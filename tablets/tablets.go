@@ -449,10 +449,16 @@ func (c *CowTabletList) RemoveTabletsWithTableFromTabletsList(keyspace string, t
 // FindReplicasForToken returns the replica set responsible for the given token,
 // within the specified keyspace and table.
 func (c *CowTabletList) FindReplicasForToken(keyspace, table string, token int64) []ReplicaInfo {
+	return c.FindTabletForToken(keyspace, table, token).Replicas()
+}
+
+// FindTabletForToken locates the tablet that covers the given token
+// for the specified keyspace and table. Returns nil if not found.
+func (c *CowTabletList) FindTabletForToken(keyspace, table string, token int64) *TabletInfo {
 	tablets := c.Get()
 	l, r := tablets.FindTablets(keyspace, table)
 	if l == -1 {
 		return nil
 	}
-	return tablets.FindTabletForToken(token, l, r).Replicas()
+	return tablets.FindTabletForToken(token, l, r)
 }
