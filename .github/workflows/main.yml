@@ -38,30 +38,4 @@ jobs:
 
       - name: Run benchmarks
         run: |
-          go test -bench=. -benchmem -run=^$ ./... | tee benchmark.txt
-
-      - name: Install benchstat
-        run: go install golang.org/x/perf/cmd/benchstat@latest
-
-      - name: Compare benchmarks
-        run: |
-          echo "::group::Benchmark Diff"
-          benchstat old_benchmark.txt benchmark.txt || true
-          echo "::endgroup::"
-
-      - name: Annotate Summary
-        run: |
-          echo "### Benchmark Results" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          cat benchmark.txt >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-      - name: Post benchmark comment
-        uses: peter-evans/create-or-update-comment@v4
-        with:
-          issue-number: ${{ github.event.pull_request.number }}
-          body: |
-            ### Benchmark Results
-            ```
-            $(cat benchmark.txt)
-            ```
+          make test-bench
