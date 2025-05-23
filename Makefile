@@ -126,12 +126,12 @@ test-unit: .prepare-pki
 
 test-bench:
 	@echo "Run benchmark tests"
-	go test -bench=. -benchmem -run=^$ ./... | tee >/tmp/gocql-benchmark-results
-	if [ -nz "$GITHUB_STEP_SUMMARY" ]; then
-		echo "### Benchmark Results" >> $GITHUB_STEP_SUMMARY
-		echo '```' >> $GITHUB_STEP_SUMMARY
-		cat /tmp/gocql-benchmark-results >> $GITHUB_STEP_SUMMARY
-		echo '```' >> $GITHUB_STEP_SUMMARY
+	@go test -bench=. -benchmem -run=^$ ./... | tee >/tmp/gocql-benchmark-results
+	@if [[ -n "${GITHUB_STEP_SUMMARY}" ]]; then \
+		echo "### Benchmark Results" >> $GITHUB_STEP_SUMMARY; \
+		echo '```' >> $GITHUB_STEP_SUMMARY; \
+		cat /tmp/gocql-benchmark-results >> $GITHUB_STEP_SUMMARY; \
+		echo '```' >> $GITHUB_STEP_SUMMARY; \
 	fi
 
 check:
