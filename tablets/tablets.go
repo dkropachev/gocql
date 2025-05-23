@@ -291,13 +291,15 @@ func tabletKey(keyspace, table string) string {
 // It allows concurrent reads without locking by storing the list atomically,
 // while ensuring writes are serialized via a mutex to avoid lost updates.
 type CowTabletList struct {
-	tableMap  sync.Map
+	tableMap  map[string]TabletInfoList
 	writeLock sync.RWMutex
 }
 
 // NewCowTabletList creates a new CowTabletList instance initialized with an empty TabletInfoList.
 func NewCowTabletList() CowTabletList {
-	return CowTabletList{}
+	return CowTabletList{
+		tableMap: make(map[string]TabletInfoList),
+	}
 }
 
 // AddTablet adds a single tablet to the list in a thread-safe manner.
@@ -305,16 +307,12 @@ func (c *CowTabletList) AddTablet(keyspaceName, tableName string, tablet *Tablet
 	c.writeLock.Lock()
 	defer c.writeLock.Unlock()
 	key := tabletKey(keyspaceName, tableName)
-	tl, ok := c.tableMap.Load(key)
+	tl, ok := c.tableMap[key]
 	if !ok {
-		c.tableMap.Store(key, TabletInfoList{tablet})
+		c.tableMap[key] = TabletInfoList{tablet}
 		return
 	}
-	casted, ok := tl.(TabletInfoList)
-	if !ok {
-		c.tableMap.Store(key, TabletInfoList{tablet})
-	}
-	c.tableMap.Store(key, casted.AddTabletToTabletsList(tablet))
+	c.tableMap[key] = tl.AddTabletToTabletsList(tablet)
 }
 
 // BulkAddTablets adds multiple tablets to the list in a single atomic update.
@@ -322,63 +320,39 @@ func (c *CowTabletList) BulkAddTablets(keyspaceName, tableName string, tablets [
 	c.writeLock.Lock()
 	defer c.writeLock.Unlock()
 	key := tabletKey(keyspaceName, tableName)
-	tl, ok := c.tableMap.Load(key)
+	tl, ok := c.tableMap[key]
 	if !ok {
-		c.tableMap.Store(key, TabletInfoList(tablets))
+		c.tableMap[key] = tablets
 		return
 	}
-	casted, ok := tl.(TabletInfoList)
-	if !ok {
-		c.tableMap.Store(key, TabletInfoList(tablets))
-	}
-	c.tableMap.Store(key, casted.BulkAddTabletsToTabletsList(tablets))
-}
-
-// Get returns tablets for give keyspace and table
-func (c *CowTabletList) Get(keyspace, table string) TabletInfoList {
-	c.writeLock.RLock()
-	defer c.writeLock.RUnlock()
-	tl, ok := c.tableMap.Load(tabletKey(keyspace, table))
-	if !ok {
-		return nil
-	}
-	casted, ok := tl.(TabletInfoList)
-	if !ok {
-		return nil
-	}
-	return casted
+	c.tableMap[key] = tl.BulkAddTabletsToTabletsList(tablets)
 }
 
 // RemoveTabletsWithHost removes all tablets associated with the specified host ID.
 func (c *CowTabletList) RemoveTabletsWithHost(hostID string) {
 	c.writeLock.Lock()
 	defer c.writeLock.Unlock()
-	c.tableMap.Range(func(key, value interface{}) bool {
-		tl, ok := value.(TabletInfoList)
-		if ok {
-			c.tableMap.Store(key, tl.RemoveTabletsWithHost(hostID))
-		}
-		return true
-	})
+	for key, tl := range c.tableMap {
+		c.tableMap[key] = tl.RemoveTabletsWithHost(hostID)
+	}
 }
 
 // RemoveTabletsWithKeyspace removes all tablets belonging to the given keyspace.
 func (c *CowTabletList) RemoveTabletsWithKeyspace(keyspace string) {
 	c.writeLock.Lock()
 	defer c.writeLock.Unlock()
-	c.tableMap.Range(func(key, value interface{}) bool {
-		if strings.HasPrefix(key.(string), keyspace) {
-			c.tableMap.Delete(key)
+	for key := range c.tableMap {
+		if strings.HasPrefix(key, keyspace) {
+			delete(c.tableMap, key)
 		}
-		return true
-	})
+	}
 }
 
 // RemoveTabletsWithTableFromTabletsList removes all tablets for the specified keyspace and table.
 func (c *CowTabletList) RemoveTabletsWithTableFromTabletsList(keyspace string, table string) {
 	c.writeLock.Lock()
 	defer c.writeLock.Unlock()
-	c.tableMap.Delete(tabletKey(keyspace, table))
+	delete(c.tableMap, tabletKey(keyspace, table))
 }
 
 // FindReplicasForToken returns the replica set responsible for the given token,
@@ -390,13 +364,11 @@ func (c *CowTabletList) FindReplicasForToken(keyspace, table string, token int64
 // FindTabletForToken locates the tablet that covers the given token
 // for the specified keyspace and table. Returns nil if not found.
 func (c *CowTabletList) FindTabletForToken(keyspace, table string, token int64) *TabletInfo {
-	tl, ok := c.tableMap.Load(tabletKey(keyspace, table))
+	c.writeLock.RLock()
+	defer c.writeLock.RUnlock()
+	tl, ok := c.tableMap[tabletKey(keyspace, table)]
 	if !ok {
 		return nil
 	}
-	casted, ok := tl.(TabletInfoList)
-	if !ok {
-		return nil
-	}
-	return casted.FindTabletForToken(token)
+	return tl.FindTabletForToken(token)
 }
