@@ -122,6 +122,7 @@ test-integration-scylla: scylla-start
 
 test-unit: .prepare-pki
 	@echo "Run unit tests"
+	@go clean -testcache
 	go test -v -tags unit -timeout=5m -race ./...
 
 check:
