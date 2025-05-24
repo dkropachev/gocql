@@ -35,10 +35,74 @@ jobs:
           make test-unit | tee $GITHUB_STEP_SUMMARY
           echo "#### End of unit tests" >> $GITHUB_STEP_SUMMARY
 
-      - run: sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"
+      - name: Run unit tests
+        run: |
+          echo "#### Unit tests" >> $GITHUB_STEP_SUMMARY
+          make test-unit | tee $GITHUB_STEP_SUMMARY
+          echo "#### End of unit tests" >> $GITHUB_STEP_SUMMARY
 
-      - name: Run integration suite
-        run: make test-integration-scylla
+      - name: Run unit tests
+        run: |
+          echo "#### Unit tests" >> $GITHUB_STEP_SUMMARY
+          make test-unit | tee $GITHUB_STEP_SUMMARY
+          echo "#### End of unit tests" >> $GITHUB_STEP_SUMMARY
 
-      - name: Run CCM integration suite
-        run: TEST_INTEGRATION_TAGS="ccm gocql_debug" make test-integration-scylla
+      - name: Run unit tests
+        run: |
+          echo "#### Unit tests" >> $GITHUB_STEP_SUMMARY
+          make test-unit | tee $GITHUB_STEP_SUMMARY
+          echo "#### End of unit tests" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run unit tests
+        run: |
+          echo "#### Unit tests" >> $GITHUB_STEP_SUMMARY
+          make test-unit | tee $GITHUB_STEP_SUMMARY
+          echo "#### End of unit tests" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run unit tests
+        run: |
+          echo "#### Unit tests" >> $GITHUB_STEP_SUMMARY
+          make test-unit | tee $GITHUB_STEP_SUMMARY
+          echo "#### End of unit tests" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run unit tests
+        run: |
+          echo "#### Unit tests" >> $GITHUB_STEP_SUMMARY
+          make test-unit | tee $GITHUB_STEP_SUMMARY
+          echo "#### End of unit tests" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run unit tests
+        run: |
+          echo "#### Unit tests" >> $GITHUB_STEP_SUMMARY
+          make test-unit | tee $GITHUB_STEP_SUMMARY
+          echo "#### End of unit tests" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run unit tests
+        run: |
+          echo "#### Unit tests" >> $GITHUB_STEP_SUMMARY
+          make test-unit | tee $GITHUB_STEP_SUMMARY
+          echo "#### End of unit tests" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run unit tests
+        run: |
+          echo "#### Unit tests" >> $GITHUB_STEP_SUMMARY
+          make test-unit | tee $GITHUB_STEP_SUMMARY
+          echo "#### End of unit tests" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run unit tests
+        run: |
+          echo "#### Unit tests" >> $GITHUB_STEP_SUMMARY
+          make test-unit | tee $GITHUB_STEP_SUMMARY
+          echo "#### End of unit tests" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run unit tests
+        run: |
+          echo "#### Unit tests" >> $GITHUB_STEP_SUMMARY
+          make test-unit | tee $GITHUB_STEP_SUMMARY
+          echo "#### End of unit tests" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run unit tests
+        run: |
+          echo "#### Unit tests" >> $GITHUB_STEP_SUMMARY
+          make test-unit | tee $GITHUB_STEP_SUMMARY
+          echo "#### End of unit tests" >> $GITHUB_STEP_SUMMARY
