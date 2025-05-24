@@ -26,6 +26,31 @@ jobs:
         run: make check
 
       - name: Run unit tests
+        run: | 
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+          make generate-pki
+
+      - name: Run unit tests
         run: make test-unit
 
       - run: sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"
