@@ -188,5 +188,5 @@ install-scylla-ccm:
 
 generate-pki:
 	@echo "Generating new PKI"
-	@rm testdata/pki/.keystore testdata/pki/.truststore testdata/pki/*.p12 testdata/pki/*.key testdata/pki/*.crt || true
+	@rm -f testdata/pki/.keystore testdata/pki/.truststore testdata/pki/*.p12 testdata/pki/*.key testdata/pki/*.crt || true
 	@cd testdata/pki/ && bash ./generate_certs.sh
