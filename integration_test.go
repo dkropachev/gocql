@@ -467,7 +467,6 @@ func TestNewConnectWithLowTimeout(t *testing.T) {
 					})
 
 					t.Run("Query from control connection after reconnect", func(t *testing.T) {
-						t.Skip("Enable it when https://github.com/scylladb/gocql/issues/528 is fixed")
 						err = s.control.reconnect()
 						if err != nil {
 							t.Fatalf("failed to reconnect to control connection: %v", err)

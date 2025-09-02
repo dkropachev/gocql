@@ -94,11 +94,13 @@ func TestGetClusterPeerInfoZeroToken(t *testing.T) {
 type mockConnection struct{}
 
 func (*mockConnection) Close() {}
-func (*mockConnection) exec(ctx context.Context, req frameBuilder, tracer Tracer) (*framer, error) {
+func (*mockConnection) exec(ctx context.Context, timeout time.Duration, writeTimeout time.Duration, req frameBuilder, tracer Tracer) (*framer, error) {
 	return nil, nil
 }
-func (*mockConnection) awaitSchemaAgreement(ctx context.Context) error     { return nil }
-func (*mockConnection) executeQuery(ctx context.Context, qry *Query) *Iter { return nil }
+func (*mockConnection) awaitSchemaAgreement(ctx context.Context) error { return nil }
+func (*mockConnection) executeQuery(ctx context.Context, qry *Query, timeout time.Duration, writeTimeout time.Duration) *Iter {
+	return nil
+}
 
 var systemLocalResultMetadata = resultMetadata{
 	flags:          0,
@@ -290,13 +292,13 @@ func (*mockConnection) querySystem(ctx context.Context, query string) *Iter {
 
 func (*mockConnection) getIsSchemaV2() bool { return false }
 func (*mockConnection) setSchemaV2(s bool)  {}
-func (*mockConnection) query(ctx context.Context, statement string, values ...interface{}) (iter *Iter) {
+func (*mockConnection) query(ctx context.Context, timeout time.Duration, writeTimeout time.Duration, statement string, values ...interface{}) (iter *Iter) {
 	return nil
 }
 func (*mockConnection) finalizeConnection()                 {}
 func (*mockConnection) getScyllaSupported() scyllaSupported { return scyllaSupported{} }
-func (*mockConnection) getTimeout() { return 11*time.Second }
-func (*mockConnection) getWriteTimeout() { return 11*time.Second }
+func (*mockConnection) getTimeout() time.Duration { return 11*time.Second }
+func (*mockConnection) getWriteTimeout() time.Duration { return 11*time.Second }
 
 type mockControlConn struct{}
 

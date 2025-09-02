@@ -1309,7 +1309,7 @@ func (q *Query) Cancel() {
 }
 
 func (q *Query) execute(ctx context.Context, conn *Conn) *Iter {
-	return conn.executeQuery(ctx, q)
+	return conn.executeQuery(ctx, q, conn.getTimeout(), conn.getWriteTimeout())
 }
 
 func (q *Query) attempt(keyspace string, end, start time.Time, iter *Iter, host *HostInfo) {
@@ -1549,7 +1549,7 @@ func (q *Query) executeQuery() *Iter {
 	if q.conn != nil {
 		// if the query was specifically run on a connection then re-use that
 		// connection when fetching the next results
-		return q.conn.executeQuery(q.Context(), q)
+		return q.conn.executeQuery(q.Context(), q, q.conn.getTimeout(), q.conn.getWriteTimeout())
 	}
 	return q.session.executeQuery(q)
 }
@@ -1980,7 +1980,7 @@ func (n *nextIter) fetch() *Iter {
 		// if the query was specifically run on a connection then re-use that
 		// connection when fetching the next results
 		if n.qry.conn != nil {
-			n.next = n.qry.conn.executeQuery(n.qry.Context(), n.qry)
+			n.next = n.qry.conn.executeQuery(n.qry.Context(), n.qry, n.qry.conn.getTimeout(), n.qry.conn.getWriteTimeout())
 		} else {
 			n.next = n.qry.session.executeQuery(n.qry)
 		}

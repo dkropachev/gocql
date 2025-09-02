@@ -158,7 +158,8 @@ func (r *ringDescriber) getHostInfo(hostID UUID) (*HostInfo, error) {
 				iter = ch.conn.querySystem(context.TODO(), qrySystemPeers)
 			}
 		} else {
-			iter = ch.conn.query(context.TODO(), fmt.Sprintf("SELECT * FROM %s WHERE key='local'", table))
+			iter = ch.conn.query(context.TODO(), r.cfg.MetadataSchemaRequestTimeout, r.cfg.MetadataSchemaRequestTimeout, fmt.Sprintf("SELECT * FROM %s WHERE key='local'", table))
+			ch.conn.finalizeConnection()
 		}
 
 		if iter != nil {

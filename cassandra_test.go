@@ -32,7 +32,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/gocql/gocql/internal/tests"
 	"math"
 	"math/big"
 	"net"
@@ -43,6 +42,8 @@ import (
 	"testing"
 	"time"
 	"unicode"
+
+	"github.com/gocql/gocql/internal/tests"
 
 	"github.com/stretchr/testify/require"
 	"gopkg.in/inf.v0"
@@ -1703,7 +1704,7 @@ func TestPrepare_MissingSchemaPrepare(t *testing.T) {
 	defer s.Close()
 
 	insertQry := s.Query("INSERT INTO invalidschemaprep (val) VALUES (?)", 5)
-	if err := conn.executeQuery(ctx, insertQry).err; err == nil {
+	if err := conn.executeQuery(ctx, insertQry, conn.getTimeout(), conn.getWriteTimeout()).err; err == nil {
 		t.Fatal("expected error, but got nil.")
 	}
 
@@ -1711,7 +1712,7 @@ func TestPrepare_MissingSchemaPrepare(t *testing.T) {
 		t.Fatal("create table:", err)
 	}
 
-	if err := conn.executeQuery(ctx, insertQry).err; err != nil {
+	if err := conn.executeQuery(ctx, insertQry, conn.getTimeout(), conn.getWriteTimeout()).err; err != nil {
 		t.Fatal(err) // unconfigured columnfamily
 	}
 }
@@ -1725,7 +1726,7 @@ func TestPrepare_ReprepareStatement(t *testing.T) {
 
 	stmt, conn := injectInvalidPreparedStatement(t, session, "test_reprepare_statement")
 	query := session.Query(stmt, "bar")
-	if err := conn.executeQuery(ctx, query).Close(); err != nil {
+	if err := conn.executeQuery(ctx, query, conn.getTimeout(), conn.getWriteTimeout()).Close(); err != nil {
 		t.Fatalf("Failed to execute query for reprepare statement: %v", err)
 	}
 }
@@ -2470,7 +2471,7 @@ func TestNegativeStream(t *testing.T) {
 		return f.finish()
 	})
 
-	frame, err := conn.exec(context.Background(), writer, nil)
+	frame, err := conn.exec(context.Background(), conn.getTimeout(), conn.getWriteTimeout(), writer, nil)
 	if err == nil {
 		t.Fatalf("expected to get an error on stream %d", stream)
 	} else if frame != nil {

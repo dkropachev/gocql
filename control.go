@@ -368,9 +368,12 @@ func (c *controlConn) registerEvents(conn *Conn) error {
 	}
 
 	framer, err := conn.exec(context.Background(),
+		c.session.cfg.MetadataSchemaRequestTimeout,
+		c.session.cfg.MetadataSchemaRequestTimeout,
 		&writeRegisterFrame{
 			events: events,
 		}, nil)
+	conn.finalizeConnection()
 	if err != nil {
 		return err
 	}
@@ -495,7 +498,8 @@ func (c *controlConn) writeFrame(w frameBuilder) (frame, error) {
 		return nil, errNoControl
 	}
 
-	framer, err := ch.conn.exec(context.Background(), w, nil)
+	framer, err := ch.conn.exec(context.Background(), c.session.cfg.MetadataSchemaRequestTimeout, c.session.cfg.MetadataSchemaRequestTimeout, w, nil)
+	ch.conn.finalizeConnection()
 	if err != nil {
 		return nil, err
 	}
@@ -510,8 +514,9 @@ func (c *controlConn) query(statement string, values ...interface{}) (iter *Iter
 	for {
 		ch := c.getConn()
 		q.conn = ch.conn.(*Conn)
-		iter = ch.conn.executeQuery(context.TODO(), q)
 
+		iter = ch.conn.executeQuery(context.TODO(), q, c.session.cfg.MetadataSchemaRequestTimeout, c.session.cfg.MetadataSchemaRequestTimeout)
+		ch.conn.finalizeConnection()
 		if gocqlDebug && iter.err != nil {
 			c.session.logger.Printf("control: error executing %q: %v\n", statement, iter.err)
 		}

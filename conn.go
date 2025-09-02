@@ -177,13 +177,13 @@ func (fn connErrorHandlerFn) HandleError(conn *Conn, err error, closed bool) {
 
 type ConnInterface interface {
 	Close()
-	exec(ctx context.Context, req frameBuilder, tracer Tracer) (*framer, error)
+	exec(ctx context.Context, timeout time.Duration, writeTimeout time.Duration, req frameBuilder, tracer Tracer) (*framer, error)
 	awaitSchemaAgreement(ctx context.Context) error
-	executeQuery(ctx context.Context, qry *Query) *Iter
+	executeQuery(ctx context.Context, qry *Query, timeout time.Duration, writeTimeout time.Duration) *Iter
 	querySystem(ctx context.Context, query string) *Iter
 	getIsSchemaV2() bool
 	setSchemaV2(s bool)
-	query(ctx context.Context, statement string, values ...interface{}) (iter *Iter)
+	query(ctx context.Context, timeout time.Duration, writeTimeout time.Duration, statement string, values ...interface{}) (iter *Iter)
 	getScyllaSupported() scyllaSupported
 	finalizeConnection()
 	getTimeout() time.Duration
@@ -264,11 +264,13 @@ func (c *Conn) getScyllaSupported() scyllaSupported {
 }
 
 func (c *Conn) getTimeout() time.Duration {
-	return c.timeout
+	var timeout = c.timeout
+	return timeout
 }
 
 func (c *Conn) getWriteTimeout() time.Duration {
-	return c.writeTimeout
+	var timeout = c.writeTimeout
+	return timeout
 }
 
 // connect establishes a connection to a Cassandra node using session's connection config.
@@ -454,8 +456,8 @@ type startupCoordinator struct {
 
 func (s *startupCoordinator) setupConn(ctx context.Context) error {
 	var cancel context.CancelFunc
-	if s.conn.timeout > 0 {
-		ctx, cancel = context.WithTimeout(ctx, s.conn.timeout)
+	if s.conn.getTimeout() > 0 {
+		ctx, cancel = context.WithTimeout(ctx, s.conn.getTimeout())
 	} else {
 		ctx, cancel = context.WithCancel(ctx)
 	}
@@ -504,7 +506,7 @@ func (s *startupCoordinator) write(ctx context.Context, frame frameBuilder) (fra
 		return nil, ctx.Err()
 	}
 
-	framer, err := s.conn.exec(ctx, frame, nil)
+	framer, err := s.conn.exec(ctx, s.conn.getTimeout(), s.conn.getWriteTimeout(), frame, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -744,7 +746,8 @@ func (c *Conn) heartBeat(ctx context.Context) {
 		case <-timer.C:
 		}
 
-		framer, err := c.exec(context.Background(), &writeOptionsFrame{}, nil)
+		framer, err := c.exec(context.Background(), c.session.cfg.MetadataSchemaRequestTimeout, c.session.cfg.MetadataSchemaRequestTimeout, &writeOptionsFrame{}, nil)
+		c.finalizeConnection()
 		if err != nil {
 			failures++
 			continue
@@ -775,7 +778,7 @@ func (c *Conn) recv(ctx context.Context) error {
 
 	// read a full header, ignore timeouts, as this is being ran in a loop
 	// TODO: TCP level deadlines? or just query level deadlines?
-	if c.timeout > 0 {
+	if c.getTimeout() > 0 {
 		c.conn.SetReadDeadline(time.Time{})
 	}
 
@@ -1149,7 +1152,7 @@ func (c *Conn) addCall(call *callReq) error {
 	return nil
 }
 
-func (c *Conn) exec(ctx context.Context, req frameBuilder, tracer Tracer) (*framer, error) {
+func (c *Conn) exec(ctx context.Context, timeout time.Duration, writeTimeout time.Duration, req frameBuilder, tracer Tracer) (*framer, error) {
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, &QueryError{err: ctxErr, potentiallyExecuted: false}
 	}
@@ -1163,6 +1166,9 @@ func (c *Conn) exec(ctx context.Context, req frameBuilder, tracer Tracer) (*fram
 	// resp is basically a waiting semaphore protecting the framer
 	framer := newFramerWithExts(c.compressor, c.version, c.cqlProtoExts, c.logger)
 	c.setTabletSupported(framer.tabletsRoutingV1)
+
+	c.timeout = timeout
+	c.writeTimeout = writeTimeout
 
 	call := &callReq{
 		timeout:  make(chan struct{}),
@@ -1239,7 +1245,7 @@ func (c *Conn) exec(ctx context.Context, req frameBuilder, tracer Tracer) (*fram
 	}
 
 	var timeoutCh <-chan time.Time
-	if c.timeout > 0 {
+	if c.getTimeout() > 0 {
 		if call.timer == nil {
 			call.timer = time.NewTimer(0)
 			<-call.timer.C
@@ -1383,7 +1389,7 @@ func (c *Conn) prepareStatement(ctx context.Context, stmt string, tracer Tracer)
 			// we won the race to do the load, if our context is canceled we shouldnt
 			// stop the load as other callers are waiting for it but this caller should get
 			// their context cancelled error.
-			framer, err := c.exec(c.ctx, prep, tracer)
+			framer, err := c.exec(c.ctx, c.getTimeout(), c.getWriteTimeout(), prep, tracer)
 			if err != nil {
 				flight.err = err
 				c.session.stmtsLRU.remove(stmtCacheKey)
@@ -1454,7 +1460,7 @@ func marshalQueryValue(typ TypeInfo, value interface{}, dst *queryValues) error 
 	return nil
 }
 
-func (c *Conn) executeQuery(ctx context.Context, qry *Query) (iter *Iter) {
+func (c *Conn) executeQuery(ctx context.Context, qry *Query, timeout time.Duration, writeTimeout time.Duration) (iter *Iter) {
 	defer func() {
 		if iter == nil || c.session == nil {
 			return
@@ -1547,7 +1553,7 @@ func (c *Conn) executeQuery(ctx context.Context, qry *Query) (iter *Iter) {
 		}
 	}
 
-	framer, err := c.exec(ctx, frame, qry.trace)
+	framer, err := c.exec(ctx, timeout, writeTimeout, frame, qry.trace)
 	if err != nil {
 		return &Iter{err: err}
 	}
@@ -1644,7 +1650,7 @@ func (c *Conn) executeQuery(ctx context.Context, qry *Query) (iter *Iter) {
 	case *RequestErrUnprepared:
 		stmtCacheKey := c.session.stmtsLRU.keyFor(c.host.HostID(), c.currentKeyspace, qry.stmt)
 		c.session.stmtsLRU.evictPreparedID(stmtCacheKey, x.StatementId)
-		return c.executeQuery(ctx, qry)
+		return c.executeQuery(ctx, qry, timeout, writeTimeout)
 	case error:
 		return &Iter{err: x, framer: framer}
 	default:
@@ -1680,7 +1686,7 @@ func (c *Conn) UseKeyspace(keyspace string) error {
 	q := &writeQueryFrame{statement: `USE "` + keyspace + `"`}
 	q.params.consistency = c.session.cons
 
-	framer, err := c.exec(c.ctx, q, nil)
+	framer, err := c.exec(c.ctx, c.getTimeout(), c.getWriteTimeout(), q, nil)
 	if err != nil {
 		return err
 	}
@@ -1787,7 +1793,7 @@ func (c *Conn) executeBatch(ctx context.Context, batch *Batch) (iter *Iter) {
 	batch.routingInfo.mu.Unlock()
 
 	// TODO: should batch support tracing?
-	framer, err := c.exec(batch.Context(), req, batch.trace)
+	framer, err := c.exec(batch.Context(), c.getTimeout(), c.getWriteTimeout(), req, batch.trace)
 	if err != nil {
 		return &Iter{err: err}
 	}
@@ -1826,13 +1832,13 @@ func (c *Conn) executeBatch(ctx context.Context, batch *Batch) (iter *Iter) {
 	}
 }
 
-func (c *Conn) query(ctx context.Context, statement string, values ...interface{}) (iter *Iter) {
+func (c *Conn) query(ctx context.Context, timeout time.Duration, writeTimeout time.Duration, statement string, values ...interface{}) (iter *Iter) {
 	q := c.session.Query(statement, values...).Consistency(One).Trace(nil)
 	q.skipPrepare = true
 	q.disableSkipMetadata = true
 	// we want to keep the query on this connection
 	q.conn = c
-	return c.executeQuery(ctx, q)
+	return c.executeQuery(ctx, q, timeout, writeTimeout)
 }
 
 func (c *Conn) querySystem(ctx context.Context, query string) *Iter {
@@ -1841,7 +1847,9 @@ func (c *Conn) querySystem(ctx context.Context, query string) *Iter {
 		usingClause = c.session.usingTimeoutClause
 	}
 	queryStmt := query + usingClause
-	return c.query(ctx, queryStmt)
+	var iter = c.query(ctx, c.session.cfg.MetadataSchemaRequestTimeout, c.session.cfg.MetadataSchemaRequestTimeout, queryStmt)
+	c.finalizeConnection()
+	return iter
 }
 
 const qrySystemPeers = "SELECT * FROM system.peers"
