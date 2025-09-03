@@ -292,6 +292,7 @@ func (*mockConnection) setSchemaV2(s bool)  {}
 func (*mockConnection) query(ctx context.Context, statement string, values ...interface{}) (iter *Iter) {
 	return nil
 }
+func (*mockConnection) finalizeConnection()                 {}
 func (*mockConnection) getScyllaSupported() scyllaSupported { return scyllaSupported{} }
 
 type mockControlConn struct{}

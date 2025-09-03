@@ -185,6 +185,7 @@ type ConnInterface interface {
 	setSchemaV2(s bool)
 	query(ctx context.Context, statement string, values ...interface{}) (iter *Iter)
 	getScyllaSupported() scyllaSupported
+	finalizeConnection()
 }
 
 // Conn is a single connection to a Cassandra node. It can be used to execute
