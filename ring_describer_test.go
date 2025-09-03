@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/gocql/gocql/internal/tests"
 
@@ -294,6 +295,8 @@ func (*mockConnection) query(ctx context.Context, statement string, values ...in
 }
 func (*mockConnection) finalizeConnection()                 {}
 func (*mockConnection) getScyllaSupported() scyllaSupported { return scyllaSupported{} }
+func (*mockConnection) getTimeout() { return 11*time.Second }
+func (*mockConnection) getWriteTimeout() { return 11*time.Second }
 
 type mockControlConn struct{}
 
