@@ -33,6 +33,8 @@ import (
 )
 
 func TestSetupTLSConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                       string
 		opts                       *SslOptions

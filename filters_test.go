@@ -33,6 +33,8 @@ import (
 )
 
 func TestFilter_WhiteList(t *testing.T) {
+	t.Parallel()
+
 	f := WhiteListHostFilter("127.0.0.1", "127.0.0.2")
 	tests := [...]struct {
 		addr   net.IP
@@ -55,6 +57,8 @@ func TestFilter_WhiteList(t *testing.T) {
 }
 
 func TestFilter_AllowAll(t *testing.T) {
+	t.Parallel()
+
 	f := AcceptAllFilter()
 	tests := [...]struct {
 		addr   net.IP
@@ -77,6 +81,8 @@ func TestFilter_AllowAll(t *testing.T) {
 }
 
 func TestFilter_DenyAll(t *testing.T) {
+	t.Parallel()
+
 	f := DenyAllFilter()
 	tests := [...]struct {
 		addr   net.IP
@@ -99,6 +105,8 @@ func TestFilter_DenyAll(t *testing.T) {
 }
 
 func TestFilter_DataCenter(t *testing.T) {
+	t.Parallel()
+
 	f := DataCenterHostFilter("dc1")
 	fDeprecated := DataCentreHostFilter("dc1")
 

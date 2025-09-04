@@ -33,6 +33,8 @@ import (
 )
 
 func TestGetCassandraType_Set(t *testing.T) {
+	t.Parallel()
+
 	typ := getCassandraType("set<text>", &defaultLogger{})
 	set, ok := typ.(CollectionType)
 	if !ok {
@@ -50,6 +52,8 @@ func TestGetCassandraType_Set(t *testing.T) {
 }
 
 func TestGetCassandraType(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		input string
 		exp   TypeInfo

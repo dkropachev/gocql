@@ -13,6 +13,8 @@ import (
 
 // TestSimpleDebouncerRace tests SimpleDebouncer for the fact that it does not allow concurrent writing, reading.
 func TestSimpleDebouncerRace(t *testing.T) {
+	t.Parallel()
+
 	operations := 1000
 	runs := 100
 	count := 3
@@ -63,6 +65,8 @@ func TestSimpleDebouncerRace(t *testing.T) {
 
 // TestDebouncerExtreme tests SimpleDebouncer in the conditions  fast multi `Debounce` method calls and fast execution of the `debounced function`.
 func TestDebouncerExtreme(t *testing.T) {
+	t.Parallel()
+
 	type runResult struct {
 		executedN int32
 		done      bool
@@ -109,6 +113,8 @@ func TestDebouncerExtreme(t *testing.T) {
 
 // TestSimpleDebouncerCount tests SimpleDebouncer for the fact that it pended only one function call.
 func TestSimpleDebouncerCount(t *testing.T) {
+	t.Parallel()
+
 	calls := 10
 
 	// Subtracting a one call that will be performed directly (not through goroutines)
@@ -147,6 +153,8 @@ func TestSimpleDebouncerCount(t *testing.T) {
 
 // TestDebouncer tests that the debouncer allows only one function to execute at a time
 func TestSimpleDebouncer(t *testing.T) {
+	t.Parallel()
+
 	d := NewSimpleDebouncer()
 	var executions int32
 	startedCh := make(chan struct{}, 1)

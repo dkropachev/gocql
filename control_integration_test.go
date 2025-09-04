@@ -21,12 +21,15 @@ func (d unixSocketDialer) DialContext(_ context.Context, _, _ string) (net.Conn,
 }
 
 func TestUnixSockets(t *testing.T) {
-	socketPath := "/tmp/scylla_node_1/cql.m"
+	socketFiles := getClusterSocketFile()
+	if len(socketFiles) == 0 {
+		t.Skip("this test needs path to socket file provided into -cluster-socket cli option")
+	}
 
 	c := createCluster()
 	c.NumConns = 1
 	c.DisableInitialHostLookup = true
-	c.ProtoVersion = 3
+	c.ProtoVersion = protoVersion3
 	c.ReconnectInterval = 0
 	c.WriteCoalesceWaitTime = 0
 
@@ -43,12 +46,12 @@ func TestUnixSockets(t *testing.T) {
 
 	c.Dialer = unixSocketDialer{
 		dialer:     d,
-		socketPath: socketPath,
+		socketPath: socketFiles[0],
 	}
 
 	sess, err := c.CreateSession()
 	if err != nil {
-		panic(fmt.Sprintf("unable to create session: %v", err))
+		t.Fatalf("unable to create session: %v", err)
 	}
 
 	defer sess.Close()

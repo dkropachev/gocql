@@ -12,7 +12,7 @@ import (
 	"github.com/gocql/gocql/dialer/replayer"
 )
 
-func InitializeCluster() {
+func InitializeCluster() error {
 	cluster := gocql.NewCluster("192.168.100.11")
 	cluster.Consistency = gocql.Quorum
 
@@ -21,7 +21,7 @@ func InitializeCluster() {
 
 	executor, err := gocql.NewSingleHostQueryExecutor(cluster)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to create executor: %v", err)
 	}
 	defer executor.Close()
 
@@ -29,22 +29,23 @@ func InitializeCluster() {
 
 	err = executor.Exec(`DROP KEYSPACE IF EXISTS ` + keyspace)
 	if err != nil {
-		panic(fmt.Sprintf("unable to drop keyspace: %v", err))
+		return fmt.Errorf("unable to drop keyspace: %v", err)
 	}
 
 	err = executor.Exec(fmt.Sprintf(`CREATE KEYSPACE %s WITH replication = {'class' : 'NetworkTopologyStrategy','replication_factor' : 1}`, keyspace))
 
 	if err != nil {
-		panic(fmt.Sprintf("unable to create keyspace: %v", err))
+		return fmt.Errorf("unable to create keyspace: %v", err)
 	}
 
 	if err = executor.Exec(fmt.Sprintf(`CREATE TABLE %s.%s (pk int, ck int, v text, PRIMARY KEY (pk));
 	`, keyspace, "table1")); err != nil {
-		panic(fmt.Sprintf("unable to create table: %v", err))
+		return fmt.Errorf("unable to create table: %v", err)
 	}
+	return nil
 }
 
-func RecordSelectTraffic(size int, dir string) {
+func RecordSelectTraffic(size int, dir string) error {
 	cluster := gocql.NewCluster("192.168.100.11")
 	cluster.Consistency = gocql.Quorum
 
@@ -55,7 +56,7 @@ func RecordSelectTraffic(size int, dir string) {
 
 	executor, err := gocql.NewSingleHostQueryExecutor(cluster)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to create executor: %v", err)
 	}
 	defer executor.Close()
 
@@ -64,16 +65,17 @@ func RecordSelectTraffic(size int, dir string) {
 		var name string
 		for iter.Scan(&name) {
 			if name[:4] != "Name" {
-				panic("Wrong value")
+				return fmt.Errorf("got wrong value for name: %s", name)
 			}
 		}
 		if err := iter.Close(); err != nil {
-			panic(err)
+			return fmt.Errorf("failed to close iterator: %v", err)
 		}
 	}
+	return nil
 }
 
-func RecordInsertTraffic(size int, dir string) {
+func RecordInsertTraffic(size int, dir string) error {
 	cluster := gocql.NewCluster("192.168.100.11")
 	cluster.Consistency = gocql.Quorum
 
@@ -84,16 +86,17 @@ func RecordInsertTraffic(size int, dir string) {
 
 	executor, err := gocql.NewSingleHostQueryExecutor(cluster)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to create executor: %v", err)
 	}
 	defer executor.Close()
 
 	for i := 0; i < size; i++ {
 		err = executor.Exec(`INSERT INTO single_conn_bench.table1 (pk, ck, v) VALUES (?, ?, ?);`, i, i%5, fmt.Sprintf("Name_%d", i))
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("failed to insert: %v", err)
 		}
 	}
+	return nil
 }
 
 func BenchmarkSingleConnectionSelect(b *testing.B) {
@@ -107,7 +110,7 @@ func BenchmarkSingleConnectionSelect(b *testing.B) {
 
 	executor, err := gocql.NewSingleHostQueryExecutor(cluster)
 	if err != nil {
-		panic(err)
+		b.Fatalf("failed to create executor: %v", err)
 	}
 	defer executor.Close()
 
@@ -133,7 +136,7 @@ func BenchmarkSingleConnectionInsert(b *testing.B) {
 
 	executor, err := gocql.NewSingleHostQueryExecutor(cluster)
 	if err != nil {
-		panic(err)
+		b.Fatalf("failed to create executor: %v", err)
 	}
 	defer executor.Close()
 
@@ -143,7 +146,7 @@ func BenchmarkSingleConnectionInsert(b *testing.B) {
 				for j := 0; j < b.N; j++ {
 					err = executor.Exec(`INSERT INTO single_conn_bench.table1 (pk, ck, v) VALUES (?, ?, ?);`, i, i%5, fmt.Sprintf("Name_%d", i))
 					if err != nil {
-						panic(err)
+						b.Fatalf("failed to insert: %v", err)
 					}
 				}
 			})
@@ -155,9 +158,21 @@ func TestMain(m *testing.M) {
 	update := flag.Bool("update-golden", false, "Update golden files")
 	flag.Parse()
 	if *update {
-		InitializeCluster()
-		RecordInsertTraffic(10, "rec_insert")
-		RecordSelectTraffic(10, "rec_select")
+		err := InitializeCluster()
+		if err != nil {
+			fmt.Printf("failed to initialize cluster: %v\n", err)
+			os.Exit(1)
+		}
+		err = RecordInsertTraffic(10, "rec_insert")
+		if err != nil {
+			fmt.Printf("failed to record insert traffic: %v\n", err)
+			os.Exit(1)
+		}
+		err = RecordSelectTraffic(10, "rec_select")
+		if err != nil {
+			fmt.Printf("failed to record select traffic: %v\n", err)
+			os.Exit(1)
+		}
 	}
 	os.Exit(m.Run())
 }

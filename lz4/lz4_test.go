@@ -34,6 +34,8 @@ import (
 )
 
 func TestLZ4Compressor(t *testing.T) {
+	t.Parallel()
+
 	var c LZ4Compressor
 	require.Equal(t, "lz4", c.Name())
 

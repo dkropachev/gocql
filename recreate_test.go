@@ -6,6 +6,7 @@
 package gocql
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -21,16 +22,18 @@ import (
 var updateGolden = flag.Bool("update-golden", false, "update golden files")
 
 func TestRecreateSchema(t *testing.T) {
-	session := createSessionFromCluster(createCluster(), t)
+	session := createSessionFromClusterTabletsDisabled(createCluster(), t)
 	defer session.Close()
 
 	getStmtFromCluster := isDescribeKeyspaceSupported(t, session)
+	tabletsAutoEnabled := isTabletsSupported() && isTabletsAutoEnabled()
 
 	tcs := []struct {
-		Name     string
-		Keyspace string
-		Input    string
-		Golden   string
+		Name            string
+		Keyspace        string
+		FailWithTablets bool
+		Input           string
+		Golden          string
 	}{
 		{
 			Name:     "Keyspace",
@@ -45,22 +48,25 @@ func TestRecreateSchema(t *testing.T) {
 			Golden:   "testdata/recreate/table_golden.cql",
 		},
 		{
-			Name:     "Materialized Views",
-			Keyspace: "gocqlx_mv",
-			Input:    "testdata/recreate/materialized_views.cql",
-			Golden:   "testdata/recreate/materialized_views_golden.cql",
+			Name:            "Materialized Views",
+			Keyspace:        "gocqlx_mv",
+			FailWithTablets: true,
+			Input:           "testdata/recreate/materialized_views.cql",
+			Golden:          "testdata/recreate/materialized_views_golden.cql",
 		},
 		{
-			Name:     "Index",
-			Keyspace: "gocqlx_idx",
-			Input:    "testdata/recreate/index.cql",
-			Golden:   "testdata/recreate/index_golden.cql",
+			Name:            "Index",
+			Keyspace:        "gocqlx_idx",
+			FailWithTablets: true,
+			Input:           "testdata/recreate/index.cql",
+			Golden:          "testdata/recreate/index_golden.cql",
 		},
 		{
-			Name:     "Secondary Index",
-			Keyspace: "gocqlx_sec_idx",
-			Input:    "testdata/recreate/secondary_index.cql",
-			Golden:   "testdata/recreate/secondary_index_golden.cql",
+			Name:            "Secondary Index",
+			Keyspace:        "gocqlx_sec_idx",
+			FailWithTablets: true,
+			Input:           "testdata/recreate/secondary_index.cql",
+			Golden:          "testdata/recreate/secondary_index_golden.cql",
 		},
 		{
 			Name:     "UDT",
@@ -89,10 +95,32 @@ func TestRecreateSchema(t *testing.T) {
 			queries := trimQueries(strings.Split(string(in), ";"))
 			for _, q := range queries {
 				qr := session.Query(q, nil)
-				if err := qr.Exec(); err != nil {
-					t.Fatal("invalid input query", q, err)
+				err = qr.Exec()
+				if err != nil {
+					break
 				}
 				qr.Release()
+			}
+
+			err = session.AwaitSchemaAgreement(context.Background())
+			if err != nil {
+				t.Fatal("failed to await for schema agreement", err)
+			}
+			err = session.metadataDescriber.refreshSchema(test.Keyspace)
+			if err != nil {
+				t.Fatal("failed to read schema for keyspace", err)
+			}
+
+			if tabletsAutoEnabled && test.FailWithTablets {
+				if err == nil {
+					t.Errorf("did not get expected error or tablets")
+				} else if strings.Contains(err.Error(), "not supported") && strings.Contains(err.Error(), "tablets") {
+					return
+				} else {
+					t.Fatal("query failed with unexpected error", err)
+				}
+			} else if err != nil {
+				t.Fatal("invalid input query", err)
 			}
 
 			km, err := session.KeyspaceMetadata(test.Keyspace)
@@ -154,6 +182,14 @@ func TestRecreateSchema(t *testing.T) {
 			}
 
 			// Check if new dump is the same as previous
+			err = session.AwaitSchemaAgreement(context.Background())
+			if err != nil {
+				t.Fatal("failed to await for schema agreement", err)
+			}
+			err = session.metadataDescriber.refreshSchema(test.Keyspace)
+			if err != nil {
+				t.Fatal("failed to read schema for keyspace", err)
+			}
 			km, err = session.KeyspaceMetadata(test.Keyspace)
 			if err != nil {
 				t.Fatal("dump schema", err)

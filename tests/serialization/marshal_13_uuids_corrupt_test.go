@@ -14,6 +14,8 @@ import (
 )
 
 func TestMarshalUUIDsMustFail(t *testing.T) {
+	t.Parallel()
+
 	tTypes := []gocql.NativeType{
 		gocql.NewNativeType(4, gocql.TypeUUID, ""),
 		gocql.NewNativeType(4, gocql.TypeTimeUUID, ""),
@@ -57,6 +59,8 @@ func TestMarshalUUIDsMustFail(t *testing.T) {
 		unmarshal := tSuite.unmarshal
 
 		t.Run(tSuite.name, func(t *testing.T) {
+			t.Parallel()
+
 			serialization.NegativeMarshalSet{
 				Values: mod.Values{
 					"b6b77c23-c776-40ff-828d-a385f3e8a2aff",

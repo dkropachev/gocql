@@ -43,12 +43,8 @@ type IDGenerator struct {
 	offset  uint32
 }
 
-func New(protocol int) *IDGenerator {
-	maxStreams := 128
-	if protocol > 2 {
-		maxStreams = 32768
-	}
-	return NewLimited(maxStreams)
+func New() *IDGenerator {
+	return NewLimited(32768)
 }
 
 func NewLimited(maxStreams int) *IDGenerator {

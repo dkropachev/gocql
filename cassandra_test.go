@@ -43,6 +43,8 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/gocql/gocql/internal/tests"
+
 	"github.com/stretchr/testify/require"
 	"gopkg.in/inf.v0"
 )
@@ -311,10 +313,6 @@ func TestPaging(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
 
-	if session.cfg.ProtoVersion == 1 {
-		t.Skip("Paging not supported. Please use Cassandra >= 2.0")
-	}
-
 	if err := createTable(session, "CREATE TABLE gocql_test.paging (id int primary key)"); err != nil {
 		t.Fatal("create table:", err)
 	}
@@ -347,10 +345,6 @@ func TestPagingWithAllowFiltering(t *testing.T) {
 		}
 		session.Close()
 	})
-
-	if session.cfg.ProtoVersion == 1 {
-		t.Skip("Paging not supported. Please use Cassandra >= 2.0")
-	}
 
 	const (
 		targetP1             = 50
@@ -479,10 +473,6 @@ func TestPagingWithBind(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
 
-	if session.cfg.ProtoVersion == 1 {
-		t.Skip("Paging not supported. Please use Cassandra >= 2.0")
-	}
-
 	if err := createTable(session, "CREATE TABLE gocql_test.paging_bind (id int, val int, primary key(id,val))"); err != nil {
 		t.Fatal("create table:", err)
 	}
@@ -524,10 +514,6 @@ func TestCAS(t *testing.T) {
 	cluster.SerialConsistency = LocalSerial
 	session := createSessionFromClusterTabletsDisabled(cluster, t)
 	defer session.Close()
-
-	if session.cfg.ProtoVersion == 1 {
-		t.Skip("lightweight transactions not supported. Please use Cassandra >= 2.0")
-	}
 
 	if err := createTable(session, `CREATE TABLE cas_table (
 			title         varchar,
@@ -780,7 +766,7 @@ func TestDurationType(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
 
-	if session.cfg.ProtoVersion < 5 {
+	if session.cfg.ProtoVersion < protoVersion5 {
 		t.Skip("Duration type is not supported. Please use protocol version >= 4 and cassandra version >= 3.11")
 	}
 
@@ -832,10 +818,6 @@ func TestMapScanCAS(t *testing.T) {
 	session := createSessionFromClusterTabletsDisabled(createCluster(), t)
 	defer session.Close()
 
-	if session.cfg.ProtoVersion == 1 {
-		t.Skip("lightweight transactions not supported. Please use Cassandra >= 2.0")
-	}
-
 	if err := createTable(session, `CREATE TABLE cas_table2 (
 			title         varchar,
 			revid   	  timeuuid,
@@ -874,10 +856,6 @@ func TestBatch(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
 
-	if session.cfg.ProtoVersion == 1 {
-		t.Skip("atomic batches not supported. Please use Cassandra >= 2.0")
-	}
-
 	if err := createTable(session, `CREATE TABLE gocql_test.batch_table (id int primary key)`); err != nil {
 		t.Fatal("create table:", err)
 	}
@@ -904,20 +882,11 @@ func TestUnpreparedBatch(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
 
-	if session.cfg.ProtoVersion == 1 {
-		t.Skip("atomic batches not supported. Please use Cassandra >= 2.0")
-	}
-
 	if err := createTable(session, `CREATE TABLE gocql_test.batch_unprepared (id int primary key, c counter)`); err != nil {
 		t.Fatal("create table:", err)
 	}
 
-	var batch *Batch
-	if session.cfg.ProtoVersion == 2 {
-		batch = session.Batch(CounterBatch)
-	} else {
-		batch = session.Batch(UnloggedBatch)
-	}
+	batch := session.Batch(UnloggedBatch)
 
 	for i := 0; i < 100; i++ {
 		batch.Query(`UPDATE batch_unprepared SET c = c + 1 WHERE id = 1`)
@@ -946,10 +915,6 @@ func TestUnpreparedBatch(t *testing.T) {
 func TestBatchLimit(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
-
-	if session.cfg.ProtoVersion == 1 {
-		t.Skip("atomic batches not supported. Please use Cassandra >= 2.0")
-	}
 
 	if err := createTable(session, `CREATE TABLE gocql_test.batch_table2 (id int primary key)`); err != nil {
 		t.Fatal("create table:", err)
@@ -995,10 +960,6 @@ func TestTooManyQueryArgs(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
 
-	if session.cfg.ProtoVersion == 1 {
-		t.Skip("atomic batches not supported. Please use Cassandra >= 2.0")
-	}
-
 	if err := createTable(session, `CREATE TABLE gocql_test.too_many_query_args (id int primary key, value int)`); err != nil {
 		t.Fatal("create table:", err)
 	}
@@ -1026,10 +987,6 @@ func TestTooManyQueryArgs(t *testing.T) {
 func TestNotEnoughQueryArgs(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
-
-	if session.cfg.ProtoVersion == 1 {
-		t.Skip("atomic batches not supported. Please use Cassandra >= 2.0")
-	}
 
 	if err := createTable(session, `CREATE TABLE gocql_test.not_enough_query_args (id int, cluster int, value int, primary key (id, cluster))`); err != nil {
 		t.Fatal("create table:", err)
@@ -1202,20 +1159,20 @@ func TestMapScan(t *testing.T) {
 	if !iter.MapScan(row) {
 		t.Fatal("select:", iter.Close())
 	}
-	assertEqual(t, "fullname", "Ada Lovelace", row["fullname"])
-	assertEqual(t, "age", 30, row["age"])
-	assertEqual(t, "address", "10.0.0.2", row["address"])
-	assertDeepEqual(t, "data", []byte(`{"foo": "bar"}`), row["data"])
+	tests.AssertEqual(t, "fullname", "Ada Lovelace", row["fullname"])
+	tests.AssertEqual(t, "age", 30, row["age"])
+	tests.AssertEqual(t, "address", "10.0.0.2", row["address"])
+	tests.AssertDeepEqual(t, "data", []byte(`{"foo": "bar"}`), row["data"])
 
 	// Second iteration using a new map
 	row = make(map[string]interface{})
 	if !iter.MapScan(row) {
 		t.Fatal("select:", iter.Close())
 	}
-	assertEqual(t, "fullname", "Grace Hopper", row["fullname"])
-	assertEqual(t, "age", 31, row["age"])
-	assertEqual(t, "address", "10.0.0.1", row["address"])
-	assertDeepEqual(t, "data", []byte(nil), row["data"])
+	tests.AssertEqual(t, "fullname", "Grace Hopper", row["fullname"])
+	tests.AssertEqual(t, "age", 31, row["age"])
+	tests.AssertEqual(t, "address", "10.0.0.1", row["address"])
+	tests.AssertDeepEqual(t, "data", []byte(nil), row["data"])
 }
 
 func TestSliceMap(t *testing.T) {
@@ -1398,10 +1355,6 @@ func TestSmallInt(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
 
-	if session.cfg.ProtoVersion < protoVersion4 {
-		t.Skip("smallint is only supported in cassandra 2.2+")
-	}
-
 	if err := createTable(session, `CREATE TABLE gocql_test.smallint_table (
 			testsmallint  smallint PRIMARY KEY,
 		)`); err != nil {
@@ -1458,10 +1411,6 @@ func TestScanWithNilArguments(t *testing.T) {
 func TestScanCASWithNilArguments(t *testing.T) {
 	session := createSessionFromClusterTabletsDisabled(createCluster(), t)
 	defer session.Close()
-
-	if session.cfg.ProtoVersion == 1 {
-		t.Skip("lightweight transactions not supported. Please use Cassandra >= 2.0")
-	}
 
 	if err := createTable(session, `CREATE TABLE scan_cas_with_nil_arguments (
 		foo   varchar,
@@ -1654,10 +1603,6 @@ func TestBatchQueryInfo(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
 
-	if session.cfg.ProtoVersion == 1 {
-		t.Skip("atomic batches not supported. Please use Cassandra >= 2.0")
-	}
-
 	if err := createTable(session, "CREATE TABLE gocql_test.batch_query_info (id int, cluster int, value text, PRIMARY KEY (id, cluster))"); err != nil {
 		t.Fatalf("failed to create table with error '%v'", err)
 	}
@@ -1793,10 +1738,6 @@ func TestPrepare_ReprepareBatch(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
 
-	if session.cfg.ProtoVersion == 1 {
-		t.Skip("atomic batches not supported. Please use Cassandra >= 2.0")
-	}
-
 	stmt, conn := injectInvalidPreparedStatement(t, session, "test_reprepare_statement_batch")
 	batch := session.Batch(UnloggedBatch)
 	batch.Query(stmt, "bar")
@@ -1810,7 +1751,7 @@ func TestQueryInfo(t *testing.T) {
 	defer session.Close()
 
 	conn := getRandomConn(t, session)
-	info, err := conn.prepareStatement(context.Background(), "SELECT release_version, host_id FROM system.local WHERE key = ?", nil)
+	info, err := conn.prepareStatement(context.Background(), "SELECT release_version, host_id FROM system.local WHERE key = ?", time.Second, nil)
 
 	if err != nil {
 		t.Fatalf("Failed to execute query for preparing statement: %v", err)
@@ -1820,10 +1761,8 @@ func TestQueryInfo(t *testing.T) {
 		t.Fatalf("Was not expecting meta data for %d query arguments, but got %d\n", 1, x)
 	}
 
-	if session.cfg.ProtoVersion > 1 {
-		if x := len(info.response.columns); x != 2 {
-			t.Fatalf("Was not expecting meta data for %d result columns, but got %d\n", 2, x)
-		}
+	if x := len(info.response.columns); x != 2 {
+		t.Fatalf("Was not expecting meta data for %d result columns, but got %d\n", 2, x)
 	}
 }
 
@@ -2174,10 +2113,6 @@ func TestBatchStats(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
 
-	if session.cfg.ProtoVersion == 1 {
-		t.Skip("atomic batches not supported. Please use Cassandra >= 2.0")
-	}
-
 	if err := createTable(session, "CREATE TABLE gocql_test.batchStats (id int, PRIMARY KEY (id))"); err != nil {
 		t.Fatalf("failed to create table with error '%v'", err)
 	}
@@ -2207,10 +2142,6 @@ func (f funcBatchObserver) ObserveBatch(ctx context.Context, o ObservedBatch) {
 func TestBatchObserve(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
-
-	if session.cfg.ProtoVersion == 1 {
-		t.Skip("atomic batches not supported. Please use Cassandra >= 2.0")
-	}
 
 	if err := createTable(session, `CREATE TABLE gocql_test.batch_observe_table (id int, other int, PRIMARY KEY (id))`); err != nil {
 		t.Fatal("create table:", err)
@@ -2263,7 +2194,7 @@ func TestBatchObserve(t *testing.T) {
 			t.Fatal("unexpected query", stmt)
 		}
 
-		assertDeepEqual(t, "observed value", []interface{}{i}, observedBatch.observedValues[i])
+		tests.AssertDeepEqual(t, "observed value", []interface{}{i}, observedBatch.observedValues[i])
 	}
 }
 
@@ -2372,7 +2303,9 @@ func TestRoutingKey(t *testing.T) {
 		t.Fatalf("failed to create table with error '%v'", err)
 	}
 
-	routingKeyInfo, err := session.routingKeyInfo(context.Background(), "SELECT * FROM test_single_routing_key WHERE second_id=? AND first_id=?")
+	initCacheSize := session.routingKeyInfoCache.lru.Len()
+
+	routingKeyInfo, err := session.routingKeyInfo(context.Background(), "SELECT * FROM test_single_routing_key WHERE second_id=? AND first_id=?", time.Second)
 	if err != nil {
 		t.Fatalf("failed to get routing key info due to error: %v", err)
 	}
@@ -2396,7 +2329,7 @@ func TestRoutingKey(t *testing.T) {
 	}
 
 	// verify the cache is working
-	routingKeyInfo, err = session.routingKeyInfo(context.Background(), "SELECT * FROM test_single_routing_key WHERE second_id=? AND first_id=?")
+	routingKeyInfo, err = session.routingKeyInfo(context.Background(), "SELECT * FROM test_single_routing_key WHERE second_id=? AND first_id=?", time.Duration(0))
 	if err != nil {
 		t.Fatalf("failed to get routing key info due to error: %v", err)
 	}
@@ -2416,8 +2349,8 @@ func TestRoutingKey(t *testing.T) {
 		t.Fatalf("Expected routing key types[0] to be %v but was %v", TypeInt, routingKeyInfo.types[0].Type())
 	}
 	cacheSize := session.routingKeyInfoCache.lru.Len()
-	if cacheSize != 1 {
-		t.Errorf("Expected cache size to be 1 but was %d", cacheSize)
+	if cacheSize != initCacheSize+1 {
+		t.Errorf("Expected cache size to be %d but was %d", initCacheSize+1, cacheSize)
 	}
 
 	query := session.Query("SELECT * FROM test_single_routing_key WHERE second_id=? AND first_id=?", 1, 2)
@@ -2430,7 +2363,7 @@ func TestRoutingKey(t *testing.T) {
 		t.Errorf("Expected routing key %v but was %v", expectedRoutingKey, routingKey)
 	}
 
-	routingKeyInfo, err = session.routingKeyInfo(context.Background(), "SELECT * FROM test_composite_routing_key WHERE second_id=? AND first_id=?")
+	routingKeyInfo, err = session.routingKeyInfo(context.Background(), "SELECT * FROM test_composite_routing_key WHERE second_id=? AND first_id=?", time.Duration(0))
 	if err != nil {
 		t.Fatalf("failed to get routing key info due to error: %v", err)
 	}
@@ -2474,8 +2407,8 @@ func TestRoutingKey(t *testing.T) {
 
 	// verify the cache is working
 	cacheSize = session.routingKeyInfoCache.lru.Len()
-	if cacheSize != 2 {
-		t.Errorf("Expected cache size to be 2 but was %d", cacheSize)
+	if cacheSize != initCacheSize+2 {
+		t.Errorf("Expected cache size to be %d but was %d", initCacheSize+2, cacheSize)
 	}
 }
 
@@ -2633,7 +2566,7 @@ func TestJSONSupport(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
 
-	if session.cfg.ProtoVersion < 4 {
+	if session.cfg.ProtoVersion < protoVersion4 {
 		t.Skip("skipping JSON support on proto < 4")
 	}
 
@@ -2676,10 +2609,6 @@ func TestJSONSupport(t *testing.T) {
 func TestUnmarshallNestedTypes(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
-
-	if session.cfg.ProtoVersion < protoVersion3 {
-		t.Skip("can not have frozen types in cassandra < 2.1.3")
-	}
 
 	if err := createTable(session, `CREATE TABLE gocql_test.test_557 (
 		    id text PRIMARY KEY,
@@ -2810,7 +2739,7 @@ func TestUnsetCol(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
 
-	if session.cfg.ProtoVersion < 4 {
+	if session.cfg.ProtoVersion < protoVersion4 {
 		t.Skip("Unset Values are not supported in protocol < 4")
 	}
 
@@ -2839,7 +2768,7 @@ func TestUnsetColBatch(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
 
-	if session.cfg.ProtoVersion < 4 {
+	if session.cfg.ProtoVersion < protoVersion4 {
 		t.Skip("Unset Values are not supported in protocol < 4")
 	}
 
@@ -2880,10 +2809,6 @@ func TestUnsetColBatch(t *testing.T) {
 func TestQuery_NamedValues(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
-
-	if session.cfg.ProtoVersion < 3 {
-		t.Skip("named Values are not supported in protocol < 3")
-	}
 
 	if err := createTable(session, "CREATE TABLE gocql_test.named_query(id int, value text, PRIMARY KEY (id))"); err != nil {
 		t.Fatal(err)

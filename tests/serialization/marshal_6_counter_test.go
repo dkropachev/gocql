@@ -14,6 +14,8 @@ import (
 )
 
 func TestMarshalCounter(t *testing.T) {
+	t.Parallel()
+
 	type testSuite struct {
 		name      string
 		marshal   func(interface{}) ([]byte, error)
@@ -43,6 +45,7 @@ func TestMarshalCounter(t *testing.T) {
 		unmarshal := tSuite.unmarshal
 
 		t.Run(tSuite.name, func(t *testing.T) {
+			t.Parallel()
 
 			serialization.PositiveSet{
 				Data: nil,

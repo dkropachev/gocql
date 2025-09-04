@@ -6,6 +6,8 @@ package serialization
 import "testing"
 
 func Test1Pointers(t *testing.T) {
+	t.Parallel()
+
 	val1 := new(int16)
 	*val1 = int16(0)
 	testPtr := getPointers(val1)
@@ -23,6 +25,8 @@ func Test1Pointers(t *testing.T) {
 }
 
 func Test2Pointers(t *testing.T) {
+	t.Parallel()
+
 	val1 := new(*int16)
 	*val1 = new(int16)
 	testPtr := getPointers(val1)

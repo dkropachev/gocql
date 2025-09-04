@@ -12,6 +12,8 @@ import (
 )
 
 func TestMarshalSetListV3(t *testing.T) {
+	t.Parallel()
+
 	elem := gocql.NewNativeType(3, gocql.TypeSmallInt, "")
 
 	tTypes := []gocql.TypeInfo{

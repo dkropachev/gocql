@@ -48,7 +48,8 @@ func (s LZ4Compressor) Name() string {
 }
 
 func (s LZ4Compressor) Encode(data []byte) ([]byte, error) {
-	buf := make([]byte, lz4.CompressBlockBound(len(data)+4))
+	dataLen := len(data)
+	buf := make([]byte, lz4.CompressBlockBound(dataLen)+4)
 	var compressor lz4.Compressor
 	n, err := compressor.CompressBlock(data, buf[4:])
 	// According to lz4.CompressBlock doc, it doesn't fail as long as the dst
@@ -57,7 +58,7 @@ func (s LZ4Compressor) Encode(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	binary.BigEndian.PutUint32(buf, uint32(len(data)))
+	binary.BigEndian.PutUint32(buf, uint32(dataLen))
 	return buf[:n+4], nil
 }
 

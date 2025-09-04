@@ -41,6 +41,8 @@ func TestMarshalDecimalCorrupt(t *testing.T) {
 		unmarshal := tSuite.unmarshal
 
 		t.Run(tSuite.name, func(t *testing.T) {
+			t.Parallel()
+
 			serialization.NegativeMarshalSet{
 				Values: mod.Values{"1s2", "1s", "-1s", ",1", "0,1"}.AddVariants(mod.All...),
 			}.Run("corrupt_vals", t, marshal)

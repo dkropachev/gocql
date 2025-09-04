@@ -30,13 +30,14 @@ package gocql
 import (
 	"bytes"
 	"encoding/binary"
-	"gopkg.in/inf.v0"
 	"math"
 	"math/big"
 	"net"
 	"reflect"
 	"strings"
 	"testing"
+
+	"gopkg.in/inf.v0"
 )
 
 type AliasInt int
@@ -54,415 +55,15 @@ var marshalTests = []struct {
 	UnmarshalError error
 }{
 	{
-		NativeType{proto: 2, typ: TypeDecimal},
-		[]byte("\x00\x00\x00\x00\x00"),
-		inf.NewDec(0, 0),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeDecimal},
-		[]byte("\x00\x00\x00\x00\x64"),
-		inf.NewDec(100, 0),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeDecimal},
-		[]byte("\x00\x00\x00\x02\x19"),
-		decimalize("0.25"),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeDecimal},
-		[]byte("\x00\x00\x00\x13\xD5\a;\x20\x14\xA2\x91"),
-		decimalize("-0.0012095473475870063"), // From the iconara/cql-rb test suite
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeDecimal},
-		[]byte("\x00\x00\x00\x13*\xF8\xC4\xDF\xEB]o"),
-		decimalize("0.0012095473475870063"), // From the iconara/cql-rb test suite
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeDecimal},
-		[]byte("\x00\x00\x00\x12\xF2\xD8\x02\xB6R\x7F\x99\xEE\x98#\x99\xA9V"),
-		decimalize("-1042342234234.123423435647768234"), // From the iconara/cql-rb test suite
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeDecimal},
-		[]byte("\x00\x00\x00\r\nJ\x04\"^\x91\x04\x8a\xb1\x18\xfe"),
-		decimalize("1243878957943.1234124191998"), // From the datastax/python-driver test suite
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeDecimal},
-		[]byte("\x00\x00\x00\x06\xe5\xde]\x98Y"),
-		decimalize("-112233.441191"), // From the datastax/python-driver test suite
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeDecimal},
-		[]byte("\x00\x00\x00\x14\x00\xfa\xce"),
-		decimalize("0.00000000000000064206"), // From the datastax/python-driver test suite
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeDecimal},
-		[]byte("\x00\x00\x00\x14\xff\x052"),
-		decimalize("-0.00000000000000064206"), // From the datastax/python-driver test suite
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeDecimal},
-		[]byte("\xff\xff\xff\x9c\x00\xfa\xce"),
-		inf.NewDec(64206, -100), // From the datastax/python-driver test suite
-		nil,
-		nil,
-	},
-	{
 		CollectionType{
-			NativeType: NativeType{proto: 2, typ: TypeList},
-			Elem:       NativeType{proto: 2, typ: TypeInt},
-		},
-		[]byte("\x00\x02\x00\x04\x00\x00\x00\x01\x00\x04\x00\x00\x00\x02"),
-		[]int{1, 2},
-		nil,
-		nil,
-	},
-	{
-		CollectionType{
-			NativeType: NativeType{proto: 2, typ: TypeList},
-			Elem:       NativeType{proto: 2, typ: TypeInt},
-		},
-		[]byte("\x00\x02\x00\x04\x00\x00\x00\x01\x00\x04\x00\x00\x00\x02"),
-		[2]int{1, 2},
-		nil,
-		nil,
-	},
-	{
-		CollectionType{
-			NativeType: NativeType{proto: 2, typ: TypeSet},
-			Elem:       NativeType{proto: 2, typ: TypeInt},
-		},
-		[]byte("\x00\x02\x00\x04\x00\x00\x00\x01\x00\x04\x00\x00\x00\x02"),
-		[]int{1, 2},
-		nil,
-		nil,
-	},
-	{
-		CollectionType{
-			NativeType: NativeType{proto: 2, typ: TypeSet},
-			Elem:       NativeType{proto: 2, typ: TypeInt},
-		},
-		[]byte{0, 0}, // encoding of a list should always include the size of the collection
-		[]int{},
-		nil,
-		nil,
-	},
-	{
-		CollectionType{
-			NativeType: NativeType{proto: 2, typ: TypeMap},
-			Key:        NativeType{proto: 2, typ: TypeVarchar},
-			Elem:       NativeType{proto: 2, typ: TypeInt},
-		},
-		[]byte("\x00\x01\x00\x03foo\x00\x04\x00\x00\x00\x01"),
-		map[string]int{"foo": 1},
-		nil,
-		nil,
-	},
-	{
-		CollectionType{
-			NativeType: NativeType{proto: 2, typ: TypeMap},
-			Key:        NativeType{proto: 2, typ: TypeVarchar},
-			Elem:       NativeType{proto: 2, typ: TypeInt},
-		},
-		[]byte{0, 0},
-		map[string]int{},
-		nil,
-		nil,
-	},
-	{
-		CollectionType{
-			NativeType: NativeType{proto: 2, typ: TypeMap},
-			Key:        NativeType{proto: 2, typ: TypeVarchar},
-			Elem:       NativeType{proto: 2, typ: TypeBlob},
-		},
-		[]byte("\x00\x01\x00\x03foo\x00\x05\x01\x02\x03\x04\x05"),
-		map[string]interface{}{
-			"foo": []byte{0x01, 0x02, 0x03, 0x04, 0x05},
-		},
-		nil,
-		nil,
-	},
-	{
-		CollectionType{
-			NativeType: NativeType{proto: 2, typ: TypeList},
-			Elem:       NativeType{proto: 2, typ: TypeVarchar},
-		},
-		bytes.Join([][]byte{
-			[]byte("\x00\x01\xFF\xFF"),
-			bytes.Repeat([]byte("X"), math.MaxUint16)}, []byte("")),
-		[]string{strings.Repeat("X", math.MaxUint16)},
-		nil,
-		nil,
-	},
-	{
-		CollectionType{
-			NativeType: NativeType{proto: 2, typ: TypeMap},
-			Key:        NativeType{proto: 2, typ: TypeVarchar},
-			Elem:       NativeType{proto: 2, typ: TypeVarchar},
-		},
-		bytes.Join([][]byte{
-			[]byte("\x00\x01\xFF\xFF"),
-			bytes.Repeat([]byte("X"), math.MaxUint16),
-			[]byte("\xFF\xFF"),
-			bytes.Repeat([]byte("Y"), math.MaxUint16)}, []byte("")),
-		map[string]string{
-			strings.Repeat("X", math.MaxUint16): strings.Repeat("Y", math.MaxUint16),
-		},
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeInet},
-		[]byte("\x7F\x00\x00\x01"),
-		net.ParseIP("127.0.0.1").To4(),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeInet},
-		[]byte("\xFF\xFF\xFF\xFF"),
-		net.ParseIP("255.255.255.255").To4(),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeInet},
-		[]byte("\x7F\x00\x00\x01"),
-		"127.0.0.1",
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeInet},
-		[]byte("\xFF\xFF\xFF\xFF"),
-		"255.255.255.255",
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeInet},
-		[]byte("\x21\xDA\x00\xd3\x00\x00\x2f\x3b\x02\xaa\x00\xff\xfe\x28\x9c\x5a"),
-		"21da:d3:0:2f3b:2aa:ff:fe28:9c5a",
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeInet},
-		[]byte("\xfe\x80\x00\x00\x00\x00\x00\x00\x02\x02\xb3\xff\xfe\x1e\x83\x29"),
-		"fe80::202:b3ff:fe1e:8329",
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeInet},
-		[]byte("\x21\xDA\x00\xd3\x00\x00\x2f\x3b\x02\xaa\x00\xff\xfe\x28\x9c\x5a"),
-		net.ParseIP("21da:d3:0:2f3b:2aa:ff:fe28:9c5a"),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeInet},
-		[]byte("\xfe\x80\x00\x00\x00\x00\x00\x00\x02\x02\xb3\xff\xfe\x1e\x83\x29"),
-		net.ParseIP("fe80::202:b3ff:fe1e:8329"),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeInet},
-		[]byte("\x7F\x00\x00\x01"),
-		func() *net.IP {
-			ip := net.ParseIP("127.0.0.1").To4()
-			return &ip
-		}(),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeInet},
-		[]byte(nil),
-		(*net.IP)(nil),
-		nil,
-		nil,
-	},
-	{
-		CollectionType{
-			NativeType: NativeType{proto: 2, typ: TypeList},
-			Elem:       NativeType{proto: 2, typ: TypeInt},
-		},
-		[]byte("\x00\x02\x00\x04\x00\x00\x00\x01\x00\x04\x00\x00\x00\x02"),
-		func() *[]int {
-			l := []int{1, 2}
-			return &l
-		}(),
-		nil,
-		nil,
-	},
-	{
-		CollectionType{
-			NativeType: NativeType{proto: 3, typ: TypeList},
-			Elem:       NativeType{proto: 3, typ: TypeInt},
+			NativeType: NativeType{proto: protoVersion3, typ: TypeList},
+			Elem:       NativeType{proto: protoVersion3, typ: TypeInt},
 		},
 		[]byte("\x00\x00\x00\x02\x00\x00\x00\x04\x00\x00\x00\x01\x00\x00\x00\x04\x00\x00\x00\x02"),
 		func() *[]int {
 			l := []int{1, 2}
 			return &l
 		}(),
-		nil,
-		nil,
-	},
-	{
-		CollectionType{
-			NativeType: NativeType{proto: 2, typ: TypeList},
-			Elem:       NativeType{proto: 2, typ: TypeInt},
-		},
-		[]byte(nil),
-		(*[]int)(nil),
-		nil,
-		nil,
-	},
-	{
-		CollectionType{
-			NativeType: NativeType{proto: 2, typ: TypeMap},
-			Key:        NativeType{proto: 2, typ: TypeVarchar},
-			Elem:       NativeType{proto: 2, typ: TypeInt},
-		},
-		[]byte("\x00\x01\x00\x03foo\x00\x04\x00\x00\x00\x01"),
-		func() *map[string]int {
-			m := map[string]int{"foo": 1}
-			return &m
-		}(),
-		nil,
-		nil,
-	},
-	{
-		CollectionType{
-			NativeType: NativeType{proto: 2, typ: TypeMap},
-			Key:        NativeType{proto: 2, typ: TypeVarchar},
-			Elem:       NativeType{proto: 2, typ: TypeInt},
-		},
-		[]byte(nil),
-		(*map[string]int)(nil),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeTinyInt},
-		[]byte("\x7f"),
-		127, // math.MaxInt8
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeTinyInt},
-		[]byte("\x7f"),
-		"127", // math.MaxInt8
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeTinyInt},
-		[]byte("\x01"),
-		int16(1),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeTinyInt},
-		[]byte("\xff"),
-		int16(-1),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeTinyInt},
-		[]byte("\xff"),
-		uint8(255),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeTinyInt},
-		[]byte("\xff"),
-		uint64(255),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeTinyInt},
-		[]byte("\xff"),
-		uint32(255),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeTinyInt},
-		[]byte("\xff"),
-		uint16(255),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeTinyInt},
-		[]byte("\xff"),
-		uint(255),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeTinyInt},
-		[]byte("\xff"),
-		AliasUint8(255),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeTinyInt},
-		[]byte("\xff"),
-		AliasUint64(255),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeTinyInt},
-		[]byte("\xff"),
-		AliasUint32(255),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeTinyInt},
-		[]byte("\xff"),
-		AliasUint16(255),
-		nil,
-		nil,
-	},
-	{
-		NativeType{proto: 2, typ: TypeTinyInt},
-		[]byte("\xff"),
-		AliasUint(255),
 		nil,
 		nil,
 	},
@@ -476,8 +77,8 @@ var unmarshalTests = []struct {
 }{
 	{
 		CollectionType{
-			NativeType: NativeType{proto: 3, typ: TypeList},
-			Elem:       NativeType{proto: 3, typ: TypeInt},
+			NativeType: NativeType{proto: protoVersion3, typ: TypeList},
+			Elem:       NativeType{proto: protoVersion3, typ: TypeInt},
 		},
 		[]byte("\x00\x00\x00\x02\x00\x00\x00\x04\x00\x00"), // truncated data
 		func() *[]int {
@@ -485,26 +86,6 @@ var unmarshalTests = []struct {
 			return &l
 		}(),
 		unmarshalErrorf("unmarshal list: unexpected eof"),
-	},
-	{
-		CollectionType{
-			NativeType: NativeType{proto: 2, typ: TypeMap},
-			Key:        NativeType{proto: 2, typ: TypeVarchar},
-			Elem:       NativeType{proto: 2, typ: TypeInt},
-		},
-		[]byte("\x00\x01\x00\x03fo"),
-		map[string]int{"foo": 1},
-		unmarshalErrorf("unmarshal map: unexpected eof"),
-	},
-	{
-		CollectionType{
-			NativeType: NativeType{proto: 2, typ: TypeMap},
-			Key:        NativeType{proto: 2, typ: TypeVarchar},
-			Elem:       NativeType{proto: 2, typ: TypeInt},
-		},
-		[]byte("\x00\x01\x00\x03foo\x00\x04\x00\x00"),
-		map[string]int{"foo": 1},
-		unmarshalErrorf("unmarshal map: unexpected eof"),
 	},
 }
 
@@ -519,6 +100,8 @@ func bigintize(s string) *big.Int {
 }
 
 func TestMarshal_Encode(t *testing.T) {
+	t.Parallel()
+
 	for i, test := range marshalTests {
 		if test.MarshalError == nil {
 			data, err := Marshal(test.Info, test.Value)
@@ -538,6 +121,8 @@ func TestMarshal_Encode(t *testing.T) {
 }
 
 func TestMarshal_Decode(t *testing.T) {
+	t.Parallel()
+
 	for i, test := range marshalTests {
 		if test.UnmarshalError == nil {
 			v := reflect.New(reflect.TypeOf(test.Value))
@@ -587,13 +172,11 @@ func equalStringPointerSlice(leftList, rightList []*string) bool {
 }
 
 func TestMarshalList(t *testing.T) {
-	typeInfoV2 := CollectionType{
-		NativeType: NativeType{proto: 2, typ: TypeList},
-		Elem:       NativeType{proto: 2, typ: TypeVarchar},
-	}
+	t.Parallel()
+
 	typeInfoV3 := CollectionType{
-		NativeType: NativeType{proto: 3, typ: TypeList},
-		Elem:       NativeType{proto: 3, typ: TypeVarchar},
+		NativeType: NativeType{proto: protoVersion3, typ: TypeList},
+		Elem:       NativeType{proto: protoVersion3, typ: TypeVarchar},
 	}
 
 	type tc struct {
@@ -606,37 +189,6 @@ func TestMarshalList(t *testing.T) {
 	valueB := "valueB"
 	valueEmpty := ""
 	testCases := []tc{
-		{
-			typeInfo: typeInfoV2,
-			input:    []*string{&valueA},
-			expected: []*string{&valueA},
-		},
-		{
-			typeInfo: typeInfoV2,
-			input:    []*string{&valueA, &valueB},
-			expected: []*string{&valueA, &valueB},
-		},
-		{
-			typeInfo: typeInfoV2,
-			input:    []*string{&valueA, &valueEmpty, &valueB},
-			expected: []*string{&valueA, &valueEmpty, &valueB},
-		},
-		{
-			typeInfo: typeInfoV2,
-			input:    []*string{&valueEmpty},
-			expected: []*string{&valueEmpty},
-		},
-		{
-			// nil values are marshalled to empty values for protocol < 3
-			typeInfo: typeInfoV2,
-			input:    []*string{nil},
-			expected: []*string{&valueEmpty},
-		},
-		{
-			typeInfo: typeInfoV2,
-			input:    []*string{&valueA, nil, &valueB},
-			expected: []*string{&valueA, &valueEmpty, &valueB},
-		},
 		{
 			typeInfo: typeInfoV3,
 			input:    []*string{&valueEmpty},
@@ -737,6 +289,8 @@ func testType(t *testing.T, cassType string, expectedType Type) {
 }
 
 func TestLookupCassType(t *testing.T) {
+	t.Parallel()
+
 	for _, lookupTest := range typeLookupTest {
 		testType(t, lookupTest.TypeName, lookupTest.ExpectedType)
 	}
@@ -748,26 +302,14 @@ func (m *MyPointerMarshaler) MarshalCQL(_ TypeInfo) ([]byte, error) {
 	return []byte{42}, nil
 }
 
-func TestMarshalPointer(t *testing.T) {
-	m := &MyPointerMarshaler{}
-	typ := NativeType{proto: 2, typ: TypeInt}
-
-	data, err := Marshal(typ, m)
-
-	if err != nil {
-		t.Errorf("Pointer marshaling failed. Error: %s", err)
-	}
-	if len(data) != 1 || data[0] != 42 {
-		t.Errorf("Pointer marshaling failed. Expected %+v, got %+v", []byte{42}, data)
-	}
-}
-
 func TestMarshalTuple(t *testing.T) {
+	t.Parallel()
+
 	info := TupleTypeInfo{
-		NativeType: NativeType{proto: 3, typ: TypeTuple},
+		NativeType: NativeType{proto: protoVersion3, typ: TypeTuple},
 		Elems: []TypeInfo{
-			NativeType{proto: 3, typ: TypeVarchar},
-			NativeType{proto: 3, typ: TypeVarchar},
+			NativeType{proto: protoVersion3, typ: TypeVarchar},
+			NativeType{proto: protoVersion3, typ: TypeVarchar},
 		},
 	}
 
@@ -910,11 +452,13 @@ func TestMarshalTuple(t *testing.T) {
 }
 
 func TestUnmarshalTuple(t *testing.T) {
+	t.Parallel()
+
 	info := TupleTypeInfo{
-		NativeType: NativeType{proto: 3, typ: TypeTuple},
+		NativeType: NativeType{proto: protoVersion3, typ: TypeTuple},
 		Elems: []TypeInfo{
-			NativeType{proto: 3, typ: TypeVarchar},
-			NativeType{proto: 3, typ: TypeVarchar},
+			NativeType{proto: protoVersion3, typ: TypeVarchar},
+			NativeType{proto: protoVersion3, typ: TypeVarchar},
 		},
 	}
 
@@ -985,10 +529,12 @@ func TestUnmarshalTuple(t *testing.T) {
 }
 
 func TestMarshalUDTMap(t *testing.T) {
-	typeInfo := UDTTypeInfo{NativeType{proto: 3, typ: TypeUDT}, "", "xyz", []UDTField{
-		{Name: "x", Type: NativeType{proto: 3, typ: TypeInt}},
-		{Name: "y", Type: NativeType{proto: 3, typ: TypeInt}},
-		{Name: "z", Type: NativeType{proto: 3, typ: TypeInt}},
+	t.Parallel()
+
+	typeInfo := UDTTypeInfo{NativeType{proto: protoVersion3, typ: TypeUDT}, "", "xyz", []UDTField{
+		{Name: "x", Type: NativeType{proto: protoVersion3, typ: TypeInt}},
+		{Name: "y", Type: NativeType{proto: protoVersion3, typ: TypeInt}},
+		{Name: "z", Type: NativeType{proto: protoVersion3, typ: TypeInt}},
 	}}
 
 	t.Run("partially bound", func(t *testing.T) {
@@ -1040,10 +586,12 @@ func TestMarshalUDTMap(t *testing.T) {
 }
 
 func TestMarshalUDTStruct(t *testing.T) {
-	typeInfo := UDTTypeInfo{NativeType{proto: 3, typ: TypeUDT}, "", "xyz", []UDTField{
-		{Name: "x", Type: NativeType{proto: 3, typ: TypeInt}},
-		{Name: "y", Type: NativeType{proto: 3, typ: TypeInt}},
-		{Name: "z", Type: NativeType{proto: 3, typ: TypeInt}},
+	t.Parallel()
+
+	typeInfo := UDTTypeInfo{NativeType{proto: protoVersion3, typ: TypeUDT}, "", "xyz", []UDTField{
+		{Name: "x", Type: NativeType{proto: protoVersion3, typ: TypeInt}},
+		{Name: "y", Type: NativeType{proto: protoVersion3, typ: TypeInt}},
+		{Name: "z", Type: NativeType{proto: protoVersion3, typ: TypeInt}},
 	}}
 
 	type xyzStruct struct {
@@ -1109,6 +657,8 @@ func TestMarshalUDTStruct(t *testing.T) {
 }
 
 func TestMarshalNil(t *testing.T) {
+	t.Parallel()
+
 	types := []Type{
 		TypeAscii,
 		TypeBlob,
@@ -1128,7 +678,7 @@ func TestMarshalNil(t *testing.T) {
 	}
 
 	for _, typ := range types {
-		data, err := Marshal(NativeType{proto: 3, typ: typ}, nil)
+		data, err := Marshal(NativeType{proto: protoVersion3, typ: typ}, nil)
 		if err != nil {
 			t.Errorf("unable to marshal nil %v: %v\n", typ, err)
 		} else if data != nil {
@@ -1138,6 +688,8 @@ func TestMarshalNil(t *testing.T) {
 }
 
 func TestUnmarshalInetCopyBytes(t *testing.T) {
+	t.Parallel()
+
 	data := []byte{127, 0, 0, 1}
 	var ip net.IP
 	if err := unmarshalInet(data, &ip); err != nil {
@@ -1165,13 +717,11 @@ func BenchmarkUnmarshalVarchar(b *testing.B) {
 }
 
 func TestReadCollectionSize(t *testing.T) {
-	listV2 := CollectionType{
-		NativeType: NativeType{proto: 2, typ: TypeList},
-		Elem:       NativeType{proto: 2, typ: TypeVarchar},
-	}
+	t.Parallel()
+
 	listV3 := CollectionType{
-		NativeType: NativeType{proto: 3, typ: TypeList},
-		Elem:       NativeType{proto: 3, typ: TypeVarchar},
+		NativeType: NativeType{proto: protoVersion3, typ: TypeList},
+		Elem:       NativeType{proto: protoVersion3, typ: TypeVarchar},
 	}
 
 	tests := []struct {
@@ -1181,24 +731,6 @@ func TestReadCollectionSize(t *testing.T) {
 		isError      bool
 		expectedSize int
 	}{
-		{
-			name:    "short read 0 proto 2",
-			info:    listV2,
-			data:    []byte{},
-			isError: true,
-		},
-		{
-			name:    "short read 1 proto 2",
-			info:    listV2,
-			data:    []byte{0x01},
-			isError: true,
-		},
-		{
-			name:         "good read proto 2",
-			info:         listV2,
-			data:         []byte{0x01, 0x38},
-			expectedSize: 0x0138,
-		},
 		{
 			name:    "short read 0 proto 3",
 			info:    listV3,
@@ -1263,18 +795,20 @@ func BenchmarkUnmarshalUUID(b *testing.B) {
 }
 
 func TestUnmarshalUDT(t *testing.T) {
+	t.Parallel()
+
 	info := UDTTypeInfo{
-		NativeType: NativeType{proto: 4, typ: TypeUDT},
+		NativeType: NativeType{proto: protoVersion4, typ: TypeUDT},
 		Name:       "myudt",
 		KeySpace:   "myks",
 		Elements: []UDTField{
 			{
 				Name: "first",
-				Type: NativeType{proto: 4, typ: TypeAscii},
+				Type: NativeType{proto: protoVersion4, typ: TypeAscii},
 			},
 			{
 				Name: "second",
-				Type: NativeType{proto: 4, typ: TypeSmallInt},
+				Type: NativeType{proto: protoVersion4, typ: TypeSmallInt},
 			},
 		},
 	}

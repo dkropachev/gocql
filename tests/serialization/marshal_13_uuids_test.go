@@ -14,6 +14,8 @@ import (
 )
 
 func TestMarshalUUIDs(t *testing.T) {
+	t.Parallel()
+
 	tTypes := []gocql.NativeType{
 		gocql.NewNativeType(4, gocql.TypeUUID, ""),
 		gocql.NewNativeType(4, gocql.TypeTimeUUID, ""),
@@ -57,6 +59,7 @@ func TestMarshalUUIDs(t *testing.T) {
 		unmarshal := tSuite.unmarshal
 
 		t.Run(tSuite.name, func(t *testing.T) {
+			t.Parallel()
 
 			serialization.PositiveSet{
 				Data: nil,
@@ -119,6 +122,8 @@ func TestMarshalUUIDs(t *testing.T) {
 }
 
 func TestMarshalTimeUUID(t *testing.T) {
+	t.Parallel()
+
 	tType := gocql.NewNativeType(4, gocql.TypeTimeUUID, "")
 
 	type testSuite struct {
@@ -145,6 +150,7 @@ func TestMarshalTimeUUID(t *testing.T) {
 		unmarshal := tSuite.unmarshal
 
 		t.Run(tSuite.name, func(t *testing.T) {
+			t.Parallel()
 
 			serialization.PositiveSet{
 				Data: make([]byte, 0),

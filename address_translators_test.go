@@ -28,11 +28,14 @@
 package gocql
 
 import (
+	"github.com/gocql/gocql/internal/tests"
 	"net"
 	"testing"
 )
 
 func TestIdentityAddressTranslator_NilAddrAndZeroPort(t *testing.T) {
+	t.Parallel()
+
 	var tr AddressTranslator = IdentityTranslator()
 	hostIP := net.ParseIP("")
 	if hostIP != nil {
@@ -43,10 +46,12 @@ func TestIdentityAddressTranslator_NilAddrAndZeroPort(t *testing.T) {
 	if addr != nil {
 		t.Errorf("expected translated host to be (nil) but was (%+v) instead", addr)
 	}
-	assertEqual(t, "translated port", 0, port)
+	tests.AssertEqual(t, "translated port", 0, port)
 }
 
 func TestIdentityAddressTranslator_HostProvided(t *testing.T) {
+	t.Parallel()
+
 	var tr AddressTranslator = IdentityTranslator()
 	hostIP := net.ParseIP("10.1.2.3")
 	if hostIP == nil {
@@ -57,5 +62,5 @@ func TestIdentityAddressTranslator_HostProvided(t *testing.T) {
 	if !hostIP.Equal(addr) {
 		t.Errorf("expected translated addr to be (%+v) but was (%+v) instead", hostIP, addr)
 	}
-	assertEqual(t, "translated port", 9042, port)
+	tests.AssertEqual(t, "translated port", 9042, port)
 }

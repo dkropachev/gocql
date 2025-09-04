@@ -33,6 +33,8 @@ import (
 )
 
 func TestAsyncSessionInit(t *testing.T) {
+	t.Parallel()
+
 	// Build a 3 node cluster to test host metric mapping
 	var addresses = []string{
 		"127.0.0.1",

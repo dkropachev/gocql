@@ -15,6 +15,8 @@ import (
 )
 
 func TestMarshalTimeCorrupt(t *testing.T) {
+	t.Parallel()
+
 	tType := gocql.NewNativeType(4, gocql.TypeTime, "")
 
 	type testSuite struct {
@@ -45,6 +47,7 @@ func TestMarshalTimeCorrupt(t *testing.T) {
 		unmarshal := tSuite.unmarshal
 
 		t.Run(tSuite.name, func(t *testing.T) {
+			t.Parallel()
 
 			// marshal, unmarshal of all supported `go types` does not return an error on all type of corruption.
 			//brokenTypes := serialization.GetTypes(int64(0), (*int64)(nil), mod.Int64(0), (*mod.Int64)(nil), time.Duration(0), (*time.Duration)(nil))

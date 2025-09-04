@@ -14,6 +14,8 @@ import (
 )
 
 func TestMarshalDateCorrupt(t *testing.T) {
+	t.Parallel()
+
 	tType := gocql.NewNativeType(4, gocql.TypeDate, "")
 
 	type testSuite struct {
@@ -44,6 +46,8 @@ func TestMarshalDateCorrupt(t *testing.T) {
 		unmarshal := tSuite.unmarshal
 
 		t.Run(tSuite.name, func(t *testing.T) {
+			t.Parallel()
+
 			serialization.NegativeMarshalSet{
 				Values: mod.Values{
 					time.Date(5881580, 7, 12, 0, 0, 0, 0, time.UTC).UnixMilli(),

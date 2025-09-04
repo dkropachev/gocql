@@ -18,6 +18,8 @@ import (
 )
 
 func TestMarshalDecimal(t *testing.T) {
+	t.Parallel()
+
 	tType := gocql.NewNativeType(4, gocql.TypeDecimal, "")
 
 	type testSuite struct {
@@ -67,6 +69,7 @@ func TestMarshalDecimal(t *testing.T) {
 		unmarshal := tSuite.unmarshal
 
 		t.Run(tSuite.name, func(t *testing.T) {
+			t.Parallel()
 
 			serialization.PositiveSet{
 				Data:   nil,
@@ -115,6 +118,8 @@ func TestMarshalDecimal(t *testing.T) {
 
 			scale := inf.Scale(math.MaxInt16)
 			t.Run("scaleMaxInt16", func(t *testing.T) {
+				t.Parallel()
+
 				serialization.PositiveSet{
 					Data:   []byte("\x00\x00\x7f\xff\x01"),
 					Values: getValues(scale, 1).AddVariants(mod.All...),

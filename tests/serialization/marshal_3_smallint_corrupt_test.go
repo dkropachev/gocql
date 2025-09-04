@@ -14,6 +14,8 @@ import (
 )
 
 func TestMarshalSmallintCorrupt(t *testing.T) {
+	t.Parallel()
+
 	type testSuite struct {
 		name      string
 		marshal   func(interface{}) ([]byte, error)
@@ -44,6 +46,8 @@ func TestMarshalSmallintCorrupt(t *testing.T) {
 		unmarshal := tSuite.unmarshal
 
 		t.Run(tSuite.name, func(t *testing.T) {
+			t.Parallel()
+
 			serialization.NegativeMarshalSet{
 				Values: mod.Values{
 					int32(32768), int64(32768), int(32768),

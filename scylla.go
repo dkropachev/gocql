@@ -282,8 +282,8 @@ func parseCQLProtocolExtensions(supported map[string][]string, logger StdLogger)
 }
 
 // isScyllaConn checks if conn is suitable for scyllaConnPicker.
-func (conn *Conn) isScyllaConn() bool {
-	return conn.getScyllaSupported().nrShards != 0
+func (c *Conn) isScyllaConn() bool {
+	return c.getScyllaSupported().nrShards != 0
 }
 
 // scyllaConnPicker is a specialised ConnPicker that selects connections based
@@ -372,24 +372,17 @@ func (p *scyllaConnPicker) Pick(t Token, qry ExecutableQuery) *Conn {
 
 	idx := -1
 
+outer:
 	for _, conn := range p.conns {
 		if conn == nil {
 			continue
 		}
 
 		if qry != nil && conn.isTabletSupported() {
-			tablets := conn.session.getTablets()
-
-			// Search for tablets with Keyspace and Table from the Query
-			l, r := tablets.findTablets(qry.Keyspace(), qry.Table())
-
-			if l != -1 {
-				tablet := tablets.findTabletForToken(mmt, l, r)
-
-				for _, replica := range tablet.replicas {
-					if replica.hostId.String() == p.hostId {
-						idx = replica.shardId
-					}
+			for _, replica := range conn.session.findTabletReplicasForToken(qry.Keyspace(), qry.Table(), int64(mmt)) {
+				if replica.HostID() == p.hostId {
+					idx = replica.ShardID()
+					break outer
 				}
 			}
 		}
@@ -675,7 +668,7 @@ func (sd *scyllaDialer) DialHost(ctx context.Context, host *HostInfo) (*DialedHo
 		return nil, fmt.Errorf("host missing port: %v", port)
 	}
 
-	addr := host.HostnameAndPort()
+	addr := net.JoinHostPort(ip.String(), strconv.Itoa(port))
 	conn, err := sd.dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, err
@@ -694,8 +687,7 @@ func (sd *scyllaDialer) DialShard(ctx context.Context, host *HostInfo, shardID, 
 	}
 
 	iter := newScyllaPortIterator(shardID, nrShards)
-
-	addr := host.HostnameAndPort()
+	addr := net.JoinHostPort(ip.String(), strconv.Itoa(port))
 
 	var shardAwarePort uint16
 	if sd.tlsConfig != nil {

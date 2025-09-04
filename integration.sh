@@ -35,7 +35,7 @@ readonly clusterSize=3
 readonly scylla_liveset="192.168.100.11,192.168.100.12,192.168.100.13"
 readonly cversion="3.11.4"
 readonly proto=4
-readonly args="-gocql.timeout=60s -proto=${proto} -rf=1 -clusterSize=${clusterSize} -autowait=2000ms -compressor=snappy -gocql.cversion=${cversion} -cluster=${scylla_liveset}"
+readonly args="-cluster-socket /tmp/scylla_node_1/cql.m -gocql.timeout=60s -proto=${proto} -rf=1 -clusterSize=${clusterSize} -autowait=2000ms -compressor=snappy -gocql.cversion=${cversion} -cluster=${scylla_liveset}"
 
 TAGS=$*
 

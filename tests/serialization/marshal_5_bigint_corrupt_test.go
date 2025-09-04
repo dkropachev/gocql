@@ -14,6 +14,8 @@ import (
 )
 
 func TestMarshalBigIntCorrupt(t *testing.T) {
+	t.Parallel()
+
 	type testSuite struct {
 		name      string
 		marshal   func(interface{}) ([]byte, error)

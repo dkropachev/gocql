@@ -40,6 +40,7 @@ import (
 
 	"github.com/gocql/gocql/debounce"
 	"github.com/gocql/gocql/internal/lru"
+	"github.com/gocql/gocql/tablets"
 )
 
 // Session is the interface used by users to interact with the database.
@@ -116,10 +117,10 @@ var queryPool = &sync.Pool{
 	},
 }
 
-func addrsToHosts(resolver DNSResolver, addrs []string, defaultPort int, logger StdLogger) ([]*HostInfo, error) {
+func addrsToHosts(resolver DNSResolver, translateAddressPort func(addr net.IP, port int) (net.IP, int), addrs []string, defaultPort int, logger StdLogger) ([]*HostInfo, error) {
 	var hosts []*HostInfo
 	for _, hostaddr := range addrs {
-		resolvedHosts, err := hostInfo(resolver, hostaddr, defaultPort)
+		resolvedHosts, err := hostInfo(resolver, translateAddressPort, hostaddr, defaultPort)
 		if err != nil {
 			// Try other hosts if unable to resolve DNS name
 			if _, ok := err.(*net.DNSError); ok {
@@ -179,7 +180,7 @@ func newSessionCommon(cfg ClusterConfig) (*Session, error) {
 	})
 
 	if cfg.PoolConfig.HostSelectionPolicy == nil {
-		cfg.PoolConfig.HostSelectionPolicy = RoundRobinHostPolicy()
+		cfg.PoolConfig.HostSelectionPolicy = TokenAwareHostPolicy(RoundRobinHostPolicy())
 	}
 	s.pool = cfg.PoolConfig.buildPool(s)
 
@@ -259,29 +260,29 @@ func (s *Session) init() error {
 		return nil
 	}
 
-	hosts, err := addrsToHosts(s.cfg.DNSResolver, s.cfg.Hosts, s.cfg.Port, s.logger)
+	hosts, err := addrsToHosts(s.cfg.DNSResolver, s.cfg.translateAddressPort, s.cfg.Hosts, s.cfg.Port, s.logger)
 	if err != nil {
 		return err
 	}
 
+	var partitioner string
+
 	if !s.cfg.disableControlConn {
 		s.control = createControlConn(s)
 		reconnectionPolicy := s.cfg.InitialReconnectionPolicy
-		var lastErr error
 		for i := 0; i < reconnectionPolicy.GetMaxRetries(); i++ {
-			lastErr = nil
 			if i != 0 {
 				time.Sleep(reconnectionPolicy.GetInterval(i))
 			}
 
 			if s.cfg.ProtoVersion == 0 {
-				proto, err := s.control.discoverProtocol(hosts)
+				var proto int
+				proto, err = s.control.discoverProtocol(hosts)
 				if err != nil {
 					err = fmt.Errorf("unable to discover protocol version: %v\n", err)
 					if gocqlDebug {
 						s.logger.Println(err.Error())
 					}
-					lastErr = err
 					continue
 				} else if proto == 0 {
 					return errors.New("unable to discovery protocol version")
@@ -292,17 +293,17 @@ func (s *Session) init() error {
 				s.connCfg.ProtoVersion = proto
 			}
 
-			if err := s.control.connect(hosts); err != nil {
+			if err = s.control.connect(hosts); err != nil {
 				err = fmt.Errorf("unable to create control connection: %v\n", err)
 				if gocqlDebug {
 					s.logger.Println(err.Error())
 				}
-				lastErr = err
 				continue
 			}
+			break
 		}
-		if lastErr != nil {
-			return fmt.Errorf("unable to connect to the cluster, last error: %v", lastErr.Error())
+		if err != nil {
+			return fmt.Errorf("unable to connect to the cluster, last error: %v", err.Error())
 		}
 
 		conn := s.control.getConn().conn.(*Conn)
@@ -316,12 +317,12 @@ func (s *Session) init() error {
 		s.hostSource.setControlConn(s.control)
 
 		if !s.cfg.DisableInitialHostLookup {
-			var partitioner string
-			newHosts, partitioner, err := s.hostSource.GetHostsFromSystem()
+			var newHosts []*HostInfo
+			newHosts, partitioner, err = s.hostSource.GetHostsFromSystem()
 			if err != nil {
 				return err
 			}
-			s.policy.SetPartitioner(partitioner)
+
 			filteredHosts := make([]*HostInfo, 0, len(newHosts))
 			for _, host := range newHosts {
 				if !s.cfg.filterHost(host) {
@@ -330,12 +331,15 @@ func (s *Session) init() error {
 			}
 
 			hosts = filteredHosts
-
-			if s.tabletsRoutingV1 {
-				tablets := TabletInfoList{}
-				s.metadataDescriber.setTablets(tablets)
-			}
 		}
+
+		newer, _ := checkSystemSchema(s.control)
+		s.useSystemSchema = newer
+		defer conn.finalizeConnection()
+	}
+
+	if partitioner != "" {
+		s.policy.SetPartitioner(partitioner)
 	}
 
 	for _, host := range hosts {
@@ -390,6 +394,12 @@ func (s *Session) init() error {
 		close(connectedCh)
 	}
 
+	if s.cfg.disableControlConn {
+		version := s.hostSource.getHostsList()[0].Version()
+		s.useSystemSchema = version.AtLeast(3, 0, 0)
+		s.hasAggregatesAndFunctions = version.AtLeast(2, 2, 0)
+	}
+
 	// before waiting for them to connect, add them all to the policy so we can
 	// utilize efficiencies by calling AddHosts if the policy supports it
 	type bulkAddHosts interface {
@@ -417,19 +427,6 @@ func (s *Session) init() error {
 	// See if there are any connections in the pool
 	if s.cfg.ReconnectInterval > 0 {
 		go s.reconnectDownedHosts(s.cfg.ReconnectInterval)
-	}
-
-	// If we disable the initial host lookup, we need to still check if the
-	// cluster is using the newer system schema or not... however, if control
-	// connection is disable, we really have no choice, so we just make our
-	// best guess...
-	if !s.cfg.disableControlConn && s.cfg.DisableInitialHostLookup {
-		newer, _ := checkSystemSchema(s.control)
-		s.useSystemSchema = newer
-	} else {
-		version := s.hostSource.getHostsList()[0].Version()
-		s.useSystemSchema = version.AtLeast(3, 0, 0)
-		s.hasAggregatesAndFunctions = version.AtLeast(2, 2, 0)
 	}
 
 	if s.pool.Size() == 0 {
@@ -536,6 +533,13 @@ func (s *Session) SetTrace(trace Tracer) {
 	s.mu.Unlock()
 }
 
+// QueryWithContext same as Query, but adds context to it.
+func (s *Session) QueryWithContext(ctx context.Context, stmt string, values ...interface{}) *Query {
+	q := s.Query(stmt, values...)
+	q.context = ctx
+	return q
+}
+
 // Query generates a new query object for interacting with the database.
 // Further details of the query may be tweaked using the resulting query
 // value before the query is executed. Query is automatically prepared
@@ -608,10 +612,6 @@ func (s *Session) Close() {
 
 	if s.cancel != nil {
 		s.cancel()
-	}
-
-	if s.policy != nil {
-		s.policy.Reset()
 	}
 
 	s.sessionStateMu.Lock()
@@ -690,7 +690,7 @@ func (s *Session) KeyspaceMetadata(keyspace string) (*KeyspaceMetadata, error) {
 }
 
 // TabletsMetadata returns the metadata about tablets
-func (s *Session) TabletsMetadata() (TabletInfoList, error) {
+func (s *Session) TabletsMetadata() (tablets.TabletInfoList, error) {
 	// fail fast
 	if s.Closed() {
 		return nil, ErrSessionClosed
@@ -721,12 +721,12 @@ func (s *Session) getConn() *Conn {
 	return nil
 }
 
-func (s *Session) getTablets() TabletInfoList {
-	return s.metadataDescriber.getTablets()
+func (s *Session) findTabletReplicasForToken(keyspace, table string, token int64) []tablets.ReplicaInfo {
+	return s.metadataDescriber.metadata.tabletsMetadata.FindReplicasForToken(keyspace, table, token)
 }
 
 // returns routing key indexes and type info
-func (s *Session) routingKeyInfo(ctx context.Context, stmt string) (*routingKeyInfo, error) {
+func (s *Session) routingKeyInfo(ctx context.Context, stmt string, requestTimout time.Duration) (*routingKeyInfo, error) {
 	s.routingKeyInfoCache.mu.Lock()
 
 	entry, cached := s.routingKeyInfoCache.lru.Get(stmt)
@@ -769,7 +769,7 @@ func (s *Session) routingKeyInfo(ctx context.Context, stmt string) (*routingKeyI
 	}
 
 	// get the query info for the statement
-	info, inflight.err = conn.prepareStatement(ctx, stmt, nil)
+	info, inflight.err = conn.prepareStatement(ctx, stmt, requestTimout, nil)
 	if inflight.err != nil {
 		// don't cache this error
 		s.routingKeyInfoCache.Remove(stmt)
@@ -1009,11 +1009,11 @@ func (qm *queryMetrics) hostMetrics(host *HostInfo) *hostMetrics {
 // hostMetricsLocked gets or creates host metrics for given host.
 // It must be called only while holding qm.l lock.
 func (qm *queryMetrics) hostMetricsLocked(host *HostInfo) *hostMetrics {
-	metrics, exists := qm.m[host.ConnectAddress().String()]
+	metrics, exists := qm.m[host.HostID()]
 	if !exists {
 		// if the host is not in the map, it means it's been accessed for the first time
 		metrics = &hostMetrics{}
-		qm.m[host.ConnectAddress().String()] = metrics
+		qm.m[host.HostID()] = metrics
 	}
 
 	return metrics
@@ -1101,6 +1101,7 @@ type Query struct {
 	customPayload         map[string][]byte
 	metrics               *queryMetrics
 	refCount              uint32
+	requestTimeout        time.Duration
 
 	disableAutoPage bool
 
@@ -1206,6 +1207,12 @@ func (q *Query) AddLatency(l int64, host *HostInfo) {
 // is used.
 func (q *Query) Consistency(c Consistency) *Query {
 	q.cons = c
+	return q
+}
+
+// SetRequestTimeout sets time driver waits for server response for this query
+func (q *Query) SetRequestTimeout(timeout time.Duration) *Query {
+	q.requestTimeout = timeout
 	return q
 }
 
@@ -1379,7 +1386,7 @@ func (q *Query) GetRoutingKey() ([]byte, error) {
 	}
 
 	// try to determine the routing key
-	routingKeyInfo, err := q.session.routingKeyInfo(q.Context(), q.stmt)
+	routingKeyInfo, err := q.session.routingKeyInfo(q.Context(), q.stmt, q.requestTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -2006,6 +2013,7 @@ type Batch struct {
 	cancelBatch           func()
 	keyspace              string
 	metrics               *queryMetrics
+	requestTimeout        time.Duration
 
 	// routingInfo is a pointer because Query can be copied and copyable struct can't hold a mutex.
 	routingInfo *queryRoutingInfo
@@ -2020,6 +2028,13 @@ type Batch struct {
 // Deprecated: use session.Batch instead
 func (s *Session) NewBatch(typ BatchType) *Batch {
 	return s.Batch(typ)
+}
+
+// BatchWithContext creates a new batch operation using defaults defined in the cluster, with context
+func (s *Session) BatchWithContext(ctx context.Context, typ BatchType) *Batch {
+	b := s.Batch(typ)
+	b.context = ctx
+	return b
 }
 
 // Batch creates a new batch operation using defaults defined in the cluster
@@ -2266,7 +2281,7 @@ func (b *Batch) GetRoutingKey() ([]byte, error) {
 		return nil, nil
 	}
 	// try to determine the routing key
-	routingKeyInfo, err := b.session.routingKeyInfo(b.Context(), entry.Stmt)
+	routingKeyInfo, err := b.session.routingKeyInfo(b.Context(), entry.Stmt, b.requestTimeout)
 	if err != nil {
 		return nil, err
 	}

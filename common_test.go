@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -37,19 +36,19 @@ import (
 )
 
 var (
-	flagCluster      = flag.String("cluster", "127.0.0.1", "a comma-separated list of host:port tuples")
-	flagProto        = flag.Int("proto", 0, "protcol version")
-	flagCQL          = flag.String("cql", "3.0.0", "CQL version")
-	flagRF           = flag.Int("rf", 1, "replication factor for test keyspace")
-	clusterSize      = flag.Int("clusterSize", 1, "the expected size of the cluster")
-	flagRetry        = flag.Int("retries", 5, "number of times to retry queries")
-	flagAutoWait     = flag.Duration("autowait", 1000*time.Millisecond, "time to wait for autodiscovery to fill the hosts poll")
-	flagRunSslTest   = flag.Bool("runssl", false, "Set to true to run ssl test")
-	flagRunAuthTest  = flag.Bool("runauth", false, "Set to true to run authentication test")
-	flagCompressTest = flag.String("compressor", "", "compressor to use")
-	flagTimeout      = flag.Duration("gocql.timeout", 5*time.Second, "sets the connection `timeout` for all operations")
-
-	flagCassVersion cassVersion
+	flagCluster       = flag.String("cluster", "127.0.0.1", "a comma-separated list of host:port tuples")
+	flagProto         = flag.Int("proto", 0, "protcol version")
+	flagCQL           = flag.String("cql", "3.0.0", "CQL version")
+	flagRF            = flag.Int("rf", 1, "replication factor for test keyspace")
+	clusterSize       = flag.Int("clusterSize", 1, "the expected size of the cluster")
+	flagRetry         = flag.Int("retries", 5, "number of times to retry queries")
+	flagAutoWait      = flag.Duration("autowait", 1000*time.Millisecond, "time to wait for autodiscovery to fill the hosts poll")
+	flagRunSslTest    = flag.Bool("runssl", false, "Set to true to run ssl test")
+	flagRunAuthTest   = flag.Bool("runauth", false, "Set to true to run authentication test")
+	flagCompressTest  = flag.String("compressor", "", "compressor to use")
+	flagTimeout       = flag.Duration("gocql.timeout", 5*time.Second, "sets the connection `timeout` for all operations")
+	flagClusterSocket = flag.String("cluster-socket", "", "nodes socket files separated by comma")
+	flagCassVersion   cassVersion
 )
 
 func init() {
@@ -98,6 +97,90 @@ func (o *OnceManager) GetOnce(key string) *sync.Once {
 }
 
 var initKeyspaceOnce = NewOnceManager()
+
+var isTabletsSupportedFlag *bool
+var isTabletsSupportedOnce sync.RWMutex
+
+func isTabletsSupported() bool {
+	isTabletsSupportedOnce.RLock()
+	if isTabletsSupportedFlag != nil {
+		isTabletsSupportedOnce.RUnlock()
+		return *isTabletsSupportedFlag
+	}
+	isTabletsSupportedOnce.RUnlock()
+	isTabletsSupportedOnce.Lock()
+	defer isTabletsSupportedOnce.Unlock()
+	if isTabletsSupportedFlag != nil {
+		return *isTabletsSupportedFlag
+	}
+	var result bool
+
+	s, err := createCluster().CreateSession()
+	if err != nil {
+		panic(fmt.Errorf("failed to create session: %v", err))
+	}
+	res := make(map[string]interface{})
+	err = s.Query("select * from system.local").MapScan(res)
+	if err != nil {
+		panic(fmt.Errorf("failed to read system.local: %v", err))
+	}
+
+	features, _ := res["supported_features"]
+	featuresCasted, _ := features.(string)
+	for _, feature := range strings.Split(featuresCasted, ",") {
+		if feature == "TABLETS" {
+			result = true
+			isTabletsSupportedFlag = &result
+			return true
+		}
+	}
+	result = false
+	isTabletsSupportedFlag = &result
+	return false
+}
+
+var isTabletsAutoEnabledFlag *bool
+var isTabletsAutoEnabledOnce sync.RWMutex
+
+func isTabletsAutoEnabled() bool {
+	isTabletsAutoEnabledOnce.RLock()
+	if isTabletsAutoEnabledFlag != nil {
+		isTabletsAutoEnabledOnce.RUnlock()
+		return *isTabletsAutoEnabledFlag
+	}
+	isTabletsAutoEnabledOnce.RUnlock()
+	isTabletsAutoEnabledOnce.Lock()
+	defer isTabletsAutoEnabledOnce.Unlock()
+	if isTabletsAutoEnabledFlag != nil {
+		return *isTabletsAutoEnabledFlag
+	}
+
+	s, err := createCluster().CreateSession()
+	if err != nil {
+		panic(fmt.Errorf("failed to create session: %v", err))
+	}
+
+	err = s.Query("DROP KEYSPACE IF EXISTS gocql_check_tablets_enabled").Exec()
+	if err != nil {
+		panic(fmt.Errorf("failed to delete keyspace: %v", err))
+	}
+	err = s.Query("CREATE KEYSPACE gocql_check_tablets_enabled WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': '1'}").Exec()
+	if err != nil {
+		panic(fmt.Errorf("failed to delete keyspace: %v", err))
+	}
+
+	res := make(map[string]interface{})
+	err = s.Query("describe keyspace gocql_check_tablets_enabled").MapScan(res)
+	if err != nil {
+		panic(fmt.Errorf("failed to read system.local: %v", err))
+	}
+
+	createStmt, _ := res["create_statement"]
+	createStmtCasted, _ := createStmt.(string)
+	result := strings.Contains(strings.ToLower(createStmtCasted), "and tablets")
+	isTabletsAutoEnabledFlag = &result
+	return result
+}
 
 func createTable(s *Session, table string) error {
 	// lets just be really sure
@@ -149,19 +232,20 @@ func createCluster(opts ...func(*ClusterConfig)) *ClusterConfig {
 }
 
 func createKeyspace(tb testing.TB, cluster *ClusterConfig, keyspace string, disableTablets bool) {
-	// TODO: tb.Helper()
+	tb.Helper()
+
 	c := *cluster
 	c.Keyspace = "system"
 	c.Timeout = 30 * time.Second
 	session, err := c.CreateSession()
 	if err != nil {
-		panic(err)
+		tb.Fatalf("failed to create session: %v", err)
 	}
 	defer session.Close()
 
 	err = createTable(session, `DROP KEYSPACE IF EXISTS `+keyspace)
 	if err != nil {
-		panic(fmt.Sprintf("unable to drop keyspace: %v", err))
+		tb.Fatalf("unable to drop keyspace: %v", err)
 	}
 
 	query := fmt.Sprintf(`CREATE KEYSPACE %s
@@ -170,16 +254,17 @@ func createKeyspace(tb testing.TB, cluster *ClusterConfig, keyspace string, disa
 		'replication_factor' : %d
 	}`, keyspace, *flagRF)
 
-	if disableTablets {
-		query += " AND tablets = {'enabled': false}"
-	} else {
-		query += " AND tablets = {'enabled': true, 'initial': 8};"
+	if isTabletsSupported() {
+		if disableTablets {
+			query += " AND tablets = {'enabled': false}"
+		} else if !isTabletsAutoEnabled() {
+			query += " AND tablets = {'enabled': true};"
+		}
 	}
 
 	err = createTable(session, query)
-
 	if err != nil {
-		panic(fmt.Sprintf("unable to create keyspace: %v", err))
+		tb.Fatalf("unable to create table: %v", err)
 	}
 }
 
@@ -204,14 +289,24 @@ func createSessionFromClusterHelper(cluster *ClusterConfig, tb testing.TB, opts 
 	cluster.Keyspace = opts.KeyspaceName()
 	session, err := cluster.CreateSession()
 	if err != nil {
-		tb.Fatal("createSession:", err)
+		tb.Fatalf("failed to create session: %v", err)
 	}
 
 	if err := session.control.awaitSchemaAgreement(); err != nil {
-		tb.Fatal(err)
+		tb.Fatalf("failed to wait on schema agreement: %v", err)
 	}
 
 	return session
+}
+
+func getClusterSocketFile() []string {
+	var res []string
+	for _, socketFile := range strings.Split(*flagClusterSocket, ",") {
+		if socketFile != "" {
+			res = append(res, socketFile)
+		}
+	}
+	return res
 }
 
 func createSessionFromClusterTabletsDisabled(cluster *ClusterConfig, tb testing.TB) *Session {
@@ -318,32 +413,4 @@ func staticAddressTranslator(newAddr net.IP, newPort int) AddressTranslator {
 	return AddressTranslatorFunc(func(addr net.IP, port int) (net.IP, int) {
 		return newAddr, newPort
 	})
-}
-
-func assertTrue(t *testing.T, description string, value bool) {
-	t.Helper()
-	if !value {
-		t.Fatalf("expected %s to be true", description)
-	}
-}
-
-func assertEqual(t *testing.T, description string, expected, actual interface{}) {
-	t.Helper()
-	if expected != actual {
-		t.Fatalf("expected %s to be (%+v) but was (%+v) instead", description, expected, actual)
-	}
-}
-
-func assertDeepEqual(t *testing.T, description string, expected, actual interface{}) {
-	t.Helper()
-	if !reflect.DeepEqual(expected, actual) {
-		t.Fatalf("expected %s to be (%+v) but was (%+v) instead", description, expected, actual)
-	}
-}
-
-func assertNil(t *testing.T, description string, actual interface{}) {
-	t.Helper()
-	if actual != nil {
-		t.Fatalf("expected %s to be (nil) but was (%+v) instead", description, actual)
-	}
 }

@@ -35,6 +35,8 @@ import (
 )
 
 func TestUUIDNil(t *testing.T) {
+	t.Parallel()
+
 	var uuid UUID
 	want, got := "00000000-0000-0000-0000-000000000000", uuid.String()
 	if want != got {
@@ -63,6 +65,8 @@ var testsUUID = []struct {
 }
 
 func TestPredefinedUUID(t *testing.T) {
+	t.Parallel()
+
 	for i := range testsUUID {
 		uuid, err := ParseUUID(testsUUID[i].input)
 		if err != nil {
@@ -106,6 +110,8 @@ func TestPredefinedUUID(t *testing.T) {
 }
 
 func TestInvalidUUIDCharacter(t *testing.T) {
+	t.Parallel()
+
 	_, err := ParseUUID("z4f00409-cef8-4822-802c-deb20704c365")
 	if err == nil || !strings.Contains(err.Error(), "invalid UUID") {
 		t.Fatalf("expected invalid UUID error, got '%v' ", err)
@@ -113,6 +119,8 @@ func TestInvalidUUIDCharacter(t *testing.T) {
 }
 
 func TestInvalidUUIDLength(t *testing.T) {
+	t.Parallel()
+
 	_, err := ParseUUID("4f00")
 	if err == nil || !strings.Contains(err.Error(), "invalid UUID") {
 		t.Fatalf("expected invalid UUID error, got '%v' ", err)
@@ -125,6 +133,8 @@ func TestInvalidUUIDLength(t *testing.T) {
 }
 
 func TestRandomUUID(t *testing.T) {
+	t.Parallel()
+
 	for i := 0; i < 20; i++ {
 		uuid, err := RandomUUID()
 		if err != nil {
@@ -140,6 +150,8 @@ func TestRandomUUID(t *testing.T) {
 }
 
 func TestRandomUUIDInvalidAPICalls(t *testing.T) {
+	t.Parallel()
+
 	uuid, err := RandomUUID()
 	if err != nil {
 		t.Fatalf("unexpected error %v", err)
@@ -159,6 +171,8 @@ func TestRandomUUIDInvalidAPICalls(t *testing.T) {
 }
 
 func TestUUIDFromTime(t *testing.T) {
+	t.Parallel()
+
 	date := time.Date(1982, 5, 5, 12, 34, 56, 400, time.UTC)
 	uuid := UUIDFromTime(date)
 
@@ -168,6 +182,8 @@ func TestUUIDFromTime(t *testing.T) {
 }
 
 func TestTimeUUIDWith(t *testing.T) {
+	t.Parallel()
+
 	utcTime := time.Date(1982, 5, 5, 12, 34, 56, 400, time.UTC)
 	ts := int64(utcTime.Unix()-timeBase)*10000000 + int64(utcTime.Nanosecond()/100)
 	clockSeq := uint32(0x3FFF)           // Max number of clock sequence.
@@ -192,6 +208,8 @@ func TestTimeUUIDWith(t *testing.T) {
 }
 
 func TestParseUUID(t *testing.T) {
+	t.Parallel()
+
 	uuid := ParseUUIDMust("486f3a88-775b-11e3-ae07-d231feb1dc81")
 	if uuid.Time() != time.Date(2014, 1, 7, 5, 19, 29, 222516000, time.UTC) {
 		t.Errorf("Expected date of 1/7/2014 at 5:19:29.222516, got %v", uuid.Time())
@@ -199,6 +217,8 @@ func TestParseUUID(t *testing.T) {
 }
 
 func TestTimeUUID(t *testing.T) {
+	t.Parallel()
+
 	var node []byte
 	timestamp := int64(0)
 	for i := 0; i < 20; i++ {
@@ -226,6 +246,8 @@ func TestTimeUUID(t *testing.T) {
 }
 
 func TestUnmarshalJSON(t *testing.T) {
+	t.Parallel()
+
 	var withHyphens, withoutHypens, tooLong UUID
 
 	withHyphens.UnmarshalJSON([]byte(`"486f3a88-775b-11e3-ae07-d231feb1dc81"`))
@@ -246,6 +268,8 @@ func TestUnmarshalJSON(t *testing.T) {
 }
 
 func TestMarshalText(t *testing.T) {
+	t.Parallel()
+
 	u, err := ParseUUID("486f3a88-775b-11e3-ae07-d231feb1dc81")
 	if err != nil {
 		t.Fatal(err)
@@ -267,6 +291,8 @@ func TestMarshalText(t *testing.T) {
 }
 
 func TestMinTimeUUID(t *testing.T) {
+	t.Parallel()
+
 	aTime := time.Now()
 	minTimeUUID := MinTimeUUID(aTime)
 
@@ -289,6 +315,8 @@ func TestMinTimeUUID(t *testing.T) {
 }
 
 func TestMaxTimeUUID(t *testing.T) {
+	t.Parallel()
+
 	aTime := time.Now()
 	maxTimeUUID := MaxTimeUUID(aTime)
 

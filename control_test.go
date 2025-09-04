@@ -33,6 +33,8 @@ import (
 )
 
 func TestHostInfo_Lookup(t *testing.T) {
+	t.Parallel()
+
 	resolver := NewSimpleDNSResolver(true)
 
 	tests := [...]struct {
@@ -44,7 +46,7 @@ func TestHostInfo_Lookup(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		hosts, err := hostInfo(resolver, test.addr, 1)
+		hosts, err := hostInfo(resolver, nil, test.addr, 1)
 		if err != nil {
 			t.Errorf("%d: %v", i, err)
 			continue
@@ -58,6 +60,8 @@ func TestHostInfo_Lookup(t *testing.T) {
 }
 
 func TestParseProtocol(t *testing.T) {
+	t.Parallel()
+
 	tests := [...]struct {
 		err   error
 		proto int
@@ -69,7 +73,7 @@ func TestParseProtocol(t *testing.T) {
 					message: "Invalid or unsupported protocol version (5); the lowest supported version is 3 and the greatest is 4",
 				},
 			},
-			proto: 4,
+			proto: protoVersion4,
 		},
 		{
 			err: &protocolError{
@@ -81,7 +85,7 @@ func TestParseProtocol(t *testing.T) {
 					message: "Invalid or unsupported protocol version: 5",
 				},
 			},
-			proto: 3,
+			proto: protoVersion3,
 		},
 	}
 

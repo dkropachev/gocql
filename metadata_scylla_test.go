@@ -14,6 +14,8 @@ import (
 // Tests metadata "compilation" from example data which might be returned
 // from metadata schema queries (see getKeyspaceMetadata, getTableMetadata, and getColumnMetadata)
 func TestCompileMetadata(t *testing.T) {
+	t.Parallel()
+
 	keyspace := &KeyspaceMetadata{
 		Name: "V2Keyspace",
 	}
@@ -97,11 +99,38 @@ func TestCompileMetadata(t *testing.T) {
 			Kind:     ColumnPartitionKey,
 			Type:     "text",
 		},
-	}
-	indexes := []IndexMetadata{
 		{
-			Name: "sec_idx",
+			Keyspace:        "V2Keyspace",
+			Table:           "buckets_by_owner_index",
+			Name:            "idx_token",
+			Kind:            ColumnClusteringKey,
+			ComponentIndex:  0,
+			Type:            "bigint",
+			ClusteringOrder: "asc",
 		},
+		{
+			Keyspace:        "V2Keyspace",
+			Table:           "buckets_by_owner_index",
+			Name:            "name",
+			Kind:            ColumnClusteringKey,
+			ComponentIndex:  1,
+			Type:            "text",
+			ClusteringOrder: "asc",
+		},
+		{
+			Keyspace: "V2Keyspace",
+			Table:    "buckets_by_owner_index",
+			Name:     "owner",
+			Kind:     ColumnPartitionKey,
+			Type:     "text",
+		},
+	}
+	// Consider an index by column `owner` on the base table `buckets` with
+	// partition key `name`.
+	//
+	// CREATE INDEX buckets_by_owner ON stg_msk_a.buckets(owner);
+	indexes := []IndexMetadata{
+		{Name: "buckets_by_owner"},
 	}
 	views := []ViewMetadata{
 		{
@@ -110,7 +139,7 @@ func TestCompileMetadata(t *testing.T) {
 		},
 		{
 			KeyspaceName: "V2Keyspace",
-			ViewName:     "sec_idx_index",
+			ViewName:     "buckets_by_owner_index",
 		},
 	}
 	compileMetadata(keyspace, tables, columns, nil, nil, nil, indexes, views, nil)
@@ -225,6 +254,41 @@ func TestCompileMetadata(t *testing.T) {
 					},
 					OrderedColumns: []string{
 						"Column1", "Column2", "Column3", "Column4",
+					},
+				},
+			},
+			Indexes: map[string]*IndexMetadata{
+				"buckets_by_owner": {
+					Name:      "buckets_by_owner",
+					TableName: "buckets_by_owner_index",
+					PartitionKey: []*ColumnMetadata{
+						{Name: "owner", Type: "text"},
+					},
+					ClusteringColumns: []*ColumnMetadata{
+						{Name: "idx_token", Type: "bigint"},
+						{Name: "name", Type: "text"},
+					},
+					OrderedColumns: []string{
+						"owner", "idx_token", "name",
+					},
+					Columns: map[string]*ColumnMetadata{
+						"owner": {
+							Name: "owner",
+							Type: "text",
+							Kind: ColumnPartitionKey,
+						},
+						"idx_token": {
+							Name:  "idx_token",
+							Type:  "bigint",
+							Order: ASC,
+							Kind:  ColumnClusteringKey,
+						},
+						"name": {
+							Name:  "name",
+							Type:  "text",
+							Order: ASC,
+							Kind:  ColumnClusteringKey,
+						},
 					},
 				},
 			},
@@ -390,8 +454,32 @@ func assertViewsMetadata(t *testing.T, keyspaceName string, actual, expected map
 	}
 }
 
+func assertIndicesMetadata(t *testing.T, keyspaceName string, actual, expected map[string]*IndexMetadata) {
+	if len(expected) != len(actual) {
+		t.Errorf("Expected len(%s.Indexes) to be %v but was %v", keyspaceName, len(expected), len(actual))
+	}
+	for key := range expected {
+		viewName := key + "_index"
+		et := expected[key]
+		at, found := actual[key]
+
+		if !found {
+			t.Errorf("Expected %s.Indexes[%s] but was not found", keyspaceName, key)
+		} else {
+			if et.Name != at.Name {
+				t.Errorf("Expected %s.Indexes[%s].Name to be %v but was %v", keyspaceName, key, et.Name, at.Name)
+			}
+			assertPartitionKey(t, keyspaceName, viewName, at.PartitionKey, et.PartitionKey)
+			assertClusteringColumns(t, keyspaceName, viewName, at.ClusteringColumns, et.ClusteringColumns)
+			assertColumns(t, keyspaceName, viewName, at.Columns, et.Columns)
+			assertOrderedColumns(t, keyspaceName, viewName, at.OrderedColumns, et.OrderedColumns)
+		}
+	}
+}
+
 // Helper function for asserting that actual metadata returned was as expected
 func assertKeyspaceMetadata(t *testing.T, actual, expected *KeyspaceMetadata) {
 	assertTableMetadata(t, expected.Name, actual.Tables, expected.Tables)
 	assertViewsMetadata(t, expected.Name, actual.Views, expected.Views)
+	assertIndicesMetadata(t, expected.Name, actual.Indexes, expected.Indexes)
 }

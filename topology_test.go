@@ -34,6 +34,8 @@ import (
 )
 
 func TestPlacementStrategy_SimpleStrategy(t *testing.T) {
+	t.Parallel()
+
 	host0 := &HostInfo{hostId: "0"}
 	host25 := &HostInfo{hostId: "25"}
 	host50 := &HostInfo{hostId: "50"}
@@ -76,6 +78,8 @@ func TestPlacementStrategy_SimpleStrategy(t *testing.T) {
 }
 
 func TestPlacementStrategy_NetworkStrategy(t *testing.T) {
+	t.Parallel()
+
 	const (
 		totalDCs   = 3
 		racksPerDC = 3
@@ -220,7 +224,7 @@ func TestPlacementStrategy_NetworkStrategy(t *testing.T) {
 								}
 							}
 							if exp.rack == lastRack {
-								panic("no more racks")
+								t.Fatal("no more racks")
 							}
 						}
 						lastRack = replica.rack

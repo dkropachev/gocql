@@ -33,6 +33,8 @@ import (
 )
 
 func TestUnmarshalCassVersion(t *testing.T) {
+	t.Parallel()
+
 	tests := [...]struct {
 		data    string
 		version cassVersion
@@ -57,6 +59,8 @@ func TestUnmarshalCassVersion(t *testing.T) {
 }
 
 func TestCassVersionBefore(t *testing.T) {
+	t.Parallel()
+
 	tests := [...]struct {
 		version             cassVersion
 		major, minor, patch int
@@ -82,6 +86,8 @@ func TestCassVersionBefore(t *testing.T) {
 }
 
 func TestIsValidPeer(t *testing.T) {
+	t.Parallel()
+
 	host := &HostInfo{
 		rpcAddress: net.ParseIP("0.0.0.0"),
 		rack:       "myRack",
@@ -101,6 +107,8 @@ func TestIsValidPeer(t *testing.T) {
 }
 
 func TestIsZeroToken(t *testing.T) {
+	t.Parallel()
+
 	host := &HostInfo{
 		rpcAddress: net.ParseIP("0.0.0.0"),
 		rack:       "myRack",
@@ -120,6 +128,8 @@ func TestIsZeroToken(t *testing.T) {
 }
 
 func TestHostInfo_ConnectAddress(t *testing.T) {
+	t.Parallel()
+
 	var localhost = net.IPv4(127, 0, 0, 1)
 	tests := []struct {
 		name          string

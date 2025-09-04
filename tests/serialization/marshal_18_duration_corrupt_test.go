@@ -13,6 +13,8 @@ import (
 )
 
 func TestMarshalDurationCorrupt(t *testing.T) {
+	t.Parallel()
+
 	tType := gocql.NewNativeType(4, gocql.TypeDuration, "")
 
 	marshal := func(i interface{}) ([]byte, error) { return gocql.Marshal(tType, i) }

@@ -43,6 +43,8 @@ import (
 
 // Tests of the murmur3Patitioner
 func TestMurmur3Partitioner(t *testing.T) {
+	t.Parallel()
+
 	token := murmur3Partitioner{}.ParseString("-1053604476080545076")
 
 	if "-1053604476080545076" != token.String() {
@@ -60,6 +62,8 @@ func TestMurmur3Partitioner(t *testing.T) {
 
 // Tests of the int64Token
 func TestInt64Token(t *testing.T) {
+	t.Parallel()
+
 	if int64Token(42).Less(int64Token(42)) {
 		t.Errorf("Expected Less to return false, but was true")
 	}
@@ -73,6 +77,8 @@ func TestInt64Token(t *testing.T) {
 
 // Tests of the orderedPartitioner
 func TestOrderedPartitioner(t *testing.T) {
+	t.Parallel()
+
 	// at least verify that the partitioner
 	// doesn't return nil
 	p := orderedPartitioner{}
@@ -96,6 +102,8 @@ func TestOrderedPartitioner(t *testing.T) {
 
 // Tests of the orderedToken
 func TestOrderedToken(t *testing.T) {
+	t.Parallel()
+
 	if orderedToken([]byte{0, 0, 4, 2}).Less(orderedToken([]byte{0, 0, 4, 2})) {
 		t.Errorf("Expected Less to return false, but was true")
 	}
@@ -109,6 +117,8 @@ func TestOrderedToken(t *testing.T) {
 
 // Tests of the randomPartitioner
 func TestRandomPartitioner(t *testing.T) {
+	t.Parallel()
+
 	// at least verify that the partitioner
 	// doesn't return nil
 	p := randomPartitioner{}
@@ -131,6 +141,8 @@ func TestRandomPartitioner(t *testing.T) {
 }
 
 func TestRandomPartitionerMatchesReference(t *testing.T) {
+	t.Parallel()
+
 	// example taken from datastax python driver
 	//    >>> from cassandra.metadata import MD5Token
 	//    >>> MD5Token.hash_fn("test")
@@ -146,6 +158,8 @@ func TestRandomPartitionerMatchesReference(t *testing.T) {
 
 // Tests of the randomToken
 func TestRandomToken(t *testing.T) {
+	t.Parallel()
+
 	if ((*randomToken)(big.NewInt(42))).Less((*randomToken)(big.NewInt(42))) {
 		t.Errorf("Expected Less to return false, but was true")
 	}
@@ -166,6 +180,8 @@ func (i intToken) Less(token Token) bool { return i < token.(intToken) }
 // page of documentation:
 // http://www.datastax.com/docs/0.8/cluster_architecture/partitioning
 func TestTokenRing_Int(t *testing.T) {
+	t.Parallel()
+
 	host0 := &HostInfo{}
 	host25 := &HostInfo{}
 	host50 := &HostInfo{}
@@ -226,6 +242,8 @@ func TestTokenRing_Int(t *testing.T) {
 
 // Test for the behavior of a nil pointer to tokenRing
 func TestTokenRing_Nil(t *testing.T) {
+	t.Parallel()
+
 	var ring *tokenRing = nil
 
 	if host, endToken := ring.GetHostForToken(nil); host != nil || endToken != nil {
@@ -238,6 +256,8 @@ func TestTokenRing_Nil(t *testing.T) {
 
 // Test of the recognition of the partitioner class
 func TestTokenRing_UnknownPartition(t *testing.T) {
+	t.Parallel()
+
 	_, err := newTokenRing("UnknownPartitioner", nil)
 	if err == nil {
 		t.Error("Expected error for unknown partitioner value, but was nil")
@@ -259,6 +279,8 @@ func hostsForTests(n int) []*HostInfo {
 
 // Test of the tokenRing with the Murmur3Partitioner
 func TestTokenRing_Murmur3(t *testing.T) {
+	t.Parallel()
+
 	// Note, strings are parsed directly to int64, they are not murmur3 hashed
 	hosts := hostsForTests(4)
 	ring, err := newTokenRing("Murmur3Partitioner", hosts)
@@ -289,6 +311,8 @@ func TestTokenRing_Murmur3(t *testing.T) {
 
 // Test of the tokenRing with the OrderedPartitioner
 func TestTokenRing_Ordered(t *testing.T) {
+	t.Parallel()
+
 	// Tokens here more or less are similar layout to the int tokens above due
 	// to each numeric character translating to a consistently offset byte.
 	hosts := hostsForTests(4)
@@ -321,6 +345,8 @@ func TestTokenRing_Ordered(t *testing.T) {
 
 // Test of the tokenRing with the RandomPartitioner
 func TestTokenRing_Random(t *testing.T) {
+	t.Parallel()
+
 	// String tokens are parsed into big.Int in base 10
 	hosts := hostsForTests(4)
 	ring, err := newTokenRing("RandomPartitioner", hosts)

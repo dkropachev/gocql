@@ -30,6 +30,7 @@ package gocql
 import (
 	"context"
 	"fmt"
+	"github.com/gocql/gocql/internal/tests"
 	"testing"
 )
 
@@ -100,6 +101,6 @@ func TestKeyspaceTable(t *testing.T) {
 
 	// cluster.Keyspace was set to "wrong_keyspace", but during prepering statement
 	// Keyspace in Query should be changed to "test" and Table should be changed to table1
-	assertEqual(t, "qry.Keyspace()", "test1", qry.Keyspace())
-	assertEqual(t, "qry.Table()", "table1", qry.Table())
+	tests.AssertEqual(t, "qry.Keyspace()", "test1", qry.Keyspace())
+	tests.AssertEqual(t, "qry.Table()", "table1", qry.Table())
 }

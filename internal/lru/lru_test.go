@@ -61,6 +61,8 @@ var getTests = []struct {
 }
 
 func TestGet(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range getTests {
 		lru := New(0)
 		lru.Add(tt.keyToAdd, 1234)
@@ -74,6 +76,8 @@ func TestGet(t *testing.T) {
 }
 
 func TestRemove(t *testing.T) {
+	t.Parallel()
+
 	lru := New(0)
 	lru.Add("mystring", 1234)
 	if val, ok := lru.Get("mystring"); !ok {

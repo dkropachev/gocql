@@ -34,6 +34,7 @@ package gocql
 import (
 	"errors"
 	"fmt"
+	"github.com/gocql/gocql/internal/tests"
 	"net"
 	"sort"
 	"strings"
@@ -45,6 +46,8 @@ import (
 
 // Tests of the round-robin host selection policy implementation
 func TestRoundRobbin(t *testing.T) {
+	t.Parallel()
+
 	policy := RoundRobinHostPolicy()
 
 	hosts := [...]*HostInfo{
@@ -71,6 +74,8 @@ func TestRoundRobbin(t *testing.T) {
 }
 
 func TestRoundRobbinSameConnectAddress(t *testing.T) {
+	t.Parallel()
+
 	policy := RoundRobinHostPolicy()
 
 	hosts := [...]*HostInfo{
@@ -99,6 +104,8 @@ func TestRoundRobbinSameConnectAddress(t *testing.T) {
 // Tests of the token-aware host selection policy implementation with a
 // round-robin host selection policy fallback.
 func TestHostPolicy_TokenAware_SimpleStrategy(t *testing.T) {
+	t.Parallel()
+
 	const keyspace = "myKeyspace"
 	policy := TokenAwareHostPolicy(RoundRobinHostPolicy())
 	policyInternal := policy.(*tokenAwareHostPolicy)
@@ -149,7 +156,7 @@ func TestHostPolicy_TokenAware_SimpleStrategy(t *testing.T) {
 
 	// The SimpleStrategy above should generate the following replicas.
 	// It's handy to have as reference here.
-	assertDeepEqual(t, "replicas", map[string]tokenRingReplicas{
+	tests.AssertDeepEqual(t, "replicas", map[string]tokenRingReplicas{
 		"myKeyspace": {
 			{orderedToken("00"), []*HostInfo{hosts[0], hosts[1]}},
 			{orderedToken("25"), []*HostInfo{hosts[1], hosts[2]}},
@@ -161,15 +168,16 @@ func TestHostPolicy_TokenAware_SimpleStrategy(t *testing.T) {
 	// now the token ring is configured
 	query.RoutingKey([]byte("20"))
 	iter = policy.Pick(query)
-	// first token-aware hosts
-	expectHosts(t, "hosts[0]", iter, "1")
-	expectHosts(t, "hosts[1]", iter, "2")
+	// shuffling is enabled by default, expecfing
+	expectHosts(t, "hosts[0]", iter, "1", "2")
 	// then rest of the hosts
 	expectHosts(t, "rest", iter, "0", "3")
 	expectNoMoreHosts(t, iter)
 }
 
 func TestHostPolicy_TokenAware_LWT_DisablesHostShuffling(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		hosts      []*HostInfo
 		routingKey string
@@ -278,6 +286,8 @@ func createPolicy(keyspace string, shuffle bool) HostSelectionPolicy {
 }
 
 func TestHostPolicy_RoundRobin_NilHostInfo(t *testing.T) {
+	t.Parallel()
+
 	policy := RoundRobinHostPolicy()
 
 	host := &HostInfo{hostId: "host-1"}
@@ -303,6 +313,8 @@ func TestHostPolicy_RoundRobin_NilHostInfo(t *testing.T) {
 }
 
 func TestHostPolicy_TokenAware_NilHostInfo(t *testing.T) {
+	t.Parallel()
+
 	policy := TokenAwareHostPolicy(RoundRobinHostPolicy())
 	policyInternal := policy.(*tokenAwareHostPolicy)
 	policyInternal.getKeyspaceName = func() string { return "myKeyspace" }
@@ -350,6 +362,8 @@ func TestHostPolicy_TokenAware_NilHostInfo(t *testing.T) {
 }
 
 func TestCOWList_Add(t *testing.T) {
+	t.Parallel()
+
 	var cow cowHostList
 
 	toAdd := [...]net.IP{net.IPv4(10, 0, 0, 1), net.IPv4(10, 0, 0, 2), net.IPv4(10, 0, 0, 3)}
@@ -379,25 +393,56 @@ func TestCOWList_Add(t *testing.T) {
 
 // TestSimpleRetryPolicy makes sure that we only allow 1 + numRetries attempts
 func TestSimpleRetryPolicy(t *testing.T) {
+	t.Parallel()
+
 	q := &Query{routingInfo: &queryRoutingInfo{}}
 
 	// this should allow a total of 3 tries.
 	rt := &SimpleRetryPolicy{NumRetries: 2}
 
+	regular_error := errors.New("regular error")
+
+	qe1 := &QueryError{
+		err:                 errors.New("connection error"),
+		potentiallyExecuted: false,
+		isIdempotent:        false,
+	}
+
+	qe2 := &QueryError{
+		err:                 errors.New("timeout error"),
+		potentiallyExecuted: true,
+		isIdempotent:        true,
+	}
+
+	qe3 := &QueryError{
+		err:                 errors.New("write timeout"),
+		potentiallyExecuted: true,
+		isIdempotent:        false,
+	}
+
 	cases := []struct {
-		attempts int
-		allow    bool
+		attempts     int
+		allow        bool
+		err          error
+		retryType    RetryType
+		LWTRetryType RetryType
 	}{
-		{0, true},
-		{1, true},
-		{2, true},
-		{3, false},
-		{4, false},
-		{5, false},
+		{0, true, qe1, RetryNextHost, Retry},
+		{1, true, qe2, RetryNextHost, Retry},
+		{2, true, qe3, Rethrow, Rethrow},
+		{3, false, regular_error, RetryNextHost, Retry},
+		{4, false, regular_error, RetryNextHost, Retry},
+		{5, false, regular_error, RetryNextHost, Retry},
 	}
 
 	for _, c := range cases {
 		q.metrics = preFilledQueryMetrics(map[string]*hostMetrics{"127.0.0.1": {Attempts: c.attempts}})
+		if c.retryType != rt.GetRetryType(c.err) {
+			t.Fatalf("retry type for %v should be %v", c.err, c.retryType)
+		}
+		if c.LWTRetryType != rt.GetRetryTypeLWT(c.err) {
+			t.Fatalf("LWT retry type for %v should be %v", c.err, c.LWTRetryType)
+		}
 		if c.allow && !rt.Attempt(q) {
 			t.Fatalf("should allow retry after %d attempts", c.attempts)
 		}
@@ -408,28 +453,60 @@ func TestSimpleRetryPolicy(t *testing.T) {
 }
 
 func TestLWTSimpleRetryPolicy(t *testing.T) {
+	t.Parallel()
+
 	ebrp := &SimpleRetryPolicy{NumRetries: 2}
 	// Verify that SimpleRetryPolicy implements both interfaces
 	var _ RetryPolicy = ebrp
 	var lwt_rt LWTRetryPolicy = ebrp
-	assertEqual(t, "retry type of LWT policy", lwt_rt.GetRetryTypeLWT(nil), Retry)
+	tests.AssertEqual(t, "retry type of LWT policy", lwt_rt.GetRetryTypeLWT(nil), Retry)
 }
 
 func TestExponentialBackoffPolicy(t *testing.T) {
+	t.Parallel()
+
 	// test with defaults
 	sut := &ExponentialBackoffRetryPolicy{NumRetries: 2}
 
-	cases := []struct {
-		attempts int
-		delay    time.Duration
-	}{
+	regular_error := errors.New("regular error")
 
-		{1, 100 * time.Millisecond},
-		{2, (2) * 100 * time.Millisecond},
-		{3, (2 * 2) * 100 * time.Millisecond},
-		{4, (2 * 2 * 2) * 100 * time.Millisecond},
+	qe1 := &QueryError{
+		err:                 errors.New("connection error"),
+		potentiallyExecuted: false,
+		isIdempotent:        false,
+	}
+
+	qe2 := &QueryError{
+		err:                 errors.New("timeout error"),
+		potentiallyExecuted: true,
+		isIdempotent:        true,
+	}
+
+	qe3 := &QueryError{
+		err:                 errors.New("write timeout"),
+		potentiallyExecuted: true,
+		isIdempotent:        false,
+	}
+
+	cases := []struct {
+		attempts     int
+		delay        time.Duration
+		err          error
+		retryType    RetryType
+		LWTRetryType RetryType
+	}{
+		{1, 100 * time.Millisecond, qe1, RetryNextHost, Retry},
+		{2, (2) * 100 * time.Millisecond, qe2, RetryNextHost, Retry},
+		{3, (2 * 2) * 100 * time.Millisecond, qe3, Rethrow, Rethrow},
+		{4, (2 * 2 * 2) * 100 * time.Millisecond, regular_error, RetryNextHost, Retry},
 	}
 	for _, c := range cases {
+		if c.retryType != sut.GetRetryType(c.err) {
+			t.Fatalf("retry type for %v should be %v", c.err, c.retryType)
+		}
+		if c.LWTRetryType != sut.GetRetryTypeLWT(c.err) {
+			t.Fatalf("LWT retry type for %v should be %v", c.err, c.LWTRetryType)
+		}
 		// test 100 times for each case
 		for i := 0; i < 100; i++ {
 			d := sut.napTime(c.attempts)
@@ -444,14 +521,17 @@ func TestExponentialBackoffPolicy(t *testing.T) {
 }
 
 func TestLWTExponentialBackoffPolicy(t *testing.T) {
+	t.Parallel()
+
 	ebrp := &ExponentialBackoffRetryPolicy{NumRetries: 2}
 	// Verify that ExponentialBackoffRetryPolicy implements both interfaces
 	var _ RetryPolicy = ebrp
 	var lwt_rt LWTRetryPolicy = ebrp
-	assertEqual(t, "retry type of LWT policy", lwt_rt.GetRetryTypeLWT(nil), Retry)
+	tests.AssertEqual(t, "retry type of LWT policy", lwt_rt.GetRetryTypeLWT(nil), Retry)
 }
 
 func TestDowngradingConsistencyRetryPolicy(t *testing.T) {
+	t.Parallel()
 
 	q := &Query{cons: LocalQuorum, routingInfo: &queryRoutingInfo{}}
 
@@ -557,6 +637,8 @@ func expectNoMoreHosts(t *testing.T, iter NextHost) {
 }
 
 func TestHostPolicy_DCAwareRR(t *testing.T) {
+	t.Parallel()
+
 	p := DCAwareRoundRobinPolicy("local")
 
 	hosts := [...]*HostInfo{
@@ -603,6 +685,8 @@ func TestHostPolicy_DCAwareRR(t *testing.T) {
 }
 
 func TestHostPolicy_DCAwareRR_disableDCFailover(t *testing.T) {
+	t.Parallel()
+
 	p := DCAwareRoundRobinPolicy("local", HostPolicyOptionDisableDCFailover)
 
 	hosts := [...]*HostInfo{
@@ -646,6 +730,8 @@ func TestHostPolicy_DCAwareRR_disableDCFailover(t *testing.T) {
 // DC aware round-robin host selection policy fallback
 // with {"class": "NetworkTopologyStrategy", "a": 1, "b": 1, "c": 1} replication.
 func TestHostPolicy_TokenAware(t *testing.T) {
+	t.Parallel()
+
 	const keyspace = "myKeyspace"
 	policy := TokenAwareHostPolicy(DCAwareRoundRobinPolicy("local"))
 	policyInternal := policy.(*tokenAwareHostPolicy)
@@ -717,7 +803,7 @@ func TestHostPolicy_TokenAware(t *testing.T) {
 
 	// The NetworkTopologyStrategy above should generate the following replicas.
 	// It's handy to have as reference here.
-	assertDeepEqual(t, "replicas", map[string]tokenRingReplicas{
+	tests.AssertDeepEqual(t, "replicas", map[string]tokenRingReplicas{
 		"myKeyspace": {
 			{orderedToken("05"), []*HostInfo{hosts[0], hosts[1], hosts[2]}},
 			{orderedToken("10"), []*HostInfo{hosts[1], hosts[2], hosts[3]}},
@@ -748,6 +834,8 @@ func TestHostPolicy_TokenAware(t *testing.T) {
 // DC aware round-robin host selection policy fallback
 // with {"class": "NetworkTopologyStrategy", "a": 2, "b": 2, "c": 2} replication.
 func TestHostPolicy_TokenAware_NetworkStrategy(t *testing.T) {
+	t.Parallel()
+
 	const keyspace = "myKeyspace"
 	policy := TokenAwareHostPolicy(DCAwareRoundRobinPolicy("local"), NonLocalReplicasFallback())
 	policyInternal := policy.(*tokenAwareHostPolicy)
@@ -808,7 +896,7 @@ func TestHostPolicy_TokenAware_NetworkStrategy(t *testing.T) {
 
 	// The NetworkTopologyStrategy above should generate the following replicas.
 	// It's handy to have as reference here.
-	assertDeepEqual(t, "replicas", map[string]tokenRingReplicas{
+	tests.AssertDeepEqual(t, "replicas", map[string]tokenRingReplicas{
 		keyspace: {
 			{orderedToken("05"), []*HostInfo{hosts[0], hosts[1], hosts[2], hosts[3], hosts[4], hosts[5]}},
 			{orderedToken("10"), []*HostInfo{hosts[1], hosts[2], hosts[3], hosts[4], hosts[5], hosts[6]}},
@@ -838,6 +926,8 @@ func TestHostPolicy_TokenAware_NetworkStrategy(t *testing.T) {
 }
 
 func TestHostPolicy_RackAwareRR(t *testing.T) {
+	t.Parallel()
+
 	p := RackAwareRoundRobinPolicy("local", "b")
 
 	hosts := [...]*HostInfo{
@@ -869,6 +959,8 @@ func TestHostPolicy_RackAwareRR(t *testing.T) {
 // Tests of the token-aware host selection policy implementation with a
 // DC & Rack aware round-robin host selection policy fallback
 func TestHostPolicy_TokenAware_RackAware(t *testing.T) {
+	t.Parallel()
+
 	const keyspace = "myKeyspace"
 	policy := TokenAwareHostPolicy(RackAwareRoundRobinPolicy("local", "b"))
 	policyWithFallback := TokenAwareHostPolicy(RackAwareRoundRobinPolicy("local", "b"), NonLocalReplicasFallback())
@@ -949,7 +1041,7 @@ func TestHostPolicy_TokenAware_RackAware(t *testing.T) {
 
 	// The NetworkTopologyStrategy above should generate the following replicas.
 	// It's handy to have as reference here.
-	assertDeepEqual(t, "replicas", map[string]tokenRingReplicas{
+	tests.AssertDeepEqual(t, "replicas", map[string]tokenRingReplicas{
 		"myKeyspace": {
 			{orderedToken("05"), []*HostInfo{hosts[0], hosts[1], hosts[2], hosts[3]}},
 			{orderedToken("10"), []*HostInfo{hosts[1], hosts[2], hosts[3], hosts[4]}},
@@ -1001,6 +1093,8 @@ func TestHostPolicy_TokenAware_RackAware(t *testing.T) {
 }
 
 func TestHostPolicy_TokenAware_Issue1274(t *testing.T) {
+	t.Parallel()
+
 	policy := TokenAwareHostPolicy(DCAwareRoundRobinPolicy("local"))
 	policyInternal := policy.(*tokenAwareHostPolicy)
 	policyInternal.getKeyspaceName = func() string { return "myKeyspace" }
@@ -1078,6 +1172,8 @@ func TestHostPolicy_TokenAware_Issue1274(t *testing.T) {
 }
 
 func TestTokenAwarePolicyReset(t *testing.T) {
+	t.Parallel()
+
 	policy := TokenAwareHostPolicy(
 		RackAwareRoundRobinPolicy("local", "b"),
 		NonLocalReplicasFallback(),
@@ -1109,59 +1205,6 @@ func TestTokenAwarePolicyReset(t *testing.T) {
 		t.Fatal("fallback is nil")
 	}
 	if !policyInternal.nonLocalReplicasFallback { // we don't touch nonLocalReplicasFallback
-		t.Fatal("nonLocalReplicasFallback is false")
-	}
-	if policyInternal.getKeyspaceMetadata != nil {
-		t.Fatal("keyspace metatadata fn is not nil")
-	}
-	if policyInternal.getKeyspaceName != nil {
-		t.Fatal("keyspace name fn is not nil")
-	}
-	if policyInternal.logger != nil {
-		t.Fatal("logger is nil")
-	}
-}
-
-func TestTokenAwarePolicyResetInSessionClose(t *testing.T) {
-	policy := TokenAwareHostPolicy(
-		RackAwareRoundRobinPolicy("local", "b"),
-		NonLocalReplicasFallback(),
-	)
-	policyInternal := policy.(*tokenAwareHostPolicy)
-
-	if policyInternal.fallback == nil {
-		t.Fatal("fallback is nil")
-	}
-	if !policyInternal.nonLocalReplicasFallback {
-		t.Fatal("nonLocalReplicasFallback is false")
-	}
-
-	// emulate session initialization
-	session := &Session{
-		logger: &defaultLogger{},
-		policy: policy,
-	}
-	policy.Init(session)
-	// check that we are realy initialize policy
-	if policyInternal.getKeyspaceMetadata == nil {
-		t.Fatal("keyspace metatadata fn is nil")
-	}
-	if policyInternal.getKeyspaceName == nil {
-		t.Fatal("keyspace name fn is nil")
-	}
-	if policyInternal.logger == nil {
-		t.Fatal("logger is nil")
-	}
-
-	// session.Close should call policy.Reset method
-	session.Close()
-
-	// check that session.Close has called policy.Reset method
-
-	if policyInternal.fallback == nil { // we don't touch fallback in Reset
-		t.Fatal("fallback is nil")
-	}
-	if !policyInternal.nonLocalReplicasFallback { // we don't touch nonLocalReplicasFallback in Reset
 		t.Fatal("nonLocalReplicasFallback is false")
 	}
 	if policyInternal.getKeyspaceMetadata != nil {

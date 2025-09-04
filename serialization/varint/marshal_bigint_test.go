@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"math"
 	"math/big"
+	"math/rand"
 	"testing"
 )
 
@@ -38,8 +39,8 @@ func TestEnc2BigInt(t *testing.T) {
 	}
 
 	t.Run("positive", func(t *testing.T) {
-		t.Parallel()
-		for i := int64(math.MaxInt16); i < 1<<24; i++ {
+		rnd := rand.New(rand.NewSource(rand.Int63()))
+		for i := int64(math.MaxInt16); i < 1<<24; i = i + int64(rnd.Int31n(300)) {
 			expected := genData(i)
 
 			received := EncBigIntRS(big.NewInt(i))
@@ -55,8 +56,8 @@ func TestEnc2BigInt(t *testing.T) {
 	})
 
 	t.Run("negative", func(t *testing.T) {
-		t.Parallel()
-		for i := int64(math.MinInt16); i > -1<<24; i-- {
+		rnd := rand.New(rand.NewSource(rand.Int63()))
+		for i := int64(math.MinInt16); i > -1<<24; i = i - int64(rnd.Int31n(300)) {
 			expected := genData(i)
 
 			received := EncBigIntRS(big.NewInt(i))

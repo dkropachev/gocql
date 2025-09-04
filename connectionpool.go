@@ -31,6 +31,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gocql/gocql/tablets"
+
 	"github.com/gocql/gocql/debounce"
 )
 
@@ -46,7 +48,7 @@ type SetPartitioner interface {
 
 // interface to implement to receive the tablets value
 type SetTablets interface {
-	SetTablets(tablets TabletInfoList)
+	SetTablets(tablets tablets.TabletInfoList)
 }
 
 type policyConnPool struct {
@@ -88,6 +90,7 @@ func connConfig(cfg *ClusterConfig) (*ConnConfig, error) {
 		CQLVersion:     cfg.CQLVersion,
 		Timeout:        cfg.Timeout,
 		WriteTimeout:   cfg.WriteTimeout,
+		ReadTimeout:    cfg.ReadTimeout,
 		ConnectTimeout: cfg.ConnectTimeout,
 		Dialer:         cfg.Dialer,
 		HostDialer:     hostDialer,
@@ -546,6 +549,7 @@ func (pool *hostConnPool) connect() (err error) {
 	// lazily initialize the connPicker when we know the required type
 	pool.initConnPicker(conn)
 	pool.connPicker.Put(conn)
+	conn.finalizeConnection()
 
 	return nil
 }

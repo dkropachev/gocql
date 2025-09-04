@@ -39,6 +39,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gocql/gocql/tablets"
+
 	"github.com/gocql/gocql/internal/lru"
 	"github.com/gocql/gocql/internal/streams"
 )
@@ -142,6 +144,7 @@ type ConnConfig struct {
 	CQLVersion     string
 	Timeout        time.Duration
 	WriteTimeout   time.Duration
+	ReadTimeout    time.Duration
 	ConnectTimeout time.Duration
 	Dialer         Dialer
 	HostDialer     HostDialer
@@ -177,11 +180,12 @@ type ConnInterface interface {
 	exec(ctx context.Context, req frameBuilder, tracer Tracer) (*framer, error)
 	awaitSchemaAgreement(ctx context.Context) error
 	executeQuery(ctx context.Context, qry *Query) *Iter
-	querySystem(ctx context.Context, query string) *Iter
+	querySystem(ctx context.Context, query string, values ...interface{}) *Iter
 	getIsSchemaV2() bool
 	setSchemaV2(s bool)
-	query(ctx context.Context, statement string, values ...interface{}) (iter *Iter)
+	query(ctx context.Context, requestTimeout time.Duration, statement string, values ...interface{}) (iter *Iter)
 	getScyllaSupported() scyllaSupported
+	finalizeConnection()
 }
 
 // Conn is a single connection to a Cassandra node. It can be used to execute
@@ -192,13 +196,13 @@ type Conn struct {
 	r    *bufio.Reader
 	w    contextWriter
 
-	timeout        time.Duration
+	readTimeout    time.Duration
 	writeTimeout   time.Duration
 	cfg            *ConnConfig
 	frameObserver  FrameHeaderObserver
 	streamObserver StreamObserver
 
-	headerBuf [maxFrameHeaderSize]byte
+	headerBuf [headSize]byte
 
 	streams *streams.IDGenerator
 	mu      sync.Mutex
@@ -242,29 +246,47 @@ func (c *Conn) setSchemaV2(s bool) {
 	c.isSchemaV2 = s
 }
 
+func (c *Conn) finalizeConnection() {
+	// When connection just created all timeouts are set to `cfg.ConnectTimeout`
+	// It is done to make sure that connection is easy to establish when users set very low `WriteTimeout` and/or `Timeout`
+	// This method sets timeouts to `operational` values after connection successfully created
+	c.writeTimeout = c.cfg.WriteTimeout
+	c.readTimeout = c.cfg.ReadTimeout
+	c.w.setFinalWriteTimeout(c.cfg.WriteTimeout)
+}
+
 func (c *Conn) getScyllaSupported() scyllaSupported {
 	return c.scyllaSupported
 }
 
+func (c *Conn) getWriteTimeout() time.Duration {
+	var timeout = c.writeTimeout
+	return timeout
+}
+
 // connect establishes a connection to a Cassandra node using session's connection config.
+// note: every connection needs to get `conn.finalizeConnection` called ont it when initialization process is done
 func (s *Session) connect(ctx context.Context, host *HostInfo, errorHandler ConnErrorHandler) (*Conn, error) {
 	return s.dial(ctx, host, s.connCfg, errorHandler)
 }
 
 // connectShard establishes a connection to a shard.
 // If nrShards is zero, shard-aware dialing is disabled.
+// note: every connection needs to get `conn.finalizeConnection` called ont it when initialization process is done
 func (s *Session) connectShard(ctx context.Context, host *HostInfo, errorHandler ConnErrorHandler,
 	shardID, nrShards int) (*Conn, error) {
 	return s.dialShard(ctx, host, s.connCfg, errorHandler, shardID, nrShards)
 }
 
 // dial establishes a connection to a Cassandra node and notifies the session's connectObserver.
+// note: every connection needs to get `conn.finalizeConnection` called on it when initialization process is done
 func (s *Session) dial(ctx context.Context, host *HostInfo, connConfig *ConnConfig, errorHandler ConnErrorHandler) (*Conn, error) {
 	return s.dialShard(ctx, host, connConfig, errorHandler, 0, 0)
 }
 
 // dialShard establishes a connection to a host/shard and notifies the session's connectObserver.
 // If nrShards is zero, shard-aware dialing is disabled.
+// note: every connection needs to get `conn.finalizeConnection` called on it when initialization process is done
 func (s *Session) dialShard(ctx context.Context, host *HostInfo, connConfig *ConnConfig, errorHandler ConnErrorHandler,
 	shardID, nrShards int) (*Conn, error) {
 	var obs ObservedConnect
@@ -307,11 +329,6 @@ func (s *Session) dialWithoutObserver(ctx context.Context, host *HostInfo, cfg *
 		return nil, err
 	}
 
-	writeTimeout := cfg.Timeout
-	if cfg.WriteTimeout > 0 {
-		writeTimeout = cfg.WriteTimeout
-	}
-
 	ctx, cancel := context.WithCancel(ctx)
 	c := &Conn{
 		conn:          dialedHost.Conn,
@@ -323,13 +340,13 @@ func (s *Session) dialWithoutObserver(ctx context.Context, host *HostInfo, cfg *
 		errorHandler:  errorHandler,
 		compressor:    cfg.Compressor,
 		session:       s,
-		streams:       s.streamIDGenerator(cfg.ProtoVersion),
+		streams:       s.streamIDGenerator(),
 		host:          host,
 		isSchemaV2:    true, // Try using "system.peers_v2" until proven otherwise
 		frameObserver: s.frameObserver,
 		w: &deadlineContextWriter{
 			w:         dialedHost.Conn,
-			timeout:   writeTimeout,
+			timeout:   cfg.ConnectTimeout,
 			semaphore: make(chan struct{}, 1),
 			quit:      make(chan struct{}),
 		},
@@ -337,7 +354,8 @@ func (s *Session) dialWithoutObserver(ctx context.Context, host *HostInfo, cfg *
 		cancel:         cancel,
 		logger:         cfg.logger(),
 		streamObserver: s.streamObserver,
-		writeTimeout:   writeTimeout,
+		writeTimeout:   cfg.ConnectTimeout,
+		readTimeout:    cfg.ConnectTimeout,
 	}
 
 	if err := c.init(ctx, dialedHost); err != nil {
@@ -349,11 +367,11 @@ func (s *Session) dialWithoutObserver(ctx context.Context, host *HostInfo, cfg *
 	return c, nil
 }
 
-func (s *Session) streamIDGenerator(protocol int) *streams.IDGenerator {
+func (s *Session) streamIDGenerator() *streams.IDGenerator {
 	if s.cfg.MaxRequestsPerConn > 0 {
 		return streams.NewLimited(s.cfg.MaxRequestsPerConn)
 	}
-	return streams.New(protocol)
+	return streams.New()
 }
 
 func (c *Conn) init(ctx context.Context, dialedHost *DialedHost) error {
@@ -372,16 +390,13 @@ func (c *Conn) init(ctx context.Context, dialedHost *DialedHost) error {
 		conn:        c,
 	}
 
-	c.timeout = c.cfg.ConnectTimeout
 	if err := startup.setupConn(ctx); err != nil {
 		return err
 	}
 
-	c.timeout = c.cfg.Timeout
-
 	// dont coalesce startup frames
 	if c.session.cfg.WriteCoalesceWaitTime > 0 && !c.cfg.disableCoalesce && !dialedHost.DisableCoalesce {
-		c.w = newWriteCoalescer(c.conn, c.writeTimeout, c.session.cfg.WriteCoalesceWaitTime, ctx.Done())
+		c.w = newWriteCoalescer(c.conn, c.cfg.ConnectTimeout, c.session.cfg.WriteCoalesceWaitTime, ctx.Done())
 	}
 
 	if c.isScyllaConn() { // ScyllaDB does not support system.peers_v2
@@ -403,8 +418,11 @@ func (c *Conn) Read(p []byte) (n int, err error) {
 
 	for i := 0; i < maxAttempts; i++ {
 		var nn int
-		if c.timeout > 0 {
-			c.conn.SetReadDeadline(time.Now().Add(c.timeout))
+		if c.readTimeout > 0 {
+			err = c.conn.SetReadDeadline(time.Now().Add(c.readTimeout))
+			if err != nil {
+				return 0, err
+			}
 		}
 
 		nn, err = io.ReadFull(c.r, p[n:])
@@ -428,8 +446,8 @@ type startupCoordinator struct {
 
 func (s *startupCoordinator) setupConn(ctx context.Context) error {
 	var cancel context.CancelFunc
-	if s.conn.timeout > 0 {
-		ctx, cancel = context.WithTimeout(ctx, s.conn.timeout)
+	if s.conn.cfg.ConnectTimeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, s.conn.cfg.ConnectTimeout)
 	} else {
 		ctx, cancel = context.WithCancel(ctx)
 	}
@@ -506,11 +524,15 @@ func (s *startupCoordinator) options(ctx context.Context) error {
 }
 
 func (s *startupCoordinator) startup(ctx context.Context) error {
-	m := map[string]string{
-		"CQL_VERSION":    s.conn.cfg.CQLVersion,
-		"DRIVER_NAME":    s.conn.session.cfg.DriverName,
-		"DRIVER_VERSION": s.conn.session.cfg.DriverVersion,
+	m := map[string]string{}
+
+	if s.conn.session.cfg.ApplicationInfo != nil {
+		s.conn.session.cfg.ApplicationInfo.UpdateStartupOptions(m)
 	}
+
+	m["CQL_VERSION"] = s.conn.cfg.CQLVersion
+	m["DRIVER_NAME"] = s.conn.session.cfg.DriverName
+	m["DRIVER_VERSION"] = s.conn.session.cfg.DriverVersion
 
 	if s.conn.compressor != nil {
 		comp := s.conn.supported["COMPRESSION"]
@@ -534,7 +556,10 @@ func (s *startupCoordinator) startup(ctx context.Context) error {
 		}
 	}
 
-	frame, err := s.write(ctx, &writeStartupFrame{opts: m})
+	frame, err := s.write(ctx, &writeStartupFrame{
+		opts:           m,
+		requestTimeout: s.conn.cfg.ConnectTimeout,
+	})
 	if err != nil {
 		return err
 	}
@@ -561,7 +586,10 @@ func (s *startupCoordinator) authenticateHandshake(ctx context.Context, authFram
 		return err
 	}
 
-	req := &writeAuthResponseFrame{data: resp}
+	req := &writeAuthResponseFrame{
+		data:           resp,
+		requestTimeout: s.conn.cfg.ConnectTimeout,
+	}
 	for {
 		frame, err := s.write(ctx, req)
 		if err != nil {
@@ -714,7 +742,10 @@ func (c *Conn) heartBeat(ctx context.Context) {
 		case <-timer.C:
 		}
 
-		framer, err := c.exec(context.Background(), &writeOptionsFrame{}, nil)
+		framer, err := c.exec(context.Background(), &writeOptionsFrame{
+			requestTimeout: c.cfg.ConnectTimeout,
+		}, nil)
+		c.finalizeConnection()
 		if err != nil {
 			failures++
 			continue
@@ -745,8 +776,8 @@ func (c *Conn) recv(ctx context.Context) error {
 
 	// read a full header, ignore timeouts, as this is being ran in a loop
 	// TODO: TCP level deadlines? or just query level deadlines?
-	if c.timeout > 0 {
-		c.conn.SetReadDeadline(time.Time{})
+	if c.readTimeout > 0 {
+		c.conn.SetReadDeadline(time.Now().Add(c.readTimeout))
 	}
 
 	headStartTime := time.Now()
@@ -896,6 +927,8 @@ type contextWriter interface {
 	// early. writeContext must return a non-nil error if it returns n < len(p). writeContext must not modify the
 	// data in p, even temporarily.
 	writeContext(ctx context.Context, p []byte) (n int, err error)
+
+	setFinalWriteTimeout(timeout time.Duration)
 }
 
 type deadlineWriter interface {
@@ -912,6 +945,10 @@ type deadlineContextWriter struct {
 
 	// quit closed once the connection is closed.
 	quit chan struct{}
+}
+
+func (c *deadlineContextWriter) setFinalWriteTimeout(timeout time.Duration) {
+	c.timeout = timeout
 }
 
 // writeContext implements contextWriter.
@@ -963,6 +1000,10 @@ type writeCoalescer struct {
 
 	testEnqueuedHook func()
 	testFlushedHook  func()
+}
+
+func (w *writeCoalescer) setFinalWriteTimeout(timeout time.Duration) {
+	w.timeout = timeout
 }
 
 type writeRequest struct {
@@ -1199,7 +1240,7 @@ func (c *Conn) exec(ctx context.Context, req frameBuilder, tracer Tracer) (*fram
 	}
 
 	var timeoutCh <-chan time.Time
-	if c.timeout > 0 {
+	if req.getRequestTimeout() > 0 {
 		if call.timer == nil {
 			call.timer = time.NewTimer(0)
 			<-call.timer.C
@@ -1212,7 +1253,7 @@ func (c *Conn) exec(ctx context.Context, req frameBuilder, tracer Tracer) (*fram
 			}
 		}
 
-		call.timer.Reset(c.timeout)
+		call.timer.Reset(req.getRequestTimeout())
 		timeoutCh = call.timer.C
 	}
 
@@ -1319,7 +1360,7 @@ type inflightPrepare struct {
 	preparedStatment *preparedStatment
 }
 
-func (c *Conn) prepareStatement(ctx context.Context, stmt string, tracer Tracer) (*preparedStatment, error) {
+func (c *Conn) prepareStatement(ctx context.Context, stmt string, requestTimeout time.Duration, tracer Tracer) (*preparedStatment, error) {
 	stmtCacheKey := c.session.stmtsLRU.keyFor(c.host.HostID(), c.currentKeyspace, stmt)
 	flight, ok := c.session.stmtsLRU.execIfMissing(stmtCacheKey, func(lru *lru.Cache) *inflightPrepare {
 		flight := &inflightPrepare{
@@ -1451,7 +1492,7 @@ func (c *Conn) executeQuery(ctx context.Context, qry *Query) (iter *Iter) {
 	if !qry.skipPrepare && qry.shouldPrepare() {
 		// Prepare all DML queries. Other queries can not be prepared.
 		var err error
-		info, err = c.prepareStatement(ctx, qry.stmt, qry.trace)
+		info, err = c.prepareStatement(ctx, qry.stmt, qry.requestTimeout, qry.trace)
 		if err != nil {
 			return &Iter{err: err}
 		}
@@ -1488,9 +1529,10 @@ func (c *Conn) executeQuery(ctx context.Context, qry *Query) (iter *Iter) {
 		params.skipMeta = !(c.session.cfg.DisableSkipMetadata || qry.disableSkipMetadata) && len(info.response.columns) != 0
 
 		frame = &writeExecuteFrame{
-			preparedID:    info.id,
-			params:        params,
-			customPayload: qry.customPayload,
+			preparedID:     info.id,
+			params:         params,
+			customPayload:  qry.customPayload,
+			requestTimeout: qry.requestTimeout,
 		}
 
 		// Set "lwt", keyspace", "table" property in the query if it is present in preparedMetadata
@@ -1501,9 +1543,10 @@ func (c *Conn) executeQuery(ctx context.Context, qry *Query) (iter *Iter) {
 		qry.routingInfo.mu.Unlock()
 	} else {
 		frame = &writeQueryFrame{
-			statement:     qry.stmt,
-			params:        params,
-			customPayload: qry.customPayload,
+			statement:      qry.stmt,
+			params:         params,
+			customPayload:  qry.customPayload,
+			requestTimeout: qry.requestTimeout,
 		}
 	}
 
@@ -1519,11 +1562,8 @@ func (c *Conn) executeQuery(ctx context.Context, qry *Query) (iter *Iter) {
 
 	if len(framer.customPayload) > 0 {
 		if tabletInfo, ok := framer.customPayload["tablets-routing-v1"]; ok {
-			var firstToken string
-			var lastToken string
-			var replicas [][]interface{}
-			tabletInfoValue := []interface{}{&firstToken, &lastToken, &replicas}
-			Unmarshal(TupleTypeInfo{
+			tabletBuilder := tablets.NewTabletInfoBuilder()
+			err = Unmarshal(TupleTypeInfo{
 				NativeType: NativeType{proto: c.version, typ: TypeTuple},
 				Elems: []TypeInfo{
 					NativeType{typ: TypeBigInt},
@@ -1538,39 +1578,17 @@ func (c *Conn) executeQuery(ctx context.Context, qry *Query) (iter *Iter) {
 							}},
 					},
 				},
-			}, tabletInfo, tabletInfoValue)
-
-			tablet := TabletInfo{}
-			tablet.firstToken, err = strconv.ParseInt(firstToken, 10, 64)
+			}, tabletInfo, []interface{}{&tabletBuilder.FirstToken, &tabletBuilder.LastToken, &tabletBuilder.Replicas})
 			if err != nil {
 				return &Iter{err: err}
 			}
-			tablet.lastToken, err = strconv.ParseInt(lastToken, 10, 64)
+			tabletBuilder.KeyspaceName = qry.routingInfo.keyspace
+			tabletBuilder.TableName = qry.routingInfo.table
+			tablet, err := tabletBuilder.Build()
 			if err != nil {
 				return &Iter{err: err}
 			}
-
-			tabletReplicas := make([]ReplicaInfo, 0, len(replicas))
-			for _, replica := range replicas {
-				if len(replica) != 2 {
-					return &Iter{err: err}
-				}
-				if hostId, ok := replica[0].(UUID); ok {
-					if shardId, ok := replica[1].(int); ok {
-						repInfo := ReplicaInfo{hostId, shardId}
-						tabletReplicas = append(tabletReplicas, repInfo)
-					} else {
-						return &Iter{err: err}
-					}
-				} else {
-					return &Iter{err: err}
-				}
-			}
-			tablet.replicas = tabletReplicas
-			tablet.keyspaceName = qry.routingInfo.keyspace
-			tablet.tableName = qry.routingInfo.table
-
-			c.session.metadataDescriber.addTablet(&tablet)
+			c.session.metadataDescriber.AddTablet(tablet)
 		}
 	}
 
@@ -1662,8 +1680,13 @@ func (c *Conn) AvailableStreams() int {
 }
 
 func (c *Conn) UseKeyspace(keyspace string) error {
-	q := &writeQueryFrame{statement: `USE "` + keyspace + `"`}
-	q.params.consistency = c.session.cons
+	q := &writeQueryFrame{
+		statement: `USE "` + keyspace + `"`,
+		params: queryParams{
+			consistency: c.session.cons,
+		},
+		requestTimeout: c.cfg.ConnectTimeout,
+	}
 
 	framer, err := c.exec(c.ctx, q, nil)
 	if err != nil {
@@ -1699,10 +1722,6 @@ func (c *Conn) executeBatch(ctx context.Context, batch *Batch) (iter *Iter) {
 		}
 	}()
 
-	if c.version == protoVersion1 {
-		return &Iter{err: ErrUnsupported}
-	}
-
 	n := len(batch.Entries)
 	req := &writeBatchFrame{
 		typ:                   batch.Type,
@@ -1712,6 +1731,7 @@ func (c *Conn) executeBatch(ctx context.Context, batch *Batch) (iter *Iter) {
 		defaultTimestamp:      batch.defaultTimestamp,
 		defaultTimestampValue: batch.defaultTimestampValue,
 		customPayload:         batch.CustomPayload,
+		requestTimeout:        batch.requestTimeout,
 	}
 
 	stmts := make(map[string]string, len(batch.Entries))
@@ -1723,7 +1743,7 @@ func (c *Conn) executeBatch(ctx context.Context, batch *Batch) (iter *Iter) {
 		b := &req.statements[i]
 
 		if len(entry.Args) > 0 || entry.binding != nil {
-			info, err := c.prepareStatement(batch.Context(), entry.Stmt, batch.trace)
+			info, err := c.prepareStatement(batch.Context(), entry.Stmt, batch.requestTimeout, batch.trace)
 			if err != nil {
 				return &Iter{err: err}
 			}
@@ -1815,8 +1835,8 @@ func (c *Conn) executeBatch(ctx context.Context, batch *Batch) (iter *Iter) {
 	}
 }
 
-func (c *Conn) query(ctx context.Context, statement string, values ...interface{}) (iter *Iter) {
-	q := c.session.Query(statement, values...).Consistency(One).Trace(nil)
+func (c *Conn) query(ctx context.Context, requestTimout time.Duration, statement string, values ...interface{}) (iter *Iter) {
+	q := c.session.Query(statement, values...).Consistency(One).SetRequestTimeout(requestTimout).Trace(nil)
 	q.skipPrepare = true
 	q.disableSkipMetadata = true
 	// we want to keep the query on this connection
@@ -1824,17 +1844,19 @@ func (c *Conn) query(ctx context.Context, statement string, values ...interface{
 	return c.executeQuery(ctx, q)
 }
 
-func (c *Conn) querySystem(ctx context.Context, query string) *Iter {
+func (c *Conn) querySystem(ctx context.Context, query string, values ...interface{}) *Iter {
 	usingClause := ""
 	if c.session.control != nil {
 		usingClause = c.session.usingTimeoutClause
 	}
 	queryStmt := query + usingClause
-	return c.query(ctx, queryStmt)
+	var iter = c.query(ctx, c.session.cfg.MetadataSchemaRequestTimeout, queryStmt, values...)
+	c.finalizeConnection()
+	return iter
 }
 
 const qrySystemPeers = "SELECT * FROM system.peers"
-const qrySystemPeersV2 = "SELECT * FROM system.peers_2"
+const qrySystemPeersV2 = "SELECT * FROM system.peers_v2"
 
 const qrySystemLocal = "SELECT * FROM system.local WHERE key='local'"
 
@@ -1897,7 +1919,7 @@ func (c *Conn) awaitSchemaAgreement(ctx context.Context) error {
 	for time.Now().Before(endDeadline) {
 		var iter *Iter
 		if c.getIsSchemaV2() {
-			iter = c.querySystem(ctx, "SELECT host_id, data_center, rack, schema_version, rpc_address FROM system.peers_2")
+			iter = c.querySystem(ctx, "SELECT host_id, data_center, rack, schema_version, preferred_ip FROM system.peers_v2")
 		} else {
 			iter = c.querySystem(ctx, "SELECT host_id, data_center, rack, schema_version, rpc_address FROM system.peers")
 		}

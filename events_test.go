@@ -34,6 +34,8 @@ import (
 )
 
 func TestEventDebounce(t *testing.T) {
+	t.Parallel()
+
 	const eventCount = 150
 	wg := &sync.WaitGroup{}
 	wg.Add(1)

@@ -13,6 +13,8 @@ import (
 )
 
 func TestMarshalMapV3Corrupt(t *testing.T) {
+	t.Parallel()
+
 	elem := gocql.NewNativeType(3, gocql.TypeSmallInt, "")
 	tType := gocql.NewCollectionType(gocql.NewNativeType(3, gocql.TypeMap, ""), elem, elem)
 

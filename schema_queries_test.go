@@ -4,6 +4,7 @@
 package gocql
 
 import (
+	"github.com/gocql/gocql/internal/tests"
 	"testing"
 )
 
@@ -20,5 +21,5 @@ func TestSchemaQueries(t *testing.T) {
 	if err != nil {
 		t.Fatal("unable to get keyspace metadata for keyspace: ", err)
 	}
-	assertTrue(t, "keyspace present in metadataDescriber", keyspaceMetadata.Name == "gocql_test")
+	tests.AssertTrue(t, "keyspace present in metadataDescriber", keyspaceMetadata.Name == "gocql_test")
 }

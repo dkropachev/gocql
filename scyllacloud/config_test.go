@@ -16,6 +16,8 @@ import (
 )
 
 func TestCloudCluster(t *testing.T) {
+	t.Parallel()
+
 	var (
 		singleDCConfig = func() *ConnectionConfig {
 			return &ConnectionConfig{
@@ -226,6 +228,8 @@ func TestCloudCluster(t *testing.T) {
 }
 
 func TestConnectionConfig_GetCurrentContextConfig(t *testing.T) {
+	t.Parallel()
+
 	tt := []struct {
 		name            string
 		connConfig      *ConnectionConfig
@@ -282,6 +286,8 @@ func TestConnectionConfig_GetCurrentContextConfig(t *testing.T) {
 }
 
 func TestConnectionConfig_GetCurrentAuthInfo(t *testing.T) {
+	t.Parallel()
+
 	tt := []struct {
 		name             string
 		connConfig       *ConnectionConfig
@@ -373,6 +379,8 @@ func TestConnectionConfig_GetCurrentAuthInfo(t *testing.T) {
 }
 
 func TestConnectionConfig_GetCurrentDatacenterConfig(t *testing.T) {
+	t.Parallel()
+
 	tt := []struct {
 		name               string
 		connConfig         *ConnectionConfig

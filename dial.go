@@ -29,6 +29,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 )
 
@@ -69,12 +70,11 @@ func (hd *defaultHostDialer) DialHost(ctx context.Context, host *HostInfo) (*Dia
 		return nil, fmt.Errorf("host missing port: %v", port)
 	}
 
-	connAddr := host.ConnectAddressAndPort()
-	conn, err := hd.dialer.DialContext(ctx, "tcp", connAddr)
+	addr := net.JoinHostPort(ip.String(), strconv.Itoa(port))
+	conn, err := hd.dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, err
 	}
-	addr := host.HostnameAndPort()
 	return WrapTLS(ctx, conn, addr, hd.tlsConfig)
 }
 

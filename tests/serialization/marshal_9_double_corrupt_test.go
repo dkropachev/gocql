@@ -13,6 +13,8 @@ import (
 )
 
 func TestMarshalDoubleCorrupt(t *testing.T) {
+	t.Parallel()
+
 	type testSuite struct {
 		name      string
 		marshal   func(interface{}) ([]byte, error)
@@ -42,6 +44,7 @@ func TestMarshalDoubleCorrupt(t *testing.T) {
 		unmarshal := tSuite.unmarshal
 
 		t.Run(tSuite.name, func(t *testing.T) {
+			t.Parallel()
 
 			serialization.NegativeUnmarshalSet{
 				Data:   []byte("\x80\x00\x00\x00\x00\x00\x00\x00\x00"),

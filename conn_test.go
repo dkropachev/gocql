@@ -54,7 +54,7 @@ import (
 )
 
 const (
-	defaultProto = protoVersion2
+	defaultProto = protoVersion3
 )
 
 type brokenDNSResolver struct{}
@@ -106,6 +106,7 @@ func testCluster(proto protoVersion, addresses ...string) *ClusterConfig {
 	cluster := NewCluster(addresses...)
 	cluster.ProtoVersion = int(proto)
 	cluster.disableControlConn = true
+	cluster.PoolConfig.HostSelectionPolicy = RoundRobinHostPolicy()
 	return cluster
 }
 
@@ -342,15 +343,16 @@ func TestCancel(t *testing.T) {
 	wg.Add(1)
 
 	go func() {
-		if err := qry.Exec(); !errors.Is(err, context.Canceled) {
-			t.Fatalf("expected to get context cancel error: '%v', got '%v'", context.Canceled, err)
-		}
+		err = qry.Exec()
 		wg.Done()
 	}()
-
 	// The query will timeout after about 1 seconds, so cancel it after a short pause
 	time.AfterFunc(20*time.Millisecond, cancel)
 	wg.Wait()
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected to get context cancel error: '%v', got '%v'", context.Canceled, err)
+	}
 }
 
 type testQueryObserver struct {
@@ -451,7 +453,13 @@ func TestQueryMultinodeWithMetrics(t *testing.T) {
 	}
 
 	for i, ip := range addresses {
-		host := &HostInfo{connectAddress: net.ParseIP(ip)}
+		var host *HostInfo
+		for _, clusterHost := range db.GetHosts() {
+			if clusterHost.connectAddress.String() == ip {
+				host = clusterHost
+			}
+		}
+
 		queryMetric := qry.metrics.hostMetrics(host)
 		observedMetrics := observer.GetMetrics(host)
 
@@ -621,7 +629,7 @@ func BenchmarkSingleConn(b *testing.B) {
 	srv := NewTestServer(b, 3, context.Background())
 	defer srv.Stop()
 
-	cluster := testCluster(3, srv.Address)
+	cluster := testCluster(protoVersion3, srv.Address)
 	// Set the timeout arbitrarily low so that the query hits the timeout in a
 	// timely manner.
 	cluster.Timeout = 500 * time.Millisecond
@@ -725,7 +733,7 @@ func TestStream0(t *testing.T) {
 
 	conn := &Conn{
 		r:       bufio.NewReader(&buf),
-		streams: streams.New(protoVersion4),
+		streams: streams.New(),
 		logger:  &defaultLogger{},
 	}
 
@@ -801,17 +809,17 @@ func TestInitialRetryPolicy(t *testing.T) {
 			ExpectedErr:              "gocql: unable to create session: unable to connect to the cluster, last error: unable to discover protocol version:"},
 		{
 			NumRetries:               1,
-			ProtoVersion:             4,
+			ProtoVersion:             protoVersion4,
 			ExpectedGetIntervalCalls: nil,
 			ExpectedErr:              "gocql: unable to create session: unable to connect to the cluster, last error: unable to create control connection: unable to connect to initial hosts:"},
 		{
 			NumRetries:               2,
-			ProtoVersion:             4,
+			ProtoVersion:             protoVersion4,
 			ExpectedGetIntervalCalls: []int{1},
 			ExpectedErr:              "gocql: unable to create session: unable to connect to the cluster, last error: unable to create control connection: unable to connect to initial hosts:"},
 		{
 			NumRetries:               3,
-			ProtoVersion:             4,
+			ProtoVersion:             protoVersion4,
 			ExpectedGetIntervalCalls: []int{1, 2},
 			ExpectedErr:              "gocql: unable to create session: unable to connect to the cluster, last error: unable to create control connection: unable to connect to initial hosts:"},
 	}
@@ -1155,10 +1163,7 @@ func (nts newTestServerOpts) newServer(t testing.TB, ctx context.Context) *TestS
 		t.Fatal(err)
 	}
 
-	headerSize := 8
-	if nts.protocol > protoVersion2 {
-		headerSize = 9
-	}
+	headerSize := 9
 
 	ctx, cancel := context.WithCancel(ctx)
 	srv := &TestServer{
@@ -1207,10 +1212,7 @@ func NewSSLTestServerWithSupportedFactory(t testing.TB, protocol uint8, ctx cont
 		t.Fatal(err)
 	}
 
-	headerSize := 8
-	if protocol > protoVersion2 {
-		headerSize = 9
-	}
+	headerSize := 9
 
 	ctx, cancel := context.WithCancel(ctx)
 	srv := &TestServer{
@@ -1257,7 +1259,7 @@ func (srv *TestServer) session() (*Session, error) {
 }
 
 func (srv *TestServer) host() *HostInfo {
-	hosts, err := hostInfo(nil, srv.Address, 9042)
+	hosts, err := hostInfo(nil, nil, srv.Address, 9042)
 	if err != nil {
 		srv.t.Fatal(err)
 	}

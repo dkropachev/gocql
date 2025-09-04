@@ -16,18 +16,26 @@ import (
 const testShardCount = 3
 
 func TestShardAwarePortMockedNoReconnections(t *testing.T) {
+	t.Parallel()
+
 	testWithAndWithoutTLS(t, testShardAwarePortNoReconnections)
 }
 
 func TestShardAwarePortMockedMaliciousNAT(t *testing.T) {
+	t.Parallel()
+
 	testWithAndWithoutTLS(t, testShardAwarePortMaliciousNAT)
 }
 
 func TestShardAwarePortMockedUnreachable(t *testing.T) {
+	t.Parallel()
+
 	testWithAndWithoutTLS(t, testShardAwarePortUnreachable)
 }
 
 func TestShardAwarePortMockedUnusedIfNotEnabled(t *testing.T) {
+	t.Parallel()
+
 	testWithAndWithoutTLS(t, testShardAwarePortUnusedIfNotEnabled)
 }
 

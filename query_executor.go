@@ -219,7 +219,7 @@ func (q *queryExecutor) do(ctx context.Context, qry ExecutableQuery, hostIter Ne
 
 		var qErr *QueryError
 		if errors.As(iter.err, &qErr) {
-			potentiallyExecuted = potentiallyExecuted && qErr.PotentiallyExecuted()
+			potentiallyExecuted = potentiallyExecuted || qErr.PotentiallyExecuted()
 			qErr.potentiallyExecuted = potentiallyExecuted
 			qErr.isIdempotent = qry.IsIdempotent()
 			iter.err = qErr

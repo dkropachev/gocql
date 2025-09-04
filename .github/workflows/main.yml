@@ -11,31 +11,21 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    env:
-      SCYLLA_IMAGE: scylladb/scylla:6.1.1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-      - uses: actions/cache@v4
-        id: gomod-cache
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('go.mod') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
 
-      - run: go vet ./...
+      - name: Run linters
+        run: make check
 
       - name: Run unit tests
-        run: go test -tags unit -race ./...
-
-      - name: Setup environment
-        uses: ./.github/actions/setup-environment
-        with:
-          ccm_version: 'master'
-          java_version: '11'
-          docker_compose_version: '2.20.0'
+        run: make test-unit
 
       - run: sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"
-      - run: ./integration.sh integration
-      - run: ./integration.sh ccm
+
+      - name: Run integration suite
+        run: make test-integration-scylla
+
+      - name: Run CCM integration suite
+        run: TEST_INTEGRATION_TAGS="ccm gocql_debug" make test-integration-scylla
+

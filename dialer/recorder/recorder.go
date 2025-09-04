@@ -72,15 +72,8 @@ func (f *FrameWriter) Write(b []byte, n int, file *os.File) (err error) {
 	f.record.Data = append(f.record.Data, b[:n]...)
 
 	if f.to_record == -1 && len(f.record.Data) >= 9 {
-		p := 4
-		stream_id := int(f.record.Data[2])
-		if b[0] > 0x02 {
-			p = 5
-			stream_id = int(f.record.Data[2])<<8 | int(f.record.Data[3])
-		}
-
-		f.to_record = p + 4 + int(f.record.Data[p+0])<<24 | int(f.record.Data[p+1])<<16 | int(f.record.Data[p+2])<<8 | int(f.record.Data[p+3]) - recorded_ealier
-		f.record.StreamID = stream_id
+		f.to_record = 9 + int(f.record.Data[5+0])<<24 | int(f.record.Data[6])<<16 | int(f.record.Data[7])<<8 | int(f.record.Data[8]) - recorded_ealier
+		f.record.StreamID = int(f.record.Data[2])<<8 | int(f.record.Data[3])
 	} else if f.to_record == -1 {
 		return err
 	}

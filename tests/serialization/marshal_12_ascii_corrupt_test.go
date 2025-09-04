@@ -13,6 +13,8 @@ import (
 )
 
 func TestMarshalAsciiMustFail(t *testing.T) {
+	t.Parallel()
+
 	tType := gocql.NewNativeType(4, gocql.TypeAscii, "")
 
 	type testSuite struct {
@@ -42,6 +44,8 @@ func TestMarshalAsciiMustFail(t *testing.T) {
 		unmarshal := tSuite.unmarshal
 
 		t.Run(tSuite.name, func(t *testing.T) {
+			t.Parallel()
+
 			serialization.NegativeUnmarshalSet{
 				Data:   []byte{255},
 				Values: mod.Values{[]byte{}, ""}.AddVariants(mod.All...),

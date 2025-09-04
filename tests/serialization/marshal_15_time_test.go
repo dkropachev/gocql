@@ -14,6 +14,8 @@ import (
 )
 
 func TestMarshalsTime(t *testing.T) {
+	t.Parallel()
+
 	tType := gocql.NewNativeType(4, gocql.TypeTime, "")
 
 	type testSuite struct {
@@ -44,6 +46,7 @@ func TestMarshalsTime(t *testing.T) {
 		unmarshal := tSuite.unmarshal
 
 		t.Run(tSuite.name, func(t *testing.T) {
+			t.Parallel()
 
 			serialization.PositiveSet{
 				Data: nil,

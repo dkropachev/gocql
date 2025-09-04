@@ -82,7 +82,6 @@ type ClusterConfig struct {
 	// Timeout limits the time spent on the client side while executing a query.
 	// Specifically, query or batch execution will return an error if the client does not receive a response
 	// from the server within the Timeout period.
-	// Timeout is also used to configure the read timeout on the underlying network connection.
 	// Client Timeout should always be higher than the request timeouts configured on the server,
 	// so that retries don't overload the server.
 	// Timeout has a default value of 11 seconds, which is higher than default server timeout for most query types.
@@ -102,6 +101,10 @@ type ClusterConfig struct {
 	// WriteTimeout should be lower than or equal to Timeout.
 	// WriteTimeout defaults to the value of Timeout.
 	WriteTimeout time.Duration
+
+	// ReadTimeout limits the time the driver waits for data from the connection.
+	// It has only one purpose, identify faulty connection early and drop it.
+	ReadTimeout time.Duration
 
 	// Port used when dialing.
 	// Default: 9042
@@ -143,7 +146,7 @@ type ClusterConfig struct {
 	AuthProvider func(h *HostInfo) (Authenticator, error)
 
 	// Default retry policy to use for queries.
-	// Default: no retries.
+	// Default: SimpleRetryPolicy{NumRetries: 3}.
 	RetryPolicy RetryPolicy
 
 	// ConvictionPolicy decides whether to mark host as down based on the error and host info.
@@ -314,10 +317,42 @@ type ClusterConfig struct {
 	disableInit        bool
 
 	DNSResolver DNSResolver
+
+	ApplicationInfo ApplicationInfo
 }
 
 type DNSResolver interface {
 	LookupIP(host string) ([]net.IP, error)
+}
+
+type ApplicationInfo interface {
+	UpdateStartupOptions(map[string]string)
+}
+
+type StaticApplicationInfo struct {
+	applicationName    string
+	applicationVersion string
+	clientID           string
+}
+
+func NewStaticApplicationInfo(name, version, clientID string) *StaticApplicationInfo {
+	return &StaticApplicationInfo{
+		applicationName:    name,
+		applicationVersion: version,
+		clientID:           clientID,
+	}
+}
+
+func (i *StaticApplicationInfo) UpdateStartupOptions(opts map[string]string) {
+	if i.applicationName != "" {
+		opts["APPLICATION_NAME"] = i.applicationName
+	}
+	if i.applicationVersion != "" {
+		opts["APPLICATION_VERSION"] = i.applicationVersion
+	}
+	if i.clientID != "" {
+		opts["CLIENT_ID"] = i.clientID
+	}
 }
 
 type SimpleDNSResolver struct {
@@ -549,6 +584,10 @@ func (cfg *ClusterConfig) Validate() error {
 
 	if cfg.DNSResolver == nil {
 		return fmt.Errorf("DNSResolver is empty")
+	}
+
+	if cfg.WriteTimeout == 0 {
+		cfg.WriteTimeout = cfg.Timeout
 	}
 
 	return cfg.ValidateAndInitSSL()

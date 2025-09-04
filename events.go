@@ -152,14 +152,14 @@ func (s *Session) handleSchemaEvent(frames []frame) {
 func (s *Session) handleKeyspaceChange(keyspace, change string) {
 	s.control.awaitSchemaAgreement()
 	if change == "DROPPED" || change == "UPDATED" {
-		s.metadataDescriber.removeTabletsWithKeyspace(keyspace)
+		s.metadataDescriber.RemoveTabletsWithKeyspace(keyspace)
 	}
 	s.policy.KeyspaceChanged(KeyspaceUpdateEvent{Keyspace: keyspace, Change: change})
 }
 
 func (s *Session) handleTableChange(keyspace, table, change string) {
 	if change == "DROPPED" || change == "UPDATED" {
-		s.metadataDescriber.removeTabletsWithTable(keyspace, table)
+		s.metadataDescriber.RemoveTabletsWithTable(keyspace, table)
 	}
 }
 

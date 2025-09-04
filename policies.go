@@ -466,6 +466,12 @@ func ShuffleReplicas() func(*tokenAwareHostPolicy) {
 	}
 }
 
+func DontShuffleReplicas() func(*tokenAwareHostPolicy) {
+	return func(t *tokenAwareHostPolicy) {
+		t.shuffleReplicas = false
+	}
+}
+
 // AvoidSlowReplicas enabled avoiding slow replicas
 //
 // TokenAwareHostPolicy normally does not check how busy replica is, with avoidSlowReplicas enabled it avoids replicas
@@ -493,7 +499,10 @@ func NonLocalReplicasFallback() func(policy *tokenAwareHostPolicy) {
 // selected based on the partition key, so queries are sent to the host which
 // owns the partition. Fallback is used when routing information is not available.
 func TokenAwareHostPolicy(fallback HostSelectionPolicy, opts ...func(*tokenAwareHostPolicy)) HostSelectionPolicy {
-	p := &tokenAwareHostPolicy{fallback: fallback}
+	p := &tokenAwareHostPolicy{
+		fallback:        fallback,
+		shuffleReplicas: true,
+	}
 	for _, opt := range opts {
 		opt(p)
 	}
@@ -540,7 +549,12 @@ func (t *tokenAwareHostPolicy) Init(s *Session) {
 		// See https://github.com/scylladb/gocql/issues/94.
 		panic("sharing token aware host selection policy between sessions is not supported")
 	}
-	t.getKeyspaceMetadata = s.KeyspaceMetadata
+	t.getKeyspaceMetadata = func(keyspace string) (*KeyspaceMetadata, error) {
+		if keyspace == "" {
+			return nil, ErrNoKeyspace
+		}
+		return s.metadataDescriber.getSchema(keyspace)
+	}
 	t.getKeyspaceName = func() string { return s.cfg.Keyspace }
 	t.logger = s.logger
 }
@@ -578,15 +592,16 @@ func (t *tokenAwareHostPolicy) KeyspaceChanged(update KeyspaceUpdateEvent) {
 // It must be called with t.mu mutex locked.
 // meta must not be nil and it's replicas field will be updated.
 func (t *tokenAwareHostPolicy) updateReplicas(meta *clusterMeta, keyspace string) {
+	if keyspace == "" || meta == nil || meta.tokenRing == nil {
+		return
+	}
 	newReplicas := make(map[string]tokenRingReplicas, len(meta.replicas))
 
 	ks, err := t.getKeyspaceMetadata(keyspace)
 	if err == nil {
 		strat := getStrategy(ks, t.logger)
 		if strat != nil {
-			if meta != nil && meta.tokenRing != nil {
-				newReplicas[keyspace] = strat.replicaMap(meta.tokenRing)
-			}
+			newReplicas[keyspace] = strat.replicaMap(meta.tokenRing)
 		}
 	}
 
@@ -729,20 +744,17 @@ func (t *tokenAwareHostPolicy) Pick(qry ExecutableQuery) NextHost {
 	}
 
 	token := partitioner.Hash(routingKey)
+	tokenCasted, isInt64Token := token.(int64Token)
 
 	var replicas []*HostInfo
 
-	if session := qry.GetSession(); session != nil && session.tabletsRoutingV1 {
-		tablets := session.metadataDescriber.getTablets()
-
-		// Search for tablets with Keyspace and Table from the Query
-		l, r := tablets.findTablets(qry.Keyspace(), qry.Table())
-		if l != -1 {
-			tablet := tablets.findTabletForToken(token, l, r)
+	if session := qry.GetSession(); session != nil && session.tabletsRoutingV1 && isInt64Token {
+		tabletReplicas := session.findTabletReplicasForToken(qry.Keyspace(), qry.Table(), int64(tokenCasted))
+		if len(tabletReplicas) != 0 {
 			hosts := t.hosts.get()
-			for _, replica := range tablet.Replicas() {
+			for _, replica := range tabletReplicas {
 				for _, host := range hosts {
-					if host.hostId == replica.hostId.String() {
+					if host.hostId == replica.HostID() {
 						replicas = append(replicas, host)
 						break
 					}
@@ -754,7 +766,11 @@ func (t *tokenAwareHostPolicy) Pick(qry ExecutableQuery) NextHost {
 	if len(replicas) == 0 {
 		ht := meta.replicas[qry.Keyspace()].replicasFor(token)
 		if ht != nil {
-			replicas = ht.hosts
+			// Clone ht.hosts, otherwise, if shuffling or avoidSlowReplicas is enabled, it will update ht.hosts
+			replicas = make([]*HostInfo, len(ht.hosts))
+			for id, replica := range ht.hosts {
+				replicas[id] = replica
+			}
 		}
 	}
 
@@ -767,7 +783,7 @@ func (t *tokenAwareHostPolicy) Pick(qry ExecutableQuery) NextHost {
 		replicas = shuffleHosts(replicas)
 	}
 
-	if s := qry.GetSession(); s != nil && t.avoidSlowReplicas {
+	if s := qry.GetSession(); s != nil && !qry.IsLWT() && t.avoidSlowReplicas {
 		healthyReplicas := make([]*HostInfo, 0, len(replicas))
 		unhealthyReplicas := make([]*HostInfo, 0, len(replicas))
 

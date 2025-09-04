@@ -464,53 +464,6 @@ func (h *HostInfo) IsBusy(s *Session) bool {
 	return ok && h != nil && pool.InFlight() >= MAX_IN_FLIGHT_THRESHOLD
 }
 
-func (h *HostInfo) HostnameAndPort() string {
-	// Fast path: in most cases hostname is not empty
-	var (
-		hostname string
-		port     int
-	)
-	h.mu.RLock()
-	hostname = h.hostname
-	port = h.port
-	h.mu.RUnlock()
-
-	if hostname != "" {
-		return net.JoinHostPort(hostname, strconv.Itoa(port))
-	}
-
-	// Slow path: hostname is empty
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.hostname == "" { // recheck is hostname empty
-		// if yes - fill it
-		addr, _ := h.connectAddressLocked()
-		h.hostname = addr.String()
-	}
-	return net.JoinHostPort(h.hostname, strconv.Itoa(h.port))
-}
-
-func (h *HostInfo) Hostname() string {
-	// Fast path: in most cases hostname is not empty
-	var hostname string
-	h.mu.RLock()
-	hostname = h.hostname
-	h.mu.RUnlock()
-
-	if hostname != "" {
-		return hostname
-	}
-
-	// Slow path: hostname is empty
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.hostname == "" {
-		addr, _ := h.connectAddressLocked()
-		h.hostname = addr.String()
-	}
-	return h.hostname
-}
-
 func (h *HostInfo) ConnectAddressAndPort() string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -764,7 +717,7 @@ func (s *Session) refreshRing() error {
 	}
 
 	for _, host := range prevHosts {
-		s.metadataDescriber.removeTabletsWithHost(host)
+		s.metadataDescriber.RemoveTabletsWithHost(host)
 		s.removeHost(host)
 	}
 	s.policy.SetPartitioner(partitioner)
