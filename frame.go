@@ -816,7 +816,8 @@ func (f *framer) parseSupportedFrame() frame {
 }
 
 type writeStartupFrame struct {
-	opts map[string]string
+	opts           map[string]string
+	requestTimeout time.Duration
 }
 
 func (w writeStartupFrame) String() string {
@@ -830,10 +831,15 @@ func (w *writeStartupFrame) buildFrame(f *framer, streamID int) error {
 	return f.finish()
 }
 
+func (w *writeStartupFrame) getRequestTimeout() time.Duration {
+	return w.requestTimeout
+}
+
 type writePrepareFrame struct {
-	statement     string
-	keyspace      string
-	customPayload map[string][]byte
+	statement      string
+	keyspace       string
+	requestTimeout time.Duration
+	customPayload  map[string][]byte
 }
 
 func (w *writePrepareFrame) buildFrame(f *framer, streamID int) error {
@@ -860,6 +866,10 @@ func (w *writePrepareFrame) buildFrame(f *framer, streamID int) error {
 	}
 
 	return f.finish()
+}
+
+func (w *writePrepareFrame) getRequestTimeout() time.Duration {
+	return w.requestTimeout
 }
 
 func (f *framer) readTypeInfo() TypeInfo {
@@ -1394,7 +1404,8 @@ func (f *framer) parseEventFrame() frame {
 }
 
 type writeAuthResponseFrame struct {
-	data []byte
+	data           []byte
+	requestTimeout time.Duration
 }
 
 func (a *writeAuthResponseFrame) String() string {
@@ -1403,6 +1414,10 @@ func (a *writeAuthResponseFrame) String() string {
 
 func (a *writeAuthResponseFrame) buildFrame(framer *framer, streamID int) error {
 	return framer.writeAuthResponseFrame(streamID, a.data)
+}
+
+func (a *writeAuthResponseFrame) getRequestTimeout() time.Duration {
+	return a.requestTimeout
 }
 
 func (f *framer) writeAuthResponseFrame(streamID int, data []byte) error {
@@ -1529,8 +1544,9 @@ func (f *framer) writeQueryParams(opts *queryParams) {
 }
 
 type writeQueryFrame struct {
-	statement string
-	params    queryParams
+	statement      string
+	params         queryParams
+	requestTimeout time.Duration
 
 	// v4+
 	customPayload map[string][]byte
@@ -1542,6 +1558,10 @@ func (w *writeQueryFrame) String() string {
 
 func (w *writeQueryFrame) buildFrame(framer *framer, streamID int) error {
 	return framer.writeQueryFrame(streamID, w.statement, &w.params, w.customPayload)
+}
+
+func (w *writeQueryFrame) getRequestTimeout() time.Duration {
+	return w.requestTimeout
 }
 
 func (f *framer) writeQueryFrame(streamID int, statement string, params *queryParams, customPayload map[string][]byte) error {
@@ -1558,6 +1578,7 @@ func (f *framer) writeQueryFrame(streamID int, statement string, params *queryPa
 
 type frameBuilder interface {
 	buildFrame(framer *framer, streamID int) error
+	getRequestTimeout() time.Duration
 }
 
 type frameWriterFunc func(framer *framer, streamID int) error
@@ -1566,10 +1587,15 @@ func (f frameWriterFunc) buildFrame(framer *framer, streamID int) error {
 	return f(framer, streamID)
 }
 
+func (f frameWriterFunc) getRequestTimeout() time.Duration {
+	return time.Second
+}
+
 type writeExecuteFrame struct {
 	preparedID []byte
 	params     queryParams
 
+	requestTimeout time.Duration
 	// v4+
 	customPayload map[string][]byte
 }
@@ -1580,6 +1606,10 @@ func (e *writeExecuteFrame) String() string {
 
 func (e *writeExecuteFrame) buildFrame(fr *framer, streamID int) error {
 	return fr.writeExecuteFrame(streamID, e.preparedID, &e.params, &e.customPayload)
+}
+
+func (e *writeExecuteFrame) getRequestTimeout() time.Duration {
+	return e.requestTimeout
 }
 
 func (f *framer) writeExecuteFrame(streamID int, preparedID []byte, params *queryParams, customPayload *map[string][]byte) error {
@@ -1603,9 +1633,10 @@ type batchStatment struct {
 }
 
 type writeBatchFrame struct {
-	typ         BatchType
-	statements  []batchStatment
-	consistency Consistency
+	typ            BatchType
+	statements     []batchStatment
+	consistency    Consistency
+	requestTimeout time.Duration
 
 	// v3+
 	serialConsistency     Consistency
@@ -1618,6 +1649,10 @@ type writeBatchFrame struct {
 
 func (w *writeBatchFrame) buildFrame(framer *framer, streamID int) error {
 	return framer.writeBatchFrame(streamID, w, w.customPayload)
+}
+
+func (w *writeBatchFrame) getRequestTimeout() time.Duration {
+	return w.requestTimeout
 }
 
 func (f *framer) writeBatchFrame(streamID int, w *writeBatchFrame, customPayload map[string][]byte) error {
@@ -1695,10 +1730,16 @@ func (f *framer) writeBatchFrame(streamID int, w *writeBatchFrame, customPayload
 	return f.finish()
 }
 
-type writeOptionsFrame struct{}
+type writeOptionsFrame struct {
+	requestTimeout time.Duration
+}
 
 func (w *writeOptionsFrame) buildFrame(framer *framer, streamID int) error {
 	return framer.writeOptionsFrame(streamID, w)
+}
+
+func (w *writeOptionsFrame) getRequestTimeout() time.Duration {
+	return w.requestTimeout
 }
 
 func (f *framer) writeOptionsFrame(stream int, _ *writeOptionsFrame) error {
@@ -1707,11 +1748,16 @@ func (f *framer) writeOptionsFrame(stream int, _ *writeOptionsFrame) error {
 }
 
 type writeRegisterFrame struct {
-	events []string
+	events        []string
+	requestTimout time.Duration
 }
 
 func (w *writeRegisterFrame) buildFrame(framer *framer, streamID int) error {
 	return framer.writeRegisterFrame(streamID, w)
+}
+
+func (w *writeRegisterFrame) getRequestTimeout() time.Duration {
+	return w.requestTimout
 }
 
 func (f *framer) writeRegisterFrame(streamID int, w *writeRegisterFrame) error {

@@ -94,11 +94,11 @@ func TestGetClusterPeerInfoZeroToken(t *testing.T) {
 type mockConnection struct{}
 
 func (*mockConnection) Close() {}
-func (*mockConnection) exec(ctx context.Context, timeout time.Duration, writeTimeout time.Duration, req frameBuilder, tracer Tracer) (*framer, error) {
+func (*mockConnection) exec(ctx context.Context, req frameBuilder, tracer Tracer) (*framer, error) {
 	return nil, nil
 }
 func (*mockConnection) awaitSchemaAgreement(ctx context.Context) error { return nil }
-func (*mockConnection) executeQuery(ctx context.Context, qry *Query, timeout time.Duration, writeTimeout time.Duration) *Iter {
+func (*mockConnection) executeQuery(ctx context.Context, qry *Query) *Iter {
 	return nil
 }
 
@@ -267,7 +267,7 @@ var systemPeersResultMetadata = resultMetadata{
 	}},
 }
 
-func (*mockConnection) querySystem(ctx context.Context, query string) *Iter {
+func (*mockConnection) querySystem(ctx context.Context, query string, values ...interface{}) *Iter {
 	localData := []interface{}{"local", "COMPLETED", net.IPv4(192, 168, 100, 12), "", "3.3.1", "datacenter1", 1733834239, ParseUUIDMust("045859a7-6b9f-4efd-a5e7-acd64a295e13"), net.IPv4(192, 168, 100, 12), "4", "org.apache.cassandra.dht.Murmur3Partitioner", "rack1", "3.0.8", net.IPv4(192, 168, 100, 12), ParseUUIDMust("daf4df2c-b708-11ef-5c25-3004361afd71"), "", []string{}, map[UUID]byte{}}
 	peerData1 := []interface{}{net.IPv4(192, 168, 100, 13), "datacenter1", ParseUUIDMust("b953309f-6e68-41f2-baf5-0e60da317a9c"), net.IP{}, "rack1", "3.0.8", net.IPv4(192, 168, 100, 13), ParseUUIDMust("b6ed5bde-b318-11ef-8f58-aeba19e31273"), "", []string{"-1032311531684407545", "-1112089412567859825"}}
 	peerData2 := []interface{}{net.IPv4(192, 168, 100, 14), "datacenter1", ParseUUIDMust("8269e111-ea38-44bd-a73f-9d3d12cfaf78"), net.IP{}, "rack1", "3.0.8", net.IPv4(192, 168, 100, 14), ParseUUIDMust("b6ed5bde-b318-11ef-8f58-aeba19e31273"), "", []string{}}
@@ -292,13 +292,11 @@ func (*mockConnection) querySystem(ctx context.Context, query string) *Iter {
 
 func (*mockConnection) getIsSchemaV2() bool { return false }
 func (*mockConnection) setSchemaV2(s bool)  {}
-func (*mockConnection) query(ctx context.Context, timeout time.Duration, writeTimeout time.Duration, statement string, values ...interface{}) (iter *Iter) {
+func (*mockConnection) query(ctx context.Context, requestTimeout time.Duration, statement string, values ...interface{}) (iter *Iter) {
 	return nil
 }
 func (*mockConnection) finalizeConnection()                 {}
 func (*mockConnection) getScyllaSupported() scyllaSupported { return scyllaSupported{} }
-func (*mockConnection) getTimeout() time.Duration { return 11*time.Second }
-func (*mockConnection) getWriteTimeout() time.Duration { return 11*time.Second }
 
 type mockControlConn struct{}
 

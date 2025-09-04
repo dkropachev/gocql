@@ -118,7 +118,9 @@ func (c *controlConn) heartBeat() {
 		case <-timer.C:
 		}
 
-		resp, err := c.writeFrame(&writeOptionsFrame{})
+		resp, err := c.writeFrame(&writeOptionsFrame{
+			requestTimeout: c.session.cfg.MetadataSchemaRequestTimeout,
+		})
 		if err != nil {
 			goto reconn
 		}
@@ -368,10 +370,9 @@ func (c *controlConn) registerEvents(conn *Conn) error {
 	}
 
 	framer, err := conn.exec(context.Background(),
-		c.session.cfg.MetadataSchemaRequestTimeout,
-		c.session.cfg.MetadataSchemaRequestTimeout,
 		&writeRegisterFrame{
-			events: events,
+			events:        events,
+			requestTimout: c.session.cfg.MetadataSchemaRequestTimeout,
 		}, nil)
 	conn.finalizeConnection()
 	if err != nil {
@@ -498,7 +499,7 @@ func (c *controlConn) writeFrame(w frameBuilder) (frame, error) {
 		return nil, errNoControl
 	}
 
-	framer, err := ch.conn.exec(context.Background(), c.session.cfg.MetadataSchemaRequestTimeout, c.session.cfg.MetadataSchemaRequestTimeout, w, nil)
+	framer, err := ch.conn.exec(context.Background(), w, nil)
 	ch.conn.finalizeConnection()
 	if err != nil {
 		return nil, err
@@ -507,24 +508,44 @@ func (c *controlConn) writeFrame(w frameBuilder) (frame, error) {
 	return framer.parseFrame()
 }
 
+type attemptCounter struct {
+	attempts    int
+	consistency Consistency
+}
+
+func (c *attemptCounter) Attempts() int {
+	return c.attempts
+}
+
+func (c *attemptCounter) SetConsistency(_ Consistency) {}
+
+func (c *attemptCounter) GetConsistency() Consistency {
+	return c.consistency
+}
+
+func (c *attemptCounter) Context() context.Context {
+	return context.TODO()
+}
+
+func (c *attemptCounter) inc() {
+	c.attempts++
+}
+
 // query will return nil if the connection is closed or nil
 func (c *controlConn) query(statement string, values ...interface{}) (iter *Iter) {
-	q := c.session.Query(statement, values...).Consistency(One).RoutingKey([]byte{}).Trace(nil)
-
+	cnt := &attemptCounter{
+		consistency: One,
+	}
 	for {
 		ch := c.getConn()
-		q.conn = ch.conn.(*Conn)
-
-		iter = ch.conn.executeQuery(context.TODO(), q, c.session.cfg.MetadataSchemaRequestTimeout, c.session.cfg.MetadataSchemaRequestTimeout)
-		ch.conn.finalizeConnection()
+		iter = ch.conn.querySystem(context.TODO(), statement, values...)
 		if gocqlDebug && iter.err != nil {
 			c.session.logger.Printf("control: error executing %q: %v\n", statement, iter.err)
 		}
-
-		q.AddAttempts(1, c.getConn().host)
-		if iter.err == nil || !c.retry.Attempt(q) {
+		if iter.err == nil || !c.retry.Attempt(cnt) {
 			break
 		}
+		cnt.inc()
 	}
 
 	return

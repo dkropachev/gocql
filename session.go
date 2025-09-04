@@ -726,7 +726,7 @@ func (s *Session) findTabletReplicasForToken(keyspace, table string, token int64
 }
 
 // returns routing key indexes and type info
-func (s *Session) routingKeyInfo(ctx context.Context, stmt string) (*routingKeyInfo, error) {
+func (s *Session) routingKeyInfo(ctx context.Context, stmt string, requestTimout time.Duration) (*routingKeyInfo, error) {
 	s.routingKeyInfoCache.mu.Lock()
 
 	entry, cached := s.routingKeyInfoCache.lru.Get(stmt)
@@ -769,7 +769,7 @@ func (s *Session) routingKeyInfo(ctx context.Context, stmt string) (*routingKeyI
 	}
 
 	// get the query info for the statement
-	info, inflight.err = conn.prepareStatement(ctx, stmt, nil)
+	info, inflight.err = conn.prepareStatement(ctx, stmt, requestTimout, nil)
 	if inflight.err != nil {
 		// don't cache this error
 		s.routingKeyInfoCache.Remove(stmt)
@@ -1101,6 +1101,7 @@ type Query struct {
 	customPayload         map[string][]byte
 	metrics               *queryMetrics
 	refCount              uint32
+	requestTimeout        time.Duration
 
 	disableAutoPage bool
 
@@ -1209,6 +1210,12 @@ func (q *Query) Consistency(c Consistency) *Query {
 	return q
 }
 
+// SetRequestTimeout sets time driver waits for server response for this query
+func (q *Query) SetRequestTimeout(timeout time.Duration) *Query {
+	q.requestTimeout = timeout
+	return q
+}
+
 // GetConsistency returns the currently configured consistency level for
 // the query.
 func (q *Query) GetConsistency() Consistency {
@@ -1309,7 +1316,7 @@ func (q *Query) Cancel() {
 }
 
 func (q *Query) execute(ctx context.Context, conn *Conn) *Iter {
-	return conn.executeQuery(ctx, q, conn.getTimeout(), conn.getWriteTimeout())
+	return conn.executeQuery(ctx, q)
 }
 
 func (q *Query) attempt(keyspace string, end, start time.Time, iter *Iter, host *HostInfo) {
@@ -1379,7 +1386,7 @@ func (q *Query) GetRoutingKey() ([]byte, error) {
 	}
 
 	// try to determine the routing key
-	routingKeyInfo, err := q.session.routingKeyInfo(q.Context(), q.stmt)
+	routingKeyInfo, err := q.session.routingKeyInfo(q.Context(), q.stmt, q.requestTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -1549,7 +1556,7 @@ func (q *Query) executeQuery() *Iter {
 	if q.conn != nil {
 		// if the query was specifically run on a connection then re-use that
 		// connection when fetching the next results
-		return q.conn.executeQuery(q.Context(), q, q.conn.getTimeout(), q.conn.getWriteTimeout())
+		return q.conn.executeQuery(q.Context(), q)
 	}
 	return q.session.executeQuery(q)
 }
@@ -1980,7 +1987,7 @@ func (n *nextIter) fetch() *Iter {
 		// if the query was specifically run on a connection then re-use that
 		// connection when fetching the next results
 		if n.qry.conn != nil {
-			n.next = n.qry.conn.executeQuery(n.qry.Context(), n.qry, n.qry.conn.getTimeout(), n.qry.conn.getWriteTimeout())
+			n.next = n.qry.conn.executeQuery(n.qry.Context(), n.qry)
 		} else {
 			n.next = n.qry.session.executeQuery(n.qry)
 		}
@@ -2006,6 +2013,7 @@ type Batch struct {
 	cancelBatch           func()
 	keyspace              string
 	metrics               *queryMetrics
+	requestTimeout        time.Duration
 
 	// routingInfo is a pointer because Query can be copied and copyable struct can't hold a mutex.
 	routingInfo *queryRoutingInfo
@@ -2273,7 +2281,7 @@ func (b *Batch) GetRoutingKey() ([]byte, error) {
 		return nil, nil
 	}
 	// try to determine the routing key
-	routingKeyInfo, err := b.session.routingKeyInfo(b.Context(), entry.Stmt)
+	routingKeyInfo, err := b.session.routingKeyInfo(b.Context(), entry.Stmt, b.requestTimeout)
 	if err != nil {
 		return nil, err
 	}

@@ -1704,7 +1704,7 @@ func TestPrepare_MissingSchemaPrepare(t *testing.T) {
 	defer s.Close()
 
 	insertQry := s.Query("INSERT INTO invalidschemaprep (val) VALUES (?)", 5)
-	if err := conn.executeQuery(ctx, insertQry, conn.getTimeout(), conn.getWriteTimeout()).err; err == nil {
+	if err := conn.executeQuery(ctx, insertQry).err; err == nil {
 		t.Fatal("expected error, but got nil.")
 	}
 
@@ -1712,7 +1712,7 @@ func TestPrepare_MissingSchemaPrepare(t *testing.T) {
 		t.Fatal("create table:", err)
 	}
 
-	if err := conn.executeQuery(ctx, insertQry, conn.getTimeout(), conn.getWriteTimeout()).err; err != nil {
+	if err := conn.executeQuery(ctx, insertQry).err; err != nil {
 		t.Fatal(err) // unconfigured columnfamily
 	}
 }
@@ -1726,7 +1726,7 @@ func TestPrepare_ReprepareStatement(t *testing.T) {
 
 	stmt, conn := injectInvalidPreparedStatement(t, session, "test_reprepare_statement")
 	query := session.Query(stmt, "bar")
-	if err := conn.executeQuery(ctx, query, conn.getTimeout(), conn.getWriteTimeout()).Close(); err != nil {
+	if err := conn.executeQuery(ctx, query).Close(); err != nil {
 		t.Fatalf("Failed to execute query for reprepare statement: %v", err)
 	}
 }
@@ -1751,7 +1751,7 @@ func TestQueryInfo(t *testing.T) {
 	defer session.Close()
 
 	conn := getRandomConn(t, session)
-	info, err := conn.prepareStatement(context.Background(), "SELECT release_version, host_id FROM system.local WHERE key = ?", nil)
+	info, err := conn.prepareStatement(context.Background(), "SELECT release_version, host_id FROM system.local WHERE key = ?", time.Second, nil)
 
 	if err != nil {
 		t.Fatalf("Failed to execute query for preparing statement: %v", err)
@@ -2305,7 +2305,7 @@ func TestRoutingKey(t *testing.T) {
 
 	initCacheSize := session.routingKeyInfoCache.lru.Len()
 
-	routingKeyInfo, err := session.routingKeyInfo(context.Background(), "SELECT * FROM test_single_routing_key WHERE second_id=? AND first_id=?")
+	routingKeyInfo, err := session.routingKeyInfo(context.Background(), "SELECT * FROM test_single_routing_key WHERE second_id=? AND first_id=?", time.Second)
 	if err != nil {
 		t.Fatalf("failed to get routing key info due to error: %v", err)
 	}
@@ -2329,7 +2329,7 @@ func TestRoutingKey(t *testing.T) {
 	}
 
 	// verify the cache is working
-	routingKeyInfo, err = session.routingKeyInfo(context.Background(), "SELECT * FROM test_single_routing_key WHERE second_id=? AND first_id=?")
+	routingKeyInfo, err = session.routingKeyInfo(context.Background(), "SELECT * FROM test_single_routing_key WHERE second_id=? AND first_id=?", time.Duration(0))
 	if err != nil {
 		t.Fatalf("failed to get routing key info due to error: %v", err)
 	}
@@ -2363,7 +2363,7 @@ func TestRoutingKey(t *testing.T) {
 		t.Errorf("Expected routing key %v but was %v", expectedRoutingKey, routingKey)
 	}
 
-	routingKeyInfo, err = session.routingKeyInfo(context.Background(), "SELECT * FROM test_composite_routing_key WHERE second_id=? AND first_id=?")
+	routingKeyInfo, err = session.routingKeyInfo(context.Background(), "SELECT * FROM test_composite_routing_key WHERE second_id=? AND first_id=?", time.Duration(0))
 	if err != nil {
 		t.Fatalf("failed to get routing key info due to error: %v", err)
 	}
@@ -2471,7 +2471,7 @@ func TestNegativeStream(t *testing.T) {
 		return f.finish()
 	})
 
-	frame, err := conn.exec(context.Background(), conn.getTimeout(), conn.getWriteTimeout(), writer, nil)
+	frame, err := conn.exec(context.Background(), writer, nil)
 	if err == nil {
 		t.Fatalf("expected to get an error on stream %d", stream)
 	} else if frame != nil {
