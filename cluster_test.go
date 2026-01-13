@@ -75,7 +75,7 @@ func TestClusterConfig_translateAddressAndPort_NilTranslator(t *testing.T) {
 		ConnectAddress: net.ParseIP("10.0.0.1"),
 		Port:           1234,
 	}.Build()
-	newAddr := cfg.translateAddressPort(&hh, AddressPort{
+	newAddr, _ := cfg.translateAddressPort(&hh, AddressPort{
 		Address: hh.UntranslatedConnectAddress(),
 		Port:    uint16(hh.Port()),
 	})
@@ -92,7 +92,7 @@ func TestClusterConfig_translateAddressAndPort_EmptyAddr(t *testing.T) {
 		ConnectAddress: []byte{},
 		Port:           0,
 	}.Build()
-	newAddr := cfg.translateAddressPort(&hh, AddressPort{
+	newAddr, _ := cfg.translateAddressPort(&hh, AddressPort{
 		Address: hh.UntranslatedConnectAddress(),
 		Port:    uint16(hh.Port()),
 	})
@@ -109,7 +109,7 @@ func TestClusterConfig_translateAddressAndPort_Success(t *testing.T) {
 		ConnectAddress: net.ParseIP("10.0.0.1"),
 		Port:           2345,
 	}.Build()
-	newAddr := cfg.translateAddressPort(&hh, AddressPort{
+	newAddr, _ := cfg.translateAddressPort(&hh, AddressPort{
 		Address: hh.UntranslatedConnectAddress(),
 		Port:    uint16(hh.Port()),
 	})

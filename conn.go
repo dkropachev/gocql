@@ -271,26 +271,38 @@ func (s *Session) dial(ctx context.Context, host *HostInfo, connConfig *ConnConf
 	return s.dialShard(ctx, host, connConfig, errorHandler, 0, 0)
 }
 
-func (s *Session) translateHostAddresses(host *HostInfo) translatedAddresses {
+func (s *Session) translateHostAddresses(host *HostInfo) (translatedAddresses, error) {
+	addr, err := s.cfg.translateAddressPort(host, AddressPort{
+		Address: host.UntranslatedConnectAddress(),
+		Port:    uint16(host.Port()),
+	})
+	if err != nil {
+		return translatedAddresses{}, fmt.Errorf("failed to translate regular CQL address: %w", err)
+	}
 	resultedInfo := translatedAddresses{
-		CQL: s.cfg.translateAddressPort(host, AddressPort{
-			Address: host.UntranslatedConnectAddress(),
-			Port:    uint16(host.Port()),
-		}),
+		CQL: addr,
 	}
 	if port := host.ScyllaShardAwarePort(); port != 0 {
-		resultedInfo.ShardAware = s.cfg.translateAddressPort(host, AddressPort{
+		addr, err = s.cfg.translateAddressPort(host, AddressPort{
 			Address: host.UntranslatedConnectAddress(),
 			Port:    port,
 		})
+		if err != nil {
+			return translatedAddresses{}, fmt.Errorf("failed to translate shard-aware address: %w", err)
+		}
+		resultedInfo.ShardAware = addr
 	}
 	if port := host.ScyllaShardAwarePortTLS(); port != 0 {
-		resultedInfo.ShardAwareTLS = s.cfg.translateAddressPort(host, AddressPort{
+		addr, err = s.cfg.translateAddressPort(host, AddressPort{
 			Address: host.UntranslatedConnectAddress(),
 			Port:    port,
 		})
+		if err != nil {
+			return translatedAddresses{}, fmt.Errorf("failed to translate TLS shard-aware address: %w", err)
+		}
+		resultedInfo.ShardAwareTLS = addr
 	}
-	return resultedInfo
+	return resultedInfo, nil
 }
 
 // dialShard establishes a connection to a host/shard and notifies the session's connectObserver.
@@ -301,7 +313,10 @@ func (s *Session) dialShard(ctx context.Context, host *HostInfo, connConfig *Con
 	var obs ObservedConnect
 
 	current := host.getTranslatedConnectionInfo()
-	updated := s.translateHostAddresses(host)
+	updated, err := s.translateHostAddresses(host)
+	if err != nil {
+		return nil, err
+	}
 	if current == nil || !updated.Equal(current) {
 		host.setTranslatedConnectionInfo(updated)
 	}

@@ -429,9 +429,9 @@ type addressTranslateFn func(host *HostInfo, addr AddressPort) AddressPort
 // if defined, to translate the given address and port into a possibly new address
 // and port, If no AddressTranslator or if an error occurs, the given address and
 // port will be returned.
-func (cfg *ClusterConfig) translateAddressPort(host *HostInfo, addr AddressPort) AddressPort {
+func (cfg *ClusterConfig) translateAddressPort(host *HostInfo, addr AddressPort) (AddressPort, error) {
 	if cfg.AddressTranslator == nil || !addr.IsValid() {
-		return addr
+		return addr, nil
 	}
 	translatorV2, ok := cfg.AddressTranslator.(AddressTranslatorV2)
 	if !ok {
@@ -442,13 +442,17 @@ func (cfg *ClusterConfig) translateAddressPort(host *HostInfo, addr AddressPort)
 		return AddressPort{
 			Address: newAddr,
 			Port:    uint16(newPort),
-		}
+		}, nil
 	}
-	newAddr := translatorV2.TranslateHost(host, addr)
+	newAddr, err := translatorV2.TranslateHost(host, addr)
+	if err != nil {
+		cfg.logger().Printf("gocql: failed to translate address %q: %s", addr, err.Error())
+		return addr, err
+	}
 	if debug.Enabled {
 		cfg.logger().Printf("gocql: translating address %q to %q", addr, newAddr)
 	}
-	return newAddr
+	return newAddr, nil
 }
 
 func (cfg *ClusterConfig) filterHost(host *HostInfo) bool {
