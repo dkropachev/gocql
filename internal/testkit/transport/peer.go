@@ -5,6 +5,7 @@
 package transport
 
 import (
+	"bufio"
 	"context"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"net"
@@ -36,6 +37,26 @@ func NewPair(t testing.TB, proto byte, compressor protocol.Compressor) (*runtime
 	c.InternalInitFramerCache()
 	t.Cleanup(func() { c.Close(); server.Close() })
 	return c, server
+}
+
+// NewDialedConn is NewPair over a TCP connection to addr with the production
+// 8 KiB shared reader, so socket batching and read-ahead match a dialed
+// connection. The peer at addr drives the protocol.
+func NewDialedConn(t testing.TB, proto byte, addr string) *runtime.Conn {
+	t.Helper()
+	client, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	c := &runtime.Conn{InternalVersion: proto, InternalCtx: ctx, InternalCancel: cancel, InternalR: &runtime.InternalConnReader{InternalConn: client, InternalR: bufio.NewReaderSize(client, 8<<10)}, InternalCalls: make(map[int]*runtime.InternalCallReq), InternalStreams: streams.New(), InternalLogger: logging.InternalNopLogger{}, InternalErrorHandler: runtime.InternalConnErrorHandlerFn(func(*runtime.Conn, error, bool) {})}
+	c.InternalW = &runtime.InternalDeadlineContextWriter{InternalW: client, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
+	c.InternalCfg = new(runtime.ConnConfig)
+	c.InternalCfg.InternalReceiveCache = new(wire.ReceiveCache)
+	t.Cleanup(c.InternalCfg.InternalReceiveCache.Close)
+	c.InternalInitFramerCache()
+	t.Cleanup(func() { c.Close() })
+	return c
 }
 
 // Fail closes the real connection through its normal poison/retirement path.
