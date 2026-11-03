@@ -107,7 +107,9 @@ func (s *InternalSessionRuntime) registerExecution(l *InternalLogicalExecution, 
 			delete(rt.InternalExecutions, l)
 			rt.InternalMu.Unlock()
 		}
-		close(done)
+		if done != nil {
+			close(done)
+		}
 		// Parent release can admit the next query generation. Nothing after
 		// this point may dereference the preceding execution's reusable request.
 		parent.InternalRelease()

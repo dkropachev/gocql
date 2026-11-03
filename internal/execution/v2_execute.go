@@ -493,9 +493,11 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, 
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	request := &InternalExecutionRequest{}
+	var request *InternalExecutionRequest
 	if query := b.privateStorage.InternalRequest.query; query != nil {
 		request = &query.request
+	} else {
+		request = new(InternalExecutionRequest)
 	}
 	*request = b.privateStorage.InternalRequest
 	request.InternalOptions = resolved
@@ -548,7 +550,13 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, 
 	} else {
 		logical = new(InternalLogicalExecution)
 	}
-	*logical = InternalLogicalExecution{lifetime: InternalExecutionLifetime{cancel: cancel, done: make(chan struct{})}, id: rt.requestID.Add(1), started: time.Now(), observer: observer, session: s, request: request}
+	// Only session-owned executions are joined through their lifetime channel.
+	// Reusable queries are joined by queryState.wait.
+	var done chan struct{}
+	if request.query == nil {
+		done = make(chan struct{})
+	}
+	*logical = InternalLogicalExecution{lifetime: InternalExecutionLifetime{cancel: cancel, done: done}, id: rt.requestID.Add(1), started: time.Now(), observer: observer, session: s, request: request}
 	request.InternalLogical = logical
 	if err := InternalRuntimeFor(s).registerExecution(request.InternalLogical, request.InternalOwner); err != nil {
 		cancel()
