@@ -87,3 +87,66 @@ Mechanism: −4 allocs/op and −224 B/op on read and write; −3 allocs in admi
 
 `-race -count=20` on `internal/execution`; unit race suite clean except the
 known baseline failure; emulator smoke OK.
+
+## I2: lock-free shared-connection admission (rejected)
+
+`beginShared`/`endShared` take the per-connection mutex four times per request,
+only to count shared operations for the rare exclusive streaming reservation.
+The prototype replaced the count with an atomic. It published the operation,
+then checked the exclusive flag, and the reservation armed its notification
+before reading the count. Lock and unlock remained only when a waiter was armed.
+A 200× race test of the protocol passed, and a mutation (no release signal)
+made it fail.
+
+There was no measurable CPU benefit at any tested parallelism, interleaved ABBA:
+
+| benchmark | I1b | I2 | Δ |
+|---|---:|---:|---:|
+| Loopback read/w64 | 11.41µ | 11.28µ | ~ (p=0.14) |
+| Loopback read/w64-2 | 9.023µ | 9.024µ | ~ |
+| Loopback read/w64-4 | 4.821µ | 4.781µ | ~ (p=0.27) |
+| Loopback write/w64-4 | 4.430µ | 4.461µ | ~ (p=0.79) |
+| Loopback read/w1-2 (ABBA, n=20) | 27.08µ | 27.80µ | +2.66% (p=0.010) |
+
+Rejected under the rule: there was no benefit, one latency case was flagged,
+and the protocol is harder to reason about. Four uncontended lock pairs are
+about 60 ns of an 11 µs request. The earlier lock-heavy profile came from
+`net.Pipe`. It does not represent a socket, and plan items I3 (call table) and
+I4/I5 (channel work) need a fresh real-TCP profile before they are attempted.
+
+The w1 comparison also exposed order bias: the new binary ran second in every
+round. `compare.sh` now runs ABBA rounds.
+
+## I3: yield once before flushing so submitters batch (kept)
+
+Plan deviation, chosen from a real-TCP profile at read/w64, one P:
+`Syscall6` (`writev`) was 32% of client CPU, `io.ReadAtLeast` 2.4%,
+mutex lock/unlock about 7.5%. strace counted **48,655 `writev` for ~50,000
+requests: 0.97 per request**. A woken writer runs next on its P, ahead of every
+runnable submitter, so the zero-coalescing drain found one request each time.
+
+The writer now yields once (`runtime.Gosched`) when its queue looks empty and
+another request is in flight on the connection. Runnable submitters enqueue
+before it flushes. There is no timer and no wait for future requests, and a lone
+caller never yields. Batches are still bounded at 16 requests and 64 KiB.
+Larger batches overflowed the two 16/128-span descriptor scratch buffers, which
+were then reallocated every batch (+6% / +30% B/op). Both now retain up to
+`maxRetainedWriteSpans` = 512 descriptors (12 KiB per connection), and
+`TestTypedWriterScratchBoundAndConcurrentOrdering` follows the new bound.
+
+Mechanism: 7,028 `writev` for ~100,000 read+write requests, **0.07 per
+request** (about 14 per batch). Also −2 allocs/op at w64.
+
+| benchmark (interleaved ABBA vs I1b) | before | after | Δ |
+|---|---:|---:|---:|
+| Loopback read/w64 | 11.00µ | 7.198µ | −34.55% |
+| Loopback write/w64 | 10.56µ | 6.614µ | −37.34% |
+| Loopback read/w64-2 | 9.050µ | 7.115µ | −21.38% |
+| Loopback write/w64-2 | 8.201µ | 6.405µ | −21.90% |
+| Loopback w1 (all four) | | | ~ |
+| Decoding point/buffered | 12.82µ | 12.83µ | ~ |
+
+Without the in-flight condition, the single-caller net.Pipe T0 cases paid
++1.1–1.6% for a pointless yield; the condition removed it. Transport
+`-race -count=20`, unit race suite clean except the known baseline failure;
+emulator smoke OK.

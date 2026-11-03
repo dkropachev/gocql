@@ -43,6 +43,9 @@ func InternalWriteSpanBuffers(w io.Writer, spans net.Buffers) (int64, error) {
 	return total, nil
 }
 
+// maxRetainedWriteSpans bounds idle writer descriptor storage per connection.
+const maxRetainedWriteSpans = 512
+
 func (w *InternalDeadlineContextWriter) InternalWriteSpans(ctx context.Context, chain wire.Chain) (int64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
@@ -67,7 +70,9 @@ func (w *InternalDeadlineContextWriter) InternalWriteSpans(ctx context.Context, 
 		clear(spans)
 		// Bound idle descriptor storage independently of request fragmentation.
 		// The write semaphore remains held until all payload references are gone.
-		if cap(spans) <= 16 {
+		// A submission batch carries up to 16 requests, so retain enough
+		// descriptors for one batch: 512 spans, 12 KiB per connection.
+		if cap(spans) <= maxRetainedWriteSpans {
 			w.spanScratch = spans[:0]
 		} else {
 			w.spanScratch = nil

@@ -5,6 +5,7 @@ package transport
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"sync/atomic"
 
@@ -106,6 +107,13 @@ func (w *submissionWriter) run() {
 			count, bytes := 1, first.packet.Len()
 			// Zero configured coalescing: drain only senders already ready. No
 			// timer and no wait for another request. A large first frame stands alone.
+			//
+			// Waking this writer puts it next in line on its P, ahead of every
+			// other runnable submitter, so a plain drain would find only the
+			// first request and pay one syscall per request. Yield once when the
+			// queue looks empty and another request is in flight: runnable
+			// submitters enqueue first. A lone caller never yields.
+			yielded := w.conn.InternalStreams.InUse() <= 1
 		collect:
 			for count < len(pending) && bytes < 64<<10 {
 				select {
@@ -119,7 +127,11 @@ func (w *submissionWriter) run() {
 						break collect
 					}
 				default:
-					break collect
+					if yielded {
+						break collect
+					}
+					yielded = true
+					runtime.Gosched()
 				}
 			}
 			// A batch may include a final frame beyond the threshold above.
@@ -173,7 +185,8 @@ func (w *submissionWriter) run() {
 					remaining -= n
 				}
 				clear(spans)
-				if cap(spans) > 128 {
+				// Retain enough descriptors for a full batch; drop only outliers.
+				if cap(spans) > maxRetainedWriteSpans {
 					spans = nil
 				}
 				// Publish completions before Close joins the calls waiting on us.

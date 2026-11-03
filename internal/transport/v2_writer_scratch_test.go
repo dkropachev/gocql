@@ -98,7 +98,7 @@ func TestTypedWriterScratchReleasesPayloadsOnEveryExit(t *testing.T) {
 func TestTypedWriterScratchBoundAndConcurrentOrdering(t *testing.T) {
 	sink := &scratchTestWriter{}
 	writer := &InternalDeadlineContextWriter{InternalW: sink, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
-	parts := make([][]byte, 17)
+	parts := make([][]byte, maxRetainedWriteSpans+1)
 	for i := range parts {
 		parts[i] = []byte{byte(i)}
 	}
