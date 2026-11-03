@@ -50,6 +50,7 @@ type ParamWriter struct {
 	allowUnset  bool
 	ownBorrowed bool
 	capture     []ParamCell
+	cell        ValueWriter // reused for each parameter; never retained by encoders
 }
 
 // ParamCell records framing while encoding, avoiding a second parse of the
@@ -64,6 +65,12 @@ func CaptureParamCells(w *ParamWriter, cells []ParamCell) { w.capture = cells }
 
 func NewParamWriter(builder *wire.Builder, columns cqltype.Columns, allowUnset bool) *ParamWriter {
 	return &ParamWriter{builder: builder, columns: columns, allowUnset: allowUnset}
+}
+
+// ResetParamWriter prepares caller-owned writer storage for a new binding, so a
+// reusable binding allocates no writer.
+func ResetParamWriter(w *ParamWriter, builder *wire.Builder, columns cqltype.Columns, allowUnset bool) {
+	*w = ParamWriter{builder: builder, columns: columns, allowUnset: allowUnset}
 }
 
 func FinishParamWriter(w *ParamWriter) error {
@@ -82,7 +89,10 @@ func WriteParam[T any](w *ParamWriter, encoder Encoder[T], value T) error {
 	if !ok {
 		return fmt.Errorf("gocql: too many parameters: index %d", w.index)
 	}
-	cell := NewValueWriter(w.builder, column.Type, w.allowUnset)
+	// The cell lives in the writer: passing it to an interface encoder would
+	// otherwise move a fresh ValueWriter to the heap for every parameter.
+	cell := &w.cell
+	initValueWriter(cell, w.builder, column.Type, w.allowUnset)
 	cell.ownBorrowed = w.ownBorrowed
 	if err := encoder.Encode(cell, value); err != nil {
 		abortValueWriter(cell)

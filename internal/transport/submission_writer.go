@@ -178,10 +178,14 @@ func (w *submissionWriter) run() {
 				var written int64
 				var err error
 				if total > 0 {
-					packet, buildErr := wire.NewChain(spans...)
-					err = buildErr
-					if err == nil {
-						written, err = w.conn.InternalW.(spanContextWriter).InternalWriteSpans(w.conn.InternalCtx, packet)
+					if sw, ok := w.conn.InternalW.(spanSliceWriter); ok {
+						written, err = sw.InternalWriteSpanSlice(w.conn.InternalCtx, spans, total)
+					} else {
+						packet, buildErr := wire.NewChain(spans...)
+						err = buildErr
+						if err == nil {
+							written, err = w.conn.InternalW.(spanContextWriter).InternalWriteSpans(w.conn.InternalCtx, packet)
+						}
 					}
 				}
 				remaining := written

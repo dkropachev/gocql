@@ -35,6 +35,9 @@ type queryState struct {
 	retire        func()
 }
 
+// noopCancel is shared so that retiring an execution allocates no closure.
+var noopCancel context.CancelFunc = func() {}
+
 type queryCursor struct {
 	query      *queryState
 	generation uint64
@@ -240,7 +243,7 @@ func (q *Query[P, R]) retire() {
 		lifetime := &q.state.inlineLogical.lifetime
 		lifetime.mu.Lock()
 		lifetime.stop = nil
-		lifetime.cancel = func() {}
+		lifetime.cancel = noopCancel
 		lifetime.mu.Unlock()
 	}
 	q.state.request = InternalExecutionRequest{}

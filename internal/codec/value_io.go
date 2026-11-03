@@ -25,19 +25,24 @@ type ValueWriter struct {
 }
 
 func NewValueWriter(builder *wire.Builder, typ cqltype.DataType, allowUnset bool) *ValueWriter {
-	w := &ValueWriter{builder: builder, typ: typ, allowUnset: allowUnset}
+	w := new(ValueWriter)
+	initValueWriter(w, builder, typ, allowUnset)
+	return w
+}
+
+func initValueWriter(w *ValueWriter, builder *wire.Builder, typ cqltype.DataType, allowUnset bool) {
+	*w = ValueWriter{builder: builder, typ: typ, allowUnset: allowUnset}
 	if builder == nil {
 		w.err = cqltype.TypeValidation("writer", "nil builder")
-		return w
+		return
 	}
 	w.mark = builder.Mark()
 	w.start = builder.Len()
 	if err := cqltype.ValidateDataType(typ); err != nil {
 		w.err = err
-		return w
+		return
 	}
 	w.err = builder.Uint32(0)
-	return w
 }
 func newOwnedValueWriter(builder *wire.Builder, typ cqltype.DataType, allowUnset bool) *ValueWriter {
 	w := NewValueWriter(builder, typ, allowUnset)

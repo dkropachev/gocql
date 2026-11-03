@@ -17,6 +17,12 @@ type InternalSpanContextWriter interface {
 	InternalWriteSpans(context.Context, wire.Chain) (int64, error)
 }
 
+// spanSliceWriter is implemented by writers that accept a span slice directly,
+// sparing the submission writer a Chain allocation per batch.
+type spanSliceWriter interface {
+	InternalWriteSpanSlice(ctx context.Context, spans []wire.Span, total int64) (int64, error)
+}
+
 // TCP and Unix sockets use writev. Wrappers (including crypto/tls) receive
 // ordered spans without a driver gather buffer. TLS record assembly is owned by
 // the standard library. Checking every fallback Write prevents a short nil write
@@ -47,6 +53,17 @@ func InternalWriteSpanBuffers(w io.Writer, spans net.Buffers) (int64, error) {
 const maxRetainedWriteSpans = 512
 
 func (w *InternalDeadlineContextWriter) InternalWriteSpans(ctx context.Context, chain wire.Chain) (int64, error) {
+	return w.writeSpans(ctx, chain, nil, chain.Len())
+}
+
+// InternalWriteSpanSlice writes ordered spans whose lengths sum to total,
+// without first building a Chain over them.
+func (w *InternalDeadlineContextWriter) InternalWriteSpanSlice(ctx context.Context, slice []wire.Span, total int64) (int64, error) {
+	return w.writeSpans(ctx, wire.Chain{}, slice, total)
+}
+
+// writeSpans writes chain, or slice when chain is empty.
+func (w *InternalDeadlineContextWriter) writeSpans(ctx context.Context, chain wire.Chain, slice []wire.Span, total int64) (int64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -78,9 +95,15 @@ func (w *InternalDeadlineContextWriter) InternalWriteSpans(ctx context.Context, 
 			w.spanScratch = nil
 		}
 	}()
-	_ = chain.Each(func(s wire.Span) error { spans = append(spans, s.Bytes()); return nil })
+	if slice != nil {
+		for _, s := range slice {
+			spans = append(spans, s.Bytes())
+		}
+	} else {
+		_ = chain.Each(func(s wire.Span) error { spans = append(spans, s.Bytes()); return nil })
+	}
 	n, err := InternalWriteSpanBuffers(w.InternalW, spans)
-	if err == nil && n != chain.Len() {
+	if err == nil && n != total {
 		err = io.ErrShortWrite
 	}
 	return n, err

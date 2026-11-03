@@ -17,6 +17,7 @@ type ParameterBuffer struct {
 	storage   []byte
 	positions []codec.ParamCell
 	cells     []model.EncodedCell
+	writer    codec.ParamWriter
 }
 
 func (b *ParameterBuffer) RetainedBytes() int {
@@ -39,7 +40,8 @@ func EncodeInto[P any](b *ParameterBuffer, plan ParamPlan[P], columns Columns, v
 		b.cells = b.cells[:n]
 	}
 	b.builder.BeginOwned(b.storage)
-	writer := newParamWriter(&b.builder, columns, allowUnset)
+	writer := &b.writer
+	codec.ResetParamWriter(writer, &b.builder, columns, allowUnset)
 	codec.CaptureParamCells(writer, b.positions)
 	// The owned builder copies every borrowed span, including custom encoders.
 	err := plan.Encode(writer, value)
@@ -68,6 +70,7 @@ func EncodeInto[P any](b *ParameterBuffer, plan ParamPlan[P], columns Columns, v
 // Retire drops large buffers and all views only after transport and callbacks
 // have drained. Idle queries retain at most 64 KiB of request backing.
 func (b *ParameterBuffer) Retire() {
+	b.writer = codec.ParamWriter{}
 	clear(b.cells)
 	clear(b.positions)
 	if cap(b.storage) > 64<<10 {

@@ -429,3 +429,29 @@ the finishing func.
 
 Execution and transport `-race -count=20`, unit race suite (only the known
 baseline failure), emulator smoke OK.
+
+## C2: small per-request allocations (kept)
+
+- `binding.EncodeInto` allocated a `ParamWriter`, and `WriteParam` a fresh
+  `ValueWriter` per parameter (it escapes through the encoder interface).
+  Both now live in the query-owned `ParameterBuffer`; the cell writer is
+  re-initialised for each parameter.
+- Retiring an inline execution assigned a new no-op closure; it now uses a
+  package-level `noopCancel`.
+- The submission writer built a `wire.Chain` over each batch's spans only for
+  the socket writer to flatten it again. `InternalDeadlineContextWriter` now
+  accepts the span slice directly (`InternalWriteSpanSlice`).
+
+| benchmark (ABBA vs C1) | before | after | Δ |
+|---|---:|---:|---:|
+| allocs/op read, pread / write, pwrite (w64) | 17 / 18 | 15, 14 / 15, 13 | −2 to −4 |
+| Admission allocs/op | 3 | 0 | −3 |
+| Loopback pwrite/w64 | 6.375µ | 5.842µ | −8.36% |
+| Loopback pread/w64-2 | 7.037µ | 6.638µ | −5.67% |
+| Loopback pread/w64-4 | 4.944µ | 4.564µ | −7.69% |
+| Loopback pwrite/w64-4 | 4.399µ | 4.000µ | −9.07% |
+
+This run was noisier than usual (some cases ±40–60%): race suites for the
+next item ran on other CPUs during it. No case regressed. Codec, binding,
+transport and execution `-race -count=20`, unit race suite (only the known
+baseline failure), emulator smoke OK.
