@@ -18,32 +18,39 @@ import (
 type writeTicket struct {
 	ctx   context.Context
 	lease *wire.Lease
-	done  chan InternalWriteResult
-	// Caller-side cache of the result received from done.
-	result      InternalWriteResult
-	packet      wire.Chain
-	refs        atomic.Int32
-	phase       atomic.Uint32 // 0 queued, 1 writing, 2 cancelled before transmission
-	resultKnown bool
+	// wake is signalled by finish only when the caller is blocked in
+	// awaitWritten; completion is otherwise published through state alone.
+	wake chan struct{}
+	// result is written by the writer before state becomes ticketFinished.
+	result InternalWriteResult
+	packet wire.Chain
+	refs   atomic.Int32
+	phase  atomic.Uint32 // 0 queued, 1 writing, 2 cancelled before transmission
+	state  atomic.Uint32 // ticketPending, ticketAwaited or ticketFinished
 }
 
-var ticketPool = sync.Pool{New: func() any { return &writeTicket{done: make(chan InternalWriteResult, 1)} }}
+const (
+	ticketPending  = iota
+	ticketAwaited  // the caller is blocked on wake
+	ticketFinished // result is published
+)
+
+var ticketPool = sync.Pool{New: func() any { return &writeTicket{wake: make(chan struct{}, 1)} }}
 
 func (t *writeTicket) release() {
 	if t.refs.Add(-1) != 0 {
 		return
 	}
-	select {
-	case <-t.done:
-	default:
-	}
-	t.ctx, t.packet, t.lease = nil, wire.Chain{}, nil
+	t.ctx, t.packet, t.lease, t.result = nil, wire.Chain{}, nil, InternalWriteResult{}
 	ticketPool.Put(t)
 }
 func (t *writeTicket) finish(result InternalWriteResult) {
 	t.lease.Release()
 	t.lease = nil
-	t.done <- result
+	t.result = result
+	if t.state.Swap(ticketFinished) == ticketAwaited {
+		t.wake <- struct{}{}
+	}
 	t.release()
 }
 
@@ -53,9 +60,16 @@ type pendingWriteError struct{ error }
 
 func (e *pendingWriteError) Unwrap() error { return e.error }
 
+// submissionWriter is a connection's persistent writer. Submitters append to
+// queue under mu and wake the writer only when it is parked.
 type submissionWriter struct {
-	conn  *Conn
-	ready chan *writeTicket
+	conn   *Conn
+	mu     sync.Mutex
+	queue  []*writeTicket
+	spare  []*writeTicket // the previous batch's storage, reused as the next queue
+	parked bool
+	closed bool
+	wake   chan struct{} // capacity 1; signalled when a parked writer has work
 }
 
 // transientDoner is implemented by contexts that hand out their Done channel
@@ -72,30 +86,50 @@ func attemptDone(ctx context.Context) <-chan struct{} {
 	return ctx.Done()
 }
 
-// submitTyped queues packet for the persistent writer and returns as soon as
-// the writer accepted the ticket; the caller then waits only for the response.
-// The returned ticket holds one reference for the caller, released with
-// release. An error means the packet was never queued: nothing was written.
-func (c *Conn) submitTyped(ctx context.Context, packet wire.Chain, lease *wire.Lease) (*writeTicket, error) {
+func (c *Conn) submissionWriter() *submissionWriter {
 	c.typedWriterOnce.Do(func() {
-		c.typedWriter = &submissionWriter{conn: c, ready: make(chan *writeTicket)}
+		c.typedWriter = &submissionWriter{conn: c, wake: make(chan struct{}, 1)}
 		go c.typedWriter.run()
 	})
+	return c.typedWriter
+}
+
+// submitTyped queues packet for the persistent writer and returns at once;
+// the caller then waits only for the response. The returned ticket holds one
+// reference for the caller, released with release. An error means the packet
+// was never queued: nothing was written.
+func (c *Conn) submitTyped(ctx context.Context, packet wire.Chain, lease *wire.Lease) (*writeTicket, error) {
+	w := c.submissionWriter()
 	t := ticketPool.Get().(*writeTicket)
 	t.refs.Store(2)
 	t.phase.Store(0)
-	t.resultKnown = false
+	t.state.Store(ticketPending)
 	t.ctx, t.packet, t.lease = ctx, packet, lease
-	select {
-	case <-attemptDone(ctx):
-		t.finish(InternalWriteResult{InternalErr: ctx.Err()})
+	reject := func(err error) (*writeTicket, error) {
+		t.finish(InternalWriteResult{InternalErr: err})
 		t.release()
-		return nil, ctx.Err()
-	case <-c.InternalCtx.Done():
-		t.finish(InternalWriteResult{InternalErr: ErrConnectionClosed})
-		t.release()
-		return nil, ErrConnectionClosed
-	case c.typedWriter.ready <- t:
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return reject(err)
+	}
+	if c.InternalCtx.Err() != nil {
+		return reject(ErrConnectionClosed)
+	}
+	w.mu.Lock()
+	if w.closed {
+		w.mu.Unlock()
+		return reject(ErrConnectionClosed)
+	}
+	w.queue = append(w.queue, t)
+	wake := w.parked
+	w.parked = false
+	w.mu.Unlock()
+	if wake {
+		select {
+		case w.wake <- struct{}{}:
+		default: // a signal is already pending
+		}
 	}
 	return t, nil
 }
@@ -105,8 +139,11 @@ func (c *Conn) submitTyped(ctx context.Context, packet wire.Chain, lease *wire.L
 // it waited for the write first. A response follows its write by a network
 // round trip, so the writer has almost always finished already.
 func (t *writeTicket) awaitWritten() {
-	if !t.resultKnown {
-		t.result, t.resultKnown = <-t.done, true
+	if t.state.Load() == ticketFinished {
+		return
+	}
+	if t.state.CompareAndSwap(ticketPending, ticketAwaited) {
+		<-t.wake
 	}
 }
 
@@ -121,121 +158,146 @@ func (t *writeTicket) unsent() bool {
 // error, so a caller woken by that close always finds it. ok is false while
 // the write is still in progress.
 func (t *writeTicket) written() (n int64, ok bool) {
-	if !t.resultKnown {
-		select {
-		case r := <-t.done:
-			t.result, t.resultKnown = r, true
-		default:
-			return 0, false
-		}
+	if t.state.Load() != ticketFinished {
+		return 0, false
 	}
 	return t.result.InternalWritten, true
 }
 
+// maxBatchTickets bounds the requests in one socket write.
+const maxBatchTickets = 16
+
 func (w *submissionWriter) run() {
-	var pending [16]*writeTicket
 	spans := make([]wire.Span, 0, 64)
 	for {
+		batch, ok := w.take()
+		if !ok {
+			return
+		}
+		// Each socket write carries at most maxBatchTickets requests and 64
+		// KiB; a large first frame is sent alone.
+		for start := 0; start < len(batch); {
+			end, total := start, int64(0)
+			spans = spans[:0]
+			for end < len(batch) && end-start < maxBatchTickets {
+				t := batch[end]
+				if total > 0 && t.packet.Len() > (64<<10)-total {
+					break
+				}
+				end++
+				if t.ctx.Err() != nil || w.conn.InternalCtx.Err() != nil {
+					t.phase.CompareAndSwap(0, 2)
+				}
+				if !t.phase.CompareAndSwap(0, 1) {
+					err := t.ctx.Err()
+					if err == nil {
+						err = ErrConnectionClosed
+					}
+					t.finish(InternalWriteResult{InternalErr: err})
+					batch[end-1] = nil
+					continue
+				}
+				_ = t.packet.Each(func(s wire.Span) error { spans = append(spans, s); return nil })
+				total += t.packet.Len()
+			}
+			var written int64
+			var err error
+			if total > 0 {
+				if sw, ok := w.conn.InternalW.(spanSliceWriter); ok {
+					written, err = sw.InternalWriteSpanSlice(w.conn.InternalCtx, spans, total)
+				} else {
+					packet, buildErr := wire.NewChain(spans...)
+					err = buildErr
+					if err == nil {
+						written, err = w.conn.InternalW.(spanContextWriter).InternalWriteSpans(w.conn.InternalCtx, packet)
+					}
+				}
+			}
+			remaining := written
+			for i := start; i < end; i++ {
+				t := batch[i]
+				batch[i] = nil
+				if t == nil {
+					continue
+				}
+				n := min(max(remaining, 0), t.packet.Len())
+				requestErr := err
+				if n == t.packet.Len() {
+					requestErr = nil
+				}
+				t.finish(InternalWriteResult{InternalWritten: n, InternalErr: requestErr})
+				remaining -= n
+			}
+			clear(spans)
+			// Retain enough descriptors for a full batch; drop only outliers.
+			if cap(spans) > maxRetainedWriteSpans {
+				spans = nil
+			}
+			// Publish completions before Close joins the calls waiting on us.
+			if err != nil {
+				w.conn.InternalCloseWithError(err)
+			}
+			start = end
+		}
+		w.recycle(batch)
+	}
+}
+
+// take waits for queued tickets and takes all of them. ok is false once the
+// connection closed; every ticket still queued then is finished unsent.
+//
+// Waking this writer puts it next in line on its P, ahead of every runnable
+// submitter, so taking the queue at once would find only the request that
+// woke it and pay one syscall per request. When more requests are in flight
+// than queued, the writer yields once so runnable submitters enqueue first.
+// There is no timer and no wait for future requests, and a lone caller never
+// yields.
+func (w *submissionWriter) take() (batch []*writeTicket, ok bool) {
+	w.mu.Lock()
+	for len(w.queue) == 0 {
+		w.parked = true
+		w.mu.Unlock()
 		select {
 		case <-w.conn.InternalCtx.Done():
-			return
-		case first := <-w.ready:
-			pending[0] = first
-			count, bytes := 1, first.packet.Len()
-			// Zero configured coalescing: drain only senders already ready. No
-			// timer and no wait for another request. A large first frame stands alone.
-			//
-			// Waking this writer puts it next in line on its P, ahead of every
-			// other runnable submitter, so a plain drain would find only the
-			// first request and pay one syscall per request. Yield once when the
-			// queue looks empty and another request is in flight: runnable
-			// submitters enqueue first. A lone caller never yields.
-			yielded := w.conn.InternalStreams.InUse() <= 1
-		collect:
-			for count < len(pending) && bytes < 64<<10 {
-				select {
-				case next := <-w.ready:
-					// A request that would exceed the byte limit is sent in the
-					// next batch; keep it locally without losing its ticket.
-					pending[count] = next
-					count++
-					bytes += next.packet.Len()
-					if bytes >= 64<<10 {
-						break collect
-					}
-				default:
-					if yielded {
-						break collect
-					}
-					yielded = true
-					runtime.Gosched()
-				}
-			}
-			// A batch may include a final frame beyond the threshold above.
-			// Split before transmission to keep the strict 64 KiB batch bound.
-			for start := 0; start < count; {
-				end, total := start, int64(0)
-				spans = spans[:0]
-				for end < count {
-					t := pending[end]
-					if total > 0 && t.packet.Len() > (64<<10)-total {
-						break
-					}
-					end++
-					if t.ctx.Err() != nil || w.conn.InternalCtx.Err() != nil {
-						t.phase.CompareAndSwap(0, 2)
-					}
-					if !t.phase.CompareAndSwap(0, 1) {
-						err := t.ctx.Err()
-						if err == nil {
-							err = ErrConnectionClosed
-						}
-						t.finish(InternalWriteResult{InternalErr: err})
-						pending[end-1] = nil
-						continue
-					}
-					_ = t.packet.Each(func(s wire.Span) error { spans = append(spans, s); return nil })
-					total += t.packet.Len()
-				}
-				var written int64
-				var err error
-				if total > 0 {
-					if sw, ok := w.conn.InternalW.(spanSliceWriter); ok {
-						written, err = sw.InternalWriteSpanSlice(w.conn.InternalCtx, spans, total)
-					} else {
-						packet, buildErr := wire.NewChain(spans...)
-						err = buildErr
-						if err == nil {
-							written, err = w.conn.InternalW.(spanContextWriter).InternalWriteSpans(w.conn.InternalCtx, packet)
-						}
-					}
-				}
-				remaining := written
-				for i := start; i < end; i++ {
-					t := pending[i]
-					pending[i] = nil
-					if t == nil {
-						continue
-					}
-					n := min(max(remaining, 0), t.packet.Len())
-					requestErr := err
-					if n == t.packet.Len() {
-						requestErr = nil
-					}
-					t.finish(InternalWriteResult{InternalWritten: n, InternalErr: requestErr})
-					remaining -= n
-				}
-				clear(spans)
-				// Retain enough descriptors for a full batch; drop only outliers.
-				if cap(spans) > maxRetainedWriteSpans {
-					spans = nil
-				}
-				// Publish completions before Close joins the calls waiting on us.
-				if err != nil {
-					w.conn.InternalCloseWithError(err)
-				}
-				start = end
-			}
+			w.shutdown()
+			return nil, false
+		case <-w.wake:
 		}
+		w.mu.Lock()
+	}
+	if n := len(w.queue); n < maxBatchTickets && w.conn.InternalStreams.InUse() > n {
+		w.mu.Unlock()
+		runtime.Gosched()
+		w.mu.Lock()
+	}
+	batch, w.queue, w.spare = w.queue, w.spare, nil
+	w.mu.Unlock()
+	return batch, true
+}
+
+// recycle keeps a finished batch's storage for the next queue, dropping
+// outliers so a burst does not pin a large array.
+func (w *submissionWriter) recycle(batch []*writeTicket) {
+	if cap(batch) > 4*maxBatchTickets {
+		return
+	}
+	clear(batch)
+	w.mu.Lock()
+	if w.spare == nil {
+		w.spare = batch[:0]
+	}
+	w.mu.Unlock()
+}
+
+// shutdown stops accepting tickets and finishes the queued ones unsent.
+func (w *submissionWriter) shutdown() {
+	w.mu.Lock()
+	w.closed = true
+	queued := w.queue
+	w.queue, w.spare = nil, nil
+	w.mu.Unlock()
+	for _, t := range queued {
+		t.phase.CompareAndSwap(0, 2)
+		t.finish(InternalWriteResult{InternalErr: ErrConnectionClosed})
 	}
 }
