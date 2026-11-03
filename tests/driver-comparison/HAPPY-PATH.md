@@ -689,3 +689,125 @@ cases, which this round did not target, remain regressions. Maximum-load
 p99 is 5–12% above master for point reads and writes; matched-rate latency
 was not measured. The point case's bytes/op is 0.25% above master, which
 the runner flags.
+
+## Round 3
+
+Plan: `~/.claude/plans/modular-questing-axolotl.md`. Gates as in round 2
+(`compare.sh`, 5×ABBA, `cpu-ns/op`). Fresh profile of `pread/w64 -cpu 1` at
+`89c18b3b`: allocations 1,429 B in 5 driver objects (rows+page holder 640 B,
+response ≈370 B, request lease, receive lease, writer lease); mutexes 12%
+flat plus 4% RWMutex reader atomics; `selectgo` and channel locks ≈10%;
+`duffcopy` 5.7%.
+
+### R1: cached protocol settings and resolved options (kept)
+
+`protocol.Settings` is built once when the framer cache is initialised and
+passed by pointer; its methods take pointer receivers. A query resolves its
+options once and re-resolves only when a profile handle publishes a new
+profile (options with a custom payload are still resolved per execution, to
+check borrowed values for liveness). Capture reads the immutable prepared
+fields without the prepared-state lock; routing partitioners are published
+for lock-free reads. Tests that change framer defaults after initialisation
+call `InternalRefreshNativeProtocol`.
+
+| vs `89c18b3b` | Δ cpu-ns/op |
+|---|---:|
+| w64 (five cases) | −1.14% to −2.40% |
+| pread / pwrite / pone w64-4 | −1.21% / −1.80% / −1.72% |
+
+### R2: lock-free host view, host ID and plan hits (kept)
+
+The ring host view is cleared under the write lock on every revision bump
+and read without the lock. A connection caches its host ID once known.
+The result plan cache serves identified hits from an atomic snapshot,
+withdrawn when the cache switches to an unidentified plan
+(`TestV2ResultPlanCacheUnidentifiedSwitchRetiresIdentityHit` fails without
+the withdrawal). Host state atomics, a picker size counter and a lock-free
+tablet feedback stamp were left out: each was under 0.5% of CPU, and the
+stamp would have had to invalidate on any schema change instead of per table.
+
+| vs R1 | Δ cpu-ns/op |
+|---|---:|
+| pread/w64 | −1.42% |
+| write / pread w64-4 | −1.48% / −0.79% |
+| other cases | ~ |
+
+### R3: submission queue without a channel rendezvous (kept)
+
+`submitTyped` appends to a mutex-guarded queue and wakes the writer only
+when it is parked, instead of a three-way select on an unbuffered channel.
+The writer takes the whole queue, yields once when more requests are in
+flight than queued, and still writes at most 16 requests and 64 KiB per
+socket write. On close it finishes every queued ticket unsent. A ticket
+publishes its write result through an atomic state and signals its channel
+only when the caller is blocked in `awaitWritten`. The response wait keeps
+its connection-closed case: a parent context can cancel the connection
+without `CloseWithError` delivering to pending calls.
+
+| vs R2 | Δ cpu-ns/op |
+|---|---:|
+| w64 (five cases) | −6.31% to −8.53% |
+| w64-4 (five cases) | −5.27% to −8.81% |
+| w1 | ~ |
+
+### R4–R8: cursor/owner atomics, Rows handle, leases, response storage (kept)
+
+- Query generation is atomic; cursors check it without the query lock. An
+  input owner keeps refs and the closed flag in one atomic word. The
+  execution context replaces its Done channel only in `begin`, so transport
+  waits read it without the lock. The reader's disarm flag is set without
+  the deadline lock (the reader re-reads it under that lock before every
+  socket read).
+- Response diagnostics are merged only when a response has extras.
+- **Breaking:** `Query.Run` and `Run` return `Rows[R]`, a value handle over
+  iterator storage that a reusable query reuses each execution. A stale
+  handle reports no rows, `Err` returns `ErrStaleRows`, `Close` does
+  nothing (`TestQueryRowsHandleGoesStaleOnNextExecution`).
+- The request lease lives in its pooled write ticket; an input owner reuses
+  one writer lease once its final release finished, and a writer that
+  overlaps it gets its own.
+- A reusable query lends its response storage to the first page's attempt on
+  the direct path. The reader parses into it only after claiming the call
+  while the caller waits; a caller that stops waiting after the claim
+  receives that response. Continuation, prefetched, speculative,
+  single-page and stream responses keep their own storage.
+
+| vs R3 | before | after | Δ |
+|---|---:|---:|---:|
+| cpu-ns/op read / pread w64 | 4.646µ / 5.110µ | 3.899µ / 4.316µ | −16.08% / −15.53% |
+| cpu-ns/op write / pwrite / pone w64 | | | −8.54% / −8.83% / −7.07% |
+| cpu-ns/op w64-4 (five cases) | | | −10.71% to −18.12% |
+| B/op pread / pwrite w64 | 1,429 / 787 | 162 / 162 | −88.7% / −79.4% |
+| allocs/op pread / pwrite w64 | 6 / 5 | 2 / 2 | |
+| Admission | 619.5n | 587.5n | −5.16% |
+
+Rejected: removing the Rows/Page mutexes. It breaks closing rows from
+another goroutine to interrupt a blocked page fetch
+(`TestV2RowsNextIntoPagingAndCloseInterrupt`), and keeping that would need a
+busy flag costing about as much as the mutex. Not done: the breaking lazy
+`Result` (`Exec`/`One`/`Each` without `Result`): building it is ≈2% of CPU,
+mostly clock reads that a lazy result still needs. The two remaining
+allocations are the benchmark's own and the receive-frame lease, which
+reaches borrowed result values and so needs generation-checked leases to be
+recycled. Response parsing still runs on the reader goroutine; moving it to
+callers needs the metadata-reuse cache made safe for concurrent parsers.
+
+Unit race suite (only the known baseline failure), `-race -count=20` on
+`execution`, `transport`, `wire`, and emulator smoke OK.
+
+## Round 3 cumulative
+
+`89c18b3b` against `fccc29f4`, 5×ABBA (n=10). Every row p≤0.023.
+
+| benchmark | before | after | Δ |
+|---|---:|---:|---:|
+| Loopback read/w64 cpu-ns/op | 5.148µ | 3.833µ | −25.54% |
+| Loopback write/w64 cpu-ns/op | 4.438µ | 3.500µ | −21.15% |
+| Loopback pread/w64 cpu-ns/op | 5.629µ | 4.223µ | −24.98% |
+| Loopback pwrite/w64 cpu-ns/op | 4.695µ | 3.690µ | −21.42% |
+| Loopback pone/w64 cpu-ns/op | 4.977µ | 4.003µ | −19.56% |
+| Loopback w64-4 cpu-ns/op (five cases) | | | −18.96% to −25.81% |
+| Loopback w1 cpu-ns/op (read, pread, pwrite, pone) | | | −5.14% to −7.80% |
+| B/op every w64 case | 787–1,429 | 162 | −79% to −89% |
+| allocs/op every w64 case | 5–6 | 2 | |
+| Admission | 692.7n | 588.1n | −15.09% |
