@@ -116,11 +116,12 @@ func TestV2QueryLiveReuse(t *testing.T) {
 	read := codecTestMust(Prepare(ctx, session, Statement[int32, record]{Kind: OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: OneParam(Int32), Rows: decoder}, PrepareOptions{}))
 	q := codecTestMust(NewQuery(read, Options{PageSize: Option[int32]{Set: true, Value: 2}, Prefetch: Option[int]{Set: true, Value: 0}}))
 	defer q.Close()
-	var previous *Rows[record]
+	var previous Rows[record]
 	for range 2 {
 		rows := codecTestMust(q.Run(ctx, int32(1)))
-		if previous != nil {
-			_ = previous.Close()
+		// A stale handle from the previous execution must not touch this one.
+		if err := previous.Close(); err != nil {
+			t.Fatal(err)
 		}
 		if _, err := q.Run(ctx, int32(1)); !errors.Is(err, ErrBusy) {
 			t.Fatal(err)

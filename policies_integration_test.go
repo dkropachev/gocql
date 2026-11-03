@@ -262,7 +262,7 @@ func TestNoHangAllHostsDown(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 			rows, queryErr := Run(ctx, session, bound, Options{Profile: handle})
-			if rows != nil {
+			if queryErr == nil {
 				queryErr = rows.Close()
 			}
 			if ctx.Err() != nil {

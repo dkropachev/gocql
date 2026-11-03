@@ -544,7 +544,7 @@ func Prepare[P, R any](context.Context, *Session, Statement[P, R], PrepareOption
 func NewQuery[P, R any](*Prepared[P, R], Options) (*Query[P, R], error)
 func NewUnpreparedQuery[P, R any](*Session, Statement[P, R], Columns, Options) (*Query[P, R], error)
 func (q *Query[P, R]) Exec(context.Context, P) (Result, error)
-func (q *Query[P, R]) Run(context.Context, P) (*Rows[R], error)
+func (q *Query[P, R]) Run(context.Context, P) (Rows[R], error)
 func (q *Query[P, R]) RunPage(context.Context, P, PageState) (*Page[R], error)
 func (q *Query[P, R]) RunUnpaged(context.Context, P) (*Page[R], error)
 func (q *Query[P, R]) Routing(P) (RoutingInfo, error)
@@ -566,6 +566,10 @@ Overlapping executions return ErrBusy. Cancellation may return while accepted
 transport writes or callbacks still drain; the query remains busy and Wait joins
 that work. Wait does not require Close. Cursor handles capture their execution
 generation; stale handles cannot advance, close or modify another execution.
+Rows is a value handle over iterator storage that a reusable query keeps and
+reuses for its next execution. A stale Rows reports no rows, Err returns
+ErrStaleRows and Close does nothing; the zero Rows has no rows. Rows is not
+safe for concurrent use.
 Close permanently stops admission and cancels active execution; it is idempotent.
 Close a cursor on early termination before waiting for query reuse. Session
 shutdown stops all queries before joining their transport/callback drains.
@@ -621,16 +625,16 @@ No unsafe cache-metadata opt-in bypasses these rules.
 ## Rows, pages, leases and conditional results
 
 ```go
-type Rows[R any] struct { /* automatic pager */ }
-func (r *Rows[R]) Next() bool
-func (r *Rows[R]) NextInto(dst *R) bool
-func (r *Rows[R]) Row() R
-func (r *Rows[R]) Err() error
-func (r *Rows[R]) Close() error
-func (r *Rows[R]) Retain() (*PageLease, error)
-func (r *Rows[R]) Clone() (R, error)
-func (r *Rows[R]) Info() Result
-func (r *Rows[R]) Columns() Columns
+type Rows[R any] struct { /* value handle: iterator storage + generation */ }
+func (r Rows[R]) Next() bool
+func (r Rows[R]) NextInto(dst *R) bool
+func (r Rows[R]) Row() R
+func (r Rows[R]) Err() error
+func (r Rows[R]) Close() error
+func (r Rows[R]) Retain() (*PageLease, error)
+func (r Rows[R]) Clone() (R, error)
+func (r Rows[R]) Info() Result
+func (r Rows[R]) Columns() Columns
 
 type Page[R any] struct { /* exactly one response page */ }
 func (p *Page[R]) Next() bool

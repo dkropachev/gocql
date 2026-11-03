@@ -10,6 +10,9 @@ type Query[P, R any] = execution.Query[P, R]
 
 var ErrBusy = execution.ErrBusy
 
+// ErrStaleRows is reported by a Rows handle from an earlier execution of its query.
+var ErrStaleRows = execution.ErrStaleRows
+
 var OwnedBlobCodec = codec.OwnedBlobCodec
 
 func RowInto[R any](reset func(*R), fields ...OutputField[R]) RowDecoder[R] {

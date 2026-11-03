@@ -278,11 +278,15 @@ type InternalPrefetchJob struct {
 	future *InternalPageFuture
 }
 
-type Rows[R any] struct {
+// rowsImpl is the storage and logic behind a Rows handle. A reusable query
+// embeds one and reinitialises it for each execution; other executions
+// allocate their own.
+type rowsImpl[R any] struct {
 	privateStorage RowsStorage[R]
+	gen            atomic.Uint64 // the generation handles must carry to use it
 }
 
-func (r *Rows[R]) Next() bool {
+func (r *rowsImpl[R]) Next() bool {
 	if r == nil {
 		return false
 	}
@@ -293,7 +297,7 @@ func (r *Rows[R]) Next() bool {
 	defer r.unlockAfterAdvance()
 	return r.advance(nil, false)
 }
-func (r *Rows[R]) NextInto(dst *R) bool {
+func (r *rowsImpl[R]) NextInto(dst *R) bool {
 	if r == nil {
 		InternalClearDestination(dst)
 		return false
@@ -309,7 +313,7 @@ func (r *Rows[R]) NextInto(dst *R) bool {
 	}
 	return ok
 }
-func (r *Rows[R]) advance(dst *R, into bool) bool {
+func (r *rowsImpl[R]) advance(dst *R, into bool) bool {
 	if r == nil || r.privateStorage.closed || r.privateStorage.err != nil {
 		return false
 	}
@@ -403,7 +407,7 @@ func (r *Rows[R]) advance(dst *R, into bool) bool {
 		r.startPrefetch()
 	}
 }
-func (r *Rows[R]) Row() R {
+func (r *rowsImpl[R]) Row() R {
 	if r == nil {
 		panic(ErrNoRows)
 	}
@@ -414,7 +418,7 @@ func (r *Rows[R]) Row() R {
 	}
 	return r.privateStorage.InternalPage.Row()
 }
-func (r *Rows[R]) Err() error {
+func (r *rowsImpl[R]) Err() error {
 	if r == nil {
 		return nil
 	}
@@ -422,7 +426,7 @@ func (r *Rows[R]) Err() error {
 	defer r.privateStorage.mu.Unlock()
 	return r.privateStorage.err
 }
-func (r *Rows[R]) Close() error {
+func (r *rowsImpl[R]) Close() error {
 	if r == nil {
 		return nil
 	}
@@ -437,7 +441,7 @@ func (r *Rows[R]) Close() error {
 	r.closeLocked()
 	return r.privateStorage.err
 }
-func (r *Rows[R]) closeLocked() {
+func (r *rowsImpl[R]) closeLocked() {
 	if r.privateStorage.closed {
 		return
 	}
@@ -465,7 +469,7 @@ func (r *Rows[R]) closeLocked() {
 		r.privateStorage.execution = nil
 	}
 }
-func (r *Rows[R]) Retain() (*PageLease, error) {
+func (r *rowsImpl[R]) Retain() (*PageLease, error) {
 	if r == nil {
 		return nil, ErrNoRows
 	}
@@ -476,7 +480,7 @@ func (r *Rows[R]) Retain() (*PageLease, error) {
 	}
 	return r.privateStorage.InternalPage.Retain()
 }
-func (r *Rows[R]) Clone() (R, error) {
+func (r *rowsImpl[R]) Clone() (R, error) {
 	if r == nil {
 		var z R
 		return z, ErrNoRows
@@ -489,7 +493,7 @@ func (r *Rows[R]) Clone() (R, error) {
 	}
 	return r.privateStorage.InternalPage.Clone()
 }
-func (r *Rows[R]) Info() Result {
+func (r *rowsImpl[R]) Info() Result {
 	if r == nil {
 		return Result{}
 	}
@@ -630,7 +634,7 @@ func (f *InternalPageFuture) InternalClose() {
 		f.response = nil
 	}
 }
-func (r *Rows[R]) startPrefetch() {
+func (r *rowsImpl[R]) startPrefetch() {
 	if r.privateStorage.InternalRequest.InternalOptions.InternalProfile.Prefetch == 0 || r.privateStorage.InternalPage == nil || r.privateStorage.closed {
 		return
 	}
@@ -674,7 +678,7 @@ func (p *Page[R]) Columns() Columns {
 }
 
 // Columns returns the current page's actual physical result metadata.
-func (r *Rows[R]) Columns() Columns {
+func (r *rowsImpl[R]) Columns() Columns {
 	if r == nil {
 		return Columns{}
 	}
@@ -725,7 +729,7 @@ func (p *Page[R]) unlockAfterAdvance() {
 		release()
 	}
 }
-func (r *Rows[R]) unlockAfterAdvance() {
+func (r *rowsImpl[R]) unlockAfterAdvance() {
 	release := r.privateStorage.pendingRelease
 	r.privateStorage.pendingRelease = nil
 	execution := r.privateStorage.pendingExecution
@@ -742,7 +746,7 @@ func (r *Rows[R]) unlockAfterAdvance() {
 }
 
 // stopExecution implements executionStopper for query and session shutdown.
-func (r *Rows[R]) stopExecution(l *InternalLogicalExecution) {
+func (r *rowsImpl[R]) stopExecution(l *InternalLogicalExecution) {
 	r.privateStorage.mu.Lock()
 	if r.privateStorage.future != nil {
 		r.privateStorage.future.InternalClose()

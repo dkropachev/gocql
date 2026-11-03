@@ -711,9 +711,7 @@ func TestV2TypedSelectionWaitsForReservedCapacity(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		rows, err := Run(ctx, s, bound, Options{HostID: Option[UUID]{Value: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), Set: true}})
-		if rows != nil {
-			rows.Close()
-		}
+		rows.Close()
 		done <- err
 	}()
 	select {

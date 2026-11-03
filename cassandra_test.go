@@ -358,9 +358,7 @@ func TestCAS(t *testing.T) {
 	if err == nil {
 		bound := cassandraBound(t, invalid, []Value{codecTestMust(TextValue(title)), revValue, TimestampValue(modified + 10000)})
 		rows, e := Run(context.Background(), session, bound, Options{})
-		if rows != nil {
-			defer rows.Close()
-		}
+		defer rows.Close()
 		err = e
 	}
 	require.Error(t, err)
@@ -425,9 +423,7 @@ func TestCAS(t *testing.T) {
 				return opaqueStorageValue
 			}()
 			rows, e := Run(context.Background(), session, bad, Options{})
-			if rows != nil {
-				rows.Close()
-			}
+			rows.Close()
 			require.Error(t, e)
 		}
 	}

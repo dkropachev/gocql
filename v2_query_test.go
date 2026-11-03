@@ -251,3 +251,72 @@ func TestQueryOwnedRowsPreserveDestinationOnCompletion(t *testing.T) {
 	}
 	<-served
 }
+
+// TestQueryRowsHandleGoesStaleOnNextExecution checks that a reusable query's
+// Rows handle stops working once the query runs again: its storage now
+// serves the new execution, which the stale handle must neither read nor
+// close.
+func TestQueryRowsHandleGoesStaleOnNextExecution(t *testing.T) {
+	s, conns, peers := runtimeTestSession(t, 1)
+	q := codecTestMust(NewUnpreparedQuery(s, Statement[Unit, Bytes]{Kind: OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: NoParams, Rows: OneColumn(BlobCodec)}, NewColumns(), Options{}))
+	defer q.Close()
+	served := make(chan struct{})
+	go func() {
+		defer close(served)
+		for _, value := range []string{"first", "second"} {
+			stream := typedTestReadRequest(t, conns[0], peers[0])
+			if _, err := peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, value))); err != nil {
+				t.Error(err)
+			}
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	first := codecTestMust(q.Run(ctx, Unit{}))
+	if !first.Next() || string(first.Row().OwnedBytes()) != "first" {
+		t.Fatal(first.Err())
+	}
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.Wait(ctx); err != nil {
+		t.Fatal(err)
+	}
+	second := codecTestMust(q.Run(ctx, Unit{}))
+	// The stale handle reports nothing and leaves the new execution alone.
+	if first.Next() || first.NextInto(new(Bytes)) {
+		t.Fatal("stale handle advanced")
+	}
+	if !errors.Is(first.Err(), ErrStaleRows) {
+		t.Fatal("stale handle error", first.Err())
+	}
+	if _, err := first.Clone(); !errors.Is(err, ErrNoRows) {
+		t.Fatal("stale handle cloned a row", err)
+	}
+	if _, err := first.Retain(); !errors.Is(err, ErrNoRows) {
+		t.Fatal("stale handle retained a page", err)
+	}
+	if first.Columns().Len() != 0 || first.Info().Attempts != 0 {
+		t.Fatal("stale handle exposed the new execution")
+	}
+	if err := first.Close(); err != nil {
+		t.Fatal("stale close", err)
+	}
+	if !second.Next() || string(second.Row().OwnedBytes()) != "second" {
+		t.Fatal("stale close disturbed the new execution", second.Err())
+	}
+	if second.Next() || second.Err() != nil {
+		t.Fatal(second.Err())
+	}
+	if err := second.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.Wait(ctx); err != nil {
+		t.Fatal(err)
+	}
+	<-served
+	var zero Rows[Bytes]
+	if zero.Next() || zero.Err() != nil || zero.Close() != nil {
+		t.Fatal("zero Rows is not empty")
+	}
+}

@@ -212,7 +212,7 @@ func TestCloudConnection(t *testing.T) {
 	}
 }
 
-func cloudHostRows(ctx context.Context, session *gocql.Session, cql string, options gocql.Options) (*gocql.Rows[gocql.Pair[netip.Addr, gocql.UUID]], error) {
+func cloudHostRows(ctx context.Context, session *gocql.Session, cql string, options gocql.Options) (gocql.Rows[gocql.Pair[netip.Addr, gocql.UUID]], error) {
 	statement := gocql.Statement[gocql.Unit, gocql.Pair[netip.Addr, gocql.UUID]]{
 		CQL:    cql,
 		Params: gocql.NoParams,
@@ -220,7 +220,7 @@ func cloudHostRows(ctx context.Context, session *gocql.Session, cql string, opti
 	}
 	bound, err := gocql.BindUnpreparedOwned(statement, gocql.NewColumns(), gocql.Unit{})
 	if err != nil {
-		return nil, err
+		return gocql.Rows[gocql.Pair[netip.Addr, gocql.UUID]]{}, err
 	}
 	defer bound.Close()
 	return gocql.Run(ctx, session, bound, options)

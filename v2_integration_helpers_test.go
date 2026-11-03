@@ -237,7 +237,7 @@ func v2Exec(ctx context.Context, session *Session, cql string, values ...Value) 
 	return Exec(ctx, session, bound, Options{})
 }
 
-func v2Query(ctx context.Context, session *Session, cql string, values ...Value) (*Rows[DynamicRow], error) {
+func v2Query(ctx context.Context, session *Session, cql string, values ...Value) (Rows[DynamicRow], error) {
 	statement := Statement[[]Value, DynamicRow]{CQL: cql, Params: DynamicParams, Rows: DynamicRows}
 	var bound *Bound[DynamicRow]
 	var err error
@@ -251,7 +251,7 @@ func v2Query(ctx context.Context, session *Session, cql string, values ...Value)
 		}
 	}
 	if err != nil {
-		return nil, err
+		return Rows[DynamicRow]{}, err
 	}
 	// Run admits the request before returning. Rows owns the execution reference
 	// until it is exhausted or closed, even after closing the binding here.

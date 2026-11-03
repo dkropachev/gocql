@@ -39,4 +39,8 @@ type RowsStorage[R any] struct {
 	execution, pendingExecution *InternalLogicalExecution
 }
 
-func RowsData[R any](v *Rows[R]) *RowsStorage[R] { return &v.privateStorage }
+func RowsData[R any](v Rows[R]) *RowsStorage[R] { return &v.impl.privateStorage }
+
+// InternalNewRows returns a handle over new, empty iterator storage, for tests
+// that assemble an iterator directly.
+func InternalNewRows[R any]() Rows[R] { return newRowsHandle(new(rowsImpl[R])) }

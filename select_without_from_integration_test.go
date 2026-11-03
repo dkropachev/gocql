@@ -126,7 +126,7 @@ func noFromText(t testing.TB, row DynamicRow, index int) string {
 	}
 	return value.String()
 }
-func noFromRows(t testing.TB, s *Session, stmt string, values ...Value) *Rows[DynamicRow] {
+func noFromRows(t testing.TB, s *Session, stmt string, values ...Value) Rows[DynamicRow] {
 	t.Helper()
 	rows, err := v2Query(context.Background(), s, stmt, values...)
 	if err != nil {
@@ -398,9 +398,7 @@ func TestSelectWithoutFromBindMarker(t *testing.T) {
 	t.Run("untyped markers rejected", func(t *testing.T) {
 		for _, cql := range []string{"SELECT ?", "SELECT (int)?", "SELECT CAST(? AS int)"} {
 			rows, err := v2Query(context.Background(), session, cql, IntValue(42))
-			if rows != nil {
-				_ = rows.Close()
-			}
+			_ = rows.Close()
 			if !isRejectedByServer(err) {
 				t.Fatalf("%q error=%v", cql, err)
 			}

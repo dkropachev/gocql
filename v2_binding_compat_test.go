@@ -34,7 +34,7 @@ func Exec[R any](a0 context.Context, a1 *Session, a2 *Bound[R], a3 Options) (Res
 	return implExecution.Exec[R](a0, a1, a2, a3)
 }
 
-func Run[R any](a0 context.Context, a1 *Session, a2 *Bound[R], a3 Options) (*Rows[R], error) {
+func Run[R any](a0 context.Context, a1 *Session, a2 *Bound[R], a3 Options) (Rows[R], error) {
 	return implExecution.Run[R](a0, a1, a2, a3)
 }
 

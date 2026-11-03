@@ -593,37 +593,44 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, 
 	}
 	return runctx, cancel, request, nil
 }
-func Run[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], options Options) (*Rows[R], error) {
+func Run[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], options Options) (Rows[R], error) {
 	runctx, cancel, request, err := InternalAdmitExecution(ctx, s, b, options)
 	if err != nil {
-		return nil, err
+		return Rows[R]{}, err
 	}
 	response, err := InternalRuntimeFor(s).executePage(runctx, request, StartPage())
 	if err != nil {
 		cancel()
 		request.InternalLogical.InternalFinish(InternalExecutionErrorResult(err), err)
 		request.InternalLogical.InternalReleaseInput()
-		return nil, err
+		return Rows[R]{}, err
 	}
 	return newRowsFromResponse(runctx, cancel, s, b, request, response)
 }
-func newRowsFromResponse[R any](runctx context.Context, cancel context.CancelFunc, s *implCluster.Session, b *Bound[R], request *InternalExecutionRequest, response *responsePage) (*Rows[R], error) {
+func newRowsFromResponse[R any](runctx context.Context, cancel context.CancelFunc, s *implCluster.Session, b *Bound[R], request *InternalExecutionRequest, response *responsePage) (Rows[R], error) {
 	plans := b.privateStorage.plans
 	if plans == nil {
 		plans = &InternalResultPlanCache[R]{}
 	}
-	// The first page shares the rows allocation; continuation pages replace it.
-	holder := new(struct {
-		rows Rows[R]
-		page Page[R]
-	})
+	// A reusable query's iterator storage is free again: this execution was
+	// admitted only after the previous one drained, which needs its rows
+	// closed or stopped. Stale handles carry the previous generation.
+	// Elsewhere the first page shares the iterator's allocation.
+	holder, gen := b.privateStorage.rows, uint64(0)
+	if holder != nil && request.query != nil {
+		gen = request.query.generation.Load()
+		*holder = rowsHolder[R]{}
+	} else {
+		holder = new(rowsHolder[R])
+	}
 	if err := newPageInto(&holder.page, response, b.privateStorage.InternalRows, plans); err != nil {
 		cancel()
 		request.InternalLogical.InternalFinish(response.Result, err)
 		request.InternalLogical.InternalReleaseInput()
-		return nil, err
+		return Rows[R]{}, err
 	}
 	rows := &holder.rows
+	rows.gen.Store(gen)
 	rt := InternalRuntimeFor(s)
 	rows.privateStorage.cursor = executionCursor(request)
 	rows.privateStorage.InternalCtx = runctx
@@ -638,7 +645,7 @@ func newRowsFromResponse[R any](runctx context.Context, cancel context.CancelFun
 	rows.startPrefetch()
 	rows.privateStorage.execution = request.InternalLogical
 	request.InternalLogical.installStop(rows)
-	return rows, nil
+	return newRowsHandle(rows), nil
 }
 func RunPage[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], state PageState, options Options) (*Page[R], error) {
 	return InternalRunSinglePage(ctx, s, b, state, options, false)
@@ -738,7 +745,7 @@ func Exec[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], optio
 		return InternalExecutionErrorResult(err), err
 	}
 	defer rows.Close()
-	rows.privateStorage.rejectColumns = true
+	rows.impl.privateStorage.rejectColumns = true
 	for rows.Next() {
 	}
 	return rows.Info(), rows.Err()

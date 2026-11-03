@@ -38,15 +38,15 @@ func serializationExec[P any](s *Session, cql string, encoder ParamEncoder[P], v
 	return err
 }
 
-func serializationRows[R any](s *Session, cql string, decoder RowDecoder[R], values ...Value) (*Rows[R], error) {
+func serializationRows[R any](s *Session, cql string, decoder RowDecoder[R], values ...Value) (Rows[R], error) {
 	ctx := context.Background()
 	p, err := Prepare(ctx, s, Statement[[]Value, R]{CQL: cql, Params: DynamicParams, Rows: decoder}, PrepareOptions{})
 	if err != nil {
-		return nil, err
+		return Rows[R]{}, err
 	}
 	b, err := BindOwned(p, values)
 	if err != nil {
-		return nil, err
+		return Rows[R]{}, err
 	}
 	defer b.Close()
 	return Run(ctx, s, b, Options{})

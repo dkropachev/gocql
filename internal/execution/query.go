@@ -106,6 +106,7 @@ type Query[P, R any] struct {
 	buffer   binding.ParameterBuffer
 	options  Options
 	scratch  eachScratch // Each and One decoding state
+	rows     rowsHolder[R] // Run's iterator storage, reused each execution
 }
 
 func newQueryState(s *implCluster.Session, state *queryState, retire func()) error {
@@ -145,6 +146,7 @@ func NewQuery[P, R any](p *Prepared[P, R], options Options) (*Query[P, R], error
 	q := &Query[P, R]{prepared: p, options: options}
 	q.bound.privateStorage.InternalRows = p.privateStorage.InternalRows
 	q.bound.privateStorage.plans = p.privateStorage.InternalPlans
+	q.bound.privateStorage.rows = &q.rows
 	if err := newQueryState(p.privateStorage.InternalState.InternalSession, &q.state, q.retire); err != nil {
 		return nil, err
 	}
@@ -169,6 +171,7 @@ func NewUnpreparedQuery[P, R any](s *implCluster.Session, statement Statement[P,
 	q := &Query[P, R]{params: plan, columns: columns, options: options}
 	q.bound.privateStorage.InternalRows = statement.Rows
 	q.bound.privateStorage.plans = &InternalResultPlanCache[R]{}
+	q.bound.privateStorage.rows = &q.rows
 	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: statement.CQL, InternalRouting: RoutingInfo{Kind: statement.Kind, Conditional: statement.Kind != OrdinaryStatement}}
 	if err := newQueryState(s, &q.state, q.retire); err != nil {
 		return nil, err
@@ -294,9 +297,11 @@ func (q *Query[P, R]) Exec(ctx context.Context, value P) (Result, error) {
 	defer q.state.owner.InternalRelease()
 	return Exec(ctx, q.state.runtime.Session, &q.bound, q.options)
 }
-func (q *Query[P, R]) Run(ctx context.Context, value P) (*Rows[R], error) {
+// Run executes the query and returns an iterator over its rows. The query
+// stays busy until the rows are closed; see Rows for stale handles.
+func (q *Query[P, R]) Run(ctx context.Context, value P) (Rows[R], error) {
 	if err := q.capture(ctx, value); err != nil {
-		return nil, err
+		return Rows[R]{}, err
 	}
 	defer q.state.owner.InternalRelease()
 	return Run(ctx, q.state.runtime.Session, &q.bound, q.options)

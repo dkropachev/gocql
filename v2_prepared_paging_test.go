@@ -1095,8 +1095,8 @@ func TestV2PagerCompletionCanInspectIterator(t *testing.T) {
 	if !pageObserved {
 		t.Fatal("page completion missing")
 	}
-	rows := func() *Rows[Bytes] {
-		opaqueStorageValuexxxxxxxx := new(Rows[Bytes])
+	rows := func() Rows[Bytes] {
+		opaqueStorageValuexxxxxxxx := implExecution.InternalNewRows[Bytes]()
 		implExecution.RowsData(opaqueStorageValuexxxxxxxx).InternalPage = step03Page(t)
 		implExecution.RowsData(opaqueStorageValuexxxxxxxx).InternalCtx = context.Background()
 		return opaqueStorageValuexxxxxxxx
@@ -1122,8 +1122,8 @@ func TestV2PagerConcurrentCloseReleasesExactlyOnce(t *testing.T) {
 	if releases.Load() != 1 {
 		t.Fatal("page release count", releases.Load())
 	}
-	rows := func() *Rows[Bytes] {
-		opaqueStorageValuexxxxxxxxx := new(Rows[Bytes])
+	rows := func() Rows[Bytes] {
+		opaqueStorageValuexxxxxxxxx := implExecution.InternalNewRows[Bytes]()
 		implExecution.RowsData(opaqueStorageValuexxxxxxxxx).InternalPage = step03Page(t)
 		implExecution.RowsData(opaqueStorageValuexxxxxxxxx).InternalCtx = context.Background()
 		return opaqueStorageValuexxxxxxxxx
