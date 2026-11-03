@@ -555,3 +555,18 @@ parser's cursor interface. The cursor is now `ResponseData.InternalParseCursor`.
 |---|---:|---:|---:|
 | allocs/op pread/w64 | 9 | 8 | −1 |
 | cpu-ns/op | | | ~ (pwrite/w64 +0.67%, p=0.035, under the 2% bar) |
+
+## C5: one shared admission per attempt (kept)
+
+`InternalExecuteTyped` hands its admission, input reference, payload owners
+and frame scratch to `typedRequestLease`, which embeds `wire.Lease`
+(`wire.InitLease`) and is its own releaser. Two connection lock pairs, two
+atomic lease operations and the release closure go away.
+
+| vs F2a | before | after | Δ |
+|---|---:|---:|---:|
+| allocs/op write / pread / pwrite w64 | 6 / 8 / 7 | 5 / 7 / 6 | −1 |
+| cpu-ns/op pread/w1 | 15.32µ | 14.57µ | −4.90% |
+| cpu-ns/op w64-4 (four cases) | | | −2.30% to −4.04% |
+| cpu-ns/op pread / pwrite w64 | | | −1.11% / −1.47% |
+| Admission | 683.8n | 688.9n | +0.75% (p=0.035, under 2%, path untouched) |

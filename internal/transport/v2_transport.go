@@ -29,7 +29,17 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 	if err := c.beginShared(ctx); err != nil {
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err})
 	}
-	defer c.endShared()
+	// The shared admission and the input reference move to the writer's
+	// request lease once the request is submitted; until then they are ours.
+	sharedHeld, inputHeld := true, false
+	defer func() {
+		if inputHeld {
+			req.Lease.Release()
+		}
+		if sharedHeld {
+			c.endShared()
+		}
+	}()
 	if err := ctx.Err(); err != nil {
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err})
 	}
@@ -40,8 +50,8 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 		if !req.Lease.Retain() {
 			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrReleased})
 		}
-		// The writer's synchronous completion is an explicit input lifetime boundary.
-		defer req.Lease.Release()
+		// The writer's completion is an explicit input lifetime boundary.
+		inputHeld = true
 	}
 	// Custom payload views can belong to a previously received page. Each
 	// accepted attempt holds those leases just like canonical bound values.
@@ -132,29 +142,13 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 	if c.InternalCoalesceWait == 0 {
 		// Hold both input and shared-connection admission until the persistent
 		// writer finishes, even if cancellation returns to the calling goroutine.
-		if err := c.beginShared(ctx); err != nil {
-			putFrameScratch(scratch)
-			return failBeforeWrite(err)
+		owner := &typedRequestLease{conn: c, payloads: payloadOwners, scratch: scratch}
+		if inputHeld {
+			owner.input = req.Lease
 		}
-		if req.Lease != nil && !req.Lease.Retain() {
-			c.endShared()
-			putFrameScratch(scratch)
-			return failBeforeWrite(ErrReleased)
-		}
-		ownedPayloads := payloadOwners
-		payloadOwners = nil
-		inputLease := req.Lease
-		lease := wire.NewLease(packet, func() {
-			if inputLease != nil {
-				inputLease.Release()
-			}
-			for _, owner := range ownedPayloads {
-				owner.Release()
-			}
-			// The writer is done with the frame: its envelope storage can be reused.
-			putFrameScratch(scratch)
-			c.endShared()
-		})
+		wire.InitLease(&owner.Lease, packet, owner)
+		lease := &owner.Lease
+		sharedHeld, inputHeld, payloadOwners = false, false, nil
 		// The caller does not wait for the write: the response wait below
 		// covers it, and write failures close the connection.
 		ticket, err = c.submitTyped(ctx, packet, lease)
@@ -269,6 +263,29 @@ func (c *Conn) typedProtocolLimits() ProtocolLimits {
 		}
 	}
 	return limits
+}
+
+// typedRequestLease owns a submitted request until its writer finishes: the
+// shared-connection admission, the input and payload references, and the
+// frame buffer. It is one allocation instead of a lease and a closure.
+type typedRequestLease struct {
+	wire.Lease
+	conn     *Conn
+	input    *wire.Lease
+	payloads []*wire.Lease
+	scratch  *wire.BuilderScratch
+}
+
+func (r *typedRequestLease) ReleaseLease() {
+	if r.input != nil {
+		r.input.Release()
+	}
+	for _, owner := range r.payloads {
+		owner.Release()
+	}
+	// The writer is done with the frame: its envelope storage can be reused.
+	putFrameScratch(r.scratch)
+	r.conn.endShared()
 }
 
 // Frame scratch holds a request envelope's scalar bytes and span descriptors.

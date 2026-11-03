@@ -29,16 +29,16 @@ import (
 type Lease struct {
 	refs     atomic.Int64
 	chain    Chain
-	releaser leaseReleaser
+	releaser LeaseReleaser
 }
 
-// leaseReleaser runs once on a lease's final release.
-type leaseReleaser interface{ releaseLease() }
+// LeaseReleaser runs once on a lease's final release.
+type LeaseReleaser interface{ ReleaseLease() }
 
 // releaseFunc adapts a callback; func values are stored in interfaces directly.
 type releaseFunc func()
 
-func (f releaseFunc) releaseLease() { f() }
+func (f releaseFunc) ReleaseLease() { f() }
 
 // NewLease creates a lease with one reference. release runs synchronously and
 // exactly once on the final Release; it may be nil.
@@ -61,7 +61,7 @@ type cachedLease struct {
 	epoch uint64
 }
 
-func (c *cachedLease) releaseLease() { c.cache.Release(c.buf, c.epoch) }
+func (c *cachedLease) ReleaseLease() { c.cache.Release(c.buf, c.epoch) }
 
 // NewCachedLease is NewLease whose final release returns buf, acquired with
 // epoch, to cache.
@@ -72,6 +72,16 @@ func NewCachedLease(chain Chain, cache *ReceiveCache, buf []byte, epoch uint64) 
 	perfLease(chain.Len())
 	c.refs.Store(1)
 	return &c.Lease
+}
+
+// InitLease initialises a Lease embedded in a caller's struct with one
+// reference; r runs once on the final Release. Like NewLease, the embedding
+// struct must be newly allocated and never recycled.
+func InitLease(l *Lease, chain Chain, r LeaseReleaser) {
+	l.chain = chain
+	l.releaser = r
+	perfLease(chain.Len())
+	l.refs.Store(1)
 }
 
 // Retain acquires another reference, or returns false after the final release.
@@ -112,7 +122,7 @@ func (l *Lease) Release() {
 			if n == 1 {
 				perfLease(-l.chain.Len())
 				if l.releaser != nil {
-					l.releaser.releaseLease()
+					l.releaser.ReleaseLease()
 				}
 			}
 			return
