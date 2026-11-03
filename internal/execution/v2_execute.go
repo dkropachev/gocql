@@ -542,14 +542,22 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, 
 	if err := request.InternalOwner.InternalAdmit(); err != nil {
 		return nil, nil, nil, err
 	}
-	runctx, cancel := InternalExecutionContext(ctx, resolved.InternalProfile.Timeout)
 	rt := InternalRuntimeFor(s)
 	observer := options.Observer
 	if observer == nil {
 		observer = rt.InternalConfig.Observer
 	}
+	query := request.query
+	inline := query != nil && observer == nil && rt.InternalConfig.CoalesceWait == 0 && canUseDirectProfile(resolved.InternalProfile)
+	var runctx context.Context
+	var cancel context.CancelFunc
+	if inline && query.execCtx != nil {
+		runctx, cancel = query.execCtx.begin(ctx, resolved.InternalProfile.Timeout)
+	} else {
+		runctx, cancel = InternalExecutionContext(ctx, resolved.InternalProfile.Timeout)
+	}
 	var logical *InternalLogicalExecution
-	if query := request.query; query != nil && observer == nil && rt.InternalConfig.CoalesceWait == 0 && canUseDirectProfile(resolved.InternalProfile) {
+	if inline {
 		// A previous generation becomes idle only after all accepted writes
 		// and callbacks drain. The direct path has no speculative finishers.
 		logical = &query.inlineLogical

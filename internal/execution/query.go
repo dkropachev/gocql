@@ -25,6 +25,7 @@ type queryState struct {
 	mu            sync.Mutex
 	owner         *inputOwner
 	execOwner     InternalInputOwner // per-execution owner, reset each generation
+	execCtx       *executionContext  // reusable direct-path context; nil keeps context.WithTimeout
 	releaseOwner  func()             // bound owner.InternalRelease, the execution drain
 	runtime       *InternalSessionRuntime
 	logical       *InternalLogicalExecution
@@ -108,6 +109,7 @@ func NewQuery[P, R any](p *Prepared[P, R], options Options) (*Query[P, R], error
 	if err := newQueryState(p.privateStorage.InternalState.InternalSession, &q.state, q.retire); err != nil {
 		return nil, err
 	}
+	q.state.execCtx = newExecutionContext()
 	return q, nil
 }
 
@@ -132,6 +134,7 @@ func NewUnpreparedQuery[P, R any](s *implCluster.Session, statement Statement[P,
 	if err := newQueryState(s, &q.state, q.retire); err != nil {
 		return nil, err
 	}
+	q.state.execCtx = newExecutionContext()
 	return q, nil
 }
 

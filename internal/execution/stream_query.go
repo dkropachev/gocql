@@ -45,6 +45,9 @@ func NewStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder StreamRowDeco
 	if err != nil {
 		return nil, err
 	}
+	// Streams hand their context to exclusive transport I/O; keep the
+	// standard per-execution context there.
+	q.state.execCtx = nil
 	options.Options = q.options
 	return &StreamQuery[P, R]{query: q, decoder: decoder, options: options}, nil
 }
@@ -68,6 +71,9 @@ func NewUnpreparedStreamQuery[P, B, R any](session *implCluster.Session, stateme
 	if err != nil {
 		return nil, err
 	}
+	// Streams hand their context to exclusive transport I/O; keep the
+	// standard per-execution context there.
+	q.state.execCtx = nil
 	options.Options = q.options
 	return &StreamQuery[P, R]{query: q, decoder: decoder, options: options}, nil
 }

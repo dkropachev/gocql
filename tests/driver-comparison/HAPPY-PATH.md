@@ -300,3 +300,59 @@ stays at 96 B, and a cached lease (136 B) replaces a lease plus closure
 | Decoding partition allocs/op | 112 | 107 | −5 |
 | B/op, every case | | | unchanged |
 | ns/op | | | ~ (noisy host, ±5–20%) |
+
+## I6: reusable execution context for direct-path queries (kept)
+
+Correction to the plan: typed attempts do not set a transport timeout
+(`attemptRequest.Timeout` is never assigned). The execution context created by
+`context.WithTimeout` in admission is therefore the only timeout mechanism. It
+spans continuation pages and retries, and it also carries query-close and
+session-close cancellation. The fix is a cheaper context with the same
+behaviour, not removing one of two timeouts.
+
+`executionContext` (`internal/execution/execution_context.go`) belongs to a
+reusable `Query`. It is used under the condition that already reuses the
+embedded logical execution: no observer, no speculation, no routing-latency
+observation, zero coalescing. `StreamQuery` opts out, because it hands its
+context to exclusive transport I/O.
+
+- One `time.Timer` per query, re-armed per execution. `expire` re-checks the
+  current deadline under the lock, so a late callback from an earlier
+  generation is discarded.
+- A cancellable parent is followed with `context.AfterFunc` and a callback bound
+  once per query. The callback cancels only when the current generation's parent
+  is cancelled.
+- Cancellation closes `Done`, as before, and stops the timer and the parent
+  registration under the lock, so a delayed stop cannot disarm the next
+  generation.
+- The type implements `AfterFunc`, so derived contexts and `context.AfterFunc`
+  need no watcher goroutine.
+- `Deadline` includes the parent's deadline, and `Value` forwards to the parent.
+  The driver does not use `context.Cause`, and users never receive this context.
+
+Tests cover deadline expiry, parent cancellation, an earlier parent deadline,
+an already-cancelled parent, value forwarding, `AfterFunc` and its stop,
+derived contexts, stale stops, and late timer and parent callbacks, with a
+concurrent race loop. Mutating the deadline re-check or the parent check makes
+`TestExecutionContextLateCallbacksSpareNextGeneration` fail.
+
+The first version captured the generation in a per-execution parent callback.
+That cost one allocation more than `context.WithTimeout` when the parent is
+cancellable (T0 point/buffered +1 alloc, +2.3% B/op); the bound callback
+removed it.
+
+| benchmark (ABBA vs HEAD) | before | after | Δ |
+|---|---:|---:|---:|
+| Loopback read/w64 | 6.764µ | 6.342µ | −6.24% |
+| Loopback write/w64-2 | 6.202µ | 5.732µ | −7.59% |
+| Loopback pread/w64 | 7.522µ | 7.072µ | −5.98% |
+| Loopback pwrite/w64 | 6.603µ | 6.138µ | −7.05% |
+| Loopback allocs/op (Background parent) | 22 | 18 | −4 |
+| Loopback B/op | | | −8% to −10% |
+| Decoding point/buffered (cancellable parent) | 29 allocs | 29 allocs | +0.92% B/op |
+| Admission ns/op | 1,087 | 790 | −27.35% |
+
+I7 (first-attempt result path) was not attempted: `mergeResponseResult` only
+checks empty slices, and the `time.Now` pair feeds the public `Result.Latency`.
+I10 (shared reader 8/16/32/64 KiB) changed w64 by at most −1.2%, so the reader
+stays at 8 KiB.
