@@ -150,3 +150,24 @@ Without the in-flight condition, the single-caller net.Pipe T0 cases paid
 +1.1–1.6% for a pointless yield; the condition removed it. Transport
 `-race -count=20`, unit race suite clean except the known baseline failure;
 emulator smoke OK.
+
+## I4: lock-free session runtime lookup (kept)
+
+The post-batching real-TCP profile shows `sync.Mutex` Lock+Unlock at 9.6% flat,
+spread over dozens of sites. The largest single site was `InternalRuntimeFor`,
+at about 1.9% of CPU. It is called several times per request, and each call
+takes `SessionData(s).InternalTypedMu` to look up a runtime that is created
+once and never replaced. The initialized runtime is now published through an
+`atomic.Value`, and later calls skip the lock.
+
+| benchmark (ABBA vs I3) | before | after | Δ |
+|---|---:|---:|---:|
+| Loopback read/w64 | 7.252µ | 7.156µ | −1.33% (p=0.028) |
+| Loopback read/w64-2 | 7.109µ | 7.063µ | −0.64% (p=0.001) |
+| Loopback write/w64 | 6.618µ | 6.590µ | ~ |
+
+The remaining lock sites are each ≤1% (session `Closed`, query cursor checks,
+page close, input owner, connection reader disarm), so they are not worth
+individual changes. The post-batching profile puts allocation and GC first:
+`mallocgc` is 17.4% cumulative plus about 12% marking and scanning, and the
+execution deadline context alone is 4.4%.

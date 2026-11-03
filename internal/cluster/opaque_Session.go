@@ -40,6 +40,7 @@ type SessionStorage struct {
 	InternalTypedMu              sync.Mutex
 	nextTypedHost                atomic.Uint64
 	InternalTypedState           InternalExecutionLifecycle
+	InternalTypedReady           atomic.Value // InternalTypedState once fully initialized; never replaced
 	schemaMu                     sync.Mutex
 	schema                       *preparedSchemaTracker
 	v2Peripheral                 atomic.Pointer[InternalV2PeripheralState]

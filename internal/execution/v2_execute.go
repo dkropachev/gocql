@@ -50,6 +50,11 @@ type InternalSessionRuntime struct {
 }
 
 func InternalRuntimeFor(s *implCluster.Session) *InternalSessionRuntime {
+	// The runtime is created once per session and never replaced, so every
+	// call after initialization takes this lock-free path.
+	if rt, ok := implCluster.SessionData(s).InternalTypedReady.Load().(*InternalSessionRuntime); ok {
+		return rt
+	}
 	implCluster.SessionData(s).InternalTypedMu.Lock()
 	defer implCluster.SessionData(s).InternalTypedMu.Unlock()
 	if implCluster.SessionData(s).InternalTypedState == nil {
@@ -62,6 +67,7 @@ func InternalRuntimeFor(s *implCluster.Session) *InternalSessionRuntime {
 	if rt.schema == nil {
 		rt.schema = implCluster.InternalSessionSchemaTracker(s)
 	}
+	implCluster.SessionData(s).InternalTypedReady.Store(rt)
 	return rt
 }
 
