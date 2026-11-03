@@ -1063,8 +1063,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		if len(wireRequest.PreparedID) > 0 && wireRequest.Batch == nil {
 			implCluster.InternalSessionApplyTypedFeedbackStamped(s.Session, response, request.InternalRouting, request.tabletFeedback, conn.InternalFramers.InternalDefaults)
 		}
-		var unprepared *RequestErrUnprepared
-		if executeErr != nil && errors.As(executeErr, &unprepared) && repair == 0 {
+		if unprepared := unpreparedError(executeErr); unprepared != nil && repair == 0 {
 			if response != nil {
 				response.Owner.Release()
 			}
@@ -1127,6 +1126,19 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		return response, nil
 	}
 	return nil, fmt.Errorf("gocql: failed unprepared repair")
+}
+
+// unpreparedError extracts an UNPREPARED response. Its errors.As target lives
+// here, so successful attempts do not allocate it.
+func unpreparedError(err error) *RequestErrUnprepared {
+	if err == nil {
+		return nil
+	}
+	var unprepared *RequestErrUnprepared
+	if errors.As(err, &unprepared) {
+		return unprepared
+	}
+	return nil
 }
 
 func (rt *InternalSessionRuntime) InternalForgetPrepareOrder(key InternalPrepareCacheKey) {

@@ -508,8 +508,7 @@ type InternalResultPlanCache[R any] struct {
 func (c *InternalResultPlanCache[R]) InternalSelectPlan(response *responsePage, decoder RowDecoder[R]) (RowPlan[R], error) {
 	entry := response.InternalMetadata
 	if entry == nil {
-		entry = &typedResultMetadata{InternalColumns: response.Columns}
-		response.InternalMetadata = entry
+		return c.selectUnidentified(response, decoder)
 	}
 	c.InternalMu.Lock()
 	if c.InternalPlan != nil && c.entry == entry {
@@ -538,6 +537,33 @@ func (c *InternalResultPlanCache[R]) InternalSelectPlan(response *responsePage, 
 	c.InternalMu.Lock()
 	if c.revision == revision && entry.InternalEpoch.InternalCurrent() {
 		c.entry = entry
+		c.columns = response.Columns
+		c.InternalPlan = plan
+	}
+	c.InternalMu.Unlock()
+	return plan, nil
+}
+
+// selectUnidentified serves responses without a schema identity, such as
+// unprepared queries. Their columns are compared directly instead of minting
+// a throwaway identity for every response.
+func (c *InternalResultPlanCache[R]) selectUnidentified(response *responsePage, decoder RowDecoder[R]) (RowPlan[R], error) {
+	c.InternalMu.Lock()
+	if c.InternalPlan != nil && c.columns.Equal(response.Columns) {
+		plan := c.InternalPlan
+		c.InternalMu.Unlock()
+		return plan, nil
+	}
+	c.revision++
+	revision := c.revision
+	c.InternalMu.Unlock()
+	plan, err := compileRowPlan(decoder, response.Columns)
+	if err != nil {
+		return nil, err
+	}
+	c.InternalMu.Lock()
+	if c.revision == revision {
+		c.entry = nil
 		c.columns = response.Columns
 		c.InternalPlan = plan
 	}

@@ -1113,7 +1113,9 @@ func (c *Conn) InternalProcessFrameSource(ctx context.Context, src frameSource) 
 
 	framer := c.InternalGetReadFramer()
 
-	err = src.InternalReadBody(framer, &head)
+	// A copy keeps head on the stack for typed frames, which return above.
+	legacyHead := head
+	err = src.InternalReadBody(framer, &legacyHead)
 
 	desynced := InternalBodyReadDesyncedConn(err)
 

@@ -219,3 +219,38 @@ They were removed before the measurement below.
 | Loopback read/w64 B/op | 3,254 | 3,174 | −2.46% |
 | Loopback read/w64 ns/op | 7.387µ | 7.130µ | −3.47% (p=0.035) |
 | Loopback write | | | unchanged (Exec builds no rows) |
+
+## I9a: stop success-path escapes (kept)
+
+Line-level allocation profiles found four allocations that happen on every
+successful request only because of escape analysis:
+
+- `executeTypedAttempt` declared its `errors.As` target for UNPREPARED
+  responses before checking for an error. The target now lives in
+  `unpreparedError`, which runs only on failure.
+- `receiveTypedCall` moved `output`/`outputEpoch` to the heap, because the
+  compressed-frame lease closure captured them by reference. That closure now
+  captures copies.
+- `InternalProcessFrameSource` moved `head` to the heap, because the legacy
+  framer path passes `&head`. The legacy path now passes a branch-local copy.
+- `InternalResultPlanCache.InternalSelectPlan` minted a throwaway schema identity
+  for every response without one (unprepared queries). Such responses now
+  compare columns with the cached plan directly. This keeps the existing reuse
+  of a plan cached under an identified entry, as required by
+  `TestV2ResultPlanCacheScopedReuseAndNoCompileLock`. The first version wrongly
+  required an unidentified cache entry and failed that test.
+
+| benchmark (ABBA vs I8) | before | after | Δ |
+|---|---:|---:|---:|
+| Loopback read allocs/op | 28 | 23 | −5 |
+| Loopback write allocs/op | 28 | 24 | −4 |
+| Decoding partition allocs/op | 137 | 112 | −25 |
+| Loopback read/w64 | 7.030µ | 6.819µ | −3.02% |
+| Loopback read/w64-2 | 6.897µ | 6.635µ | −3.81% |
+| Loopback write/w64 | 6.516µ | 6.436µ | −1.24% |
+| Loopback read/w64 B/op | 3,174 | 3,022 | −4.79% |
+
+Gate gap found here: T0/T1 use unprepared QUERY, while production and the
+emulator use prepared EXECUTE. The plan-identity allocation exists only on the
+unprepared path, and the prepared path may hide costs T1 cannot see. T1 needs a
+prepared variant before further allocation work is ranked.

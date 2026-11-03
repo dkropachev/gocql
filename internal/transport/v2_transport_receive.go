@@ -121,7 +121,9 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 					owner = wire.NewLease(body, func() { cache.Release(data, epoch) })
 				} else if pooledDecode && head.Flags&frm.FlagCompress != 0 {
 					outputReturned = true
-					owner = wire.NewLease(body, func() { cache.Release(output, outputEpoch) })
+					// Copies keep output on the stack for uncompressed frames.
+					decoded, decodedEpoch := output, outputEpoch
+					owner = wire.NewLease(body, func() { cache.Release(decoded, decodedEpoch) })
 				} else {
 					owner = wire.NewLease(body, nil)
 				}
