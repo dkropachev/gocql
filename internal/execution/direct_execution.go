@@ -125,7 +125,8 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 }
 
 func mergeResponseResult(result *Result, response *responsePage) {
-	if response == nil {
+	// Warnings, trace IDs and custom payload all live in the rare extras.
+	if response == nil || response.Extras == nil {
 		return
 	}
 	result.AddWarnings(response.Warnings()...)
