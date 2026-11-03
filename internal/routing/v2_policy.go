@@ -46,6 +46,24 @@ type TokenPartitioner interface {
 var Murmur3TokenPartitioner TokenPartitioner = murmur3StreamingPartitioner{}
 var CDCTokenPartitioner TokenPartitioner = cdcStreamingPartitioner{}
 
+// InternalValidatePartitionKey applies InternalNewPartitionKey's checks
+// without building the key.
+func InternalValidatePartitionKey(cells []encodedCell, indexes []int) error {
+	for _, idx := range indexes {
+		if idx < 0 || idx >= len(cells) {
+			return typeValidation("partition key", "invalid column index")
+		}
+		c := cells[idx]
+		if c.State != Null && c.State != Unset && c.State != Present {
+			return typeValidation("partition key", "invalid cell state")
+		}
+		if len(indexes) > 1 && c.Body.Len() > 65535 {
+			return typeValidation("partition key", "composite component exceeds 65535 bytes")
+		}
+	}
+	return nil
+}
+
 func InternalNewPartitionKey(cells []encodedCell, indexes []int) (PartitionKey, bool, error) {
 	if len(indexes) == 0 {
 		return *NewPartitionKey(PartitionKeyState{}), false, nil
@@ -113,8 +131,12 @@ func InternalComputeRoutingToken(cells []encodedCell, indexes []int, p TokenPart
 		}
 		return token, err
 	}
+	if p == nil {
+		// No partitioner, no token: only validate, without building the key.
+		return Option[int64]{}, InternalValidatePartitionKey(cells, indexes)
+	}
 	k, ok, e := InternalNewPartitionKey(cells, indexes)
-	if e != nil || !ok || p == nil {
+	if e != nil || !ok {
 		return Option[int64]{}, e
 	}
 	v, e := p.Token(k)

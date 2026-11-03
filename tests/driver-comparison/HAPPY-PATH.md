@@ -570,3 +570,10 @@ atomic lease operations and the release closure go away.
 | cpu-ns/op w64-4 (four cases) | | | −2.30% to −4.04% |
 | cpu-ns/op pread / pwrite w64 | | | −1.11% / −1.47% |
 | Admission | 683.8n | 688.9n | +0.75% (p=0.035, under 2%, path untouched) |
+
+## rt: no partition key without a partitioner (kept)
+
+| vs C5 | before | after | Δ |
+|---|---:|---:|---:|
+| allocs/op pread / pwrite w64 | 7 / 6 | 6 / 5 | −1 |
+| cpu-ns/op prepared w64 and w64-4 | | | −0.61% to −1.55% |
