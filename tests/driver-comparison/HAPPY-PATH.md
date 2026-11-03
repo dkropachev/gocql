@@ -275,3 +275,28 @@ driver change) for a baseline, interleaved ABBA:
 | pwrite allocs/op (w64) | 36 | 23 | −13 |
 | pread B/op (w64) | 4,632 | 3,302 | −28.73% |
 | pwrite B/op (w64) | 3,929 | 2,677 | −31.87% |
+
+## I9b: received frames release their buffer without a closure (kept)
+
+`wire.Lease` documents that leases are never recycled, so that an old pointer
+cannot retain a new owner's storage. That rules out the plan's pooled or
+embedded leases, and the invariant is kept. What could go is the release
+closure each received frame allocated to return its buffer to the receive
+cache.
+
+`Lease.release func()` is now `releaser leaseReleaser`, a one-method interface.
+`NewLease` wraps a callback in `releaseFunc`; storing a func value in an
+interface does not allocate. `NewCachedLease` allocates a `cachedLease`, which
+embeds `Lease`, holds the cache, buffer and epoch, and is its own releaser.
+
+The first version added the cache fields to `Lease` itself, growing every lease
+from 96 B to 128 B for +1.4–1.8% B/op. With the embedded type, a plain `Lease`
+stays at 96 B, and a cached lease (136 B) replaces a lease plus closure
+(96 + 48 B).
+
+| benchmark (ABBA vs HEAD) | before | after | Δ |
+|---|---:|---:|---:|
+| allocs/op, every loopback case | | | −1 |
+| Decoding partition allocs/op | 112 | 107 | −5 |
+| B/op, every case | | | unchanged |
+| ns/op | | | ~ (noisy host, ±5–20%) |

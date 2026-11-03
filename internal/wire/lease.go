@@ -27,18 +27,51 @@ import (
 // must not be copied. Lease objects are never recycled, so an old pointer cannot
 // retain a new owner's storage (the pooled-reference ABA problem).
 type Lease struct {
-	refs    atomic.Int64
-	chain   Chain
-	release func()
+	refs     atomic.Int64
+	chain    Chain
+	releaser leaseReleaser
 }
+
+// leaseReleaser runs once on a lease's final release.
+type leaseReleaser interface{ releaseLease() }
+
+// releaseFunc adapts a callback; func values are stored in interfaces directly.
+type releaseFunc func()
+
+func (f releaseFunc) releaseLease() { f() }
 
 // NewLease creates a lease with one reference. release runs synchronously and
 // exactly once on the final Release; it may be nil.
 func NewLease(chain Chain, release func()) *Lease {
-	l := &Lease{chain: chain, release: release}
+	l := &Lease{chain: chain}
+	if release != nil {
+		l.releaser = releaseFunc(release)
+	}
 	perfLease(chain.Len())
 	l.refs.Store(1)
 	return l
+}
+
+// cachedLease returns a received buffer to its cache on the final release,
+// in one allocation instead of a lease plus a release closure.
+type cachedLease struct {
+	Lease
+	cache *ReceiveCache
+	buf   []byte
+	epoch uint64
+}
+
+func (c *cachedLease) releaseLease() { c.cache.Release(c.buf, c.epoch) }
+
+// NewCachedLease is NewLease whose final release returns buf, acquired with
+// epoch, to cache.
+func NewCachedLease(chain Chain, cache *ReceiveCache, buf []byte, epoch uint64) *Lease {
+	c := &cachedLease{cache: cache, buf: buf, epoch: epoch}
+	c.chain = chain
+	c.releaser = c
+	perfLease(chain.Len())
+	c.refs.Store(1)
+	return &c.Lease
 }
 
 // Retain acquires another reference, or returns false after the final release.
@@ -78,8 +111,8 @@ func (l *Lease) Release() {
 			perfAdd(8, 1)
 			if n == 1 {
 				perfLease(-l.chain.Len())
-				if l.release != nil {
-					l.release()
+				if l.releaser != nil {
+					l.releaser.releaseLease()
 				}
 			}
 			return
