@@ -111,7 +111,7 @@ func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Sess
 		cursor.privateStorage.InternalActive.Unlock()
 		return nil, &ExecutionError{Err: err, Result: cursor.Info().Result}
 	}
-	request.InternalLogical.installStop(func() { InternalRowStreamCloseWithError(cursor, ErrClosed) })
+	request.InternalLogical.installStop(stopFunc(func() { InternalRowStreamCloseWithError(cursor, ErrClosed) }))
 	return cursor, nil
 }
 

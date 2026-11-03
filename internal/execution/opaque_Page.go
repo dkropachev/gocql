@@ -21,7 +21,7 @@ type PageStorage[R any] struct {
 	session           *implCluster.Session
 	InternalResponse  *responsePage
 	InternalPlan      RowPlan[R]
-	InternalCursor    *wire.Cursor
+	InternalCursor    wire.Cursor
 	reader            RowReader
 	InternalIndex     int32
 	current           R

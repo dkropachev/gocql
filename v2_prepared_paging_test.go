@@ -118,7 +118,7 @@ func TestV2PageNextIntoTerminalClearing(t *testing.T) {
 				p.Close()
 			case "malformed":
 				implExecution.PageData(p).InternalResponse.Rows = typedTestChain(t, []byte{0, 0, 0, 5, 1})
-				implExecution.PageData(p).InternalCursor = wire.NewCursor(implExecution.PageData(p).InternalResponse.Rows)
+				implExecution.PageData(p).InternalCursor = wire.CursorOver(implExecution.PageData(p).InternalResponse.Rows)
 			case "cancelled":
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel()

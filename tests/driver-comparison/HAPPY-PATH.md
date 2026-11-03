@@ -187,3 +187,35 @@ that generation's completion.
 | Loopback write/w64 | 6.665µ | 6.609µ | −0.84% (p=0.037) |
 | Decoding point/buffered | 12.86µ | 12.69µ | −1.30% (p=0.007) |
 | Loopback read/w64 | 7.244µ | 7.079µ | ~ (p=0.089) |
+
+## I8: closure-free rows release, co-allocated first page, embedded cursor (kept)
+
+Each buffered `Run` built a `Rows` and a separate first `Page`. It also built
+two closures (the rows release, and the stop hook for query or session
+shutdown) and a heap `wire.Cursor` for the page.
+
+- The rows now record their logical execution. Close moves it to a pending slot,
+  and it is finished and released after the unlock, as the closure was. The
+  result info and error are now captured under the lock. The old closure read
+  them after unlocking.
+- `installStop` takes an `executionStopper` interface, which `*Rows`
+  implements directly. Other callers use `stopFunc`, a func adapter that needs
+  no allocation because func values are stored in interfaces directly.
+- The first page shares the rows allocation. Continuation pages still replace
+  it, so no handle object is reused across executions, and stale `*Rows`
+  handles cannot observe a later generation (plan gap 6 is avoided rather than
+  solved).
+- `PageStorage.InternalCursor` is a `wire.Cursor` value, built with the new
+  `wire.CursorOver`.
+
+The first measurement carried two unused fields in `RowsStorage` (+3.4% B/op).
+They were removed before the measurement below.
+
+| benchmark (ABBA vs I5a) | before | after | Δ |
+|---|---:|---:|---:|
+| Loopback read allocs/op | 32 | 28 | −4 |
+| Decoding point/buffered allocs/op | 39 | 35 | −4 |
+| Decoding partition allocs/op | 145 | 137 | −8 |
+| Loopback read/w64 B/op | 3,254 | 3,174 | −2.46% |
+| Loopback read/w64 ns/op | 7.387µ | 7.130µ | −3.47% (p=0.035) |
+| Loopback write | | | unchanged (Exec builds no rows) |

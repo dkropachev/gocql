@@ -98,8 +98,8 @@ func TestRuntimeAttachmentStopsAllBeforeJoiningWriter(t *testing.T) {
 	}
 	writer := first.request.InternalOwner.InternalWriterLease(wire.Chain{})
 	firstStopped, secondStopped := make(chan struct{}), make(chan struct{})
-	first.installStop(func() { first.InternalReleaseInput(); close(firstStopped) })
-	second.installStop(func() { second.InternalReleaseInput(); close(secondStopped) })
+	first.installStop(stopFunc(func() { first.InternalReleaseInput(); close(firstStopped) }))
+	second.installStop(stopFunc(func() { second.InternalReleaseInput(); close(secondStopped) }))
 	parent.InternalClose()
 	done := make(chan struct{})
 	go func() { _ = s.Close(); close(done) }()
@@ -140,7 +140,7 @@ func TestRuntimeAttachmentAdmissionCloseRace(t *testing.T) {
 			t.Fatal(err)
 		}
 		logical, cancel := attachmentLogical(s, parent)
-		logical.installStop(logical.InternalReleaseInput)
+		logical.installStop(stopFunc(logical.InternalReleaseInput))
 		start := make(chan struct{})
 		admitted := make(chan error, 1)
 		closed := make(chan struct{})

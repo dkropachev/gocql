@@ -34,6 +34,9 @@ type Cursor struct {
 
 func NewCursor(c Chain) *Cursor { return &Cursor{chain: c, remaining: c.Len()} }
 
+// CursorOver returns a cursor by value, for embedding in a longer-lived owner.
+func CursorOver(c Chain) Cursor { return Cursor{chain: c, remaining: c.Len()} }
+
 func (c *Cursor) Remaining() int64 { return c.remaining }
 
 // Read implements io.Reader over the remaining immutable spans without a

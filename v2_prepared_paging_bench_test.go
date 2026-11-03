@@ -106,15 +106,15 @@ func BenchmarkV2PageCallerDestination(b *testing.B) {
 					opaqueStorageValuexx := new(Page[row])
 					implExecution.PageData(opaqueStorageValuexx).InternalResponse = &responsePage{InternalResponseData: responseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner}}
 					implExecution.PageData(opaqueStorageValuexx).InternalPlan = codecTestMust(decoder.Compile(columns))
-					implExecution.PageData(opaqueStorageValuexx).InternalCursor = wire.NewCursor(chain)
+					implExecution.PageData(opaqueStorageValuexx).InternalCursor = wire.CursorOver(chain)
 					return opaqueStorageValuexx
 				}()
-				cursor := *implExecution.PageData(p).InternalCursor
+				cursor := implExecution.PageData(p).InternalCursor
 				var dst row
 				b.ReportAllocs()
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					*implExecution.PageData(p).InternalCursor = cursor
+					implExecution.PageData(p).InternalCursor = cursor
 					implExecution.PageData(p).InternalIndex = 0
 					implExecution.PageData(p).InternalExhausted = false
 					if into {

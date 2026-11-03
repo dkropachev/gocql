@@ -33,7 +33,7 @@ import (
 type InternalExecutionLifetime struct {
 	mu            sync.Mutex
 	cancel        context.CancelFunc
-	stop          func()
+	stop          executionStopper
 	stopping      bool
 	inputReleased atomic.Bool
 	done          chan struct{}
@@ -44,7 +44,19 @@ func (l *InternalLogicalExecution) InternalReleaseInput() {
 		l.request.InternalOwner.InternalRelease()
 	}
 }
-func (l *InternalLogicalExecution) installStop(stop func()) {
+
+// executionStopper ends an execution on query or session shutdown. Result
+// handles implement it directly, so registering one allocates nothing.
+type executionStopper interface {
+	stopExecution(*InternalLogicalExecution)
+}
+
+// stopFunc adapts a closure; func values are stored in interfaces directly.
+type stopFunc func()
+
+func (f stopFunc) stopExecution(*InternalLogicalExecution) { f() }
+
+func (l *InternalLogicalExecution) installStop(stop executionStopper) {
 	l.lifetime.mu.Lock()
 	stopping := l.lifetime.stopping
 	if !stopping {
@@ -52,7 +64,7 @@ func (l *InternalLogicalExecution) installStop(stop func()) {
 	}
 	l.lifetime.mu.Unlock()
 	if stopping {
-		stop()
+		stop.stopExecution(l)
 	}
 }
 func (l *InternalLogicalExecution) shutdown() {
@@ -64,7 +76,7 @@ func (l *InternalLogicalExecution) shutdown() {
 	l.lifetime.mu.Unlock()
 	cancel()
 	if stop != nil {
-		stop()
+		stop.stopExecution(l)
 	}
 }
 func (l *InternalLogicalExecution) cancelExecution() {

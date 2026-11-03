@@ -152,7 +152,7 @@ func TestQueryRetiresInlineExecutionCaptures(t *testing.T) {
 	if request.InternalLogical != &q.state.inlineLogical {
 		t.Fatal("ordinary execution was not embedded")
 	}
-	request.InternalLogical.installStop(func() { t.Error("retired stop callback invoked") })
+	request.InternalLogical.installStop(stopFunc(func() { t.Error("retired stop callback invoked") }))
 	cancel()
 	request.InternalLogical.InternalFinish(Result{}, nil)
 	request.InternalLogical.InternalReleaseInput()

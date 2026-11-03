@@ -595,42 +595,32 @@ func newRowsFromResponse[R any](runctx context.Context, cancel context.CancelFun
 	if plans == nil {
 		plans = &InternalResultPlanCache[R]{}
 	}
-	page, err := InternalNewPageWithPlans(response, b.privateStorage.InternalRows, plans, nil)
-	if err != nil {
+	// The first page shares the rows allocation; continuation pages replace it.
+	holder := new(struct {
+		rows Rows[R]
+		page Page[R]
+	})
+	if err := newPageInto(&holder.page, response, b.privateStorage.InternalRows, plans); err != nil {
 		cancel()
 		request.InternalLogical.InternalFinish(response.Result, err)
 		request.InternalLogical.InternalReleaseInput()
 		return nil, err
 	}
-	rows := func() *Rows[R] {
-		opaqueStorageValue := new(Rows[R])
-		opaqueStorageValue.privateStorage.cursor = executionCursor(request)
-		opaqueStorageValue.privateStorage.InternalCtx = runctx
-		opaqueStorageValue.privateStorage.cancel = cancel
-		opaqueStorageValue.privateStorage.session = s
-		opaqueStorageValue.privateStorage.InternalRequest = request
-		opaqueStorageValue.privateStorage.decoder = b.privateStorage.InternalRows
-		opaqueStorageValue.privateStorage.InternalPage = page
-		opaqueStorageValue.privateStorage.info = response.Result
-		opaqueStorageValue.privateStorage.plans = plans
-		opaqueStorageValue.privateStorage.InternalHistory = pagingHistory{InternalMaxCount: InternalRuntimeFor(s).InternalConfig.Limits.MaxPagingStates, InternalMaxBytes: InternalRuntimeFor(s).InternalConfig.Limits.MaxPagingStateBytes}
-		return opaqueStorageValue
-	}()
+	rows := &holder.rows
+	rt := InternalRuntimeFor(s)
+	rows.privateStorage.cursor = executionCursor(request)
+	rows.privateStorage.InternalCtx = runctx
+	rows.privateStorage.cancel = cancel
+	rows.privateStorage.session = s
+	rows.privateStorage.InternalRequest = request
+	rows.privateStorage.decoder = b.privateStorage.InternalRows
+	rows.privateStorage.InternalPage = &holder.page
+	rows.privateStorage.info = response.Result
+	rows.privateStorage.plans = plans
+	rows.privateStorage.InternalHistory = pagingHistory{InternalMaxCount: rt.InternalConfig.Limits.MaxPagingStates, InternalMaxBytes: rt.InternalConfig.Limits.MaxPagingStateBytes}
 	rows.startPrefetch()
-	rows.privateStorage.InternalRelease = func() {
-		request.InternalLogical.InternalFinish(rows.privateStorage.info, rows.privateStorage.err)
-		request.InternalLogical.InternalReleaseInput()
-	}
-	request.InternalLogical.installStop(func() {
-		rows.privateStorage.mu.Lock()
-		if rows.privateStorage.future != nil {
-			rows.privateStorage.future.InternalClose()
-			rows.privateStorage.future = nil
-		}
-		rows.privateStorage.mu.Unlock()
-		request.InternalLogical.InternalFinish(rows.Info(), ErrClosed)
-		request.InternalLogical.InternalReleaseInput()
-	})
+	rows.privateStorage.execution = request.InternalLogical
+	request.InternalLogical.installStop(rows)
 	return rows, nil
 }
 func RunPage[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], state PageState, options Options) (*Page[R], error) {
@@ -691,10 +681,10 @@ func InternalRunSinglePage[R any](ctx context.Context, s *implCluster.Session, b
 		request.InternalLogical.InternalFinish(response.Result, page.privateStorage.err)
 		request.InternalLogical.InternalReleaseInput()
 	}
-	request.InternalLogical.installStop(func() {
+	request.InternalLogical.installStop(stopFunc(func() {
 		request.InternalLogical.InternalFinish(response.Result, ErrClosed)
 		request.InternalLogical.InternalReleaseInput()
-	})
+	}))
 	return page, nil
 }
 func Exec[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], options Options) (Result, error) {

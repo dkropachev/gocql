@@ -34,6 +34,9 @@ type RowsStorage[R any] struct {
 	closed          bool
 	valid           bool
 	InternalRelease func()
+	// execution is finished and released when the rows close; pendingExecution
+	// carries that release past the unlock, like pendingRelease.
+	execution, pendingExecution *InternalLogicalExecution
 }
 
 func RowsData[R any](v *Rows[R]) *RowsStorage[R] { return &v.privateStorage }

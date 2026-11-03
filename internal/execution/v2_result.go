@@ -52,14 +52,31 @@ func InternalNewPageWithPlans[R any](response *responsePage, decoder RowDecoder[
 		response.Owner.Release()
 		return nil, &ProtocolError{Stage: "rows", Err: fmt.Errorf("negative row count")}
 	}
-	return func() *Page[R] {
-		opaqueStorageValue := new(Page[R])
-		opaqueStorageValue.privateStorage.InternalResponse = response
-		opaqueStorageValue.privateStorage.InternalPlan = plan
-		opaqueStorageValue.privateStorage.InternalCursor = wire.NewCursor(response.Rows)
-		opaqueStorageValue.privateStorage.InternalRelease = release
-		return opaqueStorageValue
-	}(), nil
+	page := new(Page[R])
+	page.initResponse(response, plan, release)
+	return page, nil
+}
+
+// newPageInto is InternalNewPageWithPlans building into caller-owned storage.
+func newPageInto[R any](page *Page[R], response *responsePage, decoder RowDecoder[R], plans *InternalResultPlanCache[R]) error {
+	plan, err := plans.InternalSelectPlan(response, decoder)
+	if err != nil {
+		response.Owner.Release()
+		return err
+	}
+	if response.RowCount < 0 {
+		response.Owner.Release()
+		return &ProtocolError{Stage: "rows", Err: fmt.Errorf("negative row count")}
+	}
+	page.initResponse(response, plan, nil)
+	return nil
+}
+
+func (p *Page[R]) initResponse(response *responsePage, plan RowPlan[R], release func()) {
+	p.privateStorage.InternalResponse = response
+	p.privateStorage.InternalPlan = plan
+	p.privateStorage.InternalCursor = wire.CursorOver(response.Rows)
+	p.privateStorage.InternalRelease = release
 }
 func (p *Page[R]) Next() bool {
 	if p == nil {
@@ -118,12 +135,12 @@ func (p *Page[R]) advance(dst *R, into bool) bool {
 		p.privateStorage.InternalExhausted = true
 		p.privateStorage.reader = RowReader{}
 		InternalClearDestination(&p.privateStorage.current)
-		if err := p.privateStorage.InternalCursor.RequireEnd(); err != nil {
+		if err := (&p.privateStorage.InternalCursor).RequireEnd(); err != nil {
 			p.privateStorage.err = &ProtocolError{Stage: "rows", Err: err}
 		}
 		return false
 	}
-	p.privateStorage.reader = codec.RowReaderFromCursor(p.privateStorage.InternalResponse.Columns, p.privateStorage.InternalCursor, p.privateStorage.InternalResponse.Owner)
+	p.privateStorage.reader = codec.RowReaderFromCursor(p.privateStorage.InternalResponse.Columns, &p.privateStorage.InternalCursor, p.privateStorage.InternalResponse.Owner)
 	var err error
 	if into {
 		// The plan receives the actual application destination, never a row temporary.
@@ -442,6 +459,10 @@ func (r *Rows[R]) closeLocked() {
 		r.privateStorage.pendingRelease = r.privateStorage.InternalRelease
 		r.privateStorage.InternalRelease = nil
 	}
+	if r.privateStorage.execution != nil {
+		r.privateStorage.pendingExecution = r.privateStorage.execution
+		r.privateStorage.execution = nil
+	}
 }
 func (r *Rows[R]) Retain() (*PageLease, error) {
 	if r == nil {
@@ -667,8 +688,27 @@ func (p *Page[R]) unlockAfterAdvance() {
 func (r *Rows[R]) unlockAfterAdvance() {
 	release := r.privateStorage.pendingRelease
 	r.privateStorage.pendingRelease = nil
+	execution := r.privateStorage.pendingExecution
+	r.privateStorage.pendingExecution = nil
+	info, err := r.privateStorage.info, r.privateStorage.err
 	r.privateStorage.mu.Unlock()
 	if release != nil {
 		release()
 	}
+	if execution != nil {
+		execution.InternalFinish(info, err)
+		execution.InternalReleaseInput()
+	}
+}
+
+// stopExecution implements executionStopper for query and session shutdown.
+func (r *Rows[R]) stopExecution(l *InternalLogicalExecution) {
+	r.privateStorage.mu.Lock()
+	if r.privateStorage.future != nil {
+		r.privateStorage.future.InternalClose()
+		r.privateStorage.future = nil
+	}
+	r.privateStorage.mu.Unlock()
+	l.InternalFinish(r.Info(), ErrClosed)
+	l.InternalReleaseInput()
 }
