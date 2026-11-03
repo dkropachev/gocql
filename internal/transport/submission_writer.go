@@ -27,6 +27,10 @@ type writeTicket struct {
 	refs   atomic.Int32
 	phase  atomic.Uint32 // 0 queued, 1 writing, 2 cancelled before transmission
 	state  atomic.Uint32 // ticketPending, ticketAwaited or ticketFinished
+	// request owns a typed request until the writer finishes with it. Its
+	// lease is released in finish, before the ticket can be recycled, and no
+	// one else holds it, so reusing it with the ticket is safe.
+	request typedRequestLease
 }
 
 const (
@@ -42,6 +46,7 @@ func (t *writeTicket) release() {
 		return
 	}
 	t.ctx, t.packet, t.lease, t.result = nil, wire.Chain{}, nil, InternalWriteResult{}
+	t.request = typedRequestLease{}
 	ticketPool.Put(t)
 }
 func (t *writeTicket) finish(result InternalWriteResult) {
@@ -99,8 +104,16 @@ func (c *Conn) submissionWriter() *submissionWriter {
 // reference for the caller, released with release. An error means the packet
 // was never queued: nothing was written.
 func (c *Conn) submitTyped(ctx context.Context, packet wire.Chain, lease *wire.Lease) (*writeTicket, error) {
+	return c.enqueueTyped(ctx, getTicket(), packet, lease)
+}
+
+// getTicket returns an unused ticket, for a caller that builds its request in
+// the ticket's embedded lease before enqueueing it.
+func getTicket() *writeTicket { return ticketPool.Get().(*writeTicket) }
+
+// enqueueTyped is submitTyped for a ticket from getTicket.
+func (c *Conn) enqueueTyped(ctx context.Context, t *writeTicket, packet wire.Chain, lease *wire.Lease) (*writeTicket, error) {
 	w := c.submissionWriter()
-	t := ticketPool.Get().(*writeTicket)
 	t.refs.Store(2)
 	t.phase.Store(0)
 	t.state.Store(ticketPending)

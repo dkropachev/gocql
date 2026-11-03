@@ -76,7 +76,9 @@ func NewCachedLease(chain Chain, cache *ReceiveCache, buf []byte, epoch uint64) 
 
 // InitLease initialises a Lease embedded in a caller's struct with one
 // reference; r runs once on the final Release. Like NewLease, the embedding
-// struct must be newly allocated and never recycled.
+// struct must not be recycled while anyone may still hold the lease: either
+// it is newly allocated, or its owner knows that every holder dropped its
+// pointer at the final release.
 func InitLease(l *Lease, chain Chain, r LeaseReleaser) {
 	l.chain = chain
 	l.releaser = r

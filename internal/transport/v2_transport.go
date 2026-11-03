@@ -143,7 +143,9 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 	if c.InternalCoalesceWait == 0 {
 		// Hold both input and shared-connection admission until the persistent
 		// writer finishes, even if cancellation returns to the calling goroutine.
-		owner := &typedRequestLease{conn: c, payloads: payloadOwners, scratch: scratch}
+		t := getTicket()
+		owner := &t.request
+		owner.conn, owner.payloads, owner.scratch = c, payloadOwners, scratch
 		if inputHeld {
 			owner.input = req.Lease
 		}
@@ -152,7 +154,7 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 		sharedHeld, inputHeld, payloadOwners = false, false, nil
 		// The caller does not wait for the write: the response wait below
 		// covers it, and write failures close the connection.
-		ticket, err = c.submitTyped(ctx, packet, lease)
+		ticket, err = c.enqueueTyped(ctx, t, packet, lease)
 		if err != nil {
 			return failBeforeWrite(err)
 		}
@@ -268,7 +270,7 @@ func (c *Conn) typedProtocolLimits() ProtocolLimits {
 
 // typedRequestLease owns a submitted request until its writer finishes: the
 // shared-connection admission, the input and payload references, and the
-// frame buffer. It is one allocation instead of a lease and a closure.
+// frame buffer. It is embedded in the request's write ticket.
 type typedRequestLease struct {
 	conn     *Conn
 	input    *wire.Lease

@@ -21,6 +21,23 @@ type InternalInputOwner struct {
 	InternalOnDrain func()
 	onIdle          func()
 	release         func() // bound InternalRelease, reused by writer leases
+	writer          ownerWriterLease
+}
+
+// ownerWriterLease is an input owner's reusable writer lease. A writer lease
+// is never shared: its holders drop it at the final release, so once that
+// release finished it can be initialised again. inUse covers the whole
+// lease lifetime, including the final release's reads of the lease.
+type ownerWriterLease struct {
+	wire.Lease
+	owner *InternalInputOwner
+	inUse atomic.Bool
+}
+
+func (w *ownerWriterLease) ReleaseLease() {
+	owner := w.owner
+	w.inUse.Store(false)
+	owner.InternalRelease()
 }
 
 const (
@@ -141,6 +158,13 @@ func (o *InternalInputOwner) InternalWait(ctx context.Context) error {
 }
 func (o *InternalInputOwner) InternalWriterLease(chain wire.Chain) *wire.Lease {
 	o.InternalRetain()
+	// One attempt at a time normally holds the writer lease; a retry whose
+	// previous writer still holds it gets a lease of its own.
+	if w := &o.writer; w.inUse.CompareAndSwap(false, true) {
+		w.owner = o
+		wire.InitLease(&w.Lease, chain, w)
+		return &w.Lease
+	}
 	if o.release != nil {
 		return wire.NewLease(chain, o.release)
 	}
