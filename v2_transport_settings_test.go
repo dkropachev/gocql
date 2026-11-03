@@ -650,7 +650,7 @@ func TestV2TypedRepairTriggersHonorPolicyDelayAndStop(t *testing.T) {
 			h := func() *HostInfo {
 				opaqueStorageValuexxxxxxxxxxxx := new(HostInfo)
 				implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxxx).InternalHostId = UUID{15: 1}
-				implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxxx).InternalState = NodeUp
+				implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxxx).InternalState.Store(NodeUp)
 				return opaqueStorageValuexxxxxxxxxxxx
 			}()
 			c.InternalHost = h

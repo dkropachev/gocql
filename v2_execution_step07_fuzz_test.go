@@ -48,7 +48,7 @@ func FuzzStep07StreamExecutionBoundary(f *testing.F) {
 		reservation.InternalConn.InternalHost = func() *HostInfo {
 			opaqueStorageValuex := new(HostInfo)
 			implEndpoint.HostInfoData(opaqueStorageValuex).InternalHostId = UUID{15: 1}
-			implEndpoint.HostInfoData(opaqueStorageValuex).InternalState = NodeUp
+			implEndpoint.HostInfoData(opaqueStorageValuex).InternalState.Store(NodeUp)
 			return opaqueStorageValuex
 		}()
 		reservation.InternalConn.InternalHooks = newConnectionHooks(s)

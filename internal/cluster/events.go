@@ -589,7 +589,7 @@ func (s *Session) synchronizeV2HostPolicy(fallback *HostInfo) {
 		}
 		pool, _ := s.privateStorage.InternalPool.InternalGetPool(h)
 		implEndpoint.HostInfoData(h).InternalMu.RLock()
-		out := stamp{h, pool, implEndpoint.HostInfoData(h).InternalState, implEndpoint.HostInfoData(h).InternalLifecycleGeneration}
+		out := stamp{h, pool, implEndpoint.HostInfoData(h).InternalState.Load(), implEndpoint.HostInfoData(h).InternalLifecycleGeneration}
 		implEndpoint.HostInfoData(h).InternalMu.RUnlock()
 		return out
 	}

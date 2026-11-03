@@ -28,6 +28,7 @@ import (
 	"net"
 
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -58,8 +59,9 @@ type HostInfoStorage struct {
 	// TODO(zariel): reduce locking maybe, not all values will change, but to ensure
 	// that we are thread safe use a mutex to access all fields.
 	InternalMu     sync.RWMutex
-	InternalState  InternalNodeState
+	InternalState  NodeStateCell // read without InternalMu; written under it
 	InternalHostId UUID
+	hostID         atomic.Pointer[UUID] // InternalHostId once known; it never changes after
 	graph          bool
 }
 

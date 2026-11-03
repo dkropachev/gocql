@@ -61,7 +61,7 @@ func step08StreamSession(t testing.TB, mode step08Mode, spy ...bool) (*Session, 
 	c.InternalHost = func() *HostInfo {
 		opaqueStorageValue := new(HostInfo)
 		implEndpoint.HostInfoData(opaqueStorageValue).InternalHostId = UUID{15: 1}
-		implEndpoint.HostInfoData(opaqueStorageValue).InternalState = NodeUp
+		implEndpoint.HostInfoData(opaqueStorageValue).InternalState.Store(NodeUp)
 		return opaqueStorageValue
 	}()
 	c.InternalHooks = newConnectionHooks(s)

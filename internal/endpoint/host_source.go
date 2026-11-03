@@ -30,6 +30,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"time"
 )
@@ -40,6 +41,12 @@ var (
 )
 
 type InternalNodeState int32
+
+// NodeStateCell holds a host's state for lock-free reads.
+type NodeStateCell struct{ v atomic.Int32 }
+
+func (c *NodeStateCell) Load() InternalNodeState       { return InternalNodeState(c.v.Load()) }
+func (c *NodeStateCell) Store(state InternalNodeState) { c.v.Store(int32(state)) }
 
 func (n InternalNodeState) String() string {
 	if n == NodeUp {
@@ -374,10 +381,20 @@ func (h *HostInfo) HostID() string {
 
 // hostUUID returns the raw binary host UUID under the read lock.
 // Use this instead of direct field access on shared HostInfo to avoid data races.
+//
+// A host ID is filled in at most once, so the first non-empty value is cached
+// for lock-free reads.
 func InternalHostInfoHostUUID(h *HostInfo) UUID {
+	if id := h.privateStorage.hostID.Load(); id != nil {
+		return *id
+	}
 	h.privateStorage.InternalMu.RLock()
-	defer h.privateStorage.InternalMu.RUnlock()
-	return h.privateStorage.InternalHostId
+	id := h.privateStorage.InternalHostId
+	h.privateStorage.InternalMu.RUnlock()
+	if !id.IsEmpty() {
+		h.privateStorage.hostID.Store(&id)
+	}
+	return id
 }
 
 // Deprecated: WorkLoad is a DSE-specific field that is no longer queried
@@ -426,18 +443,16 @@ func (h *HostInfo) Version() InternalCassVersion {
 }
 
 func (h *HostInfo) State() InternalNodeState {
-	h.privateStorage.InternalMu.RLock()
-	defer h.privateStorage.InternalMu.RUnlock()
-	return h.privateStorage.InternalState
+	return h.privateStorage.InternalState.Load()
 }
 
 func InternalHostInfoSetState(h *HostInfo, state InternalNodeState) *HostInfo {
 	h.privateStorage.InternalMu.Lock()
 	defer h.privateStorage.InternalMu.Unlock()
-	if h.privateStorage.InternalState != state {
+	if h.privateStorage.InternalState.Load() != state {
 		h.privateStorage.InternalLifecycleGeneration++
 	}
-	h.privateStorage.InternalState = state
+	h.privateStorage.InternalState.Store(state)
 	return h
 }
 
@@ -559,7 +574,7 @@ func (h *HostInfo) String() string {
 	connectAddr, source := InternalHostInfoConnectAddressLocked(h)
 	return fmt.Sprintf("[HostInfo hostname=%q connectAddress=%q peer=%q rpc_address=%q broadcast_address=%q "+
 		"preferred_ip=%q connect_addr=%q connect_addr_source=%q "+
-		"port=%d data_center=%q rack=%q host_id=%q version=%q state=%s num_tokens=%d]", h.privateStorage.InternalHostname, h.privateStorage.InternalConnectAddress, h.privateStorage.InternalPeer, h.privateStorage.InternalRpcAddress, h.privateStorage.InternalBroadcastAddress, h.privateStorage.InternalPreferredIP, connectAddr, source, h.privateStorage.InternalPort, h.privateStorage.InternalDataCenter, h.privateStorage.InternalRack, h.privateStorage.InternalHostId.String(), h.privateStorage.InternalVersion, h.privateStorage.InternalState, len(h.privateStorage.InternalTokens))
+		"port=%d data_center=%q rack=%q host_id=%q version=%q state=%s num_tokens=%d]", h.privateStorage.InternalHostname, h.privateStorage.InternalConnectAddress, h.privateStorage.InternalPeer, h.privateStorage.InternalRpcAddress, h.privateStorage.InternalBroadcastAddress, h.privateStorage.InternalPreferredIP, connectAddr, source, h.privateStorage.InternalPort, h.privateStorage.InternalDataCenter, h.privateStorage.InternalRack, h.privateStorage.InternalHostId.String(), h.privateStorage.InternalVersion, h.privateStorage.InternalState.Load(), len(h.privateStorage.InternalTokens))
 }
 
 func InternalHostInfoSetScyllaFeatures(h *HostInfo, s ScyllaHostFeatures) {

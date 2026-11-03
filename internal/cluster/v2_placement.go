@@ -15,8 +15,9 @@ func InternalSessionCaptureTabletFeedback(s *Session, info RoutingInfo, m *Metad
 	if p == nil {
 		return tabletFeedbackStamp{}
 	}
-	p.InternalMu.Lock()
-	defer p.InternalMu.Unlock()
+	// Only reads: concurrent captures share the lock.
+	p.InternalMu.RLock()
+	defer p.InternalMu.RUnlock()
 	k := metadataTable{InternalKeyspace: info.Keyspace, InternalTable: info.Table}
 	return tabletFeedbackStamp{InternalValid: s.tabletSchemaCurrent(k, routing.InternalMetadataSnapshotTableIdentity(m, k)), InternalSnapshot: m, InternalEpoch: p.InternalPlacementEpoch.Load(), InternalSchema: p.InternalSchemaEpoch[k.InternalKeyspace], InternalTable: p.InternalTableRevision[k], InternalIdentity: routing.InternalMetadataSnapshotTableIdentity(m, k)}
 }

@@ -34,7 +34,7 @@ func runtimeTestSession(t testing.TB, n int) (*Session, []*driverConn, []net.Con
 		host := func() *HostInfo {
 			opaqueStorageValuex := new(HostInfo)
 			implEndpoint.HostInfoData(opaqueStorageValuex).InternalHostId = id
-			implEndpoint.HostInfoData(opaqueStorageValuex).InternalState = NodeUp
+			implEndpoint.HostInfoData(opaqueStorageValuex).InternalState.Store(NodeUp)
 			return opaqueStorageValuex
 		}()
 		conn.InternalHost = host

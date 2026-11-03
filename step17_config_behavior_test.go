@@ -385,7 +385,7 @@ func TestStep17IncludeMetadataOverrideChangesExecuteWireFlag(t *testing.T) {
 	id := UUID{15: 1}
 	host := new(HostInfo)
 	implEndpoint.HostInfoData(host).InternalHostId = id
-	implEndpoint.HostInfoData(host).InternalState = NodeUp
+	implEndpoint.HostInfoData(host).InternalState.Store(NodeUp)
 	c.InternalHost = host
 	c.InternalHooks = newConnectionHooks(s)
 	implCluster.SessionData(s).InternalHostSource.InternalHosts[id.String()] = host

@@ -50,7 +50,7 @@ type InternalV2PeripheralState struct {
 	workers                       sync.WaitGroup
 	hostMu                        sync.Mutex
 	InternalPublicationRevision   uint64
-	InternalMu                    sync.Mutex
+	InternalMu                    sync.RWMutex // per-request feedback captures read under RLock
 	InternalSubscribers           map[*Subscription]struct{}
 	closed                        bool
 	InternalConfig                Config

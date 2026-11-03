@@ -62,7 +62,7 @@ func loopbackTestSession(t testing.TB, workload string) *Session {
 	id := UUID{15: 1}
 	host := new(HostInfo)
 	implEndpoint.HostInfoData(host).InternalHostId = id
-	implEndpoint.HostInfoData(host).InternalState = NodeUp
+	implEndpoint.HostInfoData(host).InternalState.Store(NodeUp)
 	conn.InternalHost = host
 	conn.InternalHooks = newConnectionHooks(s)
 	implCluster.SessionData(s).InternalHostSource.InternalHosts[id.String()] = host
