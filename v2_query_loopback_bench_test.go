@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -234,6 +235,7 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 				var failed atomic.Pointer[error]
 				var wg sync.WaitGroup
 				b.ReportAllocs()
+				cpuStart := processCPUTime()
 				b.ResetTimer()
 				for _, fn := range run {
 					wg.Add(1)
@@ -249,10 +251,23 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 				}
 				wg.Wait()
 				b.StopTimer()
+				// Client CPU per operation excludes time spent preempted by other
+				// load, so it stays comparable on a busy host.
+				b.ReportMetric(float64(processCPUTime()-cpuStart)/float64(b.N), "cpu-ns/op")
 				if err := failed.Load(); err != nil {
 					b.Fatal(*err)
 				}
 			})
 		}
 	}
+}
+
+// processCPUTime returns this process's user and system CPU time. The fake
+// server is a separate process and is not included.
+func processCPUTime() time.Duration {
+	var u syscall.Rusage
+	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &u); err != nil {
+		return 0
+	}
+	return time.Duration(u.Utime.Nano() + u.Stime.Nano())
 }

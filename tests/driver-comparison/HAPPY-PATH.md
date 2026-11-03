@@ -455,3 +455,16 @@ This run was noisier than usual (some cases ±40–60%): race suites for the
 next item ran on other CPUs during it. No case regressed. Codec, binding,
 transport and execution `-race -count=20`, unit race suite (only the known
 baseline failure), emulator smoke OK.
+
+## Measuring on a busy host
+
+During round 2 the host also ran a SentinelOne scan (about two cores) and
+an unrelated C++ build, and wall-clock A/B spread reached ±20–130%.
+`BenchmarkReusableQueryLoopback` now reports `cpu-ns/op`, the client
+process's CPU time per operation from getrusage. It excludes the fake
+server and time spent preempted, and stayed within ±1–2% at 64 workers
+while wall time did not. `compare.sh` gained `HP_REF`/`HP_PATCH` so each
+item is built from a pinned commit; the queue ran every item in order,
+each against the previous one, 4×ABBA (n=8), with the unit race suite and
+emulator smoke before each comparison. Results below are against the
+previous item.
