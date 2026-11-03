@@ -575,7 +575,7 @@ type reconnectionExponentialReport = implCluster.InternalReconnectionExponential
 type reconnectionGroupReport = implCluster.InternalReconnectionGroupReport
 type requestDefaultReport = implCluster.InternalRequestDefaultReport
 
-func requestHasCounter(a0 executionRequest) bool { return implExecution.InternalRequestHasCounter(a0) }
+func requestHasCounter(a0 executionRequest) bool { return implExecution.InternalRequestHasCounter(&a0) }
 func requestQualifiedForKeyspace(a0 *executionRequest, a1 string) bool {
 	return implExecution.InternalRequestQualifiedForKeyspace(a0, a1)
 }

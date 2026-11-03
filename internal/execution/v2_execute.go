@@ -495,18 +495,24 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, 
 	if s.Closed() {
 		return nil, nil, nil, ErrClosed
 	}
-	resolved, err := InternalResolveOptions(s, options)
-	if err != nil {
-		return nil, nil, nil, err
-	}
+	var resolved *InternalResolvedOptions
 	var request *InternalExecutionRequest
 	if query := b.privateStorage.InternalRequest.query; query != nil {
+		var err error
+		if resolved, err = query.resolveOptions(s, options); err != nil {
+			return nil, nil, nil, err
+		}
 		request = &query.request
 	} else {
+		r, err := InternalResolveOptions(s, options)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		resolved = &r
 		request = new(InternalExecutionRequest)
 	}
 	*request = b.privateStorage.InternalRequest
-	request.InternalOptions = resolved
+	request.InternalOptions = *resolved
 	if options.privateStorage.InternalConnection != nil {
 		request.connection = options.privateStorage.InternalConnection
 	}
@@ -582,7 +588,7 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, 
 	}
 	rt.requests.Add(1)
 	rt.inflight.Add(1)
-	if !request.InternalRouting.Conditional && !InternalRequestHasCounter(*request) && !request.InternalOptions.InternalOptions.Timestamp.Set && rt.InternalConfig.TimestampGenerator != nil {
+	if !request.InternalRouting.Conditional && !InternalRequestHasCounter(request) && !request.InternalOptions.InternalOptions.Timestamp.Set && rt.InternalConfig.TimestampGenerator != nil {
 		request.InternalOptions.InternalOptions.Timestamp = Option[int64]{Value: rt.InternalConfig.TimestampGenerator(), Set: true}
 	}
 	return runctx, cancel, request, nil
@@ -1171,7 +1177,7 @@ func InternalAttemptBytesWritten(err error) bool {
 	return true
 }
 
-func InternalRequestHasCounter(request InternalExecutionRequest) bool {
+func InternalRequestHasCounter(request *InternalExecutionRequest) bool {
 	if request.batch != nil && request.batch.kind == CounterBatch {
 		return true
 	}

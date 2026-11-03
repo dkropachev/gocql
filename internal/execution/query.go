@@ -33,6 +33,43 @@ type queryState struct {
 	generation    uint64
 	done          chan struct{} // created by the first waiter of a busy generation
 	retire        func()
+	resolved      resolvedOptionsCache
+}
+
+// resolvedOptionsCache keeps a query's resolved options. A query's options
+// never change, so the resolution depends only on the session and explicit
+// profile pointers, which ProfileHandle.Replace swaps.
+type resolvedOptionsCache struct {
+	session, explicit *Profile
+	valid             bool
+	value             InternalResolvedOptions
+}
+
+// resolveOptions resolves the query's options, reusing the previous result
+// while neither profile was replaced. It runs during admission, which a busy
+// query never overlaps. Options with a custom payload are resolved each time:
+// their borrowed values must be checked for liveness on every execution.
+func (s *queryState) resolveOptions(session *implCluster.Session, options Options) (*InternalResolvedOptions, error) {
+	if len(options.CustomPayload) != 0 {
+		resolved, err := InternalResolveOptions(session, options)
+		return &resolved, err
+	}
+	var sessionProfile *Profile
+	if session != nil {
+		sessionProfile = InternalRuntimeFor(session).InternalProfile.InternalCurrent()
+	}
+	explicit := options.Profile.InternalCurrent()
+	c := &s.resolved
+	if c.valid && c.session == sessionProfile && c.explicit == explicit {
+		return &c.value, nil
+	}
+	resolved, err := InternalResolveOptions(session, options)
+	if err != nil {
+		c.valid = false
+		return nil, err
+	}
+	*c = resolvedOptionsCache{session: sessionProfile, explicit: explicit, valid: true, value: resolved}
+	return &c.value, nil
 }
 
 // noopCancel is shared so that retiring an execution allocates no closure.
@@ -204,13 +241,13 @@ func (q *Query[P, R]) capture(ctx context.Context, value P) error {
 	request := &q.bound.privateStorage.InternalRequest
 	plan, columns, allowUnset := q.params, q.columns, true
 	if q.prepared != nil {
-		p := q.prepared.privateStorage
+		p := &q.prepared.privateStorage
 		state := p.InternalState
-		state.InternalMu.RLock()
+		// Statement, keyspace, parameters and info are fixed when the
+		// prepared state is built, so they are read without its lock.
 		columns = state.InternalParameters
-		info := state.InternalInfo
+		info := &state.InternalInfo
 		request.InternalStatement, request.keyspace = state.InternalStatement, state.InternalKeyspace
-		state.InternalMu.RUnlock()
 		plan, allowUnset = p.InternalParams, state.InternalProtocol >= 4
 		request.InternalPrepared = state
 		request.InternalRouting = RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Kind: p.InternalKind, Conditional: p.InternalKind != OrdinaryStatement}

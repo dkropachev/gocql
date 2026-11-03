@@ -309,11 +309,27 @@ func (c *Conn) writeTypedParams(e *typedEnvelope, req *attemptRequest, batch boo
 	c.nativeProtocol().WriteTypedParams(e, req, batch)
 }
 
-func (c *Conn) nativeProtocol() protocol.Settings {
+// nativeProtocol returns the connection's protocol settings. They are built
+// once, when the framer cache is initialised; a connection that skipped that
+// step builds them on every call.
+func (c *Conn) nativeProtocol() *protocol.Settings {
+	if p := c.typedSettings.Load(); p != nil {
+		return p
+	}
+	return c.buildNativeProtocol()
+}
+
+// InternalRefreshNativeProtocol rebuilds the cached protocol settings, for
+// tests that change framer defaults after initialisation.
+func (c *Conn) InternalRefreshNativeProtocol() {
+	c.typedSettings.Store(c.buildNativeProtocol())
+}
+
+func (c *Conn) buildNativeProtocol() *protocol.Settings {
 	limits := c.typedProtocolLimits()
 	p := protocol.Settings{MetadataReuse: &c.typedMetadataReuse, Protocol: c.InternalVersion, Flags: c.InternalFramers.InternalDefaults.InternalFlags, MetadataID: c.InternalFramers.InternalDefaults.InternalScyllaUseMetadataID, TabletsRoutingV2: c.InternalFramers.InternalDefaults.InternalTabletsRoutingV2, MaxFrameBytes: limits.MaxFrameBytes, MaxDecompressedBytes: limits.MaxDecompressedBytes, MaxMetadataDepth: limits.MaxMetadataDepth, FlagLWT: c.InternalFramers.InternalDefaults.InternalFlagLWT, RateLimitingErrorCode: c.InternalFramers.InternalDefaults.rateLimitingErrorCode, SegmentCompression: c.InternalSegCompressor != nil}
 	if c.InternalCompressor != nil {
 		p.Compression = c.InternalCompressor.Name()
 	}
-	return p
+	return &p
 }

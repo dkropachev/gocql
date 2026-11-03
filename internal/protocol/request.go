@@ -110,7 +110,7 @@ func validateTypedValues(c wire.Chain, count int, proto byte) error {
 	return cursor.RequireEnd()
 }
 
-func (c Settings) BuildTypedRequest(req *model.AttemptRequest, stream int) (wire.Chain, error) {
+func (c *Settings) BuildTypedRequest(req *model.AttemptRequest, stream int) (wire.Chain, error) {
 	frame, _, err := c.BuildTypedRequestInto(req, stream, nil)
 	return frame, err
 }
@@ -119,7 +119,7 @@ func (c Settings) BuildTypedRequest(req *model.AttemptRequest, stream int) (wire
 // scratch supplies the envelope's scalar slab and span descriptors; borrowed
 // values are still only referenced. When used reports true, the frame aliases
 // scratch until its writer finishes.
-func (c Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, scratch *wire.BuilderScratch) (frame wire.Chain, used bool, err error) {
+func (c *Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, scratch *wire.BuilderScratch) (frame wire.Chain, used bool, err error) {
 	proto := c.Protocol
 	if proto < 3 || proto > 5 {
 		return wire.Chain{}, false, fmt.Errorf("gocql: unsupported typed Protocol %d", proto)
@@ -318,7 +318,7 @@ func (c Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, s
 	frame, err = wire.NewChain(spans...)
 	return frame, used, err
 }
-func (c Settings) WriteTypedParams(e *TypedEnvelope, r *model.AttemptRequest, batch bool) {
+func (c *Settings) WriteTypedParams(e *TypedEnvelope, r *model.AttemptRequest, batch bool) {
 	e.U16(uint16(r.Consistency))
 	var Flags uint32
 	if !batch {

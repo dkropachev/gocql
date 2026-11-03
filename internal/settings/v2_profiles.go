@@ -32,6 +32,15 @@ func (p *ProfileHandle) Snapshot() Profile {
 	}
 	return *p.privateStorage.current.Load()
 }
+// InternalCurrent returns the current profile pointer, or nil for the
+// default. Replace publishes a new pointer, so callers may cache work derived
+// from a profile until the pointer changes.
+func (p *ProfileHandle) InternalCurrent() *Profile {
+	if p == nil {
+		return nil
+	}
+	return p.privateStorage.current.Load()
+}
 func (p *ProfileHandle) Replace(profile Profile) error {
 	if p == nil {
 		return typeValidation("profile", "nil handle")

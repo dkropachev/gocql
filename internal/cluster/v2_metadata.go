@@ -54,6 +54,7 @@ type InternalV2PeripheralState struct {
 	InternalSubscribers           map[*Subscription]struct{}
 	closed                        bool
 	InternalConfig                Config
+	partitioners                  atomic.Pointer[map[string]TokenPartitioner] // InternalConfig.Partitioners, for lock-free reads
 	InternalSchemaEpoch           map[string]uint64
 	schemaRevision                map[string]uint64
 	InternalTableRevision         map[metadataTable]uint64
@@ -135,6 +136,8 @@ func InternalSessionConfigureV2Peripheral(s *Session, config Config) {
 	p := InternalSessionPeripheral(s)
 	p.InternalMu.Lock()
 	p.InternalConfig = config
+	partitioners := config.Partitioners
+	p.partitioners.Store(&partitioners)
 	p.InternalMu.Unlock()
 }
 func (s *Session) Metadata() *MetadataSnapshot {

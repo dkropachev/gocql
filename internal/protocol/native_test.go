@@ -13,8 +13,8 @@ import (
 	"testing"
 )
 
-func protocolSettings(protocol byte) Settings {
-	return Settings{Protocol: protocol, MaxFrameBytes: frm.MaxFrameSize, MaxDecompressedBytes: frm.MaxFrameSize, MaxMetadataDepth: 64}
+func protocolSettings(protocol byte) *Settings {
+	return &Settings{Protocol: protocol, MaxFrameBytes: frm.MaxFrameSize, MaxDecompressedBytes: frm.MaxFrameSize, MaxMetadataDepth: 64}
 }
 func typedTestChain(t *testing.T, parts ...[]byte) wire.Chain {
 	t.Helper()

@@ -49,7 +49,7 @@ func benchControlParams(t *testing.T) []byte {
 	if !errors.Is(err, sentinel) || request == nil {
 		t.Fatalf("capture canonical metadata request: %v", err)
 	}
-	frame, err := (protocol.Settings{Protocol: 4, MaxFrameBytes: DefaultConfig().Limits.MaxFrameBytes, MaxDecompressedBytes: DefaultConfig().Limits.MaxDecompressedBytes}).BuildTypedRequest(request, 0)
+	frame, err := (&protocol.Settings{Protocol: 4, MaxFrameBytes: DefaultConfig().Limits.MaxFrameBytes, MaxDecompressedBytes: DefaultConfig().Limits.MaxDecompressedBytes}).BuildTypedRequest(request, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

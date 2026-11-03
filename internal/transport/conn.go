@@ -188,7 +188,10 @@ type ConnInterface interface {
 // queries, but users are usually advised to use a more reliable, higher
 // level API.
 type Conn struct {
-	typedMetadataReuse                        protocol.MetadataReuse
+	typedMetadataReuse protocol.MetadataReuse
+	// typedSettings is published once the framer cache is initialised, when
+	// every input to the native protocol settings is final.
+	typedSettings                             atomic.Pointer[protocol.Settings]
 	typedWriterOnce                           sync.Once
 	typedWriter                               *submissionWriter
 	InternalOpeningSharderEpoch               uint64

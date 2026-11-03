@@ -402,7 +402,7 @@ func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLW
 	return result, count
 }
 
-func (c Settings) ParseTypedResponseInto(head frm.FrameHeader, body wire.Chain, owner *wire.Lease, page *model.ResponseData) (*model.ResponseData, error) {
+func (c *Settings) ParseTypedResponseInto(head frm.FrameHeader, body wire.Chain, owner *wire.Lease, page *model.ResponseData) (*model.ResponseData, error) {
 
 	if body.Len() > c.MaxDecompressedBytes {
 		return nil, ErrFrameTooBig
@@ -578,6 +578,6 @@ type budgetedMetadataCursor interface {
 	ReserveMetadata(int64) error
 }
 
-func (c Settings) ParseTypedResponse(head frm.FrameHeader, body wire.Chain, owner *wire.Lease) (*model.ResponseData, error) {
+func (c *Settings) ParseTypedResponse(head frm.FrameHeader, body wire.Chain, owner *wire.Lease) (*model.ResponseData, error) {
 	return c.ParseTypedResponseInto(head, body, owner, new(model.ResponseData))
 }

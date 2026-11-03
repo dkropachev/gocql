@@ -190,6 +190,9 @@ func InternalSessionCapturedRoutingPartitioner(s *Session, name string) TokenPar
 	if p == nil {
 		return nil
 	}
+	if partitioners := p.partitioners.Load(); partitioners != nil {
+		return (*partitioners)[name]
+	}
 	p.InternalMu.Lock()
 	defer p.InternalMu.Unlock()
 	return p.InternalConfig.Partitioners[name]

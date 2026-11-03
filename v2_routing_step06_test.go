@@ -130,6 +130,7 @@ func TestStep06TabletPayloadAndWire(t *testing.T) {
 			}
 			plain := flatten(base)
 			c.InternalFramers.InternalDefaults.InternalTabletsRoutingV2 = true
+			c.InternalRefreshNativeProtocol()
 			extended, err := c.InternalBuildTypedRequest(r, 23)
 			if err != nil {
 				t.Fatal(err)
@@ -680,8 +681,10 @@ func TestStep06BindingCapturesPartitionerAndBorrowedSpans(t *testing.T) {
 	newer := &step06CapturedPartitioner{expected: payload}
 	peripheral := implCluster.InternalSessionPeripheral(s)
 	peripheral.InternalMu.Lock()
-	peripheral.InternalConfig.Partitioners = map[string]TokenPartitioner{"old": old, "new": newer}
+	config := peripheral.InternalConfig
 	peripheral.InternalMu.Unlock()
+	config.Partitioners = map[string]TokenPartitioner{"old": old, "new": newer}
+	implCluster.InternalSessionConfigureV2Peripheral(s, config)
 	typ := codecTestMust(ScalarType(TypeBlob))
 	columns := NewColumns(ColumnSpec{Name: "key", Type: typ, Keyspace: "ks", Table: "table"})
 	encoder := OneParam(BlobCodec)

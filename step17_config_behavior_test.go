@@ -393,6 +393,7 @@ func TestStep17IncludeMetadataOverrideChangesExecuteWireFlag(t *testing.T) {
 	picker.Put(c)
 	implCluster.SessionData(s).InternalPool.InternalHostConnPools[id] = &hostConnPool{InternalHost: host, InternalConnPicker: picker}
 	c.InternalFramers.InternalDefaults.InternalScyllaUseMetadataID = true
+	c.InternalRefreshNativeProtocol()
 	go c.InternalServe(c.InternalCtx)
 	columns := NewColumns(ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(ScalarType(TypeBlob))})
 	state, _ := step03PreparedState(t, s, columns)
