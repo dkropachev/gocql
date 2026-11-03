@@ -356,3 +356,31 @@ I7 (first-attempt result path) was not attempted: `mergeResponseResult` only
 checks empty slices, and the `time.Now` pair feeds the public `Result.Latency`.
 I10 (shared reader 8/16/32/64 KiB) changed w64 by at most −1.2%, so the reader
 stays at 8 KiB.
+
+## Emulator comparison against master (screen)
+
+The same session ran both screens, back to back: `redesign_compare.py
+--stage screen --load maximum`, five canonical cases, two ABBA pairs × 30 s,
+client CPU 8 with GOMAXPROCS=1, emulator CPUs 0-1,4-5. Builds were frozen with
+`roadmap_build.py`: master `1ceaac81`, baseline `f363e371`, candidate `5f0d852f`.
+Results are in `results/hp-screen-baseline-20261103T160542Z` and
+`results/hp-screen-master-20261103T160542Z`. A screen cannot accept a change.
+Six-pair confirmation, matched-rate loads and real Scylla remain outstanding.
+
+| case | baseline / master | candidate / master | candidate CPU µs/op (master) | candidate allocs/op (master) | candidate p99 µs (master) |
+|---|---:|---:|---:|---:|---:|
+| point-buffered w64 | 0.701 | **0.976** | 10.02 (9.78) | 27.2 (32.0) | 1,826 (1,532) |
+| write w64 | 0.694 | **1.015** | 8.30 (8.42) | 25.2 (25.0) | 1,623 (1,371) |
+| paged-buffered w4 | 0.868 | 0.930 | 439 (411) | 85.5 (150) | 2,623 (2,554) |
+| paged-stream w4 | 0.866 | 0.832 | 487 (408) | 137 (150) | 2,829 (2,399) |
+| point-stream w4 | 0.672 | 0.699 | 15.7 (11.0) | 52.7 (32.0) | 225 (122) |
+
+- Point-buffered went from 0.701 to 0.976 of master. The runner's CI for it,
+  [0.968, 0.984], still marks a small regression against master. Writes went
+  from 0.694 to parity (1.015).
+- Maximum-load p99 is still 18–19% above master for point reads and writes.
+  This is a closed-loop measurement. Matched-rate latency, which the
+  convergence policy treats as primary, was not measured.
+- Streaming was out of scope: stream queries keep the standard context and
+  their own receive path. point-stream remains the largest gap, at 0.699.
+  paged-stream at 0.832 against 0.866 is within the noise of two pairs.
