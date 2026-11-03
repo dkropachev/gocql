@@ -192,6 +192,7 @@ type Conn struct {
 	// typedSettings is published once the framer cache is initialised, when
 	// every input to the native protocol settings is final.
 	typedSettings                             atomic.Pointer[protocol.Settings]
+	hostID                                    atomic.Pointer[UUID] // InternalHost's ID once known
 	typedWriterOnce                           sync.Once
 	typedWriter                               *submissionWriter
 	InternalOpeningSharderEpoch               uint64

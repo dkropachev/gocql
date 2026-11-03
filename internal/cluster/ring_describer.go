@@ -256,6 +256,11 @@ type ringHostsView struct {
 // allocate nothing. Callers must not modify it; InternalGetHostsList returns
 // a private copy.
 func (r *InternalRingDescriber) InternalHostsView() []*HostInfo {
+	// Every revision change clears the view under the write lock, so a
+	// published view is always current.
+	if v := r.hostsView.Load(); v != nil {
+		return v.hosts
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if v := r.hostsView.Load(); v != nil && v.revision == r.revision {
@@ -267,6 +272,13 @@ func (r *InternalRingDescriber) InternalHostsView() []*HostInfo {
 	}
 	r.hostsView.Store(&ringHostsView{revision: r.revision, hosts: hosts})
 	return hosts
+}
+
+// bumpRevisionLocked records a change to the host set. Caller holds r.mu for
+// writing.
+func (r *InternalRingDescriber) bumpRevisionLocked() {
+	r.revision++
+	r.hostsView.Store(nil)
 }
 
 func (r *InternalRingDescriber) getHostsMap() map[string]*HostInfo {
@@ -303,7 +315,7 @@ func (r *InternalRingDescriber) InternalAddHostIfMissing(host *HostInfo) (*HostI
 
 	existing, ok := r.InternalHosts[hostID]
 	if !ok {
-		r.revision++
+		r.bumpRevisionLocked()
 		r.InternalHosts[hostID] = host
 		r.hostIPToUUID[implEndpoint.InternalHostInfoNodeToNodeAddress(host).String()] = hostID
 		existing = host
@@ -326,7 +338,7 @@ func (r *InternalRingDescriber) InternalRemoveHost(hostID string) bool {
 		delete(r.hostIPToUUID, implEndpoint.InternalHostInfoNodeToNodeAddress(h).String())
 	}
 	delete(r.InternalHosts, hostID)
-	r.revision++
+	r.bumpRevisionLocked()
 	r.mu.Unlock()
 	return ok
 }

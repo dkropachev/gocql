@@ -526,7 +526,7 @@ func InternalSessionRecordV2Topology(s *Session, event *events.TopologyChangeEve
 		removed = r.InternalHosts[id]
 		delete(r.InternalHosts, id)
 		delete(r.hostIPToUUID, event.Host.String())
-		r.revision++
+		r.bumpRevisionLocked()
 	}
 	if event.Change == "NEW_NODE" {
 		delete(r.tombstones, id)

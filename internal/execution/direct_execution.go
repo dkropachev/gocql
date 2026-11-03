@@ -9,7 +9,6 @@ import (
 	"time"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
 )
@@ -67,7 +66,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		response, err := s.executeTypedAttempt(ctx, conn, request, state, consistency)
 		aggregate.Attempts = attempt
 		aggregate.Latency += time.Since(started)
-		aggregate.HostID = implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)
+		aggregate.HostID = conn.InternalHostID()
 		aggregate.AchievedConsistency = consistency
 		mergeResponseResult(&aggregate, response)
 		if err == nil {

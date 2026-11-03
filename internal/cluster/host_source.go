@@ -254,7 +254,7 @@ func (s *Session) refreshRing() error {
 	}
 	r.InternalHosts = next
 	r.hostIPToUUID = byIP
-	r.revision++
+	r.bumpRevisionLocked()
 	r.mu.Unlock()
 	// State mutation is complete before notifications or network work. These
 	// callbacks run without the topology/pool publication locks.

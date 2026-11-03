@@ -10,6 +10,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"sync"
+	"sync/atomic"
 )
 
 type PageLease struct {
@@ -503,12 +504,23 @@ type InternalResultPlanCache[R any] struct {
 	columns      Columns
 	InternalPlan RowPlan[R]
 	revision     uint64
+	// current mirrors entry and plan for lock-free hits on identified
+	// responses. It is replaced under InternalMu whenever entry changes.
+	current atomic.Pointer[resultPlanSnapshot[R]]
+}
+
+type resultPlanSnapshot[R any] struct {
+	entry *typedResultMetadata
+	plan  RowPlan[R]
 }
 
 func (c *InternalResultPlanCache[R]) InternalSelectPlan(response *responsePage, decoder RowDecoder[R]) (RowPlan[R], error) {
 	entry := response.InternalMetadata
 	if entry == nil {
 		return c.selectUnidentified(response, decoder)
+	}
+	if current := c.current.Load(); current != nil && current.entry == entry {
+		return current.plan, nil
 	}
 	c.InternalMu.Lock()
 	if c.InternalPlan != nil && c.entry == entry {
@@ -539,6 +551,7 @@ func (c *InternalResultPlanCache[R]) InternalSelectPlan(response *responsePage, 
 		c.entry = entry
 		c.columns = response.Columns
 		c.InternalPlan = plan
+		c.current.Store(&resultPlanSnapshot[R]{entry: entry, plan: plan})
 	}
 	c.InternalMu.Unlock()
 	return plan, nil
@@ -566,6 +579,7 @@ func (c *InternalResultPlanCache[R]) selectUnidentified(response *responsePage, 
 		c.entry = nil
 		c.columns = response.Columns
 		c.InternalPlan = plan
+		c.current.Store(nil)
 	}
 	c.InternalMu.Unlock()
 	return plan, nil

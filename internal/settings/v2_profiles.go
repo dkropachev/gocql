@@ -32,6 +32,7 @@ func (p *ProfileHandle) Snapshot() Profile {
 	}
 	return *p.privateStorage.current.Load()
 }
+
 // InternalCurrent returns the current profile pointer, or nil for the
 // default. Replace publishes a new pointer, so callers may cache work derived
 // from a profile until the pointer changes.

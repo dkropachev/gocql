@@ -3,8 +3,6 @@
 
 package execution
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"bytes"
 	"context"
@@ -163,7 +161,7 @@ func (s *InternalSessionRuntime) repairBatch(ctx context.Context, conn *Conn, ba
 			continue
 		}
 		item.InternalPrepared.InternalMu.RLock()
-		cached := item.InternalPrepared.InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)]
+		cached := item.InternalPrepared.InternalHosts[conn.InternalHostID()]
 		item.InternalPrepared.InternalMu.RUnlock()
 		if cached != nil && bytes.Equal(cached.InternalId, id) {
 			_, err := s.InternalPrepareOnConn(ctx, conn, item.InternalPrepared, item.InternalValues, true)

@@ -372,6 +372,37 @@ func TestV2ResultPlanCacheScopedReuseAndNoCompileLock(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+// TestV2ResultPlanCacheUnidentifiedSwitchRetiresIdentityHit checks that the
+// lock-free identity hit is withdrawn when the cache switches to an
+// unidentified plan, so a later response under the old identity is compiled
+// for its own columns instead of reusing the unidentified plan.
+func TestV2ResultPlanCacheUnidentifiedSwitchRetiresIdentityHit(t *testing.T) {
+	blob := codecTestMust(ScalarType(TypeBlob))
+	cols := NewColumns(ColumnSpec{Name: "v", Type: blob})
+	other := NewColumns(ColumnSpec{Name: "w", Type: blob})
+	entry := &typedResultMetadata{InternalColumns: cols}
+	cache := &resultPlanCache[Bytes]{}
+	var calls atomic.Int32
+	d := step03CountingDecoder{calls: &calls}
+	identified := &responsePage{InternalMetadata: entry, InternalResponseData: responseData{Columns: cols}}
+	for _, step := range []struct {
+		response *responsePage
+		calls    int32
+	}{
+		{identified, 1},
+		{identified, 1},
+		{&responsePage{InternalResponseData: responseData{Columns: other}}, 2},
+		{identified, 3},
+		{identified, 3},
+	} {
+		if _, err := cache.InternalSelectPlan(step.response, d); err != nil {
+			t.Fatal(err)
+		}
+		if calls.Load() != step.calls {
+			t.Fatalf("compiled %d plans, want %d", calls.Load(), step.calls)
+		}
+	}
+}
 func step03PreparedState(t *testing.T, s *Session, columns Columns) (*preparedState, *hostPrepared) {
 	t.Helper()
 	tracker := runtimeFor(s).InternalSchemaTracker()

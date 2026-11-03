@@ -154,7 +154,7 @@ func (s *InternalSessionRuntime) InternalPrepareTyped(ctx context.Context, state
 	dependencies := tracker.InternalDependencies(info.Keyspace, page.BindColumns(), page.Columns)
 	epoch := dependencies.InternalSince(started)
 	result := &typedResultMetadata{InternalColumns: page.Columns, InternalEpoch: epoch, InternalTracker: dependencies.InternalTracker}
-	state = &InternalPreparedState{InternalSession: s.Session, InternalProtocol: conn.InternalVersion, InternalStatement: statement, InternalKeyspace: keyspace, InternalParameters: page.BindColumns(), InternalColumns: page.Columns, InternalInfo: info, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalResult: result, InternalResultHost: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), InternalPartitioner: implCluster.InternalSessionPreparedPartitionerName(s.Session, info.Keyspace, info.Table), InternalHosts: map[UUID]*InternalHostPrepared{implEndpoint.InternalHostInfoHostUUID(conn.InternalHost): {InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: page.Columns, InternalGeneration: generation, InternalRevision: 1, InternalEpoch: epoch, InternalResult: result}}}
+	state = &InternalPreparedState{InternalSession: s.Session, InternalProtocol: conn.InternalVersion, InternalStatement: statement, InternalKeyspace: keyspace, InternalParameters: page.BindColumns(), InternalColumns: page.Columns, InternalInfo: info, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalResult: result, InternalResultHost: conn.InternalHostID(), InternalPartitioner: implCluster.InternalSessionPreparedPartitionerName(s.Session, info.Keyspace, info.Table), InternalHosts: map[UUID]*InternalHostPrepared{conn.InternalHostID(): {InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: page.Columns, InternalGeneration: generation, InternalRevision: 1, InternalEpoch: epoch, InternalResult: result}}}
 
 	tracker.InternalMu.RLock()
 	defer tracker.InternalMu.RUnlock()
@@ -194,7 +194,7 @@ func (s *InternalSessionRuntime) InternalPrepareOnConnExpected(ctx context.Conte
 	if err := state.InternalReconcilePendingConflict(); err != nil {
 		return nil, err
 	}
-	id := implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)
+	id := conn.InternalHostID()
 	state.InternalMu.RLock()
 	cached := state.InternalHosts[id]
 	state.InternalMu.RUnlock()
@@ -302,11 +302,11 @@ func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *Conn, st
 	defer state.InternalDependencies.InternalTracker.InternalMu.RUnlock()
 	state.InternalMu.Lock()
 	defer state.InternalMu.Unlock()
-	if state.InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)] == flight.previous && flight.epoch.InternalCurrent() && candidate.InternalEpoch.InternalCurrent() {
-		state.InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)] = candidate
-		conflict = state.InternalResultHost != implEndpoint.InternalHostInfoHostUUID(conn.InternalHost) && state.InternalResult != nil && !state.InternalResult.InternalColumns.Equal(result.InternalColumns)
+	if state.InternalHosts[conn.InternalHostID()] == flight.previous && flight.epoch.InternalCurrent() && candidate.InternalEpoch.InternalCurrent() {
+		state.InternalHosts[conn.InternalHostID()] = candidate
+		conflict = state.InternalResultHost != conn.InternalHostID() && state.InternalResult != nil && !state.InternalResult.InternalColumns.Equal(result.InternalColumns)
 		if !conflict {
-			state.InternalResultHost = implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)
+			state.InternalResultHost = conn.InternalHostID()
 			state.InternalResult = result
 			state.InternalInitialEpoch = candidate.InternalEpoch
 			state.InternalColumns = result.InternalColumns
@@ -822,7 +822,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			defer request.InternalOwner.InternalRelease()
 			started := time.Now()
 			response, err := s.executeTypedAttempt(ctx, conn, request, state, consistency)
-			event := AttemptEvent{Attempt: index, Target: Target{HostID: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), ShardID: request.InternalRouting.ShardID}, Started: started, Latency: time.Since(started), Err: err, Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded), Speculative: speculative}
+			event := AttemptEvent{Attempt: index, Target: Target{HostID: conn.InternalHostID(), ShardID: request.InternalRouting.ShardID}, Started: started, Latency: time.Since(started), Err: err, Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded), Speculative: speculative}
 			if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0 {
 				event.Target.ShardID = Option[uint32]{Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard), Set: true}
 			}
@@ -1101,14 +1101,14 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		if response == nil {
 			return nil, &ProtocolError{Stage: "execute", Err: fmt.Errorf("missing response")}
 		}
-		if err := InternalSelectPreparedResponse(request.InternalPrepared, implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), prepared, wireRequest.ResultMetadataID, conn.InternalTracksResultMetadataID(), response, observed); err != nil {
+		if err := InternalSelectPreparedResponse(request.InternalPrepared, conn.InternalHostID(), prepared, wireRequest.ResultMetadataID, conn.InternalTracksResultMetadataID(), response, observed); err != nil {
 			response.Owner.Release()
 			return nil, err
 		}
 
 		if response.SchemaChange() {
 			if request.InternalLogical != nil {
-				coordinator := implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)
+				coordinator := conn.InternalHostID()
 				request.InternalLogical.ddlCoordinator.Store(&coordinator)
 			}
 			config := s.InternalConfig.Metadata

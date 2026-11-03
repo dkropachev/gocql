@@ -10,6 +10,7 @@ import (
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 
 	"context"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 
 	"errors"
@@ -307,6 +308,20 @@ func (c *Conn) InternalBuildTypedRequest(req *attemptRequest, stream int) (wire.
 }
 func (c *Conn) writeTypedParams(e *typedEnvelope, req *attemptRequest, batch bool) {
 	c.nativeProtocol().WriteTypedParams(e, req, batch)
+}
+
+// InternalHostID returns the ID of the connection's host without taking the
+// host lock once it is known. A host ID is filled in at most once and never
+// changes afterwards, so the first non-empty value is cached.
+func (c *Conn) InternalHostID() UUID {
+	if id := c.hostID.Load(); id != nil {
+		return *id
+	}
+	id := implEndpoint.InternalHostInfoHostUUID(c.InternalHost)
+	if !id.IsEmpty() {
+		c.hostID.Store(&id)
+	}
+	return id
 }
 
 // nativeProtocol returns the connection's protocol settings. They are built
