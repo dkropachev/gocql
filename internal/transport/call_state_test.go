@@ -6,7 +6,6 @@ package transport
 import (
 	"errors"
 	"testing"
-	"time"
 )
 
 func TestCallReqReuseStartsWaitingWithAnEmptySlot(t *testing.T) {
@@ -61,49 +60,5 @@ func TestCallReqStopWaitingDecidesResponseOwnership(t *testing.T) {
 	resp, owned := delivered.InternalStopWaiting()
 	if !owned || !resp.removedFromCalls {
 		t.Fatal("stop after delivery did not return the delivered response")
-	}
-}
-
-// TestCallReqStopWaitingReceivesAClaimedResponse checks that a caller that
-// stops waiting after the reader claimed its call receives the response the
-// reader is building in the caller's storage, so that the storage is never
-// reused while the reader still writes to it.
-func TestCallReqStopWaitingReceivesAClaimedResponse(t *testing.T) {
-	t.Parallel()
-
-	dest := new(InternalResponsePage)
-	call := InternalGetCallReq(1)
-	call.dest = dest
-	if !call.claim() {
-		t.Fatal("reader could not claim a waiting call")
-	}
-	stopped := make(chan InternalCallResp)
-	go func() {
-		resp, owned := call.InternalStopWaiting()
-		if !owned {
-			t.Error("claimed response not handed to the caller")
-		}
-		stopped <- resp
-	}()
-	select {
-	case <-stopped:
-		t.Fatal("caller stopped waiting while the reader still built its response")
-	case <-time.After(20 * time.Millisecond):
-	}
-	if !call.deliver(InternalCallResp{InternalPage: dest}) {
-		t.Fatal("claimed call refused delivery")
-	}
-	if resp := <-stopped; resp.InternalPage != dest {
-		t.Fatal("caller received another response")
-	}
-
-	// A caller that stopped first keeps the reader out of its storage.
-	late := InternalGetCallReq(2)
-	late.dest = dest
-	if _, owned := late.InternalStopWaiting(); owned {
-		t.Fatal("stopped caller owns a response")
-	}
-	if late.claim() {
-		t.Fatal("reader claimed a stopped call")
 	}
 }

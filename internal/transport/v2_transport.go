@@ -30,10 +30,10 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 	return c.InternalExecuteTypedInto(ctx, req, nil)
 }
 
-// InternalExecuteTypedInto is InternalExecuteTyped building a successful
-// response in dest when dest is not nil. dest must stay unused by anyone else
-// until the response is released; a response that arrives after the caller
-// stopped waiting is built elsewhere.
+// InternalExecuteTypedInto is InternalExecuteTyped parsing the response into
+// dest when dest is not nil. The response is parsed on this goroutine, so
+// dest is written only before this call returns; it must stay unused by
+// anyone else until the returned response is released.
 func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest, dest *InternalResponsePage) (*InternalResponsePage, error) {
 	if err := c.beginShared(ctx); err != nil {
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err})
@@ -84,7 +84,7 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest
 	}
 	call := InternalGetCallReq(stream)
 	call.InternalTyped = true
-	call.dest = dest
+	call.rawDelivery = true
 	if c.InternalStreamObserver != nil {
 		call.streamObserverContext = c.InternalStreamObserver.StreamContext(ctx)
 	}
@@ -108,6 +108,7 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest
 				if resp.InternalPage != nil {
 					resp.InternalPage.Owner.Release()
 				}
+				resp.raw.release()
 				if resp.removedFromCalls {
 					releaseStream = true
 					recycleCall = true
@@ -212,6 +213,13 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest
 	}
 	select {
 	case resp := <-call.InternalResp:
+		if resp.raw.owner != nil {
+			page, err := c.parseTypedResponseInto(resp.raw.head, resp.raw.body, resp.raw.owner, dest)
+			if err != nil && page == nil {
+				resp.raw.owner.Release()
+			}
+			resp.InternalPage, resp.InternalErr = page, err
+		}
 		if ticket != nil {
 			ticket.awaitWritten()
 		}

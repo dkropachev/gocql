@@ -132,13 +132,19 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 	if err == nil {
 		if headerErr := frm.CheckResponseHeader(head, c.InternalVersion, c.typedResponseExtensionFlags()); headerErr != nil {
 			err = headerErr
-		} else {
-			// The caller's storage may be used only while it still waits.
-			var dest *InternalResponsePage
-			if call.dest != nil && call.claim() {
-				dest = call.dest
+		} else if call.rawDelivery {
+			// The caller parses the frame on its own goroutine, keeping the
+			// connection's reader free for the next frame.
+			raw := rawTypedResponse{head: head, body: body, owner: owner}
+			if !call.deliver(InternalCallResp{raw: raw, removedFromCalls: true}) {
+				raw.release()
+				c.releaseStream(call)
+				call.waitExecDone("receiveTypedCall")
+				InternalPutCallReq(call)
 			}
-			page, err = c.parseTypedResponseInto(head, body, owner, dest)
+			return nil
+		} else {
+			page, err = c.InternalParseTypedResponse(head, body, owner)
 		}
 	}
 	if err != nil && owner != nil && page == nil {
