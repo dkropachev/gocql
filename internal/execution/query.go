@@ -110,6 +110,18 @@ type Query[P, R any] struct {
 	options  Options
 	scratch  eachScratch   // Each and One decoding state
 	rows     rowsHolder[R] // Run's iterator storage, reused each execution
+	last     Result        // the latest Exec, Each or One outcome
+}
+
+// LastResult returns the result information of the query's latest Exec,
+// Each or One: the coordinator, attempts, latency, row count and any
+// warnings, trace IDs or custom payload. Run reports it through Rows.Info.
+// Like the query's other methods, it is not safe for concurrent use.
+func (q *Query[P, R]) LastResult() Result {
+	if q == nil {
+		return Result{}
+	}
+	return cloneResult(q.last)
 }
 
 func newQueryState(s *implCluster.Session, state *queryState, retire func()) error {
@@ -293,12 +305,17 @@ func (q *Query[P, R]) retire() {
 	q.buffer.Retire()
 }
 
-func (q *Query[P, R]) Exec(ctx context.Context, value P) (Result, error) {
+// Exec executes the query, which must not return rows. LastResult reports
+// the outcome's result information.
+func (q *Query[P, R]) Exec(ctx context.Context, value P) error {
 	if err := q.capture(ctx, value); err != nil {
-		return Result{}, err
+		q.last = InternalExecutionErrorResult(err)
+		return err
 	}
 	defer q.state.owner.InternalRelease()
-	return Exec(ctx, q.state.runtime.Session, &q.bound, q.options)
+	var err error
+	q.last, err = Exec(ctx, q.state.runtime.Session, &q.bound, q.options)
+	return err
 }
 
 // Run executes the query and returns an iterator over its rows. The query

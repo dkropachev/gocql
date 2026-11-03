@@ -32,7 +32,7 @@ func testOwnedQuery(t testing.TB) *Query[[]byte, Unit] {
 
 func TestUninitializedQueryReturnsValidationErrors(t *testing.T) {
 	var q Query[Unit, Unit]
-	if _, err := q.Exec(context.Background(), Unit{}); err == nil {
+	if err := q.Exec(context.Background(), Unit{}); err == nil {
 		t.Fatal("zero query executed")
 	}
 	q.Close()

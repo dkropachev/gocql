@@ -31,7 +31,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 			return err
 		}
 		defer q.Close()
-		_, err = q.Exec(ctx, Unit{})
+		err = q.Exec(ctx, Unit{})
 		return err
 	}
 	if err := exec(ctx, fmt.Sprintf("CREATE KEYSPACE %s WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':%d}", namespace, *flagRF)); err != nil {
@@ -105,7 +105,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 	defer w.Close()
 	payload := bytes.Repeat([]byte{42}, 4096)
 	for i := int32(0); i < 6; i++ {
-		if _, err := w.Exec(ctx, record{K: 1, C: i, P: payload}); err != nil {
+		if err := w.Exec(ctx, record{K: 1, C: i, P: payload}); err != nil {
 			t.Fatal(err)
 		}
 		if err := w.Wait(ctx); err != nil {

@@ -63,7 +63,7 @@ func Example() {
 			log.Print(err)
 		}
 	}()
-	if _, err := bound.Exec(ctx, tweet{gocql.NewTimeUUID(), "me", "hello world"}); err != nil {
+	if err := bound.Exec(ctx, tweet{gocql.NewTimeUUID(), "me", "hello world"}); err != nil {
 		log.Fatal(err)
 	}
 	type result struct {

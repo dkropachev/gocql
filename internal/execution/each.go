@@ -151,27 +151,33 @@ func RunOne[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], opt
 	return found, result, err
 }
 
-// Each captures value and runs RunEach with this query's
-// storage. The query is idle again when Each returns.
-func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error) (Result, error) {
+// Each captures value and runs RunEach with this query's storage. The query
+// is idle again when Each returns; LastResult reports the outcome's result
+// information.
+func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error) error {
 	if err := q.capture(ctx, value); err != nil {
-		return Result{}, err
+		q.last = InternalExecutionErrorResult(err)
+		return err
 	}
 	defer q.state.owner.InternalRelease()
-	_, result, err := each(ctx, q.state.runtime.Session, &q.bound, q.options, dst, fn, &q.scratch)
-	return result, err
+	var err error
+	_, q.last, err = each(ctx, q.state.runtime.Session, &q.bound, q.options, dst, fn, &q.scratch)
+	return err
 }
 
-// One captures value and runs RunOne with this query's
-// storage. The query is idle again when One returns.
-func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, Result, error) {
+// One captures value and runs RunOne with this query's storage. The query
+// is idle again when One returns; LastResult reports the outcome's result
+// information.
+func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, error) {
 	if err := q.capture(ctx, value); err != nil {
-		return false, Result{}, err
+		q.last = InternalExecutionErrorResult(err)
+		return false, err
 	}
 	defer q.state.owner.InternalRelease()
 	found, result, err := each(ctx, q.state.runtime.Session, &q.bound, q.options, dst, nil, &q.scratch)
+	q.last = result
 	if !found && err == nil {
 		InternalClearDestination(dst)
 	}
-	return found, result, err
+	return found, err
 }

@@ -74,7 +74,7 @@ func (a *v2Adapter) Exec(ctx context.Context, q string) error {
 		return e
 	}
 	defer b.Close()
-	_, e = b.Exec(ctx, g.Unit{})
+	e = b.Exec(ctx, g.Unit{})
 	return e
 }
 func (a *v2Adapter) Evidence() any {
@@ -148,7 +148,7 @@ func (a *v2Adapter) Worker(paged, stream bool) (worker, error) {
 }
 
 func (w *v2Worker) Write(ctx context.Context, k, r int32, p []byte) error {
-	_, e := w.write.Exec(ctx, row{K: k, R: r, P: p})
+	e := w.write.Exec(ctx, row{K: k, R: r, P: p})
 	return errors.Join(e, w.write.Wait(ctx))
 }
 func (w *v2Worker) Read(ctx context.Context, k int32, consume consumer) (resultErr error) {

@@ -134,7 +134,7 @@ func TestQueryCancelledAcceptedWriteStaysBusyUntilDrain(t *testing.T) {
 	input := bytes.Repeat([]byte{31}, 128<<10)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { _, err := q.Exec(ctx, input); done <- err }()
+	go func() { err := q.Exec(ctx, input); done <- err }()
 	<-entered
 	input[0] = 99 // execution has captured an owned snapshot
 	cancel()
@@ -165,7 +165,7 @@ func TestQueryCancelledAcceptedWriteStaysBusyUntilDrain(t *testing.T) {
 	if err := q.Wait(wait); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := q.Exec(wait, []byte("reuse")); err != nil {
+	if err := q.Exec(wait, []byte("reuse")); err != nil {
 		t.Fatal(err)
 	}
 	<-served
@@ -190,7 +190,7 @@ func TestQueryBlockedObserverKeepsQueryBusy(t *testing.T) {
 	}()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { _, err := query.Exec(ctx, Unit{}); done <- err }()
+	go func() { err := query.Exec(ctx, Unit{}); done <- err }()
 	<-entered
 	cancel()
 	if err := <-done; !errors.Is(err, context.Canceled) {
@@ -211,7 +211,7 @@ func TestQueryBlockedObserverKeepsQueryBusy(t *testing.T) {
 		t.Fatal(err)
 	}
 	observer.onAttempt = nil
-	if _, err := query.Exec(joined, Unit{}); err != nil {
+	if err := query.Exec(joined, Unit{}); err != nil {
 		t.Fatal(err)
 	}
 	<-served

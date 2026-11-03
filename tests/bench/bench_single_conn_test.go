@@ -89,7 +89,7 @@ func benchExec(ctx context.Context, s *gocql.Session, cql string) error {
 		return e
 	}
 	defer b.Close()
-	_, e = b.Exec(ctx, gocql.Unit{})
+	e = b.Exec(ctx, gocql.Unit{})
 	return e
 }
 func InitializeCluster(ctx context.Context, s *gocql.Session) error {
@@ -248,7 +248,7 @@ func benchWriteContext(ctx context.Context, s *gocql.Session, id int32) error {
 		return e
 	}
 	defer b.Close()
-	_, e = b.Exec(ctx, benchInsert{id, id % 5, fmt.Sprintf("Name_%d", id)})
+	e = b.Exec(ctx, benchInsert{id, id % 5, fmt.Sprintf("Name_%d", id)})
 	return e
 }
 func RecordSelectTraffic(ctx context.Context, size int, dir string) error {

@@ -141,7 +141,7 @@ func run() (resultErr error) {
 			return err
 		}
 		defer b.Close()
-		_, err = b.Exec(operation, gocql.Unit{})
+		err = b.Exec(operation, gocql.Unit{})
 		return err
 	}
 	exec := func(cql string) error { return execContext(ctx, cql) }
@@ -194,7 +194,7 @@ func run() (resultErr error) {
 	defer writeQuery.Close()
 	payload := bytes.Repeat([]byte("typed-stream-"), 16384)
 	for i := int32(0); i < 3; i++ {
-		if _, err := writeQuery.Exec(ctx, record{ID: i, Payload: payload, Pieces: [][]byte{[]byte("nested"), []byte("storage")}}); err != nil {
+		if err := writeQuery.Exec(ctx, record{ID: i, Payload: payload, Pieces: [][]byte{[]byte("nested"), []byte("storage")}}); err != nil {
 			return err
 		}
 		if err := writeQuery.Wait(ctx); err != nil {

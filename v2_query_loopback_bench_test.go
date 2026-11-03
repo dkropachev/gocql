@@ -188,7 +188,7 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 						dst := make([]byte, 0, len(value))
 						key := int32(i)
 						run[i] = func(ctx context.Context) error {
-							found, _, err := query.One(ctx, key, &dst)
+							found, err := query.One(ctx, key, &dst)
 							if err != nil {
 								return err
 							}
@@ -204,7 +204,7 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 						b.Cleanup(query.Close)
 						input := loopbackRow{k: int32(i), value: []byte(value)}
 						run[i] = func(ctx context.Context) error {
-							_, err := query.Exec(ctx, input)
+							err := query.Exec(ctx, input)
 							return err
 						}
 					case "read":
@@ -236,7 +236,7 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 						b.Cleanup(query.Close)
 						input := []byte(value)
 						run[i] = func(ctx context.Context) error {
-							_, err := query.Exec(ctx, input)
+							err := query.Exec(ctx, input)
 							return err
 						}
 					}

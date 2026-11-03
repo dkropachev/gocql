@@ -543,7 +543,10 @@ captured parameters through retries, pages, accepted writes and callbacks.
 func Prepare[P, R any](context.Context, *Session, Statement[P, R], PrepareOptions) (*Prepared[P, R], error)
 func NewQuery[P, R any](*Prepared[P, R], Options) (*Query[P, R], error)
 func NewUnpreparedQuery[P, R any](*Session, Statement[P, R], Columns, Options) (*Query[P, R], error)
-func (q *Query[P, R]) Exec(context.Context, P) (Result, error)
+func (q *Query[P, R]) Exec(context.Context, P) error
+func (q *Query[P, R]) Each(context.Context, P, *R, func(*R) error) error
+func (q *Query[P, R]) One(context.Context, P, *R) (bool, error)
+func (q *Query[P, R]) LastResult() Result // latest Exec, Each or One
 func (q *Query[P, R]) Run(context.Context, P) (Rows[R], error)
 func (q *Query[P, R]) RunPage(context.Context, P, PageState) (*Page[R], error)
 func (q *Query[P, R]) RunUnpaged(context.Context, P) (*Page[R], error)
