@@ -81,7 +81,7 @@ func TestLoopbackServerProcess(t *testing.T) {
 		t.Skip("benchmark helper process")
 	}
 	body := []byte{0, 0, 0, frm.ResultKindVoid}
-	if workload == "read" || workload == "pread" {
+	if workload == "read" || workload == "pread" || workload == "pone" {
 		body = runtimeRowsBody(nil, loopbackValue)
 	}
 	key := NewColumns(ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: codecTestMust(ScalarType(TypeInt))})
@@ -149,7 +149,7 @@ func serveLoopback(peer net.Conn, body, prepared []byte) {
 func BenchmarkReusableQueryLoopback(b *testing.B) {
 	options := Options{Timeout: Option[time.Duration]{Set: true, Value: 10 * time.Second}}
 	value := loopbackValue
-	for _, workload := range []string{"read", "write", "pread", "pwrite"} {
+	for _, workload := range []string{"read", "write", "pread", "pwrite", "pone"} {
 		for _, workers := range []int{1, 8, 64} {
 			b.Run(fmt.Sprintf("%s/w%d", workload, workers), func(b *testing.B) {
 				s := loopbackTestSession(b, workload)
@@ -179,6 +179,23 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 								return fmt.Errorf("bad diagnostic row")
 							}
 							return query.Wait(ctx)
+						}
+					case "pone":
+						statement := Statement[int32, []byte]{Kind: OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: OneParam(Int32), Rows: RowInto(func(*[]byte) {}, Column("value", OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+						prepared := codecTestMust(Prepare(context.Background(), s, statement, PrepareOptions{}))
+						query := codecTestMust(NewQuery(prepared, options))
+						b.Cleanup(query.Close)
+						dst := make([]byte, 0, len(value))
+						key := int32(i)
+						run[i] = func(ctx context.Context) error {
+							found, _, err := query.One(ctx, key, &dst)
+							if err != nil {
+								return err
+							}
+							if !found || len(dst) != len(value) {
+								return fmt.Errorf("bad diagnostic row")
+							}
+							return nil
 						}
 					case "pwrite":
 						statement := Statement[loopbackRow, Unit]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k, value) VALUES(?, ?)", Params: Params(ParamAt(0, Int32, func(r loopbackRow) int32 { return r.k }), ParamAt(1, BytesEncoder, func(r loopbackRow) []byte { return r.value })), Rows: NoRows}

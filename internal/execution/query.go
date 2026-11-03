@@ -70,6 +70,7 @@ type Query[P, R any] struct {
 	columns  Columns
 	buffer   binding.ParameterBuffer
 	options  Options
+	scratch  eachScratch // Each and One decoding state
 }
 
 func newQueryState(s *implCluster.Session, state *queryState, retire func()) error {

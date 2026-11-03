@@ -577,3 +577,22 @@ atomic lease operations and the release closure go away.
 |---|---:|---:|---:|
 | allocs/op pread / pwrite w64 | 7 / 6 | 6 / 5 | −1 |
 | cpu-ns/op prepared w64 and w64-4 | | | −0.61% to −1.55% |
+
+## A2: Query.Each and Query.One (kept)
+
+`internal/execution/each.go`. `RunEach`/`RunOne` are the session-level
+forms. Values that borrow response storage are valid only during the
+callback, or until One returns. A new loopback workload, `pone`, is a
+prepared point read through One.
+
+| pone vs pread, same binary | pread | pone | Δ |
+|---|---:|---:|---:|
+| sec/op w64 | 5.840µ | 5.130µ | −12.16% |
+| sec/op w64-4 | 3.585µ | 3.189µ | −11.03% |
+| cpu-ns/op w64 / w64-4 | | | −12.14% / −10.50% |
+| B/op | 1,750 | 1,044 | −40% |
+| allocs/op | 6 | 5 | −1 |
+
+Against rt the first run flagged write/w1 cpu-ns/op +4.0% (p=0.021), on a
+path A2 does not touch. A 10×ABBA (n=20) rerun of the write cases showed no
+difference (p≥0.54).
