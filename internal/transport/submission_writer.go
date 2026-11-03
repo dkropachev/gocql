@@ -22,6 +22,9 @@ type writeTicket struct {
 	packet wire.Chain
 	lease  *wire.Lease
 	done   chan InternalWriteResult
+	// Caller-side cache of the result received from done.
+	result      InternalWriteResult
+	resultKnown bool
 }
 
 var ticketPool = sync.Pool{New: func() any { return &writeTicket{done: make(chan InternalWriteResult, 1)} }}
@@ -69,7 +72,11 @@ func attemptDone(ctx context.Context) <-chan struct{} {
 	return ctx.Done()
 }
 
-func (c *Conn) submitTyped(ctx context.Context, packet wire.Chain, lease *wire.Lease) (int64, error) {
+// submitTyped queues packet for the persistent writer and returns as soon as
+// the writer accepted the ticket; the caller then waits only for the response.
+// The returned ticket holds one reference for the caller, released with
+// release. An error means the packet was never queued: nothing was written.
+func (c *Conn) submitTyped(ctx context.Context, packet wire.Chain, lease *wire.Lease) (*writeTicket, error) {
 	c.typedWriterOnce.Do(func() {
 		c.typedWriter = &submissionWriter{conn: c, ready: make(chan *writeTicket)}
 		go c.typedWriter.run()
@@ -77,37 +84,52 @@ func (c *Conn) submitTyped(ctx context.Context, packet wire.Chain, lease *wire.L
 	t := ticketPool.Get().(*writeTicket)
 	t.refs.Store(2)
 	t.phase.Store(0)
+	t.resultKnown = false
 	t.ctx, t.packet, t.lease = ctx, packet, lease
-	defer t.release()
-	ctxDone := attemptDone(ctx)
 	select {
-	case <-ctxDone:
+	case <-attemptDone(ctx):
 		t.finish(InternalWriteResult{InternalErr: ctx.Err()})
-		return 0, ctx.Err()
+		t.release()
+		return nil, ctx.Err()
 	case <-c.InternalCtx.Done():
 		t.finish(InternalWriteResult{InternalErr: ErrConnectionClosed})
-		return 0, ErrConnectionClosed
+		t.release()
+		return nil, ErrConnectionClosed
 	case c.typedWriter.ready <- t:
 	}
-	select {
-	case result := <-t.done:
-		return result.InternalWritten, result.InternalErr
-	default:
+	return t, nil
+}
+
+// awaitWritten blocks until the writer finished with this ticket, so that a
+// caller returning a response has also released the request's input, as when
+// it waited for the write first. A response follows its write by a network
+// round trip, so the writer has almost always finished already.
+func (t *writeTicket) awaitWritten() {
+	if !t.resultKnown {
+		t.result, t.resultKnown = <-t.done, true
 	}
-	select {
-	case result := <-t.done:
-		return result.InternalWritten, result.InternalErr
-	case <-ctxDone:
-		if t.phase.CompareAndSwap(0, 2) {
-			return 0, ctx.Err()
+}
+
+// unsent withdraws a ticket the writer has not started, or reports that the
+// writer already dropped it unsent. Either way no byte reached the socket.
+func (t *writeTicket) unsent() bool {
+	return t.phase.CompareAndSwap(0, 2) || t.phase.Load() == 2
+}
+
+// written reports how many bytes of this ticket the writer transmitted. The
+// writer publishes the result before it closes the connection on a write
+// error, so a caller woken by that close always finds it. ok is false while
+// the write is still in progress.
+func (t *writeTicket) written() (n int64, ok bool) {
+	if !t.resultKnown {
+		select {
+		case r := <-t.done:
+			t.result, t.resultKnown = r, true
+		default:
+			return 0, false
 		}
-		return packet.Len(), &pendingWriteError{ctx.Err()}
-	case <-c.InternalCtx.Done():
-		if t.phase.CompareAndSwap(0, 2) {
-			return 0, ErrConnectionClosed
-		}
-		return packet.Len(), &pendingWriteError{ErrConnectionClosed}
 	}
+	return t.result.InternalWritten, true
 }
 
 func (w *submissionWriter) run() {

@@ -22,17 +22,26 @@ func TestQueuedTicketConnectionLossRemainsRetryable(t *testing.T) {
 	chain, _ := wire.NewChain(wire.Borrow([]byte("queued request")))
 	drained := make(chan struct{})
 	lease := wire.NewLease(chain, func() { close(drained) })
-	done := make(chan InternalWriteResult, 1)
+	submitted := make(chan *writeTicket, 1)
 	go func() {
-		n, err := conn.submitTyped(context.Background(), chain, lease)
-		done <- InternalWriteResult{InternalWritten: n, InternalErr: err}
+		t, err := conn.submitTyped(context.Background(), chain, lease)
+		if err != nil {
+			panic(err)
+		}
+		submitted <- t
 	}()
 	ticket := <-accepted
+	callerTicket := <-submitted
 	closeConnection()
-	result := <-done
-	if result.InternalWritten != 0 || !errors.Is(result.InternalErr, ErrConnectionClosed) || errors.Is(result.InternalErr, context.Canceled) {
-		t.Fatal(result)
+	// The caller withdraws the queued ticket: nothing was transmitted, so the
+	// attempt is retryable.
+	if !callerTicket.unsent() {
+		t.Fatal("queued ticket reported as transmitted")
 	}
+	if n, known := callerTicket.written(); known && n != 0 {
+		t.Fatal("withdrawn ticket reported written bytes", n)
+	}
+	callerTicket.release()
 	select {
 	case <-drained:
 		t.Fatal("accepted ticket storage drained before writer completion")
@@ -40,4 +49,27 @@ func TestQueuedTicketConnectionLossRemainsRetryable(t *testing.T) {
 	}
 	ticket.finish(InternalWriteResult{InternalErr: ErrConnectionClosed})
 	<-drained
+}
+
+func TestTicketReportsWriterOutcome(t *testing.T) {
+	ticket := ticketPool.Get().(*writeTicket)
+	ticket.refs.Store(2)
+	ticket.phase.Store(0)
+	ticket.resultKnown = false
+	chain, _ := wire.NewChain(wire.Borrow([]byte("request")))
+	ticket.packet, ticket.lease = chain, wire.NewLease(chain, nil)
+	if _, known := ticket.written(); known {
+		t.Fatal("result known before the writer finished")
+	}
+	if !ticket.phase.CompareAndSwap(0, 1) {
+		t.Fatal("writer could not claim the ticket")
+	}
+	if ticket.unsent() {
+		t.Fatal("claimed ticket withdrawn")
+	}
+	ticket.finish(InternalWriteResult{InternalWritten: 3, InternalErr: errors.New("reset")})
+	if n, known := ticket.written(); !known || n != 3 {
+		t.Fatal("writer outcome not reported", n, known)
+	}
+	ticket.release()
 }

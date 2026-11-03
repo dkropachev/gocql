@@ -121,7 +121,7 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 	if call.streamObserverContext != nil {
 		call.streamObserverContext.StreamStarted(ObservedStream{Host: c.InternalHost})
 	}
-	var n int64
+	var ticket *writeTicket
 	if c.InternalCoalesceWait == 0 {
 		// Hold both input and shared-connection admission until the persistent
 		// writer finishes, even if cancellation returns to the calling goroutine.
@@ -144,26 +144,39 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 			}
 			c.endShared()
 		})
-		n, err = c.submitTyped(ctx, packet, lease)
-	} else {
-		n, err = writer.InternalWriteSpans(ctx, packet)
-	}
-	if err != nil {
-		stopWaiting = true
-		var pending *pendingWriteError
-		if errors.As(err, &pending) {
-			if c.markOrphan(call) {
-				closeErr = InternalErrOrphanBudget
-			}
-		} else if n == 0 && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
-			if c.InternalRemoveCallIfOpen(stream) {
-				releaseStream = true
-				recycleCall = true
-			}
-		} else {
-			closeErr = err
+		// The caller does not wait for the write: the response wait below
+		// covers it, and write failures close the connection.
+		ticket, err = c.submitTyped(ctx, packet, lease)
+		if err != nil {
+			return failBeforeWrite(err)
 		}
-		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err, InternalPotentiallyExecuted: n > 0})
+		defer ticket.release()
+	} else {
+		n, err := writer.InternalWriteSpans(ctx, packet)
+		if err != nil {
+			stopWaiting = true
+			if n == 0 && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+				if c.InternalRemoveCallIfOpen(stream) {
+					releaseStream = true
+					recycleCall = true
+				}
+			} else {
+				closeErr = err
+			}
+			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err, InternalPotentiallyExecuted: n > 0})
+		}
+	}
+	// potentiallyExecuted reports whether any byte of this request may have
+	// reached the server, after the wait ended without a response.
+	potentiallyExecuted := func() bool {
+		if ticket == nil {
+			return true // written synchronously above
+		}
+		if ticket.unsent() {
+			return false
+		}
+		n, known := ticket.written()
+		return !known || n > 0
 	}
 	var timeoutCh <-chan time.Time
 	if req.Timeout > 0 {
@@ -182,29 +195,50 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 	}
 	select {
 	case resp := <-call.InternalResp:
+		if ticket != nil {
+			ticket.awaitWritten()
+		}
 		if resp.removedFromCalls {
 			releaseStream = true
 			recycleCall = true
 		}
 		if resp.InternalErr != nil {
-			return resp.InternalPage, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: resp.InternalErr, InternalPotentiallyExecuted: true})
+			// A frame from the server proves execution; a connection failure
+			// delivered by close proves only what the writer transmitted.
+			executed := resp.removedFromCalls || potentiallyExecuted()
+			return resp.InternalPage, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: resp.InternalErr, InternalPotentiallyExecuted: executed})
 		}
 		return resp.InternalPage, nil
 	case <-timeoutCh:
 		stopWaiting = true
+		if ticket != nil && ticket.unsent() {
+			if c.InternalRemoveCallIfOpen(stream) {
+				releaseStream = true
+				recycleCall = true
+			}
+			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrTimeoutNoResponse, InternalTimeout: req.Timeout})
+		}
 		if c.markOrphan(call) {
 			closeErr = InternalErrOrphanBudget
 		}
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrTimeoutNoResponse, InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
 	case <-attemptDone(ctx):
 		stopWaiting = true
+		if ticket != nil && ticket.unsent() {
+			// Withdrawn before transmission: the stream is free again.
+			if c.InternalRemoveCallIfOpen(stream) {
+				releaseStream = true
+				recycleCall = true
+			}
+			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctx.Err()})
+		}
 		if c.markOrphan(call) {
 			closeErr = InternalErrOrphanBudget
 		}
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctx.Err(), InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
 	case <-c.InternalCtx.Done():
 		stopWaiting = true
-		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrConnectionClosed, InternalPotentiallyExecuted: true})
+		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrConnectionClosed, InternalPotentiallyExecuted: potentiallyExecuted()})
 	}
 }
 

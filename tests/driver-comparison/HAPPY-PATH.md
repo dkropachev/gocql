@@ -504,3 +504,21 @@ reuse.
 | cpu-ns/op read / write / pread / pwrite w64 | | | −3.23 / −3.44 / −2.84 / −3.59% |
 | cpu-ns/op w64-4 (four cases) | | | −7.85% to −10.02% |
 | w1 | | | ~ |
+
+## T1: no separate wait for write completion (kept)
+
+`submitTyped` returns the queued ticket; `unsent` withdraws a ticket the
+writer has not claimed, and `written` reads the writer's result, published
+before it closes the connection. On a response the caller still calls
+`awaitWritten`: the first chain, which lacked it, made `pwrite/w64-4`
+fail with `ErrBusy`, because a response could arrive before the writer
+released the query's input. `TestTypedAttemptReturnsAfterWriterReleasesInput`
+holds the writer after its bytes are sent and fails without the wait.
+
+| vs T2 | before | after | Δ |
+|---|---:|---:|---:|
+| cpu-ns/op read/w64 | 5.762µ | 5.662µ | −1.74% |
+| cpu-ns/op write/w64 | 5.281µ | 5.219µ | −1.18% |
+| cpu-ns/op w64-4 (four cases) | | | −1.17% to −1.99% |
+| sec/op decoding (three cases) | | | −0.8% to −1.1% |
+| pread / pwrite w64, w1 | | | ~ |
