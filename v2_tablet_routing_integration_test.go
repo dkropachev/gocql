@@ -62,7 +62,7 @@ func TestStep06TabletRoutingLive(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, entry := range result.CustomPayload {
+		for _, entry := range result.CustomPayload() {
 			if entry.Key == "tablets-routing-v1" || entry.Key == "tablets-routing-v2" {
 				feedback++
 			}
@@ -153,7 +153,7 @@ func TestStep06TabletRoutingLive(t *testing.T) {
 				t.Fatal("bad row")
 			}
 			result := rows.Info()
-			for _, entry := range result.CustomPayload {
+			for _, entry := range result.CustomPayload() {
 				if entry.Key == "tablets-routing-v1" || entry.Key == "tablets-routing-v2" {
 					feedback++
 					hint, parseErr := parseTypedTabletPayload(entry.Value.Value, keyspace, "records", entry.Key == "tablets-routing-v2")
@@ -261,7 +261,7 @@ func TestStep06LeaderRoutingLive(t *testing.T) {
 		}
 		result := rows.Info()
 		moved := false
-		for _, entry := range result.CustomPayload {
+		for _, entry := range result.CustomPayload() {
 			if entry.Key != "tablets-routing-v2" || !entry.Value.Valid {
 				continue
 			}

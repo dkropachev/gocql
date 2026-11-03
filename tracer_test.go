@@ -42,7 +42,7 @@ func TestTracingNewAPI(t *testing.T) {
 	require.NotEmpty(t, selected.TraceIDs)
 	// Trace polls readiness under the caller context and returns owned typed
 	// events; the legacy Tracer's internal table queries are no longer used.
-	for _, id := range append(inserted.TraceIDs, selected.TraceIDs...) {
+	for _, id := range append(inserted.TraceIDs(), selected.TraceIDs()...) {
 		info, err := session.Trace(ctx, id)
 		require.NoError(t, err)
 		require.Equal(t, id, info.ID)

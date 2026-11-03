@@ -128,7 +128,7 @@ func TestTracing(t *testing.T) {
 			require.NotEmpty(t, trace.Events)
 		}
 	}
-	checkTrace(result.TraceIDs)
+	checkTrace(result.TraceIDs())
 	read := cassandraDynamicBound(t, session, fmt.Sprintf("SELECT id FROM %s WHERE id = ?", table), []Value{IntValue(42)}, PrepareOptions{})
 	// Options are explicit per execution; the same binding can be traced repeatedly.
 	for i := 0; i < 2; i++ {
@@ -139,7 +139,7 @@ func TestTracing(t *testing.T) {
 		require.Equal(t, int64(42), cassandraInt(t, rows.Row(), "id"))
 		require.False(t, rows.Next())
 		require.NoError(t, rows.Close())
-		checkTrace(rows.Info().TraceIDs)
+		checkTrace(rows.Info().TraceIDs())
 	}
 }
 

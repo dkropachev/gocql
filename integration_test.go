@@ -539,7 +539,7 @@ func TestCustomPayloadMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertV2CustomPayload(t, customPayload, page.Info().CustomPayload)
+	assertV2CustomPayload(t, customPayload, page.Info().CustomPayload())
 	if err := page.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -554,7 +554,7 @@ func TestCustomPayloadMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertV2CustomPayload(t, customPayload, result.CustomPayload)
+	assertV2CustomPayload(t, customPayload, result.CustomPayload())
 
 	// Native BATCH retains its independent custom-payload frame path.
 	item, err := BatchEntry(insert)
@@ -565,7 +565,7 @@ func TestCustomPayloadMessages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query failed: %v", err)
 	}
-	assertV2CustomPayload(t, customPayload, result.CustomPayload)
+	assertV2CustomPayload(t, customPayload, result.CustomPayload())
 }
 
 func TestCustomPayloadValues(t *testing.T) {
@@ -598,7 +598,7 @@ func TestCustomPayloadValues(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		assertV2CustomPayload(t, customPayload, page.Info().CustomPayload)
+		assertV2CustomPayload(t, customPayload, page.Info().CustomPayload())
 		if err := page.Close(); err != nil {
 			t.Fatal(err)
 		}

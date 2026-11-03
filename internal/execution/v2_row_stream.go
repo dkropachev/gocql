@@ -561,13 +561,10 @@ func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
 
 		// Result extensions describe the latest attempt, including terminal server
 		// errors after output. The metadata parser already owns their bytes.
-		s.privateStorage.info.Result.Warnings = nil
-		s.privateStorage.info.Result.TraceIDs = nil
-		s.privateStorage.info.Result.CustomPayload = nil
+		s.privateStorage.info.Result.SetDiagnostics(nil, nil, nil)
 		if response != nil {
-			s.privateStorage.info.Result.Warnings = response.InternalInfo.Warnings
-			s.privateStorage.info.Result.TraceIDs = response.InternalInfo.TraceIDs
-			s.privateStorage.info.Result.CustomPayload = response.InternalInfo.CustomPayload
+			info := response.InternalInfo
+			s.privateStorage.info.Result.SetDiagnostics(info.Warnings(), info.TraceIDs(), info.CustomPayload())
 		}
 		s.privateStorage.mu.Unlock()
 		// Latest failed-attempt extensions remain budgeted until replacement or

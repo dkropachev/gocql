@@ -700,7 +700,7 @@ func TestStep07StreamReprepareCanonicalInputAndNoRepairAfterOutput(t *testing.T)
 	}
 	t.Logf("canonical stream attempts=3 payload_backing_bytes=%d", spy.bytes.Load())
 	info := cursor.Info()
-	if len(info.Result.Warnings) != 1 || info.Result.Warnings[0] != "terminal" || len(info.Result.TraceIDs) != 1 || info.Result.TraceIDs[0][15] != 7 || len(info.Result.CustomPayload) != 1 || string(info.Result.CustomPayload[0].Value.Value.OwnedBytes()) != "new" {
+	if len(info.Result.Warnings()) != 1 || info.Result.Warnings()[0] != "terminal" || len(info.Result.TraceIDs()) != 1 || info.Result.TraceIDs()[0][15] != 7 || len(info.Result.CustomPayload()) != 1 || string(info.Result.CustomPayload()[0].Value.Value.OwnedBytes()) != "new" {
 		t.Fatal("terminal attempt metadata missing", info)
 	}
 	bound.Close()

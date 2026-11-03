@@ -98,7 +98,7 @@ func TestTablets(t *testing.T) {
 			}
 			info := rows.Info()
 			hinted := false
-			for _, entry := range info.CustomPayload {
+			for _, entry := range info.CustomPayload() {
 				if (entry.Key != "tablets-routing-v1" && entry.Key != "tablets-routing-v2") || !entry.Value.Valid {
 					continue
 				}

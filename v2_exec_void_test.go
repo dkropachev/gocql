@@ -61,11 +61,11 @@ func TestV2RuntimeExecVoidCompletionAndMetadata(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	result, err := Exec(ctx, s, b, Options{Trace: true, Observer: observer})
-	if err != nil || result.Attempts != 1 || result.Rows != 0 || len(result.TraceIDs) != 1 || result.TraceIDs[0] != trace || len(result.Warnings) != 1 || result.Warnings[0] != "warning" {
+	if err != nil || result.Attempts != 1 || result.Rows != 0 || len(result.TraceIDs()) != 1 || result.TraceIDs()[0] != trace || len(result.Warnings()) != 1 || result.Warnings()[0] != "warning" {
 		t.Fatalf("result = %+v, %v", result, err)
 	}
-	if len(result.CustomPayload) != 1 || result.CustomPayload[0].Key != "key" || string(result.CustomPayload[0].Value.Value.OwnedBytes()) != "val" {
-		t.Fatalf("custom payload = %+v", result.CustomPayload)
+	if len(result.CustomPayload()) != 1 || result.CustomPayload()[0].Key != "key" || string(result.CustomPayload()[0].Value.Value.OwnedBytes()) != "val" {
+		t.Fatalf("custom payload = %+v", result.CustomPayload())
 	}
 	b.Close()
 	if err := b.Wait(ctx); err != nil {
@@ -75,11 +75,11 @@ func TestV2RuntimeExecVoidCompletionAndMetadata(t *testing.T) {
 	observer.mu.Lock()
 	requests, attempts := observer.requests, observer.attempts
 	observer.mu.Unlock()
-	if len(requests) != 1 || len(attempts) != 1 || requests[0].Err != nil || requests[0].Result.TraceIDs[0] != trace || requests[0].Result.Warnings[0] != "warning" {
+	if len(requests) != 1 || len(attempts) != 1 || requests[0].Err != nil || requests[0].Result.TraceIDs()[0] != trace || requests[0].Result.Warnings()[0] != "warning" {
 		t.Fatalf("observer events = %+v / %+v", requests, attempts)
 	}
-	if len(requests[0].Result.CustomPayload) != 1 || string(requests[0].Result.CustomPayload[0].Value.Value.OwnedBytes()) != "val" {
-		t.Fatalf("observer custom payload = %+v", requests[0].Result.CustomPayload)
+	if len(requests[0].Result.CustomPayload()) != 1 || string(requests[0].Result.CustomPayload()[0].Value.Value.OwnedBytes()) != "val" {
+		t.Fatalf("observer custom payload = %+v", requests[0].Result.CustomPayload())
 	}
 	if m := s.Metrics(); m.Requests != 1 || m.Attempts != 1 || m.InFlight != 0 || m.Errors != 0 {
 		t.Fatal(m)

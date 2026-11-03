@@ -596,3 +596,19 @@ prepared point read through One.
 Against rt the first run flagged write/w1 cpu-ns/op +4.0% (p=0.021), on a
 path A2 does not touch. A 10×ABBA (n=20) rerun of the write cases showed no
 difference (p≥0.54).
+
+## A1: slim Result (kept, breaking)
+
+`model.Result` keeps HostID, Attempts, Latency, Rows and
+AchievedConsistency; warnings, trace IDs and custom payload move to
+`resultDiagnostics` behind accessor methods, with `AddWarnings`,
+`AddTraceIDs`, `AddCustomPayload` and `SetDiagnostics` for the driver.
+`TestResultDiagnosticsAreCopyOnWrite` covers copies, merge and clone.
+Making Latency opt-in was left out: its two clock reads are under 1% of a
+request.
+
+| vs A2 | before | after | Δ |
+|---|---:|---:|---:|
+| B/op pread/w64 / pone/w64 / point decoding | | | −7.37% / −6.23% / −5.03% |
+| cpu-ns/op w64 (five cases) | | | −1.07% to −3.07% |
+| cpu-ns/op w64-4 (five cases) | | | −1.59% to −2.40% |

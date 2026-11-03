@@ -911,18 +911,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			aggregate.HostID = outcome.event.Target.HostID
 			aggregate.AchievedConsistency = outcome.consistency
 			if response != nil {
-				aggregate.Warnings = append(aggregate.Warnings, response.Warnings...)
-				if len(response.TraceID) == 16 {
-					var id UUID
-					copy(id[:], response.TraceID)
-					aggregate.TraceIDs = append(aggregate.TraceIDs, id)
-				}
-				for _, entry := range response.Payload {
-					if entry.Value.Valid {
-						entry.Value.Value = entry.Value.Value.Clone()
-					}
-					aggregate.CustomPayload = append(aggregate.CustomPayload, entry)
-				}
+				mergeResponseResult(&aggregate, response)
 			}
 			if attemptErr == nil {
 				response.Result = aggregate

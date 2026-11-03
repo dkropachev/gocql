@@ -129,16 +129,16 @@ func mergeResponseResult(result *Result, response *responsePage) {
 	if response == nil {
 		return
 	}
-	result.Warnings = append(result.Warnings, response.Warnings...)
+	result.AddWarnings(response.Warnings...)
 	if len(response.TraceID) == 16 {
 		var id UUID
 		copy(id[:], response.TraceID)
-		result.TraceIDs = append(result.TraceIDs, id)
+		result.AddTraceIDs(id)
 	}
 	for _, entry := range response.Payload {
 		if entry.Value.Valid {
 			entry.Value.Value = entry.Value.Value.Clone()
 		}
-		result.CustomPayload = append(result.CustomPayload, entry)
+		result.AddCustomPayload(entry)
 	}
 }

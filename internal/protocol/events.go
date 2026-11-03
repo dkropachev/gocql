@@ -79,25 +79,28 @@ func (p *TypedParser) StreamEvent(h frm.FrameHeader) frm.Frame {
 
 func (p *TypedParser) StreamExtensions(h frm.FrameHeader) Result {
 	info := Result{}
+	var traceIDs []UUID
+	var warnings []string
+	var payload []PayloadEntry
 	if h.Flags&frm.FlagTracing != 0 {
 		b := p.Copy(16)
 		if p.Err == nil {
 			p.ReserveAllocation(16)
 			var id UUID
 			copy(id[:], b)
-			info.TraceIDs = []UUID{id}
+			traceIDs = []UUID{id}
 		}
 	}
 	if h.Flags&frm.FlagWarning != 0 {
-		info.Warnings = p.Strings()
+		warnings = p.Strings()
 	}
 	if h.Flags&frm.FlagCustomPayload != 0 {
 		count := int(p.U16())
 		p.ReserveAllocation(int64(count) * 80)
 		if p.Err == nil {
-			info.CustomPayload = make([]PayloadEntry, count)
-			for i := range info.CustomPayload {
-				e := &info.CustomPayload[i]
+			payload = make([]PayloadEntry, count)
+			for i := range payload {
+				e := &payload[i]
 				e.Key = p.Str()
 				b := p.Bytes()
 				if b != nil {
@@ -106,5 +109,6 @@ func (p *TypedParser) StreamExtensions(h frm.FrameHeader) Result {
 			}
 		}
 	}
+	info.SetDiagnostics(warnings, traceIDs, payload)
 	return info
 }
