@@ -635,3 +635,32 @@ them through `Extra()`.
 | cpu-ns/op pread / pwrite w64 | −1.23% / −1.40% |
 | cpu-ns/op w64-4 (three cases) | −0.61% to −1.30% |
 | other cases | ~ |
+
+## Round 2 cumulative
+
+`c641e86b` (with the `cpu-ns/op` patch) against `e91f8ae5`, 5×ABBA (n=10),
+quiet host. Every row is p=0.000.
+
+| benchmark | before | after | Δ |
+|---|---:|---:|---:|
+| Loopback read/w64 cpu-ns/op | 6.222µ | 5.099µ | −18.05% |
+| Loopback write/w64 cpu-ns/op | 5.826µ | 4.368µ | −25.02% |
+| Loopback pread/w64 cpu-ns/op | 6.953µ | 5.575µ | −19.83% |
+| Loopback pwrite/w64 cpu-ns/op | 5.969µ | 4.598µ | −22.98% |
+| Loopback w64-4 cpu-ns/op (four cases) | | | −25.54% to −32.52% |
+| Loopback w1 sec/op (four cases) | | | −5.90% to −8.03% |
+| Loopback w64-4 sec/op (four cases) | | | −27.14% to −33.71% |
+| Decoding point / stream / partition sec/op | | | −9.58 / −8.12 / −10.91% |
+| allocs/op read, pread / write, pwrite (w64) | 18 / 19, 18 | 6 / 5, 5 | −12 to −14 |
+| allocs/op partition decoding | 107 | 50 | −53% |
+| B/op pread/w64 / pwrite/w64 | 3,030 / 2,405 | 1,430 / 787 | −52.8% / −67.3% |
+| Admission | 815.5n, 3 allocs | 684.5n, 0 allocs | −16.06% |
+
+A prepared point read through `Query.One` costs 5 allocations, 787 B and
+4.88µs client CPU at w64, against 6.95µs, 18 allocations and 3,030 B
+through `Run` before this round.
+
+Not attempted this round: a query-owned `Rows` for `Run` (needs a
+value-type handle to keep stale handles from seeing a later execution;
+`One`/`Each` cover point reads instead), removing locks that only guard
+handle misuse, and the stream-query path.
