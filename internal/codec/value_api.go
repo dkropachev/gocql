@@ -90,7 +90,7 @@ func encodeValue[T any](typ cqltype.DataType, encoder Encoder[T], value T, owned
 	if err != nil {
 		return EncodedValue{}, err
 	}
-	return EncodedValue{typ: typ, state: writer.state, body: cqltype.BytesView(body, nil)}, nil
+	return EncodedValue{typ: typ, state: writer.state, body: cqltype.BytesView(body, wire.Ref{})}, nil
 }
 
 // DecodeValue checks the requested type before invoking the decoder. Unset is
@@ -113,5 +113,5 @@ func DecodeValue[T any](decoder Decoder[T], value EncodedValue) (T, error) {
 	if value.state == cqltype.Unset {
 		return zero, cqltype.TypeValidation("state", "unset cannot be decoded as a result")
 	}
-	return compiled.Decode(NewValueReader(value.typ, value.state, cqltype.BytesChain(value.body), cqltype.BytesLease(value.body)))
+	return compiled.Decode(newValueReader(value.typ, value.state, cqltype.BytesChain(value.body), cqltype.BytesLease(value.body)))
 }

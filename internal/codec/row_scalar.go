@@ -53,7 +53,7 @@ func (r *RowReader) scalarColumn(kind, alternative cqltype.Type, compiled bool, 
 		if err := cqltype.ValidateDataType(column.Type); err != nil {
 			return 0, fmt.Errorf("gocql: column %d (%s): %w", r.index, column.Name, err)
 		}
-		if r.lease != nil && !r.lease.Alive() {
+		if !r.lease.IsZero() && !r.lease.Alive() {
 			return 0, fmt.Errorf("gocql: column %d (%s): %w", r.index, column.Name, cqltype.ErrReleased)
 		}
 		checkpoint := *r.cursor
@@ -90,7 +90,7 @@ func (r *RowReader) scalarColumn(kind, alternative cqltype.Type, compiled bool, 
 	}
 	// This is the same present-value lease guard as requirePresent. The integer
 	// path also retains its cursor guard before loading the scalar.
-	if r.lease != nil && !r.lease.Alive() {
+	if !r.lease.IsZero() && !r.lease.Alive() {
 		return fail(cqltype.ErrReleased)
 	}
 	if width > 0 && int64(length) != width {

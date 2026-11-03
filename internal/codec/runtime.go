@@ -10,7 +10,7 @@ import (
 
 // Runtime constructors reuse the caller's cursor and final row-reader storage.
 func RowReaderFromCursor(columns cqltype.Columns, cursor *wire.Cursor, lease *wire.Lease) RowReader {
-	return RowReader{columns: columns, cursor: cursor, lease: lease}
+	return RowReader{columns: columns, cursor: cursor, lease: wire.RefOf(lease)}
 }
 func SetParamOwnership(w *ParamWriter, owned bool) { w.ownBorrowed = owned }
 func BeginStreamRow(r *StreamRowReader)            { r.index = 0 }

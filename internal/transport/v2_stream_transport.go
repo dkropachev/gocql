@@ -284,11 +284,11 @@ func (r *InternalExclusiveConn) InternalExchange(ctx context.Context, request *a
 			}
 		}()
 		for _, e := range request.Payload {
-			if e.Value.Valid && cqltype.BytesLease(e.Value.Value) != nil {
-				if !cqltype.BytesLease(e.Value.Value).Retain() {
+			if owner := cqltype.BytesLease(e.Value.Value); e.Value.Valid && !owner.IsZero() {
+				if !owner.Retain() {
 					return ErrReleased
 				}
-				owners = append(owners, cqltype.BytesLease(e.Value.Value))
+				owners = append(owners, owner.Lease())
 			}
 		}
 		packet, err := r.InternalConn.InternalBuildTypedRequest(request, r.InternalStream)

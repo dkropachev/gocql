@@ -394,7 +394,7 @@ func TestV2DynamicParameterNamesCountsAndRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 	chain := dynamicTestMust(builder.Freeze())
-	if got := hex.EncodeToString((cqltype.BytesView(chain, nil)).OwnedBytes()); got != "000000040000000900000001780000000400000009" {
+	if got := hex.EncodeToString((cqltype.BytesView(chain, wire.Ref{})).OwnedBytes()); got != "000000040000000900000001780000000400000009" {
 		t.Fatalf("server marker order: %s", got)
 	}
 	tests := []struct {
@@ -466,7 +466,7 @@ func TestV2DynamicRowsPhysicalSchemaLazyAccessAndClone(t *testing.T) {
 	tuple := dynamicTestMust(cqltype.TupleType(integer, text))
 	cols := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "same", Type: integer}, cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "same", Type: text}, cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "pair", Type: tuple})
 	source := dynamicTestRowBody(t, cols, []Value{IntValue(7), CodecTestMust(TextValue("hello")), dynamicTestMust(TupleValue(tuple, []Value{IntValue(8), CodecTestMust(TextValue("nested"))}))})
-	data := (cqltype.BytesView(source, nil)).OwnedBytes()
+	data := (cqltype.BytesView(source, wire.Ref{})).OwnedBytes()
 	spans := make([]wire.Span, len(data))
 	for i := range data {
 		spans[i] = wire.Borrow(data[i : i+1])
@@ -706,7 +706,7 @@ func TestV2DynamicRowsComposeWithTypedRecords(t *testing.T) {
 	udt := dynamicTestMust(cqltype.UDTType("ks", "record", cqltype.ColumnSpec{Name: "n", Type: integer}, cqltype.ColumnSpec{Name: "s", Type: text}))
 	encoded = dynamicTestMust(EncodeValueBorrowed(udt, UDTEncoder(NamedDynamicParams, UDTOptions{Keyspace: "ks", Name: "record"}), []ValueField{{Name: "s", Value: CodecTestMust(TextValue("borrowed"))}, {Name: "n", Value: IntValue(2)}}))
 	lease := wire.NewLease(cqltype.BytesChain(encoded.Bytes()), nil)
-	encoded.body = cqltype.BytesView(cqltype.BytesChain(encoded.body), lease)
+	encoded.body = cqltype.BytesView(cqltype.BytesChain(encoded.body), wire.RefOf(lease))
 	codec := UDTDecoder(DynamicRows, UDTOptions{Keyspace: "ks", Name: "record"})
 	row := dynamicTestMust(DecodeValue(codec, encoded))
 	clone := codec.Clone(row)

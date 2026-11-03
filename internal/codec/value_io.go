@@ -235,11 +235,17 @@ type ValueReader struct {
 	typ   cqltype.DataType
 	state cqltype.CellState
 	body  wire.Chain
-	lease *wire.Lease
+	lease wire.Ref
 	err   error
 }
 
+// NewValueReader reads body, borrowed from lease. The caller holds a
+// reference to lease while constructing the reader.
 func NewValueReader(typ cqltype.DataType, state cqltype.CellState, body wire.Chain, lease *wire.Lease) ValueReader {
+	return newValueReader(typ, state, body, wire.RefOf(lease))
+}
+
+func newValueReader(typ cqltype.DataType, state cqltype.CellState, body wire.Chain, lease wire.Ref) ValueReader {
 	r := ValueReader{typ: typ, state: state, body: body, lease: lease}
 	r.err = cqltype.ValidateDataType(typ)
 	if state > cqltype.Empty || (state != cqltype.Present && body.Len() != 0) {
@@ -268,7 +274,7 @@ func (r ValueReader) cursorValue() ValueCursor {
 type ValueCursor struct {
 	cursor      wire.Cursor
 	initialized bool
-	lease       *wire.Lease
+	lease       wire.Ref
 	initial     int64
 	err         error
 }
@@ -285,7 +291,7 @@ func (c *ValueCursor) check() error {
 	}
 	if !c.initialized {
 		c.err = cqltype.TypeValidation("cursor", "uninitialized cursor")
-	} else if c.lease != nil && !c.lease.Alive() {
+	} else if !c.lease.IsZero() && !c.lease.Alive() {
 		c.err = cqltype.ErrReleased
 	}
 	return c.err
@@ -354,13 +360,13 @@ func (c *ValueCursor) RequireEnd() error {
 // readValue validates a full framed cell before advancing the caller's cursor.
 // Zero-length cells remain Present; EmptyCodec interprets scalar empty values.
 func ReadValue(cursor *wire.Cursor, typ cqltype.DataType, lease *wire.Lease, allowUnset bool) (ValueReader, error) {
-	return readFramedValue(cursor, typ, lease, allowUnset, false)
+	return readFramedValue(cursor, typ, wire.RefOf(lease), allowUnset, false)
 }
-func readFramedValue(cursor *wire.Cursor, typ cqltype.DataType, lease *wire.Lease, allowUnset, nested bool) (ValueReader, error) {
+func readFramedValue(cursor *wire.Cursor, typ cqltype.DataType, lease wire.Ref, allowUnset, nested bool) (ValueReader, error) {
 	if err := cqltype.ValidateDataType(typ); err != nil {
 		return ValueReader{}, err
 	}
-	if lease != nil && !lease.Alive() {
+	if !lease.IsZero() && !lease.Alive() {
 		return ValueReader{}, cqltype.ErrReleased
 	}
 	if cursor == nil {
@@ -377,10 +383,10 @@ func readFramedValue(cursor *wire.Cursor, typ cqltype.DataType, lease *wire.Leas
 	}
 	length := int32(prefix)
 	if length == -1 {
-		return NewValueReader(typ, cqltype.Null, wire.Chain{}, lease), nil
+		return newValueReader(typ, cqltype.Null, wire.Chain{}, lease), nil
 	}
 	if length == -2 && allowUnset {
-		return NewValueReader(typ, cqltype.Unset, wire.Chain{}, lease), nil
+		return newValueReader(typ, cqltype.Unset, wire.Chain{}, lease), nil
 	}
 	if length < 0 {
 		return fail(fmt.Errorf("invalid cell length %d", length))
@@ -394,5 +400,5 @@ func readFramedValue(cursor *wire.Cursor, typ cqltype.DataType, lease *wire.Leas
 	if err != nil {
 		return fail(err)
 	}
-	return NewValueReader(typ, cqltype.Present, body, lease), nil
+	return newValueReader(typ, cqltype.Present, body, lease), nil
 }

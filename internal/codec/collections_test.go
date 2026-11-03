@@ -229,7 +229,7 @@ func TestV2ContainerFragmentAliasingAndCloneLease(t *testing.T) {
 	}
 	chain, _ := wire.NewChain(spans...)
 	lease := wire.NewLease(chain, nil)
-	leased, _ := NewEncodedValue(list, cqltype.Present, cqltype.BytesView(chain, lease))
+	leased, _ := NewEncodedValue(list, cqltype.Present, cqltype.BytesView(chain, wire.RefOf(lease)))
 	sequence, err := DecodeValue(ListDecoder(BlobCodec), leased)
 	if err != nil {
 		t.Fatal(err)

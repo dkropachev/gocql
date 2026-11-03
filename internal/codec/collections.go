@@ -633,7 +633,7 @@ func readVectorElement(cursor *ValueCursor, typ cqltype.DataType, width int64) (
 	if err != nil {
 		return ValueReader{}, err
 	}
-	return NewValueReader(typ, cqltype.Present, cqltype.BytesChain(body), cqltype.BytesLease(body)), nil
+	return newValueReader(typ, cqltype.Present, cqltype.BytesChain(body), cqltype.BytesLease(body)), nil
 }
 
 // Fixed vector members write directly into the enclosing builder. Variable

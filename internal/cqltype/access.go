@@ -14,8 +14,8 @@ func TypeFromDescriptor(d *DataTypeDescriptor) DataType {
 func ColumnSlice(c Columns) []ColumnSpec               { return c.columns }
 func ColumnsOwned(c []ColumnSpec) Columns              { return Columns{columns: c} }
 func BytesChain(b Bytes) wire.Chain                    { return b.chain }
-func BytesLease(b Bytes) *wire.Lease                   { return b.lease }
-func BytesView(c wire.Chain, l *wire.Lease) Bytes      { return Bytes{chain: c, lease: l} }
+func BytesLease(b Bytes) wire.Ref                      { return b.lease }
+func BytesView(c wire.Chain, l wire.Ref) Bytes         { return Bytes{chain: c, lease: l} }
 func TextView(b Bytes) Text                            { return Text{bytes: b} }
 func TextBytes(t Text) Bytes                           { return t.bytes }
 func NativeVersion(n NativeType) byte                  { return n.Version() }

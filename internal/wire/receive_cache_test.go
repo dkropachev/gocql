@@ -139,3 +139,40 @@ func TestStep15ReceiveCacheMixedAdmission(t *testing.T) {
 	}
 	cache.Close()
 }
+
+// TestCachedLeaseRecyclingKeepsStaleRefsDead checks that once a cached lease
+// is recycled for a later frame, a Ref taken from its earlier generation
+// stays dead: it neither reports the new owner alive nor retains it.
+func TestCachedLeaseRecyclingKeepsStaleRefsDead(t *testing.T) {
+	cache := new(ReceiveCache)
+	var stale []Ref
+	seen := map[*Lease]bool{}
+	recycled := false
+	for i := 0; i < 64 && !recycled; i++ {
+		data, epoch := cache.Acquire(64)
+		chain, _ := NewChain(Borrow(data))
+		lease := NewCachedLease(chain, cache, data, epoch)
+		ref := RefOf(lease)
+		if !ref.Alive() {
+			t.Fatal("fresh generation not alive")
+		}
+		for _, old := range stale {
+			if old.Lease() == lease {
+				recycled = true
+				if old.Alive() || old.Retain() {
+					t.Fatal("stale generation observed a recycled lease's new owner")
+				}
+			}
+		}
+		recycled = recycled || seen[lease]
+		seen[lease] = true
+		lease.Release()
+		if ref.Alive() || ref.Retain() {
+			t.Fatal("released generation still alive")
+		}
+		stale = append(stale, ref)
+	}
+	if !recycled {
+		t.Skip("the pool never recycled a lease")
+	}
+}

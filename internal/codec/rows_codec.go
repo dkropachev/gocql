@@ -120,13 +120,13 @@ func WriteParam[T any](w *ParamWriter, encoder Encoder[T], value T) error {
 type RowReader struct {
 	columns      cqltype.Columns
 	cursor       *wire.Cursor
-	lease        *wire.Lease
+	lease        wire.Ref
 	index        int
 	allowMissing bool
 }
 
 func NewRowReader(columns cqltype.Columns, body wire.Chain, lease *wire.Lease) *RowReader {
-	return &RowReader{columns: columns, cursor: wire.NewCursor(body), lease: lease}
+	return &RowReader{columns: columns, cursor: wire.NewCursor(body), lease: wire.RefOf(lease)}
 }
 
 func FinishRowReader(r *RowReader) error {
@@ -146,9 +146,9 @@ func (r *RowReader) nextValue() (ValueReader, error) {
 	}
 	if r.allowMissing && r.cursor.Remaining() == 0 {
 		r.index++
-		return NewValueReader(column.Type, cqltype.Null, wire.Chain{}, r.lease), nil
+		return newValueReader(column.Type, cqltype.Null, wire.Chain{}, r.lease), nil
 	}
-	v, err := ReadValue(r.cursor, column.Type, r.lease, false)
+	v, err := readFramedValue(r.cursor, column.Type, r.lease, false, false)
 	if err != nil {
 		return ValueReader{}, fmt.Errorf("gocql: column %d (%s): %w", r.index, column.Name, err)
 	}

@@ -95,7 +95,7 @@ func TestStep15NativeCacheOwnership(t *testing.T) {
 	lease := codecTestMust(rows.Retain())
 	defer lease.Close()
 	owner := cqltype.BytesLease(old)
-	if owner == nil {
+	if owner.IsZero() {
 		t.Fatal("missing physical owner")
 	}
 	rows.Close()

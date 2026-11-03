@@ -15,7 +15,7 @@ import (
 // is valid only while its page or a retained page lease remains alive.
 type Bytes struct {
 	chain wire.Chain
-	lease *wire.Lease
+	lease wire.Ref
 }
 
 // Text is a validated text view. String explicitly materializes an owned string.
@@ -38,7 +38,7 @@ func BorrowText(s string) (Text, error) {
 }
 func (b Bytes) Len() int64 { return b.chain.Len() }
 func (b Bytes) checkAlive() error {
-	if b.lease != nil && !b.lease.Alive() {
+	if !b.lease.IsZero() && !b.lease.Alive() {
 		return ErrReleased
 	}
 	return nil

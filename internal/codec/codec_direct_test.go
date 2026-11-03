@@ -131,7 +131,7 @@ func TestV2CollectDetachesEveryNestedFamily(t *testing.T) {
 	encoder := ListEncoder(TupleEncoder(PairParams(1, OneParam(StringEncoder), OneParam(BytesEncoder))))
 	encoded := CodecTestMust(EncodeValueBorrowed(list, encoder, []Pair[string, []byte]{{"one", []byte("blob")}, {"two", []byte("more")}}))
 	lease := wire.NewLease(cqltype.BytesChain(encoded.body), nil)
-	borrowed := EncodedValue{typ: list, state: cqltype.Present, body: cqltype.BytesView(cqltype.BytesChain(encoded.body), lease)}
+	borrowed := EncodedValue{typ: list, state: cqltype.Present, body: cqltype.BytesView(cqltype.BytesChain(encoded.body), wire.RefOf(lease))}
 	decoder := ListDecoder(TupleDecoder(PairRows(1, OneColumn(TextCodec), OneColumn(BlobCodec))))
 	seq := CodecTestMust(DecodeValue(decoder, borrowed))
 	values := CodecTestMust(Collect(seq.Iterator()))

@@ -70,7 +70,7 @@ func TestStep06TabletPayloadAndWire(t *testing.T) {
 		raw := step06Payload(h)
 		for split := 0; split <= len(raw); split++ {
 			chain := typedTestChain(t, raw[:split], raw[split:])
-			parsed, err := parseTypedTabletPayload(cqltype.BytesView(chain, nil), "ks", "table", v2)
+			parsed, err := parseTypedTabletPayload(cqltype.BytesView(chain, wire.Ref{}), "ks", "table", v2)
 			if err != nil || !sameTabletObservation(&tabletRange{InternalSpan: TokenRange{Start: h.FirstToken(), End: h.LastToken(), Replicas: []Target{target}}, InternalVersion: Option[uint64]{Value: 0xfedcba9876543210, Set: v2}}, parsed) {
 				t.Fatalf("v2=%t split=%d: %v", v2, split, err)
 			}

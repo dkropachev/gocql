@@ -111,7 +111,7 @@ func ASCIIValue(s string) (Value, error) {
 	v := dynamicScalar(cqltype.TypeAscii)
 	// ASCII validation is also UTF-8 validation; avoid a panicking text constructor.
 	c, _ := wire.NewChain(wire.BorrowString(s))
-	v.bytes = cqltype.BytesView(c, nil)
+	v.bytes = cqltype.BytesView(c, wire.Ref{})
 	if err := validateText(v.bytes, true); err != nil {
 		return Value{}, err
 	}
@@ -247,7 +247,7 @@ func (v Value) Decimal() (Decimal, error) {
 // Clone detaches a lazy aggregate by copying its encoded backing, without
 // decoding its children. Explicit input descriptors are cloned recursively.
 func (v Value) Clone() Value {
-	if cqltype.BytesLease(v.bytes) != nil || v.bytes.Len() != 0 {
+	if !cqltype.BytesLease(v.bytes).IsZero() || v.bytes.Len() != 0 {
 		v.bytes = v.bytes.Clone()
 	}
 	if v.values != nil {
@@ -1094,7 +1094,7 @@ func (r DynamicRow) buildPhysicalIndex() {
 				cells[i].state = cqltype.Null
 				continue
 			}
-			value, e := ReadValue(cursor, col.Type, cqltype.BytesLease(r.body), false)
+			value, e := readFramedValue(cursor, col.Type, cqltype.BytesLease(r.body), false, false)
 			if e != nil {
 				r.physical.err = &cqltype.CodecError{Column: col.Name, Index: i, Stage: "decode", Err: e}
 				return
@@ -1128,7 +1128,7 @@ func (r DynamicRow) At(index int) (Value, error) {
 	if e != nil {
 		return Value{}, e
 	}
-	value := NewValueReader(col.Type, cell.state, body, cqltype.BytesLease(r.body))
+	value := newValueReader(col.Type, cell.state, body, cqltype.BytesLease(r.body))
 	decoded, e := decodeDynamicWithPlan(value, r.shapes[index])
 	if e != nil {
 		return Value{}, &cqltype.CodecError{Column: col.Name, Index: index, Stage: "decode", Err: e}
@@ -1179,7 +1179,7 @@ func (p dynamicRowsPlan) DecodeInto(r *RowReader, dst *DynamicRow) error {
 	if err := dynamicMetadataMatches(p.columns, r.columns, r.index); err != nil {
 		return err
 	}
-	if r.lease != nil && !r.lease.Alive() {
+	if !r.lease.IsZero() && !r.lease.Alive() {
 		return cqltype.ErrReleased
 	}
 	start := *r.cursor

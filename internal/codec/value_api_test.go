@@ -167,7 +167,7 @@ func TestV2FoundationEncodedValueStatesAndLifetime(t *testing.T) {
 	}
 	chain := FoundationChain(t, []byte("leased"))
 	lease := wire.NewLease(chain, nil)
-	leased, err := NewEncodedValue(blob, cqltype.Present, cqltype.BytesView(chain, lease))
+	leased, err := NewEncodedValue(blob, cqltype.Present, cqltype.BytesView(chain, wire.RefOf(lease)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,12 +197,12 @@ func TestV2FoundationOversizedValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewEncodedValue(typ, cqltype.Present, cqltype.BytesView(chain, nil)); err == nil {
+	if _, err := NewEncodedValue(typ, cqltype.Present, cqltype.BytesView(chain, wire.Ref{})); err == nil {
 		t.Fatal("oversized standalone cell accepted")
 	}
 	builder := wire.NewBuilder(0)
 	w := NewValueWriter(builder, typ, false)
-	if err := w.borrowView(cqltype.BytesView(chain, nil)); err != nil {
+	if err := w.borrowView(cqltype.BytesView(chain, wire.Ref{})); err != nil {
 		t.Fatal(err)
 	}
 	if err := FinishValueWriter(w); err == nil {

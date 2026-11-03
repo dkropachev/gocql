@@ -38,7 +38,7 @@ func BenchmarkStep15NarrowWideRows(b *testing.B) {
 			columns := cqltype.NewColumns(specs...)
 			decoder := Row(fields...)
 			plan := CodecTestMust(decoder.Compile(columns))
-			raw := cqltype.BytesView(encodeTestParams(b, columns, DynamicParams, values), nil).OwnedBytes()
+			raw := cqltype.BytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
 			spans := make([]wire.Span, fragments)
 			for i := range spans {
 				spans[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])
@@ -48,7 +48,7 @@ func BenchmarkStep15NarrowWideRows(b *testing.B) {
 			for _, into := range []bool{false, true} {
 				b.Run(fmt.Sprintf("columns%d/fragments%d/into%t", 4*groups, fragments, into), func(b *testing.B) {
 					var cursor wire.Cursor
-					reader := RowReader{columns: columns, cursor: &cursor, lease: lease}
+					reader := RowReader{columns: columns, cursor: &cursor, lease: wire.RefOf(lease)}
 					var dst step15WideRow
 					cursor = *wire.NewCursor(chain)
 					if e := plan.DecodeInto(&reader, &dst); e != nil {

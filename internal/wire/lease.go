@@ -19,18 +19,29 @@
 package wire
 
 import (
-	"math"
+	"sync"
 	"sync/atomic"
 )
 
 // Lease keeps a Chain's backing storage alive until its final Release. A Lease
-// must not be copied. Lease objects are never recycled, so an old pointer cannot
-// retain a new owner's storage (the pooled-reference ABA problem).
+// must not be copied.
+//
+// A lease's state word holds a generation in its upper half and the reference
+// count in its lower half; the final release advances the generation. Code
+// that owns a reference uses the lease directly. Code that keeps a borrowed
+// view without a reference, such as cqltype.Bytes, keeps a Ref instead: it
+// names the generation the view belongs to, so a released lease that was
+// recycled for a later owner is never mistaken for the view's own.
 type Lease struct {
 	releaser LeaseReleaser
 	chain    Chain
-	refs     atomic.Int64
+	state    atomic.Uint64 // generation<<32 | references
 }
+
+const (
+	leaseRefsMask  = 1<<32 - 1
+	leaseGenerator = 1 << 32
+)
 
 // LeaseReleaser runs once on a lease's final release.
 type LeaseReleaser interface{ ReleaseLease() }
@@ -43,17 +54,25 @@ func (f releaseFunc) ReleaseLease() { f() }
 // NewLease creates a lease with one reference. release runs synchronously and
 // exactly once on the final Release; it may be nil.
 func NewLease(chain Chain, release func()) *Lease {
-	l := &Lease{chain: chain}
+	l := new(Lease)
+	var r LeaseReleaser
 	if release != nil {
-		l.releaser = releaseFunc(release)
+		r = releaseFunc(release)
 	}
-	perfLease(chain.Len())
-	l.refs.Store(1)
+	l.init(chain, r)
 	return l
 }
 
+// init gives the lease one reference in its current generation.
+func (l *Lease) init(chain Chain, r LeaseReleaser) {
+	l.chain = chain
+	l.releaser = r
+	perfLease(chain.Len())
+	l.state.Store(l.state.Load()&^leaseRefsMask | 1)
+}
+
 // cachedLease returns a received buffer to its cache on the final release,
-// in one allocation instead of a lease plus a release closure.
+// and itself to a pool: Refs from earlier owners carry their generation.
 type cachedLease struct {
 	cache *ReceiveCache
 	buf   []byte
@@ -61,42 +80,43 @@ type cachedLease struct {
 	epoch uint64
 }
 
-func (c *cachedLease) ReleaseLease() { c.cache.Release(c.buf, c.epoch) }
+var cachedLeasePool = sync.Pool{New: func() any { return new(cachedLease) }}
+
+func (c *cachedLease) ReleaseLease() {
+	cache, buf, epoch := c.cache, c.buf, c.epoch
+	c.cache, c.buf, c.chain, c.releaser = nil, nil, Chain{}, nil
+	cachedLeasePool.Put(c)
+	cache.Release(buf, epoch)
+}
 
 // NewCachedLease is NewLease whose final release returns buf, acquired with
 // epoch, to cache.
 func NewCachedLease(chain Chain, cache *ReceiveCache, buf []byte, epoch uint64) *Lease {
-	c := &cachedLease{cache: cache, buf: buf, epoch: epoch}
-	c.chain = chain
-	c.releaser = c
-	perfLease(chain.Len())
-	c.refs.Store(1)
+	c := cachedLeasePool.Get().(*cachedLease)
+	c.cache, c.buf, c.epoch = cache, buf, epoch
+	c.init(chain, c)
 	return &c.Lease
 }
 
 // InitLease initialises a Lease embedded in a caller's struct with one
-// reference; r runs once on the final Release. Like NewLease, the embedding
-// struct must not be recycled while anyone may still hold the lease: either
-// it is newly allocated, or its owner knows that every holder dropped its
-// pointer at the final release.
+// reference; r runs once on the final Release. The embedding struct may be
+// reused once that release finished: holders without a reference keep a Ref.
 func InitLease(l *Lease, chain Chain, r LeaseReleaser) {
-	l.chain = chain
-	l.releaser = r
-	perfLease(chain.Len())
-	l.refs.Store(1)
+	l.init(chain, r)
 }
 
 // Retain acquires another reference, or returns false after the final release.
+// Only a holder that already owns a reference may call it; others use Ref.
 func (l *Lease) Retain() bool {
 	if l == nil {
 		return false
 	}
 	for {
-		n := l.refs.Load()
-		if n <= 0 || n == math.MaxInt64 {
+		v := l.state.Load()
+		if n := v & leaseRefsMask; n == 0 || n == leaseRefsMask {
 			return false
 		}
-		if l.refs.CompareAndSwap(n, n+1) {
+		if l.state.CompareAndSwap(v, v+1) {
 			perfAdd(7, 1)
 			return true
 		}
@@ -106,7 +126,7 @@ func (l *Lease) Retain() bool {
 // Alive reports whether references remain. It does not acquire a reference;
 // callers accessing storage must already hold a reference for the entire use.
 // In particular, a concurrent final Release can invalidate a positive result.
-func (l *Lease) Alive() bool { return l != nil && l.refs.Load() > 0 }
+func (l *Lease) Alive() bool { return l != nil && l.state.Load()&leaseRefsMask > 0 }
 
 // Release drops a reference. Calls on nil or an already released lease are
 // harmless. Every successful Retain still requires its own Release.
@@ -115,11 +135,16 @@ func (l *Lease) Release() {
 		return
 	}
 	for {
-		n := l.refs.Load()
-		if n <= 0 {
+		v := l.state.Load()
+		n := v & leaseRefsMask
+		if n == 0 {
 			return
 		}
-		if l.refs.CompareAndSwap(n, n-1) {
+		next := v - 1
+		if n == 1 {
+			next = v&^leaseRefsMask + leaseGenerator // next generation, no references
+		}
+		if l.state.CompareAndSwap(v, next) {
 			perfAdd(8, 1)
 			if n == 1 {
 				perfLease(-l.chain.Len())
@@ -128,6 +153,59 @@ func (l *Lease) Release() {
 				}
 			}
 			return
+		}
+	}
+}
+
+// Ref names one generation of a lease without holding a reference. It is how
+// borrowed views remember their storage: once that generation's final release
+// happened, the Ref is dead even if the lease serves a later owner.
+type Ref struct {
+	l   *Lease
+	gen uint32
+}
+
+// RefOf returns a Ref to l's current generation. The caller must hold a
+// reference, so that the generation is the one it observed.
+func RefOf(l *Lease) Ref {
+	if l == nil {
+		return Ref{}
+	}
+	return Ref{l: l, gen: uint32(l.state.Load() >> 32)}
+}
+
+// IsZero reports whether the Ref names no lease.
+func (r Ref) IsZero() bool { return r.l == nil }
+
+// Lease returns the referenced lease. Use it only while holding a reference
+// obtained through Retain.
+func (r Ref) Lease() *Lease { return r.l }
+
+// Alive reports whether the Ref's generation still has references.
+func (r Ref) Alive() bool {
+	if r.l == nil {
+		return false
+	}
+	v := r.l.state.Load()
+	return uint32(v>>32) == r.gen && v&leaseRefsMask > 0
+}
+
+// Retain acquires a reference to the Ref's generation, or returns false once
+// that generation was released. A successful Retain is paired with
+// r.Lease().Release().
+func (r Ref) Retain() bool {
+	if r.l == nil {
+		return false
+	}
+	for {
+		v := r.l.state.Load()
+		n := v & leaseRefsMask
+		if uint32(v>>32) != r.gen || n == 0 || n == leaseRefsMask {
+			return false
+		}
+		if r.l.state.CompareAndSwap(v, v+1) {
+			perfAdd(7, 1)
+			return true
 		}
 	}
 }

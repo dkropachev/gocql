@@ -42,7 +42,7 @@ func TestV2FoundationBorrowedViews(t *testing.T) {
 	chain := FoundationChain(t, first, second)
 	released := 0
 	lease := wire.NewLease(chain, func() { released++ })
-	view := cqltype.BytesView(chain, lease)
+	view := cqltype.BytesView(chain, wire.RefOf(lease))
 	slice, err := view.Slice(1, 4)
 	if err != nil {
 		t.Fatal(err)
@@ -102,7 +102,7 @@ func TestV2FoundationTextChunks(t *testing.T) {
 	data := []byte("a€界z")
 	chain := FoundationChain(t, data[:2], data[2:4], data[4:6], data[6:])
 	lease := wire.NewLease(chain, nil)
-	text := cqltype.TextView(cqltype.BytesView(chain, lease))
+	text := cqltype.TextView(cqltype.BytesView(chain, wire.RefOf(lease)))
 	if got := text.String(); got != string(data) {
 		t.Fatalf("String: %q", got)
 	}
@@ -136,7 +136,7 @@ func TestV2FoundationConcurrentRetainedViews(t *testing.T) {
 	data := []byte("immutable retained page")
 	chain := FoundationChain(t, data)
 	lease := wire.NewLease(chain, nil)
-	view := cqltype.BytesView(chain, lease)
+	view := cqltype.BytesView(chain, wire.RefOf(lease))
 	var wg sync.WaitGroup
 	for i := 0; i < 12; i++ {
 		if !lease.Retain() {

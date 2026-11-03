@@ -19,7 +19,6 @@
 package wire
 
 import (
-	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -111,8 +110,8 @@ func TestLeaseRetainRacesFinalRelease(t *testing.T) {
 
 func TestLeaseRefcountOverflow(t *testing.T) {
 	l := NewLease(Chain{}, nil)
-	l.refs.Store(math.MaxInt64)
-	if l.Retain() || l.refs.Load() != math.MaxInt64 {
+	l.state.Store(leaseRefsMask)
+	if l.Retain() || l.state.Load() != leaseRefsMask {
 		t.Fatal("refcount overflow was not rejected")
 	}
 }

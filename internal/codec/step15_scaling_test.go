@@ -65,7 +65,7 @@ func TestStep15DynamicIndexJBounds(t *testing.T) {
 					values[i] = BlobValue(make([]byte, (1<<20)/n))
 				}
 				cols := cqltype.NewColumns(specs...)
-				raw := cqltype.BytesView(dynamicTestRowBody(t, cols, values), nil).OwnedBytes()
+				raw := cqltype.BytesView(dynamicTestRowBody(t, cols, values), wire.Ref{}).OwnedBytes()
 				spans := make([]wire.Span, fragments)
 				for i := range spans {
 					spans[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])

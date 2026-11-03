@@ -434,7 +434,7 @@ func (c *Settings) ParseTypedResponseInto(head frm.FrameHeader, body wire.Chain,
 					break
 				}
 				value := p.Take(int64(length))
-				entry.Value = Nullable[Bytes]{Valid: true, Value: cqltype.BytesView(value, owner)}
+				entry.Value = Nullable[Bytes]{Valid: true, Value: cqltype.BytesView(value, wire.RefOf(owner))}
 			}
 		}
 	}

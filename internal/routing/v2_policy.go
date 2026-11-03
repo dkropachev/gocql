@@ -35,7 +35,7 @@ func (k PartitionKey) ForEach(fn func(Bytes) error) error {
 		if e != nil {
 			return e
 		}
-		return fn(cqltype.BytesView(c, nil))
+		return fn(cqltype.BytesView(c, wire.Ref{}))
 	})
 }
 

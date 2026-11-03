@@ -96,7 +96,7 @@ func integerCodec[T signedScalar](kind cqltype.Type, width int64) Codec[T] {
 			}
 			// Retain the scalar cursor lease check in addition to the frame and
 			// present-value checks, without constructing a ValueCursor.
-			if r.lease != nil && !r.lease.Alive() {
+			if !r.lease.IsZero() && !r.lease.Alive() {
 				_ = r.cursor.Skip(width) // match the consumed generic value body
 				return 0, cqltype.ErrReleased
 			}

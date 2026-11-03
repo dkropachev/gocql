@@ -207,7 +207,7 @@ func TestV2RecordCloneDetachesNestedBorrowing(t *testing.T) {
 		t.Fatal(err)
 	}
 	lease := wire.NewLease(cqltype.BytesChain(encoded.body), nil)
-	encoded.body = cqltype.BytesView(cqltype.BytesChain(encoded.body), lease)
+	encoded.body = cqltype.BytesView(cqltype.BytesChain(encoded.body), wire.RefOf(lease))
 	value, err := DecodeValue(decoder, encoded)
 	if err != nil {
 		t.Fatal(err)

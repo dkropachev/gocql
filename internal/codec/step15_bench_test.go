@@ -112,7 +112,7 @@ func BenchmarkStep15DynamicRows(b *testing.B) {
 					values[i] = BlobValue(bytes.Repeat([]byte{'x'}, 32))
 				}
 				columns := cqltype.NewColumns(cols...)
-				raw := cqltype.BytesView(encodeTestParams(b, columns, DynamicParams, values), nil).OwnedBytes()
+				raw := cqltype.BytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
 				spans := make([]wire.Span, fragments)
 				for i := range spans {
 					spans[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])
@@ -227,7 +227,7 @@ func BenchmarkStep15DynamicRepeatedAccess(b *testing.B) {
 					values[i] = BlobValue(make([]byte, (1<<20)/n))
 				}
 				columns := cqltype.NewColumns(cols...)
-				raw := cqltype.BytesView(encodeTestParams(b, columns, DynamicParams, values), nil).OwnedBytes()
+				raw := cqltype.BytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
 				parts := make([]wire.Span, fragments)
 				for i := range parts {
 					parts[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])

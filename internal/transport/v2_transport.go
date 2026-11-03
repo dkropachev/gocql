@@ -71,12 +71,11 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest
 		}
 	}()
 	for _, entry := range req.Payload {
-		if entry.Value.Valid && cqltype.BytesLease(entry.Value.Value) != nil {
-			owner := cqltype.BytesLease(entry.Value.Value)
+		if owner := cqltype.BytesLease(entry.Value.Value); entry.Value.Valid && !owner.IsZero() {
 			if !owner.Retain() {
 				return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrReleased})
 			}
-			payloadOwners = append(payloadOwners, owner)
+			payloadOwners = append(payloadOwners, owner.Lease())
 		}
 	}
 	stream, ok := c.InternalStreams.GetStream()
