@@ -627,3 +627,11 @@ them through `Extra()`.
 | cpu-ns/op w64-4 (five cases) | | | −2.25% to −2.74% |
 | cpu-ns/op pone/w1 | 14.19µ | 13.27µ | −6.45% |
 | Admission | 675.1n | 678.5n | +0.50% (p=0.007, under 2%) |
+
+## Reader pause flag (kept)
+
+| vs F2 | Δ |
+|---|---:|
+| cpu-ns/op pread / pwrite w64 | −1.23% / −1.40% |
+| cpu-ns/op w64-4 (three cases) | −0.61% to −1.30% |
+| other cases | ~ |

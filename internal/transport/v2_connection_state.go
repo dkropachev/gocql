@@ -105,6 +105,11 @@ func (c *Conn) markOrphan(call *InternalCallReq) bool {
 // boundary. It acknowledges exclusive ownership before the acquiring goroutine
 // can read and acknowledges shared resumption before admission reopens.
 func (c *Conn) pauseSharedReader(ctx context.Context) bool {
+	// pauseWanted is set under InternalMu before the reader is interrupted, so a
+	// reader that misses it here is interrupted and checks again.
+	if !c.pauseRequested.Load() {
+		return false
+	}
 	c.InternalMu.Lock()
 	if !c.pauseWanted {
 		c.InternalMu.Unlock()
@@ -202,6 +207,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 		}
 		if c.InternalSharedOps == 0 && len(c.InternalCalls) == 0 && c.InternalStreams.InUse() == 0 {
 			c.pauseWanted = true
+			c.pauseRequested.Store(true)
 			c.readerPaused = make(chan struct{})
 			c.readerResume = make(chan struct{})
 			c.readerResumed = make(chan struct{})
@@ -261,6 +267,7 @@ func (c *Conn) restoreSharedReader(reader *connReader) {
 	paused, resume, resumed := c.readerPaused, c.readerResume, c.readerResumed
 	if c.pauseWanted {
 		c.pauseWanted = false
+		c.pauseRequested.Store(false)
 		if resume != nil {
 			close(resume)
 		}

@@ -205,6 +205,7 @@ type Conn struct {
 	InternalSharedOps, orphans                int
 	sharedChanged                             chan struct{}
 	pauseWanted                               bool
+	pauseRequested                            atomic.Bool // mirrors pauseWanted for the reader's lock-free check
 	readerPaused, readerResume, readerResumed chan struct{}
 	auth                                      Authenticator
 	InternalCfg                               *ConnConfig
