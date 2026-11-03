@@ -171,3 +171,19 @@ page close, input owner, connection reader disarm), so they are not worth
 individual changes. The post-batching profile puts allocation and GC first:
 `mallocgc` is 17.4% cumulative plus about 12% marking and scanning, and the
 execution deadline context alone is 4.4%.
+
+## I5a: create the query completion channel only for a waiter (kept)
+
+Every `queryState.begin` allocated a completion channel, and the matching
+`idle` closed it, even when nothing ever called `Wait`. `wait` now returns at
+once for an idle query. A busy query creates the channel on its first waiter,
+and `idle` closes and clears it, so each generation's waiters still observe
+that generation's completion.
+
+| benchmark (ABBA vs I4) | before | after | Δ |
+|---|---:|---:|---:|
+| allocs/op (all reusable cases) | | | −1 |
+| B/op (all reusable cases) | | | −112 |
+| Loopback write/w64 | 6.665µ | 6.609µ | −0.84% (p=0.037) |
+| Decoding point/buffered | 12.86µ | 12.69µ | −1.30% (p=0.007) |
+| Loopback read/w64 | 7.244µ | 7.079µ | ~ (p=0.089) |

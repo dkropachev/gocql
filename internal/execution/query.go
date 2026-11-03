@@ -30,7 +30,7 @@ type queryState struct {
 	logical       *InternalLogicalExecution
 	busy, closed  bool
 	generation    uint64
-	done          chan struct{}
+	done          chan struct{} // created by the first waiter of a busy generation
 	retire        func()
 }
 
@@ -82,8 +82,6 @@ func newQueryState(s *implCluster.Session, state *queryState, retire func()) err
 	state.owner = newInputOwner()
 	state.releaseOwner = state.owner.InternalRelease
 	state.retire = retire
-	state.done = make(chan struct{})
-	close(state.done)
 	state.owner.onIdle = state.idle
 	state.runtime.InternalMu.Lock()
 	if state.runtime.queries == nil {
@@ -146,7 +144,10 @@ func (s *queryState) idle() {
 	s.retire()
 	s.logical = nil
 	s.busy = false
-	close(s.done)
+	if s.done != nil {
+		close(s.done)
+		s.done = nil
+	}
 	closed := s.closed
 	s.mu.Unlock()
 	if closed {
@@ -177,7 +178,6 @@ func (s *queryState) begin(ctx context.Context) error {
 	}
 	s.busy = true
 	s.generation++
-	s.done = make(chan struct{})
 	s.mu.Unlock()
 	// Never acquire owner.mu while holding state.mu: the final release calls idle.
 	if err := s.owner.InternalAdmit(); err != nil {
@@ -337,6 +337,14 @@ func (s *queryState) wait(ctx context.Context) error {
 		return typeValidation("query", "uninitialized query")
 	}
 	s.mu.Lock()
+	if !s.busy {
+		s.mu.Unlock()
+		return nil
+	}
+	// Only a waiter needs the completion channel; idle closes it.
+	if s.done == nil {
+		s.done = make(chan struct{})
+	}
 	done := s.done
 	s.mu.Unlock()
 	select {
