@@ -1554,22 +1554,22 @@ func TestPrepareBatchMetadataMultipleKeyspaceTables(t *testing.T) {
 		t.Fatalf("prepareStatement failed: %v", err)
 	}
 
-	if got := info.BindColumns.Len(); got != 2 {
+	if got := info.BindColumns().Len(); got != 2 {
 		t.Fatalf("expected 2 request columns, got %d", got)
 	}
 
-	col0, _ := info.BindColumns.At(0)
+	col0, _ := info.BindColumns().At(0)
 	if col0.Keyspace != "ks1" || col0.Table != "tbl1" || col0.Name != "col1" {
 		t.Fatalf("unexpected column 0: %+v", col0)
 	}
 
-	col1, _ := info.BindColumns.At(1)
+	col1, _ := info.BindColumns().At(1)
 	if col1.Keyspace != "ks2" || col1.Table != "tbl2" || col1.Name != "col2" {
 		t.Fatalf("unexpected column 1: %+v", col1)
 	}
 
-	if info.Keyspace != "" || "" != "" {
-		t.Fatalf("expected empty prepared keyspace/table for mixed batch, got %q/%q", info.Keyspace, "")
+	if info.Keyspace() != "" || "" != "" {
+		t.Fatalf("expected empty prepared keyspace/table for mixed batch, got %q/%q", info.Keyspace(), "")
 	}
 }
 

@@ -517,14 +517,14 @@ func TestTypedServerErrorKeepsMetadataAndUnwraps(t *testing.T) {
 	if !errors.As(err, &unprepared) || !bytes.Equal(unprepared.StatementId, []byte{1, 2}) {
 		t.Fatalf("wrong error %v", err)
 	}
-	if page == nil || len(page.Warnings) != 1 || len(page.TraceID) != 16 || len(page.Payload) != 1 {
+	if page == nil || len(page.Warnings()) != 1 || len(page.TraceID()) != 16 || len(page.Payload()) != 1 {
 		t.Fatal("error metadata lost")
 	}
-	if got := string(page.Payload[0].Value.Value.OwnedBytes()); got != "val" {
+	if got := string(page.Payload()[0].Value.Value.OwnedBytes()); got != "val" {
 		t.Fatalf("wrong payload %q", got)
 	}
 	page.Owner.Release()
-	if _, err := page.Payload[0].Value.Value.At(0); !errors.Is(err, ErrReleased) {
+	if _, err := page.Payload()[0].Value.Value.At(0); !errors.Is(err, ErrReleased) {
 		t.Fatal("error payload owner did not expire")
 	}
 }

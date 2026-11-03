@@ -276,7 +276,7 @@ func (p *TypedParser) metadata(page *model.ResponseData, prepared bool, flagLWT 
 	m := ParsedMetadata{}
 	cols, count := p.MetadataFields(&m, prepared, flagLWT)
 	if prepared {
-		page.PkIndexes = m.pkIndexes
+		page.Extra().PkIndexes = m.pkIndexes
 		page.Lwt = m.lwt
 	} else {
 		page.NoMetadata = m.NoMetadata
@@ -410,19 +410,20 @@ func (c Settings) ParseTypedResponseInto(head frm.FrameHeader, body wire.Chain, 
 	*page = model.ResponseData{Owner: owner, InternalParseCursor: wire.CursorOver(body)}
 	p := &TypedParser{reuse: c.MetadataReuse, Cursor: &page.InternalParseCursor, Proto: c.Protocol, MetadataID: c.Protocol >= 5 || c.MetadataID, owner: owner, MaxDepth: c.MaxMetadataDepth}
 	if head.Flags&frm.FlagTracing != 0 {
-		page.TraceID = p.Copy(16)
+		page.Extra().TraceID = p.Copy(16)
 	}
 	if head.Flags&frm.FlagWarning != 0 {
-		page.Warnings = p.Strings()
+		page.Extra().Warnings = p.Strings()
 	}
 	if head.Flags&frm.FlagCustomPayload != 0 {
 		count := int(p.U16())
 		if int64(count) > p.Cursor.Remaining()/6 {
 			p.Check(fmt.Errorf("gocql: payload count exceeds remaining body"))
 		} else {
-			page.Payload = make([]model.PayloadEntry, count)
-			for i := range page.Payload {
-				entry := &page.Payload[i]
+			payload := make([]model.PayloadEntry, count)
+			page.Extra().Payload = payload
+			for i := range payload {
+				entry := &payload[i]
 				entry.Key = p.Str()
 				length := p.I32()
 				if length == -1 {
@@ -465,16 +466,16 @@ func (c Settings) ParseTypedResponseInto(head frm.FrameHeader, body wire.Chain, 
 			}
 			page.Rows = p.Take(p.Cursor.Remaining())
 		case frm.ResultKindPrepared:
-			page.PreparedID = p.shortBytes()
+			page.Extra().PreparedID = p.shortBytes()
 			if p.MetadataID {
 				page.MetadataID = p.shortBytes()
 			}
-			page.BindColumns, _ = p.metadata(page, true, c.FlagLWT)
+			page.Extra().BindColumns, _ = p.metadata(page, true, c.FlagLWT)
 			page.Columns, page.ColumnCount = p.metadata(page, false, 0)
 		case frm.ResultKindKeyspace:
-			page.Keyspace = p.Str()
+			page.Extra().Keyspace = p.Str()
 		case frm.ResultKindSchemaChanged:
-			page.SchemaChange = true
+			page.Extra().SchemaChange = true
 			_ = p.Str()
 			target := p.Str()
 			_ = p.Str()

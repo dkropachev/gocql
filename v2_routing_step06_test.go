@@ -8,6 +8,7 @@ import implExecution "github.com/scylladb/gocql/v2/internal/execution"
 import (
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/model"
 )
 
 import (
@@ -458,7 +459,7 @@ func TestStep06NegotiationVersionAndFailedExecuteFeedback(t *testing.T) {
 	stamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, s.Metadata())
 	// applyTypedFeedbackStamped is deliberately before execute-error/UNPREPARED
 	// interpretation; a response page can carry payload independently of rows.
-	page := &responsePage{InternalResponseData: responseData{Payload: []PayloadEntry{{Key: "tablets-routing-v2", Value: Nullable[Bytes]{Valid: true, Value: BorrowBytes(step06Payload(h))}}}}}
+	page := &responsePage{InternalResponseData: responseData{Extras: &model.ResponseExtras{Payload: []PayloadEntry{{Key: "tablets-routing-v2", Value: Nullable[Bytes]{Valid: true, Value: BorrowBytes(step06Payload(h))}}}}}}
 	implCluster.InternalSessionApplyTypedFeedbackStamped(s, page, info, stamp, framerConfig{InternalTabletsRoutingV1: true, InternalTabletsRoutingV2: true})
 	step06Drain(s)
 	m := s.Metadata()
@@ -473,8 +474,8 @@ func TestStep06NegotiationVersionAndFailedExecuteFeedback(t *testing.T) {
 		t.Fatal("absent identity/token hint is not zero")
 	}
 	// A malformed V2 body never falls back to the simultaneously supplied V1.
-	page.Payload = append([]PayloadEntry{{Key: "tablets-routing-v1", Value: Nullable[Bytes]{Valid: true, Value: BorrowBytes(step06Payload(step06Hint(t, 100, 200, Option[uint64]{}, hTarget(2, 0))))}}}, page.Payload...)
-	page.Payload[1].Value.Value = BorrowBytes([]byte{0})
+	page.Extras.Payload = append([]PayloadEntry{{Key: "tablets-routing-v1", Value: Nullable[Bytes]{Valid: true, Value: BorrowBytes(step06Payload(step06Hint(t, 100, 200, Option[uint64]{}, hTarget(2, 0))))}}}, page.Extras.Payload...)
+	page.Extras.Payload[1].Value.Value = BorrowBytes([]byte{0})
 	implCluster.InternalSessionApplyTypedFeedbackStamped(s, page, info, implCluster.InternalSessionCaptureTabletFeedback(s, info, m), framerConfig{InternalTabletsRoutingV1: true, InternalTabletsRoutingV2: true})
 	step06Drain(s)
 	if s.Metadata() != m {

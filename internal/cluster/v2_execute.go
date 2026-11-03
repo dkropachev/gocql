@@ -164,7 +164,7 @@ func InternalSessionApplyTypedFeedbackStamped(s *Session, response *responsePage
 	} else if !features.InternalTabletsRoutingV1 {
 		return
 	}
-	for _, entry := range response.Payload {
+	for _, entry := range response.Payload() {
 		if entry.Key != key || !entry.Value.Valid {
 			continue
 		}

@@ -612,3 +612,18 @@ request.
 | B/op pread/w64 / pone/w64 / point decoding | | | −7.37% / −6.23% / −5.03% |
 | cpu-ns/op w64 (five cases) | | | −1.07% to −3.07% |
 | cpu-ns/op w64-4 (five cases) | | | −1.59% to −2.40% |
+
+## F2: response hot/cold split (kept)
+
+`ResponseData.Extras` holds Keyspace, SchemaChange, PreparedID,
+BindColumns, PkIndexes, TraceID, Payload and Warnings; the parser writes
+them through `Extra()`.
+
+| vs A1 | before | after | Δ |
+|---|---:|---:|---:|
+| B/op read and pread w64 | 1,621 | 1,429 | −11.84% |
+| B/op pone/w64 | 980 | 787 | −19.69% |
+| cpu-ns/op w64 (five cases) | | | −1.82% to −4.08% |
+| cpu-ns/op w64-4 (five cases) | | | −2.25% to −2.74% |
+| cpu-ns/op pone/w1 | 14.19µ | 13.27µ | −6.45% |
+| Admission | 675.1n | 678.5n | +0.50% (p=0.007, under 2%) |

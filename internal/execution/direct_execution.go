@@ -81,7 +81,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 			return response, nil
 		}
 		if response != nil {
-			ddl := response.SchemaChange
+			ddl := response.SchemaChange()
 			response.Owner.Release()
 			if ddl {
 				return failure(fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", err))
@@ -129,13 +129,13 @@ func mergeResponseResult(result *Result, response *responsePage) {
 	if response == nil {
 		return
 	}
-	result.AddWarnings(response.Warnings...)
-	if len(response.TraceID) == 16 {
+	result.AddWarnings(response.Warnings()...)
+	if len(response.TraceID()) == 16 {
 		var id UUID
-		copy(id[:], response.TraceID)
+		copy(id[:], response.TraceID())
 		result.AddTraceIDs(id)
 	}
-	for _, entry := range response.Payload {
+	for _, entry := range response.Payload() {
 		if entry.Value.Valid {
 			entry.Value.Value = entry.Value.Value.Clone()
 		}

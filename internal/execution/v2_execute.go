@@ -151,10 +151,10 @@ func (s *InternalSessionRuntime) InternalPrepareTyped(ctx context.Context, state
 		return nil, err
 	}
 	info.Generation = generation
-	dependencies := tracker.InternalDependencies(info.Keyspace, page.BindColumns, page.Columns)
+	dependencies := tracker.InternalDependencies(info.Keyspace, page.BindColumns(), page.Columns)
 	epoch := dependencies.InternalSince(started)
 	result := &typedResultMetadata{InternalColumns: page.Columns, InternalEpoch: epoch, InternalTracker: dependencies.InternalTracker}
-	state = &InternalPreparedState{InternalSession: s.Session, InternalProtocol: conn.InternalVersion, InternalStatement: statement, InternalKeyspace: keyspace, InternalParameters: page.BindColumns, InternalColumns: page.Columns, InternalInfo: info, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalResult: result, InternalResultHost: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), InternalPartitioner: implCluster.InternalSessionPreparedPartitionerName(s.Session, info.Keyspace, info.Table), InternalHosts: map[UUID]*InternalHostPrepared{implEndpoint.InternalHostInfoHostUUID(conn.InternalHost): {InternalId: page.PreparedID, InternalMetadataID: page.MetadataID, InternalColumns: page.Columns, InternalGeneration: generation, InternalRevision: 1, InternalEpoch: epoch, InternalResult: result}}}
+	state = &InternalPreparedState{InternalSession: s.Session, InternalProtocol: conn.InternalVersion, InternalStatement: statement, InternalKeyspace: keyspace, InternalParameters: page.BindColumns(), InternalColumns: page.Columns, InternalInfo: info, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalResult: result, InternalResultHost: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), InternalPartitioner: implCluster.InternalSessionPreparedPartitionerName(s.Session, info.Keyspace, info.Table), InternalHosts: map[UUID]*InternalHostPrepared{implEndpoint.InternalHostInfoHostUUID(conn.InternalHost): {InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: page.Columns, InternalGeneration: generation, InternalRevision: 1, InternalEpoch: epoch, InternalResult: result}}}
 
 	tracker.InternalMu.RLock()
 	defer tracker.InternalMu.RUnlock()
@@ -269,15 +269,15 @@ func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *Conn, st
 	if page == nil {
 		return nil, &ProtocolError{Stage: "prepare", Err: fmt.Errorf("missing response")}
 	}
-	if !state.InternalParameters.Equal(page.BindColumns) || !parameters.Equal(page.BindColumns) {
-		return nil, &SchemaChangedError{Statement: state.InternalStatement, Previous: parameters, Current: page.BindColumns}
+	if !state.InternalParameters.Equal(page.BindColumns()) || !parameters.Equal(page.BindColumns()) {
+		return nil, &SchemaChangedError{Statement: state.InternalStatement, Previous: parameters, Current: page.BindColumns()}
 	}
 	info, err := s.InternalHostPreparedInfo(conn, page, state)
 	if err != nil {
 		return nil, err
 	}
 	if !slices.Equal(info.PartitionKeyIndexes, state.InternalInfo.PartitionKeyIndexes) || info.Keyspace != state.InternalInfo.Keyspace || info.Table != state.InternalInfo.Table || info.Kind != state.InternalInfo.Kind || info.Conditional != state.InternalInfo.Conditional || len(state.InternalInfo.PartitionKeyIndexes) > 0 && implCluster.InternalSessionPreparedPartitionerName(s.Session, info.Keyspace, info.Table) != state.InternalPartitioner {
-		return nil, &SchemaChangedError{Statement: state.InternalStatement, Previous: state.InternalParameters, Current: page.BindColumns}
+		return nil, &SchemaChangedError{Statement: state.InternalStatement, Previous: state.InternalParameters, Current: page.BindColumns()}
 	}
 	revision := uint64(1)
 	if flight.previous != nil {
@@ -294,7 +294,7 @@ func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *Conn, st
 		}
 	}
 	state.InternalMu.RUnlock()
-	candidate := &InternalHostPrepared{InternalId: page.PreparedID, InternalMetadataID: page.MetadataID, InternalColumns: result.InternalColumns, InternalGeneration: implCluster.InternalSessionTypedGeneration(s.Session), InternalRevision: revision, InternalEpoch: epoch, InternalResult: result}
+	candidate := &InternalHostPrepared{InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: result.InternalColumns, InternalGeneration: implCluster.InternalSessionTypedGeneration(s.Session), InternalRevision: revision, InternalEpoch: epoch, InternalResult: result}
 
 	// Exact-entry/epoch CAS. A losing response keeps its own immutable candidate;
 	// it is never republished against a newly loaded host revision.
@@ -315,14 +315,14 @@ func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *Conn, st
 	return candidate, nil
 }
 func (s *InternalSessionRuntime) InternalHostPreparedInfo(conn *Conn, page *responsePage, state *InternalPreparedState) (PreparedInfo, error) {
-	info := PreparedInfo{Keyspace: state.InternalKeyspace, PartitionKeyIndexes: page.PkIndexes, Conditional: page.Lwt}
+	info := PreparedInfo{Keyspace: state.InternalKeyspace, PartitionKeyIndexes: page.PkIndexes(), Conditional: page.Lwt}
 	if conn.InternalFramers.InternalDefaults.InternalFlagLWT != 0 {
 		info.Kind = OrdinaryStatement
 	}
 	if page.Lwt {
 		info.Kind = ConditionalStatement
 	}
-	for _, columns := range []Columns{page.BindColumns, page.Columns} {
+	for _, columns := range []Columns{page.BindColumns(), page.Columns} {
 		if col, ok := columns.At(0); ok && info.Table == "" {
 			if col.Keyspace != "" {
 				info.Keyspace = col.Keyspace
@@ -335,7 +335,7 @@ func (s *InternalSessionRuntime) InternalHostPreparedInfo(conn *Conn, page *resp
 			if table := ks.Tables[info.Table]; table != nil {
 				for _, key := range table.PartitionKey {
 					index := -1
-					for i, c := range cqltype.ColumnSlice(page.BindColumns) {
+					for i, c := range cqltype.ColumnSlice(page.BindColumns()) {
 						if c.Name == key.Name && c.Table == info.Table && c.Keyspace == info.Keyspace {
 							index = i
 							break
@@ -351,7 +351,7 @@ func (s *InternalSessionRuntime) InternalHostPreparedInfo(conn *Conn, page *resp
 		}
 	}
 	for _, index := range info.PartitionKeyIndexes {
-		if index < 0 || index >= page.BindColumns.Len() {
+		if index < 0 || index >= page.BindColumns().Len() {
 			return PreparedInfo{}, &ProtocolError{Stage: "prepare", Err: fmt.Errorf("invalid partition key index %d", index)}
 		}
 	}
@@ -924,7 +924,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				return response, nil
 			}
 			// Automatic post-DDL work cannot cause a successful statement to replay.
-			if response != nil && response.SchemaChange {
+			if response != nil && response.SchemaChange() {
 				response.Owner.Release()
 				return nil, &ExecutionError{Err: fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", attemptErr), Result: aggregate}
 			}
@@ -1100,7 +1100,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 			return nil, err
 		}
 
-		if response.SchemaChange {
+		if response.SchemaChange() {
 			if request.InternalLogical != nil {
 				coordinator := implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)
 				request.InternalLogical.ddlCoordinator.Store(&coordinator)
@@ -1113,8 +1113,8 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 			}
 			if config.AutomaticAgreement && config.RefreshAfterAgreement {
 				var refreshErr error
-				if response.Keyspace != "" {
-					refreshErr = implCluster.InternalSessionRefreshV2Keyspace(s.Session, ctx, response.Keyspace)
+				if response.Keyspace() != "" {
+					refreshErr = implCluster.InternalSessionRefreshV2Keyspace(s.Session, ctx, response.Keyspace())
 				} else {
 					refreshErr = s.Session.RefreshMetadata(ctx)
 				}
