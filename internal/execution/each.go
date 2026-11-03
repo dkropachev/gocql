@@ -15,8 +15,8 @@ import (
 // eachScratch holds the row cursor and reader that a decoder receives by
 // pointer. A Query embeds one, so its executions allocate neither.
 type eachScratch struct {
-	cursor wire.Cursor
 	reader RowReader
+	cursor wire.Cursor
 }
 
 // errStopEach ends Each early without reporting an error.

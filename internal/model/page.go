@@ -10,36 +10,36 @@ import (
 )
 
 type ResponseData struct {
-	MetadataChanged         bool
-	Lwt                     bool
-	NoMetadata              bool
-	RowCount                int32
-	Kind                    int
-	ColumnCount             int
-	Owner                   *wire.Lease
+	Owner *wire.Lease
+	// Extras holds fields that only PREPARE, USE, schema-change, traced,
+	// warned or payload-carrying responses have. It is nil for others.
+	Extras                  *ResponseExtras
 	Rows                    wire.Chain
 	Columns                 Columns
 	PagingState, MetadataID []byte
 	State                   PageState
 	Result                  Result
-	// Extras holds fields that only PREPARE, USE, schema-change, traced,
-	// warned or payload-carrying responses have. It is nil for others.
-	Extras *ResponseExtras
 	// InternalParseCursor is the response parser's cursor. It lives in the
 	// already heap-allocated response so that parsing allocates no cursor.
 	InternalParseCursor wire.Cursor
+	Kind                int
+	ColumnCount         int
+	RowCount            int32
+	MetadataChanged     bool
+	Lwt                 bool
+	NoMetadata          bool
 }
 
 // ResponseExtras are the rarely present parts of a response.
 type ResponseExtras struct {
 	Keyspace     string
-	SchemaChange bool
 	PreparedID   []byte
 	BindColumns  Columns
 	PkIndexes    []int
 	TraceID      []byte
 	Payload      []PayloadEntry
 	Warnings     []string
+	SchemaChange bool
 }
 
 // Extra returns the response extras, allocating them on first use.

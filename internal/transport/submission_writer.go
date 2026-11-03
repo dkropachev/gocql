@@ -16,14 +16,14 @@ import (
 // the last owner recycles it. Cancellation can stop waiting without retiring
 // bytes still accepted by the socket writer.
 type writeTicket struct {
-	refs   atomic.Int32
-	phase  atomic.Uint32 // 0 queued, 1 writing, 2 cancelled before transmission
-	ctx    context.Context
-	packet wire.Chain
-	lease  *wire.Lease
-	done   chan InternalWriteResult
+	ctx   context.Context
+	lease *wire.Lease
+	done  chan InternalWriteResult
 	// Caller-side cache of the result received from done.
 	result      InternalWriteResult
+	packet      wire.Chain
+	refs        atomic.Int32
+	phase       atomic.Uint32 // 0 queued, 1 writing, 2 cancelled before transmission
 	resultKnown bool
 }
 

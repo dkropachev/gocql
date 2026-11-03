@@ -15,12 +15,12 @@ import (
 // read them with the methods of the same names. A Result is a value: copies
 // never observe each other's later additions.
 type Result struct {
+	diag                *resultDiagnostics
 	HostID              UUID
 	Attempts            int
 	Latency             time.Duration
 	Rows                int64
 	AchievedConsistency Consistency
-	diag                *resultDiagnostics
 }
 
 type resultDiagnostics struct {

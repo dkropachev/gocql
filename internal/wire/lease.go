@@ -27,9 +27,9 @@ import (
 // must not be copied. Lease objects are never recycled, so an old pointer cannot
 // retain a new owner's storage (the pooled-reference ABA problem).
 type Lease struct {
-	refs     atomic.Int64
-	chain    Chain
 	releaser LeaseReleaser
+	chain    Chain
+	refs     atomic.Int64
 }
 
 // LeaseReleaser runs once on a lease's final release.
@@ -55,9 +55,9 @@ func NewLease(chain Chain, release func()) *Lease {
 // cachedLease returns a received buffer to its cache on the final release,
 // in one allocation instead of a lease plus a release closure.
 type cachedLease struct {
-	Lease
 	cache *ReceiveCache
 	buf   []byte
+	Lease
 	epoch uint64
 }
 

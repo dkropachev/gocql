@@ -269,11 +269,11 @@ func (c *Conn) typedProtocolLimits() ProtocolLimits {
 // shared-connection admission, the input and payload references, and the
 // frame buffer. It is one allocation instead of a lease and a closure.
 type typedRequestLease struct {
-	wire.Lease
 	conn     *Conn
 	input    *wire.Lease
-	payloads []*wire.Lease
 	scratch  *wire.BuilderScratch
+	payloads []*wire.Lease
+	wire.Lease
 }
 
 func (r *typedRequestLease) ReleaseLease() {

@@ -247,8 +247,8 @@ func (r *InternalRingDescriber) InternalGetHostsList() []*HostInfo {
 
 // ringHostsView is an immutable host list for one ring revision.
 type ringHostsView struct {
-	revision uint64
 	hosts    []*HostInfo
+	revision uint64
 }
 
 // InternalHostsView returns the current hosts as a shared, read-only slice.
