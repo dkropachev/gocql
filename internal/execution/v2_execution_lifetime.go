@@ -115,7 +115,7 @@ func (s *InternalSessionRuntime) registerExecution(l *InternalLogicalExecution, 
 	}
 	rt.InternalExecutions[l] = struct{}{}
 	rt.InternalMu.Unlock()
-	owner := &InternalInputOwner{InternalRefs: 1, InternalClosed: true}
+	owner := newClosedInputOwner()
 	done := l.lifetime.done
 	owner.InternalOnDrain = func() {
 		rt.InternalMu.Lock()

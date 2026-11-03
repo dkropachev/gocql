@@ -2202,10 +2202,14 @@ func (c *InternalConnReader) armDeadline() error {
 // frame/segment header read (see Read). It deliberately leaves the operational
 // timeout value untouched so it can be toggled without racing a concurrent
 // finalizeConnection.
+//
+// It needs no lock. Only the reader goroutine calls it, and that goroutine
+// arms the deadline under deadlineMu before every socket read, re-reading
+// both flags. InternalRequestPause runs under the same lock, so it either
+// precedes that arming, which then sees the pause, or follows it and sees
+// the disarm stored before it.
 func (c *InternalConnReader) InternalSetDisarm(v bool) {
-	c.deadlineMu.Lock()
 	c.InternalDisarm.Store(v)
-	c.deadlineMu.Unlock()
 }
 
 func (c *InternalConnReader) Close() error {

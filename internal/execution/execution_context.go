@@ -34,8 +34,12 @@ type executionContext struct {
 	hasDeadline bool
 	timerAt     time.Time // own deadline armed on timer; zero when disarmed
 	timer       *time.Timer
-	done        chan struct{} // open channel, reused while never closed
-	shared      bool          // Done was handed out this generation
+	// done is the generation's Done channel. It is replaced only in begin,
+	// when a cancellation closed it, so InternalTransientDone reads it without
+	// the lock: begin runs only after the previous generation drained.
+	done        chan struct{}
+	doneClosed  bool // done was closed by a cancellation
+	shared      bool // Done was handed out this generation
 	cancelled   atomic.Bool
 	err         error
 	gen         uint64
@@ -75,6 +79,9 @@ func (c *executionContext) begin(parent context.Context, timeout time.Duration) 
 	c.shared = false
 	c.afters = c.afters[:0]
 	c.timerAt = time.Time{}
+	if c.done == nil || c.doneClosed {
+		c.done, c.doneClosed = make(chan struct{}), false
+	}
 	c.deadline, c.hasDeadline = parent.Deadline()
 	if timeout > 0 {
 		own := time.Now().Add(timeout)
@@ -113,7 +120,7 @@ func (c *executionContext) begin(parent context.Context, timeout time.Duration) 
 // generation instead of being closed and reallocated.
 func (c *executionContext) finish() {
 	c.mu.Lock()
-	if c.err != nil || c.shared || len(c.afters) > 0 || c.done == nil {
+	if c.err != nil || c.shared || len(c.afters) > 0 {
 		c.cancelLocked(context.Canceled)
 		return
 	}
@@ -176,10 +183,8 @@ func (c *executionContext) cancelLocked(err error) {
 	}
 	c.err = err
 	c.cancelled.Store(true)
-	if c.done != nil {
-		close(c.done)
-		c.done = nil
-	}
+	close(c.done)
+	c.doneClosed = true
 	c.disarmLocked()
 	afters := c.afters
 	c.afters = nil
@@ -202,18 +207,15 @@ func (c *executionContext) Done() <-chan struct{} {
 // InternalTransientDone is Done for a wait that ends before the current
 // attempt returns, so that it does not prevent channel reuse at finish.
 func (c *executionContext) InternalTransientDone() <-chan struct{} {
-	c.mu.Lock()
-	d := c.doneLocked()
-	c.mu.Unlock()
-	return d
+	if c.cancelled.Load() {
+		return closedExecutionDone
+	}
+	return c.done
 }
 
 func (c *executionContext) doneLocked() chan struct{} {
 	if c.err != nil {
 		return closedExecutionDone
-	}
-	if c.done == nil {
-		c.done = make(chan struct{})
 	}
 	return c.done
 }

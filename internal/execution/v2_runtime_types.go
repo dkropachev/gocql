@@ -4,98 +4,127 @@
 package execution
 
 import "context"
-import "sync"
+import "sync/atomic"
 import "github.com/scylladb/gocql/v2/internal/wire"
 
 // inputOwner serializes close against admission. Each admitted operation and
 // transport writer has an independent reference; result leases never use it.
+//
+// The reference count and the closed flag share one atomic word, so admission,
+// retention and release take no lock. The transition to zero references runs
+// onIdle, and, once closed, the drain callback, as the releasing call's final
+// actions.
 type InternalInputOwner struct {
-	mu              sync.Mutex
-	InternalClosed  bool
-	InternalRefs    int
+	state           atomic.Int64 // ownerClosed | reference count
+	drained         atomic.Bool
 	done            chan struct{} // nil for execution owners, which are never waited on
 	InternalOnDrain func()
 	onIdle          func()
 	release         func() // bound InternalRelease, reused by writer leases
 }
 
+const (
+	ownerClosed   = int64(1) << 62
+	ownerRefsMask = ownerClosed - 1
+)
+
 func InternalNewInputOwner() *InternalInputOwner {
 	return &InternalInputOwner{done: make(chan struct{})}
 }
 
+// newClosedInputOwner returns an execution owner holding the execution's own
+// reference: it drains when that reference and every writer's are released.
+func newClosedInputOwner() *InternalInputOwner {
+	o := new(InternalInputOwner)
+	o.state.Store(ownerClosed | 1)
+	return o
+}
+
 // resetExecution prepares a reusable execution owner for its next generation.
 // The previous generation has drained: its last action was the drain callback,
-// which runs after the owner is unlocked and never touches it again.
+// which runs after the final release and never touches the owner again.
 func (o *InternalInputOwner) resetExecution(onDrain func()) {
-	release := o.release
-	*o = InternalInputOwner{InternalRefs: 1, InternalClosed: true, InternalOnDrain: onDrain, release: release}
+	o.state.Store(ownerClosed | 1)
+	o.drained.Store(false)
+	o.done, o.InternalOnDrain, o.onIdle = nil, onDrain, nil
 	if o.release == nil {
 		o.release = o.InternalRelease
 	}
 }
-func (o *InternalInputOwner) InternalAdmit() error {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	if o.InternalClosed {
-		return ErrClosed
-	}
-	o.InternalRefs++
-	return nil
-}
-func (o *InternalInputOwner) InternalRetain() { o.mu.Lock(); o.InternalRefs++; o.mu.Unlock() }
 
-// drainLocked retires a closed owner whose last reference is gone. The drain
-// callback runs after unlocking: it may admit the next generation of a reusable
-// owner, so the caller must not touch the owner after invoking it.
-func (o *InternalInputOwner) drainLocked() func() {
+// InternalRefs reports the current reference count.
+func (o *InternalInputOwner) InternalRefs() int { return int(o.state.Load() & ownerRefsMask) }
+
+// InternalClosed reports whether the owner stopped admitting operations.
+func (o *InternalInputOwner) InternalClosed() bool { return o.state.Load()&ownerClosed != 0 }
+
+func (o *InternalInputOwner) InternalAdmit() error {
+	for {
+		v := o.state.Load()
+		if v&ownerClosed != 0 {
+			return ErrClosed
+		}
+		if o.state.CompareAndSwap(v, v+1) {
+			return nil
+		}
+	}
+}
+func (o *InternalInputOwner) InternalRetain() { o.state.Add(1) }
+
+// drain retires a closed owner whose last reference is gone, once. The drain
+// callback may admit the next generation of a reusable owner, so the caller
+// must not touch the owner after invoking it.
+func (o *InternalInputOwner) drain() {
+	if !o.drained.CompareAndSwap(false, true) {
+		return
+	}
 	drain := o.InternalOnDrain
 	o.InternalOnDrain = nil
 	if o.done != nil {
 		close(o.done)
 	}
-	return drain
-}
-func (o *InternalInputOwner) InternalRelease() {
-	o.mu.Lock()
-	if o.InternalRefs <= 0 {
-		o.mu.Unlock()
-		panic("gocql: unbalanced input owner release")
-	}
-	o.InternalRefs--
-	if o.InternalRefs == 0 && o.onIdle != nil {
-		o.onIdle()
-	}
-	var drain func()
-	if o.InternalClosed && o.InternalRefs == 0 {
-		drain = o.drainLocked()
-	}
-	o.mu.Unlock()
 	if drain != nil {
 		drain()
+	}
+}
+func (o *InternalInputOwner) InternalRelease() {
+	var v int64
+	for {
+		v = o.state.Load()
+		if v&ownerRefsMask == 0 {
+			panic("gocql: unbalanced input owner release")
+		}
+		if o.state.CompareAndSwap(v, v-1) {
+			break
+		}
+	}
+	if v&ownerRefsMask != 1 {
+		return
+	}
+	if o.onIdle != nil {
+		o.onIdle()
+	}
+	if v&ownerClosed != 0 {
+		o.drain()
 	}
 }
 func (o *InternalInputOwner) InternalClose() {
-	o.mu.Lock()
-	if o.InternalClosed {
-		o.mu.Unlock()
-		return
-	}
-	o.InternalClosed = true
-	var drain func()
-	if o.InternalRefs == 0 {
-		drain = o.drainLocked()
-	}
-	o.mu.Unlock()
-	if drain != nil {
-		drain()
+	for {
+		v := o.state.Load()
+		if v&ownerClosed != 0 {
+			return
+		}
+		if o.state.CompareAndSwap(v, v|ownerClosed) {
+			if v&ownerRefsMask == 0 {
+				o.drain()
+			}
+			return
+		}
 	}
 }
 func (o *InternalInputOwner) InternalWait(ctx context.Context) error {
-	o.mu.Lock()
-	closed := o.InternalClosed
 	done := o.done
-	o.mu.Unlock()
-	if !closed {
+	if !o.InternalClosed() {
 		return typeValidation("binding", "Wait requires Close first")
 	}
 	select {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -30,7 +31,7 @@ type queryState struct {
 	runtime       *InternalSessionRuntime
 	logical       *InternalLogicalExecution
 	busy, closed  bool
-	generation    uint64
+	generation    atomic.Uint64 // advanced in begin under mu; read without it by cursors
 	done          chan struct{} // created by the first waiter of a busy generation
 	retire        func()
 	resolved      resolvedOptionsCache
@@ -84,17 +85,14 @@ func executionCursor(request *InternalExecutionRequest) queryCursor {
 	if request.query == nil {
 		return queryCursor{}
 	}
-	request.query.mu.Lock()
-	defer request.query.mu.Unlock()
-	return queryCursor{query: request.query, generation: request.query.generation}
+	return queryCursor{query: request.query, generation: request.query.generation.Load()}
 }
+
+// current reports whether the cursor's execution is still the query's
+// current one. Handles are used from one goroutine, which also starts the
+// next generation, so a plain atomic read suffices.
 func (c queryCursor) current() bool {
-	if c.query == nil {
-		return true
-	}
-	c.query.mu.Lock()
-	defer c.query.mu.Unlock()
-	return c.query.generation == c.generation
+	return c.query == nil || c.query.generation.Load() == c.generation
 }
 
 // Query owns reusable parameter storage and allows one active execution.
@@ -221,7 +219,7 @@ func (s *queryState) begin(ctx context.Context) error {
 		return ErrBusy
 	}
 	s.busy = true
-	s.generation++
+	s.generation.Add(1)
 	s.mu.Unlock()
 	// Never acquire owner.mu while holding state.mu: the final release calls idle.
 	if err := s.owner.InternalAdmit(); err != nil {
