@@ -545,3 +545,13 @@ still referenced.
 | cpu-ns/op w64 (four cases) | | | −5.35% to −10.42% |
 | cpu-ns/op w64-4 (four cases) | | | −4.77% to −9.54% |
 | sec/op w1 read / write | | | −3.01% / −3.84% |
+
+## F2a: embedded parse cursor (kept)
+
+`ParseTypedResponseInto` used `wire.NewCursor`, which escaped through the
+parser's cursor interface. The cursor is now `ResponseData.InternalParseCursor`.
+
+| vs F1b | before | after | Δ |
+|---|---:|---:|---:|
+| allocs/op pread/w64 | 9 | 8 | −1 |
+| cpu-ns/op | | | ~ (pwrite/w64 +0.67%, p=0.035, under the 2% bar) |

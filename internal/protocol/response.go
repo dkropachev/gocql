@@ -407,8 +407,8 @@ func (c Settings) ParseTypedResponseInto(head frm.FrameHeader, body wire.Chain, 
 	if body.Len() > c.MaxDecompressedBytes {
 		return nil, ErrFrameTooBig
 	}
-	p := &TypedParser{reuse: c.MetadataReuse, Cursor: wire.NewCursor(body), Proto: c.Protocol, MetadataID: c.Protocol >= 5 || c.MetadataID, owner: owner, MaxDepth: c.MaxMetadataDepth}
-	*page = model.ResponseData{Owner: owner}
+	*page = model.ResponseData{Owner: owner, InternalParseCursor: wire.CursorOver(body)}
+	p := &TypedParser{reuse: c.MetadataReuse, Cursor: &page.InternalParseCursor, Proto: c.Protocol, MetadataID: c.Protocol >= 5 || c.MetadataID, owner: owner, MaxDepth: c.MaxMetadataDepth}
 	if head.Flags&frm.FlagTracing != 0 {
 		page.TraceID = p.Copy(16)
 	}

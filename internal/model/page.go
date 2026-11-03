@@ -29,4 +29,7 @@ type ResponseData struct {
 	Warnings                            []string
 	State                               PageState
 	Result                              Result
+	// InternalParseCursor is the response parser's cursor. It lives in the
+	// already heap-allocated response so that parsing allocates no cursor.
+	InternalParseCursor wire.Cursor
 }
