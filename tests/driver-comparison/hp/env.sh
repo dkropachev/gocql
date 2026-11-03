@@ -9,13 +9,16 @@ HP_T1='BenchmarkReusableQueryLoopback/(p?(read|write)|pone)/w(1|64)$'
 HP_MC='BenchmarkReusableQueryLoopback/(p?(read|write)|pone)/w64$'
 # hp_build LABEL builds the gate binaries from the working tree, or from the
 # commit HP_REF (checked out in a throwaway worktree) so that editing can go on
-# while a comparison runs. Builds stay off the benchmark CPUs.
+# while a comparison runs, optionally with HP_PATCH applied. Builds stay off the benchmark CPUs.
 hp_build() { # LABEL
 	src=$HP_REPO
 	if [ -n "${HP_REF:-}" ]; then
 		src=$HP_DIR/src-$1
 		git -C "$HP_REPO" worktree remove --force "$src" 2>/dev/null || true
 		git -C "$HP_REPO" worktree add -q --detach "$src" "$HP_REF"
+		# HP_PATCH (e.g. a benchmark metric) is applied on top of the commit,
+		# so that both sides of a comparison measure the same way.
+		if [ -n "${HP_PATCH:-}" ]; then git -C "$src" apply "$HP_PATCH"; fi
 	fi
 	(cd "$src" && taskset -c 10-19 go test -tags unit -c -o "$HP_GATES/$1.root.test" . &&
 		taskset -c 10-19 go test -tags unit -c -o "$HP_GATES/$1.exec.test" ./internal/execution/)
