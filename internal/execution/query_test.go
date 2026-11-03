@@ -15,7 +15,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
-func testOwnedQuery(t *testing.T) *Query[[]byte, Unit] {
+func testOwnedQuery(t testing.TB) *Query[[]byte, Unit] {
 	t.Helper()
 	s, _ := attachmentSession()
 	typ, err := cqltype.ScalarType(cqltype.TypeBlob)
