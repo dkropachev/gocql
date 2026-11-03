@@ -58,6 +58,38 @@ type Builder struct {
 	generation   uint64
 	sequence     uint64
 	invalid      []invalidMarks
+	scratch      *BuilderScratch
+}
+
+// BuilderScratch is reusable storage for one encoding: the scalar slab, the
+// span descriptors and the frozen chain's span index. Borrowed spans are still
+// only referenced, never copied. A Chain frozen from it aliases this storage,
+// so its owner returns the scratch for reuse only after the chain drained.
+type BuilderScratch struct {
+	slab  []byte
+	parts []builderPart
+	tail  []indexedSpan
+}
+
+// NewBuilderScratch sizes scratch for slab scalar bytes and spans descriptors.
+// An encoding that needs more falls back to ordinary allocation.
+func NewBuilderScratch(slab, spans int) *BuilderScratch {
+	return &BuilderScratch{slab: make([]byte, slab), parts: make([]builderPart, 0, spans), tail: make([]indexedSpan, 0, spans)}
+}
+
+// Reset drops the references a previous encoding left in s.
+func (s *BuilderScratch) Reset() {
+	clear(s.parts[:cap(s.parts)])
+	clear(s.tail[:cap(s.tail)])
+}
+
+// UseScratch starts an encoding in s. The builder must be empty.
+func (b *Builder) UseScratch(s *BuilderScratch) {
+	b.scratch = s
+	b.slab = s.slab
+	b.used = 0
+	b.currentPart = -1
+	b.parts = s.parts[:0]
 }
 
 // NewBuilder uses slabs of at least slabSize bytes. Nonpositive sizes select a
@@ -293,7 +325,11 @@ func (b *Builder) Freeze() (Chain, error) {
 		c.head = b.parts[0].span
 		c.len = b.len
 		if len(b.parts) > 1 {
-			c.tail = make([]indexedSpan, len(b.parts)-1)
+			if b.scratch != nil && cap(b.scratch.tail) >= len(b.parts)-1 {
+				c.tail = b.scratch.tail[:len(b.parts)-1]
+			} else {
+				c.tail = make([]indexedSpan, len(b.parts)-1)
+			}
 			end := int64(c.head.Len())
 			for i := 1; i < len(b.parts); i++ {
 				end += int64(b.parts[i].span.Len())
@@ -303,6 +339,10 @@ func (b *Builder) Freeze() (Chain, error) {
 	}
 	clear(b.parts)
 	b.parts = b.parts[:0]
+	if b.scratch != nil {
+		b.parts = nil // the scratch's descriptors stay with its owner
+		b.scratch = nil
+	}
 	b.slab = nil
 	b.used = 0
 	b.currentPart = -1

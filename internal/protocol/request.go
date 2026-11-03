@@ -111,20 +111,30 @@ func validateTypedValues(c wire.Chain, count int, proto byte) error {
 }
 
 func (c Settings) BuildTypedRequest(req *model.AttemptRequest, stream int) (wire.Chain, error) {
+	frame, _, err := c.BuildTypedRequestInto(req, stream, nil)
+	return frame, err
+}
+
+// BuildTypedRequestInto builds the request like BuildTypedRequest. A non-nil
+// scratch supplies the envelope's scalar slab and span descriptors; borrowed
+// values are still only referenced. When used reports true, the frame aliases
+// scratch until its writer finishes.
+func (c Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, scratch *wire.BuilderScratch) (frame wire.Chain, used bool, err error) {
 	proto := c.Protocol
 	if proto < 3 || proto > 5 {
-		return wire.Chain{}, fmt.Errorf("gocql: unsupported typed Protocol %d", proto)
+		return wire.Chain{}, false, fmt.Errorf("gocql: unsupported typed Protocol %d", proto)
 	}
 	if (req.Keyspace != "" || req.NowInSeconds != nil) && proto < 5 {
-		return wire.Chain{}, fmt.Errorf("gocql: keyspace and now_in_seconds overrides require Protocol v5")
+		return wire.Chain{}, false, fmt.Errorf("gocql: keyspace and now_in_seconds overrides require Protocol v5")
 	}
 	if req.PageSize < 0 || int64(req.PageSize) > math.MaxInt32 {
-		return wire.Chain{}, fmt.Errorf("gocql: invalid page size")
+		return wire.Chain{}, false, fmt.Errorf("gocql: invalid page size")
 	}
 	if err := validateTypedValues(req.Values, req.ValueCount, proto); err != nil {
-		return wire.Chain{}, err
+		return wire.Chain{}, false, err
 	}
-	e := NewTypedEnvelope()
+	var e TypedEnvelope
+	e.b.SetSlabSize(256)
 	Flags := c.Flags & frm.FlagBetaProtocol
 	if req.Trace {
 		Flags |= frm.FlagTracing
@@ -145,7 +155,10 @@ func (c Settings) BuildTypedRequest(req *model.AttemptRequest, stream int) (wire
 	// index with their body. Write the known header now and patch only its owned
 	// length field before Freeze; v3/v4 compressors still receive the body alone.
 	inlineHeader := proto >= 5 || c.Compression == ""
-	if inlineHeader && req.Batch == nil && len(req.PreparedID) > 0 && req.Values.Len() > 0 {
+	used = scratch != nil && inlineHeader
+	if used {
+		e.b.UseScratch(scratch)
+	} else if inlineHeader && req.Batch == nil && len(req.PreparedID) > 0 && req.Values.Len() > 0 {
 		// Prepared requests need scalar framing, the borrowed ID, parameter
 		// framing and at least one borrowed value span. Extra value spans or
 		// paging fields cross the next descriptor growth threshold. Reserve only
@@ -167,10 +180,10 @@ func (c Settings) BuildTypedRequest(req *model.AttemptRequest, stream int) (wire
 	}
 	if len(req.Payload) > 0 {
 		if proto < 4 {
-			return wire.Chain{}, fmt.Errorf("gocql: custom payload requires Protocol v4")
+			return wire.Chain{}, false, fmt.Errorf("gocql: custom payload requires Protocol v4")
 		}
 		if len(req.Payload) > math.MaxUint16 {
-			return wire.Chain{}, fmt.Errorf("gocql: too many payload entries")
+			return wire.Chain{}, false, fmt.Errorf("gocql: too many payload entries")
 		}
 		e.U16(uint16(len(req.Payload)))
 		for _, entry := range req.Payload {
@@ -181,10 +194,10 @@ func (c Settings) BuildTypedRequest(req *model.AttemptRequest, stream int) (wire
 			}
 			value := entry.Value.Value
 			if err := cqltype.CheckBytesAlive(value); err != nil {
-				return wire.Chain{}, err
+				return wire.Chain{}, false, err
 			}
 			if value.Len() > math.MaxInt32 {
-				return wire.Chain{}, ErrFrameTooBig
+				return wire.Chain{}, false, ErrFrameTooBig
 			}
 			e.U32(uint32(value.Len()))
 			e.Chain(cqltype.BytesChain(value))
@@ -205,13 +218,13 @@ func (c Settings) BuildTypedRequest(req *model.AttemptRequest, stream int) (wire
 		}
 	case req.Batch != nil:
 		if len(req.Batch.Items) > math.MaxUint16 {
-			return wire.Chain{}, fmt.Errorf("gocql: too many batch entries")
+			return wire.Chain{}, false, fmt.Errorf("gocql: too many batch entries")
 		}
 		e.U8(byte(req.Batch.Kind))
 		e.U16(uint16(len(req.Batch.Items)))
 		for _, item := range req.Batch.Items {
 			if err := validateTypedValues(item.Values, item.ValueCount, proto); err != nil {
-				return wire.Chain{}, err
+				return wire.Chain{}, false, err
 			}
 			if len(item.PreparedID) > 0 {
 				e.U8(1)
@@ -223,7 +236,7 @@ func (c Settings) BuildTypedRequest(req *model.AttemptRequest, stream int) (wire
 			e.U16(uint16(item.ValueCount))
 			e.Chain(item.Values)
 		}
-		c.WriteTypedParams(e, req, true)
+		c.WriteTypedParams(&e, req, true)
 	default:
 		if len(req.PreparedID) > 0 {
 			e.Bytes(req.PreparedID, true)
@@ -233,30 +246,28 @@ func (c Settings) BuildTypedRequest(req *model.AttemptRequest, stream int) (wire
 		} else {
 			e.Str(req.Statement, true)
 		}
-		c.WriteTypedParams(e, req, false)
+		c.WriteTypedParams(&e, req, false)
 		if op == frm.OpExecute && c.TabletsRoutingV2 {
 			e.U8(req.TabletVersionBlock)
 		}
 	}
-	var frame wire.Chain
-	var err error
 	if inlineHeader {
 		if e.err != nil {
-			return wire.Chain{}, e.err
+			return wire.Chain{}, false, e.err
 		}
 		size := e.b.Len() - HeadSize
 		if size > c.MaxFrameBytes {
-			return wire.Chain{}, ErrFrameTooBig
+			return wire.Chain{}, false, ErrFrameTooBig
 		}
 		e.check(e.b.PatchUint32(bodyLength, uint32(size)))
 		frame, err = e.Freeze()
 	} else {
 		body, freezeErr := e.Freeze()
 		if freezeErr != nil {
-			return wire.Chain{}, freezeErr
+			return wire.Chain{}, false, freezeErr
 		}
 		if body.Len() > c.MaxFrameBytes {
-			return wire.Chain{}, ErrFrameTooBig
+			return wire.Chain{}, false, ErrFrameTooBig
 		}
 		var out []byte
 		switch c.Compression {
@@ -270,12 +281,12 @@ func (c Settings) BuildTypedRequest(req *model.AttemptRequest, stream int) (wire
 			err = fmt.Errorf("gocql: span encoder unavailable for compressor %q", c.Compression)
 		}
 		if err != nil {
-			return wire.Chain{}, err
+			return wire.Chain{}, false, err
 		}
 		body, _ = wire.NewChain(wire.Borrow(out))
 		Flags |= frm.FlagCompress
 		if body.Len() > c.MaxFrameBytes {
-			return wire.Chain{}, ErrFrameTooBig
+			return wire.Chain{}, false, ErrFrameTooBig
 		}
 		header := NewTypedEnvelope()
 		header.U8(proto)
@@ -287,10 +298,10 @@ func (c Settings) BuildTypedRequest(req *model.AttemptRequest, stream int) (wire
 		frame, err = header.Freeze()
 	}
 	if err != nil || proto < 5 {
-		return frame, err
+		return frame, used, err
 	}
 	if c.SegmentCompression && c.Compression != "lz4" {
-		return wire.Chain{}, fmt.Errorf("gocql: v5 spans require LZ4 segment Compression")
+		return wire.Chain{}, false, fmt.Errorf("gocql: v5 spans require LZ4 segment Compression")
 	}
 	var spans []wire.Span
 	selfContained := frame.Len() <= segment.MaxPayloadSize
@@ -299,12 +310,13 @@ func (c Settings) BuildTypedRequest(req *model.AttemptRequest, stream int) (wire
 		part, _ := frame.Slice(offset, size)
 		encoded, err := segment.EncodeSpans(part, selfContained, c.SegmentCompression)
 		if err != nil {
-			return wire.Chain{}, err
+			return wire.Chain{}, false, err
 		}
 		_ = encoded.Each(func(s wire.Span) error { spans = append(spans, s); return nil })
 		offset += size
 	}
-	return wire.NewChain(spans...)
+	frame, err = wire.NewChain(spans...)
+	return frame, used, err
 }
 func (c Settings) WriteTypedParams(e *TypedEnvelope, r *model.AttemptRequest, batch bool) {
 	e.U16(uint16(r.Consistency))

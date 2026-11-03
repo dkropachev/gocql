@@ -522,3 +522,26 @@ holds the writer after its bytes are sent and fails without the wait.
 | cpu-ns/op w64-4 (four cases) | | | −1.17% to −1.99% |
 | sec/op decoding (three cases) | | | −0.8% to −1.1% |
 | pread / pwrite w64, w1 | | | ~ |
+
+## F1: contiguous owned frames (rejected), F1b: pooled envelope scratch (kept)
+
+F1 encoded small requests, values included, into one pooled contiguous
+buffer. It saved as much as F1b below, but it copied borrowed values, which
+`feature-specs/gocql-v2-implementation.md` forbids for borrowed text and
+blob of every size, and it failed
+`TestV2PreparedRetryRepreparePagingNeverReencodes`. F1b keeps the borrowed
+spans and pools only what the envelope owns: `wire.BuilderScratch` holds
+the scalar slab, span descriptors and the frozen chain's index, and the
+request lease returns it after the writer finishes.
+`TestScratchFrameMatchesAndBorrowsValues` checks byte equality with the
+plain builder for QUERY, EXECUTE and BATCH on v3–v5, and that the value is
+still referenced.
+
+| vs T1 | before | after | Δ |
+|---|---:|---:|---:|
+| allocs/op read / write / pread / pwrite w64 | 13 / 13 / 12 / 11 | 8 / 7 / 9 / 8 | −3 to −6 |
+| allocs/op partition decoding | 89 | 60 | −29 |
+| B/op pread / pwrite w64 | 2,450 / 1,746 | 1,830 / 1,123 | −25.3% / −35.7% |
+| cpu-ns/op w64 (four cases) | | | −5.35% to −10.42% |
+| cpu-ns/op w64-4 (four cases) | | | −4.77% to −9.54% |
+| sec/op w1 read / write | | | −3.01% / −3.84% |

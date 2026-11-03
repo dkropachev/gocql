@@ -5,6 +5,7 @@ package transport
 
 import (
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"sync"
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 
@@ -110,12 +111,18 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 		}
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err})
 	}
-	packet, err := c.InternalBuildTypedRequest(req, stream)
+	scratch := getFrameScratch()
+	packet, used, err := c.nativeProtocol().BuildTypedRequestInto(req, stream, scratch)
+	if !used || err != nil {
+		putFrameScratch(scratch)
+		scratch = nil
+	}
 	if err != nil {
 		return failBeforeWrite(err)
 	}
 	writer, ok := c.InternalW.(spanContextWriter)
 	if !ok {
+		putFrameScratch(scratch)
 		return failBeforeWrite(fmt.Errorf("gocql: connection writer does not support immutable spans"))
 	}
 	if call.streamObserverContext != nil {
@@ -126,10 +133,12 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 		// Hold both input and shared-connection admission until the persistent
 		// writer finishes, even if cancellation returns to the calling goroutine.
 		if err := c.beginShared(ctx); err != nil {
+			putFrameScratch(scratch)
 			return failBeforeWrite(err)
 		}
 		if req.Lease != nil && !req.Lease.Retain() {
 			c.endShared()
+			putFrameScratch(scratch)
 			return failBeforeWrite(ErrReleased)
 		}
 		ownedPayloads := payloadOwners
@@ -142,6 +151,8 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 			for _, owner := range ownedPayloads {
 				owner.Release()
 			}
+			// The writer is done with the frame: its envelope storage can be reused.
+			putFrameScratch(scratch)
 			c.endShared()
 		})
 		// The caller does not wait for the write: the response wait below
@@ -153,6 +164,7 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 		defer ticket.release()
 	} else {
 		n, err := writer.InternalWriteSpans(ctx, packet)
+		putFrameScratch(scratch) // the writer returned: no span references remain
 		if err != nil {
 			stopWaiting = true
 			if n == 0 && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
@@ -257,6 +269,20 @@ func (c *Conn) typedProtocolLimits() ProtocolLimits {
 		}
 	}
 	return limits
+}
+
+// Frame scratch holds a request envelope's scalar bytes and span descriptors.
+// It returns to the pool only once the writer finished with the frame.
+var frameScratchPool = sync.Pool{New: func() any { return wire.NewBuilderScratch(256, 16) }}
+
+func getFrameScratch() *wire.BuilderScratch { return frameScratchPool.Get().(*wire.BuilderScratch) }
+
+func putFrameScratch(s *wire.BuilderScratch) {
+	if s == nil {
+		return
+	}
+	s.Reset()
+	frameScratchPool.Put(s)
 }
 
 func (c *Conn) InternalBuildTypedRequest(req *attemptRequest, stream int) (wire.Chain, error) {
