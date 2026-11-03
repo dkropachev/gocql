@@ -384,3 +384,48 @@ Six-pair confirmation, matched-rate loads and real Scylla remain outstanding.
 - Streaming was out of scope: stream queries keep the standard context and
   their own receive path. point-stream remains the largest gap, at 0.699.
   paged-stream at 0.832 against 0.866 is within the noise of two pairs.
+
+## Round 2
+
+Plan: `~/.claude/plans/validated-chasing-mccarthy.md`. Gates now run from
+`tests/driver-comparison/hp/` (`compare.sh OLD NEW`, 5×ABBA). The gate set
+adds the prepared loopback cases and a `-cpu 4` run (client on CPUs 0-3,
+server on 6-7) for cross-core costs that one P cannot show. The admission
+benchmark runs 300,000 iterations; at 20,000 it was bimodal (≈800 and
+≈1,300 ns in both binaries) and produced a false +58%.
+
+Fresh profile of `pread/w64 -cpu 1` at `c641e86b` (6.6 µs, 18 allocs,
+3,029 B): GC ≈16–20% of CPU, mutex lock/unlock 12.5% flat over ~15 sites,
+RWMutex reader atomics 5%, `selectgo` 7%, `duffcopy` 3.5%. Largest byte
+sources: rows+page holder ≈690 B, response page ≈565 B, request framing
+≈800 B over 5–6 allocations.
+
+## C1: keep an unwatched execution Done channel (kept)
+
+I6 made the execution context reusable, but every generation still
+allocated its Done channel, because the normal end of an execution closed
+it. Two kinds of waiters use it: transport waits that end before the
+attempt returns, and watchers that may outlive it (prefetch, `AfterFunc`,
+derived contexts). Transport waits now take the channel through
+`InternalTransientDone`. The CancelFunc returned by `begin` finishes the
+generation. When no `Done` watcher or `AfterFunc` exists, it marks the
+generation cancelled without closing the channel, and the next generation
+reuses it. Done and Err still report cancellation for the finished
+generation. Real cancellation (query or session stop, deadline, parent)
+always closes it, so query and session stop now use `cancelFunc` instead of
+the finishing func.
+`TestExecutionContextFinishReusesUnsharedDone` fails if finish ignores a
+`Done` watcher.
+
+| benchmark (ABBA vs `c641e86b`) | before | after | Δ |
+|---|---:|---:|---:|
+| allocs/op, every reusable case | | | −1 |
+| B/op, loopback cases | | | −110 (−3.7% to −4.7%) |
+| Loopback write/w64 | 6.002µ | 5.853µ | −2.48% |
+| Loopback read/w64 | 6.327µ | 6.231µ | −1.52% |
+| Loopback pread/w64-2 | 6.808µ | 6.719µ | −1.31% |
+| Loopback read/w64-4 | 4.437µ | 4.370µ | −1.49% |
+| Admission (n=20 ABBA) | 824.9n | 829.4n | ~ (p=0.53) |
+
+Execution and transport `-race -count=20`, unit race suite (only the known
+baseline failure), emulator smoke OK.

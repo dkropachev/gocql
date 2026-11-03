@@ -161,3 +161,59 @@ func TestExecutionContextConcurrentUse(t *testing.T) {
 		cancel()
 	}
 }
+
+func TestExecutionContextFinishReusesUnsharedDone(t *testing.T) {
+	c := newExecutionContext()
+	ctx, finish := c.begin(context.Background(), time.Hour)
+	transient := ctx.(transientDoneContext).InternalTransientDone()
+	finish()
+	// The finished generation still reports cancellation to later observers.
+	waitDone(t, ctx)
+	if !errors.Is(ctx.Err(), context.Canceled) {
+		t.Fatal(ctx.Err())
+	}
+	select {
+	case <-transient:
+		t.Fatal("unshared channel was closed instead of reused")
+	default:
+	}
+	ctx, finish = c.begin(context.Background(), time.Hour)
+	if got := ctx.(transientDoneContext).InternalTransientDone(); got != transient {
+		t.Fatal("open channel was not reused")
+	}
+	// A real cancellation wakes transient waiters and is never reused.
+	c.cancelFunc()
+	select {
+	case <-transient:
+	default:
+		t.Fatal("cancellation did not close the transient channel")
+	}
+	finish()
+	ctx, finish = c.begin(context.Background(), time.Hour)
+	if ctx.(transientDoneContext).InternalTransientDone() == transient {
+		t.Fatal("closed channel was reused")
+	}
+	// A Done watcher may outlive the attempt, so finish must close its channel.
+	shared := ctx.Done()
+	finish()
+	select {
+	case <-shared:
+	default:
+		t.Fatal("finish left a Done watcher waiting")
+	}
+	// So must a registered AfterFunc.
+	ctx, finish = c.begin(context.Background(), time.Hour)
+	ran := make(chan struct{})
+	context.AfterFunc(ctx, func() { close(ran) })
+	finish()
+	<-ran
+	ctx, finish = c.begin(context.Background(), time.Hour)
+	defer finish()
+	if ctx.Err() != nil {
+		t.Fatal(ctx.Err())
+	}
+}
+
+type transientDoneContext interface {
+	InternalTransientDone() <-chan struct{}
+}

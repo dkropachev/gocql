@@ -551,10 +551,13 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, 
 	inline := query != nil && observer == nil && rt.InternalConfig.CoalesceWait == 0 && canUseDirectProfile(resolved.InternalProfile)
 	var runctx context.Context
 	var cancel context.CancelFunc
+	var stop context.CancelFunc // cancels from another goroutine (query or session stop)
 	if inline && query.execCtx != nil {
 		runctx, cancel = query.execCtx.begin(ctx, resolved.InternalProfile.Timeout)
+		stop = query.execCtx.cancelFunc
 	} else {
 		runctx, cancel = InternalExecutionContext(ctx, resolved.InternalProfile.Timeout)
+		stop = cancel
 	}
 	var logical *InternalLogicalExecution
 	if inline {
@@ -570,7 +573,7 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, 
 	if request.query == nil {
 		done = make(chan struct{})
 	}
-	*logical = InternalLogicalExecution{lifetime: InternalExecutionLifetime{cancel: cancel, done: done}, id: rt.requestID.Add(1), started: time.Now(), observer: observer, session: s, request: request}
+	*logical = InternalLogicalExecution{lifetime: InternalExecutionLifetime{cancel: stop, done: done}, id: rt.requestID.Add(1), started: time.Now(), observer: observer, session: s, request: request}
 	request.InternalLogical = logical
 	if err := InternalRuntimeFor(s).registerExecution(request.InternalLogical, request.InternalOwner); err != nil {
 		cancel()

@@ -188,7 +188,7 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 			closeErr = InternalErrOrphanBudget
 		}
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrTimeoutNoResponse, InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
-	case <-ctx.Done():
+	case <-attemptDone(ctx):
 		stopWaiting = true
 		if c.markOrphan(call) {
 			closeErr = InternalErrOrphanBudget

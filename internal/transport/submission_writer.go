@@ -55,6 +55,20 @@ type submissionWriter struct {
 	ready chan *writeTicket
 }
 
+// transientDoner is implemented by contexts that hand out their Done channel
+// differently to waits that end before the current attempt returns.
+type transientDoner interface {
+	InternalTransientDone() <-chan struct{}
+}
+
+// attemptDone returns ctx's Done channel for a wait bounded by one attempt.
+func attemptDone(ctx context.Context) <-chan struct{} {
+	if t, ok := ctx.(transientDoner); ok {
+		return t.InternalTransientDone()
+	}
+	return ctx.Done()
+}
+
 func (c *Conn) submitTyped(ctx context.Context, packet wire.Chain, lease *wire.Lease) (int64, error) {
 	c.typedWriterOnce.Do(func() {
 		c.typedWriter = &submissionWriter{conn: c, ready: make(chan *writeTicket)}
@@ -65,8 +79,9 @@ func (c *Conn) submitTyped(ctx context.Context, packet wire.Chain, lease *wire.L
 	t.phase.Store(0)
 	t.ctx, t.packet, t.lease = ctx, packet, lease
 	defer t.release()
+	ctxDone := attemptDone(ctx)
 	select {
-	case <-ctx.Done():
+	case <-ctxDone:
 		t.finish(InternalWriteResult{InternalErr: ctx.Err()})
 		return 0, ctx.Err()
 	case <-c.InternalCtx.Done():
@@ -82,7 +97,7 @@ func (c *Conn) submitTyped(ctx context.Context, packet wire.Chain, lease *wire.L
 	select {
 	case result := <-t.done:
 		return result.InternalWritten, result.InternalErr
-	case <-ctx.Done():
+	case <-ctxDone:
 		if t.phase.CompareAndSwap(0, 2) {
 			return 0, ctx.Err()
 		}

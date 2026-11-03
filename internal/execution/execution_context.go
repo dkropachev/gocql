@@ -12,9 +12,17 @@ import (
 
 // executionContext is a reusable query's per-execution deadline and
 // cancellation scope, replacing context.WithTimeout on the direct path. The
-// struct, its timer and its bound CancelFunc belong to the query; a generation
-// allocates only its Done channel and, for a cancellable parent, the parent
-// registration.
+// struct, its timer, its Done channel and its bound CancelFuncs belong to the
+// query; a generation allocates only the parent registration of a cancellable
+// parent.
+//
+// The CancelFunc returned by begin finishes the generation. Done channels are
+// handed out two ways: Done, for watchers that may outlive an attempt, and
+// InternalTransientDone, for transport waits that end before the attempt
+// returns. When no Done watcher or AfterFunc exists at finish, nobody can be
+// waiting on the channel, so it stays open for the next generation; Done and
+// Err still report cancellation for the rest of this generation. A real
+// cancellation (cancelFunc, deadline, parent) always closes the channel.
 //
 // A generation begins only after the previous one drained (the query is idle),
 // so no in-flight work still holds the context. Callbacks that fire late from
@@ -26,13 +34,15 @@ type executionContext struct {
 	hasDeadline bool
 	timerAt     time.Time // own deadline armed on timer; zero when disarmed
 	timer       *time.Timer
-	done        chan struct{}
+	done        chan struct{} // open channel, reused while never closed
+	shared      bool          // Done was handed out this generation
 	cancelled   atomic.Bool
 	err         error
 	gen         uint64
 	stopParent  func() bool
 	afters      []*executionAfterFunc
 	cancelFunc  context.CancelFunc // bound once: cancel(context.Canceled)
+	finishFunc  context.CancelFunc // bound once: finish
 	parentFunc  func()             // bound once: parentCancelled
 }
 
@@ -47,12 +57,14 @@ var closedExecutionDone = func() chan struct{} { c := make(chan struct{}); close
 func newExecutionContext() *executionContext {
 	c := &executionContext{}
 	c.cancelFunc = c.cancelCanceled
+	c.finishFunc = c.finish
 	c.parentFunc = c.parentCancelled
 	return c
 }
 
 // begin starts a generation with parent and timeout and returns the context
-// with its CancelFunc. timeout <= 0 leaves only the parent's deadline.
+// with the CancelFunc that finishes it. timeout <= 0 leaves only the parent's
+// deadline. Cancellation from another goroutine must use cancelFunc.
 func (c *executionContext) begin(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	c.mu.Lock()
 	c.gen++
@@ -60,7 +72,7 @@ func (c *executionContext) begin(parent context.Context, timeout time.Duration) 
 	c.parent = parent
 	c.err = nil
 	c.cancelled.Store(false)
-	c.done = nil
+	c.shared = false
 	c.afters = c.afters[:0]
 	c.timerAt = time.Time{}
 	c.deadline, c.hasDeadline = parent.Deadline()
@@ -93,7 +105,36 @@ func (c *executionContext) begin(parent context.Context, timeout time.Duration) 
 			stop()
 		}
 	}
-	return c, c.cancelFunc
+	return c, c.finishFunc
+}
+
+// finish ends the generation after its attempts returned. With no Done watcher
+// and no AfterFunc registered, the open channel is kept for the next
+// generation instead of being closed and reallocated.
+func (c *executionContext) finish() {
+	c.mu.Lock()
+	if c.err != nil || c.shared || len(c.afters) > 0 || c.done == nil {
+		c.cancelLocked(context.Canceled)
+		return
+	}
+	c.err = context.Canceled
+	c.cancelled.Store(true)
+	c.disarmLocked()
+	c.mu.Unlock()
+}
+
+// disarmLocked stops the timer and parent registration. Stop under the lock: a
+// deferred stop could otherwise disarm the next generation. Neither stop waits
+// for a callback that needs this lock.
+func (c *executionContext) disarmLocked() {
+	c.timerAt = time.Time{}
+	if c.timer != nil {
+		c.timer.Stop()
+	}
+	if c.stopParent != nil {
+		c.stopParent()
+		c.stopParent = nil
+	}
 }
 
 func (c *executionContext) expire() {
@@ -135,21 +176,11 @@ func (c *executionContext) cancelLocked(err error) {
 	}
 	c.err = err
 	c.cancelled.Store(true)
-	if c.done == nil {
-		c.done = closedExecutionDone
-	} else {
+	if c.done != nil {
 		close(c.done)
+		c.done = nil
 	}
-	c.timerAt = time.Time{}
-	// Stop under the lock: a deferred stop could otherwise disarm the next
-	// generation. Neither stop waits for a callback that needs this lock.
-	if c.timer != nil {
-		c.timer.Stop()
-	}
-	if c.stopParent != nil {
-		c.stopParent()
-		c.stopParent = nil
-	}
+	c.disarmLocked()
 	afters := c.afters
 	c.afters = nil
 	c.mu.Unlock()
@@ -162,12 +193,29 @@ func (c *executionContext) Deadline() (time.Time, bool) { return c.deadline, c.h
 
 func (c *executionContext) Done() <-chan struct{} {
 	c.mu.Lock()
+	d := c.doneLocked()
+	c.shared = true
+	c.mu.Unlock()
+	return d
+}
+
+// InternalTransientDone is Done for a wait that ends before the current
+// attempt returns, so that it does not prevent channel reuse at finish.
+func (c *executionContext) InternalTransientDone() <-chan struct{} {
+	c.mu.Lock()
+	d := c.doneLocked()
+	c.mu.Unlock()
+	return d
+}
+
+func (c *executionContext) doneLocked() chan struct{} {
+	if c.err != nil {
+		return closedExecutionDone
+	}
 	if c.done == nil {
 		c.done = make(chan struct{})
 	}
-	d := c.done
-	c.mu.Unlock()
-	return d
+	return c.done
 }
 
 func (c *executionContext) Err() error {
