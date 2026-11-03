@@ -513,6 +513,9 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, 
 	}
 	*request = b.privateStorage.InternalRequest
 	request.InternalOptions = *resolved
+	if query := request.query; query != nil {
+		request.responseDest = &query.response
+	}
 	if options.privateStorage.InternalConnection != nil {
 		request.connection = options.privateStorage.InternalConnection
 	}
@@ -667,6 +670,9 @@ func InternalRunSinglePage[R any](ctx context.Context, s *implCluster.Session, b
 	if err != nil {
 		return nil, err
 	}
+	// A Page outlives its query's generation as a stale handle whose
+	// accessors still read its response, so it never uses query storage.
+	request.responseDest = nil
 	if unpaged {
 		request.InternalOptions.InternalProfile.PageSize = 0
 	}
@@ -763,7 +769,8 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 	direct := canExecuteDirect(request)
 	if !direct {
 		pageRequest := *request
-		request = &pageRequest // speculative branches retain this page's routing capture.
+		pageRequest.responseDest = nil // concurrent attempts cannot share it
+		request = &pageRequest         // speculative branches retain this page's routing capture.
 	}
 	// A deadline context already supplies cancellation for this page's attempts.
 	// With no page deadline, retain an independent cancellation scope so a winner
@@ -1072,7 +1079,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		if request.InternalPrepared != nil {
 			observed = request.InternalPrepared.InternalDependencies.InternalTracker.InternalStart()
 		}
-		response, executeErr := conn.InternalExecuteTyped(ctx, wireRequest)
+		response, executeErr := conn.InternalExecuteTypedInto(ctx, wireRequest, request.responseDest)
 		if len(wireRequest.PreparedID) > 0 && wireRequest.Batch == nil {
 			implCluster.InternalSessionApplyTypedFeedbackStamped(s.Session, response, request.InternalRouting, request.tabletFeedback, conn.InternalFramers.InternalDefaults)
 		}

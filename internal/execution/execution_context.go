@@ -37,17 +37,17 @@ type executionContext struct {
 	// done is the generation's Done channel. It is replaced only in begin,
 	// when a cancellation closed it, so InternalTransientDone reads it without
 	// the lock: begin runs only after the previous generation drained.
-	done        chan struct{}
-	doneClosed  bool // done was closed by a cancellation
-	shared      bool // Done was handed out this generation
-	cancelled   atomic.Bool
-	err         error
-	gen         uint64
-	stopParent  func() bool
-	afters      []*executionAfterFunc
-	cancelFunc  context.CancelFunc // bound once: cancel(context.Canceled)
-	finishFunc  context.CancelFunc // bound once: finish
-	parentFunc  func()             // bound once: parentCancelled
+	done       chan struct{}
+	doneClosed bool // done was closed by a cancellation
+	shared     bool // Done was handed out this generation
+	cancelled  atomic.Bool
+	err        error
+	gen        uint64
+	stopParent func() bool
+	afters     []*executionAfterFunc
+	cancelFunc context.CancelFunc // bound once: cancel(context.Canceled)
+	finishFunc context.CancelFunc // bound once: finish
+	parentFunc func()             // bound once: parentCancelled
 }
 
 type executionAfterFunc struct {

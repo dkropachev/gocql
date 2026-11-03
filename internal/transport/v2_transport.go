@@ -27,6 +27,14 @@ import (
 // Canonical values are borrowed unchanged; retries and metadata repair belong to
 // the execution layer. A received page owns its storage independently of Conn.
 func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*InternalResponsePage, error) {
+	return c.InternalExecuteTypedInto(ctx, req, nil)
+}
+
+// InternalExecuteTypedInto is InternalExecuteTyped building a successful
+// response in dest when dest is not nil. dest must stay unused by anyone else
+// until the response is released; a response that arrives after the caller
+// stopped waiting is built elsewhere.
+func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest, dest *InternalResponsePage) (*InternalResponsePage, error) {
 	if err := c.beginShared(ctx); err != nil {
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err})
 	}
@@ -77,6 +85,7 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 	}
 	call := InternalGetCallReq(stream)
 	call.InternalTyped = true
+	call.dest = dest
 	if c.InternalStreamObserver != nil {
 		call.streamObserverContext = c.InternalStreamObserver.StreamContext(ctx)
 	}

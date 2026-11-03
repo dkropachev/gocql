@@ -172,7 +172,11 @@ func (o *InternalInputOwner) InternalWriterLease(chain wire.Chain) *wire.Lease {
 }
 
 type InternalExecutionRequest struct {
-	query              *queryState
+	query *queryState
+	// responseDest is query-owned storage for the first page's response on
+	// the direct path. It is cleared once that page succeeded, so that
+	// continuation and prefetched pages get storage of their own.
+	responseDest       *responsePage
 	tabletFeedback     tabletFeedbackStamp
 	tabletVersionBlock byte
 	connection         *Conn

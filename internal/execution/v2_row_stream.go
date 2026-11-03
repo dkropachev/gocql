@@ -76,6 +76,7 @@ func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Sess
 		return nil, err
 	}
 	request.InternalOptions.InternalProfile.Speculation = nil
+	request.responseDest = nil // a stream handle keeps its pages beyond the query's generation
 	cursor := func() *RowStream[R] {
 		opaqueStorageValue := new(RowStream[R])
 		opaqueStorageValue.privateStorage.cursor = executionCursor(request)

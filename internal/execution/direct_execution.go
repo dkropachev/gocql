@@ -58,7 +58,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		}
 		if conn.InternalStreamObserver != nil {
 			fallback := *request
-			fallback.query, fallback.connection = nil, conn
+			fallback.query, fallback.connection, fallback.responseDest = nil, conn, nil
 			return s.executePage(ctx, &fallback, state)
 		}
 		s.attempts.Add(1)
@@ -70,6 +70,9 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		aggregate.AchievedConsistency = consistency
 		mergeResponseResult(&aggregate, response)
 		if err == nil {
+			// Attempts run one at a time here, and a failed attempt's response
+			// is released before the next; later pages get their own storage.
+			request.responseDest = nil
 			response.Result = aggregate
 			response.Result.Rows = int64(response.RowCount)
 			if response.PagingState != nil {

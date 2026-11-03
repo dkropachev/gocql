@@ -35,6 +35,9 @@ type queryState struct {
 	done          chan struct{} // created by the first waiter of a busy generation
 	retire        func()
 	resolved      resolvedOptionsCache
+	// response holds an execution's first response page. The next execution
+	// can begin only after this one released it.
+	response responsePage
 }
 
 // resolvedOptionsCache keeps a query's resolved options. A query's options
@@ -105,7 +108,7 @@ type Query[P, R any] struct {
 	columns  Columns
 	buffer   binding.ParameterBuffer
 	options  Options
-	scratch  eachScratch // Each and One decoding state
+	scratch  eachScratch   // Each and One decoding state
 	rows     rowsHolder[R] // Run's iterator storage, reused each execution
 }
 
@@ -297,6 +300,7 @@ func (q *Query[P, R]) Exec(ctx context.Context, value P) (Result, error) {
 	defer q.state.owner.InternalRelease()
 	return Exec(ctx, q.state.runtime.Session, &q.bound, q.options)
 }
+
 // Run executes the query and returns an iterator over its rows. The query
 // stays busy until the rows are closed; see Rows for stale handles.
 func (q *Query[P, R]) Run(ctx context.Context, value P) (Rows[R], error) {

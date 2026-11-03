@@ -133,7 +133,12 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 		if headerErr := frm.CheckResponseHeader(head, c.InternalVersion, c.typedResponseExtensionFlags()); headerErr != nil {
 			err = headerErr
 		} else {
-			page, err = c.InternalParseTypedResponse(head, body, owner)
+			// The caller's storage may be used only while it still waits.
+			var dest *InternalResponsePage
+			if call.dest != nil && call.claim() {
+				dest = call.dest
+			}
+			page, err = c.parseTypedResponseInto(head, body, owner, dest)
 		}
 	}
 	if err != nil && owner != nil && page == nil {
@@ -283,7 +288,16 @@ func (c *Conn) typedResponseExtensionFlags() byte {
 }
 
 func (c *Conn) InternalParseTypedResponse(head frm.FrameHeader, body wire.Chain, owner *wire.Lease) (*InternalResponsePage, error) {
-	page := new(InternalResponsePage)
+	return c.parseTypedResponseInto(head, body, owner, nil)
+}
+
+// parseTypedResponseInto parses into page, or into new storage when page is nil.
+func (c *Conn) parseTypedResponseInto(head frm.FrameHeader, body wire.Chain, owner *wire.Lease, page *InternalResponsePage) (*InternalResponsePage, error) {
+	if page == nil {
+		page = new(InternalResponsePage)
+	} else {
+		page.InternalMetadata = nil
+	}
 	data, err := c.nativeProtocol().ParseTypedResponseInto(head, body, owner, &page.InternalResponseData)
 	if data == nil {
 		return nil, err
