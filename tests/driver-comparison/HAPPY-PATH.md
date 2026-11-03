@@ -254,3 +254,24 @@ Gate gap found here: T0/T1 use unprepared QUERY, while production and the
 emulator use prepared EXECUTE. The plan-identity allocation exists only on the
 unprepared path, and the prepared path may hide costs T1 cannot see. T1 needs a
 prepared variant before further allocation work is ranked.
+
+## T1 prepared variants
+
+`BenchmarkReusableQueryLoopback/pread` and `/pwrite` use `Prepare` + `NewQuery`
+with an `int32` key, as the canonical point workloads do. The fake server
+answers PREPARE with a Prepared result and every EXECUTE with the workload
+body. The same benchmark file was compiled against the T1 commit (before any
+driver change) for a baseline, interleaved ABBA:
+
+| benchmark | baseline | after I9a | Δ |
+|---|---:|---:|---:|
+| pread/w64 ns/op | 12.835µ | 7.695µ | −40.04% |
+| pread/w64-2 ns/op | 10.694µ | 7.450µ | −30.34% |
+| pwrite/w64 ns/op | 11.805µ | 6.698µ | −43.26% |
+| pwrite/w64-2 ns/op | 9.306µ | 6.619µ | −28.87% |
+| pread/w1 ns/op | 23.24µ | 22.98µ | ~ |
+| pwrite/w1 ns/op | 23.63µ | 22.05µ | −6.69% |
+| pread allocs/op (w64) | 40 | 23 | −17 |
+| pwrite allocs/op (w64) | 36 | 23 | −13 |
+| pread B/op (w64) | 4,632 | 3,302 | −28.73% |
+| pwrite B/op (w64) | 3,929 | 2,677 | −31.87% |

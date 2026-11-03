@@ -19,6 +19,7 @@ import (
 	"time"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	transporttestkit "github.com/scylladb/gocql/v2/internal/testkit/transport"
@@ -79,8 +80,14 @@ func TestLoopbackServerProcess(t *testing.T) {
 		t.Skip("benchmark helper process")
 	}
 	body := []byte{0, 0, 0, frm.ResultKindVoid}
-	if workload == "read" {
+	if workload == "read" || workload == "pread" {
 		body = runtimeRowsBody(nil, loopbackValue)
+	}
+	key := NewColumns(ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: codecTestMust(ScalarType(TypeInt))})
+	value := NewColumns(ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(ScalarType(TypeBlob))})
+	prepared := step03PreparedBody([]byte("loopback"), key, value, 0)
+	if workload == "pwrite" {
+		prepared = step03PreparedBody([]byte("loopback"), NewColumns(append(cqltype.ColumnSlice(key), cqltype.ColumnSlice(value)...)...), NewColumns(), 0)
 	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -92,14 +99,20 @@ func TestLoopbackServerProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	serveLoopback(peer, body)
+	serveLoopback(peer, body, prepared)
 }
 
 var loopbackValue = strings.Repeat("x", 1024)
 
-// serveLoopback answers every request frame with body, preserving its stream.
-// Like a server, it flushes once no further request bytes are buffered.
-func serveLoopback(peer net.Conn, body []byte) {
+type loopbackRow struct {
+	k     int32
+	value []byte
+}
+
+// serveLoopback answers PREPARE with prepared and every other request frame
+// with body, preserving its stream. Like a server, it flushes once no further
+// request bytes are buffered.
+func serveLoopback(peer net.Conn, body, prepared []byte) {
 	r := bufio.NewReaderSize(peer, 64<<10)
 	w := bufio.NewWriterSize(peer, 64<<10)
 	var header [9]byte
@@ -110,12 +123,16 @@ func serveLoopback(peer net.Conn, body []byte) {
 		if _, err := r.Discard(int(binary.BigEndian.Uint32(header[5:]))); err != nil {
 			return
 		}
+		response := body
+		if header[4] == byte(frm.OpPrepare) {
+			response = prepared
+		}
 		header[0], header[1], header[4] = 0x84, 0, byte(frm.OpResult)
-		binary.BigEndian.PutUint32(header[5:], uint32(len(body)))
+		binary.BigEndian.PutUint32(header[5:], uint32(len(response)))
 		if _, err := w.Write(header[:]); err != nil {
 			return
 		}
-		if _, err := w.Write(body); err != nil {
+		if _, err := w.Write(response); err != nil {
 			return
 		}
 		if r.Buffered() == 0 {
@@ -131,13 +148,48 @@ func serveLoopback(peer net.Conn, body []byte) {
 func BenchmarkReusableQueryLoopback(b *testing.B) {
 	options := Options{Timeout: Option[time.Duration]{Set: true, Value: 10 * time.Second}}
 	value := loopbackValue
-	for _, workload := range []string{"read", "write"} {
+	for _, workload := range []string{"read", "write", "pread", "pwrite"} {
 		for _, workers := range []int{1, 8, 64} {
 			b.Run(fmt.Sprintf("%s/w%d", workload, workers), func(b *testing.B) {
 				s := loopbackTestSession(b, workload)
 				run := make([]func(context.Context) error, workers)
 				for i := range run {
-					if workload == "read" {
+					switch workload {
+					case "pread":
+						statement := Statement[int32, []byte]{Kind: OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: OneParam(Int32), Rows: RowInto(func(*[]byte) {}, Column("value", OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+						prepared := codecTestMust(Prepare(context.Background(), s, statement, PrepareOptions{}))
+						query := codecTestMust(NewQuery(prepared, options))
+						b.Cleanup(query.Close)
+						dst := make([]byte, 0, len(value))
+						key := int32(i)
+						run[i] = func(ctx context.Context) error {
+							rows, err := query.Run(ctx, key)
+							if err != nil {
+								return err
+							}
+							count := 0
+							for rows.NextInto(&dst) {
+								count++
+							}
+							if err := rows.Close(); err != nil {
+								return err
+							}
+							if count != 1 || len(dst) != len(value) {
+								return fmt.Errorf("bad diagnostic row")
+							}
+							return query.Wait(ctx)
+						}
+					case "pwrite":
+						statement := Statement[loopbackRow, Unit]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k, value) VALUES(?, ?)", Params: Params(ParamAt(0, Int32, func(r loopbackRow) int32 { return r.k }), ParamAt(1, BytesEncoder, func(r loopbackRow) []byte { return r.value })), Rows: NoRows}
+						prepared := codecTestMust(Prepare(context.Background(), s, statement, PrepareOptions{}))
+						query := codecTestMust(NewQuery(prepared, options))
+						b.Cleanup(query.Close)
+						input := loopbackRow{k: int32(i), value: []byte(value)}
+						run[i] = func(ctx context.Context) error {
+							_, err := query.Exec(ctx, input)
+							return err
+						}
+					case "read":
 						statement := Statement[Unit, []byte]{Kind: OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: NoParams, Rows: RowInto(func(*[]byte) {}, Column("value", OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 						query := codecTestMust(NewUnpreparedQuery(s, statement, NewColumns(), options))
 						b.Cleanup(query.Close)
@@ -159,7 +211,7 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 							}
 							return query.Wait(ctx)
 						}
-					} else {
+					default:
 						typ := codecTestMust(ScalarType(TypeBlob))
 						statement := Statement[[]byte, Unit]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.tbl(value)VALUES(?)", Params: OneParam(BytesEncoder), Rows: NoRows}
 						query := codecTestMust(NewUnpreparedQuery(s, statement, NewColumns(ColumnSpec{Name: "value", Type: typ}), options))
