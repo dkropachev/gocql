@@ -1113,15 +1113,15 @@ func TestV2PagerConcurrentCloseReleasesExactlyOnce(t *testing.T) {
 	p := step03Page(t, "value")
 	var releases atomic.Int32
 	implExecution.PageData(p).InternalRelease = func() { releases.Add(1); _ = p.Err(); _ = p.Close() }
-	var wg sync.WaitGroup
+	// A Page is not safe for concurrent use: Close is idempotent, also from
+	// its own completion callback.
 	for i := 0; i < 32; i++ {
-		wg.Add(1)
-		go func() { defer wg.Done(); _ = p.Close() }()
+		_ = p.Close()
 	}
-	wg.Wait()
 	if releases.Load() != 1 {
 		t.Fatal("page release count", releases.Load())
 	}
+	var wg sync.WaitGroup
 	rows := func() Rows[Bytes] {
 		opaqueStorageValuexxxxxxxxx := implExecution.InternalNewRows[Bytes]()
 		implExecution.RowsData(opaqueStorageValuexxxxxxxxx).InternalPage = step03Page(t)

@@ -23,6 +23,8 @@ func (l *PageLease) Close() {
 	}
 }
 
+// Page holds exactly one response page. It is not safe for concurrent use;
+// within Rows it is used only under the rows' own lock.
 type Page[R any] struct {
 	privateStorage PageStorage[R]
 }
@@ -86,8 +88,7 @@ func (p *Page[R]) Next() bool {
 	if !p.privateStorage.cursor.current() {
 		return false
 	}
-	p.privateStorage.mu.Lock()
-	defer p.unlockAfterAdvance()
+	defer p.afterAdvance()
 	return p.advance(nil, false)
 }
 func (p *Page[R]) NextInto(dst *R) bool {
@@ -98,8 +99,7 @@ func (p *Page[R]) NextInto(dst *R) bool {
 	if !p.privateStorage.cursor.current() {
 		return false
 	}
-	p.privateStorage.mu.Lock()
-	defer p.unlockAfterAdvance()
+	defer p.afterAdvance()
 	ok := p.advance(dst, true)
 	if !ok && !codec.PreservesRowDestination(p.privateStorage.InternalPlan) {
 		InternalClearDestination(dst)
@@ -184,8 +184,6 @@ func (p *Page[R]) Row() R {
 	if p == nil {
 		panic(ErrNoRows)
 	}
-	p.privateStorage.mu.Lock()
-	defer p.privateStorage.mu.Unlock()
 	if !p.privateStorage.valid || p.privateStorage.closed {
 		panic(ErrNoRows)
 	}
@@ -195,8 +193,6 @@ func (p *Page[R]) Err() error {
 	if p == nil {
 		return nil
 	}
-	p.privateStorage.mu.Lock()
-	defer p.privateStorage.mu.Unlock()
 	return p.privateStorage.err
 }
 func (p *Page[R]) Close() error {
@@ -209,8 +205,7 @@ func (p *Page[R]) Close() error {
 	if p.privateStorage.cancel != nil {
 		p.privateStorage.cancel()
 	}
-	p.privateStorage.mu.Lock()
-	defer p.unlockAfterAdvance()
+	defer p.afterAdvance()
 	p.closeLocked()
 	return p.privateStorage.err
 }
@@ -233,8 +228,6 @@ func (p *Page[R]) Retain() (*PageLease, error) {
 	if p == nil {
 		return nil, ErrNoRows
 	}
-	p.privateStorage.mu.Lock()
-	defer p.privateStorage.mu.Unlock()
 	if !p.privateStorage.valid || p.privateStorage.closed {
 		return nil, ErrNoRows
 	}
@@ -252,8 +245,6 @@ func (p *Page[R]) Clone() (R, error) {
 		var zero R
 		return zero, ErrNoRows
 	}
-	p.privateStorage.mu.Lock()
-	defer p.privateStorage.mu.Unlock()
 	if !p.privateStorage.valid || p.privateStorage.closed {
 		var zero R
 		return zero, ErrNoRows
@@ -720,11 +711,11 @@ func (p InternalExecRowsPlan) DecodeInto(reader *RowReader, dst *Unit) error {
 	return nil
 }
 
-// Completion observers may inspect their iterator; invoke them after unlocking.
-func (p *Page[R]) unlockAfterAdvance() {
+// Completion observers may inspect their page; invoke them once its state is
+// final.
+func (p *Page[R]) afterAdvance() {
 	release := p.privateStorage.pendingRelease
 	p.privateStorage.pendingRelease = nil
-	p.privateStorage.mu.Unlock()
 	if release != nil {
 		release()
 	}

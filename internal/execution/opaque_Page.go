@@ -8,13 +8,11 @@ import (
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/wire"
-	"sync"
 )
 
 type PageStorage[R any] struct {
 	cursor            queryCursor
 	pendingRelease    func()
-	mu                sync.Mutex
 	destination       *R
 	InternalCtx       context.Context
 	cancel            context.CancelFunc
