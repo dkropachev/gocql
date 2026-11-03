@@ -24,6 +24,8 @@ type queryState struct {
 	routing       routing.InternalLazyRoutingPlan
 	mu            sync.Mutex
 	owner         *inputOwner
+	execOwner     InternalInputOwner // per-execution owner, reset each generation
+	releaseOwner  func()             // bound owner.InternalRelease, the execution drain
 	runtime       *InternalSessionRuntime
 	logical       *InternalLogicalExecution
 	busy, closed  bool
@@ -78,6 +80,7 @@ func newQueryState(s *implCluster.Session, state *queryState, retire func()) err
 	}
 	state.runtime = InternalRuntimeFor(s)
 	state.owner = newInputOwner()
+	state.releaseOwner = state.owner.InternalRelease
 	state.retire = retire
 	state.done = make(chan struct{})
 	close(state.done)

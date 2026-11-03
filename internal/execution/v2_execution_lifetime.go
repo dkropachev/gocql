@@ -79,13 +79,9 @@ func (s *InternalSessionRuntime) registerExecution(l *InternalLogicalExecution, 
 	if implCluster.SessionData(s.Session).InternalIsClosing || implCluster.SessionData(s.Session).InternalIsClosed {
 		return ErrClosed
 	}
-	rt := s
-	rt.InternalMu.Lock()
-	defer rt.InternalMu.Unlock()
-	if rt.InternalExecutions == nil {
-		rt.InternalExecutions = make(map[*InternalLogicalExecution]struct{})
-	}
 	if query := l.request.query; query != nil {
+		// The session state read lock orders this registration before any
+		// StopActive, which finds the execution through query.logical.
 		query.mu.Lock()
 		if query.closed {
 			query.mu.Unlock()
@@ -93,25 +89,27 @@ func (s *InternalSessionRuntime) registerExecution(l *InternalLogicalExecution, 
 		}
 		query.logical = l
 		query.mu.Unlock()
-	} else {
-		rt.InternalExecutions[l] = struct{}{}
+		// The previous generation's owner drained before the query became idle.
+		// Parent release can admit the next generation, so nothing after it
+		// may dereference the preceding execution's reusable request.
+		query.execOwner.resetExecution(query.releaseOwner)
+		l.request.InternalOwner = &query.execOwner
+		return nil
 	}
-	owner := newInputOwner()
-	owner.InternalRefs = 1
-	owner.InternalClosed = true
-	queryOwned := l.request.query != nil
+	rt := s
+	rt.InternalMu.Lock()
+	if rt.InternalExecutions == nil {
+		rt.InternalExecutions = make(map[*InternalLogicalExecution]struct{})
+	}
+	rt.InternalExecutions[l] = struct{}{}
+	rt.InternalMu.Unlock()
+	owner := &InternalInputOwner{InternalRefs: 1, InternalClosed: true}
 	done := l.lifetime.done
 	owner.InternalOnDrain = func() {
-		if !queryOwned {
-			rt.InternalMu.Lock()
-			delete(rt.InternalExecutions, l)
-			rt.InternalMu.Unlock()
-		}
-		if done != nil {
-			close(done)
-		}
-		// Parent release can admit the next query generation. Nothing after
-		// this point may dereference the preceding execution's reusable request.
+		rt.InternalMu.Lock()
+		delete(rt.InternalExecutions, l)
+		rt.InternalMu.Unlock()
+		close(done)
 		parent.InternalRelease()
 	}
 	l.request.InternalOwner = owner

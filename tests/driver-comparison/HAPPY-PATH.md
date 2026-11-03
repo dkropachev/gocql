@@ -57,3 +57,33 @@ Mechanism: −2 allocs/op, −816 B/op on every reusable-query case.
 
 w1 interleaved rerun: no difference (−0.4%, p≥0.28). Unit race suite passes
 except the known baseline failure; emulator smoke OK.
+
+## I1b: reuse a query-embedded execution owner (kept)
+
+Every execution registered a fresh input owner: the struct, a `done` channel
+that is never waited on for execution owners, a drain closure, and a bound
+release closure for each writer lease. It also took the session-global
+`rt.InternalMu` lock, which the reusable path never needed.
+
+Reusable queries now reset an embedded `execOwner` each generation. Its drain
+callback is the query owner's pre-bound `InternalRelease`, and the writer lease
+reuses one bound release function. To make the reset safe,
+`InternalRelease`/`InternalClose` run the drain callback after unlocking, as
+their final action. The next generation can only be admitted through that
+callback, and nothing touches the owner afterwards. The session-global lock is
+now taken only for session-owned executions.
+
+Mechanism: −4 allocs/op and −224 B/op on read and write; −3 allocs in admission.
+
+| benchmark (interleaved vs I1) | before | after | Δ |
+|---|---:|---:|---:|
+| Loopback read/w64-2 ns/op | 9.298µ | 9.002µ | −3.18% |
+| Loopback write/w64-2 ns/op | 8.431µ | 8.129µ | −3.58% |
+| Loopback read/w64 ns/op | 11.39µ | 11.18µ | ~ (p=0.12) |
+| Decoding point/buffered ns/op | 12.91µ | 12.76µ | −1.12% |
+| Admission ns/op | 1.346µ | 1.219µ | −9.44% |
+| Loopback read allocs/op | 39 | 35 | −4 |
+| Loopback write allocs/op | 35 | 31 | −4 |
+
+`-race -count=20` on `internal/execution`; unit race suite clean except the
+known baseline failure; emulator smoke OK.
