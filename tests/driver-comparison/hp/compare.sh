@@ -1,6 +1,6 @@
 #!/bin/sh
-# usage: HP_DIR=... compare.sh OLD NEW [ROUNDS]
-# Builds NEW from the working tree (OLD must already be built), runs ABBA
+# usage: HP_DIR=... [HP_REF=commit] compare.sh OLD NEW [ROUNDS]
+# Builds NEW from the working tree or HP_REF (OLD must already be built), runs ABBA
 # rounds (default 5 => 10 samples per side) and prints benchstat OLD vs NEW.
 set -eu
 . "$(dirname "$0")/env.sh"

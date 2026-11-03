@@ -7,10 +7,19 @@ export GOCQL_LOOPBACK_SERVER_CPUS=${GOCQL_LOOPBACK_SERVER_CPUS:-6-7}
 HP_T0='BenchmarkReusableQueryDecoding/(point|partition)/buffered|BenchmarkReusableQueryDecoding/point/stream'
 HP_T1='BenchmarkReusableQueryLoopback/p?(read|write)/w(1|64)$'
 HP_MC='BenchmarkReusableQueryLoopback/p?(read|write)/w64$'
+# hp_build LABEL builds the gate binaries from the working tree, or from the
+# commit HP_REF (checked out in a throwaway worktree) so that editing can go on
+# while a comparison runs. Builds stay off the benchmark CPUs.
 hp_build() { # LABEL
-	cd "$HP_REPO"
-	go test -tags unit -c -o "$HP_GATES/$1.root.test" .
-	go test -tags unit -c -o "$HP_GATES/$1.exec.test" ./internal/execution/
+	src=$HP_REPO
+	if [ -n "${HP_REF:-}" ]; then
+		src=$HP_DIR/src-$1
+		git -C "$HP_REPO" worktree remove --force "$src" 2>/dev/null || true
+		git -C "$HP_REPO" worktree add -q --detach "$src" "$HP_REF"
+	fi
+	(cd "$src" && taskset -c 10-19 go test -tags unit -c -o "$HP_GATES/$1.root.test" . &&
+		taskset -c 10-19 go test -tags unit -c -o "$HP_GATES/$1.exec.test" ./internal/execution/)
+	if [ -n "${HP_REF:-}" ]; then git -C "$HP_REPO" worktree remove --force "$src"; fi
 }
 hp_round() { # LABEL OUT
 	taskset -c 4-5 "$HP_GATES/$1.root.test" -test.run '^$' -test.bench "$HP_T0" -test.benchmem -test.benchtime 20000x -test.cpu 1 >>"$2"
