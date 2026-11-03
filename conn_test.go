@@ -884,33 +884,6 @@ func TestHeartBeatClosesAConnectionThatKeepsFailing(t *testing.T) {
 	}
 }
 
-func TestCallReqReuseDoesNotInvalidateOutstandingTimeout(t *testing.T) {
-	t.Parallel()
-
-	oldCall := getCallReq(1)
-	oldTimeout := oldCall.InternalTimeout
-	oldCall.InternalDone.Done()
-	putCallReq(oldCall)
-
-	newCall := getCallReq(2)
-	defer newCall.InternalDone.Done()
-	defer close(newCall.InternalTimeout)
-
-	defer func() {
-		if r := recover(); r != nil {
-			t.Fatalf("closing old timeout should not panic after putCallReq: %v", r)
-		}
-	}()
-
-	close(oldTimeout)
-
-	select {
-	case <-newCall.InternalTimeout:
-		t.Fatal("closing the old timeout unexpectedly closed the new call timeout")
-	default:
-	}
-}
-
 type testContextWriter struct {
 	n       int
 	err     error
@@ -2996,15 +2969,13 @@ func TestConnProcessAllFramesInSingleSegment(t *testing.T) {
 	c.InternalWriteTimeout.Store(int64(time.Second * 10))
 
 	call1 := &callReq{
-		InternalTimeout:  make(chan struct{}),
 		InternalStreamID: 1,
-		InternalResp:     make(chan callResp),
+		InternalResp:     make(chan callResp, 1),
 	}
 
 	call2 := &callReq{
-		InternalTimeout:  make(chan struct{}),
 		InternalStreamID: 2,
-		InternalResp:     make(chan callResp),
+		InternalResp:     make(chan callResp, 1),
 	}
 
 	c.InternalCalls[1] = call1
@@ -3104,7 +3075,7 @@ func TestConnProcessReservedStreamFrameInSegment(t *testing.T) {
 
 	// Only stream 2 has a registered call; the reserved stream -1 frame ahead of
 	// it goes through the readFrameIntoFramer body-read path.
-	call2 := &callReq{InternalTimeout: make(chan struct{}), InternalStreamID: 2, InternalResp: make(chan callResp)}
+	call2 := &callReq{InternalStreamID: 2, InternalResp: make(chan callResp, 1)}
 	c.InternalCalls[2] = call2
 
 	req := fixtureQueryFrame{
@@ -3691,7 +3662,7 @@ func TestProcessFrameDesyncedBodyIsFatalAndWakesCaller(t *testing.T) {
 	}}
 
 	// Buffered so the delivery does not need a second goroutine.
-	call := &callReq{InternalTimeout: make(chan struct{}), InternalStreamID: 1, InternalResp: make(chan callResp, 1)}
+	call := &callReq{InternalStreamID: 1, InternalResp: make(chan callResp, 1)}
 	c := &driverConn{
 		InternalR:       r,
 		InternalCalls:   map[int]*callReq{1: call},
@@ -3762,7 +3733,7 @@ func TestProcessFrameStreamIDMismatchIsAnError(t *testing.T) {
 
 	// Keyed under stream 1, but the call believes it is stream 2. resp is buffered so
 	// the delivery does not need a second goroutine.
-	call := &callReq{InternalTimeout: make(chan struct{}), InternalStreamID: 2, InternalResp: make(chan callResp, 1)}
+	call := &callReq{InternalStreamID: 2, InternalResp: make(chan callResp, 1)}
 	c := &driverConn{
 		InternalCalls:   map[int]*callReq{1: call},
 		InternalVersion: protoVersion4,
@@ -4148,7 +4119,7 @@ func TestProcessFrameFailedDeadlineArmIsFatal(t *testing.T) {
 			src, checkSource := tc.source()
 
 			// Buffered so the delivery does not need a second goroutine.
-			call := &callReq{InternalTimeout: make(chan struct{}), InternalStreamID: 1, InternalResp: make(chan callResp, 1)}
+			call := &callReq{InternalStreamID: 1, InternalResp: make(chan callResp, 1)}
 			c := &driverConn{
 				InternalCalls:   map[int]*callReq{1: call},
 				InternalVersion: protoVersion4,
@@ -4312,7 +4283,7 @@ func TestRecvSegmentReassemblesFrameWithSplitHeader(t *testing.T) {
 	}
 	c.InternalWriteTimeout.Store(int64(time.Second * 10))
 
-	call1 := &callReq{InternalTimeout: make(chan struct{}), InternalStreamID: 1, InternalResp: make(chan callResp)}
+	call1 := &callReq{InternalStreamID: 1, InternalResp: make(chan callResp, 1)}
 	c.InternalCalls[1] = call1
 
 	req := fixtureQueryFrame{
@@ -4357,7 +4328,6 @@ func TestRecvSegmentReassemblesFrameWithSplitHeader(t *testing.T) {
 	respBuf := make(chan []byte, 1)
 	go func() {
 		resp := <-call1.InternalResp
-		close(call1.InternalTimeout)
 		// resp.framer.buf holds the frame body (the header is already parsed).
 		respBuf <- resp.InternalFramer.Buf
 	}()

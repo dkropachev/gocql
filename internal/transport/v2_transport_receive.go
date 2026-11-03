@@ -140,16 +140,7 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 		owner.Release()
 		owner = nil
 	}
-	select {
-	case call.InternalResp <- InternalCallResp{InternalPage: page, InternalErr: err, removedFromCalls: true}:
-	case <-call.InternalTimeout:
-		if page != nil {
-			page.Owner.Release()
-		}
-		c.releaseStream(call)
-		call.waitExecDone("receiveTypedCall")
-		InternalPutCallReq(call)
-	case <-ctx.Done():
+	if !call.deliver(InternalCallResp{InternalPage: page, InternalErr: err, removedFromCalls: true}) {
 		if page != nil {
 			page.Owner.Release()
 		}

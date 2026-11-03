@@ -147,7 +147,7 @@ func TestRecvSplitFrameAllocatesExactlyOneFrameBuffer(t *testing.T) {
 	for i := 0; i < runs; i++ {
 		// A buffered receiver replaces the execution goroutine so process-wide
 		// allocation accounting measures the receive path without scheduling noise.
-		call := &callReq{InternalTyped: true, InternalStreamID: 1, InternalResp: make(chan callResp, 1), InternalTimeout: make(chan struct{})}
+		call := &callReq{InternalTyped: true, InternalStreamID: 1, InternalResp: make(chan callResp, 1)}
 		c.InternalCalls[1] = call
 		reader.payloads = nil
 		if err := c.InternalRecvSegment(context.Background()); err != nil {

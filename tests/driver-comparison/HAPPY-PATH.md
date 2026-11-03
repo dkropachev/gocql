@@ -486,3 +486,21 @@ assigning the field now call `InternalSessionMarkClosed`.
 | pread/w64 cpu-ns/op | 6.772µ | 6.520µ | −3.73% (p=0.050) |
 | read/w1 cpu-ns/op | 15.36µ | 14.91µ | −2.93% (p=0.038) |
 | other cases | | | ~ |
+
+## T2: one-slot response hand-off without a timeout channel (kept)
+
+`InternalCallReq` loses its per-call `InternalTimeout` channel. Its pooled
+`InternalResp` has one slot, and `state` (waiting, delivered, stopped)
+decides who owns a response: `deliver` succeeds only for a waiting
+caller, and `InternalStopWaiting` either withdraws or returns the response
+that won the race. The typed and legacy readers and `CloseWithError`
+deliver without a select. `TestCallReqStopWaitingDecidesResponseOwnership`
+and `TestCallReqReuseStartsWaitingWithAnEmptySlot` cover both outcomes and
+reuse.
+
+| vs C3 | before | after | Δ |
+|---|---:|---:|---:|
+| allocs/op | | | −1 |
+| cpu-ns/op read / write / pread / pwrite w64 | | | −3.23 / −3.44 / −2.84 / −3.59% |
+| cpu-ns/op w64-4 (four cases) | | | −7.85% to −10.02% |
+| w1 | | | ~ |

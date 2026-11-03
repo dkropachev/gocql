@@ -83,7 +83,16 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 	}()
 	defer func() {
 		if stopWaiting {
-			close(call.InternalTimeout)
+			if resp, ok := call.InternalStopWaiting(); ok {
+				// The response arrived as we stopped waiting; it is ours to drop.
+				if resp.InternalPage != nil {
+					resp.InternalPage.Owner.Release()
+				}
+				if resp.removedFromCalls {
+					releaseStream = true
+					recycleCall = true
+				}
+			}
 		}
 		call.finishExec()
 		if releaseStream {
@@ -173,7 +182,6 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 	}
 	select {
 	case resp := <-call.InternalResp:
-		stopWaiting = true
 		if resp.removedFromCalls {
 			releaseStream = true
 			recycleCall = true

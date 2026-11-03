@@ -781,12 +781,7 @@ func (c *Conn) InternalCloseWithError(err error) {
 
 		if err != nil {
 
-			select {
-			case req.InternalResp <- InternalCallResp{InternalErr: err}:
-
-			case <-req.InternalTimeout:
-
-			}
+			req.deliver(InternalCallResp{InternalErr: err})
 		}
 		req.waitExecDone("closeWithError")
 		if req.streamObserverContext != nil {
@@ -1119,12 +1114,7 @@ func (c *Conn) InternalProcessFrameSource(ctx context.Context, src frameSource) 
 
 	desynced := InternalBodyReadDesyncedConn(err)
 
-	select {
-	case call.InternalResp <- InternalCallResp{InternalFramer: framer, InternalErr: err, removedFromCalls: true}:
-
-	case <-call.InternalTimeout:
-		c.InternalAbandonRecvCall(call, framer)
-	case <-ctx.Done():
+	if !call.deliver(InternalCallResp{InternalFramer: framer, InternalErr: err, removedFromCalls: true}) {
 		c.InternalAbandonRecvCall(call, framer)
 	}
 
@@ -1405,8 +1395,10 @@ type InternalCallReq struct {
 	// streamObserverContext is notified about events regarding this stream
 	streamObserverContext StreamObserverContext
 	// resp will receive the frame that was sent as a response to this stream.
+	// It has one slot, so a sender never blocks; deliver and stopWaiting decide
+	// through state which side owns a response.
 	InternalResp     chan InternalCallResp
-	InternalTimeout  chan struct{} // indicates to recv() that a call has timed out
+	state            atomic.Uint32 // callWaiting, callDelivered or callStopped
 	timer            *time.Timer
 	InternalStreamID int // current stream in use
 	// streamObserverEndOnce ensures that either StreamAbandoned or StreamFinished is called,
@@ -1418,14 +1410,14 @@ type InternalCallReq struct {
 var InternalCallReqPool = sync.Pool{
 	New: func() any {
 		return &InternalCallReq{
-			InternalResp: make(chan InternalCallResp),
+			InternalResp: make(chan InternalCallResp, 1),
 		}
 	},
 }
 
 func InternalGetCallReq(streamID int) *InternalCallReq {
 	call := InternalCallReqPool.Get().(*InternalCallReq)
-	call.InternalTimeout = make(chan struct{})
+	call.state.Store(callWaiting)
 	call.InternalTyped = false
 	call.orphaned = false
 	call.InternalStreamID = streamID
@@ -1448,8 +1440,40 @@ func InternalPutCallReq(call *InternalCallReq) {
 	call.streamObserverContext = nil
 	call.streamObserverEndOnce = sync.Once{}
 	call.InternalStreamID = 0
-	call.InternalTimeout = nil
+	// A correct exchange leaves the slot empty; never hand a stale response to
+	// the next call.
+	select {
+	case <-call.InternalResp:
+	default:
+	}
 	InternalCallReqPool.Put(call)
+}
+
+const (
+	callWaiting uint32 = iota
+	callDelivered
+	callStopped
+)
+
+// deliver hands resp to the waiting caller without blocking. It reports false
+// when the caller already stopped waiting; the sender then still owns resp and
+// the call cleanup.
+func (call *InternalCallReq) deliver(resp InternalCallResp) bool {
+	if !call.state.CompareAndSwap(callWaiting, callDelivered) {
+		return false
+	}
+	call.InternalResp <- resp
+	return true
+}
+
+// InternalStopWaiting ends a caller's wait that did not receive from
+// InternalResp. If a response was already delivered, it is returned and the
+// caller owns it; otherwise the sender keeps ownership of any later response.
+func (call *InternalCallReq) InternalStopWaiting() (InternalCallResp, bool) {
+	if call.state.CompareAndSwap(callWaiting, callStopped) {
+		return InternalCallResp{}, false
+	}
+	return <-call.InternalResp, true
 }
 
 func (call *InternalCallReq) finishExec() {
@@ -1572,7 +1596,16 @@ func (c *Conn) execAdmitted(ctx context.Context, req frameBuilder, tracer Tracer
 
 	defer func() {
 		if stopWaiting {
-			close(call.InternalTimeout)
+			if resp, ok := call.InternalStopWaiting(); ok {
+				// The response arrived as we stopped waiting; it is ours to drop.
+				if resp.InternalFramer != nil {
+					c.InternalReleaseReadFramer(resp.InternalFramer)
+				}
+				if resp.removedFromCalls {
+					releaseStream = true
+					recycleCall = true
+				}
+			}
 		}
 		call.finishExec()
 		if releaseStream {
@@ -1661,7 +1694,6 @@ func (c *Conn) execAdmitted(ctx context.Context, req frameBuilder, tracer Tracer
 
 	select {
 	case resp := <-call.InternalResp:
-		stopWaiting = true
 		if resp.InternalErr != nil {
 			c.InternalReleaseReadFramer(resp.InternalFramer)
 			if resp.removedFromCalls {
