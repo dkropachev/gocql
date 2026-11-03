@@ -79,6 +79,9 @@ type SessionStorage struct {
 	InternalTabletsRoutingV1          bool
 	InternalIsInitialized             bool
 	InternalIsClosed                  bool
+	// closedOrClosing mirrors InternalIsClosing||InternalIsClosed for lock-free
+	// Closed; it is set under InternalSessionStateMu with either flag.
+	closedOrClosing atomic.Bool
 }
 
 func SessionData(v *Session) *SessionStorage { return &v.privateStorage }

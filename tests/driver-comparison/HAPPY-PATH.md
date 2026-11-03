@@ -468,3 +468,21 @@ item is built from a pinned commit; the queue ran every item in order,
 each against the previous one, 4×ABBA (n=8), with the unit race suite and
 emulator smoke before each comparison. Results below are against the
 previous item.
+
+## C3: lock-free closed check, cached host list (kept)
+
+`Session.Closed` read-locked the session state on every request; it now
+reads `closedOrClosing`, an atomic set under that lock with either flag.
+`InternalHostsView` returns a host list cached per ring revision, so the
+no-policy fallback in `InternalSessionSelectTypedConn` stops building one
+per request. Host UUID reads keep their lock: an empty host ID can still
+be filled in later, so a lock-free read would need atomics at every
+writer for about 1% of CPU. Tests that marked a session closed by
+assigning the field now call `InternalSessionMarkClosed`.
+
+| vs m0 (metric only) | before | after | Δ |
+|---|---:|---:|---:|
+| allocs/op, every loopback and decoding case | | | −1 |
+| pread/w64 cpu-ns/op | 6.772µ | 6.520µ | −3.73% (p=0.050) |
+| read/w1 cpu-ns/op | 15.36µ | 14.91µ | −2.93% (p=0.038) |
+| other cases | | | ~ |

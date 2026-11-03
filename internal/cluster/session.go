@@ -523,6 +523,7 @@ func (s *Session) Close() error {
 		return nil
 	}
 	s.privateStorage.InternalIsClosing = true
+	s.privateStorage.closedOrClosing.Store(true)
 	s.privateStorage.closeDone = make(chan struct{})
 	done := s.privateStorage.closeDone
 	s.privateStorage.InternalSessionStateMu.Unlock()
@@ -570,6 +571,7 @@ func (s *Session) Close() error {
 	}
 	s.privateStorage.InternalSessionStateMu.Lock()
 	s.privateStorage.InternalIsClosed = true
+	s.privateStorage.closedOrClosing.Store(true)
 	s.privateStorage.InternalSessionStateMu.Unlock()
 	InternalSessionPeripheral(s).workers.Wait()
 	if s.privateStorage.InternalMetadataDescriber != nil && s.privateStorage.InternalMetadataDescriber.InternalMetadata != nil {
@@ -584,11 +586,17 @@ func (s *Session) Close() error {
 	return nil
 }
 
+// InternalSessionMarkClosed marks the session closed without shutting it down,
+// for tests of closed-session behaviour.
+func InternalSessionMarkClosed(s *Session) {
+	s.privateStorage.InternalSessionStateMu.Lock()
+	s.privateStorage.InternalIsClosed = true
+	s.privateStorage.closedOrClosing.Store(true)
+	s.privateStorage.InternalSessionStateMu.Unlock()
+}
+
 func (s *Session) Closed() bool {
-	s.privateStorage.InternalSessionStateMu.RLock()
-	closed := s.privateStorage.InternalIsClosed || s.privateStorage.InternalIsClosing
-	s.privateStorage.InternalSessionStateMu.RUnlock()
-	return closed
+	return s.privateStorage.closedOrClosing.Load()
 }
 
 func (s *Session) initialized() bool {

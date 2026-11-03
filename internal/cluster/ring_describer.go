@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 )
 
 // Polls system.peers at a specific interval to find new hosts
@@ -26,6 +27,7 @@ type InternalRingDescriber struct {
 	mu                 sync.RWMutex
 	readMu             sync.Mutex
 	revision           uint64
+	hostsView          atomic.Pointer[ringHostsView] // InternalHostsView cache
 	eventEpoch         uint64
 	refreshSequence    uint64
 	tombstones         map[string]bool
@@ -240,6 +242,30 @@ func (r *InternalRingDescriber) InternalGetHostsList() []*HostInfo {
 		hosts = append(hosts, host)
 	}
 	r.mu.RUnlock()
+	return hosts
+}
+
+// ringHostsView is an immutable host list for one ring revision.
+type ringHostsView struct {
+	revision uint64
+	hosts    []*HostInfo
+}
+
+// InternalHostsView returns the current hosts as a shared, read-only slice.
+// It is rebuilt only when the ring revision changes, so per-request callers
+// allocate nothing. Callers must not modify it; InternalGetHostsList returns
+// a private copy.
+func (r *InternalRingDescriber) InternalHostsView() []*HostInfo {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if v := r.hostsView.Load(); v != nil && v.revision == r.revision {
+		return v.hosts
+	}
+	hosts := make([]*HostInfo, 0, len(r.InternalHosts))
+	for _, host := range r.InternalHosts {
+		hosts = append(hosts, host)
+	}
+	r.hostsView.Store(&ringHostsView{revision: r.revision, hosts: hosts})
 	return hosts
 }
 

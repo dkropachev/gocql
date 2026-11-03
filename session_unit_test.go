@@ -454,7 +454,7 @@ func TestTableTabletsMetadata(t *testing.T) {
 		defer s.Close()
 		implCluster.SessionData(s).InternalIsInitialized = true
 		implCluster.SessionData(s).InternalTabletsRoutingV1 = true
-		implCluster.SessionData(s).InternalIsClosed = true
+		implCluster.InternalSessionMarkClosed(s)
 
 		_, err := sessionTestTableTabletsMetadata(s, "ks", "tb")
 		if !errors.Is(err, ErrSessionClosed) {
@@ -606,7 +606,7 @@ func TestForEachTablet(t *testing.T) {
 		defer s.Close()
 		implCluster.SessionData(s).InternalIsInitialized = true
 		implCluster.SessionData(s).InternalTabletsRoutingV1 = true
-		implCluster.SessionData(s).InternalIsClosed = true
+		implCluster.InternalSessionMarkClosed(s)
 
 		err := sessionTestForEachTablet(s, func(keyspace, table string, entries tablets.TabletEntryList) bool {
 			t.Fatal("callback should not be called on closed session")

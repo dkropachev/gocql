@@ -58,7 +58,7 @@ func InternalSessionSelectTypedConn(s *Session, ctx context.Context, routing Rou
 		}
 		return nil, ErrNoConnections
 	}
-	hosts := s.privateStorage.InternalHostSource.InternalGetHostsList()
+	hosts := s.privateStorage.InternalHostSource.InternalHostsView()
 	if len(hosts) == 0 {
 		return nil, ErrNoConnections
 	}
