@@ -664,3 +664,28 @@ Not attempted this round: a query-owned `Rows` for `Run` (needs a
 value-type handle to keep stale handles from seeing a later execution;
 `One`/`Each` cover point reads instead), removing locks that only guard
 handle misuse, and the stream-query path.
+
+## Emulator screen against master after round 2
+
+Same setup as the earlier screen: `redesign_compare.py --stage screen --load
+maximum`, five canonical cases, two ABBA pairs × 30 s, client CPU 8 with
+GOMAXPROCS=1, emulator CPUs 0-1,4-5. Master is the same frozen `1ceaac81`
+build; the candidate is `466a6542`, frozen with `roadmap_build.py`. Results
+are in `results/hp2-screen-master-20261103T205219Z`. The point case still
+reads through `Run`, not `Query.One`.
+
+| case | candidate / master, before round 2 | after | CPU µs/op (master) | allocs/op (master) | p99 µs (master) |
+|---|---:|---:|---:|---:|---:|
+| point-buffered w64 | 0.976 | **1.098** | 8.84 (9.71) | 17.1 (32.0) | 1,681 (1,498) |
+| write w64 | 1.015 | **1.196** | 7.07 (8.46) | 13.1 (25.0) | 1,446 (1,376) |
+| paged-buffered w4 | 0.930 | 0.942 | 428 (407) | 47.3 (150) | 2,456 (2,384) |
+| paged-stream w4 | 0.832 | 0.843 | 478 (406) | 100 (150) | 2,724 (2,371) |
+| point-stream w4 | 0.699 | 0.752 | 14.2 (10.7) | 42.8 (32.0) | 175 (109) |
+
+Point reads and writes now beat master: throughput +9.8% and +19.6%, CPU
+per operation −9% and −16%, allocations about half (CIs exclude 1). The
+runner's overall verdict is still `rejected`, because the stream and paged
+cases, which this round did not target, remain regressions. Maximum-load
+p99 is 5–12% above master for point reads and writes; matched-rate latency
+was not measured. The point case's bytes/op is 0.25% above master, which
+the runner flags.
