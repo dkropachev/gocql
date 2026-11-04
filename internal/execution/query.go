@@ -48,6 +48,12 @@ type queryState struct {
 	// params is the query's latest parameters template; attempts running at
 	// once read and replace it.
 	params atomic.Pointer[model.ParamsTemplate]
+	// onIdle, when set, runs once an open query becomes idle; a query pool
+	// uses it to take the query back.
+	onIdle func()
+	// perCall reports that each execution brings its own options, so their
+	// resolution is not cached.
+	perCall bool
 }
 
 // resolvedOptionsCache keeps a query's resolved options. A query's options
@@ -64,7 +70,7 @@ type resolvedOptionsCache struct {
 // query never overlaps. Options with a custom payload are resolved each time:
 // their borrowed values must be checked for liveness on every execution.
 func (s *queryState) resolveOptions(session *implCluster.Session, options Options) (*InternalResolvedOptions, error) {
-	if len(options.CustomPayload) != 0 {
+	if len(options.CustomPayload) != 0 || s.perCall {
 		resolved, err := InternalResolveOptions(session, options)
 		return &resolved, err
 	}
@@ -136,7 +142,9 @@ func (q *Query[P, R]) LastResult() Result {
 	return cloneResult(q.last)
 }
 
-func newQueryState(s *implCluster.Session, state *queryState, retire func()) error {
+// newQueryState sets up state for session. A query of a pool is tracked by
+// the pool, not by the session runtime.
+func newQueryState(s *implCluster.Session, state *queryState, retire func(), pool *queryPoolBase) error {
 	if s == nil {
 		return typeValidation("query", "nil session")
 	}
@@ -151,6 +159,9 @@ func newQueryState(s *implCluster.Session, state *queryState, retire func()) err
 	state.releaseOwner = state.owner.InternalRelease
 	state.retire = retire
 	state.owner.onIdle = state.idle
+	if pool != nil {
+		return pool.adopt(state)
+	}
 	state.runtime.InternalMu.Lock()
 	if state.runtime.queries == nil {
 		state.runtime.queries = make(map[*queryState]struct{})
@@ -163,6 +174,10 @@ func newQueryState(s *implCluster.Session, state *queryState, retire func()) err
 // NewQuery creates a reusable query from a prepared statement. Defaults are
 // loaded from the selected profile on each execution; options are overrides.
 func NewQuery[P, R any](p *Prepared[P, R], options Options) (*Query[P, R], error) {
+	return newPreparedQuery(p, options, nil)
+}
+
+func newPreparedQuery[P, R any](p *Prepared[P, R], options Options, pool *queryPoolBase) (*Query[P, R], error) {
 	if p == nil || p.privateStorage.InternalState == nil {
 		return nil, typeValidation("prepared", "nil handle")
 	}
@@ -180,7 +195,7 @@ func NewQuery[P, R any](p *Prepared[P, R], options Options) (*Query[P, R], error
 	info := &state.InternalInfo
 	kind := p.privateStorage.InternalKind
 	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, InternalRouting: RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Kind: kind, Conditional: kind != OrdinaryStatement}}
-	if err := newQueryState(p.privateStorage.InternalState.InternalSession, &q.state, q.retire); err != nil {
+	if err := newQueryState(p.privateStorage.InternalState.InternalSession, &q.state, q.retire, pool); err != nil {
 		return nil, err
 	}
 	q.state.execCtx = newExecutionContext()
@@ -206,7 +221,7 @@ func NewUnpreparedQuery[P, R any](s *implCluster.Session, statement Statement[P,
 	q.bound.privateStorage.plans = &InternalResultPlanCache[R]{}
 	q.bound.privateStorage.rows = &q.rows
 	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: statement.CQL, InternalSource: cqlText{}, InternalRouting: RoutingInfo{Kind: statement.Kind, Conditional: statement.Kind != OrdinaryStatement}}
-	if err := newQueryState(s, &q.state, q.retire); err != nil {
+	if err := newQueryState(s, &q.state, q.retire, nil); err != nil {
 		return nil, err
 	}
 	q.state.execCtx = newExecutionContext()
@@ -232,6 +247,10 @@ func (s *queryState) idle() {
 		s.runtime.InternalMu.Lock()
 		delete(s.runtime.queries, s)
 		s.runtime.InternalMu.Unlock()
+		return
+	}
+	if s.onIdle != nil {
+		s.onIdle()
 	}
 }
 
@@ -245,6 +264,12 @@ func (s *queryState) begin(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	return s.admit()
+}
+
+// admit starts the query's next execution. It fails without making the
+// query busy only when the query is closed or already busy.
+func (s *queryState) admit() error {
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -272,6 +297,12 @@ func (q *Query[P, R]) capture(ctx context.Context, value P) error {
 	if err := q.state.begin(ctx); err != nil {
 		return err
 	}
+	return q.captureValue(value)
+}
+
+// captureValue encodes value as the input of the execution begin started.
+// On failure it ends that execution.
+func (q *Query[P, R]) captureValue(value P) error {
 	request := &q.bound.privateStorage.InternalRequest
 	values, err := binding.EncodeInto(&q.buffer, q.params, q.columns, value, q.allowUnset)
 	if err != nil {

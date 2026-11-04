@@ -28,7 +28,11 @@ func (rt *InternalSessionRuntime) StopActive() implCluster.InternalExecutionWait
 	for q := range rt.queries {
 		queries = append(queries, q)
 	}
+	pools := rt.livePools()
 	rt.InternalMu.Unlock()
+	for _, pool := range pools {
+		queries = append(queries, pool.close()...)
+	}
 	active := make([]*InternalLogicalExecution, 0, len(queries))
 	// Stop admission and cancel every reusable query before joining callbacks.
 	for _, q := range queries {

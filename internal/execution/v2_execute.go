@@ -34,6 +34,7 @@ type InternalSessionRuntime struct {
 	*implCluster.Session
 	InternalExecutions                                           map[*InternalLogicalExecution]struct{}
 	queries                                                      map[*queryState]struct{}
+	pools                                                        map[*queryPoolEntry]struct{}
 	schema                                                       *preparedSchemaTracker
 	prepareWorkersMu                                             sync.Mutex
 	prepareWorkers                                               sync.WaitGroup
