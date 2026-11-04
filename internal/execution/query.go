@@ -71,8 +71,13 @@ type resolvedOptionsCache struct {
 // their borrowed values must be checked for liveness on every execution.
 func (s *queryState) resolveOptions(session *implCluster.Session, options Options) (*InternalResolvedOptions, error) {
 	if len(options.CustomPayload) != 0 || s.perCall {
-		resolved, err := InternalResolveOptions(session, options)
-		return &resolved, err
+		// Resolved into the cache's storage, which only admission uses, but
+		// not kept: the next execution resolves its options again.
+		c := &s.resolved
+		c.valid = false
+		var err error
+		c.value, err = InternalResolveOptions(session, options)
+		return &c.value, err
 	}
 	var sessionProfile *Profile
 	if session != nil {
