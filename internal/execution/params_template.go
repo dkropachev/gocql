@@ -13,8 +13,8 @@ import (
 // optionTemplates are the parameters blocks of resolved options, encoded
 // once, indexed by protocol version (4 or 5) and by whether the request
 // sends a default timestamp. They assume the keyspace the options name, or
-// else the session's; a request with another keyspace, or with no page size,
-// falls back to the template caches.
+// else the session's; a request in another keyspace, or on protocol 3, falls
+// back to the template caches.
 type optionTemplates [2][2]*model.ParamsTemplate
 
 // newOptionTemplates encodes the parameters blocks of options resolved to
