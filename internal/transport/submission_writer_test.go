@@ -6,10 +6,14 @@ package transport
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
 	"runtime"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/scylladb/gocql/v2/internal/streams"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -141,4 +145,91 @@ func TestSubmissionWriterShutdownFinishesQueuedTickets(t *testing.T) {
 	if _, err := live.submitTyped(context.Background(), chain, wire.NewLease(chain, nil)); !errors.Is(err, ErrConnectionClosed) {
 		t.Fatal("submit after shutdown accepted", err)
 	}
+}
+
+// failingSocket fails every write, after running onWrite, and accepts Close.
+type failingSocket struct {
+	onWrite func()
+	closed  atomic.Bool
+}
+
+func (s *failingSocket) InternalWriteSpanSlice(context.Context, []wire.Span, int64) (int64, error) {
+	if s.onWrite != nil {
+		s.onWrite()
+	}
+	return 0, errors.New("write timeout")
+}
+func (s *failingSocket) InternalWriteContext(context.Context, []byte) (int, error) {
+	return 0, errors.New("write timeout")
+}
+func (s *failingSocket) InternalSetWriteTimeout(time.Duration) {}
+func (s *failingSocket) SetWriteDeadline(time.Time) error      { return nil }
+func (s *failingSocket) Read([]byte) (int, error)              { return 0, io.EOF }
+func (s *failingSocket) Close() error                          { s.closed.Store(true); return nil }
+func (s *failingSocket) RemoteAddr() net.Addr                  { return nil }
+func (s *failingSocket) SetTimeout(time.Duration)              {}
+func (s *failingSocket) GetTimeout() time.Duration             { return 0 }
+func (s *failingSocket) InternalSetDisarm(bool)                {}
+
+type ignoreConnErrors struct{}
+
+func (ignoreConnErrors) HandleError(*Conn, error, bool) {}
+
+// TestSubmissionWriterFailureFinishesQueuedTickets checks that a failed write
+// finishes every ticket queued behind it, unsent, before the connection
+// closes: close joins the calls, and a call waits for its ticket.
+func TestSubmissionWriterFailureFinishesQueuedTickets(t *testing.T) {
+	socket := &failingSocket{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	conn := &Conn{InternalCtx: ctx, InternalCancel: cancel, InternalW: socket, InternalR: socket, InternalStreams: streams.New(), InternalErrorHandler: ignoreConnErrors{}}
+	// The call of a request queued while the failing write is in progress:
+	// close joins it, and it ends only once its ticket is finished.
+	call := InternalGetCallReq(1)
+	call.InternalDone.Add(1)
+	conn.InternalCalls = map[int]*InternalCallReq{1: call}
+	var late *writeTicket
+	lateDone := make(chan struct{})
+	socket.onWrite = func() {
+		chain, _ := wire.NewChain(wire.Borrow([]byte("late")))
+		var err error
+		if late, err = conn.submitTyped(context.Background(), chain, wire.NewLease(chain, nil)); err != nil {
+			t.Error(err)
+		}
+		go func() {
+			late.awaitWritten()
+			call.InternalDone.Done()
+			close(lateDone)
+		}()
+	}
+	chain, _ := wire.NewChain(wire.Borrow([]byte("first")))
+	first, err := conn.submitTyped(context.Background(), chain, wire.NewLease(chain, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() {
+		first.awaitWritten()
+		<-lateDone
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("a ticket queued behind a failed write was never finished")
+	}
+	if n, known := first.written(); !known || n != 0 || first.result.InternalErr == nil {
+		t.Fatal("failed write not reported", n, known, first.result.InternalErr)
+	}
+	if !late.unsent() {
+		t.Fatal("ticket queued behind a failed write reported as transmitted")
+	}
+	if !socket.closed.Load() {
+		t.Fatal("connection not closed after the failed write")
+	}
+	if _, err := conn.submitTyped(context.Background(), chain, wire.NewLease(chain, nil)); !errors.Is(err, ErrConnectionClosed) {
+		t.Fatal("submit after a failed write accepted", err)
+	}
+	first.release()
+	late.release()
 }

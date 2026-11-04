@@ -263,7 +263,19 @@ func (w *submissionWriter) run() {
 			}
 			// Publish completions before Close joins the calls waiting on us.
 			if err != nil {
+				// Close joins every call of the connection, and a call waits
+				// for its ticket: finish the rest of this batch and the queued
+				// tickets unsent first, and stop accepting more.
+				for i := end; i < len(batch); i++ {
+					if t := batch[i]; t != nil {
+						batch[i] = nil
+						t.phase.CompareAndSwap(0, 2)
+						t.finish(InternalWriteResult{InternalErr: ErrConnectionClosed})
+					}
+				}
+				w.shutdown()
 				w.conn.InternalCloseWithError(err)
+				return
 			}
 			start = end
 		}
