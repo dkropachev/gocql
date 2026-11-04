@@ -19,10 +19,12 @@ module github.com/scylladb/gocql/v2
 
 require (
 	github.com/google/go-cmp v0.7.0
+	github.com/google/uuid v1.6.0
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed
 	github.com/klauspost/compress v1.20.0
 	github.com/pierrec/lz4/v4 v4.1.29
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
+	github.com/stretchr/testify v1.12.1
 	golang.org/x/net v0.58.0
 	golang.org/x/sync v0.22.0
 	gopkg.in/inf.v0 v0.9.1
@@ -30,17 +32,12 @@ require (
 )
 
 require (
+	github.com/bitly/go-hostpool v0.1.1 // indirect
+	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 // indirect
+	github.com/kr/pretty v0.3.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/text v0.41.0 // indirect
 )
 
-require (
-	github.com/bitly/go-hostpool v0.1.1 // indirect
-	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 // indirect
-	github.com/google/uuid v1.6.0
-	github.com/kr/pretty v0.3.1 // indirect
-	github.com/stretchr/testify v1.12.1
-)
-
-go 1.25.0
+go 1.27.0
