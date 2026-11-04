@@ -13,19 +13,26 @@ import (
 // timestamp. The shapes are protocol 4; protocol 5 QUERY, in the keyspace the
 // options name or else the session's; and protocol 5 EXECUTE, which sends no
 // keyspace. A QUERY in another keyspace, or a request on protocol 3, falls
-// back to the template caches.
-type optionTemplates [3][2]*model.ParamsTemplate
+// back to the template caches. A slot whose Protocol is zero holds none.
+type optionTemplates [3][2]model.ParamsTemplate
 
 // newOptionTemplates encodes the parameters blocks of options resolved to
-// profile and values, for requests in keyspace.
+// profile and values, for requests in keyspace. Options with a timestamp
+// encode only the templates that send one.
 func newOptionTemplates(profile *Profile, values *OptionValues, keyspace string) *optionTemplates {
 	t := new(optionTemplates)
+	// One buffer holds every tail: a page size, a serial consistency, a
+	// timestamp and now_in_seconds, and the keyspace in two of the shapes.
+	buf := make([]byte, 0, len(t)*len(t[0])*18+2*len(t[0])*(2+len(keyspace)))
 	for shape := range t {
 		version := byte(5)
 		if shape == 0 {
 			version = 4
 		}
 		for ts := range t[shape] {
+			if ts == 0 && values.Timestamp.Set {
+				continue
+			}
 			w := attemptRequest{PageSize: int(profile.PageSize), DefaultTimestamp: ts == 1}
 			if shape == 1 {
 				w.Keyspace = keyspace
@@ -38,7 +45,10 @@ func newOptionTemplates(profile *Profile, values *OptionValues, keyspace string)
 			}
 			// An error leaves the slot empty: the request encodes its
 			// parameters field by field, which reports it.
-			t[shape][ts], _ = protocol.NewParamsTemplate(&w, version)
+			var err error
+			if buf, err = protocol.AppendParamsTemplate(&t[shape][ts], buf, &w, version); err != nil {
+				t[shape][ts] = model.ParamsTemplate{}
+			}
 		}
 	}
 	return t
@@ -60,7 +70,8 @@ func (t *optionTemplates) find(w *attemptRequest, version byte) *model.ParamsTem
 	if w.DefaultTimestamp {
 		ts = 1
 	}
-	if p := t[shape][ts]; p.Matches(w, version) {
+	// An empty slot's protocol is zero, so it matches no request.
+	if p := &t[shape][ts]; p.Matches(w, version) {
 		return p
 	}
 	return nil

@@ -16,47 +16,53 @@ import (
 // request, for protocol: the flags they set and everything after the values
 // except the paging state, with the timestamp left as a placeholder.
 func NewParamsTemplate(r *model.AttemptRequest, protocol byte) (*model.ParamsTemplate, error) {
+	t := new(model.ParamsTemplate)
+	if _, err := AppendParamsTemplate(t, nil, r, protocol); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+// AppendParamsTemplate encodes r's template into t like NewParamsTemplate,
+// appending its tail to buf, and returns buf. Templates encoded together can
+// share one buffer: a tail is never appended to once encoded.
+func AppendParamsTemplate(t *model.ParamsTemplate, buf []byte, r *model.AttemptRequest, protocol byte) ([]byte, error) {
 	if r.Batch != nil || r.Prepare {
-		return nil, fmt.Errorf("gocql: parameter templates encode QUERY and EXECUTE only")
+		return buf, fmt.Errorf("gocql: parameter templates encode QUERY and EXECUTE only")
 	}
 	if len(r.Keyspace) > math.MaxUint16 {
-		return nil, fmt.Errorf("gocql: oversized Protocol string")
+		return buf, fmt.Errorf("gocql: oversized Protocol string")
 	}
-	t := &model.ParamsTemplate{Protocol: protocol, PageSize: r.PageSize, SerialConsistency: r.SerialConsistency, DefaultTimestamp: r.DefaultTimestamp, Keyspace: r.Keyspace, TimestampAt: -1}
+	*t = model.ParamsTemplate{Protocol: protocol, PageSize: r.PageSize, SerialConsistency: r.SerialConsistency, DefaultTimestamp: r.DefaultTimestamp, Keyspace: r.Keyspace, TimestampAt: -1}
 	if r.HasNowInSeconds {
 		t.HasNowInSeconds, t.NowInSeconds = true, r.NowInSeconds
 	}
-	size := 0
 	if r.PageSize > 0 {
 		t.Flags |= frm.FlagPageSize
-		size += 4
 	}
 	if r.SerialConsistency != 0 {
 		t.Flags |= frm.FlagWithSerialConsistency
-		size += 2
 	}
 	if r.DefaultTimestamp {
 		t.Flags |= frm.FlagDefaultTimestamp
-		size += 8
 	}
 	if r.Keyspace != "" {
 		t.Flags |= frm.FlagWithKeyspace
-		size += 2 + len(r.Keyspace)
 	}
 	if r.HasNowInSeconds {
 		t.Flags |= frm.FlagWithNowInSeconds
-		size += 4
 	}
-	tail := make([]byte, 0, size)
+	start := len(buf)
+	tail := buf
 	if r.PageSize > 0 {
 		tail = binary.BigEndian.AppendUint32(tail, uint32(r.PageSize))
 	}
-	t.PagingAt = len(tail)
+	t.PagingAt = len(tail) - start
 	if r.SerialConsistency != 0 {
 		tail = binary.BigEndian.AppendUint16(tail, uint16(r.SerialConsistency))
 	}
 	if r.DefaultTimestamp {
-		t.TimestampAt = len(tail)
+		t.TimestampAt = len(tail) - start
 		tail = binary.BigEndian.AppendUint64(tail, 0)
 	}
 	if r.Keyspace != "" {
@@ -66,8 +72,8 @@ func NewParamsTemplate(r *model.AttemptRequest, protocol byte) (*model.ParamsTem
 	if r.HasNowInSeconds {
 		tail = binary.BigEndian.AppendUint32(tail, uint32(r.NowInSeconds))
 	}
-	t.Tail = tail
-	return t, nil
+	t.Tail = tail[start:len(tail):len(tail)]
+	return tail, nil
 }
 
 // writeTemplatedParams writes r's parameters block from its template, which

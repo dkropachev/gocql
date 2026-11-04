@@ -43,9 +43,9 @@ func TestOptionTemplatesEncodedAtResolution(t *testing.T) {
 			if version == 5 {
 				w.Keyspace = "ks"
 			}
-			want := resolved.templates[version-4][0]
+			want := &resolved.templates[version-4][0]
 			if ts {
-				want = resolved.templates[version-4][1]
+				want = &resolved.templates[version-4][1]
 			}
 			if got := paramsTemplate(&resolved, w, version); got == nil || got != want {
 				t.Fatalf("v%d timestamp %v: template not the resolved one", version, ts)
@@ -60,9 +60,9 @@ func TestOptionTemplatesEncodedAtResolution(t *testing.T) {
 		if w.Keyspace != "" {
 			t.Fatal("EXECUTE kept the keyspace")
 		}
-		want := resolved.templates[2][0]
+		want := &resolved.templates[2][0]
 		if ts {
-			want = resolved.templates[2][1]
+			want = &resolved.templates[2][1]
 		}
 		got := paramsTemplate(&resolved, w, 5)
 		if got == nil || got != want || got.Flags&frm.FlagWithKeyspace != 0 {
@@ -70,13 +70,48 @@ func TestOptionTemplatesEncodedAtResolution(t *testing.T) {
 		}
 	}
 	// Another keyspace, an unpaged request and protocol v3 fall back.
-	if got := paramsTemplate(&resolved, &attemptRequest{PageSize: 10, SerialConsistency: own.SerialConsistency.Value, Keyspace: "other"}, 5); got == resolved.templates[1][0] {
+	if got := paramsTemplate(&resolved, &attemptRequest{PageSize: 10, SerialConsistency: own.SerialConsistency.Value, Keyspace: "other"}, 5); got == &resolved.templates[1][0] {
 		t.Fatal("template used for another keyspace")
 	}
-	if got := paramsTemplate(&resolved, &attemptRequest{}, 4); got == resolved.templates[0][0] {
+	if got := paramsTemplate(&resolved, &attemptRequest{}, 4); got == &resolved.templates[0][0] {
 		t.Fatal("template used for an unpaged request")
 	}
 	if resolved.templates.find(&attemptRequest{PageSize: 10, SerialConsistency: own.SerialConsistency.Value}, 3) != nil {
 		t.Fatal("template found for protocol v3")
+	}
+}
+
+// Options with a timestamp send one with every request, so they encode no
+// template without it.
+func TestOptionTemplatesWithTimestamp(t *testing.T) {
+	profile := defaultProfile()
+	templates := newOptionTemplates(&profile, &OptionValues{Timestamp: Option[int64]{Value: 1, Set: true}}, "ks")
+	for shape := range templates {
+		if templates[shape][0].Protocol != 0 || templates[shape][1].Protocol == 0 {
+			t.Fatalf("shape %d: want only the timestamp template", shape)
+		}
+	}
+	if templates.find(&attemptRequest{PageSize: int(profile.PageSize), SerialConsistency: profile.SerialConsistency.Value}, 4) != nil {
+		t.Fatal("an empty slot matched a request")
+	}
+}
+
+// BenchmarkNewOptionTemplates encodes the templates of resolved options, as
+// NewOptions and a query created with options for another session do.
+func BenchmarkNewOptionTemplates(b *testing.B) {
+	profile := defaultProfile()
+	profile.PageSize = 5000
+	for _, c := range []struct {
+		name   string
+		values OptionValues
+	}{{"plain", OptionValues{}}, {"timestamp", OptionValues{Timestamp: Option[int64]{Value: 1, Set: true}}}} {
+		b.Run(c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if newOptionTemplates(&profile, &c.values, "ks") == nil {
+					b.Fatal("no templates")
+				}
+			}
+		})
 	}
 }
