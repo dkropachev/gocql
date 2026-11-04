@@ -10,6 +10,7 @@ import (
 
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 // NewParamsTemplate encodes the fixed options of r, a QUERY or EXECUTE
@@ -118,8 +119,17 @@ func (c *Settings) writeTemplatedParams(e *TypedEnvelope, r *model.AttemptReques
 	}
 	tail, at := t.Tail, 0
 	if r.PagingState != nil {
-		e.copyTail(tail[:t.PagingAt], -1, 0)
-		e.Bytes(r.PagingState, false)
+		// The page size and the paging state's length go in one run.
+		if int64(len(r.PagingState)) > math.MaxInt32 {
+			e.check(ErrFrameTooBig)
+			return
+		}
+		if p, err = e.b.ScalarBytes(t.PagingAt + 4); err != nil {
+			e.check(err)
+			return
+		}
+		binary.BigEndian.PutUint32(p[copy(p, tail[:t.PagingAt]):], uint32(len(r.PagingState)))
+		e.check(e.b.Borrow(wire.Borrow(r.PagingState)))
 		tail, at = tail[t.PagingAt:], t.PagingAt
 	}
 	ts := -1
