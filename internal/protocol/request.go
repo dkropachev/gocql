@@ -80,32 +80,15 @@ func (e *TypedEnvelope) Freeze() (wire.Chain, error) {
 	return e.b.Freeze()
 }
 
-func validateTypedValues(c wire.Chain, count int, proto byte) error {
+// checkValueCount checks that count bound values fit a [short] count. The
+// values themselves come framed from the driver's parameter writer, which
+// wrote each length, and execution rejects unset values before protocol 4,
+// so an attempt does not walk them again.
+func checkValueCount(count int) error {
 	if count < 0 || count > math.MaxUint16 {
 		return fmt.Errorf("gocql: invalid bound value count %d", count)
 	}
-	cursor := wire.NewCursor(c)
-	for i := 0; i < count; i++ {
-		n, err := cursor.Uint32()
-		if err != nil {
-			return err
-		}
-		switch int32(n) {
-		case -1:
-		case -2:
-			if proto < 4 {
-				return fmt.Errorf("gocql: unset requires Protocol v4")
-			}
-		default:
-			if int32(n) < 0 {
-				return fmt.Errorf("gocql: invalid bound length %d", int32(n))
-			}
-			if err := cursor.Skip(int64(n)); err != nil {
-				return err
-			}
-		}
-	}
-	return cursor.RequireEnd()
+	return nil
 }
 
 func (c *Settings) BuildTypedRequest(req *model.AttemptRequest, stream int) (wire.Chain, error) {
@@ -128,7 +111,7 @@ func (c *Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, 
 	if req.PageSize < 0 || int64(req.PageSize) > math.MaxInt32 {
 		return wire.Chain{}, false, fmt.Errorf("gocql: invalid page size")
 	}
-	if err := validateTypedValues(req.Values, req.ValueCount, proto); err != nil {
+	if err := checkValueCount(req.ValueCount); err != nil {
 		return wire.Chain{}, false, err
 	}
 	var e TypedEnvelope
@@ -221,7 +204,7 @@ func (c *Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, 
 		e.U8(byte(req.Batch.Kind))
 		e.U16(uint16(len(req.Batch.Items)))
 		for _, item := range req.Batch.Items {
-			if err := validateTypedValues(item.Values, item.ValueCount, proto); err != nil {
+			if err := checkValueCount(item.ValueCount); err != nil {
 				return wire.Chain{}, false, err
 			}
 			if len(item.PreparedID) > 0 {
