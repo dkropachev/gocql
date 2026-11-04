@@ -319,6 +319,10 @@ func (c *Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, 
 	return frame, used, err
 }
 func (c *Settings) WriteTypedParams(e *TypedEnvelope, r *model.AttemptRequest, batch bool) {
+	if !batch && r.Params.Matches(r, c.Protocol) {
+		c.writeTemplatedParams(e, r)
+		return
+	}
 	e.U16(uint16(r.Consistency))
 	var Flags uint32
 	if !batch {

@@ -471,6 +471,7 @@ func (s *RowStream[R]) wireRequest(consistency Consistency) (*attemptRequest, er
 		w.NowInSeconds = &v
 	}
 	setPrepared(w, s.privateStorage.prepared, conn, opts.IncludeMetadata)
+	w.Params = InternalRuntimeFor(s.privateStorage.InternalSession).paramsTemplate(r.query, &opts, w, conn.InternalVersion)
 	return w, nil
 }
 func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
