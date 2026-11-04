@@ -299,67 +299,130 @@ func (c *Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, 
 	frame, err = wire.NewChain(spans...)
 	return frame, used, err
 }
+
+// WriteTypedParams writes r's parameters block, a batch's when batch is set:
+// from r's template when it has one, else field by field, in at most three
+// scalar runs around the borrowed values and paging state.
 func (c *Settings) WriteTypedParams(e *TypedEnvelope, r *model.AttemptRequest, batch bool) {
 	if !batch && r.Params != nil {
 		c.writeTemplatedParams(e, r)
 		return
 	}
-	e.U16(uint16(r.Consistency))
-	var Flags uint32
+	if len(r.Keyspace) > math.MaxUint16 {
+		e.check(fmt.Errorf("gocql: oversized Protocol string"))
+		return
+	}
+	var flags uint32
+	values, pageSize, paging := false, false, false
 	if !batch {
-		if r.ValueCount > 0 {
-			Flags |= frm.FlagValues
+		values, pageSize, paging = r.ValueCount > 0, r.PageSize > 0, r.PagingState != nil
+		if values {
+			flags |= frm.FlagValues
 		}
 		if r.SkipMetadata {
-			Flags |= frm.FlagSkipMetaData
+			flags |= frm.FlagSkipMetaData
 		}
-		if r.PageSize > 0 {
-			Flags |= frm.FlagPageSize
+		if pageSize {
+			flags |= frm.FlagPageSize
 		}
-		if r.PagingState != nil {
-			Flags |= frm.FlagWithPagingState
+		if paging {
+			flags |= frm.FlagWithPagingState
 		}
 	}
+	// after is the size of the options after the paging state.
+	after := 0
 	if r.SerialConsistency != 0 {
-		Flags |= frm.FlagWithSerialConsistency
+		flags |= frm.FlagWithSerialConsistency
+		after += 2
 	}
 	if r.DefaultTimestamp {
-		Flags |= frm.FlagDefaultTimestamp
+		flags |= frm.FlagDefaultTimestamp
+		after += 8
 	}
 	if r.Keyspace != "" {
-		Flags |= frm.FlagWithKeyspace
+		flags |= frm.FlagWithKeyspace
+		after += 2 + len(r.Keyspace)
 	}
 	if r.HasNowInSeconds {
-		Flags |= frm.FlagWithNowInSeconds
+		flags |= frm.FlagWithNowInSeconds
+		after += 4
 	}
+	n := 3
 	if c.Protocol >= 5 {
-		e.U32(Flags)
-	} else {
-		e.U8(byte(Flags))
+		n = 6
 	}
-	if !batch {
-		if r.ValueCount > 0 {
-			e.U16(uint16(r.ValueCount))
-			e.Chain(r.Values)
+	if values {
+		n += 2
+	}
+	p, err := e.b.ScalarBytes(n)
+	if err != nil {
+		e.check(err)
+		return
+	}
+	binary.BigEndian.PutUint16(p, uint16(r.Consistency))
+	if c.Protocol >= 5 {
+		binary.BigEndian.PutUint32(p[2:], flags)
+		p = p[6:]
+	} else {
+		p[2] = byte(flags)
+		p = p[3:]
+	}
+	if values {
+		binary.BigEndian.PutUint16(p, uint16(r.ValueCount))
+		e.Chain(r.Values)
+	}
+	// The page size and the paging state's length go in one run, and the
+	// options after it in another, or all of them in one without it.
+	before := 0
+	if pageSize {
+		before = 4
+	}
+	if paging {
+		if int64(len(r.PagingState)) > math.MaxInt32 {
+			e.check(ErrFrameTooBig)
+			return
 		}
-		if r.PageSize > 0 {
-			e.U32(uint32(r.PageSize))
+		before += 4
+	} else {
+		before, after = 0, before+after
+	}
+	if before > 0 {
+		if p, err = e.b.ScalarBytes(before); err != nil {
+			e.check(err)
+			return
 		}
-		if r.PagingState != nil {
-			e.Bytes(r.PagingState, false)
+		if pageSize {
+			binary.BigEndian.PutUint32(p, uint32(r.PageSize))
+			p = p[4:]
 		}
+		binary.BigEndian.PutUint32(p, uint32(len(r.PagingState)))
+		e.check(e.b.Borrow(wire.Borrow(r.PagingState)))
+	}
+	if after == 0 {
+		return
+	}
+	if p, err = e.b.ScalarBytes(after); err != nil {
+		e.check(err)
+		return
+	}
+	if pageSize && !paging {
+		binary.BigEndian.PutUint32(p, uint32(r.PageSize))
+		p = p[4:]
 	}
 	if r.SerialConsistency != 0 {
-		e.U16(uint16(r.SerialConsistency))
+		binary.BigEndian.PutUint16(p, uint16(r.SerialConsistency))
+		p = p[2:]
 	}
 	if r.DefaultTimestamp {
-		e.U64(uint64(r.Timestamp))
+		binary.BigEndian.PutUint64(p, uint64(r.Timestamp))
+		p = p[8:]
 	}
 	if r.Keyspace != "" {
-		e.Str(r.Keyspace, false)
+		binary.BigEndian.PutUint16(p, uint16(len(r.Keyspace)))
+		p = p[2+copy(p[2:], r.Keyspace):]
 	}
 	if r.HasNowInSeconds {
-		e.U32(uint32(r.NowInSeconds))
+		binary.BigEndian.PutUint32(p, uint32(r.NowInSeconds))
 	}
 }
 
