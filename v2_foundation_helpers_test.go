@@ -113,7 +113,7 @@ func profileOf(p Profile) *Profile { return &p }
 
 // testOptions freezes v, failing loudly on values a test meant to be valid.
 func testOptions(v OptionValues) Options {
-	o, err := NewOptions(v)
+	o, err := NewOptions(nil, v)
 	if err != nil {
 		panic(err)
 	}

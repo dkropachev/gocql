@@ -1069,10 +1069,11 @@ also interrupts active streams; already written caller output remains valid.
 
 ```go
 // Options is frozen: NewOptions validates OptionValues, copies the custom
-// payload and profile, and resolves them once. The zero Options uses the
-// session default profile. Options are immutable and safe to share.
+// payload and profile, and resolves them for session once. Options built
+// with a nil session, or used on another, resolve on each execution unless
+// they name a Profile. The zero Options uses the session default profile.
 type Options struct { /* frozen, resolved options */ }
-func NewOptions(OptionValues) (Options, error)
+func NewOptions(session *Session, values OptionValues) (Options, error)
 func (Options) Values() OptionValues          // a copy, to derive other Options
 
 type OptionValues struct {
@@ -1126,8 +1127,8 @@ type Result struct {
 ```
 
 Invalid values fail in NewOptions, before any execution. A query uses its
-options as resolved when it is created; options passed per call reuse their
-resolution for the session that used them last. A zero Options inherits the selected session profile, is non-idempotent, and has
+options as resolved when it is created; options passed per call use the
+resolution NewOptions made for their session. A zero Options inherits the selected session profile, is non-idempotent, and has
 no tracing/timestamp/keyspace override. Override validation returns typed
 errors, not panics. A profile is a plain value. Connect copies
 Config.DefaultProfile and NewOptions copies OptionValues.Profile, so changing a

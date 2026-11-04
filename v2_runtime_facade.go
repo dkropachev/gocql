@@ -112,9 +112,14 @@ type Options = implExecution.Options
 // OptionValues lists the settings of an execution; NewOptions freezes them.
 type OptionValues = implExecution.OptionValues
 
-// NewOptions validates values and freezes them into Options, resolved once
-// and safe to share. The zero Options uses the session's default profile.
-func NewOptions(values OptionValues) (Options, error) { return implExecution.NewOptions(values) }
+// NewOptions validates values and freezes them into Options resolved for
+// session, which then executes them with no per-call work. Options built
+// with a nil session, or used on another session, are resolved on each
+// execution unless they name their own Profile. The zero Options uses the
+// session's default profile.
+func NewOptions(session *Session, values OptionValues) (Options, error) {
+	return implExecution.NewOptions(session, values)
+}
 
 const OverflowEvent = implCluster.OverflowEvent
 

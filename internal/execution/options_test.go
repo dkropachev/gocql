@@ -23,7 +23,7 @@ func TestNewOptionsRejectsInvalidValues(t *testing.T) {
 		"profile":      {Profile: &Profile{}},
 	}
 	for name, values := range invalid {
-		if _, err := NewOptions(values); err == nil {
+		if _, err := NewOptions(nil, values); err == nil {
 			t.Errorf("%s: invalid values accepted", name)
 		}
 	}
@@ -34,7 +34,7 @@ func TestNewOptionsFreezesValues(t *testing.T) {
 	profile := defaultProfile()
 	profile.PageSize = 10
 	values := OptionValues{Profile: &profile, CustomPayload: []PayloadEntry{{Key: "k", Value: cqltype.Nullable[cqltype.Bytes]{Valid: true, Value: cqltype.BorrowBytes(payload)}}}}
-	o, err := NewOptions(values)
+	o, err := NewOptions(nil, values)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,34 +52,43 @@ func TestNewOptionsFreezesValues(t *testing.T) {
 	}
 }
 
-func TestOptionsResolveOncePerSession(t *testing.T) {
-	_, rt := attachmentSession()
+func TestOptionsResolvedForTheirSession(t *testing.T) {
+	s, rt := attachmentSession()
 	sessionProfile := defaultProfile()
 	sessionProfile.PageSize = 7
 	rt.InternalSetProfile(&sessionProfile)
+	var scratch InternalResolvedOptions
 
 	var zero Options
-	if r := zero.resolve(rt); r != &rt.defaultOptions || r.InternalProfile.PageSize != 7 {
+	if r := zero.resolve(rt, &scratch); r != &rt.defaultOptions || r.InternalProfile.PageSize != 7 {
 		t.Fatal("zero options do not use the session default", r.InternalProfile.PageSize)
 	}
 
 	own := defaultProfile()
 	own.PageSize = 9
 	fixed := testOptions(OptionValues{Profile: &own})
-	if r := fixed.resolve(rt); r != fixed.p.fixed || r.InternalProfile.PageSize != 9 {
+	if r := fixed.resolve(rt, &scratch); r != &fixed.p.resolved || r.InternalProfile.PageSize != 9 {
 		t.Fatal("options with a profile not resolved at creation")
 	}
 
-	overrides := testOptions(OptionValues{Consistency: Option[Consistency]{Set: true, Value: One}})
-	first := overrides.resolve(rt)
-	if first.InternalProfile.PageSize != 7 || first.InternalProfile.Consistency != One {
-		t.Fatal("overrides not merged over the session profile", first.InternalProfile)
+	overrides := OptionValues{Consistency: Option[Consistency]{Set: true, Value: One}}
+	bound, err := NewOptions(s, overrides)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if overrides.resolve(rt) != first {
-		t.Fatal("resolution not reused for the same session")
+	r := bound.resolve(rt, &scratch)
+	if r != &bound.p.resolved || r.InternalProfile.PageSize != 7 || r.InternalProfile.Consistency != One {
+		t.Fatal("options not resolved for their session at creation", r.InternalProfile)
 	}
+
+	// Options used without their session resolve on each execution.
 	_, other := attachmentSession()
-	if r := overrides.resolve(other); r == first || r.InternalProfile.PageSize != defaultProfile().PageSize {
-		t.Fatal("resolution reused across sessions")
+	if r := bound.resolve(other, &scratch); r != &scratch || r.InternalProfile.PageSize != defaultProfile().PageSize || r.InternalProfile.Consistency != One {
+		t.Fatal("options of another session not resolved for this one", r.InternalProfile)
+	}
+	unbound := testOptions(overrides)
+	scratch = InternalResolvedOptions{}
+	if r := unbound.resolve(rt, &scratch); r != &scratch || r.InternalProfile.PageSize != 7 {
+		t.Fatal("options without a session not resolved for this one", r.InternalProfile)
 	}
 }

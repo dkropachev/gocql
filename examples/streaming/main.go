@@ -214,7 +214,7 @@ func run() (resultErr error) {
 	if len(hostsSnapshot) == 0 {
 		return fmt.Errorf("missing discovered hosts")
 	}
-	pinned, err := gocql.NewOptions(gocql.OptionValues{PageSize: gocql.Option[int32]{Set: true, Value: 2}, HostID: gocql.Option[gocql.UUID]{Set: true, Value: hostsSnapshot[0].ID}})
+	pinned, err := gocql.NewOptions(s, gocql.OptionValues{PageSize: gocql.Option[int32]{Set: true, Value: 2}, HostID: gocql.Option[gocql.UUID]{Set: true, Value: hostsSnapshot[0].ID}})
 	if err != nil {
 		return err
 	}

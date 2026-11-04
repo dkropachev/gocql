@@ -103,8 +103,9 @@ protocol rules; protocol 5 compression uses LZ4. Configure
 `Connect` snapshots validated configuration before starting workers. Configure
 TLS with `crypto/tls`, authentication with `PasswordAuth` or `AuthProvider`, and
 routing/retry/speculation through `DefaultProfile` or a per-query `*Profile`.
-Per-call settings are frozen once with `NewOptions(OptionValues{...})`; the zero
-`Options{}` uses the session default.
+Per-call settings are frozen once with `NewOptions(session, OptionValues{...})`,
+resolved for that session so executions do no per-call work; the zero `Options{}`
+uses the session default.
 `Dialer`, `DialHost`, `TLSForHost`, `DNSResolver`, `AddressTranslator`,
 `ReconnectPolicy`, `TokenPartitioner`, `RoutingPolicy`, observers and immutable
 metadata snapshots provide typed extension points. Host/shard pool sizing,

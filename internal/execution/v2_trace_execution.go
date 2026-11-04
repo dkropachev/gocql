@@ -44,7 +44,10 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id UUID) (implCluste
 		return result, err
 	}
 	defer func() { bound.Close(); _ = bound.Wait(ctx) }()
-	options := traceOptions
+	options, err := NewOptions(s.Session, traceValues)
+	if err != nil {
+		return result, err
+	}
 	for {
 		if err := ctx.Err(); err != nil {
 			return result, err
@@ -111,12 +114,6 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id UUID) (implCluste
 	return result, rows.Err()
 }
 
-// traceOptions read trace events at ONE, idempotently, under the caller's
+// traceValues read trace events at ONE, idempotently, under the caller's
 // context deadline only.
-var traceOptions = func() Options {
-	o, err := NewOptions(OptionValues{Consistency: Option[Consistency]{Value: One, Set: true}, Idempotent: true, Timeout: Option[time.Duration]{Set: true}})
-	if err != nil {
-		panic(err)
-	}
-	return o
-}()
+var traceValues = OptionValues{Consistency: Option[Consistency]{Value: One, Set: true}, Idempotent: true, Timeout: Option[time.Duration]{Set: true}}

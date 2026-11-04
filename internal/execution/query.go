@@ -155,7 +155,7 @@ func newPreparedQuery[P, R any](p *Prepared[P, R], options Options, pool *queryP
 	if err := newQueryState(p.privateStorage.InternalState.InternalSession, &q.state, q.retire, pool); err != nil {
 		return nil, err
 	}
-	q.state.resolved = options.resolve(q.state.runtime)
+	q.state.resolved = options.resolveFixed(q.state.runtime)
 	q.state.execCtx = newExecutionContext()
 	return q, nil
 }
@@ -178,7 +178,7 @@ func NewUnpreparedQuery[P, R any](s *implCluster.Session, statement Statement[P,
 	if err := newQueryState(s, &q.state, q.retire, nil); err != nil {
 		return nil, err
 	}
-	q.state.resolved = options.resolve(q.state.runtime)
+	q.state.resolved = options.resolveFixed(q.state.runtime)
 	q.state.execCtx = newExecutionContext()
 	return q, nil
 }

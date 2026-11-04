@@ -68,7 +68,7 @@ func TestCloudConnection(t *testing.T) {
 	}
 
 	// Both system tables must describe the same coordinator's view of the ring.
-	pinned, err := gocql.NewOptions(gocql.OptionValues{HostID: gocql.Option[gocql.UUID]{Value: localHostID, Set: true}})
+	pinned, err := gocql.NewOptions(session, gocql.OptionValues{HostID: gocql.Option[gocql.UUID]{Value: localHostID, Set: true}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestCloudConnection(t *testing.T) {
 	}
 
 	for _, host := range ringHosts {
-		pinned, err := gocql.NewOptions(gocql.OptionValues{HostID: gocql.Option[gocql.UUID]{Value: host.ID, Set: true}})
+		pinned, err := gocql.NewOptions(session, gocql.OptionValues{HostID: gocql.Option[gocql.UUID]{Value: host.ID, Set: true}})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -40,7 +40,7 @@ func Example_paging() {
 		log.Fatal(err)
 	}
 	defer s.Close()
-	options, err := gocql.NewOptions(gocql.OptionValues{PageSize: gocql.Option[int32]{Set: true, Value: 2}})
+	options, err := gocql.NewOptions(s, gocql.OptionValues{PageSize: gocql.Option[int32]{Set: true, Value: 2}})
 	if err != nil {
 		log.Fatal(err)
 	}

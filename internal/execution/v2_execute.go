@@ -504,23 +504,27 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, 
 		return nil, nil, nil, ErrClosed
 	}
 	rt := InternalRuntimeFor(s)
-	var resolved *InternalResolvedOptions
 	var request *InternalExecutionRequest
-	if query := b.privateStorage.InternalRequest.query; query != nil {
-		// A query resolved its own options when it was created; a pooled
-		// query's come with each call.
-		resolved = query.resolved
-		if query.perCall {
-			resolved = options.resolve(rt)
-		}
+	query := b.privateStorage.InternalRequest.query
+	if query != nil {
 		request = &query.request
 	} else {
-		resolved = options.resolve(rt)
 		request = new(InternalExecutionRequest)
 	}
-	values := &resolved.InternalOptions
 	*request = b.privateStorage.InternalRequest
-	request.InternalOptions = *resolved
+	// A query resolved its own options when it was created; a pooled
+	// query's come with each call. Options that need resolving for this
+	// session resolve straight into the request.
+	var resolved *InternalResolvedOptions
+	if query != nil && !query.perCall {
+		resolved = query.resolved
+	} else {
+		resolved = options.resolve(rt, &request.InternalOptions)
+	}
+	if resolved != &request.InternalOptions {
+		request.InternalOptions = *resolved
+	}
+	values := &request.InternalOptions.InternalOptions
 	if query := request.query; query != nil {
 		request.responseDest = &query.response
 	}
@@ -563,7 +567,6 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, 
 	if observer == nil {
 		observer = rt.InternalConfig.Observer
 	}
-	query := request.query
 	inline := query != nil && observer == nil && rt.InternalConfig.CoalesceWait == 0 && canUseDirectProfile(resolved.InternalProfile)
 	var runctx context.Context
 	var cancel context.CancelFunc

@@ -4,38 +4,35 @@
 package execution
 
 import (
-	"sync/atomic"
-
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 // Options is a frozen set of execution options, validated and resolved once
 // by NewOptions. The zero Options executes with the session's default
 // profile and no overrides. Options never change, so they are safe to share
-// between goroutines, queries and sessions.
+// between goroutines and queries.
 type Options struct{ p *frozenOptions }
 
 type frozenOptions struct {
-	// fixed is the resolution of options that name their own profile, which
-	// does not depend on the session.
-	fixed *InternalResolvedOptions
-	// last is the resolution for the session that used the options last.
-	// A resolution is immutable once published.
-	last   atomic.Pointer[sessionOptions]
-	values OptionValues
-}
-
-type sessionOptions struct {
-	runtime *InternalSessionRuntime
-	value   InternalResolvedOptions
+	// runtime is the session resolved is for; nil when resolved does not
+	// depend on the session, because the options name their own profile.
+	runtime  *InternalSessionRuntime
+	resolved InternalResolvedOptions
+	values   OptionValues
+	// bound reports that resolved is valid: the options name their own
+	// profile or were built for a session.
+	bound bool
 }
 
 // noOptionValues backs the values of the zero Options.
 var noOptionValues OptionValues
 
-// NewOptions validates values and freezes them. The custom payload and the
-// profile are copied, so later changes to values do not reach the Options.
-func NewOptions(values OptionValues) (Options, error) {
+// NewOptions validates values and freezes them, resolved for session, so
+// executions on session use them as they are. Options built without a
+// session, or used on another one, are resolved again on each execution,
+// unless they name their own profile. The custom payload and the profile
+// are copied, so later changes to values do not reach the Options.
+func NewOptions(session *implCluster.Session, values OptionValues) (Options, error) {
 	values, err := cloneQueryOptions(values)
 	if err != nil {
 		return Options{}, err
@@ -44,15 +41,18 @@ func NewOptions(values OptionValues) (Options, error) {
 		profile := *values.Profile
 		values.Profile = &profile
 	}
-	resolved, err := resolveOptionValues(nil, values)
+	var rt *InternalSessionRuntime
+	var base *Profile
+	if session != nil && values.Profile == nil {
+		rt = InternalRuntimeFor(session)
+		base = rt.InternalProfile
+	}
+	resolved, err := resolveOptionValues(base, values)
 	if err != nil {
 		return Options{}, err
 	}
-	f := &frozenOptions{values: values}
-	if values.Profile != nil {
-		f.fixed = &resolved
-	}
-	return Options{p: f}, nil
+	bound := values.Profile != nil || rt != nil
+	return Options{p: &frozenOptions{runtime: rt, bound: bound, resolved: resolved, values: values}}, nil
 }
 
 // Values returns a copy of the values o was built from, to derive other
@@ -74,30 +74,36 @@ func (o Options) values() *OptionValues {
 	return &o.p.values
 }
 
-// resolve returns o resolved for rt. The zero Options and options with their
-// own profile resolve without synchronization; others reuse the resolution
-// of the last session that used them.
-func (o Options) resolve(rt *InternalSessionRuntime) *InternalResolvedOptions {
+// resolve returns o resolved for rt: the zero Options, options with their
+// own profile and options built for rt as they are, without
+// synchronization. Others are resolved into scratch.
+func (o Options) resolve(rt *InternalSessionRuntime, scratch *InternalResolvedOptions) *InternalResolvedOptions {
 	if o.p == nil {
 		return &rt.defaultOptions
 	}
-	if o.p.fixed != nil {
-		return o.p.fixed
-	}
-	if r := o.p.last.Load(); r != nil && r.runtime == rt {
-		return &r.value
+	if o.p.bound && (o.p.runtime == nil || o.p.runtime == rt) {
+		return &o.p.resolved
 	}
 	// NewOptions validated the values, and the session profile was
 	// validated at Connect, so resolution cannot fail here.
-	value, _ := resolveOptionValues(rt.InternalProfile, o.p.values)
-	r := &sessionOptions{runtime: rt, value: value}
-	o.p.last.Store(r)
-	return &r.value
+	*scratch, _ = resolveOptionValues(rt.InternalProfile, o.p.values)
+	return scratch
+}
+
+// resolveFixed returns o resolved for rt in storage that stays valid, for a
+// query that keeps its options' resolution.
+func (o Options) resolveFixed(rt *InternalSessionRuntime) *InternalResolvedOptions {
+	var scratch *InternalResolvedOptions
+	if o.p != nil && !(o.p.bound && (o.p.runtime == nil || o.p.runtime == rt)) {
+		scratch = new(InternalResolvedOptions)
+	}
+	return o.resolve(rt, scratch)
 }
 
 // InternalResolveFor returns o resolved for session s.
 func InternalResolveFor(s *implCluster.Session, o Options) InternalResolvedOptions {
-	return *o.resolve(InternalRuntimeFor(s))
+	var scratch InternalResolvedOptions
+	return *o.resolve(InternalRuntimeFor(s), &scratch)
 }
 
 // InternalSetProfile sets the session's default profile and the resolution
