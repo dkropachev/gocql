@@ -27,6 +27,8 @@ type queryState struct {
 	owner         *inputOwner
 	execOwner     InternalInputOwner // per-execution owner, reset each generation
 	execCtx       *executionContext  // reusable direct-path context; nil keeps context.WithTimeout
+	pageCtx       *executionContext  // reusable direct-path page timeout, created on first use
+	pageCtxBusy   atomic.Bool        // a page holds pageCtx
 	releaseOwner  func()             // bound owner.InternalRelease, the execution drain
 	runtime       *InternalSessionRuntime
 	logical       *InternalLogicalExecution

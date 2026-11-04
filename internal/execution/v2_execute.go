@@ -802,8 +802,23 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 	pageTimeout := request.InternalOptions.InternalProfile.PageTimeout
 	var cancel context.CancelFunc = func() {}
 	deadline, bounded := ctx.Deadline()
-	if !direct || pageTimeout > 0 && (!bounded || time.Until(deadline) > pageTimeout) {
+	if !direct {
 		ctx, cancel = InternalExecutionContext(ctx, pageTimeout)
+	} else if pageTimeout > 0 && (!bounded || time.Until(deadline) > pageTimeout) {
+		// Pages of one execution normally run one at a time, so the query's
+		// page context is reused; it follows the execution context directly.
+		// A page that overlaps another (a prefetch racing a close) takes a
+		// context of its own.
+		if query := request.query; query.pageCtxBusy.CompareAndSwap(false, true) {
+			if query.pageCtx == nil {
+				query.pageCtx = newExecutionContext()
+			}
+			var finish context.CancelFunc
+			ctx, finish = query.pageCtx.begin(ctx, pageTimeout)
+			cancel = func() { finish(); query.pageCtxBusy.Store(false) }
+		} else {
+			ctx, cancel = InternalExecutionContext(ctx, pageTimeout)
+		}
 	}
 	defer cancel()
 	metadata := s.Session.Metadata()

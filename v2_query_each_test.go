@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -204,5 +205,88 @@ func TestQueryEachUnpreparedContinuationRepairs(t *testing.T) {
 	}
 	if err := <-serverDone; err != nil {
 		t.Fatal(err)
+	}
+}
+
+// eachPageTimeoutQuery is eachTestQuery with a page timeout below the
+// execution timeout, so pages run under the query's reused page context.
+func eachPageTimeoutQuery(t *testing.T) (*Query[Unit, []byte], net.Conn) {
+	t.Helper()
+	s, _, peers := runtimeTestSession(t, 1)
+	statement := Statement[Unit, []byte]{Kind: OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: NoParams, Rows: RowInto(func(*[]byte) {}, Column("value", OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+	options := Options{Timeout: Option[time.Duration]{Set: true, Value: 5 * time.Second}, PageTimeout: Option[time.Duration]{Set: true, Value: 100 * time.Millisecond}}
+	q := codecTestMust(NewUnpreparedQuery(s, statement, NewColumns(), options))
+	t.Cleanup(q.Close)
+	return q, peers[0]
+}
+
+// A page that outlives PageTimeout fails with a deadline while the
+// execution timeout still holds, and the next execution's pages get a fresh
+// page budget from the same reused context.
+func TestQueryEachPageTimeoutPerPage(t *testing.T) {
+	q, peer := eachPageTimeoutQuery(t)
+	answer := func(body []byte) {
+		_, stream, _, err := step03ReadRequest(peer)
+		if err == nil {
+			_, err = peer.Write(typedTestResponse(t, 4, stream, body))
+		}
+		if err != nil {
+			t.Error(err)
+		}
+	}
+	served := make(chan struct{})
+	go func() {
+		defer close(served)
+		answer(runtimeRowsBody([]byte{1}, "a"))
+		if _, _, _, err := step03ReadRequest(peer); err != nil { // page 2: never answered
+			t.Error(err)
+		}
+		// The next run: four pages, each within the page budget but
+		// together well beyond it.
+		for page := byte(2); page <= 4; page++ {
+			time.Sleep(60 * time.Millisecond)
+			answer(runtimeRowsBody([]byte{page}, string('a'+page)))
+		}
+		time.Sleep(60 * time.Millisecond)
+		answer(runtimeRowsBody(nil, "f"))
+	}()
+	ctx := context.Background()
+	dst := make([]byte, 0, 8)
+	started := time.Now()
+	err := q.Each(ctx, Unit{}, &dst, func(*[]byte) error { return nil })
+	if !errors.Is(err, context.DeadlineExceeded) || time.Since(started) > 2*time.Second {
+		t.Fatal("page timeout", err, time.Since(started))
+	}
+	var got string
+	err = q.Each(ctx, Unit{}, &dst, func(row *[]byte) error { got += string(*row); return nil })
+	<-served
+	if err != nil || got != "cdef" {
+		t.Fatal("each page should get a fresh budget", got, err)
+	}
+}
+
+// Cancelling the caller's context interrupts a page running under the
+// reused page context.
+func TestQueryEachParentCancelReachesPageContext(t *testing.T) {
+	q, peer := eachPageTimeoutQuery(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		_, stream, _, err := step03ReadRequest(peer)
+		if err == nil {
+			_, err = peer.Write(typedTestResponse(t, 4, stream, runtimeRowsBody([]byte{1}, "a")))
+		}
+		if err == nil {
+			_, _, _, err = step03ReadRequest(peer)
+		}
+		if err != nil {
+			t.Error(err)
+		}
+		cancel()
+	}()
+	dst := make([]byte, 0, 8)
+	started := time.Now()
+	err := q.Each(ctx, Unit{}, &dst, func(*[]byte) error { return nil })
+	if !errors.Is(err, context.Canceled) || time.Since(started) > 90*time.Millisecond {
+		t.Fatal("parent cancellation did not reach the page", err, time.Since(started))
 	}
 }

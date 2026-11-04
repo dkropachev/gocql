@@ -44,6 +44,12 @@ type executionContext struct {
 	err        error
 	gen        uint64
 	stopParent func() bool
+	// linked is the execution context this generation is a child of, which
+	// cancels it through child without an AfterFunc registration.
+	linked *executionContext
+	// child and childGen name the generation of a linked child context.
+	child      *executionContext
+	childGen   uint64
 	afters     []*executionAfterFunc
 	cancelFunc context.CancelFunc // bound once: cancel(context.Canceled)
 	finishFunc context.CancelFunc // bound once: finish
@@ -98,7 +104,13 @@ func (c *executionContext) begin(parent context.Context, timeout time.Duration) 
 		}
 	}
 	c.mu.Unlock()
-	if err := parent.Err(); err != nil {
+	if p, ok := parent.(*executionContext); ok && p != c {
+		// A child of another execution context (a page within an
+		// execution) links to it directly; disarm unlinks it.
+		if err := p.linkChild(c, gen); err != nil {
+			c.cancel(err)
+		}
+	} else if err := parent.Err(); err != nil {
 		c.cancel(err)
 	} else if parent.Done() != nil {
 		stop := context.AfterFunc(parent, c.parentFunc)
@@ -120,7 +132,7 @@ func (c *executionContext) begin(parent context.Context, timeout time.Duration) 
 // generation instead of being closed and reallocated.
 func (c *executionContext) finish() {
 	c.mu.Lock()
-	if c.err != nil || c.shared || len(c.afters) > 0 {
+	if c.err != nil || c.shared || len(c.afters) > 0 || c.child != nil {
 		c.cancelLocked(context.Canceled)
 		return
 	}
@@ -142,6 +154,48 @@ func (c *executionContext) disarmLocked() {
 		c.stopParent()
 		c.stopParent = nil
 	}
+	if p := c.linked; p != nil {
+		c.linked = nil
+		p.mu.Lock()
+		if p.child == c {
+			p.child = nil
+		}
+		p.mu.Unlock()
+	}
+}
+
+// linkChild makes child's generation gen follow c's cancellation, or reports
+// c's error when it is already cancelled. Lock order is child, then parent:
+// a cancelling parent releases its lock before it cancels the child.
+func (c *executionContext) linkChild(child *executionContext, gen uint64) error {
+	c.mu.Lock()
+	if c.err != nil {
+		err := c.err
+		c.mu.Unlock()
+		return err
+	}
+	child.mu.Lock()
+	linked := child.gen == gen && child.err == nil
+	if linked {
+		child.linked = c
+	}
+	child.mu.Unlock()
+	if linked {
+		c.child, c.childGen = child, gen
+	}
+	c.mu.Unlock()
+	return nil
+}
+
+// cancelGen cancels generation gen only, so that a parent's late
+// cancellation cannot reach a later generation of the child.
+func (c *executionContext) cancelGen(gen uint64, err error) {
+	c.mu.Lock()
+	if c.gen != gen {
+		c.mu.Unlock()
+		return
+	}
+	c.cancelLocked(err)
 }
 
 func (c *executionContext) expire() {
@@ -188,7 +242,12 @@ func (c *executionContext) cancelLocked(err error) {
 	c.disarmLocked()
 	afters := c.afters
 	c.afters = nil
+	child, childGen := c.child, c.childGen
+	c.child = nil
 	c.mu.Unlock()
+	if child != nil {
+		child.cancelGen(childGen, err)
+	}
 	for _, a := range afters {
 		go a.f()
 	}

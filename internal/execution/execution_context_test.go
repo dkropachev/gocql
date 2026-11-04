@@ -217,3 +217,80 @@ func TestExecutionContextFinishReusesUnsharedDone(t *testing.T) {
 type transientDoneContext interface {
 	InternalTransientDone() <-chan struct{}
 }
+
+// A context begun under another execution context links to it directly:
+// the parent's cancellation, deadline and finish reach it, a linked child
+// registers no AfterFunc on the parent, and a cancellation of an earlier
+// child generation spares the next one.
+func TestExecutionContextLinkedChild(t *testing.T) {
+	parent, child := newExecutionContext(), newExecutionContext()
+
+	pctx, pcancel := parent.begin(context.Background(), time.Hour)
+	cctx, ccancel := child.begin(pctx, time.Minute)
+	if len(parent.afters) != 0 || parent.shared || parent.child != child {
+		t.Fatal("child not linked directly", len(parent.afters), parent.shared)
+	}
+	if d, ok := cctx.Deadline(); !ok || time.Until(d) > time.Minute {
+		t.Fatal("child deadline", d, ok)
+	}
+	ccancel()
+	if parent.child != nil || child.linked != nil {
+		t.Fatal("finished child still linked")
+	}
+	cctx, ccancel = child.begin(pctx, time.Minute)
+	pcancel() // finishing the parent cancels a linked child
+	waitDone(t, cctx)
+	if !errors.Is(cctx.Err(), context.Canceled) {
+		t.Fatal(cctx.Err())
+	}
+	ccancel()
+
+	pctx, pcancel = parent.begin(context.Background(), 20*time.Millisecond)
+	cctx, ccancel = child.begin(pctx, time.Hour)
+	waitDone(t, cctx)
+	if !errors.Is(cctx.Err(), context.DeadlineExceeded) {
+		t.Fatal("parent deadline did not reach the child", cctx.Err())
+	}
+	ccancel()
+	pcancel()
+
+	// Beginning under a cancelled parent is cancelled at once.
+	pctx, pcancel = parent.begin(context.Background(), time.Hour)
+	pcancel()
+	cctx, ccancel = child.begin(pctx, time.Hour)
+	if !errors.Is(cctx.Err(), context.Canceled) {
+		t.Fatal(cctx.Err())
+	}
+	ccancel()
+
+	// A late cancellation for an earlier child generation spares the next.
+	pctx, pcancel = parent.begin(context.Background(), time.Hour)
+	defer pcancel()
+	_, ccancel = child.begin(pctx, time.Hour)
+	stale := child.gen
+	ccancel()
+	cctx, ccancel = child.begin(pctx, time.Hour)
+	defer ccancel()
+	child.cancelGen(stale, context.Canceled)
+	if cctx.Err() != nil {
+		t.Fatal("stale parent cancellation reached the next generation")
+	}
+}
+
+// Parent cancellation, child finish and child expiry race without deadlock
+// or a missed cancellation.
+func TestExecutionContextLinkedChildRaces(t *testing.T) {
+	parent, child := newExecutionContext(), newExecutionContext()
+	for i := 0; i < 2000; i++ {
+		pctx, pcancel := parent.begin(context.Background(), time.Hour)
+		cctx, ccancel := child.begin(pctx, time.Duration(i%3)*time.Microsecond+time.Microsecond)
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() { defer wg.Done(); parent.cancel(context.Canceled) }()
+		go func() { defer wg.Done(); _ = cctx.Err() }()
+		wg.Wait()
+		waitDone(t, cctx)
+		ccancel()
+		pcancel()
+	}
+}
