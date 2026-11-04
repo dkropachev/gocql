@@ -32,8 +32,7 @@ func newOptionTemplates(profile *Profile, values *OptionValues, keyspace string)
 				w.SerialConsistency = profile.SerialConsistency.Value
 			}
 			if values.NowInSeconds.Set {
-				now := values.NowInSeconds.Value
-				w.NowInSeconds = &now
+				w.HasNowInSeconds, w.NowInSeconds = true, values.NowInSeconds.Value
 			}
 			// An error leaves the slot empty: the request encodes its
 			// parameters field by field, which reports it.

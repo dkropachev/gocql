@@ -47,7 +47,7 @@ func TestParamsTemplateMatchesFieldEncoding(t *testing.T) {
 				r.Keyspace = "ks"
 			}
 			if bit(6) {
-				r.NowInSeconds = &now
+				r.HasNowInSeconds, r.NowInSeconds = true, now
 			}
 			if bit(7) {
 				r.PagingState = []byte("state")

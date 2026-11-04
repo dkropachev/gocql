@@ -1105,8 +1105,7 @@ func (s *InternalSessionRuntime) newAttempt(w *attemptRequest, conn *Conn, reque
 		w.DefaultTimestamp = true
 	}
 	if opts.NowInSeconds.Set {
-		now := opts.NowInSeconds.Value
-		w.NowInSeconds = &now
+		w.HasNowInSeconds, w.NowInSeconds = true, opts.NowInSeconds.Value
 	}
 	return nil
 }

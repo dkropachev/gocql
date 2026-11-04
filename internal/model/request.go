@@ -29,26 +29,27 @@ type EncodedValues struct {
 // attemptRequest contains only immutable protocol inputs. The transport retains
 // lease until every accepted writer has stopped accessing its spans.
 type AttemptRequest struct {
-	Lease        *wire.Lease
-	NowInSeconds *int32
-	Batch        *TypedBatchRequest
+	Lease *wire.Lease
+	Batch *TypedBatchRequest
 	// Params, when it matches the request, is its pre-encoded parameters
 	// block; the encoder copies it instead of encoding each option.
-	Params                         *ParamsTemplate
-	Statement                      string
-	Keyspace                       string
-	PreparedID, ResultMetadataID   []byte
-	PagingState                    []byte
-	Payload                        []PayloadEntry
-	Values                         wire.Chain
-	ValueCount                     int
-	PageSize                       int
-	Timestamp                      int64
-	Timeout                        time.Duration
+	Params                       *ParamsTemplate
+	Statement                    string
+	Keyspace                     string
+	PreparedID, ResultMetadataID []byte
+	PagingState                  []byte
+	Payload                      []PayloadEntry
+	Values                       wire.Chain
+	ValueCount                   int
+	PageSize                     int
+	Timestamp                    int64
+	Timeout                      time.Duration
+	// NowInSeconds is sent when HasNowInSeconds is set.
+	NowInSeconds                   int32
 	Consistency, SerialConsistency cqltype.Consistency
 	TabletVersionBlock             byte
 	DefaultTimestamp, SkipMetadata bool
-	Trace                          bool
+	Trace, HasNowInSeconds         bool
 	Prepare                        bool
 }
 
@@ -83,10 +84,7 @@ func (t *ParamsTemplate) Matches(r *AttemptRequest, protocol byte) bool {
 	if t == nil || t.Protocol != protocol || t.PageSize != r.PageSize || t.SerialConsistency != r.SerialConsistency || t.DefaultTimestamp != r.DefaultTimestamp || t.Keyspace != r.Keyspace {
 		return false
 	}
-	if r.NowInSeconds == nil {
-		return !t.HasNowInSeconds
-	}
-	return t.HasNowInSeconds && t.NowInSeconds == *r.NowInSeconds
+	return t.HasNowInSeconds == r.HasNowInSeconds && t.NowInSeconds == r.NowInSeconds
 }
 
 type TypedBatchRequest struct {

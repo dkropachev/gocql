@@ -116,8 +116,7 @@ func TestTypedRequestMatchesLegacyWireAndKeepsPayload(t *testing.T) {
 		request := &attemptRequest{Statement: "INSERT INTO ks.tbl (value) VALUES (?)", Values: values, ValueCount: 1, Consistency: Quorum, SerialConsistency: LocalSerial, PageSize: 83, PagingState: []byte{1, 2, 3}, Timestamp: 78321, DefaultTimestamp: true, Trace: true}
 		if proto == 5 {
 			request.Keyspace = "ks"
-			now := int32(321)
-			request.NowInSeconds = &now
+			request.HasNowInSeconds, request.NowInSeconds = true, 321
 		}
 		got, err := c.InternalBuildTypedRequest(request, 7)
 		if err != nil {
@@ -126,8 +125,8 @@ func TestTypedRequestMatchesLegacyWireAndKeepsPayload(t *testing.T) {
 		f := c.InternalGetWriteFramer()
 		f.Trace()
 		params := fixtureQueryParams{values: []fixtureQueryValue{{value: payload}}, consistency: Quorum, serialConsistency: LocalSerial, pageSize: 83, pagingState: request.PagingState, defaultTimestamp: true, defaultTimestampValue: 78321, keyspace: request.Keyspace}
-		if request.NowInSeconds != nil {
-			now := int(*request.NowInSeconds)
+		if request.HasNowInSeconds {
+			now := int(request.NowInSeconds)
 			params.nowInSeconds = &now
 		}
 		if err := fixtureWriteQuery(f, 7, request.Statement, &params, nil); err != nil {
@@ -631,21 +630,20 @@ func TestTypedExecutePrepareBatchWireOracle(t *testing.T) {
 				r := &attemptRequest{Statement: "INSERT INTO ks.tbl (v) VALUES (?)", Consistency: Quorum, SerialConsistency: LocalSerial, Timestamp: 123456, DefaultTimestamp: true}
 				if proto >= 5 {
 					r.Keyspace = "ks"
-					now := int32(123)
-					r.NowInSeconds = &now
+					r.HasNowInSeconds, r.NowInSeconds = true, 123
 				}
 				f := c.InternalGetWriteFramer()
 				defer c.InternalReleaseWriteFramer(f)
 				params := fixtureQueryParams{consistency: Quorum, serialConsistency: LocalSerial, defaultTimestamp: true, defaultTimestampValue: 123456, keyspace: r.Keyspace}
-				if r.NowInSeconds != nil {
-					now := int(*r.NowInSeconds)
+				if r.HasNowInSeconds {
+					now := int(r.NowInSeconds)
 					params.nowInSeconds = &now
 				}
 				var err error
 				switch kind {
 				case "prepare":
 					r.Prepare = true
-					r.NowInSeconds = nil
+					r.HasNowInSeconds, r.NowInSeconds = false, 0
 					err = (&writePrepareFrame{Statement: r.Statement, Keyspace: r.Keyspace}).BuildFrame(f, 23)
 				case "execute":
 					r.PreparedID = []byte{1, 2, 3}

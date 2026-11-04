@@ -26,7 +26,7 @@ func TestScratchFrameMatchesAndBorrowsValues(t *testing.T) {
 		"execute": func(v byte) *model.AttemptRequest {
 			r := &model.AttemptRequest{PreparedID: []byte("prepared-id"), ResultMetadataID: []byte("md"), Values: values, ValueCount: 1, Consistency: cqltype.One, TabletVersionBlock: 3}
 			if v == 5 {
-				r.Keyspace, r.NowInSeconds = "ks", &now
+				r.Keyspace, r.HasNowInSeconds, r.NowInSeconds = "ks", true, now
 			}
 			return r
 		},

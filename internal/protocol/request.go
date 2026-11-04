@@ -122,7 +122,7 @@ func (c *Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, 
 	if proto < 3 || proto > 5 {
 		return wire.Chain{}, false, fmt.Errorf("gocql: unsupported typed Protocol %d", proto)
 	}
-	if (req.Keyspace != "" || req.NowInSeconds != nil) && proto < 5 {
+	if (req.Keyspace != "" || req.HasNowInSeconds) && proto < 5 {
 		return wire.Chain{}, false, fmt.Errorf("gocql: keyspace and now_in_seconds overrides require Protocol v5")
 	}
 	if req.PageSize < 0 || int64(req.PageSize) > math.MaxInt32 {
@@ -346,7 +346,7 @@ func (c *Settings) WriteTypedParams(e *TypedEnvelope, r *model.AttemptRequest, b
 	if r.Keyspace != "" {
 		Flags |= frm.FlagWithKeyspace
 	}
-	if r.NowInSeconds != nil {
+	if r.HasNowInSeconds {
 		Flags |= frm.FlagWithNowInSeconds
 	}
 	if c.Protocol >= 5 {
@@ -375,8 +375,8 @@ func (c *Settings) WriteTypedParams(e *TypedEnvelope, r *model.AttemptRequest, b
 	if r.Keyspace != "" {
 		e.Str(r.Keyspace, false)
 	}
-	if r.NowInSeconds != nil {
-		e.U32(uint32(*r.NowInSeconds))
+	if r.HasNowInSeconds {
+		e.U32(uint32(r.NowInSeconds))
 	}
 }
 

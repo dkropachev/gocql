@@ -23,8 +23,8 @@ func NewParamsTemplate(r *model.AttemptRequest, protocol byte) (*model.ParamsTem
 		return nil, fmt.Errorf("gocql: oversized Protocol string")
 	}
 	t := &model.ParamsTemplate{Protocol: protocol, PageSize: r.PageSize, SerialConsistency: r.SerialConsistency, DefaultTimestamp: r.DefaultTimestamp, Keyspace: r.Keyspace, TimestampAt: -1}
-	if r.NowInSeconds != nil {
-		t.HasNowInSeconds, t.NowInSeconds = true, *r.NowInSeconds
+	if r.HasNowInSeconds {
+		t.HasNowInSeconds, t.NowInSeconds = true, r.NowInSeconds
 	}
 	size := 0
 	if r.PageSize > 0 {
@@ -43,7 +43,7 @@ func NewParamsTemplate(r *model.AttemptRequest, protocol byte) (*model.ParamsTem
 		t.Flags |= frm.FlagWithKeyspace
 		size += 2 + len(r.Keyspace)
 	}
-	if r.NowInSeconds != nil {
+	if r.HasNowInSeconds {
 		t.Flags |= frm.FlagWithNowInSeconds
 		size += 4
 	}
@@ -63,8 +63,8 @@ func NewParamsTemplate(r *model.AttemptRequest, protocol byte) (*model.ParamsTem
 		tail = binary.BigEndian.AppendUint16(tail, uint16(len(r.Keyspace)))
 		tail = append(tail, r.Keyspace...)
 	}
-	if r.NowInSeconds != nil {
-		tail = binary.BigEndian.AppendUint32(tail, uint32(*r.NowInSeconds))
+	if r.HasNowInSeconds {
+		tail = binary.BigEndian.AppendUint32(tail, uint32(r.NowInSeconds))
 	}
 	t.Tail = tail
 	return t, nil
