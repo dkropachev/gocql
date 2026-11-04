@@ -328,6 +328,12 @@ func (p *InternalRoutingPolicy) Plan(info RoutingInfo, m *MetadataSnapshot) Quer
 // InternalPlanInto initializes a worker-owned cursor over immutable placement
 // data. The preceding traversal must be finished before its storage is reused.
 func (p *InternalRoutingPolicy) InternalPlanInto(info RoutingInfo, m *MetadataSnapshot, plan *InternalLazyRoutingPlan) QueryPlan {
+	return p.InternalPlanWith(info, m, plan, nil)
+}
+
+// InternalPlanWith is InternalPlanInto for a request whose tablet was looked
+// up in m, or that looks it up itself when tablet is nil or did not run.
+func (p *InternalRoutingPolicy) InternalPlanWith(info RoutingInfo, m *MetadataSnapshot, plan *InternalLazyRoutingPlan, tablet *InternalTabletLookup) QueryPlan {
 	info.Conditional = info.Conditional || info.Kind != OrdinaryStatement
 	if m == nil {
 		return &InternalTargetPlan{}
@@ -342,8 +348,14 @@ func (p *InternalRoutingPolicy) InternalPlanInto(info RoutingInfo, m *MetadataSn
 		return plan
 	}
 	o := p.InternalOptions
+	var lookup InternalTabletLookup
+	if tablet != nil && tablet.done {
+		lookup = *tablet
+	} else if o.TokenAware && info.Token.Set {
+		lookup = InternalLookupTablet(m, info)
+	}
 	if o.TokenAware && info.Token.Set && info.Keyspace != "" && info.Table != "" {
-		plan.replicas, _ = m.placementReplicas(info.Keyspace, info.Table, info.Token.Value)
+		plan.replicas, _ = m.lookupReplicas(&lookup, info.Keyspace, info.Table, info.Token.Value)
 	}
 	conditional := info.Conditional || info.Consistency == Serial || info.Consistency == LocalSerial
 	if len(plan.replicas) > len(plan.smallPermutation) {
@@ -381,7 +393,7 @@ func (p *InternalRoutingPolicy) InternalPlanInto(info RoutingInfo, m *MetadataSn
 	}
 	if o.LeaderAware && o.TokenAware && info.Token.Set && info.Consistency != One && info.Consistency != LocalOne {
 		if ks := SnapshotData(m).InternalKeyspaces[info.Keyspace]; ks != nil && ks.ConsistencyMode == "global" {
-			_, r := m.placementReplicas(info.Keyspace, info.Table, info.Token.Value)
+			_, r := m.lookupReplicas(&lookup, info.Keyspace, info.Table, info.Token.Value)
 			if r != nil && r.InternalValue.InternalVersion.Set && len(r.InternalValue.InternalSpan.Replicas) > 0 {
 				plan.leader = Option[Target]{Value: r.InternalValue.InternalSpan.Replicas[0], Set: true}
 			}

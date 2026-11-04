@@ -781,7 +781,8 @@ type InternalTypedAttemptOutcome struct {
 }
 
 // pagePlan builds the routing plan for one page's attempts.
-func (s *InternalSessionRuntime) pagePlan(request *InternalExecutionRequest, metadata *routing.MetadataSnapshot, direct bool) (QueryPlan, error) {
+// tablet is the request's tablet, looked up in metadata.
+func (s *InternalSessionRuntime) pagePlan(request *InternalExecutionRequest, metadata *routing.MetadataSnapshot, tablet *routing.InternalTabletLookup, direct bool) (QueryPlan, error) {
 	policy := request.InternalOptions.InternalProfile.Routing
 	if policy == nil {
 		return nil, nil
@@ -789,12 +790,12 @@ func (s *InternalSessionRuntime) pagePlan(request *InternalExecutionRequest, met
 	if err := policy.Validate(metadata); err != nil {
 		return nil, err
 	}
-	if direct && request.query != nil { // the plan lives in the query's storage
-		if builtin, ok := policy.(*routing.InternalRoutingPolicy); ok {
-			if plan := builtin.InternalPlanInto(request.InternalRouting, metadata, &request.query.routing); plan != nil {
-				return plan, nil
-			}
+	if builtin, ok := policy.(*routing.InternalRoutingPolicy); ok {
+		storage := new(routing.InternalLazyRoutingPlan)
+		if direct && request.query != nil { // the plan lives in the query's storage
+			storage = &request.query.routing
 		}
+		return builtin.InternalPlanWith(request.InternalRouting, metadata, storage, tablet), nil
 	}
 	return policy.Plan(request.InternalRouting, metadata), nil
 }
@@ -838,13 +839,14 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 	defer cancel()
 	metadata := s.Session.Metadata()
 	request.tabletFeedback = implCluster.InternalSessionCaptureTabletFeedback(s.Session, request.InternalRouting, metadata)
-	request.tabletVersionBlock = routing.InternalMetadataSnapshotTabletVersionBlock(metadata, request.InternalRouting)
+	tablet := routing.InternalLookupTablet(metadata, request.InternalRouting)
+	request.tabletVersionBlock = tablet.VersionBlock(request.InternalRouting)
 	if direct && pinnedUsable(request.pinned) {
 		// A continuation page goes to the connection that served the previous
 		// page; a plan is built only if that attempt has to be retried.
 		return s.executePageDirect(ctx, request, state, nil)
 	}
-	plan, err := s.pagePlan(request, metadata, direct)
+	plan, err := s.pagePlan(request, metadata, &tablet, direct)
 	if err != nil {
 		return nil, err
 	}

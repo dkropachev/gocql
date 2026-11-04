@@ -66,7 +66,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 				// connection took its first attempt, as a plan's first target
 				// would have, the retry plan skips that host.
 				var err error
-				if plan, err = s.pagePlan(request, s.Session.Metadata(), true); err != nil {
+				if plan, err = s.pagePlan(request, s.Session.Metadata(), nil, true); err != nil {
 					return failure(err)
 				}
 				if pinned && plan != nil {

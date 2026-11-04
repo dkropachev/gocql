@@ -453,13 +453,18 @@ func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
 	request := s.privateStorage.InternalRequest
 	metadata := s.privateStorage.InternalSession.Metadata()
 	request.tabletFeedback = implCluster.InternalSessionCaptureTabletFeedback(s.privateStorage.InternalSession, request.InternalRouting, metadata)
-	request.tabletVersionBlock = implRouting.InternalMetadataSnapshotTabletVersionBlock(metadata, request.InternalRouting)
+	tablet := implRouting.InternalLookupTablet(metadata, request.InternalRouting)
+	request.tabletVersionBlock = tablet.VersionBlock(request.InternalRouting)
 	var plan QueryPlan
 	if policy := request.InternalOptions.InternalProfile.Routing; policy != nil {
 		if err := policy.Validate(metadata); err != nil {
 			return err
 		}
-		plan = policy.Plan(request.InternalRouting, metadata)
+		if builtin, ok := policy.(*implRouting.InternalRoutingPolicy); ok {
+			plan = builtin.InternalPlanWith(request.InternalRouting, metadata, new(implRouting.InternalLazyRoutingPlan), &tablet)
+		} else {
+			plan = policy.Plan(request.InternalRouting, metadata)
+		}
 	}
 	pagectx := s.privateStorage.InternalCtx
 	if timeout := request.InternalOptions.InternalProfile.PageTimeout; timeout > 0 {

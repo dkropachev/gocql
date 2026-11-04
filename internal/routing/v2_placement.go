@@ -234,29 +234,71 @@ func InternalMetadataSnapshotTabletRoot(m *MetadataSnapshot, k InternalMetadataT
 	}
 	return nil, false
 }
-func InternalMetadataSnapshotTabletVersionBlock(m *MetadataSnapshot, info RoutingInfo) byte {
+
+// InternalTabletLookup is the tablet holding a request's token in a
+// snapshot, found once for an execution and shared by its tablet version
+// block and its routing plan.
+type InternalTabletLookup struct {
+	// node is the tablet holding the token, or nil.
+	node *InternalTabletRangeTree
+	// tracked reports that the snapshot tracks the table's tablets, so
+	// a missing node means no replicas rather than vnode placement.
+	tracked bool
+	// done reports that the lookup ran; the zero lookup did not.
+	done bool
+}
+
+// InternalLookupTablet finds the tablet holding info's token in m.
+func InternalLookupTablet(m *MetadataSnapshot, info RoutingInfo) InternalTabletLookup {
+	l := InternalTabletLookup{done: true}
+	if m == nil || info.Table == "" || info.Keyspace == "" || !info.Token.Set {
+		return l
+	}
+	if SnapshotData(m).InternalPlacementSignal != nil && SnapshotData(m).InternalPlacementEpoch != SnapshotData(m).InternalPlacementSignal.Load() {
+		// A stale snapshot routes to no replicas, as placementReplicas does.
+		l.tracked = true
+		return l
+	}
+	if root, ok := InternalMetadataSnapshotTabletRoot(m, InternalMetadataTable{InternalKeyspace: info.Keyspace, InternalTable: info.Table}); ok {
+		l.tracked = true
+		l.node = InternalTabletRangeFor(root, info.Token.Value)
+	}
+	return l
+}
+
+// VersionBlock returns the tablet version block a request with lookup l
+// sends: a random nibble of the tablet's version and its index, or a random
+// byte when the tablet or its version is unknown.
+func (l *InternalTabletLookup) VersionBlock(info RoutingInfo) byte {
 	if info.Table == "" || info.Keyspace == "" || !info.Token.Set {
 		return 0
 	}
-	if root, ok := InternalMetadataSnapshotTabletRoot(m, InternalMetadataTable{InternalKeyspace: info.Keyspace, InternalTable: info.Table}); ok {
-		if n := InternalTabletRangeFor(root, info.Token.Value); n != nil && n.InternalValue.InternalVersion.Set {
-			index := rand.Uint32N(16)
-			return byte(index<<4) | byte(n.InternalValue.InternalVersion.Value>>(index*4)&15)
-		}
+	if n := l.node; n != nil && n.InternalValue.InternalVersion.Set {
+		index := rand.Uint32N(16)
+		return byte(index<<4) | byte(n.InternalValue.InternalVersion.Value>>(index*4)&15)
 	}
 	return byte(rand.Uint32())
 }
 
+func InternalMetadataSnapshotTabletVersionBlock(m *MetadataSnapshot, info RoutingInfo) byte {
+	l := InternalLookupTablet(m, info)
+	return l.VersionBlock(info)
+}
+
 // placementReplicas is a private borrowed view; public accessors detach it.
 func (m *MetadataSnapshot) placementReplicas(keyspace, table string, token int64) ([]Target, *InternalTabletRangeTree) {
+	l := InternalLookupTablet(m, RoutingInfo{Keyspace: keyspace, Table: table, Token: Option[int64]{Value: token, Set: true}})
+	return m.lookupReplicas(&l, keyspace, table, token)
+}
+
+// lookupReplicas is placementReplicas for a request whose tablet l was
+// looked up in m.
+func (m *MetadataSnapshot) lookupReplicas(l *InternalTabletLookup, keyspace, table string, token int64) ([]Target, *InternalTabletRangeTree) {
 	if m == nil {
 		return nil, nil
 	}
-	if SnapshotData(m).InternalPlacementSignal != nil && SnapshotData(m).InternalPlacementEpoch != SnapshotData(m).InternalPlacementSignal.Load() {
-		return nil, nil
-	}
-	if root, ok := InternalMetadataSnapshotTabletRoot(m, InternalMetadataTable{InternalKeyspace: keyspace, InternalTable: table}); ok {
-		if n := InternalTabletRangeFor(root, token); n != nil {
+	if l.tracked {
+		if n := l.node; n != nil {
 			return n.InternalValue.InternalSpan.Replicas, n
 		}
 		return nil, nil
