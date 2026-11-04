@@ -9,6 +9,7 @@ import (
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -97,6 +98,7 @@ func eachPage[R any](ctx context.Context, cancel context.CancelFunc, s *implClus
 	}
 	var result Result
 	var history pagingHistory
+	var inline [paging.InternalInlineHistory]PageState // the history's first tokens
 	state := StartPage()
 	slot := 0
 	for first := true; ; first = false {
@@ -124,7 +126,7 @@ func eachPage[R any](ctx context.Context, cancel context.CancelFunc, s *implClus
 		}
 		if first {
 			result = response.Result
-			history = pagingHistory{InternalMaxCount: rt.InternalConfig.Limits.MaxPagingStates, InternalMaxBytes: rt.InternalConfig.Limits.MaxPagingStateBytes}
+			history = pagingHistory{InternalMaxCount: rt.InternalConfig.Limits.MaxPagingStates, InternalMaxBytes: rt.InternalConfig.Limits.MaxPagingStateBytes, InternalInline: &inline}
 		} else {
 			mergeResult(&result, response.Result)
 		}

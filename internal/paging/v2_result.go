@@ -12,8 +12,10 @@ import (
 )
 
 // pagingHistory owns references to the same immutable tokens sent on the wire.
-// The first InternalInlineHistory tokens live inline and are compared directly,
-// so a short paged read allocates nothing; later ones spill into a map keyed by
+// An owner with reusable storage (Each's frame, a query's iterator) lends it
+// as InternalInline: the first InternalInlineHistory tokens live there and are
+// compared directly, so a short paged read allocates nothing. Later tokens,
+// and every token of a history without inline storage, go to a map keyed by
 // hash. Hash collisions compare full bytes; count and payload budgets are
 // independent. This nongeneric state machine is also used by the incremental
 // streaming pager.
@@ -27,7 +29,7 @@ const InternalInlineHistory = 8
 type InternalPagingHistory struct {
 	InternalSeed     maphash.Seed
 	InternalEntries  map[uint64]InternalPagingHistoryEntry
-	InternalInline   [InternalInlineHistory]PageState
+	InternalInline   *[InternalInlineHistory]PageState
 	InternalCount    int
 	InternalBytes    int64
 	InternalMaxCount int
@@ -40,7 +42,7 @@ func (h *InternalPagingHistory) InternalAdd(state PageState) error {
 	}
 	token := model.PageToken(state)
 	perfAdd(0, len(token))
-	if h.InternalEntries == nil {
+	if h.InternalEntries == nil && h.InternalInline != nil {
 		// Without a map, InternalCount is the number of inline tokens.
 		for _, held := range h.InternalInline[:h.InternalCount] {
 			perfAdd(1, 1)
@@ -61,6 +63,7 @@ func (h *InternalPagingHistory) InternalAdd(state PageState) error {
 		h.record(token)
 		return nil
 	}
+	h.InternalSpill()
 	hash := maphash.Bytes(h.InternalSeed, token)
 	if entry, exists := h.InternalEntries[hash]; exists {
 		perfAdd(1, 1)
@@ -90,6 +93,9 @@ func (h *InternalPagingHistory) InternalSpill() {
 	}
 	h.InternalSeed = maphash.MakeSeed()
 	h.InternalEntries = make(map[uint64]InternalPagingHistoryEntry)
+	if h.InternalInline == nil {
+		return
+	}
 	for i, held := range h.InternalInline[:h.InternalCount] {
 		h.insert(maphash.Bytes(h.InternalSeed, model.PageToken(held)), held)
 		h.InternalInline[i] = PageState{}
@@ -126,8 +132,10 @@ func (h *InternalPagingHistory) record(token []byte) {
 }
 
 func (h *InternalPagingHistory) InternalClear() {
+	if h.InternalEntries == nil && h.InternalInline != nil {
+		clear(h.InternalInline[:h.InternalCount])
+	}
 	h.InternalEntries = nil
-	clear(h.InternalInline[:])
 	h.InternalCount = 0
 	h.InternalBytes = 0
 }

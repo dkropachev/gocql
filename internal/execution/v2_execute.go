@@ -620,7 +620,8 @@ func newRowsFromResponse[R any](runctx context.Context, cancel context.CancelFun
 	// closed or stopped. Stale handles carry the previous generation.
 	// Elsewhere the first page shares the iterator's allocation.
 	holder, gen := b.privateStorage.rows, uint64(0)
-	if holder != nil && request.query != nil {
+	queryOwned := holder != nil && request.query != nil
+	if queryOwned {
 		gen = request.query.generation.Load()
 		*holder = rowsHolder[R]{}
 	} else {
@@ -645,6 +646,11 @@ func newRowsFromResponse[R any](runctx context.Context, cancel context.CancelFun
 	rows.privateStorage.info = response.Result
 	rows.privateStorage.plans = plans
 	rows.privateStorage.InternalHistory = pagingHistory{InternalMaxCount: rt.InternalConfig.Limits.MaxPagingStates, InternalMaxBytes: rt.InternalConfig.Limits.MaxPagingStateBytes}
+	if queryOwned {
+		// A query's iterator lends the query's inline history storage; the
+		// history counts from zero, so earlier tokens there are never read.
+		rows.privateStorage.InternalHistory.InternalInline = &request.query.historyInline
+	}
 	rows.startPrefetch()
 	rows.privateStorage.execution = request.InternalLogical
 	request.InternalLogical.installStop(rows)

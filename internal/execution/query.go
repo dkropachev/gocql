@@ -12,6 +12,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/routing"
 )
 
@@ -44,6 +45,9 @@ type queryState struct {
 	// response: one page is decoded while the next is parsed.
 	responseAlt responsePage
 	prefetched  chan eachFetch // a prefetching Each's page hand-off, created on first use
+	// historyInline is the inline paging history storage the query's
+	// iterator lends its history.
+	historyInline [paging.InternalInlineHistory]PageState
 }
 
 // resolvedOptionsCache keeps a query's resolved options. A query's options
