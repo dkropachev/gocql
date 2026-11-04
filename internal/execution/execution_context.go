@@ -44,6 +44,12 @@ type executionContext struct {
 	err        error
 	gen        uint64
 	stopParent func() bool
+	// lazy marks a cancellable parent that is watched without a
+	// registration: Err checks it, transport waits select on its Done
+	// channel (InternalParentDone), and Done or AfterFunc register a
+	// watcher only once something may wait on this context's channel.
+	lazy     bool
+	watching bool // the lazy parent's watcher is registered
 	// linked is the execution context this generation is a child of, which
 	// cancels it through child without an AfterFunc registration.
 	linked *executionContext
@@ -85,6 +91,7 @@ func (c *executionContext) begin(parent context.Context, timeout time.Duration) 
 	c.shared = false
 	c.afters = c.afters[:0]
 	c.timerAt = time.Time{}
+	c.lazy, c.watching = false, false
 	if c.done == nil || c.doneClosed {
 		c.done, c.doneClosed = make(chan struct{}), false
 	}
@@ -103,8 +110,13 @@ func (c *executionContext) begin(parent context.Context, timeout time.Duration) 
 			c.timer.Reset(timeout)
 		}
 	}
+	p, linked := parent.(*executionContext)
+	linked = linked && p != c
+	if linked || parent.Done() != nil {
+		c.lazy = true
+	}
 	c.mu.Unlock()
-	if p, ok := parent.(*executionContext); ok && p != c {
+	if linked {
 		// A child of another execution context (a page within an
 		// execution) links to it directly; disarm unlinks it.
 		if err := p.linkChild(c, gen); err != nil {
@@ -112,19 +124,39 @@ func (c *executionContext) begin(parent context.Context, timeout time.Duration) 
 		}
 	} else if err := parent.Err(); err != nil {
 		c.cancel(err)
-	} else if parent.Done() != nil {
-		stop := context.AfterFunc(parent, c.parentFunc)
-		c.mu.Lock()
-		if c.gen == gen && c.err == nil {
-			c.stopParent = stop
-			stop = nil
-		}
-		c.mu.Unlock()
-		if stop != nil {
-			stop()
-		}
 	}
 	return c, c.finishFunc
+}
+
+// watchParentLocked registers the lazy parent's watcher once something may
+// wait on this generation's Done channel. A linked child relies on its
+// parent's link for the parent's own cancellation, and asks the parent to
+// watch the parent's parent. Lock order is child, then parent.
+func (c *executionContext) watchParentLocked() {
+	if !c.lazy || c.watching || c.err != nil {
+		return
+	}
+	c.watching = true
+	if p, ok := c.parent.(*executionContext); ok {
+		p.mu.Lock()
+		p.watchParentLocked()
+		p.mu.Unlock()
+		return
+	}
+	c.stopParent = context.AfterFunc(c.parent, c.parentFunc)
+}
+
+// InternalParentDone is the Done channel of the cancellable context this
+// generation watches lazily, or nil. A transport wait selects on it next to
+// InternalTransientDone; Err then reports the parent's cancellation.
+func (c *executionContext) InternalParentDone() <-chan struct{} {
+	if !c.lazy {
+		return nil
+	}
+	if p, ok := c.parent.(*executionContext); ok {
+		return p.InternalParentDone()
+	}
+	return c.parent.Done()
 }
 
 // finish ends the generation after its attempts returned. With no Done watcher
@@ -168,23 +200,16 @@ func (c *executionContext) disarmLocked() {
 // c's error when it is already cancelled. Lock order is child, then parent:
 // a cancelling parent releases its lock before it cancels the child.
 func (c *executionContext) linkChild(child *executionContext, gen uint64) error {
-	c.mu.Lock()
-	if c.err != nil {
-		err := c.err
-		c.mu.Unlock()
-		return err
-	}
 	child.mu.Lock()
-	linked := child.gen == gen && child.err == nil
-	if linked {
+	c.mu.Lock()
+	err := c.err
+	if err == nil && child.gen == gen && child.err == nil {
 		child.linked = c
-	}
-	child.mu.Unlock()
-	if linked {
 		c.child, c.childGen = child, gen
 	}
 	c.mu.Unlock()
-	return nil
+	child.mu.Unlock()
+	return err
 }
 
 // cancelGen cancels generation gen only, so that a parent's late
@@ -257,6 +282,7 @@ func (c *executionContext) Deadline() (time.Time, bool) { return c.deadline, c.h
 
 func (c *executionContext) Done() <-chan struct{} {
 	c.mu.Lock()
+	c.watchParentLocked()
 	d := c.doneLocked()
 	c.shared = true
 	c.mu.Unlock()
@@ -281,7 +307,16 @@ func (c *executionContext) doneLocked() chan struct{} {
 
 func (c *executionContext) Err() error {
 	if !c.cancelled.Load() {
-		return nil
+		if !c.lazy {
+			return nil
+		}
+		// Done must be closed once Err reports, so a lazily watched
+		// parent's cancellation cancels this generation first.
+		err := c.parent.Err()
+		if err == nil {
+			return nil
+		}
+		c.cancel(err)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -299,6 +334,7 @@ func (c *executionContext) AfterFunc(f func()) func() bool {
 		go f()
 		return func() bool { return false }
 	}
+	c.watchParentLocked()
 	a := &executionAfterFunc{ctx: c, gen: c.gen, f: f}
 	c.afters = append(c.afters, a)
 	c.mu.Unlock()

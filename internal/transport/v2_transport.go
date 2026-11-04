@@ -217,6 +217,24 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest
 	if c.closesOnCancel {
 		connDone = nil
 	}
+	// abandon ends a wait whose attempt context, or the parent it watches, was
+	// cancelled.
+	abandon := func() (*InternalResponsePage, error) {
+		stopWaiting = true
+		if ticket != nil && ticket.unsent() {
+			// Withdrawn before transmission: the stream is free again.
+			if c.InternalRemoveCallIfOpen(stream) {
+				releaseStream = true
+				recycleCall = true
+			}
+			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctx.Err()})
+		}
+		if c.markOrphan(call) {
+			closeErr = InternalErrOrphanBudget
+		}
+		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctx.Err(), InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
+	}
+	parentDone := attemptParentDone(ctx)
 	select {
 	case resp := <-call.InternalResp:
 		if ticket != nil {
@@ -247,19 +265,9 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest
 		}
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrTimeoutNoResponse, InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
 	case <-attemptDone(ctx):
-		stopWaiting = true
-		if ticket != nil && ticket.unsent() {
-			// Withdrawn before transmission: the stream is free again.
-			if c.InternalRemoveCallIfOpen(stream) {
-				releaseStream = true
-				recycleCall = true
-			}
-			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctx.Err()})
-		}
-		if c.markOrphan(call) {
-			closeErr = InternalErrOrphanBudget
-		}
-		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctx.Err(), InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
+		return abandon()
+	case <-parentDone:
+		return abandon()
 	case <-connDone:
 		stopWaiting = true
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrConnectionClosed, InternalPotentiallyExecuted: potentiallyExecuted()})

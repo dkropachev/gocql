@@ -290,3 +290,59 @@ func TestQueryEachParentCancelReachesPageContext(t *testing.T) {
 		t.Fatal("parent cancellation did not reach the page", err, time.Since(started))
 	}
 }
+
+// Cancelling the caller's context interrupts a blocked response wait
+// although the execution context registers no watcher on it.
+func TestQueryEachParentCancelInterruptsWait(t *testing.T) {
+	s, _, peers := runtimeTestSession(t, 1)
+	statement := Statement[Unit, []byte]{Kind: OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: NoParams, Rows: RowInto(func(*[]byte) {}, Column("value", OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+	q := codecTestMust(NewUnpreparedQuery(s, statement, NewColumns(), Options{Timeout: Option[time.Duration]{Set: true, Value: 5 * time.Second}}))
+	t.Cleanup(q.Close)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		if _, _, _, err := step03ReadRequest(peers[0]); err != nil {
+			t.Error(err)
+		}
+		cancel()
+	}()
+	dst := make([]byte, 0, 8)
+	started := time.Now()
+	found, err := q.One(ctx, Unit{}, &dst)
+	if found || !errors.Is(err, context.Canceled) || time.Since(started) > time.Second {
+		t.Fatal("parent cancellation did not end the wait", found, err, time.Since(started))
+	}
+}
+
+type eachRetryAfterDelay struct{}
+
+func (eachRetryAfterDelay) Decide(AttemptError) RetryDecision {
+	return RetryDecision{Action: RetrySame, Delay: time.Minute}
+}
+
+// Cancelling the caller's context interrupts a retry delay.
+func TestQueryEachParentCancelInterruptsRetryDelay(t *testing.T) {
+	s, _, peers := runtimeTestSession(t, 1)
+	statement := Statement[Unit, []byte]{Kind: OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: NoParams, Rows: RowInto(func(*[]byte) {}, Column("value", OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+	profile := defaultProfile()
+	profile.Retry = eachRetryAfterDelay{}
+	q := codecTestMust(NewUnpreparedQuery(s, statement, NewColumns(), Options{Profile: codecTestMust(NewProfile(profile)), Timeout: Option[time.Duration]{Set: true, Value: 5 * time.Minute}}))
+	t.Cleanup(q.Close)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		_, stream, _, err := step03ReadRequest(peers[0])
+		if err == nil {
+			_, err = peers[0].Write(step03ErrorResponse(t, stream, ErrCodeServer, nil))
+		}
+		if err != nil {
+			t.Error(err)
+		}
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+	dst := make([]byte, 0, 8)
+	started := time.Now()
+	_, err := q.One(ctx, Unit{}, &dst)
+	if !errors.Is(err, context.Canceled) || time.Since(started) > 2*time.Second {
+		t.Fatal("parent cancellation did not end the retry delay", err, time.Since(started))
+	}
+}

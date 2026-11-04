@@ -294,3 +294,71 @@ func TestExecutionContextLinkedChildRaces(t *testing.T) {
 		pcancel()
 	}
 }
+
+// A cancellable parent is watched lazily: no registration until something
+// may wait on Done, Err reports the parent's cancellation and closes Done,
+// InternalParentDone exposes the parent's channel to transport waits, and a
+// handed-out Done channel or a derived context still follows the parent.
+func TestExecutionContextLazyParent(t *testing.T) {
+	c := newExecutionContext()
+	parent, parentCancel := context.WithCancel(context.Background())
+	ctx, cancel := c.begin(parent, time.Hour)
+	if c.stopParent != nil || c.InternalParentDone() != parent.Done() {
+		t.Fatal("parent registered eagerly, or its channel not exposed")
+	}
+	parentCancel()
+	if !errors.Is(ctx.Err(), context.Canceled) {
+		t.Fatal("Err missed the parent's cancellation", ctx.Err())
+	}
+	select {
+	case <-c.InternalTransientDone():
+	default:
+		t.Fatal("Err reported cancellation with Done still open")
+	}
+	cancel()
+
+	parent, parentCancel = context.WithCancel(context.Background())
+	ctx, cancel = c.begin(parent, time.Hour)
+	done := ctx.Done() // a watcher may now wait on the channel alone
+	parentCancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("handed-out Done did not follow the parent")
+	}
+	cancel()
+
+	parent, parentCancel = context.WithCancel(context.Background())
+	ctx, cancel = c.begin(parent, time.Hour)
+	derived, derivedCancel := context.WithCancel(ctx)
+	defer derivedCancel()
+	parentCancel()
+	waitDone(t, derived)
+	cancel()
+
+	// A linked page context exposes the execution's parent channel and
+	// follows it once a watcher waits on the page's own channel.
+	page := newExecutionContext()
+	parent, parentCancel = context.WithCancel(context.Background())
+	ctx, cancel = c.begin(parent, time.Hour)
+	pctx, pcancel := page.begin(ctx, time.Hour)
+	if page.InternalParentDone() != parent.Done() || c.stopParent != nil {
+		t.Fatal("page context does not expose the execution's parent")
+	}
+	pdone := pctx.Done()
+	parentCancel()
+	select {
+	case <-pdone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("page Done did not follow the execution's parent")
+	}
+	pcancel()
+	cancel()
+
+	// A parent without Done is not watched at all.
+	ctx, cancel = c.begin(context.Background(), time.Hour)
+	if c.lazy || c.InternalParentDone() != nil || ctx.Err() != nil {
+		t.Fatal("background parent watched")
+	}
+	cancel()
+}

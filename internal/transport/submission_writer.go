@@ -83,6 +83,21 @@ type transientDoner interface {
 	InternalTransientDone() <-chan struct{}
 }
 
+// parentDoner is implemented by contexts that watch a cancellable parent
+// without propagating its cancellation into their own Done channel.
+type parentDoner interface {
+	InternalParentDone() <-chan struct{}
+}
+
+// attemptParentDone returns the Done channel such a context watches, or nil.
+// A wait that selects on attemptDone selects on it too.
+func attemptParentDone(ctx context.Context) <-chan struct{} {
+	if p, ok := ctx.(parentDoner); ok {
+		return p.InternalParentDone()
+	}
+	return nil
+}
+
 // attemptDone returns ctx's Done channel for a wait bounded by one attempt.
 func attemptDone(ctx context.Context) <-chan struct{} {
 	if t, ok := ctx.(transientDoner); ok {
