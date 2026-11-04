@@ -62,6 +62,11 @@ func eachPage[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], r
 	var history pagingHistory
 	state := StartPage()
 	for first := true; ; first = false {
+		if !first && request.query != nil {
+			// The previous page was released before this request, so the
+			// query's response storage is free for every continuation page.
+			request.responseDest = &request.query.response
+		}
 		response, err := rt.executePage(ctx, request, state)
 		if err != nil {
 			if first {

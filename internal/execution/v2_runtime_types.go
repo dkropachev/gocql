@@ -175,7 +175,8 @@ type InternalExecutionRequest struct {
 	query *queryState
 	// responseDest is query-owned storage for the first page's response on
 	// the direct path. It is cleared once that page succeeded, so that
-	// continuation and prefetched pages get storage of their own.
+	// continuation and prefetched pages get storage of their own; Each, which
+	// releases every page before requesting the next, lends it again.
 	responseDest       *responsePage
 	tabletFeedback     tabletFeedbackStamp
 	tabletVersionBlock byte
