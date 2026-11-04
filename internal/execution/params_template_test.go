@@ -3,7 +3,11 @@
 
 package execution
 
-import "testing"
+import (
+	"testing"
+
+	frm "github.com/scylladb/gocql/v2/internal/frame"
+)
 
 // Queries without their own options share one session template per encoded
 // combination; a query with its own options keeps a template of its own; an
@@ -97,6 +101,23 @@ func TestOptionTemplatesEncodedAtResolution(t *testing.T) {
 			if got := rt.paramsTemplate(nil, &resolved, w, version); got == nil || got != want {
 				t.Fatalf("v%d timestamp %v: template not the resolved one", version, ts)
 			}
+		}
+	}
+	// A v5 EXECUTE sends no keyspace, so it takes the keyspace-less template
+	// whatever keyspace its statement was prepared in.
+	for _, ts := range []bool{false, true} {
+		w := &attemptRequest{PageSize: 10, DefaultTimestamp: ts, SerialConsistency: own.SerialConsistency.Value, Keyspace: "prepared_ks"}
+		setPrepared(w, &InternalHostPrepared{InternalId: []byte{1}}, &Conn{}, true)
+		if w.Keyspace != "" {
+			t.Fatal("EXECUTE kept the keyspace")
+		}
+		want := resolved.templates[2][0]
+		if ts {
+			want = resolved.templates[2][1]
+		}
+		got := rt.paramsTemplate(nil, &resolved, w, 5)
+		if got == nil || got != want || got.Flags&frm.FlagWithKeyspace != 0 {
+			t.Fatalf("EXECUTE timestamp %v: not the keyspace-less resolved template", ts)
 		}
 	}
 	// Another keyspace, an unpaged request and protocol v3 fall back.

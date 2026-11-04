@@ -90,10 +90,13 @@ func (r *InternalExecutionRequest) InternalPrepared() *InternalPreparedState {
 }
 
 // setPrepared fills w's statement ID fields from the host's prepared entry.
+// An EXECUTE sends no keyspace: the statement was prepared in its keyspace,
+// and the ID names it.
 func setPrepared(w *attemptRequest, prepared *InternalHostPrepared, conn *Conn, includeMetadata bool) {
 	if prepared == nil {
 		return
 	}
+	w.Keyspace = ""
 	w.PreparedID = prepared.InternalId
 	w.ResultMetadataID = prepared.InternalMetadataID
 	w.SkipMetadata = !includeMetadata && metadataIDTracked(conn.InternalTracksResultMetadataID(), prepared.InternalMetadataID)

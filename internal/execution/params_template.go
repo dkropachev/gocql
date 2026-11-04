@@ -11,21 +11,25 @@ import (
 )
 
 // optionTemplates are the parameters blocks of resolved options, encoded
-// once, indexed by protocol version (4 or 5) and by whether the request
-// sends a default timestamp. They assume the keyspace the options name, or
-// else the session's; a request in another keyspace, or on protocol 3, falls
+// once, indexed by request shape and by whether the request sends a default
+// timestamp. The shapes are protocol 4; protocol 5 QUERY, in the keyspace the
+// options name or else the session's; and protocol 5 EXECUTE, which sends no
+// keyspace. A QUERY in another keyspace, or a request on protocol 3, falls
 // back to the template caches.
-type optionTemplates [2][2]*model.ParamsTemplate
+type optionTemplates [3][2]*model.ParamsTemplate
 
 // newOptionTemplates encodes the parameters blocks of options resolved to
 // profile and values, for requests in keyspace.
 func newOptionTemplates(profile *Profile, values *OptionValues, keyspace string) *optionTemplates {
 	t := new(optionTemplates)
-	for v := range t {
-		version := byte(4 + v)
-		for ts := range t[v] {
+	for shape := range t {
+		version := byte(5)
+		if shape == 0 {
+			version = 4
+		}
+		for ts := range t[shape] {
 			w := attemptRequest{PageSize: int(profile.PageSize), DefaultTimestamp: ts == 1}
-			if version >= 5 {
+			if shape == 1 {
 				w.Keyspace = keyspace
 			}
 			if profile.SerialConsistency.Set {
@@ -36,7 +40,7 @@ func newOptionTemplates(profile *Profile, values *OptionValues, keyspace string)
 			}
 			// An error leaves the slot empty: the request encodes its
 			// parameters field by field, which reports it.
-			t[v][ts], _ = protocol.NewParamsTemplate(&w, version)
+			t[shape][ts], _ = protocol.NewParamsTemplate(&w, version)
 		}
 	}
 	return t
@@ -47,11 +51,18 @@ func (t *optionTemplates) find(w *attemptRequest, version byte) *model.ParamsTem
 	if t == nil || version < 4 || version > 5 {
 		return nil
 	}
+	shape := 0
+	if version == 5 {
+		shape = 1
+		if len(w.PreparedID) > 0 {
+			shape = 2
+		}
+	}
 	ts := 0
 	if w.DefaultTimestamp {
 		ts = 1
 	}
-	if p := t[version-4][ts]; p.Matches(w, version) {
+	if p := t[shape][ts]; p.Matches(w, version) {
 		return p
 	}
 	return nil
