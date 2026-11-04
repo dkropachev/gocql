@@ -107,6 +107,7 @@ func TestStep15HistoryCounts(t *testing.T) {
 				t.Fatal("empty")
 			}
 			collision := model.PageStateOwned([]byte("collision"), 1)
+			h.InternalSpill()
 			hash := maphash.Bytes(h.InternalSeed, model.PageToken(collision))
 			h.InternalEntries[hash] = pagingHistoryEntry{InternalState: tokens[0]}
 			paging.ResetPerfCounters()

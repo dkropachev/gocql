@@ -12,15 +12,22 @@ import (
 )
 
 // pagingHistory owns references to the same immutable tokens sent on the wire.
-// Hash collisions compare full bytes; count and payload budgets are independent.
-// This nongeneric state machine is also used by the incremental streaming pager.
+// The first InternalInlineHistory tokens live inline and are compared directly,
+// so a short paged read allocates nothing; later ones spill into a map keyed by
+// hash. Hash collisions compare full bytes; count and payload budgets are
+// independent. This nongeneric state machine is also used by the incremental
+// streaming pager.
 type InternalPagingHistoryEntry struct {
 	InternalState PageState
 	InternalNext  *InternalPagingHistoryEntry
 }
+
+const InternalInlineHistory = 8
+
 type InternalPagingHistory struct {
 	InternalSeed     maphash.Seed
 	InternalEntries  map[uint64]InternalPagingHistoryEntry
+	InternalInline   [InternalInlineHistory]PageState
 	InternalCount    int
 	InternalBytes    int64
 	InternalMaxCount int
@@ -31,25 +38,65 @@ func (h *InternalPagingHistory) InternalAdd(state PageState) error {
 	if !state.More() {
 		return nil
 	}
+	token := model.PageToken(state)
+	perfAdd(0, len(token))
 	if h.InternalEntries == nil {
-		h.InternalSeed = maphash.MakeSeed()
-		h.InternalEntries = make(map[uint64]InternalPagingHistoryEntry)
+		// Without a map, InternalCount is the number of inline tokens.
+		for _, held := range h.InternalInline[:h.InternalCount] {
+			perfAdd(1, 1)
+			if bytes.Equal(model.PageToken(held), token) {
+				return ErrPagingNoProgress
+			}
+		}
+		if err := h.checkLimits(token); err != nil {
+			return err
+		}
+		if h.InternalCount < len(h.InternalInline) {
+			h.InternalInline[h.InternalCount] = state
+			h.record(token)
+			return nil
+		}
+		h.InternalSpill()
+		h.insert(maphash.Bytes(h.InternalSeed, token), state)
+		h.record(token)
+		return nil
 	}
-	perfAdd(0, len(model.PageToken(state)))
-	hash := maphash.Bytes(h.InternalSeed, model.PageToken(state))
-	entry, exists := h.InternalEntries[hash]
-	if exists {
+	hash := maphash.Bytes(h.InternalSeed, token)
+	if entry, exists := h.InternalEntries[hash]; exists {
 		perfAdd(1, 1)
-		if bytes.Equal(model.PageToken(entry.InternalState), model.PageToken(state)) {
+		if bytes.Equal(model.PageToken(entry.InternalState), token) {
 			return ErrPagingNoProgress
 		}
 		for p := entry.InternalNext; p != nil; p = p.InternalNext {
 			perfAdd(1, 1)
-			if bytes.Equal(model.PageToken(p.InternalState), model.PageToken(state)) {
+			if bytes.Equal(model.PageToken(p.InternalState), token) {
 				return ErrPagingNoProgress
 			}
 		}
 	}
+	if err := h.checkLimits(token); err != nil {
+		return err
+	}
+	h.insert(hash, state)
+	h.record(token)
+	return nil
+}
+
+// InternalSpill moves the inline tokens into the hashed map; later tokens go
+// there too.
+func (h *InternalPagingHistory) InternalSpill() {
+	if h.InternalEntries != nil {
+		return
+	}
+	h.InternalSeed = maphash.MakeSeed()
+	h.InternalEntries = make(map[uint64]InternalPagingHistoryEntry)
+	for i, held := range h.InternalInline[:h.InternalCount] {
+		h.insert(maphash.Bytes(h.InternalSeed, model.PageToken(held)), held)
+		h.InternalInline[i] = PageState{}
+	}
+}
+
+func (h *InternalPagingHistory) checkLimits(token []byte) error {
 	maxCount, maxBytes := h.InternalMaxCount, h.InternalMaxBytes
 	if maxCount == 0 {
 		maxCount = 65536
@@ -57,22 +104,30 @@ func (h *InternalPagingHistory) InternalAdd(state PageState) error {
 	if maxBytes == 0 {
 		maxBytes = 16 << 20
 	}
-	if h.InternalCount >= maxCount || int64(len(model.PageToken(state))) > maxBytes-h.InternalBytes {
+	if h.InternalCount >= maxCount || int64(len(token)) > maxBytes-h.InternalBytes {
 		return ErrPagingStateLimit
 	}
+	return nil
+}
+
+// insert chains state under hash; the caller has ruled out an equal token.
+func (h *InternalPagingHistory) insert(hash uint64, state PageState) {
 	candidate := InternalPagingHistoryEntry{InternalState: state}
-	if exists {
-		previous := entry
+	if previous, exists := h.InternalEntries[hash]; exists {
 		candidate.InternalNext = &previous
 	}
 	h.InternalEntries[hash] = candidate
+}
+
+func (h *InternalPagingHistory) record(token []byte) {
 	perfAdd(2, 1)
 	h.InternalCount++
-	h.InternalBytes += int64(len(model.PageToken(state)))
-	return nil
+	h.InternalBytes += int64(len(token))
 }
+
 func (h *InternalPagingHistory) InternalClear() {
 	h.InternalEntries = nil
+	clear(h.InternalInline[:])
 	h.InternalCount = 0
 	h.InternalBytes = 0
 }

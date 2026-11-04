@@ -28,6 +28,7 @@ import (
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	model "github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/paging"
 
 	"bytes"
 	"context"
@@ -234,11 +235,10 @@ func TestV2PagingHistoryCyclesLimitsAndTokenIdentity(t *testing.T) {
 	if h.InternalCount != 2 || h.InternalBytes != 2 {
 		t.Fatal("cycle stored twice")
 	}
-	entry := h.InternalEntries
 	found := false
-	for _, v := range entry {
-		if bytes.Equal(model.PageToken(v.InternalState), model.PageToken(a)) {
-			found = &model.PageToken(v.InternalState)[0] == &model.PageToken(a)[0]
+	for _, v := range h.InternalInline[:h.InternalCount] {
+		if bytes.Equal(model.PageToken(v), model.PageToken(a)) {
+			found = &model.PageToken(v)[0] == &model.PageToken(a)[0]
 		}
 	}
 	if !found {
@@ -1009,6 +1009,7 @@ func TestV2PagingHistoryHashCollisionComparesFullBytes(t *testing.T) {
 	a, b := RestorePageState([]byte("a")), RestorePageState([]byte("b"))
 	h := pagingHistory{InternalMaxCount: 4, InternalMaxBytes: 8}
 	_ = h.InternalAdd(b)
+	h.InternalSpill()
 	hash := maphash.Bytes(h.InternalSeed, model.PageToken(b))
 	h.InternalEntries[hash] = pagingHistoryEntry{InternalState: a}
 	h.InternalCount = 1
@@ -1456,5 +1457,57 @@ func TestV2DiscoveryCapacityZeroAndConcurrentMisses(t *testing.T) {
 				t.Fatal("concurrent discovery exceeded capacity", count, order, capacity)
 			}
 		})
+	}
+}
+
+// The inline history and its spill into the hashed map detect the same
+// repeats and enforce the same limits on either side of the spill.
+func TestV2PagingHistoryInlineSpill(t *testing.T) {
+	token := func(i int) PageState { return RestorePageState([]byte{byte(i), 0xff}) }
+	h := pagingHistory{InternalMaxCount: 100, InternalMaxBytes: 1000}
+	for i := 0; i < 12; i++ {
+		if err := h.InternalAdd(token(i)); err != nil {
+			t.Fatal(i, err)
+		}
+		if (h.InternalEntries != nil) != (i >= paging.InternalInlineHistory) {
+			t.Fatal("spill at wrong entry", i)
+		}
+		for j := 0; j <= i; j++ {
+			if !errors.Is(h.InternalAdd(token(j)), ErrPagingNoProgress) {
+				t.Fatal("repeat lost", i, j)
+			}
+		}
+	}
+	if h.InternalCount != 12 || h.InternalBytes != 24 {
+		t.Fatal(h.InternalCount, h.InternalBytes)
+	}
+	for _, held := range h.InternalInline {
+		if model.PageToken(held) != nil {
+			t.Fatal("spilled history kept an inline token")
+		}
+	}
+	for _, limit := range []int{3, paging.InternalInlineHistory, paging.InternalInlineHistory + 2} {
+		h = pagingHistory{InternalMaxCount: limit, InternalMaxBytes: 1000}
+		for i := 0; i < limit; i++ {
+			if err := h.InternalAdd(token(i)); err != nil {
+				t.Fatal(limit, i, err)
+			}
+		}
+		if !errors.Is(h.InternalAdd(token(limit)), ErrPagingStateLimit) || !errors.Is(h.InternalAdd(token(0)), ErrPagingNoProgress) {
+			t.Fatal("count limit", limit)
+		}
+		h = pagingHistory{InternalMaxCount: 100, InternalMaxBytes: int64(2 * limit)}
+		for i := 0; i < limit; i++ {
+			if err := h.InternalAdd(token(i)); err != nil {
+				t.Fatal(limit, i, err)
+			}
+		}
+		if !errors.Is(h.InternalAdd(token(limit)), ErrPagingStateLimit) {
+			t.Fatal("byte limit", limit)
+		}
+	}
+	h.InternalClear()
+	if h.InternalCount != 0 || h.InternalEntries != nil || model.PageToken(h.InternalInline[0]) != nil || h.InternalAdd(token(0)) != nil {
+		t.Fatal("clear")
 	}
 }
