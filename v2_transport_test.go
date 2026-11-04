@@ -841,3 +841,27 @@ func TestTypedProtocolLimits(t *testing.T) {
 		}
 	})
 }
+
+// TestTypedWaitEndsWhenConnectionContextIsCancelled checks that a typed call
+// waiting for its response returns once the connection's context is
+// cancelled without an explicit close: the cancellation closes the
+// connection, which delivers the closure to the call.
+func TestTypedWaitEndsWhenConnectionContextIsCancelled(t *testing.T) {
+	c, server := typedTestConn(t, 4, nil)
+	go c.InternalServe(c.InternalCtx)
+	out := make(chan error, 1)
+	go func() {
+		_, err := c.InternalExecuteTyped(context.Background(), &attemptRequest{Statement: "SELECT value FROM ks.tbl", Consistency: One})
+		out <- err
+	}()
+	typedTestReadRequest(t, c, server)
+	c.InternalCancel()
+	select {
+	case err := <-out:
+		if !errors.Is(err, ErrConnectionClosed) {
+			t.Fatalf("got %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("waiting call missed the connection's cancellation")
+	}
+}

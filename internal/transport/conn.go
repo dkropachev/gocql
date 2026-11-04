@@ -191,8 +191,12 @@ type Conn struct {
 	typedMetadataReuse protocol.MetadataReuse
 	// typedSettings is published once the framer cache is initialised, when
 	// every input to the native protocol settings is final.
-	typedSettings                             atomic.Pointer[protocol.Settings]
-	hostID                                    atomic.Pointer[UUID] // InternalHost's ID once known
+	typedSettings atomic.Pointer[protocol.Settings]
+	hostID        atomic.Pointer[UUID] // InternalHost's ID once known
+	// closesOnCancel reports that cancelling InternalCtx closes the connection,
+	// so every waiting typed call receives the closure through its response.
+	closesOnCancel                            bool
+	stopCloseOnCancel                         func() bool
 	typedWriterOnce                           sync.Once
 	typedWriter                               *submissionWriter
 	InternalOpeningSharderEpoch               uint64
@@ -787,6 +791,10 @@ func (c *Conn) InternalCloseWithError(err error) {
 		if err != nil {
 
 			req.deliver(InternalCallResp{InternalErr: err})
+		} else if req.InternalTyped {
+			// Typed callers of a connection that closes on cancellation do
+			// not watch InternalCtx; tell them directly.
+			req.deliver(InternalCallResp{InternalErr: ErrConnectionClosed})
 		}
 		req.waitExecDone("closeWithError")
 		if req.streamObserverContext != nil {
@@ -1402,11 +1410,11 @@ type InternalCallReq struct {
 	// resp will receive the frame that was sent as a response to this stream.
 	// It has one slot, so a sender never blocks; deliver and stopWaiting decide
 	// through state which side owns a response.
-	InternalResp     chan InternalCallResp
-	state            atomic.Uint32 // callWaiting, callDelivered or callStopped
+	InternalResp chan InternalCallResp
+	state        atomic.Uint32 // callWaiting, callDelivered or callStopped
 	// rawDelivery asks the reader to hand over a typed response frame
 	// unparsed: the caller parses it on its own goroutine.
-	rawDelivery bool
+	rawDelivery      bool
 	timer            *time.Timer
 	InternalStreamID int // current stream in use
 	// streamObserverEndOnce ensures that either StreamAbandoned or StreamFinished is called,

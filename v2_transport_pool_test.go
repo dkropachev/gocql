@@ -900,6 +900,7 @@ func TestV2TypedTLSCoalescingBorrowedOrderPartialWriteAndDrain(t *testing.T) {
 		t.Run(fmt.Sprint(partial), func(t *testing.T) {
 			c, unused := typedTestConn(t, 4, nil)
 			unused.Close()
+			c.InternalKeepOnCancel() // the connection is reused below
 			c.InternalCancel()
 			client, server, _, cleanup := step04BenchTLS(t)
 			defer cleanup()

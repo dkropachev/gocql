@@ -35,6 +35,7 @@ func NewPair(t testing.TB, proto byte, compressor protocol.Compressor) (*runtime
 	c.InternalCfg.InternalReceiveCache = new(wire.ReceiveCache)
 	t.Cleanup(c.InternalCfg.InternalReceiveCache.Close)
 	c.InternalInitFramerCache()
+	c.InternalCloseOnCancel()
 	t.Cleanup(func() { c.Close(); server.Close() })
 	return c, server
 }
@@ -55,6 +56,7 @@ func NewDialedConn(t testing.TB, proto byte, addr string) *runtime.Conn {
 	c.InternalCfg.InternalReceiveCache = new(wire.ReceiveCache)
 	t.Cleanup(c.InternalCfg.InternalReceiveCache.Close)
 	c.InternalInitFramerCache()
+	c.InternalCloseOnCancel()
 	t.Cleanup(func() { c.Close() })
 	return c
 }

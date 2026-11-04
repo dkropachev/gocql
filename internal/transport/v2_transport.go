@@ -211,6 +211,13 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest
 		}
 		timeoutCh = call.timer.C
 	}
+	// A connection that closes when its context is cancelled delivers the
+	// closure as a response, so the wait need not watch the context; a nil
+	// channel takes no part in the select.
+	connDone := c.InternalCtx.Done()
+	if c.closesOnCancel {
+		connDone = nil
+	}
 	select {
 	case resp := <-call.InternalResp:
 		if resp.raw.owner != nil {
@@ -261,7 +268,7 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest
 			closeErr = InternalErrOrphanBudget
 		}
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctx.Err(), InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
-	case <-c.InternalCtx.Done():
+	case <-connDone:
 		stopWaiting = true
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrConnectionClosed, InternalPotentiallyExecuted: potentiallyExecuted()})
 	}
@@ -326,6 +333,23 @@ func (c *Conn) InternalBuildTypedRequest(req *attemptRequest, stream int) (wire.
 }
 func (c *Conn) writeTypedParams(e *typedEnvelope, req *attemptRequest, batch bool) {
 	c.nativeProtocol().WriteTypedParams(e, req, batch)
+}
+
+// InternalCloseOnCancel makes cancelling InternalCtx close the connection,
+// which delivers the closure to every waiting typed call, so their waits
+// need not watch InternalCtx. Call it once, before the connection is used.
+func (c *Conn) InternalCloseOnCancel() {
+	c.stopCloseOnCancel = context.AfterFunc(c.InternalCtx, func() { c.InternalCloseWithError(nil) })
+	c.closesOnCancel = true
+}
+
+// InternalKeepOnCancel undoes InternalCloseOnCancel, for tests that cancel a
+// connection's context and then reuse the connection.
+func (c *Conn) InternalKeepOnCancel() {
+	if c.stopCloseOnCancel != nil {
+		c.stopCloseOnCancel()
+	}
+	c.closesOnCancel, c.stopCloseOnCancel = false, nil
 }
 
 // InternalHostID returns the ID of the connection's host without taking the

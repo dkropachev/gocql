@@ -132,6 +132,7 @@ func Dial(ctx context.Context, host *HostInfo, cfg *ConnConfig, errorHandler Con
 		InternalStreamObserver: opening.StreamObserver,
 	}
 	c.InternalSetSystemRequestTimeout(cfg.ConnectTimeout)
+	c.InternalCloseOnCancel()
 
 	if err := c.InternalInit(ctx, dialedHost); err != nil {
 		cancel()
