@@ -326,16 +326,19 @@ physical page before advancing and close the returned `PageLease` afterward.
 
 ### Options, batches, metadata, and policy extension points
 
-`Options` carries profile selection and explicit overrides for consistency,
+`OptionValues` carries a profile and explicit overrides for consistency,
 serial consistency, timeout/page timeout, page size, bounded prefetch,
 idempotence, timestamps, keyspace, tracing, payloads, host/shard targeting,
 metadata inclusion, retry policy, and observers. Optional wrappers distinguish
-an inherited value from an explicit zero or omission.
+an inherited value from an explicit zero or omission. `NewOptions` validates
+them once and freezes them into `Options`, resolved for a session, with the
+custom payload and profile copied and the wire parameters encoded. The zero
+`Options` uses the session's default profile. A `Profile` is a plain value;
+`Config.DefaultProfile` is copied at Connect.
 
 ```go
-func NewProfile(Profile) (*ProfileHandle, error)
-func (p *ProfileHandle) Snapshot() Profile
-func (p *ProfileHandle) Replace(Profile) error
+func NewOptions(session *Session, values OptionValues) (Options, error)
+func (o Options) Values() OptionValues
 
 func BatchEntry[R any](*Bound[R]) (BatchItem, error)
 func RunBatch[R any](context.Context, *Session, BatchKind, []BatchItem, RowDecoder[R], Options) (*Page[R], error)
@@ -350,7 +353,7 @@ func (s *Session) Metrics() MetricsSnapshot
 func (s *Session) Trace(context.Context, UUID) (TraceInfo, error)
 ```
 
-Profiles are snapshotted at admission and remain stable through retries and
+Options are resolved before admission and stay fixed through retries and
 later pages. Batch members reuse encoded bindings; all admissions succeed
 together or are released before sending. Conditional batches expose every result
 row.
