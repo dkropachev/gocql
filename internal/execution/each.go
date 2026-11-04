@@ -44,7 +44,7 @@ func each[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], optio
 	if err != nil {
 		return false, InternalExecutionErrorResult(err), err
 	}
-	found, result, err := eachPage(runctx, s, b, request, dst, fn, scratch)
+	found, result, err := eachPage(runctx, cancel, s, b, request, dst, fn, scratch)
 	*scratch = eachScratch{} // drop response references
 	cancel()
 	request.InternalLogical.InternalFinish(result, err)
@@ -52,23 +52,69 @@ func each[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], optio
 	return found, result, err
 }
 
-func eachPage[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], request *InternalExecutionRequest, dst *R, fn func(*R) error, scratch *eachScratch) (bool, Result, error) {
+// eachFetch is a page result handed back by a prefetch.
+type eachFetch struct {
+	response *responsePage
+	err      error
+}
+
+// eachPage reads every page. With Prefetch, the next page is requested as
+// soon as a page arrives and is parsed into the query's second response
+// slot while this page is decoded; an early stop cancels the execution and
+// joins the outstanding page before returning.
+func eachPage[R any](ctx context.Context, cancel context.CancelFunc, s *implCluster.Session, b *Bound[R], request *InternalExecutionRequest, dst *R, fn func(*R) error, scratch *eachScratch) (bool, Result, error) {
 	rt := InternalRuntimeFor(s)
 	plans := b.privateStorage.plans
 	if plans == nil {
 		plans = &InternalResultPlanCache[R]{}
 	}
+	prefetch := fn != nil && request.InternalOptions.InternalProfile.Prefetch > 0
+	var fetched chan eachFetch // the outstanding prefetch, or nil
+	var prefetchCh chan eachFetch
+	if prefetch {
+		if request.query != nil {
+			if request.query.prefetched == nil {
+				request.query.prefetched = make(chan eachFetch, 1)
+			}
+			prefetchCh = request.query.prefetched
+		} else {
+			prefetchCh = make(chan eachFetch, 1)
+		}
+	}
+	join := func() {
+		if fetched != nil {
+			// Cancel for real: an execution context's finish keeps its
+			// channel open, and the outstanding page's wait watches it.
+			if c, ok := ctx.(*executionContext); ok {
+				c.cancel(context.Canceled)
+			} else {
+				cancel()
+			}
+			if f := <-fetched; f.response != nil {
+				f.response.Owner.Release()
+			}
+		}
+	}
 	var result Result
 	var history pagingHistory
 	state := StartPage()
+	slot := 0
 	for first := true; ; first = false {
-		if !first && request.query != nil {
-			// The previous page was released before this request, so the
-			// query's response storage is free for every continuation page.
-			request.responseDest = &request.query.response
-			request.pinned = request.served
+		var response *responsePage
+		var err error
+		if fetched != nil {
+			f := <-fetched
+			fetched = nil
+			response, err = f.response, f.err
+		} else {
+			if !first && request.query != nil {
+				// The previous page was released before this request, so the
+				// query's response storage is free for every continuation page.
+				request.responseDest = &request.query.response
+				request.pinned = request.served
+			}
+			response, err = rt.executePage(ctx, request, state)
 		}
-		response, err := rt.executePage(ctx, request, state)
 		if err != nil {
 			if first {
 				return false, InternalExecutionErrorResult(err), err
@@ -78,26 +124,49 @@ func eachPage[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], r
 		}
 		if first {
 			result = response.Result
+			history = pagingHistory{InternalMaxCount: rt.InternalConfig.Limits.MaxPagingStates, InternalMaxBytes: rt.InternalConfig.Limits.MaxPagingStateBytes}
 		} else {
 			mergeResult(&result, response.Result)
 		}
 		state = response.State
+		// A paging failure is reported after this page's rows are delivered.
+		var stateErr error
+		if state.More() {
+			stateErr = history.InternalAdd(state)
+		}
+		if prefetch && state.More() && stateErr == nil {
+			if request.query != nil {
+				// This page holds one slot; the previous page, already
+				// released, held the other.
+				slot ^= 1
+				request.responseDest = &request.query.response
+				if slot == 1 {
+					request.responseDest = &request.query.responseAlt
+				}
+				request.pinned = request.served
+			}
+			fetched = prefetchCh
+			next, ch := state, fetched
+			go func() {
+				response, err := rt.executePage(ctx, request, next)
+				ch <- eachFetch{response: response, err: err}
+			}()
+		}
 		err = decodeEach(ctx, s, response, b.privateStorage.InternalRows, plans, dst, fn, scratch)
 		response.Owner.Release()
 		if err == errStopEach {
+			join()
 			return true, result, nil
 		}
 		if err != nil {
+			join()
 			return false, result, err
+		}
+		if stateErr != nil {
+			return false, result, stateErr
 		}
 		if !state.More() {
 			return fn != nil, result, nil
-		}
-		if first {
-			history = pagingHistory{InternalMaxCount: rt.InternalConfig.Limits.MaxPagingStates, InternalMaxBytes: rt.InternalConfig.Limits.MaxPagingStateBytes}
-		}
-		if err := history.InternalAdd(state); err != nil {
-			return false, result, err
 		}
 	}
 }

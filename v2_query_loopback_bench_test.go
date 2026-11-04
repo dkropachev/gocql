@@ -237,7 +237,7 @@ func serveLoopback(peer net.Conn, choose func([]byte) []byte, prepared []byte) {
 func BenchmarkReusableQueryLoopback(b *testing.B) {
 	options := Options{Timeout: Option[time.Duration]{Set: true, Value: 10 * time.Second}}
 	value := loopbackValue
-	for _, workload := range []string{"read", "write", "pread", "pwrite", "pone", "preadctx", "page", "pagectx", "pagepto"} {
+	for _, workload := range []string{"read", "write", "pread", "pwrite", "pone", "preadctx", "page", "pagectx", "pagepto", "pagepf"} {
 		workerCounts := []int{1, 8, 64}
 		if strings.HasPrefix(workload, "page") {
 			workerCounts = []int{1, 4}
@@ -248,10 +248,13 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 				run := make([]func(context.Context) error, workers)
 				for i := range run {
 					switch workload {
-					case "page", "pagectx", "pagepto":
+					case "page", "pagectx", "pagepto", "pagepf":
 						pageOptions := Options{PageSize: Option[int32]{Set: true, Value: loopbackPageRows}, Prefetch: Option[int]{Set: true, Value: 0}, Timeout: Option[time.Duration]{Set: true, Value: 10 * time.Second}}
 						if workload == "pagepto" {
 							pageOptions.PageTimeout = Option[time.Duration]{Set: true, Value: 2 * time.Second}
+						}
+						if workload == "pagepf" {
+							pageOptions.Prefetch = Option[int]{Set: true, Value: 1}
 						}
 						statement := Statement[Unit, []byte]{Kind: OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: NoParams, Rows: RowInto(func(*[]byte) {}, Column("value", OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 						query := codecTestMust(NewUnpreparedQuery(s, statement, NewColumns(), pageOptions))

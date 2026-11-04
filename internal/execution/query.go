@@ -40,6 +40,10 @@ type queryState struct {
 	// response holds an execution's first response page. The next execution
 	// can begin only after this one released it.
 	response responsePage
+	// responseAlt is the second slot a prefetching Each alternates with
+	// response: one page is decoded while the next is parsed.
+	responseAlt responsePage
+	prefetched  chan eachFetch // a prefetching Each's page hand-off, created on first use
 }
 
 // resolvedOptionsCache keeps a query's resolved options. A query's options
