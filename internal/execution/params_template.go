@@ -10,6 +10,54 @@ import (
 	protocol "github.com/scylladb/gocql/v2/internal/protocol"
 )
 
+// optionTemplates are the parameters blocks of resolved options, encoded
+// once, indexed by protocol version (4 or 5) and by whether the request
+// sends a default timestamp. They assume the keyspace the options name, or
+// else the session's; a request with another keyspace, or with no page size,
+// falls back to the template caches.
+type optionTemplates [2][2]*model.ParamsTemplate
+
+// newOptionTemplates encodes the parameters blocks of options resolved to
+// profile and values, for requests in keyspace.
+func newOptionTemplates(profile *Profile, values *OptionValues, keyspace string) *optionTemplates {
+	t := new(optionTemplates)
+	for v := range t {
+		version := byte(4 + v)
+		for ts := range t[v] {
+			w := attemptRequest{PageSize: int(profile.PageSize), DefaultTimestamp: ts == 1}
+			if version >= 5 {
+				w.Keyspace = keyspace
+			}
+			if profile.SerialConsistency.Set {
+				w.SerialConsistency = profile.SerialConsistency.Value
+			}
+			if values.NowInSeconds.Set {
+				now := values.NowInSeconds.Value
+				w.NowInSeconds = &now
+			}
+			// An error leaves the slot empty: the request encodes its
+			// parameters field by field, which reports it.
+			t[v][ts], _ = protocol.NewParamsTemplate(&w, version)
+		}
+	}
+	return t
+}
+
+// find returns the template for w on a connection of version, or nil.
+func (t *optionTemplates) find(w *attemptRequest, version byte) *model.ParamsTemplate {
+	if t == nil || version < 4 || version > 5 {
+		return nil
+	}
+	ts := 0
+	if w.DefaultTimestamp {
+		ts = 1
+	}
+	if p := t[version-4][ts]; p.Matches(w, version) {
+		return p
+	}
+	return nil
+}
+
 // sharedParamsTemplates is how many parameter templates a session shares.
 // Queries without their own options resolve to the session profile's, so a
 // few slots cover a session's protocol and timestamp combinations.
@@ -44,15 +92,19 @@ func ownsParamsTemplate(o *OptionValues) bool {
 }
 
 // paramsTemplate returns the parameters template for w on a connection of
-// version, or nil to encode w field by field. A query looks in its own slot
-// first. Options without overrides share the session's templates, so a
+// version, or nil to encode w field by field. The resolved options' own
+// templates come first, then a query's slot. Options without overrides share the session's templates, so a
 // query of the session profile builds none of its own; a query with its own
 // options keeps its template in its slot, out of the shared ones. An
 // execution with its own options and no query has nowhere to keep one.
-func (s *InternalSessionRuntime) paramsTemplate(query *queryState, opts *OptionValues, w *attemptRequest, version byte) *model.ParamsTemplate {
+func (s *InternalSessionRuntime) paramsTemplate(query *queryState, resolved *InternalResolvedOptions, w *attemptRequest, version byte) *model.ParamsTemplate {
 	if w.Batch != nil {
 		return nil
 	}
+	if t := resolved.templates.find(w, version); t != nil {
+		return t
+	}
+	opts := &resolved.InternalOptions
 	if query != nil {
 		if t := query.params.Load(); t.Matches(w, version) {
 			return t

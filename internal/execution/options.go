@@ -51,6 +51,11 @@ func NewOptions(session *implCluster.Session, values OptionValues) (Options, err
 	if err != nil {
 		return Options{}, err
 	}
+	keyspace := values.Keyspace
+	if keyspace == "" && rt != nil {
+		keyspace = rt.InternalConfig.Keyspace
+	}
+	resolved.templates = newOptionTemplates(&resolved.InternalProfile, &resolved.InternalOptions, keyspace)
 	bound := values.Profile != nil || rt != nil
 	return Options{p: &frozenOptions{runtime: rt, bound: bound, resolved: resolved, values: values}}, nil
 }
@@ -93,11 +98,16 @@ func (o Options) resolve(rt *InternalSessionRuntime, scratch *InternalResolvedOp
 // resolveFixed returns o resolved for rt in storage that stays valid, for a
 // query that keeps its options' resolution.
 func (o Options) resolveFixed(rt *InternalSessionRuntime) *InternalResolvedOptions {
-	var scratch *InternalResolvedOptions
-	if o.p != nil && !(o.p.bound && (o.p.runtime == nil || o.p.runtime == rt)) {
-		scratch = new(InternalResolvedOptions)
+	if o.p == nil || o.p.bound && (o.p.runtime == nil || o.p.runtime == rt) {
+		return o.resolve(rt, nil)
 	}
-	return o.resolve(rt, scratch)
+	r := o.resolve(rt, new(InternalResolvedOptions))
+	keyspace := r.InternalOptions.Keyspace
+	if keyspace == "" {
+		keyspace = rt.InternalConfig.Keyspace
+	}
+	r.templates = newOptionTemplates(&r.InternalProfile, &r.InternalOptions, keyspace)
+	return r
 }
 
 // InternalResolveFor returns o resolved for session s.
@@ -107,8 +117,10 @@ func InternalResolveFor(s *implCluster.Session, o Options) InternalResolvedOptio
 }
 
 // InternalSetProfile sets the session's default profile and the resolution
-// of the zero Options.
+// of the zero Options, with templates for the session's keyspace: set the
+// configuration first.
 func (rt *InternalSessionRuntime) InternalSetProfile(profile *Profile) {
 	rt.InternalProfile = profile
 	rt.defaultOptions, _ = resolveOptionValues(profile, OptionValues{})
+	rt.defaultOptions.templates = newOptionTemplates(&rt.defaultOptions.InternalProfile, &rt.defaultOptions.InternalOptions, rt.InternalConfig.Keyspace)
 }

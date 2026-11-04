@@ -13,7 +13,7 @@ func TestParamsTemplateCacheCases(t *testing.T) {
 	sessionOptions := func() *attemptRequest {
 		return &attemptRequest{PageSize: 5000, DefaultTimestamp: true, Timestamp: 1}
 	}
-	var none OptionValues
+	var none InternalResolvedOptions
 
 	// Case 1: no custom options. The second query and a later execution
 	// with another timestamp value reuse the first query's template.
@@ -51,7 +51,7 @@ func TestParamsTemplateCacheCases(t *testing.T) {
 
 	// Case 2: custom options on the query. The template is the query's own
 	// and stays out of the shared slots.
-	custom := OptionValues{PageSize: Option[int32]{Set: true, Value: 10}}
+	custom := InternalResolvedOptions{InternalOptions: OptionValues{PageSize: Option[int32]{Set: true, Value: 10}}}
 	var c queryState
 	wc := &attemptRequest{PageSize: 10, DefaultTimestamp: true}
 	tc := rt.paramsTemplate(&c, &custom, wc, 4)
@@ -72,5 +72,41 @@ func TestParamsTemplateCacheCases(t *testing.T) {
 	// Batches never use one.
 	if got := rt.paramsTemplate(&a, &none, &attemptRequest{Batch: &typedBatchRequest{}}, 4); got != nil {
 		t.Fatal("a batch got a template")
+	}
+}
+
+func TestOptionTemplatesEncodedAtResolution(t *testing.T) {
+	_, rt := attachmentSession()
+	own := defaultProfile()
+	own.PageSize = 10
+	o := testOptions(OptionValues{Profile: &own, Keyspace: "ks"})
+	resolved := o.p.resolved
+	if resolved.templates == nil {
+		t.Fatal("options resolved without templates")
+	}
+	for version := byte(4); version <= 5; version++ {
+		for _, ts := range []bool{false, true} {
+			w := &attemptRequest{PageSize: 10, DefaultTimestamp: ts, SerialConsistency: own.SerialConsistency.Value}
+			if version == 5 {
+				w.Keyspace = "ks"
+			}
+			want := resolved.templates[version-4][0]
+			if ts {
+				want = resolved.templates[version-4][1]
+			}
+			if got := rt.paramsTemplate(nil, &resolved, w, version); got == nil || got != want {
+				t.Fatalf("v%d timestamp %v: template not the resolved one", version, ts)
+			}
+		}
+	}
+	// Another keyspace, an unpaged request and protocol v3 fall back.
+	if got := rt.paramsTemplate(nil, &resolved, &attemptRequest{PageSize: 10, SerialConsistency: own.SerialConsistency.Value, Keyspace: "other"}, 5); got == resolved.templates[1][0] {
+		t.Fatal("template used for another keyspace")
+	}
+	if got := rt.paramsTemplate(nil, &resolved, &attemptRequest{}, 4); got == resolved.templates[0][0] {
+		t.Fatal("template used for an unpaged request")
+	}
+	if resolved.templates.find(&attemptRequest{PageSize: 10, SerialConsistency: own.SerialConsistency.Value}, 3) != nil {
+		t.Fatal("template found for protocol v3")
 	}
 }

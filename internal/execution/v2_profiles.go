@@ -35,6 +35,9 @@ type OptionValues struct {
 }
 
 type InternalResolvedOptions struct {
+	// templates holds the options' parameters blocks, encoded when they were
+	// resolved; nil for options resolved for one execution.
+	templates       *optionTemplates
 	InternalProfile Profile
 	InternalOptions OptionValues
 }

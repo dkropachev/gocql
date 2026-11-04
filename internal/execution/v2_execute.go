@@ -1104,7 +1104,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		now := opts.NowInSeconds.Value
 		wireRequest.NowInSeconds = &now
 	}
-	wireRequest.Params = s.paramsTemplate(request.query, &opts, wireRequest, conn.InternalVersion)
+	wireRequest.Params = s.paramsTemplate(request.query, &request.InternalOptions, wireRequest, conn.InternalVersion)
 	source := request.source()
 	prepared, err := source.onConn(ctx, s, conn, request.InternalValues, false, nil)
 	if err != nil {

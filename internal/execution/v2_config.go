@@ -21,8 +21,8 @@ func OpenSingleHost(ctx context.Context, config Config, hostID UUID) (*implClust
 func Connect(ctx context.Context, config Config) (*implCluster.Session, error) {
 	return implCluster.InternalConnectCluster(ctx, config, func(s *implCluster.Session, c Config) *Config {
 		rt := InternalRuntimeFor(s)
-		rt.InternalSetProfile(c.DefaultProfile)
 		rt.InternalConfig = c
+		rt.InternalSetProfile(c.DefaultProfile)
 		return &rt.InternalConfig
 	})
 }
