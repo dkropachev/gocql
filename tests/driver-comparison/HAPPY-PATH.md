@@ -811,3 +811,127 @@ Unit race suite (only the known baseline failure), `-race -count=20` on
 | B/op every w64 case | 787–1,429 | 162 | −79% to −89% |
 | allocs/op every w64 case | 5–6 | 2 | |
 | Admission | 692.7n | 588.1n | −15.09% |
+
+## Round 3b: the rest of the plan
+
+Each item against the previous one, 5×ABBA unless noted. The host ran an
+endpoint security agent (`s1-agent`, about one core) and other sessions
+throughout, so several gates were noisy; decisions rely on the
+reproducible ones.
+
+- **R9, breaking:** `Query.Exec` and `Each` return only an error; `One` returns
+  `(bool, error)`; `Query.LastResult()` reports the latest outcome. Building
+  a `Result` was ≈2% of CPU, mostly clock reads it still needs, so this is an
+  API change more than a CPU one.
+- **R10:** the page lock is gone. A page is used from one goroutine, and
+  within Rows only under the rows' lock, which also covers a blocking fetch,
+  so closing rows from another goroutine still interrupts it.
+- **R11:** received-frame leases are recycled. A lease's state word holds a
+  generation next to its reference count; borrowed views (`cqltype.Bytes`
+  and the codec readers built from it) carry a `wire.Ref` naming their
+  generation, so a released view stays dead after its lease is reused
+  (`TestCachedLeaseRecyclingKeepsStaleRefsDead`, which fails if `Ref.Alive`
+  ignores the generation).
+
+| R9–R11 vs R8 (`fccc29f4`) | Δ |
+|---|---:|
+| cpu-ns/op read / write / pread w64 | −4.09% / −4.89% / −6.48% |
+| allocs/op every loopback w64 case | 2 → 1 (the benchmark's own) |
+| B/op every loopback w64 case | 162 → 18 |
+
+- **R12, rejected:** parsing typed responses on the calling goroutine. A
+  focused 10×ABBA of the `-cpu 4` cases showed no gain and a consistent cost
+  (geomean +1.48%, pread +1.84% at p=0.039): the reader has just pulled the
+  frame into its core's cache. Reverted (`8cdbcb62`); the immutable
+  metadata-reuse entry went with it.
+- **R13:** host state is an atomic cell, a host's ID is cached once known,
+  and tablet feedback captures take a read lock. The picker size counter was
+  left out: `Pick` still needs the picker lock for its slice.
+- **R14:** a dialed connection closes itself when its context is cancelled,
+  and a close always delivers to waiting typed calls, so the typed response
+  wait selects on the response and the attempt only
+  (`TestTypedWaitEndsWhenConnectionContextIsCancelled` fails without the
+  hook).
+
+R13–R14 against R12's predecessor: no case moved outside the noise (all
+p>0.05; geomean −1.2%).
+
+The v2 comparison client now reads through `Query.Each` (exact row counts,
+no iterator) and joins a query with `Wait` only after a failure.
+
+## Round 3 against master
+
+### Emulator screen
+
+`redesign_compare.py --stage screen --load maximum`, the same setup as the
+earlier screens (frozen master `1ceaac81`, client CPU 8, GOMAXPROCS=1,
+emulator CPUs 0-1,4-5, two ABBA pairs × 30 s). Ratios are v2/master with
+95% CIs.
+
+`hp3-screen-master-20261104T002535Z`: candidate `8cdbcb62`, client unchanged
+(reads through `Run`).
+
+| case | throughput | CPU/op | allocs/op | bytes/op | p99 |
+|---|---:|---:|---:|---:|---:|
+| point-buffered w64 | 1.232 [1.215, 1.250] | 0.808 [0.800, 0.816] | 0.378 | 0.363 | 0.865 [0.807, 0.926] |
+| point-stream w4 | 0.789 [0.787, 0.792] | 1.269 [1.264, 1.274] | 1.245 | 1.534 | 1.417 [1.410, 1.424] |
+| paged-buffered w4 | 0.964 [0.962, 0.967] | 1.030 [1.026, 1.034] | 0.203 | 0.338 | 1.029 [0.959, 1.104] |
+| paged-stream w4 | 0.845 [0.800, 0.894] | 1.220 [1.207, 1.233] | 0.569 | 0.634 | 0.817 [0.486, 1.373] |
+| write w64 | 1.402 [1.370, 1.436] | 0.714 [0.697, 0.732] | 0.364 | 0.420 | 0.723 [0.712, 0.734] |
+
+`hp3c-screen-master-20261104T003057Z`: candidate `ea52b7b7`, client reads
+through `Query.Each`.
+
+| case | throughput | CPU/op | allocs/op | bytes/op | p99 |
+|---|---:|---:|---:|---:|---:|
+| point-buffered w64 | 1.370 [1.369, 1.371] | 0.730 [0.730, 0.730] | 0.378 | 0.363 | 0.769 [0.765, 0.772] |
+| point-stream w4 | 0.778 [0.776, 0.780] | 1.246 [1.214, 1.279] | 1.245 | 1.534 | 1.608 [1.537, 1.683] |
+| paged-buffered w4 | 0.971 [0.966, 0.977] | 1.025 [1.025, 1.025] | 0.176 | 0.229 | 0.950 [0.895, 1.008] |
+| paged-stream w4 | 0.844 [0.838, 0.850] | 1.176 [1.169, 1.184] | 0.568 | 0.632 | 1.166 [1.119, 1.216] |
+| write w64 | 1.361 [1.355, 1.368] | 0.735 [0.731, 0.738] | 0.364 | 0.420 | 0.749 [0.745, 0.754] |
+
+Before round 3 (`hp2-screen`), point reads and writes were 1.098 and 1.196
+of master. Streaming, which these rounds did not target, still regresses;
+paged buffered reads are 3% short on throughput with a fifth of master's
+allocations.
+
+### Three-node Scylla cluster
+
+`cluster.sh`: Scylla 2026.3.3 in Docker, nodes pinned to CPUs 0-1, 4-5 and
+6-7, two shards each, 3 GiB, developer mode (no I/O calibration). The
+emulator was paused. `cluster_bench.sh` ran every client on CPU 8 with
+GOMAXPROCS=1, ABBA pairs, 10 s warmup and 30 s measurement, RF=3
+LOCAL_QUORUM. Master is the frozen `1ceaac81` build; v2 is `ea52b7b7`
+(client reads through `Query.Each`). Medians; all runs had zero errors.
+Results: `results/cluster-master-vs-v2-20261104T003057Z`.
+
+Closed-loop throughput (2 pairs; 64 workers, paged 4):
+
+| scenario | ops/s master | ops/s v2 | v2/master | CPU µs/op | allocs/op | B/op | p99 µs |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| point read | 100,821 | 129,169 | **1.281** | 9.9 → 7.7 | 26.0 → 12.2 | 1,993 → 839 | 1,623 → 1,204 |
+| write | 50,319 | 63,005 | **1.252** | 9.9 → 8.6 | 25.0 → 9.4 | 1,838 → 780 | 20,047 → 12,615 |
+| paged read (128 × 4 KiB) | 2,275 | 2,103 | 0.925 | 432 → 451 | 120 → 26.7 | 11,949 → 3,677 | 3,078 → 3,814 |
+
+The server dominated write variance (master's two write runs: 60k and
+40k ops/s).
+
+Open-loop latency at 40% of master's throughput, the same scheduled rate
+for both (3 pairs):
+
+| scenario | rate/s | p90 µs | p95 µs | p99 µs | CPU µs/op |
+|---|---:|---:|---:|---:|---:|
+| point read | 40,328 | 147 → 141 | 442 → 185 | 1,539 → 1,631 | 16.1 → 17.2 |
+| write | 20,128 | 1,175 → 981 | 2,006 → 1,849 | 2,675 → 2,649 | 15.4 → 17.2 |
+| paged read | 910 | 2,331 → 2,327 | 2,535 → 2,517 | 4,055 → 3,959 | 506 → 519 |
+
+At 70% of master's throughput (2 pairs), a read rate of 70.6k/s keeps one
+client vCPU about 97% busy for both drivers, so latency there is client
+queueing; v2's read p90/p99 were 1,411/14,179 µs against master's
+9,847/20,399, and its write p90/p99 were 5,211/24,239 against 2,405/17,447.
+
+v2 needs less CPU per operation at saturation but more at 40% load:
+with fewer requests in flight, the writer batches fewer per socket write
+and the woken-writer hand-off costs more per request. Low-load write
+batching is the next target, together with the streaming and paged
+regressions.

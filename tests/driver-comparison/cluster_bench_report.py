@@ -32,7 +32,8 @@ def main():
     out = sys.argv[1]
     print('| kind | scenario | metric | master (A) | v2 (B) | B/A |')
     print('|---|---|---|---:|---:|---:|')
-    for kind in ('throughput', 'latency'):
+    kinds = sorted({p.rsplit('/', 1)[-1].split('-', 1)[0] for p in glob.glob(f'{out}/*-pair*-A.json')}, key=lambda k: (k != 'throughput', k))
+    for kind in kinds:
         for scenario in ('read', 'write', 'paged'):
             a, b = load(out, kind, scenario, 'A'), load(out, kind, scenario, 'B')
             if not a or not b:
