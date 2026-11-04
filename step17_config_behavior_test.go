@@ -74,7 +74,7 @@ func TestStep17TimestampHookOnceAcrossRetryAndPages(t *testing.T) {
 	profile := defaultProfile()
 	profile.Prefetch = 0
 	profile.Retry = step03RetryOnce{}
-	options := Options{Profile: codecTestMust(NewProfile(profile))}
+	options := testOptions(OptionValues{Profile: profileOf(profile)})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	b := runtimeQuery(t)
@@ -94,8 +94,9 @@ func TestStep17TimestampHookOnceAcrossRetryAndPages(t *testing.T) {
 		t.Fatal("generator not one per logical execution", count, calls.Load())
 	}
 	explicit := runtimeQuery(t)
-	opts := options
-	opts.Timestamp = Option[int64]{Set: true, Value: 0}
+	values := options.Values()
+	values.Timestamp = Option[int64]{Set: true, Value: 0}
+	opts := testOptions(values)
 	page := codecTestMust(RunUnpaged(ctx, s, explicit, opts))
 	if err := page.Close(); err != nil {
 		t.Fatal(err)
@@ -436,7 +437,7 @@ func TestStep17IncludeMetadataOverrideChangesExecuteWireFlag(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	for _, include := range []bool{false, true, false} {
-		page := codecTestMust(RunUnpaged(ctx, s, bound, Options{IncludeMetadata: include}))
+		page := codecTestMust(RunUnpaged(ctx, s, bound, testOptions(OptionValues{IncludeMetadata: include})))
 		if !page.Next() || string(page.Row().OwnedBytes()) != "value" {
 			t.Fatal(page.Err())
 		}

@@ -17,41 +17,7 @@ type Profile struct {
 	Routing              RoutingPolicy
 	Speculation          SpeculationPolicy
 }
-type ProfileHandle struct{ privateStorage ProfileHandleStorage }
 
-func NewProfile(profile Profile) (*ProfileHandle, error) {
-	p := new(ProfileHandle)
-	if err := p.Replace(profile); err != nil {
-		return nil, err
-	}
-	return p, nil
-}
-func (p *ProfileHandle) Snapshot() Profile {
-	if p == nil || p.privateStorage.current.Load() == nil {
-		return InternalDefaultProfile()
-	}
-	return *p.privateStorage.current.Load()
-}
-
-// InternalCurrent returns the current profile pointer, or nil for the
-// default. Replace publishes a new pointer, so callers may cache work derived
-// from a profile until the pointer changes.
-func (p *ProfileHandle) InternalCurrent() *Profile {
-	if p == nil {
-		return nil
-	}
-	return p.privateStorage.current.Load()
-}
-func (p *ProfileHandle) Replace(profile Profile) error {
-	if p == nil {
-		return typeValidation("profile", "nil handle")
-	}
-	if err := InternalValidateProfile(profile); err != nil {
-		return err
-	}
-	p.privateStorage.current.Store(&profile)
-	return nil
-}
 func InternalDefaultProfile() Profile {
 	return Profile{Consistency: LocalQuorum, SerialConsistency: Option[Consistency]{Value: LocalSerial, Set: true}, Timeout: 30 * time.Second, PageSize: 5000, Prefetch: 1, Retry: SafeRetryPolicy{MaxAttempts: 3}}
 }

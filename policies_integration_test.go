@@ -152,13 +152,10 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster Config, keyspace stri
 		if err != nil {
 			t.Fatal(err)
 		}
-		profile := cluster.DefaultProfile.Snapshot()
+		profile := *cluster.DefaultProfile
 		profile.Routing = policy
-		handle, err := NewProfile(profile)
-		if err != nil {
-			t.Fatal(err)
-		}
-		rows, err := Run(ctx, session, bound, Options{Profile: handle, Consistency: Option[Consistency]{Value: One, Set: true}})
+		handle := profileOf(profile)
+		rows, err := Run(ctx, session, bound, testOptions(OptionValues{Profile: handle, Consistency: Option[Consistency]{Value: One, Set: true}}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -254,14 +251,11 @@ func TestNoHangAllHostsDown(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, oneHost := range []bool{false, true} {
-			profile := createV2Cluster().DefaultProfile.Snapshot()
+			profile := *createV2Cluster().DefaultProfile
 			profile.Routing = v2UnavailableHostsRouting{RoutingPolicy: policy, oneHost: oneHost}
-			handle, err := NewProfile(profile)
-			if err != nil {
-				t.Fatal(err)
-			}
+			handle := profileOf(profile)
 			ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
-			rows, queryErr := Run(ctx, session, bound, Options{Profile: handle})
+			rows, queryErr := Run(ctx, session, bound, testOptions(OptionValues{Profile: handle}))
 			if queryErr == nil {
 				queryErr = rows.Close()
 			}

@@ -54,7 +54,7 @@ func TestKeyspaceTable(t *testing.T) {
 	if err := v2CreateTable(ctx, session, fmt.Sprintf(`CREATE TABLE %s.%s (pk int, ck int, v int, PRIMARY KEY (pk, ck))`, keyspace, table)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := v2SchemaRoutingExec(ctx, session, fmt.Sprintf(`INSERT INTO %s.%s(pk, ck, v) VALUES (?, ?, ?)`, keyspace, table), Options{Consistency: Option[Consistency]{Value: One, Set: true}}, IntValue(1), IntValue(2), IntValue(3)); err != nil {
+	if _, err := v2SchemaRoutingExec(ctx, session, fmt.Sprintf(`INSERT INTO %s.%s(pk, ck, v) VALUES (?, ?, ?)`, keyspace, table), testOptions(OptionValues{Consistency: Option[Consistency]{Value: One, Set: true}}), IntValue(1), IntValue(2), IntValue(3)); err != nil {
 		t.Fatal(err)
 	}
 	prepared, err := Prepare(ctx, session, Statement[[]Value, DynamicRow]{CQL: fmt.Sprintf(`SELECT pk FROM %s.%s WHERE pk = ? LIMIT 1`, keyspace, table), Params: DynamicParams, Rows: DynamicRows}, PrepareOptions{})
@@ -66,7 +66,7 @@ func TestKeyspaceTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer bound.Close()
-	rows, err := Run(ctx, session, bound, Options{Consistency: Option[Consistency]{Value: One, Set: true}})
+	rows, err := Run(ctx, session, bound, testOptions(OptionValues{Consistency: Option[Consistency]{Value: One, Set: true}}))
 	if err != nil {
 		t.Fatal(err)
 	}

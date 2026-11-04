@@ -47,7 +47,7 @@ func TestV2PageCaptureContinuationWithOutstandingLoser(t *testing.T) {
 			profile.Routing = policy
 			profile.Speculation = runtimeSpeculation{}
 			profile.Prefetch = prefetch
-			handle := codecTestMust(NewProfile(profile))
+			handle := profileOf(profile)
 			served := make(chan struct{})
 			go func() {
 				defer close(served)

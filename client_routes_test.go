@@ -74,7 +74,7 @@ func TestGetHostPortMapping(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = Exec(ctx, session, bound, Options{Consistency: Option[Consistency]{Set: true, Value: All}})
+			_, err = Exec(ctx, session, bound, testOptions(OptionValues{Consistency: Option[Consistency]{Set: true, Value: All}}))
 			bound.Close()
 			if waitErr := bound.Wait(ctx); waitErr != nil {
 				t.Fatal(waitErr)

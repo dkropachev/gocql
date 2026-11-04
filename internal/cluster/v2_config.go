@@ -34,7 +34,7 @@ func InternalConnectCluster(ctx context.Context, config Config, initialize func(
 		contacts = []string{"127.0.0.1"}
 	}
 	legacy := InternalNewClusterSettings(contacts...)
-	profile := config.DefaultProfile.Snapshot()
+	profile := *config.DefaultProfile
 	legacy.privateStorage.InternalDefaultProfile = profile
 	legacy.Port = int(config.Port)
 	legacy.ProtoVersion = config.Protocol

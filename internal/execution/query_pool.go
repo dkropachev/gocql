@@ -183,25 +183,19 @@ func (p *queryPool[P, R]) put(q *Query[P, R]) {
 	q.state.close()
 }
 
-// capture takes an idle query and captures value and options into it. On
-// success the caller owns the query until it releases the query's owner,
-// after which the query may already serve another call.
-func (p *queryPool[P, R]) capture(ctx context.Context, value P, options *Options) (*Query[P, R], Options, error) {
+// capture takes an idle query and captures value into it. On success the
+// caller owns the query until it releases the query's owner, after which the
+// query may already serve another call.
+func (p *queryPool[P, R]) capture(ctx context.Context, value P) (*Query[P, R], error) {
 	if ctx == nil {
-		return nil, Options{}, typeValidation("context", "nil context")
+		return nil, typeValidation("context", "nil context")
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, Options{}, err
-	}
-	// Options are copied for the execution, which may outlive a cancelled
-	// call: without a custom payload this does not allocate.
-	opts, err := cloneQueryOptions(*options)
-	if err != nil {
-		return nil, Options{}, err
+		return nil, err
 	}
 	q, err := p.get()
 	if err != nil {
-		return nil, Options{}, err
+		return nil, err
 	}
 	if err := q.capture(ctx, value); err != nil {
 		// A failure after the query turned busy ended its execution, and
@@ -212,27 +206,29 @@ func (p *queryPool[P, R]) capture(ctx context.Context, value P, options *Options
 		if ctxErr := ctx.Err(); ctxErr != nil && err == ctxErr {
 			p.put(q)
 		}
-		return nil, Options{}, err
+		return nil, err
 	}
-	return q, opts, nil
+	return q, nil
 }
 
-func (p *queryPool[P, R]) exec(ctx context.Context, value P, options *Options) (Result, error) {
-	q, opts, err := p.capture(ctx, value, options)
+// exec executes value with options, which are frozen, so the execution can
+// outlive a cancelled call without copying them.
+func (p *queryPool[P, R]) exec(ctx context.Context, value P, options Options) (Result, error) {
+	q, err := p.capture(ctx, value)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
-	result, err := Exec(ctx, q.state.runtime.Session, &q.bound, opts)
+	result, err := Exec(ctx, q.state.runtime.Session, &q.bound, options)
 	q.state.owner.InternalRelease()
 	return result, err
 }
 
-func (p *queryPool[P, R]) each(ctx context.Context, value P, dst *R, fn func(*R) error, options *Options) (bool, error) {
-	q, opts, err := p.capture(ctx, value, options)
+func (p *queryPool[P, R]) each(ctx context.Context, value P, dst *R, fn func(*R) error, options Options) (bool, error) {
+	q, err := p.capture(ctx, value)
 	if err != nil {
 		return false, err
 	}
-	found, _, err := each(ctx, q.state.runtime.Session, &q.bound, opts, dst, fn, &q.scratch)
+	found, _, err := each(ctx, q.state.runtime.Session, &q.bound, options, dst, fn, &q.scratch)
 	q.state.owner.InternalRelease()
 	return found, err
 }
@@ -261,7 +257,7 @@ func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options Options) (Re
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
-	return pool.exec(ctx, value, &options)
+	return pool.exec(ctx, value, options)
 }
 
 // One binds value, executes the statement once with options and decodes its
@@ -276,7 +272,7 @@ func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options Optio
 	if err != nil {
 		return false, err
 	}
-	found, err := pool.each(ctx, value, dst, nil, &options)
+	found, err := pool.each(ctx, value, dst, nil, options)
 	if !found && err == nil {
 		InternalClearDestination(dst)
 	}
@@ -299,7 +295,7 @@ func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) 
 	if err != nil {
 		return err
 	}
-	_, err = pool.each(ctx, value, dst, fn, &options)
+	_, err = pool.each(ctx, value, dst, fn, options)
 	return err
 }
 

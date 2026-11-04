@@ -340,7 +340,7 @@ func TestStep14CustomDecoderErrorAfterWrite(t *testing.T) {
 			defer bound.Close()
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
-			cursor, err := RunStream(ctx, s, bound, step14DecoderError{cause}, StreamOptions{Incremental: true, Options: Options{Idempotent: true}})
+			cursor, err := RunStream(ctx, s, bound, step14DecoderError{cause}, StreamOptions{Incremental: true, Options: testOptions(OptionValues{Idempotent: true})})
 			if err != nil {
 				t.Fatal(err)
 			}

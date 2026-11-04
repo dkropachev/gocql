@@ -1,7 +1,7 @@
 # Routing
 
-Set `Profile.Routing` to a typed `RoutingPolicy`; update a ProfileHandle with its
-validated Replace method. `NewRoutingPolicy(RoutingOptions{...})` configures
+Set `Profile.Routing` to a typed `RoutingPolicy` in `Config.DefaultProfile` or in
+the `Profile` passed with a query's options. `NewRoutingPolicy(RoutingOptions{...})` configures
 token awareness, datacenter/rack preference, remote fallback, replica shuffling,
 leader-aware routing and latency ordering. Missing required locality is an
 explicit validation error. `SingleTargetRouting` pins a typed host/shard target.

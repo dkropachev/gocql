@@ -368,8 +368,9 @@ DDL coordinator.
 
 ## Admission and optional work
 
-NewProfile/Replace validate and publish immutable profiles. Admission atomically
-loads one version, validates explicit overrides once and stores resolved options
+Profiles are plain values copied at Connect and by NewOptions, which validates
+and freezes options once; a query keeps its options resolved at creation.
+Admission stores the resolved options
 for the logical request; retries/pages reuse it without whole-profile copies,
 validation or new custom-payload descriptor arrays. A batch has one resolved
 options/payload descriptor snapshot protected by all of its member admissions.
@@ -824,7 +825,7 @@ type Config struct {
     Metadata MetadataOptions
     Limits ProtocolLimits
     PreparedCacheSize int
-    DefaultProfile *ProfileHandle
+    DefaultProfile *Profile
     Partitioners map[string]TokenPartitioner
     TimestampGenerator func() int64
     Observer Observer

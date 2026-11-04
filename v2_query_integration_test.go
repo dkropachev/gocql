@@ -26,7 +26,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 	defer session.Close()
 	namespace := fmt.Sprintf("gocql_query_%x", time.Now().UnixNano())
 	exec := func(ctx context.Context, cql string) error {
-		q, err := NewUnpreparedQuery(session, Statement[Unit, Unit]{CQL: cql, Params: NoParams, Rows: NoRows}, NewColumns(), Options{Timeout: Option[time.Duration]{Set: true, Value: 30 * time.Second}})
+		q, err := NewUnpreparedQuery(session, Statement[Unit, Unit]{CQL: cql, Params: NoParams, Rows: NoRows}, NewColumns(), testOptions(OptionValues{Timeout: Option[time.Duration]{Set: true, Value: 30 * time.Second}}))
 		if err != nil {
 			return err
 		}
@@ -50,7 +50,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 			return
 		}
 		typ := codecTestMust(ScalarType(TypeText))
-		query, err := NewUnpreparedQuery(session, Statement[string, Text]{Kind: OrdinaryStatement, CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name=?", Params: OneParam(StringEncoder), Rows: OneColumn(TextCodec)}, NewColumns(ColumnSpec{Name: "keyspace_name", Type: typ}), Options{Timeout: Option[time.Duration]{Set: true, Value: 10 * time.Second}})
+		query, err := NewUnpreparedQuery(session, Statement[string, Text]{Kind: OrdinaryStatement, CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name=?", Params: OneParam(StringEncoder), Rows: OneColumn(TextCodec)}, NewColumns(ColumnSpec{Name: "keyspace_name", Type: typ}), testOptions(OptionValues{Timeout: Option[time.Duration]{Set: true, Value: 10 * time.Second}}))
 		if err != nil {
 			t.Error(err)
 			return
@@ -114,7 +114,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 	}
 	decoder := RowInto(func(*record) {}, Column("c", Int32, func(r *record) *int32 { return &r.C }), Column("p", OwnedBlobCodec, func(r *record) *[]byte { return &r.P }))
 	read := codecTestMust(Prepare(ctx, session, Statement[int32, record]{Kind: OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: OneParam(Int32), Rows: decoder}, PrepareOptions{}))
-	q := codecTestMust(NewQuery(read, Options{PageSize: Option[int32]{Set: true, Value: 2}, Prefetch: Option[int]{Set: true, Value: 0}}))
+	q := codecTestMust(NewQuery(read, testOptions(OptionValues{PageSize: Option[int32]{Set: true, Value: 2}, Prefetch: Option[int]{Set: true, Value: 0}})))
 	defer q.Close()
 	var previous Rows[record]
 	for range 2 {
@@ -177,7 +177,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 		t.Fatal("explicit paging count", pageRows)
 	}
 	t.Log("query reuse, stale cursors, owned destinations and explicit paging passed")
-	unpaged := codecTestMust(NewQuery(read, Options{Prefetch: Option[int]{Set: true, Value: 0}}))
+	unpaged := codecTestMust(NewQuery(read, testOptions(OptionValues{Prefetch: Option[int]{Set: true, Value: 0}})))
 	defer unpaged.Close()
 	page := codecTestMust(unpaged.RunUnpaged(ctx, int32(1)))
 	n := 0
@@ -189,7 +189,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 	}
 	for _, incremental := range []bool{false, true} {
 		streamDecoder := StreamRow(func(*record) {}, StreamColumn("c", StreamInt32, func(r *record) *int32 { return &r.C }), StreamColumn("p", StreamBlob, func(r *record) *[]byte { return &r.P }))
-		streamQuery := codecTestMust(NewStreamQuery(read, streamDecoder, StreamOptions{Incremental: incremental, Options: Options{PageSize: Option[int32]{Set: true, Value: 2}}}))
+		streamQuery := codecTestMust(NewStreamQuery(read, streamDecoder, StreamOptions{Incremental: incremental, Options: testOptions(OptionValues{PageSize: Option[int32]{Set: true, Value: 2}})}))
 		cursor, err := streamQuery.Run(ctx, int32(1))
 		if incremental && config.Protocol < 5 && config.Compression != NoCompression {
 			var unsupported *StreamCapabilityError

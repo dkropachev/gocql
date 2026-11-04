@@ -55,7 +55,7 @@ func TestProto1BatchInsert(t *testing.T) {
 	fullQuery := strings.Join([]string{begin, query, end}, "\n")
 	bound := sessionTestBind(t, session, fullQuery, IntValue(5))
 	defer bound.Close()
-	if _, err := Exec(context.Background(), session, bound, Options{Consistency: Option[Consistency]{Value: Quorum, Set: true}}); err != nil {
+	if _, err := Exec(context.Background(), session, bound, testOptions(OptionValues{Consistency: Option[Consistency]{Value: Quorum, Set: true}})); err != nil {
 		t.Fatal(err)
 	}
 }

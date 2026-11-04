@@ -175,7 +175,7 @@ func TestQueryBlockedObserverKeepsQueryBusy(t *testing.T) {
 	s, conns, peers := runtimeTestSession(t, 1)
 	entered, release := make(chan struct{}), make(chan struct{})
 	observer := &execVoidObserver{onAttempt: func(AttemptEvent) { close(entered); <-release }}
-	query := codecTestMust(NewUnpreparedQuery(s, Statement[Unit, Unit]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: NoParams, Rows: NoRows}, NewColumns(), Options{Observer: observer}))
+	query := codecTestMust(NewUnpreparedQuery(s, Statement[Unit, Unit]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: NoParams, Rows: NoRows}, NewColumns(), testOptions(OptionValues{Observer: observer})))
 	defer query.Close()
 	served := make(chan struct{})
 	go func() {

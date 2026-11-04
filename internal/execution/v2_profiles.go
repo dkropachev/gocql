@@ -10,9 +10,11 @@ import (
 	// IncludeMetadata requests full result metadata even when a validated cache exists.
 )
 
-type Options struct {
+// OptionValues lists the settings of an execution. NewOptions validates and
+// freezes them into Options.
+type OptionValues struct {
 	IncludeMetadata      bool
-	Profile              *ProfileHandle
+	Profile              *Profile
 	Consistency          Option[Consistency]
 	SerialConsistency    Option[Option[Consistency]]
 	Timeout, PageTimeout Option[time.Duration]
@@ -33,19 +35,29 @@ type Options struct {
 
 type InternalResolvedOptions struct {
 	InternalProfile Profile
-	InternalOptions Options
+	InternalOptions OptionValues
 }
 
-func InternalResolveOptions(s *implCluster.Session, options Options) (InternalResolvedOptions, error) {
-	p := defaultProfile()
+func InternalResolveOptions(s *implCluster.Session, options OptionValues) (InternalResolvedOptions, error) {
+	var base *Profile
 	if s != nil {
-		rt := InternalRuntimeFor(s)
-		if rt.InternalProfile != nil {
-			p = rt.InternalProfile.Snapshot()
-		}
+		base = InternalRuntimeFor(s).InternalProfile
+	}
+	return resolveOptionValues(base, options)
+}
+
+// resolveOptionValues merges options over base, the session's default
+// profile, or the default profile when base is nil.
+func resolveOptionValues(base *Profile, options OptionValues) (InternalResolvedOptions, error) {
+	p := defaultProfile()
+	if base != nil {
+		p = *base
 	}
 	if options.Profile != nil {
-		p = options.Profile.Snapshot()
+		if err := validateProfile(*options.Profile); err != nil {
+			return InternalResolvedOptions{}, err
+		}
+		p = *options.Profile
 	}
 	if options.Consistency.Set {
 		p.Consistency = options.Consistency.Value

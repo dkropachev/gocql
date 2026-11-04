@@ -7,4 +7,4 @@ type OptionsStorage struct {
 	InternalConnection *Conn
 }
 
-func OptionsData(v *Options) *OptionsStorage { return &v.privateStorage }
+func OptionsData(v *OptionValues) *OptionsStorage { return &v.privateStorage }

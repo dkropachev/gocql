@@ -20,11 +20,9 @@ func v2ConfigureRouting(t testing.TB, config *Config, options RoutingOptions) Ro
 	if err != nil {
 		t.Fatal(err)
 	}
-	profile := config.DefaultProfile.Snapshot()
+	profile := *config.DefaultProfile
 	profile.Routing = policy
-	if err := config.DefaultProfile.Replace(profile); err != nil {
-		t.Fatal(err)
-	}
+	config.DefaultProfile = &profile
 	return policy
 }
 

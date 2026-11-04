@@ -143,11 +143,11 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 	ddl := func(cql string) {
 		b := codecTestMust(BindUnpreparedOwned(Statement[Unit, Unit]{CQL: cql, Params: NoParams, Rows: NoRows}, NewColumns(), Unit{}))
 		defer b.Close()
-		if _, err := Exec(ctx, s, b, *func() *Options {
-			opaqueStorageValue := new(Options)
+		if _, err := Exec(ctx, s, b, testOptions(*func() *OptionValues {
+			opaqueStorageValue := new(OptionValues)
 			implExecution.OptionsData(opaqueStorageValue).InternalConnection = conn
 			return opaqueStorageValue
-		}()); err != nil {
+		}())); err != nil {
 			t.Fatal(err)
 		}
 		if err := implCluster.InternalSessionAwaitV2SchemaAgreementOn(s, ctx, conn); err != nil {

@@ -660,8 +660,8 @@ func InternalBuildQueryReport(s *Session) InternalQueryReport {
 	cfg := s.privateStorage.InternalCfg
 	loadBalancing := InternalBuildLoadBalancingReport(s.privateStorage.InternalPolicy)
 	runtime := InternalCurrentExecution(s)
-	if runtime != nil && runtime.ProfileHandle() != nil {
-		profile := runtime.ProfileHandle().Snapshot()
+	if runtime != nil && runtime.Profile() != nil {
+		profile := *runtime.Profile()
 		cfg.privateStorage.InternalDefaultProfile = profile
 		cfg.Consistency = profile.Consistency
 		cfg.Timeout = profile.Timeout

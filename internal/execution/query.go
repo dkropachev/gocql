@@ -35,13 +35,13 @@ type queryState struct {
 	runtime       *InternalSessionRuntime
 	logical       *InternalLogicalExecution
 	busy, closed  bool
-	// perCall reports that each execution brings its own options, so their
-	// resolution is not cached.
+	// perCall reports that each execution brings its own options instead of
+	// using resolved.
 	perCall    bool
 	generation atomic.Uint64 // advanced in begin under mu; read without it by cursors
 	done       chan struct{} // created by the first waiter of a busy generation
 	retire     func()
-	resolved   resolvedOptionsCache
+	resolved   *InternalResolvedOptions // the query's options, resolved at creation
 	// response holds an execution's first response page. The next execution
 	// can begin only after this one released it.
 	response responsePage
@@ -51,47 +51,6 @@ type queryState struct {
 	// params is the query's latest parameters template; attempts running at
 	// once read and replace it.
 	params atomic.Pointer[model.ParamsTemplate]
-}
-
-// resolvedOptionsCache keeps a query's resolved options. A query's options
-// never change, so the resolution depends only on the session and explicit
-// profile pointers, which ProfileHandle.Replace swaps.
-type resolvedOptionsCache struct {
-	session, explicit *Profile
-	valid             bool
-	value             InternalResolvedOptions
-}
-
-// resolveOptions resolves the query's options, reusing the previous result
-// while neither profile was replaced. It runs during admission, which a busy
-// query never overlaps. Options with a custom payload are resolved each time:
-// their borrowed values must be checked for liveness on every execution.
-func (s *queryState) resolveOptions(session *implCluster.Session, options Options) (*InternalResolvedOptions, error) {
-	if len(options.CustomPayload) != 0 || s.perCall {
-		// Resolved into the cache's storage, which only admission uses, but
-		// not kept: the next execution resolves its options again.
-		c := &s.resolved
-		c.valid = false
-		var err error
-		c.value, err = InternalResolveOptions(session, options)
-		return &c.value, err
-	}
-	var sessionProfile *Profile
-	if session != nil {
-		sessionProfile = InternalRuntimeFor(session).InternalProfile.InternalCurrent()
-	}
-	explicit := options.Profile.InternalCurrent()
-	c := &s.resolved
-	if c.valid && c.session == sessionProfile && c.explicit == explicit {
-		return &c.value, nil
-	}
-	resolved, err := InternalResolveOptions(session, options)
-	if err != nil {
-		c.valid = false
-		return nil, err
-	}
-	*c = resolvedOptionsCache{session: sessionProfile, explicit: explicit, valid: true, value: resolved}
-	return &c.value, nil
 }
 
 // noopCancel is shared so that retiring an execution allocates no closure.
@@ -173,8 +132,8 @@ func newQueryState(s *implCluster.Session, state *queryState, retire func(), poo
 	return nil
 }
 
-// NewQuery creates a reusable query from a prepared statement. Defaults are
-// loaded from the selected profile on each execution; options are overrides.
+// NewQuery creates a reusable query from a prepared statement. Its options
+// are resolved for the statement's session once, here.
 func NewQuery[P, R any](p *Prepared[P, R], options Options) (*Query[P, R], error) {
 	return newPreparedQuery(p, options, nil)
 }
@@ -182,10 +141,6 @@ func NewQuery[P, R any](p *Prepared[P, R], options Options) (*Query[P, R], error
 func newPreparedQuery[P, R any](p *Prepared[P, R], options Options, pool *queryPoolBase) (*Query[P, R], error) {
 	if p == nil || p.privateStorage.InternalState == nil {
 		return nil, typeValidation("prepared", "nil handle")
-	}
-	options, err := cloneQueryOptions(options)
-	if err != nil {
-		return nil, err
 	}
 	state := p.privateStorage.InternalState
 	// Statement, keyspace, parameters and info are fixed when the prepared
@@ -200,6 +155,7 @@ func newPreparedQuery[P, R any](p *Prepared[P, R], options Options, pool *queryP
 	if err := newQueryState(p.privateStorage.InternalState.InternalSession, &q.state, q.retire, pool); err != nil {
 		return nil, err
 	}
+	q.state.resolved = options.resolve(q.state.runtime)
 	q.state.execCtx = newExecutionContext()
 	return q, nil
 }
@@ -214,10 +170,6 @@ func NewUnpreparedQuery[P, R any](s *implCluster.Session, statement Statement[P,
 	if err != nil {
 		return nil, err
 	}
-	options, err = cloneQueryOptions(options)
-	if err != nil {
-		return nil, err
-	}
 	q := &Query[P, R]{params: plan, columns: columns, options: options, allowUnset: true}
 	q.bound.privateStorage.InternalRows = statement.Rows
 	q.bound.privateStorage.plans = &InternalResultPlanCache[R]{}
@@ -226,6 +178,7 @@ func NewUnpreparedQuery[P, R any](s *implCluster.Session, statement Statement[P,
 	if err := newQueryState(s, &q.state, q.retire, nil); err != nil {
 		return nil, err
 	}
+	q.state.resolved = options.resolve(q.state.runtime)
 	q.state.execCtx = newExecutionContext()
 	return q, nil
 }
@@ -457,13 +410,13 @@ func (q *Query[P, R]) Wait(ctx context.Context) error {
 	return q.state.wait(ctx)
 }
 
-func cloneQueryOptions(options Options) (Options, error) {
+func cloneQueryOptions(options OptionValues) (OptionValues, error) {
 	options.CustomPayload = append([]PayloadEntry(nil), options.CustomPayload...)
 	for i := range options.CustomPayload {
 		entry := &options.CustomPayload[i]
 		if entry.Value.Valid {
 			if err := cqltype.CheckBytesAlive(entry.Value.Value); err != nil {
-				return Options{}, err
+				return OptionValues{}, err
 			}
 			entry.Value.Value = entry.Value.Value.Clone()
 		}

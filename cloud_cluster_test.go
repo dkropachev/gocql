@@ -67,9 +67,11 @@ func TestCloudConnection(t *testing.T) {
 	}
 
 	// Both system tables must describe the same coordinator's view of the ring.
-	rows, err = cloudHostRows(ctx, session, "SELECT peer, host_id FROM system.peers", gocql.Options{
-		HostID: gocql.Option[gocql.UUID]{Value: localHostID, Set: true},
-	})
+	pinned, err := gocql.NewOptions(gocql.OptionValues{HostID: gocql.Option[gocql.UUID]{Value: localHostID, Set: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err = cloudHostRows(ctx, session, "SELECT peer, host_id FROM system.peers", pinned)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,9 +179,11 @@ func TestCloudConnection(t *testing.T) {
 	}
 
 	for _, host := range ringHosts {
-		rows, err := cloudHostRows(ctx, session, "SELECT broadcast_address, host_id FROM system.local WHERE key='local'", gocql.Options{
-			HostID: gocql.Option[gocql.UUID]{Value: host.ID, Set: true},
-		})
+		pinned, err := gocql.NewOptions(gocql.OptionValues{HostID: gocql.Option[gocql.UUID]{Value: host.ID, Set: true}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rows, err := cloudHostRows(ctx, session, "SELECT broadcast_address, host_id FROM system.local WHERE key='local'", pinned)
 		if err != nil {
 			t.Fatal(err)
 		}

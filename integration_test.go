@@ -140,11 +140,9 @@ func TestHostFilterDiscovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	profile := cluster.DefaultProfile.Snapshot()
+	profile := *cluster.DefaultProfile
 	profile.Routing = rr
-	if err := cluster.DefaultProfile.Replace(profile); err != nil {
-		t.Fatal(err)
-	}
+	cluster.DefaultProfile = &profile
 	// we'll filter out the second host
 	filtered := clusterHosts[1]
 	cluster.ContactPoints = clusterHosts[:1]
@@ -182,11 +180,9 @@ func TestHostFilterInitial(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	profile := cluster.DefaultProfile.Snapshot()
+	profile := *cluster.DefaultProfile
 	profile.Routing = rr
-	if err := cluster.DefaultProfile.Replace(profile); err != nil {
-		t.Fatal(err)
-	}
+	cluster.DefaultProfile = &profile
 	// we'll filter out the second host
 	filtered := clusterHosts[1]
 	cluster.HostFilter = func(host HostSnapshot) bool { return host.Address.Addr().String() != filtered }
@@ -522,7 +518,7 @@ func TestCustomPayloadMessages(t *testing.T) {
 	}
 
 	customPayload := []PayloadEntry{{Key: "a", Value: Nullable[Bytes]{Valid: true, Value: BorrowBytes([]byte{10, 20})}}, {Key: "b", Value: Nullable[Bytes]{Valid: true, Value: BorrowBytes([]byte{20, 30})}}}
-	options := Options{Consistency: Option[Consistency]{Value: One, Set: true}, CustomPayload: customPayload}
+	options := testOptions(OptionValues{Consistency: Option[Consistency]{Value: One, Set: true}, CustomPayload: customPayload})
 
 	// Prepared SELECT retains the EXECUTE custom-payload path.
 	selectStatement := Statement[[]Value, DynamicRow]{CQL: fmt.Sprintf("SELECT id FROM %s where id = ?", table), Params: DynamicParams, Rows: DynamicRows}
@@ -594,7 +590,7 @@ func TestCustomPayloadValues(t *testing.T) {
 	}
 	defer bound.Close()
 	for _, customPayload := range values {
-		page, err := RunPage(context.Background(), session, bound, StartPage(), Options{Consistency: Option[Consistency]{Value: One, Set: true}, CustomPayload: customPayload})
+		page, err := RunPage(context.Background(), session, bound, StartPage(), testOptions(OptionValues{Consistency: Option[Consistency]{Value: One, Set: true}, CustomPayload: customPayload}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -727,11 +723,9 @@ func TestNewConnectWithLowTimeout(t *testing.T) {
 					name: "Timeout",
 					getCluster: func() Config {
 						cluster := createV2Cluster()
-						profile := cluster.DefaultProfile.Snapshot()
+						profile := *cluster.DefaultProfile
 						profile.Timeout = lowTimeout
-						if err := cluster.DefaultProfile.Replace(profile); err != nil {
-							t.Fatal(err)
-						}
+						cluster.DefaultProfile = &profile
 						return cluster
 					},
 					connect: Pass,
@@ -788,11 +782,9 @@ func TestNewConnectWithLowTimeout(t *testing.T) {
 					name: "AllTimeouts",
 					getCluster: func() Config {
 						cluster := createV2Cluster()
-						profile := cluster.DefaultProfile.Snapshot()
+						profile := *cluster.DefaultProfile
 						profile.Timeout = lowTimeout
-						if err := cluster.DefaultProfile.Replace(profile); err != nil {
-							t.Fatal(err)
-						}
+						cluster.DefaultProfile = &profile
 						cluster.ReadTimeout = lowTimeout
 						cluster.WriteTimeout = lowTimeout
 						cluster.Metadata.RequestTimeout = lowTimeout

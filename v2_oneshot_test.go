@@ -107,8 +107,8 @@ func TestPreparedOneShotOptionsPerCall(t *testing.T) {
 	defer peers[0].Close()
 	requests := make(chan oneShotRequest, 1)
 	p := oneShotPrepare(t, s, peers[0], requests)
-	quorum := Options{Consistency: Option[Consistency]{Set: true, Value: Quorum}, PageSize: Option[int32]{Set: true, Value: 7}}
-	two := Options{Consistency: Option[Consistency]{Set: true, Value: Two}}
+	quorum := testOptions(OptionValues{Consistency: Option[Consistency]{Set: true, Value: Quorum}, PageSize: Option[int32]{Set: true, Value: 7}})
+	two := testOptions(OptionValues{Consistency: Option[Consistency]{Set: true, Value: Two}})
 	defaults := defaultProfile()
 	for i, tc := range []struct {
 		options     Options

@@ -214,7 +214,7 @@ func eachPageTimeoutQuery(t *testing.T) (*Query[Unit, []byte], net.Conn) {
 	t.Helper()
 	s, _, peers := runtimeTestSession(t, 1)
 	statement := Statement[Unit, []byte]{Kind: OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: NoParams, Rows: RowInto(func(*[]byte) {}, Column("value", OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
-	options := Options{Timeout: Option[time.Duration]{Set: true, Value: 5 * time.Second}, PageTimeout: Option[time.Duration]{Set: true, Value: 100 * time.Millisecond}}
+	options := testOptions(OptionValues{Timeout: Option[time.Duration]{Set: true, Value: 5 * time.Second}, PageTimeout: Option[time.Duration]{Set: true, Value: 100 * time.Millisecond}})
 	q := codecTestMust(NewUnpreparedQuery(s, statement, NewColumns(), options))
 	t.Cleanup(q.Close)
 	return q, peers[0]
@@ -296,7 +296,7 @@ func TestQueryEachParentCancelReachesPageContext(t *testing.T) {
 func TestQueryEachParentCancelInterruptsWait(t *testing.T) {
 	s, _, peers := runtimeTestSession(t, 1)
 	statement := Statement[Unit, []byte]{Kind: OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: NoParams, Rows: RowInto(func(*[]byte) {}, Column("value", OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
-	q := codecTestMust(NewUnpreparedQuery(s, statement, NewColumns(), Options{Timeout: Option[time.Duration]{Set: true, Value: 5 * time.Second}}))
+	q := codecTestMust(NewUnpreparedQuery(s, statement, NewColumns(), testOptions(OptionValues{Timeout: Option[time.Duration]{Set: true, Value: 5 * time.Second}})))
 	t.Cleanup(q.Close)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
@@ -325,7 +325,7 @@ func TestQueryEachParentCancelInterruptsRetryDelay(t *testing.T) {
 	statement := Statement[Unit, []byte]{Kind: OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: NoParams, Rows: RowInto(func(*[]byte) {}, Column("value", OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 	profile := defaultProfile()
 	profile.Retry = eachRetryAfterDelay{}
-	q := codecTestMust(NewUnpreparedQuery(s, statement, NewColumns(), Options{Profile: codecTestMust(NewProfile(profile)), Timeout: Option[time.Duration]{Set: true, Value: 5 * time.Minute}}))
+	q := codecTestMust(NewUnpreparedQuery(s, statement, NewColumns(), testOptions(OptionValues{Profile: profileOf(profile), Timeout: Option[time.Duration]{Set: true, Value: 5 * time.Minute}})))
 	t.Cleanup(q.Close)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {

@@ -82,11 +82,9 @@ func BenchmarkConnRoutingKey(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		profile := config.DefaultProfile.Snapshot()
+		profile := *config.DefaultProfile
 		profile.Routing = policy
-		if err := config.DefaultProfile.Replace(profile); err != nil {
-			b.Fatal(err)
-		}
+		config.DefaultProfile = &profile
 	})
 	defer session.Close()
 	table := testTableName(b)

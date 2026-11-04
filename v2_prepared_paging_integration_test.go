@@ -82,7 +82,7 @@ func TestV2PreparedPagingConcurrentSchemaAndDestinations(t *testing.T) {
 		}
 		churn <- nil
 	}()
-	rows := codecTestMust(Run(ctx, session, bound, Options{PageSize: Option[int32]{Value: 3, Set: true}}))
+	rows := codecTestMust(Run(ctx, session, bound, testOptions(OptionValues{PageSize: Option[int32]{Value: 3, Set: true}})))
 	defer rows.Close()
 	var dst step03LiveDestination
 	var retained *PageLease

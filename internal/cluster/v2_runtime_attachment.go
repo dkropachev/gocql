@@ -14,7 +14,7 @@ type InternalExecutionLifecycle interface {
 	StopPrepared() InternalExecutionWaiter
 	StopActive() InternalExecutionWaiter
 	MetricsSnapshot() MetricsSnapshot
-	ProfileHandle() *ProfileHandle
+	Profile() *Profile
 	ConfigSnapshot() Config
 }
 

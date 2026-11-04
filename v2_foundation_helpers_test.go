@@ -105,3 +105,16 @@ func streamReaderFixture(t testing.TB, columns Columns, source io.Reader, size i
 	}
 	return r, scope
 }
+
+// profileOf returns a pointer to a copy of p, so later changes to p do not
+// reach options that already hold it.
+func profileOf(p Profile) *Profile { return &p }
+
+// testOptions freezes v, failing loudly on values a test meant to be valid.
+func testOptions(v OptionValues) Options {
+	o, err := NewOptions(v)
+	if err != nil {
+		panic(err)
+	}
+	return o
+}

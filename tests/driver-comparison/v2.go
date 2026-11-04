@@ -41,7 +41,7 @@ func connect(hosts []string) (adapter, error) {
 	c.Metadata.PeriodicRefresh = *metadataRefresh
 	c.Pool.ConnectionsPerShard = 1
 	c.Pool.MaxExcessPerShard = 0
-	p := c.DefaultProfile.Snapshot()
+	p := *c.DefaultProfile
 	p.Consistency = g.LocalQuorum
 	p.SerialConsistency = g.Option[g.Consistency]{}
 	p.Timeout = 10 * time.Second
@@ -51,9 +51,7 @@ func connect(hosts []string) (adapter, error) {
 	p.Retry = g.SafeRetryPolicy{MaxAttempts: 1}
 	p.Speculation = nil
 	p.Routing, _ = g.NewRoutingPolicy(g.RoutingOptions{TokenAware: true, Datacenter: "datacenter1"})
-	if e := c.DefaultProfile.Replace(p); e != nil {
-		return nil, e
-	}
+	c.DefaultProfile = &p
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	s, e := g.Connect(ctx, c)

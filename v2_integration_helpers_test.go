@@ -20,13 +20,11 @@ func createV2Cluster(opts ...func(*Config)) Config {
 	config.Protocol = *flagProto
 	config.CQLVersion = *flagCQL
 	config.Metadata.AgreementTimeout = 2 * time.Minute
-	profile := config.DefaultProfile.Snapshot()
+	profile := *config.DefaultProfile
 	profile.Consistency = Quorum
 	profile.Timeout = *flagTimeout
 	profile.Retry = SafeRetryPolicy{MaxAttempts: max(1, *flagRetry+1)}
-	if err := config.DefaultProfile.Replace(profile); err != nil {
-		panic(err)
-	}
+	config.DefaultProfile = &profile
 	if *flagRunAuthTest {
 		config.Auth = PasswordAuth("cassandra", "cassandra")
 	}
@@ -138,13 +136,9 @@ func createV2SessionFromConfig(config Config, t testing.TB, tabletsDisabled bool
 	initKeyspaceOnce.GetOnce("v2:" + keyspace).Do(func() {
 		bootstrap := config
 		bootstrap.Keyspace = "system"
-		profile := config.DefaultProfile.Snapshot()
+		profile := *config.DefaultProfile
 		profile.Timeout = 30 * time.Second
-		var err error
-		bootstrap.DefaultProfile, err = NewProfile(profile)
-		if err != nil {
-			t.Fatal(err)
-		}
+		bootstrap.DefaultProfile = &profile
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 		session, err := Connect(ctx, bootstrap)
@@ -290,7 +284,7 @@ func v2CreateTable(ctx context.Context, session *Session, cql string) error {
 		return err
 	}
 	defer bound.Close()
-	if _, err := Exec(ctx, session, bound, Options{Idempotent: true, Retry: SafeRetryPolicy{MaxAttempts: 4}}); err != nil {
+	if _, err := Exec(ctx, session, bound, testOptions(OptionValues{Idempotent: true, Retry: SafeRetryPolicy{MaxAttempts: 4}})); err != nil {
 		return err
 	}
 	if err := session.AwaitSchemaAgreement(ctx); err != nil {

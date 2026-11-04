@@ -59,5 +59,5 @@ func (d queryDrain) Wait() {
 	}
 }
 func (rt *InternalSessionRuntime) MetricsSnapshot() MetricsSnapshot { return rt.metricsSnapshot() }
-func (rt *InternalSessionRuntime) ProfileHandle() *ProfileHandle    { return rt.InternalProfile }
+func (rt *InternalSessionRuntime) Profile() *Profile                { return rt.InternalProfile }
 func (rt *InternalSessionRuntime) ConfigSnapshot() Config           { return rt.InternalConfig }

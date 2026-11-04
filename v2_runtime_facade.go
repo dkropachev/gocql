@@ -108,6 +108,13 @@ func OpenSingleHost(a0 context.Context, a1 Config, a2 UUID) (*Session, error) {
 
 type Options = implExecution.Options
 
+// OptionValues lists the settings of an execution; NewOptions freezes them.
+type OptionValues = implExecution.OptionValues
+
+// NewOptions validates values and freezes them into Options, resolved once
+// and safe to share. The zero Options uses the session's default profile.
+func NewOptions(values OptionValues) (Options, error) { return implExecution.NewOptions(values) }
+
 const OverflowEvent = implCluster.OverflowEvent
 
 type Page[R any] = implExecution.Page[R]
@@ -583,7 +590,7 @@ func requestQualifiedForKeyspace(a0 *executionRequest, a1 string) bool {
 type requestsReport = implCluster.InternalRequestsReport
 
 func resolveOptions(a0 *Session, a1 Options) (resolvedOptions, error) {
-	return implExecution.InternalResolveOptions(a0, a1)
+	return implExecution.InternalResolveFor(a0, a1), nil
 }
 
 type resolvedOptions = implExecution.InternalResolvedOptions

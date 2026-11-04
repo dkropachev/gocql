@@ -177,7 +177,7 @@ func TestStep07StreamFirstRowBeforePageAndNoReplay(t *testing.T) {
 	defer cancel()
 	b := runtimeQuery(t)
 	defer b.Close()
-	cursor, err := RunStream(ctx, s, b, StreamOneColumn(StreamBlob), StreamOptions{Incremental: true, Options: Options{Idempotent: true}})
+	cursor, err := RunStream(ctx, s, b, StreamOneColumn(StreamBlob), StreamOptions{Incremental: true, Options: testOptions(OptionValues{Idempotent: true})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -427,7 +427,7 @@ func TestStep07StreamCapabilityBeforeQuery(t *testing.T) {
 	if c.InternalStreams.InUse() != 0 {
 		t.Fatal("capability leaked stream")
 	}
-	_, err = RunStream(ctx, s, b, StreamOneColumn(StreamBlob), StreamOptions{Incremental: true, Options: Options{Prefetch: Option[int]{Set: true, Value: 1}}})
+	_, err = RunStream(ctx, s, b, StreamOneColumn(StreamBlob), StreamOptions{Incremental: true, Options: testOptions(OptionValues{Prefetch: Option[int]{Set: true, Value: 1}})})
 	var validation *ValidationError
 	if !errors.As(err, &validation) {
 		t.Fatal(err)
@@ -570,7 +570,7 @@ func TestStep07StreamPageDeadlineEndsAtExactBoundary(t *testing.T) {
 	}()
 	b := runtimeQuery(t)
 	defer b.Close()
-	cursor, err := RunStream(context.Background(), s, b, StreamOneColumn(StreamBlob), StreamOptions{Incremental: true, Options: Options{PageTimeout: Option[time.Duration]{Set: true, Value: 20 * time.Millisecond}}})
+	cursor, err := RunStream(context.Background(), s, b, StreamOneColumn(StreamBlob), StreamOptions{Incremental: true, Options: testOptions(OptionValues{PageTimeout: Option[time.Duration]{Set: true, Value: 20 * time.Millisecond}})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -598,7 +598,7 @@ func TestStep07StreamPartialFirstRowNeverReplays(t *testing.T) {
 	defer b.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	cursor, err := RunStream(ctx, s, b, StreamOneColumn(StreamBlob), StreamOptions{Incremental: true, Options: Options{Idempotent: true}})
+	cursor, err := RunStream(ctx, s, b, StreamOneColumn(StreamBlob), StreamOptions{Incremental: true, Options: testOptions(OptionValues{Idempotent: true})})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -839,7 +839,7 @@ func TestStep07LatestAttemptMetadataRemainsBudgetedDuringRetry(t *testing.T) {
 	s, c, peer := step07StreamSession(t, 4, nil)
 	profile := defaultProfile()
 	profile.Retry = step03RetryOnce{}
-	handle, _ := NewProfile(profile)
+	handle := profileOf(profile)
 	payload := bytes.Repeat([]byte{'x'}, 12000)
 	extension := binary.BigEndian.AppendUint16(nil, 1)
 	extension = binary.BigEndian.AppendUint16(extension, 3)
@@ -871,7 +871,7 @@ func TestStep07LatestAttemptMetadataRemainsBudgetedDuringRetry(t *testing.T) {
 	defer cancel()
 	b := runtimeQuery(t)
 	defer b.Close()
-	cursor, err := RunStream(ctx, s, b, StreamOneColumn(StreamBlob), StreamOptions{Incremental: true, Options: Options{Profile: handle}, Limits: StreamLimits{MaxMetadataBytes: 20000}})
+	cursor, err := RunStream(ctx, s, b, StreamOneColumn(StreamBlob), StreamOptions{Incremental: true, Options: testOptions(OptionValues{Profile: handle}), Limits: StreamLimits{MaxMetadataBytes: 20000}})
 	if err != nil {
 		t.Fatal(err)
 	}

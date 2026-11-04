@@ -1068,8 +1068,15 @@ also interrupts active streams; already written caller output remains valid.
 ## Options, profiles, batches and results
 
 ```go
-type Options struct {
-    Profile *ProfileHandle
+// Options is frozen: NewOptions validates OptionValues, copies the custom
+// payload and profile, and resolves them once. The zero Options uses the
+// session default profile. Options are immutable and safe to share.
+type Options struct { /* frozen, resolved options */ }
+func NewOptions(OptionValues) (Options, error)
+func (Options) Values() OptionValues          // a copy, to derive other Options
+
+type OptionValues struct {
+    Profile *Profile                              // copied when resolved
     Consistency Option[Consistency]
     SerialConsistency Option[Option[Consistency]] // inherit / omit / set
     Timeout Option[time.Duration]                 // 0 disables profile timeout
@@ -1099,10 +1106,6 @@ type Profile struct {
     Routing RoutingPolicy
     Speculation SpeculationPolicy
 }
-type ProfileHandle struct { /* atomic immutable profile snapshot */ }
-func NewProfile(Profile) (*ProfileHandle, error)
-func (p *ProfileHandle) Snapshot() Profile
-func (p *ProfileHandle) Replace(Profile) error
 
 type BatchKind uint8
 const (LoggedBatch BatchKind = iota; UnloggedBatch; CounterBatch)
@@ -1122,14 +1125,15 @@ type Result struct {
 }
 ```
 
-A zero Options inherits the selected session profile, is non-idempotent, and has
+Invalid values fail in NewOptions, before any execution. A query uses its
+options as resolved when it is created; options passed per call reuse their
+resolution for the session that used them last. A zero Options inherits the selected session profile, is non-idempotent, and has
 no tracing/timestamp/keyspace override. Override validation returns typed
-errors, not panics. Profile objects are validated immutable snapshots; Replace
-affects new admissions only, never active retries or later pages. Admission loads
-one immutable profile version, validates only per-call overrides and shares the
-resolved options across attempts/pages. It does not revalidate or deep-copy the
-whole profile on each attempt. CustomPayload descriptor copying occurs once per
-logical admission (once for a batch), with all member drains still covering it.
+errors, not panics. A profile is a plain value. Connect copies
+Config.DefaultProfile and NewOptions copies OptionValues.Profile, so changing a
+Profile after it was handed over has no effect. Admission validates nothing and
+shares the resolved options across attempts/pages; CustomPayload is copied once,
+by NewOptions.
 Defaults:
 LOCAL_QUORUM, LOCAL_SERIAL, 30-second request timeout, 5,000-row pages, one-page
 prefetch, no speculation, and the safe retry policy. Caller context always

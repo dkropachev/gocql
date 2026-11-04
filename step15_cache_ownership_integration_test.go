@@ -87,7 +87,7 @@ func TestStep15NativeCacheOwnership(t *testing.T) {
 	prepared := codecTestMust(Prepare(ctx, s, Statement[Unit, Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: OrdinaryStatement, Params: NoParams, Rows: OneColumn(BlobCodec)}, PrepareOptions{}))
 	bound := codecTestMust(BindOwned(prepared, Unit{}))
 	defer bound.Close()
-	rows := codecTestMust(Run(ctx, s, bound, Options{Prefetch: Option[int]{Set: true, Value: 0}}))
+	rows := codecTestMust(Run(ctx, s, bound, testOptions(OptionValues{Prefetch: Option[int]{Set: true, Value: 0}})))
 	var old Bytes
 	if !rows.NextInto(&old) {
 		t.Fatal(rows.Err())
@@ -108,7 +108,7 @@ func TestStep15NativeCacheOwnership(t *testing.T) {
 	})
 	for generation := 0; generation < 8; generation++ {
 		write(byte(0x72 + generation))
-		freshRows := codecTestMust(Run(ctx, s, bound, Options{Prefetch: Option[int]{Set: true, Value: 0}}))
+		freshRows := codecTestMust(Run(ctx, s, bound, testOptions(OptionValues{Prefetch: Option[int]{Set: true, Value: 0}})))
 		var view Bytes
 		if !freshRows.NextInto(&view) {
 			t.Fatal(freshRows.Err())

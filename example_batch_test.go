@@ -71,7 +71,11 @@ func ExampleExecBatch() {
 		}
 		entries = append(entries, entry)
 	}
-	if _, err := gocql.ExecBatch(ctx, session, gocql.UnloggedBatch, entries, gocql.Options{Idempotent: true}); err != nil {
+	idempotent, err := gocql.NewOptions(gocql.OptionValues{Idempotent: true})
+	if err != nil {
+		log.Fatal(err)
+	}
+	if _, err := gocql.ExecBatch(ctx, session, gocql.UnloggedBatch, entries, idempotent); err != nil {
 		log.Fatal(err)
 	}
 	type result struct {

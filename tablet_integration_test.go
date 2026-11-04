@@ -71,7 +71,7 @@ func TestTablets(t *testing.T) {
 		success := false
 		for attempt := 1; time.Since(startTime) < timeout; attempt++ {
 			observer := new(v2TabletAttemptObserver)
-			options := Options{Consistency: Option[Consistency]{Value: One, Set: true}, Observer: observer}
+			options := testOptions(OptionValues{Consistency: Option[Consistency]{Value: One, Set: true}, Observer: observer})
 			// Warm the cache by visiting existing shard slots. With RF equal to the
 			// cluster size and token-aligned tablet shards, every ordinary V1 request
 			// can already reach an owner and legitimately receive no feedback.
@@ -79,8 +79,10 @@ func TestTablets(t *testing.T) {
 			if len(cached) == 0 {
 				hosts := session.Metadata().Hosts()
 				if len(hosts) > 0 && hosts[0].Shards > 1 {
-					options.HostID = Option[UUID]{Value: hosts[0].ID, Set: true}
-					options.ShardID = Option[uint32]{Value: uint32(attempt) % hosts[0].Shards, Set: true}
+					values := options.Values()
+					values.HostID = Option[UUID]{Value: hosts[0].ID, Set: true}
+					values.ShardID = Option[uint32]{Value: uint32(attempt) % hosts[0].Shards, Set: true}
+					options = testOptions(values)
 				}
 			}
 			rows, err := Run(ctx, session, bound, options)

@@ -67,7 +67,7 @@ func BenchmarkReusableQueryDecoding(b *testing.B) {
 					}
 					served <- nil
 				}()
-				options := Options{PageSize: Option[int32]{Set: true, Value: 32}, Prefetch: Option[int]{Set: true, Value: 0}, Timeout: Option[time.Duration]{Set: true, Value: 10 * time.Second}}
+				options := testOptions(OptionValues{PageSize: Option[int32]{Set: true, Value: 32}, Prefetch: Option[int]{Set: true, Value: 0}, Timeout: Option[time.Duration]{Set: true, Value: 10 * time.Second}})
 				statement := Statement[Unit, []byte]{Kind: OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: NoParams, Rows: RowInto(func(*[]byte) {}, Column("value", OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 				var query *Query[Unit, []byte]
 				var streaming *StreamQuery[Unit, []byte]

@@ -118,8 +118,9 @@ func execTestStatement(ctx context.Context, s *Session, cql string, opts Options
 		return err
 	}
 	defer bound.Close()
-	if !opts.Timeout.Set {
-		opts.Timeout = Option[time.Duration]{Set: true, Value: implCluster.SessionData(s).InternalCfg.Timeout}
+	if v := opts.Values(); !v.Timeout.Set {
+		v.Timeout = Option[time.Duration]{Set: true, Value: implCluster.SessionData(s).InternalCfg.Timeout}
+		opts = testOptions(v)
 	}
 	_, err = Exec(ctx, s, bound, opts)
 	return err

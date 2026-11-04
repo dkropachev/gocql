@@ -118,7 +118,7 @@ func (s *Session) initV2Peripheral(config Config) error {
 		return s.v2MetadataPublicationError()
 	}
 	if config.DefaultProfile != nil {
-		if policy := config.DefaultProfile.Snapshot().Routing; policy != nil {
+		if policy := config.DefaultProfile.Routing; policy != nil {
 			if err := policy.Validate(s.Metadata()); err != nil {
 				return err
 			}
@@ -359,7 +359,7 @@ func (s *Session) tryPublishV2Metadata() bool {
 	}
 
 	if config.DefaultProfile != nil {
-		if policy := config.DefaultProfile.Snapshot().Routing; policy != nil {
+		if policy := config.DefaultProfile.Routing; policy != nil {
 			if err := policy.Validate(m); err != nil {
 				routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, err)
 			}

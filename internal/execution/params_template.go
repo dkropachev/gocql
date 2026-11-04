@@ -39,7 +39,7 @@ func (c *paramsTemplateCache) add(t *model.ParamsTemplate) {
 // ownsParamsTemplate reports whether options set any option a parameters
 // template encodes, other than the timestamp, whose value each attempt fills
 // in. Such a query's template is its own; others share the session's.
-func ownsParamsTemplate(o *Options) bool {
+func ownsParamsTemplate(o *OptionValues) bool {
 	return o.PageSize.Set || o.SerialConsistency.Set || o.NowInSeconds.Set || o.Keyspace != "" || o.Profile != nil
 }
 
@@ -49,7 +49,7 @@ func ownsParamsTemplate(o *Options) bool {
 // query of the session profile builds none of its own; a query with its own
 // options keeps its template in its slot, out of the shared ones. An
 // execution with its own options and no query has nowhere to keep one.
-func (s *InternalSessionRuntime) paramsTemplate(query *queryState, opts *Options, w *attemptRequest, version byte) *model.ParamsTemplate {
+func (s *InternalSessionRuntime) paramsTemplate(query *queryState, opts *OptionValues, w *attemptRequest, version byte) *model.ParamsTemplate {
 	if w.Batch != nil {
 		return nil
 	}

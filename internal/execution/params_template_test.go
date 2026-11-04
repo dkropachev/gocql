@@ -13,7 +13,7 @@ func TestParamsTemplateCacheCases(t *testing.T) {
 	sessionOptions := func() *attemptRequest {
 		return &attemptRequest{PageSize: 5000, DefaultTimestamp: true, Timestamp: 1}
 	}
-	var none Options
+	var none OptionValues
 
 	// Case 1: no custom options. The second query and a later execution
 	// with another timestamp value reuse the first query's template.
@@ -51,7 +51,7 @@ func TestParamsTemplateCacheCases(t *testing.T) {
 
 	// Case 2: custom options on the query. The template is the query's own
 	// and stays out of the shared slots.
-	custom := Options{PageSize: Option[int32]{Set: true, Value: 10}}
+	custom := OptionValues{PageSize: Option[int32]{Set: true, Value: 10}}
 	var c queryState
 	wc := &attemptRequest{PageSize: 10, DefaultTimestamp: true}
 	tc := rt.paramsTemplate(&c, &custom, wc, 4)

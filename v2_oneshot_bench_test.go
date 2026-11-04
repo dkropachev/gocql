@@ -20,7 +20,7 @@ import (
 // keeps queries in a sync.Pool; prepared calls Prepared.Exec and One. ns/op
 // is wall time per completed operation.
 func BenchmarkOneShotLoopback(b *testing.B) {
-	options := Options{Timeout: Option[time.Duration]{Set: true, Value: 10 * time.Second}}
+	options := testOptions(OptionValues{Timeout: Option[time.Duration]{Set: true, Value: 10 * time.Second}})
 	writeStmt := Statement[loopbackRow, Unit]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k, value) VALUES(?, ?)", Params: Params(ParamAt(0, Int32, func(r loopbackRow) int32 { return r.k }), ParamAt(1, BytesEncoder, func(r loopbackRow) []byte { return r.value })), Rows: NoRows}
 	readStmt := Statement[int32, []byte]{Kind: OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: OneParam(Int32), Rows: RowInto(func(*[]byte) {}, Column("value", OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 	variants := []string{"bind", "bindborrowed", "query", "userpool", "prepared"}

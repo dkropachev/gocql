@@ -386,7 +386,7 @@ func TestStep08StreamInterruptedRequestWrite(t *testing.T) {
 				b := runtimeQuery(t)
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 				defer cancel()
-				cursor, err := RunStream(ctx, s, b, StreamOneColumn(StreamBlob), StreamOptions{Incremental: true, Options: Options{Retry: SafeRetryPolicy{MaxAttempts: 1}}})
+				cursor, err := RunStream(ctx, s, b, StreamOneColumn(StreamBlob), StreamOptions{Incremental: true, Options: testOptions(OptionValues{Retry: SafeRetryPolicy{MaxAttempts: 1}})})
 				if cursor != nil {
 					cursor.Close()
 				}

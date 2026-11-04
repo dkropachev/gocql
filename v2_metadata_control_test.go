@@ -138,12 +138,10 @@ func TestStep05SnapshotPublicationCannotCrossDrop(t *testing.T) {
 	s, _ := refreshAllSchemaSession(t)
 	before := s.Metadata()
 	base := DefaultConfig("localhost")
-	policy := &step05BlockingPolicy{RoutingPolicy: base.DefaultProfile.Snapshot().Routing, entered: make(chan struct{}), release: make(chan struct{})}
-	profile := base.DefaultProfile.Snapshot()
+	policy := &step05BlockingPolicy{RoutingPolicy: base.DefaultProfile.Routing, entered: make(chan struct{}), release: make(chan struct{})}
+	profile := *base.DefaultProfile
 	profile.Routing = policy
-	if err := base.DefaultProfile.Replace(profile); err != nil {
-		t.Fatal(err)
-	}
+	base.DefaultProfile = &profile
 	implCluster.InternalSessionConfigureV2Peripheral(s, base)
 	policy.block.Store(true)
 	done := make(chan struct{})
@@ -682,13 +680,13 @@ func TestStep05SuccessfulDDLErrorNeverRetriesStatement(t *testing.T) {
 	}()
 	b := codecTestMust(BindUnpreparedOwned(Statement[Unit, Unit]{CQL: "CREATE KEYSPACE step05", Params: NoParams, Rows: NoRows}, NewColumns(), Unit{}))
 	defer b.Close()
-	_, err := Exec(ctx, s, b, *func() *Options {
-		opaqueStorageValuexxxxxx := new(Options)
+	_, err := Exec(ctx, s, b, testOptions(*func() *OptionValues {
+		opaqueStorageValuexxxxxx := new(OptionValues)
 		implExecution.OptionsData(opaqueStorageValuexxxxxx).InternalConnection = conn
 		opaqueStorageValuexxxxxx.Idempotent = true
 		opaqueStorageValuexxxxxx.Retry = step03RetryOnce{}
 		return opaqueStorageValuexxxxxx
-	}())
+	}()))
 	if err == nil || !strings.Contains(err.Error(), "DDL succeeded") {
 		t.Fatal("successful DDL failure not distinguished", err)
 	}
@@ -945,11 +943,11 @@ func TestStep05DDLSucceededStatusSurvivesAgreementCancellation(t *testing.T) {
 	defer bound.Close()
 	result := make(chan error, 1)
 	go func() {
-		_, err := Exec(ctx, s, bound, *func() *Options {
-			opaqueStorageValuexxxxxxxxxxxxx := new(Options)
+		_, err := Exec(ctx, s, bound, testOptions(*func() *OptionValues {
+			opaqueStorageValuexxxxxxxxxxxxx := new(OptionValues)
 			implExecution.OptionsData(opaqueStorageValuexxxxxxxxxxxxx).InternalConnection = conn
 			return opaqueStorageValuexxxxxxxxxxxxx
-		}())
+		}()))
 		result <- err
 	}()
 	<-entered
@@ -985,11 +983,9 @@ func TestStep05PublicationContentionEmitsTerminalResync(t *testing.T) {
 	defer s.Close()
 	s.Metadata()
 	config := DefaultConfig("localhost")
-	profile := config.DefaultProfile.Snapshot()
+	profile := *config.DefaultProfile
 	profile.Routing = step05UnstablePolicy{RoutingPolicy: profile.Routing, session: s}
-	if err := config.DefaultProfile.Replace(profile); err != nil {
-		t.Fatal(err)
-	}
+	config.DefaultProfile = &profile
 	implCluster.InternalSessionConfigureV2Peripheral(s, config)
 	sub, _ := s.Subscribe(EventFilter{Capacity: 4})
 	implCluster.InternalSessionHandleNodeEvent(s, []frame{&frm.StatusChangeEventFrame{Change: "DOWN", Host: net.IPv4(127, 0, 0, 1), Port: 9042}})

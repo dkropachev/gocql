@@ -13,11 +13,9 @@ import (
 // server, including the second page after the helper closes its bound handle.
 func TestV2IntegrationHelpers(t *testing.T) {
 	session := createV2Session(t, func(config *Config) {
-		profile := config.DefaultProfile.Snapshot()
+		profile := *config.DefaultProfile
 		profile.PageSize = 1
-		if err := config.DefaultProfile.Replace(profile); err != nil {
-			t.Fatal(err)
-		}
+		config.DefaultProfile = &profile
 	})
 	defer session.Close()
 	ctx := context.Background()

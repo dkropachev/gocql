@@ -97,7 +97,7 @@ func BenchmarkStep10DurationDecode(b *testing.B) {
 
 func TestStep10ReportUsesCurrentTypedProfile(t *testing.T) {
 	config := DefaultConfig("127.0.0.1")
-	profile := config.DefaultProfile.Snapshot()
+	profile := *config.DefaultProfile
 	routing, err := NewRoutingPolicy(RoutingOptions{TokenAware: true, Datacenter: "dc", Rack: "rack", AllowRemote: true, Latency: LatencyOptions{Enabled: true}})
 	if err != nil {
 		t.Fatal(err)
@@ -105,9 +105,7 @@ func TestStep10ReportUsesCurrentTypedProfile(t *testing.T) {
 	profile.Routing = routing
 	profile.Retry = SafeRetryPolicy{MaxAttempts: 7}
 	profile.PageSize = 23
-	if err := config.DefaultProfile.Replace(profile); err != nil {
-		t.Fatal(err)
-	}
+	config.DefaultProfile = &profile
 	s := func() *Session {
 		opaqueStorageValue := new(Session)
 		implCluster.SessionData(opaqueStorageValue).InternalCfg = *newClusterSettings()
@@ -128,9 +126,7 @@ func TestStep10ReportUsesCurrentTypedProfile(t *testing.T) {
 	}
 	profile.PageSize = 37
 	profile.Retry = SafeRetryPolicy{MaxAttempts: 1}
-	if err := config.DefaultProfile.Replace(profile); err != nil {
-		t.Fatal(err)
-	}
+	config.DefaultProfile = &profile
 	next := buildQueryReport(s)
 	if next.Defaults.Page.Size != 37 || next.Retry.Policy.(retryPolicySimpleReport).MaxRetries != 0 {
 		t.Fatalf("replaced profile: %+v", next)

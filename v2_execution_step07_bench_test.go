@@ -76,7 +76,7 @@ func BenchmarkStep07ExecutionStorage(b *testing.B) {
 						}
 						cursor.Close()
 					} else {
-						rows, err := Run(context.Background(), s, bound, Options{Prefetch: Option[int]{Set: true, Value: 0}})
+						rows, err := Run(context.Background(), s, bound, testOptions(OptionValues{Prefetch: Option[int]{Set: true, Value: 0}}))
 						if err != nil {
 							b.Fatal(err)
 						}

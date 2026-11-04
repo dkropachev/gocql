@@ -41,7 +41,8 @@ type InternalSessionRuntime struct {
 	preparing                                                    map[InternalPrepareCacheKey]*InternalPrepareFlight
 	InternalPrepareOrder                                         []InternalPrepareCacheKey
 	InternalMu                                                   sync.Mutex
-	InternalProfile                                              *ProfileHandle
+	InternalProfile                                              *Profile
+	defaultOptions                                               InternalResolvedOptions // the zero Options resolved for this session
 	InternalConfig                                               Config
 	InternalPrepared                                             map[InternalPrepareCacheKey]*InternalPreparedState
 	requestID                                                    atomic.Uint64
@@ -60,7 +61,9 @@ func InternalRuntimeFor(s *implCluster.Session) *InternalSessionRuntime {
 	implCluster.SessionData(s).InternalTypedMu.Lock()
 	defer implCluster.SessionData(s).InternalTypedMu.Unlock()
 	if implCluster.SessionData(s).InternalTypedState == nil {
-		implCluster.SessionData(s).InternalTypedState = &InternalSessionRuntime{Session: s, InternalPrepared: make(map[InternalPrepareCacheKey]*InternalPreparedState)}
+		rt := &InternalSessionRuntime{Session: s, InternalPrepared: make(map[InternalPrepareCacheKey]*InternalPreparedState)}
+		rt.InternalSetProfile(nil)
+		implCluster.SessionData(s).InternalTypedState = rt
 	}
 	rt := implCluster.SessionData(s).InternalTypedState.(*InternalSessionRuntime)
 	if rt.Session == nil {
@@ -497,29 +500,29 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, 
 	if s.Closed() {
 		return nil, nil, nil, ErrClosed
 	}
+	rt := InternalRuntimeFor(s)
 	var resolved *InternalResolvedOptions
 	var request *InternalExecutionRequest
 	if query := b.privateStorage.InternalRequest.query; query != nil {
-		var err error
-		if resolved, err = query.resolveOptions(s, options); err != nil {
-			return nil, nil, nil, err
+		// A query resolved its own options when it was created; a pooled
+		// query's come with each call.
+		resolved = query.resolved
+		if query.perCall {
+			resolved = options.resolve(rt)
 		}
 		request = &query.request
 	} else {
-		r, err := InternalResolveOptions(s, options)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		resolved = &r
+		resolved = options.resolve(rt)
 		request = new(InternalExecutionRequest)
 	}
+	values := &resolved.InternalOptions
 	*request = b.privateStorage.InternalRequest
 	request.InternalOptions = *resolved
 	if query := request.query; query != nil {
 		request.responseDest = &query.response
 	}
-	if options.privateStorage.InternalConnection != nil {
-		request.connection = options.privateStorage.InternalConnection
+	if values.privateStorage.InternalConnection != nil {
+		request.connection = values.privateStorage.InternalConnection
 	}
 	if state := request.InternalPrepared(); state != nil && state.InternalSession != s {
 		return nil, nil, nil, typeValidation("session", "prepared statement belongs to another session")
@@ -527,25 +530,25 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, 
 	if request.connection != nil && !implCluster.InternalConnectionOwnedBy(request.connection, s) {
 		return nil, nil, nil, typeValidation("connection", "connection belongs to another session")
 	}
-	request.keyspace = options.Keyspace
+	request.keyspace = values.Keyspace
 	if request.keyspace == "" {
 		request.keyspace = b.privateStorage.InternalRequest.keyspace
 		if request.keyspace == "" {
 			request.keyspace = implCluster.SessionData(s).InternalCfg.Keyspace
 		}
 	}
-	if options.Keyspace != "" && request.InternalRouting.Keyspace != "" && options.Keyspace != request.InternalRouting.Keyspace {
+	if values.Keyspace != "" && request.InternalRouting.Keyspace != "" && values.Keyspace != request.InternalRouting.Keyspace {
 		return nil, nil, nil, typeValidation("keyspace", "override differs from bound statement")
 	}
 	if request.InternalRouting.Keyspace == "" {
-		request.InternalRouting.Keyspace = options.Keyspace
+		request.InternalRouting.Keyspace = values.Keyspace
 		if request.InternalRouting.Keyspace == "" {
 			request.InternalRouting.Keyspace = implCluster.SessionData(s).InternalCfg.Keyspace
 		}
 	}
 	request.InternalRouting.Consistency = resolved.InternalProfile.Consistency
-	request.InternalRouting.HostID = options.HostID
-	request.InternalRouting.ShardID = options.ShardID
+	request.InternalRouting.HostID = values.HostID
+	request.InternalRouting.ShardID = values.ShardID
 	if resolved.InternalProfile.Consistency == Serial || resolved.InternalProfile.Consistency == LocalSerial {
 		request.InternalRouting.Kind = ConditionalStatement
 	}
@@ -553,8 +556,7 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, 
 	if err := request.InternalOwner.InternalAdmit(); err != nil {
 		return nil, nil, nil, err
 	}
-	rt := InternalRuntimeFor(s)
-	observer := options.Observer
+	observer := values.Observer
 	if observer == nil {
 		observer = rt.InternalConfig.Observer
 	}
@@ -668,10 +670,10 @@ func InternalRunSinglePage[R any](ctx context.Context, s *implCluster.Session, b
 	if state.Complete() {
 		return nil, ErrPagingComplete
 	}
-	if options.Prefetch.Set && options.Prefetch.Value != 0 {
+	if v := options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, &UnsupportedSettingError{Setting: "prefetch", Reason: "single-page execution has no automatic pager"}
 	}
-	if unpaged && options.PageSize.Set {
+	if unpaged && options.values().PageSize.Set {
 		return nil, &UnsupportedSettingError{Setting: "page size", Reason: "unpaged execution has no page size"}
 	}
 	runctx, cancel, request, err := InternalAdmitExecution(ctx, s, b, options)

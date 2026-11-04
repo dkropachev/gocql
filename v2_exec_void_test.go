@@ -60,7 +60,7 @@ func TestV2RuntimeExecVoidCompletionAndMetadata(t *testing.T) {
 	observer := new(execVoidObserver)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	result, err := Exec(ctx, s, b, Options{Trace: true, Observer: observer})
+	result, err := Exec(ctx, s, b, testOptions(OptionValues{Trace: true, Observer: observer}))
 	if err != nil || result.Attempts != 1 || result.Rows != 0 || len(result.TraceIDs()) != 1 || result.TraceIDs()[0] != trace || len(result.Warnings()) != 1 || result.Warnings()[0] != "warning" {
 		t.Fatalf("result = %+v, %v", result, err)
 	}
@@ -230,7 +230,7 @@ func TestV2RuntimeExecCancellationAfterVoidAcknowledgement(t *testing.T) {
 			defer cancel()
 			done := make(chan error, 1)
 			go func() {
-				_, err := Exec(ctx, s, b, Options{Observer: observer})
+				_, err := Exec(ctx, s, b, testOptions(OptionValues{Observer: observer}))
 				done <- err
 			}()
 			select {

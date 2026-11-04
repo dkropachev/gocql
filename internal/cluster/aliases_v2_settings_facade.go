@@ -40,7 +40,6 @@ const NodeDown = implEndpoint.NodeDown
 const NodeUp = implEndpoint.NodeUp
 
 type Profile = implSettings.Profile
-type ProfileHandle = implSettings.ProfileHandle
 
 type ReconnectPolicy = implSettings.ReconnectPolicy
 

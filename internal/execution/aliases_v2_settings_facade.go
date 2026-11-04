@@ -12,7 +12,6 @@ type Config = implSettings.Config
 type Observer = implSettings.Observer
 
 type Profile = implSettings.Profile
-type ProfileHandle = implSettings.ProfileHandle
 
 type RequestEvent = implSettings.RequestEvent
 type RetryPolicy = implSettings.RetryPolicy
@@ -22,3 +21,5 @@ type UnsupportedSettingError = implSettings.UnsupportedSettingError
 func defaultProfile() Profile { return implSettings.InternalDefaultProfile() }
 
 func validConsistency(a0 Consistency) bool { return implSettings.InternalValidConsistency(a0) }
+
+func validateProfile(a0 Profile) error { return implSettings.InternalValidateProfile(a0) }

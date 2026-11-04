@@ -22,12 +22,10 @@ func TestV2RuntimeDatabaseSmoke(t *testing.T) {
 	config.ReportConfiguration = false
 	config.Metadata.AutomaticAgreement = true
 	config.Metadata.RefreshAfterAgreement = true
-	profile := config.DefaultProfile.Snapshot()
+	profile := *config.DefaultProfile
 	profile.Timeout = 30 * time.Second
 	profile.Consistency = LocalQuorum
-	if err := config.DefaultProfile.Replace(profile); err != nil {
-		t.Fatal(err)
-	}
+	config.DefaultProfile = &profile
 	switch v2SmokeOption("compressor", "no-compression") {
 	case "lz4":
 		config.Compression = LZ4Compression
@@ -138,7 +136,7 @@ func TestV2RuntimeDatabaseSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := Run(ctx, session, selectBound, Options{PageSize: Option[int32]{Value: 1, Set: true}})
+	result, err := Run(ctx, session, selectBound, testOptions(OptionValues{PageSize: Option[int32]{Value: 1, Set: true}}))
 	if err != nil {
 		t.Fatal(err)
 	}

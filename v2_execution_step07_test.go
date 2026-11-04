@@ -78,7 +78,7 @@ func TestStep07UnknownConditionalNeverSpeculateAndProfileStable(t *testing.T) {
 			profile := defaultProfile()
 			profile.Speculation = spec
 			profile.Prefetch = 0
-			handle, _ := NewProfile(profile)
+			handle := profileOf(profile)
 			seen := make(chan struct{})
 			resume := make(chan struct{})
 			done := make(chan struct{})
@@ -94,16 +94,13 @@ func TestStep07UnknownConditionalNeverSpeculateAndProfileStable(t *testing.T) {
 			implExecution.BoundData(b).InternalRequest.InternalRouting.Conditional = kind != OrdinaryStatement
 			result := make(chan error, 1)
 			go func() {
-				page, err := RunPage(context.Background(), s, b, StartPage(), Options{Profile: handle, Idempotent: true})
+				page, err := RunPage(context.Background(), s, b, StartPage(), testOptions(OptionValues{Profile: handle, Idempotent: true}))
 				if page != nil {
 					page.Close()
 				}
 				result <- err
 			}()
 			<-seen
-			profile.Speculation = nil
-			profile.Consistency = One
-			handle.Replace(profile)
 			close(resume)
 			if err := <-result; err != nil {
 				t.Fatal(err)
@@ -234,7 +231,7 @@ func TestStep07ObserverAndLoggerPanicsContained(t *testing.T) {
 	}()
 	b := runtimeQuery(t)
 	defer b.Close()
-	rows, err := Run(context.Background(), s, b, Options{Observer: step07PanicObserver{}})
+	rows, err := Run(context.Background(), s, b, testOptions(OptionValues{Observer: step07PanicObserver{}}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +245,7 @@ func TestStep07ObserverAndLoggerPanicsContained(t *testing.T) {
 }
 func TestStep07ConfigurationDefaultsAndZeroSemantics(t *testing.T) {
 	c := DefaultConfig("localhost")
-	p := c.DefaultProfile.Snapshot()
+	p := *c.DefaultProfile
 	if c.Metadata.PeriodicRefresh != time.Minute || c.Metadata.RequestTimeout != 31*time.Second || p.Timeout != 30*time.Second || p.PageTimeout != 0 || p.Prefetch != 1 || p.PageSize != 5000 || p.Consistency != LocalQuorum {
 		t.Fatal(c.Metadata, p)
 	}
@@ -272,8 +269,8 @@ func TestStep07ConfigurationDefaultsAndZeroSemantics(t *testing.T) {
 		return opaqueStorageValue
 	}()
 
-	runtimeFor(s).InternalProfile = c.DefaultProfile
-	options := Options{Timeout: Option[time.Duration]{Set: true}, PageTimeout: Option[time.Duration]{Set: true}, SerialConsistency: Option[Option[Consistency]]{Set: true}, Prefetch: Option[int]{Set: true}, Timestamp: Option[int64]{Set: true}, NowInSeconds: Option[int32]{Set: true}}
+	runtimeFor(s).InternalSetProfile(c.DefaultProfile)
+	options := testOptions(OptionValues{Timeout: Option[time.Duration]{Set: true}, PageTimeout: Option[time.Duration]{Set: true}, SerialConsistency: Option[Option[Consistency]]{Set: true}, Prefetch: Option[int]{Set: true}, Timestamp: Option[int64]{Set: true}, NowInSeconds: Option[int32]{Set: true}})
 	resolved, err := resolveOptions(s, options)
 	if err != nil {
 		t.Fatal(err)
@@ -325,17 +322,17 @@ func TestStep07ManualAndBatchPagingSettingsAreExplicit(t *testing.T) {
 	s, _, _ := runtimeTestSession(t, 0)
 	b := runtimeQuery(t)
 	defer b.Close()
-	_, err := RunUnpaged(context.Background(), s, b, Options{PageSize: Option[int32]{Set: true, Value: 1}})
+	_, err := RunUnpaged(context.Background(), s, b, testOptions(OptionValues{PageSize: Option[int32]{Set: true, Value: 1}}))
 	var unsupported *UnsupportedSettingError
 	if !errors.As(err, &unsupported) {
 		t.Fatal(err)
 	}
-	_, err = RunPage(context.Background(), s, b, StartPage(), Options{Prefetch: Option[int]{Set: true, Value: 1}})
+	_, err = RunPage(context.Background(), s, b, StartPage(), testOptions(OptionValues{Prefetch: Option[int]{Set: true, Value: 1}}))
 	if !errors.As(err, &unsupported) {
 		t.Fatal(err)
 	}
 	item, _ := BatchEntry(b)
-	_, err = RunBatch(context.Background(), s, LoggedBatch, []BatchItem{item}, NoRows, Options{PageSize: Option[int32]{Set: true, Value: 1}})
+	_, err = RunBatch(context.Background(), s, LoggedBatch, []BatchItem{item}, NoRows, testOptions(OptionValues{PageSize: Option[int32]{Set: true, Value: 1}}))
 	if !errors.As(err, &unsupported) {
 		t.Fatal(err)
 	}

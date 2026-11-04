@@ -40,7 +40,7 @@ func TestRuntimeAttachmentPrecedesStartupAndDrainsFailure(t *testing.T) {
 			t.Error("execution attachment replaced")
 		}
 		rt.InternalConfig = c
-		rt.InternalProfile = c.DefaultProfile
+		rt.InternalSetProfile(c.DefaultProfile)
 		if !rt.beginPreparedWorker(s) {
 			t.Fatal("initial prepare worker rejected")
 		}

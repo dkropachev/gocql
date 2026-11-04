@@ -81,9 +81,9 @@ func TestSessionAPI(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	config := DefaultConfig("127.0.0.1")
-	profile := config.DefaultProfile.Snapshot()
+	profile := *config.DefaultProfile
 	profile.Consistency, profile.PageSize, profile.Prefetch = All, 100, 1
-	require.NoError(t, config.DefaultProfile.Replace(profile))
+	config.DefaultProfile = &profile
 	// Session setters are replaced by atomic profile snapshots. Fractional
 	// prefetch became a bounded count of zero or one physical page.
 	session := func() *Session {
@@ -91,9 +91,9 @@ func TestSessionAPI(t *testing.T) {
 		implCluster.SessionData(opaqueStorageValue).InternalLogger = nopLogger{}
 		return opaqueStorageValue
 	}()
-	runtimeFor(session).InternalProfile = config.DefaultProfile
+	runtimeFor(session).InternalSetProfile(config.DefaultProfile)
 	defer session.Close()
-	resolved, err := resolveOptions(session, Options{Trace: true})
+	resolved, err := resolveOptions(session, testOptions(OptionValues{Trace: true}))
 	require.NoError(t, err)
 	require.Equal(t, All, resolved.InternalProfile.Consistency)
 	require.Equal(t, int32(100), resolved.InternalProfile.PageSize)
@@ -183,7 +183,7 @@ func TestQueryBasicAPI(t *testing.T) {
 	require.Zero(t, zero.Latency)
 	retry := sessionTestRetry{action: RetryNext, maxAttempts: 3}
 	observer := new(sessionTestObserver)
-	options := Options{Consistency: Option[Consistency]{Value: All, Set: true}, SerialConsistency: Option[Option[Consistency]]{Value: Option[Consistency]{Value: LocalSerial, Set: true}, Set: true}, PageSize: Option[int32]{Value: 10, Set: true}, Prefetch: Option[int]{Value: 1, Set: true}, Retry: retry, Trace: true, Observer: observer}
+	options := testOptions(OptionValues{Consistency: Option[Consistency]{Value: All, Set: true}, SerialConsistency: Option[Option[Consistency]]{Value: Option[Consistency]{Value: LocalSerial, Set: true}, Set: true}, PageSize: Option[int32]{Value: 10, Set: true}, Prefetch: Option[int]{Value: 1, Set: true}, Retry: retry, Trace: true, Observer: observer})
 	resolved, err := resolveOptions(session, options)
 	require.NoError(t, err)
 	require.Equal(t, All, resolved.InternalProfile.Consistency)
@@ -191,8 +191,9 @@ func TestQueryBasicAPI(t *testing.T) {
 	require.Equal(t, int32(10), resolved.InternalProfile.PageSize)
 	require.Equal(t, 1, resolved.InternalProfile.Prefetch)
 	require.Equal(t, retry, resolved.InternalProfile.Retry)
-	serialRead := options
-	serialRead.Consistency.Value = LocalSerial
+	serialValues := options.Values()
+	serialValues.Consistency.Value = LocalSerial
+	serialRead := testOptions(serialValues)
 	resolvedSerial, err := resolveOptions(session, serialRead)
 	require.NoError(t, err)
 	require.Equal(t, LocalSerial, resolvedSerial.InternalProfile.Consistency)
@@ -217,18 +218,14 @@ func TestQueryBasicAPI(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, int64(id), sessionTestInt(t, row, "id"))
 	}
-	// Freeze a profile at admission, then replace it while the request remains
-	// admitted. This directly covers the setter-to-snapshot migration boundary.
-	profile := runtimeFor(session).InternalProfile.Snapshot()
+	// Admission copies the profile, so a request keeps the values it was
+	// admitted with.
+	profile := *runtimeFor(session).InternalProfile
 	profile.PageSize = 10
-	handle, err := NewProfile(profile)
-	require.NoError(t, err)
-	_, cancel, admitted, err := admitExecution(ctx, session, original, Options{Profile: handle})
+	_, cancel, admitted, err := admitExecution(ctx, session, original, testOptions(OptionValues{Profile: &profile}))
 	require.NoError(t, err)
 	profile.PageSize = 100
-	require.NoError(t, handle.Replace(profile))
 	require.Equal(t, int32(10), admitted.InternalOptions.InternalProfile.PageSize)
-	require.Equal(t, int32(100), handle.Snapshot().PageSize)
 	admitted.InternalLogical.InternalFinish(Result{}, nil)
 	admitted.InternalOwner.InternalRelease()
 	cancel()
@@ -274,9 +271,9 @@ func TestBatchBasicAPI(t *testing.T) {
 	ctx := context.Background()
 	retry := sessionTestRetry{action: RetryNext, maxAttempts: 2}
 	session := createV2Session(t, func(config *Config) {
-		profile := config.DefaultProfile.Snapshot()
+		profile := *config.DefaultProfile
 		profile.Retry = retry
-		require.NoError(t, config.DefaultProfile.Replace(profile))
+		config.DefaultProfile = &profile
 	})
 	defer session.Close()
 	table := testTableName(t)
@@ -292,7 +289,7 @@ func TestBatchBasicAPI(t *testing.T) {
 	require.Equal(t, retry, inherited.InternalProfile.Retry)
 	override := sessionTestRetry{action: RetryNext, maxAttempts: 4}
 	observer := new(sessionTestObserver)
-	options := Options{Consistency: Option[Consistency]{Value: One, Set: true}, Retry: override, Trace: true, Observer: observer}
+	options := testOptions(OptionValues{Consistency: Option[Consistency]{Value: One, Set: true}, Retry: override, Trace: true, Observer: observer})
 	resolved, err := resolveOptions(session, options)
 	require.NoError(t, err)
 	require.Equal(t, override, resolved.InternalProfile.Retry)
@@ -403,7 +400,7 @@ func TestRetryType_IgnoreRethrow(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/%d", mode, retries), func(t *testing.T) {
 				observer := new(sessionTestObserver)
 				retry := sessionTestRetry{action: StopRetry, maxAttempts: retries + 1}
-				_, err := Exec(ctx, session, bound, Options{Idempotent: true, Retry: retry, Observer: observer})
+				_, err := Exec(ctx, session, bound, testOptions(OptionValues{Idempotent: true, Retry: retry, Observer: observer}))
 				require.Error(t, err)
 				var server RequestError
 				require.ErrorAs(t, err, &server)

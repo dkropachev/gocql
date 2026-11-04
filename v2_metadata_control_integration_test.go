@@ -57,11 +57,11 @@ func TestStep05MetadataControlLive(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer b.Close()
-		if _, err := Exec(ctx, s, b, *func() *Options {
-			opaqueStorageValue := new(Options)
+		if _, err := Exec(ctx, s, b, testOptions(*func() *OptionValues {
+			opaqueStorageValue := new(OptionValues)
 			implExecution.OptionsData(opaqueStorageValue).InternalConnection = conn
 			return opaqueStorageValue
-		}()); err != nil {
+		}())); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -72,11 +72,11 @@ func TestStep05MetadataControlLive(t *testing.T) {
 		b, err := BindUnpreparedOwned(Statement[Unit, Unit]{CQL: "DROP KEYSPACE IF EXISTS " + keyspace, Params: NoParams, Rows: NoRows}, NewColumns(), Unit{})
 		if err == nil {
 			defer b.Close()
-			_, err = Exec(cleanup, s, b, *func() *Options {
-				opaqueStorageValuex := new(Options)
+			_, err = Exec(cleanup, s, b, testOptions(*func() *OptionValues {
+				opaqueStorageValuex := new(OptionValues)
 				implExecution.OptionsData(opaqueStorageValuex).InternalConnection = conn
 				return opaqueStorageValuex
-			}())
+			}()))
 		}
 		if err != nil {
 			t.Error("cleanup unique keyspace", err)

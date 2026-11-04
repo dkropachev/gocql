@@ -140,7 +140,7 @@ func TestStep06TabletRoutingLive(t *testing.T) {
 			before := step17TabletAuthority(t, ctx, s, id, token.Value)
 			opts := Options{}
 			if attempt < 3 {
-				opts.HostID = Option[UUID]{Value: routing.SnapshotData(s.Metadata()).InternalHosts[attempt%len(routing.SnapshotData(s.Metadata()).InternalHosts)].ID, Set: true}
+				opts = testOptions(OptionValues{HostID: Option[UUID]{Value: routing.SnapshotData(s.Metadata()).InternalHosts[attempt%len(routing.SnapshotData(s.Metadata()).InternalHosts)].ID, Set: true}})
 			}
 			rows, err := Run(ctx, s, b, opts)
 			if err != nil {
@@ -249,7 +249,7 @@ func TestStep06LeaderRoutingLive(t *testing.T) {
 	stable := 0
 	feedback := 0
 	for attempt := 0; attempt < 256 && stable < 16; attempt++ {
-		rows, err := Run(ctx, s, b, Options{Consistency: Option[Consistency]{Value: LocalQuorum, Set: true}})
+		rows, err := Run(ctx, s, b, testOptions(OptionValues{Consistency: Option[Consistency]{Value: LocalQuorum, Set: true}}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -324,7 +324,7 @@ func step17TabletAuthority(t *testing.T, ctx context.Context, s *Session, table 
 	defer bound.Close()
 	observation := step17TabletObservation{stable: true}
 	for index, host := range s.Metadata().Hosts() {
-		page := codecTestMust(RunUnpaged(ctx, s, bound, Options{HostID: Option[UUID]{Set: true, Value: host.ID}}))
+		page := codecTestMust(RunUnpaged(ctx, s, bound, testOptions(OptionValues{HostID: Option[UUID]{Set: true, Value: host.ID}})))
 		if page.Info().HostID != host.ID {
 			t.Fatal("authoritative read lost exact host pin", page.Info().HostID, host.ID)
 		}

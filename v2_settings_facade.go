@@ -54,7 +54,6 @@ const MetadataMinimal = implSettings.MetadataMinimal
 type MetadataMode = implSettings.MetadataMode
 type MetadataOptions = implSettings.MetadataOptions
 
-func NewProfile(a0 Profile) (*ProfileHandle, error)   { return implSettings.NewProfile(a0) }
 func NewSimpleDNSResolver(a0 bool) *SimpleDNSResolver { return implEndpoint.NewSimpleDNSResolver(a0) }
 func retiredNewStaticApplicationInfo(a0 string, a1 string, a2 string) *retiredStaticApplicationInfo {
 	return implEndpoint.NewStaticApplicationInfo(a0, a1, a2)
@@ -69,7 +68,6 @@ func PasswordAuth(a0 string, a1 string) AuthProvider { return implSettings.Passw
 
 type PoolOptions = implSettings.PoolOptions
 type Profile = implSettings.Profile
-type ProfileHandle = implSettings.ProfileHandle
 type ProtocolLimits = implSettings.ProtocolLimits
 type ReconnectPolicy = implSettings.ReconnectPolicy
 type RequestEvent = implSettings.RequestEvent

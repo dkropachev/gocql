@@ -74,7 +74,7 @@ func NewCloudCluster(bundlePath string, options ...func(*gocql.Config)) (gocql.C
 	cc.Pool.ShardAwarePort = false
 	cc.Pool.ConnectionsPerHost = 2
 	cc.CoalesceWait = 0
-	profile := cc.DefaultProfile.Snapshot()
+	profile := *cc.DefaultProfile
 	profile.Consistency = gocql.Quorum
 
 	if connConf.Parameters != nil {
@@ -98,9 +98,7 @@ func NewCloudCluster(bundlePath string, options ...func(*gocql.Config)) (gocql.C
 		}
 	}
 
-	if err := cc.DefaultProfile.Replace(profile); err != nil {
-		return gocql.Config{}, fmt.Errorf("cloud execution profile: %w", err)
-	}
+	cc.DefaultProfile = &profile
 	for _, option := range options {
 		option(&cc)
 	}

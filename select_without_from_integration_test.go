@@ -332,7 +332,7 @@ func TestSelectWithoutFromExecutionModes(t *testing.T) {
 					t.Error(err)
 				}
 			}()
-			rows, err := Run(context.Background(), session, bound, Options{IncludeMetadata: mode == "prepared with metadata"})
+			rows, err := Run(context.Background(), session, bound, testOptions(OptionValues{IncludeMetadata: mode == "prepared with metadata"}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -462,15 +462,13 @@ func TestSelectWithoutFromTokenAware(t *testing.T) {
 	t.Parallel()
 	skipUnlessSelectWithoutFrom(t)
 	config := createV2Cluster()
-	profile := config.DefaultProfile.Snapshot()
+	profile := *config.DefaultProfile
 	policy, err := NewRoutingPolicy(RoutingOptions{TokenAware: true, ShuffleReplicas: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	profile.Routing = policy
-	if err := config.DefaultProfile.Replace(profile); err != nil {
-		t.Fatal(err)
-	}
+	config.DefaultProfile = &profile
 	session, err := Connect(context.Background(), config)
 	if err != nil {
 		t.Fatal(err)

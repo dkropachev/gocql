@@ -96,16 +96,15 @@ func TestV2RuntimePagerEmptyContinuationAndProfileSnapshot(t *testing.T) {
 	}()
 	p := defaultProfile()
 	p.PageSize = 7
-	profile, _ := NewProfile(p)
+	profile := profileOf(p)
 	bound := runtimeQuery(t)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	rows, err := Run(ctx, s, bound, Options{Profile: profile})
+	rows, err := Run(ctx, s, bound, testOptions(OptionValues{Profile: profile}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.PageSize = 11
-	profile.Replace(p)
+	profile.PageSize = 11
 	if implExecution.RowsData(rows).InternalRequest.InternalOptions.InternalProfile.PageSize != 7 {
 		t.Fatal("profile changed after admission")
 	}
@@ -190,7 +189,7 @@ func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Dura
 	profile.Routing = policy
 	profile.Speculation = runtimeSpeculation{}
 	profile.PageTimeout = pageTimeout
-	handle, _ := NewProfile(profile)
+	handle := profileOf(profile)
 	go func() {
 		stream := typedTestReadRequest(t, conns[1], peers[1])
 		_, _ = peers[1].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "winner")))
@@ -198,7 +197,7 @@ func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Dura
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	bound := runtimeQuery(t)
-	page, err := RunPage(ctx, s, bound, StartPage(), Options{Profile: handle, Idempotent: true, CustomPayload: []PayloadEntry{{Key: "borrowed", Value: Nullable[Bytes]{Valid: true, Value: BorrowBytes([]byte("per-call-payload"))}}}})
+	page, err := RunPage(ctx, s, bound, StartPage(), testOptions(OptionValues{Profile: handle, Idempotent: true, CustomPayload: []PayloadEntry{{Key: "borrowed", Value: Nullable[Bytes]{Valid: true, Value: BorrowBytes([]byte("per-call-payload"))}}}}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,9 +232,9 @@ func TestV2RuntimeBufferedPageDeadlinePreservesCaller(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	bound := runtimeQuery(t)
-	page, err := RunPage(ctx, s, bound, StartPage(), Options{
+	page, err := RunPage(ctx, s, bound, StartPage(), testOptions(OptionValues{
 		PageTimeout: Option[time.Duration]{Set: true, Value: 20 * time.Millisecond},
-	})
+	}))
 	if page != nil {
 		page.Close()
 		t.Fatal("page returned without a response")
@@ -279,7 +278,7 @@ func TestV2RuntimeDelayedRetries(t *testing.T) {
 	s, conns, peers := runtimeTestSession(t, 1)
 	profile := defaultProfile()
 	profile.Retry = runtimeDelayedRetry{delay: time.Millisecond}
-	handle := codecTestMust(NewProfile(profile))
+	handle := profileOf(profile)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -298,7 +297,7 @@ func TestV2RuntimeDelayedRetries(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	bound := runtimeQuery(t)
-	page, err := RunPage(ctx, s, bound, StartPage(), Options{Profile: handle})
+	page, err := RunPage(ctx, s, bound, StartPage(), testOptions(OptionValues{Profile: handle}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +320,7 @@ func TestV2RuntimeDelayedRetryCancellationDrains(t *testing.T) {
 	scheduled := make(chan struct{}, 1)
 	profile := defaultProfile()
 	profile.Retry = runtimeDelayedRetry{delay: time.Hour, scheduled: scheduled}
-	handle := codecTestMust(NewProfile(profile))
+	handle := profileOf(profile)
 	go func() {
 		stream := typedTestReadRequest(t, conns[0], peers[0])
 		_, _ = peers[0].Write(step03ErrorResponse(t, stream, ErrCodeOverloaded, nil))
@@ -331,7 +330,7 @@ func TestV2RuntimeDelayedRetryCancellationDrains(t *testing.T) {
 	bound := runtimeQuery(t)
 	finished := make(chan error, 1)
 	go func() {
-		page, err := RunPage(ctx, s, bound, StartPage(), Options{Profile: handle})
+		page, err := RunPage(ctx, s, bound, StartPage(), testOptions(OptionValues{Profile: handle}))
 		if page != nil {
 			page.Close()
 		}

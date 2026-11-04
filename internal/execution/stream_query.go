@@ -37,7 +37,7 @@ func NewStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder StreamRowDeco
 	if _, err := checkedStreamLimits(options.Limits); err != nil {
 		return nil, err
 	}
-	if options.Options.Prefetch.Set && options.Options.Prefetch.Value != 0 {
+	if v := options.Options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, typeValidation("stream prefetch", "must be zero")
 	}
 	p := &Prepared[P, Unit]{privateStorage: PreparedStorage[P, Unit]{InternalState: prepared.privateStorage.InternalState, InternalKind: prepared.privateStorage.InternalKind, InternalParams: prepared.privateStorage.InternalParams, InternalRows: InternalExecRowsDecoder{}}}
@@ -64,7 +64,7 @@ func NewUnpreparedStreamQuery[P, B, R any](session *implCluster.Session, stateme
 	if _, err := checkedStreamLimits(options.Limits); err != nil {
 		return nil, err
 	}
-	if options.Options.Prefetch.Set && options.Options.Prefetch.Value != 0 {
+	if v := options.Options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, typeValidation("stream prefetch", "must be zero")
 	}
 	q, err := NewUnpreparedQuery(session, Statement[P, Unit]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: InternalExecRowsDecoder{}}, columns, options.Options)

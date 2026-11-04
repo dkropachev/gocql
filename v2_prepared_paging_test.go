@@ -281,7 +281,7 @@ func TestV2RowsCycleAndBudgetBeforePrefetch(t *testing.T) {
 				rt.InternalConfig.Limits.MaxPagingStateBytes = 2
 				profile := defaultProfile()
 				profile.Prefetch = prefetch
-				handle := codecTestMust(NewProfile(profile))
+				handle := profileOf(profile)
 				tokens := []string{"a", "b", "a"}
 				if mode == "budget" {
 					tokens = tokens[:2]
@@ -296,7 +296,7 @@ func TestV2RowsCycleAndBudgetBeforePrefetch(t *testing.T) {
 				}()
 				b := runtimeQuery(t)
 				defer b.Close()
-				rows := codecTestMust(Run(context.Background(), s, b, Options{Profile: handle}))
+				rows := codecTestMust(Run(context.Background(), s, b, testOptions(OptionValues{Profile: handle})))
 				defer rows.Close()
 				if mode == "budget" {
 					implExecution.RowsData(rows).InternalHistory.InternalMaxCount = 1
@@ -790,7 +790,7 @@ func TestV2PreparedRetryRepreparePagingNeverReencodes(t *testing.T) {
 	}()
 	profile := defaultProfile()
 	profile.Retry = step03RetryOnce{}
-	options := Options{Profile: codecTestMust(NewProfile(profile))}
+	options := testOptions(OptionValues{Profile: profileOf(profile)})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	rows := codecTestMust(Run(ctx, s, bound, options))
@@ -1408,7 +1408,7 @@ func TestV2DiscoveryCapacityZeroAndConcurrentMisses(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
 			rt := runtimeFor(s)
-			rt.InternalProfile = DefaultConfig("localhost").DefaultProfile
+			rt.InternalSetProfile(DefaultConfig("localhost").DefaultProfile)
 			rt.InternalConfig.PreparedCacheSize = capacity
 			columns := NewColumns(ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(ScalarType(TypeBlob))})
 			serverDone := make(chan error, 1)

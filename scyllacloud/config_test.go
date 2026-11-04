@@ -186,7 +186,7 @@ func TestCloudCluster(t *testing.T) {
 				return writeCloudConnectionConfigToTemp(t, cc)
 			},
 			verifyClusterConfig: func(t *testing.T, _ *ConnectionConfig, config gocql.Config) {
-				profile := config.DefaultProfile.Snapshot()
+				profile := *config.DefaultProfile
 				if profile.Consistency != gocql.LocalQuorum || !profile.SerialConsistency.Set || profile.SerialConsistency.Value != gocql.Serial {
 					t.Errorf("cloud consistency parameters were not preserved: %+v", profile)
 				}

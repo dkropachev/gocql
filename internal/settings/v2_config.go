@@ -52,7 +52,7 @@ type Config struct {
 	Metadata                                          MetadataOptions
 	Limits                                            ProtocolLimits
 	PreparedCacheSize                                 int
-	DefaultProfile                                    *ProfileHandle
+	DefaultProfile                                    *Profile
 	Partitioners                                      map[string]TokenPartitioner
 	TimestampGenerator                                func() int64
 	Observer                                          Observer
@@ -88,8 +88,7 @@ type ClientRoutesOptions = connectivity.ClientRoutesOptions
 func DefaultConfig(contactPoints ...string) Config {
 	profile := InternalDefaultProfile()
 	profile.Routing, _ = NewRoutingPolicy(RoutingOptions{TokenAware: true, ShuffleReplicas: true})
-	handle, _ := NewProfile(profile)
-	return Config{ContactPoints: append([]string(nil), contactPoints...), Port: 9042, CQLVersion: "3.0.0", ConnectTimeout: 5 * time.Second, DNSTimeout: 5 * time.Second, KeepaliveInterval: 30 * time.Second, KeepaliveTimeout: 30 * time.Second, NoDelay: true, Pool: PoolOptions{ConnectionsPerShard: 1, MaxExcessPerShard: 2, MaxRequestsPerConnection: 32768, MaxOrphanedStreams: 1024, ShardAwarePort: true, SourcePortStart: 49152, SourcePortEnd: 65535}, Metadata: MetadataOptions{Mode: MetadataFull, InitialDiscovery: true, PeriodicRefresh: 60 * time.Second, RequestTimeout: 31 * time.Second, AgreementTimeout: 60 * time.Second, AgreementPoll: 200 * time.Millisecond, AutomaticAgreement: true, RefreshAfterAgreement: true, TopologyEvents: true, StatusEvents: true, SchemaEvents: true, ClientRouteEvents: true}, Limits: ProtocolLimits{MaxFrameBytes: 256 << 20, MaxDecompressedBytes: 256 << 20, MaxMetadataDepth: 64, MaxPagingStates: 65536, MaxPagingStateBytes: 16 << 20}, PreparedCacheSize: 1000, Partitioners: map[string]TokenPartitioner{"org.apache.cassandra.dht.Murmur3Partitioner": Murmur3TokenPartitioner, "Murmur3Partitioner": Murmur3TokenPartitioner, "com.scylladb.dht.CDCPartitioner": CDCTokenPartitioner, "CDCPartitioner": CDCTokenPartitioner}, DefaultProfile: handle, Identity: IdentityOptions{DriverName: InternalDefaultDriverName, DriverVersion: InternalDefaultDriverVersion}, Reconnect: InternalDefaultReconnectPolicy{}, ReportConfiguration: true, TimestampGenerator: InternalNewTimestampGenerator()}
+	return Config{ContactPoints: append([]string(nil), contactPoints...), Port: 9042, CQLVersion: "3.0.0", ConnectTimeout: 5 * time.Second, DNSTimeout: 5 * time.Second, KeepaliveInterval: 30 * time.Second, KeepaliveTimeout: 30 * time.Second, NoDelay: true, Pool: PoolOptions{ConnectionsPerShard: 1, MaxExcessPerShard: 2, MaxRequestsPerConnection: 32768, MaxOrphanedStreams: 1024, ShardAwarePort: true, SourcePortStart: 49152, SourcePortEnd: 65535}, Metadata: MetadataOptions{Mode: MetadataFull, InitialDiscovery: true, PeriodicRefresh: 60 * time.Second, RequestTimeout: 31 * time.Second, AgreementTimeout: 60 * time.Second, AgreementPoll: 200 * time.Millisecond, AutomaticAgreement: true, RefreshAfterAgreement: true, TopologyEvents: true, StatusEvents: true, SchemaEvents: true, ClientRouteEvents: true}, Limits: ProtocolLimits{MaxFrameBytes: 256 << 20, MaxDecompressedBytes: 256 << 20, MaxMetadataDepth: 64, MaxPagingStates: 65536, MaxPagingStateBytes: 16 << 20}, PreparedCacheSize: 1000, Partitioners: map[string]TokenPartitioner{"org.apache.cassandra.dht.Murmur3Partitioner": Murmur3TokenPartitioner, "Murmur3Partitioner": Murmur3TokenPartitioner, "com.scylladb.dht.CDCPartitioner": CDCTokenPartitioner, "CDCPartitioner": CDCTokenPartitioner}, DefaultProfile: &profile, Identity: IdentityOptions{DriverName: InternalDefaultDriverName, DriverVersion: InternalDefaultDriverVersion}, Reconnect: InternalDefaultReconnectPolicy{}, ReportConfiguration: true, TimestampGenerator: InternalNewTimestampGenerator()}
 }
 func InternalNewTimestampGenerator() func() int64 {
 	var last atomic.Int64
@@ -131,7 +130,7 @@ func InternalValidateConfig(config Config) error {
 	if config.DefaultProfile == nil {
 		return typeValidation("profile", "default profile is required; use DefaultConfig")
 	}
-	if err := InternalValidateProfile(config.DefaultProfile.Snapshot()); err != nil {
+	if err := InternalValidateProfile(*config.DefaultProfile); err != nil {
 		return err
 	}
 	if config.Limits.MaxFrameBytes <= 0 || config.Limits.MaxDecompressedBytes <= 0 || config.Limits.MaxMetadataDepth <= 0 {
@@ -214,6 +213,10 @@ func InternalValidateConfig(config Config) error {
 	return nil
 }
 func InternalSnapshotConfig(config Config) Config {
+	if config.DefaultProfile != nil {
+		profile := *config.DefaultProfile
+		config.DefaultProfile = &profile
+	}
 	config.ContactPoints = append([]string(nil), config.ContactPoints...)
 	config.Metadata.Keyspaces = append([]string(nil), config.Metadata.Keyspaces...)
 	if config.TLS != nil {

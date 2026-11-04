@@ -184,8 +184,8 @@ func TestStep15OptionalWorkCounts(t *testing.T) {
 			if enabled {
 				profile.Speculation = step15Speculation{}
 			}
-			handle := codecTestMust(NewProfile(profile))
-			options := Options{Profile: handle, Idempotent: true}
+			handle := profileOf(profile)
+			options := testOptions(OptionValues{Profile: handle, Idempotent: true})
 			if mode == "default" {
 				options = Options{}
 			}
@@ -263,7 +263,7 @@ func TestStep15RetainedPrefetchCharges(t *testing.T) {
 							defer bound.Close()
 							profile := defaultProfile()
 							profile.Prefetch = prefetch
-							options := Options{Profile: codecTestMust(NewProfile(profile))}
+							options := testOptions(OptionValues{Profile: profileOf(profile)})
 							values := make([]string, cells)
 							for i := range values {
 								values[i] = "q"

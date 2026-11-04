@@ -66,14 +66,16 @@ func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Sess
 	if err != nil {
 		return nil, err
 	}
-	if options.Options.Prefetch.Set && options.Options.Prefetch.Value != 0 {
+	if v := options.Options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, typeValidation("stream prefetch", "must be zero")
 	}
-	options.Options.Prefetch = Option[int]{Set: true, Value: 0}
 	runctx, cancel, request, err := InternalAdmitExecution(ctx, session, bound, options.Options)
 	if err != nil {
 		return nil, err
 	}
+	// A stream never prefetches or speculates, whatever its profile says.
+	request.InternalOptions.InternalProfile.Prefetch = 0
+	request.InternalOptions.InternalOptions.Prefetch = Option[int]{Set: true, Value: 0}
 	request.InternalOptions.InternalProfile.Speculation = nil
 	request.responseDest = nil // a stream handle keeps its pages beyond the query's generation
 	cursor := func() *RowStream[R] {

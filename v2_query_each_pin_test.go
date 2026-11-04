@@ -152,7 +152,7 @@ func TestQueryEachPinnedRetryNextMovesHost(t *testing.T) {
 	})
 	profile := defaultProfile()
 	profile.Retry = pinRetryNext{}
-	q := pinTestQuery(t, s, Options{Profile: codecTestMust(NewProfile(profile))})
+	q := pinTestQuery(t, s, testOptions(OptionValues{Profile: profileOf(profile)}))
 	for range 16 {
 		mu.Lock()
 		failNext = true
