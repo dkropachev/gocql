@@ -314,6 +314,7 @@ func compileUDTParams[T any](codec paramsCodec[T], columns cqltype.Columns, opti
 		}
 		plan.ordered[index] = compiled
 	}
+	plan.ops = paramOps(plan.ordered)
 	return plan, nil
 }
 func compileUDTRows[T any](codec rowCodec[T], columns cqltype.Columns, options UDTOptions) (RowPlan[T], error) {
@@ -340,6 +341,7 @@ func compileUDTRows[T any](codec rowCodec[T], columns cqltype.Columns, options U
 		}
 		plan.ordered[index] = compiled
 	}
+	plan.ops = rowOps(plan.ordered)
 	return plan, nil
 }
 

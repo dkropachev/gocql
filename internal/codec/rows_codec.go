@@ -222,7 +222,10 @@ func (f inputField[P, V]) encode(w *ParamWriter, value P) error {
 }
 
 type paramsCodec[P any] struct{ fields []InputField[P] }
-type paramsPlan[P any] struct{ ordered []InputField[P] }
+type paramsPlan[P any] struct {
+	ordered []InputField[P]
+	ops     []paramOp[P] // ordered, with built-in codecs as direct ops
+}
 
 func Params[P any](fields ...InputField[P]) ParamEncoder[P] {
 	return paramsCodec[P]{fields: append([]InputField[P](nil), fields...)}
@@ -290,14 +293,22 @@ func (c paramsCodec[P]) Compile(columns cqltype.Columns) (ParamPlan[P], error) {
 		}
 		plan.ordered[index] = compiled
 	}
+	plan.ops = paramOps(plan.ordered)
 	return plan, nil
 }
 
 func (p paramsPlan[P]) Encode(w *ParamWriter, value P) error {
 	mark := w.builder.Mark()
 	start := w.index
-	for _, field := range p.ordered {
-		if err := field.encode(w, value); err != nil {
+	for i := range p.ops {
+		op := &p.ops[i]
+		var err error
+		if op.kind == directNone {
+			err = op.field.encode(w, value)
+		} else {
+			err = op.encodeDirect(w, value)
+		}
+		if err != nil {
 			w.builder.Rollback(mark)
 			w.index = start
 			return err
@@ -366,6 +377,7 @@ type rowCodec[R any] struct {
 type rowPlan[R any] struct {
 	reset   func(*R)
 	ordered []OutputField[R]
+	ops     []rowOp[R] // ordered, with built-in codecs as direct ops
 	// Scratch addresses are confined to Decode; accessors must not retain them.
 	// The returned R is copied before scratch is cleared and recycled.
 	scratch *sync.Pool
@@ -416,6 +428,7 @@ func (c rowCodec[R]) Compile(columns cqltype.Columns) (RowPlan[R], error) {
 		}
 		plan.ordered[index] = compiled
 	}
+	plan.ops = rowOps(plan.ordered)
 	return plan, nil
 }
 func (p rowPlan[R]) Decode(reader *RowReader) (R, error) {
@@ -440,8 +453,15 @@ func (p rowPlan[R]) DecodeInto(reader *RowReader, dst *R) error {
 		var zero R
 		*dst = zero
 	}
-	for _, field := range p.ordered {
-		if err := field.decode(reader, dst); err != nil {
+	for i := range p.ops {
+		op := &p.ops[i]
+		var err error
+		if op.kind == directNone {
+			err = op.field.decode(reader, dst)
+		} else {
+			err = op.decodeDirect(reader, dst)
+		}
+		if err != nil {
 			return err
 		}
 	}
