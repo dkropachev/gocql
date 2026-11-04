@@ -237,7 +237,7 @@ func serveLoopback(peer net.Conn, choose func([]byte) []byte, prepared []byte) {
 func BenchmarkReusableQueryLoopback(b *testing.B) {
 	options := Options{Timeout: Option[time.Duration]{Set: true, Value: 10 * time.Second}}
 	value := loopbackValue
-	for _, workload := range []string{"read", "write", "pread", "pwrite", "pone", "preadctx", "page", "pagectx", "pagepto", "pagepf"} {
+	for _, workload := range []string{"read", "write", "pread", "pwrite", "pone", "preadctx", "page", "pagectx", "pagepto", "pagepf", "pageb"} {
 		workerCounts := []int{1, 8, 64}
 		if strings.HasPrefix(workload, "page") {
 			workerCounts = []int{1, 4}
@@ -248,6 +248,31 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 				run := make([]func(context.Context) error, workers)
 				for i := range run {
 					switch workload {
+					case "pageb":
+						// Borrowed column values, valid until the callback returns: no
+						// per-row copy. Measurement only; master's client copies.
+						pageOptions := Options{PageSize: Option[int32]{Set: true, Value: loopbackPageRows}, Prefetch: Option[int]{Set: true, Value: 0}, Timeout: Option[time.Duration]{Set: true, Value: 10 * time.Second}}
+						statement := Statement[Unit, Bytes]{Kind: OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: NoParams, Rows: OneColumn(BlobCodec)}
+						query := codecTestMust(NewUnpreparedQuery(s, statement, NewColumns(), pageOptions))
+						b.Cleanup(query.Close)
+						var dst Bytes
+						run[i] = func(ctx context.Context) error {
+							count := 0
+							err := query.Each(ctx, Unit{}, &dst, func(row *Bytes) error {
+								if row.Len() != int64(len(loopbackPageValue)) {
+									return fmt.Errorf("bad diagnostic row")
+								}
+								count++
+								return nil
+							})
+							if err != nil {
+								return err
+							}
+							if count != loopbackPageCount*loopbackPageRows {
+								return fmt.Errorf("incomplete diagnostic partition: %d rows", count)
+							}
+							return nil
+						}
 					case "page", "pagectx", "pagepto", "pagepf":
 						pageOptions := Options{PageSize: Option[int32]{Set: true, Value: loopbackPageRows}, Prefetch: Option[int]{Set: true, Value: 0}, Timeout: Option[time.Duration]{Set: true, Value: 10 * time.Second}}
 						if workload == "pagepto" {

@@ -8,7 +8,7 @@ HP_T0='BenchmarkReusableQueryDecoding/(point|partition)/buffered|BenchmarkReusab
 HP_T1='BenchmarkReusableQueryLoopback/^(p?(read|write)|pone)$/w(1|64)$'
 HP_MC='BenchmarkReusableQueryLoopback/^(p?(read|write)|pone)$/w64$'
 # Paged Each (round 4) and the per-operation-context point read.
-HP_PAGE='BenchmarkReusableQueryLoopback/^(page(ctx|pto|pf)?|preadctx)$/w(1|4|64)$'
+HP_PAGE='BenchmarkReusableQueryLoopback/^(page(ctx|pto|pf|b)?|preadctx)$/w(1|4|64)$'
 # hp_build LABEL builds the gate binaries from the working tree, or from the
 # commit HP_REF (checked out in a throwaway worktree) so that editing can go on
 # while a comparison runs, optionally with HP_PATCH applied. Builds stay off the benchmark CPUs.
