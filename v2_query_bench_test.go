@@ -19,12 +19,12 @@ func BenchmarkReusableQueryDecoding(b *testing.B) {
 		name        string
 		rows, bytes int
 	}{{"point", 1, 1024}, {"partition", 128, 4096}} {
-		for _, stream := range []bool{false, true} {
-			name := size.name + "/buffered"
-			if stream {
-				name = size.name + "/stream"
+		for _, mode := range []string{"buffered", "stream", "each"} {
+			stream, each := mode == "stream", mode == "each"
+			if each && size.rows == 1 {
+				continue
 			}
-			b.Run(name, func(b *testing.B) {
+			b.Run(size.name+"/"+mode, func(b *testing.B) {
 				s, conns, peers := runtimeTestSession(b, 1)
 				value := strings.Repeat("x", size.bytes)
 				var bodies [][]byte
@@ -85,7 +85,18 @@ func BenchmarkReusableQueryDecoding(b *testing.B) {
 				for range b.N {
 					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 					count := 0
-					if stream {
+					if each {
+						err := query.Each(ctx, Unit{}, &dst, func(row *[]byte) error {
+							count++
+							if len(*row) != size.bytes || (*row)[0] != 'x' || (*row)[len(*row)-1] != 'x' {
+								b.Fatal("bad diagnostic payload")
+							}
+							return nil
+						})
+						if err != nil {
+							b.Fatal(err)
+						}
+					} else if stream {
 						cursor, err := streaming.Run(ctx, Unit{})
 						if err != nil {
 							b.Fatal(err)

@@ -81,8 +81,12 @@ func TestLoopbackServerProcess(t *testing.T) {
 		t.Skip("benchmark helper process")
 	}
 	body := []byte{0, 0, 0, frm.ResultKindVoid}
-	if workload == "read" || workload == "pread" || workload == "pone" {
+	if workload == "read" || workload == "pread" || workload == "pone" || workload == "preadctx" {
 		body = runtimeRowsBody(nil, loopbackValue)
+	}
+	choose := func([]byte) []byte { return body }
+	if strings.HasPrefix(workload, "page") {
+		choose = loopbackPages()
 	}
 	key := NewColumns(ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: codecTestMust(ScalarType(TypeInt))})
 	value := NewColumns(ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(ScalarType(TypeBlob))})
@@ -100,7 +104,7 @@ func TestLoopbackServerProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	serveLoopback(peer, body, prepared)
+	serveLoopback(peer, choose, prepared)
 }
 
 var loopbackValue = strings.Repeat("x", 1024)
@@ -110,23 +114,107 @@ type loopbackRow struct {
 	value []byte
 }
 
+// Paged loopback workloads read loopbackPageCount pages of loopbackPageRows
+// rows of loopbackPageValue, then an empty final page, as a server does when
+// the last full page still reported more.
+const (
+	loopbackPageCount = 4
+	loopbackPageRows  = 32
+)
+
+var loopbackPageValue = strings.Repeat("x", 4096)
+
+// loopbackPages returns a chooser that answers an unprepared v4 QUERY with
+// the page its paging state names: no state is page 1, and page n carries the
+// one-byte token n.
+func loopbackPages() func([]byte) []byte {
+	values := make([]string, loopbackPageRows)
+	for i := range values {
+		values[i] = loopbackPageValue
+	}
+	pages := make([][]byte, loopbackPageCount+1)
+	for n := range loopbackPageCount {
+		pages[n] = runtimeRowsBody([]byte{byte(n + 1)}, values...)
+	}
+	pages[loopbackPageCount] = runtimeRowsBody(nil)
+	return func(request []byte) []byte {
+		token := loopbackPagingState(request)
+		if len(token) != 1 || int(token[0]) > loopbackPageCount {
+			return pages[0]
+		}
+		return pages[token[0]]
+	}
+}
+
+// loopbackPagingState extracts the paging state of a v4 QUERY body, or nil.
+func loopbackPagingState(b []byte) []byte {
+	take := func(n int) []byte {
+		if n < 0 || n > len(b) {
+			b = nil
+			return nil
+		}
+		v := b[:n]
+		b = b[n:]
+		return v
+	}
+	u32 := func() int {
+		v := take(4)
+		if v == nil {
+			return -1
+		}
+		return int(int32(binary.BigEndian.Uint32(v)))
+	}
+	take(u32()) // query
+	take(2)     // consistency
+	flags := take(1)
+	if flags == nil {
+		return nil
+	}
+	if flags[0]&0x01 != 0 {
+		count := take(2)
+		if count == nil {
+			return nil
+		}
+		for range int(binary.BigEndian.Uint16(count)) {
+			if n := u32(); n > 0 {
+				take(n)
+			}
+		}
+	}
+	if flags[0]&0x04 != 0 {
+		take(4)
+	}
+	if flags[0]&0x08 == 0 {
+		return nil
+	}
+	return take(u32())
+}
+
 // serveLoopback answers PREPARE with prepared and every other request frame
-// with body, preserving its stream. Like a server, it flushes once no further
-// request bytes are buffered.
-func serveLoopback(peer net.Conn, body, prepared []byte) {
+// with choose(request body), preserving its stream. Like a server, it flushes
+// once no further request bytes are buffered.
+func serveLoopback(peer net.Conn, choose func([]byte) []byte, prepared []byte) {
 	r := bufio.NewReaderSize(peer, 64<<10)
 	w := bufio.NewWriterSize(peer, 64<<10)
 	var header [9]byte
+	var request []byte
 	for {
 		if _, err := io.ReadFull(r, header[:]); err != nil {
 			return
 		}
-		if _, err := r.Discard(int(binary.BigEndian.Uint32(header[5:]))); err != nil {
+		n := int(binary.BigEndian.Uint32(header[5:]))
+		if cap(request) < n {
+			request = make([]byte, n)
+		}
+		request = request[:n]
+		if _, err := io.ReadFull(r, request); err != nil {
 			return
 		}
-		response := body
+		var response []byte
 		if header[4] == byte(frm.OpPrepare) {
 			response = prepared
+		} else {
+			response = choose(request)
 		}
 		header[0], header[1], header[4] = 0x84, 0, byte(frm.OpResult)
 		binary.BigEndian.PutUint32(header[5:], uint32(len(response)))
@@ -149,21 +237,63 @@ func serveLoopback(peer net.Conn, body, prepared []byte) {
 func BenchmarkReusableQueryLoopback(b *testing.B) {
 	options := Options{Timeout: Option[time.Duration]{Set: true, Value: 10 * time.Second}}
 	value := loopbackValue
-	for _, workload := range []string{"read", "write", "pread", "pwrite", "pone"} {
-		for _, workers := range []int{1, 8, 64} {
+	for _, workload := range []string{"read", "write", "pread", "pwrite", "pone", "preadctx", "page", "pagectx", "pagepto"} {
+		workerCounts := []int{1, 8, 64}
+		if strings.HasPrefix(workload, "page") {
+			workerCounts = []int{1, 4}
+		}
+		for _, workers := range workerCounts {
 			b.Run(fmt.Sprintf("%s/w%d", workload, workers), func(b *testing.B) {
 				s := loopbackTestSession(b, workload)
 				run := make([]func(context.Context) error, workers)
 				for i := range run {
 					switch workload {
-					case "pread":
+					case "page", "pagectx", "pagepto":
+						pageOptions := Options{PageSize: Option[int32]{Set: true, Value: loopbackPageRows}, Prefetch: Option[int]{Set: true, Value: 0}, Timeout: Option[time.Duration]{Set: true, Value: 10 * time.Second}}
+						if workload == "pagepto" {
+							pageOptions.PageTimeout = Option[time.Duration]{Set: true, Value: 2 * time.Second}
+						}
+						statement := Statement[Unit, []byte]{Kind: OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: NoParams, Rows: RowInto(func(*[]byte) {}, Column("value", OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+						query := codecTestMust(NewUnpreparedQuery(s, statement, NewColumns(), pageOptions))
+						b.Cleanup(query.Close)
+						dst := make([]byte, 0, len(loopbackPageValue))
+						perOp := workload == "pagectx"
+						run[i] = func(ctx context.Context) error {
+							if perOp {
+								var cancel context.CancelFunc
+								ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
+								defer cancel()
+							}
+							count := 0
+							err := query.Each(ctx, Unit{}, &dst, func(row *[]byte) error {
+								if len(*row) != len(loopbackPageValue) {
+									return fmt.Errorf("bad diagnostic row")
+								}
+								count++
+								return nil
+							})
+							if err != nil {
+								return err
+							}
+							if count != loopbackPageCount*loopbackPageRows {
+								return fmt.Errorf("incomplete diagnostic partition: %d rows", count)
+							}
+							return nil
+						}
+					case "pread", "preadctx":
 						statement := Statement[int32, []byte]{Kind: OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: OneParam(Int32), Rows: RowInto(func(*[]byte) {}, Column("value", OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 						prepared := codecTestMust(Prepare(context.Background(), s, statement, PrepareOptions{}))
 						query := codecTestMust(NewQuery(prepared, options))
 						b.Cleanup(query.Close)
 						dst := make([]byte, 0, len(value))
 						key := int32(i)
+						perOp := workload == "preadctx"
 						run[i] = func(ctx context.Context) error {
+							if perOp {
+								var cancel context.CancelFunc
+								ctx, cancel = context.WithTimeout(ctx, 10*time.Second)
+								defer cancel()
+							}
 							rows, err := query.Run(ctx, key)
 							if err != nil {
 								return err
