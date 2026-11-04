@@ -5,6 +5,7 @@ package routing
 
 import (
 	"math/rand/v2"
+	"strings"
 	"sync/atomic"
 
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
@@ -116,19 +117,11 @@ func InternalComparePlacementToken(a, b int64) int {
 	return 0
 }
 func InternalComparePlacementTable(a, b InternalMetadataTable) int {
-	if a.InternalKeyspace < b.InternalKeyspace {
-		return -1
+	// One three-way comparison per name: < and > would each compare it.
+	if c := strings.Compare(a.InternalKeyspace, b.InternalKeyspace); c != 0 {
+		return c
 	}
-	if a.InternalKeyspace > b.InternalKeyspace {
-		return 1
-	}
-	if a.InternalTable < b.InternalTable {
-		return -1
-	}
-	if a.InternalTable > b.InternalTable {
-		return 1
-	}
-	return 0
+	return strings.Compare(a.InternalTable, b.InternalTable)
 }
 
 var tabletObservationID atomic.Uint64
