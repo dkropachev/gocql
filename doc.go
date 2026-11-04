@@ -29,6 +29,12 @@
 // directly. Parameters are copied during execution admission. Overlapping use
 // returns ErrBusy; Wait joins transport writes and callbacks before reuse.
 //
+// Prepared.Exec, One and Each execute a prepared statement once with the
+// options of the call. They are safe for concurrent use and reuse queries the
+// statement keeps for them, so they are the cheapest way to run point reads
+// and writes from many goroutines. Do not keep Query values in a sync.Pool:
+// a query the pool drops stays open until it is closed.
+//
 // NewStreamQuery decodes into seeded caller storage and buffers one response page
 // on normal multiplexed connections by default. StreamOptions.Incremental opts
 // into bounded incremental receive through an exclusive connection reservation.

@@ -52,6 +52,15 @@ statements and compiled plans remain shareable. Overlapping executions return
 `ErrBusy`; `query.Wait(ctx)` joins accepted writes and callbacks before reuse.
 `Close` cancels the active execution and permanently stops the query.
 
+For point reads and writes from many goroutines, call the prepared statement
+directly. `prepared.Exec(ctx, input, options)`, `prepared.One(ctx, input, &dst,
+options)` and `prepared.Each(ctx, input, &dst, fn, options)` are safe for
+concurrent use and reuse queries the statement keeps, so they cost about the
+same as a query per worker. They return only when the execution has finished:
+values that borrow response storage are valid until `One` returns or `fn`
+returns. Don't keep `Query` values in a `sync.Pool`: a query the pool drops
+stays open until it is closed.
+
 Buffered rows borrow receive pages. Views expire at the next advancement or
 Close unless a retained `PageLease` pins the page. `Clone` explicitly detaches
 values. `NextInto` writes typed fields into caller structs while payloads still
