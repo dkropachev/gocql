@@ -935,3 +935,300 @@ with fewer requests in flight, the writer batches fewer per socket write
 and the woken-writer hand-off costs more per request. Low-load write
 batching is the next target, together with the streaming and paged
 regressions.
+
+## Round 4: paged Query.Each
+
+Target: paged reads, the remaining regression against master on the cluster
+(0.925× throughput, 451 vs 432 CPU µs/op). Plan:
+`~/.claude/plans/compressed-wondering-parnas.md`. Each item is measured
+against its predecessor with `hp/compare.sh` (5×ABBA, n=10) and kept under
+the round 1 rule.
+
+### P0: gates
+
+The loopback server answers an unprepared QUERY with the page its paging
+state names: four pages of 32 × 4 KiB rows, then an empty page. New gates
+(`HP_PAGE`): `page`, `pagectx` (a per-operation `WithTimeout`, as the
+latency client passes), `pagepto` (`PageTimeout` 2 s under `Timeout` 10 s),
+`pagepf` (Prefetch 1), `pageb` (borrowed blob, measurement only) and
+`preadctx` (pread under a per-operation context); T0 gains
+`partition/each`. Baseline `r4base` (`0ed808ee`): `page/w1` 16 allocs,
+2,140 B/op; `pagepto/w1` 63 allocs, 4,740 B/op; `preadctx/w1` 11 allocs.
+
+The paged loopback case is dominated by `read` syscalls (65%) and the
+owned-blob copy (13%); the driver's control path is a few percent, so most
+items below show as allocations at neutral CPU.
+
+`compare.sh` resets the old side's sample file, so chained comparisons read
+each result from the `*.cmp.out` written when that comparison finished.
+
+### P1: lend query response storage to every Each page (kept)
+
+`executePageDirect` cleared the lent response storage after the first page.
+Each releases a page before requesting the next, so continuation pages now
+parse into the query's storage too. Paging tokens are copied out of the
+frame, so the history keeps them across the reuse
+(`TestQueryEachReusedStorageKeepsTokensAndDetectsRepeats`,
+`TestQueryEachUnpreparedContinuationRepairs`).
+
+| vs r4base | before | after |
+|---|---:|---:|
+| allocs/op page/w1, pagectx/w1, partition/each | 16 / 25 / 29 | 12 / 21 / 25 |
+| B/op page/w1 | 2,140 | 604 |
+| cpu-ns/op, every case | | ~ (pagectx/w4 −1.5%, p=0.019) |
+
+### Writev header in the connection writer (kept, found while profiling)
+
+`net.Buffers.WriteTo` takes its receiver by pointer, so the header passed
+by value moved to the heap on every socket write: one allocation per
+request at w1 and per page on a paged read. The writer keeps the header
+next to its span scratch, under the same semaphore.
+
+| vs P2 | before | after |
+|---|---:|---:|
+| allocs/op every loopback w1 case | 2 | 1 |
+| allocs/op page/w1 | 10 | 5 |
+| B/op page/w1 / read/w1 | 140 / 40 | 20 / 16 |
+| cpu-ns/op | | ~ (geomean +0.06%) |
+
+### P2: inline paging history (kept after a revision)
+
+The first eight tokens are compared inline; the ninth spills them into the
+hashed map (`TestV2PagingHistoryInlineSpill`; a mutation that halves the
+inline scan fails it and the fuzz test).
+
+As first written (`25ae33a4`) the inline array was part of every history:
+−2 allocs on every paged case including Rows, but `point/stream` +281 B/op
+(+9.2%, a history per stream execution) and `read/w1` cpu +2.85%
+(p=0.035), over the 2% rule. The revision (`4d0a4dde`) makes the inline
+storage a pointer lent by reusable owners only: Each from its frame, a
+query's iterator from the query; streams keep the map.
+
+| P2 vs P1 (`25ae33a4`) | before | after |
+|---|---:|---:|
+| allocs/op page/w1, partition/buffered, partition/each | 12 / 33 / 25 | 10 / 31 / 23 |
+| B/op page/w1 | 604 | 140 |
+| B/op point/stream | 3,121 | 3,409 (+9.2%) |
+| cpu-ns/op read/w1 | 12.25µ | 12.60µ (+2.85%, p=0.035) |
+
+| P2 revision vs P9 (`4d0a4dde` vs `177b08d1`) | before | after |
+|---|---:|---:|
+| B/op point/stream | 3,385 | 3,097 (−8.5%) |
+| allocs, B/op paged cases | | unchanged |
+| pwrite/w64-4 sec/op | | +3.88% (p=0.019, ±25%), see the rerun below |
+
+### P3: pin continuation pages to the previous page's connection (kept, marginal)
+
+A continuation page goes to the connection that served the previous page
+while it is open and its host is up. A plan is built only if that attempt
+is retried, and it skips the pinned host, as the plan would have moved past
+its first target (`TestQueryEachPinsContinuationPages`,
+`TestQueryEachRePlansWhenPinnedHostIsDown`,
+`TestQueryEachPinnedRetryNextMovesHost`, `TestSkipHostPlanOmitsPinnedHost`).
+
+The loopback session has one host and one connection, so the selection it
+removes is already cheap there; the benefit is meant for token-aware plans
+over several hosts.
+
+| vs writev | Δ |
+|---|---:|
+| partition/each sec/op | −0.50% (p=0.023) |
+| pagectx/w4 cpu-ns/op | −0.82% (p=0.029) |
+| read/write/pread/pone w64 and w64-4 cpu-ns/op | +0.67% to +1.09% (p<0.05) |
+| allocs, B/op | unchanged |
+
+### P4: reuse a query-owned page timeout context (kept)
+
+With `PageTimeout` below the remaining deadline every direct page derived
+`context.WithTimeout` from the execution context, about nine allocations
+per page. A second reusable execution context per query now carries the
+page timeout. It links to the execution context directly instead of
+through `AfterFunc`: the parent cancels the linked generation, a
+generation check keeps a late cancellation off the next page, and finishing
+the parent cancels a page still linked (`TestExecutionContextLinkedChild`,
+`TestExecutionContextLinkedChildRaces`, `TestQueryEachPageTimeoutPerPage`,
+`TestQueryEachParentCancelReachesPageContext`). A page that overlaps
+another takes a context of its own.
+
+| vs P3 | before | after |
+|---|---:|---:|
+| allocs/op pagepto/w1, w4 | 52 / 52 | 5 / 5 |
+| B/op pagepto/w1 | 2,620 | 20 |
+| pwrite/w64 sec/op | | +1.59% (p=0.001) |
+| pone/w1 sec/op | | +6.62% (p=0.029), see the rerun below |
+
+### P5: watch a cancellable caller context lazily (kept)
+
+Every execution under a cancellable context registered
+`context.AfterFunc` on it. The execution context now only remembers such a
+parent: `Err` checks it and cancels the generation once it is done, the
+typed response wait selects on the parent's Done channel next to the
+attempt's, and `Done` or `AfterFunc` register a watcher only once something
+may wait on the execution context's own channel. Linked contexts lock
+child, then parent (`TestExecutionContextLazyParent`,
+`TestQueryEachParentCancelInterruptsWait` — fails after 5 s without the
+parent case — and `TestQueryEachParentCancelInterruptsRetryDelay`).
+
+| vs P4 | before | after | Δ |
+|---|---:|---:|---:|
+| allocs/op preadctx/w1, pagectx/w1, point/buffered | 10 / 14 / 10 | 6 / 10 / 6 | |
+| B/op preadctx/w1 | 784 | 400 | −49% |
+| preadctx/w64 cpu-ns/op | 5.233µ | 4.780µ | −8.66% |
+| pagectx/w1 sec/op | 211.5µ | 197.7µ | −6.55% (p=0.035) |
+| point/buffered sec/op | 10.26µ | 9.91µ | −3.44% |
+| Admission | 592.4n | 583.4n | −1.52% |
+| partition/buffered sec/op | | | +0.81% |
+
+### Reruns of flagged cases
+
+Two compare runs flagged a case the change does not touch; a focused
+10×ABBA (n=20) of each, on the gate CPUs:
+
+| case | pair | sec/op | cpu-ns/op |
+|---|---|---:|---:|
+| pone/w1 | P4 vs P3 | −3.78% (p=0.049) | ~ (p=0.072) |
+| pwrite/w64-4 | P2 revision vs P9 | ~ (p=0.189) | ~ (p=0.578) |
+
+Both were noise; P4 and the revision are kept.
+
+### P9: prefetch in Each (rejected)
+
+With Prefetch 1, Each requested the next page as soon as a page arrived and
+parsed it into a second query-owned response slot while the current page's
+rows were delivered; an early stop cancelled the execution for real and
+joined the outstanding page (`177b08d1`). Gates at Prefetch 0 did not move
+(pone/w64 +1.42%, p=0.027), but the target did not improve:
+
+| | page/w1 | pagepf/w1 |
+|---|---:|---:|
+| sec/op, -cpu 1 (compare run) | 202.8µ | 215.0µ |
+| cpu-ns/op, -cpu 1 | 158.3µ | 170.3µ |
+| sec/op, -cpu 2 (6 rounds, CPUs 12-15) | 422–432µ | 462–479µ |
+| allocs/op | 5 | 9 |
+
+A loopback round trip leaves nothing for the overlap to hide, so the
+prefetch goroutine is only cost. It may pay off over a real network round
+trip, which these gates do not measure; the comparison client uses
+Prefetch 0 for both drivers. Reverted in `65c7dfa6`.
+
+### Not done
+
+- **P6** (skip redundant `SetReadDeadline`) and **P7** (per-connection
+  receive-buffer slot): `armDeadline` is 0.19% and `ReceiveCache`
+  0.4% of `page/w1` CPU, under the 1% prerequisite.
+- **P8** (per-page instead of per-row cancellation checks): the per-row
+  checks are what stop a cancellation inside the callback at the next row;
+  they cost about 0.4%.
+
+## Round 4 cumulative
+
+`65c7dfa6` against `r4base` (`0ed808ee`), 5×ABBA. Allocations and bytes are
+exact; the timing side of this first run is unusable (±20–60% per row),
+because a Scylla build used all 20 CPUs during it, and is repeated below.
+
+| benchmark | allocs/op before → after | B/op before → after |
+|---|---:|---:|
+| page/w1 | 16 → 5 | 2,140 → 20 |
+| pagectx/w1 | 25 → 10 | 2,908 → 404 |
+| pagepto/w1 | 63 → 5 | 4,740 → 20 |
+| partition/each (T0) | 29 → 14 | 3,020 → 516 |
+| partition/buffered (T0, Rows) | 33 → 22 | 4,300 → 3,332 |
+| point/buffered (T0) | 11 → 6 | 817 → 409 |
+| preadctx/w1, w64 | 11, 10 → 6, 6 | 808, 788 → 400, 401 |
+| every point read/write loopback case w1 | 2 → 1 | 40 → 16 |
+| every point read/write loopback case w64 | 1 → 1 | 18 → 16 |
+| pageb/w1 (borrowed, new) | — → 5 | — → 20 |
+
+A third run on a quiet host (`r4final3`, ±1–3% per row) gives the timing:
+
+| benchmark | before | after | Δ |
+|---|---:|---:|---:|
+| preadctx/w64 cpu-ns/op | 5.141µ | 4.737µ | −7.86% |
+| pagepto/w1, w4 cpu-ns/op | 161.8µ / 109.8µ | 154.4µ / 103.3µ | −4.58% / −5.92% |
+| pagectx/w4 cpu-ns/op | 105.5µ | 103.7µ | −1.75% |
+| partition/each sec/op (T0) | 90.29µ | 87.81µ | −2.75% |
+| point/buffered sec/op (T0) | 10.24µ | 9.85µ | −3.79% |
+| page/w1, page/w4 cpu-ns/op | 147.5µ / 100.5µ | 146.5µ / 98.5µ | ~ |
+| read, pread, pone w64-4 cpu-ns/op | | | +0.64% to +1.35% |
+| pwrite/w64 cpu-ns/op | 3.509µ | 3.557µ | +1.37% |
+| point/stream sec/op | 11.83µ | 11.91µ | +0.66% |
+| Admission | 579.4n | 585.8n | +1.10% |
+
+No case regressed by more than 2%. The small w64 costs come from P3 (pinned
+connection fields and checks on every direct page). `pageb` (borrowed
+values) runs at 132.6µ cpu-ns/op against `page`'s 146.5µ: the owned-blob
+copy is about 10% of a paged read's client CPU.
+
+## Round 4 against master
+
+### Emulator screen
+
+`hp4-screen-master-20261104T034637Z`: candidate `65c7dfa6`, the same setup
+as `hp3c` (frozen master `1ceaac81`, client CPU 8, GOMAXPROCS=1, emulator
+CPUs 0-1,4-5, two ABBA pairs × 30 s). Ratios are v2/master with 95% CIs;
+the `hp3c` column is the end of round 3.
+
+| case | throughput hp3c → hp4 | CPU/op hp3c → hp4 | allocs/op | bytes/op | p99 hp3c → hp4 |
+|---|---:|---:|---:|---:|---:|
+| point-buffered w64 | 1.370 → 1.428 [1.421, 1.434] | 0.730 → 0.699 | 0.378 → 0.250 | 0.363 → 0.195 | 0.769 → 0.548 |
+| point-stream w4 | 0.778 → 0.770 [0.765, 0.776] | 1.246 → 1.299 | 1.245 → 1.219 | 1.534 → 1.526 | 1.608 → 1.521 |
+| paged-buffered w4 | 0.971 → 0.970 [0.960, 0.979] | 1.025 → 1.023 | 0.176 → 0.081 | 0.229 → 0.038 | 0.950 → 0.974 |
+| paged-stream w4 | 0.844 → 0.844 [0.831, 0.857] | 1.176 → 1.175 | 0.568 → 0.568 | 0.632 → 0.641 | 1.166 → 1.161 |
+| write w64 | 1.361 → 1.476 [1.465, 1.487] | 0.735 → 0.677 | 0.364 → 0.200 | 0.420 → 0.210 | 0.749 → 0.479 |
+
+Paged buffered reads now allocate 8% of master's objects and 4% of its
+bytes, but throughput and CPU per operation did not move: allocation is not
+what keeps paged reads 3% behind master on the emulator. Point reads and
+writes gained throughput and tail latency, mostly from the writev header
+(one allocation per socket write) and the lazily watched caller context.
+
+### Three-node Scylla cluster
+
+Same setup as round 3 (`cluster.sh`, Scylla 2026.3.3, nodes on CPUs 0-1,
+4-5 and 6-7, clients on CPU 8 with GOMAXPROCS=1, RF=3 LOCAL_QUORUM, 10 s
+warmup and 30 s measurement), emulator paused. Master is the frozen
+`1ceaac81` build; v2 is `65c7dfa6`. Medians; every run had zero errors.
+Results: `results/cluster-master-vs-v2-hp4-20261104T034637Z`. Absolute
+rates for both drivers were lower than in the round 3 run (master paged
+1,910 against 2,275 ops/s), so compare ratios, not rates, across runs.
+
+Closed-loop throughput (2 pairs; 64 workers, paged 4):
+
+| scenario | v2/master round 3 | v2/master round 4 | CPU µs/op master → v2 | allocs/op | B/op | p99 µs |
+|---|---:|---:|---:|---:|---:|---:|
+| point read | 1.281 | **1.257** | 11.5 → 9.1 | 26.0 → 8.0 | 1,993 → 449 | 1,976 → 1,290 |
+| write | 1.252 | **1.089** | 12.5 → 10.4 | 25.0 → 5.0 | 1,838 → 386 | 10,749 → 9,953 |
+| paged read (128 × 4 KiB) | 0.925 | **1.019** | 505 → 484 | 120 → 12.2 | 12,014 → 1,187 | 4,283 → 4,394 |
+
+Per pair the paged ratio was 0.96 and 1.08, so paged reads are at parity
+with master within this run's noise, against a 7.5% deficit before; v2's
+paged CPU per operation is now 4% below master's (it was 4% above). Point
+reads were 1.26 and 1.25 per pair; writes 1.11 and 1.07 (round 3's write
+runs varied 40k–60k ops/s for master alone).
+
+Open-loop latency at 40% of master's throughput, the same scheduled rate
+for both (3 pairs):
+
+| scenario | rate/s | p90 µs | p95 µs | p99 µs | CPU µs/op |
+|---|---:|---:|---:|---:|---:|
+| point read | 35,106 | 701 → 249 | 1,644 → 401 | 2,977 → 2,395 | 22.0 → 23.2 |
+| write | 21,707 | 762 → 444 | 2,057 → 1,839 | 2,645 → 2,625 | 16.2 → 17.1 |
+| paged read | 764 | 2,659 → 2,889 | 3,085 → 3,703 | 4,599 → 5,675 | 548 → 574 |
+
+Paged tails are noise-dominated: per pair v2's p99 was 5,707/5,331,
+5,675/4,025 and 4,009/4,599 against master. CPU per operation at 40% load
+stays about 5% above master in every scenario and every pair, the low-load
+cost round 3 attributed to smaller write batches and the woken-writer
+hand-off; this round did not target it.
+
+### Outcome
+
+Round 4 removed most per-page and per-execution allocations from paged
+reads (16 → 5 allocations and 2,140 → 20 B per loopback paged read; 120 →
+12 allocations per cluster paged read against master's 120) and four per
+execution under a cancellable context. On the cluster this closed the
+paged throughput gap (0.925 → 1.019, parity within noise) and turned paged
+CPU at saturation from +4% to −4% against master; on the emulator paged
+throughput did not move (0.970), so the remaining emulator gap is not
+allocation. The open items are unchanged from round 3: low-load CPU (write
+batching at few requests in flight) and streaming.
