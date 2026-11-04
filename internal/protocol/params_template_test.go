@@ -77,18 +77,12 @@ func TestParamsTemplateMatchesFieldEncoding(t *testing.T) {
 				t.Fatalf("v%d mask %#x: templated frame differs\n got %x\nwant %x", version, mask, typedTestBytes(t, got), want)
 			}
 
-			// A template for another page size, or another protocol, is
-			// not used: the frame is still the field-by-field one.
+			// A template for another page size, or another protocol, does
+			// not match, so the caller does not attach it.
 			other := *r
 			other.PageSize = r.PageSize + 7
-			stale, _ := NewParamsTemplate(&other, version)
-			r.Params = stale
-			if stale.Matches(r, version) {
+			if stale, _ := NewParamsTemplate(&other, version); stale.Matches(r, version) {
 				t.Fatalf("v%d mask %#x: template for another page size matches", version, mask)
-			}
-			got, err = settings.BuildTypedRequest(r, 9)
-			if err != nil || !bytes.Equal(typedTestBytes(t, got), want) {
-				t.Fatalf("v%d mask %#x: stale template changed the frame (%v)", version, mask, err)
 			}
 			if template.Matches(r, version^1) {
 				t.Fatalf("v%d mask %#x: template matches another protocol", version, mask)

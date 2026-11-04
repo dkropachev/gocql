@@ -31,8 +31,9 @@ type EncodedValues struct {
 type AttemptRequest struct {
 	Lease *wire.Lease
 	Batch *TypedBatchRequest
-	// Params, when it matches the request, is its pre-encoded parameters
-	// block; the encoder copies it instead of encoding each option.
+	// Params is the request's pre-encoded parameters block, which must
+	// match it (see ParamsTemplate.Matches); the encoder copies it instead
+	// of encoding each option, and ignores it for a batch.
 	Params                       *ParamsTemplate
 	Statement                    string
 	Keyspace                     string
