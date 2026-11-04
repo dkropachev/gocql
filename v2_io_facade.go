@@ -40,5 +40,5 @@ type writeResult = implTransport.InternalWriteResult
 var writeResultChanPool = &implTransport.InternalWriteResultChanPool
 
 func writeSpanBuffers(a0 io.Writer, a1 net.Buffers) (int64, error) {
-	return implTransport.InternalWriteSpanBuffers(a0, a1)
+	return implTransport.InternalWriteSpanBuffers(a0, &a1)
 }

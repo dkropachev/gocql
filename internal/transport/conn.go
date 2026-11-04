@@ -2281,6 +2281,9 @@ type InternalDeadlineContextWriter struct {
 	// spanScratch is protected by InternalSemaphore. Only cleared descriptors
 	// are retained between writes, never request payloads.
 	spanScratch net.Buffers
+	// writeBuffers is the header net.Buffers.WriteTo consumes, also under
+	// InternalSemaphore; it lives here so that a write does not allocate it.
+	writeBuffers net.Buffers
 }
 
 func (c *InternalDeadlineContextWriter) InternalSetWriteTimeout(timeout time.Duration) {
@@ -2473,7 +2476,7 @@ func (w *InternalWriteCoalescer) InternalFlushSizes(resultChans []chan<- Interna
 	}
 
 	scratch := append(net.Buffers(nil), buffers...)
-	n, err := InternalWriteSpanBuffers(w.InternalC, scratch)
+	n, err := InternalWriteSpanBuffers(w.InternalC, &scratch)
 	var total int64
 	for _, size := range sizes {
 		total += size

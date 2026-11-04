@@ -27,11 +27,13 @@ type spanSliceWriter interface {
 // ordered spans without a driver gather buffer. TLS record assembly is owned by
 // the standard library. Checking every fallback Write prevents a short nil write
 // from accidentally skipping the unwritten suffix between spans.
-func InternalWriteSpanBuffers(w io.Writer, spans net.Buffers) (int64, error) {
+func InternalWriteSpanBuffers(w io.Writer, buffers *net.Buffers) (int64, error) {
 	switch w.(type) {
 	case *net.TCPConn, *net.UnixConn:
-		return spans.WriteTo(w)
+		// WriteTo consumes *buffers; a caller-owned header keeps it off the heap.
+		return buffers.WriteTo(w)
 	}
+	spans := *buffers
 	var total int64
 	for _, span := range spans {
 		n, err := w.Write(span)
@@ -102,7 +104,9 @@ func (w *InternalDeadlineContextWriter) writeSpans(ctx context.Context, chain wi
 	} else {
 		_ = chain.Each(func(s wire.Span) error { spans = append(spans, s.Bytes()); return nil })
 	}
-	n, err := InternalWriteSpanBuffers(w.InternalW, spans)
+	w.writeBuffers = spans
+	n, err := InternalWriteSpanBuffers(w.InternalW, &w.writeBuffers)
+	w.writeBuffers = nil
 	if err == nil && n != total {
 		err = io.ErrShortWrite
 	}
