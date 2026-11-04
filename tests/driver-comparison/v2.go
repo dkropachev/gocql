@@ -147,9 +147,14 @@ func (a *v2Adapter) Worker(paged, stream bool) (worker, error) {
 	return &v2Worker{a: a, read: readQuery, write: writeQuery, streamQuery: streamQuery, stream: stream, out: row{P: make([]byte, 0, size)}}, nil
 }
 
+// Write executes the acknowledged upsert. A successful Exec returns with the
+// query idle; after a failure the query may still drain an accepted write, so
+// Wait joins it before the worker reuses the query.
 func (w *v2Worker) Write(ctx context.Context, k, r int32, p []byte) error {
-	e := w.write.Exec(ctx, row{K: k, R: r, P: p})
-	return errors.Join(e, w.write.Wait(ctx))
+	if e := w.write.Exec(ctx, row{K: k, R: r, P: p}); e != nil {
+		return errors.Join(e, w.write.Wait(ctx))
+	}
+	return nil
 }
 func (w *v2Worker) Read(ctx context.Context, k int32, consume consumer) (resultErr error) {
 	if w.stream {
@@ -165,15 +170,11 @@ func (w *v2Worker) Read(ctx context.Context, k int32, consume consumer) (resultE
 		}
 		return rs.Err()
 	}
-	rs, e := w.read.Run(ctx, k)
-	if e != nil {
-		return e
+	// Each decodes every row of every page into the worker's owned row and
+	// returns with the query idle: no iterator to close. It keeps the exact
+	// row count the consumer validates, which One (first row only) would not.
+	if e := w.read.Each(ctx, k, &w.out, consume); e != nil {
+		return errors.Join(e, w.read.Wait(ctx))
 	}
-	defer func() { resultErr = errors.Join(resultErr, rs.Close(), w.read.Wait(ctx)) }()
-	for rs.NextInto(&w.out) {
-		if e := consume(&w.out); e != nil {
-			return e
-		}
-	}
-	return rs.Err()
+	return nil
 }
