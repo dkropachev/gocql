@@ -1232,3 +1232,91 @@ CPU at saturation from +4% to −4% against master; on the emulator paged
 throughput did not move (0.970), so the remaining emulator gap is not
 allocation. The open items are unchanged from round 3: low-load CPU (write
 batching at few requests in flight) and streaming.
+
+## Round 5: request encoding (parked)
+
+Target: per-request encoding on the prepared point paths. A profile of
+`pwrite/w64` put capture, admission and frame building at about 20% of
+client CPU; parameter encoding alone was 6.5% for an `int32` and a 1 KiB
+blob, of which about 1% was moving bytes and the rest dispatch. Each
+stage is compared with `hp/compare.sh` (5×ABBA, n=10). Commits:
+`a93b89a1` (Go 1.27.0), `4f9d57d9` (S1), `ceb7967b` (S2), `8e4d1d91`
+(S3).
+
+### S1: statement source (kept with S3)
+
+Prepared and unprepared requests branched on the prepared state in about
+a dozen places. A request now carries a statement source, a prepared
+statement or CQL text, and a Query fixes its statement fields when built.
+The first version passed the attempt request to an interface method,
+which moved it to the heap: +1 alloc and +320 B per attempt and +2% to
++7% on the point gates. The check now takes the sent prepared ID.
+
+### S2: cached parameters template (kept with S3)
+
+The options a query keeps across executions are encoded once per protocol
+version; an attempt copies the template and patches the consistency, the
+per-attempt flag bits, the paging state and the timestamp. Queries
+without their own options share eight session slots; a query with its own
+options keeps a template in its own slot. Byte-identical to field-by-field
+encoding over every option combination on v3, v4 and v5
+(`TestParamsTemplateMatchesFieldEncoding`).
+
+| `BenchmarkParamsTemplate` | fields | template |
+|---|---:|---:|
+| point frame | 300.2 ns | 271.7 ns |
+| continuation page frame | 323.7 ns | 310.7 ns |
+
+S1 and S2 against round 4 (`307c4658`), both on Go 1.25: no case
+improved; geomean cpu-ns/op +0.50%, `read/w64` sec/op +2.16% (p=0.011),
+`Admission` +1.89%. Not kept on their own.
+
+### S3: direct ops for built-in codecs (kept)
+
+Compiling a plan classifies each field once (a type switch over the value
+type, assertions on the compiled codec). Fields of the built-in integer,
+blob and owned-blob codecs, and the blob, text and ASCII parameter
+encoders, become ops the plan switches on, calling the codec's row code
+statically; only the accessor call remains. Other fields keep their
+interfaces, and an uncovered writer state goes through `WriteParam`
+(`TestDirectParamOpsMatchCodecs`, `TestDirectRowOpsMatchCodecs`,
+`TestDirectParamOpsCopyOwnedInput`; four mutations of the ops fail them).
+
+| `BenchmarkDirectFields` (11 columns) | interface | direct |
+|---|---:|---:|
+| encode | 1.136 µs | 685.9 ns |
+| decode | 1.091 µs | 954.8 ns |
+
+S1–S3 against round 4, both built with Go 1.27.0:
+
+| case | Δ |
+|---|---:|
+| `Admission` sec/op | −5.43% |
+| `pwrite` w64 / w64-4 / w1 cpu-ns/op | −1.74% / −2.32% / −4.27% |
+| `pread` w64 / w64-4 cpu-ns/op | −1.70% / −1.81% |
+| `pone` w64 / w64-4 / w1 cpu-ns/op | −0.95% / −1.71% / −5.52% |
+| `pagectx/w4`, `partition/each`, `write/w64-4` | −0.6% to −1.4% |
+| `point/buffered` (T0) sec/op | +0.51% |
+| geomean sec/op, cpu-ns/op | −0.67%, −0.82% |
+
+Allocations and bytes did not change.
+
+### Not done
+
+- Decode cells still run `scalarColumn`'s full checks (type validation,
+  two lease checks, a closure), which is why decode gains less than
+  encode.
+- Generic codec type parameters do not remove calls: a method on a type
+  parameter is called through the dictionary on Go 1.25 and 1.27. Version
+  markers specialize only branches on their shape and would remove a few
+  predictable branches per request.
+- Bool, float, UUID, inet and text-view fields keep their interfaces.
+- `golangci-lint` 2.5.0 (and 2.10.1 rebuilt locally) cannot load Go 1.27
+  export data, so `make check` needs a newer linter release.
+
+### Parked
+
+Parked at the user's request on 2026-11-04 after S3, with no push and
+the benchmark host idle. Resume from `8e4d1d91`; gate binaries for
+`base27` (round 4 on Go 1.27.0) are not kept, so rebuild them from
+`307c4658` with `GOTOOLCHAIN=go1.27.0` before comparing.
