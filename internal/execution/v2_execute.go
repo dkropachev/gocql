@@ -781,7 +781,7 @@ func (s *InternalSessionRuntime) pagePlan(request *InternalExecutionRequest, met
 	if err := policy.Validate(metadata); err != nil {
 		return nil, err
 	}
-	if direct {
+	if direct && request.query != nil { // the plan lives in the query's storage
 		if builtin, ok := policy.(*routing.InternalRoutingPolicy); ok {
 			if plan := builtin.InternalPlanInto(request.InternalRouting, metadata, &request.query.routing); plan != nil {
 				return plan, nil
@@ -797,7 +797,7 @@ func pinnedUsable(conn *Conn) bool {
 }
 
 func (s *InternalSessionRuntime) executePage(ctx context.Context, request *InternalExecutionRequest, state PageState) (*responsePage, error) {
-	direct := canExecuteDirect(request)
+	direct := canExecuteDirect(s, request)
 	if !direct {
 		pageRequest := *request
 		pageRequest.responseDest = nil // concurrent attempts cannot share it
@@ -814,9 +814,9 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 	} else if pageTimeout > 0 && (!bounded || time.Until(deadline) > pageTimeout) {
 		// Pages of one execution normally run one at a time, so the query's
 		// page context is reused; it follows the execution context directly.
-		// A page that overlaps another (a prefetch racing a close) takes a
-		// context of its own.
-		if query := request.query; query.pageCtxBusy.CompareAndSwap(false, true) {
+		// A page that overlaps another (a prefetch racing a close), or one of
+		// an execution without a query, takes a context of its own.
+		if query := request.query; query != nil && query.pageCtxBusy.CompareAndSwap(false, true) {
 			if query.pageCtx == nil {
 				query.pageCtx = newExecutionContext()
 			}

@@ -13,11 +13,18 @@ import (
 	"github.com/scylladb/gocql/v2/internal/routing"
 )
 
-func canExecuteDirect(request *InternalExecutionRequest) bool {
-	if request.query == nil || request.InternalLogical == nil || request.InternalLogical.observer != nil || request.InternalOptions.InternalProfile.Speculation != nil {
+// canExecuteDirect reports whether request's pages run on the calling
+// goroutine. Executions of a reusable query and one-shot executions both
+// qualify; a request pinned to a connection with a stream observer does not,
+// since executePageDirect hands such a connection to the general path.
+func canExecuteDirect(s *InternalSessionRuntime, request *InternalExecutionRequest) bool {
+	if request.InternalLogical == nil || request.InternalLogical.observer != nil || request.InternalOptions.InternalProfile.Speculation != nil {
 		return false
 	}
-	return canUseDirectProfile(request.InternalOptions.InternalProfile) && request.query.runtime.InternalConfig.CoalesceWait == 0
+	if request.connection != nil && request.connection.InternalStreamObserver != nil {
+		return false
+	}
+	return canUseDirectProfile(request.InternalOptions.InternalProfile) && s.InternalConfig.CoalesceWait == 0
 }
 func canUseDirectProfile(profile Profile) bool {
 	if profile.Speculation != nil {
