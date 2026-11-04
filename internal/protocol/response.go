@@ -7,7 +7,6 @@ import cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 
 import (
 	. "github.com/scylladb/gocql/v2/internal/cqltype"
-	"sync/atomic"
 
 	"bytes"
 	"fmt"
@@ -33,16 +32,11 @@ type TypedParser struct {
 	owner      *wire.Lease
 }
 
-// MetadataReuse retains one connection's latest fully validated column
-// specification, with a 64 KiB encoded ceiling. Exact byte identity permits
-// sharing immutable names and types; differing bytes always take the complete
-// checked parser path. Responses may be parsed concurrently: each entry is
-// immutable and replaced whole, and the last parser to store one wins.
+// MetadataReuse belongs to the serialized receive path of one connection.
+// It retains one fully validated column specification, with a 64 KiB encoded
+// ceiling. Exact byte identity permits sharing immutable names and types;
+// differing bytes always take the complete checked parser path.
 type MetadataReuse struct {
-	entry atomic.Pointer[metadataReuseEntry]
-}
-
-type metadataReuseEntry struct {
 	encoded []byte
 	columns Columns
 	global  bool
@@ -349,7 +343,8 @@ func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLW
 	cursor, buffered := p.Cursor.(*wire.Cursor)
 	if buffered && !prepared && p.reuse != nil && p.Err == nil {
 		checkpoint = *cursor
-		if cache := p.reuse.entry.Load(); cache != nil && cache.columns.Len() == count && cache.global == global && cache.depth == p.MaxDepth && len(cache.encoded) > 0 {
+		cache := p.reuse
+		if cache.columns.Len() == count && cache.global == global && cache.depth == p.MaxDepth && len(cache.encoded) > 0 {
 			candidate, err := cursor.Take(int64(len(cache.encoded)))
 			if err == nil {
 				offset, same := 0, true
@@ -393,9 +388,14 @@ func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLW
 		if n > 0 && n <= 64<<10 {
 			encoded, err := checkpoint.Take(n)
 			if err == nil {
-				entry := &metadataReuseEntry{encoded: make([]byte, int(n)), columns: result, global: global, depth: p.MaxDepth}
-				_, _ = encoded.CopyTo(entry.encoded)
-				p.reuse.entry.Store(entry)
+				cache := p.reuse
+				if cap(cache.encoded) < int(n) {
+					cache.encoded = make([]byte, int(n))
+				} else {
+					cache.encoded = cache.encoded[:n]
+				}
+				_, _ = encoded.CopyTo(cache.encoded)
+				cache.columns, cache.global, cache.depth = result, global, p.MaxDepth
 			}
 		}
 	}

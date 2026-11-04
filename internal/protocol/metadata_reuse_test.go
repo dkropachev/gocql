@@ -6,7 +6,6 @@ package protocol
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
@@ -69,44 +68,6 @@ func TestMetadataReuseIdentityAndChangedValidation(t *testing.T) {
 	for n := 0; n < len(original); n++ {
 		if _, err := parse(original[:n]); err == nil {
 			t.Fatalf("truncated metadata at %d accepted", n)
-		}
-	}
-}
-
-// TestMetadataReuseConcurrentParsers checks that responses of one connection
-// can be parsed concurrently, with alternating metadata, and that each still
-// gets its own validated columns.
-func TestMetadataReuseConcurrentParsers(t *testing.T) {
-	settings := protocolSettings(4)
-	settings.MetadataReuse = new(MetadataReuse)
-	bodies := [][]byte{reuseMetadataBody("value", uint16(cqltype.TypeBlob)), reuseMetadataBody("other", uint16(cqltype.TypeInt))}
-	done := make(chan error)
-	for g := 0; g < 8; g++ {
-		go func() {
-			for i := 0; i < 200; i++ {
-				body := bodies[(g+i)%2]
-				chain, _ := wire.NewChain(wire.Borrow(body))
-				lease := wire.NewLease(chain, nil)
-				page, err := settings.ParseTypedResponse(frm.FrameHeader{Version: 0x84, Op: frm.OpResult}, chain, lease)
-				if err == nil {
-					column, _ := page.Columns.At(0)
-					want := map[bool]string{true: "value", false: "other"}[(g+i)%2 == 0]
-					if column.Name != want {
-						err = fmt.Errorf("parsed %q, want %q", column.Name, want)
-					}
-				}
-				lease.Release()
-				if err != nil {
-					done <- err
-					return
-				}
-			}
-			done <- nil
-		}()
-	}
-	for g := 0; g < 8; g++ {
-		if err := <-done; err != nil {
-			t.Fatal(err)
 		}
 	}
 }

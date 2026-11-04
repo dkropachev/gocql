@@ -1411,10 +1411,11 @@ type InternalCallReq struct {
 	// It has one slot, so a sender never blocks; deliver and stopWaiting decide
 	// through state which side owns a response.
 	InternalResp chan InternalCallResp
-	state        atomic.Uint32 // callWaiting, callDelivered or callStopped
-	// rawDelivery asks the reader to hand over a typed response frame
-	// unparsed: the caller parses it on its own goroutine.
-	rawDelivery      bool
+	state        atomic.Uint32 // callWaiting, callClaimed, callDelivered or callStopped
+	// dest is caller-owned storage for a typed response. The reader parses
+	// into it only after claiming the call while the caller still waits; a
+	// caller that stops waiting then receives the claimed response.
+	dest             *InternalResponsePage
 	timer            *time.Timer
 	InternalStreamID int // current stream in use
 	// streamObserverEndOnce ensures that either StreamAbandoned or StreamFinished is called,
@@ -1437,7 +1438,7 @@ func InternalGetCallReq(streamID int) *InternalCallReq {
 	call.InternalTyped = false
 	call.orphaned = false
 	call.InternalStreamID = streamID
-	call.rawDelivery = false
+	call.dest = nil
 	call.streamObserverContext = nil
 	call.streamObserverEndOnce = sync.Once{}
 	call.InternalDone = sync.WaitGroup{}
@@ -1457,7 +1458,7 @@ func InternalPutCallReq(call *InternalCallReq) {
 	call.streamObserverContext = nil
 	call.streamObserverEndOnce = sync.Once{}
 	call.InternalStreamID = 0
-	call.rawDelivery = false
+	call.dest = nil
 	// A correct exchange leaves the slot empty; never hand a stale response to
 	// the next call.
 	select {
@@ -1471,13 +1472,14 @@ const (
 	callWaiting uint32 = iota
 	callDelivered
 	callStopped
+	callClaimed // the reader is building the response in dest
 )
 
 // deliver hands resp to the waiting caller without blocking. It reports false
 // when the caller already stopped waiting; the sender then still owns resp and
 // the call cleanup.
 func (call *InternalCallReq) deliver(resp InternalCallResp) bool {
-	if !call.state.CompareAndSwap(callWaiting, callDelivered) {
+	if !call.state.CompareAndSwap(callWaiting, callDelivered) && !call.state.CompareAndSwap(callClaimed, callDelivered) {
 		return false
 	}
 	call.InternalResp <- resp
@@ -1487,6 +1489,12 @@ func (call *InternalCallReq) deliver(resp InternalCallResp) bool {
 // InternalStopWaiting ends a caller's wait that did not receive from
 // InternalResp. If a response was already delivered, it is returned and the
 // caller owns it; otherwise the sender keeps ownership of any later response.
+// claim reserves the call's response for the reader while the caller still
+// waits, so that the reader may build it in the caller's dest.
+func (call *InternalCallReq) claim() bool {
+	return call.state.CompareAndSwap(callWaiting, callClaimed)
+}
+
 func (call *InternalCallReq) InternalStopWaiting() (InternalCallResp, bool) {
 	if call.state.CompareAndSwap(callWaiting, callStopped) {
 		return InternalCallResp{}, false
@@ -1533,23 +1541,6 @@ type InternalCallResp struct {
 	// stream and recycling the callReq. Set by processFrameSource on every outcome
 	// it delivers directly; Conn.closed races this delivery and cannot answer it.
 	removedFromCalls bool
-	// raw is an unparsed typed response, delivered to a rawDelivery call.
-	raw rawTypedResponse
-}
-
-// rawTypedResponse is a checked response frame whose body the receiver
-// parses. Its owner holds the body until it is parsed or released.
-type rawTypedResponse struct {
-	head  frm.FrameHeader
-	body  wire.Chain
-	owner *wire.Lease
-}
-
-// release drops a raw response that will not be parsed.
-func (r rawTypedResponse) release() {
-	if r.owner != nil {
-		r.owner.Release()
-	}
 }
 
 // addCall attempts to add a call to c.calls.
