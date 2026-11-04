@@ -177,7 +177,10 @@ type InternalExecutionRequest struct {
 	// the direct path. It is cleared once that page succeeded, so that
 	// continuation and prefetched pages get storage of their own; Each, which
 	// releases every page before requesting the next, lends it again.
-	responseDest       *responsePage
+	responseDest *responsePage
+	// served is the connection whose attempt produced the last direct page;
+	// pinned, when set, is where the next page's first attempt goes.
+	served, pinned     *Conn
 	tabletFeedback     tabletFeedbackStamp
 	tabletVersionBlock byte
 	connection         *Conn

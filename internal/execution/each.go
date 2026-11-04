@@ -66,6 +66,7 @@ func eachPage[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], r
 			// The previous page was released before this request, so the
 			// query's response storage is free for every continuation page.
 			request.responseDest = &request.query.response
+			request.pinned = request.served
 		}
 		response, err := rt.executePage(ctx, request, state)
 		if err != nil {

@@ -195,3 +195,30 @@ func TestQueryIdleRetentionAndBatchCapture(t *testing.T) {
 		t.Fatal("per-operation registration")
 	}
 }
+
+type slicePlan []Target
+
+func (p *slicePlan) Next() (Target, bool) {
+	if len(*p) == 0 {
+		return Target{}, false
+	}
+	t := (*p)[0]
+	*p = (*p)[1:]
+	return t, true
+}
+
+func TestSkipHostPlanOmitsPinnedHost(t *testing.T) {
+	a, b, c := UUID{15: 1}, UUID{15: 2}, UUID{15: 3}
+	plan := &skipHostPlan{plan: &slicePlan{{HostID: b}, {HostID: a}, {HostID: b}, {HostID: c}}, host: b}
+	var got []UUID
+	for {
+		target, ok := plan.Next()
+		if !ok {
+			break
+		}
+		got = append(got, target.HostID)
+	}
+	if len(got) != 2 || got[0] != a || got[1] != c {
+		t.Fatal(got)
+	}
+}

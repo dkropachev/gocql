@@ -42,6 +42,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 	aggregate := Result{AchievedConsistency: consistency}
 	failure := func(err error) (*responsePage, error) { return nil, &ExecutionError{Err: err, Result: aggregate} }
 	var conn *Conn
+	pinned := false // the first attempt went to request.pinned
 	for attempt := 1; ; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return failure(err)
@@ -49,7 +50,22 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		if conn == nil {
 			conn = request.connection
 		}
+		if conn == nil && attempt == 1 && pinnedUsable(request.pinned) {
+			conn, pinned = request.pinned, true
+		}
 		if conn == nil {
+			if plan == nil && request.pinned != nil {
+				// A continuation page came without a plan. When the pinned
+				// connection took its first attempt, as a plan's first target
+				// would have, the retry plan skips that host.
+				var err error
+				if plan, err = s.pagePlan(request, s.Session.Metadata(), true); err != nil {
+					return failure(err)
+				}
+				if pinned && plan != nil {
+					plan = &skipHostPlan{plan: plan, host: request.pinned.InternalHostID()}
+				}
+			}
 			var err error
 			conn, err = implCluster.InternalSessionSelectTypedConn(s.Session, ctx, request.InternalRouting, plan)
 			if err != nil {
@@ -73,6 +89,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 			// Attempts run one at a time here, and a failed attempt's response
 			// is released before the next; later pages get their own storage.
 			request.responseDest = nil
+			request.served = conn
 			response.Result = aggregate
 			response.Result.Rows = int64(response.RowCount)
 			if response.PagingState != nil {
@@ -124,6 +141,22 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 			conn = nil
 		}
 		s.retries.Add(1)
+	}
+}
+
+// skipHostPlan is a retry plan for a page whose first attempt went to a
+// pinned connection: it omits that connection's host.
+type skipHostPlan struct {
+	plan QueryPlan
+	host UUID
+}
+
+func (p *skipHostPlan) Next() (Target, bool) {
+	for {
+		target, ok := p.plan.Next()
+		if !ok || target.HostID != p.host {
+			return target, ok
+		}
 	}
 }
 
