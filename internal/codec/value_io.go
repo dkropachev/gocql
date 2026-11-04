@@ -14,6 +14,7 @@ import (
 // ValueWriter writes one length-framed cell. The enclosing plan owns completion;
 // an encoder writes only its body or one explicit null/unset marker.
 type ValueWriter struct {
+	err                         error
 	builder                     *wire.Builder
 	typ                         cqltype.DataType
 	mark                        wire.Mark
@@ -21,7 +22,6 @@ type ValueWriter struct {
 	state                       cqltype.CellState
 	allowUnset, wrote, finished bool
 	ownBorrowed                 bool
-	err                         error
 }
 
 func NewValueWriter(builder *wire.Builder, typ cqltype.DataType, allowUnset bool) *ValueWriter {
@@ -232,11 +232,11 @@ func FinishValueWriter(w *ValueWriter) error {
 
 // ValueReader is an immutable snapshot. Each Cursor starts at the beginning.
 type ValueReader struct {
-	typ   cqltype.DataType
-	state cqltype.CellState
-	body  wire.Chain
-	lease wire.Ref
 	err   error
+	typ   cqltype.DataType
+	lease wire.Ref
+	body  wire.Chain
+	state cqltype.CellState
 }
 
 // NewValueReader reads body, borrowed from lease. The caller holds a
@@ -272,11 +272,11 @@ func (r ValueReader) cursorValue() ValueCursor {
 // ValueCursor reads checked network scalars and nested cells across spans. A
 // failure is sticky; malformed data cannot be followed by a successful read.
 type ValueCursor struct {
-	cursor      wire.Cursor
-	initialized bool
-	lease       wire.Ref
-	initial     int64
 	err         error
+	lease       wire.Ref
+	cursor      wire.Cursor
+	initial     int64
+	initialized bool
 }
 
 func (c *ValueCursor) Remaining() int64 {

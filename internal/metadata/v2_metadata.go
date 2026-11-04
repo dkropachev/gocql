@@ -3,14 +3,17 @@
 
 package metadata
 
-import "maps"
-import "context"
-import "errors"
-import "fmt"
-import "sort"
-import "strconv"
-import "strings"
-import "golang.org/x/sync/errgroup"
+import (
+	"context"
+	"errors"
+	"fmt"
+	"maps"
+	"sort"
+	"strconv"
+	"strings"
+
+	"golang.org/x/sync/errgroup"
+)
 
 func cloneV2Any(v any) any {
 	switch x := v.(type) {
@@ -171,10 +174,10 @@ func InternalCloneV2Keyspace(k *KeyspaceMetadata) *KeyspaceMetadata {
 
 // PartialRefreshError reports keyspaces whose previous valid schema was kept.
 type PartialRefreshError struct {
-	Generation   uint64
-	Keyspaces    map[string]error
 	Topology     error
 	ClientRoutes error
+	Keyspaces    map[string]error
+	Generation   uint64
 }
 
 func (e *PartialRefreshError) Error() string {
@@ -226,9 +229,9 @@ func (e *NoHostsError) Unwrap() []error { return append([]error(nil), e.Causes..
 // Schema rows intentionally materialize small metadata values on the cold path.
 // Fields are explicitly registered; no reflection or destination inference runs.
 type InternalV2SchemaField[R any] struct {
+	compile  func(DataType) (func(*R, *RowReader) error, error)
 	name     string
 	required bool
-	compile  func(DataType) (func(*R, *RowReader) error, error)
 }
 
 func InternalV2SchemaColumn[R, V any](name string, decoder Decoder[V], field func(*R) *V) InternalV2SchemaField[R] {
@@ -266,12 +269,12 @@ func InternalV2RequiredSchemaColumn[R, V any](name string, decoder Decoder[V], f
 }
 
 type InternalV2SchemaRows[R any] struct {
-	InternalFields []InternalV2SchemaField[R]
 	initialize     func() *R
+	InternalFields []InternalV2SchemaField[R]
 }
 type InternalV2SchemaRowPlan[R any] struct {
-	steps      []func(*R, *RowReader) error
 	initialize func() *R
+	steps      []func(*R, *RowReader) error
 }
 
 func (d InternalV2SchemaRows[R]) Compile(columns Columns) (RowPlan[R], error) {
@@ -516,9 +519,9 @@ func InternalV2DecodeScyllaTable() RowDecoder[InternalV2ScyllaTableRow] {
 }
 
 type InternalV2KeyspaceRow struct {
+	replication  map[string]string
 	InternalName string
 	durable      bool
-	replication  map[string]string
 }
 
 func InternalV2DecodeKeyspace() RowDecoder[InternalV2KeyspaceRow] {
@@ -863,11 +866,11 @@ func InternalResolveV2Function(functions []FunctionMetadata, name string, args [
 }
 
 type InternalV2CQLTypeParser struct {
+	udts             map[string]bool
 	source, keyspace string
+	refs             []string
 	offset           int
 	maxDepth         int
-	udts             map[string]bool
-	refs             []string
 }
 
 func InternalValidateV2CQLType(keyspace, source string, udts map[string]bool) ([]string, error) {

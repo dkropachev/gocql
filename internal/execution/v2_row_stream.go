@@ -22,18 +22,18 @@ package execution
 import (
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
-)
-
-import (
-	model "github.com/scylladb/gocql/v2/internal/model"
 
 	"context"
 	"errors"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+
+	model "github.com/scylladb/gocql/v2/internal/model"
 
 	"time"
-	// StreamOptions captures execution defaults once; streaming is pull-driven.
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
+
+// StreamOptions captures execution defaults once; streaming is pull-driven.
 
 type StreamOptions struct {
 	Options Options

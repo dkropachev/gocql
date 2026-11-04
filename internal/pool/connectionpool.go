@@ -227,25 +227,25 @@ func (p *InternalPolicyConnPool) InternalRemoveHost(hostID UUID) {
 // hostConnPool is a connection pool for a single host.
 // Connection selection is based on a provided ConnSelectionPolicy
 type InternalHostConnPool struct {
-	InternalConnPicker ConnPicker
-	InternalLogger     StdLogger
-	InternalServices   InternalPoolServices
-	InternalHost       *HostInfo
-	InternalDebouncer  *debounce.SimpleDebouncer
-	InternalKeyspace   string
-	InternalSize       int
+	InternalServices     InternalPoolServices
+	InternalConnPicker   ConnPicker
+	InternalLogger       StdLogger
+	InternalRepairCtx    context.Context
+	InternalHost         *HostInfo
+	InternalDebouncer    *debounce.SimpleDebouncer
+	reservationChanged   chan struct{}
+	InternalRepairCancel context.CancelFunc
+	InternalKeyspace     string
+	InternalSize         int
+	generation           uint64
+	reconnectAttempt     int
 	// protection for connPicker, closed, filling
 	InternalMu                            sync.RWMutex
 	InternalClosed                        bool
 	InternalFilling                       bool
 	InternalState                         InternalPoolState
-	generation                            uint64
-	reconnectAttempt                      int
 	InternalStarted                       bool
-	reservationChanged                    chan struct{}
 	InternalRepairScheduled, retryStopped bool
-	InternalRepairCtx                     context.Context
-	InternalRepairCancel                  context.CancelFunc
 }
 
 func (pool *InternalHostConnPool) String() string {

@@ -46,11 +46,11 @@ type RowPlan[R any] interface {
 type ParamWriter struct {
 	builder     *wire.Builder
 	columns     cqltype.Columns
+	capture     []ParamCell
+	cell        ValueWriter // reused for each parameter; never retained by encoders
 	index       int
 	allowUnset  bool
 	ownBorrowed bool
-	capture     []ParamCell
-	cell        ValueWriter // reused for each parameter; never retained by encoders
 }
 
 // ParamCell records framing while encoding, avoiding a second parse of the
@@ -118,9 +118,9 @@ func WriteParam[T any](w *ParamWriter, encoder Encoder[T], value T) error {
 
 // RowReader consumes physical columns without tuple expansion or reflection.
 type RowReader struct {
-	columns      cqltype.Columns
 	cursor       *wire.Cursor
 	lease        wire.Ref
+	columns      cqltype.Columns
 	index        int
 	allowMissing bool
 }
@@ -192,9 +192,9 @@ type InputField[P any] interface {
 }
 
 type inputField[P, V any] struct {
-	loc   fieldLocation
 	codec Encoder[V]
 	get   func(P) V
+	loc   fieldLocation
 }
 
 func Param[P, V any](name string, codec Encoder[V], get func(P) V) InputField[P] {
@@ -326,9 +326,9 @@ type OutputField[R any] interface {
 }
 
 type outputField[R, V any] struct {
-	loc   fieldLocation
 	codec Decoder[V]
 	field func(*R) *V
+	loc   fieldLocation
 }
 
 func Column[R, V any](name string, codec Decoder[V], field func(*R) *V) OutputField[R] {
@@ -371,16 +371,16 @@ func (f ignoredField[R]) decode(r *RowReader, _ *R) error                  { ret
 func (f ignoredField[R]) clone(dst, source *R)                             {}
 
 type rowCodec[R any] struct {
-	fields []OutputField[R]
 	reset  func(*R)
+	fields []OutputField[R]
 }
 type rowPlan[R any] struct {
-	reset   func(*R)
-	ordered []OutputField[R]
-	ops     []rowOp[R] // ordered, with built-in codecs as direct ops
+	reset func(*R)
 	// Scratch addresses are confined to Decode; accessors must not retain them.
 	// The returned R is copied before scratch is cleared and recycled.
 	scratch *sync.Pool
+	ordered []OutputField[R]
+	ops     []rowOp[R] // ordered, with built-in codecs as direct ops
 }
 
 func Row[R any](fields ...OutputField[R]) RowDecoder[R] {
@@ -607,14 +607,14 @@ func splitColumns(columns cqltype.Columns, split int) (cqltype.Columns, cqltype.
 }
 
 type pairedParams[A, B any] struct {
-	split int
 	a     ParamEncoder[A]
 	b     ParamEncoder[B]
+	split int
 }
 type pairedParamPlan[A, B any] struct {
-	left, right cqltype.Columns
 	a           ParamPlan[A]
 	b           ParamPlan[B]
+	left, right cqltype.Columns
 }
 
 func PairParams[A, B any](leftColumns int, a ParamEncoder[A], b ParamEncoder[B]) ParamEncoder[Pair[A, B]] {
@@ -669,14 +669,14 @@ func (p pairedParamPlan[A, B]) Encode(w *ParamWriter, value Pair[A, B]) error {
 }
 
 type pairedRows[A, B any] struct {
-	split int
 	a     RowDecoder[A]
 	b     RowDecoder[B]
+	split int
 }
 type pairedRowPlan[A, B any] struct {
-	left, right cqltype.Columns
 	a           RowPlan[A]
 	b           RowPlan[B]
+	left, right cqltype.Columns
 }
 
 func PairRows[A, B any](leftColumns int, a RowDecoder[A], b RowDecoder[B]) RowDecoder[Pair[A, B]] {

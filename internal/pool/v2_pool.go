@@ -21,11 +21,12 @@ package pool
 
 import (
 	"context"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"math"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 type InternalPoolState uint8
@@ -41,7 +42,7 @@ const (
 // Positive host count is a total budget; otherwise each shard has its own
 // connection target. Reservation never removes a connection from this budget.
 type InternalTypedConnPicker struct {
-	InternalMu       sync.RWMutex
+	fallbackUntil    time.Time
 	InternalConns    [][]*Conn
 	InternalExcess   []*Conn
 	retired          []*Conn
@@ -50,9 +51,9 @@ type InternalTypedConnPicker struct {
 	InternalNrShards int
 	msbIgnore        uint64
 	InternalPos      atomic.Uint64
-	fallbackUntil    time.Time
-	closed           bool
 	generation       uint64
+	InternalMu       sync.RWMutex
+	closed           bool
 }
 
 func InternalNewTypedConnPicker(c *Conn, opts PoolOptions) (*InternalTypedConnPicker, error) {

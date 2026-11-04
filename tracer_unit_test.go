@@ -3,8 +3,6 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
 	"bytes"
 	"net"
@@ -14,6 +12,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 var (

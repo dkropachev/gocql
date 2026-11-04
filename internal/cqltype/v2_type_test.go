@@ -38,7 +38,7 @@ func TestV2FoundationDescriptorImmutability(t *testing.T) {
 	}
 	columns := NewColumns(ColumnSpec{Name: "record", Type: udt})
 	c, _ := columns.At(0)
-	c.Name = "changed"
+	c.Name = "changed" //nolint:govet // writes the copy At returned, to prove it is one
 	original, _ := columns.At(0)
 	if original.Name != "record" {
 		t.Fatal("At exposed mutable column")

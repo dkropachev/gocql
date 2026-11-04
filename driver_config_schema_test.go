@@ -3,8 +3,6 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
 	"crypto/tls"
 	"encoding/json"
@@ -15,8 +13,10 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+
+	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/santhosh-tekuri/jsonschema/v6/kind"
 )
 

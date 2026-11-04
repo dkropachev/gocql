@@ -7,15 +7,16 @@ import (
 	"context"
 	"crypto/tls"
 	x509 "crypto/x509"
+	"io"
+	"net"
+	"net/netip"
+	"time"
+
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
-	"io"
-	"net"
-	"net/netip"
-	"time"
 )
 
 func retiredAcceptAllFilter() retiredHostFilter { return implCluster.AcceptAllFilter() }

@@ -6,14 +6,12 @@
 
 package gocql
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+
 	"context"
 	"crypto/tls"
-
+	"encoding/json"
 	"math"
 	"sync"
 	"testing"
@@ -21,7 +19,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"encoding/json"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/streams"
 )

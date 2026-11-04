@@ -6,9 +6,10 @@ package cluster
 import (
 	"context"
 	"fmt"
-	model "github.com/scylladb/gocql/v2/internal/model"
 	"io"
 	"net/netip"
+
+	model "github.com/scylladb/gocql/v2/internal/model"
 
 	"time"
 )

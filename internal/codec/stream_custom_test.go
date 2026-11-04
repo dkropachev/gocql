@@ -20,8 +20,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"testing"
+
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 type customStreamPair struct {

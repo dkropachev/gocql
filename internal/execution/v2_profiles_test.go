@@ -3,14 +3,14 @@
 
 package execution_test
 
-import . "github.com/scylladb/gocql/v2"
-
 import (
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	. "github.com/scylladb/gocql/v2"
 
 	"context"
 	"errors"
 	"testing"
+
+	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )

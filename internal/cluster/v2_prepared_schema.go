@@ -19,12 +19,12 @@
 
 package cluster
 
-import implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
-
 import (
-	routing "github.com/scylladb/gocql/v2/internal/routing"
+	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 
 	"slices"
+
+	routing "github.com/scylladb/gocql/v2/internal/routing"
 )
 
 func InternalSessionInvalidatePreparedSchema(s *Session, e Event) {

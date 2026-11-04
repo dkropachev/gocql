@@ -3,9 +3,12 @@
 
 package execution
 
-import cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-import codec "github.com/scylladb/gocql/v2/internal/codec"
-import model "github.com/scylladb/gocql/v2/internal/model"
+import (
+	codec "github.com/scylladb/gocql/v2/internal/codec"
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+
+	model "github.com/scylladb/gocql/v2/internal/model"
+)
 
 func typeValidation(a0 string, a1 string, a2 ...any) error {
 	return cqltype.TypeValidation(a0, a1, a2...)

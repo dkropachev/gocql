@@ -44,21 +44,21 @@ type Mark struct {
 // A Builder must not be copied and is not safe for concurrent use. Its zero
 // value is ready to use.
 type Builder struct {
-	// owned selects contiguous, exclusively owned storage. Its owner may reuse
-	// the backing only after every published view has drained.
-	ownedMode    bool
+	scratch      *BuilderScratch
 	ownedBuffer  []byte
-	slabSize     int
 	parts        []builderPart
 	slab         []byte
+	invalid      []invalidMarks
+	slabSize     int
 	used         int
 	currentPart  int
 	currentStart int
 	len          int64
 	generation   uint64
 	sequence     uint64
-	invalid      []invalidMarks
-	scratch      *BuilderScratch
+	// owned selects contiguous, exclusively owned storage. Its owner may reuse
+	// the backing only after every published view has drained.
+	ownedMode bool
 }
 
 // BuilderScratch is reusable storage for one encoding: the scalar slab, the

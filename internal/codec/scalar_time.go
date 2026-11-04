@@ -5,10 +5,11 @@ package codec
 
 import (
 	"errors"
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"math"
 	"math/bits"
 	"time"
+
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 // Date counts calendar days relative to 1970-01-01.

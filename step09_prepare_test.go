@@ -3,10 +3,6 @@ package gocql
 import (
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
-)
-
-import (
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 
 	"bytes"
 	"context"
@@ -15,6 +11,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 func TestStep09ConditionalPrepareAbsentResultMetadata(t *testing.T) {

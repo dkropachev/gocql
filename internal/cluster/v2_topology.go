@@ -3,12 +3,11 @@
 
 package cluster
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"context"
-
 	"time"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 func InternalReadV2Topology(ctx context.Context, conn ConnInterface, stmt string, port int) ([]*HostInfo, error) {

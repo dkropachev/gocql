@@ -4,10 +4,11 @@
 package cluster
 
 import (
+	"net"
+
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
-	"net"
 )
 
 type AddressPort = implEndpoint.AddressPort

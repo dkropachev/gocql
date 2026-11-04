@@ -22,9 +22,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/scylladb/gocql/v2"
-	"github.com/scylladb/gocql/v2/dialer/recorder"
-	"github.com/scylladb/gocql/v2/dialer/replayer"
 	"net"
 	"os"
 	"path/filepath"
@@ -35,6 +32,10 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/dialer/recorder"
+	"github.com/scylladb/gocql/v2/dialer/replayer"
 )
 
 type corpusConfig struct {

@@ -24,8 +24,6 @@
 
 package transport
 
-import "github.com/scylladb/gocql/v2/internal/protocol"
-
 import (
 	"bufio"
 	"bytes"
@@ -33,13 +31,13 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+
+	"github.com/scylladb/gocql/v2/internal/protocol"
+
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
-	"github.com/scylladb/gocql/v2/internal/segment"
-	"github.com/scylladb/gocql/v2/internal/streams"
-	"github.com/scylladb/gocql/v2/internal/wire"
-	"github.com/scylladb/gocql/v2/tablets"
+
 	"io"
 	"net"
 	"strconv"
@@ -47,6 +45,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/segment"
+	"github.com/scylladb/gocql/v2/internal/streams"
+	"github.com/scylladb/gocql/v2/internal/wire"
+	"github.com/scylladb/gocql/v2/tablets"
 )
 
 func InternalApprove(authenticator string, approvedAuthenticators []string) bool {
@@ -135,18 +139,18 @@ type SslOptions struct {
 }
 
 type ConnConfig struct {
-	InternalReceiveCache    *wire.ReceiveCache
-	TypedConfig             *Config
 	TypedAuth               AuthProvider
-	TypedLimits             ProtocolLimits
 	Dialer                  legacyDialer
 	Logger                  StdLogger
 	Authenticator           Authenticator
 	Compressor              Compressor
 	HostDialer              HostDialer
+	InternalReceiveCache    *wire.ReceiveCache
+	TypedConfig             *Config
 	AuthProvider            func(h *HostInfo) (Authenticator, error)
 	InternalTlsConfig       *tls.Config
 	CQLVersion              string
+	TypedLimits             ProtocolLimits
 	ConnectTimeout          time.Duration
 	ReadTimeout             time.Duration
 	WriteTimeout            time.Duration
@@ -188,42 +192,15 @@ type ConnInterface interface {
 // queries, but users are usually advised to use a more reliable, higher
 // level API.
 type Conn struct {
-	typedMetadataReuse protocol.MetadataReuse
-	// typedSettings is published once the framer cache is initialised, when
-	// every input to the native protocol settings is final.
-	typedSettings atomic.Pointer[protocol.Settings]
-	hostID        atomic.Pointer[UUID] // InternalHost's ID once known
-	// closesOnCancel reports that cancelling InternalCtx closes the connection,
-	// so every waiting typed call receives the closure through its response.
-	closesOnCancel                            bool
-	stopCloseOnCancel                         func() bool
-	typedWriterOnce                           sync.Once
-	typedWriter                               *submissionWriter
-	InternalOpeningSharderEpoch               uint64
-	InternalOpeningDeadline                   time.Time
-	eventMu                                   sync.Mutex
-	eventsClosed                              bool
-	eventDone                                 chan struct{}
-	InternalTargetEpoch                       uint64
-	InternalValidateTarget                    func(context.Context) error
-	InternalStreamBudget                      *streamMetadataBudget
-	eventOnce                                 sync.Once
-	eventQueue                                chan InternalConnEvent
-	InternalExclusiveFlag                     atomic.Bool
-	InternalSharedOps, orphans                int
-	sharedChanged                             chan struct{}
-	pauseWanted                               bool
-	pauseRequested                            atomic.Bool // mirrors pauseWanted for the reader's lock-free check
-	readerPaused, readerResume, readerResumed chan struct{}
-	auth                                      Authenticator
-	InternalCfg                               *ConnConfig
-	InternalFrameObserver                     FrameHeaderObserver
-	InternalStreamObserver                    StreamObserver
-	InternalW                                 contextWriter
-	InternalLogger                            StdLogger
-	InternalCtx                               context.Context
-	InternalErrorHandler                      ConnErrorHandler
-	InternalCompressor                        Compressor
+	InternalOpeningDeadline time.Time
+	auth                    Authenticator
+	InternalFrameObserver   FrameHeaderObserver
+	InternalStreamObserver  StreamObserver
+	InternalW               contextWriter
+	InternalLogger          StdLogger
+	InternalCtx             context.Context
+	InternalErrorHandler    ConnErrorHandler
+	InternalCompressor      Compressor
 	// segCompressor is compressor narrowed to the two Append methods the v5 segment
 	// codec takes, resolved once by resolveSegmentCompressor during the handshake. The
 	// receive path would otherwise repeat that assertion for every segment it reads,
@@ -233,17 +210,52 @@ type Conn struct {
 	// Nil is the uncompressed segment layout, and is also what a pre-v5 connection
 	// leaves it as -- it never reaches the segment codec, and its compressor need not
 	// support segments at all.
-	InternalSegCompressor segment.Compressor
-	InternalSupported     map[string][]string
-	InternalStreams       *streams.IDGenerator
-	InternalHost          *HostInfo
+	InternalSegCompressor   segment.Compressor
+	InternalR               connReadSource
+	InternalHooks           InternalConnectionHooks
+	InternalStartupReporter InternalStartupReporter
+	// typedSettings is published once the framer cache is initialised, when
+	// every input to the native protocol settings is final.
+	typedSettings                             atomic.Pointer[protocol.Settings]
+	hostID                                    atomic.Pointer[UUID] // InternalHost's ID once known
+	stopCloseOnCancel                         func() bool
+	typedWriter                               *submissionWriter
+	eventDone                                 chan struct{}
+	InternalValidateTarget                    func(context.Context) error
+	InternalStreamBudget                      *streamMetadataBudget
+	eventQueue                                chan InternalConnEvent
+	sharedChanged                             chan struct{}
+	readerPaused, readerResume, readerResumed chan struct{}
+	InternalCfg                               *ConnConfig
+	InternalSupported                         map[string][]string
+	InternalStreams                           *streams.IDGenerator
+	InternalHost                              *HostInfo
 	// calls stores a map from stream ID to callReq.
 	// This map is protected by mu.
 	// calls should not be used when closed is true, calls is set to nil when closed=true.
-	InternalCalls map[int]*InternalCallReq
-	// segScratch holds the reusable buffers inbound v5 segments are read into.
-	// Only touched by the receive path, which runs on the serve() goroutine.
-	segScratch segment.Scratch
+	InternalCalls  map[int]*InternalCallReq
+	InternalCancel context.CancelFunc
+	// currentKeyspace is the keyspace this connection was switched to by
+	// Conn.UseKeyspace, and the default the prepared-statement cache is keyed by
+	// (see executeQuery/executeBatch). It deliberately tracks only driver-issued
+	// USE: a `USE` statement a caller executes as an ordinary query switches the
+	// server side of whichever single pooled connection it landed on, and the
+	// driver does not follow it — so cache keys keep using the configured keyspace.
+	//
+	// Atomic because UseKeyspace is exported: a caller invoking it on a live
+	// connection would otherwise race the request goroutines reading it.
+	currentKeyspace atomic.Pointer[string]
+	// systemRequest carries the timeouts driver-issued system queries are sent
+	// with. See systemRequestState for why the two travel together.
+	//
+	// Atomic because finalizeConnection switches the timeout from
+	// cfg.ConnectTimeout to cfg.MetadataSchemaRequestTimeout at the very end of
+	// Session.init, by which point the control connection is already registered
+	// for server push events: a SCHEMA_CHANGE arriving inside that window makes
+	// the event-debouncer goroutine run querySystem on this connection
+	// concurrently with the write.
+	systemRequest           atomic.Pointer[InternalSystemRequestState]
+	InternalStartupIdentity InternalStartupIdentity
 	// headerReader is the reader the current frame or segment header is read
 	// through (see readFrameHeader, readFirstSegmentHeader). Reused rather than
 	// allocated per header, and like segScratch only touched by whichever
@@ -258,45 +270,37 @@ type Conn struct {
 	// close(frameTicker), so the startup reader can still be unwinding when
 	// serve() starts. Work added to processFrameSource after the response is
 	// delivered would need a real barrier here.
-	headerReader            headerReader
-	InternalR               connReadSource
-	InternalHooks           InternalConnectionHooks
-	InternalStartupIdentity InternalStartupIdentity
-	InternalStartupReporter InternalStartupReporter
-	InternalMetadataTimeout time.Duration
-	InternalCoalesceWait    time.Duration
-	InternalPoolPolicy      InternalConnectionPoolPolicy
-	InternalFramers         InternalConnFramers
-	InternalCancel          context.CancelFunc
-	// currentKeyspace is the keyspace this connection was switched to by
-	// Conn.UseKeyspace, and the default the prepared-statement cache is keyed by
-	// (see executeQuery/executeBatch). It deliberately tracks only driver-issued
-	// USE: a `USE` statement a caller executes as an ordinary query switches the
-	// server side of whichever single pooled connection it landed on, and the
-	// driver does not follow it — so cache keys keep using the configured keyspace.
-	//
-	// Atomic because UseKeyspace is exported: a caller invoking it on a live
-	// connection would otherwise race the request goroutines reading it.
-	currentKeyspace atomic.Pointer[string]
-	InternalAddr    string
-	// systemRequest carries the timeouts driver-issued system queries are sent
-	// with. See systemRequestState for why the two travel together.
-	//
-	// Atomic because finalizeConnection switches the timeout from
-	// cfg.ConnectTimeout to cfg.MetadataSchemaRequestTimeout at the very end of
-	// Session.init, by which point the control connection is already registered
-	// for server push events: a SCHEMA_CHANGE arriving inside that window makes
-	// the event-debouncer goroutine run querySystem on this connection
-	// concurrently with the write.
-	systemRequest           atomic.Pointer[InternalSystemRequestState]
-	InternalCqlProtoExts    []cqlProtocolExtension
-	InternalScyllaSupported ScyllaConnectionFeatures
-	InternalWriteTimeout    atomic.Int64
-	InternalMu              sync.Mutex
-	tabletsRoutingV1        int32
-	headerBuf               [headSize]byte
-	InternalIsShardAware    bool
-	InternalRequestedShard  Option[uint32]
+	headerReader headerReader
+	InternalAddr string
+	// segScratch holds the reusable buffers inbound v5 segments are read into.
+	// Only touched by the receive path, which runs on the serve() goroutine.
+	segScratch                  segment.Scratch
+	InternalCqlProtoExts        []cqlProtocolExtension
+	InternalFramers             InternalConnFramers
+	typedMetadataReuse          protocol.MetadataReuse
+	InternalScyllaSupported     ScyllaConnectionFeatures
+	InternalOpeningSharderEpoch uint64
+	InternalTargetEpoch         uint64
+	InternalSharedOps, orphans  int
+	InternalMetadataTimeout     time.Duration
+	InternalCoalesceWait        time.Duration
+	InternalWriteTimeout        atomic.Int64
+	typedWriterOnce             sync.Once
+	eventOnce                   sync.Once
+	eventMu                     sync.Mutex
+	InternalPoolPolicy          InternalConnectionPoolPolicy
+	InternalMu                  sync.Mutex
+	InternalRequestedShard      Option[uint32]
+	InternalExclusiveFlag       atomic.Bool
+	pauseRequested              atomic.Bool // mirrors pauseWanted for the reader's lock-free check
+	tabletsRoutingV1            int32
+	headerBuf                   [headSize]byte
+	// closesOnCancel reports that cancelling InternalCtx closes the connection,
+	// so every waiting typed call receives the closure through its response.
+	closesOnCancel       bool
+	eventsClosed         bool
+	pauseWanted          bool
+	InternalIsShardAware bool
 	// true if connection close process for the connection started.
 	// closed is protected by mu.
 	InternalClosed     bool
@@ -1403,25 +1407,25 @@ func (c *Conn) processAllFramesInSegment(ctx context.Context, r *bytes.Reader, n
 var _ connReadSource = (*connReader)(nil)
 
 type InternalCallReq struct {
-	orphaned      bool
-	InternalTyped bool
 	// streamObserverContext is notified about events regarding this stream
 	streamObserverContext StreamObserverContext
 	// resp will receive the frame that was sent as a response to this stream.
 	// It has one slot, so a sender never blocks; deliver and stopWaiting decide
 	// through state which side owns a response.
 	InternalResp chan InternalCallResp
-	state        atomic.Uint32 // callWaiting, callClaimed, callDelivered or callStopped
 	// dest is caller-owned storage for a typed response. The reader parses
 	// into it only after claiming the call while the caller still waits; a
 	// caller that stops waiting then receives the claimed response.
 	dest             *InternalResponsePage
 	timer            *time.Timer
+	InternalDone     sync.WaitGroup
 	InternalStreamID int // current stream in use
 	// streamObserverEndOnce ensures that either StreamAbandoned or StreamFinished is called,
 	// but not both.
 	streamObserverEndOnce sync.Once
-	InternalDone          sync.WaitGroup
+	state                 atomic.Uint32 // callWaiting, callClaimed, callDelivered or callStopped
+	orphaned              bool
+	InternalTyped         bool
 }
 
 var InternalCallReqPool = sync.Pool{
@@ -1968,9 +1972,17 @@ type InternalConnectionPoolPolicy struct {
 // pointer, so it goes last to keep the pointer-scanned prefix short. It belongs
 // with r.
 type InternalFrameSource struct {
-	InternalOwner *wire.Lease
-	InternalChain wire.Chain
-	InternalR     io.Reader
+	// netStart/netEnd are the window of the network read that delivered these
+	// bytes, for FrameHeaderObserver. On v5 the CQL header is parsed out of a
+	// segment that has already arrived, so processFrameSource cannot measure the
+	// network wait itself — the reader that could is recvSegment, and it passes
+	// the window down here.
+	//
+	// Zero means "not measured", which is the pre-v5 socket path: there
+	// processFrameSource reads the header off the wire and times it directly.
+	InternalNetStart, InternalNetEnd time.Time
+	InternalR                        io.Reader
+	InternalOwner                    *wire.Lease
 	// segment, when non-nil, is the self-contained v5 segment payload r reads
 	// from. Such a segment carries only whole frames, so a header declaring a body
 	// longer than what is left in the segment is a framing violation, and
@@ -1987,19 +1999,11 @@ type InternalFrameSource struct {
 	// Nil on the pre-v5 socket path, and nil for a reassembled frame, where
 	// framer.adoptFrameBody already matches the declared length exactly.
 	InternalSegment *bytes.Reader
-	// netStart/netEnd are the window of the network read that delivered these
-	// bytes, for FrameHeaderObserver. On v5 the CQL header is parsed out of a
-	// segment that has already arrived, so processFrameSource cannot measure the
-	// network wait itself — the reader that could is recvSegment, and it passes
-	// the window down here.
-	//
-	// Zero means "not measured", which is the pre-v5 socket path: there
-	// processFrameSource reads the header off the wire and times it directly.
-	InternalNetStart, InternalNetEnd time.Time
 	// body is set only when the whole frame body is already in memory and the
 	// buffer holding it can be given away: the read framer then adopts it instead
 	// of reading and copying the body a second time (see framer.adoptFrameBody).
-	InternalBody []byte
+	InternalBody  []byte
+	InternalChain wire.Chain
 }
 
 // readBody fills f with the frame body described by head, either by reading it
@@ -2100,15 +2104,15 @@ type InternalConnReadSource interface {
 
 // connReader implements connReadSource.
 type InternalConnReader struct {
-	transferable bool
-	deadlineMu   sync.Mutex
-	pause        atomic.Bool
 	InternalConn net.Conn
 	// Production uses an 8 KiB shared buffer. Exclusive acquisition transfers
 	// this reader at a checked frame boundary, preserving all unread bytes.
 	InternalR      *bufio.Reader
 	timeout        atomic.Int64
+	deadlineMu     sync.Mutex
+	pause          atomic.Bool
 	InternalDisarm atomic.Bool
+	transferable   bool
 }
 
 // maxReadAttempts bounds how many times Read re-arms the deadline and resumes a
@@ -2276,14 +2280,14 @@ type InternalDeadlineContextWriter struct {
 	// It is a channel with capacity 1.
 	InternalSemaphore chan struct{}
 	// quit closed once the connection is closed.
-	InternalQuit    chan struct{}
-	InternalTimeout atomic.Int64
+	InternalQuit chan struct{}
 	// spanScratch is protected by InternalSemaphore. Only cleared descriptors
 	// are retained between writes, never request payloads.
 	spanScratch net.Buffers
 	// writeBuffers is the header net.Buffers.WriteTo consumes, also under
 	// InternalSemaphore; it lives here so that a write does not allocate it.
-	writeBuffers net.Buffers
+	writeBuffers    net.Buffers
+	InternalTimeout atomic.Int64
 }
 
 func (c *InternalDeadlineContextWriter) InternalSetWriteTimeout(timeout time.Duration) {

@@ -6,11 +6,13 @@ package execution
 import (
 	"context"
 	"fmt"
+
 	"github.com/scylladb/gocql/v2/internal/codec"
 
-	"github.com/scylladb/gocql/v2/internal/wire"
 	"sync"
 	"sync/atomic"
+
+	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 type PageLease struct {
@@ -265,8 +267,8 @@ func (p *Page[R]) Info() Result {
 }
 
 type InternalPrefetchJob struct {
-	state  PageState
 	future *InternalPageFuture
+	state  PageState
 }
 
 // rowsImpl is the storage and logic behind a Rows handle. A reusable query
@@ -494,14 +496,14 @@ func (r *rowsImpl[R]) Info() Result {
 }
 
 type InternalResultPlanCache[R any] struct {
-	InternalMu   sync.Mutex
-	entry        *typedResultMetadata
-	columns      Columns
 	InternalPlan RowPlan[R]
-	revision     uint64
+	entry        *typedResultMetadata
 	// current mirrors entry and plan for lock-free hits on identified
 	// responses. It is replaced under InternalMu whenever entry changes.
-	current atomic.Pointer[resultPlanSnapshot[R]]
+	current    atomic.Pointer[resultPlanSnapshot[R]]
+	columns    Columns
+	revision   uint64
+	InternalMu sync.Mutex
 }
 
 type resultPlanSnapshot[R any] struct {
@@ -583,10 +585,10 @@ func (c *InternalResultPlanCache[R]) selectUnidentified(response *responsePage, 
 // pageFuture transfers one prefetched response without making Close wait for I/O.
 // A closed future releases a late response before retiring its input admission.
 type InternalPageFuture struct {
-	mu           sync.Mutex
+	err          error
 	InternalDone chan struct{}
 	response     *responsePage
-	err          error
+	mu           sync.Mutex
 	closed       bool
 }
 

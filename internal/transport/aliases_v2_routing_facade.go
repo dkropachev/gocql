@@ -3,8 +3,10 @@
 
 package transport
 
-import runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
-import model "github.com/scylladb/gocql/v2/internal/model"
+import (
+	model "github.com/scylladb/gocql/v2/internal/model"
+	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
+)
 
 var ErrConnectionClosed = runtimeerrors.ErrConnectionClosed
 

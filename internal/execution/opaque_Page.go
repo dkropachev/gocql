@@ -11,23 +11,23 @@ import (
 )
 
 type PageStorage[R any] struct {
-	cursor            queryCursor
+	InternalCtx       context.Context
+	InternalPlan      RowPlan[R]
+	current           R
+	err               error
 	pendingRelease    func()
 	destination       *R
-	InternalCtx       context.Context
 	cancel            context.CancelFunc
 	session           *implCluster.Session
 	InternalResponse  *responsePage
-	InternalPlan      RowPlan[R]
-	InternalCursor    wire.Cursor
+	InternalRelease   func()
+	cursor            queryCursor
 	reader            RowReader
+	InternalCursor    wire.Cursor
 	InternalIndex     int32
-	current           R
 	valid             bool
-	err               error
 	closed            bool
 	InternalExhausted bool
-	InternalRelease   func()
 }
 
 func PageData[R any](v *Page[R]) *PageStorage[R] { return &v.privateStorage }

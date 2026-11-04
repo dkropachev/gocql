@@ -24,13 +24,13 @@ type writeTicket struct {
 	// result is written by the writer before state becomes ticketFinished.
 	result InternalWriteResult
 	packet wire.Chain
-	refs   atomic.Int32
-	phase  atomic.Uint32 // 0 queued, 1 writing, 2 cancelled before transmission
-	state  atomic.Uint32 // ticketPending, ticketAwaited or ticketFinished
 	// request owns a typed request until the writer finishes with it. Its
 	// lease is released in finish, before the ticket can be recycled, and no
 	// one else holds it, so reusing it with the ticket is safe.
 	request typedRequestLease
+	refs    atomic.Int32
+	phase   atomic.Uint32 // 0 queued, 1 writing, 2 cancelled before transmission
+	state   atomic.Uint32 // ticketPending, ticketAwaited or ticketFinished
 }
 
 const (
@@ -69,12 +69,12 @@ func (e *pendingWriteError) Unwrap() error { return e.error }
 // queue under mu and wake the writer only when it is parked.
 type submissionWriter struct {
 	conn   *Conn
-	mu     sync.Mutex
+	wake   chan struct{} // capacity 1; signalled when a parked writer has work
 	queue  []*writeTicket
 	spare  []*writeTicket // the previous batch's storage, reused as the next queue
+	mu     sync.Mutex
 	parked bool
 	closed bool
-	wake   chan struct{} // capacity 1; signalled when a parked writer has work
 }
 
 // transientDoner is implemented by contexts that hand out their Done channel

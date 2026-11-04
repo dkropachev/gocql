@@ -13,24 +13,24 @@ import (
 )
 
 type ClientRoutesHandlerStorage struct {
-	needsResync           atomic.Bool
-	InternalSession       *Session
-	InternalWorkers       sync.WaitGroup
-	stopOnce              sync.Once
-	queueMu               sync.Mutex
-	connectionEpoch       map[string]uint64
-	pairEpoch             map[InternalPair]uint64
 	InternalLog           StdLogger
 	InternalC             InternalControlConnection
 	InternalResolver      DNSResolver
+	InternalSession       *Session
+	connectionEpoch       map[string]uint64
+	pairEpoch             map[InternalPair]uint64
 	InternalSub           *eventbus.Subscriber[events.Event]
-	InternalRouteCache    InternalClientRouteCache
 	InternalAddrOverrides map[string]string // connectionID → user-supplied ConnectionAddr
 	InternalUpdateTasks   chan InternalUpdateTask
 	InternalCloseChan     chan struct{}
+	InternalRouteCache    InternalClientRouteCache
 	InternalCfg           ClientRoutesConfig
-	InternalPickTLSPorts  bool
+	InternalWorkers       sync.WaitGroup
+	stopOnce              sync.Once
+	queueMu               sync.Mutex
+	needsResync           atomic.Bool
 	InternalInitialized   atomic.Bool
+	InternalPickTLSPorts  bool
 }
 
 func ClientRoutesHandlerData(v *ClientRoutesHandler) *ClientRoutesHandlerStorage {

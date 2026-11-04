@@ -27,16 +27,13 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
 	"errors"
-
 	"strings"
-
 	"sync/atomic"
 	"testing"
 
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/tablets"
 )
 

@@ -27,8 +27,6 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
 	"context"
 	"fmt"
@@ -36,6 +34,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 func TestBatch_Errors(t *testing.T) {

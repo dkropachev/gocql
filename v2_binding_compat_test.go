@@ -7,6 +7,7 @@ package gocql
 // cancellation fixtures only. They are absent from the supported public API.
 import (
 	"context"
+
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 )
 

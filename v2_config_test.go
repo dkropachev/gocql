@@ -1,7 +1,5 @@
 package gocql
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"context"
 	"crypto/tls"
@@ -11,6 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 func TestV2RuntimeConfigSnapshotAndValidation(t *testing.T) {

@@ -6,10 +6,12 @@ package routing
 import (
 	"context"
 	"errors"
+
 	model "github.com/scylladb/gocql/v2/internal/model"
 
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"time"
+
+	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 type Target = model.Target
@@ -44,12 +46,12 @@ type AttemptError struct {
 }
 
 type AttemptEvent struct {
+	Started                time.Time
+	Err                    error
 	RequestID              uint64
 	Attempt                int
-	Target                 Target
-	Started                time.Time
 	Latency                time.Duration
-	Err                    error
+	Target                 Target
 	Cancelled, Speculative bool
 }
 

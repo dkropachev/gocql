@@ -22,35 +22,35 @@ import (
 var ErrBusy = errors.New("gocql: query is busy")
 
 type queryState struct {
-	request       InternalExecutionRequest
-	inlineLogical InternalLogicalExecution
-	routing       routing.InternalLazyRoutingPlan
-	mu            sync.Mutex
-	owner         *inputOwner
-	execOwner     InternalInputOwner // per-execution owner, reset each generation
-	execCtx       *executionContext  // reusable direct-path context; nil keeps context.WithTimeout
-	pageCtx       *executionContext  // reusable direct-path page timeout, created on first use
-	pageCtxBusy   atomic.Bool        // a page holds pageCtx
-	releaseOwner  func()             // bound owner.InternalRelease, the execution drain
-	runtime       *InternalSessionRuntime
-	logical       *InternalLogicalExecution
-	busy, closed  bool
-	// perCall reports that each execution brings its own options instead of
-	// using resolved.
-	perCall    bool
-	generation atomic.Uint64 // advanced in begin under mu; read without it by cursors
-	done       chan struct{} // created by the first waiter of a busy generation
-	retire     func()
-	resolved   *InternalResolvedOptions // the query's options, resolved at creation
-	// response holds an execution's first response page. The next execution
-	// can begin only after this one released it.
-	response responsePage
-	// historyInline is the inline paging history storage the query's
-	// iterator lends its history.
-	historyInline [paging.InternalInlineHistory]PageState
+	owner        *inputOwner
+	execCtx      *executionContext // reusable direct-path context; nil keeps context.WithTimeout
+	pageCtx      *executionContext // reusable direct-path page timeout, created on first use
+	releaseOwner func()            // bound owner.InternalRelease, the execution drain
+	runtime      *InternalSessionRuntime
+	logical      *InternalLogicalExecution
+	done         chan struct{} // created by the first waiter of a busy generation
+	retire       func()
+	resolved     *InternalResolvedOptions // the query's options, resolved at creation
 	// params is the query's latest parameters template; attempts running at
 	// once read and replace it.
 	params atomic.Pointer[model.ParamsTemplate]
+	// historyInline is the inline paging history storage the query's
+	// iterator lends its history.
+	historyInline [paging.InternalInlineHistory]PageState
+	inlineLogical InternalLogicalExecution
+	request       InternalExecutionRequest
+	execOwner     InternalInputOwner // per-execution owner, reset each generation
+	// response holds an execution's first response page. The next execution
+	// can begin only after this one released it.
+	response     responsePage
+	routing      routing.InternalLazyRoutingPlan
+	generation   atomic.Uint64 // advanced in begin under mu; read without it by cursors
+	mu           sync.Mutex
+	pageCtxBusy  atomic.Bool // a page holds pageCtx
+	busy, closed bool
+	// perCall reports that each execution brings its own options instead of
+	// using resolved.
+	perCall bool
 }
 
 // noopCancel is shared so that retiring an execution allocates no closure.
@@ -78,18 +78,18 @@ func (c queryCursor) current() bool {
 // Query owns reusable parameter storage and allows one active execution.
 // Prepared statements remain shareable; a Query must not be copied.
 type Query[P, R any] struct {
-	state   queryState
-	bound   Bound[R]
 	params  ParamPlan[P]
+	options Options
 	columns Columns
+	last    Result        // the latest Exec, Each or One outcome
+	scratch eachScratch   // Each and One decoding state
+	rows    rowsHolder[R] // Run's iterator storage, reused each execution
+	buffer  binding.ParameterBuffer
+	bound   Bound[R]
+	state   queryState
 	// allowUnset reports whether parameters may be unset: always for CQL
 	// text, from Protocol v4 for a prepared statement.
 	allowUnset bool
-	buffer     binding.ParameterBuffer
-	options    Options
-	scratch    eachScratch   // Each and One decoding state
-	rows       rowsHolder[R] // Run's iterator storage, reused each execution
-	last       Result        // the latest Exec, Each or One outcome
 }
 
 // LastResult returns the result information of the query's latest Exec,

@@ -6,8 +6,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	fixtureDuration "github.com/scylladb/gocql/v2/internal/tests/valuecases"
+
 	inf "gopkg.in/inf.v0"
+
+	fixtureDuration "github.com/scylladb/gocql/v2/internal/tests/valuecases"
 
 	"math"
 	"math/big"

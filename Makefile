@@ -11,7 +11,7 @@ SCYLLA_VERSION ?= LATEST
 
 HOST_ARCH := $(shell uname -m)
 
-GOLANGCI_VERSION = 2.5.0
+GOLANGCI_VERSION = 2.15.0
 GET_VERSION_VERSION = 0.4.5
 GET_VERSION_BIN = $(MAKEFILE_PATH)/bin/get-version
 # get-version publishes one release archive per architecture, and every
@@ -528,9 +528,12 @@ generate-pki:
 	rm -f testdata/pki/.keystore testdata/pki/.truststore testdata/pki/*.p12 testdata/pki/*.key testdata/pki/*.crt || true
 	cd testdata/pki/ && bash ./generate_certs.sh
 
+# golangci-lint is built with the module's Go toolchain: a linter built with
+# an older Go cannot load the export data of a newer one.
 .prepare-golangci:
-	@if ! "${BIN_DIR}/golangci-lint" --version | grep '${GOLANGCI_VERSION}' >/dev/null 2>&1 ; then
+	@GOVERSION="$$(go env GOVERSION)"
+	if ! "${BIN_DIR}/golangci-lint" --version 2>/dev/null | grep -F '${GOLANGCI_VERSION} built with '"$${GOVERSION} " >/dev/null ; then
 		mkdir -p "${BIN_DIR}"
-		echo "Installing golangci-lint to '${BIN_DIR}'"
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b bin/ v$(GOLANGCI_VERSION)
+		echo "Building golangci-lint ${GOLANGCI_VERSION} with $${GOVERSION} into '${BIN_DIR}'"
+		GOTOOLCHAIN="$${GOVERSION}" GOBIN=${BIN_DIR} go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$(GOLANGCI_VERSION)
 	fi

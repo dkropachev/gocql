@@ -101,12 +101,12 @@ func paramOps[P any](ordered []InputField[P]) []paramOp[P] {
 
 // rowOp is one compiled result field.
 type rowOp[R any] struct {
-	kind            directKind
+	field           OutputField[R] // directNone: the field itself
+	access          unsafe.Pointer // the field accessor, a func(*R) *V
 	width           int64
 	columnKind, alt cqltype.Type
+	kind            directKind
 	compiled        bool
-	access          unsafe.Pointer // the field accessor, a func(*R) *V
-	field           OutputField[R] // directNone: the field itself
 }
 
 // directRowOp compiles f, already compiled for its column, into a direct op
@@ -172,12 +172,12 @@ func (op *rowOp[R]) decodeDirect(reader *RowReader, dst *R) error {
 
 // paramOp is one compiled parameter field.
 type paramOp[P any] struct {
-	kind            directKind
-	width           int64
-	ascii           bool
-	columnKind, alt cqltype.Type   // directInt: the codec's types
-	get             unsafe.Pointer // the field getter, a func(P) V
 	field           InputField[P]  // directNone, or a precondition the op does not cover
+	get             unsafe.Pointer // the field getter, a func(P) V
+	width           int64
+	columnKind, alt cqltype.Type // directInt: the codec's types
+	kind            directKind
+	ascii           bool
 }
 
 // directParamOp compiles f, already compiled for its column, into a direct op

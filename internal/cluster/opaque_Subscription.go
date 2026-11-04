@@ -8,11 +8,11 @@ import (
 )
 
 type SubscriptionStorage struct {
-	mu     sync.Mutex
 	events chan Event
-	closed bool
-	filter EventFilter
 	parent *InternalV2PeripheralState
+	filter EventFilter
+	mu     sync.Mutex
+	closed bool
 }
 
 func SubscriptionData(v *Subscription) *SubscriptionStorage { return &v.privateStorage }

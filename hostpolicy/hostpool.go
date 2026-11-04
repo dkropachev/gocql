@@ -19,9 +19,11 @@ package hostpolicy
 
 import (
 	"fmt"
-	"github.com/hailocab/go-hostpool"
-	"github.com/scylladb/gocql/v2"
 	"sync"
+
+	"github.com/hailocab/go-hostpool"
+
+	"github.com/scylladb/gocql/v2"
 )
 
 // HostPool adapts go-hostpool to the typed routing and attempt-observation API.
@@ -32,13 +34,13 @@ func HostPool(hp hostpool.HostPool) gocql.RoutingPolicy {
 }
 
 type hostPoolHostPolicy struct {
-	mu          sync.Mutex
 	hp          hostpool.HostPool
-	generation  uint64
-	initialized bool
-	hosts       []gocql.HostSnapshot
 	byAddress   map[string]gocql.HostSnapshot
 	responses   map[gocql.UUID]hostpool.HostPoolResponse
+	hosts       []gocql.HostSnapshot
+	generation  uint64
+	mu          sync.Mutex
+	initialized bool
 }
 
 func (p *hostPoolHostPolicy) Validate(_ *gocql.MetadataSnapshot) error {
@@ -82,10 +84,10 @@ func (p *hostPoolHostPolicy) Observe(event gocql.AttemptEvent) {
 
 type hostPoolPlan struct {
 	policy    *hostPoolHostPolicy
-	hosts     []gocql.HostSnapshot
 	byAddress map[string]gocql.HostSnapshot
-	info      gocql.RoutingInfo
 	seen      map[gocql.UUID]bool
+	hosts     []gocql.HostSnapshot
+	info      gocql.RoutingInfo
 	fallback  int
 }
 

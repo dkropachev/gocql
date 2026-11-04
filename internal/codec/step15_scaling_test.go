@@ -7,10 +7,11 @@ package codec
 
 import (
 	"fmt"
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/wire"
 	"math/bits"
 	"testing"
+
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 func TestStep15NestedVisitBounds(t *testing.T) {

@@ -63,12 +63,12 @@ func CheckStreamLimits(l StreamLimits) (StreamLimits, error) {
 type streamState struct {
 	ctx        context.Context
 	source     io.Reader
-	limits     StreamLimits
 	err        error
-	scalar     [8]byte
 	discard    []byte
-	noProgress int
 	children   []*Stream
+	limits     StreamLimits
+	noProgress int
+	scalar     [8]byte
 }
 
 // Stream incrementally consumes one checked envelope or child body. It is a

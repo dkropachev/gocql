@@ -50,11 +50,11 @@ type entry struct {
 }
 
 type cache struct {
-	mu         sync.Mutex
-	shared     bool
-	entries    []entry
 	index      map[uint64]int32
+	entries    []entry
+	mu         sync.Mutex
 	head, tail int32
+	shared     bool
 }
 
 func newCache(first, count int, shared bool) *cache {
@@ -208,26 +208,26 @@ func writeAll(conn net.Conn, b []byte) error {
 }
 
 type workerResult struct {
+	CPUObservations                            map[int]uint64
+	SocketAffinityStatus                       string
+	Error                                      string  `json:",omitempty"`
+	BatchLatencyNS                             []int64 `json:"-"`
 	Worker, TargetCPU                          int
 	Operations, Checksum                       uint64
-	CPUObservations                            map[int]uint64
 	SampledCPUChanges                          uint64
 	IncomingBefore, IncomingAfter, NAPIID      int
 	IncomingAtSetup                            int
 	SocketTargetSamples, SocketOtherSamples    uint64
-	SocketAffinityStatus                       string
 	LatencySamplesSeen, LatencySamplesRetained uint64
-	BatchLatencyNS                             []int64 `json:"-"`
-	Error                                      string  `json:",omitempty"`
 }
 
 type operation struct {
-	cfg             config
 	cache           *cache
-	keys            []uint64
-	sequence        uint64
 	conn            *net.TCPConn
+	keys            []uint64
 	send, receive   []byte
+	cfg             config
+	sequence        uint64
 	checksum        uint64
 	incomingAtSetup int
 }
@@ -308,21 +308,21 @@ func makeOperation(cfg config, id, targetCPU, perWorker int, shared *cache) (*op
 }
 
 type gate struct {
-	ready, warmed           sync.WaitGroup
 	warmStart, measureStart chan struct{}
-	warmStop, stop          atomic.Bool
 	stopSignal              chan struct{}
-	jobs                    []chan time.Time
 	tokens                  chan struct{}
 	producerDone            chan struct{}
+	jobs                    []chan time.Time
+	ready, warmed           sync.WaitGroup
+	warmStop, stop          atomic.Bool
 }
 
 // One random batch in each 256-batch window prevents phase locking to the
 // power-of-two key stream. Algorithm R retains a bounded sample of the full
 // measurement instead of keeping only its earliest latency observations.
 type latencySampler struct {
-	state, next, seen uint64
 	samples           []int64
+	state, next, seen uint64
 }
 
 func newLatencySampler(seed uint64, capacity int) latencySampler {
@@ -531,18 +531,18 @@ func readCPUs(cpus []int) map[int]cpuTicks {
 }
 
 type result struct {
-	Config                                                                   config
+	CPUOverallBusyPercent                                                    map[int]float64
 	GoVersion                                                                string
+	Error                                                                    string `json:",omitempty"`
 	Workers                                                                  []workerResult
+	Config                                                                   config
 	Seconds, OperationsPerSecond, ProcessCPUSeconds, CPUSecondsPerMillionOps float64
 	Operations                                                               uint64
 	Allocations, AllocatedBytes, GCs                                         uint64
 	HeapBytes                                                                uint64
 	VoluntarySwitches, InvoluntarySwitches                                   int64
-	CPUOverallBusyPercent                                                    map[int]float64
 	BatchP50NS, BatchP95NS, BatchP99NS                                       int64
 	WorkerOperationsCV                                                       float64
-	Error                                                                    string `json:",omitempty"`
 }
 
 func seconds(t syscall.Timeval) float64 { return float64(t.Sec) + float64(t.Usec)/1e6 }

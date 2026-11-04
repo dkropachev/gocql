@@ -20,8 +20,9 @@
 package execution
 
 import (
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"sync/atomic"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 func (rt *InternalSessionRuntime) InternalSchemaTracker() *preparedSchemaTracker {

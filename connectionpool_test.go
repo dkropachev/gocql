@@ -28,11 +28,6 @@
 package gocql
 
 import (
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-)
-
-import (
 	"context"
 	"crypto/tls"
 	"errors"
@@ -44,6 +39,8 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/debounce"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 func TestSetupTLSConfig(t *testing.T) {

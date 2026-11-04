@@ -10,7 +10,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,6 +17,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 type step15ConcurrentMemory struct {

@@ -37,13 +37,8 @@ import (
 )
 
 type SessionStorage struct {
-	InternalTypedMu              sync.Mutex
-	nextTypedHost                atomic.Uint64
 	InternalTypedState           InternalExecutionLifecycle
 	InternalTypedReady           atomic.Value // InternalTypedState once fully initialized; never replaced
-	schemaMu                     sync.Mutex
-	schema                       *preparedSchemaTracker
-	v2Peripheral                 atomic.Pointer[InternalV2PeripheralState]
 	InternalControl              InternalControlConnection
 	InternalCtx                  context.Context
 	InternalLogger               StdLogger
@@ -52,6 +47,9 @@ type SessionStorage struct {
 	frameObserver                FrameHeaderObserver
 	streamObserver               StreamObserver
 	initErr                      error
+	InternalAddressTranslator    AddressTranslator
+	schema                       *preparedSchemaTracker
+	v2Peripheral                 atomic.Pointer[InternalV2PeripheralState]
 	InternalNodeEvents           *InternalEventDebouncer
 	InternalHostSource           *InternalRingDescriber
 	InternalPool                 *policyConnPool
@@ -64,24 +62,26 @@ type SessionStorage struct {
 	InternalConnCfg              *ConnConfig
 	InternalClientRoutesHandler  *ClientRoutesHandler
 	InternalDriverConfigReporter *InternalDriverConfigReporter
+	closeDone                    chan struct{}
 	// id is a globally unique identifier for this session, reported to
 	// the cluster via the SESSION_ID STARTUP option so that all connections
 	// belonging to the same session can be correlated in system.clients.
-	id                                string
-	InternalAddressTranslator         AddressTranslator
-	InternalCfg                       InternalClusterSettings
-	mu                                sync.RWMutex
-	InternalSessionStateMu            sync.RWMutex
+	id                     string
+	InternalCfg            InternalClusterSettings
+	nextTypedHost          atomic.Uint64
+	mu                     sync.RWMutex
+	InternalSessionStateMu sync.RWMutex
+	InternalTypedMu        sync.Mutex
+	schemaMu               sync.Mutex
+	// closedOrClosing mirrors InternalIsClosing||InternalIsClosed for lock-free
+	// Closed; it is set under InternalSessionStateMu with either flag.
+	closedOrClosing                   atomic.Bool
 	InternalIsClosing                 bool
-	closeDone                         chan struct{}
 	InternalHasAggregatesAndFunctions bool
 	InternalUseSystemSchema           bool
 	InternalTabletsRoutingV1          bool
 	InternalIsInitialized             bool
 	InternalIsClosed                  bool
-	// closedOrClosing mirrors InternalIsClosing||InternalIsClosed for lock-free
-	// Closed; it is set under InternalSessionStateMu with either flag.
-	closedOrClosing atomic.Bool
 }
 
 func SessionData(v *Session) *SessionStorage { return &v.privateStorage }

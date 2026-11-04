@@ -27,8 +27,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/scylladb/gocql/v2/internal/codec"
 	"io"
+
+	"github.com/scylladb/gocql/v2/internal/codec"
 
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/segment"
@@ -120,14 +121,14 @@ type InternalStreamResponse struct {
 	InternalCtx                     context.Context
 	reservation                     *InternalExclusiveConn
 	InternalBody                    *wire.Stream
-	InternalMetadata                parsedMetadata
-	InternalColumns                 Columns
-	InternalColumnCount             int
-	InternalRowCount, InternalIndex int32
-	InternalKind                    int
-	InternalInfo                    Result
 	InternalBudget                  *streamMetadataCursor
 	InternalReader                  *StreamRowReader
+	InternalColumns                 Columns
+	InternalMetadata                parsedMetadata
+	InternalInfo                    Result
+	InternalColumnCount             int
+	InternalKind                    int
+	InternalRowCount, InternalIndex int32
 	InternalTerminal                bool
 }
 

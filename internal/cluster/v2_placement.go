@@ -27,8 +27,8 @@ type InternalV2TabletFeedbackKey struct {
 	InternalEnd                     int64
 }
 type InternalV2PendingTabletFeedback struct {
-	InternalHint        tablets.TabletInfo
 	InternalStamp       tabletFeedbackStamp
+	InternalHint        tablets.TabletInfo
 	InternalObservation tabletRangeObservation
 }
 

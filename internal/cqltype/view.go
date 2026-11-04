@@ -14,8 +14,8 @@ import (
 // Bytes borrows immutable bytes, which may cross receive segments. A page view
 // is valid only while its page or a retained page lease remains alive.
 type Bytes struct {
-	chain wire.Chain
 	lease wire.Ref
+	chain wire.Chain
 }
 
 // Text is a validated text view. String explicitly materializes an owned string.

@@ -27,14 +27,11 @@
 
 package gocql
 
-import implExecution "github.com/scylladb/gocql/v2/internal/execution"
-
 import (
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-)
 
-import (
 	"context"
 	"fmt"
 	"math"
@@ -47,10 +44,12 @@ import (
 	"testing"
 	"time"
 
-	frm "github.com/scylladb/gocql/v2/internal/frame"
-	"github.com/scylladb/gocql/v2/internal/murmur"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 
 	"github.com/stretchr/testify/require"
+
+	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/murmur"
 )
 
 func TestEmptyHosts(t *testing.T) {

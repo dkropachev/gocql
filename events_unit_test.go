@@ -21,12 +21,10 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
-	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 
 	"crypto/sha256"
 	"fmt"
@@ -38,6 +36,7 @@ import (
 	"testing"
 	"time"
 
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/tests/mock"
 	"github.com/scylladb/gocql/v2/tablets"
 

@@ -18,16 +18,18 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	frm "github.com/scylladb/gocql/v2/internal/frame"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+
 	"net"
 	"net/netip"
 	"time"
+
+	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
 // nativeResultFixture contains preframed native cells used by metadata peers.

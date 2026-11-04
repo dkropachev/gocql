@@ -5,8 +5,9 @@ package main
 import (
 	"context"
 	"fmt"
-	g "github.com/gocql/gocql"
 	"time"
+
+	g "github.com/gocql/gocql"
 )
 
 const driverName = "old"

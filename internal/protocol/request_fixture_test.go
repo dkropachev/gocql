@@ -18,9 +18,10 @@ package protocol
 
 import (
 	"fmt"
+	"time"
+
 	. "github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-	"time"
 )
 
 // Independent native request fixtures produce byte oracles for the canonical

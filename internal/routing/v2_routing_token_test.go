@@ -3,12 +3,11 @@
 
 package routing_test
 
-import . "github.com/scylladb/gocql/v2"
-
 import (
 	"encoding/binary"
 	"testing"
 
+	. "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/internal/murmur"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )

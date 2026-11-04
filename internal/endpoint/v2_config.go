@@ -15,8 +15,8 @@ import (
 type InternalContextBox struct{ InternalCtx context.Context }
 type InternalV2DNSResolver struct {
 	InternalBase                          DNSResolver
-	InternalTimeout, InternalSetupTimeout time.Duration
 	InternalStartup                       atomic.Pointer[InternalContextBox]
+	InternalTimeout, InternalSetupTimeout time.Duration
 }
 
 func (r *InternalV2DNSResolver) baseContext() context.Context {
@@ -49,11 +49,11 @@ func (r *InternalV2DNSResolver) lookupIP(ctx context.Context, host string) ([]ne
 		return net.DefaultResolver.LookupIP(ctx, "ip", host)
 	}
 	type outcome struct {
-		ips []net.IP
 		err error
+		ips []net.IP
 	}
 	done := make(chan outcome, 1)
-	go func() { ips, err := r.InternalBase.LookupIP(host); done <- outcome{ips, err} }()
+	go func() { ips, err := r.InternalBase.LookupIP(host); done <- outcome{err: err, ips: ips} }()
 	select {
 	case result := <-done:
 		return result.ips, result.err

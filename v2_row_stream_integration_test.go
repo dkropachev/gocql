@@ -18,11 +18,9 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+
 	"bytes"
 	"context"
 	"encoding/json"
@@ -33,6 +31,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 func TestStep07RunStreamLive(t *testing.T) {

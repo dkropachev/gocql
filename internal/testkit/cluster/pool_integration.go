@@ -7,6 +7,7 @@ package cluster
 
 import (
 	"fmt"
+
 	runtime "github.com/scylladb/gocql/v2/internal/cluster"
 )
 

@@ -18,9 +18,11 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+import (
+	"testing"
 
-import "testing"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+)
 
 func TestStep04LateTableRefreshEntrant(t *testing.T) {
 	ctrl := &schemaDataMock{knownKeyspaces: map[string][]tableInfo{"test_ks": {{name: "tbl_a", columns: []columnInfo{{name: "id", kind: "partition_key", position: 0}}}}}}

@@ -49,10 +49,10 @@ type MetadataIO struct {
 }
 
 type ClientRoutesOptions struct {
-	ConnectionIDs     []string
 	HostnameOverrides map[string]string
-	TLS               bool
 	SNIProxyAddress   string
+	ConnectionIDs     []string
+	TLS               bool
 }
 
 type AuthProvider interface {
@@ -74,20 +74,20 @@ type ConvictionPolicy interface {
 	Reset(host HostSnapshot)
 }
 type Config struct {
+	LocalAddress                                                                     netip.Addr
+	Dialer                                                                           implEndpoint.Dialer
+	DNSResolver                                                                      implEndpoint.DNSResolver
+	Reconnect                                                                        ReconnectPolicy
+	DialHost                                                                         func(context.Context, implEndpoint.DialTarget) (net.Conn, error)
+	TLS                                                                              *tls.Config
+	TLSForHost                                                                       func(context.Context, HostSnapshot) (*tls.Config, error)
+	ClientRoutes                                                                     *ClientRoutesOptions
 	ContactPoints                                                                    []string
+	Pool                                                                             PoolOptions
+	Metadata                                                                         MetadataIO
+	ReceiveBuffer, SendBuffer                                                        Option[int]
+	Linger                                                                           Option[time.Duration]
 	Protocol                                                                         int
 	ConnectTimeout, DNSTimeout, KeepaliveInterval, KeepaliveTimeout, SocketKeepalive time.Duration
 	NoDelay                                                                          bool
-	ReceiveBuffer, SendBuffer                                                        Option[int]
-	Linger                                                                           Option[time.Duration]
-	LocalAddress                                                                     netip.Addr
-	DialHost                                                                         func(context.Context, implEndpoint.DialTarget) (net.Conn, error)
-	Dialer                                                                           implEndpoint.Dialer
-	DNSResolver                                                                      implEndpoint.DNSResolver
-	TLS                                                                              *tls.Config
-	TLSForHost                                                                       func(context.Context, HostSnapshot) (*tls.Config, error)
-	Pool                                                                             PoolOptions
-	ClientRoutes                                                                     *ClientRoutesOptions
-	Metadata                                                                         MetadataIO
-	Reconnect                                                                        ReconnectPolicy
 }

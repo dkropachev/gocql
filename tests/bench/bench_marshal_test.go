@@ -19,8 +19,9 @@ package bench_test
 import (
 	"bytes"
 	"fmt"
-	"github.com/scylladb/gocql/v2"
 	"testing"
+
+	"github.com/scylladb/gocql/v2"
 )
 
 // benchmarkValue measures explicit borrowed encoding and borrowed decoding.

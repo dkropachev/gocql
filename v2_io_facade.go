@@ -1,11 +1,12 @@
 package gocql
 
 import (
-	implTransport "github.com/scylladb/gocql/v2/internal/transport"
-	"github.com/scylladb/gocql/v2/internal/wire"
 	"io"
 	"net"
 	"time"
+
+	implTransport "github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 type chainReader = implTransport.InternalChainReader

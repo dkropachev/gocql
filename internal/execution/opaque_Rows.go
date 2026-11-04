@@ -12,31 +12,30 @@ import (
 )
 
 type RowsStorage[R any] struct {
-	cursor          queryCursor
+	nextErr         error
+	terminalErr     error
+	InternalCtx     context.Context
+	decoder         RowDecoder[R]
+	err             error
 	prefetchJobs    chan InternalPrefetchJob
 	pendingRelease  func()
-	mu              sync.Mutex
 	plans           *InternalResultPlanCache[R]
-	InternalHistory pagingHistory
-	nextErr         error
-	rejectColumns   bool
-	terminalErr     error
 	future          *InternalPageFuture
-
-	InternalCtx     context.Context
 	cancel          context.CancelFunc
 	session         *implCluster.Session
 	InternalRequest *InternalExecutionRequest
-	decoder         RowDecoder[R]
 	InternalPage    *Page[R]
-	info            Result
-	err             error
-	closed          bool
-	valid           bool
 	InternalRelease func()
 	// execution is finished and released when the rows close; pendingExecution
 	// carries that release past the unlock, like pendingRelease.
 	execution, pendingExecution *InternalLogicalExecution
+	cursor                      queryCursor
+	InternalHistory             pagingHistory
+	info                        Result
+	mu                          sync.Mutex
+	rejectColumns               bool
+	closed                      bool
+	valid                       bool
 }
 
 func RowsData[R any](v Rows[R]) *RowsStorage[R] { return &v.impl.privateStorage }

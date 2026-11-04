@@ -5,6 +5,7 @@ package cluster
 
 import (
 	"context"
+
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 )
 

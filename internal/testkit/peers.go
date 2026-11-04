@@ -6,9 +6,9 @@ import (
 )
 
 type peerCursor struct {
+	err    error
 	data   []byte
 	offset int
-	err    error
 }
 
 func (p *peerCursor) take(n int) []byte {

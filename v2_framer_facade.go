@@ -4,11 +4,12 @@
 package gocql
 
 import (
+	"io"
+
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	protocol "github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/segment"
-	"io"
 )
 
 type retiredCompressor = protocol.Compressor

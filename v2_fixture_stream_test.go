@@ -3,11 +3,9 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -20,7 +18,9 @@ import (
 	"time"
 	"unsafe"
 
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/testkit"
+
 	lz4 "github.com/scylladb/gocql/v2/internal/wirecompress"
 )
 

@@ -6,11 +6,12 @@ package endpoint
 import (
 	"context"
 	"fmt"
-	"github.com/scylladb/gocql/v2/internal/debug"
-	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"net"
 	"strconv"
 	"strings"
+
+	"github.com/scylladb/gocql/v2/internal/debug"
+	logging "github.com/scylladb/gocql/v2/internal/logging"
 )
 
 // V2's version block follows the pinned extension, independent of protocol v3/4/5.

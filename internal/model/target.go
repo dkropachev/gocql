@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license.
 
 package model
+
 import "github.com/scylladb/gocql/v2/internal/cqltype"
+
 type Target struct {
 	StrictShard bool
 	HostID      cqltype.UUID

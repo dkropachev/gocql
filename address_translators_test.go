@@ -27,13 +27,12 @@
 
 package gocql
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"fmt"
 	"net"
 	"testing"
 
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/tests"
 )
 

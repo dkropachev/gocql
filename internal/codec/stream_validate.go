@@ -18,6 +18,7 @@ package codec
 
 import (
 	"fmt"
+
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -29,9 +30,9 @@ type streamValidationPlan struct {
 	typ          cqltype.DataType
 	scalar       func(*StreamValueReader) error
 	element, key *streamValidationPlan
+	children     map[*cqltype.DataTypeDescriptor]*streamValidationPlan
 	fields       []*streamValidationPlan
 	width        int64
-	children     map[*cqltype.DataTypeDescriptor]*streamValidationPlan
 	height       int
 	building     bool
 }
@@ -224,8 +225,8 @@ func (r *StreamValueReader) failIf(err error) error {
 
 type StreamEncodedValue struct {
 	Type  cqltype.DataType
-	State cqltype.CellState
 	Bytes []byte
+	State cqltype.CellState
 }
 type streamEncodedCodec struct{}
 type streamEncodedPlan struct{ validation *streamValidationPlan }

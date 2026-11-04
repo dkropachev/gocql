@@ -17,15 +17,9 @@
 package gocql
 
 import (
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-)
-
-import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"github.com/scylladb/gocql/v2/internal/streams"
 	"math"
 	"net"
 	"strconv"
@@ -33,6 +27,10 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/streams"
 )
 
 func step04ValidSupported() map[string][]string {

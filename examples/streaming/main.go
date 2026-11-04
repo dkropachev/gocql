@@ -24,10 +24,10 @@ import (
 )
 
 type record struct {
-	ID               int32
+	ApplicationState string
 	Payload          []byte
 	Pieces           [][]byte
-	ApplicationState string
+	ID               int32
 }
 
 func main() {

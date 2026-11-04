@@ -17,17 +17,14 @@
 package gocql
 
 import (
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
-)
-
-import (
 	"context"
 	"encoding/binary"
 	"fmt"
 	"testing"
 
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 

@@ -3,11 +3,14 @@
 
 package transport
 
-import protocol "github.com/scylladb/gocql/v2/internal/protocol"
+import (
+	protocol "github.com/scylladb/gocql/v2/internal/protocol"
 
-import frm "github.com/scylladb/gocql/v2/internal/frame"
-import "github.com/scylladb/gocql/v2/internal/segment"
-import "io"
+	"io"
+
+	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/segment"
+)
 
 type framer = protocol.Framer
 

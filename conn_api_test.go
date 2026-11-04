@@ -22,9 +22,10 @@
 package gocql_test
 
 import (
-	gocql "github.com/scylladb/gocql/v2"
 	"io"
 	"testing"
+
+	gocql "github.com/scylladb/gocql/v2"
 )
 
 // *gocql.Conn has exposed both Read and Write since before the read-path

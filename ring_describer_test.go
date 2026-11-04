@@ -3,10 +3,8 @@
 
 package gocql
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 
 	"context"
 	"fmt"
@@ -14,8 +12,8 @@ import (
 	"testing"
 	"time"
 
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/tests"
-
 	"github.com/scylladb/gocql/v2/internal/tests/mock"
 )
 

@@ -3,19 +3,20 @@
 
 package transport
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+import (
+	"context"
+	"crypto/tls"
+	"errors"
+	"fmt"
+	"net"
+	"strconv"
+	"syscall"
 
-import
+	"github.com/scylladb/gocql/v2/internal/debug"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+)
 
 // isScyllaConn checks if conn is connected to a ScyllaDB node.
-"context"
-import "crypto/tls"
-import "errors"
-import "fmt"
-import "net"
-import "strconv"
-import "syscall"
-import "github.com/scylladb/gocql/v2/internal/debug"
 
 func (c *Conn) InternalIsScyllaConn() bool {
 	return c.InternalGetScyllaSupported().IsPresent()

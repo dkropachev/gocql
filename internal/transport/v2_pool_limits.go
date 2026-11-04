@@ -19,13 +19,13 @@
 
 package transport
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 func InternalCheckedV2PoolBudget(options PoolOptions, shards int) (int, error) {

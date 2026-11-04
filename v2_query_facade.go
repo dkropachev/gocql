@@ -3,8 +3,10 @@
 
 package gocql
 
-import "github.com/scylladb/gocql/v2/internal/execution"
-import "github.com/scylladb/gocql/v2/internal/codec"
+import (
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/execution"
+)
 
 type Query[P, R any] = execution.Query[P, R]
 

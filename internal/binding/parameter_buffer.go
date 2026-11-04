@@ -4,20 +4,21 @@
 package binding
 
 import (
+	"unsafe"
+
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/wire"
-	"unsafe"
 )
 
 // ParameterBuffer belongs to one query. Encode must not overlap an execution
 // still using its previous snapshot. No caller-owned input survives Encode.
 type ParameterBuffer struct {
-	builder   wire.Builder
 	storage   []byte
 	positions []codec.ParamCell
 	cells     []model.EncodedCell
 	writer    codec.ParamWriter
+	builder   wire.Builder
 }
 
 func (b *ParameterBuffer) RetainedBytes() int {

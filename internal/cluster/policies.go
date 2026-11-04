@@ -24,10 +24,10 @@
 
 package cluster
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"fmt"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 
 	randv2 "math/rand/v2"
 	"sync"

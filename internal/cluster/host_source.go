@@ -24,15 +24,14 @@
 
 package cluster
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"context"
 	"errors"
 	"fmt"
 	"net"
-
 	"time"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 func InternalCheckSystemSchema(control InternalControlConnection) (bool, error) {

@@ -17,8 +17,8 @@ type PayloadEntry struct {
 
 type EncodedCell struct {
 	Typ   cqltype.DataType
-	State cqltype.CellState
 	Body  wire.Chain
+	State cqltype.CellState
 }
 type EncodedValues struct {
 	Columns cqltype.Columns
@@ -29,27 +29,27 @@ type EncodedValues struct {
 // attemptRequest contains only immutable protocol inputs. The transport retains
 // lease until every accepted writer has stopped accessing its spans.
 type AttemptRequest struct {
-	TabletVersionBlock             byte
-	Statement                      string
-	PreparedID, ResultMetadataID   []byte
-	Values                         wire.Chain
-	ValueCount                     int
-	Lease                          *wire.Lease
-	Consistency, SerialConsistency cqltype.Consistency
-	PageSize                       int
-	PagingState                    []byte
-	Timestamp                      int64
-	DefaultTimestamp, SkipMetadata bool
-	Keyspace                       string
-	NowInSeconds                   *int32
-	Trace                          bool
-	Timeout                        time.Duration
-	Prepare                        bool
-	Batch                          *TypedBatchRequest
-	Payload                        []PayloadEntry
+	Lease        *wire.Lease
+	NowInSeconds *int32
+	Batch        *TypedBatchRequest
 	// Params, when it matches the request, is its pre-encoded parameters
 	// block; the encoder copies it instead of encoding each option.
-	Params *ParamsTemplate
+	Params                         *ParamsTemplate
+	Statement                      string
+	Keyspace                       string
+	PreparedID, ResultMetadataID   []byte
+	PagingState                    []byte
+	Payload                        []PayloadEntry
+	Values                         wire.Chain
+	ValueCount                     int
+	PageSize                       int
+	Timestamp                      int64
+	Timeout                        time.Duration
+	Consistency, SerialConsistency cqltype.Consistency
+	TabletVersionBlock             byte
+	DefaultTimestamp, SkipMetadata bool
+	Trace                          bool
+	Prepare                        bool
 }
 
 // ParamsTemplate is a query parameters block encoded once for the options
@@ -58,25 +58,24 @@ type AttemptRequest struct {
 // the flags, the paging state and the timestamp value. A template is
 // immutable once built, so attempts running at once share it.
 type ParamsTemplate struct {
-	// The options the template encodes, compared by Matches.
-	Protocol          byte
-	PageSize          int
-	SerialConsistency cqltype.Consistency
-	DefaultTimestamp  bool
-	Keyspace          string
-	HasNowInSeconds   bool
-	NowInSeconds      int32
-
-	// Flags holds the flags of the fixed options.
-	Flags uint32
+	Keyspace string
 	// Tail is everything after the values: the page size, then, after where
 	// a paging state goes, the serial consistency, a timestamp placeholder,
 	// the keyspace and now_in_seconds.
-	Tail []byte
+	Tail     []byte
+	PageSize int
 	// PagingAt is the offset in Tail where a paging state goes.
 	PagingAt int
 	// TimestampAt is the offset in Tail of the timestamp, or -1.
-	TimestampAt int
+	TimestampAt  int
+	NowInSeconds int32
+	// Flags holds the flags of the fixed options.
+	Flags             uint32
+	SerialConsistency cqltype.Consistency
+	// The options the template encodes, compared by Matches.
+	Protocol         byte
+	DefaultTimestamp bool
+	HasNowInSeconds  bool
 }
 
 // Matches reports whether t encodes r's fixed options for protocol.
@@ -91,8 +90,8 @@ func (t *ParamsTemplate) Matches(r *AttemptRequest, protocol byte) bool {
 }
 
 type TypedBatchRequest struct {
-	Kind  cqltype.BatchKind
 	Items []TypedBatchItem
+	Kind  cqltype.BatchKind
 }
 type TypedBatchItem struct {
 	Statement  string

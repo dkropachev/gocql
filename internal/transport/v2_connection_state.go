@@ -24,11 +24,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"io"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
 var InternalErrOrphanBudget = errors.New("gocql: abandoned stream budget exceeded")
@@ -130,26 +131,26 @@ func (c *Conn) pauseSharedReader(ctx context.Context) bool {
 
 type InternalExclusiveConn struct {
 	transferred            exclusiveReadSource
-	cancelMu               sync.Mutex
-	InternalIoGeneration   uint64
-	ioActive, ioWatching   bool
+	terminalCause          error
+	InternalCtx            context.Context
+	closeErr               error
 	ioDone                 <-chan struct{}
 	ioStop                 func() bool
-	terminalCause          error
 	InternalConn           *Conn
-	InternalCtx            context.Context
 	stop                   func() bool
-	active                 sync.Mutex
-	InternalClosing        atomic.Bool
 	InternalDone           chan struct{}
-	closeErr               error
-	InternalComplete       bool
-	closed                 bool
-	InternalStream         int
-	InternalLimits         StreamLimits
 	InternalMetadataBudget *streamMetadataBudget
 	InternalUnits          *InternalVerifiedStreamUnits
 	readAhead              nativeStreamReadAhead
+	InternalLimits         StreamLimits
+	InternalIoGeneration   uint64
+	InternalStream         int
+	cancelMu               sync.Mutex
+	active                 sync.Mutex
+	InternalClosing        atomic.Bool
+	ioActive, ioWatching   bool
+	InternalComplete       bool
+	closed                 bool
 }
 
 func (c *Conn) InternalReserveExclusive(ctx context.Context) (*InternalExclusiveConn, error) {

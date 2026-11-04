@@ -27,11 +27,11 @@
 
 package gocql
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"net"
 	"testing"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 func TestFilter_WhiteList(t *testing.T) {

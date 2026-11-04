@@ -8,6 +8,6 @@ import (
 )
 
 type InternalResponsePage struct {
-	InternalResponseData
 	InternalMetadata *model.ResultSchemaIdentity
+	InternalResponseData
 }

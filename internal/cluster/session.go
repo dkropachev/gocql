@@ -24,19 +24,19 @@
 
 package cluster
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/wire"
 
 	mrand "math/rand/v2"
-
 	"sync/atomic"
 	"time"
 
@@ -44,7 +44,6 @@ import (
 	"github.com/scylladb/gocql/v2/events"
 	"github.com/scylladb/gocql/v2/internal/debug"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
-
 	"github.com/scylladb/gocql/v2/tablets"
 )
 

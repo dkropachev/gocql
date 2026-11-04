@@ -3,11 +3,7 @@ package gocql
 import (
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
-)
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
-import (
 	"context"
 	"encoding/binary"
 	"errors"
@@ -15,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 func runtimeTestSession(t testing.TB, n int) (*Session, []*driverConn, []net.Conn) {

@@ -4,13 +4,14 @@
 package execution
 
 import (
-	"github.com/scylladb/gocql/v2/internal/wire"
 	"sync"
+
+	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 type PageLeaseStorage struct {
-	once  sync.Once
 	owner *wire.Lease
+	once  sync.Once
 }
 
 func PageLeaseData(v *PageLease) *PageLeaseStorage { return &v.privateStorage }

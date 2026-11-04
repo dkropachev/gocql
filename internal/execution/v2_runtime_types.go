@@ -3,9 +3,12 @@
 
 package execution
 
-import "context"
-import "sync/atomic"
-import "github.com/scylladb/gocql/v2/internal/wire"
+import (
+	"context"
+	"sync/atomic"
+
+	"github.com/scylladb/gocql/v2/internal/wire"
+)
 
 // inputOwner serializes close against admission. Each admitted operation and
 // transport writer has an independent reference; result leases never use it.
@@ -15,13 +18,13 @@ import "github.com/scylladb/gocql/v2/internal/wire"
 // onIdle, and, once closed, the drain callback, as the releasing call's final
 // actions.
 type InternalInputOwner struct {
-	state           atomic.Int64 // ownerClosed | reference count
-	drained         atomic.Bool
 	done            chan struct{} // nil for execution owners, which are never waited on
 	InternalOnDrain func()
 	onIdle          func()
 	release         func() // bound InternalRelease, reused by writer leases
 	writer          ownerWriterLease
+	state           atomic.Int64 // ownerClosed | reference count
+	drained         atomic.Bool
 }
 
 // ownerWriterLease is an input owner's reusable writer lease. A writer lease
@@ -29,8 +32,8 @@ type InternalInputOwner struct {
 // release finished it can be initialised again. inUse covers the whole
 // lease lifetime, including the final release's reads of the lease.
 type ownerWriterLease struct {
-	wire.Lease
 	owner *InternalInputOwner
+	wire.Lease
 	inUse atomic.Bool
 }
 
@@ -172,7 +175,8 @@ func (o *InternalInputOwner) InternalWriterLease(chain wire.Chain) *wire.Lease {
 }
 
 type InternalExecutionRequest struct {
-	query *queryState
+	InternalSource statementSource // the statement; nil sends InternalStatement as CQL text
+	query          *queryState
 	// responseDest is query-owned storage for the first page's response on
 	// the direct path. It is cleared once that page succeeded, so that
 	// continuation and prefetched pages get storage of their own; Each, which
@@ -181,18 +185,17 @@ type InternalExecutionRequest struct {
 	// served is the connection whose attempt produced the last direct page;
 	// pinned, when set, is where the next page's first attempt goes.
 	served, pinned     *Conn
-	tabletFeedback     tabletFeedbackStamp
-	tabletVersionBlock byte
 	connection         *Conn
-	InternalStatement  string
-	keyspace           string
-	InternalSource     statementSource // the statement; nil sends InternalStatement as CQL text
-	InternalValues     encodedValues
 	InternalOwner      *inputOwner
-	InternalRouting    RoutingInfo
-	InternalOptions    InternalResolvedOptions
 	batch              *InternalBatchState
 	InternalLogical    *InternalLogicalExecution
+	InternalStatement  string
+	keyspace           string
+	InternalValues     encodedValues
+	tabletFeedback     tabletFeedbackStamp
+	InternalRouting    RoutingInfo
+	InternalOptions    InternalResolvedOptions
+	tabletVersionBlock byte
 }
 
 type ExecutionError struct {

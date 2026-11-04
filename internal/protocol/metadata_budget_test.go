@@ -8,8 +8,9 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"github.com/scylladb/gocql/v2/internal/wire"
 	"testing"
+
+	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 type countedMetadataSource struct {

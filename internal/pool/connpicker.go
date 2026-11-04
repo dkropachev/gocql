@@ -5,9 +5,10 @@ package pool
 
 import (
 	"fmt"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"sync"
 	"sync/atomic"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 type ConnPicker interface {

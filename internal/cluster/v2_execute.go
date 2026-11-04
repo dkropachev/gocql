@@ -3,10 +3,10 @@
 
 package cluster
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"context"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 func InternalSessionTypedGeneration(s *Session) uint64 {

@@ -16,15 +16,15 @@
 
 package gocql
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
-import implExecution "github.com/scylladb/gocql/v2/internal/execution"
-
 import (
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+
 	"bytes"
 	"context"
 	"encoding/binary"
 	"testing"
+
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 )
 
 func FuzzStep07StreamExecutionBoundary(f *testing.F) {

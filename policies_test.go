@@ -31,17 +31,17 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+
 	"errors"
 	"fmt"
 	"net"
 	"sort"
 	"strings"
 	"testing"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 // tUUID returns a deterministic UUID for testing. Byte 0 is always set to

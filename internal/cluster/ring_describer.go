@@ -3,13 +3,13 @@
 
 package cluster
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 // Polls system.peers at a specific interval to find new hosts
@@ -22,17 +22,17 @@ type InternalRingDescriber struct {
 	InternalHosts map[string]*HostInfo
 	// hostIPToUUID maps host native address to host_id.
 	hostIPToUUID       map[string]string
-	prevPartitioner    string
-	prevHosts          []*HostInfo
-	mu                 sync.RWMutex
-	readMu             sync.Mutex
-	revision           uint64
 	hostsView          atomic.Pointer[ringHostsView] // InternalHostsView cache
-	eventEpoch         uint64
-	refreshSequence    uint64
 	tombstones         map[string]bool
 	tombstoneAddresses map[string]string
+	prevPartitioner    string
+	prevHosts          []*HostInfo
 	diagnostics        []error
+	revision           uint64
+	eventEpoch         uint64
+	refreshSequence    uint64
+	mu                 sync.RWMutex
+	readMu             sync.Mutex
 }
 
 func (r *InternalRingDescriber) setControlConn(c InternalControlConnection) {

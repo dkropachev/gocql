@@ -6,12 +6,13 @@ package gocql
 import (
 	"context"
 	"crypto/tls"
+	"net"
+	"time"
+
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	pool "github.com/scylladb/gocql/v2/internal/pool"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
-	"net"
-	"time"
 )
 
 type driverConnPicker = pool.ConnPicker

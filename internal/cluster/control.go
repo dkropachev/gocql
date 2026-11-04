@@ -24,15 +24,15 @@
 
 package cluster
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"context"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+
 	crand "crypto/rand"
 	"errors"
 	"fmt"
 	"math/rand"
-
 	"regexp"
 	"strconv"
 	"sync"
@@ -75,13 +75,13 @@ type InternalControlConnection interface {
 }
 
 type InternalControlConn struct {
-	workerMu        sync.Mutex
-	workers         sync.WaitGroup
 	connections     map[*Conn]struct{}
-	closeOnce       sync.Once
 	InternalConn    atomic.Pointer[InternalConnHost]
 	InternalSession *Session
 	InternalQuit    chan struct{}
+	workers         sync.WaitGroup
+	closeOnce       sync.Once
+	workerMu        sync.Mutex
 	state           int32
 	reconnecting    int32
 }

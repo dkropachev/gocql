@@ -29,10 +29,10 @@ import (
 )
 
 type DialedHostStorage struct {
-	InternalShardTarget    Option[uint32]
+	InternalValidateTarget func(context.Context) error
 	InternalTargetEpoch    uint64
 	InternalSharderEpoch   uint64
-	InternalValidateTarget func(context.Context) error
+	InternalShardTarget    Option[uint32]
 }
 
 func DialedHostData(v *DialedHost) *DialedHostStorage { return &v.privateStorage }

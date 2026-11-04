@@ -19,10 +19,11 @@ package codec
 import (
 	"encoding/binary"
 	"fmt"
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"io"
 	"math"
 	"net/netip"
+
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 // Streaming scalars use bounded native conversion callbacks. They never create
@@ -30,8 +31,8 @@ import (
 // into final caller storage. The largest fixed scalar scratch is 16 bytes.
 
 type streamScalarCodec[T any] struct {
-	kind             cqltype.Type
 	decode           func(*StreamValueReader) (T, error)
+	kind             cqltype.Type
 	minimum, maximum int64
 }
 type streamScalarPlan[T any] struct {
@@ -249,8 +250,8 @@ func (p streamBytesPlan) DecodeInto(r *StreamValueReader, dst *[]byte) error {
 }
 
 type StreamDecimalValue struct {
-	Scale    int32
 	Unscaled []byte
+	Scale    int32
 }
 type streamDecimalCodec struct{}
 type streamDecimalPlan struct{ typ cqltype.DataType }

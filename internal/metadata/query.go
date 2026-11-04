@@ -29,9 +29,9 @@ type QuerySettings struct {
 	Depth                                                  int
 }
 type Query[P, R any] struct {
-	CQL    string
 	Params codec.ParamEncoder[P]
 	Rows   codec.RowDecoder[R]
+	CQL    string
 }
 
 // ReadRows uses the canonical binding and row plans. System metadata is

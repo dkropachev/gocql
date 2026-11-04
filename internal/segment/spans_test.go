@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	lz4 "github.com/pierrec/lz4/v4"
+
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 

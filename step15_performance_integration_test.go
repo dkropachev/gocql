@@ -12,7 +12,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"net"
 	"os"
 	"path/filepath"
@@ -27,6 +26,8 @@ import (
 	"testing"
 	"time"
 	"unsafe"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 // Keep native sockets unwrapped so net.Buffers retains the OS writev path.

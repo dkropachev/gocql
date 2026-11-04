@@ -3,12 +3,12 @@
 
 package transport_test
 
-import . "github.com/scylladb/gocql/v2"
-
 import (
 	"bytes"
 	"context"
 	"testing"
+
+	. "github.com/scylladb/gocql/v2"
 )
 
 type v2TestAuthProvider struct{ exchanges []*v2TestAuthExchange }

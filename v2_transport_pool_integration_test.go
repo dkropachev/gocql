@@ -18,14 +18,11 @@
 
 package gocql
 
-import implExecution "github.com/scylladb/gocql/v2/internal/execution"
-
 import (
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-)
 
-import (
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -33,6 +30,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 func TestV2TransportPoolSizingLive(t *testing.T) {

@@ -19,13 +19,13 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+
 	"fmt"
 	"testing"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 // stubConnPicker reports a fixed InFlight and panics on everything else, so a

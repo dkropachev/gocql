@@ -4,10 +4,10 @@
 package execution
 
 type BoundStorage[R any] struct {
-	InternalRequest InternalExecutionRequest
 	InternalRows    RowDecoder[R]
 	plans           *InternalResultPlanCache[R]
 	rows            *rowsHolder[R] // a reusable query's iterator storage
+	InternalRequest InternalExecutionRequest
 }
 
 func BoundData[R any](v *Bound[R]) *BoundStorage[R] { return &v.privateStorage }

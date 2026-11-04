@@ -3,14 +3,14 @@
 
 package execution_test
 
-import . "github.com/scylladb/gocql/v2"
-
-import implExecution "github.com/scylladb/gocql/v2/internal/execution"
-
 import (
+	. "github.com/scylladb/gocql/v2"
+
 	"bytes"
 	"context"
 	"testing"
+
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 )
 
 type countingBlobEncoder struct{ calls *int }

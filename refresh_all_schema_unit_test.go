@@ -3,12 +3,12 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
 	"errors"
 	"strings"
 	"testing"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 // refreshAllSchemaSession returns a session whose schema mock knows ks1 with

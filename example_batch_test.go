@@ -27,8 +27,9 @@ package gocql_test
 import (
 	"context"
 	"fmt"
-	gocql "github.com/scylladb/gocql/v2"
 	"log"
+
+	gocql "github.com/scylladb/gocql/v2"
 )
 
 // ExampleExecBatch demonstrates typed batch inputs and borrowed result rows.

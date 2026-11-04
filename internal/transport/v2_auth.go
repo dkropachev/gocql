@@ -13,11 +13,11 @@ import (
 // involved. One bridge is created for each connection and closed on every exit.
 type InternalV2Authenticator struct {
 	ctx      context.Context
-	host     HostSnapshot
 	provider AuthProvider
 	exchange AuthExchange
-	started  bool
+	host     HostSnapshot
 	once     sync.Once
+	started  bool
 }
 
 func InternalNewV2Authenticator(ctx context.Context, host HostSnapshot, provider AuthProvider) *InternalV2Authenticator {

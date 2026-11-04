@@ -18,10 +18,12 @@ package hostpolicy
 
 import (
 	"fmt"
-	"github.com/hailocab/go-hostpool"
-	"github.com/scylladb/gocql/v2"
 	"net/netip"
 	"testing"
+
+	"github.com/hailocab/go-hostpool"
+
+	"github.com/scylladb/gocql/v2"
 )
 
 func TestHostPolicy_HostPool(t *testing.T) {

@@ -3,18 +3,18 @@
 
 package protocol
 
-import cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-
 import (
-	. "github.com/scylladb/gocql/v2/internal/cqltype"
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 
 	"bytes"
 	"fmt"
+	. "github.com/scylladb/gocql/v2/internal/cqltype"
 	"net"
 	"strconv"
 	"strings"
 
 	frm "github.com/scylladb/gocql/v2/internal/frame"
+
 	model "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -23,13 +23,13 @@ import (
 // Its sticky error makes every metadata read checked, without panic/recover.
 
 type TypedParser struct {
-	reuse      *MetadataReuse
-	MaxDepth   int
 	Cursor     typedMetadataCursor
 	Err        error
+	reuse      *MetadataReuse
+	owner      *wire.Lease
+	MaxDepth   int
 	Proto      byte
 	MetadataID bool
-	owner      *wire.Lease
 }
 
 // MetadataReuse belongs to the serialized receive path of one connection.

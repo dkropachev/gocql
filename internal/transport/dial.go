@@ -24,29 +24,34 @@
 
 package transport
 
-import "context"
-import "bufio"
-import "fmt"
-import "time"
-import "github.com/scylladb/gocql/v2/internal/streams"
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-import "crypto/tls"
-import "net"
-import "net/netip"
-import "strconv"
-import "strings"
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/scylladb/gocql/v2/internal/streams"
+
+	"crypto/tls"
+	"net"
+	"net/netip"
+	"strconv"
+	"strings"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+)
 
 // Opening captures session-owned settings before socket admission.
 type Opening struct {
 	Context                       context.Context
 	Hooks                         InternalConnectionHooks
-	Identity                      InternalStartupIdentity
 	Reporter                      InternalStartupReporter
-	MetadataTimeout, CoalesceWait time.Duration
-	PoolPolicy                    InternalConnectionPoolPolicy
-	MaxRequests                   int
 	FrameObserver                 FrameHeaderObserver
 	StreamObserver                StreamObserver
+	Identity                      InternalStartupIdentity
+	MetadataTimeout, CoalesceWait time.Duration
+	MaxRequests                   int
+	PoolPolicy                    InternalConnectionPoolPolicy
 }
 
 func newStreamIDs(limit int) *streams.IDGenerator {

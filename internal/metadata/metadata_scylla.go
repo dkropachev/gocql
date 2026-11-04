@@ -4,17 +4,17 @@
 
 package metadata
 
-import "fmt"
-import "maps"
-import "reflect"
-import "sync"
-import "sync/atomic"
-import "strings"
+import (
+	"fmt"
+	"maps"
+	"reflect"
+	"strings"
+	"sync"
+	"sync/atomic"
+)
 
 // schema metadata for a keyspace
 type KeyspaceMetadata struct {
-	TabletBased     bool
-	ConsistencyMode string
 	StrategyOptions map[string]any
 	Tables          map[string]*TableMetadata
 	Functions       map[string]*FunctionMetadata
@@ -22,12 +22,13 @@ type KeyspaceMetadata struct {
 	Types           map[string]*TypeMetadata
 	Indexes         map[string]*IndexMetadata
 	Views           map[string]*ViewMetadata
-
-	Name          string
-	StrategyClass string
-	CreateStmts   string
-	DurableWrites bool
-	state         KeyspaceState
+	state           KeyspaceState
+	ConsistencyMode string
+	Name            string
+	StrategyClass   string
+	CreateStmts     string
+	TabletBased     bool
+	DurableWrites   bool
 }
 
 // Clone returns a shallow copy of the keyspace metadata with
@@ -212,16 +213,15 @@ type FunctionMetadata struct {
 
 // AggregateMetadata holds metadata for aggregate constructs
 type AggregateMetadata struct {
-	Keyspace   string
-	Name       string
-	InitCond   string
-	ReturnType string
-	StateType  string
-
+	privateStorage AggregateMetadataStorage
+	Keyspace       string
+	Name           string
+	InitCond       string
+	ReturnType     string
+	StateType      string
 	ArgumentTypes  []string
 	FinalFunc      FunctionMetadata
 	StateFunc      FunctionMetadata
-	privateStorage AggregateMetadataStorage
 }
 
 // TypeMetadata holds the metadata for views.

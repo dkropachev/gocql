@@ -24,13 +24,14 @@
 
 package cluster
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"context"
 
-	implTransport "github.com/scylladb/gocql/v2/internal/transport"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+
 	"time"
+
+	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 )
 
 func (s *Session) connectShard(ctx context.Context, host *HostInfo, errorHandler ConnErrorHandler,

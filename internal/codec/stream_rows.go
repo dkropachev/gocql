@@ -18,6 +18,7 @@ package codec
 
 import (
 	"fmt"
+
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
@@ -25,10 +26,10 @@ import (
 // field value and never retains the application destination supplied later.
 
 type StreamOutputField[R any] struct {
-	loc             fieldLocation
 	compile         func(cqltype.DataType) (streamFieldPlan[R], error)
 	resetMissing    func(*R)
 	canResetMissing func() bool
+	loc             fieldLocation
 }
 type streamFieldPlan[R any] struct {
 	reset  func(*R)
@@ -202,9 +203,9 @@ func (p streamOneColumnPlan[T]) DecodeInto(r *StreamRowReader, dst *T) error {
 }
 
 type streamRecordCodec[R any] struct {
-	kind    cqltype.Type
-	options UDTOptions
 	decoder StreamRowDecoder[R]
+	options UDTOptions
+	kind    cqltype.Type
 }
 type streamRecordPlan[R any] struct {
 	typ         cqltype.DataType

@@ -16,12 +16,10 @@
 
 package gocql
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 
 	"bytes"
 	"context"
@@ -37,10 +35,13 @@ import (
 	"time"
 	"unsafe"
 
+	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
+
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	"github.com/scylladb/gocql/v2/internal/streams"
 	"github.com/scylladb/gocql/v2/internal/wire"
+
 	lz4 "github.com/scylladb/gocql/v2/internal/wirecompress"
 )
 

@@ -4,8 +4,9 @@
 package protocol
 
 import (
-	"github.com/scylladb/gocql/v2/internal/segment"
 	"io"
+
+	"github.com/scylladb/gocql/v2/internal/segment"
 )
 
 // readUncompressedSegment reads a full uncompressed segment (header + payload) in

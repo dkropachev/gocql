@@ -17,11 +17,6 @@
 package gocql
 
 import (
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-)
-
-import (
 	"bytes"
 	"context"
 	"crypto/ecdsa"
@@ -40,6 +35,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/streams"

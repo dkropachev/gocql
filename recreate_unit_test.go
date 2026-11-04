@@ -19,11 +19,9 @@
 
 package gocql
 
-import implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
-
 import (
 	"encoding/binary"
-
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -31,8 +29,9 @@ import (
 	"strings"
 	"testing"
 
-	"encoding/json"
 	"github.com/google/go-cmp/cmp"
+
+	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 )
 
 func col(name, typ string, kind ColumnKind) *ColumnMetadata {

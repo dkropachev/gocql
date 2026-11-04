@@ -6,8 +6,6 @@ package settings
 import (
 	"context"
 	"crypto/tls"
-	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"maps"
 	"math"
 	"math/rand/v2"
@@ -16,61 +14,64 @@ import (
 	"sync/atomic"
 	"time"
 
+	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+
 	// DialHost opens a raw socket using immutable host metadata; TLS is applied afterward.
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 )
 
 type Config struct {
-	DialHost                                          func(context.Context, implEndpoint.DialTarget) (net.Conn, error)
-	ReadTimeout                                       time.Duration
-	ContactPoints                                     []string
-	Port                                              uint16
-	Protocol                                          int
-	Keyspace, CQLVersion                              string
-	ConnectTimeout, DNSTimeout                        time.Duration
-	WriteTimeout, KeepaliveInterval, KeepaliveTimeout time.Duration
-	SocketKeepalive                                   time.Duration
-	NoDelay                                           bool
-	ReceiveBuffer, SendBuffer                         Option[int]
-	Linger                                            Option[time.Duration]
 	LocalAddress                                      netip.Addr
 	Dialer                                            implEndpoint.Dialer
 	DNSResolver                                       implEndpoint.DNSResolver
-	TLS                                               *tls.Config
-	TLSForHost                                        func(context.Context, HostSnapshot) (*tls.Config, error)
 	Auth                                              AuthProvider
-	Compression                                       Compression
-	CoalesceWait                                      time.Duration
-	Pool                                              PoolOptions
 	Reconnect                                         ReconnectPolicy
 	Conviction                                        ConvictionPolicy
 	AddressTranslator                                 implEndpoint.AddressTranslator
-	HostFilter                                        func(HostSnapshot) bool
-	ClientRoutes                                      *ClientRoutesOptions
-	Identity                                          IdentityOptions
-	ReportConfiguration                               bool
-	Metadata                                          MetadataOptions
-	Limits                                            ProtocolLimits
-	PreparedCacheSize                                 int
-	DefaultProfile                                    *Profile
-	Partitioners                                      map[string]TokenPartitioner
-	TimestampGenerator                                func() int64
 	Observer                                          Observer
 	LifecycleObserver                                 LifecycleObserver
 	Logger                                            logging.StdLogger
+	DialHost                                          func(context.Context, implEndpoint.DialTarget) (net.Conn, error)
+	TLS                                               *tls.Config
+	TLSForHost                                        func(context.Context, HostSnapshot) (*tls.Config, error)
+	HostFilter                                        func(HostSnapshot) bool
+	ClientRoutes                                      *ClientRoutesOptions
+	DefaultProfile                                    *Profile
+	Partitioners                                      map[string]TokenPartitioner
+	TimestampGenerator                                func() int64
+	Identity                                          IdentityOptions
+	Keyspace, CQLVersion                              string
+	ContactPoints                                     []string
+	Metadata                                          MetadataOptions
+	Pool                                              PoolOptions
+	Limits                                            ProtocolLimits
+	ReceiveBuffer, SendBuffer                         Option[int]
+	Linger                                            Option[time.Duration]
+	ReadTimeout                                       time.Duration
+	Protocol                                          int
+	ConnectTimeout, DNSTimeout                        time.Duration
+	WriteTimeout, KeepaliveInterval, KeepaliveTimeout time.Duration
+	SocketKeepalive                                   time.Duration
+	CoalesceWait                                      time.Duration
+	PreparedCacheSize                                 int
+	Port                                              uint16
+	NoDelay                                           bool
+	Compression                                       Compression
+	ReportConfiguration                               bool
 }
 
 type PoolOptions = connectivity.PoolOptions
 type ReconnectPolicy = connectivity.ReconnectPolicy
 type ProtocolLimits = connectivity.ProtocolLimits
 type MetadataOptions struct {
-	Mode                                                          MetadataMode
 	Keyspaces                                                     []string
-	InitialDiscovery                                              bool
+	ServerTimeout                                                 Option[time.Duration]
 	PeriodicRefresh                                               time.Duration
 	RequestTimeout                                                time.Duration
-	ServerTimeout                                                 Option[time.Duration]
 	AgreementTimeout, AgreementPoll                               time.Duration
+	Mode                                                          MetadataMode
+	InitialDiscovery                                              bool
 	AutomaticAgreement, RefreshAfterAgreement                     bool
 	TopologyEvents, StatusEvents, SchemaEvents, ClientRouteEvents bool
 }

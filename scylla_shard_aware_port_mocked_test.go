@@ -3,8 +3,6 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
 	"context"
 	"math/rand"
@@ -13,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 const testShardCount = 3

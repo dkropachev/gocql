@@ -3,25 +3,25 @@
 
 package metadata
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"fmt"
 	"net"
 	"net/netip"
 	"strconv"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 // Topology descriptors are decoded by the same canonical codecs as user rows.
 // Optional fields accommodate the supported system.local/peers table versions;
 // validation below distinguishes incomplete gossip from complete
 type InternalV2TopologyRow struct {
+	rpc, native, peer, broadcast, listen, preferred netip.Addr
+	dc, rack, release, cluster, partitioner         string
+	InternalTokens                                  []string
+	InternalPort                                    int
 	id                                              UUID
 	schema                                          UUID
-	dc, rack, release, cluster, partitioner         string
-	rpc, native, peer, broadcast, listen, preferred netip.Addr
-	InternalPort                                    int
-	InternalTokens                                  []string
 }
 
 func InternalV2DecodeTopology() RowDecoder[InternalV2TopologyRow] {

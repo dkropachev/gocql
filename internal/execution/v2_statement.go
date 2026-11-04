@@ -5,16 +5,17 @@ package execution
 
 import (
 	"context"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"sync"
 	"sync/atomic"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 type PrepareOptions struct {
+	privateStorage PrepareOptionsStorage
 	Keyspace       string
 	HostID         Option[UUID]
 	Trace          bool
-	privateStorage PrepareOptionsStorage
 }
 type PreparedInfo struct {
 	Keyspace, Table     string
@@ -24,41 +25,41 @@ type PreparedInfo struct {
 	Generation          uint64
 }
 type InternalHostPrepared struct {
-	InternalEpoch                  preparedSchemaStamp
 	InternalResult                 *typedResultMetadata
-	InternalRevision               uint64
-	InternalMetadataChanged        bool
+	InternalEpoch                  preparedSchemaStamp
 	InternalId, InternalMetadataID []byte
 	InternalColumns                Columns
+	InternalRevision               uint64
 	InternalGeneration             uint64
+	InternalMetadataChanged        bool
 }
 type InternalPreparedState struct {
-	InternalConflictDirty               atomic.Bool
-	conflictMu                          sync.Mutex
-	InternalConflictEpoch               atomic.Uint64
-	InternalConflictRefresh             atomic.Bool
-	InternalResultHost                  UUID
 	InternalResult                      *typedResultMetadata
-	InternalMu                          sync.RWMutex
 	InternalSession                     *implCluster.Session
-	InternalProtocol                    uint8
-	InternalStatement, InternalKeyspace string
-	InternalParameters, InternalColumns Columns
-	InternalInfo                        PreparedInfo
 	InternalHosts                       map[UUID]*InternalHostPrepared
 	InternalPreparing                   map[UUID]*InternalHostPrepareFlight
 	InternalDependencies                *preparedDependencies
+	InternalStatement, InternalKeyspace string
 	InternalPartitioner                 string
+	InternalParameters, InternalColumns Columns
 	InternalInitialEpoch                preparedSchemaStamp
+	InternalInfo                        PreparedInfo
+	InternalConflictEpoch               atomic.Uint64
+	InternalMu                          sync.RWMutex
+	conflictMu                          sync.Mutex
+	InternalConflictDirty               atomic.Bool
+	InternalConflictRefresh             atomic.Bool
+	InternalResultHost                  UUID
+	InternalProtocol                    uint8
 }
 type InternalHostPrepareFlight struct {
-	started         uint64
-	InternalWaiters atomic.Int32
+	err             error
 	done            chan struct{}
 	previous        *InternalHostPrepared
-	epoch           preparedSchemaStamp
 	result          *InternalHostPrepared
-	err             error
+	epoch           preparedSchemaStamp
+	started         uint64
+	InternalWaiters atomic.Int32
 }
 type Prepared[P, R any] struct {
 	privateStorage PreparedStorage[P, R]

@@ -24,13 +24,13 @@ type TimeUUID = cqltype.TimeUUID
 
 // scalarCodec contains immutable operations shared by all calls to a codec.
 type scalarCodec[T any] struct {
-	compiled    bool
-	kind        cqltype.Type
-	alternative cqltype.Type
 	encode      func(*ValueWriter, T) error
 	decode      func(ValueReader) (T, error)
 	decodeRow   func(*RowReader, cqltype.Type, cqltype.Type, bool) (T, error)
 	clone       func(T) T
+	kind        cqltype.Type
+	alternative cqltype.Type
+	compiled    bool
 }
 
 func checkScalarType(t cqltype.DataType, kind, alternative cqltype.Type) error {
@@ -407,8 +407,8 @@ func (textCodec) Clone(v cqltype.Text) cqltype.Text { return v.Clone() }
 // textValidation shares incremental UTF-8/ASCII rules between borrowed spans
 // and final-storage streaming. It never constructs a string or retains a chunk.
 type textValidation struct {
-	ascii     bool
 	remaining int
+	ascii     bool
 	low, high byte
 }
 

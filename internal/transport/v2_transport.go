@@ -4,12 +4,14 @@
 package transport
 
 import (
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"sync"
+
+	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 
 	"context"
+
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 

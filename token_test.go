@@ -31,8 +31,6 @@
 
 package gocql
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"bytes"
 	"fmt"
@@ -41,6 +39,8 @@ import (
 	"sort"
 	"strconv"
 	"testing"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 // Tests of the murmur3Patitioner

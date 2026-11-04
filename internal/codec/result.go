@@ -8,8 +8,8 @@ import (
 )
 
 type CASResult[R any] struct {
-	Applied  bool
 	Previous cqltype.Option[R]
+	Applied  bool
 }
 type casRows[R any] struct{ decoder RowDecoder[R] }
 type casRowPlan[R any] struct {

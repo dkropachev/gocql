@@ -4,9 +4,10 @@
 package codec
 
 import (
+	"math"
+
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/wire"
-	"math"
 )
 
 // EncodedValue contains one checked value body, its complete type, and cell
@@ -14,8 +15,8 @@ import (
 
 type EncodedValue struct {
 	typ   cqltype.DataType
-	state cqltype.CellState
 	body  cqltype.Bytes
+	state cqltype.CellState
 }
 
 // NewEncodedValue checks the descriptor and state/body framing. Scalar content

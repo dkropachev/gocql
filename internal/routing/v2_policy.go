@@ -181,10 +181,10 @@ func (murmur3StreamingPartitioner) Token(k PartitionKey) (int64, error) {
 }
 
 type RoutingOptions struct {
-	TokenAware                                bool
 	Datacenter, Rack                          string
-	AllowRemote, ShuffleReplicas, LeaderAware bool
 	Latency                                   LatencyOptions
+	TokenAware                                bool
+	AllowRemote, ShuffleReplicas, LeaderAware bool
 }
 type LatencyOptions struct {
 	Enabled                            bool
@@ -193,20 +193,20 @@ type LatencyOptions struct {
 	Scale, RetryPeriod, UpdateInterval time.Duration
 }
 type InternalRoutingLatency struct {
-	mu              sync.Mutex
 	nextProbe       time.Time // protected by mu, including selection reservations
+	InternalUpdated time.Time
 	InternalValue   float64
 	InternalSamples int
-	InternalUpdated time.Time
+	mu              sync.Mutex
 }
 type InternalRoutingDecisions struct{ InternalSlow map[UUID]time.Time }
 type InternalRoutingPolicy struct {
+	InternalDecisions atomic.Pointer[InternalRoutingDecisions]
+	updateAfter       atomic.Pointer[time.Time]
+	InternalLatencies sync.Map
 	InternalOptions   RoutingOptions
 	seed              uint64
 	round             atomic.Uint64
-	InternalLatencies sync.Map
-	InternalDecisions atomic.Pointer[InternalRoutingDecisions]
-	updateAfter       atomic.Pointer[time.Time]
 	minimumBits       atomic.Uint64
 }
 
@@ -275,9 +275,9 @@ type InternalRoutingHostIndex struct {
 	enabledDC   map[string]int
 	enabledRack map[routingLocality]int
 	byID        map[UUID]int
-	all         []int
 	dc          map[string][]int
 	rack        map[routingLocality][]int
+	all         []int
 }
 
 func InternalBuildRoutingHostIndex(hosts []HostSnapshot) *InternalRoutingHostIndex {
@@ -304,20 +304,20 @@ func (m *MetadataSnapshot) routingIndex() *InternalRoutingHostIndex {
 }
 
 type InternalLazyRoutingPlan struct {
+	InternalNow                time.Time
 	policy                     *InternalRoutingPolicy
 	metadata                   *MetadataSnapshot
 	index                      *InternalRoutingHostIndex
-	replicas                   []Target
-	leader                     Option[Target]
-	permutation                []int // used only when replicas exceed the inline capacity
-	smallPermutation           [16]uint8
-	emitted                    []Target
-	smallEmitted               [8]Target
+	InternalSlow               *InternalRoutingDecisions
 	groups                     [3][]int
+	replicas                   []Target
+	permutation                []int // used only when replicas exceed the inline capacity
+	emitted                    []Target
 	stage, cursor, latencyPass int
 	rotation                   int
-	InternalSlow               *InternalRoutingDecisions
-	InternalNow                time.Time
+	smallEmitted               [8]Target
+	leader                     Option[Target]
+	smallPermutation           [16]uint8
 	pinned                     bool
 }
 

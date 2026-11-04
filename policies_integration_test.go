@@ -3,18 +3,18 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
-	routing "github.com/scylladb/gocql/v2/internal/routing"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 
 	"context"
 	"errors"
 	"fmt"
 	"testing"
 	"time"
+
+	routing "github.com/scylladb/gocql/v2/internal/routing"
 )
 
 func TestDCValidationTokenAware(t *testing.T) {
@@ -214,7 +214,7 @@ func (p v2UnavailableHostsRouting) Plan(info RoutingInfo, metadata *MetadataSnap
 
 // Keep the all-hosts-down disruption test serialized as in the original suite.
 //
-//nolint:paralleltest
+//nolint:paralleltest // it brings every host down, so it cannot share the cluster
 func TestNoHangAllHostsDown(t *testing.T) {
 	session := createV2Session(t)
 	defer session.Close()

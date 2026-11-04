@@ -61,10 +61,10 @@ type UnitReader struct {
 	ctx     context.Context
 	source  io.Reader
 	comp    Compressor
-	limits  UnitLimits
-	storage []byte
-	framing [unitFramingBytes]byte
 	err     error
+	storage []byte
+	limits  UnitLimits
+	framing [unitFramingBytes]byte
 	closed  bool
 }
 

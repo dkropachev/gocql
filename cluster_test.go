@@ -27,8 +27,6 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
 	"crypto/tls"
 	"fmt"
@@ -38,6 +36,7 @@ import (
 	"testing"
 	"time"
 
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/tests"
 )
 

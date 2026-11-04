@@ -20,17 +20,15 @@
 package gocql
 
 import (
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-)
-
-import (
 	"net"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/scylladb/gocql/v2/debounce"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 

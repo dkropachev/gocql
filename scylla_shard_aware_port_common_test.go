@@ -4,13 +4,6 @@
 package gocql
 
 import (
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	// Each fixture supplies its own construction path; integration fixtures use
-	// Config/Connect while unit servers can disable their unsupported control path.
-)
-
-import (
 	"context"
 	"fmt"
 	"net"
@@ -18,6 +11,11 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	// Each fixture supplies its own construction path; integration fixtures use
+	// Config/Connect while unit servers can disable their unsupported control path.
 )
 
 type shardAwareTestCluster struct {

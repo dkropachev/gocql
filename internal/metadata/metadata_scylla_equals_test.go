@@ -19,11 +19,11 @@
 
 package metadata_test
 
-import . "github.com/scylladb/gocql/v2"
-
 import (
 	"reflect"
 	"testing"
+
+	. "github.com/scylladb/gocql/v2"
 )
 
 // The Equals family decides whether a schema refresh sees a table as changed

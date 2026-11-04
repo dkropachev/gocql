@@ -22,14 +22,14 @@ type Entry[K, V any] struct {
 // ValueIterator is a bounded cursor. A failed Next permanently stops iteration;
 // Value never exposes the partially decoded value which caused that failure.
 type ValueIterator[T any] struct {
-	cursor       ValueCursor
-	count, index int
-	next         func(int) (T, error)
-	nextCursor   func(*ValueCursor, int) (T, error)
 	value        T
 	err          error
-	done         bool
+	next         func(int) (T, error)
+	nextCursor   func(*ValueCursor, int) (T, error)
 	clone        func(T) T
+	cursor       ValueCursor
+	count, index int
+	done         bool
 }
 
 func newValueIterator[T any](count int, next func(int) (T, error), clone func(T) T) *ValueIterator[T] {
@@ -109,12 +109,12 @@ func Collect[T any](i *ValueIterator[T]) ([]T, error) {
 // Sequence is a lazy list, set, or vector. Its encoded backing storage retains
 // the source page lease; Clone detaches that storage without decoding elements.
 type Sequence[T any] struct {
+	decoder Decoder[T]
+	element cqltype.DataType
 	body    cqltype.Bytes
 	count   int
-	element cqltype.DataType
-	decoder Decoder[T]
-	vector  bool
 	width   int64
+	vector  bool
 }
 
 func (s Sequence[T]) Len() int           { return s.count }
@@ -154,11 +154,11 @@ func (s Sequence[T]) Iterator() *ValueIterator[T] {
 
 // Mapping is a lazy ordered map view; keys need not be Go-comparable.
 type Mapping[K, V any] struct {
-	body         cqltype.Bytes
-	count        int
-	key, value   cqltype.DataType
 	keyDecoder   Decoder[K]
 	valueDecoder Decoder[V]
+	key, value   cqltype.DataType
+	body         cqltype.Bytes
+	count        int
 }
 
 func (m Mapping[K, V]) Len() int             { return m.count }
@@ -199,9 +199,9 @@ func (m Mapping[K, V]) Iterator() *ValueIterator[Entry[K, V]] {
 }
 
 type sequenceEncoder[T any] struct {
-	kind    cqltype.Type
 	element Encoder[T]
 	typ     cqltype.DataType
+	kind    cqltype.Type
 	width   int64
 }
 
@@ -304,9 +304,9 @@ func writeCollectionElement[T any](w *ValueWriter, typ cqltype.DataType, encoder
 }
 
 type sequenceDecoder[T any] struct {
-	kind    cqltype.Type
 	element Decoder[T]
 	typ     cqltype.DataType
+	kind    cqltype.Type
 	width   int64
 }
 

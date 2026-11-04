@@ -30,6 +30,7 @@ package protocol
 import (
 	. "github.com/scylladb/gocql/v2/internal/cqltype"
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
 
 	"bytes"

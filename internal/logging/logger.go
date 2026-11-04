@@ -46,8 +46,8 @@ func (n InternalNopLogger) Printf(_ string, _ ...any) {}
 func (n InternalNopLogger) Println(_ ...any) {}
 
 type InternalTestLogger struct {
-	mu      sync.Mutex
 	capture bytes.Buffer
+	mu      sync.Mutex
 }
 
 func (l *InternalTestLogger) Print(v ...any) {

@@ -19,8 +19,9 @@
 package codec
 
 import (
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"testing"
+
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 // sync.Pool deliberately drops entries randomly under -race; allocation

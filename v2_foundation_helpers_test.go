@@ -3,9 +3,10 @@ package gocql
 import (
 	"context"
 	"encoding/binary"
-	"github.com/scylladb/gocql/v2/internal/wire"
 	"io"
 	"testing"
+
+	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 func codecTestMust[T any](v T, err error) T {

@@ -1,5 +1,9 @@
 package model
-import("github.com/scylladb/gocql/v2/internal/schemafence";"github.com/scylladb/gocql/v2/internal/cqltype")
+
+import (
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/schemafence"
+)
 
 // resultPlanCache is scoped to one application decoder/handle, not CQL. Only
 // its current shape is retained; live pages own previous selected plans.

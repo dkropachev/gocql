@@ -20,8 +20,9 @@ import (
 	model "github.com/scylladb/gocql/v2/internal/model"
 
 	"errors"
-	"github.com/scylladb/gocql/v2/internal/wire"
 	"testing"
+
+	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 func FuzzV2PageDestinationFraming(f *testing.F) {

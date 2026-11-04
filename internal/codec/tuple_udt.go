@@ -21,12 +21,12 @@ type UDTOptions struct {
 }
 
 type recordEncoder[T any] struct {
-	kind    cqltype.Type
 	codec   ParamEncoder[T]
-	options UDTOptions
-	typ     cqltype.DataType
-	columns cqltype.Columns
 	plan    ParamPlan[T]
+	typ     cqltype.DataType
+	options UDTOptions
+	columns cqltype.Columns
+	kind    cqltype.Type
 }
 
 // TupleEncoder encodes its parameters as members of one physical tuple cell.
@@ -103,14 +103,14 @@ func (c recordEncoder[T]) Encode(w *ValueWriter, value T) error {
 }
 
 type recordDecoder[T any] struct {
-	kind    cqltype.Type
 	codec   RowDecoder[T]
-	options UDTOptions
-	typ     cqltype.DataType
-	columns cqltype.Columns
 	plan    RowPlan[T]
+	typ     cqltype.DataType
 	readers *sync.Pool
 	values  *sync.Pool
+	options UDTOptions
+	columns cqltype.Columns
+	kind    cqltype.Type
 }
 
 type recordReaderState struct {

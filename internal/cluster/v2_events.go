@@ -3,16 +3,15 @@
 
 package cluster
 
-import implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
-
 import (
-	routing "github.com/scylladb/gocql/v2/internal/routing"
+	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 
 	"net"
 	"net/netip"
 	"slices"
-
 	"time"
+
+	routing "github.com/scylladb/gocql/v2/internal/routing"
 
 	oldevents "github.com/scylladb/gocql/v2/events"
 )
@@ -29,16 +28,16 @@ const (
 )
 
 type Event struct {
-	Kind                             EventKind
-	Generation                       uint64
+	Address                          netip.AddrPort
 	Change, Target, Keyspace, Object string
 	ArgumentTypes                    []string
+	Generation                       uint64
 	HostID                           UUID
-	Address                          netip.AddrPort
+	Kind                             EventKind
 }
 type EventFilter struct {
-	Kinds    []EventKind
 	Keyspace string
+	Kinds    []EventKind
 	Capacity int
 }
 

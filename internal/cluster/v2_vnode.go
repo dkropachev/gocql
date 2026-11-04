@@ -3,12 +3,12 @@
 
 package cluster
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 // Cold-path replica precomputation uses the same distinct-node/rack-budget

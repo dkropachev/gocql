@@ -28,12 +28,15 @@
 package gocql
 
 import (
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	inf "gopkg.in/inf.v0"
 
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+
 	"fmt"
-	"github.com/scylladb/gocql/v2/internal/tests"
+
 	"github.com/stretchr/testify/require"
+
+	"github.com/scylladb/gocql/v2/internal/tests"
 
 	"math/big"
 	"net/netip"

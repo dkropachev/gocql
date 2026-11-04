@@ -3,15 +3,13 @@
 
 package protocol
 
-import cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-
 import (
-	"github.com/scylladb/gocql/v2/internal/model"
-
 	"encoding/binary"
-
 	"fmt"
 	"math"
+
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
 
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/segment"
@@ -23,8 +21,8 @@ import (
 // enter the slab, and Freeze cannot relocate any published bytes.
 // A TypedEnvelope must not be copied after its first use.
 type TypedEnvelope struct {
-	b   wire.Builder
 	err error
+	b   wire.Builder
 }
 
 func NewTypedEnvelope() *TypedEnvelope {
@@ -385,12 +383,12 @@ func (c *Settings) WriteTypedParams(e *TypedEnvelope, r *model.AttemptRequest, b
 // Settings snapshots only negotiated, immutable wire settings.
 type Settings struct {
 	MetadataReuse                       *MetadataReuse
-	Protocol                            byte
-	Flags                               byte
-	MetadataID, TabletsRoutingV2        bool
+	Compression                         string
 	MaxFrameBytes, MaxDecompressedBytes int64
 	MaxMetadataDepth                    int
 	FlagLWT, RateLimitingErrorCode      int
-	Compression                         string
+	Protocol                            byte
+	Flags                               byte
+	MetadataID, TabletsRoutingV2        bool
 	SegmentCompression                  bool
 }

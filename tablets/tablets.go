@@ -188,13 +188,13 @@ func NewTabletInfo(keyspace, table string, firstToken, lastToken int64, replicas
 
 // TabletInfo represents a tablet with its token range and replica set.
 type TabletInfo struct {
-	version      uint64
-	versionSet   bool
 	keyspaceName string
 	tableName    string
 	replicas     []ReplicaInfo
+	version      uint64
 	firstToken   int64
 	lastToken    int64
+	versionSet   bool
 }
 
 func (t TabletInfo) KeyspaceName() string {
@@ -228,11 +228,11 @@ type TabletInfoList []TabletInfo
 
 // TabletEntry is the per-table representation of a tablet, without keyspace/table names.
 type TabletEntry struct {
-	version    uint64
-	versionSet bool
 	replicas   []ReplicaInfo
+	version    uint64
 	firstToken int64
 	lastToken  int64
+	versionSet bool
 }
 
 type TabletEntryList []TabletEntry

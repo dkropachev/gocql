@@ -4,8 +4,9 @@
 package codec
 
 import (
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"testing"
+
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 func FoundationScalar(t *testing.T, kind cqltype.Type) cqltype.DataType {

@@ -2,15 +2,15 @@
 
 package gocql
 
-import implExecution "github.com/scylladb/gocql/v2/internal/execution"
-
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+
 	"context"
 	"fmt"
 	"testing"
 	"time"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 func TestStep05MetadataControlLive(t *testing.T) {

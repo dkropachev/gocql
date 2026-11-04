@@ -57,7 +57,9 @@ var directParams = Params(
 	Param("text", StringEncoder, func(r directRow) string { return r.Text }),
 	Param("ascii", ASCIIEncoder, func(r directRow) string { return r.ASCII }),
 	Param("blob", BytesEncoder, func(r directRow) []byte { return r.Blob }),
-	Param("skipped", NullableCodec(Int32), func(r directRow) cqltype.Nullable[int32] { return cqltype.Nullable[int32]{Value: r.Skipped, Valid: true} }),
+	Param("skipped", NullableCodec(Int32), func(r directRow) cqltype.Nullable[int32] {
+		return cqltype.Nullable[int32]{Value: r.Skipped, Valid: true}
+	}),
 )
 
 var directRows = RowInto(func(r *directRow) { r.Owned = r.Owned[:0] },
@@ -196,12 +198,14 @@ func TestDirectRowOpsMatchCodecs(t *testing.T) {
 		return out
 	}
 	cases := map[string][]byte{
-		"values":      full(nil),
-		"null int":    full(func(i int, b []byte) ([]byte, bool) { return b, i == 2 }),
-		"short int":   full(func(i int, b []byte) ([]byte, bool) { return map[bool][]byte{true: {1, 2}, false: b}[i == 3], false }),
-		"null blob":   full(func(i int, b []byte) ([]byte, bool) { return b, i == 6 }),
-		"empty blobs": full(func(i int, b []byte) ([]byte, bool) { return map[bool][]byte{true: {}, false: b}[i == 5 || i == 6], false }),
-		"truncated":   full(nil)[:20],
+		"values":    full(nil),
+		"null int":  full(func(i int, b []byte) ([]byte, bool) { return b, i == 2 }),
+		"short int": full(func(i int, b []byte) ([]byte, bool) { return map[bool][]byte{true: {1, 2}, false: b}[i == 3], false }),
+		"null blob": full(func(i int, b []byte) ([]byte, bool) { return b, i == 6 }),
+		"empty blobs": full(func(i int, b []byte) ([]byte, bool) {
+			return map[bool][]byte{true: {}, false: b}[i == 5 || i == 6], false
+		}),
+		"truncated": full(nil)[:20],
 	}
 	for name, body := range cases {
 		chain, _ := wire.NewChain(wire.Borrow(body))

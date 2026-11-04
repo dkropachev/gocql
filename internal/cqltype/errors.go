@@ -12,8 +12,8 @@ var ErrReleased = errors.New("gocql: borrowed value has been released")
 
 // ValidationError describes an invalid API argument or type descriptor.
 type ValidationError struct {
-	Field string
 	Err   error
+	Field string
 }
 
 func (e *ValidationError) Error() string { return fmt.Sprintf("gocql: invalid %s: %v", e.Field, e.Err) }
@@ -21,11 +21,11 @@ func (e *ValidationError) Unwrap() error { return e.Err }
 
 // CodecError records the physical column and nested path of a codec failure.
 type CodecError struct {
+	Err    error
 	Column string
-	Index  int
 	Path   string
 	Stage  string
-	Err    error
+	Index  int
 }
 
 func (e *CodecError) Error() string {
@@ -35,9 +35,9 @@ func (e *CodecError) Unwrap() error { return e.Err }
 
 // ProtocolError records the stage and byte offset of invalid protocol data.
 type ProtocolError struct {
-	Offset int64
-	Stage  string
 	Err    error
+	Stage  string
+	Offset int64
 }
 
 func (e *ProtocolError) Error() string {

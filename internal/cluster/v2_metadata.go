@@ -27,60 +27,60 @@ import (
 )
 
 type TraceInfo struct {
-	ID          UUID
 	Coordinator netip.Addr
 	Started     time.Time
-	Duration    time.Duration
 	Events      []TraceEvent
+	Duration    time.Duration
+	ID          UUID
 }
 type TraceEvent struct {
-	ID       UUID
-	Activity string
 	Source   netip.Addr
-	Elapsed  time.Duration
+	Activity string
 	Thread   string
+	Elapsed  time.Duration
+	ID       UUID
 }
 
 type InternalV2LatencySummary struct{ p50, p95, p99 time.Duration }
 
 type InternalV2PeripheralState struct {
-	metricsOnce                   sync.Once
+	routeDiagnostic               error
 	InternalSnapshot              atomic.Pointer[MetadataSnapshot]
-	publishMu                     sync.Mutex
-	workers                       sync.WaitGroup
-	hostMu                        sync.Mutex
-	InternalPublicationRevision   uint64
-	InternalMu                    sync.RWMutex // per-request feedback captures read under RLock
 	InternalSubscribers           map[*Subscription]struct{}
-	closed                        bool
-	InternalConfig                Config
 	partitioners                  atomic.Pointer[map[string]TokenPartitioner] // InternalConfig.Partitioners, for lock-free reads
 	InternalSchemaEpoch           map[string]uint64
 	schemaRevision                map[string]uint64
 	InternalTableRevision         map[metadataTable]uint64
 	schemaDropped                 map[string]bool
-	InternalRetryScheduled        atomic.Bool
-	schemaRetryNeeded             atomic.Bool
 	InternalPreparedRefreshScopes map[string]uint64
-	preparedRefreshVersion        uint64
-	InternalSchemaReconciled      atomic.Uint64
-	periodicOnce                  sync.Once
-	schemaGeneration              atomic.Uint64
-	InternalPlacementEpoch        atomic.Uint64
-	InternalFeedbackOnce          sync.Once
-	InternalFeedbackMu            sync.Mutex
 	InternalFeedback              map[InternalV2TabletFeedbackKey]InternalV2PendingTabletFeedback
 	feedbackWake                  chan struct{}
 	InternalDone                  chan struct{}
-	latency                       [1024]atomic.Int64
-	latencyCount                  atomic.Uint64
 	latencySummary                atomic.Pointer[InternalV2LatencySummary]
-	orphans                       atomic.Uint64
 	schemaStale                   map[string]bool
-	refreshDiagnostics            []error
-	routeDiagnostic               error
-	InternalFeedbackResync        bool
 	knownTabletTables             map[metadataTable]bool
+	refreshDiagnostics            []error
+	InternalConfig                Config
+	latency                       [1024]atomic.Int64
+	workers                       sync.WaitGroup
+	InternalPublicationRevision   uint64
+	preparedRefreshVersion        uint64
+	InternalSchemaReconciled      atomic.Uint64
+	schemaGeneration              atomic.Uint64
+	InternalPlacementEpoch        atomic.Uint64
+	latencyCount                  atomic.Uint64
+	orphans                       atomic.Uint64
+	InternalMu                    sync.RWMutex // per-request feedback captures read under RLock
+	metricsOnce                   sync.Once
+	periodicOnce                  sync.Once
+	InternalFeedbackOnce          sync.Once
+	publishMu                     sync.Mutex
+	hostMu                        sync.Mutex
+	InternalFeedbackMu            sync.Mutex
+	InternalRetryScheduled        atomic.Bool
+	schemaRetryNeeded             atomic.Bool
+	closed                        bool
+	InternalFeedbackResync        bool
 }
 
 func InternalSessionPeripheral(s *Session) *InternalV2PeripheralState {
@@ -579,20 +579,20 @@ func (s *Session) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *
 			return &NoHostsError{Operation: "schema agreement", Causes: []error{ErrNoConnections}}
 		}
 		type observation struct {
-			version UUID
 			err     error
+			version UUID
 		}
 		results := make(chan observation, len(scope))
 		// Fixed worker count bounds goroutines even with large topologies.
 		jobs := make(chan struct {
-			id    UUID
 			conns []*Conn
+			id    UUID
 		}, len(scope))
 		for id, conns := range scope {
 			jobs <- struct {
-				id    UUID
 				conns []*Conn
-			}{id, conns}
+				id    UUID
+			}{conns: conns, id: id}
 		}
 		close(jobs)
 		var workers sync.WaitGroup
@@ -602,7 +602,7 @@ func (s *Session) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *
 				defer workers.Done()
 				for job := range jobs {
 					v, err := InternalReadV2AgreementHost(ctx, job.id, job.conns)
-					results <- observation{v, err}
+					results <- observation{err: err, version: v}
 				}
 			}()
 		}

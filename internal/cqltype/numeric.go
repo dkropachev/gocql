@@ -5,16 +5,17 @@ package cqltype
 
 import (
 	"errors"
-	"github.com/scylladb/gocql/v2/internal/wire"
 	"math/big"
+
+	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 type Varint struct{ bytes Bytes }
 
 // Decimal represents Unscaled * 10^-Scale without rounding.
 type Decimal struct {
-	Scale    int32
 	Unscaled Varint
+	Scale    int32
 }
 
 // VarintFromBytes borrows a nonempty, big-endian two's complement integer.

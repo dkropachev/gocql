@@ -10,10 +10,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"testing"
+
 	metadata "github.com/scylladb/gocql/v2/internal/metadata"
 	model "github.com/scylladb/gocql/v2/internal/model"
 	protocol "github.com/scylladb/gocql/v2/internal/protocol"
-	"testing"
 
 	"github.com/scylladb/gocql/v2/dialer"
 	frm "github.com/scylladb/gocql/v2/internal/frame"

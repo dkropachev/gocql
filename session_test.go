@@ -27,20 +27,22 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
-	clustertestkit "github.com/scylladb/gocql/v2/internal/testkit/cluster"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	clustertestkit "github.com/scylladb/gocql/v2/internal/testkit/cluster"
 )
 
 // Typed request helpers keep parameter construction explicit and bind inputs once.

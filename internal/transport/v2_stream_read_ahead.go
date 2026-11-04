@@ -16,13 +16,13 @@ import (
 // It is accessed under the reservation's active lock, without background reads.
 type nativeStreamReadAhead struct {
 	source    interface{ readAvailable([]byte) (int, error) }
+	err       error
 	buf       []byte
 	start     int
 	end       int
 	remaining int64
 	limit     int
 	target    int
-	err       error
 }
 
 func (b *nativeStreamReadAhead) begin(source interface{ readAvailable([]byte) (int, error) }, size int64, limit int) {

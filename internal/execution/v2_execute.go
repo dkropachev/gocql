@@ -3,23 +3,26 @@
 
 package execution
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	model "github.com/scylladb/gocql/v2/internal/model"
 
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+
+	model "github.com/scylladb/gocql/v2/internal/model"
+
 	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 type InternalPrepareCacheKey struct {
@@ -35,21 +38,21 @@ type InternalSessionRuntime struct {
 	InternalExecutions                                           map[*InternalLogicalExecution]struct{}
 	queries                                                      map[*queryState]struct{}
 	schema                                                       *preparedSchemaTracker
-	prepareWorkersMu                                             sync.Mutex
-	prepareWorkers                                               sync.WaitGroup
-	prepareWorkersClosed                                         bool
 	preparing                                                    map[InternalPrepareCacheKey]*InternalPrepareFlight
-	InternalPrepareOrder                                         []InternalPrepareCacheKey
-	InternalMu                                                   sync.Mutex
 	InternalProfile                                              *Profile
+	InternalPrepared                                             map[InternalPrepareCacheKey]*InternalPreparedState
+	pools                                                        map[*queryPoolEntry]struct{}
+	paramsTemplates                                              paramsTemplateCache
+	InternalPrepareOrder                                         []InternalPrepareCacheKey
 	defaultOptions                                               InternalResolvedOptions // the zero Options resolved for this session
 	InternalConfig                                               Config
-	InternalPrepared                                             map[InternalPrepareCacheKey]*InternalPreparedState
+	prepareWorkers                                               sync.WaitGroup
 	requestID                                                    atomic.Uint64
 	requests, attempts, errors, retries, speculations, cancelled atomic.Uint64
 	inflight                                                     atomic.Int64
-	paramsTemplates                                              paramsTemplateCache
-	pools                                                        map[*queryPoolEntry]struct{}
+	prepareWorkersMu                                             sync.Mutex
+	InternalMu                                                   sync.Mutex
+	prepareWorkersClosed                                         bool
 }
 
 func InternalRuntimeFor(s *implCluster.Session) *InternalSessionRuntime {
@@ -366,12 +369,12 @@ func (s *InternalSessionRuntime) InternalHostPreparedInfo(conn *Conn, page *resp
 // selectPreparedResponse resolves a response using only the attempt's retained
 // immutable entry. Later schema events do not invalidate bytes already received.
 type InternalResultMetadataObservation struct {
+	metadata                    *typedResultMetadata
 	columns                     Columns
+	metadataID                  []byte
 	columnCount                 int
 	kind                        int
 	noMetadata, metadataChanged bool
-	metadataID                  []byte
-	metadata                    *typedResultMetadata
 }
 
 func InternalSelectPreparedResponse(state *InternalPreparedState, host UUID, prepared *InternalHostPrepared, sentID []byte, tracksID bool, response *responsePage, observed ...uint64) error {
@@ -450,14 +453,14 @@ func InternalSelectPreparedMetadata(state *InternalPreparedState, host UUID, pre
 }
 
 type InternalLogicalExecution struct {
-	lifetime       InternalExecutionLifetime
-	ddlCoordinator atomic.Pointer[UUID]
-	id             uint64
 	started        time.Time
-	once           sync.Once
 	observer       Observer
+	ddlCoordinator atomic.Pointer[UUID]
 	session        *implCluster.Session
 	request        *InternalExecutionRequest
+	lifetime       InternalExecutionLifetime
+	id             uint64
+	once           sync.Once
 }
 
 func (l *InternalLogicalExecution) InternalFinish(result Result, err error) {

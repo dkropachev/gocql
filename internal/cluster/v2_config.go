@@ -3,16 +3,17 @@
 
 package cluster
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"context"
-	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+
+	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
 
-	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"time"
+
+	logging "github.com/scylladb/gocql/v2/internal/logging"
 )
 
 func InternalConnectCluster(ctx context.Context, config Config, initialize func(*Session, Config) *Config) (*Session, error) {
@@ -159,8 +160,8 @@ func InternalConnectCluster(ctx context.Context, config Config, initialize func(
 // reconnectTypedDownedHosts keeps independent bounded backoff state for each host.
 func (s *Session) reconnectTypedDownedHosts(policy ReconnectPolicy, initial time.Duration) {
 	type retryState struct {
-		attempt int
 		next    time.Time
+		attempt int
 		stopped bool
 	}
 	retries := make(map[UUID]retryState)

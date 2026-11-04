@@ -21,22 +21,23 @@ package execution
 
 import (
 	"context"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 // Each logical operation has a closed input owner of its own. Its final drain
 // includes accepted writers and speculative/prefetch workers, independently of
 // output page leases and other operations using the same binding.
 type InternalExecutionLifetime struct {
-	mu            sync.Mutex
-	cancel        context.CancelFunc
 	stop          executionStopper
-	stopping      bool
-	inputReleased atomic.Bool
+	cancel        context.CancelFunc
 	done          chan struct{}
+	mu            sync.Mutex
+	inputReleased atomic.Bool
+	stopping      bool
 }
 
 func (l *InternalLogicalExecution) InternalReleaseInput() {

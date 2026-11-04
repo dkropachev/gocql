@@ -3,15 +3,15 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
-	routing "github.com/scylladb/gocql/v2/internal/routing"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 
 	"encoding/binary"
 	"fmt"
 	"testing"
 	"time"
+
+	routing "github.com/scylladb/gocql/v2/internal/routing"
 )
 
 var step06BenchmarkTarget Target

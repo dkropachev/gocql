@@ -18,12 +18,13 @@ package codec
 
 import (
 	"fmt"
+
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 type streamSequenceCodec[T any] struct {
-	kind    cqltype.Type
 	element StreamDecoder[T]
+	kind    cqltype.Type
 }
 type streamSequencePlan[T any] struct {
 	typ, element cqltype.DataType
@@ -33,13 +34,13 @@ type streamSequencePlan[T any] struct {
 }
 
 func StreamList[T any](child StreamDecoder[T]) StreamDecoder[[]T] {
-	return streamSequenceCodec[T]{cqltype.TypeList, child}
+	return streamSequenceCodec[T]{kind: cqltype.TypeList, element: child}
 }
 func StreamSet[T any](child StreamDecoder[T]) StreamDecoder[[]T] {
-	return streamSequenceCodec[T]{cqltype.TypeSet, child}
+	return streamSequenceCodec[T]{kind: cqltype.TypeSet, element: child}
 }
 func StreamVector[T any](child StreamDecoder[T]) StreamDecoder[[]T] {
-	return streamSequenceCodec[T]{cqltype.TypeCustom, child}
+	return streamSequenceCodec[T]{kind: cqltype.TypeCustom, element: child}
 }
 func (c streamSequenceCodec[T]) Compile(t cqltype.DataType) (StreamValuePlan[[]T], error) {
 	if c.element == nil {

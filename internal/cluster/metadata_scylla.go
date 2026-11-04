@@ -4,17 +4,15 @@
 
 package cluster
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
-	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 
 	"fmt"
-
 	"sync"
 
 	"golang.org/x/sync/singleflight"
 
+	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/tablets"
 )
 

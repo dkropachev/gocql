@@ -8,7 +8,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	gocql "github.com/scylladb/gocql/v2"
 	"io"
 	"net"
 	"net/netip"
@@ -17,6 +16,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	gocql "github.com/scylladb/gocql/v2"
 
 	"sigs.k8s.io/yaml"
 

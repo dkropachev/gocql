@@ -27,13 +27,13 @@
 
 package gocql
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"fmt"
 	"math"
 	"sort"
 	"testing"
+
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 func TestPlacementStrategy_SimpleStrategy(t *testing.T) {

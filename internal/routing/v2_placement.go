@@ -4,10 +4,11 @@
 package routing
 
 import (
-	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/tablets"
 	"math/rand/v2"
 	"sync/atomic"
+
+	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/tablets"
 	// Immutable AVL indices share every unaffected subtree. Neither an observation
 	// nor a routing plan may mutate a published node or replica slice.
 )
@@ -133,9 +134,9 @@ func InternalComparePlacementTable(a, b InternalMetadataTable) int {
 var tabletObservationID atomic.Uint64
 
 type InternalTabletRange struct {
-	observation     uint64
 	InternalSpan    TokenRange
 	InternalVersion Option[uint64]
+	observation     uint64
 }
 type InternalTabletRangeTree = InternalPlacementTree[int64, *InternalTabletRange]
 type InternalTabletPlacement struct {
@@ -288,9 +289,9 @@ func (m *MetadataSnapshot) legacyPlacementReplicas(ranges []TokenRange, tablet b
 
 type InternalTabletFeedbackStamp struct {
 	InternalSnapshot                             *MetadataSnapshot
-	InternalValid                                bool
-	InternalEpoch, InternalSchema, InternalTable uint64
 	InternalIdentity                             string
+	InternalEpoch, InternalSchema, InternalTable uint64
+	InternalValid                                bool
 }
 
 func InternalClonePlacementSnapshot(m *MetadataSnapshot) *MetadataSnapshot {

@@ -3,11 +3,14 @@
 
 package binding
 
-import cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-import "fmt"
-import "github.com/scylladb/gocql/v2/internal/codec"
-import "github.com/scylladb/gocql/v2/internal/wire"
-import "strings"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/scylladb/gocql/v2/internal/codec"
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/wire"
+)
 
 func InternalEncodeParameters[P any](plan ParamPlan[P], columns Columns, value P, owned, allowUnset bool) (encodedValues, error) {
 	if columns.Len() > 65535 {
@@ -46,10 +49,10 @@ func InternalEncodeParameters[P any](plan ParamPlan[P], columns Columns, value P
 }
 
 type Statement[P, R any] struct {
-	Kind   StatementKind
-	CQL    string
 	Params ParamEncoder[P]
 	Rows   RowDecoder[R]
+	CQL    string
+	Kind   StatementKind
 }
 
 func InternalValidateStatement[P, R any](s Statement[P, R]) error {

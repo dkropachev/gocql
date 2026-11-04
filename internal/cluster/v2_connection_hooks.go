@@ -5,6 +5,7 @@ package cluster
 
 import (
 	"context"
+
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 )
 

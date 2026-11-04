@@ -30,17 +30,20 @@ package gocql_test
 import (
 	"bytes"
 	"encoding/binary"
-	gocql "github.com/scylladb/gocql/v2"
 	"math"
+
+	gocql "github.com/scylladb/gocql/v2"
 
 	"testing"
 
 	"github.com/klauspost/compress/s2"
-	lz4mod "github.com/scylladb/gocql/v2/internal/wirecompress"
 	"github.com/stretchr/testify/require"
 
-	frm "github.com/scylladb/gocql/v2/internal/frame"
+	lz4mod "github.com/scylladb/gocql/v2/internal/wirecompress"
+
 	"os"
+
+	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
 type frameExample struct {

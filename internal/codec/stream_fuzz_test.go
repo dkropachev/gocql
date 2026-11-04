@@ -17,8 +17,9 @@
 package codec
 
 import (
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"testing"
+
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 func FuzzV2StreamingValues(f *testing.F) {

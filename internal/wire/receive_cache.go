@@ -9,12 +9,12 @@ import "sync"
 // session owns it, with hard idle byte/object/individual limits independent of
 // connection/shard counts. Outstanding page bytes are ordinary demand, not idle.
 type ReceiveCache struct {
-	mu           sync.Mutex
 	entries      [][]byte
 	bytes        int
 	epoch        uint64
-	closed       bool
 	hits, misses uint64
+	mu           sync.Mutex
+	closed       bool
 }
 
 const ReceiveCacheMaxBytes = 16 << 20

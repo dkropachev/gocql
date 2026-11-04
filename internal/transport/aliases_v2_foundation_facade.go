@@ -3,10 +3,13 @@
 
 package transport
 
-import codec "github.com/scylladb/gocql/v2/internal/codec"
-import cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-import model "github.com/scylladb/gocql/v2/internal/model"
-import "github.com/scylladb/gocql/v2/internal/wire"
+import (
+	codec "github.com/scylladb/gocql/v2/internal/codec"
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+
+	model "github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/wire"
+)
 
 func BorrowBytes(a0 []byte) Bytes { return cqltype.BorrowBytes(a0) }
 

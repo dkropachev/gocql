@@ -18,8 +18,9 @@ package bench_test
 
 import (
 	"fmt"
-	"github.com/scylladb/gocql/v2"
 	"testing"
+
+	"github.com/scylladb/gocql/v2"
 )
 
 func BenchmarkVectorPublic(b *testing.B) {

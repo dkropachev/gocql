@@ -29,13 +29,13 @@ import (
 // Prepared epochs are dependency-local clocks. Snapshot publication numbers and
 // opaque server metadata IDs are deliberately not schema clocks.
 type InternalPreparedDependencyKey struct {
-	InternalKind                   byte
 	InternalKeyspace, InternalName string
+	InternalKind                   byte
 }
 type InternalPreparedSchemaTracker struct {
-	InternalMu     sync.RWMutex
-	sequence       atomic.Uint64
 	InternalEpochs map[InternalPreparedDependencyKey]*atomic.Uint64
+	sequence       atomic.Uint64
+	InternalMu     sync.RWMutex
 }
 type InternalPreparedEpochRead struct {
 	clock *atomic.Uint64
@@ -64,9 +64,9 @@ func (s InternalPreparedSchemaStamp) InternalEqual(other InternalPreparedSchemaS
 }
 
 type InternalPreparedDependencies struct {
-	mu              sync.RWMutex
 	InternalTracker *InternalPreparedSchemaTracker
 	clocks          []*atomic.Uint64
+	mu              sync.RWMutex
 }
 
 func (d *InternalPreparedDependencies) InternalSnapshot() InternalPreparedSchemaStamp {
@@ -115,8 +115,8 @@ func (t *InternalPreparedSchemaTracker) InternalDependencies(keyspace string, pa
 		}
 		visited[d] = true
 		if d.Kind == cqltype.TypeUDT {
-			add(InternalPreparedDependencyKey{'k', d.Keyspace, ""})
-			add(InternalPreparedDependencyKey{'t', d.Keyspace, d.Name})
+			add(InternalPreparedDependencyKey{InternalKind: 'k', InternalKeyspace: d.Keyspace, InternalName: ""})
+			add(InternalPreparedDependencyKey{InternalKind: 't', InternalKeyspace: d.Keyspace, InternalName: d.Name})
 		}
 		typ(d.Key)
 		typ(d.Element)
@@ -132,15 +132,15 @@ func (t *InternalPreparedSchemaTracker) InternalDependencies(keyspace string, pa
 			}
 			if c.Table != "" {
 				knownTable = true
-				add(InternalPreparedDependencyKey{'b', ks, c.Table})
-				add(InternalPreparedDependencyKey{'k', ks, ""})
-				add(InternalPreparedDependencyKey{'f', ks, ""})
+				add(InternalPreparedDependencyKey{InternalKind: 'b', InternalKeyspace: ks, InternalName: c.Table})
+				add(InternalPreparedDependencyKey{InternalKind: 'k', InternalKeyspace: ks, InternalName: ""})
+				add(InternalPreparedDependencyKey{InternalKind: 'f', InternalKeyspace: ks, InternalName: ""})
 			}
 			typ(c.Type)
 		}
 	}
 	if !knownTable {
-		add(InternalPreparedDependencyKey{'a', keyspace, ""})
+		add(InternalPreparedDependencyKey{InternalKind: 'a', InternalKeyspace: keyspace, InternalName: ""})
 	}
 	t.InternalMu.Lock()
 	defer t.InternalMu.Unlock()

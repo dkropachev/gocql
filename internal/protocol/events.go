@@ -27,10 +27,11 @@ package protocol
 import (
 	"errors"
 	"fmt"
+	"net"
+
 	. "github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	. "github.com/scylladb/gocql/v2/internal/model"
-	"net"
 )
 
 func (p *TypedParser) StreamEvent(h frm.FrameHeader) frm.Frame {

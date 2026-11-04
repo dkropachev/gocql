@@ -8,15 +8,16 @@ import (
 
 	model "github.com/scylladb/gocql/v2/internal/model"
 
-	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"sync/atomic"
 	"time"
+
+	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
+	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 type TokenRange struct {
-	Start, End int64
 	Replicas   []Target
+	Start, End int64
 }
 type MetadataSnapshot struct {
 	state SnapshotState
@@ -118,16 +119,16 @@ type MetricsSnapshot struct {
 type SnapshotState struct {
 	InternalHostIndex       *InternalRoutingHostIndex
 	InternalPlacements      *InternalTabletPlacementTree
-	InternalPlacementEpoch  uint64
 	InternalPlacementSignal *atomic.Uint64
-	InternalGeneration      uint64
-	InternalHosts           []HostSnapshot
 	InternalKeyspaces       map[string]*implMetadata.KeyspaceMetadata
 	InternalSchemaSources   map[string]*implMetadata.KeyspaceMetadata
 	InternalRanges          map[string][]TokenRange
 	InternalTablets         map[InternalMetadataTable][]TokenRange
 	InternalPartitioner     string
+	InternalHosts           []HostSnapshot
 	InternalDiagnostics     []error
+	InternalPlacementEpoch  uint64
+	InternalGeneration      uint64
 }
 
 type HostSnapshot = model.HostSnapshot

@@ -18,8 +18,8 @@ import (
 // the pool created, so that closing the session stops them. The runtime
 // refers to it weakly, so a pool nobody uses is collected with its queries.
 type queryPoolBase struct {
-	mu     sync.Mutex
 	all    []*queryState
+	mu     sync.Mutex
 	closed atomic.Bool // set under mu
 }
 
@@ -122,8 +122,8 @@ func InternalQueryPools(s *implCluster.Session) int {
 // at most that many behind.
 type queryPool[P, R any] struct {
 	base     *queryPoolBase
-	slots    []atomic.Pointer[Query[P, R]]
 	newQuery func(*queryPoolBase) (*Query[P, R], error)
+	slots    []atomic.Pointer[Query[P, R]]
 }
 
 // idleQueryCap is the number of idle queries a pool keeps.

@@ -3,8 +3,6 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
 	"context"
 	"errors"
@@ -12,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )

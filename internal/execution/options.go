@@ -16,13 +16,13 @@ import (
 type Options struct{ p *frozenOptions }
 
 type frozenOptions struct {
-	values OptionValues
 	// fixed is the resolution of options that name their own profile, which
 	// does not depend on the session.
 	fixed *InternalResolvedOptions
 	// last is the resolution for the session that used the options last.
 	// A resolution is immutable once published.
-	last atomic.Pointer[sessionOptions]
+	last   atomic.Pointer[sessionOptions]
+	values OptionValues
 }
 
 type sessionOptions struct {

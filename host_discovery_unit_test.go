@@ -4,16 +4,14 @@
 package gocql
 
 import (
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-)
-
-import (
 	"net"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 func TestHostInfoFromMap(t *testing.T) {

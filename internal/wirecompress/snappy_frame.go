@@ -26,7 +26,9 @@ package wirecompress
 
 import (
 	"fmt"
+
 	"github.com/klauspost/compress/s2"
+
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 

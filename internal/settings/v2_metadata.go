@@ -9,9 +9,9 @@ import (
 
 type LifecycleObserver interface{ ObserveLifecycle(LifecycleEvent) }
 type LifecycleEvent struct {
-	Kind, Stage string
-	HostID      UUID
-	Stream      int16
 	At          time.Time
 	Err         error
+	Kind, Stage string
+	Stream      int16
+	HostID      UUID
 }

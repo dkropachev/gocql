@@ -43,12 +43,10 @@ type HostDialer interface {
 
 // DialedHost contains information about established connection to a host.
 type DialedHost struct {
-
 	// Conn used to communicate with the server.
-	Conn net.Conn
-
+	Conn           net.Conn
+	privateStorage DialedHostStorage
 	// DisableCoalesce disables write coalescing for the Conn.
 	// If true, the effect is the same as if WriteCoalesceWaitTime was configured to 0.
 	DisableCoalesce bool
-	privateStorage  DialedHostStorage
 }

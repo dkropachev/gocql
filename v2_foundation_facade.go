@@ -4,13 +4,14 @@
 package gocql
 
 import (
+	"math/big"
+	"net/netip"
+	"time"
+
 	codec "github.com/scylladb/gocql/v2/internal/codec"
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	model "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/wire"
-	"math/big"
-	"net/netip"
-	"time"
 )
 
 var ASCIICodec = codec.ASCIICodec

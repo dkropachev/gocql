@@ -5,26 +5,27 @@ package execution
 
 import (
 	"context"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"sync"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 type streamPlanCache[R any] struct {
-	mu      sync.Mutex
-	columns Columns
 	plan    StreamRowPlan[R]
+	columns Columns
+	mu      sync.Mutex
 }
 
 // StreamQuery reuses owned parameters and an immutable streaming decoder plan.
 // Page buffering is the default; Incremental explicitly bounds receive storage.
 type StreamQuery[P, R any] struct {
-	query   *Query[P, Unit]
-	decoder StreamRowDecoder[R]
-	options StreamOptions
 	plans   streamPlanCache[R]
+	decoder StreamRowDecoder[R]
+	query   *Query[P, Unit]
+	options StreamOptions
 }
 
 func NewStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {

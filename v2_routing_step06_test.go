@@ -3,18 +3,15 @@
 
 package gocql
 
-import implExecution "github.com/scylladb/gocql/v2/internal/execution"
-
 import (
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/model"
-)
 
-import (
 	routing "github.com/scylladb/gocql/v2/internal/routing"
-
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 
 	"bytes"
 	"context"
@@ -24,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	"github.com/scylladb/gocql/v2/internal/streams"
 	"github.com/scylladb/gocql/v2/internal/wire"

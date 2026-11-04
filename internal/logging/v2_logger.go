@@ -20,7 +20,10 @@ package logging
 // implementations remain responsible for their shared concurrency contract.
 type InternalV2SafeLogger struct{ InternalLogger StdLogger }
 
-func (l InternalV2SafeLogger) Print(v ...any) { defer func() { _ = recover() }(); l.InternalLogger.Print(v...) }
+func (l InternalV2SafeLogger) Print(v ...any) {
+	defer func() { _ = recover() }()
+	l.InternalLogger.Print(v...)
+}
 func (l InternalV2SafeLogger) Printf(format string, v ...any) {
 	defer func() { _ = recover() }()
 	l.InternalLogger.Printf(format, v...)

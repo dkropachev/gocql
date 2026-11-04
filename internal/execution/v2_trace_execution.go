@@ -6,9 +6,10 @@ package execution
 import (
 	"context"
 	"fmt"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"net/netip"
 	"time"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 func (s *InternalSessionRuntime) Trace(ctx context.Context, id UUID) (implCluster.TraceInfo, error) {

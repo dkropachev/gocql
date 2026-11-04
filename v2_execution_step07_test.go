@@ -16,15 +16,12 @@
 
 package gocql
 
-import implExecution "github.com/scylladb/gocql/v2/internal/execution"
-
 import (
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-)
 
-import (
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 
 	"context"
 	"errors"
@@ -32,6 +29,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 func TestStep07KindDeclarationAndServerRefinement(t *testing.T) {

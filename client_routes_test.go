@@ -3,8 +3,6 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
 	"context"
 	"fmt"
@@ -13,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 func TestGetHostPortMapping(t *testing.T) {

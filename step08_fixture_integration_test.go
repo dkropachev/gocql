@@ -2,8 +2,6 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
 	"context"
 	"fmt"
@@ -11,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 // The runner always invokes cleanup after its test subprocess, even on failure.

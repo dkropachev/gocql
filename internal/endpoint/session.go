@@ -24,11 +24,14 @@
 
 package endpoint
 
-import "errors"
-import "fmt"
-import "github.com/scylladb/gocql/v2/internal/debug"
-import logging "github.com/scylladb/gocql/v2/internal/logging"
-import "net"
+import (
+	"errors"
+	"fmt"
+	"net"
+
+	"github.com/scylladb/gocql/v2/internal/debug"
+	logging "github.com/scylladb/gocql/v2/internal/logging"
+)
 
 // findTabletReplicasUnsafeForToken returns the raw replica slice for the tablet
 // owning the given token. The returned slice must not be modified by callers.

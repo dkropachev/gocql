@@ -7,12 +7,13 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"io"
+	"time"
+
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
-	"io"
-	"time"
 )
 
 func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src frameSource, head frm.FrameHeader) error {

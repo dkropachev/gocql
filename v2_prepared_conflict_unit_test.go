@@ -18,10 +18,8 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
-	routing "github.com/scylladb/gocql/v2/internal/routing"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 
 	"context"
 	"errors"
@@ -31,6 +29,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	routing "github.com/scylladb/gocql/v2/internal/routing"
 )
 
 type step03ScopedSchemaBackend struct {

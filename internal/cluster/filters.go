@@ -24,9 +24,11 @@
 
 package cluster
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+import (
+	"fmt"
 
-import "fmt"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+)
 
 // HostFilter interface is used when a host is discovered via server sent events.
 type HostFilter interface {

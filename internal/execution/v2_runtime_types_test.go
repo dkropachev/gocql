@@ -3,8 +3,6 @@
 
 package execution_test
 
-import . "github.com/scylladb/gocql/v2"
-
 import (
 	"context"
 	"errors"
@@ -12,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 

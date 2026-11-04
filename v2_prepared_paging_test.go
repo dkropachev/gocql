@@ -16,19 +16,16 @@
 
 package gocql
 
-import implExecution "github.com/scylladb/gocql/v2/internal/execution"
-
 import (
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-)
 
-import (
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	model "github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/paging"
 
 	"bytes"
 	"context"
@@ -44,6 +41,8 @@ import (
 	"testing"
 	"time"
 
+	model "github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -373,6 +372,7 @@ func TestV2ResultPlanCacheScopedReuseAndNoCompileLock(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
 // TestV2ResultPlanCacheUnidentifiedSwitchRetiresIdentityHit checks that the
 // lock-free identity hit is withdrawn when the cache switches to an
 // unidentified plan, so a later response under the old identity is compiled

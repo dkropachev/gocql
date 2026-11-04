@@ -121,6 +121,6 @@ func (r Rows[R]) Columns() Columns {
 // rowsHolder is a Rows iterator with its first page, allocated together. A
 // reusable query embeds one.
 type rowsHolder[R any] struct {
-	rows rowsImpl[R]
 	page Page[R]
+	rows rowsImpl[R]
 }

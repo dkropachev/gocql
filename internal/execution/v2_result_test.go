@@ -3,14 +3,13 @@
 
 package execution_test
 
-import . "github.com/scylladb/gocql/v2"
-
 import (
 	"context"
 	"encoding/binary"
 	"errors"
 	"testing"
 
+	. "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 

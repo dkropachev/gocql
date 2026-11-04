@@ -3,18 +3,18 @@
 
 package cluster
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/scylladb/gocql/v2/events"
 	"maps"
 	"net"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/scylladb/gocql/v2/events"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 type InternalV2RouteRow struct {

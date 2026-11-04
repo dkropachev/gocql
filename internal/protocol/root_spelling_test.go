@@ -7,8 +7,9 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 
-	"github.com/scylladb/gocql/v2/internal/segment"
 	"io"
+
+	"github.com/scylladb/gocql/v2/internal/segment"
 )
 
 const apacheCassandraTypePrefix = cqltype.ApacheCassandraTypePrefix

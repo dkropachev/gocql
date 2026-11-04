@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 
 	"net"

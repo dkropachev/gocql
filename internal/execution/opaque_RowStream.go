@@ -22,47 +22,47 @@ package execution
 import (
 	"context"
 
+	"sync"
+	"sync/atomic"
+
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/wire"
-	"sync"
-	"sync/atomic"
 )
 
 type RowStreamStorage[R any] struct {
-	cursor              queryCursor
-	pageBuffered        bool
+	InternalCtx         context.Context
+	InternalDecoder     StreamRowDecoder[R]
+	plan                StreamRowPlan[R]
+	err                 error
 	bufferedPage        *responsePage
 	bufferedBody        *wire.Stream
 	bufferedReader      *codec.StreamRowReader
-	bufferedIndex       int32
 	bufferedPlans       *streamPlanCache[R]
 	attemptMetadata     *streamResponse
 	closeDone           chan struct{}
 	retryTarget         *Target
-	InternalActive      sync.Mutex
-	mu                  sync.Mutex
-	advancing           atomic.Bool
-	InternalClosing     atomic.Bool
-	InternalCtx         context.Context
 	InternalCancel      context.CancelFunc
 	stop                func() bool
 	InternalSession     *implCluster.Session
 	InternalRequest     *InternalExecutionRequest
-	limits              StreamLimits
-	InternalDecoder     StreamRowDecoder[R]
-	plan                StreamRowPlan[R]
-	columns             Columns
 	response            *streamResponse
 	InternalReservation *exclusiveConn
 	prepared            *InternalHostPrepared
 	pageCancel          context.CancelFunc
-
-	InternalHistory pagingHistory
-	info            StreamInfo
-	err             error
-	terminal        bool
-	cleaned         bool
+	cursor              queryCursor
+	columns             Columns
+	InternalHistory     pagingHistory
+	info                StreamInfo
+	limits              StreamLimits
+	InternalActive      sync.Mutex
+	mu                  sync.Mutex
+	bufferedIndex       int32
+	advancing           atomic.Bool
+	InternalClosing     atomic.Bool
+	pageBuffered        bool
+	terminal            bool
+	cleaned             bool
 }
 
 func RowStreamData[R any](v *RowStream[R]) *RowStreamStorage[R] { return &v.privateStorage }

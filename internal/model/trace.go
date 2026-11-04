@@ -2,7 +2,8 @@ package model
 
 import (
 	"net/netip"
-"github.com/scylladb/gocql/v2/internal/cqltype"
+
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 type TraceSessionRow struct {
@@ -11,9 +12,9 @@ type TraceSessionRow struct {
 	InternalDuration    cqltype.Nullable[int32]
 }
 type TraceActivityRow struct {
-	InternalId       cqltype.TimeUUID
-	InternalActivity cqltype.Text
 	InternalSource   netip.Addr
-	InternalElapsed  cqltype.Nullable[int32]
+	InternalActivity cqltype.Text
 	InternalThread   cqltype.Text
+	InternalElapsed  cqltype.Nullable[int32]
+	InternalId       cqltype.TimeUUID
 }

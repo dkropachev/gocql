@@ -31,14 +31,11 @@ import (
 )
 
 type InternalClusterSettingsStorage struct {
-	InternalDisableClientRouteEvents bool
-
 	actualSslOpts *atomic.Pointer[tls.Config]
-
 	// Default retry policy to use for queries.
 	// Default: SimpleRetryPolicy{NumRetries: 3}.
-	InternalDefaultProfile Profile
-
+	InternalDefaultProfile           Profile
+	InternalDisableClientRouteEvents bool
 	// internal config for testing
 	InternalDisableControlConn bool
 	disableInit                bool

@@ -24,8 +24,6 @@
 
 package cluster
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 import (
 	"context"
 	"net"
@@ -34,6 +32,8 @@ import (
 
 	"github.com/scylladb/gocql/v2/events"
 	"github.com/scylladb/gocql/v2/internal/debug"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
@@ -43,14 +43,14 @@ type InternalEventDebouncer struct {
 	callback         func([]frame)
 	quit             chan struct{}
 	done             chan struct{}
-	stopOnce         sync.Once
-	stopped          bool
-	InternalOverflow bool
 	InternalResync   func()
 	name             string
 	InternalEvents   []frame
 	releases         []func()
+	stopOnce         sync.Once
 	InternalMu       sync.Mutex
+	stopped          bool
+	InternalOverflow bool
 }
 
 func InternalNewEventDebouncer(name string, eventHandler func([]frame), logger StdLogger) *InternalEventDebouncer {

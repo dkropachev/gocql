@@ -27,14 +27,14 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
 	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 func TestProto1BatchInsert(t *testing.T) {

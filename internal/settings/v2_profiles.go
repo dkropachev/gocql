@@ -8,14 +8,14 @@ import (
 )
 
 type Profile struct {
-	Consistency          Consistency
-	SerialConsistency    Option[Consistency]
-	Timeout, PageTimeout time.Duration
-	PageSize             int32
-	Prefetch             int
 	Retry                RetryPolicy
 	Routing              RoutingPolicy
 	Speculation          SpeculationPolicy
+	Timeout, PageTimeout time.Duration
+	Prefetch             int
+	PageSize             int32
+	SerialConsistency    Option[Consistency]
+	Consistency          Consistency
 }
 
 func InternalDefaultProfile() Profile {
@@ -53,11 +53,11 @@ type Observer interface {
 	ObserveAttempt(AttemptEvent)
 }
 type RequestEvent struct {
-	ID              uint64
+	Err             error
 	Statement       string
 	BatchStatements []string
 	Parameters      Columns
-	Routing         RoutingInfo
 	Result          Result
-	Err             error
+	Routing         RoutingInfo
+	ID              uint64
 }

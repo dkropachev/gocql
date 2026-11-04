@@ -4,33 +4,34 @@
 package execution
 
 import (
+	"time"
+
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	"time"
 	// IncludeMetadata requests full result metadata even when a validated cache exists.
 )
 
 // OptionValues lists the settings of an execution. NewOptions validates and
 // freezes them into Options.
 type OptionValues struct {
-	IncludeMetadata      bool
-	Profile              *Profile
-	Consistency          Option[Consistency]
-	SerialConsistency    Option[Option[Consistency]]
-	Timeout, PageTimeout Option[time.Duration]
-	PageSize             Option[int32]
-	Prefetch             Option[int]
-	Idempotent           bool
-	Timestamp            Option[int64]
-	NowInSeconds         Option[int32]
-	Keyspace             string
-	Trace                bool
-	CustomPayload        []PayloadEntry
-	HostID               Option[UUID]
-	ShardID              Option[uint32]
 	Retry                RetryPolicy
 	Observer             Observer
+	Profile              *Profile
 	privateStorage       OptionsStorage
+	Keyspace             string
+	CustomPayload        []PayloadEntry
+	Timeout, PageTimeout Option[time.Duration]
+	Prefetch             Option[int]
+	Timestamp            Option[int64]
+	PageSize             Option[int32]
+	NowInSeconds         Option[int32]
+	ShardID              Option[uint32]
+	SerialConsistency    Option[Option[Consistency]]
+	Consistency          Option[Consistency]
+	HostID               Option[UUID]
+	IncludeMetadata      bool
+	Idempotent           bool
+	Trace                bool
 }
 
 type InternalResolvedOptions struct {

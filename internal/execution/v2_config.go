@@ -5,6 +5,7 @@ package execution
 
 import (
 	"context"
+
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 

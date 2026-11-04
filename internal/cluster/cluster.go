@@ -58,7 +58,6 @@ func (p PoolConfig) buildPool(session *Session) *policyConnPool {
 // behavior to fit the most common use cases. Applications that require a
 // different setup must implement their own
 type InternalClusterSettings struct {
-
 	// BatchObserver will set the provided batch observer on all queries created from this session.
 	// Use it to collect metrics / stats from batch queries by providing an implementation of BatchObserver.
 	// Dialer will be used to establish all connections created for this Cluster.
@@ -100,13 +99,11 @@ type InternalClusterSettings struct {
 	Compressor Compressor
 	// Default: nil
 	Authenticator Authenticator
-
 	// PoolConfig configures the underlying connection pool, allowing the
 	// configuration of host selection and connection selection policies.
 	PoolConfig PoolConfig
 	// Default retry policy to use for queries.
 	// Default: SimpleRetryPolicy{NumRetries: 3}.
-
 	// ConvictionPolicy decides whether to mark host as down based on the error and host info.
 	// Default: SimpleConvictionPolicy
 	ConvictionPolicy ConvictionPolicy
@@ -143,7 +140,8 @@ type InternalClusterSettings struct {
 	// the port from these entries (see cfg.Port for details). When cfg.Port is
 	// set to a non-zero value, embedded ports in host strings are ignored for
 	// the purpose of peer discovery.
-	Hosts []string
+	Hosts          []string
+	privateStorage InternalClusterSettingsStorage
 	// The time to wait for frames before flushing the frames connection to Cassandra.
 	// Can help reduce syscall overhead by making less calls to write. Set to 0 to
 	// disable.
@@ -234,11 +232,6 @@ type InternalClusterSettings struct {
 	// Also, it describes a maximum number of connections at the same time.
 	// Default: 2
 	NumConns int
-	// The gocql driver may hold excess shard connections to reuse them when existing connections are dropped.
-	// This configuration variable defines the limit for such excess connections. Once the limit is reached,
-	// gocql starts dropping any additional excess connections.
-	// The limit is computed as `MaxExcessShardConnectionsRate` * <number_of_shards>.
-	MaxExcessShardConnectionsRate float32
 	// Maximum cache size for prepared statements globally for gocql.
 	// Default: 1000
 	MaxPreparedStmts int
@@ -252,6 +245,13 @@ type InternalClusterSettings struct {
 	// It has only one purpose, identify faulty connection early and drop it.
 	// Default: 11 Seconds
 	ReadTimeout time.Duration
+	// An event bus configuration
+	EventBusConfig eventbus.EventBusConfig
+	// The gocql driver may hold excess shard connections to reuse them when existing connections are dropped.
+	// This configuration variable defines the limit for such excess connections. Once the limit is reached,
+	// gocql starts dropping any additional excess connections.
+	// The limit is computed as `MaxExcessShardConnectionsRate` * <number_of_shards>.
+	MaxExcessShardConnectionsRate float32
 	// Consistency for the serial part of queries, values can be either SERIAL or LOCAL_SERIAL.
 	// Default: unset
 	SerialConsistency Consistency
@@ -327,7 +327,6 @@ type InternalClusterSettings struct {
 	// such host filtering and token aware query routing will not be available.
 	DisableInitialHostLookup bool
 	// internal config for testing
-
 	// If IgnorePeerAddr is true and the address in system.peers does not match
 	// the supplied host by either initial hosts or discovered via events then the
 	// host will be replaced with the supplied address.
@@ -352,9 +351,6 @@ type InternalClusterSettings struct {
 	//
 	// Default: false
 	DisableDriverConfigReporting bool
-	// An event bus configuration
-	EventBusConfig eventbus.EventBusConfig
-	privateStorage InternalClusterSettingsStorage
 }
 
 // newClusterSettings generates a new config for the default cluster implementation.

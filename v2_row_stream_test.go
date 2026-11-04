@@ -16,21 +16,16 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
-)
 
-import (
 	"bytes"
 	"context"
 	"encoding/binary"
-
 	"errors"
 	"fmt"
-
 	"net"
 	"runtime"
 	"sync"
@@ -38,8 +33,10 @@ import (
 	"testing"
 	"time"
 
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	"github.com/scylladb/gocql/v2/internal/wire"
+
 	lz4 "github.com/scylladb/gocql/v2/internal/wirecompress"
 )
 

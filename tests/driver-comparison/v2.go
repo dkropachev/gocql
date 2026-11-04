@@ -6,9 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	g "github.com/scylladb/gocql/v2"
 	"sync"
 	"time"
+
+	g "github.com/scylladb/gocql/v2"
 )
 
 const driverName = "v2"

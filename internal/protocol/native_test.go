@@ -6,11 +6,12 @@ package protocol
 import (
 	"bytes"
 	"encoding/binary"
+	"testing"
+
 	. "github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/wire"
-	"testing"
 )
 
 func protocolSettings(protocol byte) *Settings {

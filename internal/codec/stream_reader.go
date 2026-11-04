@@ -41,9 +41,9 @@ func (e *StreamCapacityError) Error() string {
 
 // StreamCapabilityError identifies a mode or mapping without an incremental path.
 type StreamCapabilityError struct {
+	Reason      string
 	Protocol    int
 	Compression cqltype.Compression
-	Reason      string
 }
 
 func (e *StreamCapabilityError) Error() string {
@@ -75,15 +75,15 @@ type streamCapture struct {
 	offset int
 }
 type streamDecodeState struct {
-	values       []*StreamValueReader
-	rows         []*StreamRowReader
-	scalar       [32]byte
-	discard      []byte
-	discardBytes int
 	err          error
 	typeMatches  map[streamTypePair]bool
 	rowMatches   map[streamColumnsPair]bool
 	childMatches map[streamChildPair]*streamValidationPlan
+	values       []*StreamValueReader
+	rows         []*StreamRowReader
+	discard      []byte
+	discardBytes int
+	scalar       [32]byte
 }
 
 func (s *streamDecodeState) value(depth int) *StreamValueReader {
@@ -110,13 +110,13 @@ func (s *streamDecodeState) fail(err error) error {
 type StreamValueReader struct {
 	scope        *wire.Stream
 	typ          cqltype.DataType
-	state        cqltype.CellState
 	shared       *streamDecodeState
 	validation   *streamValidationPlan
 	capture      *streamCapture
+	path         string
 	captureState streamCapture
 	depth        int
-	path         string
+	state        cqltype.CellState
 	active       bool
 }
 
@@ -384,14 +384,14 @@ func (r *StreamValueReader) vectorLength() (int64, error) {
 // StreamRowReader visits physical columns in wire order. Runtime owners reuse
 // it between rows; RequireEnd checks columns, not a complete multi-row envelope.
 type StreamRowReader struct {
-	columns      cqltype.Columns
 	scope        *wire.Stream
 	shared       *streamDecodeState
+	capture      *streamCapture
+	columns      cqltype.Columns
 	validations  []*streamValidationPlan
 	index, depth int
 	allowMissing bool
 	active       bool
-	capture      *streamCapture
 }
 
 // InternalStreamReaderWorkingStorageBytes reports the actual retained byte

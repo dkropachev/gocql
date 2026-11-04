@@ -3,12 +3,15 @@
 
 package transport
 
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-import logging "github.com/scylladb/gocql/v2/internal/logging"
-import implSettings "github.com/scylladb/gocql/v2/internal/connectivity"
+import (
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	logging "github.com/scylladb/gocql/v2/internal/logging"
 
-import "crypto/tls"
-import "net"
+	"crypto/tls"
+	"net"
+
+	implSettings "github.com/scylladb/gocql/v2/internal/connectivity"
+)
 
 type AddressPort = implEndpoint.AddressPort
 type AddressTranslator = implEndpoint.AddressTranslator

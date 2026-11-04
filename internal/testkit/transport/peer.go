@@ -7,9 +7,10 @@ package transport
 import (
 	"bufio"
 	"context"
-	"github.com/scylladb/gocql/v2/internal/wire"
 	"net"
 	"testing"
+
+	"github.com/scylladb/gocql/v2/internal/wire"
 
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"

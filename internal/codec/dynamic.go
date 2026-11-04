@@ -18,21 +18,21 @@ import (
 // the active payload; no payload is stored in an interface.
 
 type Value struct {
-	typ         cqltype.DataType
-	state       cqltype.CellState
-	bits        uint64
-	uuid        cqltype.UUID
 	inet        netip.Addr
-	duration    cqltype.Duration
-	scale       int32
-	bytes       cqltype.Bytes
+	typ         cqltype.DataType
+	shape       *streamValidationPlan
 	values      []Value
 	fields      []ValueField
 	entries     []ValueEntry
-	encoded     bool
+	bytes       cqltype.Bytes
+	duration    cqltype.Duration
+	bits        uint64
 	count       int
 	vectorWidth int64
-	shape       *streamValidationPlan
+	scale       int32
+	uuid        cqltype.UUID
+	state       cqltype.CellState
+	encoded     bool
 }
 
 type ValueField struct {
@@ -1050,18 +1050,18 @@ type dynamicRowsCodec struct{}
 func (dynamicRowsCodec) Clone(r DynamicRow) DynamicRow { return r.Clone() }
 
 type dynamicRowsPlan struct {
+	lookup  map[string]int
 	shapes  []*streamValidationPlan
 	columns cqltype.Columns
-	lookup  map[string]int
 }
 
 // DynamicRow stores one encoded physical row. Its immutable name index is shared
 // with the compiled plan. Copied rows share one immutable lazy physical index.
 type DynamicRow struct {
 	physical     *dynamicRowIndex
+	lookup       map[string]int
 	shapes       []*streamValidationPlan
 	columns      cqltype.Columns
-	lookup       map[string]int
 	body         cqltype.Bytes
 	allowMissing bool
 }
@@ -1078,9 +1078,9 @@ type dynamicRowCell struct {
 	state          cqltype.CellState
 }
 type dynamicRowIndex struct {
-	once  sync.Once
-	cells []dynamicRowCell
 	err   error
+	cells []dynamicRowCell
+	once  sync.Once
 }
 
 func (r DynamicRow) buildPhysicalIndex() {

@@ -33,11 +33,9 @@ import (
 )
 
 type HostInfoStorage struct {
-	InternalLifecycleGeneration  uint64
-	InternalSharderGeneration    uint64
 	InternalInitialSetupDeadline time.Time
-	InternalTransportGeneration  uint64
 	InternalTranslatedAddresses  *InternalTranslatedAddresses
+	hostID                       atomic.Pointer[UUID] // InternalHostId once known; it never changes after
 	InternalWorkload             string
 	InternalDseVersion           string
 	InternalDataCenter           string
@@ -55,13 +53,15 @@ type HostInfoStorage struct {
 	InternalConnectAddress       net.IP
 	InternalVersion              InternalCassVersion
 	InternalScyllaFeatures       ScyllaHostFeatures
+	InternalLifecycleGeneration  uint64
+	InternalSharderGeneration    uint64
+	InternalTransportGeneration  uint64
 	InternalPort                 int
 	// TODO(zariel): reduce locking maybe, not all values will change, but to ensure
 	// that we are thread safe use a mutex to access all fields.
 	InternalMu     sync.RWMutex
 	InternalState  NodeStateCell // read without InternalMu; written under it
 	InternalHostId UUID
-	hostID         atomic.Pointer[UUID] // InternalHostId once known; it never changes after
 	graph          bool
 }
 

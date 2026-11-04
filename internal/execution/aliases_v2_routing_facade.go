@@ -3,10 +3,13 @@
 
 package execution
 
-import runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
+import (
+	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 
-import model "github.com/scylladb/gocql/v2/internal/model"
-import routing "github.com/scylladb/gocql/v2/internal/routing"
+	model "github.com/scylladb/gocql/v2/internal/model"
+
+	routing "github.com/scylladb/gocql/v2/internal/routing"
+)
 
 var ErrClosed = runtimeerrors.ErrClosed
 

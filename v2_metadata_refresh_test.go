@@ -2,14 +2,14 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
 	"context"
 	"errors"
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 func TestV2MetadataDropDuringFetchIsConfirmed(t *testing.T) {

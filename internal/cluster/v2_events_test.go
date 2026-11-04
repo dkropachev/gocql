@@ -3,14 +3,15 @@
 
 package cluster_test
 
-import . "github.com/scylladb/gocql/v2"
-
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
-	oldevents "github.com/scylladb/gocql/v2/events"
+	. "github.com/scylladb/gocql/v2"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+
 	"sync"
 	"testing"
+
+	oldevents "github.com/scylladb/gocql/v2/events"
 )
 
 func TestV2SubscriptionsFilterOverflowAndClose(t *testing.T) {

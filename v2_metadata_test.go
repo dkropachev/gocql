@@ -1,13 +1,13 @@
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
-	routing "github.com/scylladb/gocql/v2/internal/routing"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 
-	"github.com/scylladb/gocql/v2/tablets"
 	"testing"
 	"time"
+
+	routing "github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/tablets"
 )
 
 func TestV2MetadataSnapshotsDetachNestedSchema(t *testing.T) {

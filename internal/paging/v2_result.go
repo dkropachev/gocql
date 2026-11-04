@@ -20,16 +20,16 @@ import (
 // independent. This nongeneric state machine is also used by the incremental
 // streaming pager.
 type InternalPagingHistoryEntry struct {
-	InternalState PageState
 	InternalNext  *InternalPagingHistoryEntry
+	InternalState PageState
 }
 
 const InternalInlineHistory = 8
 
 type InternalPagingHistory struct {
-	InternalSeed     maphash.Seed
 	InternalEntries  map[uint64]InternalPagingHistoryEntry
 	InternalInline   *[InternalInlineHistory]PageState
+	InternalSeed     maphash.Seed
 	InternalCount    int
 	InternalBytes    int64
 	InternalMaxCount int

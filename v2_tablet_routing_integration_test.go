@@ -5,10 +5,8 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
-	routing "github.com/scylladb/gocql/v2/internal/routing"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 
 	"context"
 	"fmt"
@@ -16,6 +14,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	routing "github.com/scylladb/gocql/v2/internal/routing"
 )
 
 func TestStep06TabletRoutingLive(t *testing.T) {

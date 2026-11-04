@@ -18,11 +18,11 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 import (
 	"reflect"
 	"testing"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 type step10CustomRetry struct{}

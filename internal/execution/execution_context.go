@@ -28,44 +28,44 @@ import (
 // so no in-flight work still holds the context. Callbacks that fire late from
 // a previous generation are discarded by generation or deadline checks.
 type executionContext struct {
-	mu          sync.Mutex
-	parent      context.Context
-	deadline    time.Time // effective deadline, including the parent's
-	hasDeadline bool
-	timerAt     time.Time // own deadline armed on timer; zero when disarmed
-	timer       *time.Timer
+	deadline time.Time // effective deadline, including the parent's
+	timerAt  time.Time // own deadline armed on timer; zero when disarmed
+	parent   context.Context
+	err      error
+	timer    *time.Timer
 	// done is the generation's Done channel. It is replaced only in begin,
 	// when a cancellation closed it, so InternalTransientDone reads it without
 	// the lock: begin runs only after the previous generation drained.
 	done       chan struct{}
-	doneClosed bool // done was closed by a cancellation
-	shared     bool // Done was handed out this generation
-	cancelled  atomic.Bool
-	err        error
-	gen        uint64
 	stopParent func() bool
+	// linked is the execution context this generation is a child of, which
+	// cancels it through child without an AfterFunc registration.
+	linked *executionContext
+	// child and childGen name the generation of a linked child context.
+	child       *executionContext
+	cancelFunc  context.CancelFunc // bound once: cancel(context.Canceled)
+	finishFunc  context.CancelFunc // bound once: finish
+	parentFunc  func()             // bound once: parentCancelled
+	afters      []*executionAfterFunc
+	gen         uint64
+	childGen    uint64
+	mu          sync.Mutex
+	cancelled   atomic.Bool
+	hasDeadline bool
+	doneClosed  bool // done was closed by a cancellation
+	shared      bool // Done was handed out this generation
 	// lazy marks a cancellable parent that is watched without a
 	// registration: Err checks it, transport waits select on its Done
 	// channel (InternalParentDone), and Done or AfterFunc register a
 	// watcher only once something may wait on this context's channel.
 	lazy     bool
 	watching bool // the lazy parent's watcher is registered
-	// linked is the execution context this generation is a child of, which
-	// cancels it through child without an AfterFunc registration.
-	linked *executionContext
-	// child and childGen name the generation of a linked child context.
-	child      *executionContext
-	childGen   uint64
-	afters     []*executionAfterFunc
-	cancelFunc context.CancelFunc // bound once: cancel(context.Canceled)
-	finishFunc context.CancelFunc // bound once: finish
-	parentFunc func()             // bound once: parentCancelled
 }
 
 type executionAfterFunc struct {
 	ctx *executionContext
-	gen uint64
 	f   func()
+	gen uint64
 }
 
 var closedExecutionDone = func() chan struct{} { c := make(chan struct{}); close(c); return c }()

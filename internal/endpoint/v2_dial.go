@@ -31,9 +31,9 @@ import (
 // DialTarget is a resolved raw connection target. Hooks must honor the selected
 // endpoint and source, or return an error. TLS and protocol setup follow dialing.
 type DialTarget struct {
-	Host             HostSnapshot
-	Network, Address string
 	LocalAddress     netip.AddrPort
+	Network, Address string
+	Host             HostSnapshot
 	ShardID          Option[uint32]
 }
 

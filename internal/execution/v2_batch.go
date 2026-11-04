@@ -7,14 +7,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	// BatchItem retains an immutable binding descriptor without admitting
 )
 
 type BatchItem struct{ privateStorage BatchItemStorage }
 type InternalBatchState struct {
-	kind  BatchKind
 	items []InternalExecutionRequest
+	kind  BatchKind
 }
 
 // Public batches own their items, and frozen options own their payloads.
