@@ -19,7 +19,8 @@ func InternalSessionCaptureTabletFeedback(s *Session, info RoutingInfo, m *Metad
 	p.InternalMu.RLock()
 	defer p.InternalMu.RUnlock()
 	k := metadataTable{InternalKeyspace: info.Keyspace, InternalTable: info.Table}
-	return tabletFeedbackStamp{InternalValid: s.tabletSchemaCurrent(k, routing.InternalMetadataSnapshotTableIdentity(m, k)), InternalSnapshot: m, InternalEpoch: p.InternalPlacementEpoch.Load(), InternalSchema: p.InternalSchemaEpoch[k.InternalKeyspace], InternalTable: p.InternalTableRevision[k], InternalIdentity: routing.InternalMetadataSnapshotTableIdentity(m, k)}
+	identity := routing.InternalMetadataSnapshotTableIdentity(m, k)
+	return tabletFeedbackStamp{InternalValid: s.tabletSchemaCurrent(k, identity), InternalSnapshot: m, InternalEpoch: p.InternalPlacementEpoch.Load(), InternalSchema: p.InternalSchemaEpoch[k.InternalKeyspace], InternalTable: p.InternalTableRevision[k], InternalIdentity: identity}
 }
 
 type InternalV2TabletFeedbackKey struct {
