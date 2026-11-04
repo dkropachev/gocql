@@ -107,16 +107,18 @@ func (c queryCursor) current() bool {
 // Query owns reusable parameter storage and allows one active execution.
 // Prepared statements remain shareable; a Query must not be copied.
 type Query[P, R any] struct {
-	state    queryState
-	bound    Bound[R]
-	prepared *Prepared[P, R]
-	params   ParamPlan[P]
-	columns  Columns
-	buffer   binding.ParameterBuffer
-	options  Options
-	scratch  eachScratch   // Each and One decoding state
-	rows     rowsHolder[R] // Run's iterator storage, reused each execution
-	last     Result        // the latest Exec, Each or One outcome
+	state   queryState
+	bound   Bound[R]
+	params  ParamPlan[P]
+	columns Columns
+	// allowUnset reports whether parameters may be unset: always for CQL
+	// text, from Protocol v4 for a prepared statement.
+	allowUnset bool
+	buffer     binding.ParameterBuffer
+	options    Options
+	scratch    eachScratch   // Each and One decoding state
+	rows       rowsHolder[R] // Run's iterator storage, reused each execution
+	last       Result        // the latest Exec, Each or One outcome
 }
 
 // LastResult returns the result information of the query's latest Exec,
@@ -164,10 +166,16 @@ func NewQuery[P, R any](p *Prepared[P, R], options Options) (*Query[P, R], error
 	if err != nil {
 		return nil, err
 	}
-	q := &Query[P, R]{prepared: p, options: options}
+	state := p.privateStorage.InternalState
+	// Statement, keyspace, parameters and info are fixed when the prepared
+	// state is built, so the query's request takes them once.
+	q := &Query[P, R]{options: options, params: p.privateStorage.InternalParams, columns: state.InternalParameters, allowUnset: state.InternalProtocol >= 4}
 	q.bound.privateStorage.InternalRows = p.privateStorage.InternalRows
 	q.bound.privateStorage.plans = p.privateStorage.InternalPlans
 	q.bound.privateStorage.rows = &q.rows
+	info := &state.InternalInfo
+	kind := p.privateStorage.InternalKind
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, InternalRouting: RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Kind: kind, Conditional: kind != OrdinaryStatement}}
 	if err := newQueryState(p.privateStorage.InternalState.InternalSession, &q.state, q.retire); err != nil {
 		return nil, err
 	}
@@ -189,11 +197,11 @@ func NewUnpreparedQuery[P, R any](s *implCluster.Session, statement Statement[P,
 	if err != nil {
 		return nil, err
 	}
-	q := &Query[P, R]{params: plan, columns: columns, options: options}
+	q := &Query[P, R]{params: plan, columns: columns, options: options, allowUnset: true}
 	q.bound.privateStorage.InternalRows = statement.Rows
 	q.bound.privateStorage.plans = &InternalResultPlanCache[R]{}
 	q.bound.privateStorage.rows = &q.rows
-	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: statement.CQL, InternalRouting: RoutingInfo{Kind: statement.Kind, Conditional: statement.Kind != OrdinaryStatement}}
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: statement.CQL, InternalSource: cqlText{}, InternalRouting: RoutingInfo{Kind: statement.Kind, Conditional: statement.Kind != OrdinaryStatement}}
 	if err := newQueryState(s, &q.state, q.retire); err != nil {
 		return nil, err
 	}
@@ -261,38 +269,18 @@ func (q *Query[P, R]) capture(ctx context.Context, value P) error {
 		return err
 	}
 	request := &q.bound.privateStorage.InternalRequest
-	plan, columns, allowUnset := q.params, q.columns, true
-	if q.prepared != nil {
-		p := &q.prepared.privateStorage
-		state := p.InternalState
-		// Statement, keyspace, parameters and info are fixed when the
-		// prepared state is built, so they are read without its lock.
-		columns = state.InternalParameters
-		info := &state.InternalInfo
-		request.InternalStatement, request.keyspace = state.InternalStatement, state.InternalKeyspace
-		plan, allowUnset = p.InternalParams, state.InternalProtocol >= 4
-		request.InternalPrepared = state
-		request.InternalRouting = RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Kind: p.InternalKind, Conditional: p.InternalKind != OrdinaryStatement}
-		values, err := binding.EncodeInto(&q.buffer, plan, columns, value, allowUnset)
-		if err != nil {
-			q.state.owner.InternalRelease()
-			return err
-		}
-		request.InternalValues = values
-		token, err := computeRoutingToken(values.Cells, info.PartitionKeyIndexes, implCluster.InternalSessionCapturedRoutingPartitioner(state.InternalSession, state.InternalPartitioner))
-		if err != nil {
-			q.state.owner.InternalRelease()
-			return err
-		}
-		request.InternalRouting.Token = token
-	} else {
-		values, err := binding.EncodeInto(&q.buffer, plan, columns, value, allowUnset)
-		if err != nil {
-			q.state.owner.InternalRelease()
-			return err
-		}
-		request.InternalValues = values
+	values, err := binding.EncodeInto(&q.buffer, q.params, q.columns, value, q.allowUnset)
+	if err != nil {
+		q.state.owner.InternalRelease()
+		return err
 	}
+	request.InternalValues = values
+	token, err := request.InternalSource.token(values.Cells)
+	if err != nil {
+		q.state.owner.InternalRelease()
+		return err
+	}
+	request.InternalRouting.Token = token
 	request.InternalOwner, request.query = q.state.owner, &q.state
 	return nil
 }

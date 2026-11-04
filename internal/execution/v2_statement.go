@@ -182,7 +182,7 @@ func InternalBindPrepared[P, R any](p *Prepared[P, R], value P, owned bool) (*Bo
 	}
 	return func() *Bound[R] {
 		opaqueStorageValuex := new(Bound[R])
-		opaqueStorageValuex.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: statement, keyspace: keyspace, InternalPrepared: p.privateStorage.InternalState, InternalValues: values, InternalOwner: newInputOwner(), InternalRouting: RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Token: token, Kind: p.privateStorage.InternalKind, Conditional: p.privateStorage.InternalKind != OrdinaryStatement}}
+		opaqueStorageValuex.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: statement, keyspace: keyspace, InternalSource: preparedSource{state: p.privateStorage.InternalState}, InternalValues: values, InternalOwner: newInputOwner(), InternalRouting: RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Token: token, Kind: p.privateStorage.InternalKind, Conditional: p.privateStorage.InternalKind != OrdinaryStatement}}
 		opaqueStorageValuex.privateStorage.InternalRows = p.privateStorage.InternalRows
 		opaqueStorageValuex.privateStorage.plans = p.privateStorage.InternalPlans
 		return opaqueStorageValuex
@@ -208,7 +208,7 @@ func InternalBindUnprepared[P, R any](s Statement[P, R], columns Columns, value 
 	}
 	return func() *Bound[R] {
 		opaqueStorageValuexx := new(Bound[R])
-		opaqueStorageValuexx.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: s.CQL, InternalValues: values, InternalOwner: newInputOwner(), InternalRouting: RoutingInfo{Kind: s.Kind, Conditional: s.Kind != OrdinaryStatement}}
+		opaqueStorageValuexx.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: s.CQL, InternalSource: cqlText{}, InternalValues: values, InternalOwner: newInputOwner(), InternalRouting: RoutingInfo{Kind: s.Kind, Conditional: s.Kind != OrdinaryStatement}}
 		opaqueStorageValuexx.privateStorage.InternalRows = s.Rows
 		opaqueStorageValuexx.privateStorage.plans = &InternalResultPlanCache[R]{}
 		return opaqueStorageValuexx

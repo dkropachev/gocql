@@ -186,7 +186,7 @@ type InternalExecutionRequest struct {
 	connection         *Conn
 	InternalStatement  string
 	keyspace           string
-	InternalPrepared   *InternalPreparedState
+	InternalSource     statementSource // the statement; nil sends InternalStatement as CQL text
 	InternalValues     encodedValues
 	InternalOwner      *inputOwner
 	InternalRouting    RoutingInfo

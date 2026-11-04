@@ -1046,9 +1046,9 @@ func TestPrepare_ReprepareStatement(t *testing.T) {
 		return opaqueStorageValuexx
 	}())
 	require.NoError(t, err)
-	implExecution.BoundData(bound).InternalRequest.InternalPrepared.InternalMu.RLock()
-	id := append([]byte(nil), implExecution.BoundData(bound).InternalRequest.InternalPrepared.InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)].InternalId...)
-	implExecution.BoundData(bound).InternalRequest.InternalPrepared.InternalMu.RUnlock()
+	implExecution.BoundData(bound).InternalRequest.InternalPrepared().InternalMu.RLock()
+	id := append([]byte(nil), implExecution.BoundData(bound).InternalRequest.InternalPrepared().InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)].InternalId...)
+	implExecution.BoundData(bound).InternalRequest.InternalPrepared().InternalMu.RUnlock()
 	require.NotEqual(t, []byte("foobar"), id)
 	require.Equal(t, int64(7), cassandraInt(t, cassandraRead(t, session, "SELECT bar FROM "+table+" WHERE foo=?", codecTestMust(TextValue("bar"))), "bar"))
 }
@@ -1065,9 +1065,9 @@ func TestPrepare_ReprepareBatch(t *testing.T) {
 		implExecution.OptionsData(opaqueStorageValuexxx).InternalConnection = conn
 		return opaqueStorageValuexxx
 	}())
-	implExecution.BoundData(bound).InternalRequest.InternalPrepared.InternalMu.RLock()
-	id := append([]byte(nil), implExecution.BoundData(bound).InternalRequest.InternalPrepared.InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)].InternalId...)
-	implExecution.BoundData(bound).InternalRequest.InternalPrepared.InternalMu.RUnlock()
+	implExecution.BoundData(bound).InternalRequest.InternalPrepared().InternalMu.RLock()
+	id := append([]byte(nil), implExecution.BoundData(bound).InternalRequest.InternalPrepared().InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)].InternalId...)
+	implExecution.BoundData(bound).InternalRequest.InternalPrepared().InternalMu.RUnlock()
 	require.NotEqual(t, []byte("foobar"), id)
 	require.Equal(t, int64(7), cassandraInt(t, cassandraRead(t, session, "SELECT bar FROM "+table+" WHERE foo=?", codecTestMust(TextValue("bar"))), "bar"))
 }

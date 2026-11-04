@@ -67,11 +67,11 @@ func RunBatch[R any](ctx context.Context, s *implCluster.Session, kind BatchKind
 	routing := RoutingInfo{Kind: OrdinaryStatement}
 	admitted := make([]*inputOwner, 0, len(items))
 	for i, item := range items {
-		if item.privateStorage.InternalRequest != nil && item.privateStorage.InternalRequest.InternalPrepared != nil && item.privateStorage.InternalRequest.InternalPrepared.InternalSession != s {
-			return nil, typeValidation("batch session", "prepared statement belongs to another session")
-		}
 		if item.privateStorage.InternalRequest == nil {
 			return nil, typeValidation("batch item", "nil descriptor")
+		}
+		if state := item.privateStorage.InternalRequest.InternalPrepared(); state != nil && state.InternalSession != s {
+			return nil, typeValidation("batch session", "prepared statement belongs to another session")
 		}
 		if len(item.privateStorage.InternalRequest.InternalValues.Cells) > 65535 {
 			return nil, typeValidation("batch values", "maximum count is 65535")
@@ -137,11 +137,11 @@ func (s *InternalSessionRuntime) prepareBatchAttempt(ctx context.Context, conn *
 	request := &typedBatchRequest{Kind: batch.kind, Items: make([]typedBatchItem, len(batch.items))}
 	for i, item := range batch.items {
 		entry := typedBatchItem{Statement: item.InternalStatement, Values: item.InternalValues.Framed, ValueCount: len(item.InternalValues.Cells)}
-		if item.InternalPrepared != nil {
-			prepared, err := s.InternalPrepareOnConn(ctx, conn, item.InternalPrepared, item.InternalValues, false)
-			if err != nil {
-				return nil, err
-			}
+		prepared, err := item.source().onConn(ctx, s, conn, item.InternalValues, false, nil)
+		if err != nil {
+			return nil, err
+		}
+		if prepared != nil {
 			entry.PreparedID = prepared.InternalId
 		}
 		if conn.InternalVersion < 4 {
@@ -157,14 +157,15 @@ func (s *InternalSessionRuntime) prepareBatchAttempt(ctx context.Context, conn *
 }
 func (s *InternalSessionRuntime) repairBatch(ctx context.Context, conn *Conn, batch *InternalBatchState, id []byte) error {
 	for _, item := range batch.items {
-		if item.InternalPrepared == nil {
+		state := item.InternalPrepared()
+		if state == nil {
 			continue
 		}
-		item.InternalPrepared.InternalMu.RLock()
-		cached := item.InternalPrepared.InternalHosts[conn.InternalHostID()]
-		item.InternalPrepared.InternalMu.RUnlock()
+		state.InternalMu.RLock()
+		cached := state.InternalHosts[conn.InternalHostID()]
+		state.InternalMu.RUnlock()
 		if cached != nil && bytes.Equal(cached.InternalId, id) {
-			_, err := s.InternalPrepareOnConn(ctx, conn, item.InternalPrepared, item.InternalValues, true)
+			_, err := item.source().onConn(ctx, s, conn, item.InternalValues, true, nil)
 			return err
 		}
 	}

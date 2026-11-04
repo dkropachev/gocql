@@ -27,7 +27,6 @@ import (
 import (
 	model "github.com/scylladb/gocql/v2/internal/model"
 
-	"bytes"
 	"context"
 	"errors"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -398,12 +397,13 @@ func (s *RowStream[R]) acquire(plan QueryPlan) error {
 			return err
 		}
 		s.privateStorage.InternalReservation = reservation
-		if request.InternalPrepared == nil {
+		state := request.InternalPrepared()
+		if state == nil {
 			return nil
 		}
-		request.InternalPrepared.InternalMu.RLock()
-		prepared := request.InternalPrepared.InternalHosts[implEndpoint.InternalHostInfoHostUUID(reservation.InternalConn.InternalHost)]
-		request.InternalPrepared.InternalMu.RUnlock()
+		state.InternalMu.RLock()
+		prepared := state.InternalHosts[implEndpoint.InternalHostInfoHostUUID(reservation.InternalConn.InternalHost)]
+		state.InternalMu.RUnlock()
 		if prepared != nil && prepared.InternalEpoch.InternalCurrent() {
 			s.privateStorage.prepared = prepared
 			if s.privateStorage.plan == nil || !s.privateStorage.columns.Equal(prepared.InternalColumns) {
@@ -428,7 +428,7 @@ func (s *RowStream[R]) acquire(plan QueryPlan) error {
 			return err
 		}
 		s.privateStorage.InternalReservation = nil
-		s.privateStorage.prepared, err = InternalRuntimeFor(s.privateStorage.InternalSession).InternalPrepareOnConn(s.privateStorage.InternalCtx, conn, request.InternalPrepared, request.InternalValues, false)
+		s.privateStorage.prepared, err = request.source().onConn(s.privateStorage.InternalCtx, InternalRuntimeFor(s.privateStorage.InternalSession), conn, request.InternalValues, false, nil)
 		if err != nil {
 			return err
 		}
@@ -470,11 +470,7 @@ func (s *RowStream[R]) wireRequest(consistency Consistency) (*attemptRequest, er
 		v := opts.NowInSeconds.Value
 		w.NowInSeconds = &v
 	}
-	if s.privateStorage.prepared != nil {
-		w.PreparedID = s.privateStorage.prepared.InternalId
-		w.ResultMetadataID = s.privateStorage.prepared.InternalMetadataID
-		w.SkipMetadata = !opts.IncludeMetadata && metadataIDTracked(conn.InternalTracksResultMetadataID(), s.privateStorage.prepared.InternalMetadataID)
-	}
+	setPrepared(w, s.privateStorage.prepared, conn, opts.IncludeMetadata)
 	return w, nil
 }
 func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
@@ -512,14 +508,14 @@ func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
 			// and validates the same canonical input, then sends the next page
 			// state; it never replays a page that has exposed caller output.
 			if s.Info().OutputStarted && !s.state.More() {
-				return &SchemaChangedError{Statement: request.InternalStatement, Previous: request.InternalValues.Columns, Current: request.InternalPrepared.InternalParameters}
+				return &SchemaChangedError{Statement: request.InternalStatement, Previous: request.InternalValues.Columns, Current: request.InternalPrepared().InternalParameters}
 			}
 			conn := s.privateStorage.InternalReservation.InternalConn
 			if err := s.privateStorage.InternalReservation.InternalClose(true); err != nil {
 				return err
 			}
 			s.privateStorage.InternalReservation = nil
-			prepared, err := InternalRuntimeFor(s.privateStorage.InternalSession).InternalPrepareOnConn(pagectx, conn, request.InternalPrepared, request.InternalValues, false)
+			prepared, err := request.source().onConn(pagectx, InternalRuntimeFor(s.privateStorage.InternalSession), conn, request.InternalValues, false, nil)
 			if err != nil {
 				return err
 			}
@@ -534,10 +530,7 @@ func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
 			return err
 		}
 		wireRequest.Lease = request.InternalOwner.InternalWriterLease(request.InternalValues.Framed)
-		observed := uint64(0)
-		if request.InternalPrepared != nil {
-			observed = request.InternalPrepared.InternalDependencies.InternalTracker.InternalStart()
-		}
+		observed := request.source().observe()
 		started := time.Now()
 		response, err := s.privateStorage.InternalReservation.InternalExchange(pagectx, wireRequest)
 		wireRequest.Lease.Release()
@@ -576,7 +569,7 @@ func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
 		}
 		if err == nil {
 			page := &InternalResultMetadataObservation{kind: response.InternalKind, columns: response.InternalColumns, columnCount: response.InternalColumnCount, noMetadata: response.InternalMetadata.NoMetadata, metadataChanged: response.InternalMetadata.MetadataChanged, metadataID: response.InternalMetadata.MetadataID}
-			err = InternalSelectPreparedMetadata(request.InternalPrepared, conn.InternalHostID(), s.privateStorage.prepared, wireRequest.ResultMetadataID, conn.InternalTracksResultMetadataID(), page, observed)
+			err = InternalSelectPreparedMetadata(request.InternalPrepared(), conn.InternalHostID(), s.privateStorage.prepared, wireRequest.ResultMetadataID, conn.InternalTracksResultMetadataID(), page, observed)
 			if err == nil {
 				if s.privateStorage.plan == nil || !s.privateStorage.columns.Equal(page.columns) {
 					s.privateStorage.plan, err = s.privateStorage.InternalDecoder.Compile(page.columns)
@@ -614,13 +607,13 @@ func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
 			return err
 		}
 		var unprepared *RequestErrUnprepared
-		if attempt == 1 && request.InternalPrepared != nil && errors.As(err, &unprepared) && bytes.Equal(unprepared.StatementId, wireRequest.PreparedID) {
+		if attempt == 1 && errors.As(err, &unprepared) && request.source().rejected(unprepared.StatementId, wireRequest.PreparedID) {
 			if closeErr := s.privateStorage.InternalReservation.InternalClose(true); closeErr != nil {
 				return closeErr
 			}
 			s.privateStorage.InternalReservation = nil
 			s.privateStorage.retryTarget = &Target{HostID: conn.InternalHostID(), ShardID: Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
-			s.privateStorage.prepared, err = InternalRuntimeFor(s.privateStorage.InternalSession).InternalPrepareOnConnExpected(pagectx, conn, request.InternalPrepared, request.InternalValues, true, s.privateStorage.prepared)
+			s.privateStorage.prepared, err = request.source().onConn(pagectx, InternalRuntimeFor(s.privateStorage.InternalSession), conn, request.InternalValues, true, s.privateStorage.prepared)
 			if err != nil {
 				return err
 			}

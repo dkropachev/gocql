@@ -42,7 +42,7 @@ func TestStreamContinuationValidationMetadataAndCallbacks(t *testing.T) {
 	columns := NewColumns(ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(ScalarType(TypeBlob))})
 	state, _ := step03PreparedState(t, s, columns)
 	bound := new(Bound[Bytes])
-	implExecution.BoundData(bound).InternalRequest = executionRequest{InternalStatement: state.InternalStatement, InternalPrepared: state, InternalValues: encodedValues{Columns: NewColumns()}, InternalOwner: newInputOwner(), InternalRouting: RoutingInfo{Kind: OrdinaryStatement}}
+	implExecution.BoundData(bound).InternalRequest = executionRequest{InternalStatement: state.InternalStatement, InternalSource: implExecution.InternalPreparedSource(state), InternalValues: encodedValues{Columns: NewColumns()}, InternalOwner: newInputOwner(), InternalRouting: RoutingInfo{Kind: OrdinaryStatement}}
 	implExecution.BoundData(bound).InternalRows = OneColumn(BlobCodec)
 	defer bound.Close()
 	// The first page is empty. The next omits metadata, then an equal full

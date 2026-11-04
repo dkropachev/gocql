@@ -472,8 +472,8 @@ func (l *InternalLogicalExecution) InternalFinish(result Result, err error) {
 		if l.observer != nil {
 			perfAdd(0, 1)
 			event := RequestEvent{ID: l.id, Statement: l.request.InternalStatement, Parameters: l.request.InternalValues.Columns, Routing: l.request.InternalRouting, Result: cloneResult(result), Err: err}
-			if l.request.InternalPrepared != nil {
-				event.Parameters = l.request.InternalPrepared.InternalParameters
+			if state := l.request.InternalPrepared(); state != nil {
+				event.Parameters = state.InternalParameters
 			}
 			if l.request.batch != nil {
 				for _, entry := range l.request.batch.items {
@@ -519,7 +519,7 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, 
 	if options.privateStorage.InternalConnection != nil {
 		request.connection = options.privateStorage.InternalConnection
 	}
-	if request.InternalPrepared != nil && request.InternalPrepared.InternalSession != s {
+	if state := request.InternalPrepared(); state != nil && state.InternalSession != s {
 		return nil, nil, nil, typeValidation("session", "prepared statement belongs to another session")
 	}
 	if request.connection != nil && !implCluster.InternalConnectionOwnedBy(request.connection, s) {
@@ -1094,17 +1094,12 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		now := opts.NowInSeconds.Value
 		wireRequest.NowInSeconds = &now
 	}
-	var prepared *InternalHostPrepared
-	var err error
-	if request.InternalPrepared != nil {
-		prepared, err = s.InternalPrepareOnConn(ctx, conn, request.InternalPrepared, request.InternalValues, false)
-		if err != nil {
-			return nil, err
-		}
-		wireRequest.PreparedID = prepared.InternalId
-		wireRequest.ResultMetadataID = prepared.InternalMetadataID
-		wireRequest.SkipMetadata = !opts.IncludeMetadata && metadataIDTracked(conn.InternalTracksResultMetadataID(), prepared.InternalMetadataID)
+	source := request.source()
+	prepared, err := source.onConn(ctx, s, conn, request.InternalValues, false, nil)
+	if err != nil {
+		return nil, err
 	}
+	setPrepared(wireRequest, prepared, conn, opts.IncludeMetadata)
 	if request.batch != nil {
 		wireRequest.Batch, err = s.prepareBatchAttempt(ctx, conn, request.batch)
 		if err != nil {
@@ -1115,10 +1110,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 	defer lease.Release()
 	wireRequest.Lease = lease
 	for repair := 0; repair < 2; repair++ {
-		observed := uint64(0)
-		if request.InternalPrepared != nil {
-			observed = request.InternalPrepared.InternalDependencies.InternalTracker.InternalStart()
-		}
+		observed := source.observe()
 		response, executeErr := conn.InternalExecuteTypedInto(ctx, wireRequest, request.responseDest)
 		if len(wireRequest.PreparedID) > 0 && wireRequest.Batch == nil {
 			implCluster.InternalSessionApplyTypedFeedbackStamped(s.Session, response, request.InternalRouting, request.tabletFeedback, conn.InternalFramers.InternalDefaults)
@@ -1127,14 +1119,12 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 			if response != nil {
 				response.Owner.Release()
 			}
-			if request.InternalPrepared != nil && bytes.Equal(unprepared.StatementId, wireRequest.PreparedID) {
-				prepared, err = s.InternalPrepareOnConnExpected(ctx, conn, request.InternalPrepared, request.InternalValues, true, prepared)
+			if source.rejected(unprepared.StatementId, wireRequest.PreparedID) {
+				prepared, err = source.onConn(ctx, s, conn, request.InternalValues, true, prepared)
 				if err != nil {
 					return nil, err
 				}
-				wireRequest.PreparedID = prepared.InternalId
-				wireRequest.ResultMetadataID = prepared.InternalMetadataID
-				wireRequest.SkipMetadata = !opts.IncludeMetadata && metadataIDTracked(conn.InternalTracksResultMetadataID(), prepared.InternalMetadataID)
+				setPrepared(wireRequest, prepared, conn, opts.IncludeMetadata)
 				continue
 			}
 			if request.batch != nil {
@@ -1155,7 +1145,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		if response == nil {
 			return nil, &ProtocolError{Stage: "execute", Err: fmt.Errorf("missing response")}
 		}
-		if err := InternalSelectPreparedResponse(request.InternalPrepared, conn.InternalHostID(), prepared, wireRequest.ResultMetadataID, conn.InternalTracksResultMetadataID(), response, observed); err != nil {
+		if err := InternalSelectPreparedResponse(source.prepared(), conn.InternalHostID(), prepared, wireRequest.ResultMetadataID, conn.InternalTracksResultMetadataID(), response, observed); err != nil {
 			response.Owner.Release()
 			return nil, err
 		}

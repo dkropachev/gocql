@@ -499,7 +499,7 @@ func TestStep07StreamPreparedMetadataFencesAndPlanIsolation(t *testing.T) {
 			state, _ := step03PreparedState(t, s, columns)
 			bound := func() *Bound[Bytes] {
 				opaqueStorageValuex := new(Bound[Bytes])
-				implExecution.BoundData(opaqueStorageValuex).InternalRequest = executionRequest{InternalStatement: state.InternalStatement, InternalPrepared: state, InternalValues: encodedValues{Columns: NewColumns()}, InternalOwner: newInputOwner(), InternalRouting: RoutingInfo{Kind: OrdinaryStatement}}
+				implExecution.BoundData(opaqueStorageValuex).InternalRequest = executionRequest{InternalStatement: state.InternalStatement, InternalSource: implExecution.InternalPreparedSource(state), InternalValues: encodedValues{Columns: NewColumns()}, InternalOwner: newInputOwner(), InternalRouting: RoutingInfo{Kind: OrdinaryStatement}}
 				implExecution.BoundData(opaqueStorageValuex).InternalRows = OneColumn(BlobCodec)
 				return opaqueStorageValuex
 			}()

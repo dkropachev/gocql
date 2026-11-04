@@ -174,7 +174,7 @@ func step09StreamReconcile(t *testing.T, failContinuation bool) {
 	changed := NewColumns(cqltype.ColumnSlice(columns)[0], ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "added", Type: blob})
 	bound := func() *Bound[Bytes] {
 		opaqueStorageValue := new(Bound[Bytes])
-		implExecution.BoundData(opaqueStorageValue).InternalRequest = executionRequest{InternalStatement: state.InternalStatement, InternalPrepared: state, InternalValues: encodedValues{Columns: NewColumns()}, InternalOwner: newInputOwner(), InternalRouting: RoutingInfo{Kind: OrdinaryStatement}}
+		implExecution.BoundData(opaqueStorageValue).InternalRequest = executionRequest{InternalStatement: state.InternalStatement, InternalSource: implExecution.InternalPreparedSource(state), InternalValues: encodedValues{Columns: NewColumns()}, InternalOwner: newInputOwner(), InternalRouting: RoutingInfo{Kind: OrdinaryStatement}}
 		implExecution.BoundData(opaqueStorageValue).InternalRows = OneColumn(BlobCodec)
 		return opaqueStorageValue
 	}()
