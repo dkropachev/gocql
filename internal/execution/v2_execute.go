@@ -1068,41 +1068,53 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 		}
 	}
 }
-func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *Conn, request *InternalExecutionRequest, state PageState, consistency Consistency) (*responsePage, error) {
-	opts := request.InternalOptions.InternalOptions
+// newAttempt validates request for conn and builds its attempt at state in
+// w, without the prepared statement, the batch or the parameters template.
+// The caller owns w, so an attempt that does not outlive its caller stays
+// off the heap.
+func (s *InternalSessionRuntime) newAttempt(w *attemptRequest, conn *Conn, request *InternalExecutionRequest, state PageState, consistency Consistency) error {
+	opts := &request.InternalOptions.InternalOptions
 	if conn.InternalVersion < 5 && request.keyspace != "" && request.keyspace != implCluster.SessionData(s.Session).InternalCfg.Keyspace && !InternalRequestQualifiedForKeyspace(request, request.keyspace) {
-		return nil, typeValidation("keyspace", "protocol v3/v4 requires the session keyspace")
+		return typeValidation("keyspace", "protocol v3/v4 requires the session keyspace")
 	}
 	if conn.InternalVersion < 4 {
 		if len(opts.CustomPayload) > 0 {
-			return nil, typeValidation("payload", "requires protocol v4")
+			return typeValidation("payload", "requires protocol v4")
 		}
 		for _, cell := range request.InternalValues.Cells {
 			if cell.State == Unset {
-				return nil, typeValidation("unset", "requires protocol v4")
+				return typeValidation("unset", "requires protocol v4")
 			}
 		}
 	}
 	if opts.NowInSeconds.Set && conn.InternalVersion < 5 {
-		return nil, typeValidation("now in seconds", "requires protocol v5")
+		return typeValidation("now in seconds", "requires protocol v5")
 	}
-	wireRequest := &attemptRequest{TabletVersionBlock: request.tabletVersionBlock, Statement: request.InternalStatement, Values: request.InternalValues.Framed, ValueCount: len(request.InternalValues.Cells), Consistency: consistency, PageSize: int(request.InternalOptions.InternalProfile.PageSize), Keyspace: request.keyspace, Trace: opts.Trace, Payload: opts.CustomPayload}
+	*w = attemptRequest{TabletVersionBlock: request.tabletVersionBlock, Statement: request.InternalStatement, Values: request.InternalValues.Framed, ValueCount: len(request.InternalValues.Cells), Consistency: consistency, PageSize: int(request.InternalOptions.InternalProfile.PageSize), Keyspace: request.keyspace, Trace: opts.Trace, Payload: opts.CustomPayload}
 	if conn.InternalVersion < 5 {
-		wireRequest.Keyspace = ""
+		w.Keyspace = ""
 	}
 	if state.More() {
-		wireRequest.PagingState = model.PageToken(state)
+		w.PagingState = model.PageToken(state)
 	}
 	if request.InternalOptions.InternalProfile.SerialConsistency.Set {
-		wireRequest.SerialConsistency = request.InternalOptions.InternalProfile.SerialConsistency.Value
+		w.SerialConsistency = request.InternalOptions.InternalProfile.SerialConsistency.Value
 	}
 	if opts.Timestamp.Set {
-		wireRequest.Timestamp = opts.Timestamp.Value
-		wireRequest.DefaultTimestamp = true
+		w.Timestamp = opts.Timestamp.Value
+		w.DefaultTimestamp = true
 	}
 	if opts.NowInSeconds.Set {
 		now := opts.NowInSeconds.Value
-		wireRequest.NowInSeconds = &now
+		w.NowInSeconds = &now
+	}
+	return nil
+}
+func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *Conn, request *InternalExecutionRequest, state PageState, consistency Consistency) (*responsePage, error) {
+	opts := &request.InternalOptions.InternalOptions
+	wireRequest := new(attemptRequest)
+	if err := s.newAttempt(wireRequest, conn, request, state, consistency); err != nil {
+		return nil, err
 	}
 	source := request.source()
 	prepared, err := source.onConn(ctx, s, conn, request.InternalValues, false, nil)

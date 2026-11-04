@@ -26,8 +26,6 @@ import (
 	"context"
 	"errors"
 
-	model "github.com/scylladb/gocql/v2/internal/model"
-
 	"time"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -439,41 +437,13 @@ func (s *RowStream[R]) acquire(plan QueryPlan) error {
 func (s *RowStream[R]) wireRequest(consistency Consistency) (*attemptRequest, error) {
 	r := s.privateStorage.InternalRequest
 	conn := s.privateStorage.InternalReservation.InternalConn
-	opts := r.InternalOptions.InternalOptions
-	if conn.InternalVersion < 5 && r.keyspace != "" && r.keyspace != implCluster.SessionData(s.privateStorage.InternalSession).InternalCfg.Keyspace && !InternalQualifiedForKeyspace(r.InternalStatement, r.keyspace) {
-		return nil, typeValidation("keyspace", "protocol v3/v4 requires the session keyspace")
+	rt := InternalRuntimeFor(s.privateStorage.InternalSession)
+	w := new(attemptRequest)
+	if err := rt.newAttempt(w, conn, r, s.state, consistency); err != nil {
+		return nil, err
 	}
-	if conn.InternalVersion < 4 && len(opts.CustomPayload) > 0 {
-		return nil, typeValidation("payload", "requires protocol v4")
-	}
-	if opts.NowInSeconds.Set && conn.InternalVersion < 5 {
-		return nil, typeValidation("now in seconds", "requires protocol v5")
-	}
-	for _, cell := range r.InternalValues.Cells {
-		if conn.InternalVersion < 4 && cell.State == Unset {
-			return nil, typeValidation("unset", "requires protocol v4")
-		}
-	}
-	w := &attemptRequest{Statement: r.InternalStatement, Values: r.InternalValues.Framed, ValueCount: len(r.InternalValues.Cells), Consistency: consistency, PageSize: int(r.InternalOptions.InternalProfile.PageSize), Keyspace: r.keyspace, Trace: opts.Trace, Payload: opts.CustomPayload, TabletVersionBlock: r.tabletVersionBlock}
-	if conn.InternalVersion < 5 {
-		w.Keyspace = ""
-	}
-	if s.state.More() {
-		w.PagingState = model.PageToken(s.state)
-	}
-	if r.InternalOptions.InternalProfile.SerialConsistency.Set {
-		w.SerialConsistency = r.InternalOptions.InternalProfile.SerialConsistency.Value
-	}
-	if opts.Timestamp.Set {
-		w.Timestamp = opts.Timestamp.Value
-		w.DefaultTimestamp = true
-	}
-	if opts.NowInSeconds.Set {
-		v := opts.NowInSeconds.Value
-		w.NowInSeconds = &v
-	}
-	setPrepared(w, s.privateStorage.prepared, conn, opts.IncludeMetadata)
-	w.Params = InternalRuntimeFor(s.privateStorage.InternalSession).paramsTemplate(r.query, &r.InternalOptions, w, conn.InternalVersion)
+	setPrepared(w, s.privateStorage.prepared, conn, r.InternalOptions.InternalOptions.IncludeMetadata)
+	w.Params = rt.paramsTemplate(r.query, &r.InternalOptions, w, conn.InternalVersion)
 	return w, nil
 }
 func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
