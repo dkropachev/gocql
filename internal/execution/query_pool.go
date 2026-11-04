@@ -5,6 +5,7 @@ package execution
 
 import (
 	"context"
+	"math/rand/v2"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -31,6 +32,20 @@ func (b *queryPoolBase) adopt(q *queryState) error {
 	}
 	b.all = append(b.all, q)
 	return nil
+}
+
+// forget stops tracking q, a query the pool is closing.
+func (b *queryPoolBase) forget(q *queryState) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for i, tracked := range b.all {
+		if tracked == q {
+			last := len(b.all) - 1
+			b.all[i], b.all[last] = b.all[last], nil
+			b.all = b.all[:last]
+			return
+		}
+	}
 }
 
 // close stops the pool from taking or creating queries and returns those it
@@ -99,15 +114,25 @@ func InternalQueryPools(s *implCluster.Session) int {
 // queryPool keeps idle queries of one statement for synchronous one-shot
 // calls, each with its own options. A query returns to the pool when it
 // becomes idle, once its execution drained, not when the call returns.
+//
+// Idle queries sit in a fixed array of slots, taken with Swap and filled with
+// CompareAndSwap from a random start, so callers on different processors
+// rarely touch the same slot and no lock is taken. The slot count caps the
+// idle queries: one that finds every slot full is closed, so a burst leaves
+// at most that many behind.
 type queryPool[P, R any] struct {
 	base     *queryPoolBase
-	mu       sync.Mutex
-	free     []*Query[P, R]
+	slots    []atomic.Pointer[Query[P, R]]
 	newQuery func(*queryPoolBase) (*Query[P, R], error)
 }
 
+// idleQueryCap is the number of idle queries a pool keeps.
+func idleQueryCap() int {
+	return max(16, 4*runtime.GOMAXPROCS(0))
+}
+
 func newQueryPool[P, R any](s *implCluster.Session, newQuery func(*queryPoolBase) (*Query[P, R], error)) (*queryPool[P, R], error) {
-	p := &queryPool[P, R]{base: new(queryPoolBase), newQuery: newQuery}
+	p := &queryPool[P, R]{base: new(queryPoolBase), slots: make([]atomic.Pointer[Query[P, R]], idleQueryCap()), newQuery: newQuery}
 	if err := InternalRuntimeFor(s).registerPool(s, p.base); err != nil {
 		return nil, err
 	}
@@ -118,15 +143,15 @@ func (p *queryPool[P, R]) get() (*Query[P, R], error) {
 	if p.base.closed.Load() {
 		return nil, ErrClosed
 	}
-	p.mu.Lock()
-	if n := len(p.free); n > 0 {
-		q := p.free[n-1]
-		p.free[n-1] = nil
-		p.free = p.free[:n-1]
-		p.mu.Unlock()
-		return q, nil
+	n := len(p.slots)
+	for i, start := 0, int(rand.Uint32N(uint32(n))); i < n; i++ {
+		slot := &p.slots[(start+i)%n]
+		if slot.Load() != nil {
+			if q := slot.Swap(nil); q != nil {
+				return q, nil
+			}
+		}
 	}
-	p.mu.Unlock()
 	q, err := p.newQuery(p.base)
 	if err != nil {
 		return nil, err
@@ -136,13 +161,20 @@ func (p *queryPool[P, R]) get() (*Query[P, R], error) {
 	return q, nil
 }
 
+// put keeps q, which just became idle, or closes it when every slot is full.
 func (p *queryPool[P, R]) put(q *Query[P, R]) {
 	if p.base.closed.Load() {
 		return
 	}
-	p.mu.Lock()
-	p.free = append(p.free, q)
-	p.mu.Unlock()
+	n := len(p.slots)
+	for i, start := 0, int(rand.Uint32N(uint32(n))); i < n; i++ {
+		slot := &p.slots[(start+i)%n]
+		if slot.Load() == nil && slot.CompareAndSwap(nil, q) {
+			return
+		}
+	}
+	p.base.forget(&q.state)
+	q.state.close()
 }
 
 // capture takes an idle query and captures value and options into it. On
@@ -269,7 +301,22 @@ func InternalPreparedPoolIdle[P, R any](p *Prepared[P, R]) int {
 	if pool == nil {
 		return 0
 	}
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
-	return len(pool.free)
+	idle := 0
+	for i := range pool.slots {
+		if pool.slots[i].Load() != nil {
+			idle++
+		}
+	}
+	return idle
+}
+
+// InternalPreparedPoolTracked reports how many queries p's pool tracks.
+func InternalPreparedPoolTracked[P, R any](p *Prepared[P, R]) int {
+	pool := p.privateStorage.pool
+	if pool == nil {
+		return 0
+	}
+	pool.base.mu.Lock()
+	defer pool.base.mu.Unlock()
+	return len(pool.base.all)
 }

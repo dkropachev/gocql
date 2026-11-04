@@ -323,3 +323,44 @@ func TestPreparedOneShotConcurrent(t *testing.T) {
 		})
 	}
 }
+
+// TestPreparedOneShotIdleCap checks that after a burst the pool keeps at most
+// its idle cap of queries and closes the rest.
+func TestPreparedOneShotIdleCap(t *testing.T) {
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1)) // cap 16
+	const burst = 40
+	s, _, peers := runtimeTestSession(t, 1)
+	defer s.Close()
+	defer peers[0].Close()
+	requests := make(chan oneShotRequest, burst)
+	p := oneShotPrepare(t, s, peers[0], requests)
+	errs := make(chan error, burst)
+	for i := range burst {
+		go func() {
+			var dst []byte
+			_, err := p.One(context.Background(), int32(i), &dst, Options{})
+			errs <- err
+		}()
+	}
+	pending := make([]oneShotRequest, 0, burst)
+	for range burst {
+		pending = append(pending, <-requests)
+	}
+	if n := implExecution.InternalPreparedPoolTracked(p); n != burst {
+		t.Fatalf("tracked %d queries during the burst, want %d", n, burst)
+	}
+	for _, r := range pending {
+		if _, err := peers[0].Write(typedTestResponse(t, 4, r.stream, runtimeRowsBody(nil, "row"))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for range burst {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	waitIdle(t, p, 16)
+	if n := implExecution.InternalPreparedPoolTracked(p); n != 16 {
+		t.Fatalf("tracked %d queries after the burst, want 16", n)
+	}
+}
