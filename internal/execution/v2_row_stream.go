@@ -443,7 +443,7 @@ func (s *RowStream[R]) wireRequest(consistency Consistency) (*attemptRequest, er
 		return nil, err
 	}
 	setPrepared(w, s.privateStorage.prepared, conn, r.InternalOptions.InternalOptions.IncludeMetadata)
-	w.Params = rt.paramsTemplate(r.query, &r.InternalOptions, w, conn.InternalVersion)
+	w.Params = paramsTemplate(&r.InternalOptions, w, conn.InternalVersion)
 	return w, nil
 }
 func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {

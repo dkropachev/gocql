@@ -12,7 +12,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	model "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/routing"
 )
@@ -31,9 +30,9 @@ type queryState struct {
 	done         chan struct{} // created by the first waiter of a busy generation
 	retire       func()
 	resolved     *InternalResolvedOptions // the query's options, resolved at creation
-	// params is the query's latest parameters template; attempts running at
-	// once read and replace it.
-	params atomic.Pointer[model.ParamsTemplate]
+	// _ holds the place of a removed field: moving the fields after it
+	// slows admission by about 3%.
+	_ [8]byte
 	// historyInline is the inline paging history storage the query's
 	// iterator lends its history.
 	historyInline [paging.InternalInlineHistory]PageState

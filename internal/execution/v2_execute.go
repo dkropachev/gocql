@@ -42,7 +42,6 @@ type InternalSessionRuntime struct {
 	InternalProfile                                              *Profile
 	InternalPrepared                                             map[InternalPrepareCacheKey]*InternalPreparedState
 	pools                                                        map[*queryPoolEntry]struct{}
-	paramsTemplates                                              paramsTemplateCache
 	InternalPrepareOrder                                         []InternalPrepareCacheKey
 	defaultOptions                                               InternalResolvedOptions // the zero Options resolved for this session
 	InternalConfig                                               Config
@@ -1068,6 +1067,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 		}
 	}
 }
+
 // newAttempt validates request for conn and builds its attempt at state in
 // w, without the prepared statement, the batch or the parameters template.
 // The caller owns w, so an attempt that does not outlive its caller stays
@@ -1128,7 +1128,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		}
 	}
 	// After the batch is set, so that a batch takes no template.
-	wireRequest.Params = s.paramsTemplate(request.query, &request.InternalOptions, wireRequest, conn.InternalVersion)
+	wireRequest.Params = paramsTemplate(&request.InternalOptions, wireRequest, conn.InternalVersion)
 	lease := request.InternalOwner.InternalWriterLease(request.InternalValues.Framed)
 	defer lease.Release()
 	wireRequest.Lease = lease
