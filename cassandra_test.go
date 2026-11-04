@@ -440,7 +440,11 @@ func TestConsistencySerial(t *testing.T) {
 	}{{"Any", Any}, {"One", One}, {"Two", Two}, {"Three", Three}, {"Quorum", Quorum}, {"LocalQuorum", LocalQuorum}, {"EachQuorum", EachQuorum}, {"Serial", Serial}, {"LocalSerial", LocalSerial}, {"LocalOne", LocalOne}} {
 		t.Run(tc.name, func(t *testing.T) {
 			bound := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), []Value{IntValue(int32(i + 1))}, PrepareOptions{})
-			_, err := Exec(context.Background(), session, bound, testOptions(OptionValues{SerialConsistency: Option[Option[Consistency]]{Set: true, Value: Option[Consistency]{Set: true, Value: tc.consistency}}}))
+			// Serial consistency is checked when the options are built.
+			options, err := NewOptions(session, OptionValues{SerialConsistency: Option[Option[Consistency]]{Set: true, Value: Option[Consistency]{Set: true, Value: tc.consistency}}})
+			if err == nil {
+				_, err = Exec(context.Background(), session, bound, options)
+			}
 			if tc.consistency == Serial || tc.consistency == LocalSerial {
 				require.NoError(t, err)
 				require.Equal(t, int64(i+1), cassandraInt(t, cassandraRead(t, session, fmt.Sprintf("SELECT id FROM %s WHERE id=?", table), IntValue(int32(i+1))), "id"))
@@ -1998,9 +2002,9 @@ func TestQuery_SetHostID(t *testing.T) {
 	}
 	_, err := ParseUUID("[invalid]")
 	require.Error(t, err, "invalid host IDs are rejected while constructing typed UUIDs")
-	_, err = Run(context.Background(), session, bound, testOptions(OptionValues{HostID: Option[UUID]{Value: UUID{}, Set: true}}))
+	_, err = NewOptions(session, OptionValues{HostID: Option[UUID]{Value: UUID{}, Set: true}})
 	var invalidHost *ValidationError
-	require.ErrorAs(t, err, &invalidHost)
+	require.ErrorAs(t, err, &invalidHost, "an empty host ID is rejected when options are built")
 	_, err = Run(context.Background(), session, bound, testOptions(OptionValues{HostID: Option[UUID]{Value: codecTestMust(RandomUUID()), Set: true}}))
 	require.ErrorIs(t, err, ErrNoConnections)
 	host := hosts[0]

@@ -50,10 +50,9 @@ func TestStep13PublicExample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "3 rows; seeded nested storage reused; pool occupancy and binding drain verified"
-	if cfg.Protocol < 5 && cfg.Compression != NoCompression {
-		want = "frame compression explicitly rejected before streaming submission"
-	}
+	// Without -incremental the example buffers whole pages on multiplexed
+	// connections, which carry frame compression, so it always streams.
+	want := "3 rows; seeded nested storage reused; query admission and drain verified"
 	for _, line := range strings.Split(string(output), "\n") {
 		if strings.HasPrefix(line, "CLEANED ") {
 			step13Namespace(t, cfg, strings.TrimPrefix(line, "CLEANED "), false)
