@@ -35,10 +35,13 @@ type queryState struct {
 	runtime       *InternalSessionRuntime
 	logical       *InternalLogicalExecution
 	busy, closed  bool
-	generation    atomic.Uint64 // advanced in begin under mu; read without it by cursors
-	done          chan struct{} // created by the first waiter of a busy generation
-	retire        func()
-	resolved      resolvedOptionsCache
+	// perCall reports that each execution brings its own options, so their
+	// resolution is not cached.
+	perCall    bool
+	generation atomic.Uint64 // advanced in begin under mu; read without it by cursors
+	done       chan struct{} // created by the first waiter of a busy generation
+	retire     func()
+	resolved   resolvedOptionsCache
 	// response holds an execution's first response page. The next execution
 	// can begin only after this one released it.
 	response responsePage
@@ -48,12 +51,6 @@ type queryState struct {
 	// params is the query's latest parameters template; attempts running at
 	// once read and replace it.
 	params atomic.Pointer[model.ParamsTemplate]
-	// onIdle, when set, runs once an open query becomes idle; a query pool
-	// uses it to take the query back.
-	onIdle func()
-	// perCall reports that each execution brings its own options, so their
-	// resolution is not cached.
-	perCall bool
 }
 
 // resolvedOptionsCache keeps a query's resolved options. A query's options
@@ -252,10 +249,6 @@ func (s *queryState) idle() {
 		s.runtime.InternalMu.Lock()
 		delete(s.runtime.queries, s)
 		s.runtime.InternalMu.Unlock()
-		return
-	}
-	if s.onIdle != nil {
-		s.onIdle()
 	}
 }
 
@@ -269,12 +262,6 @@ func (s *queryState) begin(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return s.admit()
-}
-
-// admit starts the query's next execution. It fails without making the
-// query busy only when the query is closed or already busy.
-func (s *queryState) admit() error {
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -302,12 +289,6 @@ func (q *Query[P, R]) capture(ctx context.Context, value P) error {
 	if err := q.state.begin(ctx); err != nil {
 		return err
 	}
-	return q.captureValue(value)
-}
-
-// captureValue encodes value as the input of the execution begin started.
-// On failure it ends that execution.
-func (q *Query[P, R]) captureValue(value P) error {
 	request := &q.bound.privateStorage.InternalRequest
 	values, err := binding.EncodeInto(&q.buffer, q.params, q.columns, value, q.allowUnset)
 	if err != nil {

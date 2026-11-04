@@ -34,7 +34,6 @@ type InternalSessionRuntime struct {
 	*implCluster.Session
 	InternalExecutions                                           map[*InternalLogicalExecution]struct{}
 	queries                                                      map[*queryState]struct{}
-	pools                                                        map[*queryPoolEntry]struct{}
 	schema                                                       *preparedSchemaTracker
 	prepareWorkersMu                                             sync.Mutex
 	prepareWorkers                                               sync.WaitGroup
@@ -49,6 +48,7 @@ type InternalSessionRuntime struct {
 	requests, attempts, errors, retries, speculations, cancelled atomic.Uint64
 	inflight                                                     atomic.Int64
 	paramsTemplates                                              paramsTemplateCache
+	pools                                                        map[*queryPoolEntry]struct{}
 }
 
 func InternalRuntimeFor(s *implCluster.Session) *InternalSessionRuntime {

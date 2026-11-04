@@ -157,7 +157,13 @@ func (p *queryPool[P, R]) get() (*Query[P, R], error) {
 		return nil, err
 	}
 	q.state.perCall = true
-	q.state.onIdle = func() { p.put(q) }
+	// The owner's last release makes the query idle and hands it back. A
+	// query reaches idle only from an execution, and one closed during it
+	// was closed with the pool, which put ignores.
+	q.state.owner.onIdle = func() {
+		q.state.idle()
+		p.put(q)
+	}
 	return q, nil
 }
 
@@ -197,13 +203,15 @@ func (p *queryPool[P, R]) capture(ctx context.Context, value P, options *Options
 	if err != nil {
 		return nil, Options{}, err
 	}
-	// admit fails without making the query busy only when it was closed with
-	// the session; the query is dropped. Later failures end the execution,
-	// and the query returns through idle.
-	if err := q.state.admit(); err != nil {
-		return nil, Options{}, err
-	}
-	if err := q.captureValue(value); err != nil {
+	if err := q.capture(ctx, value); err != nil {
+		// A failure after the query turned busy ended its execution, and
+		// the query returned through idle. Before that, capture fails only
+		// for a closed query, which is dropped, or for the context, which
+		// can end between the check above and the capture; that query is
+		// still idle and goes back.
+		if ctxErr := ctx.Err(); ctxErr != nil && err == ctxErr {
+			p.put(q)
+		}
 		return nil, Options{}, err
 	}
 	return q, opts, nil
