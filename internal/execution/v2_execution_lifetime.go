@@ -87,16 +87,14 @@ func (l *InternalLogicalExecution) cancelExecution() {
 	cancel()
 }
 func (s *InternalSessionRuntime) registerExecution(l *InternalLogicalExecution, parent *inputOwner) error {
-	implCluster.SessionData(s.Session).InternalSessionStateMu.RLock()
-	defer implCluster.SessionData(s.Session).InternalSessionStateMu.RUnlock()
-	if implCluster.SessionData(s.Session).InternalIsClosing || implCluster.SessionData(s.Session).InternalIsClosed {
-		return ErrClosed
-	}
 	if query := l.request.query; query != nil {
-		// The session state read lock orders this registration before any
-		// StopActive, which finds the execution through query.logical.
+		// Session.Close marks the session closing before StopActive, which
+		// finds the execution through query.logical under query.mu. Checking
+		// the mark under query.mu orders this registration either before
+		// StopActive's stop of the query, which then cancels it, or after the
+		// mark, which refuses it; no session lock is needed.
 		query.mu.Lock()
-		if query.closed {
+		if query.closed || s.Session.Closed() {
 			query.mu.Unlock()
 			return ErrClosed
 		}
@@ -108,6 +106,11 @@ func (s *InternalSessionRuntime) registerExecution(l *InternalLogicalExecution, 
 		query.execOwner.resetExecution(query.releaseOwner)
 		l.request.InternalOwner = &query.execOwner
 		return nil
+	}
+	implCluster.SessionData(s.Session).InternalSessionStateMu.RLock()
+	defer implCluster.SessionData(s.Session).InternalSessionStateMu.RUnlock()
+	if implCluster.SessionData(s.Session).InternalIsClosing || implCluster.SessionData(s.Session).InternalIsClosed {
+		return ErrClosed
 	}
 	rt := s
 	rt.InternalMu.Lock()
