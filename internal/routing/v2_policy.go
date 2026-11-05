@@ -352,7 +352,7 @@ func (p *InternalRoutingPolicy) InternalPlanWith(info RoutingInfo, m *MetadataSn
 		plan.leader = Option[Target]{Value: Target{HostID: info.HostID.Value, ShardID: info.ShardID, StrictShard: info.ShardID.Set}, Set: true}
 		return plan
 	}
-	o := p.InternalOptions
+	o := &p.InternalOptions
 	var lookup InternalTabletLookup
 	if tablet != nil && tablet.done {
 		lookup = *tablet
@@ -540,7 +540,7 @@ func (p *InternalLazyRoutingPlan) Next() (Target, bool) {
 				if !ok || !p.eligible(h) || !h.Connected || !h.Up {
 					continue
 				}
-				o := p.policy.InternalOptions
+				o := &p.policy.InternalOptions
 				local := o.Datacenter == "" || h.Datacenter == o.Datacenter
 				tier := 3
 				if local {
