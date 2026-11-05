@@ -281,33 +281,38 @@ func InternalNewHostPool(services InternalPoolServices, host *HostInfo, size int
 
 // Pick a connection from this connection pool for the given query.
 func (pool *InternalHostConnPool) Pick(token implEndpoint.Token) *Conn {
-	defer pool.InternalRequestTypedRepair()
 	pool.InternalMu.RLock()
-	defer pool.InternalMu.RUnlock()
-
-	if !pool.InternalPickable() {
-		return nil
+	pickable, repair := pool.InternalPickable()
+	var conn *Conn
+	if pickable {
+		conn = pool.InternalConnPicker.Pick(token)
 	}
-
-	return pool.InternalConnPicker.Pick(token)
+	pool.InternalMu.RUnlock()
+	if repair {
+		pool.InternalScheduleTypedRepair()
+	}
+	return conn
 }
 
 // PickInt64 picks a connection for the given raw int64 routing token, avoiding
 // the Token interface boxing. Picks fall back to the boxed path when the
 // connPicker does not support raw-int64 picking.
 func (pool *InternalHostConnPool) PickInt64(token int64) *Conn {
-	defer pool.InternalRequestTypedRepair()
 	pool.InternalMu.RLock()
-	defer pool.InternalMu.RUnlock()
-
-	if !pool.InternalPickable() {
-		return nil
+	pickable, repair := pool.InternalPickable()
+	var conn *Conn
+	if pickable {
+		if p, ok := pool.InternalConnPicker.(InternalInt64ConnPicker); ok {
+			conn = p.PickInt64(token)
+		} else {
+			conn = pool.InternalConnPicker.Pick(implEndpoint.InternalInt64Token(token))
+		}
 	}
-
-	if p, ok := pool.InternalConnPicker.(InternalInt64ConnPicker); ok {
-		return p.PickInt64(token)
+	pool.InternalMu.RUnlock()
+	if repair {
+		pool.InternalScheduleTypedRepair()
 	}
-	return pool.InternalConnPicker.Pick(implEndpoint.InternalInt64Token(token))
+	return conn
 }
 
 // PickConn routes a picked host to the raw-int64 fast path when it exposes one,
@@ -321,27 +326,31 @@ func (pool *InternalHostConnPool) PickConn(host implEndpoint.SelectedHost) *Conn
 	return pool.Pick(host.Token())
 }
 
-// pickable reports whether the pool is open and has (or is filling) connections.
-// Must be called with pool.mu held.
-func (pool *InternalHostConnPool) InternalPickable() bool {
+// pickable reports whether the pool is open and has (or is filling)
+// connections, and whether a typed pool misses connections, in which case
+// the caller requests repair with InternalScheduleTypedRepair after
+// releasing pool.mu. Must be called with pool.mu held.
+func (pool *InternalHostConnPool) InternalPickable() (pickable, repair bool) {
 	if pool.InternalClosed {
-		return false
+		return false, false
 	}
 
 	size, missing := pool.InternalConnPicker.Size()
 	if missing > 0 && !pool.retryStopped {
 		// Legacy callers retain their existing debounce path. Typed runtime repair
-		// is requested after releasing pool.mu and always uses ReconnectPolicy.
-		if _, typed := pool.typedConfig(); !typed {
+		// always uses ReconnectPolicy.
+		if _, typed := pool.typedConfig(); typed {
+			repair = true
+		} else {
 			go pool.InternalFill_debounce()
 		}
 
 		if size == 0 {
-			return false
+			return false, repair
 		}
 	}
 
-	return true
+	return true, repair
 }
 
 // Size returns the number of connections currently active in the pool

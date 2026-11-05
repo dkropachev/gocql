@@ -89,12 +89,21 @@ func InternalSessionObserveSafely(s *Session, fn func()) {
 // pickTypedPool carries native shard targets through connection selection without
 // manufacturing an old query object or discarding table-specific tablet routing.
 func InternalSessionPickTypedPool(s *Session, pool *hostConnPool, target Target, routing RoutingInfo) *Conn {
-	defer pool.InternalRequestTypedRepair()
 	pool.InternalMu.RLock()
-	defer pool.InternalMu.RUnlock()
-	if !pool.InternalPickable() {
-		return nil
+	pickable, repair := pool.InternalPickable()
+	var conn *Conn
+	if pickable {
+		conn = pickTypedPoolLocked(s, pool, target, routing)
 	}
+	pool.InternalMu.RUnlock()
+	if repair {
+		pool.InternalScheduleTypedRepair()
+	}
+	return conn
+}
+
+// pickTypedPoolLocked picks from a pickable pool. Must be called with pool.mu held.
+func pickTypedPoolLocked(s *Session, pool *hostConnPool, target Target, routing RoutingInfo) *Conn {
 	if picker, ok := pool.InternalConnPicker.(*typedConnPicker); ok {
 		return picker.InternalPickTarget(target, routing)
 	}

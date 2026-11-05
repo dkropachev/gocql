@@ -564,16 +564,3 @@ func (pool *InternalHostConnPool) InternalScheduleTypedRepair() {
 		}
 	}()
 }
-
-func (pool *InternalHostConnPool) InternalRequestTypedRepair() {
-	if _, typed := pool.typedConfig(); !typed {
-		return
-	}
-	pool.InternalMu.RLock()
-	_, missing := pool.InternalConnPicker.Size()
-	needed := !pool.InternalClosed && !pool.retryStopped && missing > 0
-	pool.InternalMu.RUnlock()
-	if needed {
-		pool.InternalScheduleTypedRepair()
-	}
-}
