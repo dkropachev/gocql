@@ -30,6 +30,11 @@ func (c *ReceiveCache) Acquire(n int) ([]byte, uint64) {
 	if !c.closed {
 		best := -1
 		for i, b := range c.entries {
+			if cap(b) == n {
+				// No entry fits better than an exact one.
+				best = i
+				break
+			}
 			if cap(b) >= n && (cap(b) <= 4096 || n >= cap(b)-n) && (best < 0 || cap(b) < cap(c.entries[best])) {
 				best = i
 			}
