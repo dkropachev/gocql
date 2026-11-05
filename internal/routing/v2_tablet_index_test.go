@@ -4,7 +4,9 @@
 package routing
 
 import (
+	"math"
 	"math/rand/v2"
+	"slices"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/tablets"
@@ -90,5 +92,44 @@ func checkTabletRangeIndex(t *testing.T, p InternalTabletPlacement, rng *rand.Ra
 	}
 	for i := 0; i < 16; i++ {
 		probe(rng.Int64N(span*600) - span*300)
+	}
+}
+
+// TestGuessLowerBound checks guessLowerBound against lowerBound over evenly
+// spread, clustered and random sorted slices spanning the whole token ring,
+// at, next to and between their elements.
+func TestGuessLowerBound(t *testing.T) {
+	rng := rand.New(rand.NewPCG(7, 7))
+	for _, n := range []int{1, 2, 3, 4, 5, 64, 1000} {
+		even := make([]int64, n)
+		step := uint64(math.MaxUint64) / uint64(n)
+		for i := range even {
+			even[i] = math.MinInt64 + int64(uint64(i+1)*step-1)
+		}
+		clustered := make([]int64, n)
+		for i := range clustered {
+			clustered[i] = int64(i)
+		}
+		clustered[n-1] = math.MaxInt64
+		random := make([]int64, 0, n)
+		seen := map[int64]bool{}
+		for len(random) < n {
+			if v := int64(rng.Uint64()); !seen[v] {
+				seen[v] = true
+				random = append(random, v)
+			}
+		}
+		slices.Sort(random)
+		for _, s := range [][]int64{even, clustered, random} {
+			probes := []int64{math.MinInt64, math.MaxInt64, 0}
+			for _, e := range s {
+				probes = append(probes, e-1, e, e+1, int64(rng.Uint64()))
+			}
+			for _, v := range probes {
+				if got, want := guessLowerBound(s, v), lowerBound(s, v); got != want {
+					t.Fatalf("n=%d v=%d: got %d, want %d", n, v, got, want)
+				}
+			}
+		}
 	}
 }

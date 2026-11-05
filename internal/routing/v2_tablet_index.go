@@ -164,6 +164,37 @@ func lowerBound(s []int64, v int64) int {
 	return lo
 }
 
+// guessLowerBound is lowerBound for s spread about evenly over its span,
+// as a table's tablets are: it looks next to where v would sit if s were
+// evenly spread, and binary-searches the rest only when v is not there.
+func guessLowerBound(s []int64, v int64) int {
+	n := len(s)
+	if n < 4 {
+		return lowerBound(s, v)
+	}
+	lo, hi := s[0], s[n-1]
+	if v <= lo {
+		return 0
+	}
+	if v > hi {
+		return n
+	}
+	// lo < v <= hi, so the result is in [1, n-1]; g is about the last
+	// element below v.
+	g := int(float64(uint64(v)-uint64(lo)) / float64(uint64(hi)-uint64(lo)) * float64(n-1))
+	g = min(max(g, 0), n-2)
+	if s[g] < v {
+		if s[g+1] >= v {
+			return g + 1
+		}
+		return g + 2 + lowerBound(s[g+2:], v)
+	}
+	if s[g-1] < v {
+		return g
+	}
+	return lowerBound(s[:g-1], v)
+}
+
 // tabletRangeFor is InternalTabletRangeFor over t, using its index when current.
 func (t *InternalTabletPlacement) tabletRangeFor(token int64) *InternalTabletRange {
 	x := t.index
@@ -173,12 +204,12 @@ func (t *InternalTabletPlacement) tabletRangeFor(token int64) *InternalTabletRan
 		}
 		return nil
 	}
-	ci := lowerBound(x.last, token)
+	ci := guessLowerBound(x.last, token)
 	if ci == len(x.chunks) {
 		return nil
 	}
 	c := x.chunks[ci]
-	if r := c.ranges[lowerBound(c.ends, token)]; token > r.InternalSpan.Start {
+	if r := c.ranges[guessLowerBound(c.ends, token)]; token > r.InternalSpan.Start {
 		return r
 	}
 	return nil
