@@ -512,6 +512,16 @@ func (p *InternalLazyRoutingPlan) Next() (Target, bool) {
 		// Connected replicas: rack, DC, then permitted remote replicas. Remote
 		// replicas precede local nonreplicas.
 		for p.stage >= 1 && p.stage <= 3 {
+			// A tier no replica can be in is skipped without looking its
+			// replicas up: the rack tier without a rack, the remote tier
+			// without a datacenter or without remote replicas allowed.
+			if p.policy != nil {
+				if o := &p.policy.InternalOptions; p.stage == 1 && o.Rack == "" || p.stage == 3 && (o.Datacenter == "" || !o.AllowRemote) {
+					p.cursor = 0
+					p.stage++
+					continue
+				}
+			}
 			for p.cursor < len(p.replicas) {
 				var i int
 				if p.permutation != nil {
