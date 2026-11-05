@@ -1383,3 +1383,49 @@ and bytes did not change.
   Sampling would change what `Session.Metrics` reports over few requests.
 - The legacy (non-typed) picker path still takes the pool's read lock;
   Scylla pools use the lock-free typed picker.
+
+## Round 7: what the round 6 profile left
+
+Target: a `pread/w64` profile of `b3bb376b` (`-cpu 1`, 3.39 µs/op). It
+was taken with `/^pread$/^w64$`: `hp/profile.sh LABEL pread/w64` also
+matches `preadctx` and mixes in its select and context costs. Each stage
+is compared with `hp/compare.sh` against the previous kept stage
+(5×ABBA, n=10).
+
+| stage | commit | verdict | main effect (cpu-ns/op) |
+|---|---|---|---|
+| owned parameter cells cut from the owned bytes | `61e58c8a` | kept | Admission −4.15%, pwrite/w64 −2.32%, w64-4 −1.1% |
+| exact-size receive buffer without a full scan | `ed8ba6fc` | kept | read/w64-4 sec/op −7.92%, w64-4 −1.4% to −2.1% |
+| `endShared` without the connection lock (waiter flag) | — | rejected | w64-4 +0.5% to +3.4%, no single-CPU gain |
+
+`EncodeInto` for one int32 cost about 200 ns, mostly the owned
+builder's `Freeze` (`NewChain`'s variadic walk) and a `Chain.Slice` per
+cell; the encode itself was 0.04 s of 0.41 s. The receive cache scanned
+every retained buffer, up to 64 under its lock, for the best fit;
+responses of one statement have one size, so the first exact fit ends
+it. The c2 gate flagged `write/w1` and `pwrite/w1` (+3%, +5%); a 10×ABBA
+rerun of the four w1 gates showed no change (all p>0.1).
+
+The `endShared` change counted shared admissions in an atomic and took
+`Conn.InternalMu` only when a reservation had registered for a change.
+It was correct (a registered waiter is woken; a waiter racing the last
+end sees zero or is woken) but slowed every w64-4 point gate, with
+`write/w64-4` +3.43%.
+
+### Not done
+
+- End of rows on a one-page result (12.5% of `pread/w64` in
+  `Rows.NextInto`): the response lease release (2.1%), `retire`'s
+  lifetime lock (0.8%, which keeps a concurrent query stop from
+  cancelling the next generation) and latency recording (0.9%) are
+  each needed and under the 1% bar.
+- Clock reads: `time.Since` already reads only the monotonic clock,
+  and admission needs the wall clock for the deadline.
+- The routing partitioner lookup takes `InternalMu` only because the
+  benchmark session skips `InternalSessionConfigureV2Peripheral`; in
+  production it is an atomic load and a map lookup.
+- The legacy picker's read locks (4.4% here) do not apply to Scylla
+  pools, which use the lock-free typed picker.
+- `preadctx`'s one driver allocation is the caller context's Done
+  channel, which its transport wait selects on.
+- Syscalls are 16% (writev 10%, read 6%) at about 13 frames per writev.
