@@ -42,6 +42,7 @@ type MetadataSnapshot = routing.MetadataSnapshot
 type MetricsSnapshot = routing.MetricsSnapshot
 
 type QueryPlan = routing.QueryPlan
+type Route = routing.Route
 
 type RoutingInfo = model.RoutingInfo
 

@@ -24,35 +24,36 @@ import (
 	"github.com/hailocab/go-hostpool"
 
 	"github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/internal/routing"
 )
 
 func TestHostPolicy_HostPool(t *testing.T) {
 	p := HostPool(hostpool.New(nil)).(*hostPoolHostPolicy)
 	ids := []gocql.UUID{gocql.ParseUUIDMust("a0000000-0000-0000-0000-000000000000"), gocql.ParseUUIDMust("a0000000-0000-0000-0000-000000000001")}
 	hosts := []gocql.HostSnapshot{{ID: ids[0], Address: netip.MustParseAddrPort("10.0.0.1:9042"), Enabled: true, Up: true}, {ID: ids[1], Address: netip.MustParseAddrPort("10.0.0.2:9042"), Enabled: true, Up: true}}
-	p.setHosts(hosts)
+	p.setHosts(hosts, []gocql.Route{routing.InternalRouteOf(gocql.Target{HostID: ids[0]}), routing.InternalRouteOf(gocql.Target{HostID: ids[1]})})
 	plan := p.Plan(gocql.RoutingInfo{}, nil)
 	a, ok := plan.Next()
-	if !ok || a.HostID != ids[0] {
+	if !ok || a.HostID() != ids[0] {
 		t.Fatalf("first host: %+v %t", a, ok)
 	}
-	p.Observe(gocql.AttemptEvent{Target: a})
+	p.Observe(gocql.AttemptEvent{Target: a.Target()})
 	b, ok := plan.Next()
-	if !ok || b.HostID != ids[1] {
+	if !ok || b.HostID() != ids[1] {
 		t.Fatalf("second host: %+v %t", b, ok)
 	}
-	p.Observe(gocql.AttemptEvent{Target: b, Err: fmt.Errorf("error")})
+	p.Observe(gocql.AttemptEvent{Target: b.Target(), Err: fmt.Errorf("error")})
 	if _, ok := plan.Next(); ok {
 		t.Fatal("routing plan repeated a host")
 	}
 	next := p.Plan(gocql.RoutingInfo{}, nil)
 	a, ok = next.Next()
-	if !ok || a.HostID != ids[0] {
+	if !ok || a.HostID() != ids[0] {
 		t.Fatalf("healthy host: %+v %t", a, ok)
 	}
 	pinned := p.Plan(gocql.RoutingInfo{HostID: gocql.Option[gocql.UUID]{Set: true, Value: ids[1]}, ShardID: gocql.Option[uint32]{Set: true, Value: 2}}, nil)
 	target, ok := pinned.Next()
-	if !ok || target.HostID != ids[1] || !target.StrictShard || target.ShardID.Value != 2 {
+	if !ok || target.HostID() != ids[1] || target.Shard != 2 {
 		t.Fatalf("strict target: %+v %t", target, ok)
 	}
 	if _, ok := pinned.Next(); ok {

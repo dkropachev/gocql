@@ -18,7 +18,7 @@ const hostRoutingShards = 4
 // hostRoutingSession is a session whose hosts 1-4 of v2TestMetadata each have
 // a ready typed pool of one connection per shard, with tablet or vnode
 // placement for ks.table whose replicas are hosts 1, 2 and 3.
-func hostRoutingSession(b *testing.B, tablets bool) *Session {
+func hostRoutingSession(b testing.TB, tablets bool) *Session {
 	b.Helper()
 	s := step06Session(b)
 	m := s.Metadata()
@@ -67,6 +67,8 @@ func hostRoutingSession(b *testing.B, tablets bool) *Session {
 		}
 		implCluster.SessionData(s).InternalPool.InternalHostConnPools[snapshot.ID] = pool
 	}
+	// As a published snapshot does, index the hosts with the session's routes.
+	routing.SnapshotData(m).InternalHostIndex = implCluster.InternalSessionRoutingHostIndex(s, routing.SnapshotData(m).InternalHosts)
 	return s
 }
 

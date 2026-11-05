@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/internal/murmur"
+	pool "github.com/scylladb/gocql/v2/internal/pool"
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	// PartitionKey is the canonical encoded component stream. It never owns a
@@ -255,18 +256,40 @@ func (p *InternalRoutingPolicy) Validate(m *MetadataSnapshot) error {
 	return nil
 }
 
+// InternalTargetPlan routes to its targets in order. A target with a shard
+// that is not strict is followed by a route to any shard of its host.
+// Targets resolve their hosts through hosts when set, else by ID.
 type InternalTargetPlan struct {
 	InternalTargets []Target
+	hosts           []*pool.HostRoute
 	next            int
+	fallback        bool
 }
 
-func (p *InternalTargetPlan) Next() (Target, bool) {
-	if p == nil || p.next >= len(p.InternalTargets) {
-		return Target{}, false
+func (p *InternalTargetPlan) Next() (Route, bool) {
+	if p == nil {
+		return Route{}, false
+	}
+	if p.fallback {
+		p.fallback = false
+		return p.route(p.next - 1).WithShard(AnyShard), true
+	}
+	if p.next >= len(p.InternalTargets) {
+		return Route{}, false
 	}
 	t := p.InternalTargets[p.next]
+	r := p.route(p.next)
 	p.next++
-	return t, true
+	p.fallback = t.ShardID.Set && !t.StrictShard
+	return r, true
+}
+func (p *InternalTargetPlan) route(i int) Route {
+	if i < len(p.hosts) && p.hosts[i] != nil {
+		r := InternalRouteOf(p.InternalTargets[i])
+		r.host = p.hosts[i]
+		return r
+	}
+	return InternalRouteOf(p.InternalTargets[i])
 }
 
 // Host indices and locality slices are built once on topology publication.
@@ -278,13 +301,24 @@ type InternalRoutingHostIndex struct {
 	dc          map[string][]int
 	rack        map[routingLocality][]int
 	all         []int
+	// routes holds each host's route, in host order.
+	routes []*pool.HostRoute
 }
 
+// InternalBuildRoutingHostIndex indexes hosts with routes that belong to no
+// session.
 func InternalBuildRoutingHostIndex(hosts []HostSnapshot) *InternalRoutingHostIndex {
-	x := &InternalRoutingHostIndex{enabledDC: make(map[string]int), enabledRack: make(map[routingLocality]int), byID: make(map[UUID]int, len(hosts)), dc: make(map[string][]int), rack: make(map[routingLocality][]int)}
+	return InternalBuildRoutingHostIndexWith(hosts, pool.NewHostRoute)
+}
+
+// InternalBuildRoutingHostIndexWith indexes hosts with the routes route
+// returns for their IDs.
+func InternalBuildRoutingHostIndexWith(hosts []HostSnapshot, route func(UUID) *pool.HostRoute) *InternalRoutingHostIndex {
+	x := &InternalRoutingHostIndex{enabledDC: make(map[string]int), enabledRack: make(map[routingLocality]int), byID: make(map[UUID]int, len(hosts)), dc: make(map[string][]int), rack: make(map[routingLocality][]int), routes: make([]*pool.HostRoute, len(hosts))}
 	for i, h := range hosts {
 		perfAdd(2, 1)
 		x.byID[h.ID] = i
+		x.routes[i] = route(h.ID)
 		x.all = append(x.all, i)
 		x.dc[h.Datacenter] = append(x.dc[h.Datacenter], i)
 		k := routingLocality{h.Datacenter, h.Rack}
@@ -304,21 +338,29 @@ func (m *MetadataSnapshot) routingIndex() *InternalRoutingHostIndex {
 }
 
 type InternalLazyRoutingPlan struct {
-	InternalNow                time.Time
-	policy                     *InternalRoutingPolicy
-	metadata                   *MetadataSnapshot
-	index                      *InternalRoutingHostIndex
-	InternalSlow               *InternalRoutingDecisions
-	groups                     [3][]int
+	policy       *InternalRoutingPolicy
+	metadata     *MetadataSnapshot
+	index        *InternalRoutingHostIndex
+	InternalSlow *InternalRoutingDecisions
+	InternalNow  time.Time
+	// fallback is the route to any shard of the host just routed to a
+	// shard, which the plan returns next when set.
+	fallback                   Route
+	smallEmitted               [8]Route
+	emitted                    []Route
 	replicas                   []Target
 	permutation                []int // used only when replicas exceed the inline capacity
-	emitted                    []Target
+	groups                     [3][]int
+	leader                     Option[Target]
 	stage, cursor, latencyPass int
 	rotation                   int
-	smallEmitted               [8]Target
-	leader                     Option[Target]
+	token                      int64
 	smallPermutation           [16]uint8
+	shard                      Option[uint32] // the request's own shard, for every host
 	pinned                     bool
+	tokenSet                   bool
+	// strict plans route to a host's shard only: no fallback to any shard.
+	strict bool
 }
 
 func (p *InternalRoutingPolicy) Plan(info RoutingInfo, m *MetadataSnapshot) QueryPlan {
@@ -345,11 +387,14 @@ func (p *InternalRoutingPolicy) InternalPlanWith(info RoutingInfo, m *MetadataSn
 		plan.InternalNow = time.Now()
 	}
 	plan.emitted = plan.smallEmitted[:0]
+	plan.token, plan.tokenSet = info.Token.Value, info.Token.Set
+	plan.shard = info.ShardID
+	plan.strict = info.Conditional || info.ShardID.Set
 	if info.HostID.Set {
 		plan.pinned = true
 		// Pinned plans never traverse replica leaders. Keep only the captured
 		// destination in that slot instead of retaining all routing inputs.
-		plan.leader = Option[Target]{Value: Target{HostID: info.HostID.Value, ShardID: info.ShardID, StrictShard: info.ShardID.Set}, Set: true}
+		plan.leader = Option[Target]{Value: Target{HostID: info.HostID.Value}, Set: true}
 		return plan
 	}
 	o := &p.InternalOptions
@@ -420,13 +465,13 @@ func (p *InternalRoutingPolicy) InternalPlanWith(info RoutingInfo, m *MetadataSn
 	}
 	return plan
 }
-func (p *InternalLazyRoutingPlan) host(t Target) (*HostSnapshot, bool) {
+func (p *InternalLazyRoutingPlan) host(t Target) (int, *HostSnapshot) {
 	perfAdd(0, 1)
 	i, ok := p.index.byID[t.HostID]
 	if !ok {
-		return nil, false
+		return -1, nil
 	}
-	return &SnapshotData(p.metadata).InternalHosts[i], true
+	return i, &SnapshotData(p.metadata).InternalHosts[i]
 }
 func (p *InternalLazyRoutingPlan) eligible(h *HostSnapshot) bool {
 	return h.Enabled && (p.policy.InternalOptions.Datacenter == "" || h.Datacenter == p.policy.InternalOptions.Datacenter || p.policy.InternalOptions.AllowRemote)
@@ -465,22 +510,61 @@ func (p *InternalLazyRoutingPlan) InternalPenalty(t Target) bool {
 	sample.nextProbe = p.InternalNow.Add(p.policy.InternalOptions.Latency.RetryPeriod)
 	return false
 }
-func targetsDuplicate(a, b Target) bool {
-	return a.HostID == b.HostID && (!a.ShardID.Set || !b.ShardID.Set || a.ShardID.Value == b.ShardID.Value)
-}
-func (p *InternalLazyRoutingPlan) accept(t Target) (Target, bool) {
-	if p.InternalPenalty(t) != (p.latencyPass == 1) {
-		return Target{}, false
-	}
+
+// duplicate reports whether the plan already routed to r: to its host and
+// shard, or to any shard of its host, or, for r to any shard, to its host.
+func (p *InternalLazyRoutingPlan) duplicate(r Route) bool {
 	for _, e := range p.emitted {
-		if targetsDuplicate(t, e) {
-			return Target{}, false
+		if e.host == r.host && (e.Shard == r.Shard || e.Shard == AnyShard || r.Shard == AnyShard) {
+			return true
 		}
 	}
-	p.emitted = append(p.emitted, t)
-	return t, true
+	return false
 }
-func (p *InternalLazyRoutingPlan) Next() (Target, bool) {
+
+// accept returns the route to target t of host i, h, unless the latency
+// pass excludes it or the plan already routed to it. A replica's
+// route goes to the shard that owns the plan's token, unless placement or
+// the request names one; another host's goes to any shard. A route to a
+// shard is followed by one to any shard of the host unless the plan or
+// target is strict.
+func (p *InternalLazyRoutingPlan) accept(t Target, i int, h *HostSnapshot, replica bool) (Route, bool) {
+	if p.InternalPenalty(t) != (p.latencyPass == 1) {
+		return Route{}, false
+	}
+	host := p.index.routes[i]
+	r := Route{host: host, Shard: AnyShard}
+	switch {
+	case p.shard.Set:
+		r.Shard = int32(min(p.shard.Value, math.MaxInt32))
+	case t.ShardID.Set:
+		r.Shard = int32(min(t.ShardID.Value, math.MaxInt32))
+	case replica && p.tokenSet && h.Shards > 0:
+		r.Shard = shardOf(p.token, h.Shards, h.ShardingIgnoreMSB)
+	}
+	if p.duplicate(r) {
+		return Route{}, false
+	}
+	p.emitted = append(p.emitted, r)
+	if r.Shard != AnyShard && !p.strict && !t.StrictShard {
+		p.fallback = Route{host: host, Shard: AnyShard}
+	}
+	return r, true
+}
+func (p *InternalLazyRoutingPlan) Next() (Route, bool) {
+	if r := p.fallback; r.host != nil {
+		// The fallback follows its host's route to a shard; it repeats
+		// only a route to any shard of the host.
+		p.fallback = Route{}
+		repeated := false
+		for _, e := range p.emitted {
+			repeated = repeated || e.host == r.host && e.Shard == AnyShard
+		}
+		if !repeated {
+			p.emitted = append(p.emitted, r)
+			return r, true
+		}
+	}
 	if !p.pinned && p.metadata != nil && SnapshotData(p.metadata).InternalPlacementSignal != nil && SnapshotData(p.metadata).InternalPlacementEpoch != SnapshotData(p.metadata).InternalPlacementSignal.Load() {
 		p.replicas = nil
 		p.permutation = nil
@@ -492,24 +576,26 @@ func (p *InternalLazyRoutingPlan) Next() (Target, bool) {
 	}
 	if p.pinned {
 		if p.stage > 0 {
-			return Target{}, false
+			return Route{}, false
 		}
 		p.stage++
 		t := p.leader.Value
-		if h, ok := p.host(t); ok && h.Enabled {
-			return t, true
+		if i, h := p.host(t); h != nil && h.Enabled {
+			p.latencyPass = 0
+			p.InternalSlow = nil // a pinned host is never skipped for latency
+			return p.accept(t, i, h, false)
 		}
-		return Target{}, false
+		return Route{}, false
 	}
 	for {
 		if p.stage == 0 {
 			p.stage++
 			if p.leader.Set {
 				t := p.leader.Value
-				if h, ok := p.host(t); ok && p.eligible(h) && h.Connected && h.Up && (!t.ShardID.Set || h.Shards > 0 && t.ShardID.Value < h.Shards) {
+				if i, h := p.host(t); h != nil && p.eligible(h) && h.Connected && h.Up && (!t.ShardID.Set || h.Shards > 0 && t.ShardID.Value < h.Shards) {
 					t.StrictShard = t.ShardID.Set
-					if t, ok := p.accept(t); ok {
-						return t, true
+					if r, ok := p.accept(t, i, h, true); ok {
+						return r, true
 					}
 				}
 			}
@@ -528,16 +614,16 @@ func (p *InternalLazyRoutingPlan) Next() (Target, bool) {
 				}
 			}
 			for p.cursor < len(p.replicas) {
-				var i int
+				var k int
 				if p.permutation != nil {
-					i = p.permutation[p.cursor]
+					k = p.permutation[p.cursor]
 				} else {
-					i = int(p.smallPermutation[p.cursor])
+					k = int(p.smallPermutation[p.cursor])
 				}
-				t := p.replicas[i]
+				t := p.replicas[k]
 				p.cursor++
-				h, ok := p.host(t)
-				if !ok || !p.eligible(h) || !h.Connected || !h.Up {
+				i, h := p.host(t)
+				if h == nil || !p.eligible(h) || !h.Connected || !h.Up {
 					continue
 				}
 				o := &p.policy.InternalOptions
@@ -552,8 +638,8 @@ func (p *InternalLazyRoutingPlan) Next() (Target, bool) {
 				if tier != p.stage {
 					continue
 				}
-				if t, ok := p.accept(t); ok {
-					return t, true
+				if r, ok := p.accept(t, i, h, true); ok {
+					return r, true
 				}
 			}
 			p.cursor = 0
@@ -569,18 +655,18 @@ func (p *InternalLazyRoutingPlan) Next() (Target, bool) {
 			}
 			ids := p.groups[group]
 			for p.cursor < len(ids) {
-				i := (p.cursor + p.rotation) % len(ids)
+				k := (p.cursor + p.rotation) % len(ids)
 				p.cursor++
 				perfAdd(1, 1)
-				h := &SnapshotData(p.metadata).InternalHosts[ids[i]]
+				h := &SnapshotData(p.metadata).InternalHosts[ids[k]]
 				if !p.eligible(h) || connected && (!h.Connected || !h.Up) {
 					continue
 				}
 				if group == 2 && p.policy.InternalOptions.Datacenter != "" && h.Datacenter == p.policy.InternalOptions.Datacenter {
 					continue
 				}
-				if t, ok := p.accept(Target{HostID: h.ID}); ok {
-					return t, true
+				if r, ok := p.accept(Target{HostID: h.ID}, ids[k], h, false); ok {
+					return r, true
 				}
 			}
 			p.cursor = 0
@@ -592,7 +678,7 @@ func (p *InternalLazyRoutingPlan) Next() (Target, bool) {
 			p.cursor = 0
 			continue
 		}
-		return Target{}, false
+		return Route{}, false
 	}
 }
 func (p *InternalRoutingPolicy) Observe(e AttemptEvent) {
@@ -709,7 +795,7 @@ func (p *singleTargetRouting) Plan(_ RoutingInfo, m *MetadataSnapshot) QueryPlan
 					}
 					t.ShardID = Option[uint32]{}
 				}
-				return &InternalTargetPlan{InternalTargets: []Target{t}}
+				return &InternalTargetPlan{InternalTargets: []Target{t}, hosts: []*pool.HostRoute{m.routingIndex().routes[i]}}
 			}
 		}
 	}

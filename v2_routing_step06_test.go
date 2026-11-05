@@ -289,7 +289,7 @@ func TestStep06PlacementFencesSharingAndOverflow(t *testing.T) {
 	for i := 0; i < 1025; i++ {
 		implCluster.InternalSessionQueueTabletFeedback(s, step06Hint(t, int64(i*2), int64(i*2+1), Option[uint64]{}, hTarget(1, 0)), implCluster.InternalSessionCaptureTabletFeedback(s, info, before))
 	}
-	if target, ok := lazy.Next(); !ok || target.ShardID.Set {
+	if target, ok := nextTarget(lazy); !ok || target.ShardID.Set {
 		t.Fatal("preexisting plan used invalidated placement", target)
 	}
 	if replicas, _ := before.Replicas("ks", "table", 150); len(replicas) != 0 {
@@ -330,7 +330,7 @@ func TestStep06LeaderLocalityLWTAndFallback(t *testing.T) {
 	policy := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, LeaderAware: true, Datacenter: "a", Rack: "r1", AllowRemote: true, ShuffleReplicas: true}))
 	for i := 0; i < 10; i++ {
 		plan := policy.Plan(info, m)
-		first, ok := plan.Next()
+		first, ok := nextTarget(plan)
 		if !ok || first.HostID != routing.SnapshotData(m).InternalHosts[2].ID || !first.StrictShard || first.ShardID.Value != 1 {
 			t.Fatal("eligible remote leader was not strict first", first)
 		}
@@ -354,7 +354,7 @@ func TestStep06LeaderLocalityLWTAndFallback(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			test.change()
 			defer test.restore()
-			first, _ := policy.Plan(info, m).Next()
+			first, _ := nextTarget(policy.Plan(info, m))
 			if first.HostID[15] != test.want {
 				t.Fatal(first)
 			}
@@ -574,7 +574,7 @@ func TestStep06AllDisconnectedAndMissingFollowers(t *testing.T) {
 	r, _ := updateTabletRange(nil, h)
 	routing.SnapshotData(m).InternalPlacements = placementPut(routing.SnapshotData(m).InternalPlacements, metadataTable{InternalKeyspace: "ks", InternalTable: "table"}, tabletPlacement{InternalRanges: r}, comparePlacementTable)
 	leader := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, LeaderAware: true}))
-	first, _ := leader.Plan(RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Set: true, Value: 1}, Consistency: Quorum}, m).Next()
+	first, _ := nextTarget(leader.Plan(RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Set: true, Value: 1}, Consistency: Quorum}, m))
 	if first.HostID[15] != 2 {
 		t.Fatal("missing follower hid resolved leader")
 	}

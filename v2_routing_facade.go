@@ -77,6 +77,10 @@ func NewRoutingPolicy(a0 RoutingOptions) (RoutingPolicy, error) { return routing
 type PartitionKey = routing.PartitionKey
 type QueryError = runtimeerrors.QueryError
 type QueryPlan = routing.QueryPlan
+type Route = routing.Route
+
+const AnyShard = routing.AnyShard
+
 type RetryAction = routing.RetryAction
 type RetryDecision = routing.RetryDecision
 

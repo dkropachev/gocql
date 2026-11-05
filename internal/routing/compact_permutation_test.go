@@ -43,7 +43,7 @@ func compactDrain(t *testing.T, plan QueryPlan, limit int) []Target {
 	t.Helper()
 	var targets []Target
 	for i := 0; i <= limit; i++ {
-		target, ok := plan.Next()
+		target, ok := InternalNextTarget(plan)
 		if !ok {
 			return targets
 		}
@@ -168,6 +168,10 @@ func TestCompactPermutationLocalityLeaderLatencyAndFallback(t *testing.T) {
 							last.StrictShard = leader
 							want = append(want, last)
 						}
+						// A conditional plan does not fall back from a shard.
+						for i := range want {
+							want[i].StrictShard = want[i].ShardID.Set
+						}
 						if !reflect.DeepEqual(got, want) {
 							t.Fatalf("got %+v\nwant %+v", got, want)
 						}
@@ -191,7 +195,7 @@ func TestCompactPermutationPlacementInvalidation(t *testing.T) {
 				plan := policy.Plan(info, m).(*InternalLazyRoutingPlan)
 				seen := make(map[UUID]bool)
 				if consumed != 0 {
-					target, ok := plan.Next()
+					target, ok := InternalNextTarget(plan)
 					if !ok || !target.ShardID.Set {
 						t.Fatal("missing initial replica")
 					}
@@ -248,7 +252,7 @@ func TestCompactPermutationConcurrentIndependentPlans(t *testing.T) {
 
 func TestCompactPermutationLayout(t *testing.T) {
 	t.Logf("pointer_bytes=%d target_bytes=%d plan_bytes=%d", unsafe.Sizeof(uintptr(0)), unsafe.Sizeof(Target{}), unsafe.Sizeof(InternalLazyRoutingPlan{}))
-	if unsafe.Sizeof(uintptr(0)) == 8 && unsafe.Sizeof(InternalLazyRoutingPlan{}) != 512 {
+	if unsafe.Sizeof(uintptr(0)) == 8 && unsafe.Sizeof(InternalLazyRoutingPlan{}) != 448 {
 		t.Fatal("unexpected compact plan layout")
 	}
 }

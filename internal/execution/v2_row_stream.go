@@ -29,6 +29,7 @@ import (
 	"time"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	implPool "github.com/scylladb/gocql/v2/internal/pool"
 )
 
 // StreamOptions captures execution defaults once; streaming is pull-driven.
@@ -354,17 +355,19 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 func (s *RowStream[R]) acquire(plan QueryPlan) error {
 	request := s.privateStorage.InternalRequest
 	var target Target
+	var routed *implPool.InternalHostConnPool // the pool of the plan's route
 	if s.privateStorage.retryTarget != nil {
 		target = *s.privateStorage.retryTarget
 		s.privateStorage.retryTarget = nil
 	} else if request.connection != nil {
 		target = Target{HostID: implEndpoint.InternalHostInfoHostUUID(request.connection.InternalHost)}
 	} else if plan != nil {
-		var ok bool
-		target, ok = plan.Next()
+		r, ok := plan.Next()
 		if !ok {
 			return ErrNoConnections
 		}
+		target = r.Target()
+		routed = r.InternalHost().Pool()
 	} else if request.InternalRouting.HostID.Set {
 		target = Target{HostID: request.InternalRouting.HostID.Value, ShardID: request.InternalRouting.ShardID, StrictShard: request.InternalRouting.ShardID.Set}
 	} else {
@@ -379,9 +382,12 @@ func (s *RowStream[R]) acquire(plan QueryPlan) error {
 			return ErrNoConnections
 		}
 	}
-	implCluster.SessionData(s.privateStorage.InternalSession).InternalPool.InternalMu.RLock()
-	pool := implCluster.SessionData(s.privateStorage.InternalSession).InternalPool.InternalHostConnPools[target.HostID]
-	implCluster.SessionData(s.privateStorage.InternalSession).InternalPool.InternalMu.RUnlock()
+	pool := routed
+	if pool == nil {
+		implCluster.SessionData(s.privateStorage.InternalSession).InternalPool.InternalMu.RLock()
+		pool = implCluster.SessionData(s.privateStorage.InternalSession).InternalPool.InternalHostConnPools[target.HostID]
+		implCluster.SessionData(s.privateStorage.InternalSession).InternalPool.InternalMu.RUnlock()
+	}
 	if pool == nil || pool.InternalHost == nil || !pool.InternalHost.IsUp() || implCluster.InternalClusterSettingsFilterHost(&implCluster.SessionData(s.privateStorage.InternalSession).InternalCfg, pool.InternalHost) {
 		return ErrNoConnections
 	}

@@ -36,6 +36,7 @@ func HostPool(hp hostpool.HostPool) gocql.RoutingPolicy {
 type hostPoolHostPolicy struct {
 	hp          hostpool.HostPool
 	byAddress   map[string]gocql.HostSnapshot
+	routes      map[gocql.UUID]gocql.Route
 	responses   map[gocql.UUID]hostpool.HostPoolResponse
 	hosts       []gocql.HostSnapshot
 	generation  uint64
@@ -49,13 +50,17 @@ func (p *hostPoolHostPolicy) Validate(_ *gocql.MetadataSnapshot) error {
 	}
 	return nil
 }
-func (p *hostPoolHostPolicy) setHosts(hosts []gocql.HostSnapshot) {
+
+// setHosts takes hosts and their routes, in the same order.
+func (p *hostPoolHostPolicy) setHosts(hosts []gocql.HostSnapshot, routes []gocql.Route) {
 	addresses := make([]string, 0, len(hosts))
 	p.hosts = nil
 	p.byAddress = make(map[string]gocql.HostSnapshot, len(hosts))
+	p.routes = make(map[gocql.UUID]gocql.Route, len(hosts))
 	p.responses = make(map[gocql.UUID]hostpool.HostPoolResponse, len(hosts))
-	for _, h := range hosts {
+	for i, h := range hosts {
 		if h.Enabled && h.Up {
+			p.routes[h.ID] = routes[i]
 			address := h.Address.String()
 			addresses = append(addresses, address)
 			p.byAddress[address] = h
@@ -68,11 +73,11 @@ func (p *hostPoolHostPolicy) Plan(info gocql.RoutingInfo, m *gocql.MetadataSnaps
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if m != nil && (!p.initialized || p.generation != m.Generation()) {
-		p.setHosts(m.Hosts())
+		p.setHosts(m.Hosts(), m.HostRoutes())
 		p.generation = m.Generation()
 		p.initialized = true
 	}
-	return &hostPoolPlan{policy: p, hosts: p.hosts, byAddress: p.byAddress, info: info, seen: make(map[gocql.UUID]bool)}
+	return &hostPoolPlan{policy: p, hosts: p.hosts, byAddress: p.byAddress, routes: p.routes, info: info, seen: make(map[gocql.UUID]bool)}
 }
 func (p *hostPoolHostPolicy) Observe(event gocql.AttemptEvent) {
 	p.mu.Lock()
@@ -85,22 +90,27 @@ func (p *hostPoolHostPolicy) Observe(event gocql.AttemptEvent) {
 type hostPoolPlan struct {
 	policy    *hostPoolHostPolicy
 	byAddress map[string]gocql.HostSnapshot
+	routes    map[gocql.UUID]gocql.Route
 	seen      map[gocql.UUID]bool
 	hosts     []gocql.HostSnapshot
 	info      gocql.RoutingInfo
 	fallback  int
 }
 
-func (p *hostPoolPlan) Next() (gocql.Target, bool) {
+func (p *hostPoolPlan) Next() (gocql.Route, bool) {
 	policy := p.policy
 	policy.mu.Lock()
 	defer policy.mu.Unlock()
-	emit := func(h gocql.HostSnapshot) (gocql.Target, bool) {
+	emit := func(h gocql.HostSnapshot) (gocql.Route, bool) {
 		if p.seen[h.ID] || p.info.HostID.Set && p.info.HostID.Value != h.ID {
-			return gocql.Target{}, false
+			return gocql.Route{}, false
 		}
 		p.seen[h.ID] = true
-		return gocql.Target{HostID: h.ID, ShardID: p.info.ShardID, StrictShard: p.info.ShardID.Set}, true
+		r := p.routes[h.ID]
+		if p.info.ShardID.Set {
+			return r.WithShard(int32(p.info.ShardID.Value)), true
+		}
+		return r, true
 	}
 	for n := 0; n < 2*len(p.hosts); n++ {
 		r := policy.hp.Get()
@@ -120,5 +130,5 @@ func (p *hostPoolPlan) Next() (gocql.Target, bool) {
 			return t, true
 		}
 	}
-	return gocql.Target{}, false
+	return gocql.Route{}, false
 }

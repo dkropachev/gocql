@@ -27,7 +27,8 @@ func SnapshotHost(h *HostInfo) (HostSnapshot, error) {
 		}
 		out.Tokens = append(out.Tokens, n)
 	}
+	out.Shards = uint32(h.privateStorage.InternalScyllaFeatures.ShardsCount())
+	out.ShardingIgnoreMSB = uint8(h.privateStorage.InternalScyllaFeatures.privateStorage.InternalMsbIgnore)
 	h.privateStorage.InternalMu.RUnlock()
-	out.Shards = uint32(h.ScyllaShardCount())
 	return out, tokenErr
 }

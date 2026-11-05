@@ -32,6 +32,7 @@ type MetricsSnapshot = routing.MetricsSnapshot
 
 type QueryError = runtimeerrors.QueryError
 type QueryPlan = routing.QueryPlan
+type Route = routing.Route
 
 type RetryDecision = routing.RetryDecision
 

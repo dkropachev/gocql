@@ -5,14 +5,19 @@ package cluster
 
 import (
 	"context"
+	"math"
 
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 )
 
 func InternalSessionTypedGeneration(s *Session) uint64 {
 	return InternalSessionTypedSchemaGeneration(s)
 }
 
+// InternalSessionSelectTypedConn returns a connection for a request: from the
+// first of plan's routes that has one, or, without a plan, of the request's
+// pinned host, or of any host.
 func InternalSessionSelectTypedConn(s *Session, ctx context.Context, routing RoutingInfo, plan QueryPlan) (*Conn, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -23,37 +28,23 @@ func InternalSessionSelectTypedConn(s *Session, ctx context.Context, routing Rou
 	if s.privateStorage.InternalPool == nil || s.privateStorage.InternalHostSource == nil {
 		return nil, ErrNoConnections
 	}
-	pickTarget := func(target Target) *Conn {
-		if routing.HostID.Set && target.HostID != routing.HostID.Value {
-			return nil
-		}
-		s.privateStorage.InternalPool.InternalMu.RLock()
-		pool := s.privateStorage.InternalPool.InternalHostConnPools[target.HostID]
-		s.privateStorage.InternalPool.InternalMu.RUnlock()
-		if pool == nil || pool.InternalHost == nil || !pool.InternalHost.IsUp() || InternalClusterSettingsFilterHost(&s.privateStorage.InternalCfg, pool.InternalHost) {
-			return nil
-		}
-		return InternalSessionPickTypedPool(s, pool, target, routing)
-	}
 	if plan != nil {
 		for {
-			target, ok := plan.Next()
+			r, ok := plan.Next()
 			if !ok {
 				return nil, ErrNoConnections
 			}
-			if target.StrictShard && !target.ShardID.Set {
-				return nil, typeValidation("routing shard", "strict target requires a shard ID")
-			}
-			if conn := pickTarget(target); conn != nil {
+			if conn := InternalSessionPickRoute(s, r, routing); conn != nil {
 				return conn, nil
-			}
-			if target.StrictShard {
-				return nil, typeValidation("routing shard", "strict target is unavailable")
 			}
 		}
 	}
 	if routing.HostID.Set {
-		if conn := pickTarget(Target{HostID: routing.HostID.Value, ShardID: routing.ShardID, StrictShard: routing.ShardID.Set}); conn != nil {
+		shard := implRouting.AnyShard
+		if routing.ShardID.Set {
+			shard = int32(min(routing.ShardID.Value, math.MaxInt32))
+		}
+		if conn := InternalSessionPickRoute(s, implRouting.InternalNewRoute(s.privateStorage.InternalPool.InternalRoute(routing.HostID.Value), shard), routing); conn != nil {
 			return conn, nil
 		}
 		return nil, ErrNoConnections
@@ -62,16 +53,41 @@ func InternalSessionSelectTypedConn(s *Session, ctx context.Context, routing Rou
 	if len(hosts) == 0 {
 		return nil, ErrNoConnections
 	}
-	pick := func(host *HostInfo, _ Target) *Conn {
-		return pickTarget(Target{HostID: implEndpoint.InternalHostInfoHostUUID(host)})
-	}
 	start := int(s.privateStorage.nextTypedHost.Add(1) % uint64(len(hosts)))
 	for i := 0; i < len(hosts); i++ {
-		if conn := pick(hosts[(start+i)%len(hosts)], Target{}); conn != nil {
+		r := implRouting.InternalNewRoute(s.privateStorage.InternalPool.InternalRoute(implEndpoint.InternalHostInfoHostUUID(hosts[(start+i)%len(hosts)])), implRouting.AnyShard)
+		if conn := InternalSessionPickRoute(s, r, routing); conn != nil {
 			return conn, nil
 		}
 	}
 	return nil, ErrNoConnections
+}
+
+// InternalSessionPickRoute returns a connection of r's host for r's shard,
+// or nil. A route that belongs to no session resolves its host by ID.
+func InternalSessionPickRoute(s *Session, r Route, routing RoutingInfo) *Conn {
+	host := r.InternalHost()
+	if host == nil || routing.HostID.Set && host.ID() != routing.HostID.Value {
+		return nil
+	}
+	pool := host.Pool()
+	if pool == nil && !host.Bound() {
+		pool = s.privateStorage.InternalPool.InternalRoute(host.ID()).Pool()
+	}
+	if pool == nil || pool.InternalHost == nil || InternalClusterSettingsFilterHost(&s.privateStorage.InternalCfg, pool.InternalHost) {
+		return nil
+	}
+	if conn, ok := pool.PickRoute(r.Shard); ok {
+		return conn
+	}
+	if !pool.InternalHost.IsUp() {
+		return nil
+	}
+	// A pool without a typed picker picks the legacy way, strictly when
+	// the route names a shard.
+	target := r.Target()
+	target.StrictShard = target.ShardID.Set
+	return InternalSessionPickTypedPool(s, pool, target, routing)
 }
 
 func InternalSessionObserveSafely(s *Session, fn func()) {

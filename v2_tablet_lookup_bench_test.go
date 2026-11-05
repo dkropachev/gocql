@@ -50,7 +50,7 @@ func BenchmarkTabletLookup(b *testing.B) {
 					stamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, m)
 					tablet := routing.InternalLookupTabletCached(m, info, &cache)
 					block := tablet.VersionBlock(info)
-					target, ok := p.InternalPlanWith(info, m, &plan, &tablet).Next()
+					target, ok := nextTarget(p.InternalPlanWith(info, m, &plan, &tablet))
 					if !ok || !stamp.InternalValid {
 						b.Fatal("no target")
 					}

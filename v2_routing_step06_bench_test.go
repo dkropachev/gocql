@@ -56,7 +56,7 @@ func BenchmarkStep06FirstTarget(b *testing.B) {
 						b.Fatal(err)
 					}
 					plan := p.Plan(info, m)
-					target, ok := plan.Next()
+					target, ok := nextTarget(plan)
 					if !ok {
 						b.Fatal("no target")
 					}

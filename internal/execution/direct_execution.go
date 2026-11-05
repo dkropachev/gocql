@@ -158,11 +158,11 @@ type skipHostPlan struct {
 	host UUID
 }
 
-func (p *skipHostPlan) Next() (Target, bool) {
+func (p *skipHostPlan) Next() (Route, bool) {
 	for {
-		target, ok := p.plan.Next()
-		if !ok || target.HostID != p.host {
-			return target, ok
+		r, ok := p.plan.Next()
+		if !ok || r.HostID() != p.host {
+			return r, ok
 		}
 	}
 }

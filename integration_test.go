@@ -152,7 +152,7 @@ func TestHostFilterDiscovery(t *testing.T) {
 	plan := rr.Plan(RoutingInfo{}, session.Metadata())
 	targets := make(map[UUID]bool)
 	for target, ok := plan.Next(); ok; target, ok = plan.Next() {
-		targets[target.HostID] = true
+		targets[target.HostID()] = true
 	}
 	tests.AssertEqual(t, "eligible routing hosts", len(clusterHosts)-1, len(targets))
 	for _, host := range session.Metadata().Hosts() {
@@ -191,7 +191,7 @@ func TestHostFilterInitial(t *testing.T) {
 	plan := rr.Plan(RoutingInfo{}, session.Metadata())
 	targets := make(map[UUID]bool)
 	for target, ok := plan.Next(); ok; target, ok = plan.Next() {
-		targets[target.HostID] = true
+		targets[target.HostID()] = true
 	}
 	tests.AssertEqual(t, "eligible routing hosts", len(clusterHosts)-1, len(targets))
 	for _, host := range session.Metadata().Hosts() {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/routing"
 )
 
 func testOwnedQuery(t testing.TB) *Query[[]byte, Unit] {
@@ -198,13 +199,13 @@ func TestQueryIdleRetentionAndBatchCapture(t *testing.T) {
 
 type slicePlan []Target
 
-func (p *slicePlan) Next() (Target, bool) {
+func (p *slicePlan) Next() (Route, bool) {
 	if len(*p) == 0 {
-		return Target{}, false
+		return Route{}, false
 	}
 	t := (*p)[0]
 	*p = (*p)[1:]
-	return t, true
+	return routing.InternalRouteOf(t), true
 }
 
 func TestSkipHostPlanOmitsPinnedHost(t *testing.T) {
@@ -216,7 +217,7 @@ func TestSkipHostPlanOmitsPinnedHost(t *testing.T) {
 		if !ok {
 			break
 		}
-		got = append(got, target.HostID)
+		got = append(got, target.HostID())
 	}
 	if len(got) != 2 || got[0] != a || got[1] != c {
 		t.Fatal(got)

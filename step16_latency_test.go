@@ -35,7 +35,7 @@ func TestStep16LatencyProbeReservation(t *testing.T) {
 		go func() {
 			defer group.Done()
 			<-start
-			target, ok := policy.Plan(info, metadata).Next()
+			target, ok := nextTarget(policy.Plan(info, metadata))
 			if !ok {
 				t.Error("missing target")
 				return
@@ -56,7 +56,7 @@ func TestStep16LatencyProbeReservation(t *testing.T) {
 	for attempt := 0; attempt < 2; attempt++ {
 		plan := policy.Plan(info, metadata).(*lazyRoutingPlan)
 		plan.InternalNow = future
-		target, ok := plan.Next()
+		target, ok := nextTarget(plan)
 		if !ok || (target.HostID == slow) != (attempt == 0) {
 			t.Fatal("abandoned probe did not expire/reserve once", attempt, target, ok)
 		}
@@ -66,7 +66,7 @@ func TestStep16LatencyProbeReservation(t *testing.T) {
 	policy.Observe(AttemptEvent{Target: Target{HostID: slow}, Started: future, Latency: 10 * time.Millisecond})
 	plan := policy.Plan(info, metadata).(*lazyRoutingPlan)
 	plan.InternalNow = future.Add(20 * time.Millisecond)
-	if target, ok := plan.Next(); !ok || target.HostID == slow {
+	if target, ok := nextTarget(plan); !ok || target.HostID == slow {
 		t.Fatal("completed probe did not restart exclusion", target, ok)
 	}
 }

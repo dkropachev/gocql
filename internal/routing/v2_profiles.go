@@ -16,7 +16,9 @@ import (
 
 type Target = model.Target
 
-type QueryPlan interface{ Next() (Target, bool) }
+// QueryPlan returns the routes a request tries, in order, until one of
+// them has a connection.
+type QueryPlan interface{ Next() (Route, bool) }
 type RoutingPolicy interface {
 	Validate(*MetadataSnapshot) error
 	Plan(RoutingInfo, *MetadataSnapshot) QueryPlan

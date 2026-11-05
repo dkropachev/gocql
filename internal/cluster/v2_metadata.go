@@ -353,7 +353,7 @@ func (s *Session) tryPublishV2Metadata() bool {
 	routing.SnapshotData(m).InternalPlacementEpoch = p.InternalPlacementEpoch.Load()
 	routing.SnapshotData(m).InternalPlacementSignal = &p.InternalPlacementEpoch
 	routing.SnapshotData(m).InternalPlacements = reconcileTabletPlacement(old, m)
-	routing.SnapshotData(m).InternalHostIndex = buildRoutingHostIndex(routing.SnapshotData(m).InternalHosts)
+	routing.SnapshotData(m).InternalHostIndex = InternalSessionRoutingHostIndex(s, routing.SnapshotData(m).InternalHosts)
 	if config.Metadata.Mode != MetadataFull {
 		routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, typeValidation("partitioner", "table partitioners outside loaded metadata disable token routing"))
 	}
@@ -1246,4 +1246,13 @@ func (s *Session) v2SchemaRefreshFailure(name string, cause error) error {
 
 func (s *Session) v2MetadataPublicationError() error {
 	return &PartialRefreshError{Generation: s.Metadata().Generation(), Keyspaces: map[string]error{"<publication>": fmt.Errorf("metadata sources changed throughout publication; refresh again")}}
+}
+
+// InternalSessionRoutingHostIndex indexes hosts with the session's routes to
+// them, so that plans route to their pools without looking them up.
+func InternalSessionRoutingHostIndex(s *Session, hosts []HostSnapshot) *routingHostIndex {
+	if s.privateStorage.InternalPool == nil {
+		return buildRoutingHostIndex(hosts)
+	}
+	return routing.InternalBuildRoutingHostIndexWith(hosts, s.privateStorage.InternalPool.InternalRoute)
 }

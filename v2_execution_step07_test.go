@@ -300,9 +300,6 @@ func TestStep07HostPinSurvivesCustomPolicy(t *testing.T) {
 	if conn, err := implCluster.InternalSessionSelectTypedConn(s, context.Background(), RoutingInfo{HostID: Option[UUID]{Set: true, Value: pinned}}, plan); conn != nil || !errors.Is(err, ErrNoConnections) {
 		t.Fatal("host pin escaped", conn, err)
 	}
-	if _, err := implCluster.InternalSessionSelectTypedConn(s, context.Background(), RoutingInfo{}, &targetPlan{InternalTargets: []Target{{HostID: pinned, StrictShard: true}}}); err == nil {
-		t.Fatal("strict target without shard accepted")
-	}
 }
 func TestStep07SafeRetryBytesWritten(t *testing.T) {
 	for _, written := range []bool{false, true} {

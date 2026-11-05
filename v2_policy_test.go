@@ -95,10 +95,15 @@ func v2TestMetadata() *MetadataSnapshot {
 	hosts := []HostSnapshot{v2TestHost(1, "a", "r1"), v2TestHost(2, "a", "r2"), v2TestHost(3, "b", "r3"), v2TestHost(4, "a", "r1")}
 	return routing.NewMetadataSnapshot(routing.SnapshotState{InternalHostIndex: buildRoutingHostIndex(hosts), InternalHosts: hosts, InternalKeyspaces: map[string]*KeyspaceMetadata{"ks": {Tables: map[string]*TableMetadata{"table": {Name: "table"}}}}, InternalRanges: map[string][]TokenRange{"ks": {{Start: 0, End: 0, Replicas: []Target{{HostID: hosts[2].ID}, {HostID: hosts[1].ID}, {HostID: hosts[0].ID}}}}}, InternalTablets: map[metadataTable][]TokenRange{}})
 }
+
+// nextTarget is the target of a plan's next route, without the route to any
+// shard of the same host that may follow it.
+var nextTarget = routing.InternalNextTarget
+
 func v2PlanIDs(p QueryPlan) []byte {
 	var result []byte
 	for {
-		v, ok := p.Next()
+		v, ok := nextTarget(p)
 		if !ok {
 			return result
 		}
@@ -149,11 +154,11 @@ func TestV2RoutingTabletMissAndStrictShard(t *testing.T) {
 	if err := single.Validate(m); err == nil {
 		t.Fatal("invalid strict shard accepted")
 	}
-	if _, ok := single.Plan(RoutingInfo{}, m).Next(); ok {
+	if _, ok := nextTarget(single.Plan(RoutingInfo{}, m)); ok {
 		t.Fatal("strict shard fell back")
 	}
 	single = SingleTargetRouting(Target{HostID: routing.SnapshotData(m).InternalHosts[0].ID, ShardID: Option[uint32]{Value: 9, Set: true}}, false)
-	target, ok := single.Plan(RoutingInfo{}, m).Next()
+	target, ok := nextTarget(single.Plan(RoutingInfo{}, m))
 	if !ok || target.ShardID.Set {
 		t.Fatal("hint fallback failed", target, ok)
 	}
@@ -189,12 +194,12 @@ func TestV2RoutingPinnedTargetsRemainIndependent(t *testing.T) {
 	// shards on the same host. Each plan must retain its own exact destination.
 	for i := len(plans) - 1; i >= 0; i-- {
 		test := tests[i]
-		target, ok := plans[i].Next()
+		target, ok := nextTarget(plans[i])
 		want := Target{HostID: UUID{15: test.host}, ShardID: test.shard, StrictShard: test.shard.Set}
 		if ok != test.valid || ok && target != want {
 			t.Fatalf("host %d shard %+v: got %+v,%t; want %+v,%t", test.host, test.shard, target, ok, want, test.valid)
 		}
-		if target, ok := plans[i].Next(); ok {
+		if target, ok := nextTarget(plans[i]); ok {
 			t.Fatalf("pinned host %d fell back to %+v", test.host, target)
 		}
 	}
