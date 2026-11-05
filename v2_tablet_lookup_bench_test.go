@@ -59,3 +59,21 @@ func BenchmarkTabletLookup(b *testing.B) {
 }
 
 var step06BenchmarkBlock byte
+
+// BenchmarkTabletFeedbackCaptureParallel captures the tablet feedback stamp
+// of a request from every benchmark goroutine at once, as concurrent
+// executions do before sending.
+func BenchmarkTabletFeedbackCaptureParallel(b *testing.B) {
+	s := step06Session(b)
+	m := s.Metadata()
+	info := RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Value: 1, Set: true}, Consistency: Quorum}
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			if !implCluster.InternalSessionCaptureTabletFeedback(s, info, m).InternalValid {
+				b.Fatal("stale stamp")
+			}
+		}
+	})
+}

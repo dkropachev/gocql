@@ -289,7 +289,7 @@ func (s *InternalMetadataDescriber) InternalRefreshTableSchema(keyspaceName, tab
 		}
 	})
 	if applied {
-		p.InternalTableRevision[tableKey]++
+		p.InternalBumpTableRevisionLocked(tableKey)
 	}
 	p.InternalMu.Unlock()
 	if !applied {

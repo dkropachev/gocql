@@ -160,7 +160,7 @@ func TestV2TabletFeedbackOverflowResyncAndEpoch(t *testing.T) {
 	p.InternalFeedbackMu.Unlock()
 	// A newer schema event must win over every already queued hint.
 	p.InternalMu.Lock()
-	p.InternalSchemaEpoch["ks"]++
+	p.InternalBumpSchemaEpochLocked("ks")
 	p.InternalMu.Unlock()
 	go implCluster.InternalSessionRunV2TabletFeedback(s, p)
 	select {

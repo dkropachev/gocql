@@ -247,7 +247,7 @@ func (s *Session) publishV2EventMode(source oldevents.Event, invalidate, deliver
 		InternalSessionInvalidatePreparedSchema(s, e)
 		p.InternalMu.Lock()
 		p.InternalPublicationRevision++
-		p.InternalSchemaEpoch[e.Keyspace]++
+		p.InternalBumpSchemaEpochLocked(e.Keyspace)
 		p.schemaGeneration.Add(1)
 		if e.Target == "KEYSPACE" {
 			if e.Change == "DROPPED" {

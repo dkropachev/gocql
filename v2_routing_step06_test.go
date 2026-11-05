@@ -237,7 +237,7 @@ func TestStep06PlacementFencesSharingAndOverflow(t *testing.T) {
 	lazy := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true})).Plan(RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Value: 20, Set: true}}, beforeEpoch)
 
 	p.InternalMu.Lock()
-	p.InternalTableRevision[metadataTable{InternalKeyspace: "ks", InternalTable: "table"}]++
+	p.InternalBumpTableRevisionLocked(metadataTable{InternalKeyspace: "ks", InternalTable: "table"})
 	p.InternalMu.Unlock()
 	implCluster.InternalSessionQueueTabletFeedback(s, h, oldStamp)
 	step06Drain(s)

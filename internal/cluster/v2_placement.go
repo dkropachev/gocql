@@ -15,12 +15,14 @@ func InternalSessionCaptureTabletFeedback(s *Session, info RoutingInfo, m *Metad
 	if p == nil {
 		return tabletFeedbackStamp{}
 	}
-	// Only reads: concurrent captures share the lock.
-	p.InternalMu.RLock()
-	defer p.InternalMu.RUnlock()
+	// No lock: every input is an atomically published copy. A capture that
+	// races a schema change can mix values from before and after it; then at
+	// least one of them differs from what the publisher compares it with
+	// under the lock, and the feedback is dropped, as it would be if it had
+	// been captured before the change.
 	k := metadataTable{InternalKeyspace: info.Keyspace, InternalTable: info.Table}
 	identity := routing.InternalMetadataSnapshotTableIdentity(m, k)
-	return tabletFeedbackStamp{InternalValid: s.tabletSchemaCurrent(k, identity), InternalSnapshot: m, InternalEpoch: p.InternalPlacementEpoch.Load(), InternalSchema: p.InternalSchemaEpoch[k.InternalKeyspace], InternalTable: p.InternalTableRevision[k], InternalIdentity: identity}
+	return tabletFeedbackStamp{InternalValid: s.tabletSchemaCurrent(k, identity), InternalSnapshot: m, InternalEpoch: p.InternalPlacementEpoch.Load(), InternalSchema: (*p.schemaEpochs.Load())[k.InternalKeyspace], InternalTable: (*p.tableRevisions.Load())[k], InternalIdentity: identity}
 }
 
 type InternalV2TabletFeedbackKey struct {
@@ -210,7 +212,7 @@ func InternalSessionCapturedRoutingPartitioner(s *Session, name string) TokenPar
 	return p.InternalConfig.Partitioners[name]
 }
 
-// Caller holds peripheral.mu. Source identity is checked as well as the public
+// Source identity is checked as well as the public
 // snapshot: a drop can already be fenced while its snapshot build is pending.
 func (s *Session) tabletSchemaCurrent(k metadataTable, identity string) bool {
 	if s.privateStorage.InternalMetadataDescriber == nil || s.privateStorage.InternalMetadataDescriber.InternalMetadata == nil {

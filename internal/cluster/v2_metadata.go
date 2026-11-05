@@ -44,13 +44,18 @@ type TraceEvent struct {
 type InternalV2LatencySummary struct{ p50, p95, p99 time.Duration }
 
 type InternalV2PeripheralState struct {
-	routeDiagnostic               error
-	InternalSnapshot              atomic.Pointer[MetadataSnapshot]
-	InternalSubscribers           map[*Subscription]struct{}
-	partitioners                  atomic.Pointer[map[string]TokenPartitioner] // InternalConfig.Partitioners, for lock-free reads
-	InternalSchemaEpoch           map[string]uint64
-	schemaRevision                map[string]uint64
-	InternalTableRevision         map[metadataTable]uint64
+	routeDiagnostic       error
+	InternalSnapshot      atomic.Pointer[MetadataSnapshot]
+	InternalSubscribers   map[*Subscription]struct{}
+	partitioners          atomic.Pointer[map[string]TokenPartitioner] // InternalConfig.Partitioners, for lock-free reads
+	InternalSchemaEpoch   map[string]uint64
+	schemaRevision        map[string]uint64
+	InternalTableRevision map[metadataTable]uint64
+	// schemaEpochs and tableRevisions are copies of InternalSchemaEpoch and
+	// InternalTableRevision, replaced whole on every change, that a request
+	// reads without the lock when it captures its tablet feedback stamp.
+	schemaEpochs                  atomic.Pointer[map[string]uint64]
+	tableRevisions                atomic.Pointer[map[metadataTable]uint64]
 	schemaDropped                 map[string]bool
 	InternalPreparedRefreshScopes map[string]uint64
 	InternalFeedback              map[InternalV2TabletFeedbackKey]InternalV2PendingTabletFeedback
@@ -91,6 +96,8 @@ func InternalSessionPeripheral(s *Session) *InternalV2PeripheralState {
 		return p
 	}
 	p := &InternalV2PeripheralState{InternalSubscribers: make(map[*Subscription]struct{}), InternalSchemaEpoch: make(map[string]uint64), schemaRevision: make(map[string]uint64), InternalTableRevision: make(map[metadataTable]uint64), schemaDropped: make(map[string]bool), schemaStale: make(map[string]bool), InternalFeedback: make(map[InternalV2TabletFeedbackKey]InternalV2PendingTabletFeedback), feedbackWake: make(chan struct{}, 1), knownTabletTables: make(map[metadataTable]bool), InternalDone: make(chan struct{})}
+	p.schemaEpochs.Store(&map[string]uint64{})
+	p.tableRevisions.Store(&map[metadataTable]uint64{})
 	if s.privateStorage.v2Peripheral.CompareAndSwap(nil, p) {
 		return p
 	}
@@ -1192,6 +1199,18 @@ func (p *InternalV2PeripheralState) admitMetadataWork() bool {
 	}
 	p.workers.Add(1)
 	return true
+}
+
+// InternalBumpSchemaEpochLocked advances keyspace's schema epoch. Caller holds p.InternalMu.
+func (p *InternalV2PeripheralState) InternalBumpSchemaEpochLocked(keyspace string) {
+	p.InternalSchemaEpoch[keyspace]++
+	p.schemaEpochs.Store(new(maps.Clone(p.InternalSchemaEpoch)))
+}
+
+// InternalBumpTableRevisionLocked advances k's table revision. Caller holds p.InternalMu.
+func (p *InternalV2PeripheralState) InternalBumpTableRevisionLocked(k metadataTable) {
+	p.InternalTableRevision[k]++
+	p.tableRevisions.Store(new(maps.Clone(p.InternalTableRevision)))
 }
 
 func (p *InternalV2PeripheralState) captureTableRevisionsLocked(keyspace string) map[metadataTable]uint64 {
