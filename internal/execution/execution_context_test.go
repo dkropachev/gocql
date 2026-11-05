@@ -393,3 +393,32 @@ func TestExecutionContextKeptTimerFollowsLaterDeadline(t *testing.T) {
 		t.Fatal(ctx.Err())
 	}
 }
+
+func TestExecutionContextWakesTypedWait(t *testing.T) {
+	c := newExecutionContext()
+	_, cancel := c.begin(context.Background(), time.Hour)
+	wake := c.InternalWakeChannel()
+	cancel()
+	select {
+	case <-wake:
+		t.Fatal("finishing a generation woke a wait")
+	default:
+	}
+	_, _ = c.begin(context.Background(), time.Hour)
+	c.cancelFunc()
+	select {
+	case <-wake:
+	default:
+		t.Fatal("cancellation did not wake a wait")
+	}
+	// A wake nobody received does not reach the next generation.
+	_, _ = c.begin(context.Background(), time.Hour)
+	c.cancelFunc()
+	_, cancel = c.begin(context.Background(), time.Hour)
+	defer cancel()
+	select {
+	case <-wake:
+		t.Fatal("a previous generation's wake reached the next one")
+	default:
+	}
+}

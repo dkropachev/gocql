@@ -8,6 +8,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 // executionContext is a reusable query's per-execution deadline and
@@ -41,7 +43,11 @@ type executionContext struct {
 	// done is the generation's Done channel. It is replaced only in begin,
 	// when a cancellation closed it, so InternalTransientDone reads it without
 	// the lock: begin runs only after the previous generation drained.
-	done       chan struct{}
+	done chan struct{}
+	// wake receives a wake when a generation is cancelled, so that a typed
+	// wait receiving its response from it needs no select (see
+	// transport.InternalWake). begin drains a wake left from before.
+	wake       chan transport.InternalCallResp
 	stopParent func() bool
 	// linked is the execution context this generation is a child of, which
 	// cancels it through child without an AfterFunc registration.
@@ -76,7 +82,7 @@ type executionAfterFunc struct {
 var closedExecutionDone = func() chan struct{} { c := make(chan struct{}); close(c); return c }()
 
 func newExecutionContext() *executionContext {
-	c := &executionContext{}
+	c := &executionContext{wake: transport.InternalNewWakeChannel()}
 	c.cancelFunc = c.cancelCanceled
 	c.finishFunc = c.finish
 	c.parentFunc = c.parentCancelled
@@ -97,6 +103,7 @@ func (c *executionContext) begin(parent context.Context, timeout time.Duration) 
 	c.afters = c.afters[:0]
 	c.timerAt = time.Time{}
 	c.lazy, c.watching = false, false
+	transport.InternalDrainWake(c.wake)
 	if c.done == nil || c.doneClosed {
 		c.done, c.doneClosed = make(chan struct{}), false
 	}
@@ -285,6 +292,7 @@ func (c *executionContext) cancelLocked(err error) {
 	c.cancelled.Store(true)
 	close(c.done)
 	c.doneClosed = true
+	transport.InternalWake(c.wake)
 	c.disarmLocked()
 	afters := c.afters
 	c.afters = nil
@@ -309,6 +317,9 @@ func (c *executionContext) Done() <-chan struct{} {
 	c.mu.Unlock()
 	return d
 }
+
+// InternalWakeChannel is the channel cancellation wakes; see wake.
+func (c *executionContext) InternalWakeChannel() chan transport.InternalCallResp { return c.wake }
 
 // InternalTransientDone is Done for a wait that ends before the current
 // attempt returns, so that it does not prevent channel reuse at finish.

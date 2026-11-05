@@ -1412,6 +1412,9 @@ type InternalCallReq struct {
 	// It has one slot, so a sender never blocks; deliver and stopWaiting decide
 	// through state which side owns a response.
 	InternalResp chan InternalCallResp
+	// ownResp is the call's own channel; InternalResp is a context's wake
+	// channel (attemptWake) for the duration of one typed wait.
+	ownResp chan InternalCallResp
 	// dest is caller-owned storage for a typed response. The reader parses
 	// into it only after claiming the call while the caller still waits; a
 	// caller that stops waiting then receives the claimed response.
@@ -1429,9 +1432,8 @@ type InternalCallReq struct {
 
 var InternalCallReqPool = sync.Pool{
 	New: func() any {
-		return &InternalCallReq{
-			InternalResp: make(chan InternalCallResp, 1),
-		}
+		resp := make(chan InternalCallResp, 1)
+		return &InternalCallReq{InternalResp: resp, ownResp: resp}
 	},
 }
 
@@ -1462,6 +1464,9 @@ func InternalPutCallReq(call *InternalCallReq) {
 	call.streamObserverEndOnce = sync.Once{}
 	call.InternalStreamID = 0
 	call.dest = nil
+	if call.ownResp != nil {
+		call.InternalResp = call.ownResp
+	}
 	// A correct exchange leaves the slot empty; never hand a stale response to
 	// the next call.
 	select {
@@ -1502,7 +1507,12 @@ func (call *InternalCallReq) InternalStopWaiting() (InternalCallResp, bool) {
 	if call.state.CompareAndSwap(callWaiting, callStopped) {
 		return InternalCallResp{}, false
 	}
-	return <-call.InternalResp, true
+	for {
+		// A context's wake channel can hold a wake ahead of the response.
+		if resp := <-call.InternalResp; !resp.wake {
+			return resp, true
+		}
+	}
 }
 
 func (call *InternalCallReq) finishExec() {
@@ -1539,6 +1549,29 @@ type InternalCallResp struct {
 	// stream and recycling the callReq. Set by processFrameSource on every outcome
 	// it delivers directly; Conn.closed races this delivery and cannot answer it.
 	removedFromCalls bool
+	// wake marks a cancellation sent by the wait's context, not a response.
+	wake bool
+}
+
+// InternalNewWakeChannel makes the channel a context hands to typed waits
+// (see attemptWake): one response and one wake fit without blocking.
+func InternalNewWakeChannel() chan InternalCallResp { return make(chan InternalCallResp, 2) }
+
+// InternalWake sends a cancellation's wake to a wait on ch without blocking.
+// A full channel already holds what ends the wait.
+func InternalWake(ch chan InternalCallResp) {
+	select {
+	case ch <- InternalCallResp{wake: true}:
+	default:
+	}
+}
+
+// InternalDrainWake discards a wake left from a previous use of ch.
+func InternalDrainWake(ch chan InternalCallResp) {
+	select {
+	case <-ch:
+	default:
+	}
 }
 
 // allocCall allocates a stream for call and registers call under it in one

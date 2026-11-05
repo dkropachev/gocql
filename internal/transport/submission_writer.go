@@ -83,6 +83,20 @@ type transientDoner interface {
 	InternalTransientDone() <-chan struct{}
 }
 
+// waker is implemented by contexts that send a wake (InternalWake) into a
+// channel of their own when cancelled, instead of only closing Done.
+type waker interface {
+	InternalWakeChannel() chan InternalCallResp
+}
+
+// attemptWake returns ctx's wake channel, or nil.
+func attemptWake(ctx context.Context) chan InternalCallResp {
+	if w, ok := ctx.(waker); ok {
+		return w.InternalWakeChannel()
+	}
+	return nil
+}
+
 // parentDoner is implemented by contexts that watch a cancellable parent
 // without propagating its cancellation into their own Done channel.
 type parentDoner interface {

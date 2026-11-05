@@ -130,6 +130,15 @@ func (x *typedExec) run(ctx context.Context, req *attemptRequest, dest *Internal
 	call := InternalGetCallReq(0)
 	call.InternalTyped = true
 	call.dest = dest
+	// A context that wakes a wait through a channel of its own lets the wait
+	// receive the response and the cancellation from that one channel, unless
+	// something else can end the wait.
+	wake := attemptWake(ctx)
+	if wake != nil && req.Timeout <= 0 && c.closesOnCancel && attemptParentDone(ctx) == nil {
+		call.InternalResp = wake
+	} else {
+		wake = nil
+	}
 	if err := c.allocSharedCall(ctx, call); err != nil {
 		call.finishExec()
 		InternalPutCallReq(call)
@@ -253,9 +262,7 @@ func (x *typedExec) run(ctx context.Context, req *attemptRequest, dest *Internal
 		}
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctx.Err(), InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
 	}
-	parentDone := attemptParentDone(ctx)
-	select {
-	case resp := <-call.InternalResp:
+	received := func(resp InternalCallResp) (*InternalResponsePage, error) {
 		if ticket != nil {
 			ticket.awaitWritten()
 		}
@@ -270,6 +277,18 @@ func (x *typedExec) run(ctx context.Context, req *attemptRequest, dest *Internal
 			return resp.InternalPage, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: resp.InternalErr, InternalPotentiallyExecuted: executed})
 		}
 		return resp.InternalPage, nil
+	}
+	if wake != nil {
+		// The context sends a wake into the call's channel when cancelled.
+		if resp := <-wake; !resp.wake {
+			return received(resp)
+		}
+		return abandon()
+	}
+	parentDone := attemptParentDone(ctx)
+	select {
+	case resp := <-call.InternalResp:
+		return received(resp)
 	case <-timeoutCh:
 		x.stopWaiting = true
 		if ticket != nil && ticket.unsent() {
