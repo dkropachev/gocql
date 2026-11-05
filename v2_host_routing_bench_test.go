@@ -72,7 +72,7 @@ func hostRoutingSession(b testing.TB, tablets bool) *Session {
 	return s
 }
 
-// BenchmarkHostRouting does a token-aware request's host path: it builds the
+// BenchmarkHostRouting does a token-aware ordinary request's host path: it builds the
 // routing plan and selects a connection for its first target, as an
 // execution's first attempt does, without sending anything.
 func BenchmarkHostRouting(b *testing.B) {
@@ -98,7 +98,7 @@ func BenchmarkHostRouting(b *testing.B) {
 					i := 0
 					for pb.Next() {
 						m := s.Metadata()
-						info := RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Value: tokens[i&4095], Set: true}, Consistency: Quorum}
+						info := RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Value: tokens[i&4095], Set: true}, Consistency: Quorum, Kind: OrdinaryStatement}
 						i++
 						tablet := routing.InternalLookupTabletCached(m, info, &cache)
 						conn, err := implCluster.InternalSessionSelectTypedConn(s, ctx, info, p.InternalPlanWith(info, m, &plan, &tablet))
