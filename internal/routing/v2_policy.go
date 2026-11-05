@@ -420,15 +420,15 @@ func (p *InternalRoutingPolicy) InternalPlanWith(info RoutingInfo, m *MetadataSn
 	}
 	return plan
 }
-func (p *InternalLazyRoutingPlan) host(t Target) (HostSnapshot, bool) {
+func (p *InternalLazyRoutingPlan) host(t Target) (*HostSnapshot, bool) {
 	perfAdd(0, 1)
 	i, ok := p.index.byID[t.HostID]
 	if !ok {
-		return HostSnapshot{}, false
+		return nil, false
 	}
-	return SnapshotData(p.metadata).InternalHosts[i], true
+	return &SnapshotData(p.metadata).InternalHosts[i], true
 }
-func (p *InternalLazyRoutingPlan) eligible(h HostSnapshot) bool {
+func (p *InternalLazyRoutingPlan) eligible(h *HostSnapshot) bool {
 	return h.Enabled && (p.policy.InternalOptions.Datacenter == "" || h.Datacenter == p.policy.InternalOptions.Datacenter || p.policy.InternalOptions.AllowRemote)
 }
 func (p *InternalLazyRoutingPlan) InternalPenalty(t Target) bool {
@@ -572,7 +572,7 @@ func (p *InternalLazyRoutingPlan) Next() (Target, bool) {
 				i := (p.cursor + p.rotation) % len(ids)
 				p.cursor++
 				perfAdd(1, 1)
-				h := SnapshotData(p.metadata).InternalHosts[ids[i]]
+				h := &SnapshotData(p.metadata).InternalHosts[ids[i]]
 				if !p.eligible(h) || connected && (!h.Connected || !h.Up) {
 					continue
 				}
