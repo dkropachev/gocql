@@ -60,17 +60,18 @@ func InternalSessionQueueTabletFeedback(s *Session, h tablets.TabletInfo, stamp 
 	stamp.InternalSnapshot = nil // the queue never retains a cluster/schema snapshot or page.
 	p.InternalFeedbackMu.Lock()
 	key := InternalV2TabletFeedbackKey{k.InternalKeyspace, k.InternalTable, h.LastToken()}
-	p.knownTabletTables[k] = true
-	if len(p.InternalFeedback) >= 1024 {
-		if _, exists := p.InternalFeedback[key]; !exists {
-			clear(p.InternalFeedback)
-			p.InternalFeedbackResync = true
-			p.InternalPlacementEpoch.Add(1)
-		}
+	if !p.knownTabletTables[k] {
+		p.knownTabletTables[k] = true
+	}
+	prior, ok := p.InternalFeedback[key]
+	if !ok && len(p.InternalFeedback) >= 1024 {
+		clear(p.InternalFeedback)
+		p.InternalFeedbackResync = true
+		p.InternalPlacementEpoch.Add(1)
 	}
 	// Keep the earliest pending observation for an overlapping identity/range.
 	// Later requests can relearn after it publishes; receipt order is not freshness.
-	if prior, ok := p.InternalFeedback[key]; !ok || prior.InternalStamp.InternalEpoch != stamp.InternalEpoch || prior.InternalStamp.InternalSchema != stamp.InternalSchema || prior.InternalStamp.InternalTable != stamp.InternalTable || prior.InternalStamp.InternalIdentity != stamp.InternalIdentity {
+	if !ok || prior.InternalStamp.InternalEpoch != stamp.InternalEpoch || prior.InternalStamp.InternalSchema != stamp.InternalSchema || prior.InternalStamp.InternalTable != stamp.InternalTable || prior.InternalStamp.InternalIdentity != stamp.InternalIdentity {
 		p.InternalFeedback[key] = InternalV2PendingTabletFeedback{InternalHint: h, InternalStamp: stamp, InternalObservation: observation}
 	}
 	p.InternalFeedbackMu.Unlock()
