@@ -256,3 +256,27 @@ func TestCompactPermutationLayout(t *testing.T) {
 		t.Fatal("unexpected compact plan layout")
 	}
 }
+
+// A policy that does not shuffle per request applies, for each replica
+// count, the permutation it computed once when it was made.
+func TestCompactPermutationFixedMatchesShuffle(t *testing.T) {
+	p := codecMust(NewRoutingPolicy(RoutingOptions{TokenAware: true})).(*InternalRoutingPolicy)
+	for n := 0; n <= 16; n++ {
+		want := originalPermutation(n, p.seed, false)
+		for i, v := range want {
+			if int(p.fixed[n][i]) != v {
+				t.Fatalf("replicas %d: fixed %v, want %v", n, p.fixed[n][:n], want)
+			}
+		}
+	}
+	if shuffled := codecMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, ShuffleReplicas: true})).(*InternalRoutingPolicy); shuffled.fixed != nil {
+		t.Fatal("per-request shuffle kept a fixed permutation")
+	}
+}
+
+func codecMust[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
+}

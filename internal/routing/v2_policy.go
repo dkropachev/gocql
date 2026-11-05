@@ -204,6 +204,10 @@ type InternalRoutingDecisions struct{ InternalSlow map[UUID]time.Time }
 type InternalRoutingPolicy struct {
 	InternalDecisions atomic.Pointer[InternalRoutingDecisions]
 	updateAfter       atomic.Pointer[time.Time]
+	// fixed holds, for each replica count up to sixteen, the permutation
+	// a plan applies when replicas are not shuffled per request, which
+	// depends only on seed and the count.
+	fixed             *[17][16]uint8
 	InternalLatencies sync.Map
 	InternalOptions   RoutingOptions
 	seed              uint64
@@ -235,7 +239,14 @@ func NewRoutingPolicy(o RoutingOptions) (RoutingPolicy, error) {
 			return nil, typeValidation("latency routing", "invalid configuration")
 		}
 	}
-	return &InternalRoutingPolicy{InternalOptions: o, seed: rand.Uint64()}, nil
+	p := &InternalRoutingPolicy{InternalOptions: o, seed: rand.Uint64()}
+	if !o.ShuffleReplicas {
+		p.fixed = new([17][16]uint8)
+		for n := range p.fixed {
+			p.fixed[n] = smallPermutation(p.seed, n)
+		}
+	}
+	return p, nil
 }
 func (p *InternalRoutingPolicy) Validate(m *MetadataSnapshot) error {
 	if m == nil {
@@ -436,6 +447,8 @@ func (p *InternalRoutingPolicy) InternalPlanWith(info RoutingInfo, m *MetadataSn
 		for i := range plan.permutation {
 			plan.permutation[i] = i
 		}
+	} else if !conditional && len(plan.replicas) > 1 && p.fixed != nil {
+		plan.smallPermutation = p.fixed[len(plan.replicas)]
 	} else {
 		// These are replica-relative positions, not global host indices. The
 		// inline path has at most sixteen entries; larger sets keep full ints.
@@ -443,7 +456,7 @@ func (p *InternalRoutingPolicy) InternalPlanWith(info RoutingInfo, m *MetadataSn
 			plan.smallPermutation[i] = uint8(i)
 		}
 	}
-	if !conditional && len(plan.replicas) > 1 {
+	if !conditional && len(plan.replicas) > 1 && (plan.permutation != nil || p.fixed == nil) {
 		seed := p.seed
 		if o.ShuffleReplicas {
 			seed = rand.Uint64()
@@ -487,6 +500,27 @@ func (p *InternalRoutingPolicy) InternalPlanWith(info RoutingInfo, m *MetadataSn
 		plan.rotation = int(p.round.Add(1) & uint64(^uint(0)>>1))
 	}
 	return plan
+}
+
+// smallPermutation is the permutation of n replica positions that a plan
+// with seed applies; it shuffles exactly as InternalPlanWith does.
+func smallPermutation(seed uint64, n int) [16]uint8 {
+	var perm [16]uint8
+	for i := range n {
+		perm[i] = uint8(i)
+	}
+	rng := rand.NewPCG(seed, seed^0x9e3779b97f4a7c15)
+	for i := n - 1; i > 0; i-- {
+		bound := uint64(i + 1)
+		threshold := -bound % bound
+		v := rng.Uint64()
+		for v < threshold {
+			v = rng.Uint64()
+		}
+		j := int(v % bound)
+		perm[i], perm[j] = perm[j], perm[i]
+	}
+	return perm
 }
 func (p *InternalLazyRoutingPlan) host(t Target) (int, *HostSnapshot) {
 	perfAdd(0, 1)
