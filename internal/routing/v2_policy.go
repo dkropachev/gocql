@@ -338,7 +338,12 @@ func (p *InternalRoutingPolicy) InternalPlanWith(info RoutingInfo, m *MetadataSn
 	if m == nil {
 		return &InternalTargetPlan{}
 	}
-	*plan = InternalLazyRoutingPlan{policy: p, metadata: m, index: m.routingIndex(), InternalNow: time.Now(), InternalSlow: p.InternalDecisions.Load()}
+	*plan = InternalLazyRoutingPlan{policy: p, metadata: m, index: m.routingIndex(), InternalSlow: p.InternalDecisions.Load()}
+	if plan.InternalSlow != nil && len(plan.InternalSlow.InternalSlow) > 0 {
+		// Only a slow host's penalty reads the plan's time; published
+		// decisions are not modified, so a plan without one never does.
+		plan.InternalNow = time.Now()
+	}
 	plan.emitted = plan.smallEmitted[:0]
 	if info.HostID.Set {
 		plan.pinned = true
