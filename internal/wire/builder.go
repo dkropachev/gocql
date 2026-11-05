@@ -316,9 +316,9 @@ func (b *Builder) PatchUint32(m Mark, v uint32) error {
 // payloads remain borrowed; the caller must still honor their lifetime.
 func (b *Builder) Freeze() (Chain, error) {
 	if b.ownedMode {
-		c, err := NewChain(Borrow(b.ownedBuffer))
+		c := ChainOf(b.ownedBuffer)
 		*b = Builder{generation: b.generation + 1, currentPart: -1}
-		return c, err
+		return c, nil
 	}
 	var c Chain
 	if len(b.parts) > 0 {

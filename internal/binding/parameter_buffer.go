@@ -49,7 +49,8 @@ func EncodeInto[P any](b *ParameterBuffer, plan ParamPlan[P], columns Columns, v
 	if err == nil {
 		err = finishParamWriter(writer)
 	}
-	b.storage = b.builder.OwnedBytes()
+	storage := b.builder.OwnedBytes()
+	b.storage = storage
 	framed, freezeErr := b.builder.Freeze()
 	if err != nil {
 		return encodedValues{}, err
@@ -57,13 +58,14 @@ func EncodeInto[P any](b *ParameterBuffer, plan ParamPlan[P], columns Columns, v
 	if freezeErr != nil {
 		return encodedValues{}, freezeErr
 	}
+	// The owned builder's bytes are one contiguous span, so each cell is a
+	// subslice of them.
 	for i, position := range b.positions {
 		column, _ := columns.At(i)
-		body, err := framed.Slice(position.Start, position.End-position.Start)
-		if err != nil {
-			return encodedValues{}, err
+		if position.Start < 0 || position.End < position.Start || position.End > int64(len(storage)) {
+			return encodedValues{}, wire.ErrBounds
 		}
-		b.cells[i] = model.EncodedCell{Typ: column.Type, State: position.State, Body: body}
+		b.cells[i] = model.EncodedCell{Typ: column.Type, State: position.State, Body: wire.ChainOf(storage[position.Start:position.End])}
 	}
 	return encodedValues{Columns: columns, Cells: b.cells, Framed: framed}, nil
 }

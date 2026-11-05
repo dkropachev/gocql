@@ -132,6 +132,14 @@ func NewChain(spans ...Span) (Chain, error) {
 	return c, nil
 }
 
+// ChainOf is NewChain(Borrow(b)) without the variadic descriptor walk.
+func ChainOf(b []byte) Chain {
+	if len(b) == 0 {
+		return Chain{}
+	}
+	return Chain{head: Borrow(b), len: int64(len(b))}
+}
+
 func (c Chain) Len() int64 { return c.len }
 
 // Contiguous returns the borrowed single-span payload, without flattening.
