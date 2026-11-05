@@ -93,6 +93,7 @@ func BenchmarkStep06PlacementUpdate(b *testing.B) {
 						current := p.InternalSnapshot.Load()
 						stamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, current)
 						r, _ := routing.InternalMetadataSnapshotTabletRoot(current, k)
+						implCluster.InternalSessionResolveTabletFeedback(&stamp, k)
 						stamp.InternalSnapshot = nil
 						if !duplicate {
 							h = h.WithVersion(uint64(i + 1))

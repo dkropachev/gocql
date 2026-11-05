@@ -340,8 +340,19 @@ func (m *MetadataSnapshot) legacyPlacementReplicas(ranges []TokenRange, tablet b
 	return ranges[lo].Replicas
 }
 
+// InternalTabletFeedbackStamp is what a request captured before sending to
+// check a tablet hint in its response against. A capture takes only
+// published copies; the schema values it would read from them are read on
+// receipt of a hint, which most responses do not carry, when
+// InternalSchemaEpochs is set.
 type InternalTabletFeedbackStamp struct {
-	InternalSnapshot                             *MetadataSnapshot
+	InternalSnapshot *MetadataSnapshot
+	// InternalSchemaEpochs and InternalTableRevisions are the published
+	// copies InternalSchema and InternalTable are read from on receipt.
+	InternalSchemaEpochs   *map[string]uint64
+	InternalTableRevisions *map[InternalMetadataTable]uint64
+	// InternalIdentity is the table's schema source identity until receipt,
+	// then the snapshot's identity it matched.
 	InternalIdentity                             string
 	InternalEpoch, InternalSchema, InternalTable uint64
 	InternalValid                                bool
