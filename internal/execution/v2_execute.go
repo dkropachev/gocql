@@ -460,6 +460,9 @@ type InternalLogicalExecution struct {
 	lifetime       InternalExecutionLifetime
 	id             uint64
 	finished       atomic.Bool
+	// attemptTimed is set once an attempt took started as its own start:
+	// the first attempt starts with the execution, later ones read the clock.
+	attemptTimed bool
 }
 
 func (l *InternalLogicalExecution) InternalFinish(result Result, err error) {

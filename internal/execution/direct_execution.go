@@ -85,7 +85,15 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 			return s.executePage(ctx, &fallback, state)
 		}
 		s.attempts.Add(1)
-		started := time.Now()
+		var started time.Time
+		if l := request.InternalLogical; l != nil && !l.attemptTimed && !l.started.IsZero() {
+			// The first attempt starts with the execution: routing it took
+			// no time worth another clock reading.
+			l.attemptTimed = true
+			started = l.started
+		} else {
+			started = time.Now()
+		}
 		response, err := s.executeTypedAttempt(ctx, conn, request, state, consistency)
 		aggregate.Attempts = attempt
 		aggregate.Latency += time.Since(started)
