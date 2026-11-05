@@ -4,7 +4,9 @@
 package gocql
 
 import (
+	"fmt"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	"reflect"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 
@@ -83,6 +85,19 @@ func TestStep06TabletPayloadAndWire(t *testing.T) {
 			copy(bad[offset:offset+8], raw[4:12])
 			if _, err := parseTypedTabletPayload(BorrowBytes(bad), "ks", "table", v2); offset == 16 && err == nil {
 				t.Fatal("accepted empty range")
+			}
+		}
+		// A contiguous payload takes a byte parser and a split one the
+		// cursor parser; both must agree on every corrupted byte.
+		for offset := range raw {
+			for _, v := range []byte{0, 1, 0x7f, 0xff, raw[offset] + 1} {
+				bad := append([]byte(nil), raw...)
+				bad[offset] = v
+				got, gotErr := parseTypedTabletPayload(BorrowBytes(bad), "ks", "table", v2)
+				want, wantErr := parseTypedTabletPayload(cqltype.BytesView(typedTestChain(t, bad[:1], bad[1:]), wire.Ref{}), "ks", "table", v2)
+				if fmt.Sprint(gotErr) != fmt.Sprint(wantErr) || !reflect.DeepEqual(got, want) {
+					t.Fatalf("v2=%t offset=%d value=%#x: contiguous %v %v, split %v %v", v2, offset, v, got, gotErr, want, wantErr)
+				}
 			}
 		}
 		bad := append([]byte(nil), raw...)

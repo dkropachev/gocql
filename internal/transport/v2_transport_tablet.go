@@ -23,6 +23,12 @@ func InternalParseTypedTabletPayload(value Bytes, keyspace, table string, v2 boo
 	if err := cqltype.CheckBytesAlive(value); err != nil {
 		return tablets.TabletInfo{}, err
 	}
+	if raw, ok := cqltype.BytesChain(value).Contiguous(); ok {
+		if hint, ok, err := parseContiguousTabletPayload(raw, keyspace, table, v2); ok {
+			return hint, err
+		}
+		// A malformed hint is parsed again below for its error.
+	}
 	// Cursors are held by value and the first error returns at once, so a
 	// hint allocates only its replicas.
 	p := wire.CursorOver(cqltype.BytesChain(value))
@@ -147,4 +153,83 @@ func tabletHintBigint(c *wire.Cursor) (int64, error) {
 		return 0, err
 	}
 	return int64(n), nil
+}
+
+// parseContiguousTabletPayload is InternalParseTypedTabletPayload for a
+// payload in one buffer, reading it as plain bytes. It reports false for
+// any malformed payload, leaving the error to the cursor parser.
+func parseContiguousTabletPayload(b []byte, keyspace, table string, v2 bool) (tablets.TabletInfo, bool, error) {
+	first, b, ok := contiguousTabletBigint(b)
+	if !ok {
+		return tablets.TabletInfo{}, false, nil
+	}
+	last, b, ok := contiguousTabletBigint(b)
+	if !ok {
+		return tablets.TabletInfo{}, false, nil
+	}
+	list, b, ok := contiguousTabletField(b)
+	if !ok || len(list) < 4 {
+		return tablets.TabletInfo{}, false, nil
+	}
+	count := int(int32(binary.BigEndian.Uint32(list)))
+	list = list[4:]
+	if count < 0 || count > len(list)/4 || count > 1000 {
+		return tablets.TabletInfo{}, false, nil
+	}
+	replicas := make([]tablets.ReplicaInfo, count)
+	for i := range replicas {
+		var tuple, id, shard []byte
+		if tuple, list, ok = contiguousTabletField(list); !ok {
+			return tablets.TabletInfo{}, false, nil
+		}
+		if id, tuple, ok = contiguousTabletField(tuple); !ok || len(id) != 16 {
+			return tablets.TabletInfo{}, false, nil
+		}
+		if shard, tuple, ok = contiguousTabletField(tuple); !ok || len(shard) != 4 || len(tuple) != 0 {
+			return tablets.TabletInfo{}, false, nil
+		}
+		shardID := int(int32(binary.BigEndian.Uint32(shard)))
+		if shardID < 0 {
+			return tablets.TabletInfo{}, false, nil
+		}
+		replicas[i] = tablets.NewReplicaInfo(tablets.HostUUID(id), shardID)
+	}
+	if len(list) != 0 {
+		return tablets.TabletInfo{}, false, nil
+	}
+	var version int64
+	if v2 {
+		if version, b, ok = contiguousTabletBigint(b); !ok {
+			return tablets.TabletInfo{}, false, nil
+		}
+	}
+	if len(b) != 0 {
+		return tablets.TabletInfo{}, false, nil
+	}
+	hint, err := tablets.NewTabletInfo(keyspace, table, first, last, replicas)
+	if v2 {
+		hint = hint.WithVersion(uint64(version))
+	}
+	return hint, true, err
+}
+
+// contiguousTabletField splits a non-null [bytes] field off b.
+func contiguousTabletField(b []byte) (field, rest []byte, ok bool) {
+	if len(b) < 4 {
+		return nil, nil, false
+	}
+	n := int32(binary.BigEndian.Uint32(b))
+	if n < 0 || int(n) > len(b)-4 {
+		return nil, nil, false
+	}
+	return b[4 : 4+n], b[4+n:], true
+}
+
+// contiguousTabletBigint splits a bigint field off b.
+func contiguousTabletBigint(b []byte) (int64, []byte, bool) {
+	f, rest, ok := contiguousTabletField(b)
+	if !ok || len(f) != 8 {
+		return 0, nil, false
+	}
+	return int64(binary.BigEndian.Uint64(f)), rest, true
 }
