@@ -146,16 +146,21 @@ func (r *HostRoute) view() *typedView {
 // typedPicker returns the pool's typed picker, or nil while it has none. A
 // pool installs its picker once, replacing the placeholder it starts with.
 func (pool *InternalHostConnPool) typedPicker() *InternalTypedConnPicker {
-	if t := pool.typed.Load(); t != nil {
+	if t := pool.typed.Load(); t != nil || pool.legacy.Load() {
 		return t
 	}
 	pool.InternalMu.RLock()
-	t, _ := pool.InternalConnPicker.(*InternalTypedConnPicker)
+	picker := pool.InternalConnPicker
 	pool.InternalMu.RUnlock()
-	if t != nil {
+	switch t := picker.(type) {
+	case *InternalTypedConnPicker:
 		pool.typed.Store(t)
+		return t
+	case InternalNopConnPicker, nil:
+	default:
+		pool.legacy.Store(true) // the installed picker stays
 	}
-	return t
+	return nil
 }
 
 // PickRoute returns a connection of a host with a free stream on shard, or

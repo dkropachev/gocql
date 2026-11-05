@@ -247,6 +247,7 @@ type InternalHostConnPool struct {
 	InternalSize         int
 	generation           uint64
 	reconnectAttempt     int
+	legacy               atomic.Bool // the installed picker is not typed
 	// protection for connPicker, closed, filling
 	InternalMu                            sync.RWMutex
 	InternalClosed                        bool
