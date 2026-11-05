@@ -133,3 +133,39 @@ func TestGuessLowerBound(t *testing.T) {
 		}
 	}
 }
+
+// TestLookupTabletCached checks that a cached lookup finds what an uncached
+// one does as the placement tree is replaced: by a tablet update, by another
+// table's placement, and by the table's removal.
+func TestLookupTabletCached(t *testing.T) {
+	table := InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}
+	other := InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "other"}
+	hint := func(first, last int64, host byte) tablets.TabletInfo {
+		h, err := tablets.NewTabletInfo("ks", "table", first, last, []tablets.ReplicaInfo{tablets.NewReplicaInfo(tablets.HostUUID{15: host}, 0)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return h
+	}
+	var c InternalPlacementCache
+	var roots []*InternalTabletPlacementTree
+	var p InternalTabletPlacement
+	roots = append(roots, nil)
+	for i := int64(0); i < 4; i++ {
+		p, _ = InternalUpdateTabletPlacement(p, hint(i*100, i*100+100, byte(i)))
+		roots = append(roots, InternalPlacementPut(roots[len(roots)-1], table, p, InternalComparePlacementTable))
+	}
+	roots = append(roots, InternalPlacementPut(roots[len(roots)-1], other, InternalTabletPlacement{}, InternalComparePlacementTable))
+	roots = append(roots, placementDelete(roots[len(roots)-1], table, InternalComparePlacementTable))
+	// Revisit earlier trees as well, as snapshots taken before an update do.
+	order := []int{0, 1, 1, 2, 4, 3, 5, 6, 2, 6}
+	for _, i := range order {
+		m := NewMetadataSnapshot(SnapshotState{InternalPlacements: roots[i]})
+		for _, token := range []int64{-1, 0, 1, 50, 100, 150, 250, 399, 400, 401} {
+			info := RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Value: token, Set: true}}
+			if got, want := InternalLookupTabletCached(m, info, &c), InternalLookupTablet(m, info); got != want {
+				t.Fatalf("tree %d token %d: cached lookup %+v, uncached %+v", i, token, got, want)
+			}
+		}
+	}
+}

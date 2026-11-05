@@ -277,6 +277,46 @@ func InternalLookupTablet(m *MetadataSnapshot, info RoutingInfo) InternalTabletL
 	return l
 }
 
+// InternalPlacementCache remembers the placement of one statement's table
+// in the placement tree it was last found in, so that requests of the
+// statement skip the tree walk until a tablet update replaces the tree.
+type InternalPlacementCache struct {
+	entry atomic.Pointer[placementCacheEntry]
+}
+
+type placementCacheEntry struct {
+	root *InternalTabletPlacementTree
+	// placement is the table's placement in root, or nil without one.
+	placement *InternalTabletPlacement
+}
+
+// InternalLookupTabletCached is InternalLookupTablet for a statement whose
+// keyspace and table are fixed, finding their placement through c.
+func InternalLookupTabletCached(m *MetadataSnapshot, info RoutingInfo, c *InternalPlacementCache) InternalTabletLookup {
+	l := InternalTabletLookup{done: true}
+	if m == nil || info.Table == "" || info.Keyspace == "" || !info.Token.Set {
+		return l
+	}
+	if SnapshotData(m).InternalPlacementSignal != nil && SnapshotData(m).InternalPlacementEpoch != SnapshotData(m).InternalPlacementSignal.Load() {
+		l.tracked = true
+		return l
+	}
+	root := SnapshotData(m).InternalPlacements
+	e := c.entry.Load()
+	if e == nil || e.root != root {
+		e = &placementCacheEntry{root: root}
+		if n := InternalPlacementGet(root, InternalMetadataTable{InternalKeyspace: info.Keyspace, InternalTable: info.Table}, InternalComparePlacementTable); n != nil {
+			e.placement = &n.InternalValue
+		}
+		c.entry.Store(e)
+	}
+	if e.placement != nil {
+		l.tracked = true
+		l.node = e.placement.tabletRangeFor(info.Token.Value)
+	}
+	return l
+}
+
 // VersionBlock returns the tablet version block a request with lookup l
 // sends: a random nibble of the tablet's version and its index, or a random
 // byte when the tablet or its version is unknown.

@@ -453,7 +453,7 @@ func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
 	request := s.privateStorage.InternalRequest
 	metadata := s.privateStorage.InternalSession.Metadata()
 	request.tabletFeedback = implCluster.InternalSessionCaptureTabletFeedback(s.privateStorage.InternalSession, request.InternalRouting, metadata)
-	tablet := implRouting.InternalLookupTablet(metadata, request.InternalRouting)
+	tablet := lookupRequestTablet(metadata, request)
 	request.tabletVersionBlock = tablet.VersionBlock(request.InternalRouting)
 	var plan QueryPlan
 	if policy := request.InternalOptions.InternalProfile.Routing; policy != nil {

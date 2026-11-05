@@ -839,7 +839,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 	defer cancel()
 	metadata := s.Session.Metadata()
 	request.tabletFeedback = implCluster.InternalSessionCaptureTabletFeedback(s.Session, request.InternalRouting, metadata)
-	tablet := routing.InternalLookupTablet(metadata, request.InternalRouting)
+	tablet := lookupRequestTablet(metadata, request)
 	request.tabletVersionBlock = tablet.VersionBlock(request.InternalRouting)
 	if direct && pinnedUsable(request.pinned) {
 		// A continuation page goes to the connection that served the previous
@@ -1256,4 +1256,13 @@ func InternalRequestHasCounter(request *InternalExecutionRequest) bool {
 		}
 	}
 	return false
+}
+
+// lookupRequestTablet finds the tablet of request's token in m, through its
+// prepared statement's placement cache when it has one.
+func lookupRequestTablet(m *routing.MetadataSnapshot, request *InternalExecutionRequest) routing.InternalTabletLookup {
+	if source, ok := request.InternalSource.(preparedSource); ok && source.state != nil {
+		return routing.InternalLookupTabletCached(m, request.InternalRouting, &source.state.tabletPlacement)
+	}
+	return routing.InternalLookupTablet(m, request.InternalRouting)
 }

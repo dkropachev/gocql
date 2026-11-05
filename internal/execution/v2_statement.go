@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	routing "github.com/scylladb/gocql/v2/internal/routing"
 )
 
 type PrepareOptions struct {
@@ -34,11 +35,13 @@ type InternalHostPrepared struct {
 	InternalMetadataChanged        bool
 }
 type InternalPreparedState struct {
-	InternalResult                      *typedResultMetadata
-	InternalSession                     *implCluster.Session
-	InternalHosts                       map[UUID]*InternalHostPrepared
-	InternalPreparing                   map[UUID]*InternalHostPrepareFlight
-	InternalDependencies                *preparedDependencies
+	InternalResult       *typedResultMetadata
+	InternalSession      *implCluster.Session
+	InternalHosts        map[UUID]*InternalHostPrepared
+	InternalPreparing    map[UUID]*InternalHostPrepareFlight
+	InternalDependencies *preparedDependencies
+	// tabletPlacement finds the statement's table among tablet placements.
+	tabletPlacement                     routing.InternalPlacementCache
 	InternalStatement, InternalKeyspace string
 	InternalPartitioner                 string
 	InternalParameters, InternalColumns Columns

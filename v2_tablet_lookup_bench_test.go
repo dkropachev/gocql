@@ -36,6 +36,9 @@ func BenchmarkTabletLookup(b *testing.B) {
 				}
 				p := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true})).(*routing.InternalRoutingPolicy)
 				var plan routing.InternalLazyRoutingPlan
+				// The request is a prepared statement's, whose placement cache
+				// finds its table.
+				var cache routing.InternalPlacementCache
 				tokens := make([]int64, 4096)
 				for i := range tokens {
 					tokens[i] = int64(uint64(i) * 0x9e3779b97f4a7c15)
@@ -45,7 +48,7 @@ func BenchmarkTabletLookup(b *testing.B) {
 				for i := 0; i < b.N; i++ {
 					info := RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Value: tokens[i&4095], Set: true}, Consistency: Quorum}
 					stamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, m)
-					tablet := routing.InternalLookupTablet(m, info)
+					tablet := routing.InternalLookupTabletCached(m, info, &cache)
 					block := tablet.VersionBlock(info)
 					target, ok := p.InternalPlanWith(info, m, &plan, &tablet).Next()
 					if !ok || !stamp.InternalValid {
