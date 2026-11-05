@@ -42,6 +42,7 @@ const (
 // Positive host count is a total budget; otherwise each shard has its own
 // connection target. Reservation never removes a connection from this budget.
 type InternalTypedConnPicker struct {
+	view             atomic.Pointer[typedView]
 	fallbackUntil    time.Time
 	InternalConns    [][]*Conn
 	InternalExcess   []*Conn
@@ -150,20 +151,24 @@ func (p *InternalTypedConnPicker) putMode(c *Conn, expected uint64, check, initi
 	}
 	p.InternalMu.Lock()
 	if check && p.generation != expected {
+		p.publishLocked()
 		p.InternalMu.Unlock()
 		return typeValidation("pool generation", "opening attempt belongs to superseded sharder")
 	}
 	if p.closed {
+		p.publishLocked()
 		p.InternalMu.Unlock()
 		return ErrClosed
 	}
 	shards := max(1, implEndpoint.ScyllaHostFeaturesData(&c.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards)
 	shard := implEndpoint.ScyllaConnectionFeaturesData(&c.InternalScyllaSupported).InternalShard
 	if initial && p.InternalCount() > 0 && (shards != p.InternalNrShards || implEndpoint.ScyllaHostFeaturesData(&c.InternalScyllaSupported.ScyllaHostFeatures).InternalMsbIgnore != p.msbIgnore) {
+		p.publishLocked()
 		p.InternalMu.Unlock()
 		return typeValidation("pool generation", "late initial opening conflicts with installed sharder")
 	}
 	if shard < 0 || shard >= shards {
+		p.publishLocked()
 		p.InternalMu.Unlock()
 		return typeValidation("shard", "server reported invalid shard")
 	}
@@ -183,11 +188,13 @@ func (p *InternalTypedConnPicker) putMode(c *Conn, expected uint64, check, initi
 	if c.InternalRequestedShard.Set && uint32(shard) != c.InternalRequestedShard.Value {
 		p.fallbackUntil = time.Now().Add(InternalScyllaShardAwarePortFallbackDuration)
 		p.retired = append(p.retired, retired...)
+		p.publishLocked()
 		p.InternalMu.Unlock()
 		return typeValidation("shard target", "source-port/NAT mapping assigned shard %d instead of %d; ordinary-port fallback enabled", shard, c.InternalRequestedShard.Value)
 	}
 	if p.options.ConnectionsPerHost > 0 && p.InternalCount() >= p.InternalTarget() {
 		p.retired = append(p.retired, retired...)
+		p.publishLocked()
 		p.InternalMu.Unlock()
 		return ErrNoStreams
 	}
@@ -197,6 +204,7 @@ func (p *InternalTypedConnPicker) putMode(c *Conn, expected uint64, check, initi
 		p.InternalExcess = append(p.InternalExcess, c)
 	} else {
 		p.retired = append(p.retired, retired...)
+		p.publishLocked()
 		p.InternalMu.Unlock()
 		return ErrNoStreams
 	}
@@ -205,6 +213,7 @@ func (p *InternalTypedConnPicker) putMode(c *Conn, expected uint64, check, initi
 		p.InternalExcess = nil
 	}
 	p.retired = append(p.retired, retired...)
+	p.publishLocked()
 	p.InternalMu.Unlock()
 	return nil
 }
@@ -214,9 +223,9 @@ func (p *InternalTypedConnPicker) Remove(c *Conn) {
 	for i, cs := range p.InternalConns {
 		for j, v := range cs {
 			if v == c {
-				copy(cs[j:], cs[j+1:])
-				cs[len(cs)-1] = nil
-				p.InternalConns[i] = cs[:len(cs)-1]
+				// Published views share the shard's slice; build a new one.
+				p.InternalConns[i] = append(cs[:j:j], cs[j+1:]...)
+				p.publishLocked()
 				return
 			}
 		}
@@ -246,6 +255,7 @@ func (p *InternalTypedConnPicker) Close() {
 	p.retired = nil
 	p.InternalConns = nil
 	p.InternalExcess = nil
+	p.publishLocked()
 	p.InternalMu.Unlock()
 	InternalCloseConns(all...)
 }
@@ -291,30 +301,7 @@ func (p *InternalTypedConnPicker) InternalPickTarget(target Target, routing Rout
 	} else if routing.Token.Set {
 		shard = p.InternalShardOf(routing.Token.Value)
 	}
-	choose := func(cs []*Conn) *Conn {
-		var best, waiting *Conn
-		available := 0
-		if len(cs) == 0 {
-			return nil
-		}
-		// The shared position only rotates among several connections.
-		start := 0
-		if len(cs) > 1 {
-			start = int(p.InternalPos.Add(1) % uint64(len(cs)))
-		}
-		for i := range cs {
-			c := cs[(start+i)%len(cs)]
-			if n := c.AvailableStreams(); n > available {
-				best, available = c, n
-			} else if waiting == nil && c.InternalExclusiveFlag.Load() && c.InternalStreams.Available() > 0 {
-				waiting = c
-			}
-		}
-		if best == nil {
-			return waiting
-		}
-		return best
-	}
+	choose := p.choose
 	var preferred *Conn
 	if shard >= 0 && shard < len(p.InternalConns) {
 		cs := p.InternalConns[shard]

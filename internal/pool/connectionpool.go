@@ -30,6 +30,7 @@ import (
 	"math/rand"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/scylladb/gocql/v2/internal/debug"
@@ -57,6 +58,7 @@ type SetTablets interface {
 type InternalPolicyConnPool struct {
 	InternalServices      InternalPoolServices
 	InternalHostConnPools map[UUID]*InternalHostConnPool
+	routes                map[UUID]*HostRoute
 	InternalKeyspace      string
 	InternalPort          int
 	InternalNumConns      int
@@ -105,12 +107,14 @@ func (p *InternalPolicyConnPool) SetHosts(hosts []*HostInfo) {
 		if pool.Size() > 0 {
 			// add pool only if there a connections available
 			p.InternalHostConnPools[implEndpoint.InternalHostInfoHostUUID(pool.InternalHost)] = pool
+			p.routeChangedLocked(implEndpoint.InternalHostInfoHostUUID(pool.InternalHost), pool)
 		}
 	}
 
 	for addr := range toRemove {
 		pool := p.InternalHostConnPools[addr]
 		delete(p.InternalHostConnPools, addr)
+		p.routeChangedLocked(addr, nil)
 		go pool.Close()
 	}
 }
@@ -181,6 +185,7 @@ func (p *InternalPolicyConnPool) Close() {
 	for id, pool := range p.InternalHostConnPools {
 		pools = append(pools, pool)
 		delete(p.InternalHostConnPools, id)
+		p.routeChangedLocked(id, nil)
 	}
 	p.InternalMu.Unlock()
 	for _, pool := range pools {
@@ -201,6 +206,7 @@ func (p *InternalPolicyConnPool) InternalEnsureHost(host *HostInfo) *InternalHos
 		)
 
 		p.InternalHostConnPools[hostID] = pool
+		p.routeChangedLocked(hostID, pool)
 	}
 	p.InternalMu.Unlock()
 
@@ -219,6 +225,7 @@ func (p *InternalPolicyConnPool) InternalRemoveHost(hostID UUID) {
 	}
 
 	delete(p.InternalHostConnPools, hostID)
+	p.routeChangedLocked(hostID, nil)
 	p.InternalMu.Unlock()
 
 	go pool.Close()
@@ -229,6 +236,7 @@ func (p *InternalPolicyConnPool) InternalRemoveHost(hostID UUID) {
 type InternalHostConnPool struct {
 	InternalServices     InternalPoolServices
 	InternalConnPicker   ConnPicker
+	typed                atomic.Pointer[InternalTypedConnPicker]
 	InternalLogger       StdLogger
 	InternalRepairCtx    context.Context
 	InternalHost         *HostInfo
@@ -741,6 +749,7 @@ func (pool *InternalHostConnPool) InternalInitConnPicker(conn *Conn) error {
 			return err
 		}
 		pool.InternalConnPicker = picker
+		pool.typed.Store(picker)
 		return nil
 	}
 	if conn.InternalIsScyllaConn() && implEndpoint.ScyllaHostFeaturesValueData(conn.InternalGetScyllaSupported().ScyllaHostFeatures).InternalNrShards != 0 {
