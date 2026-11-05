@@ -37,12 +37,10 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 // until the response is released; a response that arrives after the caller
 // stopped waiting is built elsewhere.
 func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest, dest *InternalResponsePage) (*InternalResponsePage, error) {
-	if err := c.beginShared(ctx); err != nil {
-		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err})
-	}
 	// The shared admission and the input reference move to the writer's
 	// request lease once the request is submitted; until then they are ours.
-	sharedHeld, inputHeld := true, false
+	// The admission is taken together with the stream.
+	sharedHeld, inputHeld := false, false
 	defer func() {
 		if inputHeld {
 			req.Lease.Release()
@@ -83,11 +81,12 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest
 	call := InternalGetCallReq(0)
 	call.InternalTyped = true
 	call.dest = dest
-	if err := c.allocCall(call); err != nil {
+	if err := c.allocSharedCall(ctx, call); err != nil {
 		call.finishExec()
 		InternalPutCallReq(call)
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err})
 	}
+	sharedHeld = true
 	stream := call.InternalStreamID
 	if c.InternalStreamObserver != nil {
 		call.streamObserverContext = c.InternalStreamObserver.StreamContext(ctx)

@@ -1550,6 +1550,34 @@ func (c *Conn) allocCall(call *InternalCallReq) error {
 	if c.InternalClosed {
 		return ErrConnectionClosed
 	}
+	return c.allocCallLocked(call)
+}
+
+// allocSharedCall is beginShared followed by allocCall, in one critical section
+// unless the connection is reserved and admission has to wait. On success the
+// caller owns a shared admission it must end with endShared.
+func (c *Conn) allocSharedCall(ctx context.Context, call *InternalCallReq) error {
+	c.InternalMu.Lock()
+	if !c.InternalClosed && !c.InternalExclusiveFlag.Load() {
+		err := c.allocCallLocked(call)
+		if err == nil {
+			c.InternalSharedOps++
+		}
+		c.InternalMu.Unlock()
+		return err
+	}
+	c.InternalMu.Unlock()
+	if err := c.beginShared(ctx); err != nil {
+		return err
+	}
+	if err := c.allocCall(call); err != nil {
+		c.endShared()
+		return err
+	}
+	return nil
+}
+
+func (c *Conn) allocCallLocked(call *InternalCallReq) error {
 	stream, ok := c.InternalStreams.GetStream()
 	if !ok {
 		return ErrNoStreams
