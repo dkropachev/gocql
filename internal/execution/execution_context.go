@@ -30,9 +30,14 @@ import (
 type executionContext struct {
 	deadline time.Time // effective deadline, including the parent's
 	timerAt  time.Time // own deadline armed on timer; zero when disarmed
-	parent   context.Context
-	err      error
-	timer    *time.Timer
+	// timerFire is when timer is set to fire, zero when it is stopped or has
+	// fired. A finished generation leaves the timer running: deadlines grow
+	// from one generation to the next, so a later generation keeps the
+	// earlier firing and expire re-arms it for what remains.
+	timerFire time.Time
+	parent    context.Context
+	err       error
+	timer     *time.Timer
 	// done is the generation's Done channel. It is replaced only in begin,
 	// when a cancellation closed it, so InternalTransientDone reads it without
 	// the lock: begin runs only after the previous generation drained.
@@ -106,8 +111,10 @@ func (c *executionContext) begin(parent context.Context, timeout time.Duration) 
 	if !c.timerAt.IsZero() {
 		if c.timer == nil {
 			c.timer = time.AfterFunc(timeout, c.expire)
-		} else {
+			c.timerFire = c.timerAt
+		} else if c.timerFire.IsZero() || c.timerAt.Before(c.timerFire) {
 			c.timer.Reset(timeout)
+			c.timerFire = c.timerAt
 		}
 	}
 	p, linked := parent.(*executionContext)
@@ -170,7 +177,12 @@ func (c *executionContext) finish() {
 	}
 	c.err = context.Canceled
 	c.cancelled.Store(true)
-	c.disarmLocked()
+	// The timer keeps running for a later generation; when it fires idle,
+	// expire lets it stop.
+	c.timerAt = time.Time{}
+	if c.stopParent != nil || c.linked != nil {
+		c.disarmLocked()
+	}
 	c.mu.Unlock()
 }
 
@@ -181,6 +193,7 @@ func (c *executionContext) disarmLocked() {
 	c.timerAt = time.Time{}
 	if c.timer != nil {
 		c.timer.Stop()
+		c.timerFire = time.Time{}
 	}
 	if c.stopParent != nil {
 		c.stopParent()
@@ -225,8 +238,16 @@ func (c *executionContext) cancelGen(gen uint64, err error) {
 
 func (c *executionContext) expire() {
 	c.mu.Lock()
-	// A late callback from a previous generation sees a later or no deadline.
-	if c.timerAt.IsZero() || time.Now().Before(c.timerAt) {
+	c.timerFire = time.Time{}
+	// A firing kept from a previous generation, or a late callback, sees a
+	// later or no deadline; a later deadline re-arms the timer.
+	if c.timerAt.IsZero() {
+		c.mu.Unlock()
+		return
+	}
+	if now := time.Now(); now.Before(c.timerAt) {
+		c.timer.Reset(c.timerAt.Sub(now))
+		c.timerFire = c.timerAt
 		c.mu.Unlock()
 		return
 	}

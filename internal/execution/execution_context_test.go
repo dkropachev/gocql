@@ -362,3 +362,34 @@ func TestExecutionContextLazyParent(t *testing.T) {
 	}
 	cancel()
 }
+
+func TestExecutionContextKeptTimerFollowsLaterDeadline(t *testing.T) {
+	c := newExecutionContext()
+	_, cancel := c.begin(context.Background(), 20*time.Millisecond)
+	cancel()
+	// The finished generation's firing is kept; it must re-arm for this
+	// generation's later deadline instead of cancelling it early.
+	start := time.Now()
+	ctx, cancel := c.begin(context.Background(), 80*time.Millisecond)
+	defer cancel()
+	time.Sleep(40 * time.Millisecond)
+	if ctx.Err() != nil {
+		t.Fatal("a kept firing cancelled a later deadline", ctx.Err())
+	}
+	waitDone(t, ctx)
+	if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		t.Fatal(ctx.Err())
+	}
+	if elapsed := time.Since(start); elapsed < 80*time.Millisecond {
+		t.Fatal("cancelled before its deadline", elapsed)
+	}
+	// An earlier deadline than the kept firing re-arms the timer.
+	_, cancel = c.begin(context.Background(), time.Hour)
+	cancel()
+	ctx, cancel = c.begin(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	waitDone(t, ctx)
+	if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		t.Fatal(ctx.Err())
+	}
+}
