@@ -1320,3 +1320,66 @@ Parked at the user's request on 2026-11-04 after S3, with no push and
 the benchmark host idle. Resume from `8e4d1d91`; gate binaries for
 `base27` (round 4 on Go 1.27.0) are not kept, so rebuild them from
 `307c4658` with `GOTOOLCHAIN=go1.27.0` before comparing.
+
+## Round 6: synchronization and timers on the point paths
+
+Target: per-request fixed cost left after the routing work, from a
+`pwrite/w64` and `pread/w64` profile of `2051c2b5`: the response wait's
+select (5.2%), the execution timer's reset and stop (2.9%), the typed
+attempt's non-open-coded defers (3.4% at its exit), a `sync.Once` reset
+every execution (2.3%), extra clock readings, the session state read
+lock, and the result metadata compare on prepared reads. Each stage is
+compared with `hp/compare.sh` against the previous kept stage (5×ABBA,
+n=10); the commit messages carry each stage's numbers.
+
+| stage | commit | verdict | main effect (cpu-ns/op) |
+|---|---|---|---|
+| CAS instead of `sync.Once` in `InternalFinish` | `d1d748b1` | kept | pread/w64 −1.6%, w64-4 −0.8% |
+| keep the deadline timer running between executions | `0e0d6001` | kept | Admission −13%, w64 −1.6% to −3.2% |
+| one open-coded defer in the typed attempt | `534a0d81` | kept after a fix | −0.9% to −2.9% |
+| one-channel response wait | `15ec74b0` | kept | −1.9% to −4.4% |
+| one clock reading for execution start and deadline | `3868a122` | kept | Admission −5.8%, w64-4 −0.6% to −1.3% |
+| no session lock when a query registers its execution | `452517db` | kept | Admission −2.9%, read −1% |
+| prepared columns returned for equal result metadata | `4d9449aa` | kept | prepared reads −1.2% to −2.0% |
+| first attempt timed from the execution's start | `dc48bd01` | kept | w64-4 −0.9% to −1.6% |
+
+The first version of the defer change kept the attempt request in the
+state struct; escape analysis moved it to the heap with the payload
+owners the writer's lease takes (+1 alloc, +288 B, +5% on every point
+gate). Passing the request as a parameter removed the allocation.
+
+The one-channel wait applies when nothing but the execution context can
+end it: no transport timeout, no lazily watched cancellable parent, and
+a connection that reports its closure as a response. `preadctx` keeps
+the select.
+
+### Round 6 cumulative
+
+`dc48bd01` against `2051c2b5`, 5×ABBA on a quiet host (a first run during
+heavy host load had ±100–500% spreads and was discarded). Allocations
+and bytes did not change.
+
+| benchmark | before | after | Δ |
+|---|---:|---:|---:|
+| read, write, pread, pwrite, pone w64 cpu-ns/op | 3.19–3.77µ | 2.96–3.39µ | −7.1% to −9.9% |
+| the same, w64-4 cpu-ns/op | 7.40–8.75µ | 6.54–7.73µ | −11.3% to −11.8% |
+| preadctx/w64 cpu-ns/op | 4.547µ | 4.341µ | −4.54% |
+| read, pwrite, pone w1 cpu-ns/op | | | −3.3% to −6.5% |
+| point/buffered, point/stream (T0) sec/op | 9.654µ / 11.87µ | 9.485µ / 11.74µ | −1.75% / −1.10% |
+| Admission | 555.9n | 444.4n | −20.04% |
+| paged reads (page, pagectx, pagepto, pageb) | | | ~ |
+| geomean cpu-ns/op | 17.70µ | 16.75µ | −5.38% |
+
+### Not done
+
+- Lease chain (writer, input and receive-buffer leases released per
+  request): the CAS operations themselves are about 1.1% of `pread/w64`
+  over four releases; the rest of `Lease.Release` is the releasers'
+  necessary work. Under the 1% bar for one mechanism.
+- Lazily built encoded cells: slicing the frozen parameters per column
+  is 0.6% of `pread/w64`.
+- The session latency ring (`InternalSessionRecordV2Latency`, about 1%):
+  one shared counter and adjacent slots written by every goroutine.
+  Sampling would change what `Session.Metrics` reports over few requests.
+- The legacy (non-typed) picker path still takes the pool's read lock;
+  Scylla pools use the lock-free typed picker.
