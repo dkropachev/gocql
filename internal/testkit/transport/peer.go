@@ -25,7 +25,7 @@ func NewPair(t testing.TB, proto byte, compressor protocol.Compressor) (*runtime
 	t.Helper()
 	server, client := net.Pipe()
 	ctx, cancel := context.WithCancel(context.Background())
-	c := &runtime.Conn{InternalVersion: proto, InternalCtx: ctx, InternalCancel: cancel, InternalR: &runtime.InternalConnReader{InternalConn: client}, InternalCalls: make(map[int]*runtime.InternalCallReq), InternalStreams: streams.New(), InternalLogger: logging.InternalNopLogger{}, InternalCompressor: compressor, InternalErrorHandler: runtime.InternalConnErrorHandlerFn(func(*runtime.Conn, error, bool) {})}
+	c := &runtime.Conn{InternalVersion: proto, InternalCtx: ctx, InternalCancel: cancel, InternalR: &runtime.InternalConnReader{InternalConn: client}, InternalCalls: runtime.InternalNewCallTable(), InternalStreams: streams.New(), InternalLogger: logging.InternalNopLogger{}, InternalCompressor: compressor, InternalErrorHandler: runtime.InternalConnErrorHandlerFn(func(*runtime.Conn, error, bool) {})}
 	c.InternalW = &runtime.InternalDeadlineContextWriter{InternalW: client, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
 	if proto == 5 && compressor != nil {
 		c.InternalSegCompressor = compressor.(segment.Compressor)
@@ -51,7 +51,7 @@ func NewDialedConn(t testing.TB, proto byte, addr string) *runtime.Conn {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	c := &runtime.Conn{InternalVersion: proto, InternalCtx: ctx, InternalCancel: cancel, InternalR: &runtime.InternalConnReader{InternalConn: client, InternalR: bufio.NewReaderSize(client, 8<<10)}, InternalCalls: make(map[int]*runtime.InternalCallReq), InternalStreams: streams.New(), InternalLogger: logging.InternalNopLogger{}, InternalErrorHandler: runtime.InternalConnErrorHandlerFn(func(*runtime.Conn, error, bool) {})}
+	c := &runtime.Conn{InternalVersion: proto, InternalCtx: ctx, InternalCancel: cancel, InternalR: &runtime.InternalConnReader{InternalConn: client, InternalR: bufio.NewReaderSize(client, 8<<10)}, InternalCalls: runtime.InternalNewCallTable(), InternalStreams: streams.New(), InternalLogger: logging.InternalNopLogger{}, InternalErrorHandler: runtime.InternalConnErrorHandlerFn(func(*runtime.Conn, error, bool) {})}
 	c.InternalW = &runtime.InternalDeadlineContextWriter{InternalW: client, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
 	c.InternalCfg = new(runtime.ConnConfig)
 	c.InternalCfg.InternalReceiveCache = new(wire.ReceiveCache)

@@ -140,7 +140,7 @@ func TestRecvSplitFrameAllocatesExactlyOneFrameBuffer(t *testing.T) {
 		src = src[n:]
 	}
 	reader := &typedSegmentAllocationReader{segmentReader: newSegmentReader(bytes.Repeat(stream, runs))}
-	c := &driverConn{InternalVersion: protoVersion5, InternalR: reader, InternalStreams: streams.New(), InternalCalls: make(map[int]*callReq), InternalLogger: &defaultLogger{}}
+	c := &driverConn{InternalVersion: protoVersion5, InternalR: reader, InternalStreams: streams.New(), InternalCalls: newCallTable(), InternalLogger: &defaultLogger{}}
 	c.InternalInitFramerCache()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
@@ -148,7 +148,7 @@ func TestRecvSplitFrameAllocatesExactlyOneFrameBuffer(t *testing.T) {
 		// A buffered receiver replaces the execution goroutine so process-wide
 		// allocation accounting measures the receive path without scheduling noise.
 		call := &callReq{InternalTyped: true, InternalStreamID: 1, InternalResp: make(chan callResp, 1)}
-		c.InternalCalls[1] = call
+		c.InternalCalls.Set(1, call)
 		reader.payloads = nil
 		if err := c.InternalRecvSegment(context.Background()); err != nil {
 			t.Fatalf("run %d: %v", i, err)

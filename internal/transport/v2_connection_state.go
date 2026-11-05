@@ -89,7 +89,7 @@ func (c *Conn) markOrphan(call *InternalCallReq) bool {
 	c.InternalMu.Lock()
 	defer c.InternalMu.Unlock()
 
-	if c.InternalClosed || c.InternalCalls[call.InternalStreamID] != call || call.orphaned {
+	if c.InternalClosed || c.InternalCalls.Get(call.InternalStreamID) != call || call.orphaned {
 		return false
 	}
 	call.orphaned = true
@@ -206,7 +206,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 			c.InternalMu.Unlock()
 			return nil, ErrConnectionClosed
 		}
-		if c.InternalSharedOps == 0 && len(c.InternalCalls) == 0 && c.InternalStreams.InUse() == 0 {
+		if c.InternalSharedOps == 0 && c.InternalCalls.Len() == 0 && c.InternalStreams.InUse() == 0 {
 			c.pauseWanted = true
 			c.pauseRequested.Store(true)
 			c.readerPaused = make(chan struct{})
@@ -239,7 +239,9 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 	if err = ctx.Err(); err != nil {
 		return nil, err
 	}
+	c.InternalMu.Lock()
 	stream, ok := c.InternalStreams.GetStream()
+	c.InternalMu.Unlock()
 	if !ok {
 		return nil, ErrNoStreams
 	}
@@ -255,7 +257,9 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 	}()
 
 	if err = r.InternalInitStream(limits); err != nil {
+		c.InternalMu.Lock()
 		c.InternalStreams.Clear(stream)
+		c.InternalMu.Unlock()
 		return nil, err
 	}
 	r.stop = context.AfterFunc(ctx, func() { r.cancelLifetime(ctx.Err()) })
@@ -333,7 +337,9 @@ func (r *InternalExclusiveConn) closeOwned(reusable bool) error {
 	if r.stop != nil {
 		r.stop()
 	}
+	r.InternalConn.InternalMu.Lock()
 	r.InternalConn.InternalStreams.Clear(r.InternalStream)
+	r.InternalConn.InternalMu.Unlock()
 	reader := r.InternalConn.InternalR.(*connReader)
 	if reusable && (!r.InternalComplete || r.InternalUnits != nil && !r.InternalUnits.boundary()) {
 		r.closeErr = fmt.Errorf("gocql: incomplete streaming response")

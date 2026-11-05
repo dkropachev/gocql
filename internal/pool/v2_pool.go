@@ -433,7 +433,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 					continue
 				}
 				c.InternalMu.Lock()
-				idle := c.InternalSharedOps == 0 && len(c.InternalCalls) == 0 && c.InternalStreams.InUse() == 0
+				idle := c.InternalSharedOps == 0 && c.InternalCalls.Len() == 0 && c.InternalStreams.InUse() == 0
 				c.InternalMu.Unlock()
 				if pass == 0 && !idle || pass == 1 && idle {
 					continue

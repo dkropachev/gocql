@@ -34,6 +34,7 @@ func approve(a0 string, a1 []string) bool { return implTransport.InternalApprove
 func bodyReadDesyncedConn(a0 error) bool  { return implTransport.InternalBodyReadDesyncedConn(a0) }
 
 type callReq = implTransport.InternalCallReq
+type callTable = implTransport.InternalCallTable
 
 var callReqPool = &implTransport.InternalCallReqPool
 

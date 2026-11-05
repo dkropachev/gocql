@@ -805,7 +805,7 @@ func mockConnForPicker(shard, nrShards int) *driverConn {
 		InternalLogger:  &testLogger{},
 		InternalCtx:     ctx,
 		InternalCancel:  cancel,
-		InternalCalls:   make(map[int]*callReq),
+		InternalCalls:   newCallTable(),
 		InternalStreams: streams.New(),
 	}
 }

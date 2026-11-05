@@ -868,7 +868,7 @@ func TestHeartBeatClosesAConnectionThatKeepsFailing(t *testing.T) {
 		// close it is looking for.
 		conn.InternalMu.Lock()
 		var call *callReq
-		for _, inFlight := range conn.InternalCalls {
+		for _, inFlight := range conn.InternalCalls.All() {
 			call = inFlight
 			break
 		}
@@ -925,7 +925,7 @@ func newTestExecConn(t *testing.T, w contextWriter) (*driverConn, net.Conn) {
 	c.InternalLogger = nopLogger{}
 	c.InternalErrorHandler = connErrorHandlerFn(func(*driverConn, error, bool) {})
 	c.InternalStreams = streams.New()
-	c.InternalCalls = make(map[int]*callReq)
+	c.InternalCalls = newCallTable()
 
 	return c, server
 }
@@ -945,7 +945,7 @@ func waitForSingleCallWithin(t *testing.T, c *driverConn, timeout time.Duration)
 
 	for {
 		c.InternalMu.Lock()
-		for _, call := range c.InternalCalls {
+		for _, call := range c.InternalCalls.All() {
 			c.InternalMu.Unlock()
 			return call
 		}
@@ -964,8 +964,8 @@ func detachSingleCall(t *testing.T, c *driverConn) *callReq {
 
 	c.InternalMu.Lock()
 	defer c.InternalMu.Unlock()
-	for streamID, call := range c.InternalCalls {
-		delete(c.InternalCalls, streamID)
+	for streamID, call := range c.InternalCalls.All() {
+		c.InternalCalls.Delete(streamID)
 		return call
 	}
 
@@ -1034,8 +1034,8 @@ func TestExecCloseWithError(t *testing.T) {
 
 		c.InternalMu.Lock()
 		defer c.InternalMu.Unlock()
-		if len(c.InternalCalls) != 0 {
-			t.Fatalf("expected no in-flight calls after build error, got %d", len(c.InternalCalls))
+		if c.InternalCalls.Len() != 0 {
+			t.Fatalf("expected no in-flight calls after build error, got %d", c.InternalCalls.Len())
 		}
 	})
 
@@ -1076,8 +1076,8 @@ func TestExecCloseWithError(t *testing.T) {
 
 		c.InternalMu.Lock()
 		defer c.InternalMu.Unlock()
-		if len(c.InternalCalls) != 0 {
-			t.Fatalf("expected no in-flight calls after canceled write, got %d", len(c.InternalCalls))
+		if c.InternalCalls.Len() != 0 {
+			t.Fatalf("expected no in-flight calls after canceled write, got %d", c.InternalCalls.Len())
 		}
 	})
 
@@ -1109,8 +1109,8 @@ func TestExecCloseWithError(t *testing.T) {
 
 		c.InternalMu.Lock()
 		defer c.InternalMu.Unlock()
-		if len(c.InternalCalls) != 0 {
-			t.Fatalf("expected no in-flight calls after response error, got %d", len(c.InternalCalls))
+		if c.InternalCalls.Len() != 0 {
+			t.Fatalf("expected no in-flight calls after response error, got %d", c.InternalCalls.Len())
 		}
 	})
 
@@ -2957,7 +2957,7 @@ func TestConnProcessAllFramesInSingleSegment(t *testing.T) {
 			InternalConn: server,
 			InternalR:    bufio.NewReader(server),
 		},
-		InternalCalls:      make(map[int]*callReq),
+		InternalCalls:      newCallTable(),
 		InternalVersion:    protoVersion5,
 		InternalAddr:       server.RemoteAddr().String(),
 		InternalStreams:    streams.New(),
@@ -2977,8 +2977,8 @@ func TestConnProcessAllFramesInSingleSegment(t *testing.T) {
 		InternalResp:     make(chan callResp, 1),
 	}
 
-	c.InternalCalls[1] = call1
-	c.InternalCalls[2] = call2
+	c.InternalCalls.Set(1, call1)
+	c.InternalCalls.Set(2, call2)
 
 	req := fixtureQueryFrame{
 		statement: "SELECT * FROM system.local",
@@ -3062,7 +3062,7 @@ func TestConnProcessReservedStreamFrameInSegment(t *testing.T) {
 			InternalConn: server,
 			InternalR:    bufio.NewReader(server),
 		},
-		InternalCalls:      make(map[int]*callReq),
+		InternalCalls:      newCallTable(),
 		InternalVersion:    protoVersion5,
 		InternalAddr:       server.RemoteAddr().String(),
 		InternalStreams:    streams.New(),
@@ -3075,7 +3075,7 @@ func TestConnProcessReservedStreamFrameInSegment(t *testing.T) {
 	// Only stream 2 has a registered call; the reserved stream -1 frame ahead of
 	// it goes through the readFrameIntoFramer body-read path.
 	call2 := &callReq{InternalStreamID: 2, InternalResp: make(chan callResp, 1)}
-	c.InternalCalls[2] = call2
+	c.InternalCalls.Set(2, call2)
 
 	req := fixtureQueryFrame{
 		statement: "SELECT * FROM system.local",
@@ -3193,7 +3193,7 @@ func TestRecvSegmentDisarmsReadDeadlineOnIdleConn(t *testing.T) {
 
 	c := &driverConn{
 		InternalR:       cr,
-		InternalCalls:   make(map[int]*callReq),
+		InternalCalls:   newCallTable(),
 		InternalVersion: protoVersion5,
 		InternalStreams: streams.New(),
 		InternalW:       w,
@@ -3664,7 +3664,7 @@ func TestProcessFrameDesyncedBodyIsFatalAndWakesCaller(t *testing.T) {
 	call := &callReq{InternalStreamID: 1, InternalResp: make(chan callResp, 1)}
 	c := &driverConn{
 		InternalR:       r,
-		InternalCalls:   map[int]*callReq{1: call},
+		InternalCalls:   callTableOf(1, call),
 		InternalVersion: protoVersion4,
 		InternalStreams: streams.New(),
 		InternalLogger:  nopLogger{},
@@ -3734,7 +3734,7 @@ func TestProcessFrameStreamIDMismatchIsAnError(t *testing.T) {
 	// the delivery does not need a second goroutine.
 	call := &callReq{InternalStreamID: 2, InternalResp: make(chan callResp, 1)}
 	c := &driverConn{
-		InternalCalls:   map[int]*callReq{1: call},
+		InternalCalls:   callTableOf(1, call),
 		InternalVersion: protoVersion4,
 		InternalStreams: streams.New(),
 		InternalLogger:  nopLogger{},
@@ -3755,9 +3755,10 @@ func TestProcessFrameStreamIDMismatchIsAnError(t *testing.T) {
 	}
 
 	c.InternalMu.Lock()
-	remaining := c.InternalCalls
+	remaining, entry := c.InternalCalls.Len(), c.InternalCalls.Get(1)
 	c.InternalMu.Unlock()
-	require.Equal(t, map[int]*callReq{1: call}, remaining, "the disagreeing entry must be left for closeWithError")
+	require.Equal(t, 1, remaining, "the disagreeing entry must be left for closeWithError")
+	require.Same(t, call, entry, "the disagreeing entry must be left for closeWithError")
 }
 
 // TestExecStreamIDMismatchFailsTheConnection drives the same mismatch with a real
@@ -3807,8 +3808,8 @@ func TestExecStreamIDMismatchFailsTheConnection(t *testing.T) {
 		}
 
 		c.InternalMu.Lock()
-		delete(c.InternalCalls, call.InternalStreamID)
-		c.InternalCalls[wrongKey] = call
+		c.InternalCalls.Delete(call.InternalStreamID)
+		c.InternalCalls.Set(wrongKey, call)
 		c.InternalMu.Unlock()
 
 		return errCh, wrongKey
@@ -3842,7 +3843,7 @@ func TestExecStreamIDMismatchFailsTheConnection(t *testing.T) {
 		}
 
 		c.InternalMu.Lock()
-		c.InternalCalls[staleKey] = call
+		c.InternalCalls.Set(staleKey, call)
 		c.InternalMu.Unlock()
 
 		return errCh, staleKey
@@ -3893,7 +3894,7 @@ func TestExecStreamIDMismatchFailsTheConnection(t *testing.T) {
 		// on the close path clears it for any in-flight call. What must not survive
 		// is the call itself.
 		c.InternalMu.Lock()
-		remaining := len(c.InternalCalls)
+		remaining := c.InternalCalls.Len()
 		c.InternalMu.Unlock()
 		if remaining != 0 {
 			t.Fatalf("expected the close to drain c.calls, got %d", remaining)
@@ -4120,7 +4121,7 @@ func TestProcessFrameFailedDeadlineArmIsFatal(t *testing.T) {
 			// Buffered so the delivery does not need a second goroutine.
 			call := &callReq{InternalStreamID: 1, InternalResp: make(chan callResp, 1)}
 			c := &driverConn{
-				InternalCalls:   map[int]*callReq{1: call},
+				InternalCalls:   callTableOf(1, call),
 				InternalVersion: protoVersion4,
 				InternalStreams: streams.New(),
 				InternalLogger:  nopLogger{},
@@ -4273,7 +4274,7 @@ func TestRecvSegmentReassemblesFrameWithSplitHeader(t *testing.T) {
 			InternalConn: server,
 			InternalR:    bufio.NewReader(server),
 		},
-		InternalCalls:      make(map[int]*callReq),
+		InternalCalls:      newCallTable(),
 		InternalVersion:    protoVersion5,
 		InternalAddr:       server.RemoteAddr().String(),
 		InternalStreams:    streams.New(),
@@ -4283,7 +4284,7 @@ func TestRecvSegmentReassemblesFrameWithSplitHeader(t *testing.T) {
 	c.InternalWriteTimeout.Store(int64(time.Second * 10))
 
 	call1 := &callReq{InternalStreamID: 1, InternalResp: make(chan callResp, 1)}
-	c.InternalCalls[1] = call1
+	c.InternalCalls.Set(1, call1)
 
 	req := fixtureQueryFrame{
 		statement: "SELECT * FROM system.local",
@@ -4365,7 +4366,7 @@ func TestRecvSegmentPayloadReadIsBounded(t *testing.T) {
 
 	c := &driverConn{
 		InternalR:       cr,
-		InternalCalls:   make(map[int]*callReq),
+		InternalCalls:   newCallTable(),
 		InternalVersion: protoVersion5,
 		InternalStreams: streams.New(),
 	}
@@ -4823,4 +4824,12 @@ func TestStartupCompressionIsDriverOwned(t *testing.T) {
 			}
 		})
 	}
+}
+
+func newCallTable() *callTable { return &callTable{} }
+
+func callTableOf(stream int, call *callReq) *callTable {
+	t := newCallTable()
+	t.Set(stream, call)
+	return t
 }

@@ -230,10 +230,9 @@ type Conn struct {
 	InternalSupported                         map[string][]string
 	InternalStreams                           *streams.IDGenerator
 	InternalHost                              *HostInfo
-	// calls stores a map from stream ID to callReq.
-	// This map is protected by mu.
+	// calls maps stream IDs to in-flight callReqs. It is protected by mu.
 	// calls should not be used when closed is true, calls is set to nil when closed=true.
-	InternalCalls  map[int]*InternalCallReq
+	InternalCalls  *InternalCallTable
 	InternalCancel context.CancelFunc
 	// currentKeyspace is the keyspace this connection was switched to by
 	// Conn.UseKeyspace, and the default the prepared-statement cache is keyed by
@@ -785,8 +784,8 @@ func (c *Conn) InternalCloseWithError(err error) {
 	}
 	cerr = c.close()
 
-	seen := make(map[*InternalCallReq]bool, len(callsToClose))
-	for _, req := range callsToClose {
+	seen := make(map[*InternalCallReq]bool, callsToClose.Len())
+	for _, req := range callsToClose.All() {
 		if seen[req] {
 			continue
 		}
@@ -1103,18 +1102,18 @@ func (c *Conn) InternalProcessFrameSource(ctx context.Context, src frameSource) 
 		c.InternalMu.Unlock()
 		return ErrConnectionClosed
 	}
-	call, ok := c.InternalCalls[head.Stream]
+	call := c.InternalCalls.Get(head.Stream)
 
-	if call != nil && ok {
+	if call != nil {
 		if streamID := call.InternalStreamID; head.Stream != streamID {
 			c.InternalMu.Unlock()
 
 			return fmt.Errorf("gocql: response for stream %d dispatched to a call on stream %d", head.Stream, streamID)
 		}
 	}
-	delete(c.InternalCalls, head.Stream)
+	c.InternalCalls.Delete(head.Stream)
 	c.InternalMu.Unlock()
-	if call == nil || !ok {
+	if call == nil {
 		c.InternalLogger.Printf("gocql: received response for stream which has no handler: header=%v\n", head)
 		return c.discardFrame(r, head)
 	}
@@ -1525,12 +1524,7 @@ func (c *Conn) InternalRemoveCallIfOpen(streamID int) bool {
 		return false
 	}
 
-	if _, present := c.InternalCalls[streamID]; !present {
-
-		return false
-	}
-	delete(c.InternalCalls, streamID)
-	return true
+	return c.InternalCalls.Delete(streamID) != nil
 }
 
 type InternalCallResp struct {
@@ -1547,21 +1541,26 @@ type InternalCallResp struct {
 	removedFromCalls bool
 }
 
-// addCall attempts to add a call to c.calls.
-// It fails with error if the connection already started closing or if a call for the given stream
-// already exists.
-func (c *Conn) addCall(call *InternalCallReq) error {
+// allocCall allocates a stream for call and registers call under it in one
+// critical section. It fails if the connection already started closing or has
+// no free stream.
+func (c *Conn) allocCall(call *InternalCallReq) error {
 	c.InternalMu.Lock()
 	defer c.InternalMu.Unlock()
 	if c.InternalClosed {
 		return ErrConnectionClosed
 	}
-	existingCall := c.InternalCalls[call.InternalStreamID]
-	if existingCall != nil {
-		return fmt.Errorf("attempting to use stream already in use: %d -> %d", call.InternalStreamID,
+	stream, ok := c.InternalStreams.GetStream()
+	if !ok {
+		return ErrNoStreams
+	}
+	if existingCall := c.InternalCalls.Get(stream); existingCall != nil {
+		c.InternalStreams.Clear(stream)
+		return fmt.Errorf("attempting to use stream already in use: %d -> %d", stream,
 			existingCall.InternalStreamID)
 	}
-	c.InternalCalls[call.InternalStreamID] = call
+	call.InternalStreamID = stream
+	c.InternalCalls.Set(stream, call)
 	return nil
 }
 
@@ -1591,24 +1590,18 @@ func (c *Conn) execAdmitted(ctx context.Context, req frameBuilder, tracer Tracer
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctxErr, InternalPotentiallyExecuted: false})
 	}
 
-	stream, ok := c.InternalStreams.GetStream()
-	if !ok {
-		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrNoStreams, InternalPotentiallyExecuted: false})
+	call := InternalGetCallReq(0)
+	if err := c.allocCall(call); err != nil {
+		call.finishExec()
+		InternalPutCallReq(call)
+		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err, InternalPotentiallyExecuted: false})
 	}
+	stream := call.InternalStreamID
 
 	framer := c.InternalGetWriteFramer()
 
-	call := InternalGetCallReq(stream)
-
 	if c.InternalStreamObserver != nil {
 		call.streamObserverContext = c.InternalStreamObserver.StreamContext(ctx)
-	}
-
-	if err := c.addCall(call); err != nil {
-		call.finishExec()
-		InternalPutCallReq(call)
-		c.InternalReleaseWriteFramer(framer)
-		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err, InternalPotentiallyExecuted: false})
 	}
 
 	var (

@@ -105,7 +105,7 @@ func Dial(ctx context.Context, host *HostInfo, cfg *ConnConfig, errorHandler Con
 			transferable: true,
 		},
 		InternalCfg:                 cfg,
-		InternalCalls:               make(map[int]*InternalCallReq),
+		InternalCalls:               InternalNewCallTable(),
 		InternalVersion:             uint8(cfg.ProtoVersion),
 		InternalIsShardAware:        isShardAware,
 		InternalRequestedShard:      implEndpoint.DialedHostData(dialedHost).InternalShardTarget,

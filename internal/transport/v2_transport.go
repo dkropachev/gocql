@@ -80,21 +80,17 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest
 			payloadOwners = append(payloadOwners, owner.Lease())
 		}
 	}
-	stream, ok := c.InternalStreams.GetStream()
-	if !ok {
-		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrNoStreams})
-	}
-	call := InternalGetCallReq(stream)
+	call := InternalGetCallReq(0)
 	call.InternalTyped = true
 	call.dest = dest
-	if c.InternalStreamObserver != nil {
-		call.streamObserverContext = c.InternalStreamObserver.StreamContext(ctx)
-	}
-	if err := c.addCall(call); err != nil {
-		c.InternalStreams.Clear(stream)
+	if err := c.allocCall(call); err != nil {
 		call.finishExec()
 		InternalPutCallReq(call)
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err})
+	}
+	stream := call.InternalStreamID
+	if c.InternalStreamObserver != nil {
+		call.streamObserverContext = c.InternalStreamObserver.StreamContext(ctx)
 	}
 	var stopWaiting, releaseStream, recycleCall bool
 	var closeErr error

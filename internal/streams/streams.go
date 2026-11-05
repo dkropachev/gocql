@@ -24,22 +24,26 @@
 
 package streams
 
-import (
-	"math"
-	"strconv"
-	"sync/atomic"
-)
+import "sync/atomic"
 
-const bucketBits = 64
-
-// IDGenerator tracks and allocates streams which are in use.
+// IDGenerator allocates the stream IDs of one connection.
+//
+// GetStream and Clear must be called under a lock the caller holds for the
+// connection (Conn.InternalMu): stream allocation happens together with the
+// registration of the call that owns it, so a lock-free allocator would only add
+// atomic traffic to a section that is serialised anyway. InUse and Available may
+// be read without that lock.
+//
+// Released IDs are reused last-in first-out, so a connection keeps reusing the
+// same few low IDs and the call-table slots they index stay warm. IDs that were
+// never handed out sit above a watermark rather than in the free stack, which
+// grows only as far as the connection's peak concurrency.
 type IDGenerator struct {
-	// streams is a bitset where each bit represents a stream, a 1 implies in use
-	streams      []uint64
-	NumStreams   int
-	inuseStreams int32
-	numBuckets   uint32
-	offset       uint32
+	NumStreams int
+	inUse      atomic.Int32
+	next       int32   // IDs in [next, NumStreams) have never been handed out
+	free       []int16 // released IDs, reused LIFO
+	used       []uint64
 }
 
 func New() *IDGenerator {
@@ -50,110 +54,51 @@ func NewLimited(maxStreams int) *IDGenerator {
 	if maxStreams < 1 || maxStreams > 32768 {
 		panic("streams: capacity must be 1..32768")
 	}
-	buckets := (maxStreams + 63) / 64
-	bits := make([]uint64, buckets)
-	// Bits outside the exact configured capacity are permanently unavailable.
-	if used := maxStreams % 64; used != 0 {
-		bits[buckets-1] = (uint64(1) << uint(64-used)) - 1
-	}
-	return &IDGenerator{NumStreams: maxStreams, streams: bits, numBuckets: uint32(buckets), offset: uint32(buckets) - 1}
+	return &IDGenerator{NumStreams: maxStreams, used: make([]uint64, (maxStreams+63)/64)}
 }
 
-func streamFromBucket(bucket, streamInBucket int) int {
-	return (bucket * bucketBits) + streamInBucket
-}
-
+// GetStream allocates a stream ID. The caller must hold the connection lock.
 func (s *IDGenerator) GetStream() (int, bool) {
-	// Reduce collisions by offsetting the starting point
-	offset := atomic.AddUint32(&s.offset, 1)
-
-	for i := uint32(0); i < s.numBuckets; i++ {
-		pos := int((i + offset) % s.numBuckets)
-
-		bucket := atomic.LoadUint64(&s.streams[pos])
-		if bucket == math.MaxUint64 {
-			// all streams in use
-			continue
-		}
-
-		for j := 0; j < bucketBits; j++ {
-			mask := uint64(1 << streamOffset(j))
-			for bucket&mask == 0 {
-				if atomic.CompareAndSwapUint64(&s.streams[pos], bucket, bucket|mask) {
-					atomic.AddInt32(&s.inuseStreams, 1)
-					return streamFromBucket(int(pos), j), true
-				}
-				bucket = atomic.LoadUint64(&s.streams[pos])
-			}
-		}
+	var stream int
+	if n := len(s.free); n > 0 {
+		stream = int(s.free[n-1])
+		s.free = s.free[:n-1]
+	} else if int(s.next) < s.NumStreams {
+		stream = int(s.next)
+		s.next++
+	} else {
+		return 0, false
 	}
-
-	return 0, false
+	s.used[stream>>6] |= 1 << uint(stream&63)
+	s.inUse.Store(s.inUse.Load() + 1)
+	return stream, true
 }
 
-func bitfmt(b uint64) string {
-	return strconv.FormatUint(b, 16)
-}
-
-// returns the bucket offset of a given stream
-func bucketOffset(i int) int {
-	return i / bucketBits
-}
-
-func streamOffset(stream int) uint64 {
-	return bucketBits - uint64(stream%bucketBits) - 1
-}
-
-func isSet(bits uint64, stream int) bool {
-	return bits>>streamOffset(stream)&1 == 1
-}
-
-func (s *IDGenerator) isSet(stream int) bool {
-	bits := atomic.LoadUint64(&s.streams[bucketOffset(stream)])
-	return isSet(bits, stream)
-}
-
-func (s *IDGenerator) String() string {
-	size := s.numBuckets * (bucketBits + 1)
-	buf := make([]byte, 0, size)
-	for i := 0; i < int(s.numBuckets); i++ {
-		bits := atomic.LoadUint64(&s.streams[i])
-		buf = append(buf, bitfmt(bits)...)
-		buf = append(buf, ' ')
-	}
-	return string(buf[: size-1 : size-1])
-}
-
+// Clear releases stream and reports whether it was in use. The caller must
+// hold the connection lock.
 func (s *IDGenerator) Clear(stream int) (inuse bool) {
-	offset := bucketOffset(stream)
-	bucket := atomic.LoadUint64(&s.streams[offset])
-
-	mask := uint64(1) << streamOffset(stream)
-	if bucket&mask != mask {
+	if stream < 0 || stream >= s.NumStreams {
+		return false
+	}
+	word, bit := &s.used[stream>>6], uint64(1)<<uint(stream&63)
+	if *word&bit == 0 {
 		// already cleared
 		return false
 	}
-
-	for !atomic.CompareAndSwapUint64(&s.streams[offset], bucket, bucket & ^mask) {
-		bucket = atomic.LoadUint64(&s.streams[offset])
-		if bucket&mask != mask {
-			// already cleared
-			return false
-		}
-	}
-
-	if atomic.AddInt32(&s.inuseStreams, -1) < 0 {
-		// TODO(zariel): remove this
-		panic("negative streams inuse")
-	}
-
+	*word &^= bit
+	s.free = append(s.free, int16(stream))
+	s.inUse.Store(s.inUse.Load() - 1)
 	return true
 }
 
+func (s *IDGenerator) isSet(stream int) bool {
+	return s.used[stream>>6]&(1<<uint(stream&63)) != 0
+}
+
 func (s *IDGenerator) Available() int {
-	return s.NumStreams - int(atomic.LoadInt32(&s.inuseStreams))
+	return s.NumStreams - int(s.inUse.Load())
 }
 
 func (s *IDGenerator) InUse() int {
-	return int(atomic.LoadInt32(&s.inuseStreams))
+	return int(s.inUse.Load())
 }

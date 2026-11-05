@@ -187,7 +187,8 @@ func TestSubmissionWriterFailureFinishesQueuedTickets(t *testing.T) {
 	// close joins it, and it ends only once its ticket is finished.
 	call := InternalGetCallReq(1)
 	call.InternalDone.Add(1)
-	conn.InternalCalls = map[int]*InternalCallReq{1: call}
+	conn.InternalCalls = InternalNewCallTable()
+	conn.InternalCalls.Set(1, call)
 	var late *writeTicket
 	lateDone := make(chan struct{})
 	socket.onWrite = func() {
