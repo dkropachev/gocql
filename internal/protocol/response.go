@@ -23,10 +23,13 @@ import (
 // Its sticky error makes every metadata read checked, without panic/recover.
 
 type TypedParser struct {
-	Cursor     typedMetadataCursor
-	Err        error
-	reuse      *MetadataReuse
-	owner      *wire.Lease
+	Cursor typedMetadataCursor
+	Err    error
+	reuse  *MetadataReuse
+	owner  *wire.Lease
+	// expect is the result columns the request expects, typically a prepared
+	// statement's; equal parsed columns are returned as expect itself.
+	expect     Columns
 	MaxDepth   int
 	Proto      byte
 	MetadataID bool
@@ -39,8 +42,11 @@ type TypedParser struct {
 type MetadataReuse struct {
 	encoded []byte
 	columns Columns
-	global  bool
-	depth   int
+	// expected is a request's expected columns found equal to columns; a
+	// request expecting the same receives them instead.
+	expected Columns
+	global   bool
+	depth    int
 }
 
 func (p *TypedParser) Check(err error) {
@@ -357,6 +363,13 @@ func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLW
 					return nil
 				})
 				if same {
+					if p.expect.Len() > 0 && p.expect.Same(cache.expected) {
+						return cache.expected, count
+					}
+					if p.expect.Len() == count && cache.columns.Equal(p.expect) {
+						cache.expected = p.expect
+						return p.expect, count
+					}
 					return cache.columns, count
 				}
 			}
@@ -396,6 +409,7 @@ func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLW
 				}
 				_, _ = encoded.CopyTo(cache.encoded)
 				cache.columns, cache.global, cache.depth = result, global, p.MaxDepth
+				cache.expected = Columns{}
 			}
 		}
 	}
@@ -407,8 +421,10 @@ func (c *Settings) ParseTypedResponseInto(head frm.FrameHeader, body wire.Chain,
 	if body.Len() > c.MaxDecompressedBytes {
 		return nil, ErrFrameTooBig
 	}
+	// A caller's page arrives with the result columns it expects.
+	expect := page.Columns
 	*page = model.ResponseData{Owner: owner, InternalParseCursor: wire.CursorOver(body)}
-	p := &TypedParser{reuse: c.MetadataReuse, Cursor: &page.InternalParseCursor, Proto: c.Protocol, MetadataID: c.Protocol >= 5 || c.MetadataID, owner: owner, MaxDepth: c.MaxMetadataDepth}
+	p := &TypedParser{expect: expect, reuse: c.MetadataReuse, Cursor: &page.InternalParseCursor, Proto: c.Protocol, MetadataID: c.Protocol >= 5 || c.MetadataID, owner: owner, MaxDepth: c.MaxMetadataDepth}
 	if head.Flags&frm.FlagTracing != 0 {
 		page.Extra().TraceID = p.Copy(16)
 	}

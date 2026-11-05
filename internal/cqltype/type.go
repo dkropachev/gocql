@@ -172,7 +172,16 @@ func (c Columns) At(index int) (ColumnSpec, bool) {
 	}
 	return c.columns[index], true
 }
+
+// Same reports whether c and other are the same specifications, not only
+// equal ones: the same backing, which Columns never modifies.
+func (c Columns) Same(other Columns) bool {
+	return len(c.columns) == len(other.columns) && (len(c.columns) == 0 || &c.columns[0] == &other.columns[0])
+}
 func (c Columns) Equal(other Columns) bool {
+	if c.Same(other) {
+		return true
+	}
 	if len(c.columns) != len(other.columns) {
 		return false
 	}

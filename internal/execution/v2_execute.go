@@ -1140,6 +1140,11 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 	wireRequest.Lease = lease
 	for repair := 0; repair < 2; repair++ {
 		observed := source.observe()
+		if dest := request.responseDest; dest != nil && prepared != nil {
+			// The parser returns these columns for equal result metadata, so
+			// that checking the response against them compares identities.
+			dest.Columns = prepared.InternalColumns
+		}
 		response, executeErr := conn.InternalExecuteTypedInto(ctx, wireRequest, request.responseDest)
 		if len(wireRequest.PreparedID) > 0 && wireRequest.Batch == nil {
 			implCluster.InternalSessionApplyTypedFeedbackStamped(s.Session, response, request.InternalRouting, request.tabletFeedback, conn.InternalFramers.InternalDefaults)
