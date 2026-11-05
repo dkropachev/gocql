@@ -135,6 +135,64 @@ type InternalTabletRangeTree = InternalPlacementTree[int64, *InternalTabletRange
 type InternalTabletPlacement struct {
 	InternalRanges   *InternalTabletRangeTree
 	InternalIdentity string
+	// index is a flat copy of InternalRanges for lookups; it is used only
+	// while its root is still InternalRanges.
+	index *tabletRangeIndex
+}
+
+// tabletRangeIndex lists a range tree's ranges in token order, so a lookup
+// binary-searches contiguous ends instead of chasing tree nodes.
+type tabletRangeIndex struct {
+	root   *InternalTabletRangeTree
+	ends   []int64
+	ranges []*InternalTabletRange
+}
+
+// InternalIndexTabletPlacement returns t with an index of its current ranges.
+func InternalIndexTabletPlacement(t InternalTabletPlacement) InternalTabletPlacement {
+	if t.InternalRanges == nil {
+		t.index = nil
+		return t
+	}
+	if t.index != nil && t.index.root == t.InternalRanges {
+		return t
+	}
+	n := 0
+	InternalPlacementEach(t.InternalRanges, func(int64, *InternalTabletRange) { n++ })
+	x := &tabletRangeIndex{root: t.InternalRanges, ends: make([]int64, 0, n), ranges: make([]*InternalTabletRange, 0, n)}
+	InternalPlacementEach(t.InternalRanges, func(end int64, r *InternalTabletRange) {
+		x.ends = append(x.ends, end)
+		x.ranges = append(x.ranges, r)
+	})
+	t.index = x
+	return t
+}
+
+// tabletRangeFor is InternalTabletRangeFor over t, using its index when current.
+func (t *InternalTabletPlacement) tabletRangeFor(token int64) *InternalTabletRange {
+	x := t.index
+	if x == nil || x.root != t.InternalRanges {
+		if n := InternalTabletRangeFor(t.InternalRanges, token); n != nil {
+			return n.InternalValue
+		}
+		return nil
+	}
+	ends := x.ends
+	lo, hi := 0, len(ends)
+	for lo < hi {
+		mid := int(uint(lo+hi) >> 1)
+		if ends[mid] < token {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
+	if lo < len(ends) {
+		if r := x.ranges[lo]; token > r.InternalSpan.Start {
+			return r
+		}
+	}
+	return nil
 }
 type InternalTabletPlacementTree = InternalPlacementTree[InternalMetadataTable, InternalTabletPlacement]
 
@@ -233,7 +291,7 @@ func InternalMetadataSnapshotTabletRoot(m *MetadataSnapshot, k InternalMetadataT
 // block and its routing plan.
 type InternalTabletLookup struct {
 	// node is the tablet holding the token, or nil.
-	node *InternalTabletRangeTree
+	node *InternalTabletRange
 	// tracked reports that the snapshot tracks the table's tablets, so
 	// a missing node means no replicas rather than vnode placement.
 	tracked bool
@@ -252,9 +310,9 @@ func InternalLookupTablet(m *MetadataSnapshot, info RoutingInfo) InternalTabletL
 		l.tracked = true
 		return l
 	}
-	if root, ok := InternalMetadataSnapshotTabletRoot(m, InternalMetadataTable{InternalKeyspace: info.Keyspace, InternalTable: info.Table}); ok {
+	if n := InternalPlacementGet(SnapshotData(m).InternalPlacements, InternalMetadataTable{InternalKeyspace: info.Keyspace, InternalTable: info.Table}, InternalComparePlacementTable); n != nil {
 		l.tracked = true
-		l.node = InternalTabletRangeFor(root, info.Token.Value)
+		l.node = n.InternalValue.tabletRangeFor(info.Token.Value)
 	}
 	return l
 }
@@ -266,9 +324,9 @@ func (l *InternalTabletLookup) VersionBlock(info RoutingInfo) byte {
 	if info.Table == "" || info.Keyspace == "" || !info.Token.Set {
 		return 0
 	}
-	if n := l.node; n != nil && n.InternalValue.InternalVersion.Set {
+	if n := l.node; n != nil && n.InternalVersion.Set {
 		index := rand.Uint32N(16)
-		return byte(index<<4) | byte(n.InternalValue.InternalVersion.Value>>(index*4)&15)
+		return byte(index<<4) | byte(n.InternalVersion.Value>>(index*4)&15)
 	}
 	return byte(rand.Uint32())
 }
@@ -279,20 +337,20 @@ func InternalMetadataSnapshotTabletVersionBlock(m *MetadataSnapshot, info Routin
 }
 
 // placementReplicas is a private borrowed view; public accessors detach it.
-func (m *MetadataSnapshot) placementReplicas(keyspace, table string, token int64) ([]Target, *InternalTabletRangeTree) {
+func (m *MetadataSnapshot) placementReplicas(keyspace, table string, token int64) ([]Target, *InternalTabletRange) {
 	l := InternalLookupTablet(m, RoutingInfo{Keyspace: keyspace, Table: table, Token: Option[int64]{Value: token, Set: true}})
 	return m.lookupReplicas(&l, keyspace, table, token)
 }
 
 // lookupReplicas is placementReplicas for a request whose tablet l was
 // looked up in m.
-func (m *MetadataSnapshot) lookupReplicas(l *InternalTabletLookup, keyspace, table string, token int64) ([]Target, *InternalTabletRangeTree) {
+func (m *MetadataSnapshot) lookupReplicas(l *InternalTabletLookup, keyspace, table string, token int64) ([]Target, *InternalTabletRange) {
 	if m == nil {
 		return nil, nil
 	}
 	if l.tracked {
 		if n := l.node; n != nil {
-			return n.InternalValue.InternalSpan.Replicas, n
+			return n.InternalSpan.Replicas, n
 		}
 		return nil, nil
 	}
@@ -374,7 +432,7 @@ func InternalReconcileTabletPlacement(old, current *MetadataSnapshot) *InternalT
 		}
 		if ranges != t.InternalRanges {
 			t.InternalRanges = ranges
-			root = InternalPlacementPut(root, k, t, InternalComparePlacementTable)
+			root = InternalPlacementPut(root, k, InternalIndexTabletPlacement(t), InternalComparePlacementTable)
 		}
 	})
 	for k, ranges := range SnapshotData(current).InternalTablets {

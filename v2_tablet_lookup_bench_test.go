@@ -29,10 +29,10 @@ func BenchmarkTabletLookup(b *testing.B) {
 					root, _ = updateTabletRange(root, step06Hint(b, first, first+int64(step), Option[uint64]{Value: uint64(i), Set: true}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0)))
 				}
 				k := metadataTable{InternalKeyspace: "ks", InternalTable: "table"}
-				routing.SnapshotData(m).InternalPlacements = placementPut(routing.SnapshotData(m).InternalPlacements, k, tabletPlacement{InternalIdentity: "identity-1", InternalRanges: root}, comparePlacementTable)
+				routing.SnapshotData(m).InternalPlacements = placementPut(routing.SnapshotData(m).InternalPlacements, k, routing.InternalIndexTabletPlacement(tabletPlacement{InternalIdentity: "identity-1", InternalRanges: root}), comparePlacementTable)
 				for i := 1; i < tables; i++ {
 					other := metadataTable{InternalKeyspace: "ks", InternalTable: fmt.Sprintf("other%d", i)}
-					routing.SnapshotData(m).InternalPlacements = placementPut(routing.SnapshotData(m).InternalPlacements, other, tabletPlacement{InternalRanges: root}, comparePlacementTable)
+					routing.SnapshotData(m).InternalPlacements = placementPut(routing.SnapshotData(m).InternalPlacements, other, routing.InternalIndexTabletPlacement(tabletPlacement{InternalRanges: root}), comparePlacementTable)
 				}
 				p := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true})).(*routing.InternalRoutingPolicy)
 				var plan routing.InternalLazyRoutingPlan

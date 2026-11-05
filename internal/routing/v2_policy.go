@@ -394,8 +394,8 @@ func (p *InternalRoutingPolicy) InternalPlanWith(info RoutingInfo, m *MetadataSn
 	if o.LeaderAware && o.TokenAware && info.Token.Set && info.Consistency != One && info.Consistency != LocalOne {
 		if ks := SnapshotData(m).InternalKeyspaces[info.Keyspace]; ks != nil && ks.ConsistencyMode == "global" {
 			_, r := m.lookupReplicas(&lookup, info.Keyspace, info.Table, info.Token.Value)
-			if r != nil && r.InternalValue.InternalVersion.Set && len(r.InternalValue.InternalSpan.Replicas) > 0 {
-				plan.leader = Option[Target]{Value: r.InternalValue.InternalSpan.Replicas[0], Set: true}
+			if r != nil && r.InternalVersion.Set && len(r.InternalSpan.Replicas) > 0 {
+				plan.leader = Option[Target]{Value: r.InternalSpan.Replicas[0], Set: true}
 			}
 		}
 	}
