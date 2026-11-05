@@ -393,6 +393,9 @@ type InternalLazyRoutingPlan struct {
 	shard                      Option[uint32] // the request's own shard, for every host
 	pinned                     bool
 	tokenSet                   bool
+	// rotate says that the fallback tiers start at a rotating offset, taken
+	// from the policy's shared counter only when a plan reaches them.
+	rotate bool
 	// strict plans route to a host's shard only: no fallback to any shard.
 	strict bool
 }
@@ -496,9 +499,7 @@ func (p *InternalRoutingPolicy) InternalPlanWith(info RoutingInfo, m *MetadataSn
 			plan.groups[2] = plan.index.all
 		}
 	}
-	if !conditional {
-		plan.rotation = int(p.round.Add(1) & uint64(^uint(0)>>1))
-	}
+	plan.rotate = !conditional
 	return plan
 }
 
@@ -703,6 +704,10 @@ func (p *InternalLazyRoutingPlan) Next() (Route, bool) {
 			p.stage++
 		}
 		// Shared immutable fallback indices are traversed only on demand.
+		if p.rotate && p.stage >= 4 {
+			p.rotate = false
+			p.rotation = int(p.policy.round.Add(1) & uint64(^uint(0)>>1))
+		}
 		for p.stage >= 4 && p.stage <= 8 {
 			group := p.stage - 4
 			connected := true
