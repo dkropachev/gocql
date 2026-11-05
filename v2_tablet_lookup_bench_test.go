@@ -77,3 +77,18 @@ func BenchmarkTabletFeedbackCaptureParallel(b *testing.B) {
 		}
 	})
 }
+
+// BenchmarkTabletHintParse parses a tablets-routing-v2 custom payload of a
+// tablet with three replicas, as each response carrying a hint does.
+func BenchmarkTabletHintParse(b *testing.B) {
+	h := step06Hint(b, -100, 100, Option[uint64]{Value: 7, Set: true}, hTarget(1, 0), hTarget(2, 1), hTarget(3, 2))
+	raw := step06Payload(h)
+	value := BorrowBytes(raw)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := parseTypedTabletPayload(value, "ks", "table", true); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
