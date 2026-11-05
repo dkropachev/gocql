@@ -37,18 +37,75 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 // until the response is released; a response that arrives after the caller
 // stopped waiting is built elsewhere.
 func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest, dest *InternalResponsePage) (*InternalResponsePage, error) {
+	// One deferred cleanup with one return keeps the defer open-coded.
+	// req stays out of x: x's payload owners move to the heap with the
+	// writer's lease, and req would move with them.
+	x := typedExec{conn: c}
+	defer x.cleanup(req)
+	return x.run(ctx, req, dest)
+}
+
+// typedExec is the state of one InternalExecuteTypedInto that its cleanup
+// reads: what the attempt still holds when it returns.
+type typedExec struct {
+	conn *Conn
 	// The shared admission and the input reference move to the writer's
 	// request lease once the request is submitted; until then they are ours.
 	// The admission is taken together with the stream.
-	sharedHeld, inputHeld := false, false
-	defer func() {
-		if inputHeld {
-			req.Lease.Release()
+	sharedHeld, inputHeld bool
+	// Custom payload views can belong to a previously received page. Each
+	// accepted attempt holds those leases just like canonical bound values.
+	payloadOwners []*wire.Lease
+	// call is set once the call holds a stream.
+	call                                    *InternalCallReq
+	stopWaiting, releaseStream, recycleCall bool
+	closeErr                                error
+	ticket                                  *writeTicket
+}
+
+// cleanup releases what the attempt holds, in the reverse order of taking it.
+func (x *typedExec) cleanup(req *attemptRequest) {
+	c := x.conn
+	if x.ticket != nil {
+		x.ticket.release()
+	}
+	if call := x.call; call != nil {
+		if x.stopWaiting {
+			if resp, ok := call.InternalStopWaiting(); ok {
+				// The response arrived as we stopped waiting; it is ours to drop.
+				if resp.InternalPage != nil {
+					resp.InternalPage.Owner.Release()
+				}
+				if resp.removedFromCalls {
+					x.releaseStream = true
+					x.recycleCall = true
+				}
+			}
 		}
-		if sharedHeld {
-			c.endShared()
+		call.finishExec()
+		if x.releaseStream {
+			c.releaseStream(call)
 		}
-	}()
+		if x.recycleCall {
+			InternalPutCallReq(call)
+		}
+		if x.closeErr != nil {
+			c.InternalCloseWithError(x.closeErr)
+		}
+	}
+	for _, owner := range x.payloadOwners {
+		owner.Release()
+	}
+	if x.inputHeld {
+		req.Lease.Release()
+	}
+	if x.sharedHeld {
+		c.endShared()
+	}
+}
+
+func (x *typedExec) run(ctx context.Context, req *attemptRequest, dest *InternalResponsePage) (*InternalResponsePage, error) {
+	c := x.conn
 	if err := ctx.Err(); err != nil {
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err})
 	}
@@ -60,22 +117,14 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest
 			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrReleased})
 		}
 		// The writer's completion is an explicit input lifetime boundary.
-		inputHeld = true
+		x.inputHeld = true
 	}
-	// Custom payload views can belong to a previously received page. Each
-	// accepted attempt holds those leases just like canonical bound values.
-	var payloadOwners []*wire.Lease
-	defer func() {
-		for _, owner := range payloadOwners {
-			owner.Release()
-		}
-	}()
 	for _, entry := range req.Payload {
 		if owner := cqltype.BytesLease(entry.Value.Value); entry.Value.Valid && !owner.IsZero() {
 			if !owner.Retain() {
 				return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrReleased})
 			}
-			payloadOwners = append(payloadOwners, owner.Lease())
+			x.payloadOwners = append(x.payloadOwners, owner.Lease())
 		}
 	}
 	call := InternalGetCallReq(0)
@@ -86,44 +135,17 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest
 		InternalPutCallReq(call)
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err})
 	}
-	sharedHeld = true
+	x.sharedHeld = true
+	x.call = call
 	stream := call.InternalStreamID
 	if c.InternalStreamObserver != nil {
 		call.streamObserverContext = c.InternalStreamObserver.StreamContext(ctx)
 	}
-	var stopWaiting, releaseStream, recycleCall bool
-	var closeErr error
-	defer func() {
-		if closeErr != nil {
-			c.InternalCloseWithError(closeErr)
-		}
-	}()
-	defer func() {
-		if stopWaiting {
-			if resp, ok := call.InternalStopWaiting(); ok {
-				// The response arrived as we stopped waiting; it is ours to drop.
-				if resp.InternalPage != nil {
-					resp.InternalPage.Owner.Release()
-				}
-				if resp.removedFromCalls {
-					releaseStream = true
-					recycleCall = true
-				}
-			}
-		}
-		call.finishExec()
-		if releaseStream {
-			c.releaseStream(call)
-		}
-		if recycleCall {
-			InternalPutCallReq(call)
-		}
-	}()
 	failBeforeWrite := func(err error) (*InternalResponsePage, error) {
-		stopWaiting = true
+		x.stopWaiting = true
 		if c.InternalRemoveCallIfOpen(stream) {
-			releaseStream = true
-			recycleCall = true
+			x.releaseStream = true
+			x.recycleCall = true
 		}
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err})
 	}
@@ -150,32 +172,32 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest
 		// writer finishes, even if cancellation returns to the calling goroutine.
 		t := getTicket()
 		owner := &t.request
-		owner.conn, owner.payloads, owner.scratch = c, payloadOwners, scratch
-		if inputHeld {
+		owner.conn, owner.payloads, owner.scratch = c, x.payloadOwners, scratch
+		if x.inputHeld {
 			owner.input = req.Lease
 		}
 		wire.InitLease(&owner.Lease, packet, owner)
 		lease := &owner.Lease
-		sharedHeld, inputHeld, payloadOwners = false, false, nil
+		x.sharedHeld, x.inputHeld, x.payloadOwners = false, false, nil
 		// The caller does not wait for the write: the response wait below
 		// covers it, and write failures close the connection.
 		ticket, err = c.enqueueTyped(ctx, t, packet, lease)
 		if err != nil {
 			return failBeforeWrite(err)
 		}
-		defer ticket.release()
+		x.ticket = ticket
 	} else {
 		n, err := writer.InternalWriteSpans(ctx, packet)
 		putFrameScratch(scratch) // the writer returned: no span references remain
 		if err != nil {
-			stopWaiting = true
+			x.stopWaiting = true
 			if n == 0 && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 				if c.InternalRemoveCallIfOpen(stream) {
-					releaseStream = true
-					recycleCall = true
+					x.releaseStream = true
+					x.recycleCall = true
 				}
 			} else {
-				closeErr = err
+				x.closeErr = err
 			}
 			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err, InternalPotentiallyExecuted: n > 0})
 		}
@@ -217,17 +239,17 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest
 	// abandon ends a wait whose attempt context, or the parent it watches, was
 	// cancelled.
 	abandon := func() (*InternalResponsePage, error) {
-		stopWaiting = true
+		x.stopWaiting = true
 		if ticket != nil && ticket.unsent() {
 			// Withdrawn before transmission: the stream is free again.
 			if c.InternalRemoveCallIfOpen(stream) {
-				releaseStream = true
-				recycleCall = true
+				x.releaseStream = true
+				x.recycleCall = true
 			}
 			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctx.Err()})
 		}
 		if c.markOrphan(call) {
-			closeErr = InternalErrOrphanBudget
+			x.closeErr = InternalErrOrphanBudget
 		}
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctx.Err(), InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
 	}
@@ -238,8 +260,8 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest
 			ticket.awaitWritten()
 		}
 		if resp.removedFromCalls {
-			releaseStream = true
-			recycleCall = true
+			x.releaseStream = true
+			x.recycleCall = true
 		}
 		if resp.InternalErr != nil {
 			// A frame from the server proves execution; a connection failure
@@ -249,16 +271,16 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest
 		}
 		return resp.InternalPage, nil
 	case <-timeoutCh:
-		stopWaiting = true
+		x.stopWaiting = true
 		if ticket != nil && ticket.unsent() {
 			if c.InternalRemoveCallIfOpen(stream) {
-				releaseStream = true
-				recycleCall = true
+				x.releaseStream = true
+				x.recycleCall = true
 			}
 			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrTimeoutNoResponse, InternalTimeout: req.Timeout})
 		}
 		if c.markOrphan(call) {
-			closeErr = InternalErrOrphanBudget
+			x.closeErr = InternalErrOrphanBudget
 		}
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrTimeoutNoResponse, InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
 	case <-attemptDone(ctx):
@@ -266,7 +288,7 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest
 	case <-parentDone:
 		return abandon()
 	case <-connDone:
-		stopWaiting = true
+		x.stopWaiting = true
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrConnectionClosed, InternalPotentiallyExecuted: potentiallyExecuted()})
 	}
 }
