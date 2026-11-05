@@ -93,6 +93,12 @@ func newExecutionContext() *executionContext {
 // with the CancelFunc that finishes it. timeout <= 0 leaves only the parent's
 // deadline. Cancellation from another goroutine must use cancelFunc.
 func (c *executionContext) begin(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	return c.beginAt(parent, timeout, time.Time{})
+}
+
+// beginAt is begin with the time the execution started, read by the caller
+// for its own use; a zero now reads the clock when a timeout needs it.
+func (c *executionContext) beginAt(parent context.Context, timeout time.Duration, now time.Time) (context.Context, context.CancelFunc) {
 	c.mu.Lock()
 	c.gen++
 	gen := c.gen
@@ -109,7 +115,10 @@ func (c *executionContext) begin(parent context.Context, timeout time.Duration) 
 	}
 	c.deadline, c.hasDeadline = parent.Deadline()
 	if timeout > 0 {
-		own := time.Now().Add(timeout)
+		if now.IsZero() {
+			now = time.Now()
+		}
+		own := now.Add(timeout)
 		if !c.hasDeadline || own.Before(c.deadline) {
 			c.deadline, c.hasDeadline = own, true
 			c.timerAt = own
