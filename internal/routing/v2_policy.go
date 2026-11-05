@@ -303,6 +303,26 @@ type InternalRoutingHostIndex struct {
 	all         []int
 	// routes holds each host's route, in host order.
 	routes []*pool.HostRoute
+	// ids holds the hosts' IDs in host order when there are few enough
+	// that scanning them beats hashing an ID.
+	ids []UUID
+}
+
+// smallHostIndex is the most hosts whose IDs a lookup scans.
+const smallHostIndex = 16
+
+// host returns the position of the host with id.
+func (x *InternalRoutingHostIndex) host(id UUID) (int, bool) {
+	if x.ids != nil {
+		for i := range x.ids {
+			if x.ids[i] == id {
+				return i, true
+			}
+		}
+		return 0, false
+	}
+	i, ok := x.byID[id]
+	return i, ok
 }
 
 // InternalBuildRoutingHostIndex indexes hosts with routes that belong to no
@@ -319,6 +339,9 @@ func InternalBuildRoutingHostIndexWith(hosts []HostSnapshot, route func(UUID) *p
 		perfAdd(2, 1)
 		x.byID[h.ID] = i
 		x.routes[i] = route(h.ID)
+		if len(hosts) <= smallHostIndex {
+			x.ids = append(x.ids, h.ID)
+		}
 		x.all = append(x.all, i)
 		x.dc[h.Datacenter] = append(x.dc[h.Datacenter], i)
 		k := routingLocality{h.Datacenter, h.Rack}
@@ -467,7 +490,7 @@ func (p *InternalRoutingPolicy) InternalPlanWith(info RoutingInfo, m *MetadataSn
 }
 func (p *InternalLazyRoutingPlan) host(t Target) (int, *HostSnapshot) {
 	perfAdd(0, 1)
-	i, ok := p.index.byID[t.HostID]
+	i, ok := p.index.host(t.HostID)
 	if !ok {
 		return -1, nil
 	}
@@ -770,7 +793,7 @@ func (p *singleTargetRouting) Validate(m *MetadataSnapshot) error {
 		return typeValidation("routing shard", "strict target requires a shard ID")
 	}
 	if m != nil {
-		if i, ok := m.routingIndex().byID[p.target.HostID]; ok {
+		if i, ok := m.routingIndex().host(p.target.HostID); ok {
 			h := SnapshotData(m).InternalHosts[i]
 			if h.Enabled {
 				if (p.strict || p.target.StrictShard) && p.target.ShardID.Set && (h.Shards == 0 || p.target.ShardID.Value >= h.Shards) {
@@ -784,7 +807,7 @@ func (p *singleTargetRouting) Validate(m *MetadataSnapshot) error {
 }
 func (p *singleTargetRouting) Plan(_ RoutingInfo, m *MetadataSnapshot) QueryPlan {
 	if m != nil {
-		if i, ok := m.routingIndex().byID[p.target.HostID]; ok {
+		if i, ok := m.routingIndex().host(p.target.HostID); ok {
 			h := SnapshotData(m).InternalHosts[i]
 			if h.Enabled {
 				t := p.target

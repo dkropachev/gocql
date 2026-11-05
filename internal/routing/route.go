@@ -103,7 +103,7 @@ func (m *MetadataSnapshot) ReplicaRoutes(info RoutingInfo) []Route {
 	x := m.routingIndex()
 	out := make([]Route, 0, len(replicas))
 	for _, t := range replicas {
-		i, ok := x.byID[t.HostID]
+		i, ok := x.host(t.HostID)
 		if !ok {
 			continue
 		}
