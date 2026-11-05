@@ -18,11 +18,15 @@ type tabletRangeIndex struct {
 	// last holds each chunk's last range end.
 	last   []int64
 	chunks []*tabletRangeChunk
+	// lastScale is evenScale of last.
+	lastScale float64
 }
 
 type tabletRangeChunk struct {
 	ends   []int64
 	ranges []*InternalTabletRange
+	// scale is evenScale of ends.
+	scale float64
 }
 
 // currentIndex reports whether t's index lists exactly InternalRanges; a
@@ -51,6 +55,7 @@ func InternalIndexTabletPlacement(t InternalTabletPlacement) InternalTabletPlace
 	})
 	x := &tabletRangeIndex{root: t.InternalRanges}
 	x.appendChunks(ends, ranges)
+	x.lastScale = evenScale(x.last)
 	t.index = x
 	return t
 }
@@ -61,6 +66,7 @@ func (x *tabletRangeIndex) appendChunks(ends []int64, ranges []*InternalTabletRa
 	for i := 0; i < n; i++ {
 		lo, hi := i*len(ends)/n, (i+1)*len(ends)/n
 		c := &tabletRangeChunk{ends: ends[lo:hi:hi], ranges: ranges[lo:hi:hi]}
+		c.scale = evenScale(c.ends)
 		x.last = append(x.last, c.ends[len(c.ends)-1])
 		x.chunks = append(x.chunks, c)
 	}
@@ -92,6 +98,7 @@ func (x *tabletRangeIndex) replace(root *InternalTabletRangeTree, first, last in
 	y := &tabletRangeIndex{root: root}
 	if x == nil || len(x.chunks) == 0 {
 		y.appendChunks([]int64{last}, []*InternalTabletRange{r})
+		y.lastScale = evenScale(y.last)
 		return y
 	}
 	// The first range ending after first is at (ci, j); a range ending
@@ -133,6 +140,7 @@ func (x *tabletRangeIndex) replace(root *InternalTabletRangeTree, first, last in
 	y.appendChunks(ends, ranges)
 	y.last = append(y.last, x.last[cj+1:]...)
 	y.chunks = append(y.chunks, x.chunks[cj+1:]...)
+	y.lastScale = evenScale(y.last)
 	return y
 }
 
@@ -168,6 +176,22 @@ func lowerBound(s []int64, v int64) int {
 // as a table's tablets are: it looks next to where v would sit if s were
 // evenly spread, and binary-searches the rest only when v is not there.
 func guessLowerBound(s []int64, v int64) int {
+	return guessLowerBoundScaled(s, v, evenScale(s))
+}
+
+// evenScale is the count of steps between the sorted s's elements per
+// unit of their span, which guessLowerBoundScaled multiplies by instead of
+// dividing at every lookup.
+func evenScale(s []int64) float64 {
+	n := len(s)
+	if n < 4 {
+		return 0
+	}
+	return float64(n-1) / float64(uint64(s[n-1])-uint64(s[0]))
+}
+
+// guessLowerBoundScaled is guessLowerBound for s whose evenScale is scale.
+func guessLowerBoundScaled(s []int64, v int64, scale float64) int {
 	n := len(s)
 	if n < 4 {
 		return lowerBound(s, v)
@@ -181,7 +205,7 @@ func guessLowerBound(s []int64, v int64) int {
 	}
 	// lo < v <= hi, so the result is in [1, n-1]; g is about the last
 	// element below v.
-	g := int(float64(uint64(v)-uint64(lo)) / float64(uint64(hi)-uint64(lo)) * float64(n-1))
+	g := int(float64(uint64(v)-uint64(lo)) * scale)
 	g = min(max(g, 0), n-2)
 	if s[g] < v {
 		if s[g+1] >= v {
@@ -204,12 +228,12 @@ func (t *InternalTabletPlacement) tabletRangeFor(token int64) *InternalTabletRan
 		}
 		return nil
 	}
-	ci := guessLowerBound(x.last, token)
+	ci := guessLowerBoundScaled(x.last, token, x.lastScale)
 	if ci == len(x.chunks) {
 		return nil
 	}
 	c := x.chunks[ci]
-	if r := c.ranges[guessLowerBound(c.ends, token)]; token > r.InternalSpan.Start {
+	if r := c.ranges[guessLowerBoundScaled(c.ends, token, c.scale)]; token > r.InternalSpan.Start {
 		return r
 	}
 	return nil
