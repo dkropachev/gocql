@@ -135,64 +135,9 @@ type InternalTabletRangeTree = InternalPlacementTree[int64, *InternalTabletRange
 type InternalTabletPlacement struct {
 	InternalRanges   *InternalTabletRangeTree
 	InternalIdentity string
-	// index is a flat copy of InternalRanges for lookups; it is used only
+	// index lists InternalRanges in chunks for lookups; it is used only
 	// while its root is still InternalRanges.
 	index *tabletRangeIndex
-}
-
-// tabletRangeIndex lists a range tree's ranges in token order, so a lookup
-// binary-searches contiguous ends instead of chasing tree nodes.
-type tabletRangeIndex struct {
-	root   *InternalTabletRangeTree
-	ends   []int64
-	ranges []*InternalTabletRange
-}
-
-// InternalIndexTabletPlacement returns t with an index of its current ranges.
-func InternalIndexTabletPlacement(t InternalTabletPlacement) InternalTabletPlacement {
-	if t.InternalRanges == nil {
-		t.index = nil
-		return t
-	}
-	if t.index != nil && t.index.root == t.InternalRanges {
-		return t
-	}
-	n := 0
-	InternalPlacementEach(t.InternalRanges, func(int64, *InternalTabletRange) { n++ })
-	x := &tabletRangeIndex{root: t.InternalRanges, ends: make([]int64, 0, n), ranges: make([]*InternalTabletRange, 0, n)}
-	InternalPlacementEach(t.InternalRanges, func(end int64, r *InternalTabletRange) {
-		x.ends = append(x.ends, end)
-		x.ranges = append(x.ranges, r)
-	})
-	t.index = x
-	return t
-}
-
-// tabletRangeFor is InternalTabletRangeFor over t, using its index when current.
-func (t *InternalTabletPlacement) tabletRangeFor(token int64) *InternalTabletRange {
-	x := t.index
-	if x == nil || x.root != t.InternalRanges {
-		if n := InternalTabletRangeFor(t.InternalRanges, token); n != nil {
-			return n.InternalValue
-		}
-		return nil
-	}
-	ends := x.ends
-	lo, hi := 0, len(ends)
-	for lo < hi {
-		mid := int(uint(lo+hi) >> 1)
-		if ends[mid] < token {
-			lo = mid + 1
-		} else {
-			hi = mid
-		}
-	}
-	if lo < len(ends) {
-		if r := x.ranges[lo]; token > r.InternalSpan.Start {
-			return r
-		}
-	}
-	return nil
 }
 type InternalTabletPlacementTree = InternalPlacementTree[InternalMetadataTable, InternalTabletPlacement]
 

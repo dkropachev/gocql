@@ -132,8 +132,6 @@ func InternalSessionPublishTabletFeedback(s *Session, p *InternalV2PeripheralSta
 			}
 		}
 	}
-	// Tables whose ranges changed are indexed once, after every update.
-	var touched []metadataTable
 	for _, u := range updates {
 		h, stamp := u.InternalHint, u.InternalStamp
 		k := metadataTable{InternalKeyspace: h.KeyspaceName(), InternalTable: h.TableName()}
@@ -158,18 +156,10 @@ func InternalSessionPublishTabletFeedback(s *Session, p *InternalV2PeripheralSta
 			continue
 		}
 		var changed bool
-		t.InternalRanges, changed = updateTabletRange(current, h)
+		t, changed = routing.InternalUpdateTabletPlacement(t, h)
 		if changed {
 			ensureNext()
 			routing.SnapshotData(next).InternalPlacements = placementPut(routing.SnapshotData(next).InternalPlacements, k, t, comparePlacementTable)
-			touched = append(touched, k)
-		}
-	}
-	for _, k := range touched {
-		if n := placementGet(routing.SnapshotData(next).InternalPlacements, k, comparePlacementTable); n != nil {
-			if t := routing.InternalIndexTabletPlacement(n.InternalValue); t != n.InternalValue {
-				routing.SnapshotData(next).InternalPlacements = placementPut(routing.SnapshotData(next).InternalPlacements, k, t, comparePlacementTable)
-			}
 		}
 	}
 	changed := next != old
