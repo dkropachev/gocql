@@ -297,7 +297,11 @@ func (p *InternalTypedConnPicker) InternalPickTarget(target Target, routing Rout
 		if len(cs) == 0 {
 			return nil
 		}
-		start := int(p.InternalPos.Add(1) % uint64(len(cs)))
+		// The shared position only rotates among several connections.
+		start := 0
+		if len(cs) > 1 {
+			start = int(p.InternalPos.Add(1) % uint64(len(cs)))
+		}
 		for i := range cs {
 			c := cs[(start+i)%len(cs)]
 			if n := c.AvailableStreams(); n > available {
@@ -313,8 +317,13 @@ func (p *InternalTypedConnPicker) InternalPickTarget(target Target, routing Rout
 	}
 	var preferred *Conn
 	if shard >= 0 && shard < len(p.InternalConns) {
-		preferred = choose(p.InternalConns[shard])
-		if preferred != nil && preferred.AvailableStreams() > 0 {
+		cs := p.InternalConns[shard]
+		// A shard usually has one connection: take it when it has a free stream.
+		if len(cs) == 1 && cs[0].AvailableStreams() > 0 {
+			return cs[0]
+		}
+		preferred = choose(cs)
+		if len(cs) > 1 && preferred != nil && preferred.AvailableStreams() > 0 {
 			return preferred
 		}
 	}
