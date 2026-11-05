@@ -459,37 +459,39 @@ type InternalLogicalExecution struct {
 	request        *InternalExecutionRequest
 	lifetime       InternalExecutionLifetime
 	id             uint64
-	once           sync.Once
+	finished       atomic.Bool
 }
 
 func (l *InternalLogicalExecution) InternalFinish(result Result, err error) {
 	if l == nil {
 		return
 	}
-	l.once.Do(func() {
-		rt := InternalRuntimeFor(l.session)
-		rt.inflight.Add(-1)
-		implCluster.InternalSessionRecordV2Latency(l.session, time.Since(l.started))
-		if err != nil {
-			rt.errors.Add(1)
+	// A reused execution starts unfinished; only the first call records it.
+	if !l.finished.CompareAndSwap(false, true) {
+		return
+	}
+	rt := InternalRuntimeFor(l.session)
+	rt.inflight.Add(-1)
+	implCluster.InternalSessionRecordV2Latency(l.session, time.Since(l.started))
+	if err != nil {
+		rt.errors.Add(1)
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		rt.cancelled.Add(1)
+	}
+	if l.observer != nil {
+		perfAdd(0, 1)
+		event := RequestEvent{ID: l.id, Statement: l.request.InternalStatement, Parameters: l.request.InternalValues.Columns, Routing: l.request.InternalRouting, Result: cloneResult(result), Err: err}
+		if state := l.request.InternalPrepared(); state != nil {
+			event.Parameters = state.InternalParameters
 		}
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			rt.cancelled.Add(1)
-		}
-		if l.observer != nil {
-			perfAdd(0, 1)
-			event := RequestEvent{ID: l.id, Statement: l.request.InternalStatement, Parameters: l.request.InternalValues.Columns, Routing: l.request.InternalRouting, Result: cloneResult(result), Err: err}
-			if state := l.request.InternalPrepared(); state != nil {
-				event.Parameters = state.InternalParameters
+		if l.request.batch != nil {
+			for _, entry := range l.request.batch.items {
+				event.BatchStatements = append(event.BatchStatements, entry.InternalStatement)
 			}
-			if l.request.batch != nil {
-				for _, entry := range l.request.batch.items {
-					event.BatchStatements = append(event.BatchStatements, entry.InternalStatement)
-				}
-			}
-			implCluster.InternalSessionObserveSafely(l.session, func() { l.observer.ObserveRequest(event) })
 		}
-	})
+		implCluster.InternalSessionObserveSafely(l.session, func() { l.observer.ObserveRequest(event) })
+	}
 }
 
 func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], options Options) (context.Context, context.CancelFunc, *InternalExecutionRequest, error) {
