@@ -117,11 +117,26 @@ func InternalComparePlacementToken(a, b int64) int {
 	return 0
 }
 func InternalComparePlacementTable(a, b InternalMetadataTable) int {
-	// One three-way comparison per name: < and > would each compare it.
-	if c := strings.Compare(a.InternalKeyspace, b.InternalKeyspace); c != 0 {
+	// Names are ordered by length first: a lookup mostly meets names of
+	// other lengths, or its own keyspace, and decides those without
+	// comparing bytes in order.
+	if c := comparePlacementName(a.InternalKeyspace, b.InternalKeyspace); c != 0 {
 		return c
 	}
-	return strings.Compare(a.InternalTable, b.InternalTable)
+	return comparePlacementName(a.InternalTable, b.InternalTable)
+}
+
+func comparePlacementName(a, b string) int {
+	if len(a) != len(b) {
+		if len(a) < len(b) {
+			return -1
+		}
+		return 1
+	}
+	if a == b {
+		return 0
+	}
+	return strings.Compare(a, b)
 }
 
 var tabletObservationID atomic.Uint64
