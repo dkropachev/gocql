@@ -39,7 +39,7 @@ func serializationExec[P any](s *gocql.Session, stmt string, encoder cql.ParamEn
 		return err
 	}
 	defer b.Close()
-	_, err = Exec(ctx, s, b, gocql.Options{})
+	_, err = Exec(ctx, s, b, gocql.SessionOptions{})
 	return err
 }
 
@@ -54,7 +54,7 @@ func serializationRows[R any](s *gocql.Session, stmt string, decoder cql.RowDeco
 		return gocql.Rows[R]{}, err
 	}
 	defer b.Close()
-	return Run(ctx, s, b, gocql.Options{})
+	return Run(ctx, s, b, gocql.SessionOptions{})
 }
 
 func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (R, error) {

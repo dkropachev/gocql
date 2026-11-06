@@ -145,8 +145,8 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 	ddl := func(stmt string) {
 		b := codecTestMust(BindUnpreparedOwned(cql.Command(stmt), cql.NewColumns(), cql.EmptyParams{}))
 		defer b.Close()
-		if _, err := Exec(ctx, s, b, testOptions(*func() *gocql.OptionValues {
-			opaqueStorageValue := new(gocql.OptionValues)
+		if _, err := Exec(ctx, s, b, bindOptions(s, *func() *gocql.Options {
+			opaqueStorageValue := new(gocql.Options)
 			implExecution.OptionsData(opaqueStorageValue).InternalConnection = conn
 			return opaqueStorageValue
 		}())); err != nil {
@@ -163,7 +163,7 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 		b, err := BindUnpreparedOwned(cql.Command("DROP TABLE IF EXISTS "+qualified), cql.NewColumns(), cql.EmptyParams{})
 		if err == nil {
 			defer b.Close()
-			_, err = Exec(cleanup, s, b, gocql.Options{})
+			_, err = Exec(cleanup, s, b, gocql.SessionOptions{})
 		}
 		if err != nil {
 			t.Errorf("cleanup unique stream table: %v", err)
@@ -174,7 +174,7 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		payload := bytes.Repeat([]byte{byte(i + 1)}, size)
 		bound := codecTestMust(BindOwned(insert, cql.Pair[int32, []byte]{First: int32(i), Second: payload}))
-		_, err := Exec(ctx, s, bound, gocql.Options{})
+		_, err := Exec(ctx, s, bound, gocql.SessionOptions{})
 		bound.Close()
 		if err != nil {
 			t.Fatal(err)
@@ -266,7 +266,7 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 	}
 	query := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, int32]{CQL: "SELECT id FROM " + qualified + " LIMIT 1", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.Int32)}, cql.NewColumns(), cql.EmptyParams{}))
 	defer query.Close()
-	rows := codecTestMust(Run(ctx, s, query, gocql.Options{}))
+	rows := codecTestMust(Run(ctx, s, query, gocql.SessionOptions{}))
 	defer rows.Close()
 	if !rows.Next() {
 		t.Fatal("shared execution after repair", rows.Err())

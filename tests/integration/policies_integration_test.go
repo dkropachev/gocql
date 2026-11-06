@@ -158,7 +158,7 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster gocql.Config, keyspac
 		profile := *cluster.DefaultProfile
 		profile.Routing = policy
 		handle := profileOf(profile)
-		rows, err := Run(ctx, session, bound, testOptions(gocql.OptionValues{Profile: handle, Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}))
+		rows, err := Run(ctx, session, bound, bindOptions(session, gocql.Options{Profile: handle, Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -267,7 +267,7 @@ func TestNoHangAllHostsDown(t *testing.T) {
 			profile.Routing = v2UnavailableHostsRouting{Policy: policy, oneHost: oneHost}
 			handle := profileOf(profile)
 			ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
-			rows, queryErr := Run(ctx, session, bound, testOptions(gocql.OptionValues{Profile: handle}))
+			rows, queryErr := Run(ctx, session, bound, bindOptions(session, gocql.Options{Profile: handle}))
 			if queryErr == nil {
 				queryErr = rows.Close()
 			}

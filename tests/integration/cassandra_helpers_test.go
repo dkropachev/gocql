@@ -122,7 +122,7 @@ func cassandraUnprepared[R any](t testing.TB, stmt string, decoder cql.RowDecode
 }
 func cassandraReadBound[R any](t testing.TB, s *gocql.Session, b *Bound[R], options gocql.Options) R {
 	t.Helper()
-	rows, err := Run(context.Background(), s, b, options)
+	rows, err := Run(context.Background(), s, b, bindOptions(s, options))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func cassandraWriteBound(t testing.TB, s *gocql.Session, stmt string, values []c
 }
 func cassandraRows(t testing.TB, s *gocql.Session, b *Bound[cql.DynamicRow], options gocql.Options) []cql.DynamicRow {
 	t.Helper()
-	rows, err := Run(context.Background(), s, b, options)
+	rows, err := Run(context.Background(), s, b, bindOptions(s, options))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func cassandraRows(t testing.TB, s *gocql.Session, b *Bound[cql.DynamicRow], opt
 }
 func cassandraBatch(t testing.TB, s *gocql.Session, kind cql.BatchKind, items []gocql.BatchItem, options gocql.Options) gocql.Result {
 	t.Helper()
-	r, e := gocql.ExecBatch(context.Background(), s, kind, items, options)
+	r, e := gocql.ExecBatch(context.Background(), s, kind, items, bindOptions(s, options))
 	if e != nil {
 		t.Fatal(e)
 	}

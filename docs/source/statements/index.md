@@ -14,7 +14,10 @@ To execute a prepared statement once from any goroutine, call
 `prepared.Exec(ctx, input, options)`, `prepared.One(ctx, input, &dst, options)`
 or `prepared.Each(ctx, input, &dst, fn, options)`. They reuse queries the
 statement keeps, so point reads and writes cost about what a query per worker
-does, and the options apply to that call only. They return once the execution
+does, and the options apply to that call only. These calls take
+`SessionOptions`: bind `Options` to the session once with
+`BindOptions(session, options)` and reuse the result, or pass the zero value
+for the session default. They return once the execution
 has finished; for rows that outlive the call, use a `Query` and `Run`.
 
 `Options` overlays the selected profile using explicit `Option[T]` values for

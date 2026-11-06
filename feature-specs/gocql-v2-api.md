@@ -1072,17 +1072,19 @@ also interrupts active streams; already written caller output remains valid.
 ## Options, profiles, batches and results
 
 ```go
-// Options is frozen: NewOptions validates OptionValues and copies the custom
-// payload and profile. A Query resolves its Options for its session once at
-// construction. NewOptionsFor also resolves them for session up front, for
-// one-shot executions; used on another session they resolve on each execution
-// unless they name a Profile. The zero Options uses the session default profile.
-type Options struct { /* frozen, resolved options */ }
-func NewOptions(values OptionValues) (Options, error)
-func NewOptionsFor(session *Session, values OptionValues) (Options, error)
-func (Options) Values() OptionValues          // a copy, to derive other Options
+// Options are plain values; the zero Options uses the session default
+// profile. Query constructors take Options and validate, resolve and encode
+// them for their session once. One-shot executions (Prepared.Exec/One/Each,
+// ExecBatch, RunBatch) take SessionOptions: Options bound by BindOptions to
+// one session's default profile and keyspace. Executions use SessionOptions as
+// they are and do not check which session runs them; on another session they
+// apply the binding session's defaults. The zero SessionOptions uses the
+// executing session's default profile.
+type SessionOptions struct { /* frozen, resolved options */ }
+func BindOptions(session *Session, options Options) (SessionOptions, error)
+func (SessionOptions) Values() Options        // a copy, to derive other options
 
-type OptionValues struct {
+type Options struct {
     Profile *Profile                              // copied when resolved
     Consistency Option[Consistency]
     SerialConsistency Option[Consistency]         // inherit / set
@@ -1118,8 +1120,8 @@ type Profile struct {
 type BatchKind uint8
 const (LoggedBatch BatchKind = iota; UnloggedBatch; CounterBatch)
 type BatchItem struct { /* immutable owned entry captured by query.BatchEntry */ }
-func RunBatch[R any](context.Context, *Session, BatchKind, []BatchItem, RowDecoder[R], Options) (*Page[R], error)
-func ExecBatch(context.Context, *Session, BatchKind, []BatchItem, Options) (Result, error)
+func RunBatch[R any](context.Context, *Session, BatchKind, []BatchItem, RowDecoder[R], SessionOptions) (*Page[R], error)
+func ExecBatch(context.Context, *Session, BatchKind, []BatchItem, SessionOptions) (Result, error)
 
 type Result struct {
     HostID UUID
@@ -1133,15 +1135,15 @@ type Result struct {
 }
 ```
 
-Invalid values fail in NewOptions, before any execution. A query uses its
-options as resolved when it is created; options passed per call use the
-resolution NewOptions made for their session. A zero Options inherits the selected session profile, is non-idempotent, and has
+Invalid values fail in the query constructor or BindOptions, before any
+execution. A query uses its options as resolved when it is created; options
+passed per call use the resolution BindOptions made. A zero Options inherits the selected session profile, is non-idempotent, and has
 no tracing/timestamp/keyspace override. Override validation returns typed
 errors, not panics. A profile is a plain value. Connect copies
-Config.DefaultProfile and NewOptions copies OptionValues.Profile, so changing a
+Config.DefaultProfile and binding copies Options.Profile, so changing a
 Profile after it was handed over has no effect. Admission validates nothing and
 shares the resolved options across attempts/pages; CustomPayload is copied once,
-by NewOptions.
+when the options are bound.
 Defaults:
 LOCAL_QUORUM, LOCAL_SERIAL, 30-second request timeout, 5,000-row pages, one-page
 prefetch, no speculation, and the safe retry policy. Caller context always

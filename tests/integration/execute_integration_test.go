@@ -90,7 +90,7 @@ func TestV2RuntimeDatabaseSmoke(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer bound.Close()
-		if _, err = Exec(ctx, session, bound, gocql.Options{}); err != nil {
+		if _, err = Exec(ctx, session, bound, gocql.SessionOptions{}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -99,7 +99,7 @@ func TestV2RuntimeDatabaseSmoke(t *testing.T) {
 		bound, err := BindUnpreparedOwned(cql.Command("DROP KEYSPACE "+keyspace), cql.NewColumns(), cql.EmptyParams{})
 		if err == nil {
 			defer bound.Close()
-			if _, err = Exec(context.Background(), session, bound, gocql.Options{}); err != nil {
+			if _, err = Exec(context.Background(), session, bound, gocql.SessionOptions{}); err != nil {
 				t.Error(err)
 			}
 		}
@@ -128,7 +128,7 @@ func TestV2RuntimeDatabaseSmoke(t *testing.T) {
 		if !bound.Routing().Token.Set {
 			t.Fatal("prepared partition key had no routing token")
 		}
-		if _, err = Exec(ctx, session, bound, gocql.Options{}); err != nil {
+		if _, err = Exec(ctx, session, bound, gocql.SessionOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		bound.Close()
@@ -140,7 +140,7 @@ func TestV2RuntimeDatabaseSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := Run(ctx, session, selectBound, testOptions(gocql.OptionValues{PageSize: cql.Option[int32]{Value: 1, Set: true}}))
+	result, err := Run(ctx, session, selectBound, bindOptions(session, gocql.Options{PageSize: cql.Option[int32]{Value: 1, Set: true}}))
 	if err != nil {
 		t.Fatal(err)
 	}

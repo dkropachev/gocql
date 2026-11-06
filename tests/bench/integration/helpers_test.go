@@ -193,11 +193,11 @@ func BindUnpreparedOwned[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a
 	return implExecution.BindUnpreparedOwned[P, R](a0, a1, a2)
 }
 
-func Exec[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.Options) (gocql.Result, error) {
+func Exec[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.SessionOptions) (gocql.Result, error) {
 	return implExecution.Exec[R](a0, a1, a2, a3)
 }
 
-func Run[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.Options) (gocql.Rows[R], error) {
+func Run[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.SessionOptions) (gocql.Rows[R], error) {
 	return implExecution.Run[R](a0, a1, a2, a3)
 }
 
@@ -370,9 +370,10 @@ func codecTestMust[T any](v T, err error) T {
 	return v
 }
 
-// testOptions freezes v, failing loudly on values a test meant to be valid.
-func testOptions(v gocql.OptionValues) gocql.Options {
-	o, err := gocql.NewOptions(v)
+// bindOptions binds v to session, failing loudly on values a test meant to
+// be valid.
+func bindOptions(session *gocql.Session, v gocql.Options) gocql.SessionOptions {
+	o, err := gocql.BindOptions(session, v)
 	if err != nil {
 		panic(err)
 	}
@@ -594,7 +595,7 @@ func v2Query(ctx context.Context, session *gocql.Session, stmt string, values ..
 	// Run admits the request before returning. Rows owns the execution reference
 	// until it is exhausted or closed, even after closing the binding here.
 	defer bound.Close()
-	return Run(ctx, session, bound, gocql.Options{})
+	return Run(ctx, session, bound, gocql.SessionOptions{})
 }
 
 func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (cql.DynamicRow, error) {
@@ -628,7 +629,7 @@ func v2CreateTable(ctx context.Context, session *gocql.Session, stmt string) err
 		return err
 	}
 	defer bound.Close()
-	if _, err := Exec(ctx, session, bound, testOptions(gocql.OptionValues{Idempotent: true, Retry: retry.Safe{MaxAttempts: 4}})); err != nil {
+	if _, err := Exec(ctx, session, bound, bindOptions(session, gocql.Options{Idempotent: true, Retry: retry.Safe{MaxAttempts: 4}})); err != nil {
 		return err
 	}
 	if err := session.AwaitSchemaAgreement(ctx); err != nil {
@@ -1156,7 +1157,7 @@ func serializationExec[P any](s *gocql.Session, stmt string, encoder cql.ParamEn
 		return err
 	}
 	defer b.Close()
-	_, err = Exec(ctx, s, b, gocql.Options{})
+	_, err = Exec(ctx, s, b, gocql.SessionOptions{})
 	return err
 }
 
@@ -1171,7 +1172,7 @@ func serializationRows[R any](s *gocql.Session, stmt string, decoder cql.RowDeco
 		return gocql.Rows[R]{}, err
 	}
 	defer b.Close()
-	return Run(ctx, s, b, gocql.Options{})
+	return Run(ctx, s, b, gocql.SessionOptions{})
 }
 
 func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (R, error) {

@@ -53,7 +53,7 @@ func TestNewOptionsFreezesValues(t *testing.T) {
 	}
 }
 
-func TestOptionsResolvedForTheirSession(t *testing.T) {
+func TestOptionsResolvedForTheSessionTheyAreBoundTo(t *testing.T) {
 	s, rt := attachmentSession()
 	sessionProfile := defaultProfile()
 	sessionProfile.PageSize = 7
@@ -82,10 +82,11 @@ func TestOptionsResolvedForTheirSession(t *testing.T) {
 		t.Fatal("options not resolved for their session at creation", r.InternalProfile)
 	}
 
-	// Options used without their session resolve on each execution.
+	// Bound options are used as they are on any session, with the defaults
+	// of the session they were bound to.
 	_, other := attachmentSession()
-	if r := bound.resolve(other, &scratch); r != &scratch || r.InternalProfile.PageSize != defaultProfile().PageSize || r.InternalProfile.Consistency != One {
-		t.Fatal("options of another session not resolved for this one", r.InternalProfile)
+	if r := bound.resolve(other, &scratch); r != &bound.p.resolved || r.InternalProfile.PageSize != 7 {
+		t.Fatal("bound options resolved again on another session", r.InternalProfile)
 	}
 	unbound := testOptions(overrides)
 	scratch = InternalResolvedOptions{}
@@ -115,5 +116,20 @@ func TestNewOptionsSerialConsistencyOverrides(t *testing.T) {
 	}
 	if inherited.InternalProfile.SerialConsistency != defaultProfile().SerialConsistency {
 		t.Fatalf("SerialConsistency = %+v, want the profile's", inherited.InternalProfile.SerialConsistency)
+	}
+}
+
+func TestBindOptionsKeepsEmptyValuesOnTheSessionDefault(t *testing.T) {
+	s, _ := attachmentSession()
+	zero, err := InternalBindOptions(s, OptionValues{})
+	if err != nil || zero.p != nil {
+		t.Fatalf("empty values bound to %+v, %v; want the zero Options", zero.p, err)
+	}
+	set, err := InternalBindOptions(s, OptionValues{Idempotent: true})
+	if err != nil || set.p == nil || !set.p.bound {
+		t.Fatalf("values not bound to the session: %+v, %v", set.p, err)
+	}
+	if _, err := InternalBindOptions(nil, OptionValues{Idempotent: true}); err == nil {
+		t.Fatal("values bound without a session")
 	}
 }

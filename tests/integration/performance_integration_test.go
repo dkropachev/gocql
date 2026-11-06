@@ -213,7 +213,7 @@ func TestNativePerformance(t *testing.T) {
 		t.Helper()
 		b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{}))
 		defer b.Close()
-		if _, e := Exec(ctx, s, b, gocql.Options{}); e != nil {
+		if _, e := Exec(ctx, s, b, gocql.SessionOptions{}); e != nil {
 			t.Fatal(e)
 		}
 	}
@@ -224,7 +224,7 @@ func TestNativePerformance(t *testing.T) {
 		b, e := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + ks, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{})
 		if e == nil {
 			defer b.Close()
-			_, e = Exec(cleanup, s, b, gocql.Options{})
+			_, e = Exec(cleanup, s, b, gocql.SessionOptions{})
 		}
 		if e != nil {
 			t.Error("owned cleanup", e)
@@ -240,7 +240,7 @@ func TestNativePerformance(t *testing.T) {
 		payload := bytes.Repeat([]byte{0x71}, size)
 		for i := 0; i < count; i++ {
 			b := codecTestMust(BindBorrowed(insert, testInput{int32(size), int32(i), payload, [][]byte{[]byte("first"), []byte("second")}}))
-			_, e := Exec(ctx, s, b, gocql.Options{})
+			_, e := Exec(ctx, s, b, gocql.SessionOptions{})
 			b.Close()
 			if e != nil {
 				t.Fatal(e)
@@ -270,7 +270,7 @@ func TestNativePerformance(t *testing.T) {
 				for i := range outputs {
 					outputs[i] = testOutput{Payload: make([]byte, 0, shape.Cell), Pieces: [][]byte{make([]byte, 0, 5), make([]byte, 0, 6)}}
 				}
-				options := testOptions(gocql.OptionValues{PageSize: cql.Option[int32]{Set: true, Value: int32(shape.Page)}, Prefetch: cql.Option[int]{Set: true, Value: 0}})
+				options := gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: int32(shape.Page)}, Prefetch: cql.Option[int]{Set: true, Value: 0}}
 				run := func(worker int, sample func()) (int64, int64, error) {
 					dst := &outputs[worker]
 					backing := unsafe.SliceData(dst.Payload[:cap(dst.Payload)])
@@ -311,7 +311,7 @@ func TestNativePerformance(t *testing.T) {
 							return 0, 0, e
 						}
 					} else {
-						rows, e := Run(ctx, s, bound, options)
+						rows, e := Run(ctx, s, bound, bindOptions(s, options))
 						if e != nil {
 							return 0, 0, e
 						}

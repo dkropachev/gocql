@@ -6,6 +6,7 @@ package execution
 import (
 	"context"
 	"errors"
+	"reflect"
 	"sync"
 	"sync/atomic"
 
@@ -132,9 +133,34 @@ func newQueryState(s *implCluster.Session, state *queryState, retire func(), poo
 }
 
 // NewQuery creates a reusable query from a prepared statement. Its options
-// are resolved for the statement's session once, here.
-func NewQuery[P, R any](p *Prepared[P, R], options Options) (*Query[P, R], error) {
+// are validated and resolved for the statement's session once, here.
+func NewQuery[P, R any](p *Prepared[P, R], values OptionValues) (*Query[P, R], error) {
+	if p == nil || p.privateStorage.InternalState == nil {
+		return nil, typeValidation("prepared", "nil handle")
+	}
+	options, err := queryOptions(p.privateStorage.InternalState.InternalSession, values)
+	if err != nil {
+		return nil, err
+	}
 	return newPreparedQuery(p, options, nil)
+}
+
+// InternalBindOptions freezes values for session s. Empty values become the
+// zero Options, which use the session's shared default resolution.
+func InternalBindOptions(s *implCluster.Session, values OptionValues) (Options, error) {
+	return queryOptions(s, values)
+}
+
+// queryOptions freezes a query's values for its session. Empty values use
+// the session's shared default resolution.
+func queryOptions(s *implCluster.Session, values OptionValues) (Options, error) {
+	if reflect.ValueOf(&values).Elem().IsZero() {
+		return Options{}, nil
+	}
+	if s == nil {
+		return Options{}, typeValidation("query", "nil session")
+	}
+	return NewOptions(s, values)
 }
 
 func newPreparedQuery[P, R any](p *Prepared[P, R], options Options, pool *queryPoolBase) (*Query[P, R], error) {
@@ -162,7 +188,15 @@ func newPreparedQuery[P, R any](p *Prepared[P, R], options Options, pool *queryP
 // NewUnpreparedQuery compiles parameters once against statement.BindMarkers
 // and captures each execution's input in query-owned storage, including
 // values passed to custom codecs.
-func NewUnpreparedQuery[P, R any](s *implCluster.Session, statement Statement[P, R], options Options) (*Query[P, R], error) {
+func NewUnpreparedQuery[P, R any](s *implCluster.Session, statement Statement[P, R], values OptionValues) (*Query[P, R], error) {
+	options, err := queryOptions(s, values)
+	if err != nil {
+		return nil, err
+	}
+	return newUnpreparedQuery(s, statement, options)
+}
+
+func newUnpreparedQuery[P, R any](s *implCluster.Session, statement Statement[P, R], options Options) (*Query[P, R], error) {
 	if err := validateStatement(&statement); err != nil {
 		return nil, err
 	}

@@ -235,7 +235,7 @@ func v2Exec(ctx context.Context, session *gocql.Session, stmt string, values ...
 		return gocql.Result{}, err
 	}
 	defer bound.Close()
-	return Exec(ctx, session, bound, gocql.Options{})
+	return Exec(ctx, session, bound, gocql.SessionOptions{})
 }
 
 func v2Query(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (gocql.Rows[cql.DynamicRow], error) {
@@ -257,7 +257,7 @@ func v2Query(ctx context.Context, session *gocql.Session, stmt string, values ..
 	// Run admits the request before returning. Rows owns the execution reference
 	// until it is exhausted or closed, even after closing the binding here.
 	defer bound.Close()
-	return Run(ctx, session, bound, gocql.Options{})
+	return Run(ctx, session, bound, gocql.SessionOptions{})
 }
 
 func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (cql.DynamicRow, error) {
@@ -291,7 +291,7 @@ func v2CreateTable(ctx context.Context, session *gocql.Session, stmt string) err
 		return err
 	}
 	defer bound.Close()
-	if _, err := Exec(ctx, session, bound, testOptions(gocql.OptionValues{Idempotent: true, Retry: retry.Safe{MaxAttempts: 4}})); err != nil {
+	if _, err := Exec(ctx, session, bound, bindOptions(session, gocql.Options{Idempotent: true, Retry: retry.Safe{MaxAttempts: 4}})); err != nil {
 		return err
 	}
 	if err := session.AwaitSchemaAgreement(ctx); err != nil {

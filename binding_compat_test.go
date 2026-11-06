@@ -18,6 +18,6 @@ func BindUnpreparedBorrowed[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns
 	return implExecution.BindUnpreparedBorrowed[P, R](a0, a1, a2)
 }
 
-func Run[R any](a0 context.Context, a1 *Session, a2 *Bound[R], a3 Options) (Rows[R], error) {
+func Run[R any](a0 context.Context, a1 *Session, a2 *Bound[R], a3 SessionOptions) (Rows[R], error) {
 	return implExecution.Run[R](a0, a1, a2, a3)
 }

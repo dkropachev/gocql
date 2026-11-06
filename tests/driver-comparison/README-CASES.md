@@ -40,9 +40,9 @@ Notation: `w.*` is per-worker state built before timing; `check` validates rows.
 | B2 | `Run` + `Rows.NextInto` loop + `Close` | MB1 | |
 | B3 | `StreamQuery.Run` (page buffered) + `NextInto` loop | MB1 | |
 | B4 | `StreamQuery` with `StreamOptions{Incremental: true}` | MB1 | |
-| B5 | B1 with `OptionValues{Prefetch: 1}` | MB2 | MB1 with `Prefetch(0.25)` (master's default; nearest to one page) |
+| B5 | B1 with `Options{Prefetch: 1}` | MB2 | MB1 with `Prefetch(0.25)` (master's default; nearest to one page) |
 | B6 | `RunUnpaged`: the whole partition in one response | MB3 | MB1 with `PageSize(0)` |
-| B7 | B1 with `OptionValues{PageSize: 5000}` | MB4 | MB1 with `PageSize(5000)` |
+| B7 | B1 with `Options{PageSize: 5000}` | MB4 | MB1 with `PageSize(5000)` |
 | B8 | `rows := Run(...)`; read 16 rows; `rows.Close(); w.q.Wait(ctx)` | MB5 | `it := Iter()`; scan 16 rows; `it.Close()` |
 | B9 | incremental `StreamQuery`: read 16 rows; `rs.Close(); Wait` | MB5 | |
 
@@ -63,7 +63,7 @@ a state ends the partition, and the worker moves to its next partition.
 | D1 | `w.q.Exec(ctx, row)` on a reused `Query` | MD1 | `w.q.Bind(k, r, p).WithContext(ctx).Exec()` on a reused template |
 | D2 | `prepared.Exec(ctx, row, opts)` | MD2 | `s.Query(pointWrite, k, r, p).WithContext(ctx).Exec()` |
 | D4 | `q := NewUnpreparedQuery(pointWrite, row params); q.Exec(...); q.Close()` | MD2 | |
-| D3 | `prepared.Exec(ctx, row, NewOptions({Idempotent, Timestamp: now}))`: a reused `Query` has fixed options, so per-operation timestamps need one-shot options | MD3 | MD1 with `Idempotent(true)` and `WithTimestamp(now)` |
+| D3 | `prepared.Exec(ctx, row, BindOptions(session, {Idempotent, Timestamp: now}))`: a reused `Query` has fixed options, so per-operation timestamps need one-shot options | MD3 | MD1 with `Idempotent(true)` and `WithTimestamp(now)` |
 
 ## E. Batches, 64 workers (E1: 8; at 64, 32 KiB batches exceed Scylla's in-flight hint budget)
 

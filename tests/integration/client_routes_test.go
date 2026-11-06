@@ -76,7 +76,7 @@ func TestGetHostPortMapping(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = Exec(ctx, session, bound, testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Set: true, Value: cql.All}}))
+			_, err = Exec(ctx, session, bound, bindOptions(session, gocql.Options{Consistency: cql.Option[cql.Consistency]{Set: true, Value: cql.All}}))
 			bound.Close()
 			if waitErr := bound.Wait(ctx); waitErr != nil {
 				t.Fatal(waitErr)

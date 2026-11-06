@@ -29,7 +29,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 	defer session.Close()
 	namespace := fmt.Sprintf("gocql_query_%x", time.Now().UnixNano())
 	exec := func(ctx context.Context, stmt string) error {
-		q, err := gocql.NewUnpreparedQuery(session, cql.Command(stmt), testOptions(gocql.OptionValues{Timeout: cql.Option[time.Duration]{Set: true, Value: 30 * time.Second}}))
+		q, err := gocql.NewUnpreparedQuery(session, cql.Command(stmt), gocql.Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 30 * time.Second}})
 		if err != nil {
 			return err
 		}
@@ -53,7 +53,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 			return
 		}
 		typ := codecTestMust(cql.ScalarType(cql.TypeText))
-		query, err := gocql.NewUnpreparedQuery(session, cql.Statement[string, cql.Text]{Kind: cql.OrdinaryStatement, CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name=?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.TextCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "keyspace_name", Type: typ})}, testOptions(gocql.OptionValues{Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}}))
+		query, err := gocql.NewUnpreparedQuery(session, cql.Statement[string, cql.Text]{Kind: cql.OrdinaryStatement, CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name=?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.TextCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "keyspace_name", Type: typ})}, gocql.Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
 		if err != nil {
 			t.Error(err)
 			return
@@ -117,7 +117,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 	}
 	decoder := cql.RowInto(func(*record) {}, cql.Column("c", cql.Int32, func(r *record) *int32 { return &r.C }), cql.Column("p", cql.OwnedBlobCodec, func(r *record) *[]byte { return &r.P }))
 	read := codecTestMust(gocql.Prepare(ctx, session, cql.Statement[int32, record]{Kind: cql.OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32), Rows: decoder}, gocql.PrepareOptions{}))
-	q := codecTestMust(gocql.NewQuery(read, testOptions(gocql.OptionValues{PageSize: cql.Option[int32]{Set: true, Value: 2}, Prefetch: cql.Option[int]{Set: true, Value: 0}})))
+	q := codecTestMust(gocql.NewQuery(read, gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
 	defer q.Close()
 	var previous gocql.Rows[record]
 	for range 2 {
@@ -180,7 +180,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 		t.Fatal("explicit paging count", pageRows)
 	}
 	t.Log("query reuse, stale cursors, owned destinations and explicit paging passed")
-	unpaged := codecTestMust(gocql.NewQuery(read, testOptions(gocql.OptionValues{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
+	unpaged := codecTestMust(gocql.NewQuery(read, gocql.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}}))
 	defer unpaged.Close()
 	page := codecTestMust(unpaged.RunUnpaged(ctx, int32(1)))
 	n := 0
@@ -192,7 +192,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 	}
 	for _, incremental := range []bool{false, true} {
 		streamDecoder := cql.StreamRow(func(*record) {}, cql.StreamColumn("c", cql.StreamInt32, func(r *record) *int32 { return &r.C }), cql.StreamColumn("p", cql.StreamBlob, func(r *record) *[]byte { return &r.P }))
-		streamQuery := codecTestMust(gocql.NewStreamQuery(read, streamDecoder, gocql.StreamOptions{Incremental: incremental, Options: testOptions(gocql.OptionValues{PageSize: cql.Option[int32]{Set: true, Value: 2}})}))
+		streamQuery := codecTestMust(gocql.NewStreamQuery(read, streamDecoder, gocql.StreamOptions{Incremental: incremental, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}))
 		cursor, err := streamQuery.Run(ctx, int32(1))
 		if incremental && config.Protocol < 5 && config.Compression != gocql.NoCompression {
 			var unsupported *cql.StreamCapabilityError
@@ -230,7 +230,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 		entries = append(entries, codecTestMust(w.BatchEntry(record{K: 2, C: i, P: payload})))
 	}
 	payload[0] = 99
-	if _, err := gocql.ExecBatch(ctx, session, cql.UnloggedBatch, entries, gocql.Options{}); err != nil {
+	if _, err := gocql.ExecBatch(ctx, session, cql.UnloggedBatch, entries, gocql.SessionOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	rows := codecTestMust(q.Run(ctx, int32(2)))

@@ -135,7 +135,7 @@ func TestQueryCancelledAcceptedWriteStaysBusyUntilDrain(t *testing.T) {
 	entered := make(chan struct{})
 	conns[0].InternalW = &transport.InternalDeadlineContextWriter{InternalW: &acceptedWriter{Conn: conns[0].InternalR.(*transport.InternalConnReader).InternalConn, entered: entered}, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
 	typ := codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
-	q := codecTestMust(NewUnpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(value)VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: typ})}, Options{}))
+	q := codecTestMust(NewUnpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(value)VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: typ})}, OptionValues{}))
 	defer q.Close()
 	input := bytes.Repeat([]byte{31}, 128<<10)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -181,7 +181,7 @@ func TestQueryBlockedObserverKeepsQueryBusy(t *testing.T) {
 	s, conns, peers := runtimeTestSession(t, 1)
 	entered, release := make(chan struct{}), make(chan struct{})
 	observer := &execVoidObserver{onAttempt: func(routing.AttemptEvent) { close(entered); <-release }}
-	query := codecTestMust(NewUnpreparedQuery(s, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, testOptions(OptionValues{Observer: observer})))
+	query := codecTestMust(NewUnpreparedQuery(s, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, OptionValues{Observer: observer}))
 	defer query.Close()
 	served := make(chan struct{})
 	go func() {
@@ -227,7 +227,7 @@ func TestQueryOwnedRowsPreserveDestinationOnCompletion(t *testing.T) {
 	s, conns, peers := runtimeTestSession(t, 1)
 	type output struct{ Value []byte }
 	decoder := codec.RowInto(func(*output) {}, codec.Column("value", codec.OwnedBlobCodec, func(v *output) *[]byte { return &v.Value }))
-	q := codecTestMust(NewUnpreparedQuery(s, binding.Statement[codec.EmptyRecord, output]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: decoder}, Options{}))
+	q := codecTestMust(NewUnpreparedQuery(s, binding.Statement[codec.EmptyRecord, output]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: decoder}, OptionValues{}))
 	defer q.Close()
 	served := make(chan struct{})
 	go func() {
@@ -264,7 +264,7 @@ func TestQueryOwnedRowsPreserveDestinationOnCompletion(t *testing.T) {
 // close.
 func TestQueryRowsHandleGoesStaleOnNextExecution(t *testing.T) {
 	s, conns, peers := runtimeTestSession(t, 1)
-	q := codecTestMust(NewUnpreparedQuery(s, binding.Statement[codec.EmptyRecord, cqltype.Bytes]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.OneColumn(codec.BlobCodec)}, Options{}))
+	q := codecTestMust(NewUnpreparedQuery(s, binding.Statement[codec.EmptyRecord, cqltype.Bytes]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.OneColumn(codec.BlobCodec)}, OptionValues{}))
 	defer q.Close()
 	served := make(chan struct{})
 	go func() {

@@ -57,7 +57,7 @@ func v2SchemaRoutingExec(ctx context.Context, session *gocql.Session, stmt strin
 		return gocql.Result{}, err
 	}
 	defer bound.Close()
-	return Exec(ctx, session, bound, options)
+	return Exec(ctx, session, bound, bindOptions(session, options))
 }
 
 func v2SchemaRoutingInt(t testing.TB, row cql.DynamicRow, name string) int32 {

@@ -62,7 +62,8 @@ statements and compiled plans remain shareable. Overlapping executions return
 
 For point reads and writes from many goroutines, call the prepared statement
 directly. `prepared.Exec(ctx, input, options)`, `prepared.One(ctx, input, &dst,
-options)` and `prepared.Each(ctx, input, &dst, fn, options)` are safe for
+options)` and `prepared.Each(ctx, input, &dst, fn, options)`, with
+`SessionOptions` from `BindOptions` (or the zero value), are safe for
 concurrent use and reuse queries the statement keeps, so they cost about the
 same as a query per worker. They return only when the execution has finished:
 values that borrow response storage are valid until `One` returns or `fn`
@@ -111,11 +112,15 @@ protocol rules; protocol 5 compression uses LZ4. Configure
 `Connect` snapshots validated configuration before starting workers. Configure
 TLS with `crypto/tls`, authentication with `auth.Password` or an `auth.Provider`, and
 routing/retry/speculation through `DefaultProfile` or a per-query `*Profile`.
-Per-call settings are frozen once with `NewOptions(OptionValues{...})`, for
-example `OptionValues{PageSize: cql.Some[int32](100)}`. A query resolves its
-options once when it is created, so executions do no per-call work; for one-shot
-batch executions, `NewOptionsFor(session, values)` resolves them up front. The
-zero `Options{}` uses the session default.
+Per-execution settings are plain `gocql.Options` values, for example
+`gocql.Options{PageSize: cql.Some[int32](100)}`; the zero `Options{}` uses the
+session default. Query constructors validate, resolve and encode them for their
+session once, so query executions do no per-call work. One-shot executions
+(`prepared.Exec/One/Each`, `ExecBatch`, `RunBatch`) take `SessionOptions` from
+`BindOptions(session, options)`, which does the same work up front. Session
+options carry their session's default profile and keyspace and are not checked
+against the session that runs them: use them only on the session they were
+bound to.
 `endpoint.Dialer`, `DialHost`, `TLSForHost`, `endpoint.DNSResolver`,
 `endpoint.Translator`, `ReconnectPolicy`, `routing.TokenPartitioner`,
 `routing.Policy`, observers and immutable

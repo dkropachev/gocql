@@ -61,7 +61,7 @@ func TestTabletRoutingLive(t *testing.T) {
 	feedback := 0
 	for key := int32(0); key < 8; key++ {
 		bound := codecTestMust(BindBorrowed(insert, key))
-		result, err := Exec(ctx, s, bound, gocql.Options{})
+		result, err := Exec(ctx, s, bound, gocql.SessionOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -143,9 +143,9 @@ func TestTabletRoutingLive(t *testing.T) {
 			before := tabletAuthority(t, ctx, s, id, token.Value)
 			opts := gocql.Options{}
 			if attempt < 3 {
-				opts = testOptions(gocql.OptionValues{HostID: cql.Option[cql.UUID]{Value: implRouting.SnapshotData(s.Metadata()).InternalHosts[attempt%len(implRouting.SnapshotData(s.Metadata()).InternalHosts)].ID, Set: true}})
+				opts = gocql.Options{HostID: cql.Option[cql.UUID]{Value: implRouting.SnapshotData(s.Metadata()).InternalHosts[attempt%len(implRouting.SnapshotData(s.Metadata()).InternalHosts)].ID, Set: true}}
 			}
-			rows, err := Run(ctx, s, b, opts)
+			rows, err := Run(ctx, s, b, bindOptions(s, opts))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -252,7 +252,7 @@ func TestLeaderRoutingLive(t *testing.T) {
 	stable := 0
 	feedback := 0
 	for attempt := 0; attempt < 256 && stable < 16; attempt++ {
-		rows, err := Run(ctx, s, b, testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.LocalQuorum, Set: true}}))
+		rows, err := Run(ctx, s, b, bindOptions(s, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.LocalQuorum, Set: true}}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -327,7 +327,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table 
 	defer bound.Close()
 	observation := tabletObservation{stable: true}
 	for index, host := range s.Metadata().Hosts() {
-		page := codecTestMust(RunUnpaged(ctx, s, bound, testOptions(gocql.OptionValues{HostID: cql.Option[cql.UUID]{Set: true, Value: host.ID}})))
+		page := codecTestMust(RunUnpaged(ctx, s, bound, bindOptions(s, gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: host.ID}})))
 		if page.Info().HostID != host.ID {
 			t.Fatal("authoritative read lost exact host pin", page.Info().HostID, host.ID)
 		}

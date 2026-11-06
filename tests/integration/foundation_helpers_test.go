@@ -15,9 +15,10 @@ func codecTestMust[T any](v T, err error) T {
 // reach options that already hold it.
 func profileOf(p gocql.Profile) *gocql.Profile { return &p }
 
-// testOptions freezes v, failing loudly on values a test meant to be valid.
-func testOptions(v gocql.OptionValues) gocql.Options {
-	o, err := gocql.NewOptions(v)
+// bindOptions binds v to session, failing loudly on values a test meant to
+// be valid.
+func bindOptions(session *gocql.Session, v gocql.Options) gocql.SessionOptions {
+	o, err := gocql.BindOptions(session, v)
 	if err != nil {
 		panic(err)
 	}

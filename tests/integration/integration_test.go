@@ -521,7 +521,7 @@ func TestCustomPayloadMessages(t *testing.T) {
 	}
 
 	customPayload := []cql.PayloadEntry{{Key: "a", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes([]byte{10, 20})}}, {Key: "b", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes([]byte{20, 30})}}}
-	options := testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, CustomPayload: customPayload})
+	options := gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, CustomPayload: customPayload}
 
 	// Prepared SELECT retains the EXECUTE custom-payload path.
 	selectStatement := cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id FROM %s where id = ?", table), Params: cql.DynamicParams, Rows: cql.DynamicRows}
@@ -534,7 +534,7 @@ func TestCustomPayloadMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer bound.Close()
-	page, err := RunPage(context.Background(), session, bound, gocql.StartPage(), options)
+	page, err := RunPage(context.Background(), session, bound, gocql.StartPage(), bindOptions(session, options))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -549,7 +549,7 @@ func TestCustomPayloadMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer insert.Close()
-	result, err := Exec(context.Background(), session, insert, options)
+	result, err := Exec(context.Background(), session, insert, bindOptions(session, options))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -560,7 +560,7 @@ func TestCustomPayloadMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err = gocql.ExecBatch(context.Background(), session, cql.LoggedBatch, []gocql.BatchItem{item}, options)
+	result, err = gocql.ExecBatch(context.Background(), session, cql.LoggedBatch, []gocql.BatchItem{item}, bindOptions(session, options))
 	if err != nil {
 		t.Fatalf("query failed: %v", err)
 	}
@@ -593,7 +593,7 @@ func TestCustomPayloadValues(t *testing.T) {
 	}
 	defer bound.Close()
 	for _, customPayload := range values {
-		page, err := RunPage(context.Background(), session, bound, gocql.StartPage(), testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, CustomPayload: customPayload}))
+		page, err := RunPage(context.Background(), session, bound, gocql.StartPage(), bindOptions(session, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, CustomPayload: customPayload}))
 		if err != nil {
 			t.Fatal(err)
 		}

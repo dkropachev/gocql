@@ -68,7 +68,7 @@ func ExampleExecBatch() {
 		}
 		entries = append(entries, entry)
 	}
-	idempotent, err := gocql.NewOptionsFor(session, gocql.OptionValues{Idempotent: true})
+	idempotent, err := gocql.BindOptions(session, gocql.Options{Idempotent: true})
 	if err != nil {
 		log.Fatal(err)
 	}

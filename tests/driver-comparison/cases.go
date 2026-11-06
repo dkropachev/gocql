@@ -71,7 +71,7 @@ func (a *v2Adapter) lwtPrepared() (*g.Prepared[lwtArgs, cql.CASResult[int32]], *
 	return a.lwt, a.lwtRead, nil
 }
 
-func (a *v2Adapter) options(v g.OptionValues) (g.Options, error) { return g.NewOptionsFor(a.s, v) }
+func (a *v2Adapter) options(v g.Options) (g.SessionOptions, error) { return g.BindOptions(a.s, v) }
 
 func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 	if len(name) == 0 {
@@ -104,12 +104,9 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		opts := g.Options{}
 		switch name {
 		case "B5":
-			opts, err = a.options(g.OptionValues{Prefetch: cql.Option[int]{Set: true, Value: 1}})
+			opts = g.Options{Prefetch: cql.Some(1)}
 		case "B7":
-			opts, err = a.options(g.OptionValues{PageSize: cql.Option[int32]{Set: true, Value: 5000}})
-		}
-		if err != nil {
-			return nil, err
+			opts = g.Options{PageSize: cql.Some[int32](5000)}
 		}
 		q, err := g.NewQuery(read, opts)
 		if err != nil {
@@ -244,11 +241,11 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		}
 		return execOp(q), nil
 	case "D2":
-		return preparedExec(write, a.metadata), nil
+		return preparedExec(write, a.boundMetadata), nil
 	case "D3":
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
-			opts, err := a.options(g.OptionValues{IncludeMetadata: true, Idempotent: true, Timestamp: cql.Option[int64]{Set: true, Value: time.Now().UnixMicro()}})
+			opts, err := a.options(g.Options{IncludeMetadata: true, Idempotent: true, Timestamp: cql.Option[int64]{Set: true, Value: time.Now().UnixMicro()}})
 			if err != nil {
 				return err
 			}
@@ -295,7 +292,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 					items = append(items, item)
 				}
 			}
-			_, err := g.ExecBatch(ctx, a.s, kind, items, g.Options{})
+			_, err := g.ExecBatch(ctx, a.s, kind, items, g.SessionOptions{})
 			return err
 		}, nil
 	case "F1":
@@ -313,7 +310,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			}
 			readOp, writeOp = c.one(rq), execOp(wq)
 		} else {
-			readOp, writeOp = c.preparedOne(read), preparedExec(write, a.metadata)
+			readOp, writeOp = c.preparedOne(read), preparedExec(write, a.boundMetadata)
 		}
 		return func(ctx context.Context, seq uint64) error {
 			if seq%2 == 0 {
@@ -356,7 +353,7 @@ func (c *v2Case) preparedOne(p *g.Prepared[int32, row]) op {
 	return func(ctx context.Context, seq uint64) error {
 		k := pointKey(seq)
 		c.check.reset(false, k, 0)
-		found, err := p.One(ctx, k, &c.out, g.Options{})
+		found, err := p.One(ctx, k, &c.out, g.SessionOptions{})
 		return c.found(found, err)
 	}
 }
@@ -368,7 +365,7 @@ func execOp(q *g.Query[row, cql.EmptyRow]) op {
 	}
 }
 
-func preparedExec(p *g.Prepared[row, cql.EmptyRow], opts g.Options) op {
+func preparedExec(p *g.Prepared[row, cql.EmptyRow], opts g.SessionOptions) op {
 	return func(ctx context.Context, seq uint64) error {
 		k := pointKey(seq)
 		_, err := p.Exec(ctx, row{K: k, P: payload(false, k, 0)}, opts)
@@ -390,7 +387,7 @@ func (c *v2Case) lwt(id, n int) (op, error) {
 	var keys, values [lwtKeysPerWorker]int32
 	for j := range keys {
 		keys[j] = int32(id + n*j)
-		found, err := read.One(ctx, keys[j], &values[j], g.Options{})
+		found, err := read.One(ctx, keys[j], &values[j], g.SessionOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -398,11 +395,7 @@ func (c *v2Case) lwt(id, n int) (op, error) {
 			return nil, fmt.Errorf("lwt key %d missing; run -mode prepare -scenario lwt", keys[j])
 		}
 	}
-	opts, err := c.a.options(g.OptionValues{SerialConsistency: cql.Some(cql.LocalSerial)})
-	if err != nil {
-		return nil, err
-	}
-	q, err := g.NewQuery(update, opts)
+	q, err := g.NewQuery(update, g.Options{SerialConsistency: cql.Some(cql.LocalSerial)})
 	if err != nil {
 		return nil, err
 	}

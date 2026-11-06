@@ -61,7 +61,7 @@ func BenchmarkConnStress(b *testing.B) {
 				b.Error(err)
 				return
 			}
-			_, err = Exec(ctx, session, bound, gocql.Options{})
+			_, err = Exec(ctx, session, bound, gocql.SessionOptions{})
 			bound.Close()
 			waitErr := bound.Wait(ctx)
 			if err != nil {

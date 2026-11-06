@@ -33,10 +33,11 @@ import (
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
 )
 
-// StreamOptions captures execution defaults once; streaming is pull-driven.
-
+// StreamOptions configures a stream query; streaming is pull-driven. The
+// query validates and resolves Options for its session once, when it is
+// created.
 type StreamOptions struct {
-	Options Options
+	Options OptionValues
 	Limits  StreamLimits
 	// Incremental reserves an exclusive connection and bounds receive scratch.
 	// The default buffers a complete page on normal multiplexed connections.
@@ -56,20 +57,24 @@ type RowStream[R any] struct {
 }
 
 func RunStream[B, R any](ctx context.Context, session *implCluster.Session, bound *Bound[B], decoder StreamRowDecoder[R], options StreamOptions) (*RowStream[R], error) {
-	return runStreamWithCache(ctx, session, bound, decoder, options, nil)
-}
-func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Session, bound *Bound[B], decoder StreamRowDecoder[R], options StreamOptions, plans *streamPlanCache[R]) (*RowStream[R], error) {
-	if decoder == nil {
-		return nil, typeValidation("stream decoder", "nil decoder")
-	}
-	limits, err := checkedStreamLimits(options.Limits)
+	frozen, err := queryOptions(session, options.Options)
 	if err != nil {
 		return nil, err
 	}
-	if v := options.Options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
+	return runStreamWithCache(ctx, session, bound, decoder, frozen, options.Limits, options.Incremental, nil)
+}
+func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Session, bound *Bound[B], decoder StreamRowDecoder[R], options Options, streamLimits StreamLimits, incremental bool, plans *streamPlanCache[R]) (*RowStream[R], error) {
+	if decoder == nil {
+		return nil, typeValidation("stream decoder", "nil decoder")
+	}
+	limits, err := checkedStreamLimits(streamLimits)
+	if err != nil {
+		return nil, err
+	}
+	if v := options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, typeValidation("stream prefetch", "must be zero")
 	}
-	runctx, cancel, request, err := InternalAdmitExecution(ctx, session, bound, options.Options)
+	runctx, cancel, request, err := InternalAdmitExecution(ctx, session, bound, options)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +94,7 @@ func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Sess
 		opaqueStorageValue.privateStorage.InternalDecoder = decoder
 		opaqueStorageValue.state = StartPage()
 		opaqueStorageValue.privateStorage.InternalHistory = pagingHistory{InternalMaxCount: InternalRuntimeFor(session).InternalConfig.Limits.MaxPagingStates, InternalMaxBytes: InternalRuntimeFor(session).InternalConfig.Limits.MaxPagingStateBytes}
-		opaqueStorageValue.privateStorage.pageBuffered = !options.Incremental
+		opaqueStorageValue.privateStorage.pageBuffered = !incremental
 		opaqueStorageValue.privateStorage.bufferedPlans = plans
 		return opaqueStorageValue
 		// Construction owns active until headers/metadata have selected a checked plan.

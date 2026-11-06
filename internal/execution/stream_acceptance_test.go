@@ -346,7 +346,7 @@ func TestCustomDecoderErrorAfterWrite(t *testing.T) {
 			defer bound.Close()
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
-			cursor, err := RunStream(ctx, s, bound, decoderError{cause}, StreamOptions{Incremental: true, Options: testOptions(OptionValues{Idempotent: true})})
+			cursor, err := RunStream(ctx, s, bound, decoderError{cause}, StreamOptions{Incremental: true, Options: OptionValues{Idempotent: true}})
 			if err != nil {
 				t.Fatal(err)
 			}

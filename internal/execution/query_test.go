@@ -40,7 +40,7 @@ func testOwnedQuery(t testing.TB) *Query[[]byte, EmptyRecord] {
 	if err != nil {
 		t.Fatal(err)
 	}
-	q, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, Options{})
+	q, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, OptionValues{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -449,14 +449,14 @@ func serveLoopback(peer net.Conn, choose func([]byte) []byte, prepared []byte) {
 
 func TestUnpreparedQueryDefaultsEmptyCodecs(t *testing.T) {
 	s, _ := attachmentSession()
-	q, err := NewUnpreparedQuery(s, Statement[EmptyRecord, EmptyRecord]{Kind: OrdinaryStatement, CQL: "TRUNCATE ks.t"}, Options{})
+	q, err := NewUnpreparedQuery(s, Statement[EmptyRecord, EmptyRecord]{Kind: OrdinaryStatement, CQL: "TRUNCATE ks.t"}, OptionValues{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := q.CloseAndWait(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)"}, Options{}); err == nil {
+	if _, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)"}, OptionValues{}); err == nil {
 		t.Fatal("typed parameters without an encoder accepted")
 	}
 }

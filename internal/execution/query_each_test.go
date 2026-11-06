@@ -26,7 +26,7 @@ func eachTestQuery(t *testing.T) (*Query[codec.EmptyRecord, []byte], func(bodies
 	t.Helper()
 	s, conns, peers := runtimeTestSession(t, 1)
 	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
-	q := codecTestMust(NewUnpreparedQuery(s, statement, Options{}))
+	q := codecTestMust(NewUnpreparedQuery(s, statement, OptionValues{}))
 	t.Cleanup(q.Close)
 	serve := func(bodies ...[]byte) chan struct{} {
 		served := make(chan struct{})
@@ -169,7 +169,7 @@ func TestQueryEachUnpreparedContinuationRepairs(t *testing.T) {
 	PreparedData(handle).InternalParams = codecTestMust(codec.OneParam(codec.BytesEncoder).Compile(columns))
 	PreparedData(handle).InternalRows = codec.OneColumn(codec.BlobCodec)
 	PreparedData(handle).InternalPlans = &InternalResultPlanCache[cqltype.Bytes]{}
-	q := codecTestMust(NewQuery(handle, Options{}))
+	q := codecTestMust(NewQuery(handle, OptionValues{}))
 	defer q.Close()
 	serverDone := make(chan error, 1)
 	go func() {
@@ -221,7 +221,7 @@ func eachPageTimeoutQuery(t *testing.T) (*Query[codec.EmptyRecord, []byte], net.
 	s, _, peers := runtimeTestSession(t, 1)
 	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 	options := testOptions(OptionValues{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Second}, PageTimeout: cqltype.Option[time.Duration]{Set: true, Value: 100 * time.Millisecond}})
-	q := codecTestMust(NewUnpreparedQuery(s, statement, options))
+	q := codecTestMust(NewUnpreparedQuery(s, statement, options.Values()))
 	t.Cleanup(q.Close)
 	return q, peers[0]
 }
@@ -302,7 +302,7 @@ func TestQueryEachParentCancelReachesPageContext(t *testing.T) {
 func TestQueryEachParentCancelInterruptsWait(t *testing.T) {
 	s, _, peers := runtimeTestSession(t, 1)
 	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
-	q := codecTestMust(NewUnpreparedQuery(s, statement, testOptions(OptionValues{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Second}})))
+	q := codecTestMust(NewUnpreparedQuery(s, statement, OptionValues{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Second}}))
 	t.Cleanup(q.Close)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
@@ -331,7 +331,7 @@ func TestQueryEachParentCancelInterruptsRetryDelay(t *testing.T) {
 	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 	profile := settings.InternalDefaultProfile()
 	profile.Retry = eachRetryAfterDelay{}
-	q := codecTestMust(NewUnpreparedQuery(s, statement, testOptions(OptionValues{Profile: profileOf(profile), Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Minute}})))
+	q := codecTestMust(NewUnpreparedQuery(s, statement, OptionValues{Profile: profileOf(profile), Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Minute}}))
 	t.Cleanup(q.Close)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {

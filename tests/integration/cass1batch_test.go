@@ -57,7 +57,7 @@ func TestProto1BatchInsert(t *testing.T) {
 	fullQuery := strings.Join([]string{begin, query, end}, "\n")
 	bound := sessionTestBind(t, session, fullQuery, cql.IntValue(5))
 	defer bound.Close()
-	if _, err := Exec(context.Background(), session, bound, testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.Quorum, Set: true}})); err != nil {
+	if _, err := Exec(context.Background(), session, bound, bindOptions(session, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.Quorum, Set: true}})); err != nil {
 		t.Fatal(err)
 	}
 }

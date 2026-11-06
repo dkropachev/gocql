@@ -80,7 +80,7 @@ func ExampleRunBatch_conditional() {
 		}
 		entries = append(entries, entry)
 	}
-	page, err := gocql.RunBatch(ctx, session, cql.LoggedBatch, entries, conditional, gocql.Options{})
+	page, err := gocql.RunBatch(ctx, session, cql.LoggedBatch, entries, conditional, gocql.SessionOptions{})
 	if err != nil {
 		log.Fatal(err)
 	}

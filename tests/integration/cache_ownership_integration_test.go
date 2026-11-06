@@ -44,7 +44,7 @@ func TestNativeCacheOwnership(t *testing.T) {
 		t.Helper()
 		b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{}))
 		defer b.Close()
-		if _, e := Exec(ctx, s, b, gocql.Options{}); e != nil {
+		if _, e := Exec(ctx, s, b, gocql.SessionOptions{}); e != nil {
 			t.Fatal(e)
 		}
 	}
@@ -65,7 +65,7 @@ func TestNativeCacheOwnership(t *testing.T) {
 		b, e := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + ks, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{})
 		if e == nil {
 			defer b.Close()
-			_, e = Exec(cleanup, cleanupSession, b, gocql.Options{})
+			_, e = Exec(cleanup, cleanupSession, b, gocql.SessionOptions{})
 		}
 		if e != nil {
 			t.Error(e)
@@ -77,7 +77,7 @@ func TestNativeCacheOwnership(t *testing.T) {
 		t.Helper()
 		payload := bytes.Repeat([]byte{value}, 1<<20)
 		bound := codecTestMust(BindBorrowed(insert, payload))
-		_, e := Exec(ctx, s, bound, gocql.Options{})
+		_, e := Exec(ctx, s, bound, gocql.SessionOptions{})
 		bound.Close()
 		if e != nil {
 			t.Fatal(e)
@@ -90,7 +90,7 @@ func TestNativeCacheOwnership(t *testing.T) {
 	prepared := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[cql.EmptyParams, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}, gocql.PrepareOptions{}))
 	bound := codecTestMust(BindOwned(prepared, cql.EmptyParams{}))
 	defer bound.Close()
-	rows := codecTestMust(Run(ctx, s, bound, testOptions(gocql.OptionValues{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
+	rows := codecTestMust(Run(ctx, s, bound, bindOptions(s, gocql.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
 	var old cql.Bytes
 	if !rows.NextInto(&old) {
 		t.Fatal(rows.Err())
@@ -111,7 +111,7 @@ func TestNativeCacheOwnership(t *testing.T) {
 	})
 	for generation := 0; generation < 8; generation++ {
 		write(byte(0x72 + generation))
-		freshRows := codecTestMust(Run(ctx, s, bound, testOptions(gocql.OptionValues{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
+		freshRows := codecTestMust(Run(ctx, s, bound, bindOptions(s, gocql.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
 		var view cql.Bytes
 		if !freshRows.NextInto(&view) {
 			t.Fatal(freshRows.Err())

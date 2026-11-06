@@ -11,9 +11,10 @@ func codecTestMust[T any](v T, err error) T {
 // reach options that already hold it.
 func profileOf(p Profile) *Profile { return &p }
 
-// testOptions freezes v, failing loudly on values a test meant to be valid.
-func testOptions(v OptionValues) Options {
-	o, err := NewOptions(v)
+// bindOptions binds v to session, failing loudly on values a test meant to
+// be valid.
+func bindOptions(session *Session, v Options) SessionOptions {
+	o, err := BindOptions(session, v)
 	if err != nil {
 		panic(err)
 	}

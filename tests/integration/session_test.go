@@ -98,7 +98,7 @@ func TestSessionAPI(t *testing.T) {
 	}()
 	runtimeFor(session).InternalSetProfile(config.DefaultProfile)
 	defer session.Close()
-	resolved, err := resolveOptions(session, testOptions(gocql.OptionValues{Trace: true}))
+	resolved, err := resolveOptions(session, gocql.Options{Trace: true})
 	require.NoError(t, err)
 	require.Equal(t, cql.All, resolved.InternalProfile.Consistency)
 	require.Equal(t, int32(100), resolved.InternalProfile.PageSize)
@@ -115,17 +115,17 @@ func TestSessionAPI(t *testing.T) {
 	require.Equal(t, int32(1), encoded, "typed parameter accessor replaces callback binding")
 	// An incomplete session now reports ErrNoConnections from the typed path.
 	// It does not construct the old mutable Query/Iter error holder.
-	_, err = Run(ctx, session, bound, gocql.Options{})
+	_, err = Run(ctx, session, bound, gocql.SessionOptions{})
 	require.ErrorIs(t, err, gocql.ErrNoConnections)
 	batch := []gocql.BatchItem{sessionTestItem(t, bound)}
-	_, err = gocql.ExecBatch(ctx, session, cql.LoggedBatch, batch, gocql.Options{})
+	_, err = gocql.ExecBatch(ctx, session, cql.LoggedBatch, batch, gocql.SessionOptions{})
 	require.ErrorIs(t, err, gocql.ErrNoConnections)
 	require.NoError(t, session.Close())
 	require.True(t, session.Closed())
 	require.NoError(t, session.Close())
-	_, err = gocql.ExecBatch(ctx, session, cql.LoggedBatch, batch, gocql.Options{})
+	_, err = gocql.ExecBatch(ctx, session, cql.LoggedBatch, batch, gocql.SessionOptions{})
 	require.ErrorIs(t, err, gocql.ErrClosed)
-	_, err = Exec(ctx, session, bound, gocql.Options{})
+	_, err = Exec(ctx, session, bound, gocql.SessionOptions{})
 	require.ErrorIs(t, err, gocql.ErrClosed)
 }
 
@@ -188,7 +188,7 @@ func TestQueryBasicAPI(t *testing.T) {
 	require.Zero(t, zero.Latency)
 	retryPolicy := sessionTestRetry{action: retry.Next, maxAttempts: 3}
 	observer := new(sessionTestObserver)
-	options := testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, SerialConsistency: cql.Some(cql.LocalSerial), PageSize: cql.Option[int32]{Value: 10, Set: true}, Prefetch: cql.Option[int]{Value: 1, Set: true}, Retry: retryPolicy, Trace: true, Observer: observer})
+	options := gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, SerialConsistency: cql.Some(cql.LocalSerial), PageSize: cql.Option[int32]{Value: 10, Set: true}, Prefetch: cql.Option[int]{Value: 1, Set: true}, Retry: retryPolicy, Trace: true, Observer: observer}
 	resolved, err := resolveOptions(session, options)
 	require.NoError(t, err)
 	require.Equal(t, cql.All, resolved.InternalProfile.Consistency)
@@ -196,15 +196,15 @@ func TestQueryBasicAPI(t *testing.T) {
 	require.Equal(t, int32(10), resolved.InternalProfile.PageSize)
 	require.Equal(t, 1, resolved.InternalProfile.Prefetch)
 	require.Equal(t, retryPolicy, resolved.InternalProfile.Retry)
-	serialValues := options.Values()
+	serialValues := options
 	serialValues.Consistency.Value = cql.LocalSerial
-	serialRead := testOptions(serialValues)
+	serialRead := serialValues
 	resolvedSerial, err := resolveOptions(session, serialRead)
 	require.NoError(t, err)
 	require.Equal(t, cql.LocalSerial, resolvedSerial.InternalProfile.Consistency)
 
 	for _, bound := range []*Bound[cql.EmptyRow]{original, rebound, original} {
-		result, err := Exec(ctx, session, bound, options)
+		result, err := Exec(ctx, session, bound, bindOptions(session, options))
 		require.NoError(t, err)
 		require.Equal(t, 1, result.Attempts)
 		require.Greater(t, result.Latency, time.Duration(0))
@@ -227,7 +227,7 @@ func TestQueryBasicAPI(t *testing.T) {
 	// admitted with.
 	profile := *runtimeFor(session).InternalProfile
 	profile.PageSize = 10
-	_, cancel, admitted, err := admitExecution(ctx, session, original, testOptions(gocql.OptionValues{Profile: &profile}))
+	_, cancel, admitted, err := admitExecution(ctx, session, original, bindOptions(session, gocql.Options{Profile: &profile}))
 	require.NoError(t, err)
 	profile.PageSize = 100
 	require.Equal(t, int32(10), admitted.InternalOptions.InternalProfile.PageSize)
@@ -236,7 +236,7 @@ func TestQueryBasicAPI(t *testing.T) {
 	cancel()
 	original.Close()
 	require.NoError(t, original.Wait(ctx))
-	_, err = Exec(ctx, session, original, gocql.Options{})
+	_, err = Exec(ctx, session, original, gocql.SessionOptions{})
 	require.ErrorIs(t, err, gocql.ErrClosed)
 }
 
@@ -294,7 +294,7 @@ func TestBatchBasicAPI(t *testing.T) {
 	require.Equal(t, retryPolicy, inherited.InternalProfile.Retry)
 	override := sessionTestRetry{action: retry.Next, maxAttempts: 4}
 	observer := new(sessionTestObserver)
-	options := testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, Retry: override, Trace: true, Observer: observer})
+	options := gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, Retry: override, Trace: true, Observer: observer}
 	resolved, err := resolveOptions(session, options)
 	require.NoError(t, err)
 	require.Equal(t, override, resolved.InternalProfile.Retry)
@@ -305,7 +305,7 @@ func TestBatchBasicAPI(t *testing.T) {
 	require.Zero(t, (gocql.Result{}).Attempts)
 	require.Zero(t, (gocql.Result{}).Latency)
 	for _, kind := range []cql.BatchKind{cql.UnloggedBatch, cql.LoggedBatch} {
-		result, err := gocql.ExecBatch(ctx, session, kind, items, options)
+		result, err := gocql.ExecBatch(ctx, session, kind, items, bindOptions(session, options))
 		require.NoError(t, err)
 		require.Equal(t, 1, result.Attempts)
 		require.Greater(t, result.Latency, time.Duration(0))
@@ -326,10 +326,10 @@ func TestBatchBasicAPI(t *testing.T) {
 	// BatchEntry is only a descriptor. Closing any member prevents the entire
 	// batch admission, and other members remain available for separate work.
 	first.Close()
-	_, err = gocql.ExecBatch(ctx, session, cql.LoggedBatch, items, options)
+	_, err = gocql.ExecBatch(ctx, session, cql.LoggedBatch, items, bindOptions(session, options))
 	require.ErrorIs(t, err, gocql.ErrClosed)
 	require.NoError(t, first.Wait(ctx))
-	_, err = Exec(ctx, session, second, gocql.Options{})
+	_, err = Exec(ctx, session, second, gocql.SessionOptions{})
 	require.NoError(t, err)
 }
 
@@ -405,7 +405,7 @@ func TestRetryType_IgnoreRethrow(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/%d", mode, retries), func(t *testing.T) {
 				observer := new(sessionTestObserver)
 				retryPolicy := sessionTestRetry{action: retry.Stop, maxAttempts: retries + 1}
-				_, err := Exec(ctx, session, bound, testOptions(gocql.OptionValues{Idempotent: true, Retry: retryPolicy, Observer: observer}))
+				_, err := Exec(ctx, session, bound, bindOptions(session, gocql.Options{Idempotent: true, Retry: retryPolicy, Observer: observer}))
 				require.Error(t, err)
 				var server cql.RequestError
 				require.ErrorAs(t, err, &server)

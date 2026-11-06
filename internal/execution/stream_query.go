@@ -38,7 +38,7 @@ func NewStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder StreamRowDeco
 	if _, err := checkedStreamLimits(options.Limits); err != nil {
 		return nil, err
 	}
-	if v := options.Options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
+	if v := options.Options; v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, typeValidation("stream prefetch", "must be zero")
 	}
 	p := &Prepared[P, EmptyRecord]{privateStorage: PreparedStorage[P, EmptyRecord]{InternalState: prepared.privateStorage.InternalState, InternalKind: prepared.privateStorage.InternalKind, InternalParams: prepared.privateStorage.InternalParams, InternalRows: InternalExecRowsDecoder{}}}
@@ -49,7 +49,6 @@ func NewStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder StreamRowDeco
 	// Streams hand their context to exclusive transport I/O; keep the
 	// standard per-execution context there.
 	q.state.execCtx = nil
-	options.Options = q.options
 	return &StreamQuery[P, R]{query: q, decoder: decoder, options: options}, nil
 }
 
@@ -65,7 +64,7 @@ func NewUnpreparedStreamQuery[P, B, R any](session *implCluster.Session, stateme
 	if _, err := checkedStreamLimits(options.Limits); err != nil {
 		return nil, err
 	}
-	if v := options.Options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
+	if v := options.Options; v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, typeValidation("stream prefetch", "must be zero")
 	}
 	q, err := NewUnpreparedQuery(session, Statement[P, EmptyRecord]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: InternalExecRowsDecoder{}, BindMarkers: statement.BindMarkers}, options.Options)
@@ -75,7 +74,6 @@ func NewUnpreparedStreamQuery[P, B, R any](session *implCluster.Session, stateme
 	// Streams hand their context to exclusive transport I/O; keep the
 	// standard per-execution context there.
 	q.state.execCtx = nil
-	options.Options = q.options
 	return &StreamQuery[P, R]{query: q, decoder: decoder, options: options}, nil
 }
 
@@ -87,7 +85,7 @@ func (q *StreamQuery[P, R]) Run(ctx context.Context, value P) (*RowStream[R], er
 		return nil, err
 	}
 	defer q.query.state.owner.InternalRelease()
-	return runStreamWithCache(ctx, q.query.state.runtime.Session, &q.query.bound, q.decoder, q.options, &q.plans)
+	return runStreamWithCache(ctx, q.query.state.runtime.Session, &q.query.bound, q.decoder, q.query.options, q.options.Limits, q.options.Incremental, &q.plans)
 }
 func (q *StreamQuery[P, R]) Close() {
 	if q != nil {

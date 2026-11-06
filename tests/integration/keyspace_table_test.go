@@ -57,7 +57,7 @@ func TestKeyspaceTable(t *testing.T) {
 	if err := v2CreateTable(ctx, session, fmt.Sprintf(`CREATE TABLE %s.%s (pk int, ck int, v int, PRIMARY KEY (pk, ck))`, keyspace, table)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := v2SchemaRoutingExec(ctx, session, fmt.Sprintf(`INSERT INTO %s.%s(pk, ck, v) VALUES (?, ?, ?)`, keyspace, table), testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}), cql.IntValue(1), cql.IntValue(2), cql.IntValue(3)); err != nil {
+	if _, err := v2SchemaRoutingExec(ctx, session, fmt.Sprintf(`INSERT INTO %s.%s(pk, ck, v) VALUES (?, ?, ?)`, keyspace, table), gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}, cql.IntValue(1), cql.IntValue(2), cql.IntValue(3)); err != nil {
 		t.Fatal(err)
 	}
 	prepared, err := gocql.Prepare(ctx, session, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf(`SELECT pk FROM %s.%s WHERE pk = ? LIMIT 1`, keyspace, table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
@@ -69,7 +69,7 @@ func TestKeyspaceTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer bound.Close()
-	rows, err := Run(ctx, session, bound, testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}))
+	rows, err := Run(ctx, session, bound, bindOptions(session, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}))
 	if err != nil {
 		t.Fatal(err)
 	}

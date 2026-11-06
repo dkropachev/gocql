@@ -22,13 +22,14 @@ type borrowedRow struct {
 	P    cql.Bytes
 }
 type v2Adapter struct {
-	s        *g.Session
-	mu       sync.Mutex
-	reads    [2]*g.Prepared[int32, row]
-	writes   [2]*g.Prepared[row, cql.EmptyRow]
-	lwt      *g.Prepared[lwtArgs, cql.CASResult[int32]]
-	lwtRead  *g.Prepared[int32, int32]
-	metadata g.Options // includes result metadata, as master's writes request
+	s             *g.Session
+	mu            sync.Mutex
+	reads         [2]*g.Prepared[int32, row]
+	writes        [2]*g.Prepared[row, cql.EmptyRow]
+	lwt           *g.Prepared[lwtArgs, cql.CASResult[int32]]
+	lwtRead       *g.Prepared[int32, int32]
+	metadata      g.Options        // includes result metadata, as master's writes request
+	boundMetadata g.SessionOptions // metadata bound to the session, for one-shot executions
 }
 type v2Worker struct {
 	a           *v2Adapter
@@ -70,12 +71,13 @@ func connect(hosts []string) (adapter, error) {
 		s.Close()
 		return nil, e
 	}
-	metadata, e := g.NewOptionsFor(s, g.OptionValues{IncludeMetadata: true})
+	metadata := g.Options{IncludeMetadata: true}
+	boundMetadata, e := g.BindOptions(s, metadata)
 	if e != nil {
 		s.Close()
 		return nil, e
 	}
-	return &v2Adapter{s: s, metadata: metadata}, nil
+	return &v2Adapter{s: s, metadata: metadata, boundMetadata: boundMetadata}, nil
 }
 func (a *v2Adapter) Close() error { return a.s.Close() }
 func (a *v2Adapter) Exec(ctx context.Context, q string) error {

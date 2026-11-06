@@ -64,7 +64,7 @@ func TestConcurrentLiveMemory(t *testing.T) {
 		t.Helper()
 		b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{}))
 		defer b.Close()
-		if _, e := Exec(ctx, s, b, gocql.Options{}); e != nil {
+		if _, e := Exec(ctx, s, b, gocql.SessionOptions{}); e != nil {
 			t.Fatal(e)
 		}
 	}
@@ -75,7 +75,7 @@ func TestConcurrentLiveMemory(t *testing.T) {
 		b, e := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + ks, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{})
 		if e == nil {
 			defer b.Close()
-			_, e = Exec(cleanup, s, b, gocql.Options{})
+			_, e = Exec(cleanup, s, b, gocql.SessionOptions{})
 		}
 		if e != nil {
 			t.Error(e)
@@ -89,7 +89,7 @@ func TestConcurrentLiveMemory(t *testing.T) {
 		payload := bytes.Repeat([]byte{0x71}, 4096)
 		for id := int32(0); id < 128; id++ {
 			b := codecTestMust(BindBorrowed(insert, testInput{4096, id, payload, [][]byte{[]byte("first"), []byte("second")}}))
-			_, e := Exec(ctx, s, b, gocql.Options{})
+			_, e := Exec(ctx, s, b, gocql.SessionOptions{})
 			b.Close()
 			if e != nil {
 				t.Fatal(e)
@@ -172,7 +172,7 @@ func TestConcurrentLiveMemory(t *testing.T) {
 							return nil
 						}
 						run := func() error {
-							options := testOptions(gocql.OptionValues{PageSize: cql.Option[int32]{Set: true, Value: 128}, Prefetch: cql.Option[int]{Set: true, Value: 0}})
+							options := gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 128}, Prefetch: cql.Option[int]{Set: true, Value: 0}}
 							if api == "stream" {
 								cursor, e := RunStream(caseCtx, s, bound, streamDecoder, gocql.StreamOptions{Incremental: true, Options: options})
 								if e != nil {
@@ -189,7 +189,7 @@ func TestConcurrentLiveMemory(t *testing.T) {
 								}
 								return cursor.Close()
 							}
-							rows, e := Run(caseCtx, s, bound, options)
+							rows, e := Run(caseCtx, s, bound, bindOptions(s, options))
 							if e != nil {
 								return e
 							}

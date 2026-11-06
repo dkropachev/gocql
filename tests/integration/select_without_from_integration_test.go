@@ -336,7 +336,7 @@ func TestSelectWithoutFromExecutionModes(t *testing.T) {
 					t.Error(err)
 				}
 			}()
-			rows, err := Run(context.Background(), session, bound, testOptions(gocql.OptionValues{IncludeMetadata: mode == "prepared with metadata"}))
+			rows, err := Run(context.Background(), session, bound, bindOptions(session, gocql.Options{IncludeMetadata: mode == "prepared with metadata"}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -445,7 +445,7 @@ func TestSelectWithoutFromRoutingKey(t *testing.T) {
 			if b.Routing().Token.Set {
 				t.Fatal("no-FROM SELECT invented a partition token")
 			}
-			rows, err := Run(context.Background(), session, b, gocql.Options{})
+			rows, err := Run(context.Background(), session, b, gocql.SessionOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}

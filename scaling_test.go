@@ -189,7 +189,7 @@ func TestOptionalWorkCounts(t *testing.T) {
 				profile.Speculation = speculation{}
 			}
 			handle := profileOf(profile)
-			options := testOptions(OptionValues{Profile: handle, Idempotent: true})
+			options := Options{Profile: handle, Idempotent: true}
 			if mode == "default" {
 				options = Options{}
 			}
@@ -212,7 +212,7 @@ func TestOptionalWorkCounts(t *testing.T) {
 			}()
 			implExecution.ResetPerfCounters()
 			wire.ResetPerfCounters()
-			rows := codecTestMust(Run(context.Background(), s, bound, options))
+			rows := codecTestMust(Run(context.Background(), s, bound, bindOptions(s, options)))
 			for rows.Next() {
 			}
 			if e := rows.Err(); e != nil {
@@ -267,7 +267,7 @@ func TestRetainedPrefetchCharges(t *testing.T) {
 							defer bound.Close()
 							profile := defaultProfile()
 							profile.Prefetch = prefetch
-							options := testOptions(OptionValues{Profile: profileOf(profile)})
+							options := Options{Profile: profileOf(profile)}
 							values := make([]string, cells)
 							for i := range values {
 								values[i] = "q"
@@ -284,7 +284,7 @@ func TestRetainedPrefetchCharges(t *testing.T) {
 									ps[0].Write(typedTestResponse(t, 4, id, runtimeRowsBody(token, values...)))
 								}
 							}()
-							rows, e := Run(context.Background(), s, bound, options)
+							rows, e := Run(context.Background(), s, bound, bindOptions(s, options))
 							if e != nil {
 								errors <- e
 								return

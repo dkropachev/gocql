@@ -18,3 +18,9 @@ func TestOnePrepareOptionsAcceptsAtMostOne(t *testing.T) {
 		t.Fatal("two PrepareOptions accepted")
 	}
 }
+
+func TestBindOptionsRequiresSession(t *testing.T) {
+	if _, err := BindOptions(nil, Options{}); err == nil {
+		t.Fatal("options bound without a session")
+	}
+}

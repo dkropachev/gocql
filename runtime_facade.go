@@ -31,7 +31,7 @@ type Event = implCluster.Event
 type EventFilter = implCluster.EventFilter
 type EventKind = implCluster.EventKind
 
-func ExecBatch(a0 context.Context, a1 *Session, a2 cql.BatchKind, a3 []BatchItem, a4 Options) (Result, error) {
+func ExecBatch(a0 context.Context, a1 *Session, a2 cql.BatchKind, a3 []BatchItem, a4 SessionOptions) (Result, error) {
 	return implExecution.ExecOwnedBatch(a0, a1, a2, a3, a4)
 }
 
@@ -41,25 +41,30 @@ func OpenSingleHost(a0 context.Context, a1 Config, a2 cql.UUID) (*Session, error
 	return implExecution.OpenSingleHost(a0, a1, a2)
 }
 
-type Options = implExecution.Options
+// Options lists the settings of an execution. The zero Options uses the
+// session's default profile. Query constructors take Options and validate and
+// resolve them for their session once, so query executions do no per-call
+// work; one-shot executions take SessionOptions from BindOptions instead.
+type Options = implExecution.OptionValues
 
-// OptionValues lists the settings of an execution; NewOptions freezes them.
-type OptionValues = implExecution.OptionValues
+// SessionOptions are Options validated, resolved against one session's
+// default profile and keyspace, and encoded once by BindOptions, for one-shot
+// executions such as Prepared.Exec, ExecBatch and RunBatch. They are
+// immutable and safe to share between goroutines. Executions use them as they
+// are, without checking which session runs them: using them on another
+// session applies the binding session's default profile and keyspace. The
+// zero SessionOptions uses the executing session's default profile.
+type SessionOptions = implExecution.Options
 
-// NewOptions validates values and freezes them into Options. A Query
-// resolves its Options against its session once, when it is created, so
-// executions pay nothing for them. The zero Options uses the session's
-// default profile.
-func NewOptions(values OptionValues) (Options, error) {
-	return implExecution.NewOptions(nil, values)
-}
-
-// NewOptionsFor is NewOptions resolved for session up front, for one-shot
-// executions such as ExecBatch and RunBatch that have no Query to resolve
-// them once. Used on another session, they are resolved on each execution
-// unless they name their own Profile.
-func NewOptionsFor(session *Session, values OptionValues) (Options, error) {
-	return implExecution.NewOptions(session, values)
+// BindOptions validates options and resolves them for session into
+// SessionOptions; the zero Options gives the zero SessionOptions. The custom
+// payload and the profile are copied, so later changes to options do not
+// reach the result.
+func BindOptions(session *Session, options Options) (SessionOptions, error) {
+	if session == nil {
+		return SessionOptions{}, errors.New("gocql: BindOptions requires a session")
+	}
+	return implExecution.InternalBindOptions(session, options)
 }
 
 const OverflowEvent = implCluster.OverflowEvent
@@ -106,7 +111,7 @@ type PreparedInfo = implExecution.PreparedInfo
 type RowStream[R any] = implExecution.RowStream[R]
 type Rows[R any] = implExecution.Rows[R]
 
-func RunBatch[R any](a0 context.Context, a1 *Session, a2 cql.BatchKind, a3 []BatchItem, a4 cql.RowDecoder[R], a5 Options) (*Page[R], error) {
+func RunBatch[R any](a0 context.Context, a1 *Session, a2 cql.BatchKind, a3 []BatchItem, a4 cql.RowDecoder[R], a5 SessionOptions) (*Page[R], error) {
 	return implExecution.RunOwnedBatch[R](a0, a1, a2, a3, a4, a5)
 }
 

@@ -216,10 +216,7 @@ func run() (resultErr error) {
 	if len(hostsSnapshot) == 0 {
 		return fmt.Errorf("missing discovered hosts")
 	}
-	pinned, err := gocql.NewOptionsFor(s, gocql.OptionValues{PageSize: cql.Option[int32]{Set: true, Value: 2}, HostID: cql.Option[cql.UUID]{Set: true, Value: hostsSnapshot[0].ID}})
-	if err != nil {
-		return err
-	}
+	pinned := gocql.Options{PageSize: cql.Some[int32](2), HostID: cql.Some(hostsSnapshot[0].ID)}
 	options := gocql.StreamOptions{Incremental: *incremental, Options: pinned}
 	query, err := gocql.NewStreamQuery(prepared, decoder, options)
 	if err != nil {

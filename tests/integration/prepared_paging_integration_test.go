@@ -85,7 +85,7 @@ func TestV2PreparedPagingConcurrentSchemaAndDestinations(t *testing.T) {
 		}
 		churn <- nil
 	}()
-	rows := codecTestMust(Run(ctx, session, bound, testOptions(gocql.OptionValues{PageSize: cql.Option[int32]{Value: 3, Set: true}})))
+	rows := codecTestMust(Run(ctx, session, bound, bindOptions(session, gocql.Options{PageSize: cql.Option[int32]{Value: 3, Set: true}})))
 	defer rows.Close()
 	var dst liveDestination
 	var retained *gocql.PageLease

@@ -55,7 +55,7 @@ func TestRunStreamLive(t *testing.T) {
 		t.Helper()
 		b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{}))
 		defer b.Close()
-		if _, err := Exec(ctx, s, b, gocql.Options{}); err != nil {
+		if _, err := Exec(ctx, s, b, gocql.SessionOptions{}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -66,7 +66,7 @@ func TestRunStreamLive(t *testing.T) {
 		b, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + keyspace, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{})
 		if err == nil {
 			defer b.Close()
-			_, err = Exec(cleanup, s, b, gocql.Options{})
+			_, err = Exec(cleanup, s, b, gocql.SessionOptions{})
 		}
 		if err != nil {
 			t.Error("unique keyspace cleanup", err)
@@ -85,7 +85,7 @@ func TestRunStreamLive(t *testing.T) {
 	textPayload := strings.Repeat("stream-🙂-", 24000)
 	for i := 0; i < 5; i++ {
 		b := codecTestMust(BindOwned(prepared, input{int32(i), payload, [][]byte{[]byte("nested"), []byte("storage")}, textPayload}))
-		_, err := Exec(ctx, s, b, gocql.Options{})
+		_, err := Exec(ctx, s, b, gocql.SessionOptions{})
 		b.Close()
 		if err != nil {
 			t.Fatal(err)
@@ -105,7 +105,7 @@ func TestRunStreamLive(t *testing.T) {
 		Text   []byte
 	}
 	decoder := cql.StreamRow(func(*output) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *output) *int32 { return &r.ID }), cql.StreamColumn("value", cql.StreamBlob, func(r *output) *[]byte { return &r.Value }), cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(r *output) *[][]byte { return &r.Pieces }), cql.StreamColumn("txt", cql.StreamText, func(r *output) *[]byte { return &r.Text }))
-	options := gocql.StreamOptions{Incremental: true, Options: testOptions(gocql.OptionValues{PageSize: cql.Option[int32]{Set: true, Value: 2}})}
+	options := gocql.StreamOptions{Incremental: true, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}
 	if config.Protocol < 5 && config.Compression != gocql.NoCompression {
 		_, err := RunStream(ctx, s, bound, decoder, options)
 		var capability *cql.StreamCapabilityError
@@ -182,7 +182,7 @@ func TestRunStreamLive(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	rows, err := Run(ctx, s, bound, testOptions(gocql.OptionValues{Prefetch: cql.Option[int]{Set: true, Value: 0}}))
+	rows, err := Run(ctx, s, bound, bindOptions(s, gocql.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestRunStreamLive(t *testing.T) {
 	changedPrepared := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT * FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}, gocql.PrepareOptions{}))
 	changedBound := codecTestMust(BindOwned(changedPrepared, cql.EmptyParams{}))
 	defer changedBound.Close()
-	changed, err := RunStream(ctx, s, changedBound, decoder, gocql.StreamOptions{Incremental: true, Options: testOptions(gocql.OptionValues{PageSize: cql.Option[int32]{Set: true, Value: 1}})})
+	changed, err := RunStream(ctx, s, changedBound, decoder, gocql.StreamOptions{Incremental: true, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 1}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +229,7 @@ func TestRunStreamLive(t *testing.T) {
 	}
 	defer sub.Close()
 	blockedCtx, blockedCancel := context.WithTimeout(ctx, 100*time.Millisecond)
-	second, blockedErr := RunStream(blockedCtx, s, bound, decoder, gocql.StreamOptions{Incremental: true, Options: testOptions(gocql.OptionValues{HostID: cql.Option[cql.UUID]{Set: true, Value: changed.Info().Result.HostID}})})
+	second, blockedErr := RunStream(blockedCtx, s, bound, decoder, gocql.StreamOptions{Incremental: true, Options: gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: changed.Info().Result.HostID}}})
 	blockedCancel()
 	if second != nil {
 		second.Close()
@@ -289,7 +289,7 @@ func TestRunStreamLive(t *testing.T) {
 	if target.IsEmpty() {
 		t.Fatal("owned interruption coordinator missing")
 	}
-	interrupted, err := RunStream(ctx, s, bound, decoder, gocql.StreamOptions{Incremental: true, Options: testOptions(gocql.OptionValues{HostID: cql.Option[cql.UUID]{Set: true, Value: target}, PageSize: cql.Option[int32]{Set: true, Value: 1}})})
+	interrupted, err := RunStream(ctx, s, bound, decoder, gocql.StreamOptions{Incremental: true, Options: gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: target}, PageSize: cql.Option[int32]{Set: true, Value: 1}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +322,7 @@ func TestRunStreamLive(t *testing.T) {
 	restarted = true
 	repairDeadline := time.Now().Add(40 * time.Second)
 	for {
-		probe, probeErr := Run(ctx, s, bound, testOptions(gocql.OptionValues{HostID: cql.Option[cql.UUID]{Set: true, Value: target}, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
+		probe, probeErr := Run(ctx, s, bound, bindOptions(s, gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: target}, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
 		if probeErr == nil {
 			n := 0
 			for probe.Next() {
