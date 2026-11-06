@@ -4,7 +4,6 @@ import (
 	"net"
 	"reflect"
 	"strings"
-	"testing"
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -282,120 +281,8 @@ func errCodeName(code int) string {
 	return "other"
 }
 
-func TestParseErrorFrame(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range errorFrameCases() {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := parseErrorBody(tc.proto, tc.body, tc.rateLimitCode)
-			if err != nil {
-				t.Fatalf("parseFrame: %v", err)
-			}
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Fatalf("parsed %#v\nwant   %#v", got, tc.want)
-			}
-			// Every server error must surface as an error with the server's
-			// message, whatever its concrete type.
-			e, ok := got.(error)
-			if !ok || e.Error() != messageOf(tc.want) {
-				t.Fatalf("parsed frame %T is not an error carrying the server message", got)
-			}
-		})
-	}
-}
-
 // messageOf reads the server message off any parsed error, through the
 // ErrorFrame each one embeds.
 func messageOf(f Frame) string {
 	return reflect.Indirect(reflect.ValueOf(f)).FieldByName("Message").String()
-}
-
-// Every prefix of a valid error body is malformed. Decoding one must return a
-// protocol error, not panic out of parseFrame.
-func TestParseErrorFrameTruncated(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range errorFrameCases() {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			for n := 0; n < len(tc.body)-tc.unread; n++ {
-				body := append([]byte(nil), tc.body[:n]...)
-				if got, err := parseErrorBody(tc.proto, body, tc.rateLimitCode); err == nil {
-					t.Fatalf("body truncated to %d of %d bytes parsed as %#v, want an error", n, len(tc.body), got)
-				}
-			}
-		})
-	}
-}
-
-func TestReadErrorMapRejectsBadAddress(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		write   func(f *Framer)
-		wantErr string
-	}{
-		{"InvalidSize", func(f *Framer) {
-			f.WriteInt(1)
-			f.WriteByteValue(5)
-			f.Buf = append(f.Buf, 1, 2, 3, 4, 5)
-			f.WriteShort(1)
-		}, "invalid IP size: 5"},
-		{"ZeroSize", func(f *Framer) {
-			f.WriteInt(1)
-			f.WriteByteValue(0)
-			f.WriteShort(1)
-		}, "invalid IP size: 0"},
-		{"ShortAddress", func(f *Framer) {
-			f.WriteInt(1)
-			f.WriteByteValue(16)
-			f.Buf = append(f.Buf, 1, 2, 3, 4)
-		}, "not enough bytes in buffer to read inet"},
-		{"MoreEntriesThanData", func(f *Framer) {
-			f.WriteInt(3)
-			writeInetOnly(f, net.ParseIP("10.0.0.1"))
-			f.WriteShort(1)
-			// what follows is read as the next address and rejected
-		}, "invalid IP size"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			body := errBody(ProtoVersion5, ErrCodeReadFailure, "rf", func(f *Framer) {
-				f.WriteConsistency(cqltype.One)
-				f.WriteInt(0)
-				f.WriteInt(1)
-				tc.write(f)
-				f.WriteByteValue(0)
-			})
-			_, err := parseErrorBody(ProtoVersion5, body, 0)
-			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Fatalf("err = %v, want %q", err, tc.wantErr)
-			}
-		})
-	}
-}
-
-// A negative failure count reads as an empty map rather than an error.
-func TestReadErrorMapNegativeCount(t *testing.T) {
-	t.Parallel()
-
-	body := errBody(ProtoVersion5, ErrCodeReadFailure, "rf", func(f *Framer) {
-		f.WriteConsistency(cqltype.One)
-		f.WriteInt(0)
-		f.WriteInt(1)
-		f.WriteInt(-1)
-		f.WriteByteValue(0)
-	})
-	got, err := parseErrorBody(ProtoVersion5, body, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rf := got.(*RequestErrReadFailure)
-	if len(rf.ErrorMap) != 0 || rf.NumFailures != 0 {
-		t.Fatalf("ErrorMap = %v, NumFailures = %d; want empty", rf.ErrorMap, rf.NumFailures)
-	}
 }

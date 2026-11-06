@@ -945,7 +945,7 @@ func (f *Framer) ParseResultMetadata() ResultMetadata {
 	//
 	// Read after the paging state, matching Cassandra's encoder
 	// (ResultSet$ResultMetadata$Codec.encode) and the v5 spec. See
-	// TestParseResultMetadata_PagingStateBeforeNewMetadataID, which is the only
+	// TestResponse/ParseResultMetadata/PagingStateBeforeNewMetadataID, which is the only
 	// test that can distinguish the two orderings.
 	if (f.Proto > ProtoVersion4 || f.ScyllaUseMetadataID) && meta.Flags&frm.FlagMetaDataChanged == frm.FlagMetaDataChanged {
 		meta.NewMetadataID = f.ReadShortBytesCopy()

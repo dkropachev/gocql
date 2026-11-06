@@ -28,9 +28,6 @@ import (
 	"compress/gzip"
 	"io"
 	"os"
-	"testing"
-
-	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
 func readGzipData(path string) ([]byte, error) {
@@ -47,28 +44,4 @@ func readGzipData(path string) ([]byte, error) {
 	defer r.Close()
 
 	return io.ReadAll(r)
-}
-
-func BenchmarkParseRowsFrame(b *testing.B) {
-	data, err := readGzipData("../../testdata/frames/bench_parse_result.gz")
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		framer := &Framer{
-			Header: &frm.FrameHeader{
-				Version: protoVersion4 | protoDirectionMask,
-				Op:      frm.OpResult,
-				Length:  len(data),
-			},
-			Buf: data,
-		}
-
-		_, err = framer.ParseFrame()
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
 }
