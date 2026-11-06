@@ -46,7 +46,7 @@ accidental Rust limitations are not requirements to reproduce.
 | --- | --- |
 | Go version | Go 1.25 initially, matching the current workspace/toolchain. |
 | Public module | One driver module: `github.com/scylladb/gocql/v2`. |
-| Public packages | `gocql` for the driver and codecs; `scyllacloud` for optional cloud configuration. |
+| Public packages | `gocql` for the driver and codecs. |
 | Generic operations | Package-level generic functions; methods only use their receiver's existing type parameters. |
 | Request model | Immutable prepared handles and encoded bindings; per-call options replace mutable query setters. |
 | Codec model | Explicit typed accessors/custom implementations; no reflection or `[]any` on execution paths. |
@@ -429,7 +429,6 @@ github.com/scylladb/gocql/v2
 ├── profiles.go, policies.go              public policies and execution options
 ├── metadata.go, events.go, auth.go        public snapshots and extension points
 ├── errors.go, tracing.go                 public errors and observability
-├── scyllacloud/                          bundle → Config, per-host dial/TLS
 ├── internal/
 │   ├── cqltype/                         immutable CQL descriptors/value domains
 │   ├── codec/                           generic scalar/container/row implementations
@@ -474,7 +473,6 @@ compatibility.
    immutable snapshots rather than reaching into mutable cluster internals.
 8. `execution` coordinates cluster/routing and transport; public generic facades
    compile codecs and hand it encoded inputs and decode plans.
-9. `scyllacloud` depends on the public API; the public API never imports it.
 
 Public aliases/facade functions may expose the shared implementation types. They
 must not add payload conversion, reflection, or a second serializer.

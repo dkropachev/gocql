@@ -8,8 +8,7 @@ go get github.com/scylladb/gocql/v2@v2.0.0
 ```
 
 Import `github.com/scylladb/gocql/v2`. The repository has one Go module;
-compression and benchmarks are included in it. Optional cloud bundle support is
-in `github.com/scylladb/gocql/v2/scyllacloud`.
+compression and benchmarks are included in it.
 
 ## Typed execution
 
@@ -110,10 +109,6 @@ uses the session default.
 `ReconnectPolicy`, `TokenPartitioner`, `RoutingPolicy`, observers and immutable
 metadata snapshots provide typed extension points. Host/shard pool sizing,
 source ports, cancellation and orphan budgets are independently configured.
-
-Cloud users call `scyllacloud.NewCloudCluster(bundlePath, options...)`, then
-`gocql.Connect(ctx, config)`. Bundle options run before SNI dial/TLS hooks capture
-the dialer. Cloud routing disables incompatible source-port sharding.
 
 ## Development
 
