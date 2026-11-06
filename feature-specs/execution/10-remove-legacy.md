@@ -61,7 +61,7 @@ read/backing/reset/skip/capture/cancellation tests pass in the full race suite.
 All 29 original file hashes and all 174 original body hashes match the immutable
 baseline and accepted step09 source. Every original identity remains mapped.
 173 translated test token streams are unchanged, ignoring comments and optional
-semicolons. The sole changed test, `TestSessionMetadataAPIs`, calls existing
+semicolons. The sole changed test, `TestMetadata/Session`, calls existing
 `v2TabletsSupported` on its own typed session instead of the deleted global
 legacy probe; all existing assertions remain. Complete original/current test
 bodies and reachable helper assertions are retained in

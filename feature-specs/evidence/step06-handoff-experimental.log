@@ -50,10 +50,10 @@
 {"Time":"2026-10-29T20:21:58.556778326-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"2026/10/29 20:21:58 logger.go:59: scylla: 127.0.22.3:9042 no excess connections to close\n"}
 {"Time":"2026-10-29T20:21:58.556788956-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"2026/10/29 20:21:58 logger.go:59: scylla: 127.0.22.1:9042 closing 2 connections\n"}
 {"Time":"2026-10-29T20:21:58.556797071-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"2026/10/29 20:21:58 logger.go:59: scylla: 127.0.22.1:9042 no excess connections to close\n"}
-{"Time":"2026-10-29T20:21:58.557253102-04:00","Action":"run","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets"}
-{"Time":"2026-10-29T20:21:58.557254695-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"=== RUN   TestTablets\n"}
-{"Time":"2026-10-29T20:21:58.557279342-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"=== PAUSE TestTablets\n"}
-{"Time":"2026-10-29T20:21:58.557280314-04:00","Action":"pause","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets"}
+{"Time":"2026-10-29T20:21:58.557253102-04:00","Action":"run","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge"}
+{"Time":"2026-10-29T20:21:58.557254695-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"=== RUN   TestRouting/Tablets/Converge\n"}
+{"Time":"2026-10-29T20:21:58.557279342-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"=== PAUSE TestRouting/Tablets/Converge\n"}
+{"Time":"2026-10-29T20:21:58.557280314-04:00","Action":"pause","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge"}
 {"Time":"2026-10-29T20:21:58.557574539-04:00","Action":"run","Package":"github.com/scylladb/gocql/v2","Test":"TestStep06TabletRoutingLive"}
 {"Time":"2026-10-29T20:21:58.557575762-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep06TabletRoutingLive","Output":"=== RUN   TestStep06TabletRoutingLive\n"}
 {"Time":"2026-10-29T20:21:58.560316376-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep06TabletRoutingLive","Output":"2026/10/29 20:21:58 logger.go:59: gocql: conns of pool after stopped \"127.0.22.2\": 2\n"}
@@ -81,18 +81,18 @@
 {"Time":"2026-10-29T20:21:59.200903254-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep06LeaderRoutingLive","Output":"2026/10/29 20:21:59 logger.go:59: gocql: handling frame: [event schema_change change=\"DROPPED\" keyspace=\"step06_leader_18e326c86dfa0740\" object=\"records\"]\n"}
 {"Time":"2026-10-29T20:21:59.229455542-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep06LeaderRoutingLive","Output":"--- PASS: TestStep06LeaderRoutingLive (0.33s)\n"}
 {"Time":"2026-10-29T20:21:59.229483234-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Test":"TestStep06LeaderRoutingLive","Elapsed":0.33}
-{"Time":"2026-10-29T20:21:59.229621766-04:00","Action":"cont","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets"}
-{"Time":"2026-10-29T20:21:59.229623519-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"=== CONT  TestTablets\n"}
-{"Time":"2026-10-29T20:21:59.239206913-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"2026/10/29 20:21:59 logger.go:59: gocql: conns of pool after stopped \"127.0.22.2\": 2\n"}
-{"Time":"2026-10-29T20:21:59.239328202-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"2026/10/29 20:21:59 logger.go:59: gocql: conns of pool after stopped \"127.0.22.3\": 2\n"}
-{"Time":"2026-10-29T20:21:59.239352538-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"2026/10/29 20:21:59 logger.go:59: gocql: conns of pool after stopped \"127.0.22.1\": 2\n"}
-{"Time":"2026-10-29T20:21:59.241014797-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"2026/10/29 20:21:59 logger.go:59: gocql: handling frame: [event schema_change_keyspace change=\"CREATED\" keyspace=\"gocql_test\"]\n"}
-{"Time":"2026-10-29T20:21:59.277407068-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"2026/10/29 20:21:59 logger.go:59: gocql: conns of pool after stopped \"127.0.22.1\": 2\n"}
-{"Time":"2026-10-29T20:21:59.277435401-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"2026/10/29 20:21:59 logger.go:59: gocql: conns of pool after stopped \"127.0.22.3\": 2\n"}
-{"Time":"2026-10-29T20:21:59.277619459-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"2026/10/29 20:21:59 logger.go:59: gocql: conns of pool after stopped \"127.0.22.2\": 2\n"}
-{"Time":"2026-10-29T20:21:59.295599105-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"2026/10/29 20:21:59 logger.go:59: gocql: handling frame: [event schema_change change=\"CREATED\" keyspace=\"gocql_test\" object=\"testtablets_bc962307f9174bfc8b6e033b0b938aaa\"]\n"}
-{"Time":"2026-10-29T20:21:59.345114574-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"--- PASS: TestTablets (0.12s)\n"}
-{"Time":"2026-10-29T20:21:59.345147917-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Elapsed":0.12}
+{"Time":"2026-10-29T20:21:59.229621766-04:00","Action":"cont","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge"}
+{"Time":"2026-10-29T20:21:59.229623519-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"=== CONT  TestRouting/Tablets/Converge\n"}
+{"Time":"2026-10-29T20:21:59.239206913-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"2026/10/29 20:21:59 logger.go:59: gocql: conns of pool after stopped \"127.0.22.2\": 2\n"}
+{"Time":"2026-10-29T20:21:59.239328202-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"2026/10/29 20:21:59 logger.go:59: gocql: conns of pool after stopped \"127.0.22.3\": 2\n"}
+{"Time":"2026-10-29T20:21:59.239352538-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"2026/10/29 20:21:59 logger.go:59: gocql: conns of pool after stopped \"127.0.22.1\": 2\n"}
+{"Time":"2026-10-29T20:21:59.241014797-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"2026/10/29 20:21:59 logger.go:59: gocql: handling frame: [event schema_change_keyspace change=\"CREATED\" keyspace=\"gocql_test\"]\n"}
+{"Time":"2026-10-29T20:21:59.277407068-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"2026/10/29 20:21:59 logger.go:59: gocql: conns of pool after stopped \"127.0.22.1\": 2\n"}
+{"Time":"2026-10-29T20:21:59.277435401-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"2026/10/29 20:21:59 logger.go:59: gocql: conns of pool after stopped \"127.0.22.3\": 2\n"}
+{"Time":"2026-10-29T20:21:59.277619459-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"2026/10/29 20:21:59 logger.go:59: gocql: conns of pool after stopped \"127.0.22.2\": 2\n"}
+{"Time":"2026-10-29T20:21:59.295599105-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"2026/10/29 20:21:59 logger.go:59: gocql: handling frame: [event schema_change change=\"CREATED\" keyspace=\"gocql_test\" object=\"testtablets_bc962307f9174bfc8b6e033b0b938aaa\"]\n"}
+{"Time":"2026-10-29T20:21:59.345114574-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"--- PASS: TestRouting/Tablets/Converge (0.12s)\n"}
+{"Time":"2026-10-29T20:21:59.345147917-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Elapsed":0.12}
 {"Time":"2026-10-29T20:21:59.345157064-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"PASS\n"}
 {"Time":"2026-10-29T20:22:00.348611307-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"ok  \tgithub.com/scylladb/gocql/v2\t1.819s\n"}
 {"Time":"2026-10-29T20:22:00.34865015-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Elapsed":1.819}

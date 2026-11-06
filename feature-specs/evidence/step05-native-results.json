@@ -14,7 +14,7 @@
         "-timeout=7m",
         "-parallel=1",
         "-run",
-        "^(TestStep05MetadataControlLive|TestSessionAwaitSchemaAgreement|TestSessionAwaitSchemaAgreementSessionClosed|TestSessionAwaitSchemaAgreementContextCanceled|TestSessionEventBusReceivesSchemaChangeEvent|TestSessionEventBusReceivesControlReconnectEvent|TestSchemaQueries|TestGetHostPortMapping|TestInvalidPeerEntry)$",
+        "^TestStep05MetadataControlLive$|^TestSession$/^AwaitSchemaAgreement$/^Agrees$|^TestSession$/^AwaitSchemaAgreement$/^SessionClosed$|^TestSession$/^AwaitSchemaAgreement$/^ContextCanceled$|^TestMetadata$/^Events$/^SchemaChange$|^TestMetadata$/^Events$/^ControlReconnect$|^TestMetadata$/^Keyspace$/^TokenAwareSession$|^TestRouting$/^ClientRoutes$|^TestMetadata$/^Hosts$/^InvalidPeer$",
         ".",
         "-args",
         "-gocql.timeout=60s",

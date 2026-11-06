@@ -6183,7 +6183,7 @@
   "tests": [
     {
       "file": "batch_test.go",
-      "identity": "batch_test.go::TestBatch_Errors",
+      "identity": "batch_test.go::TestBatch/Exec/RejectsInvalidStatement",
       "original": {
         "assertions": [
           {
@@ -6227,7 +6227,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestBatch_Errors",
+      "test": "TestBatch/Exec/RejectsInvalidStatement",
       "translated": {
         "assertions": [
           {
@@ -6296,7 +6296,7 @@
     },
     {
       "file": "batch_test.go",
-      "identity": "batch_test.go::TestBatch_WithTimestamp",
+      "identity": "batch_test.go::TestBatch/Options/Timestamp",
       "original": {
         "assertions": [
           {
@@ -6354,7 +6354,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestBatch_WithTimestamp",
+      "test": "TestBatch/Options/Timestamp",
       "translated": {
         "assertions": [
           {
@@ -6423,7 +6423,7 @@
     },
     {
       "file": "batch_test.go",
-      "identity": "batch_test.go::TestBatch_WithNowInSeconds",
+      "identity": "batch_test.go::TestBatch/Options/NowInSeconds",
       "original": {
         "assertions": [
           {
@@ -6482,7 +6482,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestBatch_WithNowInSeconds",
+      "test": "TestBatch/Options/NowInSeconds",
       "translated": {
         "assertions": [
           {
@@ -6583,7 +6583,7 @@
     },
     {
       "file": "batch_test.go",
-      "identity": "batch_test.go::TestBatch_SetKeyspace",
+      "identity": "batch_test.go::TestBatch/Options/Keyspace",
       "original": {
         "assertions": [
           {
@@ -6649,7 +6649,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestBatch_SetKeyspace",
+      "test": "TestBatch/Options/Keyspace",
       "translated": {
         "assertions": [
           {
@@ -6757,7 +6757,7 @@
     },
     {
       "file": "cass1batch_test.go",
-      "identity": "cass1batch_test.go::TestProto1BatchInsert",
+      "identity": "cass1batch_test.go::TestBatch/Exec/BeginApplyStatement",
       "original": {
         "assertions": [
           {
@@ -6802,7 +6802,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestProto1BatchInsert",
+      "test": "TestBatch/Exec/BeginApplyStatement",
       "translated": {
         "assertions": [
           {
@@ -6852,7 +6852,7 @@
     },
     {
       "file": "cass1batch_test.go",
-      "identity": "cass1batch_test.go::TestShouldPrepareFunction",
+      "identity": "cass1batch_test.go::TestQuery/ShouldPrepare/MultilineStatements",
       "original": {
         "assertions": [
           {
@@ -6872,7 +6872,7 @@
         "source": "func TestShouldPrepareFunction(t *testing.T) {\n\tt.Parallel()\n\n\tvar shouldPrepareTests = []struct {\n\t\tStmt   string\n\t\tResult bool\n\t}{\n\t\t{`\n      BEGIN BATCH\n        INSERT INTO users (userID, password)\n        VALUES ('smith', 'secret')\n      APPLY BATCH\n    ;\n      `, true},\n\t\t{`INSERT INTO users (userID, password, name) VALUES ('user2', 'ch@ngem3b', 'second user')`, true},\n\t\t{`BEGIN COUNTER BATCH UPDATE stats SET views = views + 1 WHERE pageid = 1 APPLY BATCH`, true},\n\t\t{`delete name from users where userID = 'smith';`, true},\n\t\t{`  UPDATE users SET password = 'secret' WHERE userID = 'smith'   `, true},\n\t\t{`CREATE TABLE users (\n        user_name varchar PRIMARY KEY,\n        password varchar,\n        gender varchar,\n        session_token varchar,\n        state varchar,\n        birth_year bigint\n      );`, false},\n\t}\n\n\tfor _, test := range shouldPrepareTests {\n\t\tq := &Query{stmt: test.Stmt, routingInfo: &queryRoutingInfo{}}\n\t\tif got := q.shouldPrepare(); got != test.Result {\n\t\t\tt.Fatalf(\"%q: got %v, expected %v\\n\", test.Stmt, got, test.Result)\n\t\t}\n\t}\n}"
       },
       "original_helper_ids": null,
-      "test": "TestShouldPrepareFunction",
+      "test": "TestQuery/ShouldPrepare/MultilineStatements",
       "translated": {
         "assertions": [
           {
@@ -6912,7 +6912,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestEmptyHosts",
+      "identity": "cassandra_test.go::TestSession/Connect/EmptyHosts",
       "original": {
         "assertions": [
           {
@@ -6938,7 +6938,7 @@
         "common_test.go::createCluster",
         "common_test.go::getClusterHosts"
       ],
-      "test": "TestEmptyHosts",
+      "test": "TestSession/Connect/EmptyHosts",
       "translated": {
         "assertions": [
           {
@@ -6967,7 +6967,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestInvalidPeerEntry",
+      "identity": "cassandra_test.go::TestMetadata/Hosts/InvalidPeer",
       "original": {
         "assertions": [
           {
@@ -7021,7 +7021,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestInvalidPeerEntry",
+      "test": "TestMetadata/Hosts/InvalidPeer",
       "translated": {
         "assertions": [
           {
@@ -7087,7 +7087,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestUseStatementError",
+      "identity": "cassandra_test.go::TestQuery/Bind/RejectsUse",
       "original": {
         "assertions": [
           {
@@ -7127,7 +7127,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestUseStatementError",
+      "test": "TestQuery/Bind/RejectsUse",
       "translated": {
         "assertions": [
           {
@@ -7170,7 +7170,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestInvalidKeyspace",
+      "identity": "cassandra_test.go::TestSession/Connect/InvalidKeyspace",
       "original": {
         "assertions": [
           {
@@ -7201,7 +7201,7 @@
         "common_test.go::createCluster",
         "common_test.go::getClusterHosts"
       ],
-      "test": "TestInvalidKeyspace",
+      "test": "TestSession/Connect/InvalidKeyspace",
       "translated": {
         "assertions": [
           {
@@ -7235,7 +7235,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestTracing",
+      "identity": "cassandra_test.go::TestObserver/Trace/IDs",
       "original": {
         "assertions": [
           {
@@ -7312,7 +7312,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestTracing",
+      "test": "TestObserver/Trace/IDs",
       "translated": {
         "assertions": [
           {
@@ -7418,7 +7418,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestObserve",
+      "identity": "cassandra_test.go::TestObserver/Query",
       "original": {
         "assertions": [
           {
@@ -7554,7 +7554,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestObserve",
+      "test": "TestObserver/Query",
       "translated": {
         "assertions": [
           {
@@ -7668,7 +7668,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestObserve_Pagination",
+      "identity": "cassandra_test.go::TestObserver/Paging",
       "original": {
         "assertions": [
           {
@@ -7736,7 +7736,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestObserve_Pagination",
+      "test": "TestObserver/Paging",
       "translated": {
         "assertions": [
           {
@@ -7823,7 +7823,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestPaging",
+      "identity": "cassandra_test.go::TestPaging/Auto/AllRows",
       "original": {
         "assertions": [
           {
@@ -7879,7 +7879,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestPaging",
+      "test": "TestPaging/Auto/AllRows",
       "translated": {
         "assertions": [
           {
@@ -7927,7 +7927,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestPagingWithAllowFiltering",
+      "identity": "cassandra_test.go::TestPaging/AllowFiltering",
       "original": {
         "assertions": [
           {
@@ -8042,7 +8042,7 @@
         "integration_serialization_scylla_test.go::compareValues",
         "integration_serialization_scylla_test.go::validateResult"
       ],
-      "test": "TestPagingWithAllowFiltering",
+      "test": "TestPaging/AllowFiltering",
       "translated": {
         "assertions": [
           {
@@ -8139,7 +8139,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestPagingWithBind",
+      "identity": "cassandra_test.go::TestPaging/Auto/Bound",
       "original": {
         "assertions": [
           {
@@ -8205,7 +8205,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestPagingWithBind",
+      "test": "TestPaging/Auto/Bound",
       "translated": {
         "assertions": [
           {
@@ -8263,7 +8263,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestCAS",
+      "identity": "cassandra_test.go::TestConditional/Exec",
       "original": {
         "assertions": [
           {
@@ -8459,7 +8459,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestCAS",
+      "test": "TestConditional/Exec",
       "translated": {
         "assertions": [
           {
@@ -8635,7 +8635,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestConsistencySerial",
+      "identity": "cassandra_test.go::TestConditional/SerialConsistency",
       "original": {
         "assertions": [
           {
@@ -8696,7 +8696,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestConsistencySerial",
+      "test": "TestConditional/SerialConsistency",
       "translated": {
         "assertions": [
           {
@@ -8766,7 +8766,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestDurationType",
+      "identity": "cassandra_test.go::TestTypes/RoundTrip/Duration",
       "original": {
         "assertions": [
           {
@@ -8825,7 +8825,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestDurationType",
+      "test": "TestTypes/RoundTrip/Duration",
       "translated": {
         "assertions": [
           {
@@ -8894,7 +8894,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestMapScanCAS",
+      "identity": "cassandra_test.go::TestConditional/MapScan",
       "original": {
         "assertions": [
           {
@@ -8956,7 +8956,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestMapScanCAS",
+      "test": "TestConditional/MapScan",
       "translated": {
         "assertions": [
           {
@@ -9055,7 +9055,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestBatch",
+      "identity": "cassandra_test.go::TestBatch/Exec/Logged",
       "original": {
         "assertions": [
           {
@@ -9110,7 +9110,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestBatch",
+      "test": "TestBatch/Exec/Logged",
       "translated": {
         "assertions": [
           {
@@ -9166,7 +9166,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestUnpreparedBatch",
+      "identity": "cassandra_test.go::TestBatch/Exec/UnpreparedCounter",
       "original": {
         "assertions": [
           {
@@ -9236,7 +9236,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestUnpreparedBatch",
+      "test": "TestBatch/Exec/UnpreparedCounter",
       "translated": {
         "assertions": [
           {
@@ -9292,7 +9292,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestBatchLimit",
+      "identity": "cassandra_test.go::TestBatch/Exec/RejectsOverStatementLimit",
       "original": {
         "assertions": [
           {
@@ -9336,7 +9336,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestBatchLimit",
+      "test": "TestBatch/Exec/RejectsOverStatementLimit",
       "translated": {
         "assertions": [
           {
@@ -9397,7 +9397,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestWhereIn",
+      "identity": "cassandra_test.go::TestQuery/Exec/WhereIn",
       "original": {
         "assertions": [
           {
@@ -9447,7 +9447,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestWhereIn",
+      "test": "TestQuery/Exec/WhereIn",
       "translated": {
         "assertions": [
           {
@@ -9500,7 +9500,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestTooManyQueryArgs",
+      "identity": "cassandra_test.go::TestQuery/Bind/TooManyArgs",
       "original": {
         "assertions": [
           {
@@ -9551,7 +9551,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestTooManyQueryArgs",
+      "test": "TestQuery/Bind/TooManyArgs",
       "translated": {
         "assertions": [
           {
@@ -9598,7 +9598,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestNotEnoughQueryArgs",
+      "identity": "cassandra_test.go::TestQuery/Bind/NotEnoughArgs",
       "original": {
         "assertions": [
           {
@@ -9649,7 +9649,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestNotEnoughQueryArgs",
+      "test": "TestQuery/Bind/NotEnoughArgs",
       "translated": {
         "assertions": [
           {
@@ -9696,7 +9696,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestCreateSessionTimeout",
+      "identity": "cassandra_test.go::TestSession/Connect/Timeout",
       "original": {
         "assertions": [
           {
@@ -9733,7 +9733,7 @@
         "common_test.go::createCluster",
         "common_test.go::getClusterHosts"
       ],
-      "test": "TestCreateSessionTimeout",
+      "test": "TestSession/Connect/Timeout",
       "translated": {
         "assertions": [
           {
@@ -9771,7 +9771,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestReconnection",
+      "identity": "cassandra_test.go::TestSession/Reconnect",
       "original": {
         "assertions": [
           {
@@ -9813,7 +9813,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestReconnection",
+      "test": "TestSession/Reconnect",
       "translated": {
         "assertions": [
           {
@@ -9860,7 +9860,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestMapScanWithRefMap",
+      "identity": "cassandra_test.go::TestScan/MapScan/RefMap",
       "original": {
         "assertions": [
           {
@@ -9947,7 +9947,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestMapScanWithRefMap",
+      "test": "TestScan/MapScan/RefMap",
       "translated": {
         "assertions": [
           {
@@ -10032,7 +10032,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestMapScan",
+      "identity": "cassandra_test.go::TestScan/MapScan/Rows",
       "original": {
         "assertions": [
           {
@@ -10128,7 +10128,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestMapScan",
+      "test": "TestScan/MapScan/Rows",
       "translated": {
         "assertions": [
           {
@@ -10225,7 +10225,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestSliceMap",
+      "identity": "cassandra_test.go::TestScan/SliceMap",
       "original": {
         "assertions": [
           {
@@ -10302,7 +10302,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestSliceMap",
+      "test": "TestScan/SliceMap",
       "translated": {
         "assertions": [
           {
@@ -10466,7 +10466,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::Test_RetryPolicyIdempotence",
+      "identity": "cassandra_test.go::TestQuery/Retry/Idempotence",
       "original": {
         "assertions": [
           {
@@ -10508,7 +10508,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "Test_RetryPolicyIdempotence",
+      "test": "TestQuery/Retry/Idempotence",
       "translated": {
         "assertions": [
           {
@@ -10558,7 +10558,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestSmallInt",
+      "identity": "cassandra_test.go::TestTypes/RoundTrip/SmallInt",
       "original": {
         "assertions": [
           {
@@ -10613,7 +10613,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestSmallInt",
+      "test": "TestTypes/RoundTrip/SmallInt",
       "translated": {
         "assertions": [
           {
@@ -10662,7 +10662,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestScanWithNilArguments",
+      "identity": "cassandra_test.go::TestScan/Row/IgnoredColumn",
       "original": {
         "assertions": [
           {
@@ -10717,7 +10717,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestScanWithNilArguments",
+      "test": "TestScan/Row/IgnoredColumn",
       "translated": {
         "assertions": [
           {
@@ -10786,7 +10786,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestScanCASWithNilArguments",
+      "identity": "cassandra_test.go::TestConditional/ScanIgnoredColumns",
       "original": {
         "assertions": [
           {
@@ -10858,7 +10858,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestScanCASWithNilArguments",
+      "test": "TestConditional/ScanIgnoredColumns",
       "translated": {
         "assertions": [
           {
@@ -10925,7 +10925,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestRebindQueryInfo",
+      "identity": "cassandra_test.go::TestQuery/Bind/Rebind",
       "original": {
         "assertions": [
           {
@@ -10984,7 +10984,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestRebindQueryInfo",
+      "test": "TestQuery/Bind/Rebind",
       "translated": {
         "assertions": [
           {
@@ -11049,7 +11049,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestStaticQueryInfo",
+      "identity": "cassandra_test.go::TestQuery/Bind/Static",
       "original": {
         "assertions": [
           {
@@ -11110,7 +11110,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestStaticQueryInfo",
+      "test": "TestQuery/Bind/Static",
       "translated": {
         "assertions": [
           {
@@ -11180,7 +11180,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestBoundQueryInfo",
+      "identity": "cassandra_test.go::TestQuery/Bind/ParamsMetadata",
       "original": {
         "assertions": [
           {
@@ -11234,7 +11234,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestBoundQueryInfo",
+      "test": "TestQuery/Bind/ParamsMetadata",
       "translated": {
         "assertions": [
           {
@@ -11308,7 +11308,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestBatchQueryInfo",
+      "identity": "cassandra_test.go::TestBatch/Bind/ManualParams",
       "original": {
         "assertions": [
           {
@@ -11365,7 +11365,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestBatchQueryInfo",
+      "test": "TestBatch/Bind/ManualParams",
       "translated": {
         "assertions": [
           {
@@ -11439,7 +11439,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestPrepare_MissingSchemaPrepare",
+      "identity": "cassandra_test.go::TestPrepared/Prepare/MissingSchema",
       "original": {
         "assertions": [
           {
@@ -11492,7 +11492,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestPrepare_MissingSchemaPrepare",
+      "test": "TestPrepared/Prepare/MissingSchema",
       "translated": {
         "assertions": [
           {
@@ -11549,7 +11549,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestPrepare_ReprepareStatement",
+      "identity": "cassandra_test.go::TestPrepared/Reprepare/Statement",
       "original": {
         "assertions": [
           {
@@ -11594,7 +11594,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestPrepare_ReprepareStatement",
+      "test": "TestPrepared/Reprepare/Statement",
       "translated": {
         "assertions": [
           {
@@ -11667,7 +11667,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestPrepare_ReprepareBatch",
+      "identity": "cassandra_test.go::TestPrepared/Reprepare/Batch",
       "original": {
         "assertions": [
           {
@@ -11713,7 +11713,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestPrepare_ReprepareBatch",
+      "test": "TestPrepared/Reprepare/Batch",
       "translated": {
         "assertions": [
           {
@@ -11783,7 +11783,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestQueryInfo",
+      "identity": "cassandra_test.go::TestPrepared/Prepare/Metadata",
       "original": {
         "assertions": [
           {
@@ -11831,7 +11831,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestQueryInfo",
+      "test": "TestPrepared/Prepare/Metadata",
       "translated": {
         "assertions": [
           {
@@ -11876,7 +11876,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestPrepare_PreparedCacheEviction",
+      "identity": "cassandra_test.go::TestPrepared/Cache/Eviction",
       "original": {
         "assertions": [
           {
@@ -11975,7 +11975,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestPrepare_PreparedCacheEviction",
+      "test": "TestPrepared/Cache/Eviction",
       "translated": {
         "assertions": [
           {
@@ -12039,7 +12039,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestPrepare_PreparedCacheKey",
+      "identity": "cassandra_test.go::TestPrepared/Cache/Key",
       "original": {
         "assertions": [
           {
@@ -12121,7 +12121,7 @@
         "common_test.go::testKeyspaceName",
         "common_test.go::testTableName"
       ],
-      "test": "TestPrepare_PreparedCacheKey",
+      "test": "TestPrepared/Cache/Key",
       "translated": {
         "assertions": [
           {
@@ -12180,7 +12180,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestMarshalFloat64Ptr",
+      "identity": "cassandra_test.go::TestTypes/RoundTrip/Float64Ptr",
       "original": {
         "assertions": [
           {
@@ -12224,7 +12224,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestMarshalFloat64Ptr",
+      "test": "TestTypes/RoundTrip/Float64Ptr",
       "translated": {
         "assertions": [
           {
@@ -12285,7 +12285,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestMarshalInet",
+      "identity": "cassandra_test.go::TestTypes/RoundTrip/Inet",
       "original": {
         "assertions": [
           {
@@ -12376,7 +12376,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestMarshalInet",
+      "test": "TestTypes/RoundTrip/Inet",
       "translated": {
         "assertions": [
           {
@@ -12449,7 +12449,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestVarint",
+      "identity": "cassandra_test.go::TestTypes/RoundTrip/Varint",
       "original": {
         "assertions": [
           {
@@ -12591,7 +12591,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestVarint",
+      "test": "TestTypes/RoundTrip/Varint",
       "translated": {
         "assertions": [
           {
@@ -12717,7 +12717,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestQueryStats",
+      "identity": "cassandra_test.go::TestQuery/Result/Stats",
       "original": {
         "assertions": [
           {
@@ -12763,7 +12763,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestQueryStats",
+      "test": "TestQuery/Result/Stats",
       "translated": {
         "assertions": [
           {
@@ -12821,7 +12821,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestIterHost",
+      "identity": "cassandra_test.go::TestQuery/Result/HostID",
       "original": {
         "assertions": [
           {
@@ -12857,7 +12857,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestIterHost",
+      "test": "TestQuery/Result/HostID",
       "translated": {
         "assertions": [
           {
@@ -12900,7 +12900,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestBatchStats",
+      "identity": "cassandra_test.go::TestBatch/Stats",
       "original": {
         "assertions": [
           {
@@ -12955,7 +12955,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestBatchStats",
+      "test": "TestBatch/Stats",
       "translated": {
         "assertions": [
           {
@@ -13008,7 +13008,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestBatchObserve",
+      "identity": "cassandra_test.go::TestObserver/Batch",
       "original": {
         "assertions": [
           {
@@ -13085,7 +13085,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestBatchObserve",
+      "test": "TestObserver/Batch",
       "translated": {
         "assertions": [
           {
@@ -13166,7 +13166,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestNilInQuery",
+      "identity": "cassandra_test.go::TestQuery/Bind/Nil",
       "original": {
         "assertions": [
           {
@@ -13218,7 +13218,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestNilInQuery",
+      "test": "TestQuery/Bind/Nil",
       "translated": {
         "assertions": [
           {
@@ -13275,7 +13275,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestEmptyTimestamp",
+      "identity": "cassandra_test.go::TestScan/Row/EmptyTimestamp",
       "original": {
         "assertions": [
           {
@@ -13329,7 +13329,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestEmptyTimestamp",
+      "test": "TestScan/Row/EmptyTimestamp",
       "translated": {
         "assertions": [
           {
@@ -13387,7 +13387,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestGetKeyspaceMetadata",
+      "identity": "cassandra_test.go::TestMetadata/Keyspace/Exists",
       "original": {
         "assertions": [
           {
@@ -13453,7 +13453,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestGetKeyspaceMetadata",
+      "test": "TestMetadata/Keyspace/Exists",
       "translated": {
         "assertions": [
           {
@@ -13522,7 +13522,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestSessionMetadataAPIs",
+      "identity": "cassandra_test.go::TestMetadata/Session",
       "original": {
         "assertions": [
           {
@@ -13806,7 +13806,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestSessionMetadataAPIs",
+      "test": "TestMetadata/Session",
       "translated": {
         "assertions": [
           {
@@ -14120,7 +14120,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestGetKeyspaceMetadataFails",
+      "identity": "cassandra_test.go::TestMetadata/Keyspace/Missing",
       "original": {
         "assertions": [
           {
@@ -14154,7 +14154,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestGetKeyspaceMetadataFails",
+      "test": "TestMetadata/Keyspace/Missing",
       "translated": {
         "assertions": [
           {
@@ -14190,7 +14190,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestRoutingKey",
+      "identity": "cassandra_test.go::TestRouting/RoutingKey/Computed",
       "original": {
         "assertions": [
           {
@@ -14358,7 +14358,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestRoutingKey",
+      "test": "TestRouting/RoutingKey/Computed",
       "translated": {
         "assertions": [
           {
@@ -14461,7 +14461,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestTokenAwareConnPool",
+      "identity": "cassandra_test.go::TestRouting/TokenAware/ConnPool",
       "original": {
         "assertions": [
           {
@@ -14526,7 +14526,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestTokenAwareConnPool",
+      "test": "TestRouting/TokenAware/ConnPool",
       "translated": {
         "assertions": [
           {
@@ -14605,7 +14605,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestNegativeStream",
+      "identity": "cassandra_test.go::TestFraming/NegativeStream",
       "original": {
         "assertions": [
           {
@@ -14650,7 +14650,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestNegativeStream",
+      "test": "TestFraming/NegativeStream",
       "translated": {
         "assertions": [
           {
@@ -14696,7 +14696,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestManualQueryPaging",
+      "identity": "cassandra_test.go::TestPaging/Manual",
       "original": {
         "assertions": [
           {
@@ -14761,7 +14761,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestManualQueryPaging",
+      "test": "TestPaging/Manual",
       "translated": {
         "assertions": [
           {
@@ -14833,7 +14833,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestSessionBindRoutingKey",
+      "identity": "cassandra_test.go::TestRouting/RoutingKey/Bind",
       "original": {
         "assertions": [
           {
@@ -14878,7 +14878,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestSessionBindRoutingKey",
+      "test": "TestRouting/RoutingKey/Bind",
       "translated": {
         "assertions": [
           {
@@ -14943,7 +14943,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestJSONSupport",
+      "identity": "cassandra_test.go::TestQuery/Exec/JSON",
       "original": {
         "assertions": [
           {
@@ -15010,7 +15010,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestJSONSupport",
+      "test": "TestQuery/Exec/JSON",
       "translated": {
         "assertions": [
           {
@@ -15078,7 +15078,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestUnmarshallNestedTypes",
+      "identity": "cassandra_test.go::TestScan/Dynamic/NestedCollections",
       "original": {
         "assertions": [
           {
@@ -15132,7 +15132,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestUnmarshallNestedTypes",
+      "test": "TestScan/Dynamic/NestedCollections",
       "translated": {
         "assertions": [
           {
@@ -15211,7 +15211,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestSchemaReset",
+      "identity": "cassandra_test.go::TestPrepared/Reprepare/AfterAlterTable",
       "original": {
         "assertions": [
           {
@@ -15275,10 +15275,10 @@
         "skips": [
           {
             "line": 3333,
-            "text": "t.Skipf(\"skipping TestSchemaReset due to CASSANDRA-7910 in Cassandra <2.1.3 version=%v\", flagCassVersion)"
+            "text": "t.Skipf(\"skipping TestPrepared/Reprepare/AfterAlterTable due to CASSANDRA-7910 in Cassandra <2.1.3 version=%v\", flagCassVersion)"
           }
         ],
-        "source": "func TestSchemaReset(t *testing.T) {\n\tt.Parallel()\n\n\tif flagCassVersion.Major == 0 || flagCassVersion.Before(2, 1, 3) {\n\t\tt.Skipf(\"skipping TestSchemaReset due to CASSANDRA-7910 in Cassandra <2.1.3 version=%v\", flagCassVersion)\n\t}\n\n\tcluster := createCluster()\n\tcluster.NumConns = 1\n\n\tsession := createSessionFromCluster(cluster, t)\n\tdefer session.Close()\n\n\ttable := testTableName(t)\n\n\tif err := createTable(session, fmt.Sprintf(`CREATE TABLE gocql_test.%s (\n\t\tid text PRIMARY KEY)`, table)); err != nil {\n\n\t\tt.Fatal(err)\n\t}\n\n\tconst key = \"test\"\n\n\terr := session.Query(fmt.Sprintf(\"INSERT INTO %s(id) VALUES(?)\", table), key).Exec()\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\tvar id string\n\terr = session.Query(fmt.Sprintf(\"SELECT * FROM %s WHERE id=?\", table), key).Scan(&id)\n\tif err != nil {\n\t\tt.Fatal(err)\n\t} else if id != key {\n\t\tt.Fatalf(\"expected to get id=%q got=%q\", key, id)\n\t}\n\n\tif err := createTable(session, fmt.Sprintf(`ALTER TABLE gocql_test.%s ADD val text`, table)); err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\tconst expVal = \"test-val\"\n\terr = session.Query(fmt.Sprintf(\"INSERT INTO %s(id, val) VALUES(?, ?)\", table), key, expVal).Exec()\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\tvar val string\n\terr = session.Query(fmt.Sprintf(\"SELECT * FROM %s WHERE id=?\", table), key).Scan(&id, &val)\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\tif id != key {\n\t\tt.Errorf(\"expected to get id=%q got=%q\", key, id)\n\t}\n\tif val != expVal {\n\t\tt.Errorf(\"expected to get val=%q got=%q\", expVal, val)\n\t}\n}"
+        "source": "func TestSchemaReset(t *testing.T) {\n\tt.Parallel()\n\n\tif flagCassVersion.Major == 0 || flagCassVersion.Before(2, 1, 3) {\n\t\tt.Skipf(\"skipping TestPrepared/Reprepare/AfterAlterTable due to CASSANDRA-7910 in Cassandra <2.1.3 version=%v\", flagCassVersion)\n\t}\n\n\tcluster := createCluster()\n\tcluster.NumConns = 1\n\n\tsession := createSessionFromCluster(cluster, t)\n\tdefer session.Close()\n\n\ttable := testTableName(t)\n\n\tif err := createTable(session, fmt.Sprintf(`CREATE TABLE gocql_test.%s (\n\t\tid text PRIMARY KEY)`, table)); err != nil {\n\n\t\tt.Fatal(err)\n\t}\n\n\tconst key = \"test\"\n\n\terr := session.Query(fmt.Sprintf(\"INSERT INTO %s(id) VALUES(?)\", table), key).Exec()\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\tvar id string\n\terr = session.Query(fmt.Sprintf(\"SELECT * FROM %s WHERE id=?\", table), key).Scan(&id)\n\tif err != nil {\n\t\tt.Fatal(err)\n\t} else if id != key {\n\t\tt.Fatalf(\"expected to get id=%q got=%q\", key, id)\n\t}\n\n\tif err := createTable(session, fmt.Sprintf(`ALTER TABLE gocql_test.%s ADD val text`, table)); err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\tconst expVal = \"test-val\"\n\terr = session.Query(fmt.Sprintf(\"INSERT INTO %s(id, val) VALUES(?, ?)\", table), key, expVal).Exec()\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\tvar val string\n\terr = session.Query(fmt.Sprintf(\"SELECT * FROM %s WHERE id=?\", table), key).Scan(&id, &val)\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\tif id != key {\n\t\tt.Errorf(\"expected to get id=%q got=%q\", key, id)\n\t}\n\tif val != expVal {\n\t\tt.Errorf(\"expected to get val=%q got=%q\", expVal, val)\n\t}\n}"
       },
       "original_helper_ids": [
         "common_test.go::addSslOptions",
@@ -15293,7 +15293,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestSchemaReset",
+      "test": "TestPrepared/Reprepare/AfterAlterTable",
       "translated": {
         "assertions": [
           {
@@ -15332,10 +15332,10 @@
         "skips": [
           {
             "line": 1890,
-            "text": "t.Skipf(\"skipping TestSchemaReset due to CASSANDRA-7910 in Cassandra <2.1.3 version=%v\", flagCassVersion)"
+            "text": "t.Skipf(\"skipping TestPrepared/Reprepare/AfterAlterTable due to CASSANDRA-7910 in Cassandra <2.1.3 version=%v\", flagCassVersion)"
           }
         ],
-        "source": "func TestSchemaReset(t *testing.T) {\n\tt.Parallel()\n\tif flagCassVersion.Major == 0 || flagCassVersion.Before(2, 1, 3) {\n\t\tt.Skipf(\"skipping TestSchemaReset due to CASSANDRA-7910 in Cassandra <2.1.3 version=%v\", flagCassVersion)\n\t}\n\tsession := createV2Session(t, func(c *Config) { c.Pool.ConnectionsPerHost = 1 })\n\tdefer session.Close()\n\ttable := testTableName(t)\n\tcassandraDDL(t, session, fmt.Sprintf(\"CREATE TABLE %s(id text PRIMARY KEY)\", table))\n\tcassandraWrite(t, session, fmt.Sprintf(\"INSERT INTO %s(id) VALUES(?)\", table), codecTestMust(TextValue(\"test\")))\n\tselectCQL := fmt.Sprintf(\"SELECT * FROM %s WHERE id=?\", table)\n\tbefore := cassandraDynamicBound(t, session, selectCQL, []Value{codecTestMust(TextValue(\"test\"))}, PrepareOptions{})\n\trequire.Equal(t, \"test\", cassandraText(t, cassandraReadBound(t, session, before, Options{}), \"id\"))\n\tcassandraDDL(t, session, fmt.Sprintf(\"ALTER TABLE %s ADD val text\", table))\n\tcassandraWrite(t, session, fmt.Sprintf(\"INSERT INTO %s(id,val) VALUES(?,?)\", table), codecTestMust(TextValue(\"test\")), codecTestMust(TextValue(\"test-val\")))\n\trow := cassandraReadBound(t, session, before, Options{})\n\trequire.Equal(t, \"test\", cassandraText(t, row, \"id\"))\n\trequire.Equal(t, \"test-val\", cassandraText(t, row, \"val\"))\n}"
+        "source": "func TestSchemaReset(t *testing.T) {\n\tt.Parallel()\n\tif flagCassVersion.Major == 0 || flagCassVersion.Before(2, 1, 3) {\n\t\tt.Skipf(\"skipping TestPrepared/Reprepare/AfterAlterTable due to CASSANDRA-7910 in Cassandra <2.1.3 version=%v\", flagCassVersion)\n\t}\n\tsession := createV2Session(t, func(c *Config) { c.Pool.ConnectionsPerHost = 1 })\n\tdefer session.Close()\n\ttable := testTableName(t)\n\tcassandraDDL(t, session, fmt.Sprintf(\"CREATE TABLE %s(id text PRIMARY KEY)\", table))\n\tcassandraWrite(t, session, fmt.Sprintf(\"INSERT INTO %s(id) VALUES(?)\", table), codecTestMust(TextValue(\"test\")))\n\tselectCQL := fmt.Sprintf(\"SELECT * FROM %s WHERE id=?\", table)\n\tbefore := cassandraDynamicBound(t, session, selectCQL, []Value{codecTestMust(TextValue(\"test\"))}, PrepareOptions{})\n\trequire.Equal(t, \"test\", cassandraText(t, cassandraReadBound(t, session, before, Options{}), \"id\"))\n\tcassandraDDL(t, session, fmt.Sprintf(\"ALTER TABLE %s ADD val text\", table))\n\tcassandraWrite(t, session, fmt.Sprintf(\"INSERT INTO %s(id,val) VALUES(?,?)\", table), codecTestMust(TextValue(\"test\")), codecTestMust(TextValue(\"test-val\")))\n\trow := cassandraReadBound(t, session, before, Options{})\n\trequire.Equal(t, \"test\", cassandraText(t, row, \"id\"))\n\trequire.Equal(t, \"test-val\", cassandraText(t, row, \"val\"))\n}"
       },
       "translated_helper_ids": [
         "cassandra_v2_helpers_test.go::cassandraBound",
@@ -15362,7 +15362,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestCreateSession_DontSwallowError",
+      "identity": "cassandra_test.go::TestSession/Connect/ReportsProtocolError",
       "original": {
         "assertions": [
           {
@@ -15405,7 +15405,7 @@
         "common_test.go::createCluster",
         "common_test.go::getClusterHosts"
       ],
-      "test": "TestCreateSession_DontSwallowError",
+      "test": "TestSession/Connect/ReportsProtocolError",
       "translated": {
         "assertions": [
           {
@@ -15440,7 +15440,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestControl_DiscoverProtocol",
+      "identity": "cassandra_test.go::TestSession/Connect/DiscoverProtocol",
       "original": {
         "assertions": [
           {
@@ -15470,7 +15470,7 @@
         "common_test.go::createCluster",
         "common_test.go::getClusterHosts"
       ],
-      "test": "TestControl_DiscoverProtocol",
+      "test": "TestSession/Connect/DiscoverProtocol",
       "translated": {
         "assertions": [
           {
@@ -15505,7 +15505,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestUnsetCol",
+      "identity": "cassandra_test.go::TestQuery/Bind/UnsetColumn",
       "original": {
         "assertions": [
           {
@@ -15568,7 +15568,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestUnsetCol",
+      "test": "TestQuery/Bind/UnsetColumn",
       "translated": {
         "assertions": [
           {
@@ -15640,7 +15640,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestUnsetColBatch",
+      "identity": "cassandra_test.go::TestBatch/Bind/UnsetColumn",
       "original": {
         "assertions": [
           {
@@ -15720,7 +15720,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestUnsetColBatch",
+      "test": "TestBatch/Bind/UnsetColumn",
       "translated": {
         "assertions": [
           {
@@ -15811,7 +15811,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestQuery_NamedValues",
+      "identity": "cassandra_test.go::TestQuery/Bind/NamedValues",
       "original": {
         "assertions": [
           {
@@ -15860,7 +15860,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestQuery_NamedValues",
+      "test": "TestQuery/Bind/NamedValues",
       "translated": {
         "assertions": [
           {
@@ -15918,7 +15918,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestQuery_SetHostID",
+      "identity": "cassandra_test.go::TestQuery/Options/HostID",
       "original": {
         "assertions": [
           {
@@ -15975,7 +15975,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestQuery_SetHostID",
+      "test": "TestQuery/Options/HostID",
       "translated": {
         "assertions": [
           {
@@ -16052,7 +16052,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestQuery_WithNowInSeconds",
+      "identity": "cassandra_test.go::TestQuery/Options/NowInSeconds",
       "original": {
         "assertions": [
           {
@@ -16110,7 +16110,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestQuery_WithNowInSeconds",
+      "test": "TestQuery/Options/NowInSeconds",
       "translated": {
         "assertions": [
           {
@@ -16177,7 +16177,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestQuery_SetKeyspace",
+      "identity": "cassandra_test.go::TestQuery/Options/Keyspace",
       "original": {
         "assertions": [
           {
@@ -16256,7 +16256,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestQuery_SetKeyspace",
+      "test": "TestQuery/Options/Keyspace",
       "translated": {
         "assertions": [
           {
@@ -16334,7 +16334,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestLargeSizeQuery",
+      "identity": "cassandra_test.go::TestFraming/Segment",
       "original": {
         "assertions": [
           {
@@ -16390,7 +16390,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestLargeSizeQuery",
+      "test": "TestFraming/Segment",
       "translated": {
         "assertions": [
           {
@@ -16448,7 +16448,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestCompressorNegotiated",
+      "identity": "cassandra_test.go::TestFraming/Compression/Negotiated",
       "original": {
         "assertions": [
           {
@@ -16496,7 +16496,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestCompressorNegotiated",
+      "test": "TestFraming/Compression/Negotiated",
       "translated": {
         "assertions": [
           {
@@ -16545,7 +16545,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestQueryCompressionNotWorthIt",
+      "identity": "cassandra_test.go::TestFraming/Compression/NotWorthIt",
       "original": {
         "assertions": [
           {
@@ -16590,7 +16590,7 @@
             "text": "t.Skip(\"no compressor negotiated on the connection; the compressed-segment path is unreachable\")"
           }
         ],
-        "source": "func TestQueryCompressionNotWorthIt(t *testing.T) {\n\tsession := createSession(t)\n\tdefer session.Close()\n\n\t// The compressed-segment \"not worth it\" encoding requires both proto v5 and\n\t// an actual segment compressor. Without both, this test round-trips a short\n\t// string over an uncompressed frame and proves nothing.\n\tif session.cfg.ProtoVersion < protoVersion5 {\n\t\tt.Skip(\"compressed segments are only produced on protocol >= 5\")\n\t}\n\t// Check a connection, not session.cfg: startupCoordinator.startup drops the\n\t// compressor when the server's SUPPORTED list does not name it, leaving cfg set\n\t// while nothing is actually compressed. Skipping on cfg alone would let this test\n\t// pass having round-tripped a plain uncompressed segment.\n\t//\n\t// This is a smoke check on one pooled connection, not a statement about the lane:\n\t// the queries below route through the token-aware policy to whichever replica owns\n\t// the key, which need not be this one. TestCompressorNegotiated is what checks\n\t// every host.\n\tif conn := getRandomConn(t, session); conn.compressor == nil {\n\t\tt.Skip(\"no compressor negotiated on the connection; the compressed-segment path is unreachable\")\n\t}\n\n\tif err := createTable(session, \"CREATE TABLE IF NOT EXISTS gocql_test.compression_now_worth_it(id int, text_col text, PRIMARY KEY (id))\"); err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\tstr := \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()_+\"\n\terr := session.Query(\"INSERT INTO gocql_test.compression_now_worth_it (id, text_col) VALUES (?, ?)\", 1, str).Exec()\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\tvar result string\n\terr = session.Query(\"SELECT text_col FROM gocql_test.compression_now_worth_it WHERE id = ?\", 1).Scan(&result)\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\trequire.Equal(t, str, result)\n}"
+        "source": "func TestQueryCompressionNotWorthIt(t *testing.T) {\n\tsession := createSession(t)\n\tdefer session.Close()\n\n\t// The compressed-segment \"not worth it\" encoding requires both proto v5 and\n\t// an actual segment compressor. Without both, this test round-trips a short\n\t// string over an uncompressed frame and proves nothing.\n\tif session.cfg.ProtoVersion < protoVersion5 {\n\t\tt.Skip(\"compressed segments are only produced on protocol >= 5\")\n\t}\n\t// Check a connection, not session.cfg: startupCoordinator.startup drops the\n\t// compressor when the server's SUPPORTED list does not name it, leaving cfg set\n\t// while nothing is actually compressed. Skipping on cfg alone would let this test\n\t// pass having round-tripped a plain uncompressed segment.\n\t//\n\t// This is a smoke check on one pooled connection, not a statement about the lane:\n\t// the queries below route through the token-aware policy to whichever replica owns\n\t// the key, which need not be this one. TestFraming/Compression/Negotiated is what checks\n\t// every host.\n\tif conn := getRandomConn(t, session); conn.compressor == nil {\n\t\tt.Skip(\"no compressor negotiated on the connection; the compressed-segment path is unreachable\")\n\t}\n\n\tif err := createTable(session, \"CREATE TABLE IF NOT EXISTS gocql_test.compression_now_worth_it(id int, text_col text, PRIMARY KEY (id))\"); err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\tstr := \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()_+\"\n\terr := session.Query(\"INSERT INTO gocql_test.compression_now_worth_it (id, text_col) VALUES (?, ?)\", 1, str).Exec()\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\tvar result string\n\terr = session.Query(\"SELECT text_col FROM gocql_test.compression_now_worth_it WHERE id = ?\", 1).Scan(&result)\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\trequire.Equal(t, str, result)\n}"
       },
       "original_helper_ids": [
         "cassandra_test.go::getRandomConn",
@@ -16607,7 +16607,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestQueryCompressionNotWorthIt",
+      "test": "TestFraming/Compression/NotWorthIt",
       "translated": {
         "assertions": [
           {
@@ -16671,7 +16671,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestPrepareExecuteMetadataChangedFlag",
+      "identity": "cassandra_test.go::TestFraming/ResultMetadataID/ChangedFlag",
       "original": {
         "assertions": [
           {
@@ -16719,7 +16719,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestPrepareExecuteMetadataChangedFlag",
+      "test": "TestFraming/ResultMetadataID/ChangedFlag",
       "translated": {
         "assertions": [
           {
@@ -16778,7 +16778,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestStmtCacheUsesOverriddenKeyspace",
+      "identity": "cassandra_test.go::TestPrepared/Cache/OverriddenKeyspace",
       "original": {
         "assertions": [
           {
@@ -16871,7 +16871,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestStmtCacheUsesOverriddenKeyspace",
+      "test": "TestPrepared/Cache/OverriddenKeyspace",
       "translated": {
         "assertions": [
           {
@@ -16939,7 +16939,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestRoutingKeyCacheUsesOverriddenKeyspace",
+      "identity": "cassandra_test.go::TestRouting/RoutingKey/OverriddenKeyspace",
       "original": {
         "assertions": [
           {
@@ -17031,7 +17031,7 @@
             "text": "t.Skip(\"This tests only runs on proto > 4 due SetKeyspace availability\")"
           }
         ],
-        "source": "func TestRoutingKeyCacheUsesOverriddenKeyspace(t *testing.T) {\n\tsession := createSession(t)\n\n\t// Cleanup registered before any DDL, for the reasons spelled out in\n\t// TestStmtCacheUsesOverriddenKeyspace. This test has an extra way to abort\n\t// early: the getRoutingKeyInfo helper below type-asserts on a cache lookup and\n\t// panics outright if the entry is missing.\n\tt.Cleanup(func() {\n\t\tdefer session.Close()\n\t\tif err := createTable(session, \"DROP TABLE IF EXISTS gocql_test.routing_key_cache_uses_overridden_ks\"); err != nil {\n\t\t\tt.Errorf(\"drop table: %v\", err)\n\t\t}\n\t\tif err := createTable(session, \"DROP KEYSPACE IF EXISTS gocql_test_routing_key_cache\"); err != nil {\n\t\t\tt.Errorf(\"drop keyspace: %v\", err)\n\t\t}\n\t})\n\n\tif session.cfg.ProtoVersion < protoVersion5 {\n\t\tt.Skip(\"This tests only runs on proto > 4 due SetKeyspace availability\")\n\t}\n\n\tconst createKeyspaceStmt = `CREATE KEYSPACE IF NOT EXISTS %s\n\tWITH replication = {\n\t\t'class' : 'SimpleStrategy',\n\t\t\t'replication_factor' : 1\n\t}`\n\n\terr := createTable(session, fmt.Sprintf(createKeyspaceStmt, \"gocql_test_routing_key_cache\"))\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\terr = createTable(session, \"CREATE TABLE IF NOT EXISTS gocql_test.routing_key_cache_uses_overridden_ks(id int, PRIMARY KEY (id))\")\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\terr = createTable(session, \"CREATE TABLE IF NOT EXISTS gocql_test_routing_key_cache.routing_key_cache_uses_overridden_ks(id int, PRIMARY KEY (id))\")\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\tgetRoutingKeyInfo := func(keyspace, stmt string) *routingKeyInfo {\n\t\tt.Helper()\n\t\tsession.routingKeyInfoCache.mu.Lock()\n\t\tvalue, _ := session.routingKeyInfoCache.lru.Get(routingKeyInfoCacheKey{keyspace: keyspace, stmt: stmt})\n\t\tsession.routingKeyInfoCache.mu.Unlock()\n\n\t\tinflight := value.(*inflightCachedEntry)\n\t\treturn inflight.value.(*routingKeyInfo)\n\t}\n\n\tconst insertQuery = \"INSERT INTO routing_key_cache_uses_overridden_ks (id) VALUES (?)\"\n\n\t// Running batch in default ks gocql_test\n\tb1 := session.NewBatch(LoggedBatch)\n\tb1.Query(insertQuery, 1)\n\t_, err = b1.GetRoutingKey()\n\trequire.NoError(t, err)\n\n\t// Ensuring that the cache contains the query with default ks\n\troutingKeyInfo1 := getRoutingKeyInfo(\"gocql_test\", b1.Entries[0].Stmt)\n\trequire.Equal(t, \"gocql_test\", routingKeyInfo1.keyspace)\n\n\t// Running batch in gocql_test_routing_key_cache ks\n\tb2 := session.NewBatch(LoggedBatch)\n\tb2.SetKeyspace(\"gocql_test_routing_key_cache\")\n\tb2.Query(insertQuery, 2)\n\t_, err = b2.GetRoutingKey()\n\trequire.NoError(t, err)\n\n\t// Ensuring that the cache contains the query with gocql_test_routing_key_cache ks\n\troutingKeyInfo2 := getRoutingKeyInfo(\"gocql_test_routing_key_cache\", b2.Entries[0].Stmt)\n\trequire.Equal(t, \"gocql_test_routing_key_cache\", routingKeyInfo2.keyspace)\n\n\tconst selectStmt = \"SELECT * FROM routing_key_cache_uses_overridden_ks WHERE id=?\"\n\n\t// Running query in default ks gocql_test\n\tq1 := session.Query(selectStmt, 1)\n\t_, err = q1.GetRoutingKey()\n\trequire.NoError(t, err)\n\trequire.Equal(t, \"gocql_test\", q1.routingInfo.keyspace)\n\n\t// Running query in gocql_test_routing_key_cache ks\n\tq2 := session.Query(selectStmt, 1)\n\t_, err = q2.SetKeyspace(\"gocql_test_routing_key_cache\").GetRoutingKey()\n\trequire.NoError(t, err)\n\trequire.Equal(t, \"gocql_test_routing_key_cache\", q2.routingInfo.keyspace)\n}"
+        "source": "func TestRoutingKeyCacheUsesOverriddenKeyspace(t *testing.T) {\n\tsession := createSession(t)\n\n\t// Cleanup registered before any DDL, for the reasons spelled out in\n\t// TestPrepared/Cache/OverriddenKeyspace. This test has an extra way to abort\n\t// early: the getRoutingKeyInfo helper below type-asserts on a cache lookup and\n\t// panics outright if the entry is missing.\n\tt.Cleanup(func() {\n\t\tdefer session.Close()\n\t\tif err := createTable(session, \"DROP TABLE IF EXISTS gocql_test.routing_key_cache_uses_overridden_ks\"); err != nil {\n\t\t\tt.Errorf(\"drop table: %v\", err)\n\t\t}\n\t\tif err := createTable(session, \"DROP KEYSPACE IF EXISTS gocql_test_routing_key_cache\"); err != nil {\n\t\t\tt.Errorf(\"drop keyspace: %v\", err)\n\t\t}\n\t})\n\n\tif session.cfg.ProtoVersion < protoVersion5 {\n\t\tt.Skip(\"This tests only runs on proto > 4 due SetKeyspace availability\")\n\t}\n\n\tconst createKeyspaceStmt = `CREATE KEYSPACE IF NOT EXISTS %s\n\tWITH replication = {\n\t\t'class' : 'SimpleStrategy',\n\t\t\t'replication_factor' : 1\n\t}`\n\n\terr := createTable(session, fmt.Sprintf(createKeyspaceStmt, \"gocql_test_routing_key_cache\"))\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\terr = createTable(session, \"CREATE TABLE IF NOT EXISTS gocql_test.routing_key_cache_uses_overridden_ks(id int, PRIMARY KEY (id))\")\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\terr = createTable(session, \"CREATE TABLE IF NOT EXISTS gocql_test_routing_key_cache.routing_key_cache_uses_overridden_ks(id int, PRIMARY KEY (id))\")\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\n\tgetRoutingKeyInfo := func(keyspace, stmt string) *routingKeyInfo {\n\t\tt.Helper()\n\t\tsession.routingKeyInfoCache.mu.Lock()\n\t\tvalue, _ := session.routingKeyInfoCache.lru.Get(routingKeyInfoCacheKey{keyspace: keyspace, stmt: stmt})\n\t\tsession.routingKeyInfoCache.mu.Unlock()\n\n\t\tinflight := value.(*inflightCachedEntry)\n\t\treturn inflight.value.(*routingKeyInfo)\n\t}\n\n\tconst insertQuery = \"INSERT INTO routing_key_cache_uses_overridden_ks (id) VALUES (?)\"\n\n\t// Running batch in default ks gocql_test\n\tb1 := session.NewBatch(LoggedBatch)\n\tb1.Query(insertQuery, 1)\n\t_, err = b1.GetRoutingKey()\n\trequire.NoError(t, err)\n\n\t// Ensuring that the cache contains the query with default ks\n\troutingKeyInfo1 := getRoutingKeyInfo(\"gocql_test\", b1.Entries[0].Stmt)\n\trequire.Equal(t, \"gocql_test\", routingKeyInfo1.keyspace)\n\n\t// Running batch in gocql_test_routing_key_cache ks\n\tb2 := session.NewBatch(LoggedBatch)\n\tb2.SetKeyspace(\"gocql_test_routing_key_cache\")\n\tb2.Query(insertQuery, 2)\n\t_, err = b2.GetRoutingKey()\n\trequire.NoError(t, err)\n\n\t// Ensuring that the cache contains the query with gocql_test_routing_key_cache ks\n\troutingKeyInfo2 := getRoutingKeyInfo(\"gocql_test_routing_key_cache\", b2.Entries[0].Stmt)\n\trequire.Equal(t, \"gocql_test_routing_key_cache\", routingKeyInfo2.keyspace)\n\n\tconst selectStmt = \"SELECT * FROM routing_key_cache_uses_overridden_ks WHERE id=?\"\n\n\t// Running query in default ks gocql_test\n\tq1 := session.Query(selectStmt, 1)\n\t_, err = q1.GetRoutingKey()\n\trequire.NoError(t, err)\n\trequire.Equal(t, \"gocql_test\", q1.routingInfo.keyspace)\n\n\t// Running query in gocql_test_routing_key_cache ks\n\tq2 := session.Query(selectStmt, 1)\n\t_, err = q2.SetKeyspace(\"gocql_test_routing_key_cache\").GetRoutingKey()\n\trequire.NoError(t, err)\n\trequire.Equal(t, \"gocql_test_routing_key_cache\", q2.routingInfo.keyspace)\n}"
       },
       "original_helper_ids": [
         "common_test.go::addSslOptions",
@@ -17046,7 +17046,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestRoutingKeyCacheUsesOverriddenKeyspace",
+      "test": "TestRouting/RoutingKey/OverriddenKeyspace",
       "translated": {
         "assertions": [
           {
@@ -17135,7 +17135,7 @@
     },
     {
       "file": "cassandra_test.go",
-      "identity": "cassandra_test.go::TestPrepareExecuteScyllaEmptyMetadataID",
+      "identity": "cassandra_test.go::TestFraming/ResultMetadataID/ScyllaEmpty",
       "original": {
         "assertions": [
           {
@@ -17252,7 +17252,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestPrepareExecuteScyllaEmptyMetadataID",
+      "test": "TestFraming/ResultMetadataID/ScyllaEmpty",
       "translated": {
         "assertions": [
           {
@@ -17364,7 +17364,7 @@
     },
     {
       "file": "client_routes_test.go",
-      "identity": "client_routes_test.go::TestGetHostPortMapping",
+      "identity": "client_routes_test.go::TestRouting/ClientRoutes",
       "original": {
         "assertions": [
           {
@@ -17441,7 +17441,7 @@
         "common_test.go::testKeyspaceName",
         "common_test.go::testTableName"
       ],
-      "test": "TestGetHostPortMapping",
+      "test": "TestRouting/ClientRoutes",
       "translated": {
         "assertions": [
           {
@@ -17782,7 +17782,7 @@
     },
     {
       "file": "control_integration_test.go",
-      "identity": "control_integration_test.go::TestUnixSockets",
+      "identity": "control_integration_test.go::TestSession/Connect/UnixSocket",
       "original": {
         "assertions": [
           {
@@ -17833,7 +17833,7 @@
         "common_test.go::testKeyspaceName",
         "common_test.go::testTableName"
       ],
-      "test": "TestUnixSockets",
+      "test": "TestSession/Connect/UnixSocket",
       "translated": {
         "assertions": [
           {
@@ -17889,7 +17889,7 @@
     },
     {
       "file": "dns_test.go",
-      "identity": "dns_test.go::TestDNS",
+      "identity": "dns_test.go::TestSession/Connect/DNS",
       "original": {
         "assertions": [
           {
@@ -17950,7 +17950,7 @@
         "dns_test.go::MustIP",
         "dns_test.go::newMockDNSResolver"
       ],
-      "test": "TestDNS",
+      "test": "TestSession/Connect/DNS",
       "translated": {
         "assertions": [
           {
@@ -18018,7 +18018,7 @@
     },
     {
       "file": "errors_test.go",
-      "identity": "errors_test.go::TestErrorsParse",
+      "identity": "errors_test.go::TestQuery/Errors/AlreadyExists",
       "original": {
         "assertions": [
           {
@@ -18069,7 +18069,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestErrorsParse",
+      "test": "TestQuery/Errors/AlreadyExists",
       "translated": {
         "assertions": [
           {
@@ -18124,7 +18124,7 @@
     },
     {
       "file": "exec_test.go",
-      "identity": "exec_test.go::TestSingleHostQueryExecutor",
+      "identity": "exec_test.go::TestSession/OpenSingleHost",
       "original": {
         "assertions": [
           {
@@ -18162,7 +18162,7 @@
         "common_test.go::createCluster",
         "common_test.go::getClusterHosts"
       ],
-      "test": "TestSingleHostQueryExecutor",
+      "test": "TestSession/OpenSingleHost",
       "translated": {
         "assertions": [
           {
@@ -18257,7 +18257,7 @@
     },
     {
       "file": "integration_serialization_scylla_test.go",
-      "identity": "integration_serialization_scylla_test.go::TestRetryOnTopologyBusy",
+      "identity": "integration_serialization_scylla_test.go::TestFixture/RetryOnTopologyBusy",
       "original": {
         "assertions": [
           {
@@ -18328,7 +18328,7 @@
         "integration_serialization_scylla_test.go::isTopologyBusyErr",
         "integration_serialization_scylla_test.go::retryOnTopologyBusyWithSleep"
       ],
-      "test": "TestRetryOnTopologyBusy",
+      "test": "TestFixture/RetryOnTopologyBusy",
       "translated": {
         "assertions": [
           {
@@ -18402,7 +18402,7 @@
     },
     {
       "file": "integration_serialization_scylla_test.go",
-      "identity": "integration_serialization_scylla_test.go::TestSerializationSimpleTypesCassandra",
+      "identity": "integration_serialization_scylla_test.go::TestTypes/Simple",
       "original": {
         "assertions": [
           {
@@ -18452,7 +18452,7 @@
         "integration_serialization_scylla_test.go::equalVals",
         "integration_serialization_scylla_test.go::newRef"
       ],
-      "test": "TestSerializationSimpleTypesCassandra",
+      "test": "TestTypes/Simple",
       "translated": {
         "assertions": [
           {
@@ -18580,7 +18580,7 @@
     },
     {
       "file": "integration_serialization_scylla_test.go",
-      "identity": "integration_serialization_scylla_test.go::TestSliceMapMapScanTypes",
+      "identity": "integration_serialization_scylla_test.go::TestScan/Dynamic/Scalars",
       "original": {
         "assertions": [
           {
@@ -18653,7 +18653,7 @@
         "integration_serialization_scylla_test.go::truncateTable",
         "integration_serialization_scylla_test.go::validateResult"
       ],
-      "test": "TestSliceMapMapScanTypes",
+      "test": "TestScan/Dynamic/Scalars",
       "translated": {
         "assertions": [
           {
@@ -18745,7 +18745,7 @@
     },
     {
       "file": "integration_serialization_scylla_test.go",
-      "identity": "integration_serialization_scylla_test.go::TestSliceMapMapScanCounterTypes",
+      "identity": "integration_serialization_scylla_test.go::TestScan/Dynamic/Counter",
       "original": {
         "assertions": [
           {
@@ -18821,7 +18821,7 @@
         "integration_serialization_scylla_test.go::truncateTable",
         "integration_serialization_scylla_test.go::validateResult"
       ],
-      "test": "TestSliceMapMapScanCounterTypes",
+      "test": "TestScan/Dynamic/Counter",
       "translated": {
         "assertions": [
           {
@@ -18876,7 +18876,7 @@
     },
     {
       "file": "integration_serialization_scylla_test.go",
-      "identity": "integration_serialization_scylla_test.go::TestSliceMapMapScanTupleTypes",
+      "identity": "integration_serialization_scylla_test.go::TestScan/Dynamic/Tuple",
       "original": {
         "assertions": [
           {
@@ -18983,7 +18983,7 @@
         "integration_serialization_scylla_test.go::retryOnTopologyBusyWithSleep",
         "integration_serialization_scylla_test.go::truncateTable"
       ],
-      "test": "TestSliceMapMapScanTupleTypes",
+      "test": "TestScan/Dynamic/Tuple",
       "translated": {
         "assertions": [
           {
@@ -19045,7 +19045,7 @@
     },
     {
       "file": "integration_serialization_scylla_test.go",
-      "identity": "integration_serialization_scylla_test.go::TestSliceMapMapScanVectorTypes",
+      "identity": "integration_serialization_scylla_test.go::TestScan/Dynamic/Vector",
       "original": {
         "assertions": [
           {
@@ -19149,7 +19149,7 @@
         "integration_serialization_scylla_test.go::truncateTable",
         "integration_serialization_scylla_test.go::validateResult"
       ],
-      "test": "TestSliceMapMapScanVectorTypes",
+      "test": "TestScan/Dynamic/Vector",
       "translated": {
         "assertions": [
           {
@@ -19213,7 +19213,7 @@
     },
     {
       "file": "integration_serialization_scylla_test.go",
-      "identity": "integration_serialization_scylla_test.go::TestSliceMapMapScanCollectionTypes",
+      "identity": "integration_serialization_scylla_test.go::TestScan/Dynamic/Collections",
       "original": {
         "assertions": [
           {
@@ -19315,7 +19315,7 @@
         "integration_serialization_scylla_test.go::truncateTable",
         "integration_serialization_scylla_test.go::validateResult"
       ],
-      "test": "TestSliceMapMapScanCollectionTypes",
+      "test": "TestScan/Dynamic/Collections",
       "translated": {
         "assertions": [
           {
@@ -19381,7 +19381,7 @@
     },
     {
       "file": "integration_test.go",
-      "identity": "integration_test.go::TestAuthentication",
+      "identity": "integration_test.go::TestSession/Connect/Authentication",
       "original": {
         "assertions": [
           {
@@ -19413,7 +19413,7 @@
         "common_test.go::createCluster",
         "common_test.go::getClusterHosts"
       ],
-      "test": "TestAuthentication",
+      "test": "TestSession/Connect/Authentication",
       "translated": {
         "assertions": [
           {
@@ -19461,7 +19461,7 @@
     },
     {
       "file": "integration_test.go",
-      "identity": "integration_test.go::TestGetHostsFromSystem",
+      "identity": "integration_test.go::TestMetadata/Hosts/FromSystem",
       "original": {
         "assertions": [
           {
@@ -19505,7 +19505,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestGetHostsFromSystem",
+      "test": "TestMetadata/Hosts/FromSystem",
       "translated": {
         "assertions": [
           {
@@ -19571,7 +19571,7 @@
     },
     {
       "file": "integration_test.go",
-      "identity": "integration_test.go::TestRingDiscovery",
+      "identity": "integration_test.go::TestMetadata/Hosts/RingDiscovery",
       "original": {
         "assertions": [
           {
@@ -19612,7 +19612,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestRingDiscovery",
+      "test": "TestMetadata/Hosts/RingDiscovery",
       "translated": {
         "assertions": [
           {
@@ -19655,7 +19655,7 @@
     },
     {
       "file": "integration_test.go",
-      "identity": "integration_test.go::TestHostFilterDiscovery",
+      "identity": "integration_test.go::TestRouting/HostFilter/Discovery",
       "original": {
         "assertions": [
           {
@@ -19702,7 +19702,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestHostFilterDiscovery",
+      "test": "TestRouting/HostFilter/Discovery",
       "translated": {
         "assertions": [
           {
@@ -19776,7 +19776,7 @@
     },
     {
       "file": "integration_test.go",
-      "identity": "integration_test.go::TestHostFilterInitial",
+      "identity": "integration_test.go::TestRouting/HostFilter/Initial",
       "original": {
         "assertions": [
           {
@@ -19823,7 +19823,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestHostFilterInitial",
+      "test": "TestRouting/HostFilter/Initial",
       "translated": {
         "assertions": [
           {
@@ -19897,7 +19897,7 @@
     },
     {
       "file": "integration_test.go",
-      "identity": "integration_test.go::TestApplicationInformation",
+      "identity": "integration_test.go::TestSession/Startup/ApplicationInfo",
       "original": {
         "assertions": [
           {
@@ -19950,7 +19950,7 @@
         "common_test.go::createCluster",
         "common_test.go::getClusterHosts"
       ],
-      "test": "TestApplicationInformation",
+      "test": "TestSession/Startup/ApplicationInfo",
       "translated": {
         "assertions": [
           {
@@ -20001,7 +20001,7 @@
     },
     {
       "file": "integration_test.go",
-      "identity": "integration_test.go::TestDriverConfigReporting",
+      "identity": "integration_test.go::TestSession/Startup/DriverConfig",
       "original": {
         "assertions": [
           {
@@ -20097,7 +20097,7 @@
         "scylla_shard_aware_port_common_test.go::checkIfPoolsStoppedFilling",
         "scylla_shard_aware_port_common_test.go::waitUntilPoolsStopFilling"
       ],
-      "test": "TestDriverConfigReporting",
+      "test": "TestSession/Startup/DriverConfig",
       "translated": {
         "assertions": [
           {
@@ -20199,7 +20199,7 @@
     },
     {
       "file": "integration_test.go",
-      "identity": "integration_test.go::TestWriteFailure",
+      "identity": "integration_test.go::TestQuery/Errors/WriteFailure",
       "original": {
         "assertions": [
           {
@@ -20270,7 +20270,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestWriteFailure",
+      "test": "TestQuery/Errors/WriteFailure",
       "translated": {
         "assertions": [
           {
@@ -20343,7 +20343,7 @@
     },
     {
       "file": "integration_test.go",
-      "identity": "integration_test.go::TestCustomPayloadMessages",
+      "identity": "integration_test.go::TestQuery/CustomPayload/Messages",
       "original": {
         "assertions": [
           {
@@ -20411,7 +20411,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestCustomPayloadMessages",
+      "test": "TestQuery/CustomPayload/Messages",
       "translated": {
         "assertions": [
           {
@@ -20504,7 +20504,7 @@
     },
     {
       "file": "integration_test.go",
-      "identity": "integration_test.go::TestCustomPayloadValues",
+      "identity": "integration_test.go::TestQuery/CustomPayload/Values",
       "original": {
         "assertions": [
           {
@@ -20557,7 +20557,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestCustomPayloadValues",
+      "test": "TestQuery/CustomPayload/Values",
       "translated": {
         "assertions": [
           {
@@ -20627,7 +20627,7 @@
     },
     {
       "file": "integration_test.go",
-      "identity": "integration_test.go::TestSessionAwaitSchemaAgreement",
+      "identity": "integration_test.go::TestSession/AwaitSchemaAgreement/Agrees",
       "original": {
         "assertions": [
           {
@@ -20662,7 +20662,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestSessionAwaitSchemaAgreement",
+      "test": "TestSession/AwaitSchemaAgreement/Agrees",
       "translated": {
         "assertions": [
           {
@@ -20698,7 +20698,7 @@
     },
     {
       "file": "integration_test.go",
-      "identity": "integration_test.go::TestSessionAwaitSchemaAgreementSessionClosed",
+      "identity": "integration_test.go::TestSession/AwaitSchemaAgreement/SessionClosed",
       "original": {
         "assertions": [
           {
@@ -20734,7 +20734,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestSessionAwaitSchemaAgreementSessionClosed",
+      "test": "TestSession/AwaitSchemaAgreement/SessionClosed",
       "translated": {
         "assertions": [
           {
@@ -20771,7 +20771,7 @@
     },
     {
       "file": "integration_test.go",
-      "identity": "integration_test.go::TestSessionAwaitSchemaAgreementContextCanceled",
+      "identity": "integration_test.go::TestSession/AwaitSchemaAgreement/ContextCanceled",
       "original": {
         "assertions": [
           {
@@ -20808,7 +20808,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestSessionAwaitSchemaAgreementContextCanceled",
+      "test": "TestSession/AwaitSchemaAgreement/ContextCanceled",
       "translated": {
         "assertions": [
           {
@@ -20847,7 +20847,7 @@
     },
     {
       "file": "integration_test.go",
-      "identity": "integration_test.go::TestNewConnectWithLowTimeout",
+      "identity": "integration_test.go::TestSession/Connect/LowTimeout",
       "original": {
         "assertions": [
           {
@@ -20915,7 +20915,7 @@
         "common_test.go::createCluster",
         "common_test.go::getClusterHosts"
       ],
-      "test": "TestNewConnectWithLowTimeout",
+      "test": "TestSession/Connect/LowTimeout",
       "translated": {
         "assertions": [
           {
@@ -21118,7 +21118,7 @@
     },
     {
       "file": "keyspace_table_test.go",
-      "identity": "keyspace_table_test.go::TestKeyspaceTable",
+      "identity": "keyspace_table_test.go::TestPrepared/Prepare/KeyspaceTable",
       "original": {
         "assertions": [
           {
@@ -21201,7 +21201,7 @@
         "common_test.go::testKeyspaceName",
         "common_test.go::testTableName"
       ],
-      "test": "TestKeyspaceTable",
+      "test": "TestPrepared/Prepare/KeyspaceTable",
       "translated": {
         "assertions": [
           {
@@ -21340,7 +21340,7 @@
     },
     {
       "file": "policies_integration_test.go",
-      "identity": "policies_integration_test.go::TestDCValidationTokenAware",
+      "identity": "policies_integration_test.go::TestRouting/DCValidation/TokenAware",
       "original": {
         "assertions": [
           {
@@ -21367,7 +21367,7 @@
         "common_test.go::createCluster",
         "common_test.go::getClusterHosts"
       ],
-      "test": "TestDCValidationTokenAware",
+      "test": "TestRouting/DCValidation/TokenAware",
       "translated": {
         "assertions": null,
         "calls": [
@@ -21389,7 +21389,7 @@
     },
     {
       "file": "policies_integration_test.go",
-      "identity": "policies_integration_test.go::TestDCValidationDCAware",
+      "identity": "policies_integration_test.go::TestRouting/DCValidation/DCAware",
       "original": {
         "assertions": [
           {
@@ -21415,7 +21415,7 @@
         "common_test.go::createCluster",
         "common_test.go::getClusterHosts"
       ],
-      "test": "TestDCValidationDCAware",
+      "test": "TestRouting/DCValidation/DCAware",
       "translated": {
         "assertions": null,
         "calls": [
@@ -21437,7 +21437,7 @@
     },
     {
       "file": "policies_integration_test.go",
-      "identity": "policies_integration_test.go::TestDCValidationRackAware",
+      "identity": "policies_integration_test.go::TestRouting/DCValidation/RackAware",
       "original": {
         "assertions": [
           {
@@ -21463,7 +21463,7 @@
         "common_test.go::createCluster",
         "common_test.go::getClusterHosts"
       ],
-      "test": "TestDCValidationRackAware",
+      "test": "TestRouting/DCValidation/RackAware",
       "translated": {
         "assertions": null,
         "calls": [
@@ -21485,7 +21485,7 @@
     },
     {
       "file": "policies_integration_test.go",
-      "identity": "policies_integration_test.go::TestTokenAwareHostPolicy",
+      "identity": "policies_integration_test.go::TestRouting/TokenAware/HostPolicy",
       "original": {
         "assertions": null,
         "calls": [
@@ -21517,7 +21517,7 @@
         "common_test.go::testTableName",
         "policies_integration_test.go::testIfPolicyInitializedProperly"
       ],
-      "test": "TestTokenAwareHostPolicy",
+      "test": "TestRouting/TokenAware/HostPolicy",
       "translated": {
         "assertions": null,
         "calls": [
@@ -21561,7 +21561,7 @@
     },
     {
       "file": "policies_integration_test.go",
-      "identity": "policies_integration_test.go::TestNoHangAllHostsDown",
+      "identity": "policies_integration_test.go::TestRouting/AllHostsDown",
       "original": {
         "assertions": [
           {
@@ -21616,7 +21616,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestNoHangAllHostsDown",
+      "test": "TestRouting/AllHostsDown",
       "translated": {
         "assertions": [
           {
@@ -21689,7 +21689,7 @@
     },
     {
       "file": "recreate_test.go",
-      "identity": "recreate_test.go::TestRecreateSchema",
+      "identity": "recreate_test.go::TestMetadata/Recreate",
       "original": {
         "assertions": [
           {
@@ -21842,7 +21842,7 @@
         "recreate_test.go::trimQueries",
         "recreate_test.go::trimSchema"
       ],
-      "test": "TestRecreateSchema",
+      "test": "TestMetadata/Recreate",
       "translated": {
         "assertions": [
           {
@@ -22005,7 +22005,7 @@
     },
     {
       "file": "schema_queries_test.go",
-      "identity": "schema_queries_test.go::TestSchemaQueries",
+      "identity": "schema_queries_test.go::TestMetadata/Keyspace/TokenAwareSession",
       "original": {
         "assertions": [
           {
@@ -22046,7 +22046,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestSchemaQueries",
+      "test": "TestMetadata/Keyspace/TokenAwareSession",
       "translated": {
         "assertions": [
           {
@@ -22090,7 +22090,7 @@
     },
     {
       "file": "scylla_shard_aware_port_integration_test.go",
-      "identity": "scylla_shard_aware_port_integration_test.go::TestShardAwarePortIntegrationNoReconnections",
+      "identity": "scylla_shard_aware_port_integration_test.go::TestPool/ShardAwarePort/NoReconnections",
       "original": {
         "assertions": null,
         "calls": [
@@ -22114,7 +22114,7 @@
         "scylla_shard_aware_port_common_test.go::testShardAwarePortNoReconnections",
         "scylla_shard_aware_port_common_test.go::waitUntilPoolsStopFilling"
       ],
-      "test": "TestShardAwarePortIntegrationNoReconnections",
+      "test": "TestPool/ShardAwarePort/NoReconnections",
       "translated": {
         "assertions": null,
         "calls": [
@@ -22137,7 +22137,7 @@
     },
     {
       "file": "scylla_shard_aware_port_integration_test.go",
-      "identity": "scylla_shard_aware_port_integration_test.go::TestShardAwarePortIntegrationMaliciousNAT",
+      "identity": "scylla_shard_aware_port_integration_test.go::TestPool/ShardAwarePort/MaliciousNAT",
       "original": {
         "assertions": null,
         "calls": [
@@ -22161,7 +22161,7 @@
         "scylla_shard_aware_port_common_test.go::triggerPoolsRefill",
         "scylla_shard_aware_port_common_test.go::waitUntilPoolsStopFilling"
       ],
-      "test": "TestShardAwarePortIntegrationMaliciousNAT",
+      "test": "TestPool/ShardAwarePort/MaliciousNAT",
       "translated": {
         "assertions": null,
         "calls": [
@@ -22184,7 +22184,7 @@
     },
     {
       "file": "scylla_shard_aware_port_integration_test.go",
-      "identity": "scylla_shard_aware_port_integration_test.go::TestShardAwarePortIntegrationUnreachable",
+      "identity": "scylla_shard_aware_port_integration_test.go::TestPool/ShardAwarePort/Unreachable",
       "original": {
         "assertions": null,
         "calls": [
@@ -22209,7 +22209,7 @@
         "scylla_shard_aware_port_common_test.go::triggerPoolsRefill",
         "scylla_shard_aware_port_common_test.go::waitUntilPoolsStopFilling"
       ],
-      "test": "TestShardAwarePortIntegrationUnreachable",
+      "test": "TestPool/ShardAwarePort/Unreachable",
       "translated": {
         "assertions": null,
         "calls": [
@@ -22232,7 +22232,7 @@
     },
     {
       "file": "scylla_shard_aware_port_integration_test.go",
-      "identity": "scylla_shard_aware_port_integration_test.go::TestShardAwarePortIntegrationUnusedIfNotEnabled",
+      "identity": "scylla_shard_aware_port_integration_test.go::TestPool/ShardAwarePort/UnusedIfNotEnabled",
       "original": {
         "assertions": null,
         "calls": [
@@ -22256,7 +22256,7 @@
         "scylla_shard_aware_port_common_test.go::testShardAwarePortUnusedIfNotEnabled",
         "scylla_shard_aware_port_common_test.go::waitUntilPoolsStopFilling"
       ],
-      "test": "TestShardAwarePortIntegrationUnusedIfNotEnabled",
+      "test": "TestPool/ShardAwarePort/UnusedIfNotEnabled",
       "translated": {
         "assertions": null,
         "calls": [
@@ -22279,7 +22279,7 @@
     },
     {
       "file": "select_without_from_integration_test.go",
-      "identity": "select_without_from_integration_test.go::TestSelectWithoutFromLiteral",
+      "identity": "select_without_from_integration_test.go::TestSelectWithoutFrom/Exec/Literal",
       "original": {
         "assertions": [
           {
@@ -22342,7 +22342,7 @@
         "select_without_from_integration_test.go::logColumns",
         "select_without_from_integration_test.go::skipUnlessSelectWithoutFrom"
       ],
-      "test": "TestSelectWithoutFromLiteral",
+      "test": "TestSelectWithoutFrom/Exec/Literal",
       "translated": {
         "assertions": [
           {
@@ -22412,7 +22412,7 @@
     },
     {
       "file": "select_without_from_integration_test.go",
-      "identity": "select_without_from_integration_test.go::TestSelectWithoutFromFilteredOut",
+      "identity": "select_without_from_integration_test.go::TestSelectWithoutFrom/Exec/Where",
       "original": {
         "assertions": [
           {
@@ -22476,7 +22476,7 @@
         "select_without_from_integration_test.go::createSessionWithoutKeyspace",
         "select_without_from_integration_test.go::skipUnlessSelectWithoutFrom"
       ],
-      "test": "TestSelectWithoutFromFilteredOut",
+      "test": "TestSelectWithoutFrom/Exec/Where",
       "translated": {
         "assertions": [
           {
@@ -22541,7 +22541,7 @@
     },
     {
       "file": "select_without_from_integration_test.go",
-      "identity": "select_without_from_integration_test.go::TestSelectWithoutFromNow",
+      "identity": "select_without_from_integration_test.go::TestSelectWithoutFrom/Exec/Now",
       "original": {
         "assertions": [
           {
@@ -22606,7 +22606,7 @@
         "select_without_from_integration_test.go::logColumns",
         "select_without_from_integration_test.go::skipUnlessSelectWithoutFrom"
       ],
-      "test": "TestSelectWithoutFromNow",
+      "test": "TestSelectWithoutFrom/Exec/Now",
       "translated": {
         "assertions": [
           {
@@ -22667,7 +22667,7 @@
     },
     {
       "file": "select_without_from_integration_test.go",
-      "identity": "select_without_from_integration_test.go::TestSelectWithoutFromFunctionCast",
+      "identity": "select_without_from_integration_test.go::TestSelectWithoutFrom/Exec/FunctionCast",
       "original": {
         "assertions": [
           {
@@ -22726,7 +22726,7 @@
         "select_without_from_integration_test.go::logColumns",
         "select_without_from_integration_test.go::skipUnlessSelectWithoutFrom"
       ],
-      "test": "TestSelectWithoutFromFunctionCast",
+      "test": "TestSelectWithoutFrom/Exec/FunctionCast",
       "translated": {
         "assertions": [
           {
@@ -22783,7 +22783,7 @@
     },
     {
       "file": "select_without_from_integration_test.go",
-      "identity": "select_without_from_integration_test.go::TestSelectWithoutFromMultipleSelectors",
+      "identity": "select_without_from_integration_test.go::TestSelectWithoutFrom/Exec/MultipleSelectors",
       "original": {
         "assertions": [
           {
@@ -22837,7 +22837,7 @@
         "select_without_from_integration_test.go::logColumns",
         "select_without_from_integration_test.go::skipUnlessSelectWithoutFrom"
       ],
-      "test": "TestSelectWithoutFromMultipleSelectors",
+      "test": "TestSelectWithoutFrom/Exec/MultipleSelectors",
       "translated": {
         "assertions": [
           {
@@ -22896,7 +22896,7 @@
     },
     {
       "file": "select_without_from_integration_test.go",
-      "identity": "select_without_from_integration_test.go::TestSelectWithoutFromAlias",
+      "identity": "select_without_from_integration_test.go::TestSelectWithoutFrom/Exec/Alias",
       "original": {
         "assertions": [
           {
@@ -22956,7 +22956,7 @@
         "select_without_from_integration_test.go::logColumns",
         "select_without_from_integration_test.go::skipUnlessSelectWithoutFrom"
       ],
-      "test": "TestSelectWithoutFromAlias",
+      "test": "TestSelectWithoutFrom/Exec/Alias",
       "translated": {
         "assertions": [
           {
@@ -23023,7 +23023,7 @@
     },
     {
       "file": "select_without_from_integration_test.go",
-      "identity": "select_without_from_integration_test.go::TestSelectWithoutFromExecutionModes",
+      "identity": "select_without_from_integration_test.go::TestSelectWithoutFrom/ExecutionModes",
       "original": {
         "assertions": [
           {
@@ -23097,7 +23097,7 @@
         "select_without_from_integration_test.go::logColumns",
         "select_without_from_integration_test.go::skipUnlessSelectWithoutFrom"
       ],
-      "test": "TestSelectWithoutFromExecutionModes",
+      "test": "TestSelectWithoutFrom/ExecutionModes",
       "translated": {
         "assertions": [
           {
@@ -23197,7 +23197,7 @@
     },
     {
       "file": "select_without_from_integration_test.go",
-      "identity": "select_without_from_integration_test.go::TestSelectWithoutFromBindMarker",
+      "identity": "select_without_from_integration_test.go::TestSelectWithoutFrom/Bind",
       "original": {
         "assertions": [
           {
@@ -23284,7 +23284,7 @@
         "select_without_from_integration_test.go::serverErrorCode",
         "select_without_from_integration_test.go::skipUnlessSelectWithoutFrom"
       ],
-      "test": "TestSelectWithoutFromBindMarker",
+      "test": "TestSelectWithoutFrom/Bind",
       "translated": {
         "assertions": [
           {
@@ -23355,7 +23355,7 @@
     },
     {
       "file": "select_without_from_integration_test.go",
-      "identity": "select_without_from_integration_test.go::TestSelectWithoutFromRoutingKey",
+      "identity": "select_without_from_integration_test.go::TestSelectWithoutFrom/RoutingKey",
       "original": {
         "assertions": [
           {
@@ -23411,7 +23411,7 @@
         "select_without_from_integration_test.go::createSessionWithoutKeyspace",
         "select_without_from_integration_test.go::skipUnlessSelectWithoutFrom"
       ],
-      "test": "TestSelectWithoutFromRoutingKey",
+      "test": "TestSelectWithoutFrom/RoutingKey",
       "translated": {
         "assertions": [
           {
@@ -23487,7 +23487,7 @@
     },
     {
       "file": "select_without_from_integration_test.go",
-      "identity": "select_without_from_integration_test.go::TestSelectWithoutFromTokenAware",
+      "identity": "select_without_from_integration_test.go::TestSelectWithoutFrom/TokenAware",
       "original": {
         "assertions": [
           {
@@ -23529,7 +23529,7 @@
         "common_test.go::getClusterHosts",
         "select_without_from_integration_test.go::skipUnlessSelectWithoutFrom"
       ],
-      "test": "TestSelectWithoutFromTokenAware",
+      "test": "TestSelectWithoutFrom/TokenAware",
       "translated": {
         "assertions": [
           {
@@ -23585,7 +23585,7 @@
     },
     {
       "file": "select_without_from_integration_test.go",
-      "identity": "select_without_from_integration_test.go::TestSelectWithoutFromMapScan",
+      "identity": "select_without_from_integration_test.go::TestSelectWithoutFrom/DynamicScan",
       "original": {
         "assertions": [
           {
@@ -23642,7 +23642,7 @@
         "select_without_from_integration_test.go::logColumns",
         "select_without_from_integration_test.go::skipUnlessSelectWithoutFrom"
       ],
-      "test": "TestSelectWithoutFromMapScan",
+      "test": "TestSelectWithoutFrom/DynamicScan",
       "translated": {
         "assertions": [
           {
@@ -23709,7 +23709,7 @@
     },
     {
       "file": "select_without_from_integration_test.go",
-      "identity": "select_without_from_integration_test.go::TestSelectWithoutFromAggregate",
+      "identity": "select_without_from_integration_test.go::TestSelectWithoutFrom/Exec/Aggregate",
       "original": {
         "assertions": [
           {
@@ -23744,7 +23744,7 @@
         "select_without_from_integration_test.go::createSessionWithoutKeyspace",
         "select_without_from_integration_test.go::skipUnlessSelectWithoutFrom"
       ],
-      "test": "TestSelectWithoutFromAggregate",
+      "test": "TestSelectWithoutFrom/Exec/Aggregate",
       "translated": {
         "assertions": [
           {
@@ -23781,7 +23781,7 @@
     },
     {
       "file": "select_without_from_integration_test.go",
-      "identity": "select_without_from_integration_test.go::TestSelectWithoutFromJSON",
+      "identity": "select_without_from_integration_test.go::TestSelectWithoutFrom/Exec/JSON",
       "original": {
         "assertions": [
           {
@@ -23839,7 +23839,7 @@
         "select_without_from_integration_test.go::createSessionWithoutKeyspace",
         "select_without_from_integration_test.go::skipUnlessSelectWithoutFrom"
       ],
-      "test": "TestSelectWithoutFromJSON",
+      "test": "TestSelectWithoutFrom/Exec/JSON",
       "translated": {
         "assertions": [
           {
@@ -23892,7 +23892,7 @@
     },
     {
       "file": "select_without_from_integration_test.go",
-      "identity": "select_without_from_integration_test.go::TestSelectWithoutFromWithKeyspace",
+      "identity": "select_without_from_integration_test.go::TestSelectWithoutFrom/Exec/SessionKeyspace",
       "original": {
         "assertions": [
           {
@@ -23939,7 +23939,7 @@
         "common_test.go::isTabletsSupported",
         "select_without_from_integration_test.go::skipUnlessSelectWithoutFrom"
       ],
-      "test": "TestSelectWithoutFromWithKeyspace",
+      "test": "TestSelectWithoutFrom/Exec/SessionKeyspace",
       "translated": {
         "assertions": [
           {
@@ -23986,7 +23986,7 @@
     },
     {
       "file": "select_without_from_integration_test.go",
-      "identity": "select_without_from_integration_test.go::TestSelectWithoutFromUnqualifiedUDF",
+      "identity": "select_without_from_integration_test.go::TestSelectWithoutFrom/UDF",
       "original": {
         "assertions": [
           {
@@ -24067,7 +24067,7 @@
         "select_without_from_integration_test.go::serverErrorCode",
         "select_without_from_integration_test.go::skipUnlessSelectWithoutFrom"
       ],
-      "test": "TestSelectWithoutFromUnqualifiedUDF",
+      "test": "TestSelectWithoutFrom/UDF",
       "translated": {
         "assertions": [
           {
@@ -24139,7 +24139,7 @@
     },
     {
       "file": "select_without_from_integration_test.go",
-      "identity": "select_without_from_integration_test.go::TestSelectWithoutFromRejected",
+      "identity": "select_without_from_integration_test.go::TestSelectWithoutFrom/Rejected",
       "original": {
         "assertions": [
           {
@@ -24195,7 +24195,7 @@
         "select_without_from_integration_test.go::serverErrorCode",
         "select_without_from_integration_test.go::skipUnlessSelectWithoutFrom"
       ],
-      "test": "TestSelectWithoutFromRejected",
+      "test": "TestSelectWithoutFrom/Rejected",
       "translated": {
         "assertions": [
           {
@@ -24264,7 +24264,7 @@
     },
     {
       "file": "session_event_bus_integration_test.go",
-      "identity": "session_event_bus_integration_test.go::TestSessionEventBusReceivesSchemaChangeEvent",
+      "identity": "session_event_bus_integration_test.go::TestMetadata/Events/SchemaChange",
       "original": {
         "assertions": [
           {
@@ -24312,7 +24312,7 @@
         "common_test.go::createCluster",
         "common_test.go::getClusterHosts"
       ],
-      "test": "TestSessionEventBusReceivesSchemaChangeEvent",
+      "test": "TestMetadata/Events/SchemaChange",
       "translated": {
         "assertions": [
           {
@@ -24372,7 +24372,7 @@
     },
     {
       "file": "session_event_bus_integration_test.go",
-      "identity": "session_event_bus_integration_test.go::TestSessionEventBusReceivesControlReconnectEvent",
+      "identity": "session_event_bus_integration_test.go::TestMetadata/Events/ControlReconnect",
       "original": {
         "assertions": [
           {
@@ -24417,7 +24417,7 @@
         "common_test.go::createCluster",
         "common_test.go::getClusterHosts"
       ],
-      "test": "TestSessionEventBusReceivesControlReconnectEvent",
+      "test": "TestMetadata/Events/ControlReconnect",
       "translated": {
         "assertions": [
           {
@@ -24471,7 +24471,7 @@
     },
     {
       "file": "session_test.go",
-      "identity": "session_test.go::TestSessionAPI",
+      "identity": "session_test.go::TestSession/Close/Unconnected",
       "original": {
         "assertions": [
           {
@@ -24555,7 +24555,7 @@
         "source": "func TestSessionAPI(t *testing.T) {\n\tt.Parallel()\n\n\tcfg := &ClusterConfig{}\n\n\ts := &Session{\n\t\tcfg:    *cfg,\n\t\tcons:   Quorum,\n\t\tpolicy: RoundRobinHostPolicy(),\n\t\tlogger: cfg.logger(),\n\t}\n\n\ts.pool = cfg.PoolConfig.buildPool(s)\n\ts.executor = &queryExecutor{\n\t\tpool:   s.pool,\n\t\tpolicy: s.policy,\n\t}\n\tdefer s.Close()\n\n\ts.SetConsistency(All)\n\tif s.cons != All {\n\t\tt.Fatalf(\"expected consistency 'All', got '%v'\", s.cons)\n\t}\n\n\ts.SetPageSize(100)\n\tif s.pageSize != 100 {\n\t\tt.Fatalf(\"expected pageSize 100, got %v\", s.pageSize)\n\t}\n\n\ts.SetPrefetch(0.75)\n\tif s.prefetch != 0.75 {\n\t\tt.Fatalf(\"expceted prefetch 0.75, got %v\", s.prefetch)\n\t}\n\n\ttrace := NewTracer(nil)\n\n\ts.SetTrace(trace)\n\tif s.trace != trace {\n\t\tt.Fatalf(\"expected tracer '%v',got '%v'\", trace, s.trace)\n\t}\n\n\tqry := s.Query(\"test\", 1)\n\tif v, ok := qry.values[0].(int); !ok {\n\t\tt.Fatalf(\"expected qry.values[0] to be an int, got %v\", qry.values[0])\n\t} else if v != 1 {\n\t\tt.Fatalf(\"expceted qry.values[0] to be 1, got %v\", v)\n\t} else if qry.stmt != \"test\" {\n\t\tt.Fatalf(\"expected qry.stmt to be 'test', got '%v'\", qry.stmt)\n\t}\n\n\tboundQry := s.Bind(\"test\", func(q *QueryInfo) ([]any, error) {\n\t\treturn nil, nil\n\t})\n\tif boundQry.binding == nil {\n\t\tt.Fatal(\"expected qry.binding to be defined, got nil\")\n\t} else if boundQry.stmt != \"test\" {\n\t\tt.Fatalf(\"expected qry.stmt to be 'test', got '%v'\", boundQry.stmt)\n\t}\n\n\titr := qry.Iter()\n\tif itr.err != ErrSessionNotReady {\n\t\tt.Fatalf(\"expected itr.err to be '%v', got '%v'\", ErrSessionNotReady, itr.err)\n\t}\n\n\ttestBatch := s.Batch(LoggedBatch)\n\ttestBatch.Query(\"test\")\n\terr := s.ExecuteBatch(testBatch)\n\n\tif err != ErrSessionNotReady {\n\t\tt.Fatalf(\"expected session.ExecuteBatch to return '%v', got '%v'\", ErrSessionNotReady, err)\n\t}\n\n\ts.Close()\n\tif !s.Closed() {\n\t\tt.Fatal(\"expected s.Closed() to be true, got false\")\n\t}\n\t//Should just return cleanly\n\ts.Close()\n\n\terr = s.ExecuteBatch(testBatch)\n\tif err != ErrSessionClosed {\n\t\tt.Fatalf(\"expected session.ExecuteBatch to return '%v', got '%v'\", ErrSessionClosed, err)\n\t}\n}"
       },
       "original_helper_ids": null,
-      "test": "TestSessionAPI",
+      "test": "TestSession/Close/Unconnected",
       "translated": {
         "assertions": [
           {
@@ -24664,7 +24664,7 @@
     },
     {
       "file": "session_test.go",
-      "identity": "session_test.go::TestQueryBasicAPI",
+      "identity": "session_test.go::TestQuery/Exec/Basic",
       "original": {
         "assertions": [
           {
@@ -24749,7 +24749,7 @@
         "source": "func TestQueryBasicAPI(t *testing.T) {\n\tt.Parallel()\n\n\tqry := &Query{routingInfo: &queryRoutingInfo{}}\n\n\t// Initiate host\n\tip := \"127.0.0.1\"\n\thostID := TimeUUID()\n\n\tqry.metrics = preFilledQueryMetrics(map[UUID]*hostMetrics{hostID: {Attempts: 0, TotalLatency: 0}})\n\tif qry.Latency() != 0 {\n\t\tt.Fatalf(\"expected Query.Latency() to return 0, got %v\", qry.Latency())\n\t}\n\n\tqry.metrics = preFilledQueryMetrics(map[UUID]*hostMetrics{hostID: {Attempts: 2, TotalLatency: 4}})\n\tif qry.Attempts() != 2 {\n\t\tt.Fatalf(\"expected Query.Attempts() to return 2, got %v\", qry.Attempts())\n\t}\n\tif qry.Latency() != 2 {\n\t\tt.Fatalf(\"expected Query.Latency() to return 2, got %v\", qry.Latency())\n\t}\n\n\tqry.AddAttempts(2, &HostInfo{hostname: ip, connectAddress: net.ParseIP(ip), port: 9042})\n\tif qry.Attempts() != 4 {\n\t\tt.Fatalf(\"expected Query.Attempts() to return 4, got %v\", qry.Attempts())\n\t}\n\n\tqry.Consistency(All)\n\tif qry.GetConsistency() != All {\n\t\tt.Fatalf(\"expected Query.GetConsistency to return 'All', got '%s'\", qry.GetConsistency())\n\t}\n\n\tqry.Consistency(LocalSerial)\n\tif qry.GetConsistency() != LocalSerial {\n\t\tt.Fatalf(\"expected Query.GetConsistency to return 'LocalSerial', got '%s'\", qry.GetConsistency())\n\t}\n\n\tqry.SerialConsistency(LocalSerial)\n\tif qry.GetConsistency() != LocalSerial {\n\t\tt.Fatalf(\"expected Query.GetConsistency to return 'LocalSerial', got '%s'\", qry.GetConsistency())\n\t}\n\n\ttrace := NewTracer(nil)\n\tqry.Trace(trace)\n\tif qry.trace != trace {\n\t\tt.Fatalf(\"expected Query.Trace to be '%v', got '%v'\", trace, qry.trace)\n\t}\n\n\tobserver := funcQueryObserver(func(context.Context, ObservedQuery) {})\n\tqry.Observer(observer)\n\tif qry.observer == nil { // can't compare func to func, checking not nil instead\n\t\tt.Fatal(\"expected Query.QueryObserver to be set, got nil\")\n\t}\n\n\tqry.PageSize(10)\n\tif qry.pageSize != 10 {\n\t\tt.Fatalf(\"expected Query.PageSize to be 10, got %v\", qry.pageSize)\n\t}\n\n\tqry.Prefetch(0.75)\n\tif qry.prefetch != 0.75 {\n\t\tt.Fatalf(\"expected Query.Prefetch to be 0.75, got %v\", qry.prefetch)\n\t}\n\n\trt := &SimpleRetryPolicy{NumRetries: 3}\n\tif qry.RetryPolicy(rt); qry.rt != rt {\n\t\tt.Fatalf(\"expected Query.RetryPolicy to be '%v', got '%v'\", rt, qry.rt)\n\t}\n\n\tqry.Bind(qry)\n\tif qry.values[0] != qry {\n\t\tt.Fatalf(\"expected Query.Values[0] to be '%v', got '%v'\", qry, qry.values[0])\n\t}\n}"
       },
       "original_helper_ids": null,
-      "test": "TestQueryBasicAPI",
+      "test": "TestQuery/Exec/Basic",
       "translated": {
         "assertions": [
           {
@@ -24955,7 +24955,7 @@
     },
     {
       "file": "session_test.go",
-      "identity": "session_test.go::TestQueryShouldPrepare",
+      "identity": "session_test.go::TestQuery/ShouldPrepare/Keywords",
       "original": {
         "assertions": [
           {
@@ -24980,7 +24980,7 @@
         "source": "func TestQueryShouldPrepare(t *testing.T) {\n\tt.Parallel()\n\n\ttoPrepare := []string{\"select * \", \"INSERT INTO\", \"update table\", \"delete from\", \"begin batch\"}\n\tcantPrepare := []string{\"create table\", \"USE table\", \"LIST keyspaces\", \"alter table\", \"drop table\", \"grant user\", \"revoke user\"}\n\n\tfor i := 0; i < len(toPrepare); i++ {\n\t\tq := &Query{stmt: toPrepare[i], routingInfo: &queryRoutingInfo{}}\n\t\tif !q.shouldPrepare() {\n\t\t\tt.Fatalf(\"expected Query.shouldPrepare to return true, got false for statement '%v'\", toPrepare[i])\n\t\t}\n\t}\n\n\tfor i := 0; i < len(cantPrepare); i++ {\n\t\tq := &Query{stmt: cantPrepare[i], routingInfo: &queryRoutingInfo{}}\n\t\tif q.shouldPrepare() {\n\t\t\tt.Fatalf(\"expected Query.shouldPrepare to return false, got true for statement '%v'\", cantPrepare[i])\n\t\t}\n\t}\n}"
       },
       "original_helper_ids": null,
-      "test": "TestQueryShouldPrepare",
+      "test": "TestQuery/ShouldPrepare/Keywords",
       "translated": {
         "assertions": [
           {
@@ -25027,7 +25027,7 @@
     },
     {
       "file": "session_test.go",
-      "identity": "session_test.go::TestBatchBasicAPI",
+      "identity": "session_test.go::TestBatch/Exec/Basic",
       "original": {
         "assertions": [
           {
@@ -25120,7 +25120,7 @@
         "source": "func TestBatchBasicAPI(t *testing.T) {\n\tt.Parallel()\n\n\tcfg := &ClusterConfig{RetryPolicy: &SimpleRetryPolicy{NumRetries: 2}}\n\n\ts := &Session{\n\t\tcfg:    *cfg,\n\t\tcons:   Quorum,\n\t\tlogger: cfg.logger(),\n\t}\n\tdefer s.Close()\n\n\ts.pool = cfg.PoolConfig.buildPool(s)\n\n\t// Test UnloggedBatch\n\tb := s.Batch(UnloggedBatch)\n\tif b.Type != UnloggedBatch {\n\t\tt.Fatalf(\"expceted batch.Type to be '%v', got '%v'\", UnloggedBatch, b.Type)\n\t} else if b.rt != cfg.RetryPolicy {\n\t\tt.Fatalf(\"expceted batch.RetryPolicy to be '%v', got '%v'\", cfg.RetryPolicy, b.rt)\n\t}\n\n\t// Test LoggedBatch\n\tb = s.Batch(LoggedBatch)\n\tif b.Type != LoggedBatch {\n\t\tt.Fatalf(\"expected batch.Type to be '%v', got '%v'\", LoggedBatch, b.Type)\n\t}\n\n\tip := \"127.0.0.1\"\n\thostID := TimeUUID()\n\n\t// Test attempts\n\tb.metrics = preFilledQueryMetrics(map[UUID]*hostMetrics{hostID: {Attempts: 1}})\n\tif b.Attempts() != 1 {\n\t\tt.Fatalf(\"expected batch.Attempts() to return %v, got %v\", 1, b.Attempts())\n\t}\n\n\tb.AddAttempts(2, &HostInfo{hostname: ip, connectAddress: net.ParseIP(ip), port: 9042})\n\tif b.Attempts() != 3 {\n\t\tt.Fatalf(\"expected batch.Attempts() to return %v, got %v\", 3, b.Attempts())\n\t}\n\n\t// Test latency\n\tif b.Latency() != 0 {\n\t\tt.Fatalf(\"expected batch.Latency() to be 0, got %v\", b.Latency())\n\t}\n\n\tb.metrics = preFilledQueryMetrics(map[UUID]*hostMetrics{hostID: {Attempts: 1, TotalLatency: 4}})\n\tif b.Latency() != 4 {\n\t\tt.Fatalf(\"expected batch.Latency() to return %v, got %v\", 4, b.Latency())\n\t}\n\n\t// Test Consistency\n\tb.Cons = One\n\tif b.GetConsistency() != One {\n\t\tt.Fatalf(\"expected batch.GetConsistency() to return 'One', got '%s'\", b.GetConsistency())\n\t}\n\n\ttrace := NewTracer(nil)\n\tb.Trace(trace)\n\tif b.trace != trace {\n\t\tt.Fatalf(\"expected batch.Trace to be '%v', got '%v'\", trace, b.trace)\n\t}\n\n\t// Test batch.Query()\n\tb.Query(\"test\", 1)\n\tif b.Entries[0].Stmt != \"test\" {\n\t\tt.Fatalf(\"expected batch.Entries[0].Statement to be 'test', got '%v'\", b.Entries[0].Stmt)\n\t} else if b.Entries[0].Args[0].(int) != 1 {\n\t\tt.Fatalf(\"expected batch.Entries[0].Args[0] to be 1, got %v\", b.Entries[0].Args[0])\n\t}\n\n\tb.Bind(\"test2\", func(q *QueryInfo) ([]any, error) {\n\t\treturn nil, nil\n\t})\n\n\tif b.Entries[1].Stmt != \"test2\" {\n\t\tt.Fatalf(\"expected batch.Entries[1].Statement to be 'test2', got '%v'\", b.Entries[1].Stmt)\n\t} else if b.Entries[1].binding == nil {\n\t\tt.Fatal(\"expected batch.Entries[1].binding to be defined, got nil\")\n\t}\n\n\t// Test RetryPolicy\n\tr := &SimpleRetryPolicy{NumRetries: 4}\n\n\tb.RetryPolicy(r)\n\tif b.rt != r {\n\t\tt.Fatalf(\"expected batch.RetryPolicy to be '%v', got '%v'\", r, b.rt)\n\t}\n\n\tif b.Size() != 2 {\n\t\tt.Fatalf(\"expected batch.Size() to return 2, got %v\", b.Size())\n\t}\n\n}"
       },
       "original_helper_ids": null,
-      "test": "TestBatchBasicAPI",
+      "test": "TestBatch/Exec/Basic",
       "translated": {
         "assertions": [
           {
@@ -25278,7 +25278,7 @@
     },
     {
       "file": "session_test.go",
-      "identity": "session_test.go::TestConsistencyNames",
+      "identity": "session_test.go::TestQuery/ConsistencyString",
       "original": {
         "assertions": [
           {
@@ -25298,7 +25298,7 @@
         "source": "func TestConsistencyNames(t *testing.T) {\n\tt.Parallel()\n\n\tnames := map[fmt.Stringer]string{\n\t\tAny:         \"ANY\",\n\t\tOne:         \"ONE\",\n\t\tTwo:         \"TWO\",\n\t\tThree:       \"THREE\",\n\t\tQuorum:      \"QUORUM\",\n\t\tAll:         \"ALL\",\n\t\tLocalQuorum: \"LOCAL_QUORUM\",\n\t\tEachQuorum:  \"EACH_QUORUM\",\n\t\tSerial:      \"SERIAL\",\n\t\tLocalSerial: \"LOCAL_SERIAL\",\n\t\tLocalOne:    \"LOCAL_ONE\",\n\t}\n\n\tfor k, v := range names {\n\t\tif k.String() != v {\n\t\t\tt.Fatalf(\"expected '%v', got '%v'\", v, k.String())\n\t\t}\n\t}\n}"
       },
       "original_helper_ids": null,
-      "test": "TestConsistencyNames",
+      "test": "TestQuery/ConsistencyString",
       "translated": {
         "assertions": [
           {
@@ -25321,7 +25321,7 @@
     },
     {
       "file": "session_test.go",
-      "identity": "session_test.go::TestIsUseStatement",
+      "identity": "session_test.go::TestQuery/Bind/DetectsUse",
       "original": {
         "assertions": [
           {
@@ -25341,7 +25341,7 @@
         "source": "func TestIsUseStatement(t *testing.T) {\n\tt.Parallel()\n\n\ttestCases := []struct {\n\t\tinput string\n\t\texp   bool\n\t}{\n\t\t{\"USE foo\", true},\n\t\t{\"USe foo\", true},\n\t\t{\"UsE foo\", true},\n\t\t{\"Use foo\", true},\n\t\t{\"uSE foo\", true},\n\t\t{\"uSe foo\", true},\n\t\t{\"usE foo\", true},\n\t\t{\"use foo\", true},\n\t\t{\"SELECT \", false},\n\t\t{\"UPDATE \", false},\n\t\t{\"INSERT \", false},\n\t\t{\"\", false},\n\t}\n\n\tfor _, tc := range testCases {\n\t\tv := isUseStatement(tc.input)\n\t\tif v != tc.exp {\n\t\t\tt.Fatalf(\"expected %v but got %v for statement %q\", tc.exp, v, tc.input)\n\t\t}\n\t}\n}"
       },
       "original_helper_ids": null,
-      "test": "TestIsUseStatement",
+      "test": "TestQuery/Bind/DetectsUse",
       "translated": {
         "assertions": [
           {
@@ -25367,7 +25367,7 @@
     },
     {
       "file": "session_test.go",
-      "identity": "session_test.go::TestRetryType_IgnoreRethrow",
+      "identity": "session_test.go::TestQuery/Retry/IgnoreRethrow",
       "original": {
         "assertions": [
           {
@@ -25415,7 +25415,7 @@
         "common_test.go::isTabletsAutoEnabled",
         "common_test.go::isTabletsSupported"
       ],
-      "test": "TestRetryType_IgnoreRethrow",
+      "test": "TestQuery/Retry/IgnoreRethrow",
       "translated": {
         "assertions": [
           {
@@ -25491,7 +25491,7 @@
     },
     {
       "file": "session_test.go",
-      "identity": "session_test.go::TestTLSTicketResumption",
+      "identity": "session_test.go::TestSession/Connect/TLSTicketResumption",
       "original": {
         "assertions": [
           {
@@ -25566,7 +25566,7 @@
         "session_test.go::newSessionCache",
         "session_test.go::withSessionCache"
       ],
-      "test": "TestTLSTicketResumption",
+      "test": "TestSession/Connect/TLSTicketResumption",
       "translated": {
         "assertions": [
           {
@@ -25644,7 +25644,7 @@
     },
     {
       "file": "tablet_integration_test.go",
-      "identity": "tablet_integration_test.go::TestTablets",
+      "identity": "tablet_integration_test.go::TestRouting/Tablets/Converge",
       "original": {
         "assertions": [
           {
@@ -25726,7 +25726,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestTablets",
+      "test": "TestRouting/Tablets/Converge",
       "translated": {
         "assertions": [
           {
@@ -25895,7 +25895,7 @@
     },
     {
       "file": "tracer_test.go",
-      "identity": "tracer_test.go::TestTracingNewAPI",
+      "identity": "tracer_test.go::TestObserver/Trace/Tracer",
       "original": {
         "assertions": [
           {
@@ -25976,7 +25976,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestTracingNewAPI",
+      "test": "TestObserver/Trace/Tracer",
       "translated": {
         "assertions": [
           {
@@ -26116,7 +26116,7 @@
     },
     {
       "file": "tuple_test.go",
-      "identity": "tuple_test.go::TestTupleSimple",
+      "identity": "tuple_test.go::TestTuple/RoundTrip/Simple",
       "original": {
         "assertions": [
           {
@@ -26177,7 +26177,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestTupleSimple",
+      "test": "TestTuple/RoundTrip/Simple",
       "translated": {
         "assertions": [
           {
@@ -26231,7 +26231,7 @@
     },
     {
       "file": "tuple_test.go",
-      "identity": "tuple_test.go::TestTuple_NullTuple",
+      "identity": "tuple_test.go::TestTuple/RoundTrip/Null",
       "original": {
         "assertions": [
           {
@@ -26289,7 +26289,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestTuple_NullTuple",
+      "test": "TestTuple/RoundTrip/Null",
       "translated": {
         "assertions": [
           {
@@ -26333,7 +26333,7 @@
     },
     {
       "file": "tuple_test.go",
-      "identity": "tuple_test.go::TestTuple_TupleNotSet",
+      "identity": "tuple_test.go::TestTuple/RoundTrip/NotSet",
       "original": {
         "assertions": [
           {
@@ -26408,7 +26408,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestTuple_TupleNotSet",
+      "test": "TestTuple/RoundTrip/NotSet",
       "translated": {
         "assertions": [
           {
@@ -26473,7 +26473,7 @@
     },
     {
       "file": "tuple_test.go",
-      "identity": "tuple_test.go::TestTupleMapScan",
+      "identity": "tuple_test.go::TestTuple/MapScan/Present",
       "original": {
         "assertions": [
           {
@@ -26531,7 +26531,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestTupleMapScan",
+      "test": "TestTuple/MapScan/Present",
       "translated": {
         "assertions": null,
         "calls": [
@@ -26565,7 +26565,7 @@
     },
     {
       "file": "tuple_test.go",
-      "identity": "tuple_test.go::TestTupleMapScanNil",
+      "identity": "tuple_test.go::TestTuple/MapScan/NullMembers",
       "original": {
         "assertions": [
           {
@@ -26623,7 +26623,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestTupleMapScanNil",
+      "test": "TestTuple/MapScan/NullMembers",
       "translated": {
         "assertions": null,
         "calls": [
@@ -26657,7 +26657,7 @@
     },
     {
       "file": "tuple_test.go",
-      "identity": "tuple_test.go::TestTupleMapScanNotSet",
+      "identity": "tuple_test.go::TestTuple/MapScan/Absent",
       "original": {
         "assertions": [
           {
@@ -26715,7 +26715,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestTupleMapScanNotSet",
+      "test": "TestTuple/MapScan/Absent",
       "translated": {
         "assertions": null,
         "calls": [
@@ -26749,7 +26749,7 @@
     },
     {
       "file": "tuple_test.go",
-      "identity": "tuple_test.go::TestTupleLastFieldEmpty",
+      "identity": "tuple_test.go::TestTuple/RoundTrip/LastFieldEmpty",
       "original": {
         "assertions": [
           {
@@ -26814,7 +26814,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestTupleLastFieldEmpty",
+      "test": "TestTuple/RoundTrip/LastFieldEmpty",
       "translated": {
         "assertions": [
           {
@@ -26858,7 +26858,7 @@
     },
     {
       "file": "tuple_test.go",
-      "identity": "tuple_test.go::TestTuple_NestedCollection",
+      "identity": "tuple_test.go::TestTuple/NestedCollection/NonNull",
       "original": {
         "assertions": [
           {
@@ -26921,7 +26921,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestTuple_NestedCollection",
+      "test": "TestTuple/NestedCollection/NonNull",
       "translated": {
         "assertions": [
           {
@@ -26980,7 +26980,7 @@
     },
     {
       "file": "tuple_test.go",
-      "identity": "tuple_test.go::TestTuple_NullableNestedCollection",
+      "identity": "tuple_test.go::TestTuple/NestedCollection/Nullable",
       "original": {
         "assertions": [
           {
@@ -27043,7 +27043,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestTuple_NullableNestedCollection",
+      "test": "TestTuple/NestedCollection/Nullable",
       "translated": {
         "assertions": [
           {
@@ -27101,7 +27101,7 @@
     },
     {
       "file": "udt_test.go",
-      "identity": "udt_test.go::TestUDT_Marshaler",
+      "identity": "udt_test.go::TestUDT/RoundTrip/Marshaler",
       "original": {
         "assertions": [
           {
@@ -27169,7 +27169,7 @@
         "common_test.go::testTableName",
         "common_test.go::testTypeName"
       ],
-      "test": "TestUDT_Marshaler",
+      "test": "TestUDT/RoundTrip/Marshaler",
       "translated": {
         "assertions": [
           {
@@ -27220,7 +27220,7 @@
     },
     {
       "file": "udt_test.go",
-      "identity": "udt_test.go::TestUDT_Reflect",
+      "identity": "udt_test.go::TestUDT/RoundTrip/Reflect",
       "original": {
         "assertions": [
           {
@@ -27279,7 +27279,7 @@
         "common_test.go::testTableName",
         "common_test.go::testTypeName"
       ],
-      "test": "TestUDT_Reflect",
+      "test": "TestUDT/RoundTrip/Reflect",
       "translated": {
         "assertions": [
           {
@@ -27328,7 +27328,7 @@
     },
     {
       "file": "udt_test.go",
-      "identity": "udt_test.go::TestUDT_NullObject",
+      "identity": "udt_test.go::TestUDT/Scan/NullIntoNullable",
       "original": {
         "assertions": [
           {
@@ -27392,7 +27392,7 @@
         "common_test.go::testTableName",
         "common_test.go::testTypeName"
       ],
-      "test": "TestUDT_NullObject",
+      "test": "TestUDT/Scan/NullIntoNullable",
       "translated": {
         "assertions": [
           {
@@ -27454,7 +27454,7 @@
     },
     {
       "file": "udt_test.go",
-      "identity": "udt_test.go::TestMapScanUDT",
+      "identity": "udt_test.go::TestUDT/MapScan",
       "original": {
         "assertions": [
           {
@@ -27550,7 +27550,7 @@
         "common_test.go::testTableName",
         "common_test.go::testTypeName"
       ],
-      "test": "TestMapScanUDT",
+      "test": "TestUDT/MapScan",
       "translated": {
         "assertions": [
           {
@@ -27692,7 +27692,7 @@
     },
     {
       "file": "udt_test.go",
-      "identity": "udt_test.go::TestUDT_MissingField",
+      "identity": "udt_test.go::TestUDT/RoundTrip/MissingField",
       "original": {
         "assertions": [
           {
@@ -27752,7 +27752,7 @@
         "common_test.go::testTableName",
         "common_test.go::testTypeName"
       ],
-      "test": "TestUDT_MissingField",
+      "test": "TestUDT/RoundTrip/MissingField",
       "translated": {
         "assertions": [
           {
@@ -27814,7 +27814,7 @@
     },
     {
       "file": "udt_test.go",
-      "identity": "udt_test.go::TestUDT_EmptyCollections",
+      "identity": "udt_test.go::TestUDT/RoundTrip/EmptyCollections",
       "original": {
         "assertions": [
           {
@@ -27882,7 +27882,7 @@
         "common_test.go::testTableName",
         "common_test.go::testTypeName"
       ],
-      "test": "TestUDT_EmptyCollections",
+      "test": "TestUDT/RoundTrip/EmptyCollections",
       "translated": {
         "assertions": [
           {
@@ -27947,7 +27947,7 @@
     },
     {
       "file": "udt_test.go",
-      "identity": "udt_test.go::TestUDT_UpdateField",
+      "identity": "udt_test.go::TestUDT/UpdateField",
       "original": {
         "assertions": [
           {
@@ -28011,7 +28011,7 @@
         "common_test.go::testTableName",
         "common_test.go::testTypeName"
       ],
-      "test": "TestUDT_UpdateField",
+      "test": "TestUDT/UpdateField",
       "translated": {
         "assertions": [
           {
@@ -28083,7 +28083,7 @@
     },
     {
       "file": "udt_test.go",
-      "identity": "udt_test.go::TestUDT_ScanNullUDT",
+      "identity": "udt_test.go::TestUDT/Scan/NullMarshaler",
       "original": {
         "assertions": [
           {
@@ -28137,7 +28137,7 @@
         "common_test.go::testTableName",
         "common_test.go::testTypeName"
       ],
-      "test": "TestUDT_ScanNullUDT",
+      "test": "TestUDT/Scan/NullMarshaler",
       "translated": {
         "assertions": [
           {
@@ -28195,7 +28195,7 @@
     },
     {
       "file": "vector_test.go",
-      "identity": "vector_test.go::TestVector_Marshaler",
+      "identity": "vector_test.go::TestVector/RoundTrip/Marshaler",
       "original": {
         "assertions": [
           {
@@ -28278,7 +28278,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestVector_Marshaler",
+      "test": "TestVector/RoundTrip/Marshaler",
       "translated": {
         "assertions": [
           {
@@ -28332,7 +28332,7 @@
     },
     {
       "file": "vector_test.go",
-      "identity": "vector_test.go::TestVector_Types",
+      "identity": "vector_test.go::TestVector/RoundTrip/Types",
       "original": {
         "assertions": [
           {
@@ -28468,7 +28468,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestVector_Types",
+      "test": "TestVector/RoundTrip/Types",
       "translated": {
         "assertions": [
           {
@@ -28577,7 +28577,7 @@
     },
     {
       "file": "vector_test.go",
-      "identity": "vector_test.go::TestVector_MarshalerUDT",
+      "identity": "vector_test.go::TestVector/RoundTrip/UDT",
       "original": {
         "assertions": [
           {
@@ -28647,7 +28647,7 @@
         "common_test.go::testTableName",
         "common_test.go::testTypeName"
       ],
-      "test": "TestVector_MarshalerUDT",
+      "test": "TestVector/RoundTrip/UDT",
       "translated": {
         "assertions": [
           {
@@ -28706,7 +28706,7 @@
     },
     {
       "file": "vector_test.go",
-      "identity": "vector_test.go::TestVector_Empty",
+      "identity": "vector_test.go::TestVector/RoundTrip/Empty",
       "original": {
         "assertions": [
           {
@@ -28788,7 +28788,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestVector_Empty",
+      "test": "TestVector/RoundTrip/Empty",
       "translated": {
         "assertions": [
           {
@@ -28862,7 +28862,7 @@
     },
     {
       "file": "vector_test.go",
-      "identity": "vector_test.go::TestVector_MissingDimension",
+      "identity": "vector_test.go::TestVector/Bind/WrongDimension",
       "original": {
         "assertions": [
           {
@@ -28922,7 +28922,7 @@
         "common_test.go::isTabletsSupported",
         "common_test.go::testTableName"
       ],
-      "test": "TestVector_MissingDimension",
+      "test": "TestVector/Bind/WrongDimension",
       "translated": {
         "assertions": [
           {
@@ -28969,7 +28969,7 @@
     },
     {
       "file": "vector_test.go",
-      "identity": "vector_test.go::TestVector_SubTypeParsing",
+      "identity": "vector_test.go::TestVector/ParseType",
       "original": {
         "assertions": [
           {
@@ -29011,7 +29011,7 @@
         "source": "func TestVector_SubTypeParsing(t *testing.T) {\n\tt.Parallel()\n\n\tif *flagDistribution == \"scylla\" && flagCassVersion.Before(2025, 4, 0) {\n\t\tt.Skip(\"Vector types are useful in ScyllaDB from 2025.4 and on\")\n\t}\n\tprefix := apacheCassandraTypePrefix\n\tvectorTypePrefix := prefix + \"VectorType\"\n\ttestCases := []struct {\n\t\tname     string\n\t\tcustom   string\n\t\texpected TypeInfo\n\t}{\n\t\t{name: \"text\", custom: prefix + \"UTF8Type\", expected: NativeType{typ: TypeVarchar}},\n\t\t{name: \"set_int\", custom: prefix + \"SetType(\" + prefix + \"Int32Type)\", expected: CollectionType{NativeType: NativeType{typ: TypeSet}, Key: nil, Elem: NativeType{typ: TypeInt}}},\n\t\t{\n\t\t\tname:   \"udt\",\n\t\t\tcustom: prefix + \"UserType(gocql_test,706572736f6e,66697273745f6e616d65:\" + prefix + \"UTF8Type,6c6173745f6e616d65:\" + prefix + \"UTF8Type,616765:\" + prefix + \"Int32Type)\",\n\t\t\texpected: UDTTypeInfo{\n\t\t\t\tNativeType: NativeType{typ: TypeUDT},\n\t\t\t\tKeySpace:   \"gocql_test\",\n\t\t\t\tName:       \"person\",\n\t\t\t\tElements: []UDTField{\n\t\t\t\t\tUDTField{Name: \"first_name\", Type: NativeType{typ: TypeVarchar}},\n\t\t\t\t\tUDTField{Name: \"last_name\", Type: NativeType{typ: TypeVarchar}},\n\t\t\t\t\tUDTField{Name: \"age\", Type: NativeType{typ: TypeInt}},\n\t\t\t\t},\n\t\t\t},\n\t\t},\n\t\t{\n\t\t\tname:   \"tuple\",\n\t\t\tcustom: prefix + \"TupleType(\" + prefix + \"UTF8Type,\" + prefix + \"Int32Type,\" + prefix + \"UTF8Type)\",\n\t\t\texpected: TupleTypeInfo{\n\t\t\t\tNativeType: NativeType{typ: TypeTuple},\n\t\t\t\tElems: []TypeInfo{\n\t\t\t\t\tNativeType{typ: TypeVarchar},\n\t\t\t\t\tNativeType{typ: TypeInt},\n\t\t\t\t\tNativeType{typ: TypeVarchar},\n\t\t\t\t},\n\t\t\t},\n\t\t},\n\t\t{\n\t\t\tname:   \"vector_vector_inet\",\n\t\t\tcustom: prefix + \"VectorType(\" + prefix + \"VectorType(\" + prefix + \"InetAddressType, 2), 3)\",\n\t\t\texpected: VectorType{\n\t\t\t\tNativeType: NativeType{typ: TypeCustom, custom: vectorTypePrefix},\n\t\t\t\tSubType: VectorType{\n\t\t\t\t\tNativeType: NativeType{typ: TypeCustom, custom: vectorTypePrefix},\n\t\t\t\t\tSubType:    NativeType{typ: TypeInet},\n\t\t\t\t\tDimensions: 2,\n\t\t\t\t},\n\t\t\t\tDimensions: 3,\n\t\t\t},\n\t\t},\n\t\t{\n\t\t\tname:   \"map_int_vector_text\",\n\t\t\tcustom: prefix + \"MapType(\" + prefix + \"Int32Type,\" + prefix + \"VectorType(\" + prefix + \"UTF8Type, 10))\",\n\t\t\texpected: CollectionType{\n\t\t\t\tNativeType: NativeType{typ: TypeMap},\n\t\t\t\tKey:        NativeType{typ: TypeInt},\n\t\t\t\tElem: VectorType{\n\t\t\t\t\tNativeType: NativeType{typ: TypeCustom, custom: vectorTypePrefix},\n\t\t\t\t\tSubType:    NativeType{typ: TypeVarchar},\n\t\t\t\t\tDimensions: 10,\n\t\t\t\t},\n\t\t\t},\n\t\t},\n\t\t{\n\t\t\tname:   \"set_map_vector_text_text\",\n\t\t\tcustom: prefix + \"SetType(\" + prefix + \"MapType(\" + prefix + \"VectorType(\" + prefix + \"Int32Type, 10),\" + prefix + \"UTF8Type))\",\n\t\t\texpected: CollectionType{\n\t\t\t\tNativeType: NativeType{typ: TypeSet},\n\t\t\t\tKey:        nil,\n\t\t\t\tElem: CollectionType{\n\t\t\t\t\tNativeType: NativeType{typ: TypeMap},\n\t\t\t\t\tKey: VectorType{\n\t\t\t\t\t\tNativeType: NativeType{typ: TypeCustom, custom: vectorTypePrefix},\n\t\t\t\t\t\tSubType:    NativeType{typ: TypeInt},\n\t\t\t\t\t\tDimensions: 10,\n\t\t\t\t\t},\n\t\t\t\t\tElem: NativeType{typ: TypeVarchar},\n\t\t\t\t},\n\t\t\t},\n\t\t},\n\t}\n\n\tfor _, test := range testCases {\n\t\tt.Run(test.name, func(t *testing.T) {\n\t\t\tf := newFramer(nil, 0)\n\t\t\tf.writeShort(0)\n\t\t\tf.writeString(fmt.Sprintf(\"%sVectorType(%s, 2)\", prefix, test.custom))\n\t\t\tparsedType := f.readTypeInfo()\n\t\t\trequire.IsType(t, parsedType, VectorType{})\n\t\t\tvectorType := parsedType.(VectorType)\n\t\t\ttests.AssertEqual(t, \"dimensions\", 2, vectorType.Dimensions)\n\t\t\ttests.AssertDeepEqual(t, \"vector\", test.expected, vectorType.SubType)\n\t\t})\n\t}\n}"
       },
       "original_helper_ids": null,
-      "test": "TestVector_SubTypeParsing",
+      "test": "TestVector/ParseType",
       "translated": {
         "assertions": [
           {
@@ -29077,7 +29077,7 @@
     },
     {
       "file": "wiki_test.go",
-      "identity": "wiki_test.go::TestWikiCreateSchema",
+      "identity": "wiki_test.go::TestWiki/CreateSchema",
       "original": {
         "assertions": null,
         "calls": [
@@ -29107,7 +29107,7 @@
         "common_test.go::testTableName",
         "wiki_test.go::CreateSchema"
       ],
-      "test": "TestWikiCreateSchema",
+      "test": "TestWiki/CreateSchema",
       "translated": {
         "assertions": null,
         "calls": [
@@ -29139,7 +29139,7 @@
     },
     {
       "file": "wiki_test.go",
-      "identity": "wiki_test.go::TestWikiCreatePages",
+      "identity": "wiki_test.go::TestWiki/CreatePages",
       "original": {
         "assertions": [
           {
@@ -29177,7 +29177,7 @@
         "common_test.go::testTableName",
         "wiki_test.go::CreateSchema"
       ],
-      "test": "TestWikiCreatePages",
+      "test": "TestWiki/CreatePages",
       "translated": {
         "assertions": [
           {
@@ -29217,7 +29217,7 @@
     },
     {
       "file": "wiki_test.go",
-      "identity": "wiki_test.go::TestWikiTypicalCRUD",
+      "identity": "wiki_test.go::TestWiki/CRUD",
       "original": {
         "assertions": [
           {
@@ -29274,7 +29274,7 @@
         "common_test.go::testTableName",
         "wiki_test.go::CreateSchema"
       ],
-      "test": "TestWikiTypicalCRUD",
+      "test": "TestWiki/CRUD",
       "translated": {
         "assertions": [
           {

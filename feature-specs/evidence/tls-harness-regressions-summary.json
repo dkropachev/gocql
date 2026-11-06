@@ -14,15 +14,15 @@
   ],
   "tests": [
     {
-      "test": "TestShardAwarePortIntegrationUnreachable",
+      "test": "TestPool/ShardAwarePort/Unreachable",
       "result": "fail"
     },
     {
-      "test": "TestShardAwarePortIntegrationUnusedIfNotEnabled",
+      "test": "TestPool/ShardAwarePort/UnusedIfNotEnabled",
       "result": "pass"
     },
     {
-      "test": "TestShardAwarePortIntegrationNoReconnections",
+      "test": "TestPool/ShardAwarePort/NoReconnections",
       "result": "pass"
     },
     {
@@ -30,11 +30,11 @@
       "result": "pass"
     },
     {
-      "test": "TestShardAwarePortIntegrationMaliciousNAT",
+      "test": "TestPool/ShardAwarePort/MaliciousNAT",
       "result": "pass"
     },
     {
-      "test": "TestUnixSockets",
+      "test": "TestSession/Connect/UnixSocket",
       "result": "pass"
     }
   ]

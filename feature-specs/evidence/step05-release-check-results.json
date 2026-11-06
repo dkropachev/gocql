@@ -24,7 +24,7 @@
       "-race",
       "-tags=unit",
       "-run",
-      "^(TestStep05|TestV2Metadata|TestV2Subscription|TestConcurrentSchemaRefreshErrorHandling|TestHandleNode|TestRefreshRing|TestControl|TestEventDebounce)",
+      "^(TestStep05|TestV2Metadata|TestV2Subscription|TestSchemaMetadata/ConcurrentRefresh/ErrorHandling|TestHandleNode|TestHostDiscovery/RefreshRing/AddsPeers|TestControl|TestEventDebouncer/Debounce/Burst)",
       "-timeout=2m",
       "."
     ],

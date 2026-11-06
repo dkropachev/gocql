@@ -544,7 +544,7 @@
         "-race",
         "-tags=unit",
         "-run",
-        "^(TestStep05|TestV2Metadata|TestV2Subscription|TestConcurrentSchemaRefreshErrorHandling|TestHandleNode|TestRefreshRing|TestControl|TestEventDebounce)",
+        "^(TestStep05|TestV2Metadata|TestV2Subscription|TestSchemaMetadata/ConcurrentRefresh/ErrorHandling|TestHandleNode|TestHostDiscovery/RefreshRing/AddsPeers|TestControl|TestEventDebouncer/Debounce/Burst)",
         "-timeout=2m",
         "."
       ],
@@ -647,7 +647,7 @@
         "-timeout=7m",
         "-parallel=1",
         "-run",
-        "^(TestStep05MetadataControlLive|TestSessionAwaitSchemaAgreement|TestSessionAwaitSchemaAgreementSessionClosed|TestSessionAwaitSchemaAgreementContextCanceled|TestSessionEventBusReceivesSchemaChangeEvent|TestSessionEventBusReceivesControlReconnectEvent|TestSchemaQueries|TestGetHostPortMapping|TestInvalidPeerEntry)$",
+        "^TestStep05MetadataControlLive$|^TestSession$/^AwaitSchemaAgreement$/^Agrees$|^TestSession$/^AwaitSchemaAgreement$/^SessionClosed$|^TestSession$/^AwaitSchemaAgreement$/^ContextCanceled$|^TestMetadata$/^Events$/^SchemaChange$|^TestMetadata$/^Events$/^ControlReconnect$|^TestMetadata$/^Keyspace$/^TokenAwareSession$|^TestRouting$/^ClientRoutes$|^TestMetadata$/^Hosts$/^InvalidPeer$",
         ".",
         "-args",
         "-gocql.timeout=60s",
@@ -670,7 +670,7 @@
       "log_sha256": "8782141cdf49dec8497e1cd2740695d6f07a8f03165ce98b115b668cc172ffce",
       "individual_outcomes": [
         {
-          "Test": "TestSessionEventBusReceivesSchemaChangeEvent",
+          "Test": "TestMetadata/Events/SchemaChange",
           "Action": "pass",
           "Elapsed": 1.03
         },
@@ -680,64 +680,64 @@
           "Elapsed": 1.12
         },
         {
-          "Test": "TestInvalidPeerEntry",
+          "Test": "TestMetadata/Hosts/InvalidPeer",
           "Action": "skip",
           "Elapsed": 0
         },
         {
-          "Test": "TestSessionAwaitSchemaAgreementSessionClosed",
+          "Test": "TestSession/AwaitSchemaAgreement/SessionClosed",
           "Action": "pass",
           "Elapsed": 0.26
         },
         {
-          "Test": "TestSessionEventBusReceivesControlReconnectEvent",
+          "Test": "TestMetadata/Events/ControlReconnect",
           "Action": "pass",
           "Elapsed": 0.02
         },
         {
-          "Test": "TestSessionAwaitSchemaAgreement",
+          "Test": "TestSession/AwaitSchemaAgreement/Agrees",
           "Action": "pass",
           "Elapsed": 0.02
         },
         {
-          "Test": "TestSchemaQueries",
+          "Test": "TestMetadata/Keyspace/TokenAwareSession",
           "Action": "pass",
           "Elapsed": 0.02
         },
         {
-          "Test": "TestSessionAwaitSchemaAgreementContextCanceled",
+          "Test": "TestSession/AwaitSchemaAgreement/ContextCanceled",
           "Action": "pass",
           "Elapsed": 0.02
         },
         {
-          "Test": "TestGetHostPortMapping/get-for-connection-ids",
+          "Test": "TestRouting/ClientRoutes/get-for-connection-ids",
           "Action": "pass",
           "Elapsed": 0
         },
         {
-          "Test": "TestGetHostPortMapping/get-for-pairs",
+          "Test": "TestRouting/ClientRoutes/get-for-pairs",
           "Action": "pass",
           "Elapsed": 0
         },
         {
-          "Test": "TestGetHostPortMapping/get-for-single-host-pairs",
+          "Test": "TestRouting/ClientRoutes/get-for-single-host-pairs",
           "Action": "pass",
           "Elapsed": 0
         },
         {
-          "Test": "TestGetHostPortMapping/get-for-connection-ids-tls",
+          "Test": "TestRouting/ClientRoutes/get-for-connection-ids-tls",
           "Action": "pass",
           "Elapsed": 0
         },
         {
-          "Test": "TestGetHostPortMapping",
+          "Test": "TestRouting/ClientRoutes",
           "Action": "pass",
           "Elapsed": 0.05
         }
       ],
       "passed_top_level": 8,
       "skipped_top_level": [
-        "TestInvalidPeerEntry"
+        "TestMetadata/Hosts/InvalidPeer"
       ]
     },
     {
@@ -753,7 +753,7 @@
         "-timeout=7m",
         "-parallel=1",
         "-run",
-        "^(TestStep05MetadataControlLive|TestUnixSockets)$",
+        "^TestStep05MetadataControlLive$|^TestSession$/^Connect$/^UnixSocket$",
         ".",
         "-args",
         "-gocql.timeout=60s",
@@ -783,7 +783,7 @@
           "Elapsed": 1.32
         },
         {
-          "Test": "TestUnixSockets",
+          "Test": "TestSession/Connect/UnixSocket",
           "Action": "pass",
           "Elapsed": 0.05
         }
@@ -804,7 +804,7 @@
         "-timeout=7m",
         "-parallel=1",
         "-run",
-        "^(TestStep05MetadataControlLive|TestSessionAwaitSchemaAgreement|TestSessionAwaitSchemaAgreementSessionClosed|TestSessionAwaitSchemaAgreementContextCanceled|TestSessionEventBusReceivesSchemaChangeEvent|TestSessionEventBusReceivesControlReconnectEvent|TestSchemaQueries|TestGetHostPortMapping|TestInvalidPeerEntry)$",
+        "^TestStep05MetadataControlLive$|^TestSession$/^AwaitSchemaAgreement$/^Agrees$|^TestSession$/^AwaitSchemaAgreement$/^SessionClosed$|^TestSession$/^AwaitSchemaAgreement$/^ContextCanceled$|^TestMetadata$/^Events$/^SchemaChange$|^TestMetadata$/^Events$/^ControlReconnect$|^TestMetadata$/^Keyspace$/^TokenAwareSession$|^TestRouting$/^ClientRoutes$|^TestMetadata$/^Hosts$/^InvalidPeer$",
         ".",
         "-args",
         "-gocql.timeout=60s",
@@ -826,7 +826,7 @@
       "log_sha256": "0cd61393588c88619cba490a4513c17254125ca6be9ca7ad45ab70205997b34a",
       "individual_outcomes": [
         {
-          "Test": "TestSessionEventBusReceivesSchemaChangeEvent",
+          "Test": "TestMetadata/Events/SchemaChange",
           "Action": "pass",
           "Elapsed": 1.44
         },
@@ -836,57 +836,57 @@
           "Elapsed": 2.42
         },
         {
-          "Test": "TestGetHostPortMapping/get-for-connection-ids",
+          "Test": "TestRouting/ClientRoutes/get-for-connection-ids",
           "Action": "pass",
           "Elapsed": 0.01
         },
         {
-          "Test": "TestGetHostPortMapping/get-for-pairs",
+          "Test": "TestRouting/ClientRoutes/get-for-pairs",
           "Action": "pass",
           "Elapsed": 0
         },
         {
-          "Test": "TestGetHostPortMapping/get-for-single-host-pairs",
+          "Test": "TestRouting/ClientRoutes/get-for-single-host-pairs",
           "Action": "pass",
           "Elapsed": 0
         },
         {
-          "Test": "TestGetHostPortMapping/get-for-connection-ids-tls",
+          "Test": "TestRouting/ClientRoutes/get-for-connection-ids-tls",
           "Action": "pass",
           "Elapsed": 0
         },
         {
-          "Test": "TestGetHostPortMapping",
+          "Test": "TestRouting/ClientRoutes",
           "Action": "pass",
           "Elapsed": 0.58
         },
         {
-          "Test": "TestSessionAwaitSchemaAgreementContextCanceled",
+          "Test": "TestSession/AwaitSchemaAgreement/ContextCanceled",
           "Action": "pass",
           "Elapsed": 0.33
         },
         {
-          "Test": "TestSchemaQueries",
+          "Test": "TestMetadata/Keyspace/TokenAwareSession",
           "Action": "pass",
           "Elapsed": 0.04
         },
         {
-          "Test": "TestSessionEventBusReceivesControlReconnectEvent",
+          "Test": "TestMetadata/Events/ControlReconnect",
           "Action": "pass",
           "Elapsed": 0.03
         },
         {
-          "Test": "TestSessionAwaitSchemaAgreement",
+          "Test": "TestSession/AwaitSchemaAgreement/Agrees",
           "Action": "pass",
           "Elapsed": 0.03
         },
         {
-          "Test": "TestInvalidPeerEntry",
+          "Test": "TestMetadata/Hosts/InvalidPeer",
           "Action": "pass",
           "Elapsed": 0.01
         },
         {
-          "Test": "TestSessionAwaitSchemaAgreementSessionClosed",
+          "Test": "TestSession/AwaitSchemaAgreement/SessionClosed",
           "Action": "pass",
           "Elapsed": 0.03
         }

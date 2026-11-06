@@ -1,6 +1,6 @@
 panic: test timed out after 45s
     running tests:
-        TestV2OrphanBudgetUsesExactCapacity (45s)
+        TestTypedConn/OrphanBudget (45s)
 
 goroutine 63 [running]:
 testing.(*M).startAlarm.func1()
@@ -29,7 +29,7 @@ sync.runtime_SemacquireWaitGroup(0xc000012970?, 0x0?)
     /usr/local/go/src/runtime/sema.go:114 +0x2e
 sync.(*WaitGroup).Wait(0xc000012970)
     /usr/local/go/src/sync/waitgroup.go:206 +0xd3
-github.com/scylladb/gocql/v2.TestV2OrphanBudgetUsesExactCapacity(0xc0002d0c40)
+github.com/scylladb/gocql/v2.TestTypedConn/OrphanBudget(0xc0002d0c40)
     /extra/scylladb/gocql/v2_transport_pool_test.go:294 +0x81f
 testing.tRunner(0xc0002d0c40, 0x11a6848)
     /usr/local/go/src/testing/testing.go:1934 +0x21d
@@ -47,9 +47,9 @@ io.ReadFull(...)
     /usr/local/go/src/io/io.go:354
 github.com/scylladb/gocql/v2.typedTestReadRequest(0xc0002d0c40, 0xc00029a308, {0x12f2db8, 0xc000294300})
     /extra/scylladb/gocql/v2_transport_test.go:101 +0x125
-github.com/scylladb/gocql/v2.TestV2OrphanBudgetUsesExactCapacity.func1()
+github.com/scylladb/gocql/v2.TestTypedConn/OrphanBudget.func1()
     /extra/scylladb/gocql/v2_transport_pool_test.go:269 +0x77
-created by github.com/scylladb/gocql/v2.TestV2OrphanBudgetUsesExactCapacity in goroutine 69
+created by github.com/scylladb/gocql/v2.TestTypedConn/OrphanBudget in goroutine 69
     /extra/scylladb/gocql/v2_transport_pool_test.go:267 +0x80b
 
 goroutine 89 [select]:
@@ -81,7 +81,7 @@ github.com/scylladb/gocql/v2.(*Conn).recv(0xc00029a308, {0x12ebdb0, 0xc0002600f0
     /extra/scylladb/gocql/conn.go:1141 +0x188
 github.com/scylladb/gocql/v2.(*Conn).serve(0xc00029a308, {0x12ebdb0, 0xc0002600f0})
     /extra/scylladb/gocql/conn.go:1027 +0x73
-created by github.com/scylladb/gocql/v2.TestV2OrphanBudgetUsesExactCapacity in goroutine 69
+created by github.com/scylladb/gocql/v2.TestTypedConn/OrphanBudget in goroutine 69
     /extra/scylladb/gocql/v2_transport_pool_test.go:264 +0x657
 FAIL    github.com/scylladb/gocql/v2    45.055s
 FAIL

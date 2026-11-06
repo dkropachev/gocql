@@ -27,39 +27,39 @@
       {
         "outcome": "pass",
         "seconds": 0.16,
-        "test": "TestRecreateSchema/Keyspace"
+        "test": "TestMetadata/Recreate/Keyspace"
       },
       {
         "outcome": "pass",
         "seconds": 1.01,
-        "test": "TestRecreateSchema/Table"
+        "test": "TestMetadata/Recreate/Table"
       },
       {
         "outcome": "pass",
         "seconds": 0.76,
-        "test": "TestRecreateSchema/Materialized_Views"
+        "test": "TestMetadata/Recreate/Materialized_Views"
       },
       {
         "outcome": "pass",
         "seconds": 0.39,
-        "test": "TestRecreateSchema/Index"
+        "test": "TestMetadata/Recreate/Index"
       },
       {
         "outcome": "pass",
         "seconds": 0.9,
-        "test": "TestRecreateSchema/Secondary_Index"
+        "test": "TestMetadata/Recreate/Secondary_Index"
       },
       {
         "outcome": "pass",
         "seconds": 0.25,
-        "test": "TestRecreateSchema/UDT"
+        "test": "TestMetadata/Recreate/UDT"
       },
       {
         "outcome": "pass",
         "seconds": 0.88,
-        "test": "TestRecreateSchema/Aggregates"
+        "test": "TestMetadata/Recreate/Aggregates"
       }
     ],
-    "test": "TestRecreateSchema"
+    "test": "TestMetadata/Recreate"
   }
 ]

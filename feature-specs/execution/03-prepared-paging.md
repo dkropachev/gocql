@@ -113,7 +113,7 @@ per-run tables with cleanup; stable/Cassandra fixture lanes remain exclusive.
 
 ## Diagnostics and evidence limits
 
-The original rare `TestPagingWithBind` metadata error was not reproduced by the
+The original rare `TestPaging/Auto/Bound` metadata error was not reproduced by the
 single clean predecessor comparison lane: it passed. The first predecessor run
 failed on stale task tables, which were cleaned in the exclusively reserved lane.
 The unsafe old global-generation comparison is addressed by deterministic

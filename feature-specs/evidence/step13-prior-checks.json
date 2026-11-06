@@ -154,7 +154,7 @@
         "-run",
         "^$",
         "-bench",
-        "BenchmarkLZ4Compressor$",
+        "BenchmarkCompressor/LZ4$",
         "-benchtime=5x",
         "-benchmem",
         "./internal/wirecompress"

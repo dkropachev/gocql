@@ -1,6 +1,6 @@
 import subprocess,hashlib,json,pathlib,time
 root=pathlib.Path('/extra/scylladb/gocql')
-base=['go','test','-json','-race','-tags','integration gocql_debug','-run','^(TestV2TransportPoolSizingLive|TestV2ExclusiveTransportLive)$','-count=1','-timeout=8m','-parallel=1','.','-args','-distribution=scylla','-gocql.timeout=60s','-proto=4','-rf=3','-clusterSize=3','-autowait=2000ms','-compressor=no-compression','-gocql.cversion=2026.3.4','-cluster=127.0.20.1,127.0.20.2,127.0.20.3']
+base=['go','test','-json','-race','-tags','integration gocql_debug','-run','^TestPool$/^Sizing$|^TestPool$/^ExclusiveTransport$','-count=1','-timeout=8m','-parallel=1','.','-args','-distribution=scylla','-gocql.timeout=60s','-proto=4','-rf=3','-clusterSize=3','-autowait=2000ms','-compressor=no-compression','-gocql.cversion=2026.3.4','-cluster=127.0.20.1,127.0.20.2,127.0.20.3']
 paths=subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard','*.go'],cwd=root,text=True).splitlines()
 snapshot={p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in paths if (root/p).is_file()}
 (root/'feature-specs/evidence/step04-live-initial-source.json').write_text(json.dumps(snapshot,indent=2)+'\n')

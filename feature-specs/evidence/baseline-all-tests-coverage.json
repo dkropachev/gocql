@@ -4,518 +4,518 @@
   "tests_with_observed_pass": 174,
   "total_original_tests": 174,
   "passing_evidence": {
-    "TestBatch_Errors": [
+    "TestBatch/Exec/RejectsInvalidStatement": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestBatch_WithTimestamp": [
+    "TestBatch/Options/Timestamp": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestBatch_WithNowInSeconds": [
+    "TestBatch/Options/NowInSeconds": [
       "baseline-cassandra-v5-valid-ca-summary.json"
     ],
-    "TestBatch_SetKeyspace": [
+    "TestBatch/Options/Keyspace": [
       "baseline-cassandra-v5-valid-ca-summary.json"
     ],
-    "TestProto1BatchInsert": [
+    "TestBatch/Exec/BeginApplyStatement": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestShouldPrepareFunction": [
+    "TestQuery/ShouldPrepare/MultilineStatements": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestEmptyHosts": [
+    "TestSession/Connect/EmptyHosts": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestInvalidPeerEntry": [
+    "TestMetadata/Hosts/InvalidPeer": [
       "incomplete-peer-transport-fixture-summary.json"
     ],
-    "TestUseStatementError": [
+    "TestQuery/Bind/RejectsUse": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestInvalidKeyspace": [
+    "TestSession/Connect/InvalidKeyspace": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestTracing": [
+    "TestObserver/Trace/IDs": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestObserve": [
+    "TestObserver/Query": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestObserve_Pagination": [
+    "TestObserver/Paging": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestPaging": [
+    "TestPaging/Auto/AllRows": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestPagingWithAllowFiltering": [
+    "TestPaging/AllowFiltering": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestPagingWithBind": [
+    "TestPaging/Auto/Bound": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestCAS": [
+    "TestConditional/Exec": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestConsistencySerial": [
+    "TestConditional/SerialConsistency": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestDurationType": [
+    "TestTypes/RoundTrip/Duration": [
       "baseline-cassandra-v5-valid-ca-summary.json"
     ],
-    "TestMapScanCAS": [
+    "TestConditional/MapScan": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestBatch": [
+    "TestBatch/Exec/Logged": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestUnpreparedBatch": [
+    "TestBatch/Exec/UnpreparedCounter": [
       "reactivated-batch-error-tls-summary.json"
     ],
-    "TestBatchLimit": [
+    "TestBatch/Exec/RejectsOverStatementLimit": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestWhereIn": [
+    "TestQuery/Exec/WhereIn": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestTooManyQueryArgs": [
+    "TestQuery/Bind/TooManyArgs": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestNotEnoughQueryArgs": [
+    "TestQuery/Bind/NotEnoughArgs": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestCreateSessionTimeout": [
+    "TestSession/Connect/Timeout": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestReconnection": [
+    "TestSession/Reconnect": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestMapScanWithRefMap": [
+    "TestScan/MapScan/RefMap": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestMapScan": [
+    "TestScan/MapScan/Rows": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestSliceMap": [
+    "TestScan/SliceMap": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "Test_RetryPolicyIdempotence": [
+    "TestQuery/Retry/Idempotence": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestSmallInt": [
+    "TestTypes/RoundTrip/SmallInt": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestScanWithNilArguments": [
+    "TestScan/Row/IgnoredColumn": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestScanCASWithNilArguments": [
+    "TestConditional/ScanIgnoredColumns": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestRebindQueryInfo": [
+    "TestQuery/Bind/Rebind": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestStaticQueryInfo": [
+    "TestQuery/Bind/Static": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestBoundQueryInfo": [
+    "TestQuery/Bind/ParamsMetadata": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestBatchQueryInfo": [
+    "TestBatch/Bind/ManualParams": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestPrepare_MissingSchemaPrepare": [
+    "TestPrepared/Prepare/MissingSchema": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestPrepare_ReprepareStatement": [
+    "TestPrepared/Reprepare/Statement": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestPrepare_ReprepareBatch": [
+    "TestPrepared/Reprepare/Batch": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestQueryInfo": [
+    "TestPrepared/Prepare/Metadata": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestPrepare_PreparedCacheEviction": [
+    "TestPrepared/Cache/Eviction": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestPrepare_PreparedCacheKey": [
+    "TestPrepared/Cache/Key": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestMarshalFloat64Ptr": [
+    "TestTypes/RoundTrip/Float64Ptr": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestMarshalInet": [
+    "TestTypes/RoundTrip/Inet": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestVarint": [
+    "TestTypes/RoundTrip/Varint": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestQueryStats": [
+    "TestQuery/Result/Stats": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestIterHost": [
+    "TestQuery/Result/HostID": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestBatchStats": [
+    "TestBatch/Stats": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestBatchObserve": [
+    "TestObserver/Batch": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestNilInQuery": [
+    "TestQuery/Bind/Nil": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestEmptyTimestamp": [
+    "TestScan/Row/EmptyTimestamp": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestGetKeyspaceMetadata": [
+    "TestMetadata/Keyspace/Exists": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestSessionMetadataAPIs": [
+    "TestMetadata/Session": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestGetKeyspaceMetadataFails": [
+    "TestMetadata/Keyspace/Missing": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestRoutingKey": [
+    "TestRouting/RoutingKey/Computed": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestTokenAwareConnPool": [
+    "TestRouting/TokenAware/ConnPool": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestNegativeStream": [
+    "TestFraming/NegativeStream": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestManualQueryPaging": [
+    "TestPaging/Manual": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestSessionBindRoutingKey": [
+    "TestRouting/RoutingKey/Bind": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestJSONSupport": [
+    "TestQuery/Exec/JSON": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestUnmarshallNestedTypes": [
+    "TestScan/Dynamic/NestedCollections": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestSchemaReset": [
+    "TestPrepared/Reprepare/AfterAlterTable": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestCreateSession_DontSwallowError": [
+    "TestSession/Connect/ReportsProtocolError": [
       "reactivated-batch-error-tls-summary.json"
     ],
-    "TestControl_DiscoverProtocol": [
+    "TestSession/Connect/DiscoverProtocol": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestUnsetCol": [
+    "TestQuery/Bind/UnsetColumn": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestUnsetColBatch": [
+    "TestBatch/Bind/UnsetColumn": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestQuery_NamedValues": [
+    "TestQuery/Bind/NamedValues": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestQuery_SetHostID": [
+    "TestQuery/Options/HostID": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestQuery_WithNowInSeconds": [
+    "TestQuery/Options/NowInSeconds": [
       "baseline-cassandra-v5-valid-ca-summary.json"
     ],
-    "TestQuery_SetKeyspace": [
+    "TestQuery/Options/Keyspace": [
       "baseline-cassandra-v5-valid-ca-summary.json"
     ],
-    "TestLargeSizeQuery": [
+    "TestFraming/Segment": [
       "baseline-cassandra-v5-valid-ca-summary.json"
     ],
-    "TestCompressorNegotiated": [
+    "TestFraming/Compression/Negotiated": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestQueryCompressionNotWorthIt": [
+    "TestFraming/Compression/NotWorthIt": [
       "baseline-cassandra-v5-valid-ca-summary.json"
     ],
-    "TestPrepareExecuteMetadataChangedFlag": [
+    "TestFraming/ResultMetadataID/ChangedFlag": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestStmtCacheUsesOverriddenKeyspace": [
+    "TestPrepared/Cache/OverriddenKeyspace": [
       "baseline-cassandra-v5-valid-ca-summary.json"
     ],
-    "TestRoutingKeyCacheUsesOverriddenKeyspace": [
+    "TestRouting/RoutingKey/OverriddenKeyspace": [
       "baseline-cassandra-v5-valid-ca-summary.json"
     ],
-    "TestPrepareExecuteScyllaEmptyMetadataID": [
+    "TestFraming/ResultMetadataID/ScyllaEmpty": [
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestGetHostPortMapping": [
+    "TestRouting/ClientRoutes": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
@@ -526,157 +526,157 @@
       "scylla-v4-lz4-tls-harness-fixed-summary.json",
       "tls-harness-regressions-summary.json"
     ],
-    "TestUnixSockets": [
+    "TestSession/Connect/UnixSocket": [
       "baseline-scylla-unix-socket-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json",
       "tls-harness-regressions-summary.json"
     ],
-    "TestDNS": [
+    "TestSession/Connect/DNS": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestErrorsParse": [
+    "TestQuery/Errors/AlreadyExists": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestSingleHostQueryExecutor": [
+    "TestSession/OpenSingleHost": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestRetryOnTopologyBusy": [
+    "TestFixture/RetryOnTopologyBusy": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestSerializationSimpleTypesCassandra": [
+    "TestTypes/Simple": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestSliceMapMapScanTypes": [
+    "TestScan/Dynamic/Scalars": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestSliceMapMapScanCounterTypes": [
+    "TestScan/Dynamic/Counter": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestSliceMapMapScanTupleTypes": [
+    "TestScan/Dynamic/Tuple": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestSliceMapMapScanVectorTypes": [
+    "TestScan/Dynamic/Vector": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestSliceMapMapScanCollectionTypes": [
+    "TestScan/Dynamic/Collections": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestAuthentication": [
+    "TestSession/Connect/Authentication": [
       "password-authentication-explicit-role-summary.json"
     ],
-    "TestGetHostsFromSystem": [
+    "TestMetadata/Hosts/FromSystem": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestRingDiscovery": [
+    "TestMetadata/Hosts/RingDiscovery": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestHostFilterDiscovery": [
+    "TestRouting/HostFilter/Discovery": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestHostFilterInitial": [
+    "TestRouting/HostFilter/Initial": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestApplicationInformation": [
+    "TestSession/Startup/ApplicationInfo": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestDriverConfigReporting": [
+    "TestSession/Startup/DriverConfig": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestWriteFailure": [
+    "TestQuery/Errors/WriteFailure": [
       "cassandra-server-fixtures-v5-summary.json"
     ],
-    "TestCustomPayloadMessages": [
+    "TestQuery/CustomPayload/Messages": [
       "cassandra-server-fixtures-v5-summary.json"
     ],
-    "TestCustomPayloadValues": [
+    "TestQuery/CustomPayload/Values": [
       "cassandra-server-fixtures-v5-summary.json"
     ],
-    "TestSessionAwaitSchemaAgreement": [
+    "TestSession/AwaitSchemaAgreement/Agrees": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestSessionAwaitSchemaAgreementSessionClosed": [
+    "TestSession/AwaitSchemaAgreement/SessionClosed": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestSessionAwaitSchemaAgreementContextCanceled": [
+    "TestSession/AwaitSchemaAgreement/ContextCanceled": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestNewConnectWithLowTimeout": [
+    "TestSession/Connect/LowTimeout": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
@@ -686,63 +686,63 @@
     "TestCCM": [
       "baseline-ccm-summary.json"
     ],
-    "TestKeyspaceTable": [
+    "TestPrepared/Prepare/KeyspaceTable": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestDCValidationTokenAware": [
+    "TestRouting/DCValidation/TokenAware": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestDCValidationDCAware": [
+    "TestRouting/DCValidation/DCAware": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestDCValidationRackAware": [
+    "TestRouting/DCValidation/RackAware": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestTokenAwareHostPolicy": [
+    "TestRouting/TokenAware/HostPolicy": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestNoHangAllHostsDown": [
+    "TestRouting/AllHostsDown": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestRecreateSchema": [
+    "TestMetadata/Recreate": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestSchemaQueries": [
+    "TestMetadata/Keyspace/TokenAwareSession": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestShardAwarePortIntegrationNoReconnections": [
+    "TestPool/ShardAwarePort/NoReconnections": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
@@ -750,330 +750,330 @@
       "scylla-v4-lz4-tls-harness-fixed-summary.json",
       "tls-harness-regressions-summary.json"
     ],
-    "TestShardAwarePortIntegrationMaliciousNAT": [
+    "TestPool/ShardAwarePort/MaliciousNAT": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json",
       "tls-harness-regressions-summary.json"
     ],
-    "TestShardAwarePortIntegrationUnreachable": [
+    "TestPool/ShardAwarePort/Unreachable": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json",
       "tls-unreachable-port-regression-summary.json"
     ],
-    "TestShardAwarePortIntegrationUnusedIfNotEnabled": [
+    "TestPool/ShardAwarePort/UnusedIfNotEnabled": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json",
       "tls-harness-regressions-summary.json"
     ],
-    "TestSelectWithoutFromLiteral": [
+    "TestSelectWithoutFrom/Exec/Literal": [
       "baseline-scylla-nightly-v4-snappy-summary.json"
     ],
-    "TestSelectWithoutFromFilteredOut": [
+    "TestSelectWithoutFrom/Exec/Where": [
       "baseline-scylla-nightly-v4-snappy-summary.json"
     ],
-    "TestSelectWithoutFromNow": [
+    "TestSelectWithoutFrom/Exec/Now": [
       "baseline-scylla-nightly-v4-snappy-summary.json"
     ],
-    "TestSelectWithoutFromFunctionCast": [
+    "TestSelectWithoutFrom/Exec/FunctionCast": [
       "baseline-scylla-nightly-v4-snappy-summary.json"
     ],
-    "TestSelectWithoutFromMultipleSelectors": [
+    "TestSelectWithoutFrom/Exec/MultipleSelectors": [
       "baseline-scylla-nightly-v4-snappy-summary.json"
     ],
-    "TestSelectWithoutFromAlias": [
+    "TestSelectWithoutFrom/Exec/Alias": [
       "baseline-scylla-nightly-v4-snappy-summary.json"
     ],
-    "TestSelectWithoutFromExecutionModes": [
+    "TestSelectWithoutFrom/ExecutionModes": [
       "baseline-scylla-nightly-v4-snappy-summary.json"
     ],
-    "TestSelectWithoutFromBindMarker": [
+    "TestSelectWithoutFrom/Bind": [
       "baseline-scylla-nightly-v4-snappy-summary.json"
     ],
-    "TestSelectWithoutFromRoutingKey": [
+    "TestSelectWithoutFrom/RoutingKey": [
       "baseline-scylla-nightly-v4-snappy-summary.json"
     ],
-    "TestSelectWithoutFromTokenAware": [
+    "TestSelectWithoutFrom/TokenAware": [
       "baseline-scylla-nightly-v4-snappy-summary.json"
     ],
-    "TestSelectWithoutFromMapScan": [
+    "TestSelectWithoutFrom/DynamicScan": [
       "baseline-scylla-nightly-v4-snappy-summary.json"
     ],
-    "TestSelectWithoutFromAggregate": [
+    "TestSelectWithoutFrom/Exec/Aggregate": [
       "baseline-scylla-nightly-v4-snappy-summary.json"
     ],
-    "TestSelectWithoutFromJSON": [
+    "TestSelectWithoutFrom/Exec/JSON": [
       "baseline-scylla-nightly-v4-snappy-summary.json"
     ],
-    "TestSelectWithoutFromWithKeyspace": [
+    "TestSelectWithoutFrom/Exec/SessionKeyspace": [
       "baseline-scylla-nightly-v4-snappy-summary.json"
     ],
-    "TestSelectWithoutFromUnqualifiedUDF": [
+    "TestSelectWithoutFrom/UDF": [
       "baseline-scylla-nightly-v4-snappy-summary.json"
     ],
-    "TestSelectWithoutFromRejected": [
+    "TestSelectWithoutFrom/Rejected": [
       "baseline-scylla-nightly-v4-snappy-summary.json"
     ],
-    "TestSessionEventBusReceivesSchemaChangeEvent": [
+    "TestMetadata/Events/SchemaChange": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestSessionEventBusReceivesControlReconnectEvent": [
+    "TestMetadata/Events/ControlReconnect": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestSessionAPI": [
+    "TestSession/Close/Unconnected": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestQueryBasicAPI": [
+    "TestQuery/Exec/Basic": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestQueryShouldPrepare": [
+    "TestQuery/ShouldPrepare/Keywords": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestBatchBasicAPI": [
+    "TestBatch/Exec/Basic": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestConsistencyNames": [
+    "TestQuery/ConsistencyString": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestIsUseStatement": [
+    "TestQuery/Bind/DetectsUse": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestRetryType_IgnoreRethrow": [
+    "TestQuery/Retry/IgnoreRethrow": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestTLSTicketResumption": [
+    "TestSession/Connect/TLSTicketResumption": [
       "tls-ticket-resumption-summary.json"
     ],
-    "TestTablets": [
+    "TestRouting/Tablets/Converge": [
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestTracingNewAPI": [
+    "TestObserver/Trace/Tracer": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestTupleSimple": [
+    "TestTuple/RoundTrip/Simple": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestTuple_NullTuple": [
+    "TestTuple/RoundTrip/Null": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestTuple_TupleNotSet": [
+    "TestTuple/RoundTrip/NotSet": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestTupleMapScan": [
+    "TestTuple/MapScan/Present": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestTupleMapScanNil": [
+    "TestTuple/MapScan/NullMembers": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestTupleMapScanNotSet": [
+    "TestTuple/MapScan/Absent": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestTupleLastFieldEmpty": [
+    "TestTuple/RoundTrip/LastFieldEmpty": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestTuple_NestedCollection": [
+    "TestTuple/NestedCollection/NonNull": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestTuple_NullableNestedCollection": [
+    "TestTuple/NestedCollection/Nullable": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestUDT_Marshaler": [
+    "TestUDT/RoundTrip/Marshaler": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestUDT_Reflect": [
+    "TestUDT/RoundTrip/Reflect": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestUDT_NullObject": [
+    "TestUDT/Scan/NullIntoNullable": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestMapScanUDT": [
+    "TestUDT/MapScan": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestUDT_MissingField": [
+    "TestUDT/RoundTrip/MissingField": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestUDT_EmptyCollections": [
+    "TestUDT/RoundTrip/EmptyCollections": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestUDT_UpdateField": [
+    "TestUDT/UpdateField": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestUDT_ScanNullUDT": [
+    "TestUDT/Scan/NullMarshaler": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestVector_Marshaler": [
+    "TestVector/RoundTrip/Marshaler": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestVector_Types": [
+    "TestVector/RoundTrip/Types": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestVector_MarshalerUDT": [
+    "TestVector/RoundTrip/UDT": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestVector_Empty": [
+    "TestVector/RoundTrip/Empty": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestVector_MissingDimension": [
+    "TestVector/Bind/WrongDimension": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestVector_SubTypeParsing": [
+    "TestVector/ParseType": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestWikiCreateSchema": [
+    "TestWiki/CreateSchema": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestWikiCreatePages": [
+    "TestWiki/CreatePages": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",
       "baseline-scylla-tls-summary.json",
       "scylla-v4-lz4-tls-harness-fixed-summary.json"
     ],
-    "TestWikiTypicalCRUD": [
+    "TestWiki/CRUD": [
       "baseline-cassandra-v5-valid-ca-summary.json",
       "baseline-scylla-nightly-v4-snappy-summary.json",
       "baseline-scylla-summary.json",

@@ -7,8 +7,8 @@ checks=[
  ('vet',['go','vet','-tags','unit','./...']),
  ('integration-build',['go','test','-c','-race','-tags','integration gocql_debug','-o','/tmp/step08-final-integration.test','.']),
  ('ccm-build',['go','test','-c','-race','-tags','ccm integration gocql_debug','-o','/tmp/step08-final-ccm.test','.']),
- ('benchmarks',['go','test','-tags','unit','-run','^$','-bench','^BenchmarkStep08|^BenchmarkV2ExclusiveTransport$|^BenchmarkV2TLS(Write|Receive)Amplification$|^BenchmarkStep07ExecutionStorage$','-benchtime=20x','-count=1','-timeout=3m','.']),
- ('copy-contract',['go','test','-race','-tags','unit','-run','^TestStep08IndependentRawDirectRead$|^TestStep07StreamRawReadCallerBacking$|^TestV2Exclusive.*(Working|Direct|Copy|Memory|Storage)|^TestTypedTLSReceivesOriginalPlaintextSpans$','-count=1','-timeout=1m','.'])]
+ ('benchmarks',['go','test','-tags','unit','-run','^$','-bench','^BenchmarkStep08|^BenchmarkStreamTransport$/^Exclusive$|^BenchmarkV2TLS(Write|Receive)Amplification$|^BenchmarkStep07ExecutionStorage$','-benchtime=20x','-count=1','-timeout=3m','.']),
+ ('copy-contract',['go','test','-race','-tags','unit','-run','^TestStep08IndependentRawDirectRead$|^TestStep07StreamRawReadCallerBacking$|^TestV2Exclusive.*(Working|Direct|Copy|Memory|Storage)|^TestWriteSpans$/^TLS$/^OriginalPlaintextSpans$','-count=1','-timeout=1m','.'])]
 for name,command in checks:
  log=out/('step08-final-'+name+'.log');start=time.monotonic()
  with log.open('wb') as target:r=subprocess.run(command,cwd=root,stdout=target,stderr=subprocess.STDOUT)

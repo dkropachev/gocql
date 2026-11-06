@@ -132,8 +132,8 @@ for group in ("helpers", "supporting_methods"):
 ledger["revision"] = "step13 source manifest " + source
 write("assertion-source", ledger)
 # Broader test/helper declaration preservation includes two explicit semantic renames.
-renames = {"TestBenchHistoricalControlCapture": "TestBenchCurrentControlCapture",
-           "TestLZ4ReleaseNeverLatest": "TestPrereleaseNeverLatest"}
+renames = {"TestBenchHistoricalControlCapture": "TestFixtures/BenchRecordings/CurrentControlCapture",
+           "TestLZ4ReleaseNeverLatest": "TestRelease/InspectReleaseState/PrereleaseNeverLatest"}
 call_equivalence = read(AUDIT / "test-call-equivalence.json")
 assert all(call_equivalence.values()) and len(call_equivalence) == 9
 changes = []
@@ -230,12 +230,12 @@ for path in sorted(Path("tests/bench").glob("rec_*/*")):
     records = [json.loads(line) for line in path.read_text().splitlines()]
     corpus.append({"path": str(path), "sha256": sha(path), "records": len(records), "protocol_stamps": sorted({r["proto"] for r in records})})
 replay_events = list(log_events(CHECKS / "replay-operations.log"))
-case_passes = [e for e in replay_events if e.get("Action") == "pass" and re.fullmatch(r"TestSingleConnectionReplay/(select|insert)/Case[0-9]", e.get("Test", ""))]
+case_passes = [e for e in replay_events if e.get("Action") == "pass" and re.fullmatch(r"TestSingleConnection/Replay/(select|insert)/Case[0-9]", e.get("Test", ""))]
 assert len(case_passes) == 60
 write("replay", {"source_sha256": source, "capture_generation_receipt": "step13-native-stable.json", "corpus_config":read("tests/bench/corpus.json"), "corpus_config_sha256":sha("tests/bench/corpus.json"),
     "capture_generation_command": next(c for c in native["stable"]["commands"] if c["name"].endswith("record-and-v4raw")),
     "server": native["stable"]["configuration"]["lanes"][0], "corpus": corpus,
-    "operational_command": ["go", "test", "-json", "-race", "-count=3", "-run", "^TestSingleConnectionReplay$", "./tests/bench"],
+    "operational_command": ["go", "test", "-json", "-race", "-count=3", "-run", "^TestSingleConnection$/^Replay$", "./tests/bench"],
     "operational_log": str(CHECKS / "replay-operations.log"), "operational_log_sha256": sha(CHECKS / "replay-operations.log"),
     "effective_case_passes": len(case_passes), "unique_cases": sorted({e["Test"] for e in case_passes}),
     "select_assertions": "Exactly one row with exact Name_i for each key i=0..9.",
@@ -276,7 +276,7 @@ assert api["external_implementation_consumer"]["exit_code"]==0
 assert len(api["required_interface_signatures"])==31
 assert any(r.get("interface")=="ConvictionPolicy" and r.get("unnameable_type")=="github.com/scylladb/gocql/v2/internal/endpoint.HostInfo" for r in read(E/"step13-required-interface-negative.json")["unnameable_required_interface_types"])
 assert "PUBLIC CONVICTION CALLBACK false" in text and "PUBLIC CONVICTION CALLBACK true" in text
-write("public-extension",{"source_sha256":source,"externally_implemented_interfaces":sorted(api["required_interface_signatures"]),"consumer":api["external_implementation_consumer"],"negative_control":{"candidate":"583b274dcbfe3461b2096d1df89665de5cf053b4","evidence":"step13-required-interface-negative.json","sha256":sha(E/"step13-required-interface-negative.json"),"expected_audit_exit_code":1},"native_custom_conviction_verdicts":[False,True],"native_host_context_equals_data_dial_snapshot":True,"pool_callback_test":"TestConvictionSnapshotFailureDecision","pool_checks":["original error and host identity/address/DC/rack/tokens/state/shards preserved","snapshot tokens detached from mutable host","callback outside pool lock","false keeps host; true reports down","no callback without empty failed pool","reset remains externally callable with same host identity"],"runtime_behavior":"Default SimpleConvictionPolicy still always convicts and Reset remains a no-op. No new driver Reset calls were introduced.","projection_boundary":"Pool uses lower endpoint.SnapshotHost without parent-pool lookups; control uses existing upper snapshot projection. No lower settings/routing/metadata dependency was added."})
+write("public-extension",{"source_sha256":source,"externally_implemented_interfaces":sorted(api["required_interface_signatures"]),"consumer":api["external_implementation_consumer"],"negative_control":{"candidate":"583b274dcbfe3461b2096d1df89665de5cf053b4","evidence":"step13-required-interface-negative.json","sha256":sha(E/"step13-required-interface-negative.json"),"expected_audit_exit_code":1},"native_custom_conviction_verdicts":[False,True],"native_host_context_equals_data_dial_snapshot":True,"pool_callback_test":"TestHostConnPool/FillingStopped/Conviction","pool_checks":["original error and host identity/address/DC/rack/tokens/state/shards preserved","snapshot tokens detached from mutable host","callback outside pool lock","false keeps host; true reports down","no callback without empty failed pool","reset remains externally callable with same host identity"],"runtime_behavior":"Default SimpleConvictionPolicy still always convicts and Reset remains a no-op. No new driver Reset calls were introduced.","projection_boundary":"Pool uses lower endpoint.SnapshotHost without parent-pool lookups; control uses existing upper snapshot projection. No lower settings/routing/metadata dependency was added."})
 
 artifacts = sorted(p for p in E.glob("step13-*.json") if p.name != "step13-verification.json")
 write("verification", {"step": 13, "branch": "v2-13-public-module-docs", "accepted_predecessor": BASE,

@@ -33,7 +33,7 @@ fixture restores physical picker down states and rebuilds only its synthetic
 membership index, retaining all nine original policies and one-host cases.
 
 Vnode ring fixtures explicitly disable tablets where supported; the separate
-TestTablets still requires actual wrong-shard feedback and shard-specific
+TestRouting/Tablets/Converge still requires actual wrong-shard feedback and shard-specific
 convergence. Both Scylla distributions run two shards. Native plaintext/TLS shard
 ports are explicitly 19042/19142, preventing the server from assigning TLS to the
 plaintext advanced endpoint. This exposed and corrected fixture behavior that

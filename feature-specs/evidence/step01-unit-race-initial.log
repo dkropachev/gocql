@@ -1,28 +1,28 @@
 2026/10/29 15:04:00 logger.go:60: warning: skipping result metadata can lead to unpredictable results if columns involved in a prepared query are altered, on connections that exchange no result metadata ID (protocol v4 or lower without the SCYLLA_USE_METADATA_ID extension).
 2026/10/29 15:04:00 logger.go:59: gocql: 127.0.0.1:43719 does not support the requested "snappy" compression, continuing uncompressed (server offers: [lz4])
 2026/10/29 15:04:00 logger.go:59: gocql: 127.0.0.1:43719 does not support the requested "snappy" compression, continuing uncompressed (server offers: [lz4])
---- FAIL: Test_readCompressedFrame (0.00s)
-    --- FAIL: Test_readCompressedFrame/failed_to_encode_payload (0.00s)
+--- FAIL: TestFramer/ReadFrame/Compressed (0.00s)
+    --- FAIL: TestFramer/ReadFrame/Compressed/failed_to_encode_payload (0.00s)
         frame_test.go:1394:
                 Error Trace:    /extra/scylladb/gocql/frame_test.go:1394
                 Error:          An error is expected but got nil.
-                Test:           Test_readCompressedFrame/failed_to_encode_payload
-    --- FAIL: Test_readCompressedFrame/failed_to_decode_payload (0.00s)
+                Test:           TestFramer/ReadFrame/Compressed/failed_to_encode_payload
+    --- FAIL: TestFramer/ReadFrame/Compressed/failed_to_decode_payload (0.00s)
         frame_test.go:1394:
                 Error Trace:    /extra/scylladb/gocql/frame_test.go:1394
                 Error:          An error is expected but got nil.
-                Test:           Test_readCompressedFrame/failed_to_decode_payload
-    --- FAIL: Test_readCompressedFrame/length_mismatch_after_decoding (0.00s)
+                Test:           TestFramer/ReadFrame/Compressed/failed_to_decode_payload
+    --- FAIL: TestFramer/ReadFrame/Compressed/length_mismatch_after_decoding (0.00s)
         frame_test.go:1394:
                 Error Trace:    /extra/scylladb/gocql/frame_test.go:1394
                 Error:          An error is expected but got nil.
-                Test:           Test_readCompressedFrame/length_mismatch_after_decoding
+                Test:           TestFramer/ReadFrame/Compressed/length_mismatch_after_decoding
 ==================
 WARNING: DATA RACE
 Write at 0x00c000242960 by goroutine 2469:
   runtime.mapdelete_faststr()
       /usr/local/go/src/internal/runtime/maps/runtime_faststr_swiss.go:401 +0x0
-  github.com/scylladb/gocql/v2.TestV2MetadataDropDuringFetchIsConfirmed.func1()
+  github.com/scylladb/gocql/v2.TestSchemaMetadata/RefreshV2AllSchema/DropDuringFetchIsConfirmed.func1()
       /extra/scylladb/gocql/v2_metadata_refresh_test.go:19 +0xbc
   github.com/scylladb/gocql/v2.(*schemaDataMock).querySystem()
       /extra/scylladb/gocql/events_unit_test.go:242 +0x271
@@ -68,7 +68,7 @@ Goroutine 2469 (running) created at:
       /extra/scylladb/gocql/v2_metadata.go:1807 +0x4be
   github.com/scylladb/gocql/v2.(*Session).refreshV2AllSchema()
       /extra/scylladb/gocql/v2_metadata.go:1630 +0x17ba
-  github.com/scylladb/gocql/v2.TestV2MetadataDropDuringFetchIsConfirmed()
+  github.com/scylladb/gocql/v2.TestSchemaMetadata/RefreshV2AllSchema/DropDuringFetchIsConfirmed()
       /extra/scylladb/gocql/v2_metadata_refresh_test.go:28 +0x16f
   testing.tRunner()
       /usr/local/go/src/testing/testing.go:1934 +0x21c
@@ -82,14 +82,14 @@ Goroutine 2470 (finished) created at:
       /extra/scylladb/gocql/v2_metadata.go:1808 +0x61e
   github.com/scylladb/gocql/v2.(*Session).refreshV2AllSchema()
       /extra/scylladb/gocql/v2_metadata.go:1630 +0x17ba
-  github.com/scylladb/gocql/v2.TestV2MetadataDropDuringFetchIsConfirmed()
+  github.com/scylladb/gocql/v2.TestSchemaMetadata/RefreshV2AllSchema/DropDuringFetchIsConfirmed()
       /extra/scylladb/gocql/v2_metadata_refresh_test.go:28 +0x16f
   testing.tRunner()
       /usr/local/go/src/testing/testing.go:1934 +0x21c
   testing.(*T).Run.gowrap1()
       /usr/local/go/src/testing/testing.go:1997 +0x44
 ==================
---- FAIL: TestV2MetadataDropDuringFetchIsConfirmed (0.00s)
+--- FAIL: TestSchemaMetadata/RefreshV2AllSchema/DropDuringFetchIsConfirmed (0.00s)
     testing.go:1617: race detected during execution of test
 2026/10/29 15:04:00 logger.go:60: gocql: WARNING - DisableStrictCertificateValidation is deprecated and will be removed in a future version. Please ensure your certificate chains are properly configured to work with strict validation.
 2026/10/29 15:04:01 logger.go:59: scylla: connection to shard-aware address 127.0.0.1:40473 resulted in wrong shard being assigned; please check that you are not behind a NAT or AddressTranslater which changes source ports; falling back to non-shard-aware port for 5m0s

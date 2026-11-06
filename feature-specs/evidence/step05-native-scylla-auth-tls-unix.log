@@ -59,10 +59,10 @@
 {"Time":"2026-10-29T19:23:28.825542941-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"2026/10/29 19:23:28 logger.go:59: scylla: 127.0.20.1:9142 no excess connections to close\n"}
 {"Time":"2026-10-29T19:23:28.825549594-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"2026/10/29 19:23:28 logger.go:59: scylla: 127.0.20.3:9142 closing 2 connections\n"}
 {"Time":"2026-10-29T19:23:28.825564302-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"2026/10/29 19:23:28 logger.go:59: scylla: 127.0.20.3:9142 no excess connections to close\n"}
-{"Time":"2026-10-29T19:23:28.825940782-04:00","Action":"run","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets"}
-{"Time":"2026-10-29T19:23:28.825942716-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets","Output":"=== RUN   TestUnixSockets\n"}
-{"Time":"2026-10-29T19:23:28.825961251-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets","Output":"=== PAUSE TestUnixSockets\n"}
-{"Time":"2026-10-29T19:23:28.825962303-04:00","Action":"pause","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets"}
+{"Time":"2026-10-29T19:23:28.825940782-04:00","Action":"run","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket"}
+{"Time":"2026-10-29T19:23:28.825942716-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket","Output":"=== RUN   TestSession/Connect/UnixSocket\n"}
+{"Time":"2026-10-29T19:23:28.825961251-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket","Output":"=== PAUSE TestSession/Connect/UnixSocket\n"}
+{"Time":"2026-10-29T19:23:28.825962303-04:00","Action":"pause","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket"}
 {"Time":"2026-10-29T19:23:28.826159104-04:00","Action":"run","Package":"github.com/scylladb/gocql/v2","Test":"TestStep05MetadataControlLive"}
 {"Time":"2026-10-29T19:23:28.826160066-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep05MetadataControlLive","Output":"=== RUN   TestStep05MetadataControlLive\n"}
 {"Time":"2026-10-29T19:23:28.882985804-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep05MetadataControlLive","Output":"2026/10/29 19:23:28 logger.go:59: gocql: conns of pool after stopped \"127.0.20.3\": 1\n"}
@@ -76,11 +76,11 @@
 {"Time":"2026-10-29T19:23:30.700903682-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep05MetadataControlLive","Output":"2026/10/29 19:23:30 logger.go:59: gocql: handling frame: [header version=[version=4 direction=RESP] flags=0x0 stream=-1 op=EVENT length=63]\n"}
 {"Time":"2026-10-29T19:23:30.947242407-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep05MetadataControlLive","Output":"--- PASS: TestStep05MetadataControlLive (2.12s)\n"}
 {"Time":"2026-10-29T19:23:30.947264008-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Test":"TestStep05MetadataControlLive","Elapsed":2.12}
-{"Time":"2026-10-29T19:23:30.947538656-04:00","Action":"cont","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets"}
-{"Time":"2026-10-29T19:23:30.947540439-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets","Output":"=== CONT  TestUnixSockets\n"}
-{"Time":"2026-10-29T19:23:30.949541556-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets","Output":"2026/10/29 19:23:30 logger.go:59: gocql: conns of pool after stopped \"127.0.0.1\": 1\n"}
-{"Time":"2026-10-29T19:23:30.993116157-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets","Output":"--- PASS: TestUnixSockets (0.05s)\n"}
-{"Time":"2026-10-29T19:23:30.993143218-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets","Elapsed":0.05}
+{"Time":"2026-10-29T19:23:30.947538656-04:00","Action":"cont","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket"}
+{"Time":"2026-10-29T19:23:30.947540439-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket","Output":"=== CONT  TestSession/Connect/UnixSocket\n"}
+{"Time":"2026-10-29T19:23:30.949541556-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket","Output":"2026/10/29 19:23:30 logger.go:59: gocql: conns of pool after stopped \"127.0.0.1\": 1\n"}
+{"Time":"2026-10-29T19:23:30.993116157-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket","Output":"--- PASS: TestSession/Connect/UnixSocket (0.05s)\n"}
+{"Time":"2026-10-29T19:23:30.993143218-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket","Elapsed":0.05}
 {"Time":"2026-10-29T19:23:30.993146835-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"PASS\n"}
 {"Time":"2026-10-29T19:23:31.996211485-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"ok  \tgithub.com/scylladb/gocql/v2\t4.857s\n"}
 {"Time":"2026-10-29T19:23:31.996239057-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Elapsed":4.857}

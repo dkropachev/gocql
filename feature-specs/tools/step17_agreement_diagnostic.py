@@ -37,7 +37,7 @@ if full:
     replacement=OUT/'recreate.overlay.go';replacement.write_text(body);changes[str(original)]=str(replacement)
     overlay.write_text(json.dumps({'Replace':changes},indent=2)+'\n')
 config=json.loads((OUT.parents[1]/'release/cassandra-config.json').read_text());lane=config['lanes'][0]
-lane['modes']=[dict(name='mv-v5-raw-tls',tests='^Test'if full else'^TestRecreateSchema$/^Materialized_Views$',args=['-proto=5','-compressor=no-compression','-runssl','-test.count='+('1'if full else'3')])]
+lane['modes']=[dict(name='mv-v5-raw-tls',tests='^Test'if full else'^TestMetadata$/^Recreate$/^Materialized_Views$',args=['-proto=5','-compressor=no-compression','-runssl','-test.count='+('1'if full else'3')])]
 path=OUT/'config.json';path.write_text(json.dumps(config,indent=2)+'\n')
 sys.path.insert(0,str(ROOT/'tests/fixtures'));import native
 Original=native.Runner

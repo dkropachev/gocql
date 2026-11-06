@@ -29,8 +29,8 @@ def build():
     assert all(row['same_complete_source']for rows in mapping['preservation'].values()for row in rows)
     replay=next(c for c in matrix.read(OUT/'checks/checks.json')if c['name']=='replay-operations')
     events=matrix.events(replay['log'])
-    cases=[e['Test']for e in events if e.get('Action')=='pass'and re.fullmatch(r'TestSingleConnectionReplay/(select|insert)/Case[0-9]',e.get('Test',''))]
-    expected={'TestSingleConnectionReplay/'+op+'/Case'+str(i)for op in ['select','insert']for i in range(10)}
+    cases=[e['Test']for e in events if e.get('Action')=='pass'and re.fullmatch(r'TestSingleConnection/Replay/(select|insert)/Case[0-9]',e.get('Test',''))]
+    expected={'TestSingleConnection/Replay/'+op+'/Case'+str(i)for op in ['select','insert']for i in range(10)}
     assert len(cases)==60 and set(cases)==expected
     bench=next(c for c in matrix.read(OUT/'checks/checks.json')if c['name']=='replay-benchmark')
     bench_cases=re.findall(r'(?m)^(BenchmarkSingleConnection(?:Select|Insert)/Case[0-9])-\d+\s',Path(bench['log']).read_text())

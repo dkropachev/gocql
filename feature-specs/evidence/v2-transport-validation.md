@@ -43,7 +43,7 @@ adapter still materializes payloads for old callers during migration.
 Command actually run:
 
 ```
-go test -run '^$' -bench '^BenchmarkTypedBuildRequest$' -benchmem -benchtime=100ms .
+go test -run '^$' -bench '^BenchmarkWriter$/^BuildRequest$' -benchmem -benchtime=100ms .
 ```
 
 Passed in 2.017 s. Selected observed results:
@@ -72,7 +72,7 @@ by this transport worker. Database lanes are tracked by the integration owner.
   — passed, 1.008 s. A present empty paging token remains present on the request
   wire and response page. `METADATA_CHANGED | NO_METADATA` is rejected even
   when the replacement metadata ID is empty.
-- `go test -race -tags=unit -run '^TestRecvSplitFrameAllocatesExactlyOneFrameBuffer$' -count=1 -timeout=30s .`
+- `go test -race -tags=unit -run '^TestSegment$/^RecvSplitFrame$/^AllocatesOneFrameBuffer$' -count=1 -timeout=30s .`
   — passed, 1.027 s after translating this existing test to real typed ROWS.
   Its test identity and original 1.5-times-frame-size total-allocation ceiling
   remain unchanged. It now records the actual segment Read destination slices
@@ -80,11 +80,11 @@ by this transport worker. Database lanes are tracked by the integration owner.
   The previous synthetic READY/event frame exercised the legacy contiguous
   framer adapter, which intentionally remains during migration.
 
-- `go test -race -run '^TestTypedReceiveLargeFragmentedRows$' -count=1 -timeout=30s .`
+- `go test -race -run '^TestTypedConn$/^ExecuteTyped$/^LargeFragmentedRows$' -count=1 -timeout=30s .`
   — passed, 1.155 s after expanding the test to both random and repetitive
   500 KB payloads. This covers genuinely compressed v5 continuation segments,
   compressed v4 frames, and v5 raw fallback through the actual connection loop.
-- `go test -race -run '^TestTypedProtocolLimits$' -count=1 -timeout=30s .`
+- `go test -race -run '^TestTypedConn$/^ProtocolLimits$' -count=1 -timeout=30s .`
   — passed, 1.008 s. Configured frame and metadata depth limits are enforced;
   oversized v4 declared expansion is rejected before Decode, and oversized v5
   declared expansion before reading/decompressing payload. Zero ConnConfig

@@ -38,10 +38,10 @@
 {"Time":"2026-10-29T20:07:43.58042041-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"2026/10/29 20:07:43 logger.go:59: scylla: 127.0.20.2:9042 no excess connections to close\n"}
 {"Time":"2026-10-29T20:07:43.58043104-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"2026/10/29 20:07:43 logger.go:59: scylla: 127.0.20.1:9042 closing 1 connections\n"}
 {"Time":"2026-10-29T20:07:43.580438654-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"2026/10/29 20:07:43 logger.go:59: scylla: 127.0.20.1:9042 no excess connections to close\n"}
-{"Time":"2026-10-29T20:07:43.581082591-04:00","Action":"run","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets"}
-{"Time":"2026-10-29T20:07:43.581085466-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"=== RUN   TestTablets\n"}
-{"Time":"2026-10-29T20:07:43.581109943-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"=== PAUSE TestTablets\n"}
-{"Time":"2026-10-29T20:07:43.581112007-04:00","Action":"pause","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets"}
+{"Time":"2026-10-29T20:07:43.581082591-04:00","Action":"run","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge"}
+{"Time":"2026-10-29T20:07:43.581085466-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"=== RUN   TestRouting/Tablets/Converge\n"}
+{"Time":"2026-10-29T20:07:43.581109943-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"=== PAUSE TestRouting/Tablets/Converge\n"}
+{"Time":"2026-10-29T20:07:43.581112007-04:00","Action":"pause","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge"}
 {"Time":"2026-10-29T20:07:43.581432242-04:00","Action":"run","Package":"github.com/scylladb/gocql/v2","Test":"TestStep06TabletRoutingLive"}
 {"Time":"2026-10-29T20:07:43.581435217-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep06TabletRoutingLive","Output":"=== RUN   TestStep06TabletRoutingLive\n"}
 {"Time":"2026-10-29T20:07:43.583605337-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep06TabletRoutingLive","Output":"2026/10/29 20:07:43 logger.go:59: gocql: conns of pool after stopped \"127.0.20.1\": 1\n"}
@@ -63,19 +63,19 @@
 {"Time":"2026-10-29T20:07:44.120485847-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep06LeaderRoutingLive","Output":"    v2_tablet_routing_integration_test.go:213: server did not advertise TABLETS_ROUTING_V2_EXPERIMENTAL; source-accurate wire fixtures cover V2 separately\n"}
 {"Time":"2026-10-29T20:07:44.120685845-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep06LeaderRoutingLive","Output":"--- SKIP: TestStep06LeaderRoutingLive (0.00s)\n"}
 {"Time":"2026-10-29T20:07:44.120702366-04:00","Action":"skip","Package":"github.com/scylladb/gocql/v2","Test":"TestStep06LeaderRoutingLive","Elapsed":0}
-{"Time":"2026-10-29T20:07:44.12086829-04:00","Action":"cont","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets"}
-{"Time":"2026-10-29T20:07:44.120869552-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"=== CONT  TestTablets\n"}
-{"Time":"2026-10-29T20:07:44.127699846-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"2026/10/29 20:07:44 logger.go:59: gocql: conns of pool after stopped \"127.0.20.3\": 1\n"}
-{"Time":"2026-10-29T20:07:44.127872582-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"2026/10/29 20:07:44 logger.go:59: gocql: conns of pool after stopped \"127.0.20.1\": 1\n"}
-{"Time":"2026-10-29T20:07:44.128202085-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"2026/10/29 20:07:44 logger.go:59: gocql: conns of pool after stopped \"127.0.20.2\": 1\n"}
-{"Time":"2026-10-29T20:07:44.129680728-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"2026/10/29 20:07:44 logger.go:59: gocql: handling frame: [event schema_change_keyspace change=\"CREATED\" keyspace=\"gocql_test\"]\n"}
-{"Time":"2026-10-29T20:07:44.163064387-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"2026/10/29 20:07:44 logger.go:59: gocql: conns of pool after stopped \"127.0.20.2\": 1\n"}
-{"Time":"2026-10-29T20:07:44.163074385-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"2026/10/29 20:07:44 logger.go:59: gocql: conns of pool after stopped \"127.0.20.3\": 1\n"}
-{"Time":"2026-10-29T20:07:44.163172781-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"2026/10/29 20:07:44 logger.go:59: gocql: conns of pool after stopped \"127.0.20.1\": 1\n"}
-{"Time":"2026-10-29T20:07:44.181038483-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"2026/10/29 20:07:44 logger.go:59: gocql: handling frame: [event schema_change change=\"CREATED\" keyspace=\"gocql_test\" object=\"testtablets_c3436286e07740bb8c7f9fa935f3be60\"]\n"}
-{"Time":"2026-10-29T20:07:44.21405092-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"    tablet_integration_test.go:123: tablet execution target {false 38291561-6444-4ff2-80e8-c3b97c1e20b7 {0 true}} is not a shard-specific replica in []\n"}
-{"Time":"2026-10-29T20:07:44.214200512-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Output":"--- FAIL: TestTablets (0.09s)\n"}
-{"Time":"2026-10-29T20:07:44.2142471-04:00","Action":"fail","Package":"github.com/scylladb/gocql/v2","Test":"TestTablets","Elapsed":0.09}
+{"Time":"2026-10-29T20:07:44.12086829-04:00","Action":"cont","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge"}
+{"Time":"2026-10-29T20:07:44.120869552-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"=== CONT  TestRouting/Tablets/Converge\n"}
+{"Time":"2026-10-29T20:07:44.127699846-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"2026/10/29 20:07:44 logger.go:59: gocql: conns of pool after stopped \"127.0.20.3\": 1\n"}
+{"Time":"2026-10-29T20:07:44.127872582-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"2026/10/29 20:07:44 logger.go:59: gocql: conns of pool after stopped \"127.0.20.1\": 1\n"}
+{"Time":"2026-10-29T20:07:44.128202085-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"2026/10/29 20:07:44 logger.go:59: gocql: conns of pool after stopped \"127.0.20.2\": 1\n"}
+{"Time":"2026-10-29T20:07:44.129680728-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"2026/10/29 20:07:44 logger.go:59: gocql: handling frame: [event schema_change_keyspace change=\"CREATED\" keyspace=\"gocql_test\"]\n"}
+{"Time":"2026-10-29T20:07:44.163064387-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"2026/10/29 20:07:44 logger.go:59: gocql: conns of pool after stopped \"127.0.20.2\": 1\n"}
+{"Time":"2026-10-29T20:07:44.163074385-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"2026/10/29 20:07:44 logger.go:59: gocql: conns of pool after stopped \"127.0.20.3\": 1\n"}
+{"Time":"2026-10-29T20:07:44.163172781-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"2026/10/29 20:07:44 logger.go:59: gocql: conns of pool after stopped \"127.0.20.1\": 1\n"}
+{"Time":"2026-10-29T20:07:44.181038483-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"2026/10/29 20:07:44 logger.go:59: gocql: handling frame: [event schema_change change=\"CREATED\" keyspace=\"gocql_test\" object=\"testtablets_c3436286e07740bb8c7f9fa935f3be60\"]\n"}
+{"Time":"2026-10-29T20:07:44.21405092-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"    tablet_integration_test.go:123: tablet execution target {false 38291561-6444-4ff2-80e8-c3b97c1e20b7 {0 true}} is not a shard-specific replica in []\n"}
+{"Time":"2026-10-29T20:07:44.214200512-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Output":"--- FAIL: TestRouting/Tablets/Converge (0.09s)\n"}
+{"Time":"2026-10-29T20:07:44.2142471-04:00","Action":"fail","Package":"github.com/scylladb/gocql/v2","Test":"TestRouting/Tablets/Converge","Elapsed":0.09}
 {"Time":"2026-10-29T20:07:44.214250266-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"FAIL\n"}
 {"Time":"2026-10-29T20:07:44.216730592-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"FAIL\tgithub.com/scylladb/gocql/v2\t0.663s\n"}
 {"Time":"2026-10-29T20:07:44.216753576-04:00","Action":"fail","Package":"github.com/scylladb/gocql/v2","Elapsed":0.663}

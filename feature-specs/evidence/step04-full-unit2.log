@@ -2,7 +2,7 @@
 2026/10/29 17:18:17 logger.go:60: warning: skipping result metadata can lead to unpredictable results if columns involved in a prepared query are altered, on connections that exchange no result metadata ID (protocol v4 or lower without the SCYLLA_USE_METADATA_ID extension).
 2026/10/29 17:18:17 logger.go:59: gocql: 127.0.0.1:37319 does not support the requested "snappy" compression, continuing uncompressed (server offers: [lz4])
 2026/10/29 17:18:17 logger.go:59: gocql: 127.0.0.1:37319 does not support the requested "snappy" compression, continuing uncompressed (server offers: [lz4])
---- FAIL: TestEffectiveInFlightMaxMatchesStreamGenerator (0.00s)
+--- FAIL: TestDriverConfigReport/EffectiveInFlightMax (0.00s)
     driver_config_test.go:194: effectiveInFlightMax(1) = 63, but the generator allows 1
     driver_config_test.go:194: effectiveInFlightMax(64) = 63, but the generator allows 64
     driver_config_test.go:194: effectiveInFlightMax(100) = 127, but the generator allows 100

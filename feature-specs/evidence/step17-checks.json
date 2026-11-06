@@ -376,7 +376,7 @@
         "-race",
         "-count=3",
         "-run",
-        "^TestSingleConnectionReplay$",
+        "^TestSingleConnection$/^Replay$",
         "./tests/bench"
       ],
       "environment": {

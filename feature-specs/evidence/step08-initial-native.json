@@ -24,7 +24,7 @@
             "args": [
               "-proto=3"
             ],
-            "tests": "^(TestAuthentication|TestStep07RunStreamLive|TestUnixSockets)$"
+            "tests": "^TestSession$/^Connect$/^Authentication$|^TestStep07RunStreamLive$|^TestSession$/^Connect$/^UnixSocket$"
           },
           {
             "name": "v4-tls",
@@ -32,7 +32,7 @@
               "-proto=4",
               "-runssl"
             ],
-            "tests": "^(TestAuthentication|TestStep07RunStreamLive|TestUnixSockets|TestCloudConnection|TestTLSTicketResumption|TestRecreateSchema)$"
+            "tests": "^TestSession$/^Connect$/^Authentication$|^TestStep07RunStreamLive$|^TestSession$/^Connect$/^UnixSocket$|^TestCloudConnection$|^TestSession$/^Connect$/^TLSTicketResumption$|^TestMetadata$/^Recreate$"
           }
         ]
       },
@@ -57,7 +57,7 @@
               "-proto=4",
               "-compressor=no-compression"
             ],
-            "tests": "^(TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+            "tests": "^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$"
           },
           {
             "name": "v5-no-compression",
@@ -65,7 +65,7 @@
               "-proto=5",
               "-compressor=no-compression"
             ],
-            "tests": "^(TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+            "tests": "^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$"
           },
           {
             "name": "v5-lz4",
@@ -73,7 +73,7 @@
               "-proto=5",
               "-compressor=lz4"
             ],
-            "tests": "^(TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+            "tests": "^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$"
           },
           {
             "name": "v5-lz4-tls",
@@ -82,7 +82,7 @@
               "-compressor=lz4",
               "-runssl"
             ],
-            "tests": "^(TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+            "tests": "^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$"
           }
         ]
       },
@@ -108,7 +108,7 @@
             "args": [
               "-proto=4"
             ],
-            "tests": "^(TestSelectWithoutFromLiteral|TestStep07RunStreamLive)$"
+            "tests": "^TestSelectWithoutFrom$/^Exec$/^Literal$|^TestStep07RunStreamLive$"
           }
         ]
       }
@@ -193,7 +193,7 @@
         "-timeout=8m",
         "-parallel=1",
         "-run",
-        "^(TestAuthentication|TestStep07RunStreamLive|TestUnixSockets)$",
+        "^TestSession$/^Connect$/^Authentication$|^TestStep07RunStreamLive$|^TestSession$/^Connect$/^UnixSocket$",
         ".",
         "-args",
         "-gocql.timeout=60s",

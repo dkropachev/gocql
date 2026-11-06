@@ -1,7 +1,7 @@
 2026/10/29 16:14:39 logger.go:60: warning: skipping result metadata can lead to unpredictable results if columns involved in a prepared query are altered, on connections that exchange no result metadata ID (protocol v4 or lower without the SCYLLA_USE_METADATA_ID extension).
 2026/10/29 16:14:39 logger.go:59: gocql: 127.0.0.1:37339 does not support the requested "snappy" compression, continuing uncompressed (server offers: [lz4])
 2026/10/29 16:14:39 logger.go:59: gocql: 127.0.0.1:37339 does not support the requested "snappy" compression, continuing uncompressed (server offers: [lz4])
---- FAIL: TestV2ResultPlanCompileSchemaFenceKeepsRetainedPage (0.00s)
+--- FAIL: TestResultPlanCache/Compile/SchemaFenceKeepsRetainedPage (0.00s)
     v2_prepared_paging_test.go:994: compile published through changed schema epoch
 2026/10/29 16:14:39 logger.go:59: scylla: connection to shard-aware address 127.0.0.1:38517 resulted in wrong shard being assigned; please check that you are not behind a NAT or AddressTranslater which changes source ports; falling back to non-shard-aware port for 5m0s
 2026/10/29 16:14:39 logger.go:59: scylla: connection to shard-aware address 127.0.0.1:45469 resulted in wrong shard being assigned; please check that you are not behind a NAT or AddressTranslater which changes source ports; falling back to non-shard-aware port for 5m0s

@@ -192,7 +192,7 @@
           "-timeout=8m",
           "-parallel=1",
           "-run",
-          "^(TestStep06TabletRoutingLive|TestStep06LeaderRoutingLive|TestTablets)$",
+          "^TestStep06TabletRoutingLive$|^TestStep06LeaderRoutingLive$|^TestRouting$/^Tablets$/^Converge$",
           ".",
           "-args",
           "-gocql.timeout=60s",
@@ -221,7 +221,7 @@
             "elapsed": 0
           },
           {
-            "test": "TestTablets",
+            "test": "TestRouting/Tablets/Converge",
             "action": "pass",
             "elapsed": 0.82
           }
@@ -244,7 +244,7 @@
           "-timeout=8m",
           "-parallel=1",
           "-run",
-          "^(TestStep06TabletRoutingLive|TestStep06LeaderRoutingLive|TestTablets)$",
+          "^TestStep06TabletRoutingLive$|^TestStep06LeaderRoutingLive$|^TestRouting$/^Tablets$/^Converge$",
           ".",
           "-args",
           "-gocql.timeout=60s",
@@ -273,7 +273,7 @@
             "elapsed": 0.33
           },
           {
-            "test": "TestTablets",
+            "test": "TestRouting/Tablets/Converge",
             "action": "pass",
             "elapsed": 0.12
           }

@@ -57,10 +57,10 @@ GROUPS={
 # Explicitly include the descriptor/domain, observation and partitioner tests
 # named by those requirements, in addition to the seam regressions above.
 for group,extra in {
- 'type-descriptors':['TestV2FoundationDescriptorImmutability','TestV2FoundationDescriptorValidation','TestV2FoundationProtocolTypeConversion'],
- 'routing-tokens':['TestV2StreamingPartitioners','TestScyllaCDCPartitioner_HashInt64MatchesHash','TestScyllaCDCPartitioner_HashInt64_ShortKeyReturnsMinToken','TestScyllaCDCPartitioner_HashInt64_ZeroAlloc'],
- 'observers-optional':['TestObserve','TestObserve_Pagination','TestBatchObserve','TestApplicationInformation','TestTracing','TestTracingNewAPI','TestTracerEnhanced','TestTracerEnhancedNotReady','TestTracerEnhancedErrors','TestTraceWriter','TestTraceWriterIncomplete','TestTraceWriterAttemptFloor','TestTraceWriterError','TestV2LifecyclePanicContained'],
- 'protocol-limits':['TestV2ServerErrorsExposeTheirCodeThroughWrappers','TestParseErrorFrame','TestParseErrorFrameTruncated','TestReadErrorMapRejectsBadAddress','TestReadErrorMapNegativeCount','TestErrorsParse','TestQueryError_PotentiallyExecuted','TestQueryError_IsIdempotent','TestQueryError_Error','TestMalformedFrameErrorWraps'],
+ 'type-descriptors':['TestDataType/Immutability','TestDataType/Constructors/Validation','TestDataType/DataTypeFromInfo'],
+ 'routing-tokens':['TestPartitionKey/Murmur3Token/SplitChains','TestScyllaCDCPartitioner/HashInt64/MatchesHash','TestScyllaCDCPartitioner/HashInt64/ShortKeyReturnsMinToken','TestScyllaCDCPartitioner/HashInt64/ZeroAlloc'],
+ 'observers-optional':['TestObserver/Query','TestObserver/Paging','TestObserver/Batch','TestSession/Startup/ApplicationInfo','TestObserver/Trace/IDs','TestObserver/Trace/Tracer','TestTracer/Enhanced/Complete','TestTracer/Enhanced/NotReady','TestTracer/Enhanced/Errors','TestTracer/Writer/Polls','TestTracer/Writer/Incomplete','TestTracer/Writer/AttemptFloor','TestTracer/Writer/Error','TestSession/ObserveLifecycle'],
+ 'protocol-limits':['TestResponse/ServerErrorCode','TestResponse/ParseError/Decodes','TestResponse/ParseError/RejectsTruncated','TestResponse/ReadErrorMap/RejectsBadAddress','TestResponse/ReadErrorMap/NegativeCountIsEmpty','TestQuery/Errors/AlreadyExists','TestQueryError/PotentiallyExecuted','TestQueryError/IsIdempotent','TestQueryError/Error','TestFramer/MalformedFrameError'],
 }.items():
     scope,pattern=GROUPS[group]
     GROUPS[group]=(scope,'(?:'+pattern+'|'+'|'.join(re.escape(x) for x in extra)+')')

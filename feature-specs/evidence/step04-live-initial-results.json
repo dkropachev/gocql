@@ -8,7 +8,7 @@
       "-tags",
       "integration gocql_debug",
       "-run",
-      "^(TestV2TransportPoolSizingLive|TestV2ExclusiveTransportLive)$",
+      "^TestPool$/^Sizing$|^TestPool$/^ExclusiveTransport$",
       "-count=1",
       "-timeout=8m",
       "-parallel=1",

@@ -1736,7 +1736,7 @@
       "disposition": "Canonical scalar/container wire values, null/unset/empty states, malformed lengths/counts, numeric/date/duration/decimal/vector edges and ownership remain covered by typed suites and all96 retained binary fixtures. Automatic pointer/interface/struct-tag discovery, cross-Go-type coercions, NewWithError, arbitrary reflection containers and MarshalCQL callbacks are intentionally removed. This is a contract disposition, not a claim that every old coercion assertion has an equivalent supported typed conversion.",
       "file": "marshal_test.go",
       "test": {
-        "name": "TestLookupCassType",
+        "name": "TestCassType/Lookup",
         "sha256": "6e025ca1a814293a4d0ed54067ad17162ba91c776f1ea52db8acaeb041031903",
         "assertion_expressions": 0
       }

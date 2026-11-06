@@ -91,7 +91,7 @@
     "expected_audit_exit_code": 1,
     "sha256": "32aa25e7ce6106350e56a941e15e82b8bbe97ec9b5cb9914b86b78a44e9d854f"
   },
-  "pool_callback_test": "TestConvictionSnapshotFailureDecision",
+  "pool_callback_test": "TestHostConnPool/FillingStopped/Conviction",
   "pool_checks": [
     "original error and host identity/address/DC/rack/tokens/state/shards preserved",
     "snapshot tokens detached from mutable host",

@@ -233,7 +233,7 @@
         "-timeout=10m",
         "-parallel=1",
         "-run",
-        "^(TestV2TransportPoolSizingLive|TestV2ExclusiveTransportLive)$",
+        "^TestPool$/^Sizing$|^TestPool$/^ExclusiveTransport$",
         ".",
         "-args",
         "-distribution=scylla",
@@ -265,7 +265,7 @@
         "-timeout=10m",
         "-parallel=1",
         "-run",
-        "^(TestV2TransportPoolSizingLive|TestV2ExclusiveTransportLive|TestShardAwarePortIntegrationNoReconnections|TestShardAwarePortIntegrationMaliciousNAT|TestShardAwarePortIntegrationUnreachable|TestShardAwarePortIntegrationUnusedIfNotEnabled|TestUnixSockets)$",
+        "^TestPool$/^Sizing$|^TestPool$/^ExclusiveTransport$|^TestPool$/^ShardAwarePort$/^NoReconnections$|^TestPool$/^ShardAwarePort$/^MaliciousNAT$|^TestPool$/^ShardAwarePort$/^Unreachable$|^TestPool$/^ShardAwarePort$/^UnusedIfNotEnabled$|^TestSession$/^Connect$/^UnixSocket$",
         ".",
         "-args",
         "-distribution=scylla",
@@ -299,7 +299,7 @@
         "-timeout=10m",
         "-parallel=1",
         "-run",
-        "^(TestV2TransportPoolSizingLive|TestV2ExclusiveTransportLive)$",
+        "^TestPool$/^Sizing$|^TestPool$/^ExclusiveTransport$",
         ".",
         "-args",
         "-distribution=cassandra",
@@ -332,7 +332,7 @@
         "-timeout=10m",
         "-parallel=1",
         "-run",
-        "^(TestV2ExclusiveTransportLive)$",
+        "^TestPool$/^ExclusiveTransport$",
         ".",
         "-args",
         "-distribution=cassandra",
@@ -358,8 +358,8 @@
       "package": "pass",
       "top_level": {
         "pass": [
-          "TestV2TransportPoolSizingLive",
-          "TestV2ExclusiveTransportLive"
+          "TestPool/Sizing",
+          "TestPool/ExclusiveTransport"
         ],
         "fail": [],
         "skip": []
@@ -371,13 +371,13 @@
       "package": "pass",
       "top_level": {
         "pass": [
-          "TestV2TransportPoolSizingLive",
-          "TestV2ExclusiveTransportLive",
-          "TestUnixSockets",
-          "TestShardAwarePortIntegrationUnusedIfNotEnabled",
-          "TestShardAwarePortIntegrationUnreachable",
-          "TestShardAwarePortIntegrationNoReconnections",
-          "TestShardAwarePortIntegrationMaliciousNAT"
+          "TestPool/Sizing",
+          "TestPool/ExclusiveTransport",
+          "TestSession/Connect/UnixSocket",
+          "TestPool/ShardAwarePort/UnusedIfNotEnabled",
+          "TestPool/ShardAwarePort/Unreachable",
+          "TestPool/ShardAwarePort/NoReconnections",
+          "TestPool/ShardAwarePort/MaliciousNAT"
         ],
         "fail": [],
         "skip": []
@@ -389,8 +389,8 @@
       "package": "pass",
       "top_level": {
         "pass": [
-          "TestV2TransportPoolSizingLive",
-          "TestV2ExclusiveTransportLive"
+          "TestPool/Sizing",
+          "TestPool/ExclusiveTransport"
         ],
         "fail": [],
         "skip": []
@@ -402,7 +402,7 @@
       "package": "pass",
       "top_level": {
         "pass": [
-          "TestV2ExclusiveTransportLive"
+          "TestPool/ExclusiveTransport"
         ],
         "fail": [],
         "skip": []

@@ -13,15 +13,15 @@
   ],
   "tests": [
     {
-      "test": "TestCustomPayloadValues",
+      "test": "TestQuery/CustomPayload/Values",
       "result": "pass"
     },
     {
-      "test": "TestWriteFailure",
+      "test": "TestQuery/Errors/WriteFailure",
       "result": "pass"
     },
     {
-      "test": "TestCustomPayloadMessages",
+      "test": "TestQuery/CustomPayload/Messages",
       "result": "pass"
     }
   ]

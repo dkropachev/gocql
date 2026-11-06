@@ -126,7 +126,7 @@
         "-run",
         "^$",
         "-bench",
-        "^BenchmarkStep08|^BenchmarkV2ExclusiveTransport$|^BenchmarkV2TLS(Write|Receive)Amplification$|^BenchmarkStep07ExecutionStorage$",
+        "^BenchmarkStep08|^BenchmarkStreamTransport$/^Exclusive$|^BenchmarkV2TLS(Write|Receive)Amplification$|^BenchmarkStep07ExecutionStorage$",
         "-benchtime=20x",
         "-count=1",
         "-timeout=3m",
@@ -148,7 +148,7 @@
         "-tags",
         "unit",
         "-run",
-        "^TestStep08IndependentRawDirectRead$|^TestStep07StreamRawReadCallerBacking$|^TestV2Exclusive.*(Working|Direct|Copy|Memory|Storage)|^TestTypedTLSReceivesOriginalPlaintextSpans$",
+        "^TestStep08IndependentRawDirectRead$|^TestStep07StreamRawReadCallerBacking$|^TestV2Exclusive.*(Working|Direct|Copy|Memory|Storage)|^TestWriteSpans$/^TLS$/^OriginalPlaintextSpans$",
         "-count=1",
         "-timeout=1m",
         "."
@@ -228,14 +228,14 @@
                   "args": [
                     "-proto=3"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestAuthentication|TestStep07RunStreamLive|TestUnixSockets)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestSession$/^Connect$/^Authentication$|^TestStep07RunStreamLive$|^TestSession$/^Connect$/^UnixSocket$"
                 },
                 {
                   "name": "v4-raw",
                   "args": [
                     "-proto=4"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestAuthentication|TestStep07RunStreamLive)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestSession$/^Connect$/^Authentication$|^TestStep07RunStreamLive$"
                 },
                 {
                   "name": "v4-tls",
@@ -243,7 +243,7 @@
                     "-proto=4",
                     "-runssl"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestStep08ClientCertificateEnforced|TestStep08SNIProxyCancellationJoins|TestAuthentication|TestStep07RunStreamLive|TestUnixSockets|TestCloudConnection|TestTLSTicketResumption|TestRecreateSchema)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestStep08ClientCertificateEnforced$|^TestStep08SNIProxyCancellationJoins$|^TestSession$/^Connect$/^Authentication$|^TestStep07RunStreamLive$|^TestSession$/^Connect$/^UnixSocket$|^TestCloudConnection$|^TestSession$/^Connect$/^TLSTicketResumption$|^TestMetadata$/^Recreate$"
                 }
               ]
             },
@@ -268,7 +268,7 @@
                     "-proto=4",
                     "-compressor=no-compression"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$"
                 },
                 {
                   "name": "v4-tls",
@@ -277,7 +277,7 @@
                     "-runssl",
                     "-compressor=no-compression"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$"
                 },
                 {
                   "name": "v5-no-compression",
@@ -285,7 +285,7 @@
                     "-proto=5",
                     "-compressor=no-compression"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$"
                 },
                 {
                   "name": "v5-lz4",
@@ -293,7 +293,7 @@
                     "-proto=5",
                     "-compressor=lz4"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$"
                 },
                 {
                   "name": "v5-raw-tls",
@@ -302,7 +302,7 @@
                     "-runssl",
                     "-compressor=no-compression"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$"
                 },
                 {
                   "name": "v5-lz4-tls",
@@ -311,7 +311,7 @@
                     "-compressor=lz4",
                     "-runssl"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$"
                 }
               ]
             },
@@ -337,7 +337,7 @@
                   "args": [
                     "-proto=4"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestSelectWithoutFromLiteral|TestStep07RunStreamLive)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestSelectWithoutFrom$/^Exec$/^Literal$|^TestStep07RunStreamLive$"
                 }
               ]
             }
@@ -534,7 +534,7 @@
               "-timeout=8m",
               "-parallel=1",
               "-run",
-              "^(TestStep08FixtureIdentity|TestAuthentication|TestStep07RunStreamLive|TestUnixSockets)$",
+              "^TestStep08FixtureIdentity$|^TestSession$/^Connect$/^Authentication$|^TestStep07RunStreamLive$|^TestSession$/^Connect$/^UnixSocket$",
               ".",
               "-args",
               "-gocql.timeout=60s",
@@ -557,8 +557,8 @@
             "test_passes": [
               "TestStep08FixtureIdentity",
               "TestStep07RunStreamLive",
-              "TestAuthentication",
-              "TestUnixSockets"
+              "TestSession/Connect/Authentication",
+              "TestSession/Connect/UnixSocket"
             ],
             "test_skips": []
           },
@@ -609,7 +609,7 @@
               "-timeout=8m",
               "-parallel=1",
               "-run",
-              "^(TestStep08FixtureIdentity|TestAuthentication|TestStep07RunStreamLive)$",
+              "^TestStep08FixtureIdentity$|^TestSession$/^Connect$/^Authentication$|^TestStep07RunStreamLive$",
               ".",
               "-args",
               "-gocql.timeout=60s",
@@ -632,7 +632,7 @@
             "test_passes": [
               "TestStep08FixtureIdentity",
               "TestStep07RunStreamLive",
-              "TestAuthentication"
+              "TestSession/Connect/Authentication"
             ],
             "test_skips": []
           },
@@ -683,7 +683,7 @@
               "-timeout=8m",
               "-parallel=1",
               "-run",
-              "^(TestStep08FixtureIdentity|TestStep08ClientCertificateEnforced|TestStep08SNIProxyCancellationJoins|TestAuthentication|TestStep07RunStreamLive|TestUnixSockets|TestCloudConnection|TestTLSTicketResumption|TestRecreateSchema)$",
+              "^TestStep08FixtureIdentity$|^TestStep08ClientCertificateEnforced$|^TestStep08SNIProxyCancellationJoins$|^TestSession$/^Connect$/^Authentication$|^TestStep07RunStreamLive$|^TestSession$/^Connect$/^UnixSocket$|^TestCloudConnection$|^TestSession$/^Connect$/^TLSTicketResumption$|^TestMetadata$/^Recreate$",
               ".",
               "-args",
               "-gocql.timeout=60s",
@@ -709,18 +709,18 @@
               "TestStep08ClientCertificateEnforced",
               "TestStep07RunStreamLive",
               "TestStep08SNIProxyCancellationJoins",
-              "TestAuthentication",
+              "TestSession/Connect/Authentication",
               "TestCloudConnection",
-              "TestTLSTicketResumption",
-              "TestRecreateSchema/Keyspace",
-              "TestRecreateSchema/Table",
-              "TestRecreateSchema/Materialized_Views",
-              "TestRecreateSchema/Index",
-              "TestRecreateSchema/Secondary_Index",
-              "TestRecreateSchema/UDT",
-              "TestRecreateSchema/Aggregates",
-              "TestRecreateSchema",
-              "TestUnixSockets"
+              "TestSession/Connect/TLSTicketResumption",
+              "TestMetadata/Recreate/Keyspace",
+              "TestMetadata/Recreate/Table",
+              "TestMetadata/Recreate/Materialized_Views",
+              "TestMetadata/Recreate/Index",
+              "TestMetadata/Recreate/Secondary_Index",
+              "TestMetadata/Recreate/UDT",
+              "TestMetadata/Recreate/Aggregates",
+              "TestMetadata/Recreate",
+              "TestSession/Connect/UnixSocket"
             ],
             "test_skips": []
           },
@@ -785,7 +785,7 @@
               "-timeout=8m",
               "-parallel=1",
               "-run",
-              "^(TestStep08FixtureIdentity|TestSelectWithoutFromLiteral|TestStep07RunStreamLive)$",
+              "^TestStep08FixtureIdentity$|^TestSelectWithoutFrom$/^Exec$/^Literal$|^TestStep07RunStreamLive$",
               ".",
               "-args",
               "-gocql.timeout=60s",
@@ -808,7 +808,7 @@
             "test_passes": [
               "TestStep08FixtureIdentity",
               "TestStep07RunStreamLive",
-              "TestSelectWithoutFromLiteral"
+              "TestSelectWithoutFrom/Exec/Literal"
             ],
             "test_skips": []
           },
@@ -880,14 +880,14 @@
                   "args": [
                     "-proto=3"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestAuthentication|TestStep07RunStreamLive|TestUnixSockets)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestSession$/^Connect$/^Authentication$|^TestStep07RunStreamLive$|^TestSession$/^Connect$/^UnixSocket$"
                 },
                 {
                   "name": "v4-raw",
                   "args": [
                     "-proto=4"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestAuthentication|TestStep07RunStreamLive)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestSession$/^Connect$/^Authentication$|^TestStep07RunStreamLive$"
                 },
                 {
                   "name": "v4-tls",
@@ -895,7 +895,7 @@
                     "-proto=4",
                     "-runssl"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestStep08ClientCertificateEnforced|TestStep08SNIProxyCancellationJoins|TestAuthentication|TestStep07RunStreamLive|TestUnixSockets|TestCloudConnection|TestTLSTicketResumption|TestRecreateSchema)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestStep08ClientCertificateEnforced$|^TestStep08SNIProxyCancellationJoins$|^TestSession$/^Connect$/^Authentication$|^TestStep07RunStreamLive$|^TestSession$/^Connect$/^UnixSocket$|^TestCloudConnection$|^TestSession$/^Connect$/^TLSTicketResumption$|^TestMetadata$/^Recreate$"
                 }
               ]
             },
@@ -920,7 +920,7 @@
                     "-proto=4",
                     "-compressor=no-compression"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$"
                 },
                 {
                   "name": "v4-tls",
@@ -929,7 +929,7 @@
                     "-runssl",
                     "-compressor=no-compression"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$"
                 },
                 {
                   "name": "v5-no-compression",
@@ -937,7 +937,7 @@
                     "-proto=5",
                     "-compressor=no-compression"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$"
                 },
                 {
                   "name": "v5-lz4",
@@ -945,7 +945,7 @@
                     "-proto=5",
                     "-compressor=lz4"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$"
                 },
                 {
                   "name": "v5-raw-tls",
@@ -954,7 +954,7 @@
                     "-runssl",
                     "-compressor=no-compression"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$"
                 },
                 {
                   "name": "v5-lz4-tls",
@@ -963,7 +963,7 @@
                     "-compressor=lz4",
                     "-runssl"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$"
                 }
               ]
             },
@@ -989,7 +989,7 @@
                   "args": [
                     "-proto=4"
                   ],
-                  "tests": "^(TestStep08FixtureIdentity|TestSelectWithoutFromLiteral|TestStep07RunStreamLive)$"
+                  "tests": "^TestStep08FixtureIdentity$|^TestSelectWithoutFrom$/^Exec$/^Literal$|^TestStep07RunStreamLive$"
                 }
               ]
             }
@@ -1220,7 +1220,7 @@
               "-timeout=8m",
               "-parallel=1",
               "-run",
-              "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$",
+              "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$",
               ".",
               "-args",
               "-gocql.timeout=60s",
@@ -1243,18 +1243,18 @@
             "test_passes": [
               "TestStep08FixtureIdentity",
               "TestStep07RunStreamLive",
-              "TestRecreateSchema/Keyspace",
-              "TestRecreateSchema/Table",
-              "TestRecreateSchema/Materialized_Views",
-              "TestRecreateSchema/Index",
-              "TestRecreateSchema/Secondary_Index",
-              "TestRecreateSchema/UDT",
-              "TestRecreateSchema/Aggregates",
-              "TestRecreateSchema",
-              "TestCustomPayloadMessages",
-              "TestWriteFailure",
-              "TestInvalidPeerEntry",
-              "TestCustomPayloadValues"
+              "TestMetadata/Recreate/Keyspace",
+              "TestMetadata/Recreate/Table",
+              "TestMetadata/Recreate/Materialized_Views",
+              "TestMetadata/Recreate/Index",
+              "TestMetadata/Recreate/Secondary_Index",
+              "TestMetadata/Recreate/UDT",
+              "TestMetadata/Recreate/Aggregates",
+              "TestMetadata/Recreate",
+              "TestQuery/CustomPayload/Messages",
+              "TestQuery/Errors/WriteFailure",
+              "TestMetadata/Hosts/InvalidPeer",
+              "TestQuery/CustomPayload/Values"
             ],
             "test_skips": []
           },
@@ -1305,7 +1305,7 @@
               "-timeout=8m",
               "-parallel=1",
               "-run",
-              "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$",
+              "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$",
               ".",
               "-args",
               "-gocql.timeout=60s",
@@ -1329,18 +1329,18 @@
             "test_passes": [
               "TestStep08FixtureIdentity",
               "TestStep07RunStreamLive",
-              "TestWriteFailure",
-              "TestCustomPayloadMessages",
-              "TestCustomPayloadValues",
-              "TestRecreateSchema/Keyspace",
-              "TestRecreateSchema/Table",
-              "TestRecreateSchema/Materialized_Views",
-              "TestRecreateSchema/Index",
-              "TestRecreateSchema/Secondary_Index",
-              "TestRecreateSchema/UDT",
-              "TestRecreateSchema/Aggregates",
-              "TestRecreateSchema",
-              "TestInvalidPeerEntry"
+              "TestQuery/Errors/WriteFailure",
+              "TestQuery/CustomPayload/Messages",
+              "TestQuery/CustomPayload/Values",
+              "TestMetadata/Recreate/Keyspace",
+              "TestMetadata/Recreate/Table",
+              "TestMetadata/Recreate/Materialized_Views",
+              "TestMetadata/Recreate/Index",
+              "TestMetadata/Recreate/Secondary_Index",
+              "TestMetadata/Recreate/UDT",
+              "TestMetadata/Recreate/Aggregates",
+              "TestMetadata/Recreate",
+              "TestMetadata/Hosts/InvalidPeer"
             ],
             "test_skips": []
           },
@@ -1392,7 +1392,7 @@
               "-timeout=8m",
               "-parallel=1",
               "-run",
-              "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$",
+              "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$",
               ".",
               "-args",
               "-gocql.timeout=60s",
@@ -1415,18 +1415,18 @@
             "test_passes": [
               "TestStep08FixtureIdentity",
               "TestStep07RunStreamLive",
-              "TestCustomPayloadMessages",
-              "TestRecreateSchema/Keyspace",
-              "TestRecreateSchema/Table",
-              "TestRecreateSchema/Materialized_Views",
-              "TestRecreateSchema/Index",
-              "TestRecreateSchema/Secondary_Index",
-              "TestRecreateSchema/UDT",
-              "TestRecreateSchema/Aggregates",
-              "TestRecreateSchema",
-              "TestCustomPayloadValues",
-              "TestWriteFailure",
-              "TestInvalidPeerEntry"
+              "TestQuery/CustomPayload/Messages",
+              "TestMetadata/Recreate/Keyspace",
+              "TestMetadata/Recreate/Table",
+              "TestMetadata/Recreate/Materialized_Views",
+              "TestMetadata/Recreate/Index",
+              "TestMetadata/Recreate/Secondary_Index",
+              "TestMetadata/Recreate/UDT",
+              "TestMetadata/Recreate/Aggregates",
+              "TestMetadata/Recreate",
+              "TestQuery/CustomPayload/Values",
+              "TestQuery/Errors/WriteFailure",
+              "TestMetadata/Hosts/InvalidPeer"
             ],
             "test_skips": []
           },
@@ -1477,7 +1477,7 @@
               "-timeout=8m",
               "-parallel=1",
               "-run",
-              "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$",
+              "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$",
               ".",
               "-args",
               "-gocql.timeout=60s",
@@ -1500,18 +1500,18 @@
             "test_passes": [
               "TestStep08FixtureIdentity",
               "TestStep07RunStreamLive",
-              "TestInvalidPeerEntry",
-              "TestCustomPayloadMessages",
-              "TestRecreateSchema/Keyspace",
-              "TestRecreateSchema/Table",
-              "TestRecreateSchema/Materialized_Views",
-              "TestRecreateSchema/Index",
-              "TestRecreateSchema/Secondary_Index",
-              "TestRecreateSchema/UDT",
-              "TestRecreateSchema/Aggregates",
-              "TestRecreateSchema",
-              "TestCustomPayloadValues",
-              "TestWriteFailure"
+              "TestMetadata/Hosts/InvalidPeer",
+              "TestQuery/CustomPayload/Messages",
+              "TestMetadata/Recreate/Keyspace",
+              "TestMetadata/Recreate/Table",
+              "TestMetadata/Recreate/Materialized_Views",
+              "TestMetadata/Recreate/Index",
+              "TestMetadata/Recreate/Secondary_Index",
+              "TestMetadata/Recreate/UDT",
+              "TestMetadata/Recreate/Aggregates",
+              "TestMetadata/Recreate",
+              "TestQuery/CustomPayload/Values",
+              "TestQuery/Errors/WriteFailure"
             ],
             "test_skips": []
           },
@@ -1562,7 +1562,7 @@
               "-timeout=8m",
               "-parallel=1",
               "-run",
-              "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$",
+              "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$",
               ".",
               "-args",
               "-gocql.timeout=60s",
@@ -1586,18 +1586,18 @@
             "test_passes": [
               "TestStep08FixtureIdentity",
               "TestStep07RunStreamLive",
-              "TestInvalidPeerEntry",
-              "TestCustomPayloadMessages",
-              "TestRecreateSchema/Keyspace",
-              "TestRecreateSchema/Table",
-              "TestRecreateSchema/Materialized_Views",
-              "TestRecreateSchema/Index",
-              "TestRecreateSchema/Secondary_Index",
-              "TestRecreateSchema/UDT",
-              "TestRecreateSchema/Aggregates",
-              "TestRecreateSchema",
-              "TestWriteFailure",
-              "TestCustomPayloadValues"
+              "TestMetadata/Hosts/InvalidPeer",
+              "TestQuery/CustomPayload/Messages",
+              "TestMetadata/Recreate/Keyspace",
+              "TestMetadata/Recreate/Table",
+              "TestMetadata/Recreate/Materialized_Views",
+              "TestMetadata/Recreate/Index",
+              "TestMetadata/Recreate/Secondary_Index",
+              "TestMetadata/Recreate/UDT",
+              "TestMetadata/Recreate/Aggregates",
+              "TestMetadata/Recreate",
+              "TestQuery/Errors/WriteFailure",
+              "TestQuery/CustomPayload/Values"
             ],
             "test_skips": []
           },
@@ -1649,7 +1649,7 @@
               "-timeout=8m",
               "-parallel=1",
               "-run",
-              "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$",
+              "^TestStep08FixtureIdentity$|^TestMetadata$/^Recreate$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Errors$/^WriteFailure$|^TestMetadata$/^Hosts$/^InvalidPeer$|^TestStep07RunStreamLive$",
               ".",
               "-args",
               "-gocql.timeout=60s",
@@ -1673,18 +1673,18 @@
             "test_passes": [
               "TestStep08FixtureIdentity",
               "TestStep07RunStreamLive",
-              "TestInvalidPeerEntry",
-              "TestCustomPayloadMessages",
-              "TestCustomPayloadValues",
-              "TestRecreateSchema/Keyspace",
-              "TestRecreateSchema/Table",
-              "TestRecreateSchema/Materialized_Views",
-              "TestRecreateSchema/Index",
-              "TestRecreateSchema/Secondary_Index",
-              "TestRecreateSchema/UDT",
-              "TestRecreateSchema/Aggregates",
-              "TestRecreateSchema",
-              "TestWriteFailure"
+              "TestMetadata/Hosts/InvalidPeer",
+              "TestQuery/CustomPayload/Messages",
+              "TestQuery/CustomPayload/Values",
+              "TestMetadata/Recreate/Keyspace",
+              "TestMetadata/Recreate/Table",
+              "TestMetadata/Recreate/Materialized_Views",
+              "TestMetadata/Recreate/Index",
+              "TestMetadata/Recreate/Secondary_Index",
+              "TestMetadata/Recreate/UDT",
+              "TestMetadata/Recreate/Aggregates",
+              "TestMetadata/Recreate",
+              "TestQuery/Errors/WriteFailure"
             ],
             "test_skips": []
           },

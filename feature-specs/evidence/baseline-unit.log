@@ -1,8 +1,8 @@
---- FAIL: TestSSLSimple (0.00s)
+--- FAIL: TestClusterSettings/Open/SSL (0.00s)
     conn_test.go:1965: Failed parsing or appending certs
---- FAIL: TestSSLSimpleNoClientCert (0.00s)
+--- FAIL: TestClusterSettings/Open/SSLNoClientCert (0.00s)
     conn_test.go:1965: Failed parsing or appending certs
---- FAIL: TestPolicyConnPoolSSL (0.00s)
+--- FAIL: TestClusterSettings/Open/SSLRoundRobinPool (0.00s)
     conn_test.go:1965: Failed parsing or appending certs
 2026/10/29 00:52:18 logger.go:60: warning: skipping result metadata can lead to unpredictable results if columns involved in a prepared query are altered, on connections that exchange no result metadata ID (protocol v4 or lower without the SCYLLA_USE_METADATA_ID extension).
 2026/10/29 00:52:18 logger.go:59: gocql: 127.0.0.1:39053 does not support the requested "snappy" compression, continuing uncompressed (server offers: [lz4])
@@ -16,17 +16,17 @@
 2026/10/29 00:52:19 logger.go:59: gocql: unable to dial control conn 127.0.0.1:1: dial tcp 127.0.0.1:1: connect: connection refused
 2026/10/29 00:52:19 logger.go:59: gocql: unable to dial control conn 127.0.0.1:1: dial tcp 127.0.0.1:1: connect: connection refused
 2026/10/29 00:52:19 logger.go:59: gocql: unable to dial control conn 127.0.0.1:1: dial tcp 127.0.0.1:1: connect: connection refused
---- FAIL: TestShardAwarePortMockedUnusedIfNotEnabled (0.25s)
-    --- FAIL: TestShardAwarePortMockedUnusedIfNotEnabled/with_TLS (0.00s)
+--- FAIL: TestShardAwarePort/Dial/UnusedIfNotEnabled (0.25s)
+    --- FAIL: TestShardAwarePort/Dial/UnusedIfNotEnabled/with_TLS (0.00s)
         conn_test.go:1965: Failed parsing or appending certs
---- FAIL: TestShardAwarePortMockedNoReconnections (0.31s)
-    --- FAIL: TestShardAwarePortMockedNoReconnections/with_TLS (0.00s)
+--- FAIL: TestShardAwarePort/Dial/NoReconnections (0.31s)
+    --- FAIL: TestShardAwarePort/Dial/NoReconnections/with_TLS (0.00s)
         conn_test.go:1965: Failed parsing or appending certs
---- FAIL: TestShardAwarePortMockedUnreachable (0.50s)
-    --- FAIL: TestShardAwarePortMockedUnreachable/with_TLS (0.00s)
+--- FAIL: TestShardAwarePort/Dial/Unreachable (0.50s)
+    --- FAIL: TestShardAwarePort/Dial/Unreachable/with_TLS (0.00s)
         conn_test.go:1965: Failed parsing or appending certs
---- FAIL: TestShardAwarePortMockedMaliciousNAT (1.31s)
-    --- FAIL: TestShardAwarePortMockedMaliciousNAT/with_TLS (0.00s)
+--- FAIL: TestShardAwarePort/Dial/MaliciousNAT (1.31s)
+    --- FAIL: TestShardAwarePort/Dial/MaliciousNAT/with_TLS (0.00s)
         conn_test.go:1965: Failed parsing or appending certs
 FAIL
 FAIL	github.com/gocql/gocql	12.904s

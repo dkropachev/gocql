@@ -13,15 +13,15 @@
   ],
   "tests": [
     {
-      "test": "TestCreateSession_DontSwallowError",
+      "test": "TestSession/Connect/ReportsProtocolError",
       "result": "pass"
     },
     {
-      "test": "TestTLSTicketResumption",
+      "test": "TestSession/Connect/TLSTicketResumption",
       "result": "pass"
     },
     {
-      "test": "TestUnpreparedBatch",
+      "test": "TestBatch/Exec/UnpreparedCounter",
       "result": "pass"
     }
   ]

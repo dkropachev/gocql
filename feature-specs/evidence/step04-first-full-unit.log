@@ -1,4 +1,4 @@
---- FAIL: TestSimple (0.00s)
+--- FAIL: TestClusterSettings/Open/Simple (0.00s)
     conn_test.go:140: 0x3: EOF (potentially executed: true)
 --- FAIL: TestCancel (0.00s)
     conn_test.go:381: expected to get context cancel error: 'context canceled', got 'EOF (potentially executed: true)'
@@ -9,46 +9,46 @@
 --- FAIL: TestSpeculativeExecution (0.00s)
     conn_test.go:573: The query failed with 'gocql: host pool does not have connections (potentially executed: true)'!
     conn_test.go:586: error: none of 3 nodes was attempted 4 times!
---- FAIL: TestQueryTimeout (0.00s)
+--- FAIL: TestClusterSettings/Exec/QueryTimeout (0.00s)
     conn_test.go:651: expected to get gocql: no response received from cassandra within timeout period for timeout got EOF (potentially executed: true)
---- FAIL: TestQueryTimeoutClose (0.05s)
+--- FAIL: TestClusterSettings/Exec/QueryTimeoutClose (0.05s)
     conn_test.go:745: expected to get gocql: connection closed waiting for response or an error wrapping it, got EOF (potentially executed: true)
 2026/10/29 17:15:31 logger.go:59: gocql: received response for stream which has no handler: header=[header version=[version=4 direction=RESP] flags=0x0 stream=0 op=RESULT length=4]
---- FAIL: TestStream0 (0.00s)
+--- FAIL: TestConn/ProcessFrame/Stream0Unsolicited (0.00s)
     conn_test.go:776: expected to get an error on stream 0
---- FAIL: TestHeartBeatSurvivesUnexpectedOptionsResponse (10.00s)
+--- FAIL: TestConn/HeartBeat/SurvivesUnexpectedOptionsResponse (10.00s)
     conn_test.go:984: heartBeat never logged the unexpected OPTIONS reply
 2026/10/29 17:15:41 logger.go:60: warning: skipping result metadata can lead to unpredictable results if columns involved in a prepared query are altered, on connections that exchange no result metadata ID (protocol v4 or lower without the SCYLLA_USE_METADATA_ID extension).
---- FAIL: TestSkipMetadata (0.00s)
+--- FAIL: TestClusterSettings/Exec/SkipMetadata (0.00s)
     conn_test.go:1793: expected no error got: EOF (potentially executed: true)
---- FAIL: TestPrepareBatchMetadataMultipleKeyspaceTables (0.00s)
+--- FAIL: TestClusterSettings/Prepare/BatchMetadataMultipleKeyspaceTables (0.00s)
     conn_test.go:1823: prepareStatement failed: EOF (potentially executed: true)
---- FAIL: TestFrameHeaderObserver (0.00s)
+--- FAIL: TestClusterSettings/Exec/FrameHeaderObserver (0.00s)
     conn_test.go:1878: EOF (potentially executed: true)
 --- FAIL: TestExecuteMetadataChangedWithoutColumns (0.00s)
     conn_test.go:3099: unexpected error: EOF (potentially executed: true)
---- FAIL: TestStartupCompressorNotSupported (0.00s)
+--- FAIL: TestConnStartup/Compression/NotSupported (0.00s)
     conn_test.go:5175:
             Error Trace:    /extra/scylladb/gocql/conn_test.go:5175
             Error:          Received unexpected error:
                             EOF (potentially executed: true)
-            Test:           TestStartupCompressorNotSupported
+            Test:           TestConnStartup/Compression/NotSupported
 2026/10/29 17:15:41 logger.go:59: gocql: 127.0.0.1:46411 does not support the requested "snappy" compression, continuing uncompressed (server offers: [lz4])
 2026/10/29 17:15:41 logger.go:59: gocql: 127.0.0.1:46411 does not support the requested "snappy" compression, continuing uncompressed (server offers: [lz4])
---- FAIL: TestStartupCompressionIsDriverOwned (0.00s)
-    --- FAIL: TestStartupCompressionIsDriverOwned/configured_compressor_the_server_refuses (0.00s)
+--- FAIL: TestConnStartup/Compression/DriverOwned (0.00s)
+    --- FAIL: TestConnStartup/Compression/DriverOwned/configured_compressor_the_server_refuses (0.00s)
         conn_test.go:5271:
                 Error Trace:    /extra/scylladb/gocql/conn_test.go:5271
                 Error:          Received unexpected error:
                                 EOF (potentially executed: true)
-                Test:           TestStartupCompressionIsDriverOwned/configured_compressor_the_server_refuses
-    --- FAIL: TestStartupCompressionIsDriverOwned/no_compressor_configured (0.00s)
+                Test:           TestConnStartup/Compression/DriverOwned/configured_compressor_the_server_refuses
+    --- FAIL: TestConnStartup/Compression/DriverOwned/no_compressor_configured (0.00s)
         conn_test.go:5271:
                 Error Trace:    /extra/scylladb/gocql/conn_test.go:5271
                 Error:          Received unexpected error:
                                 EOF (potentially executed: true)
-                Test:           TestStartupCompressionIsDriverOwned/no_compressor_configured
---- FAIL: TestEffectiveInFlightMaxMatchesStreamGenerator (0.00s)
+                Test:           TestConnStartup/Compression/DriverOwned/no_compressor_configured
+--- FAIL: TestDriverConfigReport/EffectiveInFlightMax (0.00s)
     driver_config_test.go:194: effectiveInFlightMax(1) = 63, but the generator allows 1
     driver_config_test.go:194: effectiveInFlightMax(64) = 63, but the generator allows 64
     driver_config_test.go:194: effectiveInFlightMax(100) = 127, but the generator allows 100
@@ -89,7 +89,7 @@
     batch_exec_unit_test.go:184: Exec: EOF (potentially executed: true)
 --- FAIL: TestBatchExecuteServerError (0.01s)
     batch_exec_unit_test.go:333: Exec error = EOF (potentially executed: true), want the server's invalid-request error
---- FAIL: TestAuthHandshakePassword (0.01s)
+--- FAIL: TestAuthHandshake/Password (0.01s)
     auth_handshake_unit_test.go:147: query after authenticating: EOF (potentially executed: true)
 --- FAIL: TestBatchExecuteReprepareOnUnprepared (0.01s)
     batch_exec_unit_test.go:355: Exec: EOF (potentially executed: true)

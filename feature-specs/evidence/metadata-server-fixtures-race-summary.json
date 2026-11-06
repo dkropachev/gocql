@@ -13,19 +13,19 @@
   ],
   "tests": [
     {
-      "test": "TestInvalidPeerEntry",
+      "test": "TestMetadata/Hosts/InvalidPeer",
       "result": "pass"
     },
     {
-      "test": "TestCustomPayloadValues",
+      "test": "TestQuery/CustomPayload/Values",
       "result": "pass"
     },
     {
-      "test": "TestCustomPayloadMessages",
+      "test": "TestQuery/CustomPayload/Messages",
       "result": "pass"
     },
     {
-      "test": "TestWriteFailure",
+      "test": "TestQuery/Errors/WriteFailure",
       "result": "pass"
     }
   ]

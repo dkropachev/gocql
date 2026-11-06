@@ -23,7 +23,7 @@
       "-tags",
       "integration gocql_debug",
       "-run",
-      "^(TestPagingWithBind|TestManualQueryPaging|TestPrepare_PreparedCacheEviction|TestPrepareExecuteMetadataChangedFlag|TestV2PreparedPagingConcurrentSchemaAndDestinations)$",
+      "^TestPaging$/^Auto$/^Bound$|^TestPaging$/^Manual$|^TestPrepared$/^Cache$/^Eviction$|^TestFraming$/^ResultMetadataID$/^ChangedFlag$|^TestPaging$/^PreparedSchemaChange$",
       "-count=1",
       "-timeout=8m",
       "-parallel=5",

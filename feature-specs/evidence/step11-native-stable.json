@@ -57,7 +57,7 @@
         "-timeout=8m",
         "-parallel=1",
         "-run",
-        "^(TestStep07RunStreamLive|TestStep08FixtureIdentity|TestAuthentication|TestErrorsParse|TestCustomPayloadMessages|TestCustomPayloadValues|TestUseStatementError|TestBatch|TestUnpreparedBatch|TestCAS|TestPaging|TestPrepareExecuteMetadataChangedFlag|TestSerializationSimpleTypesCassandra|TestSliceMapMapScanTypes|TestSliceMapMapScanCounterTypes|TestSliceMapMapScanTupleTypes|TestSliceMapMapScanVectorTypes|TestSliceMapMapScanCollectionTypes|TestTuple_NestedCollection|TestTuple_NullableNestedCollection|TestUDT_MissingField|TestVector_SubTypeParsing|TestVector_MarshalerUDT|TestDurationType|TestVarint|TestRecreateSchema|TestTracingNewAPI|TestCloudConnection)$",
+        "^TestStep07RunStreamLive$|^TestStep08FixtureIdentity$|^TestSession$/^Connect$/^Authentication$|^TestQuery$/^Errors$/^AlreadyExists$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Bind$/^RejectsUse$|^TestBatch$/^Exec$/^Logged$|^TestBatch$/^Exec$/^UnpreparedCounter$|^TestConditional$/^Exec$|^TestPaging$/^Auto$/^AllRows$|^TestFraming$/^ResultMetadataID$/^ChangedFlag$|^TestTypes$/^Simple$|^TestScan$/^Dynamic$/^Scalars$|^TestScan$/^Dynamic$/^Counter$|^TestScan$/^Dynamic$/^Tuple$|^TestScan$/^Dynamic$/^Vector$|^TestScan$/^Dynamic$/^Collections$|^TestTuple$/^NestedCollection$/^NonNull$|^TestTuple$/^NestedCollection$/^Nullable$|^TestUDT$/^RoundTrip$/^MissingField$|^TestVector$/^ParseType$|^TestVector$/^RoundTrip$/^UDT$|^TestTypes$/^RoundTrip$/^Duration$|^TestTypes$/^RoundTrip$/^Varint$|^TestMetadata$/^Recreate$|^TestObserver$/^Trace$/^Tracer$|^TestCloudConnection$",
         ".",
         "-args",
         "-gocql.timeout=60s",
@@ -125,7 +125,7 @@
         "-timeout=8m",
         "-parallel=1",
         "-run",
-        "^(TestStep07RunStreamLive|TestStep08FixtureIdentity|TestAuthentication|TestErrorsParse|TestCustomPayloadMessages|TestCustomPayloadValues|TestUseStatementError|TestBatch|TestUnpreparedBatch|TestCAS|TestPaging|TestPrepareExecuteMetadataChangedFlag|TestSerializationSimpleTypesCassandra|TestSliceMapMapScanTypes|TestSliceMapMapScanCounterTypes|TestSliceMapMapScanTupleTypes|TestSliceMapMapScanVectorTypes|TestSliceMapMapScanCollectionTypes|TestTuple_NestedCollection|TestTuple_NullableNestedCollection|TestUDT_MissingField|TestVector_SubTypeParsing|TestVector_MarshalerUDT|TestDurationType|TestVarint|TestRecreateSchema|TestTracingNewAPI|TestCloudConnection)$",
+        "^TestStep07RunStreamLive$|^TestStep08FixtureIdentity$|^TestSession$/^Connect$/^Authentication$|^TestQuery$/^Errors$/^AlreadyExists$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Bind$/^RejectsUse$|^TestBatch$/^Exec$/^Logged$|^TestBatch$/^Exec$/^UnpreparedCounter$|^TestConditional$/^Exec$|^TestPaging$/^Auto$/^AllRows$|^TestFraming$/^ResultMetadataID$/^ChangedFlag$|^TestTypes$/^Simple$|^TestScan$/^Dynamic$/^Scalars$|^TestScan$/^Dynamic$/^Counter$|^TestScan$/^Dynamic$/^Tuple$|^TestScan$/^Dynamic$/^Vector$|^TestScan$/^Dynamic$/^Collections$|^TestTuple$/^NestedCollection$/^NonNull$|^TestTuple$/^NestedCollection$/^Nullable$|^TestUDT$/^RoundTrip$/^MissingField$|^TestVector$/^ParseType$|^TestVector$/^RoundTrip$/^UDT$|^TestTypes$/^RoundTrip$/^Duration$|^TestTypes$/^RoundTrip$/^Varint$|^TestMetadata$/^Recreate$|^TestObserver$/^Trace$/^Tracer$|^TestCloudConnection$",
         ".",
         "-args",
         "-gocql.timeout=60s",
@@ -203,7 +203,7 @@
               "-proto=4"
             ],
             "name": "foundation-v4",
-            "tests": "^(TestStep07RunStreamLive|TestStep08FixtureIdentity|TestAuthentication|TestErrorsParse|TestCustomPayloadMessages|TestCustomPayloadValues|TestUseStatementError|TestBatch|TestUnpreparedBatch|TestCAS|TestPaging|TestPrepareExecuteMetadataChangedFlag|TestSerializationSimpleTypesCassandra|TestSliceMapMapScanTypes|TestSliceMapMapScanCounterTypes|TestSliceMapMapScanTupleTypes|TestSliceMapMapScanVectorTypes|TestSliceMapMapScanCollectionTypes|TestTuple_NestedCollection|TestTuple_NullableNestedCollection|TestUDT_MissingField|TestVector_SubTypeParsing|TestVector_MarshalerUDT|TestDurationType|TestVarint|TestRecreateSchema|TestTracingNewAPI|TestCloudConnection)$"
+            "tests": "^TestStep07RunStreamLive$|^TestStep08FixtureIdentity$|^TestSession$/^Connect$/^Authentication$|^TestQuery$/^Errors$/^AlreadyExists$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Bind$/^RejectsUse$|^TestBatch$/^Exec$/^Logged$|^TestBatch$/^Exec$/^UnpreparedCounter$|^TestConditional$/^Exec$|^TestPaging$/^Auto$/^AllRows$|^TestFraming$/^ResultMetadataID$/^ChangedFlag$|^TestTypes$/^Simple$|^TestScan$/^Dynamic$/^Scalars$|^TestScan$/^Dynamic$/^Counter$|^TestScan$/^Dynamic$/^Tuple$|^TestScan$/^Dynamic$/^Vector$|^TestScan$/^Dynamic$/^Collections$|^TestTuple$/^NestedCollection$/^NonNull$|^TestTuple$/^NestedCollection$/^Nullable$|^TestUDT$/^RoundTrip$/^MissingField$|^TestVector$/^ParseType$|^TestVector$/^RoundTrip$/^UDT$|^TestTypes$/^RoundTrip$/^Duration$|^TestTypes$/^RoundTrip$/^Varint$|^TestMetadata$/^Recreate$|^TestObserver$/^Trace$/^Tracer$|^TestCloudConnection$"
           },
           {
             "args": [
@@ -211,7 +211,7 @@
               "-runssl"
             ],
             "name": "foundation-v4-tls",
-            "tests": "^(TestStep07RunStreamLive|TestStep08FixtureIdentity|TestAuthentication|TestErrorsParse|TestCustomPayloadMessages|TestCustomPayloadValues|TestUseStatementError|TestBatch|TestUnpreparedBatch|TestCAS|TestPaging|TestPrepareExecuteMetadataChangedFlag|TestSerializationSimpleTypesCassandra|TestSliceMapMapScanTypes|TestSliceMapMapScanCounterTypes|TestSliceMapMapScanTupleTypes|TestSliceMapMapScanVectorTypes|TestSliceMapMapScanCollectionTypes|TestTuple_NestedCollection|TestTuple_NullableNestedCollection|TestUDT_MissingField|TestVector_SubTypeParsing|TestVector_MarshalerUDT|TestDurationType|TestVarint|TestRecreateSchema|TestTracingNewAPI|TestCloudConnection)$"
+            "tests": "^TestStep07RunStreamLive$|^TestStep08FixtureIdentity$|^TestSession$/^Connect$/^Authentication$|^TestQuery$/^Errors$/^AlreadyExists$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Bind$/^RejectsUse$|^TestBatch$/^Exec$/^Logged$|^TestBatch$/^Exec$/^UnpreparedCounter$|^TestConditional$/^Exec$|^TestPaging$/^Auto$/^AllRows$|^TestFraming$/^ResultMetadataID$/^ChangedFlag$|^TestTypes$/^Simple$|^TestScan$/^Dynamic$/^Scalars$|^TestScan$/^Dynamic$/^Counter$|^TestScan$/^Dynamic$/^Tuple$|^TestScan$/^Dynamic$/^Vector$|^TestScan$/^Dynamic$/^Collections$|^TestTuple$/^NestedCollection$/^NonNull$|^TestTuple$/^NestedCollection$/^Nullable$|^TestUDT$/^RoundTrip$/^MissingField$|^TestVector$/^ParseType$|^TestVector$/^RoundTrip$/^UDT$|^TestTypes$/^RoundTrip$/^Duration$|^TestTypes$/^RoundTrip$/^Varint$|^TestMetadata$/^Recreate$|^TestObserver$/^Trace$/^Tracer$|^TestCloudConnection$"
           }
         ],
         "name": "stable20",
@@ -238,7 +238,7 @@
               "-compressor=lz4"
             ],
             "name": "foundation-v5-lz4",
-            "tests": "^(TestStep07RunStreamLive|TestStep08FixtureIdentity|TestAuthentication|TestErrorsParse|TestCustomPayloadMessages|TestCustomPayloadValues|TestUseStatementError|TestBatch|TestUnpreparedBatch|TestCAS|TestPaging|TestPrepareExecuteMetadataChangedFlag|TestSerializationSimpleTypesCassandra|TestSliceMapMapScanTypes|TestSliceMapMapScanCounterTypes|TestSliceMapMapScanTupleTypes|TestSliceMapMapScanVectorTypes|TestSliceMapMapScanCollectionTypes|TestTuple_NestedCollection|TestTuple_NullableNestedCollection|TestUDT_MissingField|TestVector_SubTypeParsing|TestVector_MarshalerUDT|TestDurationType|TestVarint|TestRecreateSchema|TestTracingNewAPI|TestCloudConnection)$"
+            "tests": "^TestStep07RunStreamLive$|^TestStep08FixtureIdentity$|^TestSession$/^Connect$/^Authentication$|^TestQuery$/^Errors$/^AlreadyExists$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Bind$/^RejectsUse$|^TestBatch$/^Exec$/^Logged$|^TestBatch$/^Exec$/^UnpreparedCounter$|^TestConditional$/^Exec$|^TestPaging$/^Auto$/^AllRows$|^TestFraming$/^ResultMetadataID$/^ChangedFlag$|^TestTypes$/^Simple$|^TestScan$/^Dynamic$/^Scalars$|^TestScan$/^Dynamic$/^Counter$|^TestScan$/^Dynamic$/^Tuple$|^TestScan$/^Dynamic$/^Vector$|^TestScan$/^Dynamic$/^Collections$|^TestTuple$/^NestedCollection$/^NonNull$|^TestTuple$/^NestedCollection$/^Nullable$|^TestUDT$/^RoundTrip$/^MissingField$|^TestVector$/^ParseType$|^TestVector$/^RoundTrip$/^UDT$|^TestTypes$/^RoundTrip$/^Duration$|^TestTypes$/^RoundTrip$/^Varint$|^TestMetadata$/^Recreate$|^TestObserver$/^Trace$/^Tracer$|^TestCloudConnection$"
           },
           {
             "args": [
@@ -247,7 +247,7 @@
               "-runssl"
             ],
             "name": "foundation-v5-lz4-tls",
-            "tests": "^(TestStep07RunStreamLive|TestStep08FixtureIdentity|TestAuthentication|TestErrorsParse|TestCustomPayloadMessages|TestCustomPayloadValues|TestUseStatementError|TestBatch|TestUnpreparedBatch|TestCAS|TestPaging|TestPrepareExecuteMetadataChangedFlag|TestSerializationSimpleTypesCassandra|TestSliceMapMapScanTypes|TestSliceMapMapScanCounterTypes|TestSliceMapMapScanTupleTypes|TestSliceMapMapScanVectorTypes|TestSliceMapMapScanCollectionTypes|TestTuple_NestedCollection|TestTuple_NullableNestedCollection|TestUDT_MissingField|TestVector_SubTypeParsing|TestVector_MarshalerUDT|TestDurationType|TestVarint|TestRecreateSchema|TestTracingNewAPI|TestCloudConnection)$"
+            "tests": "^TestStep07RunStreamLive$|^TestStep08FixtureIdentity$|^TestSession$/^Connect$/^Authentication$|^TestQuery$/^Errors$/^AlreadyExists$|^TestQuery$/^CustomPayload$/^Messages$|^TestQuery$/^CustomPayload$/^Values$|^TestQuery$/^Bind$/^RejectsUse$|^TestBatch$/^Exec$/^Logged$|^TestBatch$/^Exec$/^UnpreparedCounter$|^TestConditional$/^Exec$|^TestPaging$/^Auto$/^AllRows$|^TestFraming$/^ResultMetadataID$/^ChangedFlag$|^TestTypes$/^Simple$|^TestScan$/^Dynamic$/^Scalars$|^TestScan$/^Dynamic$/^Counter$|^TestScan$/^Dynamic$/^Tuple$|^TestScan$/^Dynamic$/^Vector$|^TestScan$/^Dynamic$/^Collections$|^TestTuple$/^NestedCollection$/^NonNull$|^TestTuple$/^NestedCollection$/^Nullable$|^TestUDT$/^RoundTrip$/^MissingField$|^TestVector$/^ParseType$|^TestVector$/^RoundTrip$/^UDT$|^TestTypes$/^RoundTrip$/^Duration$|^TestTypes$/^RoundTrip$/^Varint$|^TestMetadata$/^Recreate$|^TestObserver$/^Trace$/^Tracer$|^TestCloudConnection$"
           }
         ],
         "name": "cassandra21",

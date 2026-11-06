@@ -29,7 +29,7 @@ def lane(name,cluster,addresses,args):
   print('START',name,str(fixture),flush=True)
   cluster.start(wait_for_binary_proto=True,wait_other_notice=True)
   health(addresses)
-  base=['go','test','-json','-race','-tags','integration gocql_debug','-count=1','-timeout=7m','-parallel=1','-run','^(TestStep07RunStreamLive|TestV2RuntimeDatabaseSmoke)$','.','-args','-gocql.timeout=60s','-rf=3','-clusterSize=3','-autowait=2000ms','-cluster='+','.join(addresses)]
+  base=['go','test','-json','-race','-tags','integration gocql_debug','-count=1','-timeout=7m','-parallel=1','-run','^TestStep07RunStreamLive$|^TestSession$/^Smoke$','.','-args','-gocql.timeout=60s','-rf=3','-clusterSize=3','-autowait=2000ms','-cluster='+','.join(addresses)]
   for suffix,extra in args:
    run(name+suffix,base+extra)
 

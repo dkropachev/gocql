@@ -22,7 +22,7 @@
       "-tags",
       "integration gocql_debug",
       "-run",
-      "^(TestPaging|TestPagingWithAllowFiltering|TestPagingWithBind|TestRebindQueryInfo|TestStaticQueryInfo|TestBoundQueryInfo|TestManualQueryPaging|TestPrepare_PreparedCacheEviction|TestPrepareExecuteScyllaEmptyMetadataID|TestV2PreparedPagingConcurrentSchemaAndDestinations)$",
+      "^TestPaging$/^Auto$/^AllRows$|^TestPaging$/^AllowFiltering$|^TestPaging$/^Auto$/^Bound$|^TestQuery$/^Bind$/^Rebind$|^TestQuery$/^Bind$/^Static$|^TestQuery$/^Bind$/^ParamsMetadata$|^TestPaging$/^Manual$|^TestPrepared$/^Cache$/^Eviction$|^TestFraming$/^ResultMetadataID$/^ScyllaEmpty$|^TestPaging$/^PreparedSchemaChange$",
       "-count=1",
       "-timeout=8m",
       "-parallel=8",

@@ -49,7 +49,7 @@
           "complete_source_sha256": "634e421d0c7b5593ff7888238413fc03c727ff6fb13c1e1fbabd50627001deed",
           "file": "internal/codec/stream_codec_test.go",
           "line": 118,
-          "test": "TestV2StreamingScalarDomains"
+          "test": "TestStream/Scalar/Domains"
         },
         {
           "actual_effective_passes": [
@@ -71,7 +71,7 @@
           "complete_source_sha256": "de36b473a059fae1e88eaa92c117ebf2f618ff81594e092b48d2a842a085f2ef",
           "file": "internal/codec/stream_codec_test.go",
           "line": 154,
-          "test": "TestV2StreamingBytesCapacityNullAndText"
+          "test": "TestStream/Scalar/BytesCapacityNullAndText"
         },
         {
           "actual_effective_passes": [
@@ -90,7 +90,7 @@
           "complete_source_sha256": "2c14d0b8785e9f06c052e410b73ae7531873b4f34a7ce2f2b0373f5888ca798e",
           "file": "internal/codec/stream_codec_test.go",
           "line": 261,
-          "test": "TestV2StreamingNestedCollectionCapacityAndBacking"
+          "test": "TestStream/Collection/NestedCapacityAndBacking"
         }
       ]
     },
@@ -256,7 +256,7 @@
           "complete_source_sha256": "4c9c763860627238bddc5491f71782d4bd57754855adc74bb5482a6ad2e9aa68",
           "file": "v2_stream_transport_bench_test.go",
           "line": 118,
-          "test": "TestV2StreamingTransportReadTargetsAndWorkingMemory"
+          "test": "TestStreamTransport/ReadTargetsAndWorkingMemory"
         }
       ]
     },
@@ -284,7 +284,7 @@
           "complete_source_sha256": "de36b473a059fae1e88eaa92c117ebf2f618ff81594e092b48d2a842a085f2ef",
           "file": "internal/codec/stream_codec_test.go",
           "line": 154,
-          "test": "TestV2StreamingBytesCapacityNullAndText"
+          "test": "TestStream/Scalar/BytesCapacityNullAndText"
         },
         {
           "actual_effective_passes": [
@@ -300,7 +300,7 @@
           "complete_source_sha256": "3a6502c8ea036816f4c598de945be675f11ff1c9449f08a3f88169a318303d5b",
           "file": "internal/codec/stream_codec_test.go",
           "line": 234,
-          "test": "TestV2StreamingNumericPayloadStorage"
+          "test": "TestStream/Scalar/NumericPayloadStorage"
         },
         {
           "actual_effective_passes": [
@@ -319,7 +319,7 @@
           "complete_source_sha256": "2c14d0b8785e9f06c052e410b73ae7531873b4f34a7ce2f2b0373f5888ca798e",
           "file": "internal/codec/stream_codec_test.go",
           "line": 261,
-          "test": "TestV2StreamingNestedCollectionCapacityAndBacking"
+          "test": "TestStream/Collection/NestedCapacityAndBacking"
         },
         {
           "actual_effective_passes": [
@@ -335,7 +335,7 @@
           "complete_source_sha256": "c1a8bd438a422ee2906298c8ac35562f670541c2a52316db7497278d4dd25f03",
           "file": "internal/codec/stream_codec_test.go",
           "line": 304,
-          "test": "TestV2StreamingVectors"
+          "test": "TestStream/Collection/Vectors"
         },
         {
           "actual_effective_passes": [
@@ -358,7 +358,7 @@
           "complete_source_sha256": "1a91a0432adb35371408f2bad94da9ad3c78fe9730c4d5305fe5aaebfabba1a0",
           "file": "internal/codec/stream_codec_test.go",
           "line": 329,
-          "test": "TestV2StreamingRecordsAndEncodedOutput"
+          "test": "TestStream/Row/RecordsAndEncodedOutput"
         },
         {
           "actual_effective_passes": [
@@ -374,7 +374,7 @@
           "complete_source_sha256": "7b62a02aa31b511cafb0d147b25e8a1b384129e4dcef7236f76d5432a944f65e",
           "file": "internal/codec/stream_codec_test.go",
           "line": 488,
-          "test": "TestV2StreamingRowsDuplicateNamesAndMissingUDTFields"
+          "test": "TestStream/Row/DuplicateNamesAndMissingUDTFields"
         },
         {
           "actual_effective_passes": [
@@ -390,7 +390,7 @@
           "complete_source_sha256": "e77607cd5a4c4486a6df177a45efe8b247c4c2f65c6891bd17797cce3d25f946",
           "file": "internal/codec/stream_custom_test.go",
           "line": 187,
-          "test": "TestV2StreamingMissingPayloadResetPreservesSeeds"
+          "test": "TestStream/Reset/MissingPayloadPreservesSeeds"
         },
         {
           "actual_effective_passes": [
@@ -403,7 +403,7 @@
           "complete_source_sha256": "23952e49b57414d39d4ac58a9fade44a4784173ce1742aee63661d0e2c874761",
           "file": "internal/codec/stream_custom_test.go",
           "line": 222,
-          "test": "TestV2StreamingAbsentCustomDescendantResetCapability"
+          "test": "TestStream/Reset/AbsentCustomDescendantCapability"
         },
         {
           "actual_effective_passes": [
@@ -416,7 +416,7 @@
           "complete_source_sha256": "dca29fe20c9adf247b189cd1d467684ad7e76c29300460ee33fe0866148f50ea",
           "file": "internal/codec/stream_custom_test.go",
           "line": 235,
-          "test": "TestV2StreamingAbsentCustomResetterSucceeds"
+          "test": "TestStream/Reset/AbsentCustomResetterSucceeds"
         }
       ]
     },
@@ -467,7 +467,7 @@
           "complete_source_sha256": "27c72536cb52e34485228f1da0c795b4562f9cde61c3bbfc7c3123e7d1071b41",
           "file": "internal/codec/stream_codec_test.go",
           "line": 206,
-          "test": "TestV2StreamingDirectReadTargets"
+          "test": "TestStream/Scalar/DirectReadTargets"
         },
         {
           "actual_effective_passes": [
@@ -482,7 +482,7 @@
           "complete_source_sha256": "350544346df23266715630026789c64d4de032d12cd89a613454319be3c884b7",
           "file": "internal/codec/stream_codec_test.go",
           "line": 456,
-          "test": "TestV2StreamingEncodedNestedFinalReadIdentity"
+          "test": "TestStream/Collection/EncodedNestedFinalReadIdentity"
         },
         {
           "actual_effective_passes": [
@@ -572,7 +572,7 @@
           "complete_source_sha256": "d58fe7f58527a251c4b6723f0ffdb1ba7af4c50df12d071f43b59651494f78f4",
           "file": "internal/codec/stream_codec_test.go",
           "line": 396,
-          "test": "TestV2StreamingSkippedValuesAreBoundedAndChecked"
+          "test": "TestStream/Row/SkippedValuesBoundedAndChecked"
         },
         {
           "actual_effective_passes": [
@@ -645,7 +645,7 @@
           "complete_source_sha256": "73bced7d7288ac282cd8a49896ff7f14979d926ad9b7ff5c9ed9ab493035ffdf",
           "file": "v2_prepared_paging_test.go",
           "line": 61,
-          "test": "TestV2PageNextIntoMixedCurrentAndRetention"
+          "test": "TestPage/NextInto/MixedCurrentAndRetention"
         },
         {
           "actual_effective_passes": [
@@ -676,7 +676,7 @@
           "complete_source_sha256": "c4225a8131af4801ced07f7ec977744666736fc92788a0e71ca1baa068ac9308",
           "file": "v2_prepared_paging_test.go",
           "line": 99,
-          "test": "TestV2PageNextIntoTerminalClearing"
+          "test": "TestPage/NextInto/TerminalClearing"
         },
         {
           "actual_effective_passes": [
@@ -704,7 +704,7 @@
           "complete_source_sha256": "b4a63edaec5c6742add9091b767a8b71c788a05b4a804a55ca4f1039d8ef5e73",
           "file": "v2_prepared_paging_test.go",
           "line": 137,
-          "test": "TestV2PageNextIntoPartialErrorClears"
+          "test": "TestPage/NextInto/PartialErrorClears"
         },
         {
           "actual_effective_passes": [
@@ -738,7 +738,7 @@
           "complete_source_sha256": "abbdb40edd8b0e640ec6c6c8b593ddfae5f793714c68aec934520548243d5bb9",
           "file": "v2_prepared_paging_test.go",
           "line": 155,
-          "test": "TestV2RowsNextIntoPagingAndCloseInterrupt"
+          "test": "TestPaging/Rows/NextIntoPagingAndCloseInterrupt"
         },
         {
           "actual_effective_passes": [
@@ -768,7 +768,7 @@
           "complete_source_sha256": "9662b6f055185d34af1b365deefc75d6e64710523a7bb1d07564245f56a3ecee",
           "file": "v2_prepared_paging_test.go",
           "line": 1001,
-          "test": "TestV2PreparedOldPageKeepsMatchingPlan"
+          "test": "TestResultPlanCache/Compile/OldPageKeepsMatchingPlan"
         },
         {
           "actual_effective_passes": [
@@ -801,7 +801,7 @@
           "complete_source_sha256": "fa35b92674a25d9268c04a45cb8734b69fb6ac1aa1b605db890a7454995465ea",
           "file": "v2_prepared_paging_test.go",
           "line": 1106,
-          "test": "TestV2DeliveredPageSurvivesSessionCloseUntilAdvance"
+          "test": "TestPage/SessionClose/DeliveredSurvivesUntilAdvance"
         }
       ]
     },
@@ -956,7 +956,7 @@
           "complete_source_sha256": "1a46c8055e887f295a1fb5ffea83c2bf5ba6175d6ce1d065c0fa669596520c38",
           "file": "internal/codec/stream_custom_test.go",
           "line": 66,
-          "test": "TestV2StreamingCustomPlansReuseCompiledChildren"
+          "test": "TestStream/Compile/CustomReusesCompiledChildren"
         }
       ]
     },
@@ -994,7 +994,7 @@
           "complete_source_sha256": "5df88a8f1e2837bf60d16e76a6eeba9d34430c317a6344891dda8d1ebf5bb16e",
           "file": "v2_transport_pool_test.go",
           "line": 185,
-          "test": "TestV2ExclusiveWaitsForOrphanAndAcquisitionCancellation"
+          "test": "TestTypedConn/Exclusive/WaitsForOrphanAndAcquisitionCancellation"
         },
         {
           "actual_effective_passes": [
@@ -1025,7 +1025,7 @@
           "complete_source_sha256": "417802188f78ad8096adef826e316d19c7583f5f9fea182d22f226ccedae54af",
           "file": "v2_transport_pool_test.go",
           "line": 648,
-          "test": "TestV2ExclusiveAcquisitionDrainsAcceptedWriterOwnership"
+          "test": "TestTypedConn/Exclusive/AcquisitionDrainsAcceptedWriterOwnership"
         },
         {
           "actual_effective_passes": [
@@ -1056,7 +1056,7 @@
           "complete_source_sha256": "08bab3fcdb142d54bd154951a3bd9ec06ab5e48e17eee57d1da668dc5645d4d1",
           "file": "v2_transport_pool_test.go",
           "line": 557,
-          "test": "TestV2ExclusiveHandoffWaitsForWholeV5Segment"
+          "test": "TestTypedConn/Exclusive/HandoffWaitsForWholeV5Segment"
         },
         {
           "actual_effective_passes": [
@@ -1087,7 +1087,7 @@
           "complete_source_sha256": "2990c3152671caa1d88df2fd2f18b066a50d6f6b4b259f408d75a3d8f3e57617",
           "file": "v2_transport_pool_test.go",
           "line": 598,
-          "test": "TestV2ExclusiveHandoffFinishesPartialHeader"
+          "test": "TestTypedConn/Exclusive/HandoffFinishesPartialHeader"
         },
         {
           "actual_effective_passes": [
@@ -1260,7 +1260,7 @@
           "complete_source_sha256": "5f5588ce5d14488c84610e0cd042be929d0edd5b303f958635fbc878130d1e41",
           "file": "v2_transport_pool_test.go",
           "line": 757,
-          "test": "TestV2PageCancellationGenerationDoesNotReachLaterPageOrSharedUse"
+          "test": "TestTypedConn/Page/CancellationGenerationIsolated"
         },
         {
           "actual_effective_passes": [
@@ -1293,7 +1293,7 @@
           "complete_source_sha256": "3155e9cfef79901dd93758a063e91591d87c2f9eca09194c4b57dc368c211276",
           "file": "v2_transport_pool_test.go",
           "line": 812,
-          "test": "TestV2PageContextCancellationWinsAndJoinsRead"
+          "test": "TestTypedConn/Page/ContextCancellationWinsAndJoinsRead"
         },
         {
           "actual_effective_passes": [
@@ -1500,7 +1500,7 @@
           "complete_source_sha256": "8ad21cab962eb9e9fbcef3860234a5e08c2f3cf2846cdabeff25281895df81f1",
           "file": "v2_transport_pool_test.go",
           "line": 470,
-          "test": "TestV2ExclusiveControlOverflowPoisonsAndReleases"
+          "test": "TestTypedConn/Exclusive/ControlOverflowPoisonsAndReleases"
         },
         {
           "actual_effective_passes": [
@@ -1532,7 +1532,7 @@
           "complete_source_sha256": "dc9b23cbeeee24957e5d1d504bd17d7328a3033725194c3249c1ec7a8666a537",
           "file": "v2_transport_pool_test.go",
           "line": 424,
-          "test": "TestV2ExclusiveV5TrailingControlReuse"
+          "test": "TestTypedConn/Exclusive/V5TrailingControlReuse"
         },
         {
           "actual_effective_passes": [
@@ -1561,7 +1561,7 @@
           "complete_source_sha256": "4ad04a7b8a09074f0987352432d3b75325e5e4d9a799c6a8a6f0513d11e70fd7",
           "file": "v2_transport_pool_test.go",
           "line": 516,
-          "test": "TestV2EventEnqueueCloseRaceReleasesEveryCharge"
+          "test": "TestTypedConn/DispatchEvent"
         },
         {
           "actual_effective_passes": [
@@ -1770,7 +1770,7 @@
           "complete_source_sha256": "3446b5e7228c88aaa28b8c0d96897a9220f197af1f16840349be2bceb013a861",
           "file": "v2_transport_pool_integration_test.go",
           "line": 127,
-          "test": "TestV2ExclusiveTransportLive"
+          "test": "TestPool/ExclusiveTransport"
         },
         {
           "actual_effective_passes": [
@@ -1864,7 +1864,7 @@
           "complete_source_sha256": "4bdb537156b848a15fba6873478e9a5300dff4db67c644eb92c99470d8142374",
           "file": "v2_transport_pool_test.go",
           "line": 960,
-          "test": "TestV2UnsupportedCompressionRejectedBeforeStartupOrQuery"
+          "test": "TestTypedConn/Startup"
         },
         {
           "actual_effective_passes": [

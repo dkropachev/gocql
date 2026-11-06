@@ -44,20 +44,20 @@ ok  	github.com/scylladb/gocql/v2/serialization/duration	1.008s
 ?   	github.com/scylladb/gocql/v2/serialization/uuid	[no test files]
 ?   	github.com/scylladb/gocql/v2/serialization/varchar	[no test files]
 ok  	github.com/scylladb/gocql/v2/serialization/varint	1.122s
---- FAIL: TestParseHintNoReplicas (0.00s)
+--- FAIL: TestHint/ParseHint/NoReplicas (0.00s)
     hint_parser_test.go:73: invalid token range: firstToken (1) > lastToken (1)
---- FAIL: TestFindOverlapRange (0.00s)
-    --- FAIL: TestFindOverlapRange/ContiguousBoundary (0.00s)
+--- FAIL: TestTabletEntries/FindOverlapRange (0.00s)
+    --- FAIL: TestTabletEntries/FindOverlapRange/ContiguousBoundary (0.00s)
         tablets_test.go:182: expected tailStart=2 for contiguous boundary, got 1
---- FAIL: TestFindEntryForToken (0.00s)
-    --- FAIL: TestFindEntryForToken/ExactFirstToken (0.00s)
+--- FAIL: TestTabletEntries/FindEntryForToken (0.00s)
+    --- FAIL: TestTabletEntries/FindEntryForToken/ExactFirstToken (0.00s)
         tablets_test.go:35: expected entry for token at exact firstToken boundary
-    --- FAIL: TestFindEntryForToken/SingleEntry (0.00s)
+    --- FAIL: TestTabletEntries/FindEntryForToken/SingleEntry (0.00s)
         tablets_test.go:95: expected entry for token at firstToken of single entry
-    --- FAIL: TestFindEntryForToken/SingleTokenTablet (0.00s)
+    --- FAIL: TestTabletEntries/FindEntryForToken/SingleTokenTablet (0.00s)
         tablets_test.go:149: expected entry for single-token tablet
---- FAIL: TestCowTabletListEdgeCases (1.25s)
-    --- FAIL: TestCowTabletListEdgeCases/ExtremeTokenValues (0.00s)
+--- FAIL: TestCowTabletList/EdgeCases (1.25s)
+    --- FAIL: TestCowTabletList/EdgeCases/ExtremeTokenValues (0.00s)
         cow_tablet_list_test.go:1540: expected tablet for math.MinInt64
 FAIL
 FAIL	github.com/scylladb/gocql/v2/tablets	1.258s

@@ -22,7 +22,7 @@
       "-tags",
       "integration gocql_debug",
       "-run",
-      "^TestPrepare_PreparedCacheEviction$",
+      "^TestPrepared$/^Cache$/^Eviction$",
       "-count=1",
       "-timeout=3m",
       ".",

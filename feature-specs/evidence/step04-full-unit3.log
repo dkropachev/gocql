@@ -15,8 +15,8 @@
 2026/10/29 17:32:00 logger.go:59: gocql: unable to dial control conn 127.0.0.1:1: dial tcp 127.0.0.1:1: connect: connection refused
 2026/10/29 17:32:00 logger.go:59: gocql: unable to dial control conn 127.0.0.1:1: dial tcp 127.0.0.1:1: connect: connection refused
 2026/10/29 17:32:00 logger.go:59: gocql: unable to dial control conn 127.0.0.1:1: dial tcp 127.0.0.1:1: connect: connection refused
---- FAIL: TestSchemaRefreshConcurrent (0.00s)
-    --- FAIL: TestSchemaRefreshConcurrent/GetTable/after_table_invalidation (0.23s)
+--- FAIL: TestSchemaMetadata/ConcurrentRefresh/SingleFetch (0.00s)
+    --- FAIL: TestSchemaMetadata/ConcurrentRefresh/SingleFetch/GetTable/after_table_invalidation (0.23s)
         events_unit_test.go:1239: expected 4 queries (single table refresh), got 8
 2026/10/29 17:32:00 logger.go:59: scylla: connection to shard-aware address 127.0.0.1:35993 resulted in wrong shard being assigned; please check that you are not behind a NAT or AddressTranslater which changes source ports; falling back to non-shard-aware port for 5m0s
 2026/10/29 17:32:01 logger.go:59: scylla: connection to shard-aware address 127.0.0.1:46151 resulted in wrong shard being assigned; please check that you are not behind a NAT or AddressTranslater which changes source ports; falling back to non-shard-aware port for 5m0s

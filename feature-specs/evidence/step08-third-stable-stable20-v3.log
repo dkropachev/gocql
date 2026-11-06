@@ -37,14 +37,14 @@
 {"Time":"2026-10-29T21:41:16.106970817-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"2026/10/29 21:41:16 logger.go:69: scylla: 127.0.20.2:9042 no excess connections to close\n"}
 {"Time":"2026-10-29T21:41:16.106978181-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"2026/10/29 21:41:16 logger.go:69: scylla: 127.0.20.1:9042 closing 1 connections\n"}
 {"Time":"2026-10-29T21:41:16.106986166-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"2026/10/29 21:41:16 logger.go:69: scylla: 127.0.20.1:9042 no excess connections to close\n"}
-{"Time":"2026-10-29T21:41:16.107335846-04:00","Action":"run","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets"}
-{"Time":"2026-10-29T21:41:16.10733761-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets","Output":"=== RUN   TestUnixSockets\n"}
-{"Time":"2026-10-29T21:41:16.107373567-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets","Output":"=== PAUSE TestUnixSockets\n"}
-{"Time":"2026-10-29T21:41:16.1073749-04:00","Action":"pause","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets"}
-{"Time":"2026-10-29T21:41:16.107425706-04:00","Action":"run","Package":"github.com/scylladb/gocql/v2","Test":"TestAuthentication"}
-{"Time":"2026-10-29T21:41:16.107427309-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestAuthentication","Output":"=== RUN   TestAuthentication\n"}
-{"Time":"2026-10-29T21:41:16.107440864-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestAuthentication","Output":"=== PAUSE TestAuthentication\n"}
-{"Time":"2026-10-29T21:41:16.107441876-04:00","Action":"pause","Package":"github.com/scylladb/gocql/v2","Test":"TestAuthentication"}
+{"Time":"2026-10-29T21:41:16.107335846-04:00","Action":"run","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket"}
+{"Time":"2026-10-29T21:41:16.10733761-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket","Output":"=== RUN   TestSession/Connect/UnixSocket\n"}
+{"Time":"2026-10-29T21:41:16.107373567-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket","Output":"=== PAUSE TestSession/Connect/UnixSocket\n"}
+{"Time":"2026-10-29T21:41:16.1073749-04:00","Action":"pause","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket"}
+{"Time":"2026-10-29T21:41:16.107425706-04:00","Action":"run","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/Authentication"}
+{"Time":"2026-10-29T21:41:16.107427309-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/Authentication","Output":"=== RUN   TestSession/Connect/Authentication\n"}
+{"Time":"2026-10-29T21:41:16.107440864-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/Authentication","Output":"=== PAUSE TestSession/Connect/Authentication\n"}
+{"Time":"2026-10-29T21:41:16.107441876-04:00","Action":"pause","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/Authentication"}
 {"Time":"2026-10-29T21:41:16.107843675-04:00","Action":"run","Package":"github.com/scylladb/gocql/v2","Test":"TestStep07RunStreamLive"}
 {"Time":"2026-10-29T21:41:16.107845057-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep07RunStreamLive","Output":"=== RUN   TestStep07RunStreamLive\n"}
 {"Time":"2026-10-29T21:41:16.113753055-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep07RunStreamLive","Output":"2026/10/29 21:41:16 logger.go:69: gocql: conns of pool after stopped \"127.0.20.1\": 1\n"}
@@ -67,23 +67,23 @@
 {"Time":"2026-10-29T21:41:17.170191472-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep07RunStreamLive","Output":"2026/10/29 21:41:17 logger.go:69: gocql: handling frame: [event schema_change change=\"DROPPED\" keyspace=\"step07_18e32b1c0dcbc9d0\" object=\"records\"]\n"}
 {"Time":"2026-10-29T21:41:17.188706649-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep07RunStreamLive","Output":"--- PASS: TestStep07RunStreamLive (1.08s)\n"}
 {"Time":"2026-10-29T21:41:17.188735083-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Test":"TestStep07RunStreamLive","Elapsed":1.08}
-{"Time":"2026-10-29T21:41:17.188972651-04:00","Action":"cont","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets"}
-{"Time":"2026-10-29T21:41:17.188990796-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets","Output":"=== CONT  TestUnixSockets\n"}
-{"Time":"2026-10-29T21:41:17.191198121-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets","Output":"2026/10/29 21:41:17 logger.go:69: gocql: conns of pool after stopped \"127.0.0.1\": 1\n"}
-{"Time":"2026-10-29T21:41:17.241223797-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets","Output":"--- PASS: TestUnixSockets (0.05s)\n"}
-{"Time":"2026-10-29T21:41:17.241254675-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Test":"TestUnixSockets","Elapsed":0.05}
-{"Time":"2026-10-29T21:41:17.241259114-04:00","Action":"cont","Package":"github.com/scylladb/gocql/v2","Test":"TestAuthentication"}
-{"Time":"2026-10-29T21:41:17.241260556-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestAuthentication","Output":"=== CONT  TestAuthentication\n"}
-{"Time":"2026-10-29T21:41:17.246717413-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestAuthentication","Output":"2026/10/29 21:41:17 logger.go:69: gocql: conns of pool after stopped \"127.0.20.1\": 1\n"}
-{"Time":"2026-10-29T21:41:17.246743943-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestAuthentication","Output":"2026/10/29 21:41:17 logger.go:69: gocql: conns of pool after stopped \"127.0.20.2\": 1\n"}
-{"Time":"2026-10-29T21:41:17.246753271-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestAuthentication","Output":"2026/10/29 21:41:17 logger.go:69: gocql: conns of pool after stopped \"127.0.20.3\": 1\n"}
-{"Time":"2026-10-29T21:41:17.249778008-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestAuthentication","Output":"2026/10/29 21:41:17 logger.go:69: gocql: unable to dial control conn 127.0.20.1:9042: Username and/or password are incorrect\n"}
-{"Time":"2026-10-29T21:41:17.25216901-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestAuthentication","Output":"2026/10/29 21:41:17 logger.go:69: gocql: unable to dial control conn 127.0.20.2:9042: Username and/or password are incorrect\n"}
-{"Time":"2026-10-29T21:41:17.254598154-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestAuthentication","Output":"2026/10/29 21:41:17 logger.go:69: gocql: unable to dial control conn 127.0.20.3:9042: Username and/or password are incorrect\n"}
-{"Time":"2026-10-29T21:41:17.25461177-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestAuthentication","Output":"2026/10/29 21:41:17 logger.go:70: unable to create control connection: unable to connect to initial hosts: Username and/or password are incorrect\n"}
-{"Time":"2026-10-29T21:41:17.254613733-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestAuthentication","Output":"\n"}
-{"Time":"2026-10-29T21:41:17.254710436-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestAuthentication","Output":"--- PASS: TestAuthentication (0.01s)\n"}
-{"Time":"2026-10-29T21:41:17.254769437-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Test":"TestAuthentication","Elapsed":0.01}
+{"Time":"2026-10-29T21:41:17.188972651-04:00","Action":"cont","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket"}
+{"Time":"2026-10-29T21:41:17.188990796-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket","Output":"=== CONT  TestSession/Connect/UnixSocket\n"}
+{"Time":"2026-10-29T21:41:17.191198121-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket","Output":"2026/10/29 21:41:17 logger.go:69: gocql: conns of pool after stopped \"127.0.0.1\": 1\n"}
+{"Time":"2026-10-29T21:41:17.241223797-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket","Output":"--- PASS: TestSession/Connect/UnixSocket (0.05s)\n"}
+{"Time":"2026-10-29T21:41:17.241254675-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/UnixSocket","Elapsed":0.05}
+{"Time":"2026-10-29T21:41:17.241259114-04:00","Action":"cont","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/Authentication"}
+{"Time":"2026-10-29T21:41:17.241260556-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/Authentication","Output":"=== CONT  TestSession/Connect/Authentication\n"}
+{"Time":"2026-10-29T21:41:17.246717413-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/Authentication","Output":"2026/10/29 21:41:17 logger.go:69: gocql: conns of pool after stopped \"127.0.20.1\": 1\n"}
+{"Time":"2026-10-29T21:41:17.246743943-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/Authentication","Output":"2026/10/29 21:41:17 logger.go:69: gocql: conns of pool after stopped \"127.0.20.2\": 1\n"}
+{"Time":"2026-10-29T21:41:17.246753271-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/Authentication","Output":"2026/10/29 21:41:17 logger.go:69: gocql: conns of pool after stopped \"127.0.20.3\": 1\n"}
+{"Time":"2026-10-29T21:41:17.249778008-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/Authentication","Output":"2026/10/29 21:41:17 logger.go:69: gocql: unable to dial control conn 127.0.20.1:9042: Username and/or password are incorrect\n"}
+{"Time":"2026-10-29T21:41:17.25216901-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/Authentication","Output":"2026/10/29 21:41:17 logger.go:69: gocql: unable to dial control conn 127.0.20.2:9042: Username and/or password are incorrect\n"}
+{"Time":"2026-10-29T21:41:17.254598154-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/Authentication","Output":"2026/10/29 21:41:17 logger.go:69: gocql: unable to dial control conn 127.0.20.3:9042: Username and/or password are incorrect\n"}
+{"Time":"2026-10-29T21:41:17.25461177-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/Authentication","Output":"2026/10/29 21:41:17 logger.go:70: unable to create control connection: unable to connect to initial hosts: Username and/or password are incorrect\n"}
+{"Time":"2026-10-29T21:41:17.254613733-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/Authentication","Output":"\n"}
+{"Time":"2026-10-29T21:41:17.254710436-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/Authentication","Output":"--- PASS: TestSession/Connect/Authentication (0.01s)\n"}
+{"Time":"2026-10-29T21:41:17.254769437-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Test":"TestSession/Connect/Authentication","Elapsed":0.01}
 {"Time":"2026-10-29T21:41:17.254772603-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"PASS\n"}
 {"Time":"2026-10-29T21:41:18.257486686-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"ok  \tgithub.com/scylladb/gocql/v2\t2.187s\n"}
 {"Time":"2026-10-29T21:41:18.257518086-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Elapsed":2.187}

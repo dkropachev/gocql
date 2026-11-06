@@ -14,163 +14,163 @@
   ],
   "tests": [
     {
-      "test": "TestBatch_WithNowInSeconds",
+      "test": "TestBatch/Options/NowInSeconds",
       "result": "skip"
     },
     {
-      "test": "TestBatch_SetKeyspace",
+      "test": "TestBatch/Options/Keyspace",
       "result": "skip"
     },
     {
-      "test": "TestReconnection",
+      "test": "TestSession/Reconnect",
       "result": "pass"
     },
     {
-      "test": "TestQuery_SetHostID",
+      "test": "TestQuery/Options/HostID",
       "result": "pass"
     },
     {
-      "test": "TestQuery_WithNowInSeconds",
+      "test": "TestQuery/Options/NowInSeconds",
       "result": "skip"
     },
     {
-      "test": "TestQuery_SetKeyspace",
+      "test": "TestQuery/Options/Keyspace",
       "result": "skip"
     },
     {
-      "test": "TestLargeSizeQuery",
+      "test": "TestFraming/Segment",
       "result": "skip"
     },
     {
-      "test": "TestCompressorNegotiated",
+      "test": "TestFraming/Compression/Negotiated",
       "result": "pass"
     },
     {
-      "test": "TestQueryCompressionNotWorthIt",
+      "test": "TestFraming/Compression/NotWorthIt",
       "result": "skip"
     },
     {
-      "test": "TestPrepareExecuteMetadataChangedFlag/native_protocol_v5",
+      "test": "TestFraming/ResultMetadataID/ChangedFlag/native_protocol_v5",
       "result": "skip"
     },
     {
-      "test": "TestPrepareExecuteMetadataChangedFlag/protocol_v4_with_SCYLLA_USE_METADATA_ID",
+      "test": "TestFraming/ResultMetadataID/ChangedFlag/protocol_v4_with_SCYLLA_USE_METADATA_ID",
       "result": "pass"
     },
     {
-      "test": "TestPrepareExecuteMetadataChangedFlag",
+      "test": "TestFraming/ResultMetadataID/ChangedFlag",
       "result": "pass"
     },
     {
-      "test": "TestStmtCacheUsesOverriddenKeyspace",
+      "test": "TestPrepared/Cache/OverriddenKeyspace",
       "result": "skip"
     },
     {
-      "test": "TestRoutingKeyCacheUsesOverriddenKeyspace",
+      "test": "TestRouting/RoutingKey/OverriddenKeyspace",
       "result": "skip"
     },
     {
-      "test": "TestPrepareExecuteScyllaEmptyMetadataID",
+      "test": "TestFraming/ResultMetadataID/ScyllaEmpty",
       "result": "pass"
     },
     {
-      "test": "TestNoHangAllHostsDown",
+      "test": "TestRouting/AllHostsDown",
       "result": "pass"
     },
     {
-      "test": "TestAsSegmentCompressor/nil_is_the_uncompressed_layout",
+      "test": "TestSegment/AsSegmentCompressor/nil_is_the_uncompressed_layout",
       "result": "pass"
     },
     {
-      "test": "TestAsSegmentCompressor/a_segment_compressor_narrows_to_itself",
+      "test": "TestSegment/AsSegmentCompressor/a_segment_compressor_narrows_to_itself",
       "result": "pass"
     },
     {
-      "test": "TestAsSegmentCompressor/a_frame-only_compressor_is_refused_by_name",
+      "test": "TestSegment/AsSegmentCompressor/a_frame-only_compressor_is_refused_by_name",
       "result": "pass"
     },
     {
-      "test": "TestAsSegmentCompressor",
+      "test": "TestSegment/AsSegmentCompressor",
       "result": "pass"
     },
     {
-      "test": "TestResolveSegmentCompressor/v5_narrows_the_compressor_once",
+      "test": "TestSegment/ResolveSegmentCompressor/v5_narrows_the_compressor_once",
       "result": "pass"
     },
     {
-      "test": "TestResolveSegmentCompressor/v4_leaves_a_frame-only_compressor_alone",
+      "test": "TestSegment/ResolveSegmentCompressor/v4_leaves_a_frame-only_compressor_alone",
       "result": "pass"
     },
     {
-      "test": "TestResolveSegmentCompressor/v5_refuses_a_frame-only_compressor_by_name",
+      "test": "TestSegment/ResolveSegmentCompressor/v5_refuses_a_frame-only_compressor_by_name",
       "result": "pass"
     },
     {
-      "test": "TestResolveSegmentCompressor",
+      "test": "TestSegment/ResolveSegmentCompressor",
       "result": "pass"
     },
     {
-      "test": "TestSessionEventBusReceivesSchemaChangeEvent",
+      "test": "TestMetadata/Events/SchemaChange",
       "result": "pass"
     },
     {
-      "test": "TestUnixSockets",
+      "test": "TestSession/Connect/UnixSocket",
       "result": "skip"
     },
     {
-      "test": "TestCreateSession_DontSwallowError",
+      "test": "TestSession/Connect/ReportsProtocolError",
       "result": "skip"
     },
     {
-      "test": "TestDCValidationTokenAware",
+      "test": "TestRouting/DCValidation/TokenAware",
       "result": "pass"
     },
     {
-      "test": "TestGetKeyspaceMetadata",
+      "test": "TestMetadata/Keyspace/Exists",
       "result": "pass"
     },
     {
-      "test": "TestControl_DiscoverProtocol",
+      "test": "TestSession/Connect/DiscoverProtocol",
       "result": "pass"
     },
     {
-      "test": "TestSelectWithoutFromRoutingKey",
+      "test": "TestSelectWithoutFrom/RoutingKey",
       "result": "skip"
     },
     {
-      "test": "TestSelectWithoutFromExecutionModes",
+      "test": "TestSelectWithoutFrom/ExecutionModes",
       "result": "skip"
     },
     {
-      "test": "TestSelectWithoutFromBindMarker",
+      "test": "TestSelectWithoutFrom/Bind",
       "result": "skip"
     },
     {
-      "test": "TestSelectWithoutFromAlias",
+      "test": "TestSelectWithoutFrom/Exec/Alias",
       "result": "skip"
     },
     {
-      "test": "TestSelectWithoutFromMultipleSelectors",
+      "test": "TestSelectWithoutFrom/Exec/MultipleSelectors",
       "result": "skip"
     },
     {
-      "test": "TestSelectWithoutFromFunctionCast",
+      "test": "TestSelectWithoutFrom/Exec/FunctionCast",
       "result": "skip"
     },
     {
-      "test": "TestDCValidationDCAware",
+      "test": "TestRouting/DCValidation/DCAware",
       "result": "pass"
     },
     {
-      "test": "TestGetKeyspaceMetadataFails",
+      "test": "TestMetadata/Keyspace/Missing",
       "result": "pass"
     },
     {
-      "test": "TestQueryInfo",
+      "test": "TestPrepared/Prepare/Metadata",
       "result": "pass"
     },
     {
-      "test": "TestSessionBindRoutingKey",
+      "test": "TestRouting/RoutingKey/Bind",
       "result": "pass"
     },
     {
@@ -178,2283 +178,2283 @@
       "result": "skip"
     },
     {
-      "test": "TestJSONSupport",
+      "test": "TestQuery/Exec/JSON",
       "result": "pass"
     },
     {
-      "test": "TestNegativeStream",
+      "test": "TestFraming/NegativeStream",
       "result": "pass"
     },
     {
-      "test": "TestPrepare_ReprepareStatement",
+      "test": "TestPrepared/Reprepare/Statement",
       "result": "pass"
     },
     {
-      "test": "TestUDT_MissingField",
+      "test": "TestUDT/RoundTrip/MissingField",
       "result": "pass"
     },
     {
-      "test": "TestUDT_EmptyCollections",
+      "test": "TestUDT/RoundTrip/EmptyCollections",
       "result": "pass"
     },
     {
-      "test": "TestBatchQueryInfo",
+      "test": "TestBatch/Bind/ManualParams",
       "result": "pass"
     },
     {
-      "test": "TestVector_MissingDimension",
+      "test": "TestVector/Bind/WrongDimension",
       "result": "pass"
     },
     {
-      "test": "TestVector_Empty",
+      "test": "TestVector/RoundTrip/Empty",
       "result": "pass"
     },
     {
-      "test": "TestUDT_NullObject",
+      "test": "TestUDT/Scan/NullIntoNullable",
       "result": "pass"
     },
     {
-      "test": "TestTupleMapScanNotSet",
+      "test": "TestTuple/MapScan/Absent",
       "result": "pass"
     },
     {
-      "test": "TestTuple_NestedCollection/slice",
+      "test": "TestTuple/NestedCollection/NonNull/slice",
       "result": "pass"
     },
     {
-      "test": "TestTuple_NestedCollection/array",
+      "test": "TestTuple/NestedCollection/NonNull/array",
       "result": "pass"
     },
     {
-      "test": "TestTuple_NestedCollection/struct",
+      "test": "TestTuple/NestedCollection/NonNull/struct",
       "result": "pass"
     },
     {
-      "test": "TestTuple_NestedCollection",
+      "test": "TestTuple/NestedCollection/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/Timeout/Connect",
+      "test": "TestSession/Connect/LowTimeout/1ns/Timeout/Connect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/Timeout/Regular_Query",
+      "test": "TestSession/Connect/LowTimeout/1ns/Timeout/Regular_Query",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/Timeout/Query_from_control_connection",
+      "test": "TestSession/Connect/LowTimeout/1ns/Timeout/Query_from_control_connection",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/Timeout/Query_from_control_connection_after_reconnect",
+      "test": "TestSession/Connect/LowTimeout/1ns/Timeout/Query_from_control_connection_after_reconnect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/Timeout",
+      "test": "TestSession/Connect/LowTimeout/1ns/Timeout",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/MetadataSchemaRequestTimeout/Connect",
+      "test": "TestSession/Connect/LowTimeout/1ns/MetadataSchemaRequestTimeout/Connect",
       "result": "pass"
     },
     {
-      "test": "TestRebindQueryInfo",
+      "test": "TestQuery/Bind/Rebind",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/MetadataSchemaRequestTimeout/Regular_Query",
+      "test": "TestSession/Connect/LowTimeout/1ns/MetadataSchemaRequestTimeout/Regular_Query",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/MetadataSchemaRequestTimeout/Query_from_control_connection",
+      "test": "TestSession/Connect/LowTimeout/1ns/MetadataSchemaRequestTimeout/Query_from_control_connection",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/MetadataSchemaRequestTimeout/Query_from_control_connection_after_reconnect",
+      "test": "TestSession/Connect/LowTimeout/1ns/MetadataSchemaRequestTimeout/Query_from_control_connection_after_reconnect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/MetadataSchemaRequestTimeout",
+      "test": "TestSession/Connect/LowTimeout/1ns/MetadataSchemaRequestTimeout",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/WriteTimeout/Connect",
+      "test": "TestSession/Connect/LowTimeout/1ns/WriteTimeout/Connect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/WriteTimeout/Regular_Query",
+      "test": "TestSession/Connect/LowTimeout/1ns/WriteTimeout/Regular_Query",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/WriteTimeout/Query_from_control_connection",
+      "test": "TestSession/Connect/LowTimeout/1ns/WriteTimeout/Query_from_control_connection",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/WriteTimeout/Query_from_control_connection_after_reconnect",
+      "test": "TestSession/Connect/LowTimeout/1ns/WriteTimeout/Query_from_control_connection_after_reconnect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/WriteTimeout",
+      "test": "TestSession/Connect/LowTimeout/1ns/WriteTimeout",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/ReadTimeout/Connect",
+      "test": "TestSession/Connect/LowTimeout/1ns/ReadTimeout/Connect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/ReadTimeout/Regular_Query",
+      "test": "TestSession/Connect/LowTimeout/1ns/ReadTimeout/Regular_Query",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/ReadTimeout/Query_from_control_connection",
+      "test": "TestSession/Connect/LowTimeout/1ns/ReadTimeout/Query_from_control_connection",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/ReadTimeout/Query_from_control_connection_after_reconnect",
+      "test": "TestSession/Connect/LowTimeout/1ns/ReadTimeout/Query_from_control_connection_after_reconnect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/ReadTimeout",
+      "test": "TestSession/Connect/LowTimeout/1ns/ReadTimeout",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/AllTimeouts/Connect",
+      "test": "TestSession/Connect/LowTimeout/1ns/AllTimeouts/Connect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/AllTimeouts/Regular_Query",
+      "test": "TestSession/Connect/LowTimeout/1ns/AllTimeouts/Regular_Query",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/AllTimeouts/Query_from_control_connection",
+      "test": "TestSession/Connect/LowTimeout/1ns/AllTimeouts/Query_from_control_connection",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/AllTimeouts/Query_from_control_connection_after_reconnect",
+      "test": "TestSession/Connect/LowTimeout/1ns/AllTimeouts/Query_from_control_connection_after_reconnect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns/AllTimeouts",
+      "test": "TestSession/Connect/LowTimeout/1ns/AllTimeouts",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/1ns",
+      "test": "TestSession/Connect/LowTimeout/1ns",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/Timeout/Connect",
+      "test": "TestSession/Connect/LowTimeout/10ns/Timeout/Connect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/Timeout/Regular_Query",
+      "test": "TestSession/Connect/LowTimeout/10ns/Timeout/Regular_Query",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/Timeout/Query_from_control_connection",
+      "test": "TestSession/Connect/LowTimeout/10ns/Timeout/Query_from_control_connection",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/Timeout/Query_from_control_connection_after_reconnect",
+      "test": "TestSession/Connect/LowTimeout/10ns/Timeout/Query_from_control_connection_after_reconnect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/Timeout",
+      "test": "TestSession/Connect/LowTimeout/10ns/Timeout",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/MetadataSchemaRequestTimeout/Connect",
+      "test": "TestSession/Connect/LowTimeout/10ns/MetadataSchemaRequestTimeout/Connect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/MetadataSchemaRequestTimeout/Regular_Query",
+      "test": "TestSession/Connect/LowTimeout/10ns/MetadataSchemaRequestTimeout/Regular_Query",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/MetadataSchemaRequestTimeout/Query_from_control_connection",
+      "test": "TestSession/Connect/LowTimeout/10ns/MetadataSchemaRequestTimeout/Query_from_control_connection",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/MetadataSchemaRequestTimeout/Query_from_control_connection_after_reconnect",
+      "test": "TestSession/Connect/LowTimeout/10ns/MetadataSchemaRequestTimeout/Query_from_control_connection_after_reconnect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/MetadataSchemaRequestTimeout",
+      "test": "TestSession/Connect/LowTimeout/10ns/MetadataSchemaRequestTimeout",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/WriteTimeout/Connect",
+      "test": "TestSession/Connect/LowTimeout/10ns/WriteTimeout/Connect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/WriteTimeout/Regular_Query",
+      "test": "TestSession/Connect/LowTimeout/10ns/WriteTimeout/Regular_Query",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/WriteTimeout/Query_from_control_connection",
+      "test": "TestSession/Connect/LowTimeout/10ns/WriteTimeout/Query_from_control_connection",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/WriteTimeout/Query_from_control_connection_after_reconnect",
+      "test": "TestSession/Connect/LowTimeout/10ns/WriteTimeout/Query_from_control_connection_after_reconnect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/WriteTimeout",
+      "test": "TestSession/Connect/LowTimeout/10ns/WriteTimeout",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/ReadTimeout/Connect",
+      "test": "TestSession/Connect/LowTimeout/10ns/ReadTimeout/Connect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/ReadTimeout/Regular_Query",
+      "test": "TestSession/Connect/LowTimeout/10ns/ReadTimeout/Regular_Query",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/ReadTimeout/Query_from_control_connection",
+      "test": "TestSession/Connect/LowTimeout/10ns/ReadTimeout/Query_from_control_connection",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/ReadTimeout/Query_from_control_connection_after_reconnect",
+      "test": "TestSession/Connect/LowTimeout/10ns/ReadTimeout/Query_from_control_connection_after_reconnect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/ReadTimeout",
+      "test": "TestSession/Connect/LowTimeout/10ns/ReadTimeout",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/AllTimeouts/Connect",
+      "test": "TestSession/Connect/LowTimeout/10ns/AllTimeouts/Connect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/AllTimeouts/Regular_Query",
+      "test": "TestSession/Connect/LowTimeout/10ns/AllTimeouts/Regular_Query",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/AllTimeouts/Query_from_control_connection",
+      "test": "TestSession/Connect/LowTimeout/10ns/AllTimeouts/Query_from_control_connection",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/AllTimeouts/Query_from_control_connection_after_reconnect",
+      "test": "TestSession/Connect/LowTimeout/10ns/AllTimeouts/Query_from_control_connection_after_reconnect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns/AllTimeouts",
+      "test": "TestSession/Connect/LowTimeout/10ns/AllTimeouts",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/10ns",
+      "test": "TestSession/Connect/LowTimeout/10ns",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/Timeout/Connect",
+      "test": "TestSession/Connect/LowTimeout/100ns/Timeout/Connect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/Timeout/Regular_Query",
+      "test": "TestSession/Connect/LowTimeout/100ns/Timeout/Regular_Query",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/Timeout/Query_from_control_connection",
+      "test": "TestSession/Connect/LowTimeout/100ns/Timeout/Query_from_control_connection",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/Timeout/Query_from_control_connection_after_reconnect",
+      "test": "TestSession/Connect/LowTimeout/100ns/Timeout/Query_from_control_connection_after_reconnect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/Timeout",
+      "test": "TestSession/Connect/LowTimeout/100ns/Timeout",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/MetadataSchemaRequestTimeout/Connect",
+      "test": "TestSession/Connect/LowTimeout/100ns/MetadataSchemaRequestTimeout/Connect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/MetadataSchemaRequestTimeout/Regular_Query",
+      "test": "TestSession/Connect/LowTimeout/100ns/MetadataSchemaRequestTimeout/Regular_Query",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/MetadataSchemaRequestTimeout/Query_from_control_connection",
+      "test": "TestSession/Connect/LowTimeout/100ns/MetadataSchemaRequestTimeout/Query_from_control_connection",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/MetadataSchemaRequestTimeout/Query_from_control_connection_after_reconnect",
+      "test": "TestSession/Connect/LowTimeout/100ns/MetadataSchemaRequestTimeout/Query_from_control_connection_after_reconnect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/MetadataSchemaRequestTimeout",
+      "test": "TestSession/Connect/LowTimeout/100ns/MetadataSchemaRequestTimeout",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/WriteTimeout/Connect",
+      "test": "TestSession/Connect/LowTimeout/100ns/WriteTimeout/Connect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/WriteTimeout/Regular_Query",
+      "test": "TestSession/Connect/LowTimeout/100ns/WriteTimeout/Regular_Query",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/WriteTimeout/Query_from_control_connection",
+      "test": "TestSession/Connect/LowTimeout/100ns/WriteTimeout/Query_from_control_connection",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/WriteTimeout/Query_from_control_connection_after_reconnect",
+      "test": "TestSession/Connect/LowTimeout/100ns/WriteTimeout/Query_from_control_connection_after_reconnect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/WriteTimeout",
+      "test": "TestSession/Connect/LowTimeout/100ns/WriteTimeout",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/ReadTimeout/Connect",
+      "test": "TestSession/Connect/LowTimeout/100ns/ReadTimeout/Connect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/ReadTimeout/Regular_Query",
+      "test": "TestSession/Connect/LowTimeout/100ns/ReadTimeout/Regular_Query",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/ReadTimeout/Query_from_control_connection",
+      "test": "TestSession/Connect/LowTimeout/100ns/ReadTimeout/Query_from_control_connection",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/ReadTimeout/Query_from_control_connection_after_reconnect",
+      "test": "TestSession/Connect/LowTimeout/100ns/ReadTimeout/Query_from_control_connection_after_reconnect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/ReadTimeout",
+      "test": "TestSession/Connect/LowTimeout/100ns/ReadTimeout",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/AllTimeouts/Connect",
+      "test": "TestSession/Connect/LowTimeout/100ns/AllTimeouts/Connect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/AllTimeouts/Regular_Query",
+      "test": "TestSession/Connect/LowTimeout/100ns/AllTimeouts/Regular_Query",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/AllTimeouts/Query_from_control_connection",
+      "test": "TestSession/Connect/LowTimeout/100ns/AllTimeouts/Query_from_control_connection",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/AllTimeouts/Query_from_control_connection_after_reconnect",
+      "test": "TestSession/Connect/LowTimeout/100ns/AllTimeouts/Query_from_control_connection_after_reconnect",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns/AllTimeouts",
+      "test": "TestSession/Connect/LowTimeout/100ns/AllTimeouts",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout/100ns",
+      "test": "TestSession/Connect/LowTimeout/100ns",
       "result": "pass"
     },
     {
-      "test": "TestNewConnectWithLowTimeout",
+      "test": "TestSession/Connect/LowTimeout",
       "result": "pass"
     },
     {
-      "test": "TestBoundQueryInfo",
+      "test": "TestQuery/Bind/ParamsMetadata",
       "result": "pass"
     },
     {
-      "test": "TestNilInQuery",
+      "test": "TestQuery/Bind/Nil",
       "result": "pass"
     },
     {
-      "test": "TestManualQueryPaging",
+      "test": "TestPaging/Manual",
       "result": "pass"
     },
     {
-      "test": "TestWikiTypicalCRUD",
+      "test": "TestWiki/CRUD",
       "result": "pass"
     },
     {
-      "test": "TestSessionAwaitSchemaAgreementSessionClosed",
+      "test": "TestSession/AwaitSchemaAgreement/SessionClosed",
       "result": "pass"
     },
     {
-      "test": "TestSessionAwaitSchemaAgreement",
+      "test": "TestSession/AwaitSchemaAgreement/Agrees",
       "result": "pass"
     },
     {
-      "test": "TestIsUseStatement",
+      "test": "TestQuery/Bind/DetectsUse",
       "result": "pass"
     },
     {
-      "test": "TestConsistencyNames",
+      "test": "TestQuery/ConsistencyString",
       "result": "pass"
     },
     {
-      "test": "TestRetryType_IgnoreRethrow",
+      "test": "TestQuery/Retry/IgnoreRethrow",
       "result": "pass"
     },
     {
-      "test": "TestBatchBasicAPI",
+      "test": "TestBatch/Exec/Basic",
       "result": "pass"
     },
     {
-      "test": "TestQueryShouldPrepare",
+      "test": "TestQuery/ShouldPrepare/Keywords",
       "result": "pass"
     },
     {
-      "test": "TestQueryBasicAPI",
+      "test": "TestQuery/Exec/Basic",
       "result": "pass"
     },
     {
-      "test": "TestSessionAPI",
+      "test": "TestSession/Close/Unconnected",
       "result": "pass"
     },
     {
-      "test": "Test_RetryPolicyIdempotence/with_retry",
+      "test": "TestQuery/Retry/Idempotence/with_retry",
       "result": "pass"
     },
     {
-      "test": "Test_RetryPolicyIdempotence/without_retry",
+      "test": "TestQuery/Retry/Idempotence/without_retry",
       "result": "pass"
     },
     {
-      "test": "Test_RetryPolicyIdempotence",
+      "test": "TestQuery/Retry/Idempotence",
       "result": "pass"
     },
     {
-      "test": "TestSessionEventBusReceivesControlReconnectEvent",
+      "test": "TestMetadata/Events/ControlReconnect",
       "result": "pass"
     },
     {
-      "test": "TestEmptyTimestamp",
+      "test": "TestScan/Row/EmptyTimestamp",
       "result": "pass"
     },
     {
-      "test": "TestSelectWithoutFromRejected",
+      "test": "TestSelectWithoutFrom/Rejected",
       "result": "skip"
     },
     {
-      "test": "TestTupleLastFieldEmpty",
+      "test": "TestTuple/RoundTrip/LastFieldEmpty",
       "result": "pass"
     },
     {
-      "test": "TestCustomPayloadValues",
+      "test": "TestQuery/CustomPayload/Values",
       "result": "skip"
     },
     {
-      "test": "TestTLSTicketResumption",
+      "test": "TestSession/Connect/TLSTicketResumption",
       "result": "skip"
     },
     {
-      "test": "TestUDT_Reflect",
+      "test": "TestUDT/RoundTrip/Reflect",
       "result": "pass"
     },
     {
-      "test": "TestSelectWithoutFromWithKeyspace",
+      "test": "TestSelectWithoutFrom/Exec/SessionKeyspace",
       "result": "skip"
     },
     {
-      "test": "TestSelectWithoutFromJSON",
+      "test": "TestSelectWithoutFrom/Exec/JSON",
       "result": "skip"
     },
     {
-      "test": "TestSelectWithoutFromAggregate",
+      "test": "TestSelectWithoutFrom/Exec/Aggregate",
       "result": "skip"
     },
     {
-      "test": "TestCreateSessionTimeout",
+      "test": "TestSession/Connect/Timeout",
       "result": "pass"
     },
     {
-      "test": "TestStaticQueryInfo",
+      "test": "TestQuery/Bind/Static",
       "result": "pass"
     },
     {
-      "test": "TestSessionAwaitSchemaAgreementContextCanceled",
+      "test": "TestSession/AwaitSchemaAgreement/ContextCanceled",
       "result": "pass"
     },
     {
-      "test": "TestSmallInt",
+      "test": "TestTypes/RoundTrip/SmallInt",
       "result": "pass"
     },
     {
-      "test": "TestSliceMap",
+      "test": "TestScan/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestUnpreparedBatch",
+      "test": "TestBatch/Exec/UnpreparedCounter",
       "result": "skip"
     },
     {
-      "test": "TestCustomPayloadMessages",
+      "test": "TestQuery/CustomPayload/Messages",
       "result": "skip"
     },
     {
-      "test": "TestTablets",
+      "test": "TestRouting/Tablets/Converge",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTupleTypes/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Tuple/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTupleTypes/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Tuple/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTupleTypes/NonNull",
+      "test": "TestScan/Dynamic/Tuple/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTupleTypes/Null/SliceMap",
+      "test": "TestScan/Dynamic/Tuple/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTupleTypes/Null/MapScan",
+      "test": "TestScan/Dynamic/Tuple/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTupleTypes/Null",
+      "test": "TestScan/Dynamic/Tuple/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTupleTypes",
+      "test": "TestScan/Dynamic/Tuple",
       "result": "pass"
     },
     {
-      "test": "TestUnmarshallNestedTypes",
+      "test": "TestScan/Dynamic/NestedCollections",
       "result": "pass"
     },
     {
-      "test": "TestWriteFailure",
+      "test": "TestQuery/Errors/WriteFailure",
       "result": "skip"
     },
     {
-      "test": "TestQuery_NamedValues",
+      "test": "TestQuery/Bind/NamedValues",
       "result": "pass"
     },
     {
-      "test": "TestDriverConfigReporting",
+      "test": "TestSession/Startup/DriverConfig",
       "result": "pass"
     },
     {
-      "test": "TestConsistencySerial/Any",
+      "test": "TestConditional/SerialConsistency/Any",
       "result": "pass"
     },
     {
-      "test": "TestConsistencySerial/One",
+      "test": "TestConditional/SerialConsistency/One",
       "result": "pass"
     },
     {
-      "test": "TestConsistencySerial/Two",
+      "test": "TestConditional/SerialConsistency/Two",
       "result": "pass"
     },
     {
-      "test": "TestConsistencySerial/Three",
+      "test": "TestConditional/SerialConsistency/Three",
       "result": "pass"
     },
     {
-      "test": "TestConsistencySerial/Quorum",
+      "test": "TestConditional/SerialConsistency/Quorum",
       "result": "pass"
     },
     {
-      "test": "TestConsistencySerial/LocalQuorum",
+      "test": "TestConditional/SerialConsistency/LocalQuorum",
       "result": "pass"
     },
     {
-      "test": "TestConsistencySerial/EachQuorum",
+      "test": "TestConditional/SerialConsistency/EachQuorum",
       "result": "pass"
     },
     {
-      "test": "TestWhereIn",
+      "test": "TestQuery/Exec/WhereIn",
       "result": "pass"
     },
     {
-      "test": "TestConsistencySerial/Serial",
+      "test": "TestConditional/SerialConsistency/Serial",
       "result": "pass"
     },
     {
-      "test": "TestConsistencySerial/LocalSerial",
+      "test": "TestConditional/SerialConsistency/LocalSerial",
       "result": "pass"
     },
     {
-      "test": "TestConsistencySerial/LocalOne",
+      "test": "TestConditional/SerialConsistency/LocalOne",
       "result": "pass"
     },
     {
-      "test": "TestConsistencySerial",
+      "test": "TestConditional/SerialConsistency",
       "result": "pass"
     },
     {
-      "test": "TestBatchLimit",
+      "test": "TestBatch/Exec/RejectsOverStatementLimit",
       "result": "pass"
     },
     {
-      "test": "TestHostFilterInitial",
+      "test": "TestRouting/HostFilter/Initial",
       "result": "pass"
     },
     {
-      "test": "TestBatch",
+      "test": "TestBatch/Exec/Logged",
       "result": "pass"
     },
     {
-      "test": "TestApplicationInformation/full",
+      "test": "TestSession/Startup/ApplicationInfo/full",
       "result": "pass"
     },
     {
-      "test": "TestApplicationInformation/empty",
+      "test": "TestSession/Startup/ApplicationInfo/empty",
       "result": "pass"
     },
     {
-      "test": "TestApplicationInformation/name-only",
+      "test": "TestSession/Startup/ApplicationInfo/name-only",
       "result": "pass"
     },
     {
-      "test": "TestTooManyQueryArgs",
+      "test": "TestQuery/Bind/TooManyArgs",
       "result": "pass"
     },
     {
-      "test": "TestSelectWithoutFromMapScan",
+      "test": "TestSelectWithoutFrom/DynamicScan",
       "result": "skip"
     },
     {
-      "test": "TestApplicationInformation/version-only",
+      "test": "TestSession/Startup/ApplicationInfo/version-only",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/ascii",
+      "test": "TestVector/RoundTrip/Types/ascii",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/bigint",
+      "test": "TestVector/RoundTrip/Types/bigint",
       "result": "pass"
     },
     {
-      "test": "TestApplicationInformation/client-id-only",
+      "test": "TestSession/Startup/ApplicationInfo/client-id-only",
       "result": "pass"
     },
     {
-      "test": "TestApplicationInformation",
+      "test": "TestSession/Startup/ApplicationInfo",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/blob",
+      "test": "TestVector/RoundTrip/Types/blob",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/boolean",
+      "test": "TestVector/RoundTrip/Types/boolean",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/counter",
+      "test": "TestVector/RoundTrip/Types/counter",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/decimal",
+      "test": "TestVector/RoundTrip/Types/decimal",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/double",
+      "test": "TestVector/RoundTrip/Types/double",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/float",
+      "test": "TestVector/RoundTrip/Types/float",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/int",
+      "test": "TestVector/RoundTrip/Types/int",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/text",
+      "test": "TestVector/RoundTrip/Types/text",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/timestamp",
+      "test": "TestVector/RoundTrip/Types/timestamp",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/uuid",
+      "test": "TestVector/RoundTrip/Types/uuid",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/varchar",
+      "test": "TestVector/RoundTrip/Types/varchar",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/varint",
+      "test": "TestVector/RoundTrip/Types/varint",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/timeuuid",
+      "test": "TestVector/RoundTrip/Types/timeuuid",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/inet",
+      "test": "TestVector/RoundTrip/Types/inet",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/date",
+      "test": "TestVector/RoundTrip/Types/date",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/time",
+      "test": "TestVector/RoundTrip/Types/time",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/smallint",
+      "test": "TestVector/RoundTrip/Types/smallint",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/tinyint",
+      "test": "TestVector/RoundTrip/Types/tinyint",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/duration",
+      "test": "TestVector/RoundTrip/Types/duration",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/vector_vector_float",
+      "test": "TestVector/RoundTrip/Types/vector_vector_float",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/vector_vector_set_float",
+      "test": "TestVector/RoundTrip/Types/vector_vector_set_float",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/vector_tuple_text_int_float",
+      "test": "TestVector/RoundTrip/Types/vector_tuple_text_int_float",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/vector_tuple_text_list_text",
+      "test": "TestVector/RoundTrip/Types/vector_tuple_text_list_text",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/vector_set_text",
+      "test": "TestVector/RoundTrip/Types/vector_set_text",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/vector_list_int",
+      "test": "TestVector/RoundTrip/Types/vector_list_int",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types/vector_map_text_int",
+      "test": "TestVector/RoundTrip/Types/vector_map_text_int",
       "result": "pass"
     },
     {
-      "test": "TestVector_Types",
+      "test": "TestVector/RoundTrip/Types",
       "result": "pass"
     },
     {
-      "test": "TestSelectWithoutFromTokenAware",
+      "test": "TestSelectWithoutFrom/TokenAware",
       "result": "skip"
     },
     {
-      "test": "TestDurationType",
+      "test": "TestTypes/RoundTrip/Duration",
       "result": "skip"
     },
     {
-      "test": "TestGetHostsFromSystem",
+      "test": "TestMetadata/Hosts/FromSystem",
       "result": "pass"
     },
     {
-      "test": "TestMapScanCAS",
+      "test": "TestConditional/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestObserve_Pagination",
+      "test": "TestObserver/Paging",
       "result": "pass"
     },
     {
-      "test": "TestInvalidKeyspace",
+      "test": "TestSession/Connect/InvalidKeyspace",
       "result": "pass"
     },
     {
-      "test": "TestUseStatementError",
+      "test": "TestQuery/Bind/RejectsUse",
       "result": "pass"
     },
     {
-      "test": "TestInvalidPeerEntry",
+      "test": "TestMetadata/Hosts/InvalidPeer",
       "result": "skip"
     },
     {
-      "test": "TestAuthentication",
+      "test": "TestSession/Connect/Authentication",
       "result": "skip"
     },
     {
-      "test": "TestSelectWithoutFromNow",
+      "test": "TestSelectWithoutFrom/Exec/Now",
       "result": "skip"
     },
     {
-      "test": "TestEmptyHosts",
+      "test": "TestSession/Connect/EmptyHosts",
       "result": "pass"
     },
     {
-      "test": "TestShouldPrepareFunction",
+      "test": "TestQuery/ShouldPrepare/MultilineStatements",
       "result": "pass"
     },
     {
-      "test": "TestTuple_NullableNestedCollection/slice",
+      "test": "TestTuple/NestedCollection/Nullable/slice",
       "result": "pass"
     },
     {
-      "test": "TestTuple_NullableNestedCollection/array",
+      "test": "TestTuple/NestedCollection/Nullable/array",
       "result": "pass"
     },
     {
-      "test": "TestTuple_NullableNestedCollection/struct",
+      "test": "TestTuple/NestedCollection/Nullable/struct",
       "result": "pass"
     },
     {
-      "test": "TestTuple_NullableNestedCollection",
+      "test": "TestTuple/NestedCollection/Nullable",
       "result": "pass"
     },
     {
-      "test": "TestHostFilterDiscovery",
+      "test": "TestRouting/HostFilter/Discovery",
       "result": "pass"
     },
     {
-      "test": "TestSelectWithoutFromFilteredOut",
+      "test": "TestSelectWithoutFrom/Exec/Where",
       "result": "skip"
     },
     {
-      "test": "TestSelectWithoutFromLiteral",
+      "test": "TestSelectWithoutFrom/Exec/Literal",
       "result": "skip"
     },
     {
-      "test": "TestPrepare_MissingSchemaPrepare",
+      "test": "TestPrepared/Prepare/MissingSchema",
       "result": "pass"
     },
     {
-      "test": "TestUnsetCol",
+      "test": "TestQuery/Bind/UnsetColumn",
       "result": "pass"
     },
     {
-      "test": "TestMapScan",
+      "test": "TestScan/MapScan/Rows",
       "result": "pass"
     },
     {
-      "test": "TestKeyspaceTable",
+      "test": "TestPrepared/Prepare/KeyspaceTable",
       "result": "pass"
     },
     {
-      "test": "TestVector_MarshalerUDT",
+      "test": "TestVector/RoundTrip/UDT",
       "result": "pass"
     },
     {
-      "test": "TestSchemaQueries",
+      "test": "TestMetadata/Keyspace/TokenAwareSession",
       "result": "pass"
     },
     {
-      "test": "TestShardAwarePortIntegrationUnreachable",
+      "test": "TestPool/ShardAwarePort/Unreachable",
       "result": "pass"
     },
     {
-      "test": "TestDCValidationRackAware",
+      "test": "TestRouting/DCValidation/RackAware",
       "result": "pass"
     },
     {
-      "test": "TestShardAwarePortIntegrationUnusedIfNotEnabled",
+      "test": "TestPool/ShardAwarePort/UnusedIfNotEnabled",
       "result": "pass"
     },
     {
-      "test": "TestShardAwarePortIntegrationNoReconnections",
+      "test": "TestPool/ShardAwarePort/NoReconnections",
       "result": "pass"
     },
     {
-      "test": "TestSingleHostQueryExecutor",
+      "test": "TestSession/OpenSingleHost",
       "result": "pass"
     },
     {
-      "test": "TestProto1BatchInsert",
+      "test": "TestBatch/Exec/BeginApplyStatement",
       "result": "pass"
     },
     {
-      "test": "TestDNS/OneDNSPerNode",
+      "test": "TestSession/Connect/DNS/OneDNSPerNode",
       "result": "pass"
     },
     {
-      "test": "TestDNS/OneDNSPerCluster",
+      "test": "TestSession/Connect/DNS/OneDNSPerCluster",
       "result": "pass"
     },
     {
-      "test": "TestDNS/AddressTranslator+OneDNSPerNode",
+      "test": "TestSession/Connect/DNS/AddressTranslator+OneDNSPerNode",
       "result": "pass"
     },
     {
-      "test": "TestDNS/AddressTranslator+OneDNSPerCluster",
+      "test": "TestSession/Connect/DNS/AddressTranslator+OneDNSPerCluster",
       "result": "pass"
     },
     {
-      "test": "TestDNS/OneDNSPerClusterFirstBroken",
+      "test": "TestSession/Connect/DNS/OneDNSPerClusterFirstBroken",
       "result": "pass"
     },
     {
-      "test": "TestDNS",
+      "test": "TestSession/Connect/DNS",
       "result": "pass"
     },
     {
-      "test": "TestRetryOnTopologyBusy/retries_busy_then_succeeds",
+      "test": "TestFixture/RetryOnTopologyBusy/retries_busy_then_succeeds",
       "result": "pass"
     },
     {
-      "test": "TestRetryOnTopologyBusy/does_not_retry_non-busy_errors",
+      "test": "TestFixture/RetryOnTopologyBusy/does_not_retry_non-busy_errors",
       "result": "pass"
     },
     {
-      "test": "TestRetryOnTopologyBusy/gives_up_after_max_attempts",
+      "test": "TestFixture/RetryOnTopologyBusy/gives_up_after_max_attempts",
       "result": "pass"
     },
     {
-      "test": "TestRetryOnTopologyBusy/isTopologyBusyErr_classification",
+      "test": "TestFixture/RetryOnTopologyBusy/isTopologyBusyErr_classification",
       "result": "pass"
     },
     {
-      "test": "TestRetryOnTopologyBusy/retries_the_TRUNCATE-variant_busy_error",
+      "test": "TestFixture/RetryOnTopologyBusy/retries_the_TRUNCATE-variant_busy_error",
       "result": "pass"
     },
     {
-      "test": "TestRetryOnTopologyBusy",
+      "test": "TestFixture/RetryOnTopologyBusy",
       "result": "pass"
     },
     {
-      "test": "TestShardAwarePortIntegrationMaliciousNAT",
+      "test": "TestPool/ShardAwarePort/MaliciousNAT",
       "result": "pass"
     },
     {
-      "test": "TestBatch_WithTimestamp",
+      "test": "TestBatch/Options/Timestamp",
       "result": "pass"
     },
     {
-      "test": "TestRoutingKey",
+      "test": "TestRouting/RoutingKey/Computed",
       "result": "pass"
     },
     {
-      "test": "TestVector_SubTypeParsing/text",
+      "test": "TestVector/ParseType/text",
       "result": "pass"
     },
     {
-      "test": "TestVector_SubTypeParsing/set_int",
+      "test": "TestVector/ParseType/set_int",
       "result": "pass"
     },
     {
-      "test": "TestVector_SubTypeParsing/udt",
+      "test": "TestVector/ParseType/udt",
       "result": "pass"
     },
     {
-      "test": "TestVector_SubTypeParsing/tuple",
+      "test": "TestVector/ParseType/tuple",
       "result": "pass"
     },
     {
-      "test": "TestVector_SubTypeParsing/vector_vector_inet",
+      "test": "TestVector/ParseType/vector_vector_inet",
       "result": "pass"
     },
     {
-      "test": "TestVector_SubTypeParsing/map_int_vector_text",
+      "test": "TestVector/ParseType/map_int_vector_text",
       "result": "pass"
     },
     {
-      "test": "TestVector_SubTypeParsing/set_map_vector_text_text",
+      "test": "TestVector/ParseType/set_map_vector_text_text",
       "result": "pass"
     },
     {
-      "test": "TestVector_SubTypeParsing",
+      "test": "TestVector/ParseType",
       "result": "pass"
     },
     {
-      "test": "TestTupleSimple",
+      "test": "TestTuple/RoundTrip/Simple",
       "result": "pass"
     },
     {
-      "test": "TestTracing",
+      "test": "TestObserver/Trace/IDs",
       "result": "pass"
     },
     {
-      "test": "TestUDT_Marshaler",
+      "test": "TestUDT/RoundTrip/Marshaler",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanVectorTypes/vector_float_col/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Vector/vector_float_col/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanVectorTypes/vector_float_col/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Vector/vector_float_col/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanVectorTypes/vector_float_col/NonNull",
+      "test": "TestScan/Dynamic/Vector/vector_float_col/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanVectorTypes/vector_float_col/Null/SliceMap",
+      "test": "TestScan/Dynamic/Vector/vector_float_col/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanVectorTypes/vector_float_col/Null/MapScan",
+      "test": "TestScan/Dynamic/Vector/vector_float_col/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanVectorTypes/vector_float_col/Null",
+      "test": "TestScan/Dynamic/Vector/vector_float_col/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanVectorTypes/vector_float_col",
+      "test": "TestScan/Dynamic/Vector/vector_float_col",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanVectorTypes/vector_text_col/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Vector/vector_text_col/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanVectorTypes/vector_text_col/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Vector/vector_text_col/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanVectorTypes/vector_text_col/NonNull",
+      "test": "TestScan/Dynamic/Vector/vector_text_col/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanVectorTypes/vector_text_col/Null/SliceMap",
+      "test": "TestScan/Dynamic/Vector/vector_text_col/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanVectorTypes/vector_text_col/Null/MapScan",
+      "test": "TestScan/Dynamic/Vector/vector_text_col/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanVectorTypes/vector_text_col/Null",
+      "test": "TestScan/Dynamic/Vector/vector_text_col/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanVectorTypes/vector_text_col",
+      "test": "TestScan/Dynamic/Vector/vector_text_col",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanVectorTypes",
+      "test": "TestScan/Dynamic/Vector",
       "result": "pass"
     },
     {
-      "test": "TestRingDiscovery",
+      "test": "TestMetadata/Hosts/RingDiscovery",
       "result": "pass"
     },
     {
-      "test": "TestErrorsParse",
+      "test": "TestQuery/Errors/AlreadyExists",
       "result": "pass"
     },
     {
-      "test": "TestIterHost",
+      "test": "TestQuery/Result/HostID",
       "result": "pass"
     },
     {
-      "test": "TestQueryStats",
+      "test": "TestQuery/Result/Stats",
       "result": "pass"
     },
     {
-      "test": "TestMarshalFloat64Ptr",
+      "test": "TestTypes/RoundTrip/Float64Ptr",
       "result": "pass"
     },
     {
-      "test": "TestGetHostPortMapping/get-for-connection-ids",
+      "test": "TestRouting/ClientRoutes/get-for-connection-ids",
       "result": "pass"
     },
     {
-      "test": "TestGetHostPortMapping/get-for-pairs",
+      "test": "TestRouting/ClientRoutes/get-for-pairs",
       "result": "pass"
     },
     {
-      "test": "TestGetHostPortMapping/get-for-single-host-pairs",
+      "test": "TestRouting/ClientRoutes/get-for-single-host-pairs",
       "result": "pass"
     },
     {
-      "test": "TestGetHostPortMapping/get-for-connection-ids-tls",
+      "test": "TestRouting/ClientRoutes/get-for-connection-ids-tls",
       "result": "pass"
     },
     {
-      "test": "TestGetHostPortMapping",
+      "test": "TestRouting/ClientRoutes",
       "result": "pass"
     },
     {
-      "test": "TestTokenAwareHostPolicy/keyspace",
+      "test": "TestRouting/TokenAware/HostPolicy/keyspace",
       "result": "pass"
     },
     {
-      "test": "TestTokenAwareHostPolicy/no-keyspace",
+      "test": "TestRouting/TokenAware/HostPolicy/no-keyspace",
       "result": "pass"
     },
     {
-      "test": "TestTokenAwareHostPolicy",
+      "test": "TestRouting/TokenAware/HostPolicy",
       "result": "pass"
     },
     {
-      "test": "TestScanWithNilArguments",
+      "test": "TestScan/Row/IgnoredColumn",
       "result": "pass"
     },
     {
-      "test": "TestVector_Marshaler",
+      "test": "TestVector/RoundTrip/Marshaler",
       "result": "pass"
     },
     {
-      "test": "TestTuple_NullTuple",
+      "test": "TestTuple/RoundTrip/Null",
       "result": "pass"
     },
     {
-      "test": "TestPagingWithAllowFiltering/Prepare",
+      "test": "TestPaging/AllowFiltering/Prepare",
       "result": "pass"
     },
     {
-      "test": "TestPagingWithAllowFiltering/AutoPagination/ONE",
+      "test": "TestPaging/AllowFiltering/AutoPagination/ONE",
       "result": "pass"
     },
     {
-      "test": "TestPagingWithAllowFiltering/AutoPagination/QUORUM",
+      "test": "TestPaging/AllowFiltering/AutoPagination/QUORUM",
       "result": "pass"
     },
     {
-      "test": "TestPagingWithAllowFiltering/AutoPagination",
+      "test": "TestPaging/AllowFiltering/AutoPagination",
       "result": "pass"
     },
     {
-      "test": "TestPagingWithAllowFiltering/ManualPagination/ONE",
+      "test": "TestPaging/AllowFiltering/ManualPagination/ONE",
       "result": "pass"
     },
     {
-      "test": "TestPagingWithAllowFiltering/ManualPagination/QUORUM",
+      "test": "TestPaging/AllowFiltering/ManualPagination/QUORUM",
       "result": "pass"
     },
     {
-      "test": "TestPagingWithAllowFiltering/ManualPagination",
+      "test": "TestPaging/AllowFiltering/ManualPagination",
       "result": "pass"
     },
     {
-      "test": "TestTuple_TupleNotSet",
+      "test": "TestTuple/RoundTrip/NotSet",
       "result": "pass"
     },
     {
-      "test": "TestMarshalInet",
+      "test": "TestTypes/RoundTrip/Inet",
       "result": "pass"
     },
     {
-      "test": "TestWikiCreatePages",
+      "test": "TestWiki/CreatePages",
       "result": "pass"
     },
     {
-      "test": "TestSelectWithoutFromUnqualifiedUDF",
+      "test": "TestSelectWithoutFrom/UDF",
       "result": "skip"
     },
     {
-      "test": "TestPrepare_PreparedCacheEviction",
+      "test": "TestPrepared/Cache/Eviction",
       "result": "pass"
     },
     {
-      "test": "TestBatch_Errors",
+      "test": "TestBatch/Exec/RejectsInvalidStatement",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/boolean",
+      "test": "TestTypes/Simple/Marshal/boolean",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/tinyint",
+      "test": "TestTypes/Simple/Marshal/tinyint",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/smallint",
+      "test": "TestTypes/Simple/Marshal/smallint",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/int",
+      "test": "TestTypes/Simple/Marshal/int",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/bigint",
+      "test": "TestTypes/Simple/Marshal/bigint",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/varint",
+      "test": "TestTypes/Simple/Marshal/varint",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/float",
+      "test": "TestTypes/Simple/Marshal/float",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/double",
+      "test": "TestTypes/Simple/Marshal/double",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/decimal",
+      "test": "TestTypes/Simple/Marshal/decimal",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/varchar",
+      "test": "TestTypes/Simple/Marshal/varchar",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/text",
+      "test": "TestTypes/Simple/Marshal/text",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/blob",
+      "test": "TestTypes/Simple/Marshal/blob",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/ascii",
+      "test": "TestTypes/Simple/Marshal/ascii",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/uuid",
+      "test": "TestTypes/Simple/Marshal/uuid",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/timeuuid",
+      "test": "TestTypes/Simple/Marshal/timeuuid",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/inet",
+      "test": "TestTypes/Simple/Marshal/inet",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/time",
+      "test": "TestTypes/Simple/Marshal/time",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/timestamp",
+      "test": "TestTypes/Simple/Marshal/timestamp",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/date",
+      "test": "TestTypes/Simple/Marshal/date",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal/duration",
+      "test": "TestTypes/Simple/Marshal/duration",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Marshal",
+      "test": "TestTypes/Simple/Marshal",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/boolean",
+      "test": "TestTypes/Simple/Unmarshal/boolean",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/tinyint",
+      "test": "TestTypes/Simple/Unmarshal/tinyint",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/smallint",
+      "test": "TestTypes/Simple/Unmarshal/smallint",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/int",
+      "test": "TestTypes/Simple/Unmarshal/int",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/bigint",
+      "test": "TestTypes/Simple/Unmarshal/bigint",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/varint",
+      "test": "TestTypes/Simple/Unmarshal/varint",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/float",
+      "test": "TestTypes/Simple/Unmarshal/float",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/double",
+      "test": "TestTypes/Simple/Unmarshal/double",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/decimal",
+      "test": "TestTypes/Simple/Unmarshal/decimal",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/varchar",
+      "test": "TestTypes/Simple/Unmarshal/varchar",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/text",
+      "test": "TestTypes/Simple/Unmarshal/text",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/blob",
+      "test": "TestTypes/Simple/Unmarshal/blob",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/ascii",
+      "test": "TestTypes/Simple/Unmarshal/ascii",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/uuid",
+      "test": "TestTypes/Simple/Unmarshal/uuid",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/timeuuid",
+      "test": "TestTypes/Simple/Unmarshal/timeuuid",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/inet",
+      "test": "TestTypes/Simple/Unmarshal/inet",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/time",
+      "test": "TestTypes/Simple/Unmarshal/time",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/timestamp",
+      "test": "TestTypes/Simple/Unmarshal/timestamp",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/date",
+      "test": "TestTypes/Simple/Unmarshal/date",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal/duration",
+      "test": "TestTypes/Simple/Unmarshal/duration",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/Unmarshal",
+      "test": "TestTypes/Simple/Unmarshal",
       "result": "pass"
     },
     {
-      "test": "TestMapScanWithRefMap",
+      "test": "TestScan/MapScan/RefMap",
       "result": "pass"
     },
     {
-      "test": "TestPrepare_ReprepareBatch",
+      "test": "TestPrepared/Reprepare/Batch",
       "result": "pass"
     },
     {
-      "test": "TestUnsetColBatch",
+      "test": "TestBatch/Bind/UnsetColumn",
       "result": "pass"
     },
     {
-      "test": "TestNotEnoughQueryArgs",
+      "test": "TestQuery/Bind/NotEnoughArgs",
       "result": "pass"
     },
     {
-      "test": "TestSchemaReset",
+      "test": "TestPrepared/Reprepare/AfterAlterTable",
       "result": "pass"
     },
     {
-      "test": "TestScanCASWithNilArguments",
+      "test": "TestConditional/ScanIgnoredColumns",
       "result": "pass"
     },
     {
-      "test": "TestPagingWithBind",
+      "test": "TestPaging/Auto/Bound",
       "result": "pass"
     },
     {
-      "test": "TestPaging",
+      "test": "TestPaging/Auto/AllRows",
       "result": "pass"
     },
     {
-      "test": "TestCAS",
+      "test": "TestConditional/Exec",
       "result": "pass"
     },
     {
-      "test": "TestTupleMapScanNil",
+      "test": "TestTuple/MapScan/NullMembers",
       "result": "pass"
     },
     {
-      "test": "TestTracingNewAPI",
+      "test": "TestObserver/Trace/Tracer",
       "result": "pass"
     },
     {
-      "test": "TestMapScanUDT",
+      "test": "TestUDT/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestPagingWithAllowFiltering",
+      "test": "TestPaging/AllowFiltering",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/list_col/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Collections/list_col/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/list_col/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Collections/list_col/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/list_col/NonNull",
+      "test": "TestScan/Dynamic/Collections/list_col/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/list_col/Null/SliceMap",
+      "test": "TestScan/Dynamic/Collections/list_col/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/list_col/Null/MapScan",
+      "test": "TestScan/Dynamic/Collections/list_col/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/list_col/Null",
+      "test": "TestScan/Dynamic/Collections/list_col/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/list_col",
+      "test": "TestScan/Dynamic/Collections/list_col",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/set_col/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Collections/set_col/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/set_col/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Collections/set_col/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/set_col/NonNull",
+      "test": "TestScan/Dynamic/Collections/set_col/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/set_col/Null/SliceMap",
+      "test": "TestScan/Dynamic/Collections/set_col/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/set_col/Null/MapScan",
+      "test": "TestScan/Dynamic/Collections/set_col/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/set_col/Null",
+      "test": "TestScan/Dynamic/Collections/set_col/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/set_col",
+      "test": "TestScan/Dynamic/Collections/set_col",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/map_col/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Collections/map_col/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/map_col/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Collections/map_col/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/map_col/NonNull",
+      "test": "TestScan/Dynamic/Collections/map_col/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/map_col/Null/SliceMap",
+      "test": "TestScan/Dynamic/Collections/map_col/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/map_col/Null/MapScan",
+      "test": "TestScan/Dynamic/Collections/map_col/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/map_col/Null",
+      "test": "TestScan/Dynamic/Collections/map_col/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes/map_col",
+      "test": "TestScan/Dynamic/Collections/map_col",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCollectionTypes",
+      "test": "TestScan/Dynamic/Collections",
       "result": "pass"
     },
     {
-      "test": "TestTupleMapScan",
+      "test": "TestTuple/MapScan/Present",
       "result": "pass"
     },
     {
-      "test": "TestTokenAwareConnPool",
+      "test": "TestRouting/TokenAware/ConnPool",
       "result": "pass"
     },
     {
-      "test": "TestRecreateSchema/Keyspace",
+      "test": "TestMetadata/Recreate/Keyspace",
       "result": "pass"
     },
     {
-      "test": "TestSessionMetadataAPIs/TableMetadata/basic_table_after_create",
+      "test": "TestMetadata/Session/TableMetadata/basic_table_after_create",
       "result": "pass"
     },
     {
-      "test": "TestUDT_ScanNullUDT",
+      "test": "TestUDT/Scan/NullMarshaler",
       "result": "pass"
     },
     {
-      "test": "TestBatchStats",
+      "test": "TestBatch/Stats",
       "result": "pass"
     },
     {
-      "test": "TestUDT_UpdateField",
+      "test": "TestUDT/UpdateField",
       "result": "pass"
     },
     {
-      "test": "TestBatchObserve",
+      "test": "TestObserver/Batch",
       "result": "pass"
     },
     {
-      "test": "TestPrepare_PreparedCacheKey",
+      "test": "TestPrepared/Cache/Key",
       "result": "pass"
     },
     {
-      "test": "TestObserve",
+      "test": "TestObserver/Query",
       "result": "pass"
     },
     {
-      "test": "TestVarint",
+      "test": "TestTypes/RoundTrip/Varint",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCounterTypes/SliceMap",
+      "test": "TestScan/Dynamic/Counter/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCounterTypes/MapScan",
+      "test": "TestScan/Dynamic/Counter/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanCounterTypes",
+      "test": "TestScan/Dynamic/Counter",
       "result": "pass"
     },
     {
-      "test": "TestWikiCreateSchema",
+      "test": "TestWiki/CreateSchema",
       "result": "pass"
     },
     {
-      "test": "TestSessionMetadataAPIs/TableMetadata/columns_and_partition_key",
+      "test": "TestMetadata/Session/TableMetadata/columns_and_partition_key",
       "result": "pass"
     },
     {
-      "test": "TestSessionMetadataAPIs/TableMetadata/with_secondary_index",
+      "test": "TestMetadata/Session/TableMetadata/with_secondary_index",
       "result": "skip"
     },
     {
-      "test": "TestSessionMetadataAPIs/TableMetadata/with_materialized_view",
+      "test": "TestMetadata/Session/TableMetadata/with_materialized_view",
       "result": "skip"
     },
     {
-      "test": "TestSliceMapMapScanTypes/tinyint/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/tinyint/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/tinyint/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/tinyint/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/tinyint/NonNull",
+      "test": "TestScan/Dynamic/Scalars/tinyint/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/tinyint/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/tinyint/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/tinyint/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/tinyint/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/tinyint/Null",
+      "test": "TestScan/Dynamic/Scalars/tinyint/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/tinyint",
+      "test": "TestScan/Dynamic/Scalars/tinyint",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/smallint/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/smallint/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/smallint/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/smallint/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/smallint/NonNull",
+      "test": "TestScan/Dynamic/Scalars/smallint/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/smallint/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/smallint/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/smallint/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/smallint/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/smallint/Null",
+      "test": "TestScan/Dynamic/Scalars/smallint/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/smallint",
+      "test": "TestScan/Dynamic/Scalars/smallint",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/int/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/int/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/int/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/int/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/int/NonNull",
+      "test": "TestScan/Dynamic/Scalars/int/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/int/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/int/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/int/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/int/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/int/Null",
+      "test": "TestScan/Dynamic/Scalars/int/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/int",
+      "test": "TestScan/Dynamic/Scalars/int",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/bigint/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/bigint/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/bigint/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/bigint/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/bigint/NonNull",
+      "test": "TestScan/Dynamic/Scalars/bigint/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/bigint/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/bigint/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/bigint/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/bigint/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/bigint/Null",
+      "test": "TestScan/Dynamic/Scalars/bigint/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/bigint",
+      "test": "TestScan/Dynamic/Scalars/bigint",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/float/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/float/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/float/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/float/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/float/NonNull",
+      "test": "TestScan/Dynamic/Scalars/float/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/float/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/float/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/float/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/float/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/float/Null",
+      "test": "TestScan/Dynamic/Scalars/float/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/float",
+      "test": "TestScan/Dynamic/Scalars/float",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/double/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/double/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/double/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/double/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/double/NonNull",
+      "test": "TestScan/Dynamic/Scalars/double/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/double/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/double/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/double/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/double/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/double/Null",
+      "test": "TestScan/Dynamic/Scalars/double/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/double",
+      "test": "TestScan/Dynamic/Scalars/double",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/boolean/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/boolean/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/boolean/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/boolean/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/boolean/NonNull",
+      "test": "TestScan/Dynamic/Scalars/boolean/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/boolean/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/boolean/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/boolean/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/boolean/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/boolean/Null",
+      "test": "TestScan/Dynamic/Scalars/boolean/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/boolean",
+      "test": "TestScan/Dynamic/Scalars/boolean",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/text/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/text/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/text/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/text/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/text/NonNull",
+      "test": "TestScan/Dynamic/Scalars/text/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/text/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/text/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/text/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/text/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/text/Null",
+      "test": "TestScan/Dynamic/Scalars/text/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/text",
+      "test": "TestScan/Dynamic/Scalars/text",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/ascii/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/ascii/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/ascii/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/ascii/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/ascii/NonNull",
+      "test": "TestScan/Dynamic/Scalars/ascii/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/ascii/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/ascii/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/ascii/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/ascii/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/ascii/Null",
+      "test": "TestScan/Dynamic/Scalars/ascii/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/ascii",
+      "test": "TestScan/Dynamic/Scalars/ascii",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/varchar/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/varchar/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/varchar/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/varchar/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/varchar/NonNull",
+      "test": "TestScan/Dynamic/Scalars/varchar/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/varchar/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/varchar/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/varchar/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/varchar/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/varchar/Null",
+      "test": "TestScan/Dynamic/Scalars/varchar/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/varchar",
+      "test": "TestScan/Dynamic/Scalars/varchar",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/timestamp/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/timestamp/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/timestamp/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/timestamp/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/timestamp/NonNull",
+      "test": "TestScan/Dynamic/Scalars/timestamp/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/timestamp/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/timestamp/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/timestamp/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/timestamp/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/timestamp/Null",
+      "test": "TestScan/Dynamic/Scalars/timestamp/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/timestamp",
+      "test": "TestScan/Dynamic/Scalars/timestamp",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/uuid/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/uuid/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/uuid/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/uuid/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/uuid/NonNull",
+      "test": "TestScan/Dynamic/Scalars/uuid/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/uuid/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/uuid/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/uuid/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/uuid/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/uuid/Null",
+      "test": "TestScan/Dynamic/Scalars/uuid/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/uuid",
+      "test": "TestScan/Dynamic/Scalars/uuid",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/timeuuid/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/timeuuid/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/timeuuid/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/timeuuid/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/timeuuid/NonNull",
+      "test": "TestScan/Dynamic/Scalars/timeuuid/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/timeuuid/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/timeuuid/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/timeuuid/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/timeuuid/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/timeuuid/Null",
+      "test": "TestScan/Dynamic/Scalars/timeuuid/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/timeuuid",
+      "test": "TestScan/Dynamic/Scalars/timeuuid",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/inet/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/inet/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/inet/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/inet/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/inet/NonNull",
+      "test": "TestScan/Dynamic/Scalars/inet/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/inet/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/inet/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/inet/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/inet/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/inet/Null",
+      "test": "TestScan/Dynamic/Scalars/inet/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/inet",
+      "test": "TestScan/Dynamic/Scalars/inet",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/blob/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/blob/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/blob/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/blob/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/blob/NonNull",
+      "test": "TestScan/Dynamic/Scalars/blob/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/blob/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/blob/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/blob/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/blob/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/blob/Null",
+      "test": "TestScan/Dynamic/Scalars/blob/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/blob",
+      "test": "TestScan/Dynamic/Scalars/blob",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/varint/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/varint/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/varint/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/varint/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/varint/NonNull",
+      "test": "TestScan/Dynamic/Scalars/varint/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/varint/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/varint/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/varint/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/varint/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/varint/Null",
+      "test": "TestScan/Dynamic/Scalars/varint/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/varint",
+      "test": "TestScan/Dynamic/Scalars/varint",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/decimal/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/decimal/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/decimal/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/decimal/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/decimal/NonNull",
+      "test": "TestScan/Dynamic/Scalars/decimal/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/decimal/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/decimal/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/decimal/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/decimal/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/decimal/Null",
+      "test": "TestScan/Dynamic/Scalars/decimal/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/decimal",
+      "test": "TestScan/Dynamic/Scalars/decimal",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/date/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/date/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/date/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/date/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/date/NonNull",
+      "test": "TestScan/Dynamic/Scalars/date/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/date/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/date/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/date/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/date/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/date/Null",
+      "test": "TestScan/Dynamic/Scalars/date/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/date",
+      "test": "TestScan/Dynamic/Scalars/date",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/time/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/time/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/time/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/time/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/time/NonNull",
+      "test": "TestScan/Dynamic/Scalars/time/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/time/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/time/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/time/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/time/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/time/Null",
+      "test": "TestScan/Dynamic/Scalars/time/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/time",
+      "test": "TestScan/Dynamic/Scalars/time",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/duration/NonNull/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/duration/NonNull/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/duration/NonNull/MapScan",
+      "test": "TestScan/Dynamic/Scalars/duration/NonNull/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/duration/NonNull",
+      "test": "TestScan/Dynamic/Scalars/duration/NonNull",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/duration/Null/SliceMap",
+      "test": "TestScan/Dynamic/Scalars/duration/Null/SliceMap",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/duration/Null/MapScan",
+      "test": "TestScan/Dynamic/Scalars/duration/Null/MapScan",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/duration/Null",
+      "test": "TestScan/Dynamic/Scalars/duration/Null",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes/duration",
+      "test": "TestScan/Dynamic/Scalars/duration",
       "result": "pass"
     },
     {
-      "test": "TestSliceMapMapScanTypes",
+      "test": "TestScan/Dynamic/Scalars",
       "result": "pass"
     },
     {
-      "test": "TestSessionMetadataAPIs/TableMetadata/after_alter_table",
+      "test": "TestMetadata/Session/TableMetadata/after_alter_table",
       "result": "pass"
     },
     {
-      "test": "TestSessionMetadataAPIs/TableMetadata/after_drop_and_recreate",
+      "test": "TestMetadata/Session/TableMetadata/after_drop_and_recreate",
       "result": "pass"
     },
     {
-      "test": "TestSessionMetadataAPIs/TableMetadata/nonexistent_table",
+      "test": "TestMetadata/Session/TableMetadata/nonexistent_table",
       "result": "pass"
     },
     {
-      "test": "TestSessionMetadataAPIs/TableMetadata/empty_table_name",
+      "test": "TestMetadata/Session/TableMetadata/empty_table_name",
       "result": "pass"
     },
     {
-      "test": "TestSessionMetadataAPIs/TableMetadata/empty_keyspace",
+      "test": "TestMetadata/Session/TableMetadata/empty_keyspace",
       "result": "pass"
     },
     {
-      "test": "TestSessionMetadataAPIs/TableMetadata",
+      "test": "TestMetadata/Session/TableMetadata",
       "result": "pass"
     },
     {
-      "test": "TestSessionMetadataAPIs/KeyspaceMetadata/includes_new_table",
+      "test": "TestMetadata/Session/KeyspaceMetadata/includes_new_table",
       "result": "pass"
     },
     {
-      "test": "TestSessionMetadataAPIs/KeyspaceMetadata/excludes_dropped_table",
+      "test": "TestMetadata/Session/KeyspaceMetadata/excludes_dropped_table",
       "result": "pass"
     },
     {
-      "test": "TestRecreateSchema/Table",
+      "test": "TestMetadata/Recreate/Table",
       "result": "pass"
     },
     {
-      "test": "TestSessionMetadataAPIs/KeyspaceMetadata/multiple_tables",
+      "test": "TestMetadata/Session/KeyspaceMetadata/multiple_tables",
       "result": "pass"
     },
     {
-      "test": "TestSessionMetadataAPIs/KeyspaceMetadata/nonexistent_keyspace",
+      "test": "TestMetadata/Session/KeyspaceMetadata/nonexistent_keyspace",
       "result": "pass"
     },
     {
-      "test": "TestSessionMetadataAPIs/KeyspaceMetadata/empty_keyspace",
+      "test": "TestMetadata/Session/KeyspaceMetadata/empty_keyspace",
       "result": "pass"
     },
     {
-      "test": "TestSessionMetadataAPIs/KeyspaceMetadata",
+      "test": "TestMetadata/Session/KeyspaceMetadata",
       "result": "pass"
     },
     {
-      "test": "TestSessionMetadataAPIs",
+      "test": "TestMetadata/Session",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/boolean",
+      "test": "TestTypes/Simple/InsertSelect/boolean",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/tinyint",
+      "test": "TestTypes/Simple/InsertSelect/tinyint",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/smallint",
+      "test": "TestTypes/Simple/InsertSelect/smallint",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/int",
+      "test": "TestTypes/Simple/InsertSelect/int",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/bigint",
+      "test": "TestTypes/Simple/InsertSelect/bigint",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/varint",
+      "test": "TestTypes/Simple/InsertSelect/varint",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/float",
+      "test": "TestTypes/Simple/InsertSelect/float",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/double",
+      "test": "TestTypes/Simple/InsertSelect/double",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/decimal",
+      "test": "TestTypes/Simple/InsertSelect/decimal",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/varchar",
+      "test": "TestTypes/Simple/InsertSelect/varchar",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/text",
+      "test": "TestTypes/Simple/InsertSelect/text",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/blob",
+      "test": "TestTypes/Simple/InsertSelect/blob",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/ascii",
+      "test": "TestTypes/Simple/InsertSelect/ascii",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/uuid",
+      "test": "TestTypes/Simple/InsertSelect/uuid",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/timeuuid",
+      "test": "TestTypes/Simple/InsertSelect/timeuuid",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/inet",
+      "test": "TestTypes/Simple/InsertSelect/inet",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/time",
+      "test": "TestTypes/Simple/InsertSelect/time",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/timestamp",
+      "test": "TestTypes/Simple/InsertSelect/timestamp",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/date",
+      "test": "TestTypes/Simple/InsertSelect/date",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect/duration",
+      "test": "TestTypes/Simple/InsertSelect/duration",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra/InsertSelect",
+      "test": "TestTypes/Simple/InsertSelect",
       "result": "pass"
     },
     {
-      "test": "TestSerializationSimpleTypesCassandra",
+      "test": "TestTypes/Simple",
       "result": "pass"
     },
     {
-      "test": "TestRecreateSchema/Materialized_Views",
+      "test": "TestMetadata/Recreate/Materialized_Views",
       "result": "pass"
     },
     {
-      "test": "TestRecreateSchema/Index",
+      "test": "TestMetadata/Recreate/Index",
       "result": "pass"
     },
     {
-      "test": "TestRecreateSchema/Secondary_Index",
+      "test": "TestMetadata/Recreate/Secondary_Index",
       "result": "pass"
     },
     {
-      "test": "TestRecreateSchema/UDT",
+      "test": "TestMetadata/Recreate/UDT",
       "result": "pass"
     },
     {
-      "test": "TestRecreateSchema/Aggregates",
+      "test": "TestMetadata/Recreate/Aggregates",
       "result": "pass"
     },
     {
-      "test": "TestRecreateSchema",
+      "test": "TestMetadata/Recreate",
       "result": "pass"
     }
   ]

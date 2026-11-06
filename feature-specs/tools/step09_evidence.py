@@ -38,37 +38,37 @@ def events(path):
 
 def fixture(name, file):
     common = ['Three-node pinned native fixture, RF=3 and explicit per-run namespace; protocol/distribution gates below remain applicable.']
-    if name in {'TestSessionAPI', 'TestConsistencyNames', 'TestIsUseStatement', 'TestShouldPrepareFunction', 'TestQueryShouldPrepare', 'TestRetryOnTopologyBusy', 'TestVector_SubTypeParsing'}:
+    if name in {'TestSession/Close/Unconnected', 'TestQuery/ConsistencyString', 'TestQuery/Bind/DetectsUse', 'TestQuery/ShouldPrepare/MultilineStatements', 'TestQuery/ShouldPrepare/Keywords', 'TestFixture/RetryOnTopologyBusy', 'TestVector/ParseType'}:
         return ['Local API/codec/policy assertions; integration package startup still performs real fixture probes.']
     if name == 'TestCCM':
         return ['Live owned CCM cluster; finite CLI forwards status/stop/join/start/health to the same runner holding exact address locks.']
     if name.startswith('TestSelectWithoutFrom'):
         common += ['Development Scylla SELECT-without-FROM capability; actual prepared/unprepared and rejection cases as declared in source.']
-    if name.startswith('TestVector') or name == 'TestSliceMapMapScanVectorTypes':
+    if name.startswith('TestVector') or name == 'TestScan/Dynamic/Vector':
         common += ['Server support for the exact vector subtype/dimension; scalar and variable-size subtype gates retained in source.']
-    if name in {'TestCustomPayloadMessages', 'TestCustomPayloadValues', 'TestWriteFailure'}:
+    if name in {'TestQuery/CustomPayload/Messages', 'TestQuery/CustomPayload/Values', 'TestQuery/Errors/WriteFailure'}:
         common += ['Cassandra Java FixtureQueryHandler: ordinary real QUERY/EXECUTE/BATCH processing, native echo/failure serialization; v5 for reason maps.']
-    if name == 'TestInvalidPeerEntry':
+    if name == 'TestMetadata/Hosts/InvalidPeer':
         common += ['Cassandra plaintext uncompressed v4 and independent incomplete-peer transport fixture.']
-    if name == 'TestAuthentication':
+    if name == 'TestSession/Connect/Authentication':
         common += ['Password authentication enforced by the real Scylla fixture, including rejected credentials.']
-    if name == 'TestUnixSockets':
+    if name == 'TestSession/Connect/UnixSocket':
         common += ['Actual Scylla maintenance Unix-domain socket of the owned node.']
-    if name in {'TestCloudConnection', 'TestTLSTicketResumption'}:
+    if name in {'TestCloudConnection', 'TestSession/Connect/TLSTicketResumption'}:
         common += ['TLS lane, trusted dedicated PKI/client certificate, real proxy/SNI or fresh ticket-resuming handshakes.']
-    if name.startswith('TestShardAwarePort') or name in {'TestDriverConfigReporting', 'TestTablets'}:
+    if name.startswith('TestShardAwarePort') or name in {'TestSession/Startup/DriverConfig', 'TestRouting/Tablets/Converge'}:
         common += ['Two Scylla shards; actual native 9042/9142 and plaintext/TLS shard ports19042/19142, strict source-port targeting and wrong-shard feedback.']
-    if name == 'TestRecreateSchema':
+    if name == 'TestMetadata/Recreate':
         common += ['Scylla Lua or Cassandra Java UDF/UDA, materialized views and original schema goldens/dump replay.']
     if any(k in name for k in ['NowInSeconds', 'SetKeyspace', 'OverriddenKeyspace', 'LargeSizeQuery']):
         common += ['Native protocol5 where the source gate requires protocol5 options/segmentation.']
-    if name == 'TestQueryCompressionNotWorthIt':
+    if name == 'TestFraming/Compression/NotWorthIt':
         common += ['Cassandra v5 with actually negotiated LZ4 segments, including the uncompressed-payload escape within compressed segmentation.']
-    if name == 'TestCompressorNegotiated':
+    if name == 'TestFraming/Compression/Negotiated':
         common += ['An explicitly requested compressor must be present on every expected host.']
-    if name == 'TestPrepareExecuteMetadataChangedFlag':
+    if name == 'TestFraming/ResultMetadataID/ChangedFlag':
         common += ['Cassandra native v5 and Scylla v4 negotiated metadata-ID extension, each exercised separately.']
-    if name == 'TestPrepareExecuteScyllaEmptyMetadataID':
+    if name == 'TestFraming/ResultMetadataID/ScyllaEmpty':
         common += ['Scylla v4 negotiated metadata-ID extension and controlled empty-ID cache input.']
     return common
 
@@ -83,23 +83,23 @@ def semantics(item):
         changes += ['Scan/reflection destinations become typed row fields or explicit Value accessors; null/empty/unset are explicit states. Owned collection/Clone paths preserve retained results.']
     if 'Tuple' in name:
         changes += ['One physical tuple remains one typed tuple value; named/indexed member assertions replace destination flattening.']
-    if 'UDT' in name or 'Marshaler' in name or name.startswith('TestWiki') or name == 'TestSerializationSimpleTypesCassandra':
+    if 'UDT' in name or 'Marshaler' in name or name.startswith('TestWiki') or name == 'TestTypes/Simple':
         changes += ['Explicit custom/field codecs replace reflection and Marshal/Unmarshal callbacks; fixture values and schema/type/byte assertions remain.']
-    if name == 'TestMapScanWithRefMap':
+    if name == 'TestScan/MapScan/RefMap':
         changes += ['Preseeded map pointer replacement becomes explicit typed field access, including both custom FullName members and Nullable[int32].']
-    if name in {'TestSessionAPI', 'TestQueryBasicAPI', 'TestBatchBasicAPI'}:
+    if name in {'TestSession/Close/Unconnected', 'TestQuery/Exec/Basic', 'TestBatch/Exec/Basic'}:
         changes += ['Session setters become atomic profile replacement; fractional prefetch becomes a bounded count0/1; metrics/traces belong to execution Results/Observers; invalid/closed operations return typed errors.']
     if 'Stats' in name or 'Observe' in name:
         changes += ['Immutable execution Result and observer events replace mutable request-owned metrics while retaining attempts, host, timing, rows/pages and batch entry assertions.']
-    if name == 'TestQuery_SetHostID':
+    if name == 'TestQuery/Options/HostID':
         changes += ['Malformed UUID text is rejected at construction; present-empty UUID yields ValidationError; nonempty unknown and down targets still return ErrNoConnections without fallback.']
-    if name == 'TestRoutingKey':
+    if name == 'TestRouting/RoutingKey/Computed':
         changes += ['Canonical encoded partition-key spans replace GetRoutingKey; test retains exact bytes, parameter indices/types, cache identity/size and token assertions.']
-    if name == 'TestPrepare_PreparedCacheEviction':
+    if name == 'TestPrepared/Cache/Eviction':
         changes += ['Typed statement cache is keyed by CQL/keyspace with per-host IDs inside entries; capacity and exact retained/evicted statement membership remain checked.']
-    if name == 'TestNoHangAllHostsDown':
+    if name == 'TestRouting/AllHostsDown':
         changes += ['Immutable routing snapshot fixture rebuilds derived indices; actual picker HostInfo down states retain original fault injection for all nine policies and one-host membership.']
-    if name == 'TestRecreateSchema':
+    if name == 'TestMetadata/Recreate':
         changes += ['Cassandra uses equivalent Java aggregate; only exact server-declared aborted group0 concurrent-modification transactions receive a bounded fixture retry. All original golden/dump/replay assertions remain.']
     return changes
 

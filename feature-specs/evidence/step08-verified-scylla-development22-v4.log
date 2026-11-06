@@ -38,10 +38,10 @@
 {"Time":"2026-10-29T22:00:58.901124682-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"2026/10/29 22:00:58 logger.go:69: scylla: 127.0.22.3:9042 no excess connections to close\n"}
 {"Time":"2026-10-29T22:00:58.901133989-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"2026/10/29 22:00:58 logger.go:69: scylla: 127.0.22.1:9042 closing 1 connections\n"}
 {"Time":"2026-10-29T22:00:58.901151142-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"2026/10/29 22:00:58 logger.go:69: scylla: 127.0.22.1:9042 no excess connections to close\n"}
-{"Time":"2026-10-29T22:00:58.90175326-04:00","Action":"run","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFromLiteral"}
-{"Time":"2026-10-29T22:00:58.901755033-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFromLiteral","Output":"=== RUN   TestSelectWithoutFromLiteral\n"}
-{"Time":"2026-10-29T22:00:58.901767407-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFromLiteral","Output":"=== PAUSE TestSelectWithoutFromLiteral\n"}
-{"Time":"2026-10-29T22:00:58.901768519-04:00","Action":"pause","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFromLiteral"}
+{"Time":"2026-10-29T22:00:58.90175326-04:00","Action":"run","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFrom/Exec/Literal"}
+{"Time":"2026-10-29T22:00:58.901755033-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFrom/Exec/Literal","Output":"=== RUN   TestSelectWithoutFrom/Exec/Literal\n"}
+{"Time":"2026-10-29T22:00:58.901767407-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFrom/Exec/Literal","Output":"=== PAUSE TestSelectWithoutFrom/Exec/Literal\n"}
+{"Time":"2026-10-29T22:00:58.901768519-04:00","Action":"pause","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFrom/Exec/Literal"}
 {"Time":"2026-10-29T22:00:58.90208652-04:00","Action":"run","Package":"github.com/scylladb/gocql/v2","Test":"TestStep08FixtureIdentity"}
 {"Time":"2026-10-29T22:00:58.90211301-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep08FixtureIdentity","Output":"=== RUN   TestStep08FixtureIdentity\n"}
 {"Time":"2026-10-29T22:00:58.90665205-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep08FixtureIdentity","Output":"2026/10/29 22:00:58 logger.go:69: gocql: conns of pool after stopped \"127.0.22.1\": 1\n"}
@@ -68,16 +68,16 @@
 {"Time":"2026-10-29T22:00:59.921125989-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep07RunStreamLive","Output":"2026/10/29 22:00:59 logger.go:69: gocql: handling frame: [event schema_change change=\"DROPPED\" keyspace=\"g73b290e766e94bd1_5c723577396428d1\" object=\"records\"]\n"}
 {"Time":"2026-10-29T22:01:00.136324013-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestStep07RunStreamLive","Output":"--- PASS: TestStep07RunStreamLive (1.23s)\n"}
 {"Time":"2026-10-29T22:01:00.136347638-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Test":"TestStep07RunStreamLive","Elapsed":1.23}
-{"Time":"2026-10-29T22:01:00.136926662-04:00","Action":"cont","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFromLiteral"}
-{"Time":"2026-10-29T22:01:00.136928285-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFromLiteral","Output":"=== CONT  TestSelectWithoutFromLiteral\n"}
-{"Time":"2026-10-29T22:01:00.141755029-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFromLiteral","Output":"2026/10/29 22:01:00 logger.go:69: gocql: conns of pool after stopped \"127.0.22.1\": 1\n"}
-{"Time":"2026-10-29T22:01:00.141778253-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFromLiteral","Output":"2026/10/29 22:01:00 logger.go:69: gocql: conns of pool after stopped \"127.0.22.3\": 1\n"}
-{"Time":"2026-10-29T22:01:00.14178161-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFromLiteral","Output":"2026/10/29 22:01:00 logger.go:69: gocql: conns of pool after stopped \"127.0.22.2\": 1\n"}
-{"Time":"2026-10-29T22:01:00.146229458-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFromLiteral","Output":"2026/10/29 22:01:00 logger.go:69: gocql: conns of pool after stopped \"127.0.22.1\": 1\n"}
-{"Time":"2026-10-29T22:01:00.146326701-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFromLiteral","Output":"2026/10/29 22:01:00 logger.go:69: gocql: conns of pool after stopped \"127.0.22.2\": 1\n"}
-{"Time":"2026-10-29T22:01:00.146489289-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFromLiteral","Output":"2026/10/29 22:01:00 logger.go:69: gocql: conns of pool after stopped \"127.0.22.3\": 1\n"}
-{"Time":"2026-10-29T22:01:00.146911497-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFromLiteral","Output":"--- PASS: TestSelectWithoutFromLiteral (0.01s)\n"}
-{"Time":"2026-10-29T22:01:00.146982381-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFromLiteral","Elapsed":0.01}
+{"Time":"2026-10-29T22:01:00.136926662-04:00","Action":"cont","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFrom/Exec/Literal"}
+{"Time":"2026-10-29T22:01:00.136928285-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFrom/Exec/Literal","Output":"=== CONT  TestSelectWithoutFrom/Exec/Literal\n"}
+{"Time":"2026-10-29T22:01:00.141755029-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFrom/Exec/Literal","Output":"2026/10/29 22:01:00 logger.go:69: gocql: conns of pool after stopped \"127.0.22.1\": 1\n"}
+{"Time":"2026-10-29T22:01:00.141778253-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFrom/Exec/Literal","Output":"2026/10/29 22:01:00 logger.go:69: gocql: conns of pool after stopped \"127.0.22.3\": 1\n"}
+{"Time":"2026-10-29T22:01:00.14178161-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFrom/Exec/Literal","Output":"2026/10/29 22:01:00 logger.go:69: gocql: conns of pool after stopped \"127.0.22.2\": 1\n"}
+{"Time":"2026-10-29T22:01:00.146229458-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFrom/Exec/Literal","Output":"2026/10/29 22:01:00 logger.go:69: gocql: conns of pool after stopped \"127.0.22.1\": 1\n"}
+{"Time":"2026-10-29T22:01:00.146326701-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFrom/Exec/Literal","Output":"2026/10/29 22:01:00 logger.go:69: gocql: conns of pool after stopped \"127.0.22.2\": 1\n"}
+{"Time":"2026-10-29T22:01:00.146489289-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFrom/Exec/Literal","Output":"2026/10/29 22:01:00 logger.go:69: gocql: conns of pool after stopped \"127.0.22.3\": 1\n"}
+{"Time":"2026-10-29T22:01:00.146911497-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFrom/Exec/Literal","Output":"--- PASS: TestSelectWithoutFrom/Exec/Literal (0.01s)\n"}
+{"Time":"2026-10-29T22:01:00.146982381-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Test":"TestSelectWithoutFrom/Exec/Literal","Elapsed":0.01}
 {"Time":"2026-10-29T22:01:00.146985717-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"PASS\n"}
 {"Time":"2026-10-29T22:01:01.149173907-04:00","Action":"output","Package":"github.com/scylladb/gocql/v2","Output":"ok  \tgithub.com/scylladb/gocql/v2\t2.284s\n"}
 {"Time":"2026-10-29T22:01:01.149209194-04:00","Action":"pass","Package":"github.com/scylladb/gocql/v2","Elapsed":2.284}

@@ -213,7 +213,7 @@
         "-tags",
         "integration gocql_debug",
         "-run",
-        "^TestPrepare_PreparedCacheEviction$",
+        "^TestPrepared$/^Cache$/^Eviction$",
         "-count=1",
         "-timeout=3m",
         ".",
@@ -291,7 +291,7 @@
         "-tags",
         "integration gocql_debug",
         "-run",
-        "^(TestPaging|TestPagingWithAllowFiltering|TestPagingWithBind|TestRebindQueryInfo|TestStaticQueryInfo|TestBoundQueryInfo|TestManualQueryPaging|TestPrepare_PreparedCacheEviction|TestPrepareExecuteScyllaEmptyMetadataID|TestV2PreparedPagingConcurrentSchemaAndDestinations)$",
+        "^TestPaging$/^Auto$/^AllRows$|^TestPaging$/^AllowFiltering$|^TestPaging$/^Auto$/^Bound$|^TestQuery$/^Bind$/^Rebind$|^TestQuery$/^Bind$/^Static$|^TestQuery$/^Bind$/^ParamsMetadata$|^TestPaging$/^Manual$|^TestPrepared$/^Cache$/^Eviction$|^TestFraming$/^ResultMetadataID$/^ScyllaEmpty$|^TestPaging$/^PreparedSchemaChange$",
         "-count=1",
         "-timeout=8m",
         "-parallel=8",
@@ -338,7 +338,7 @@
         "-tags",
         "integration gocql_debug",
         "-run",
-        "^(TestPagingWithBind|TestManualQueryPaging|TestPrepare_PreparedCacheEviction|TestPrepareExecuteMetadataChangedFlag|TestV2PreparedPagingConcurrentSchemaAndDestinations)$",
+        "^TestPaging$/^Auto$/^Bound$|^TestPaging$/^Manual$|^TestPrepared$/^Cache$/^Eviction$|^TestFraming$/^ResultMetadataID$/^ChangedFlag$|^TestPaging$/^PreparedSchemaChange$",
         "-count=1",
         "-timeout=8m",
         "-parallel=5",
@@ -366,87 +366,87 @@
       "outcomes": [
         {
           "Action": "pass",
-          "Test": "TestPrepareExecuteScyllaEmptyMetadataID",
+          "Test": "TestFraming/ResultMetadataID/ScyllaEmpty",
           "Elapsed": 3.16
         },
         {
           "Action": "pass",
-          "Test": "TestStaticQueryInfo",
+          "Test": "TestQuery/Bind/Static",
           "Elapsed": 1.87
         },
         {
           "Action": "pass",
-          "Test": "TestRebindQueryInfo",
+          "Test": "TestQuery/Bind/Rebind",
           "Elapsed": 1.95
         },
         {
           "Action": "pass",
-          "Test": "TestPagingWithBind",
+          "Test": "TestPaging/Auto/Bound",
           "Elapsed": 1.98
         },
         {
           "Action": "pass",
-          "Test": "TestPaging",
+          "Test": "TestPaging/Auto/AllRows",
           "Elapsed": 2
         },
         {
           "Action": "pass",
-          "Test": "TestManualQueryPaging",
+          "Test": "TestPaging/Manual",
           "Elapsed": 2.83
         },
         {
           "Action": "pass",
-          "Test": "TestPagingWithAllowFiltering/Prepare",
+          "Test": "TestPaging/AllowFiltering/Prepare",
           "Elapsed": 1.37
         },
         {
           "Action": "pass",
-          "Test": "TestPagingWithAllowFiltering/AutoPagination/ONE",
+          "Test": "TestPaging/AllowFiltering/AutoPagination/ONE",
           "Elapsed": 0.03
         },
         {
           "Action": "pass",
-          "Test": "TestPagingWithAllowFiltering/AutoPagination/QUORUM",
+          "Test": "TestPaging/AllowFiltering/AutoPagination/QUORUM",
           "Elapsed": 0.03
         },
         {
           "Action": "pass",
-          "Test": "TestPagingWithAllowFiltering/AutoPagination",
+          "Test": "TestPaging/AllowFiltering/AutoPagination",
           "Elapsed": 0.05
         },
         {
           "Action": "pass",
-          "Test": "TestPagingWithAllowFiltering/ManualPagination/ONE",
+          "Test": "TestPaging/AllowFiltering/ManualPagination/ONE",
           "Elapsed": 0.03
         },
         {
           "Action": "pass",
-          "Test": "TestPagingWithAllowFiltering/ManualPagination/QUORUM",
+          "Test": "TestPaging/AllowFiltering/ManualPagination/QUORUM",
           "Elapsed": 0.03
         },
         {
           "Action": "pass",
-          "Test": "TestPagingWithAllowFiltering/ManualPagination",
+          "Test": "TestPaging/AllowFiltering/ManualPagination",
           "Elapsed": 0.05
         },
         {
           "Action": "pass",
-          "Test": "TestPagingWithAllowFiltering",
+          "Test": "TestPaging/AllowFiltering",
           "Elapsed": 1.98
         },
         {
           "Action": "pass",
-          "Test": "TestPrepare_PreparedCacheEviction",
+          "Test": "TestPrepared/Cache/Eviction",
           "Elapsed": 3.86
         },
         {
           "Action": "pass",
-          "Test": "TestBoundQueryInfo",
+          "Test": "TestQuery/Bind/ParamsMetadata",
           "Elapsed": 3.87
         },
         {
           "Action": "pass",
-          "Test": "TestV2PreparedPagingConcurrentSchemaAndDestinations",
+          "Test": "TestPaging/PreparedSchemaChange",
           "Elapsed": 25.95
         },
         {
@@ -461,37 +461,37 @@
       "outcomes": [
         {
           "Action": "pass",
-          "Test": "TestPrepareExecuteMetadataChangedFlag/native_protocol_v5",
+          "Test": "TestFraming/ResultMetadataID/ChangedFlag/native_protocol_v5",
           "Elapsed": 1.85
         },
         {
           "Action": "skip",
-          "Test": "TestPrepareExecuteMetadataChangedFlag/protocol_v4_with_SCYLLA_USE_METADATA_ID",
+          "Test": "TestFraming/ResultMetadataID/ChangedFlag/protocol_v4_with_SCYLLA_USE_METADATA_ID",
           "Elapsed": 0.04
         },
         {
           "Action": "pass",
-          "Test": "TestPrepareExecuteMetadataChangedFlag",
+          "Test": "TestFraming/ResultMetadataID/ChangedFlag",
           "Elapsed": 1.89
         },
         {
           "Action": "pass",
-          "Test": "TestPagingWithBind",
+          "Test": "TestPaging/Auto/Bound",
           "Elapsed": 1.21
         },
         {
           "Action": "pass",
-          "Test": "TestManualQueryPaging",
+          "Test": "TestPaging/Manual",
           "Elapsed": 1.26
         },
         {
           "Action": "pass",
-          "Test": "TestPrepare_PreparedCacheEviction",
+          "Test": "TestPrepared/Cache/Eviction",
           "Elapsed": 1.26
         },
         {
           "Action": "pass",
-          "Test": "TestV2PreparedPagingConcurrentSchemaAndDestinations",
+          "Test": "TestPaging/PreparedSchemaChange",
           "Elapsed": 19.98
         },
         {
@@ -506,7 +506,7 @@
       "outcomes": [
         {
           "Action": "pass",
-          "Test": "TestPrepare_PreparedCacheEviction",
+          "Test": "TestPrepared/Cache/Eviction",
           "Elapsed": 2.06
         },
         {

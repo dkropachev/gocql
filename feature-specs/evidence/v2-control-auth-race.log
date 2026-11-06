@@ -1,24 +1,24 @@
 2026/10/29 08:59:31 logger.go:59: [6a8d9885-def0-4e53-8d33-72a3a18da923] warnings: [Using Replication Factor replication_factor=1 lower than the minimum_replication_factor_warn_threshold=3 is not recommended.]
-=== RUN   TestAuthentication
-=== PAUSE TestAuthentication
-=== RUN   TestApplicationInformation
-=== PAUSE TestApplicationInformation
-=== RUN   TestDriverConfigReporting
-=== PAUSE TestDriverConfigReporting
-=== CONT  TestAuthentication
-=== CONT  TestDriverConfigReporting
-=== CONT  TestApplicationInformation
---- PASS: TestAuthentication (0.01s)
-=== RUN   TestApplicationInformation/full
---- PASS: TestDriverConfigReporting (0.01s)
-=== RUN   TestApplicationInformation/empty
-=== RUN   TestApplicationInformation/name-only
-=== RUN   TestApplicationInformation/version-only
-=== RUN   TestApplicationInformation/client-id-only
---- PASS: TestApplicationInformation (0.04s)
-    --- PASS: TestApplicationInformation/full (0.00s)
-    --- PASS: TestApplicationInformation/empty (0.00s)
-    --- PASS: TestApplicationInformation/name-only (0.01s)
-    --- PASS: TestApplicationInformation/version-only (0.00s)
-    --- PASS: TestApplicationInformation/client-id-only (0.01s)
+=== RUN   TestSession/Connect/Authentication
+=== PAUSE TestSession/Connect/Authentication
+=== RUN   TestSession/Startup/ApplicationInfo
+=== PAUSE TestSession/Startup/ApplicationInfo
+=== RUN   TestSession/Startup/DriverConfig
+=== PAUSE TestSession/Startup/DriverConfig
+=== CONT  TestSession/Connect/Authentication
+=== CONT  TestSession/Startup/DriverConfig
+=== CONT  TestSession/Startup/ApplicationInfo
+--- PASS: TestSession/Connect/Authentication (0.01s)
+=== RUN   TestSession/Startup/ApplicationInfo/full
+--- PASS: TestSession/Startup/DriverConfig (0.01s)
+=== RUN   TestSession/Startup/ApplicationInfo/empty
+=== RUN   TestSession/Startup/ApplicationInfo/name-only
+=== RUN   TestSession/Startup/ApplicationInfo/version-only
+=== RUN   TestSession/Startup/ApplicationInfo/client-id-only
+--- PASS: TestSession/Startup/ApplicationInfo (0.04s)
+    --- PASS: TestSession/Startup/ApplicationInfo/full (0.00s)
+    --- PASS: TestSession/Startup/ApplicationInfo/empty (0.00s)
+    --- PASS: TestSession/Startup/ApplicationInfo/name-only (0.01s)
+    --- PASS: TestSession/Startup/ApplicationInfo/version-only (0.00s)
+    --- PASS: TestSession/Startup/ApplicationInfo/client-id-only (0.01s)
 PASS

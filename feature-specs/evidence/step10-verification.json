@@ -69,7 +69,7 @@
     "not_rerun_current": "16 development SELECT-without-FROM identities remain preserved and token-identical; their actual successful runtime evidence is historical step09. The complete current/final174 matrix remains14/17.",
     "original_bodies_verified": 174,
     "original_files_verified": 29,
-    "translated_change": "Only TestSessionMetadataAPIs changes tokens: existing v2TabletsSupported reads its own typed session instead of the removed global legacy probe; every existing assertion remains.",
+    "translated_change": "Only TestMetadata/Session changes tokens: existing v2TabletsSupported reads its own typed session instead of the removed global legacy probe; every existing assertion remains.",
     "translated_token_identical_to_step09": 173
   },
   "branch": "v2-10-remove-legacy",

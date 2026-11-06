@@ -98,7 +98,7 @@ token routing with a diagnostic. No alternate serialization is introduced.
 | Tokens/vnodes | Existing canonical composite/CDC/signed Murmur vectors, custom partitioner payload backing identity and captured choice, duplicate vnodes and exact NTS rack budget/factor vectors. |
 | Concurrency | Focused repeated race tests cover plan advancement against concurrently replaced placements; the full uncached unit race suite includes metadata/control/drop/event and pool regression tests. |
 | Cost | First-target host scaling, changed/duplicate publication with independent table/range scaling, and bounded/coalesced feedback queue benchmarks. |
-| Live server | Native task-owned Scylla 2026.3.4 ordinary v1 and experimental v2 lanes; independently read system.tablets replica sets, retained original TestTablets assertions, and 16 stable LOCAL_QUORUM reads to the leader decoded directly from a v2 payload. |
+| Live server | Native task-owned Scylla 2026.3.4 ordinary v1 and experimental v2 lanes; independently read system.tablets replica sets, retained original TestRouting/Tablets/Converge assertions, and 16 stable LOCAL_QUORUM reads to the leader decoded directly from a v2 payload. |
 
 The first-target benchmark includes plan creation/validation/first Next and retains
 one 768-byte allocation with 3, 30 and 300 hosts, including ordinary, conditional,

@@ -88,7 +88,7 @@ Additional baseline checks:
   existing SELECT-without-FROM tests unsupported by stable 2026.3.
 
 Current baseline inventory includes pre-existing unconditional skips in
-TestUnpreparedBatch, TestWriteFailure, and custom payload tests; these require
+TestBatch/Exec/UnpreparedCounter, TestQuery/Errors/WriteFailure, and custom payload tests; these require
 explicit investigation before claiming all requested behavior is verified.
 
 Baseline follow-up evidence and infrastructure fixes:
@@ -140,20 +140,20 @@ in `--jvm_arg` is passed as one invalid Scylla option by this installed CCM.
 Across baseline lanes, 166/174 original top-level tests have an observed pass.
 Remaining tests with no pass:
 
-- `TestInvalidPeerEntry`: unconditional skip; intended incomplete-peer handling,
+- `TestMetadata/Hosts/InvalidPeer`: unconditional skip; intended incomplete-peer handling,
   disabled because original implementation mutates system tables. Rewrite with
   a faithful metadata/transport fixture during migration rather than counting skip.
-- `TestUnpreparedBatch`: unconditional flake skip; inspect counter-batch semantics.
-- `TestCreateSession_DontSwallowError`: unconditional skip; legacy assertion depends
+- `TestBatch/Exec/UnpreparedCounter`: unconditional flake skip; inspect counter-batch semantics.
+- `TestSession/Connect/ReportsProtocolError`: unconditional skip; legacy assertion depends
   on old server error strings despite locally invalid protocol value 256.
-- `TestAuthentication`: opt-in, requires a server actually enforcing authentication.
-- `TestWriteFailure`: needs Cassandra `cassandra.test.fail_writes_ks=test` fixture
+- `TestSession/Connect/Authentication`: opt-in, requires a server actually enforcing authentication.
+- `TestQuery/Errors/WriteFailure`: needs Cassandra `cassandra.test.fail_writes_ks=test` fixture
   and error-unwrapping assertions appropriate to wrapped driver errors.
-- `TestCustomPayloadMessages`, `TestCustomPayloadValues`: need Cassandra's built-in
+- `TestQuery/CustomPayload/Messages`, `TestQuery/CustomPayload/Values`: need Cassandra's built-in
   `org.apache.cassandra.cql3.CustomPayloadMirroringQueryHandler` enabled. Class was
   verified in the 5.0.9 jar and official tagged source. Existing assertions must
   be executed, with iterator errors/close checked.
-- `TestTLSTicketResumption`: unconditional old-version skip; helper overwrites TLS
+- `TestSession/Connect/TLSTicketResumption`: unconditional old-version skip; helper overwrites TLS
   client certificate config, and ticket-count equality is not itself evidence of
   successful resumed handshakes. Preserve the intended resumption behavior with
   actual TLS connection-state evidence.
@@ -183,9 +183,9 @@ Recent reactivations and fixes:
   Native Scylla now needs explicit `auth_superuser_name` and salted password in
   addition to PasswordAuthenticator; merely waiting for an implicit default role
   does not work. Explicit role setup passed readiness and wrong-password rejection
-  probes, then `TestAuthentication` passed. Logs: `auth-explicit-role-probes.log`,
+  probes, then `TestSession/Connect/Authentication` passed. Logs: `auth-explicit-role-probes.log`,
   `password-authentication-explicit-role.jsonl`. The native fixture was stopped.
-- `TestInvalidPeerEntry` now uses `metadata_peer_fixture_test.go` to append an
+- `TestMetadata/Hosts/InvalidPeer` now uses `metadata_peer_fixture_test.go` to append an
   incomplete row to actual Cassandra native-v4 transport responses, without
   mutating system tables. It verifies injection occurred during discovery, the
   invalid host is excluded, all valid hosts remain, and a real query succeeds.

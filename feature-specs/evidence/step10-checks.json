@@ -307,7 +307,7 @@
       "-run",
       "^$",
       "-bench",
-      "^BenchmarkSingleConnectionSelect/Case0$",
+      "^BenchmarkSingleConnection/Select/Case0$",
       "-benchtime=1x",
       "-timeout=15s",
       "."
