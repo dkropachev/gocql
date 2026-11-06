@@ -10,9 +10,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/pool"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/retry"
@@ -92,84 +90,6 @@ func runtimeQuery(t testing.TB) *Bound[cqltype.Bytes] {
 	}
 	return b
 }
-func TestV2RuntimePagerEmptyContinuationAndProfileSnapshot(t *testing.T) {
-	s, conns, peers := runtimeTestSession(t, 1)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for _, body := range [][]byte{runtimeRowsBody([]byte{}), runtimeRowsBody([]byte{1}, "row"), runtimeRowsBody(nil)} {
-			stream := typedTestReadRequest(t, conns[0], peers[0])
-			if _, err := peers[0].Write(typedTestResponse(t, 4, stream, body)); err != nil {
-				t.Error(err)
-				return
-			}
-		}
-	}()
-	p := settings.InternalDefaultProfile()
-	p.PageSize = 7
-	profile := profileOf(p)
-	bound := runtimeQuery(t)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	rows, err := Run(ctx, s, bound, testOptions(OptionValues{Profile: profile}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	profile.PageSize = 11
-	if RowsData(rows).InternalRequest.InternalOptions.InternalProfile.PageSize != 7 {
-		t.Fatal("profile changed after admission")
-	}
-	bound.Close()
-	var view cqltype.Bytes
-	if !rows.NextInto(&view) || string(view.OwnedBytes()) != "row" {
-		t.Fatal(rows.Err())
-	}
-	retained, err := rows.Retain()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var tail cqltype.Bytes
-	if rows.NextInto(&tail) {
-		t.Fatal("unexpected row")
-	}
-	if err = rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	if err = bound.Wait(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if string(view.OwnedBytes()) != "row" {
-		t.Fatal("retained page lost")
-	}
-	retained.Close()
-	<-done
-}
-func TestV2RuntimeRepeatedPagingState(t *testing.T) {
-	s, conns, peers := runtimeTestSession(t, 1)
-	go func() {
-		for _, value := range []string{"a", "b"} {
-			stream := typedTestReadRequest(t, conns[0], peers[0])
-			_, _ = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody([]byte{1}, value)))
-		}
-	}()
-	bound := runtimeQuery(t)
-	defer bound.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	rows, err := Run(ctx, s, bound, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	count := 0
-	var row cqltype.Bytes
-	for rows.NextInto(&row) {
-		count++
-	}
-	if count != 2 || !errors.Is(rows.Err(), runtimeerrors.ErrPagingNoProgress) {
-		t.Fatal(count, rows.Err())
-	}
-}
 
 type runtimePolicy struct {
 	targets []model.Target
@@ -190,14 +110,6 @@ type runtimeSpeculation struct{}
 func (runtimeSpeculation) Delay(attempt int, _ routing.MetricsSnapshot) (time.Duration, bool) {
 	return time.Millisecond, attempt == 1
 }
-func TestV2RuntimeSpeculativeLoserWriterKeepsInput(t *testing.T) {
-	for _, pageTimeout := range []time.Duration{0, time.Second} {
-		t.Run(pageTimeout.String(), func(t *testing.T) {
-			runtimeSpeculativeLoserWriterKeepsInput(t, pageTimeout)
-		})
-	}
-}
-
 func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Duration) {
 	s, conns, peers := runtimeTestSession(t, 2)
 	policy := &runtimePolicy{targets: []model.Target{{HostID: implEndpoint.InternalHostInfoHostUUID(conns[0].InternalHost)}, {HostID: implEndpoint.InternalHostInfoHostUUID(conns[1].InternalHost)}}}
@@ -238,40 +150,6 @@ func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Dura
 	}
 }
 
-// A page deadline cancels accepted attempts and drains their input without
-// cancelling the caller's context or releasing an orphan's stream too early.
-func TestV2RuntimeBufferedPageDeadlinePreservesCaller(t *testing.T) {
-	s, conns, peers := runtimeTestSession(t, 1)
-	requestRead := make(chan int, 1)
-	go func() {
-		requestRead <- typedTestReadRequest(t, conns[0], peers[0])
-	}()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	bound := runtimeQuery(t)
-	page, err := RunPage(ctx, s, bound, model.StartPage(), testOptions(OptionValues{
-		PageTimeout: cqltype.Option[time.Duration]{Set: true, Value: 20 * time.Millisecond},
-	}))
-	if page != nil {
-		page.Close()
-		t.Fatal("page returned without a response")
-	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("page deadline: %v", err)
-	}
-	if ctx.Err() != nil {
-		t.Fatalf("page deadline cancelled caller: %v", ctx.Err())
-	}
-	stream := <-requestRead
-	bound.Close()
-	go func() {
-		_, _ = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "late")))
-	}()
-	if err := bound.Wait(ctx); err != nil {
-		t.Fatalf("accepted attempt did not drain: %v", err)
-	}
-}
-
 type runtimeDelayedRetry struct {
 	delay     time.Duration
 	scheduled chan<- struct{}
@@ -289,92 +167,4 @@ func (p runtimeDelayedRetry) Decide(e retry.Attempt) retry.Decision {
 		action = retry.Next
 	}
 	return retry.Decision{Action: action, Delay: p.delay}
-}
-
-func TestV2RuntimeDelayedRetries(t *testing.T) {
-	s, conns, peers := runtimeTestSession(t, 1)
-	profile := settings.InternalDefaultProfile()
-	profile.Retry = runtimeDelayedRetry{delay: time.Millisecond}
-	handle := profileOf(profile)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for attempt := 0; attempt < 3; attempt++ {
-			stream := typedTestReadRequest(t, conns[0], peers[0])
-			response := errorResponse(t, stream, protocol.ErrCodeOverloaded, nil)
-			if attempt == 2 {
-				response = typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "retried"))
-			}
-			if _, err := peers[0].Write(response); err != nil {
-				t.Error(err)
-				return
-			}
-		}
-	}()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	bound := runtimeQuery(t)
-	page, err := RunPage(ctx, s, bound, model.StartPage(), testOptions(OptionValues{Profile: handle}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var row cqltype.Bytes
-	if !page.NextInto(&row) || string(row.OwnedBytes()) != "retried" {
-		t.Fatal("delayed retry result", page.Err())
-	}
-	page.Close()
-	bound.Close()
-	if err := bound.Wait(ctx); err != nil {
-		t.Fatal("delayed retries did not drain", err)
-	}
-	<-done
-	if got := s.Metrics(); got.Attempts != 3 || got.Retries != 2 {
-		t.Fatalf("delayed retry accounting: %+v", got)
-	}
-}
-
-func TestV2RuntimeDelayedRetryCancellationDrains(t *testing.T) {
-	s, conns, peers := runtimeTestSession(t, 1)
-	scheduled := make(chan struct{}, 1)
-	profile := settings.InternalDefaultProfile()
-	profile.Retry = runtimeDelayedRetry{delay: time.Hour, scheduled: scheduled}
-	handle := profileOf(profile)
-	go func() {
-		stream := typedTestReadRequest(t, conns[0], peers[0])
-		_, _ = peers[0].Write(errorResponse(t, stream, protocol.ErrCodeOverloaded, nil))
-	}()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	bound := runtimeQuery(t)
-	finished := make(chan error, 1)
-	go func() {
-		page, err := RunPage(ctx, s, bound, model.StartPage(), testOptions(OptionValues{Profile: handle}))
-		if page != nil {
-			page.Close()
-		}
-		finished <- err
-	}()
-	deadline, stop := context.WithTimeout(context.Background(), time.Second)
-	defer stop()
-	select {
-	case <-scheduled:
-	case <-deadline.Done():
-		t.Fatal("retry was not scheduled")
-	}
-	cancel()
-	select {
-	case err := <-finished:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("cancelled retry: %v", err)
-		}
-	case <-deadline.Done():
-		t.Fatal("cancelled delayed retry did not return")
-	}
-	bound.Close()
-	if err := bound.Wait(deadline); err != nil {
-		t.Fatal("cancelled delayed retry retained input", err)
-	}
-	if got := s.Metrics(); got.Attempts != 1 || got.Retries != 0 {
-		t.Fatalf("cancelled delay launched an attempt: %+v", got)
-	}
 }

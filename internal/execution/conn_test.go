@@ -25,16 +25,6 @@
 package execution
 
 import (
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/endpoint"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
-	"github.com/scylladb/gocql/v2/internal/model"
-	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
-	"github.com/scylladb/gocql/v2/internal/transport"
-	"github.com/scylladb/gocql/v2/internal/wirecompress"
-
 	"bufio"
 	"bytes"
 	"context"
@@ -54,14 +44,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/streams"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 const (
@@ -76,31 +70,6 @@ func (b brokenDNSResolver) LookupIP(host string) ([]net.IP, error) {
 		UnwrapErr: err,
 		Err:       err.Error(),
 		Server:    host,
-	}
-}
-
-func TestApprove(t *testing.T) {
-	tests := map[bool]bool{
-		transport.InternalApprove("org.apache.cassandra.auth.PasswordAuthenticator", []string{}):                                             true,
-		transport.InternalApprove("org.apache.cassandra.auth.MutualTlsWithPasswordFallbackAuthenticator", []string{}):                        true,
-		transport.InternalApprove("org.apache.cassandra.auth.MutualTlsAuthenticator", []string{}):                                            true,
-		transport.InternalApprove("com.instaclustr.cassandra.auth.SharedSecretAuthenticator", []string{}):                                    true,
-		transport.InternalApprove("com.datastax.bdp.cassandra.auth.DseAuthenticator", []string{}):                                            true,
-		transport.InternalApprove("io.aiven.cassandra.auth.AivenAuthenticator", []string{}):                                                  true,
-		transport.InternalApprove("com.amazon.helenus.auth.HelenusAuthenticator", []string{}):                                                true,
-		transport.InternalApprove("com.ericsson.bss.cassandra.ecaudit.auth.AuditAuthenticator", []string{}):                                  true,
-		transport.InternalApprove("com.scylladb.auth.SaslauthdAuthenticator", []string{}):                                                    true,
-		transport.InternalApprove("com.scylladb.auth.TransitionalAuthenticator", []string{}):                                                 true,
-		transport.InternalApprove("com.instaclustr.cassandra.auth.InstaclustrPasswordAuthenticator", []string{}):                             true,
-		transport.InternalApprove("com.apache.cassandra.auth.FakeAuthenticator", []string{}):                                                 true,
-		transport.InternalApprove("com.apache.cassandra.auth.FakeAuthenticator", nil):                                                        true,
-		transport.InternalApprove("com.apache.cassandra.auth.FakeAuthenticator", []string{"com.apache.cassandra.auth.FakeAuthenticator"}):    true,
-		transport.InternalApprove("com.apache.cassandra.auth.FakeAuthenticator", []string{"com.apache.cassandra.auth.NotFakeAuthenticator"}): false,
-	}
-	for k, v := range tests {
-		if k != v {
-			t.Fatalf("expected '%v', got '%v'", k, v)
-		}
 	}
 }
 
@@ -134,49 +103,6 @@ func waitForPoolSize(session *implCluster.Session, want int, timeout time.Durati
 	}
 }
 
-func TestSimple(t *testing.T) {
-	srv := NewTestServer(t, defaultProto, context.Background())
-	defer srv.Stop()
-
-	cluster := testCluster(defaultProto, srv.Address)
-	db, err := implCluster.InternalClusterSettingsOpen(cluster)
-	if err != nil {
-		t.Fatalf("0x%x: newClusterSettings: %v", defaultProto, err)
-	}
-
-	if err := execTestStatement(context.Background(), db, "void", Options{}); err != nil {
-		t.Fatalf("0x%x: %v", defaultProto, err)
-	}
-}
-
-func TestSSLSimple(t *testing.T) {
-	srv := NewSSLTestServer(t, defaultProto, context.Background())
-	defer srv.Stop()
-
-	db, err := implCluster.InternalClusterSettingsOpen(createTestSslCluster(srv.Address, defaultProto, true))
-	if err != nil {
-		t.Fatalf("0x%x: newClusterSettings: %v", defaultProto, err)
-	}
-
-	if err := execTestStatement(context.Background(), db, "void", Options{}); err != nil {
-		t.Fatalf("0x%x: %v", defaultProto, err)
-	}
-}
-
-func TestSSLSimpleNoClientCert(t *testing.T) {
-	srv := NewSSLTestServer(t, defaultProto, context.Background())
-	defer srv.Stop()
-
-	db, err := implCluster.InternalClusterSettingsOpen(createTestSslCluster(srv.Address, defaultProto, false))
-	if err != nil {
-		t.Fatalf("0x%x: newClusterSettings: %v", defaultProto, err)
-	}
-
-	if err := execTestStatement(context.Background(), db, "void", Options{}); err != nil {
-		t.Fatalf("0x%x: %v", defaultProto, err)
-	}
-}
-
 func createTestSslCluster(addr string, proto frm.ProtoVersion, useClientCert bool) *implCluster.InternalClusterSettings {
 	cluster := testCluster(proto, addr)
 	sslOpts := &transport.SslOptions{
@@ -193,351 +119,14 @@ func createTestSslCluster(addr string, proto frm.ProtoVersion, useClientCert boo
 	return cluster
 }
 
-func TestClosed(t *testing.T) {
-	t.Skip("Skipping the execution of TestClosed for now to try to concentrate on more important test failures on Travis")
-
-	srv := NewTestServer(t, defaultProto, context.Background())
-	defer srv.Stop()
-
-	session, err := newTestSession(defaultProto, srv.Address)
-	if err != nil {
-		t.Fatalf("0x%x: newClusterSettings: %v", defaultProto, err)
-	}
-
-	session.Close()
-
-	if err := execTestStatement(context.Background(), session, "void", Options{}); err != runtimeerrors.ErrSessionClosed {
-		t.Fatalf("0x%x: expected %#v, got %#v", defaultProto, runtimeerrors.ErrSessionClosed, err)
-	}
-}
-
 func newTestSession(proto frm.ProtoVersion, addresses ...string) (*implCluster.Session, error) {
 	return implCluster.InternalClusterSettingsOpen(testCluster(proto, addresses...))
 }
 
 var _ endpoint.DNSResolver = brokenDNSResolver{}
 
-func TestDNSLookupConnected(t *testing.T) {
-	log := &logging.InternalTestLogger{}
-
-	// Override the default DNS resolver and restore at the end
-
-	srv := NewTestServer(t, defaultProto, context.Background())
-	defer srv.Stop()
-
-	// Use bare IP (no port) so all entries are portless; the driver falls back
-	// to cfg.Port, which is where the test server is bound.
-	cluster := implCluster.InternalNewClusterSettings("cassandra1.invalid", "127.0.0.1", "cassandra2.invalid")
-	cluster.Port = srv.port()
-	cluster.Logger = log
-	cluster.ProtoVersion = int(defaultProto)
-	implCluster.InternalClusterSettingsData(cluster).InternalDisableControlConn = true
-	cluster.DNSResolver = brokenDNSResolver{}
-
-	// open() should attempt to resolve the DNS name "cassandraX.invalid"
-	// and fail, but continue to connect via 127.0.0.1
-	_, err := implCluster.InternalClusterSettingsOpen(cluster)
-	if err != nil {
-		t.Fatal("open() should have connected")
-	}
-
-	if !strings.Contains(log.String(), "failed to resolve endpoint") {
-		t.Fatalf("Expected to receive 'failed to resolve endpoint' log message  - got '%s' instead", log.String())
-	}
-}
-
-func TestDNSLookupError(t *testing.T) {
-	log := &logging.InternalTestLogger{}
-
-	// Override the default DNS resolver and restore at the end
-	hosts := []string{"cassandra1.invalid", "cassandra2.invalid"}
-
-	cluster := implCluster.InternalNewClusterSettings(hosts...)
-	cluster.Logger = log
-	cluster.ProtoVersion = int(defaultProto)
-	implCluster.InternalClusterSettingsData(cluster).InternalDisableControlConn = true
-	cluster.DNSResolver = brokenDNSResolver{}
-
-	// open() should attempt to resolve each DNS name "cassandraX.invalid"
-	// and fail since it could not resolve any dns entries
-	_, err := implCluster.InternalClusterSettingsOpen(cluster)
-	if err == nil {
-		t.Fatal("open() should have returned an error")
-	}
-
-	if !strings.Contains(log.String(), "failed to resolve endpoint") {
-		t.Fatalf("Expected to receive 'failed to resolve endpoint' log message  - got '%s' instead", log.String())
-	}
-
-	if !strings.Contains(err.Error(), "unable to create session: failed to resolve any of the provided hostnames") {
-		t.Fatalf("Expected open() to fail with error message that contains 'unable to create session: failed to resolve any of the provided hostnames'")
-	}
-
-	for _, host := range hosts {
-		expected := fmt.Sprintf("failed to resolve endpoint \"%s\": lookup  on %s: this error comes from mocked broken resolver", host, host)
-		if !strings.Contains(err.Error(), expected) {
-			t.Fatalf("Expected to fail with error message that contains '%s'", expected)
-		}
-	}
-}
-
-func TestStartupTimeout(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	log := &logging.InternalTestLogger{}
-
-	srv := NewTestServer(t, defaultProto, ctx)
-	defer srv.Stop()
-
-	// Tell the server to never respond to Startup frame
-	atomic.StoreInt32(&srv.TimeoutOnStartup, 1)
-
-	startTime := time.Now()
-	cluster := implCluster.InternalNewClusterSettings(srv.Address)
-	cluster.Logger = log
-	cluster.ProtoVersion = int(defaultProto)
-	implCluster.InternalClusterSettingsData(cluster).InternalDisableControlConn = true
-	// Set very long query connection timeout
-	// so we know open() is using the ConnectTimeout
-	cluster.Timeout = time.Second * 5
-	cluster.ConnectTimeout = 600 * time.Millisecond
-
-	// Create session should timeout during connect attempt
-	_, err := implCluster.InternalClusterSettingsOpen(cluster)
-	if err == nil {
-		t.Fatal("open() should have returned a timeout error")
-	}
-
-	elapsed := time.Since(startTime)
-	if elapsed > time.Second*5 {
-		t.Fatal("ConnectTimeout is not respected")
-	}
-
-	if !errors.Is(err, implCluster.ErrNoConnectionsStarted) {
-		t.Fatalf("Expected to receive no connections error - got '%s'", err)
-	}
-
-	if !strings.Contains(log.String(), "no response to connection startup within timeout") && !strings.Contains(log.String(), "no response received from cassandra within timeout period") {
-		t.Fatalf("Expected to receive timeout log message  - got '%s'", log.String())
-	}
-
-	cancel()
-}
-
-func TestTimeout(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-
-	srv := NewTestServer(t, defaultProto, ctx)
-	defer srv.Stop()
-
-	db, err := newTestSession(defaultProto, srv.Address)
-	if err != nil {
-		t.Fatalf("newClusterSettings: %v", err)
-	}
-	defer db.Close()
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-
-		select {
-		case <-time.After(5 * time.Second):
-			t.Errorf("no timeout")
-		case <-ctx.Done():
-		}
-	}()
-
-	if err := execTestStatement(ctx, db, "kill", Options{}); err == nil {
-		t.Fatal("expected error got nil")
-	}
-	cancel()
-
-	wg.Wait()
-}
-
 type testRetryPolicy struct {
 	NumRetries int
-}
-
-func TestPolicyConnPoolSSL(t *testing.T) {
-	srv := NewSSLTestServer(t, defaultProto, context.Background())
-	defer srv.Stop()
-
-	cluster := createTestSslCluster(srv.Address, defaultProto, true)
-	cluster.PoolConfig.HostSelectionPolicy = implCluster.RoundRobinHostPolicy()
-
-	db, err := implCluster.InternalClusterSettingsOpen(cluster)
-	if err != nil {
-		t.Fatalf("failed to create new session: %v", err)
-	}
-
-	if err := execTestStatement(context.Background(), db, "void", Options{}); err != nil {
-		t.Fatalf("query failed due to error: %v", err)
-	}
-	db.Close()
-
-	// wait for the pool to drain
-	time.Sleep(100 * time.Millisecond)
-	size := implCluster.SessionData(db).InternalPool.Size()
-	if size != 0 {
-		t.Fatalf("connection pool did not drain, still contains %d connections", size)
-	}
-}
-
-func TestQueryTimeout(t *testing.T) {
-	srv := NewTestServer(t, defaultProto, context.Background())
-	defer srv.Stop()
-
-	cluster := testCluster(defaultProto, srv.Address)
-	// Set the timeout arbitrarily low so that the query hits the timeout in a
-	// timely manner.
-	cluster.Timeout = 1 * time.Millisecond
-
-	db, err := implCluster.InternalClusterSettingsOpen(cluster)
-	if err != nil {
-		t.Fatalf("newClusterSettings: %v", err)
-	}
-	defer db.Close()
-
-	ch := make(chan error, 1)
-
-	go func() {
-		err := execTestStatement(context.Background(), db, "timeout", Options{})
-		if err != nil {
-			ch <- err
-			return
-		}
-		t.Errorf("err was nil, expected to get a timeout after %v", implCluster.SessionData(db).InternalCfg.Timeout)
-	}()
-
-	select {
-	case err := <-ch:
-		if !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("expected to get %v for timeout got %v", runtimeerrors.ErrTimeoutNoResponse, err)
-		}
-	case <-time.After(40*time.Millisecond + implCluster.SessionData(db).InternalCfg.Timeout):
-		// ensure that the query goroutines have been scheduled
-		t.Fatalf("query did not timeout after %v", implCluster.SessionData(db).InternalCfg.Timeout)
-	}
-}
-
-func TestQueryTimeoutReuseStream(t *testing.T) {
-	t.Skip("no longer tests anything")
-	// TODO(zariel): move this to conn test, we really just want to check what
-	// happens when a conn is
-
-	srv := NewTestServer(t, defaultProto, context.Background())
-	defer srv.Stop()
-
-	cluster := testCluster(defaultProto, srv.Address)
-	// Set the timeout arbitrarily low so that the query hits the timeout in a
-	// timely manner.
-	cluster.Timeout = 1 * time.Millisecond
-	cluster.NumConns = 1
-
-	db, err := implCluster.InternalClusterSettingsOpen(cluster)
-	if err != nil {
-		t.Fatalf("newClusterSettings: %v", err)
-	}
-	defer db.Close()
-
-	execTestStatement(context.Background(), db, "slow", Options{})
-
-	err = execTestStatement(context.Background(), db, "void", Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestQueryTimeoutClose(t *testing.T) {
-	srv := NewTestServer(t, defaultProto, context.Background())
-	defer srv.Stop()
-
-	cluster := testCluster(defaultProto, srv.Address)
-	// Set the timeout arbitrarily low so that the query hits the timeout in a
-	// timely manner.
-	cluster.Timeout = 1000 * time.Millisecond
-	cluster.NumConns = 1
-
-	db, err := implCluster.InternalClusterSettingsOpen(cluster)
-	if err != nil {
-		t.Fatalf("newClusterSettings: %v", err)
-	}
-
-	ch := make(chan error)
-	go func() {
-		err := execTestStatement(context.Background(), db, "timeout", Options{})
-		ch <- err
-	}()
-	// ensure that the above goroutine gets sheduled
-	time.Sleep(50 * time.Millisecond)
-
-	db.Close()
-	select {
-	case err = <-ch:
-	case <-time.After(1 * time.Second):
-		t.Fatal("timedout waiting to get a response once cluster is closed")
-	}
-
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected to get %v or an error wrapping it, got %v", runtimeerrors.ErrConnectionClosed, err)
-	}
-}
-
-func TestStream0(t *testing.T) {
-	// Native stream 0 is valid; unsolicited responses follow the ordinary
-	// discard path rather than being misclassified as a reserved stream.
-
-	var buf bytes.Buffer
-	f := implProtocol.NewFramer(nil, implProtocol.ProtoVersion4)
-	f.WriteHeader(0, frm.OpResult, 0)
-	f.WriteInt(frm.ResultKindVoid)
-	f.Buf[0] |= 0x80
-	if err := f.Finish(); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.WriteFrameTo(&buf); err != nil {
-		t.Fatal(err)
-	}
-
-	conn := &transport.Conn{
-		InternalR: &transport.InternalConnReader{
-			InternalR: bufio.NewReader(&buf),
-		},
-		InternalStreams: streams.New(),
-		InternalLogger:  &logging.InternalDefaultLogger{},
-		InternalCfg:     &transport.ConnConfig{},
-	}
-
-	err := conn.InternalRecv(context.Background(), false)
-	if err != nil {
-		t.Fatalf("valid nonnegative stream rejected: %v", err)
-	}
-}
-
-func TestContext_Timeout(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	srv := NewTestServer(t, defaultProto, ctx)
-	defer srv.Stop()
-
-	cluster := testCluster(defaultProto, srv.Address)
-	cluster.Timeout = 5 * time.Second
-	db, err := implCluster.InternalClusterSettingsOpen(cluster)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-
-	ctx, cancel = context.WithCancel(ctx)
-	cancel()
-
-	err = execTestStatement(ctx, db, "timeout", Options{})
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected to get context cancel error: %v got %v", context.Canceled, err)
-	}
 }
 
 type TestReconnectionPolicy struct {
@@ -554,122 +143,6 @@ func (c *TestReconnectionPolicy) GetMaxRetries() int {
 	return c.NumRetries
 }
 
-func TestInitialRetryPolicy(t *testing.T) {
-	t.Parallel()
-
-	tcase := []struct {
-		NumRetries               int
-		ProtoVersion             int
-		ExpectedGetIntervalCalls []int
-		ExpectedErr              string
-	}{
-		{
-			NumRetries:               1,
-			ProtoVersion:             0,
-			ExpectedGetIntervalCalls: nil,
-			ExpectedErr:              "gocql: unable to create session: unable to connect to the cluster, last error: unable to discover protocol version:"},
-		{
-			NumRetries:               2,
-			ProtoVersion:             0,
-			ExpectedGetIntervalCalls: []int{1},
-			ExpectedErr:              "gocql: unable to create session: unable to connect to the cluster, last error: unable to discover protocol version:"},
-		{
-			NumRetries:               3,
-			ProtoVersion:             0,
-			ExpectedGetIntervalCalls: []int{1, 2},
-			ExpectedErr:              "gocql: unable to create session: unable to connect to the cluster, last error: unable to discover protocol version:"},
-		{
-			NumRetries:               1,
-			ProtoVersion:             implProtocol.ProtoVersion4,
-			ExpectedGetIntervalCalls: nil,
-			ExpectedErr:              "gocql: unable to create session: unable to connect to the cluster, last error: unable to create control connection: unable to connect to initial hosts:"},
-		{
-			NumRetries:               2,
-			ProtoVersion:             implProtocol.ProtoVersion4,
-			ExpectedGetIntervalCalls: []int{1},
-			ExpectedErr:              "gocql: unable to create session: unable to connect to the cluster, last error: unable to create control connection: unable to connect to initial hosts:"},
-		{
-			NumRetries:               3,
-			ProtoVersion:             implProtocol.ProtoVersion4,
-			ExpectedGetIntervalCalls: []int{1, 2},
-			ExpectedErr:              "gocql: unable to create session: unable to connect to the cluster, last error: unable to create control connection: unable to connect to initial hosts:"},
-	}
-
-	for id := range tcase {
-		tc := tcase[id]
-		t.Run(fmt.Sprintf("NumRetries=%d_ProtocolVersion=%d", tc.NumRetries, tc.ProtoVersion), func(t *testing.T) {
-			t.Parallel()
-
-			// Use a loopback address with a well-known closed port so the test
-			// remains deterministic even when a local Cassandra-compatible
-			// service is listening on 9042.
-			cluster := implCluster.InternalNewClusterSettings("127.0.0.1:1")
-			policy := &TestReconnectionPolicy{NumRetries: tc.NumRetries}
-			cluster.InitialReconnectionPolicy = policy
-			cluster.ProtoVersion = tc.ProtoVersion
-			_, err := implCluster.InternalClusterSettingsOpen(cluster)
-			if err == nil {
-				t.Fatal("expected to get an error")
-			}
-			if !strings.Contains(err.Error(), tc.ExpectedErr) {
-				t.Errorf("expected error to contain %q got %q", tc.ExpectedErr, err.Error())
-			}
-			if !cmp.Equal(tc.ExpectedGetIntervalCalls, policy.GetIntervalCalls) {
-				t.Errorf("expected GetInterval calls to be (%+v) but was (%+v) instead", tc.ExpectedGetIntervalCalls, policy.GetIntervalCalls)
-			}
-		})
-	}
-}
-
-func TestContext_CanceledBeforeExec(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	var reqCount uint64
-
-	srv := newTestServerOpts{
-		addr:     "127.0.0.1:0",
-		protocol: defaultProto,
-		recvHook: func(f *implProtocol.Framer) {
-			if f.Header.Op == frm.OpStartup || f.Header.Op == frm.OpOptions {
-				// ignore statup and heartbeat messages
-				return
-			}
-			atomic.AddUint64(&reqCount, 1)
-		},
-	}.newServer(t, ctx)
-
-	defer srv.Stop()
-
-	cluster := testCluster(defaultProto, srv.Address)
-	cluster.Timeout = 5 * time.Second
-	db, err := implCluster.InternalClusterSettingsOpen(cluster)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-
-	startupRequestCount := atomic.LoadUint64(&reqCount)
-
-	ctx, cancel = context.WithCancel(ctx)
-	cancel()
-
-	err = execTestStatement(ctx, db, "timeout", Options{})
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected to get context cancel error: %v got %v", context.Canceled, err)
-	}
-
-	// Queries are executed by separate goroutine and we don't have a synchronization point that would allow us to
-	// check if a request was sent or not.
-	// Fall back to waiting a little bit.
-	time.Sleep(100 * time.Millisecond)
-
-	queryRequestCount := atomic.LoadUint64(&reqCount) - startupRequestCount
-	if queryRequestCount != 0 {
-		t.Fatalf("expected that no request is sent to server, sent %d requests", queryRequestCount)
-	}
-}
-
 // unexpectedOptionsLogger closes seen once heartBeat logs an unexpected OPTIONS
 // reply -- proof the driver parsed it. A server-side request counter would not do:
 // it advances before the response is built, so the test could pass without it.
@@ -683,181 +156,6 @@ func (l *unexpectedOptionsLogger) Println(v ...any) {}
 func (l *unexpectedOptionsLogger) Printf(format string, v ...any) {
 	if strings.Contains(format, "unexpected frame in response to options") {
 		l.seenOnce.Do(func() { close(l.seen) })
-	}
-}
-
-func TestHeartBeatSurvivesUnexpectedOptionsResponse(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	srv := NewTestServer(t, defaultProto, ctx)
-	defer srv.Stop()
-
-	log := &unexpectedOptionsLogger{seen: make(chan struct{})}
-
-	// Spoil every OPTIONS after startup's, so the reply is in place before the first
-	// beat; losing that race pushes the next one 30s out.
-	atomic.StoreInt32(&srv.readyOnOptions, 1)
-
-	cluster := testCluster(defaultProto, srv.Address)
-	cluster.NumConns = 1
-	cluster.Logger = log
-	db, err := implCluster.InternalClusterSettingsOpen(cluster)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-
-	if err := waitForPoolSize(db, 1, 5*time.Second); err != nil {
-		t.Fatal(err)
-	}
-
-	// Wait for the driver to parse the first beat rather than sleeping past it.
-	select {
-	case <-log.seen:
-	case <-time.After(10 * time.Second):
-		t.Fatal("heartBeat never logged the unexpected OPTIONS reply")
-	}
-
-	if err := execTestStatement(context.Background(), db, "void", Options{}); err != nil {
-		t.Fatalf("the session did not survive an unexpected heartbeat reply: %v", err)
-	}
-}
-
-func TestControlHeartBeatSurvivesUnexpectedOptionsResponse(t *testing.T) {
-	t.Parallel()
-
-	const testTimeout = 10 * time.Second
-
-	log := &unexpectedOptionsLogger{seen: make(chan struct{})}
-
-	conn, server := newTestExecConn(t, testContextWriter{})
-	// execInternal checks the response's protocol version against c.version; an unset
-	// one makes every frame a protocol error before heartBeat classifies it.
-	conn.InternalVersion = implProtocol.ProtoVersion4
-	defer server.Close()
-
-	// Only the fields the failing reconnect reaches. With no hosts and no contact
-	// points it fails in resolveInitialEndpoints, well before refreshRingNow.
-	sess := func() *implCluster.Session {
-		opaqueStorageValue := new(implCluster.Session)
-		implCluster.SessionData(opaqueStorageValue).InternalLogger = log
-		implCluster.SessionData(opaqueStorageValue).InternalConnCfg = &transport.ConnConfig{}
-		return opaqueStorageValue
-	}()
-	implCluster.SessionData(sess).InternalHostSource = &implCluster.InternalRingDescriber{InternalCfg: &implCluster.SessionData(sess).InternalCfg, InternalLogger: log}
-
-	// state is left at controlConnStarting so heartBeat's CAS lets it run.
-	cc := &implCluster.InternalControlConn{InternalSession: sess, InternalQuit: make(chan struct{})}
-	cc.InternalConn.Store(&implCluster.InternalConnHost{InternalConn: conn})
-
-	go cc.InternalHeartBeat()
-	defer close(cc.InternalQuit)
-
-	// Catch the first beat's in-flight call, then answer OPTIONS with READY: a frame
-	// parseFrame builds happily, but not one an OPTIONS may be answered with.
-	call := waitForSingleCallWithin(t, conn, testTimeout)
-	ready := []byte{
-		implProtocol.ProtoVersion4 | implProtocol.ProtoDirectionMask, 0x00,
-		byte(call.InternalStreamID >> 8), byte(call.InternalStreamID),
-		byte(frm.OpReady),
-		0x00, 0x00, 0x00, 0x00, // no body
-	}
-	if err := conn.InternalProcessFrameSource(context.Background(), transport.InternalFrameSource{InternalR: bytes.NewReader(ready)}); err != nil {
-		t.Fatalf("delivering the READY reply to the heartbeat: %v", err)
-	}
-
-	select {
-	case <-log.seen:
-	case <-time.After(testTimeout):
-		t.Fatal("the control heartbeat never logged the unexpected OPTIONS reply")
-	}
-
-	// attemptReconnect closes the old connection before trying any host, so this is
-	// what separates a reconnect from a continue that trusts the connection anyway.
-	deadline := time.Now().Add(testTimeout)
-	for !conn.Closed() {
-		if time.Now().After(deadline) {
-			t.Fatal("the unexpected reply did not cost the control connection a reconnect")
-		}
-		time.Sleep(time.Millisecond)
-	}
-}
-
-func TestHeartBeatClosesAConnectionThatKeepsFailing(t *testing.T) {
-	t.Parallel()
-
-	const testTimeout = 30 * time.Second
-
-	log := &unexpectedOptionsLogger{seen: make(chan struct{})}
-
-	conn, server := newTestExecConn(t, testContextWriter{})
-	conn.InternalVersion = implProtocol.ProtoVersion4
-	conn.InternalCfg = &transport.ConnConfig{}
-	conn.InternalLogger = log
-	defer server.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go conn.InternalHeartBeat(ctx)
-
-	// An ERROR frame: [int error code][string message], the shortest reply a server
-	// may answer an OPTIONS with that heartBeat has to classify as a failure.
-	errorReply := func(streamID int) []byte {
-		const msg = "scripted heartbeat failure"
-		body := []byte{0x00, 0x00, 0x10, 0x01, byte(len(msg) >> 8), byte(len(msg))}
-		body = append(body, msg...)
-		return append([]byte{
-			implProtocol.ProtoVersion4 | implProtocol.ProtoDirectionMask, 0x00,
-			byte(streamID >> 8), byte(streamID),
-			byte(frm.OpError),
-			byte(len(body) >> 24), byte(len(body) >> 16), byte(len(body) >> 8), byte(len(body)),
-		}, body...)
-	}
-
-	// The first beat gets the unexpected frame, so the interval is already at 1s.
-	call := waitForSingleCallWithin(t, conn, testTimeout)
-	ready := []byte{
-		implProtocol.ProtoVersion4 | implProtocol.ProtoDirectionMask, 0x00,
-		byte(call.InternalStreamID >> 8), byte(call.InternalStreamID),
-		byte(frm.OpReady),
-		0x00, 0x00, 0x00, 0x00, // no body
-	}
-	if err := conn.InternalProcessFrameSource(ctx, transport.InternalFrameSource{InternalR: bytes.NewReader(ready)}); err != nil {
-		t.Fatalf("delivering the READY reply to the heartbeat: %v", err)
-	}
-
-	select {
-	case <-log.seen:
-	case <-time.After(testTimeout):
-		t.Fatal("heartBeat never logged the unexpected OPTIONS reply")
-	}
-
-	// Answer every later beat with an ERROR. heartBeat closes the connection once
-	// the failures pass its bound; without counting them it never would.
-	deadline := time.Now().Add(testTimeout)
-	for !conn.Closed() {
-		if time.Now().After(deadline) {
-			t.Fatal("a connection answering every heartbeat with an ERROR was never closed")
-		}
-		// Poll rather than wait: the beat that trips the bound is answered and then
-		// no further call is ever registered, so a blocking wait would outlive the
-		// close it is looking for.
-		conn.InternalMu.Lock()
-		var call *transport.InternalCallReq
-		for _, inFlight := range conn.InternalCalls.All() {
-			call = inFlight
-			break
-		}
-		conn.InternalMu.Unlock()
-		if call == nil {
-			time.Sleep(time.Millisecond)
-			continue
-		}
-		if err := conn.InternalProcessFrameSource(ctx, transport.InternalFrameSource{InternalR: bytes.NewReader(errorReply(call.InternalStreamID))}); err != nil {
-			t.Fatalf("delivering the ERROR reply to the heartbeat: %v", err)
-		}
 	}
 }
 
@@ -994,334 +292,6 @@ func (o *testStreamObserverContext) StreamFinished(transport.ObservedStream) {
 	}
 }
 
-func TestExecCloseWithError(t *testing.T) {
-	t.Parallel()
-
-	const execCloseTestTimeout = 10 * time.Second
-
-	t.Run("BuildFrameErrorReleasesResources", func(t *testing.T) {
-		c, server := newTestExecConn(t, testContextWriter{})
-		defer server.Close()
-
-		_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
-			return io.ErrUnexpectedEOF
-		}), nil, 0)
-		if !errors.Is(err, io.ErrUnexpectedEOF) {
-			t.Fatalf("expected build error %v, got %v", io.ErrUnexpectedEOF, err)
-		}
-
-		c.InternalMu.Lock()
-		defer c.InternalMu.Unlock()
-		if c.InternalCalls.Len() != 0 {
-			t.Fatalf("expected no in-flight calls after build error, got %d", c.InternalCalls.Len())
-		}
-	})
-
-	t.Run("ContextCanceledBeforeWriteReleasesResources", func(t *testing.T) {
-		writeEntered := make(chan struct{})
-		c, server := newTestExecConn(t, contextWriterFunc(func(ctx context.Context, p []byte) (int, error) {
-			close(writeEntered)
-			<-ctx.Done()
-			return 0, ctx.Err()
-		}))
-		defer server.Close()
-
-		ctx, cancel := context.WithCancel(context.Background())
-		errCh := make(chan error, 1)
-		go func() {
-			_, err := c.InternalExec(ctx, implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
-				f.Buf = append(f.Buf[:0], 'x')
-				return nil
-			}), nil, 0)
-			errCh <- err
-		}()
-
-		select {
-		case <-writeEntered:
-		case <-time.After(execCloseTestTimeout):
-			t.Fatal("exec never reached the write path")
-		}
-		cancel()
-
-		select {
-		case err := <-errCh:
-			if !errors.Is(err, context.Canceled) {
-				t.Fatalf("expected context cancel error %v, got %v", context.Canceled, err)
-			}
-		case <-time.After(execCloseTestTimeout):
-			t.Fatal("exec deadlocked after context cancellation before write")
-		}
-
-		c.InternalMu.Lock()
-		defer c.InternalMu.Unlock()
-		if c.InternalCalls.Len() != 0 {
-			t.Fatalf("expected no in-flight calls after canceled write, got %d", c.InternalCalls.Len())
-		}
-	})
-
-	t.Run("ResponseErrorReleasesResources", func(t *testing.T) {
-		c, server := newTestExecConn(t, testContextWriter{})
-		defer server.Close()
-
-		errCh := make(chan error, 1)
-		go func() {
-			_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
-				f.Buf = append(f.Buf[:0], 'x')
-				return nil
-			}), nil, 0)
-			errCh <- err
-		}()
-
-		waitForSingleCall(t, c)
-		call := detachSingleCall(t, c)
-		call.InternalResp <- transport.InternalCallResp{InternalErr: io.EOF}
-
-		select {
-		case err := <-errCh:
-			if !errors.Is(err, io.EOF) {
-				t.Fatalf("expected response error %v, got %v", io.EOF, err)
-			}
-		case <-time.After(execCloseTestTimeout):
-			t.Fatal("exec deadlocked after response error")
-		}
-
-		c.InternalMu.Lock()
-		defer c.InternalMu.Unlock()
-		if c.InternalCalls.Len() != 0 {
-			t.Fatalf("expected no in-flight calls after response error, got %d", c.InternalCalls.Len())
-		}
-	})
-
-	t.Run("PartialWriteDoesNotDeadlock", func(t *testing.T) {
-		c, server := newTestExecConn(t, testContextWriter{
-			n:   1,
-			err: io.ErrUnexpectedEOF,
-		})
-		defer server.Close()
-
-		errCh := make(chan error, 1)
-		go func() {
-			_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
-				f.Buf = append(f.Buf[:0], 'x')
-				return nil
-			}), nil, 0)
-			errCh <- err
-		}()
-
-		select {
-		case err := <-errCh:
-			if !errors.Is(err, io.ErrUnexpectedEOF) {
-				t.Fatalf("expected write error %v, got %v", io.ErrUnexpectedEOF, err)
-			}
-		case <-time.After(execCloseTestTimeout):
-			t.Fatal("exec deadlocked after partial write failure")
-		}
-	})
-
-	t.Run("ConnectionCloseErrorDoesNotDeadlock", func(t *testing.T) {
-		writeStarted := make(chan struct{})
-		var writeStartedOnce sync.Once
-		c, server := newTestExecConn(t, testContextWriter{
-			onWrite: func() {
-				writeStartedOnce.Do(func() {
-					close(writeStarted)
-				})
-			},
-		})
-		defer server.Close()
-
-		closeDone := make(chan struct{})
-		go func() {
-			<-writeStarted
-			c.InternalCloseWithError(io.EOF)
-			close(closeDone)
-		}()
-
-		errCh := make(chan error, 1)
-		go func() {
-			_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
-				f.Buf = append(f.Buf[:0], 'x')
-				return nil
-			}), nil, 0)
-			errCh <- err
-		}()
-
-		select {
-		case err := <-errCh:
-			if !errors.Is(err, io.EOF) {
-				t.Fatalf("expected close error %v, got %v", io.EOF, err)
-			}
-		case <-time.After(execCloseTestTimeout):
-			t.Fatal("exec deadlocked after closeWithError")
-		}
-
-		select {
-		case <-closeDone:
-		case <-time.After(execCloseTestTimeout):
-			t.Fatal("closeWithError deadlocked waiting for exec to release the call")
-		}
-	})
-
-	t.Run("TimeoutUnblocksAbandonRecvCall", func(t *testing.T) {
-		c, server := newTestExecConn(t, testContextWriter{})
-		defer server.Close()
-
-		errCh := make(chan error, 1)
-		go func() {
-			_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
-				f.Buf = append(f.Buf[:0], 'x')
-				return nil
-			}), nil, time.Millisecond)
-			errCh <- err
-		}()
-
-		call := waitForSingleCall(t, c)
-
-		select {
-		case err := <-errCh:
-			if !errors.Is(err, runtimeerrors.ErrTimeoutNoResponse) {
-				t.Fatalf("expected timeout error %v, got %v", runtimeerrors.ErrTimeoutNoResponse, err)
-			}
-		case <-time.After(execCloseTestTimeout):
-			t.Fatal("exec deadlocked waiting for timeout")
-		}
-
-		if !c.InternalRemoveCallIfOpen(call.InternalStreamID) {
-			t.Fatal("expected timed out call to still be registered")
-		}
-
-		done := make(chan struct{})
-		go func() {
-			c.InternalAbandonRecvCall(call, c.InternalGetReadFramer())
-			close(done)
-		}()
-
-		select {
-		case <-done:
-		case <-time.After(execCloseTestTimeout):
-			t.Fatal("abandonRecvCall deadlocked after timeout")
-		}
-	})
-
-	t.Run("ContextCancelUnblocksAbandonRecvCall", func(t *testing.T) {
-		c, server := newTestExecConn(t, testContextWriter{})
-		defer server.Close()
-
-		ctx, cancel := context.WithCancel(context.Background())
-		errCh := make(chan error, 1)
-		go func() {
-			_, err := c.InternalExec(ctx, implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
-				f.Buf = append(f.Buf[:0], 'x')
-				return nil
-			}), nil, 0)
-			errCh <- err
-		}()
-
-		call := waitForSingleCall(t, c)
-		cancel()
-
-		select {
-		case err := <-errCh:
-			if !errors.Is(err, context.Canceled) {
-				t.Fatalf("expected context cancel error %v, got %v", context.Canceled, err)
-			}
-		case <-time.After(execCloseTestTimeout):
-			t.Fatal("exec deadlocked waiting for context cancellation")
-		}
-
-		if !c.InternalRemoveCallIfOpen(call.InternalStreamID) {
-			t.Fatal("expected canceled call to still be registered")
-		}
-
-		done := make(chan struct{})
-		go func() {
-			c.InternalAbandonRecvCall(call, c.InternalGetReadFramer())
-			close(done)
-		}()
-
-		select {
-		case <-done:
-		case <-time.After(execCloseTestTimeout):
-			t.Fatal("abandonRecvCall deadlocked after context cancellation")
-		}
-	})
-
-	t.Run("ConnectionCloseAbandonsInflightStream", func(t *testing.T) {
-		writeStarted := make(chan struct{})
-		var writeStartedOnce sync.Once
-		observerCtx := newTestStreamObserverContext()
-		c, server := newTestExecConn(t, testContextWriter{
-			onWrite: func() {
-				writeStartedOnce.Do(func() {
-					close(writeStarted)
-				})
-			},
-		})
-		c.InternalStreamObserver = &testStreamObserver{ctx: observerCtx}
-		defer server.Close()
-
-		errCh := make(chan error, 1)
-		go func() {
-			_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
-				f.Buf = append(f.Buf[:0], 'x')
-				return nil
-			}), nil, 0)
-			errCh <- err
-		}()
-
-		select {
-		case <-observerCtx.started:
-		case <-time.After(execCloseTestTimeout):
-			t.Fatal("stream observer did not observe the request start")
-		}
-
-		select {
-		case <-writeStarted:
-		case <-time.After(execCloseTestTimeout):
-			t.Fatal("exec never reached the write path")
-		}
-
-		closeDone := make(chan struct{})
-		go func() {
-			c.Close()
-			close(closeDone)
-		}()
-
-		select {
-		case err := <-errCh:
-			if !errors.Is(err, runtimeerrors.ErrConnectionClosed) {
-				t.Fatalf("expected close error %v, got %v", runtimeerrors.ErrConnectionClosed, err)
-			}
-		case <-time.After(execCloseTestTimeout):
-			t.Fatal("exec deadlocked after Close")
-		}
-
-		select {
-		case <-observerCtx.abandoned:
-		case <-time.After(execCloseTestTimeout):
-			t.Fatal("Close did not abandon the in-flight stream")
-		}
-
-		select {
-		case <-observerCtx.finished:
-			t.Fatal("Close should not mark the in-flight stream as finished")
-		default:
-		}
-
-		select {
-		case <-closeDone:
-		case <-time.After(execCloseTestTimeout):
-			t.Fatal("Close did not wait for the in-flight exec cleanup")
-		}
-
-		c.InternalMu.Lock()
-		defer c.InternalMu.Unlock()
-		if c.InternalCalls != nil {
-			t.Fatal("expected in-flight calls to be detached on Close")
-		}
-	})
-}
-
 // tcpConnPair returns a matching set of a TCP client side and server side connection.
 func tcpConnPair() (s, c net.Conn, err error) {
 	l, err := net.Listen("tcp", "localhost:0")
@@ -1361,195 +331,6 @@ func tcpConnPair() (s, c net.Conn, err error) {
 	return s, c, err
 }
 
-func TestWriteCoalescing(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	server, client, err := tcpConnPair()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	done := make(chan struct{}, 1)
-	var (
-		buf      bytes.Buffer
-		bufMutex sync.Mutex
-	)
-	go func() {
-		defer close(done)
-		defer server.Close()
-		var err error
-		b := make([]byte, 256)
-		var n int
-		for {
-			if n, err = server.Read(b); err != nil {
-				break
-			}
-			bufMutex.Lock()
-			buf.Write(b[:n])
-			bufMutex.Unlock()
-		}
-		if err != io.EOF {
-			t.Errorf("unexpected read error: %v", err)
-		}
-	}()
-	enqueued := make(chan struct{})
-	resetTimer := make(chan struct{})
-	w := &transport.InternalWriteCoalescer{
-		InternalWriteCh: make(chan transport.InternalWriteRequest),
-		InternalC:       client,
-		InternalQuit:    ctx.Done(),
-		InternalTestEnqueuedHook: func() {
-			enqueued <- struct{}{}
-		},
-		InternalTestFlushedHook: func() {
-			client.Close()
-		},
-	}
-	w.InternalSetWriteTimeout(500 * time.Millisecond)
-	timerC := make(chan time.Time, 1)
-	go func() {
-		w.InternalWriteFlusherImpl(timerC, func() { resetTimer <- struct{}{} })
-	}()
-
-	go func() {
-		if _, err := w.InternalWriteContext(context.Background(), []byte("one")); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	go func() {
-		if _, err := w.InternalWriteContext(context.Background(), []byte("two")); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	<-enqueued
-	<-resetTimer
-	<-enqueued
-
-	// flush
-	timerC <- time.Now()
-
-	<-done
-
-	if got := buf.String(); got != "onetwo" && got != "twoone" {
-		t.Fatalf("expected to get %q got %q", "onetwo or twoone", got)
-	}
-}
-
-func TestWriteCoalescing_WriteAfterClose(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	var buf bytes.Buffer
-	defer cancel()
-	server, client, err := tcpConnPair()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	done := make(chan struct{}, 1)
-	go func() {
-		io.Copy(&buf, server)
-		server.Close()
-		close(done)
-	}()
-	w := transport.InternalNewWriteCoalescer(client, 0, 5*time.Millisecond, ctx.Done())
-
-	// ensure 1 write works
-	if _, err := w.InternalWriteContext(context.Background(), []byte("one")); err != nil {
-		t.Fatal(err)
-	}
-
-	client.Close()
-	<-done
-	if v := buf.String(); v != "one" {
-		t.Fatalf("expected buffer to be %q got %q", "one", v)
-	}
-
-	// now close and do a write, we should error
-	cancel()
-	client.Close() // close client conn too, since server won't see the answer anyway.
-
-	if _, err := w.InternalWriteContext(context.Background(), []byte("two")); err == nil {
-		t.Fatal("expected to get error for write after closing")
-	} else if err != io.EOF {
-		t.Fatalf("expected to get EOF got %v", err)
-	}
-}
-
-func TestSkipMetadata(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	srv := NewTestServer(t, implProtocol.ProtoVersion4, ctx)
-	defer srv.Stop()
-
-	cfg := testCluster(implProtocol.ProtoVersion4, srv.Address)
-	cfg.DisableSkipMetadata = false
-
-	db, err := implCluster.InternalClusterSettingsOpen(cfg)
-	if err != nil {
-		t.Fatalf("newClusterSettings: %v", err)
-	}
-	defer db.Close()
-
-	if err := execTestStatement(context.Background(), db, "select nometadata", Options{}); err != nil {
-		t.Fatalf("expected no error got: %v", err)
-	}
-
-	if err := execTestStatement(context.Background(), db, "select metadata", Options{}); err != nil {
-		t.Fatalf("expected no error got: %v", err)
-	}
-}
-
-func TestPrepareBatchMetadataMultipleKeyspaceTables(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	srv := NewTestServer(t, implProtocol.ProtoVersion4, ctx)
-	defer srv.Stop()
-
-	cfg := testCluster(implProtocol.ProtoVersion4, srv.Address)
-	db, err := implCluster.InternalClusterSettingsOpen(cfg)
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	defer db.Close()
-
-	conn := implCluster.InternalSessionGetConn(db)
-	if conn == nil {
-		t.Fatal("expected connection, got nil")
-	}
-
-	stmt := "BEGIN BATCH INSERT INTO ks1.tbl1 (col1) VALUES (?) INSERT INTO ks2.tbl2 (col2) VALUES (?) APPLY BATCH"
-	info, err := conn.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: stmt, Prepare: true, Timeout: time.Second})
-	if info != nil && info.Owner != nil {
-		defer info.Owner.Release()
-	}
-	if err != nil {
-		t.Fatalf("prepareStatement failed: %v", err)
-	}
-
-	if got := info.BindColumns().Len(); got != 2 {
-		t.Fatalf("expected 2 request columns, got %d", got)
-	}
-
-	col0, _ := info.BindColumns().At(0)
-	if col0.Keyspace != "ks1" || col0.Table != "tbl1" || col0.Name != "col1" {
-		t.Fatalf("unexpected column 0: %+v", col0)
-	}
-
-	col1, _ := info.BindColumns().At(1)
-	if col1.Keyspace != "ks2" || col1.Table != "tbl2" || col1.Name != "col2" {
-		t.Fatalf("unexpected column 1: %+v", col1)
-	}
-
-	if info.Keyspace() != "" || "" != "" {
-		t.Fatalf("expected empty prepared keyspace/table for mixed batch, got %q/%q", info.Keyspace(), "")
-	}
-}
-
 type recordingFrameHeaderObserver struct {
 	t      *testing.T
 	mu     sync.Mutex
@@ -1566,41 +347,6 @@ func (r *recordingFrameHeaderObserver) getFrames() []transport.ObservedFrameHead
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.frames
-}
-
-func TestFrameHeaderObserver(t *testing.T) {
-	srv := NewTestServer(t, defaultProto, context.Background())
-	defer srv.Stop()
-
-	cluster := testCluster(defaultProto, srv.Address)
-	cluster.NumConns = 1
-	observer := &recordingFrameHeaderObserver{t: t}
-	cluster.FrameHeaderObserver = observer
-
-	db, err := implCluster.InternalClusterSettingsOpen(cluster)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := execTestStatement(context.Background(), db, "void", Options{}); err != nil {
-		t.Fatal(err)
-	}
-
-	frames := observer.getFrames()
-	expFrames := []frm.Op{frm.OpSupported, frm.OpReady, frm.OpResult}
-	if len(frames) != len(expFrames) {
-		t.Fatalf("Expected to receive %d frames, instead received %d", len(expFrames), len(frames))
-	}
-
-	for i, op := range expFrames {
-		if op != frames[i].Opcode {
-			t.Fatalf("expected frame %d to be %v got %v", i, op, frames[i])
-		}
-	}
-	voidResultFrame := frames[2]
-	if voidResultFrame.Length != int32(4) {
-		t.Fatalf("Expected to receive frame with body length 4, instead received body length %d", voidResultFrame.Length)
-	}
 }
 
 func NewTestServerWithAddress(addr string, t testing.TB, protocol uint8, ctx context.Context) *TestServer {
@@ -2293,174 +1039,6 @@ func (srv *TestServer) readFrame(conn net.Conn) (*implProtocol.Framer, error) {
 	return framer, nil
 }
 
-func TestGetSchemaAgreement(t *testing.T) {
-	schema_version1 := cqltype.ParseUUIDMust("af810386-a694-11ef-81fa-3aea73156247")
-	peersRows := []transport.InternalSchemaAgreementHost{
-		{
-			DataCenter:    "datacenter1",
-			HostID:        cqltype.ParseUUIDMust("b2035fd9-e0ca-4857-8c45-e63c00fb7c43"),
-			Rack:          "rack1",
-			RPCAddress:    "127.0.0.3",
-			SchemaVersion: schema_version1,
-		},
-		{
-			DataCenter:    "datacenter1",
-			HostID:        cqltype.ParseUUIDMust("4b21ee4c-acea-4267-8e20-aaed5361a0dd"),
-			Rack:          "rack1",
-			RPCAddress:    "127.0.0.2",
-			SchemaVersion: schema_version1,
-		},
-		{
-			DataCenter:    "datacenter2",
-			HostID:        cqltype.ParseUUIDMust("dfef4a22-b8d8-47e9-aee5-8c19d4b7a9e3"),
-			Rack:          "rack1",
-			RPCAddress:    "127.0.0.5",
-			SchemaVersion: cqltype.ParseUUIDMust("875a938a-a695-11ef-4314-85c8ef0ebaa2"),
-		},
-	}
-
-	var logger logging.StdLogger
-
-	t.Run("SchemaNotConsistent", func(t *testing.T) {
-		err := transport.InternalGetSchemaAgreement(
-			"875a938a-a695-11ef-4314-85c8ef0ebaa2",
-			peersRows,
-			logger,
-		)
-
-		assert.Error(t, err, "error expected when local schema is different then others")
-	})
-
-	t.Run("ZeroTokenNodeSchemaNotConsistent", func(t *testing.T) {
-		err := transport.InternalGetSchemaAgreement(
-			"af810386-a694-11ef-81fa-3aea73156247",
-			peersRows,
-			logger,
-		)
-
-		assert.Error(t, err, "expected error when zero-token node has different schema")
-	})
-
-	t.Run("SchemaConsistent", func(t *testing.T) {
-		peersRows[2].SchemaVersion = schema_version1
-		err := transport.InternalGetSchemaAgreement(
-			"af810386-a694-11ef-81fa-3aea73156247",
-			peersRows,
-			logger,
-		)
-
-		assert.NoError(t, err, "expected no error when all nodes have the same schema")
-	})
-
-	t.Run("EmptyLocalSchemaVersion", func(t *testing.T) {
-		err := transport.InternalGetSchemaAgreement(
-			"",
-			[]transport.InternalSchemaAgreementHost{
-				{
-					DataCenter:    "datacenter1",
-					HostID:        cqltype.ParseUUIDMust("b2035fd9-e0ca-4857-8c45-e63c00fb7c43"),
-					Rack:          "rack1",
-					RPCAddress:    "127.0.0.3",
-					SchemaVersion: schema_version1,
-				},
-			},
-			logger,
-		)
-
-		assert.NoError(t, err, "expected no error when local version is empty and peers are consistent")
-	})
-
-	t.Run("EmptyLocalWithNoPeers", func(t *testing.T) {
-		err := transport.InternalGetSchemaAgreement("", nil, logger)
-
-		assert.NoError(t, err, "expected no error when both local and peers are empty")
-	})
-
-	t.Run("EmptyLocalWithInconsistentPeers", func(t *testing.T) {
-		err := transport.InternalGetSchemaAgreement(
-			"",
-			[]transport.InternalSchemaAgreementHost{
-				{
-					DataCenter:    "datacenter1",
-					HostID:        cqltype.ParseUUIDMust("b2035fd9-e0ca-4857-8c45-e63c00fb7c43"),
-					Rack:          "rack1",
-					RPCAddress:    "127.0.0.3",
-					SchemaVersion: schema_version1,
-				},
-				{
-					DataCenter:    "datacenter2",
-					HostID:        cqltype.ParseUUIDMust("dfef4a22-b8d8-47e9-aee5-8c19d4b7a9e3"),
-					Rack:          "rack1",
-					RPCAddress:    "127.0.0.5",
-					SchemaVersion: cqltype.ParseUUIDMust("875a938a-a695-11ef-4314-85c8ef0ebaa2"),
-				},
-			},
-			logger,
-		)
-
-		assert.Error(t, err, "expected error when peers have different schemas")
-	})
-}
-
-// TestAwaitSchemaAgreementBoundedByMaxWaitSchemaAgreement verifies that a stalled
-// system.peers/system.local query cannot make awaitSchemaAgreement block past
-// MaxWaitSchemaAgreement, even when MetadataSchemaRequestTimeout is much larger.
-func TestAwaitSchemaAgreementBoundedByMaxWaitSchemaAgreement(t *testing.T) {
-	srv := NewTestServer(t, defaultProto, context.Background())
-	defer srv.Stop()
-
-	const maxWaitSchemaAgreement = 200 * time.Millisecond
-	const metadataSchemaRequestTimeout = 5 * time.Second
-
-	cluster := testCluster(defaultProto, srv.Address)
-	cluster.MaxWaitSchemaAgreement = maxWaitSchemaAgreement
-	cluster.MetadataSchemaRequestTimeout = metadataSchemaRequestTimeout
-
-	session, err := implCluster.InternalClusterSettingsOpen(cluster)
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	defer session.Close()
-
-	conn := implCluster.InternalSessionGetConn(session)
-	if conn == nil {
-		t.Fatal("unable to get a connection")
-	}
-
-	atomic.StoreInt32(&srv.stallSystemQueries, 1)
-
-	start := time.Now()
-	err = implCluster.InternalSessionAwaitV2SchemaAgreementOn(session, context.Background(), conn)
-	elapsed := time.Since(start)
-
-	if err == nil {
-		t.Fatal("expected an error from a stalled schema agreement query, got nil")
-	}
-	if elapsed >= metadataSchemaRequestTimeout {
-		t.Fatalf("awaitSchemaAgreement took %v, expected to return near MaxWaitSchemaAgreement (%v), not wait for MetadataSchemaRequestTimeout (%v)",
-			elapsed, maxWaitSchemaAgreement, metadataSchemaRequestTimeout)
-	}
-}
-
-func TestUseKeyspaceQuoteEscaping(t *testing.T) {
-	tests := []struct {
-		keyspace string
-		want     string
-	}{
-		{"simple", `USE "simple"`},
-		{`my"ks`, `USE "my""ks"`},
-		{`a""b`, `USE "a""""b"`},
-		{`"`, `USE """"`},
-		{"", `USE ""`},
-	}
-	for _, tt := range tests {
-		got := transport.InternalUseKeyspaceStmt(tt.keyspace)
-		if got != tt.want {
-			t.Errorf("keyspace %q: got %q, want %q", tt.keyspace, got, tt.want)
-		}
-	}
-}
-
 // newTestConnWithFramerPool creates a minimal driverConn with an initialized framer pool
 // suitable for testing releaseFramer and EWMA logic.
 func newTestConnWithFramerPool() *transport.Conn {
@@ -2470,162 +1048,6 @@ func newTestConnWithFramerPool() *transport.Conn {
 	}
 	c.InternalFramers.InternalInitPool(c)
 	return c
-}
-
-// TestInitFramerCacheScyllaUseMetadataID guards against scyllaUseMetadataID
-// being negotiated on the driverConn but never reaching the pooled framers that
-// actually read/write frames (see frame.go's parseResultMetadata,
-// parseResultPrepared, fixtureExecuteFrame).
-//
-// It also pins driverConn.usesMetadataID against the same config, since the request path
-// reads the flag through it: were the two to diverge, the driver would ask the
-// server to skip metadata while writing no result metadata ID to compare against.
-func TestInitFramerCacheScyllaUseMetadataID(t *testing.T) {
-	c := &transport.Conn{
-		InternalVersion:      implProtocol.ProtoVersion4,
-		InternalCqlProtoExts: []endpoint.InternalCqlProtocolExtension{&endpoint.InternalScyllaUseMetadataIDExt{}},
-	}
-	c.InternalInitFramerCache()
-
-	if !c.InternalFramers.InternalDefaults.InternalScyllaUseMetadataID {
-		t.Fatal("framerConfig.scyllaUseMetadataID should be true once SCYLLA_USE_METADATA_ID is negotiated")
-	}
-
-	if !c.InternalUsesMetadataID() {
-		t.Error("driverConn.usesMetadataID() should agree with the framer config")
-	}
-
-	wf := c.InternalGetWriteFramer()
-	if !wf.ScyllaUseMetadataID {
-		t.Error("write framer obtained from pool should have scyllaUseMetadataID set")
-	}
-
-	rf := c.InternalGetReadFramer()
-	if !rf.ScyllaUseMetadataID {
-		t.Error("read framer obtained from pool should have scyllaUseMetadataID set")
-	}
-}
-
-// TestInitFramerCacheWithoutScyllaUseMetadataID is the negative counterpart: with
-// no extension negotiated, nothing on the connection may claim otherwise.
-func TestInitFramerCacheWithoutScyllaUseMetadataID(t *testing.T) {
-	c := &transport.Conn{InternalVersion: implProtocol.ProtoVersion4}
-	c.InternalInitFramerCache()
-
-	if c.InternalFramers.InternalDefaults.InternalScyllaUseMetadataID {
-		t.Error("framerConfig.scyllaUseMetadataID should be false when the extension was not negotiated")
-	}
-	if c.InternalUsesMetadataID() {
-		t.Error("driverConn.usesMetadataID() should be false when the extension was not negotiated")
-	}
-	if c.InternalGetWriteFramer().ScyllaUseMetadataID {
-		t.Error("write framer should not have scyllaUseMetadataID set")
-	}
-}
-
-// TestInitFramerCacheProtoV3IgnoresScyllaUseMetadataID pins the negotiation gate from
-// the connection's end: a v3 connection to a server advertising SCYLLA_USE_METADATA_ID
-// must come out of the handshake with the extension nowhere on it. It goes through
-// parseCQLProtocolExtensions rather than setting cqlProtoExts directly, because that
-// list is also what startupCoordinator.startup serializes into STARTUP — an extension
-// filtered out there is one the driver neither announces nor encodes.
-func TestInitFramerCacheProtoV3IgnoresScyllaUseMetadataID(t *testing.T) {
-	t.Parallel()
-
-	c := &transport.Conn{InternalVersion: implProtocol.ProtoVersion3, InternalLogger: &logging.InternalTestLogger{}}
-	c.InternalCqlProtoExts = endpoint.InternalParseCQLProtocolExtensions(map[string][]string{endpoint.InternalScyllaUseMetadataID: {}}, c.InternalVersion, c.InternalLogger)
-	c.InternalInitFramerCache()
-
-	if endpoint.InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, endpoint.InternalScyllaUseMetadataID) != nil {
-		t.Error("SCYLLA_USE_METADATA_ID should not be negotiated on a protocol v3 connection")
-	}
-	if c.InternalFramers.InternalDefaults.InternalScyllaUseMetadataID {
-		t.Error("framerConfig.scyllaUseMetadataID should be false on a protocol v3 connection")
-	}
-	if c.InternalUsesMetadataID() {
-		t.Error("driverConn.usesMetadataID() should be false on a protocol v3 connection")
-	}
-	if c.InternalTracksResultMetadataID() {
-		t.Error("driverConn.tracksResultMetadataID() should be false on a protocol v3 connection")
-	}
-	if c.InternalGetWriteFramer().ScyllaUseMetadataID {
-		t.Error("write framer should not have scyllaUseMetadataID set on a protocol v3 connection")
-	}
-}
-
-// TestConnTracksResultMetadataID pins the question the EXECUTE path actually asks:
-// does this connection exchange result metadata IDs at all? Two mechanisms answer
-// yes — native protocol v5, where the field is mandatory, and SCYLLA_USE_METADATA_ID,
-// which backports it to v4 — and the skip-metadata default follows either, per
-// scylladb/scylla-drivers#81.
-//
-// usesMetadataID must stay narrower than that: the integration tests use it to
-// assert the extension was negotiated specifically, so a v5 connection reporting
-// true there would turn a negotiation regression green.
-func TestConnTracksResultMetadataID(t *testing.T) {
-	t.Parallel()
-
-	for _, tt := range []struct {
-		name        string
-		proto       byte
-		exts        []endpoint.InternalCqlProtocolExtension
-		wantTracked bool
-		wantExt     bool
-	}{
-		{name: "v4 without the extension", proto: implProtocol.ProtoVersion4},
-		{
-			name:        "v4 with the extension",
-			proto:       implProtocol.ProtoVersion4,
-			exts:        []endpoint.InternalCqlProtocolExtension{&endpoint.InternalScyllaUseMetadataIDExt{}},
-			wantTracked: true,
-			wantExt:     true,
-		},
-		{
-			// v5 makes the field mandatory, so no extension is involved.
-			name:        "v5 without the extension",
-			proto:       implProtocol.ProtoVersion5,
-			wantTracked: true,
-		},
-		{
-			// Not reachable through negotiation — newScyllaUseMetadataIDExt opts in on
-			// v4 only — but initCache must not read the two mechanisms as exclusive.
-			name:        "v5 with the extension",
-			proto:       implProtocol.ProtoVersion5,
-			exts:        []endpoint.InternalCqlProtocolExtension{&endpoint.InternalScyllaUseMetadataIDExt{}},
-			wantTracked: true,
-			wantExt:     true,
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			c := &transport.Conn{InternalVersion: tt.proto, InternalCqlProtoExts: tt.exts}
-			c.InternalInitFramerCache()
-
-			if got := c.InternalTracksResultMetadataID(); got != tt.wantTracked {
-				t.Errorf("driverConn.tracksResultMetadataID() = %v, want %v", got, tt.wantTracked)
-			}
-			if got := c.InternalUsesMetadataID(); got != tt.wantExt {
-				t.Errorf("driverConn.usesMetadataID() = %v, want %v", got, tt.wantExt)
-			}
-		})
-	}
-}
-
-// TestConnTracksResultMetadataIDMasksDirectionBit guards the derivation against the
-// request/response direction bit: tracksResultMetadataID reads the framer config,
-// which initCache masks with protoVersionMask. Folding the bit into the version
-// instead would make a v4 connection look like protocol 0x84 and silently start
-// skipping metadata with no ID to recover it.
-func TestConnTracksResultMetadataIDMasksDirectionBit(t *testing.T) {
-	t.Parallel()
-
-	c := &transport.Conn{InternalVersion: implProtocol.ProtoVersion4 | 0x80}
-	c.InternalInitFramerCache()
-
-	if c.InternalTracksResultMetadataID() {
-		t.Error("driverConn.tracksResultMetadataID() = true for v4 with the direction bit set, want false")
-	}
 }
 
 func buildTestFrame(t *testing.T, f *implProtocol.Framer, req implProtocol.FrameBuilder, streamID int) ([]byte, frm.FrameHeader) {
@@ -2642,259 +1064,6 @@ func buildTestFrame(t *testing.T, f *implProtocol.Framer, req implProtocol.Frame
 	}
 
 	return buf, header
-}
-
-func TestReleaseFramer(t *testing.T) {
-	t.Parallel()
-
-	t.Run("EWMAEquilibrium", func(t *testing.T) {
-		c := newTestConnWithFramerPool()
-
-		// Release framers with bufCap == avg. EWMA should not drift.
-		for i := 0; i < 20; i++ {
-			f := c.InternalGetReadFramer()
-			// readBuffer is defaultBufSize (128), avg starts at defaultBufSize
-			c.InternalReleaseReadFramer(f)
-		}
-
-		avg := c.InternalFramers.InternalReadPool.InternalBufAvgSize.Load()
-		if avg != implProtocol.DefaultBufSize {
-			t.Errorf("EWMA should stay at defaultBufSize=%d when all buffers equal, got %d", implProtocol.DefaultBufSize, avg)
-		}
-	})
-
-	t.Run("DelegatesFramerReleaseToConn", func(t *testing.T) {
-		c := newTestConnWithFramerPool()
-
-		f := c.InternalGetReadFramer()
-		f.ReadBuffer = make([]byte, 4096)
-
-		f.Release()
-
-		avgAfterFirstRelease := c.InternalFramers.InternalReadPool.InternalBufAvgSize.Load()
-		if avgAfterFirstRelease <= implProtocol.DefaultBufSize {
-			t.Fatalf("framer.Release() should route through driverConn.releaseFramer and update EWMA, got %d", avgAfterFirstRelease)
-		}
-
-		f.Release()
-
-		if avgAfterSecondRelease := c.InternalFramers.InternalReadPool.InternalBufAvgSize.Load(); avgAfterSecondRelease != avgAfterFirstRelease {
-			t.Fatalf("second framer.Release() should be a no-op: first avg=%d second avg=%d", avgAfterFirstRelease, avgAfterSecondRelease)
-		}
-	})
-
-	t.Run("EWMAConvergesUpward", func(t *testing.T) {
-		c := newTestConnWithFramerPool()
-
-		// Release framers with a larger buffer; EWMA should converge toward it.
-		const targetSize = 4096
-		for i := 0; i < 100; i++ {
-			f := c.InternalGetReadFramer()
-			f.ReadBuffer = make([]byte, targetSize)
-			c.InternalReleaseReadFramer(f)
-		}
-
-		avg := c.InternalFramers.InternalReadPool.InternalBufAvgSize.Load()
-		// After 100 iterations with weight=8, avg should be very close to targetSize.
-		// Allow 1% tolerance.
-		if avg < targetSize*99/100 || avg > targetSize*101/100 {
-			t.Errorf("EWMA should converge to ~%d, got %d", targetSize, avg)
-		}
-	})
-
-	t.Run("EWMAConvergesDownward", func(t *testing.T) {
-		c := newTestConnWithFramerPool()
-
-		// First, push EWMA up.
-		for i := 0; i < 100; i++ {
-			f := c.InternalGetReadFramer()
-			f.ReadBuffer = make([]byte, 4096)
-			c.InternalReleaseReadFramer(f)
-		}
-
-		// Now release framers with small buffers; EWMA should converge back down.
-		// Due to upward bias (+4 rounding), convergence downward is slower.
-		const smallSize = 256
-		for i := 0; i < 200; i++ {
-			f := c.InternalGetReadFramer()
-			f.ReadBuffer = make([]byte, smallSize)
-			c.InternalReleaseReadFramer(f)
-		}
-
-		avg := c.InternalFramers.InternalReadPool.InternalBufAvgSize.Load()
-		// Due to the upward-biased rounding (+framerBufEWMAWeight/2), the EWMA settles
-		// slightly above the actual sample value when converging downward. The steady-state
-		// offset is at most framerBufEWMAWeight/2 (i.e., 4) per step which compounds to
-		// roughly framerBufEWMAWeight/2 above the target. Allow generous tolerance.
-		if avg < smallSize || avg > smallSize+2*transport.InternalFramerBufEWMAWeight {
-			t.Errorf("EWMA should converge toward ~%d (with upward bias), got %d", smallSize, avg)
-		}
-	})
-
-	t.Run("ShrinkOversizedBuffer", func(t *testing.T) {
-		c := newTestConnWithFramerPool()
-
-		// EWMA starts at defaultBufSize (128). Release a very large framer.
-		f := c.InternalGetReadFramer()
-		f.ReadBuffer = make([]byte, 100000)
-		origBuf := f.ReadBuffer
-		c.InternalReleaseReadFramer(f)
-
-		// Get the framer back from the pool and check that its buffer was shrunk.
-		f2 := c.InternalGetReadFramer()
-		if cap(f2.ReadBuffer) >= cap(origBuf) {
-			t.Errorf("oversized buffer should have been shrunk: original cap=%d, new cap=%d",
-				cap(origBuf), cap(f2.ReadBuffer))
-		}
-		// Shrink target should be at least defaultBufSize.
-		if cap(f2.ReadBuffer) < implProtocol.DefaultBufSize {
-			t.Errorf("shrunk buffer should be at least defaultBufSize=%d, got cap=%d",
-				implProtocol.DefaultBufSize, cap(f2.ReadBuffer))
-		}
-		c.InternalReleaseReadFramer(f2)
-	})
-
-	t.Run("NoShrinkNormalBuffer", func(t *testing.T) {
-		c := newTestConnWithFramerPool()
-
-		// Release a few framers with identical buffers; none should be shrunk.
-		for i := 0; i < 10; i++ {
-			f := c.InternalGetReadFramer()
-			origCap := cap(f.ReadBuffer)
-			c.InternalReleaseReadFramer(f)
-			f2 := c.InternalGetReadFramer()
-			if cap(f2.ReadBuffer) != origCap {
-				t.Errorf("iteration %d: normal-sized buffer should not be shrunk: orig cap=%d, new cap=%d",
-					i, origCap, cap(f2.ReadBuffer))
-			}
-			c.InternalReleaseReadFramer(f2)
-		}
-	})
-
-	t.Run("ShrinkFloorIsDefaultBufSize", func(t *testing.T) {
-		c := newTestConnWithFramerPool()
-
-		// Push EWMA down to a very small value by releasing tiny buffers.
-		// The shrink target should never go below defaultBufSize.
-		for i := 0; i < 100; i++ {
-			f := c.InternalGetReadFramer()
-			f.ReadBuffer = make([]byte, 1) // Tiny buffer
-			c.InternalReleaseReadFramer(f)
-		}
-
-		// Now release a moderately large buffer that triggers shrink.
-		f := c.InternalGetReadFramer()
-		f.ReadBuffer = make([]byte, 10000)
-		c.InternalReleaseReadFramer(f)
-
-		f2 := c.InternalGetReadFramer()
-		if cap(f2.ReadBuffer) < implProtocol.DefaultBufSize {
-			t.Errorf("shrink target should respect defaultBufSize floor: got cap=%d, want >= %d",
-				cap(f2.ReadBuffer), implProtocol.DefaultBufSize)
-		}
-		c.InternalReleaseReadFramer(f2)
-	})
-
-	t.Run("NilFramer", func(t *testing.T) {
-		c := newTestConnWithFramerPool()
-		// Should not panic.
-		c.InternalReleaseReadFramer(nil)
-	})
-
-	t.Run("NoPool", func(t *testing.T) {
-		c := &transport.Conn{} // No pool initialized.
-		f := implProtocol.NewFramer(nil, implProtocol.ProtoVersion4)
-		// Should not panic, framer is just dropped.
-		c.InternalReleaseReadFramer(f)
-	})
-
-	t.Run("ReadAndWritePoolsAreSeparate", func(t *testing.T) {
-		c := newTestConnWithFramerPool()
-
-		readFramer := c.InternalGetReadFramer()
-		readFramer.ReadBuffer = make([]byte, 100000)
-		c.InternalReleaseReadFramer(readFramer)
-
-		writeFramer := c.InternalGetWriteFramer()
-		writeFramer.Buf = make([]byte, 0, 8192)
-		c.InternalReleaseWriteFramer(writeFramer)
-
-		if writeAvg := c.InternalFramers.InternalWritePool.InternalBufAvgSize.Load(); writeAvg <= implProtocol.DefaultBufSize {
-			t.Fatalf("writer pool should track its own EWMA, got %d", writeAvg)
-		}
-
-		writeFramer = c.InternalGetWriteFramer()
-		if cap(writeFramer.Buf) >= cap(readFramer.ReadBuffer) {
-			t.Fatalf("writer framer should not inherit oversized reader buffer state, got writer cap=%d reader cap=%d", cap(writeFramer.Buf), cap(readFramer.ReadBuffer))
-		}
-		c.InternalReleaseWriteFramer(writeFramer)
-	})
-
-	t.Run("WriteFramerResetsCustomPayloadFlagBetweenUses", func(t *testing.T) {
-		c := newTestConnWithFramerPool()
-		const streamID = 7
-
-		f := c.InternalGetWriteFramer()
-		payloadReq := &fixtureQueryFrame{
-			statement: "SELECT now() FROM system.local",
-			customPayload: map[string][]byte{
-				"k": []byte("v"),
-			},
-		}
-		_, payloadHeader := buildTestFrame(t, f, payloadReq, streamID)
-		if payloadHeader.Flags&frm.FlagCustomPayload == 0 {
-			t.Fatalf("custom payload frame should set %v, got flags=%08b", frm.FlagCustomPayload, payloadHeader.Flags)
-		}
-
-		c.InternalReleaseWriteFramer(f)
-		if got, want := f.Flags, c.InternalFramers.InternalDefaults.InternalFlags; got != want {
-			t.Fatalf("releaseWriteFramer should restore default flags: got %08b want %08b", got, want)
-		}
-
-		f = c.InternalGetWriteFramer()
-		plainReq := &fixtureQueryFrame{statement: "SELECT now() FROM system.local"}
-		plainBuf, plainHeader := buildTestFrame(t, f, plainReq, streamID)
-		if plainHeader.Flags != c.InternalFramers.InternalDefaults.InternalFlags {
-			t.Fatalf("plain query should use default flags after pooled reuse: got %08b want %08b", plainHeader.Flags, c.InternalFramers.InternalDefaults.InternalFlags)
-		}
-
-		fresh := implProtocol.NewFramer(nil, implProtocol.ProtoVersion4)
-		freshBuf, freshHeader := buildTestFrame(t, fresh, plainReq, streamID)
-		if plainHeader.Flags != freshHeader.Flags {
-			t.Fatalf("reused plain query flags do not match fresh framer: got %08b want %08b", plainHeader.Flags, freshHeader.Flags)
-		}
-		if !bytes.Equal(plainBuf, freshBuf) {
-			t.Fatal("reused plain query frame does not match fresh framer output")
-		}
-
-		c.InternalReleaseWriteFramer(f)
-	})
-
-	t.Run("WriteFramerResetsTracingFlagBetweenUses", func(t *testing.T) {
-		c := newTestConnWithFramerPool()
-		const streamID = 9
-
-		f := c.InternalGetWriteFramer()
-		f.Trace()
-		tracedReq := &fixtureQueryFrame{statement: "SELECT now() FROM system.local"}
-		_, tracedHeader := buildTestFrame(t, f, tracedReq, streamID)
-		if tracedHeader.Flags&frm.FlagTracing == 0 {
-			t.Fatalf("traced query should set %v, got flags=%08b", frm.FlagTracing, tracedHeader.Flags)
-		}
-
-		c.InternalReleaseWriteFramer(f)
-		if got, want := f.Flags, c.InternalFramers.InternalDefaults.InternalFlags; got != want {
-			t.Fatalf("releaseWriteFramer should restore default flags: got %08b want %08b", got, want)
-		}
-
-		f = c.InternalGetWriteFramer()
-		_, plainHeader := buildTestFrame(t, f, tracedReq, streamID)
-		if plainHeader.Flags&frm.FlagTracing != 0 {
-			t.Fatalf("plain query should not inherit tracing flag after pooled reuse: got %08b", plainHeader.Flags)
-		}
-
-		c.InternalReleaseWriteFramer(f)
-	})
 }
 
 const segmentTestTimeout = 10 * time.Second
@@ -2914,187 +1083,6 @@ func recvCallResp(t *testing.T, call *transport.InternalCallReq) transport.Inter
 	case <-time.After(segmentTestTimeout):
 		t.Fatalf("timed out waiting for a response on stream %d", call.InternalStreamID)
 		return transport.InternalCallResp{}
-	}
-}
-
-func TestConnProcessAllFramesInSingleSegment(t *testing.T) {
-	server, client, err := tcpConnPair()
-	require.NoError(t, err)
-	defer server.Close()
-	defer client.Close()
-
-	w := &transport.InternalDeadlineContextWriter{
-		InternalW:         server,
-		InternalSemaphore: make(chan struct{}, 1),
-		InternalQuit:      make(chan struct{}),
-	}
-	w.InternalTimeout.Store(int64(time.Second * 10))
-
-	c := &transport.Conn{
-		InternalR: &transport.InternalConnReader{
-			InternalConn: server,
-			InternalR:    bufio.NewReader(server),
-		},
-		InternalCalls:      newCallTable(),
-		InternalVersion:    implProtocol.ProtoVersion5,
-		InternalAddr:       server.RemoteAddr().String(),
-		InternalStreams:    streams.New(),
-		InternalIsSchemaV2: true,
-		InternalLogger:     logging.InternalNopLogger{},
-		InternalW:          w,
-	}
-	c.InternalWriteTimeout.Store(int64(time.Second * 10))
-
-	call1 := &transport.InternalCallReq{
-		InternalStreamID: 1,
-		InternalResp:     make(chan transport.InternalCallResp, 1),
-	}
-
-	call2 := &transport.InternalCallReq{
-		InternalStreamID: 2,
-		InternalResp:     make(chan transport.InternalCallResp, 1),
-	}
-
-	c.InternalCalls.Set(1, call1)
-	c.InternalCalls.Set(2, call2)
-
-	req := fixtureQueryFrame{
-		statement: "SELECT * FROM system.local",
-		params: fixtureQueryParams{
-			consistency: cqltype.Quorum,
-			keyspace:    "gocql_test",
-		},
-	}
-
-	framer1 := implProtocol.NewFramer(nil, implProtocol.ProtoVersion5)
-	err = req.BuildFrame(framer1, 1)
-	require.NoError(t, err)
-
-	framer2 := implProtocol.NewFramer(nil, implProtocol.ProtoVersion5)
-	err = req.BuildFrame(framer2, 2)
-	require.NoError(t, err)
-
-	// Write from the test goroutine: this is a real loopback socket, and the two
-	// frames plus the segment header and CRC are ~124 bytes, so the write completes
-	// into the socket buffer without a reader.
-	var buf []byte
-	buf = append(buf, framer1.Buf...)
-	buf = append(buf, framer2.Buf...)
-
-	uncompressedSegment, err := newUncompressedSegment(buf, true)
-	require.NoError(t, err)
-
-	_, err = client.Write(uncompressedSegment)
-	require.NoError(t, err)
-
-	ctx, cancel := context.WithTimeout(context.Background(), segmentTestTimeout)
-	defer cancel()
-
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- c.InternalRecvSegment(ctx)
-	}()
-
-	// Receive in segment order: processAllFramesInSegment consumes the frames
-	// sequentially and each send is on an unbuffered channel, so frame 1 is fully
-	// delivered before frame 2 starts.
-	//
-	// The header is skipped because resp.framer has already parsed it; framer.buf
-	// holds the body only.
-	resp1 := recvCallResp(t, call1)
-	require.Equal(t, framer1.Buf[9:], resp1.InternalFramer.Buf)
-
-	resp2 := recvCallResp(t, call2)
-	require.Equal(t, framer2.Buf[9:], resp2.InternalFramer.Buf)
-
-	select {
-	case err := <-errCh:
-		require.NoError(t, err)
-	case <-time.After(segmentTestTimeout):
-		t.Fatal("recvSegment did not return after delivering both frames")
-	}
-}
-
-// TestConnProcessReservedStreamFrameInSegment verifies that a reserved-stream
-// frame (streamID -1) packed inside a self-contained v5 segment has its body
-// consumed from the segment payload rather than the socket. A normal response
-// frame for a real call follows it in the same segment; if the reserved frame's
-// body were read from the socket (c.r) instead of the segment reader, the
-// segment reader would be left misaligned and the trailing frame would never be
-// delivered to its call (the test would time out).
-func TestConnProcessReservedStreamFrameInSegment(t *testing.T) {
-	server, client, err := tcpConnPair()
-	require.NoError(t, err)
-	defer server.Close()
-	defer client.Close()
-
-	w := &transport.InternalDeadlineContextWriter{
-		InternalW:         server,
-		InternalSemaphore: make(chan struct{}, 1),
-		InternalQuit:      make(chan struct{}),
-	}
-	w.InternalTimeout.Store(int64(time.Second * 10))
-
-	c := &transport.Conn{
-		InternalR: &transport.InternalConnReader{
-			InternalConn: server,
-			InternalR:    bufio.NewReader(server),
-		},
-		InternalCalls:      newCallTable(),
-		InternalVersion:    implProtocol.ProtoVersion5,
-		InternalAddr:       server.RemoteAddr().String(),
-		InternalStreams:    streams.New(),
-		InternalIsSchemaV2: true,
-		InternalLogger:     logging.InternalNopLogger{},
-		InternalW:          w,
-	}
-	c.InternalWriteTimeout.Store(int64(time.Second * 10))
-
-	// Only stream 2 has a registered call; the reserved stream -1 frame ahead of
-	// it goes through the readFrameIntoFramer body-read path.
-	call2 := &transport.InternalCallReq{InternalStreamID: 2, InternalResp: make(chan transport.InternalCallResp, 1)}
-	c.InternalCalls.Set(2, call2)
-
-	req := fixtureQueryFrame{
-		statement: "SELECT * FROM system.local",
-		params:    fixtureQueryParams{consistency: cqltype.Quorum, keyspace: "gocql_test"},
-	}
-
-	// A request-direction frame parses as an error on the response path; for
-	// stream -1 that error is tolerated (logged) — all we need here is for its
-	// body to be consumed from the segment reader.
-	reservedFramer := implProtocol.NewFramer(nil, implProtocol.ProtoVersion5)
-	require.NoError(t, req.BuildFrame(reservedFramer, -1))
-	framer2 := implProtocol.NewFramer(nil, implProtocol.ProtoVersion5)
-	require.NoError(t, req.BuildFrame(framer2, 2))
-
-	// Written from the test goroutine; see TestConnProcessAllFramesInSingleSegment.
-	var buf []byte
-	buf = append(buf, reservedFramer.Buf...)
-	buf = append(buf, framer2.Buf...)
-
-	seg, err := newUncompressedSegment(buf, true)
-	require.NoError(t, err)
-	_, err = client.Write(seg)
-	require.NoError(t, err)
-
-	ctx, cancel := context.WithTimeout(context.Background(), segmentTestTimeout)
-	defer cancel()
-
-	errCh := make(chan error, 1)
-	go func() { errCh <- c.InternalRecvSegment(ctx) }()
-
-	// This is the assertion the test exists for: if the reserved frame's body had
-	// been read from the socket instead of the segment payload, the segment reader
-	// would be misaligned and this response would never arrive (or arrive corrupt).
-	resp2 := recvCallResp(t, call2)
-	require.Equal(t, framer2.Buf[9:], resp2.InternalFramer.Buf)
-
-	select {
-	case err := <-errCh:
-		require.NoError(t, err)
-	case <-time.After(segmentTestTimeout):
-		t.Fatal("recvSegment did not return; reserved-stream frame body was likely read from the socket, not the segment")
 	}
 }
 
@@ -3135,115 +1123,6 @@ func (c *deadlineRecordingConn) RemoteAddr() net.Addr               { return nil
 func (c *deadlineRecordingConn) SetDeadline(t time.Time) error      { return nil }
 func (c *deadlineRecordingConn) SetWriteDeadline(t time.Time) error { return nil }
 
-// TestRecvSegmentDisarmsReadDeadlineOnIdleConn verifies that recvSegment
-// disarms the read deadline (SetReadDeadline(time.Time{})) on the underlying
-// connection while reading the first segment header, and re-arms it afterwards.
-//
-// The disarm is driven by the connReader.disarm flag rather than by zeroing the
-// operational timeout: the configured timeout value is left intact throughout,
-// so a concurrent finalizeConnection switching ConnectTimeout -> ReadTimeout is
-// never clobbered.
-//
-// This exercises the fix for the idle proto-v5 connection timeout regression:
-// without the disarm, connReader.Read re-arms the deadline on every call, so
-// a short ReadTimeout fires on a healthy idle connection and serve() drops it.
-func TestRecvSegmentDisarmsReadDeadlineOnIdleConn(t *testing.T) {
-	t.Parallel()
-
-	const configuredTimeout = 5 * time.Millisecond
-
-	mock := &deadlineRecordingConn{
-		readEntered: make(chan struct{}),
-		proceed:     make(chan struct{}),
-	}
-
-	cr := &transport.InternalConnReader{
-		InternalConn: mock,
-		InternalR:    bufio.NewReader(mock),
-	}
-	cr.SetTimeout(configuredTimeout)
-
-	w := &transport.InternalDeadlineContextWriter{
-		InternalW:         mock,
-		InternalSemaphore: make(chan struct{}, 1),
-		InternalQuit:      make(chan struct{}),
-	}
-
-	c := &transport.Conn{
-		InternalR:       cr,
-		InternalCalls:   newCallTable(),
-		InternalVersion: implProtocol.ProtoVersion5,
-		InternalStreams: streams.New(),
-		InternalW:       w,
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	errCh := make(chan error, 1)
-	go func() { errCh <- c.InternalRecvSegment(ctx) }()
-
-	// Wait until connReader.Read has been entered — at this point the disarm
-	// flag is set and SetReadDeadline(zero) has already been called, but the
-	// re-arm has not yet happened.
-	select {
-	case <-mock.readEntered:
-	case <-ctx.Done():
-		t.Fatal("timed out waiting for recvSegment to enter Read")
-	}
-
-	// --- assertions valid while recvSegment is blocked inside Read ---
-
-	// SetReadDeadline must have been called with the zero time to disarm the
-	// deadline. connReader.Read clears the deadline whenever the disarm flag is
-	// set, so every value seen before the segment read must be the zero time.
-	mock.mu.Lock()
-	deadlines := append([]time.Time(nil), mock.deadlines...)
-	mock.mu.Unlock()
-
-	require.NotEmpty(t, deadlines, "expected at least one SetReadDeadline call before the segment read")
-	for i, d := range deadlines {
-		require.True(t, d.IsZero(),
-			"SetReadDeadline call %d should pass the zero time to disarm the deadline; got %v", i, d)
-	}
-
-	// The disarm flag must be set so connReader.Read does not re-arm the
-	// deadline while blocking for segment data...
-	require.True(t, cr.InternalDisarm.Load(),
-		"connReader disarm flag should be set while recvSegment blocks on the initial segment read")
-	// ...while the operational timeout value is left intact (not zeroed), so a
-	// concurrent finalizeConnection cannot be clobbered by a restore.
-	require.Equal(t, configuredTimeout, cr.GetTimeout(),
-		"connReader timeout should be preserved (not zeroed) while recvSegment blocks on the initial segment read")
-
-	// Unblock Read — mock returns (0, io.EOF), which terminates recvSegment.
-	close(mock.proceed)
-
-	select {
-	case err := <-errCh:
-		// io.EOF is the expected outcome: we fed no bytes so recvSegment has
-		// nothing to parse and propagates the EOF from the mock.
-		// The critical invariant is that the error is NOT ErrReadHeaderTimeout:
-		// io.EOF is a clean close, not a timeout, so serve() must treat it as fatal.
-		require.ErrorIs(t, err, io.EOF,
-			"recvSegment should propagate io.EOF from a closed read, not misclassify it")
-		require.False(t, errors.Is(err, implProtocol.ErrReadHeaderTimeout),
-			"io.EOF must not be wrapped as ErrReadHeaderTimeout")
-	case <-ctx.Done():
-		t.Fatal("timed out waiting for recvSegment to return after Read was unblocked")
-	}
-
-	// --- assertions valid after recvSegment has returned ---
-
-	// The disarm flag must be cleared so subsequent body reads are bounded by
-	// the operational timeout again.
-	require.False(t, cr.InternalDisarm.Load(),
-		"connReader disarm flag should be cleared after recvSegment returns")
-	// The configured timeout is unchanged throughout, regardless of the error path.
-	require.Equal(t, configuredTimeout, cr.GetTimeout(),
-		"connReader timeout should remain its configured value after recvSegment returns")
-}
-
 // nonBlockingDeadlineConn is a net.Conn that records SetReadDeadline calls and
 // returns immediately from Read, so a single connReader.Read can be exercised
 // synchronously. setDeadlineErr, when set, makes SetReadDeadline fail; reads
@@ -3267,89 +1146,6 @@ func (c *nonBlockingDeadlineConn) LocalAddr() net.Addr                { return n
 func (c *nonBlockingDeadlineConn) RemoteAddr() net.Addr               { return nil }
 func (c *nonBlockingDeadlineConn) SetDeadline(t time.Time) error      { return nil }
 func (c *nonBlockingDeadlineConn) SetWriteDeadline(t time.Time) error { return nil }
-
-// TestConnReaderReadClearsDeadlineWhenTimeoutDisabled verifies that
-// connReader.Read arms a read deadline when a positive timeout is configured
-// and clears any previously-armed deadline when the timeout is disabled (0).
-// Without the clear, a deadline armed during connection setup (e.g.
-// ConnectTimeout) would persist and keep expiring on an idle connection.
-func TestConnReaderReadClearsDeadlineWhenTimeoutDisabled(t *testing.T) {
-	t.Parallel()
-
-	mock := &nonBlockingDeadlineConn{}
-	cr := &transport.InternalConnReader{InternalConn: mock, InternalR: bufio.NewReader(mock)}
-
-	buf := make([]byte, 1)
-
-	// Positive timeout: Read arms a concrete (non-zero) deadline.
-	cr.SetTimeout(5 * time.Second)
-	_, _ = cr.Read(buf)
-	require.Len(t, mock.deadlines, 1)
-	require.False(t, mock.deadlines[0].IsZero(),
-		"a positive timeout should arm a non-zero read deadline")
-
-	// Disabled timeout: Read must clear the previously-armed deadline.
-	cr.SetTimeout(0)
-	_, _ = cr.Read(buf)
-	require.Len(t, mock.deadlines, 2)
-	require.True(t, mock.deadlines[1].IsZero(),
-		"disabling the timeout should clear the read deadline (zero time)")
-}
-
-// TestConnReaderReadWithNilConnAndPositiveTimeoutDoesNotPanic verifies
-// connReader.Read does not dereference a nil conn when a positive timeout is
-// configured. Only test constructions produce a nil conn, but the
-// deadline-arming branch must be guarded consistently with the other branches.
-func TestConnReaderReadWithNilConnAndPositiveTimeoutDoesNotPanic(t *testing.T) {
-	t.Parallel()
-	cr := &transport.InternalConnReader{InternalR: bufio.NewReader(bytes.NewReader([]byte{0x01}))}
-	cr.SetTimeout(5 * time.Second)
-	require.NotPanics(t, func() {
-		buf := make([]byte, 1)
-		_, _ = cr.Read(buf)
-	})
-}
-
-// TestConnReaderReadReturnsDeadlineError verifies that connReader.Read reports a
-// failing SetReadDeadline instead of reading with no deadline (or a stale one),
-// matching the write path (deadlineContextWriter.InternalWriteContext). All three
-// deadline branches are covered: disarmed, positive timeout, disabled timeout.
-func TestConnReaderReadReturnsDeadlineError(t *testing.T) {
-	t.Parallel()
-
-	setDeadlineErr := errors.New("set read deadline failed")
-
-	for _, tc := range []struct {
-		name    string
-		timeout time.Duration
-		disarm  bool
-	}{
-		{name: "disarmed", timeout: 5 * time.Second, disarm: true},
-		{name: "positive timeout", timeout: 5 * time.Second},
-		{name: "timeout disabled", timeout: 0},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			mock := &nonBlockingDeadlineConn{setDeadlineErr: setDeadlineErr}
-			cr := &transport.InternalConnReader{InternalConn: mock, InternalR: bufio.NewReader(mock)}
-			cr.SetTimeout(tc.timeout)
-			cr.InternalSetDisarm(tc.disarm)
-
-			n, err := cr.Read(make([]byte, 1))
-			require.ErrorIs(t, err, setDeadlineErr)
-			require.Zero(t, n)
-			require.Zero(t, mock.reads,
-				"Read must not touch the connection once arming the deadline failed")
-			// Marked as well as reported: the underlying error need not be a
-			// net.Error, so "nothing was consumed" has to be recoverable by name for
-			// bodyReadDesyncedConn to classify a body read that hits this as fatal.
-			require.ErrorIs(t, err, transport.InternalErrArmReadDeadline)
-			require.True(t, transport.InternalBodyReadDesyncedConn(err),
-				"a body read that never reached the socket leaves the whole body queued")
-		})
-	}
-}
 
 // scriptedConn is a net.Conn whose reads come from a script and which records the
 // read deadlines it was given, so tests can drive connReader.Read's retry loop.
@@ -3380,126 +1176,6 @@ func (c *scriptedConn) LocalAddr() net.Addr              { return nil }
 func (c *scriptedConn) RemoteAddr() net.Addr             { return nil }
 func (c *scriptedConn) SetDeadline(time.Time) error      { return nil }
 func (c *scriptedConn) SetWriteDeadline(time.Time) error { return nil }
-
-// TestConnReaderReadRetriesWhileMakingProgress pins connReader.Read's retry policy.
-// ReadTimeout is a per-read budget, so a large body over a slow link can legitimately
-// need more than one; but it is also the driver's "identify faulty connections early"
-// mechanism (clusterSettings.ReadTimeout), so a peer that has actually stopped must not
-// get maxReadAttempts budgets before the connection is dropped. Progress is what
-// separates the two.
-func TestConnReaderReadRetriesWhileMakingProgress(t *testing.T) {
-	t.Parallel()
-
-	// Every step is one read attempt; a step that carries data and a timeout is a
-	// slow-but-progressing peer, a step with only a timeout is a stalled one.
-	for _, tc := range []struct {
-		name          string
-		bufLen        int
-		steps         []scriptedRead
-		wantN         int
-		wantErr       bool
-		wantDeadlines int
-	}{
-		{
-			// The fault-detection guarantee: nothing delivered means the peer stopped,
-			// so this fails within one ReadTimeout even though data would follow.
-			name:          "empty timeout is not resumed",
-			bufLen:        4,
-			steps:         []scriptedRead{{err: timeoutErr{}}, {data: []byte{1, 2, 3, 4}}},
-			wantN:         0,
-			wantErr:       true,
-			wantDeadlines: 1,
-		},
-		{
-			// The tolerance guarantee: bytes accumulate across attempts and no data is
-			// dropped, so a body slower than one ReadTimeout still completes.
-			name:   "accumulates across progressing attempts",
-			bufLen: 4,
-			steps: []scriptedRead{
-				{data: []byte{1}, err: timeoutErr{}},
-				{data: []byte{2}, err: timeoutErr{}},
-				{data: []byte{3, 4}},
-			},
-			wantN:         4,
-			wantDeadlines: 3,
-		},
-		{
-			name:   "stops once progress stops",
-			bufLen: 4,
-			steps: []scriptedRead{
-				{data: []byte{1}, err: timeoutErr{}},
-				{err: timeoutErr{}},
-				{data: []byte{2, 3, 4}},
-			},
-			wantN:         1,
-			wantErr:       true,
-			wantDeadlines: 2,
-		},
-		{
-			// A non-timeout network error is not resumable, whatever Temporary() says
-			// about it — the stream position can no longer be trusted.
-			name:   "non-timeout net error is not retried",
-			bufLen: 4,
-			steps: []scriptedRead{
-				{data: []byte{1}, err: &net.OpError{Op: "read", Err: errors.New("connection reset by peer")}},
-				{data: []byte{2, 3, 4}},
-			},
-			wantN:         1,
-			wantErr:       true,
-			wantDeadlines: 1,
-		},
-		{
-			// Bounded: a peer trickling one byte per ReadTimeout forever still fails,
-			// after maxReadAttempts.
-			name:   "gives up after maxReadAttempts",
-			bufLen: 10,
-			steps: []scriptedRead{
-				{data: []byte{1}, err: timeoutErr{}},
-				{data: []byte{2}, err: timeoutErr{}},
-				{data: []byte{3}, err: timeoutErr{}},
-				{data: []byte{4}, err: timeoutErr{}},
-				{data: []byte{5}, err: timeoutErr{}},
-				{data: []byte{6}, err: timeoutErr{}},
-			},
-			wantN:         transport.InternalMaxReadAttempts,
-			wantErr:       true,
-			wantDeadlines: transport.InternalMaxReadAttempts,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			mock := &scriptedConn{steps: tc.steps}
-			cr := &transport.InternalConnReader{InternalConn: mock, InternalR: bufio.NewReader(mock)}
-			cr.SetTimeout(time.Second)
-
-			n, err := cr.Read(make([]byte, tc.bufLen))
-
-			require.Equal(t, tc.wantN, n)
-			if tc.wantErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-			require.Len(t, mock.deadlines, tc.wantDeadlines,
-				"one fresh read deadline per attempt")
-		})
-	}
-}
-
-// TestConnReadDelegatesToConnReader verifies that the exported (*driverConn).Read is
-// wired to the connection's connReader, so *driverConn keeps satisfying io.Reader for
-// external callers after the read-path refactor.
-func TestConnReadDelegatesToConnReader(t *testing.T) {
-	t.Parallel()
-
-	payload := []byte{0xDE, 0xAD, 0xBE, 0xEF}
-	c := &transport.Conn{InternalR: &transport.InternalConnReader{InternalR: bufio.NewReader(bytes.NewReader(payload))}}
-
-	buf := make([]byte, len(payload))
-	n, err := c.Read(buf)
-	require.NoError(t, err)
-	require.Equal(t, len(payload), n)
-	require.Equal(t, payload, buf)
-}
 
 // scriptedReadSource is a connReadSource whose reads come from a script of
 // (bytes, error) steps and which records every InternalSetDisarm transition. It lets tests
@@ -3565,103 +1241,6 @@ func (timeoutErr) Temporary() bool { return true }
 
 var _ net.Error = timeoutErr{}
 
-// TestHeaderReadTimeoutIsBenignOnlyWhenNothingWasConsumed pins the line between
-// the two kinds of header-read timeout, for both header readers.
-//
-// Consumed nothing: the peer was simply idle, serve() logs ErrReadHeaderTimeout and
-// reads again. Consumed part of a header: the stream is now at an unknown offset, so
-// the error must NOT be normalised — serve() has to close the connection instead of
-// resuming and mis-framing every frame that follows.
-func TestHeaderReadTimeoutIsBenignOnlyWhenNothingWasConsumed(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name      string
-		steps     []scriptedRead
-		wantIsErr bool
-	}{
-		{
-			name:      "nothing consumed",
-			steps:     []scriptedRead{{err: timeoutErr{}}},
-			wantIsErr: true,
-		},
-		{
-			name:      "partial header consumed",
-			steps:     []scriptedRead{{data: []byte{0x84, 0x00, 0x00, 0x01}, err: timeoutErr{}}},
-			wantIsErr: false,
-		},
-	} {
-		t.Run("frame header/"+tc.name, func(t *testing.T) {
-			c := &transport.Conn{InternalR: &scriptedReadSource{steps: tc.steps}}
-
-			_, err := c.InternalReadFrameHeader(c.InternalR)
-
-			require.Error(t, err)
-			require.Equal(t, tc.wantIsErr, errors.Is(err, implProtocol.ErrReadHeaderTimeout),
-				"errors.Is(ErrReadHeaderTimeout) on %q", err)
-		})
-
-		t.Run("segment header/"+tc.name, func(t *testing.T) {
-			c := &transport.Conn{InternalR: &scriptedReadSource{steps: tc.steps}}
-
-			_, err := c.InternalReadFirstSegmentHeader()
-
-			require.Error(t, err)
-			require.Equal(t, tc.wantIsErr, errors.Is(err, implProtocol.ErrReadHeaderTimeout),
-				"errors.Is(ErrReadHeaderTimeout) on %q", err)
-		})
-	}
-}
-
-// TestProcessFrameDesyncedBodyIsFatalAndWakesCaller pins the two halves of what
-// has to happen when a frame body cannot be read off the wire:
-//
-//   - processFrame returns the error, so serve() closes the connection. The
-//     unread remainder of the body is still queued on the socket, so reusing the
-//     connection would read it as the next frame header and mis-frame everything
-//     after it.
-//   - the waiting caller is handed the error first. head.Stream has already been
-//     removed from c.calls by this point, so closeWithError can no longer find the
-//     call: returning without delivering would leave exec() waiting out its full
-//     request timeout for a response that can never arrive.
-func TestProcessFrameDesyncedBodyIsFatalAndWakesCaller(t *testing.T) {
-	t.Parallel()
-
-	header := []byte{
-		implProtocol.ProtoVersion4 | implProtocol.ProtoDirectionMask, 0x00, 0x00, 0x01, byte(frm.OpResult),
-		0x00, 0x00, 0x00, 0x08, // body length 8
-	}
-
-	// The peer sends a complete header and then stalls partway through the body.
-	r := &scriptedReadSource{steps: []scriptedRead{
-		{data: header},
-		{data: []byte{0x01, 0x02, 0x03}, err: timeoutErr{}},
-	}}
-
-	// Buffered so the delivery does not need a second goroutine.
-	call := &transport.InternalCallReq{InternalStreamID: 1, InternalResp: make(chan transport.InternalCallResp, 1)}
-	c := &transport.Conn{
-		InternalR:       r,
-		InternalCalls:   callTableOf(1, call),
-		InternalVersion: implProtocol.ProtoVersion4,
-		InternalStreams: streams.New(),
-		InternalLogger:  logging.InternalNopLogger{},
-	}
-
-	err := c.InternalProcessFrame(context.Background(), c.InternalR)
-
-	require.Error(t, err, "a half-read body desyncs the connection and must be fatal")
-	var netErr net.Error
-	require.ErrorAs(t, err, &netErr)
-
-	select {
-	case resp := <-call.InternalResp:
-		require.ErrorIs(t, resp.InternalErr, err, "the waiting caller must be handed the same failure")
-	default:
-		t.Fatal("the call was never woken: it would wait out its full request timeout")
-	}
-}
-
 // armFailingConn serves a fixed byte stream and fails SetReadDeadline from
 // failFromArm onwards, with a plain error that is deliberately not a net.Error —
 // net.Conn.SetReadDeadline is only conventionally a *net.OpError, and a connection
@@ -3700,270 +1279,6 @@ func (c *armFailingConn) RemoteAddr() net.Addr             { return nil }
 func (c *armFailingConn) SetDeadline(time.Time) error      { return nil }
 func (c *armFailingConn) SetWriteDeadline(time.Time) error { return nil }
 
-func TestProcessFrameStreamIDMismatchIsAnError(t *testing.T) {
-	t.Parallel()
-
-	header := []byte{
-		implProtocol.ProtoVersion4 | implProtocol.ProtoDirectionMask, 0x00, 0x00, 0x01, byte(frm.OpResult),
-		0x00, 0x00, 0x00, 0x00, // no body
-	}
-
-	// Keyed under stream 1, but the call believes it is stream 2. resp is buffered so
-	// the delivery does not need a second goroutine.
-	call := &transport.InternalCallReq{InternalStreamID: 2, InternalResp: make(chan transport.InternalCallResp, 1)}
-	c := &transport.Conn{
-		InternalCalls:   callTableOf(1, call),
-		InternalVersion: implProtocol.ProtoVersion4,
-		InternalStreams: streams.New(),
-		InternalLogger:  logging.InternalNopLogger{},
-	}
-
-	err := c.InternalProcessFrameSource(context.Background(), transport.InternalFrameSource{InternalR: bytes.NewReader(header)})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "stream 1")
-	require.Contains(t, err.Error(), "stream 2")
-
-	// Nothing was delivered and nothing was removed. Waking the call would mean
-	// trusting call.streamID, which is the half of the disagreement that may name a
-	// stream some other call owns; closeWithError drains the map instead.
-	select {
-	case resp := <-call.InternalResp:
-		t.Fatalf("the mismatched call was woken with %v, leaving closeWithError nothing to drain", resp.InternalErr)
-	default:
-	}
-
-	c.InternalMu.Lock()
-	remaining, entry := c.InternalCalls.Len(), c.InternalCalls.Get(1)
-	c.InternalMu.Unlock()
-	require.Equal(t, 1, remaining, "the disagreeing entry must be left for closeWithError")
-	require.Same(t, call, entry, "the disagreeing entry must be left for closeWithError")
-}
-
-// TestExecStreamIDMismatchFailsTheConnection drives the same mismatch with a real
-// exec() waiting on call.resp, so it pins what actually resolves that call: the
-// connection close the error triggers, not a delivery from the mismatch arm.
-func TestExecStreamIDMismatchFailsTheConnection(t *testing.T) {
-	t.Parallel()
-
-	const testTimeout = 10 * time.Second
-
-	// mismatchHeader builds a response frame header addressed to streamID, sized to
-	// carry no body.
-	mismatchHeader := func(streamID int) []byte {
-		return []byte{
-			implProtocol.ProtoVersion4 | implProtocol.ProtoDirectionMask, 0x00,
-			byte(streamID >> 8), byte(streamID),
-			byte(frm.OpResult),
-			0x00, 0x00, 0x00, 0x00, // no body
-		}
-	}
-
-	// remapWaitingCall starts an exec() and re-keys c.calls so the entry sits under a
-	// different stream than call.streamID. Returns the result channel and the wrong
-	// map key a mismatched response must be addressed to.
-	remapWaitingCall := func(t *testing.T, c *transport.Conn, observerCtx *testStreamObserverContext) (<-chan error, int) {
-		t.Helper()
-
-		errCh := make(chan error, 1)
-		go func() {
-			_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
-				f.Buf = append(f.Buf[:0], 'x')
-				return nil
-			}), nil, 0)
-			errCh <- err
-		}()
-
-		call := waitForSingleCall(t, c)
-		select {
-		case <-observerCtx.started:
-		case <-time.After(testTimeout):
-			t.Fatal("stream observer did not observe the request start")
-		}
-
-		wrongKey := call.InternalStreamID + 1
-		if wrongKey > c.InternalStreams.NumStreams {
-			wrongKey = 1
-		}
-
-		c.InternalMu.Lock()
-		c.InternalCalls.Delete(call.InternalStreamID)
-		c.InternalCalls.Set(wrongKey, call)
-		c.InternalMu.Unlock()
-
-		return errCh, wrongKey
-	}
-
-	// duplicateWaitingCall is remapWaitingCall without the delete: the live entry
-	// stays under call.streamID and a stale one is added beside it, which is what a
-	// recycled-and-re-issued callReq leaves behind. Returns the stale key.
-	duplicateWaitingCall := func(t *testing.T, c *transport.Conn, observerCtx *testStreamObserverContext) (<-chan error, int) {
-		t.Helper()
-
-		errCh := make(chan error, 1)
-		go func() {
-			_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
-				f.Buf = append(f.Buf[:0], 'x')
-				return nil
-			}), nil, 0)
-			errCh <- err
-		}()
-
-		call := waitForSingleCall(t, c)
-		select {
-		case <-observerCtx.started:
-		case <-time.After(testTimeout):
-			t.Fatal("stream observer did not observe the request start")
-		}
-
-		staleKey := call.InternalStreamID + 1
-		if staleKey > c.InternalStreams.NumStreams {
-			staleKey = 1
-		}
-
-		c.InternalMu.Lock()
-		c.InternalCalls.Set(staleKey, call)
-		c.InternalMu.Unlock()
-
-		return errCh, staleKey
-	}
-
-	t.Run("TheCloseReleasesAndRecyclesTheStream", func(t *testing.T) {
-		t.Parallel()
-
-		observerCtx := newTestStreamObserverContext()
-		c, server := newTestExecConn(t, testContextWriter{})
-		c.InternalStreamObserver = &testStreamObserver{ctx: observerCtx}
-		defer server.Close()
-
-		errCh, wrongKey := remapWaitingCall(t, c, observerCtx)
-
-		procErr := c.InternalProcessFrameSource(context.Background(), transport.InternalFrameSource{InternalR: bytes.NewReader(mismatchHeader(wrongKey))})
-		require.Error(t, procErr)
-
-		// The arm left the call where it was, so it is still exec's only way out.
-		select {
-		case err := <-errCh:
-			t.Fatalf("exec returned %v before the connection was closed", err)
-		case <-time.After(10 * time.Millisecond):
-		}
-
-		// serve() does exactly this with the error it was handed.
-		c.InternalCloseWithError(procErr)
-
-		select {
-		case err := <-errCh:
-			require.ErrorIs(t, err, procErr)
-		case <-time.After(testTimeout):
-			t.Fatal("exec did not return after the connection was closed")
-		}
-
-		select {
-		case <-observerCtx.abandoned:
-		case <-time.After(testTimeout):
-			t.Fatal("stream was never marked abandoned")
-		}
-		select {
-		case <-observerCtx.finished:
-			t.Fatal("stream should not also be marked finished")
-		default:
-		}
-
-		// The stream bit stays set: c.streams dies with the connection, and nothing
-		// on the close path clears it for any in-flight call. What must not survive
-		// is the call itself.
-		c.InternalMu.Lock()
-		remaining := c.InternalCalls.Len()
-		c.InternalMu.Unlock()
-		if remaining != 0 {
-			t.Fatalf("expected the close to drain c.calls, got %d", remaining)
-		}
-	})
-
-	// The shape a mismatch can actually take: addCall only ever keys by
-	// call.streamID, so the key and the field can diverge only once the callReq has
-	// been recycled and re-issued, leaving a stale entry beside the live one. Both
-	// entries then point at one callReq, and the close has to survive meeting it
-	// twice.
-	t.Run("ADuplicateEntryDoesNotWedgeTheClose", func(t *testing.T) {
-		t.Parallel()
-
-		observerCtx := newTestStreamObserverContext()
-		c, server := newTestExecConn(t, testContextWriter{})
-		c.InternalStreamObserver = &testStreamObserver{ctx: observerCtx}
-		defer server.Close()
-
-		errCh, staleKey := duplicateWaitingCall(t, c, observerCtx)
-
-		procErr := c.InternalProcessFrameSource(context.Background(), transport.InternalFrameSource{InternalR: bytes.NewReader(mismatchHeader(staleKey))})
-		require.Error(t, procErr)
-
-		closed := make(chan struct{})
-		go func() {
-			c.InternalCloseWithError(procErr)
-			close(closed)
-		}()
-		select {
-		case <-closed:
-		case <-time.After(testTimeout):
-			t.Fatal("closeWithError never returned: it met the recycled callReq a second time")
-		}
-
-		select {
-		case err := <-errCh:
-			require.ErrorIs(t, err, procErr)
-		case <-time.After(testTimeout):
-			t.Fatal("exec did not return after the connection was closed")
-		}
-	})
-
-	t.Run("RacesWithConnectionClose", func(t *testing.T) {
-		t.Parallel()
-
-		for i := 0; i < 100; i++ {
-			observerCtx := newTestStreamObserverContext()
-			c, server := newTestExecConn(t, testContextWriter{})
-			c.InternalStreamObserver = &testStreamObserver{ctx: observerCtx}
-
-			errCh, wrongKey := remapWaitingCall(t, c, observerCtx)
-			header := mismatchHeader(wrongKey)
-
-			var wg sync.WaitGroup
-			wg.Add(2)
-			go func() {
-				defer wg.Done()
-				c.InternalProcessFrameSource(context.Background(), transport.InternalFrameSource{InternalR: bytes.NewReader(header)})
-			}()
-			go func() {
-				defer wg.Done()
-				c.Close()
-			}()
-			wg.Wait()
-			server.Close()
-
-			select {
-			case <-errCh:
-			case <-time.After(testTimeout):
-				t.Fatal("exec never returned after the raced delivery/close")
-			}
-
-			finished, abandoned := false, false
-			select {
-			case <-observerCtx.finished:
-				finished = true
-			default:
-			}
-			select {
-			case <-observerCtx.abandoned:
-				abandoned = true
-			default:
-			}
-			if finished == abandoned {
-				t.Fatalf("iteration %d: expected exactly one terminal callback, finished=%v abandoned=%v", i, finished, abandoned)
-			}
-		}
-	})
-}
-
 // closeOnBodyRead serves header and then, on the read that would fetch the body,
 // marks the connection closed before failing.
 type closeOnBodyRead struct {
@@ -3987,625 +1302,11 @@ func (r *closeOnBodyRead) Read(p []byte) (int, error) {
 	return 0, io.ErrUnexpectedEOF
 }
 
-// TestProcessFrameHandsOffOwnershipWhenTheConnectionCloses pins the handoff
-// callResp.removedFromCalls exists for, in the window that used to get it wrong: the
-// call has already been removed from c.calls, so closeWithError's drain can never
-// reach it, and only exec can release its stream and recycle the callReq. Keying
-// that on c.closed -- as the connection closes underneath the delivery -- makes exec
-// stand down for a drain that will never come, and the stream stays allocated for
-// the rest of the connection's life.
-func TestProcessFrameHandsOffOwnershipWhenTheConnectionCloses(t *testing.T) {
-	t.Parallel()
-
-	const testTimeout = 10 * time.Second
-
-	c, server := newTestExecConn(t, testContextWriter{})
-	c.InternalVersion = implProtocol.ProtoVersion4
-	defer server.Close()
-
-	errCh := make(chan error, 1)
-	go func() {
-		_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
-			f.Buf = append(f.Buf[:0], 'x')
-			return nil
-		}), nil, 0)
-		errCh <- err
-	}()
-
-	call := waitForSingleCall(t, c)
-	header := []byte{
-		implProtocol.ProtoVersion4 | implProtocol.ProtoDirectionMask, 0x00,
-		byte(call.InternalStreamID >> 8), byte(call.InternalStreamID),
-		byte(frm.OpResult),
-		0x00, 0x00, 0x00, 0x08, // a body that never arrives
-	}
-
-	c.InternalProcessFrameSource(context.Background(), transport.InternalFrameSource{InternalR: &closeOnBodyRead{c: c, header: header}})
-
-	select {
-	case err := <-errCh:
-		require.ErrorIs(t, err, io.ErrUnexpectedEOF)
-	case <-time.After(testTimeout):
-		t.Fatal("exec was never woken: it would wait out its full request timeout")
-	}
-
-	if inUse := c.InternalStreams.InUse(); inUse != 0 {
-		t.Fatalf("exec left the stream to a drain that can never run, %d still in use", inUse)
-	}
-}
-
-// TestProcessFrameFailedDeadlineArmIsFatal pins that a body read which never
-// reached the socket is fatal to the connection, and that widening the rule that
-// far did not make every read failure fatal.
-//
-// A failed read-deadline arm is the worst case of a desynced body: connReader.Read
-// returns before touching the socket, so the entire body is still queued on a
-// connection that is otherwise healthy, and serve() reads it as the next frame
-// header. Nothing else surfaces it. Classifying it needs the error to say so —
-// SetReadDeadline's error need not be a net.Error, so the net.Error test alone let
-// this through as a per-request failure and kept the connection in the pool.
-//
-// The second case is the boundary: a short read out of a buffer that has already
-// arrived yields io.ErrUnexpectedEOF, which is not a net.Error either, and must
-// stay per-request. The stream is not desynced — there is no socket behind it — so
-// the connection survives and only the one request fails.
-func TestProcessFrameFailedDeadlineArmIsFatal(t *testing.T) {
-	t.Parallel()
-
-	header := []byte{
-		implProtocol.ProtoVersion4 | implProtocol.ProtoDirectionMask, 0x00, 0x00, 0x01, byte(frm.OpResult),
-		0x00, 0x00, 0x00, 0x08, // body length 8
-	}
-	armErr := errors.New("set read deadline failed")
-
-	for _, tc := range []struct {
-		name      string
-		source    func() (transport.InternalFrameSource, func())
-		wantFatal bool
-	}{
-		{
-			name: "failed deadline arm",
-			source: func() (transport.InternalFrameSource, func()) {
-				// Two arms read the header — one for its first byte with the deadline
-				// disarmed, one for the rest (headerReader) — so the third is the body's.
-				// If that arithmetic ever changes, the header read fails instead and the
-				// "caller was woken" assertion below catches it rather than the test
-				// passing for the wrong reason.
-				mock := &armFailingConn{data: header, failFromArm: 3, err: armErr}
-				cr := &transport.InternalConnReader{InternalConn: mock, InternalR: bufio.NewReader(mock)}
-				cr.SetTimeout(5 * time.Second)
-				return transport.InternalFrameSource{InternalR: cr}, func() {
-					require.Equal(t, len(header), mock.off,
-						"the whole header must have been read before the body arm failed")
-				}
-			},
-			wantFatal: true,
-		},
-		{
-			name: "short read from an arrived buffer",
-			source: func() (transport.InternalFrameSource, func()) {
-				// A header promising 8 body bytes over a buffer holding 3.
-				buf := append(append([]byte(nil), header...), 0x01, 0x02, 0x03)
-				return transport.InternalFrameSource{InternalR: bytes.NewReader(buf)}, func() {}
-			},
-			wantFatal: false,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			src, checkSource := tc.source()
-
-			// Buffered so the delivery does not need a second goroutine.
-			call := &transport.InternalCallReq{InternalStreamID: 1, InternalResp: make(chan transport.InternalCallResp, 1)}
-			c := &transport.Conn{
-				InternalCalls:   callTableOf(1, call),
-				InternalVersion: implProtocol.ProtoVersion4,
-				InternalStreams: streams.New(),
-				InternalLogger:  logging.InternalNopLogger{},
-			}
-
-			err := c.InternalProcessFrameSource(context.Background(), src)
-			checkSource()
-
-			// The caller is always woken, fatal or not: head.Stream has already been
-			// removed from c.calls, so closeWithError can no longer find the call.
-			var delivered error
-			select {
-			case resp := <-call.InternalResp:
-				delivered = resp.InternalErr
-			default:
-				t.Fatal("the call was never woken: it would wait out its full request timeout")
-			}
-			require.Error(t, delivered)
-
-			if tc.wantFatal {
-				require.ErrorIs(t, err, transport.InternalErrArmReadDeadline,
-					"an unread body on a live connection must close it")
-				require.ErrorIs(t, err, armErr, "the underlying failure must stay inspectable")
-				require.ErrorIs(t, delivered, err, "the waiting caller must be handed the same failure")
-				return
-			}
-
-			require.NoError(t, err,
-				"a short read out of an arrived buffer leaves no unread bytes on a socket, so the connection survives")
-			require.ErrorIs(t, delivered, io.ErrUnexpectedEOF)
-		})
-	}
-}
-
-// TestReadFirstSegmentHeaderDisarmsAndRearms pins that the idle wait for a segment
-// header runs with the read deadline disarmed and that the deadline is restored on
-// every exit path — including the error path, where a missed re-arm would leave the
-// connection reading with no deadline for the rest of its life.
-func TestReadFirstSegmentHeaderDisarmsAndRearms(t *testing.T) {
-	t.Parallel()
-
-	header := mustUncompressedSegment(t, []byte("hello"), true)
-
-	for _, tc := range []struct {
-		name  string
-		steps []scriptedRead
-	}{
-		{"header read succeeds", []scriptedRead{{data: header}}},
-		{"header read fails", []scriptedRead{{err: timeoutErr{}}}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			r := &scriptedReadSource{steps: tc.steps}
-			c := &transport.Conn{InternalR: r}
-
-			_, _ = c.InternalReadFirstSegmentHeader()
-
-			// Asserted as a shape rather than an exact slice: the re-arm can come from
-			// headerReader (as soon as a byte arrives) as well as from the deferred
-			// clear, so a successful read legitimately clears twice. What must hold is
-			// that the read starts disarmed, ends re-armed, and is never re-disarmed —
-			// the last of those is what a redundant deferred clear must stay harmless
-			// for.
-			require.NotEmpty(t, r.disarms, "the header read must disarm the deadline")
-			require.True(t, r.disarms[0], "the idle wait must start with the deadline disarmed")
-			require.False(t, r.disarms[len(r.disarms)-1],
-				"the deadline must be re-armed before readFirstSegmentHeader returns")
-			for i, d := range r.disarms[1:] {
-				require.False(t, d, "InternalSetDisarm(true) at index %d: the deadline must never be re-disarmed", i+1)
-			}
-		})
-	}
-}
-
-// TestHeaderReadDisarmIsBoundedToTheFirstByte pins that only the idle wait for a
-// header's first byte runs without a read deadline.
-//
-// The disarm is per-read (connReader.armDeadline runs once per read attempt), so a
-// disarm held across the whole header read leaves every byte of it unbounded: a peer
-// that sends one byte and then stops holds the serve goroutine for as long as it
-// keeps the socket open, and ReadTimeout never drops the connection. That cannot be
-// asserted by waiting — the point of the bug is that nothing ever returns — so it is
-// pinned on the mechanism instead: the first read asks for a single byte, and the
-// deadline is re-armed before the second read starts.
-func TestHeaderReadDisarmIsBoundedToTheFirstByte(t *testing.T) {
-	t.Parallel()
-
-	// A peer that delivers one byte of the header and then stalls until the re-armed
-	// deadline expires.
-	steps := []scriptedRead{{data: []byte{0x84}}, {err: timeoutErr{}}}
-
-	for _, tc := range []struct {
-		name string
-		read func(*transport.Conn) error
-	}{
-		{
-			name: "frame header",
-			read: func(c *transport.Conn) error { _, err := c.InternalReadFrameHeader(c.InternalR); return err },
-		},
-		{
-			name: "segment header",
-			read: func(c *transport.Conn) error { _, err := c.InternalReadFirstSegmentHeader(); return err },
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			r := &scriptedReadSource{steps: steps}
-			c := &transport.Conn{InternalR: r}
-
-			err := tc.read(c)
-
-			require.Error(t, err)
-			// Not normalised: a timeout that already consumed part of a header leaves
-			// the stream at an unknown offset, so serve() must close the connection
-			// rather than resume and mis-frame everything after it.
-			require.False(t, errors.Is(err, implProtocol.ErrReadHeaderTimeout),
-				"a timeout partway through a header must stay fatal, got %q", err)
-
-			require.GreaterOrEqual(t, len(r.readLens), 2,
-				"the header must be read in more than one read for the deadline to be re-armed in between")
-			require.Equal(t, 1, r.readLens[0],
-				"the unbounded read must ask for a single byte, so only the idle wait is unbounded")
-			require.Equal(t, 1, r.arms,
-				"exactly one read must start with the deadline re-armed: the one after the first byte arrived")
-		})
-	}
-}
-
-// TestRecvSegmentReassemblesFrameWithSplitHeader verifies that recvSegment
-// correctly reassembles a single CQL frame that is split across multiple
-// non-self-contained segments even when the 9-byte CQL frame header itself
-// spans two segments. The first segment intentionally carries only 4 payload
-// bytes, so the header must be accumulated across both segments before it can
-// be parsed.
-func TestRecvSegmentReassemblesFrameWithSplitHeader(t *testing.T) {
-	server, client, err := tcpConnPair()
-	require.NoError(t, err)
-	defer server.Close()
-	defer client.Close()
-
-	w := &transport.InternalDeadlineContextWriter{
-		InternalW:         server,
-		InternalSemaphore: make(chan struct{}, 1),
-		InternalQuit:      make(chan struct{}),
-	}
-	w.InternalTimeout.Store(int64(time.Second * 10))
-
-	c := &transport.Conn{
-		InternalR: &transport.InternalConnReader{
-			InternalConn: server,
-			InternalR:    bufio.NewReader(server),
-		},
-		InternalCalls:      newCallTable(),
-		InternalVersion:    implProtocol.ProtoVersion5,
-		InternalAddr:       server.RemoteAddr().String(),
-		InternalStreams:    streams.New(),
-		InternalIsSchemaV2: true,
-		InternalW:          w,
-	}
-	c.InternalWriteTimeout.Store(int64(time.Second * 10))
-
-	call1 := &transport.InternalCallReq{InternalStreamID: 1, InternalResp: make(chan transport.InternalCallResp, 1)}
-	c.InternalCalls.Set(1, call1)
-
-	req := fixtureQueryFrame{
-		statement: "SELECT * FROM system.local",
-		params:    fixtureQueryParams{consistency: cqltype.Quorum, keyspace: "gocql_test"},
-	}
-	framer := implProtocol.NewFramer(nil, implProtocol.ProtoVersion5)
-	require.NoError(t, req.BuildFrame(framer, 1))
-	full := append([]byte(nil), framer.Buf...)
-
-	// Split the frame into two non-self-contained segments. The first carries
-	// only 4 bytes, fewer than the 9-byte CQL frame header, so the header is
-	// split across both segments.
-	const splitAt = 4
-	seg1, err := newUncompressedSegment(full[:splitAt], false)
-	require.NoError(t, err)
-	seg2, err := newUncompressedSegment(full[splitAt:], false)
-	require.NoError(t, err)
-
-	// The helper goroutines only ferry results out; every assertion runs on the
-	// test goroutine. A require failing inside a helper exits that goroutine via
-	// runtime.Goexit, which here would starve recvSegment of its response
-	// delivery and park the test until the suite timeout — and an assertion in
-	// the response goroutine is not synchronised with test completion, so it
-	// could be skipped outright when the test finishes first.
-	writeErr := make(chan error, 1)
-	go func() {
-		buf := append(append([]byte(nil), seg1...), seg2...)
-		_, err := client.Write(buf)
-		writeErr <- err
-	}()
-
-	// A generous margin rather than something tight, so this does not flake
-	// under -race on a loaded CI runner (see TestRecvSegmentPayloadReadIsBounded),
-	// while still failing this test rather than the whole suite on a hang.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	errCh := make(chan error, 1)
-	go func() { errCh <- c.InternalRecvSegment(ctx) }()
-
-	respBuf := make(chan []byte, 1)
-	go func() {
-		resp := <-call1.InternalResp
-		// resp.framer.buf holds the frame body (the header is already parsed).
-		respBuf <- resp.InternalFramer.Buf
-	}()
-
-	select {
-	case <-ctx.Done():
-		t.Fatal("timed out waiting for reassembled frame")
-	case err := <-errCh:
-		require.NoError(t, err)
-	}
-
-	// Delivery to call1.resp happens-before recvSegment returns, so neither
-	// receive can block for long once errCh has fired.
-	require.NoError(t, <-writeErr, "writing the segmented stream")
-	require.Equal(t, full[9:], <-respBuf)
-}
-
-// TestRecvSegmentPayloadReadIsBounded verifies that after the (idle-disarmed)
-// segment header is read, the read deadline is re-armed for the payload read,
-// so a peer that sends a segment header and then stalls does not hang the
-// receive loop indefinitely.
-func TestRecvSegmentPayloadReadIsBounded(t *testing.T) {
-	t.Parallel()
-
-	server, client, err := tcpConnPair()
-	require.NoError(t, err)
-	defer server.Close()
-	defer client.Close()
-
-	cr := &transport.InternalConnReader{InternalConn: server, InternalR: bufio.NewReader(server)}
-	// Use a generous timeout/watchdog margin (rather than something tighter
-	// like 100ms/2s) so this doesn't flake under -race on a loaded CI runner,
-	// where scheduling jitter alone can exceed a couple hundred milliseconds.
-	const readTimeout = 500 * time.Millisecond
-	cr.SetTimeout(readTimeout)
-
-	c := &transport.Conn{
-		InternalR:       cr,
-		InternalCalls:   newCallTable(),
-		InternalVersion: implProtocol.ProtoVersion5,
-		InternalStreams: streams.New(),
-	}
-
-	// Build a valid self-contained segment but send ONLY its 6-byte header: the
-	// header advertises a payload the peer never delivers (a mid-transfer stall).
-	payload := make([]byte, 128)
-	seg, err := newUncompressedSegment(payload, true)
-	require.NoError(t, err)
-	const uncompressedSegmentHeaderSize = 6
-
-	go func() {
-		_, _ = client.Write(seg[:uncompressedSegmentHeaderSize])
-	}()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	errCh := make(chan error, 1)
-	go func() { errCh <- c.InternalRecvSegment(ctx) }()
-
-	select {
-	case err := <-errCh:
-		require.Error(t, err, "recvSegment should fail when the advertised payload never arrives")
-		require.False(t, errors.Is(err, implProtocol.ErrReadHeaderTimeout),
-			"a mid-transfer payload stall must not be normalised to the benign idle header timeout")
-	case <-time.After(5 * time.Second):
-		t.Fatal("recvSegment hung on the payload read; the read deadline was not re-armed after the segment header")
-	}
-}
-
-// TestStartupOptionsKeepDriverKeys pins that ApplicationInfo cannot overwrite the
-// STARTUP options the driver owns.
-//
-// CQL_VERSION, DRIVER_NAME and DRIVER_VERSION describe the driver and the
-// protocol it speaks. A callback that set CQL_VERSION could make every connection
-// in the cluster fail its handshake; one that set DRIVER_NAME or DRIVER_VERSION
-// would misreport the driver to the server for the life of the connection.
-// SESSION_ID is driver-owned for the same reason: it is what correlates a
-// session's connections in system.clients.
-func TestStartupOptionsKeepDriverKeys(t *testing.T) {
-	t.Parallel()
-
-	const (
-		cqlVersion    = "3.4.5"
-		driverName    = "gocql"
-		driverVersion = "1.2.3"
-		sessionID     = "91b0b1a2-0000-4000-8000-000000000001"
-	)
-
-	t.Run("no ApplicationInfo", func(t *testing.T) {
-		m := transport.InternalStartupOptions(cqlVersion, driverName, driverVersion, nil, nil, sessionID, false)
-
-		require.Equal(t, map[string]string{
-			"CQL_VERSION":                         cqlVersion,
-			"DRIVER_NAME":                         driverName,
-			"DRIVER_VERSION":                      driverVersion,
-			transport.InternalSessionIDStartupKey: sessionID,
-		}, m)
-	})
-
-	t.Run("application options are kept", func(t *testing.T) {
-		m := transport.InternalStartupOptions(cqlVersion, driverName, driverVersion,
-			endpoint.NewStaticApplicationInfo("app", "9.9.9", "client-id"), nil, sessionID, false)
-
-		require.Equal(t, "app", m["APPLICATION_NAME"])
-		require.Equal(t, "9.9.9", m["APPLICATION_VERSION"])
-		require.Equal(t, "client-id", m["CLIENT_ID"])
-		require.Equal(t, cqlVersion, m["CQL_VERSION"])
-		require.Equal(t, driverName, m["DRIVER_NAME"])
-		require.Equal(t, driverVersion, m["DRIVER_VERSION"])
-		require.Equal(t, sessionID, m[transport.InternalSessionIDStartupKey])
-	})
-
-	t.Run("driver-owned keys win", func(t *testing.T) {
-		m := transport.InternalStartupOptions(cqlVersion, driverName, driverVersion,
-			applicationInfoFunc(func(opts map[string]string) {
-				opts["CQL_VERSION"] = "9.9.9"
-				opts["DRIVER_NAME"] = "not-gocql"
-				opts["DRIVER_VERSION"] = "0.0.0"
-				opts[transport.InternalSessionIDStartupKey] = "not-the-session-id"
-				opts["APPLICATION_NAME"] = "app"
-			}), nil, sessionID, false)
-
-		require.Equal(t, cqlVersion, m["CQL_VERSION"], "a custom CQL version would fail every handshake")
-		require.Equal(t, driverName, m["DRIVER_NAME"])
-		require.Equal(t, driverVersion, m["DRIVER_VERSION"])
-		require.Equal(t, sessionID, m[transport.InternalSessionIDStartupKey], "a custom session id would break correlating a session's connections")
-		require.Equal(t, "app", m["APPLICATION_NAME"], "keys the driver does not own must still come through")
-	})
-}
-
 // applicationInfoFunc adapts a function to ApplicationInfo, so a test can supply
 // options StaticApplicationInfo would never produce.
 type applicationInfoFunc func(map[string]string)
 
 func (f applicationInfoFunc) UpdateStartupOptions(opts map[string]string) { f(opts) }
-
-// TestSystemRequestTimeoutRaceWithFinalizeConnection pins the state
-// driver-issued system queries read (driverConn.systemRequest, holding the client-side
-// timeout and the pre-rendered USING TIMEOUT clause) as safe to read while
-// finalizeConnection switches it from ConnectTimeout to
-// MetadataSchemaRequestTimeout.
-//
-// The two are concurrent in practice: the control connection is registered for
-// server push events during controlConn.setupConn, but its
-// finalizeConnection() is deferred to the very end of Session.init. A keyspace
-// SCHEMA_CHANGE delivered inside that window (a freshly bootstrapped cluster
-// still creating its internal keyspaces is enough) makes the event-debouncer
-// goroutine run handleKeyspaceChange -> awaitSchemaAgreement -> querySystem on
-// the connection the main goroutine is mid-write on.
-//
-// Run under -race: were the two values plain fields again, this would report
-// "DATA RACE" on them — a torn string header for the clause and a stale timeout.
-func TestSystemRequestTimeoutRaceWithFinalizeConnection(t *testing.T) {
-	t.Parallel()
-
-	// finalizeConnection only stores into atomics - driverConn.writeTimeout,
-	// driverConn.systemRequest, and the timeout field of each of these two - so neither
-	// needs a net.Conn behind it.
-	c := &transport.Conn{
-		InternalR: &transport.InternalConnReader{},
-		InternalW: &transport.InternalDeadlineContextWriter{},
-		InternalCfg: &transport.ConnConfig{
-			ConnectTimeout: 10 * time.Second,
-			WriteTimeout:   2 * time.Second,
-			ReadTimeout:    3 * time.Second,
-		},
-		InternalMetadataTimeout: 42 * time.Millisecond,
-		// Only a ScyllaDB connection renders the USING TIMEOUT clause.
-		InternalScyllaSupported: endpoint.ScyllaConnectionFeatures{
-			ScyllaHostFeatures: *func() *endpoint.ScyllaHostFeatures {
-				opaqueStorageValuex := new(endpoint.ScyllaHostFeatures)
-				implEndpoint.ScyllaHostFeaturesData(opaqueStorageValuex).InternalIsScylla = true
-				return opaqueStorageValuex
-			}(),
-		},
-	}
-	c.InternalSetSystemRequestTimeout(c.InternalCfg.ConnectTimeout)
-
-	// The only two snapshots a reader may observe: the one the connection is
-	// dialed with, and the one finalizeConnection replaces it with. Spelling both
-	// out keeps this test from re-deriving the rendering rule, which is
-	// TestSystemRequestStateClauseFollowsTimeout's job.
-	var (
-		beforeFinalize = transport.InternalSystemRequestState{
-			InternalTimeout:     c.InternalCfg.ConnectTimeout,
-			InternalUsingClause: " USING TIMEOUT 10000ms",
-		}
-		afterFinalize = transport.InternalSystemRequestState{
-			InternalTimeout:     c.InternalMetadataTimeout,
-			InternalUsingClause: " USING TIMEOUT 42ms",
-		}
-	)
-
-	const readers = 4
-	done := make(chan struct{})
-	var wg, spinning sync.WaitGroup
-	wg.Add(readers)
-	spinning.Add(readers)
-	for i := 0; i < readers; i++ {
-		go func() {
-			defer wg.Done()
-			first := true
-			for {
-				select {
-				case <-done:
-					return
-				default:
-				}
-				// The single load querySystem performs.
-				state := c.InternalGetSystemRequestState()
-				if first {
-					// Only write once every reader is already spinning, so the
-					// two sides genuinely overlap.
-					spinning.Done()
-					first = false
-				}
-				// Both values must come from the same snapshot: the clause the
-				// server is asked to honour always matches the deadline the
-				// client is waiting on, never the other transition's value.
-				if state != beforeFinalize && state != afterFinalize {
-					t.Errorf("observed %+v, which is neither transition's snapshot; want %+v or %+v",
-						state, beforeFinalize, afterFinalize)
-					return
-				}
-			}
-		}()
-	}
-
-	spinning.Wait()
-	c.InternalFinalizeConnection()
-	close(done)
-	wg.Wait()
-
-	require.Equal(t, afterFinalize, c.InternalGetSystemRequestState(),
-		"finalizeConnection should publish the metadata timeout and its clause as one snapshot")
-}
-
-// TestSystemRequestStateClauseFollowsTimeout pins the USING TIMEOUT clause as
-// derived purely from the timeout in effect and whether the peer is ScyllaDB.
-//
-// The zero case is the one worth guarding: MetadataSchemaRequestTimeout is
-// documented as "positive or zero" (see clusterSettings.Validate), and by the time
-// finalizeConnection applies it, startupCoordinator.options has already rendered a
-// clause from ConnectTimeout. Were that clause carried over, a caller who disabled
-// the metadata timeout would still have every system query bounded server-side by
-// an unrelated setting - while DRIVER_CONFIG reported no timeout at all, since
-// buildControlPlaneReport omits a non-positive one.
-func TestSystemRequestStateClauseFollowsTimeout(t *testing.T) {
-	t.Parallel()
-
-	newConn := func(isScylla bool) *transport.Conn {
-		c := &transport.Conn{InternalScyllaSupported: endpoint.ScyllaConnectionFeatures{
-			ScyllaHostFeatures: *func() *endpoint.ScyllaHostFeatures {
-				opaqueStorageValuexx := new(endpoint.ScyllaHostFeatures)
-				implEndpoint.ScyllaHostFeaturesData(opaqueStorageValuexx).InternalIsScylla = isScylla
-				return opaqueStorageValuexx
-
-				// As startupCoordinator.options leaves it: a clause rendered from
-				// ConnectTimeout, before finalizeConnection applies the metadata timeout.
-			}(),
-		}}
-
-		c.InternalSetSystemRequestTimeout(600 * time.Millisecond)
-		return c
-	}
-
-	t.Run("scylla renders the clause", func(t *testing.T) {
-		require.Equal(t, transport.InternalSystemRequestState{
-			InternalTimeout:     600 * time.Millisecond,
-			InternalUsingClause: " USING TIMEOUT 600ms",
-		}, newConn(true).InternalGetSystemRequestState())
-	})
-
-	t.Run("cassandra renders no clause", func(t *testing.T) {
-		require.Equal(t, transport.InternalSystemRequestState{InternalTimeout: 600 * time.Millisecond},
-			newConn(false).InternalGetSystemRequestState())
-	})
-
-	t.Run("a disabled timeout clears the clause", func(t *testing.T) {
-		c := newConn(true)
-		c.InternalSetSystemRequestTimeout(0)
-		require.Equal(t, transport.InternalSystemRequestState{}, c.InternalGetSystemRequestState(),
-			"a zero metadata timeout must not leave the ConnectTimeout clause in force")
-	})
-
-	// The cases above assert the snapshot itself; this one goes through
-	// systemRequestStatement, which is how the query paths reach it.
-	t.Run("the statement carries the clause in force", func(t *testing.T) {
-		c := newConn(true)
-		stmt, timeout := c.InternalSystemRequestStatement(transport.InternalQrySystemLocal)
-		require.Equal(t, transport.InternalQrySystemLocal+" USING TIMEOUT 600ms", stmt)
-		require.Equal(t, 600*time.Millisecond, timeout)
-
-		c.InternalSetSystemRequestTimeout(0)
-		stmt, timeout = c.InternalSystemRequestStatement(transport.InternalQrySystemLocal)
-		require.Equal(t, transport.InternalQrySystemLocal, stmt, "a disabled timeout appends nothing")
-		require.Equal(t, time.Duration(0), timeout)
-	})
-}
 
 // recordingLogger captures log output for assertions.
 //
@@ -4639,55 +1340,6 @@ func (l *recordingLogger) String() string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.capture.String()
-}
-
-// TestStartupCompressorNotSupported covers the negotiation fallback: the server's
-// SUPPORTED response does not name the configured compressor, so the driver drops it and
-// continues uncompressed rather than sending a STARTUP the server would reject.
-//
-// The fallback itself is deliberate and stays. What is asserted here is that it is no
-// longer silent: a user who asked for snappy and got an uncompressed connection had no
-// way to find out short of reading driver internals, and on a mixed cluster this can
-// affect one node out of several. TestCompressorNegotiated is the integration-side check
-// that it does not happen on a healthy cluster.
-//
-// The server advertises lz4 rather than nothing, which is the sharper case: it separates
-// "this node offers no compression" from "this node offers a different algorithm", and
-// the warning has to name both sides to be worth logging.
-func TestStartupCompressorNotSupported(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	srv := NewTestServerWithAddressAndSupportedFactory("127.0.0.1:0", t, implProtocol.ProtoVersion4, ctx,
-		func(net.Conn) map[string][]string {
-			return map[string][]string{"COMPRESSION": {"lz4"}}
-		})
-	defer srv.Stop()
-
-	rec := &recordingLogger{}
-	cluster := testCluster(implProtocol.ProtoVersion4, srv.Address)
-	cluster.Compressor = wirecompress.SnappyCompressor{}
-	cluster.Logger = rec
-
-	db, err := implCluster.InternalClusterSettingsOpen(cluster)
-	require.NoError(t, err)
-	defer db.Close()
-
-	conn := implCluster.InternalSessionGetConn(db)
-	require.NotNil(t, conn, "no connection available")
-
-	require.Nil(t, conn.InternalCompressor, "the refused compressor must be dropped")
-	// The flag is the part that actually matters: a framer still carrying FlagCompress
-	// against a server expecting plaintext would fail every request.
-	require.Zero(t, conn.InternalFramers.InternalDefaults.InternalFlags&frm.FlagCompress,
-		"cached framer flags must not claim compression")
-
-	logged := rec.String()
-	require.Contains(t, logged, "snappy", "the warning must name the compressor that was refused")
-	require.Contains(t, logged, "lz4", "the warning must name what the server offered instead")
-
-	// The connection is still expected to work -- the point of the fallback.
-	require.NoError(t, execTestStatement(context.Background(), db, "void", Options{}))
 }
 
 // compressionInjectingAppInfo is an ApplicationInfo that writes the driver-owned
@@ -4728,86 +1380,2204 @@ func parseStartupOptions(tb testing.TB, body []byte) map[string]string {
 	return opts
 }
 
-// TestStartupCompressionIsDriverOwned pins that COMPRESSION in the STARTUP options is
-// always the driver's negotiated choice, never something an ApplicationInfo callback
-// left behind.
-//
-// The callback runs first and is handed the raw map, so it can set any key. The driver
-// overwrites the keys it always writes, but COMPRESSION is written only when the
-// server's SUPPORTED list names the configured compressor. On every other path a
-// callback-supplied value would otherwise be sent as though the driver had chosen it:
-// the server would compress with an algorithm the framers are not using, and every
-// frame after the handshake would be unreadable by one side.
-//
-// Both paths that skip the write are covered -- a compressor configured but refused,
-// and no compressor configured at all.
-func TestStartupCompressionIsDriverOwned(t *testing.T) {
-	for _, tc := range []struct {
-		name       string
-		compressor implProtocol.Compressor
-	}{
-		{"configured compressor the server refuses", wirecompress.SnappyCompressor{}},
-		{"no compressor configured", nil},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-
-			var mu sync.Mutex
-			var startups []map[string]string
-
-			srv := newTestServerOpts{
-				addr:     "127.0.0.1:0",
-				protocol: implProtocol.ProtoVersion4,
-				supportedFactory: func(net.Conn) map[string][]string {
-					// The server does offer lz4, so the callback's value names a real
-					// algorithm. Only the driver's own compressor is unsupported.
-					return map[string][]string{"COMPRESSION": {"lz4"}}
-				},
-				recvHook: func(f *implProtocol.Framer) {
-					if f.Header.Op != frm.OpStartup {
-						return
-					}
-					mu.Lock()
-					defer mu.Unlock()
-					startups = append(startups, parseStartupOptions(t, append([]byte(nil), f.Buf...)))
-				},
-			}.newServer(t, ctx)
-			defer srv.Stop()
-
-			cluster := testCluster(implProtocol.ProtoVersion4, srv.Address)
-			cluster.Compressor = tc.compressor
-			cluster.ApplicationInfo = compressionInjectingAppInfo{algorithm: "lz4"}
-
-			db, err := implCluster.InternalClusterSettingsOpen(cluster)
-			require.NoError(t, err)
-			defer db.Close()
-
-			require.NoError(t, execTestStatement(context.Background(), db, "void", Options{}))
-
-			conn := implCluster.InternalSessionGetConn(db)
-			require.NotNil(t, conn)
-			require.Nil(t, conn.InternalCompressor, "no compressor was negotiated, so none may remain")
-			require.Zero(t, conn.InternalFramers.InternalDefaults.InternalFlags&frm.FlagCompress)
-
-			mu.Lock()
-			defer mu.Unlock()
-			require.NotEmpty(t, startups, "no STARTUP frame was observed")
-			for _, opts := range startups {
-				require.NotContains(t, opts, "COMPRESSION",
-					"STARTUP advertised a compression the driver is not using")
-				// The callback still reached the server, so the test is not passing
-				// because ApplicationInfo was ignored wholesale.
-				require.Contains(t, opts, "DRIVER_NAME")
-			}
-		})
-	}
-}
-
 func newCallTable() *transport.InternalCallTable { return &transport.InternalCallTable{} }
 
 func callTableOf(stream int, call *transport.InternalCallReq) *transport.InternalCallTable {
 	t := newCallTable()
 	t.Set(stream, call)
 	return t
+}
+
+func TestConn(t *testing.T) {
+	t.Run("ConnReader", func(t *testing.T) {
+		// TestConn/ConnReader/ClearsDeadlineWhenTimeoutDisabled verifies that
+		// connReader.Read arms a read deadline when a positive timeout is configured
+		// and clears any previously-armed deadline when the timeout is disabled (0).
+		// Without the clear, a deadline armed during connection setup (e.g.
+		// ConnectTimeout) would persist and keep expiring on an idle connection.
+		t.Run("ClearsDeadlineWhenTimeoutDisabled", func(t *testing.T) {
+			t.Parallel()
+
+			mock := &nonBlockingDeadlineConn{}
+			cr := &transport.InternalConnReader{InternalConn: mock, InternalR: bufio.NewReader(mock)}
+
+			buf := make([]byte, 1)
+
+			// Positive timeout: Read arms a concrete (non-zero) deadline.
+			cr.SetTimeout(5 * time.Second)
+			_, _ = cr.Read(buf)
+			require.Len(t, mock.deadlines, 1)
+			require.False(t, mock.deadlines[0].IsZero(),
+				"a positive timeout should arm a non-zero read deadline")
+
+			// Disabled timeout: Read must clear the previously-armed deadline.
+			cr.SetTimeout(0)
+			_, _ = cr.Read(buf)
+			require.Len(t, mock.deadlines, 2)
+			require.True(t, mock.deadlines[1].IsZero(),
+				"disabling the timeout should clear the read deadline (zero time)")
+		})
+
+		// TestConn/ConnReader/NilConnPositiveTimeoutNoPanic verifies
+		// connReader.Read does not dereference a nil conn when a positive timeout is
+		// configured. Only test constructions produce a nil conn, but the
+		// deadline-arming branch must be guarded consistently with the other branches.
+		t.Run("NilConnPositiveTimeoutNoPanic", func(t *testing.T) {
+			t.Parallel()
+			cr := &transport.InternalConnReader{InternalR: bufio.NewReader(bytes.NewReader([]byte{0x01}))}
+			cr.SetTimeout(5 * time.Second)
+			require.NotPanics(t, func() {
+				buf := make([]byte, 1)
+				_, _ = cr.Read(buf)
+			})
+		})
+
+		// TestConn/ConnReader/RetriesWhileMakingProgress pins connReader.Read's retry policy.
+		// ReadTimeout is a per-read budget, so a large body over a slow link can legitimately
+		// need more than one; but it is also the driver's "identify faulty connections early"
+		// mechanism (clusterSettings.ReadTimeout), so a peer that has actually stopped must not
+		// get maxReadAttempts budgets before the connection is dropped. Progress is what
+		// separates the two.
+		t.Run("RetriesWhileMakingProgress", func(t *testing.T) {
+			t.Parallel()
+
+			// Every step is one read attempt; a step that carries data and a timeout is a
+			// slow-but-progressing peer, a step with only a timeout is a stalled one.
+			for _, tc := range []struct {
+				name          string
+				bufLen        int
+				steps         []scriptedRead
+				wantN         int
+				wantErr       bool
+				wantDeadlines int
+			}{
+				{
+					// The fault-detection guarantee: nothing delivered means the peer stopped,
+					// so this fails within one ReadTimeout even though data would follow.
+					name:          "empty timeout is not resumed",
+					bufLen:        4,
+					steps:         []scriptedRead{{err: timeoutErr{}}, {data: []byte{1, 2, 3, 4}}},
+					wantN:         0,
+					wantErr:       true,
+					wantDeadlines: 1,
+				},
+				{
+					// The tolerance guarantee: bytes accumulate across attempts and no data is
+					// dropped, so a body slower than one ReadTimeout still completes.
+					name:   "accumulates across progressing attempts",
+					bufLen: 4,
+					steps: []scriptedRead{
+						{data: []byte{1}, err: timeoutErr{}},
+						{data: []byte{2}, err: timeoutErr{}},
+						{data: []byte{3, 4}},
+					},
+					wantN:         4,
+					wantDeadlines: 3,
+				},
+				{
+					name:   "stops once progress stops",
+					bufLen: 4,
+					steps: []scriptedRead{
+						{data: []byte{1}, err: timeoutErr{}},
+						{err: timeoutErr{}},
+						{data: []byte{2, 3, 4}},
+					},
+					wantN:         1,
+					wantErr:       true,
+					wantDeadlines: 2,
+				},
+				{
+					// A non-timeout network error is not resumable, whatever Temporary() says
+					// about it — the stream position can no longer be trusted.
+					name:   "non-timeout net error is not retried",
+					bufLen: 4,
+					steps: []scriptedRead{
+						{data: []byte{1}, err: &net.OpError{Op: "read", Err: errors.New("connection reset by peer")}},
+						{data: []byte{2, 3, 4}},
+					},
+					wantN:         1,
+					wantErr:       true,
+					wantDeadlines: 1,
+				},
+				{
+					// Bounded: a peer trickling one byte per ReadTimeout forever still fails,
+					// after maxReadAttempts.
+					name:   "gives up after maxReadAttempts",
+					bufLen: 10,
+					steps: []scriptedRead{
+						{data: []byte{1}, err: timeoutErr{}},
+						{data: []byte{2}, err: timeoutErr{}},
+						{data: []byte{3}, err: timeoutErr{}},
+						{data: []byte{4}, err: timeoutErr{}},
+						{data: []byte{5}, err: timeoutErr{}},
+						{data: []byte{6}, err: timeoutErr{}},
+					},
+					wantN:         transport.InternalMaxReadAttempts,
+					wantErr:       true,
+					wantDeadlines: transport.InternalMaxReadAttempts,
+				},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					mock := &scriptedConn{steps: tc.steps}
+					cr := &transport.InternalConnReader{InternalConn: mock, InternalR: bufio.NewReader(mock)}
+					cr.SetTimeout(time.Second)
+
+					n, err := cr.Read(make([]byte, tc.bufLen))
+
+					require.Equal(t, tc.wantN, n)
+					if tc.wantErr {
+						require.Error(t, err)
+					} else {
+						require.NoError(t, err)
+					}
+					require.Len(t, mock.deadlines, tc.wantDeadlines,
+						"one fresh read deadline per attempt")
+				})
+			}
+		})
+
+		// TestConn/ConnReader/ReturnsDeadlineError verifies that connReader.Read reports a
+		// failing SetReadDeadline instead of reading with no deadline (or a stale one),
+		// matching the write path (deadlineContextWriter.InternalWriteContext). All three
+		// deadline branches are covered: disarmed, positive timeout, disabled timeout.
+		t.Run("ReturnsDeadlineError", func(t *testing.T) {
+			t.Parallel()
+
+			setDeadlineErr := errors.New("set read deadline failed")
+
+			for _, tc := range []struct {
+				name    string
+				timeout time.Duration
+				disarm  bool
+			}{
+				{name: "disarmed", timeout: 5 * time.Second, disarm: true},
+				{name: "positive timeout", timeout: 5 * time.Second},
+				{name: "timeout disabled", timeout: 0},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					t.Parallel()
+
+					mock := &nonBlockingDeadlineConn{setDeadlineErr: setDeadlineErr}
+					cr := &transport.InternalConnReader{InternalConn: mock, InternalR: bufio.NewReader(mock)}
+					cr.SetTimeout(tc.timeout)
+					cr.InternalSetDisarm(tc.disarm)
+
+					n, err := cr.Read(make([]byte, 1))
+					require.ErrorIs(t, err, setDeadlineErr)
+					require.Zero(t, n)
+					require.Zero(t, mock.reads,
+						"Read must not touch the connection once arming the deadline failed")
+					// Marked as well as reported: the underlying error need not be a
+					// net.Error, so "nothing was consumed" has to be recoverable by name for
+					// bodyReadDesyncedConn to classify a body read that hits this as fatal.
+					require.ErrorIs(t, err, transport.InternalErrArmReadDeadline)
+					require.True(t, transport.InternalBodyReadDesyncedConn(err),
+						"a body read that never reached the socket leaves the whole body queued")
+				})
+			}
+		})
+	})
+
+	t.Run("Exec", func(t *testing.T) {
+		t.Run("CloseWithError", func(t *testing.T) {
+			t.Parallel()
+
+			const execCloseTestTimeout = 10 * time.Second
+
+			t.Run("BuildFrameErrorReleasesResources", func(t *testing.T) {
+				c, server := newTestExecConn(t, testContextWriter{})
+				defer server.Close()
+
+				_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
+					return io.ErrUnexpectedEOF
+				}), nil, 0)
+				if !errors.Is(err, io.ErrUnexpectedEOF) {
+					t.Fatalf("expected build error %v, got %v", io.ErrUnexpectedEOF, err)
+				}
+
+				c.InternalMu.Lock()
+				defer c.InternalMu.Unlock()
+				if c.InternalCalls.Len() != 0 {
+					t.Fatalf("expected no in-flight calls after build error, got %d", c.InternalCalls.Len())
+				}
+			})
+
+			t.Run("ContextCanceledBeforeWriteReleasesResources", func(t *testing.T) {
+				writeEntered := make(chan struct{})
+				c, server := newTestExecConn(t, contextWriterFunc(func(ctx context.Context, p []byte) (int, error) {
+					close(writeEntered)
+					<-ctx.Done()
+					return 0, ctx.Err()
+				}))
+				defer server.Close()
+
+				ctx, cancel := context.WithCancel(context.Background())
+				errCh := make(chan error, 1)
+				go func() {
+					_, err := c.InternalExec(ctx, implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
+						f.Buf = append(f.Buf[:0], 'x')
+						return nil
+					}), nil, 0)
+					errCh <- err
+				}()
+
+				select {
+				case <-writeEntered:
+				case <-time.After(execCloseTestTimeout):
+					t.Fatal("exec never reached the write path")
+				}
+				cancel()
+
+				select {
+				case err := <-errCh:
+					if !errors.Is(err, context.Canceled) {
+						t.Fatalf("expected context cancel error %v, got %v", context.Canceled, err)
+					}
+				case <-time.After(execCloseTestTimeout):
+					t.Fatal("exec deadlocked after context cancellation before write")
+				}
+
+				c.InternalMu.Lock()
+				defer c.InternalMu.Unlock()
+				if c.InternalCalls.Len() != 0 {
+					t.Fatalf("expected no in-flight calls after canceled write, got %d", c.InternalCalls.Len())
+				}
+			})
+
+			t.Run("ResponseErrorReleasesResources", func(t *testing.T) {
+				c, server := newTestExecConn(t, testContextWriter{})
+				defer server.Close()
+
+				errCh := make(chan error, 1)
+				go func() {
+					_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
+						f.Buf = append(f.Buf[:0], 'x')
+						return nil
+					}), nil, 0)
+					errCh <- err
+				}()
+
+				waitForSingleCall(t, c)
+				call := detachSingleCall(t, c)
+				call.InternalResp <- transport.InternalCallResp{InternalErr: io.EOF}
+
+				select {
+				case err := <-errCh:
+					if !errors.Is(err, io.EOF) {
+						t.Fatalf("expected response error %v, got %v", io.EOF, err)
+					}
+				case <-time.After(execCloseTestTimeout):
+					t.Fatal("exec deadlocked after response error")
+				}
+
+				c.InternalMu.Lock()
+				defer c.InternalMu.Unlock()
+				if c.InternalCalls.Len() != 0 {
+					t.Fatalf("expected no in-flight calls after response error, got %d", c.InternalCalls.Len())
+				}
+			})
+
+			t.Run("PartialWriteDoesNotDeadlock", func(t *testing.T) {
+				c, server := newTestExecConn(t, testContextWriter{
+					n:   1,
+					err: io.ErrUnexpectedEOF,
+				})
+				defer server.Close()
+
+				errCh := make(chan error, 1)
+				go func() {
+					_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
+						f.Buf = append(f.Buf[:0], 'x')
+						return nil
+					}), nil, 0)
+					errCh <- err
+				}()
+
+				select {
+				case err := <-errCh:
+					if !errors.Is(err, io.ErrUnexpectedEOF) {
+						t.Fatalf("expected write error %v, got %v", io.ErrUnexpectedEOF, err)
+					}
+				case <-time.After(execCloseTestTimeout):
+					t.Fatal("exec deadlocked after partial write failure")
+				}
+			})
+
+			t.Run("ConnectionCloseErrorDoesNotDeadlock", func(t *testing.T) {
+				writeStarted := make(chan struct{})
+				var writeStartedOnce sync.Once
+				c, server := newTestExecConn(t, testContextWriter{
+					onWrite: func() {
+						writeStartedOnce.Do(func() {
+							close(writeStarted)
+						})
+					},
+				})
+				defer server.Close()
+
+				closeDone := make(chan struct{})
+				go func() {
+					<-writeStarted
+					c.InternalCloseWithError(io.EOF)
+					close(closeDone)
+				}()
+
+				errCh := make(chan error, 1)
+				go func() {
+					_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
+						f.Buf = append(f.Buf[:0], 'x')
+						return nil
+					}), nil, 0)
+					errCh <- err
+				}()
+
+				select {
+				case err := <-errCh:
+					if !errors.Is(err, io.EOF) {
+						t.Fatalf("expected close error %v, got %v", io.EOF, err)
+					}
+				case <-time.After(execCloseTestTimeout):
+					t.Fatal("exec deadlocked after closeWithError")
+				}
+
+				select {
+				case <-closeDone:
+				case <-time.After(execCloseTestTimeout):
+					t.Fatal("closeWithError deadlocked waiting for exec to release the call")
+				}
+			})
+
+			t.Run("TimeoutUnblocksAbandonRecvCall", func(t *testing.T) {
+				c, server := newTestExecConn(t, testContextWriter{})
+				defer server.Close()
+
+				errCh := make(chan error, 1)
+				go func() {
+					_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
+						f.Buf = append(f.Buf[:0], 'x')
+						return nil
+					}), nil, time.Millisecond)
+					errCh <- err
+				}()
+
+				call := waitForSingleCall(t, c)
+
+				select {
+				case err := <-errCh:
+					if !errors.Is(err, runtimeerrors.ErrTimeoutNoResponse) {
+						t.Fatalf("expected timeout error %v, got %v", runtimeerrors.ErrTimeoutNoResponse, err)
+					}
+				case <-time.After(execCloseTestTimeout):
+					t.Fatal("exec deadlocked waiting for timeout")
+				}
+
+				if !c.InternalRemoveCallIfOpen(call.InternalStreamID) {
+					t.Fatal("expected timed out call to still be registered")
+				}
+
+				done := make(chan struct{})
+				go func() {
+					c.InternalAbandonRecvCall(call, c.InternalGetReadFramer())
+					close(done)
+				}()
+
+				select {
+				case <-done:
+				case <-time.After(execCloseTestTimeout):
+					t.Fatal("abandonRecvCall deadlocked after timeout")
+				}
+			})
+
+			t.Run("ContextCancelUnblocksAbandonRecvCall", func(t *testing.T) {
+				c, server := newTestExecConn(t, testContextWriter{})
+				defer server.Close()
+
+				ctx, cancel := context.WithCancel(context.Background())
+				errCh := make(chan error, 1)
+				go func() {
+					_, err := c.InternalExec(ctx, implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
+						f.Buf = append(f.Buf[:0], 'x')
+						return nil
+					}), nil, 0)
+					errCh <- err
+				}()
+
+				call := waitForSingleCall(t, c)
+				cancel()
+
+				select {
+				case err := <-errCh:
+					if !errors.Is(err, context.Canceled) {
+						t.Fatalf("expected context cancel error %v, got %v", context.Canceled, err)
+					}
+				case <-time.After(execCloseTestTimeout):
+					t.Fatal("exec deadlocked waiting for context cancellation")
+				}
+
+				if !c.InternalRemoveCallIfOpen(call.InternalStreamID) {
+					t.Fatal("expected canceled call to still be registered")
+				}
+
+				done := make(chan struct{})
+				go func() {
+					c.InternalAbandonRecvCall(call, c.InternalGetReadFramer())
+					close(done)
+				}()
+
+				select {
+				case <-done:
+				case <-time.After(execCloseTestTimeout):
+					t.Fatal("abandonRecvCall deadlocked after context cancellation")
+				}
+			})
+
+			t.Run("ConnectionCloseAbandonsInflightStream", func(t *testing.T) {
+				writeStarted := make(chan struct{})
+				var writeStartedOnce sync.Once
+				observerCtx := newTestStreamObserverContext()
+				c, server := newTestExecConn(t, testContextWriter{
+					onWrite: func() {
+						writeStartedOnce.Do(func() {
+							close(writeStarted)
+						})
+					},
+				})
+				c.InternalStreamObserver = &testStreamObserver{ctx: observerCtx}
+				defer server.Close()
+
+				errCh := make(chan error, 1)
+				go func() {
+					_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
+						f.Buf = append(f.Buf[:0], 'x')
+						return nil
+					}), nil, 0)
+					errCh <- err
+				}()
+
+				select {
+				case <-observerCtx.started:
+				case <-time.After(execCloseTestTimeout):
+					t.Fatal("stream observer did not observe the request start")
+				}
+
+				select {
+				case <-writeStarted:
+				case <-time.After(execCloseTestTimeout):
+					t.Fatal("exec never reached the write path")
+				}
+
+				closeDone := make(chan struct{})
+				go func() {
+					c.Close()
+					close(closeDone)
+				}()
+
+				select {
+				case err := <-errCh:
+					if !errors.Is(err, runtimeerrors.ErrConnectionClosed) {
+						t.Fatalf("expected close error %v, got %v", runtimeerrors.ErrConnectionClosed, err)
+					}
+				case <-time.After(execCloseTestTimeout):
+					t.Fatal("exec deadlocked after Close")
+				}
+
+				select {
+				case <-observerCtx.abandoned:
+				case <-time.After(execCloseTestTimeout):
+					t.Fatal("Close did not abandon the in-flight stream")
+				}
+
+				select {
+				case <-observerCtx.finished:
+					t.Fatal("Close should not mark the in-flight stream as finished")
+				default:
+				}
+
+				select {
+				case <-closeDone:
+				case <-time.After(execCloseTestTimeout):
+					t.Fatal("Close did not wait for the in-flight exec cleanup")
+				}
+
+				c.InternalMu.Lock()
+				defer c.InternalMu.Unlock()
+				if c.InternalCalls != nil {
+					t.Fatal("expected in-flight calls to be detached on Close")
+				}
+			})
+		})
+
+		// TestConn/Exec/StreamIDMismatchFailsConnection drives the same mismatch with a real
+		// exec() waiting on call.resp, so it pins what actually resolves that call: the
+		// connection close the error triggers, not a delivery from the mismatch arm.
+		t.Run("StreamIDMismatchFailsConnection", func(t *testing.T) {
+			t.Parallel()
+
+			const testTimeout = 10 * time.Second
+
+			// mismatchHeader builds a response frame header addressed to streamID, sized to
+			// carry no body.
+			mismatchHeader := func(streamID int) []byte {
+				return []byte{
+					implProtocol.ProtoVersion4 | implProtocol.ProtoDirectionMask, 0x00,
+					byte(streamID >> 8), byte(streamID),
+					byte(frm.OpResult),
+					0x00, 0x00, 0x00, 0x00, // no body
+				}
+			}
+
+			// remapWaitingCall starts an exec() and re-keys c.calls so the entry sits under a
+			// different stream than call.streamID. Returns the result channel and the wrong
+			// map key a mismatched response must be addressed to.
+			remapWaitingCall := func(t *testing.T, c *transport.Conn, observerCtx *testStreamObserverContext) (<-chan error, int) {
+				t.Helper()
+
+				errCh := make(chan error, 1)
+				go func() {
+					_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
+						f.Buf = append(f.Buf[:0], 'x')
+						return nil
+					}), nil, 0)
+					errCh <- err
+				}()
+
+				call := waitForSingleCall(t, c)
+				select {
+				case <-observerCtx.started:
+				case <-time.After(testTimeout):
+					t.Fatal("stream observer did not observe the request start")
+				}
+
+				wrongKey := call.InternalStreamID + 1
+				if wrongKey > c.InternalStreams.NumStreams {
+					wrongKey = 1
+				}
+
+				c.InternalMu.Lock()
+				c.InternalCalls.Delete(call.InternalStreamID)
+				c.InternalCalls.Set(wrongKey, call)
+				c.InternalMu.Unlock()
+
+				return errCh, wrongKey
+			}
+
+			// duplicateWaitingCall is remapWaitingCall without the delete: the live entry
+			// stays under call.streamID and a stale one is added beside it, which is what a
+			// recycled-and-re-issued callReq leaves behind. Returns the stale key.
+			duplicateWaitingCall := func(t *testing.T, c *transport.Conn, observerCtx *testStreamObserverContext) (<-chan error, int) {
+				t.Helper()
+
+				errCh := make(chan error, 1)
+				go func() {
+					_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
+						f.Buf = append(f.Buf[:0], 'x')
+						return nil
+					}), nil, 0)
+					errCh <- err
+				}()
+
+				call := waitForSingleCall(t, c)
+				select {
+				case <-observerCtx.started:
+				case <-time.After(testTimeout):
+					t.Fatal("stream observer did not observe the request start")
+				}
+
+				staleKey := call.InternalStreamID + 1
+				if staleKey > c.InternalStreams.NumStreams {
+					staleKey = 1
+				}
+
+				c.InternalMu.Lock()
+				c.InternalCalls.Set(staleKey, call)
+				c.InternalMu.Unlock()
+
+				return errCh, staleKey
+			}
+
+			t.Run("TheCloseReleasesAndRecyclesTheStream", func(t *testing.T) {
+				t.Parallel()
+
+				observerCtx := newTestStreamObserverContext()
+				c, server := newTestExecConn(t, testContextWriter{})
+				c.InternalStreamObserver = &testStreamObserver{ctx: observerCtx}
+				defer server.Close()
+
+				errCh, wrongKey := remapWaitingCall(t, c, observerCtx)
+
+				procErr := c.InternalProcessFrameSource(context.Background(), transport.InternalFrameSource{InternalR: bytes.NewReader(mismatchHeader(wrongKey))})
+				require.Error(t, procErr)
+
+				// The arm left the call where it was, so it is still exec's only way out.
+				select {
+				case err := <-errCh:
+					t.Fatalf("exec returned %v before the connection was closed", err)
+				case <-time.After(10 * time.Millisecond):
+				}
+
+				// serve() does exactly this with the error it was handed.
+				c.InternalCloseWithError(procErr)
+
+				select {
+				case err := <-errCh:
+					require.ErrorIs(t, err, procErr)
+				case <-time.After(testTimeout):
+					t.Fatal("exec did not return after the connection was closed")
+				}
+
+				select {
+				case <-observerCtx.abandoned:
+				case <-time.After(testTimeout):
+					t.Fatal("stream was never marked abandoned")
+				}
+				select {
+				case <-observerCtx.finished:
+					t.Fatal("stream should not also be marked finished")
+				default:
+				}
+
+				// The stream bit stays set: c.streams dies with the connection, and nothing
+				// on the close path clears it for any in-flight call. What must not survive
+				// is the call itself.
+				c.InternalMu.Lock()
+				remaining := c.InternalCalls.Len()
+				c.InternalMu.Unlock()
+				if remaining != 0 {
+					t.Fatalf("expected the close to drain c.calls, got %d", remaining)
+				}
+			})
+
+			// The shape a mismatch can actually take: addCall only ever keys by
+			// call.streamID, so the key and the field can diverge only once the callReq has
+			// been recycled and re-issued, leaving a stale entry beside the live one. Both
+			// entries then point at one callReq, and the close has to survive meeting it
+			// twice.
+			t.Run("ADuplicateEntryDoesNotWedgeTheClose", func(t *testing.T) {
+				t.Parallel()
+
+				observerCtx := newTestStreamObserverContext()
+				c, server := newTestExecConn(t, testContextWriter{})
+				c.InternalStreamObserver = &testStreamObserver{ctx: observerCtx}
+				defer server.Close()
+
+				errCh, staleKey := duplicateWaitingCall(t, c, observerCtx)
+
+				procErr := c.InternalProcessFrameSource(context.Background(), transport.InternalFrameSource{InternalR: bytes.NewReader(mismatchHeader(staleKey))})
+				require.Error(t, procErr)
+
+				closed := make(chan struct{})
+				go func() {
+					c.InternalCloseWithError(procErr)
+					close(closed)
+				}()
+				select {
+				case <-closed:
+				case <-time.After(testTimeout):
+					t.Fatal("closeWithError never returned: it met the recycled callReq a second time")
+				}
+
+				select {
+				case err := <-errCh:
+					require.ErrorIs(t, err, procErr)
+				case <-time.After(testTimeout):
+					t.Fatal("exec did not return after the connection was closed")
+				}
+			})
+
+			t.Run("RacesWithConnectionClose", func(t *testing.T) {
+				t.Parallel()
+
+				for i := 0; i < 100; i++ {
+					observerCtx := newTestStreamObserverContext()
+					c, server := newTestExecConn(t, testContextWriter{})
+					c.InternalStreamObserver = &testStreamObserver{ctx: observerCtx}
+
+					errCh, wrongKey := remapWaitingCall(t, c, observerCtx)
+					header := mismatchHeader(wrongKey)
+
+					var wg sync.WaitGroup
+					wg.Add(2)
+					go func() {
+						defer wg.Done()
+						c.InternalProcessFrameSource(context.Background(), transport.InternalFrameSource{InternalR: bytes.NewReader(header)})
+					}()
+					go func() {
+						defer wg.Done()
+						c.Close()
+					}()
+					wg.Wait()
+					server.Close()
+
+					select {
+					case <-errCh:
+					case <-time.After(testTimeout):
+						t.Fatal("exec never returned after the raced delivery/close")
+					}
+
+					finished, abandoned := false, false
+					select {
+					case <-observerCtx.finished:
+						finished = true
+					default:
+					}
+					select {
+					case <-observerCtx.abandoned:
+						abandoned = true
+					default:
+					}
+					if finished == abandoned {
+						t.Fatalf("iteration %d: expected exactly one terminal callback, finished=%v abandoned=%v", i, finished, abandoned)
+					}
+				}
+			})
+		})
+	})
+
+	t.Run("HeaderRead", func(t *testing.T) {
+		// TestConn/HeaderRead/DisarmBoundedToFirstByte pins that only the idle wait for a
+		// header's first byte runs without a read deadline.
+		//
+		// The disarm is per-read (connReader.armDeadline runs once per read attempt), so a
+		// disarm held across the whole header read leaves every byte of it unbounded: a peer
+		// that sends one byte and then stops holds the serve goroutine for as long as it
+		// keeps the socket open, and ReadTimeout never drops the connection. That cannot be
+		// asserted by waiting — the point of the bug is that nothing ever returns — so it is
+		// pinned on the mechanism instead: the first read asks for a single byte, and the
+		// deadline is re-armed before the second read starts.
+		t.Run("DisarmBoundedToFirstByte", func(t *testing.T) {
+			t.Parallel()
+
+			// A peer that delivers one byte of the header and then stalls until the re-armed
+			// deadline expires.
+			steps := []scriptedRead{{data: []byte{0x84}}, {err: timeoutErr{}}}
+
+			for _, tc := range []struct {
+				name string
+				read func(*transport.Conn) error
+			}{
+				{
+					name: "frame header",
+					read: func(c *transport.Conn) error { _, err := c.InternalReadFrameHeader(c.InternalR); return err },
+				},
+				{
+					name: "segment header",
+					read: func(c *transport.Conn) error { _, err := c.InternalReadFirstSegmentHeader(); return err },
+				},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					t.Parallel()
+
+					r := &scriptedReadSource{steps: steps}
+					c := &transport.Conn{InternalR: r}
+
+					err := tc.read(c)
+
+					require.Error(t, err)
+					// Not normalised: a timeout that already consumed part of a header leaves
+					// the stream at an unknown offset, so serve() must close the connection
+					// rather than resume and mis-frame everything after it.
+					require.False(t, errors.Is(err, implProtocol.ErrReadHeaderTimeout),
+						"a timeout partway through a header must stay fatal, got %q", err)
+
+					require.GreaterOrEqual(t, len(r.readLens), 2,
+						"the header must be read in more than one read for the deadline to be re-armed in between")
+					require.Equal(t, 1, r.readLens[0],
+						"the unbounded read must ask for a single byte, so only the idle wait is unbounded")
+					require.Equal(t, 1, r.arms,
+						"exactly one read must start with the deadline re-armed: the one after the first byte arrived")
+				})
+			}
+		})
+
+		// TestConn/HeaderRead/FirstSegmentDisarmsAndRearms pins that the idle wait for a segment
+		// header runs with the read deadline disarmed and that the deadline is restored on
+		// every exit path — including the error path, where a missed re-arm would leave the
+		// connection reading with no deadline for the rest of its life.
+		t.Run("FirstSegmentDisarmsAndRearms", func(t *testing.T) {
+			t.Parallel()
+
+			header := mustUncompressedSegment(t, []byte("hello"), true)
+
+			for _, tc := range []struct {
+				name  string
+				steps []scriptedRead
+			}{
+				{"header read succeeds", []scriptedRead{{data: header}}},
+				{"header read fails", []scriptedRead{{err: timeoutErr{}}}},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					r := &scriptedReadSource{steps: tc.steps}
+					c := &transport.Conn{InternalR: r}
+
+					_, _ = c.InternalReadFirstSegmentHeader()
+
+					// Asserted as a shape rather than an exact slice: the re-arm can come from
+					// headerReader (as soon as a byte arrives) as well as from the deferred
+					// clear, so a successful read legitimately clears twice. What must hold is
+					// that the read starts disarmed, ends re-armed, and is never re-disarmed —
+					// the last of those is what a redundant deferred clear must stay harmless
+					// for.
+					require.NotEmpty(t, r.disarms, "the header read must disarm the deadline")
+					require.True(t, r.disarms[0], "the idle wait must start with the deadline disarmed")
+					require.False(t, r.disarms[len(r.disarms)-1],
+						"the deadline must be re-armed before readFirstSegmentHeader returns")
+					for i, d := range r.disarms[1:] {
+						require.False(t, d, "InternalSetDisarm(true) at index %d: the deadline must never be re-disarmed", i+1)
+					}
+				})
+			}
+		})
+
+		// TestConn/HeaderRead/TimeoutBenignOnlyWhenNothingConsumed pins the line between
+		// the two kinds of header-read timeout, for both header readers.
+		//
+		// Consumed nothing: the peer was simply idle, serve() logs ErrReadHeaderTimeout and
+		// reads again. Consumed part of a header: the stream is now at an unknown offset, so
+		// the error must NOT be normalised — serve() has to close the connection instead of
+		// resuming and mis-framing every frame that follows.
+		t.Run("TimeoutBenignOnlyWhenNothingConsumed", func(t *testing.T) {
+			t.Parallel()
+
+			for _, tc := range []struct {
+				name      string
+				steps     []scriptedRead
+				wantIsErr bool
+			}{
+				{
+					name:      "nothing consumed",
+					steps:     []scriptedRead{{err: timeoutErr{}}},
+					wantIsErr: true,
+				},
+				{
+					name:      "partial header consumed",
+					steps:     []scriptedRead{{data: []byte{0x84, 0x00, 0x00, 0x01}, err: timeoutErr{}}},
+					wantIsErr: false,
+				},
+			} {
+				t.Run("frame header/"+tc.name, func(t *testing.T) {
+					c := &transport.Conn{InternalR: &scriptedReadSource{steps: tc.steps}}
+
+					_, err := c.InternalReadFrameHeader(c.InternalR)
+
+					require.Error(t, err)
+					require.Equal(t, tc.wantIsErr, errors.Is(err, implProtocol.ErrReadHeaderTimeout),
+						"errors.Is(ErrReadHeaderTimeout) on %q", err)
+				})
+
+				t.Run("segment header/"+tc.name, func(t *testing.T) {
+					c := &transport.Conn{InternalR: &scriptedReadSource{steps: tc.steps}}
+
+					_, err := c.InternalReadFirstSegmentHeader()
+
+					require.Error(t, err)
+					require.Equal(t, tc.wantIsErr, errors.Is(err, implProtocol.ErrReadHeaderTimeout),
+						"errors.Is(ErrReadHeaderTimeout) on %q", err)
+				})
+			}
+		})
+	})
+
+	t.Run("HeartBeat", func(t *testing.T) {
+		t.Run("ClosesConnectionThatKeepsFailing", func(t *testing.T) {
+			t.Parallel()
+
+			const testTimeout = 30 * time.Second
+
+			log := &unexpectedOptionsLogger{seen: make(chan struct{})}
+
+			conn, server := newTestExecConn(t, testContextWriter{})
+			conn.InternalVersion = implProtocol.ProtoVersion4
+			conn.InternalCfg = &transport.ConnConfig{}
+			conn.InternalLogger = log
+			defer server.Close()
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			go conn.InternalHeartBeat(ctx)
+
+			// An ERROR frame: [int error code][string message], the shortest reply a server
+			// may answer an OPTIONS with that heartBeat has to classify as a failure.
+			errorReply := func(streamID int) []byte {
+				const msg = "scripted heartbeat failure"
+				body := []byte{0x00, 0x00, 0x10, 0x01, byte(len(msg) >> 8), byte(len(msg))}
+				body = append(body, msg...)
+				return append([]byte{
+					implProtocol.ProtoVersion4 | implProtocol.ProtoDirectionMask, 0x00,
+					byte(streamID >> 8), byte(streamID),
+					byte(frm.OpError),
+					byte(len(body) >> 24), byte(len(body) >> 16), byte(len(body) >> 8), byte(len(body)),
+				}, body...)
+			}
+
+			// The first beat gets the unexpected frame, so the interval is already at 1s.
+			call := waitForSingleCallWithin(t, conn, testTimeout)
+			ready := []byte{
+				implProtocol.ProtoVersion4 | implProtocol.ProtoDirectionMask, 0x00,
+				byte(call.InternalStreamID >> 8), byte(call.InternalStreamID),
+				byte(frm.OpReady),
+				0x00, 0x00, 0x00, 0x00, // no body
+			}
+			if err := conn.InternalProcessFrameSource(ctx, transport.InternalFrameSource{InternalR: bytes.NewReader(ready)}); err != nil {
+				t.Fatalf("delivering the READY reply to the heartbeat: %v", err)
+			}
+
+			select {
+			case <-log.seen:
+			case <-time.After(testTimeout):
+				t.Fatal("heartBeat never logged the unexpected OPTIONS reply")
+			}
+
+			// Answer every later beat with an ERROR. heartBeat closes the connection once
+			// the failures pass its bound; without counting them it never would.
+			deadline := time.Now().Add(testTimeout)
+			for !conn.Closed() {
+				if time.Now().After(deadline) {
+					t.Fatal("a connection answering every heartbeat with an ERROR was never closed")
+				}
+				// Poll rather than wait: the beat that trips the bound is answered and then
+				// no further call is ever registered, so a blocking wait would outlive the
+				// close it is looking for.
+				conn.InternalMu.Lock()
+				var call *transport.InternalCallReq
+				for _, inFlight := range conn.InternalCalls.All() {
+					call = inFlight
+					break
+				}
+				conn.InternalMu.Unlock()
+				if call == nil {
+					time.Sleep(time.Millisecond)
+					continue
+				}
+				if err := conn.InternalProcessFrameSource(ctx, transport.InternalFrameSource{InternalR: bytes.NewReader(errorReply(call.InternalStreamID))}); err != nil {
+					t.Fatalf("delivering the ERROR reply to the heartbeat: %v", err)
+				}
+			}
+		})
+
+		t.Run("ControlSurvivesUnexpectedOptionsResponse", func(t *testing.T) {
+			t.Parallel()
+
+			const testTimeout = 10 * time.Second
+
+			log := &unexpectedOptionsLogger{seen: make(chan struct{})}
+
+			conn, server := newTestExecConn(t, testContextWriter{})
+			// execInternal checks the response's protocol version against c.version; an unset
+			// one makes every frame a protocol error before heartBeat classifies it.
+			conn.InternalVersion = implProtocol.ProtoVersion4
+			defer server.Close()
+
+			// Only the fields the failing reconnect reaches. With no hosts and no contact
+			// points it fails in resolveInitialEndpoints, well before refreshRingNow.
+			sess := func() *implCluster.Session {
+				opaqueStorageValue := new(implCluster.Session)
+				implCluster.SessionData(opaqueStorageValue).InternalLogger = log
+				implCluster.SessionData(opaqueStorageValue).InternalConnCfg = &transport.ConnConfig{}
+				return opaqueStorageValue
+			}()
+			implCluster.SessionData(sess).InternalHostSource = &implCluster.InternalRingDescriber{InternalCfg: &implCluster.SessionData(sess).InternalCfg, InternalLogger: log}
+
+			// state is left at controlConnStarting so heartBeat's CAS lets it run.
+			cc := &implCluster.InternalControlConn{InternalSession: sess, InternalQuit: make(chan struct{})}
+			cc.InternalConn.Store(&implCluster.InternalConnHost{InternalConn: conn})
+
+			go cc.InternalHeartBeat()
+			defer close(cc.InternalQuit)
+
+			// Catch the first beat's in-flight call, then answer OPTIONS with READY: a frame
+			// parseFrame builds happily, but not one an OPTIONS may be answered with.
+			call := waitForSingleCallWithin(t, conn, testTimeout)
+			ready := []byte{
+				implProtocol.ProtoVersion4 | implProtocol.ProtoDirectionMask, 0x00,
+				byte(call.InternalStreamID >> 8), byte(call.InternalStreamID),
+				byte(frm.OpReady),
+				0x00, 0x00, 0x00, 0x00, // no body
+			}
+			if err := conn.InternalProcessFrameSource(context.Background(), transport.InternalFrameSource{InternalR: bytes.NewReader(ready)}); err != nil {
+				t.Fatalf("delivering the READY reply to the heartbeat: %v", err)
+			}
+
+			select {
+			case <-log.seen:
+			case <-time.After(testTimeout):
+				t.Fatal("the control heartbeat never logged the unexpected OPTIONS reply")
+			}
+
+			// attemptReconnect closes the old connection before trying any host, so this is
+			// what separates a reconnect from a continue that trusts the connection anyway.
+			deadline := time.Now().Add(testTimeout)
+			for !conn.Closed() {
+				if time.Now().After(deadline) {
+					t.Fatal("the unexpected reply did not cost the control connection a reconnect")
+				}
+				time.Sleep(time.Millisecond)
+			}
+		})
+
+		t.Run("KeepaliveDisabledAndBlockedWriteTimeout", func(t *testing.T) {
+			c, server := typedTestConn(t, 4, nil)
+			config := settings.DefaultConfig("localhost")
+			config.KeepaliveInterval = 0
+			c.InternalCfg = &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config)}
+			done := make(chan struct{})
+			go func() { c.InternalHeartBeat(c.InternalCtx); close(done) }()
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+				t.Fatal("disabled heartbeat active")
+			}
+			server.Close()
+			c, _ = typedTestConn(t, 4, nil)
+			config.KeepaliveInterval = time.Millisecond
+			config.KeepaliveTimeout = 10 * time.Millisecond
+			c.InternalCfg = &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config)}
+			done = make(chan struct{})
+			go func() { c.InternalHeartBeat(c.InternalCtx); close(done) }()
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+				t.Fatal("heartbeat timeout did not cover blocked write")
+			}
+			if !c.Closed() {
+				t.Fatal("timed out writer left connection alive")
+			}
+		})
+
+		t.Run("SurvivesUnexpectedOptionsResponse", func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			srv := NewTestServer(t, defaultProto, ctx)
+			defer srv.Stop()
+
+			log := &unexpectedOptionsLogger{seen: make(chan struct{})}
+
+			// Spoil every OPTIONS after startup's, so the reply is in place before the first
+			// beat; losing that race pushes the next one 30s out.
+			atomic.StoreInt32(&srv.readyOnOptions, 1)
+
+			cluster := testCluster(defaultProto, srv.Address)
+			cluster.NumConns = 1
+			cluster.Logger = log
+			db, err := implCluster.InternalClusterSettingsOpen(cluster)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+
+			if err := waitForPoolSize(db, 1, 5*time.Second); err != nil {
+				t.Fatal(err)
+			}
+
+			// Wait for the driver to parse the first beat rather than sleeping past it.
+			select {
+			case <-log.seen:
+			case <-time.After(10 * time.Second):
+				t.Fatal("heartBeat never logged the unexpected OPTIONS reply")
+			}
+
+			if err := execTestStatement(context.Background(), db, "void", Options{}); err != nil {
+				t.Fatalf("the session did not survive an unexpected heartbeat reply: %v", err)
+			}
+		})
+	})
+
+	t.Run("ProcessFrame", func(t *testing.T) {
+		// TestConn/ProcessFrame/DesyncedBodyIsFatalAndWakesCaller pins the two halves of what
+		// has to happen when a frame body cannot be read off the wire:
+		//
+		//   - processFrame returns the error, so serve() closes the connection. The
+		//     unread remainder of the body is still queued on the socket, so reusing the
+		//     connection would read it as the next frame header and mis-frame everything
+		//     after it.
+		//   - the waiting caller is handed the error first. head.Stream has already been
+		//     removed from c.calls by this point, so closeWithError can no longer find the
+		//     call: returning without delivering would leave exec() waiting out its full
+		//     request timeout for a response that can never arrive.
+		t.Run("DesyncedBodyIsFatalAndWakesCaller", func(t *testing.T) {
+			t.Parallel()
+
+			header := []byte{
+				implProtocol.ProtoVersion4 | implProtocol.ProtoDirectionMask, 0x00, 0x00, 0x01, byte(frm.OpResult),
+				0x00, 0x00, 0x00, 0x08, // body length 8
+			}
+
+			// The peer sends a complete header and then stalls partway through the body.
+			r := &scriptedReadSource{steps: []scriptedRead{
+				{data: header},
+				{data: []byte{0x01, 0x02, 0x03}, err: timeoutErr{}},
+			}}
+
+			// Buffered so the delivery does not need a second goroutine.
+			call := &transport.InternalCallReq{InternalStreamID: 1, InternalResp: make(chan transport.InternalCallResp, 1)}
+			c := &transport.Conn{
+				InternalR:       r,
+				InternalCalls:   callTableOf(1, call),
+				InternalVersion: implProtocol.ProtoVersion4,
+				InternalStreams: streams.New(),
+				InternalLogger:  logging.InternalNopLogger{},
+			}
+
+			err := c.InternalProcessFrame(context.Background(), c.InternalR)
+
+			require.Error(t, err, "a half-read body desyncs the connection and must be fatal")
+			var netErr net.Error
+			require.ErrorAs(t, err, &netErr)
+
+			select {
+			case resp := <-call.InternalResp:
+				require.ErrorIs(t, resp.InternalErr, err, "the waiting caller must be handed the same failure")
+			default:
+				t.Fatal("the call was never woken: it would wait out its full request timeout")
+			}
+		})
+
+		// TestConn/ProcessFrame/FailedDeadlineArmIsFatal pins that a body read which never
+		// reached the socket is fatal to the connection, and that widening the rule that
+		// far did not make every read failure fatal.
+		//
+		// A failed read-deadline arm is the worst case of a desynced body: connReader.Read
+		// returns before touching the socket, so the entire body is still queued on a
+		// connection that is otherwise healthy, and serve() reads it as the next frame
+		// header. Nothing else surfaces it. Classifying it needs the error to say so —
+		// SetReadDeadline's error need not be a net.Error, so the net.Error test alone let
+		// this through as a per-request failure and kept the connection in the pool.
+		//
+		// The second case is the boundary: a short read out of a buffer that has already
+		// arrived yields io.ErrUnexpectedEOF, which is not a net.Error either, and must
+		// stay per-request. The stream is not desynced — there is no socket behind it — so
+		// the connection survives and only the one request fails.
+		t.Run("FailedDeadlineArmIsFatal", func(t *testing.T) {
+			t.Parallel()
+
+			header := []byte{
+				implProtocol.ProtoVersion4 | implProtocol.ProtoDirectionMask, 0x00, 0x00, 0x01, byte(frm.OpResult),
+				0x00, 0x00, 0x00, 0x08, // body length 8
+			}
+			armErr := errors.New("set read deadline failed")
+
+			for _, tc := range []struct {
+				name      string
+				source    func() (transport.InternalFrameSource, func())
+				wantFatal bool
+			}{
+				{
+					name: "failed deadline arm",
+					source: func() (transport.InternalFrameSource, func()) {
+						// Two arms read the header — one for its first byte with the deadline
+						// disarmed, one for the rest (headerReader) — so the third is the body's.
+						// If that arithmetic ever changes, the header read fails instead and the
+						// "caller was woken" assertion below catches it rather than the test
+						// passing for the wrong reason.
+						mock := &armFailingConn{data: header, failFromArm: 3, err: armErr}
+						cr := &transport.InternalConnReader{InternalConn: mock, InternalR: bufio.NewReader(mock)}
+						cr.SetTimeout(5 * time.Second)
+						return transport.InternalFrameSource{InternalR: cr}, func() {
+							require.Equal(t, len(header), mock.off,
+								"the whole header must have been read before the body arm failed")
+						}
+					},
+					wantFatal: true,
+				},
+				{
+					name: "short read from an arrived buffer",
+					source: func() (transport.InternalFrameSource, func()) {
+						// A header promising 8 body bytes over a buffer holding 3.
+						buf := append(append([]byte(nil), header...), 0x01, 0x02, 0x03)
+						return transport.InternalFrameSource{InternalR: bytes.NewReader(buf)}, func() {}
+					},
+					wantFatal: false,
+				},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					t.Parallel()
+
+					src, checkSource := tc.source()
+
+					// Buffered so the delivery does not need a second goroutine.
+					call := &transport.InternalCallReq{InternalStreamID: 1, InternalResp: make(chan transport.InternalCallResp, 1)}
+					c := &transport.Conn{
+						InternalCalls:   callTableOf(1, call),
+						InternalVersion: implProtocol.ProtoVersion4,
+						InternalStreams: streams.New(),
+						InternalLogger:  logging.InternalNopLogger{},
+					}
+
+					err := c.InternalProcessFrameSource(context.Background(), src)
+					checkSource()
+
+					// The caller is always woken, fatal or not: head.Stream has already been
+					// removed from c.calls, so closeWithError can no longer find the call.
+					var delivered error
+					select {
+					case resp := <-call.InternalResp:
+						delivered = resp.InternalErr
+					default:
+						t.Fatal("the call was never woken: it would wait out its full request timeout")
+					}
+					require.Error(t, delivered)
+
+					if tc.wantFatal {
+						require.ErrorIs(t, err, transport.InternalErrArmReadDeadline,
+							"an unread body on a live connection must close it")
+						require.ErrorIs(t, err, armErr, "the underlying failure must stay inspectable")
+						require.ErrorIs(t, delivered, err, "the waiting caller must be handed the same failure")
+						return
+					}
+
+					require.NoError(t, err,
+						"a short read out of an arrived buffer leaves no unread bytes on a socket, so the connection survives")
+					require.ErrorIs(t, delivered, io.ErrUnexpectedEOF)
+				})
+			}
+		})
+
+		// TestConn/ProcessFrame/HandsOffOwnershipOnClose pins the handoff
+		// callResp.removedFromCalls exists for, in the window that used to get it wrong: the
+		// call has already been removed from c.calls, so closeWithError's drain can never
+		// reach it, and only exec can release its stream and recycle the callReq. Keying
+		// that on c.closed -- as the connection closes underneath the delivery -- makes exec
+		// stand down for a drain that will never come, and the stream stays allocated for
+		// the rest of the connection's life.
+		t.Run("HandsOffOwnershipOnClose", func(t *testing.T) {
+			t.Parallel()
+
+			const testTimeout = 10 * time.Second
+
+			c, server := newTestExecConn(t, testContextWriter{})
+			c.InternalVersion = implProtocol.ProtoVersion4
+			defer server.Close()
+
+			errCh := make(chan error, 1)
+			go func() {
+				_, err := c.InternalExec(context.Background(), implProtocol.FrameWriterFunc(func(f *implProtocol.Framer, streamID int) error {
+					f.Buf = append(f.Buf[:0], 'x')
+					return nil
+				}), nil, 0)
+				errCh <- err
+			}()
+
+			call := waitForSingleCall(t, c)
+			header := []byte{
+				implProtocol.ProtoVersion4 | implProtocol.ProtoDirectionMask, 0x00,
+				byte(call.InternalStreamID >> 8), byte(call.InternalStreamID),
+				byte(frm.OpResult),
+				0x00, 0x00, 0x00, 0x08, // a body that never arrives
+			}
+
+			c.InternalProcessFrameSource(context.Background(), transport.InternalFrameSource{InternalR: &closeOnBodyRead{c: c, header: header}})
+
+			select {
+			case err := <-errCh:
+				require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+			case <-time.After(testTimeout):
+				t.Fatal("exec was never woken: it would wait out its full request timeout")
+			}
+
+			if inUse := c.InternalStreams.InUse(); inUse != 0 {
+				t.Fatalf("exec left the stream to a drain that can never run, %d still in use", inUse)
+			}
+		})
+
+		t.Run("Stream0Unsolicited", func(t *testing.T) {
+			// Native stream 0 is valid; unsolicited responses follow the ordinary
+			// discard path rather than being misclassified as a reserved stream.
+
+			var buf bytes.Buffer
+			f := implProtocol.NewFramer(nil, implProtocol.ProtoVersion4)
+			f.WriteHeader(0, frm.OpResult, 0)
+			f.WriteInt(frm.ResultKindVoid)
+			f.Buf[0] |= 0x80
+			if err := f.Finish(); err != nil {
+				t.Fatal(err)
+			}
+			if err := f.WriteFrameTo(&buf); err != nil {
+				t.Fatal(err)
+			}
+
+			conn := &transport.Conn{
+				InternalR: &transport.InternalConnReader{
+					InternalR: bufio.NewReader(&buf),
+				},
+				InternalStreams: streams.New(),
+				InternalLogger:  &logging.InternalDefaultLogger{},
+				InternalCfg:     &transport.ConnConfig{},
+			}
+
+			err := conn.InternalRecv(context.Background(), false)
+			if err != nil {
+				t.Fatalf("valid nonnegative stream rejected: %v", err)
+			}
+		})
+
+		t.Run("StreamIDMismatchIsAnError", func(t *testing.T) {
+			t.Parallel()
+
+			header := []byte{
+				implProtocol.ProtoVersion4 | implProtocol.ProtoDirectionMask, 0x00, 0x00, 0x01, byte(frm.OpResult),
+				0x00, 0x00, 0x00, 0x00, // no body
+			}
+
+			// Keyed under stream 1, but the call believes it is stream 2. resp is buffered so
+			// the delivery does not need a second goroutine.
+			call := &transport.InternalCallReq{InternalStreamID: 2, InternalResp: make(chan transport.InternalCallResp, 1)}
+			c := &transport.Conn{
+				InternalCalls:   callTableOf(1, call),
+				InternalVersion: implProtocol.ProtoVersion4,
+				InternalStreams: streams.New(),
+				InternalLogger:  logging.InternalNopLogger{},
+			}
+
+			err := c.InternalProcessFrameSource(context.Background(), transport.InternalFrameSource{InternalR: bytes.NewReader(header)})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "stream 1")
+			require.Contains(t, err.Error(), "stream 2")
+
+			// Nothing was delivered and nothing was removed. Waking the call would mean
+			// trusting call.streamID, which is the half of the disagreement that may name a
+			// stream some other call owns; closeWithError drains the map instead.
+			select {
+			case resp := <-call.InternalResp:
+				t.Fatalf("the mismatched call was woken with %v, leaving closeWithError nothing to drain", resp.InternalErr)
+			default:
+			}
+
+			c.InternalMu.Lock()
+			remaining, entry := c.InternalCalls.Len(), c.InternalCalls.Get(1)
+			c.InternalMu.Unlock()
+			require.Equal(t, 1, remaining, "the disagreeing entry must be left for closeWithError")
+			require.Same(t, call, entry, "the disagreeing entry must be left for closeWithError")
+		})
+	})
+
+	t.Run("Read", func(t *testing.T) {
+		// TestConn/Read/DelegatesToConnReader verifies that the exported (*driverConn).Read is
+		// wired to the connection's connReader, so *driverConn keeps satisfying io.Reader for
+		// external callers after the read-path refactor.
+		t.Run("DelegatesToConnReader", func(t *testing.T) {
+			t.Parallel()
+
+			payload := []byte{0xDE, 0xAD, 0xBE, 0xEF}
+			c := &transport.Conn{InternalR: &transport.InternalConnReader{InternalR: bufio.NewReader(bytes.NewReader(payload))}}
+
+			buf := make([]byte, len(payload))
+			n, err := c.Read(buf)
+			require.NoError(t, err)
+			require.Equal(t, len(payload), n)
+			require.Equal(t, payload, buf)
+		})
+	})
+
+	t.Run("RecvSegment", func(t *testing.T) {
+		// TestConn/RecvSegment/DisarmsDeadlineOnIdle verifies that recvSegment
+		// disarms the read deadline (SetReadDeadline(time.Time{})) on the underlying
+		// connection while reading the first segment header, and re-arms it afterwards.
+		//
+		// The disarm is driven by the connReader.disarm flag rather than by zeroing the
+		// operational timeout: the configured timeout value is left intact throughout,
+		// so a concurrent finalizeConnection switching ConnectTimeout -> ReadTimeout is
+		// never clobbered.
+		//
+		// This exercises the fix for the idle proto-v5 connection timeout regression:
+		// without the disarm, connReader.Read re-arms the deadline on every call, so
+		// a short ReadTimeout fires on a healthy idle connection and serve() drops it.
+		t.Run("DisarmsDeadlineOnIdle", func(t *testing.T) {
+			t.Parallel()
+
+			const configuredTimeout = 5 * time.Millisecond
+
+			mock := &deadlineRecordingConn{
+				readEntered: make(chan struct{}),
+				proceed:     make(chan struct{}),
+			}
+
+			cr := &transport.InternalConnReader{
+				InternalConn: mock,
+				InternalR:    bufio.NewReader(mock),
+			}
+			cr.SetTimeout(configuredTimeout)
+
+			w := &transport.InternalDeadlineContextWriter{
+				InternalW:         mock,
+				InternalSemaphore: make(chan struct{}, 1),
+				InternalQuit:      make(chan struct{}),
+			}
+
+			c := &transport.Conn{
+				InternalR:       cr,
+				InternalCalls:   newCallTable(),
+				InternalVersion: implProtocol.ProtoVersion5,
+				InternalStreams: streams.New(),
+				InternalW:       w,
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			errCh := make(chan error, 1)
+			go func() { errCh <- c.InternalRecvSegment(ctx) }()
+
+			// Wait until connReader.Read has been entered — at this point the disarm
+			// flag is set and SetReadDeadline(zero) has already been called, but the
+			// re-arm has not yet happened.
+			select {
+			case <-mock.readEntered:
+			case <-ctx.Done():
+				t.Fatal("timed out waiting for recvSegment to enter Read")
+			}
+
+			// --- assertions valid while recvSegment is blocked inside Read ---
+
+			// SetReadDeadline must have been called with the zero time to disarm the
+			// deadline. connReader.Read clears the deadline whenever the disarm flag is
+			// set, so every value seen before the segment read must be the zero time.
+			mock.mu.Lock()
+			deadlines := append([]time.Time(nil), mock.deadlines...)
+			mock.mu.Unlock()
+
+			require.NotEmpty(t, deadlines, "expected at least one SetReadDeadline call before the segment read")
+			for i, d := range deadlines {
+				require.True(t, d.IsZero(),
+					"SetReadDeadline call %d should pass the zero time to disarm the deadline; got %v", i, d)
+			}
+
+			// The disarm flag must be set so connReader.Read does not re-arm the
+			// deadline while blocking for segment data...
+			require.True(t, cr.InternalDisarm.Load(),
+				"connReader disarm flag should be set while recvSegment blocks on the initial segment read")
+			// ...while the operational timeout value is left intact (not zeroed), so a
+			// concurrent finalizeConnection cannot be clobbered by a restore.
+			require.Equal(t, configuredTimeout, cr.GetTimeout(),
+				"connReader timeout should be preserved (not zeroed) while recvSegment blocks on the initial segment read")
+
+			// Unblock Read — mock returns (0, io.EOF), which terminates recvSegment.
+			close(mock.proceed)
+
+			select {
+			case err := <-errCh:
+				// io.EOF is the expected outcome: we fed no bytes so recvSegment has
+				// nothing to parse and propagates the EOF from the mock.
+				// The critical invariant is that the error is NOT ErrReadHeaderTimeout:
+				// io.EOF is a clean close, not a timeout, so serve() must treat it as fatal.
+				require.ErrorIs(t, err, io.EOF,
+					"recvSegment should propagate io.EOF from a closed read, not misclassify it")
+				require.False(t, errors.Is(err, implProtocol.ErrReadHeaderTimeout),
+					"io.EOF must not be wrapped as ErrReadHeaderTimeout")
+			case <-ctx.Done():
+				t.Fatal("timed out waiting for recvSegment to return after Read was unblocked")
+			}
+
+			// --- assertions valid after recvSegment has returned ---
+
+			// The disarm flag must be cleared so subsequent body reads are bounded by
+			// the operational timeout again.
+			require.False(t, cr.InternalDisarm.Load(),
+				"connReader disarm flag should be cleared after recvSegment returns")
+			// The configured timeout is unchanged throughout, regardless of the error path.
+			require.Equal(t, configuredTimeout, cr.GetTimeout(),
+				"connReader timeout should remain its configured value after recvSegment returns")
+		})
+
+		// TestConn/RecvSegment/PayloadReadIsBounded verifies that after the (idle-disarmed)
+		// segment header is read, the read deadline is re-armed for the payload read,
+		// so a peer that sends a segment header and then stalls does not hang the
+		// receive loop indefinitely.
+		t.Run("PayloadReadIsBounded", func(t *testing.T) {
+			t.Parallel()
+
+			server, client, err := tcpConnPair()
+			require.NoError(t, err)
+			defer server.Close()
+			defer client.Close()
+
+			cr := &transport.InternalConnReader{InternalConn: server, InternalR: bufio.NewReader(server)}
+			// Use a generous timeout/watchdog margin (rather than something tighter
+			// like 100ms/2s) so this doesn't flake under -race on a loaded CI runner,
+			// where scheduling jitter alone can exceed a couple hundred milliseconds.
+			const readTimeout = 500 * time.Millisecond
+			cr.SetTimeout(readTimeout)
+
+			c := &transport.Conn{
+				InternalR:       cr,
+				InternalCalls:   newCallTable(),
+				InternalVersion: implProtocol.ProtoVersion5,
+				InternalStreams: streams.New(),
+			}
+
+			// Build a valid self-contained segment but send ONLY its 6-byte header: the
+			// header advertises a payload the peer never delivers (a mid-transfer stall).
+			payload := make([]byte, 128)
+			seg, err := newUncompressedSegment(payload, true)
+			require.NoError(t, err)
+			const uncompressedSegmentHeaderSize = 6
+
+			go func() {
+				_, _ = client.Write(seg[:uncompressedSegmentHeaderSize])
+			}()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			errCh := make(chan error, 1)
+			go func() { errCh <- c.InternalRecvSegment(ctx) }()
+
+			select {
+			case err := <-errCh:
+				require.Error(t, err, "recvSegment should fail when the advertised payload never arrives")
+				require.False(t, errors.Is(err, implProtocol.ErrReadHeaderTimeout),
+					"a mid-transfer payload stall must not be normalised to the benign idle header timeout")
+			case <-time.After(5 * time.Second):
+				t.Fatal("recvSegment hung on the payload read; the read deadline was not re-armed after the segment header")
+			}
+		})
+
+		t.Run("ProcessesAllFrames", func(t *testing.T) {
+			server, client, err := tcpConnPair()
+			require.NoError(t, err)
+			defer server.Close()
+			defer client.Close()
+
+			w := &transport.InternalDeadlineContextWriter{
+				InternalW:         server,
+				InternalSemaphore: make(chan struct{}, 1),
+				InternalQuit:      make(chan struct{}),
+			}
+			w.InternalTimeout.Store(int64(time.Second * 10))
+
+			c := &transport.Conn{
+				InternalR: &transport.InternalConnReader{
+					InternalConn: server,
+					InternalR:    bufio.NewReader(server),
+				},
+				InternalCalls:      newCallTable(),
+				InternalVersion:    implProtocol.ProtoVersion5,
+				InternalAddr:       server.RemoteAddr().String(),
+				InternalStreams:    streams.New(),
+				InternalIsSchemaV2: true,
+				InternalLogger:     logging.InternalNopLogger{},
+				InternalW:          w,
+			}
+			c.InternalWriteTimeout.Store(int64(time.Second * 10))
+
+			call1 := &transport.InternalCallReq{
+				InternalStreamID: 1,
+				InternalResp:     make(chan transport.InternalCallResp, 1),
+			}
+
+			call2 := &transport.InternalCallReq{
+				InternalStreamID: 2,
+				InternalResp:     make(chan transport.InternalCallResp, 1),
+			}
+
+			c.InternalCalls.Set(1, call1)
+			c.InternalCalls.Set(2, call2)
+
+			req := fixtureQueryFrame{
+				statement: "SELECT * FROM system.local",
+				params: fixtureQueryParams{
+					consistency: cqltype.Quorum,
+					keyspace:    "gocql_test",
+				},
+			}
+
+			framer1 := implProtocol.NewFramer(nil, implProtocol.ProtoVersion5)
+			err = req.BuildFrame(framer1, 1)
+			require.NoError(t, err)
+
+			framer2 := implProtocol.NewFramer(nil, implProtocol.ProtoVersion5)
+			err = req.BuildFrame(framer2, 2)
+			require.NoError(t, err)
+
+			// Write from the test goroutine: this is a real loopback socket, and the two
+			// frames plus the segment header and CRC are ~124 bytes, so the write completes
+			// into the socket buffer without a reader.
+			var buf []byte
+			buf = append(buf, framer1.Buf...)
+			buf = append(buf, framer2.Buf...)
+
+			uncompressedSegment, err := newUncompressedSegment(buf, true)
+			require.NoError(t, err)
+
+			_, err = client.Write(uncompressedSegment)
+			require.NoError(t, err)
+
+			ctx, cancel := context.WithTimeout(context.Background(), segmentTestTimeout)
+			defer cancel()
+
+			errCh := make(chan error, 1)
+			go func() {
+				errCh <- c.InternalRecvSegment(ctx)
+			}()
+
+			// Receive in segment order: processAllFramesInSegment consumes the frames
+			// sequentially and each send is on an unbuffered channel, so frame 1 is fully
+			// delivered before frame 2 starts.
+			//
+			// The header is skipped because resp.framer has already parsed it; framer.buf
+			// holds the body only.
+			resp1 := recvCallResp(t, call1)
+			require.Equal(t, framer1.Buf[9:], resp1.InternalFramer.Buf)
+
+			resp2 := recvCallResp(t, call2)
+			require.Equal(t, framer2.Buf[9:], resp2.InternalFramer.Buf)
+
+			select {
+			case err := <-errCh:
+				require.NoError(t, err)
+			case <-time.After(segmentTestTimeout):
+				t.Fatal("recvSegment did not return after delivering both frames")
+			}
+		})
+
+		// TestConn/RecvSegment/ReassemblesSplitHeader verifies that recvSegment
+		// correctly reassembles a single CQL frame that is split across multiple
+		// non-self-contained segments even when the 9-byte CQL frame header itself
+		// spans two segments. The first segment intentionally carries only 4 payload
+		// bytes, so the header must be accumulated across both segments before it can
+		// be parsed.
+		t.Run("ReassemblesSplitHeader", func(t *testing.T) {
+			server, client, err := tcpConnPair()
+			require.NoError(t, err)
+			defer server.Close()
+			defer client.Close()
+
+			w := &transport.InternalDeadlineContextWriter{
+				InternalW:         server,
+				InternalSemaphore: make(chan struct{}, 1),
+				InternalQuit:      make(chan struct{}),
+			}
+			w.InternalTimeout.Store(int64(time.Second * 10))
+
+			c := &transport.Conn{
+				InternalR: &transport.InternalConnReader{
+					InternalConn: server,
+					InternalR:    bufio.NewReader(server),
+				},
+				InternalCalls:      newCallTable(),
+				InternalVersion:    implProtocol.ProtoVersion5,
+				InternalAddr:       server.RemoteAddr().String(),
+				InternalStreams:    streams.New(),
+				InternalIsSchemaV2: true,
+				InternalW:          w,
+			}
+			c.InternalWriteTimeout.Store(int64(time.Second * 10))
+
+			call1 := &transport.InternalCallReq{InternalStreamID: 1, InternalResp: make(chan transport.InternalCallResp, 1)}
+			c.InternalCalls.Set(1, call1)
+
+			req := fixtureQueryFrame{
+				statement: "SELECT * FROM system.local",
+				params:    fixtureQueryParams{consistency: cqltype.Quorum, keyspace: "gocql_test"},
+			}
+			framer := implProtocol.NewFramer(nil, implProtocol.ProtoVersion5)
+			require.NoError(t, req.BuildFrame(framer, 1))
+			full := append([]byte(nil), framer.Buf...)
+
+			// Split the frame into two non-self-contained segments. The first carries
+			// only 4 bytes, fewer than the 9-byte CQL frame header, so the header is
+			// split across both segments.
+			const splitAt = 4
+			seg1, err := newUncompressedSegment(full[:splitAt], false)
+			require.NoError(t, err)
+			seg2, err := newUncompressedSegment(full[splitAt:], false)
+			require.NoError(t, err)
+
+			// The helper goroutines only ferry results out; every assertion runs on the
+			// test goroutine. A require failing inside a helper exits that goroutine via
+			// runtime.Goexit, which here would starve recvSegment of its response
+			// delivery and park the test until the suite timeout — and an assertion in
+			// the response goroutine is not synchronised with test completion, so it
+			// could be skipped outright when the test finishes first.
+			writeErr := make(chan error, 1)
+			go func() {
+				buf := append(append([]byte(nil), seg1...), seg2...)
+				_, err := client.Write(buf)
+				writeErr <- err
+			}()
+
+			// A generous margin rather than something tight, so this does not flake
+			// under -race on a loaded CI runner (see TestConn/RecvSegment/PayloadReadIsBounded),
+			// while still failing this test rather than the whole suite on a hang.
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			errCh := make(chan error, 1)
+			go func() { errCh <- c.InternalRecvSegment(ctx) }()
+
+			respBuf := make(chan []byte, 1)
+			go func() {
+				resp := <-call1.InternalResp
+				// resp.framer.buf holds the frame body (the header is already parsed).
+				respBuf <- resp.InternalFramer.Buf
+			}()
+
+			select {
+			case <-ctx.Done():
+				t.Fatal("timed out waiting for reassembled frame")
+			case err := <-errCh:
+				require.NoError(t, err)
+			}
+
+			// Delivery to call1.resp happens-before recvSegment returns, so neither
+			// receive can block for long once errCh has fired.
+			require.NoError(t, <-writeErr, "writing the segmented stream")
+			require.Equal(t, full[9:], <-respBuf)
+		})
+
+		// TestConn/RecvSegment/ReservedStreamFrame verifies that a reserved-stream
+		// frame (streamID -1) packed inside a self-contained v5 segment has its body
+		// consumed from the segment payload rather than the socket. A normal response
+		// frame for a real call follows it in the same segment; if the reserved frame's
+		// body were read from the socket (c.r) instead of the segment reader, the
+		// segment reader would be left misaligned and the trailing frame would never be
+		// delivered to its call (the test would time out).
+		t.Run("ReservedStreamFrame", func(t *testing.T) {
+			server, client, err := tcpConnPair()
+			require.NoError(t, err)
+			defer server.Close()
+			defer client.Close()
+
+			w := &transport.InternalDeadlineContextWriter{
+				InternalW:         server,
+				InternalSemaphore: make(chan struct{}, 1),
+				InternalQuit:      make(chan struct{}),
+			}
+			w.InternalTimeout.Store(int64(time.Second * 10))
+
+			c := &transport.Conn{
+				InternalR: &transport.InternalConnReader{
+					InternalConn: server,
+					InternalR:    bufio.NewReader(server),
+				},
+				InternalCalls:      newCallTable(),
+				InternalVersion:    implProtocol.ProtoVersion5,
+				InternalAddr:       server.RemoteAddr().String(),
+				InternalStreams:    streams.New(),
+				InternalIsSchemaV2: true,
+				InternalLogger:     logging.InternalNopLogger{},
+				InternalW:          w,
+			}
+			c.InternalWriteTimeout.Store(int64(time.Second * 10))
+
+			// Only stream 2 has a registered call; the reserved stream -1 frame ahead of
+			// it goes through the readFrameIntoFramer body-read path.
+			call2 := &transport.InternalCallReq{InternalStreamID: 2, InternalResp: make(chan transport.InternalCallResp, 1)}
+			c.InternalCalls.Set(2, call2)
+
+			req := fixtureQueryFrame{
+				statement: "SELECT * FROM system.local",
+				params:    fixtureQueryParams{consistency: cqltype.Quorum, keyspace: "gocql_test"},
+			}
+
+			// A request-direction frame parses as an error on the response path; for
+			// stream -1 that error is tolerated (logged) — all we need here is for its
+			// body to be consumed from the segment reader.
+			reservedFramer := implProtocol.NewFramer(nil, implProtocol.ProtoVersion5)
+			require.NoError(t, req.BuildFrame(reservedFramer, -1))
+			framer2 := implProtocol.NewFramer(nil, implProtocol.ProtoVersion5)
+			require.NoError(t, req.BuildFrame(framer2, 2))
+
+			// Written from the test goroutine; see TestConn/RecvSegment/ProcessesAllFrames.
+			var buf []byte
+			buf = append(buf, reservedFramer.Buf...)
+			buf = append(buf, framer2.Buf...)
+
+			seg, err := newUncompressedSegment(buf, true)
+			require.NoError(t, err)
+			_, err = client.Write(seg)
+			require.NoError(t, err)
+
+			ctx, cancel := context.WithTimeout(context.Background(), segmentTestTimeout)
+			defer cancel()
+
+			errCh := make(chan error, 1)
+			go func() { errCh <- c.InternalRecvSegment(ctx) }()
+
+			// This is the assertion the test exists for: if the reserved frame's body had
+			// been read from the socket instead of the segment payload, the segment reader
+			// would be misaligned and this response would never arrive (or arrive corrupt).
+			resp2 := recvCallResp(t, call2)
+			require.Equal(t, framer2.Buf[9:], resp2.InternalFramer.Buf)
+
+			select {
+			case err := <-errCh:
+				require.NoError(t, err)
+			case <-time.After(segmentTestTimeout):
+				t.Fatal("recvSegment did not return; reserved-stream frame body was likely read from the socket, not the segment")
+			}
+		})
+	})
+
+	t.Run("ReleaseFramer", func(t *testing.T) {
+		t.Parallel()
+
+		t.Run("EWMAEquilibrium", func(t *testing.T) {
+			c := newTestConnWithFramerPool()
+
+			// Release framers with bufCap == avg. EWMA should not drift.
+			for i := 0; i < 20; i++ {
+				f := c.InternalGetReadFramer()
+				// readBuffer is defaultBufSize (128), avg starts at defaultBufSize
+				c.InternalReleaseReadFramer(f)
+			}
+
+			avg := c.InternalFramers.InternalReadPool.InternalBufAvgSize.Load()
+			if avg != implProtocol.DefaultBufSize {
+				t.Errorf("EWMA should stay at defaultBufSize=%d when all buffers equal, got %d", implProtocol.DefaultBufSize, avg)
+			}
+		})
+
+		t.Run("DelegatesFramerReleaseToConn", func(t *testing.T) {
+			c := newTestConnWithFramerPool()
+
+			f := c.InternalGetReadFramer()
+			f.ReadBuffer = make([]byte, 4096)
+
+			f.Release()
+
+			avgAfterFirstRelease := c.InternalFramers.InternalReadPool.InternalBufAvgSize.Load()
+			if avgAfterFirstRelease <= implProtocol.DefaultBufSize {
+				t.Fatalf("framer.Release() should route through driverConn.releaseFramer and update EWMA, got %d", avgAfterFirstRelease)
+			}
+
+			f.Release()
+
+			if avgAfterSecondRelease := c.InternalFramers.InternalReadPool.InternalBufAvgSize.Load(); avgAfterSecondRelease != avgAfterFirstRelease {
+				t.Fatalf("second framer.Release() should be a no-op: first avg=%d second avg=%d", avgAfterFirstRelease, avgAfterSecondRelease)
+			}
+		})
+
+		t.Run("EWMAConvergesUpward", func(t *testing.T) {
+			c := newTestConnWithFramerPool()
+
+			// Release framers with a larger buffer; EWMA should converge toward it.
+			const targetSize = 4096
+			for i := 0; i < 100; i++ {
+				f := c.InternalGetReadFramer()
+				f.ReadBuffer = make([]byte, targetSize)
+				c.InternalReleaseReadFramer(f)
+			}
+
+			avg := c.InternalFramers.InternalReadPool.InternalBufAvgSize.Load()
+			// After 100 iterations with weight=8, avg should be very close to targetSize.
+			// Allow 1% tolerance.
+			if avg < targetSize*99/100 || avg > targetSize*101/100 {
+				t.Errorf("EWMA should converge to ~%d, got %d", targetSize, avg)
+			}
+		})
+
+		t.Run("EWMAConvergesDownward", func(t *testing.T) {
+			c := newTestConnWithFramerPool()
+
+			// First, push EWMA up.
+			for i := 0; i < 100; i++ {
+				f := c.InternalGetReadFramer()
+				f.ReadBuffer = make([]byte, 4096)
+				c.InternalReleaseReadFramer(f)
+			}
+
+			// Now release framers with small buffers; EWMA should converge back down.
+			// Due to upward bias (+4 rounding), convergence downward is slower.
+			const smallSize = 256
+			for i := 0; i < 200; i++ {
+				f := c.InternalGetReadFramer()
+				f.ReadBuffer = make([]byte, smallSize)
+				c.InternalReleaseReadFramer(f)
+			}
+
+			avg := c.InternalFramers.InternalReadPool.InternalBufAvgSize.Load()
+			// Due to the upward-biased rounding (+framerBufEWMAWeight/2), the EWMA settles
+			// slightly above the actual sample value when converging downward. The steady-state
+			// offset is at most framerBufEWMAWeight/2 (i.e., 4) per step which compounds to
+			// roughly framerBufEWMAWeight/2 above the target. Allow generous tolerance.
+			if avg < smallSize || avg > smallSize+2*transport.InternalFramerBufEWMAWeight {
+				t.Errorf("EWMA should converge toward ~%d (with upward bias), got %d", smallSize, avg)
+			}
+		})
+
+		t.Run("ShrinkOversizedBuffer", func(t *testing.T) {
+			c := newTestConnWithFramerPool()
+
+			// EWMA starts at defaultBufSize (128). Release a very large framer.
+			f := c.InternalGetReadFramer()
+			f.ReadBuffer = make([]byte, 100000)
+			origBuf := f.ReadBuffer
+			c.InternalReleaseReadFramer(f)
+
+			// Get the framer back from the pool and check that its buffer was shrunk.
+			f2 := c.InternalGetReadFramer()
+			if cap(f2.ReadBuffer) >= cap(origBuf) {
+				t.Errorf("oversized buffer should have been shrunk: original cap=%d, new cap=%d",
+					cap(origBuf), cap(f2.ReadBuffer))
+			}
+			// Shrink target should be at least defaultBufSize.
+			if cap(f2.ReadBuffer) < implProtocol.DefaultBufSize {
+				t.Errorf("shrunk buffer should be at least defaultBufSize=%d, got cap=%d",
+					implProtocol.DefaultBufSize, cap(f2.ReadBuffer))
+			}
+			c.InternalReleaseReadFramer(f2)
+		})
+
+		t.Run("NoShrinkNormalBuffer", func(t *testing.T) {
+			c := newTestConnWithFramerPool()
+
+			// Release a few framers with identical buffers; none should be shrunk.
+			for i := 0; i < 10; i++ {
+				f := c.InternalGetReadFramer()
+				origCap := cap(f.ReadBuffer)
+				c.InternalReleaseReadFramer(f)
+				f2 := c.InternalGetReadFramer()
+				if cap(f2.ReadBuffer) != origCap {
+					t.Errorf("iteration %d: normal-sized buffer should not be shrunk: orig cap=%d, new cap=%d",
+						i, origCap, cap(f2.ReadBuffer))
+				}
+				c.InternalReleaseReadFramer(f2)
+			}
+		})
+
+		t.Run("ShrinkFloorIsDefaultBufSize", func(t *testing.T) {
+			c := newTestConnWithFramerPool()
+
+			// Push EWMA down to a very small value by releasing tiny buffers.
+			// The shrink target should never go below defaultBufSize.
+			for i := 0; i < 100; i++ {
+				f := c.InternalGetReadFramer()
+				f.ReadBuffer = make([]byte, 1) // Tiny buffer
+				c.InternalReleaseReadFramer(f)
+			}
+
+			// Now release a moderately large buffer that triggers shrink.
+			f := c.InternalGetReadFramer()
+			f.ReadBuffer = make([]byte, 10000)
+			c.InternalReleaseReadFramer(f)
+
+			f2 := c.InternalGetReadFramer()
+			if cap(f2.ReadBuffer) < implProtocol.DefaultBufSize {
+				t.Errorf("shrink target should respect defaultBufSize floor: got cap=%d, want >= %d",
+					cap(f2.ReadBuffer), implProtocol.DefaultBufSize)
+			}
+			c.InternalReleaseReadFramer(f2)
+		})
+
+		t.Run("NilFramer", func(t *testing.T) {
+			c := newTestConnWithFramerPool()
+			// Should not panic.
+			c.InternalReleaseReadFramer(nil)
+		})
+
+		t.Run("NoPool", func(t *testing.T) {
+			c := &transport.Conn{} // No pool initialized.
+			f := implProtocol.NewFramer(nil, implProtocol.ProtoVersion4)
+			// Should not panic, framer is just dropped.
+			c.InternalReleaseReadFramer(f)
+		})
+
+		t.Run("ReadAndWritePoolsAreSeparate", func(t *testing.T) {
+			c := newTestConnWithFramerPool()
+
+			readFramer := c.InternalGetReadFramer()
+			readFramer.ReadBuffer = make([]byte, 100000)
+			c.InternalReleaseReadFramer(readFramer)
+
+			writeFramer := c.InternalGetWriteFramer()
+			writeFramer.Buf = make([]byte, 0, 8192)
+			c.InternalReleaseWriteFramer(writeFramer)
+
+			if writeAvg := c.InternalFramers.InternalWritePool.InternalBufAvgSize.Load(); writeAvg <= implProtocol.DefaultBufSize {
+				t.Fatalf("writer pool should track its own EWMA, got %d", writeAvg)
+			}
+
+			writeFramer = c.InternalGetWriteFramer()
+			if cap(writeFramer.Buf) >= cap(readFramer.ReadBuffer) {
+				t.Fatalf("writer framer should not inherit oversized reader buffer state, got writer cap=%d reader cap=%d", cap(writeFramer.Buf), cap(readFramer.ReadBuffer))
+			}
+			c.InternalReleaseWriteFramer(writeFramer)
+		})
+
+		t.Run("WriteFramerResetsCustomPayloadFlagBetweenUses", func(t *testing.T) {
+			c := newTestConnWithFramerPool()
+			const streamID = 7
+
+			f := c.InternalGetWriteFramer()
+			payloadReq := &fixtureQueryFrame{
+				statement: "SELECT now() FROM system.local",
+				customPayload: map[string][]byte{
+					"k": []byte("v"),
+				},
+			}
+			_, payloadHeader := buildTestFrame(t, f, payloadReq, streamID)
+			if payloadHeader.Flags&frm.FlagCustomPayload == 0 {
+				t.Fatalf("custom payload frame should set %v, got flags=%08b", frm.FlagCustomPayload, payloadHeader.Flags)
+			}
+
+			c.InternalReleaseWriteFramer(f)
+			if got, want := f.Flags, c.InternalFramers.InternalDefaults.InternalFlags; got != want {
+				t.Fatalf("releaseWriteFramer should restore default flags: got %08b want %08b", got, want)
+			}
+
+			f = c.InternalGetWriteFramer()
+			plainReq := &fixtureQueryFrame{statement: "SELECT now() FROM system.local"}
+			plainBuf, plainHeader := buildTestFrame(t, f, plainReq, streamID)
+			if plainHeader.Flags != c.InternalFramers.InternalDefaults.InternalFlags {
+				t.Fatalf("plain query should use default flags after pooled reuse: got %08b want %08b", plainHeader.Flags, c.InternalFramers.InternalDefaults.InternalFlags)
+			}
+
+			fresh := implProtocol.NewFramer(nil, implProtocol.ProtoVersion4)
+			freshBuf, freshHeader := buildTestFrame(t, fresh, plainReq, streamID)
+			if plainHeader.Flags != freshHeader.Flags {
+				t.Fatalf("reused plain query flags do not match fresh framer: got %08b want %08b", plainHeader.Flags, freshHeader.Flags)
+			}
+			if !bytes.Equal(plainBuf, freshBuf) {
+				t.Fatal("reused plain query frame does not match fresh framer output")
+			}
+
+			c.InternalReleaseWriteFramer(f)
+		})
+
+		t.Run("WriteFramerResetsTracingFlagBetweenUses", func(t *testing.T) {
+			c := newTestConnWithFramerPool()
+			const streamID = 9
+
+			f := c.InternalGetWriteFramer()
+			f.Trace()
+			tracedReq := &fixtureQueryFrame{statement: "SELECT now() FROM system.local"}
+			_, tracedHeader := buildTestFrame(t, f, tracedReq, streamID)
+			if tracedHeader.Flags&frm.FlagTracing == 0 {
+				t.Fatalf("traced query should set %v, got flags=%08b", frm.FlagTracing, tracedHeader.Flags)
+			}
+
+			c.InternalReleaseWriteFramer(f)
+			if got, want := f.Flags, c.InternalFramers.InternalDefaults.InternalFlags; got != want {
+				t.Fatalf("releaseWriteFramer should restore default flags: got %08b want %08b", got, want)
+			}
+
+			f = c.InternalGetWriteFramer()
+			_, plainHeader := buildTestFrame(t, f, tracedReq, streamID)
+			if plainHeader.Flags&frm.FlagTracing != 0 {
+				t.Fatalf("plain query should not inherit tracing flag after pooled reuse: got %08b", plainHeader.Flags)
+			}
+
+			c.InternalReleaseWriteFramer(f)
+		})
+	})
+
+	t.Run("WriteCoalescing", func(t *testing.T) {
+		t.Run("Flush", func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			server, client, err := tcpConnPair()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			done := make(chan struct{}, 1)
+			var (
+				buf      bytes.Buffer
+				bufMutex sync.Mutex
+			)
+			go func() {
+				defer close(done)
+				defer server.Close()
+				var err error
+				b := make([]byte, 256)
+				var n int
+				for {
+					if n, err = server.Read(b); err != nil {
+						break
+					}
+					bufMutex.Lock()
+					buf.Write(b[:n])
+					bufMutex.Unlock()
+				}
+				if err != io.EOF {
+					t.Errorf("unexpected read error: %v", err)
+				}
+			}()
+			enqueued := make(chan struct{})
+			resetTimer := make(chan struct{})
+			w := &transport.InternalWriteCoalescer{
+				InternalWriteCh: make(chan transport.InternalWriteRequest),
+				InternalC:       client,
+				InternalQuit:    ctx.Done(),
+				InternalTestEnqueuedHook: func() {
+					enqueued <- struct{}{}
+				},
+				InternalTestFlushedHook: func() {
+					client.Close()
+				},
+			}
+			w.InternalSetWriteTimeout(500 * time.Millisecond)
+			timerC := make(chan time.Time, 1)
+			go func() {
+				w.InternalWriteFlusherImpl(timerC, func() { resetTimer <- struct{}{} })
+			}()
+
+			go func() {
+				if _, err := w.InternalWriteContext(context.Background(), []byte("one")); err != nil {
+					t.Error(err)
+				}
+			}()
+
+			go func() {
+				if _, err := w.InternalWriteContext(context.Background(), []byte("two")); err != nil {
+					t.Error(err)
+				}
+			}()
+
+			<-enqueued
+			<-resetTimer
+			<-enqueued
+
+			// flush
+			timerC <- time.Now()
+
+			<-done
+
+			if got := buf.String(); got != "onetwo" && got != "twoone" {
+				t.Fatalf("expected to get %q got %q", "onetwo or twoone", got)
+			}
+		})
+
+		t.Run("WriteAfterClose", func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			var buf bytes.Buffer
+			defer cancel()
+			server, client, err := tcpConnPair()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			done := make(chan struct{}, 1)
+			go func() {
+				io.Copy(&buf, server)
+				server.Close()
+				close(done)
+			}()
+			w := transport.InternalNewWriteCoalescer(client, 0, 5*time.Millisecond, ctx.Done())
+
+			// ensure 1 write works
+			if _, err := w.InternalWriteContext(context.Background(), []byte("one")); err != nil {
+				t.Fatal(err)
+			}
+
+			client.Close()
+			<-done
+			if v := buf.String(); v != "one" {
+				t.Fatalf("expected buffer to be %q got %q", "one", v)
+			}
+
+			// now close and do a write, we should error
+			cancel()
+			client.Close() // close client conn too, since server won't see the answer anyway.
+
+			if _, err := w.InternalWriteContext(context.Background(), []byte("two")); err == nil {
+				t.Fatal("expected to get error for write after closing")
+			} else if err != io.EOF {
+				t.Fatalf("expected to get EOF got %v", err)
+			}
+		})
+	})
 }

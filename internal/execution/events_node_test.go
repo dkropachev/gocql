@@ -125,7 +125,7 @@ func (p *nodeEventPolicy) hostDownCalls() []string {
 //
 // A test that needs to observe the pool being mutated has to populate
 // hostConnPools itself, or the short-circuit makes the call unobservable; see
-// TestSessionRemoveHost in connectionpool_test.go.
+// cluster TestNodeEvents/RemoveHost in node_events_test.go.
 type nodeEventFixture struct {
 	session   *cluster.Session
 	policy    *nodeEventPolicy

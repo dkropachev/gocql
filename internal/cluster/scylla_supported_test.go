@@ -305,8 +305,8 @@ func TestScyllaSupported(t *testing.T) {
 			}
 		})
 
-		// The framer side of the extension is covered by conn_test.go's
-		// TestInitFramerCacheScyllaUseMetadataID and its negative counterpart, which go
+		// The framer side of the extension is covered by internal/execution's
+		// TestConnStartup/InitFramerCache/ScyllaUseMetadataID and its negative counterpart, which go
 		// through the same connFramers.initCache path and additionally pin
 		// driverConn.usesMetadataID against it.
 	})

@@ -2,14 +2,12 @@ package execution
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"testing"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -129,80 +127,6 @@ func passwordToken(user, pass string) string {
 	return "\x00" + user + "\x00" + pass
 }
 
-func TestAuthHandshakePassword(t *testing.T) {
-	t.Parallel()
-
-	want := passwordToken("cassandra", "secret")
-	srv := newAuthTestServer(t, func(token []byte) authReply {
-		if string(token) != want {
-			return authReply{op: frm.OpError, errCode: protocol.ErrCodeCredentials, errMsg: "bad credentials"}
-		}
-		return authReply{op: frm.OpAuthSuccess}
-	})
-
-	cfg, _ := srv.cluster(transport.PasswordAuthenticator{Username: "cassandra", Password: "secret"})
-	s, err := implCluster.InternalClusterSettingsOpen(cfg)
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	defer s.Close()
-	if err := execTestStatement(context.Background(), s, "void", Options{}); err != nil {
-		t.Fatalf("query after authenticating: %v", err)
-	}
-	if got := srv.received(); len(got) == 0 || got[0] != want {
-		t.Fatalf("server received tokens %q, want %q", got, want)
-	}
-}
-
-func TestAuthHandshakeFailures(t *testing.T) {
-	t.Parallel()
-
-	success := func([]byte) authReply { return authReply{op: frm.OpAuthSuccess} }
-
-	tests := []struct {
-		name    string
-		auth    transport.Authenticator
-		reply   func([]byte) authReply
-		wantErr string
-	}{
-		{
-			name:    "NoAuthenticatorConfigured",
-			auth:    nil,
-			reply:   success,
-			wantErr: fmt.Sprintf("authentication required (using %q)", testAuthClass),
-		},
-		{
-			name:    "AuthenticatorClassNotAllowed",
-			auth:    transport.PasswordAuthenticator{Username: "u", Password: "p", AllowedAuthenticators: []string{"com.example.Other"}},
-			reply:   success,
-			wantErr: "unexpected authenticator",
-		},
-		{
-			name: "BadCredentials",
-			auth: transport.PasswordAuthenticator{Username: "u", Password: "wrong"},
-			reply: func([]byte) authReply {
-				return authReply{op: frm.OpError, errCode: protocol.ErrCodeCredentials, errMsg: "Provided username u and/or password are incorrect"}
-			},
-			wantErr: "password are incorrect",
-		},
-		{
-			name:    "UnexpectedFrame",
-			auth:    transport.PasswordAuthenticator{Username: "u", Password: "p"},
-			reply:   func([]byte) authReply { return authReply{op: frm.OpReady} },
-			wantErr: "unknown frame response during authentication",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			srv := newAuthTestServer(t, tc.reply)
-			cfg, log := srv.cluster(tc.auth)
-			requireHandshakeError(t, cfg, log, tc.wantErr)
-		})
-	}
-}
-
 // authLog records what a stepAuthenticator was called with.
 type authLog struct {
 	mu      sync.Mutex
@@ -255,108 +179,4 @@ func multiStepReply(token []byte) authReply {
 		return authReply{op: frm.OpAuthSuccess, data: []byte("done")}
 	}
 	return authReply{op: frm.OpError, errCode: protocol.ErrCodeCredentials, errMsg: "unexpected token " + string(token)}
-}
-
-func TestAuthHandshakeMultiStep(t *testing.T) {
-	t.Parallel()
-
-	srv := newAuthTestServer(t, multiStepReply)
-	log := &authLog{}
-	cfg, _ := srv.cluster(stepAuthenticator{log: log})
-	s, err := implCluster.InternalClusterSettingsOpen(cfg)
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	defer s.Close()
-
-	want := []string{
-		fmt.Sprintf("challenge 0 %q", testAuthClass),
-		`challenge 1 "c1"`,
-		`success 2 "done"`,
-	}
-	got := log.get()
-	if len(got) < len(want) {
-		t.Fatalf("authenticator calls = %q, want %q", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("authenticator calls = %q, want them to start with %q", got, want)
-		}
-	}
-}
-
-func TestAuthHandshakeAuthenticatorErrors(t *testing.T) {
-	t.Parallel()
-
-	errChallenge := errors.New("challenge rejected")
-	errSuccess := errors.New("success rejected")
-
-	for _, tc := range []struct {
-		name string
-		auth stepAuthenticator
-		want error
-	}{
-		{"ChallengeFails", stepAuthenticator{challengeErr: errChallenge}, errChallenge},
-		{"SuccessFails", stepAuthenticator{successErr: errSuccess}, errSuccess},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			srv := newAuthTestServer(t, multiStepReply)
-			tc.auth.log = &authLog{}
-			cfg, log := srv.cluster(tc.auth)
-			requireHandshakeError(t, cfg, log, tc.want.Error())
-		})
-	}
-}
-
-// AuthProvider picks the authenticator per host.
-func TestAuthHandshakeAuthProvider(t *testing.T) {
-	t.Parallel()
-
-	want := passwordToken("per-host", "pw")
-	srv := newAuthTestServer(t, func(token []byte) authReply {
-		if string(token) != want {
-			return authReply{op: frm.OpError, errCode: protocol.ErrCodeCredentials, errMsg: "bad credentials"}
-		}
-		return authReply{op: frm.OpAuthSuccess}
-	})
-
-	var mu sync.Mutex
-	var hosts []string
-	cfg, _ := srv.cluster(nil)
-	cfg.AuthProvider = func(h *endpoint.HostInfo) (transport.Authenticator, error) {
-		mu.Lock()
-		hosts = append(hosts, h.ConnectAddress().String())
-		mu.Unlock()
-		return transport.PasswordAuthenticator{Username: "per-host", Password: "pw"}, nil
-	}
-	s, err := implCluster.InternalClusterSettingsOpen(cfg)
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	s.Close()
-
-	mu.Lock()
-	defer mu.Unlock()
-	if len(hosts) == 0 || hosts[0] != "127.0.0.1" {
-		t.Fatalf("AuthProvider called for %v, want 127.0.0.1", hosts)
-	}
-
-	errProvider := errors.New("no credentials for host")
-	cfg, log := srv.cluster(nil)
-	cfg.AuthProvider = func(*endpoint.HostInfo) (transport.Authenticator, error) { return nil, errProvider }
-	requireHandshakeError(t, cfg, log, errProvider.Error())
-}
-
-// PasswordAuthenticator is single-step: it returns no follow-up
-// authenticator. A server that answers its credentials with a challenge
-// anyway must fail the connection, not dereference the missing one.
-func TestAuthHandshakeChallengeWithoutChallenger(t *testing.T) {
-	t.Parallel()
-
-	srv := newAuthTestServer(t, func([]byte) authReply {
-		return authReply{op: frm.OpAuthChallenge, data: []byte("more?")}
-	})
-	cfg, log := srv.cluster(transport.PasswordAuthenticator{Username: "u", Password: "p"})
-	requireHandshakeError(t, cfg, log, "unexpected authentication challenge")
 }
