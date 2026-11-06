@@ -144,9 +144,6 @@ func (r *StreamValueReader) check() error {
 	if !r.active {
 		return r.shared.fail(cqltype.TypeValidation("stream reader", "reader escaped its callback"))
 	}
-	if err := r.Context().Err(); err != nil {
-		return r.shared.fail(err)
-	}
 	return nil
 }
 func (r *StreamValueReader) fail(err error) error {
@@ -456,9 +453,6 @@ func (r *StreamRowReader) check() error {
 	}
 	if !r.active {
 		return r.shared.fail(cqltype.TypeValidation("stream row", "inactive reader"))
-	}
-	if err := r.Context().Err(); err != nil {
-		return r.shared.fail(err)
 	}
 	return nil
 }

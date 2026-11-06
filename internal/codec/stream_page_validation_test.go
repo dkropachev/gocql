@@ -48,8 +48,11 @@ func TestStreamPageValidationOwnership(t *testing.T) {
 	if err := next.RequireEnd(); err != nil {
 		t.Fatal(err)
 	}
+	// Cancellation is enforced where a page reads its source.
 	cancel()
-	if err := next.check(); !errors.Is(err, context.Canceled) {
+	scope = CodecTestMust(wire.NewStream(ctx, bytes.NewReader(data), int64(len(data)), wire.StreamLimits{}))
+	again := CodecTestMust(NewStreamRowReaderReusingValidation(columns, scope, next))
+	if err := plan.DecodeInto(again, &value); !errors.Is(err, context.Canceled) {
 		t.Fatal("new page context not enforced", err)
 	}
 	if _, err := NewStreamRowReaderReusingValidation(columns, nil, next); err == nil {

@@ -74,7 +74,8 @@ type streamState struct {
 // Stream incrementally consumes one checked envelope or child body. It is a
 // scoped mutable reader, never a retained view. Children are callback-scoped;
 // parents cannot read while a child is active. All errors are terminal/sticky.
-// It is not safe for concurrent use. Cancellation is checked around each read;
+// It is not safe for concurrent use. Cancellation is checked around each read
+// of the source;
 // the transport must interrupt a blocked source (deadline/Close) itself. There
 // are no background reads or goroutines that could outlive caller storage.
 type Stream struct {
@@ -135,9 +136,6 @@ func (s *Stream) check() error {
 	if !s.active || s.child {
 		return s.fail(ErrStreamScope)
 	}
-	if err := s.state.ctx.Err(); err != nil {
-		return s.fail(err)
-	}
 	return nil
 }
 
@@ -152,6 +150,12 @@ func (s *Stream) Read(p []byte) (int, error) {
 	}
 	if s.remaining == 0 {
 		return 0, io.EOF
+	}
+	// Cancellation is checked here, where the stream can block, and after
+	// the read, not on every scope operation: ctx.Err takes a lock, and a
+	// row's cells would otherwise check it several times each.
+	if err := s.state.ctx.Err(); err != nil {
+		return 0, s.fail(err)
 	}
 	p = p[:min(int64(len(p)), s.remaining)]
 	n, err := s.state.source.Read(p)
