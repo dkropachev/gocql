@@ -40,7 +40,7 @@ func testOwnedQuery(t testing.TB) *Query[[]byte, EmptyRecord] {
 	if err != nil {
 		t.Fatal(err)
 	}
-	q, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.NoRows}, cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ}), Options{})
+	q, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder}, cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ}), Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -25,7 +25,7 @@ import (
 func eachTestQuery(t *testing.T) (*Query[codec.EmptyRecord, []byte], func(bodies ...[]byte) chan struct{}) {
 	t.Helper()
 	s, conns, peers := runtimeTestSession(t, 1)
-	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 	q := codecTestMust(NewUnpreparedQuery(s, statement, cqltype.NewColumns(), Options{}))
 	t.Cleanup(q.Close)
 	serve := func(bodies ...[]byte) chan struct{} {
@@ -219,7 +219,7 @@ func TestQueryEachUnpreparedContinuationRepairs(t *testing.T) {
 func eachPageTimeoutQuery(t *testing.T) (*Query[codec.EmptyRecord, []byte], net.Conn) {
 	t.Helper()
 	s, _, peers := runtimeTestSession(t, 1)
-	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 	options := testOptions(OptionValues{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Second}, PageTimeout: cqltype.Option[time.Duration]{Set: true, Value: 100 * time.Millisecond}})
 	q := codecTestMust(NewUnpreparedQuery(s, statement, cqltype.NewColumns(), options))
 	t.Cleanup(q.Close)
@@ -301,7 +301,7 @@ func TestQueryEachParentCancelReachesPageContext(t *testing.T) {
 // although the execution context registers no watcher on it.
 func TestQueryEachParentCancelInterruptsWait(t *testing.T) {
 	s, _, peers := runtimeTestSession(t, 1)
-	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 	q := codecTestMust(NewUnpreparedQuery(s, statement, cqltype.NewColumns(), testOptions(OptionValues{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Second}})))
 	t.Cleanup(q.Close)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -328,7 +328,7 @@ func (eachRetryAfterDelay) Decide(retry.Attempt) retry.Decision {
 // Cancelling the caller's context interrupts a retry delay.
 func TestQueryEachParentCancelInterruptsRetryDelay(t *testing.T) {
 	s, _, peers := runtimeTestSession(t, 1)
-	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 	profile := settings.InternalDefaultProfile()
 	profile.Retry = eachRetryAfterDelay{}
 	q := codecTestMust(NewUnpreparedQuery(s, statement, cqltype.NewColumns(), testOptions(OptionValues{Profile: profileOf(profile), Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Minute}})))

@@ -720,7 +720,7 @@ func TestBindingCapturesPartitionerAndBorrowedSpans(t *testing.T) {
 			codec.EmptyRecord])
 		PreparedData(opaqueStorageValuexxxxxxxx).InternalState = state
 		PreparedData(opaqueStorageValuexxxxxxxx).InternalParams = params
-		PreparedData(opaqueStorageValuexxxxxxxx).InternalRows = codec.NoRows
+		PreparedData(opaqueStorageValuexxxxxxxx).InternalRows = codec.EmptyRowDecoder
 		PreparedData(opaqueStorageValuexxxxxxxx).
 			// Later metadata selects a different partitioner. Existing preparation and
 			// binding still consume the canonical original parameter spans exactly once.

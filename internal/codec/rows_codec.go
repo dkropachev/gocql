@@ -509,8 +509,8 @@ func (p singleColumnPlan[T]) DecodeInto(reader *RowReader, dst *T) error {
 }
 func (p singleColumnPlan[T]) Clone(value T) T { return p.decoder.Clone(value) }
 
-var NoParams ParamEncoder[EmptyRecord] = Params[EmptyRecord]()
-var NoRows RowDecoder[EmptyRecord] = Row[EmptyRecord]()
+var EmptyParamsEncoder ParamEncoder[EmptyRecord] = Params[EmptyRecord]()
+var EmptyRowDecoder RowDecoder[EmptyRecord] = Row[EmptyRecord]()
 
 type mappedParams[A, B any] struct {
 	codec    ParamEncoder[B]

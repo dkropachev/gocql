@@ -79,7 +79,7 @@ func connect(hosts []string) (adapter, error) {
 }
 func (a *v2Adapter) Close() error { return a.s.Close() }
 func (a *v2Adapter) Exec(ctx context.Context, q string) error {
-	b, e := g.NewUnpreparedQuery(a.s, cql.Statement[cql.EmptyParams, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: q, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), g.Options{})
+	b, e := g.NewUnpreparedQuery(a.s, cql.Statement[cql.EmptyParams, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: q, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), g.Options{})
 	if e != nil {
 		return e
 	}
@@ -140,7 +140,7 @@ func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[r
 		a.reads[idx] = p
 	}
 	if a.writes[idx] == nil {
-		p, e := g.Prepare(ctx, a.s, cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: wr, Params: rowParams, Rows: cql.NoRows}, g.PrepareOptions{})
+		p, e := g.Prepare(ctx, a.s, cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: wr, Params: rowParams, Rows: cql.EmptyRowDecoder}, g.PrepareOptions{})
 		if e != nil {
 			return nil, nil, e
 		}

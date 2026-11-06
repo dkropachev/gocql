@@ -29,7 +29,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 	defer session.Close()
 	namespace := fmt.Sprintf("gocql_query_%x", time.Now().UnixNano())
 	exec := func(ctx context.Context, stmt string) error {
-		q, err := gocql.NewUnpreparedQuery(session, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), testOptions(gocql.OptionValues{Timeout: cql.Option[time.Duration]{Set: true, Value: 30 * time.Second}}))
+		q, err := gocql.NewUnpreparedQuery(session, cql.Command(stmt), cql.NewColumns(), testOptions(gocql.OptionValues{Timeout: cql.Option[time.Duration]{Set: true, Value: 30 * time.Second}}))
 		if err != nil {
 			return err
 		}
@@ -103,7 +103,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 		K, C int32
 		P    []byte
 	}
-	write := codecTestMust(gocql.Prepare(ctx, session, cql.Statement[record, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO " + table + "(k,c,p)VALUES(?,?,?)", Params: cql.Params(cql.Param("k", cql.Int32, func(r record) int32 { return r.K }), cql.Param("c", cql.Int32, func(r record) int32 { return r.C }), cql.Param("p", cql.BytesEncoder, func(r record) []byte { return r.P })), Rows: cql.NoRows}, gocql.PrepareOptions{}))
+	write := codecTestMust(gocql.Prepare(ctx, session, cql.Statement[record, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO " + table + "(k,c,p)VALUES(?,?,?)", Params: cql.Params(cql.Param("k", cql.Int32, func(r record) int32 { return r.K }), cql.Param("c", cql.Int32, func(r record) int32 { return r.C }), cql.Param("p", cql.BytesEncoder, func(r record) []byte { return r.P })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
 	w := codecTestMust(gocql.NewQuery(write, gocql.Options{}))
 	defer w.Close()
 	payload := bytes.Repeat([]byte{42}, 4096)

@@ -56,7 +56,7 @@ func TestCanonicalAssembly(t *testing.T) {
 					cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})
 					calls := 0
 					input := bytes.Repeat([]byte{0x71}, size)
-					statement := binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(v)VALUES(?)", Params: codec.OneParam[[]byte](countingBlobEncoder{calls: &calls}), Rows: codec.NoRows}
+					statement := binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(v)VALUES(?)", Params: codec.OneParam[[]byte](countingBlobEncoder{calls: &calls}), Rows: codec.EmptyRowDecoder}
 					var bound *Bound[codec.EmptyRecord]
 					if owned {
 						bound = codecTestMust(BindUnpreparedOwned(statement, cols, input))

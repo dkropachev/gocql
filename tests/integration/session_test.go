@@ -51,7 +51,7 @@ import (
 // Typed request helpers keep parameter construction explicit and bind inputs once.
 func sessionTestBind(t testing.TB, session *gocql.Session, stmt string, values ...cql.Value) *Bound[cql.EmptyRow] {
 	t.Helper()
-	prepared, err := gocql.Prepare(context.Background(), session, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.NoRows}, gocql.PrepareOptions{})
+	prepared, err := gocql.Prepare(context.Background(), session, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestSessionAPI(t *testing.T) {
 	intType, err := cql.ScalarType(cql.TypeInt)
 	require.NoError(t, err)
 	var encoded int32
-	statement := cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO test(id) VALUES (?)", Params: cql.Params(cql.ParamAt(0, cql.Int32, func(n int32) int32 { encoded = n; return n })), Rows: cql.NoRows}
+	statement := cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO test(id) VALUES (?)", Params: cql.Params(cql.ParamAt(0, cql.Int32, func(n int32) int32 { encoded = n; return n })), Rows: cql.EmptyRowDecoder}
 	bound, err := BindUnpreparedOwned(statement, cql.NewColumns(cql.ColumnSpec{Name: "id", Type: intType}), int32(1))
 	require.NoError(t, err)
 	defer bound.Close()
@@ -170,7 +170,7 @@ func TestQueryBasicAPI(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	require.NoError(t, v2CreateTable(ctx, session, fmt.Sprintf("CREATE TABLE %s (id int PRIMARY KEY)", table)))
-	prepared, err := gocql.Prepare(ctx, session, cql.Statement[int32, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), Params: cql.OneParam(cql.Int32), Rows: cql.NoRows}, gocql.PrepareOptions{})
+	prepared, err := gocql.Prepare(ctx, session, cql.Statement[int32, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), Params: cql.OneParam(cql.Int32), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 	require.NoError(t, err)
 	require.Equal(t, 1, prepared.Parameters().Len())
 	require.Equal(t, table, prepared.Info().Table)
@@ -255,7 +255,7 @@ func TestQueryShouldPrepare(t *testing.T) {
 	defer session.Close()
 	for _, stmt := range append(toPrepare, cantPrepare...) {
 		t.Run(stmt, func(t *testing.T) {
-			statement := cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}
+			statement := cql.Command(stmt)
 			bound, err := BindUnpreparedOwned(statement, cql.NewColumns(), cql.EmptyParams{})
 			if firstCQLWord(stmt) == "USE" {
 				require.ErrorIs(t, err, gocql.ErrUseStmt)
@@ -379,7 +379,7 @@ func TestIsUseStatement(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		bound, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: tc.input, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyParams{})
+		bound, err := BindUnpreparedOwned(cql.Command(tc.input), cql.NewColumns(), cql.EmptyParams{})
 		if bound != nil {
 			bound.Close()
 		}
@@ -397,7 +397,7 @@ func TestRetryType_IgnoreRethrow(t *testing.T) {
 	session := createV2Session(t)
 	defer session.Close()
 	ctx := context.Background()
-	bound, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: ("INSERT INTO " + fixtureKeyspace("") + ".invalid_table(value) VALUES(1)"), Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyParams{})
+	bound, err := BindUnpreparedOwned(cql.Command(("INSERT INTO " + fixtureKeyspace("") + ".invalid_table(value) VALUES(1)")), cql.NewColumns(), cql.EmptyParams{})
 	require.NoError(t, err)
 	defer bound.Close()
 	for _, mode := range []string{"Ignore", "Rethrow"} {

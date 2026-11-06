@@ -219,7 +219,7 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session) (bool, erro
 // v2Exec and v2Query accept only explicitly typed dynamic values. Owned binding
 // lets callers release or change their inputs as soon as these helpers return.
 func v2Exec(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (gocql.Result, error) {
-	statement := cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.NoRows}
+	statement := cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}
 	var bound *Bound[cql.EmptyRow]
 	var err error
 	if len(values) == 0 {
@@ -286,7 +286,7 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 }
 
 func v2CreateTable(ctx context.Context, session *gocql.Session, stmt string) error {
-	bound, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyParams{})
+	bound, err := BindUnpreparedOwned(cql.Command(stmt), cql.NewColumns(), cql.EmptyParams{})
 	if err != nil {
 		return err
 	}

@@ -101,7 +101,7 @@ func TestShouldPrepareFunction(t *testing.T) {
 	defer session.Close()
 	for _, test := range shouldPrepareTests {
 		t.Run(fmt.Sprintf("formerly_prepared_%t_%s", test.Result, firstCQLWord(test.Stmt)), func(t *testing.T) {
-			statement := cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: test.Stmt, Params: cql.NoParams, Rows: cql.NoRows}
+			statement := cql.Command(test.Stmt)
 			bound, err := BindUnpreparedOwned(statement, cql.NewColumns(), cql.EmptyParams{})
 			if err != nil {
 				t.Fatal(err)

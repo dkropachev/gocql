@@ -67,7 +67,7 @@ func TestGetHostPortMapping(t *testing.T) {
 				CQL: fmt.Sprintf(`INSERT INTO %s (
                     connection_id, host_id, Address, port, tls_port, alternator_port, alternator_https_port, Datacenter, Rack)
                     VALUES (?, ?, ?, 9042, 9142, 0, 0, 'dc1', ?)`, qualifiedTable),
-				Kind: cql.OrdinaryStatement, Params: cql.DynamicParams, Rows: cql.NoRows,
+				Kind: cql.OrdinaryStatement, Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder,
 			}, gocql.PrepareOptions{})
 			if err != nil {
 				t.Fatal(err)

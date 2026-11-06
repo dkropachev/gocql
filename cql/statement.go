@@ -34,3 +34,9 @@ func ParseConsistencyWrapper(s string) (consistency Consistency, err error) {
 	err = consistency.UnmarshalText([]byte(strings.ToUpper(s)))
 	return
 }
+
+// Command returns a statement with no bind markers and no result columns,
+// such as DDL or a write with literal values.
+func Command(text string) Statement[EmptyParams, EmptyRow] {
+	return Statement[EmptyParams, EmptyRow]{CQL: text, Params: EmptyParamsEncoder, Rows: EmptyRowDecoder}
+}

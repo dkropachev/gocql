@@ -256,7 +256,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return err
 		}, nil
 	case "D4":
-		statement := cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: pointWrite, Params: rowParams, Rows: cql.NoRows}
+		statement := cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: pointWrite, Params: rowParams, Rows: cql.EmptyRowDecoder}
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
 			q, err := g.NewUnpreparedQuery(a.s, statement, rowColumns, a.metadata)

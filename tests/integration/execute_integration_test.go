@@ -85,7 +85,7 @@ func TestV2RuntimeDatabaseSmoke(t *testing.T) {
 	keyspace := fmt.Sprintf("v2_runtime_%x", time.Now().UnixNano())
 	exec := func(stmt string) {
 		t.Helper()
-		bound, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyParams{})
+		bound, err := BindUnpreparedOwned(cql.Command(stmt), cql.NewColumns(), cql.EmptyParams{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -96,7 +96,7 @@ func TestV2RuntimeDatabaseSmoke(t *testing.T) {
 	}
 	exec("CREATE KEYSPACE " + keyspace + " WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':1}")
 	defer func() {
-		bound, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + keyspace, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyParams{})
+		bound, err := BindUnpreparedOwned(cql.Command("DROP KEYSPACE "+keyspace), cql.NewColumns(), cql.EmptyParams{})
 		if err == nil {
 			defer bound.Close()
 			if _, err = Exec(context.Background(), session, bound, gocql.Options{}); err != nil {
@@ -115,7 +115,7 @@ func TestV2RuntimeDatabaseSmoke(t *testing.T) {
 	}
 	inputs := cql.Params(cql.Param("id", cql.Int32, func(v input) int32 { return v.ID }), cql.Param("value", cql.BytesEncoder, func(v input) []byte { return v.Value }))
 	rows := cql.Row(cql.Column("id", cql.Int32, func(v *output) *int32 { return &v.ID }), cql.Column("value", cql.BlobCodec, func(v *output) *cql.Bytes { return &v.Value }))
-	prepared, err := gocql.Prepare(ctx, session, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".values (id,value) VALUES (?,?)", Params: inputs, Rows: cql.NoRows}, gocql.PrepareOptions{})
+	prepared, err := gocql.Prepare(ctx, session, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".values (id,value) VALUES (?,?)", Params: inputs, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestV2RuntimeDatabaseSmoke(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	selectBound, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, output]{CQL: "SELECT id,value FROM " + keyspace + ".values", Params: cql.NoParams, Rows: rows}, cql.NewColumns(), cql.EmptyParams{})
+	selectBound, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, output]{CQL: "SELECT id,value FROM " + keyspace + ".values", Params: cql.EmptyParamsEncoder, Rows: rows}, cql.NewColumns(), cql.EmptyParams{})
 	if err != nil {
 		t.Fatal(err)
 	}

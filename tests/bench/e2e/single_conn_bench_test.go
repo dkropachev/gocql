@@ -88,7 +88,7 @@ func benchConfig(d endpoint.Dialer) gocql.Config {
 	return c
 }
 func benchExec(ctx context.Context, s *gocql.Session, text string) error {
-	b, e := gocql.NewUnpreparedQuery(s, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: text, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), gocql.Options{})
+	b, e := gocql.NewUnpreparedQuery(s, cql.Command(text), cql.NewColumns(), gocql.Options{})
 	if e != nil {
 		return e
 	}
@@ -243,7 +243,7 @@ func benchWrite(s *gocql.Session, id int32) error {
 	return benchWriteContext(context.Background(), s, id)
 }
 func benchWriteContext(ctx context.Context, s *gocql.Session, id int32) error {
-	p, e := gocql.Prepare(ctx, s, cql.Statement[benchInsert, cql.EmptyRow]{CQL: "INSERT INTO " + corpus.Namespace + ".table1 (pk, ck, v) VALUES (?, ?, ?);", Params: cql.Params(cql.Param("pk", cql.Int32, func(v benchInsert) int32 { return v.PK }), cql.Param("ck", cql.Int32, func(v benchInsert) int32 { return v.CK }), cql.Param("v", cql.StringEncoder, func(v benchInsert) string { return v.Value })), Rows: cql.NoRows}, gocql.PrepareOptions{})
+	p, e := gocql.Prepare(ctx, s, cql.Statement[benchInsert, cql.EmptyRow]{CQL: "INSERT INTO " + corpus.Namespace + ".table1 (pk, ck, v) VALUES (?, ?, ?);", Params: cql.Params(cql.Param("pk", cql.Int32, func(v benchInsert) int32 { return v.PK }), cql.Param("ck", cql.Int32, func(v benchInsert) int32 { return v.CK }), cql.Param("v", cql.StringEncoder, func(v benchInsert) string { return v.Value })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 	if e != nil {
 		return e
 	}

@@ -184,8 +184,8 @@ func NewEncodedValue(a0 DataType, a1 CellState, a2 Bytes) (EncodedValue, error) 
 
 func NewTimeUUID() UUID { return cqltype.NewTimeUUID() }
 
-var NoParams = codec.NoParams
-var NoRows = codec.NoRows
+var EmptyParamsEncoder = codec.EmptyParamsEncoder
+var EmptyRowDecoder = codec.EmptyRowDecoder
 
 const Null = cqltype.Null
 

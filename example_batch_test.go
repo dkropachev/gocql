@@ -55,7 +55,7 @@ func ExampleExecBatch() {
 	)
 	prepared, err := gocql.Prepare(ctx, session, cql.Statement[item, cql.EmptyRow]{
 		CQL:    "INSERT INTO example.batches (pk, ck, description) VALUES (?, ?, ?)",
-		Params: params, Rows: cql.NoRows,
+		Params: params, Rows: cql.EmptyRowDecoder,
 	}, gocql.PrepareOptions{})
 	if err != nil {
 		log.Fatal(err)
@@ -90,7 +90,7 @@ func ExampleExecBatch() {
 		cql.Column("description", cql.TextCodec, func(v *result) *cql.Text { return &v.Description }),
 	)
 	bound, err := gocql.NewUnpreparedQuery(session, cql.Statement[cql.EmptyParams, result]{
-		CQL: "SELECT pk, ck, description FROM example.batches", Params: cql.NoParams, Rows: row,
+		CQL: "SELECT pk, ck, description FROM example.batches", Params: cql.EmptyParamsEncoder, Rows: row,
 	}, cql.NewColumns(), gocql.Options{})
 	if err != nil {
 		log.Fatal(err)

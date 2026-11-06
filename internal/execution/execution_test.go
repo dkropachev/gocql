@@ -47,7 +47,7 @@ import (
 func TestKindDeclarationAndServerRefinement(t *testing.T) {
 	for _, kind := range []cqltype.StatementKind{cqltype.UnknownStatement, cqltype.OrdinaryStatement, cqltype.ConditionalStatement} {
 		for _, cql := range []string{"SELECT value FROM ks.tbl", "INSERT INTO t (x) VALUES (1) IF NOT EXISTS", "SELECT 'IF' FROM t"} {
-			b, err := BindUnpreparedOwned(binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{CQL: cql, Kind: kind, Params: codec.NoParams, Rows: codec.NoRows}, cqltype.NewColumns(), codec.EmptyRecord{})
+			b, err := BindUnpreparedOwned(binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{CQL: cql, Kind: kind, Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, cqltype.NewColumns(), codec.EmptyRecord{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -206,7 +206,7 @@ func TestBatchAdmissionRollbackAndClassification(t *testing.T) {
 	b.Close()
 	ea, _ := BatchEntry(a)
 	eb, _ := BatchEntry(b)
-	_, err := RunBatch(context.Background(), s, cqltype.LoggedBatch, []BatchItem{ea, eb}, codec.NoRows, Options{})
+	_, err := RunBatch(context.Background(), s, cqltype.LoggedBatch, []BatchItem{ea, eb}, codec.EmptyRowDecoder, Options{})
 	if !errors.Is(err, implRuntimeerrors.ErrClosed) {
 		t.Fatal(err)
 	}
@@ -341,7 +341,7 @@ func TestManualAndBatchPagingSettingsAreExplicit(t *testing.T) {
 		t.Fatal(err)
 	}
 	item, _ := BatchEntry(b)
-	_, err = RunBatch(context.Background(), s, cqltype.LoggedBatch, []BatchItem{item}, codec.NoRows, testOptions(OptionValues{PageSize: implCql.Option[int32]{Set: true, Value: 1}}))
+	_, err = RunBatch(context.Background(), s, cqltype.LoggedBatch, []BatchItem{item}, codec.EmptyRowDecoder, testOptions(OptionValues{PageSize: implCql.Option[int32]{Set: true, Value: 1}}))
 	if !errors.As(err, &unsupported) {
 		t.Fatal(err)
 	}

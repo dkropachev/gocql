@@ -50,7 +50,7 @@ func MustRandomUUID() UUID { return cqltype.MustRandomUUID() }
 
 func NewColumns(a0 ...ColumnSpec) Columns { return cqltype.NewColumns(a0...) }
 
-var NoParams = codec.NoParams
+var EmptyParamsEncoder = codec.EmptyParamsEncoder
 
 type Nullable[T any] = cqltype.Nullable[T]
 

@@ -294,9 +294,9 @@ func NewUDTType(a0 byte, a1 string, a2 string, a3 ...UDTField) UDTTypeInfo {
 
 const NoCompression = cqltype.NoCompression
 
-var NoParams = codec.NoParams
+var EmptyParamsEncoder = codec.EmptyParamsEncoder
 
-var NoRows = codec.NoRows
+var EmptyRowDecoder = codec.EmptyRowDecoder
 
 const Null = cqltype.Null
 
