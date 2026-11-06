@@ -29,28 +29,30 @@ import (
 	"testing"
 )
 
-// BenchmarkConcurrentUse allocates and releases under a shared lock, as a
-// connection does.
-func BenchmarkConcurrentUse(b *testing.B) {
-	streams := New()
-	var mu sync.Mutex
+func BenchmarkIDGenerator(b *testing.B) {
+	// Allocates and releases under a shared lock, as a
+	// connection does.
+	b.Run("GetStream", func(b *testing.B) {
+		streams := New()
+		var mu sync.Mutex
 
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			mu.Lock()
-			stream, ok := streams.GetStream()
-			mu.Unlock()
-			if !ok {
-				b.Error("unable to get stream")
-				return
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				mu.Lock()
+				stream, ok := streams.GetStream()
+				mu.Unlock()
+				if !ok {
+					b.Error("unable to get stream")
+					return
+				}
+				mu.Lock()
+				ok = streams.Clear(stream)
+				mu.Unlock()
+				if !ok {
+					b.Errorf("stream was already cleared: %d", stream)
+					return
+				}
 			}
-			mu.Lock()
-			ok = streams.Clear(stream)
-			mu.Unlock()
-			if !ok {
-				b.Errorf("stream was already cleared: %d", stream)
-				return
-			}
-		}
+		})
 	})
 }

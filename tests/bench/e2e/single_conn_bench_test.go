@@ -285,48 +285,6 @@ func RecordInsertTraffic(ctx context.Context, size int, dir string) error {
 	}
 	return finishCapture(s, d)
 }
-func BenchmarkSingleConnectionSelect(b *testing.B) {
-	d := newCaptureDialer(corpusPath("rec_select"), true)
-	s, e := gocql.Connect(context.Background(), benchConfig(d))
-	if e != nil {
-		b.Fatal(e)
-	}
-	defer func() {
-		if err := finishCapture(s, d); err != nil {
-			b.Fatal(err)
-		}
-	}()
-	for i := 0; i < 10; i++ {
-		b.Run("Case"+strconv.Itoa(i), func(b *testing.B) {
-			for n := 0; n < b.N; n++ {
-				if e := benchRead(s, int32(i)); e != nil {
-					b.Fatal(e)
-				}
-			}
-		})
-	}
-}
-func BenchmarkSingleConnectionInsert(b *testing.B) {
-	d := newCaptureDialer(corpusPath("rec_insert"), true)
-	s, e := gocql.Connect(context.Background(), benchConfig(d))
-	if e != nil {
-		b.Fatal(e)
-	}
-	defer func() {
-		if err := finishCapture(s, d); err != nil {
-			b.Fatal(err)
-		}
-	}()
-	for i := 0; i < 10; i++ {
-		b.Run("Case"+strconv.Itoa(i), func(b *testing.B) {
-			for n := 0; n < b.N; n++ {
-				if e := benchWrite(s, int32(i)); e != nil {
-					b.Fatal(e)
-				}
-			}
-		})
-	}
-}
 
 // TestMain regenerates captures only with -update-golden against an explicitly
 // owned native fixture. See README.md in this directory for the complete recipe.
@@ -403,35 +361,6 @@ func (d *captureDialer) DialContext(ctx context.Context, target endpoint.DialTar
 	return &captureTCP{Conn: recorded, socket: tcp}, nil
 }
 
-func TestSingleConnectionReplay(t *testing.T) {
-	for _, workload := range []struct {
-		name, dir string
-		operation func(*gocql.Session, int32) error
-	}{
-		{"select", "rec_select", benchRead}, {"insert", "rec_insert", benchWrite},
-	} {
-		t.Run(workload.name, func(t *testing.T) {
-			d := newCaptureDialer(corpusPath(workload.dir), true)
-			s, err := gocql.Connect(context.Background(), benchConfig(d))
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer func() {
-				if err := finishCapture(s, d); err != nil {
-					t.Fatal(err)
-				}
-			}()
-			for i := int32(0); i < 10; i++ {
-				t.Run(fmt.Sprintf("Case%d", i), func(t *testing.T) {
-					if err := workload.operation(s, i); err != nil {
-						t.Fatal(err)
-					}
-				})
-			}
-		})
-	}
-}
-
 func (d *captureDialer) track(conn net.Conn) {
 	d.mu.Lock()
 	d.connections = append(d.connections, conn)
@@ -465,3 +394,80 @@ func (c *captureTCP) SetKeepAlivePeriod(v time.Duration) error { return c.socket
 func (c *captureTCP) SetReadBuffer(v int) error                { return c.socket.SetReadBuffer(v) }
 func (c *captureTCP) SetWriteBuffer(v int) error               { return c.socket.SetWriteBuffer(v) }
 func (c *captureTCP) SetLinger(v int) error                    { return c.socket.SetLinger(v) }
+
+func BenchmarkSingleConnection(b *testing.B) {
+	b.Run("Insert", func(b *testing.B) {
+		d := newCaptureDialer(corpusPath("rec_insert"), true)
+		s, e := gocql.Connect(context.Background(), benchConfig(d))
+		if e != nil {
+			b.Fatal(e)
+		}
+		defer func() {
+			if err := finishCapture(s, d); err != nil {
+				b.Fatal(err)
+			}
+		}()
+		for i := 0; i < 10; i++ {
+			b.Run("Case"+strconv.Itoa(i), func(b *testing.B) {
+				for n := 0; n < b.N; n++ {
+					if e := benchWrite(s, int32(i)); e != nil {
+						b.Fatal(e)
+					}
+				}
+			})
+		}
+	})
+
+	b.Run("Select", func(b *testing.B) {
+		d := newCaptureDialer(corpusPath("rec_select"), true)
+		s, e := gocql.Connect(context.Background(), benchConfig(d))
+		if e != nil {
+			b.Fatal(e)
+		}
+		defer func() {
+			if err := finishCapture(s, d); err != nil {
+				b.Fatal(err)
+			}
+		}()
+		for i := 0; i < 10; i++ {
+			b.Run("Case"+strconv.Itoa(i), func(b *testing.B) {
+				for n := 0; n < b.N; n++ {
+					if e := benchRead(s, int32(i)); e != nil {
+						b.Fatal(e)
+					}
+				}
+			})
+		}
+	})
+}
+
+func TestSingleConnection(t *testing.T) {
+	t.Run("Replay", func(t *testing.T) {
+		for _, workload := range []struct {
+			name, dir string
+			operation func(*gocql.Session, int32) error
+		}{
+			{"select", "rec_select", benchRead}, {"insert", "rec_insert", benchWrite},
+		} {
+			t.Run(workload.name, func(t *testing.T) {
+				d := newCaptureDialer(corpusPath(workload.dir), true)
+				s, err := gocql.Connect(context.Background(), benchConfig(d))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer func() {
+					if err := finishCapture(s, d); err != nil {
+						t.Fatal(err)
+					}
+				}()
+				for i := int32(0); i < 10; i++ {
+					t.Run(fmt.Sprintf("Case%d", i), func(t *testing.T) {
+						if err := workload.operation(s, i); err != nil {
+							t.Fatal(err)
+						}
+					})
+				}
+			})
+		}
+	})
+}

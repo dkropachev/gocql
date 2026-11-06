@@ -28,20 +28,22 @@ import (
 	"testing"
 )
 
-// Benchmark of the performance of the murmur3 implementation
-func BenchmarkMurmur3H1(b *testing.B) {
-	data := make([]byte, 1024)
-	for i := 0; i < 1024; i++ {
-		data[i] = byte(i)
-	}
-
-	b.ResetTimer()
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			h1 := Murmur3H1(data)
-			if h1 != int64(7627370222079200297) {
-				b.Fatalf("expected %d got %d", int64(7627370222079200297), h1)
-			}
+func BenchmarkMurmur3(b *testing.B) {
+	// Benchmark of the performance of the murmur3 implementation
+	b.Run("H1", func(b *testing.B) {
+		data := make([]byte, 1024)
+		for i := 0; i < 1024; i++ {
+			data[i] = byte(i)
 		}
+
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				h1 := Murmur3H1(data)
+				if h1 != int64(7627370222079200297) {
+					b.Fatalf("expected %d got %d", int64(7627370222079200297), h1)
+				}
+			}
+		})
 	})
 }

@@ -164,121 +164,123 @@ func (w *WikiTest) GetPageCount() int {
 	return int(count)
 }
 
-func BenchmarkWikiCreateSchema(b *testing.B) {
-	b.StopTimer()
-	session := createV2Session(b)
-	defer func() {
+func BenchmarkWiki(b *testing.B) {
+	b.Run("CreatePages", func(b *testing.B) {
 		b.StopTimer()
-		session.Close()
-	}()
+		session := createV2Session(b)
+		defer func() {
+			b.StopTimer()
+			session.Close()
+		}()
 
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		CreateSchema(session, b, "bench_create")
-	}
-}
+		w := CreateSchema(session, b, "bench_create_pages")
 
-func BenchmarkWikiCreatePages(b *testing.B) {
-	b.StopTimer()
-	session := createV2Session(b)
-	defer func() {
+		b.StartTimer()
+
+		w.CreatePages(b.N)
+	})
+
+	b.Run("CreateSchema", func(b *testing.B) {
 		b.StopTimer()
-		session.Close()
-	}()
+		session := createV2Session(b)
+		defer func() {
+			b.StopTimer()
+			session.Close()
+		}()
 
-	w := CreateSchema(session, b, "bench_create_pages")
+		b.StartTimer()
+		for i := 0; i < b.N; i++ {
+			CreateSchema(session, b, "bench_create")
+		}
+	})
 
-	b.StartTimer()
-
-	w.CreatePages(b.N)
-}
-
-func BenchmarkWikiSelectAllPages(b *testing.B) {
-	b.StopTimer()
-	session := createV2Session(b)
-	defer func() {
+	b.Run("SelectAllPages", func(b *testing.B) {
 		b.StopTimer()
-		session.Close()
-	}()
-	w := CreateSchema(session, b, "bench_select_all")
+		session := createV2Session(b)
+		defer func() {
+			b.StopTimer()
+			session.Close()
+		}()
+		w := CreateSchema(session, b, "bench_select_all")
 
-	w.CreatePages(100)
-	b.StartTimer()
+		w.CreatePages(100)
+		b.StartTimer()
 
-	var page WikiPage
-	for i := 0; i < b.N; i++ {
-		rows, err := serializationRows(w.session, fmt.Sprintf("SELECT title,revid,body,views,protected,modified,tags,attachments,rating FROM %s", w.table), wikiRows)
+		var page WikiPage
+		for i := 0; i < b.N; i++ {
+			rows, err := serializationRows(w.session, fmt.Sprintf("SELECT title,revid,body,views,protected,modified,tags,attachments,rating FROM %s", w.table), wikiRows)
+			if err != nil {
+				b.Fatal(err)
+			}
+			for rows.NextInto(&page) {
+			}
+			if err := rows.Err(); err != nil {
+				b.Error(err)
+			}
+			if err := rows.Close(); err != nil {
+				b.Error(err)
+			}
+		}
+	})
+
+	b.Run("SelectPageCount", func(b *testing.B) {
+		b.StopTimer()
+		session := createV2Session(b)
+		defer func() {
+			b.StopTimer()
+			session.Close()
+		}()
+
+		w := CreateSchema(session, b, "bench_page_count")
+		const numPages = 10
+		w.CreatePages(numPages)
+		b.StartTimer()
+		for i := 0; i < b.N; i++ {
+			if count := w.GetPageCount(); count != numPages {
+				b.Errorf("expected %d pages, got %d pages.", numPages, count)
+			}
+		}
+	})
+
+	b.Run("SelectSinglePage", func(b *testing.B) {
+		b.StopTimer()
+		session := createV2Session(b)
+		defer func() {
+			b.StopTimer()
+			session.Close()
+		}()
+		w := CreateSchema(session, b, "bench_select_single")
+		pages := make([]WikiPage, 100)
+		w.CreatePages(len(pages))
+		decoder := cql.Row(cql.Column("title", serializationString, func(v *WikiPage) *string { return &v.Title }), cql.Column("revid", wikiRevisionCodec, func(v *WikiPage) *cql.UUID { return &v.RevId }))
+		rows, err := serializationRows(session, fmt.Sprintf("SELECT title,revid FROM %s", w.table), decoder)
 		if err != nil {
 			b.Fatal(err)
 		}
-		for rows.NextInto(&page) {
+		n := 0
+		var row WikiPage
+		for rows.NextInto(&row) {
+			if n == len(pages) {
+				break
+			}
+			pages[n] = row
+			n++
 		}
+		pages = pages[:n]
 		if err := rows.Err(); err != nil {
-			b.Error(err)
+			b.Fatal(err)
 		}
 		if err := rows.Close(); err != nil {
-			b.Error(err)
+			b.Fatal(err)
 		}
-	}
-}
+		b.StartTimer()
 
-func BenchmarkWikiSelectSinglePage(b *testing.B) {
-	b.StopTimer()
-	session := createV2Session(b)
-	defer func() {
-		b.StopTimer()
-		session.Close()
-	}()
-	w := CreateSchema(session, b, "bench_select_single")
-	pages := make([]WikiPage, 100)
-	w.CreatePages(len(pages))
-	decoder := cql.Row(cql.Column("title", serializationString, func(v *WikiPage) *string { return &v.Title }), cql.Column("revid", wikiRevisionCodec, func(v *WikiPage) *cql.UUID { return &v.RevId }))
-	rows, err := serializationRows(session, fmt.Sprintf("SELECT title,revid FROM %s", w.table), decoder)
-	if err != nil {
-		b.Fatal(err)
-	}
-	n := 0
-	var row WikiPage
-	for rows.NextInto(&row) {
-		if n == len(pages) {
-			break
+		var page WikiPage
+		for i := 0; i < b.N; i++ {
+			p := &pages[i%len(pages)]
+			if err := w.SelectPage(&page, p.Title, p.RevId); err != nil {
+				b.Error(err)
+			}
 		}
-		pages[n] = row
-		n++
-	}
-	pages = pages[:n]
-	if err := rows.Err(); err != nil {
-		b.Fatal(err)
-	}
-	if err := rows.Close(); err != nil {
-		b.Fatal(err)
-	}
-	b.StartTimer()
-
-	var page WikiPage
-	for i := 0; i < b.N; i++ {
-		p := &pages[i%len(pages)]
-		if err := w.SelectPage(&page, p.Title, p.RevId); err != nil {
-			b.Error(err)
-		}
-	}
-}
-
-func BenchmarkWikiSelectPageCount(b *testing.B) {
-	b.StopTimer()
-	session := createV2Session(b)
-	defer func() {
-		b.StopTimer()
-		session.Close()
-	}()
-
-	w := CreateSchema(session, b, "bench_page_count")
-	const numPages = 10
-	w.CreatePages(numPages)
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		if count := w.GetPageCount(); count != numPages {
-			b.Errorf("expected %d pages, got %d pages.", numPages, count)
-		}
-	}
+	})
 }

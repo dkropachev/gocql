@@ -66,9 +66,9 @@ Maximum rows use operation latency; sustainable rows use scheduled-arrival-to-co
 
 |Test/check|Coverage / observed result|
 |---|---|
-|Go TestOwnedValidation, both builds, race detector|Valid row accepted; full-payload corruption and wrong row ID rejected|
-|Go TestWindowAndDrain, both builds, race detector|Completion-window versus drain accounting, all admitted requests joined, histogram count|
-|Go TestBoundedScheduledQueue, both builds, race detector|Queue stays bounded under overload, rejects arrivals, scheduled latency includes queue delay|
+|Go TestValidation/Validator/Owned, both builds, race detector|Valid row accepted; full-payload corruption and wrong row ID rejected|
+|Go TestPhase/Window/Drain, both builds, race detector|Completion-window versus drain accounting, all admitted requests joined, histogram count|
+|Go TestPhase/Queue/Bounded, both builds, race detector|Queue stays bounded under overload, rejects arrivals, scheduled latency includes queue delay|
 |Python test_stability|Percentile CV violation detected|
 |Python test_incomplete|Incomplete round set rejected|
 |Python test_capacity_is_not_target|98% delivery fails 99% target requirement|

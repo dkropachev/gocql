@@ -29,29 +29,31 @@ func sameReplicaSet(a, b []Target) bool {
 	return true
 }
 
-func TestAuthoritativeReplicaSetEquality(t *testing.T) {
-	a := Target{HostID: cqltype.UUID{15: 1}, ShardID: cqltype.Option[uint32]{Set: true}}
-	b := Target{HostID: cqltype.UUID{15: 2}, ShardID: cqltype.Option[uint32]{Set: true, Value: 1}}
-	otherShard := a
-	otherShard.ShardID.Value = 1
-	for _, test := range []struct {
-		name        string
-		left, right []Target
-		want        bool
-	}{
-		{"empty", nil, nil, true},
-		{"same", []Target{a, b}, []Target{a, b}, true},
-		{"reordered", []Target{a, b}, []Target{b, a}, true},
-		{"driver-duplicate", []Target{a, a}, []Target{a, b}, false},
-		{"authority-duplicate", []Target{a, b}, []Target{a, a}, false},
-		{"both-duplicate", []Target{a, a}, []Target{a, a}, false},
-		{"different-length", []Target{a}, []Target{a, b}, false},
-		{"different-shard", []Target{a, b}, []Target{otherShard, b}, false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			if got := sameReplicaSet(test.left, test.right); got != test.want {
-				t.Fatal(got, test.want)
-			}
-		})
-	}
+func TestTabletOracle(t *testing.T) {
+	t.Run("SameReplicaSet", func(t *testing.T) {
+		a := Target{HostID: cqltype.UUID{15: 1}, ShardID: cqltype.Option[uint32]{Set: true}}
+		b := Target{HostID: cqltype.UUID{15: 2}, ShardID: cqltype.Option[uint32]{Set: true, Value: 1}}
+		otherShard := a
+		otherShard.ShardID.Value = 1
+		for _, test := range []struct {
+			name        string
+			left, right []Target
+			want        bool
+		}{
+			{"empty", nil, nil, true},
+			{"same", []Target{a, b}, []Target{a, b}, true},
+			{"reordered", []Target{a, b}, []Target{b, a}, true},
+			{"driver-duplicate", []Target{a, a}, []Target{a, b}, false},
+			{"authority-duplicate", []Target{a, b}, []Target{a, a}, false},
+			{"both-duplicate", []Target{a, a}, []Target{a, a}, false},
+			{"different-length", []Target{a}, []Target{a, b}, false},
+			{"different-shard", []Target{a, b}, []Target{otherShard, b}, false},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				if got := sameReplicaSet(test.left, test.right); got != test.want {
+					t.Fatal(got, test.want)
+				}
+			})
+		}
+	})
 }

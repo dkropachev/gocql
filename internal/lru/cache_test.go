@@ -45,6 +45,74 @@ import (
 	"testing"
 )
 
+func TestCache(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Add", func(t *testing.T) {
+		// Struct keys work correctly with the generic cache.
+		t.Run("StructKey", func(t *testing.T) {
+			t.Parallel()
+
+			type compositeKey struct {
+				A string
+				B string
+			}
+
+			c := New[compositeKey](0)
+			k1 := compositeKey{A: "ab", B: "cd"}
+			k2 := compositeKey{A: "a", B: "bcd"}
+
+			c.Add(k1, "value1")
+			c.Add(k2, "value2")
+
+			if val, ok := c.Get(k1); !ok || val != "value1" {
+				t.Fatalf("expected value1 for k1, got %v (ok=%v)", val, ok)
+			}
+			if val, ok := c.Get(k2); !ok || val != "value2" {
+				t.Fatalf("expected value2 for k2, got %v (ok=%v)", val, ok)
+			}
+
+			// Verify that keys with same concatenation but different field boundaries
+			// are distinct (this was a bug with string concatenation keys).
+			if c.Len() != 2 {
+				t.Fatalf("expected 2 entries, got %d", c.Len())
+			}
+		})
+	})
+
+	t.Run("Get", func(t *testing.T) {
+		t.Parallel()
+
+		for _, tt := range getTests {
+			lru := New[string](0)
+			lru.Add(tt.keyToAdd, 1234)
+			val, ok := lru.Get(tt.keyToGet)
+			if ok != tt.expectedOk {
+				t.Fatalf("%s: cache hit = %v; want %v", tt.name, ok, !ok)
+			} else if ok && val != 1234 {
+				t.Fatalf("%s expected get to return 1234 but got %v", tt.name, val)
+			}
+		}
+	})
+
+	t.Run("Remove", func(t *testing.T) {
+		t.Parallel()
+
+		lru := New[string](0)
+		lru.Add("mystring", 1234)
+		if val, ok := lru.Get("mystring"); !ok {
+			t.Fatal("Remove returned no match")
+		} else if val != 1234 {
+			t.Fatalf("Remove failed.  Expected %d, got %v", 1234, val)
+		}
+
+		lru.Remove("mystring")
+		if _, ok := lru.Get("mystring"); ok {
+			t.Fatal("Remove returned a removed entry")
+		}
+	})
+}
+
 var getTests = []struct {
 	name       string
 	keyToAdd   string
@@ -55,66 +123,4 @@ var getTests = []struct {
 	{"string_miss", "mystring", "nonsense", false},
 	{"simple_struct_hit", "two", "two", true},
 	{"simeple_struct_miss", "two", "noway", false},
-}
-
-func TestGet(t *testing.T) {
-	t.Parallel()
-
-	for _, tt := range getTests {
-		lru := New[string](0)
-		lru.Add(tt.keyToAdd, 1234)
-		val, ok := lru.Get(tt.keyToGet)
-		if ok != tt.expectedOk {
-			t.Fatalf("%s: cache hit = %v; want %v", tt.name, ok, !ok)
-		} else if ok && val != 1234 {
-			t.Fatalf("%s expected get to return 1234 but got %v", tt.name, val)
-		}
-	}
-}
-
-func TestRemove(t *testing.T) {
-	t.Parallel()
-
-	lru := New[string](0)
-	lru.Add("mystring", 1234)
-	if val, ok := lru.Get("mystring"); !ok {
-		t.Fatal("TestRemove returned no match")
-	} else if val != 1234 {
-		t.Fatalf("TestRemove failed.  Expected %d, got %v", 1234, val)
-	}
-
-	lru.Remove("mystring")
-	if _, ok := lru.Get("mystring"); ok {
-		t.Fatal("TestRemove returned a removed entry")
-	}
-}
-
-// TestStructKey verifies that struct keys work correctly with the generic cache.
-func TestStructKey(t *testing.T) {
-	t.Parallel()
-
-	type compositeKey struct {
-		A string
-		B string
-	}
-
-	c := New[compositeKey](0)
-	k1 := compositeKey{A: "ab", B: "cd"}
-	k2 := compositeKey{A: "a", B: "bcd"}
-
-	c.Add(k1, "value1")
-	c.Add(k2, "value2")
-
-	if val, ok := c.Get(k1); !ok || val != "value1" {
-		t.Fatalf("expected value1 for k1, got %v (ok=%v)", val, ok)
-	}
-	if val, ok := c.Get(k2); !ok || val != "value2" {
-		t.Fatalf("expected value2 for k2, got %v (ok=%v)", val, ok)
-	}
-
-	// Verify that keys with same concatenation but different field boundaries
-	// are distinct (this was a bug with string concatenation keys).
-	if c.Len() != 2 {
-		t.Fatalf("expected 2 entries, got %d", c.Len())
-	}
 }

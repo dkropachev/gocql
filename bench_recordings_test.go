@@ -4,7 +4,6 @@
 package gocql
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -149,56 +148,4 @@ func readRecording(t *testing.T, name string) []dialer.Record {
 		records = append(records, record)
 	}
 	return records
-}
-
-// Current typed-control captures also run through TestSingleConnectionReplay.
-func TestBenchCurrentControlCapture(t *testing.T) {
-	const regenerate = "\nRegenerate the recordings: see the recipe above TestMain in tests/bench/e2e/single_conn_bench_test.go."
-
-	want := benchControlQuery()
-	wantParams := benchControlParams(t)
-
-	for _, name := range benchRecordings {
-		t.Run(name, func(t *testing.T) {
-			var (
-				texts   []string
-				params  []byte
-				found   bool
-				skipped int
-			)
-			for i, record := range readRecording(t, name) {
-				text, tail, ok := recordedQueryText(t, i, record.Data)
-				if !ok {
-					if recordedIsQuery(record.Data) {
-						skipped++
-					}
-					continue
-				}
-				texts = append(texts, text)
-				if text == want && !found {
-					params, found = tail, true
-				}
-			}
-
-			if !found {
-				switch {
-				case skipped > 0:
-					// Not a stale recording: the frames are there and this parser
-					// cannot read them. Reporting "no QUERY frame" here would send
-					// the reader off to regenerate a recording that is fine.
-					t.Fatalf("all %d of the recording's QUERY frames carry a custom payload, which this guard does not read past", skipped)
-				case len(texts) == 0:
-					t.Fatal("the recording holds no QUERY frame, so it cannot serve the control connection's system.local lookup")
-				default:
-					t.Fatalf("no recorded query is the one the control connection sends\n\twant %q\n\tgot  %q"+regenerate, want, texts)
-				}
-			}
-
-			// The statement matches. The parameters behind it are inside the hash as
-			// well, so the recording is only current if they match too.
-			if !bytes.Equal(params, wantParams) {
-				t.Fatalf("recorded control query parameters differ from current typed metadata execution\nwant % x\ngot  % x%s", wantParams, params, regenerate)
-			}
-		})
-	}
 }

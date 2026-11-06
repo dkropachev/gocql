@@ -22,42 +22,46 @@ import (
 	"testing"
 )
 
-func BenchmarkEventDistribution(b *testing.B) {
-	eb := New[int](
-		EventBusConfig{
-			InputEventsQueueSize: 1000,
-		}, nil)
-	eb.Start()
-	defer eb.Stop()
+func BenchmarkEventBus(b *testing.B) {
+	b.Run("PublishEvent", func(b *testing.B) {
+		b.Run("Filtered", func(b *testing.B) {
+			eb := New[int](
+				EventBusConfig{
+					InputEventsQueueSize: 1000,
+				}, nil)
+			eb.Start()
+			defer eb.Stop()
 
-	// Create 10 subscribers
-	for i := 0; i < 10; i++ {
-		eb.Subscribe(string(rune('A'+i)), 1000, nil)
-	}
+			filter := func(n int) bool { return n%2 == 0 }
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		eb.PublishEvent(i)
-	}
-}
+			// Create 10 subscribers with filters
+			for i := 0; i < 10; i++ {
+				eb.Subscribe(string(rune('A'+i)), 1000, filter)
+			}
 
-func BenchmarkEventDistributionWithFilter(b *testing.B) {
-	eb := New[int](
-		EventBusConfig{
-			InputEventsQueueSize: 1000,
-		}, nil)
-	eb.Start()
-	defer eb.Stop()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				eb.PublishEvent(i)
+			}
+		})
 
-	filter := func(n int) bool { return n%2 == 0 }
+		b.Run("Unfiltered", func(b *testing.B) {
+			eb := New[int](
+				EventBusConfig{
+					InputEventsQueueSize: 1000,
+				}, nil)
+			eb.Start()
+			defer eb.Stop()
 
-	// Create 10 subscribers with filters
-	for i := 0; i < 10; i++ {
-		eb.Subscribe(string(rune('A'+i)), 1000, filter)
-	}
+			// Create 10 subscribers
+			for i := 0; i < 10; i++ {
+				eb.Subscribe(string(rune('A'+i)), 1000, nil)
+			}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		eb.PublishEvent(i)
-	}
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				eb.PublishEvent(i)
+			}
+		})
+	})
 }

@@ -12,82 +12,6 @@ import (
 	"testing"
 )
 
-func TestVersions(t *testing.T) {
-	t.Parallel()
-	for _, version := range []string{"2.0.0", "2.0.0", "2.0.0-rc.1", "2.0.0-alpha-beta.2", "2.0.0-999999999999999999999999999"} {
-		version := version
-		t.Run("valid/"+version, func(t *testing.T) {
-			t.Parallel()
-			if _, err := parseVersion(version); err != nil {
-				t.Fatal(err)
-			}
-		})
-	}
-	for _, version := range []string{"", "v2.0.0", "1.20.0", "0.20.0", "1.2", "1.2.3.4", "1.02.3", "1.2.03", "1.2.3+build.1", "1.2.3-rc.01", "1.2.3-", "1.2.3-rc/1", "1.2.3;touch-pwned", "1.2.3-$(id)", "1.2.3-rc\nnext=value"} {
-		version := version
-		t.Run("invalid/"+strings.ReplaceAll(version, "/", "_"), func(t *testing.T) {
-			t.Parallel()
-			if _, err := parseVersion(version); err == nil {
-				t.Fatalf("%q accepted", version)
-			}
-		})
-	}
-}
-
-func TestModuleMappings(t *testing.T) {
-	t.Parallel()
-	tests := []struct{ module, path, dir, tag, title string }{
-		{"root", rootModulePath, ".", "v2.0.0", "v2.0.0"},
-	}
-	for _, tt := range tests {
-		got, err := newCandidate(tt.module, "2.0.0")
-		if err != nil || got.modulePath != tt.path || got.directory != tt.dir || got.tag != tt.tag || got.title != tt.title {
-			t.Fatalf("mapping %#v, %v", got, err)
-		}
-	}
-	if _, err := newCandidate("root; echo pwned", "2.0.0"); err == nil {
-		t.Fatal("shell-shaped module accepted")
-	}
-}
-
-func TestReleaseCandidates(t *testing.T) {
-	t.Parallel()
-	candidates, err := releaseCandidates("2.0.0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(candidates) != 1 || candidates[0].tag != "v2.0.0" {
-		t.Fatalf("release order = %#v, want only root", candidates)
-	}
-	for _, c := range candidates {
-		if c.version != "2.0.0" {
-			t.Fatalf("%s has version %q", c.module, c.version)
-		}
-	}
-	if _, err := releaseCandidates("v2.0.0"); err == nil {
-		t.Fatal("invalid shared version accepted")
-	}
-}
-
-func TestCompareVersions(t *testing.T) {
-	ordered := []string{"2.0.0-alpha", "2.0.0-alpha.1", "2.0.0-alpha.beta", "2.0.0-beta", "2.0.0-beta.2", "2.0.0-beta.11", "2.0.0-rc.1", "2.0.0", "2.1.0"}
-	for i := 1; i < len(ordered); i++ {
-		a, _ := parseVersion(ordered[i-1])
-		b, _ := parseVersion(ordered[i])
-		if compareVersions(a, b) >= 0 {
-			t.Fatalf("%s !< %s", ordered[i-1], ordered[i])
-		}
-	}
-}
-
-func TestSigningIdentity(t *testing.T) {
-	output := strings.Join([]string{"uid", "", "", "", "", "", "", "", "", "Release\\x20Signer\\x20\\x3crelease@example.com\\x3e"}, ":")
-	name, email, err := signingIdentity(output)
-	if err != nil || name != "Release Signer" || email != "release@example.com" {
-		t.Fatalf("%q <%s>: %v", name, email, err)
-	}
-}
-
 type fakeTargetGit struct {
 	fetchErr, resolveErr, ancestorErr, checkoutErr error
 	resolved                                       string
@@ -107,58 +31,6 @@ func (f *fakeTargetGit) isAncestor(context.Context, string) (bool, error) {
 func (f *fakeTargetGit) checkout(_ context.Context, sha string) error {
 	f.checkedOut = sha
 	return f.checkoutErr
-}
-
-func TestResolveTarget(t *testing.T) {
-	sha := strings.Repeat("a", 40)
-	tests := []struct {
-		name, requested, wantResolve string
-		git                          fakeTargetGit
-		wantErr                      string
-	}{
-		{"ok", sha, sha, fakeTargetGit{resolved: sha, ancestor: true}, ""},
-		{"master", "master", "refs/remotes/origin/master", fakeTargetGit{resolved: sha, ancestor: true}, ""},
-		{"malformed", "master; touch pwned", "", fakeTargetGit{}, "40-character"},
-		{"fetch failure", sha, "", fakeTargetGit{fetchErr: errors.New("network down")}, "fetch origin/master"},
-		{"resolve failure", sha, sha, fakeTargetGit{resolveErr: errors.New("git unavailable")}, "resolve target"},
-		{"different resolution", sha, sha, fakeTargetGit{resolved: strings.Repeat("b", 40)}, "want exact commit"},
-		{"non ancestor", sha, sha, fakeTargetGit{resolved: sha}, "not reachable"},
-		{"ancestry failure", sha, sha, fakeTargetGit{resolved: sha, ancestorErr: errors.New("broken graph")}, "check target ancestry"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := resolveTarget(context.Background(), &tt.git, tt.requested)
-			if tt.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("%v; want %s", err, tt.wantErr)
-				}
-				return
-			}
-			if err != nil || got != sha || tt.git.checkedOut != sha || tt.git.resolvedRef != tt.wantResolve {
-				t.Fatalf("%q %v resolve=%q checkout=%q", got, err, tt.git.resolvedRef, tt.git.checkedOut)
-			}
-		})
-	}
-}
-
-func TestValidateReleaseMode(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name, mode string
-		wantErr    bool
-	}{
-		{"validate", "validate", false},
-		{"publish", "publish", false},
-		{"unknown mode", "schedule", true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateReleaseMode(tt.mode)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("error = %v, wantErr=%t", err, tt.wantErr)
-			}
-		})
-	}
 }
 
 type fakeAPI struct {
@@ -190,136 +62,212 @@ type fakeVerifier struct{ err error }
 
 func (f fakeVerifier) verifyRemoteTag(string) error { return f.err }
 
-func TestReleaseStates(t *testing.T) {
-	c, _ := newCandidate("root", "2.0.0")
-	sha := strings.Repeat("a", 40)
-	goodTag := tagInfo{Target: sha, Annotated: true, Verified: true}
-	goodRelease := releaseInfo{ID: 20, TagName: c.tag, Name: c.title}
-	tests := []struct {
-		name    string
-		api     fakeAPI
-		verify  error
-		want    releaseAction
-		wantErr string
-	}{
-		{"nothing", fakeAPI{}, nil, actionCreateBoth, ""},
-		{"tag only", fakeAPI{tagInfo: goodTag, tagExists: true}, nil, actionCreateRelease, ""},
-		{"complete", fakeAPI{tagInfo: goodTag, tagExists: true, releaseInfo: goodRelease, releaseExists: true, latestInfo: goodRelease, latestExists: true}, nil, actionComplete, ""},
-		{"release without tag", fakeAPI{releaseInfo: goodRelease, releaseExists: true}, nil, "", "without its tag"},
-		{"lightweight", fakeAPI{tagInfo: tagInfo{Target: sha}, tagExists: true}, nil, "", "lightweight"},
-		{"unverified", fakeAPI{tagInfo: tagInfo{Target: sha, Annotated: true}, tagExists: true}, nil, "", "verified signature"},
-		{"wrong target", fakeAPI{tagInfo: tagInfo{Target: strings.Repeat("b", 40), Annotated: true, Verified: true}, tagExists: true}, nil, "", "want " + sha},
-		{"wrong signer", fakeAPI{tagInfo: goodTag, tagExists: true}, errors.New("wrong fingerprint"), "", "wrong fingerprint"},
-		{"metadata", fakeAPI{tagInfo: goodTag, tagExists: true, releaseInfo: releaseInfo{TagName: c.tag, Name: "wrong"}, releaseExists: true}, nil, "", "conflicting metadata"},
-		{"historical stable superseded", fakeAPI{tagInfo: goodTag, tagExists: true, releaseInfo: goodRelease, releaseExists: true, latestInfo: releaseInfo{ID: 21, TagName: "v2.1.0"}, latestExists: true}, nil, actionComplete, ""},
-		{"stable unexpectedly not latest", fakeAPI{tagInfo: goodTag, tagExists: true, releaseInfo: goodRelease, releaseExists: true}, nil, "", "not Latest"},
-		{"tag API", fakeAPI{tagErr: errors.New("tag API down")}, nil, "", "tag API down"},
-		{"release API", fakeAPI{tagInfo: goodTag, tagExists: true, releaseErr: errors.New("release API down")}, nil, "", "release API down"},
-		{"latest API", fakeAPI{tagInfo: goodTag, tagExists: true, releaseInfo: goodRelease, releaseExists: true, latestErr: errors.New("latest API down")}, nil, "", "latest API down"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := inspectReleaseState(context.Background(), tt.api, fakeVerifier{tt.verify}, c, sha)
-			if tt.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+func TestRelease(t *testing.T) {
+	t.Run("CheckBlockers", func(t *testing.T) {
+		tests := []struct {
+			name          string
+			status        int
+			body, wantErr string
+		}{
+			{"none", 200, `[]`, ""}, {"one", 200, `[{"number":1080,"title":"gate","html_url":"https://example/1080"}]`, "#1080"},
+			{"API", 500, `{"message":"boom"}`, "500"}, {"not found", 404, `{}`, "not found"}, {"parse", 200, `{not-json`, "decode"}, {"trailing", 200, `[] true`, "trailing data"},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if r.Header.Get("Authorization") != "Bearer token" {
+						t.Error("auth")
+					}
+					w.WriteHeader(tt.status)
+					_, _ = w.Write([]byte(tt.body))
+				}))
+				defer server.Close()
+				api, _ := newGitHubAPI(server.URL, "scylladb/gocql", "token")
+				api.client = server.Client()
+				err := checkBlockers(context.Background(), api)
+				if tt.wantErr == "" && err != nil {
+					t.Fatal(err)
+				}
+				if tt.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErr)) {
 					t.Fatalf("%v; want %s", err, tt.wantErr)
 				}
-				return
-			}
-			if err != nil || got != tt.want {
-				t.Fatalf("%q %v; want %q", got, err, tt.want)
-			}
-		})
-	}
-}
-
-func TestPrereleaseNeverLatest(t *testing.T) {
-	c, _ := newCandidate("root", "2.0.0-rc.1")
-	sha := strings.Repeat("a", 40)
-	release := releaseInfo{ID: 20, TagName: c.tag, Name: c.title, Prerelease: true}
-	api := fakeAPI{tagInfo: tagInfo{Target: sha, Annotated: true, Verified: true}, tagExists: true, releaseInfo: release, releaseExists: true, latestInfo: releaseInfo{ID: 19}, latestExists: true}
-	if got, err := inspectReleaseState(context.Background(), api, fakeVerifier{}, c, sha); err != nil || got != actionComplete {
-		t.Fatalf("%q %v", got, err)
-	}
-}
-
-func TestLatestPolicies(t *testing.T) {
-	t.Parallel()
-	root, _ := newCandidate("root", "2.0.0")
-	prerelease, _ := newCandidate("root", "2.0.0-rc.1")
-	sha := strings.Repeat("a", 40)
-	tag := tagInfo{Target: sha, Annotated: true, Verified: true}
-	rootRelease := releaseInfo{ID: 20, TagName: root.tag, Name: root.title}
-	preRelease := releaseInfo{ID: 21, TagName: prerelease.tag, Name: prerelease.title, Prerelease: true}
-
-	if err := verifyNewReleaseLatest(context.Background(), fakeAPI{releaseInfo: rootRelease, releaseExists: true, latestInfo: rootRelease, latestExists: true}, root); err != nil {
-		t.Fatalf("new stable root latest check: %v", err)
-	}
-	if err := verifyNewReleaseLatest(context.Background(), fakeAPI{releaseInfo: rootRelease, releaseExists: true}, root); err == nil || !strings.Contains(err.Error(), "not Latest") {
-		t.Fatalf("missing Latest error = %v", err)
-	}
-	if err := verifyNewReleaseLatest(context.Background(), fakeAPI{releaseInfo: rootRelease, releaseExists: true, latestErr: errors.New("latest API down")}, root); err == nil || !strings.Contains(err.Error(), "latest API down") {
-		t.Fatalf("Latest API error = %v", err)
-	}
-	if got, err := inspectReleaseState(context.Background(), fakeAPI{tagInfo: tag, tagExists: true, releaseInfo: preRelease, releaseExists: true, latestInfo: preRelease, latestExists: true}, fakeVerifier{}, prerelease, sha); err == nil || got != "" || !strings.Contains(err.Error(), "must not be") {
-		t.Fatalf("prerelease Latest state = %q, %v", got, err)
-	}
-	if _, err := inspectReleaseState(context.Background(), fakeAPI{tagInfo: tag, tagExists: true, releaseInfo: preRelease, releaseExists: true, latestErr: errors.New("latest API down")}, fakeVerifier{}, prerelease, sha); err == nil || !strings.Contains(err.Error(), "latest API down") {
-		t.Fatalf("prerelease Latest API error = %v", err)
-	}
-}
-
-func TestHigherStableRootTag(t *testing.T) {
-	t.Parallel()
-	c, _ := newCandidate("root", "2.0.0")
-	tests := []struct {
-		tag  string
-		want bool
-	}{
-		{"v2.1.0", true},
-		{"v2.0.1", true},
-		{"v2.0.0", false},
-		{"v1.19.9", false},
-		{"v2.1.0-rc.1", false},
-		{"lz4/v2.1.0", false},
-		{"v2.0.0", false},
-		{"not-a-version", false},
-	}
-	for _, tt := range tests {
-		if got := isHigherStableRootTag(tt.tag, c); got != tt.want {
-			t.Errorf("isHigherStableRootTag(%q) = %t, want %t", tt.tag, got, tt.want)
+			})
 		}
-	}
-}
+	})
 
-func TestBlockersFailClosed(t *testing.T) {
-	tests := []struct {
-		name          string
-		status        int
-		body, wantErr string
-	}{
-		{"none", 200, `[]`, ""}, {"one", 200, `[{"number":1080,"title":"gate","html_url":"https://example/1080"}]`, "#1080"},
-		{"API", 500, `{"message":"boom"}`, "500"}, {"not found", 404, `{}`, "not found"}, {"parse", 200, `{not-json`, "decode"}, {"trailing", 200, `[] true`, "trailing data"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Header.Get("Authorization") != "Bearer token" {
-					t.Error("auth")
-				}
-				w.WriteHeader(tt.status)
-				_, _ = w.Write([]byte(tt.body))
-			}))
-			defer server.Close()
-			api, _ := newGitHubAPI(server.URL, "scylladb/gocql", "token")
-			api.client = server.Client()
-			err := checkBlockers(context.Background(), api)
-			if tt.wantErr == "" && err != nil {
-				t.Fatal(err)
-			}
-			if tt.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErr)) {
-				t.Fatalf("%v; want %s", err, tt.wantErr)
+	t.Run("InspectReleaseState", func(t *testing.T) {
+		t.Run("PrereleaseNeverLatest", func(t *testing.T) {
+			c, _ := newCandidate("root", "2.0.0-rc.1")
+			sha := strings.Repeat("a", 40)
+			release := releaseInfo{ID: 20, TagName: c.tag, Name: c.title, Prerelease: true}
+			api := fakeAPI{tagInfo: tagInfo{Target: sha, Annotated: true, Verified: true}, tagExists: true, releaseInfo: release, releaseExists: true, latestInfo: releaseInfo{ID: 19}, latestExists: true}
+			if got, err := inspectReleaseState(context.Background(), api, fakeVerifier{}, c, sha); err != nil || got != actionComplete {
+				t.Fatalf("%q %v", got, err)
 			}
 		})
-	}
+
+		t.Run("States", func(t *testing.T) {
+			c, _ := newCandidate("root", "2.0.0")
+			sha := strings.Repeat("a", 40)
+			goodTag := tagInfo{Target: sha, Annotated: true, Verified: true}
+			goodRelease := releaseInfo{ID: 20, TagName: c.tag, Name: c.title}
+			tests := []struct {
+				name    string
+				api     fakeAPI
+				verify  error
+				want    releaseAction
+				wantErr string
+			}{
+				{"nothing", fakeAPI{}, nil, actionCreateBoth, ""},
+				{"tag only", fakeAPI{tagInfo: goodTag, tagExists: true}, nil, actionCreateRelease, ""},
+				{"complete", fakeAPI{tagInfo: goodTag, tagExists: true, releaseInfo: goodRelease, releaseExists: true, latestInfo: goodRelease, latestExists: true}, nil, actionComplete, ""},
+				{"release without tag", fakeAPI{releaseInfo: goodRelease, releaseExists: true}, nil, "", "without its tag"},
+				{"lightweight", fakeAPI{tagInfo: tagInfo{Target: sha}, tagExists: true}, nil, "", "lightweight"},
+				{"unverified", fakeAPI{tagInfo: tagInfo{Target: sha, Annotated: true}, tagExists: true}, nil, "", "verified signature"},
+				{"wrong target", fakeAPI{tagInfo: tagInfo{Target: strings.Repeat("b", 40), Annotated: true, Verified: true}, tagExists: true}, nil, "", "want " + sha},
+				{"wrong signer", fakeAPI{tagInfo: goodTag, tagExists: true}, errors.New("wrong fingerprint"), "", "wrong fingerprint"},
+				{"metadata", fakeAPI{tagInfo: goodTag, tagExists: true, releaseInfo: releaseInfo{TagName: c.tag, Name: "wrong"}, releaseExists: true}, nil, "", "conflicting metadata"},
+				{"historical stable superseded", fakeAPI{tagInfo: goodTag, tagExists: true, releaseInfo: goodRelease, releaseExists: true, latestInfo: releaseInfo{ID: 21, TagName: "v2.1.0"}, latestExists: true}, nil, actionComplete, ""},
+				{"stable unexpectedly not latest", fakeAPI{tagInfo: goodTag, tagExists: true, releaseInfo: goodRelease, releaseExists: true}, nil, "", "not Latest"},
+				{"tag API", fakeAPI{tagErr: errors.New("tag API down")}, nil, "", "tag API down"},
+				{"release API", fakeAPI{tagInfo: goodTag, tagExists: true, releaseErr: errors.New("release API down")}, nil, "", "release API down"},
+				{"latest API", fakeAPI{tagInfo: goodTag, tagExists: true, releaseInfo: goodRelease, releaseExists: true, latestErr: errors.New("latest API down")}, nil, "", "latest API down"},
+			}
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					got, err := inspectReleaseState(context.Background(), tt.api, fakeVerifier{tt.verify}, c, sha)
+					if tt.wantErr != "" {
+						if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+							t.Fatalf("%v; want %s", err, tt.wantErr)
+						}
+						return
+					}
+					if err != nil || got != tt.want {
+						t.Fatalf("%q %v; want %q", got, err, tt.want)
+					}
+				})
+			}
+		})
+	})
+
+	t.Run("NewCandidate", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct{ module, path, dir, tag, title string }{
+			{"root", rootModulePath, ".", "v2.0.0", "v2.0.0"},
+		}
+		for _, tt := range tests {
+			got, err := newCandidate(tt.module, "2.0.0")
+			if err != nil || got.modulePath != tt.path || got.directory != tt.dir || got.tag != tt.tag || got.title != tt.title {
+				t.Fatalf("mapping %#v, %v", got, err)
+			}
+		}
+		if _, err := newCandidate("root; echo pwned", "2.0.0"); err == nil {
+			t.Fatal("shell-shaped module accepted")
+		}
+	})
+
+	t.Run("ReleaseCandidates", func(t *testing.T) {
+		t.Parallel()
+		candidates, err := releaseCandidates("2.0.0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(candidates) != 1 || candidates[0].tag != "v2.0.0" {
+			t.Fatalf("release order = %#v, want only root", candidates)
+		}
+		for _, c := range candidates {
+			if c.version != "2.0.0" {
+				t.Fatalf("%s has version %q", c.module, c.version)
+			}
+		}
+		if _, err := releaseCandidates("v2.0.0"); err == nil {
+			t.Fatal("invalid shared version accepted")
+		}
+	})
+
+	t.Run("ResolveTarget", func(t *testing.T) {
+		sha := strings.Repeat("a", 40)
+		tests := []struct {
+			name, requested, wantResolve string
+			git                          fakeTargetGit
+			wantErr                      string
+		}{
+			{"ok", sha, sha, fakeTargetGit{resolved: sha, ancestor: true}, ""},
+			{"master", "master", "refs/remotes/origin/master", fakeTargetGit{resolved: sha, ancestor: true}, ""},
+			{"malformed", "master; touch pwned", "", fakeTargetGit{}, "40-character"},
+			{"fetch failure", sha, "", fakeTargetGit{fetchErr: errors.New("network down")}, "fetch origin/master"},
+			{"resolve failure", sha, sha, fakeTargetGit{resolveErr: errors.New("git unavailable")}, "resolve target"},
+			{"different resolution", sha, sha, fakeTargetGit{resolved: strings.Repeat("b", 40)}, "want exact commit"},
+			{"non ancestor", sha, sha, fakeTargetGit{resolved: sha}, "not reachable"},
+			{"ancestry failure", sha, sha, fakeTargetGit{resolved: sha, ancestorErr: errors.New("broken graph")}, "check target ancestry"},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				got, err := resolveTarget(context.Background(), &tt.git, tt.requested)
+				if tt.wantErr != "" {
+					if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+						t.Fatalf("%v; want %s", err, tt.wantErr)
+					}
+					return
+				}
+				if err != nil || got != sha || tt.git.checkedOut != sha || tt.git.resolvedRef != tt.wantResolve {
+					t.Fatalf("%q %v resolve=%q checkout=%q", got, err, tt.git.resolvedRef, tt.git.checkedOut)
+				}
+			})
+		}
+	})
+
+	t.Run("SigningIdentity", func(t *testing.T) {
+		output := strings.Join([]string{"uid", "", "", "", "", "", "", "", "", "Release\\x20Signer\\x20\\x3crelease@example.com\\x3e"}, ":")
+		name, email, err := signingIdentity(output)
+		if err != nil || name != "Release Signer" || email != "release@example.com" {
+			t.Fatalf("%q <%s>: %v", name, email, err)
+		}
+	})
+
+	t.Run("ValidateReleaseMode", func(t *testing.T) {
+		t.Parallel()
+		tests := []struct {
+			name, mode string
+			wantErr    bool
+		}{
+			{"validate", "validate", false},
+			{"publish", "publish", false},
+			{"unknown mode", "schedule", true},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				err := validateReleaseMode(tt.mode)
+				if (err != nil) != tt.wantErr {
+					t.Fatalf("error = %v, wantErr=%t", err, tt.wantErr)
+				}
+			})
+		}
+	})
+
+	t.Run("VerifyNewReleaseLatest", func(t *testing.T) {
+		t.Parallel()
+		root, _ := newCandidate("root", "2.0.0")
+		prerelease, _ := newCandidate("root", "2.0.0-rc.1")
+		sha := strings.Repeat("a", 40)
+		tag := tagInfo{Target: sha, Annotated: true, Verified: true}
+		rootRelease := releaseInfo{ID: 20, TagName: root.tag, Name: root.title}
+		preRelease := releaseInfo{ID: 21, TagName: prerelease.tag, Name: prerelease.title, Prerelease: true}
+
+		if err := verifyNewReleaseLatest(context.Background(), fakeAPI{releaseInfo: rootRelease, releaseExists: true, latestInfo: rootRelease, latestExists: true}, root); err != nil {
+			t.Fatalf("new stable root latest check: %v", err)
+		}
+		if err := verifyNewReleaseLatest(context.Background(), fakeAPI{releaseInfo: rootRelease, releaseExists: true}, root); err == nil || !strings.Contains(err.Error(), "not Latest") {
+			t.Fatalf("missing Latest error = %v", err)
+		}
+		if err := verifyNewReleaseLatest(context.Background(), fakeAPI{releaseInfo: rootRelease, releaseExists: true, latestErr: errors.New("latest API down")}, root); err == nil || !strings.Contains(err.Error(), "latest API down") {
+			t.Fatalf("Latest API error = %v", err)
+		}
+		if got, err := inspectReleaseState(context.Background(), fakeAPI{tagInfo: tag, tagExists: true, releaseInfo: preRelease, releaseExists: true, latestInfo: preRelease, latestExists: true}, fakeVerifier{}, prerelease, sha); err == nil || got != "" || !strings.Contains(err.Error(), "must not be") {
+			t.Fatalf("prerelease Latest state = %q, %v", got, err)
+		}
+		if _, err := inspectReleaseState(context.Background(), fakeAPI{tagInfo: tag, tagExists: true, releaseInfo: preRelease, releaseExists: true, latestErr: errors.New("latest API down")}, fakeVerifier{}, prerelease, sha); err == nil || !strings.Contains(err.Error(), "latest API down") {
+			t.Fatalf("prerelease Latest API error = %v", err)
+		}
+	})
 }

@@ -27,7 +27,7 @@ start, test and stop; its regeneration mode sets `GOCQL_REGENERATE_BENCH=1` and 
 
 ```sh
 GOCQL_BENCH_ADDRESS=127.0.20.1:9042 \
-  go test -race -count=1 -run '^TestSingleConnectionReplay$' ./tests/bench/e2e \
+  go test -race -count=1 -run '^TestSingleConnection$/^Replay$' ./tests/bench/e2e \
   -args -update-golden
 ```
 

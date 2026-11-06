@@ -15,22 +15,56 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/*
- * Content before git sha 34fdeebefcbf183ed7f916f931aa0586fdaa1b40
- * Copyright (c) 2016, The Gocql authors,
- * provided under the BSD-3-Clause License.
- * See the NOTICE file distributed with this work for additional information.
- */
 
 package gocql_test
 
 import (
-	gocql "github.com/scylladb/gocql/v2"
-
+	"io"
 	"testing"
 
+	gocql "github.com/scylladb/gocql/v2"
 	lz4mod "github.com/scylladb/gocql/v2/internal/wirecompress"
 )
+
+func TestInterfacesAPI(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Compressor", func(t *testing.T) {
+		t.Run("BackwardCompatibility", func(t *testing.T) {
+			t.Parallel()
+
+			// A compressor implementing only Name/Encode/Decode must satisfy
+			// gocql.Compressor without implementing the optional v5 SegmentCompressor.
+			var c gocql.Compressor = legacyCompressor{}
+			if _, ok := c.(gocql.SegmentCompressor); ok {
+				t.Fatal("legacyCompressor unexpectedly satisfies SegmentCompressor")
+			}
+
+			// The built-in SnappyCompressor must not satisfy SegmentCompressor: it is
+			// the "capable Compressor, but not v5-segment-capable" case the driver
+			// rejects up front on ProtoVersion >= 5.
+			if _, ok := interface{}(gocql.SnappyCompressor{}).(gocql.SegmentCompressor); ok {
+				t.Fatal("SnappyCompressor must not satisfy SegmentCompressor")
+			}
+		})
+	})
+
+	t.Run("Conn", func(t *testing.T) {
+		// Documents the compile-time Conn guards in this file as an explicit
+		// expectation, in the same spirit as Compressor/BackwardCompatibility.
+		t.Run("ReadWriter", func(t *testing.T) {
+			t.Parallel()
+
+			var c interface{} = (*gocql.Conn)(nil)
+			if _, ok := c.(io.Reader); !ok {
+				t.Error("*gocql.Conn must satisfy io.Reader")
+			}
+			if _, ok := c.(io.Writer); !ok {
+				t.Error("*gocql.Conn must satisfy io.Writer")
+			}
+		})
+	})
+}
 
 // legacyCompressor implements only the master-era Compressor surface
 // (Name/Encode/Decode). It guards backward compatibility: if the public
@@ -49,24 +83,6 @@ var (
 	_ gocql.SegmentCompressor = lz4mod.LZ4Compressor{}
 )
 
-func TestCompressorBackwardCompatibility(t *testing.T) {
-	t.Parallel()
-
-	// A compressor implementing only Name/Encode/Decode must satisfy
-	// gocql.Compressor without implementing the optional v5 SegmentCompressor.
-	var c gocql.Compressor = legacyCompressor{}
-	if _, ok := c.(gocql.SegmentCompressor); ok {
-		t.Fatal("legacyCompressor unexpectedly satisfies SegmentCompressor")
-	}
-
-	// The built-in SnappyCompressor must not satisfy SegmentCompressor: it is
-	// the "capable Compressor, but not v5-segment-capable" case the driver
-	// rejects up front on ProtoVersion >= 5.
-	if _, ok := interface{}(gocql.SnappyCompressor{}).(gocql.SegmentCompressor); ok {
-		t.Fatal("SnappyCompressor must not satisfy SegmentCompressor")
-	}
-}
-
 // TestSnappyCompressorDecodeRejectsHugeLength is the snappy counterpart of
 // TestLZ4Compressor_DecodeRejectsHugeLength in the lz4 module.
 //
@@ -75,3 +91,12 @@ func TestCompressorBackwardCompatibility(t *testing.T) {
 // refuses a claim above 4 GiB, so without a bound here a handful of corrupt header bytes
 // on a short frame buy a multi-gigabyte allocation: the frame reader bounds the
 // compressed body it accepts, but nothing bounded what that body expanded into.
+
+// *gocql.Conn has exposed both Read and Write since before the read-path
+// refactor. This module has no /v2 import path, so dropping either one is a
+// backward-incompatible removal for downstream code that uses a *Conn as an
+// io.Reader/io.Writer. These guards make such a removal a build failure.
+var (
+	_ io.Reader = (*gocql.Conn)(nil)
+	_ io.Writer = (*gocql.Conn)(nil)
+)
