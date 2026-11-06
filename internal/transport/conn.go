@@ -897,7 +897,11 @@ func (c *Conn) InternalServe(ctx context.Context) {
 		}
 
 		if errors.Is(err, ErrReadHeaderTimeout) {
-			c.InternalLogger.Print("gocql: read header timeout")
+			// An exclusive reservation interrupts the idle header wait on
+			// purpose to pause this reader; that is not a timeout.
+			if !c.pauseRequested.Load() {
+				c.InternalLogger.Print("gocql: read header timeout")
+			}
 			err = nil
 			continue
 		}

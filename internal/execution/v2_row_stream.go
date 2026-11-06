@@ -195,6 +195,21 @@ func InternalRowStreamCloseWithError[R any](s *RowStream[R], err error) error {
 	s.privateStorage.mu.Unlock()
 	defer close(done)
 
+	// An explicit Close of an incremental stream that no NextInto is running
+	// keeps its connection when the rest of the current response is small:
+	// discarding those bytes is far cheaper than closing the connection and
+	// dialing a replacement. The reservation is returned before cancellation,
+	// whose callback would otherwise close the connection.
+	if err == nil && s.privateStorage.InternalActive.TryLock() {
+		if finishAbandonedResponse(s) {
+			if err := s.privateStorage.InternalReservation.InternalClose(true); err != nil {
+				s.setError(err)
+			}
+			s.privateStorage.InternalReservation = nil
+		}
+		s.privateStorage.InternalActive.Unlock()
+	}
+
 	// Publish termination before cancellation so our own cancellation callback
 	// cannot turn successful explicit Close into a context error. Every caller
 	// joins the same completion, including callback and session shutdown paths.
@@ -203,6 +218,40 @@ func InternalRowStreamCloseWithError[R any](s *RowStream[R], err error) error {
 	InternalRowStreamCleanup(s, false)
 	s.privateStorage.InternalActive.Unlock()
 	return s.Err()
+}
+
+// abandonedResponseDrainLimit bounds the unread response bytes an explicit
+// Close discards to keep an incremental stream's connection.
+const abandonedResponseDrainLimit = 1 << 20
+
+// finishAbandonedResponse reads and discards the unread rest of an
+// incremental stream's current response, reporting whether the reservation
+// is back at a response boundary and its connection can be reused. Active is
+// held.
+func finishAbandonedResponse[R any](s *RowStream[R]) bool {
+	p := &s.privateStorage
+	if p.pageBuffered || p.cleaned || p.InternalReservation == nil || p.response == nil || p.err != nil {
+		return false
+	}
+	response := p.response
+	if response.InternalTerminal {
+		return p.InternalReservation.InternalComplete
+	}
+	body := response.InternalBody
+	if body == nil || body.Remaining() > abandonedResponseDrainLimit {
+		return false
+	}
+	err := p.InternalReservation.InternalWithIO(response.InternalCtx, func() error {
+		if err := body.Skip(); err != nil {
+			return err
+		}
+		if err := body.RequireEnd(); err != nil {
+			return err
+		}
+		response.InternalTerminal = true
+		return p.InternalReservation.InternalFinishResponse()
+	})
+	return err == nil
 }
 
 // active is held; no driver mutex is held while calling application code.
