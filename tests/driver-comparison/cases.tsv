@@ -1,0 +1,29 @@
+# master	v2	workers	description
+# Every v2 case is timed against its master case; a master case may serve
+# several v2 cases. See README-CASES.md for the pseudocode of each case.
+MA1	A1	64	point read, reused query, single row (One / Scan)
+MA2	A2	64	point read, one-shot (Prepared.One / new Query per op)
+MA2	A7	64	point read, unprepared with bound values (master prepares implicitly)
+MA3	A3	64	point read, reused query, Each / Iter loop
+MA3	A4	64	point read, Run + Rows.NextInto / Iter loop
+MA3	A5	64	point read, StreamQuery / Iter loop
+MA4	A6	64	point read, unpaged (RunUnpaged / PageSize 0)
+MB1	B1	4	partition read 128x4KiB, page 32, Each / Iter
+MB1	B2	4	partition read, Run + Rows.NextInto / Iter
+MB1	B3	4	partition read, StreamQuery buffered / Iter
+MB1	B4	4	partition read, StreamQuery incremental / Iter
+MB2	B5	4	partition read with prefetch (1 page / 0.25)
+MB3	B6	4	partition read unpaged (RunUnpaged / PageSize 0)
+MB4	B7	4	partition read, page size 5000 (one page)
+MB5	B8	4	partition read, first 16 rows then abandon
+MB5	B9	4	partition read, incremental StreamQuery, first 16 rows then abandon
+MC1	C1	64	application-driven paging, one 32-row page per op
+MD1	D1	64	point write, reused query
+MD2	D2	64	point write, one-shot (Prepared.Exec / new Query per op)
+MD2	D4	64	point write, unprepared with bound values
+MD3	D3	64	point write, idempotent with client timestamp
+ME1	E1	8	unlogged batch, 8 rows of one partition (8 workers: 64 exceed the server hint budget)
+ME2	E2	64	logged batch, 4 point partitions
+MF1	F1	64	LWT compare-and-set UPDATE ... IF, LOCAL_SERIAL
+MG1	G1	64	50/50 point read/write, reused queries
+MG2	G2	64	50/50 point read/write, one-shot

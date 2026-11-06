@@ -48,7 +48,12 @@ func connect(hosts []string) (adapter, error) {
 	c.RetryPolicy = &g.SimpleRetryPolicy{NumRetries: 0}
 	c.PoolConfig.HostSelectionPolicy = g.TokenAwareHostPolicy(g.DCAwareRoundRobinPolicy("datacenter1"))
 	s, e := c.CreateSession()
-	return &oldAdapter{s}, e
+	if e != nil {
+		return nil, e
+	}
+	// Queries built per operation match v2's profile: no prefetch.
+	s.SetPrefetch(0)
+	return &oldAdapter{s}, nil
 }
 func (a *oldAdapter) Close() error { a.s.Close(); return nil }
 func (a *oldAdapter) Exec(ctx context.Context, q string) error {

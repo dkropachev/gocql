@@ -32,6 +32,21 @@ const pointRead = "SELECT k,r,p FROM bench_compare.point WHERE k=?"
 const pageRead = "SELECT k,r,p FROM bench_compare.paged WHERE k=?"
 const pointWrite = "INSERT INTO bench_compare.point (k,r,p) VALUES (?,?,?)"
 const pageWrite = "INSERT INTO bench_compare.paged (k,r,p) VALUES (?,?,?)"
+const lwtUpdate = "UPDATE bench_compare.lwt SET v=? WHERE k=? IF v=?"
+const lwtRead = "SELECT v FROM bench_compare.lwt WHERE k=?"
+
+// lwtKeys rows of bench_compare.lwt exist; a case worker id of n owns keys
+// id, id+n, ... and lwtKeysPerWorker of them, so n may be at most 64.
+const lwtKeys = 4096
+const lwtKeysPerWorker = 64
+
+// pageRows is the page size of every paged case.
+const pageRows = 32
+
+// allRows reads until the driver ends the result. A full read must not stop
+// at the expected row count: that skips the request for the terminal page,
+// which a complete read pays for.
+const allRows = int32(1<<31 - 1)
 
 type row struct {
 	K, R int32
@@ -42,8 +57,14 @@ type worker interface {
 	Read(context.Context, int32, consumer) error
 	Write(context.Context, int32, int32, []byte) error
 }
+
+// op is one measured operation of a case; seq selects its key.
+type op func(context.Context, uint64) error
+
 type adapter interface {
 	Worker(bool, bool) (worker, error)
+	// Case builds worker id of n for a named case of this driver.
+	Case(name string, id, n int) (op, error)
 	Exec(context.Context, string) error
 	Close() error
 	Evidence() any
@@ -92,6 +113,68 @@ func validator(paged bool, k int32) consumer {
 		return nil
 	}
 }
+func pointKey(seq uint64) int32 { return int32((seq * 7919) % keys) }
+func partKey(seq uint64) int32  { return int32((seq * 7919) % partitions) }
+
+// rowCheck validates rows of one key, from row first on, without allocating:
+// a case binds its row method once and resets it per operation.
+type rowCheck struct {
+	paged         bool
+	k, next, seen int32
+}
+
+func (c *rowCheck) reset(paged bool, k, first int32) {
+	c.paged, c.k, c.next, c.seen = paged, k, first, 0
+}
+func (c *rowCheck) row(v *row) error {
+	s := 0
+	if c.paged {
+		s = 1
+	}
+	if v.K != c.k || v.R != c.next || len(v.P) != 1024*(1+3*s) || sha256.Sum256(v.P) != checksums[s][variant(c.k, c.next)] {
+		return fmt.Errorf("invalid owned row key=%d row=%d got=%d/%d len=%d", c.k, c.next, v.K, v.R, len(v.P))
+	}
+	c.next++
+	c.seen++
+	return nil
+}
+
+// done reports err, or a row count other than want.
+func (c *rowCheck) done(want int32, err error) error {
+	if err == nil && c.seen != want {
+		return fmt.Errorf("key=%d rows=%d expected=%d", c.k, c.seen, want)
+	}
+	return err
+}
+
+// pageCursor is application-driven paging over the paged table: each
+// operation fetches one page of a partition from a saved state, and a
+// partition is finished by the page that returns no state.
+type pageCursor struct {
+	state []byte
+	k     int32
+	next  int32
+	part  uint64
+}
+
+// expect returns the rows the next page must hold.
+func (c *pageCursor) expect() int32 { return min(pageRows, rowsPerPartition-c.next) }
+
+// advance records a fetched page of n rows and its next state.
+func (c *pageCursor) advance(n int32, state []byte) error {
+	c.next += n
+	if len(state) == 0 {
+		if c.next != rowsPerPartition {
+			return fmt.Errorf("partition %d ended after %d rows", c.k, c.next)
+		}
+		c.part++
+		c.k, c.next, c.state = partKey(c.part), 0, c.state[:0]
+		return nil
+	}
+	c.state = append(c.state[:0], state...)
+	return nil
+}
+
 func operation(ctx context.Context, w worker, scenario string, seq uint64) error {
 	paged := scenario == "paged"
 	space := uint64(keys)
@@ -162,6 +245,40 @@ func check(a adapter, stream bool) error {
 	}
 	return nil
 }
+
+// prepareLWT resets every lwt row to v=0.
+func prepareLWT(a adapter) error {
+	ctx := context.Background()
+	if err := a.Exec(ctx, "TRUNCATE bench_compare.lwt"); err != nil {
+		return err
+	}
+	for k := 0; k < lwtKeys; k++ {
+		if err := a.Exec(ctx, fmt.Sprintf("INSERT INTO bench_compare.lwt (k,v) VALUES (%d,0)", k)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkCase runs a case's operations sequentially on one worker. Every
+// operation validates what it reads, LWT operations require the update to
+// apply, and enough operations run to page through several partitions.
+func checkCase(a adapter, name string) error {
+	w, err := a.Case(name, 0, 1)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	for seq := uint64(0); seq < 256; seq++ {
+		if err := w(ctx, seq); err != nil {
+			return fmt.Errorf("case %s op %d: %w", name, seq, err)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "CHECK %s %s: 256 operations\n", driverName, name)
+	return nil
+}
+
 func prepare(a adapter, scenario string) error {
 	ctx := context.Background()
 	table := "point"
@@ -341,11 +458,16 @@ type arrival struct {
 	scheduled, enqueued time.Time
 }
 
-func phase(workers []worker, scenario string, duration time.Duration, rate float64) (*stats, error) {
-	return phaseWithSleep(workers, scenario, duration, rate, time.Sleep)
+// scenarioOp adapts a scenario worker to a measured operation.
+func scenarioOp(w worker, scenario string) op {
+	return func(ctx context.Context, seq uint64) error { return operation(ctx, w, scenario, seq) }
 }
 
-func phaseWithSleep(workers []worker, scenario string, duration time.Duration, rate float64, sleep func(time.Duration)) (*stats, error) {
+func phase(workers []op, duration time.Duration, rate float64) (*stats, error) {
+	return phaseWithSleep(workers, duration, rate, time.Sleep)
+}
+
+func phaseWithSleep(workers []op, duration time.Duration, rate float64, sleep func(time.Duration)) (*stats, error) {
 	s := &stats{Latency: histogram(), Dispatch: histogram(), Queue: histogram(), Schedule: histogram(), Elapsed: duration.Seconds(), Rate: rate}
 	if e := affinity(); e != nil {
 		return nil, e
@@ -385,10 +507,10 @@ func phaseWithSleep(workers []worker, scenario string, duration time.Duration, r
 			}
 		}
 	}()
-	execute := func(w worker, a arrival) {
+	execute := func(w op, a arrival) {
 		dispatch := time.Now()
 		opCtx, stop := context.WithTimeout(ctx, 10*time.Second)
-		e := operation(opCtx, w, scenario, a.seq)
+		e := w(opCtx, a.seq)
 		stop()
 		finish := time.Now()
 		s.mu.Lock()
@@ -414,7 +536,7 @@ func phaseWithSleep(workers []worker, scenario string, duration time.Duration, r
 	var wg sync.WaitGroup
 	for id, w := range workers {
 		wg.Add(1)
-		go func(id int, w worker) {
+		go func(id int, w op) {
 			defer wg.Done()
 			if rate > 0 {
 				for a := range queue {
@@ -507,7 +629,8 @@ func phaseWithSleep(workers []worker, scenario string, duration time.Duration, r
 func run() (resultErr error) {
 	hosts := flag.String("hosts", "", "comma separated IPs")
 	mode := flag.String("mode", "run", "schema, check, prepare, warm, run")
-	scenario := flag.String("scenario", "read", "read, write, paged")
+	scenario := flag.String("scenario", "read", "read, write, paged; lwt for prepare")
+	caseName := flag.String("case", "", "named query-execution case (see cases.tsv); replaces -scenario for run and check")
 	stream := flag.Bool("stream", false, "v2 streaming")
 	concurrency := flag.Int("concurrency", 1, "workers")
 	warmup := flag.Duration("warmup", 30*time.Second, "warmup")
@@ -540,7 +663,7 @@ func run() (resultErr error) {
 	if *concurrency < 1 || *queueSize < 1 || *rate < 0 || *duration <= 0 {
 		return errors.New("invalid measurement configuration")
 	}
-	if *scenario != "read" && *scenario != "write" && *scenario != "paged" {
+	if *scenario != "read" && *scenario != "write" && *scenario != "paged" && !(*scenario == "lwt" && *mode == "prepare") {
 		return errors.New("invalid scenario")
 	}
 	initialize()
@@ -551,13 +674,16 @@ func run() (resultErr error) {
 	defer func() { resultErr = errors.Join(resultErr, a.Close()) }()
 	switch *mode {
 	case "schema":
-		for _, q := range []string{"CREATE KEYSPACE IF NOT EXISTS bench_compare WITH replication={'class':'NetworkTopologyStrategy','datacenter1':3} AND tablets={'enabled':false}", "CREATE TABLE IF NOT EXISTS bench_compare.point (k int PRIMARY KEY,r int,p blob)", "CREATE TABLE IF NOT EXISTS bench_compare.paged (k int,r int,p blob,PRIMARY KEY(k,r))"} {
+		for _, q := range []string{"CREATE KEYSPACE IF NOT EXISTS bench_compare WITH replication={'class':'NetworkTopologyStrategy','datacenter1':3} AND tablets={'enabled':false}", "CREATE TABLE IF NOT EXISTS bench_compare.point (k int PRIMARY KEY,r int,p blob)", "CREATE TABLE IF NOT EXISTS bench_compare.paged (k int,r int,p blob,PRIMARY KEY(k,r))", "CREATE TABLE IF NOT EXISTS bench_compare.lwt (k int PRIMARY KEY,v int)"} {
 			if e := a.Exec(context.Background(), q); e != nil {
 				return e
 			}
 		}
 		return nil
 	case "check":
+		if *caseName != "" {
+			return checkCase(a, *caseName)
+		}
 		return check(a, *stream)
 	case "probe":
 		for _, sc := range []string{"read", "write", "paged"} {
@@ -573,6 +699,9 @@ func run() (resultErr error) {
 		time.Sleep(8 * time.Second)
 		return nil
 	case "prepare":
+		if *scenario == "lwt" {
+			return prepareLWT(a)
+		}
 		return prepare(a, *scenario)
 	case "warm":
 		return warmDataset(a, *scenario, *stream)
@@ -580,22 +709,28 @@ func run() (resultErr error) {
 	default:
 		return errors.New("invalid mode")
 	}
-	workers := make([]worker, *concurrency)
+	workers := make([]op, *concurrency)
 	for i := range workers {
-		workers[i], e = a.Worker(*scenario == "paged", *stream)
+		if *caseName != "" {
+			workers[i], e = a.Case(*caseName, i, *concurrency)
+		} else {
+			var w worker
+			w, e = a.Worker(*scenario == "paged", *stream)
+			workers[i] = scenarioOp(w, *scenario)
+		}
 		if e != nil {
 			return e
 		}
 	}
 	// Prime all prepared statements on routed hosts before timing.
 	for i, w := range workers {
-		if e := operation(context.Background(), w, *scenario, uint64(i)); e != nil {
+		if e := w(context.Background(), uint64(i)); e != nil {
 			return e
 		}
 	}
 	var warm *stats
 	if *warmup > 0 {
-		warm, e = phase(workers, *scenario, *warmup, *rate)
+		warm, e = phase(workers, *warmup, *rate)
 		if e != nil {
 			return e
 		}
@@ -607,12 +742,12 @@ func run() (resultErr error) {
 	if e != nil {
 		return e
 	}
-	measured, measurementErr := phase(workers, *scenario, *duration, *rate)
+	measured, measurementErr := phase(workers, *duration, *rate)
 	measurementErr = errors.Join(measurementErr, profiles.stop())
 	if measured == nil {
 		return measurementErr
 	}
-	result := map[string]any{"driver": driverName, "scenario": *scenario, "stream": *stream, "concurrency": *concurrency, "runtime": runtime.Version(), "metadata_refresh_ns": int64(*metadataRefresh), "gomaxprocs": runtime.GOMAXPROCS(0), "evidence": a.Evidence(), "measurement": measured.result()}
+	result := map[string]any{"driver": driverName, "case": *caseName, "scenario": *scenario, "stream": *stream, "concurrency": *concurrency, "runtime": runtime.Version(), "metadata_refresh_ns": int64(*metadataRefresh), "gomaxprocs": runtime.GOMAXPROCS(0), "evidence": a.Evidence(), "measurement": measured.result()}
 	result["instrumentation"] = map[string]any{"cpu_profiling": *profilePrefix != "", "forced_gc": *profilePrefix != "", "heap_sample_rate": runtime.MemProfileRate}
 	if *synchronizationProfiles {
 		result["instrumentation"].(map[string]any)["block_profile_rate"] = 1

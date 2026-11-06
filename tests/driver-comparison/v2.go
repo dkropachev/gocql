@@ -19,10 +19,13 @@ type borrowedRow struct {
 	P    g.Bytes
 }
 type v2Adapter struct {
-	s      *g.Session
-	mu     sync.Mutex
-	reads  [2]*g.Prepared[int32, row]
-	writes [2]*g.Prepared[row, g.Unit]
+	s        *g.Session
+	mu       sync.Mutex
+	reads    [2]*g.Prepared[int32, row]
+	writes   [2]*g.Prepared[row, g.Unit]
+	lwt      *g.Prepared[lwtArgs, g.CASResult[int32]]
+	lwtRead  *g.Prepared[int32, int32]
+	metadata g.Options // includes result metadata, as master's writes request
 }
 type v2Worker struct {
 	a           *v2Adapter
@@ -64,11 +67,16 @@ func connect(hosts []string) (adapter, error) {
 		s.Close()
 		return nil, e
 	}
-	return &v2Adapter{s: s}, nil
+	metadata, e := g.NewOptions(s, g.OptionValues{IncludeMetadata: true})
+	if e != nil {
+		s.Close()
+		return nil, e
+	}
+	return &v2Adapter{s: s, metadata: metadata}, nil
 }
 func (a *v2Adapter) Close() error { return a.s.Close() }
 func (a *v2Adapter) Exec(ctx context.Context, q string) error {
-	b, e := g.NewUnpreparedQuery(a.s, g.Statement[g.Unit, g.Unit]{CQL: q, Params: g.NoParams, Rows: g.NoRows}, g.NewColumns(), g.Options{})
+	b, e := g.NewUnpreparedQuery(a.s, g.Statement[g.Unit, g.Unit]{Kind: g.OrdinaryStatement, CQL: q, Params: g.NoParams, Rows: g.NoRows}, g.NewColumns(), g.Options{})
 	if e != nil {
 		return e
 	}
@@ -93,51 +101,70 @@ func (a *v2Adapter) Evidence() any {
 	keyspace, _ := a.s.Metadata().Keyspace("bench_compare")
 	return map[string]any{"keyspace_strategy": keyspace.StrategyOptions, "keyspace_strategy_class": keyspace.StrategyClass, "metrics": a.s.Metrics(), "routing_samples": routing, "hosts": a.s.Metadata().Hosts(), "protocol": 4, "consistency": "LOCAL_QUORUM", "page_size": 32, "prefetch": 0, "retries": 0, "compression": "none", "tls": false, "coalesce_wait_ns": 0, "incremental_receive": *incremental, "metadata_refresh_ns": int64(*metadataRefresh)}
 }
-func (a *v2Adapter) Worker(paged, stream bool) (worker, error) {
+
+var keyParams = g.Params(g.Param("k", g.Int32, func(k int32) int32 { return k }))
+var rowParams = g.Params(g.Param("k", g.Int32, func(r row) int32 { return r.K }), g.Param("r", g.Int32, func(r row) int32 { return r.R }), g.Param("p", g.BytesEncoder, func(r row) []byte { return r.P }))
+
+// prepared prepares, once, the read and write statements of the point or
+// paged table and checks that the read is token routed.
+func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[row, g.Unit], error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	idx := 0
 	rd, wr := pointRead, pointWrite
-	size := 1024
 	if paged {
 		idx = 1
 		rd, wr = pageRead, pageWrite
-		size = 4096
 	}
 	ctx := context.Background()
 	if a.reads[idx] == nil {
-		p, e := g.Prepare(ctx, a.s, g.Statement[int32, row]{CQL: rd, Params: g.Params(g.Param("k", g.Int32, func(k int32) int32 { return k })), Rows: bufferedDecoder}, g.PrepareOptions{})
+		p, e := g.Prepare(ctx, a.s, g.Statement[int32, row]{Kind: g.OrdinaryStatement, CQL: rd, Params: keyParams, Rows: bufferedDecoder}, g.PrepareOptions{})
 		if e != nil {
-			return nil, e
+			return nil, nil, e
+		}
+		q, e := g.NewQuery(p, g.Options{})
+		if e != nil {
+			return nil, nil, e
+		}
+		routing, e := q.Routing(int32(0))
+		q.Close()
+		if e != nil {
+			return nil, nil, e
+		}
+		if !routing.Token.Set {
+			return nil, nil, fmt.Errorf("prepared read lacks token routing for %s", rd)
 		}
 		a.reads[idx] = p
 	}
 	if a.writes[idx] == nil {
-		p, e := g.Prepare(ctx, a.s, g.Statement[row, g.Unit]{CQL: wr, Params: g.Params(g.Param("k", g.Int32, func(r row) int32 { return r.K }), g.Param("r", g.Int32, func(r row) int32 { return r.R }), g.Param("p", g.BytesEncoder, func(r row) []byte { return r.P })), Rows: g.NoRows}, g.PrepareOptions{})
+		p, e := g.Prepare(ctx, a.s, g.Statement[row, g.Unit]{Kind: g.OrdinaryStatement, CQL: wr, Params: rowParams, Rows: g.NoRows}, g.PrepareOptions{})
 		if e != nil {
-			return nil, e
+			return nil, nil, e
 		}
 		a.writes[idx] = p
 	}
-	readQuery, e := g.NewQuery(a.reads[idx], g.Options{})
+	return a.reads[idx], a.writes[idx], nil
+}
+
+func (a *v2Adapter) Worker(paged, stream bool) (worker, error) {
+	read, write, e := a.prepared(paged)
 	if e != nil {
 		return nil, e
 	}
-	routing, e := readQuery.Routing(int32(0))
+	size := 1024
+	if paged {
+		size = 4096
+	}
+	readQuery, e := g.NewQuery(read, g.Options{})
+	if e != nil {
+		return nil, e
+	}
+	writeQuery, e := g.NewQuery(write, a.metadata)
 	if e != nil {
 		readQuery.Close()
 		return nil, e
 	}
-	if !routing.Token.Set {
-		readQuery.Close()
-		return nil, fmt.Errorf("prepared read lacks token routing for %s", rd)
-	}
-	writeQuery, e := g.NewQuery(a.writes[idx], g.Options{IncludeMetadata: true})
-	if e != nil {
-		readQuery.Close()
-		return nil, e
-	}
-	streamQuery, e := g.NewStreamQuery(a.reads[idx], streamDecoder, g.StreamOptions{Incremental: *incremental})
+	streamQuery, e := g.NewStreamQuery(read, streamDecoder, g.StreamOptions{Incremental: *incremental})
 	if e != nil {
 		readQuery.Close()
 		writeQuery.Close()

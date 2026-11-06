@@ -36,7 +36,7 @@ func TestOwnedValidation(t *testing.T) {
 }
 func TestWindowAndDrain(t *testing.T) {
 	initialize()
-	s, e := phase([]worker{fakeWorker{8 * time.Millisecond}}, "read", 30*time.Millisecond, 0)
+	s, e := phase([]op{scenarioOp(fakeWorker{8 * time.Millisecond}, "read")}, 30*time.Millisecond, 0)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -60,7 +60,7 @@ func TestBoundedScheduledQueue(t *testing.T) {
 	*queueSize = 4
 	t.Cleanup(func() { *queueSize = oldQueueSize })
 	initialize()
-	s, e := phase([]worker{fakeWorker{4 * time.Millisecond}}, "read", 40*time.Millisecond, 2000)
+	s, e := phase([]op{scenarioOp(fakeWorker{4 * time.Millisecond}, "read")}, 40*time.Millisecond, 2000)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -74,7 +74,7 @@ func TestBoundedScheduledQueue(t *testing.T) {
 
 func TestScheduledWindowBoundaryDrainsEveryArrival(t *testing.T) {
 	initialize()
-	s, err := phaseWithSleep([]worker{fakeWorker{}}, "read", 20*time.Millisecond, 100,
+	s, err := phaseWithSleep([]op{scenarioOp(fakeWorker{}, "read")}, 20*time.Millisecond, 100,
 		func(wait time.Duration) { time.Sleep(wait + 30*time.Millisecond) })
 	if err != nil {
 		t.Fatal(err)
@@ -85,5 +85,53 @@ func TestScheduledWindowBoundaryDrainsEveryArrival(t *testing.T) {
 	}
 	if s.InWindow >= s.Completed || s.Schedule.TotalCount() != s.Offered {
 		t.Fatal("late work inflated window throughput or lost its schedule latency")
+	}
+}
+
+func TestRowCheckCountsAndOrders(t *testing.T) {
+	initialize()
+	var c rowCheck
+	c.reset(true, 5, 32)
+	for r := int32(32); r < 40; r++ {
+		v := row{K: 5, R: r, P: payload(true, 5, r)}
+		if err := c.row(&v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := c.done(8, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.done(9, nil); err == nil {
+		t.Fatal("accepted a short page")
+	}
+	v := row{K: 5, R: 41, P: payload(true, 5, 41)}
+	if err := c.row(&v); err == nil {
+		t.Fatal("accepted a skipped row")
+	}
+}
+
+func TestPageCursorWalksPartitions(t *testing.T) {
+	c := pageCursor{k: partKey(0)}
+	first := c.k
+	for page := 0; page < 4; page++ {
+		if c.expect() != pageRows {
+			t.Fatalf("page %d expects %d", page, c.expect())
+		}
+		if err := c.advance(pageRows, []byte{1, 2, 3}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if c.expect() != 0 {
+		t.Fatal("terminal page must be empty")
+	}
+	if err := c.advance(0, nil); err != nil {
+		t.Fatal(err)
+	}
+	if c.k == first || c.next != 0 || len(c.state) != 0 {
+		t.Fatalf("cursor did not move to the next partition: %+v", c)
+	}
+	c.next = 10
+	if err := c.advance(0, nil); err == nil {
+		t.Fatal("accepted a partition that ended early")
 	}
 }

@@ -1,0 +1,424 @@
+//go:build !old
+
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	g "github.com/scylladb/gocql/v2"
+)
+
+// The v2 query-execution cases. cases.tsv matches each to a master case of
+// old_cases.go; README-CASES.md describes them.
+
+type lwtArgs struct{ V, K, Cur int32 }
+
+var lwtParams = g.Params(g.ParamAt(0, g.Int32, func(a lwtArgs) int32 { return a.V }), g.ParamAt(1, g.Int32, func(a lwtArgs) int32 { return a.K }), g.ParamAt(2, g.Int32, func(a lwtArgs) int32 { return a.Cur }))
+var lwtValue = g.RowInto(func(*int32) {}, g.Column("v", g.Int32, func(v *int32) *int32 { return v }))
+var lwtRows = g.CASRows(lwtValue)
+
+// v2Case is the per-worker state of a case: an owned output row and a row
+// validator whose method value is bound once.
+type v2Case struct {
+	a     *v2Adapter
+	check rowCheck
+	row   func(*row) error
+	out   row
+}
+
+type rowSource interface{ NextInto(*row) bool }
+
+// drain validates rows from src until it ends or limit rows were read.
+func (c *v2Case) drain(src rowSource, limit int32) error {
+	for c.check.seen < limit && src.NextInto(&c.out) {
+		if err := c.row(&c.out); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// settle joins a failed execution of q so that the worker can reuse it.
+func settle[P, R any](ctx context.Context, q *g.Query[P, R], err error) error {
+	if err != nil {
+		return errors.Join(err, q.Wait(ctx))
+	}
+	return nil
+}
+
+func (a *v2Adapter) lwtPrepared() (*g.Prepared[lwtArgs, g.CASResult[int32]], *g.Prepared[int32, int32], error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	ctx := context.Background()
+	if a.lwt == nil {
+		p, err := g.Prepare(ctx, a.s, g.Statement[lwtArgs, g.CASResult[int32]]{Kind: g.ConditionalStatement, CQL: lwtUpdate, Params: lwtParams, Rows: lwtRows}, g.PrepareOptions{})
+		if err != nil {
+			return nil, nil, err
+		}
+		a.lwt = p
+	}
+	if a.lwtRead == nil {
+		p, err := g.Prepare(ctx, a.s, g.Statement[int32, int32]{Kind: g.OrdinaryStatement, CQL: lwtRead, Params: keyParams, Rows: lwtValue}, g.PrepareOptions{})
+		if err != nil {
+			return nil, nil, err
+		}
+		a.lwtRead = p
+	}
+	return a.lwt, a.lwtRead, nil
+}
+
+func (a *v2Adapter) options(v g.OptionValues) (g.Options, error) { return g.NewOptions(a.s, v) }
+
+func (a *v2Adapter) Case(name string, id, n int) (op, error) {
+	if len(name) == 0 {
+		return nil, errors.New("empty case")
+	}
+	paged := name[0] == 'B' || name[0] == 'C' || name == "E1"
+	read, write, err := a.prepared(paged)
+	if err != nil {
+		return nil, err
+	}
+	size := 1024
+	if paged {
+		size = 4096
+	}
+	c := &v2Case{a: a, out: row{P: make([]byte, 0, size)}}
+	c.row = c.check.row
+	intType, err := g.ScalarType(g.TypeInt)
+	if err != nil {
+		return nil, err
+	}
+	blobType, err := g.ScalarType(g.TypeBlob)
+	if err != nil {
+		return nil, err
+	}
+	keyColumns := g.NewColumns(g.ColumnSpec{Name: "k", Type: intType})
+	rowColumns := g.NewColumns(g.ColumnSpec{Name: "k", Type: intType}, g.ColumnSpec{Name: "r", Type: intType}, g.ColumnSpec{Name: "p", Type: blobType})
+
+	switch name {
+	case "A1", "B5", "B7", "A3", "B1":
+		opts := g.Options{}
+		switch name {
+		case "B5":
+			opts, err = a.options(g.OptionValues{Prefetch: g.Option[int]{Set: true, Value: 1}})
+		case "B7":
+			opts, err = a.options(g.OptionValues{PageSize: g.Option[int32]{Set: true, Value: 5000}})
+		}
+		if err != nil {
+			return nil, err
+		}
+		q, err := g.NewQuery(read, opts)
+		if err != nil {
+			return nil, err
+		}
+		if name == "A1" {
+			return c.one(q), nil
+		}
+		want := int32(1)
+		if paged {
+			want = rowsPerPartition
+		}
+		return func(ctx context.Context, seq uint64) error {
+			k := c.key(paged, seq)
+			c.check.reset(paged, k, 0)
+			return c.check.done(want, settle(ctx, q, q.Each(ctx, k, &c.out, c.row)))
+		}, nil
+	case "A2":
+		return c.preparedOne(read), nil
+	case "A4", "B2", "B8":
+		q, err := g.NewQuery(read, g.Options{})
+		if err != nil {
+			return nil, err
+		}
+		want, limit := int32(1), allRows
+		if paged {
+			want = rowsPerPartition
+		}
+		if name == "B8" {
+			want, limit = 16, 16
+		}
+		return func(ctx context.Context, seq uint64) error {
+			k := c.key(paged, seq)
+			c.check.reset(paged, k, 0)
+			rows, err := q.Run(ctx, k)
+			if err != nil {
+				return settle(ctx, q, err)
+			}
+			err = c.drain(rows, limit)
+			if name == "B8" {
+				// Abandon the rest of the partition, then join the cancelled execution.
+				return c.check.done(want, errors.Join(err, rows.Close(), q.Wait(ctx)))
+			}
+			return c.check.done(want, settle(ctx, q, errors.Join(err, rows.Err(), rows.Close())))
+		}, nil
+	case "A5", "B3", "B4", "B9":
+		sq, err := g.NewStreamQuery(read, streamDecoder, g.StreamOptions{Incremental: name == "B4" || name == "B9"})
+		if err != nil {
+			return nil, err
+		}
+		want, limit := int32(1), allRows
+		if paged {
+			want = rowsPerPartition
+		}
+		if name == "B9" {
+			want, limit = 16, 16
+		}
+		return func(ctx context.Context, seq uint64) error {
+			k := c.key(paged, seq)
+			c.check.reset(paged, k, 0)
+			rs, err := sq.Run(ctx, k)
+			if err != nil {
+				return errors.Join(err, sq.Wait(ctx))
+			}
+			err = c.drain(rs, limit)
+			return c.check.done(want, errors.Join(err, rs.Err(), rs.Close(), sq.Wait(ctx)))
+		}, nil
+	case "A6", "B6":
+		q, err := g.NewQuery(read, g.Options{})
+		if err != nil {
+			return nil, err
+		}
+		want := int32(1)
+		if paged {
+			want = rowsPerPartition
+		}
+		return func(ctx context.Context, seq uint64) error {
+			k := c.key(paged, seq)
+			c.check.reset(paged, k, 0)
+			page, err := q.RunUnpaged(ctx, k)
+			if err != nil {
+				return settle(ctx, q, err)
+			}
+			err = c.drain(page, allRows)
+			return c.check.done(want, settle(ctx, q, errors.Join(err, page.Err(), page.Close())))
+		}, nil
+	case "A7":
+		statement := g.Statement[int32, row]{Kind: g.OrdinaryStatement, CQL: pointRead, Params: keyParams, Rows: bufferedDecoder}
+		return func(ctx context.Context, seq uint64) error {
+			k := pointKey(seq)
+			c.check.reset(false, k, 0)
+			q, err := g.NewUnpreparedQuery(a.s, statement, keyColumns, g.Options{})
+			if err != nil {
+				return err
+			}
+			defer q.Close()
+			found, err := q.One(ctx, k, &c.out)
+			return c.found(found, settle(ctx, q, err))
+		}, nil
+	case "C1":
+		q, err := g.NewQuery(read, g.Options{})
+		if err != nil {
+			return nil, err
+		}
+		cursor := &pageCursor{part: uint64(id)}
+		cursor.k = partKey(cursor.part)
+		return func(ctx context.Context, _ uint64) error {
+			c.check.reset(true, cursor.k, cursor.next)
+			want := cursor.expect()
+			state := g.StartPage()
+			if len(cursor.state) > 0 {
+				state = g.RestorePageState(cursor.state)
+			}
+			page, err := q.RunPage(ctx, cursor.k, state)
+			if err != nil {
+				return settle(ctx, q, err)
+			}
+			err = c.drain(page, allRows)
+			next := page.State().Bytes()
+			if err = settle(ctx, q, errors.Join(err, page.Err(), page.Close())); err != nil {
+				return err
+			}
+			if err = c.check.done(want, nil); err != nil {
+				return err
+			}
+			return cursor.advance(c.check.seen, next)
+		}, nil
+	case "D1":
+		q, err := g.NewQuery(write, a.metadata)
+		if err != nil {
+			return nil, err
+		}
+		return execOp(q), nil
+	case "D2":
+		return preparedExec(write, a.metadata), nil
+	case "D3":
+		return func(ctx context.Context, seq uint64) error {
+			k := pointKey(seq)
+			opts, err := a.options(g.OptionValues{IncludeMetadata: true, Idempotent: true, Timestamp: g.Option[int64]{Set: true, Value: time.Now().UnixMicro()}})
+			if err != nil {
+				return err
+			}
+			_, err = write.Exec(ctx, row{K: k, P: payload(false, k, 0)}, opts)
+			return err
+		}, nil
+	case "D4":
+		statement := g.Statement[row, g.Unit]{Kind: g.OrdinaryStatement, CQL: pointWrite, Params: rowParams, Rows: g.NoRows}
+		return func(ctx context.Context, seq uint64) error {
+			k := pointKey(seq)
+			q, err := g.NewUnpreparedQuery(a.s, statement, rowColumns, a.metadata)
+			if err != nil {
+				return err
+			}
+			defer q.Close()
+			return settle(ctx, q, q.Exec(ctx, row{K: k, P: payload(false, k, 0)}))
+		}, nil
+	case "E1", "E2":
+		q, err := g.NewQuery(write, a.metadata)
+		if err != nil {
+			return nil, err
+		}
+		items := make([]g.BatchItem, 0, 8)
+		return func(ctx context.Context, seq uint64) error {
+			items = items[:0]
+			kind := g.UnloggedBatch
+			if name == "E1" {
+				k, base := partKey(seq), int32(seq%16)*8
+				for r := base; r < base+8; r++ {
+					item, err := q.BatchEntry(row{K: k, R: r, P: payload(true, k, r)})
+					if err != nil {
+						return err
+					}
+					items = append(items, item)
+				}
+			} else {
+				kind = g.LoggedBatch
+				for i := uint64(0); i < 4; i++ {
+					k := pointKey(seq*4 + i)
+					item, err := q.BatchEntry(row{K: k, P: payload(false, k, 0)})
+					if err != nil {
+						return err
+					}
+					items = append(items, item)
+				}
+			}
+			_, err := g.ExecBatch(ctx, a.s, kind, items, g.Options{})
+			return err
+		}, nil
+	case "F1":
+		return c.lwt(id, n)
+	case "G1", "G2":
+		var readOp, writeOp op
+		if name == "G1" {
+			rq, err := g.NewQuery(read, g.Options{})
+			if err != nil {
+				return nil, err
+			}
+			wq, err := g.NewQuery(write, a.metadata)
+			if err != nil {
+				return nil, err
+			}
+			readOp, writeOp = c.one(rq), execOp(wq)
+		} else {
+			readOp, writeOp = c.preparedOne(read), preparedExec(write, a.metadata)
+		}
+		return func(ctx context.Context, seq uint64) error {
+			if seq%2 == 0 {
+				return readOp(ctx, seq)
+			}
+			return writeOp(ctx, seq)
+		}, nil
+	}
+	return nil, fmt.Errorf("unknown v2 case %q", name)
+}
+
+func (c *v2Case) key(paged bool, seq uint64) int32 {
+	if paged {
+		return partKey(seq)
+	}
+	return pointKey(seq)
+}
+
+// found validates the single row a One-style read decoded.
+func (c *v2Case) found(found bool, err error) error {
+	if err == nil {
+		if !found {
+			return fmt.Errorf("key=%d not found", c.check.k)
+		}
+		err = c.row(&c.out)
+	}
+	return c.check.done(1, err)
+}
+
+func (c *v2Case) one(q *g.Query[int32, row]) op {
+	return func(ctx context.Context, seq uint64) error {
+		k := pointKey(seq)
+		c.check.reset(false, k, 0)
+		found, err := q.One(ctx, k, &c.out)
+		return c.found(found, settle(ctx, q, err))
+	}
+}
+
+func (c *v2Case) preparedOne(p *g.Prepared[int32, row]) op {
+	return func(ctx context.Context, seq uint64) error {
+		k := pointKey(seq)
+		c.check.reset(false, k, 0)
+		found, err := p.One(ctx, k, &c.out, g.Options{})
+		return c.found(found, err)
+	}
+}
+
+func execOp(q *g.Query[row, g.Unit]) op {
+	return func(ctx context.Context, seq uint64) error {
+		k := pointKey(seq)
+		return settle(ctx, q, q.Exec(ctx, row{K: k, P: payload(false, k, 0)}))
+	}
+}
+
+func preparedExec(p *g.Prepared[row, g.Unit], opts g.Options) op {
+	return func(ctx context.Context, seq uint64) error {
+		k := pointKey(seq)
+		_, err := p.Exec(ctx, row{K: k, P: payload(false, k, 0)}, opts)
+		return err
+	}
+}
+
+// lwt updates the worker's own keys in turn with a compare-and-set that
+// must apply: the worker read each key's value when it was built.
+func (c *v2Case) lwt(id, n int) (op, error) {
+	if n > lwtKeys/lwtKeysPerWorker {
+		return nil, fmt.Errorf("lwt case supports at most %d workers", lwtKeys/lwtKeysPerWorker)
+	}
+	update, read, err := c.a.lwtPrepared()
+	if err != nil {
+		return nil, err
+	}
+	ctx := context.Background()
+	var keys, values [lwtKeysPerWorker]int32
+	for j := range keys {
+		keys[j] = int32(id + n*j)
+		found, err := read.One(ctx, keys[j], &values[j], g.Options{})
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			return nil, fmt.Errorf("lwt key %d missing; run -mode prepare -scenario lwt", keys[j])
+		}
+	}
+	opts, err := c.a.options(g.OptionValues{SerialConsistency: g.Option[g.Option[g.Consistency]]{Set: true, Value: g.Option[g.Consistency]{Set: true, Value: g.LocalSerial}}})
+	if err != nil {
+		return nil, err
+	}
+	q, err := g.NewQuery(update, opts)
+	if err != nil {
+		return nil, err
+	}
+	var result g.CASResult[int32]
+	next := 0
+	return func(ctx context.Context, _ uint64) error {
+		j := next % lwtKeysPerWorker
+		next++
+		cur := values[j]
+		found, err := q.One(ctx, lwtArgs{V: cur + 1, K: keys[j], Cur: cur}, &result)
+		if err = settle(ctx, q, err); err != nil {
+			return err
+		}
+		if !found || !result.Applied {
+			return fmt.Errorf("lwt key=%d v=%d not applied (previous %+v)", keys[j], cur, result.Previous)
+		}
+		values[j] = cur + 1
+		return nil
+	}, nil
+}
