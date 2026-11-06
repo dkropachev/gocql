@@ -256,3 +256,26 @@ func BenchmarkBatchExec(b *testing.B) {
 		})
 	}
 }
+
+func TestBatchStatementKind(t *testing.T) {
+	s, _, _ := runtimeTestSession(t, 0)
+	for _, tc := range []struct {
+		kinds []StatementKind
+		want  StatementKind
+	}{
+		{[]StatementKind{OrdinaryStatement, OrdinaryStatement}, OrdinaryStatement},
+		{[]StatementKind{UnknownStatement}, UnknownStatement},
+		{[]StatementKind{OrdinaryStatement, UnknownStatement}, UnknownStatement},
+		{[]StatementKind{UnknownStatement, ConditionalStatement, OrdinaryStatement}, ConditionalStatement},
+	} {
+		var batch Batch
+		for _, kind := range tc.kinds {
+			if err := batch.add(s, &InternalExecutionRequest{InternalStatement: "UPDATE t SET v=1", InternalRouting: RoutingInfo{Kind: kind}}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if batch.routing.Kind != tc.want {
+			t.Errorf("%v: kind %v, want %v", tc.kinds, batch.routing.Kind, tc.want)
+		}
+	}
+}

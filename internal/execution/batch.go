@@ -122,6 +122,9 @@ func (b *Batch) add(s *implCluster.Session, request *InternalExecutionRequest) e
 		count:     len(values.Cells),
 		unset:     unset,
 	})
+	if len(b.entries) == 1 {
+		b.routing.Kind = OrdinaryStatement
+	}
 	b.session = s
 	if r.Keyspace != "" {
 		b.routing.Keyspace = r.Keyspace
@@ -191,9 +194,6 @@ func runBatch[R any](ctx context.Context, s *implCluster.Session, kind BatchKind
 	owner.resetOpen()
 	*state = InternalBatchState{kind: kind, entries: batch.entries, values: batch.values}
 	routing := batch.routing
-	if routing.Kind == 0 {
-		routing.Kind = OrdinaryStatement
-	}
 	routing.Conditional = routing.Kind != OrdinaryStatement
 	bound := new(Bound[R])
 	bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalOwner: owner, InternalRouting: routing, batch: state}
