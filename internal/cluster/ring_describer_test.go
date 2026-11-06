@@ -3,91 +3,17 @@ package cluster
 import (
 	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/transport"
 
 	"context"
 	"fmt"
 	"net"
-	"testing"
 	"time"
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/tests"
 	"github.com/scylladb/gocql/v2/internal/tests/mock"
 )
-
-func TestGetClusterPeerInfoZeroToken(t *testing.T) {
-	t.Parallel()
-
-	schema_version1 := implCqltype.ParseUUIDMust("af810386-a694-11ef-81fa-3aea73156247")
-
-	peersRows := []map[string]any{
-		{
-			"data_center":     "datacenter1",
-			"host_id":         implCqltype.ParseUUIDMust("b2035fd9-e0ca-4857-8c45-e63c00fb7c43"),
-			"peer":            "127.0.0.3",
-			"preferred_ip":    "127.0.0.3",
-			"rack":            "rack1",
-			"release_version": "3.0.8",
-			"rpc_address":     "127.0.0.3",
-			"schema_version":  schema_version1,
-			"tokens":          []string{"-1296227678594315580994457470329811265"},
-		},
-		{
-			"data_center":     "datacenter1",
-			"host_id":         implCqltype.ParseUUIDMust("4b21ee4c-acea-4267-8e20-aaed5361a0dd"),
-			"peer":            "127.0.0.2",
-			"preferred_ip":    "127.0.0.2",
-			"rack":            "rack1",
-			"release_version": "3.0.8",
-			"rpc_address":     "127.0.0.2",
-			"schema_version":  schema_version1,
-			"tokens":          []string{"-1129762924682054333"},
-		},
-		{
-			"data_center":     "datacenter2",
-			"host_id":         implCqltype.ParseUUIDMust("dfef4a22-b8d8-47e9-aee5-8c19d4b7a9e3"),
-			"peer":            "127.0.0.5",
-			"preferred_ip":    "127.0.0.5",
-			"rack":            "rack1",
-			"release_version": "3.0.8",
-			"rpc_address":     "127.0.0.5",
-			"schema_version":  schema_version1,
-			"tokens":          []string{},
-		},
-	}
-
-	var logger logging.StdLogger
-	t.Run("OmitOneZeroTokenNode", func(t *testing.T) {
-		peers, err := InternalGetPeersFromQuerySystemPeers(
-			peersRows,
-			9042,
-			logger,
-		)
-
-		if err != nil {
-			t.Fatalf("unable to get peers: %v", err)
-		}
-		tests.AssertEqual(t, "peers length", 2, len(peers))
-	})
-
-	t.Run("NoZeroTokenNodes", func(t *testing.T) {
-		peersRows[2]["tokens"] = []string{"-1129762924682054333"}
-		peers, err := InternalGetPeersFromQuerySystemPeers(
-			peersRows,
-			9042,
-			logger,
-		)
-
-		if err != nil {
-			t.Fatalf("unable to get peers: %v", err)
-		}
-		tests.AssertEqual(t, "peers length", 3, len(peers))
-	})
-}
 
 type mockConnection struct{}
 
@@ -318,137 +244,4 @@ func (*trackingRingConnection) InternalSetSchemaV2(bool)      {}
 func (c *trackingRingConnection) InternalIsScyllaConn() bool  { return c.scylla }
 func (*trackingRingConnection) InternalGetScyllaSupported() endpoint.ScyllaConnectionFeatures {
 	return endpoint.ScyllaConnectionFeatures{}
-}
-
-func TestMockGetHostsFromSystem(t *testing.T) {
-	t.Parallel()
-
-	r := &InternalRingDescriber{InternalControl: &mockControlConn{}, InternalCfg: &InternalClusterSettings{Port: 9042}}
-
-	hosts, _, err := r.GetHostsFromSystem()
-	if err != nil {
-		t.Fatalf("unable to get hosts: %v", err)
-	}
-
-	// Zero-token hosts remain in topology and participate in schema agreement.
-	tests.AssertEqual(t, "hosts length", 3, len(hosts))
-	tests.AssertEqual(t, "host token length", 2, len(implEndpoint.HostInfoData(hosts[1]).InternalTokens))
-}
-
-func TestRingDescriberGetClusterPeerInfoClosesIter(t *testing.T) {
-	t.Parallel()
-
-	row := []any{
-		net.IPv4(192, 168, 100, 13),
-		"datacenter1",
-		implCqltype.ParseUUIDMust("b953309f-6e68-41f2-baf5-0e60da317a9c"),
-		nil,
-		"rack1",
-		"3.0.8",
-		net.IPv4(192, 168, 100, 13),
-		implCqltype.ParseUUIDMust("b6ed5bde-b318-11ef-8f58-aeba19e31273"),
-		[]string{"-1032311531684407545"},
-	}
-	framer := &trackingMockFramer{
-		MockFramer: mock.MockFramer{Data: marshalMetadataMust(systemPeersResultMetadata, row)},
-	}
-	r := &InternalRingDescriber{InternalCfg: &InternalClusterSettings{Port: 9042}}
-
-	peers, err := r.InternalGetClusterPeerInfo(context.Background(), &trackingRingConnection{
-		iter: &nativeResultFixture{
-			meta:    systemPeersResultMetadata,
-			framer:  framer,
-			numRows: 1,
-		},
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(peers) != 1 {
-		t.Fatalf("expected 1 peer, got %d", len(peers))
-	}
-	if !framer.released {
-		t.Fatal("expected iterator framer to be released")
-	}
-}
-
-func TestGetClusterPeerInfoQueryRouting(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		schemaV2  bool
-		scylla    bool
-		wantQuery string
-	}{
-		{"schema_v2", true, false, transport.InternalQrySystemPeersV2},
-		{"scylla_peers", false, true, transport.InternalQrySystemPeers},
-		{"cassandra_peers", false, false, transport.InternalQrySystemPeersCassandra},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			conn := &trackingRingConnection{
-				schemaV2: tt.schemaV2,
-				scylla:   tt.scylla,
-			}
-			r := &InternalRingDescriber{InternalCfg: &InternalClusterSettings{Port: 9042}}
-			// iter is nil so getClusterPeerInfo returns errNoControl, but the query is still recorded
-			_, _ = r.InternalGetClusterPeerInfo(context.Background(), conn)
-			if conn.lastQuery != tt.wantQuery {
-				t.Errorf("got query %q, want %q", conn.lastQuery, tt.wantQuery)
-			}
-		})
-	}
-}
-
-func TestRing_AddHostIfMissing_Missing(t *testing.T) {
-	t.Parallel()
-
-	ring := &InternalRingDescriber{}
-
-	host := func() *endpoint.HostInfo {
-		opaqueStorageValuex := new(endpoint.HostInfo)
-		implEndpoint.HostInfoData(opaqueStorageValuex).InternalHostId = implCqltype.MustRandomUUID()
-		implEndpoint.HostInfoData(opaqueStorageValuex).InternalConnectAddress = net.IPv4(1, 1, 1, 1)
-		return opaqueStorageValuex
-	}()
-	h1, ok := ring.InternalAddHostIfMissing(host)
-	if ok {
-		t.Fatal("host was reported as already existing")
-	} else if !h1.Equal(host) {
-		t.Fatalf("hosts not equal that are returned %v != %v", h1, host)
-	} else if h1 != host {
-		t.Fatalf("returned host same pointer: %p != %p", h1, host)
-	}
-}
-
-func TestRing_AddHostIfMissing_Existing(t *testing.T) {
-	t.Parallel()
-
-	ring := &InternalRingDescriber{}
-
-	host := func() *endpoint.HostInfo {
-		opaqueStorageValuexx := new(endpoint.HostInfo)
-		implEndpoint.HostInfoData(opaqueStorageValuexx).InternalHostId = implCqltype.MustRandomUUID()
-		implEndpoint.HostInfoData(opaqueStorageValuexx).InternalConnectAddress = net.IPv4(1, 1, 1, 1)
-		return opaqueStorageValuexx
-	}()
-	ring.InternalAddHostIfMissing(host)
-
-	h2 := func() *endpoint.HostInfo {
-		opaqueStorageValuexxx := new(endpoint.HostInfo)
-		implEndpoint.HostInfoData(opaqueStorageValuexxx).InternalHostId = implEndpoint.HostInfoData(host).InternalHostId
-		implEndpoint.HostInfoData(opaqueStorageValuexxx).InternalConnectAddress = net.IPv4(2, 2, 2, 2)
-		return opaqueStorageValuexxx
-	}()
-
-	h1, ok := ring.InternalAddHostIfMissing(h2)
-	if !ok {
-		t.Fatal("host was not reported as already existing")
-	} else if !h1.Equal(host) {
-		t.Fatalf("hosts not equal that are returned %v != %v", h1, host)
-	} else if h1 != host {
-		t.Fatalf("returned host same pointer: %p != %p", h1, host)
-	}
 }

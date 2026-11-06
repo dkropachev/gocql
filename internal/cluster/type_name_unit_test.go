@@ -22,14 +22,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
-func TestLookupCassType(t *testing.T) {
-	t.Parallel()
-
-	for _, lookupTest := range typeLookupTest {
-		testType(t, lookupTest.TypeName, lookupTest.ExpectedType)
-	}
-}
-
 type MyPointerMarshaler struct{}
 
 var typeLookupTest = []struct {

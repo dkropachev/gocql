@@ -108,7 +108,8 @@ type InternalReadWriteTimeoutReport struct {
 // The schema makes orphaned optional for exactly this case, and gives its
 // absence that meaning, so omitting it produces a document a consumer
 // validating against the schema accepts. See
-// TestSchemaPermitsAnAbsentOrphanBound, which fails if that ever changes.
+// TestDriverConfigReport/Schema/PermitsAbsentOrphanBound, which fails if that
+// ever changes.
 type InternalRequestsReport struct {
 	InFlight InternalInFlightReport `json:"in-flight"`
 }
