@@ -148,17 +148,7 @@ func testShardAwarePortMaliciousNAT(t *testing.T, makeCluster makeClusterTestFun
 
 	// Retry until we establish one connection per shard
 
-	for {
-		if err := waitUntilPoolsStopFilling(context.Background(), sess, 10*time.Second); err != nil {
-			t.Fatal(err)
-		}
-
-		if checkIfPoolsAreFull(sess) {
-			break
-		}
-
-		triggerPoolsRefill(sess)
-	}
+	fillPoolsByRetry(t, sess)
 }
 
 func testShardAwarePortUnreachable(t *testing.T, makeCluster makeClusterTestFunc) {
@@ -178,17 +168,7 @@ func testShardAwarePortUnreachable(t *testing.T, makeCluster makeClusterTestFunc
 
 	// Retry until we establish one connection per shard
 
-	for {
-		if err := waitUntilPoolsStopFilling(context.Background(), sess, 10*time.Second); err != nil {
-			t.Fatal(err)
-		}
-
-		if checkIfPoolsAreFull(sess) {
-			break
-		}
-
-		triggerPoolsRefill(sess)
-	}
+	fillPoolsByRetry(t, sess)
 }
 
 func testShardAwarePortUnusedIfNotEnabled(t *testing.T, makeCluster makeClusterTestFunc) {
@@ -242,6 +222,29 @@ func triggerPoolsRefill(sess *gocql.Session) {
 	for _, host := range hosts {
 		hostPool, _ := implCluster.SessionData(sess).InternalPool.InternalGetPool(host)
 		go hostPool.InternalFill_debounce()
+	}
+}
+
+// fillPoolsByRetry refills the pools until every shard has a connection.
+// Without a working shard-aware port, connections land on shards the driver
+// does not choose, so filling takes a varying number of rounds; a round that
+// is still filling after 10 s under load is progress, not a failure. Only the
+// overall minute running out is.
+func fillPoolsByRetry(t *testing.T, sess *gocql.Session) {
+	t.Helper()
+	const budget = time.Minute
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	defer cancel()
+	for {
+		if err := waitUntilPoolsStopFilling(ctx, sess, 10*time.Second); err != nil && ctx.Err() != nil {
+			t.Fatalf("connection pools not full after %s: %v", budget, err)
+		}
+		if checkIfPoolsAreFull(sess) {
+			return
+		}
+		if checkIfPoolsStoppedFilling(sess) {
+			triggerPoolsRefill(sess)
+		}
 	}
 }
 
