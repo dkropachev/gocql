@@ -72,6 +72,9 @@ func makeStreamColumn[R, V any](loc fieldLocation, decoder StreamDecoder[V], fie
 type streamRowsCodec[R any] struct {
 	reset  func(*R)
 	fields []StreamOutputField[R]
+	// structMapping maps like buffered struct rows: every column needs a
+	// field, and fields without a column are allowed.
+	structMapping bool
 }
 type streamRowsPlan[R any] struct {
 	reset   func(*R)
@@ -102,7 +105,11 @@ func (c streamRowsCodec[R]) compile(columns cqltype.Columns, strict bool, option
 	}
 	// Generic result rows skip unspecified physical columns. Records use the same
 	// exact/missing/extra mapping policy as buffered records.
-	mapping, err := streamFieldMapping(columns, locations, !strict || options.AllowExtraDatabaseFields, strict && options.AllowMissingFields)
+	extra, missing := !strict || options.AllowExtraDatabaseFields, strict && options.AllowMissingFields
+	if c.structMapping && !strict {
+		extra, missing = false, true
+	}
+	mapping, err := streamFieldMapping(columns, locations, extra, missing)
 	if err != nil {
 		return nil, err
 	}

@@ -220,7 +220,10 @@ func (f inputField[P, V]) encode(w *ParamWriter, value P) error {
 	return WriteParam(w, f.codec, f.get(value))
 }
 
-type paramsCodec[P any] struct{ fields []InputField[P] }
+type paramsCodec[P any] struct {
+	fields   []InputField[P]
+	optional bool // fields without a column are skipped (struct mappings)
+}
 type paramsPlan[P any] struct {
 	ordered []InputField[P]
 	ops     []paramOp[P] // ordered, with built-in codecs as direct ops
@@ -232,7 +235,10 @@ func Params[P any](fields ...InputField[P]) ParamEncoder[P] {
 
 // mapFields resolves names/positions once. Parameters may repeat one named input;
 // result columns require an explicit positional accessor for duplicate aliases.
-func mapFields(columns cqltype.Columns, locations []fieldLocation, repeatedNames bool) ([]int, error) {
+// With optional, a field without a column is skipped instead of rejected, so
+// one struct mapping serves statements that use a subset of its fields; every
+// column still needs a field.
+func mapFields(columns cqltype.Columns, locations []fieldLocation, repeatedNames, optional bool) ([]int, error) {
 	perfNameMap()
 	ordered := make([]int, columns.Len())
 	for i := range ordered {
@@ -256,6 +262,9 @@ func mapFields(columns cqltype.Columns, locations []fieldLocation, repeatedNames
 			matches++
 		}
 		if matches == 0 {
+			if optional {
+				continue
+			}
 			return nil, fmt.Errorf("gocql: field %q at index %d has no database column", location.name, location.index)
 		}
 		if matches > 1 && !repeatedNames {
@@ -279,7 +288,7 @@ func (c paramsCodec[P]) Compile(columns cqltype.Columns) (ParamPlan[P], error) {
 		}
 		locations[i] = field.location()
 	}
-	mapping, err := mapFields(columns, locations, true)
+	mapping, err := mapFields(columns, locations, true, c.optional)
 	if err != nil {
 		return nil, err
 	}
@@ -370,8 +379,9 @@ func (f ignoredField[R]) decode(r *RowReader, _ *R) error                  { ret
 func (f ignoredField[R]) clone(dst, source *R)                             {}
 
 type rowCodec[R any] struct {
-	reset  func(*R)
-	fields []OutputField[R]
+	reset    func(*R)
+	fields   []OutputField[R]
+	optional bool // fields without a column are skipped (struct mappings)
 }
 type rowPlan[R any] struct {
 	reset func(*R)
@@ -414,7 +424,7 @@ func (c rowCodec[R]) Compile(columns cqltype.Columns) (RowPlan[R], error) {
 		}
 		locations[i] = field.location()
 	}
-	mapping, err := mapFields(columns, locations, false)
+	mapping, err := mapFields(columns, locations, false, c.optional)
 	if err != nil {
 		return nil, err
 	}
