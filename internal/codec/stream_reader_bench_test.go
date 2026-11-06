@@ -16,16 +16,6 @@
 
 package codec
 
-import (
-	"bytes"
-	"context"
-	"fmt"
-	"testing"
-
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/wire"
-)
-
 type streamRepeatSource struct {
 	cell   []byte
 	offset int
@@ -38,85 +28,4 @@ func (s *streamRepeatSource) Read(p []byte) (int, error) {
 		s.offset = 0
 	}
 	return n, nil
-}
-
-func BenchmarkV2StreamFinalStorage(b *testing.B) {
-	typ := cqltype.BlobType
-	cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "blob", Type: typ})
-	plan := CodecTestMust(StreamOneColumn(StreamBlob).Compile(cols))
-	for _, size := range []int{32, 4096, 512000} {
-		b.Run(fmt.Sprint(size), func(b *testing.B) {
-			data := StreamCell(bytes.Repeat([]byte{0x71}, size))
-			source := &streamRepeatSource{cell: data}
-			const batch = 32
-			first := CodecTestMust(wire.NewStream(context.Background(), source, int64(batch*len(data)), wire.StreamLimits{}))
-			reader := CodecTestMust(NewStreamRowReader(cols, first))
-			dst := make([]byte, 0, size)
-			// Warm all reusable scopes before measuring per-page/per-row work.
-			for i := 0; i < batch; i++ {
-				reader.index = 0
-				plan.Reset(&dst)
-				if err := plan.DecodeInto(reader, &dst); err != nil {
-					b.Fatal(err)
-				}
-			}
-			b.ReportAllocs()
-			b.SetBytes(int64(batch * size))
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				scope, err := wire.NewStream(context.Background(), source, int64(batch*len(data)), wire.StreamLimits{})
-				if err != nil {
-					b.Fatal(err)
-				}
-				reader.scope = scope
-				for row := 0; row < batch; row++ {
-					reader.index = 0
-					plan.Reset(&dst)
-					if err := plan.DecodeInto(reader, &dst); err != nil {
-						b.Fatal(err)
-					}
-				}
-			}
-			b.ReportMetric(batch, "rows/op")
-		})
-	}
-}
-
-func BenchmarkV2StreamingNestedElements(b *testing.B) {
-	integer := cqltype.IntType
-	typ := CodecTestMust(cqltype.ListType(integer))
-	cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "list", Type: typ})
-	plan := CodecTestMust(StreamOneColumn(StreamList(StreamInt32)).Compile(cols))
-	for _, count := range []int{16, 1024} {
-		b.Run(fmt.Sprint(count), func(b *testing.B) {
-			values := make([]int32, count)
-			data := streamEncodedFixture(b, typ, ListEncoder(Int32), values)
-			source := &streamRepeatSource{cell: data}
-			const batch = 32
-			dst := make([]int32, 0, count)
-			first := CodecTestMust(wire.NewStream(context.Background(), source, int64(batch*len(data)), wire.StreamLimits{}))
-			reader := CodecTestMust(NewStreamRowReader(cols, first))
-			for i := 0; i < batch; i++ {
-				reader.index = 0
-				plan.Reset(&dst)
-				if err := plan.DecodeInto(reader, &dst); err != nil {
-					b.Fatal(err)
-				}
-			}
-			b.ReportAllocs()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				scope := CodecTestMust(wire.NewStream(context.Background(), source, int64(batch*len(data)), wire.StreamLimits{}))
-				reader.scope = scope
-				for row := 0; row < batch; row++ {
-					reader.index = 0
-					plan.Reset(&dst)
-					if err := plan.DecodeInto(reader, &dst); err != nil {
-						b.Fatal(err)
-					}
-				}
-			}
-			b.ReportMetric(batch*float64(count), "elements/op")
-		})
-	}
 }

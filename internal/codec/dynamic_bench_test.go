@@ -16,80 +16,81 @@ var dynamicSink DynamicRow
 
 var valueSink Value
 
-func BenchmarkDynamicRows(b *testing.B) {
-	for _, cells := range []int{1, 32, 128} {
-		for _, fragments := range []int{1, 1024} {
-			b.Run(fmt.Sprintf("cells%d/fragments%d", cells, fragments), func(b *testing.B) {
-				typ := cqltype.BlobType
-				cols := make([]cqltype.ColumnSpec, cells)
-				values := make([]Value, cells)
-				for i := range cols {
-					cols[i] = cqltype.ColumnSpec{Name: fmt.Sprint("v", i), Type: typ}
-					values[i] = BlobValue(bytes.Repeat([]byte{'x'}, 32))
-				}
-				columns := cqltype.NewColumns(cols...)
-				raw := cqltype.BytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
-				spans := make([]wire.Span, fragments)
-				for i := range spans {
-					spans[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])
-				}
-				chain := CodecTestMust(wire.NewChain(spans...))
-				plan := CodecTestMust(DynamicRows.Compile(columns))
-				var dst DynamicRow
-				b.ReportAllocs()
-				b.SetBytes(int64(len(raw)))
-				b.ResetTimer()
-				for b.Loop() {
-					reader := NewRowReader(columns, chain, nil)
-					if e := plan.DecodeInto(reader, &dst); e != nil {
-						b.Fatal(e)
+func BenchmarkDynamic(b *testing.B) {
+	// The one-time row-owned physical index is setup here. Its allocation/build cost
+	// is measured separately by BenchmarkDynamic/Rows. This measures actual J
+	// repeated late-column accesses at independently varied N and S.
+	b.Run("RepeatedAccess", func(b *testing.B) {
+		blob := cqltype.BlobType
+		for _, n := range []int{1, 128, 4096} {
+			for _, fragments := range []int{1, 256, 65536} {
+				b.Run(fmt.Sprintf("N%d/S%d", n, fragments), func(b *testing.B) {
+					cols := make([]cqltype.ColumnSpec, n)
+					values := make([]Value, n)
+					for i := range cols {
+						cols[i] = cqltype.ColumnSpec{Name: fmt.Sprint("v", i), Type: blob}
+						values[i] = BlobValue(make([]byte, (1<<20)/n))
 					}
-					v, e := dst.At(cells - 1)
-					if e != nil {
-						b.Fatal(e)
+					columns := cqltype.NewColumns(cols...)
+					raw := cqltype.BytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
+					parts := make([]wire.Span, fragments)
+					for i := range parts {
+						parts[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])
 					}
-					valueSink = v
-				}
-				dynamicSink = dst
-			})
+					chain := CodecTestMust(wire.NewChain(parts...))
+					plan := CodecTestMust(DynamicRows.Compile(columns))
+					row := CodecTestMust(plan.Decode(NewRowReader(columns, chain, nil)))
+					CodecTestMust(row.At(n - 1))
+					b.ReportAllocs()
+					b.ResetTimer()
+					for b.Loop() {
+						v, e := row.At(n - 1)
+						if e != nil {
+							b.Fatal(e)
+						}
+						valueSink = v
+					}
+				})
+			}
 		}
-	}
-}
-
-// The one-time row-owned physical index is setup here. Its allocation/build cost
-// is measured separately by BenchmarkDynamicRows. This measures actual J
-// repeated late-column accesses at independently varied N and S.
-func BenchmarkDynamicRepeatedAccess(b *testing.B) {
-	blob := cqltype.BlobType
-	for _, n := range []int{1, 128, 4096} {
-		for _, fragments := range []int{1, 256, 65536} {
-			b.Run(fmt.Sprintf("N%d/S%d", n, fragments), func(b *testing.B) {
-				cols := make([]cqltype.ColumnSpec, n)
-				values := make([]Value, n)
-				for i := range cols {
-					cols[i] = cqltype.ColumnSpec{Name: fmt.Sprint("v", i), Type: blob}
-					values[i] = BlobValue(make([]byte, (1<<20)/n))
-				}
-				columns := cqltype.NewColumns(cols...)
-				raw := cqltype.BytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
-				parts := make([]wire.Span, fragments)
-				for i := range parts {
-					parts[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])
-				}
-				chain := CodecTestMust(wire.NewChain(parts...))
-				plan := CodecTestMust(DynamicRows.Compile(columns))
-				row := CodecTestMust(plan.Decode(NewRowReader(columns, chain, nil)))
-				CodecTestMust(row.At(n - 1))
-				b.ReportAllocs()
-				b.ResetTimer()
-				for b.Loop() {
-					v, e := row.At(n - 1)
-					if e != nil {
-						b.Fatal(e)
+	})
+	b.Run("Rows", func(b *testing.B) {
+		for _, cells := range []int{1, 32, 128} {
+			for _, fragments := range []int{1, 1024} {
+				b.Run(fmt.Sprintf("cells%d/fragments%d", cells, fragments), func(b *testing.B) {
+					typ := cqltype.BlobType
+					cols := make([]cqltype.ColumnSpec, cells)
+					values := make([]Value, cells)
+					for i := range cols {
+						cols[i] = cqltype.ColumnSpec{Name: fmt.Sprint("v", i), Type: typ}
+						values[i] = BlobValue(bytes.Repeat([]byte{'x'}, 32))
 					}
-					valueSink = v
-				}
-			})
+					columns := cqltype.NewColumns(cols...)
+					raw := cqltype.BytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
+					spans := make([]wire.Span, fragments)
+					for i := range spans {
+						spans[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])
+					}
+					chain := CodecTestMust(wire.NewChain(spans...))
+					plan := CodecTestMust(DynamicRows.Compile(columns))
+					var dst DynamicRow
+					b.ReportAllocs()
+					b.SetBytes(int64(len(raw)))
+					b.ResetTimer()
+					for b.Loop() {
+						reader := NewRowReader(columns, chain, nil)
+						if e := plan.DecodeInto(reader, &dst); e != nil {
+							b.Fatal(e)
+						}
+						v, e := dst.At(cells - 1)
+						if e != nil {
+							b.Fatal(e)
+						}
+						valueSink = v
+					}
+					dynamicSink = dst
+				})
+			}
 		}
-	}
+	})
 }

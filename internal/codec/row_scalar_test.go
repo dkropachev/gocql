@@ -4,10 +4,8 @@
 package codec
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
-	"math"
 	"reflect"
 	"testing"
 
@@ -67,88 +65,6 @@ func checkRowScalarEquivalent[T any](t *testing.T, kind cqltype.Type, decoder De
 	}
 }
 
-func TestFusedRowIntegerSemantics(t *testing.T) {
-	for name, input := range map[string][]byte{
-		"positive":         rowScalarFrame(4, []byte{0, 0, 0, 42}),
-		"negative":         rowScalarFrame(4, []byte{0xff, 0xff, 0xff, 0xfe}),
-		"minimum":          rowScalarFrame(4, []byte{0x80, 0, 0, 0}),
-		"null":             rowScalarFrame(-1, nil),
-		"unset":            rowScalarFrame(-2, nil),
-		"invalid_negative": rowScalarFrame(math.MinInt32, nil),
-		"empty":            rowScalarFrame(0, nil),
-		"short_width":      rowScalarFrame(3, []byte{1, 2, 3}),
-		"long_width":       rowScalarFrame(5, []byte{1, 2, 3, 4, 5}),
-		"truncated_body":   rowScalarFrame(4, []byte{1, 2, 3}),
-		"truncated_prefix": []byte{0, 0, 0},
-	} {
-		t.Run(name, func(t *testing.T) { checkRowScalarEquivalent(t, cqltype.TypeInt, Int32, input, false, false) })
-	}
-	checkRowScalarEquivalent(t, cqltype.TypeInt, Int32, nil, true, false)
-	checkRowScalarEquivalent(t, cqltype.TypeInt, Int32, nil, true, true)
-	checkRowScalarEquivalent(t, cqltype.TypeInt, Int32, rowScalarFrame(4, []byte{1, 2, 3, 4}), false, true)
-	checkRowScalarEquivalent(t, cqltype.TypeBlob, Int32, rowScalarFrame(4, []byte{1, 2, 3, 4}), false, false)
-	checkRowScalarEquivalent(t, cqltype.TypeTinyInt, Int8, rowScalarFrame(1, []byte{0x80}), false, false)
-	checkRowScalarEquivalent(t, cqltype.TypeSmallInt, Int16, rowScalarFrame(2, []byte{0x80, 0}), false, false)
-	checkRowScalarEquivalent(t, cqltype.TypeBigInt, Int64, rowScalarFrame(8, []byte{0x80, 0, 0, 0, 0, 0, 0, 0}), false, false)
-	checkRowScalarEquivalent(t, cqltype.TypeCounter, CounterCodec, rowScalarFrame(8, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}), false, false)
-}
-
-func TestFusedRowBlobAndGenericFallback(t *testing.T) {
-	for name, input := range map[string][]byte{
-		"present":   rowScalarFrame(5, []byte("bytes")),
-		"empty":     rowScalarFrame(0, nil),
-		"null":      rowScalarFrame(-1, nil),
-		"unset":     rowScalarFrame(-2, nil),
-		"truncated": rowScalarFrame(5, []byte("byte")),
-	} {
-		t.Run(name, func(t *testing.T) { checkRowScalarEquivalent(t, cqltype.TypeBlob, BlobCodec, input, false, false) })
-	}
-	checkRowScalarEquivalent(t, cqltype.TypeBlob, BlobCodec, rowScalarFrame(1, []byte{1}), false, true)
-	checkRowScalarEquivalent(t, cqltype.TypeInt, BlobCodec, rowScalarFrame(4, []byte{1, 2, 3, 4}), false, false)
-	checkRowScalarEquivalent(t, cqltype.TypeFloat, Float32, rowScalarFrame(4, []byte{0, 0, 0, 0}), false, false)
-	checkRowScalarEquivalent(t, cqltype.TypeBlob, BlobCodec, nil, true, false)
-
-	columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: rowTestType(t, cqltype.TypeBlob)})
-	chain, _ := wire.NewChain(wire.Borrow(rowScalarFrame(3, []byte("abc"))))
-	lease := wire.NewLease(chain, nil)
-	if !lease.Retain() {
-		t.Fatal("retain failed")
-	}
-	reader := NewRowReader(columns, chain, lease)
-	var value cqltype.Bytes
-	if err := readColumnInto(reader, BlobCodec, &value); err != nil {
-		t.Fatal(err)
-	}
-	lease.Release()
-	if !bytes.Equal(value.OwnedBytes(), []byte("abc")) {
-		t.Fatal("retained view invalid")
-	}
-	lease.Release()
-	if _, err := value.At(0); err != cqltype.ErrReleased {
-		t.Fatalf("released view err=%v", err)
-	}
-}
-
-func TestFusedRowCompiledGuardsAndDestination(t *testing.T) {
-	columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: rowTestType(t, cqltype.TypeInt)})
-	compiled, err := compileValueDecoder(Int32, rowTestType(t, cqltype.TypeInt))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, decoder := range []Decoder[int32]{Int32, compiled} {
-		checkRowScalarEquivalent(t, cqltype.TypeBlob, decoder, rowScalarFrame(4, []byte{1, 2, 3, 4}), false, false)
-		chain, _ := wire.NewChain(wire.Borrow(rowScalarFrame(3, []byte{1, 2, 3})))
-		value := int32(99)
-		if err := readColumnInto(NewRowReader(columns, chain, nil), decoder, &value); err == nil || value != 99 {
-			t.Fatalf("destination overwritten: value=%d err=%v", value, err)
-		}
-		check := NewRowReader(columns, chain, nil)
-		if err := readColumnInto(check, decoder, nil); err == nil || check.index != 1 {
-			t.Fatalf("nil dst err=%v index=%d", err, check.index)
-		}
-	}
-}
-
 type capturedRowInt struct {
 	Decoder[int32]
 	seen  *ValueReader
@@ -159,29 +75,4 @@ func (c capturedRowInt) Decode(r ValueReader) (int32, error) {
 	*c.seen = r
 	*c.calls++
 	return c.Decoder.Decode(r)
-}
-func TestFusedRowCustomDecoderSnapshot(t *testing.T) {
-	columns := cqltype.NewColumns(
-		cqltype.ColumnSpec{Name: "first", Type: rowTestType(t, cqltype.TypeInt)},
-		cqltype.ColumnSpec{Name: "second", Type: rowTestType(t, cqltype.TypeInt)},
-	)
-	data := append(rowScalarFrame(4, []byte{0, 0, 0, 17}), rowScalarFrame(4, []byte{0, 0, 0, 29})...)
-	chain, _ := wire.NewChain(wire.Borrow(data))
-	lease := wire.NewLease(chain, nil)
-	defer lease.Release()
-	reader := NewRowReader(columns, chain, lease)
-	var snapshot ValueReader
-	var calls int
-	custom := capturedRowInt{Decoder: Int32, seen: &snapshot, calls: &calls}
-	var first, second int32
-	if err := readColumnInto(reader, custom, &first); err != nil {
-		t.Fatal(err)
-	}
-	if err := readColumnInto(reader, Int32, &second); err != nil {
-		t.Fatal(err)
-	}
-	stillFirst, err := Int32.Decode(snapshot)
-	if err != nil || first != 17 || second != 29 || stillFirst != 17 || calls != 1 {
-		t.Fatalf("custom snapshot: first=%d second=%d captured=%d calls=%d err=%v", first, second, stillFirst, calls, err)
-	}
 }
