@@ -136,7 +136,7 @@ func TestRecreateSchema(t *testing.T) {
 
 			queries := trimQueries(splitFixtureCQL(inStr))
 			for _, q := range queries {
-				_, err = step09RecreateExec(t, session, q)
+				_, err = recreateExec(t, session, q)
 				if err != nil {
 					break
 				}
@@ -213,7 +213,7 @@ func TestRecreateSchema(t *testing.T) {
 			}
 
 			if test.Name == "Aggregates" {
-				step08CheckAggregate(t, session, ks)
+				checkAggregate(t, session, ks)
 			}
 
 			// Exec dumped queries to check if they are CQL-correct.
@@ -221,13 +221,13 @@ func TestRecreateSchema(t *testing.T) {
 			cleanup(t, session, ks)
 
 			for _, q := range trimQueries(splitFixtureCQL(strings.ReplaceAll(dump, test.FixedKeyspace, ks))) {
-				if _, err := step09RecreateExec(t, session, q); err != nil {
+				if _, err := recreateExec(t, session, q); err != nil {
 					t.Fatal("invalid dump query", q, err)
 				}
 			}
 
 			if test.Name == "Aggregates" {
-				step08CheckAggregate(t, session, ks)
+				checkAggregate(t, session, ks)
 			}
 
 			// Check if new dump is the same as previous
@@ -337,7 +337,7 @@ func v2SchemaRoutingTabletsAutoEnabled(t *testing.T, session *gocql.Session) boo
 // Development group-0 schema transactions can explicitly abort on a concurrent
 // topology/schema change. Retry only this server-declared aborted transaction;
 // keep all input/dump/golden assertions and propagate every other failure.
-func step09RecreateExec(t testing.TB, s *gocql.Session, cql string) (gocql.Result, error) {
+func recreateExec(t testing.TB, s *gocql.Session, cql string) (gocql.Result, error) {
 	t.Helper()
 	var result gocql.Result
 	var err error

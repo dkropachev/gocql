@@ -29,7 +29,7 @@ var benchRecordings = []string{
 
 // benchControlQuery and benchControlParams pin typed control startup exactly.
 // The original pre-migration captures and their failed operational replay remain
-// source-bound historical evidence in step10; these fixtures run current code.
+// source-bound historical evidence; these fixtures run current code.
 // The capture's negotiated Scylla metadata timeout is 30s. Unlike legacy
 // querySystem it is independent of connect and client metadata timeout budgets.
 // The always-run operational replay additionally guards the complete startup.

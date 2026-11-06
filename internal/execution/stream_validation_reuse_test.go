@@ -40,10 +40,10 @@ func (p pageValidationPlan) DecodeInto(reader *codec.StreamRowReader, dst *[]byt
 }
 
 func TestStreamContinuationValidationMetadataAndCallbacks(t *testing.T) {
-	s, c, peer := step07StreamSession(t, 4, nil)
+	s, c, peer := rowStreamSession(t, 4, nil)
 	implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
 	columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))})
-	state, _ := step03PreparedState(t, s, columns)
+	state, _ := preparedState(t, s, columns)
 	bound := new(Bound[cqltype.Bytes])
 	BoundData(bound).InternalRequest = InternalExecutionRequest{InternalStatement: state.InternalStatement, InternalSource: InternalPreparedSource(state), InternalValues: model.EncodedValues{Columns: cqltype.NewColumns()}, InternalOwner: InternalNewInputOwner(), InternalRouting: model.RoutingInfo{Kind: cqltype.OrdinaryStatement}}
 	BoundData(bound).InternalRows = codec.OneColumn(codec.BlobCodec)
@@ -64,7 +64,7 @@ func TestStreamContinuationValidationMetadataAndCallbacks(t *testing.T) {
 		defer close(done)
 		for _, body := range [][]byte{runtimeRowsBody([]byte{}), noMetadata, runtimeRowsBody([]byte{2}, "def"), changed} {
 			id := typedTestReadRequest(t, c, peer)
-			if _, err := peer.Write(step07Response(t, c, id, body)); err != nil {
+			if _, err := peer.Write(testResponse(t, c, id, body)); err != nil {
 				t.Error(err)
 				return
 			}

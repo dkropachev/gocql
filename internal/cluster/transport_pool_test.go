@@ -51,7 +51,7 @@ import (
 	lz4 "github.com/scylladb/gocql/v2/internal/wirecompress"
 )
 
-func step04Reserve(t *testing.T, c *transport.Conn) *transport.InternalExclusiveConn {
+func reserve(t *testing.T, c *transport.Conn) *transport.InternalExclusiveConn {
 	t.Helper()
 	go c.InternalServe(c.InternalCtx)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -63,7 +63,7 @@ func step04Reserve(t *testing.T, c *transport.Conn) *transport.InternalExclusive
 	t.Cleanup(func() { r.InternalClose(false) })
 	return r
 }
-func step04WriteResponse(t *testing.T, c *transport.Conn, server net.Conn, stream int, body []byte) {
+func writeResponse(t *testing.T, c *transport.Conn, server net.Conn, stream int, body []byte) {
 	t.Helper()
 	frame := typedTestResponse(t, c.InternalVersion, stream, body)
 	if c.InternalVersion < 5 {
@@ -99,13 +99,13 @@ func TestV2ExclusiveStreamingModesAndSafeReuse(t *testing.T) {
 			return "raw"
 		}(), func(t *testing.T) {
 			c, server := typedTestConn(t, mode.version, mode.compression)
-			r := step04Reserve(t, c)
+			r := reserve(t, c)
 			payload := bytes.Repeat([]byte("segmented-value"), 20000)
 			sent := make(chan struct{})
 			go func() {
 				defer close(sent)
 				stream := typedTestReadRequest(t, c, server)
-				step04WriteResponse(t, c, server, stream, typedTestRowsBody(payload))
+				writeResponse(t, c, server, stream, typedTestRowsBody(payload))
 			}()
 			response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value FROM ks.tbl", Consistency: cqltype.One})
 			if err != nil {
@@ -136,7 +136,7 @@ func TestV2ExclusiveStreamingModesAndSafeReuse(t *testing.T) {
 			}
 			go func() {
 				stream := typedTestReadRequest(t, c, server)
-				step04WriteResponse(t, c, server, stream, typedTestRowsBody([]byte("shared")))
+				writeResponse(t, c, server, stream, typedTestRowsBody([]byte("shared")))
 			}()
 			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
 			if err != nil {
@@ -148,7 +148,7 @@ func TestV2ExclusiveStreamingModesAndSafeReuse(t *testing.T) {
 }
 func TestV2ExclusiveRawFirstRowBeforeRemainingResponse(t *testing.T) {
 	c, server := typedTestConn(t, 4, nil)
-	r := step04Reserve(t, c)
+	r := reserve(t, c)
 	first, second := []byte("first"), []byte("second")
 	body := typedTestRowsBody(first)
 	binary.BigEndian.PutUint32(body[len(body)-len(first)-8:], 2)
@@ -199,7 +199,7 @@ func TestV2ExclusiveWaitsForOrphanAndAcquisitionCancellation(t *testing.T) {
 		stream := typedTestReadRequest(t, c, server)
 		close(requested)
 		<-allowLate
-		step04WriteResponse(t, c, server, stream, typedTestRowsBody(nil))
+		writeResponse(t, c, server, stream, typedTestRowsBody(nil))
 	}()
 	done := make(chan error)
 	go func() {
@@ -239,7 +239,7 @@ func TestV2ExclusiveWaitsForOrphanAndAcquisitionCancellation(t *testing.T) {
 }
 func TestV2ExclusiveCloseStopsBlockedCallerStorage(t *testing.T) {
 	c, server := typedTestConn(t, 4, nil)
-	r := step04Reserve(t, c)
+	r := reserve(t, c)
 	entered := make(chan struct{})
 	go func() {
 		stream := typedTestReadRequest(t, c, server)
@@ -362,7 +362,7 @@ func TestV2PoolSizingModesAndPendingShards(t *testing.T) {
 
 var _ io.Reader = (*transport.InternalVerifiedStreamUnits)(nil)
 
-func step04EventPacket(t *testing.T, proto byte, kind string) []byte {
+func eventPacket(t *testing.T, proto byte, kind string) []byte {
 	t.Helper()
 	e := protocol.NewTypedEnvelope()
 	e.Str(kind, false)
@@ -391,7 +391,7 @@ func TestV2ExclusiveTLSStreaming(t *testing.T) {
 			c, rawServer := typedTestConn(t, version, mode.compressor)
 			defer rawServer.Close()
 			rawClient := c.InternalR.(*transport.InternalConnReader).InternalConn
-			cert, clientConfig := step04TLS(t)
+			cert, clientConfig := testTLS(t)
 			client := tls.Client(rawClient, clientConfig)
 			server := tls.Server(rawServer, &tls.Config{Certificates: []tls.Certificate{cert}})
 			done := make(chan error, 1)
@@ -404,11 +404,11 @@ func TestV2ExclusiveTLSStreaming(t *testing.T) {
 			}
 			c.InternalR.(*transport.InternalConnReader).InternalConn = client
 			c.InternalW = &transport.InternalDeadlineContextWriter{InternalW: client, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
-			r := step04Reserve(t, c)
+			r := reserve(t, c)
 			payload := bytes.Repeat([]byte("tls-final-storage"), 30000)
 			go func() {
 				stream := typedTestReadRequest(t, c, server)
-				step04WriteResponse(t, c, server, stream, typedTestRowsBody(payload))
+				writeResponse(t, c, server, stream, typedTestRowsBody(payload))
 			}()
 			response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
 			if err != nil {
@@ -438,11 +438,11 @@ func TestV2ExclusiveV5TrailingControlReuse(t *testing.T) {
 				SessionData(opaqueStorageValuexx).InternalLogger = logging.InternalNopLogger{}
 				return opaqueStorageValuexx
 			}())
-			r := step04Reserve(t, c)
+			r := reserve(t, c)
 			go func() {
 				stream := typedTestReadRequest(t, c, server)
 				result := typedTestResponse(t, 5, stream, typedTestRowsBody([]byte("one")))
-				control := step04EventPacket(t, 5, "CLIENT_ROUTES_CHANGE")
+				control := eventPacket(t, 5, "CLIENT_ROUTES_CHANGE")
 				if bad {
 					control = control[:len(control)-1]
 				}
@@ -501,7 +501,7 @@ func TestV2ExclusiveControlOverflowPoisonsAndReleases(t *testing.T) {
 				defer close(serverDone)
 				typedTestReadRequest(t, c, server)
 				for i := 0; i < 50; i++ {
-					if _, err := server.Write(step04EventPacket(t, 4, "STATUS_CHANGE")); err != nil {
+					if _, err := server.Write(eventPacket(t, 4, "STATUS_CHANGE")); err != nil {
 						return
 					}
 				}
@@ -553,20 +553,20 @@ func TestV2EventEnqueueCloseRaceReleasesEveryCharge(t *testing.T) {
 	}
 }
 
-type step04HeaderPause struct {
+type headerPause struct {
 	entered, release chan struct{}
 	once             sync.Once
 }
 
-func (o *step04HeaderPause) ObserveFrameHeader(context.Context, transport.ObservedFrameHeader) {
+func (o *headerPause) ObserveFrameHeader(context.Context, transport.ObservedFrameHeader) {
 	o.once.Do(func() { close(o.entered); <-o.release })
 }
 func TestV2ExclusiveHandoffWaitsForWholeV5Segment(t *testing.T) {
 	c, server := typedTestConn(t, 5, nil)
-	gate := &step04HeaderPause{entered: make(chan struct{}), release: make(chan struct{})}
+	gate := &headerPause{entered: make(chan struct{}), release: make(chan struct{})}
 	c.InternalFrameObserver = gate
 	go c.InternalServe(c.InternalCtx)
-	event := step04EventPacket(t, 5, "CLIENT_ROUTES_CHANGE")
+	event := eventPacket(t, 5, "CLIENT_ROUTES_CHANGE")
 	packet := codecTestMust(segment.EncodeSpans(typedTestChain(t, event, event), true, false))
 	sent := make(chan struct{})
 	go func() { server.Write(typedTestBytes(t, packet)); close(sent) }()
@@ -605,7 +605,7 @@ func TestV2ExclusiveHandoffWaitsForWholeV5Segment(t *testing.T) {
 func TestV2ExclusiveHandoffFinishesPartialHeader(t *testing.T) {
 	c, server := typedTestConn(t, 4, nil)
 	go c.InternalServe(c.InternalCtx)
-	packet := step04EventPacket(t, 4, "CLIENT_ROUTES_CHANGE")
+	packet := eventPacket(t, 4, "CLIENT_ROUTES_CHANGE")
 	first := make(chan struct{})
 	go func() { server.Write(packet[:1]); close(first) }()
 	<-first
@@ -642,13 +642,13 @@ func TestV2ExclusiveHandoffFinishesPartialHeader(t *testing.T) {
 	r.InternalClose(true)
 }
 
-type step04AcceptedWriter struct {
+type acceptedWriter struct {
 	net.Conn
 	entered chan struct{}
 	once    sync.Once
 }
 
-func (w *step04AcceptedWriter) Write(b []byte) (int, error) {
+func (w *acceptedWriter) Write(b []byte) (int, error) {
 	w.once.Do(func() { close(w.entered) })
 	return w.Conn.Write(b)
 }
@@ -656,7 +656,7 @@ func TestV2ExclusiveAcquisitionDrainsAcceptedWriterOwnership(t *testing.T) {
 	c, server := typedTestConn(t, 4, nil)
 	go c.InternalServe(c.InternalCtx)
 	entered := make(chan struct{})
-	c.InternalW = &transport.InternalDeadlineContextWriter{InternalW: &step04AcceptedWriter{Conn: c.InternalR.(*transport.InternalConnReader).InternalConn, entered: entered}, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
+	c.InternalW = &transport.InternalDeadlineContextWriter{InternalW: &acceptedWriter{Conn: c.InternalR.(*transport.InternalConnReader).InternalConn, entered: entered}, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
 	payload := bytes.Repeat([]byte("borrowed"), 20000)
 	prefix := binary.BigEndian.AppendUint32(nil, uint32(len(payload)))
 	values := typedTestChain(t, prefix, payload)
@@ -684,7 +684,7 @@ func TestV2ExclusiveAcquisitionDrainsAcceptedWriterOwnership(t *testing.T) {
 	go func() {
 		defer close(serverDone)
 		stream := typedTestReadRequest(t, c, server)
-		step04WriteResponse(t, c, server, stream, typedTestRowsBody(nil))
+		writeResponse(t, c, server, stream, typedTestRowsBody(nil))
 	}()
 	if err := <-done; !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
@@ -699,12 +699,12 @@ func TestV2ExclusiveAcquisitionDrainsAcceptedWriterOwnership(t *testing.T) {
 
 func TestV2ExclusiveClosedResponseDropsValidatedArena(t *testing.T) {
 	c, server := typedTestConn(t, 5, nil)
-	r := step04Reserve(t, c)
+	r := reserve(t, c)
 	sent := make(chan struct{})
 	go func() {
 		defer close(sent)
 		stream := typedTestReadRequest(t, c, server)
-		step04WriteResponse(t, c, server, stream, typedTestRowsBody(bytes.Repeat([]byte("value"), 30000)))
+		writeResponse(t, c, server, stream, typedTestRowsBody(bytes.Repeat([]byte("value"), 30000)))
 	}()
 	response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
 	if err != nil {
@@ -766,13 +766,13 @@ func TestV2InitialOpeningCannotReplaceInstalledSharder(t *testing.T) {
 
 func TestV2PageCancellationGenerationDoesNotReachLaterPageOrSharedUse(t *testing.T) {
 	c, server := typedTestConn(t, 4, nil)
-	r := step04Reserve(t, c)
+	r := reserve(t, c)
 	serverDone := make(chan struct{})
 	go func() {
 		defer close(serverDone)
 		for i := 0; i < 3; i++ {
 			stream := typedTestReadRequest(t, c, server)
-			step04WriteResponse(t, c, server, stream, typedTestRowsBody([]byte("value")))
+			writeResponse(t, c, server, stream, typedTestRowsBody([]byte("value")))
 		}
 	}()
 	pageCtx, cancelPage := context.WithCancel(r.InternalCtx)
@@ -821,7 +821,7 @@ func TestV2PageCancellationGenerationDoesNotReachLaterPageOrSharedUse(t *testing
 }
 func TestV2PageContextCancellationWinsAndJoinsRead(t *testing.T) {
 	c, server := typedTestConn(t, 4, nil)
-	r := step04Reserve(t, c)
+	r := reserve(t, c)
 	prefixWritten := make(chan struct{})
 	serverDone := make(chan struct{})
 	go func() {
@@ -865,7 +865,7 @@ func TestV2PageContextCancellationWinsAndJoinsRead(t *testing.T) {
 	}
 }
 
-type step04TLSCoalescedRecorder struct {
+type tlsCoalescedRecorder struct {
 	conn      *tls.Conn
 	payload   []byte
 	remaining int
@@ -875,10 +875,10 @@ type step04TLSCoalescedRecorder struct {
 	once      sync.Once
 }
 
-func (w *step04TLSCoalescedRecorder) SetWriteDeadline(deadline time.Time) error {
+func (w *tlsCoalescedRecorder) SetWriteDeadline(deadline time.Time) error {
 	return w.conn.SetWriteDeadline(deadline)
 }
-func (w *step04TLSCoalescedRecorder) Write(p []byte) (int, error) {
+func (w *tlsCoalescedRecorder) Write(p []byte) (int, error) {
 	w.once.Do(func() { close(w.entered) })
 	if len(p) > 1024 {
 		at := uintptr(unsafe.Pointer(&p[0]))
@@ -909,7 +909,7 @@ func TestV2TypedTLSCoalescingBorrowedOrderPartialWriteAndDrain(t *testing.T) {
 			unused.Close()
 			c.InternalKeepOnCancel() // the connection is reused below
 			c.InternalCancel()
-			client, server, _, cleanup := step04BenchTLS(t)
+			client, server, _, cleanup := benchTLS(t)
 			defer cleanup()
 			ctx, cancel := context.WithCancel(context.Background())
 			c.InternalCtx, c.InternalCancel = ctx, cancel
@@ -917,7 +917,7 @@ func TestV2TypedTLSCoalescingBorrowedOrderPartialWriteAndDrain(t *testing.T) {
 			c.InternalR = &transport.InternalConnReader{InternalConn: client}
 			payload := bytes.Repeat([]byte("original-borrowed"), 10000)
 			values := typedTestChain(t, binary.BigEndian.AppendUint32(nil, uint32(len(payload))), payload)
-			recorder := &step04TLSCoalescedRecorder{conn: client, payload: payload, remaining: len(payload) / 2, partial: partial, entered: make(chan struct{})}
+			recorder := &tlsCoalescedRecorder{conn: client, payload: payload, remaining: len(payload) / 2, partial: partial, entered: make(chan struct{})}
 			c.InternalW = transport.InternalNewWriteCoalescer(recorder, 0, 100*time.Microsecond, c.InternalCtx.Done())
 			go c.InternalServe(c.InternalCtx)
 			serverDone := make(chan error, 1)
@@ -963,9 +963,9 @@ func TestV2TypedTLSCoalescingBorrowedOrderPartialWriteAndDrain(t *testing.T) {
 	}
 }
 
-type step04FixedHostDialer struct{ conn net.Conn }
+type fixedHostDialer struct{ conn net.Conn }
 
-func (d step04FixedHostDialer) DialHost(context.Context, *endpoint.HostInfo) (*endpoint.DialedHost, error) {
+func (d fixedHostDialer) DialHost(context.Context, *endpoint.HostInfo) (*endpoint.DialedHost, error) {
 	return &endpoint.DialedHost{Conn: d.conn}, nil
 }
 func TestV2UnsupportedCompressionRejectedBeforeStartupOrQuery(t *testing.T) {
@@ -1016,7 +1016,7 @@ func TestV2UnsupportedCompressionRejectedBeforeStartupOrQuery(t *testing.T) {
 				}
 				done <- nil
 			}()
-			cfg := &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config), ProtoVersion: 4, CQLVersion: "3.0.0", ConnectTimeout: time.Second, HostDialer: step04FixedHostDialer{client}, Compressor: compressor, Logger: logging.InternalNopLogger{}}
+			cfg := &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config), ProtoVersion: 4, CQLVersion: "3.0.0", ConnectTimeout: time.Second, HostDialer: fixedHostDialer{client}, Compressor: compressor, Logger: logging.InternalNopLogger{}}
 			conn, err := InternalSessionDialWithoutObserver(session, ctx, host, cfg, transport.InternalConnErrorHandlerFn(func(*transport.Conn, error, bool) {}), 0, 0)
 			var unsupported *settings.UnsupportedSettingError
 			if conn != nil || !errors.As(err, &unsupported) {
@@ -1036,18 +1036,18 @@ func TestV2UnsupportedCompressionRejectedBeforeStartupOrQuery(t *testing.T) {
 	}
 }
 
-type step04WireCounter struct {
+type wireCounter struct {
 	net.Conn
 	reads, writes, readBytes, writeBytes, records atomic.Int64
 }
 
-func (c *step04WireCounter) Read(p []byte) (int, error) {
+func (c *wireCounter) Read(p []byte) (int, error) {
 	n, err := c.Conn.Read(p)
 	c.reads.Add(1)
 	c.readBytes.Add(int64(n))
 	return n, err
 }
-func (c *step04WireCounter) Write(p []byte) (int, error) {
+func (c *wireCounter) Write(p []byte) (int, error) {
 	n, err := c.Conn.Write(p)
 	c.writes.Add(1)
 	c.writeBytes.Add(int64(n))
@@ -1064,18 +1064,18 @@ func (c *step04WireCounter) Write(p []byte) (int, error) {
 	}
 	return n, err
 }
-func (c *step04WireCounter) reset() {
+func (c *wireCounter) reset() {
 	c.reads.Store(0)
 	c.writes.Store(0)
 	c.readBytes.Store(0)
 	c.writeBytes.Store(0)
 	c.records.Store(0)
 }
-func step04BenchTLS(b testing.TB) (*tls.Conn, *tls.Conn, *step04WireCounter, func()) {
+func benchTLS(b testing.TB) (*tls.Conn, *tls.Conn, *wireCounter, func()) {
 	b.Helper()
 	rawClient, rawServer := net.Pipe()
-	wire := &step04WireCounter{Conn: rawClient}
-	cert, config := step04TLS(b)
+	wire := &wireCounter{Conn: rawClient}
+	cert, config := testTLS(b)
 	client := tls.Client(wire, config)
 	server := tls.Server(rawServer, &tls.Config{Certificates: []tls.Certificate{cert}, SessionTicketsDisabled: true})
 	done := make(chan error, 1)

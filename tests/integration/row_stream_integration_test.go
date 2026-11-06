@@ -36,7 +36,7 @@ import (
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
-func TestStep07RunStreamLive(t *testing.T) {
+func TestRunStreamLive(t *testing.T) {
 	config := createV2Cluster(func(c *gocql.Config) {
 		c.Pool.ConnectionsPerHost = 1
 		c.KeepaliveInterval = 0
@@ -296,12 +296,12 @@ func TestStep07RunStreamLive(t *testing.T) {
 	if !interrupted.NextInto(&dst) {
 		t.Fatal("interruption first row", interrupted.Err())
 	}
-	step09NodeCommand(t, "stop")
+	nodeCommand(t, "stop")
 	// Always restart the exact stopped node, even if an assertion below fails.
 	restarted := false
 	defer func() {
 		if !restarted {
-			step09NodeCommand(t, "start", "--wait-for-binary-proto")
+			nodeCommand(t, "start", "--wait-for-binary-proto")
 		}
 	}()
 	if interrupted.NextInto(&dst) || interrupted.Err() == nil {
@@ -317,7 +317,7 @@ func TestStep07RunStreamLive(t *testing.T) {
 	if err := interrupted.Close(); !errors.Is(err, terminal) {
 		t.Fatal("close lost interruption", err)
 	}
-	step09NodeCommand(t, "start", "--wait-for-binary-proto")
+	nodeCommand(t, "start", "--wait-for-binary-proto")
 	restarted = true
 	repairDeadline := time.Now().Add(40 * time.Second)
 	for {
@@ -347,7 +347,7 @@ func TestStep07RunStreamLive(t *testing.T) {
 
 // The finite protocol is serviced by the same native.py process holding the
 // address locks. It accepts only nodes belonging to that exact live cluster.
-func step09NodeCommand(t testing.TB, action ...string) {
+func nodeCommand(t testing.TB, action ...string) {
 	t.Helper()
 	conn, err := net.DialTimeout("unix", os.Getenv("GOCQL_FIXTURE_CONTROL"), 5*time.Second)
 	if err != nil {

@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestStep15DecodeToFinalArena(t *testing.T) {
+func TestDecodeToFinalArena(t *testing.T) {
 	for _, codec := range []interface {
 		Name() string
 		Encode([]byte) ([]byte, error)

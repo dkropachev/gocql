@@ -22,8 +22,8 @@ count fails the workload.
 
 To regenerate, use a dedicated **owned** ScyllaDB fixture at an explicit native
 endpoint. The native fixture runner retains exclusive address locks through
-start, test and stop; its step 13 mode sets `GOCQL_REGENERATE_BENCH=1` and runs
-`TestStep13RegenerateReplay`. The underlying command is:
+start, test and stop; its regeneration mode sets `GOCQL_REGENERATE_BENCH=1` and runs
+`TestRegenerateReplay`. The underlying command is:
 
 ```sh
 GOCQL_BENCH_ADDRESS=127.0.20.1:9042 \
@@ -44,7 +44,7 @@ errors before TestMain can call os.Exit, including ordinary failure and operatio
 cancellation. Only then does the operational replay test run. Failed/canceled
 processes that cannot execute defers retain the runner prefix, so the native
 runner's cleanup removes them after the exact child binary is killed and joined.
-TestStep13Ownership exercises both paths. `GOCQL_BENCH_CORPUS_DIR` isolates
+TestOwnership exercises both paths. `GOCQL_BENCH_CORPUS_DIR` isolates
 fault-test captures from the checked-in corpus. No container reset or unrelated
 workload is involved.
 
@@ -57,9 +57,9 @@ request fallback or old-control compatibility path.
 
 Generation source/config/server/capture hashes, actual operation results and
 cleanup receipts are recorded in
-[step13-verification.json](../../feature-specs/evidence/step13-verification.json).
+[the verification report](../../feature-specs/evidence/step13-verification.json).
 The old page-5000/timestamp captures and their failed operational replay remain
-historical evidence in the accepted predecessor and step 10/12 reports; they do
+historical evidence in the accepted predecessor reports; they do
 not count as successful current replay. These are benchmark smoke checks.
 Comprehensive native throughput, scaling and retained-memory measurements
-remain step 15.
+live in the native performance integration tests.

@@ -28,7 +28,7 @@ import (
 	"time"
 )
 
-func step04TLS(t testing.TB) (tls.Certificate, *tls.Config) {
+func testTLS(t testing.TB) (tls.Certificate, *tls.Config) {
 	t.Helper()
 	key := codecTestMust(ecdsa.GenerateKey(elliptic.P256(), rand.Reader))
 	template := &x509.Certificate{SerialNumber: big.NewInt(42), DNSNames: []string{"transport.test"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}

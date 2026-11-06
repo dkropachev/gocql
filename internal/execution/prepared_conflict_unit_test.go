@@ -37,7 +37,7 @@ import (
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 )
 
-type step03ScopedSchemaBackend struct {
+type scopedSchemaBackend struct {
 	*schemaDataMock
 	keyspace string
 	fail     atomic.Bool
@@ -46,7 +46,7 @@ type step03ScopedSchemaBackend struct {
 	calls    atomic.Int32
 }
 
-func (b *step03ScopedSchemaBackend) InternalQueryV2System(ctx context.Context, r *model.AttemptRequest) (*transport.InternalResponsePage, error) {
+func (b *scopedSchemaBackend) InternalQueryV2System(ctx context.Context, r *model.AttemptRequest) (*transport.InternalResponsePage, error) {
 	args, err := v2SchemaMockArguments(r)
 	if err != nil {
 		return nil, err
@@ -64,7 +64,7 @@ func (b *step03ScopedSchemaBackend) InternalQueryV2System(ctx context.Context, r
 	}
 	return b.schemaDataMock.InternalQueryV2System(ctx, r)
 }
-func waitStep03Reconciliation(t *testing.T, p *cluster.InternalV2PeripheralState) {
+func waitReconciliation(t *testing.T, p *cluster.InternalV2PeripheralState) {
 	t.Helper()
 	deadline := time.Now().Add(4 * time.Second)
 	for {
@@ -96,7 +96,7 @@ func TestV2PreparedConflictRunsOnlyRelevantTypedRefresh(t *testing.T) {
 			}
 			p.InternalMu.Unlock()
 			before := s.Metadata()
-			backend := &step03ScopedSchemaBackend{schemaDataMock: mock, keyspace: "ks1", queried: make(chan struct{})}
+			backend := &scopedSchemaBackend{schemaDataMock: mock, keyspace: "ks1", queried: make(chan struct{})}
 			implCluster.SessionData(s).InternalControl = backend
 			mock.mu.Lock()
 			mock.knownKeyspaces["ks1"] = append(mock.knownKeyspaces["ks1"], tableInfo{name: "from_conflict", columns: []columnInfo{{name: "id", kind: "partition_key"}}})
@@ -112,7 +112,7 @@ func TestV2PreparedConflictRunsOnlyRelevantTypedRefresh(t *testing.T) {
 			case <-time.After(3 * time.Second):
 				t.Fatal("required relevant refresh did not query typed source")
 			}
-			waitStep03Reconciliation(t, p)
+			waitReconciliation(t, p)
 			if backend.calls.Load() != 1 {
 				t.Fatal("required refresh not coalesced", backend.calls.Load())
 			}
@@ -127,7 +127,7 @@ func TestV2PreparedConflictRunsOnlyRelevantTypedRefresh(t *testing.T) {
 }
 func TestV2PreparedConflictRefreshRetriesDirtyScope(t *testing.T) {
 	s, mock := refreshAllSchemaSession(t)
-	backend := &step03ScopedSchemaBackend{schemaDataMock: mock, keyspace: "ks1", queried: make(chan struct{})}
+	backend := &scopedSchemaBackend{schemaDataMock: mock, keyspace: "ks1", queried: make(chan struct{})}
 	backend.fail.Store(true)
 	implCluster.SessionData(s).InternalControl = backend
 	p := implCluster.InternalSessionPeripheral(s)
@@ -146,7 +146,7 @@ func TestV2PreparedConflictRefreshRetriesDirtyScope(t *testing.T) {
 	if !dirty {
 		t.Fatal("failed scope was dropped")
 	}
-	waitStep03Reconciliation(t, p)
+	waitReconciliation(t, p)
 	if backend.calls.Load() != 2 {
 		t.Fatal("failed required scope did not retry", backend.calls.Load())
 	}
@@ -160,11 +160,11 @@ func TestV2PreparedConflictOverflowPropagatesAndRetries(t *testing.T) {
 	implCluster.SessionData(s).InternalCtx, implCluster.SessionData(s).InternalCancel = context.WithCancel(context.Background())
 	defer s.Close()
 	cols := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))})
-	state, old := step03PreparedState(t, s, cols)
+	state, old := preparedState(t, s, cols)
 	host := cqltype.UUID{15: 2}
 	other := *old
 	state.InternalHosts[host] = &other
-	page := step03Page(t, "retained")
+	page := testPage(t, "retained")
 	defer page.Close()
 	if !page.Next() {
 		t.Fatal(page.Err())

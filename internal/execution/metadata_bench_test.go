@@ -14,7 +14,7 @@ import (
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 )
 
-func BenchmarkStep05MetadataRead(b *testing.B) {
+func BenchmarkMetadataRead(b *testing.B) {
 	s := func() *cluster.Session {
 		opaqueStorageValuexxxx := new(cluster.Session)
 		return opaqueStorageValuexxxx
@@ -28,7 +28,7 @@ func BenchmarkStep05MetadataRead(b *testing.B) {
 	}
 }
 
-func BenchmarkStep05EventPublication(b *testing.B) {
+func BenchmarkEventPublication(b *testing.B) {
 	s := func() *cluster.Session {
 		opaqueStorageValuexxxxx := new(cluster.Session)
 		return opaqueStorageValuexxxxx
@@ -43,7 +43,7 @@ func BenchmarkStep05EventPublication(b *testing.B) {
 	}
 }
 
-func BenchmarkStep05SchemaSnapshotPublication(b *testing.B) {
+func BenchmarkSchemaSnapshotPublication(b *testing.B) {
 	for _, count := range []int{1, 1000} {
 		b.Run(fmt.Sprint(count), func(b *testing.B) {
 			ks := &implMetadata.KeyspaceMetadata{Name: "ks", Tables: make(map[string]*implMetadata.TableMetadata, count)}

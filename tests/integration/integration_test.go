@@ -61,7 +61,7 @@ func TestAuthentication(t *testing.T) {
 	}
 
 	session.Close()
-	cluster.Auth = gocql.PasswordAuth("cassandra", "step08-invalid-password")
+	cluster.Auth = gocql.PasswordAuth("cassandra", "invalid-password")
 	rejected, err := gocql.Connect(context.Background(), cluster)
 	if err == nil {
 		rejected.Close()

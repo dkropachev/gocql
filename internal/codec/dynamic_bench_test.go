@@ -12,11 +12,11 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-var step15DynamicSink DynamicRow
+var dynamicSink DynamicRow
 
-var step15ValueSink Value
+var valueSink Value
 
-func BenchmarkStep15DynamicRows(b *testing.B) {
+func BenchmarkDynamicRows(b *testing.B) {
 	for _, cells := range []int{1, 32, 128} {
 		for _, fragments := range []int{1, 1024} {
 			b.Run(fmt.Sprintf("cells%d/fragments%d", cells, fragments), func(b *testing.B) {
@@ -48,18 +48,18 @@ func BenchmarkStep15DynamicRows(b *testing.B) {
 					if e != nil {
 						b.Fatal(e)
 					}
-					step15ValueSink = v
+					valueSink = v
 				}
-				step15DynamicSink = dst
+				dynamicSink = dst
 			})
 		}
 	}
 }
 
 // The one-time row-owned physical index is setup here. Its allocation/build cost
-// is measured separately by BenchmarkStep15DynamicRows. This measures actual J
+// is measured separately by BenchmarkDynamicRows. This measures actual J
 // repeated late-column accesses at independently varied N and S.
-func BenchmarkStep15DynamicRepeatedAccess(b *testing.B) {
+func BenchmarkDynamicRepeatedAccess(b *testing.B) {
 	blob := CodecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
 	for _, n := range []int{1, 128, 4096} {
 		for _, fragments := range []int{1, 256, 65536} {
@@ -87,7 +87,7 @@ func BenchmarkStep15DynamicRepeatedAccess(b *testing.B) {
 					if e != nil {
 						b.Fatal(e)
 					}
-					step15ValueSink = v
+					valueSink = v
 				}
 			})
 		}

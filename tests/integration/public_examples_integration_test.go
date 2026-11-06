@@ -28,7 +28,7 @@ import (
 
 // This subprocess is a normal consumer build: root _test.go aliases cannot make
 // the standalone example compile or run.
-func TestStep13PublicExample(t *testing.T) {
+func TestPublicExample(t *testing.T) {
 	cfg := createV2Cluster()
 	host := getClusterHosts()[0]
 	args := []string{"run", "./examples/streaming", "-hosts", net.JoinHostPort(host, strconv.Itoa(int(cfg.Port))), "-protocol", strconv.Itoa(cfg.Protocol)}
@@ -58,7 +58,7 @@ func TestStep13PublicExample(t *testing.T) {
 	want := "3 rows; seeded nested storage reused; query admission and drain verified"
 	for _, line := range strings.Split(string(output), "\n") {
 		if strings.HasPrefix(line, "CLEANED ") {
-			step13Namespace(t, cfg, strings.TrimPrefix(line, "CLEANED "), false)
+			testNamespace(t, cfg, strings.TrimPrefix(line, "CLEANED "), false)
 		}
 	}
 	if !strings.Contains(string(output), "CLEANED ") {
@@ -69,7 +69,7 @@ func TestStep13PublicExample(t *testing.T) {
 	}
 }
 
-func TestStep13RegenerateReplay(t *testing.T) {
+func TestRegenerateReplay(t *testing.T) {
 	if os.Getenv("GOCQL_REGENERATE_BENCH") != "1" {
 		t.Skip("explicit recording mode only")
 	}
@@ -93,13 +93,13 @@ func TestStep13RegenerateReplay(t *testing.T) {
 	if err := json.Unmarshal(data, &corpus); err != nil {
 		t.Fatal(err)
 	}
-	step13Namespace(t, createV2Cluster(), corpus.Namespace, false)
+	testNamespace(t, createV2Cluster(), corpus.Namespace, false)
 	t.Log("GENERATED CORPUS NAMESPACE ABSENT", corpus.Namespace)
 }
 
-// TestStep13Ownership executes the actual compiled children. A killed child is
+// TestOwnership executes the actual compiled children. A killed child is
 // joined before the existing runner prefix cleanup is allowed to remove its data.
-func TestStep13Ownership(t *testing.T) {
+func TestOwnership(t *testing.T) {
 	if os.Getenv("GOCQL_TEST_RUN") == "" {
 		t.Skip("requires locked native run")
 	}
@@ -133,7 +133,7 @@ func TestStep13Ownership(t *testing.T) {
 					args = []string{"-update-golden", "-test.run=^$"}
 					env = append(os.Environ(), "GOCQL_BENCH_FAILURE="+failure, "GOCQL_BENCH_ADDRESS="+host, "GOCQL_BENCH_CORPUS_DIR="+t.TempDir())
 				}
-				namespace, output, err := step13OwnedChild(t, binary, args, env, failure == "pause", cfg)
+				namespace, output, err := ownedChild(t, binary, args, env, failure == "pause", cfg)
 				t.Logf("owned %s %s namespace=%s\n%s", workload, failure, namespace, output)
 				if err == nil {
 					t.Fatal("injected failure unexpectedly succeeded")
@@ -154,20 +154,20 @@ func TestStep13Ownership(t *testing.T) {
 				if failure == "cancel" && !strings.Contains(output, "context canceled") {
 					t.Fatal("missing cancellation error")
 				}
-				step13Namespace(t, cfg, namespace, false)
+				testNamespace(t, cfg, namespace, false)
 			})
 		}
 	}
 	// Both actual binaries have exited and been joined above. Exercise the same
 	// cleanup implementation as the native runner, scoped to these exact children.
-	step08CleanupNamespaces(t, killed)
+	cleanupNamespaces(t, killed)
 	for _, namespace := range killed {
-		step13Namespace(t, cfg, namespace, false)
+		testNamespace(t, cfg, namespace, false)
 		t.Log("KILLED CHILD PREFIX CLEANUP VERIFIED", namespace)
 	}
 }
 
-func step13Namespace(t *testing.T, cfg gocql.Config, namespace string, wantPresent bool) {
+func testNamespace(t *testing.T, cfg gocql.Config, namespace string, wantPresent bool) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -196,7 +196,7 @@ func step13Namespace(t *testing.T, cfg gocql.Config, namespace string, wantPrese
 		t.Fatalf("namespace %s present=%t want=%t", namespace, present, wantPresent)
 	}
 }
-func step13OwnedChild(t *testing.T, binary string, args, env []string, kill bool, cfg gocql.Config) (string, string, error) {
+func ownedChild(t *testing.T, binary string, args, env []string, kill bool, cfg gocql.Config) (string, string, error) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -248,7 +248,7 @@ func step13OwnedChild(t *testing.T, binary string, args, env []string, kill bool
 		t.Fatal("child escaped run prefix", namespace)
 	}
 	if kill {
-		step13Namespace(t, cfg, namespace, true)
+		testNamespace(t, cfg, namespace, true)
 		if err := cmd.Process.Kill(); err != nil {
 			t.Fatal(err)
 		}
@@ -259,7 +259,7 @@ func step13OwnedChild(t *testing.T, binary string, args, env []string, kill bool
 	return namespace, text, err
 }
 
-type step13Conviction struct {
+type testConviction struct {
 	mu      sync.Mutex
 	cause   error
 	hosts   []gocql.HostSnapshot
@@ -268,7 +268,7 @@ type step13Conviction struct {
 	resets  int
 }
 
-func (p *step13Conviction) AddFailure(err error, host gocql.HostSnapshot) bool {
+func (p *testConviction) AddFailure(err error, host gocql.HostSnapshot) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if !errors.Is(err, p.cause) {
@@ -278,7 +278,7 @@ func (p *step13Conviction) AddFailure(err error, host gocql.HostSnapshot) bool {
 	p.hosts = append(p.hosts, host)
 	return p.verdict
 }
-func (p *step13Conviction) Reset(host gocql.HostSnapshot) {
+func (p *testConviction) Reset(host gocql.HostSnapshot) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if len(p.hosts) == 0 || p.hosts[0].ID != host.ID {
@@ -287,13 +287,13 @@ func (p *step13Conviction) Reset(host gocql.HostSnapshot) {
 	p.resets++
 }
 
-type step13NoReconnect struct{}
+type noReconnect struct{}
 
-func (step13NoReconnect) Delay(int) (time.Duration, bool) { return 0, false }
+func (noReconnect) Delay(int) (time.Duration, bool) { return 0, false }
 
 // The control connection completes real startup, then the data dial fails. The
 // public conviction hook must receive the discovered host, not a mutable core.
-func TestStep13ConvictionLive(t *testing.T) {
+func TestConvictionLive(t *testing.T) {
 	cfg := createV2Cluster()
 	if cfg.Protocol != 4 || cfg.TLS != nil {
 		t.Skip("raw v4 callback lane")
@@ -301,13 +301,13 @@ func TestStep13ConvictionLive(t *testing.T) {
 	for _, verdict := range []bool{false, true} {
 		t.Run(fmt.Sprint(verdict), func(t *testing.T) {
 			cause := errors.New("injected data connection failure")
-			policy := &step13Conviction{cause: cause, verdict: verdict}
+			policy := &testConviction{cause: cause, verdict: verdict}
 			config := createV2Cluster(func(c *gocql.Config) {
 				c.ContactPoints = []string{getClusterHosts()[0]}
 				c.Metadata.InitialDiscovery = false
 				c.Pool.ConnectionsPerHost = 1
 				c.Pool.ShardAwarePort = false
-				c.Reconnect = step13NoReconnect{}
+				c.Reconnect = noReconnect{}
 				c.Conviction = policy
 				c.KeepaliveInterval = 0
 				c.Metadata.PeriodicRefresh = 0

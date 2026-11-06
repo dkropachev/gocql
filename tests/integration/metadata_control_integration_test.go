@@ -14,7 +14,7 @@ import (
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
-func TestStep05MetadataControlLive(t *testing.T) {
+func TestMetadataControlLive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	config := createV2Cluster(func(c *gocql.Config) {
@@ -40,7 +40,7 @@ func TestStep05MetadataControlLive(t *testing.T) {
 	if err := s.AwaitSchemaAgreement(ctx); err != nil {
 		t.Fatal(err)
 	}
-	keyspace := fmt.Sprintf("step05_%x", time.Now().UnixNano())
+	keyspace := fmt.Sprintf("metadata_control_%x", time.Now().UnixNano())
 	sub, err := s.Subscribe(gocql.EventFilter{Kinds: []gocql.EventKind{gocql.SchemaEvent}, Keyspace: keyspace, Capacity: 64})
 	if err != nil {
 		t.Fatal(err)

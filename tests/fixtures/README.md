@@ -14,7 +14,7 @@ latter adapter invokes that distribution's loader and libraries without starting
 or changing a container. Cassandra is copied into an isolated install overlay;
 its original files remain read-only. The verified Cassandra 5.0.9 server supports
 native protocol 4 and 5. A separate Cassandra 4.x server installation is not part
-of step 08's verified matrix.
+of the verified matrix.
 
 ```sh
 python tests/fixtures/native.py --config /path/to/pinned-config.json \
@@ -59,7 +59,7 @@ receipt. Other lanes and historical data must remain untouched.
 
 Integration CQL call sites and codec identities use the run namespace explicitly;
 there is no CQL rewrite at a driver boundary. The complete original identity and
-assertion mapping is retained in `feature-specs/evidence/step09-test-mapping.json`.
+assertion mapping is retained in the feature-specs evidence test mapping.
 Two-shard lanes set `smp: 2`; plaintext and TLS shard endpoints are explicitly
 19042 and 19142, respectively, alongside native 9042 and 9142.
 
@@ -118,17 +118,17 @@ or a complete peak-memory/CPU comparison.
 
 ```sh
 python3 -m unittest discover -s tests/fixtures -p 'test_*.py'
-go test -race -run '^TestStep08' -count=2 .
-go test -run '^$' -bench '^BenchmarkStep08' -benchtime=20x .
+go test -race -run '^Test' -count=2 .
+go test -run '^$' -bench '^Benchmark' -benchtime=20x .
 ```
 
-`TestStep08HarnessLifecycle` is an explicit failure/cancellation probe. It skips
+`TestHarnessLifecycle` is an explicit failure/cancellation probe. It skips
 unless `GOCQL_FIXTURE_ACTION=fail|cancel` is configured. It creates a real owned
 keyspace and writes `GOCQL_FIXTURE_MARKER`, then fails or waits for cancellation.
 These are deliberate failed receipts, retained separately from passing DB gates.
 
 Cleanup runs only in the runner's dedicated post-package subprocess, which sets
-`GOCQL_FIXTURE_CLEANUP=1` and selects exactly `TestStep08Cleanup`. Leave that flag
+`GOCQL_FIXTURE_CLEANUP=1` and selects exactly `TestCleanup`. Leave that flag
 unset in ordinary suites: cleanup must never delete a namespace while parallel
 tests still own it. The killed-child tests use the same cleanup implementation
 with an exact owned-name allowlist after joining those children. Cleanup validates

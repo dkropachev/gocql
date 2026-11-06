@@ -23,18 +23,18 @@ import (
 )
 
 func TestQueryPageBufferedProtocolTLSMatrix(t *testing.T) {
-	modes := append([]step08Mode(nil), step08Modes...)
-	modes = append(modes, step08Mode{"v3lz4frame", 3, wirecompress.LZ4Compressor{}, false}, step08Mode{"v4lz4frame", 4, wirecompress.LZ4Compressor{}, false}, step08Mode{"v4snappyframe", 4, wirecompress.SnappyCompressor{}, false}, step08Mode{"v4lz4frametls", 4, wirecompress.LZ4Compressor{}, true})
+	modes := append([]fixtureMode(nil), fixtureModes...)
+	modes = append(modes, fixtureMode{"v3lz4frame", 3, wirecompress.LZ4Compressor{}, false}, fixtureMode{"v4lz4frame", 4, wirecompress.LZ4Compressor{}, false}, fixtureMode{"v4snappyframe", 4, wirecompress.SnappyCompressor{}, false}, fixtureMode{"v4lz4frametls", 4, wirecompress.LZ4Compressor{}, true})
 	for _, mode := range modes {
 		t.Run(mode.name, func(t *testing.T) {
-			s, c, peer := step08StreamSession(t, mode)
+			s, c, peer := fixtureStreamSession(t, mode)
 			query := codecTestMust(NewUnpreparedStreamQuery(s, binding.Statement[codec.Unit, cqltype.Bytes]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.OneColumn(codec.BlobCodec)}, cqltype.NewColumns(), codec.StreamOneColumn(codec.StreamBlob), StreamOptions{}))
 			defer query.Close()
 			served := make(chan struct{})
 			go func() {
 				defer close(served)
 				stream := typedTestReadRequest(t, c, peer)
-				packet := step08Packet(mode, testkit.BlobRows(mode.version, uint16(stream), []byte("complete")))
+				packet := fixturePacket(mode, testkit.BlobRows(mode.version, uint16(stream), []byte("complete")))
 				if mode.version < 5 && mode.compression != nil {
 					compressed, err := mode.compression.Encode(packet[9:])
 					if err != nil {
@@ -133,7 +133,7 @@ func TestQueryBufferedStreamsMultiplexAndReuseSeededStorage(t *testing.T) {
 func TestQueryCancelledAcceptedWriteStaysBusyUntilDrain(t *testing.T) {
 	s, conns, peers := runtimeTestSession(t, 1)
 	entered := make(chan struct{})
-	conns[0].InternalW = &transport.InternalDeadlineContextWriter{InternalW: &step04AcceptedWriter{Conn: conns[0].InternalR.(*transport.InternalConnReader).InternalConn, entered: entered}, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
+	conns[0].InternalW = &transport.InternalDeadlineContextWriter{InternalW: &acceptedWriter{Conn: conns[0].InternalR.(*transport.InternalConnReader).InternalConn, entered: entered}, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
 	typ := codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
 	q := codecTestMust(NewUnpreparedQuery(s, binding.Statement[[]byte, codec.Unit]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(value)VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.NoRows}, cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: typ}), Options{}))
 	defer q.Close()

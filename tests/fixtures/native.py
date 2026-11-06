@@ -288,7 +288,7 @@ class Runner:
                             self.phase = "cleanup"
                             self.save()
                             cleanup_base = ["-timeout=2m" if value == "-timeout=20m" else value for value in base]
-                            cleanup = cleanup_base + ["-run", "^TestStep08Cleanup$", ".", "-args"] + flags + extra
+                            cleanup = cleanup_base + ["-run", "^TestCleanup$", ".", "-args"] + flags + extra
                             cleanup_env = dict(env, GOCQL_FIXTURE_CLEANUP="1")
                             self.command(name + "-" + mode["name"] + "-cleanup", cleanup, cleanup_env)
                             if self.cancel_requested:

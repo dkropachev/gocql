@@ -180,7 +180,7 @@ func driverConfigCases() []struct {
 		{
 			name: "typed-nil custom retry policy",
 			cfg: func(c *InternalClusterSettings) {
-				InternalClusterSettingsData(c).InternalDefaultProfile.Retry = (*step10CustomRetry)(nil)
+				InternalClusterSettingsData(c).InternalDefaultProfile.Retry = (*customRetry)(nil)
 			},
 		},
 		{
@@ -226,7 +226,7 @@ func driverConfigCases() []struct {
 		{
 			name: "custom retry policy",
 			cfg: func(c *InternalClusterSettings) {
-				InternalClusterSettingsData(c).InternalDefaultProfile.Retry = &step10CustomRetry{}
+				InternalClusterSettingsData(c).InternalDefaultProfile.Retry = &customRetry{}
 			},
 		},
 		{

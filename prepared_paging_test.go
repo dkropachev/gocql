@@ -21,21 +21,21 @@ import (
 	"testing"
 )
 
-type step03CountingDecoder struct {
+type countingDecoder struct {
 	calls *atomic.Int32
 	hook  func()
 }
 
-func (d step03CountingDecoder) Compile(c Columns) (RowPlan[Bytes], error) {
+func (d countingDecoder) Compile(c Columns) (RowPlan[Bytes], error) {
 	d.calls.Add(1)
 	if d.hook != nil {
 		d.hook()
 	}
 	return OneColumn(BlobCodec).Compile(c)
 }
-func (d step03CountingDecoder) Clone(v Bytes) Bytes { return v.Clone() }
+func (d countingDecoder) Clone(v Bytes) Bytes { return v.Clone() }
 
-func step03PreparedState(t *testing.T, s *Session, columns Columns) (*preparedState, *hostPrepared) {
+func testPreparedState(t *testing.T, s *Session, columns Columns) (*preparedState, *hostPrepared) {
 	t.Helper()
 	tracker := runtimeFor(s).InternalSchemaTracker()
 	dependencies := tracker.InternalDependencies("ks", NewColumns(), columns)

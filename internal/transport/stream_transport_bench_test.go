@@ -41,7 +41,7 @@ import (
 	lz4 "github.com/scylladb/gocql/v2/internal/wirecompress"
 )
 
-type step04MemoryConn struct {
+type memoryConn struct {
 	source                 *bytes.Reader
 	readCalls              int
 	directBytes, otherBulk int64
@@ -49,7 +49,7 @@ type step04MemoryConn struct {
 	closed                 bool
 }
 
-func (c *step04MemoryConn) Read(p []byte) (int, error) {
+func (c *memoryConn) Read(p []byte) (int, error) {
 	if c.closed {
 		return 0, io.ErrClosedPipe
 	}
@@ -64,23 +64,23 @@ func (c *step04MemoryConn) Read(p []byte) (int, error) {
 	}
 	return c.source.Read(p)
 }
-func (c *step04MemoryConn) Write(p []byte) (int, error) {
+func (c *memoryConn) Write(p []byte) (int, error) {
 	if c.closed {
 		return 0, io.ErrClosedPipe
 	}
 	return len(p), nil
 }
-func (c *step04MemoryConn) Close() error { c.closed = true; return nil }
-func (c *step04MemoryConn) LocalAddr() net.Addr {
+func (c *memoryConn) Close() error { c.closed = true; return nil }
+func (c *memoryConn) LocalAddr() net.Addr {
 	return &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 49152}
 }
-func (c *step04MemoryConn) RemoteAddr() net.Addr {
+func (c *memoryConn) RemoteAddr() net.Addr {
 	return &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 9042}
 }
-func (c *step04MemoryConn) SetDeadline(time.Time) error      { return nil }
-func (c *step04MemoryConn) SetReadDeadline(time.Time) error  { return nil }
-func (c *step04MemoryConn) SetWriteDeadline(time.Time) error { return nil }
-func step04MemoryReservation(version byte, compressor protocol.Compressor, source net.Conn) *InternalExclusiveConn {
+func (c *memoryConn) SetDeadline(time.Time) error      { return nil }
+func (c *memoryConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *memoryConn) SetWriteDeadline(time.Time) error { return nil }
+func memoryReservation(version byte, compressor protocol.Compressor, source net.Conn) *InternalExclusiveConn {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &Conn{InternalVersion: version, InternalCtx: ctx, InternalCancel: cancel, InternalR: &InternalConnReader{InternalConn: source}, InternalStreams: streams.New(), InternalLogger: logging.InternalNopLogger{}, InternalErrorHandler: InternalConnErrorHandlerFn(func(*Conn, error, bool) {}), InternalCompressor: compressor}
 	c.InternalW = &InternalDeadlineContextWriter{InternalW: source, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
@@ -97,7 +97,7 @@ func step04MemoryReservation(version byte, compressor protocol.Compressor, sourc
 	r.InternalInitStream(StreamLimits{})
 	return r
 }
-func step04EncodedResponse(version byte, compressed bool, payload []byte) []byte {
+func encodedResponse(version byte, compressed bool, payload []byte) []byte {
 	body := typedTestRowsBody(payload)
 	frame := []byte{version | 0x80, 0, 0, 0, 8}
 	frame = binary.BigEndian.AppendUint32(frame, uint32(len(body)))
@@ -129,9 +129,9 @@ func TestV2StreamingTransportReadTargetsAndWorkingMemory(t *testing.T) {
 		for _, size := range []int{400 << 10, 8 << 20} {
 			payload := make([]byte, size)
 			rand.New(rand.NewSource(42)).Read(payload)
-			encoded := step04EncodedResponse(mode.version, mode.compressor != nil, payload)
-			source := &step04MemoryConn{source: bytes.NewReader(encoded)}
-			r := step04MemoryReservation(mode.version, mode.compressor, source)
+			encoded := encodedResponse(mode.version, mode.compressor != nil, payload)
+			source := &memoryConn{source: bytes.NewReader(encoded)}
+			r := memoryReservation(mode.version, mode.compressor, source)
 			dst := make([]byte, 0, size)
 			source.start = uintptr(unsafe.Pointer(&dst[:cap(dst)][0]))
 			source.end = source.start + uintptr(size)
@@ -176,9 +176,9 @@ func BenchmarkV2ExclusiveTransport(b *testing.B) {
 		for _, size := range []int{1024, 400 << 10, 8 << 20} {
 			b.Run(fmt.Sprintf("%s/%d", mode.name, size), func(b *testing.B) {
 				payload := bytes.Repeat([]byte("stream-payload"), size/14+1)[:size]
-				encoded := step04EncodedResponse(mode.version, mode.compressor != nil, payload)
-				source := &step04MemoryConn{source: bytes.NewReader(encoded)}
-				r := step04MemoryReservation(mode.version, mode.compressor, source)
+				encoded := encodedResponse(mode.version, mode.compressor != nil, payload)
+				source := &memoryConn{source: bytes.NewReader(encoded)}
+				r := memoryReservation(mode.version, mode.compressor, source)
 				defer r.InternalClose(true)
 				dst := make([]byte, 0, size)
 				request := &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One}
@@ -232,16 +232,16 @@ func BenchmarkV2ExclusiveTransport(b *testing.B) {
 	}
 }
 func FuzzV2ExclusiveIncrementalFraming(f *testing.F) {
-	f.Add(byte(4), step04EncodedResponse(4, false, []byte("value")))
-	f.Add(byte(5), step04EncodedResponse(5, false, []byte("value")))
+	f.Add(byte(4), encodedResponse(4, false, []byte("value")))
+	f.Add(byte(5), encodedResponse(5, false, []byte("value")))
 	f.Add(byte(5), []byte{0, 0, 0, 0, 0, 0})
 	f.Fuzz(func(t *testing.T, version byte, input []byte) {
 		if len(input) > 8192 {
 			t.Skip()
 		}
 		version = 3 + version%3
-		source := &step04MemoryConn{source: bytes.NewReader(input)}
-		r := step04MemoryReservation(version, nil, source)
+		source := &memoryConn{source: bytes.NewReader(input)}
+		r := memoryReservation(version, nil, source)
 		defer r.InternalClose(false)
 		r.InternalLimits.MaxMetadataBytes = 2048
 		r.InternalMetadataBudget.SetLimit(2048)
@@ -282,8 +282,8 @@ func BenchmarkV2ExclusiveRowsScaling(b *testing.B) {
 			encoded := []byte{0x84, 0, 0, 0, 8}
 			encoded = binary.BigEndian.AppendUint32(encoded, uint32(len(body)))
 			encoded = append(encoded, body...)
-			source := &step04MemoryConn{source: bytes.NewReader(encoded)}
-			r := step04MemoryReservation(4, nil, source)
+			source := &memoryConn{source: bytes.NewReader(encoded)}
+			r := memoryReservation(4, nil, source)
 			defer r.InternalClose(true)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -331,18 +331,18 @@ func BenchmarkV2ExclusiveRowsScaling(b *testing.B) {
 	}
 }
 
-type step04WireCounter struct {
+type testWireCounter struct {
 	net.Conn
 	reads, writes, readBytes, writeBytes, records atomic.Int64
 }
 
-func (c *step04WireCounter) Read(p []byte) (int, error) {
+func (c *testWireCounter) Read(p []byte) (int, error) {
 	n, err := c.Conn.Read(p)
 	c.reads.Add(1)
 	c.readBytes.Add(int64(n))
 	return n, err
 }
-func (c *step04WireCounter) Write(p []byte) (int, error) {
+func (c *testWireCounter) Write(p []byte) (int, error) {
 	n, err := c.Conn.Write(p)
 	c.writes.Add(1)
 	c.writeBytes.Add(int64(n))
@@ -359,18 +359,18 @@ func (c *step04WireCounter) Write(p []byte) (int, error) {
 	}
 	return n, err
 }
-func (c *step04WireCounter) reset() {
+func (c *testWireCounter) reset() {
 	c.reads.Store(0)
 	c.writes.Store(0)
 	c.readBytes.Store(0)
 	c.writeBytes.Store(0)
 	c.records.Store(0)
 }
-func step04BenchTLS(b testing.TB) (*tls.Conn, *tls.Conn, *step04WireCounter, func()) {
+func benchTLS(b testing.TB) (*tls.Conn, *tls.Conn, *testWireCounter, func()) {
 	b.Helper()
 	rawClient, rawServer := net.Pipe()
-	wire := &step04WireCounter{Conn: rawClient}
-	cert, config := step04TLS(b)
+	wire := &testWireCounter{Conn: rawClient}
+	cert, config := testTLS(b)
 	client := tls.Client(wire, config)
 	server := tls.Server(rawServer, &tls.Config{Certificates: []tls.Certificate{cert}, SessionTicketsDisabled: true})
 	done := make(chan error, 1)
@@ -384,13 +384,13 @@ func step04BenchTLS(b testing.TB) (*tls.Conn, *tls.Conn, *step04WireCounter, fun
 	return client, server, wire, func() { rawClient.Close(); rawServer.Close() }
 }
 
-type step04PlaintextCounter struct {
+type plaintextCounter struct {
 	net.Conn
 	reads, outputBytes int64
 	start, end         uintptr
 }
 
-func (c *step04PlaintextCounter) Read(p []byte) (int, error) {
+func (c *plaintextCounter) Read(p []byte) (int, error) {
 	n, err := c.Conn.Read(p)
 	c.reads++
 	if n > 0 {
@@ -406,10 +406,10 @@ func (c *step04PlaintextCounter) Read(p []byte) (int, error) {
 func BenchmarkV2TLSReceiveAmplification(b *testing.B) {
 	for _, size := range []int{4096, 400 << 10} {
 		b.Run(fmt.Sprint(size), func(b *testing.B) {
-			client, server, wireCounter, cleanup := step04BenchTLS(b)
+			client, server, wireCounter, cleanup := benchTLS(b)
 			defer cleanup()
-			encoded := step04EncodedResponse(4, false, bytes.Repeat([]byte("z"), size))
-			plain := &step04PlaintextCounter{Conn: client}
+			encoded := encodedResponse(4, false, bytes.Repeat([]byte("z"), size))
+			plain := &plaintextCounter{Conn: client}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			c := &Conn{InternalVersion: 4, InternalCtx: ctx, InternalCancel: cancel, InternalR: &InternalConnReader{InternalConn: plain}, InternalStreams: streams.New(), InternalLogger: logging.InternalNopLogger{}, InternalErrorHandler: InternalConnErrorHandlerFn(func(*Conn, error, bool) {})}

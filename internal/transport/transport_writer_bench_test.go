@@ -22,7 +22,7 @@ import (
 
 // Uses real loopback sockets and the actual coalescer; no wrapper hides writev.
 // OS syscall counts are collected in separate strace runs of the same cases.
-func BenchmarkStep15SocketWrites(b *testing.B) {
+func BenchmarkSocketWrites(b *testing.B) {
 	for _, tlsOn := range []bool{false, true} {
 		for _, count := range []int{8, 1024, 4096} {
 			for _, mixed := range []bool{false, true} {
@@ -47,7 +47,7 @@ func BenchmarkStep15SocketWrites(b *testing.B) {
 					defer client.Close()
 					defer server.Close()
 					if tlsOn {
-						cert, conf := step04TLS(b)
+						cert, conf := testTLS(b)
 						a := tls.Client(client, conf)
 						z := tls.Server(server, &tls.Config{Certificates: []tls.Certificate{cert}})
 						done := make(chan error, 1)
@@ -96,7 +96,7 @@ func BenchmarkV2TLSWriteAmplification(b *testing.B) {
 	for _, size := range []int{64 << 10, 400 << 10} {
 		for _, fragments := range []int{1, 16, 1024} {
 			b.Run(fmt.Sprintf("bytes=%d/fragments=%d", size, fragments), func(b *testing.B) {
-				client, server, wireCounter, cleanup := step04BenchTLS(b)
+				client, server, wireCounter, cleanup := benchTLS(b)
 				defer cleanup()
 				payload := bytes.Repeat([]byte("x"), size)
 				parts := make([][]byte, 0, fragments)

@@ -20,7 +20,7 @@ import (
 	"testing"
 )
 
-func TestStep04LateTableRefreshEntrant(t *testing.T) {
+func TestLateTableRefreshEntrant(t *testing.T) {
 	ctrl := &schemaDataMock{knownKeyspaces: map[string][]tableInfo{"test_ks": {{name: "tbl_a", columns: []columnInfo{{name: "id", kind: "partition_key", position: 0}}}}}}
 	s := newSchemaEventTestSessionWithMock(ctrl)
 	defer s.Close()

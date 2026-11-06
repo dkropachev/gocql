@@ -100,7 +100,7 @@ func streamReaderFixture(t testing.TB, columns cqltype.Columns, source io.Reader
 // reach options that already hold it.
 func profileOf(p settings.Profile) *settings.Profile { return &p }
 
-type step04MemoryConn struct {
+type memoryConn struct {
 	source                 *bytes.Reader
 	readCalls              int
 	directBytes, otherBulk int64
@@ -108,7 +108,7 @@ type step04MemoryConn struct {
 	closed                 bool
 }
 
-func (c *step04MemoryConn) Read(p []byte) (int, error) {
+func (c *memoryConn) Read(p []byte) (int, error) {
 	if c.closed {
 		return 0, io.ErrClosedPipe
 	}
@@ -123,23 +123,23 @@ func (c *step04MemoryConn) Read(p []byte) (int, error) {
 	}
 	return c.source.Read(p)
 }
-func (c *step04MemoryConn) Write(p []byte) (int, error) {
+func (c *memoryConn) Write(p []byte) (int, error) {
 	if c.closed {
 		return 0, io.ErrClosedPipe
 	}
 	return len(p), nil
 }
-func (c *step04MemoryConn) Close() error { c.closed = true; return nil }
-func (c *step04MemoryConn) LocalAddr() net.Addr {
+func (c *memoryConn) Close() error { c.closed = true; return nil }
+func (c *memoryConn) LocalAddr() net.Addr {
 	return &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 49152}
 }
-func (c *step04MemoryConn) RemoteAddr() net.Addr {
+func (c *memoryConn) RemoteAddr() net.Addr {
 	return &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 9042}
 }
-func (c *step04MemoryConn) SetDeadline(time.Time) error      { return nil }
-func (c *step04MemoryConn) SetReadDeadline(time.Time) error  { return nil }
-func (c *step04MemoryConn) SetWriteDeadline(time.Time) error { return nil }
-func step04MemoryReservation(version byte, compressor protocol.Compressor, source net.Conn) *transport.InternalExclusiveConn {
+func (c *memoryConn) SetDeadline(time.Time) error      { return nil }
+func (c *memoryConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *memoryConn) SetWriteDeadline(time.Time) error { return nil }
+func memoryReservation(version byte, compressor protocol.Compressor, source net.Conn) *transport.InternalExclusiveConn {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &transport.Conn{InternalVersion: version, InternalCtx: ctx, InternalCancel: cancel, InternalR: &transport.InternalConnReader{InternalConn: source}, InternalStreams: streams.New(), InternalLogger: logging.InternalNopLogger{}, InternalErrorHandler: transport.InternalConnErrorHandlerFn(func(*transport.Conn, error, bool) {}), InternalCompressor: compressor}
 	c.InternalW = &transport.InternalDeadlineContextWriter{InternalW: source, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}

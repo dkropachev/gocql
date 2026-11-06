@@ -24,11 +24,11 @@ import (
 // The discovery LRU lock stays held throughout warm concurrent bindings and
 // host-state selection. Unrelated schema/placement publication runs concurrently;
 // neither may cause reprepare or serialize warm calls through the discovery LRU.
-func BenchmarkStep15WarmConcurrentBindings(b *testing.B) {
+func BenchmarkWarmConcurrentBindings(b *testing.B) {
 	for _, updates := range []bool{false, true} {
 		for _, owned := range []bool{false, true} {
 			b.Run(fmt.Sprintf("updates%t/owned%t", updates, owned), func(b *testing.B) {
-				s := step06Session(b)
+				s := testSession(b)
 				rt := InternalRuntimeFor(s)
 				columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))})
 				tracker := rt.InternalSchemaTracker()
@@ -62,7 +62,7 @@ func BenchmarkStep15WarmConcurrentBindings(b *testing.B) {
 							current := s.Metadata()
 							info := model.RoutingInfo{Keyspace: "ks", Table: "table"}
 							stamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, current)
-							hint := step06Hint(b, 0, 1, cql.Option[uint64]{Set: true, Value: i}, hTarget(1, 0))
+							hint := testHint(b, 0, 1, cql.Option[uint64]{Set: true, Value: i}, hTarget(1, 0))
 							implCluster.InternalSessionPublishTabletFeedback(s, p, map[cluster.InternalV2TabletFeedbackKey]cluster.InternalV2PendingTabletFeedback{{InternalKeyspace: "ks", InternalTable: "table", InternalEnd: 1}: {InternalHint: hint, InternalStamp: stamp}}, false)
 							runtime.Gosched()
 						}

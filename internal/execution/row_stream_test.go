@@ -51,7 +51,7 @@ import (
 	lz4 "github.com/scylladb/gocql/v2/internal/wirecompress"
 )
 
-func step07StreamSession(t *testing.T, proto byte, compressor implProtocol.Compressor) (*cluster.Session, *transport.Conn, net.Conn) {
+func rowStreamSession(t *testing.T, proto byte, compressor implProtocol.Compressor) (*cluster.Session, *transport.Conn, net.Conn) {
 	t.Helper()
 	s, cs, ps := runtimeTestSession(t, 0)
 	c, peer := typedTestConn(t, proto, compressor)
@@ -70,11 +70,11 @@ func step07StreamSession(t *testing.T, proto byte, compressor implProtocol.Compr
 	_ = cs
 	_ = ps
 	reader := c.InternalR.(*transport.InternalConnReader)
-	reader.InternalConn = &step07ReadTargets{Conn: reader.InternalConn}
+	reader.InternalConn = &testReadTargets{Conn: reader.InternalConn}
 	go c.InternalServe(c.InternalCtx)
 	return s, c, peer
 }
-func step07Response(t *testing.T, c *transport.Conn, stream int, body []byte) []byte {
+func testResponse(t *testing.T, c *transport.Conn, stream int, body []byte) []byte {
 	t.Helper()
 	data := typedTestResponse(t, c.InternalVersion, stream, body)
 	if c.InternalVersion != 5 {
@@ -97,21 +97,21 @@ func step07Response(t *testing.T, c *transport.Conn, stream int, body []byte) []
 	return out.Bytes()
 }
 
-func TestStep07StreamPagingModes(t *testing.T) {
+func TestStreamPagingModes(t *testing.T) {
 	for _, mode := range []struct {
 		name        string
 		proto       byte
 		compression implProtocol.Compressor
 	}{{"v3", 3, nil}, {"v4", 4, nil}, {"v5raw", 5, nil}, {"v5lz4", 5, lz4.LZ4Compressor{}}} {
 		t.Run(mode.name, func(t *testing.T) {
-			s, c, peer := step07StreamSession(t, mode.proto, mode.compression)
+			s, c, peer := rowStreamSession(t, mode.proto, mode.compression)
 			payload := bytes.Repeat([]byte("caller-owned"), 40000)
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
 				for _, body := range [][]byte{runtimeRowsBody([]byte{}), runtimeRowsBody([]byte{1}, string(payload)), runtimeRowsBody(nil, "last")} {
 					stream := typedTestReadRequest(t, c, peer)
-					if _, err := peer.Write(step07Response(t, c, stream, body)); err != nil {
+					if _, err := peer.Write(testResponse(t, c, stream, body)); err != nil {
 						t.Error(err)
 						return
 					}
@@ -162,8 +162,8 @@ func TestStep07StreamPagingModes(t *testing.T) {
 		})
 	}
 }
-func TestStep07StreamFirstRowBeforePageAndNoReplay(t *testing.T) {
-	s, c, peer := step07StreamSession(t, 4, nil)
+func TestStreamFirstRowBeforePageAndNoReplay(t *testing.T) {
+	s, c, peer := rowStreamSession(t, 4, nil)
 	first := make(chan struct{})
 	later := make(chan struct{})
 	done := make(chan struct{})
@@ -171,7 +171,7 @@ func TestStep07StreamFirstRowBeforePageAndNoReplay(t *testing.T) {
 		defer close(done)
 		stream := typedTestReadRequest(t, c, peer)
 		body := runtimeRowsBody(nil, "first", "second")
-		frame := step07Response(t, c, stream, body)
+		frame := testResponse(t, c, stream, body)
 		split := len(frame) - len("second") - 4
 		if _, err := peer.Write(frame[:split]); err != nil {
 			t.Error(err)
@@ -209,15 +209,15 @@ func TestStep07StreamFirstRowBeforePageAndNoReplay(t *testing.T) {
 	}
 	<-done
 }
-func TestStep07StreamCapacityAndNilNoResetReplay(t *testing.T) {
+func TestStreamCapacityAndNilNoResetReplay(t *testing.T) {
 	for _, nilDst := range []bool{false, true} {
 		t.Run(map[bool]string{false: "capacity", true: "nil"}[nilDst], func(t *testing.T) {
-			s, c, peer := step07StreamSession(t, 4, nil)
+			s, c, peer := rowStreamSession(t, 4, nil)
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
 				stream := typedTestReadRequest(t, c, peer)
-				_, _ = peer.Write(step07Response(t, c, stream, runtimeRowsBody(nil, "payload")))
+				_, _ = peer.Write(testResponse(t, c, stream, runtimeRowsBody(nil, "payload")))
 			}()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
@@ -257,41 +257,41 @@ func TestStep07StreamCapacityAndNilNoResetReplay(t *testing.T) {
 
 // The custom plan blocks after Reset. Close/cancel must join that invocation;
 // concurrent NextInto must never enter Reset or access its destination.
-type step07GatedDecoder struct {
+type gatedDecoder struct {
 	entered chan struct{}
 	leave   chan struct{}
 	resets  atomic.Int32
 }
 
-func (d *step07GatedDecoder) Compile(cqltype.Columns) (codec.StreamRowPlan[[]byte], error) {
+func (d *gatedDecoder) Compile(cqltype.Columns) (codec.StreamRowPlan[[]byte], error) {
 	return d, nil
 }
-func (d *step07GatedDecoder) Reset(dst *[]byte) {
+func (d *gatedDecoder) Reset(dst *[]byte) {
 	d.resets.Add(1)
 	close(d.entered)
 	<-d.leave
 	*dst = (*dst)[:0]
 }
-func (d *step07GatedDecoder) DecodeInto(r *codec.StreamRowReader, dst *[]byte) error {
+func (d *gatedDecoder) DecodeInto(r *codec.StreamRowReader, dst *[]byte) error {
 	plan, err := codec.StreamBlob.Compile(codecTestMust(cqltype.ScalarType(cqltype.TypeBlob)))
 	if err != nil {
 		return err
 	}
 	return codec.ReadStreamColumn(r, plan, dst)
 }
-func TestStep07StreamCloseJoinsDestinationAndConcurrentRejection(t *testing.T) {
+func TestStreamCloseJoinsDestinationAndConcurrentRejection(t *testing.T) {
 	for _, action := range []string{"close", "cancel", "session", "concurrent"} {
 		t.Run(action, func(t *testing.T) {
-			s, c, peer := step07StreamSession(t, 4, nil)
+			s, c, peer := rowStreamSession(t, 4, nil)
 			go func() {
 				stream := typedTestReadRequest(t, c, peer)
-				_, _ = peer.Write(step07Response(t, c, stream, runtimeRowsBody(nil, "payload")))
+				_, _ = peer.Write(testResponse(t, c, stream, runtimeRowsBody(nil, "payload")))
 			}()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			b := runtimeQuery(t)
 			bDone := make(chan struct{})
-			decoder := &step07GatedDecoder{entered: make(chan struct{}), leave: make(chan struct{})}
+			decoder := &gatedDecoder{entered: make(chan struct{}), leave: make(chan struct{})}
 			cursor, err := RunStream(ctx, s, b, decoder, StreamOptions{Incremental: true})
 			if err != nil {
 				t.Fatal(err)
@@ -347,11 +347,11 @@ func TestStep07StreamCloseJoinsDestinationAndConcurrentRejection(t *testing.T) {
 		})
 	}
 }
-func TestStep07StreamIdleSessionDrainAndPoolExhaustion(t *testing.T) {
-	s, c, peer := step07StreamSession(t, 4, nil)
+func TestStreamIdleSessionDrainAndPoolExhaustion(t *testing.T) {
+	s, c, peer := rowStreamSession(t, 4, nil)
 	go func() {
 		stream := typedTestReadRequest(t, c, peer)
-		_, _ = peer.Write(step07Response(t, c, stream, runtimeRowsBody(nil, "payload")))
+		_, _ = peer.Write(testResponse(t, c, stream, runtimeRowsBody(nil, "payload")))
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -377,10 +377,10 @@ func TestStep07StreamIdleSessionDrainAndPoolExhaustion(t *testing.T) {
 		t.Fatal("idle operation leaked")
 	}
 }
-func TestStep07StreamPagingCycleAndLimits(t *testing.T) {
+func TestStreamPagingCycleAndLimits(t *testing.T) {
 	for _, limit := range []bool{false, true} {
 		t.Run(map[bool]string{false: "cycle", true: "limit"}[limit], func(t *testing.T) {
-			s, c, peer := step07StreamSession(t, 4, nil)
+			s, c, peer := rowStreamSession(t, 4, nil)
 			config := settings.DefaultConfig("localhost")
 			if limit {
 				config.Limits.MaxPagingStates = 1
@@ -395,7 +395,7 @@ func TestStep07StreamPagingCycleAndLimits(t *testing.T) {
 				}
 				for _, token := range tokens {
 					stream := typedTestReadRequest(t, c, peer)
-					if _, err := peer.Write(step07Response(t, c, stream, runtimeRowsBody(token))); err != nil {
+					if _, err := peer.Write(testResponse(t, c, stream, runtimeRowsBody(token))); err != nil {
 						return
 					}
 				}
@@ -423,8 +423,8 @@ func TestStep07StreamPagingCycleAndLimits(t *testing.T) {
 		})
 	}
 }
-func TestStep07StreamCapabilityBeforeQuery(t *testing.T) {
-	s, c, _ := step07StreamSession(t, 4, wirecompress.SnappyCompressor{})
+func TestStreamCapabilityBeforeQuery(t *testing.T) {
+	s, c, _ := rowStreamSession(t, 4, wirecompress.SnappyCompressor{})
 	b := runtimeQuery(t)
 	defer b.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -445,26 +445,26 @@ func TestStep07StreamCapabilityBeforeQuery(t *testing.T) {
 }
 
 // Raw bulk reads must target caller storage after at most a bounded prefix.
-type step07ReadTargets struct {
+type testReadTargets struct {
 	net.Conn
 	mu      sync.Mutex
 	targets [][]byte
 }
 
-func (c *step07ReadTargets) Read(p []byte) (int, error) {
+func (c *testReadTargets) Read(p []byte) (int, error) {
 	c.mu.Lock()
 	c.targets = append(c.targets, p)
 	c.mu.Unlock()
 	return c.Conn.Read(p)
 }
-func TestStep07StreamRawReadCallerBacking(t *testing.T) {
-	s, c, peer := step07StreamSession(t, 4, nil)
+func TestStreamRawReadCallerBacking(t *testing.T) {
+	s, c, peer := rowStreamSession(t, 4, nil)
 	reader := c.InternalR.(*transport.InternalConnReader)
-	spy := reader.InternalConn.(*step07ReadTargets)
+	spy := reader.InternalConn.(*testReadTargets)
 	payload := bytes.Repeat([]byte{7}, 128<<10)
 	go func() {
 		stream := typedTestReadRequest(t, c, peer)
-		_, _ = peer.Write(step07Response(t, c, stream, runtimeRowsBody(nil, string(payload))))
+		_, _ = peer.Write(testResponse(t, c, stream, runtimeRowsBody(nil, string(payload))))
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -494,26 +494,26 @@ func TestStep07StreamRawReadCallerBacking(t *testing.T) {
 	cursor.Close()
 }
 
-type step07CountStreamDecoder struct{ compiles atomic.Int32 }
+type countStreamDecoder struct{ compiles atomic.Int32 }
 
-func (d *step07CountStreamDecoder) Compile(columns cqltype.Columns) (codec.StreamRowPlan[[]byte], error) {
+func (d *countStreamDecoder) Compile(columns cqltype.Columns) (codec.StreamRowPlan[[]byte], error) {
 	d.compiles.Add(1)
 	return codec.StreamOneColumn(codec.StreamBlob).Compile(columns)
 }
-func TestStep07StreamPreparedMetadataFencesAndPlanIsolation(t *testing.T) {
+func TestStreamPreparedMetadataFencesAndPlanIsolation(t *testing.T) {
 	for _, mismatch := range []bool{false, true} {
 		t.Run(map[bool]string{false: "matching", true: "count-mismatch"}[mismatch], func(t *testing.T) {
-			s, c, peer := step07StreamSession(t, 4, nil)
+			s, c, peer := rowStreamSession(t, 4, nil)
 			implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
 			columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))})
-			state, _ := step03PreparedState(t, s, columns)
+			state, _ := preparedState(t, s, columns)
 			bound := func() *Bound[cqltype.Bytes] {
 				opaqueStorageValuex := new(Bound[cqltype.Bytes])
 				BoundData(opaqueStorageValuex).InternalRequest = InternalExecutionRequest{InternalStatement: state.InternalStatement, InternalSource: InternalPreparedSource(state), InternalValues: model.EncodedValues{Columns: cqltype.NewColumns()}, InternalOwner: InternalNewInputOwner(), InternalRouting: model.RoutingInfo{Kind: cqltype.OrdinaryStatement}}
 				BoundData(opaqueStorageValuex).InternalRows = codec.OneColumn(codec.BlobCodec)
 				return opaqueStorageValuex
 			}()
-			decoder := &step07CountStreamDecoder{}
+			decoder := &countStreamDecoder{}
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
@@ -523,7 +523,7 @@ func TestStep07StreamPreparedMetadataFencesAndPlanIsolation(t *testing.T) {
 					body[11] = 2
 					body = append(body, 255, 255, 255, 255)
 				}
-				_, _ = peer.Write(step07Response(t, c, stream, body))
+				_, _ = peer.Write(testResponse(t, c, stream, body))
 			}()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
@@ -555,11 +555,11 @@ func TestStep07StreamPreparedMetadataFencesAndPlanIsolation(t *testing.T) {
 		})
 	}
 }
-func TestStep07StreamBadV5IntegrityCannotDeliver(t *testing.T) {
-	s, c, peer := step07StreamSession(t, 5, nil)
+func TestStreamBadV5IntegrityCannotDeliver(t *testing.T) {
+	s, c, peer := rowStreamSession(t, 5, nil)
 	go func() {
 		stream := typedTestReadRequest(t, c, peer)
-		frame := step07Response(t, c, stream, runtimeRowsBody(nil, "payload"))
+		frame := testResponse(t, c, stream, runtimeRowsBody(nil, "payload"))
 		frame[len(frame)-1] ^= 1
 		_, _ = peer.Write(frame)
 	}()
@@ -572,11 +572,11 @@ func TestStep07StreamBadV5IntegrityCannotDeliver(t *testing.T) {
 		t.Fatal("invalid checksum exposed cursor", cursor, err)
 	}
 }
-func TestStep07StreamPageDeadlineEndsAtExactBoundary(t *testing.T) {
-	s, c, peer := step07StreamSession(t, 4, nil)
+func TestStreamPageDeadlineEndsAtExactBoundary(t *testing.T) {
+	s, c, peer := rowStreamSession(t, 4, nil)
 	go func() {
 		stream := typedTestReadRequest(t, c, peer)
-		_, _ = peer.Write(step07Response(t, c, stream, runtimeRowsBody(nil, "value")))
+		_, _ = peer.Write(testResponse(t, c, stream, runtimeRowsBody(nil, "value")))
 	}()
 	b := runtimeQuery(t)
 	defer b.Close()
@@ -594,13 +594,13 @@ func TestStep07StreamPageDeadlineEndsAtExactBoundary(t *testing.T) {
 	}
 }
 
-func TestStep07StreamPartialFirstRowNeverReplays(t *testing.T) {
-	s, c, peer := step07StreamSession(t, 4, nil)
+func TestStreamPartialFirstRowNeverReplays(t *testing.T) {
+	s, c, peer := rowStreamSession(t, 4, nil)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		stream := typedTestReadRequest(t, c, peer)
-		frame := step07Response(t, c, stream, runtimeRowsBody(nil, "payload"))
+		frame := testResponse(t, c, stream, runtimeRowsBody(nil, "payload"))
 		_, _ = peer.Write(frame[:len(frame)-4])
 		peer.Close()
 	}()
@@ -626,12 +626,12 @@ func TestStep07StreamPartialFirstRowNeverReplays(t *testing.T) {
 	<-done
 }
 
-func TestStep07StreamReprepareCanonicalInputAndNoRepairAfterOutput(t *testing.T) {
-	s, connection, peer := step07StreamSession(t, 4, nil)
+func TestStreamReprepareCanonicalInputAndNoRepairAfterOutput(t *testing.T) {
+	s, connection, peer := rowStreamSession(t, 4, nil)
 	implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
 	typ := codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
 	columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: typ})
-	state, old := step03PreparedState(t, s, columns)
+	state, old := preparedState(t, s, columns)
 	state.InternalParameters = columns
 	state.InternalInfo.PartitionKeyIndexes = []int{0}
 	count := 0
@@ -648,12 +648,12 @@ func TestStep07StreamReprepareCanonicalInputAndNoRepairAfterOutput(t *testing.T)
 	}()
 	input := []byte("canonical-input")
 	bound := codecTestMust(BindBorrowed(prepared, input))
-	spy := &step15CanonicalWriter{step15Writer: connection.InternalW, payload: input}
+	spy := &canonicalWriter{testWriter: connection.InternalW, payload: input}
 	connection.InternalW = spy
 	done := make(chan error, 1)
 	go func() {
 		for step := 0; step < 4; step++ {
-			op, id, body, err := step03ReadRequest(peer)
+			op, id, body, err := readRequest(peer)
 			if err != nil {
 				done <- err
 				return
@@ -663,7 +663,7 @@ func TestStep07StreamReprepareCanonicalInputAndNoRepairAfterOutput(t *testing.T)
 					done <- errors.New("missing reprepare")
 					return
 				}
-				_, err = peer.Write(typedTestResponse(t, 4, id, step03PreparedBody([]byte("new"), columns, columns, 0)))
+				_, err = peer.Write(typedTestResponse(t, 4, id, preparedBody([]byte("new"), columns, columns, 0)))
 			} else {
 				if op != 10 || !bytes.Contains(body, input) {
 					done <- errors.New("canonical input changed")
@@ -671,11 +671,11 @@ func TestStep07StreamReprepareCanonicalInputAndNoRepairAfterOutput(t *testing.T)
 				}
 				switch step {
 				case 0:
-					_, err = peer.Write(step03ErrorResponse(t, id, implProtocol.ErrCodeUnprepared, old.InternalId))
+					_, err = peer.Write(errorResponse(t, id, implProtocol.ErrCodeUnprepared, old.InternalId))
 				case 2:
 					_, err = peer.Write(typedTestResponse(t, 4, id, runtimeRowsBody([]byte("next"), "first")))
 				case 3:
-					_, err = peer.Write(step07ErrorExtensions(step03ErrorResponse(t, id, implProtocol.ErrCodeUnprepared, []byte("new"))))
+					_, err = peer.Write(errorExtensions(errorResponse(t, id, implProtocol.ErrCodeUnprepared, []byte("new"))))
 				}
 			}
 			if err != nil {
@@ -723,11 +723,11 @@ func TestStep07StreamReprepareCanonicalInputAndNoRepairAfterOutput(t *testing.T)
 	}
 }
 
-func TestStep07V3NegotiatedTabletPayloadEnvelope(t *testing.T) {
+func TestV3NegotiatedTabletPayloadEnvelope(t *testing.T) {
 	for _, streaming := range []bool{false, true} {
 		for _, negotiated := range []bool{false, true} {
 			t.Run(fmt.Sprintf("stream=%t/negotiated=%t", streaming, negotiated), func(t *testing.T) {
-				s, c, peer := step07StreamSession(t, 3, nil)
+				s, c, peer := rowStreamSession(t, 3, nil)
 				c.InternalFramers.InternalDefaults.InternalTabletsRoutingV1 = negotiated
 				done := make(chan struct{})
 				go func() {
@@ -774,13 +774,13 @@ func TestStep07V3NegotiatedTabletPayloadEnvelope(t *testing.T) {
 	}
 }
 
-func TestStep07CloseGenerationRejectsLateCancellation(t *testing.T) {
-	s, c, peer := step07StreamSession(t, 4, nil)
+func TestCloseGenerationRejectsLateCancellation(t *testing.T) {
+	s, c, peer := rowStreamSession(t, 4, nil)
 	go func() {
 		id := typedTestReadRequest(t, c, peer)
-		_, _ = peer.Write(step07Response(t, c, id, runtimeRowsBody(nil, "value")))
+		_, _ = peer.Write(testResponse(t, c, id, runtimeRowsBody(nil, "value")))
 	}()
-	decoder := &step07GatedDecoder{entered: make(chan struct{}), leave: make(chan struct{})}
+	decoder := &gatedDecoder{entered: make(chan struct{}), leave: make(chan struct{})}
 	b := runtimeQuery(t)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -826,7 +826,7 @@ func TestStep07CloseGenerationRejectsLateCancellation(t *testing.T) {
 	}
 }
 
-func step07ErrorExtensions(frame []byte) []byte {
+func errorExtensions(frame []byte) []byte {
 	extension := make([]byte, 16)
 	extension[15] = 7
 	extension = binary.BigEndian.AppendUint16(extension, 1)
@@ -845,10 +845,10 @@ func step07ErrorExtensions(frame []byte) []byte {
 	return result
 }
 
-func TestStep07LatestAttemptMetadataRemainsBudgetedDuringRetry(t *testing.T) {
-	s, c, peer := step07StreamSession(t, 4, nil)
+func TestLatestAttemptMetadataRemainsBudgetedDuringRetry(t *testing.T) {
+	s, c, peer := rowStreamSession(t, 4, nil)
 	profile := settings.InternalDefaultProfile()
-	profile.Retry = step03RetryOnce{}
+	profile.Retry = retryOnce{}
 	handle := profileOf(profile)
 	payload := bytes.Repeat([]byte{'x'}, 12000)
 	extension := binary.BigEndian.AppendUint16(nil, 1)
@@ -871,7 +871,7 @@ func TestStep07LatestAttemptMetadataRemainsBudgetedDuringRetry(t *testing.T) {
 			return
 		}
 		id = typedTestReadRequest(t, c, peer)
-		if _, err := peer.Write(withPayload(step03ErrorResponse(t, id, implProtocol.ErrCodeServer, nil))); err != nil {
+		if _, err := peer.Write(withPayload(errorResponse(t, id, implProtocol.ErrCodeServer, nil))); err != nil {
 			return
 		}
 		id = typedTestReadRequest(t, c, peer)

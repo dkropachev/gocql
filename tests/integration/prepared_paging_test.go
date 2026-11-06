@@ -24,16 +24,16 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 )
 
-type step03CountingDecoder struct {
+type countingDecoder struct {
 	calls *atomic.Int32
 	hook  func()
 }
 
-func (d step03CountingDecoder) Compile(c gocql.Columns) (gocql.RowPlan[gocql.Bytes], error) {
+func (d countingDecoder) Compile(c gocql.Columns) (gocql.RowPlan[gocql.Bytes], error) {
 	d.calls.Add(1)
 	if d.hook != nil {
 		d.hook()
 	}
 	return gocql.OneColumn(gocql.BlobCodec).Compile(c)
 }
-func (d step03CountingDecoder) Clone(v gocql.Bytes) gocql.Bytes { return v.Clone() }
+func (d countingDecoder) Clone(v gocql.Bytes) gocql.Bytes { return v.Clone() }

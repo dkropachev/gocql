@@ -64,7 +64,7 @@ func fixtureKeyspace(suffix string) string {
 	return prefix + suffix
 }
 
-func TestStep08FixtureCQL(t *testing.T) {
+func TestFixtureCQL(t *testing.T) {
 	source := "CREATE FUNCTION f() AS $$ int x=1; return x; $$; SELECT ';'';'; SELECT \"a;\";"
 	queries := splitFixtureCQL(source)
 	if len(queries) != 4 || !strings.Contains(queries[0], "return x;") || strings.TrimSpace(queries[3]) != "" {

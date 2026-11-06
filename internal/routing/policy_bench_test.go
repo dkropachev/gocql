@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func BenchmarkStep17LatencyPublicationClaims(b *testing.B) {
+func BenchmarkLatencyPublicationClaims(b *testing.B) {
 	for _, kind := range []string{"warm", "boundary", "competing-boundary"} {
 		b.Run(kind, func(b *testing.B) {
 			policy := &InternalRoutingPolicy{InternalOptions: RoutingOptions{Latency: LatencyOptions{UpdateInterval: time.Minute}}}
@@ -53,8 +53,8 @@ func BenchmarkStep17LatencyPublicationClaims(b *testing.B) {
 	}
 }
 
-func BenchmarkStep17LatencyProbeDeadline(b *testing.B) {
-	for _, test := range step17DeadlineCases() {
+func BenchmarkLatencyProbeDeadline(b *testing.B) {
+	for _, test := range deadlineCases() {
 		b.Run(fmt.Sprintf("%s/claim-and-reset", test.name), func(b *testing.B) {
 			host := UUID{15: 1}
 			sample := &InternalRoutingLatency{}

@@ -39,7 +39,7 @@ import (
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
-func TestStep05ExplicitContactsHaveActualDistinctIdentities(t *testing.T) {
+func TestExplicitContactsHaveActualDistinctIdentities(t *testing.T) {
 	ids := []cqltype.UUID{cqltype.MustRandomUUID(), cqltype.MustRandomUUID()}
 	contacts := make([]string, 2)
 	for i := range contacts {
@@ -89,7 +89,7 @@ func TestStep05ExplicitContactsHaveActualDistinctIdentities(t *testing.T) {
 	}
 }
 
-func TestStep05IncompleteKnownPeerRetainsCompleteTopology(t *testing.T) {
+func TestIncompleteKnownPeerRetainsCompleteTopology(t *testing.T) {
 	good := newTestPeer("127.0.0.2")
 	srv := newRingTestServer(t, good)
 	s := srv.session(t, nil)
@@ -106,7 +106,7 @@ func TestStep05IncompleteKnownPeerRetainsCompleteTopology(t *testing.T) {
 	}
 }
 
-func TestStep05TopologyRemovalTombstoneAndRecreate(t *testing.T) {
+func TestTopologyRemovalTombstoneAndRecreate(t *testing.T) {
 	peer := newTestPeer("127.0.0.2")
 	srv := newRingTestServer(t, peer)
 	s := srv.session(t, nil)
@@ -130,24 +130,24 @@ func TestStep05TopologyRemovalTombstoneAndRecreate(t *testing.T) {
 	}
 }
 
-type step05BlockingPolicy struct {
+type blockingPolicy struct {
 	RoutingPolicy
 	block            atomic.Bool
 	entered, release chan struct{}
 }
 
-func (p *step05BlockingPolicy) Validate(*implRouting.MetadataSnapshot) error {
+func (p *blockingPolicy) Validate(*implRouting.MetadataSnapshot) error {
 	if p.block.CompareAndSwap(true, false) {
 		close(p.entered)
 		<-p.release
 	}
 	return nil
 }
-func TestStep05SnapshotPublicationCannotCrossDrop(t *testing.T) {
+func TestSnapshotPublicationCannotCrossDrop(t *testing.T) {
 	s, _ := refreshAllSchemaSession(t)
 	before := s.Metadata()
 	base := settings.DefaultConfig("localhost")
-	policy := &step05BlockingPolicy{RoutingPolicy: base.DefaultProfile.Routing, entered: make(chan struct{}), release: make(chan struct{})}
+	policy := &blockingPolicy{RoutingPolicy: base.DefaultProfile.Routing, entered: make(chan struct{}), release: make(chan struct{})}
 	profile := *base.DefaultProfile
 	profile.Routing = policy
 	base.DefaultProfile = &profile
@@ -171,7 +171,7 @@ func TestStep05SnapshotPublicationCannotCrossDrop(t *testing.T) {
 	}
 }
 
-func TestStep05TableRefreshCannotCrossDropAndFailure(t *testing.T) {
+func TestTableRefreshCannotCrossDropAndFailure(t *testing.T) {
 	s, mock := refreshAllSchemaSession(t)
 	entered, release := make(chan struct{}), make(chan struct{})
 	var gate atomic.Bool
@@ -207,7 +207,7 @@ func TestStep05TableRefreshCannotCrossDropAndFailure(t *testing.T) {
 	}
 }
 
-func TestStep05SchemaCapabilityAndMetadataScope(t *testing.T) {
+func TestSchemaCapabilityAndMetadataScope(t *testing.T) {
 	s, mock := refreshAllSchemaSession(t)
 	implCluster.SessionData(s).InternalUseSystemSchema = false
 	if err := implCluster.InternalSessionRefreshV2AllSchema(s, context.Background()); err == nil {
@@ -250,7 +250,7 @@ func TestStep05SchemaCapabilityAndMetadataScope(t *testing.T) {
 	}
 }
 
-func TestStep05OverflowHighestGenerationAndIsolation(t *testing.T) {
+func TestOverflowHighestGenerationAndIsolation(t *testing.T) {
 	s := func() *cluster.Session {
 		opaqueStorageValue := new(cluster.Session)
 		return opaqueStorageValue
@@ -280,7 +280,7 @@ func TestStep05OverflowHighestGenerationAndIsolation(t *testing.T) {
 	}
 }
 
-func TestStep05ShutdownJoinsWorkersAndRepeatedClosers(t *testing.T) {
+func TestShutdownJoinsWorkersAndRepeatedClosers(t *testing.T) {
 	s := func() *cluster.Session {
 		opaqueStorageValuex := new(cluster.Session)
 		return opaqueStorageValuex
@@ -311,7 +311,7 @@ func TestStep05ShutdownJoinsWorkersAndRepeatedClosers(t *testing.T) {
 	}
 }
 
-func TestStep05DebouncerSerialBoundedAndJoined(t *testing.T) {
+func TestDebouncerSerialBoundedAndJoined(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
 	var callbacks atomic.Int32
 	var resync atomic.Int32
@@ -347,7 +347,7 @@ func TestStep05DebouncerSerialBoundedAndJoined(t *testing.T) {
 	d.InternalStop()
 }
 
-func step05UUIDRows(id, version cqltype.UUID) []byte {
+func uuidRows(id, version cqltype.UUID) []byte {
 	body := binary.BigEndian.AppendUint32(nil, frm.ResultKindRows)
 	body = binary.BigEndian.AppendUint32(body, 1)
 	body = binary.BigEndian.AppendUint32(body, 2)
@@ -365,7 +365,7 @@ func step05UUIDRows(id, version cqltype.UUID) []byte {
 	}
 	return body
 }
-func step05AgreementConn(t *testing.T, s *cluster.Session, id, version cqltype.UUID, code int) (*transport.Conn, *atomic.Int32) {
+func agreementConn(t *testing.T, s *cluster.Session, id, version cqltype.UUID, code int) (*transport.Conn, *atomic.Int32) {
 	t.Helper()
 	c, server := typedTestConn(t, 4, nil)
 	c.InternalHost = func() *endpoint.HostInfo {
@@ -392,9 +392,9 @@ func step05AgreementConn(t *testing.T, s *cluster.Session, id, version cqltype.U
 			}
 			stream := int(binary.BigEndian.Uint16(header[2:4]))
 			count.Add(1)
-			response := typedTestResponse(t, 4, stream, step05UUIDRows(id, version))
+			response := typedTestResponse(t, 4, stream, uuidRows(id, version))
 			if code != 0 {
-				response = step03ErrorResponse(t, stream, code, nil)
+				response = errorResponse(t, stream, code, nil)
 			}
 			if _, err := server.Write(response); err != nil {
 				return
@@ -404,7 +404,7 @@ func step05AgreementConn(t *testing.T, s *cluster.Session, id, version cqltype.U
 	t.Cleanup(func() { c.Close(); server.Close(); <-done; c.InternalWaitEventDispatch() })
 	return c, count
 }
-func step05AgreementSession(t *testing.T) (*cluster.Session, cqltype.UUID, cqltype.UUID) {
+func agreementSession(t *testing.T) (*cluster.Session, cqltype.UUID, cqltype.UUID) {
 	t.Helper()
 	s := func() *cluster.Session {
 		opaqueStorageValuexxx := new(cluster.Session)
@@ -419,17 +419,17 @@ func step05AgreementSession(t *testing.T) (*cluster.Session, cqltype.UUID, cqlty
 	t.Cleanup(func() { s.Close() })
 	return s, cqltype.MustRandomUUID(), cqltype.MustRandomUUID()
 }
-func step05AgreementPool(s *cluster.Session, c *transport.Conn) {
+func agreementPool(s *cluster.Session, c *transport.Conn) {
 	implCluster.SessionData(s).InternalPool.InternalHostConnPools[implEndpoint.InternalHostInfoHostUUID(c.InternalHost)] = &implPool.InternalHostConnPool{InternalHost: c.InternalHost, InternalConnPicker: &implPool.InternalDefaultConnPicker{InternalConns: []*transport.Conn{c}}}
 }
-func TestStep05AgreementChecksEnabledDownAndZeroSuccess(t *testing.T) {
+func TestAgreementChecksEnabledDownAndZeroSuccess(t *testing.T) {
 	for _, success := range []bool{false, true} {
 		t.Run(fmt.Sprint(success), func(t *testing.T) {
-			s, id, missing := step05AgreementSession(t)
+			s, id, missing := agreementSession(t)
 			hosts := []model.HostSnapshot{{ID: missing, Enabled: true, Up: false}}
 			if success {
-				c, _ := step05AgreementConn(t, s, id, cqltype.MustRandomUUID(), 0)
-				step05AgreementPool(s, c)
+				c, _ := agreementConn(t, s, id, cqltype.MustRandomUUID(), 0)
+				agreementPool(s, c)
 				hosts = append(hosts, model.HostSnapshot{ID: id, Enabled: true, Up: true})
 			}
 			implCluster.InternalSessionPeripheral(s).InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: hosts}))
@@ -439,12 +439,12 @@ func TestStep05AgreementChecksEnabledDownAndZeroSuccess(t *testing.T) {
 		})
 	}
 }
-func TestStep05AgreementRetainsExcludedCoordinatorAndFilters(t *testing.T) {
-	s, id, coordinatorID := step05AgreementSession(t)
+func TestAgreementRetainsExcludedCoordinatorAndFilters(t *testing.T) {
+	s, id, coordinatorID := agreementSession(t)
 	version := cqltype.MustRandomUUID()
-	c, _ := step05AgreementConn(t, s, id, version, 0)
-	step05AgreementPool(s, c)
-	coordinator, count := step05AgreementConn(t, s, coordinatorID, version, 0)
+	c, _ := agreementConn(t, s, id, version, 0)
+	agreementPool(s, c)
+	coordinator, count := agreementConn(t, s, coordinatorID, version, 0)
 	implCluster.InternalSessionPeripheral(s).InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: []model.HostSnapshot{{ID: id, Enabled: true}, {ID: cqltype.MustRandomUUID(), Enabled: false}}}))
 	if err := implCluster.InternalSessionAwaitV2SchemaAgreementOn(s, context.Background(), coordinator); err != nil {
 		t.Fatal(err)
@@ -452,15 +452,15 @@ func TestStep05AgreementRetainsExcludedCoordinatorAndFilters(t *testing.T) {
 	if count.Load() != 1 {
 		t.Fatal("excluded exact coordinator not queried", count.Load())
 	}
-	different, _ := step05AgreementConn(t, s, coordinatorID, cqltype.MustRandomUUID(), 0)
+	different, _ := agreementConn(t, s, coordinatorID, cqltype.MustRandomUUID(), 0)
 	if err := implCluster.InternalSessionAwaitV2SchemaAgreementOn(s, context.Background(), different); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal("older topology agreement ignored coordinator schema", err)
 	}
 }
-func TestStep05AgreementTerminalAuthorization(t *testing.T) {
-	s, id, _ := step05AgreementSession(t)
-	c, count := step05AgreementConn(t, s, id, cqltype.MustRandomUUID(), protocol.ErrCodeUnauthorized)
-	step05AgreementPool(s, c)
+func TestAgreementTerminalAuthorization(t *testing.T) {
+	s, id, _ := agreementSession(t)
+	c, count := agreementConn(t, s, id, cqltype.MustRandomUUID(), protocol.ErrCodeUnauthorized)
+	agreementPool(s, c)
 	implCluster.InternalSessionPeripheral(s).InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: []model.HostSnapshot{{ID: id, Enabled: true}}}))
 	var request protocol.RequestError
 	if err := s.AwaitSchemaAgreement(context.Background()); !errors.As(err, &request) || request.GetCode() != protocol.ErrCodeUnauthorized {
@@ -471,7 +471,7 @@ func TestStep05AgreementTerminalAuthorization(t *testing.T) {
 	}
 }
 
-func TestStep05ClientRouteConfigSnapshotsAndValidation(t *testing.T) {
+func TestClientRouteConfigSnapshotsAndValidation(t *testing.T) {
 	cfg := settings.DefaultConfig("localhost")
 	cfg.Pool.ShardAwarePort = false
 	cfg.ClientRoutes = &settings.ClientRoutesOptions{ConnectionIDs: []string{"one", "two"}, HostnameOverrides: map[string]string{"one": "proxy.example"}}
@@ -493,7 +493,7 @@ func TestStep05ClientRouteConfigSnapshotsAndValidation(t *testing.T) {
 		}
 	}
 }
-func TestStep05ClientRoutesFencePerPairAndPreserveDisjointUpdates(t *testing.T) {
+func TestClientRoutesFencePerPairAndPreserveDisjointUpdates(t *testing.T) {
 	p := cluster.NewClientRoutesAddressTranslator(cluster.ClientRoutesConfig{Endpoints: cluster.ClientRoutesEndpointList{{ConnectionID: "a"}, {ConnectionID: "b"}}}, nil, false, logging.InternalNopLogger{})
 	a := cluster.InternalClientRoute{InternalConnectionID: "a", InternalHostID: "host", InternalAddress: "old", InternalPort: 9042}
 	b := cluster.InternalClientRoute{InternalConnectionID: "b", InternalHostID: "host", InternalAddress: "b", InternalPort: 9042}
@@ -521,7 +521,7 @@ func TestStep05ClientRoutesFencePerPairAndPreserveDisjointUpdates(t *testing.T) 
 		t.Fatal("sticky route lost")
 	}
 }
-func TestStep05LatePoolConnectedCannotUndoDownOrRemoval(t *testing.T) {
+func TestLatePoolConnectedCannotUndoDownOrRemoval(t *testing.T) {
 	f := newNodeEventFixture(t)
 	h := f.addHost(t, "127.0.10.1")
 	old, _ := implCluster.SessionData(f.session).InternalPool.InternalGetPool(h)
@@ -537,7 +537,7 @@ func TestStep05LatePoolConnectedCannotUndoDownOrRemoval(t *testing.T) {
 	}
 }
 
-func TestStep05ClientRouteDNSAndConnectFallbackShareDeadline(t *testing.T) {
+func TestClientRouteDNSAndConnectFallbackShareDeadline(t *testing.T) {
 	ids := []cqltype.UUID{cqltype.MustRandomUUID(), cqltype.MustRandomUUID(), cqltype.MustRandomUUID()}
 	srv := newControlTestServer(t, func(srv *controlTestServer) {
 		srv.queries = func(query string, stream int, resp *protocol.Framer) bool {
@@ -604,7 +604,7 @@ func TestStep05ClientRouteDNSAndConnectFallbackShareDeadline(t *testing.T) {
 	}
 }
 
-func TestStep05SuccessfulDDLErrorNeverRetriesStatement(t *testing.T) {
+func TestSuccessfulDDLErrorNeverRetriesStatement(t *testing.T) {
 	s, conns, peers := runtimeTestSession(t, 1)
 	conn := conns[0]
 	config := InternalRuntimeFor(s).InternalConfig
@@ -645,7 +645,7 @@ func TestStep05SuccessfulDDLErrorNeverRetriesStatement(t *testing.T) {
 			if strings.HasPrefix(query, "CREATE") {
 				ddl.Add(1)
 				response := binary.BigEndian.AppendUint32(nil, frm.ResultKindSchemaChanged)
-				for _, v := range []string{"CREATED", "KEYSPACE", "step05"} {
+				for _, v := range []string{"CREATED", "KEYSPACE", "schema_events"} {
 					response = binary.BigEndian.AppendUint16(response, uint16(len(v)))
 					response = append(response, v...)
 				}
@@ -653,19 +653,19 @@ func TestStep05SuccessfulDDLErrorNeverRetriesStatement(t *testing.T) {
 					return
 				}
 			} else {
-				if _, err := peers[0].Write(step03ErrorResponse(t, stream, protocol.ErrCodeUnauthorized, nil)); err != nil {
+				if _, err := peers[0].Write(errorResponse(t, stream, protocol.ErrCodeUnauthorized, nil)); err != nil {
 					return
 				}
 			}
 		}
 	}()
-	b := codecTestMust(BindUnpreparedOwned(binding.Statement[codec.Unit, codec.Unit]{CQL: "CREATE KEYSPACE step05", Params: codec.NoParams, Rows: codec.NoRows}, cqltype.NewColumns(), codec.Unit{}))
+	b := codecTestMust(BindUnpreparedOwned(binding.Statement[codec.Unit, codec.Unit]{CQL: "CREATE KEYSPACE schema_events", Params: codec.NoParams, Rows: codec.NoRows}, cqltype.NewColumns(), codec.Unit{}))
 	defer b.Close()
 	_, err := Exec(ctx, s, b, testOptions(*func() *OptionValues {
 		opaqueStorageValuexxxxxx := new(OptionValues)
 		OptionsData(opaqueStorageValuexxxxxx).InternalConnection = conn
 		opaqueStorageValuexxxxxx.Idempotent = true
-		opaqueStorageValuexxxxxx.Retry = step03RetryOnce{}
+		opaqueStorageValuexxxxxx.Retry = retryOnce{}
 		return opaqueStorageValuexxxxxx
 	}()))
 	if err == nil || !strings.Contains(err.Error(), "DDL succeeded") {
@@ -679,10 +679,10 @@ func TestStep05SuccessfulDDLErrorNeverRetriesStatement(t *testing.T) {
 	}
 }
 
-type step05LifecycleFunc func(settings.LifecycleEvent)
+type lifecycleFunc func(settings.LifecycleEvent)
 
-func (f step05LifecycleFunc) ObserveLifecycle(e settings.LifecycleEvent) { f(e) }
-func TestStep05ConnectedCallbackPausedAcrossNewerDown(t *testing.T) {
+func (f lifecycleFunc) ObserveLifecycle(e settings.LifecycleEvent) { f(e) }
+func TestConnectedCallbackPausedAcrossNewerDown(t *testing.T) {
 	f := newNodeEventFixture(t)
 	host := f.addHost(t, "127.0.10.1")
 	conn, _ := typedTestConn(t, 4, nil)
@@ -693,7 +693,7 @@ func TestStep05ConnectedCallbackPausedAcrossNewerDown(t *testing.T) {
 	implCluster.SessionData(f.session).InternalPool.InternalMu.Unlock()
 	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	p := implCluster.InternalSessionPeripheral(f.session)
-	p.InternalConfig.LifecycleObserver = step05LifecycleFunc(func(e settings.LifecycleEvent) {
+	p.InternalConfig.LifecycleObserver = lifecycleFunc(func(e settings.LifecycleEvent) {
 		if e.Stage == "connected" {
 			close(entered)
 			<-release
@@ -708,7 +708,7 @@ func TestStep05ConnectedCallbackPausedAcrossNewerDown(t *testing.T) {
 		t.Fatal("delayed callback reintroduced host after DOWN", f.policy.hostUpCalls())
 	}
 }
-func TestStep05TypedTopologyRejectsMalformedTokensAndPorts(t *testing.T) {
+func TestTypedTopologyRejectsMalformedTokensAndPorts(t *testing.T) {
 	for _, row := range []implMetadata.InternalV2TopologyRow{{InternalPort: -1}, {InternalPort: 65536}, {InternalPort: 9042, InternalTokens: []string{"not-a-token"}}} {
 		if _, err := row.InternalHost(9042); err == nil {
 			t.Fatal("malformed topology accepted", row)
@@ -716,7 +716,7 @@ func TestStep05TypedTopologyRejectsMalformedTokensAndPorts(t *testing.T) {
 	}
 }
 
-func TestStep05DisabledEventsDoNotMutateMetadata(t *testing.T) {
+func TestDisabledEventsDoNotMutateMetadata(t *testing.T) {
 	s := func() *cluster.Session {
 		opaqueStorageValuexxxxxxx := new(cluster.Session)
 		return opaqueStorageValuexxxxxxx
@@ -735,7 +735,7 @@ func TestStep05DisabledEventsDoNotMutateMetadata(t *testing.T) {
 		t.Fatal("disabled unsolicited event changed snapshot")
 	}
 }
-func TestStep05PartialBaseReadFailureRetainsLatestSnapshot(t *testing.T) {
+func TestPartialBaseReadFailureRetainsLatestSnapshot(t *testing.T) {
 	s, mock := refreshAllSchemaSession(t)
 	mock.mu.Lock()
 	mock.queryError = errors.New("base schema denied temporarily")
@@ -752,7 +752,7 @@ func TestStep05PartialBaseReadFailureRetainsLatestSnapshot(t *testing.T) {
 	}
 }
 
-func TestStep05EventChargeTransfersUntilDownstreamConsumptionAndDrain(t *testing.T) {
+func TestEventChargeTransfersUntilDownstreamConsumptionAndDrain(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
 	var freed atomic.Int32
 	downstream := cluster.InternalNewEventDebouncer("owned", func([]protocol.Frame) { close(entered); <-release }, logging.InternalNopLogger{})
@@ -792,7 +792,7 @@ func TestStep05EventChargeTransfersUntilDownstreamConsumptionAndDrain(t *testing
 		t.Fatal("repeated closure released event twice")
 	}
 }
-func TestStep05RouteEventExpansionFallsBackToFullRefresh(t *testing.T) {
+func TestRouteEventExpansionFallsBackToFullRefresh(t *testing.T) {
 	p := cluster.NewClientRoutesAddressTranslator(cluster.ClientRoutesConfig{Endpoints: cluster.ClientRoutesEndpointList{{ConnectionID: "allowed"}}}, nil, false, logging.InternalNopLogger{})
 	// More than the bounded pair capacity must schedule a full connection scope,
 	// without allocating the Cartesian product or dropping required recovery.
@@ -829,7 +829,7 @@ func TestStep05RouteEventExpansionFallsBackToFullRefresh(t *testing.T) {
 	}
 }
 
-func TestStep05RouteDeletionAdvancesTransportInsertionEpoch(t *testing.T) {
+func TestRouteDeletionAdvancesTransportInsertionEpoch(t *testing.T) {
 	p := cluster.NewClientRoutesAddressTranslator(cluster.ClientRoutesConfig{}, nil, false, logging.InternalNopLogger{})
 	host := func() *endpoint.HostInfo {
 		opaqueStorageValuexxxxxxxxxxx := new(endpoint.HostInfo)
@@ -852,7 +852,7 @@ func TestStep05RouteDeletionAdvancesTransportInsertionEpoch(t *testing.T) {
 		t.Fatal("deletion left late validated transport insertion eligible")
 	}
 }
-func TestStep05EmptyRouteFullReadDetectsNewerPair(t *testing.T) {
+func TestEmptyRouteFullReadDetectsNewerPair(t *testing.T) {
 	p := cluster.NewClientRoutesAddressTranslator(cluster.ClientRoutesConfig{}, nil, false, logging.InternalNopLogger{})
 	before := implCluster.InternalClientRoutesHandlerCaptureRouteEpochs(p)
 	implCluster.InternalClientRoutesHandlerInvalidateRouteTask(p, cluster.InternalUpdateTask{InternalPairs: []cluster.InternalPair{{InternalConnectionID: "connection", InternalHostID: "new-host"}}})
@@ -861,7 +861,7 @@ func TestStep05EmptyRouteFullReadDetectsNewerPair(t *testing.T) {
 	}
 }
 
-func TestStep05DDLSucceededStatusSurvivesAgreementCancellation(t *testing.T) {
+func TestDDLSucceededStatusSurvivesAgreementCancellation(t *testing.T) {
 	s, conns, peers := runtimeTestSession(t, 1)
 	conn := conns[0]
 	config := InternalRuntimeFor(s).InternalConfig
@@ -876,7 +876,7 @@ func TestStep05DDLSucceededStatusSurvivesAgreementCancellation(t *testing.T) {
 		defer close(serverDone)
 		stream := typedTestReadRequest(t, conn, peers[0])
 		body := binary.BigEndian.AppendUint32(nil, frm.ResultKindSchemaChanged)
-		for _, value := range []string{"CREATED", "KEYSPACE", "step05"} {
+		for _, value := range []string{"CREATED", "KEYSPACE", "schema_events"} {
 			body = binary.BigEndian.AppendUint16(body, uint16(len(value)))
 			body = append(body, value...)
 		}
@@ -887,7 +887,7 @@ func TestStep05DDLSucceededStatusSurvivesAgreementCancellation(t *testing.T) {
 		close(entered)
 		<-ctx.Done()
 	}()
-	bound := codecTestMust(BindUnpreparedOwned(binding.Statement[codec.Unit, codec.Unit]{CQL: "CREATE KEYSPACE step05", Params: codec.NoParams, Rows: codec.NoRows}, cqltype.NewColumns(), codec.Unit{}))
+	bound := codecTestMust(BindUnpreparedOwned(binding.Statement[codec.Unit, codec.Unit]{CQL: "CREATE KEYSPACE schema_events", Params: codec.NoParams, Rows: codec.NoRows}, cqltype.NewColumns(), codec.Unit{}))
 	defer bound.Close()
 	result := make(chan error, 1)
 	go func() {
@@ -909,19 +909,19 @@ func TestStep05DDLSucceededStatusSurvivesAgreementCancellation(t *testing.T) {
 	<-serverDone
 }
 
-type step05UnstablePolicy struct {
+type unstablePolicy struct {
 	RoutingPolicy
 	session *cluster.Session
 }
 
-func (p step05UnstablePolicy) Validate(*implRouting.MetadataSnapshot) error {
+func (p unstablePolicy) Validate(*implRouting.MetadataSnapshot) error {
 	state := implCluster.InternalSessionPeripheral(p.session)
 	state.InternalMu.Lock()
 	state.InternalPublicationRevision++
 	state.InternalMu.Unlock()
 	return nil
 }
-func TestStep05PublicationContentionEmitsTerminalResync(t *testing.T) {
+func TestPublicationContentionEmitsTerminalResync(t *testing.T) {
 	s := func() *cluster.Session {
 		opaqueStorageValuexxxxxxxxxxxxxx := new(cluster.Session)
 		implCluster.SessionData(opaqueStorageValuexxxxxxxxxxxxxx).InternalHostSource = &cluster.InternalRingDescriber{}
@@ -932,7 +932,7 @@ func TestStep05PublicationContentionEmitsTerminalResync(t *testing.T) {
 	s.Metadata()
 	config := settings.DefaultConfig("localhost")
 	profile := *config.DefaultProfile
-	profile.Routing = step05UnstablePolicy{RoutingPolicy: profile.Routing, session: s}
+	profile.Routing = unstablePolicy{RoutingPolicy: profile.Routing, session: s}
 	config.DefaultProfile = &profile
 	implCluster.InternalSessionConfigureV2Peripheral(s, config)
 	sub, _ := s.Subscribe(cluster.EventFilter{Capacity: 4})
@@ -946,7 +946,7 @@ func TestStep05PublicationContentionEmitsTerminalResync(t *testing.T) {
 	}
 }
 
-func TestStep05SchemaRetryRejectedAfterShutdownClearsRegistration(t *testing.T) {
+func TestSchemaRetryRejectedAfterShutdownClearsRegistration(t *testing.T) {
 	s := func() *cluster.Session {
 		opaqueStorageValuexxxxxxxxxxxxxxx := new(cluster.Session)
 		return opaqueStorageValuexxxxxxxxxxxxxxx

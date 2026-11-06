@@ -162,7 +162,7 @@ func TestQueryEachUnpreparedContinuationRepairs(t *testing.T) {
 	implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
 	typ := codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
 	columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: typ})
-	state, old := step03PreparedState(t, s, columns)
+	state, old := preparedState(t, s, columns)
 	state.InternalParameters = columns
 	state.InternalInfo.PartitionKeyIndexes = []int{0}
 	handle := new(Prepared[[]byte, cqltype.Bytes])
@@ -175,20 +175,20 @@ func TestQueryEachUnpreparedContinuationRepairs(t *testing.T) {
 	serverDone := make(chan error, 1)
 	go func() {
 		for step := 0; step < 4; step++ {
-			op, stream, _, err := step03ReadRequest(peers[0])
+			op, stream, _, err := readRequest(peers[0])
 			if err != nil {
 				serverDone <- err
 				return
 			}
 			switch {
 			case step == 2 && op == 9:
-				_, err = peers[0].Write(typedTestResponse(t, 4, stream, step03PreparedBody([]byte("new"), columns, columns, 0)))
+				_, err = peers[0].Write(typedTestResponse(t, 4, stream, preparedBody([]byte("new"), columns, columns, 0)))
 			case step == 2:
 				err = fmt.Errorf("wanted PREPARE got %d", op)
 			case step == 0:
 				_, err = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody([]byte("a"), "one", "uno")))
 			case step == 1:
-				_, err = peers[0].Write(step03ErrorResponse(t, stream, protocol.ErrCodeUnprepared, old.InternalId))
+				_, err = peers[0].Write(errorResponse(t, stream, protocol.ErrCodeUnprepared, old.InternalId))
 			default:
 				_, err = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "two")))
 			}
@@ -233,7 +233,7 @@ func eachPageTimeoutQuery(t *testing.T) (*Query[codec.Unit, []byte], net.Conn) {
 func TestQueryEachPageTimeoutPerPage(t *testing.T) {
 	q, peer := eachPageTimeoutQuery(t)
 	answer := func(body []byte) {
-		_, stream, _, err := step03ReadRequest(peer)
+		_, stream, _, err := readRequest(peer)
 		if err == nil {
 			_, err = peer.Write(typedTestResponse(t, 4, stream, body))
 		}
@@ -245,7 +245,7 @@ func TestQueryEachPageTimeoutPerPage(t *testing.T) {
 	go func() {
 		defer close(served)
 		answer(runtimeRowsBody([]byte{1}, "a"))
-		if _, _, _, err := step03ReadRequest(peer); err != nil { // page 2: never answered
+		if _, _, _, err := readRequest(peer); err != nil { // page 2: never answered
 			t.Error(err)
 		}
 		// The next run: four pages, each within the page budget but
@@ -278,12 +278,12 @@ func TestQueryEachParentCancelReachesPageContext(t *testing.T) {
 	q, peer := eachPageTimeoutQuery(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		_, stream, _, err := step03ReadRequest(peer)
+		_, stream, _, err := readRequest(peer)
 		if err == nil {
 			_, err = peer.Write(typedTestResponse(t, 4, stream, runtimeRowsBody([]byte{1}, "a")))
 		}
 		if err == nil {
-			_, _, _, err = step03ReadRequest(peer)
+			_, _, _, err = readRequest(peer)
 		}
 		if err != nil {
 			t.Error(err)
@@ -307,7 +307,7 @@ func TestQueryEachParentCancelInterruptsWait(t *testing.T) {
 	t.Cleanup(q.Close)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		if _, _, _, err := step03ReadRequest(peers[0]); err != nil {
+		if _, _, _, err := readRequest(peers[0]); err != nil {
 			t.Error(err)
 		}
 		cancel()
@@ -336,9 +336,9 @@ func TestQueryEachParentCancelInterruptsRetryDelay(t *testing.T) {
 	t.Cleanup(q.Close)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		_, stream, _, err := step03ReadRequest(peers[0])
+		_, stream, _, err := readRequest(peers[0])
 		if err == nil {
-			_, err = peers[0].Write(step03ErrorResponse(t, stream, protocol.ErrCodeServer, nil))
+			_, err = peers[0].Write(errorResponse(t, stream, protocol.ErrCodeServer, nil))
 		}
 		if err != nil {
 			t.Error(err)

@@ -83,11 +83,11 @@ func BenchmarkV2ScalarBlobEncodeBorrowed(b *testing.B) {
 	}
 }
 
-var step15UUIDSink cqltype.UUID
+var uuidSink cqltype.UUID
 
 // These two cases exactly reproduce the original benchmark work: varchar into
 // existing []byte and UUID into a fixed scalar. Borrowed Text is measured apart.
-func BenchmarkStep15BaselineEquivalent(b *testing.B) {
+func BenchmarkBaselineEquivalent(b *testing.B) {
 	b.Run("Varchar1024IntoBytes", func(b *testing.B) {
 		data := bytes.Repeat([]byte{'x'}, 1024)
 		typ := CodecTestMust(cqltype.ScalarType(cqltype.TypeVarchar))
@@ -114,12 +114,12 @@ func BenchmarkStep15BaselineEquivalent(b *testing.B) {
 			if e != nil {
 				b.Fatal(e)
 			}
-			step15UUIDSink = v
+			uuidSink = v
 		}
 	})
 }
 
-func BenchmarkStep15BorrowedSizes(b *testing.B) {
+func BenchmarkBorrowedSizes(b *testing.B) {
 	for _, size := range []int{0, 32, 4096, 500 << 10} {
 		for _, text := range []bool{false, true} {
 			b.Run(fmt.Sprintf("bytes%d/text%t", size, text), func(b *testing.B) {

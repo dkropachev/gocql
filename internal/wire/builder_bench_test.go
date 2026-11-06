@@ -52,7 +52,7 @@ func BenchmarkBuilderScalarAndBorrow(b *testing.B) {
 }
 
 // Reports arena/slab/descriptor work separately from per-scalar serialization.
-func BenchmarkStep15ScalarArena(b *testing.B) {
+func BenchmarkScalarArena(b *testing.B) {
 	for _, count := range []int{1, 1024} {
 		b.Run(fmt.Sprint(count), func(b *testing.B) {
 			b.ReportAllocs()

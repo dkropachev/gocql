@@ -39,7 +39,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
-func step04ValidSupported() map[string][]string {
+func validSupported() map[string][]string {
 	return map[string][]string{"SCYLLA_SHARD": {"0"}, "SCYLLA_NR_SHARDS": {"12"}, "SCYLLA_PARTITIONER": {"org.apache.cassandra.dht.Murmur3Partitioner"}, "SCYLLA_SHARDING_ALGORITHM": {"biased-token-round-robin"}, "SCYLLA_SHARDING_IGNORE_MSB": {"0"}}
 }
 func TestV2SupportedShardingValidationBeforeAllocation(t *testing.T) {
@@ -49,7 +49,7 @@ func TestV2SupportedShardingValidationBeforeAllocation(t *testing.T) {
 			v[endpoint.InternalLwtAddMetadataMarkKey] = []string{"LWT_OPTIMIZATION_META_BIT_MASK"}
 		},
 	} {
-		values := step04ValidSupported()
+		values := validSupported()
 		change(values)
 		var protocol *cqltype.ProtocolError
 		if err := transport.InternalValidateV2Supported(values, options); !errors.As(err, &protocol) {
@@ -58,12 +58,12 @@ func TestV2SupportedShardingValidationBeforeAllocation(t *testing.T) {
 		// Legacy callers are also panic-free, even if they do not request typed setup.
 		endpoint.InternalParseSupported(values, logging.InternalNopLogger{})
 	}
-	for _, values := range []map[string][]string{nil, {}, {endpoint.InternalScyllaUseMetadataID: nil}, {"SCYLLA_SHARD_AWARE_PORT": {"19042"}, endpoint.InternalLwtAddMetadataMarkKey: {"LWT_OPTIMIZATION_META_BIT_MASK=536870912"}}, step04ValidSupported()} {
+	for _, values := range []map[string][]string{nil, {}, {endpoint.InternalScyllaUseMetadataID: nil}, {"SCYLLA_SHARD_AWARE_PORT": {"19042"}, endpoint.InternalLwtAddMetadataMarkKey: {"LWT_OPTIMIZATION_META_BIT_MASK=536870912"}}, validSupported()} {
 		if err := transport.InternalValidateV2Supported(values, options); err != nil {
 			t.Fatal("legitimate absent/optional capability rejected", values, err)
 		}
 	}
-	values := step04ValidSupported()
+	values := validSupported()
 	if got := endpoint.InternalParseSupported(values, logging.InternalNopLogger{}); implEndpoint.ScyllaHostFeaturesData(&got.ScyllaHostFeatures).InternalNrShards != 12 || implEndpoint.ScyllaHostFeaturesData(&got.ScyllaHostFeatures).InternalMsbIgnore != 0 {
 		t.Fatal("explicit zero MSB disabled valid sharding", got)
 	}
@@ -142,13 +142,13 @@ func TestV2PoolTargetArithmeticAndMaximumValidShardCount(t *testing.T) {
 	}
 }
 
-type step04BoundedOpeningDialer struct {
+type boundedOpeningDialer struct {
 	active, max, calls atomic.Int32
 	entered            chan struct{}
 	release            chan struct{}
 }
 
-func (d *step04BoundedOpeningDialer) DialHost(ctx context.Context, host *endpoint.HostInfo) (*endpoint.DialedHost, error) {
+func (d *boundedOpeningDialer) DialHost(ctx context.Context, host *endpoint.HostInfo) (*endpoint.DialedHost, error) {
 	active := d.active.Add(1)
 	defer d.active.Add(-1)
 	d.calls.Add(1)
@@ -171,7 +171,7 @@ func TestV2HugePoolTargetUsesBoundedDialWorkers(t *testing.T) {
 	defer cancel()
 	config := settings.DefaultConfig("localhost")
 	config.Pool.ConnectionsPerHost = math.MaxInt
-	dialer := &step04BoundedOpeningDialer{entered: make(chan struct{}, 64), release: make(chan struct{})}
+	dialer := &boundedOpeningDialer{entered: make(chan struct{}, 64), release: make(chan struct{})}
 	s := func() *Session {
 		opaqueStorageValuexxxxxx := new(Session)
 		SessionData(opaqueStorageValuexxxxxx).InternalCtx = ctx
@@ -211,14 +211,14 @@ func TestV2HugePoolTargetUsesBoundedDialWorkers(t *testing.T) {
 	}
 }
 func TestV2ShardingZeroMSBMapsEntireTokenRange(t *testing.T) {
-	features := endpoint.InternalParseSupported(step04ValidSupported(), logging.InternalNopLogger{})
+	features := endpoint.InternalParseSupported(validSupported(), logging.InternalNopLogger{})
 	options := settings.DefaultConfig("localhost").Pool
 	p := codecTestMust(implPool.InternalNewTypedConnPicker(&transport.Conn{InternalScyllaSupported: features}, options))
 	if p.InternalShardOf(math.MinInt64) != 0 || p.InternalShardOf(math.MaxInt64) != 11 {
 		t.Fatal("zero MSB semantics incorrect")
 	}
 	// The full32-bit LWT mask remains a wire bitset on both native architectures.
-	values := step04ValidSupported()
+	values := validSupported()
 	values[endpoint.InternalLwtAddMetadataMarkKey] = []string{"LWT_OPTIMIZATION_META_BIT_MASK=2147483648"}
 	if err := transport.InternalValidateV2Supported(values, options); err != nil {
 		t.Fatal(err)
@@ -239,21 +239,21 @@ func TestV2LogicalTLSNamesHandleIPv6AndZones(t *testing.T) {
 	}
 }
 
-type step04OpaqueTCP struct{ net.Conn }
-type step04ForwardingTCP struct {
+type opaqueTCP struct{ net.Conn }
+type forwardingTCP struct {
 	*net.TCPConn
 	mu        sync.Mutex
 	noDelay   []bool
 	keepalive []bool
 }
 
-func (c *step04ForwardingTCP) SetNoDelay(value bool) error {
+func (c *forwardingTCP) SetNoDelay(value bool) error {
 	c.mu.Lock()
 	c.noDelay = append(c.noDelay, value)
 	c.mu.Unlock()
 	return c.TCPConn.SetNoDelay(value)
 }
-func (c *step04ForwardingTCP) SetKeepAlive(value bool) error {
+func (c *forwardingTCP) SetKeepAlive(value bool) error {
 	c.mu.Lock()
 	c.keepalive = append(c.keepalive, value)
 	c.mu.Unlock()
@@ -275,12 +275,12 @@ func TestV2TCPWrapperSocketControlsApplyOrFailExplicitly(t *testing.T) {
 	defer server.Close()
 	tcp := raw.(*net.TCPConn)
 	config := settings.DefaultConfig("localhost")
-	opaque := &step04OpaqueTCP{Conn: tcp}
+	opaque := &opaqueTCP{Conn: tcp}
 	var unsupported *settings.UnsupportedSettingError
 	if err := applyV2SocketOptions(opaque, config, "tcp"); !errors.As(err, &unsupported) {
 		t.Fatal("TCP wrapper silently ignored NODELAY", err)
 	}
-	forwarding := &step04ForwardingTCP{TCPConn: tcp}
+	forwarding := &forwardingTCP{TCPConn: tcp}
 	for _, value := range []bool{true, false} {
 		config.NoDelay = value
 		if err := applyV2SocketOptions(forwarding, config, "tcp"); err != nil {

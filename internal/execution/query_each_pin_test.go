@@ -35,7 +35,7 @@ func (p *pinServe) start(t *testing.T, peers []net.Conn, answer func(peer int, t
 	for i, peer := range peers {
 		go func() {
 			for {
-				_, stream, body, err := step03ReadRequest(peer)
+				_, stream, body, err := readRequest(peer)
 				if err != nil {
 					return
 				}
@@ -155,7 +155,7 @@ func TestQueryEachPinnedRetryNextMovesHost(t *testing.T) {
 		}
 		mu.Unlock()
 		if fail {
-			return step03ErrorResponse(t, stream, protocol.ErrCodeServer, nil)
+			return errorResponse(t, stream, protocol.ErrCodeServer, nil)
 		}
 		return pinPages(t, stream, token)
 	})

@@ -180,9 +180,9 @@ func TestV2ContainerSegmentedIterationAllocationsDoNotScale(t *testing.T) {
 	}
 }
 
-var step15CollectSink []int32
+var collectSink []int32
 
-func BenchmarkStep15LazyAndMaterialized(b *testing.B) {
+func BenchmarkLazyAndMaterialized(b *testing.B) {
 	integer := CodecTestMust(cqltype.ScalarType(cqltype.TypeInt))
 	for _, n := range []int{1, 1024} {
 		for _, kind := range []string{"list", "vector", "tuple", "udt", "map"} {
@@ -243,7 +243,7 @@ func BenchmarkStep15LazyAndMaterialized(b *testing.B) {
 								if e != nil {
 									b.Fatal(e)
 								}
-								step15CollectSink = values
+								collectSink = values
 							case "clone":
 								containerSequenceSink = seq.Clone()
 							}

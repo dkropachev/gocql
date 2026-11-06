@@ -33,21 +33,21 @@ import (
 	lz4 "github.com/scylladb/gocql/v2/internal/wirecompress"
 )
 
-type step08Mode struct {
+type fixtureMode struct {
 	name        string
 	version     byte
 	compression protocol.Compressor
 	tls         bool
 }
 
-var step08Modes = []step08Mode{{"v3", 3, nil, false}, {"v4", 4, nil, false}, {"v4tls", 4, nil, true}, {"v5raw", 5, nil, false}, {"v5lz4", 5, lz4.LZ4Compressor{}, false}, {"v3tls", 3, nil, true}, {"v5rawtls", 5, nil, true}, {"v5lz4tls", 5, lz4.LZ4Compressor{}, true}}
+var fixtureModes = []fixtureMode{{"v3", 3, nil, false}, {"v4", 4, nil, false}, {"v4tls", 4, nil, true}, {"v5raw", 5, nil, false}, {"v5lz4", 5, lz4.LZ4Compressor{}, false}, {"v3tls", 3, nil, true}, {"v5rawtls", 5, nil, true}, {"v5lz4tls", 5, lz4.LZ4Compressor{}, true}}
 
-func step08StreamSession(t testing.TB, mode step08Mode, spy ...bool) (*cluster.Session, *transport.Conn, net.Conn) {
+func fixtureStreamSession(t testing.TB, mode fixtureMode, spy ...bool) (*cluster.Session, *transport.Conn, net.Conn) {
 	t.Helper()
 	s, _, _ := runtimeTestSession(t, 0)
 	c, peer := typedTestConn(t, mode.version, mode.compression)
 	if mode.tls {
-		cert, config := step04TLS(t)
+		cert, config := testTLS(t)
 		rawClient := c.InternalR.(*transport.InternalConnReader).InternalConn
 		client := tls.Client(rawClient, config)
 		server := tls.Server(peer, &tls.Config{Certificates: []tls.Certificate{cert}})
@@ -59,13 +59,13 @@ func step08StreamSession(t testing.TB, mode step08Mode, spy ...bool) (*cluster.S
 		if err := <-done; err != nil {
 			t.Fatal(err)
 		}
-		clientConn := &step08TLSConn{Conn: client, raw: rawClient}
+		clientConn := &tlsConn{Conn: client, raw: rawClient}
 		c.InternalR.(*transport.InternalConnReader).InternalConn = clientConn
 		c.InternalW = &transport.InternalDeadlineContextWriter{InternalW: clientConn, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
-		peer = &step08TLSConn{Conn: server, raw: peer}
+		peer = &tlsConn{Conn: server, raw: peer}
 	}
 	if len(spy) > 0 && spy[0] {
-		c.InternalR.(*transport.InternalConnReader).InternalConn = &step08ReadTargets{Conn: c.InternalR.(*transport.InternalConnReader).InternalConn}
+		c.InternalR.(*transport.InternalConnReader).InternalConn = &fixtureReadTargets{Conn: c.InternalR.(*transport.InternalConnReader).InternalConn}
 	}
 	c.InternalHost = func() *endpoint.HostInfo {
 		opaqueStorageValue := new(endpoint.HostInfo)
@@ -83,7 +83,7 @@ func step08StreamSession(t testing.TB, mode step08Mode, spy ...bool) (*cluster.S
 	return s, c, peer
 }
 
-func step08Packet(mode step08Mode, frame []byte) []byte {
+func fixturePacket(mode fixtureMode, frame []byte) []byte {
 	if mode.version < 5 {
 		return frame
 	}
@@ -96,14 +96,14 @@ func step08Packet(mode step08Mode, frame []byte) []byte {
 	return packet
 }
 
-func TestStep08StreamIndependentEverySplitAndTruncation(t *testing.T) {
-	for _, mode := range step08Modes {
+func TestStreamIndependentEverySplitAndTruncation(t *testing.T) {
+	for _, mode := range fixtureModes {
 		t.Run(mode.name, func(t *testing.T) {
-			sample := step08Packet(mode, testkit.BlobRows(mode.version, 0, []byte("first"), []byte("last")))
+			sample := fixturePacket(mode, testkit.BlobRows(mode.version, 0, []byte("first"), []byte("last")))
 			for _, truncate := range []bool{false, true} {
 				t.Run(fmt.Sprintf("truncate=%v", truncate), func(t *testing.T) {
 					for split := 0; split < len(sample); split++ {
-						s, c, peer := step08StreamSession(t, mode)
+						s, c, peer := fixtureStreamSession(t, mode)
 						done := make(chan struct{})
 						finish := make(chan struct{})
 						var finishOnce sync.Once
@@ -112,7 +112,7 @@ func TestStep08StreamIndependentEverySplitAndTruncation(t *testing.T) {
 						go func() {
 							defer close(done)
 							stream := typedTestReadRequest(t, c, peer)
-							packet := step08Packet(mode, testkit.BlobRows(mode.version, uint16(stream), []byte("first"), []byte("last")))
+							packet := fixturePacket(mode, testkit.BlobRows(mode.version, uint16(stream), []byte("first"), []byte("last")))
 							_, _ = peer.Write(packet[:split])
 							if !truncate {
 								_, _ = peer.Write(packet[split:])
@@ -157,10 +157,10 @@ func TestStep08StreamIndependentEverySplitAndTruncation(t *testing.T) {
 	}
 }
 
-func TestStep08StreamIndependentFirstRowGate(t *testing.T) {
-	for _, mode := range step08Modes {
+func TestStreamIndependentFirstRowGate(t *testing.T) {
+	for _, mode := range fixtureModes {
 		t.Run(mode.name, func(t *testing.T) {
-			s, c, peer := step08StreamSession(t, mode)
+			s, c, peer := fixtureStreamSession(t, mode)
 			release := make(chan struct{})
 			done := make(chan struct{})
 			t.Cleanup(func() {
@@ -209,8 +209,8 @@ func TestStep08StreamIndependentFirstRowGate(t *testing.T) {
 	}
 }
 
-func TestStep08StreamIndependentCorruptChecksums(t *testing.T) {
-	for _, mode := range step08Modes {
+func TestStreamIndependentCorruptChecksums(t *testing.T) {
+	for _, mode := range fixtureModes {
 		if mode.version != 5 {
 			continue
 		}
@@ -222,7 +222,7 @@ func TestStep08StreamIndependentCorruptChecksums(t *testing.T) {
 			}
 			for _, checksum := range []string{"header", "payload"} {
 				for i := 0; i < map[string]int{"header": 3, "payload": 4}[checksum]; i++ {
-					s, c, peer := step08StreamSession(t, mode)
+					s, c, peer := fixtureStreamSession(t, mode)
 					done := make(chan struct{})
 					finish := make(chan struct{})
 					var finishOnce sync.Once
@@ -231,7 +231,7 @@ func TestStep08StreamIndependentCorruptChecksums(t *testing.T) {
 					go func() {
 						defer close(done)
 						stream := typedTestReadRequest(t, c, peer)
-						packet := step08Packet(mode, testkit.BlobRows(mode.version, uint16(stream), []byte("forbidden")))
+						packet := fixturePacket(mode, testkit.BlobRows(mode.version, uint16(stream), []byte("forbidden")))
 						offset := headerSize - 3 + i
 						if checksum == "payload" {
 							offset = len(packet) - 4 + i
@@ -266,16 +266,16 @@ func TestStep08StreamIndependentCorruptChecksums(t *testing.T) {
 	}
 }
 
-type step08FinalAccess struct {
+type finalAccess struct {
 	entered, leave chan struct{}
 	writes         atomic.Int32
 }
 
-func (d *step08FinalAccess) Compile(cqltype.Columns) (codec.StreamRowPlan[[]byte], error) {
+func (d *finalAccess) Compile(cqltype.Columns) (codec.StreamRowPlan[[]byte], error) {
 	return d, nil
 }
-func (d *step08FinalAccess) Reset(dst *[]byte) { *dst = (*dst)[:0] }
-func (d *step08FinalAccess) DecodeInto(r *codec.StreamRowReader, dst *[]byte) error {
+func (d *finalAccess) Reset(dst *[]byte) { *dst = (*dst)[:0] }
+func (d *finalAccess) DecodeInto(r *codec.StreamRowReader, dst *[]byte) error {
 	plan, err := codec.StreamBlob.Compile(codecTestMust(cqltype.ScalarType(cqltype.TypeBlob)))
 	if err != nil {
 		return err
@@ -289,20 +289,20 @@ func (d *step08FinalAccess) DecodeInto(r *codec.StreamRowReader, dst *[]byte) er
 	d.writes.Add(1)
 	return nil
 }
-func TestStep08StreamCloseDuringFinalCallerAccess(t *testing.T) {
-	for _, mode := range step08Modes {
+func TestStreamCloseDuringFinalCallerAccess(t *testing.T) {
+	for _, mode := range fixtureModes {
 		for _, action := range []string{"close", "cancel", "session"} {
 			t.Run(mode.name+"-"+action, func(t *testing.T) {
-				s, c, peer := step08StreamSession(t, mode)
+				s, c, peer := fixtureStreamSession(t, mode)
 				go func() {
 					stream := typedTestReadRequest(t, c, peer)
-					_, _ = peer.Write(step08Packet(mode, testkit.BlobRows(mode.version, uint16(stream), []byte("final"))))
+					_, _ = peer.Write(fixturePacket(mode, testkit.BlobRows(mode.version, uint16(stream), []byte("final"))))
 				}()
 				b := runtimeQuery(t)
 				defer b.Close()
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				decoder := &step08FinalAccess{entered: make(chan struct{}), leave: make(chan struct{})}
+				decoder := &finalAccess{entered: make(chan struct{}), leave: make(chan struct{})}
 				cursor, err := RunStream(ctx, s, b, decoder, StreamOptions{Incremental: true})
 				if err != nil {
 					t.Fatal(err)
@@ -352,7 +352,7 @@ func TestStep08StreamCloseDuringFinalCallerAccess(t *testing.T) {
 	}
 }
 
-func TestStep08LoggerConcurrentCapture(t *testing.T) {
+func TestLoggerConcurrentCapture(t *testing.T) {
 	logger := &logging.InternalTestLogger{}
 	done := make(chan struct{}, 8)
 	for i := 0; i < 8; i++ {
@@ -376,23 +376,23 @@ func TestStep08LoggerConcurrentCapture(t *testing.T) {
 
 // A failed stream write must poison its connection and release canonical input,
 // whether no byte or a request prefix reached the peer.
-type step08InterruptedWriter struct {
+type interruptedWriter struct {
 	net.Conn
 	accepted int
 	calls    atomic.Int32
 }
 
-func (w *step08InterruptedWriter) Write(p []byte) (int, error) {
+func (w *interruptedWriter) Write(p []byte) (int, error) {
 	w.calls.Add(1)
 	return min(w.accepted, len(p)), net.ErrClosed
 }
-func TestStep08StreamInterruptedRequestWrite(t *testing.T) {
-	for _, mode := range step08Modes {
+func TestStreamInterruptedRequestWrite(t *testing.T) {
+	for _, mode := range fixtureModes {
 		for _, accepted := range []int{0, 1, 8} {
 			t.Run(mode.name+fmt.Sprint(accepted), func(t *testing.T) {
-				s, c, peer := step08StreamSession(t, mode)
+				s, c, peer := fixtureStreamSession(t, mode)
 				defer peer.Close()
-				writer := &step08InterruptedWriter{Conn: c.InternalR.(*transport.InternalConnReader).InternalConn, accepted: accepted}
+				writer := &interruptedWriter{Conn: c.InternalR.(*transport.InternalConnReader).InternalConn, accepted: accepted}
 				c.InternalW.(*transport.InternalDeadlineContextWriter).InternalW = writer
 				b := runtimeQuery(t)
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -416,13 +416,13 @@ func TestStep08StreamInterruptedRequestWrite(t *testing.T) {
 	}
 }
 
-func TestStep08IndependentRawDirectRead(t *testing.T) {
-	for _, mode := range step08Modes {
+func TestIndependentRawDirectRead(t *testing.T) {
+	for _, mode := range fixtureModes {
 		if mode.version == 5 {
 			continue
 		}
 		t.Run(mode.name, func(t *testing.T) {
-			s, c, peer := step08StreamSession(t, mode, true)
+			s, c, peer := fixtureStreamSession(t, mode, true)
 			payload := bytes.Repeat([]byte{0x71}, 400<<10)
 			done := make(chan struct{})
 			go func() {
@@ -441,7 +441,7 @@ func TestStep08IndependentRawDirectRead(t *testing.T) {
 			if !cursor.NextInto(&dst) || !bytes.Equal(dst, payload) || &dst[0] != backing {
 				t.Fatal("lost final storage", cursor.Err())
 			}
-			spy := c.InternalR.(*transport.InternalConnReader).InternalConn.(*step08ReadTargets)
+			spy := c.InternalR.(*transport.InternalConnReader).InternalConn.(*fixtureReadTargets)
 			spy.mu.Lock()
 			direct := 0
 			otherBulk := 0
@@ -472,14 +472,14 @@ func TestStep08IndependentRawDirectRead(t *testing.T) {
 }
 
 // Fault fixtures interrupt TLS through the socket, including blocked close alerts.
-type step08TLSConn struct {
+type tlsConn struct {
 	*tls.Conn
 	raw net.Conn
 }
 
-func (c *step08TLSConn) Close() error { return c.raw.Close() }
+func (c *tlsConn) Close() error { return c.raw.Close() }
 
-type step08ReadTargets struct {
+type fixtureReadTargets struct {
 	net.Conn
 	mu      sync.Mutex
 	targets []struct {
@@ -488,7 +488,7 @@ type step08ReadTargets struct {
 	}
 }
 
-func (c *step08ReadTargets) Read(p []byte) (int, error) {
+func (c *fixtureReadTargets) Read(p []byte) (int, error) {
 	n, err := c.Conn.Read(p)
 	c.mu.Lock()
 	c.targets = append(c.targets, struct {

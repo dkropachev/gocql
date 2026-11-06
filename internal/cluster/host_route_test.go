@@ -133,11 +133,11 @@ const hostRoutingShards = 4
 // placement for ks.table whose replicas are hosts 1, 2 and 3.
 func hostRoutingSession(b testing.TB, tablets bool) *Session {
 	b.Helper()
-	s := step06Session(b)
+	s := testSession(b)
 	m := s.Metadata()
 	k := implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}
 	if tablets {
-		root, _ := implRouting.InternalUpdateTabletRange(nil, step06Hint(b, -1<<63+1, 1<<63-1, cql.Option[uint64]{Value: 1, Set: true}, hTarget(1, 1), hTarget(2, 2), hTarget(3, 3)))
+		root, _ := implRouting.InternalUpdateTabletRange(nil, testHint(b, -1<<63+1, 1<<63-1, cql.Option[uint64]{Value: 1, Set: true}, hTarget(1, 1), hTarget(2, 2), hTarget(3, 3)))
 		routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, k, routing.InternalIndexTabletPlacement(implRouting.InternalTabletPlacement{InternalIdentity: "identity-1", InternalRanges: root}), implRouting.InternalComparePlacementTable)
 	} else {
 		routing.SnapshotData(m).InternalKeyspaces["ks"].TabletBased = false

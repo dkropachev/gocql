@@ -23,7 +23,7 @@ func TestReceiveCacheSaturationStatistics(t *testing.T) {
 	}
 }
 
-func TestStep15ReceiveCacheOwnership(t *testing.T) {
+func TestReceiveCacheOwnership(t *testing.T) {
 	cache := new(ReceiveCache)
 	data, epoch := cache.Acquire(4096)
 	data[0] = 71
@@ -96,7 +96,7 @@ func CodecTestChain(t *testing.T, b []byte) Chain {
 	return c
 }
 
-func TestStep15ReceiveCacheMixedAdmission(t *testing.T) {
+func TestReceiveCacheMixedAdmission(t *testing.T) {
 	cache := new(ReceiveCache)
 	for i := 0; i < 4; i++ {
 		cache.Release(make([]byte, 32+i), cache.epoch)

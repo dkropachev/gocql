@@ -48,14 +48,14 @@ func TestStreamAbandonedIncrementalCloseKeepsConnection(t *testing.T) {
 			{"over-drain-limit", []string{"a", string(bytes.Repeat([]byte{'x'}, 1<<20+1))}, 1, false},
 		} {
 			t.Run(mode.name+"/"+tc.name, func(t *testing.T) {
-				s, c, peer := step07StreamSession(t, mode.proto, mode.compression)
+				s, c, peer := rowStreamSession(t, mode.proto, mode.compression)
 				served := make(chan struct{})
 				go func() {
 					defer close(served)
 					// The first stream's page has more pages; the second is final.
 					for _, body := range [][]byte{runtimeRowsBody([]byte{7}, tc.rows...), runtimeRowsBody(nil, "next")} {
 						stream := typedTestReadRequest(t, c, peer)
-						if _, err := peer.Write(step07Response(t, c, stream, body)); err != nil {
+						if _, err := peer.Write(testResponse(t, c, stream, body)); err != nil {
 							return
 						}
 						if !tc.keep {

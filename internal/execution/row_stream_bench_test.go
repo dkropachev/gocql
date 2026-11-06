@@ -36,7 +36,7 @@ import (
 // Final caller storage and immutable peer response fixtures are outside the
 // measured loop. Measurements include net.Pipe/peer scheduling and complete
 // logical API setup; they are not database/socket throughput numbers.
-func BenchmarkStep07ExecutionStorage(b *testing.B) {
+func BenchmarkExecutionStorage(b *testing.B) {
 	for _, shape := range []struct{ rows, cell int }{{1, 1024}, {100, 1024}, {1000, 1024}, {1, 400 << 10}, {1, 8 << 20}} {
 		for _, mode := range []string{"row", "into", "stream"} {
 			b.Run(fmt.Sprintf("%s/rows=%d/cell=%d", mode, shape.rows, shape.cell), func(b *testing.B) {
@@ -132,18 +132,18 @@ func BenchmarkStep07ExecutionStorage(b *testing.B) {
 // Fixture construction and seeded final caller storage are outside measurement.
 // This measures public API setup/receive against the independent wire oracle,
 // including peer scheduling. It does not measure native database throughput.
-func BenchmarkStep08IndependentStreamOracle(b *testing.B) {
-	for _, mode := range step08Modes {
+func BenchmarkIndependentStreamOracle(b *testing.B) {
+	for _, mode := range fixtureModes {
 		for _, shape := range []struct{ rows, cell int }{{1, 1024}, {32, 1024}, {256, 1024}, {1, 400 << 10}, {1, 8 << 20}} {
 			b.Run(fmt.Sprintf("%s/rows=%d/cell=%d", mode.name, shape.rows, shape.cell), func(b *testing.B) {
-				s, c, peer := step08StreamSession(b, mode)
+				s, c, peer := fixtureStreamSession(b, mode)
 				values := make([][]byte, shape.rows)
 				for i := range values {
 					values[i] = bytes.Repeat([]byte{byte(i)}, shape.cell)
 				}
 				frame := testkit.BlobRows(mode.version, 0, values...)
 				// Payload is built once; only stream/checksum fields change.
-				packet := step08Packet(mode, frame)
+				packet := fixturePacket(mode, frame)
 				done := make(chan struct{})
 				go func() {
 					defer close(done)

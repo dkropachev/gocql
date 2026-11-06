@@ -812,36 +812,36 @@ func (p v2UnavailableHostsRouting) unavailable(metadata *gocql.MetadataSnapshot)
 	return &snapshot
 }
 
-type step03LiveDestination struct {
+type liveDestination struct {
 	Value   int32
 	Payload gocql.Bytes
 }
-type step03LiveDecoder struct {
+type liveDecoder struct {
 	calls *atomic.Int32
-	base  gocql.RowDecoder[step03LiveDestination]
+	base  gocql.RowDecoder[liveDestination]
 }
 
-func (d step03LiveDecoder) Compile(c gocql.Columns) (gocql.RowPlan[step03LiveDestination], error) {
+func (d liveDecoder) Compile(c gocql.Columns) (gocql.RowPlan[liveDestination], error) {
 	d.calls.Add(1)
 	return d.base.Compile(c)
 }
-func (d step03LiveDecoder) Clone(v step03LiveDestination) step03LiveDestination {
+func (d liveDecoder) Clone(v liveDestination) liveDestination {
 	return d.base.Clone(v)
 }
 
-type step03CountingDecoder struct {
+type countingDecoder struct {
 	calls *atomic.Int32
 	hook  func()
 }
 
-func (d step03CountingDecoder) Compile(c gocql.Columns) (gocql.RowPlan[gocql.Bytes], error) {
+func (d countingDecoder) Compile(c gocql.Columns) (gocql.RowPlan[gocql.Bytes], error) {
 	d.calls.Add(1)
 	if d.hook != nil {
 		d.hook()
 	}
 	return gocql.OneColumn(gocql.BlobCodec).Compile(c)
 }
-func (d step03CountingDecoder) Clone(v gocql.Bytes) gocql.Bytes { return v.Clone() }
+func (d countingDecoder) Clone(v gocql.Bytes) gocql.Bytes { return v.Clone() }
 
 // Independent native request fixtures produce byte oracles for the canonical
 // span writer. These own already-encoded test bytes only; no production request
@@ -1024,7 +1024,7 @@ func fixtureWriteExecute(f *framer, streamID int, preparedID, resultMetadataID [
 	return f.Finish()
 }
 
-type step13Conviction struct {
+type testConviction struct {
 	mu      sync.Mutex
 	cause   error
 	hosts   []gocql.HostSnapshot
@@ -1033,7 +1033,7 @@ type step13Conviction struct {
 	resets  int
 }
 
-func (p *step13Conviction) AddFailure(err error, host gocql.HostSnapshot) bool {
+func (p *testConviction) AddFailure(err error, host gocql.HostSnapshot) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if !errors.Is(err, p.cause) {
@@ -1043,7 +1043,7 @@ func (p *step13Conviction) AddFailure(err error, host gocql.HostSnapshot) bool {
 	p.hosts = append(p.hosts, host)
 	return p.verdict
 }
-func (p *step13Conviction) Reset(host gocql.HostSnapshot) {
+func (p *testConviction) Reset(host gocql.HostSnapshot) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if len(p.hosts) == 0 || p.hosts[0].ID != host.ID {
@@ -1052,9 +1052,9 @@ func (p *step13Conviction) Reset(host gocql.HostSnapshot) {
 	p.resets++
 }
 
-type step13NoReconnect struct{}
+type noReconnect struct{}
 
-func (step13NoReconnect) Delay(int) (time.Duration, bool) { return 0, false }
+func (noReconnect) Delay(int) (time.Duration, bool) { return 0, false }
 
 var ScyllaGetSourcePort = retiredScyllaGetSourcePort
 
@@ -1442,19 +1442,19 @@ func (c *sessionCache) NumberOfTickets() int {
 // TCP_INFO counters are kernel-accounted bytes for exactly these client sockets.
 // /proc/self/io syscr/syscw are whole-process syscall counts (including background
 // control work and the counter read); they are labeled separately from Read calls.
-type step15IO struct {
+type testIO struct {
 	mu    sync.Mutex
 	conns []*net.TCPConn
 }
 
-func (s *step15IO) add(c net.Conn) {
+func (s *testIO) add(c net.Conn) {
 	if tcp, ok := c.(*net.TCPConn); ok {
 		s.mu.Lock()
 		s.conns = append(s.conns, tcp)
 		s.mu.Unlock()
 	}
 }
-func (s *step15IO) snapshot() (reads, writes, readBytes, writeBytes int64) {
+func (s *testIO) snapshot() (reads, writes, readBytes, writeBytes int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, conn := range s.conns {

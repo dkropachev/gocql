@@ -27,7 +27,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/segment"
 )
 
-func step04WriteResponse(t *testing.T, c *transport.Conn, server net.Conn, stream int, body []byte) {
+func writeResponse(t *testing.T, c *transport.Conn, server net.Conn, stream int, body []byte) {
 	t.Helper()
 	frame := typedTestResponse(t, c.InternalVersion, stream, body)
 	if c.InternalVersion < 5 {
@@ -54,13 +54,13 @@ func step04WriteResponse(t *testing.T, c *transport.Conn, server net.Conn, strea
 
 var _ io.Reader = (*transport.InternalVerifiedStreamUnits)(nil)
 
-type step04AcceptedWriter struct {
+type acceptedWriter struct {
 	net.Conn
 	entered chan struct{}
 	once    sync.Once
 }
 
-func (w *step04AcceptedWriter) Write(b []byte) (int, error) {
+func (w *acceptedWriter) Write(b []byte) (int, error) {
 	w.once.Do(func() { close(w.entered) })
 	return w.Conn.Write(b)
 }

@@ -138,7 +138,7 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	conn := codecTestMust(implCluster.InternalSessionSelectTypedConn(s, ctx, gocql.RoutingInfo{}, nil))
-	table := fmt.Sprintf("step04_stream_%x", time.Now().UnixNano())
+	table := fmt.Sprintf("pool_stream_%x", time.Now().UnixNano())
 	qualified := (fixtureKeyspace("") + ".") + table
 	ddl := func(cql string) {
 		b := codecTestMust(BindUnpreparedOwned(gocql.Statement[gocql.Unit, gocql.Unit]{CQL: cql, Params: gocql.NoParams, Rows: gocql.NoRows}, gocql.NewColumns(), gocql.Unit{}))

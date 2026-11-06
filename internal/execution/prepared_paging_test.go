@@ -58,7 +58,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-func step03Page(t *testing.T, values ...string) *Page[implCqltype.Bytes] {
+func testPage(t *testing.T, values ...string) *Page[implCqltype.Bytes] {
 	t.Helper()
 	typ := codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))
 	columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Name: "value", Type: typ})
@@ -71,7 +71,7 @@ func step03Page(t *testing.T, values ...string) *Page[implCqltype.Bytes] {
 	return codecTestMust(InternalNewPage(&transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{Columns: columns, Rows: chain, RowCount: int32(len(values)), Owner: wire.NewLease(chain, nil), State: implModel.CompletePageState()}}, codec.OneColumn(codec.BlobCodec), nil))
 }
 func TestV2PageNextIntoMixedCurrentAndRetention(t *testing.T) {
-	p := step03Page(t, "one", "two", "three")
+	p := testPage(t, "one", "two", "three")
 	defer p.Close()
 	var first, second implCqltype.Bytes
 	if !p.NextInto(&first) || string(first.OwnedBytes()) != "one" {
@@ -111,12 +111,12 @@ func TestV2PageNextIntoMixedCurrentAndRetention(t *testing.T) {
 func TestV2PageNextIntoTerminalClearing(t *testing.T) {
 	for _, mode := range []string{"empty", "nil", "closed", "malformed", "cancelled"} {
 		t.Run(mode, func(t *testing.T) {
-			p := step03Page(t, "one")
+			p := testPage(t, "one")
 			defer p.Close()
 			dst := implCqltype.BorrowBytes([]byte("stale"))
 			switch mode {
 			case "empty":
-				p = step03Page(t)
+				p = testPage(t)
 				defer p.Close()
 			case "nil":
 				if p.NextInto(nil) {
@@ -329,25 +329,25 @@ func TestV2RowsCycleAndBudgetBeforePrefetch(t *testing.T) {
 	}
 }
 
-type step03CountingDecoder struct {
+type countingDecoder struct {
 	calls *atomic.Int32
 	hook  func()
 }
 
-func (d step03CountingDecoder) Compile(c implCqltype.Columns) (codec.RowPlan[implCqltype.Bytes], error) {
+func (d countingDecoder) Compile(c implCqltype.Columns) (codec.RowPlan[implCqltype.Bytes], error) {
 	d.calls.Add(1)
 	if d.hook != nil {
 		d.hook()
 	}
 	return codec.OneColumn(codec.BlobCodec).Compile(c)
 }
-func (d step03CountingDecoder) Clone(v implCqltype.Bytes) implCqltype.Bytes { return v.Clone() }
+func (d countingDecoder) Clone(v implCqltype.Bytes) implCqltype.Bytes { return v.Clone() }
 func TestV2ResultPlanCacheScopedReuseAndNoCompileLock(t *testing.T) {
 	cols := implCqltype.NewColumns(implCqltype.ColumnSpec{Name: "v", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
 	entry := &implModel.ResultSchemaIdentity{InternalColumns: cols}
 	cache := &InternalResultPlanCache[implCqltype.Bytes]{}
 	var calls atomic.Int32
-	d := step03CountingDecoder{calls: &calls}
+	d := countingDecoder{calls: &calls}
 	for i := 0; i < 100; i++ {
 		if _, err := cache.InternalSelectPlan(&transport.InternalResponsePage{InternalMetadata: entry, InternalResponseData: implModel.ResponseData{Columns: cols}}, d); err != nil {
 			t.Fatal(err)
@@ -396,7 +396,7 @@ func TestV2ResultPlanCacheUnidentifiedSwitchRetiresIdentityHit(t *testing.T) {
 	entry := &implModel.ResultSchemaIdentity{InternalColumns: cols}
 	cache := &InternalResultPlanCache[implCqltype.Bytes]{}
 	var calls atomic.Int32
-	d := step03CountingDecoder{calls: &calls}
+	d := countingDecoder{calls: &calls}
 	identified := &transport.InternalResponsePage{InternalMetadata: entry, InternalResponseData: implModel.ResponseData{Columns: cols}}
 	for _, step := range []struct {
 		response *transport.InternalResponsePage
@@ -416,7 +416,7 @@ func TestV2ResultPlanCacheUnidentifiedSwitchRetiresIdentityHit(t *testing.T) {
 		}
 	}
 }
-func step03PreparedState(t *testing.T, s *cluster.Session, columns implCqltype.Columns) (*InternalPreparedState, *InternalHostPrepared) {
+func preparedState(t *testing.T, s *cluster.Session, columns implCqltype.Columns) (*InternalPreparedState, *InternalHostPrepared) {
 	t.Helper()
 	tracker := InternalRuntimeFor(s).InternalSchemaTracker()
 	dependencies := tracker.InternalDependencies("ks", implCqltype.NewColumns(), columns)
@@ -433,7 +433,7 @@ func TestV2PreparedResponseRetainsMetadataAcrossSchemaChange(t *testing.T) {
 		return opaqueStorageValue
 	}()
 	columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
-	state, hp := step03PreparedState(t, s, columns)
+	state, hp := preparedState(t, s, columns)
 	implCluster.InternalSessionInvalidatePreparedSchema(s, cluster.Event{Keyspace: "other", Object: "other", Target: "TABLE"})
 	if !hp.InternalEpoch.InternalCurrent() {
 		t.Fatal("unrelated keyspace invalidated")
@@ -464,7 +464,7 @@ func TestV2PreparedPublicationExactEntryEpochAndOpaqueIDs(t *testing.T) {
 	}()
 	blob := codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))
 	columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: blob})
-	state, old := step03PreparedState(t, s, columns)
+	state, old := preparedState(t, s, columns)
 	id := implCqltype.UUID{15: 1}
 	newer := *old
 	newer.InternalRevision++
@@ -501,7 +501,7 @@ func TestV2PreparedDependencyTypesAndSnapshotChanges(t *testing.T) {
 	integer := codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))
 	udt := codecTestMust(implCqltype.UDTType("ks", "wanted", implCqltype.ColumnSpec{Name: "n", Type: integer}))
 	columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "v", Type: udt})
-	_, hp := step03PreparedState(t, s, columns)
+	_, hp := preparedState(t, s, columns)
 	implCluster.InternalSessionInvalidatePreparedSchema(s, cluster.Event{Keyspace: "ks", Object: "unrelated", Target: "TYPE"})
 	if !hp.InternalEpoch.InternalCurrent() {
 		t.Fatal("unrelated UDT invalidated")
@@ -531,7 +531,7 @@ func TestV2PreparedDependencyTypesAndSnapshotChanges(t *testing.T) {
 	}
 }
 
-func step03PreparedBody(id []byte, parameters, columns implCqltype.Columns, pk ...int) []byte {
+func preparedBody(id []byte, parameters, columns implCqltype.Columns, pk ...int) []byte {
 	b := binary.BigEndian.AppendUint32(nil, 4)
 	b = binary.BigEndian.AppendUint16(b, uint16(len(id)))
 	b = append(b, id...)
@@ -554,7 +554,7 @@ func step03PreparedBody(id []byte, parameters, columns implCqltype.Columns, pk .
 	}
 	return b
 }
-func step03ReadRequest(server net.Conn) (byte, int, []byte, error) {
+func readRequest(server net.Conn) (byte, int, []byte, error) {
 	var h [9]byte
 	if _, e := io.ReadFull(server, h[:]); e != nil {
 		return 0, 0, nil, e
@@ -569,11 +569,11 @@ func TestV2PrepareHostFlightsCancellationAndSchemaCompatibility(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			conn := conns[0]
 			columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
-			state, old := step03PreparedState(t, s, columns)
+			state, old := preparedState(t, s, columns)
 			entered, release := make(chan struct{}), make(chan struct{})
 			serverDone := make(chan error, 1)
 			go func() {
-				op, stream, _, err := step03ReadRequest(peers[0])
+				op, stream, _, err := readRequest(peers[0])
 				if err != nil {
 					serverDone <- err
 					return
@@ -588,7 +588,7 @@ func TestV2PrepareHostFlightsCancellationAndSchemaCompatibility(t *testing.T) {
 				if incompatible {
 					params = implCqltype.NewColumns(implCqltype.ColumnSpec{Name: "new", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))})
 				}
-				_, err = peers[0].Write(typedTestResponse(t, 4, stream, step03PreparedBody([]byte("new"), params, columns)))
+				_, err = peers[0].Write(typedTestResponse(t, 4, stream, preparedBody([]byte("new"), params, columns)))
 				serverDone <- err
 			}()
 			ctx, cancel := context.WithCancel(context.Background())
@@ -648,7 +648,7 @@ func TestV2PrepareHostFlightsCancellationAndSchemaCompatibility(t *testing.T) {
 func TestV2WarmPreparedHandleSurvivesDiscoveryCacheLock(t *testing.T) {
 	s, conns, _ := runtimeTestSession(t, 1)
 	cols := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
-	state, hp := step03PreparedState(t, s, cols)
+	state, hp := preparedState(t, s, cols)
 	rt := InternalRuntimeFor(s)
 	rt.InternalMu.Lock()
 	done := make(chan error, 1)
@@ -678,7 +678,7 @@ func TestV2PreparedMetadataIntroducesUDTDependency(t *testing.T) {
 		return opaqueStorageValuexxx
 	}()
 	columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
-	state, old := step03PreparedState(t, s, columns)
+	state, old := preparedState(t, s, columns)
 	udt := codecTestMust(implCqltype.UDTType("ks", "introduced", implCqltype.ColumnSpec{Name: "n", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))}))
 	changed := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: udt})
 	response := &transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("next")}}
@@ -701,7 +701,7 @@ func TestV2PreparedNewDependencyEventDuringAttemptFencesPublication(t *testing.T
 		return opaqueStorageValuexxxx
 	}()
 	columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
-	state, old := step03PreparedState(t, s, columns)
+	state, old := preparedState(t, s, columns)
 	started := state.InternalDependencies.InternalTracker.InternalStart()
 	implCluster.InternalSessionInvalidatePreparedSchema(s, cluster.Event{Keyspace: "ks", Target: "TYPE", Object: "introduced"})
 	udt := codecTestMust(implCqltype.UDTType("ks", "introduced", implCqltype.ColumnSpec{Name: "n", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))}))
@@ -717,7 +717,7 @@ func TestV2PreparedNewDependencyEventDuringAttemptFencesPublication(t *testing.T
 		t.Fatal("losing response lost supplied metadata")
 	}
 }
-func step03ErrorResponse(t *testing.T, stream, code int, id []byte) []byte {
+func errorResponse(t *testing.T, stream, code int, id []byte) []byte {
 	body := binary.BigEndian.AppendUint32(nil, uint32(code))
 	body = binary.BigEndian.AppendUint16(body, 4)
 	body = append(body, "test"...)
@@ -730,9 +730,9 @@ func step03ErrorResponse(t *testing.T, stream, code int, id []byte) []byte {
 	return response
 }
 
-type step03RetryOnce struct{}
+type retryOnce struct{}
 
-func (step03RetryOnce) Decide(e retry.Attempt) retry.Decision {
+func (retryOnce) Decide(e retry.Attempt) retry.Decision {
 	if e.Number == 1 {
 		return retry.Decision{Action: retry.Same}
 	}
@@ -743,7 +743,7 @@ func TestV2PreparedRetryRepreparePagingNeverReencodes(t *testing.T) {
 	implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
 	typ := codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))
 	columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: typ})
-	state, old := step03PreparedState(t, s, columns)
+	state, old := preparedState(t, s, columns)
 	state.InternalParameters = columns
 	state.InternalInfo.PartitionKeyIndexes = []int{0}
 	count := 0
@@ -760,13 +760,13 @@ func TestV2PreparedRetryRepreparePagingNeverReencodes(t *testing.T) {
 	}()
 	input := []byte("canonical-payload")
 	bound := codecTestMust(BindBorrowed(handle, input))
-	spy := &step15CanonicalWriter{step15Writer: conns[0].InternalW, payload: input}
+	spy := &canonicalWriter{testWriter: conns[0].InternalW, payload: input}
 	conns[0].InternalW = spy
 	defer bound.Close()
 	serverDone := make(chan error, 1)
 	go func() {
 		for step := 0; step < 5; step++ {
-			op, stream, body, err := step03ReadRequest(peers[0])
+			op, stream, body, err := readRequest(peers[0])
 			if err != nil {
 				serverDone <- err
 				return
@@ -776,7 +776,7 @@ func TestV2PreparedRetryRepreparePagingNeverReencodes(t *testing.T) {
 					serverDone <- fmt.Errorf("wanted PREPARE got %d", op)
 					return
 				}
-				_, err = peers[0].Write(typedTestResponse(t, 4, stream, step03PreparedBody([]byte("new"), columns, columns, 0)))
+				_, err = peers[0].Write(typedTestResponse(t, 4, stream, preparedBody([]byte("new"), columns, columns, 0)))
 			} else {
 				if op != 10 || !bytes.Contains(body, input) {
 					serverDone <- fmt.Errorf("missing original execution bytes step %d", step)
@@ -784,9 +784,9 @@ func TestV2PreparedRetryRepreparePagingNeverReencodes(t *testing.T) {
 				}
 				switch step {
 				case 0:
-					_, err = peers[0].Write(step03ErrorResponse(t, stream, protocol.ErrCodeServer, nil))
+					_, err = peers[0].Write(errorResponse(t, stream, protocol.ErrCodeServer, nil))
 				case 1:
-					_, err = peers[0].Write(step03ErrorResponse(t, stream, protocol.ErrCodeUnprepared, old.InternalId))
+					_, err = peers[0].Write(errorResponse(t, stream, protocol.ErrCodeUnprepared, old.InternalId))
 				case 3:
 					_, err = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody([]byte("a"), "one")))
 				case 4:
@@ -801,7 +801,7 @@ func TestV2PreparedRetryRepreparePagingNeverReencodes(t *testing.T) {
 		serverDone <- nil
 	}()
 	profile := settings.InternalDefaultProfile()
-	profile.Retry = step03RetryOnce{}
+	profile.Retry = retryOnce{}
 	options := testOptions(OptionValues{Profile: profileOf(profile)})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -838,7 +838,7 @@ func TestV2PreparedHostRoutingChangesFailBeforeResend(t *testing.T) {
 			typ := codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))
 			parameters := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "a", Type: typ}, implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "b", Type: typ})
 			columns := implCqltype.NewColumns(cqltype.ColumnSlice(parameters)[0])
-			state, old := step03PreparedState(t, s, columns)
+			state, old := preparedState(t, s, columns)
 			state.InternalParameters = parameters
 			state.InternalInfo.PartitionKeyIndexes = []int{0, 1}
 			current, pk := parameters, []int{0, 1}
@@ -860,9 +860,9 @@ func TestV2PreparedHostRoutingChangesFailBeforeResend(t *testing.T) {
 			}
 			done := make(chan error, 1)
 			go func() {
-				_, stream, _, err := step03ReadRequest(peers[0])
+				_, stream, _, err := readRequest(peers[0])
 				if err == nil {
-					_, err = peers[0].Write(typedTestResponse(t, 4, stream, step03PreparedBody([]byte("new"), current, columns, pk...)))
+					_, err = peers[0].Write(typedTestResponse(t, 4, stream, preparedBody([]byte("new"), current, columns, pk...)))
 				}
 				done <- err
 			}()
@@ -885,9 +885,9 @@ func TestV2PreparedHostRoutingChangesFailBeforeResend(t *testing.T) {
 func TestV2PreparedWorkerShutdownJoinsWithoutInput(t *testing.T) {
 	s, conns, peers := runtimeTestSession(t, 1)
 	cols := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
-	state, old := step03PreparedState(t, s, cols)
+	state, old := preparedState(t, s, cols)
 	requested := make(chan struct{})
-	go func() { _, _, _, _ = step03ReadRequest(peers[0]); close(requested) }()
+	go func() { _, _, _, _ = readRequest(peers[0]); close(requested) }()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
@@ -920,22 +920,22 @@ func TestV2PreparedWorkerShutdownJoinsWithoutInput(t *testing.T) {
 func TestV2PreparedColdHostsDoNotSerialize(t *testing.T) {
 	s, conns, peers := runtimeTestSession(t, 2)
 	columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
-	state, old := step03PreparedState(t, s, columns)
+	state, old := preparedState(t, s, columns)
 	firstRead, release := make(chan struct{}), make(chan struct{})
 	servers := make(chan error, 2)
 	go func() {
-		_, stream, _, err := step03ReadRequest(peers[0])
+		_, stream, _, err := readRequest(peers[0])
 		close(firstRead)
 		<-release
 		if err == nil {
-			_, err = peers[0].Write(typedTestResponse(t, 4, stream, step03PreparedBody([]byte("first"), implCqltype.NewColumns(), columns)))
+			_, err = peers[0].Write(typedTestResponse(t, 4, stream, preparedBody([]byte("first"), implCqltype.NewColumns(), columns)))
 		}
 		servers <- err
 	}()
 	go func() {
-		_, stream, _, err := step03ReadRequest(peers[1])
+		_, stream, _, err := readRequest(peers[1])
 		if err == nil {
-			_, err = peers[1].Write(typedTestResponse(t, 4, stream, step03PreparedBody([]byte("second"), implCqltype.NewColumns(), columns)))
+			_, err = peers[1].Write(typedTestResponse(t, 4, stream, preparedBody([]byte("second"), implCqltype.NewColumns(), columns)))
 		}
 		servers <- err
 	}()
@@ -966,15 +966,15 @@ func TestV2PreparedPrepareResultDoesNotOverwriteReplacement(t *testing.T) {
 		t.Run(change, func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			cols := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
-			state, old := step03PreparedState(t, s, cols)
+			state, old := preparedState(t, s, cols)
 			received, release := make(chan struct{}), make(chan struct{})
 			serverDone := make(chan error, 1)
 			go func() {
-				_, stream, _, err := step03ReadRequest(peers[0])
+				_, stream, _, err := readRequest(peers[0])
 				close(received)
 				<-release
 				if err == nil {
-					_, err = peers[0].Write(typedTestResponse(t, 4, stream, step03PreparedBody([]byte("late"), implCqltype.NewColumns(), cols)))
+					_, err = peers[0].Write(typedTestResponse(t, 4, stream, preparedBody([]byte("late"), implCqltype.NewColumns(), cols)))
 				}
 				serverDone <- err
 			}()
@@ -1038,7 +1038,7 @@ func TestV2PagingHistoryHashCollisionComparesFullBytes(t *testing.T) {
 	}
 }
 func TestV2ManualPageEmptyContinuationSurvivesClose(t *testing.T) {
-	p := step03Page(t)
+	p := testPage(t)
 	PageData(p).InternalResponse.State = implModel.RestorePageState(nil)
 	state := p.State()
 	p.Close()
@@ -1056,7 +1056,7 @@ func TestV2PreparedOldPageKeepsMatchingPlan(t *testing.T) {
 		return opaqueStorageValuexxxxxx
 	}()
 	columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
-	state, old := step03PreparedState(t, s, columns)
+	state, old := preparedState(t, s, columns)
 	host := implCqltype.UUID{15: 1}
 	changed := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))})
 	replacement := &transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("new")}}
@@ -1083,9 +1083,9 @@ func TestV2ResultPlanCompileSchemaFenceKeepsRetainedPage(t *testing.T) {
 		return opaqueStorageValuexxxxxxx
 	}()
 	columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
-	_, hp := step03PreparedState(t, s, columns)
+	_, hp := preparedState(t, s, columns)
 	var calls atomic.Int32
-	decoder := step03CountingDecoder{calls: &calls, hook: func() {
+	decoder := countingDecoder{calls: &calls, hook: func() {
 		implCluster.InternalSessionInvalidatePreparedSchema(s, cluster.Event{Keyspace: "ks", Target: "TABLE", Object: "tbl"})
 	}}
 	cache := &InternalResultPlanCache[implCqltype.Bytes]{}
@@ -1102,7 +1102,7 @@ func TestV2ResultPlanCompileSchemaFenceKeepsRetainedPage(t *testing.T) {
 }
 
 func TestV2PagerCompletionCanInspectIterator(t *testing.T) {
-	p := step03Page(t)
+	p := testPage(t)
 	pageObserved := false
 	PageData(p).InternalRelease = func() { _ = p.Err(); _ = p.Close(); pageObserved = true }
 	p.Close()
@@ -1111,7 +1111,7 @@ func TestV2PagerCompletionCanInspectIterator(t *testing.T) {
 	}
 	rows := func() Rows[implCqltype.Bytes] {
 		opaqueStorageValuexxxxxxxx := InternalNewRows[implCqltype.Bytes]()
-		RowsData(opaqueStorageValuexxxxxxxx).InternalPage = step03Page(t)
+		RowsData(opaqueStorageValuexxxxxxxx).InternalPage = testPage(t)
 		RowsData(opaqueStorageValuexxxxxxxx).InternalCtx = context.Background()
 		return opaqueStorageValuexxxxxxxx
 	}()
@@ -1124,7 +1124,7 @@ func TestV2PagerCompletionCanInspectIterator(t *testing.T) {
 }
 
 func TestV2PagerConcurrentCloseReleasesExactlyOnce(t *testing.T) {
-	p := step03Page(t, "value")
+	p := testPage(t, "value")
 	var releases atomic.Int32
 	PageData(p).InternalRelease = func() { releases.Add(1); _ = p.Err(); _ = p.Close() }
 	// A Page is not safe for concurrent use: Close is idempotent, also from
@@ -1138,7 +1138,7 @@ func TestV2PagerConcurrentCloseReleasesExactlyOnce(t *testing.T) {
 	var wg sync.WaitGroup
 	rows := func() Rows[implCqltype.Bytes] {
 		opaqueStorageValuexxxxxxxxx := InternalNewRows[implCqltype.Bytes]()
-		RowsData(opaqueStorageValuexxxxxxxxx).InternalPage = step03Page(t)
+		RowsData(opaqueStorageValuexxxxxxxxx).InternalPage = testPage(t)
 		RowsData(opaqueStorageValuexxxxxxxxx).InternalCtx = context.Background()
 		return opaqueStorageValuexxxxxxxxx
 	}()
@@ -1210,7 +1210,7 @@ func TestV2PreparedConflictingHostsRetainResponseAndCoalesce(t *testing.T) {
 	implCluster.SessionData(s).InternalCtx, implCluster.SessionData(s).InternalCancel = context.WithCancel(context.Background())
 	defer s.Close()
 	columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
-	state, old := step03PreparedState(t, s, columns)
+	state, old := preparedState(t, s, columns)
 	host := implCqltype.UUID{15: 2}
 	second := *old
 	state.InternalHosts[host] = &second
@@ -1245,11 +1245,11 @@ func TestV2ResultPlanPublicationSharesEpochGate(t *testing.T) {
 		return opaqueStorageValuexxxxxxxxxxx
 	}()
 	columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
-	_, hp := step03PreparedState(t, s, columns)
+	_, hp := preparedState(t, s, columns)
 	tracker := hp.InternalResult.InternalTracker
 	entered, release := make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
-	decoder := step03CountingDecoder{calls: &calls, hook: func() {
+	decoder := countingDecoder{calls: &calls, hook: func() {
 		if !tracker.InternalMu.TryLock() {
 			t.Error("user Compile ran under epoch gate")
 		} else {
@@ -1304,10 +1304,10 @@ func TestV2InitialPrepareDoesNotCacheChangedEpoch(t *testing.T) {
 	columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
 	serverDone := make(chan error, 1)
 	go func() {
-		_, stream, _, err := step03ReadRequest(peers[0])
+		_, stream, _, err := readRequest(peers[0])
 		if err == nil {
 			implCluster.InternalSessionInvalidatePreparedSchema(s, cluster.Event{Keyspace: "ks", Target: "TABLE", Object: "tbl"})
-			_, err = peers[0].Write(typedTestResponse(t, 4, stream, step03PreparedBody([]byte("old"), implCqltype.NewColumns(), columns)))
+			_, err = peers[0].Write(typedTestResponse(t, 4, stream, preparedBody([]byte("old"), implCqltype.NewColumns(), columns)))
 		}
 		serverDone <- err
 	}()
@@ -1340,7 +1340,7 @@ func TestV2StalePrepareFailurePreservesDiscoveryBound(t *testing.T) {
 	s, conns, peers := runtimeTestSession(t, 1)
 	implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
 	cols := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
-	state, _ := step03PreparedState(t, s, cols)
+	state, _ := preparedState(t, s, cols)
 	rt := InternalRuntimeFor(s)
 	rt.InternalConfig.PreparedCacheSize = 1
 	key := InternalPrepareCacheKey{InternalCql: "A", InternalKeyspace: "ks"}
@@ -1350,16 +1350,16 @@ func TestV2StalePrepareFailurePreservesDiscoveryBound(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		for i := 0; i < 3; i++ {
-			_, stream, _, err := step03ReadRequest(peers[0])
+			_, stream, _, err := readRequest(peers[0])
 			if err != nil {
 				done <- err
 				return
 			}
 			var response []byte
 			if i == 0 {
-				response = step03ErrorResponse(t, stream, protocol.ErrCodeServer, nil)
+				response = errorResponse(t, stream, protocol.ErrCodeServer, nil)
 			} else {
-				response = typedTestResponse(t, 4, stream, step03PreparedBody([]byte{byte(i)}, implCqltype.NewColumns(), cols))
+				response = typedTestResponse(t, 4, stream, preparedBody([]byte{byte(i)}, implCqltype.NewColumns(), cols))
 			}
 			if _, err = peers[0].Write(response); err != nil {
 				done <- err
@@ -1427,7 +1427,7 @@ func TestV2DiscoveryCapacityZeroAndConcurrentMisses(t *testing.T) {
 			go func() {
 				streams := make([]int, 2)
 				for i := range streams {
-					_, stream, _, err := step03ReadRequest(peers[0])
+					_, stream, _, err := readRequest(peers[0])
 					if err != nil {
 						serverDone <- err
 						return
@@ -1435,7 +1435,7 @@ func TestV2DiscoveryCapacityZeroAndConcurrentMisses(t *testing.T) {
 					streams[i] = stream
 				}
 				for i, stream := range streams {
-					if _, err := peers[0].Write(typedTestResponse(t, 4, stream, step03PreparedBody([]byte{byte(i + 1)}, implCqltype.NewColumns(), columns))); err != nil {
+					if _, err := peers[0].Write(typedTestResponse(t, 4, stream, preparedBody([]byte{byte(i + 1)}, implCqltype.NewColumns(), columns))); err != nil {
 						serverDone <- err
 						return
 					}

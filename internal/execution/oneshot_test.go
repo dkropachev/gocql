@@ -38,11 +38,11 @@ type oneShotRequest struct {
 func oneShotServer(t *testing.T, peer net.Conn, requests chan<- oneShotRequest) {
 	key := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeInt))})
 	value := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))})
-	prepared := step03PreparedBody([]byte("oneshot"), key, value, 0)
+	prepared := preparedBody([]byte("oneshot"), key, value, 0)
 	go func() {
 		defer close(requests)
 		for {
-			op, stream, body, err := step03ReadRequest(peer)
+			op, stream, body, err := readRequest(peer)
 			if err != nil {
 				return
 			}

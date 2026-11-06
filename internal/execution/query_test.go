@@ -305,9 +305,9 @@ func TestLoopbackServerProcess(t *testing.T) {
 	}
 	key := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))})
 	value := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
-	prepared := step03PreparedBody([]byte("loopback"), key, value, 0)
+	prepared := preparedBody([]byte("loopback"), key, value, 0)
 	if workload == "pwrite" {
-		prepared = step03PreparedBody([]byte("loopback"), implCqltype.NewColumns(append(cqltype.ColumnSlice(key), cqltype.ColumnSlice(value)...)...), implCqltype.NewColumns(), 0)
+		prepared = preparedBody([]byte("loopback"), implCqltype.NewColumns(append(cqltype.ColumnSlice(key), cqltype.ColumnSlice(value)...)...), implCqltype.NewColumns(), 0)
 	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

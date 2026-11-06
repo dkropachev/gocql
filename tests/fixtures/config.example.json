@@ -19,14 +19,14 @@
           "args": [
             "-proto=3"
           ],
-          "tests": "^(TestStep08FixtureIdentity|TestAuthentication|TestStep07RunStreamLive|TestUnixSockets)$"
+          "tests": "^(TestFixtureIdentity|TestAuthentication|TestRunStreamLive|TestUnixSockets)$"
         },
         {
           "name": "v4-raw",
           "args": [
             "-proto=4"
           ],
-          "tests": "^(TestStep08FixtureIdentity|TestAuthentication|TestStep07RunStreamLive)$"
+          "tests": "^(TestFixtureIdentity|TestAuthentication|TestRunStreamLive)$"
         },
         {
           "name": "v4-tls",
@@ -34,7 +34,7 @@
             "-proto=4",
             "-runssl"
           ],
-          "tests": "^(TestStep08FixtureIdentity|TestStep08ClientCertificateEnforced|TestStep08SNIProxyCancellationJoins|TestAuthentication|TestStep07RunStreamLive|TestUnixSockets|TestCloudConnection|TestTLSTicketResumption|TestRecreateSchema)$"
+          "tests": "^(TestFixtureIdentity|TestClientCertificateEnforced|TestSNIProxyCancellationJoins|TestAuthentication|TestRunStreamLive|TestUnixSockets|TestCloudConnection|TestTLSTicketResumption|TestRecreateSchema)$"
         }
       ]
     },
@@ -59,7 +59,7 @@
             "-proto=4",
             "-compressor=no-compression"
           ],
-          "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+          "tests": "^(TestFixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestRunStreamLive)$"
         },
         {
           "name": "v4-tls",
@@ -68,7 +68,7 @@
             "-runssl",
             "-compressor=no-compression"
           ],
-          "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+          "tests": "^(TestFixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestRunStreamLive)$"
         },
         {
           "name": "v5-no-compression",
@@ -76,7 +76,7 @@
             "-proto=5",
             "-compressor=no-compression"
           ],
-          "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+          "tests": "^(TestFixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestRunStreamLive)$"
         },
         {
           "name": "v5-lz4",
@@ -84,7 +84,7 @@
             "-proto=5",
             "-compressor=lz4"
           ],
-          "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+          "tests": "^(TestFixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestRunStreamLive)$"
         },
         {
           "name": "v5-raw-tls",
@@ -93,7 +93,7 @@
             "-runssl",
             "-compressor=no-compression"
           ],
-          "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+          "tests": "^(TestFixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestRunStreamLive)$"
         },
         {
           "name": "v5-lz4-tls",
@@ -102,7 +102,7 @@
             "-compressor=lz4",
             "-runssl"
           ],
-          "tests": "^(TestStep08FixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestStep07RunStreamLive)$"
+          "tests": "^(TestFixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestRunStreamLive)$"
         }
       ]
     },
@@ -128,7 +128,7 @@
           "args": [
             "-proto=4"
           ],
-          "tests": "^(TestStep08FixtureIdentity|TestSelectWithoutFromLiteral|TestStep07RunStreamLive)$"
+          "tests": "^(TestFixtureIdentity|TestSelectWithoutFromLiteral|TestRunStreamLive)$"
         }
       ]
     }

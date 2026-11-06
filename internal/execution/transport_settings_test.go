@@ -82,7 +82,7 @@ func TestV2TransportDefaultsAndValidation(t *testing.T) {
 		}
 	}
 }
-func step04TLS(t testing.TB) (tls.Certificate, *tls.Config) {
+func testTLS(t testing.TB) (tls.Certificate, *tls.Config) {
 	t.Helper()
 	key := codecTestMust(ecdsa.GenerateKey(elliptic.P256(), rand.Reader))
 	template := &x509.Certificate{SerialNumber: big.NewInt(42), DNSNames: []string{"transport.test"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
@@ -94,7 +94,7 @@ func step04TLS(t testing.TB) (tls.Certificate, *tls.Config) {
 	return cert, &tls.Config{RootCAs: pool, ServerName: "transport.test", MinVersion: tls.VersionTLS13}
 }
 func TestV2TLSConfigurationDetachAndHookContext(t *testing.T) {
-	cert, tlsConfig := step04TLS(t)
+	cert, tlsConfig := testTLS(t)
 	tlsConfig.Certificates = []tls.Certificate{cert}
 	tlsConfig.NextProtos = []string{"cql"}
 	tlsConfig.ClientCAs = tlsConfig.RootCAs
@@ -135,7 +135,7 @@ func TestV2TLSConfigurationDetachAndHookContext(t *testing.T) {
 		t.Fatal("hook context", err)
 	}
 }
-func step04Host(t *testing.T, address net.Addr) *endpoint.HostInfo {
+func testHost(t *testing.T, address net.Addr) *endpoint.HostInfo {
 	t.Helper()
 	host, port := codecTestMust2(net.SplitHostPort(address.String()))
 	_ = port
@@ -157,10 +157,10 @@ func codecTestMust2(a, b string, err error) (string, string) {
 	return a, b
 }
 func TestV2TLSShardDialUsesSelectedSourceAndHook(t *testing.T) {
-	cert, tlsConfig := step04TLS(t)
+	cert, tlsConfig := testTLS(t)
 	listener := codecTestMust(net.Listen("tcp", "127.0.0.1:0"))
 	defer listener.Close()
-	host := step04Host(t, listener.Addr())
+	host := testHost(t, listener.Addr())
 	accepted := make(chan error, 1)
 	go func() {
 		raw, err := listener.Accept()
@@ -418,14 +418,14 @@ func TestV2EventMetadataBudgetAndTerminalAdmission(t *testing.T) {
 	cursor.Release()
 }
 
-type step04DNS func(string) ([]net.IP, error)
+type testDNS func(string) ([]net.IP, error)
 
-func (f step04DNS) LookupIP(name string) ([]net.IP, error) { return f(name) }
+func (f testDNS) LookupIP(name string) ([]net.IP, error) { return f(name) }
 func TestV2ConnectionSetupDeadlineIncludesDNSAndTranslation(t *testing.T) {
 	config := settings.DefaultConfig("setup.test")
 	config.ConnectTimeout = 10 * time.Second
 	config.DNSTimeout = 20 * time.Second
-	resolver := &endpoint.InternalV2DNSResolver{InternalBase: step04DNS(func(string) ([]net.IP, error) {
+	resolver := &endpoint.InternalV2DNSResolver{InternalBase: testDNS(func(string) ([]net.IP, error) {
 		return []net.IP{net.ParseIP("127.0.0.1")}, nil
 	}), InternalTimeout: config.DNSTimeout, InternalSetupTimeout: config.ConnectTimeout}
 	resolver.InternalStartup.Store(&endpoint.InternalContextBox{InternalCtx: context.Background()})
@@ -528,13 +528,13 @@ func TestV2UnsupportedSocketSettingsKeepTypedError(t *testing.T) {
 	}
 }
 
-type step04Reconnect struct {
+type testReconnect struct {
 	calls chan int
 	again bool
 	pool  *implPool.InternalHostConnPool
 }
 
-func (p *step04Reconnect) Delay(attempt int) (time.Duration, bool) {
+func (p *testReconnect) Delay(attempt int) (time.Duration, bool) {
 	if p.pool != nil {
 		p.pool.InternalTransportState()
 	}
@@ -545,7 +545,7 @@ func TestV2PoolRepairPolicyAndClosedState(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	config := settings.DefaultConfig("localhost")
-	policy := &step04Reconnect{calls: make(chan int, 4), again: true}
+	policy := &testReconnect{calls: make(chan int, 4), again: true}
 	config.Reconnect = policy
 	s := func() *cluster.Session {
 		opaqueStorageValuexxxxxxxxx := new(cluster.Session)
@@ -599,7 +599,7 @@ func TestV2PoolRepairPolicyAndClosedState(t *testing.T) {
 }
 
 func TestV2ResolvedContactsOwnIndependentSetupDeadlines(t *testing.T) {
-	resolver := &endpoint.InternalV2DNSResolver{InternalBase: step04DNS(func(string) ([]net.IP, error) { return []net.IP{net.ParseIP("127.0.0.1")}, nil }), InternalSetupTimeout: time.Minute}
+	resolver := &endpoint.InternalV2DNSResolver{InternalBase: testDNS(func(string) ([]net.IP, error) { return []net.IP{net.ParseIP("127.0.0.1")}, nil }), InternalSetupTimeout: time.Minute}
 	first := codecTestMust(endpoint.InternalResolveInitialEndpoint(resolver, "first.test:9042", 9042))[0]
 	second := codecTestMust(endpoint.InternalResolveInitialEndpoint(resolver, "second.test:9142", 9042))[0]
 	implEndpoint.
@@ -621,19 +621,19 @@ func TestV2ResolvedContactsOwnIndependentSetupDeadlines(t *testing.T) {
 	}
 }
 
-type step04LongRepairPolicy struct {
+type longRepairPolicy struct {
 	calls atomic.Int32
 	again bool
 }
 
-func (p *step04LongRepairPolicy) Delay(int) (time.Duration, bool) {
+func (p *longRepairPolicy) Delay(int) (time.Duration, bool) {
 	p.calls.Add(1)
 	return time.Hour, p.again
 }
 
-type step04CountingHostDialer struct{ calls *atomic.Int32 }
+type countingHostDialer struct{ calls *atomic.Int32 }
 
-func (d step04CountingHostDialer) DialHost(context.Context, *endpoint.HostInfo) (*endpoint.DialedHost, error) {
+func (d countingHostDialer) DialHost(context.Context, *endpoint.HostInfo) (*endpoint.DialedHost, error) {
 	d.calls.Add(1)
 	return nil, io.EOF
 }
@@ -645,14 +645,14 @@ func TestV2TypedRepairTriggersHonorPolicyDelayAndStop(t *testing.T) {
 			defer cancel()
 			config := settings.DefaultConfig("localhost")
 			config.Pool.ConnectionsPerHost = 1
-			policy := &step04LongRepairPolicy{again: again}
+			policy := &longRepairPolicy{again: again}
 			config.Reconnect = policy
 			var dials atomic.Int32
 			s := func() *cluster.Session {
 				opaqueStorageValuexxxxxxxxxxx := new(cluster.Session)
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalCtx = ctx
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalLogger = logging.InternalNopLogger{}
-				implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalConnCfg = &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config), HostDialer: step04CountingHostDialer{&dials}}
+				implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalConnCfg = &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config), HostDialer: countingHostDialer{&dials}}
 				return opaqueStorageValuexxxxxxxxxxx
 			}()
 			implCluster.SessionData(s).InternalCfg.ReconnectionPolicy = &implPool.NoReconnectionPolicy{}
@@ -733,7 +733,7 @@ func TestV2TypedSelectionWaitsForReservedCapacity(t *testing.T) {
 	}
 	go func() {
 		stream := typedTestReadRequest(t, c, peers[0])
-		step04WriteResponse(t, c, peers[0], stream, typedTestRowsBody([]byte("resumed")))
+		writeResponse(t, c, peers[0], stream, typedTestRowsBody([]byte("resumed")))
 	}()
 	if err := r.InternalClose(true); err != nil {
 		t.Fatal(err)
@@ -876,13 +876,13 @@ func TestV2ReservedPreferredShardUsesAllowedFreeAlternative(t *testing.T) {
 }
 
 func TestV2TLSIdentityUsesLogicalHostAcrossTranslatedEndpoint(t *testing.T) {
-	cert, configTLS := step04TLS(t)
+	cert, configTLS := testTLS(t)
 	configTLS.ServerName = ""
 	var name string
 	configTLS.VerifyConnection = func(state tls.ConnectionState) error { name = state.ServerName; return nil }
 	listener := codecTestMust(net.Listen("tcp", "127.0.0.1:0"))
 	defer listener.Close()
-	host := step04Host(t, listener.Addr())
+	host := testHost(t, listener.Addr())
 	implEndpoint.HostInfoData(host).InternalHostname = "transport.test"
 	implEndpoint.HostInfoData(host).InternalConnectAddress = net.ParseIP("192.0.2.12")
 	done := make(chan error, 1)

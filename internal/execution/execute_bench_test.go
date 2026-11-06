@@ -76,7 +76,7 @@ func BenchmarkSingleConn(b *testing.B) {
 	})
 }
 
-func BenchmarkStep07SharedAdmission(b *testing.B) {
+func BenchmarkSharedAdmission(b *testing.B) {
 	for _, parallelism := range []int{1, 4, 16} {
 		b.Run(fmt.Sprint(parallelism), func(b *testing.B) {
 			s := func() *cluster.Session {
@@ -175,7 +175,7 @@ func BenchmarkReusableQueryAdmission(b *testing.B) {
 	}
 }
 
-func BenchmarkStep10DurationDecode(b *testing.B) {
+func BenchmarkDurationDecode(b *testing.B) {
 	reader := scalarReader(b, cqltype.TypeDuration, cqltype.Present, []byte{2, 4, 6})
 	b.ReportAllocs()
 	for b.Loop() {

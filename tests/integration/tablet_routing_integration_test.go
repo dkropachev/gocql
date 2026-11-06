@@ -19,7 +19,7 @@ import (
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 )
 
-func TestStep06TabletRoutingLive(t *testing.T) {
+func TestTabletRoutingLive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	config := createV2Cluster()
@@ -36,7 +36,7 @@ func TestStep06TabletRoutingLive(t *testing.T) {
 	if !supported {
 		t.Skip("server does not provide tablets")
 	}
-	keyspace := testKeyspaceName(t, fmt.Sprintf("step06_%x", time.Now().UnixNano()))
+	keyspace := testKeyspaceName(t, fmt.Sprintf("tablet_routing_%x", time.Now().UnixNano()))
 	if err := v2CreateTable(ctx, s, "CREATE KEYSPACE "+keyspace+" WITH replication={'class':'NetworkTopologyStrategy','replication_factor':2} AND tablets={'enabled':true}"); err != nil {
 		t.Fatal(err)
 	}
@@ -136,9 +136,9 @@ func TestStep06TabletRoutingLive(t *testing.T) {
 		// one exact, non-transitioning authority on every node before and after
 		// each query; the initial map is diagnostic, not permanent authority.
 		verified := 0
-		var latest step17TabletObservation
+		var latest tabletObservation
 		for attempt := 0; attempt < 96 && verified < 8; attempt++ {
-			before := step17TabletAuthority(t, ctx, s, id, token.Value)
+			before := tabletAuthority(t, ctx, s, id, token.Value)
 			opts := gocql.Options{}
 			if attempt < 3 {
 				opts = testOptions(gocql.OptionValues{HostID: gocql.Option[gocql.UUID]{Value: routing.SnapshotData(s.Metadata()).InternalHosts[attempt%len(routing.SnapshotData(s.Metadata()).InternalHosts)].ID, Set: true}})
@@ -170,14 +170,14 @@ func TestStep06TabletRoutingLive(t *testing.T) {
 			if err := rows.Close(); err != nil {
 				t.Fatal(err)
 			}
-			after := step17TabletAuthority(t, ctx, s, id, token.Value)
+			after := tabletAuthority(t, ctx, s, id, token.Value)
 			latest = after
 			replicas, err := s.Metadata().Replicas(keyspace, "records", token.Value)
 			if err != nil {
 				t.Fatal(err)
 			}
-			stable := before.stable && after.stable && before.last == after.last && step17SameReplicaSet(before.replicas, after.replicas)
-			cacheMatches := len(after.replicas) == 2 && step17SameReplicaSet(replicas, after.replicas)
+			stable := before.stable && after.stable && before.last == after.last && sameReplicaSet(before.replicas, after.replicas)
+			cacheMatches := len(after.replicas) == 2 && sameReplicaSet(replicas, after.replicas)
 			coordinatorMatches := false
 			for _, replica := range after.replicas {
 				coordinatorMatches = coordinatorMatches || replica.HostID == result.HostID
@@ -209,7 +209,7 @@ func TestStep06TabletRoutingLive(t *testing.T) {
 	t.Logf("accepted live feedback responses=%d", feedback)
 }
 
-func TestStep06LeaderRoutingLive(t *testing.T) {
+func TestLeaderRoutingLive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	config := createV2Cluster()
@@ -222,7 +222,7 @@ func TestStep06LeaderRoutingLive(t *testing.T) {
 	if !implCluster.InternalSessionGetConn(s).InternalFramers.InternalDefaults.InternalTabletsRoutingV2 {
 		t.Skip("server did not advertise TABLETS_ROUTING_V2_EXPERIMENTAL; source-accurate wire fixtures cover V2 separately")
 	}
-	ks := testKeyspaceName(t, fmt.Sprintf("step06_leader_%x", time.Now().UnixNano()))
+	ks := testKeyspaceName(t, fmt.Sprintf("tablet_leader_%x", time.Now().UnixNano()))
 	if err := v2CreateTable(ctx, s, "CREATE KEYSPACE "+ks+" WITH replication={'class':'NetworkTopologyStrategy','replication_factor':3} AND tablets={'enabled':true} AND consistency='global'"); err != nil {
 		t.Fatal(err)
 	}
@@ -300,16 +300,16 @@ func TestStep06LeaderRoutingLive(t *testing.T) {
 	t.Logf("independently decoded leader=%s, feedback=%d, stable LOCAL_QUORUM reads=%d", leader, feedback, stable)
 }
 
-// step17TabletAuthority brackets routed queries with independent server reads.
+// tabletAuthority brackets routed queries with independent server reads.
 // During a transition or disagreement it supplies no correctness credit.
-type step17TabletObservation struct {
+type tabletObservation struct {
 	last      int64
 	replicas  []gocql.Target
 	readNodes []gocql.UUID
 	stable    bool
 }
 
-func step17TabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table gocql.UUID, token int64) step17TabletObservation {
+func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table gocql.UUID, token int64) tabletObservation {
 	t.Helper()
 	type parameters struct {
 		Table gocql.UUID
@@ -323,7 +323,7 @@ func step17TabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, 
 	columns := gocql.NewColumns(gocql.ColumnSpec{Name: "id", Type: codecTestMust(gocql.ScalarType(gocql.TypeUUID))}, gocql.ColumnSpec{Name: "token", Type: codecTestMust(gocql.ScalarType(gocql.TypeBigInt))})
 	bound := codecTestMust(BindUnpreparedOwned(statement, columns, parameters{table, token}))
 	defer bound.Close()
-	observation := step17TabletObservation{stable: true}
+	observation := tabletObservation{stable: true}
 	for index, host := range s.Metadata().Hosts() {
 		page := codecTestMust(RunUnpaged(ctx, s, bound, testOptions(gocql.OptionValues{HostID: gocql.Option[gocql.UUID]{Set: true, Value: host.ID}})))
 		if page.Info().HostID != host.ID {
@@ -369,7 +369,7 @@ func step17TabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, 
 		}
 		if index == 0 {
 			observation.last, observation.replicas = last, replicas
-		} else if last != observation.last || !step17SameReplicaSet(replicas, observation.replicas) {
+		} else if last != observation.last || !sameReplicaSet(replicas, observation.replicas) {
 			observation.stable = false
 		}
 	}
@@ -385,7 +385,7 @@ func step17TabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, 
 
 // Placement is a set of distinct host/shard destinations. Duplicate entries
 // cannot satisfy an exact authoritative-set assertion in either direction.
-func step17SameReplicaSet(a, b []gocql.Target) bool {
+func sameReplicaSet(a, b []gocql.Target) bool {
 	if len(a) != len(b) {
 		return false
 	}
