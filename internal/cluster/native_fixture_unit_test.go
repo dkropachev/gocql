@@ -1,0 +1,198 @@
+//go:build unit
+
+/*
+ * Copyright (C) 2026 ScyllaDB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package cluster
+
+import (
+	"context"
+	"encoding/binary"
+	"fmt"
+
+	"net"
+	"net/netip"
+
+	"github.com/scylladb/gocql/v2/internal/binding"
+	implCodec "github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
+	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/protocol"
+	"github.com/scylladb/gocql/v2/internal/transport"
+)
+
+// nativeResultFixture contains preframed native cells used by metadata peers.
+// It has no query, iterator, reflection serialization or scanning behavior.
+type nativeResultFixture struct {
+	framer  protocol.FramerInterface
+	err     error
+	meta    protocol.ResultMetadata
+	numRows int
+}
+
+func fixtureBody[T any](typ cqltype.DataType, codec implCodec.Encoder[T], v T) ([]byte, error) {
+	encoded, err := implCodec.EncodeValueOwned(typ, codec, v)
+	if err != nil {
+		return nil, err
+	}
+	return encoded.Bytes().OwnedBytes(), nil
+}
+func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
+	typ, err := cqltype.DataTypeFromInfo(info)
+	if err != nil {
+		return nil, err
+	}
+	if value == nil {
+		return nil, nil
+	}
+	switch v := value.(type) {
+	case string:
+		if typ.Kind() == cqltype.TypeInet {
+			ip, err := netip.ParseAddr(v)
+			if err != nil {
+				return nil, err
+			}
+			return fixtureBody(typ, implCodec.InetCodec, ip)
+		}
+		return fixtureBody(typ, implCodec.StringEncoder, v)
+	case net.IP:
+		ip, ok := netip.AddrFromSlice(v)
+		if !ok {
+			return nil, fmt.Errorf("invalid fixture IP")
+		}
+		return fixtureBody(typ, implCodec.InetCodec, ip.Unmap())
+	case cqltype.UUID:
+		return fixtureBody(typ, implCodec.UUIDCodec, v)
+	case []byte:
+		return fixtureBody(typ, implCodec.BlobCodec, cqltype.BorrowBytes(v))
+	case int8:
+		return fixtureBody(typ, implCodec.Int8, v)
+	case int16:
+		return fixtureBody(typ, implCodec.Int16, v)
+	case float32:
+		return fixtureBody(typ, implCodec.Float32, v)
+	case map[string][]byte:
+		entries := make([]implCodec.Entry[string, cqltype.Bytes], 0, len(v))
+		for k, x := range v {
+			entries = append(entries, implCodec.Entry[string, cqltype.Bytes]{Key: k, Value: cqltype.BorrowBytes(x)})
+		}
+		return fixtureBody(typ, implCodec.MapEncoder(implCodec.StringEncoder, implCodec.BlobCodec), entries)
+	case bool:
+		return fixtureBody(typ, implCodec.Bool, v)
+	case int:
+		return fixtureBody(typ, implCodec.Int32, int32(v))
+	case int32:
+		return fixtureBody(typ, implCodec.Int32, v)
+	case int64:
+		return fixtureBody(typ, implCodec.Int64, v)
+	case float64:
+		return fixtureBody(typ, implCodec.Float64, v)
+	case []string:
+		if typ.Kind() == cqltype.TypeSet {
+			return fixtureBody(typ, implCodec.SetEncoder(implCodec.StringEncoder), v)
+		}
+		return fixtureBody(typ, implCodec.ListEncoder(implCodec.StringEncoder), v)
+	case map[string]string:
+		entries := make([]implCodec.Entry[string, string], 0, len(v))
+		for k, x := range v {
+			entries = append(entries, implCodec.Entry[string, string]{Key: k, Value: x})
+		}
+		return fixtureBody(typ, implCodec.MapEncoder(implCodec.StringEncoder, implCodec.StringEncoder), entries)
+	default:
+		return nil, fmt.Errorf("unsupported explicit fixture value %T", value)
+	}
+}
+
+// hostInfoFromFixture exercises the same typed topology decoder as control I/O.
+func hostInfoFromFixture(f *nativeResultFixture, port int) (*endpoint.HostInfo, error) {
+	rows, err := InternalReadV2SystemRowsVia(context.Background(), 4, 0, func(_ context.Context, _ *model.AttemptRequest) (*transport.InternalResponsePage, error) {
+		return v2SchemaMockResponse(transport.InternalQrySystemLocal, f)
+	}, binding.Statement[implCodec.Unit, metadata.InternalV2TopologyRow]{CQL: transport.InternalQrySystemLocal, Params: implCodec.NoParams, Rows: metadata.InternalV2DecodeTopology()}, cqltype.NewColumns(), implCodec.Unit{})
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("query returned 0 rows")
+	}
+	return rows[0].InternalHost(port)
+}
+
+func writeErrorResult(resp *protocol.Framer, stream int, code int, msg string) {
+	resp.WriteHeader(0, frm.OpError, stream)
+	resp.WriteInt(int32(code))
+	resp.WriteString(msg)
+}
+
+type testPreparedCol struct {
+	keyspace, table, name string
+	typ                   cqltype.Type
+}
+
+// testPrepared describes a RESULT/Prepared reply. keyspace/table set means a
+// global table spec; otherwise each column carries its own.
+type testPrepared struct {
+	id              uint64
+	flags           int
+	keyspace, table string
+	cols            []testPreparedCol
+	pkIndexes       []uint16
+}
+
+func (p testPrepared) write(resp *protocol.Framer, stream int, writeResultMetadataID func(uint64)) {
+	resp.WriteHeader(0, frm.OpResult, stream)
+	resp.WriteInt(frm.ResultKindPrepared)
+	resp.WriteShortBytes(binary.BigEndian.AppendUint64(nil, p.id))
+	writeResultMetadataID(p.id)
+
+	global := p.keyspace != ""
+	flags := p.flags
+	if global {
+		flags |= frm.FlagGlobalTableSpec
+	}
+	resp.WriteInt(int32(flags))
+	resp.WriteInt(int32(len(p.cols)))
+	if resp.Proto >= protocol.ProtoVersion4 {
+		resp.WriteInt(int32(len(p.pkIndexes)))
+		for _, idx := range p.pkIndexes {
+			resp.WriteShort(idx)
+		}
+	}
+	if global {
+		resp.WriteString(p.keyspace)
+		resp.WriteString(p.table)
+	}
+	for _, c := range p.cols {
+		if !global {
+			resp.WriteString(c.keyspace)
+			resp.WriteString(c.table)
+		}
+		resp.WriteString(c.name)
+		resp.WriteShort(uint16(c.typ))
+	}
+
+	// <result_metadata>
+	resp.WriteInt(int32(frm.FlagNoMetaData))
+	resp.WriteInt(0)
+}
+
+// routingTestServer is a TestServer answering PREPARE from a fixed table of
+// statements and counting how many PREPAREs each one received. Statements not
+// in the table get a server error.
+
+func int32Bytes(v int32) []byte { return binary.BigEndian.AppendUint32(nil, uint32(v)) }

@@ -381,3 +381,22 @@ func step17TabletAuthority(t *testing.T, ctx context.Context, s *Session, table 
 	}
 	return observation
 }
+
+// Placement is a set of distinct host/shard destinations. Duplicate entries
+// cannot satisfy an exact authoritative-set assertion in either direction.
+func step17SameReplicaSet(a, b []Target) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, target := range a {
+		if slices.Contains(a[:i], target) || !slices.Contains(b, target) {
+			return false
+		}
+	}
+	for i, target := range b {
+		if slices.Contains(b[:i], target) {
+			return false
+		}
+	}
+	return true
+}

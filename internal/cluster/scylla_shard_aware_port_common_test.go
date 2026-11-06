@@ -1,0 +1,394 @@
+//go:build integration || unit
+// +build integration unit
+
+package cluster
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"strconv"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/scylladb/gocql/v2/internal/endpoint"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	implPool "github.com/scylladb/gocql/v2/internal/pool"
+	"github.com/scylladb/gocql/v2/internal/transport"
+	// Each fixture supplies its own construction path; integration fixtures use
+	// Config/Connect while unit servers can disable their unsupported control path.
+)
+
+type shardAwareTestCluster struct {
+	connect func(context.Context, endpoint.InternalLegacyDialer, bool) (*Session, error)
+	useTLS  bool
+	port    uint16
+}
+
+type makeClusterTestFunc func() shardAwareTestCluster
+
+func testShardAwarePortNoReconnections(t *testing.T, makeCluster makeClusterTestFunc) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	wg := &sync.WaitGroup{}
+
+	// Initialize 10 sessions in parallel.
+	// If shard-aware port is used and configured properly, we should get
+	// a connection to each shard without any retries.
+	// For each host, there should be N-1 connections to the special port.
+	var errs []error
+	var errLock sync.Mutex
+
+	pushErr := func(err error) {
+		errLock.Lock()
+		errs = append(errs, err)
+		errLock.Unlock()
+	}
+
+	// Run 10 sessions in parallel
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Each session gets a separate configuration, because we need to have
+			// separate connection listeners - we need to differentiate connections
+			// made for each session separately
+			dialer := newLoggingTestDialer()
+			cluster := makeCluster()
+
+			useTLS := cluster.useTLS
+
+			sess, err := cluster.connect(ctx, dialer, false)
+			if err != nil {
+				pushErr(fmt.Errorf("create session: %w", err))
+				cancel()
+				return
+			}
+			defer sess.Close()
+
+			if err := waitUntilPoolsStopFilling(ctx, sess, 10*time.Second); err != nil {
+				pushErr(fmt.Errorf("wait for connection pools: %w", err))
+				cancel()
+				return
+			}
+
+			hosts := SessionData(sess).InternalHostSource.InternalGetHostsList()
+			for _, host := range hosts {
+				t.Logf("checking host %s:%d hostID: %q", host.ConnectAddress(), host.Port(), implEndpoint.HostInfoData(host).InternalHostId)
+				hostPool, ok := SessionData(sess).InternalPool.InternalGetPool(host)
+				if !ok {
+					pushErr(fmt.Errorf("host %q hostID not found", implEndpoint.HostInfoData(host).InternalHostname))
+					return
+				}
+
+				shardAwarePort := getShardAwarePort(hostPool, useTLS)
+				if shardAwarePort == 0 {
+					// Shard aware port was not exposed by the host
+					t.Log("the host does not expose a shard-aware port, skipping")
+					continue
+				}
+
+				// Both typed and migration pickers expose actual shard membership.
+				numberOfShards := hostPool.GetShardCount()
+				if numberOfShards <= 0 {
+					t.Errorf("not a sharded connection")
+					continue
+				}
+
+				// Make sure that we didn't connect to the same shard twice
+				// There should be numberOfShards-1 connections to the new port
+				events := dialer.connectionEvents(host.ConnectAddress().String())
+				shardAwareConnectionCount := 0
+				shardsConnected := make(map[int]testConnectionEvent)
+				for _, evt := range events {
+					if evt.destinationPort != shardAwarePort {
+						continue
+					}
+
+					shardAwareConnectionCount++
+
+					shard := transport.InternalScyllaShardForSourcePort(evt.sourcePort, numberOfShards)
+					if oldEvt, hasShard := shardsConnected[shard]; hasShard {
+						t.Errorf("there was more than one connection to the shard aware port from the same shard (shard %d, port %d and %d)",
+							shard, oldEvt.sourcePort, evt.sourcePort)
+					}
+					shardsConnected[shard] = evt
+				}
+
+				if shardAwareConnectionCount != numberOfShards-1 {
+					t.Errorf("expected %d connections to the shard aware port, but got %d", numberOfShards-1, shardAwareConnectionCount)
+				}
+			}
+
+			return
+		}()
+	}
+
+	wg.Wait()
+	for _, err := range errs {
+		t.Error(err.Error())
+	}
+}
+
+func testShardAwarePortMaliciousNAT(t *testing.T, makeCluster makeClusterTestFunc) {
+	cluster := makeCluster()
+	dialer := &sourcePortOffByOneTestDialer{}
+
+	sess, err := cluster.connect(context.Background(), dialer, false)
+	if err != nil {
+		t.Fatalf("an error occurred while creating a session: %s", err)
+	}
+	defer sess.Close()
+
+	// In this situation we are guaranteed that the connection will miss one
+	// shard at this point. The first connection receives a random shard,
+	// then we establish N-1 connections, targeting remaining shards.
+	// Because the malicious port translator shifts the port by one,
+	// one shard will be missed (if the host has more than one shard).
+
+	// Retry until we establish one connection per shard
+
+	for {
+		if err := waitUntilPoolsStopFilling(context.Background(), sess, 10*time.Second); err != nil {
+			t.Fatal(err)
+		}
+
+		if checkIfPoolsAreFull(sess) {
+			break
+		}
+
+		triggerPoolsRefill(sess)
+	}
+}
+
+func testShardAwarePortUnreachable(t *testing.T, makeCluster makeClusterTestFunc) {
+	cluster := makeCluster()
+	dialer := &allowOnlyNonShardAwarePortDialer{allowedPort: cluster.port}
+
+	sess, err := cluster.connect(context.Background(), dialer, false)
+	if err != nil {
+		t.Fatalf("an error occurred while creating a session: %s", err)
+	}
+	defer sess.Close()
+
+	// In this situation, the connecting to the shard-aware port will fail,
+	// but connections to the non-shard-aware port will succeed. This test
+	// checks that we detect that the shard-aware-port is unreachable and
+	// we fall back to the old port.
+
+	// Retry until we establish one connection per shard
+
+	for {
+		if err := waitUntilPoolsStopFilling(context.Background(), sess, 10*time.Second); err != nil {
+			t.Fatal(err)
+		}
+
+		if checkIfPoolsAreFull(sess) {
+			break
+		}
+
+		triggerPoolsRefill(sess)
+	}
+}
+
+func testShardAwarePortUnusedIfNotEnabled(t *testing.T, makeCluster makeClusterTestFunc) {
+	dialer := newLoggingTestDialer()
+	cluster := makeCluster()
+
+	useTLS := cluster.useTLS
+
+	// Explicitly disable the shard aware port.
+	sess, err := cluster.connect(context.Background(), dialer, true)
+	if err != nil {
+		t.Fatalf("an error occurred while creating a session: %s", err)
+	}
+	defer sess.Close()
+
+	if err := waitUntilPoolsStopFilling(context.Background(), sess, 10*time.Second); err != nil {
+		t.Fatal(err)
+	}
+
+	hosts := SessionData(sess).InternalHostSource.InternalGetHostsList()
+	for _, host := range hosts {
+		t.Logf("checking host %s", implEndpoint.HostInfoData(host).InternalHostname)
+		hostPool, _ := SessionData(sess).InternalPool.InternalGetPool(host)
+
+		shardAwarePort := getShardAwarePort(hostPool, useTLS)
+		if shardAwarePort == 0 {
+			// Shard aware port was not exposed by the host
+			t.Log("the host does not expose a shard-aware port, skipping")
+			continue
+		}
+
+		events := dialer.connectionEvents(host.ConnectAddress().String())
+
+		for _, evt := range events {
+			if evt.destinationPort == shardAwarePort {
+				t.Error("there was an attempt to connect to a shard aware port, but the configuration does not allow that")
+			}
+		}
+	}
+}
+
+func getShardAwarePort(pool *implPool.InternalHostConnPool, useTLS bool) uint16 {
+	if useTLS {
+		return pool.Host().ScyllaShardAwarePortTLS()
+	}
+	return pool.Host().ScyllaShardAwarePort()
+}
+
+func triggerPoolsRefill(sess *Session) {
+	hosts := SessionData(sess).InternalHostSource.InternalGetHostsList()
+	for _, host := range hosts {
+		hostPool, _ := SessionData(sess).InternalPool.InternalGetPool(host)
+		go hostPool.InternalFill_debounce()
+	}
+}
+
+func waitUntilPoolsStopFilling(ctx context.Context, sess *Session, timeout time.Duration) error {
+	deadline := time.After(timeout)
+	for !checkIfPoolsStoppedFilling(sess) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+
+		case <-deadline:
+			return fmt.Errorf("failed to fill all connection pools in %s", timeout)
+
+		case <-time.After(250 * time.Millisecond):
+			continue
+		}
+	}
+
+	return nil
+}
+
+func checkIfPoolsStoppedFilling(sess *Session) bool {
+	hosts := SessionData(sess).InternalHostSource.InternalGetHostsList()
+	for _, host := range hosts {
+		hostPool, _ := SessionData(sess).InternalPool.InternalGetPool(host)
+
+		hostPool.InternalMu.Lock()
+		isFilling := hostPool.InternalFilling || hostPool.InternalRepairScheduled
+		hostPool.InternalMu.Unlock()
+
+		if isFilling {
+			return false
+		}
+	}
+
+	return true
+}
+
+func checkIfPoolsAreFull(sess *Session) bool {
+	hosts := SessionData(sess).InternalHostSource.InternalGetHostsList()
+	for _, host := range hosts {
+		hostPool, _ := SessionData(sess).InternalPool.InternalGetPool(host)
+
+		hostPool.InternalMu.Lock()
+		_, remaining := hostPool.InternalConnPicker.Size()
+		hostPool.InternalMu.Unlock()
+
+		if remaining > 0 {
+			return false
+		}
+	}
+
+	return true
+}
+
+func shardTestContactPort(contactPoints []string, defaultPort uint16) uint16 {
+	_, portStr, _ := net.SplitHostPort(contactPoints[0])
+	port, _ := strconv.Atoi(portStr)
+
+	if port == 0 {
+		// A contact point without a port uses the configured transport port.
+		return defaultPort
+	}
+	return uint16(port)
+}
+
+type sourcePortOffByOneTestDialer struct {
+	ScyllaShardAwareDialer
+}
+
+func (spobo *sourcePortOffByOneTestDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	// Simulate a NAT that always increases the source port by 1
+	// This should always result in wrong shard being assigned if host
+	// has more than one shard.
+
+	sourcePort := endpoint.ScyllaGetSourcePort(ctx)
+	if sourcePort > 0 {
+		sourcePort++
+	}
+	newCtx := context.WithValue(ctx, endpoint.InternalScyllaSourcePortCtx{}, sourcePort)
+	return spobo.ScyllaShardAwareDialer.DialContext(newCtx, network, addr)
+}
+
+type allowOnlyNonShardAwarePortDialer struct {
+	net.Dialer
+
+	allowedPort uint16
+}
+
+func (aonsa *allowOnlyNonShardAwarePortDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	// Simulate a network configuration which allows connections to the
+	// non-shard-aware port, but not to the shard-aware one.
+
+	_, targetPort, _ := net.SplitHostPort(addr)
+	if targetPort != strconv.Itoa(int(aonsa.allowedPort)) {
+		return nil, fmt.Errorf("allowOnlyNonShardAwarePortDialer: tried to connect to port %s, but only %d is allowed", targetPort, aonsa.allowedPort)
+	}
+
+	return aonsa.Dialer.DialContext(ctx, network, addr)
+}
+
+type loggingTestDialer struct {
+	ScyllaShardAwareDialer
+
+	events map[string][]testConnectionEvent
+	mu     sync.Mutex
+}
+
+type testConnectionEvent struct {
+	sourcePort, destinationPort uint16
+}
+
+func newLoggingTestDialer() *loggingTestDialer {
+	return &loggingTestDialer{
+		events: make(map[string][]testConnectionEvent),
+	}
+}
+
+func (ltd *loggingTestDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	ipaddr, destinationPortStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+	destinationPort, err := strconv.ParseUint(destinationPortStr, 10, 16)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := ltd.ScyllaShardAwareDialer.DialContext(ctx, network, addr)
+
+	if err == nil {
+		ltd.mu.Lock()
+		defer ltd.mu.Unlock()
+
+		evt := testConnectionEvent{
+			sourcePort:      uint16(conn.LocalAddr().(*net.TCPAddr).Port),
+			destinationPort: uint16(destinationPort),
+		}
+		ltd.events[ipaddr] = append(ltd.events[ipaddr], evt)
+	}
+
+	return conn, err
+}
+
+func (ltd *loggingTestDialer) connectionEvents(address string) []testConnectionEvent {
+	ltd.mu.Lock()
+	defer ltd.mu.Unlock()
+	return append([]testConnectionEvent(nil), ltd.events[address]...)
+}

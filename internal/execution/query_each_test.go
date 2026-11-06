@@ -1,0 +1,355 @@
+// Copyright 2026 The Gocql Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license.
+
+package execution
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/binding"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/protocol"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/retry"
+)
+
+func eachTestQuery(t *testing.T) (*Query[codec.Unit, []byte], func(bodies ...[]byte) chan struct{}) {
+	t.Helper()
+	s, conns, peers := runtimeTestSession(t, 1)
+	statement := binding.Statement[codec.Unit, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+	q := codecTestMust(NewUnpreparedQuery(s, statement, cqltype.NewColumns(), Options{}))
+	t.Cleanup(q.Close)
+	serve := func(bodies ...[]byte) chan struct{} {
+		served := make(chan struct{})
+		go func() {
+			defer close(served)
+			for _, body := range bodies {
+				stream := typedTestReadRequest(t, conns[0], peers[0])
+				if _, err := peers[0].Write(typedTestResponse(t, 4, stream, body)); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+		}()
+		return served
+	}
+	return q, serve
+}
+
+func TestQueryEachDecodesEveryPageAndLeavesQueryIdle(t *testing.T) {
+	q, serve := eachTestQuery(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	served := serve(runtimeRowsBody([]byte{1}, "a", "b"), runtimeRowsBody(nil, "c"))
+	var got []string
+	dst := make([]byte, 0, 8)
+	err := q.Each(ctx, codec.Unit{}, &dst, func(row *[]byte) error {
+		got = append(got, string(*row))
+		return nil
+	})
+	<-served
+	result := q.LastResult()
+	if err != nil || strings.Join(got, ",") != "a,b,c" || result.Rows != 3 {
+		t.Fatal(got, result.Rows, err)
+	}
+	// The query is reusable at once: no Close or Wait obligation.
+	served = serve(runtimeRowsBody(nil, "d"))
+	found, err := q.One(ctx, codec.Unit{}, &dst)
+	<-served
+	if err != nil || !found || string(dst) != "d" {
+		t.Fatal(found, string(dst), err)
+	}
+}
+
+func TestQueryOneStopsAfterFirstRow(t *testing.T) {
+	q, serve := eachTestQuery(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	// Only one page is served: One must not request the continuation.
+	served := serve(runtimeRowsBody([]byte{1}, "first", "second"))
+	dst := make([]byte, 0, 8)
+	found, err := q.One(ctx, codec.Unit{}, &dst)
+	<-served
+	if err != nil || !found || string(dst) != "first" {
+		t.Fatal(found, string(dst), err)
+	}
+}
+
+func TestQueryOneNotFoundClearsDestination(t *testing.T) {
+	q, serve := eachTestQuery(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	served := serve(runtimeRowsBody(nil))
+	dst := []byte("stale")
+	found, err := q.One(ctx, codec.Unit{}, &dst)
+	<-served
+	if err != nil || found || dst != nil {
+		t.Fatal(found, dst, err)
+	}
+}
+
+func TestQueryEachCallbackErrorStops(t *testing.T) {
+	q, serve := eachTestQuery(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	served := serve(runtimeRowsBody([]byte{1}, "a", "b"))
+	stop := errors.New("stop")
+	calls := 0
+	dst := make([]byte, 0, 8)
+	err := q.Each(ctx, codec.Unit{}, &dst, func(*[]byte) error { calls++; return stop })
+	<-served
+	if !errors.Is(err, stop) || calls != 1 {
+		t.Fatal(calls, err)
+	}
+	served = serve(runtimeRowsBody(nil, "next"))
+	if found, err := q.One(ctx, codec.Unit{}, &dst); err != nil || !found || string(dst) != "next" {
+		t.Fatal("query not reusable after a callback error", found, err)
+	}
+	<-served
+}
+
+// Each lends the query's response storage to every page. Paging tokens of
+// different lengths and per-page row counts must survive that reuse, and a
+// token the history already holds must still be detected after the storage
+// that carried it was overwritten.
+func TestQueryEachReusedStorageKeepsTokensAndDetectsRepeats(t *testing.T) {
+	q, serve := eachTestQuery(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	served := serve(runtimeRowsBody([]byte{1}, "a"), runtimeRowsBody([]byte{2, 2, 2}, "b", "c", "d"), runtimeRowsBody([]byte{3}), runtimeRowsBody(nil, "e"))
+	var got []string
+	dst := make([]byte, 0, 8)
+	err := q.Each(ctx, codec.Unit{}, &dst, func(row *[]byte) error {
+		got = append(got, string(*row))
+		return nil
+	})
+	<-served
+	if err != nil || strings.Join(got, ",") != "a,b,c,d,e" || q.LastResult().Rows != 5 {
+		t.Fatal(got, q.LastResult().Rows, err)
+	}
+	got = got[:0]
+	served = serve(runtimeRowsBody([]byte{1}, "a"), runtimeRowsBody([]byte{2, 2}, "b"), runtimeRowsBody([]byte{1}, "c"))
+	err = q.Each(ctx, codec.Unit{}, &dst, func(row *[]byte) error {
+		got = append(got, string(*row))
+		return nil
+	})
+	<-served
+	if !errors.Is(err, runtimeerrors.ErrPagingNoProgress) || strings.Join(got, ",") != "a,b,c" {
+		t.Fatal(got, err)
+	}
+	served = serve(runtimeRowsBody(nil, "next"))
+	if found, err := q.One(ctx, codec.Unit{}, &dst); err != nil || !found || string(dst) != "next" {
+		t.Fatal("query not reusable after a paging failure", found, err)
+	}
+	<-served
+}
+
+// An UNPREPARED continuation page is reprepared and re-executed in the
+// query's lent response storage, and the released first response does not
+// leak into the repaired page.
+func TestQueryEachUnpreparedContinuationRepairs(t *testing.T) {
+	s, _, peers := runtimeTestSession(t, 1)
+	implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
+	typ := codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+	columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: typ})
+	state, old := step03PreparedState(t, s, columns)
+	state.InternalParameters = columns
+	state.InternalInfo.PartitionKeyIndexes = []int{0}
+	handle := new(Prepared[[]byte, cqltype.Bytes])
+	PreparedData(handle).InternalState = state
+	PreparedData(handle).InternalParams = codecTestMust(codec.OneParam(codec.BytesEncoder).Compile(columns))
+	PreparedData(handle).InternalRows = codec.OneColumn(codec.BlobCodec)
+	PreparedData(handle).InternalPlans = &InternalResultPlanCache[cqltype.Bytes]{}
+	q := codecTestMust(NewQuery(handle, Options{}))
+	defer q.Close()
+	serverDone := make(chan error, 1)
+	go func() {
+		for step := 0; step < 4; step++ {
+			op, stream, _, err := step03ReadRequest(peers[0])
+			if err != nil {
+				serverDone <- err
+				return
+			}
+			switch {
+			case step == 2 && op == 9:
+				_, err = peers[0].Write(typedTestResponse(t, 4, stream, step03PreparedBody([]byte("new"), columns, columns, 0)))
+			case step == 2:
+				err = fmt.Errorf("wanted PREPARE got %d", op)
+			case step == 0:
+				_, err = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody([]byte("a"), "one", "uno")))
+			case step == 1:
+				_, err = peers[0].Write(step03ErrorResponse(t, stream, protocol.ErrCodeUnprepared, old.InternalId))
+			default:
+				_, err = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "two")))
+			}
+			if err != nil {
+				serverDone <- err
+				return
+			}
+		}
+		serverDone <- nil
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	var dst cqltype.Bytes
+	var values []string
+	err := q.Each(ctx, []byte("key"), &dst, func(row *cqltype.Bytes) error {
+		values = append(values, string(row.OwnedBytes()))
+		return nil
+	})
+	if err != nil || fmt.Sprint(values) != "[one uno two]" || q.LastResult().Rows != 3 {
+		t.Fatal(values, q.LastResult().Rows, err)
+	}
+	if err := <-serverDone; err != nil {
+		t.Fatal(err)
+	}
+}
+
+// eachPageTimeoutQuery is eachTestQuery with a page timeout below the
+// execution timeout, so pages run under the query's reused page context.
+func eachPageTimeoutQuery(t *testing.T) (*Query[codec.Unit, []byte], net.Conn) {
+	t.Helper()
+	s, _, peers := runtimeTestSession(t, 1)
+	statement := binding.Statement[codec.Unit, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+	options := testOptions(OptionValues{Timeout: cql.Option[time.Duration]{Set: true, Value: 5 * time.Second}, PageTimeout: cql.Option[time.Duration]{Set: true, Value: 100 * time.Millisecond}})
+	q := codecTestMust(NewUnpreparedQuery(s, statement, cqltype.NewColumns(), options))
+	t.Cleanup(q.Close)
+	return q, peers[0]
+}
+
+// A page that outlives PageTimeout fails with a deadline while the
+// execution timeout still holds, and the next execution's pages get a fresh
+// page budget from the same reused context.
+func TestQueryEachPageTimeoutPerPage(t *testing.T) {
+	q, peer := eachPageTimeoutQuery(t)
+	answer := func(body []byte) {
+		_, stream, _, err := step03ReadRequest(peer)
+		if err == nil {
+			_, err = peer.Write(typedTestResponse(t, 4, stream, body))
+		}
+		if err != nil {
+			t.Error(err)
+		}
+	}
+	served := make(chan struct{})
+	go func() {
+		defer close(served)
+		answer(runtimeRowsBody([]byte{1}, "a"))
+		if _, _, _, err := step03ReadRequest(peer); err != nil { // page 2: never answered
+			t.Error(err)
+		}
+		// The next run: four pages, each within the page budget but
+		// together well beyond it.
+		for page := byte(2); page <= 4; page++ {
+			time.Sleep(60 * time.Millisecond)
+			answer(runtimeRowsBody([]byte{page}, string('a'+page)))
+		}
+		time.Sleep(60 * time.Millisecond)
+		answer(runtimeRowsBody(nil, "f"))
+	}()
+	ctx := context.Background()
+	dst := make([]byte, 0, 8)
+	started := time.Now()
+	err := q.Each(ctx, codec.Unit{}, &dst, func(*[]byte) error { return nil })
+	if !errors.Is(err, context.DeadlineExceeded) || time.Since(started) > 2*time.Second {
+		t.Fatal("page timeout", err, time.Since(started))
+	}
+	var got string
+	err = q.Each(ctx, codec.Unit{}, &dst, func(row *[]byte) error { got += string(*row); return nil })
+	<-served
+	if err != nil || got != "cdef" {
+		t.Fatal("each page should get a fresh budget", got, err)
+	}
+}
+
+// Cancelling the caller's context interrupts a page running under the
+// reused page context.
+func TestQueryEachParentCancelReachesPageContext(t *testing.T) {
+	q, peer := eachPageTimeoutQuery(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		_, stream, _, err := step03ReadRequest(peer)
+		if err == nil {
+			_, err = peer.Write(typedTestResponse(t, 4, stream, runtimeRowsBody([]byte{1}, "a")))
+		}
+		if err == nil {
+			_, _, _, err = step03ReadRequest(peer)
+		}
+		if err != nil {
+			t.Error(err)
+		}
+		cancel()
+	}()
+	dst := make([]byte, 0, 8)
+	started := time.Now()
+	err := q.Each(ctx, codec.Unit{}, &dst, func(*[]byte) error { return nil })
+	if !errors.Is(err, context.Canceled) || time.Since(started) > 90*time.Millisecond {
+		t.Fatal("parent cancellation did not reach the page", err, time.Since(started))
+	}
+}
+
+// Cancelling the caller's context interrupts a blocked response wait
+// although the execution context registers no watcher on it.
+func TestQueryEachParentCancelInterruptsWait(t *testing.T) {
+	s, _, peers := runtimeTestSession(t, 1)
+	statement := binding.Statement[codec.Unit, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+	q := codecTestMust(NewUnpreparedQuery(s, statement, cqltype.NewColumns(), testOptions(OptionValues{Timeout: cql.Option[time.Duration]{Set: true, Value: 5 * time.Second}})))
+	t.Cleanup(q.Close)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		if _, _, _, err := step03ReadRequest(peers[0]); err != nil {
+			t.Error(err)
+		}
+		cancel()
+	}()
+	dst := make([]byte, 0, 8)
+	started := time.Now()
+	found, err := q.One(ctx, codec.Unit{}, &dst)
+	if found || !errors.Is(err, context.Canceled) || time.Since(started) > time.Second {
+		t.Fatal("parent cancellation did not end the wait", found, err, time.Since(started))
+	}
+}
+
+type eachRetryAfterDelay struct{}
+
+func (eachRetryAfterDelay) Decide(retry.Attempt) retry.Decision {
+	return retry.Decision{Action: retry.Same, Delay: time.Minute}
+}
+
+// Cancelling the caller's context interrupts a retry delay.
+func TestQueryEachParentCancelInterruptsRetryDelay(t *testing.T) {
+	s, _, peers := runtimeTestSession(t, 1)
+	statement := binding.Statement[codec.Unit, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+	profile := settings.InternalDefaultProfile()
+	profile.Retry = eachRetryAfterDelay{}
+	q := codecTestMust(NewUnpreparedQuery(s, statement, cqltype.NewColumns(), testOptions(OptionValues{Profile: profileOf(profile), Timeout: cql.Option[time.Duration]{Set: true, Value: 5 * time.Minute}})))
+	t.Cleanup(q.Close)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		_, stream, _, err := step03ReadRequest(peers[0])
+		if err == nil {
+			_, err = peers[0].Write(step03ErrorResponse(t, stream, protocol.ErrCodeServer, nil))
+		}
+		if err != nil {
+			t.Error(err)
+		}
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+	dst := make([]byte, 0, 8)
+	started := time.Now()
+	_, err := q.One(ctx, codec.Unit{}, &dst)
+	if !errors.Is(err, context.Canceled) || time.Since(started) > 2*time.Second {
+		t.Fatal("parent cancellation did not end the retry delay", err, time.Since(started))
+	}
+}

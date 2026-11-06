@@ -3,7 +3,9 @@
 
 package gocql
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+import (
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+)
 
 // These private-runtime test names preserve existing test bodies. They are absent
 // from the production package and its public API.

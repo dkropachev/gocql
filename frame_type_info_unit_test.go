@@ -6,23 +6,10 @@ package gocql
 // typeOption writes a CQL [option] type description the way a server does.
 type typeOption func(f *framer)
 
-func optNative(t Type) typeOption {
-	return func(f *framer) { f.WriteShort(uint16(t)) }
-}
-
 func optCustom(class string) typeOption {
 	return func(f *framer) {
 		f.WriteShort(uint16(TypeCustom))
 		f.WriteString(class)
-	}
-}
-
-func optCollection(t Type, elems ...typeOption) typeOption {
-	return func(f *framer) {
-		f.WriteShort(uint16(t))
-		for _, e := range elems {
-			e(f)
-		}
 	}
 }
 

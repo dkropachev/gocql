@@ -1,0 +1,898 @@
+//go:build unit
+// +build unit
+
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/*
+ * Content before git sha 34fdeebefcbf183ed7f916f931aa0586fdaa1b40
+ * Copyright (c) 2016, The Gocql authors,
+ * provided under the BSD-3-Clause License.
+ * See the NOTICE file distributed with this work for additional information.
+ */
+
+package cluster
+
+import (
+	"net"
+	"testing"
+
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/protocol"
+
+	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/tests/mock"
+)
+
+type trackingMockFramer struct {
+	mock.MockFramer
+	released bool
+}
+
+func (f *trackingMockFramer) Release() {
+	f.released = true
+}
+
+type systemSchemaTestControl struct {
+	iter *nativeResultFixture
+}
+
+func (*systemSchemaTestControl) InternalGetConn() *InternalConnHost               { return nil }
+func (*systemSchemaTestControl) InternalAwaitSchemaAgreement() error              { return nil }
+func (*systemSchemaTestControl) query(string, ...any) (iter *nativeResultFixture) { return nil }
+func (c *systemSchemaTestControl) querySystem(string, ...any) (iter *nativeResultFixture) {
+	return c.iter
+}
+func (*systemSchemaTestControl) InternalDiscoverProtocol([]*endpoint.HostInfo) (int, error) {
+	return 0, nil
+}
+func (*systemSchemaTestControl) InternalConnect([]*endpoint.HostInfo) error { return nil }
+func (*systemSchemaTestControl) InternalClose()                             {}
+func (*systemSchemaTestControl) InternalGetSession() *Session               { return nil }
+func (*systemSchemaTestControl) InternalReconnect() error                   { return nil }
+
+func TestUnmarshalCassVersion(t *testing.T) {
+	t.Parallel()
+
+	tests := [...]struct {
+		data    string
+		version endpoint.InternalCassVersion
+	}{
+		{"3.2", endpoint.InternalCassVersion{Major: 3, Minor: 2, Patch: 0, Qualifier: ""}},
+		{"2.10.1-SNAPSHOT", endpoint.InternalCassVersion{Major: 2, Minor: 10, Patch: 1, Qualifier: ""}},
+		{"1.2.3", endpoint.InternalCassVersion{Major: 1, Minor: 2, Patch: 3, Qualifier: ""}},
+		{"4.0-rc2", endpoint.InternalCassVersion{Major: 4, Minor: 0, Patch: 0, Qualifier: "rc2"}},
+		{"4.3.2-rc1", endpoint.InternalCassVersion{Major: 4, Minor: 3, Patch: 2, Qualifier: "rc1"}},
+		{"4.3.2-rc1-qualifier1", endpoint.InternalCassVersion{Major: 4, Minor: 3, Patch: 2, Qualifier: "rc1-qualifier1"}},
+		{"4.3-rc1-qualifier1", endpoint.InternalCassVersion{Major: 4, Minor: 3, Patch: 0, Qualifier: "rc1-qualifier1"}},
+	}
+
+	for i, test := range tests {
+		v := &endpoint.InternalCassVersion{}
+		if err := v.Set(test.data); err != nil {
+			t.Errorf("%d: %v", i, err)
+		} else if *v != test.version {
+			t.Errorf("%d: expected %#+v got %#+v", i, test.version, *v)
+		}
+	}
+}
+
+func TestCassVersionBefore(t *testing.T) {
+	t.Parallel()
+
+	tests := [...]struct {
+		version             endpoint.InternalCassVersion
+		major, minor, patch int
+		Qualifier           string
+	}{
+		{endpoint.InternalCassVersion{Major: 1, Minor: 0, Patch: 0, Qualifier: ""}, 0, 0, 0, ""},
+		{endpoint.InternalCassVersion{Major: 0, Minor: 1, Patch: 0, Qualifier: ""}, 0, 0, 0, ""},
+		{endpoint.InternalCassVersion{Major: 0, Minor: 0, Patch: 1, Qualifier: ""}, 0, 0, 0, ""},
+
+		{endpoint.InternalCassVersion{Major: 1, Minor: 0, Patch: 0, Qualifier: ""}, 0, 1, 0, ""},
+		{endpoint.InternalCassVersion{Major: 0, Minor: 1, Patch: 0, Qualifier: ""}, 0, 0, 1, ""},
+		{endpoint.InternalCassVersion{Major: 4, Minor: 1, Patch: 0, Qualifier: ""}, 3, 1, 2, ""},
+
+		{endpoint.InternalCassVersion{Major: 4, Minor: 1, Patch: 0, Qualifier: ""}, 3, 1, 2, ""},
+	}
+
+	for i, test := range tests {
+		if test.version.Before(test.major, test.minor, test.patch) {
+			t.Errorf("%d: expected v%d.%d.%d to be before %v", i, test.major, test.minor, test.patch, test.version)
+		}
+	}
+
+}
+
+func TestIsValidPeer(t *testing.T) {
+	t.Parallel()
+
+	host := func() *endpoint.HostInfo {
+		opaqueStorageValue := new(endpoint.HostInfo)
+		implEndpoint.HostInfoData(opaqueStorageValue).InternalRpcAddress = net.ParseIP("0.0.0.0")
+		implEndpoint.HostInfoData(opaqueStorageValue).InternalRack = "myRack"
+		implEndpoint.HostInfoData(opaqueStorageValue).InternalHostId = tUUID(1)
+		implEndpoint.HostInfoData(opaqueStorageValue).InternalDataCenter = "datacenter"
+		implEndpoint.HostInfoData(opaqueStorageValue).InternalTokens = []string{"0", "1"}
+		return opaqueStorageValue
+	}()
+
+	if !InternalIsValidPeer(host) {
+		t.Errorf("expected %+v to be a valid peer", host)
+	}
+	implEndpoint.HostInfoData(host).InternalRack = ""
+	if InternalIsValidPeer(host) {
+		t.Errorf("expected %+v to NOT be a valid peer", host)
+	}
+}
+
+func TestIsZeroToken(t *testing.T) {
+	t.Parallel()
+
+	host := func() *endpoint.HostInfo {
+		opaqueStorageValuex := new(endpoint.HostInfo)
+		implEndpoint.HostInfoData(opaqueStorageValuex).InternalRpcAddress = net.ParseIP("0.0.0.0")
+		implEndpoint.HostInfoData(opaqueStorageValuex).InternalRack = "myRack"
+		implEndpoint.HostInfoData(opaqueStorageValuex).InternalHostId = tUUID(1)
+		implEndpoint.HostInfoData(opaqueStorageValuex).InternalDataCenter = "datacenter"
+		implEndpoint.HostInfoData(opaqueStorageValuex).InternalTokens = []string{"0", "1"}
+		return opaqueStorageValuex
+	}()
+
+	if InternalIsZeroToken(host) {
+		t.Errorf("expected %+v to NOT be a zero-token host", host)
+	}
+	implEndpoint.HostInfoData(host).InternalTokens = []string{}
+	if !InternalIsZeroToken(host) {
+		t.Errorf("expected %+v to be a zero-token host", host)
+	}
+}
+
+func TestCheckSystemSchemaClosesIter(t *testing.T) {
+	t.Parallel()
+
+	t.Run("NilIterReturnsNoControl", func(t *testing.T) {
+		ok, err := InternalCheckSystemSchema(&systemSchemaTestControl{})
+		if err != metadata.InternalErrNoControl {
+			t.Fatalf("expected errNoControl, got %v", err)
+		}
+		if ok {
+			t.Fatal("expected system schema v2 detection to fail without a control iterator")
+		}
+	})
+
+	t.Run("Success", func(t *testing.T) {
+		framer := &trackingMockFramer{}
+		ok, err := InternalCheckSystemSchema(&systemSchemaTestControl{
+			iter: &nativeResultFixture{framer: framer},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !ok {
+			t.Fatal("expected system schema v2 detection to succeed")
+		}
+		if !framer.released {
+			t.Fatal("expected iterator framer to be released")
+		}
+	})
+
+	t.Run("SyntaxError", func(t *testing.T) {
+		framer := &trackingMockFramer{}
+		ok, err := InternalCheckSystemSchema(&systemSchemaTestControl{
+			iter: &nativeResultFixture{
+				err:    &frm.ErrorFrame{Code: protocol.ErrCodeSyntax},
+				framer: framer,
+			},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if ok {
+			t.Fatal("expected schema v2 detection to fall back on syntax error")
+		}
+		if !framer.released {
+			t.Fatal("expected iterator framer to be released")
+		}
+	})
+}
+
+func TestHostInfoFromIterClosesIter(t *testing.T) {
+	t.Parallel()
+
+	// Column order matches systemLocalResultMetadata:
+	// broadcast_address, cluster_name, data_center, host_id, listen_address, partitioner, rack, release_version, rpc_address, schema_version, tokens
+	row := []any{
+		net.IPv4(192, 168, 100, 12),
+		"cluster",
+		"datacenter1",
+		cqltype.ParseUUIDMust("045859a7-6b9f-4efd-a5e7-acd64a295e13"),
+		net.IPv4(192, 168, 100, 12),
+		"org.apache.cassandra.dht.Murmur3Partitioner",
+		"rack1",
+		"3.0.8",
+		net.IPv4(192, 168, 100, 12),
+		cqltype.ParseUUIDMust("daf4df2c-b708-11ef-5c25-3004361afd71"),
+		[]string{"1"},
+	}
+	framer := &trackingMockFramer{
+		MockFramer: mock.MockFramer{Data: marshalMetadataMust(systemLocalResultMetadata, row)},
+	}
+
+	host, err := hostInfoFromFixture(&nativeResultFixture{
+		meta:    systemLocalResultMetadata,
+		framer:  framer,
+		numRows: 1,
+	}, 9042)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if host == nil {
+		t.Fatal("expected host info")
+	}
+	if !framer.released {
+		t.Fatal("expected iterator framer to be released")
+	}
+}
+
+func TestHostInfo_ConnectAddress(t *testing.T) {
+	t.Parallel()
+
+	var localhost = net.IPv4(127, 0, 0, 1)
+	tests := []struct {
+		name          string
+		connectAddr   net.IP
+		rpcAddr       net.IP
+		broadcastAddr net.IP
+		peer          net.IP
+	}{
+		{name: "rpc_address", rpcAddr: localhost},
+		{name: "connect_address", connectAddr: localhost},
+		{name: "broadcast_address", broadcastAddr: localhost},
+		{name: "peer", peer: localhost},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			host := func() *endpoint.HostInfo {
+				opaqueStorageValuexx := new(endpoint.HostInfo)
+				implEndpoint.HostInfoData(opaqueStorageValuexx).InternalConnectAddress = test.connectAddr
+				implEndpoint.HostInfoData(opaqueStorageValuexx).InternalRpcAddress = test.rpcAddr
+				implEndpoint.HostInfoData(opaqueStorageValuexx).InternalBroadcastAddress = test.broadcastAddr
+				implEndpoint.HostInfoData(opaqueStorageValuexx).InternalPeer = test.peer
+				return opaqueStorageValuexx
+			}()
+
+			if addr := host.ConnectAddress(); !addr.Equal(localhost) {
+				t.Fatalf("expected ConnectAddress to be %s got %s", localhost, addr)
+			}
+		})
+	}
+}
+
+func TestAddressPort(t *testing.T) {
+	t.Parallel()
+
+	t.Run("IsValid", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name     string
+			addr     endpoint.AddressPort
+			expected bool
+		}{
+			{
+				name:     "valid IPv4 address with port",
+				addr:     endpoint.AddressPort{Address: net.IPv4(127, 0, 0, 1), Port: 9042},
+				expected: true,
+			},
+			{
+				name:     "valid IPv6 address with port",
+				addr:     endpoint.AddressPort{Address: net.ParseIP("::1"), Port: 9042},
+				expected: true,
+			},
+			{
+				name:     "nil address",
+				addr:     endpoint.AddressPort{Address: nil, Port: 9042},
+				expected: false,
+			},
+			{
+				name:     "unspecified IPv4 address",
+				addr:     endpoint.AddressPort{Address: net.IPv4zero, Port: 9042},
+				expected: false,
+			},
+			{
+				name:     "unspecified IPv6 address",
+				addr:     endpoint.AddressPort{Address: net.IPv6unspecified, Port: 9042},
+				expected: false,
+			},
+			{
+				name:     "zero port",
+				addr:     endpoint.AddressPort{Address: net.IPv4(127, 0, 0, 1), Port: 0},
+				expected: false,
+			},
+			{
+				name:     "nil address and zero port",
+				addr:     endpoint.AddressPort{Address: nil, Port: 0},
+				expected: false,
+			},
+			{
+				name:     "empty AddressPort",
+				addr:     endpoint.AddressPort{},
+				expected: false,
+			},
+		}
+
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				result := test.addr.IsValid()
+				if result != test.expected {
+					t.Errorf("IsValid() = %v, expected %v for %+v", result, test.expected, test.addr)
+				}
+			})
+		}
+	})
+
+	t.Run("Equal", func(t *testing.T) {
+		t.Parallel()
+
+		addr1 := endpoint.AddressPort{Address: net.IPv4(127, 0, 0, 1), Port: 9042}
+		addr2 := endpoint.AddressPort{Address: net.IPv4(127, 0, 0, 1), Port: 9042}
+		addr3 := endpoint.AddressPort{Address: net.IPv4(192, 168, 1, 1), Port: 9042}
+		addr4 := endpoint.AddressPort{Address: net.IPv4(127, 0, 0, 1), Port: 9043}
+
+		tests := []struct {
+			name     string
+			a        endpoint.AddressPort
+			b        endpoint.AddressPort
+			expected bool
+		}{
+			{
+				name:     "equal addresses and ports",
+				a:        addr1,
+				b:        addr2,
+				expected: true,
+			},
+			{
+				name:     "different addresses, same port",
+				a:        addr1,
+				b:        addr3,
+				expected: false,
+			},
+			{
+				name:     "same address, different ports",
+				a:        addr1,
+				b:        addr4,
+				expected: false,
+			},
+			{
+				name:     "IPv6 addresses equal",
+				a:        endpoint.AddressPort{Address: net.ParseIP("::1"), Port: 9042},
+				b:        endpoint.AddressPort{Address: net.ParseIP("::1"), Port: 9042},
+				expected: true,
+			},
+			{
+				name:     "empty",
+				a:        endpoint.AddressPort{},
+				b:        endpoint.AddressPort{},
+				expected: true,
+			},
+			{
+				name:     "empty, non-empty",
+				a:        endpoint.AddressPort{},
+				b:        endpoint.AddressPort{Address: net.ParseIP("::1"), Port: 9042},
+				expected: false,
+			},
+		}
+
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				result := test.a.Equal(test.b)
+				if result != test.expected {
+					t.Errorf("Equal() = %v, expected %v for a=%+v, b=%+v", result, test.expected, test.a, test.b)
+				}
+			})
+		}
+	})
+
+	t.Run("String", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name     string
+			addr     endpoint.AddressPort
+			expected string
+		}{
+			{
+				name:     "IPv4 address",
+				addr:     endpoint.AddressPort{Address: net.IPv4(127, 0, 0, 1), Port: 9042},
+				expected: "127.0.0.1:9042",
+			},
+			{
+				name:     "IPv6 address",
+				addr:     endpoint.AddressPort{Address: net.ParseIP("::1"), Port: 9042},
+				expected: "::1:9042",
+			},
+			{
+				name:     "different port",
+				addr:     endpoint.AddressPort{Address: net.IPv4(192, 168, 1, 1), Port: 8080},
+				expected: "192.168.1.1:8080",
+			},
+			{
+				name:     "nil address",
+				addr:     endpoint.AddressPort{Address: nil, Port: 9042},
+				expected: "<nil>:9042",
+			},
+		}
+
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				result := test.addr.String()
+				if result != test.expected {
+					t.Errorf("String() = %q, expected %q", result, test.expected)
+				}
+			})
+		}
+	})
+
+	t.Run("ToNetAddr", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name     string
+			addr     endpoint.AddressPort
+			expected string
+		}{
+			{
+				name:     "IPv4 address",
+				addr:     endpoint.AddressPort{Address: net.IPv4(127, 0, 0, 1), Port: 9042},
+				expected: "127.0.0.1:9042",
+			},
+			{
+				name:     "IPv6 address",
+				addr:     endpoint.AddressPort{Address: net.ParseIP("::1"), Port: 9042},
+				expected: "[::1]:9042",
+			},
+			{
+				name:     "IPv6 address with zone",
+				addr:     endpoint.AddressPort{Address: net.ParseIP("fe80::1"), Port: 9043},
+				expected: "[fe80::1]:9043",
+			},
+			{
+				name:     "different port",
+				addr:     endpoint.AddressPort{Address: net.IPv4(192, 168, 1, 1), Port: 8080},
+				expected: "192.168.1.1:8080",
+			},
+		}
+
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				result := test.addr.ToNetAddr()
+				if result != test.expected {
+					t.Errorf("ToNetAddr() = %q, expected %q", result, test.expected)
+				}
+			})
+		}
+	})
+}
+
+func TestHostInfoBuilder(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Build", func(t *testing.T) {
+		t.Run("basic fields", func(t *testing.T) {
+			t.Parallel()
+
+			builder := endpoint.HostInfoBuilder{
+				HostId:        "a0000000-0000-0000-0000-000000000123",
+				DataCenter:    "dc1",
+				Rack:          "rack1",
+				Tokens:        []string{"token1", "token2"},
+				Port:          9042,
+				Workload:      "Analytics",
+				DseVersion:    "6.8.0",
+				ClusterName:   "test-cluster",
+				Partitioner:   "Murmur3Partitioner",
+				Hostname:      "node1.example.com",
+				SchemaVersion: "schema-v1",
+			}
+
+			host := builder.Build()
+
+			if host.HostID() != builder.HostId {
+				t.Errorf("HostID() = %q, expected %q", host.HostID(), builder.HostId)
+			}
+			if host.DataCenter() != builder.DataCenter {
+				t.Errorf("DataCenter() = %q, expected %q", host.DataCenter(), builder.DataCenter)
+			}
+			if host.Rack() != builder.Rack {
+				t.Errorf("Rack() = %q, expected %q", host.Rack(), builder.Rack)
+			}
+			if host.Port() != builder.Port {
+				t.Errorf("Port() = %d, expected %d", host.Port(), builder.Port)
+			}
+			if host.WorkLoad() != builder.Workload {
+				t.Errorf("WorkLoad() = %q, expected %q", host.WorkLoad(), builder.Workload)
+			}
+			if host.DSEVersion() != builder.DseVersion {
+				t.Errorf("DSEVersion() = %q, expected %q", host.DSEVersion(), builder.DseVersion)
+			}
+			if host.ClusterName() != builder.ClusterName {
+				t.Errorf("ClusterName() = %q, expected %q", host.ClusterName(), builder.ClusterName)
+			}
+			if host.Partitioner() != builder.Partitioner {
+				t.Errorf("Partitioner() = %q, expected %q", host.Partitioner(), builder.Partitioner)
+			}
+			if len(host.Tokens()) != len(builder.Tokens) {
+				t.Errorf("len(Tokens()) = %d, expected %d", len(host.Tokens()), len(builder.Tokens))
+			}
+			for i, token := range host.Tokens() {
+				if token != builder.Tokens[i] {
+					t.Errorf("Tokens()[%d] = %q, expected %q", i, token, builder.Tokens[i])
+				}
+			}
+		})
+
+		t.Run("IP addresses", func(t *testing.T) {
+			t.Parallel()
+
+			connectAddr := net.IPv4(192, 168, 1, 1)
+			broadcastAddr := net.IPv4(192, 168, 1, 2)
+			preferredIP := net.IPv4(192, 168, 1, 3)
+			rpcAddr := net.IPv4(192, 168, 1, 4)
+			peer := net.IPv4(192, 168, 1, 5)
+			listenAddr := net.IPv4(192, 168, 1, 6)
+
+			builder := endpoint.HostInfoBuilder{
+				ConnectAddress:   connectAddr,
+				BroadcastAddress: broadcastAddr,
+				PreferredIP:      preferredIP,
+				RpcAddress:       rpcAddr,
+				Peer:             peer,
+				ListenAddress:    listenAddr,
+				Port:             9042,
+			}
+
+			host := builder.Build()
+
+			if !host.UntranslatedConnectAddress().Equal(connectAddr) {
+				t.Errorf("UntranslatedConnectAddress() = %v, expected %v", host.UntranslatedConnectAddress(), connectAddr)
+			}
+			if !host.BroadcastAddress().Equal(broadcastAddr) {
+				t.Errorf("BroadcastAddress() = %v, expected %v", host.BroadcastAddress(), broadcastAddr)
+			}
+			if !host.PreferredIP().Equal(preferredIP) {
+				t.Errorf("PreferredIP() = %v, expected %v", host.PreferredIP(), preferredIP)
+			}
+			if !host.RPCAddress().Equal(rpcAddr) {
+				t.Errorf("RPCAddress() = %v, expected %v", host.RPCAddress(), rpcAddr)
+			}
+			if !host.Peer().Equal(peer) {
+				t.Errorf("Peer() = %v, expected %v", host.Peer(), peer)
+			}
+			if !host.ListenAddress().Equal(listenAddr) {
+				t.Errorf("ListenAddress() = %v, expected %v", host.ListenAddress(), listenAddr)
+			}
+		})
+
+		t.Run("translated addresses", func(t *testing.T) {
+			t.Parallel()
+
+			translatedAddrs := &endpoint.InternalTranslatedAddresses{
+				CQL: endpoint.AddressPort{
+					Address: net.IPv4(10, 0, 0, 1),
+					Port:    9042,
+				},
+				ShardAware: endpoint.AddressPort{
+					Address: net.IPv4(10, 0, 0, 2),
+					Port:    19042,
+				},
+				ShardAwareTLS: endpoint.AddressPort{
+					Address: net.IPv4(10, 0, 0, 3),
+					Port:    19043,
+				},
+			}
+
+			builder := endpoint.HostInfoBuilder{
+				TranslatedAddresses: translatedAddrs,
+				Port:                9042,
+			}
+
+			host := builder.Build()
+
+			// ConnectAddress should use translated CQL address
+			expectedAddr := translatedAddrs.CQL.Address
+			if !host.ConnectAddress().Equal(expectedAddr) {
+				t.Errorf("ConnectAddress() = %v, expected %v", host.ConnectAddress(), expectedAddr)
+			}
+
+			// Verify translated addresses are set
+			retrievedAddrs := implEndpoint.InternalHostInfoGetTranslatedConnectionInfo(&host)
+			if retrievedAddrs == nil {
+				t.Fatal("getTranslatedConnectionInfo() returned nil")
+			}
+			if !retrievedAddrs.Equal(translatedAddrs) {
+				t.Errorf("translated addresses not equal: got %+v, expected %+v", retrievedAddrs, translatedAddrs)
+			}
+		})
+
+		t.Run("version", func(t *testing.T) {
+			t.Parallel()
+
+			version := endpoint.InternalCassVersion{
+				Major:     4,
+				Minor:     0,
+				Patch:     3,
+				Qualifier: "rc1",
+			}
+
+			builder := endpoint.HostInfoBuilder{
+				Version: version,
+				Port:    9042,
+			}
+
+			host := builder.Build()
+
+			if host.Version() != version {
+				t.Errorf("Version() = %+v, expected %+v", host.Version(), version)
+			}
+		})
+
+		t.Run("empty builder", func(t *testing.T) {
+			t.Parallel()
+
+			builder := endpoint.HostInfoBuilder{}
+			host := builder.Build()
+
+			if host.HostID() != "" {
+				t.Errorf("HostID() = %q, expected empty string", host.HostID())
+			}
+			if host.DataCenter() != "" {
+				t.Errorf("DataCenter() = %q, expected empty string", host.DataCenter())
+			}
+			if host.Port() != 0 {
+				t.Errorf("Port() = %d, expected 0", host.Port())
+			}
+			if host.Tokens() != nil {
+				t.Errorf("Tokens() = %v, expected nil", host.Tokens())
+			}
+		})
+
+		t.Run("all fields populated", func(t *testing.T) {
+			t.Parallel()
+
+			translatedAddrs := &endpoint.InternalTranslatedAddresses{
+				CQL: endpoint.AddressPort{
+					Address: net.IPv4(10, 0, 0, 1),
+					Port:    9042,
+				},
+			}
+
+			version := endpoint.InternalCassVersion{
+				Major: 3,
+				Minor: 11,
+				Patch: 4,
+			}
+
+			builder := endpoint.HostInfoBuilder{
+				TranslatedAddresses: translatedAddrs,
+				Workload:            "Cassandra",
+				HostId:              "b0000000-0000-0000-0000-000000000456",
+				SchemaVersion:       "schema-v2",
+				Hostname:            "cassandra-node.local",
+				ClusterName:         "production-cluster",
+				Partitioner:         "Murmur3Partitioner",
+				Rack:                "rack2",
+				DseVersion:          "6.8.1",
+				DataCenter:          "dc2",
+				ConnectAddress:      net.IPv4(192, 168, 2, 1),
+				BroadcastAddress:    net.IPv4(192, 168, 2, 2),
+				PreferredIP:         net.IPv4(192, 168, 2, 3),
+				RpcAddress:          net.IPv4(192, 168, 2, 4),
+				Peer:                net.IPv4(192, 168, 2, 5),
+				ListenAddress:       net.IPv4(192, 168, 2, 6),
+				Tokens:              []string{"token-a", "token-b", "token-c"},
+				Version:             version,
+				Port:                9043,
+			}
+
+			host := builder.Build()
+
+			// Verify all fields
+			if host.WorkLoad() != builder.Workload {
+				t.Errorf("WorkLoad() = %q, expected %q", host.WorkLoad(), builder.Workload)
+			}
+			if host.HostID() != builder.HostId {
+				t.Errorf("HostID() = %q, expected %q", host.HostID(), builder.HostId)
+			}
+			if host.ClusterName() != builder.ClusterName {
+				t.Errorf("ClusterName() = %q, expected %q", host.ClusterName(), builder.ClusterName)
+			}
+			if host.Partitioner() != builder.Partitioner {
+				t.Errorf("Partitioner() = %q, expected %q", host.Partitioner(), builder.Partitioner)
+			}
+			if host.Rack() != builder.Rack {
+				t.Errorf("Rack() = %q, expected %q", host.Rack(), builder.Rack)
+			}
+			if host.DSEVersion() != builder.DseVersion {
+				t.Errorf("DSEVersion() = %q, expected %q", host.DSEVersion(), builder.DseVersion)
+			}
+			if host.DataCenter() != builder.DataCenter {
+				t.Errorf("DataCenter() = %q, expected %q", host.DataCenter(), builder.DataCenter)
+			}
+			if !host.UntranslatedConnectAddress().Equal(builder.ConnectAddress) {
+				t.Errorf("UntranslatedConnectAddress() = %v, expected %v", host.UntranslatedConnectAddress(), builder.ConnectAddress)
+			}
+			if !host.BroadcastAddress().Equal(builder.BroadcastAddress) {
+				t.Errorf("BroadcastAddress() = %v, expected %v", host.BroadcastAddress(), builder.BroadcastAddress)
+			}
+			if !host.PreferredIP().Equal(builder.PreferredIP) {
+				t.Errorf("PreferredIP() = %v, expected %v", host.PreferredIP(), builder.PreferredIP)
+			}
+			if !host.RPCAddress().Equal(builder.RpcAddress) {
+				t.Errorf("RPCAddress() = %v, expected %v", host.RPCAddress(), builder.RpcAddress)
+			}
+			if !host.Peer().Equal(builder.Peer) {
+				t.Errorf("Peer() = %v, expected %v", host.Peer(), builder.Peer)
+			}
+			if !host.ListenAddress().Equal(builder.ListenAddress) {
+				t.Errorf("ListenAddress() = %v, expected %v", host.ListenAddress(), builder.ListenAddress)
+			}
+			if host.Version() != builder.Version {
+				t.Errorf("Version() = %+v, expected %+v", host.Version(), builder.Version)
+			}
+			if host.Port() != builder.Port {
+				t.Errorf("Port() = %d, expected %d", host.Port(), builder.Port)
+			}
+			if len(host.Tokens()) != len(builder.Tokens) {
+				t.Errorf("len(Tokens()) = %d, expected %d", len(host.Tokens()), len(builder.Tokens))
+			}
+
+			// Verify ConnectAddress uses translated address
+			if !host.ConnectAddress().Equal(translatedAddrs.CQL.Address) {
+				t.Errorf("ConnectAddress() = %v, expected %v", host.ConnectAddress(), translatedAddrs.CQL.Address)
+			}
+		})
+
+		t.Run("nil IP addresses", func(t *testing.T) {
+			t.Parallel()
+
+			builder := endpoint.HostInfoBuilder{
+				ConnectAddress:   nil,
+				BroadcastAddress: nil,
+				PreferredIP:      nil,
+				RpcAddress:       nil,
+				Peer:             nil,
+				ListenAddress:    nil,
+				Port:             9042,
+			}
+
+			host := builder.Build()
+
+			if host.UntranslatedConnectAddress() != nil {
+				t.Errorf("UntranslatedConnectAddress() = %v, expected nil", host.UntranslatedConnectAddress())
+			}
+			if host.BroadcastAddress() != nil {
+				t.Errorf("BroadcastAddress() = %v, expected nil", host.BroadcastAddress())
+			}
+			if host.PreferredIP() != nil {
+				t.Errorf("PreferredIP() = %v, expected nil", host.PreferredIP())
+			}
+			if host.RPCAddress() != nil {
+				t.Errorf("RPCAddress() = %v, expected nil", host.RPCAddress())
+			}
+			if host.Peer() != nil {
+				t.Errorf("Peer() = %v, expected nil", host.Peer())
+			}
+			if host.ListenAddress() != nil {
+				t.Errorf("ListenAddress() = %v, expected nil", host.ListenAddress())
+			}
+		})
+
+		t.Run("connect address priority without translated addresses", func(t *testing.T) {
+			t.Parallel()
+
+			// Test that ConnectAddress follows the priority order when translated addresses are not set
+			tests := []struct {
+				name         string
+				builder      endpoint.HostInfoBuilder
+				expectedAddr net.IP
+				shouldPanic  bool
+			}{
+				{
+					name: "connectAddress takes priority",
+					builder: endpoint.HostInfoBuilder{
+						ConnectAddress:   net.IPv4(1, 1, 1, 1),
+						RpcAddress:       net.IPv4(2, 2, 2, 2),
+						PreferredIP:      net.IPv4(3, 3, 3, 3),
+						BroadcastAddress: net.IPv4(4, 4, 4, 4),
+						Peer:             net.IPv4(5, 5, 5, 5),
+						Port:             9042,
+					},
+					expectedAddr: net.IPv4(1, 1, 1, 1),
+				},
+				{
+					name: "rpcAddress when connectAddress is nil",
+					builder: endpoint.HostInfoBuilder{
+						RpcAddress:       net.IPv4(2, 2, 2, 2),
+						PreferredIP:      net.IPv4(3, 3, 3, 3),
+						BroadcastAddress: net.IPv4(4, 4, 4, 4),
+						Peer:             net.IPv4(5, 5, 5, 5),
+						Port:             9042,
+					},
+					expectedAddr: net.IPv4(2, 2, 2, 2),
+				},
+				{
+					name: "preferredIP when connectAddress and rpcAddress are nil",
+					builder: endpoint.HostInfoBuilder{
+						PreferredIP:      net.IPv4(3, 3, 3, 3),
+						BroadcastAddress: net.IPv4(4, 4, 4, 4),
+						Peer:             net.IPv4(5, 5, 5, 5),
+						Port:             9042,
+					},
+					expectedAddr: net.IPv4(3, 3, 3, 3),
+				},
+				{
+					name: "broadcastAddress when others are nil",
+					builder: endpoint.HostInfoBuilder{
+						BroadcastAddress: net.IPv4(4, 4, 4, 4),
+						Peer:             net.IPv4(5, 5, 5, 5),
+						Port:             9042,
+					},
+					expectedAddr: net.IPv4(4, 4, 4, 4),
+				},
+				{
+					name: "peer when all others are nil",
+					builder: endpoint.HostInfoBuilder{
+						Peer: net.IPv4(5, 5, 5, 5),
+						Port: 9042,
+					},
+					expectedAddr: net.IPv4(5, 5, 5, 5),
+				},
+				{
+					name: "no valid addresses panics",
+					builder: endpoint.HostInfoBuilder{
+						Port: 9042,
+					},
+					shouldPanic: true,
+				},
+			}
+
+			for _, test := range tests {
+				t.Run(test.name, func(t *testing.T) {
+					host := test.builder.Build()
+
+					if test.shouldPanic {
+						defer func() {
+							if r := recover(); r == nil {
+								t.Error("ConnectAddress() should have panicked but did not")
+							}
+						}()
+					}
+
+					addr := host.ConnectAddress()
+					if !test.shouldPanic && !addr.Equal(test.expectedAddr) {
+						t.Errorf("ConnectAddress() = %v, expected %v", addr, test.expectedAddr)
+					}
+				})
+			}
+		})
+	})
+}

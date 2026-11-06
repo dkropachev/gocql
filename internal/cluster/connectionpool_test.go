@@ -1,0 +1,613 @@
+//go:build unit
+// +build unit
+
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/*
+ * Content before git sha 34fdeebefcbf183ed7f916f931aa0586fdaa1b40
+ * Copyright (c) 2016, The Gocql authors,
+ * provided under the BSD-3-Clause License.
+ * See the NOTICE file distributed with this work for additional information.
+ */
+
+package cluster
+
+import (
+	"context"
+	"crypto/tls"
+	"errors"
+	"net"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/scylladb/gocql/v2/debounce"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	implPool "github.com/scylladb/gocql/v2/internal/pool"
+	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/internal/transport"
+)
+
+func TestSetupTLSConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                       string
+		opts                       *transport.SslOptions
+		expectedInsecureSkipVerify bool
+	}{
+		{
+			name: "Config nil, EnableHostVerification false",
+			opts: &transport.SslOptions{
+				EnableHostVerification: false,
+			},
+			expectedInsecureSkipVerify: true,
+		},
+		{
+			name: "Config nil, EnableHostVerification true",
+			opts: &transport.SslOptions{
+				EnableHostVerification: true,
+			},
+			expectedInsecureSkipVerify: false,
+		},
+		{
+			name: "Config.InsecureSkipVerify false, EnableHostVerification false",
+			opts: &transport.SslOptions{
+				EnableHostVerification: false,
+				Config: &tls.Config{
+					InsecureSkipVerify: false,
+				},
+			},
+			expectedInsecureSkipVerify: false,
+		},
+		{
+			name: "Config.InsecureSkipVerify true, EnableHostVerification false",
+			opts: &transport.SslOptions{
+				EnableHostVerification: false,
+				Config: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+			},
+			expectedInsecureSkipVerify: true,
+		},
+		{
+			name: "Config.InsecureSkipVerify false, EnableHostVerification true",
+			opts: &transport.SslOptions{
+				EnableHostVerification: true,
+				Config: &tls.Config{
+					InsecureSkipVerify: false,
+				},
+			},
+			expectedInsecureSkipVerify: false,
+		},
+		{
+			name: "Config.InsecureSkipVerify true, EnableHostVerification true",
+			opts: &transport.SslOptions{
+				EnableHostVerification: true,
+				Config: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+			},
+			expectedInsecureSkipVerify: false,
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			tlsConfig, err := InternalSetupTLSConfig(test.opts, &logging.InternalDefaultLogger{})
+			if err != nil {
+				t.Fatalf("unexpected error %q", err.Error())
+			}
+			if tlsConfig.InsecureSkipVerify != test.expectedInsecureSkipVerify {
+				t.Fatalf("got %v, but expected %v", tlsConfig.InsecureSkipVerify,
+					test.expectedInsecureSkipVerify)
+			}
+
+			// Verify that VerifyPeerCertificate is set when InsecureSkipVerify is false
+			// and DisableStrictCertificateValidation is false (default)
+			if !tlsConfig.InsecureSkipVerify && tlsConfig.VerifyPeerCertificate == nil {
+				t.Fatal("VerifyPeerCertificate should be set when InsecureSkipVerify is false")
+			}
+			// Verify that VerifyPeerCertificate is not set when InsecureSkipVerify is true
+			if tlsConfig.InsecureSkipVerify && tlsConfig.VerifyPeerCertificate != nil {
+				t.Fatal("VerifyPeerCertificate should not be set when InsecureSkipVerify is true")
+			}
+		})
+	}
+}
+
+// errorConn is a mock net.Conn whose Close returns an error,
+// triggering HandleError via driverConn.closeWithError.
+type errorConn struct {
+	net.Conn
+}
+
+func (e errorConn) Close() error {
+	return errors.New("mock close error")
+}
+
+func (e errorConn) SetTimeout(_ time.Duration) {}
+func (e errorConn) GetTimeout() time.Duration  { return 0 }
+
+// InternalSetDisarm is required of any reader installed as driverConn.r (connReadSource). This
+// mock is never read from, so there is nothing to disarm.
+func (e errorConn) InternalSetDisarm(_ bool) {}
+
+// TestHostConnPoolCloseDeadlock verifies that hostConnPool.Close() does not
+// self-deadlock when defaultConnPicker closes connections that trigger
+// HandleError callbacks.
+//
+// Deadlock chain (before fix):
+//
+//	Close() -> connPicker.Close() -> conn.Close() -> HandleError() -> pool.mu.Lock() (DEADLOCK)
+func TestHostConnPoolCloseDeadlock(t *testing.T) {
+	t.Parallel()
+
+	host := func() *endpoint.HostInfo {
+		opaqueStorageValue := new(endpoint.HostInfo)
+		implEndpoint.HostInfoData(opaqueStorageValue).InternalConnectAddress = net.ParseIP("127.0.0.1")
+		implEndpoint.HostInfoData(opaqueStorageValue).InternalPort = 9042
+		return opaqueStorageValue
+	}()
+	session := func() *Session {
+		opaqueStorageValuex := new(Session)
+		SessionData(opaqueStorageValuex).InternalCfg = InternalClusterSettings{
+			NumConns:         2,
+			ConvictionPolicy: &settings.SimpleConvictionPolicy{},
+		}
+		SessionData(opaqueStorageValuex).InternalLogger = logging.InternalNopLogger{}
+		return opaqueStorageValuex
+	}()
+
+	pool := &implPool.InternalHostConnPool{
+		InternalServices:   InternalNewPoolServices(session),
+		InternalHost:       host,
+		InternalSize:       2,
+		InternalKeyspace:   "test",
+		InternalConnPicker: implPool.InternalNopConnPicker{},
+		InternalLogger:     logging.InternalNopLogger{},
+		InternalDebouncer:  debounce.NewSimpleDebouncer(),
+	}
+
+	// Build a defaultConnPicker with Conns that trigger HandleError on Close.
+	picker := implPool.InternalNewDefaultConnPicker(2)
+	for i := 0; i < 2; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		conn := &transport.Conn{
+			InternalR:            errorConn{},
+			InternalErrorHandler: pool,
+			InternalCancel:       cancel,
+			InternalCtx:          ctx,
+			InternalLogger:       logging.InternalNopLogger{},
+		}
+		_ = picker.Put(conn)
+	}
+	pool.InternalConnPicker = picker
+
+	// Close must return before timeout; otherwise the pool is deadlocked.
+	done := make(chan struct{})
+	go func() {
+		pool.Close()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success — Close returned without deadlocking.
+	case <-time.After(5 * time.Second):
+		t.Fatal("hostConnPool.Close() deadlocked: timed out after 5 seconds")
+	}
+}
+
+// TestHostConnPoolConnectClosedPoolDoesNotDeadlock verifies that connect's
+// already-closed-pool path does not close a connection while holding pool.mu.
+func TestHostConnPoolConnectClosedPoolDoesNotDeadlock(t *testing.T) {
+	t.Parallel()
+
+	host := func() *endpoint.HostInfo {
+		opaqueStorageValuexx := new(endpoint.HostInfo)
+		implEndpoint.HostInfoData(opaqueStorageValuexx).InternalConnectAddress = net.ParseIP("127.0.0.1")
+		implEndpoint.HostInfoData(opaqueStorageValuexx).InternalPort = 9042
+		return opaqueStorageValuexx
+	}()
+	session := func() *Session {
+		opaqueStorageValuexxx := new(Session)
+		SessionData(opaqueStorageValuexxx).InternalCfg = InternalClusterSettings{
+			NumConns:         1,
+			ConvictionPolicy: &settings.SimpleConvictionPolicy{},
+		}
+		SessionData(opaqueStorageValuexxx).InternalLogger = logging.InternalNopLogger{}
+		return opaqueStorageValuexxx
+	}()
+
+	pool := &implPool.InternalHostConnPool{
+		InternalServices:   InternalNewPoolServices(session),
+		InternalHost:       host,
+		InternalSize:       1,
+		InternalKeyspace:   "test",
+		InternalConnPicker: implPool.InternalNopConnPicker{},
+		InternalLogger:     logging.InternalNopLogger{},
+		InternalDebouncer:  debounce.NewSimpleDebouncer(),
+		InternalClosed:     true,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	conn := &transport.Conn{
+		InternalR:            errorConn{},
+		InternalErrorHandler: pool,
+		InternalCancel:       cancel,
+		InternalCtx:          ctx,
+		InternalLogger:       logging.InternalNopLogger{},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		pool.InternalMu.Lock()
+		if pool.InternalClosed {
+			pool.InternalMu.Unlock()
+			conn.Close()
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("closed-pool connect cleanup deadlocked: timed out after 5 seconds")
+	}
+}
+
+// newUndialedHostPool builds a hostConnPool for host without connecting it.
+// newHostConnPool is a pure constructor -- it installs a nopConnPicker and
+// leaves the pool unfilled -- so this needs no server, and every HostPoolInfo
+// accessor the iteration exposes is safe on the result.
+func newUndialedHostPool(t *testing.T, session *Session, ip string) *implPool.InternalHostConnPool {
+	t.Helper()
+
+	addr := net.ParseIP(ip)
+	if addr == nil {
+		t.Fatalf("newUndialedHostPool: %q is not an IP", ip)
+	}
+	host := func() *endpoint.HostInfo {
+		opaqueStorageValuexxxx := new(endpoint.HostInfo)
+		implEndpoint.HostInfoData(opaqueStorageValuexxxx).InternalHostId = cqltype.MustRandomUUID()
+		implEndpoint.HostInfoData(opaqueStorageValuexxxx).InternalConnectAddress = addr
+		implEndpoint.HostInfoData(opaqueStorageValuexxxx).InternalBroadcastAddress = addr
+		implEndpoint.HostInfoData(opaqueStorageValuexxxx).InternalPort = 9042
+		return opaqueStorageValuexxxx
+	}()
+
+	return InternalNewHostConnPool(session, host, 1, "")
+}
+
+// TestPolicyConnPoolIteratePool covers policyConnPool.iteratePool, the engine
+// behind the public Session.IterateHostPools. It had no coverage in either
+// lane.
+//
+// The behaviour worth pinning is the early exit: iteratePool holds a read lock
+// across the whole walk and breaks when the callback returns false, so a caller
+// can stop after finding what it wants. A refactor that dropped the break would
+// still pass a "visits everything" test.
+func TestPolicyConnPoolIteratePool(t *testing.T) {
+	t.Parallel()
+
+	newPool := func(t *testing.T, ips ...string) *implPool.InternalPolicyConnPool {
+		t.Helper()
+		session := func() *Session {
+			opaqueStorageValuexxxxx := new(Session)
+			SessionData(opaqueStorageValuexxxxx).InternalLogger = &logging.InternalTestLogger{}
+			return opaqueStorageValuexxxxx
+		}()
+		p := &implPool.InternalPolicyConnPool{InternalHostConnPools: map[cqltype.UUID]*implPool.InternalHostConnPool{}}
+		for _, ip := range ips {
+			hp := newUndialedHostPool(t, session, ip)
+			p.InternalHostConnPools[implEndpoint.InternalHostInfoHostUUID(hp.InternalHost)] = hp
+		}
+		return p
+	}
+
+	t.Run("visits every pool", func(t *testing.T) {
+		t.Parallel()
+
+		p := newPool(t, "127.0.20.1", "127.0.20.2", "127.0.20.3")
+
+		seen := map[string]bool{}
+		p.InternalIteratePool(func(info implPool.HostPoolInfo) bool {
+			seen[info.Host().ConnectAddress().String()] = true
+			return true
+		})
+
+		for _, want := range []string{"127.0.20.1", "127.0.20.2", "127.0.20.3"} {
+			if !seen[want] {
+				t.Errorf("pool for %s was never visited (saw %v)", want, seen)
+			}
+		}
+	})
+
+	t.Run("stops when the callback returns false", func(t *testing.T) {
+		t.Parallel()
+
+		p := newPool(t, "127.0.20.1", "127.0.20.2", "127.0.20.3")
+
+		visits := 0
+		p.InternalIteratePool(func(implPool.HostPoolInfo) bool {
+			visits++
+			return false
+		})
+
+		if visits != 1 {
+			t.Errorf("callback ran %d times after returning false, want 1", visits)
+		}
+	})
+
+	t.Run("empty pool never invokes the callback", func(t *testing.T) {
+		t.Parallel()
+
+		p := newPool(t)
+
+		p.InternalIteratePool(func(implPool.HostPoolInfo) bool {
+			t.Error("callback ran for a pool with no hosts")
+			return true
+		})
+	})
+
+	// iter is caller-supplied and runs under the pool's read lock, so it can
+	// panic -- or a test callback can t.Fatal, which is a runtime.Goexit.
+	// Either skips a bare RUnlock and strands the lock, and because the pool
+	// never blocks on itself the symptom surfaces later and elsewhere: the next
+	// addHost, removeHost or Close hangs, and the session silently stops
+	// reacting to hosts coming up and going down.
+	t.Run("a panicking callback does not strand the read lock", func(t *testing.T) {
+		t.Parallel()
+
+		p := newPool(t, "127.0.20.1")
+
+		func() {
+			defer func() { _ = recover() }()
+			p.InternalIteratePool(func(implPool.HostPoolInfo) bool { panic("boom from the callback") })
+		}()
+
+		locked := make(chan struct{})
+		go func() {
+			p.InternalMu.Lock()
+			p.InternalMu.Unlock()
+			close(locked)
+		}()
+
+		select {
+		case <-locked:
+		case <-time.After(5 * time.Second):
+			t.Fatal("pool is wedged: the read lock outlived a panic in the callback")
+		}
+	})
+}
+
+// closeSignalPicker is a driverConnPicker that reports when it has been closed.
+//
+// Closing a retired pool is the half of policyConnPool.removeHost that dropping
+// the map entry does not prove: hostConnPool.Close is what reaches
+// connPicker.Close and hangs up the host's connections, and it runs on a new
+// goroutine, so there is nothing synchronous to assert on. Signalling from the
+// picker makes the wait deterministic rather than a poll, and embedding
+// nopConnPicker keeps this to the one method that matters.
+type closeSignalPicker struct {
+	nopConnPicker
+
+	once   sync.Once
+	closed chan struct{}
+}
+
+func newCloseSignalPicker() *closeSignalPicker {
+	return &closeSignalPicker{closed: make(chan struct{})}
+}
+
+// Close is idempotent. hostConnPool.Close already guards against closing twice,
+// but a double close here would panic rather than fail, which is a bad way for
+// a regression in that guard to surface.
+func (p *closeSignalPicker) Close() {
+	p.once.Do(func() { close(p.closed) })
+}
+
+// newSignallingHostPool builds an undialed pool for host whose Close is
+// observable. The connPicker is replaced before the pool is published to
+// hostConnPools, so nothing else can be reading it yet.
+func newSignallingHostPool(session *Session, host *endpoint.HostInfo) (*implPool.InternalHostConnPool, *closeSignalPicker) {
+	pool := InternalNewHostConnPool(session, host, 1, "")
+	picker := newCloseSignalPicker()
+	pool.InternalConnPicker = picker
+	return pool, picker
+}
+
+func awaitPoolClosed(t *testing.T, picker *closeSignalPicker, what string) {
+	t.Helper()
+	select {
+	case <-picker.closed:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("%s: connection pool was never closed", what)
+	}
+}
+
+func assertPoolNotClosed(t *testing.T, picker *closeSignalPicker, what string) {
+	t.Helper()
+	select {
+	case <-picker.closed:
+		t.Errorf("%s: connection pool was closed", what)
+	default:
+	}
+}
+
+// TestSessionRemoveHost covers Session.removeHost, which the ring refresher
+// calls when a host leaves the ring (host_source.go). It had no coverage in
+// either lane.
+//
+// It has to retire the host from all three places that track it -- the
+// selection policy, the connection pool and the host source. Dropping any one
+// leaves the driver routing to a node that is gone, so each is asserted
+// separately.
+func TestSessionRemoveHost(t *testing.T) {
+	t.Parallel()
+
+	// newNodeEventFixture (events_node_test.go) already assembles exactly the
+	// trio removeHost touches: a recording policy, a connection pool and a
+	// host source.
+	f := newNodeEventFixture(t)
+	host := f.addHost(t, "127.0.20.1")
+	other := f.addHost(t, "127.0.20.2")
+
+	// The fixture's pool is empty by default, and policyConnPool.removeHost
+	// short-circuits on a missing host -- so with an empty pool the
+	// s.pool.removeHost leg of removeHost is unobservable and dropping it
+	// entirely would still pass. Populate it so that leg is actually pinned.
+	// newHostConnPool is a pure constructor, so neither pool dials.
+	hostPool, hostPicker := newSignallingHostPool(f.session, host)
+	otherPool, otherPicker := newSignallingHostPool(f.session, other)
+	SessionData(f.session).InternalPool.InternalHostConnPools = map[cqltype.UUID]*implPool.InternalHostConnPool{implEndpoint.InternalHostInfoHostUUID(host): hostPool, implEndpoint.InternalHostInfoHostUUID(other): otherPool}
+
+	if _, ok := SessionData(f.session).InternalHostSource.InternalGetHostByIP("127.0.20.1"); !ok {
+		t.Fatal("precondition: host is not in the host source")
+	}
+	if _, ok := SessionData(f.session).InternalPool.InternalGetPoolByHostID(host.HostID()); !ok {
+		t.Fatal("precondition: host has no connection pool")
+	}
+	InternalSessionRemoveHost(f.session, host)
+
+	assertStrings(t, "RemoveHost", f.policy.removeHostCalls(), []string{"127.0.20.1"})
+
+	// policyConnPool.removeHost does two things, and the map entry only proves
+	// the first. Dropping the entry without closing the pool leaves the retired
+	// host's connections open -- a leak on every topology change, and a
+	// regression the entry check alone cannot see, since reducing removeHost to
+	// a bare delete() still satisfies it.
+	if _, ok := SessionData(f.session).InternalPool.InternalGetPoolByHostID(host.HostID()); ok {
+		t.Error("removed host still has a connection pool")
+	}
+	awaitPoolClosed(t, hostPicker, "removed host")
+
+	if _, ok := SessionData(f.session).InternalPool.InternalGetPoolByHostID(other.HostID()); !ok {
+		t.Error("removeHost also dropped an unrelated host's connection pool")
+	}
+	// Safe as a non-blocking check: the wait above already established that the
+	// goroutine removeHost started has run, and it is the only one that could
+	// have closed anything.
+	assertPoolNotClosed(t, otherPicker, "unrelated host")
+
+	if _, ok := SessionData(f.session).InternalHostSource.InternalGetHostByIP("127.0.20.1"); ok {
+		t.Error("removed host is still resolvable in the host source")
+	}
+	// ringDescriber keeps two indexes, and getHostByIP only proves one of them.
+	// Its ok comes from hostIPToUUID alone, so a host left behind in the hosts
+	// map is invisible to the check above -- and hosts is what getHostsList
+	// reads, which is what controlConn.attemptReconnect dials. Assert the ID
+	// index separately.
+	if got := SessionData(f.session).InternalHostSource.InternalGetHost(host.HostID()); got != nil {
+		t.Error("removed host is still in the host source by ID")
+	}
+
+	if _, ok := SessionData(f.session).InternalHostSource.InternalGetHostByIP("127.0.20.2"); !ok {
+		t.Error("removeHost also dropped an unrelated host")
+	}
+	if got := SessionData(f.session).InternalHostSource.InternalGetHost(other.HostID()); got == nil {
+		t.Error("unrelated host disappeared from the host source by ID")
+	}
+}
+
+// TestGetHostPoolByIDAbsent pins that GetHostPoolByID hands back a nil
+// interface rather than a typed nil.
+//
+// getPoolByHostID reports absence through its ok result, not through the
+// pointer, so returning that pointer unconditionally boxes a nil
+// *hostConnPool into a non-nil HostPoolInfo. A caller guarding with
+// `if pool != nil` would then get past the guard and panic on the first
+// method call -- the failure lands at the call site, far from the cause.
+func TestGetHostPoolByIDAbsent(t *testing.T) {
+	t.Parallel()
+
+	session := func() *Session {
+		opaqueStorageValuexxxxxx := new(Session)
+		SessionData(opaqueStorageValuexxxxxx).InternalLogger = &logging.InternalTestLogger{}
+		return opaqueStorageValuexxxxxx
+	}()
+	SessionData(session).InternalPool = &implPool.InternalPolicyConnPool{InternalServices: InternalNewPoolServices(session), InternalHostConnPools: map[cqltype.UUID]*implPool.InternalHostConnPool{}}
+
+	present := func() *endpoint.HostInfo {
+		opaqueStorageValuexxxxxxx := new(endpoint.HostInfo)
+		implEndpoint.HostInfoData(opaqueStorageValuexxxxxxx).InternalHostId = cqltype.MustRandomUUID()
+		implEndpoint.HostInfoData(opaqueStorageValuexxxxxxx).InternalConnectAddress = net.ParseIP("127.0.40.1")
+		return opaqueStorageValuexxxxxxx
+	}()
+	SessionData(session).InternalPool.InternalHostConnPools[implEndpoint.InternalHostInfoHostUUID(present)] = InternalNewHostConnPool(session, present, 1, "")
+
+	t.Run("present id returns the pool", func(t *testing.T) {
+		info := InternalSessionGetHostPoolByID(session, present.HostID())
+		if info == nil {
+			t.Fatal("pool for a known host was not returned")
+		}
+		if got := info.Host().ConnectAddress().String(); got != "127.0.40.1" {
+			t.Errorf("pool belongs to %s, want 127.0.40.1", got)
+		}
+	})
+
+	for _, tc := range []struct {
+		name   string
+		hostID string
+	}{
+		{"absent id", cqltype.MustRandomUUID().String()},
+		{"malformed id", "not-a-uuid"},
+		{"empty id", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			info := InternalSessionGetHostPoolByID(session, tc.hostID)
+			if info != nil {
+				// Not t.Fatal: calling through the interface is the point, and
+				// it is what would panic before the fix.
+				t.Errorf("got non-nil HostPoolInfo (%T) for %s", info, tc.name)
+				t.Errorf("connection count reads %d", info.GetConnectionCount())
+			}
+		})
+	}
+}
+
+// TestHostConnPoolConnectNoAttempts covers a ReconnectionPolicy that allows no
+// attempts after Validate passed: connect must return an error, not hand a nil
+// conn to initConnPicker.
+func TestHostConnPoolConnectNoAttempts(t *testing.T) {
+	t.Parallel()
+
+	for _, retries := range []int{0, -1} {
+		t.Run(strconv.Itoa(retries), func(t *testing.T) {
+			session := func() *Session {
+				opaqueStorageValuexxxxxxxx := new(Session)
+				SessionData(opaqueStorageValuexxxxxxxx).InternalCfg = InternalClusterSettings{ReconnectionPolicy: &implPool.ConstantReconnectionPolicy{MaxRetries: retries}}
+				SessionData(opaqueStorageValuexxxxxxxx).InternalLogger = logging.InternalNopLogger{}
+				return opaqueStorageValuexxxxxxxx
+			}()
+
+			pool := newUndialedHostPool(t, session, "127.0.0.1")
+
+			err := pool.InternalConnect()
+			if err == nil || !strings.Contains(err.Error(), "no connection attempted") {
+				t.Fatalf("connect() = %v, want the no-attempts error", err)
+			}
+		})
+	}
+}
