@@ -276,7 +276,7 @@ func (d *finalAccess) Compile(cqltype.Columns) (codec.StreamRowPlan[[]byte], err
 }
 func (d *finalAccess) Reset(dst *[]byte) { *dst = (*dst)[:0] }
 func (d *finalAccess) DecodeInto(r *codec.StreamRowReader, dst *[]byte) error {
-	plan, err := codec.StreamBlob.Compile(codecTestMust(cqltype.ScalarType(cqltype.TypeBlob)))
+	plan, err := codec.StreamBlob.Compile(cqltype.BlobType)
 	if err != nil {
 		return err
 	}

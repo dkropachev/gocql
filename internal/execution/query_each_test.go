@@ -159,7 +159,7 @@ func TestQueryEachReusedStorageKeepsTokensAndDetectsRepeats(t *testing.T) {
 func TestQueryEachUnpreparedContinuationRepairs(t *testing.T) {
 	s, _, peers := runtimeTestSession(t, 1)
 	implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
-	typ := codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+	typ := cqltype.BlobType
 	columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: typ})
 	state, old := preparedState(t, s, columns)
 	state.InternalParameters = columns

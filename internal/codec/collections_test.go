@@ -258,7 +258,7 @@ func TestV2ContainerFragmentAliasingAndCloneLease(t *testing.T) {
 	if err != nil || string(values[0].OwnedBytes()) != "fragmented" {
 		t.Fatalf("detached clone failed: %v", err)
 	}
-	owned, err := EncodeValueOwned(list, ListEncoder(BytesEncoder), [][]byte{payload})
+	owned, err := EncodeValue(list, ListEncoder(BytesEncoder), [][]byte{payload})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +314,7 @@ func TestV2VectorVariablePayloadBorrowingAndOwnedDetach(t *testing.T) {
 	if !alias {
 		t.Fatal("variable vector encoder gathered its payload")
 	}
-	owned, err := EncodeValueOwned(vector, VectorEncoder(BytesEncoder), input)
+	owned, err := EncodeValue(vector, VectorEncoder(BytesEncoder), input)
 	if err != nil {
 		t.Fatal(err)
 	}

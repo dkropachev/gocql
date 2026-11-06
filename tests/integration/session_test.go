@@ -105,8 +105,7 @@ func TestSessionAPI(t *testing.T) {
 	require.Equal(t, 1, resolved.InternalProfile.Prefetch)
 	require.True(t, resolved.InternalOptions.Trace)
 
-	intType, err := cql.ScalarType(cql.TypeInt)
-	require.NoError(t, err)
+	intType := cql.IntType
 	var encoded int32
 	statement := cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO test(id) VALUES (?)", Params: cql.Params(cql.ParamAt(0, cql.Int32, func(n int32) int32 { encoded = n; return n })), Rows: cql.EmptyRowDecoder}
 	bound, err := BindUnpreparedOwned(statement, cql.NewColumns(cql.ColumnSpec{Name: "id", Type: intType}), int32(1))

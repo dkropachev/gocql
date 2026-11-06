@@ -42,7 +42,7 @@ func (p pageValidationPlan) DecodeInto(reader *codec.StreamRowReader, dst *[]byt
 func TestStreamContinuationValidationMetadataAndCallbacks(t *testing.T) {
 	s, c, peer := rowStreamSession(t, 4, nil)
 	implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
-	columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))})
+	columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.BlobType})
 	state, _ := preparedState(t, s, columns)
 	bound := new(Bound[cqltype.Bytes])
 	BoundData(bound).InternalRequest = InternalExecutionRequest{InternalStatement: state.InternalStatement, InternalSource: InternalPreparedSource(state), InternalValues: model.EncodedValues{Columns: cqltype.NewColumns()}, InternalOwner: InternalNewInputOwner(), InternalRouting: model.RoutingInfo{Kind: cqltype.OrdinaryStatement}}
@@ -119,7 +119,7 @@ func TestStreamContinuationValidationMetadataAndCallbacks(t *testing.T) {
 }
 
 func TestStreamValidationSurvivesPriorResponseRelease(t *testing.T) {
-	columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))})
+	columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: cqltype.BlobType})
 	data := binary.BigEndian.AppendUint32(nil, 3)
 	data = append(data, "abc"...)
 	budget := &protocol.StreamMetadataBudget{Limit: 200}

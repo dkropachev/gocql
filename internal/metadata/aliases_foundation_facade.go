@@ -62,6 +62,8 @@ type Type = cqltype.Type
 
 const TypeVarchar = cqltype.TypeVarchar
 
+var VarcharType = cqltype.VarcharType
+
 type UUID = cqltype.UUID
 
 var UUIDCodec = codec.UUIDCodec
@@ -190,8 +192,8 @@ func EncodeValueBorrowed[T any](a0 DataType, a1 Encoder[T], a2 T) (EncodedValue,
 	return codec.EncodeValueBorrowed[T](a0, a1, a2)
 }
 
-func EncodeValueOwned[T any](a0 DataType, a1 Encoder[T], a2 T) (EncodedValue, error) {
-	return codec.EncodeValueOwned[T](a0, a1, a2)
+func EncodeValue[T any](a0 DataType, a1 Encoder[T], a2 T) (EncodedValue, error) {
+	return codec.EncodeValue[T](a0, a1, a2)
 }
 
 type EncodedValue = codec.EncodedValue

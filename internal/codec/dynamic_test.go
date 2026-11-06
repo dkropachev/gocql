@@ -621,7 +621,7 @@ func TestV2DynamicBorrowingAndOwnedAggregateClone(t *testing.T) {
 	input := dynamicTestMust(ListValue(blobs, descriptors))
 	inputClone := input.Clone()
 	borrowed := dynamicTestMust(EncodeValueBorrowed(blobs, DynamicCodec, input))
-	owned := dynamicTestMust(EncodeValueOwned(blobs, DynamicCodec, input))
+	owned := dynamicTestMust(EncodeValue(blobs, DynamicCodec, input))
 	payload[0] = 'X'
 	descriptors[0] = BlobValue([]byte("replaced"))
 	clonedInputValues := dynamicTestMust(Collect(dynamicTestMust(inputClone.Elements())))

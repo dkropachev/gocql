@@ -27,7 +27,7 @@ func FuzzV2StreamingValues(f *testing.F) {
 	f.Add(byte(1), StreamCell([]byte("€")), uint8(1))
 	f.Add(byte(2), []byte{0, 0, 0, 4, 0, 0, 0, 0}, uint8(3))
 	f.Add(byte(3), []byte{255, 255, 255, 254}, uint8(1))
-	boolean, text, blob := CodecTestMust(cqltype.ScalarType(cqltype.TypeBoolean)), CodecTestMust(cqltype.ScalarType(cqltype.TypeText)), CodecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+	boolean, text, blob := cqltype.BooleanType, cqltype.TextType, cqltype.BlobType
 	list := CodecTestMust(cqltype.ListType(blob))
 	f.Fuzz(func(t *testing.T, kind byte, data []byte, chunk uint8) {
 		if len(data) > 4096 {

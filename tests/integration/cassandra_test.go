@@ -710,15 +710,13 @@ func TestSliceMap(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(testuuid timeuuid PRIMARY KEY,testtimestamp timestamp,testvarchar varchar,testbigint bigint,testblob blob,testbool boolean,testfloat float,testdouble double,testint int,testdecimal decimal,testlist list<text>,testset set<int>,testmap map<varchar,varchar>,testvarint varint,testinet inet)", table))
-	textType, err := cql.ScalarType(cql.TypeVarchar)
-	require.NoError(t, err)
-	intType := cql.IntValue(0).Type()
+	textType := cql.VarcharType
+	intType := cql.IntType
 	listType, err := cql.ListType(textType)
 	require.NoError(t, err)
 	setType, err := cql.SetType(intType)
 	require.NoError(t, err)
-	varcharType, err := cql.ScalarType(cql.TypeVarchar)
-	require.NoError(t, err)
+	varcharType := cql.VarcharType
 	mapType, err := cql.MapType(varcharType, varcharType)
 	require.NoError(t, err)
 	bigInt, ok := new(big.Int).SetString("830169365738487321165427203929228", 10)
@@ -734,9 +732,9 @@ func TestSliceMap(t *testing.T) {
 		require.Equal(t, len(expected), row.Columns().Len())
 		for _, field := range expected {
 			actual := cassandraField(t, row, field.Name)
-			want, err := cql.EncodeValueOwned(actual.Type(), cql.DynamicCodec, field.Value)
+			want, err := cql.EncodeValue(actual.Type(), cql.DynamicCodec, field.Value)
 			require.NoError(t, err, field.Name)
-			got, err := cql.EncodeValueOwned(actual.Type(), cql.DynamicCodec, actual)
+			got, err := cql.EncodeValue(actual.Type(), cql.DynamicCodec, actual)
 			require.NoError(t, err, field.Name)
 			require.Equal(t, want.State(), got.State(), field.Name)
 			require.Equal(t, want.Bytes().OwnedBytes(), got.Bytes().OwnedBytes(), field.Name)

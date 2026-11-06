@@ -104,6 +104,9 @@ const Two = cqltype.Two
 type Type = cqltype.Type
 
 const TypeUUID = cqltype.TypeUUID
+
+var UUIDType = cqltype.UUIDType
+
 const TypeVarchar = cqltype.TypeVarchar
 
 type UUID = cqltype.UUID

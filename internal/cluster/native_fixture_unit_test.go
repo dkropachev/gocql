@@ -45,7 +45,7 @@ type nativeResultFixture struct {
 }
 
 func fixtureBody[T any](typ cqltype.DataType, codec implCodec.Encoder[T], v T) ([]byte, error) {
-	encoded, err := implCodec.EncodeValueOwned(typ, codec, v)
+	encoded, err := implCodec.EncodeValue(typ, codec, v)
 	if err != nil {
 		return nil, err
 	}

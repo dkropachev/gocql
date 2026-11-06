@@ -20,7 +20,7 @@ func (c countingBlobEncoder) Encode(w *cql.ValueWriter, b []byte) error {
 	return cql.BytesEncoder.Encode(w, b)
 }
 func TestV2RuntimeBindCanonicalOwnership(t *testing.T) {
-	typ, _ := cql.ScalarType(cql.TypeBlob)
+	typ := cql.BlobType
 	columns := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: typ})
 	calls := 0
 	statement := cql.Statement[[]byte, cql.EmptyRow]{CQL: "INSERT INTO ks.tbl(v) VALUES (?)", Params: cql.OneParam[[]byte](countingBlobEncoder{calls: &calls}), Rows: cql.EmptyRowDecoder}

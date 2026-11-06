@@ -319,7 +319,7 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 			t.Fatalf("map cardinality: %d %d %v %v", len(a), len(b), e, f)
 		}
 		key := func(v cql.Value) string {
-			encoded, e := cql.EncodeValueOwned(v.Type(), cql.DynamicCodec, v)
+			encoded, e := cql.EncodeValue(v.Type(), cql.DynamicCodec, v)
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -368,7 +368,7 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 		}
 		if wk == cql.TypeSet {
 			key := func(v cql.Value) string {
-				x, e := cql.EncodeValueOwned(v.Type(), cql.DynamicCodec, v)
+				x, e := cql.EncodeValue(v.Type(), cql.DynamicCodec, v)
 				if e != nil {
 					t.Fatal(e)
 				}

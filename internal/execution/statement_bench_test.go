@@ -29,7 +29,7 @@ func BenchmarkWarmConcurrentBindings(b *testing.B) {
 			b.Run(fmt.Sprintf("updates%t/owned%t", updates, owned), func(b *testing.B) {
 				s := testSession(b)
 				rt := InternalRuntimeFor(s)
-				columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))})
+				columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.BlobType})
 				tracker := rt.InternalSchemaTracker()
 				deps := tracker.InternalDependencies("ks", columns, columns)
 				hp := &InternalHostPrepared{InternalEpoch: deps.InternalSnapshot()}

@@ -120,9 +120,9 @@ func v2SchemaMockResponse(statement string, fixture *nativeResultFixture) (*tran
 }
 
 func v2SchemaMockEmptyColumns(statement string) (cqltype.Columns, error) {
-	textType, _ := cqltype.ScalarType(cqltype.TypeVarchar)
-	boolType, _ := cqltype.ScalarType(cqltype.TypeBoolean)
-	uuidType, _ := cqltype.ScalarType(cqltype.TypeUUID)
+	textType := cqltype.VarcharType
+	boolType := cqltype.BooleanType
+	uuidType := cqltype.UUIDType
 	listText, _ := cqltype.ListType(textType)
 	mapText, _ := cqltype.MapType(textType, textType)
 	textColumn := func(name string) cqltype.ColumnSpec { return cqltype.ColumnSpec{Name: name, Type: textType} }
@@ -189,8 +189,8 @@ func (f *fakeControlConn) InternalQueryV2System(ctx context.Context, r *model.At
 	if f.iter != nil {
 		return v2SchemaMockResponse(r.Statement, f.iter)
 	}
-	text, _ := cqltype.ScalarType(cqltype.TypeVarchar)
-	integer, _ := cqltype.ScalarType(cqltype.TypeInt)
+	text := cqltype.VarcharType
+	integer := cqltype.IntType
 	cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "connection_id", Type: text}, cqltype.ColumnSpec{Name: "host_id", Type: text}, cqltype.ColumnSpec{Name: "address", Type: text}, cqltype.ColumnSpec{Name: "port", Type: integer}, cqltype.ColumnSpec{Name: "tls_port", Type: integer})
 	chain, _ := wire.NewChain()
 	return &transport.InternalResponsePage{InternalResponseData: model.ResponseData{Columns: cols, ColumnCount: 5, Rows: chain, Owner: wire.NewLease(chain, nil)}}, nil

@@ -29,10 +29,7 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id UUID) (implCluste
 		ctx, cancel = context.WithTimeout(ctx, profile.Timeout)
 		defer cancel()
 	}
-	uuidType, err := ScalarType(TypeUUID)
-	if err != nil {
-		return result, err
-	}
+	uuidType := UUIDType
 	params := NewColumns(ColumnSpec{Name: "session_id", Type: uuidType})
 	sessionStatement := Statement[UUID, InternalTraceSessionRow]{CQL: "SELECT coordinator, started_at, duration FROM system_traces.sessions WHERE session_id = ?", Params: OneParam(UUIDCodec), Rows: Row(
 		Column("coordinator", NullableCodec(InetCodec), func(r *InternalTraceSessionRow) *Nullable[netip.Addr] { return &r.InternalCoordinator }),

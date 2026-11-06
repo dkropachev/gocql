@@ -33,12 +33,8 @@ import (
 )
 
 func Example_nulls() {
-	typ, err := cql.ScalarType(cql.TypeVarchar)
-	if err != nil {
-		log.Fatal(err)
-	}
 	codec := cql.NullableCodec(cql.TextCodec)
-	null, err := cql.NewEncodedValue(typ, cql.Null, cql.BorrowBytes(nil))
+	null, err := cql.NewEncodedValue(cql.VarcharType, cql.Null, cql.BorrowBytes(nil))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -47,7 +43,7 @@ func Example_nulls() {
 		log.Fatal(err)
 	}
 	fmt.Println(value.Valid)
-	empty, err := cql.NewEncodedValue(typ, cql.Present, cql.BorrowBytes([]byte{}))
+	empty, err := cql.NewEncodedValue(cql.VarcharType, cql.Present, cql.BorrowBytes([]byte{}))
 	if err != nil {
 		log.Fatal(err)
 	}

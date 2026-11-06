@@ -46,11 +46,7 @@ func (temperatureCodec) Decode(r cql.ValueReader) (temperature, error) {
 func (temperatureCodec) Clone(v temperature) temperature { return v }
 
 func Example_customCodec() {
-	typ, err := cql.ScalarType(cql.TypeInt)
-	if err != nil {
-		log.Fatal(err)
-	}
-	encoded, err := cql.EncodeValueOwned(typ, temperatureCodec{}, temperature(23))
+	encoded, err := cql.EncodeValue(cql.IntType, temperatureCodec{}, temperature(23))
 	if err != nil {
 		log.Fatal(err)
 	}

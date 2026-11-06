@@ -42,7 +42,7 @@ func benchmarkValue[P, R any](b *testing.B, typ cql.DataType, enc cql.Encoder[P]
 	b.Run("EncodeOwned", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			if _, err := cql.EncodeValueOwned(typ, enc, value); err != nil {
+			if _, err := cql.EncodeValue(typ, enc, value); err != nil {
 				b.Fatal(err)
 			}
 		}

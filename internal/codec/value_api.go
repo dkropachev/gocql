@@ -57,8 +57,10 @@ func EncodeValueBorrowed[T any](typ cqltype.DataType, encoder Encoder[T], value 
 	return encodeValue(typ, encoder, value, false)
 }
 
-// EncodeValueOwned encodes one value and copies every borrowed input payload.
-func EncodeValueOwned[T any](typ cqltype.DataType, encoder Encoder[T], value T) (EncodedValue, error) {
+// EncodeValue encodes one value and copies every borrowed input payload, so the
+// result does not depend on the caller's buffers. Use EncodeValueBorrowed to
+// skip the copy.
+func EncodeValue[T any](typ cqltype.DataType, encoder Encoder[T], value T) (EncodedValue, error) {
 	return encodeValue(typ, encoder, value, true)
 }
 func encodeValue[T any](typ cqltype.DataType, encoder Encoder[T], value T, owned bool) (EncodedValue, error) {

@@ -183,7 +183,7 @@ func TestV2ContainerSegmentedIterationAllocationsDoNotScale(t *testing.T) {
 var collectSink []int32
 
 func BenchmarkLazyAndMaterialized(b *testing.B) {
-	integer := CodecTestMust(cqltype.ScalarType(cqltype.TypeInt))
+	integer := cqltype.IntType
 	for _, n := range []int{1, 1024} {
 		for _, kind := range []string{"list", "vector", "tuple", "udt", "map"} {
 			b.Run(fmt.Sprintf("%s/%d", kind, n), func(b *testing.B) {

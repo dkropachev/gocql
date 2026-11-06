@@ -272,7 +272,7 @@ func (d *gatedDecoder) Reset(dst *[]byte) {
 	*dst = (*dst)[:0]
 }
 func (d *gatedDecoder) DecodeInto(r *codec.StreamRowReader, dst *[]byte) error {
-	plan, err := codec.StreamBlob.Compile(codecTestMust(cqltype.ScalarType(cqltype.TypeBlob)))
+	plan, err := codec.StreamBlob.Compile(cqltype.BlobType)
 	if err != nil {
 		return err
 	}
@@ -504,7 +504,7 @@ func TestStreamPreparedMetadataFencesAndPlanIsolation(t *testing.T) {
 		t.Run(map[bool]string{false: "matching", true: "count-mismatch"}[mismatch], func(t *testing.T) {
 			s, c, peer := rowStreamSession(t, 4, nil)
 			implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
-			columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))})
+			columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.BlobType})
 			state, _ := preparedState(t, s, columns)
 			bound := func() *Bound[cqltype.Bytes] {
 				opaqueStorageValuex := new(Bound[cqltype.Bytes])
@@ -628,7 +628,7 @@ func TestStreamPartialFirstRowNeverReplays(t *testing.T) {
 func TestStreamReprepareCanonicalInputAndNoRepairAfterOutput(t *testing.T) {
 	s, connection, peer := rowStreamSession(t, 4, nil)
 	implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
-	typ := codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+	typ := cqltype.BlobType
 	columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: typ})
 	state, old := preparedState(t, s, columns)
 	state.InternalParameters = columns

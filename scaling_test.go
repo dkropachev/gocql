@@ -132,7 +132,7 @@ func TestHistoryCounts(t *testing.T) {
 	}
 }
 func TestWarmAndChangedPlans(t *testing.T) {
-	cols := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: codecTestMust(cql.ScalarType(cql.TypeBlob))})
+	cols := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: cql.BlobType})
 	entry := &typedResultMetadata{InternalColumns: cols}
 	response := &responsePage{InternalMetadata: entry, InternalResponseData: responseData{Columns: cols}}
 	cache := &resultPlanCache[cql.Bytes]{}
@@ -151,7 +151,7 @@ func TestWarmAndChangedPlans(t *testing.T) {
 	if comp != 0 || maps != 0 || calls.Load() != 1 || implCodec.ReadPerfTypeChecks() != 0 {
 		t.Fatal(comp, maps, calls.Load())
 	}
-	changed := cql.NewColumns(cql.ColumnSpec{Name: "changed", Type: codecTestMust(cql.ScalarType(cql.TypeBlob))})
+	changed := cql.NewColumns(cql.ColumnSpec{Name: "changed", Type: cql.BlobType})
 	second := &responsePage{InternalMetadata: &typedResultMetadata{InternalColumns: changed}, InternalResponseData: responseData{Columns: changed}}
 	if _, e := cache.InternalSelectPlan(second, decoder); e != nil {
 		t.Fatal(e)
@@ -238,7 +238,7 @@ func TestOptionalWorkCounts(t *testing.T) {
 	// unrelated schema events leave the captured table generation current.
 	s := new(Session)
 	implCluster.SessionData(s).InternalLogger = nopLogger{}
-	cols := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "v", Type: codecTestMust(cql.ScalarType(cql.TypeBlob))})
+	cols := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "v", Type: cql.BlobType})
 	_, hp := testPreparedState(t, s, cols)
 	for i := 0; i < 1000; i++ {
 		implCluster.InternalSessionInvalidatePreparedSchema(s, Event{Keyspace: "unrelated", Object: fmt.Sprint(i), Target: "TABLE"})

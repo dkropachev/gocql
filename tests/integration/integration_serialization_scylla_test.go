@@ -193,7 +193,7 @@ func TestSerializationSimpleTypesCassandra(t *testing.T) {
 							for _, owned := range []bool{false, true} {
 								var encoded cql.EncodedValue
 								if owned {
-									encoded, err = cql.EncodeValueOwned(typ, cql.DynamicCodec, value)
+									encoded, err = cql.EncodeValue(typ, cql.DynamicCodec, value)
 								} else {
 									encoded, err = cql.EncodeValueBorrowed(typ, cql.DynamicCodec, value)
 								}
@@ -476,7 +476,7 @@ func TestSliceMapMapScanTupleTypes(t *testing.T) {
 	if err := truncateTable(t, s, table); err != nil {
 		t.Fatal(err)
 	}
-	typ := serializationMustType(cql.TupleType(serializationMustType(cql.ScalarType(cql.TypeInt)), serializationMustType(cql.ScalarType(cql.TypeText))))
+	typ := serializationMustType(cql.TupleType(cql.IntType, cql.TextType))
 	checkDynamicSerializationCases(t, s, table, []serializationDynamicCase{{"tuple", "(42,'hello')", serializationMustValue(cql.TupleValue(typ, []cql.Value{cql.IntValue(42), codecTestMust(cql.TextValue("hello"))}))}})
 }
 func TestSliceMapMapScanVectorTypes(t *testing.T) {
@@ -489,8 +489,8 @@ func TestSliceMapMapScanVectorTypes(t *testing.T) {
 	if err := truncateTable(t, s, table); err != nil {
 		t.Fatal(err)
 	}
-	fl := serializationMustType(cql.VectorDataType(serializationMustType(cql.ScalarType(cql.TypeFloat)), 3))
-	tx := serializationMustType(cql.VectorDataType(serializationMustType(cql.ScalarType(cql.TypeText)), 2))
+	fl := serializationMustType(cql.VectorDataType(cql.FloatType, 3))
+	tx := serializationMustType(cql.VectorDataType(cql.TextType, 2))
 	checkDynamicSerializationCases(t, s, table, []serializationDynamicCase{{"vector_float", "[1.0,2.5,-3.0]", serializationMustValue(cql.VectorValue(fl, []cql.Value{cql.FloatValue(1), cql.FloatValue(2.5), cql.FloatValue(-3)}))}, {"vector_text", "['hello','world']", serializationMustValue(cql.VectorValue(tx, []cql.Value{codecTestMust(cql.TextValue("hello")), codecTestMust(cql.TextValue("world"))}))}})
 }
 func TestSliceMapMapScanCollectionTypes(t *testing.T) {
@@ -502,7 +502,7 @@ func TestSliceMapMapScanCollectionTypes(t *testing.T) {
 	if err := truncateTable(t, s, table); err != nil {
 		t.Fatal(err)
 	}
-	tx, in := serializationMustType(cql.ScalarType(cql.TypeText)), serializationMustType(cql.ScalarType(cql.TypeInt))
+	tx, in := cql.TextType, cql.IntType
 	list, set, mp := serializationMustType(cql.ListType(tx)), serializationMustType(cql.SetType(in)), serializationMustType(cql.MapType(tx, in))
 	checkDynamicSerializationCases(t, s, table, []serializationDynamicCase{
 		{"list", "['a','b','c']", serializationMustValue(cql.ListValue(list, []cql.Value{codecTestMust(cql.TextValue("a")), codecTestMust(cql.TextValue("b")), codecTestMust(cql.TextValue("c"))}))},

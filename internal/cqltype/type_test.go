@@ -158,3 +158,33 @@ func TestV2FoundationProtocolTypeConversion(t *testing.T) {
 		}
 	}
 }
+
+func TestPredeclaredScalarTypesAreShared(t *testing.T) {
+	predeclared := map[Type]DataType{
+		TypeAscii: ASCIIType, TypeBigInt: BigIntType, TypeBlob: BlobType, TypeBoolean: BooleanType,
+		TypeCounter: CounterType, TypeDecimal: DecimalType, TypeDouble: DoubleType, TypeFloat: FloatType,
+		TypeInt: IntType, TypeText: TextType, TypeTimestamp: TimestampType, TypeUUID: UUIDType,
+		TypeVarchar: VarcharType, TypeVarint: VarintType, TypeTimeUUID: TimeUUIDType, TypeInet: InetType,
+		TypeDate: DateType, TypeTime: TimeType, TypeSmallInt: SmallIntType, TypeTinyInt: TinyIntType,
+		TypeDuration: DurationType,
+	}
+	for kind := TypeAscii; kind <= TypeDuration; kind++ {
+		want, ok := predeclared[kind]
+		if !ok {
+			t.Fatalf("no predeclared type for %v", kind)
+		}
+		got, err := ScalarType(kind)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.descriptor != want.descriptor || got.Kind() != kind {
+			t.Fatalf("ScalarType(%v) = %v, want shared %v", kind, got, want)
+		}
+	}
+	if _, err := ScalarType(TypeList); err == nil {
+		t.Fatal("ScalarType accepted a collection kind")
+	}
+	if allocs := testing.AllocsPerRun(100, func() { _, _ = ScalarType(TypeText) }); allocs != 0 {
+		t.Fatalf("ScalarType allocated %v times", allocs)
+	}
+}

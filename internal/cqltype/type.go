@@ -31,12 +31,49 @@ type ColumnSpec struct {
 // Columns is an immutable, ordered set of column specifications.
 type Columns struct{ columns []ColumnSpec }
 
-// ScalarType constructs a supported scalar descriptor.
+// scalarTypes holds one shared descriptor per scalar kind, indexed by Type.
+var scalarTypes = func() (t [TypeDuration + 1]DataType) {
+	for k := TypeAscii; k <= TypeDuration; k++ {
+		t[k] = DataType{descriptor: &DataTypeDescriptor{Kind: k}}
+	}
+	return t
+}()
+
+// Predeclared scalar types. Each equals ScalarType of the matching Type
+// constant. Treat them as constants: reassigning one changes only code that
+// reads the variable, not ScalarType or decoded metadata.
+var (
+	ASCIIType     = scalarTypes[TypeAscii]
+	BigIntType    = scalarTypes[TypeBigInt]
+	BlobType      = scalarTypes[TypeBlob]
+	BooleanType   = scalarTypes[TypeBoolean]
+	CounterType   = scalarTypes[TypeCounter]
+	DecimalType   = scalarTypes[TypeDecimal]
+	DoubleType    = scalarTypes[TypeDouble]
+	FloatType     = scalarTypes[TypeFloat]
+	IntType       = scalarTypes[TypeInt]
+	TextType      = scalarTypes[TypeText]
+	TimestampType = scalarTypes[TypeTimestamp]
+	UUIDType      = scalarTypes[TypeUUID]
+	VarcharType   = scalarTypes[TypeVarchar]
+	VarintType    = scalarTypes[TypeVarint]
+	TimeUUIDType  = scalarTypes[TypeTimeUUID]
+	InetType      = scalarTypes[TypeInet]
+	DateType      = scalarTypes[TypeDate]
+	TimeType      = scalarTypes[TypeTime]
+	SmallIntType  = scalarTypes[TypeSmallInt]
+	TinyIntType   = scalarTypes[TypeTinyInt]
+	DurationType  = scalarTypes[TypeDuration]
+)
+
+// ScalarType returns the shared descriptor for a supported scalar kind. It
+// fails only for non-scalar kinds; use the predeclared values such as TextType
+// when the kind is known at compile time.
 func ScalarType(kind Type) (DataType, error) {
 	if err := ValidateScalarKind(kind); err != nil {
 		return DataType{}, err
 	}
-	return DataType{descriptor: &DataTypeDescriptor{Kind: kind}}, nil
+	return scalarTypes[kind], nil
 }
 
 // ValidateScalarKind checks scalar support without constructing a descriptor.

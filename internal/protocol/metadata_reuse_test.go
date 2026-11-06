@@ -89,10 +89,7 @@ func TestMetadataReuseReturnsExpectedColumns(t *testing.T) {
 	}
 	body := reuseMetadataBody("value", uint16(cqltype.TypeBlob))
 	parsed := parse(body, cqltype.Columns{})
-	blob, err := cqltype.ScalarType(cqltype.TypeBlob)
-	if err != nil {
-		t.Fatal(err)
-	}
+	blob := cqltype.BlobType
 	expect := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "table", Name: "value", Type: blob})
 	if parsed.Same(expect) || !parsed.Equal(expect) {
 		t.Fatal("setup: expected columns must be equal, not the same")

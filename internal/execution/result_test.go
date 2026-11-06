@@ -15,7 +15,7 @@ import (
 )
 
 func TestV2RuntimePageLeaseAndClone(t *testing.T) {
-	typ, _ := cql.ScalarType(cql.TypeBlob)
+	typ := cql.BlobType
 	columns := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: typ})
 	body := append(binary.BigEndian.AppendUint32(nil, 5), []byte("value")...)
 	chain, _ := wire.NewChain(wire.Borrow(body))
@@ -60,8 +60,8 @@ func TestV2RuntimePageLeaseAndClone(t *testing.T) {
 	}
 }
 func TestV2RuntimeCASMetadataAndEmptyPageValidation(t *testing.T) {
-	boolean, _ := cql.ScalarType(cql.TypeBoolean)
-	integer, _ := cql.ScalarType(cql.TypeInt)
+	boolean := cql.BooleanType
+	integer := cql.IntType
 	codec := cql.CASRows(cql.OneColumn(cql.Int32))
 	columns := cql.NewColumns(cql.ColumnSpec{Name: "[applied]", Type: boolean})
 	plan, err := codec.Compile(columns)
@@ -84,7 +84,7 @@ func TestV2RuntimeCASMetadataAndEmptyPageValidation(t *testing.T) {
 	if err != nil || result.Applied || !result.Previous.Set || result.Previous.Value != 7 {
 		t.Fatal(result, err)
 	}
-	bad, _ := cql.ScalarType(cql.TypeBlob)
+	bad := cql.BlobType
 	response := &responsePage{InternalResponseData: responseData{Columns: cql.NewColumns(cql.ColumnSpec{Name: "bad", Type: bad}), Owner: wire.NewLease(wire.Chain{}, nil)}}
 	if _, err := newPage(response, cql.OneColumn(cql.Int32), nil); err == nil {
 		t.Fatal("empty page skipped metadata validation")

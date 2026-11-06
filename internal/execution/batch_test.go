@@ -23,10 +23,7 @@ import (
 
 func batchTestQuery(t testing.TB, s *implCluster.Session) *Query[[]byte, EmptyRecord] {
 	t.Helper()
-	typ, err := cqltype.ScalarType(cqltype.TypeBlob)
-	if err != nil {
-		t.Fatal(err)
-	}
+	typ := cqltype.BlobType
 	q, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, OptionValues{})
 	if err != nil {
 		t.Fatal(err)
@@ -358,7 +355,7 @@ func TestBatchAttemptReusesWireBatch(t *testing.T) {
 func TestBatchRepairsEveryEvictedStatement(t *testing.T) {
 	s, _, peers := runtimeTestSession(t, 1)
 	implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
-	typ := codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+	typ := cqltype.BlobType
 	columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: typ})
 	query := func(id string) *Query[[]byte, EmptyRecord] {
 		state, hp := preparedState(t, s, cqltype.NewColumns())

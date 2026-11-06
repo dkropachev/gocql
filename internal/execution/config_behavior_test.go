@@ -404,7 +404,7 @@ func TestIncludeMetadataOverrideChangesExecuteWireFlag(t *testing.T) {
 	c.InternalFramers.InternalDefaults.InternalScyllaUseMetadataID = true
 	c.InternalRefreshNativeProtocol()
 	go c.InternalServe(c.InternalCtx)
-	columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))})
+	columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.BlobType})
 	state, _ := preparedState(t, s, columns)
 	handle := new(Prepared[codec.EmptyRecord, cqltype.Bytes])
 	storage := PreparedData(handle)

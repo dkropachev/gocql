@@ -20,7 +20,7 @@ func BenchmarkDynamicRows(b *testing.B) {
 	for _, cells := range []int{1, 32, 128} {
 		for _, fragments := range []int{1, 1024} {
 			b.Run(fmt.Sprintf("cells%d/fragments%d", cells, fragments), func(b *testing.B) {
-				typ := CodecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+				typ := cqltype.BlobType
 				cols := make([]cqltype.ColumnSpec, cells)
 				values := make([]Value, cells)
 				for i := range cols {
@@ -60,7 +60,7 @@ func BenchmarkDynamicRows(b *testing.B) {
 // is measured separately by BenchmarkDynamicRows. This measures actual J
 // repeated late-column accesses at independently varied N and S.
 func BenchmarkDynamicRepeatedAccess(b *testing.B) {
-	blob := CodecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+	blob := cqltype.BlobType
 	for _, n := range []int{1, 128, 4096} {
 		for _, fragments := range []int{1, 256, 65536} {
 			b.Run(fmt.Sprintf("N%d/S%d", n, fragments), func(b *testing.B) {

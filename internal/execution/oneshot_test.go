@@ -35,8 +35,8 @@ type oneShotRequest struct {
 // parameter and one blob column, and passes each EXECUTE to requests. It
 // returns when peer closes.
 func oneShotServer(t *testing.T, peer net.Conn, requests chan<- oneShotRequest) {
-	key := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeInt))})
-	value := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))})
+	key := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cqltype.IntType})
+	value := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.BlobType})
 	prepared := preparedBody([]byte("oneshot"), key, value, 0)
 	go func() {
 		defer close(requests)

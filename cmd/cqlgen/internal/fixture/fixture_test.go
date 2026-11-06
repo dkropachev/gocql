@@ -20,8 +20,8 @@ import (
 
 func mapType(t *testing.T) cqltype.DataType {
 	t.Helper()
-	text, _ := cqltype.ScalarType(cqltype.TypeText)
-	big, _ := cqltype.ScalarType(cqltype.TypeBigInt)
+	text := cqltype.TextType
+	big := cqltype.BigIntType
 	typ, err := cqltype.MapType(text, big)
 	if err != nil {
 		t.Fatal(err)

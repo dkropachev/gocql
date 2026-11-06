@@ -142,9 +142,9 @@ type wideRow struct {
 }
 
 func BenchmarkNarrowWideRows(b *testing.B) {
-	integer := CodecTestMust(cqltype.ScalarType(cqltype.TypeInt))
-	text := CodecTestMust(cqltype.ScalarType(cqltype.TypeText))
-	blob := CodecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+	integer := cqltype.IntType
+	text := cqltype.TextType
+	blob := cqltype.BlobType
 	list := CodecTestMust(cqltype.ListType(integer))
 	for _, groups := range []int{1, 8, 32} {
 		for _, fragments := range []int{1, 1024} {
@@ -211,7 +211,7 @@ func BenchmarkV2RowDestinationFragments(b *testing.B) {
 		Payload cqltype.Bytes
 		Pad     [256]int64
 	}
-	integer, blob := CodecTestMust(cqltype.ScalarType(cqltype.TypeInt)), CodecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+	integer, blob := cqltype.IntType, cqltype.BlobType
 	cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "number", Type: integer}, cqltype.ColumnSpec{Name: "payload", Type: blob})
 	decoder := Row(Column("number", Int32, func(r *row) *int32 { return &r.Number }), Column("payload", BlobCodec, func(r *row) *cqltype.Bytes { return &r.Payload }))
 	plan := CodecTestMust(decoder.Compile(cols))

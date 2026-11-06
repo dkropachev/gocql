@@ -10,11 +10,8 @@ import (
 )
 
 func TestStringCodecDecodesOwnedString(t *testing.T) {
-	typ, err := cqltype.ScalarType(cqltype.TypeVarchar)
-	if err != nil {
-		t.Fatal(err)
-	}
-	encoded, err := EncodeValueOwned(typ, StringCodec, "héllo")
+	typ := cqltype.VarcharType
+	encoded, err := EncodeValue(typ, StringCodec, "héllo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,15 +35,12 @@ func TestStringCodecDecodesOwnedString(t *testing.T) {
 }
 
 func TestStringCodecDecodesCollectionElements(t *testing.T) {
-	text, err := cqltype.ScalarType(cqltype.TypeText)
-	if err != nil {
-		t.Fatal(err)
-	}
+	text := cqltype.TextType
 	typ, err := cqltype.ListType(text)
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded, err := EncodeValueOwned(typ, ListEncoder(StringCodec), []string{"a", "bc"})
+	encoded, err := EncodeValue(typ, ListEncoder(StringCodec), []string{"a", "bc"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,17 +62,11 @@ func TestStringCodecDecodesCollectionElements(t *testing.T) {
 }
 
 func TestStringCodecRejectsWrongTypes(t *testing.T) {
-	blob, err := cqltype.ScalarType(cqltype.TypeBlob)
-	if err != nil {
-		t.Fatal(err)
-	}
+	blob := cqltype.BlobType
 	if err := StringCodec.CheckType(blob); err == nil {
 		t.Fatal("StringCodec accepted blob")
 	}
-	text, err := cqltype.ScalarType(cqltype.TypeText)
-	if err != nil {
-		t.Fatal(err)
-	}
+	text := cqltype.TextType
 	if err := ASCIIStringCodec.CheckType(text); err == nil {
 		t.Fatal("ASCIIStringCodec accepted text")
 	}

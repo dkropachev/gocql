@@ -128,7 +128,7 @@ func BenchmarkV2WarmPreparedSelection(b *testing.B) {
 		implCluster.SessionData(opaqueStorageValue).InternalLogger = logging.InternalNopLogger{}
 		return opaqueStorageValue
 	}()
-	columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))})
+	columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.BlobType})
 	tracker := InternalRuntimeFor(s).InternalSchemaTracker()
 	deps := tracker.InternalDependencies("ks", cqltype.NewColumns(), columns)
 	hp := &InternalHostPrepared{InternalEpoch: deps.InternalSnapshot()}

@@ -59,7 +59,7 @@ func BenchmarkV2PageCallerDestination(b *testing.B) {
 		Value   cqltype.Bytes
 		Padding [128]int64
 	}
-	typ := codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+	typ := cqltype.BlobType
 	columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: typ})
 	decoder := codec.Row(codec.Column("value", codec.BlobCodec, func(r *row) *cqltype.Bytes { return &r.Value }))
 	for _, fragments := range []int{1, 1024} {
@@ -98,7 +98,7 @@ func BenchmarkV2PageCallerDestination(b *testing.B) {
 }
 
 func BenchmarkV2ResultPlanExactEntry(b *testing.B) {
-	columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))})
+	columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: cqltype.BlobType})
 	entry := &model.ResultSchemaIdentity{InternalColumns: columns}
 	response := &transport.InternalResponsePage{InternalMetadata: entry, InternalResponseData: model.ResponseData{Columns: columns}}
 	cache := &InternalResultPlanCache[cqltype.Bytes]{}

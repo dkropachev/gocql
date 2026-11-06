@@ -36,7 +36,11 @@ compared structure and names; equality never relies solely on a hash.
 type DataType struct { /* immutable private descriptor */ }
 type ColumnSpec struct { Keyspace, Table, Name string; Type DataType }
 type Columns struct { /* immutable private ordered column specs */ }
-func ScalarType(kind Type) (DataType, error)
+func ScalarType(kind Type) (DataType, error) // shared descriptor; fails only for non-scalar kinds
+var ASCIIType, BigIntType, BlobType, BooleanType, CounterType, DecimalType,
+    DoubleType, FloatType, IntType, TextType, TimestampType, UUIDType,
+    VarcharType, VarintType, TimeUUIDType, InetType, DateType, TimeType,
+    SmallIntType, TinyIntType, DurationType DataType // predeclared scalars; treat as constants
 func ListType(element DataType) (DataType, error)
 func SetType(element DataType) (DataType, error)
 func MapType(key, value DataType) (DataType, error)
@@ -198,7 +202,7 @@ func (v EncodedValue) State() CellState
 func (v EncodedValue) Bytes() Bytes
 func (v EncodedValue) Clone() EncodedValue
 func EncodeValueBorrowed[T any](DataType, Encoder[T], T) (EncodedValue, error)
-func EncodeValueOwned[T any](DataType, Encoder[T], T) (EncodedValue, error)
+func EncodeValue[T any](DataType, Encoder[T], T) (EncodedValue, error) // owned
 func DecodeValue[T any](Decoder[T], EncodedValue) (T, error)
 ```
 
@@ -207,7 +211,7 @@ any encoded value/decoded view is used; these synchronous helpers start no
 background work. They do not retain source page leases: the caller must retain
 those leases separately. Original received views detect a released owner, but a
 derived standalone encoded span cannot detect that its externally owned source
-was released. Use EncodeValueOwned or Clone to detach. Owned encoding clones
+was released. Use EncodeValue or Clone to detach. EncodeValue clones
 caller-backed payload once, sharing already-owned scalar encoding. Clone
 detaches bytes explicitly. These functions call the exact
 ValueWriter/ValueReader used in request binding and result decoding; no second
@@ -388,6 +392,7 @@ type UDTOptions struct {
     Keyspace, Name string // required expected UDT identity, exact metadata names
     AllowExtraDatabaseFields, AllowMissingFields bool
 }
+func UDTOptionsFor(DataType) (UDTOptions, error) // identity from a UDT DataType
 func UDTEncoder[T any](ParamEncoder[T], UDTOptions) Encoder[T]
 func UDTDecoder[T any](RowDecoder[T], UDTOptions) Decoder[T]
 func Collect[T any](*ValueIterator[T]) ([]T, error)

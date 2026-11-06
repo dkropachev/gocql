@@ -41,8 +41,8 @@ type streamChunkSource struct {
 
 func TestStreamValidationRejectsUnsupportedScalarKinds(t *testing.T) {
 	for _, kind := range []cqltype.Type{-1, cqltype.TypeDuration + 1, 65535} {
-		typ := FoundationScalar(t, cqltype.TypeInt)
-		cqltype.DescriptorOf(typ).Kind = kind
+		// Corrupt a private copy: ScalarType descriptors are shared.
+		typ := cqltype.TypeFromDescriptor(&cqltype.DataTypeDescriptor{Kind: kind})
 		checks := []func() error{
 			func() error { _, err := compileStreamValidation(typ, 0); return err },
 			func() error {

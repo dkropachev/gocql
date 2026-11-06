@@ -36,10 +36,7 @@ import (
 func testOwnedQuery(t testing.TB) *Query[[]byte, EmptyRecord] {
 	t.Helper()
 	s, _ := attachmentSession()
-	typ, err := cqltype.ScalarType(cqltype.TypeBlob)
-	if err != nil {
-		t.Fatal(err)
-	}
+	typ := cqltype.BlobType
 	q, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, OptionValues{})
 	if err != nil {
 		t.Fatal(err)

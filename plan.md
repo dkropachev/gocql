@@ -279,7 +279,7 @@ Standalone serialization uses the same implementation as live execution:
 
 ```go
 func EncodeValueBorrowed[T any](DataType, Encoder[T], T) (EncodedValue, error)
-func EncodeValueOwned[T any](DataType, Encoder[T], T) (EncodedValue, error)
+func EncodeValue[T any](DataType, Encoder[T], T) (EncodedValue, error)
 func DecodeValue[T any](Decoder[T], EncodedValue) (T, error)
 ```
 

@@ -37,15 +37,16 @@ func Example_userDefinedTypes() {
 		Street string
 		Number int32
 	}
-	text, _ := cql.ScalarType(cql.TypeText)
-	integer, _ := cql.ScalarType(cql.TypeInt)
-	typ, err := cql.UDTType("example", "address", cql.ColumnSpec{Name: "street", Type: text}, cql.ColumnSpec{Name: "number", Type: integer})
+	typ, err := cql.UDTType("example", "address", cql.ColumnSpec{Name: "street", Type: cql.TextType}, cql.ColumnSpec{Name: "number", Type: cql.IntType})
 	if err != nil {
 		log.Fatal(err)
 	}
-	opts := cql.UDTOptions{Keyspace: "example", Name: "address"}
+	opts, err := cql.UDTOptionsFor(typ)
+	if err != nil {
+		log.Fatal(err)
+	}
 	encoder := cql.UDTEncoder(cql.Params(cql.Param("street", cql.StringEncoder, func(v address) string { return v.Street }), cql.Param("number", cql.Int32, func(v address) int32 { return v.Number })), opts)
-	encoded, err := cql.EncodeValueOwned(typ, encoder, address{"Main Street", 42})
+	encoded, err := cql.EncodeValue(typ, encoder, address{"Main Street", 42})
 	if err != nil {
 		log.Fatal(err)
 	}

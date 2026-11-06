@@ -21,9 +21,9 @@ func TestBorrowIdentityAndWrites(t *testing.T) {
 		for _, text := range []bool{false, true} {
 			t.Run(fmt.Sprintf("size%d/text%t", size, text), func(t *testing.T) {
 				data := bytes.Repeat([]byte{'q'}, size)
-				typ := CodecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+				typ := cqltype.BlobType
 				if text {
-					typ = CodecTestMust(cqltype.ScalarType(cqltype.TypeText))
+					typ = cqltype.TextType
 				}
 				wire.ResetPerfCounters()
 				var encoded EncodedValue
@@ -79,9 +79,9 @@ func TestBorrowIdentityAndWrites(t *testing.T) {
 			})
 		}
 	}
-	integer := CodecTestMust(cqltype.ScalarType(cqltype.TypeBigInt))
+	integer := cqltype.BigIntType
 	wire.ResetPerfCounters()
-	value := CodecTestMust(EncodeValueOwned(integer, Int64, int64(42)))
+	value := CodecTestMust(EncodeValue(integer, Int64, int64(42)))
 	c := wire.ReadPerfCounters()
 	if c.ScalarWrites != 2 || c.ScalarBytes != 12 || c.CopyBytes != 0 {
 		t.Fatal(c)
@@ -122,7 +122,7 @@ func sequenceWork[T any](t *testing.T, typ cqltype.DataType, encoder Encoder[[]T
 	t.Logf("elements=%d bytes=%d counts=%+v compiles=%d name_maps=%d CheckType=%d", n, len(raw), c, comp, maps, ReadPerfTypeChecks())
 }
 func TestLazyTraversalCounts(t *testing.T) {
-	integer := CodecTestMust(cqltype.ScalarType(cqltype.TypeInt))
+	integer := cqltype.IntType
 	for _, n := range []int{1, 1024} {
 		t.Run(fmt.Sprintf("list%d", n), func(t *testing.T) {
 			sequenceWork(t, CodecTestMust(cqltype.ListType(integer)), ListEncoder(Int32), ListDecoder(Int32), make([]int32, n))
@@ -169,8 +169,8 @@ func TestLazyTraversalCounts(t *testing.T) {
 }
 
 func TestDynamicLazyReuse(t *testing.T) {
-	integer := CodecTestMust(cqltype.ScalarType(cqltype.TypeInt))
-	blob := CodecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+	integer := cqltype.IntType
+	blob := cqltype.BlobType
 	tuple := CodecTestMust(cqltype.TupleType(integer, blob))
 	list := CodecTestMust(cqltype.ListType(tuple))
 	cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "list", Type: list})
@@ -214,7 +214,7 @@ func TestDynamicLazyReuse(t *testing.T) {
 func oneScalarWrite[T any](t *testing.T, typ cqltype.DataType, codec Encoder[T], value T) {
 	t.Helper()
 	wire.ResetPerfCounters()
-	encoded := CodecTestMust(EncodeValueOwned(typ, codec, value))
+	encoded := CodecTestMust(EncodeValue(typ, codec, value))
 	c := wire.ReadPerfCounters()
 	if c.ScalarWrites != 2 || c.ScalarBytes != encoded.Bytes().Len()+4 || c.CopyBytes != 0 {
 		t.Fatal("framing plus one body write", c)
@@ -222,15 +222,15 @@ func oneScalarWrite[T any](t *testing.T, typ cqltype.DataType, codec Encoder[T],
 	t.Logf("%s %+v", typ, c)
 }
 func TestAllScalarArenaWrites(t *testing.T) {
-	oneScalarWrite(t, CodecTestMust(cqltype.ScalarType(cqltype.TypeUUID)), UUIDCodec, cqltype.UUID{})
-	oneScalarWrite(t, CodecTestMust(cqltype.ScalarType(cqltype.TypeInet)), InetCodec, netip.MustParseAddr("2001:db8::1"))
-	oneScalarWrite(t, CodecTestMust(cqltype.ScalarType(cqltype.TypeDuration)), DurationCodec, cqltype.Duration{Months: 2147483647, Days: 2147483647, Nanoseconds: 9223372036854775807})
+	oneScalarWrite(t, cqltype.UUIDType, UUIDCodec, cqltype.UUID{})
+	oneScalarWrite(t, cqltype.InetType, InetCodec, netip.MustParseAddr("2001:db8::1"))
+	oneScalarWrite(t, cqltype.DurationType, DurationCodec, cqltype.Duration{Months: 2147483647, Days: 2147483647, Nanoseconds: 9223372036854775807})
 }
 
 func TestCompiledScalarSafetyAndWarmChecks(t *testing.T) {
-	integer := CodecTestMust(cqltype.ScalarType(cqltype.TypeInt))
-	text := CodecTestMust(cqltype.ScalarType(cqltype.TypeText))
-	blob := CodecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+	integer := cqltype.IntType
+	text := cqltype.TextType
+	blob := cqltype.BlobType
 	list := CodecTestMust(cqltype.ListType(integer))
 	type result struct {
 		N        int32

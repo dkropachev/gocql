@@ -52,7 +52,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		typ := codecTestMust(cql.ScalarType(cql.TypeText))
+		typ := cql.TextType
 		query, err := gocql.NewUnpreparedQuery(session, cql.Statement[string, cql.Text]{Kind: cql.OrdinaryStatement, CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name=?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.TextCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "keyspace_name", Type: typ})}, gocql.Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
 		if err != nil {
 			t.Error(err)

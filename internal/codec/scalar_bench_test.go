@@ -90,7 +90,7 @@ var uuidSink cqltype.UUID
 func BenchmarkBaselineEquivalent(b *testing.B) {
 	b.Run("Varchar1024IntoBytes", func(b *testing.B) {
 		data := bytes.Repeat([]byte{'x'}, 1024)
-		typ := CodecTestMust(cqltype.ScalarType(cqltype.TypeVarchar))
+		typ := cqltype.VarcharType
 		r := NewValueReader(typ, cqltype.Present, CodecTestMust(wire.NewChain(wire.Borrow(data))), nil)
 		dst := make([]byte, 1024)
 		b.ReportAllocs()
@@ -124,9 +124,9 @@ func BenchmarkBorrowedSizes(b *testing.B) {
 		for _, text := range []bool{false, true} {
 			b.Run(fmt.Sprintf("bytes%d/text%t", size, text), func(b *testing.B) {
 				data := bytes.Repeat([]byte{'q'}, size)
-				typ := CodecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+				typ := cqltype.BlobType
 				if text {
-					typ = CodecTestMust(cqltype.ScalarType(cqltype.TypeText))
+					typ = cqltype.TextType
 				}
 				stringData := string(data)
 				b.Run("bind", func(b *testing.B) {

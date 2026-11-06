@@ -134,7 +134,7 @@ func TestQueryCancelledAcceptedWriteStaysBusyUntilDrain(t *testing.T) {
 	s, conns, peers := runtimeTestSession(t, 1)
 	entered := make(chan struct{})
 	conns[0].InternalW = &transport.InternalDeadlineContextWriter{InternalW: &acceptedWriter{Conn: conns[0].InternalR.(*transport.InternalConnReader).InternalConn, entered: entered}, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
-	typ := codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+	typ := cqltype.BlobType
 	q := codecTestMust(NewUnpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(value)VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: typ})}, OptionValues{}))
 	defer q.Close()
 	input := bytes.Repeat([]byte{31}, 128<<10)

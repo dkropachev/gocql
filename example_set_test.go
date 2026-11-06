@@ -33,12 +33,11 @@ import (
 )
 
 func Example_set() {
-	text, _ := cql.ScalarType(cql.TypeText)
-	typ, err := cql.SetType(text)
+	typ, err := cql.SetType(cql.TextType)
 	if err != nil {
 		log.Fatal(err)
 	}
-	encoded, err := cql.EncodeValueOwned(typ, cql.SetEncoder(cql.StringEncoder), []string{"alpha", "beta"})
+	encoded, err := cql.EncodeValue(typ, cql.SetEncoder(cql.StringEncoder), []string{"alpha", "beta"})
 	if err != nil {
 		log.Fatal(err)
 	}

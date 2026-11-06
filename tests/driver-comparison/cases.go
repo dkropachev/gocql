@@ -88,14 +88,8 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 	}
 	c := &v2Case{a: a, out: row{P: make([]byte, 0, size)}}
 	c.row = c.check.row
-	intType, err := cql.ScalarType(cql.TypeInt)
-	if err != nil {
-		return nil, err
-	}
-	blobType, err := cql.ScalarType(cql.TypeBlob)
-	if err != nil {
-		return nil, err
-	}
+	intType := cql.IntType
+	blobType := cql.BlobType
 	keyColumns := cql.NewColumns(cql.ColumnSpec{Name: "k", Type: intType})
 	rowColumns := cql.NewColumns(cql.ColumnSpec{Name: "k", Type: intType}, cql.ColumnSpec{Name: "r", Type: intType}, cql.ColumnSpec{Name: "p", Type: blobType})
 

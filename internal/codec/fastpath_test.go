@@ -17,9 +17,9 @@ import (
 )
 
 func TestContiguousScalarSafety(t *testing.T) {
-	uuidType := CodecTestMust(cqltype.ScalarType(cqltype.TypeUUID))
-	timeType := CodecTestMust(cqltype.ScalarType(cqltype.TypeTimeUUID))
-	textType := CodecTestMust(cqltype.ScalarType(cqltype.TypeText))
+	uuidType := cqltype.UUIDType
+	timeType := cqltype.TimeUUIDType
+	textType := cqltype.TextType
 	data := []byte{0, 1, 2, 3, 4, 5, 0x10, 7, 8, 9, 10, 11, 12, 13, 14, 15}
 	for split := 0; split <= len(data); split++ {
 		chain := CodecTestMust(wire.NewChain(wire.Borrow(data[:split]), wire.Borrow(data[split:])))
@@ -93,16 +93,16 @@ func TestContiguousScalarSafety(t *testing.T) {
 		}
 	}
 	for _, duration := range []cqltype.Duration{{}, {Months: math.MaxInt32, Days: math.MaxInt32, Nanoseconds: math.MaxInt64}, {Months: math.MinInt32, Days: math.MinInt32, Nanoseconds: math.MinInt64}} {
-		typ := CodecTestMust(cqltype.ScalarType(cqltype.TypeDuration))
-		encoded := CodecTestMust(EncodeValueOwned(typ, DurationCodec, duration))
+		typ := cqltype.DurationType
+		encoded := CodecTestMust(EncodeValue(typ, DurationCodec, duration))
 		if got := CodecTestMust(DecodeValue(DurationCodec, encoded)); got != duration {
 			t.Fatal(got, duration)
 		}
 	}
-	typ := CodecTestMust(cqltype.ScalarType(cqltype.TypeInet))
+	typ := cqltype.InetType
 	for _, address := range []string{"127.0.0.1", "2001:db8::1"} {
 		v := netip.MustParseAddr(address)
-		encoded := CodecTestMust(EncodeValueOwned(typ, InetCodec, v))
+		encoded := CodecTestMust(EncodeValue(typ, InetCodec, v))
 		if got := CodecTestMust(DecodeValue(InetCodec, encoded)); got != v {
 			t.Fatal(got, v)
 		}
@@ -110,7 +110,7 @@ func TestContiguousScalarSafety(t *testing.T) {
 }
 
 func TestDynamicCopiedRowsIndexAndClone(t *testing.T) {
-	blob := CodecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+	blob := cqltype.BlobType
 	specs := make([]cqltype.ColumnSpec, 128)
 	values := make([]Value, 128)
 	for i := range specs {

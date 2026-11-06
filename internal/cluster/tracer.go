@@ -177,10 +177,7 @@ func InternalReadV2TraceRows[R any](s *Session, traceID []byte, cql string, deco
 	}
 	var id UUID
 	copy(id[:], traceID)
-	typ, err := ScalarType(TypeUUID)
-	if err != nil {
-		return nil, err
-	}
+	typ := UUIDType
 	ctx := v2SchemaContext(InternalNewSchemaSource(s))
 	timeout := s.privateStorage.InternalCfg.MetadataSchemaRequestTimeout
 	if timeout <= 0 {

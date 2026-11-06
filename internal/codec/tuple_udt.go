@@ -20,6 +20,16 @@ type UDTOptions struct {
 	AllowMissingFields       bool
 }
 
+// UDTOptionsFor returns options naming typ's UDT, with every relaxation off.
+// It fails when typ is not a UDT.
+func UDTOptionsFor(typ cqltype.DataType) (UDTOptions, error) {
+	keyspace, name, ok := typ.UDTName()
+	if !ok {
+		return UDTOptions{}, cqltype.TypeValidation("type", "%s is not a UDT", typ)
+	}
+	return UDTOptions{Keyspace: keyspace, Name: name}, nil
+}
+
 type recordEncoder[T any] struct {
 	codec   ParamEncoder[T]
 	plan    ParamPlan[T]

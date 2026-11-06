@@ -385,10 +385,7 @@ func InternalQueryV2SchemaRows[R any](ctx context.Context, s Source, stmt string
 	if !settings.Available {
 		return nil, InternalErrNoControl
 	}
-	typ, err := ScalarType(TypeVarchar)
-	if err != nil {
-		return nil, err
-	}
+	typ := VarcharType
 	columns := make([]ColumnSpec, len(args))
 	for i := range columns {
 		columns[i] = ColumnSpec{Type: typ}

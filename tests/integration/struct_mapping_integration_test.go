@@ -620,8 +620,8 @@ func TestStructMappingUnprepared(t *testing.T) {
 		t.Fatal(err)
 	}
 	keyMarkers := cql.NewColumns(
-		cql.ColumnSpec{Name: "bucket", Type: codecTestMust(cql.ScalarType(cql.TypeInt))},
-		cql.ColumnSpec{Name: "id", Type: codecTestMust(cql.ScalarType(cql.TypeUUID))},
+		cql.ColumnSpec{Name: "bucket", Type: cql.IntType},
+		cql.ColumnSpec{Name: "id", Type: cql.UUIDType},
 	)
 	read, err := gocql.NewUnpreparedQuery(f.session, cql.Statement[smKey, smRecord]{
 		Kind:        cql.OrdinaryStatement,

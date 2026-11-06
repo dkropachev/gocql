@@ -41,7 +41,7 @@ func (s *streamRepeatSource) Read(p []byte) (int, error) {
 }
 
 func BenchmarkV2StreamFinalStorage(b *testing.B) {
-	typ := CodecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+	typ := cqltype.BlobType
 	cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "blob", Type: typ})
 	plan := CodecTestMust(StreamOneColumn(StreamBlob).Compile(cols))
 	for _, size := range []int{32, 4096, 512000} {
@@ -83,7 +83,7 @@ func BenchmarkV2StreamFinalStorage(b *testing.B) {
 }
 
 func BenchmarkV2StreamingNestedElements(b *testing.B) {
-	integer := CodecTestMust(cqltype.ScalarType(cqltype.TypeInt))
+	integer := cqltype.IntType
 	typ := CodecTestMust(cqltype.ListType(integer))
 	cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "list", Type: typ})
 	plan := CodecTestMust(StreamOneColumn(StreamList(StreamInt32)).Compile(cols))

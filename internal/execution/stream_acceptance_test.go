@@ -322,7 +322,7 @@ func (d decoderError) Compile(cqltype.Columns) (codec.StreamRowPlan[[]byte], err
 }
 func (d decoderError) Reset(dst *[]byte) { *dst = (*dst)[:0] }
 func (d decoderError) DecodeInto(r *codec.StreamRowReader, dst *[]byte) error {
-	p, err := codec.StreamBlob.Compile(codecTestMust(cqltype.ScalarType(cqltype.TypeBlob)))
+	p, err := codec.StreamBlob.Compile(cqltype.BlobType)
 	if err != nil {
 		return err
 	}

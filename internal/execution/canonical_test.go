@@ -52,7 +52,7 @@ func TestCanonicalAssembly(t *testing.T) {
 		for _, proto := range []byte{3, 4, 5} {
 			for _, owned := range []bool{false, true} {
 				t.Run(fmt.Sprintf("bytes%d/v%d/owned%t", size, proto, owned), func(t *testing.T) {
-					typ := codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+					typ := cqltype.BlobType
 					cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})
 					calls := 0
 					input := bytes.Repeat([]byte{0x71}, size)

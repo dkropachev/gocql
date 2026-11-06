@@ -50,8 +50,7 @@ func TestBatch_Errors(t *testing.T) {
 
 	// Keep the invalid SELECT inside the native BATCH, so the server rejects
 	// the batch itself rather than a preceding PREPARE operation.
-	inet, err := cql.ScalarType(cql.TypeInet)
-	require.NoError(t, err)
+	inet := cql.InetType
 	bound, err := BindUnpreparedOwned(cql.Statement[[]cql.Value, cql.EmptyRow]{
 		CQL:    fmt.Sprintf(("SELECT * FROM " + fixtureKeyspace("") + ".%s WHERE id=2 AND val=?"), table),
 		Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder,

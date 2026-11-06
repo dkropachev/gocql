@@ -324,7 +324,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table 
 		Params: cql.Params(cql.Param("id", cql.UUIDCodec, func(p parameters) cql.UUID { return p.Table }), cql.Param("token", cql.Int64, func(p parameters) int64 { return p.Token })),
 		Rows:   cql.DynamicRows,
 	}
-	columns := cql.NewColumns(cql.ColumnSpec{Name: "id", Type: codecTestMust(cql.ScalarType(cql.TypeUUID))}, cql.ColumnSpec{Name: "token", Type: codecTestMust(cql.ScalarType(cql.TypeBigInt))})
+	columns := cql.NewColumns(cql.ColumnSpec{Name: "id", Type: cql.UUIDType}, cql.ColumnSpec{Name: "token", Type: cql.BigIntType})
 	bound := codecTestMust(BindUnpreparedOwned(statement, columns, parameters{table, token}))
 	defer bound.Close()
 	observation := tabletObservation{stable: true}

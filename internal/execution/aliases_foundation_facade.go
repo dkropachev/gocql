@@ -99,6 +99,8 @@ const TypeCounter = cqltype.TypeCounter
 
 const TypeUUID = cqltype.TypeUUID
 
+var UUIDType = cqltype.UUIDType
+
 type UUID = cqltype.UUID
 
 var UUIDCodec = codec.UUIDCodec

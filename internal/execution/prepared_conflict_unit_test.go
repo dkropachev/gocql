@@ -159,7 +159,7 @@ func TestV2PreparedConflictOverflowPropagatesAndRetries(t *testing.T) {
 	}()
 	implCluster.SessionData(s).InternalCtx, implCluster.SessionData(s).InternalCancel = context.WithCancel(context.Background())
 	defer s.Close()
-	cols := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))})
+	cols := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.BlobType})
 	state, old := preparedState(t, s, cols)
 	host := cqltype.UUID{15: 2}
 	other := *old
@@ -179,7 +179,7 @@ func TestV2PreparedConflictOverflowPropagatesAndRetries(t *testing.T) {
 		p.InternalPreparedRefreshScopes[fmt.Sprint(i)] = 1
 	}
 	p.InternalMu.Unlock()
-	changed := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeInt))})
+	changed := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.IntType})
 	response := &transport.InternalResponsePage{InternalResponseData: model.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("conflict")}}
 	err := InternalSelectPreparedResponse(state, host, &other, other.InternalMetadataID, true, response)
 	var protocol *cqltype.ProtocolError

@@ -498,7 +498,7 @@ func TestV2ScalarPublicValueOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owned, err := EncodeValueOwned(typ, BytesEncoder, source)
+	owned, err := EncodeValue(typ, BytesEncoder, source)
 	if err != nil {
 		t.Fatal(err)
 	}

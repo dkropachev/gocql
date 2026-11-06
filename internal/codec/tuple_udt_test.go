@@ -253,3 +253,22 @@ func TestV2TupleConcurrentCompiledPlansCheckOnce(t *testing.T) {
 		t.Fatalf("tuple child metadata checked %d times", checks.Load())
 	}
 }
+
+func TestV2UDTOptionsForDerivesIdentity(t *testing.T) {
+	typ, err := cqltype.UDTType("ks", "record", cqltype.ColumnSpec{Name: "id", Type: cqltype.IntType})
+	if err != nil {
+		t.Fatal(err)
+	}
+	options, err := UDTOptionsFor(typ)
+	if err != nil || options != (UDTOptions{Keyspace: "ks", Name: "record"}) {
+		t.Fatalf("UDTOptionsFor=%+v err=%v", options, err)
+	}
+	encoded := containerGolden(t, typ, UDTEncoder(Params(Param("id", Int32, func(v int32) int32 { return v })), options), int32(7), "0000000400000007")
+	decoded, err := DecodeValue(UDTDecoder(OneColumn(Int32), options), encoded)
+	if err != nil || decoded != 7 {
+		t.Fatalf("decoded=%v err=%v", decoded, err)
+	}
+	if _, err := UDTOptionsFor(cqltype.IntType); err == nil {
+		t.Fatal("UDTOptionsFor accepted a scalar type")
+	}
+}

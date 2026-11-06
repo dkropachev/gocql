@@ -13,10 +13,7 @@ import (
 )
 
 func TestOwnedParameterCaptureMatchesCheckedGenericEncoding(t *testing.T) {
-	typ, err := cqltype.ScalarType(cqltype.TypeBlob)
-	if err != nil {
-		t.Fatal(err)
-	}
+	typ := cqltype.BlobType
 	columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: typ})
 	plan, err := codec.OneParam(codec.BindEncoder(codec.BytesEncoder)).Compile(columns)
 	if err != nil {
@@ -57,10 +54,7 @@ func TestOwnedParameterCaptureMatchesCheckedGenericEncoding(t *testing.T) {
 }
 
 func TestOwnedEmptyCaptureHasPresentWireState(t *testing.T) {
-	typ, err := cqltype.ScalarType(cqltype.TypeInt)
-	if err != nil {
-		t.Fatal(err)
-	}
+	typ := cqltype.IntType
 	columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: typ})
 	plan, err := codec.OneParam(codec.EmptyCodec(codec.Int32)).Compile(columns)
 	if err != nil {
@@ -82,10 +76,7 @@ func TestOwnedEmptyCaptureHasPresentWireState(t *testing.T) {
 }
 
 func TestOwnedParameterRetirementBoundsDescriptorStorage(t *testing.T) {
-	typ, err := cqltype.ScalarType(cqltype.TypeInt)
-	if err != nil {
-		t.Fatal(err)
-	}
+	typ := cqltype.IntType
 	columns := make([]cqltype.ColumnSpec, 2048)
 	fields := make([]codec.InputField[codec.EmptyRecord], len(columns))
 	for i := range columns {

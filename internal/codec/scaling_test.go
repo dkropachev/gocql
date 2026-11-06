@@ -18,7 +18,7 @@ func TestNestedVisitBounds(t *testing.T) {
 	for _, depth := range []int{1, 4, 16} {
 		for _, fragments := range []int{1, 256, 65536} {
 			t.Run(fmt.Sprintf("depth%d/S%d", depth, fragments), func(t *testing.T) {
-				typ := CodecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+				typ := cqltype.BlobType
 				v := BlobValue(make([]byte, 1<<20))
 				for i := 0; i < depth; i++ {
 					typ = CodecTestMust(cqltype.ListType(typ))
@@ -55,7 +55,7 @@ func TestNestedVisitBounds(t *testing.T) {
 	}
 }
 func TestDynamicIndexJBounds(t *testing.T) {
-	blob := CodecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+	blob := cqltype.BlobType
 	for _, n := range []int{1, 128, 4096} {
 		for _, fragments := range []int{1, 256, 65536} {
 			t.Run(fmt.Sprintf("N%d/S%d", n, fragments), func(t *testing.T) {

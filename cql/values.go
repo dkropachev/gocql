@@ -114,8 +114,8 @@ type EmptyValueOf[T any] = cqltype.EmptyValueOf[T]
 func EncodeValueBorrowed[T any](a0 DataType, a1 Encoder[T], a2 T) (EncodedValue, error) {
 	return codec.EncodeValueBorrowed[T](a0, a1, a2)
 }
-func EncodeValueOwned[T any](a0 DataType, a1 Encoder[T], a2 T) (EncodedValue, error) {
-	return codec.EncodeValueOwned[T](a0, a1, a2)
+func EncodeValue[T any](a0 DataType, a1 Encoder[T], a2 T) (EncodedValue, error) {
+	return codec.EncodeValue[T](a0, a1, a2)
 }
 
 type EncodedValue = codec.EncodedValue
@@ -245,6 +245,33 @@ type RowPlan[R any] = codec.RowPlan[R]
 type RowReader = codec.RowReader
 
 func ScalarType(a0 Type) (DataType, error) { return cqltype.ScalarType(a0) }
+
+// Predeclared scalar types. Each equals ScalarType of the matching Type
+// constant. Treat them as constants: reassigning one changes only code that
+// reads the variable, not ScalarType or decoded metadata.
+var (
+	ASCIIType     = cqltype.ASCIIType
+	BigIntType    = cqltype.BigIntType
+	BlobType      = cqltype.BlobType
+	BooleanType   = cqltype.BooleanType
+	CounterType   = cqltype.CounterType
+	DecimalType   = cqltype.DecimalType
+	DoubleType    = cqltype.DoubleType
+	FloatType     = cqltype.FloatType
+	IntType       = cqltype.IntType
+	TextType      = cqltype.TextType
+	TimestampType = cqltype.TimestampType
+	UUIDType      = cqltype.UUIDType
+	VarcharType   = cqltype.VarcharType
+	VarintType    = cqltype.VarintType
+	TimeUUIDType  = cqltype.TimeUUIDType
+	InetType      = cqltype.InetType
+	DateType      = cqltype.DateType
+	TimeType      = cqltype.TimeType
+	SmallIntType  = cqltype.SmallIntType
+	TinyIntType   = cqltype.TinyIntType
+	DurationType  = cqltype.DurationType
+)
 
 type Sequence[T any] = codec.Sequence[T]
 
@@ -425,6 +452,8 @@ func UDTEncoder[T any](a0 ParamEncoder[T], a1 UDTOptions) Encoder[T] {
 
 type UDTField = cqltype.UDTField
 type UDTOptions = codec.UDTOptions
+
+func UDTOptionsFor(a0 DataType) (UDTOptions, error) { return codec.UDTOptionsFor(a0) }
 
 func UDTType(a0 string, a1 string, a2 ...ColumnSpec) (DataType, error) {
 	return cqltype.UDTType(a0, a1, a2...)
