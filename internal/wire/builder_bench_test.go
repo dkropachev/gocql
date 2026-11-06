@@ -20,55 +20,54 @@ package wire
 
 import (
 	"fmt"
-
 	"testing"
 )
 
-func BenchmarkBuilderBorrowLargePayload(b *testing.B) {
-	data := make([]byte, 1<<20)
-	builder := NewBuilder(16)
-	b.ReportAllocs()
-	b.SetBytes(int64(len(data)))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = builder.Borrow(Borrow(data))
-		allocationChain, _ = builder.Freeze()
-	}
-}
-
-func BenchmarkBuilderScalarAndBorrow(b *testing.B) {
-	data := make([]byte, 1<<20)
-	builder := NewBuilder(16)
-	b.ReportAllocs()
-	b.SetBytes(int64(len(data)))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		mark := builder.Mark()
-		_ = builder.Uint32(0)
-		_ = builder.Borrow(Borrow(data))
-		_ = builder.PatchUint32(mark, uint32(len(data)))
-		allocationChain, _ = builder.Freeze()
-	}
-}
-
-// Reports arena/slab/descriptor work separately from per-scalar serialization.
-func BenchmarkScalarArena(b *testing.B) {
-	for _, count := range []int{1, 1024} {
-		b.Run(fmt.Sprint(count), func(b *testing.B) {
-			b.ReportAllocs()
-			b.SetBytes(int64(8 * count))
-			for i := 0; i < b.N; i++ {
-				builder := NewBuilder(8 * count)
-				for j := 0; j < count; j++ {
-					if e := builder.Uint64(uint64(j)); e != nil {
+func BenchmarkBuilder(b *testing.B) {
+	b.Run("BorrowLargePayload", func(b *testing.B) {
+		data := make([]byte, 1<<20)
+		builder := NewBuilder(16)
+		b.ReportAllocs()
+		b.SetBytes(int64(len(data)))
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = builder.Borrow(Borrow(data))
+			allocationChain, _ = builder.Freeze()
+		}
+	})
+	b.Run("ScalarAndBorrow", func(b *testing.B) {
+		data := make([]byte, 1<<20)
+		builder := NewBuilder(16)
+		b.ReportAllocs()
+		b.SetBytes(int64(len(data)))
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			mark := builder.Mark()
+			_ = builder.Uint32(0)
+			_ = builder.Borrow(Borrow(data))
+			_ = builder.PatchUint32(mark, uint32(len(data)))
+			allocationChain, _ = builder.Freeze()
+		}
+	})
+	// Reports arena/slab/descriptor work separately from per-scalar serialization.
+	b.Run("ScalarArena", func(b *testing.B) {
+		for _, count := range []int{1, 1024} {
+			b.Run(fmt.Sprint(count), func(b *testing.B) {
+				b.ReportAllocs()
+				b.SetBytes(int64(8 * count))
+				for i := 0; i < b.N; i++ {
+					builder := NewBuilder(8 * count)
+					for j := 0; j < count; j++ {
+						if e := builder.Uint64(uint64(j)); e != nil {
+							b.Fatal(e)
+						}
+					}
+					if _, e := builder.Freeze(); e != nil {
 						b.Fatal(e)
 					}
 				}
-				if _, e := builder.Freeze(); e != nil {
-					b.Fatal(e)
-				}
-			}
-			b.ReportMetric(float64(count), "scalar-writes/op")
-		})
-	}
+				b.ReportMetric(float64(count), "scalar-writes/op")
+			})
+		}
+	})
 }

@@ -23,7 +23,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"math/rand"
 	"net"
 	"sync/atomic"
 	"testing"
@@ -120,117 +119,6 @@ func encodedResponse(version byte, compressed bool, payload []byte) []byte {
 	}
 	return out
 }
-func TestV2StreamingTransportReadTargetsAndWorkingMemory(t *testing.T) {
-	for _, mode := range []struct {
-		version    byte
-		compressor protocol.Compressor
-	}{{4, nil}, {5, nil}, {5, lz4.LZ4Compressor{}}} {
-		var storage int64
-		for _, size := range []int{400 << 10, 8 << 20} {
-			payload := make([]byte, size)
-			rand.New(rand.NewSource(42)).Read(payload)
-			encoded := encodedResponse(mode.version, mode.compressor != nil, payload)
-			source := &memoryConn{source: bytes.NewReader(encoded)}
-			r := memoryReservation(mode.version, mode.compressor, source)
-			dst := make([]byte, 0, size)
-			source.start = uintptr(unsafe.Pointer(&dst[:cap(dst)][0]))
-			source.end = source.start + uintptr(size)
-			response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
-				t.Fatal(err)
-			}
-			plan := codecTestMust(codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns))
-			if ok, err := InternalDecodeStreamRow(response, plan, &dst); !ok || err != nil || !bytes.Equal(dst, payload) {
-				t.Fatal(ok, err)
-			}
-			if mode.version == 4 {
-				// A native body may read ahead one bounded prefix; bulk
-				// payload still targets the final caller ranges.
-				if source.directBytes < int64(size)-(4<<10) || source.directBytes > int64(size) || source.otherBulk > 4<<10 {
-					t.Fatal("raw payload did not target final ranges", source.directBytes, source.otherBulk)
-				}
-			} else {
-				now := r.InternalUnits.InternalUnits.StorageBytes()
-				if now > r.InternalLimits.MaxTransformBytes || storage != 0 && now != storage {
-					t.Fatal("working memory grew with response bytes", storage, now)
-				}
-				storage = now
-			}
-			if response.InternalBudget.Used >= 16<<10 {
-				t.Fatal("metadata allocations grew with cell", response.InternalBudget.Used)
-			}
-			response.InternalReleaseMetadata()
-			r.InternalClose(true)
-		}
-	}
-}
-func BenchmarkV2ExclusiveTransport(b *testing.B) {
-	for _, mode := range []struct {
-		name       string
-		version    byte
-		compressor protocol.Compressor
-	}{{"raw4", 4, nil}, {"raw5", 5, nil}, {"lz4v5", 5, lz4.LZ4Compressor{}}} {
-		for _, size := range []int{1024, 400 << 10, 8 << 20} {
-			b.Run(fmt.Sprintf("%s/%d", mode.name, size), func(b *testing.B) {
-				payload := bytes.Repeat([]byte("stream-payload"), size/14+1)[:size]
-				encoded := encodedResponse(mode.version, mode.compressor != nil, payload)
-				source := &memoryConn{source: bytes.NewReader(encoded)}
-				r := memoryReservation(mode.version, mode.compressor, source)
-				defer r.InternalClose(true)
-				dst := make([]byte, 0, size)
-				request := &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One}
-				var plan codec.StreamRowPlan[[]byte]
-				run := func() {
-					source.source.Reset(encoded)
-					source.closed = false
-					source.readCalls = 0
-					source.directBytes = 0
-					source.otherBulk = 0
-					if r.InternalUnits != nil {
-						r.InternalUnits.InternalData = nil
-						r.InternalUnits.InternalOffset = 0
-						r.InternalUnits.InternalFrameActive = false
-						r.InternalUnits.InternalStarted = false
-						r.InternalUnits.InternalCopies = 0
-					}
-					response, err := r.InternalExchange(context.Background(), request)
-					if err != nil {
-						b.Fatal(err)
-					}
-					if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
-						b.Fatal(err)
-					}
-					if plan == nil {
-						plan, err = codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns)
-						if err != nil {
-							b.Fatal(err)
-						}
-					}
-					if ok, err := InternalDecodeStreamRow(response, plan, &dst); !ok || err != nil {
-						b.Fatal(ok, err)
-					}
-					response.InternalReleaseMetadata()
-				}
-				run()
-				b.SetBytes(int64(size))
-				b.ReportAllocs()
-				b.ResetTimer()
-				for i := 0; i < b.N; i++ {
-					run()
-				}
-				b.StopTimer()
-				b.ReportMetric(float64(source.readCalls), "reads/op")
-				if r.InternalUnits != nil {
-					b.ReportMetric(float64(r.InternalUnits.InternalUnits.StorageBytes()), "transform-B")
-					b.ReportMetric(float64(r.InternalUnits.InternalCopies), "unit-copy-B/op")
-				}
-			})
-		}
-	}
-}
 func FuzzV2ExclusiveIncrementalFraming(f *testing.F) {
 	f.Add(byte(4), encodedResponse(4, false, []byte("value")))
 	f.Add(byte(5), encodedResponse(5, false, []byte("value")))
@@ -268,67 +156,6 @@ func FuzzV2ExclusiveIncrementalFraming(f *testing.F) {
 			}
 		}
 	})
-}
-
-func BenchmarkV2ExclusiveRowsScaling(b *testing.B) {
-	for _, count := range []int{1, 32, 1024} {
-		b.Run(fmt.Sprint(count), func(b *testing.B) {
-			body := typedTestRowsBody([]byte{42})
-			binary.BigEndian.PutUint32(body[len(body)-9:], uint32(count))
-			cell := []byte{0, 0, 0, 1, 42}
-			for i := 1; i < count; i++ {
-				body = append(body, cell...)
-			}
-			encoded := []byte{0x84, 0, 0, 0, 8}
-			encoded = binary.BigEndian.AppendUint32(encoded, uint32(len(body)))
-			encoded = append(encoded, body...)
-			source := &memoryConn{source: bytes.NewReader(encoded)}
-			r := memoryReservation(4, nil, source)
-			defer r.InternalClose(true)
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			var plan codec.StreamRowPlan[[]byte]
-			dst := make([]byte, 0, 1)
-			run := func() {
-				source.source.Reset(encoded)
-				response, err := r.InternalExchange(ctx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
-				if err != nil {
-					b.Fatal(err)
-				}
-				if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
-					b.Fatal(err)
-				}
-				if plan == nil {
-					plan, err = codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns)
-					if err != nil {
-						b.Fatal(err)
-					}
-				}
-				n := 0
-				for {
-					ok, err := InternalDecodeStreamRow(response, plan, &dst)
-					if err != nil {
-						b.Fatal(err)
-					}
-					if !ok {
-						break
-					}
-					n++
-				}
-				if n != count {
-					b.Fatal(n, count)
-				}
-				response.InternalReleaseMetadata()
-			}
-			run()
-			b.ReportAllocs()
-			b.ReportMetric(float64(count), "rows/op")
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				run()
-			}
-		})
-	}
 }
 
 type testWireCounter struct {
@@ -403,89 +230,216 @@ func (c *plaintextCounter) Read(p []byte) (int, error) {
 	}
 	return n, err
 }
-func BenchmarkV2TLSReceiveAmplification(b *testing.B) {
-	for _, size := range []int{4096, 400 << 10} {
-		b.Run(fmt.Sprint(size), func(b *testing.B) {
-			client, server, wireCounter, cleanup := benchTLS(b)
-			defer cleanup()
-			encoded := encodedResponse(4, false, bytes.Repeat([]byte("z"), size))
-			plain := &plaintextCounter{Conn: client}
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			c := &Conn{InternalVersion: 4, InternalCtx: ctx, InternalCancel: cancel, InternalR: &InternalConnReader{InternalConn: plain}, InternalStreams: streams.New(), InternalLogger: logging.InternalNopLogger{}, InternalErrorHandler: InternalConnErrorHandlerFn(func(*Conn, error, bool) {})}
-			c.InternalW = &InternalDeadlineContextWriter{InternalW: client, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
-			c.InternalInitFramerCache()
-			stream, _ := c.InternalStreams.GetStream()
-			c.InternalExclusiveFlag.Store(true)
-			r := &InternalExclusiveConn{InternalConn: c, InternalCtx: ctx, InternalStream: stream, InternalComplete: true, InternalDone: make(chan struct{})}
-			r.InternalInitStream(StreamLimits{})
-			defer r.InternalClose(true)
-			warm := make(chan struct{})
-			done := make(chan error, 1)
-			go func() {
-				var header [9]byte
-				for i := 0; i <= b.N; i++ {
-					if _, err := io.ReadFull(server, header[:]); err != nil {
-						done <- err
-						return
+
+func BenchmarkStreamTransport(b *testing.B) {
+	b.Run("Exclusive", func(b *testing.B) {
+		for _, mode := range []struct {
+			name       string
+			version    byte
+			compressor protocol.Compressor
+		}{{"raw4", 4, nil}, {"raw5", 5, nil}, {"lz4v5", 5, lz4.LZ4Compressor{}}} {
+			for _, size := range []int{1024, 400 << 10, 8 << 20} {
+				b.Run(fmt.Sprintf("%s/%d", mode.name, size), func(b *testing.B) {
+					payload := bytes.Repeat([]byte("stream-payload"), size/14+1)[:size]
+					encoded := encodedResponse(mode.version, mode.compressor != nil, payload)
+					source := &memoryConn{source: bytes.NewReader(encoded)}
+					r := memoryReservation(mode.version, mode.compressor, source)
+					defer r.InternalClose(true)
+					dst := make([]byte, 0, size)
+					request := &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One}
+					var plan codec.StreamRowPlan[[]byte]
+					run := func() {
+						source.source.Reset(encoded)
+						source.closed = false
+						source.readCalls = 0
+						source.directBytes = 0
+						source.otherBulk = 0
+						if r.InternalUnits != nil {
+							r.InternalUnits.InternalData = nil
+							r.InternalUnits.InternalOffset = 0
+							r.InternalUnits.InternalFrameActive = false
+							r.InternalUnits.InternalStarted = false
+							r.InternalUnits.InternalCopies = 0
+						}
+						response, err := r.InternalExchange(context.Background(), request)
+						if err != nil {
+							b.Fatal(err)
+						}
+						if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
+							b.Fatal(err)
+						}
+						if plan == nil {
+							plan, err = codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns)
+							if err != nil {
+								b.Fatal(err)
+							}
+						}
+						if ok, err := InternalDecodeStreamRow(response, plan, &dst); !ok || err != nil {
+							b.Fatal(ok, err)
+						}
+						response.InternalReleaseMetadata()
 					}
-					if _, err := io.CopyN(io.Discard, server, int64(binary.BigEndian.Uint32(header[5:]))); err != nil {
-						done <- err
-						return
+					run()
+					b.SetBytes(int64(size))
+					b.ReportAllocs()
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						run()
 					}
-					if _, err := server.Write(encoded); err != nil {
-						done <- err
-						return
+					b.StopTimer()
+					b.ReportMetric(float64(source.readCalls), "reads/op")
+					if r.InternalUnits != nil {
+						b.ReportMetric(float64(r.InternalUnits.InternalUnits.StorageBytes()), "transform-B")
+						b.ReportMetric(float64(r.InternalUnits.InternalCopies), "unit-copy-B/op")
 					}
-					if i == 0 {
-						close(warm)
-					}
+				})
+			}
+		}
+	})
+	b.Run("RowsScaling", func(b *testing.B) {
+		for _, count := range []int{1, 32, 1024} {
+			b.Run(fmt.Sprint(count), func(b *testing.B) {
+				body := typedTestRowsBody([]byte{42})
+				binary.BigEndian.PutUint32(body[len(body)-9:], uint32(count))
+				cell := []byte{0, 0, 0, 1, 42}
+				for i := 1; i < count; i++ {
+					body = append(body, cell...)
 				}
-				done <- nil
-			}()
-			dst := make([]byte, 0, size)
-			plain.start = uintptr(unsafe.Pointer(&dst[:cap(dst)][0]))
-			plain.end = plain.start + uintptr(size)
-			var plan codec.StreamRowPlan[[]byte]
-			run := func() {
-				response, err := r.InternalExchange(ctx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
-				if err != nil {
-					b.Fatal(err)
-				}
-				if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
-					b.Fatal(err)
-				}
-				if plan == nil {
-					plan, err = codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns)
+				encoded := []byte{0x84, 0, 0, 0, 8}
+				encoded = binary.BigEndian.AppendUint32(encoded, uint32(len(body)))
+				encoded = append(encoded, body...)
+				source := &memoryConn{source: bytes.NewReader(encoded)}
+				r := memoryReservation(4, nil, source)
+				defer r.InternalClose(true)
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				var plan codec.StreamRowPlan[[]byte]
+				dst := make([]byte, 0, 1)
+				run := func() {
+					source.source.Reset(encoded)
+					response, err := r.InternalExchange(ctx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
 					if err != nil {
 						b.Fatal(err)
 					}
+					if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
+						b.Fatal(err)
+					}
+					if plan == nil {
+						plan, err = codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns)
+						if err != nil {
+							b.Fatal(err)
+						}
+					}
+					n := 0
+					for {
+						ok, err := InternalDecodeStreamRow(response, plan, &dst)
+						if err != nil {
+							b.Fatal(err)
+						}
+						if !ok {
+							break
+						}
+						n++
+					}
+					if n != count {
+						b.Fatal(n, count)
+					}
+					response.InternalReleaseMetadata()
 				}
-				if ok, err := InternalDecodeStreamRow(response, plan, &dst); !ok || err != nil {
-					b.Fatal(ok, err)
-				}
-				response.InternalReleaseMetadata()
-			}
-			run()
-			<-warm
-			wireCounter.reset()
-			plain.reads = 0
-			plain.outputBytes = 0
-			b.SetBytes(int64(size))
-			b.ReportAllocs()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
 				run()
-			}
-			b.StopTimer()
-			if err := <-done; err != nil {
-				b.Fatal(err)
-			}
-			b.ReportMetric(float64(wireCounter.reads.Load())/float64(b.N), "net-reads/op")
-			b.ReportMetric(float64(wireCounter.readBytes.Load())/float64(b.N), "tls-wire-read-B/op")
-			b.ReportMetric(float64(plain.reads)/float64(b.N), "plaintext-reads/op")
-			b.ReportMetric(float64(plain.outputBytes)/float64(b.N), "tls-output-handoff-B/op")
-			b.ReportMetric(0, "driver-gather-B/op")
-		})
-	}
+				b.ReportAllocs()
+				b.ReportMetric(float64(count), "rows/op")
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					run()
+				}
+			})
+		}
+	})
+	b.Run("TLSReceiveAmplification", func(b *testing.B) {
+		for _, size := range []int{4096, 400 << 10} {
+			b.Run(fmt.Sprint(size), func(b *testing.B) {
+				client, server, wireCounter, cleanup := benchTLS(b)
+				defer cleanup()
+				encoded := encodedResponse(4, false, bytes.Repeat([]byte("z"), size))
+				plain := &plaintextCounter{Conn: client}
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				c := &Conn{InternalVersion: 4, InternalCtx: ctx, InternalCancel: cancel, InternalR: &InternalConnReader{InternalConn: plain}, InternalStreams: streams.New(), InternalLogger: logging.InternalNopLogger{}, InternalErrorHandler: InternalConnErrorHandlerFn(func(*Conn, error, bool) {})}
+				c.InternalW = &InternalDeadlineContextWriter{InternalW: client, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
+				c.InternalInitFramerCache()
+				stream, _ := c.InternalStreams.GetStream()
+				c.InternalExclusiveFlag.Store(true)
+				r := &InternalExclusiveConn{InternalConn: c, InternalCtx: ctx, InternalStream: stream, InternalComplete: true, InternalDone: make(chan struct{})}
+				r.InternalInitStream(StreamLimits{})
+				defer r.InternalClose(true)
+				warm := make(chan struct{})
+				done := make(chan error, 1)
+				go func() {
+					var header [9]byte
+					for i := 0; i <= b.N; i++ {
+						if _, err := io.ReadFull(server, header[:]); err != nil {
+							done <- err
+							return
+						}
+						if _, err := io.CopyN(io.Discard, server, int64(binary.BigEndian.Uint32(header[5:]))); err != nil {
+							done <- err
+							return
+						}
+						if _, err := server.Write(encoded); err != nil {
+							done <- err
+							return
+						}
+						if i == 0 {
+							close(warm)
+						}
+					}
+					done <- nil
+				}()
+				dst := make([]byte, 0, size)
+				plain.start = uintptr(unsafe.Pointer(&dst[:cap(dst)][0]))
+				plain.end = plain.start + uintptr(size)
+				var plan codec.StreamRowPlan[[]byte]
+				run := func() {
+					response, err := r.InternalExchange(ctx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+					if err != nil {
+						b.Fatal(err)
+					}
+					if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
+						b.Fatal(err)
+					}
+					if plan == nil {
+						plan, err = codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns)
+						if err != nil {
+							b.Fatal(err)
+						}
+					}
+					if ok, err := InternalDecodeStreamRow(response, plan, &dst); !ok || err != nil {
+						b.Fatal(ok, err)
+					}
+					response.InternalReleaseMetadata()
+				}
+				run()
+				<-warm
+				wireCounter.reset()
+				plain.reads = 0
+				plain.outputBytes = 0
+				b.SetBytes(int64(size))
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					run()
+				}
+				b.StopTimer()
+				if err := <-done; err != nil {
+					b.Fatal(err)
+				}
+				b.ReportMetric(float64(wireCounter.reads.Load())/float64(b.N), "net-reads/op")
+				b.ReportMetric(float64(wireCounter.readBytes.Load())/float64(b.N), "tls-wire-read-B/op")
+				b.ReportMetric(float64(plain.reads)/float64(b.N), "plaintext-reads/op")
+				b.ReportMetric(float64(plain.outputBytes)/float64(b.N), "tls-output-handoff-B/op")
+				b.ReportMetric(0, "driver-gather-B/op")
+			})
+		}
+	})
 }

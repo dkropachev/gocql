@@ -20,43 +20,43 @@ package wire
 
 import (
 	"fmt"
-
 	"testing"
 )
 
-func BenchmarkCursorCrossSpanScalar(b *testing.B) {
-	c := segmented(b, []byte{1, 2, 3, 4, 5, 6, 7, 8}, 1)
-	b.ReportAllocs()
-	b.SetBytes(8)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		cur := NewCursor(c)
-		allocationScalar, _ = cur.Uint64()
-	}
-}
-
-func BenchmarkCursorCellsAndFragments(b *testing.B) {
-	for _, cells := range []int{256, 8192} {
-		for _, fragments := range []int{1, 256, 65536} {
-			b.Run(fmt.Sprintf("cells=%d/fragments=%d", cells, fragments), func(b *testing.B) {
-				data := make([]byte, 65536)
-				spans := make([]Span, fragments)
-				width := len(data) / fragments
-				for i := range spans {
-					spans[i] = Borrow(data[i*width : (i+1)*width])
-				}
-				c, _ := NewChain(spans...)
-				b.ReportAllocs()
-				b.ResetTimer()
-				for i := 0; i < b.N; i++ {
-					cursor := NewCursor(c)
-					for j := 0; j < cells; j++ {
-						if _, e := cursor.Take(int64(len(data) / cells)); e != nil {
-							b.Fatal(e)
+func BenchmarkCursor(b *testing.B) {
+	b.Run("CrossSpanScalar", func(b *testing.B) {
+		c := segmented(b, []byte{1, 2, 3, 4, 5, 6, 7, 8}, 1)
+		b.ReportAllocs()
+		b.SetBytes(8)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			cur := NewCursor(c)
+			allocationScalar, _ = cur.Uint64()
+		}
+	})
+	b.Run("CellsAndFragments", func(b *testing.B) {
+		for _, cells := range []int{256, 8192} {
+			for _, fragments := range []int{1, 256, 65536} {
+				b.Run(fmt.Sprintf("cells=%d/fragments=%d", cells, fragments), func(b *testing.B) {
+					data := make([]byte, 65536)
+					spans := make([]Span, fragments)
+					width := len(data) / fragments
+					for i := range spans {
+						spans[i] = Borrow(data[i*width : (i+1)*width])
+					}
+					c, _ := NewChain(spans...)
+					b.ReportAllocs()
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						cursor := NewCursor(c)
+						for j := 0; j < cells; j++ {
+							if _, e := cursor.Take(int64(len(data) / cells)); e != nil {
+								b.Fatal(e)
+							}
 						}
 					}
-				}
-			})
+				})
+			}
 		}
-	}
+	})
 }

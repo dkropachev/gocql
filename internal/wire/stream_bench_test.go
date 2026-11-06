@@ -18,32 +18,31 @@ package wire
 
 import (
 	"context"
-
 	"fmt"
-
 	"math"
-
 	"testing"
 )
 
-func BenchmarkStreamFinalRanges(b *testing.B) {
-	for _, size := range []int{32, 4096, 500 << 10} {
-		b.Run(fmt.Sprint(size), func(b *testing.B) {
-			dst := make([]byte, size)
-			source := &repeatedStreamReader{bytes: math.MaxInt64}
-			s, _ := NewStream(context.Background(), source, math.MaxInt32, StreamLimits{MaxBytes: math.MaxInt32})
-			if e := s.Child(int64(size), func(c *Stream) error { return c.ReadFull(dst) }); e != nil {
-				b.Fatal(e)
-			}
-			b.ReportAllocs()
-			b.SetBytes(int64(size))
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				s.remaining = math.MaxInt32
+func BenchmarkStream(b *testing.B) {
+	b.Run("FinalRanges", func(b *testing.B) {
+		for _, size := range []int{32, 4096, 500 << 10} {
+			b.Run(fmt.Sprint(size), func(b *testing.B) {
+				dst := make([]byte, size)
+				source := &repeatedStreamReader{bytes: math.MaxInt64}
+				s, _ := NewStream(context.Background(), source, math.MaxInt32, StreamLimits{MaxBytes: math.MaxInt32})
 				if e := s.Child(int64(size), func(c *Stream) error { return c.ReadFull(dst) }); e != nil {
 					b.Fatal(e)
 				}
-			}
-		})
-	}
+				b.ReportAllocs()
+				b.SetBytes(int64(size))
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					s.remaining = math.MaxInt32
+					if e := s.Child(int64(size), func(c *Stream) error { return c.ReadFull(dst) }); e != nil {
+						b.Fatal(e)
+					}
+				}
+			})
+		}
+	})
 }

@@ -26,19 +26,15 @@ package transport
 
 import (
 	"errors"
-
 	"runtime"
-
 	"testing"
-
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/logging"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-	lz4mod "github.com/scylladb/gocql/v2/internal/wirecompress"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/protocol"
+	lz4mod "github.com/scylladb/gocql/v2/internal/wirecompress"
 )
 
 // errReader fails every read with err, standing in for a socket whose read
@@ -65,28 +61,6 @@ func capturedRuntimeError(t *testing.T) runtime.Error {
 	}()
 
 	return caught
-}
-
-func Test_framerFlags_neverBetaProtocol(t *testing.T) {
-	comp := testMockedCompressor{}
-
-	for _, version := range []byte{protocol.ProtoVersion4, protocol.ProtoVersion5, protocol.ProtoVersion5 | protocol.ProtoDirectionMask} {
-		for _, compressor := range []protocol.Compressor{nil, comp} {
-			if got := protocol.DefaultFramerFlags(compressor, version); got&frm.FlagBetaProtocol != 0 {
-				t.Errorf("defaultFramerFlags(%v, 0x%02x) set FlagBetaProtocol", compressor != nil, version)
-			}
-			if got := protocol.NewFramer(compressor, version).Flags; got&frm.FlagBetaProtocol != 0 {
-				t.Errorf("newFramer(%v, 0x%02x) set FlagBetaProtocol", compressor != nil, version)
-			}
-		}
-	}
-
-	// initCache is what the connection actually uses once the handshake completed.
-	c := &Conn{InternalVersion: protocol.ProtoVersion5, InternalCompressor: comp, InternalLogger: &logging.InternalDefaultLogger{}}
-	c.InternalInitFramerCache()
-	if c.InternalFramers.InternalDefaults.InternalFlags&frm.FlagBetaProtocol != 0 {
-		t.Error("initFramerCache(v5) seeded FlagBetaProtocol")
-	}
 }
 
 type testMockedCompressor struct {
@@ -239,7 +213,8 @@ func writeRowsResultWithColumnType(fr *protocol.Framer, customType string) {
 //
 // The slice is large but free: finish() rejects it before the append, so it is never
 // read or copied and stays untouched zero pages. That is why this test needs none of
-// the memory-pressure skips TestFrameWriteTooLong and TestFrameReadTooLong carry -- and
+// the memory-pressure skips protocol.TestFramer/Finish/RejectsTooLong and
+// protocol.TestFramer/ReadFrame/RejectsTooLong carry -- and
 // why a matching "exactly at the limit" case is deliberately absent. finish() would
 // accept that one and copy the whole 256 MiB into f.buf, which measured 0.54s under
 // -race against 0.00s here. Neither of the two pre-existing MaxFrameSize checks has an

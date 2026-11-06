@@ -22,12 +22,14 @@ import (
 	"testing"
 )
 
-func BenchmarkLeaseRetainRelease(b *testing.B) {
-	l := NewLease(Chain{}, nil)
-	b.Cleanup(l.Release)
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		l.Retain()
-		l.Release()
-	}
+func BenchmarkLease(b *testing.B) {
+	b.Run("RetainRelease", func(b *testing.B) {
+		l := NewLease(Chain{}, nil)
+		b.Cleanup(l.Release)
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			l.Retain()
+			l.Release()
+		}
+	})
 }

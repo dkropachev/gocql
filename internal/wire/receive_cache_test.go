@@ -5,88 +5,6 @@ package wire
 
 import "testing"
 
-func TestReceiveCacheSaturationStatistics(t *testing.T) {
-	cache := new(ReceiveCache)
-	for range 80 {
-		cache.Release(make([]byte, 1024), 0)
-	}
-	stats := cache.Stats()
-	if stats.RetainedObjects != 64 || stats.RetainedBytes != 64*1024 {
-		t.Fatal(stats)
-	}
-	for range 65 {
-		_, _ = cache.Acquire(1024)
-	}
-	stats = cache.Stats()
-	if stats.Hits != 64 || stats.Misses != 1 || stats.RetainedObjects != 0 || stats.RetainedBytes != 0 {
-		t.Fatal(stats)
-	}
-}
-
-func TestReceiveCacheOwnership(t *testing.T) {
-	cache := new(ReceiveCache)
-	data, epoch := cache.Acquire(4096)
-	data[0] = 71
-	chain, _ := NewChain(Borrow(data))
-	lease := NewLease(chain, func() { cache.Release(data, epoch) })
-	if !lease.Retain() {
-		t.Fatal("retain")
-	}
-	lease.Release()
-	if n, _ := cache.Storage(); n != 0 {
-		t.Fatal("returned while retained")
-	}
-	other, _ := cache.Acquire(4096)
-	if &other[0] == &data[0] {
-		t.Fatal("live page reused")
-	}
-	lease.Release()
-	if n, _ := cache.Storage(); n != 4096 {
-		t.Fatal(n)
-	}
-	reused, nextEpoch := cache.Acquire(4096)
-	if &reused[0] != &data[0] || reused[0] != 71 {
-		t.Fatal("not actual backing reuse")
-	}
-	fresh := NewLease(CodecTestChain(t, reused), func() { cache.Release(reused, nextEpoch) })
-	if fresh == lease || lease.Retain() {
-		t.Fatal("lease ABA")
-	}
-	fresh.Release()
-	cache.Clear()
-	if n, c := cache.Storage(); n != 0 || c != 0 {
-		t.Fatal("clear", n, c)
-	}
-	stale, staleEpoch := cache.Acquire(8192)
-	cache.Clear()
-	cache.Release(stale, staleEpoch)
-	if n, _ := cache.Storage(); n != 0 {
-		t.Fatal("stale generation returned")
-	}
-	for i := 0; i < 8; i++ {
-		cache.Release(make([]byte, 1<<20), cache.epoch)
-	}
-	if n, c := cache.Storage(); n > ReceiveCacheMaxBytes || c > ReceiveCacheMaxObjects {
-		t.Fatal("object/byte bound", n, c)
-	}
-	cache.Clear()
-	cache.Release(make([]byte, ReceiveCacheMaxObject+1), cache.epoch)
-	if n, _ := cache.Storage(); n != 0 {
-		t.Fatal("oversized cached")
-	}
-	for i := 0; i < 3; i++ {
-		cache.Release(make([]byte, 8<<20), cache.epoch)
-	}
-	if n, c := cache.Storage(); n != ReceiveCacheMaxBytes || c != 2 {
-		t.Fatal("total budget", n, c)
-	}
-	active, e := cache.Acquire(8 << 20)
-	cache.Close()
-	cache.Release(active, e)
-	if n, c := cache.Storage(); n != 0 || c != 0 {
-		t.Fatal("shutdown retained", n, c)
-	}
-}
 func CodecTestChain(t *testing.T, b []byte) Chain {
 	t.Helper()
 	c, e := NewChain(Borrow(b))
@@ -96,83 +14,165 @@ func CodecTestChain(t *testing.T, b []byte) Chain {
 	return c
 }
 
-func TestReceiveCacheMixedAdmission(t *testing.T) {
-	cache := new(ReceiveCache)
-	for i := 0; i < 4; i++ {
-		cache.Release(make([]byte, 32+i), cache.epoch)
-	}
-	hot, e := cache.Acquire(512 << 10)
-	hot[0] = 71
-	cache.Release(hot, e)
-	reused, e := cache.Acquire(512 << 10)
-	if &reused[0] != &hot[0] || reused[0] != 71 {
-		t.Fatal("four tiny slots starved hot frame backing")
-	}
-	cache.Release(reused, e)
-	for i := 0; i < 1000; i++ {
-		cache.Release(make([]byte, 32+i%4), cache.epoch)
-	}
-	reused, e = cache.Acquire(512 << 10)
-	if &reused[0] != &hot[0] {
-		t.Fatal("tiny traffic evicted hot frame")
-	}
-	cache.Release(reused, e)
-	for i := 0; i < 64; i++ {
-		other, e := cache.Acquire(1024 + (i%4)*1024)
-		cache.Release(other, e)
-		large, e := cache.Acquire(512 << 10)
-		if &large[0] != &hot[0] {
-			t.Fatal("mixed classes lost hot backing")
+func TestReceiveCache(t *testing.T) {
+	t.Run("SaturationStatistics", func(t *testing.T) {
+		cache := new(ReceiveCache)
+		for range 80 {
+			cache.Release(make([]byte, 1024), 0)
 		}
-		cache.Release(large, e)
-	}
-	bytes, objects := cache.Storage()
-	if bytes > ReceiveCacheMaxBytes || objects > ReceiveCacheMaxObjects {
-		t.Fatal(bytes, objects)
-	}
-	cache.Clear()
-	stale, e := cache.Acquire(1 << 20)
-	cache.Clear()
-	cache.Release(stale, e)
-	if n, _ := cache.Storage(); n != 0 {
-		t.Fatal("epoch stale admission")
-	}
-	cache.Close()
-}
-
-// TestCachedLeaseRecyclingKeepsStaleRefsDead checks that once a cached lease
-// is recycled for a later frame, a Ref taken from its earlier generation
-// stays dead: it neither reports the new owner alive nor retains it.
-func TestCachedLeaseRecyclingKeepsStaleRefsDead(t *testing.T) {
-	cache := new(ReceiveCache)
-	var stale []Ref
-	seen := map[*Lease]bool{}
-	recycled := false
-	for i := 0; i < 64 && !recycled; i++ {
-		data, epoch := cache.Acquire(64)
+		stats := cache.Stats()
+		if stats.RetainedObjects != 64 || stats.RetainedBytes != 64*1024 {
+			t.Fatal(stats)
+		}
+		for range 65 {
+			_, _ = cache.Acquire(1024)
+		}
+		stats = cache.Stats()
+		if stats.Hits != 64 || stats.Misses != 1 || stats.RetainedObjects != 0 || stats.RetainedBytes != 0 {
+			t.Fatal(stats)
+		}
+	})
+	t.Run("Ownership", func(t *testing.T) {
+		cache := new(ReceiveCache)
+		data, epoch := cache.Acquire(4096)
+		data[0] = 71
 		chain, _ := NewChain(Borrow(data))
-		lease := NewCachedLease(chain, cache, data, epoch)
-		ref := RefOf(lease)
-		if !ref.Alive() {
-			t.Fatal("fresh generation not alive")
+		lease := NewLease(chain, func() { cache.Release(data, epoch) })
+		if !lease.Retain() {
+			t.Fatal("retain")
 		}
-		for _, old := range stale {
-			if old.Lease() == lease {
-				recycled = true
-				if old.Alive() || old.Retain() {
-					t.Fatal("stale generation observed a recycled lease's new owner")
+		lease.Release()
+		if n, _ := cache.Storage(); n != 0 {
+			t.Fatal("returned while retained")
+		}
+		other, _ := cache.Acquire(4096)
+		if &other[0] == &data[0] {
+			t.Fatal("live page reused")
+		}
+		lease.Release()
+		if n, _ := cache.Storage(); n != 4096 {
+			t.Fatal(n)
+		}
+		reused, nextEpoch := cache.Acquire(4096)
+		if &reused[0] != &data[0] || reused[0] != 71 {
+			t.Fatal("not actual backing reuse")
+		}
+		fresh := NewLease(CodecTestChain(t, reused), func() { cache.Release(reused, nextEpoch) })
+		if fresh == lease || lease.Retain() {
+			t.Fatal("lease ABA")
+		}
+		fresh.Release()
+		cache.Clear()
+		if n, c := cache.Storage(); n != 0 || c != 0 {
+			t.Fatal("clear", n, c)
+		}
+		stale, staleEpoch := cache.Acquire(8192)
+		cache.Clear()
+		cache.Release(stale, staleEpoch)
+		if n, _ := cache.Storage(); n != 0 {
+			t.Fatal("stale generation returned")
+		}
+		for i := 0; i < 8; i++ {
+			cache.Release(make([]byte, 1<<20), cache.epoch)
+		}
+		if n, c := cache.Storage(); n > ReceiveCacheMaxBytes || c > ReceiveCacheMaxObjects {
+			t.Fatal("object/byte bound", n, c)
+		}
+		cache.Clear()
+		cache.Release(make([]byte, ReceiveCacheMaxObject+1), cache.epoch)
+		if n, _ := cache.Storage(); n != 0 {
+			t.Fatal("oversized cached")
+		}
+		for i := 0; i < 3; i++ {
+			cache.Release(make([]byte, 8<<20), cache.epoch)
+		}
+		if n, c := cache.Storage(); n != ReceiveCacheMaxBytes || c != 2 {
+			t.Fatal("total budget", n, c)
+		}
+		active, e := cache.Acquire(8 << 20)
+		cache.Close()
+		cache.Release(active, e)
+		if n, c := cache.Storage(); n != 0 || c != 0 {
+			t.Fatal("shutdown retained", n, c)
+		}
+	})
+	t.Run("MixedAdmission", func(t *testing.T) {
+		cache := new(ReceiveCache)
+		for i := 0; i < 4; i++ {
+			cache.Release(make([]byte, 32+i), cache.epoch)
+		}
+		hot, e := cache.Acquire(512 << 10)
+		hot[0] = 71
+		cache.Release(hot, e)
+		reused, e := cache.Acquire(512 << 10)
+		if &reused[0] != &hot[0] || reused[0] != 71 {
+			t.Fatal("four tiny slots starved hot frame backing")
+		}
+		cache.Release(reused, e)
+		for i := 0; i < 1000; i++ {
+			cache.Release(make([]byte, 32+i%4), cache.epoch)
+		}
+		reused, e = cache.Acquire(512 << 10)
+		if &reused[0] != &hot[0] {
+			t.Fatal("tiny traffic evicted hot frame")
+		}
+		cache.Release(reused, e)
+		for i := 0; i < 64; i++ {
+			other, e := cache.Acquire(1024 + (i%4)*1024)
+			cache.Release(other, e)
+			large, e := cache.Acquire(512 << 10)
+			if &large[0] != &hot[0] {
+				t.Fatal("mixed classes lost hot backing")
+			}
+			cache.Release(large, e)
+		}
+		bytes, objects := cache.Storage()
+		if bytes > ReceiveCacheMaxBytes || objects > ReceiveCacheMaxObjects {
+			t.Fatal(bytes, objects)
+		}
+		cache.Clear()
+		stale, e := cache.Acquire(1 << 20)
+		cache.Clear()
+		cache.Release(stale, e)
+		if n, _ := cache.Storage(); n != 0 {
+			t.Fatal("epoch stale admission")
+		}
+		cache.Close()
+	})
+	// Checks that once a cached lease
+	// is recycled for a later frame, a Ref taken from its earlier generation
+	// stays dead: it neither reports the new owner alive nor retains it.
+	t.Run("LeaseRecycling", func(t *testing.T) {
+		cache := new(ReceiveCache)
+		var stale []Ref
+		seen := map[*Lease]bool{}
+		recycled := false
+		for i := 0; i < 64 && !recycled; i++ {
+			data, epoch := cache.Acquire(64)
+			chain, _ := NewChain(Borrow(data))
+			lease := NewCachedLease(chain, cache, data, epoch)
+			ref := RefOf(lease)
+			if !ref.Alive() {
+				t.Fatal("fresh generation not alive")
+			}
+			for _, old := range stale {
+				if old.Lease() == lease {
+					recycled = true
+					if old.Alive() || old.Retain() {
+						t.Fatal("stale generation observed a recycled lease's new owner")
+					}
 				}
 			}
+			recycled = recycled || seen[lease]
+			seen[lease] = true
+			lease.Release()
+			if ref.Alive() || ref.Retain() {
+				t.Fatal("released generation still alive")
+			}
+			stale = append(stale, ref)
 		}
-		recycled = recycled || seen[lease]
-		seen[lease] = true
-		lease.Release()
-		if ref.Alive() || ref.Retain() {
-			t.Fatal("released generation still alive")
+		if !recycled {
+			t.Skip("the pool never recycled a lease")
 		}
-		stale = append(stale, ref)
-	}
-	if !recycled {
-		t.Skip("the pool never recycled a lease")
-	}
+	})
 }

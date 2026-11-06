@@ -24,94 +24,96 @@ import (
 	"testing"
 )
 
-func TestLeaseLifecycleAndNoResurrection(t *testing.T) {
-	var calls atomic.Int64
-	c := chain(t, BorrowString("retained"))
-	l := NewLease(c, func() { calls.Add(1) })
-	if !l.Alive() || !l.Retain() || l.Chain().Len() != 8 {
-		t.Fatal("new lease cannot be retained or read")
-	}
-	l.Release()
-	if calls.Load() != 0 || l.Chain().Len() != 8 {
-		t.Fatal("storage released with an outstanding reference")
-	}
-	l.Release()
-	l.Release()
-	if calls.Load() != 1 || l.Retain() || l.Alive() || l.Chain().Len() != 0 {
-		t.Fatal("final release was not exactly once or lease was resurrected")
-	}
-	other := NewLease(c, nil)
-	if l == other || l.Retain() || !other.Retain() {
-		t.Fatal("new lease reused the old lease identity")
-	}
-	other.Release()
-	other.Release()
-	var nilLease *Lease
-	nilLease.Release()
-	if nilLease.Retain() || nilLease.Alive() || nilLease.Chain().Len() != 0 {
-		t.Fatal("nil lease must be inert")
-	}
-}
-
-func TestLeaseConcurrentReferences(t *testing.T) {
-	var calls atomic.Int64
-	l := NewLease(chain(t, BorrowString("stable")), func() { calls.Add(1) })
-	var wg sync.WaitGroup
-	for range 32 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for range 1000 {
-				if !l.Retain() {
-					t.Error("retain failed while the original reference remained held")
-					return
-				}
-				if l.Chain().Len() != 6 {
-					t.Error("retained lease lost its chain")
-				}
-				l.Release()
-			}
-		}()
-	}
-	wg.Wait()
-	if calls.Load() != 0 {
-		t.Fatal("callback ran with original reference still held")
-	}
-	l.Release()
-	if calls.Load() != 1 || l.Retain() {
-		t.Fatal("concurrent references did not end in a single final release")
-	}
-}
-
-func TestLeaseRetainRacesFinalRelease(t *testing.T) {
-	for range 200 {
+func TestLease(t *testing.T) {
+	t.Run("Lifecycle", func(t *testing.T) {
 		var calls atomic.Int64
-		l := NewLease(Chain{}, func() { calls.Add(1) })
-		start := make(chan struct{})
+		c := chain(t, BorrowString("retained"))
+		l := NewLease(c, func() { calls.Add(1) })
+		if !l.Alive() || !l.Retain() || l.Chain().Len() != 8 {
+			t.Fatal("new lease cannot be retained or read")
+		}
+		l.Release()
+		if calls.Load() != 0 || l.Chain().Len() != 8 {
+			t.Fatal("storage released with an outstanding reference")
+		}
+		l.Release()
+		l.Release()
+		if calls.Load() != 1 || l.Retain() || l.Alive() || l.Chain().Len() != 0 {
+			t.Fatal("final release was not exactly once or lease was resurrected")
+		}
+		other := NewLease(c, nil)
+		if l == other || l.Retain() || !other.Retain() {
+			t.Fatal("new lease reused the old lease identity")
+		}
+		other.Release()
+		other.Release()
+		var nilLease *Lease
+		nilLease.Release()
+		if nilLease.Retain() || nilLease.Alive() || nilLease.Chain().Len() != 0 {
+			t.Fatal("nil lease must be inert")
+		}
+	})
+	t.Run("ConcurrentReferences", func(t *testing.T) {
+		var calls atomic.Int64
+		l := NewLease(chain(t, BorrowString("stable")), func() { calls.Add(1) })
 		var wg sync.WaitGroup
-		for range 8 {
+		for range 32 {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				<-start
-				if l.Retain() {
+				for range 1000 {
+					if !l.Retain() {
+						t.Error("retain failed while the original reference remained held")
+						return
+					}
+					if l.Chain().Len() != 6 {
+						t.Error("retained lease lost its chain")
+					}
 					l.Release()
 				}
 			}()
 		}
-		close(start)
-		l.Release()
 		wg.Wait()
-		if calls.Load() != 1 || l.Retain() {
-			t.Fatalf("final-release race: %d callbacks", calls.Load())
+		if calls.Load() != 0 {
+			t.Fatal("callback ran with original reference still held")
 		}
-	}
-}
+		l.Release()
+		if calls.Load() != 1 || l.Retain() {
+			t.Fatal("concurrent references did not end in a single final release")
+		}
+	})
 
-func TestLeaseRefcountOverflow(t *testing.T) {
-	l := NewLease(Chain{}, nil)
-	l.state.Store(leaseRefsMask)
-	if l.Retain() || l.state.Load() != leaseRefsMask {
-		t.Fatal("refcount overflow was not rejected")
-	}
+	t.Run("Retain", func(t *testing.T) {
+		t.Run("RacesFinalRelease", func(t *testing.T) {
+			for range 200 {
+				var calls atomic.Int64
+				l := NewLease(Chain{}, func() { calls.Add(1) })
+				start := make(chan struct{})
+				var wg sync.WaitGroup
+				for range 8 {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						<-start
+						if l.Retain() {
+							l.Release()
+						}
+					}()
+				}
+				close(start)
+				l.Release()
+				wg.Wait()
+				if calls.Load() != 1 || l.Retain() {
+					t.Fatalf("final-release race: %d callbacks", calls.Load())
+				}
+			}
+		})
+		t.Run("RefcountOverflow", func(t *testing.T) {
+			l := NewLease(Chain{}, nil)
+			l.state.Store(leaseRefsMask)
+			if l.Retain() || l.state.Load() != leaseRefsMask {
+				t.Fatal("refcount overflow was not rejected")
+			}
+		})
+	})
 }
