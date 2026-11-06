@@ -521,7 +521,7 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, 
 	// query's come with each call. Options that need resolving for this
 	// session resolve straight into the request.
 	var resolved *InternalResolvedOptions
-	if query != nil && !query.perCall {
+	if query != nil && !query.perCall && request.batch == nil {
 		resolved = query.resolved
 	} else {
 		resolved = options.resolve(rt, &request.InternalOptions)

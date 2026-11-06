@@ -72,19 +72,6 @@ func (o *InternalInputOwner) resetExecution(onDrain func()) {
 	}
 }
 
-// resetOpen prepares a reusable owner, whose previous use drained, to admit
-// a new execution. Unlike resetExecution, the owner holds no reference: the
-// execution's admission takes one, and closing the owner after it returned
-// drains it once its writers released theirs.
-func (o *InternalInputOwner) resetOpen() {
-	o.state.Store(0)
-	o.drained.Store(false)
-	o.done, o.InternalOnDrain, o.onIdle = nil, nil, nil
-	if o.release == nil {
-		o.release = o.InternalRelease
-	}
-}
-
 // InternalRefs reports the current reference count.
 func (o *InternalInputOwner) InternalRefs() int { return int(o.state.Load() & ownerRefsMask) }
 

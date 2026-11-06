@@ -89,7 +89,7 @@ func TestBatchExecSendsEntriesAndReusesStorage(t *testing.T) {
 			t.Fatalf("request %d: op %#x body %q", i, r.op, r.body)
 		}
 	}
-	if !batch.owner.drained.Load() || batch.shared {
+	if !batch.drained() || batch.shared {
 		t.Fatal("a completed execution did not drain")
 	}
 	values := &batch.values[0]
@@ -114,38 +114,61 @@ func TestBatchExecSendsEntriesAndReusesStorage(t *testing.T) {
 
 func TestBatchResetLeavesStorageToUndrainedExecution(t *testing.T) {
 	q := testOwnedQuery(t)
-	var batch Batch
-	if err := q.AddTo(&batch, []byte("in flight")); err != nil {
-		t.Fatal(err)
-	}
-	// Model an execution that was cancelled while its writer still holds
-	// the owner.
-	batch.ownerUsed = true
-	batch.owner.resetOpen()
-	if err := batch.owner.InternalAdmit(); err != nil {
-		t.Fatal(err)
-	}
-	batch.owner.InternalClose()
-	inflight, entry := batch.values, batch.entries[0]
-	batch.Reset()
-	if err := q.AddTo(&batch, []byte("next batch")); err != nil {
-		t.Fatal(err)
-	}
-	if got := string(inflight[entry.start+4 : entry.end]); got != "in flight" {
-		t.Fatalf("in-flight values overwritten: %q", got)
-	}
-	// The writer finishing drains the owner; the next Reset reuses again.
-	batch.owner.InternalRelease()
-	if !batch.owner.drained.Load() {
-		t.Fatal("owner did not drain")
-	}
-	values := &batch.values[0]
-	batch.Reset()
-	if err := q.AddTo(&batch, []byte("reused")); err != nil {
-		t.Fatal(err)
-	}
-	if &batch.values[0] != values {
-		t.Fatal("Reset did not reuse drained storage")
+	for _, tc := range []struct {
+		name string
+		// start models an execution that was cancelled while its writer
+		// still reads the batch; it returns the writer's release.
+		start func(*Batch) func()
+	}{
+		{"query", func(batch *Batch) func() {
+			sender := testOwnedQuery(t)
+			if err := sender.state.begin(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			var request InternalExecutionRequest
+			batch.queryExec(&request, &sender.state, LoggedBatch)
+			return sender.state.owner.InternalRelease
+		}},
+		{"session", func(batch *Batch) func() {
+			owner := newInputOwner()
+			if err := owner.InternalAdmit(); err != nil {
+				t.Fatal(err)
+			}
+			owner.InternalClose()
+			batch.begin(LoggedBatch)
+			batch.lastOwner, batch.lastQuery = owner, nil
+			return owner.InternalRelease
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var batch Batch
+			if err := q.AddTo(&batch, []byte("in flight")); err != nil {
+				t.Fatal(err)
+			}
+			release := tc.start(&batch)
+			inflight, entry := batch.values, batch.entries[0]
+			batch.Reset()
+			if err := q.AddTo(&batch, []byte("next batch")); err != nil {
+				t.Fatal(err)
+			}
+			if got := string(inflight[entry.start+4 : entry.end]); got != "in flight" {
+				t.Fatalf("in-flight values overwritten: %q", got)
+			}
+			// The writer finishing drains the execution; the next Reset
+			// reuses the storage again.
+			release()
+			if !batch.drained() {
+				t.Fatal("execution did not drain")
+			}
+			values := &batch.values[0]
+			batch.Reset()
+			if err := q.AddTo(&batch, []byte("reused")); err != nil {
+				t.Fatal(err)
+			}
+			if &batch.values[0] != values {
+				t.Fatal("Reset did not reuse drained storage")
+			}
+		})
 	}
 }
 

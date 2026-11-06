@@ -372,25 +372,45 @@ func (q *Query[P, R]) AddTo(batch *Batch, value P) error {
 
 // ExecBatch sends batch as one CQL BATCH of kind on the query's session.
 // The batch's statements must produce no result columns; RunBatch reads
-// the rows of a conditional batch. The query only supplies the session: it
-// need not be one of the batch's statements, and it stays free for other
-// use while the batch runs.
+// the rows of a conditional batch. The query need not be one of the
+// batch's statements; it is busy while the batch runs, as for its own
+// executions.
 func (q *Query[P, R]) ExecBatch(ctx context.Context, kind BatchKind, batch *Batch, options Options) (Result, error) {
 	if q == nil || q.state.runtime == nil {
-		return Result{}, typeValidation("query", "nil query")
+		err := typeValidation("query", "nil query")
+		return InternalExecutionErrorResult(err), err
 	}
-	return execBatch(ctx, q.state.runtime.Session, kind, batch, options)
+	s := q.state.runtime.Session
+	if err := validateBatch(s, kind, batch, options); err != nil {
+		return InternalExecutionErrorResult(err), err
+	}
+	if err := q.state.begin(ctx); err != nil {
+		return InternalExecutionErrorResult(err), err
+	}
+	defer q.state.owner.InternalRelease()
+	batch.queryExec(&batch.exec.privateStorage.InternalRequest, &q.state, kind)
+	return Exec(ctx, s, &batch.exec, options)
 }
 
 // RunBatch sends batch as one CQL BATCH of kind on the query's session and
 // returns its rows, decoded with the query's row decoder. A conditional
 // batch returns one row per conditional statement, or one row reporting
-// that it was not applied.
+// that it was not applied. The query is busy until the page is closed.
 func (q *Query[P, R]) RunBatch(ctx context.Context, kind BatchKind, batch *Batch, options Options) (*Page[R], error) {
 	if q == nil || q.state.runtime == nil {
 		return nil, typeValidation("query", "nil query")
 	}
-	return runBatch(ctx, q.state.runtime.Session, kind, batch, q.bound.privateStorage.InternalRows, options)
+	s := q.state.runtime.Session
+	if err := validateBatch(s, kind, batch, options); err != nil {
+		return nil, err
+	}
+	if err := q.state.begin(ctx); err != nil {
+		return nil, err
+	}
+	defer q.state.owner.InternalRelease()
+	bound := &Bound[R]{privateStorage: BoundStorage[R]{InternalRows: q.bound.privateStorage.InternalRows}}
+	batch.queryExec(&bound.privateStorage.InternalRequest, &q.state, kind)
+	return RunPage(ctx, s, bound, StartPage(), options)
 }
 
 func (s *queryState) close() {

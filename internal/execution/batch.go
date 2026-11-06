@@ -30,14 +30,18 @@ type Batch struct {
 	// values holds the encoded values of every entry back to back.
 	values  []byte
 	session *implCluster.Session
+	// The latest execution: one sent through a query is tracked by the
+	// query's generation, one sent without by its owner.
+	lastQuery *queryState
+	lastOwner *InternalInputOwner
+	// state is the execution state lent to an execution while no earlier
+	// one may still read it.
+	state   InternalBatchState
 	routing RoutingInfo
-	// state is the execution state lent to executions with owner.
-	state InternalBatchState
-	// owner is the reusable owner of the latest execution that used it. An
-	// execution starting before it drained gets an owner of its own.
-	owner     InternalInputOwner
-	ownerUsed bool
-	// shared reports that an execution not tracked by owner may still read
+	// exec is the request a query's ExecBatch admits; admission copies it.
+	exec    Bound[EmptyRecord]
+	lastGen uint64
+	// shared reports that an execution no longer tracked may still read
 	// entries or values: Reset must abandon them instead of reusing them.
 	shared bool
 }
@@ -73,13 +77,71 @@ func (b *Batch) Len() int {
 // an execution of the batch may still be writing it, which happens after its
 // context was cancelled, Reset leaves the storage to that execution instead.
 func (b *Batch) Reset() {
-	if b.shared || (b.ownerUsed && !b.owner.drained.Load()) {
+	if b.shared || !b.drained() {
 		b.entries, b.values = nil, nil
 	} else {
 		clear(b.entries)
 		b.entries, b.values = b.entries[:0], b.values[:0]
 	}
 	b.session, b.routing, b.shared = nil, RoutingInfo{}, false
+}
+
+// drained reports whether the latest execution of the batch, if any, has
+// stopped reading it.
+func (b *Batch) drained() bool {
+	if b.lastOwner != nil && !b.lastOwner.drained.Load() {
+		return false
+	}
+	if q := b.lastQuery; q != nil && q.generation.Load() == b.lastGen {
+		q.mu.Lock()
+		busy := q.busy
+		q.mu.Unlock()
+		return !busy
+	}
+	return true
+}
+
+// begin returns the state for an execution of kind. While an earlier
+// execution may still read the batch's state, this one gets its own, and
+// the batch's storage is left to the earlier one at the next Reset.
+func (b *Batch) begin(kind BatchKind) *InternalBatchState {
+	state := &b.state
+	if !b.drained() {
+		state = new(InternalBatchState)
+		b.shared = true
+	}
+	*state = InternalBatchState{kind: kind, entries: b.entries, values: b.values}
+	return state
+}
+
+// request returns the batch's request routing.
+func (b *Batch) requestRouting() RoutingInfo {
+	routing := b.routing
+	routing.Conditional = routing.Kind != OrdinaryStatement
+	return routing
+}
+
+// validate checks that batch can be sent as kind with options on s.
+func validateBatch(s *implCluster.Session, kind BatchKind, batch *Batch, options Options) error {
+	if batch == nil {
+		return typeValidation("batch", "nil batch")
+	}
+	if options.values().PageSize.Set {
+		return &UnsupportedSettingError{Setting: "batch page size", Reason: "native BATCH responses do not support paging"}
+	}
+	if v := options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
+		return &UnsupportedSettingError{Setting: "batch prefetch", Reason: "native BATCH responses do not support paging"}
+	}
+	if len(batch.entries) == 0 {
+		return typeValidation("batch", "requires 1 to 65535 entries")
+	}
+	if kind != LoggedBatch && kind != UnloggedBatch && kind != CounterBatch {
+		return typeValidation("batch kind", "unknown kind")
+	}
+	if batch.session != s {
+		return typeValidation("batch session", "statements belong to another session")
+	}
+	return nil
 }
 
 // add appends one statement whose encoded values are values. request carries
@@ -157,50 +219,33 @@ func InternalAddBound[R any](batch *Batch, s *implCluster.Session, bound *Bound[
 	return batch.add(s, request)
 }
 
-// runBatch sends batch on s and returns its first and only page.
+// runBatch sends batch on s without a query and returns its first and
+// only page.
 func runBatch[R any](ctx context.Context, s *implCluster.Session, kind BatchKind, batch *Batch, decoder RowDecoder[R], options Options) (*Page[R], error) {
-	if batch == nil {
-		return nil, typeValidation("batch", "nil batch")
-	}
-	if options.values().PageSize.Set {
-		return nil, &UnsupportedSettingError{Setting: "batch page size", Reason: "native BATCH responses do not support paging"}
-	}
-	if v := options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
-		return nil, &UnsupportedSettingError{Setting: "batch prefetch", Reason: "native BATCH responses do not support paging"}
-	}
-	if len(batch.entries) == 0 {
-		return nil, typeValidation("batch", "requires 1 to 65535 entries")
-	}
-	if kind != LoggedBatch && kind != UnloggedBatch && kind != CounterBatch {
-		return nil, typeValidation("batch kind", "unknown kind")
+	if err := validateBatch(s, kind, batch, options); err != nil {
+		return nil, err
 	}
 	if decoder == nil {
 		return nil, typeValidation("batch rows", "nil decoder")
 	}
-	if batch.session != s {
-		return nil, typeValidation("batch session", "statements belong to another session")
-	}
-	// The happy path reuses the batch's owner and state: the previous
-	// execution drained before returning. One that was cancelled may still
-	// be writing, so this execution gets its own and Reset must not reuse
-	// the storage that one reads.
-	owner, state := &batch.owner, &batch.state
-	if batch.ownerUsed && !owner.drained.Load() {
-		owner, state = new(InternalInputOwner), new(InternalBatchState)
-		batch.shared = true
-	} else {
-		batch.ownerUsed = true
-	}
-	owner.resetOpen()
-	*state = InternalBatchState{kind: kind, entries: batch.entries, values: batch.values}
-	routing := batch.routing
-	routing.Conditional = routing.Kind != OrdinaryStatement
+	state := batch.begin(kind)
+	owner := newInputOwner()
+	batch.lastOwner, batch.lastQuery = owner, nil
 	bound := new(Bound[R])
-	bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalOwner: owner, InternalRouting: routing, batch: state}
+	bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalOwner: owner, InternalRouting: batch.requestRouting(), batch: state}
 	bound.privateStorage.InternalRows = decoder
 	page, err := RunPage(ctx, s, bound, StartPage(), options)
 	owner.InternalClose()
 	return page, err
+}
+
+// queryExec prepares the batch's request for an execution on query q,
+// which began its own execution generation for it. Admission copies the
+// request into the query's inline request.
+func (b *Batch) queryExec(dst *InternalExecutionRequest, q *queryState, kind BatchKind) {
+	state := b.begin(kind)
+	b.lastQuery, b.lastGen, b.lastOwner = q, q.generation.Load(), nil
+	*dst = InternalExecutionRequest{InternalOwner: q.owner, query: q, InternalRouting: b.requestRouting(), batch: state}
 }
 
 // execBatch sends batch on s and drains its result, which must have no
