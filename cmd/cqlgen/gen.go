@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"go/ast"
+	"go/build"
 	"go/format"
 	"go/importer"
 	"go/parser"
@@ -169,6 +170,11 @@ func parseDir(fset *token.FileSet, dir string) ([]*sourceFile, error) {
 	var files []*sourceFile
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") {
+			continue
+		}
+		// Files go list leaves out, for build tags or GOOS, have no export
+		// data for their imports.
+		if match, err := build.Default.MatchFile(dir, e.Name()); err != nil || !match {
 			continue
 		}
 		f, err := parser.ParseFile(fset, filepath.Join(dir, e.Name()), nil, parser.ParseComments|parser.SkipObjectResolution)
