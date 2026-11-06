@@ -490,3 +490,56 @@ func TestStructMappingEmbedded(t *testing.T) {
 
 // Inner embeds a CreatedAt at the same depth as auditFields'.
 type Inner struct{ CreatedAt cqltype.Timestamp }
+
+// Scylla sends the previous row's columns even when a conditional statement
+// applied; all null, they decode as no previous row, so a struct with
+// non-nullable fields still decodes the result.
+func TestCASRowsAppliedWithNullPrevious(t *testing.T) {
+	type previous struct {
+		K int32
+		V string
+	}
+	columns := cqltype.NewColumns(
+		cqltype.ColumnSpec{Name: "[applied]", Type: rowTestType(t, cqltype.TypeBoolean)},
+		cqltype.ColumnSpec{Name: "k", Type: rowTestType(t, cqltype.TypeInt)},
+		cqltype.ColumnSpec{Name: "v", Type: rowTestType(t, cqltype.TypeText)},
+	)
+	plan, err := CASRows(MustRowOf[previous]()).Compile(columns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decode := func(cells ...[]byte) (CASResult[previous], error) {
+		var data []byte
+		for _, c := range cells {
+			data = append(data, c...)
+		}
+		chain, err := wire.NewChain(wire.Borrow(data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		reader := NewRowReader(columns, chain, wire.NewLease(chain, nil))
+		result, err := plan.Decode(reader)
+		if err == nil {
+			err = FinishRowReader(reader)
+		}
+		return result, err
+	}
+	null := rowScalarFrame(-1, nil)
+	if got, err := decode(rowScalarFrame(1, []byte{1}), null, null); err != nil || !got.Applied || got.Previous.Set {
+		t.Fatalf("applied with null previous: %+v %v", got, err)
+	}
+	got, err := decode(rowScalarFrame(1, []byte{0}), rowScalarFrame(4, []byte{0, 0, 0, 7}), rowScalarFrame(1, []byte("x")))
+	if err != nil || got.Applied || !got.Previous.Set || got.Previous.Value != (previous{K: 7, V: "x"}) {
+		t.Fatalf("not applied: %+v %v", got, err)
+	}
+	// An applied result with a previous value still decodes it.
+	got, err = decode(rowScalarFrame(1, []byte{1}), rowScalarFrame(4, []byte{0, 0, 0, 8}), rowScalarFrame(1, []byte("y")))
+	if err != nil || !got.Applied || got.Previous.Value != (previous{K: 8, V: "y"}) {
+		t.Fatalf("applied with previous: %+v %v", got, err)
+	}
+	// A null previous row of a statement that did not apply still fails on
+	// non-nullable fields, as before.
+	if _, err := decode(rowScalarFrame(1, []byte{0}), null, null); err == nil {
+		t.Fatal("not applied with null previous decoded into non-nullable fields")
+	}
+}

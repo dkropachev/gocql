@@ -63,6 +63,9 @@ func (p casRowPlan[R]) DecodeInto(reader *RowReader, dst *CASResult[R]) error {
 	if p.previous == nil {
 		return nil
 	}
+	if dst.Applied && skipNullPrevious(reader, p.columns.Len()) {
+		return nil
+	}
 	columns, index := reader.columns, reader.index
 	reader.columns, reader.index = p.columns, 0
 	err := p.previous.DecodeInto(reader, &dst.Previous.Value)
@@ -89,4 +92,25 @@ func (c casRows[R]) Clone(value CASResult[R]) CASResult[R] {
 		value.Previous.Value = c.decoder.Clone(value.Previous.Value)
 	}
 	return value
+}
+
+// skipNullPrevious consumes the previous-row cells of an applied conditional
+// statement when all of them are null, and reports whether it did. Scylla
+// sends the previous row's columns even when the statement applied; all null,
+// they mean there was no previous row, which a decoder with non-nullable
+// fields could not decode.
+func skipNullPrevious(reader *RowReader, n int) bool {
+	if reader.cursor == nil || reader.cursor.Remaining() == 0 {
+		return false
+	}
+	scan := *reader.cursor
+	for range n {
+		prefix, err := scan.Uint32()
+		if err != nil || int32(prefix) != -1 {
+			return false
+		}
+	}
+	*reader.cursor = scan
+	reader.index += n
+	return true
 }
