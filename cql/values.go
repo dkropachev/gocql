@@ -104,7 +104,7 @@ type DynamicRow = codec.DynamicRow
 
 var DynamicRows = codec.DynamicRows
 
-const Empty = cqltype.Empty
+const EmptyCell = cqltype.EmptyCell
 
 func EmptyCodec[T any](a0 Codec[T]) Codec[EmptyValueOf[T]] { return codec.EmptyCodec[T](a0) }
 func EmptyValue(a0 DataType) (Value, error)                { return codec.EmptyValue(a0) }
@@ -279,8 +279,8 @@ type StreamDecoder[T any] = codec.StreamDecoder[T]
 
 var StreamDuration = codec.StreamDuration
 
-func StreamEmpty[T any](a0 StreamDecoder[T]) StreamDecoder[EmptyValueOf[T]] {
-	return codec.StreamEmpty[T](a0)
+func EmptyStream[T any](a0 StreamDecoder[T]) StreamDecoder[EmptyValueOf[T]] {
+	return codec.EmptyStream[T](a0)
 }
 
 var StreamEncoded = codec.StreamEncoded
@@ -434,7 +434,7 @@ func UUIDFromBytes(a0 []byte) (UUID, error) { return cqltype.UUIDFromBytes(a0) }
 func UUIDFromTime(a0 time.Time) UUID        { return cqltype.UUIDFromTime(a0) }
 func UUIDValue(a0 UUID) Value               { return codec.UUIDValue(a0) }
 
-type Unit = codec.Unit
+type EmptyRecord = codec.EmptyRecord
 
 const UnknownStatement = cqltype.UnknownStatement
 const Unset = cqltype.Unset

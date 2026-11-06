@@ -81,9 +81,9 @@ func BenchmarkReusableQueryDecoding(b *testing.B) {
 					served <- nil
 				}()
 				options := testOptions(OptionValues{PageSize: cqltype.Option[int32]{Set: true, Value: 32}, Prefetch: cqltype.Option[int]{Set: true, Value: 0}, Timeout: cqltype.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
-				statement := binding.Statement[codec.Unit, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
-				var query *Query[codec.Unit, []byte]
-				var streaming *StreamQuery[codec.Unit, []byte]
+				statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+				var query *Query[codec.EmptyRecord, []byte]
+				var streaming *StreamQuery[codec.EmptyRecord, []byte]
 				if stream {
 					streaming = codecTestMust(NewUnpreparedStreamQuery(s, statement, cqltype.NewColumns(), codec.StreamOneColumn(codec.StreamBlob), StreamOptions{Options: options}))
 					defer streaming.Close()
@@ -99,7 +99,7 @@ func BenchmarkReusableQueryDecoding(b *testing.B) {
 					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 					count := 0
 					if each {
-						err := query.Each(ctx, codec.Unit{}, &dst, func(row *[]byte) error {
+						err := query.Each(ctx, codec.EmptyRecord{}, &dst, func(row *[]byte) error {
 							count++
 							if len(*row) != size.bytes || (*row)[0] != 'x' || (*row)[len(*row)-1] != 'x' {
 								b.Fatal("bad diagnostic payload")
@@ -110,7 +110,7 @@ func BenchmarkReusableQueryDecoding(b *testing.B) {
 							b.Fatal(err)
 						}
 					} else if stream {
-						cursor, err := streaming.Run(ctx, codec.Unit{})
+						cursor, err := streaming.Run(ctx, codec.EmptyRecord{})
 						if err != nil {
 							b.Fatal(err)
 						}
@@ -130,7 +130,7 @@ func BenchmarkReusableQueryDecoding(b *testing.B) {
 							b.Fatal(err)
 						}
 					} else {
-						cursor, err := query.Run(ctx, codec.Unit{})
+						cursor, err := query.Run(ctx, codec.EmptyRecord{})
 						if err != nil {
 							b.Fatal(err)
 						}
@@ -172,7 +172,7 @@ func BenchmarkReusableQueryDecoding(b *testing.B) {
 // is wall time per completed operation.
 func BenchmarkOneShotLoopback(b *testing.B) {
 	options := testOptions(OptionValues{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
-	writeStmt := binding.Statement[loopbackRow, codec.Unit]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k, value) VALUES(?, ?)", Params: codec.Params(codec.ParamAt(0, codec.Int32, func(r loopbackRow) int32 { return r.k }), codec.ParamAt(1, codec.BytesEncoder, func(r loopbackRow) []byte { return r.value })), Rows: codec.NoRows}
+	writeStmt := binding.Statement[loopbackRow, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k, value) VALUES(?, ?)", Params: codec.Params(codec.ParamAt(0, codec.Int32, func(r loopbackRow) int32 { return r.k }), codec.ParamAt(1, codec.BytesEncoder, func(r loopbackRow) []byte { return r.value })), Rows: codec.NoRows}
 	readStmt := binding.Statement[int32, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: codec.OneParam(codec.Int32), Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 	variants := []string{"bind", "bindborrowed", "query", "userpool", "prepared"}
 	for _, op := range []string{"exec", "one"} {
@@ -181,7 +181,7 @@ func BenchmarkOneShotLoopback(b *testing.B) {
 			for _, workers := range []int{1, 8, 64} {
 				b.Run(fmt.Sprintf("%s/%s/w%d", op, variant, workers), func(b *testing.B) {
 					s := loopbackTestSession(b, workload)
-					var wp *Prepared[loopbackRow, codec.Unit]
+					var wp *Prepared[loopbackRow, codec.EmptyRecord]
 					var rp *Prepared[int32, []byte]
 					var wpool, rpool sync.Pool
 					if op == "exec" {
@@ -205,7 +205,7 @@ func BenchmarkOneShotLoopback(b *testing.B) {
 							}
 							return nil
 						}
-						var wq *Query[loopbackRow, codec.Unit]
+						var wq *Query[loopbackRow, codec.EmptyRecord]
 						var rq *Query[int32, []byte]
 						if variant == "query" && op == "exec" {
 							wq = codecTestMust(NewQuery(wp, options))
@@ -218,7 +218,7 @@ func BenchmarkOneShotLoopback(b *testing.B) {
 						case "bind/exec", "bindborrowed/exec":
 							borrowed := variant == "bindborrowed"
 							run[i] = func(ctx context.Context) error {
-								var bound *Bound[codec.Unit]
+								var bound *Bound[codec.EmptyRecord]
 								var err error
 								if borrowed {
 									bound, err = BindBorrowed(wp, input)
@@ -253,7 +253,7 @@ func BenchmarkOneShotLoopback(b *testing.B) {
 							run[i] = func(ctx context.Context) error { return check(rq.One(ctx, key, &dst)) }
 						case "userpool/exec":
 							run[i] = func(ctx context.Context) error {
-								q := wpool.Get().(*Query[loopbackRow, codec.Unit])
+								q := wpool.Get().(*Query[loopbackRow, codec.EmptyRecord])
 								err := q.Exec(ctx, input)
 								wpool.Put(q)
 								return err
@@ -330,13 +330,13 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 						// Borrowed column values, valid until the callback returns: no
 						// per-row copy. Measurement only; master's client copies.
 						pageOptions := testOptions(OptionValues{PageSize: cqltype.Option[int32]{Set: true, Value: loopbackPageRows}, Prefetch: cqltype.Option[int]{Set: true, Value: 0}, Timeout: cqltype.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
-						statement := binding.Statement[codec.Unit, implCqltype.Bytes]{Kind: implCqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.OneColumn(codec.BlobCodec)}
+						statement := binding.Statement[codec.EmptyRecord, implCqltype.Bytes]{Kind: implCqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.OneColumn(codec.BlobCodec)}
 						query := codecTestMust(NewUnpreparedQuery(s, statement, implCqltype.NewColumns(), pageOptions))
 						b.Cleanup(query.Close)
 						var dst implCqltype.Bytes
 						run[i] = func(ctx context.Context) error {
 							count := 0
-							err := query.Each(ctx, codec.Unit{}, &dst, func(row *implCqltype.Bytes) error {
+							err := query.Each(ctx, codec.EmptyRecord{}, &dst, func(row *implCqltype.Bytes) error {
 								if row.Len() != int64(len(loopbackPageValue)) {
 									return fmt.Errorf("bad diagnostic row")
 								}
@@ -357,7 +357,7 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 							pageValues.PageTimeout = cqltype.Option[time.Duration]{Set: true, Value: 2 * time.Second}
 						}
 						pageOptions := testOptions(pageValues)
-						statement := binding.Statement[codec.Unit, []byte]{Kind: implCqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+						statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: implCqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 						query := codecTestMust(NewUnpreparedQuery(s, statement, implCqltype.NewColumns(), pageOptions))
 						b.Cleanup(query.Close)
 						dst := make([]byte, 0, len(loopbackPageValue))
@@ -369,7 +369,7 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 								defer cancel()
 							}
 							count := 0
-							err := query.Each(ctx, codec.Unit{}, &dst, func(row *[]byte) error {
+							err := query.Each(ctx, codec.EmptyRecord{}, &dst, func(row *[]byte) error {
 								if len(*row) != len(loopbackPageValue) {
 									return fmt.Errorf("bad diagnostic row")
 								}
@@ -432,7 +432,7 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 							return nil
 						}
 					case "pwrite":
-						statement := binding.Statement[loopbackRow, codec.Unit]{Kind: implCqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k, value) VALUES(?, ?)", Params: codec.Params(codec.ParamAt(0, codec.Int32, func(r loopbackRow) int32 { return r.k }), codec.ParamAt(1, codec.BytesEncoder, func(r loopbackRow) []byte { return r.value })), Rows: codec.NoRows}
+						statement := binding.Statement[loopbackRow, codec.EmptyRecord]{Kind: implCqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k, value) VALUES(?, ?)", Params: codec.Params(codec.ParamAt(0, codec.Int32, func(r loopbackRow) int32 { return r.k }), codec.ParamAt(1, codec.BytesEncoder, func(r loopbackRow) []byte { return r.value })), Rows: codec.NoRows}
 						prepared := codecTestMust(Prepare(context.Background(), s, statement, PrepareOptions{}))
 						query := codecTestMust(NewQuery(prepared, options))
 						b.Cleanup(query.Close)
@@ -442,12 +442,12 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 							return err
 						}
 					case "read":
-						statement := binding.Statement[codec.Unit, []byte]{Kind: implCqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+						statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: implCqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 						query := codecTestMust(NewUnpreparedQuery(s, statement, implCqltype.NewColumns(), options))
 						b.Cleanup(query.Close)
 						dst := make([]byte, 0, len(value))
 						run[i] = func(ctx context.Context) error {
-							rows, err := query.Run(ctx, codec.Unit{})
+							rows, err := query.Run(ctx, codec.EmptyRecord{})
 							if err != nil {
 								return err
 							}
@@ -465,7 +465,7 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 						}
 					default:
 						typ := codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))
-						statement := binding.Statement[[]byte, codec.Unit]{Kind: implCqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(value)VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.NoRows}
+						statement := binding.Statement[[]byte, codec.EmptyRecord]{Kind: implCqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(value)VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.NoRows}
 						query := codecTestMust(NewUnpreparedQuery(s, statement, implCqltype.NewColumns(implCqltype.ColumnSpec{Name: "value", Type: typ}), options))
 						b.Cleanup(query.Close)
 						input := []byte(value)

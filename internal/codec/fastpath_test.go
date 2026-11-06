@@ -46,7 +46,7 @@ func TestContiguousScalarSafety(t *testing.T) {
 			t.Fatal("UUID width", width)
 		}
 	}
-	for _, state := range []cqltype.CellState{cqltype.Null, cqltype.Unset, cqltype.Empty} {
+	for _, state := range []cqltype.CellState{cqltype.Null, cqltype.Unset, cqltype.EmptyCell} {
 		if _, e := UUIDCodec.Decode(NewValueReader(uuidType, state, wire.Chain{}, nil)); e == nil {
 			t.Fatal("UUID state", state)
 		}

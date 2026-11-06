@@ -62,7 +62,7 @@ func EmptyValue(t cqltype.DataType) (Value, error) {
 	if !emptySupported(t) {
 		return Value{}, cqltype.TypeValidation("type", "%s does not support Empty", t)
 	}
-	return Value{typ: t, state: cqltype.Empty}, nil
+	return Value{typ: t, state: cqltype.EmptyCell}, nil
 }
 func BoolValue(b bool) Value {
 	v := dynamicScalar(cqltype.TypeBoolean)
@@ -374,7 +374,7 @@ func checkDynamicValue(t cqltype.DataType, v Value, nested bool) error {
 		if nested {
 			return cqltype.TypeValidation("value", "unset is not permitted in nested values")
 		}
-	case cqltype.Empty:
+	case cqltype.EmptyCell:
 		if !emptySupported(t) {
 			return cqltype.TypeValidation("value", "%s does not support Empty", t)
 		}
@@ -415,7 +415,7 @@ func dynamicAggregateChecked(t cqltype.DataType, kind cqltype.Type, values []Val
 			if err != nil {
 				return Value{}, err
 			}
-			if v.state != cqltype.Empty || width != 0 {
+			if v.state != cqltype.EmptyCell || width != 0 {
 				return Value{}, cqltype.TypeValidation("vector", "element %d must have a present body", i)
 			}
 		}
@@ -512,7 +512,7 @@ func encodeDynamicChecked(w *ValueWriter, v Value) error {
 		return w.Null()
 	case cqltype.Unset:
 		return w.Unset()
-	case cqltype.Empty:
+	case cqltype.EmptyCell:
 		return w.emptyValue()
 	}
 	switch v.typ.Kind() {
@@ -594,14 +594,14 @@ func decodeDynamicWithPlan(r ValueReader, shape *streamValidationPlan) (Value, e
 		return NullValue(r.Type()), nil
 	case cqltype.Unset:
 		return Value{}, cqltype.TypeValidation("state", "unset cannot be decoded as a result")
-	case cqltype.Empty:
-		return Value{typ: r.Type(), state: cqltype.Empty}, nil
+	case cqltype.EmptyCell:
+		return Value{typ: r.Type(), state: cqltype.EmptyCell}, nil
 	case cqltype.Present:
 	default:
 		return Value{}, cqltype.TypeValidation("state", "invalid state %d", r.State())
 	}
 	if r.Bytes().Len() == 0 && emptySupported(r.Type()) {
-		return Value{typ: r.Type(), state: cqltype.Empty}, nil
+		return Value{typ: r.Type(), state: cqltype.EmptyCell}, nil
 	}
 	switch r.Type().Kind() {
 	case cqltype.TypeBoolean:

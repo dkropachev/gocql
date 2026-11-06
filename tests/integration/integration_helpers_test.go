@@ -219,13 +219,13 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session) (bool, erro
 // v2Exec and v2Query accept only explicitly typed dynamic values. Owned binding
 // lets callers release or change their inputs as soon as these helpers return.
 func v2Exec(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (gocql.Result, error) {
-	statement := cql.Statement[[]cql.Value, cql.Unit]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.NoRows}
-	var bound *Bound[cql.Unit]
+	statement := cql.Statement[[]cql.Value, cql.EmptyRecord]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.NoRows}
+	var bound *Bound[cql.EmptyRecord]
 	var err error
 	if len(values) == 0 {
 		bound, err = BindUnpreparedOwned(statement, cql.NewColumns(), values)
 	} else {
-		var prepared *gocql.Prepared[[]cql.Value, cql.Unit]
+		var prepared *gocql.Prepared[[]cql.Value, cql.EmptyRecord]
 		prepared, err = gocql.Prepare(ctx, session, statement, gocql.PrepareOptions{})
 		if err == nil {
 			bound, err = BindOwned(prepared, values)
@@ -286,7 +286,7 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 }
 
 func v2CreateTable(ctx context.Context, session *gocql.Session, stmt string) error {
-	bound, err := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{})
+	bound, err := BindUnpreparedOwned(cql.Statement[cql.EmptyRecord, cql.EmptyRecord]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyRecord{})
 	if err != nil {
 		return err
 	}

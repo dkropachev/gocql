@@ -31,13 +31,13 @@ func NewEncodedValue(typ cqltype.DataType, state cqltype.CellState, body cqltype
 	if body.Len() > math.MaxInt32 {
 		return EncodedValue{}, cqltype.TypeValidation("value", "cell body exceeds signed 32-bit length")
 	}
-	if state > cqltype.Empty {
+	if state > cqltype.EmptyCell {
 		return EncodedValue{}, cqltype.TypeValidation("state", "unknown cell state %d", state)
 	}
 	if state != cqltype.Present && body.Len() != 0 {
 		return EncodedValue{}, cqltype.TypeValidation("value", "state %d cannot contain payload bytes", state)
 	}
-	if state == cqltype.Empty && !emptySupported(typ) {
+	if state == cqltype.EmptyCell && !emptySupported(typ) {
 		return EncodedValue{}, cqltype.TypeValidation("type", "%s does not support empty values", typ)
 	}
 	return EncodedValue{typ: typ, state: state, body: body}, nil

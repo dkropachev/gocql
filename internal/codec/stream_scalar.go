@@ -349,7 +349,7 @@ type streamEmptyPlan[T any] struct {
 	typ  cqltype.DataType
 }
 
-func StreamEmpty[T any](base StreamDecoder[T]) StreamDecoder[cqltype.EmptyValueOf[T]] {
+func EmptyStream[T any](base StreamDecoder[T]) StreamDecoder[cqltype.EmptyValueOf[T]] {
 	return streamEmptyCodec[T]{base}
 }
 func (c streamEmptyCodec[T]) Compile(t cqltype.DataType) (StreamValuePlan[cqltype.EmptyValueOf[T]], error) {

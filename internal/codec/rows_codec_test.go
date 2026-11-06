@@ -151,7 +151,7 @@ func TestV2ParamsEncodingFailureRollsBackWholePlan(t *testing.T) {
 
 func TestV2RowTruncatedIgnoredCellIsError(t *testing.T) {
 	columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "unused", Type: rowTestType(t, cqltype.TypeBlob)})
-	plan, err := Row[Unit](IgnoreColumn[Unit]("unused")).Compile(columns)
+	plan, err := Row[EmptyRecord](IgnoreColumn[EmptyRecord]("unused")).Compile(columns)
 	if err != nil {
 		t.Fatal(err)
 	}

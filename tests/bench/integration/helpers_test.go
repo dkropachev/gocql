@@ -623,7 +623,7 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 }
 
 func v2CreateTable(ctx context.Context, session *gocql.Session, stmt string) error {
-	bound, err := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{})
+	bound, err := BindUnpreparedOwned(cql.Statement[cql.EmptyRecord, cql.EmptyRecord]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyRecord{})
 	if err != nil {
 		return err
 	}
@@ -1147,7 +1147,7 @@ func (ltd *loggingTestDialer) connectionEvents(address string) []testConnectionE
 // pass through reflected parameter binding or result destination discovery.
 func serializationExec[P any](s *gocql.Session, stmt string, encoder cql.ParamEncoder[P], value P) error {
 	ctx := context.Background()
-	p, err := gocql.Prepare(ctx, s, cql.Statement[P, cql.Unit]{CQL: stmt, Params: encoder, Rows: cql.NoRows}, gocql.PrepareOptions{})
+	p, err := gocql.Prepare(ctx, s, cql.Statement[P, cql.EmptyRecord]{CQL: stmt, Params: encoder, Rows: cql.NoRows}, gocql.PrepareOptions{})
 	if err != nil {
 		return err
 	}

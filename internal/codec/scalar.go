@@ -733,7 +733,7 @@ func (c emptyCodec[T]) Decode(r ValueReader) (cqltype.EmptyValueOf[T], error) {
 	if r.err != nil {
 		return cqltype.EmptyValueOf[T]{}, r.err
 	}
-	if r.State() == cqltype.Empty || (r.State() == cqltype.Present && r.Bytes().Len() == 0) {
+	if r.State() == cqltype.EmptyCell || (r.State() == cqltype.Present && r.Bytes().Len() == 0) {
 		if e := cqltype.CheckBytesAlive(r.Bytes()); e != nil {
 			return cqltype.EmptyValueOf[T]{}, e
 		}
@@ -837,7 +837,7 @@ func (c emptyCodec[T]) DecodeInto(r ValueReader, dst *cqltype.EmptyValueOf[T]) e
 	if r.err != nil {
 		return r.err
 	}
-	if r.State() == cqltype.Empty || (r.State() == cqltype.Present && r.Bytes().Len() == 0) {
+	if r.State() == cqltype.EmptyCell || (r.State() == cqltype.Present && r.Bytes().Len() == 0) {
 		if err := cqltype.CheckBytesAlive(r.Bytes()); err != nil {
 			return err
 		}

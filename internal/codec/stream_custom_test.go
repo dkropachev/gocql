@@ -117,7 +117,7 @@ func TestV2CodecNilCompiledPlansAreValidationErrors(t *testing.T) {
 		func() error { _, e := StreamList(nilStreamValue{}).Compile(list); return e },
 		func() error { _, e := StreamMap(nilStreamValue{}, StreamInt32).Compile(m); return e },
 		func() error { _, e := StreamNullable(nilStreamValue{}).Compile(integer); return e },
-		func() error { _, e := StreamEmpty(nilStreamValue{}).Compile(integer); return e },
+		func() error { _, e := EmptyStream(nilStreamValue{}).Compile(integer); return e },
 		func() error { _, e := StreamTuple(nilStreamRows{}).Compile(tuple); return e },
 		func() error { return TupleDecoder(nilBufferedRows{}).CheckType(tuple) },
 		func() error { return TupleEncoder(nilBufferedParams{}).CheckType(tuple) },

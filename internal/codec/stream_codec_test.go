@@ -216,10 +216,10 @@ func TestV2StreamingBytesCapacityNullAndText(t *testing.T) {
 		t.Fatal("unset result accepted")
 	}
 	empty := cqltype.EmptyValueOf[int32]{Value: 1}
-	if err := StreamDecodeFixture(t, FoundationScalar(t, cqltype.TypeInt), StreamEmpty(StreamInt32), StreamCell(nil), &empty, 1); err != nil || !empty.Empty {
+	if err := StreamDecodeFixture(t, FoundationScalar(t, cqltype.TypeInt), EmptyStream(StreamInt32), StreamCell(nil), &empty, 1); err != nil || !empty.Empty {
 		t.Fatal("logical Empty", err)
 	}
-	if _, err := StreamEmpty(StreamText).Compile(typ); err == nil {
+	if _, err := EmptyStream(StreamText).Compile(typ); err == nil {
 		t.Fatal("text Empty accepted")
 	}
 }
@@ -403,19 +403,19 @@ func TestV2StreamingRecordsAndEncodedOutput(t *testing.T) {
 		t.Fatal("encoded output skipped text validation")
 	}
 	zero := CodecTestMust(cqltype.TupleType())
-	unit := Unit{}
+	unit := EmptyRecord{}
 	empty := StreamCell(nil)
-	if err := StreamDecodeFixture(t, zero, StreamTuple(StreamRow(func(*Unit) {})), empty, &unit, 1); err != nil {
+	if err := StreamDecodeFixture(t, zero, StreamTuple(StreamRow(func(*EmptyRecord) {})), empty, &unit, 1); err != nil {
 		t.Fatal("zero tuple", err)
 	}
-	wrapped := cqltype.EmptyValueOf[Unit]{}
-	if err := StreamDecodeFixture(t, zero, StreamEmpty(StreamTuple(StreamRow(func(*Unit) {}))), empty, &wrapped, 1); err != nil || !wrapped.Empty {
+	wrapped := cqltype.EmptyValueOf[EmptyRecord]{}
+	if err := StreamDecodeFixture(t, zero, EmptyStream(StreamTuple(StreamRow(func(*EmptyRecord) {}))), empty, &wrapped, 1); err != nil || !wrapped.Empty {
 		t.Fatal("zero tuple Empty", err)
 	}
 }
 func TestV2StreamingSkippedValuesAreBoundedAndChecked(t *testing.T) {
 	boolean, text, blob := FoundationScalar(t, cqltype.TypeBoolean), FoundationScalar(t, cqltype.TypeText), FoundationScalar(t, cqltype.TypeBlob)
-	ignored := StreamRow(func(*Unit) {})
+	ignored := StreamRow(func(*EmptyRecord) {})
 	for _, tc := range []struct {
 		typ  cqltype.DataType
 		body []byte
@@ -424,7 +424,7 @@ func TestV2StreamingSkippedValuesAreBoundedAndChecked(t *testing.T) {
 		data := StreamCell(tc.body)
 		r, _ := streamReaderFixture(t, cols, &streamChunkSource{data: data, step: 1}, len(data))
 		plan := CodecTestMust(ignored.Compile(cols))
-		dst := Unit{}
+		dst := EmptyRecord{}
 		if err := plan.DecodeInto(r, &dst); err == nil {
 			t.Fatal("malformed ignored value accepted")
 		}
@@ -434,7 +434,7 @@ func TestV2StreamingSkippedValuesAreBoundedAndChecked(t *testing.T) {
 	source := &streamChunkSource{data: data}
 	r, scope := streamReaderFixture(t, cols, source, len(data))
 	plan := CodecTestMust(ignored.Compile(cols))
-	dst := Unit{}
+	dst := EmptyRecord{}
 	if err := plan.DecodeInto(r, &dst); err != nil {
 		t.Fatal(err)
 	}

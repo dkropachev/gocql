@@ -424,7 +424,7 @@ const (
 	Present CellState = iota
 	Null
 	Unset
-	Empty
+	EmptyCell
 )
 
 type Nullable[T any] struct {

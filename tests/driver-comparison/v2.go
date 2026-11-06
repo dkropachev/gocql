@@ -25,7 +25,7 @@ type v2Adapter struct {
 	s        *g.Session
 	mu       sync.Mutex
 	reads    [2]*g.Prepared[int32, row]
-	writes   [2]*g.Prepared[row, cql.Unit]
+	writes   [2]*g.Prepared[row, cql.EmptyRecord]
 	lwt      *g.Prepared[lwtArgs, cql.CASResult[int32]]
 	lwtRead  *g.Prepared[int32, int32]
 	metadata g.Options // includes result metadata, as master's writes request
@@ -33,7 +33,7 @@ type v2Adapter struct {
 type v2Worker struct {
 	a           *v2Adapter
 	read        *g.Query[int32, row]
-	write       *g.Query[row, cql.Unit]
+	write       *g.Query[row, cql.EmptyRecord]
 	streamQuery *g.StreamQuery[int32, row]
 	stream      bool
 	out         row
@@ -79,12 +79,12 @@ func connect(hosts []string) (adapter, error) {
 }
 func (a *v2Adapter) Close() error { return a.s.Close() }
 func (a *v2Adapter) Exec(ctx context.Context, q string) error {
-	b, e := g.NewUnpreparedQuery(a.s, cql.Statement[cql.Unit, cql.Unit]{Kind: cql.OrdinaryStatement, CQL: q, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), g.Options{})
+	b, e := g.NewUnpreparedQuery(a.s, cql.Statement[cql.EmptyRecord, cql.EmptyRecord]{Kind: cql.OrdinaryStatement, CQL: q, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), g.Options{})
 	if e != nil {
 		return e
 	}
 	defer b.Close()
-	e = b.Exec(ctx, cql.Unit{})
+	e = b.Exec(ctx, cql.EmptyRecord{})
 	return e
 }
 func (a *v2Adapter) Evidence() any {
@@ -110,7 +110,7 @@ var rowParams = cql.Params(cql.Param("k", cql.Int32, func(r row) int32 { return 
 
 // prepared prepares, once, the read and write statements of the point or
 // paged table and checks that the read is token routed.
-func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[row, cql.Unit], error) {
+func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[row, cql.EmptyRecord], error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	idx := 0
@@ -140,7 +140,7 @@ func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[r
 		a.reads[idx] = p
 	}
 	if a.writes[idx] == nil {
-		p, e := g.Prepare(ctx, a.s, cql.Statement[row, cql.Unit]{Kind: cql.OrdinaryStatement, CQL: wr, Params: rowParams, Rows: cql.NoRows}, g.PrepareOptions{})
+		p, e := g.Prepare(ctx, a.s, cql.Statement[row, cql.EmptyRecord]{Kind: cql.OrdinaryStatement, CQL: wr, Params: rowParams, Rows: cql.NoRows}, g.PrepareOptions{})
 		if e != nil {
 			return nil, nil, e
 		}

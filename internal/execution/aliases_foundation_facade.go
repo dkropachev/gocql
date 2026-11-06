@@ -103,7 +103,7 @@ type UUID = cqltype.UUID
 
 var UUIDCodec = codec.UUIDCodec
 
-type Unit = codec.Unit
+type EmptyRecord = codec.EmptyRecord
 
 const UnknownStatement = cqltype.UnknownStatement
 const Unset = cqltype.Unset

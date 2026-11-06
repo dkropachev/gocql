@@ -715,16 +715,16 @@ func TestBindingCapturesPartitionerAndBorrowedSpans(t *testing.T) {
 	params := codecTestMust(encoder.Compile(columns))
 	state := &InternalPreparedState{InternalSession: s, InternalProtocol: 4, InternalParameters: columns, InternalPartitioner: "old", InternalInfo: PreparedInfo{Keyspace: "ks", Table: "table", PartitionKeyIndexes: []int{0}}}
 	prepared := func() *Prepared[implCqltype.Bytes,
-		codec.Unit] {
+		codec.EmptyRecord] {
 		opaqueStorageValuexxxxxxxx := new(Prepared[implCqltype.Bytes,
-			codec.Unit])
+			codec.EmptyRecord])
 		PreparedData(opaqueStorageValuexxxxxxxx).InternalState = state
 		PreparedData(opaqueStorageValuexxxxxxxx).InternalParams = params
 		PreparedData(opaqueStorageValuexxxxxxxx).InternalRows = codec.NoRows
 		PreparedData(opaqueStorageValuexxxxxxxx).
 			// Later metadata selects a different partitioner. Existing preparation and
 			// binding still consume the canonical original parameter spans exactly once.
-			InternalPlans = &InternalResultPlanCache[codec.Unit]{}
+			InternalPlans = &InternalResultPlanCache[codec.EmptyRecord]{}
 		return opaqueStorageValuexxxxxxxx
 	}()
 

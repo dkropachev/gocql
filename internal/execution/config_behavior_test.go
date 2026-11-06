@@ -112,7 +112,7 @@ func TestTimestampHookOnceAcrossRetryAndPages(t *testing.T) {
 	if err := explicit.Wait(ctx); err != nil {
 		t.Fatal(err)
 	}
-	conditional := codecTestMust(BindUnpreparedBorrowed(binding.Statement[codec.Unit, cqltype.Bytes]{Kind: cqltype.ConditionalStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.OneColumn(codec.BlobCodec)}, cqltype.NewColumns(), codec.Unit{}))
+	conditional := codecTestMust(BindUnpreparedBorrowed(binding.Statement[codec.EmptyRecord, cqltype.Bytes]{Kind: cqltype.ConditionalStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.OneColumn(codec.BlobCodec)}, cqltype.NewColumns(), codec.EmptyRecord{}))
 	page = codecTestMust(RunUnpaged(ctx, s, conditional, options))
 	if err := page.Close(); err != nil {
 		t.Fatal(err)
@@ -405,13 +405,13 @@ func TestIncludeMetadataOverrideChangesExecuteWireFlag(t *testing.T) {
 	go c.InternalServe(c.InternalCtx)
 	columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))})
 	state, _ := preparedState(t, s, columns)
-	handle := new(Prepared[codec.Unit, cqltype.Bytes])
+	handle := new(Prepared[codec.EmptyRecord, cqltype.Bytes])
 	storage := PreparedData(handle)
 	storage.InternalState = state
 	storage.InternalParams = codecTestMust(codec.NoParams.Compile(cqltype.NewColumns()))
 	storage.InternalRows = codec.OneColumn(codec.BlobCodec)
 	storage.InternalPlans = &InternalResultPlanCache[cqltype.Bytes]{}
-	bound := codecTestMust(BindBorrowed(handle, codec.Unit{}))
+	bound := codecTestMust(BindBorrowed(handle, codec.EmptyRecord{}))
 	defer bound.Close()
 	done := make(chan error, 1)
 	go func() {

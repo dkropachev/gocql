@@ -41,12 +41,12 @@ func Example_dynamicColumns() {
 		log.Fatal(err)
 	}
 	defer s.Close()
-	b, err := gocql.NewUnpreparedQuery(s, cql.Statement[cql.Unit, cql.DynamicRow]{CQL: "SELECT * FROM example.table1", Params: cql.NoParams, Rows: cql.DynamicRows}, cql.NewColumns(), gocql.Options{})
+	b, err := gocql.NewUnpreparedQuery(s, cql.Statement[cql.EmptyRecord, cql.DynamicRow]{CQL: "SELECT * FROM example.table1", Params: cql.NoParams, Rows: cql.DynamicRows}, cql.NewColumns(), gocql.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer func() { b.Close(); _ = b.Wait(ctx) }()
-	rows, err := b.Run(ctx, cql.Unit{})
+	rows, err := b.Run(ctx, cql.EmptyRecord{})
 	if err != nil {
 		log.Fatal(err)
 	}

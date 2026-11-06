@@ -24,7 +24,7 @@ type streamPlanCache[R any] struct {
 type StreamQuery[P, R any] struct {
 	plans   streamPlanCache[R]
 	decoder StreamRowDecoder[R]
-	query   *Query[P, Unit]
+	query   *Query[P, EmptyRecord]
 	options StreamOptions
 }
 
@@ -41,7 +41,7 @@ func NewStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder StreamRowDeco
 	if v := options.Options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, typeValidation("stream prefetch", "must be zero")
 	}
-	p := &Prepared[P, Unit]{privateStorage: PreparedStorage[P, Unit]{InternalState: prepared.privateStorage.InternalState, InternalKind: prepared.privateStorage.InternalKind, InternalParams: prepared.privateStorage.InternalParams, InternalRows: InternalExecRowsDecoder{}}}
+	p := &Prepared[P, EmptyRecord]{privateStorage: PreparedStorage[P, EmptyRecord]{InternalState: prepared.privateStorage.InternalState, InternalKind: prepared.privateStorage.InternalKind, InternalParams: prepared.privateStorage.InternalParams, InternalRows: InternalExecRowsDecoder{}}}
 	q, err := NewQuery(p, options.Options)
 	if err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func NewUnpreparedStreamQuery[P, B, R any](session *implCluster.Session, stateme
 	if v := options.Options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, typeValidation("stream prefetch", "must be zero")
 	}
-	q, err := NewUnpreparedQuery(session, Statement[P, Unit]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: InternalExecRowsDecoder{}}, columns, options.Options)
+	q, err := NewUnpreparedQuery(session, Statement[P, EmptyRecord]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: InternalExecRowsDecoder{}}, columns, options.Options)
 	if err != nil {
 		return nil, err
 	}

@@ -143,7 +143,7 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 	table := fmt.Sprintf("pool_stream_%x", time.Now().UnixNano())
 	qualified := (fixtureKeyspace("") + ".") + table
 	ddl := func(stmt string) {
-		b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{}))
+		b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyRecord, cql.EmptyRecord]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyRecord{}))
 		defer b.Close()
 		if _, err := Exec(ctx, s, b, testOptions(*func() *gocql.OptionValues {
 			opaqueStorageValue := new(gocql.OptionValues)
@@ -160,7 +160,7 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		b, err := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: "DROP TABLE IF EXISTS " + qualified, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{})
+		b, err := BindUnpreparedOwned(cql.Statement[cql.EmptyRecord, cql.EmptyRecord]{CQL: "DROP TABLE IF EXISTS " + qualified, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyRecord{})
 		if err == nil {
 			defer b.Close()
 			_, err = Exec(cleanup, s, b, gocql.Options{})
@@ -169,7 +169,7 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 			t.Errorf("cleanup unique stream table: %v", err)
 		}
 	}()
-	insert := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[cql.Pair[int32, []byte], cql.Unit]{CQL: "INSERT INTO " + qualified + "(id,value) VALUES(?,?)", Params: cql.PairParams(1, cql.OneParam(cql.Int32), cql.OneParam(cql.BytesEncoder)), Rows: cql.NoRows}, gocql.PrepareOptions{}))
+	insert := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[cql.Pair[int32, []byte], cql.EmptyRecord]{CQL: "INSERT INTO " + qualified + "(id,value) VALUES(?,?)", Params: cql.PairParams(1, cql.OneParam(cql.Int32), cql.OneParam(cql.BytesEncoder)), Rows: cql.NoRows}, gocql.PrepareOptions{}))
 	size := 400 << 10
 	for i := 0; i < 4; i++ {
 		payload := bytes.Repeat([]byte{byte(i + 1)}, size)
@@ -264,7 +264,7 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
-	query := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.Unit, int32]{CQL: "SELECT id FROM " + qualified + " LIMIT 1", Params: cql.NoParams, Rows: cql.OneColumn(cql.Int32)}, cql.NewColumns(), cql.Unit{}))
+	query := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyRecord, int32]{CQL: "SELECT id FROM " + qualified + " LIMIT 1", Params: cql.NoParams, Rows: cql.OneColumn(cql.Int32)}, cql.NewColumns(), cql.EmptyRecord{}))
 	defer query.Close()
 	rows := codecTestMust(Run(ctx, s, query, gocql.Options{}))
 	defer rows.Close()

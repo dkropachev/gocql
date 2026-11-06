@@ -59,8 +59,8 @@ func (p *pinServe) take() []string {
 	return seen
 }
 
-func pinTestQuery(t *testing.T, s *cluster.Session, options Options) *Query[codec.Unit, []byte] {
-	statement := binding.Statement[codec.Unit, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+func pinTestQuery(t *testing.T, s *cluster.Session, options Options) *Query[codec.EmptyRecord, []byte] {
+	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 	q := codecTestMust(NewUnpreparedQuery(s, statement, cqltype.NewColumns(), options))
 	t.Cleanup(q.Close)
 	return q
@@ -77,13 +77,13 @@ func pinPages(t *testing.T, stream int, token string) []byte {
 	}
 }
 
-func pinEach(t *testing.T, q *Query[codec.Unit, []byte]) {
+func pinEach(t *testing.T, q *Query[codec.EmptyRecord, []byte]) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var got string
 	dst := make([]byte, 0, 8)
-	if err := q.Each(ctx, codec.Unit{}, &dst, func(row *[]byte) error { got += string(*row); return nil }); err != nil || got != "abc" {
+	if err := q.Each(ctx, codec.EmptyRecord{}, &dst, func(row *[]byte) error { got += string(*row); return nil }); err != nil || got != "abc" {
 		t.Fatal(got, err)
 	}
 }

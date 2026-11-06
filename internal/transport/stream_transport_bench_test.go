@@ -256,11 +256,11 @@ func FuzzV2ExclusiveIncrementalFraming(f *testing.F) {
 		if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
 			return
 		}
-		plan, err := codec.StreamRow(func(*codec.Unit) {}).Compile(response.InternalColumns)
+		plan, err := codec.StreamRow(func(*codec.EmptyRecord) {}).Compile(response.InternalColumns)
 		if err != nil {
 			return
 		}
-		var dst codec.Unit
+		var dst codec.EmptyRecord
 		for i := 0; i < 16; i++ {
 			ok, err := InternalDecodeStreamRow(response, plan, &dst)
 			if err != nil || !ok {

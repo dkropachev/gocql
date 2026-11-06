@@ -56,7 +56,7 @@ func TestTabletRoutingLive(t *testing.T) {
 	if !ks.TabletBased || ks.Tables["records"].ID == "" {
 		t.Fatal("server tablet/table UUID metadata absent", ks)
 	}
-	insert := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[int32, cql.Unit]{CQL: "INSERT INTO " + keyspace + ".records(pk,v) VALUES(?,7)", Params: cql.OneParam(cql.Int32), Rows: cql.NoRows}, gocql.PrepareOptions{}))
+	insert := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[int32, cql.EmptyRecord]{CQL: "INSERT INTO " + keyspace + ".records(pk,v) VALUES(?,7)", Params: cql.OneParam(cql.Int32), Rows: cql.NoRows}, gocql.PrepareOptions{}))
 	read := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[int32, cql.DynamicRow]{CQL: "SELECT pk,v FROM " + keyspace + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows}, gocql.PrepareOptions{}))
 	feedback := 0
 	for key := int32(0); key < 8; key++ {

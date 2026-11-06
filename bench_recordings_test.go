@@ -45,7 +45,7 @@ func benchControlParams(t *testing.T) []byte {
 			request = r
 			return nil, sentinel
 		},
-		metadata.Query[cql.Unit, cql.Unit]{CQL: benchControlQuery(), Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{})
+		metadata.Query[cql.EmptyRecord, cql.EmptyRecord]{CQL: benchControlQuery(), Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyRecord{})
 	if !errors.Is(err, sentinel) || request == nil {
 		t.Fatalf("capture canonical metadata request: %v", err)
 	}

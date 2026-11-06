@@ -110,7 +110,7 @@ type UUID = cqltype.UUID
 
 var UUIDCodec = codec.UUIDCodec
 
-type Unit = codec.Unit
+type EmptyRecord = codec.EmptyRecord
 
 type ValidationError = cqltype.ValidationError
 

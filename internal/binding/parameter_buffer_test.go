@@ -87,10 +87,10 @@ func TestOwnedParameterRetirementBoundsDescriptorStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 	columns := make([]cqltype.ColumnSpec, 2048)
-	fields := make([]codec.InputField[codec.Unit], len(columns))
+	fields := make([]codec.InputField[codec.EmptyRecord], len(columns))
 	for i := range columns {
 		columns[i] = cqltype.ColumnSpec{Name: fmt.Sprint(i), Type: typ}
-		fields[i] = codec.ParamAt(i, codec.Int32, func(codec.Unit) int32 { return 42 })
+		fields[i] = codec.ParamAt(i, codec.Int32, func(codec.EmptyRecord) int32 { return 42 })
 	}
 	metadata := cqltype.NewColumns(columns...)
 	plan, err := codec.Params(fields...).Compile(metadata)
@@ -98,7 +98,7 @@ func TestOwnedParameterRetirementBoundsDescriptorStorage(t *testing.T) {
 		t.Fatal(err)
 	}
 	var storage ParameterBuffer
-	values, err := EncodeInto(&storage, plan, metadata, codec.Unit{}, true)
+	values, err := EncodeInto(&storage, plan, metadata, codec.EmptyRecord{}, true)
 	if err != nil {
 		t.Fatal(err)
 	}

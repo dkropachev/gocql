@@ -256,7 +256,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return err
 		}, nil
 	case "D4":
-		statement := cql.Statement[row, cql.Unit]{Kind: cql.OrdinaryStatement, CQL: pointWrite, Params: rowParams, Rows: cql.NoRows}
+		statement := cql.Statement[row, cql.EmptyRecord]{Kind: cql.OrdinaryStatement, CQL: pointWrite, Params: rowParams, Rows: cql.NoRows}
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
 			q, err := g.NewUnpreparedQuery(a.s, statement, rowColumns, a.metadata)
@@ -361,14 +361,14 @@ func (c *v2Case) preparedOne(p *g.Prepared[int32, row]) op {
 	}
 }
 
-func execOp(q *g.Query[row, cql.Unit]) op {
+func execOp(q *g.Query[row, cql.EmptyRecord]) op {
 	return func(ctx context.Context, seq uint64) error {
 		k := pointKey(seq)
 		return settle(ctx, q, q.Exec(ctx, row{K: k, P: payload(false, k, 0)}))
 	}
 }
 
-func preparedExec(p *g.Prepared[row, cql.Unit], opts g.Options) op {
+func preparedExec(p *g.Prepared[row, cql.EmptyRecord], opts g.Options) op {
 	return func(ctx context.Context, seq uint64) error {
 		k := pointKey(seq)
 		_, err := p.Exec(ctx, row{K: k, P: payload(false, k, 0)}, opts)

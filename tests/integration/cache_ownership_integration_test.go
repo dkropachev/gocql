@@ -42,7 +42,7 @@ func TestNativeCacheOwnership(t *testing.T) {
 	created := false
 	exec := func(stmt string) {
 		t.Helper()
-		b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{}))
+		b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyRecord, cql.EmptyRecord]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyRecord{}))
 		defer b.Close()
 		if _, e := Exec(ctx, s, b, gocql.Options{}); e != nil {
 			t.Fatal(e)
@@ -62,7 +62,7 @@ func TestNativeCacheOwnership(t *testing.T) {
 			return
 		}
 		defer cleanupSession.Close()
-		b, e := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: "DROP KEYSPACE " + ks, Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{})
+		b, e := BindUnpreparedOwned(cql.Statement[cql.EmptyRecord, cql.EmptyRecord]{CQL: "DROP KEYSPACE " + ks, Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyRecord{})
 		if e == nil {
 			defer b.Close()
 			_, e = Exec(cleanup, cleanupSession, b, gocql.Options{})
@@ -72,7 +72,7 @@ func TestNativeCacheOwnership(t *testing.T) {
 		}
 	}()
 	exec("CREATE TABLE " + ks + ".records(id int PRIMARY KEY,value blob)")
-	insert := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[[]byte, cql.Unit]{CQL: "INSERT INTO " + ks + ".records(id,value)VALUES(1,?)", Kind: cql.OrdinaryStatement, Params: cql.OneParam(cql.BytesEncoder), Rows: cql.NoRows}, gocql.PrepareOptions{}))
+	insert := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[[]byte, cql.EmptyRecord]{CQL: "INSERT INTO " + ks + ".records(id,value)VALUES(1,?)", Kind: cql.OrdinaryStatement, Params: cql.OneParam(cql.BytesEncoder), Rows: cql.NoRows}, gocql.PrepareOptions{}))
 	write := func(value byte) {
 		t.Helper()
 		payload := bytes.Repeat([]byte{value}, 1<<20)
@@ -87,8 +87,8 @@ func TestNativeCacheOwnership(t *testing.T) {
 		}
 	}
 	write(0x71)
-	prepared := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[cql.Unit, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.OneColumn(cql.BlobCodec)}, gocql.PrepareOptions{}))
-	bound := codecTestMust(BindOwned(prepared, cql.Unit{}))
+	prepared := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[cql.EmptyRecord, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.OneColumn(cql.BlobCodec)}, gocql.PrepareOptions{}))
+	bound := codecTestMust(BindOwned(prepared, cql.EmptyRecord{}))
 	defer bound.Close()
 	rows := codecTestMust(Run(ctx, s, bound, testOptions(gocql.OptionValues{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
 	var old cql.Bytes

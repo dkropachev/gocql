@@ -768,7 +768,7 @@ func Exec[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], optio
 	}
 	// Unexpected row results retain full draining, framing validation and the
 	// established result-columns error, including all continuation pages.
-	execution := &Bound[Unit]{privateStorage: BoundStorage[Unit]{InternalRows: InternalExecRowsDecoder{}}}
+	execution := &Bound[EmptyRecord]{privateStorage: BoundStorage[EmptyRecord]{InternalRows: InternalExecRowsDecoder{}}}
 	rows, err := newRowsFromResponse(runctx, cancel, s, execution, request, response)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err

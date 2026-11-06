@@ -90,7 +90,7 @@ func scalarGolden[T comparable](t *testing.T, codec Codec[T], kind cqltype.Type,
 			t.Fatalf("split %d: wrong decoded scalar", split)
 		}
 	}
-	for _, state := range []cqltype.CellState{cqltype.Null, cqltype.Unset, cqltype.Empty} {
+	for _, state := range []cqltype.CellState{cqltype.Null, cqltype.Unset, cqltype.EmptyCell} {
 		if _, err := codec.Decode(ScalarReader(t, kind, state)); err == nil {
 			t.Fatalf("accepted state %d", state)
 		}
@@ -340,7 +340,7 @@ func TestV2ScalarBlobStatesAndWrappers(t *testing.T) {
 	if err != nil || len(frame) != 4 {
 		t.Fatal("empty encoding incorrect")
 	}
-	for _, state := range []cqltype.CellState{cqltype.Present, cqltype.Empty} {
+	for _, state := range []cqltype.CellState{cqltype.Present, cqltype.EmptyCell} {
 		v, err := wrapped.Decode(ScalarReader(t, cqltype.TypeInt, state))
 		if err != nil || !v.Empty {
 			t.Fatal("empty decoding incorrect")
@@ -518,7 +518,7 @@ func TestV2ScalarPublicValueOwnership(t *testing.T) {
 		t.Fatal("owned encoding retained input alias")
 	}
 	empty, err := EncodeValueBorrowed(scalarType(t, cqltype.TypeInt), EmptyCodec(Int32), cqltype.EmptyValueOf[int32]{Empty: true})
-	if err != nil || empty.State() != cqltype.Empty || empty.Bytes().Len() != 0 {
+	if err != nil || empty.State() != cqltype.EmptyCell || empty.Bytes().Len() != 0 {
 		t.Fatalf("explicit Empty state lost: %v", err)
 	}
 	decoded, err := DecodeValue(EmptyCodec(Int32), empty)
@@ -528,7 +528,7 @@ func TestV2ScalarPublicValueOwnership(t *testing.T) {
 	if _, err := DecodeValue(Int32, empty); err == nil {
 		t.Fatal("nonempty decoder accepted Empty")
 	}
-	if _, err := NewEncodedValue(typ, cqltype.Empty, cqltype.Bytes{}); err == nil {
+	if _, err := NewEncodedValue(typ, cqltype.EmptyCell, cqltype.Bytes{}); err == nil {
 		t.Fatal("blob admitted a distinct Empty state")
 	}
 	if _, err := NewEncodedValue(scalarType(t, cqltype.TypeInt), cqltype.Null, cqltype.BorrowBytes([]byte{1})); err == nil {

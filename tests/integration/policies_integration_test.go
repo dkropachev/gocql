@@ -252,7 +252,7 @@ func TestNoHangAllHostsDown(t *testing.T) {
 		{TokenAware: true, Datacenter: dc, Rack: rack},
 		{},
 	}
-	bound, err := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.DynamicRow]{CQL: "SELECT host_id FROM system.local", Params: cql.NoParams, Rows: cql.DynamicRows}, cql.NewColumns(), cql.Unit{})
+	bound, err := BindUnpreparedOwned(cql.Statement[cql.EmptyRecord, cql.DynamicRow]{CQL: "SELECT host_id FROM system.local", Params: cql.NoParams, Rows: cql.DynamicRows}, cql.NewColumns(), cql.EmptyRecord{})
 	if err != nil {
 		t.Fatal(err)
 	}

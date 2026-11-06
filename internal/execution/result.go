@@ -686,25 +686,25 @@ func (r *rowsImpl[R]) Columns() Columns {
 type InternalExecRowsDecoder struct{}
 type InternalExecRowsPlan struct{ count int }
 
-func (InternalExecRowsDecoder) Compile(columns Columns) (RowPlan[Unit], error) {
+func (InternalExecRowsDecoder) Compile(columns Columns) (RowPlan[EmptyRecord], error) {
 	return InternalExecRowsPlan{count: columns.Len()}, nil
 }
-func (InternalExecRowsDecoder) Clone(value Unit) Unit { return value }
-func (p InternalExecRowsPlan) Decode(reader *RowReader) (Unit, error) {
+func (InternalExecRowsDecoder) Clone(value EmptyRecord) EmptyRecord { return value }
+func (p InternalExecRowsPlan) Decode(reader *RowReader) (EmptyRecord, error) {
 	for i := 0; i < p.count; i++ {
 		if err := reader.SkipColumn(); err != nil {
-			return Unit{}, err
+			return EmptyRecord{}, err
 		}
 	}
-	return Unit{}, nil
+	return EmptyRecord{}, nil
 }
-func (InternalExecRowsPlan) Clone(value Unit) Unit { return value }
+func (InternalExecRowsPlan) Clone(value EmptyRecord) EmptyRecord { return value }
 
-func (p InternalExecRowsPlan) DecodeInto(reader *RowReader, dst *Unit) error {
+func (p InternalExecRowsPlan) DecodeInto(reader *RowReader, dst *EmptyRecord) error {
 	if dst == nil {
 		return typeValidation("destination", "nil row destination")
 	}
-	*dst = Unit{}
+	*dst = EmptyRecord{}
 	for i := 0; i < p.count; i++ {
 		if err := reader.SkipColumn(); err != nil {
 			return err

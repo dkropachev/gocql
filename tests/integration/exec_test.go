@@ -27,7 +27,7 @@ func TestSingleHostQueryExecutor(t *testing.T) {
 	session, err := gocql.OpenSingleHost(ctx, config, hostID)
 	require.NoError(t, err)
 	defer session.Close()
-	bound, err := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.TimeUUID]{CQL: "SELECT now() FROM system.local", Params: cql.NoParams, Rows: cql.OneColumn(cql.TimeUUIDCodec)}, cql.NewColumns(), cql.Unit{})
+	bound, err := BindUnpreparedOwned(cql.Statement[cql.EmptyRecord, cql.TimeUUID]{CQL: "SELECT now() FROM system.local", Params: cql.NoParams, Rows: cql.OneColumn(cql.TimeUUIDCodec)}, cql.NewColumns(), cql.EmptyRecord{})
 	require.NoError(t, err)
 	defer bound.Close()
 	rows, err := Run(ctx, session, bound, gocql.Options{})

@@ -98,7 +98,7 @@ func (w *ValueWriter) emptyValue() error {
 	if !emptySupported(w.typ) {
 		return w.fail(cqltype.TypeValidation("type", "%s does not support empty values", w.typ))
 	}
-	return w.setState(cqltype.Empty)
+	return w.setState(cqltype.EmptyCell)
 }
 func (w *ValueWriter) BorrowBytes(b []byte) error {
 	if err := w.payload(); err != nil {
@@ -207,7 +207,7 @@ func FinishValueWriter(w *ValueWriter) error {
 	switch w.state {
 	case cqltype.Present:
 		prefix = uint32(length)
-	case cqltype.Empty:
+	case cqltype.EmptyCell:
 		prefix = 0
 	case cqltype.Null:
 		prefix = math.MaxUint32
@@ -248,7 +248,7 @@ func NewValueReader(typ cqltype.DataType, state cqltype.CellState, body wire.Cha
 func newValueReader(typ cqltype.DataType, state cqltype.CellState, body wire.Chain, lease wire.Ref) ValueReader {
 	r := ValueReader{typ: typ, state: state, body: body, lease: lease}
 	r.err = cqltype.ValidateDataType(typ)
-	if state > cqltype.Empty || (state != cqltype.Present && body.Len() != 0) {
+	if state > cqltype.EmptyCell || (state != cqltype.Present && body.Len() != 0) {
 		r.err = &cqltype.ProtocolError{Stage: "cell", Err: fmt.Errorf("invalid state %d for %d bytes", state, body.Len())}
 	}
 	return r

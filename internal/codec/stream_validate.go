@@ -270,7 +270,7 @@ func (p streamEncodedPlan) DecodeInto(r *StreamValueReader, dst *StreamEncodedVa
 	}
 	dst.Type, dst.State = r.typ, r.state
 	if r.state == cqltype.Present && len(dst.Bytes) == 0 && emptySupported(r.typ) {
-		dst.State = cqltype.Empty
+		dst.State = cqltype.EmptyCell
 	}
 	return nil
 }

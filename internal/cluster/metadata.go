@@ -644,7 +644,7 @@ func (s *Session) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *
 	}
 }
 func InternalReadV2AgreementHost(ctx context.Context, id UUID, conns []*Conn) (UUID, error) {
-	stmt := Statement[Unit, InternalAgreementPeer]{CQL: "SELECT host_id, schema_version FROM system.local WHERE key = 'local'", Params: NoParams, Rows: Row(Column("host_id", NullableCodec(UUIDCodec), func(r *InternalAgreementPeer) *Nullable[UUID] { return &r.id }), Column("schema_version", NullableCodec(UUIDCodec), func(r *InternalAgreementPeer) *Nullable[UUID] { return &r.version }))}
+	stmt := Statement[EmptyRecord, InternalAgreementPeer]{CQL: "SELECT host_id, schema_version FROM system.local WHERE key = 'local'", Params: NoParams, Rows: Row(Column("host_id", NullableCodec(UUIDCodec), func(r *InternalAgreementPeer) *Nullable[UUID] { return &r.id }), Column("schema_version", NullableCodec(UUIDCodec), func(r *InternalAgreementPeer) *Nullable[UUID] { return &r.version }))}
 	var last error = ErrNoConnections
 	for _, conn := range conns {
 		if conn == nil || conn.Closed() {
@@ -654,7 +654,7 @@ func InternalReadV2AgreementHost(ctx context.Context, id UUID, conns []*Conn) (U
 		if conn.InternalCfg != nil && conn.InternalCfg.TypedConfig != nil {
 			timeout = conn.InternalCfg.TypedConfig.Metadata.RequestTimeout
 		}
-		rows, err := InternalReadV2SystemRowsVia(ctx, conn.InternalVersion, timeout, conn.InternalExecuteV2System, stmt, NewColumns(), Unit{})
+		rows, err := InternalReadV2SystemRowsVia(ctx, conn.InternalVersion, timeout, conn.InternalExecuteV2System, stmt, NewColumns(), EmptyRecord{})
 		if err != nil {
 			if InternalTerminalV2AgreementError(err) {
 				return UUID{}, err

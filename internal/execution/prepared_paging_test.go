@@ -278,7 +278,7 @@ func TestV2PagingLimitsConfigurationAndCompleteState(t *testing.T) {
 	if settings.InternalValidateConfig(c) == nil {
 		t.Fatal("negative byte budget")
 	}
-	if _, err := RunPage[codec.Unit](nil, nil, nil, implModel.CompletePageState(), Options{}); !errors.Is(err, runtimeerrors.ErrPagingComplete) {
+	if _, err := RunPage[codec.EmptyRecord](nil, nil, nil, implModel.CompletePageState(), Options{}); !errors.Is(err, runtimeerrors.ErrPagingComplete) {
 		t.Fatal("complete admitted", err)
 	}
 }

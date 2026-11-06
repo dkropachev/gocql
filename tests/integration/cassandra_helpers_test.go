@@ -106,7 +106,7 @@ func cassandraBound[P, R any](t testing.TB, p *gocql.Prepared[P, R], value P) *B
 }
 func cassandraUnprepared[R any](t testing.TB, stmt string, decoder cql.RowDecoder[R]) *Bound[R] {
 	t.Helper()
-	b, err := BindUnpreparedOwned(cql.Statement[cql.Unit, R]{CQL: stmt, Params: cql.NoParams, Rows: decoder}, cql.NewColumns(), cql.Unit{})
+	b, err := BindUnpreparedOwned(cql.Statement[cql.EmptyRecord, R]{CQL: stmt, Params: cql.NoParams, Rows: decoder}, cql.NewColumns(), cql.EmptyRecord{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,9 +154,9 @@ func cassandraDynamicBound(t testing.TB, s *gocql.Session, stmt string, values [
 	t.Helper()
 	return cassandraBound(t, cassandraPrepared(t, s, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}, options), values)
 }
-func cassandraWriteBound(t testing.TB, s *gocql.Session, stmt string, values []cql.Value, options gocql.PrepareOptions) *Bound[cql.Unit] {
+func cassandraWriteBound(t testing.TB, s *gocql.Session, stmt string, values []cql.Value, options gocql.PrepareOptions) *Bound[cql.EmptyRecord] {
 	t.Helper()
-	return cassandraBound(t, cassandraPrepared(t, s, cql.Statement[[]cql.Value, cql.Unit]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.NoRows}, options), values)
+	return cassandraBound(t, cassandraPrepared(t, s, cql.Statement[[]cql.Value, cql.EmptyRecord]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.NoRows}, options), values)
 }
 func cassandraRows(t testing.TB, s *gocql.Session, b *Bound[cql.DynamicRow], options gocql.Options) []cql.DynamicRow {
 	t.Helper()

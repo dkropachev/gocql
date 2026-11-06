@@ -47,7 +47,7 @@ func v2CreateRoutingKeyspace(t testing.TB, session *gocql.Session, keyspace stri
 }
 
 func v2SchemaRoutingExec(ctx context.Context, session *gocql.Session, stmt string, options gocql.Options, values ...cql.Value) (gocql.Result, error) {
-	statement := cql.Statement[[]cql.Value, cql.Unit]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.NoRows}
+	statement := cql.Statement[[]cql.Value, cql.EmptyRecord]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.NoRows}
 	prepared, err := gocql.Prepare(ctx, session, statement, gocql.PrepareOptions{})
 	if err != nil {
 		return gocql.Result{}, err

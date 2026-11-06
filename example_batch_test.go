@@ -53,7 +53,7 @@ func ExampleExecBatch() {
 		cql.Param("ck", cql.Int32, func(v item) int32 { return v.CK }),
 		cql.Param("description", cql.StringEncoder, func(v item) string { return v.Description }),
 	)
-	prepared, err := gocql.Prepare(ctx, session, cql.Statement[item, cql.Unit]{
+	prepared, err := gocql.Prepare(ctx, session, cql.Statement[item, cql.EmptyRecord]{
 		CQL:    "INSERT INTO example.batches (pk, ck, description) VALUES (?, ?, ?)",
 		Params: params, Rows: cql.NoRows,
 	}, gocql.PrepareOptions{})
@@ -89,7 +89,7 @@ func ExampleExecBatch() {
 		cql.Column("ck", cql.Int32, func(v *result) *int32 { return &v.CK }),
 		cql.Column("description", cql.TextCodec, func(v *result) *cql.Text { return &v.Description }),
 	)
-	bound, err := gocql.NewUnpreparedQuery(session, cql.Statement[cql.Unit, result]{
+	bound, err := gocql.NewUnpreparedQuery(session, cql.Statement[cql.EmptyRecord, result]{
 		CQL: "SELECT pk, ck, description FROM example.batches", Params: cql.NoParams, Rows: row,
 	}, cql.NewColumns(), gocql.Options{})
 	if err != nil {
@@ -101,7 +101,7 @@ func ExampleExecBatch() {
 			log.Print(err)
 		}
 	}()
-	rows, err := bound.Run(ctx, cql.Unit{})
+	rows, err := bound.Run(ctx, cql.EmptyRecord{})
 	if err != nil {
 		log.Fatal(err)
 	}

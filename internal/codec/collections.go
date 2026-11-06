@@ -296,7 +296,7 @@ func writeCollectionElement[T any](w *ValueWriter, typ cqltype.DataType, encoder
 		if err := encoder.Encode(child, value); err != nil {
 			return err
 		}
-		if child.state != cqltype.Present && child.state != cqltype.Empty {
+		if child.state != cqltype.Present && child.state != cqltype.EmptyCell {
 			return cqltype.TypeValidation("element", "collection elements cannot be null or unset")
 		}
 		return nil
@@ -668,7 +668,7 @@ func writeVectorElement[T any](w *ValueWriter, typ cqltype.DataType, width int64
 		abortValueWriter(child)
 		return w.fail(err)
 	}
-	if child.state != cqltype.Present && child.state != cqltype.Empty {
+	if child.state != cqltype.Present && child.state != cqltype.EmptyCell {
 		abortValueWriter(child)
 		return w.fail(cqltype.TypeValidation("element", "vector elements cannot be null or unset"))
 	}

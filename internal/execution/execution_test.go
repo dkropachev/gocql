@@ -47,7 +47,7 @@ import (
 func TestKindDeclarationAndServerRefinement(t *testing.T) {
 	for _, kind := range []cqltype.StatementKind{cqltype.UnknownStatement, cqltype.OrdinaryStatement, cqltype.ConditionalStatement} {
 		for _, cql := range []string{"SELECT value FROM ks.tbl", "INSERT INTO t (x) VALUES (1) IF NOT EXISTS", "SELECT 'IF' FROM t"} {
-			b, err := BindUnpreparedOwned(binding.Statement[codec.Unit, codec.Unit]{CQL: cql, Kind: kind, Params: codec.NoParams, Rows: codec.NoRows}, cqltype.NewColumns(), codec.Unit{})
+			b, err := BindUnpreparedOwned(binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{CQL: cql, Kind: kind, Params: codec.NoParams, Rows: codec.NoRows}, cqltype.NewColumns(), codec.EmptyRecord{})
 			if err != nil {
 				t.Fatal(err)
 			}

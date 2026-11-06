@@ -33,14 +33,14 @@ import (
 	transporttestkit "github.com/scylladb/gocql/v2/internal/testkit/transport"
 )
 
-func testOwnedQuery(t testing.TB) *Query[[]byte, Unit] {
+func testOwnedQuery(t testing.TB) *Query[[]byte, EmptyRecord] {
 	t.Helper()
 	s, _ := attachmentSession()
 	typ, err := cqltype.ScalarType(cqltype.TypeBlob)
 	if err != nil {
 		t.Fatal(err)
 	}
-	q, err := NewUnpreparedQuery(s, Statement[[]byte, Unit]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.NoRows}, cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ}), Options{})
+	q, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.NoRows}, cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ}), Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,8 +49,8 @@ func testOwnedQuery(t testing.TB) *Query[[]byte, Unit] {
 }
 
 func TestUninitializedQueryReturnsValidationErrors(t *testing.T) {
-	var q Query[Unit, Unit]
-	if err := q.Exec(context.Background(), Unit{}); err == nil {
+	var q Query[EmptyRecord, EmptyRecord]
+	if err := q.Exec(context.Background(), EmptyRecord{}); err == nil {
 		t.Fatal("zero query executed")
 	}
 	q.Close()

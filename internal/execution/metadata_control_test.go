@@ -659,7 +659,7 @@ func TestSuccessfulDDLErrorNeverRetriesStatement(t *testing.T) {
 			}
 		}
 	}()
-	b := codecTestMust(BindUnpreparedOwned(binding.Statement[codec.Unit, codec.Unit]{CQL: "CREATE KEYSPACE schema_events", Params: codec.NoParams, Rows: codec.NoRows}, cqltype.NewColumns(), codec.Unit{}))
+	b := codecTestMust(BindUnpreparedOwned(binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{CQL: "CREATE KEYSPACE schema_events", Params: codec.NoParams, Rows: codec.NoRows}, cqltype.NewColumns(), codec.EmptyRecord{}))
 	defer b.Close()
 	_, err := Exec(ctx, s, b, testOptions(*func() *OptionValues {
 		opaqueStorageValuexxxxxx := new(OptionValues)
@@ -887,7 +887,7 @@ func TestDDLSucceededStatusSurvivesAgreementCancellation(t *testing.T) {
 		close(entered)
 		<-ctx.Done()
 	}()
-	bound := codecTestMust(BindUnpreparedOwned(binding.Statement[codec.Unit, codec.Unit]{CQL: "CREATE KEYSPACE schema_events", Params: codec.NoParams, Rows: codec.NoRows}, cqltype.NewColumns(), codec.Unit{}))
+	bound := codecTestMust(BindUnpreparedOwned(binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{CQL: "CREATE KEYSPACE schema_events", Params: codec.NoParams, Rows: codec.NoRows}, cqltype.NewColumns(), codec.EmptyRecord{}))
 	defer bound.Close()
 	result := make(chan error, 1)
 	go func() {

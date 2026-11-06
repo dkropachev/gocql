@@ -293,7 +293,7 @@ func TestV2DynamicStatesAndTrailingFields(t *testing.T) {
 		empty := dynamicTestMust(EmptyValue(typ))
 		dynamicTestRoundTrip(t, empty, "")
 		got := dynamicTestDecode(t, typ, nil)
-		if got.State() != cqltype.Empty {
+		if got.State() != cqltype.EmptyCell {
 			t.Fatalf("%s wire empty lost", typ)
 		}
 	}

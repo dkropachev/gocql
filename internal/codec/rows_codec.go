@@ -11,9 +11,8 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-// Unit is the value type for a statement without parameters or result columns.
-
-type Unit struct{}
+// EmptyRecord is the value type for a statement without parameters or result columns.
+type EmptyRecord struct{}
 
 // Pair composes two independently typed parameter or row values.
 type Pair[A, B any] struct {
@@ -107,7 +106,7 @@ func WriteParam[T any](w *ParamWriter, encoder Encoder[T], value T) error {
 			return fmt.Errorf("gocql: missing parameter capture slot")
 		}
 		state := cell.state
-		if state == cqltype.Empty {
+		if state == cqltype.EmptyCell {
 			state = cqltype.Present
 		} // empty has a zero-length present wire body
 		w.capture[w.index] = ParamCell{Start: cell.start + 4, End: w.builder.Len(), State: state}
@@ -510,8 +509,8 @@ func (p singleColumnPlan[T]) DecodeInto(reader *RowReader, dst *T) error {
 }
 func (p singleColumnPlan[T]) Clone(value T) T { return p.decoder.Clone(value) }
 
-var NoParams ParamEncoder[Unit] = Params[Unit]()
-var NoRows RowDecoder[Unit] = Row[Unit]()
+var NoParams ParamEncoder[EmptyRecord] = Params[EmptyRecord]()
+var NoRows RowDecoder[EmptyRecord] = Row[EmptyRecord]()
 
 type mappedParams[A, B any] struct {
 	codec    ParamEncoder[B]

@@ -88,7 +88,7 @@ func TestConditionalPrepareAbsentResultMetadata(t *testing.T) {
 				_, err = peers[0].Write(typedTestResponse(t, 4, stream, body))
 				done <- err
 			}()
-			prepared, err := Prepare(ctx, s, binding.Statement[codec.Unit, codec.CASResult[codec.DynamicRow]]{CQL: "INSERT INTO ks.tbl(id)VALUES(1)IF NOT EXISTS", Kind: tc.kind, Params: codec.NoParams, Rows: codec.CASRows(codec.DynamicRows)}, PrepareOptions{})
+			prepared, err := Prepare(ctx, s, binding.Statement[codec.EmptyRecord, codec.CASResult[codec.DynamicRow]]{CQL: "INSERT INTO ks.tbl(id)VALUES(1)IF NOT EXISTS", Kind: tc.kind, Params: codec.NoParams, Rows: codec.CASRows(codec.DynamicRows)}, PrepareOptions{})
 			var validation *implCqltype.ValidationError
 			if tc.prepareError {
 				if !errors.As(err, &validation) {
@@ -101,7 +101,7 @@ func TestConditionalPrepareAbsentResultMetadata(t *testing.T) {
 				if PreparedData(prepared).InternalPlans.InternalPlan != nil {
 					t.Fatal("absent shape compiled eagerly")
 				}
-				bound := codecTestMust(BindOwned(prepared, codec.Unit{}))
+				bound := codecTestMust(BindOwned(prepared, codec.EmptyRecord{}))
 				defer bound.Close()
 				rows, err := Run(ctx, s, bound, Options{})
 				if tc.badResult {

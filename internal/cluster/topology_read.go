@@ -22,7 +22,7 @@ func InternalReadV2Topology(ctx context.Context, conn ConnInterface, stmt string
 	if c, ok := conn.(*Conn); ok {
 		execute = c.InternalExecuteV2System
 	}
-	rows, err := InternalReadV2SystemRowsVia(ctx, 4, timeout, execute, Statement[Unit, v2TopologyRow]{CQL: stmt, Params: NoParams, Rows: v2DecodeTopology()}, NewColumns(), Unit{})
+	rows, err := InternalReadV2SystemRowsVia(ctx, 4, timeout, execute, Statement[EmptyRecord, v2TopologyRow]{CQL: stmt, Params: NoParams, Rows: v2DecodeTopology()}, NewColumns(), EmptyRecord{})
 	if err != nil {
 		return nil, err
 	}

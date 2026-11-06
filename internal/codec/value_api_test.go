@@ -142,7 +142,7 @@ func TestV2FoundationEncodedValueStatesAndLifetime(t *testing.T) {
 		state cqltype.CellState
 		body  []byte
 		typ   cqltype.DataType
-	}{{cqltype.Null, []byte{1}, blob}, {cqltype.Unset, []byte{1}, blob}, {cqltype.Empty, []byte{1}, integer}, {cqltype.CellState(42), nil, blob}, {cqltype.Empty, nil, blob}} {
+	}{{cqltype.Null, []byte{1}, blob}, {cqltype.Unset, []byte{1}, blob}, {cqltype.EmptyCell, []byte{1}, integer}, {cqltype.CellState(42), nil, blob}, {cqltype.EmptyCell, nil, blob}} {
 		if _, err := NewEncodedValue(test.typ, test.state, cqltype.BorrowBytes(test.body)); err == nil {
 			t.Fatalf("invalid state/body accepted: %+v", test)
 		}
@@ -151,7 +151,7 @@ func TestV2FoundationEncodedValueStatesAndLifetime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if empty.State() != cqltype.Empty || empty.Bytes().Len() != 0 {
+	if empty.State() != cqltype.EmptyCell || empty.Bytes().Len() != 0 {
 		t.Fatal("explicit empty state lost")
 	}
 	decoded, err := DecodeValue(EmptyCodec(Int32), empty)

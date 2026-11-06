@@ -150,8 +150,8 @@ func TestStreamingStorageMatrix(t *testing.T) {
 					r.InternalConn.InternalR.(*transport.InternalConnReader).InternalConn = &observedConn{Conn: socket, observe: sample}
 					sample()
 					if work.skip {
-						plan := codecTestMust(codec.StreamRow(func(*codec.Unit) {}).Compile(response.InternalColumns))
-						var dst codec.Unit
+						plan := codecTestMust(codec.StreamRow(func(*codec.EmptyRecord) {}).Compile(response.InternalColumns))
+						var dst codec.EmptyRecord
 						for i := 0; i < work.rows; i++ {
 							if ok, err := transport.InternalDecodeStreamRow(response, plan, &dst); !ok || err != nil {
 								t.Fatal(ok, err)
