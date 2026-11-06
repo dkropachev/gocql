@@ -302,3 +302,36 @@ func TestBatchStatementKind(t *testing.T) {
 		}
 	}
 }
+
+func TestBatchAttemptReusesWireBatch(t *testing.T) {
+	s, conns, _ := runtimeTestSession(t, 1)
+	q := batchTestQuery(t, s)
+	var batch Batch
+	if err := q.AddTo(&batch, []byte("v")); err != nil {
+		t.Fatal(err)
+	}
+	state := batch.begin(LoggedBatch)
+	rt := InternalRuntimeFor(s)
+	ctx := context.Background()
+	first, err := rt.prepareBatchAttempt(ctx, conns[0], state, nil)
+	if err != nil || first != &state.attempt {
+		t.Fatal("first attempt did not take the state's wire batch", err)
+	}
+	// A concurrent, speculative attempt builds its own.
+	second, err := rt.prepareBatchAttempt(ctx, conns[0], state, nil)
+	if err != nil || second == first || len(second.Items) != 1 {
+		t.Fatal("concurrent attempt shared the wire batch", err)
+	}
+	// A repair refills the attempt's own wire batch.
+	if again, err := rt.prepareBatchAttempt(ctx, conns[0], state, first); err != nil || again != first {
+		t.Fatal("repair did not refill the wire batch", err)
+	}
+	state.releaseAttempt(second)
+	if !state.attemptBusy.Load() {
+		t.Fatal("another attempt's release freed the wire batch")
+	}
+	state.releaseAttempt(first)
+	if next, _ := rt.prepareBatchAttempt(ctx, conns[0], state, nil); next != &state.attempt {
+		t.Fatal("released wire batch not reused")
+	}
+}

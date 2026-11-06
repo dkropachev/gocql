@@ -1133,7 +1133,8 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 	}
 	setPrepared(wireRequest, prepared, conn, opts.IncludeMetadata)
 	if request.batch != nil {
-		wireRequest.Batch, err = s.prepareBatchAttempt(ctx, conn, request.batch)
+		wireRequest.Batch, err = s.prepareBatchAttempt(ctx, conn, request.batch, nil)
+		defer request.batch.releaseAttempt(wireRequest.Batch)
 		if err != nil {
 			return nil, err
 		}
@@ -1170,7 +1171,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 				if err = s.repairBatch(ctx, conn, request.batch, unprepared.StatementId); err != nil {
 					return nil, err
 				}
-				wireRequest.Batch, err = s.prepareBatchAttempt(ctx, conn, request.batch)
+				wireRequest.Batch, err = s.prepareBatchAttempt(ctx, conn, request.batch, wireRequest.Batch)
 				if err != nil {
 					return nil, err
 				}

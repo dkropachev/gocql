@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sync/atomic"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/wire"
@@ -62,7 +63,11 @@ type batchEntry struct {
 type InternalBatchState struct {
 	entries []batchEntry
 	values  []byte
-	kind    BatchKind
+	// attempt is the wire batch an attempt lends while attemptBusy is set;
+	// a concurrent speculative attempt builds its own.
+	attempt     typedBatchRequest
+	attemptBusy atomic.Bool
+	kind        BatchKind
 }
 
 // Len returns the number of statements in the batch.
@@ -110,7 +115,8 @@ func (b *Batch) begin(kind BatchKind) *InternalBatchState {
 		state = new(InternalBatchState)
 		b.shared = true
 	}
-	*state = InternalBatchState{kind: kind, entries: b.entries, values: b.values}
+	// The wire batch's item storage is kept for the next execution.
+	state.kind, state.entries, state.values = kind, b.entries, b.values
 	return state
 }
 
@@ -287,24 +293,47 @@ func (e *batchEntry) encoded() encodedValues {
 	return encodedValues{Columns: e.columns}
 }
 
-func (s *InternalSessionRuntime) prepareBatchAttempt(ctx context.Context, conn *Conn, batch *InternalBatchState) (*typedBatchRequest, error) {
-	request := &typedBatchRequest{Kind: batch.kind, Items: make([]typedBatchItem, len(batch.entries))}
+// prepareBatchAttempt fills the wire batch of one attempt on conn. It
+// refills request when given one, and otherwise takes the state's own wire
+// batch unless another attempt holds it; the caller releases that with
+// releaseAttempt.
+func (s *InternalSessionRuntime) prepareBatchAttempt(ctx context.Context, conn *Conn, batch *InternalBatchState, request *typedBatchRequest) (*typedBatchRequest, error) {
+	if request == nil {
+		if batch.attemptBusy.CompareAndSwap(false, true) {
+			request = &batch.attempt
+		} else {
+			request = new(typedBatchRequest)
+		}
+	}
+	request.Kind = batch.kind
+	items := request.Items[:0]
+	if cap(items) < len(batch.entries) {
+		items = make([]typedBatchItem, 0, len(batch.entries))
+	}
 	for i := range batch.entries {
 		entry := &batch.entries[i]
 		if entry.unset && conn.InternalVersion < 4 {
-			return nil, typeValidation("unset", "requires protocol v4")
+			return request, typeValidation("unset", "requires protocol v4")
 		}
 		item := typedBatchItem{Statement: entry.statement, Values: wire.ChainOf(batch.values[entry.start:entry.end]), ValueCount: entry.count}
 		prepared, err := entry.sourceOrText().onConn(ctx, s, conn, entry.encoded(), false, nil)
 		if err != nil {
-			return nil, err
+			return request, err
 		}
 		if prepared != nil {
 			item.PreparedID = prepared.InternalId
 		}
-		request.Items[i] = item
+		items = append(items, item)
 	}
+	request.Items = items
 	return request, nil
+}
+
+// releaseAttempt returns the state's wire batch if request is it.
+func (batch *InternalBatchState) releaseAttempt(request *typedBatchRequest) {
+	if request == &batch.attempt {
+		batch.attemptBusy.Store(false)
+	}
 }
 
 func (s *InternalSessionRuntime) repairBatch(ctx context.Context, conn *Conn, batch *InternalBatchState, id []byte) error {
