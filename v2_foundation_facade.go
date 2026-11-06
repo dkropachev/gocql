@@ -12,7 +12,6 @@ import (
 	codec "github.com/scylladb/gocql/v2/internal/codec"
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	model "github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 var ASCIICodec = codec.ASCIICodec
@@ -190,24 +189,13 @@ func NamedScalar[A any, B any](a0 Codec[B], a1 func(A) B, a2 func(B) A) Codec[A]
 
 type NativeType = cqltype.NativeType
 
-func retiredNewCollectionType(a0 NativeType, a1 TypeInfo, a2 TypeInfo) CollectionType {
-	return cqltype.NewCollectionType(a0, a1, a2)
-}
 func NewColumns(a0 ...ColumnSpec) Columns { return cqltype.NewColumns(a0...) }
-func retiredNewCustomType(a0 byte, a1 Type, a2 string) NativeType {
-	return cqltype.NewCustomType(a0, a1, a2)
-}
+
 func NewEncodedValue(a0 DataType, a1 CellState, a2 Bytes) (EncodedValue, error) {
 	return codec.NewEncodedValue(a0, a1, a2)
 }
-func retiredNewNativeType(a0 byte, a1 Type) NativeType { return cqltype.NewNativeType(a0, a1) }
-func NewTimeUUID() UUID                                { return cqltype.NewTimeUUID() }
-func retiredNewTupleType(a0 NativeType, a1 ...TypeInfo) TupleTypeInfo {
-	return cqltype.NewTupleType(a0, a1...)
-}
-func retiredNewUDTType(a0 byte, a1 string, a2 string, a3 ...UDTField) UDTTypeInfo {
-	return cqltype.NewUDTType(a0, a1, a2, a3...)
-}
+
+func NewTimeUUID() UUID { return cqltype.NewTimeUUID() }
 
 const NoCompression = cqltype.NoCompression
 
@@ -513,51 +501,6 @@ func VectorValue(a0 DataType, a1 []Value) (Value, error) { return codec.VectorVa
 func WriteParam[T any](a0 *ParamWriter, a1 Encoder[T], a2 T) error {
 	return codec.WriteParam[T](a0, a1, a2)
 }
-
-type attemptRequest = model.AttemptRequest
-
-func columnsFromInfo(a0 []ColumnInfo) (Columns, error) { return cqltype.ColumnsFromInfo(a0) }
-func compileParamPlan[P any](a0 ParamEncoder[P], a1 Columns) (ParamPlan[P], error) {
-	return codec.CompileParamPlan[P](a0, a1)
-}
-func compileRowPlan[R any](a0 RowDecoder[R], a1 Columns) (RowPlan[R], error) {
-	return codec.CompileRowPlan[R](a0, a1)
-}
-
-type dataTypeDescriptor = cqltype.DataTypeDescriptor
-
-func dataTypeFromInfo(a0 TypeInfo) (DataType, error) { return cqltype.DataTypeFromInfo(a0) }
-
-type encodedCell = model.EncodedCell
-type encodedValues = model.EncodedValues
-
-func finishParamWriter(a0 *ParamWriter) error { return codec.FinishParamWriter(a0) }
-func finishRowReader(a0 *RowReader) error     { return codec.FinishRowReader(a0) }
-func finishValueWriter(a0 *ValueWriter) error { return codec.FinishValueWriter(a0) }
-func newParamWriter(a0 *wire.Builder, a1 Columns, a2 bool) *ParamWriter {
-	return codec.NewParamWriter(a0, a1, a2)
-}
-func newRowReader(a0 Columns, a1 wire.Chain, a2 *wire.Lease) *RowReader {
-	return codec.NewRowReader(a0, a1, a2)
-}
-func newStreamRowReader(a0 Columns, a1 *wire.Stream) (*StreamRowReader, error) {
-	return codec.NewStreamRowReader(a0, a1)
-}
-func newValueReader(a0 DataType, a1 CellState, a2 wire.Chain, a3 *wire.Lease) ValueReader {
-	return codec.NewValueReader(a0, a1, a2, a3)
-}
-func newValueWriter(a0 *wire.Builder, a1 DataType, a2 bool) *ValueWriter {
-	return codec.NewValueWriter(a0, a1, a2)
-}
-func readValue(a0 *wire.Cursor, a1 DataType, a2 *wire.Lease, a3 bool) (ValueReader, error) {
-	return codec.ReadValue(a0, a1, a2, a3)
-}
-func typeValidation(a0 string, a1 string, a2 ...any) error {
-	return cqltype.TypeValidation(a0, a1, a2...)
-}
-
-type typedBatchItem = model.TypedBatchItem
-type typedBatchRequest = model.TypedBatchRequest
 
 const (
 	LoggedBatch   = cqltype.LoggedBatch

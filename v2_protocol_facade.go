@@ -55,13 +55,3 @@ type Result = model.Result
 func StartPage() PageState { return model.StartPage() }
 
 type UnknownServerError = protocol.UnknownServerError
-
-func cloneResult(a0 Result) Result      { return model.CloneResult(a0) }
-func completePageState() PageState      { return model.CompletePageState() }
-func mergeResult(a0 *Result, a1 Result) { model.MergeResult(a0, a1) }
-func newTypedEnvelope() *typedEnvelope  { return protocol.NewTypedEnvelope() }
-
-type parsedMetadata = protocol.ParsedMetadata
-type responseData = model.ResponseData
-type typedEnvelope = protocol.TypedEnvelope
-type typedParser = protocol.TypedParser
