@@ -603,7 +603,7 @@ difference (p≥0.54).
 AchievedConsistency; warnings, trace IDs and custom payload move to
 `resultDiagnostics` behind accessor methods, with `AddWarnings`,
 `AddTraceIDs`, `AddCustomPayload` and `SetDiagnostics` for the driver.
-`TestResultDiagnosticsAreCopyOnWrite` covers copies, merge and clone.
+`TestResultDiagnostics` covers copies, merge and clone.
 Making Latency opt-in was left out: its two clock reads are under 1% of a
 request.
 

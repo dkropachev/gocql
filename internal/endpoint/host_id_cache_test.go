@@ -8,27 +8,36 @@ import (
 	"testing"
 )
 
-// TestHostUUIDCachesOnlyAKnownID checks that an empty host ID is not cached,
-// so the ID filled in later is observed, and that state reads see updates.
-func TestHostUUIDCachesOnlyAKnownID(t *testing.T) {
-	h := new(HostInfo)
-	h.privateStorage.InternalConnectAddress = net.IPv4(127, 0, 0, 1)
-	if id := InternalHostInfoHostUUID(h); !id.IsEmpty() {
-		t.Fatal("empty host reported an ID", id)
+func TestHostInfo(t *testing.T) {
+	newHost := func() *HostInfo {
+		h := new(HostInfo)
+		h.privateStorage.InternalConnectAddress = net.IPv4(127, 0, 0, 1)
+		return h
 	}
-	from := new(HostInfo)
-	from.privateStorage.InternalConnectAddress = h.privateStorage.InternalConnectAddress
-	from.privateStorage.InternalHostId = UUID{15: 3}
-	InternalHostInfoUpdate(h, from)
-	if id := InternalHostInfoHostUUID(h); id != (UUID{15: 3}) {
-		t.Fatal("filled-in host ID not observed", id)
-	}
-	InternalHostInfoSetState(h, NodeUp)
-	if !h.IsUp() {
-		t.Fatal("state update not observed")
-	}
-	InternalHostInfoSetState(h, NodeDown)
-	if h.IsUp() {
-		t.Fatal("state update not observed")
-	}
+
+	// An empty host ID must not be cached, so the ID filled in later is observed.
+	t.Run("InternalHostInfoHostUUID", func(t *testing.T) {
+		h := newHost()
+		if id := InternalHostInfoHostUUID(h); !id.IsEmpty() {
+			t.Fatal("empty host reported an ID", id)
+		}
+		from := newHost()
+		from.privateStorage.InternalHostId = UUID{15: 3}
+		InternalHostInfoUpdate(h, from)
+		if id := InternalHostInfoHostUUID(h); id != (UUID{15: 3}) {
+			t.Fatal("filled-in host ID not observed", id)
+		}
+	})
+
+	t.Run("InternalHostInfoSetState", func(t *testing.T) {
+		h := newHost()
+		InternalHostInfoSetState(h, NodeUp)
+		if !h.IsUp() {
+			t.Fatal("NodeUp not observed")
+		}
+		InternalHostInfoSetState(h, NodeDown)
+		if h.IsUp() {
+			t.Fatal("NodeDown not observed")
+		}
+	})
 }
