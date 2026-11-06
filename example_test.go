@@ -48,7 +48,7 @@ func Example() {
 		ID             cql.UUID
 		Timeline, Text string
 	}
-	insert, err := gocql.Prepare(ctx, session, cql.Statement[tweet, cql.EmptyRecord]{
+	insert, err := gocql.Prepare(ctx, session, cql.Statement[tweet, cql.EmptyRow]{
 		CQL:    "INSERT INTO tweet (id,timeline,text) VALUES (?,?,?)",
 		Params: cql.Params(cql.Param("id", cql.UUIDCodec, func(v tweet) cql.UUID { return v.ID }), cql.Param("timeline", cql.StringEncoder, func(v tweet) string { return v.Timeline }), cql.Param("text", cql.StringEncoder, func(v tweet) string { return v.Text })), Rows: cql.NoRows,
 	}, gocql.PrepareOptions{})

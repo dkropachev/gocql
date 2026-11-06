@@ -45,14 +45,14 @@ func Example_paging() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	b, err := gocql.NewUnpreparedQuery(s, cql.Statement[cql.EmptyRecord, int32]{CQL: "SELECT id FROM example.itoa", Params: cql.NoParams, Rows: cql.OneColumn(cql.Int32)}, cql.NewColumns(), options)
+	b, err := gocql.NewUnpreparedQuery(s, cql.Statement[cql.EmptyParams, int32]{CQL: "SELECT id FROM example.itoa", Params: cql.NoParams, Rows: cql.OneColumn(cql.Int32)}, cql.NewColumns(), options)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer func() { b.Close(); _ = b.Wait(ctx) }()
 	var state gocql.PageState
 	for {
-		page, err := b.RunPage(ctx, cql.EmptyRecord{}, state)
+		page, err := b.RunPage(ctx, cql.EmptyParams{}, state)
 		if err != nil {
 			log.Fatal(err)
 		}

@@ -312,20 +312,20 @@ func TestSelectWithoutFromExecutionModes(t *testing.T) {
 	session := createSessionWithoutKeyspace(t)
 	defer session.Close()
 	const stmt = "SELECT 1, 'a', true"
-	statement := cql.Statement[cql.EmptyRecord, cql.DynamicRow]{CQL: stmt, Params: cql.NoParams, Rows: cql.DynamicRows}
+	statement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: stmt, Params: cql.NoParams, Rows: cql.DynamicRows}
 	var baseline cql.Columns
 	for _, mode := range []string{"prepared", "prepared with metadata", "not prepared"} {
 		t.Run(mode, func(t *testing.T) {
 			var bound *Bound[cql.DynamicRow]
 			var err error
 			if mode == "not prepared" {
-				bound, err = BindUnpreparedOwned(statement, cql.NewColumns(), cql.EmptyRecord{})
+				bound, err = BindUnpreparedOwned(statement, cql.NewColumns(), cql.EmptyParams{})
 			} else {
 				prepared, e := gocql.Prepare(context.Background(), session, statement, gocql.PrepareOptions{})
 				if e != nil {
 					t.Fatal(e)
 				}
-				bound, err = BindOwned(prepared, cql.EmptyRecord{})
+				bound, err = BindOwned(prepared, cql.EmptyParams{})
 			}
 			if err != nil {
 				t.Fatal(err)

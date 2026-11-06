@@ -53,7 +53,7 @@ func TestRunStreamLive(t *testing.T) {
 	keyspace := testKeyspaceName(t, fmt.Sprintf("%x", time.Now().UnixNano()))
 	exec := func(stmt string) {
 		t.Helper()
-		b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyRecord, cql.EmptyRecord]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyRecord{}))
+		b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyParams{}))
 		defer b.Close()
 		if _, err := Exec(ctx, s, b, gocql.Options{}); err != nil {
 			t.Fatal(err)
@@ -63,7 +63,7 @@ func TestRunStreamLive(t *testing.T) {
 	defer func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
 		defer stop()
-		b, err := BindUnpreparedOwned(cql.Statement[cql.EmptyRecord, cql.EmptyRecord]{CQL: "DROP KEYSPACE " + keyspace, Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyRecord{})
+		b, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + keyspace, Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyParams{})
 		if err == nil {
 			defer b.Close()
 			_, err = Exec(cleanup, s, b, gocql.Options{})
@@ -80,7 +80,7 @@ func TestRunStreamLive(t *testing.T) {
 		Text   string
 	}
 	params := cql.Params(cql.Param("id", cql.Int32, func(v input) int32 { return v.ID }), cql.Param("value", cql.BytesEncoder, func(v input) []byte { return v.Value }), cql.Param("pieces", cql.ListEncoder(cql.BytesEncoder), func(v input) [][]byte { return v.Pieces }), cql.Param("txt", cql.StringEncoder, func(v input) string { return v.Text }))
-	prepared := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[input, cql.EmptyRecord]{CQL: "INSERT INTO " + keyspace + ".records(id,value,pieces,txt)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: params, Rows: cql.NoRows}, gocql.PrepareOptions{}))
+	prepared := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".records(id,value,pieces,txt)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: params, Rows: cql.NoRows}, gocql.PrepareOptions{}))
 	payload := bytes.Repeat([]byte("segment-crossing"), 30000)
 	textPayload := strings.Repeat("stream-🙂-", 24000)
 	for i := 0; i < 5; i++ {
@@ -94,9 +94,9 @@ func TestRunStreamLive(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	statement := cql.Statement[cql.EmptyRecord, cql.DynamicRow]{CQL: "SELECT id,value,pieces,txt FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.DynamicRows}
+	statement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,value,pieces,txt FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.DynamicRows}
 	selectPrepared := codecTestMust(gocql.Prepare(ctx, s, statement, gocql.PrepareOptions{}))
-	bound := codecTestMust(BindOwned(selectPrepared, cql.EmptyRecord{}))
+	bound := codecTestMust(BindOwned(selectPrepared, cql.EmptyParams{}))
 	defer bound.Close()
 	type output struct {
 		ID     int32
@@ -193,7 +193,7 @@ func TestRunStreamLive(t *testing.T) {
 	if err := rows.Close(); err != nil || count != 5 {
 		t.Fatal("shared execution after stream repair", count, err)
 	}
-	emptyBound := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyRecord, cql.DynamicRow]{CQL: "SELECT id,value,pieces,txt FROM " + keyspace + ".records WHERE id=-1", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.DynamicRows}, cql.NewColumns(), cql.EmptyRecord{}))
+	emptyBound := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,value,pieces,txt FROM " + keyspace + ".records WHERE id=-1", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.DynamicRows}, cql.NewColumns(), cql.EmptyParams{}))
 	empty, err := RunStream(ctx, s, emptyBound, decoder, options)
 	if err != nil {
 		t.Fatal(err)
@@ -206,8 +206,8 @@ func TestRunStreamLive(t *testing.T) {
 
 	// Change a SELECT * result while its pull-driven continuation is live. The
 	// existing binding must select a new streaming plan from real server metadata.
-	changedPrepared := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[cql.EmptyRecord, cql.DynamicRow]{CQL: "SELECT * FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{}))
-	changedBound := codecTestMust(BindOwned(changedPrepared, cql.EmptyRecord{}))
+	changedPrepared := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT * FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{}))
+	changedBound := codecTestMust(BindOwned(changedPrepared, cql.EmptyParams{}))
 	defer changedBound.Close()
 	changed, err := RunStream(ctx, s, changedBound, decoder, gocql.StreamOptions{Incremental: true, Options: testOptions(gocql.OptionValues{PageSize: cql.Option[int32]{Set: true, Value: 1}})})
 	if err != nil {

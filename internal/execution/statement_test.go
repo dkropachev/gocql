@@ -23,7 +23,7 @@ func TestV2RuntimeBindCanonicalOwnership(t *testing.T) {
 	typ, _ := cql.ScalarType(cql.TypeBlob)
 	columns := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: typ})
 	calls := 0
-	statement := cql.Statement[[]byte, cql.EmptyRecord]{CQL: "INSERT INTO ks.tbl(v) VALUES (?)", Params: cql.OneParam[[]byte](countingBlobEncoder{calls: &calls}), Rows: cql.NoRows}
+	statement := cql.Statement[[]byte, cql.EmptyRow]{CQL: "INSERT INTO ks.tbl(v) VALUES (?)", Params: cql.OneParam[[]byte](countingBlobEncoder{calls: &calls}), Rows: cql.NoRows}
 	input := []byte("original")
 	borrowed, err := BindUnpreparedBorrowed(statement, columns, input)
 	if err != nil {
@@ -46,7 +46,7 @@ func TestV2RuntimeBindCanonicalOwnership(t *testing.T) {
 	if !bytes.Equal(a, input) || string(b) != "original" {
 		t.Fatalf("borrowed=%q owned=%q", a, b)
 	}
-	for _, bound := range []*Bound[cql.EmptyRecord]{borrowed, owned} {
+	for _, bound := range []*Bound[cql.EmptyRow]{borrowed, owned} {
 		bound.Close()
 		if err := bound.Wait(context.Background()); err != nil {
 			t.Fatal(err)

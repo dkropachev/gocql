@@ -55,7 +55,7 @@ func TestMetadataControlLive(t *testing.T) {
 	}
 	exec := func(stmt string) {
 		t.Helper()
-		b, err := BindUnpreparedOwned(cql.Statement[cql.EmptyRecord, cql.EmptyRecord]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyRecord{})
+		b, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyParams{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -72,7 +72,7 @@ func TestMetadataControlLive(t *testing.T) {
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		b, err := BindUnpreparedOwned(cql.Statement[cql.EmptyRecord, cql.EmptyRecord]{CQL: "DROP KEYSPACE IF EXISTS " + keyspace, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyRecord{})
+		b, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE IF EXISTS " + keyspace, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyParams{})
 		if err == nil {
 			defer b.Close()
 			_, err = Exec(cleanup, s, b, testOptions(*func() *gocql.OptionValues {

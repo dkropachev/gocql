@@ -52,7 +52,7 @@ func TestBatch_Errors(t *testing.T) {
 	// the batch itself rather than a preceding PREPARE operation.
 	inet, err := cql.ScalarType(cql.TypeInet)
 	require.NoError(t, err)
-	bound, err := BindUnpreparedOwned(cql.Statement[[]cql.Value, cql.EmptyRecord]{
+	bound, err := BindUnpreparedOwned(cql.Statement[[]cql.Value, cql.EmptyRow]{
 		CQL:    fmt.Sprintf(("SELECT * FROM " + fixtureKeyspace("") + ".%s WHERE id=2 AND val=?"), table),
 		Params: cql.DynamicParams, Rows: cql.NoRows,
 	}, cql.NewColumns(cql.ColumnSpec{Name: "val", Type: inet}), []cql.Value{cql.NullValue(inet)})
@@ -127,7 +127,7 @@ func TestBatch_SetKeyspace(t *testing.T) {
 	require.NoError(t, v2CreateTable(ctx, session, "CREATE TABLE IF NOT EXISTS "+keyspace+".batch_keyspace(id int, value text, PRIMARY KEY (id))"))
 	// Explicit prepare keyspace and execution keyspace must agree. Unqualified
 	// member CQL still exercises the v5 BATCH keyspace flag.
-	prepared, err := gocql.Prepare(ctx, session, cql.Statement[[]cql.Value, cql.EmptyRecord]{CQL: "INSERT INTO batch_keyspace(id, value) VALUES (?, ?)", Params: cql.DynamicParams, Rows: cql.NoRows}, gocql.PrepareOptions{Keyspace: keyspace})
+	prepared, err := gocql.Prepare(ctx, session, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: "INSERT INTO batch_keyspace(id, value) VALUES (?, ?)", Params: cql.DynamicParams, Rows: cql.NoRows}, gocql.PrepareOptions{Keyspace: keyspace})
 	require.NoError(t, err)
 	first, err := BindOwned(prepared, []cql.Value{cql.IntValue(1), codecTestMust(cql.TextValue("val1"))})
 	require.NoError(t, err)

@@ -30,7 +30,7 @@ import (
 // pass through reflected parameter binding or result destination discovery.
 func serializationExec[P any](s *gocql.Session, stmt string, encoder cql.ParamEncoder[P], value P) error {
 	ctx := context.Background()
-	p, err := gocql.Prepare(ctx, s, cql.Statement[P, cql.EmptyRecord]{CQL: stmt, Params: encoder, Rows: cql.NoRows}, gocql.PrepareOptions{})
+	p, err := gocql.Prepare(ctx, s, cql.Statement[P, cql.EmptyRow]{CQL: stmt, Params: encoder, Rows: cql.NoRows}, gocql.PrepareOptions{})
 	if err != nil {
 		return err
 	}

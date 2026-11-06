@@ -138,12 +138,12 @@ func run() (resultErr error) {
 		return fmt.Errorf("invalid owned namespace %q", namespace)
 	}
 	execContext := func(operation context.Context, text string) error {
-		b, err := gocql.NewUnpreparedQuery(s, cql.Statement[cql.EmptyRecord, cql.EmptyRecord]{CQL: text, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), gocql.Options{})
+		b, err := gocql.NewUnpreparedQuery(s, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: text, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), gocql.Options{})
 		if err != nil {
 			return err
 		}
 		defer b.Close()
-		err = b.Exec(operation, cql.EmptyRecord{})
+		err = b.Exec(operation, cql.EmptyParams{})
 		return err
 	}
 	exec := func(text string) error { return execContext(ctx, text) }
@@ -181,7 +181,7 @@ func run() (resultErr error) {
 	if err := exec("CREATE TABLE " + table + " (id int PRIMARY KEY,payload blob,pieces list<blob>)"); err != nil {
 		return err
 	}
-	insert, err := gocql.Prepare(ctx, s, cql.Statement[record, cql.EmptyRecord]{CQL: "INSERT INTO " + table + " (id,payload,pieces) VALUES (?,?,?)", Params: cql.Params(
+	insert, err := gocql.Prepare(ctx, s, cql.Statement[record, cql.EmptyRow]{CQL: "INSERT INTO " + table + " (id,payload,pieces) VALUES (?,?,?)", Params: cql.Params(
 		cql.Param("id", cql.Int32, func(v record) int32 { return v.ID }),
 		cql.Param("payload", cql.BytesEncoder, func(v record) []byte { return v.Payload }),
 		cql.Param("pieces", cql.ListEncoder(cql.BytesEncoder), func(v record) [][]byte { return v.Pieces }),
@@ -203,7 +203,7 @@ func run() (resultErr error) {
 			return err
 		}
 	}
-	prepared, err := gocql.Prepare(ctx, s, cql.Statement[cql.EmptyRecord, cql.DynamicRow]{CQL: "SELECT id,payload,pieces FROM " + table, Params: cql.NoParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
+	prepared, err := gocql.Prepare(ctx, s, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,payload,pieces FROM " + table, Params: cql.NoParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
 	if err != nil {
 		return err
 	}
@@ -226,7 +226,7 @@ func run() (resultErr error) {
 		return err
 	}
 	defer query.Close()
-	stream, err := query.Run(ctx, cql.EmptyRecord{})
+	stream, err := query.Run(ctx, cql.EmptyParams{})
 	if *incremental && cfg.Protocol < 5 && cfg.Compression != gocql.NoCompression {
 		var unsupported *cql.StreamCapabilityError
 		if !errors.As(err, &unsupported) {
@@ -241,7 +241,7 @@ func run() (resultErr error) {
 	defer stream.Close()
 	// One worker owns one query; overlapping use is rejected immediately.
 	blockedCtx, blockedCancel := context.WithTimeout(ctx, 20*time.Millisecond)
-	_, blockedErr := query.Run(blockedCtx, cql.EmptyRecord{})
+	_, blockedErr := query.Run(blockedCtx, cql.EmptyParams{})
 	blockedCancel()
 	if !errors.Is(blockedErr, gocql.ErrBusy) {
 		return fmt.Errorf("query admission: %v", blockedErr)

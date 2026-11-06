@@ -434,8 +434,6 @@ func UUIDFromBytes(a0 []byte) (UUID, error) { return cqltype.UUIDFromBytes(a0) }
 func UUIDFromTime(a0 time.Time) UUID        { return cqltype.UUIDFromTime(a0) }
 func UUIDValue(a0 UUID) Value               { return codec.UUIDValue(a0) }
 
-type EmptyRecord = codec.EmptyRecord
-
 const UnknownStatement = cqltype.UnknownStatement
 const Unset = cqltype.Unset
 
@@ -478,3 +476,9 @@ const (
 	UnloggedBatch = cqltype.UnloggedBatch
 	CounterBatch  = cqltype.CounterBatch
 )
+
+// EmptyParams is the input type of a statement without bind markers.
+type EmptyParams = codec.EmptyRecord
+
+// EmptyRow is the row type of a statement without result columns.
+type EmptyRow = codec.EmptyRecord

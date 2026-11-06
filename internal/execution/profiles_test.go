@@ -43,7 +43,7 @@ func TestV2RuntimeSafeRetryPreservesServerErrors(t *testing.T) {
 }
 func TestV2RuntimeStatementKeywords(t *testing.T) {
 	for _, stmt := range []string{"USE ks", " -- comment\n use ks", "/* comment */ USE ks"} {
-		if _, err := BindUnpreparedBorrowed(cql.Statement[cql.EmptyRecord, cql.EmptyRecord]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyRecord{}); !errors.Is(err, ErrUseStmt) {
+		if _, err := BindUnpreparedBorrowed(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyParams{}); !errors.Is(err, ErrUseStmt) {
 			t.Fatalf("USE accepted %q: %v", stmt, err)
 		}
 	}

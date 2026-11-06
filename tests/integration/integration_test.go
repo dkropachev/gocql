@@ -544,7 +544,7 @@ func TestCustomPayloadMessages(t *testing.T) {
 	}
 
 	// Unprepared INSERT retains the QUERY custom-payload path.
-	insert, err := BindUnpreparedOwned(cql.Statement[cql.EmptyRecord, cql.EmptyRecord]{CQL: fmt.Sprintf("INSERT INTO %s(id,value) VALUES(1, 1)", table), Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyRecord{})
+	insert, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,value) VALUES(1, 1)", table), Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.EmptyParams{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -867,8 +867,8 @@ func readV2ClientOptions(ctx context.Context, session *gocql.Session, stmt strin
 	if !ok {
 		return nil, fmt.Errorf("control connection does not support typed queries")
 	}
-	statement := cql.Statement[cql.EmptyRecord, cql.Mapping[cql.Text, cql.Text]]{CQL: stmt, Params: cql.NoParams, Rows: cql.OneColumn(cql.MapDecoder(cql.TextCodec, cql.TextCodec))}
-	rows, err := readV2SystemRows(ctx, conn, statement, cql.NewColumns(), cql.EmptyRecord{})
+	statement := cql.Statement[cql.EmptyParams, cql.Mapping[cql.Text, cql.Text]]{CQL: stmt, Params: cql.NoParams, Rows: cql.OneColumn(cql.MapDecoder(cql.TextCodec, cql.TextCodec))}
+	rows, err := readV2SystemRows(ctx, conn, statement, cql.NewColumns(), cql.EmptyParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -897,7 +897,7 @@ func queryV2ControlKey(ctx context.Context, session *gocql.Session) error {
 	if !ok {
 		return fmt.Errorf("control connection does not support typed queries")
 	}
-	statement := cql.Statement[cql.EmptyRecord, cql.Text]{CQL: "SELECT key FROM system.local WHERE key='local'", Params: cql.NoParams, Rows: cql.OneColumn(cql.TextCodec)}
-	_, err := readV2SystemRows(ctx, conn, statement, cql.NewColumns(), cql.EmptyRecord{})
+	statement := cql.Statement[cql.EmptyParams, cql.Text]{CQL: "SELECT key FROM system.local WHERE key='local'", Params: cql.NoParams, Rows: cql.OneColumn(cql.TextCodec)}
+	_, err := readV2SystemRows(ctx, conn, statement, cql.NewColumns(), cql.EmptyParams{})
 	return err
 }
