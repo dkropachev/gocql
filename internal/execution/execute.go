@@ -1144,7 +1144,15 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 	lease := request.InternalOwner.InternalWriterLease(request.InternalValues.Framed)
 	defer lease.Release()
 	wireRequest.Lease = lease
-	for repair := 0; repair < 2; repair++ {
+	// One UNPREPARED repair, or for a batch one per entry: the server names
+	// one missing statement per response, and its cache can have evicted
+	// several of a batch's statements.
+	repairs := 1
+	if request.batch != nil {
+		repairs = max(1, len(request.batch.entries))
+	}
+	var repaired []byte
+	for repair := 0; repair <= repairs; repair++ {
 		observed := source.observe()
 		if dest := request.responseDest; dest != nil && prepared != nil {
 			// The parser returns these columns for equal result metadata, so
@@ -1155,7 +1163,8 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		if len(wireRequest.PreparedID) > 0 && wireRequest.Batch == nil {
 			implCluster.InternalSessionApplyTypedFeedbackStamped(s.Session, response, request.InternalRouting, request.tabletFeedback, conn.InternalFramers.InternalDefaults)
 		}
-		if unprepared := unpreparedError(executeErr); unprepared != nil && repair == 0 {
+		if unprepared := unpreparedError(executeErr); unprepared != nil && repair < repairs && !bytes.Equal(unprepared.StatementId, repaired) {
+			repaired = unprepared.StatementId
 			if response != nil {
 				response.Owner.Release()
 			}

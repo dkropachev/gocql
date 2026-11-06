@@ -18,6 +18,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
 func batchTestQuery(t testing.TB, s *implCluster.Session) *Query[[]byte, EmptyRecord] {
@@ -348,5 +349,74 @@ func TestBatchAttemptReusesWireBatch(t *testing.T) {
 	state.releaseAttempt(first)
 	if next, _ := rt.prepareBatchAttempt(ctx, conns[0], state, nil); next != &state.attempt {
 		t.Fatal("released wire batch not reused")
+	}
+}
+
+// The server names one missing statement per UNPREPARED response, and under
+// prepared cache pressure it can have evicted several of a batch's
+// statements. The batch is repaired once per missing statement.
+func TestBatchRepairsEveryEvictedStatement(t *testing.T) {
+	s, _, peers := runtimeTestSession(t, 1)
+	implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
+	typ := codecTestMust(cqltype.ScalarType(cqltype.TypeBlob))
+	columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: typ})
+	query := func(id string) *Query[[]byte, EmptyRecord] {
+		state, hp := preparedState(t, s, cqltype.NewColumns())
+		hp.InternalId = []byte(id)
+		state.InternalStatement = "INSERT INTO ks.tbl(value) VALUES(?) -- " + id
+		state.InternalParameters = columns
+		state.InternalInfo.PartitionKeyIndexes = []int{0}
+		handle := new(Prepared[[]byte, EmptyRecord])
+		PreparedData(handle).InternalState = state
+		PreparedData(handle).InternalParams = codecTestMust(codec.OneParam(codec.BytesEncoder).Compile(columns))
+		PreparedData(handle).InternalRows = codec.EmptyRowDecoder
+		PreparedData(handle).InternalPlans = &InternalResultPlanCache[EmptyRecord]{}
+		q := codecTestMust(NewQuery(handle, OptionValues{}))
+		t.Cleanup(q.Close)
+		return q
+	}
+	first, second := query("id1"), query("id2")
+	var batch Batch
+	if err := first.AddTo(&batch, []byte("a")); err != nil {
+		t.Fatal(err)
+	}
+	if err := second.AddTo(&batch, []byte("b")); err != nil {
+		t.Fatal(err)
+	}
+	serverDone := make(chan error, 1)
+	go func() {
+		// BATCH -> UNPREPARED id1, PREPARE, BATCH -> UNPREPARED id2, PREPARE, BATCH -> void.
+		responses := []func(stream int) []byte{
+			func(stream int) []byte { return errorResponse(t, stream, protocol.ErrCodeUnprepared, []byte("id1")) },
+			func(stream int) []byte {
+				return typedTestResponse(t, 4, stream, preparedBody([]byte("id1"), columns, cqltype.NewColumns(), 0))
+			},
+			func(stream int) []byte { return errorResponse(t, stream, protocol.ErrCodeUnprepared, []byte("id2")) },
+			func(stream int) []byte {
+				return typedTestResponse(t, 4, stream, preparedBody([]byte("id2"), columns, cqltype.NewColumns(), 0))
+			},
+			func(stream int) []byte {
+				return typedTestResponse(t, 4, stream, binary.BigEndian.AppendUint32(nil, frm.ResultKindVoid))
+			},
+		}
+		for _, respond := range responses {
+			_, stream, _, err := readRequest(peers[0])
+			if err == nil {
+				_, err = peers[0].Write(respond(stream))
+			}
+			if err != nil {
+				serverDone <- err
+				return
+			}
+		}
+		serverDone <- nil
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := first.ExecBatch(ctx, LoggedBatch, &batch, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-serverDone; err != nil {
+		t.Fatal(err)
 	}
 }
