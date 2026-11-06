@@ -149,7 +149,7 @@ func TestHostFilterDiscovery(t *testing.T) {
 	session := createV2SessionFromConfig(cluster, t, false)
 	defer session.Close()
 
-	plan := rr.Plan(RoutingInfo{}, session.Metadata())
+	plan := NewQueryPlan(rr, RoutingInfo{}, session.Metadata())
 	targets := make(map[UUID]bool)
 	for target, ok := plan.Next(); ok; target, ok = plan.Next() {
 		targets[target.HostID()] = true
@@ -188,7 +188,7 @@ func TestHostFilterInitial(t *testing.T) {
 	session := createV2SessionFromConfig(cluster, t, false)
 	defer session.Close()
 
-	plan := rr.Plan(RoutingInfo{}, session.Metadata())
+	plan := NewQueryPlan(rr, RoutingInfo{}, session.Metadata())
 	targets := make(map[UUID]bool)
 	for target, ok := plan.Next(); ok; target, ok = plan.Next() {
 		targets[target.HostID()] = true

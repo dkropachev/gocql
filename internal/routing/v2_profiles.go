@@ -19,9 +19,23 @@ type Target = model.Target
 // QueryPlan returns the routes a request tries, in order, until one of
 // them has a connection.
 type QueryPlan interface{ Next() (Route, bool) }
+
+// RoutingPolicy chooses the routes of a request in two steps, optimized for
+// the happy path where the first route serves it:
+//
+//   - Pick returns the first route, cheaply: without building a plan and
+//     without allocating. It returns false when it has no cheap answer, and
+//     the request then starts with Fallback's routes.
+//   - Fallback returns every route the request may take, in order. The
+//     driver calls it only when the picked route fails or Pick returned
+//     false, and skips the picked route if Fallback returns it again.
+//
+// Observe receives the outcome of every attempt. NewPlan combines Pick and
+// Fallback into the plan a request follows.
 type RoutingPolicy interface {
 	Validate(*MetadataSnapshot) error
-	Plan(RoutingInfo, *MetadataSnapshot) QueryPlan
+	Pick(RoutingInfo, *MetadataSnapshot) (Route, bool)
+	Fallback(RoutingInfo, *MetadataSnapshot) QueryPlan
 	Observe(AttemptEvent)
 }
 type RetryDecision struct {

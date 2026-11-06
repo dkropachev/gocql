@@ -198,7 +198,16 @@ type v2UnavailableHostsRouting struct {
 	oneHost bool
 }
 
-func (p v2UnavailableHostsRouting) Plan(info RoutingInfo, metadata *MetadataSnapshot) QueryPlan {
+func (p v2UnavailableHostsRouting) Pick(info RoutingInfo, metadata *MetadataSnapshot) (Route, bool) {
+	return p.RoutingPolicy.Pick(info, p.unavailable(metadata))
+}
+
+func (p v2UnavailableHostsRouting) Fallback(info RoutingInfo, metadata *MetadataSnapshot) QueryPlan {
+	return p.RoutingPolicy.Fallback(info, p.unavailable(metadata))
+}
+
+// unavailable returns metadata with every host down.
+func (p v2UnavailableHostsRouting) unavailable(metadata *MetadataSnapshot) *MetadataSnapshot {
 	snapshot := *metadata
 	routing.SnapshotData(&snapshot).InternalHostIndex = nil
 	routing. // rebuild indices after test-only membership changes
@@ -209,7 +218,7 @@ func (p v2UnavailableHostsRouting) Plan(info RoutingInfo, metadata *MetadataSnap
 	if p.oneHost && len(routing.SnapshotData(&snapshot).InternalHosts) > 1 {
 		routing.SnapshotData(&snapshot).InternalHosts = routing.SnapshotData(&snapshot).InternalHosts[:1]
 	}
-	return p.RoutingPolicy.Plan(info, &snapshot)
+	return &snapshot
 }
 
 // Keep the all-hosts-down disruption test serialized as in the original suite.

@@ -69,14 +69,42 @@ func (p *hostPoolHostPolicy) setHosts(hosts []gocql.HostSnapshot, routes []gocql
 	}
 	p.hp.SetHosts(addresses)
 }
-func (p *hostPoolHostPolicy) Plan(info gocql.RoutingInfo, m *gocql.MetadataSnapshot) gocql.QueryPlan {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+
+// refresh takes m's hosts when they changed. p.mu must be held.
+func (p *hostPoolHostPolicy) refresh(m *gocql.MetadataSnapshot) {
 	if m != nil && (!p.initialized || p.generation != m.Generation()) {
 		p.setHosts(m.Hosts(), m.HostRoutes())
 		p.generation = m.Generation()
 		p.initialized = true
 	}
+}
+
+// Pick routes to the host go-hostpool chooses, when the request may go there.
+func (p *hostPoolHostPolicy) Pick(info gocql.RoutingInfo, m *gocql.MetadataSnapshot) (gocql.Route, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.refresh(m)
+	if len(p.hosts) == 0 {
+		return gocql.Route{}, false
+	}
+	response := p.hp.Get()
+	h, ok := p.byAddress[response.Host()]
+	if !ok || info.HostID.Set && info.HostID.Value != h.ID {
+		return gocql.Route{}, false
+	}
+	p.responses[h.ID] = response
+	r := p.routes[h.ID]
+	if info.ShardID.Set {
+		r = r.WithShard(int32(info.ShardID.Value))
+	}
+	return r, true
+}
+
+// Fallback returns go-hostpool's choices, then every other host in order.
+func (p *hostPoolHostPolicy) Fallback(info gocql.RoutingInfo, m *gocql.MetadataSnapshot) gocql.QueryPlan {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.refresh(m)
 	return &hostPoolPlan{policy: p, hosts: p.hosts, byAddress: p.byAddress, routes: p.routes, info: info, seen: make(map[gocql.UUID]bool)}
 }
 func (p *hostPoolHostPolicy) Observe(event gocql.AttemptEvent) {

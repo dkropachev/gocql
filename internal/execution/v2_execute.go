@@ -804,7 +804,7 @@ func (s *InternalSessionRuntime) pagePlan(request *InternalExecutionRequest, met
 		}
 		return builtin.InternalPlanWith(request.InternalRouting, metadata, storage, tablet), nil
 	}
-	return policy.Plan(request.InternalRouting, metadata), nil
+	return routing.NewPlan(policy, request.InternalRouting, metadata), nil
 }
 
 // pinnedUsable reports whether a continuation page may reuse conn.

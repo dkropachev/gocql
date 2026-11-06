@@ -63,7 +63,7 @@ func TestStep15HostWorkCounts(t *testing.T) {
 					policy.(*routingPolicy).InternalDecisions.Store(&routingDecisions{InternalSlow: map[UUID]time.Time{storage.InternalHosts[2].ID: time.Now().Add(time.Hour)}})
 				}
 				routing.ResetPerfCounters()
-				plan := policy.Plan(info, m)
+				plan := NewQueryPlan(policy, info, m)
 				target, ok := plan.Next()
 				if !ok {
 					t.Fatal("no target")

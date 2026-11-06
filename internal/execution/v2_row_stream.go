@@ -518,7 +518,7 @@ func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
 		if builtin, ok := policy.(*implRouting.InternalRoutingPolicy); ok {
 			plan = builtin.InternalPlanWith(request.InternalRouting, metadata, new(implRouting.InternalLazyRoutingPlan), &tablet)
 		} else {
-			plan = policy.Plan(request.InternalRouting, metadata)
+			plan = implRouting.NewPlan(policy, request.InternalRouting, metadata)
 		}
 	}
 	pagectx := s.privateStorage.InternalCtx

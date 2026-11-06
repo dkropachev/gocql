@@ -249,7 +249,7 @@ func TestStep06PlacementFencesSharingAndOverflow(t *testing.T) {
 	}
 	beforeEpoch := s.Metadata()
 	oldStamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, beforeEpoch)
-	lazy := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true})).Plan(RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Value: 20, Set: true}}, beforeEpoch)
+	lazy := NewQueryPlan(codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true})), RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Value: 20, Set: true}}, beforeEpoch)
 
 	p.InternalMu.Lock()
 	p.InternalBumpTableRevisionLocked(metadataTable{InternalKeyspace: "ks", InternalTable: "table"})
@@ -329,7 +329,7 @@ func TestStep06LeaderLocalityLWTAndFallback(t *testing.T) {
 	info := RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Value: 1, Set: true}, Consistency: LocalQuorum, Conditional: true}
 	policy := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, LeaderAware: true, Datacenter: "a", Rack: "r1", AllowRemote: true, ShuffleReplicas: true}))
 	for i := 0; i < 10; i++ {
-		plan := policy.Plan(info, m)
+		plan := NewQueryPlan(policy, info, m)
 		first, ok := nextTarget(plan)
 		if !ok || first.HostID != routing.SnapshotData(m).InternalHosts[2].ID || !first.StrictShard || first.ShardID.Value != 1 {
 			t.Fatal("eligible remote leader was not strict first", first)
@@ -354,26 +354,26 @@ func TestStep06LeaderLocalityLWTAndFallback(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			test.change()
 			defer test.restore()
-			first, _ := nextTarget(policy.Plan(info, m))
+			first, _ := nextTarget(NewQueryPlan(policy, info, m))
 			if first.HostID[15] != test.want {
 				t.Fatal(first)
 			}
 		})
 	}
 	local := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, LeaderAware: true, Datacenter: "a", Rack: "r1"}))
-	if ids := v2PlanIDs(local.Plan(info, m)); bytes.Contains(ids, []byte{3}) {
+	if ids := v2PlanIDs(NewQueryPlan(local, info, m)); bytes.Contains(ids, []byte{3}) {
 		t.Fatal("excluded remote leader admitted", ids)
 	}
 	// Explicit latency penalties apply to leaders and LWT without admitting hosts.
 	p := policy.(*routingPolicy)
 	p.InternalDecisions.Store(&routingDecisions{InternalSlow: map[UUID]time.Time{routing.SnapshotData(m).InternalHosts[2].ID: time.Now().Add(time.Hour)}})
-	if got := v2PlanIDs(p.Plan(info, m)); !bytes.Equal(got, []byte{1, 2, 4, 3}) {
+	if got := v2PlanIDs(NewQueryPlan(p, info, m)); !bytes.Equal(got, []byte{1, 2, 4, 3}) {
 		t.Fatal("penalized leader order", got)
 	}
 	// Preserve distinct explicit shards, but suppress host-only fallback duplicates.
 	p.InternalDecisions.Store(nil)
 	set(hTarget(1, 0), hTarget(1, 1), hTarget(2, 2))
-	ids := v2PlanIDs(p.Plan(info, m))
+	ids := v2PlanIDs(NewQueryPlan(p, info, m))
 	if !bytes.Equal(ids, []byte{1, 1, 2, 4, 3}) {
 		t.Fatal("shard destinations deduplicated by host", ids)
 	}
@@ -389,7 +389,7 @@ func TestStep06ConcurrentPlansAndFeedback(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < 200; j++ {
 				m := s.Metadata()
-				p := policy.Plan(info, m)
+				p := NewQueryPlan(policy, info, m)
 				_ = v2PlanIDs(p)
 				_ = routing.InternalMetadataSnapshotTabletVersionBlock(m, info)
 			}
@@ -565,7 +565,7 @@ func TestStep06AllDisconnectedAndMissingFollowers(t *testing.T) {
 		routing.SnapshotData(m).InternalHosts[i].Connected = false
 	}
 	policy := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, Datacenter: "a"}))
-	if ids := v2PlanIDs(policy.Plan(RoutingInfo{Kind: OrdinaryStatement}, m)); !bytes.Equal(ids, []byte{2, 4, 1}) {
+	if ids := v2PlanIDs(NewQueryPlan(policy, RoutingInfo{Kind: OrdinaryStatement}, m)); !bytes.Equal(ids, []byte{2, 4, 1}) {
 		t.Fatal("enabled disconnected fallback", ids)
 	}
 	m = v2TestMetadata()
@@ -574,7 +574,7 @@ func TestStep06AllDisconnectedAndMissingFollowers(t *testing.T) {
 	r, _ := updateTabletRange(nil, h)
 	routing.SnapshotData(m).InternalPlacements = placementPut(routing.SnapshotData(m).InternalPlacements, metadataTable{InternalKeyspace: "ks", InternalTable: "table"}, tabletPlacement{InternalRanges: r}, comparePlacementTable)
 	leader := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, LeaderAware: true}))
-	first, _ := nextTarget(leader.Plan(RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Set: true, Value: 1}, Consistency: Quorum}, m))
+	first, _ := nextTarget(NewQueryPlan(leader, RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Set: true, Value: 1}, Consistency: Quorum}, m))
 	if first.HostID[15] != 2 {
 		t.Fatal("missing follower hid resolved leader")
 	}

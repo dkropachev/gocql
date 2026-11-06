@@ -120,7 +120,7 @@ func TestV2RoutingOrderAndIndependentPlans(t *testing.T) {
 		t.Fatal(err)
 	}
 	info := RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Set: true, Value: 1}, Conditional: true}
-	a, b := policy.Plan(info, m), policy.Plan(info, m)
+	a, b := NewQueryPlan(policy, info, m), NewQueryPlan(policy, info, m)
 	want := []byte{1, 2, 3, 4}
 	if got := v2PlanIDs(a); !bytes.Equal(got, want) {
 		t.Fatalf("plan=%v want %v", got, want)
@@ -131,12 +131,12 @@ func TestV2RoutingOrderAndIndependentPlans(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		info.Conditional = false
 		info.Consistency = Serial
-		if got := v2PlanIDs(policy.Plan(info, m)); !bytes.Equal(got, want) {
+		if got := v2PlanIDs(NewQueryPlan(policy, info, m)); !bytes.Equal(got, want) {
 			t.Fatal("SERIAL order changed", got)
 		}
 	}
 	routing.SnapshotData(m).InternalHosts[0].Enabled = false
-	if got := v2PlanIDs(policy.Plan(info, m)); bytes.Contains(got, []byte{1}) {
+	if got := v2PlanIDs(NewQueryPlan(policy, info, m)); bytes.Contains(got, []byte{1}) {
 		t.Fatal("disabled host in plan")
 	}
 	bad, _ := NewRoutingPolicy(RoutingOptions{Datacenter: "missing"})
@@ -154,11 +154,11 @@ func TestV2RoutingTabletMissAndStrictShard(t *testing.T) {
 	if err := single.Validate(m); err == nil {
 		t.Fatal("invalid strict shard accepted")
 	}
-	if _, ok := nextTarget(single.Plan(RoutingInfo{}, m)); ok {
+	if _, ok := nextTarget(NewQueryPlan(single, RoutingInfo{}, m)); ok {
 		t.Fatal("strict shard fell back")
 	}
 	single = SingleTargetRouting(Target{HostID: routing.SnapshotData(m).InternalHosts[0].ID, ShardID: Option[uint32]{Value: 9, Set: true}}, false)
-	target, ok := nextTarget(single.Plan(RoutingInfo{}, m))
+	target, ok := nextTarget(NewQueryPlan(single, RoutingInfo{}, m))
 	if !ok || target.ShardID.Set {
 		t.Fatal("hint fallback failed", target, ok)
 	}
@@ -188,7 +188,7 @@ func TestV2RoutingPinnedTargetsRemainIndependent(t *testing.T) {
 	for i, test := range tests {
 		info.HostID = Option[UUID]{Value: UUID{15: test.host}, Set: true}
 		info.ShardID = test.shard
-		plans[i] = policy.Plan(info, m)
+		plans[i] = NewQueryPlan(policy, info, m)
 	}
 	// Consume in reverse after all plans have been created, including different
 	// shards on the same host. Each plan must retain its own exact destination.
@@ -216,9 +216,158 @@ func TestV2LatencyRoutingDeprioritizesAndRetries(t *testing.T) {
 		}
 		p.Observe(AttemptEvent{Target: Target{HostID: h.ID}, Started: time.Now(), Latency: latency})
 	}
-	_ = p.Plan(RoutingInfo{}, m)
-	ids := v2PlanIDs(p.Plan(RoutingInfo{}, m))
+	_ = NewQueryPlan(p, RoutingInfo{}, m)
+	ids := v2PlanIDs(NewQueryPlan(p, RoutingInfo{}, m))
 	if ids[len(ids)-1] != 1 {
 		t.Fatal("slow host was not deferred", ids)
+	}
+}
+
+// planHosts is the last byte of each host a plan routes to, in order.
+func planHosts(plan QueryPlan) []byte {
+	var hosts []byte
+	for {
+		target, ok := nextTarget(plan)
+		if !ok {
+			return hosts
+		}
+		hosts = append(hosts, target.HostID[15])
+	}
+}
+
+func TestV2RoutingPickedFirstRoute(t *testing.T) {
+	m := v2TestMetadata()
+	info := RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Value: 1, Set: true}, Consistency: Quorum, Kind: routing.OrdinaryStatement}
+	t.Run("rack replica first", func(t *testing.T) {
+		p := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, Datacenter: "a", Rack: "r1", AllowRemote: true, ShuffleReplicas: true})).(*routingPolicy)
+		var storage routing.InternalLazyRoutingPlan
+		for range 200 {
+			hosts := planHosts(p.InternalPlanInto(info, m, &storage))
+			if len(hosts) != 4 || hosts[0] != 1 || hosts[1] != 2 || hosts[2] != 3 || hosts[3] != 4 {
+				t.Fatalf("plan %v, want [1 2 3 4]", hosts)
+			}
+		}
+	})
+	t.Run("uniform in datacenter", func(t *testing.T) {
+		p := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, Datacenter: "a", ShuffleReplicas: true})).(*routingPolicy)
+		var storage routing.InternalLazyRoutingPlan
+		var first [5]int
+		const plans = 4000
+		for range plans {
+			hosts := planHosts(p.InternalPlanInto(info, m, &storage))
+			if len(hosts) != 3 || hosts[0]+hosts[1] != 3 || hosts[0] == hosts[1] || hosts[2] != 4 {
+				t.Fatalf("plan %v, want replicas 1 and 2 in either order, then 4", hosts)
+			}
+			first[hosts[0]]++
+		}
+		if first[1] < plans*4/10 || first[2] < plans*4/10 {
+			t.Fatalf("first replicas %v are not uniform", first)
+		}
+	})
+	t.Run("down replica is skipped", func(t *testing.T) {
+		m := v2TestMetadata()
+		routing.SnapshotData(m).InternalHosts[0].Up = false
+		p := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, Datacenter: "a", Rack: "r1", ShuffleReplicas: true})).(*routingPolicy)
+		var storage routing.InternalLazyRoutingPlan
+		for range 200 {
+			hosts := planHosts(p.InternalPlanInto(info, m, &storage))
+			if len(hosts) != 3 || hosts[0] != 2 || hosts[1] != 4 || hosts[2] != 1 {
+				t.Fatalf("plan %v, want [2 4 1]", hosts)
+			}
+		}
+	})
+}
+
+// pickFallbackPolicy picks pick, when set, and falls back to fallback,
+// counting Fallback calls.
+type pickFallbackPolicy struct {
+	pick      Option[Route]
+	fallback  []Route
+	fallbacks int
+}
+
+func (p *pickFallbackPolicy) Validate(*MetadataSnapshot) error { return nil }
+func (p *pickFallbackPolicy) Pick(RoutingInfo, *MetadataSnapshot) (Route, bool) {
+	return p.pick.Value, p.pick.Set
+}
+func (p *pickFallbackPolicy) Fallback(RoutingInfo, *MetadataSnapshot) QueryPlan {
+	p.fallbacks++
+	return &routeList{routes: p.fallback}
+}
+func (p *pickFallbackPolicy) Observe(AttemptEvent) {}
+
+type routeList struct{ routes []Route }
+
+func (l *routeList) Next() (Route, bool) {
+	if len(l.routes) == 0 {
+		return Route{}, false
+	}
+	r := l.routes[0]
+	l.routes = l.routes[1:]
+	return r, true
+}
+
+func TestV2QueryPlanPicksThenFallsBack(t *testing.T) {
+	m := v2TestMetadata()
+	hosts := m.HostRoutes()
+	t.Run("pick first, fallback on demand", func(t *testing.T) {
+		p := &pickFallbackPolicy{pick: Option[Route]{Value: hosts[1], Set: true}, fallback: []Route{hosts[0], hosts[1], hosts[2], hosts[1]}}
+		plan := NewQueryPlan(p, RoutingInfo{}, m)
+		if r, ok := plan.Next(); !ok || r != hosts[1] || p.fallbacks != 0 {
+			t.Fatalf("first route %v %v after %d fallbacks, want the pick and no fallback", r.HostID(), ok, p.fallbacks)
+		}
+		var got []Route
+		for r, ok := plan.Next(); ok; r, ok = plan.Next() {
+			got = append(got, r)
+		}
+		if p.fallbacks != 1 || len(got) != 2 || got[0] != hosts[0] || got[1] != hosts[2] {
+			t.Fatalf("fallback routes %v after %d fallbacks, want hosts 0 and 2 without the pick", got, p.fallbacks)
+		}
+	})
+	t.Run("no pick", func(t *testing.T) {
+		p := &pickFallbackPolicy{fallback: []Route{hosts[2], hosts[0]}}
+		plan := NewQueryPlan(p, RoutingInfo{}, m)
+		a, _ := plan.Next()
+		b, _ := plan.Next()
+		if _, ok := plan.Next(); ok || a != hosts[2] || b != hosts[0] || p.fallbacks != 1 {
+			t.Fatalf("plan %v %v, want the fallback routes in order", a.HostID(), b.HostID())
+		}
+	})
+	t.Run("shard of the picked host", func(t *testing.T) {
+		p := &pickFallbackPolicy{pick: Option[Route]{Value: hosts[0].WithShard(1), Set: true}, fallback: []Route{hosts[0].WithShard(1), hosts[0]}}
+		plan := NewQueryPlan(p, RoutingInfo{}, m)
+		plan.Next()
+		if r, ok := plan.Next(); !ok || r != hosts[0] {
+			t.Fatalf("second route %v shard %d, want any shard of the picked host", r.HostID(), r.Shard)
+		}
+	})
+}
+
+func TestV2BuiltinPickAndFallback(t *testing.T) {
+	m := v2TestMetadata()
+	info := RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Value: 1, Set: true}, Consistency: Quorum, Kind: routing.OrdinaryStatement}
+	p := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, Datacenter: "a", Rack: "r1", ShuffleReplicas: true}))
+	picked := 0
+	for range 200 {
+		if r, ok := p.Pick(info, m); ok {
+			picked++
+			if r.HostID()[15] != 1 {
+				t.Fatalf("picked host %v, want the local-rack replica 1", r.HostID())
+			}
+		}
+	}
+	if picked == 0 {
+		t.Fatal("Pick never routed to the local-rack replica")
+	}
+	if allocs := testing.AllocsPerRun(100, func() { p.Pick(info, m) }); allocs != 0 {
+		t.Fatalf("Pick allocates %v times", allocs)
+	}
+	if hosts := planHosts(p.Fallback(info, m)); len(hosts) != 3 || hosts[0] != 1 || hosts[1] != 2 || hosts[2] != 4 {
+		t.Fatalf("fallback %v, want [1 2 4]", hosts)
+	}
+	conditional := info
+	conditional.Conditional = true
+	if _, ok := p.Pick(conditional, m); ok {
+		t.Fatal("Pick routed a conditional request, which keeps replica order")
 	}
 }

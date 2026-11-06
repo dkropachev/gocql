@@ -86,7 +86,7 @@ func TestCompactPermutationBoundariesAndOrder(t *testing.T) {
 					info.Consistency = consistency
 					policy := &InternalRoutingPolicy{InternalOptions: RoutingOptions{TokenAware: true}, seed: seed}
 					replicas := slices.Clone(SnapshotData(m).InternalRanges["ks"][0].Replicas)
-					plan := policy.Plan(info, m).(*InternalLazyRoutingPlan)
+					plan := NewPlan(policy, info, m).(*InternalLazyRoutingPlan)
 					if (plan.permutation != nil) != (n > 16) {
 						t.Fatal("wrong permutation storage mode", n)
 					}
@@ -147,7 +147,7 @@ func TestCompactPermutationLocalityLeaderLatencyAndFallback(t *testing.T) {
 							policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[UUID]time.Time{hosts[2].ID: time.Now().Add(time.Hour)}})
 						}
 						info.Conditional = true
-						got := compactDrain(t, policy.Plan(info, m), len(hosts)+n)
+						got := compactDrain(t, NewPlan(policy, info, m), len(hosts)+n)
 						want := []Target{target(0, 0), target(0, 1), target(1, 1)}
 						if remote && !slow && !leader {
 							want = append(want, target(2, 0))
@@ -192,7 +192,7 @@ func TestCompactPermutationPlacementInvalidation(t *testing.T) {
 				policy := &InternalRoutingPolicy{InternalOptions: RoutingOptions{TokenAware: true}}
 				// A second pass must also remain clear of stale inline and int indexes.
 				policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[UUID]time.Time{SnapshotData(m).InternalHosts[0].ID: time.Now().Add(time.Hour)}})
-				plan := policy.Plan(info, m).(*InternalLazyRoutingPlan)
+				plan := NewPlan(policy, info, m).(*InternalLazyRoutingPlan)
 				seen := make(map[UUID]bool)
 				if consumed != 0 {
 					target, ok := InternalNextTarget(plan)
@@ -232,7 +232,7 @@ func TestCompactPermutationConcurrentIndependentPlans(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for range 4 {
-					plan := policy.Plan(info, m)
+					plan := NewPlan(policy, info, m)
 					seen := make(map[UUID]bool)
 					for _, target := range compactDrain(t, plan, len(SnapshotData(m).InternalHosts)) {
 						if seen[target.HostID] {

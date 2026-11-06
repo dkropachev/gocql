@@ -474,7 +474,7 @@ func TestStep17LatencyLargeRetryWholePlan(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			target, ok := nextTarget(policy.Plan(info, metadata))
+			target, ok := nextTarget(NewQueryPlan(policy, info, metadata))
 			if !ok {
 				t.Error("missing target")
 			}

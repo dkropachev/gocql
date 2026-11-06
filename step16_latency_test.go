@@ -26,7 +26,7 @@ func TestStep16LatencyProbeReservation(t *testing.T) {
 	policy.InternalDecisions.Store(&routing.InternalRoutingDecisions{InternalSlow: map[UUID]time.Time{slow: time.Now().Add(-time.Minute)}})
 	info := RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Set: true}, Kind: OrdinaryStatement}
 	// Constructing an abandoned plan must not reserve a probe.
-	_ = policy.Plan(info, metadata)
+	_ = NewQueryPlan(policy, info, metadata)
 	start := make(chan struct{})
 	var group sync.WaitGroup
 	var probes atomic.Int32
@@ -35,7 +35,7 @@ func TestStep16LatencyProbeReservation(t *testing.T) {
 		go func() {
 			defer group.Done()
 			<-start
-			target, ok := nextTarget(policy.Plan(info, metadata))
+			target, ok := nextTarget(NewQueryPlan(policy, info, metadata))
 			if !ok {
 				t.Error("missing target")
 				return
@@ -54,7 +54,7 @@ func TestStep16LatencyProbeReservation(t *testing.T) {
 	// Advancing the plan clock avoids a timing-dependent minute-long test.
 	future := time.Now().Add(2 * time.Minute)
 	for attempt := 0; attempt < 2; attempt++ {
-		plan := policy.Plan(info, metadata).(*lazyRoutingPlan)
+		plan := NewQueryPlan(policy, info, metadata).(*lazyRoutingPlan)
 		plan.InternalNow = future
 		target, ok := nextTarget(plan)
 		if !ok || (target.HostID == slow) != (attempt == 0) {
@@ -64,7 +64,7 @@ func TestStep16LatencyProbeReservation(t *testing.T) {
 	// A completed probe restarts its retry interval even before the decision
 	// updater publishes again; sharing a policy shares the reservation state.
 	policy.Observe(AttemptEvent{Target: Target{HostID: slow}, Started: future, Latency: 10 * time.Millisecond})
-	plan := policy.Plan(info, metadata).(*lazyRoutingPlan)
+	plan := NewQueryPlan(policy, info, metadata).(*lazyRoutingPlan)
 	plan.InternalNow = future.Add(20 * time.Millisecond)
 	if target, ok := nextTarget(plan); !ok || target.HostID == slow {
 		t.Fatal("completed probe did not restart exclusion", target, ok)

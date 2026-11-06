@@ -32,7 +32,7 @@ func TestHostPolicy_HostPool(t *testing.T) {
 	ids := []gocql.UUID{gocql.ParseUUIDMust("a0000000-0000-0000-0000-000000000000"), gocql.ParseUUIDMust("a0000000-0000-0000-0000-000000000001")}
 	hosts := []gocql.HostSnapshot{{ID: ids[0], Address: netip.MustParseAddrPort("10.0.0.1:9042"), Enabled: true, Up: true}, {ID: ids[1], Address: netip.MustParseAddrPort("10.0.0.2:9042"), Enabled: true, Up: true}}
 	p.setHosts(hosts, []gocql.Route{routing.InternalRouteOf(gocql.Target{HostID: ids[0]}), routing.InternalRouteOf(gocql.Target{HostID: ids[1]})})
-	plan := p.Plan(gocql.RoutingInfo{}, nil)
+	plan := gocql.NewQueryPlan(p, gocql.RoutingInfo{}, nil)
 	a, ok := plan.Next()
 	if !ok || a.HostID() != ids[0] {
 		t.Fatalf("first host: %+v %t", a, ok)
@@ -46,12 +46,12 @@ func TestHostPolicy_HostPool(t *testing.T) {
 	if _, ok := plan.Next(); ok {
 		t.Fatal("routing plan repeated a host")
 	}
-	next := p.Plan(gocql.RoutingInfo{}, nil)
+	next := gocql.NewQueryPlan(p, gocql.RoutingInfo{}, nil)
 	a, ok = next.Next()
 	if !ok || a.HostID() != ids[0] {
 		t.Fatalf("healthy host: %+v %t", a, ok)
 	}
-	pinned := p.Plan(gocql.RoutingInfo{HostID: gocql.Option[gocql.UUID]{Set: true, Value: ids[1]}, ShardID: gocql.Option[uint32]{Set: true, Value: 2}}, nil)
+	pinned := gocql.NewQueryPlan(p, gocql.RoutingInfo{HostID: gocql.Option[gocql.UUID]{Set: true, Value: ids[1]}, ShardID: gocql.Option[uint32]{Set: true, Value: 2}}, nil)
 	target, ok := pinned.Next()
 	if !ok || target.HostID() != ids[1] || target.Shard != 2 {
 		t.Fatalf("strict target: %+v %t", target, ok)

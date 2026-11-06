@@ -398,10 +398,90 @@ type InternalLazyRoutingPlan struct {
 	rotate bool
 	// strict plans route to a host's shard only: no fallback to any shard.
 	strict bool
+	// picking plans first pick a random preferred replica; unprepared
+	// plans build the replica permutation and fallback groups when Next
+	// first needs them.
+	picking, unprepared bool
+	// conditional plans keep replica order and do not rotate fallbacks.
+	conditional bool
 }
 
-func (p *InternalRoutingPolicy) Plan(info RoutingInfo, m *MetadataSnapshot) QueryPlan {
-	return p.InternalPlanInto(info, m, new(InternalLazyRoutingPlan))
+// Pick routes to a random replica of info's token that is routable and in
+// the preferred tier: the local rack when the policy has one, else the
+// local datacenter. Plans that need a leader, avoid a slow
+// host, keep replica order or do not shuffle replicas are not picked.
+func (p *InternalRoutingPolicy) Pick(info RoutingInfo, m *MetadataSnapshot) (Route, bool) {
+	o := &p.InternalOptions
+	if m == nil || info.HostID.Set || !o.ShuffleReplicas || !o.TokenAware || !info.Token.Set || info.Keyspace == "" || info.Table == "" {
+		return Route{}, false
+	}
+	if info.Conditional || info.Kind != OrdinaryStatement || info.Consistency == Serial || info.Consistency == LocalSerial {
+		return Route{}, false
+	}
+	if d := p.InternalDecisions.Load(); d != nil && len(d.InternalSlow) > 0 {
+		return Route{}, false
+	}
+	lookup := InternalLookupTablet(m, info)
+	replicas, _ := m.lookupReplicas(&lookup, info.Keyspace, info.Table, info.Token.Value)
+	if len(replicas) < 2 || len(replicas) > smallReplicas || o.LeaderAware && p.leader(info, m, &lookup).Set {
+		return Route{}, false
+	}
+	x := m.routingIndex()
+	var perm [16]uint8
+	k, i, h := pickReplica(o, m, x, replicas, &perm)
+	if h == nil {
+		return Route{}, false
+	}
+	return replicaRoute(x.routes[i], replicas[k], h, info.ShardID, info.Token.Value), true
+}
+
+// smallReplicas is the most replicas a plan permutes inline, and picks.
+const smallReplicas = 16
+
+// leader is the replica that leads info's token range when leader-aware
+// routing applies to info.
+func (p *InternalRoutingPolicy) leader(info RoutingInfo, m *MetadataSnapshot, lookup *InternalTabletLookup) Option[Target] {
+	o := &p.InternalOptions
+	if !o.LeaderAware || !o.TokenAware || !info.Token.Set || info.Consistency == One || info.Consistency == LocalOne {
+		return Option[Target]{}
+	}
+	if ks := SnapshotData(m).InternalKeyspaces[info.Keyspace]; ks == nil || ks.ConsistencyMode != "global" {
+		return Option[Target]{}
+	}
+	_, r := m.lookupReplicas(lookup, info.Keyspace, info.Table, info.Token.Value)
+	if r != nil && r.InternalVersion.Set && len(r.InternalSpan.Replicas) > 0 {
+		return Option[Target]{Value: r.InternalSpan.Replicas[0], Set: true}
+	}
+	return Option[Target]{}
+}
+
+// preferred reports whether a pick may route to replica host h: h is
+// routable and in the preferred tier, the local rack when the options have
+// one, else the local datacenter.
+func (o *RoutingOptions) preferred(h *HostSnapshot) bool {
+	return h.Enabled && h.Connected && h.Up && (o.Datacenter == "" || h.Datacenter == o.Datacenter) && (o.Rack == "" || h.Rack == o.Rack)
+}
+
+// replicaRoute is the route to replica t of host h: to the request's shard
+// when it names one, else to the shard placement names, else to the shard
+// owning token.
+func replicaRoute(host *pool.HostRoute, t Target, h *HostSnapshot, shard Option[uint32], token int64) Route {
+	if !shard.Set {
+		shard = t.ShardID
+	}
+	if shard.Set {
+		return Route{host: host, Shard: int32(min(shard.Value, math.MaxInt32))}
+	}
+	if h.Shards > 0 {
+		return Route{host: host, Shard: shardOf(token, h.Shards, h.ShardingIgnoreMSB)}
+	}
+	return Route{host: host, Shard: AnyShard}
+}
+
+// Fallback returns the full plan: the leader, the replicas by tier in
+// shuffled or fixed order, then the other hosts by tier.
+func (p *InternalRoutingPolicy) Fallback(info RoutingInfo, m *MetadataSnapshot) QueryPlan {
+	return p.planWith(info, m, new(InternalLazyRoutingPlan), nil, false)
 }
 
 // InternalPlanInto initializes a worker-owned cursor over immutable placement
@@ -412,7 +492,14 @@ func (p *InternalRoutingPolicy) InternalPlanInto(info RoutingInfo, m *MetadataSn
 
 // InternalPlanWith is InternalPlanInto for a request whose tablet was looked
 // up in m, or that looks it up itself when tablet is nil or did not run.
+// The plan is Pick's route, then Fallback's routes except that one, in one
+// cursor that builds the fallback only when the pick does not route.
 func (p *InternalRoutingPolicy) InternalPlanWith(info RoutingInfo, m *MetadataSnapshot, plan *InternalLazyRoutingPlan, tablet *InternalTabletLookup) QueryPlan {
+	return p.planWith(info, m, plan, tablet, true)
+}
+
+// planWith initializes plan; a plan that may pick tries Pick's route first.
+func (p *InternalRoutingPolicy) planWith(info RoutingInfo, m *MetadataSnapshot, plan *InternalLazyRoutingPlan, tablet *InternalTabletLookup, mayPick bool) QueryPlan {
 	info.Conditional = info.Conditional || info.Kind != OrdinaryStatement
 	if m == nil {
 		return &InternalTargetPlan{}
@@ -444,7 +531,25 @@ func (p *InternalRoutingPolicy) InternalPlanWith(info RoutingInfo, m *MetadataSn
 	if o.TokenAware && info.Token.Set && info.Keyspace != "" && info.Table != "" {
 		plan.replicas, _ = m.lookupReplicas(&lookup, info.Keyspace, info.Table, info.Token.Value)
 	}
-	conditional := info.Conditional || info.Consistency == Serial || info.Consistency == LocalSerial
+	plan.conditional = info.Conditional || info.Consistency == Serial || info.Consistency == LocalSerial
+	if o.LeaderAware {
+		plan.leader = p.leader(info, m, &lookup)
+	}
+	plan.rotate = !plan.conditional
+	// The happy path: a shuffled plan whose first route is any routable
+	// replica of the preferred tier. A leader or a slow host needs the
+	// full plan.
+	plan.picking = mayPick && o.ShuffleReplicas && !plan.conditional && !plan.leader.Set && plan.InternalNow.IsZero() && len(plan.replicas) > 1 && len(plan.replicas) <= smallReplicas
+	plan.unprepared = plan.picking
+	if !plan.picking {
+		plan.prepare()
+	}
+	return plan
+}
+
+// prepare builds the replica permutation and the fallback groups.
+func (plan *InternalLazyRoutingPlan) prepare() {
+	p, o, conditional := plan.policy, &plan.policy.InternalOptions, plan.conditional
 	if len(plan.replicas) > len(plan.smallPermutation) {
 		plan.permutation = make([]int, len(plan.replicas))
 		for i := range plan.permutation {
@@ -480,14 +585,6 @@ func (p *InternalRoutingPolicy) InternalPlanWith(info RoutingInfo, m *MetadataSn
 			}
 		}
 	}
-	if o.LeaderAware && o.TokenAware && info.Token.Set && info.Consistency != One && info.Consistency != LocalOne {
-		if ks := SnapshotData(m).InternalKeyspaces[info.Keyspace]; ks != nil && ks.ConsistencyMode == "global" {
-			_, r := m.lookupReplicas(&lookup, info.Keyspace, info.Table, info.Token.Value)
-			if r != nil && r.InternalVersion.Set && len(r.InternalSpan.Replicas) > 0 {
-				plan.leader = Option[Target]{Value: r.InternalSpan.Replicas[0], Set: true}
-			}
-		}
-	}
 	if o.Datacenter == "" {
 		plan.groups[1] = plan.index.all
 	} else {
@@ -499,8 +596,60 @@ func (p *InternalRoutingPolicy) InternalPlanWith(info RoutingInfo, m *MetadataSn
 			plan.groups[2] = plan.index.all
 		}
 	}
-	plan.rotate = !conditional
-	return plan
+}
+
+// pickReplica draws replicas in random order, without repeats, until one
+// is routable and in the preferred tier, and returns its position, its
+// host's position and its host. The replica is uniform over that tier, so
+// the full plan, which a miss falls back to, keeps the same odds.
+func pickReplica(o *RoutingOptions, m *MetadataSnapshot, x *InternalRoutingHostIndex, replicas []Target, perm *[16]uint8) (k, i int, h *HostSnapshot) {
+	k = rand.IntN(len(replicas))
+	perfAdd(0, 1)
+	if i, ok := x.host(replicas[k].HostID); ok {
+		if h = &SnapshotData(m).InternalHosts[i]; o.preferred(h) {
+			return k, i, h
+		}
+	}
+	return redrawReplica(o, m, x, replicas, perm, k)
+}
+
+// pick routes to the replica pickReplica would; it draws the first replica
+// itself, the one the happy path routes to. The scratch permutation a miss
+// shuffles is rebuilt by prepare.
+func (p *InternalLazyRoutingPlan) pick() (Route, bool) {
+	o := &p.policy.InternalOptions
+	k := rand.IntN(len(p.replicas))
+	t := p.replicas[k]
+	if i, h := p.host(t); h != nil && o.preferred(h) {
+		return p.accept(t, i, h, true)
+	}
+	k, i, h := redrawReplica(o, p.metadata, p.index, p.replicas, &p.smallPermutation, k)
+	if h == nil {
+		return Route{}, false
+	}
+	return p.accept(p.replicas[k], i, h, true)
+}
+
+// redrawReplica is pickReplica after its first draw, replica first, missed:
+// it shuffles perm forward one position per draw over the other replicas.
+func redrawReplica(o *RoutingOptions, m *MetadataSnapshot, x *InternalRoutingHostIndex, replicas []Target, perm *[16]uint8, first int) (k, i int, h *HostSnapshot) {
+	n := len(replicas)
+	for j := range n {
+		perm[j] = uint8(j)
+	}
+	perm[0], perm[first] = perm[first], perm[0]
+	for c := 1; c < n; c++ {
+		j := c + rand.IntN(n-c)
+		perm[c], perm[j] = perm[j], perm[c]
+		k = int(perm[c])
+		perfAdd(0, 1)
+		if i, ok := x.host(replicas[k].HostID); ok {
+			if h = &SnapshotData(m).InternalHosts[i]; o.preferred(h) {
+				return k, i, h
+			}
+		}
+	}
+	return 0, 0, nil
 }
 
 // smallPermutation is the permutation of n replica positions that a plan
@@ -593,12 +742,12 @@ func (p *InternalLazyRoutingPlan) accept(t Target, i int, h *HostSnapshot, repli
 	host := p.index.routes[i]
 	r := Route{host: host, Shard: AnyShard}
 	switch {
+	case replica && p.tokenSet:
+		r = replicaRoute(host, t, h, p.shard, p.token)
 	case p.shard.Set:
 		r.Shard = int32(min(p.shard.Value, math.MaxInt32))
 	case t.ShardID.Set:
 		r.Shard = int32(min(t.ShardID.Value, math.MaxInt32))
-	case replica && p.tokenSet && h.Shards > 0:
-		r.Shard = shardOf(p.token, h.Shards, h.ShardingIgnoreMSB)
 	}
 	if p.duplicate(r) {
 		return Route{}, false
@@ -644,6 +793,18 @@ func (p *InternalLazyRoutingPlan) Next() (Route, bool) {
 			return p.accept(t, i, h, false)
 		}
 		return Route{}, false
+	}
+	if p.unprepared {
+		if p.picking {
+			p.picking = false
+			if len(p.replicas) > 0 {
+				if r, ok := p.pick(); ok {
+					return r, true
+				}
+			}
+		}
+		p.unprepared = false
+		p.prepare()
 	}
 	for {
 		if p.stage == 0 {
@@ -844,7 +1005,13 @@ func (p *singleTargetRouting) Validate(m *MetadataSnapshot) error {
 	}
 	return typeValidation("routing host", "host is not eligible")
 }
-func (p *singleTargetRouting) Plan(_ RoutingInfo, m *MetadataSnapshot) QueryPlan {
+
+// Pick returns false: a single target's plan is already its first route.
+func (*singleTargetRouting) Pick(RoutingInfo, *MetadataSnapshot) (Route, bool) {
+	return Route{}, false
+}
+
+func (p *singleTargetRouting) Fallback(_ RoutingInfo, m *MetadataSnapshot) QueryPlan {
 	if m != nil {
 		if i, ok := m.routingIndex().host(p.target.HostID); ok {
 			h := SnapshotData(m).InternalHosts[i]

@@ -55,7 +55,7 @@ func BenchmarkStep06FirstTarget(b *testing.B) {
 					if err := p.Validate(m); err != nil {
 						b.Fatal(err)
 					}
-					plan := p.Plan(info, m)
+					plan := NewQueryPlan(p, info, m)
 					target, ok := nextTarget(plan)
 					if !ok {
 						b.Fatal("no target")
@@ -122,5 +122,41 @@ func BenchmarkStep06FeedbackQueue(b *testing.B) {
 				implCluster.InternalSessionQueueTabletFeedback(s, hints[i%ranges].InternalHint, stamp)
 			}
 		})
+	}
+}
+
+// BenchmarkRoutingFirstRoute builds a worker-owned plan for an ordinary
+// statement and takes its first target, the pick every request makes.
+func BenchmarkRoutingFirstRoute(b *testing.B) {
+	for _, count := range []int{3, 30} {
+		for _, rack := range []string{"", "r1"} {
+			for _, shuffle := range []bool{true, false} {
+				b.Run(fmt.Sprintf("hosts%d/rack=%q/shuffle=%v", count, rack, shuffle), func(b *testing.B) {
+					m := v2TestMetadata()
+					routing.SnapshotData(m).InternalHosts = make([]HostSnapshot, count)
+					for i := range routing.SnapshotData(m).InternalHosts {
+						h := v2TestHost(0, "a", fmt.Sprintf("r%d", i%3+1))
+						binary.BigEndian.PutUint64(h.ID[8:], uint64(i+1))
+						routing.SnapshotData(m).InternalHosts[i] = h
+					}
+					routing.SnapshotData(m).InternalHostIndex = buildRoutingHostIndex(routing.SnapshotData(m).InternalHosts)
+					h := step06Hint(b, 0, 100, Option[uint64]{}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0))
+					root, _ := updateTabletRange(nil, h)
+					routing.SnapshotData(m).InternalPlacements = placementPut(routing.SnapshotData(m).InternalPlacements, metadataTable{InternalKeyspace: "ks", InternalTable: "table"}, tabletPlacement{InternalRanges: root}, comparePlacementTable)
+					info := RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Value: 1, Set: true}, Consistency: Quorum, Kind: routing.OrdinaryStatement}
+					p := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, Datacenter: "a", Rack: rack, ShuffleReplicas: shuffle})).(*routingPolicy)
+					var storage routing.InternalLazyRoutingPlan
+					b.ReportAllocs()
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						target, ok := nextTarget(p.InternalPlanInto(info, m, &storage))
+						if !ok {
+							b.Fatal("no target")
+						}
+						step06BenchmarkTarget = target
+					}
+				})
+			}
+		}
 	}
 }

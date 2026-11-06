@@ -77,6 +77,13 @@ func NewRoutingPolicy(a0 RoutingOptions) (RoutingPolicy, error) { return routing
 type PartitionKey = routing.PartitionKey
 type QueryError = runtimeerrors.QueryError
 type QueryPlan = routing.QueryPlan
+
+// NewQueryPlan returns the plan a request follows under policy: the route
+// policy.Pick gives, then the routes of policy.Fallback except that one.
+func NewQueryPlan(policy RoutingPolicy, info RoutingInfo, m *MetadataSnapshot) QueryPlan {
+	return routing.NewPlan(policy, info, m)
+}
+
 type Route = routing.Route
 
 const AnyShard = routing.AnyShard

@@ -161,8 +161,9 @@ type runtimePolicy struct {
 	events  atomic.Int32
 }
 
-func (p *runtimePolicy) Validate(*MetadataSnapshot) error { return nil }
-func (p *runtimePolicy) Plan(RoutingInfo, *MetadataSnapshot) QueryPlan {
+func (p *runtimePolicy) Validate(*MetadataSnapshot) error                  { return nil }
+func (p *runtimePolicy) Pick(RoutingInfo, *MetadataSnapshot) (Route, bool) { return Route{}, false }
+func (p *runtimePolicy) Fallback(RoutingInfo, *MetadataSnapshot) QueryPlan {
 	return &targetPlan{InternalTargets: append([]Target(nil), p.targets...)}
 }
 func (p *runtimePolicy) Observe(AttemptEvent) { p.events.Add(1) }
