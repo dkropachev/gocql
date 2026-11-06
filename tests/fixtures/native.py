@@ -65,6 +65,28 @@ def assert_free(addresses):
             raise RuntimeError(f"refusing occupied lane {address}:{port}")
 
 
+
+INTEGRATION_PKG = "./tests/integration"
+CLEANUP_TEST = "TestFixture/Cleanup"
+
+
+def run_pattern(*paths):
+    """Return a go test -run pattern that selects exactly the tests at paths.
+
+    A top-level '|' in -run separates whole test paths, and each path's
+    '/'-separated levels are anchored so that no sibling with a longer name
+    matches."""
+    return "|".join("/".join("^" + re.escape(level) + "$" for level in path.split("/")) for path in paths)
+
+
+def lane_tests(mode):
+    """Return a mode's test paths, rejecting the old single-regex form."""
+    tests = mode["tests"]
+    if isinstance(tests, str) or not all(isinstance(path, str) and path.startswith("Test") for path in tests):
+        raise ValueError("mode %r: tests must be a list of test paths such as "
+                         "\"TestFixture/Identity\", not a -run regex" % mode.get("name"))
+    return tests
+
 class Runner:
     def __init__(self, config, state, output, root):
         self.config, self.state, self.output, self.root = config, state, output, root
@@ -275,7 +297,7 @@ class Runner:
                     env = os.environ.copy()
                     env["GOCQL_TEST_RUN"] = self.run_id
                     env.update(mode.get("environment", {}))
-                    command = base + ["-run", mode["tests"], ".", "-args"] + flags + extra
+                    command = base + ["-run", run_pattern(*lane_tests(mode)), INTEGRATION_PKG, "-args"] + flags + extra
                     try:
                         status = self.command(name + "-" + mode["name"], command, env, check=False)
                         record["tests"].append({"mode": mode["name"], "exit_code": status})
@@ -284,7 +306,7 @@ class Runner:
                         self.phase = "cleanup"
                         self.save()
                         cleanup_base = ["-timeout=2m" if value == "-timeout=20m" else value for value in base]
-                        cleanup = cleanup_base + ["-run", "^TestCleanup$", ".", "-args"] + flags + extra
+                        cleanup = cleanup_base + ["-run", run_pattern(CLEANUP_TEST), INTEGRATION_PKG, "-args"] + flags + extra
                         cleanup_env = dict(env, GOCQL_FIXTURE_CLEANUP="1")
                         self.command(name + "-" + mode["name"] + "-cleanup", cleanup, cleanup_env)
                         if self.cancel_requested:
@@ -336,6 +358,10 @@ def main():
         raise KeyboardInterrupt("cancelled by signal " + str(signum))
     signal.signal(signal.SIGTERM, cancel)
     signal.signal(signal.SIGINT, cancel)
+    # Reject a stale test list before any cluster is provisioned.
+    for lane in config["lanes"]:
+        for mode in lane["modes"]:
+            lane_tests(mode)
     try:
         for lane in config["lanes"]:
             if not args.lane or lane["name"] in args.lane:

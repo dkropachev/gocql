@@ -21,6 +21,11 @@ python tests/fixtures/native.py --config /path/to/pinned-config.json \
   --state /path/to/task-owned-state --output /path/to/receipt.json
 ```
 
+Each mode lists its tests as paths such as `TestFixture/Identity` or
+`TestSession/Connect/Authentication`. The runner joins them into one exact `-run`
+pattern for `./tests/integration`. A mode that still gives a `-run` regex string
+is rejected before any cluster is provisioned.
+
 Use `--lane NAME` to select named lanes. Configuration paths accept environment
 variables. `--state` must be the same absolute directory for all cooperating
 runners: per-address `flock` reservations are stored there and fail immediately
@@ -63,7 +68,7 @@ assertion mapping is retained in the feature-specs evidence test mapping.
 Two-shard lanes set `smp: 2`; plaintext and TLS shard endpoints are explicitly
 19042 and 19142, respectively, alongside native 9042 and 9142.
 
-Tests do not stop or start nodes. TestRunStreamLive streams with a separate real
+Tests do not stop or start nodes. TestPaging/Stream streams with a separate real
 client performing ALTER between pull-driven pages, because the stream owns its
 configured pool capacity across those pages; its coordinator-interruption step
 waits for test-owned node control from the CCM package (scylladb/gocql#339).
@@ -83,7 +88,7 @@ Ordinary QUERY, EXECUTE and BATCH requests execute on the real database. Only
 modifications to the exact per-run `_fail` keyspace throw an injected
 `WriteFailureException`; Cassandra itself serializes errors, payloads, native v5
 segments, LZ4 and TLS. This proves client handling of injected server responses,
-not a natural database storage failure. `TestInvalidPeerEntry` uses a separate
+not a natural database storage failure. `TestMetadata/Hosts/InvalidPeer` uses a separate
 uncompressed v4 transport fixture that appends an incomplete peer to a real
 response without changing any system table. Its wire metadata parser and bytes
 come from `internal/testkit`, independently of the driver parser/serializer.
@@ -115,13 +120,13 @@ go test -race -run '^Test' -count=2 .
 go test -run '^$' -bench '^Benchmark' -benchtime=20x .
 ```
 
-`TestHarnessLifecycle` is an explicit failure/cancellation probe. It skips
+`TestFixture/HarnessLifecycle` is an explicit failure/cancellation probe. It skips
 unless `GOCQL_FIXTURE_ACTION=fail|cancel` is configured. It creates a real owned
 keyspace and writes `GOCQL_FIXTURE_MARKER`, then fails or waits for cancellation.
 These are deliberate failed receipts, retained separately from passing DB gates.
 
 Cleanup runs only in the runner's dedicated post-package subprocess, which sets
-`GOCQL_FIXTURE_CLEANUP=1` and selects exactly `TestCleanup`. Leave that flag
+`GOCQL_FIXTURE_CLEANUP=1` and selects exactly `TestFixture/Cleanup`. Leave that flag
 unset in ordinary suites: cleanup must never delete a namespace while parallel
 tests still own it. The killed-child tests use the same cleanup implementation
 with an exact owned-name allowlist after joining those children. Cleanup validates

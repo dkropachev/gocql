@@ -277,8 +277,8 @@ jobs:
       # uncompressed segments, and only the compressed half would be exercised.
       #
       # Scoped with -run rather than a second full suite: the two tests below are the
-      # ones whose subject is the framing itself -- TestLargeSizeQuery is the
-      # multi-segment split, TestPrepareExecuteMetadataChangedFlag is the v5 half of the
+      # ones whose subject is the framing itself -- TestFraming/Segment is the
+      # multi-segment split, TestFraming/ResultMetadataID/ChangedFlag is the v5 half of the
       # result-metadata-id exchange -- so this costs seconds, where repeating the suite
       # would cost another eight minutes. Do not fold it into the lane above as a
       # duplicate; the compressor is the entire point of the difference.
@@ -287,5 +287,7 @@ jobs:
         run: |
           TEST_CQL_PROTOCOL=5 \
           TEST_COMPRESSOR=no-compression \
-          TEST_OPTS="-run=TestLargeSizeQuery|TestPrepareExecuteMetadataChangedFlag" \
+          # A top-level '|' in -run separates whole test paths. The single quotes keep it
+          # away from the shell that runs make's recipe.
+          TEST_OPTS="-run='TestFraming/Segment|TestFraming/ResultMetadataID/ChangedFlag'" \
           make test-integration-cassandra

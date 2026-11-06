@@ -19,14 +19,14 @@
           "args": [
             "-proto=3"
           ],
-          "tests": "^(TestFixtureIdentity|TestAuthentication|TestRunStreamLive|TestUnixSockets)$"
+          "tests": ["TestFixture/Identity", "TestSession/Connect/Authentication", "TestPaging/Stream", "TestSession/Connect/UnixSocket"]
         },
         {
           "name": "v4-raw",
           "args": [
             "-proto=4"
           ],
-          "tests": "^(TestFixtureIdentity|TestAuthentication|TestRunStreamLive)$"
+          "tests": ["TestFixture/Identity", "TestSession/Connect/Authentication", "TestPaging/Stream"]
         },
         {
           "name": "v4-tls",
@@ -34,7 +34,7 @@
             "-proto=4",
             "-runssl"
           ],
-          "tests": "^(TestFixtureIdentity|TestClientCertificateEnforced|TestSNIProxyCancellationJoins|TestAuthentication|TestRunStreamLive|TestUnixSockets|TestCloudConnection|TestTLSTicketResumption|TestRecreateSchema)$"
+          "tests": ["TestFixture/Identity", "TestFixture/ClientCertificate", "TestSession/Connect/Authentication", "TestPaging/Stream", "TestSession/Connect/UnixSocket", "TestSession/Connect/TLSTicketResumption", "TestMetadata/Recreate"]
         }
       ]
     },
@@ -59,7 +59,7 @@
             "-proto=4",
             "-compressor=no-compression"
           ],
-          "tests": "^(TestFixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestRunStreamLive)$"
+          "tests": ["TestFixture/Identity", "TestMetadata/Recreate", "TestQuery/CustomPayload/Messages", "TestQuery/CustomPayload/Values", "TestQuery/Errors/WriteFailure", "TestMetadata/Hosts/InvalidPeer", "TestPaging/Stream"]
         },
         {
           "name": "v4-tls",
@@ -68,7 +68,7 @@
             "-runssl",
             "-compressor=no-compression"
           ],
-          "tests": "^(TestFixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestRunStreamLive)$"
+          "tests": ["TestFixture/Identity", "TestMetadata/Recreate", "TestQuery/CustomPayload/Messages", "TestQuery/CustomPayload/Values", "TestQuery/Errors/WriteFailure", "TestMetadata/Hosts/InvalidPeer", "TestPaging/Stream"]
         },
         {
           "name": "v5-no-compression",
@@ -76,7 +76,7 @@
             "-proto=5",
             "-compressor=no-compression"
           ],
-          "tests": "^(TestFixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestRunStreamLive)$"
+          "tests": ["TestFixture/Identity", "TestMetadata/Recreate", "TestQuery/CustomPayload/Messages", "TestQuery/CustomPayload/Values", "TestQuery/Errors/WriteFailure", "TestMetadata/Hosts/InvalidPeer", "TestPaging/Stream"]
         },
         {
           "name": "v5-lz4",
@@ -84,7 +84,7 @@
             "-proto=5",
             "-compressor=lz4"
           ],
-          "tests": "^(TestFixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestRunStreamLive)$"
+          "tests": ["TestFixture/Identity", "TestMetadata/Recreate", "TestQuery/CustomPayload/Messages", "TestQuery/CustomPayload/Values", "TestQuery/Errors/WriteFailure", "TestMetadata/Hosts/InvalidPeer", "TestPaging/Stream"]
         },
         {
           "name": "v5-raw-tls",
@@ -93,7 +93,7 @@
             "-runssl",
             "-compressor=no-compression"
           ],
-          "tests": "^(TestFixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestRunStreamLive)$"
+          "tests": ["TestFixture/Identity", "TestMetadata/Recreate", "TestQuery/CustomPayload/Messages", "TestQuery/CustomPayload/Values", "TestQuery/Errors/WriteFailure", "TestMetadata/Hosts/InvalidPeer", "TestPaging/Stream"]
         },
         {
           "name": "v5-lz4-tls",
@@ -102,7 +102,7 @@
             "-compressor=lz4",
             "-runssl"
           ],
-          "tests": "^(TestFixtureIdentity|TestRecreateSchema|TestCustomPayloadMessages|TestCustomPayloadValues|TestWriteFailure|TestInvalidPeerEntry|TestRunStreamLive)$"
+          "tests": ["TestFixture/Identity", "TestMetadata/Recreate", "TestQuery/CustomPayload/Messages", "TestQuery/CustomPayload/Values", "TestQuery/Errors/WriteFailure", "TestMetadata/Hosts/InvalidPeer", "TestPaging/Stream"]
         }
       ]
     },
@@ -128,7 +128,7 @@
           "args": [
             "-proto=4"
           ],
-          "tests": "^(TestFixtureIdentity|TestSelectWithoutFromLiteral|TestRunStreamLive)$"
+          "tests": ["TestFixture/Identity", "TestSelectWithoutFrom/Exec/Literal", "TestPaging/Stream"]
         }
       ]
     }

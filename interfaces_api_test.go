@@ -83,8 +83,8 @@ var (
 	_ gocql.SegmentCompressor = lz4mod.LZ4Compressor{}
 )
 
-// TestSnappyCompressorDecodeRejectsHugeLength is the snappy counterpart of
-// TestLZ4Compressor_DecodeRejectsHugeLength in the lz4 module.
+// internal/wirecompress TestCompressor/Snappy/DecodeRejectsHugeLength is the snappy
+// counterpart of TestCompressor/LZ4/DecodeRejectsHugeLength.
 //
 // A snappy block begins with a varint holding the decompressed length, and s2 allocates
 // that many bytes before it validates a single byte of the stream. s2 itself only

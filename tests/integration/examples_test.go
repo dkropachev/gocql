@@ -97,7 +97,7 @@ func TestExamples(t *testing.T) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "go", "test", "-race", "-count=1", "-run", "^TestSingleConnectionReplay$", "./tests/bench/e2e", "-args", "-update-golden")
+		cmd := exec.CommandContext(ctx, "go", "test", "-race", "-count=1", "-run", "^TestSingleConnection$/^Replay$", "./tests/bench/e2e", "-args", "-update-golden")
 		cmd.Dir = "../.." // module root
 		cmd.Env = append(os.Environ(), "GOCQL_BENCH_ADDRESS="+net.JoinHostPort(getClusterHosts()[0], "9042"))
 		output, err := cmd.CombinedOutput()

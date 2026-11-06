@@ -21,7 +21,7 @@ import (
 )
 
 func BenchmarkWriter(b *testing.B) {
-	// The pointer assertions in TestTypedRequestMatchesLegacyWireAndKeepsPayload
+	// The pointer assertions in internal/settings TestTypedConn/BuildTypedRequest/MatchesLegacyWire
 	// establish the copy boundary. These counters measure envelope/descriptor work;
 	// compression output is a separate representation change, not payload gathering.
 	b.Run("BuildRequest", func(b *testing.B) {
