@@ -8,13 +8,14 @@ import (
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/retry"
 	// IncludeMetadata requests full result metadata even when a validated cache exists.
 )
 
 // OptionValues lists the settings of an execution. NewOptions validates and
 // freezes them into Options.
 type OptionValues struct {
-	Retry                RetryPolicy
+	Retry                retry.Policy
 	Observer             Observer
 	Profile              *Profile
 	privateStorage       OptionsStorage

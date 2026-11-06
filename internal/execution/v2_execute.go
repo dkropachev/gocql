@@ -5,6 +5,7 @@ package execution
 
 import (
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/retry"
 
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 
@@ -1010,20 +1011,20 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			if response != nil {
 				response.Owner.Release()
 			}
-			decision := RetryDecision{}
-			if retry := request.InternalOptions.InternalProfile.Retry; retry != nil {
-				decision = retry.Decide(AttemptError{Err: attemptErr, Attempt: outcome.event.Attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.InternalRouting.Conditional, BytesWritten: InternalAttemptBytesWritten(attemptErr)})
+			decision := retry.Decision{}
+			if policy := request.InternalOptions.InternalProfile.Retry; policy != nil {
+				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.InternalRouting.Conditional, BytesWritten: InternalAttemptBytesWritten(attemptErr)})
 			}
-			if decision.Action == IgnoreWriteError {
+			if decision.Action == retry.IgnoreWrite {
 				return &responsePage{InternalResponseData: responseData{State: completePageState(), Result: aggregate}}, nil
 			}
-			if decision.Action == StopRetry {
+			if decision.Action == retry.Stop {
 				if active == 0 && scheduled == 0 {
 					return nil, &ExecutionError{Err: lastErr, Result: aggregate}
 				}
 				continue
 			}
-			if decision.Action != RetrySame && decision.Action != RetryNext {
+			if decision.Action != retry.Same && decision.Action != retry.Next {
 				return nil, &ExecutionError{Err: typeValidation("retry", "unknown retry action"), Result: aggregate}
 			}
 			consistency := outcome.consistency
@@ -1037,7 +1038,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				return nil, typeValidation("retry delay", "negative delay")
 			}
 			conn := outcome.conn
-			if decision.Action == RetryNext {
+			if decision.Action == retry.Next {
 				conn = nil
 			}
 			if decision.Delay > 0 {

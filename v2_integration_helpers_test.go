@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/scylladb/gocql/v2/retry"
 )
 
 // createV2Cluster applies the integration flags to the public typed configuration.
@@ -23,7 +25,7 @@ func createV2Cluster(opts ...func(*Config)) Config {
 	profile := *config.DefaultProfile
 	profile.Consistency = Quorum
 	profile.Timeout = *flagTimeout
-	profile.Retry = SafeRetryPolicy{MaxAttempts: max(1, *flagRetry+1)}
+	profile.Retry = retry.Safe{MaxAttempts: max(1, *flagRetry+1)}
 	config.DefaultProfile = &profile
 	if *flagRunAuthTest {
 		config.Auth = PasswordAuth("cassandra", "cassandra")
@@ -284,7 +286,7 @@ func v2CreateTable(ctx context.Context, session *Session, cql string) error {
 		return err
 	}
 	defer bound.Close()
-	if _, err := Exec(ctx, session, bound, testOptions(OptionValues{Idempotent: true, Retry: SafeRetryPolicy{MaxAttempts: 4}})); err != nil {
+	if _, err := Exec(ctx, session, bound, testOptions(OptionValues{Idempotent: true, Retry: retry.Safe{MaxAttempts: 4}})); err != nil {
 		return err
 	}
 	if err := session.AwaitSchemaAgreement(ctx); err != nil {

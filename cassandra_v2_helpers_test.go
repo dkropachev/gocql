@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/scylladb/gocql/v2/retry"
 )
 
 // These helpers accept typed descriptors and explicit values. Retained results
@@ -246,11 +248,11 @@ func (o *cassandraObserver) snapshot() ([]RequestEvent, []AttemptEvent) {
 
 type cassandraRetry struct{}
 
-func (cassandraRetry) Decide(a AttemptError) RetryDecision {
-	if a.Idempotent && a.Attempt < 6 {
-		return RetryDecision{Action: RetrySame}
+func (cassandraRetry) Decide(a retry.Attempt) retry.Decision {
+	if a.Idempotent && a.Number < 6 {
+		return retry.Decision{Action: retry.Same}
 	}
-	return RetryDecision{Action: StopRetry}
+	return retry.Decision{Action: retry.Stop}
 }
 
 // Custom values use explicit codecs; field discovery and reflection are absent.

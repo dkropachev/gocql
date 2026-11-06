@@ -14,6 +14,7 @@ import (
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	"github.com/scylladb/gocql/v2/retry"
 )
 
 func eachTestQuery(t *testing.T) (*Query[Unit, []byte], func(bodies ...[]byte) chan struct{}) {
@@ -315,8 +316,8 @@ func TestQueryEachParentCancelInterruptsWait(t *testing.T) {
 
 type eachRetryAfterDelay struct{}
 
-func (eachRetryAfterDelay) Decide(AttemptError) RetryDecision {
-	return RetryDecision{Action: RetrySame, Delay: time.Minute}
+func (eachRetryAfterDelay) Decide(retry.Attempt) retry.Decision {
+	return retry.Decision{Action: retry.Same, Delay: time.Minute}
 }
 
 // Cancelling the caller's context interrupts a retry delay.

@@ -5,6 +5,7 @@ package gocql
 
 import (
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/retry"
 
 	"bytes"
 	"context"
@@ -386,7 +387,7 @@ func TestStep08StreamInterruptedRequestWrite(t *testing.T) {
 				b := runtimeQuery(t)
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 				defer cancel()
-				cursor, err := RunStream(ctx, s, b, StreamOneColumn(StreamBlob), StreamOptions{Incremental: true, Options: testOptions(OptionValues{Retry: SafeRetryPolicy{MaxAttempts: 1}})})
+				cursor, err := RunStream(ctx, s, b, StreamOneColumn(StreamBlob), StreamOptions{Incremental: true, Options: testOptions(OptionValues{Retry: retry.Safe{MaxAttempts: 1}})})
 				if cursor != nil {
 					cursor.Close()
 				}

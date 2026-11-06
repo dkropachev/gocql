@@ -11,20 +11,21 @@ import (
 	"testing"
 
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/retry"
 
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
 func TestV2RuntimeSafeRetryPreservesServerErrors(t *testing.T) {
-	policy := SafeRetryPolicy{MaxAttempts: 3}
+	policy := retry.Safe{MaxAttempts: 3}
 	for _, test := range []struct {
 		code       int
 		idempotent bool
-		want       RetryAction
-	}{{ErrCodeOverloaded, true, RetryNext}, {ErrCodeBootstrapping, true, RetryNext}, {ErrCodeOverloaded, false, StopRetry}, {ErrCodeSyntax, true, StopRetry}, {ErrCodeInvalid, true, StopRetry}, {ErrCodeProtocol, true, StopRetry}} {
+		want       retry.Action
+	}{{ErrCodeOverloaded, true, retry.Next}, {ErrCodeBootstrapping, true, retry.Next}, {ErrCodeOverloaded, false, retry.Stop}, {ErrCodeSyntax, true, retry.Stop}, {ErrCodeInvalid, true, retry.Stop}, {ErrCodeProtocol, true, retry.Stop}} {
 		server := &frm.ErrorFrame{Code: test.code, Message: "test error"}
 		err := runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: server, InternalPotentiallyExecuted: true})
-		decision := policy.Decide(AttemptError{Err: err, Attempt: 1, Idempotent: test.idempotent, BytesWritten: true})
+		decision := policy.Decide(retry.Attempt{Err: err, Number: 1, Idempotent: test.idempotent, BytesWritten: true})
 		if decision.Action != test.want {
 			t.Fatalf("code %x idempotent %t got %d want %d", test.code, test.idempotent, decision.Action, test.want)
 		}
@@ -34,7 +35,7 @@ func TestV2RuntimeSafeRetryPreservesServerErrors(t *testing.T) {
 		}
 	}
 	for _, err := range []error{context.Canceled, context.DeadlineExceeded, &ProtocolError{Stage: "response", Err: errors.New("invalid frame")}, &ValidationError{Field: "page size", Err: errors.New("invalid")}} {
-		if got := policy.Decide(AttemptError{Err: err, Attempt: 1, Idempotent: true}); got.Action != StopRetry {
+		if got := policy.Decide(retry.Attempt{Err: err, Number: 1, Idempotent: true}); got.Action != retry.Stop {
 			t.Fatalf("retry deterministic error %v", err)
 		}
 	}

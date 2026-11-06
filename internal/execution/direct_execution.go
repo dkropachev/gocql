@@ -11,6 +11,7 @@ import (
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/retry"
 )
 
 // canExecuteDirect reports whether request's pages run on the calling
@@ -121,16 +122,16 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 				return failure(fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", err))
 			}
 		}
-		decision := RetryDecision{}
-		if retry := request.InternalOptions.InternalProfile.Retry; retry != nil {
-			decision = retry.Decide(AttemptError{Err: err, Attempt: attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.InternalRouting.Conditional, BytesWritten: InternalAttemptBytesWritten(err)})
+		decision := retry.Decision{}
+		if policy := request.InternalOptions.InternalProfile.Retry; policy != nil {
+			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.InternalRouting.Conditional, BytesWritten: InternalAttemptBytesWritten(err)})
 		}
 		switch decision.Action {
-		case IgnoreWriteError:
+		case retry.IgnoreWrite:
 			return &responsePage{InternalResponseData: responseData{State: completePageState(), Result: aggregate}}, nil
-		case StopRetry:
+		case retry.Stop:
 			return failure(err)
-		case RetrySame, RetryNext:
+		case retry.Same, retry.Next:
 		default:
 			return failure(typeValidation("retry", "unknown retry action"))
 		}
@@ -152,7 +153,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 			case <-timer.C:
 			}
 		}
-		if decision.Action == RetryNext {
+		if decision.Action == retry.Next {
 			conn = nil
 		}
 		s.retries.Add(1)

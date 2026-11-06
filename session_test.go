@@ -34,6 +34,7 @@ import (
 	"fmt"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/retry"
 
 	"sync"
 	"sync/atomic"
@@ -149,15 +150,15 @@ func (o *sessionTestObserver) snapshot() ([]RequestEvent, []AttemptEvent) {
 }
 
 type sessionTestRetry struct {
-	action      RetryAction
+	action      retry.Action
 	maxAttempts int
 }
 
-func (p sessionTestRetry) Decide(e AttemptError) RetryDecision {
-	if e.Attempt >= p.maxAttempts {
-		return RetryDecision{Action: StopRetry}
+func (p sessionTestRetry) Decide(e retry.Attempt) retry.Decision {
+	if e.Number >= p.maxAttempts {
+		return retry.Decision{Action: retry.Stop}
 	}
-	return RetryDecision{Action: p.action}
+	return retry.Decision{Action: p.action}
 }
 
 func TestQueryBasicAPI(t *testing.T) {
@@ -183,16 +184,16 @@ func TestQueryBasicAPI(t *testing.T) {
 	zero := Result{}
 	require.Zero(t, zero.Attempts)
 	require.Zero(t, zero.Latency)
-	retry := sessionTestRetry{action: RetryNext, maxAttempts: 3}
+	retryPolicy := sessionTestRetry{action: retry.Next, maxAttempts: 3}
 	observer := new(sessionTestObserver)
-	options := testOptions(OptionValues{Consistency: Option[Consistency]{Value: All, Set: true}, SerialConsistency: Option[Option[Consistency]]{Value: Option[Consistency]{Value: LocalSerial, Set: true}, Set: true}, PageSize: Option[int32]{Value: 10, Set: true}, Prefetch: Option[int]{Value: 1, Set: true}, Retry: retry, Trace: true, Observer: observer})
+	options := testOptions(OptionValues{Consistency: Option[Consistency]{Value: All, Set: true}, SerialConsistency: Option[Option[Consistency]]{Value: Option[Consistency]{Value: LocalSerial, Set: true}, Set: true}, PageSize: Option[int32]{Value: 10, Set: true}, Prefetch: Option[int]{Value: 1, Set: true}, Retry: retryPolicy, Trace: true, Observer: observer})
 	resolved, err := resolveOptions(session, options)
 	require.NoError(t, err)
 	require.Equal(t, All, resolved.InternalProfile.Consistency)
 	require.Equal(t, LocalSerial, resolved.InternalProfile.SerialConsistency.Value)
 	require.Equal(t, int32(10), resolved.InternalProfile.PageSize)
 	require.Equal(t, 1, resolved.InternalProfile.Prefetch)
-	require.Equal(t, retry, resolved.InternalProfile.Retry)
+	require.Equal(t, retryPolicy, resolved.InternalProfile.Retry)
 	serialValues := options.Values()
 	serialValues.Consistency.Value = LocalSerial
 	serialRead := testOptions(serialValues)
@@ -271,10 +272,10 @@ func TestQueryShouldPrepare(t *testing.T) {
 func TestBatchBasicAPI(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	retry := sessionTestRetry{action: RetryNext, maxAttempts: 2}
+	retryPolicy := sessionTestRetry{action: retry.Next, maxAttempts: 2}
 	session := createV2Session(t, func(config *Config) {
 		profile := *config.DefaultProfile
-		profile.Retry = retry
+		profile.Retry = retryPolicy
 		config.DefaultProfile = &profile
 	})
 	defer session.Close()
@@ -288,8 +289,8 @@ func TestBatchBasicAPI(t *testing.T) {
 	require.Len(t, items, 2)
 	inherited, err := resolveOptions(session, Options{})
 	require.NoError(t, err)
-	require.Equal(t, retry, inherited.InternalProfile.Retry)
-	override := sessionTestRetry{action: RetryNext, maxAttempts: 4}
+	require.Equal(t, retryPolicy, inherited.InternalProfile.Retry)
+	override := sessionTestRetry{action: retry.Next, maxAttempts: 4}
 	observer := new(sessionTestObserver)
 	options := testOptions(OptionValues{Consistency: Option[Consistency]{Value: One, Set: true}, Retry: override, Trace: true, Observer: observer})
 	resolved, err := resolveOptions(session, options)
@@ -388,7 +389,7 @@ func TestIsUseStatement(t *testing.T) {
 }
 
 // The old Ignore mode stopped retries but preserved errors. Its v2 equivalent
-// is StopRetry; IgnoreWriteError is a separate explicit error-suppression policy.
+// is retry.Stop; retry.IgnoreWrite is a separate explicit error-suppression policy.
 func TestRetryType_IgnoreRethrow(t *testing.T) {
 	t.Parallel()
 	session := createV2Session(t)
@@ -401,8 +402,8 @@ func TestRetryType_IgnoreRethrow(t *testing.T) {
 		for _, retries := range []int{0, 1} {
 			t.Run(fmt.Sprintf("%s/%d", mode, retries), func(t *testing.T) {
 				observer := new(sessionTestObserver)
-				retry := sessionTestRetry{action: StopRetry, maxAttempts: retries + 1}
-				_, err := Exec(ctx, session, bound, testOptions(OptionValues{Idempotent: true, Retry: retry, Observer: observer}))
+				retryPolicy := sessionTestRetry{action: retry.Stop, maxAttempts: retries + 1}
+				_, err := Exec(ctx, session, bound, testOptions(OptionValues{Idempotent: true, Retry: retryPolicy, Observer: observer}))
 				require.Error(t, err)
 				var server RequestError
 				require.ErrorAs(t, err, &server)

@@ -225,7 +225,7 @@ func main() {
 			publicTypeNames[key] = append(publicTypeNames[key], name)
 		}
 	}
-	extensionNames := strings.Fields("AuthProvider AuthExchange ConvictionPolicy ReconnectPolicy Dialer DNSResolver AddressTranslator AddressTranslatorV2 AddressTranslatorHostInfo Observer LifecycleObserver RoutingPolicy QueryPlan TokenPartitioner RetryPolicy SpeculationPolicy Encoder Decoder Codec ParamEncoder ParamPlan RowDecoder RowPlan StreamDecoder StreamRowDecoder StreamValuePlan StreamRowPlan StreamResetter")
+	extensionNames := strings.Fields("AuthProvider AuthExchange ConvictionPolicy ReconnectPolicy Dialer DNSResolver AddressTranslator AddressTranslatorV2 AddressTranslatorHostInfo Observer LifecycleObserver RoutingPolicy QueryPlan TokenPartitioner SpeculationPolicy Encoder Decoder Codec ParamEncoder ParamPlan RowDecoder RowPlan StreamDecoder StreamRowDecoder StreamValuePlan StreamRowPlan StreamResetter")
 
 	// Include every other externally implementable public interface as well as
 	// the mandatory extension list, so newly retained hooks cannot evade checks.

@@ -23,21 +23,25 @@ import (
 	"testing"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+
+	"github.com/scylladb/gocql/v2/retry"
 )
 
 type step10CustomRetry struct{}
 
-func (*step10CustomRetry) Decide(AttemptError) RetryDecision { return RetryDecision{Action: StopRetry} }
+func (*step10CustomRetry) Decide(retry.Attempt) retry.Decision {
+	return retry.Decision{Action: retry.Stop}
+}
 
 func TestStep10RetryConfigurationReport(t *testing.T) {
 	for _, tc := range []struct{ attempts, want int }{{-1, 2}, {0, 2}, {1, 0}, {3, 2}, {7, 6}} {
-		got := buildRetryPolicyReport(SafeRetryPolicy{MaxAttempts: tc.attempts})
+		got := buildRetryPolicyReport(retry.Safe{MaxAttempts: tc.attempts})
 		want := retryPolicySimpleReport{Type: "simple", MaxRetries: tc.want}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("attempts %d: got %#v want %#v", tc.attempts, got, want)
 		}
 	}
-	for _, policy := range []RetryPolicy{(*step10CustomRetry)(nil), &step10CustomRetry{}} {
+	for _, policy := range []retry.Policy{(*step10CustomRetry)(nil), &step10CustomRetry{}} {
 		got := buildRetryPolicyReport(policy).(retryPolicyCustomReport)
 		if got.Name != "step10CustomRetry" || got.Type != "custom" {
 			t.Fatalf("custom report: %+v", got)
@@ -103,7 +107,7 @@ func TestStep10ReportUsesCurrentTypedProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	profile.Routing = routing
-	profile.Retry = SafeRetryPolicy{MaxAttempts: 7}
+	profile.Retry = retry.Safe{MaxAttempts: 7}
 	profile.PageSize = 23
 	config.DefaultProfile = &profile
 	s := func() *Session {
@@ -125,7 +129,7 @@ func TestStep10ReportUsesCurrentTypedProfile(t *testing.T) {
 		t.Fatalf("typed routing: %+v", policy)
 	}
 	profile.PageSize = 37
-	profile.Retry = SafeRetryPolicy{MaxAttempts: 1}
+	profile.Retry = retry.Safe{MaxAttempts: 1}
 	config.DefaultProfile = &profile
 	next := buildQueryReport(s)
 	if next.Defaults.Page.Size != 37 || next.Retry.Policy.(retryPolicySimpleReport).MaxRetries != 0 {

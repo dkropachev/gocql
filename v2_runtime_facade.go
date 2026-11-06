@@ -17,6 +17,7 @@ import (
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/retry"
 )
 
 func retiredAcceptAllFilter() retiredHostFilter { return implCluster.AcceptAllFilter() }
@@ -251,7 +252,7 @@ func buildReconnectionPolicyReport(a0 retiredReconnectionPolicy) any {
 func buildRequestsReport(a0 *clusterSettings) requestsReport {
 	return implCluster.InternalBuildRequestsReport(a0)
 }
-func buildRetryPolicyReport(a0 RetryPolicy) any {
+func buildRetryPolicyReport(a0 retry.Policy) any {
 	return implCluster.InternalBuildRetryPolicyReport(a0)
 }
 func buildSocketReport() socketReport               { return implCluster.InternalBuildSocketReport() }

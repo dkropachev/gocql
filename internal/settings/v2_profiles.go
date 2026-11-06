@@ -5,10 +5,12 @@ package settings
 
 import (
 	"time"
+
+	"github.com/scylladb/gocql/v2/retry"
 )
 
 type Profile struct {
-	Retry                RetryPolicy
+	Retry                retry.Policy
 	Routing              RoutingPolicy
 	Speculation          SpeculationPolicy
 	Timeout, PageTimeout time.Duration
@@ -19,7 +21,7 @@ type Profile struct {
 }
 
 func InternalDefaultProfile() Profile {
-	return Profile{Consistency: LocalQuorum, SerialConsistency: Option[Consistency]{Value: LocalSerial, Set: true}, Timeout: 30 * time.Second, PageSize: 5000, Prefetch: 1, Retry: SafeRetryPolicy{MaxAttempts: 3}}
+	return Profile{Consistency: LocalQuorum, SerialConsistency: Option[Consistency]{Value: LocalSerial, Set: true}, Timeout: 30 * time.Second, PageSize: 5000, Prefetch: 1, Retry: retry.Safe{MaxAttempts: 3}}
 }
 func InternalValidateProfile(p Profile) error {
 	if !InternalValidConsistency(p.Consistency) {
@@ -41,9 +43,6 @@ func InternalValidateProfile(p Profile) error {
 }
 func InternalValidConsistency(c Consistency) bool { return c >= Any && c <= LocalOne }
 
-type RetryPolicy interface {
-	Decide(AttemptError) RetryDecision
-}
 type SpeculationPolicy interface {
 	Delay(attempt int, metrics MetricsSnapshot) (time.Duration, bool)
 }

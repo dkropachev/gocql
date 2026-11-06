@@ -8,6 +8,7 @@ package gocql
 
 import (
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/retry"
 
 	"context"
 	"crypto/tls"
@@ -1136,14 +1137,14 @@ func TestDriverConfigReportingDial(t *testing.T) {
 }
 
 func TestCustomPolicyNameIsAlwaysReportable(t *testing.T) {
-	type namedPolicy struct{ RetryPolicy }
+	type namedPolicy struct{ retry.Policy }
 
 	for _, v := range []any{
 		nil,
-		(*SafeRetryPolicy)(nil),
-		&SafeRetryPolicy{},
+		(*retry.Safe)(nil),
+		&retry.Safe{},
 		&namedPolicy{},
-		struct{ RetryPolicy }{},
+		struct{ retry.Policy }{},
 	} {
 		if got := customPolicyName(v); got == "" {
 			t.Errorf("customPolicyName(%T) is empty, which the schema rejects", v)
@@ -1186,6 +1187,6 @@ func TestDriverConfigReporterStartupOptions(t *testing.T) {
 	// fallback, not an absent/zero policy.
 	policyMap, ok := report.Query.Retry.Policy.(map[string]any)
 	if !ok || policyMap["type"] != "simple" {
-		t.Errorf("query.retry.policy = %#v, want type simple (SafeRetryPolicy fallback)", report.Query.Retry.Policy)
+		t.Errorf("query.retry.policy = %#v, want type simple (retry.Safe fallback)", report.Query.Retry.Policy)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	codec "github.com/scylladb/gocql/v2/internal/codec"
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	model "github.com/scylladb/gocql/v2/internal/model"
@@ -69,7 +70,7 @@ type Compression = cqltype.Compression
 
 const ConditionalStatement = cqltype.ConditionalStatement
 
-type Consistency = cqltype.Consistency
+type Consistency = cql.Consistency
 type Counter = codec.Counter
 
 var CounterCodec = codec.CounterCodec
@@ -228,7 +229,7 @@ const One = cqltype.One
 func OneColumn[T any](a0 Decoder[T]) RowDecoder[T]  { return codec.OneColumn[T](a0) }
 func OneParam[T any](a0 Encoder[T]) ParamEncoder[T] { return codec.OneParam[T](a0) }
 
-type Option[T any] = cqltype.Option[T]
+type Option[T any] = cql.Option[T]
 
 const OrdinaryStatement = cqltype.OrdinaryStatement
 

@@ -11,7 +11,6 @@ import (
 const ASC = implMetadata.ASC
 
 type AggregateMetadata = implMetadata.AggregateMetadata
-type AttemptError = routing.AttemptError
 type AttemptEvent = routing.AttemptEvent
 
 var CDCTokenPartitioner = routing.CDCTokenPartitioner
@@ -61,7 +60,6 @@ var ErrUseStmt = runtimeerrors.ErrUseStmt
 type FunctionMetadata = implMetadata.FunctionMetadata
 type HostSnapshot = model.HostSnapshot
 
-const IgnoreWriteError = routing.IgnoreWriteError
 const IndexKindCustom = implMetadata.IndexKindCustom
 
 type IndexMetadata = implMetadata.IndexMetadata
@@ -88,23 +86,14 @@ type Route = routing.Route
 
 const AnyShard = routing.AnyShard
 
-type RetryAction = routing.RetryAction
-type RetryDecision = routing.RetryDecision
-
-const RetryNext = routing.RetryNext
-const RetrySame = routing.RetrySame
-
 type RoutingInfo = model.RoutingInfo
 type RoutingOptions = routing.RoutingOptions
 type RoutingPolicy = routing.RoutingPolicy
-type SafeRetryPolicy = routing.SafeRetryPolicy
 type SchemaChangedError = runtimeerrors.SchemaChangedError
 
 func SingleTargetRouting(a0 Target, a1 bool) RoutingPolicy {
 	return routing.SingleTargetRouting(a0, a1)
 }
-
-const StopRetry = routing.StopRetry
 
 type TableMetadata = implMetadata.TableMetadata
 type TableMetadataOptions = implMetadata.TableMetadataOptions

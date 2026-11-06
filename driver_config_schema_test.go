@@ -15,6 +15,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/retry"
 
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/santhosh-tekuri/jsonschema/v6/kind"
@@ -205,19 +206,19 @@ func driverConfigCases() []struct {
 		{
 			name: "safe retry three attempts",
 			cfg: func(c *clusterSettings) {
-				implCluster.InternalClusterSettingsData(c).InternalDefaultProfile.Retry = SafeRetryPolicy{MaxAttempts: 3}
+				implCluster.InternalClusterSettingsData(c).InternalDefaultProfile.Retry = retry.Safe{MaxAttempts: 3}
 			},
 		},
 		{
 			name: "safe retry one attempt",
 			cfg: func(c *clusterSettings) {
-				implCluster.InternalClusterSettingsData(c).InternalDefaultProfile.Retry = SafeRetryPolicy{MaxAttempts: 1}
+				implCluster.InternalClusterSettingsData(c).InternalDefaultProfile.Retry = retry.Safe{MaxAttempts: 1}
 			},
 		},
 		{
 			name: "safe retry default limit",
 			cfg: func(c *clusterSettings) {
-				implCluster.InternalClusterSettingsData(c).InternalDefaultProfile.Retry = SafeRetryPolicy{MaxAttempts: 0}
+				implCluster.InternalClusterSettingsData(c).InternalDefaultProfile.Retry = retry.Safe{MaxAttempts: 0}
 			},
 		},
 		{
@@ -229,13 +230,13 @@ func driverConfigCases() []struct {
 		{
 			name: "safe retry negative limit",
 			cfg: func(c *clusterSettings) {
-				implCluster.InternalClusterSettingsData(c).InternalDefaultProfile.Retry = SafeRetryPolicy{MaxAttempts: -1}
+				implCluster.InternalClusterSettingsData(c).InternalDefaultProfile.Retry = retry.Safe{MaxAttempts: -1}
 			},
 		},
 		{
 			name: "safe retry zero limit",
 			cfg: func(c *clusterSettings) {
-				implCluster.InternalClusterSettingsData(c).InternalDefaultProfile.Retry = SafeRetryPolicy{MaxAttempts: 0}
+				implCluster.InternalClusterSettingsData(c).InternalDefaultProfile.Retry = retry.Safe{MaxAttempts: 0}
 			},
 		},
 		{

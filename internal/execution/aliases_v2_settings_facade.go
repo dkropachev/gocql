@@ -14,7 +14,6 @@ type Observer = implSettings.Observer
 type Profile = implSettings.Profile
 
 type RequestEvent = implSettings.RequestEvent
-type RetryPolicy = implSettings.RetryPolicy
 
 type UnsupportedSettingError = implSettings.UnsupportedSettingError
 

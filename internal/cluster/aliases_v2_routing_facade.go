@@ -47,7 +47,6 @@ type Route = routing.Route
 type RoutingInfo = model.RoutingInfo
 
 type RoutingPolicy = routing.RoutingPolicy
-type SafeRetryPolicy = routing.SafeRetryPolicy
 
 type TableMetadata = implMetadata.TableMetadata
 

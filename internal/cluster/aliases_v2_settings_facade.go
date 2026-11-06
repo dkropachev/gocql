@@ -44,8 +44,6 @@ type Profile = implSettings.Profile
 
 type ReconnectPolicy = implSettings.ReconnectPolicy
 
-type RetryPolicy = implSettings.RetryPolicy
-
 type ScyllaShardAwareDialer = implEndpoint.ScyllaShardAwareDialer
 type ShardDialer = implEndpoint.ShardDialer
 type SimpleConvictionPolicy = implSettings.SimpleConvictionPolicy

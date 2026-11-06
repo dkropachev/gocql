@@ -12,6 +12,8 @@ import (
 	"time"
 
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+
+	"github.com/scylladb/gocql/v2/retry"
 )
 
 // pinServe answers every request on every peer with answer(peer, token),
@@ -121,14 +123,14 @@ func TestQueryEachRePlansWhenPinnedHostIsDown(t *testing.T) {
 
 type pinRetryNext struct{}
 
-func (pinRetryNext) Decide(e AttemptError) RetryDecision {
-	if e.Attempt == 1 {
-		return RetryDecision{Action: RetryNext}
+func (pinRetryNext) Decide(e retry.Attempt) retry.Decision {
+	if e.Number == 1 {
+		return retry.Decision{Action: retry.Next}
 	}
-	return RetryDecision{}
+	return retry.Decision{}
 }
 
-// RetryNext on a pinned continuation moves to another host, as it would
+// retry.Next on a pinned continuation moves to another host, as it would
 // have moved past the plan's first target, and the page after it pins to
 // the new host. Each run fails its first continuation attempt.
 // TestSkipHostPlanOmitsPinnedHost covers the skip itself, which round-robin

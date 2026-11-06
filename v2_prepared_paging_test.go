@@ -18,6 +18,7 @@ package gocql
 
 import (
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	"github.com/scylladb/gocql/v2/retry"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 
@@ -720,11 +721,11 @@ func step03ErrorResponse(t *testing.T, stream, code int, id []byte) []byte {
 
 type step03RetryOnce struct{}
 
-func (step03RetryOnce) Decide(e AttemptError) RetryDecision {
-	if e.Attempt == 1 {
-		return RetryDecision{Action: RetrySame}
+func (step03RetryOnce) Decide(e retry.Attempt) retry.Decision {
+	if e.Number == 1 {
+		return retry.Decision{Action: retry.Same}
 	}
-	return RetryDecision{}
+	return retry.Decision{}
 }
 func TestV2PreparedRetryRepreparePagingNeverReencodes(t *testing.T) {
 	s, conns, peers := runtimeTestSession(t, 1)

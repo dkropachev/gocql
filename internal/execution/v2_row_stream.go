@@ -22,6 +22,7 @@ package execution
 import (
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/retry"
 
 	"context"
 	"errors"
@@ -653,14 +654,14 @@ func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
 			rt.retries.Add(1)
 			continue
 		}
-		decision := RetryDecision{}
-		if retry := request.InternalOptions.InternalProfile.Retry; retry != nil {
-			decision = retry.Decide(AttemptError{Err: err, Attempt: attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.InternalRouting.Conditional, BytesWritten: InternalAttemptBytesWritten(err)})
+		decision := retry.Decision{}
+		if policy := request.InternalOptions.InternalProfile.Retry; policy != nil {
+			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.InternalRouting.Conditional, BytesWritten: InternalAttemptBytesWritten(err)})
 		}
-		if decision.Action == StopRetry {
+		if decision.Action == retry.Stop {
 			return err
 		}
-		if decision.Action != RetrySame && decision.Action != RetryNext {
+		if decision.Action != retry.Same && decision.Action != retry.Next {
 			return typeValidation("stream retry", "requires retry same, next or stop")
 		}
 		if decision.Delay < 0 {
@@ -672,10 +673,10 @@ func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
 			}
 			consistency = decision.Consistency.Value
 		}
-		if decision.Action == RetrySame && s.privateStorage.InternalReservation.InternalClosing.Load() {
+		if decision.Action == retry.Same && s.privateStorage.InternalReservation.InternalClosing.Load() {
 			s.privateStorage.retryTarget = &Target{HostID: conn.InternalHostID(), ShardID: Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
 		}
-		if decision.Action == RetryNext || s.privateStorage.InternalReservation.InternalClosing.Load() {
+		if decision.Action == retry.Next || s.privateStorage.InternalReservation.InternalClosing.Load() {
 			s.privateStorage.InternalReservation.InternalClose(false)
 			s.privateStorage.InternalReservation = nil
 			s.privateStorage.prepared = nil

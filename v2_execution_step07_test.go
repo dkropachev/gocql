@@ -18,6 +18,7 @@ package gocql
 
 import (
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	"github.com/scylladb/gocql/v2/retry"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 
@@ -304,8 +305,8 @@ func TestStep07HostPinSurvivesCustomPolicy(t *testing.T) {
 func TestStep07SafeRetryBytesWritten(t *testing.T) {
 	for _, written := range []bool{false, true} {
 		err := runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: errors.New("write"), InternalPotentiallyExecuted: written})
-		decision := (SafeRetryPolicy{}).Decide(AttemptError{Err: err, Attempt: 1, BytesWritten: attemptBytesWritten(err)})
-		if (decision.Action == RetryNext) == written {
+		decision := (retry.Safe{}).Decide(retry.Attempt{Err: err, Number: 1, BytesWritten: attemptBytesWritten(err)})
+		if (decision.Action == retry.Next) == written {
 			t.Fatal(written, decision)
 		}
 	}

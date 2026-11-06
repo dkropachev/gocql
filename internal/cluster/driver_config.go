@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/scylladb/gocql/v2/retry"
 )
 
 // driverConfigStartupKey is the STARTUP option carrying the JSON description
@@ -748,9 +750,9 @@ func InternalBuildQueryRetryReport(cfg *InternalClusterSettings) InternalQueryRe
 	}
 	return InternalQueryRetryReport{Policy: InternalBuildRetryPolicyReport(policy)}
 }
-func InternalBuildRetryPolicyReport(policy RetryPolicy) any {
+func InternalBuildRetryPolicyReport(policy retry.Policy) any {
 	switch p := policy.(type) {
-	case SafeRetryPolicy:
+	case retry.Safe:
 		attempts := p.MaxAttempts
 		if attempts <= 0 {
 			attempts = 3

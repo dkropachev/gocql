@@ -72,7 +72,6 @@ type Profile = implSettings.Profile
 type ProtocolLimits = implSettings.ProtocolLimits
 type ReconnectPolicy = implSettings.ReconnectPolicy
 type RequestEvent = implSettings.RequestEvent
-type RetryPolicy = implSettings.RetryPolicy
 type retiredScyllaConnectionFeatures = implEndpoint.ScyllaConnectionFeatures
 
 func retiredScyllaGetSourcePort(a0 context.Context) uint16 {

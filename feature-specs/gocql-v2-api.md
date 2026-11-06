@@ -1093,7 +1093,7 @@ type OptionValues struct {
     IncludeMetadata bool                          // request full result metadata
     HostID Option[UUID]
     ShardID Option[uint32]
-    Retry RetryPolicy
+    Retry retry.Policy
     Observer Observer
 }
 type PayloadEntry struct { Key string; Value Nullable[Bytes] }
@@ -1103,7 +1103,7 @@ type Profile struct {
     Timeout, PageTimeout time.Duration
     PageSize int32
     Prefetch int
-    Retry RetryPolicy
+    Retry retry.Policy
     Routing RoutingPolicy
     Speculation SpeculationPolicy
 }
@@ -1197,23 +1197,7 @@ type RoutingPolicy interface {
     Plan(RoutingInfo, *MetadataSnapshot) QueryPlan
     Observe(AttemptEvent)
 }
-type RetryDecision struct {
-    Action RetryAction
-    Consistency Option[Consistency]
-    Delay time.Duration
-}
-type RetryAction uint8
-const (StopRetry RetryAction = iota; RetrySame; RetryNext; IgnoreWriteError)
-type RetryPolicy interface { Decide(AttemptError) RetryDecision }
 type SpeculationPolicy interface { Delay(attempt int, metrics MetricsSnapshot) (time.Duration, bool) }
-type AttemptError struct {
-    Err error
-    Attempt int
-    Idempotent bool
-    Consistency Consistency
-    Conditional bool
-    BytesWritten bool
-}
 type Observer interface { ObserveRequest(RequestEvent); ObserveAttempt(AttemptEvent) }
 type RequestEvent struct {
     ID uint64
@@ -1233,6 +1217,34 @@ type AttemptEvent struct {
     Err error
     Cancelled, Speculative bool
 }
+```
+
+Retry types live in the public package `github.com/scylladb/gocql/v2/retry`,
+and the consistency vocabulary they use lives in
+`github.com/scylladb/gocql/v2/cql`. A retry policy depends on those two
+packages only, not on the root package:
+
+```go
+package retry
+
+type Action uint8
+const (Stop Action = iota; Same; Next; IgnoreWrite)
+type Attempt struct {
+    Err error
+    Number int // 1-based
+    Idempotent bool
+    Consistency cql.Consistency
+    Conditional bool
+    BytesWritten bool
+}
+type Decision struct {
+    Action Action
+    Consistency cql.Option[cql.Consistency]
+    Delay time.Duration
+}
+type Policy interface { Decide(Attempt) Decision }
+type PolicyFunc func(Attempt) Decision
+type Safe struct { MaxAttempts int }
 ```
 
 Built-in routing has a concrete configuration surface. DefaultConfig selects a

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	g "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/retry"
 )
 
 const driverName = "v2"
@@ -52,7 +53,7 @@ func connect(hosts []string) (adapter, error) {
 	p.PageTimeout = 10 * time.Second
 	p.PageSize = 32
 	p.Prefetch = 0
-	p.Retry = g.SafeRetryPolicy{MaxAttempts: 1}
+	p.Retry = retry.Safe{MaxAttempts: 1}
 	p.Speculation = nil
 	p.Routing, _ = g.NewRoutingPolicy(g.RoutingOptions{TokenAware: true, Datacenter: "datacenter1"})
 	c.DefaultProfile = &p

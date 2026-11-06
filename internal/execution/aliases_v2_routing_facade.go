@@ -13,7 +13,6 @@ import (
 
 var ErrClosed = runtimeerrors.ErrClosed
 
-type AttemptError = routing.AttemptError
 type AttemptEvent = routing.AttemptEvent
 
 var ErrKeyspaceDoesNotExist = runtimeerrors.ErrKeyspaceDoesNotExist
@@ -26,24 +25,15 @@ var ErrPagingComplete = runtimeerrors.ErrPagingComplete
 
 type HostSnapshot = model.HostSnapshot
 
-const IgnoreWriteError = routing.IgnoreWriteError
-
 type MetricsSnapshot = routing.MetricsSnapshot
 
 type QueryError = runtimeerrors.QueryError
 type QueryPlan = routing.QueryPlan
 type Route = routing.Route
 
-type RetryDecision = routing.RetryDecision
-
-const RetryNext = routing.RetryNext
-const RetrySame = routing.RetrySame
-
 type RoutingInfo = model.RoutingInfo
 
 type SchemaChangedError = runtimeerrors.SchemaChangedError
-
-const StopRetry = routing.StopRetry
 
 type Target = model.Target
 type TokenPartitioner = routing.TokenPartitioner
