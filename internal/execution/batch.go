@@ -152,7 +152,7 @@ func validateBatch(s *implCluster.Session, kind BatchKind, batch *Batch, options
 
 // add appends one statement whose encoded values are values. request carries
 // the statement, its source and its routing.
-func (b *Batch) add(s *implCluster.Session, request *InternalExecutionRequest) error {
+func (b *Batch) add(s *implCluster.Session, source statementSource, statement string, r *RoutingInfo, values encodedValues) error {
 	if b == nil {
 		return typeValidation("batch", "nil batch")
 	}
@@ -162,11 +162,9 @@ func (b *Batch) add(s *implCluster.Session, request *InternalExecutionRequest) e
 	if b.session != nil && b.session != s {
 		return typeValidation("batch session", "statements belong to different sessions")
 	}
-	r := &request.InternalRouting
 	if r.Keyspace != "" && b.routing.Keyspace != "" && r.Keyspace != b.routing.Keyspace {
 		return typeValidation("batch keyspace", "members use different keyspaces")
 	}
-	values := request.InternalValues
 	start := len(b.values)
 	n := int(values.Framed.Len())
 	b.values = append(b.values, make([]byte, n)...)
@@ -182,8 +180,8 @@ func (b *Batch) add(s *implCluster.Session, request *InternalExecutionRequest) e
 		}
 	}
 	b.entries = append(b.entries, batchEntry{
-		source:    request.InternalSource,
-		statement: request.InternalStatement,
+		source:    source,
+		statement: statement,
 		columns:   values.Columns,
 		start:     start,
 		end:       start + n,
@@ -222,7 +220,7 @@ func InternalAddBound[R any](batch *Batch, s *implCluster.Session, bound *Bound[
 		return err
 	}
 	defer request.InternalOwner.InternalRelease()
-	return batch.add(s, request)
+	return batch.add(s, request.InternalSource, request.InternalStatement, &request.InternalRouting, request.InternalValues)
 }
 
 // runBatch sends batch on s without a query and returns its first and

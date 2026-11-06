@@ -358,16 +358,39 @@ func (q *Query[P, R]) Routing(value P) (RoutingInfo, error) {
 // AddTo encodes value with the query's parameters and appends the statement
 // to batch. The values are copied into the batch, so the query is free for
 // its next use as soon as AddTo returns, and closing it does not affect the
-// batch.
+// batch. Like the query's executions, AddTo fails while the query is busy.
 func (q *Query[P, R]) AddTo(batch *Batch, value P) error {
 	if batch == nil {
 		return typeValidation("batch", "nil batch")
 	}
-	if err := q.capture(context.Background(), value); err != nil {
+	if q == nil || q.state.owner == nil || q.state.runtime == nil {
+		return typeValidation("query", "uninitialized query")
+	}
+	// Encoding into the query's buffer needs only an idle query: nothing
+	// outlives the call, so it starts no execution generation.
+	q.state.mu.Lock()
+	closed, busy := q.state.closed, q.state.busy
+	q.state.mu.Unlock()
+	if closed {
+		return ErrClosed
+	}
+	if busy {
+		return ErrBusy
+	}
+	values, err := binding.EncodeInto(&q.buffer, q.params, q.columns, value, q.allowUnset)
+	if err != nil {
 		return err
 	}
-	defer q.state.owner.InternalRelease()
-	return batch.add(q.state.runtime.Session, &q.bound.privateStorage.InternalRequest)
+	request := &q.bound.privateStorage.InternalRequest
+	routing := request.InternalRouting
+	if routing.Token, err = request.InternalSource.token(values.Cells); err != nil {
+		return err
+	}
+	err = batch.add(q.state.runtime.Session, request.InternalSource, request.InternalStatement, &routing, values)
+	if q.buffer.RetainedBytes() > 64<<10 {
+		q.buffer.Retire()
+	}
+	return err
 }
 
 // ExecBatch sends batch as one CQL BATCH of kind on the query's session.

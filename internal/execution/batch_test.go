@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -196,6 +197,20 @@ func TestBatchValidation(t *testing.T) {
 	if _, err := q.ExecBatch(ctx, BatchKind(42), &batch, Options{}); err == nil {
 		t.Fatal("unknown batch kind sent")
 	}
+	if err := q.state.begin(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.AddTo(&batch, []byte("v")); !errors.Is(err, ErrBusy) {
+		t.Fatal("busy query appended", err)
+	}
+	q.state.owner.InternalRelease()
+	q.Close()
+	if err := q.AddTo(&batch, []byte("v")); !errors.Is(err, ErrClosed) {
+		t.Fatal("closed query appended", err)
+	}
+	if batch.Len() != 1 {
+		t.Fatal(batch.Len())
+	}
 }
 
 func TestBatchAddToDoesNotAllocate(t *testing.T) {
@@ -293,7 +308,7 @@ func TestBatchStatementKind(t *testing.T) {
 	} {
 		var batch Batch
 		for _, kind := range tc.kinds {
-			if err := batch.add(s, &InternalExecutionRequest{InternalStatement: "UPDATE t SET v=1", InternalRouting: RoutingInfo{Kind: kind}}); err != nil {
+			if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &RoutingInfo{Kind: kind}, encodedValues{}); err != nil {
 				t.Fatal(err)
 			}
 		}
