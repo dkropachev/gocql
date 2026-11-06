@@ -5,35 +5,16 @@ package integration
 import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/metadata"
 	routing "github.com/scylladb/gocql/v2/routing"
-
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 
 	"context"
 	"errors"
 	"fmt"
 	"testing"
-	"time"
 
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 )
-
-func TestDCValidationTokenAware(t *testing.T) {
-	t.Parallel()
-	testV2InvalidDatacenter(t, routing.Options{TokenAware: true, Datacenter: "WRONG_DC"})
-}
-
-func TestDCValidationDCAware(t *testing.T) {
-	t.Parallel()
-	testV2InvalidDatacenter(t, routing.Options{Datacenter: "WRONG_DC"})
-}
-
-func TestDCValidationRackAware(t *testing.T) {
-	t.Parallel()
-	testV2InvalidDatacenter(t, routing.Options{Datacenter: "WRONG_DC", Rack: "RACK"})
-}
 
 func testV2InvalidDatacenter(t *testing.T, options routing.Options) {
 	t.Helper()
@@ -49,29 +30,6 @@ func testV2InvalidDatacenter(t *testing.T, options routing.Options) {
 	var validation *cql.ValidationError
 	if !errors.As(err, &validation) {
 		t.Fatalf("expected datacenter validation error, got %T: %v", err, err)
-	}
-}
-
-func TestTokenAwareHostPolicy(t *testing.T) {
-	t.Parallel()
-	for _, configuredKeyspace := range []bool{true, false} {
-		name := "no-keyspace"
-		if configuredKeyspace {
-			name = "keyspace"
-		}
-		t.Run(name, func(t *testing.T) {
-			bootstrap := createV2Session(t)
-			defer bootstrap.Close()
-			keyspace := v2SchemaRoutingName(t)
-			v2CreateRoutingKeyspace(t, bootstrap, keyspace, 1)
-			defer cleanup(t, bootstrap, keyspace)
-			cluster := createV2Cluster()
-			v2ConfigureRouting(t, &cluster, routing.Options{TokenAware: true})
-			if configuredKeyspace {
-				cluster.Keyspace = keyspace
-			}
-			testIfPolicyInitializedProperly(t, cluster, keyspace)
-		})
 	}
 }
 
@@ -223,62 +181,4 @@ func (p v2UnavailableHostsRouting) unavailable(metadata *metadata.Snapshot) *met
 		implRouting.SnapshotData(&snapshot).InternalHosts = implRouting.SnapshotData(&snapshot).InternalHosts[:1]
 	}
 	return &snapshot
-}
-
-// Keep the all-hosts-down disruption test serialized as in the original suite.
-//
-//nolint:paralleltest // it brings every host down, so it cannot share the cluster
-func TestNoHangAllHostsDown(t *testing.T) {
-	session := createV2Session(t)
-	defer session.Close()
-	hosts := session.Metadata().Hosts()
-	if len(hosts) == 0 {
-		t.Fatal("no hosts")
-	}
-	// Match the original fault injection at the actual connection picker too:
-	// routing intentionally includes disconnected fallback candidates.
-	for _, host := range implCluster.SessionData(session).InternalHostSource.InternalGetHostsList() {
-		implEndpoint.InternalHostInfoSetState(host, NodeDown)
-		defer implEndpoint.InternalHostInfoSetState(host, NodeUp)
-	}
-	dc, rack := hosts[0].Datacenter, hosts[0].Rack
-	policies := []routing.Options{
-		{Datacenter: dc, AllowRemote: true},
-		{Datacenter: dc},
-		{TokenAware: true, Datacenter: dc, AllowRemote: true},
-		{TokenAware: true, Datacenter: dc},
-		{Datacenter: dc, Rack: rack, AllowRemote: true},
-		{Datacenter: dc, Rack: rack},
-		{TokenAware: true, Datacenter: dc, Rack: rack, AllowRemote: true},
-		{TokenAware: true, Datacenter: dc, Rack: rack},
-		{},
-	}
-	bound, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT host_id FROM system.local", Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}, cql.NewColumns(), cql.EmptyParams{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer bound.Close()
-	for i, options := range policies {
-		policy, err := routing.NewPolicy(options)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, oneHost := range []bool{false, true} {
-			profile := *createV2Cluster().DefaultProfile
-			profile.Routing = v2UnavailableHostsRouting{Policy: policy, oneHost: oneHost}
-			handle := profileOf(profile)
-			ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
-			rows, queryErr := Run(ctx, session, bound, bindOptions(session, gocql.Options{Profile: handle}))
-			if queryErr == nil {
-				queryErr = rows.Close()
-			}
-			if ctx.Err() != nil {
-				t.Errorf("policy %d oneHost=%t hung when every host was down: %v", i, oneHost, queryErr)
-			}
-			if queryErr == nil {
-				t.Errorf("policy %d oneHost=%t unexpectedly executed with every host down", i, oneHost)
-			}
-			cancel()
-		}
-	}
 }

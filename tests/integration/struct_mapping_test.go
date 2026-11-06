@@ -1,0 +1,719 @@
+//go:build integration
+
+// Copyright 2026 The Gocql Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license.
+
+package integration
+
+import (
+	"fmt"
+	"math/big"
+	"reflect"
+	"testing"
+
+	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/tests/integration/internal/mapped"
+)
+
+// TestStructMapping covers struct mappings through every query execution API:
+// Prepared, Query, unprepared queries, batches, conditional statements and row
+// streams.
+func TestStructMapping(t *testing.T) {
+	// Query.AddTo with ExecBatch, and a counter table updated through a struct.
+	t.Run("Batch", func(t *testing.T) {
+		ctx, f := newSMFixture(t)
+		insert, err := gocql.NewQuery(f.insert(t, ctx), gocql.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer insert.Close()
+		var batch gocql.Batch
+		var want []smRecord
+		for i := range 3 {
+			r := smRecordAt(6, i)
+			want = append(want, r)
+			if err := insert.AddTo(&batch, r); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := insert.ExecBatch(ctx, cql.LoggedBatch, &batch, gocql.SessionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		var got smRecord
+		n := 0
+		if err := f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)).Each(ctx, 6, &got, func(r *smRecord) error {
+			err := recordError(*r, want[n])
+			n++
+			return err
+		}, gocql.SessionOptions{}); err != nil || n != len(want) {
+			t.Fatal(n, err)
+		}
+
+		counters := testTableName(t, "counters")
+		if err := v2CreateTable(ctx, f.session, "CREATE TABLE IF NOT EXISTS "+counters+" (k int PRIMARY KEY, hits counter)"); err != nil {
+			t.Fatal(err)
+		}
+		type hit struct {
+			K    int32
+			Hits cql.Counter
+		}
+		add, err := gocql.PrepareQuery(ctx, f.session, cql.Statement[hit, cql.EmptyRow]{
+			Kind:   cql.OrdinaryStatement,
+			CQL:    "UPDATE " + counters + " SET hits = hits + ? WHERE k = ?",
+			Params: cql.MustParamsOf[hit](),
+		}, gocql.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer add.Close()
+		if _, err := v2Exec(ctx, f.session, "TRUNCATE "+counters); err != nil {
+			t.Fatal(err)
+		}
+		batch.Reset()
+		for _, h := range []hit{{K: 1, Hits: 2}, {K: 1, Hits: 3}} {
+			if err := add.AddTo(&batch, h); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := add.ExecBatch(ctx, cql.CounterBatch, &batch, gocql.SessionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		read, err := gocql.PrepareQuery(ctx, f.session, cql.Statement[int32, hit]{
+			Kind: cql.OrdinaryStatement, CQL: "SELECT k, hits FROM " + counters + " WHERE k = ?",
+			Params: cql.OneParam(cql.Int32), Rows: cql.MustRowOf[hit](),
+		}, gocql.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer read.Close()
+		var h hit
+		if ok, err := read.One(ctx, 1, &h); err != nil || !ok || h != (hit{K: 1, Hits: 5}) {
+			t.Fatal(h, ok, err)
+		}
+	})
+
+	// Conditional statements decode the previous row into a struct, alone and in
+	// a conditional batch.
+	t.Run("Conditional", func(t *testing.T) {
+		ctx, f := newSMFixture(t)
+		insert, err := gocql.PrepareQuery(ctx, f.session, cql.Statement[smRecord, cql.CASResult[smRecord]]{
+			Kind:   cql.ConditionalStatement,
+			CQL:    "INSERT INTO " + f.table + " (" + smColumns + ") VALUES (?" + repeatMarkers(21) + ") IF NOT EXISTS",
+			Params: cql.MustParamsOf(smAttrs),
+			Rows:   cql.CASRows(cql.MustRowOf(smAttrs)),
+		}, gocql.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer insert.Close()
+		r := smRecordAt(7, 0)
+		var result cql.CASResult[smRecord]
+		if ok, err := insert.One(ctx, r, &result); err != nil || !ok || !result.Applied {
+			t.Fatal("first insert:", ok, err, result.Applied)
+		}
+		changed := r
+		changed.Name = "other"
+		if ok, err := insert.One(ctx, changed, &result); err != nil || !ok || result.Applied || !result.Previous.Set {
+			t.Fatal("second insert:", ok, err, result)
+		}
+		requireRecord(t, result.Previous.Value, r)
+
+		type guard struct {
+			Bucket int32
+			ID     cql.UUID `cql:"id"`
+			Name   string
+			Big    int64
+		}
+		update, err := gocql.PrepareQuery(ctx, f.session, cql.Statement[guard, cql.CASResult[smRecord]]{
+			Kind:   cql.ConditionalStatement,
+			CQL:    "UPDATE " + f.table + " SET name = ? WHERE bucket = ? AND id = ? IF big = ?",
+			Params: cql.MustParamsOf[guard](),
+			Rows:   cql.CASRows(cql.MustRowOf(smAttrs)),
+		}, gocql.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer update.Close()
+		var batch gocql.Batch
+		if err := update.AddTo(&batch, guard{Bucket: 7, ID: r.ID, Name: "batched", Big: r.Big}); err != nil {
+			t.Fatal(err)
+		}
+		page, err := update.RunBatch(ctx, cql.LoggedBatch, &batch, gocql.SessionOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer page.Close()
+		applied := 0
+		for page.NextInto(&result) {
+			if result.Applied {
+				applied++
+			}
+		}
+		if err := page.Err(); err != nil || applied == 0 {
+			t.Fatal("conditional batch:", applied, err)
+		}
+	})
+
+	// A mapping generated by cqlgen and the one reflection builds for the same
+	// struct write and read each other's rows, buffered and streamed.
+	t.Run("Generated", func(t *testing.T) {
+		ctx, f := newSMFixture(t)
+		if fields, ok := codec.RegisteredStruct[mapped.Event](); !ok || fields.Params == nil {
+			t.Fatal("generated Event mapping is not registered")
+		}
+		if fields, ok := codec.RegisteredStruct[mapped.StreamEvent](); !ok || fields.StreamColumns == nil {
+			t.Fatal("generated StreamEvent stream mapping is not registered")
+		}
+		const columns = "bucket, id, name, blob, big, maybe, tags, scores, createdat, updatedat"
+		reflectedParams := codecTestMust(codec.ReflectParams[mapped.Event]())
+		reflectedRows := codecTestMust(codec.ReflectRow[mapped.Event]())
+		events := make([]mapped.Event, 2)
+		for i := range events {
+			r := smRecordAt(10, i)
+			events[i] = mapped.Event{Bucket: r.Bucket, ID: r.ID, Name: r.Name, Blob: r.Blob, Big: r.Big, Maybe: r.Maybe,
+				Tags: r.Tags, Scores: r.Scores, Audit: mapped.Audit{CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}}
+		}
+		event := func(i int) mapped.Event { return events[i] }
+		for i, params := range []cql.ParamEncoder[mapped.Event]{cql.MustParamsOf[mapped.Event](), reflectedParams} {
+			insert, err := gocql.PrepareQuery(ctx, f.session, cql.Statement[mapped.Event, cql.EmptyRow]{
+				Kind: cql.OrdinaryStatement, CQL: "INSERT INTO " + f.table + " (" + columns + ") VALUES (?" + repeatMarkers(9) + ")", Params: params,
+			}, gocql.Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := insert.Exec(ctx, event(i)); err != nil {
+				t.Fatal(err)
+			}
+			insert.Close()
+		}
+		for _, rows := range []cql.RowDecoder[mapped.Event]{cql.MustRowOf[mapped.Event](), reflectedRows} {
+			read, err := gocql.PrepareQuery(ctx, f.session, cql.Statement[int32, mapped.Event]{
+				Kind: cql.OrdinaryStatement, CQL: "SELECT " + columns + " FROM " + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32), Rows: rows,
+			}, gocql.Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got mapped.Event
+			n := 0
+			if err := read.Each(ctx, 10, &got, func(e *mapped.Event) error {
+				if !reflect.DeepEqual(*e, event(n)) {
+					return fmt.Errorf("row %d:\ngot  %+v\nwant %+v", n, *e, event(n))
+				}
+				n++
+				return nil
+			}); err != nil || n != 2 {
+				t.Fatal(n, err)
+			}
+			read.Close()
+		}
+		prepared, err := gocql.Prepare(ctx, f.session, cql.Statement[int32, cql.DynamicRow]{
+			Kind: cql.OrdinaryStatement, CQL: "SELECT bucket, id, name, blob, big, maybe, scores, createdat, updatedat FROM " + f.table + " WHERE bucket = ?",
+			Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, decoder := range []cql.StreamRowDecoder[mapped.StreamEvent]{cql.MustStreamRowOf[mapped.StreamEvent](), codecTestMust(codec.ReflectStreamRow[mapped.StreamEvent]())} {
+			q, err := gocql.NewStreamQuery(prepared, decoder, gocql.StreamOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			stream, err := q.Run(ctx, 10)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := mapped.StreamEvent{Name: make([]byte, 0, 32), Blob: make([]byte, 0, 32), Scores: make([]int32, 0, 4)}
+			n := 0
+			for stream.NextInto(&got) {
+				w := event(n)
+				if string(got.Name) != w.Name || got.ID != w.ID || !reflect.DeepEqual(got.Scores, w.Scores) || got.Audit != w.Audit {
+					t.Fatalf("stream row %d:\ngot  %+v\nwant %+v", n, got, w)
+				}
+				n++
+			}
+			if err := stream.Err(); err != nil || n != 2 {
+				t.Fatal(n, err)
+			}
+			stream.Close()
+			if err := q.CloseAndWait(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+
+	// Null values and empty collections, which CQL stores as null, read back as
+	// invalid Nullables and empty slices.
+	t.Run("Nulls", func(t *testing.T) {
+		ctx, f := newSMFixture(t)
+		r := smRecordAt(4, 0)
+		r.Maybe, r.Tags, r.Scores, r.Attrs, r.Blob = cql.Nullable[int32]{}, []string{}, nil, nil, []byte{}
+		if _, err := f.insert(t, ctx).Exec(ctx, r, gocql.SessionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		var got smRecord
+		if ok, err := f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)).One(ctx, 4, &got, gocql.SessionOptions{}); err != nil || !ok {
+			t.Fatal(ok, err)
+		}
+		if got.Maybe.Valid || len(got.Tags) != 0 || len(got.Scores) != 0 || len(got.Attrs) != 0 || len(got.Blob) != 0 {
+			t.Fatalf("nulls and empty collections: %+v", got)
+		}
+	})
+
+	// Varint and decimal round trip through their struct fields.
+	t.Run("Numeric", func(t *testing.T) {
+		ctx, f := newSMFixture(t)
+		table := testTableName(t, "numeric")
+		if err := v2CreateTable(ctx, f.session, "CREATE TABLE IF NOT EXISTS "+table+" (k int PRIMARY KEY, v varint, d decimal)"); err != nil {
+			t.Fatal(err)
+		}
+		type numeric struct {
+			K int32
+			V cql.Varint
+			D cql.Decimal
+		}
+		insert, err := gocql.PrepareQuery(ctx, f.session, cql.Statement[numeric, cql.EmptyRow]{
+			Kind: cql.OrdinaryStatement, CQL: "INSERT INTO " + table + " (k, v, d) VALUES (?, ?, ?)", Params: cql.MustParamsOf[numeric](),
+		}, gocql.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer insert.Close()
+		huge, _ := new(big.Int).SetString("-123456789012345678901234567890", 10)
+		in := numeric{K: 1, V: cql.VarintFromBigInt(huge), D: cql.Decimal{Unscaled: cql.VarintFromBigInt(big.NewInt(314)), Scale: 2}}
+		if err := insert.Exec(ctx, in); err != nil {
+			t.Fatal(err)
+		}
+		read, err := gocql.PrepareQuery(ctx, f.session, cql.Statement[int32, numeric]{
+			Kind: cql.OrdinaryStatement, CQL: "SELECT k, v, d FROM " + table + " WHERE k = ?", Params: cql.OneParam(cql.Int32), Rows: cql.MustRowOf[numeric](),
+		}, gocql.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer read.Close()
+		// Varint and Decimal borrow the response page: read them while the row is
+		// current, or Clone the row to keep it.
+		rows, err := read.Run(ctx, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out, kept numeric
+		n := 0
+		for rows.NextInto(&out) {
+			if out.V.BigInt().Cmp(huge) != 0 || out.D.Unscaled.BigInt().Int64() != 314 || out.D.Scale != 2 {
+				t.Fatalf("numeric round trip: %v %v/%d", out.V.BigInt(), out.D.Unscaled.BigInt(), out.D.Scale)
+			}
+			if kept, err = rows.Clone(); err != nil {
+				t.Fatal(err)
+			}
+			n++
+		}
+		if err := rows.Err(); err != nil || n != 1 {
+			t.Fatal(n, err)
+		}
+		if err := rows.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if kept.V.BigInt().Cmp(huge) != 0 || kept.D.Unscaled.BigInt().Int64() != 314 {
+			t.Fatal("cloned numeric row did not survive its page")
+		}
+	})
+
+	// Prepared.Exec, Prepared.One and Prepared.Each.
+	t.Run("Prepared", func(t *testing.T) {
+		ctx, f := newSMFixture(t)
+		insert := f.insert(t, ctx)
+		want := []smRecord{smRecordAt(1, 0), smRecordAt(1, 1), smRecordAt(1, 2)}
+		for _, r := range want {
+			if _, err := insert.Exec(ctx, r, gocql.SessionOptions{}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		one, err := gocql.Prepare(ctx, f.session, cql.Statement[smKey, smRecord]{
+			Kind:   cql.OrdinaryStatement,
+			CQL:    "SELECT " + smColumns + " FROM " + f.table + " WHERE bucket = ? AND id = ?",
+			Params: cql.MustParamsOf[smKey](),
+			Rows:   cql.MustRowOf(smAttrs),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got smRecord
+		if ok, err := one.One(ctx, smKey{Bucket: 1, ID: want[1].ID}, &got, gocql.SessionOptions{}); err != nil || !ok {
+			t.Fatal(ok, err)
+		}
+		requireRecord(t, got, want[1])
+		if ok, err := one.One(ctx, smKey{Bucket: 1, ID: cql.UUID{}}, &got, gocql.SessionOptions{}); err != nil || ok {
+			t.Fatal("missing row:", ok, err)
+		}
+		var all []smRecord
+		err = f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)).Each(ctx, 1, &got, func(r *smRecord) error {
+			all = append(all, *r)
+			return nil
+		}, gocql.SessionOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(all) != len(want) {
+			t.Fatalf("Each: %d rows, want %d", len(all), len(want))
+		}
+		for i := range want {
+			requireRecord(t, all[i], want[i])
+		}
+	})
+
+	// Query.Exec, Run, RunPage, RunUnpaged, Each, One, Routing and LastResult,
+	// with paging across pages of two rows.
+	t.Run("Query", func(t *testing.T) {
+		ctx, f := newSMFixture(t)
+		insert, err := gocql.NewQuery(f.insert(t, ctx), gocql.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer insert.Close()
+		var want []smRecord
+		for i := range 5 {
+			r := smRecordAt(2, i)
+			want = append(want, r)
+			if err := insert.Exec(ctx, r); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := insert.Routing(want[0]); err != nil {
+			t.Fatal(err)
+		}
+		if err := insert.Wait(ctx); err != nil {
+			t.Fatal(err)
+		}
+		read, err := gocql.NewQuery(f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)), gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer read.Close()
+
+		t.Run("Run", func(t *testing.T) {
+			rows, err := read.Run(ctx, 2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got smRecord
+			n := 0
+			for rows.NextInto(&got) {
+				requireRecord(t, got, want[n])
+				clone, err := rows.Clone()
+				if err != nil {
+					t.Fatal(err)
+				}
+				requireRecord(t, clone, want[n])
+				n++
+			}
+			if err := rows.Err(); err != nil {
+				t.Fatal(err)
+			}
+			if err := rows.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if n != len(want) {
+				t.Fatalf("Run: %d rows across pages, want %d", n, len(want))
+			}
+			if err := read.Wait(ctx); err != nil {
+				t.Fatal(err)
+			}
+		})
+		t.Run("RunPage", func(t *testing.T) {
+			state, n := gocql.StartPage(), 0
+			for pages := 0; ; pages++ {
+				page, err := read.RunPage(ctx, 2, state)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var got smRecord
+				for page.NextInto(&got) {
+					requireRecord(t, got, want[n])
+					n++
+				}
+				if err := page.Err(); err != nil {
+					t.Fatal(err)
+				}
+				next := page.State()
+				if err := page.Close(); err != nil {
+					t.Fatal(err)
+				}
+				if err := read.Wait(ctx); err != nil {
+					t.Fatal(err)
+				}
+				if !next.More() {
+					break
+				}
+				// Resume from a page state saved as bytes, as a client would.
+				state = gocql.RestorePageState(next.Bytes())
+				if pages > len(want) {
+					t.Fatal("paging does not end")
+				}
+			}
+			if n != len(want) {
+				t.Fatalf("RunPage: %d rows, want %d", n, len(want))
+			}
+		})
+		t.Run("RunUnpaged", func(t *testing.T) {
+			// Unpaged execution takes a query without a page size.
+			read, err := gocql.NewQuery(f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)), gocql.Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer read.Close()
+			page, err := read.RunUnpaged(ctx, 2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer page.Close()
+			var got smRecord
+			n := 0
+			for page.NextInto(&got) {
+				requireRecord(t, got, want[n])
+				n++
+			}
+			if err := page.Err(); err != nil || n != len(want) {
+				t.Fatal(n, err)
+			}
+			if err := page.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err := read.Wait(ctx); err != nil {
+				t.Fatal(err)
+			}
+		})
+		t.Run("Each", func(t *testing.T) {
+			var got smRecord
+			n := 0
+			if err := read.Each(ctx, 2, &got, func(r *smRecord) error {
+				err := recordError(*r, want[n])
+				n++
+				return err
+			}); err != nil || n != len(want) {
+				t.Fatal(n, err)
+			}
+		})
+		t.Run("One", func(t *testing.T) {
+			var got smRecord
+			if ok, err := read.One(ctx, 2, &got); err != nil || !ok {
+				t.Fatal(ok, err)
+			}
+			requireRecord(t, got, want[0])
+			if ok, err := read.One(ctx, 99, &got); err != nil || ok {
+				t.Fatal("empty bucket:", ok, err)
+			}
+		})
+	})
+
+	// With ReuseBuffers, NextInto decodes slice fields into the destination's
+	// storage instead of allocating per row.
+	t.Run("ReuseBuffers", func(t *testing.T) {
+		ctx, f := newSMFixture(t)
+		insert := f.insert(t, ctx)
+		var want []smRecord
+		for i := range 4 {
+			r := smRecordAt(5, i)
+			want = append(want, r)
+			if _, err := insert.Exec(ctx, r, gocql.SessionOptions{}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		read, err := gocql.NewQuery(f.selectBucket(t, ctx, cql.MustRowOf(smAttrs, cql.ReuseBuffers[smRecord]())), gocql.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer read.Close()
+		rows, err := read.Run(ctx, 5)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		got := smRecord{Blob: make([]byte, 0, 16), Tags: make([]string, 0, 4)}
+		blob, tags := &got.Blob[:1][0], &got.Tags[:1][0]
+		n := 0
+		for rows.NextInto(&got) {
+			requireRecord(t, got, want[n])
+			if &got.Blob[0] != blob || &got.Tags[0] != tags {
+				t.Fatalf("row %d: slice fields did not reuse the destination's storage", n)
+			}
+			n++
+		}
+		if err := rows.Err(); err != nil || n != 4 {
+			t.Fatal(n, err)
+		}
+	})
+
+	// Row streams decode into a struct through StreamRowOf, buffered and
+	// incremental, prepared and unprepared.
+	t.Run("Stream", func(t *testing.T) {
+		ctx, f := newSMFixture(t)
+		insert := f.insert(t, ctx)
+		var want []smRecord
+		for i := range 5 {
+			r := smRecordAt(9, i)
+			want = append(want, r)
+			if _, err := insert.Exec(ctx, r, gocql.SessionOptions{}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		const query = "SELECT bucket, id, name, blob, big, maybe, scores, span, createdat, updatedat FROM "
+		read, err := gocql.Prepare(ctx, f.session, cql.Statement[int32, cql.DynamicRow]{
+			Kind: cql.OrdinaryStatement, CQL: query + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		check := func(t *testing.T, stream *gocql.RowStream[smStream]) {
+			t.Helper()
+			defer stream.Close()
+			// Streaming decoders write into the destination's storage.
+			got := smStream{Name: make([]byte, 0, 32), Blob: make([]byte, 0, 32), Scores: make([]int32, 0, 4)}
+			n := 0
+			for stream.NextInto(&got) {
+				w := want[n]
+				if got.Bucket != w.Bucket || got.ID != w.ID || string(got.Name) != w.Name || string(got.Blob) != string(w.Blob) ||
+					got.Big != w.Big || got.Maybe != w.Maybe || !reflect.DeepEqual(got.Scores, w.Scores) || got.Span != w.Span || got.smAudit != w.smAudit {
+					t.Fatalf("row %d:\ngot  %+v\nwant %+v", n, got, w)
+				}
+				n++
+			}
+			if err := stream.Err(); err != nil || n != len(want) {
+				t.Fatal(n, err)
+			}
+		}
+		for _, incremental := range []bool{false, true} {
+			options := gocql.StreamOptions{Incremental: incremental, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}
+			q, err := gocql.NewStreamQuery(read, cql.MustStreamRowOf[smStream](), options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stream, err := q.Run(ctx, 9)
+			if err != nil {
+				t.Fatal(err)
+			}
+			check(t, stream)
+			if err := q.CloseAndWait(ctx); err != nil {
+				t.Fatal(err)
+			}
+			u, err := gocql.NewUnpreparedStreamQuery(f.session, cql.Statement[int32, cql.DynamicRow]{
+				Kind: cql.OrdinaryStatement, CQL: query + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows,
+				BindMarkers: read.Parameters(),
+			}, cql.MustStreamRowOf[smStream](), options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stream, err = u.Run(ctx, 9)
+			if err != nil {
+				t.Fatal(err)
+			}
+			check(t, stream)
+			if err := u.CloseAndWait(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+
+	// A struct binds statements that use a subset of its columns, and a select
+	// of a subset of columns leaves the other fields zero.
+	t.Run("Subset", func(t *testing.T) {
+		ctx, f := newSMFixture(t)
+		r := smRecordAt(3, 0)
+		if _, err := f.insert(t, ctx).Exec(ctx, r, gocql.SessionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		update, err := gocql.PrepareQuery(ctx, f.session, cql.Statement[smRecord, cql.EmptyRow]{
+			Kind:   cql.OrdinaryStatement,
+			CQL:    "UPDATE " + f.table + " SET name = ?, tags = ?, maybe = ? WHERE bucket = ? AND id = ?",
+			Params: cql.MustParamsOf(smAttrs),
+		}, gocql.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer update.Close()
+		edit := smRecord{Bucket: r.Bucket, ID: r.ID, Name: "edited", Tags: []string{"z"}, Big: 12345}
+		if err := update.Exec(ctx, edit); err != nil {
+			t.Fatal(err)
+		}
+		type partial struct {
+			ID   cql.UUID `cql:"id"`
+			Name string
+			Tags []string
+			Big  int64 // not selected: stays zero
+			Note string
+		}
+		read, err := gocql.PrepareQuery(ctx, f.session, cql.Statement[smKey, partial]{
+			Kind:   cql.OrdinaryStatement,
+			CQL:    "SELECT id, name, tags FROM " + f.table + " WHERE bucket = ? AND id = ?",
+			Params: cql.MustParamsOf[smKey](),
+			Rows:   cql.MustRowOf[partial](),
+		}, gocql.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer read.Close()
+		got := partial{Big: 7, Note: "kept"}
+		if ok, err := read.One(ctx, smKey{Bucket: r.Bucket, ID: r.ID}, &got); err != nil || !ok {
+			t.Fatal(ok, err)
+		}
+		if want := (partial{ID: r.ID, Name: "edited", Tags: []string{"z"}}); !reflect.DeepEqual(got, want) {
+			t.Fatalf("subset row:\ngot  %+v\nwant %+v", got, want)
+		}
+		// The update nulled maybe; Big and the rest are unchanged.
+		var full smRecord
+		one, err := gocql.Prepare(ctx, f.session, cql.Statement[smKey, smRecord]{
+			Kind: cql.OrdinaryStatement, CQL: "SELECT " + smColumns + " FROM " + f.table + " WHERE bucket = ? AND id = ?",
+			Params: cql.MustParamsOf[smKey](), Rows: cql.MustRowOf(smAttrs),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok, err := one.One(ctx, smKey{Bucket: r.Bucket, ID: r.ID}, &full, gocql.SessionOptions{}); err != nil || !ok {
+			t.Fatal(ok, err)
+		}
+		want := r
+		want.Name, want.Tags, want.Maybe = "edited", []string{"z"}, cql.Nullable[int32]{}
+		requireRecord(t, full, want)
+	})
+
+	// Unprepared queries bind struct fields by the bind marker names given.
+	t.Run("Unprepared", func(t *testing.T) {
+		ctx, f := newSMFixture(t)
+		prepared := f.insert(t, ctx) // for the bind marker metadata
+		insert, err := gocql.NewUnpreparedQuery(f.session, cql.Statement[smRecord, cql.EmptyRow]{
+			Kind:        cql.OrdinaryStatement,
+			CQL:         "INSERT INTO " + f.table + " (" + smColumns + ") VALUES (?" + repeatMarkers(21) + ")",
+			Params:      cql.MustParamsOf(smAttrs),
+			BindMarkers: prepared.Parameters(),
+		}, gocql.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer insert.Close()
+		r := smRecordAt(8, 0)
+		if err := insert.Exec(ctx, r); err != nil {
+			t.Fatal(err)
+		}
+		keyMarkers := cql.NewColumns(
+			cql.ColumnSpec{Name: "bucket", Type: cql.IntType},
+			cql.ColumnSpec{Name: "id", Type: cql.UUIDType},
+		)
+		read, err := gocql.NewUnpreparedQuery(f.session, cql.Statement[smKey, smRecord]{
+			Kind:        cql.OrdinaryStatement,
+			CQL:         "SELECT " + smColumns + " FROM " + f.table + " WHERE bucket = ? AND id = ?",
+			Params:      cql.MustParamsOf[smKey](),
+			Rows:        cql.MustRowOf(smAttrs),
+			BindMarkers: keyMarkers,
+		}, gocql.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer read.Close()
+		var got smRecord
+		if ok, err := read.One(ctx, smKey{Bucket: 8, ID: r.ID}, &got); err != nil || !ok {
+			t.Fatal(ok, err)
+		}
+		requireRecord(t, got, r)
+	})
+}

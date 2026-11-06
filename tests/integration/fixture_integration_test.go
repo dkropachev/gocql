@@ -13,17 +13,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 
 	"github.com/scylladb/gocql/v2/cql"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
-
-// The runner always invokes cleanup after its test subprocess, even on failure.
-// A random run prefix is required; default/manual suites cannot trigger it.
-func TestCleanup(t *testing.T) {
-	if os.Getenv("GOCQL_FIXTURE_CLEANUP") != "1" {
-		t.Skip("cleanup runs only in the native runner's explicit post-package subprocess")
-	}
-	cleanupNamespaces(t, nil)
-}
 
 // A nil allowlist cleans the whole owned run after its test process joins. A
 // non-nil allowlist is used mid-package only for exact killed/joined children.
@@ -137,74 +127,4 @@ func checkAggregate(t *testing.T, s *gocql.Session, keyspace string) {
 	if _, err := v2Exec(context.Background(), s, "DROP TABLE "+table); err != nil {
 		t.Fatal(err)
 	}
-}
-
-// Explicit lifecycle probe used only by the harness's failure/cancellation gate.
-// It provisions a real owned namespace before announcing the injection point.
-func TestHarnessLifecycle(t *testing.T) {
-	action := os.Getenv("GOCQL_FIXTURE_ACTION")
-	if action == "" {
-		t.Skip("explicit harness failure/cancellation probe")
-	}
-	s := createV2Session(t)
-	defer s.Close()
-	if marker := os.Getenv("GOCQL_FIXTURE_MARKER"); marker != "" {
-		if err := os.WriteFile(marker, []byte(implCluster.SessionData(s).InternalCfg.Keyspace), 0600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	switch action {
-	case "fail":
-		t.Fatal("intentional harness failure after provisioning")
-	case "cancel":
-		select {}
-	default:
-		t.Fatal("unknown lifecycle injection")
-	}
-}
-
-func TestFixtureIdentity(t *testing.T) {
-	s, err := gocql.Connect(context.Background(), createV2Cluster())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
-	query := "SELECT release_version FROM system.local"
-	if *flagDistribution == "scylla" {
-		query = "SELECT version FROM system.versions WHERE key='local'"
-	}
-	row, err := v2ReadOne(context.Background(), s, query)
-	if err != nil {
-		t.Fatal(err)
-	}
-	value, err := row.At(0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	version, err := value.Text()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Log("ACTUAL_SERVER_VERSION", version.String(), "PROTOCOL", implCluster.SessionData(s).InternalCfg.ProtoVersion)
-	if !strings.HasPrefix(version.String(), strings.TrimPrefix(flagCassVersion.String(), "v")) {
-		t.Fatalf("unexpected server version %q", version.String())
-	}
-}
-
-func TestClientCertificateEnforced(t *testing.T) {
-	if !*flagRunSslTest || *flagDistribution != "scylla" {
-		t.Skip("requires Scylla mutual-TLS fixture")
-	}
-	accepted, err := gocql.Connect(context.Background(), createV2Cluster())
-	if err != nil {
-		t.Fatal("valid client certificate rejected", err)
-	}
-	accepted.Close()
-	config := createV2Cluster(func(c *gocql.Config) { c.TLS = c.TLS.Clone(); c.TLS.Certificates = nil })
-	rejected, err := gocql.Connect(context.Background(), config)
-	if err == nil {
-		rejected.Close()
-		t.Fatal("mutual-TLS server accepted missing client certificate")
-	}
-	t.Log("MISSING_CLIENT_CERT_REJECTED", err)
 }

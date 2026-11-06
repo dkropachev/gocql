@@ -34,10 +34,10 @@ import (
 	"testing"
 	"time"
 
+	inf "gopkg.in/inf.v0"
+
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-
-	inf "gopkg.in/inf.v0"
 )
 
 type WikiPage struct {
@@ -186,56 +186,60 @@ func (w *WikiTest) GetPageCount() int {
 	return int(count)
 }
 
-func TestWikiCreateSchema(t *testing.T) {
+func TestWiki(t *testing.T) {
 	t.Parallel()
 
-	session := createV2Session(t)
-	defer session.Close()
+	t.Run("CRUD", func(t *testing.T) {
+		t.Parallel()
 
-	CreateSchema(session, t, "create")
-}
+		session := createV2Session(t)
+		defer session.Close()
 
-func TestWikiCreatePages(t *testing.T) {
-	t.Parallel()
+		w := CreateSchema(session, t, "crud")
 
-	session := createV2Session(t)
-	defer session.Close()
-
-	w := CreateSchema(session, t, "create_pages")
-
-	numPages := 5
-	w.CreatePages(numPages)
-	if count := w.GetPageCount(); count != numPages {
-		t.Errorf("expected %d pages, got %d pages.", numPages, count)
-	}
-}
-
-func TestWikiTypicalCRUD(t *testing.T) {
-	t.Parallel()
-
-	session := createV2Session(t)
-	defer session.Close()
-
-	w := CreateSchema(session, t, "crud")
-
-	for _, page := range wikiTestData {
-		if err := w.InsertPage(page); err != nil {
-			t.Error("InsertPage:", err)
+		for _, page := range wikiTestData {
+			if err := w.InsertPage(page); err != nil {
+				t.Error("InsertPage:", err)
+			}
 		}
-	}
-	if count := w.GetPageCount(); count != len(wikiTestData) {
-		t.Errorf("count: expected %d, got %d\n", len(wikiTestData), count)
-	}
-	for _, original := range wikiTestData {
-		page := new(WikiPage)
-		if err := w.SelectPage(page, original.Title, original.RevId); err != nil {
-			t.Error("SelectPage:", err)
-			continue
+		if count := w.GetPageCount(); count != len(wikiTestData) {
+			t.Errorf("count: expected %d, got %d\n", len(wikiTestData), count)
 		}
-		sort.Sort(sort.StringSlice(page.Tags))
-		sort.Sort(sort.StringSlice(original.Tags))
-		if !reflect.DeepEqual(page, original) {
-			t.Errorf("page: expected %#v, got %#v\n", original, page)
+		for _, original := range wikiTestData {
+			page := new(WikiPage)
+			if err := w.SelectPage(page, original.Title, original.RevId); err != nil {
+				t.Error("SelectPage:", err)
+				continue
+			}
+			sort.Sort(sort.StringSlice(page.Tags))
+			sort.Sort(sort.StringSlice(original.Tags))
+			if !reflect.DeepEqual(page, original) {
+				t.Errorf("page: expected %#v, got %#v\n", original, page)
+			}
 		}
-	}
+	})
+
+	t.Run("CreatePages", func(t *testing.T) {
+		t.Parallel()
+
+		session := createV2Session(t)
+		defer session.Close()
+
+		w := CreateSchema(session, t, "create_pages")
+
+		numPages := 5
+		w.CreatePages(numPages)
+		if count := w.GetPageCount(); count != numPages {
+			t.Errorf("expected %d pages, got %d pages.", numPages, count)
+		}
+	})
+
+	t.Run("CreateSchema", func(t *testing.T) {
+		t.Parallel()
+
+		session := createV2Session(t)
+		defer session.Close()
+
+		CreateSchema(session, t, "create")
+	})
 }

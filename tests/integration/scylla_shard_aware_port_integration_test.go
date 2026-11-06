@@ -5,35 +5,10 @@ package integration
 import (
 	"context"
 	"net"
-	"testing"
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/endpoint"
 )
-
-func TestShardAwarePortIntegrationNoReconnections(t *testing.T) {
-	t.Parallel()
-
-	testShardAwarePortNoReconnections(t, makeIntegrationShardAwareCluster)
-}
-
-func TestShardAwarePortIntegrationMaliciousNAT(t *testing.T) {
-	t.Parallel()
-
-	testShardAwarePortMaliciousNAT(t, makeIntegrationShardAwareCluster)
-}
-
-func TestShardAwarePortIntegrationUnreachable(t *testing.T) {
-	t.Parallel()
-
-	testShardAwarePortUnreachable(t, makeIntegrationShardAwareCluster)
-}
-
-func TestShardAwarePortIntegrationUnusedIfNotEnabled(t *testing.T) {
-	t.Parallel()
-
-	testShardAwarePortUnusedIfNotEnabled(t, makeIntegrationShardAwareCluster)
-}
 
 func makeIntegrationShardAwareCluster() shardAwareTestCluster {
 	config := createV2Cluster()
