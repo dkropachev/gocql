@@ -87,7 +87,7 @@ current response (up to 1 MiB), finishes it and returns the reservation
 for reuse before cancelling, whose callback would otherwise close the
 connection. The intentional pause of the shared reader is no longer
 logged as a timeout. New unit test
-`TestStreamAbandonedIncrementalCloseKeepsConnection` (v4, v5;
+`TestStream/Close/AbandonedIncrementalKeepsConnection` (v4, v5;
 mid-response, boundary, over the limit), 30x under -race.
 
 Cluster, 2xABBA against e2268627:
@@ -102,7 +102,7 @@ All 13 errors were base runs timing out.
 
 ### P3: poll the context's Done channel instead of Err (rejected)
 
-`BenchmarkReusableQueryDecoding/partition/stream` +5.33% (5xABBA). The
+`BenchmarkReusableQuery/Decoding/partition/stream` +5.33% (5xABBA). The
 profile diff shows the removed `cancelCtx.Err` (-0.20 s) replaced by an
 equal `selectnbrecv`/`chanrecv` cost (+0.21 s): no mechanism gain.
 
@@ -128,7 +128,7 @@ Cluster, 2xABBA against P1:
 Happy-path gates (`hp/compare.sh`, 5xABBA against P1, cluster stopped):
 no change beyond 2%; flagged pone/w1 -2.08% sec/op, -5.29% cpu-sec/op,
 and pagectx/w4 +1.03% sec/op (p=0.043). Unit suite with -race: only the
-known `TestProcessFrameFailedDeadlineArmIsFatal`, which also fails on
+known `TestConn/ProcessFrame/FailedDeadlineArmIsFatal`, which also fails on
 e2268627~1.
 
 ### Not done

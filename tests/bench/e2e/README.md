@@ -23,7 +23,7 @@ count fails the workload.
 To regenerate, use a dedicated **owned** ScyllaDB fixture at an explicit native
 endpoint. The native fixture runner retains exclusive address locks through
 start, test and stop; its regeneration mode sets `GOCQL_REGENERATE_BENCH=1` and runs
-`TestRegenerateReplay`. The underlying command is:
+`TestExamples/RegenerateReplay`. The underlying command is:
 
 ```sh
 GOCQL_BENCH_ADDRESS=127.0.20.1:9042 \
@@ -44,7 +44,7 @@ errors before TestMain can call os.Exit, including ordinary failure and operatio
 cancellation. Only then does the operational replay test run. Failed/canceled
 processes that cannot execute defers retain the runner prefix, so the native
 runner's cleanup removes them after the exact child binary is killed and joined.
-TestOwnership exercises both paths. `GOCQL_BENCH_CORPUS_DIR` isolates
+TestExamples/Ownership exercises both paths. `GOCQL_BENCH_CORPUS_DIR` isolates
 fault-test captures from the checked-in corpus. No container reset or unrelated
 workload is involved.
 

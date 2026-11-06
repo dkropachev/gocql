@@ -6,9 +6,9 @@ goal is per-request fixed cost when the first attempt succeeds. Plan and rationa
 
 ## Gates
 
-- **T0**: `BenchmarkReusableQueryDecoding` (net.Pipe, one caller) and
-  `BenchmarkReusableQueryAdmission`. Exact allocations; CPU on an unbatched pipe.
-- **T1**: `BenchmarkReusableQueryLoopback` over loopback TCP with the production
+- **T0**: `BenchmarkReusableQuery/Decoding` (net.Pipe, one caller) and
+  `BenchmarkReusableQuery/Admission`. Exact allocations; CPU on an unbatched pipe.
+- **T1**: `BenchmarkReusableQuery/Loopback` over loopback TCP with the production
   8 KiB reader. The fake server is a child process pinned to CPUs 6-7, and the
   client is pinned to 4-5. At `w64 -cpu 1` the single P is saturated, so ns/op
   is client CPU per operation. `w1` is a round-trip latency figure (±5-8%).
@@ -16,13 +16,18 @@ goal is per-request fixed cost when the first attempt succeeds. Plan and rationa
   `driver-comparison -mode check` for read, write and paged in buffered and
   stream modes. Emulator failure counter must not change.
 
+Tests and benchmarks are cited under their grouped names
+(`Test<Feature>/<API>/<Case>`). Results recorded before the grouping used the
+old top-level names; `hp/renames.sed` maps each old benchmark name to its
+current path.
+
 A change is kept when its mechanism is proven exactly and an interleaved A/B
 benchstat (10 rounds, alternating binaries) shows no regression worse than 2%
 at p<0.05. The first comparison ran the two sets sequentially and showed a
 false `write/w1` +4.8% from drift; interleaving removed it.
 
 Known baseline failure, unrelated to this work:
-`TestProcessFrameFailedDeadlineArmIsFatal` fails deterministically on `f363e371`.
+`TestConn/ProcessFrame/FailedDeadlineArmIsFatal` fails deterministically on `f363e371`.
 
 ## Baseline `f363e371`
 
@@ -132,7 +137,7 @@ caller never yields. Batches are still bounded at 16 requests and 64 KiB.
 Larger batches overflowed the two 16/128-span descriptor scratch buffers, which
 were then reallocated every batch (+6% / +30% B/op). Both now retain up to
 `maxRetainedWriteSpans` = 512 descriptors (12 KiB per connection), and
-`TestTypedWriterScratchBoundAndConcurrentOrdering` follows the new bound.
+`TestWriter/Scratch/BoundAndConcurrentOrdering` follows the new bound.
 
 Mechanism: 7,028 `writev` for ~100,000 read+write requests, **0.07 per
 request** (about 14 per batch). Also −2 allocs/op at w64.
@@ -237,7 +242,7 @@ successful request only because of escape analysis:
   for every response without one (unprepared queries). Such responses now
   compare columns with the cached plan directly. This keeps the existing reuse
   of a plan cached under an identified entry, as required by
-  `TestV2ResultPlanCacheScopedReuseAndNoCompileLock`. The first version wrongly
+  `TestResultPlanCache/SelectPlan/ScopedReuseAndNoCompileLock`. The first version wrongly
   required an unidentified cache entry and failed that test.
 
 | benchmark (ABBA vs I8) | before | after | Δ |
@@ -257,7 +262,7 @@ prepared variant before further allocation work is ranked.
 
 ## T1 prepared variants
 
-`BenchmarkReusableQueryLoopback/pread` and `/pwrite` use `Prepare` + `NewQuery`
+`BenchmarkReusableQuery/Loopback/pread` and `/pwrite` use `Prepare` + `NewQuery`
 with an `int32` key, as the canonical point workloads do. The fake server
 answers PREPARE with a Prepared result and every EXECUTE with the workload
 body. The same benchmark file was compiled against the T1 commit (before any
@@ -334,7 +339,7 @@ Tests cover deadline expiry, parent cancellation, an earlier parent deadline,
 an already-cancelled parent, value forwarding, `AfterFunc` and its stop,
 derived contexts, stale stops, and late timer and parent callbacks, with a
 concurrent race loop. Mutating the deadline re-check or the parent check makes
-`TestExecutionContextLateCallbacksSpareNextGeneration` fail.
+`TestExecutionContext/Generation/LateCallbacksSpareNext` fail.
 
 The first version captured the generation in a per-execution parent callback.
 That cost one allocation more than `context.WithTimeout` when the parent is
@@ -414,7 +419,7 @@ reuses it. Done and Err still report cancellation for the finished
 generation. Real cancellation (query or session stop, deadline, parent)
 always closes it, so query and session stop now use `cancelFunc` instead of
 the finishing func.
-`TestExecutionContextFinishReusesUnsharedDone` fails if finish ignores a
+`TestExecutionContext/Finish` fails if finish ignores a
 `Done` watcher.
 
 | benchmark (ABBA vs `c641e86b`) | before | after | Δ |
@@ -460,7 +465,7 @@ baseline failure), emulator smoke OK.
 
 During round 2 the host also ran a SentinelOne scan (about two cores) and
 an unrelated C++ build, and wall-clock A/B spread reached ±20–130%.
-`BenchmarkReusableQueryLoopback` now reports `cpu-ns/op`, the client
+`BenchmarkReusableQuery/Loopback` now reports `cpu-ns/op`, the client
 process's CPU time per operation from getrusage. It excludes the fake
 server and time spent preempted, and stayed within ±1–2% at 64 workers
 while wall time did not. `compare.sh` gained `HP_REF`/`HP_PATCH` so each
@@ -494,8 +499,8 @@ assigning the field now call `InternalSessionMarkClosed`.
 decides who owns a response: `deliver` succeeds only for a waiting
 caller, and `InternalStopWaiting` either withdraws or returns the response
 that won the race. The typed and legacy readers and `CloseWithError`
-deliver without a select. `TestCallReqStopWaitingDecidesResponseOwnership`
-and `TestCallReqReuseStartsWaitingWithAnEmptySlot` cover both outcomes and
+deliver without a select. `TestCall/StopWaiting/DecidesResponseOwnership`
+and `TestCall/Reuse` cover both outcomes and
 reuse.
 
 | vs C3 | before | after | Δ |
@@ -512,7 +517,7 @@ writer has not claimed, and `written` reads the writer's result, published
 before it closes the connection. On a response the caller still calls
 `awaitWritten`: the first chain, which lacked it, made `pwrite/w64-4`
 fail with `ErrBusy`, because a response could arrive before the writer
-released the query's input. `TestTypedAttemptReturnsAfterWriterReleasesInput`
+released the query's input. `TestConn/ExecuteTyped/ReturnsAfterWriterReleasesInput`
 holds the writer after its bytes are sent and fails without the wait.
 
 | vs T2 | before | after | Δ |
@@ -529,11 +534,11 @@ F1 encoded small requests, values included, into one pooled contiguous
 buffer. It saved as much as F1b below, but it copied borrowed values, which
 `feature-specs/gocql-v2-implementation.md` forbids for borrowed text and
 blob of every size, and it failed
-`TestV2PreparedRetryRepreparePagingNeverReencodes`. F1b keeps the borrowed
+`TestPrepared/Reprepare/PagingNeverReencodes`. F1b keeps the borrowed
 spans and pools only what the envelope owns: `wire.BuilderScratch` holds
 the scalar slab, span descriptors and the frozen chain's index, and the
 request lease returns it after the writer finishes.
-`TestScratchFrameMatchesAndBorrowsValues` checks byte equality with the
+`TestTypedFrame/BuildTypedRequestInto` checks byte equality with the
 plain builder for QUERY, EXECUTE and BATCH on v3–v5, and that the value is
 still referenced.
 
@@ -721,7 +726,7 @@ The ring host view is cleared under the write lock on every revision bump
 and read without the lock. A connection caches its host ID once known.
 The result plan cache serves identified hits from an atomic snapshot,
 withdrawn when the cache switches to an unidentified plan
-(`TestV2ResultPlanCacheUnidentifiedSwitchRetiresIdentityHit` fails without
+(`TestResultPlanCache/SelectPlan/UnidentifiedSwitchRetiresIdentityHit` fails without
 the withdrawal). Host state atomics, a picker size counter and a lock-free
 tablet feedback stamp were left out: each was under 0.5% of CPU, and the
 stamp would have had to invalidate on any schema change instead of per table.
@@ -762,7 +767,7 @@ without `CloseWithError` delivering to pending calls.
 - **Breaking:** `Query.Run` and `Run` return `Rows[R]`, a value handle over
   iterator storage that a reusable query reuses each execution. A stale
   handle reports no rows, `Err` returns `ErrStaleRows`, `Close` does
-  nothing (`TestQueryRowsHandleGoesStaleOnNextExecution`).
+  nothing (`TestQuery/Rows/HandleGoesStaleOnNextExecution`).
 - The request lease lives in its pooled write ticket; an input owner reuses
   one writer lease once its final release finished, and a writer that
   overlaps it gets its own.
@@ -783,7 +788,7 @@ without `CloseWithError` delivering to pending calls.
 
 Rejected: removing the Rows/Page mutexes. It breaks closing rows from
 another goroutine to interrupt a blocked page fetch
-(`TestV2RowsNextIntoPagingAndCloseInterrupt`), and keeping that would need a
+(`TestPaging/Rows/NextIntoPagingAndCloseInterrupt`), and keeping that would need a
 busy flag costing about as much as the mutex. Not done: the breaking lazy
 `Result` (`Exec`/`One`/`Each` without `Result`): building it is ≈2% of CPU,
 mostly clock reads that a lazy result still needs. The two remaining
@@ -830,7 +835,7 @@ reproducible ones.
   generation next to its reference count; borrowed views (`cqltype.Bytes`
   and the codec readers built from it) carry a `wire.Ref` naming their
   generation, so a released view stays dead after its lease is reused
-  (`TestCachedLeaseRecyclingKeepsStaleRefsDead`, which fails if `Ref.Alive`
+  (`TestReceiveCache/LeaseRecycling`, which fails if `Ref.Alive`
   ignores the generation).
 
 | R9–R11 vs R8 (`fccc29f4`) | Δ |
@@ -850,7 +855,7 @@ reproducible ones.
 - **R14:** a dialed connection closes itself when its context is cancelled,
   and a close always delivers to waiting typed calls, so the typed response
   wait selects on the response and the attempt only
-  (`TestTypedWaitEndsWhenConnectionContextIsCancelled` fails without the
+  (`TestTypedConn/ExecuteTyped/WaitEndsOnConnContextCancel` fails without the
   hook).
 
 R13–R14 against R12's predecessor: no case moved outside the noise (all
@@ -968,8 +973,8 @@ each result from the `*.cmp.out` written when that comparison finished.
 Each releases a page before requesting the next, so continuation pages now
 parse into the query's storage too. Paging tokens are copied out of the
 frame, so the history keeps them across the reuse
-(`TestQueryEachReusedStorageKeepsTokensAndDetectsRepeats`,
-`TestQueryEachUnpreparedContinuationRepairs`).
+(`TestQuery/Each/ReusedStorageKeepsTokens`,
+`TestQuery/Each/UnpreparedContinuationRepairs`).
 
 | vs r4base | before | after |
 |---|---:|---:|
@@ -994,7 +999,7 @@ next to its span scratch, under the same semaphore.
 ### P2: inline paging history (kept after a revision)
 
 The first eight tokens are compared inline; the ninth spills them into the
-hashed map (`TestV2PagingHistoryInlineSpill`; a mutation that halves the
+hashed map (`TestPaging/History/InlineSpill`; a mutation that halves the
 inline scan fails it and the fuzz test).
 
 As first written (`25ae33a4`) the inline array was part of every history:
@@ -1022,9 +1027,9 @@ query's iterator from the query; streams keep the map.
 A continuation page goes to the connection that served the previous page
 while it is open and its host is up. A plan is built only if that attempt
 is retried, and it skips the pinned host, as the plan would have moved past
-its first target (`TestQueryEachPinsContinuationPages`,
-`TestQueryEachRePlansWhenPinnedHostIsDown`,
-`TestQueryEachPinnedRetryNextMovesHost`, `TestSkipHostPlanOmitsPinnedHost`).
+its first target (`TestQuery/Pin/ContinuationPages`,
+`TestQuery/Pin/RePlansWhenHostDown`,
+`TestQuery/Pin/RetryNextMovesHost`, `TestQuery/Pin/SkipHostPlanOmitsPinnedHost`).
 
 The loopback session has one host and one connection, so the selection it
 removes is already cheap there; the benefit is meant for token-aware plans
@@ -1045,9 +1050,9 @@ per page. A second reusable execution context per query now carries the
 page timeout. It links to the execution context directly instead of
 through `AfterFunc`: the parent cancels the linked generation, a
 generation check keeps a late cancellation off the next page, and finishing
-the parent cancels a page still linked (`TestExecutionContextLinkedChild`,
-`TestExecutionContextLinkedChildRaces`, `TestQueryEachPageTimeoutPerPage`,
-`TestQueryEachParentCancelReachesPageContext`). A page that overlaps
+the parent cancels a page still linked (`TestExecutionContext/LinkedChild/Propagation`,
+`TestExecutionContext/LinkedChild/Races`, `TestQuery/Each/PageTimeoutPerPage`,
+`TestQuery/Each/ParentCancelReachesPageContext`). A page that overlaps
 another takes a context of its own.
 
 | vs P3 | before | after |
@@ -1065,9 +1070,9 @@ parent: `Err` checks it and cancels the generation once it is done, the
 typed response wait selects on the parent's Done channel next to the
 attempt's, and `Done` or `AfterFunc` register a watcher only once something
 may wait on the execution context's own channel. Linked contexts lock
-child, then parent (`TestExecutionContextLazyParent`,
-`TestQueryEachParentCancelInterruptsWait` — fails after 5 s without the
-parent case — and `TestQueryEachParentCancelInterruptsRetryDelay`).
+child, then parent (`TestExecutionContext/LazyParent`,
+`TestQuery/Each/ParentCancelInterruptsWait` — fails after 5 s without the
+parent case — and `TestQuery/Each/ParentCancelInterruptsRetryDelay`).
 
 | vs P4 | before | after | Δ |
 |---|---:|---:|---:|
@@ -1260,9 +1265,9 @@ per-attempt flag bits, the paging state and the timestamp. Queries
 without their own options share eight session slots; a query with its own
 options keeps a template in its own slot. Byte-identical to field-by-field
 encoding over every option combination on v3, v4 and v5
-(`TestParamsTemplateMatchesFieldEncoding`).
+(`TestTypedFrame/ParamsTemplate`).
 
-| `BenchmarkParamsTemplate` | fields | template |
+| `BenchmarkTypedFrame/ParamsTemplate` | fields | template |
 |---|---:|---:|
 | point frame | 300.2 ns | 271.7 ns |
 | continuation page frame | 323.7 ns | 310.7 ns |
@@ -1279,10 +1284,10 @@ blob and owned-blob codecs, and the blob, text and ASCII parameter
 encoders, become ops the plan switches on, calling the codec's row code
 statically; only the accessor call remains. Other fields keep their
 interfaces, and an uncovered writer state goes through `WriteParam`
-(`TestDirectParamOpsMatchCodecs`, `TestDirectRowOpsMatchCodecs`,
-`TestDirectParamOpsCopyOwnedInput`; four mutations of the ops fail them).
+(`TestRowsCodec/DirectOps/ParamsMatchCodecs`, `TestRowsCodec/DirectOps/RowsMatchCodecs`,
+`TestRowsCodec/DirectOps/ParamsCopyOwnedInput`; four mutations of the ops fail them).
 
-| `BenchmarkDirectFields` (11 columns) | interface | direct |
+| `BenchmarkRowsCodec/DirectFields` (11 columns) | interface | direct |
 |---|---:|---:|
 | encode | 1.136 µs | 685.9 ns |
 | decode | 1.091 µs | 954.8 ns |

@@ -567,7 +567,7 @@ not completion of the feature.
   exclusive receive and RunStream in agents 01/02/04/07; complete all memory,
   ownership, direct-read, live-server and performance acceptance checks. Buffered
   NextInto does not complete this feature.
-- `TestPagingWithBind` failed in a parallel race run with “missing matching
+- `TestPaging/Auto/Bound` failed in a parallel race run with “missing matching
   metadata”; investigate concurrent schema generation versus retained page metadata.
 - Scylla `ConnectionsPerHost` override is not correctly applied by the picker.
 - TLS host-specific dialing bypassed shard-aware dialing. A fix landed immediately
