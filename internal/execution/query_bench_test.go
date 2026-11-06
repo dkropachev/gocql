@@ -85,10 +85,10 @@ func BenchmarkReusableQueryDecoding(b *testing.B) {
 				var query *Query[codec.EmptyRecord, []byte]
 				var streaming *StreamQuery[codec.EmptyRecord, []byte]
 				if stream {
-					streaming = codecTestMust(NewUnpreparedStreamQuery(s, statement, cqltype.NewColumns(), codec.StreamOneColumn(codec.StreamBlob), StreamOptions{Options: options}))
+					streaming = codecTestMust(NewUnpreparedStreamQuery(s, statement, codec.StreamOneColumn(codec.StreamBlob), StreamOptions{Options: options}))
 					defer streaming.Close()
 				} else {
-					query = codecTestMust(NewUnpreparedQuery(s, statement, cqltype.NewColumns(), options))
+					query = codecTestMust(NewUnpreparedQuery(s, statement, options))
 					defer query.Close()
 				}
 				dst := make([]byte, 0, size.bytes)
@@ -331,7 +331,7 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 						// per-row copy. Measurement only; master's client copies.
 						pageOptions := testOptions(OptionValues{PageSize: cqltype.Option[int32]{Set: true, Value: loopbackPageRows}, Prefetch: cqltype.Option[int]{Set: true, Value: 0}, Timeout: cqltype.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
 						statement := binding.Statement[codec.EmptyRecord, implCqltype.Bytes]{Kind: implCqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.OneColumn(codec.BlobCodec)}
-						query := codecTestMust(NewUnpreparedQuery(s, statement, implCqltype.NewColumns(), pageOptions))
+						query := codecTestMust(NewUnpreparedQuery(s, statement, pageOptions))
 						b.Cleanup(query.Close)
 						var dst implCqltype.Bytes
 						run[i] = func(ctx context.Context) error {
@@ -358,7 +358,7 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 						}
 						pageOptions := testOptions(pageValues)
 						statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: implCqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
-						query := codecTestMust(NewUnpreparedQuery(s, statement, implCqltype.NewColumns(), pageOptions))
+						query := codecTestMust(NewUnpreparedQuery(s, statement, pageOptions))
 						b.Cleanup(query.Close)
 						dst := make([]byte, 0, len(loopbackPageValue))
 						perOp := workload == "pagectx"
@@ -443,7 +443,7 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 						}
 					case "read":
 						statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: implCqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
-						query := codecTestMust(NewUnpreparedQuery(s, statement, implCqltype.NewColumns(), options))
+						query := codecTestMust(NewUnpreparedQuery(s, statement, options))
 						b.Cleanup(query.Close)
 						dst := make([]byte, 0, len(value))
 						run[i] = func(ctx context.Context) error {
@@ -465,8 +465,8 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 						}
 					default:
 						typ := codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))
-						statement := binding.Statement[[]byte, codec.EmptyRecord]{Kind: implCqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(value)VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder}
-						query := codecTestMust(NewUnpreparedQuery(s, statement, implCqltype.NewColumns(implCqltype.ColumnSpec{Name: "value", Type: typ}), options))
+						statement := binding.Statement[[]byte, codec.EmptyRecord]{Kind: implCqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(value)VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: implCqltype.NewColumns(implCqltype.ColumnSpec{Name: "value", Type: typ})}
+						query := codecTestMust(NewUnpreparedQuery(s, statement, options))
 						b.Cleanup(query.Close)
 						input := []byte(value)
 						run[i] = func(ctx context.Context) error {

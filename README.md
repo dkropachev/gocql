@@ -27,38 +27,38 @@ session, err := gocql.Connect(ctx, config)
 if err != nil { return err }
 defer session.Close()
 
-statement := cql.Statement[int32, cql.Text]{
+statement := cql.Statement[int32, string]{
     CQL: "SELECT name FROM app.users WHERE id = ?",
     Params: cql.OneParam(cql.Int32),
-    Rows: cql.OneColumn(cql.TextCodec),
+    Rows: cql.OneColumn(cql.StringCodec),
 }
-prepared, err := gocql.Prepare(ctx, session, statement, gocql.PrepareOptions{})
+query, err := gocql.PrepareQuery(ctx, session, statement, gocql.Options{})
 if err != nil { return err }
-query, err := gocql.NewQuery(prepared, gocql.Options{})
+defer query.CloseAndWait(ctx)
+var name string
+found, err := query.One(ctx, int32(42), &name)
 if err != nil { return err }
-defer query.Close()
-rows, err := query.Run(ctx, int32(42))
-if err != nil { return err }
-defer rows.Close()
-for rows.Next() {
-    fmt.Println(rows.Row().String())
-}
-return rows.Err()
+fmt.Println(found, name)
 ```
 
-`Exec` handles statements with no result columns; `RunPage` gives explicit
-paging. `Params`/`Row` compose typed struct mappings, while `DynamicRows` and
+`Exec` handles statements with no result columns; `Each` visits every row and
+`Run` returns an iterator; `RunPage` gives explicit paging. A nil `Params` or
+`Rows` means none when the type is `cql.EmptyParams` or `cql.EmptyRow`.
+`cql.StringCodec` decodes text into an owned `string`; `cql.TextCodec` decodes
+a `cql.Text` view of the response without copying. `Params`/`Row` compose typed struct mappings, while `DynamicRows` and
 `DynamicParams` support metadata-driven applications. Custom codecs compile
 against immutable `DataType`/`Columns` metadata; execution does not infer codecs
 from arbitrary Go values.
 
 ## Ownership and streaming
 
-`NewQuery` creates a reusable query for one worker. Each `Exec`, `Run`,
+`PrepareQuery` (or `Prepare` then `NewQuery`, to share one preparation)
+creates a reusable query for one worker. Each `Exec`, `Run`,
 `RunPage` or `RunUnpaged` call copies its parameters during admission. Prepared
 statements and compiled plans remain shareable. Overlapping executions return
 `ErrBusy`; `query.Wait(ctx)` joins accepted writes and callbacks before reuse.
-`Close` cancels the active execution and permanently stops the query.
+`Close` cancels the active execution and permanently stops the query;
+`CloseAndWait(ctx)` closes it and waits for that drain.
 
 For point reads and writes from many goroutines, call the prepared statement
 directly. `prepared.Exec(ctx, input, options)`, `prepared.One(ctx, input, &dst,
@@ -111,9 +111,11 @@ protocol rules; protocol 5 compression uses LZ4. Configure
 `Connect` snapshots validated configuration before starting workers. Configure
 TLS with `crypto/tls`, authentication with `auth.Password` or an `auth.Provider`, and
 routing/retry/speculation through `DefaultProfile` or a per-query `*Profile`.
-Per-call settings are frozen once with `NewOptions(session, OptionValues{...})`,
-resolved for that session so executions do no per-call work; the zero `Options{}`
-uses the session default.
+Per-call settings are frozen once with `NewOptions(OptionValues{...})`, for
+example `OptionValues{PageSize: cql.Some[int32](100)}`. A query resolves its
+options once when it is created, so executions do no per-call work; for one-shot
+batch executions, `NewOptionsFor(session, values)` resolves them up front. The
+zero `Options{}` uses the session default.
 `endpoint.Dialer`, `DialHost`, `TLSForHost`, `endpoint.DNSResolver`,
 `endpoint.Translator`, `ReconnectPolicy`, `routing.TokenPartitioner`,
 `routing.Policy`, observers and immutable

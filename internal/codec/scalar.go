@@ -199,15 +199,20 @@ var (
 			return math.Float64frombits(v), e
 		},
 	}
-	UUIDCodec     Codec[cqltype.UUID]  = scalarCodec[cqltype.UUID]{kind: cqltype.TypeUUID, encode: encodeUUID, decode: decodeUUID}
-	TimeUUIDCodec Codec[TimeUUID]      = scalarCodec[TimeUUID]{kind: cqltype.TypeTimeUUID, encode: encodeTimeUUID, decode: decodeTimeUUID}
-	InetCodec     Codec[netip.Addr]    = scalarCodec[netip.Addr]{kind: cqltype.TypeInet, encode: encodeInet, decode: decodeInet}
-	StringEncoder Encoder[string]      = stringEncoder{}
-	ASCIIEncoder  Encoder[string]      = stringEncoder{ascii: true}
-	BytesEncoder  Encoder[[]byte]      = bytesEncoder{}
-	TextCodec     Codec[cqltype.Text]  = textCodec{}
-	ASCIICodec    Codec[cqltype.Text]  = textCodec{ascii: true}
-	BlobCodec     Codec[cqltype.Bytes] = scalarCodec[cqltype.Bytes]{kind: cqltype.TypeBlob,
+	UUIDCodec     Codec[cqltype.UUID] = scalarCodec[cqltype.UUID]{kind: cqltype.TypeUUID, encode: encodeUUID, decode: decodeUUID}
+	TimeUUIDCodec Codec[TimeUUID]     = scalarCodec[TimeUUID]{kind: cqltype.TypeTimeUUID, encode: encodeTimeUUID, decode: decodeTimeUUID}
+	InetCodec     Codec[netip.Addr]   = scalarCodec[netip.Addr]{kind: cqltype.TypeInet, encode: encodeInet, decode: decodeInet}
+	StringEncoder Encoder[string]     = stringEncoder{}
+	ASCIIEncoder  Encoder[string]     = stringEncoder{ascii: true}
+	// StringCodec encodes a string and decodes into a newly allocated one,
+	// so decoded values stay valid after the row. TextCodec decodes without
+	// copying.
+	StringCodec      Codec[string]        = stringEncoder{}
+	ASCIIStringCodec Codec[string]        = stringEncoder{ascii: true}
+	BytesEncoder     Encoder[[]byte]      = bytesEncoder{}
+	TextCodec        Codec[cqltype.Text]  = textCodec{}
+	ASCIICodec       Codec[cqltype.Text]  = textCodec{ascii: true}
+	BlobCodec        Codec[cqltype.Bytes] = scalarCodec[cqltype.Bytes]{kind: cqltype.TypeBlob,
 		decodeRow: blobColumn,
 		encode:    func(w *ValueWriter, v cqltype.Bytes) error { return w.borrowView(v) },
 		decode:    func(r ValueReader) (cqltype.Bytes, error) { return r.Bytes(), nil },
@@ -356,6 +361,23 @@ func (c stringEncoder) Encode(w *ValueWriter, v string) error {
 		return errors.New("gocql: invalid UTF-8")
 	}
 	return w.BorrowString(v)
+}
+
+// Decode copies the text value into a new string.
+func (c stringEncoder) Decode(r ValueReader) (string, error) {
+	t, err := textCodec(c).Decode(r)
+	if err != nil {
+		return "", err
+	}
+	return t.String(), nil
+}
+func (stringEncoder) Clone(v string) string { return v }
+func (c stringEncoder) compileValueDecoder(t cqltype.DataType) (Decoder[string], error) {
+	if e := c.CheckType(t); e != nil {
+		return nil, e
+	}
+	c.compiled = true
+	return c, nil
 }
 
 type bytesEncoder struct{ compiled bool }

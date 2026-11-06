@@ -55,8 +55,8 @@ func NewStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder StreamRowDeco
 
 // NewUnpreparedStreamQuery uses the same owned input and receive-mode contract
 // for a statement executed without server preparation.
-func NewUnpreparedStreamQuery[P, B, R any](session *implCluster.Session, statement Statement[P, B], columns Columns, decoder StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
-	if err := validateStatement(statement); err != nil {
+func NewUnpreparedStreamQuery[P, B, R any](session *implCluster.Session, statement Statement[P, B], decoder StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
+	if err := validateStatement(&statement); err != nil {
 		return nil, err
 	}
 	if decoder == nil {
@@ -68,7 +68,7 @@ func NewUnpreparedStreamQuery[P, B, R any](session *implCluster.Session, stateme
 	if v := options.Options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, typeValidation("stream prefetch", "must be zero")
 	}
-	q, err := NewUnpreparedQuery(session, Statement[P, EmptyRecord]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: InternalExecRowsDecoder{}}, columns, options.Options)
+	q, err := NewUnpreparedQuery(session, Statement[P, EmptyRecord]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: InternalExecRowsDecoder{}, BindMarkers: statement.BindMarkers}, options.Options)
 	if err != nil {
 		return nil, err
 	}
@@ -99,6 +99,13 @@ func (q *StreamQuery[P, R]) Wait(ctx context.Context) error {
 		return typeValidation("query", "nil query")
 	}
 	return q.query.Wait(ctx)
+}
+
+// CloseAndWait closes the query and waits until its accepted transport writes
+// and callbacks finish or ctx is done.
+func (q *StreamQuery[P, R]) CloseAndWait(ctx context.Context) error {
+	q.Close()
+	return q.Wait(ctx)
 }
 
 func (s *RowStream[R]) loadBufferedPage() error {

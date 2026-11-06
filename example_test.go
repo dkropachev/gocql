@@ -48,54 +48,48 @@ func Example() {
 		ID             cql.UUID
 		Timeline, Text string
 	}
-	insert, err := gocql.Prepare(ctx, session, cql.Statement[tweet, cql.EmptyRow]{
-		CQL:    "INSERT INTO tweet (id,timeline,text) VALUES (?,?,?)",
-		Params: cql.Params(cql.Param("id", cql.UUIDCodec, func(v tweet) cql.UUID { return v.ID }), cql.Param("timeline", cql.StringEncoder, func(v tweet) string { return v.Timeline }), cql.Param("text", cql.StringEncoder, func(v tweet) string { return v.Text })), Rows: cql.EmptyRowDecoder,
-	}, gocql.PrepareOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	bound, err := gocql.NewQuery(insert, gocql.Options{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer func() {
-		bound.Close()
-		if err := bound.Wait(ctx); err != nil {
-			log.Print(err)
-		}
-	}()
-	if err := bound.Exec(ctx, tweet{cql.NewTimeUUID(), "me", "hello world"}); err != nil {
-		log.Fatal(err)
-	}
-	type result struct {
-		ID   cql.UUID
-		Text cql.Text
-	}
-	query, err := gocql.Prepare(ctx, session, cql.Statement[string, result]{CQL: "SELECT id,text FROM tweet WHERE timeline = ?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.Row(cql.Column("id", cql.UUIDCodec, func(v *result) *cql.UUID { return &v.ID }), cql.Column("text", cql.TextCodec, func(v *result) *cql.Text { return &v.Text }))}, gocql.PrepareOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	selectBound, err := gocql.NewQuery(query, gocql.Options{})
+	insert, err := gocql.PrepareQuery(ctx, session, cql.Statement[tweet, cql.EmptyRow]{
+		CQL: "INSERT INTO tweet (id,timeline,text) VALUES (?,?,?)",
+		Params: cql.Params(
+			cql.Param("id", cql.UUIDCodec, func(v tweet) cql.UUID { return v.ID }),
+			cql.Param("timeline", cql.StringCodec, func(v tweet) string { return v.Timeline }),
+			cql.Param("text", cql.StringCodec, func(v tweet) string { return v.Text }),
+		),
+	}, gocql.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer func() {
-		selectBound.Close()
-		if err := selectBound.Wait(ctx); err != nil {
+		if err := insert.CloseAndWait(ctx); err != nil {
 			log.Print(err)
 		}
 	}()
-	rows, err := selectBound.Run(ctx, "me")
+	if err := insert.Exec(ctx, tweet{cql.NewTimeUUID(), "me", "hello world"}); err != nil {
+		log.Fatal(err)
+	}
+	selectTweets, err := gocql.PrepareQuery(ctx, session, cql.Statement[string, tweet]{
+		CQL:    "SELECT id,timeline,text FROM tweet WHERE timeline = ?",
+		Params: cql.OneParam(cql.StringCodec),
+		Rows: cql.Row(
+			cql.Column("id", cql.UUIDCodec, func(v *tweet) *cql.UUID { return &v.ID }),
+			cql.Column("timeline", cql.StringCodec, func(v *tweet) *string { return &v.Timeline }),
+			cql.Column("text", cql.StringCodec, func(v *tweet) *string { return &v.Text }),
+		),
+	}, gocql.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer rows.Close()
-	var row result
-	for rows.NextInto(&row) {
-		fmt.Println(row.ID, row.Text.String())
-	}
-	if err := rows.Err(); err != nil {
+	defer func() {
+		if err := selectTweets.CloseAndWait(ctx); err != nil {
+			log.Print(err)
+		}
+	}()
+	var row tweet
+	err = selectTweets.Each(ctx, "me", &row, func(row *tweet) error {
+		fmt.Println(row.ID, row.Text)
+		return nil
+	})
+	if err != nil {
 		log.Fatal(err)
 	}
 }

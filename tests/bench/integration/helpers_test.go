@@ -372,7 +372,7 @@ func codecTestMust[T any](v T, err error) T {
 
 // testOptions freezes v, failing loudly on values a test meant to be valid.
 func testOptions(v gocql.OptionValues) gocql.Options {
-	o, err := gocql.NewOptions(nil, v)
+	o, err := gocql.NewOptions(v)
 	if err != nil {
 		panic(err)
 	}

@@ -282,7 +282,7 @@ func TestConfigurationDefaultsAndZeroSemantics(t *testing.T) {
 	}()
 
 	InternalRuntimeFor(s).InternalSetProfile(c.DefaultProfile)
-	options := testOptions(OptionValues{Timeout: implCql.Option[time.Duration]{Set: true}, PageTimeout: implCql.Option[time.Duration]{Set: true}, SerialConsistency: implCql.Option[implCql.Option[implCql.Consistency]]{Set: true}, Prefetch: implCql.Option[int]{Set: true}, Timestamp: implCql.Option[int64]{Set: true}, NowInSeconds: implCql.Option[int32]{Set: true}})
+	options := testOptions(OptionValues{Timeout: implCql.Option[time.Duration]{Set: true}, PageTimeout: implCql.Option[time.Duration]{Set: true}, NoSerialConsistency: true, Prefetch: implCql.Option[int]{Set: true}, Timestamp: implCql.Option[int64]{Set: true}, NowInSeconds: implCql.Option[int32]{Set: true}})
 	resolved, err := resolveOptions(s, options)
 	if err != nil {
 		t.Fatal(err)

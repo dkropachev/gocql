@@ -21,14 +21,14 @@ func NewStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder cql.StreamRow
 	return execution.NewStreamQuery(prepared, decoder, options)
 }
 
-func NewUnpreparedStreamQuery[P, B, R any](session *Session, statement cql.Statement[P, B], columns cql.Columns, decoder cql.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
-	return execution.NewUnpreparedStreamQuery(session, statement, columns, decoder, options)
+func NewUnpreparedStreamQuery[P, B, R any](session *Session, statement cql.Statement[P, B], decoder cql.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
+	return execution.NewUnpreparedStreamQuery(session, statement, decoder, options)
 }
 
 func NewQuery[P, R any](prepared *Prepared[P, R], options Options) (*Query[P, R], error) {
 	return execution.NewQuery(prepared, options)
 }
 
-func NewUnpreparedQuery[P, R any](session *Session, statement cql.Statement[P, R], columns cql.Columns, options Options) (*Query[P, R], error) {
-	return execution.NewUnpreparedQuery(session, statement, columns, options)
+func NewUnpreparedQuery[P, R any](session *Session, statement cql.Statement[P, R], options Options) (*Query[P, R], error) {
+	return execution.NewUnpreparedQuery(session, statement, options)
 }

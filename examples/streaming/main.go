@@ -138,7 +138,7 @@ func run() (resultErr error) {
 		return fmt.Errorf("invalid owned namespace %q", namespace)
 	}
 	execContext := func(operation context.Context, text string) error {
-		b, err := gocql.NewUnpreparedQuery(s, cql.Command(text), cql.NewColumns(), gocql.Options{})
+		b, err := gocql.NewUnpreparedQuery(s, cql.Command(text), gocql.Options{})
 		if err != nil {
 			return err
 		}
@@ -216,7 +216,7 @@ func run() (resultErr error) {
 	if len(hostsSnapshot) == 0 {
 		return fmt.Errorf("missing discovered hosts")
 	}
-	pinned, err := gocql.NewOptions(s, gocql.OptionValues{PageSize: cql.Option[int32]{Set: true, Value: 2}, HostID: cql.Option[cql.UUID]{Set: true, Value: hostsSnapshot[0].ID}})
+	pinned, err := gocql.NewOptionsFor(s, gocql.OptionValues{PageSize: cql.Option[int32]{Set: true, Value: 2}, HostID: cql.Option[cql.UUID]{Set: true, Value: hostsSnapshot[0].ID}})
 	if err != nil {
 		return err
 	}

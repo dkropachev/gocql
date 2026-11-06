@@ -48,19 +48,14 @@ func ExampleExecBatch() {
 		PK, CK      int32
 		Description string
 	}
-	params := cql.Params(
-		cql.Param("pk", cql.Int32, func(v item) int32 { return v.PK }),
-		cql.Param("ck", cql.Int32, func(v item) int32 { return v.CK }),
-		cql.Param("description", cql.StringEncoder, func(v item) string { return v.Description }),
-	)
-	prepared, err := gocql.Prepare(ctx, session, cql.Statement[item, cql.EmptyRow]{
-		CQL:    "INSERT INTO example.batches (pk, ck, description) VALUES (?, ?, ?)",
-		Params: params, Rows: cql.EmptyRowDecoder,
-	}, gocql.PrepareOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	query, err := gocql.NewQuery(prepared, gocql.Options{})
+	query, err := gocql.PrepareQuery(ctx, session, cql.Statement[item, cql.EmptyRow]{
+		CQL: "INSERT INTO example.batches (pk, ck, description) VALUES (?, ?, ?)",
+		Params: cql.Params(
+			cql.Param("pk", cql.Int32, func(v item) int32 { return v.PK }),
+			cql.Param("ck", cql.Int32, func(v item) int32 { return v.CK }),
+			cql.Param("description", cql.StringCodec, func(v item) string { return v.Description }),
+		),
+	}, gocql.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -73,44 +68,35 @@ func ExampleExecBatch() {
 		}
 		entries = append(entries, entry)
 	}
-	idempotent, err := gocql.NewOptions(session, gocql.OptionValues{Idempotent: true})
+	idempotent, err := gocql.NewOptionsFor(session, gocql.OptionValues{Idempotent: true})
 	if err != nil {
 		log.Fatal(err)
 	}
 	if _, err := gocql.ExecBatch(ctx, session, cql.UnloggedBatch, entries, idempotent); err != nil {
 		log.Fatal(err)
 	}
-	type result struct {
-		PK, CK      int32
-		Description cql.Text
-	}
-	row := cql.Row(
-		cql.Column("pk", cql.Int32, func(v *result) *int32 { return &v.PK }),
-		cql.Column("ck", cql.Int32, func(v *result) *int32 { return &v.CK }),
-		cql.Column("description", cql.TextCodec, func(v *result) *cql.Text { return &v.Description }),
-	)
-	bound, err := gocql.NewUnpreparedQuery(session, cql.Statement[cql.EmptyParams, result]{
-		CQL: "SELECT pk, ck, description FROM example.batches", Params: cql.EmptyParamsEncoder, Rows: row,
-	}, cql.NewColumns(), gocql.Options{})
+	selectAll, err := gocql.NewUnpreparedQuery(session, cql.Statement[cql.EmptyParams, item]{
+		CQL: "SELECT pk, ck, description FROM example.batches",
+		Rows: cql.Row(
+			cql.Column("pk", cql.Int32, func(v *item) *int32 { return &v.PK }),
+			cql.Column("ck", cql.Int32, func(v *item) *int32 { return &v.CK }),
+			cql.Column("description", cql.StringCodec, func(v *item) *string { return &v.Description }),
+		),
+	}, gocql.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer func() {
-		bound.Close()
-		if err := bound.Wait(ctx); err != nil {
+		if err := selectAll.CloseAndWait(ctx); err != nil {
 			log.Print(err)
 		}
 	}()
-	rows, err := bound.Run(ctx, cql.EmptyParams{})
+	var row item
+	err = selectAll.Each(ctx, cql.EmptyParams{}, &row, func(v *item) error {
+		fmt.Println(v.PK, v.CK, v.Description)
+		return nil
+	})
 	if err != nil {
-		log.Fatal(err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		value := rows.Row()
-		fmt.Println(value.PK, value.CK, value.Description.String())
-	}
-	if err := rows.Err(); err != nil {
 		log.Fatal(err)
 	}
 }

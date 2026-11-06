@@ -70,7 +70,7 @@ func connect(hosts []string) (adapter, error) {
 		s.Close()
 		return nil, e
 	}
-	metadata, e := g.NewOptions(s, g.OptionValues{IncludeMetadata: true})
+	metadata, e := g.NewOptionsFor(s, g.OptionValues{IncludeMetadata: true})
 	if e != nil {
 		s.Close()
 		return nil, e
@@ -79,7 +79,7 @@ func connect(hosts []string) (adapter, error) {
 }
 func (a *v2Adapter) Close() error { return a.s.Close() }
 func (a *v2Adapter) Exec(ctx context.Context, q string) error {
-	b, e := g.NewUnpreparedQuery(a.s, cql.Statement[cql.EmptyParams, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: q, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), g.Options{})
+	b, e := g.NewUnpreparedQuery(a.s, cql.Statement[cql.EmptyParams, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: q, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, g.Options{})
 	if e != nil {
 		return e
 	}

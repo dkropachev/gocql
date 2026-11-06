@@ -448,7 +448,7 @@ func TestConsistencySerial(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			bound := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), []cql.Value{cql.IntValue(int32(i + 1))}, gocql.PrepareOptions{})
 			// Serial consistency is checked when the options are built.
-			options, err := gocql.NewOptions(session, gocql.OptionValues{SerialConsistency: cql.Option[cql.Option[cql.Consistency]]{Set: true, Value: cql.Option[cql.Consistency]{Set: true, Value: tc.consistency}}})
+			options, err := gocql.NewOptionsFor(session, gocql.OptionValues{SerialConsistency: cql.Some(tc.consistency)})
 			if err == nil {
 				_, err = Exec(context.Background(), session, bound, options)
 			}
@@ -2009,7 +2009,7 @@ func TestQuery_SetHostID(t *testing.T) {
 	}
 	_, err := cql.ParseUUID("[invalid]")
 	require.Error(t, err, "invalid host IDs are rejected while constructing typed UUIDs")
-	_, err = gocql.NewOptions(session, gocql.OptionValues{HostID: cql.Option[cql.UUID]{Value: cql.UUID{}, Set: true}})
+	_, err = gocql.NewOptionsFor(session, gocql.OptionValues{HostID: cql.Option[cql.UUID]{Value: cql.UUID{}, Set: true}})
 	var invalidHost *cql.ValidationError
 	require.ErrorAs(t, err, &invalidHost, "an empty host ID is rejected when options are built")
 	_, err = Run(context.Background(), session, bound, testOptions(gocql.OptionValues{HostID: cql.Option[cql.UUID]{Value: codecTestMust(cql.RandomUUID()), Set: true}}))

@@ -159,12 +159,14 @@ func newPreparedQuery[P, R any](p *Prepared[P, R], options Options, pool *queryP
 	return q, nil
 }
 
-// NewUnpreparedQuery compiles parameters once and captures each execution's
-// input in query-owned storage, including values passed to custom codecs.
-func NewUnpreparedQuery[P, R any](s *implCluster.Session, statement Statement[P, R], columns Columns, options Options) (*Query[P, R], error) {
-	if err := validateStatement(statement); err != nil {
+// NewUnpreparedQuery compiles parameters once against statement.BindMarkers
+// and captures each execution's input in query-owned storage, including
+// values passed to custom codecs.
+func NewUnpreparedQuery[P, R any](s *implCluster.Session, statement Statement[P, R], options Options) (*Query[P, R], error) {
+	if err := validateStatement(&statement); err != nil {
 		return nil, err
 	}
+	columns := statement.BindMarkers
 	plan, err := compileParamPlan(statement.Params, columns)
 	if err != nil {
 		return nil, err
@@ -407,6 +409,13 @@ func (q *Query[P, R]) Wait(ctx context.Context) error {
 		return typeValidation("query", "nil query")
 	}
 	return q.state.wait(ctx)
+}
+
+// CloseAndWait closes the query and waits until its accepted transport writes
+// and callbacks finish or ctx is done.
+func (q *Query[P, R]) CloseAndWait(ctx context.Context) error {
+	q.Close()
+	return q.Wait(ctx)
 }
 
 func cloneQueryOptions(options OptionValues) (OptionValues, error) {

@@ -50,28 +50,24 @@ func ExampleRunBatch_conditional() {
 		Version       int32
 	}
 	type previous struct {
-		PK, CK  cql.Text
+		PK, CK  string
 		Version int32
 	}
-	previousRows := cql.Row(
-		cql.Column("pk", cql.TextCodec, func(v *previous) *cql.Text { return &v.PK }),
-		cql.Column("ck", cql.TextCodec, func(v *previous) *cql.Text { return &v.CK }),
+	conditional := cql.CASRows(cql.Row(
+		cql.Column("pk", cql.StringCodec, func(v *previous) *string { return &v.PK }),
+		cql.Column("ck", cql.StringCodec, func(v *previous) *string { return &v.CK }),
 		cql.Column("version", cql.Int32, func(v *previous) *int32 { return &v.Version }),
-	)
-	conditional := cql.CASRows(previousRows)
-	prepared, err := gocql.Prepare(ctx, session, cql.Statement[update, cql.CASResult[previous]]{
+	))
+	query, err := gocql.PrepareQuery(ctx, session, cql.Statement[update, cql.CASResult[previous]]{
 		CQL: "UPDATE example.my_lwt_batch_table SET value=? WHERE pk=? AND ck=? IF version=?",
 		Params: cql.Params(
-			cql.Param("value", cql.StringEncoder, func(v update) string { return v.Value }),
-			cql.Param("pk", cql.StringEncoder, func(v update) string { return v.PK }),
-			cql.Param("ck", cql.StringEncoder, func(v update) string { return v.CK }),
+			cql.Param("value", cql.StringCodec, func(v update) string { return v.Value }),
+			cql.Param("pk", cql.StringCodec, func(v update) string { return v.PK }),
+			cql.Param("ck", cql.StringCodec, func(v update) string { return v.CK }),
 			cql.Param("version", cql.Int32, func(v update) int32 { return v.Version }),
-		), Rows: conditional,
-	}, gocql.PrepareOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	query, err := gocql.NewQuery(prepared, gocql.Options{})
+		),
+		Rows: conditional,
+	}, gocql.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -93,7 +89,7 @@ func ExampleRunBatch_conditional() {
 		value := page.Row()
 		fmt.Println("applied:", value.Applied)
 		if value.Previous.Set {
-			fmt.Println(value.Previous.Value.CK.String(), value.Previous.Value.Version)
+			fmt.Println(value.Previous.Value.CK, value.Previous.Value.Version)
 		}
 	}
 	if err := page.Err(); err != nil {

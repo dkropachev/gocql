@@ -1,10 +1,12 @@
 # Executing statements
 
-`Statement[P,R]` pairs CQL with `ParamEncoder[P]` and `RowDecoder[R]`. Prepare
-once and share immutable prepared handles. Create one `NewQuery(prepared,
-options)` per worker, then pass parameters directly to its `Exec`, `Run`,
-`RunPage` or `RunUnpaged` methods. `NewUnpreparedQuery` requires explicit parameter
-Columns. `NewStreamQuery` uses a streaming decoder with page buffering by
+`Statement[P,R]` pairs CQL with `ParamEncoder[P]` and `RowDecoder[R]`. A nil
+`Params` or `Rows` means none for `cql.EmptyParams` or `cql.EmptyRow`. Prepare
+once and share immutable prepared handles. Create one query per worker with
+`PrepareQuery(ctx, session, statement, options)`, or `NewQuery(prepared,
+options)` to share a preparation, then pass parameters directly to its `Exec`,
+`One`, `Each`, `Run`, `RunPage` or `RunUnpaged` methods.
+`NewUnpreparedQuery` takes the parameter columns from `Statement.BindMarkers`. `NewStreamQuery` uses a streaming decoder with page buffering by
 default; set `StreamOptions.Incremental` for bounded incremental receive.
 Queries reject overlap with `ErrBusy` and own captured parameters through drain.
 

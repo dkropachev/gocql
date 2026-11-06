@@ -29,7 +29,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 	defer session.Close()
 	namespace := fmt.Sprintf("gocql_query_%x", time.Now().UnixNano())
 	exec := func(ctx context.Context, stmt string) error {
-		q, err := gocql.NewUnpreparedQuery(session, cql.Command(stmt), cql.NewColumns(), testOptions(gocql.OptionValues{Timeout: cql.Option[time.Duration]{Set: true, Value: 30 * time.Second}}))
+		q, err := gocql.NewUnpreparedQuery(session, cql.Command(stmt), testOptions(gocql.OptionValues{Timeout: cql.Option[time.Duration]{Set: true, Value: 30 * time.Second}}))
 		if err != nil {
 			return err
 		}
@@ -53,7 +53,7 @@ func TestV2QueryLiveReuse(t *testing.T) {
 			return
 		}
 		typ := codecTestMust(cql.ScalarType(cql.TypeText))
-		query, err := gocql.NewUnpreparedQuery(session, cql.Statement[string, cql.Text]{Kind: cql.OrdinaryStatement, CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name=?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.TextCodec)}, cql.NewColumns(cql.ColumnSpec{Name: "keyspace_name", Type: typ}), testOptions(gocql.OptionValues{Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}}))
+		query, err := gocql.NewUnpreparedQuery(session, cql.Statement[string, cql.Text]{Kind: cql.OrdinaryStatement, CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name=?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.TextCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "keyspace_name", Type: typ})}, testOptions(gocql.OptionValues{Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}}))
 		if err != nil {
 			t.Error(err)
 			return

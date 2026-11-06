@@ -10,16 +10,19 @@ Import `github.com/scylladb/gocql/v2` (`gocql`) and
 `github.com/scylladb/gocql/v2/cql`. Create `gocql.DefaultConfig(contactPoints...)`
 and open it with `gocql.Connect(ctx, config)`. Close the session when finished.
 
-Declare a `cql.Statement[P,R]` with `CQL`, `Params` and `Rows`. `Prepare` validates
-its codecs against server metadata. `NewQuery(prepared, options)` creates a
-worker-owned reusable query; `query.Run(ctx, parameters)` returns typed rows.
-Check `Rows.Err()` after iteration and close the rows. Use `query.Exec` for
-statements without results: their row type is `cql.EmptyRow`, decoded by
-`cql.EmptyRowDecoder`. A statement with no bind markers takes `cql.EmptyParams`,
-encoded by `cql.EmptyParamsEncoder`; `cql.Command(text)` builds a statement
-with neither, such as DDL. Parameters are copied on admission.
+Declare a `cql.Statement[P,R]` with `CQL`, `Params` and `Rows`.
+`PrepareQuery(ctx, session, statement, options)` prepares it, validates its
+codecs against server metadata and returns a worker-owned reusable query;
+`Prepare` and `NewQuery` do the same in two steps when several queries share
+one preparation. `query.One` reads one row, `query.Each` visits every row and
+`query.Run` returns typed rows: check `Rows.Err()` after iteration and close
+the rows. Use `query.Exec` for statements without results: their row type is
+`cql.EmptyRow`. A statement with no bind markers takes `cql.EmptyParams`. Leave
+`Params` or `Rows` nil for those empty types; `cql.Command(text)` builds a
+statement with neither, such as DDL. Parameters are copied on admission.
 Overlapping executions return `ErrBusy`; `query.Wait(ctx)` waits for transport
-and callbacks to drain. Close queries when finished.
+and callbacks to drain. Close queries when finished, or call
+`query.CloseAndWait(ctx)` to close and wait in one step.
 
 The repository's external-package `Example` and other `example_*_test.go` files
 compile against the normal public API. The complete `examples/streaming` command

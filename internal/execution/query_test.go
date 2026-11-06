@@ -40,7 +40,7 @@ func testOwnedQuery(t testing.TB) *Query[[]byte, EmptyRecord] {
 	if err != nil {
 		t.Fatal(err)
 	}
-	q, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder}, cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ}), Options{})
+	q, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -444,5 +444,40 @@ func serveLoopback(peer net.Conn, choose func([]byte) []byte, prepared []byte) {
 				return
 			}
 		}
+	}
+}
+
+func TestUnpreparedQueryDefaultsEmptyCodecs(t *testing.T) {
+	s, _ := attachmentSession()
+	q, err := NewUnpreparedQuery(s, Statement[EmptyRecord, EmptyRecord]{Kind: OrdinaryStatement, CQL: "TRUNCATE ks.t"}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := q.CloseAndWait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)"}, Options{}); err == nil {
+		t.Fatal("typed parameters without an encoder accepted")
+	}
+}
+
+func TestQueryCloseAndWaitJoinsAcceptedWrites(t *testing.T) {
+	q := testOwnedQuery(t)
+	if err := q.capture(context.Background(), []byte("value")); err != nil {
+		t.Fatal(err)
+	}
+	writer := q.state.owner.InternalWriterLease(q.bound.privateStorage.InternalRequest.InternalValues.Framed)
+	q.state.owner.InternalRelease()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	if err := q.CloseAndWait(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("CloseAndWait with a held write = %v, want deadline exceeded", err)
+	}
+	writer.Release()
+	if err := q.CloseAndWait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.Exec(context.Background(), []byte("value")); err == nil {
+		t.Fatal("closed query executed")
 	}
 }

@@ -13,7 +13,7 @@ import (
 func TestNewOptionsRejectsInvalidValues(t *testing.T) {
 	invalid := map[string]OptionValues{
 		"consistency":  {Consistency: Option[Consistency]{Set: true, Value: Consistency(0xff)}},
-		"serial":       {SerialConsistency: Option[Option[Consistency]]{Set: true, Value: Option[Consistency]{Set: true, Value: One}}},
+		"serial":       {SerialConsistency: Option[Consistency]{Set: true, Value: One}},
 		"timeout":      {Timeout: Option[time.Duration]{Set: true, Value: -1}},
 		"page size":    {PageSize: Option[int32]{Set: true}},
 		"prefetch":     {Prefetch: Option[int]{Set: true, Value: 2}},
@@ -21,6 +21,7 @@ func TestNewOptionsRejectsInvalidValues(t *testing.T) {
 		"shard":        {ShardID: Option[uint32]{Set: true}},
 		"payload keys": {CustomPayload: []PayloadEntry{{Key: "k"}, {Key: "k"}}},
 		"profile":      {Profile: &Profile{}},
+		"serial both":  {SerialConsistency: Option[Consistency]{Set: true, Value: LocalSerial}, NoSerialConsistency: true},
 	}
 	for name, values := range invalid {
 		if _, err := NewOptions(nil, values); err == nil {
@@ -90,5 +91,29 @@ func TestOptionsResolvedForTheirSession(t *testing.T) {
 	scratch = InternalResolvedOptions{}
 	if r := unbound.resolve(rt, &scratch); r != &scratch || r.InternalProfile.PageSize != 7 {
 		t.Fatal("options without a session not resolved for this one", r.InternalProfile)
+	}
+}
+
+func TestNewOptionsSerialConsistencyOverrides(t *testing.T) {
+	set, err := resolveOptionValues(nil, OptionValues{SerialConsistency: cqltype.Some(Serial)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !set.InternalProfile.SerialConsistency.Set || set.InternalProfile.SerialConsistency.Value != Serial {
+		t.Fatalf("SerialConsistency = %+v, want SERIAL", set.InternalProfile.SerialConsistency)
+	}
+	none, err := resolveOptionValues(nil, OptionValues{NoSerialConsistency: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if none.InternalProfile.SerialConsistency.Set {
+		t.Fatalf("SerialConsistency = %+v, want omitted", none.InternalProfile.SerialConsistency)
+	}
+	inherited, err := resolveOptionValues(nil, OptionValues{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inherited.InternalProfile.SerialConsistency != defaultProfile().SerialConsistency {
+		t.Fatalf("SerialConsistency = %+v, want the profile's", inherited.InternalProfile.SerialConsistency)
 	}
 }

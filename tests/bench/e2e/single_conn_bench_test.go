@@ -88,7 +88,7 @@ func benchConfig(d endpoint.Dialer) gocql.Config {
 	return c
 }
 func benchExec(ctx context.Context, s *gocql.Session, text string) error {
-	b, e := gocql.NewUnpreparedQuery(s, cql.Command(text), cql.NewColumns(), gocql.Options{})
+	b, e := gocql.NewUnpreparedQuery(s, cql.Command(text), gocql.Options{})
 	if e != nil {
 		return e
 	}

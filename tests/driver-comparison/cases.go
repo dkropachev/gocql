@@ -71,7 +71,7 @@ func (a *v2Adapter) lwtPrepared() (*g.Prepared[lwtArgs, cql.CASResult[int32]], *
 	return a.lwt, a.lwtRead, nil
 }
 
-func (a *v2Adapter) options(v g.OptionValues) (g.Options, error) { return g.NewOptions(a.s, v) }
+func (a *v2Adapter) options(v g.OptionValues) (g.Options, error) { return g.NewOptionsFor(a.s, v) }
 
 func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 	if len(name) == 0 {
@@ -197,11 +197,11 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return c.check.done(want, settle(ctx, q, errors.Join(err, page.Err(), page.Close())))
 		}, nil
 	case "A7":
-		statement := cql.Statement[int32, row]{Kind: cql.OrdinaryStatement, CQL: pointRead, Params: keyParams, Rows: bufferedDecoder}
+		statement := cql.Statement[int32, row]{Kind: cql.OrdinaryStatement, CQL: pointRead, Params: keyParams, Rows: bufferedDecoder, BindMarkers: keyColumns}
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
 			c.check.reset(false, k, 0)
-			q, err := g.NewUnpreparedQuery(a.s, statement, keyColumns, g.Options{})
+			q, err := g.NewUnpreparedQuery(a.s, statement, g.Options{})
 			if err != nil {
 				return err
 			}
@@ -256,10 +256,10 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return err
 		}, nil
 	case "D4":
-		statement := cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: pointWrite, Params: rowParams, Rows: cql.EmptyRowDecoder}
+		statement := cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: pointWrite, Params: rowParams, Rows: cql.EmptyRowDecoder, BindMarkers: rowColumns}
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
-			q, err := g.NewUnpreparedQuery(a.s, statement, rowColumns, a.metadata)
+			q, err := g.NewUnpreparedQuery(a.s, statement, a.metadata)
 			if err != nil {
 				return err
 			}
@@ -398,7 +398,7 @@ func (c *v2Case) lwt(id, n int) (op, error) {
 			return nil, fmt.Errorf("lwt key %d missing; run -mode prepare -scenario lwt", keys[j])
 		}
 	}
-	opts, err := c.a.options(g.OptionValues{SerialConsistency: cql.Option[cql.Option[cql.Consistency]]{Set: true, Value: cql.Option[cql.Consistency]{Set: true, Value: cql.LocalSerial}}})
+	opts, err := c.a.options(g.OptionValues{SerialConsistency: cql.Some(cql.LocalSerial)})
 	if err != nil {
 		return nil, err
 	}

@@ -8,3 +8,6 @@ type Option[T any] struct {
 	Value T
 	Set   bool
 }
+
+// Some returns an Option set to v.
+func Some[T any](v T) Option[T] { return Option[T]{Value: v, Set: true} }

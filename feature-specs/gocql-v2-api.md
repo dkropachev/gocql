@@ -302,6 +302,8 @@ var VarintCodec Codec[Varint]
 var DecimalCodec Codec[Decimal]
 var StringEncoder Encoder[string]             // text/varchar
 var ASCIIEncoder Encoder[string]
+var StringCodec Codec[string]                 // text/varchar; decodes an owned copy
+var ASCIIStringCodec Codec[string]
 var BytesEncoder Encoder[[]byte]              // blob; borrows input
 var TextCodec Codec[Text]                     // text/varchar borrowed view
 var ASCIICodec Codec[Text]
@@ -540,9 +542,10 @@ worker creates a reusable query; it permits one active execution and owns all
 captured parameters through retries, pages, accepted writes and callbacks.
 
 ```go
-func Prepare[P, R any](context.Context, *Session, Statement[P, R], PrepareOptions) (*Prepared[P, R], error)
+func Prepare[P, R any](context.Context, *Session, Statement[P, R], ...PrepareOptions) (*Prepared[P, R], error) // at most one
+func PrepareQuery[P, R any](context.Context, *Session, Statement[P, R], Options, ...PrepareOptions) (*Query[P, R], error)
 func NewQuery[P, R any](*Prepared[P, R], Options) (*Query[P, R], error)
-func NewUnpreparedQuery[P, R any](*Session, Statement[P, R], Columns, Options) (*Query[P, R], error)
+func NewUnpreparedQuery[P, R any](*Session, Statement[P, R], Options) (*Query[P, R], error)
 func (q *Query[P, R]) Exec(context.Context, P) error
 func (q *Query[P, R]) Each(context.Context, P, *R, func(*R) error) error
 func (q *Query[P, R]) One(context.Context, P, *R) (bool, error)
@@ -554,14 +557,15 @@ func (q *Query[P, R]) Routing(P) (RoutingInfo, error)
 func (q *Query[P, R]) BatchEntry(P) (BatchItem, error)
 func (q *Query[P, R]) Close()
 func (q *Query[P, R]) Wait(context.Context) error
+func (q *Query[P, R]) CloseAndWait(context.Context) error // Close, then Wait
 ```
 
 The public immutable binding API and standalone binding-based execution
 functions have been removed. Input is copied during execution admission,
 including custom codec borrowed spans. Encoding records cell boundaries and
 computes routing from the same owned bytes; encoders are not called again for
-routing, retries, reprepare or paging. NewUnpreparedQuery requires explicit
-parameter Columns. Query options are captured at construction, including owned
+routing, retries, reprepare or paging. NewUnpreparedQuery takes parameter
+Columns from Statement.BindMarkers. Query options are captured at construction, including owned
 custom payload bytes; the selected profile is loaded per execution. Profile
 replacement never changes an active execution's retry or continuation options.
 
@@ -1068,18 +1072,21 @@ also interrupts active streams; already written caller output remains valid.
 ## Options, profiles, batches and results
 
 ```go
-// Options is frozen: NewOptions validates OptionValues, copies the custom
-// payload and profile, and resolves them for session once. Options built
-// with a nil session, or used on another, resolve on each execution unless
-// they name a Profile. The zero Options uses the session default profile.
+// Options is frozen: NewOptions validates OptionValues and copies the custom
+// payload and profile. A Query resolves its Options for its session once at
+// construction. NewOptionsFor also resolves them for session up front, for
+// one-shot executions; used on another session they resolve on each execution
+// unless they name a Profile. The zero Options uses the session default profile.
 type Options struct { /* frozen, resolved options */ }
-func NewOptions(session *Session, values OptionValues) (Options, error)
+func NewOptions(values OptionValues) (Options, error)
+func NewOptionsFor(session *Session, values OptionValues) (Options, error)
 func (Options) Values() OptionValues          // a copy, to derive other Options
 
 type OptionValues struct {
     Profile *Profile                              // copied when resolved
     Consistency Option[Consistency]
-    SerialConsistency Option[Option[Consistency]] // inherit / omit / set
+    SerialConsistency Option[Consistency]         // inherit / set
+    NoSerialConsistency bool                      // omit; error with SerialConsistency
     Timeout Option[time.Duration]                 // 0 disables profile timeout
     PageTimeout Option[time.Duration]
     PageSize Option[int32]

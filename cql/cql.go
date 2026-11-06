@@ -25,3 +25,6 @@ const (
 
 // Option distinguishes an explicit zero value from an inherited setting.
 type Option[T any] = cqltype.Option[T]
+
+// Some returns an Option set to v.
+func Some[T any](v T) Option[T] { return cqltype.Some(v) }

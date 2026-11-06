@@ -27,12 +27,15 @@ type OptionValues struct {
 	PageSize             Option[int32]
 	NowInSeconds         Option[int32]
 	ShardID              Option[uint32]
-	SerialConsistency    Option[Option[Consistency]]
-	Consistency          Option[Consistency]
-	HostID               Option[UUID]
-	IncludeMetadata      bool
-	Idempotent           bool
-	Trace                bool
+	// SerialConsistency overrides the profile's serial consistency;
+	// NoSerialConsistency sends none instead. Setting both is an error.
+	SerialConsistency   Option[Consistency]
+	Consistency         Option[Consistency]
+	HostID              Option[UUID]
+	IncludeMetadata     bool
+	Idempotent          bool
+	Trace               bool
+	NoSerialConsistency bool
 }
 
 type InternalResolvedOptions struct {
@@ -67,8 +70,14 @@ func resolveOptionValues(base *Profile, options OptionValues) (InternalResolvedO
 	if options.Consistency.Set {
 		p.Consistency = options.Consistency.Value
 	}
+	if options.SerialConsistency.Set && options.NoSerialConsistency {
+		return InternalResolvedOptions{}, typeValidation("serial consistency", "set together with NoSerialConsistency")
+	}
 	if options.SerialConsistency.Set {
-		p.SerialConsistency = options.SerialConsistency.Value
+		p.SerialConsistency = options.SerialConsistency
+	}
+	if options.NoSerialConsistency {
+		p.SerialConsistency = Option[Consistency]{}
 	}
 	if options.Timeout.Set {
 		p.Timeout = options.Timeout.Value

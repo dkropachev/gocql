@@ -343,6 +343,14 @@ func StreamVector[T any](a0 StreamDecoder[T]) StreamDecoder[[]T] { return codec.
 
 var StringEncoder = codec.StringEncoder
 
+// StringCodec encodes a string and decodes text into a newly allocated
+// string that stays valid after the row is released. Use TextCodec to decode
+// without copying.
+var StringCodec = codec.StringCodec
+
+// ASCIIStringCodec is StringCodec for the ascii type.
+var ASCIIStringCodec = codec.ASCIIStringCodec
+
 type Text = cqltype.Text
 
 var TextCodec = codec.TextCodec

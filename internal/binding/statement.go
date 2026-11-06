@@ -48,11 +48,32 @@ func InternalEncodeParameters[P any](plan ParamPlan[P], columns Columns, value P
 	return encodedValues{Columns: columns, Cells: cells, Framed: framed}, nil
 }
 
+// Statement is CQL text with its typed parameter encoder and row decoder.
+// A nil Params is allowed when P is EmptyParams, and a nil Rows when R is
+// EmptyRow. BindMarkers describes the bind markers of a statement executed
+// without preparation; prepared statements take them from the server, so
+// Prepare ignores it.
 type Statement[P, R any] struct {
-	Params ParamEncoder[P]
-	Rows   RowDecoder[R]
-	CQL    string
-	Kind   StatementKind
+	Params      ParamEncoder[P]
+	Rows        RowDecoder[R]
+	CQL         string
+	BindMarkers Columns
+	Kind        StatementKind
+}
+
+// InternalStatementDefaults fills a nil Params or Rows that has an empty
+// default.
+func InternalStatementDefaults[P, R any](s *Statement[P, R]) {
+	if s.Params == nil {
+		if e, ok := any(codec.EmptyParamsEncoder).(ParamEncoder[P]); ok {
+			s.Params = e
+		}
+	}
+	if s.Rows == nil {
+		if d, ok := any(codec.EmptyRowDecoder).(RowDecoder[R]); ok {
+			s.Rows = d
+		}
+	}
 }
 
 func InternalValidateStatement[P, R any](s Statement[P, R]) error {
