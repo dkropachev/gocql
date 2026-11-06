@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/dialer"
@@ -140,55 +139,6 @@ func readExactly(t *testing.T, conn net.Conn, n int) {
 	}
 }
 
-// TestProtocolV5RoundTrip records a v5 connection and replays it, which is the whole
-// point of the segment support: the recorder is handed transport segments and has to
-// store the frames inside them, and the replayer has to put them back on the wire in
-// the framing the driver expects.
-//
-// It cannot be done against a real cluster. controlConn.discoverProtocol pins
-// negotiation to v4 and ScyllaDB does not speak v5, so `go test -C tests/bench/e2e
-// -update-golden` can never produce a v5 recording. This drives both dialers in
-// process instead.
-func TestProtocolV5RoundTrip(t *testing.T) {
-	for _, cc := range []struct {
-		name        string
-		compression string
-		comp        dialer.SegmentCompressor
-	}{
-		{name: "uncompressed", compression: ""},
-		{name: "compressed", compression: "lz4", comp: passthroughCompressor{}},
-	} {
-		t.Run(cc.name, func(t *testing.T) {
-			conv := v5Conversation(cc.compression)
-			fname := filepath.Join(t.TempDir(), "conn")
-
-			recordConversation(t, fname, conv, cc.comp)
-
-			// The recording must hold bare frames, decompressed and unwrapped, so the
-			// format does not depend on the protocol version.
-			for _, side := range []struct {
-				suffix string
-				want   func(exchange) []byte
-			}{
-				{suffix: "Writes", want: func(e exchange) []byte { return e.request }},
-				{suffix: "Reads", want: func(e exchange) []byte { return e.response }},
-			} {
-				got := recordedFrames(t, fname+side.suffix)
-				if len(got) != len(conv) {
-					t.Fatalf("%s: recorded %d frames, want %d", side.suffix, len(got), len(conv))
-				}
-				for i, ex := range conv {
-					if !bytes.Equal(got[i].Data, side.want(ex)) {
-						t.Errorf("%s: frame %d was not recorded as a bare CQL frame", side.suffix, i)
-					}
-				}
-			}
-
-			replayConversation(t, fname, conv, cc.comp)
-		})
-	}
-}
-
 // queryV5 builds a protocol v5 QUERY carrying a page size and a default timestamp,
 // the way querySystem sends one: a [long string] query text, the consistency, the
 // 4-byte v5 flags field, and then the fields those flags announce.
@@ -202,47 +152,6 @@ func queryV5(streamID int, query string, timestamp int64) []byte {
 		body = append(body, byte(timestamp>>uint(shift)))
 	}
 	return v5Frame(0x07, false, streamID, body)
-}
-
-// TestProtocolV5QueryReplaysWithAFreshTimestamp is the round trip a real driver
-// performs and TestProtocolV5RoundTrip cannot: it replays a request that is not
-// byte-identical to the recorded one.
-//
-// The default timestamp is time.Now() at send (framer.writeQueryParams), so the QUERY
-// the driver puts on the wire during replay differs from the recorded one in those
-// eight bytes and in nothing else. The hash therefore has to cover the query text --
-// so the two statements are told apart -- while leaving the timestamp out.
-//
-// Before scylladb/gocql#1000 a v5 QUERY could satisfy neither. The parameter walk was
-// handed the body start, read the text's length and first two characters as the 4-byte
-// flags field, failed a bounds check on the nonsense that produced, and fell back to
-// hashing the whole frame -- timestamp included. Replaying either query below panicked
-// with "unable to find a response to replay".
-func TestProtocolV5QueryReplaysWithAFreshTimestamp(t *testing.T) {
-	const (
-		local = "SELECT * FROM system.local WHERE key='local'"
-		peers = "SELECT peer, data_center FROM system.peers"
-	)
-
-	// The handshake, unsegmented; then two distinct queries, segmented. Separate
-	// stream ids because a recording pairs requests with responses by stream id.
-	handshake := []exchange{
-		{request: v5Frame(0x05, false, 0x0001, nil), response: v5Frame(0x06, true, 0x0001, nil)},
-		{request: startupV5(""), response: v5Frame(0x02, true, 0x0040, nil)},
-	}
-	queries := func(timestamp int64) []exchange {
-		return []exchange{
-			{request: queryV5(0x0080, local, timestamp), response: v5Frame(0x08, true, 0x0080, []byte{0x00, 0x00, 0x00, 0x01}), segmented: true},
-			{request: queryV5(0x00C0, peers, timestamp), response: v5Frame(0x08, true, 0x00C0, []byte{0x00, 0x00, 0x00, 0x02}), segmented: true},
-		}
-	}
-
-	fname := filepath.Join(t.TempDir(), "conn")
-	recordConversation(t, fname, append(append([]exchange{}, handshake...), queries(111)...), nil)
-
-	// Replay the same two statements, stamped with a different timestamp. Each must
-	// come back with its own recorded response, not the other one's.
-	replayConversation(t, fname, append(append([]exchange{}, handshake...), queries(999999)...), nil)
 }
 
 // recordConversation records conv through a ConnectionRecorder fed the bytes a socket
@@ -317,101 +226,127 @@ func expectedResponseWire(ex exchange, comp dialer.SegmentCompressor) ([]byte, e
 	return dialer.AppendSegmented(nil, ex.response, comp)
 }
 
-// TestProtocolV5RoundTripNeedsACompressor pins that a compressed v5 connection with no
-// compressor supplied says so, rather than decoding the stream with the wrong segment
-// header size and reporting corrupt frames.
-func TestProtocolV5RoundTripNeedsACompressor(t *testing.T) {
-	conv := v5Conversation("lz4")
-	fname := filepath.Join(t.TempDir(), "conn")
+func TestRoundTrip(t *testing.T) {
+	t.Run("ProtocolV5", func(t *testing.T) {
+		// Compression records a v5 connection and replays it, which is the whole
+		// point of the segment support: the recorder is handed transport segments and has to
+		// store the frames inside them, and the replayer has to put them back on the wire in
+		// the framing the driver expects.
+		//
+		// It cannot be done against a real cluster. controlConn.discoverProtocol pins
+		// negotiation to v4 and ScyllaDB does not speak v5, so `go test -C tests/bench/e2e
+		// -update-golden` can never produce a v5 recording. This drives both dialers in
+		// process instead.
+		t.Run("Compression", func(t *testing.T) {
+			for _, cc := range []struct {
+				name        string
+				compression string
+				comp        dialer.SegmentCompressor
+			}{
+				{name: "uncompressed", compression: ""},
+				{name: "compressed", compression: "lz4", comp: passthroughCompressor{}},
+			} {
+				t.Run(cc.name, func(t *testing.T) {
+					conv := v5Conversation(cc.compression)
+					fname := filepath.Join(t.TempDir(), "conn")
 
-	rec, err := NewConnectionRecorder(fname, &stubConn{readData: wire(t, conv, passthroughCompressor{}, true)}, nil)
-	if err != nil {
-		t.Fatalf("NewConnectionRecorder: %v", err)
-	}
-	defer rec.Close()
+					recordConversation(t, fname, conv, cc.comp)
 
-	// The handshake goes through unsegmented; the first segmented write is where the
-	// missing compressor is discovered.
-	for i, ex := range conv[:2] {
-		if _, err := rec.Write(ex.request); err != nil {
-			t.Fatalf("exchange %d: %v", i, err)
-		}
-		readExactly(t, rec, len(ex.response))
-	}
+					// The recording must hold bare frames, decompressed and unwrapped, so the
+					// format does not depend on the protocol version.
+					for _, side := range []struct {
+						suffix string
+						want   func(exchange) []byte
+					}{
+						{suffix: "Writes", want: func(e exchange) []byte { return e.request }},
+						{suffix: "Reads", want: func(e exchange) []byte { return e.response }},
+					} {
+						got := recordedFrames(t, fname+side.suffix)
+						if len(got) != len(conv) {
+							t.Fatalf("%s: recorded %d frames, want %d", side.suffix, len(got), len(conv))
+						}
+						for i, ex := range conv {
+							if !bytes.Equal(got[i].Data, side.want(ex)) {
+								t.Errorf("%s: frame %d was not recorded as a bare CQL frame", side.suffix, i)
+							}
+						}
+					}
 
-	_, err = rec.Write(onWire(t, conv[2].request, true, passthroughCompressor{}))
-	if err == nil {
-		t.Fatal("a compressed v5 connection was recorded without a compressor")
-	}
-	if !errors.Is(err, dialer.ErrSegmentCompressorRequired) {
-		t.Errorf("error = %v, want dialer.ErrSegmentCompressorRequired", err)
-	}
-}
+					replayConversation(t, fname, conv, cc.comp)
+				})
+			}
+		})
 
-// TestRecorderSendsNothingItCouldNotRecord pins the write path's order: the frame
-// is recorded before it is sent, so a request the recording refuses -- here a
-// pre-v5 compressed STARTUP -- never reaches the server, Write reports (0, err)
-// rather than success with a trailing error the write coalescer would swallow, and
-// the failure is latched so both directions return it from then on: the connection
-// comes down at the failure instead of past it, recording a lie.
-func TestRecorderSendsNothingItCouldNotRecord(t *testing.T) {
-	startup := startupV5("lz4")
-	startup[0] = 0x04
+		// FreshTimestamp is the round trip a real driver
+		// performs and TestRoundTrip/ProtocolV5/Compression cannot: it replays a request that is not
+		// byte-identical to the recorded one.
+		//
+		// The default timestamp is time.Now() at send (framer.writeQueryParams), so the QUERY
+		// the driver puts on the wire during replay differs from the recorded one in those
+		// eight bytes and in nothing else. The hash therefore has to cover the query text --
+		// so the two statements are told apart -- while leaving the timestamp out.
+		//
+		// Before scylladb/gocql#1000 a v5 QUERY could satisfy neither. The parameter walk was
+		// handed the body start, read the text's length and first two characters as the 4-byte
+		// flags field, failed a bounds check on the nonsense that produced, and fell back to
+		// hashing the whole frame -- timestamp included. Replaying either query below panicked
+		// with "unable to find a response to replay".
+		t.Run("FreshTimestamp", func(t *testing.T) {
+			const (
+				local = "SELECT * FROM system.local WHERE key='local'"
+				peers = "SELECT peer, data_center FROM system.peers"
+			)
 
-	conn := &stubConn{}
-	rec, err := NewConnectionRecorder(filepath.Join(t.TempDir(), "conn"), conn, passthroughCompressor{})
-	if err != nil {
-		t.Fatalf("NewConnectionRecorder: %v", err)
-	}
-	defer rec.Close()
+			// The handshake, unsegmented; then two distinct queries, segmented. Separate
+			// stream ids because a recording pairs requests with responses by stream id.
+			handshake := []exchange{
+				{request: v5Frame(0x05, false, 0x0001, nil), response: v5Frame(0x06, true, 0x0001, nil)},
+				{request: startupV5(""), response: v5Frame(0x02, true, 0x0040, nil)},
+			}
+			queries := func(timestamp int64) []exchange {
+				return []exchange{
+					{request: queryV5(0x0080, local, timestamp), response: v5Frame(0x08, true, 0x0080, []byte{0x00, 0x00, 0x00, 0x01}), segmented: true},
+					{request: queryV5(0x00C0, peers, timestamp), response: v5Frame(0x08, true, 0x00C0, []byte{0x00, 0x00, 0x00, 0x02}), segmented: true},
+				}
+			}
 
-	n, err := rec.Write(startup)
-	if err == nil {
-		t.Fatal("a compressed protocol v4 connection was recorded")
-	}
-	if n != 0 {
-		t.Errorf("Write = %d bytes, want 0", n)
-	}
-	if len(conn.written) != 0 {
-		t.Errorf("%d bytes reached the connection after the recording refused the frame", len(conn.written))
-	}
+			fname := filepath.Join(t.TempDir(), "conn")
+			recordConversation(t, fname, append(append([]exchange{}, handshake...), queries(111)...), nil)
 
-	if _, err := rec.Write(optionsFrame(0x04)); err == nil {
-		t.Error("a Write after the recording failed was accepted")
-	}
-	if _, err := rec.Read(make([]byte, 8)); err == nil {
-		t.Error("a Read after the recording failed was accepted")
-	}
-}
+			// Replay the same two statements, stamped with a different timestamp. Each must
+			// come back with its own recorded response, not the other one's.
+			replayConversation(t, fname, append(append([]exchange{}, handshake...), queries(999999)...), nil)
+		})
 
-// TestRecorderRefusesPreV5Compression pins that a compressed connection below protocol
-// v5 is refused where the cause is still visible.
-//
-// Below v5 a negotiated compressor compresses frame bodies, not transport segments, so
-// nothing here would fail: the recorder would write the frames out with compressed
-// bodies and look successful. The cost lands on whoever replays that recording, as a
-// panic from GetFrameHash finding no match -- because a compressed body carries the
-// encoded default timestamp, so the hash differs on every run -- with nothing in it
-// pointing at compression.
-func TestRecorderRefusesPreV5Compression(t *testing.T) {
-	// A v4 STARTUP naming lz4: same body as the v5 one, one version byte apart.
-	startup := startupV5("lz4")
-	startup[0] = 0x04
+		// NeedsCompressor pins that a compressed v5 connection with no
+		// compressor supplied says so, rather than decoding the stream with the wrong segment
+		// header size and reporting corrupt frames.
+		t.Run("NeedsCompressor", func(t *testing.T) {
+			conv := v5Conversation("lz4")
+			fname := filepath.Join(t.TempDir(), "conn")
 
-	fname := filepath.Join(t.TempDir(), "conn")
-	rec, err := NewConnectionRecorder(fname, &stubConn{}, passthroughCompressor{})
-	if err != nil {
-		t.Fatalf("NewConnectionRecorder: %v", err)
-	}
-	defer rec.Close()
+			rec, err := NewConnectionRecorder(fname, &stubConn{readData: wire(t, conv, passthroughCompressor{}, true)}, nil)
+			if err != nil {
+				t.Fatalf("NewConnectionRecorder: %v", err)
+			}
+			defer rec.Close()
 
-	_, err = rec.Write(startup)
-	if err == nil {
-		t.Fatal("a compressed protocol v4 connection was recorded")
-	}
-	for _, want := range []string{"lz4", "v4"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error %q does not mention %q", err, want)
-		}
-	}
+			// The handshake goes through unsegmented; the first segmented write is where the
+			// missing compressor is discovered.
+			for i, ex := range conv[:2] {
+				if _, err := rec.Write(ex.request); err != nil {
+					t.Fatalf("exchange %d: %v", i, err)
+				}
+				readExactly(t, rec, len(ex.response))
+			}
+
+			_, err = rec.Write(onWire(t, conv[2].request, true, passthroughCompressor{}))
+			if err == nil {
+				t.Fatal("a compressed v5 connection was recorded without a compressor")
+			}
+			if !errors.Is(err, dialer.ErrSegmentCompressorRequired) {
+				t.Errorf("error = %v, want dialer.ErrSegmentCompressorRequired", err)
+			}
+		})
+	})
 }

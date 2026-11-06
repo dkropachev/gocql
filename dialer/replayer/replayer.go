@@ -526,7 +526,7 @@ func loadResponseFramesFromFiles(read_file, write_file string) ([]*FrameRecorded
 	// for the first hash that matches, so were two ever to collide, this slice's order
 	// would decide which response the colliding request is served.
 	//
-	// No checked-in recording holds such a pair -- TestCheckedInRecordingsStillLoad
+	// No checked-in recording holds such a pair -- TestRecording/CheckedIn/StillLoad
 	// asserts the hashes are distinct -- and the shapes that used to collide are fixed
 	// rather than merely rare. This is not a live defect being worked around: it is
 	// that a 64-bit hash of caller-supplied bytes cannot be promised never to collide,

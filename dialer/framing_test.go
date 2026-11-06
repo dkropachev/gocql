@@ -23,275 +23,6 @@ func startupWith(opts ...[2]string) []byte {
 	return frameV5(opStartup, 0x00, stringMap(opts...))
 }
 
-// TestFramingLatchesSegmentedOnReadyOrAuthenticate pins the framing boundary.
-//
-// It is one frame earlier than "the handshake finished": the driver flips its own
-// switch when READY or AUTHENTICATE arrives and then writes AUTH_RESPONSE through it,
-// so authentication traffic is already segmented. A latch that waited for
-// AUTH_SUCCESS would decode AUTH_RESPONSE and AUTH_SUCCESS as bare frames and corrupt
-// every authenticated recording.
-func TestFramingLatchesSegmentedOnReadyOrAuthenticate(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		frame []byte
-		want  bool
-	}{
-		{name: "v5 READY", frame: responseV5(opReady), want: true},
-		{name: "v5 AUTHENTICATE", frame: responseV5(opAuthenticate), want: true},
-
-		// Everything the server sends before them stays unsegmented.
-		{name: "v5 SUPPORTED", frame: responseV5(opSupported), want: false},
-
-		// AUTH_SUCCESS is already past the line; if it were the trigger, the frames
-		// between it and AUTHENTICATE would have been decoded wrongly.
-		{name: "v5 AUTH_SUCCESS", frame: responseV5(opAuthSuccess), want: false},
-
-		// A v4 connection never segments anything.
-		{name: "v4 READY", frame: responseV4(opReady), want: false},
-		{name: "v4 AUTHENTICATE", frame: responseV4(opAuthenticate), want: false},
-
-		{name: "short frame", frame: []byte{0x85, 0x00}, want: false},
-		{name: "empty", frame: nil, want: false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			f := NewFraming(nil)
-			f.ObserveResponse(tc.frame)
-			if got := f.Segmented(); got != tc.want {
-				t.Errorf("Segmented() = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}
-
-// TestFramingLatchIsSticky pins that the switch is one-way. A later frame that is not
-// READY must not unset it.
-func TestFramingLatchIsSticky(t *testing.T) {
-	f := NewFraming(nil)
-	f.ObserveResponse(responseV5(opReady))
-	f.ObserveResponse(responseV5(opResult))
-	f.ObserveResponse(responseV4(opResult))
-
-	if !f.Segmented() {
-		t.Error("the framing latch was cleared by a later frame")
-	}
-}
-
-// TestFramingLatchesCompressionFromStartup pins where the segment header layout comes
-// from. The two layouts differ in size, so a decoder that guesses wrong misreads every
-// subsequent offset.
-func TestFramingLatchesCompressionFromStartup(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		frame []byte
-		want  bool
-	}{
-		{
-			name:  "STARTUP naming lz4",
-			frame: startupWith([2]string{"CQL_VERSION", "3.0.0"}, [2]string{"COMPRESSION", "lz4"}),
-			want:  true,
-		},
-		{
-			// An option present but empty names nothing to compress with. Latching on
-			// its presence alone would pick the compressed header layout, which is two
-			// bytes longer, for an uncompressed stream.
-			name:  "STARTUP with an empty COMPRESSION",
-			frame: startupWith([2]string{"COMPRESSION", ""}),
-			want:  false,
-		},
-		{
-			name:  "STARTUP without COMPRESSION",
-			frame: startupWith([2]string{"CQL_VERSION", "3.0.0"}),
-			want:  false,
-		},
-		{
-			// A SUPPORTED response advertises COMPRESSION too. Reading it as the
-			// negotiated choice would turn on the compressed layout on a connection
-			// that never asked for it.
-			name:  "SUPPORTED advertising COMPRESSION",
-			frame: frameV5(opSupported, 0x00, stringMap([2]string{"COMPRESSION", "lz4"})),
-			want:  false,
-		},
-		{
-			name:  "OPTIONS",
-			frame: frameV5(opOptions, 0x00, nil),
-			want:  false,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			f := NewFraming(nil)
-			if err := f.ObserveRequest(tc.frame); err != nil {
-				t.Fatalf("ObserveRequest: %v", err)
-			}
-			if got := f.Compressed(); got != tc.want {
-				t.Errorf("Compressed() = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}
-
-// TestFramingRequiresACompressorForCompressedSegments pins that a missing dependency
-// is reported rather than silently decoded with the wrong header size.
-func TestFramingRequiresACompressorForCompressedSegments(t *testing.T) {
-	f := NewFraming(nil)
-	if err := f.ObserveRequest(startupWith([2]string{"COMPRESSION", "lz4"})); err != nil {
-		t.Fatalf("ObserveRequest: %v", err)
-	}
-	f.ObserveResponse(responseV5(opReady))
-
-	d := f.NewDecoder()
-	err := d.Feed([]byte{0x00, 0x01, 0x02}, func([]byte) error { return nil })
-	if !errors.Is(err, ErrSegmentCompressorRequired) {
-		t.Fatalf("Feed error = %v, want ErrSegmentCompressorRequired", err)
-	}
-
-	if _, err := f.EncodeResponse(nil, responseV5(opResult)); !errors.Is(err, ErrSegmentCompressorRequired) {
-		t.Errorf("EncodeResponse error = %v, want ErrSegmentCompressorRequired", err)
-	}
-}
-
-// TestDecoderFollowsTheSwitch walks a decoder across the framing boundary, in the
-// order a real handshake produces, and checks every frame comes back intact.
-func TestDecoderFollowsTheSwitch(t *testing.T) {
-	for _, cc := range compressors() {
-		t.Run(cc.name, func(t *testing.T) {
-			f := NewFraming(cc.comp)
-
-			startup := startupWith([2]string{"CQL_VERSION", "3.0.0"})
-			if cc.comp != nil {
-				startup = startupWith([2]string{"COMPRESSION", "lz4"})
-			}
-
-			requests := f.NewDecoder()
-			responses := f.NewDecoder()
-
-			var got [][]byte
-			keep := func(frame []byte) error {
-				got = append(got, append([]byte(nil), frame...))
-				return nil
-			}
-			// The response direction is what drives the latch.
-			observe := func(frame []byte) error {
-				f.ObserveResponse(frame)
-				return keep(frame)
-			}
-
-			// OPTIONS and STARTUP: unsegmented requests.
-			options := frameV5(opOptions, 0x00, nil)
-			if err := requests.Feed(options, keep); err != nil {
-				t.Fatalf("OPTIONS: %v", err)
-			}
-			if err := f.ObserveRequest(startup); err != nil {
-				t.Fatalf("ObserveRequest: %v", err)
-			}
-			if err := requests.Feed(startup, keep); err != nil {
-				t.Fatalf("STARTUP: %v", err)
-			}
-
-			// SUPPORTED and AUTHENTICATE: unsegmented responses. AUTHENTICATE flips
-			// the latch as it is observed.
-			supported := frameV5(opSupported, 0x00, nil)
-			authenticate := responseV5(opAuthenticate)
-			if err := responses.Feed(append(append([]byte(nil), supported...), authenticate...), observe); err != nil {
-				t.Fatalf("SUPPORTED+AUTHENTICATE: %v", err)
-			}
-			if !f.Segmented() {
-				t.Fatal("AUTHENTICATE did not flip the framing latch")
-			}
-
-			// AUTH_RESPONSE is the first segmented request, and AUTH_SUCCESS the first
-			// segmented response. This is the boundary that is easy to get wrong.
-			authResponse := frameV5(opAuthResponse, 0x00, []byte{0x00, 0x00, 0x00, 0x00})
-			wire, err := AppendSegmented(nil, authResponse, cc.comp)
-			if err != nil {
-				t.Fatalf("encode AUTH_RESPONSE: %v", err)
-			}
-			if err := requests.Feed(wire, keep); err != nil {
-				t.Fatalf("AUTH_RESPONSE: %v", err)
-			}
-
-			authSuccess := responseV5(opAuthSuccess)
-			if wire, err = f.EncodeResponse(nil, authSuccess); err != nil {
-				t.Fatalf("encode AUTH_SUCCESS: %v", err)
-			}
-			if err := responses.Feed(wire, observe); err != nil {
-				t.Fatalf("AUTH_SUCCESS: %v", err)
-			}
-
-			want := [][]byte{options, startup, supported, authenticate, authResponse, authSuccess}
-			if len(got) != len(want) {
-				t.Fatalf("recovered %d frames, want %d", len(got), len(want))
-			}
-			for i := range want {
-				if !bytes.Equal(got[i], want[i]) {
-					t.Errorf("frame %d: got % X, want % X", i, got[i], want[i])
-				}
-			}
-			if requests.Pending() || responses.Pending() {
-				t.Error("a decoder still holds something incomplete")
-			}
-		})
-	}
-}
-
-// TestEncodeResponseFollowsTheSwitch pins that a response is wrapped only once the
-// connection has switched — before that the driver expects bare frames.
-func TestEncodeResponseFollowsTheSwitch(t *testing.T) {
-	f := NewFraming(nil)
-	frame := responseV5(opSupported)
-
-	before, err := f.EncodeResponse(nil, frame)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(before, frame) {
-		t.Error("a pre-switch response was wrapped")
-	}
-
-	f.ObserveResponse(responseV5(opReady))
-
-	after, err := f.EncodeResponse(nil, frame)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bytes.Equal(after, frame) {
-		t.Error("a post-switch response was not wrapped")
-	}
-
-	// And it must decode back to the frame that went in.
-	s := NewSegmentSplitter(nil)
-	got := decode(t, s, after)
-	if len(got) != 1 || !bytes.Equal(got[0], frame) {
-		t.Error("a wrapped response did not decode back to itself")
-	}
-}
-
-// TestObserveRequestRefusesPreV5Compression pins that a compressed connection below
-// protocol v5 is refused up front.
-//
-// Below v5 a negotiated compressor compresses frame *bodies*, not transport segments.
-// Every recorded body would be compressed bytes, which GetFrameHash cannot walk: it
-// falls back to hashing the whole frame, default timestamp included, so the hash
-// differs on every run and the replayer panics looking for a response to a request it
-// was given. Nothing in that failure names compression as the cause.
-func TestObserveRequestRefusesPreV5Compression(t *testing.T) {
-	startupV4 := frameV4(opStartup, 0x00, stringMap(
-		[2]string{"CQL_VERSION", "3.0.0"}, [2]string{"COMPRESSION", "lz4"}))
-
-	f := NewFraming(nil)
-	err := f.ObserveRequest(startupV4)
-	if err == nil {
-		t.Fatal("a v4 STARTUP naming compression was accepted")
-	}
-	for _, want := range []string{"lz4", "v4"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error %q does not mention %q", err, want)
-		}
-	}
-	if f.Compressed() {
-		t.Error("the refused connection still latched the compressed layout")
-	}
-}
-
 // namedCompressor is a passthrough compressor that reports a name, as the real ones do
 // -- lz4 satisfies gocql.Compressor, so it has a Name. The segment compressor interface
 // deliberately does not require one, so the check is by assertion.
@@ -319,143 +50,512 @@ func (mapCompressor) AppendDecompressed(dst, src []byte, _ uint32) ([]byte, erro
 	return append(dst, src...), nil
 }
 
-// TestNewFramingNormalizesATypedNilCompressor pins that a typed-nil compressor -- a
-// nil *lz4.LZ4Compressor handed over as the SegmentCompressor interface -- behaves
-// like no compressor at all. The interface value is non-nil, so it passes every
-// comp == nil check, and the real compressors declare their methods on the value
-// type, so the first call through it panics -- where the absence has a name,
-// ErrSegmentCompressorRequired, and should keep it.
-//
-// Every nilable kind, not only the pointer the real compressors use: nothing stops an
-// implementation from hanging the methods on a map, func or slice type, and a typed
-// nil of one of those panics in the same place.
-func TestNewFramingNormalizesATypedNilCompressor(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		comp SegmentCompressor
-	}{
-		{"pointer", (*namedCompressor)(nil)},
-		{"map", mapCompressor(nil)},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			f := NewFraming(tc.comp)
+func TestFraming(t *testing.T) {
+	t.Run("Decoder", func(t *testing.T) {
+		// FollowsLatchWithinOneFeed pins that the framing is re-checked at every
+		// frame boundary, not once per call.
+		//
+		// emit is what flips the latch -- the recorder observes the READY it has just been
+		// handed -- so a buffer carrying READY and the first transport segment together would
+		// otherwise have its remainder read as bare frames: the segment's payload length low
+		// byte taken for a protocol version, its next four bytes for a body length, and the
+		// result recorded.
+		t.Run("FollowsLatchWithinOneFeed", func(t *testing.T) {
+			f := NewFraming(nil)
+			d := f.NewDecoder()
 
+			ready := responseV5(opReady)
+			result := responseV5(opResult)
+			segmented, err := AppendSegmented(nil, result, nil)
+			if err != nil {
+				t.Fatalf("AppendSegmented: %v", err)
+			}
+
+			var got [][]byte
+			err = d.Feed(append(append([]byte(nil), ready...), segmented...), func(frame []byte) error {
+				got = append(got, append([]byte(nil), frame...))
+				f.ObserveResponse(frame)
+				return nil
+			})
+			if err != nil {
+				t.Fatalf("Feed: %v", err)
+			}
+
+			want := [][]byte{ready, result}
+			if len(got) != len(want) {
+				t.Fatalf("recovered %d frames, want %d", len(got), len(want))
+			}
+			for i := range want {
+				if !bytes.Equal(got[i], want[i]) {
+					t.Errorf("frame %d: got % X, want % X", i, got[i], want[i])
+				}
+			}
+			if d.Pending() {
+				t.Error("the decoder still holds something incomplete")
+			}
+		})
+
+		// FollowsSwitch walks a decoder across the framing boundary, in the
+		// order a real handshake produces, and checks every frame comes back intact.
+		t.Run("FollowsSwitch", func(t *testing.T) {
+			for _, cc := range compressors() {
+				t.Run(cc.name, func(t *testing.T) {
+					f := NewFraming(cc.comp)
+
+					startup := startupWith([2]string{"CQL_VERSION", "3.0.0"})
+					if cc.comp != nil {
+						startup = startupWith([2]string{"COMPRESSION", "lz4"})
+					}
+
+					requests := f.NewDecoder()
+					responses := f.NewDecoder()
+
+					var got [][]byte
+					keep := func(frame []byte) error {
+						got = append(got, append([]byte(nil), frame...))
+						return nil
+					}
+					// The response direction is what drives the latch.
+					observe := func(frame []byte) error {
+						f.ObserveResponse(frame)
+						return keep(frame)
+					}
+
+					// OPTIONS and STARTUP: unsegmented requests.
+					options := frameV5(opOptions, 0x00, nil)
+					if err := requests.Feed(options, keep); err != nil {
+						t.Fatalf("OPTIONS: %v", err)
+					}
+					if err := f.ObserveRequest(startup); err != nil {
+						t.Fatalf("ObserveRequest: %v", err)
+					}
+					if err := requests.Feed(startup, keep); err != nil {
+						t.Fatalf("STARTUP: %v", err)
+					}
+
+					// SUPPORTED and AUTHENTICATE: unsegmented responses. AUTHENTICATE flips
+					// the latch as it is observed.
+					supported := frameV5(opSupported, 0x00, nil)
+					authenticate := responseV5(opAuthenticate)
+					if err := responses.Feed(append(append([]byte(nil), supported...), authenticate...), observe); err != nil {
+						t.Fatalf("SUPPORTED+AUTHENTICATE: %v", err)
+					}
+					if !f.Segmented() {
+						t.Fatal("AUTHENTICATE did not flip the framing latch")
+					}
+
+					// AUTH_RESPONSE is the first segmented request, and AUTH_SUCCESS the first
+					// segmented response. This is the boundary that is easy to get wrong.
+					authResponse := frameV5(opAuthResponse, 0x00, []byte{0x00, 0x00, 0x00, 0x00})
+					wire, err := AppendSegmented(nil, authResponse, cc.comp)
+					if err != nil {
+						t.Fatalf("encode AUTH_RESPONSE: %v", err)
+					}
+					if err := requests.Feed(wire, keep); err != nil {
+						t.Fatalf("AUTH_RESPONSE: %v", err)
+					}
+
+					authSuccess := responseV5(opAuthSuccess)
+					if wire, err = f.EncodeResponse(nil, authSuccess); err != nil {
+						t.Fatalf("encode AUTH_SUCCESS: %v", err)
+					}
+					if err := responses.Feed(wire, observe); err != nil {
+						t.Fatalf("AUTH_SUCCESS: %v", err)
+					}
+
+					want := [][]byte{options, startup, supported, authenticate, authResponse, authSuccess}
+					if len(got) != len(want) {
+						t.Fatalf("recovered %d frames, want %d", len(got), len(want))
+					}
+					for i := range want {
+						if !bytes.Equal(got[i], want[i]) {
+							t.Errorf("frame %d: got % X, want % X", i, got[i], want[i])
+						}
+					}
+					if requests.Pending() || responses.Pending() {
+						t.Error("a decoder still holds something incomplete")
+					}
+				})
+			}
+		})
+
+		// RefusesSwitchMidFrame pins the other side of it: the switch happens
+		// between frames, so reaching a segment with half a bare frame buffered means either
+		// that reasoning is wrong or the stream is damaged, and reading on would take whatever
+		// the next bytes look like as a segment header.
+		t.Run("RefusesSwitchMidFrame", func(t *testing.T) {
+			f := NewFraming(nil)
+			d := f.NewDecoder()
+
+			partial := responseV5(opResult)[:5]
+			if err := d.Feed(partial, func([]byte) error {
+				t.Error("a partial frame was emitted")
+				return nil
+			}); err != nil {
+				t.Fatalf("Feed of a partial frame: %v", err)
+			}
+
+			f.ObserveResponse(responseV5(opReady))
+
+			err := d.Feed([]byte{0x00, 0x01, 0x02}, func([]byte) error { return nil })
+			if err == nil || !strings.Contains(err.Error(), "middle of a frame") {
+				t.Errorf("Feed error = %v, want a mid-frame switch to be refused", err)
+			}
+		})
+
+		// ReportsLatchedFailureOnEmptyFeed pins the one-shot contract against the
+		// call that carries nothing.
+		//
+		// consume is where the latch is normally read, and it does not run when there is nothing
+		// to consume, so an empty buffer used to come back nil -- reading as a healthy stream on
+		// a splitter whose framing was already in doubt. ConnectionReplayer.Write is the caller
+		// that would believe it: it has no failure gate of its own, so a zero-length write after
+		// a refused STARTUP answered (0, nil). SegmentSplitter.Feed already checked before its
+		// own loop, and startSegments' two refusals were never latched at all, so the four
+		// implementations disagreed about one documented contract.
+		t.Run("ReportsLatchedFailureOnEmptyFeed", func(t *testing.T) {
+			want := errors.New("disk full")
+
+			t.Run("FrameSplitter", func(t *testing.T) {
+				var s FrameSplitter
+				if err := s.Feed(frameV4(opOptions, 0x00, nil), func([]byte) error { return want }); !errors.Is(err, want) {
+					t.Fatalf("Feed error = %v, want %v", err, want)
+				}
+				if err := s.Feed(nil, mustNotEmit(t)); !errors.Is(err, want) {
+					t.Errorf("Feed(nil) = %v, want the original %v", err, want)
+				}
+			})
+
+			for _, tc := range []struct {
+				name string
+				// drive puts a decoder into its failed state and returns the error it reported.
+				// Each entry is a different way in: through a splitter, and through each of
+				// startSegments' two refusals.
+				drive func(t *testing.T, f *Framing, d *Decoder) error
+				// pending is what Pending must report afterwards. It answers "is anything
+				// buffered", not "has this failed", so it differs by path.
+				pending bool
+			}{
+				{
+					name:    "emit error",
+					pending: true,
+					drive: func(t *testing.T, f *Framing, d *Decoder) error {
+						return d.Feed(frameV4(opOptions, 0x00, nil), func([]byte) error { return want })
+					},
+				},
+				{
+					name:    "switch mid-frame",
+					pending: true,
+					drive: func(t *testing.T, f *Framing, d *Decoder) error {
+						if err := d.Feed(responseV5(opResult)[:5], mustNotEmit(t)); err != nil {
+							t.Fatalf("Feed of a partial frame: %v", err)
+						}
+						f.ObserveResponse(responseV5(opReady))
+						return d.Feed([]byte{0x00, 0x01, 0x02}, mustNotEmit(t))
+					},
+				},
+				{
+					name:    "compressed without a compressor",
+					pending: false,
+					drive: func(t *testing.T, f *Framing, d *Decoder) error {
+						if err := f.ObserveRequest(startupWith([2]string{"COMPRESSION", "lz4"})); err != nil {
+							t.Fatalf("ObserveRequest: %v", err)
+						}
+						f.ObserveResponse(responseV5(opReady))
+						return d.Feed([]byte{0x00, 0x01, 0x02}, mustNotEmit(t))
+					},
+				},
+			} {
+				t.Run("Decoder/"+tc.name, func(t *testing.T) {
+					f := NewFraming(nil)
+					d := f.NewDecoder()
+
+					first := tc.drive(t, f, d)
+					if first == nil {
+						t.Fatal("the decoder was not driven into a failure")
+					}
+
+					// The empty call reaches neither splitter, so only a latch can answer it.
+					if err := d.Feed(nil, mustNotEmit(t)); !errors.Is(err, first) {
+						t.Errorf("Feed(nil) = %v, want the latched %v", err, first)
+					}
+
+					// A later call carrying bytes has to report the same error *value*, not
+					// another one just like it. errors.Is compares identity, which is what tells
+					// a latch apart from a refusal recomputed per call: startSegments' two
+					// refusals produce a fresh, equal-looking error every time they run.
+					if err := d.Feed(frameV4(opOptions, 0x00, nil), mustNotEmit(t)); !errors.Is(err, first) {
+						t.Errorf("a later Feed = %v, want the latched %v", err, first)
+					}
+
+					if got := d.Pending(); got != tc.pending {
+						t.Errorf("Pending() = %v, want %v", got, tc.pending)
+					}
+				})
+			}
+		})
+
+		// RequiresCompressor pins that a missing dependency
+		// is reported rather than silently decoded with the wrong header size.
+		t.Run("RequiresCompressor", func(t *testing.T) {
+			f := NewFraming(nil)
 			if err := f.ObserveRequest(startupWith([2]string{"COMPRESSION", "lz4"})); err != nil {
 				t.Fatalf("ObserveRequest: %v", err)
 			}
-			if _, err := f.segmentCompressor(); !errors.Is(err, ErrSegmentCompressorRequired) {
-				t.Errorf("segmentCompressor error = %v, want ErrSegmentCompressorRequired", err)
+			f.ObserveResponse(responseV5(opReady))
+
+			d := f.NewDecoder()
+			err := d.Feed([]byte{0x00, 0x01, 0x02}, func([]byte) error { return nil })
+			if !errors.Is(err, ErrSegmentCompressorRequired) {
+				t.Fatalf("Feed error = %v, want ErrSegmentCompressorRequired", err)
+			}
+
+			if _, err := f.EncodeResponse(nil, responseV5(opResult)); !errors.Is(err, ErrSegmentCompressorRequired) {
+				t.Errorf("EncodeResponse error = %v, want ErrSegmentCompressorRequired", err)
 			}
 		})
-	}
-}
+	})
 
-// TestObserveRequestChecksTheCompressorName pins that a recording naming one algorithm
-// is not replayed with a compressor for another.
-//
-// The segment CRCs cover the compressed payload, so they pass whatever the payload was
-// compressed with, and the mismatch surfaces further on as corrupt CQL frames -- the
-// outcome ErrSegmentCompressorRequired exists to avoid.
-func TestObserveRequestChecksTheCompressorName(t *testing.T) {
-	startup := startupWith([2]string{"COMPRESSION", "snappy"})
+	// EncodeResponse pins that a response is wrapped only once the
+	// connection has switched — before that the driver expects bare frames.
+	t.Run("EncodeResponse", func(t *testing.T) {
+		f := NewFraming(nil)
+		frame := responseV5(opSupported)
 
-	t.Run("mismatch", func(t *testing.T) {
-		f := NewFraming(namedCompressor{name: "lz4"})
-		err := f.ObserveRequest(startup)
-		if err == nil {
-			t.Fatal("a snappy connection was accepted with an lz4 compressor")
+		before, err := f.EncodeResponse(nil, frame)
+		if err != nil {
+			t.Fatal(err)
 		}
-		for _, want := range []string{"snappy", "lz4"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Errorf("error %q does not mention %q", err, want)
+		if !bytes.Equal(before, frame) {
+			t.Error("a pre-switch response was wrapped")
+		}
+
+		f.ObserveResponse(responseV5(opReady))
+
+		after, err := f.EncodeResponse(nil, frame)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Equal(after, frame) {
+			t.Error("a post-switch response was not wrapped")
+		}
+
+		// And it must decode back to the frame that went in.
+		s := NewSegmentSplitter(nil)
+		got := decode(t, s, after)
+		if len(got) != 1 || !bytes.Equal(got[0], frame) {
+			t.Error("a wrapped response did not decode back to itself")
+		}
+	})
+
+	// NewFraming pins that a typed-nil compressor -- a
+	// nil *lz4.LZ4Compressor handed over as the SegmentCompressor interface -- behaves
+	// like no compressor at all. The interface value is non-nil, so it passes every
+	// comp == nil check, and the real compressors declare their methods on the value
+	// type, so the first call through it panics -- where the absence has a name,
+	// ErrSegmentCompressorRequired, and should keep it.
+	//
+	// Every nilable kind, not only the pointer the real compressors use: nothing stops an
+	// implementation from hanging the methods on a map, func or slice type, and a typed
+	// nil of one of those panics in the same place.
+	t.Run("NewFraming", func(t *testing.T) {
+		for _, tc := range []struct {
+			name string
+			comp SegmentCompressor
+		}{
+			{"pointer", (*namedCompressor)(nil)},
+			{"map", mapCompressor(nil)},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				f := NewFraming(tc.comp)
+
+				if err := f.ObserveRequest(startupWith([2]string{"COMPRESSION", "lz4"})); err != nil {
+					t.Fatalf("ObserveRequest: %v", err)
+				}
+				if _, err := f.segmentCompressor(); !errors.Is(err, ErrSegmentCompressorRequired) {
+					t.Errorf("segmentCompressor error = %v, want ErrSegmentCompressorRequired", err)
+				}
+			})
+		}
+	})
+
+	t.Run("ObserveRequest", func(t *testing.T) {
+		// ChecksCompressorName pins that a recording naming one algorithm
+		// is not replayed with a compressor for another.
+		//
+		// The segment CRCs cover the compressed payload, so they pass whatever the payload was
+		// compressed with, and the mismatch surfaces further on as corrupt CQL frames -- the
+		// outcome ErrSegmentCompressorRequired exists to avoid.
+		t.Run("ChecksCompressorName", func(t *testing.T) {
+			startup := startupWith([2]string{"COMPRESSION", "snappy"})
+
+			t.Run("mismatch", func(t *testing.T) {
+				f := NewFraming(namedCompressor{name: "lz4"})
+				err := f.ObserveRequest(startup)
+				if err == nil {
+					t.Fatal("a snappy connection was accepted with an lz4 compressor")
+				}
+				for _, want := range []string{"snappy", "lz4"} {
+					if !strings.Contains(err.Error(), want) {
+						t.Errorf("error %q does not mention %q", err, want)
+					}
+				}
+			})
+
+			t.Run("match, case-insensitively", func(t *testing.T) {
+				f := NewFraming(namedCompressor{name: "SNAPPY"})
+				if err := f.ObserveRequest(startup); err != nil {
+					t.Fatalf("ObserveRequest: %v", err)
+				}
+				if !f.Compressed() {
+					t.Error("a matching compressor did not latch the compressed layout")
+				}
+			})
+
+			t.Run("a compressor without a name is taken as given", func(t *testing.T) {
+				f := NewFraming(passthroughCompressor{})
+				if err := f.ObserveRequest(startup); err != nil {
+					t.Fatalf("ObserveRequest: %v", err)
+				}
+				if !f.Compressed() {
+					t.Error("an unnamed compressor did not latch the compressed layout")
+				}
+			})
+		})
+
+		// LatchesCompressionFromStartup pins where the segment header layout comes
+		// from. The two layouts differ in size, so a decoder that guesses wrong misreads every
+		// subsequent offset.
+		t.Run("LatchesCompressionFromStartup", func(t *testing.T) {
+			for _, tc := range []struct {
+				name  string
+				frame []byte
+				want  bool
+			}{
+				{
+					name:  "STARTUP naming lz4",
+					frame: startupWith([2]string{"CQL_VERSION", "3.0.0"}, [2]string{"COMPRESSION", "lz4"}),
+					want:  true,
+				},
+				{
+					// An option present but empty names nothing to compress with. Latching on
+					// its presence alone would pick the compressed header layout, which is two
+					// bytes longer, for an uncompressed stream.
+					name:  "STARTUP with an empty COMPRESSION",
+					frame: startupWith([2]string{"COMPRESSION", ""}),
+					want:  false,
+				},
+				{
+					name:  "STARTUP without COMPRESSION",
+					frame: startupWith([2]string{"CQL_VERSION", "3.0.0"}),
+					want:  false,
+				},
+				{
+					// A SUPPORTED response advertises COMPRESSION too. Reading it as the
+					// negotiated choice would turn on the compressed layout on a connection
+					// that never asked for it.
+					name:  "SUPPORTED advertising COMPRESSION",
+					frame: frameV5(opSupported, 0x00, stringMap([2]string{"COMPRESSION", "lz4"})),
+					want:  false,
+				},
+				{
+					name:  "OPTIONS",
+					frame: frameV5(opOptions, 0x00, nil),
+					want:  false,
+				},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					f := NewFraming(nil)
+					if err := f.ObserveRequest(tc.frame); err != nil {
+						t.Fatalf("ObserveRequest: %v", err)
+					}
+					if got := f.Compressed(); got != tc.want {
+						t.Errorf("Compressed() = %v, want %v", got, tc.want)
+					}
+				})
 			}
-		}
+		})
+
+		// RefusesPreV5Compression pins that a compressed connection below
+		// protocol v5 is refused up front.
+		//
+		// Below v5 a negotiated compressor compresses frame *bodies*, not transport segments.
+		// Every recorded body would be compressed bytes, which GetFrameHash cannot walk: it
+		// falls back to hashing the whole frame, default timestamp included, so the hash
+		// differs on every run and the replayer panics looking for a response to a request it
+		// was given. Nothing in that failure names compression as the cause.
+		t.Run("RefusesPreV5Compression", func(t *testing.T) {
+			startupV4 := frameV4(opStartup, 0x00, stringMap(
+				[2]string{"CQL_VERSION", "3.0.0"}, [2]string{"COMPRESSION", "lz4"}))
+
+			f := NewFraming(nil)
+			err := f.ObserveRequest(startupV4)
+			if err == nil {
+				t.Fatal("a v4 STARTUP naming compression was accepted")
+			}
+			for _, want := range []string{"lz4", "v4"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not mention %q", err, want)
+				}
+			}
+			if f.Compressed() {
+				t.Error("the refused connection still latched the compressed layout")
+			}
+		})
 	})
 
-	t.Run("match, case-insensitively", func(t *testing.T) {
-		f := NewFraming(namedCompressor{name: "SNAPPY"})
-		if err := f.ObserveRequest(startup); err != nil {
-			t.Fatalf("ObserveRequest: %v", err)
-		}
-		if !f.Compressed() {
-			t.Error("a matching compressor did not latch the compressed layout")
-		}
+	t.Run("ObserveResponse", func(t *testing.T) {
+		// LatchIsSticky pins that the switch is one-way. A later frame that is not
+		// READY must not unset it.
+		t.Run("LatchIsSticky", func(t *testing.T) {
+			f := NewFraming(nil)
+			f.ObserveResponse(responseV5(opReady))
+			f.ObserveResponse(responseV5(opResult))
+			f.ObserveResponse(responseV4(opResult))
+
+			if !f.Segmented() {
+				t.Error("the framing latch was cleared by a later frame")
+			}
+		})
+
+		// LatchesSegmentedOnReadyOrAuthenticate pins the framing boundary.
+		//
+		// It is one frame earlier than "the handshake finished": the driver flips its own
+		// switch when READY or AUTHENTICATE arrives and then writes AUTH_RESPONSE through it,
+		// so authentication traffic is already segmented. A latch that waited for
+		// AUTH_SUCCESS would decode AUTH_RESPONSE and AUTH_SUCCESS as bare frames and corrupt
+		// every authenticated recording.
+		t.Run("LatchesSegmentedOnReadyOrAuthenticate", func(t *testing.T) {
+			for _, tc := range []struct {
+				name  string
+				frame []byte
+				want  bool
+			}{
+				{name: "v5 READY", frame: responseV5(opReady), want: true},
+				{name: "v5 AUTHENTICATE", frame: responseV5(opAuthenticate), want: true},
+
+				// Everything the server sends before them stays unsegmented.
+				{name: "v5 SUPPORTED", frame: responseV5(opSupported), want: false},
+
+				// AUTH_SUCCESS is already past the line; if it were the trigger, the frames
+				// between it and AUTHENTICATE would have been decoded wrongly.
+				{name: "v5 AUTH_SUCCESS", frame: responseV5(opAuthSuccess), want: false},
+
+				// A v4 connection never segments anything.
+				{name: "v4 READY", frame: responseV4(opReady), want: false},
+				{name: "v4 AUTHENTICATE", frame: responseV4(opAuthenticate), want: false},
+
+				{name: "short frame", frame: []byte{0x85, 0x00}, want: false},
+				{name: "empty", frame: nil, want: false},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					f := NewFraming(nil)
+					f.ObserveResponse(tc.frame)
+					if got := f.Segmented(); got != tc.want {
+						t.Errorf("Segmented() = %v, want %v", got, tc.want)
+					}
+				})
+			}
+		})
 	})
-
-	t.Run("a compressor without a name is taken as given", func(t *testing.T) {
-		f := NewFraming(passthroughCompressor{})
-		if err := f.ObserveRequest(startup); err != nil {
-			t.Fatalf("ObserveRequest: %v", err)
-		}
-		if !f.Compressed() {
-			t.Error("an unnamed compressor did not latch the compressed layout")
-		}
-	})
-}
-
-// TestDecoderFollowsTheLatchWithinOneFeed pins that the framing is re-checked at every
-// frame boundary, not once per call.
-//
-// emit is what flips the latch -- the recorder observes the READY it has just been
-// handed -- so a buffer carrying READY and the first transport segment together would
-// otherwise have its remainder read as bare frames: the segment's payload length low
-// byte taken for a protocol version, its next four bytes for a body length, and the
-// result recorded.
-func TestDecoderFollowsTheLatchWithinOneFeed(t *testing.T) {
-	f := NewFraming(nil)
-	d := f.NewDecoder()
-
-	ready := responseV5(opReady)
-	result := responseV5(opResult)
-	segmented, err := AppendSegmented(nil, result, nil)
-	if err != nil {
-		t.Fatalf("AppendSegmented: %v", err)
-	}
-
-	var got [][]byte
-	err = d.Feed(append(append([]byte(nil), ready...), segmented...), func(frame []byte) error {
-		got = append(got, append([]byte(nil), frame...))
-		f.ObserveResponse(frame)
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("Feed: %v", err)
-	}
-
-	want := [][]byte{ready, result}
-	if len(got) != len(want) {
-		t.Fatalf("recovered %d frames, want %d", len(got), len(want))
-	}
-	for i := range want {
-		if !bytes.Equal(got[i], want[i]) {
-			t.Errorf("frame %d: got % X, want % X", i, got[i], want[i])
-		}
-	}
-	if d.Pending() {
-		t.Error("the decoder still holds something incomplete")
-	}
-}
-
-// TestDecoderRefusesASwitchMidFrame pins the other side of it: the switch happens
-// between frames, so reaching a segment with half a bare frame buffered means either
-// that reasoning is wrong or the stream is damaged, and reading on would take whatever
-// the next bytes look like as a segment header.
-func TestDecoderRefusesASwitchMidFrame(t *testing.T) {
-	f := NewFraming(nil)
-	d := f.NewDecoder()
-
-	partial := responseV5(opResult)[:5]
-	if err := d.Feed(partial, func([]byte) error {
-		t.Error("a partial frame was emitted")
-		return nil
-	}); err != nil {
-		t.Fatalf("Feed of a partial frame: %v", err)
-	}
-
-	f.ObserveResponse(responseV5(opReady))
-
-	err := d.Feed([]byte{0x00, 0x01, 0x02}, func([]byte) error { return nil })
-	if err == nil || !strings.Contains(err.Error(), "middle of a frame") {
-		t.Errorf("Feed error = %v, want a mid-frame switch to be refused", err)
-	}
 }

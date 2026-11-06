@@ -7,7 +7,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -23,53 +22,6 @@ var fixtureRecordings = []string{
 	"rec_insert/connection-1",
 	"rec_select/connection-0",
 	"rec_select/connection-1",
-}
-
-// TestCheckedInRecordingsStillLoad pins the two properties the replay benchmarks
-// depend on, against the actual bytes they replay.
-//
-// Neither is about a particular hash value. The hash function may change — a recording
-// stores raw frames and is rehashed at load time with the same function applied to the
-// live request, so both sides move together. What it may not do is stop telling the
-// recording's own requests apart: the replayer scans for the first matching hash, so a
-// collision serves the wrong response, silently. The scan runs over a slice sorted by
-// stream id, so it is at least wrong the same way every run.
-func TestCheckedInRecordingsStillLoad(t *testing.T) {
-	for _, name := range fixtureRecordings {
-		t.Run(name, func(t *testing.T) {
-			base := benchRecordingBase(t, name)
-
-			frames, proto, err := loadResponseFramesFromFiles(base+"Reads", base+"Writes")
-			if err != nil {
-				t.Fatalf("loading the recording: %v", err)
-			}
-			if len(frames) == 0 {
-				t.Fatal("the recording paired no requests with responses")
-			}
-			if proto == 0 {
-				t.Error("no protocol version was read from the recording")
-			}
-
-			seen := make(map[int64]int, len(frames))
-			for i, frame := range frames {
-				if first, dup := seen[frame.Hash]; dup {
-					t.Errorf("frames %d and %d hash alike (%d), so the replayer would serve whichever it reached first",
-						first, i, frame.Hash)
-					continue
-				}
-				seen[frame.Hash] = i
-
-				// materialise refuses any record that is not one whole frame, and a
-				// short one cannot be refused later: the driver reads a frame with
-				// io.ReadFull and ConnectionReplayer's SetReadDeadline is a no-op, so
-				// it blocks mid-frame forever. An empty response is only the loudest
-				// case of that.
-				if !wholeFrame(frame.Response) {
-					t.Errorf("frame %d holds %d bytes, which is not one whole CQL frame", i, len(frame.Response))
-				}
-			}
-		})
-	}
 }
 
 func benchRecordingBase(t *testing.T, name string) string {
@@ -121,56 +73,4 @@ func readAllRecords(t *testing.T, path string) []dialer.Record {
 		t.Fatalf("the recording at %s holds no records", path)
 	}
 	return records
-}
-
-// TestCheckedInRecordingsCarryTheirProtocolStamp pins that the recordings were produced
-// by this tree's recorder, and that one directory is one connection at one version.
-//
-// FrameWriter stamps Record.Proto on every record it writes and has since the field
-// existed, so an unstamped record was captured by an older build. Replay tolerates that
-// -- loadResponseFramesFromFiles falls back to a response frame's own version byte --
-// which is exactly why it needs saying out loud: without this, a regeneration run from a
-// stale checkout silently produces recordings the checked-in recipe cannot reproduce,
-// and Record.Proto goes back to being exercised by no fixture at all.
-//
-// The stamps are compared against each other, not against their own frames. FrameWriter
-// derives the stamp by handing the frame to FrameProtoVersion, so re-reading byte 0 with
-// that same function could only ever agree: it would assert nothing. What is not
-// self-evident is that the records agree among themselves. The recorder appends to these
-// files (see NewConnectionRecorder), so a directory can hold one session's Reads beside
-// another's Writes, and that is the mixed state worth catching.
-//
-// loadResponseFramesFromFiles refuses such a disagreement too, but only among the Writes
-// records -- it never reads a response record's stamp at all. So the Reads half is this
-// test's own to cover, and comparing both halves in one pass is what makes them answer
-// to each other.
-func TestCheckedInRecordingsCarryTheirProtocolStamp(t *testing.T) {
-	for _, name := range fixtureRecordings {
-		t.Run(name, func(t *testing.T) {
-			base := benchRecordingBase(t, name)
-
-			// The first stamped record a directory yields, and where it came from, so
-			// a disagreement can name both sides.
-			var (
-				proto byte
-				from  string
-			)
-			for _, half := range []string{"Reads", "Writes"} {
-				for i, record := range readAllRecords(t, base+half) {
-					where := fmt.Sprintf("%s record %d", half, i)
-					if record.Proto == 0 {
-						t.Errorf("%s carries no proto stamp, so the recording predates this tree's recorder; regenerate it (see the recipe above TestMain in tests/bench/e2e/single_conn_bench_test.go)", where)
-						continue
-					}
-					if proto == 0 {
-						proto, from = record.Proto, where
-						continue
-					}
-					if record.Proto != proto {
-						t.Errorf("%s is stamped proto %d but %s is stamped proto %d; a recording is one connection at one version", where, record.Proto, from, proto)
-					}
-				}
-			}
-		})
-	}
 }
