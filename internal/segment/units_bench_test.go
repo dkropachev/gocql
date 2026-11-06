@@ -16,15 +16,6 @@
 
 package segment
 
-import (
-	"bytes"
-	"context"
-
-	"fmt"
-
-	"testing"
-)
-
 type cyclicUnitReader struct {
 	unit   []byte
 	offset int
@@ -37,31 +28,4 @@ func (r *cyclicUnitReader) Read(p []byte) (int, error) {
 	n := copy(p, r.unit[r.offset:])
 	r.offset += n
 	return n, nil
-}
-
-func BenchmarkValidatedUnits(b *testing.B) {
-	for _, compressed := range []bool{false, true} {
-		for _, size := range []int{32, 4096, MaxPayloadSize} {
-			b.Run(fmt.Sprintf("compressed=%v/%d", compressed, size), func(b *testing.B) {
-				encoded := encodedUnit(b, bytes.Repeat([]byte("x"), size), compressed, true)
-				var comp Compressor
-				if compressed {
-					comp = independentLZ4{}
-				}
-				source := &cyclicUnitReader{unit: encoded}
-				r, _ := NewUnitReader(context.Background(), source, comp, UnitLimits{})
-				if _, _, e := r.Next(); e != nil {
-					b.Fatal(e)
-				}
-				b.SetBytes(int64(size))
-				b.ReportAllocs()
-				b.ResetTimer()
-				for i := 0; i < b.N; i++ {
-					if _, out, e := r.Next(); e != nil || len(out) != size {
-						b.Fatal(e)
-					}
-				}
-			})
-		}
-	}
 }

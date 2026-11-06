@@ -21,10 +21,14 @@ package segment
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
+	"hash/crc32"
 	"io"
+	"math/rand"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/internal/crc"
+	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 // The helpers below build or read one whole segment in a single call, each with
@@ -134,322 +138,445 @@ func (shortAppendCompressor) AppendDecompressed(dst, src []byte, _ uint32) ([]by
 	return append(dst, src...), nil
 }
 
-// TestAppendCompressedIncompressiblePayloadFallsBackToRaw locks the case where the
-// compressor reports the payload as incompressible (empty result). The segment must
-// be emitted as raw (UncompressedLen==0, PayloadLen equal to the source length)
-// rather than with compressedLen==0 and a nonzero uncompressedLen, which the peer
-// cannot decode.
-func TestAppendCompressedIncompressiblePayloadFallsBackToRaw(t *testing.T) {
-	payload := []byte("this payload is reported as incompressible")
+func TestSegment(t *testing.T) {
+	t.Run("AppendCompressed", func(t *testing.T) {
+		// TestSegment/AppendCompressed/IncompressibleFallsBackToRaw locks the case where the
+		// compressor reports the payload as incompressible (empty result). The segment must
+		// be emitted as raw (UncompressedLen==0, PayloadLen equal to the source length)
+		// rather than with compressedLen==0 and a nonzero uncompressedLen, which the peer
+		// cannot decode.
+		t.Run("IncompressibleFallsBackToRaw", func(t *testing.T) {
+			payload := []byte("this payload is reported as incompressible")
 
-	seg, err := newCompressed(payload, true, incompressibleCompressor{})
-	if err != nil {
-		t.Fatalf("newCompressed: %v", err)
-	}
-
-	h, err := ReadCompressedHeader(bytes.NewReader(seg))
-	if err != nil {
-		t.Fatalf("ReadCompressedHeader: %v", err)
-	}
-	// UncompressedLen==0 signals "use the payload as-is, do not decompress".
-	if h.UncompressedLen != 0 {
-		t.Fatalf("UncompressedLen = %d, want 0 (raw fallback)", h.UncompressedLen)
-	}
-	if h.PayloadLen != len(payload) {
-		t.Fatalf("PayloadLen = %d, want %d", h.PayloadLen, len(payload))
-	}
-	if !h.IsSelfContained {
-		t.Fatalf("IsSelfContained = false, want true")
-	}
-}
-
-// TestAppendCompressedRejectsShortAppend pins that a Compressor which discards the
-// bytes it was handed is reported rather than slicing out of range.
-func TestAppendCompressedRejectsShortAppend(t *testing.T) {
-	if _, err := newCompressed([]byte("payload"), true, shortAppendCompressor{}); err == nil {
-		t.Fatal("a compressor that dropped the reserved header was accepted")
-	}
-}
-
-// TestReadPayloadReusesScratch pins that reading consecutive segments with one
-// scratch does not allocate. A connection's receive loop is serialized on its
-// serve() goroutine, so the payload buffers are reused; allocating them per segment
-// costs one (uncompressed) or two (compressed) buffers of up to MaxPayloadSize for
-// every segment received.
-func TestReadPayloadReusesScratch(t *testing.T) {
-	payload := bytes.Repeat([]byte{0x5A}, 8192)
-
-	for _, tc := range []struct {
-		name string
-		comp Compressor
-	}{
-		{"uncompressed", nil},
-		{"compressed", passthroughCompressor{}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var (
-				seg []byte
-				err error
-			)
-			if tc.comp != nil {
-				seg, err = newCompressed(payload, true, tc.comp)
-			} else {
-				seg, err = newUncompressed(payload, true)
-			}
+			seg, err := newCompressed(payload, true, incompressibleCompressor{})
 			if err != nil {
-				t.Fatalf("build segment: %v", err)
+				t.Fatalf("newCompressed: %v", err)
 			}
 
-			var scratch Scratch
-			r := bytes.NewReader(seg)
-			read := func() {
-				r.Reset(seg)
-				h, err := ReadHeader(r, tc.comp != nil)
+			h, err := ReadCompressedHeader(bytes.NewReader(seg))
+			if err != nil {
+				t.Fatalf("ReadCompressedHeader: %v", err)
+			}
+			// UncompressedLen==0 signals "use the payload as-is, do not decompress".
+			if h.UncompressedLen != 0 {
+				t.Fatalf("UncompressedLen = %d, want 0 (raw fallback)", h.UncompressedLen)
+			}
+			if h.PayloadLen != len(payload) {
+				t.Fatalf("PayloadLen = %d, want %d", h.PayloadLen, len(payload))
+			}
+			if !h.IsSelfContained {
+				t.Fatalf("IsSelfContained = false, want true")
+			}
+		})
+
+		// TestSegment/AppendCompressed/RejectsShortAppend pins that a Compressor which discards the
+		// bytes it was handed is reported rather than slicing out of range.
+		t.Run("RejectsShortAppend", func(t *testing.T) {
+			if _, err := newCompressed([]byte("payload"), true, shortAppendCompressor{}); err == nil {
+				t.Fatal("a compressor that dropped the reserved header was accepted")
+			}
+		})
+	})
+
+	t.Run("ReadPayload", func(t *testing.T) {
+		// TestSegment/ReadPayload/ReusesScratch pins that reading consecutive segments with one
+		// scratch does not allocate. A connection's receive loop is serialized on its
+		// serve() goroutine, so the payload buffers are reused; allocating them per segment
+		// costs one (uncompressed) or two (compressed) buffers of up to MaxPayloadSize for
+		// every segment received.
+		t.Run("ReusesScratch", func(t *testing.T) {
+			payload := bytes.Repeat([]byte{0x5A}, 8192)
+
+			for _, tc := range []struct {
+				name string
+				comp Compressor
+			}{
+				{"uncompressed", nil},
+				{"compressed", passthroughCompressor{}},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					var (
+						seg []byte
+						err error
+					)
+					if tc.comp != nil {
+						seg, err = newCompressed(payload, true, tc.comp)
+					} else {
+						seg, err = newUncompressed(payload, true)
+					}
+					if err != nil {
+						t.Fatalf("build segment: %v", err)
+					}
+
+					var scratch Scratch
+					r := bytes.NewReader(seg)
+					read := func() {
+						r.Reset(seg)
+						h, err := ReadHeader(r, tc.comp != nil)
+						if err != nil {
+							t.Fatalf("ReadHeader: %v", err)
+						}
+						got, err := ReadPayload(r, h, tc.comp, &scratch)
+						if err != nil {
+							t.Fatalf("ReadPayload: %v", err)
+						}
+						if len(got) != len(payload) {
+							t.Fatalf("payload length %d, want %d", len(got), len(payload))
+						}
+					}
+
+					// The first read legitimately allocates the scratch buffers.
+					read()
+
+					// Watch the backing arrays themselves rather than a byte budget.
+					// runtime.MemStats.TotalAlloc counts every allocation in the process
+					// during the window -- the testing package's own, the runtime's
+					// bookkeeping, and whatever a -race or -cover build adds on top -- so any
+					// threshold it is compared against is a guess that drifts with the
+					// toolchain and the build flags. Buffer identity is the invariant this
+					// test is named for, and it is exact.
+					wire := &scratch.wire[0]
+					var decompressed *byte
+					if len(scratch.decompressed) > 0 {
+						decompressed = &scratch.decompressed[0]
+					}
+
+					const reads = 8
+					for i := 0; i < reads; i++ {
+						read()
+						if got := &scratch.wire[0]; got != wire {
+							t.Fatalf("read %d reallocated the wire buffer", i+1)
+						}
+						if decompressed == nil {
+							continue
+						}
+						if got := &scratch.decompressed[0]; got != decompressed {
+							t.Fatalf("read %d reallocated the decompressed buffer", i+1)
+						}
+					}
+				})
+			}
+		})
+
+		t.Run("RejectsForgedHeaders", func(t *testing.T) {
+			headers := []Header{{PayloadLen: -1}, {PayloadLen: MaxPayloadSize + 1}, {PayloadLen: 1, UncompressedLen: -1}, {PayloadLen: 1, UncompressedLen: MaxPayloadSize + 1}, {PayloadLen: 1, UncompressedLen: 4}}
+			for _, h := range headers {
+				input := &shortUnitReader{source: bytes.NewReader(nil), chunk: 1}
+				if _, e := ReadOwnedPayload(input, h, nil); !errors.Is(e, ErrInvalidHeader) {
+					t.Fatal(h, e)
+				}
+				if _, e := ReadUncompressedPayload(input, h, new(Scratch)); !errors.Is(e, ErrInvalidHeader) {
+					t.Fatal(h, e)
+				}
+				if _, e := ReadCompressedPayload(input, h, nil, new(Scratch)); !errors.Is(e, ErrInvalidHeader) {
+					t.Fatal(h, e)
+				}
+				if input.read != 0 {
+					t.Fatal("forged header read payload")
+				}
+			}
+			if _, e := ReadUncompressedPayload(bytes.NewReader(nil), Header{}, nil); !errors.Is(e, ErrInvalidHeader) {
+				t.Fatal(e)
+			}
+		})
+	})
+
+	t.Run("ReadCompressedHeader", func(t *testing.T) {
+		t.Run("LengthsBoundedTo17Bits", func(t *testing.T) {
+			// Set every bit in the length/self-contained region. The reader extracts
+			// compressedLen and uncompressedLen with a 17-bit mask each, so both must come
+			// back clamped to MaxPayloadSize regardless of the wider input. This
+			// regression-locks the inherent bound that keeps segment payload allocations
+			// safe without an explicit runtime check.
+			allBits := uint64(1)<<35 - 1 // bits 0..34 set (both 17-bit fields + self-contained bit)
+			header := makeCompressedHeaderRaw(allBits)
+
+			h, err := ReadCompressedHeader(bytes.NewReader(header))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if h.PayloadLen != MaxPayloadSize {
+				t.Fatalf("PayloadLen = %d, want %d", h.PayloadLen, MaxPayloadSize)
+			}
+			if h.UncompressedLen != MaxPayloadSize {
+				t.Fatalf("UncompressedLen = %d, want %d", h.UncompressedLen, MaxPayloadSize)
+			}
+			if !h.IsSelfContained {
+				t.Fatalf("IsSelfContained = false, want true")
+			}
+		})
+
+		t.Run("AcceptsMaxLengths", func(t *testing.T) {
+			// The maximum in-range value for both 17-bit fields must be accepted.
+			header := makeCompressedHeader(MaxPayloadSize, MaxPayloadSize, false)
+
+			h, err := ReadCompressedHeader(bytes.NewReader(header))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if h.PayloadLen != MaxPayloadSize {
+				t.Fatalf("PayloadLen = %d, want %d", h.PayloadLen, MaxPayloadSize)
+			}
+			if h.UncompressedLen != MaxPayloadSize {
+				t.Fatalf("UncompressedLen = %d, want %d", h.UncompressedLen, MaxPayloadSize)
+			}
+			if h.IsSelfContained {
+				t.Fatalf("IsSelfContained = true, want false")
+			}
+		})
+	})
+
+	// TestSegment/HeaderSize pins the two constants the buffering
+	// callers size their reads with against what the decoders actually read. A caller
+	// that has to collect a whole header before decoding it — the record/replay dialers
+	// — corrupts the stream if these disagree by even a byte.
+	t.Run("HeaderSize", func(t *testing.T) {
+		for _, tc := range []struct {
+			name       string
+			compressed bool
+			segment    func() ([]byte, error)
+		}{
+			{
+				name:       "uncompressed",
+				compressed: false,
+				segment:    func() ([]byte, error) { return newUncompressed([]byte("payload"), true) },
+			},
+			{
+				name:       "compressed",
+				compressed: true,
+				segment:    func() ([]byte, error) { return newCompressed([]byte("payload"), true, passthroughCompressor{}) },
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				seg, err := tc.segment()
 				if err != nil {
+					t.Fatalf("build segment: %v", err)
+				}
+
+				r := bytes.NewReader(seg)
+				if _, err := ReadHeader(r, tc.compressed); err != nil {
 					t.Fatalf("ReadHeader: %v", err)
 				}
-				got, err := ReadPayload(r, h, tc.comp, &scratch)
-				if err != nil {
-					t.Fatalf("ReadPayload: %v", err)
+
+				consumed := len(seg) - r.Len()
+				if want := HeaderSize(tc.compressed); consumed != want {
+					t.Errorf("ReadHeader consumed %d bytes, HeaderSize reports %d", consumed, want)
 				}
-				if len(got) != len(payload) {
-					t.Fatalf("payload length %d, want %d", len(got), len(payload))
-				}
-			}
-
-			// The first read legitimately allocates the scratch buffers.
-			read()
-
-			// Watch the backing arrays themselves rather than a byte budget.
-			// runtime.MemStats.TotalAlloc counts every allocation in the process
-			// during the window -- the testing package's own, the runtime's
-			// bookkeeping, and whatever a -race or -cover build adds on top -- so any
-			// threshold it is compared against is a guess that drifts with the
-			// toolchain and the build flags. Buffer identity is the invariant this
-			// test is named for, and it is exact.
-			wire := &scratch.wire[0]
-			var decompressed *byte
-			if len(scratch.decompressed) > 0 {
-				decompressed = &scratch.decompressed[0]
-			}
-
-			const reads = 8
-			for i := 0; i < reads; i++ {
-				read()
-				if got := &scratch.wire[0]; got != wire {
-					t.Fatalf("read %d reallocated the wire buffer", i+1)
-				}
-				if decompressed == nil {
-					continue
-				}
-				if got := &scratch.decompressed[0]; got != decompressed {
-					t.Fatalf("read %d reallocated the decompressed buffer", i+1)
-				}
-			}
-		})
-	}
-}
-
-func TestReadCompressedHeaderLengthsBoundedTo17Bits(t *testing.T) {
-	// Set every bit in the length/self-contained region. The reader extracts
-	// compressedLen and uncompressedLen with a 17-bit mask each, so both must come
-	// back clamped to MaxPayloadSize regardless of the wider input. This
-	// regression-locks the inherent bound that keeps segment payload allocations
-	// safe without an explicit runtime check.
-	allBits := uint64(1)<<35 - 1 // bits 0..34 set (both 17-bit fields + self-contained bit)
-	header := makeCompressedHeaderRaw(allBits)
-
-	h, err := ReadCompressedHeader(bytes.NewReader(header))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if h.PayloadLen != MaxPayloadSize {
-		t.Fatalf("PayloadLen = %d, want %d", h.PayloadLen, MaxPayloadSize)
-	}
-	if h.UncompressedLen != MaxPayloadSize {
-		t.Fatalf("UncompressedLen = %d, want %d", h.UncompressedLen, MaxPayloadSize)
-	}
-	if !h.IsSelfContained {
-		t.Fatalf("IsSelfContained = false, want true")
-	}
-}
-
-func TestReadCompressedHeaderAcceptsMaxLengths(t *testing.T) {
-	// The maximum in-range value for both 17-bit fields must be accepted.
-	header := makeCompressedHeader(MaxPayloadSize, MaxPayloadSize, false)
-
-	h, err := ReadCompressedHeader(bytes.NewReader(header))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if h.PayloadLen != MaxPayloadSize {
-		t.Fatalf("PayloadLen = %d, want %d", h.PayloadLen, MaxPayloadSize)
-	}
-	if h.UncompressedLen != MaxPayloadSize {
-		t.Fatalf("UncompressedLen = %d, want %d", h.UncompressedLen, MaxPayloadSize)
-	}
-	if h.IsSelfContained {
-		t.Fatalf("IsSelfContained = true, want false")
-	}
-}
-
-// TestHeaderSizeMatchesWhatReadHeaderConsumes pins the two constants the buffering
-// callers size their reads with against what the decoders actually read. A caller
-// that has to collect a whole header before decoding it — the record/replay dialers
-// — corrupts the stream if these disagree by even a byte.
-func TestHeaderSizeMatchesWhatReadHeaderConsumes(t *testing.T) {
-	for _, tc := range []struct {
-		name       string
-		compressed bool
-		segment    func() ([]byte, error)
-	}{
-		{
-			name:       "uncompressed",
-			compressed: false,
-			segment:    func() ([]byte, error) { return newUncompressed([]byte("payload"), true) },
-		},
-		{
-			name:       "compressed",
-			compressed: true,
-			segment:    func() ([]byte, error) { return newCompressed([]byte("payload"), true, passthroughCompressor{}) },
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			seg, err := tc.segment()
-			if err != nil {
-				t.Fatalf("build segment: %v", err)
-			}
-
-			r := bytes.NewReader(seg)
-			if _, err := ReadHeader(r, tc.compressed); err != nil {
-				t.Fatalf("ReadHeader: %v", err)
-			}
-
-			consumed := len(seg) - r.Len()
-			if want := HeaderSize(tc.compressed); consumed != want {
-				t.Errorf("ReadHeader consumed %d bytes, HeaderSize reports %d", consumed, want)
-			}
-		})
-	}
-}
-
-// TestEncodedSizeIsAnUpperBound pins that the size EncodedSize reports is enough for
-// what Append actually writes, across the split boundary. Under-reporting it makes
-// the framer's wire buffer grow mid-encode, which is the allocation the two-buffer
-// design exists to avoid.
-func TestEncodedSizeIsAnUpperBound(t *testing.T) {
-	for _, rawLen := range []int{0, 1, 1024, MaxPayloadSize - 1, MaxPayloadSize, MaxPayloadSize + 1, 2*MaxPayloadSize + 7} {
-		for _, comp := range []Compressor{nil, passthroughCompressor{}} {
-			payload := bytes.Repeat([]byte{0x42}, rawLen)
-
-			// Mirror how the framer segments a frame: fixed-size continuation
-			// chunks, then a remainder that is self-contained only if nothing split.
-			var (
-				wire          []byte
-				err           error
-				src           = payload
-				selfContained = true
-			)
-			for len(src) > MaxPayloadSize {
-				if wire, err = Append(wire, src[:MaxPayloadSize], false, comp); err != nil {
-					t.Fatalf("rawLen=%d: %v", rawLen, err)
-				}
-				src = src[MaxPayloadSize:]
-				selfContained = false
-			}
-			if wire, err = Append(wire, src, selfContained, comp); err != nil {
-				t.Fatalf("rawLen=%d: %v", rawLen, err)
-			}
-
-			if bound := EncodedSize(rawLen, comp != nil); len(wire) > bound {
-				t.Errorf("rawLen=%d compressed=%v: encoded to %d bytes, EncodedSize reported %d",
-					rawLen, comp != nil, len(wire), bound)
-			}
-		}
-	}
-}
-
-// TestAppendRoundTrip pins that what Append writes is what the readers read back,
-// for both layouts and both values of the self-contained flag.
-func TestAppendRoundTrip(t *testing.T) {
-	payload := []byte("a payload that survives a round trip")
-
-	for _, selfContained := range []bool{true, false} {
-		seg, err := newUncompressed(payload, selfContained)
-		if err != nil {
-			t.Fatalf("newUncompressed: %v", err)
-		}
-		got, gotSelfContained, err := readUncompressed(bytes.NewReader(seg))
-		if err != nil {
-			t.Fatalf("readUncompressed: %v", err)
-		}
-		if !bytes.Equal(got, payload) {
-			t.Errorf("uncompressed round trip: got %q, want %q", got, payload)
-		}
-		if gotSelfContained != selfContained {
-			t.Errorf("uncompressed round trip: self-contained %v, want %v", gotSelfContained, selfContained)
-		}
-
-		comp := passthroughCompressor{}
-		seg, err = newCompressed(payload, selfContained, comp)
-		if err != nil {
-			t.Fatalf("newCompressed: %v", err)
-		}
-		var scratch Scratch
-		r := bytes.NewReader(seg)
-		h, err := ReadCompressedHeader(r)
-		if err != nil {
-			t.Fatalf("ReadCompressedHeader: %v", err)
-		}
-		got, err = ReadCompressedPayload(r, h, comp, &scratch)
-		if err != nil {
-			t.Fatalf("ReadCompressedPayload: %v", err)
-		}
-		if !bytes.Equal(got, payload) {
-			t.Errorf("compressed round trip: got %q, want %q", got, payload)
-		}
-		if h.IsSelfContained != selfContained {
-			t.Errorf("compressed round trip: self-contained %v, want %v", h.IsSelfContained, selfContained)
-		}
-	}
-}
-
-// TestAppendRejectsOversizedPayload pins the one bound Append needs, since a payload
-// longer than the 17-bit length field would otherwise be silently truncated.
-func TestAppendRejectsOversizedPayload(t *testing.T) {
-	payload := bytes.Repeat([]byte{0x01}, MaxPayloadSize+1)
-
-	if _, err := newUncompressed(payload, true); err == nil {
-		t.Error("AppendUncompressed accepted an oversized payload")
-	}
-	if _, err := newCompressed(payload, true, passthroughCompressor{}); err == nil {
-		t.Error("AppendCompressed accepted an oversized payload")
-	}
-}
-
-// TestReadRejectsCorruptChecksums pins that both CRCs are actually verified.
-func TestReadRejectsCorruptChecksums(t *testing.T) {
-	payload := []byte("a payload whose checksums matter")
-
-	t.Run("header crc24", func(t *testing.T) {
-		seg, err := newUncompressed(payload, true)
-		if err != nil {
-			t.Fatal(err)
-		}
-		seg[0] ^= 0xFF // corrupt the length field, leaving its CRC24 stale
-		if _, _, err := readUncompressed(bytes.NewReader(seg)); err == nil {
-			t.Error("a corrupt header CRC24 was accepted")
+			})
 		}
 	})
 
-	t.Run("payload crc32", func(t *testing.T) {
-		seg, err := newUncompressed(payload, true)
-		if err != nil {
-			t.Fatal(err)
+	// TestSegment/EncodedSize pins that the size EncodedSize reports is enough for
+	// what Append actually writes, across the split boundary. Under-reporting it makes
+	// the framer's wire buffer grow mid-encode, which is the allocation the two-buffer
+	// design exists to avoid.
+	t.Run("EncodedSize", func(t *testing.T) {
+		for _, rawLen := range []int{0, 1, 1024, MaxPayloadSize - 1, MaxPayloadSize, MaxPayloadSize + 1, 2*MaxPayloadSize + 7} {
+			for _, comp := range []Compressor{nil, passthroughCompressor{}} {
+				payload := bytes.Repeat([]byte{0x42}, rawLen)
+
+				// Mirror how the framer segments a frame: fixed-size continuation
+				// chunks, then a remainder that is self-contained only if nothing split.
+				var (
+					wire          []byte
+					err           error
+					src           = payload
+					selfContained = true
+				)
+				for len(src) > MaxPayloadSize {
+					if wire, err = Append(wire, src[:MaxPayloadSize], false, comp); err != nil {
+						t.Fatalf("rawLen=%d: %v", rawLen, err)
+					}
+					src = src[MaxPayloadSize:]
+					selfContained = false
+				}
+				if wire, err = Append(wire, src, selfContained, comp); err != nil {
+					t.Fatalf("rawLen=%d: %v", rawLen, err)
+				}
+
+				if bound := EncodedSize(rawLen, comp != nil); len(wire) > bound {
+					t.Errorf("rawLen=%d compressed=%v: encoded to %d bytes, EncodedSize reported %d",
+						rawLen, comp != nil, len(wire), bound)
+				}
+			}
 		}
-		seg[UncompressedHeaderSize] ^= 0xFF // corrupt a payload byte
-		if _, _, err := readUncompressed(bytes.NewReader(seg)); err == nil {
-			t.Error("a corrupt payload CRC32 was accepted")
+	})
+
+	t.Run("Append", func(t *testing.T) {
+		// TestSegment/Append/RoundTrip pins that what Append writes is what the readers read back,
+		// for both layouts and both values of the self-contained flag.
+		t.Run("RoundTrip", func(t *testing.T) {
+			payload := []byte("a payload that survives a round trip")
+
+			for _, selfContained := range []bool{true, false} {
+				seg, err := newUncompressed(payload, selfContained)
+				if err != nil {
+					t.Fatalf("newUncompressed: %v", err)
+				}
+				got, gotSelfContained, err := readUncompressed(bytes.NewReader(seg))
+				if err != nil {
+					t.Fatalf("readUncompressed: %v", err)
+				}
+				if !bytes.Equal(got, payload) {
+					t.Errorf("uncompressed round trip: got %q, want %q", got, payload)
+				}
+				if gotSelfContained != selfContained {
+					t.Errorf("uncompressed round trip: self-contained %v, want %v", gotSelfContained, selfContained)
+				}
+
+				comp := passthroughCompressor{}
+				seg, err = newCompressed(payload, selfContained, comp)
+				if err != nil {
+					t.Fatalf("newCompressed: %v", err)
+				}
+				var scratch Scratch
+				r := bytes.NewReader(seg)
+				h, err := ReadCompressedHeader(r)
+				if err != nil {
+					t.Fatalf("ReadCompressedHeader: %v", err)
+				}
+				got, err = ReadCompressedPayload(r, h, comp, &scratch)
+				if err != nil {
+					t.Fatalf("ReadCompressedPayload: %v", err)
+				}
+				if !bytes.Equal(got, payload) {
+					t.Errorf("compressed round trip: got %q, want %q", got, payload)
+				}
+				if h.IsSelfContained != selfContained {
+					t.Errorf("compressed round trip: self-contained %v, want %v", h.IsSelfContained, selfContained)
+				}
+			}
+		})
+
+		// TestSegment/Append/RejectsOversized pins the one bound Append needs, since a payload
+		// longer than the 17-bit length field would otherwise be silently truncated.
+		t.Run("RejectsOversized", func(t *testing.T) {
+			payload := bytes.Repeat([]byte{0x01}, MaxPayloadSize+1)
+
+			if _, err := newUncompressed(payload, true); err == nil {
+				t.Error("AppendUncompressed accepted an oversized payload")
+			}
+			if _, err := newCompressed(payload, true, passthroughCompressor{}); err == nil {
+				t.Error("AppendCompressed accepted an oversized payload")
+			}
+		})
+	})
+
+	t.Run("Read", func(t *testing.T) {
+		// TestSegment/Read/RejectsCorruptChecksums pins that both CRCs are actually verified.
+		t.Run("RejectsCorruptChecksums", func(t *testing.T) {
+			payload := []byte("a payload whose checksums matter")
+
+			t.Run("header crc24", func(t *testing.T) {
+				seg, err := newUncompressed(payload, true)
+				if err != nil {
+					t.Fatal(err)
+				}
+				seg[0] ^= 0xFF // corrupt the length field, leaving its CRC24 stale
+				if _, _, err := readUncompressed(bytes.NewReader(seg)); err == nil {
+					t.Error("a corrupt header CRC24 was accepted")
+				}
+			})
+
+			t.Run("payload crc32", func(t *testing.T) {
+				seg, err := newUncompressed(payload, true)
+				if err != nil {
+					t.Fatal(err)
+				}
+				seg[UncompressedHeaderSize] ^= 0xFF // corrupt a payload byte
+				if _, _, err := readUncompressed(bytes.NewReader(seg)); err == nil {
+					t.Error("a corrupt payload CRC32 was accepted")
+				}
+			})
+		})
+	})
+
+	t.Run("EncodeSpans", func(t *testing.T) {
+		random := make([]byte, 70000)
+		rand.New(rand.NewSource(62)).Read(random)
+		for _, input := range [][]byte{nil, []byte("abcd"), bytes.Repeat([]byte("span-compression-pattern-"), 4000), random} {
+			for _, compressed := range []bool{false, true} {
+				var spans []wire.Span
+				for i := 0; i < len(input); {
+					n := min(len(input)-i, 1+(i%113))
+					spans = append(spans, wire.Borrow(input[i:i+n]))
+					i += n
+				}
+				source, _ := wire.NewChain(spans...)
+				result, err := EncodeSpans(source, true, compressed)
+				if err != nil {
+					t.Fatal(err)
+				}
+				encoded := flattenTest(t, result)
+				r := bytes.NewReader(encoded)
+				header, err := ReadHeader(r, compressed)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !header.IsSelfContained {
+					t.Fatal("self contained bit lost")
+				}
+				var comp Compressor
+				if compressed {
+					comp = independentLZ4{}
+				}
+				owner, err := ReadOwnedPayload(r, header, comp)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got := flattenTest(t, owner.Chain()); !bytes.Equal(got, input) {
+					t.Fatal("independent LZ4 roundtrip mismatch")
+				}
+				owner.Release()
+				start := HeaderSize(compressed)
+				payload := encoded[start : len(encoded)-4]
+				crcInput := append([]byte{0xfa, 0x2d, 0x55, 0xca}, payload...)
+				if binary.LittleEndian.Uint32(encoded[len(encoded)-4:]) != crc32.ChecksumIEEE(crcInput) {
+					t.Fatal("incremental CRC mismatch")
+				}
+				if !compressed || header.UncompressedLen == 0 {
+					raw, _ := result.Slice(int64(start), source.Len())
+					i := 0
+					_ = raw.Each(func(s wire.Span) error {
+						if &s.Bytes()[0] != &spans[i].Bytes()[0] {
+							t.Fatal("raw payload copied")
+						}
+						i++
+						return nil
+					})
+					if i != len(spans) {
+						t.Fatal("unexpected raw descriptor count")
+					}
+				}
+				if compressed && len(input) > 90000 && header.UncompressedLen == 0 {
+					t.Fatal("compressible input stored raw")
+				}
+			}
 		}
+	})
+
+	t.Run("ReadOwnedPayload", func(t *testing.T) {
+		t.Run("SurvivesLaterRead", func(t *testing.T) {
+			a, _ := wire.NewChain(wire.Borrow([]byte("first segment")))
+			b, _ := wire.NewChain(wire.Borrow([]byte("second segment")))
+			ac, _ := EncodeSpans(a, true, false)
+			bc, _ := EncodeSpans(b, true, false)
+			r := bytes.NewReader(append(flattenTest(t, ac), flattenTest(t, bc)...))
+			h, _ := ReadHeader(r, false)
+			first, err := ReadOwnedPayload(r, h, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			h, _ = ReadHeader(r, false)
+			second, err := ReadOwnedPayload(r, h, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			second.Release()
+			if got := string(flattenTest(t, first.Chain())); got != "first segment" {
+				t.Fatalf("retained payload overwritten: %q", got)
+			}
+			first.Release()
+		})
 	})
 }

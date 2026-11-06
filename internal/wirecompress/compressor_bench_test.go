@@ -24,27 +24,57 @@
 
 package wirecompress
 
-import "testing"
+import (
+	"testing"
+)
 
-func BenchmarkSnappyCompressor(b *testing.B) {
-	c := SnappyCompressor{}
-	b.Run("Decode", func(b *testing.B) {
-		for _, frame := range frameExamples.Responses {
-			b.Run(frame.Name, func(b *testing.B) {
-				for x := 0; x < b.N; x++ {
-					_, _ = c.Decode(frame.Frame)
+func BenchmarkCompressor(b *testing.B) {
+	b.Run("LZ4", func(b *testing.B) {
+		original := []byte("My Test String")
+		var c LZ4Compressor
+
+		b.Run("Encode", func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				if _, err := c.Encode(original); err != nil {
+					b.Fatal(err)
 				}
-			})
+			}
+		})
+
+		compressed, err := c.Encode(original)
+		if err != nil {
+			b.Fatal(err)
 		}
+
+		b.Run("Decode", func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				if _, err := c.Decode(compressed); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	})
 
-	b.Run("Encode", func(b *testing.B) {
-		for _, frame := range frameExamples.Requests {
-			b.Run(frame.Name, func(b *testing.B) {
-				for x := 0; x < b.N; x++ {
-					_, _ = c.Encode(frame.Frame)
-				}
-			})
-		}
+	b.Run("Snappy", func(b *testing.B) {
+		c := SnappyCompressor{}
+		b.Run("Decode", func(b *testing.B) {
+			for _, frame := range frameExamples.Responses {
+				b.Run(frame.Name, func(b *testing.B) {
+					for x := 0; x < b.N; x++ {
+						_, _ = c.Decode(frame.Frame)
+					}
+				})
+			}
+		})
+
+		b.Run("Encode", func(b *testing.B) {
+			for _, frame := range frameExamples.Requests {
+				b.Run(frame.Name, func(b *testing.B) {
+					for x := 0; x < b.N; x++ {
+						_, _ = c.Encode(frame.Frame)
+					}
+				})
+			}
+		})
 	})
 }

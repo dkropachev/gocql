@@ -31,16 +31,6 @@ import (
 	"time"
 )
 
-func TestUUIDNil(t *testing.T) {
-	t.Parallel()
-
-	var uuid UUID
-	want, got := "00000000-0000-0000-0000-000000000000", uuid.String()
-	if want != got {
-		t.Fatalf("TestNil: expected %q got %q", want, got)
-	}
-}
-
 var testsUUID = []struct {
 	input   string
 	variant int
@@ -61,275 +51,297 @@ var testsUUID = []struct {
 	{"d0e817e1-e4b1-1801-ffe6-b4b60ccecf9d", VariantFuture, 0},
 }
 
-func TestPredefinedUUID(t *testing.T) {
+func TestUUID(t *testing.T) {
 	t.Parallel()
 
-	for i := range testsUUID {
-		uuid, err := ParseUUID(testsUUID[i].input)
-		if err != nil {
-			t.Errorf("ParseUUID #%d: %v", i, err)
-			continue
-		}
+	t.Run("String", func(t *testing.T) {
+		t.Run("Nil", func(t *testing.T) {
+			t.Parallel()
 
-		if str := uuid.String(); str != strings.ToLower(testsUUID[i].input) {
-			t.Errorf("String #%d: expected %q got %q", i, testsUUID[i].input, str)
-			continue
-		}
-
-		if variant := uuid.Variant(); variant != testsUUID[i].variant {
-			t.Errorf("Variant #%d: expected %d got %d", i, testsUUID[i].variant, variant)
-		}
-
-		if testsUUID[i].variant == VariantIETF {
-			if version := uuid.Version(); version != testsUUID[i].version {
-				t.Errorf("Version #%d: expected %d got %d", i, testsUUID[i].version, version)
+			var uuid UUID
+			want, got := "00000000-0000-0000-0000-000000000000", uuid.String()
+			if want != got {
+				t.Fatalf("TestNil: expected %q got %q", want, got)
 			}
+		})
+	})
+
+	t.Run("ParseUUID", func(t *testing.T) {
+		t.Run("Predefined", func(t *testing.T) {
+			t.Parallel()
+
+			for i := range testsUUID {
+				uuid, err := ParseUUID(testsUUID[i].input)
+				if err != nil {
+					t.Errorf("ParseUUID #%d: %v", i, err)
+					continue
+				}
+
+				if str := uuid.String(); str != strings.ToLower(testsUUID[i].input) {
+					t.Errorf("String #%d: expected %q got %q", i, testsUUID[i].input, str)
+					continue
+				}
+
+				if variant := uuid.Variant(); variant != testsUUID[i].variant {
+					t.Errorf("Variant #%d: expected %d got %d", i, testsUUID[i].variant, variant)
+				}
+
+				if testsUUID[i].variant == VariantIETF {
+					if version := uuid.Version(); version != testsUUID[i].version {
+						t.Errorf("Version #%d: expected %d got %d", i, testsUUID[i].version, version)
+					}
+				}
+
+				json, err := uuid.MarshalJSON()
+				if err != nil {
+					t.Errorf("MarshalJSON #%d: %v", i, err)
+				}
+				expectedJson := `"` + strings.ToLower(testsUUID[i].input) + `"`
+				if string(json) != expectedJson {
+					t.Errorf("MarshalJSON #%d: expected %v got %v", i, expectedJson, string(json))
+				}
+
+				var unmarshaled UUID
+				err = unmarshaled.UnmarshalJSON(json)
+				if err != nil {
+					t.Errorf("UnmarshalJSON #%d: %v", i, err)
+				}
+				if unmarshaled != uuid {
+					t.Errorf("UnmarshalJSON #%d: expected %v got %v", i, uuid, unmarshaled)
+				}
+			}
+		})
+
+		t.Run("InvalidCharacter", func(t *testing.T) {
+			t.Parallel()
+
+			_, err := ParseUUID("z4f00409-cef8-4822-802c-deb20704c365")
+			if err == nil || !strings.Contains(err.Error(), "invalid UUID") {
+				t.Fatalf("expected invalid UUID error, got '%v' ", err)
+			}
+		})
+
+		t.Run("InvalidLength", func(t *testing.T) {
+			t.Parallel()
+
+			_, err := ParseUUID("4f00")
+			if err == nil || !strings.Contains(err.Error(), "invalid UUID") {
+				t.Fatalf("expected invalid UUID error, got '%v' ", err)
+			}
+
+			_, err = UUIDFromBytes(NewTimeUUID().Bytes()[:15])
+			if err == nil || err.Error() != "UUIDs must be exactly 16 bytes long" {
+				t.Fatalf("expected error '%v', got '%v'", "UUIDs must be exactly 16 bytes long", err)
+			}
+		})
+	})
+
+	t.Run("RandomUUID", func(t *testing.T) {
+		t.Run("Valid", func(t *testing.T) {
+			t.Parallel()
+
+			for i := 0; i < 20; i++ {
+				uuid, err := RandomUUID()
+				if err != nil {
+					t.Errorf("RandomUUID: %v", err)
+				}
+				if variant := uuid.Variant(); variant != VariantIETF {
+					t.Errorf("wrong variant. expected %d got %d", VariantIETF, variant)
+				}
+				if version := uuid.Version(); version != 4 {
+					t.Errorf("wrong version. expected %d got %d", 4, version)
+				}
+			}
+		})
+
+		t.Run("TimeAccessorsOnRandom", func(t *testing.T) {
+			t.Parallel()
+
+			uuid, err := RandomUUID()
+			if err != nil {
+				t.Fatalf("unexpected error %v", err)
+			}
+
+			if node := uuid.Node(); node != nil {
+				t.Fatalf("expected nil, got %v", node)
+			}
+
+			if stamp := uuid.Timestamp(); stamp != 0 {
+				t.Fatalf("expceted 0, got %v", stamp)
+			}
+			zeroT := time.Time{}
+			if to := uuid.Time(); to != zeroT {
+				t.Fatalf("expected %v, got %v", zeroT, to)
+			}
+		})
+	})
+
+	t.Run("UUIDFromTime", func(t *testing.T) {
+		t.Parallel()
+
+		date := time.Date(1982, 5, 5, 12, 34, 56, 400, time.UTC)
+		uuid := UUIDFromTime(date)
+
+		if uuid.Time() != date {
+			t.Errorf("embedded time incorrect. Expected %v got %v", date, uuid.Time())
+		}
+	})
+
+	t.Run("TimeUUIDWith", func(t *testing.T) {
+		t.Parallel()
+
+		utcTime := time.Date(1982, 5, 5, 12, 34, 56, 400, time.UTC)
+		ts := int64(utcTime.Unix()-timeBase)*10000000 + int64(utcTime.Nanosecond()/100)
+		clockSeq := uint32(0x3FFF)           // Max number of clock sequence.
+		node := [7]byte{0, 1, 2, 3, 4, 5, 6} // The last element should be ignored.
+		uuid := TimeUUIDWith(ts, clockSeq, node[:])
+
+		if got := uuid.Variant(); got != VariantIETF {
+			t.Errorf("wrong variant. expected %d got %d", VariantIETF, got)
+		}
+		if got, want := uuid.Version(), 1; got != want {
+			t.Errorf("wrong version. Expected %v got %v", want, got)
+		}
+		if got := uuid.Timestamp(); got != int64(ts) {
+			t.Errorf("wrong timestamp. Expected %v got %v", ts, got)
+		}
+		if got := uuid.Clock(); uint32(got) != clockSeq {
+			t.Errorf("wrong clock. expected %v got %v", clockSeq, got)
+		}
+		if got, want := uuid.Node(), node[:6]; !bytes.Equal(got, want) {
+			t.Errorf("wrong node. expected %x, bot %x", want, got)
+		}
+	})
+
+	t.Run("ParseUUIDMust", func(t *testing.T) {
+		t.Run("Time", func(t *testing.T) {
+			t.Parallel()
+
+			uuid := ParseUUIDMust("486f3a88-775b-11e3-ae07-d231feb1dc81")
+			if uuid.Time() != time.Date(2014, 1, 7, 5, 19, 29, 222516000, time.UTC) {
+				t.Errorf("Expected date of 1/7/2014 at 5:19:29.222516, got %v", uuid.Time())
+			}
+		})
+	})
+
+	t.Run("NewTimeUUID", func(t *testing.T) {
+		t.Parallel()
+
+		var node []byte
+		timestamp := int64(0)
+		for i := 0; i < 20; i++ {
+			uuid := NewTimeUUID()
+
+			if variant := uuid.Variant(); variant != VariantIETF {
+				t.Errorf("wrong variant. expected %d got %d", VariantIETF, variant)
+			}
+			if version := uuid.Version(); version != 1 {
+				t.Errorf("wrong version. expected %d got %d", 1, version)
+			}
+
+			if n := uuid.Node(); !bytes.Equal(n, node) && i > 0 {
+				t.Errorf("wrong node. expected %x, got %x", node, n)
+			} else if i == 0 {
+				node = n
+			}
+
+			ts := uuid.Timestamp()
+			if ts < timestamp {
+				t.Errorf("timestamps must grow: timestamp=%v ts=%v", timestamp, ts)
+			}
+			timestamp = ts
+		}
+	})
+
+	t.Run("UnmarshalJSON", func(t *testing.T) {
+		t.Parallel()
+
+		var withHyphens, withoutHypens, tooLong UUID
+
+		withHyphens.UnmarshalJSON([]byte(`"486f3a88-775b-11e3-ae07-d231feb1dc81"`))
+		if withHyphens.Time().Truncate(time.Second) != time.Date(2014, 1, 7, 5, 19, 29, 0, time.UTC) {
+			t.Errorf("Expected date of 1/7/2014 at 5:19:29, got %v", withHyphens.Time())
 		}
 
-		json, err := uuid.MarshalJSON()
+		withoutHypens.UnmarshalJSON([]byte(`"486f3a88775b11e3ae07d231feb1dc81"`))
+		if withoutHypens.Time().Truncate(time.Second) != time.Date(2014, 1, 7, 5, 19, 29, 0, time.UTC) {
+			t.Errorf("Expected date of 1/7/2014 at 5:19:29, got %v", withoutHypens.Time())
+		}
+
+		err := tooLong.UnmarshalJSON([]byte(`"486f3a88-775b-11e3-ae07-d231feb1dc81486f3a88"`))
+		if err == nil {
+			t.Errorf("no error for invalid JSON UUID")
+		}
+
+	})
+
+	t.Run("MarshalText", func(t *testing.T) {
+		t.Parallel()
+
+		u, err := ParseUUID("486f3a88-775b-11e3-ae07-d231feb1dc81")
 		if err != nil {
-			t.Errorf("MarshalJSON #%d: %v", i, err)
-		}
-		expectedJson := `"` + strings.ToLower(testsUUID[i].input) + `"`
-		if string(json) != expectedJson {
-			t.Errorf("MarshalJSON #%d: expected %v got %v", i, expectedJson, string(json))
+			t.Fatal(err)
 		}
 
-		var unmarshaled UUID
-		err = unmarshaled.UnmarshalJSON(json)
+		text, err := u.MarshalText()
 		if err != nil {
-			t.Errorf("UnmarshalJSON #%d: %v", i, err)
-		}
-		if unmarshaled != uuid {
-			t.Errorf("UnmarshalJSON #%d: expected %v got %v", i, uuid, unmarshaled)
-		}
-	}
-}
-
-func TestInvalidUUIDCharacter(t *testing.T) {
-	t.Parallel()
-
-	_, err := ParseUUID("z4f00409-cef8-4822-802c-deb20704c365")
-	if err == nil || !strings.Contains(err.Error(), "invalid UUID") {
-		t.Fatalf("expected invalid UUID error, got '%v' ", err)
-	}
-}
-
-func TestInvalidUUIDLength(t *testing.T) {
-	t.Parallel()
-
-	_, err := ParseUUID("4f00")
-	if err == nil || !strings.Contains(err.Error(), "invalid UUID") {
-		t.Fatalf("expected invalid UUID error, got '%v' ", err)
-	}
-
-	_, err = UUIDFromBytes(NewTimeUUID().Bytes()[:15])
-	if err == nil || err.Error() != "UUIDs must be exactly 16 bytes long" {
-		t.Fatalf("expected error '%v', got '%v'", "UUIDs must be exactly 16 bytes long", err)
-	}
-}
-
-func TestRandomUUID(t *testing.T) {
-	t.Parallel()
-
-	for i := 0; i < 20; i++ {
-		uuid, err := RandomUUID()
-		if err != nil {
-			t.Errorf("RandomUUID: %v", err)
-		}
-		if variant := uuid.Variant(); variant != VariantIETF {
-			t.Errorf("wrong variant. expected %d got %d", VariantIETF, variant)
-		}
-		if version := uuid.Version(); version != 4 {
-			t.Errorf("wrong version. expected %d got %d", 4, version)
-		}
-	}
-}
-
-func TestRandomUUIDInvalidAPICalls(t *testing.T) {
-	t.Parallel()
-
-	uuid, err := RandomUUID()
-	if err != nil {
-		t.Fatalf("unexpected error %v", err)
-	}
-
-	if node := uuid.Node(); node != nil {
-		t.Fatalf("expected nil, got %v", node)
-	}
-
-	if stamp := uuid.Timestamp(); stamp != 0 {
-		t.Fatalf("expceted 0, got %v", stamp)
-	}
-	zeroT := time.Time{}
-	if to := uuid.Time(); to != zeroT {
-		t.Fatalf("expected %v, got %v", zeroT, to)
-	}
-}
-
-func TestUUIDFromTime(t *testing.T) {
-	t.Parallel()
-
-	date := time.Date(1982, 5, 5, 12, 34, 56, 400, time.UTC)
-	uuid := UUIDFromTime(date)
-
-	if uuid.Time() != date {
-		t.Errorf("embedded time incorrect. Expected %v got %v", date, uuid.Time())
-	}
-}
-
-func TestTimeUUIDWith(t *testing.T) {
-	t.Parallel()
-
-	utcTime := time.Date(1982, 5, 5, 12, 34, 56, 400, time.UTC)
-	ts := int64(utcTime.Unix()-timeBase)*10000000 + int64(utcTime.Nanosecond()/100)
-	clockSeq := uint32(0x3FFF)           // Max number of clock sequence.
-	node := [7]byte{0, 1, 2, 3, 4, 5, 6} // The last element should be ignored.
-	uuid := TimeUUIDWith(ts, clockSeq, node[:])
-
-	if got := uuid.Variant(); got != VariantIETF {
-		t.Errorf("wrong variant. expected %d got %d", VariantIETF, got)
-	}
-	if got, want := uuid.Version(), 1; got != want {
-		t.Errorf("wrong version. Expected %v got %v", want, got)
-	}
-	if got := uuid.Timestamp(); got != int64(ts) {
-		t.Errorf("wrong timestamp. Expected %v got %v", ts, got)
-	}
-	if got := uuid.Clock(); uint32(got) != clockSeq {
-		t.Errorf("wrong clock. expected %v got %v", clockSeq, got)
-	}
-	if got, want := uuid.Node(), node[:6]; !bytes.Equal(got, want) {
-		t.Errorf("wrong node. expected %x, bot %x", want, got)
-	}
-}
-
-func TestParseUUID(t *testing.T) {
-	t.Parallel()
-
-	uuid := ParseUUIDMust("486f3a88-775b-11e3-ae07-d231feb1dc81")
-	if uuid.Time() != time.Date(2014, 1, 7, 5, 19, 29, 222516000, time.UTC) {
-		t.Errorf("Expected date of 1/7/2014 at 5:19:29.222516, got %v", uuid.Time())
-	}
-}
-
-func TestTimeUUID(t *testing.T) {
-	t.Parallel()
-
-	var node []byte
-	timestamp := int64(0)
-	for i := 0; i < 20; i++ {
-		uuid := NewTimeUUID()
-
-		if variant := uuid.Variant(); variant != VariantIETF {
-			t.Errorf("wrong variant. expected %d got %d", VariantIETF, variant)
-		}
-		if version := uuid.Version(); version != 1 {
-			t.Errorf("wrong version. expected %d got %d", 1, version)
+			t.Fatal(err)
 		}
 
-		if n := uuid.Node(); !bytes.Equal(n, node) && i > 0 {
-			t.Errorf("wrong node. expected %x, got %x", node, n)
-		} else if i == 0 {
-			node = n
+		var u2 UUID
+		if err := u2.UnmarshalText(text); err != nil {
+			t.Fatal(err)
 		}
 
-		ts := uuid.Timestamp()
-		if ts < timestamp {
-			t.Errorf("timestamps must grow: timestamp=%v ts=%v", timestamp, ts)
+		if u != u2 {
+			t.Fatalf("uuids not equal after marshalling: before=%s after=%s", u, u2)
 		}
-		timestamp = ts
-	}
-}
+	})
 
-func TestUnmarshalJSON(t *testing.T) {
-	t.Parallel()
+	t.Run("MinTimeUUID", func(t *testing.T) {
+		t.Parallel()
 
-	var withHyphens, withoutHypens, tooLong UUID
+		aTime := time.Now()
+		minTimeUUID := MinTimeUUID(aTime)
 
-	withHyphens.UnmarshalJSON([]byte(`"486f3a88-775b-11e3-ae07-d231feb1dc81"`))
-	if withHyphens.Time().Truncate(time.Second) != time.Date(2014, 1, 7, 5, 19, 29, 0, time.UTC) {
-		t.Errorf("Expected date of 1/7/2014 at 5:19:29, got %v", withHyphens.Time())
-	}
+		ts := aTime.Unix()
+		tsFromUUID := minTimeUUID.Time().Unix()
+		if ts != tsFromUUID {
+			t.Errorf("timestamps are not equal: expected %d, got %d", ts, tsFromUUID)
+		}
 
-	withoutHypens.UnmarshalJSON([]byte(`"486f3a88775b11e3ae07d231feb1dc81"`))
-	if withoutHypens.Time().Truncate(time.Second) != time.Date(2014, 1, 7, 5, 19, 29, 0, time.UTC) {
-		t.Errorf("Expected date of 1/7/2014 at 5:19:29, got %v", withoutHypens.Time())
-	}
+		clockFromUUID := minTimeUUID.Clock()
+		// clear two most significant bits, as they are used for IETF variant
+		if minClock&0x3FFF != clockFromUUID {
+			t.Errorf("clocks are not equal: expected %08b, got %08b", minClock&0x3FFF, clockFromUUID)
+		}
 
-	err := tooLong.UnmarshalJSON([]byte(`"486f3a88-775b-11e3-ae07-d231feb1dc81486f3a88"`))
-	if err == nil {
-		t.Errorf("no error for invalid JSON UUID")
-	}
+		nodeFromUUID := minTimeUUID.Node()
+		if !bytes.Equal(minNode, nodeFromUUID) {
+			t.Errorf("nodes are not equal: expected %08b, got %08b", minNode, nodeFromUUID)
+		}
+	})
 
-}
+	t.Run("MaxTimeUUID", func(t *testing.T) {
+		t.Parallel()
 
-func TestMarshalText(t *testing.T) {
-	t.Parallel()
+		aTime := time.Now()
+		maxTimeUUID := MaxTimeUUID(aTime)
 
-	u, err := ParseUUID("486f3a88-775b-11e3-ae07-d231feb1dc81")
-	if err != nil {
-		t.Fatal(err)
-	}
+		ts := aTime.Unix()
+		tsFromUUID := maxTimeUUID.Time().Unix()
+		if ts != tsFromUUID {
+			t.Errorf("timestamps are not equal: expected %d, got %d", ts, tsFromUUID)
+		}
 
-	text, err := u.MarshalText()
-	if err != nil {
-		t.Fatal(err)
-	}
+		clockFromUUID := maxTimeUUID.Clock()
+		if maxClock&0x3FFF != clockFromUUID {
+			t.Errorf("clocks are not equal: expected %08b, got %08b", maxClock&0x3FFF, clockFromUUID)
+		}
 
-	var u2 UUID
-	if err := u2.UnmarshalText(text); err != nil {
-		t.Fatal(err)
-	}
-
-	if u != u2 {
-		t.Fatalf("uuids not equal after marshalling: before=%s after=%s", u, u2)
-	}
-}
-
-func TestMinTimeUUID(t *testing.T) {
-	t.Parallel()
-
-	aTime := time.Now()
-	minTimeUUID := MinTimeUUID(aTime)
-
-	ts := aTime.Unix()
-	tsFromUUID := minTimeUUID.Time().Unix()
-	if ts != tsFromUUID {
-		t.Errorf("timestamps are not equal: expected %d, got %d", ts, tsFromUUID)
-	}
-
-	clockFromUUID := minTimeUUID.Clock()
-	// clear two most significant bits, as they are used for IETF variant
-	if minClock&0x3FFF != clockFromUUID {
-		t.Errorf("clocks are not equal: expected %08b, got %08b", minClock&0x3FFF, clockFromUUID)
-	}
-
-	nodeFromUUID := minTimeUUID.Node()
-	if !bytes.Equal(minNode, nodeFromUUID) {
-		t.Errorf("nodes are not equal: expected %08b, got %08b", minNode, nodeFromUUID)
-	}
-}
-
-func TestMaxTimeUUID(t *testing.T) {
-	t.Parallel()
-
-	aTime := time.Now()
-	maxTimeUUID := MaxTimeUUID(aTime)
-
-	ts := aTime.Unix()
-	tsFromUUID := maxTimeUUID.Time().Unix()
-	if ts != tsFromUUID {
-		t.Errorf("timestamps are not equal: expected %d, got %d", ts, tsFromUUID)
-	}
-
-	clockFromUUID := maxTimeUUID.Clock()
-	if maxClock&0x3FFF != clockFromUUID {
-		t.Errorf("clocks are not equal: expected %08b, got %08b", maxClock&0x3FFF, clockFromUUID)
-	}
-
-	nodeFromUUID := maxTimeUUID.Node()
-	if !bytes.Equal(maxNode, nodeFromUUID) {
-		t.Errorf("nodes are not equal:  expected %08b, got %08b", maxNode, nodeFromUUID)
-	}
+		nodeFromUUID := maxTimeUUID.Node()
+		if !bytes.Equal(maxNode, nodeFromUUID) {
+			t.Errorf("nodes are not equal:  expected %08b, got %08b", maxNode, nodeFromUUID)
+		}
+	})
 }
