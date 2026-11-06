@@ -25,7 +25,6 @@ import time
 import types
 import uuid
 
-from control import node_control
 
 
 def sha(path):
@@ -270,42 +269,27 @@ class Runner:
                     flags += ["-runauth", "-cluster-socket=" + str(Path(cluster.nodelist()[0].get_path()) / "cql.m")]
                 else:
                     flags += ["-runcassandrafixtures"]
-                with node_control(cluster, record, health) as control_path:
-                    for mode in lane["modes"]:
-                        self.phase = "testing"
-                        extra = mode["args"]
-                        env = os.environ.copy()
-                        env["GOCQL_TEST_RUN"] = self.run_id
-                        env["GOCQL_FIXTURE_CONTROL"] = control_path
-                        env["GOCQL_FIXTURE_NODE"] = addresses[0]
-                        env.update(mode.get("environment", {}))
-                        command = base + ["-run", mode["tests"], ".", "-args"] + flags + extra
-                        try:
-                            status = self.command(name + "-" + mode["name"], command, env, check=False)
-                            record["tests"].append({"mode": mode["name"], "exit_code": status})
-                        finally:
-                            # Cleanup after success, test failure, SIGINT or SIGTERM.
-                            self.phase = "cleanup"
-                            self.save()
-                            cleanup_base = ["-timeout=2m" if value == "-timeout=20m" else value for value in base]
-                            cleanup = cleanup_base + ["-run", "^TestCleanup$", ".", "-args"] + flags + extra
-                            cleanup_env = dict(env, GOCQL_FIXTURE_CLEANUP="1")
-                            self.command(name + "-" + mode["name"] + "-cleanup", cleanup, cleanup_env)
-                            if self.cancel_requested:
-                                raise KeyboardInterrupt("cancelled; owned namespace cleanup completed")
-                        if status: raise RuntimeError("test lane failed: " + name + "/" + mode["name"])
-                    if lane.get("ccm", False):
-                        cli = self.fixture / "ccm-bin"
-                        cli.mkdir(exist_ok=True)
-                        wrapper = cli / "ccm"
-                        wrapper.write_text("#!" + sys.executable + "\n" +
-                            "import json,os,socket,sys\ns=socket.socket(socket.AF_UNIX)\ns.connect(os.environ['GOCQL_FIXTURE_CONTROL'])\n" +
-                            "s.sendall((json.dumps({'command':sys.argv[1:]})+'\\n').encode())\nr=json.loads(s.makefile().readline())\n" +
-                            "sys.stdout.write(r.get('output',''))\nsys.stderr.write(r.get('error',''))\nsys.exit(1 if 'error' in r else 0)\n")
-                        wrapper.chmod(0o700)
-                        env = os.environ.copy()
-                        env.update(GOCQL_FIXTURE_CONTROL=control_path, PATH=str(cli) + os.pathsep + env["PATH"])
-                        self.command(name + "-ccm", ["go", "test", "-json", "-race", "-tags", "ccm", "-count=1", "-timeout=5m", "./internal/ccm"], env)
+                for mode in lane["modes"]:
+                    self.phase = "testing"
+                    extra = mode["args"]
+                    env = os.environ.copy()
+                    env["GOCQL_TEST_RUN"] = self.run_id
+                    env.update(mode.get("environment", {}))
+                    command = base + ["-run", mode["tests"], ".", "-args"] + flags + extra
+                    try:
+                        status = self.command(name + "-" + mode["name"], command, env, check=False)
+                        record["tests"].append({"mode": mode["name"], "exit_code": status})
+                    finally:
+                        # Cleanup after success, test failure, SIGINT or SIGTERM.
+                        self.phase = "cleanup"
+                        self.save()
+                        cleanup_base = ["-timeout=2m" if value == "-timeout=20m" else value for value in base]
+                        cleanup = cleanup_base + ["-run", "^TestCleanup$", ".", "-args"] + flags + extra
+                        cleanup_env = dict(env, GOCQL_FIXTURE_CLEANUP="1")
+                        self.command(name + "-" + mode["name"] + "-cleanup", cleanup, cleanup_env)
+                        if self.cancel_requested:
+                            raise KeyboardInterrupt("cancelled; owned namespace cleanup completed")
+                    if status: raise RuntimeError("test lane failed: " + name + "/" + mode["name"])
                 record["status"] = "passed"
             finally:
                 if cluster is not None:

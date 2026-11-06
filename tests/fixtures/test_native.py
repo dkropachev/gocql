@@ -1,5 +1,4 @@
 """Focused harness checks; database behavior is proved by native.py receipts."""
-import contextlib
 import fcntl
 import importlib.util
 import json
@@ -108,36 +107,38 @@ class ProvisionTest(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
-class ControlTest(unittest.TestCase):
-    def test_confined_node_control_joins_and_rejects_unknown_nodes(self):
-        import control
-        class Node:
-            name = 'node1'
-            pid = 111
-            network_interfaces = {'binary': ('127.0.20.1', 9042)}
-            running = True
-            def get_path(self): return '/owned/node1'
-            def is_running(self): return self.running
-            def stop(self, **kwargs): self.running = False
-            def start(self, **kwargs): self.running = True; self.pid = 222
-        node = Node()
-        class Cluster:
-            name = 'owned'
-            def nodelist(self): return [node]
-        record = {}
-        def call(path, command):
-            with socket.socket(socket.AF_UNIX) as sock:
-                sock.connect(path)
-                sock.sendall((json.dumps({'command': command}) + '\n').encode())
-                return json.loads(sock.makefile().readline())
-        with control.node_control(Cluster(), record, lambda a: {'address': a}) as path:
-            self.assertIn('error', call(path, ['other', 'stop']))
-            self.assertTrue(node.running)
-            self.assertEqual(call(path, ['node1', 'stop']), {'output': ''})
-            self.assertFalse(node.running)
-            self.assertTrue(record['node_control'][-1]['joined'])
-            self.assertEqual(call(path, ['node1', 'start', '--wait-for-binary-proto']), {'output': ''})
-            self.assertTrue(node.running)
-            self.assertEqual(record['node_control'][-1]['pid_after'], 222)
-            self.assertIn('node1: UP', call(path, ['status', '-v'])['output'])
-        self.assertFalse(Path(path).exists())
+# TODO(scylladb/gocql#339): node control moves to the CCM package; port this
+# test of the removed tests/fixtures/control.py there.
+# class ControlTest(unittest.TestCase):
+#     def test_confined_node_control_joins_and_rejects_unknown_nodes(self):
+#         import control
+#         class Node:
+#             name = 'node1'
+#             pid = 111
+#             network_interfaces = {'binary': ('127.0.20.1', 9042)}
+#             running = True
+#             def get_path(self): return '/owned/node1'
+#             def is_running(self): return self.running
+#             def stop(self, **kwargs): self.running = False
+#             def start(self, **kwargs): self.running = True; self.pid = 222
+#         node = Node()
+#         class Cluster:
+#             name = 'owned'
+#             def nodelist(self): return [node]
+#         record = {}
+#         def call(path, command):
+#             with socket.socket(socket.AF_UNIX) as sock:
+#                 sock.connect(path)
+#                 sock.sendall((json.dumps({'command': command}) + '\n').encode())
+#                 return json.loads(sock.makefile().readline())
+#         with control.node_control(Cluster(), record, lambda a: {'address': a}) as path:
+#             self.assertIn('error', call(path, ['other', 'stop']))
+#             self.assertTrue(node.running)
+#             self.assertEqual(call(path, ['node1', 'stop']), {'output': ''})
+#             self.assertFalse(node.running)
+#             self.assertTrue(record['node_control'][-1]['joined'])
+#             self.assertEqual(call(path, ['node1', 'start', '--wait-for-binary-proto']), {'output': ''})
+#             self.assertTrue(node.running)
+#             self.assertEqual(record['node_control'][-1]['pid_after'], 222)
+#             self.assertIn('node1: UP', call(path, ['status', '-v'])['output'])
+#         self.assertFalse(Path(path).exists())

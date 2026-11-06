@@ -63,19 +63,12 @@ assertion mapping is retained in the feature-specs evidence test mapping.
 Two-shard lanes set `smp: 2`; plaintext and TLS shard endpoints are explicitly
 19042 and 19142, respectively, alongside native 9042 and 9142.
 
-During tests the same live runner holds a mode-0600 Unix control socket inside a
-private temporary directory. `GOCQL_FIXTURE_CONTROL` and `GOCQL_FIXTURE_NODE`
-identify it and the first owned node. It accepts only status, stop/join and
-start/health for exact nodes from that locked cluster. Streaming stops the actual
-coordinator after its first delivered row, verifies terminal failure without
-replay, restarts it and probes pool recovery. A separate real client performs
-ALTER between pull-driven pages, because the stream owns its configured pool
-capacity across those pages. Setting `ccm: true` additionally runs the original
-TestCCM through a finite CLI facade targeting this socket, without CCM CURRENT.
-The control worker joins before final cluster stop; command/PID/address/path and
-health evidence are retained in the native receipt. Cleanup disables event
-subscriptions, drops only enumerated owned namespaces, waits for agreement and
-queries the schema again to prove none survived.
+Tests do not stop or start nodes. TestRunStreamLive streams with a separate real
+client performing ALTER between pull-driven pages, because the stream owns its
+configured pool capacity across those pages; its coordinator-interruption step
+waits for test-owned node control from the CCM package (scylladb/gocql#339).
+Cleanup disables event subscriptions, drops only enumerated owned namespaces,
+waits for agreement and queries the schema again to prove none survived.
 
 The checked-in `testdata/pki` material is dedicated test PKI, with a trusted
 server URI identity and client certificates. Its exact hashes are included in

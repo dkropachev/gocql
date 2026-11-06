@@ -25,16 +25,11 @@ import (
 
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
-	"os"
 	"strings"
 	"testing"
 	"time"
-
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 func TestRunStreamLive(t *testing.T) {
@@ -276,103 +271,94 @@ func TestRunStreamLive(t *testing.T) {
 	}
 	t.Logf("live metadata change: 4 -> %d physical columns, %d delivered rows", changed.Columns().Len(), len(changedSeen))
 
-	// Stop the actual selected coordinator after a delivered row and before the
-	// next page request. This is server lifecycle interruption, not a mocked EOF.
-	if os.Getenv("GOCQL_FIXTURE_CONTROL") == "" {
-		t.Fatal("owned node control required for live interruption coverage")
-	}
-	var target cql.UUID
-	for _, host := range implCluster.SessionData(s).InternalHostSource.InternalGetHostsList() {
-		if host.ConnectAddress().String() == os.Getenv("GOCQL_FIXTURE_NODE") {
-			target = implEndpoint.InternalHostInfoHostUUID(host)
-		}
-	}
-	if target.IsEmpty() {
-		t.Fatal("owned interruption coordinator missing")
-	}
-	interrupted, err := RunStream(ctx, s, bound, decoder, gocql.StreamOptions{Incremental: true, Options: gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: target}, PageSize: cql.Option[int32]{Set: true, Value: 1}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer interrupted.Close()
-	if !interrupted.NextInto(&dst) {
-		t.Fatal("interruption first row", interrupted.Err())
-	}
-	nodeCommand(t, "stop")
-	// Always restart the exact stopped node, even if an assertion below fails.
-	restarted := false
-	defer func() {
-		if !restarted {
-			nodeCommand(t, "start", "--wait-for-binary-proto")
-		}
-	}()
-	if interrupted.NextInto(&dst) || interrupted.Err() == nil {
-		t.Fatal("server interruption was not terminal", interrupted.Err())
-	}
-	terminal := interrupted.Err()
-	if interrupted.Info().DeliveredRows != 1 || !interrupted.Info().OutputStarted {
-		t.Fatal("interruption replayed output", interrupted.Info())
-	}
-	if interrupted.NextInto(&dst) || !errors.Is(interrupted.Err(), terminal) {
-		t.Fatal("terminal interruption changed")
-	}
-	if err := interrupted.Close(); !errors.Is(err, terminal) {
-		t.Fatal("close lost interruption", err)
-	}
-	nodeCommand(t, "start", "--wait-for-binary-proto")
-	restarted = true
-	repairDeadline := time.Now().Add(40 * time.Second)
-	for {
-		probe, probeErr := Run(ctx, s, bound, bindOptions(s, gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: target}, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
-		if probeErr == nil {
-			n := 0
-			var probeRow cql.DynamicRow
-			for probe.NextInto(&probeRow) {
-				n++
-			}
-			probeErr = probe.Close()
-			if probeErr == nil && n == 5 {
-				break
-			}
-		}
-		if time.Now().After(repairDeadline) {
-			t.Fatal("coordinator pool did not recover", probeErr)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Logf("actual coordinator stop/join after one delivered row: %v; restart and shared pool probe succeeded", terminal)
+	// TODO(scylladb/gocql#339): cover a coordinator interruption once the CCM
+	// package can stop and start a node of a test-owned cluster. With it, this
+	// step should:
+	//   - open an incremental stream pinned to node1 (HostID) with page size 1
+	//     and read its first row;
+	//   - stop node1 gracefully and wait for it to exit (ccm node1 stop);
+	//   - check the stream fails terminally: NextInto stays false, Err and Close
+	//     return the same error, and DeliveredRows stays 1 (no replay);
+	//   - start node1 and wait for its binary protocol
+	//     (ccm node1 start --wait-for-binary-proto), restarting it even when an
+	//     assertion fails;
+	//   - probe that queries pinned to node1 return all 5 rows within 40 s,
+	//     proving the shared pool recovered.
+	// It must not stop a node of the shared integration cluster, which other
+	// tests use concurrently. The steps below ran through the node control
+	// socket of tests/fixtures/native.py, which is gone: nodeCommand(t, "stop")
+	// and nodeCommand(t, "start", "--wait-for-binary-proto") stand for the CCM
+	// package's node stop and start, and GOCQL_FIXTURE_NODE for node1's address.
+	// Re-enabling them needs the os and internal/endpoint imports back.
+	//
+	// // Stop the actual selected coordinator after a delivered row and before the
+	// // next page request. This is server lifecycle interruption, not a mocked EOF.
+	// if os.Getenv("GOCQL_FIXTURE_CONTROL") == "" {
+	// 	t.Fatal("owned node control required for live interruption coverage")
+	// }
+	// var target cql.UUID
+	// for _, host := range implCluster.SessionData(s).InternalHostSource.InternalGetHostsList() {
+	// 	if host.ConnectAddress().String() == os.Getenv("GOCQL_FIXTURE_NODE") {
+	// 		target = implEndpoint.InternalHostInfoHostUUID(host)
+	// 	}
+	// }
+	// if target.IsEmpty() {
+	// 	t.Fatal("owned interruption coordinator missing")
+	// }
+	// interrupted, err := RunStream(ctx, s, bound, decoder, gocql.StreamOptions{Incremental: true, Options: gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: target}, PageSize: cql.Option[int32]{Set: true, Value: 1}}})
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	// defer interrupted.Close()
+	// if !interrupted.NextInto(&dst) {
+	// 	t.Fatal("interruption first row", interrupted.Err())
+	// }
+	// nodeCommand(t, "stop")
+	// // Always restart the exact stopped node, even if an assertion below fails.
+	// restarted := false
+	// defer func() {
+	// 	if !restarted {
+	// 		nodeCommand(t, "start", "--wait-for-binary-proto")
+	// 	}
+	// }()
+	// if interrupted.NextInto(&dst) || interrupted.Err() == nil {
+	// 	t.Fatal("server interruption was not terminal", interrupted.Err())
+	// }
+	// terminal := interrupted.Err()
+	// if interrupted.Info().DeliveredRows != 1 || !interrupted.Info().OutputStarted {
+	// 	t.Fatal("interruption replayed output", interrupted.Info())
+	// }
+	// if interrupted.NextInto(&dst) || !errors.Is(interrupted.Err(), terminal) {
+	// 	t.Fatal("terminal interruption changed")
+	// }
+	// if err := interrupted.Close(); !errors.Is(err, terminal) {
+	// 	t.Fatal("close lost interruption", err)
+	// }
+	// nodeCommand(t, "start", "--wait-for-binary-proto")
+	// restarted = true
+	// repairDeadline := time.Now().Add(40 * time.Second)
+	// for {
+	// 	probe, probeErr := Run(ctx, s, bound, bindOptions(s, gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: target}, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
+	// 	if probeErr == nil {
+	// 		n := 0
+	// 		var probeRow cql.DynamicRow
+	// 		for probe.NextInto(&probeRow) {
+	// 			n++
+	// 		}
+	// 		probeErr = probe.Close()
+	// 		if probeErr == nil && n == 5 {
+	// 			break
+	// 		}
+	// 	}
+	// 	if time.Now().After(repairDeadline) {
+	// 		t.Fatal("coordinator pool did not recover", probeErr)
+	// 	}
+	// 	time.Sleep(20 * time.Millisecond)
+	// }
+	// t.Logf("actual coordinator stop/join after one delivered row: %v; restart and shared pool probe succeeded", terminal)
 	bound.Close()
 	if err := bound.Wait(ctx); err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("public RunStream protocol=%d compression=%d tls=%v rows=%d pages=%d bytes/row=%d attempts=%d", config.Protocol, config.Compression, *flagRunSslTest, info.DeliveredRows, info.Pages, len(payload), info.Result.Attempts)
-}
-
-// The finite protocol is serviced by the same native.py process holding the
-// address locks. It accepts only nodes belonging to that exact live cluster.
-func nodeCommand(t testing.TB, action ...string) {
-	t.Helper()
-	conn, err := net.DialTimeout("unix", os.Getenv("GOCQL_FIXTURE_CONTROL"), 5*time.Second)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close()
-	if err := conn.SetDeadline(time.Now().Add(2 * time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	command := append([]string{"node1"}, action...)
-	if err := json.NewEncoder(conn).Encode(struct {
-		Command []string `json:"command"`
-	}{command}); err != nil {
-		t.Fatal(err)
-	}
-	var response struct {
-		Error string `json:"error"`
-	}
-	if err := json.NewDecoder(conn).Decode(&response); err != nil {
-		t.Fatal(err)
-	}
-	if response.Error != "" {
-		t.Fatal(response.Error)
-	}
 }
