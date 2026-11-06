@@ -69,22 +69,36 @@ type BuilderScratch struct {
 	slab  []byte
 	parts []builderPart
 	tail  []indexedSpan
+	// dirtyParts and dirtyTail count the leading descriptors the last
+	// encoding may have left set.
+	dirtyParts, dirtyTail int
 }
 
+// Scratch keeps storage an encoding outgrew it with, up to these sizes, so
+// that encodings of a steady larger size stop allocating.
+const (
+	maxScratchSlab  = 4 << 10
+	maxScratchSpans = 256
+)
+
 // NewBuilderScratch sizes scratch for slab scalar bytes and spans descriptors.
-// An encoding that needs more falls back to ordinary allocation.
+// An encoding that needs more allocates, and the scratch keeps the larger
+// storage, within bounds, for its next encoding.
 func NewBuilderScratch(slab, spans int) *BuilderScratch {
 	return &BuilderScratch{slab: make([]byte, slab), parts: make([]builderPart, 0, spans), tail: make([]indexedSpan, 0, spans)}
 }
 
 // Reset drops the references a previous encoding left in s.
 func (s *BuilderScratch) Reset() {
-	clear(s.parts[:cap(s.parts)])
-	clear(s.tail[:cap(s.tail)])
+	clear(s.parts[:s.dirtyParts])
+	clear(s.tail[:s.dirtyTail])
+	s.dirtyParts, s.dirtyTail = 0, 0
 }
 
 // UseScratch starts an encoding in s. The builder must be empty.
 func (b *Builder) UseScratch(s *BuilderScratch) {
+	// Until Freeze accounts for them, every descriptor may be set.
+	s.dirtyParts, s.dirtyTail = cap(s.parts), cap(s.tail)
 	b.scratch = s
 	b.slab = s.slab
 	b.used = 0
@@ -168,6 +182,11 @@ func (b *Builder) writable(n int) ([]byte, error) {
 		size := b.slabSize
 		if size <= 0 {
 			size = defaultSlabSize
+		}
+		if b.scratch != nil {
+			// Double, so that the scratch keeps a slab the next
+			// encoding of this size fits in.
+			size = max(size, min(2*len(b.slab), maxScratchSlab))
 		}
 		b.slab = make([]byte, max(size, n))
 		perfSlab(len(b.slab))
@@ -311,6 +330,31 @@ func (b *Builder) PatchUint32(m Mark, v uint32) error {
 	return nil
 }
 
+// keepGrown records what the encoding left in s and lets s keep storage the
+// encoding outgrew it with. The frozen chain still aliases that storage, but
+// s is reused only after the chain drained. b.parts is already cleared.
+func (b *Builder) keepGrown(s *BuilderScratch, tail []indexedSpan) {
+	s.dirtyParts = 0
+	if cap(b.parts) > cap(s.parts) {
+		// The descriptors grew out of the scratch's, after filling them.
+		s.dirtyParts = cap(s.parts)
+		if cap(b.parts) <= maxScratchSpans {
+			s.parts, s.dirtyParts = b.parts, 0
+		}
+	}
+	switch {
+	case len(tail) <= cap(s.tail):
+		s.dirtyTail = len(tail) // Freeze used the scratch's index
+	case cap(tail) <= maxScratchSpans:
+		s.tail, s.dirtyTail = tail[:0], len(tail)
+	default:
+		s.dirtyTail = 0
+	}
+	if len(b.slab) > len(s.slab) && len(b.slab) <= maxScratchSlab {
+		s.slab = b.slab
+	}
+}
+
 // Freeze publishes the accumulated bytes and resets b for independent reuse.
 // It invalidates all existing marks, even when the result is empty. Borrowed
 // payloads remain borrowed; the caller must still honor their lifetime.
@@ -339,7 +383,8 @@ func (b *Builder) Freeze() (Chain, error) {
 	}
 	clear(b.parts)
 	b.parts = b.parts[:0]
-	if b.scratch != nil {
+	if s := b.scratch; s != nil {
+		b.keepGrown(s, c.tail)
 		b.parts = nil // the scratch's descriptors stay with its owner
 		b.scratch = nil
 	}

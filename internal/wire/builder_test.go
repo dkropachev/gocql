@@ -289,3 +289,55 @@ func TestBuilderBorrowDoesNotAllocate(t *testing.T) {
 		t.Fatal("borrowed-only builder copied payload")
 	}
 }
+
+func TestBuilderScratchKeepsGrownStorage(t *testing.T) {
+	scratch := NewBuilderScratch(16, 2)
+	payload := []byte("borrowed")
+	encode := func() Chain {
+		var b Builder
+		b.SetSlabSize(16)
+		b.UseScratch(scratch)
+		for i := 0; i < 8; i++ {
+			if err := b.Uint32(uint32(i)); err != nil {
+				t.Fatal(err)
+			}
+			if err := b.Borrow(Borrow(payload)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		c, err := b.Freeze()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	want := encode()
+	got := make([]byte, want.Len())
+	if _, err := want.CopyTo(got); err != nil {
+		t.Fatal(err)
+	}
+	scratch.Reset()
+	// The first encoding grew the scratch: one of the same size fits.
+	if n := testing.AllocsPerRun(10, func() { encode(); scratch.Reset() }); n != 0 {
+		t.Fatalf("encoding into grown scratch allocates %v times", n)
+	}
+	again := encode()
+	out := make([]byte, again.Len())
+	if _, err := again.CopyTo(out); err != nil {
+		t.Fatal(err)
+	}
+	if string(out) != string(got) {
+		t.Fatalf("encoded %q, want %q", out, got)
+	}
+	scratch.Reset()
+	for _, part := range scratch.parts[:cap(scratch.parts)] {
+		if part.span.Len() != 0 {
+			t.Fatal("Reset left a descriptor set")
+		}
+	}
+	for _, span := range scratch.tail[:cap(scratch.tail)] {
+		if span.span.Len() != 0 {
+			t.Fatal("Reset left an index entry set")
+		}
+	}
+}
