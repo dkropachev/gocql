@@ -1,6 +1,3 @@
-//go:build unit
-// +build unit
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -487,44 +484,4 @@ drainSlow:
 
 	// Slow subscriber should have received some events but likely not all
 	t.Logf("Slow subscriber received %d events (some may have been dropped)", slowCount)
-}
-
-func BenchmarkEventDistribution(b *testing.B) {
-	eb := New[int](
-		EventBusConfig{
-			InputEventsQueueSize: 1000,
-		}, nil)
-	eb.Start()
-	defer eb.Stop()
-
-	// Create 10 subscribers
-	for i := 0; i < 10; i++ {
-		eb.Subscribe(string(rune('A'+i)), 1000, nil)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		eb.PublishEvent(i)
-	}
-}
-
-func BenchmarkEventDistributionWithFilter(b *testing.B) {
-	eb := New[int](
-		EventBusConfig{
-			InputEventsQueueSize: 1000,
-		}, nil)
-	eb.Start()
-	defer eb.Stop()
-
-	filter := func(n int) bool { return n%2 == 0 }
-
-	// Create 10 subscribers with filters
-	for i := 0; i < 10; i++ {
-		eb.Subscribe(string(rune('A'+i)), 1000, filter)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		eb.PublishEvent(i)
-	}
 }

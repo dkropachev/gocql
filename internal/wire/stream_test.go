@@ -21,7 +21,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"fmt"
+
 	"io"
 	"math"
 	"net"
@@ -351,27 +351,6 @@ func FuzzStreamCells(f *testing.F) {
 			t.Fatal("successful parse left bytes")
 		}
 	})
-}
-func BenchmarkStreamFinalRanges(b *testing.B) {
-	for _, size := range []int{32, 4096, 500 << 10} {
-		b.Run(fmt.Sprint(size), func(b *testing.B) {
-			dst := make([]byte, size)
-			source := &repeatedStreamReader{bytes: math.MaxInt64}
-			s, _ := NewStream(context.Background(), source, math.MaxInt32, StreamLimits{MaxBytes: math.MaxInt32})
-			if e := s.Child(int64(size), func(c *Stream) error { return c.ReadFull(dst) }); e != nil {
-				b.Fatal(e)
-			}
-			b.ReportAllocs()
-			b.SetBytes(int64(size))
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				s.remaining = math.MaxInt32
-				if e := s.Child(int64(size), func(c *Stream) error { return c.ReadFull(dst) }); e != nil {
-					b.Fatal(e)
-				}
-			}
-		})
-	}
 }
 
 type eofDataReader struct{ data []byte }

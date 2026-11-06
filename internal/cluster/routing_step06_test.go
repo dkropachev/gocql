@@ -11,7 +11,6 @@ import (
 
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 
-	"encoding/binary"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/tablets"
@@ -31,24 +30,6 @@ func step06Hint(t testing.TB, first, last int64, version cql.Option[uint64], rep
 		h = h.WithVersion(version.Value)
 	}
 	return h
-}
-func step06Payload(h tablets.TabletInfo) []byte {
-	field := func(dst, b []byte) []byte { return append(binary.BigEndian.AppendUint32(dst, uint32(len(b))), b...) }
-	var b []byte
-	b = field(b, binary.BigEndian.AppendUint64(nil, uint64(h.FirstToken())))
-	b = field(b, binary.BigEndian.AppendUint64(nil, uint64(h.LastToken())))
-	list := binary.BigEndian.AppendUint32(nil, uint32(len(h.ReplicasUnsafe())))
-	for _, r := range h.ReplicasUnsafe() {
-		id := r.HostUUIDValue()
-		tuple := field(nil, id[:])
-		tuple = field(tuple, binary.BigEndian.AppendUint32(nil, uint32(r.ShardID())))
-		list = field(list, tuple)
-	}
-	b = field(b, list)
-	if v, ok := h.Version(); ok {
-		b = field(b, binary.BigEndian.AppendUint64(nil, v))
-	}
-	return b
 }
 
 func step06Session(t testing.TB) *Session {

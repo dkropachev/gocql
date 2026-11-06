@@ -1,6 +1,3 @@
-//go:build unit
-// +build unit
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -28,150 +25,12 @@
 package gocql_test
 
 import (
-	"bytes"
-	"encoding/binary"
-	"math"
-
 	gocql "github.com/scylladb/gocql/v2"
 
 	"testing"
 
-	"github.com/klauspost/compress/s2"
-	"github.com/stretchr/testify/require"
-
 	lz4mod "github.com/scylladb/gocql/v2/internal/wirecompress"
-
-	"os"
-
-	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
-
-type frameExample struct {
-	Name     string
-	Frame    []byte
-	FilePath string
-}
-
-var frameExamples = struct {
-	Requests  []frameExample
-	Responses []frameExample
-}{
-	Requests: []frameExample{
-		{
-			Name:     "Small query request",
-			FilePath: "testdata/frames/small_query_request.bin",
-		},
-		{
-			Name:     "Medium query request",
-			FilePath: "testdata/frames/medium_query_request.bin",
-		},
-		{
-			Name:     "Big query request",
-			FilePath: "testdata/frames/big_query_request.bin",
-		},
-		{
-			Name:     "Prepare statement request",
-			FilePath: "testdata/frames/prepare_statement_request.bin",
-		},
-	},
-	Responses: []frameExample{
-		{
-			Name:     "Small query response",
-			FilePath: "testdata/frames/small_query_response.bin",
-		},
-		{
-			Name:     "Medium query response",
-			FilePath: "testdata/frames/medium_query_response.bin",
-		},
-		{
-			Name:     "Big query response",
-			FilePath: "testdata/frames/big_query_response.bin",
-		},
-		{
-			Name:     "Prepare statement response",
-			FilePath: "testdata/frames/prepare_statement_response.bin",
-		},
-	},
-}
-
-func TestSnappyCompressor(t *testing.T) {
-	t.Parallel()
-
-	t.Run("basic", func(t *testing.T) {
-		c := gocql.SnappyCompressor{}
-		if c.Name() != "snappy" {
-			t.Fatalf("expected name to be 'snappy', got %v", c.Name())
-		}
-
-		str := "My Test String"
-		//Test Encoding with S2 library, Snappy compatible encoding.
-		expected := s2.EncodeSnappy(nil, []byte(str))
-		if res, err := c.Encode([]byte(str)); err != nil {
-			t.Fatalf("failed to encode '%v' with error %v", str, err)
-		} else if bytes.Compare(expected, res) != 0 {
-			t.Fatal("failed to match the expected encoded value with the result encoded value.")
-		}
-
-		val, err := c.Encode([]byte(str))
-		if err != nil {
-			t.Fatalf("failed to encode '%v' with error '%v'", str, err)
-		}
-
-		//Test Decoding with S2 library, Snappy compatible encoding.
-		if expected, err := s2.Decode(nil, val); err != nil {
-			t.Fatalf("failed to decode '%v' with error %v", val, err)
-		} else if res, err := c.Decode(val); err != nil {
-			t.Fatalf("failed to decode '%v' with error %v", val, err)
-		} else if bytes.Compare(expected, res) != 0 {
-			t.Fatal("failed to match the expected decoded value with the result decoded value.")
-		}
-	})
-
-	t.Run("frame-examples", func(t *testing.T) {
-		c := gocql.SnappyCompressor{}
-
-		t.Run("Encode", func(t *testing.T) {
-			for id := range frameExamples.Requests {
-				frame := frameExamples.Requests[id]
-				t.Run(frame.Name, func(t *testing.T) {
-					t.Parallel()
-
-					encoded, err := c.Encode(frame.Frame)
-					if err != nil {
-						t.Fatalf("failed to encode frame %s", frame.Name)
-					}
-					decoded, err := c.Decode(encoded)
-					if err != nil {
-						t.Fatalf("failed to decode frame %s", frame.Name)
-					}
-
-					if bytes.Compare(decoded, frame.Frame) != 0 {
-						t.Fatalf("failed to match the decoded value with the original value")
-					}
-					t.Logf("Compression rate %f", float64(len(encoded))/float64(len(frame.Frame)))
-				})
-			}
-		})
-
-		t.Run("Decode", func(t *testing.T) {
-			for id := range frameExamples.Responses {
-				frame := frameExamples.Responses[id]
-				t.Run(frame.Name, func(t *testing.T) {
-					t.Parallel()
-
-					decoded, err := c.Decode(frame.Frame)
-					if err != nil {
-						t.Fatalf("failed to decode frame %s", frame.Name)
-					}
-
-					if len(decoded) == 0 {
-						t.Fatalf("frame was decoded to empty slice")
-					}
-				})
-			}
-		})
-	})
-}
 
 // legacyCompressor implements only the master-era Compressor surface
 // (Name/Encode/Decode). It guards backward compatibility: if the public
@@ -208,29 +67,6 @@ func TestCompressorBackwardCompatibility(t *testing.T) {
 	}
 }
 
-func BenchmarkSnappyCompressor(b *testing.B) {
-	c := gocql.SnappyCompressor{}
-	b.Run("Decode", func(b *testing.B) {
-		for _, frame := range frameExamples.Responses {
-			b.Run(frame.Name, func(b *testing.B) {
-				for x := 0; x < b.N; x++ {
-					_, _ = c.Decode(frame.Frame)
-				}
-			})
-		}
-	})
-
-	b.Run("Encode", func(b *testing.B) {
-		for _, frame := range frameExamples.Requests {
-			b.Run(frame.Name, func(b *testing.B) {
-				for x := 0; x < b.N; x++ {
-					_, _ = c.Encode(frame.Frame)
-				}
-			})
-		}
-	})
-}
-
 // TestSnappyCompressorDecodeRejectsHugeLength is the snappy counterpart of
 // TestLZ4Compressor_DecodeRejectsHugeLength in the lz4 module.
 //
@@ -239,52 +75,3 @@ func BenchmarkSnappyCompressor(b *testing.B) {
 // refuses a claim above 4 GiB, so without a bound here a handful of corrupt header bytes
 // on a short frame buy a multi-gigabyte allocation: the frame reader bounds the
 // compressed body it accepts, but nothing bounded what that body expanded into.
-func TestSnappyCompressorDecodeRejectsHugeLength(t *testing.T) {
-	t.Parallel()
-
-	c := gocql.SnappyCompressor{}
-
-	for _, tc := range []struct {
-		name   string
-		length uint64
-	}{
-		{"just above the limit", frm.MaxFrameSize + 1},
-		// Capped at MaxInt32 rather than s2's own 4 GiB ceiling. Above MaxInt32,
-		// s2.DecodedLen rejects the length itself where int is 32 bits wide and
-		// returns "s2: decoded block is too large", so the assertion below would be
-		// pinning s2's guard rather than this one. gocql does not build on a 32-bit
-		// platform today -- serialization/varint has constants that overflow int
-		// there -- so this is hygiene rather than a live case, but it keeps the test
-		// about the only thing it is for.
-		{"far above the limit", math.MaxInt32},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			var hdr [binary.MaxVarintLen64]byte
-			n := binary.PutUvarint(hdr[:], tc.length)
-
-			// One trailing byte so the input is a plausible block rather than a bare
-			// header: the bound must reject it before the stream is even looked at.
-			_, err := c.Decode(append(hdr[:n], 0x00))
-			require.Error(t, err)
-			require.Contains(t, err.Error(), "exceeds maximum")
-		})
-	}
-}
-
-func init() {
-	var err error
-	for id, def := range frameExamples.Requests {
-		frameExamples.Requests[id].Frame, err = os.ReadFile(def.FilePath)
-		if err != nil {
-			panic("can't read file " + def.FilePath)
-		}
-	}
-	for id, def := range frameExamples.Responses {
-		frameExamples.Responses[id].Frame, err = os.ReadFile(def.FilePath)
-		if err != nil {
-			panic("can't read file " + def.FilePath)
-		}
-	}
-}

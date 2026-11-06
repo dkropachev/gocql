@@ -227,13 +227,13 @@ All public methods are thread-safe and can be called concurrently from multiple 
 Run unit tests:
 
 ```bash
-go test -tags unit -v ./eventbus
+go test -v ./eventbus
 ```
 
 Run benchmarks:
 
 ```bash
-go test -tags unit -bench=. ./eventbus
+go test -bench=. ./eventbus
 ```
 
 ## License

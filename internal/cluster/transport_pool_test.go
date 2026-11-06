@@ -17,19 +17,6 @@
 package cluster
 
 import (
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/endpoint"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
-	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/pool"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-	implRuntimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
-	"github.com/scylladb/gocql/v2/internal/settings"
-	"github.com/scylladb/gocql/v2/internal/transport"
-	"github.com/scylladb/gocql/v2/internal/wirecompress"
-
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -44,13 +31,23 @@ import (
 	"time"
 	"unsafe"
 
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
-
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/pool"
+	"github.com/scylladb/gocql/v2/internal/protocol"
+	implRuntimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/segment"
+	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/streams"
+	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
-
+	"github.com/scylladb/gocql/v2/internal/wirecompress"
 	lz4 "github.com/scylladb/gocql/v2/internal/wirecompress"
 )
 
@@ -1037,4 +1034,57 @@ func TestV2UnsupportedCompressionRejectedBeforeStartupOrQuery(t *testing.T) {
 	if err := settings.InternalValidateConfig(config); !errors.As(err, &unsupported) {
 		t.Fatal("known protocol/compressor incompatibility not explicit", err)
 	}
+}
+
+type step04WireCounter struct {
+	net.Conn
+	reads, writes, readBytes, writeBytes, records atomic.Int64
+}
+
+func (c *step04WireCounter) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	c.reads.Add(1)
+	c.readBytes.Add(int64(n))
+	return n, err
+}
+func (c *step04WireCounter) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
+	c.writes.Add(1)
+	c.writeBytes.Add(int64(n))
+	// Count complete actual TLS application records independently of Write calls.
+	for at := 0; at+5 <= n; {
+		length := int(binary.BigEndian.Uint16(p[at+3 : at+5]))
+		if at+5+length > n {
+			break
+		}
+		if p[at] == 23 {
+			c.records.Add(1)
+		}
+		at += 5 + length
+	}
+	return n, err
+}
+func (c *step04WireCounter) reset() {
+	c.reads.Store(0)
+	c.writes.Store(0)
+	c.readBytes.Store(0)
+	c.writeBytes.Store(0)
+	c.records.Store(0)
+}
+func step04BenchTLS(b testing.TB) (*tls.Conn, *tls.Conn, *step04WireCounter, func()) {
+	b.Helper()
+	rawClient, rawServer := net.Pipe()
+	wire := &step04WireCounter{Conn: rawClient}
+	cert, config := step04TLS(b)
+	client := tls.Client(wire, config)
+	server := tls.Server(rawServer, &tls.Config{Certificates: []tls.Certificate{cert}, SessionTicketsDisabled: true})
+	done := make(chan error, 1)
+	go func() { done <- server.Handshake() }()
+	if err := client.Handshake(); err != nil {
+		b.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		b.Fatal(err)
+	}
+	return client, server, wire, func() { rawClient.Close(); rawServer.Close() }
 }

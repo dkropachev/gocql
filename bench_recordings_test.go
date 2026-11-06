@@ -1,5 +1,3 @@
-//go:build unit
-
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
@@ -128,7 +126,7 @@ func recordedQueryText(t *testing.T, i int, frame []byte) (string, []byte, bool)
 func readRecording(t *testing.T, name string) []dialer.Record {
 	t.Helper()
 
-	dir := filepath.Join("tests", "bench")
+	dir := filepath.Join("tests", "bench", "e2e")
 
 	path := filepath.Join(dir, name)
 	raw, err := os.ReadFile(path)
@@ -154,7 +152,7 @@ func readRecording(t *testing.T, name string) []dialer.Record {
 
 // Current typed-control captures also run through TestSingleConnectionReplay.
 func TestBenchCurrentControlCapture(t *testing.T) {
-	const regenerate = "\nRegenerate the recordings: see the recipe above TestMain in tests/bench/bench_single_conn_test.go."
+	const regenerate = "\nRegenerate the recordings: see the recipe above TestMain in tests/bench/e2e/single_conn_bench_test.go."
 
 	want := benchControlQuery()
 	wantParams := benchControlParams(t)

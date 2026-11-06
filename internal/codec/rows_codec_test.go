@@ -215,20 +215,3 @@ func TestV2OwnedParametersDetachOnlyBorrowedPayload(t *testing.T) {
 		t.Fatalf("value=%q err=%v", value.OwnedBytes(), err)
 	}
 }
-
-func BenchmarkV2RowScalarPlan(b *testing.B) {
-	columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: rowTestType(b, cqltype.TypeInt)})
-	plan, err := OneColumn(Int32).Compile(columns)
-	if err != nil {
-		b.Fatal(err)
-	}
-	chain := encodeTestParams(b, columns, OneParam(Int32), int32(42))
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := plan.Decode(NewRowReader(columns, chain, nil))
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}

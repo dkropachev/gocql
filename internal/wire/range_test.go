@@ -2,7 +2,7 @@ package wire
 
 import (
 	"bytes"
-	"fmt"
+
 	"testing"
 )
 
@@ -105,53 +105,6 @@ func TestRangeIndexIsSharedAndOrdered(t *testing.T) {
 		part, e := v.Slice(off, 1)
 		if e != nil || &part.head.data[0] != &data[32000+off] {
 			t.Fatal("indexed range changed backing")
-		}
-	}
-}
-func BenchmarkRangeLookupScaling(b *testing.B) {
-	for _, fragments := range []int{1, 1024, 65536} {
-		b.Run(fmt.Sprint(fragments), func(b *testing.B) {
-			data := make([]byte, 65536)
-			spans := make([]Span, fragments)
-			width := len(data) / fragments
-			for i := range spans {
-				spans[i] = Borrow(data[i*width : (i+1)*width])
-			}
-			c, _ := NewChain(spans...)
-			b.ReportAllocs()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				off := (i * 7919) % (len(data) - 16)
-				v, e := c.Slice(int64(off), 16)
-				if e != nil || v.Len() != 16 {
-					b.Fatal(e)
-				}
-			}
-		})
-	}
-}
-func BenchmarkCursorCellsAndFragments(b *testing.B) {
-	for _, cells := range []int{256, 8192} {
-		for _, fragments := range []int{1, 256, 65536} {
-			b.Run(fmt.Sprintf("cells=%d/fragments=%d", cells, fragments), func(b *testing.B) {
-				data := make([]byte, 65536)
-				spans := make([]Span, fragments)
-				width := len(data) / fragments
-				for i := range spans {
-					spans[i] = Borrow(data[i*width : (i+1)*width])
-				}
-				c, _ := NewChain(spans...)
-				b.ReportAllocs()
-				b.ResetTimer()
-				for i := 0; i < b.N; i++ {
-					cursor := NewCursor(c)
-					for j := 0; j < cells; j++ {
-						if _, e := cursor.Take(int64(len(data) / cells)); e != nil {
-							b.Fatal(e)
-						}
-					}
-				}
-			})
 		}
 	}
 }

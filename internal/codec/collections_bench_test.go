@@ -179,3 +179,78 @@ func TestV2ContainerSegmentedIterationAllocationsDoNotScale(t *testing.T) {
 		t.Fatalf("cross-span allocations scale with elements: one=%g, 1024=%g", small, large)
 	}
 }
+
+var step15CollectSink []int32
+
+func BenchmarkStep15LazyAndMaterialized(b *testing.B) {
+	integer := CodecTestMust(cqltype.ScalarType(cqltype.TypeInt))
+	for _, n := range []int{1, 1024} {
+		for _, kind := range []string{"list", "vector", "tuple", "udt", "map"} {
+			b.Run(fmt.Sprintf("%s/%d", kind, n), func(b *testing.B) {
+				if kind == "map" {
+					typ := CodecTestMust(cqltype.MapType(integer, integer))
+					entries := make([]Entry[int32, int32], n)
+					encoded := CodecTestMust(EncodeValueBorrowed(typ, MapEncoder(Int32, Int32), entries))
+					m := CodecTestMust(DecodeValue(MapDecoder(Int32, Int32), encoded))
+					b.ReportAllocs()
+					b.ResetTimer()
+					for b.Loop() {
+						it := m.Iterator()
+						for it.Next() {
+							containerIntSink = it.Value().Value
+						}
+						if e := it.Err(); e != nil {
+							b.Fatal(e)
+						}
+					}
+					return
+				}
+				typ := CodecTestMust(cqltype.ListType(integer))
+				enc, dec := ListEncoder(Int32), ListDecoder(Int32)
+				if kind == "vector" {
+					typ = CodecTestMust(cqltype.VectorDataType(integer, uint16(n)))
+					enc, dec = VectorEncoder(Int32), VectorDecoder(Int32)
+				}
+				if kind == "tuple" {
+					tuple := CodecTestMust(cqltype.TupleType(integer))
+					typ = CodecTestMust(cqltype.ListType(tuple))
+					enc, dec = ListEncoder(TupleEncoder(OneParam(Int32))), ListDecoder(TupleDecoder(OneColumn(Int32)))
+				}
+				if kind == "udt" {
+					udt := CodecTestMust(cqltype.UDTType("ks", "r", cqltype.ColumnSpec{Name: "n", Type: integer}))
+					typ = CodecTestMust(cqltype.ListType(udt))
+					o := UDTOptions{Keyspace: "ks", Name: "r"}
+					enc, dec = ListEncoder(UDTEncoder(OneParam(Int32), o)), ListDecoder(UDTDecoder(OneColumn(Int32), o))
+				}
+				encoded := CodecTestMust(EncodeValueBorrowed(typ, enc, make([]int32, n)))
+				seq := CodecTestMust(DecodeValue(dec, encoded))
+				for _, mode := range []string{"iterate", "collect", "clone"} {
+					b.Run(mode, func(b *testing.B) {
+						b.ReportAllocs()
+						b.ResetTimer()
+						for b.Loop() {
+							switch mode {
+							case "iterate":
+								it := seq.Iterator()
+								for it.Next() {
+									containerIntSink = it.Value()
+								}
+								if e := it.Err(); e != nil {
+									b.Fatal(e)
+								}
+							case "collect":
+								values, e := Collect(seq.Iterator())
+								if e != nil {
+									b.Fatal(e)
+								}
+								step15CollectSink = values
+							case "clone":
+								containerSequenceSink = seq.Clone()
+							}
+						}
+					})
+				}
+			})
+		}
+	}
+}

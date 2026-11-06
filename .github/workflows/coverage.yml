@@ -89,9 +89,6 @@ jobs:
         if: steps.scylla-version.outputs.value != 'NOT-FOUND'
         run: make test-integration-scylla-coverage
 
-      - name: Run CCM integration suite with coverage
-        if: steps.scylla-version.outputs.value != 'NOT-FOUND'
-        run: make ccm-test-coverage
 
       - name: Generate coverage report
         if: always()

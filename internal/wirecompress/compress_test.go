@@ -403,39 +403,6 @@ func TestPreallocatedOutputAllocations(t *testing.T) {
 	}
 }
 
-func BenchmarkSpanCompression(b *testing.B) {
-	for _, codec := range codecs {
-		for _, size := range []int{1 << 10, 1 << 20} {
-			for _, spans := range []int{1, 16, 1024} {
-				for _, random := range []bool{false, true} {
-					b.Run(fmt.Sprintf("%s/%dB/%dspans/random=%v", codec.name, size, spans, random), func(b *testing.B) {
-						data := bytes.Repeat([]byte{'x'}, size)
-						if random {
-							_, _ = rand.New(rand.NewSource(17)).Read(data)
-						}
-						chain := splitChain(b, data, size/spans)
-						dst := make([]byte, 0, size+size/6+64)
-						b.SetBytes(int64(size))
-						b.ReportAllocs()
-						b.ResetTimer()
-						var encoded []byte
-						for i := 0; i < b.N; i++ {
-							var err error
-							if encoded, err = codec.append(dst, chain); err != nil {
-								b.Fatal(err)
-							}
-						}
-						b.StopTimer()
-						b.ReportMetric(float64(len(encoded)), "transformed-output-B/op")
-						b.ReportMetric(float64(size), "transform-input-B/op")
-						b.ReportMetric(float64(len(encoded))/float64(size), "compression-ratio")
-					})
-				}
-			}
-		}
-	}
-}
-
 func FuzzSpanCompression(f *testing.F) {
 	f.Add([]byte{}, uint16(1))
 	f.Add([]byte("borrowed spans borrowed spans borrowed spans"), uint16(3))

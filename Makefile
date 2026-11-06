@@ -28,6 +28,9 @@ SCYLLA_ARCH ?= $(HOST_ARCH)
 TEST_CQL_PROTOCOL ?= 4
 TEST_COMPRESSOR ?= snappy
 TEST_OPTS ?=
+# INTEGRATION_PKG is the package the integration targets run; the bench-integration-*
+# targets point it at the server-backed benchmarks.
+INTEGRATION_PKG ?= ./tests/integration
 # go test's own -timeout for both integration targets. It cannot be set through
 # TEST_OPTS: TEST_OPTS is interpolated ahead of -timeout on the command line, and
 # the later flag wins, so a -timeout there is silently discarded.
@@ -332,15 +335,15 @@ scylla-stop: .prepare-scylla-ccm
 	@ccm stop --not-gently ${CCM_SCYLLA_CLUSTER_NAME} 2>/dev/null 1>&2 || true
 	@ccm remove ${CCM_SCYLLA_CLUSTER_NAME} 2>/dev/null 1>&2 || true
 
-# The package pattern below is "." (this package only), not "./...". All
-# integration-tagged test files live in this package; the handful of
+# The package pattern below is ./tests/integration only, not "./...". All
+# integration-tagged test files live in that package; the handful of
 # unconditional (untagged) test files in other packages -- dialer,
 # hostpolicy, several serialization/* packages, etc. -- would also get
-# built and would fail to parse -distribution/-cluster/etc, which only this
+# built and would fail to parse -distribution/-cluster/etc, which only that
 # package's test files register. Cross-package coverage attribution still
 # works without testing those packages directly: -coverpkg=./... controls
 # what gets *instrumented*, separately from what gets *run*, so code in
-# other packages exercised transitively through this package's tests is
+# other packages exercised transitively through that package's tests is
 # still measured under test-integration-*-coverage.
 test-integration-cassandra: cassandra-start
 	@echo "Run integration tests for proto ${TEST_CQL_PROTOCOL} on cassandra ${CASSANDRA_VERSION}"
@@ -351,8 +354,8 @@ test-integration-cassandra: cassandra-start
 		echo "Cassandra version ${CASSANDRA_VERSION} was not resolved"
 		exit 1
 	fi
-	echo "go test -v ${TEST_OPTS} -tags \"${TEST_INTEGRATION_TAGS}\" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} . -args -distribution cassandra -runauth -runcassandrafixtures -gocql.timeout=60s -runssl -proto=${TEST_CQL_PROTOCOL} -rf=3 -clusterSize=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} -gocql.cversion=$${CASSANDRA_VERSION_RESOLVED} -cluster=$$(ccm liveset) ${COVER_RUNTIME_ARGS}"
-	go test -v ${TEST_OPTS} -tags "${TEST_INTEGRATION_TAGS}" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} . -args -distribution cassandra -runauth -runcassandrafixtures -gocql.timeout=60s -runssl -proto=${TEST_CQL_PROTOCOL} -rf=3 -clusterSize=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} -gocql.cversion=$$(ccm node1 versionfrombuild) -cluster=$$(ccm liveset) ${COVER_RUNTIME_ARGS}
+	echo "go test -v ${TEST_OPTS} -tags \"${TEST_INTEGRATION_TAGS}\" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution cassandra -runauth -runcassandrafixtures -gocql.timeout=60s -runssl -proto=${TEST_CQL_PROTOCOL} -rf=3 -clusterSize=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} -gocql.cversion=$${CASSANDRA_VERSION_RESOLVED} -cluster=$$(ccm liveset) ${COVER_RUNTIME_ARGS}"
+	go test -v ${TEST_OPTS} -tags "${TEST_INTEGRATION_TAGS}" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution cassandra -runauth -runcassandrafixtures -gocql.timeout=60s -runssl -proto=${TEST_CQL_PROTOCOL} -rf=3 -clusterSize=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} -gocql.cversion=$$(ccm node1 versionfrombuild) -cluster=$$(ccm liveset) ${COVER_RUNTIME_ARGS}
 
 test-integration-scylla: scylla-start
 	@echo "Run integration tests for proto ${TEST_CQL_PROTOCOL} on scylla ${SCYLLA_VERSION}"
@@ -369,8 +372,8 @@ test-integration-scylla: scylla-start
 	# CCM references describe where a build came from, not the version string the
 	# test binary parses. Read the installed build so unstable references work too.
 	SCYLLA_SERVER_VERSION=$$(ccm node1 versionfrombuild | sed -E 's/~([[:alpha:]])/-\1/; s/^([0-9]+\.[0-9]+)\.([[:alpha:]])/\1.0-\2/')
-	echo "go test -v ${TEST_OPTS} -tags \"${TEST_INTEGRATION_TAGS}\" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} . -args -distribution scylla $${CLUSTER_SOCKET} -gocql.timeout=60s -proto=${TEST_CQL_PROTOCOL} -rf=3 -clusterSize=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} -gocql.cversion=$${SCYLLA_SERVER_VERSION} -cluster=$$(ccm liveset) ${COVER_RUNTIME_ARGS}"
-	go test -v ${TEST_OPTS} -tags "${TEST_INTEGRATION_TAGS}" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} . -args -distribution scylla $${CLUSTER_SOCKET} -gocql.timeout=60s -proto=${TEST_CQL_PROTOCOL} -rf=3 -clusterSize=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} -gocql.cversion=$${SCYLLA_SERVER_VERSION} -cluster=$$(ccm liveset) ${COVER_RUNTIME_ARGS}
+	echo "go test -v ${TEST_OPTS} -tags \"${TEST_INTEGRATION_TAGS}\" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution scylla $${CLUSTER_SOCKET} -gocql.timeout=60s -proto=${TEST_CQL_PROTOCOL} -rf=3 -clusterSize=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} -gocql.cversion=$${SCYLLA_SERVER_VERSION} -cluster=$$(ccm liveset) ${COVER_RUNTIME_ARGS}"
+	go test -v ${TEST_OPTS} -tags "${TEST_INTEGRATION_TAGS}" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution scylla $${CLUSTER_SOCKET} -gocql.timeout=60s -proto=${TEST_CQL_PROTOCOL} -rf=3 -clusterSize=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} -gocql.cversion=$${SCYLLA_SERVER_VERSION} -cluster=$$(ccm liveset) ${COVER_RUNTIME_ARGS}
 
 # One module includes compressor and replay workload tests.
 test-unit: .prepare-pki
@@ -380,14 +383,14 @@ test-unit: .prepare-pki
 ifeq ($(shell if [[ -n "$${GITHUB_STEP_SUMMARY}" ]]; then echo "running-in-workflow"; else echo "running-in-shell"; fi), running-in-workflow)
 	echo "### Unit Test Results" >>$${GITHUB_STEP_SUMMARY}
 	echo '```' >>$${GITHUB_STEP_SUMMARY}
-	echo go test -tags unit -timeout=5m -race ./... ${COVER_ARGS}
+	echo go test -timeout=5m -race ./... ${COVER_ARGS}
 	TEST_STATUS=0
-	go test -tags unit -timeout=5m -race ./... ${COVER_ARGS} | tee -a "$${GITHUB_STEP_SUMMARY}" || TEST_STATUS=$${PIPESTATUS[0]}
+	go test -timeout=5m -race ./... ${COVER_ARGS} | tee -a "$${GITHUB_STEP_SUMMARY}" || TEST_STATUS=$${PIPESTATUS[0]}
 	echo '```' >>"$${GITHUB_STEP_SUMMARY}"
 	if (( TEST_STATUS != 0 )); then exit "$${TEST_STATUS}"; fi
 	exit "$${TEST_STATUS}"
 else
-	go test -v -tags unit -timeout=5m -race ./... ${COVER_ARGS}
+	go test -v -timeout=5m -race ./... ${COVER_ARGS}
 endif
 
 .prepare-coverage-dir:
@@ -409,7 +412,7 @@ endif
 # -covermode=atomic is explicit (rather than relying on -race, which forces
 # it) because `go tool covdata` refuses to merge data recorded under
 # different counter modes ("counter mode clash"): every *-coverage target
-# and ccm-test-coverage need to agree, not just test-unit-coverage, which is
+# needs to agree, not just test-unit-coverage, which is
 # the only one that would otherwise get atomic mode for free from -race.
 test-unit-coverage: .prepare-coverage-dir
 	@$(MAKE) test-unit COVER_ARGS="-cover -covermode=atomic -coverpkg=./... -args -test.gocoverdir=\"${COVERAGE_DIR}\""
@@ -419,21 +422,6 @@ test-integration-scylla-coverage: .prepare-coverage-dir
 
 test-integration-cassandra-coverage: .prepare-coverage-dir
 	@$(MAKE) test-integration-cassandra COVER_BUILD_ARGS="-cover -covermode=atomic -coverpkg=./..." COVER_RUNTIME_ARGS="-test.gocoverdir=\"${COVERAGE_DIR}\""
-
-# internal/ccm's tests (the only tests the "ccm" build tag selects -- nothing
-# else in the module has a file gated by it) don't take any of the custom
-# flags test-integration-scylla passes (-distribution, -cluster, ...); its
-# test binary doesn't define them and would fail to parse them. It also needs
-# to be targeted directly rather than through ./...: `go test` stops
-# resolving its own flags (including the package pattern) at the first flag
-# it doesn't recognize, so a ./... alongside those custom flags silently
-# collapses to just ".", which is why reusing test-integration-scylla for
-# this never actually ran internal/ccm's tests.
-ccm-test:
-	@go test -tags "ccm gocql_debug" -timeout=5m -v ./internal/ccm/...
-
-ccm-test-coverage: .prepare-coverage-dir
-	@go test -tags "ccm gocql_debug" -timeout=5m -v -cover -covermode=atomic -coverpkg=./... ./internal/ccm/... -args -test.gocoverdir="${COVERAGE_DIR}"
 
 # All packages share the canonical v2 module and one coverage profile.
 coverage-report:
@@ -445,24 +433,31 @@ coverage-report:
 clean-coverage:
 	rm -rf "${COVERAGE_DIR}" "${MAKEFILE_PATH}"/coverage-root.*
 
-# The benchmarks are behind the `bench` build tag (and, in the root module, some
-# behind `unit`), so the tags have to be passed or `go test -bench` compiles and
-# runs almost nothing. `-run '^$$'` keeps this a benchmark-only run; the tests
-# themselves belong to test-unit.
-BENCH_OPTS = -tags "bench unit" -run '^$$' -bench=. -benchmem
+# `-run '^$$'` keeps this a benchmark-only run; the tests themselves belong to
+# test-unit.
+BENCH_OPTS = -run '^$$' -bench=. -benchmem
 
 test-bench:
 	go test ${BENCH_OPTS} ./...
+
+# Benchmarks that need a live cluster: same cluster setup and flags as the
+# integration suite, run against ./tests/bench/integration.
+bench-integration-scylla:
+	@$(MAKE) test-integration-scylla INTEGRATION_PKG=./tests/bench/integration TEST_OPTS='-run=^$$$$ -bench=. -benchmem'
+
+bench-integration-cassandra:
+	@$(MAKE) test-integration-cassandra INTEGRATION_PKG=./tests/bench/integration TEST_OPTS='-run=^$$$$ -bench=. -benchmem'
 
 check-go-mod-drift:
 	go mod tidy -diff
 
 # The architecture-dependent part of check. It is not redundant with test-unit:
-# `go test` compiles no non-test file the `all` tag guards -- integration_only.go,
-# internal/ccm, internal/debug/debug_on.go.
+# `go test` compiles no non-test file behind a build tag -- integration_only.go,
+# internal/debug/debug_on.go, the gocql_perf counters.
 build:
 	@echo "Build"
-	go build -tags all .
+	go build ./...
+	go build -tags "integration gocql_debug gocql_perf" ./...
 
 check: build .prepare-golangci check-go-mod-drift
 	echo "Check linting"

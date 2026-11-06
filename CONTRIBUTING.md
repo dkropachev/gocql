@@ -60,7 +60,7 @@ The Scylla project needs to consider the ongoing maintainability of the library 
 
 Your patch will get merged quicker if you have decent test cases that provide test coverage for the new behavior you wish to introduce.
 
-Unit tests are good, integration tests are even better. An example of a unit test is `marshal_test.go` - this tests the serialization code in isolation. `cassandra_test.go` is an integration test suite that is executed against every version of Cassandra that gocql supports as part of the CI process on Travis.
+Unit tests are good, integration tests are even better. An example of a unit test is `marshal_test.go` - this tests the serialization code in isolation. `tests/integration/cassandra_test.go` is an integration test suite that is executed against every version of Cassandra that gocql supports as part of the CI process on Travis.
 
 That said, the point of writing tests is to provide a safety net to catch regressions, so there is no need to go overboard with tests. Remember that the more tests you write, the more code we will have to maintain. So there's a balance to strike there.
 
@@ -68,12 +68,12 @@ That said, the point of writing tests is to provide a safety net to catch regres
 
 The repository has one module, `github.com/scylladb/gocql/v2`, including codec,
 compression and replay benchmark packages. Run `make check-go-mod-drift`,
-`go test -race -tags unit -timeout=5m ./...` and compilation with
+`go test -race -timeout=5m ./...` and compilation with
 `-tags 'integration gocql_debug'`. New examples must compile with the normal
 consumer package build and use typed codecs.
 
 Use the owned native fixture runner described in tests/fixtures/README.md for
 actual database tests. Select Cassandra protocol 5 explicitly for v5 segments;
 Scylla fixture protocol rejection is not a v5 pass. Replay regeneration and
-operation checks are documented in tests/bench/README.md. Comprehensive native
+operation checks are documented in tests/bench/e2e/README.md. Comprehensive native
 acceptance and performance remain separate source-bound gates in plan.md.

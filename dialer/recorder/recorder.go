@@ -130,7 +130,7 @@ func openRecordingFile(fname string) (*os.File, error) {
 // shard-awareness is on. Every connection to a host therefore appends to the same pair
 // of files, and a directory reused across runs keeps accumulating. The loader survives
 // that only because it keys records by stream id and keeps the last one for each: the
-// recordings checked into tests/bench were 23 stacked sessions of the same 15 frames,
+// recordings checked into tests/bench/e2e were 23 stacked sessions of the same 15 frames,
 // 345 records loading as 15, before they were regenerated. Anything the last session
 // did not overwrite is a record from an older one, paired with whatever response now
 // shares its stream id.

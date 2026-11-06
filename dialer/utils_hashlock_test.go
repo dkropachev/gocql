@@ -11,7 +11,7 @@ import (
 // blast-radius detector for changes to the offset math.
 //
 // It is deliberately not a claim that these numbers may never change. The
-// recordings under tests/bench store raw frames and are rehashed at load time
+// recordings under tests/bench/e2e store raw frames and are rehashed at load time
 // (loadResponseFramesFromFiles) with the same function applied to the live request,
 // so the hash function itself can change freely. What a recording actually depends
 // on is narrower, and neither half is visible in a single hash value:

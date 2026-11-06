@@ -115,13 +115,3 @@ func TestLeaseRefcountOverflow(t *testing.T) {
 		t.Fatal("refcount overflow was not rejected")
 	}
 }
-
-func BenchmarkLeaseRetainRelease(b *testing.B) {
-	l := NewLease(Chain{}, nil)
-	b.Cleanup(l.Release)
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		l.Retain()
-		l.Release()
-	}
-}

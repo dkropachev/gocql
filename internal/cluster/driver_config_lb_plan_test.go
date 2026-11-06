@@ -1,6 +1,3 @@
-//go:build unit
-// +build unit
-
 package cluster
 
 // hostLocation is a host's datacenter and rack as the plan saw them.

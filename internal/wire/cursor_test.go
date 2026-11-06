@@ -145,17 +145,6 @@ func TestCursorScalarDoesNotAllocate(t *testing.T) {
 	}
 }
 
-func BenchmarkCursorCrossSpanScalar(b *testing.B) {
-	c := segmented(b, []byte{1, 2, 3, 4, 5, 6, 7, 8}, 1)
-	b.ReportAllocs()
-	b.SetBytes(8)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		cur := NewCursor(c)
-		allocationScalar, _ = cur.Uint64()
-	}
-}
-
 func FuzzCursorTake(f *testing.F) {
 	f.Add([]byte("segmented payload"), uint8(3), uint64(5))
 	f.Add([]byte{}, uint8(0), uint64(0))

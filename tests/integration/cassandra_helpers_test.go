@@ -1,0 +1,310 @@
+//go:build integration
+
+package integration
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	gocql "github.com/scylladb/gocql/v2"
+
+	"github.com/scylladb/gocql/v2/retry"
+)
+
+// These helpers accept typed descriptors and explicit values. Retained results
+// are cloned before their page is closed.
+func cassandraValue(value gocql.Value, err error) gocql.Value {
+	if err != nil {
+		panic(err)
+	}
+	return value
+}
+func cassandraField(t testing.TB, row gocql.DynamicRow, name string) gocql.Value {
+	t.Helper()
+	v, err := row.Get(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+func cassandraInt(t testing.TB, row gocql.DynamicRow, name string) int64 {
+	t.Helper()
+	v, err := cassandraField(t, row, name).Signed()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+func cassandraText(t testing.TB, row gocql.DynamicRow, name string) string {
+	t.Helper()
+	v, err := cassandraField(t, row, name).Text()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v.String()
+}
+func cassandraBool(t testing.TB, row gocql.DynamicRow, name string) bool {
+	t.Helper()
+	v, err := cassandraField(t, row, name).Bool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+func cassandraRead(t testing.TB, s *gocql.Session, cql string, values ...gocql.Value) gocql.DynamicRow {
+	t.Helper()
+	row, err := v2ReadOne(context.Background(), s, cql, values...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return row
+}
+func cassandraWrite(t testing.TB, s *gocql.Session, cql string, values ...gocql.Value) gocql.Result {
+	t.Helper()
+	result, err := v2Exec(context.Background(), s, cql, values...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+func cassandraDDL(t testing.TB, s *gocql.Session, cql string) {
+	t.Helper()
+	if err := v2CreateTable(context.Background(), s, cql); err != nil {
+		t.Fatal(err)
+	}
+}
+func cassandraPrepared[P, R any](t testing.TB, s *gocql.Session, statement gocql.Statement[P, R], options gocql.PrepareOptions) *gocql.Prepared[P, R] {
+	t.Helper()
+	p, err := gocql.Prepare(context.Background(), s, statement, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+func cassandraBound[P, R any](t testing.TB, p *gocql.Prepared[P, R], value P) *Bound[R] {
+	t.Helper()
+	b, err := BindOwned(p, value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		b.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := b.Wait(ctx); err != nil {
+			t.Error(err)
+		}
+	})
+	return b
+}
+func cassandraUnprepared[R any](t testing.TB, cql string, decoder gocql.RowDecoder[R]) *Bound[R] {
+	t.Helper()
+	b, err := BindUnpreparedOwned(gocql.Statement[gocql.Unit, R]{CQL: cql, Params: gocql.NoParams, Rows: decoder}, gocql.NewColumns(), gocql.Unit{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		b.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := b.Wait(ctx); err != nil {
+			t.Error(err)
+		}
+	})
+	return b
+}
+func cassandraReadBound[R any](t testing.TB, s *gocql.Session, b *Bound[R], options gocql.Options) R {
+	t.Helper()
+	rows, err := Run(context.Background(), s, b, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		t.Fatalf("expected one row: %v", rows.Err())
+	}
+	row, err := rows.Clone()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows.Next() {
+		t.Fatal("expected exactly one row")
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return row
+}
+func cassandraItem[R any](t testing.TB, b *Bound[R]) gocql.BatchItem {
+	t.Helper()
+	item, err := BatchEntry(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return item
+}
+func cassandraDynamicBound(t testing.TB, s *gocql.Session, cql string, values []gocql.Value, options gocql.PrepareOptions) *Bound[gocql.DynamicRow] {
+	t.Helper()
+	return cassandraBound(t, cassandraPrepared(t, s, gocql.Statement[[]gocql.Value, gocql.DynamicRow]{CQL: cql, Params: gocql.DynamicParams, Rows: gocql.DynamicRows}, options), values)
+}
+func cassandraWriteBound(t testing.TB, s *gocql.Session, cql string, values []gocql.Value, options gocql.PrepareOptions) *Bound[gocql.Unit] {
+	t.Helper()
+	return cassandraBound(t, cassandraPrepared(t, s, gocql.Statement[[]gocql.Value, gocql.Unit]{CQL: cql, Params: gocql.DynamicParams, Rows: gocql.NoRows}, options), values)
+}
+func cassandraRows(t testing.TB, s *gocql.Session, b *Bound[gocql.DynamicRow], options gocql.Options) []gocql.DynamicRow {
+	t.Helper()
+	rows, err := Run(context.Background(), s, b, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var result []gocql.DynamicRow
+	for rows.Next() {
+		row, err := rows.Clone()
+		if err != nil {
+			t.Fatal(err)
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+func cassandraBatch(t testing.TB, s *gocql.Session, kind gocql.BatchKind, items []gocql.BatchItem, options gocql.Options) gocql.Result {
+	t.Helper()
+	r, e := gocql.ExecBatch(context.Background(), s, kind, items, options)
+	if e != nil {
+		t.Fatal(e)
+	}
+	return r
+}
+func cassandraKeyspace(s *gocql.Session, name string) (*gocql.KeyspaceMetadata, error) {
+	if name == "" {
+		return nil, gocql.ErrNoKeyspace
+	}
+	ks, ok := s.Metadata().Keyspace(name)
+	if !ok {
+		return nil, gocql.ErrKeyspaceDoesNotExist
+	}
+	return ks, nil
+}
+func cassandraTable(s *gocql.Session, ks, name string) (*gocql.TableMetadata, error) {
+	if name == "" {
+		return nil, gocql.ErrNoTable
+	}
+	k, err := cassandraKeyspace(s, ks)
+	if err != nil {
+		return nil, err
+	}
+	table, ok := k.Tables[name]
+	if !ok {
+		return nil, gocql.ErrNotFound
+	}
+	return table, nil
+}
+func cassandraOtherSession(t testing.TB, s *gocql.Session, keyspace string) *gocql.Session {
+	t.Helper()
+	cassandraDDL(t, s, fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':%d}", keyspace, *flagRF))
+	config := createV2Cluster()
+	config.Keyspace = keyspace
+	other, err := gocql.Connect(context.Background(), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return other
+}
+
+type cassandraObserver struct {
+	mu       sync.Mutex
+	requests []gocql.RequestEvent
+	attempts []gocql.AttemptEvent
+}
+
+func (o *cassandraObserver) ObserveRequest(e gocql.RequestEvent) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.requests = append(o.requests, e)
+}
+func (o *cassandraObserver) ObserveAttempt(e gocql.AttemptEvent) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.attempts = append(o.attempts, e)
+}
+func (o *cassandraObserver) reset() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.requests = nil
+	o.attempts = nil
+}
+func (o *cassandraObserver) snapshot() ([]gocql.RequestEvent, []gocql.AttemptEvent) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([]gocql.RequestEvent(nil), o.requests...), append([]gocql.AttemptEvent(nil), o.attempts...)
+}
+
+type cassandraRetry struct{}
+
+func (cassandraRetry) Decide(a retry.Attempt) retry.Decision {
+	if a.Idempotent && a.Number < 6 {
+		return retry.Decision{Action: retry.Same}
+	}
+	return retry.Decision{Action: retry.Stop}
+}
+
+// Custom values use explicit codecs; field discovery and reflection are absent.
+type fullNameCodec struct{}
+
+func (fullNameCodec) CheckType(t gocql.DataType) error { return gocql.TextCodec.CheckType(t) }
+func (fullNameCodec) Encode(w *gocql.ValueWriter, n FullName) error {
+	return gocql.StringEncoder.Encode(w, n.FirstName+" "+n.LastName)
+}
+func (fullNameCodec) Decode(r gocql.ValueReader) (FullName, error) {
+	text, err := gocql.TextCodec.Decode(r)
+	if err != nil {
+		return FullName{}, err
+	}
+	names := strings.SplitN(text.String(), " ", 2)
+	if len(names) != 2 {
+		return FullName{}, errors.New("full name requires two components")
+	}
+	return FullName{FirstName: names[0], LastName: names[1]}, nil
+}
+func (fullNameCodec) Clone(n FullName) FullName { return n }
+func cassandraCASBound[R any](t testing.TB, s *gocql.Session, cql string, values []gocql.Value, decoder gocql.RowDecoder[R]) *Bound[gocql.CASResult[R]] {
+	t.Helper()
+	return cassandraBound(t, cassandraPrepared(t, s, gocql.Statement[[]gocql.Value, gocql.CASResult[R]]{CQL: cql, Params: gocql.DynamicParams, Rows: gocql.CASRows(decoder)}, gocql.PrepareOptions{}), values)
+}
+
+func cassandraUUID(text string) gocql.UUID {
+	u, err := gocql.ParseUUID(text)
+	if err != nil {
+		panic(err)
+	}
+	return u
+}
+
+type cassandraVarintInt64 struct{}
+
+func (cassandraVarintInt64) CheckType(t gocql.DataType) error { return gocql.VarintCodec.CheckType(t) }
+func (cassandraVarintInt64) Decode(r gocql.ValueReader) (int64, error) {
+	v, err := gocql.VarintCodec.Decode(r)
+	if err != nil {
+		return 0, err
+	}
+	n := v.BigInt()
+	if !n.IsInt64() {
+		return 0, fmt.Errorf("varint is outside int64 range")
+	}
+	return n.Int64(), nil
+}
+func (cassandraVarintInt64) Clone(v int64) int64 { return v }
+
+type cassandraReconnect struct{}
+
+func (cassandraReconnect) Delay(attempt int) (time.Duration, bool) { return time.Second, true }

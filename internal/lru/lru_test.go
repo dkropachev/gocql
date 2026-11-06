@@ -1,6 +1,3 @@
-//go:build unit
-// +build unit
-
 /*
 Copyright 2015 To gocql authors
 Copyright 2013 Google Inc.
@@ -45,7 +42,6 @@ limitations under the License.
 package lru
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -120,69 +116,5 @@ func TestStructKey(t *testing.T) {
 	// are distinct (this was a bug with string concatenation keys).
 	if c.Len() != 2 {
 		t.Fatalf("expected 2 entries, got %d", c.Len())
-	}
-}
-
-type stmtKey struct {
-	hostID    string
-	keyspace  string
-	statement string
-}
-
-// BenchmarkStructKeyLookup benchmarks the hot path: looking up a struct key
-// in a populated cache.
-func BenchmarkStructKeyLookup(b *testing.B) {
-	c := New[stmtKey](1000)
-	key := stmtKey{
-		hostID:    "550e8400-e29b-41d4-a716-446655440000",
-		keyspace:  "my_keyspace",
-		statement: "SELECT id, name, email FROM users WHERE id = ?",
-	}
-	c.Add(key, "prepared-id")
-
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		c.Get(key)
-	}
-}
-
-// BenchmarkStringKeyLookup benchmarks the old approach: looking up a
-// concatenated string key in a populated cache.
-func BenchmarkStringKeyLookup(b *testing.B) {
-	c := New[string](1000)
-	key := "550e8400-e29b-41d4-a716-446655440000" + "my_keyspace" + "SELECT id, name, email FROM users WHERE id = ?"
-	c.Add(key, "prepared-id")
-
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		c.Get(key)
-	}
-}
-
-// BenchmarkStructKeyInsert benchmarks inserting entries with struct keys,
-// including eviction when the cache is full.
-func BenchmarkStructKeyInsert(b *testing.B) {
-	c := New[stmtKey](1000)
-
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		k := stmtKey{
-			hostID:    "550e8400-e29b-41d4-a716-446655440000",
-			keyspace:  "my_keyspace",
-			statement: fmt.Sprintf("SELECT id FROM users WHERE id = %d", i),
-		}
-		c.Add(k, "prepared-id")
-	}
-}
-
-// BenchmarkStringKeyInsert benchmarks inserting entries with concatenated
-// string keys, including the per-query allocation cost of key construction.
-func BenchmarkStringKeyInsert(b *testing.B) {
-	c := New[string](1000)
-
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		k := fmt.Sprintf("%s%s%s", "550e8400-e29b-41d4-a716-446655440000", "my_keyspace", fmt.Sprintf("SELECT id FROM users WHERE id = %d", i))
-		c.Add(k, "prepared-id")
 	}
 }

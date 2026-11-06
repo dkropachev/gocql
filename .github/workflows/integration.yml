@@ -158,9 +158,6 @@ jobs:
         if: steps.scylla-version.outputs.value != 'NOT-FOUND'
         run: make test-integration-scylla
 
-      - name: Run CCM integration suite with ScyllaDB ${{ matrix.version }}(${{ steps.scylla-version.outputs.value }})
-        if: steps.scylla-version.outputs.value != 'NOT-FOUND'
-        run: make ccm-test
 
   test-integration-cassandra:
     name: Integration Tests On Cassandra (${{ matrix.version }}, ${{ matrix.suite }}, ${{ matrix.arch }})
@@ -239,9 +236,6 @@ jobs:
         if: matrix.suite == 'default' && steps.cassandra-version.outputs.value != 'NOT-FOUND'
         run: make test-integration-cassandra
 
-      - name: Run CCM integration suite with Cassandra ${{ matrix.version }}(${{ steps.cassandra-version.outputs.value }})
-        if: matrix.suite == 'default' && steps.cassandra-version.outputs.value != 'NOT-FOUND'
-        run: make ccm-test
 
       # Native protocol v5 is never negotiated automatically (discoverProtocol caps at
       # v4), so at the default TEST_CQL_PROTOCOL=4 every ProtoVersion >= 5 test skips and

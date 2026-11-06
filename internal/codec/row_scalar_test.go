@@ -149,66 +149,6 @@ func TestFusedRowCompiledGuardsAndDestination(t *testing.T) {
 	}
 }
 
-type fusedBenchRow struct {
-	Key, Row int32
-	Blob     cqltype.Bytes
-}
-
-func BenchmarkFusedRowPaged(b *testing.B) {
-	columns := cqltype.NewColumns(
-		cqltype.ColumnSpec{Name: "key", Type: rowTestType(b, cqltype.TypeInt)},
-		cqltype.ColumnSpec{Name: "row", Type: rowTestType(b, cqltype.TypeInt)},
-		cqltype.ColumnSpec{Name: "blob", Type: rowTestType(b, cqltype.TypeBlob)},
-	)
-	var data []byte
-	for i := 0; i < 32; i++ {
-		data = append(data, rowScalarFrame(4, []byte{0, 0, 0, 42})...)
-		data = append(data, rowScalarFrame(4, []byte{0, 0, 0, byte(i)})...)
-		data = append(data, rowScalarFrame(4096, make([]byte, 4096))...)
-	}
-	chain, _ := wire.NewChain(wire.Borrow(data))
-	lease := wire.NewLease(chain, nil)
-	defer lease.Release()
-	for _, direct := range []bool{false, true} {
-		name := "generic"
-		if direct {
-			name = "fused"
-		}
-		b.Run(name, func(b *testing.B) {
-			var integer Decoder[int32] = Int32
-			var blob Decoder[cqltype.Bytes] = BlobCodec
-			if !direct {
-				integer = genericRowScalar[int32]{integer}
-				blob = genericRowScalar[cqltype.Bytes]{blob}
-			}
-			plan, err := Row(
-				Column("key", integer, func(r *fusedBenchRow) *int32 { return &r.Key }),
-				Column("row", integer, func(r *fusedBenchRow) *int32 { return &r.Row }),
-				Column("blob", blob, func(r *fusedBenchRow) *cqltype.Bytes { return &r.Blob }),
-			).Compile(columns)
-			if err != nil {
-				b.Fatal(err)
-			}
-			var dst fusedBenchRow
-			b.ReportAllocs()
-			b.SetBytes(32 * 4096)
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				reader := NewRowReader(columns, chain, lease)
-				for row := 0; row < 32; row++ {
-					reader.index = 0
-					if err := plan.DecodeInto(reader, &dst); err != nil {
-						b.Fatal(err)
-					}
-				}
-				if err := reader.cursor.RequireEnd(); err != nil {
-					b.Fatal(err)
-				}
-			}
-		})
-	}
-}
-
 type capturedRowInt struct {
 	Decoder[int32]
 	seen  *ValueReader

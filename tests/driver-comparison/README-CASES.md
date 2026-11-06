@@ -2,7 +2,7 @@
 
 `cluster_bench.sh` times every case of `cases.tsv` on the pinned three-node
 cluster (`cluster.sh`, or `provision.py`, which can add 200 µs of netem delay).
-Each v2 case (`v2_cases.go`) is matched to one master case (`old_cases.go`);
+Each v2 case (`cases.go`) is matched to one master case (`old_cases.go`);
 several v2 cases can share one master case. Clients run on CPU 8 with
 GOMAXPROCS=1.
 

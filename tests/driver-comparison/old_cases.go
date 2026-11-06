@@ -11,7 +11,7 @@ import (
 )
 
 // The master query-execution cases. cases.tsv matches v2 cases of
-// v2_cases.go to them; README-CASES.md describes them.
+// cases.go to them; README-CASES.md describes them.
 
 // oldCase is the per-worker state of a case: reused argument and scan
 // slices, an owned blob and a row validator whose method value is bound once.

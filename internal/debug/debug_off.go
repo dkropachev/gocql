@@ -1,5 +1,4 @@
 //go:build !gocql_debug
-// +build !gocql_debug
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one

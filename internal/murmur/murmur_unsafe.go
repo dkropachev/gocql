@@ -1,5 +1,4 @@
 //go:build !appengine && !s390x
-// +build !appengine,!s390x
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one

@@ -48,7 +48,7 @@ func startupFrameV4(body []byte) []byte {
 // TestGetFrameHashStartupIgnoresBodyLength pins that the STARTUP hash does not
 // depend on the body, directly or through the length field in the header.
 //
-// The checked-in replay recordings in tests/bench store raw frames and are
+// The checked-in replay recordings in tests/bench/e2e store raw frames and are
 // rehashed at load time, so a body-dependent STARTUP hash silently couples them
 // to the exact set of STARTUP options the driver sent when they were recorded.
 // Adding one shifts the length field, no recorded frame matches any more, and

@@ -26,7 +26,7 @@ package gocql
 
 import (
 	"net"
-	"strconv"
+
 	"sync"
 )
 
@@ -38,20 +38,6 @@ type OneConnTestServer struct {
 	Port       int
 	mu         sync.Mutex
 	closed     bool
-}
-
-func NewOneConnTestServer() (*OneConnTestServer, error) {
-	lstn, err := net.Listen("tcp4", "localhost:0")
-	if err != nil {
-		return nil, err
-	}
-	addr, port := parseAddressPort(lstn.Addr().String())
-	return &OneConnTestServer{
-		listener:   lstn,
-		acceptChan: make(chan struct{}),
-		Addr:       addr,
-		Port:       port,
-	}, nil
 }
 
 func (c *OneConnTestServer) Accepted() chan struct{} {
@@ -79,13 +65,4 @@ func (c *OneConnTestServer) lockedClose() {
 		c.listener.Close()
 		c.closed = true
 	}
-}
-
-func parseAddressPort(hostPort string) (net.IP, int) {
-	host, portStr, err := net.SplitHostPort(hostPort)
-	if err != nil {
-		return net.ParseIP(""), 0
-	}
-	port, _ := strconv.Atoi(portStr)
-	return net.ParseIP(host), port
 }

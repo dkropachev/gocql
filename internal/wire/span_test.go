@@ -182,23 +182,3 @@ func TestSmallViewsDoNotAllocate(t *testing.T) {
 		t.Fatalf("string view allocated %v times", n)
 	}
 }
-
-func BenchmarkBorrowLargePayload(b *testing.B) {
-	data := make([]byte, 1<<20)
-	b.ReportAllocs()
-	b.SetBytes(int64(len(data)))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		allocationChain, _ = NewChain(Borrow(data))
-	}
-}
-
-func BenchmarkChainSlice(b *testing.B) {
-	data := make([]byte, 1<<20)
-	c := chain(b, Borrow(data[:1<<19]), Borrow(data[1<<19:]))
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		allocationChain, _ = c.Slice(1, int64(len(data)-2))
-	}
-}

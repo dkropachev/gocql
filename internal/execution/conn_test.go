@@ -1,6 +1,3 @@
-//go:build unit
-// +build unit
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -423,33 +420,6 @@ func TestQueryTimeout(t *testing.T) {
 		// ensure that the query goroutines have been scheduled
 		t.Fatalf("query did not timeout after %v", implCluster.SessionData(db).InternalCfg.Timeout)
 	}
-}
-
-func BenchmarkSingleConn(b *testing.B) {
-	srv := NewTestServer(b, 3, context.Background())
-	defer srv.Stop()
-
-	cluster := testCluster(implProtocol.ProtoVersion3, srv.Address)
-	// Set the timeout arbitrarily low so that the query hits the timeout in a
-	// timely manner.
-	cluster.Timeout = 500 * time.Millisecond
-	cluster.NumConns = 1
-	db, err := implCluster.InternalClusterSettingsOpen(cluster)
-	if err != nil {
-		b.Fatalf("newClusterSettings: %v", err)
-	}
-	defer db.Close()
-
-	b.ResetTimer()
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			err := execTestStatement(context.Background(), db, "void", Options{})
-			if err != nil {
-				b.Error(err)
-				return
-			}
-		}
-	})
 }
 
 func TestQueryTimeoutReuseStream(t *testing.T) {

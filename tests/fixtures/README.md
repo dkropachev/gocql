@@ -118,8 +118,8 @@ or a complete peak-memory/CPU comparison.
 
 ```sh
 python3 -m unittest discover -s tests/fixtures -p 'test_*.py'
-go test -race -tags unit -run '^TestStep08' -count=2 .
-go test -tags unit -run '^$' -bench '^BenchmarkStep08' -benchtime=20x .
+go test -race -run '^TestStep08' -count=2 .
+go test -run '^$' -bench '^BenchmarkStep08' -benchtime=20x .
 ```
 
 `TestStep08HarnessLifecycle` is an explicit failure/cancellation probe. It skips

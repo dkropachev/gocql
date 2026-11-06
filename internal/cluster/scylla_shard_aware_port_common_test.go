@@ -1,6 +1,3 @@
-//go:build integration || unit
-// +build integration unit
-
 package cluster
 
 import (

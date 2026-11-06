@@ -1,6 +1,3 @@
-//go:build unit
-// +build unit
-
 /*
  * Copyright (C) 2026 ScyllaDB
  *

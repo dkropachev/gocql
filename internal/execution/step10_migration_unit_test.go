@@ -1,5 +1,3 @@
-//go:build unit
-
 /*
  * Copyright (C) 2026 ScyllaDB
  *
@@ -92,16 +90,6 @@ func TestStep10IncrementalScalarValidationParity(t *testing.T) {
 		[]byte{248, 1, 0, 0, 0, 0, 0, 0}, // months overflow
 		[]byte{0, 0, 0, 0},               // trailing byte
 	)
-}
-
-func BenchmarkStep10DurationDecode(b *testing.B) {
-	reader := scalarReader(b, cqltype.TypeDuration, cqltype.Present, []byte{2, 4, 6})
-	b.ReportAllocs()
-	for b.Loop() {
-		if _, err := codec.DurationCodec.Decode(reader); err != nil {
-			b.Fatal(err)
-		}
-	}
 }
 
 func TestStep10ReportUsesCurrentTypedProfile(t *testing.T) {

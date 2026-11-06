@@ -113,13 +113,13 @@ source ports, cancellation and orphan budgets are independently configured.
 ## Development
 
 ```sh
-go test -race -tags unit -timeout=5m ./...
+go test -race -timeout=5m ./...
 go test -tags 'integration gocql_debug' -run '^$' ./...
-go test -tags 'bench unit' -run '^$' -bench SingleConnection -benchtime=1x ./tests/bench
+go test -run '^$' -bench SingleConnection -benchtime=1x ./tests/bench/e2e
 ```
 
 Replay benchmarks execute ten actual SELECT/INSERT cases using typed-control
-recordings; [their recipe](tests/bench/README.md) explains regeneration. Native
+recordings; [their recipe](tests/bench/e2e/README.md) explains regeneration. Native
 integration requires [owned fixtures](tests/fixtures/README.md). Full native
 acceptance and comprehensive performance gates are tracked in
 [plan.md](plan.md) and the [execution ledger](feature-specs/execution/STATUS.md).

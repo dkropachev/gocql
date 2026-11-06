@@ -6,11 +6,9 @@ package transport
 import (
 	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 
-	"crypto/tls"
 	"encoding/binary"
-	"fmt"
+
 	"testing"
-	"time"
 
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
@@ -33,19 +31,4 @@ func typedTestRowsBody(value []byte) []byte {
 	out = binary.BigEndian.AppendUint32(out, 1)
 	out = binary.BigEndian.AppendUint32(out, uint32(len(value)))
 	return append(out, value...)
-}
-
-type typedTLSRecorder struct {
-	conn     *tls.Conn
-	expected [][]byte
-	next     int
-}
-
-func (w *typedTLSRecorder) SetWriteDeadline(t time.Time) error { return w.conn.SetWriteDeadline(t) }
-func (w *typedTLSRecorder) Write(p []byte) (int, error) {
-	if w.next >= len(w.expected) || len(p) != len(w.expected[w.next]) || &p[0] != &w.expected[w.next][0] {
-		return 0, fmt.Errorf("TLS plaintext was gathered before tls.Conn.Write")
-	}
-	w.next++
-	return w.conn.Write(p)
 }

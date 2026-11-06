@@ -65,11 +65,9 @@ ignore:
   - "testdata/**"
   - "**/*_test.go"
   # Test-only support code that lives outside *_test.go files: shared helpers
-  # and mocks, the CCM cluster driver the integration suites use, and the
-  # integration-tag-only flag definitions. Counting them would credit the
-  # driver with coverage of its own test harness.
+  # and mocks, and the integration-tag-only pool hooks. Counting them would
+  # credit the driver with coverage of its own test harness.
   - "internal/tests/**"
-  - "internal/ccm/**"
   - "integration_only.go"
 
 comment:

@@ -26,7 +26,7 @@ import (
 
 // sync.Pool deliberately drops entries randomly under -race; allocation
 // contracts are measured without that instrumentation. Concurrency and borrowed
-// lifetime tests still run with -race in v2_codec_direct_test.go and tuple tests.
+// lifetime tests still run with -race in codec_direct_test.go and tuple tests.
 
 func TestV2TupleValueIterationAllocationsDoNotScale(t *testing.T) {
 	integer := FoundationScalar(t, cqltype.TypeInt)

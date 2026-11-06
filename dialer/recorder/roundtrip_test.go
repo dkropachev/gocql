@@ -146,7 +146,7 @@ func readExactly(t *testing.T, conn net.Conn, n int) {
 // the framing the driver expects.
 //
 // It cannot be done against a real cluster. controlConn.discoverProtocol pins
-// negotiation to v4 and ScyllaDB does not speak v5, so `go test -C tests/bench
+// negotiation to v4 and ScyllaDB does not speak v5, so `go test -C tests/bench/e2e
 // -update-golden` can never produce a v5 recording. This drives both dialers in
 // process instead.
 func TestProtocolV5RoundTrip(t *testing.T) {

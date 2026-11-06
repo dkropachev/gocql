@@ -4,16 +4,33 @@
 package execution
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
+	"fmt"
+	"io"
+	"net"
+	"os"
+	"os/exec"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/cluster"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/routing"
+	transporttestkit "github.com/scylladb/gocql/v2/internal/testkit/transport"
 )
 
 func testOwnedQuery(t testing.TB) *Query[[]byte, Unit] {
@@ -221,5 +238,211 @@ func TestSkipHostPlanOmitsPinnedHost(t *testing.T) {
 	}
 	if len(got) != 2 || got[0] != a || got[1] != c {
 		t.Fatal(got)
+	}
+}
+
+// loopbackTestSession is runtimeTestSession over a real loopback TCP socket
+// with the production shared reader, so concurrent workers exercise socket
+// batching, the submission writer and shared-connection admission.
+//
+// The fake server runs in a child process pinned by GOCQL_LOOPBACK_SERVER_CPUS
+// (default 6-7), so client CPU time and scheduling are not shared with it.
+func loopbackTestSession(t testing.TB, workload string) *cluster.Session {
+	t.Helper()
+	cpus := os.Getenv("GOCQL_LOOPBACK_SERVER_CPUS")
+	if cpus == "" {
+		cpus = "6-7"
+	}
+	cmd := exec.Command("taskset", "-c", cpus, os.Args[0], "-test.run=^TestLoopbackServerProcess$")
+	cmd.Env = append(os.Environ(), "GOCQL_LOOPBACK_SERVER="+workload)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	line, err := bufio.NewReader(stdout).ReadString('\n')
+	addr, ok := strings.CutPrefix(strings.TrimSpace(line), "ADDR ")
+	if err != nil || !ok {
+		t.Fatalf("loopback server did not start: %q %v", line, err)
+	}
+	s := new(cluster.Session)
+	implCluster.SessionData(s).InternalLogger = logging.InternalNopLogger{}
+	implCluster.SessionData(s).InternalHostSource = &cluster.InternalRingDescriber{InternalHosts: map[string]*endpoint.HostInfo{}}
+	implCluster.SessionData(s).InternalPool = &pool.InternalPolicyConnPool{InternalHostConnPools: map[implCqltype.UUID]*pool.InternalHostConnPool{}}
+	conn := transporttestkit.NewDialedConn(t, 4, addr)
+	id := implCqltype.UUID{15: 1}
+	host := new(endpoint.HostInfo)
+	implEndpoint.HostInfoData(host).InternalHostId = id
+	implEndpoint.HostInfoData(host).InternalState.Store(endpoint.NodeUp)
+	conn.InternalHost = host
+	conn.InternalHooks = cluster.InternalNewConnectionHooks(s)
+	implCluster.SessionData(s).InternalHostSource.InternalHosts[id.String()] = host
+	picker := pool.InternalNewDefaultConnPicker(1)
+	picker.Put(conn)
+	implCluster.SessionData(s).InternalPool.InternalHostConnPools[id] = &pool.InternalHostConnPool{InternalHost: host, InternalConnPicker: picker}
+	go conn.InternalServe(conn.InternalCtx)
+	return s
+}
+
+// TestLoopbackServerProcess is the loopback benchmark's fake server. It runs
+// only as a child of loopbackTestSession.
+func TestLoopbackServerProcess(t *testing.T) {
+	workload := os.Getenv("GOCQL_LOOPBACK_SERVER")
+	if workload == "" {
+		t.Skip("benchmark helper process")
+	}
+	body := []byte{0, 0, 0, frm.ResultKindVoid}
+	if workload == "read" || workload == "pread" || workload == "pone" || workload == "preadctx" {
+		body = runtimeRowsBody(nil, loopbackValue)
+	}
+	choose := func([]byte) []byte { return body }
+	if strings.HasPrefix(workload, "page") {
+		choose = loopbackPages()
+	}
+	key := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))})
+	value := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
+	prepared := step03PreparedBody([]byte("loopback"), key, value, 0)
+	if workload == "pwrite" {
+		prepared = step03PreparedBody([]byte("loopback"), implCqltype.NewColumns(append(cqltype.ColumnSlice(key), cqltype.ColumnSlice(value)...)...), implCqltype.NewColumns(), 0)
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("ADDR %s\n", listener.Addr())
+	peer, err := listener.Accept()
+	listener.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	serveLoopback(peer, choose, prepared)
+}
+
+var loopbackValue = strings.Repeat("x", 1024)
+
+type loopbackRow struct {
+	k     int32
+	value []byte
+}
+
+// Paged loopback workloads read loopbackPageCount pages of loopbackPageRows
+// rows of loopbackPageValue, then an empty final page, as a server does when
+// the last full page still reported more.
+const (
+	loopbackPageCount = 4
+	loopbackPageRows  = 32
+)
+
+var loopbackPageValue = strings.Repeat("x", 4096)
+
+// loopbackPages returns a chooser that answers an unprepared v4 QUERY with
+// the page its paging state names: no state is page 1, and page n carries the
+// one-byte token n.
+func loopbackPages() func([]byte) []byte {
+	values := make([]string, loopbackPageRows)
+	for i := range values {
+		values[i] = loopbackPageValue
+	}
+	pages := make([][]byte, loopbackPageCount+1)
+	for n := range loopbackPageCount {
+		pages[n] = runtimeRowsBody([]byte{byte(n + 1)}, values...)
+	}
+	pages[loopbackPageCount] = runtimeRowsBody(nil)
+	return func(request []byte) []byte {
+		token := loopbackPagingState(request)
+		if len(token) != 1 || int(token[0]) > loopbackPageCount {
+			return pages[0]
+		}
+		return pages[token[0]]
+	}
+}
+
+// loopbackPagingState extracts the paging state of a v4 QUERY body, or nil.
+func loopbackPagingState(b []byte) []byte {
+	take := func(n int) []byte {
+		if n < 0 || n > len(b) {
+			b = nil
+			return nil
+		}
+		v := b[:n]
+		b = b[n:]
+		return v
+	}
+	u32 := func() int {
+		v := take(4)
+		if v == nil {
+			return -1
+		}
+		return int(int32(binary.BigEndian.Uint32(v)))
+	}
+	take(u32()) // query
+	take(2)     // consistency
+	flags := take(1)
+	if flags == nil {
+		return nil
+	}
+	if flags[0]&0x01 != 0 {
+		count := take(2)
+		if count == nil {
+			return nil
+		}
+		for range int(binary.BigEndian.Uint16(count)) {
+			if n := u32(); n > 0 {
+				take(n)
+			}
+		}
+	}
+	if flags[0]&0x04 != 0 {
+		take(4)
+	}
+	if flags[0]&0x08 == 0 {
+		return nil
+	}
+	return take(u32())
+}
+
+// serveLoopback answers PREPARE with prepared and every other request frame
+// with choose(request body), preserving its stream. Like a server, it flushes
+// once no further request bytes are buffered.
+func serveLoopback(peer net.Conn, choose func([]byte) []byte, prepared []byte) {
+	r := bufio.NewReaderSize(peer, 64<<10)
+	w := bufio.NewWriterSize(peer, 64<<10)
+	var header [9]byte
+	var request []byte
+	for {
+		if _, err := io.ReadFull(r, header[:]); err != nil {
+			return
+		}
+		n := int(binary.BigEndian.Uint32(header[5:]))
+		if cap(request) < n {
+			request = make([]byte, n)
+		}
+		request = request[:n]
+		if _, err := io.ReadFull(r, request); err != nil {
+			return
+		}
+		var response []byte
+		if header[4] == byte(frm.OpPrepare) {
+			response = prepared
+		} else {
+			response = choose(request)
+		}
+		header[0], header[1], header[4] = 0x84, 0, byte(frm.OpResult)
+		binary.BigEndian.PutUint32(header[5:], uint32(len(response)))
+		if _, err := w.Write(header[:]); err != nil {
+			return
+		}
+		if _, err := w.Write(response); err != nil {
+			return
+		}
+		if r.Buffered() == 0 {
+			if err := w.Flush(); err != nil {
+				return
+			}
+		}
 	}
 }
