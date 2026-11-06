@@ -268,31 +268,27 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		if err != nil {
 			return nil, err
 		}
-		items := make([]g.BatchItem, 0, 8)
+		var batch g.Batch
 		return func(ctx context.Context, seq uint64) error {
-			items = items[:0]
+			batch.Reset()
 			kind := cql.UnloggedBatch
 			if name == "E1" {
 				k, base := partKey(seq), int32(seq%16)*8
 				for r := base; r < base+8; r++ {
-					item, err := q.BatchEntry(row{K: k, R: r, P: payload(true, k, r)})
-					if err != nil {
+					if err := q.AddTo(&batch, row{K: k, R: r, P: payload(true, k, r)}); err != nil {
 						return err
 					}
-					items = append(items, item)
 				}
 			} else {
 				kind = cql.LoggedBatch
 				for i := uint64(0); i < 4; i++ {
 					k := pointKey(seq*4 + i)
-					item, err := q.BatchEntry(row{K: k, P: payload(false, k, 0)})
-					if err != nil {
+					if err := q.AddTo(&batch, row{K: k, P: payload(false, k, 0)}); err != nil {
 						return err
 					}
-					items = append(items, item)
 				}
 			}
-			_, err := g.ExecBatch(ctx, a.s, kind, items, g.SessionOptions{})
+			_, err := q.ExecBatch(ctx, kind, &batch, g.SessionOptions{})
 			return err
 		}, nil
 	case "F1":

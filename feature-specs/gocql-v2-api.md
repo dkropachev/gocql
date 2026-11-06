@@ -554,7 +554,9 @@ func (q *Query[P, R]) Run(context.Context, P) (Rows[R], error)
 func (q *Query[P, R]) RunPage(context.Context, P, PageState) (*Page[R], error)
 func (q *Query[P, R]) RunUnpaged(context.Context, P) (*Page[R], error)
 func (q *Query[P, R]) Routing(P) (RoutingInfo, error)
-func (q *Query[P, R]) BatchEntry(P) (BatchItem, error)
+func (q *Query[P, R]) AddTo(*Batch, P) error
+func (q *Query[P, R]) ExecBatch(context.Context, BatchKind, *Batch, SessionOptions) (Result, error)
+func (q *Query[P, R]) RunBatch(context.Context, BatchKind, *Batch, SessionOptions) (*Page[R], error)
 func (q *Query[P, R]) Close()
 func (q *Query[P, R]) Wait(context.Context) error
 func (q *Query[P, R]) CloseAndWait(context.Context) error // Close, then Wait
@@ -1071,7 +1073,7 @@ also interrupts active streams; already written caller output remains valid.
 // Options are plain values; the zero Options uses the session default
 // profile. Query constructors take Options and validate, resolve and encode
 // them for their session once. One-shot executions (Prepared.Exec/One/Each,
-// ExecBatch, RunBatch) take SessionOptions: Options bound by BindOptions to
+// Query.ExecBatch, Query.RunBatch) take SessionOptions: Options bound by BindOptions to
 // one session's default profile and keyspace. Executions use SessionOptions as
 // they are and do not check which session runs them; on another session they
 // apply the binding session's defaults. The zero SessionOptions uses the
@@ -1115,9 +1117,9 @@ type Profile struct {
 
 type BatchKind uint8
 const (LoggedBatch BatchKind = iota; UnloggedBatch; CounterBatch)
-type BatchItem struct { /* immutable owned entry captured by query.BatchEntry */ }
-func RunBatch[R any](context.Context, *Session, BatchKind, []BatchItem, RowDecoder[R], SessionOptions) (*Page[R], error)
-func ExecBatch(context.Context, *Session, BatchKind, []BatchItem, SessionOptions) (Result, error)
+type Batch struct { /* reusable owned members appended by query.AddTo */ }
+func (b *Batch) Len() int
+func (b *Batch) Reset()
 
 type Result struct {
     HostID UUID
@@ -1148,7 +1150,7 @@ queueing and cleanup waits. Cleanup continues independently where required to
 release an orphan stream; returning a context error never authorizes reuse of
 still-borrowed input before Wait. Query construction copies custom payload bytes and checks source views while
 capturing options. Public batch execution also owns its options payload; batch
-parameters are owned when query.BatchEntry is appended. There is no public
+parameters are copied into the batch when query.AddTo appends them. There is no public
 binding drain obligation. Returned Result
 payloads use owned storage, because Result outlives pages; this explicit escape
 is an ownership conversion, not a per-cell receive copy.
@@ -1166,8 +1168,11 @@ propagates its strictShard argument unchanged. Unsupported version options fail
 before send. Timestamps use one value per logical execution reused across
 retries; generated timestamps are concurrency-safe.
 
-BatchEntry holds a descriptor, not an admission. RunBatch atomically admits
-every member before sending and releases all if any is closed. At most 65,535
+A Batch owns its members' encoded parameters in storage it reuses after Reset:
+appending to a batch at its working size does not allocate. AddTo validates
+the session and keyspace of each member as it is appended. An execution that
+returns before its writer finished, after cancellation, keeps the storage it
+reads: a later Reset gives the batch fresh storage instead. At most 65,535
 entries and 65,535 parameters/member; reject size violations before
 preparation/I/O. Mixed prepared and QUERY members are legal. Binding spans are
 reused unchanged; UNPREPARED repairs only the matching host statement and

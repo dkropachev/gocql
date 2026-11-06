@@ -143,7 +143,7 @@ func cassandraReadBound[R any](t testing.TB, s *gocql.Session, b *Bound[R], opti
 	}
 	return row
 }
-func cassandraItem[R any](t testing.TB, b *Bound[R]) gocql.BatchItem {
+func cassandraItem[R any](t testing.TB, b *Bound[R]) batchItem {
 	t.Helper()
 	item, err := BatchEntry(b)
 	if err != nil {
@@ -180,9 +180,9 @@ func cassandraRows(t testing.TB, s *gocql.Session, b *Bound[cql.DynamicRow], opt
 	}
 	return result
 }
-func cassandraBatch(t testing.TB, s *gocql.Session, kind cql.BatchKind, items []gocql.BatchItem, options gocql.Options) gocql.Result {
+func cassandraBatch(t testing.TB, s *gocql.Session, kind cql.BatchKind, items []batchItem, options gocql.Options) gocql.Result {
 	t.Helper()
-	r, e := gocql.ExecBatch(context.Background(), s, kind, items, bindOptions(s, options))
+	r, e := execBatch(context.Background(), s, kind, items, bindOptions(s, options))
 	if e != nil {
 		t.Fatal(e)
 	}

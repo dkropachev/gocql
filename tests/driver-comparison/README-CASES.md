@@ -69,7 +69,7 @@ a state ends the partition, and the worker moves to its next partition.
 
 | v2 | pseudocode | master | pseudocode |
 |---|---|---|---|
-| E1 | 8 × `w.q.BatchEntry(row)` of one `paged` partition; `ExecBatch(ctx, s, UnloggedBatch, items, opts)` | ME1 | `b := s.BatchWithContext(ctx, UnloggedBatch)`; 8 × `b.Query(pageWrite, ...)`; `s.ExecuteBatch(b)` |
+| E1 | 8 × `q.AddTo(&batch, row)` of one `paged` partition; `q.ExecBatch(ctx, UnloggedBatch, &batch, opts)` on a reused `Batch` | ME1 | `b := s.BatchWithContext(ctx, UnloggedBatch)`; 8 × `b.Query(pageWrite, ...)`; `s.ExecuteBatch(b)` |
 | E2 | 4 `point` keys, `LoggedBatch` | ME2 | 4 `point` keys, `LoggedBatch` |
 
 ## F. Lightweight transaction (`lwt`, LOCAL_SERIAL), 64 workers

@@ -1,0 +1,258 @@
+// Copyright 2026 The Gocql Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license.
+
+package execution
+
+import (
+	"bytes"
+	"context"
+	"encoding/binary"
+	"fmt"
+	"io"
+	"net"
+	"testing"
+	"time"
+
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	frm "github.com/scylladb/gocql/v2/internal/frame"
+)
+
+func batchTestQuery(t testing.TB, s *implCluster.Session) *Query[[]byte, EmptyRecord] {
+	t.Helper()
+	typ, err := cqltype.ScalarType(cqltype.TypeBlob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, OptionValues{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(q.Close)
+	return q
+}
+
+// batchTestServe answers one protocol v4 request with a void result and
+// returns its opcode and body.
+func batchTestServe(t testing.TB, server net.Conn) (byte, []byte) {
+	t.Helper()
+	var header [9]byte
+	if _, err := io.ReadFull(server, header[:]); err != nil {
+		t.Error(err)
+		return 0, nil
+	}
+	body := make([]byte, binary.BigEndian.Uint32(header[5:]))
+	if _, err := io.ReadFull(server, body); err != nil {
+		t.Error(err)
+		return 0, nil
+	}
+	stream := int(binary.BigEndian.Uint16(header[2:4]))
+	if _, err := server.Write(typedTestResponse(t, 4, stream, binary.BigEndian.AppendUint32(nil, frm.ResultKindVoid))); err != nil {
+		t.Error(err)
+	}
+	return header[4], body
+}
+
+func TestBatchExecSendsEntriesAndReusesStorage(t *testing.T) {
+	s, _, peers := runtimeTestSession(t, 1)
+	q := batchTestQuery(t, s)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	type request struct {
+		op   byte
+		body []byte
+	}
+	requests := make(chan request, 3)
+	go func() {
+		for i := 0; i < 3; i++ {
+			op, body := batchTestServe(t, peers[0])
+			requests <- request{op, body}
+		}
+	}()
+	var batch Batch
+	for _, v := range []string{"first", "second"} {
+		if err := q.AddTo(&batch, []byte(v)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if batch.Len() != 2 {
+		t.Fatal(batch.Len())
+	}
+	// A batch may be sent again unchanged.
+	for i := 0; i < 2; i++ {
+		if _, err := q.ExecBatch(ctx, LoggedBatch, &batch, Options{}); err != nil {
+			t.Fatal(err)
+		}
+		r := <-requests
+		if r.op != byte(frm.OpBatch) || !bytes.Contains(r.body, []byte("first")) || !bytes.Contains(r.body, []byte("second")) {
+			t.Fatalf("request %d: op %#x body %q", i, r.op, r.body)
+		}
+	}
+	if !batch.owner.drained.Load() || batch.shared {
+		t.Fatal("a completed execution did not drain")
+	}
+	values := &batch.values[0]
+	batch.Reset()
+	if batch.Len() != 0 {
+		t.Fatal(batch.Len())
+	}
+	if err := q.AddTo(&batch, []byte("third")); err != nil {
+		t.Fatal(err)
+	}
+	if &batch.values[0] != values {
+		t.Fatal("Reset did not keep the storage")
+	}
+	if _, err := q.ExecBatch(ctx, UnloggedBatch, &batch, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	r := <-requests
+	if !bytes.Contains(r.body, []byte("third")) || bytes.Contains(r.body, []byte("first")) {
+		t.Fatalf("body %q", r.body)
+	}
+}
+
+func TestBatchResetLeavesStorageToUndrainedExecution(t *testing.T) {
+	q := testOwnedQuery(t)
+	var batch Batch
+	if err := q.AddTo(&batch, []byte("in flight")); err != nil {
+		t.Fatal(err)
+	}
+	// Model an execution that was cancelled while its writer still holds
+	// the owner.
+	batch.ownerUsed = true
+	batch.owner.resetOpen()
+	if err := batch.owner.InternalAdmit(); err != nil {
+		t.Fatal(err)
+	}
+	batch.owner.InternalClose()
+	inflight, entry := batch.values, batch.entries[0]
+	batch.Reset()
+	if err := q.AddTo(&batch, []byte("next batch")); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(inflight[entry.start+4 : entry.end]); got != "in flight" {
+		t.Fatalf("in-flight values overwritten: %q", got)
+	}
+	// The writer finishing drains the owner; the next Reset reuses again.
+	batch.owner.InternalRelease()
+	if !batch.owner.drained.Load() {
+		t.Fatal("owner did not drain")
+	}
+	values := &batch.values[0]
+	batch.Reset()
+	if err := q.AddTo(&batch, []byte("reused")); err != nil {
+		t.Fatal(err)
+	}
+	if &batch.values[0] != values {
+		t.Fatal("Reset did not reuse drained storage")
+	}
+}
+
+func TestBatchValidation(t *testing.T) {
+	s, _, _ := runtimeTestSession(t, 0)
+	q := batchTestQuery(t, s)
+	other := testOwnedQuery(t)
+	ctx := context.Background()
+	var batch Batch
+	if _, err := q.ExecBatch(ctx, LoggedBatch, &batch, Options{}); err == nil {
+		t.Fatal("empty batch sent")
+	}
+	if err := q.AddTo(nil, []byte("v")); err == nil {
+		t.Fatal("nil batch accepted")
+	}
+	if err := q.AddTo(&batch, []byte("v")); err != nil {
+		t.Fatal(err)
+	}
+	if err := other.AddTo(&batch, []byte("v")); err == nil || batch.Len() != 1 {
+		t.Fatal("statement of another session added", err)
+	}
+	if _, err := other.ExecBatch(ctx, LoggedBatch, &batch, Options{}); err == nil {
+		t.Fatal("batch sent on another session")
+	}
+	if _, err := q.ExecBatch(ctx, BatchKind(42), &batch, Options{}); err == nil {
+		t.Fatal("unknown batch kind sent")
+	}
+}
+
+func TestBatchAddToDoesNotAllocate(t *testing.T) {
+	q := testOwnedQuery(t)
+	var batch Batch
+	value := []byte("batch entry")
+	fill := func() {
+		for i := 0; i < 16; i++ {
+			if err := q.AddTo(&batch, value); err != nil {
+				t.Fatal(err)
+			}
+		}
+		batch.Reset()
+	}
+	fill() // grow the batch to its working size
+	if n := testing.AllocsPerRun(100, fill); n != 0 {
+		t.Fatalf("AddTo and Reset allocate %v times per batch", n)
+	}
+}
+
+func BenchmarkBatchAddTo(b *testing.B) {
+	q := testOwnedQuery(b)
+	var batch Batch
+	value := []byte("batch entry")
+	b.ReportAllocs()
+	for b.Loop() {
+		if err := q.AddTo(&batch, value); err != nil {
+			b.Fatal(err)
+		}
+		if batch.Len() == 64 {
+			batch.Reset()
+		}
+	}
+}
+
+// batchBenchSession returns a session whose one connection answers every
+// request with a void result.
+func batchBenchSession(b *testing.B) *implCluster.Session {
+	s, _, peers := runtimeTestSession(b, 1)
+	go func() {
+		var header [9]byte
+		response := typedTestResponse(b, 4, 0, binary.BigEndian.AppendUint32(nil, frm.ResultKindVoid))
+		body := make([]byte, 1<<16)
+		for {
+			if _, err := io.ReadFull(peers[0], header[:]); err != nil {
+				return
+			}
+			n := binary.BigEndian.Uint32(header[5:])
+			if _, err := io.ReadFull(peers[0], body[:n]); err != nil {
+				return
+			}
+			response[2], response[3] = header[2], header[3]
+			if _, err := peers[0].Write(response); err != nil {
+				return
+			}
+		}
+	}()
+	return s
+}
+
+func BenchmarkBatchExec(b *testing.B) {
+	for _, n := range []int{1, 8} {
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			s := batchBenchSession(b)
+			q := batchTestQuery(b, s)
+			ctx := context.Background()
+			value := []byte("0123456789abcdef0123456789abcdef")
+			var batch Batch
+			b.ReportAllocs()
+			for b.Loop() {
+				batch.Reset()
+				for i := 0; i < n; i++ {
+					if err := q.AddTo(&batch, value); err != nil {
+						b.Fatal(err)
+					}
+				}
+				if _, err := q.ExecBatch(ctx, UnloggedBatch, &batch, Options{}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}

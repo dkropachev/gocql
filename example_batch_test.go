@@ -33,8 +33,8 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 )
 
-// ExampleExecBatch demonstrates typed batch inputs and borrowed result rows.
-func ExampleExecBatch() {
+// ExampleQuery_ExecBatch builds a batch one statement at a time and sends it.
+func ExampleQuery_ExecBatch() {
 	// Assumes example.batches(pk int, ck int, description text, PRIMARY KEY(pk, ck)).
 	ctx := context.Background()
 	config := gocql.DefaultConfig("localhost:9042")
@@ -60,19 +60,22 @@ func ExampleExecBatch() {
 		log.Fatal(err)
 	}
 	defer query.Close()
-	var entries []gocql.BatchItem
-	for _, value := range []item{{1, 2, "1.2"}, {1, 3, "1.3"}, {1, 4, "1.4"}, {1, 5, "1.5"}} {
-		entry, err := query.BatchEntry(value)
-		if err != nil {
+	var batch gocql.Batch
+	for _, value := range []item{
+		{PK: 1, CK: 2, Description: "1.2"},
+		{PK: 1, CK: 3, Description: "1.3"},
+		{PK: 1, CK: 4, Description: "1.4"},
+		{PK: 1, CK: 5, Description: "1.5"},
+	} {
+		if err := query.AddTo(&batch, value); err != nil {
 			log.Fatal(err)
 		}
-		entries = append(entries, entry)
 	}
 	idempotent, err := gocql.BindOptions(session, gocql.Options{Idempotent: true})
 	if err != nil {
 		log.Fatal(err)
 	}
-	if _, err := gocql.ExecBatch(ctx, session, cql.UnloggedBatch, entries, idempotent); err != nil {
+	if _, err := query.ExecBatch(ctx, cql.UnloggedBatch, &batch, idempotent); err != nil {
 		log.Fatal(err)
 	}
 	selectAll, err := gocql.NewUnpreparedQuery(session, cql.Statement[cql.EmptyParams, item]{

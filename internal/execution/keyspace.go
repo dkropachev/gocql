@@ -141,8 +141,8 @@ func InternalCqlIdentifiers(source string) []string {
 
 func InternalRequestQualifiedForKeyspace(request *InternalExecutionRequest, keyspace string) bool {
 	if request.batch != nil {
-		for _, item := range request.batch.items {
-			if !InternalQualifiedForKeyspace(item.InternalStatement, keyspace) {
+		for _, item := range request.batch.entries {
+			if !InternalQualifiedForKeyspace(item.statement, keyspace) {
 				return false
 			}
 		}

@@ -560,7 +560,7 @@ func TestCustomPayloadMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err = gocql.ExecBatch(context.Background(), session, cql.LoggedBatch, []gocql.BatchItem{item}, bindOptions(session, options))
+	result, err = execBatch(context.Background(), session, cql.LoggedBatch, []batchItem{item}, bindOptions(session, options))
 	if err != nil {
 		t.Fatalf("query failed: %v", err)
 	}

@@ -12,7 +12,13 @@ import (
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 )
 
-type BatchItem = implExecution.BatchItem
+// Batch collects statements, each with its values, to send as one CQL
+// BATCH request: Query.AddTo appends a statement, Query.ExecBatch and
+// Query.RunBatch send the batch, and Reset empties it for reuse. Once a
+// batch has grown to its working size, appending allocates nothing. The
+// zero Batch is ready to use; a Batch is not safe for concurrent use and
+// must not be copied.
+type Batch = implExecution.Batch
 
 const BatchSizeMaximum = implCluster.BatchSizeMaximum
 
@@ -31,10 +37,6 @@ type Event = implCluster.Event
 type EventFilter = implCluster.EventFilter
 type EventKind = implCluster.EventKind
 
-func ExecBatch(a0 context.Context, a1 *Session, a2 cql.BatchKind, a3 []BatchItem, a4 SessionOptions) (Result, error) {
-	return implExecution.ExecOwnedBatch(a0, a1, a2, a3, a4)
-}
-
 type ExecutionError = implExecution.ExecutionError
 
 func OpenSingleHost(a0 context.Context, a1 Config, a2 cql.UUID) (*Session, error) {
@@ -49,7 +51,7 @@ type Options = implExecution.OptionValues
 
 // SessionOptions are Options validated, resolved against one session's
 // default profile and keyspace, and encoded once by BindOptions, for one-shot
-// executions such as Prepared.Exec, ExecBatch and RunBatch. They are
+// executions such as Prepared.Exec, Query.ExecBatch and Query.RunBatch. They are
 // immutable and safe to share between goroutines. Executions use them as they
 // are, without checking which session runs them: using them on another
 // session applies the binding session's default profile and keyspace. The
@@ -110,10 +112,6 @@ type PreparedInfo = implExecution.PreparedInfo
 
 type RowStream[R any] = implExecution.RowStream[R]
 type Rows[R any] = implExecution.Rows[R]
-
-func RunBatch[R any](a0 context.Context, a1 *Session, a2 cql.BatchKind, a3 []BatchItem, a4 cql.RowDecoder[R], a5 SessionOptions) (*Page[R], error) {
-	return implExecution.RunOwnedBatch[R](a0, a1, a2, a3, a4, a5)
-}
 
 const SchemaEvent = implCluster.SchemaEvent
 

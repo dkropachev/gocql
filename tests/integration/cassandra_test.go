@@ -375,9 +375,9 @@ func TestCAS(t *testing.T) {
 	successDelete := cassandraCASBound(t, session, deleteCQL, values, cql.DynamicRows)
 	require.True(t, cassandraReadBound(t, session, successDelete, gocql.Options{}).Applied)
 	cassandraWrite(t, session, "TRUNCATE "+table)
-	runBatch := func(items []gocql.BatchItem, wantApplied bool, wantRows int) {
+	runCASBatch := func(items []batchItem, wantApplied bool, wantRows int) {
 		t.Helper()
-		page, err := gocql.RunBatch(context.Background(), session, cql.LoggedBatch, items, cql.CASRows(cql.DynamicRows), gocql.SessionOptions{})
+		page, err := runBatch(context.Background(), session, cql.LoggedBatch, items, cql.CASRows(cql.DynamicRows), gocql.SessionOptions{})
 		require.NoError(t, err)
 		defer page.Close()
 		count := 0
@@ -392,11 +392,11 @@ func TestCAS(t *testing.T) {
 		require.NoError(t, page.Close())
 		require.Equal(t, wantRows, count)
 	}
-	runBatch([]gocql.BatchItem{cassandraItem(t, insert)}, true, 1)
+	runCASBatch([]batchItem{cassandraItem(t, insert)}, true, 1)
 	other := cassandraCASBound(t, session, insertCQL, []cql.Value{codecTestMust(cql.TextValue(title + "_foo")), revValue, cql.TimestampValue(modified)}, cql.DynamicRows)
-	runBatch([]gocql.BatchItem{cassandraItem(t, other)}, true, 1)
-	runBatch([]gocql.BatchItem{cassandraItem(t, other)}, false, 1)
-	var seed, conditional []gocql.BatchItem
+	runCASBatch([]batchItem{cassandraItem(t, other)}, true, 1)
+	runCASBatch([]batchItem{cassandraItem(t, other)}, false, 1)
+	var seed, conditional []batchItem
 	for _, id := range []string{"2c3af400-73a4-11e5-9381-29463d90c3f0", "3e4ad2f1-73a4-11e5-9381-29463d90c3f0"} {
 		r, e := cql.ParseUUID(id)
 		require.NoError(t, e)
@@ -405,13 +405,13 @@ func TestCAS(t *testing.T) {
 		conditional = append(conditional, cassandraItem(t, cassandraCASBound(t, session, fmt.Sprintf("UPDATE %s SET last_modified=? WHERE title=? AND revid=? IF last_modified=?", table), []cql.Value{cql.TimestampValue(modified + 10000), codecTestMust(cql.TextValue("_foo")), rv, cql.TimestampValue(modified + 20000)}, cql.DynamicRows)))
 	}
 	cassandraBatch(t, session, cql.LoggedBatch, seed, gocql.Options{})
-	runBatch(conditional, false, 2)
+	runCASBatch(conditional, false, 2)
 	// CASRows rejects ordinary SELECTs and unconditional batches; the former
 	// MapScanCAS silent false result is replaced by validated result metadata.
 	_, err = gocql.Prepare(context.Background(), session, cql.Statement[[]cql.Value, cql.CASResult[cql.DynamicRow]]{CQL: fmt.Sprintf("SELECT revid FROM %s WHERE title=?", table), Params: cql.DynamicParams, Rows: cql.CASRows(cql.DynamicRows)}, gocql.PrepareOptions{})
 	require.Error(t, err)
 	for i := 0; i < 2; i++ {
-		page, err := gocql.RunBatch(context.Background(), session, cql.LoggedBatch, seed, cql.CASRows(cql.DynamicRows), gocql.SessionOptions{})
+		page, err := runBatch(context.Background(), session, cql.LoggedBatch, seed, cql.CASRows(cql.DynamicRows), gocql.SessionOptions{})
 		if page != nil {
 			page.Close()
 		}
@@ -421,7 +421,7 @@ func TestCAS(t *testing.T) {
 		badDecoder := cql.CASRows(cql.OneColumn(cql.Bool))
 		bound := cassandraDynamicBound(t, session, fmt.Sprintf("UPDATE %s SET last_modified=? WHERE title=? AND revid=? IF last_modified=?", table), []cql.Value{cql.TimestampValue(modified + 10000), codecTestMust(cql.TextValue("_foo")), cassandraValue(cql.TimeUUIDValue(cql.TimeUUID(cassandraUUID("3e4ad2f1-73a4-11e5-9381-29463d90c3f0")))), cql.TimestampValue(modified + 20000)}, gocql.PrepareOptions{})
 		if batch {
-			page, e := gocql.RunBatch(context.Background(), session, cql.LoggedBatch, []gocql.BatchItem{cassandraItem(t, bound)}, badDecoder, gocql.SessionOptions{})
+			page, e := runBatch(context.Background(), session, cql.LoggedBatch, []batchItem{cassandraItem(t, bound)}, badDecoder, gocql.SessionOptions{})
 			if page != nil {
 				page.Close()
 			}
@@ -516,7 +516,7 @@ func TestBatch(t *testing.T) {
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY)", table))
 	prepared := cassandraPrepared(t, session, cql.Statement[int32, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), Params: cql.OneParam(cql.Int32), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
-	var items []gocql.BatchItem
+	var items []batchItem
 	for i := int32(0); i < 100; i++ {
 		items = append(items, cassandraItem(t, cassandraBound(t, prepared, i)))
 	}
@@ -531,7 +531,7 @@ func TestUnpreparedBatch(t *testing.T) {
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,c counter)", table))
 	bound := cassandraUnprepared(t, fmt.Sprintf("UPDATE %s SET c=c+1 WHERE id=1", table), cql.EmptyRowDecoder)
-	items := make([]gocql.BatchItem, 100)
+	items := make([]batchItem, 100)
 	for i := range items {
 		items[i] = cassandraItem(t, bound)
 	}
@@ -549,12 +549,12 @@ func TestBatchLimit(t *testing.T) {
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY)", table))
 	bound := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), []cql.Value{cql.IntValue(1)}, gocql.PrepareOptions{})
-	items := make([]gocql.BatchItem, 65537)
+	items := make([]batchItem, 65537)
 	for i := range items {
 		items[i] = cassandraItem(t, bound)
 	}
 	before := session.Metrics()
-	_, err := gocql.ExecBatch(context.Background(), session, cql.LoggedBatch, items, gocql.SessionOptions{})
+	_, err := execBatch(context.Background(), session, cql.LoggedBatch, items, gocql.SessionOptions{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "65535")
 	require.Equal(t, before.Requests, session.Metrics().Requests, "oversized batches must be rejected before submission")
@@ -908,7 +908,7 @@ func TestBatchQueryInfo(t *testing.T) {
 	prepared := cassandraPrepared(t, session, cql.Statement[ClusteredKeyValue, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,cluster,value) VALUES(?,?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 	require.Equal(t, 3, prepared.Parameters().Len())
 	bound := cassandraBound(t, prepared, ClusteredKeyValue{4000, 5000, "bar"})
-	cassandraBatch(t, session, cql.LoggedBatch, []gocql.BatchItem{cassandraItem(t, bound)}, gocql.Options{})
+	cassandraBatch(t, session, cql.LoggedBatch, []batchItem{cassandraItem(t, bound)}, gocql.Options{})
 	read := cassandraDynamicBound(t, session, fmt.Sprintf("SELECT id,cluster,value FROM %s WHERE id=? AND cluster=?", table), []cql.Value{cql.IntValue(4000), cql.IntValue(5000)}, gocql.PrepareOptions{})
 	row := cassandraReadBound(t, session, read, gocql.Options{})
 	require.Equal(t, "bar", cassandraText(t, row, "value"))
@@ -1076,7 +1076,7 @@ func TestPrepare_ReprepareBatch(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	bound, conn := injectInvalidPreparedStatement(t, session, table)
-	cassandraBatch(t, session, cql.UnloggedBatch, []gocql.BatchItem{cassandraItem(t, bound)}, *func() *gocql.Options {
+	cassandraBatch(t, session, cql.UnloggedBatch, []batchItem{cassandraItem(t, bound)}, *func() *gocql.Options {
 		opaqueStorageValuexxx := new(gocql.Options)
 		opaqueStorageValuexxx.HostID = cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
 		implExecution.OptionsData(opaqueStorageValuexxx).InternalConnection = conn
@@ -1269,7 +1269,7 @@ func TestBatchStats(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY)", table))
-	var items []gocql.BatchItem
+	var items []batchItem
 	for _, id := range []int32{1, 2} {
 		items = append(items, cassandraItem(t, cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), []cql.Value{cql.IntValue(id)}, gocql.PrepareOptions{})))
 	}
@@ -1285,7 +1285,7 @@ func TestBatchObserve(t *testing.T) {
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,other int)", table))
 	observer := &cassandraObserver{}
-	var items []gocql.BatchItem
+	var items []batchItem
 	var cqls []string
 	for i := int32(0); i < 100; i++ {
 		stmt := fmt.Sprintf("INSERT INTO %s(id,other) VALUES(?,%d)", table, i)
@@ -1972,7 +1972,7 @@ func TestUnsetColBatch(t *testing.T) {
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,my_int int,my_text text)", table))
 	stmt := fmt.Sprintf("INSERT INTO %s(id,my_int,my_text) VALUES(?,?,?)", table)
-	var items []gocql.BatchItem
+	var items []batchItem
 	for _, values := range [][]cql.Value{{cql.IntValue(1), cql.IntValue(1), cql.UnsetDynamic(codecTestMust(cql.TextValue("")).Type())}, {cql.IntValue(1), cql.UnsetDynamic(cql.IntValue(0).Type()), codecTestMust(cql.TextValue(""))}, {cql.IntValue(2), cql.IntValue(2), cql.UnsetDynamic(codecTestMust(cql.TextValue("")).Type())}} {
 		items = append(items, cassandraItem(t, cassandraWriteBound(t, session, stmt, values, gocql.PrepareOptions{})))
 	}
@@ -2340,7 +2340,7 @@ func TestStmtCacheUsesOverriddenKeyspace(t *testing.T) {
 	insert := "INSERT INTO " + table + "(id) VALUES(?)"
 	for i, keyspace := range []string{fixtureKeyspace(""), ks} {
 		bound := cassandraWriteBound(t, session, insert, []cql.Value{cql.IntValue(int32(i + 1))}, gocql.PrepareOptions{Keyspace: keyspace})
-		cassandraBatch(t, session, cql.LoggedBatch, []gocql.BatchItem{cassandraItem(t, bound)}, gocql.Options{Keyspace: keyspace})
+		cassandraBatch(t, session, cql.LoggedBatch, []batchItem{cassandraItem(t, bound)}, gocql.Options{Keyspace: keyspace})
 	}
 	for i, keyspace := range []string{fixtureKeyspace(""), ks} {
 		prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, int32]{CQL: "SELECT * FROM " + table, Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.Int32)}, gocql.PrepareOptions{Keyspace: keyspace})
@@ -2369,8 +2369,6 @@ func TestRoutingKeyCacheUsesOverriddenKeyspace(t *testing.T) {
 		write := cassandraWriteBound(t, session, insert, []cql.Value{cql.IntValue(int32(i + 1))}, gocql.PrepareOptions{Keyspace: keyspace})
 		require.Equal(t, keyspace, write.Routing().Keyspace)
 		require.True(t, write.Routing().Token.Set)
-		item := cassandraItem(t, write)
-		require.Equal(t, keyspace, implExecution.BatchItemData(&item).InternalRequest.InternalRouting.Keyspace)
 		runtime := runtimeFor(session)
 		runtime.InternalMu.Lock()
 		found := false

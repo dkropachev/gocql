@@ -1,12 +1,32 @@
 # Batches
 
-Capture each typed member with `query.BatchEntry(parameters)` and append the
-returned item, then call `ExecBatch(ctx, session, kind, items, options)`.
-Parameters become owned when the entry is created; entries have no Close/Wait
-obligation. Query reuse or later input mutation cannot change an existing entry.
+Append each typed member with `query.AddTo(&batch, parameters)`, then send the
+batch with `query.ExecBatch(ctx, kind, &batch, options)`. Any query of the
+session can send the batch, and members of several queries may share one batch:
+
+```go
+var batch gocql.Batch
+for _, r := range rows {
+	if err := insert.AddTo(&batch, r); err != nil {
+		return err
+	}
+}
+if _, err := insert.ExecBatch(ctx, cql.UnloggedBatch, &batch, gocql.SessionOptions{}); err != nil {
+	return err
+}
+batch.Reset()
+```
+
+`AddTo` encodes the parameters into storage the batch owns, so the query is
+free for reuse at once and later input mutation cannot change the batch. A batch
+may be sent again unchanged. `Reset` empties it and keeps its storage, so a
+reused batch appends without allocating; if a cancelled execution may still be
+writing the batch, `Reset` leaves that storage to it. A `Batch` is not safe for
+concurrent use.
 `LoggedBatch`, `UnloggedBatch` and `CounterBatch` select native batch kind.
 A counter batch contains only counter updates. Prepared metadata, routing,
 parameter schemas and observation remain typed. Batches do not speculate.
 
-Conditional batch results use `RunBatch` with an explicit row decoder. See
+Conditional batch results use `query.RunBatch`, which decodes the rows with the
+query's row decoder. See
 [lightweight transactions](lightweight-transactions.md).

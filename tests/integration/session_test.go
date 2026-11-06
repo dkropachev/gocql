@@ -61,7 +61,7 @@ func sessionTestBind(t testing.TB, session *gocql.Session, stmt string, values .
 	}
 	return bound
 }
-func sessionTestItem[R any](t testing.TB, bound *Bound[R]) gocql.BatchItem {
+func sessionTestItem[R any](t testing.TB, bound *Bound[R]) batchItem {
 	t.Helper()
 	item, err := BatchEntry(bound)
 	if err != nil {
@@ -117,13 +117,13 @@ func TestSessionAPI(t *testing.T) {
 	// It does not construct the old mutable Query/Iter error holder.
 	_, err = Run(ctx, session, bound, gocql.SessionOptions{})
 	require.ErrorIs(t, err, gocql.ErrNoConnections)
-	batch := []gocql.BatchItem{sessionTestItem(t, bound)}
-	_, err = gocql.ExecBatch(ctx, session, cql.LoggedBatch, batch, gocql.SessionOptions{})
+	batch := []batchItem{sessionTestItem(t, bound)}
+	_, err = execBatch(ctx, session, cql.LoggedBatch, batch, gocql.SessionOptions{})
 	require.ErrorIs(t, err, gocql.ErrNoConnections)
 	require.NoError(t, session.Close())
 	require.True(t, session.Closed())
 	require.NoError(t, session.Close())
-	_, err = gocql.ExecBatch(ctx, session, cql.LoggedBatch, batch, gocql.SessionOptions{})
+	_, err = execBatch(ctx, session, cql.LoggedBatch, batch, gocql.SessionOptions{})
 	require.ErrorIs(t, err, gocql.ErrClosed)
 	_, err = Exec(ctx, session, bound, gocql.SessionOptions{})
 	require.ErrorIs(t, err, gocql.ErrClosed)
@@ -287,7 +287,7 @@ func TestBatchBasicAPI(t *testing.T) {
 	defer first.Close()
 	second := sessionTestBind(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), cql.IntValue(2))
 	defer second.Close()
-	items := []gocql.BatchItem{sessionTestItem(t, first), sessionTestItem(t, second)}
+	items := []batchItem{sessionTestItem(t, first), sessionTestItem(t, second)}
 	require.Len(t, items, 2)
 	inherited, err := resolveOptions(session, gocql.Options{})
 	require.NoError(t, err)
@@ -305,7 +305,7 @@ func TestBatchBasicAPI(t *testing.T) {
 	require.Zero(t, (gocql.Result{}).Attempts)
 	require.Zero(t, (gocql.Result{}).Latency)
 	for _, kind := range []cql.BatchKind{cql.UnloggedBatch, cql.LoggedBatch} {
-		result, err := gocql.ExecBatch(ctx, session, kind, items, bindOptions(session, options))
+		result, err := execBatch(ctx, session, kind, items, bindOptions(session, options))
 		require.NoError(t, err)
 		require.Equal(t, 1, result.Attempts)
 		require.Greater(t, result.Latency, time.Duration(0))
@@ -323,10 +323,10 @@ func TestBatchBasicAPI(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, int64(id), sessionTestInt(t, row, "id"))
 	}
-	// BatchEntry is only a descriptor. Closing any member prevents the entire
-	// batch admission, and other members remain available for separate work.
+	// A closed binding cannot be added to a batch; the other members remain
+	// available for separate work.
 	first.Close()
-	_, err = gocql.ExecBatch(ctx, session, cql.LoggedBatch, items, bindOptions(session, options))
+	_, err = execBatch(ctx, session, cql.LoggedBatch, items, bindOptions(session, options))
 	require.ErrorIs(t, err, gocql.ErrClosed)
 	require.NoError(t, first.Wait(ctx))
 	_, err = Exec(ctx, session, second, gocql.SessionOptions{})

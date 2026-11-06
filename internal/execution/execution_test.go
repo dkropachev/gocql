@@ -197,22 +197,29 @@ func TestSessionClosePreservesDeliveredPageAndDrains(t *testing.T) {
 		})
 	}
 }
-func TestBatchAdmissionRollbackAndClassification(t *testing.T) {
+func TestBatchAddCopiesBindings(t *testing.T) {
 	s, _, _ := runtimeTestSession(t, 0)
 	a := runtimeQuery(t)
 	b := runtimeQuery(t)
 	b.Close()
-	ea, _ := BatchEntry(a)
-	eb, _ := BatchEntry(b)
-	_, err := RunBatch(context.Background(), s, cqltype.LoggedBatch, []BatchItem{ea, eb}, codec.EmptyRowDecoder, Options{})
-	if !errors.Is(err, implRuntimeerrors.ErrClosed) {
+	var batch Batch
+	if err := InternalAddBound(&batch, s, b); !errors.Is(err, implRuntimeerrors.ErrClosed) {
+		t.Fatal(err)
+	}
+	if batch.Len() != 0 {
+		t.Fatal("closed binding added")
+	}
+	if err := InternalAddBound(&batch, s, a); err != nil {
 		t.Fatal(err)
 	}
 	a.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	if err := a.Wait(ctx); err != nil {
-		t.Fatal("partial batch admission retained", err)
+		t.Fatal("batch retained its binding", err)
+	}
+	if batch.Len() != 1 {
+		t.Fatal(batch.Len())
 	}
 }
 
@@ -339,8 +346,11 @@ func TestManualAndBatchPagingSettingsAreExplicit(t *testing.T) {
 	if !errors.As(err, &unsupported) {
 		t.Fatal(err)
 	}
-	item, _ := BatchEntry(b)
-	_, err = RunBatch(context.Background(), s, cqltype.LoggedBatch, []BatchItem{item}, codec.EmptyRowDecoder, testOptions(OptionValues{PageSize: implCql.Option[int32]{Set: true, Value: 1}}))
+	var batch Batch
+	if err := InternalAddBound(&batch, s, b); err != nil {
+		t.Fatal(err)
+	}
+	_, err = InternalRunBatch(context.Background(), s, cqltype.LoggedBatch, &batch, codec.EmptyRowDecoder, testOptions(OptionValues{PageSize: implCql.Option[int32]{Set: true, Value: 1}}))
 	if !errors.As(err, &unsupported) {
 		t.Fatal(err)
 	}

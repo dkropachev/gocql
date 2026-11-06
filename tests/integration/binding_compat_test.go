@@ -9,6 +9,7 @@ package integration
 // cancellation fixtures only. They are absent from the supported public API.
 import (
 	"context"
+	"errors"
 
 	gocql "github.com/scylladb/gocql/v2"
 
@@ -18,7 +19,46 @@ import (
 
 type Bound[R any] = implExecution.Bound[R]
 
-func BatchEntry[R any](a0 *Bound[R]) (gocql.BatchItem, error) { return implExecution.BatchEntry[R](a0) }
+// batchItem is one binding of a test batch. It is copied into a gocql.Batch
+// when the batch is sent, so closing the binding first fails the batch.
+type batchItem struct {
+	add func(*gocql.Batch, *gocql.Session) error
+}
+
+func BatchEntry[R any](bound *Bound[R]) (batchItem, error) {
+	if bound == nil {
+		return batchItem{}, errors.New("nil binding")
+	}
+	return batchItem{add: func(batch *gocql.Batch, s *gocql.Session) error {
+		return implExecution.InternalAddBound(batch, s, bound)
+	}}, nil
+}
+
+func buildBatch(s *gocql.Session, items []batchItem) (*gocql.Batch, error) {
+	batch := new(gocql.Batch)
+	for _, item := range items {
+		if err := item.add(batch, s); err != nil {
+			return nil, err
+		}
+	}
+	return batch, nil
+}
+
+func execBatch(ctx context.Context, s *gocql.Session, kind cql.BatchKind, items []batchItem, options gocql.SessionOptions) (gocql.Result, error) {
+	batch, err := buildBatch(s, items)
+	if err != nil {
+		return gocql.Result{}, err
+	}
+	return implExecution.InternalExecBatch(ctx, s, kind, batch, options)
+}
+
+func runBatch[R any](ctx context.Context, s *gocql.Session, kind cql.BatchKind, items []batchItem, decoder cql.RowDecoder[R], options gocql.SessionOptions) (*gocql.Page[R], error) {
+	batch, err := buildBatch(s, items)
+	if err != nil {
+		return nil, err
+	}
+	return implExecution.InternalRunBatch(ctx, s, kind, batch, decoder, options)
+}
 
 func BindBorrowed[P any, R any](a0 *gocql.Prepared[P, R], a1 P) (*Bound[R], error) {
 	return implExecution.BindBorrowed[P, R](a0, a1)

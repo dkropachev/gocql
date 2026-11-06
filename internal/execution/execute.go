@@ -490,8 +490,8 @@ func (l *InternalLogicalExecution) InternalFinish(result Result, err error) {
 			event.Parameters = state.InternalParameters
 		}
 		if l.request.batch != nil {
-			for _, entry := range l.request.batch.items {
-				event.BatchStatements = append(event.BatchStatements, entry.InternalStatement)
+			for _, entry := range l.request.batch.entries {
+				event.BatchStatements = append(event.BatchStatements, entry.statement)
 			}
 		}
 		implCluster.InternalSessionObserveSafely(l.session, func() { l.observer.ObserveRequest(event) })

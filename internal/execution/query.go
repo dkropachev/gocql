@@ -355,19 +355,42 @@ func (q *Query[P, R]) Routing(value P) (RoutingInfo, error) {
 	return q.bound.privateStorage.InternalRequest.InternalRouting, nil
 }
 
-// BatchEntry captures an owned batch member immediately. The item has no Close
-// or Wait obligation and does not keep this query busy. Each append transfers
-// that encoding's backing storage to the immutable item.
-func (q *Query[P, R]) BatchEntry(value P) (BatchItem, error) {
+// AddTo encodes value with the query's parameters and appends the statement
+// to batch. The values are copied into the batch, so the query is free for
+// its next use as soon as AddTo returns, and closing it does not affect the
+// batch.
+func (q *Query[P, R]) AddTo(batch *Batch, value P) error {
+	if batch == nil {
+		return typeValidation("batch", "nil batch")
+	}
 	if err := q.capture(context.Background(), value); err != nil {
-		return BatchItem{}, err
+		return err
 	}
 	defer q.state.owner.InternalRelease()
-	request := q.bound.privateStorage.InternalRequest
-	q.buffer = binding.ParameterBuffer{}
-	request.query, request.InternalLogical = nil, nil
-	request.InternalOwner = newInputOwner()
-	return BatchItem{privateStorage: BatchItemStorage{InternalRequest: &request}}, nil
+	return batch.add(q.state.runtime.Session, &q.bound.privateStorage.InternalRequest)
+}
+
+// ExecBatch sends batch as one CQL BATCH of kind on the query's session.
+// The batch's statements must produce no result columns; RunBatch reads
+// the rows of a conditional batch. The query only supplies the session: it
+// need not be one of the batch's statements, and it stays free for other
+// use while the batch runs.
+func (q *Query[P, R]) ExecBatch(ctx context.Context, kind BatchKind, batch *Batch, options Options) (Result, error) {
+	if q == nil || q.state.runtime == nil {
+		return Result{}, typeValidation("query", "nil query")
+	}
+	return execBatch(ctx, q.state.runtime.Session, kind, batch, options)
+}
+
+// RunBatch sends batch as one CQL BATCH of kind on the query's session and
+// returns its rows, decoded with the query's row decoder. A conditional
+// batch returns one row per conditional statement, or one row reporting
+// that it was not applied.
+func (q *Query[P, R]) RunBatch(ctx context.Context, kind BatchKind, batch *Batch, options Options) (*Page[R], error) {
+	if q == nil || q.state.runtime == nil {
+		return nil, typeValidation("query", "nil query")
+	}
+	return runBatch(ctx, q.state.runtime.Session, kind, batch, q.bound.privateStorage.InternalRows, options)
 }
 
 func (s *queryState) close() {

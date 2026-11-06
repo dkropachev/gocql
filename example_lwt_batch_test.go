@@ -33,8 +33,8 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 )
 
-// ExampleRunBatch_conditional consumes every typed row returned by a conditional batch.
-func ExampleRunBatch_conditional() {
+// ExampleQuery_RunBatch_conditional consumes every typed row returned by a conditional batch.
+func ExampleQuery_RunBatch_conditional() {
 	// Assumes example.my_lwt_batch_table(pk text, ck text, version int, value text,
 	// PRIMARY KEY(pk, ck)), with initial rows (pk1,ck1,1,a) and (pk1,ck2,1,A).
 	ctx := context.Background()
@@ -53,11 +53,6 @@ func ExampleRunBatch_conditional() {
 		PK, CK  string
 		Version int32
 	}
-	conditional := cql.CASRows(cql.Row(
-		cql.Column("pk", cql.StringCodec, func(v *previous) *string { return &v.PK }),
-		cql.Column("ck", cql.StringCodec, func(v *previous) *string { return &v.CK }),
-		cql.Column("version", cql.Int32, func(v *previous) *int32 { return &v.Version }),
-	))
 	query, err := gocql.PrepareQuery(ctx, session, cql.Statement[update, cql.CASResult[previous]]{
 		CQL: "UPDATE example.my_lwt_batch_table SET value=? WHERE pk=? AND ck=? IF version=?",
 		Params: cql.Params(
@@ -66,21 +61,26 @@ func ExampleRunBatch_conditional() {
 			cql.Param("ck", cql.StringCodec, func(v update) string { return v.CK }),
 			cql.Param("version", cql.Int32, func(v update) int32 { return v.Version }),
 		),
-		Rows: conditional,
+		Rows: cql.CASRows(cql.Row(
+			cql.Column("pk", cql.StringCodec, func(v *previous) *string { return &v.PK }),
+			cql.Column("ck", cql.StringCodec, func(v *previous) *string { return &v.CK }),
+			cql.Column("version", cql.Int32, func(v *previous) *int32 { return &v.Version }),
+		)),
 	}, gocql.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer query.Close()
-	var entries []gocql.BatchItem
-	for _, value := range []update{{"pk1", "ck1", "b", 1}, {"pk1", "ck2", "B", 0}} {
-		entry, err := query.BatchEntry(value)
-		if err != nil {
+	var batch gocql.Batch
+	for _, value := range []update{
+		{PK: "pk1", CK: "ck1", Value: "b", Version: 1},
+		{PK: "pk1", CK: "ck2", Value: "B", Version: 0},
+	} {
+		if err := query.AddTo(&batch, value); err != nil {
 			log.Fatal(err)
 		}
-		entries = append(entries, entry)
 	}
-	page, err := gocql.RunBatch(ctx, session, cql.LoggedBatch, entries, conditional, gocql.SessionOptions{})
+	page, err := query.RunBatch(ctx, cql.LoggedBatch, &batch, gocql.SessionOptions{})
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -191,8 +191,8 @@ func TestQueryIdleRetentionAndBatchCapture(t *testing.T) {
 		t.Fatal("oversized idle storage")
 	}
 	input = []byte("batch entry")
-	entry, err := q.BatchEntry(input)
-	if err != nil {
+	var batch Batch
+	if err := q.AddTo(&batch, input); err != nil {
 		t.Fatal(err)
 	}
 	input[0] = 'X'
@@ -200,14 +200,10 @@ func TestQueryIdleRetentionAndBatchCapture(t *testing.T) {
 		t.Fatal(err)
 	}
 	q.state.owner.InternalRelease()
-	body := entry.privateStorage.InternalRequest.InternalValues.Cells[0].Body
-	got := make([]byte, body.Len())
-	_, _ = body.CopyTo(got)
-	if string(got) != "batch entry" {
-		t.Fatal(string(got))
-	}
-	if entry.privateStorage.InternalRequest.query != nil {
-		t.Fatal("batch retained reusable query")
+	entry := batch.entries[0]
+	// The values block is the length-prefixed value.
+	if got := string(batch.values[entry.start+4 : entry.end]); got != "batch entry" {
+		t.Fatal(got)
 	}
 	if len(q.state.runtime.InternalExecutions) != 0 || len(q.state.runtime.queries) != 1 {
 		t.Fatal("per-operation registration")

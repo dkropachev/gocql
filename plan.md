@@ -340,9 +340,12 @@ custom payload and profile copied and the wire parameters encoded. The zero
 func NewOptions(session *Session, values OptionValues) (Options, error)
 func (o Options) Values() OptionValues
 
-func BatchEntry[R any](*Bound[R]) (BatchItem, error)
-func RunBatch[R any](context.Context, *Session, BatchKind, []BatchItem, RowDecoder[R], Options) (*Page[R], error)
-func ExecBatch(context.Context, *Session, BatchKind, []BatchItem, Options) (Result, error)
+type Batch struct { /* reusable owned members */ }
+func (b *Batch) Len() int
+func (b *Batch) Reset()
+func (q *Query[P, R]) AddTo(*Batch, P) error
+func (q *Query[P, R]) ExecBatch(context.Context, BatchKind, *Batch, Options) (Result, error)
+func (q *Query[P, R]) RunBatch(context.Context, BatchKind, *Batch, Options) (*Page[R], error)
 func CASRows[R any](RowDecoder[R]) RowDecoder[CASResult[R]]
 
 func (s *Session) Metadata() *MetadataSnapshot
@@ -354,9 +357,12 @@ func (s *Session) Trace(context.Context, UUID) (TraceInfo, error)
 ```
 
 Options are resolved before admission and stay fixed through retries and
-later pages. Batch members reuse encoded bindings; all admissions succeed
-together or are released before sending. Conditional batches expose every result
-row.
+later pages. `AddTo` copies a member's encoded values into storage the batch
+owns, checking its session and keyspace as it is appended; the query is free
+again at once. `Reset` keeps that storage, so a reused batch appends without
+allocating, unless a cancelled execution may still be writing it, in which case
+the batch takes fresh storage. `RunBatch` decodes rows with the query's row
+decoder. Conditional batches expose every result row.
 
 Routing, retry, speculation, timestamp generation, reconnect, authentication,
 logging, and observation are replaceable interfaces. Built-in configuration must

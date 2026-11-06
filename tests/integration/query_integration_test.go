@@ -227,12 +227,14 @@ func TestV2QueryLiveReuse(t *testing.T) {
 		}
 		t.Logf("stream receive incremental=%t passed", incremental)
 	}
-	var entries []gocql.BatchItem
+	var batch gocql.Batch
 	for i := int32(0); i < 3; i++ {
-		entries = append(entries, codecTestMust(w.BatchEntry(record{K: 2, C: i, P: payload})))
+		if err := w.AddTo(&batch, record{K: 2, C: i, P: payload}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	payload[0] = 99
-	if _, err := gocql.ExecBatch(ctx, session, cql.UnloggedBatch, entries, gocql.SessionOptions{}); err != nil {
+	if _, err := w.ExecBatch(ctx, cql.UnloggedBatch, &batch, gocql.SessionOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	rows := codecTestMust(q.Run(ctx, int32(2)))

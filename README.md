@@ -119,7 +119,7 @@ Per-execution settings are plain `gocql.Options` values, for example
 `gocql.Options{PageSize: cql.Some[int32](100)}`; the zero `Options{}` uses the
 session default. Query constructors validate, resolve and encode them for their
 session once, so query executions do no per-call work. One-shot executions
-(`prepared.Exec/One/Each`, `ExecBatch`, `RunBatch`) take `SessionOptions` from
+(`prepared.Exec/One/Each`, `query.ExecBatch`, `query.RunBatch`) take `SessionOptions` from
 `BindOptions(session, options)`, which does the same work up front. Session
 options carry their session's default profile and keyspace and are not checked
 against the session that runs them: use them only on the session they were
