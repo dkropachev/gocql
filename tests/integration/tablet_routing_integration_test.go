@@ -79,8 +79,8 @@ func TestTabletRoutingLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	var authoritative []routing.TokenRange
-	for serverRows.Next() {
-		row := serverRows.Row()
+	var row cql.DynamicRow
+	for serverRows.NextInto(&row) {
 		last := codecTestMust(codecTestMust(row.Get("last_token")).Signed())
 		list := codecTestMust(codecTestMust(row.Get("replicas")).Elements())
 		r := routing.TokenRange{End: last}
@@ -149,10 +149,11 @@ func TestTabletRoutingLive(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !rows.Next() {
+			var row cql.DynamicRow
+			if !rows.NextInto(&row) {
 				t.Fatal("missing data", rows.Err())
 			}
-			if v2SchemaRoutingInt(t, rows.Row(), "pk") != key || v2SchemaRoutingInt(t, rows.Row(), "v") != 7 {
+			if v2SchemaRoutingInt(t, row, "pk") != key || v2SchemaRoutingInt(t, row, "v") != 7 {
 				t.Fatal("bad row")
 			}
 			result := rows.Info()
@@ -166,7 +167,7 @@ func TestTabletRoutingLive(t *testing.T) {
 					t.Logf("key=%d token=%d attempt=%d actual feedback replicas=%s", key, token.Value, attempt, hint.Replicas())
 				}
 			}
-			if rows.Next() {
+			if rows.NextInto(&row) {
 				t.Fatal("extra row")
 			}
 			if err := rows.Close(); err != nil {
@@ -256,10 +257,11 @@ func TestLeaderRoutingLive(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !rows.Next() {
+		var row cql.DynamicRow
+		if !rows.NextInto(&row) {
 			t.Fatal("missing strong row", rows.Err())
 		}
-		if v2SchemaRoutingInt(t, rows.Row(), "v") != 7 {
+		if v2SchemaRoutingInt(t, row, "v") != 7 {
 			t.Fatal("bad strong row")
 		}
 		result := rows.Info()
@@ -277,7 +279,7 @@ func TestLeaderRoutingLive(t *testing.T) {
 			moved = true
 			stable = 0
 		}
-		for rows.Next() {
+		for rows.NextInto(&row) {
 		}
 		if err := rows.Close(); err != nil {
 			t.Fatal(err)
@@ -332,10 +334,10 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table 
 			t.Fatal("authoritative read lost exact host pin", page.Info().HostID, host.ID)
 		}
 		observation.readNodes = append(observation.readNodes, page.Info().HostID)
-		if !page.Next() {
+		var row cql.DynamicRow
+		if !page.NextInto(&row) {
 			t.Fatal("authoritative tablet absent", page.Err())
 		}
-		row := page.Row()
 		last := codecTestMust(codecTestMust(row.Get("last_token")).Signed())
 		iterator := codecTestMust(codecTestMust(row.Get("replicas")).Elements())
 		var replicas []routing.Target
@@ -363,7 +365,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table 
 		if codecTestMust(row.Get("new_replicas")).State() != cql.Null || codecTestMust(row.Get("stage")).State() != cql.Null {
 			observation.stable = false
 		}
-		if page.Next() || page.Err() != nil {
+		if page.NextInto(&row) || page.Err() != nil {
 			t.Fatal("authoritative query count", page.Err())
 		}
 		if err := page.Close(); err != nil {

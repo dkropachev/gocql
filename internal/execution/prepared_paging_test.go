@@ -81,11 +81,11 @@ func TestV2PageNextIntoMixedCurrentAndRetention(t *testing.T) {
 	defer retained.Close()
 	original := first
 	first = implCqltype.BorrowBytes([]byte("edited"))
-	if string(p.Row().OwnedBytes()) != "edited" || string(codecTestMust(p.Clone()).OwnedBytes()) != "edited" {
+	if string(codecTestMust(p.Clone()).OwnedBytes()) != "edited" {
 		t.Fatal("current destination not observed")
 	}
-	if !p.Next() || string(p.Row().OwnedBytes()) != "two" || string(first.OwnedBytes()) != "edited" {
-		t.Fatal("mixed Next modified old destination")
+	if !p.NextInto(&second) || string(second.OwnedBytes()) != "two" || string(first.OwnedBytes()) != "edited" {
+		t.Fatal("NextInto modified old destination")
 	}
 	if !p.NextInto(&second) || string(second.OwnedBytes()) != "three" {
 		t.Fatal(p.Err())
@@ -313,7 +313,8 @@ func TestV2RowsCycleAndBudgetBeforePrefetch(t *testing.T) {
 					RowsData(rows).InternalHistory.InternalMaxCount = 1
 				}
 				count := 0
-				for rows.Next() {
+				var row implCqltype.Bytes
+				for rows.NextInto(&row) {
 					count++
 				}
 				want := runtimeerrors.ErrPagingNoProgress

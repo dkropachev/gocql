@@ -65,7 +65,8 @@ func TestV2QueryLiveReuse(t *testing.T) {
 			return
 		}
 		defer rows.Close()
-		if rows.Next() {
+		var keyspaceName cql.Text
+		if rows.NextInto(&keyspaceName) {
 			t.Error("owned namespace survived cleanup", namespace, dropErr)
 		}
 		if err := rows.Err(); err != nil {
@@ -184,7 +185,8 @@ func TestV2QueryLiveReuse(t *testing.T) {
 	defer unpaged.Close()
 	page := codecTestMust(unpaged.RunUnpaged(ctx, int32(1)))
 	n := 0
-	for page.Next() {
+	var unpagedRow record
+	for page.NextInto(&unpagedRow) {
 		n++
 	}
 	if err := page.Close(); err != nil || n != 6 {

@@ -63,43 +63,37 @@ func BenchmarkV2PageCallerDestination(b *testing.B) {
 	columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: typ})
 	decoder := codec.Row(codec.Column("value", codec.BlobCodec, func(r *row) *cqltype.Bytes { return &r.Value }))
 	for _, fragments := range []int{1, 1024} {
-		for _, into := range []bool{false, true} {
-			b.Run(fmt.Sprintf("fragments=%d/into=%t", fragments, into), func(b *testing.B) {
-				data := binary.BigEndian.AppendUint32(nil, 512000)
-				data = append(data, make([]byte, 512000)...)
-				spans := make([]wire.Span, 0, fragments)
-				for i := 0; i < fragments; i++ {
-					lo, hi := len(data)*i/fragments, len(data)*(i+1)/fragments
-					spans = append(spans, wire.Borrow(data[lo:hi]))
+		b.Run(fmt.Sprintf("fragments=%d", fragments), func(b *testing.B) {
+			data := binary.BigEndian.AppendUint32(nil, 512000)
+			data = append(data, make([]byte, 512000)...)
+			spans := make([]wire.Span, 0, fragments)
+			for i := 0; i < fragments; i++ {
+				lo, hi := len(data)*i/fragments, len(data)*(i+1)/fragments
+				spans = append(spans, wire.Borrow(data[lo:hi]))
+			}
+			chain := codecTestMust(wire.NewChain(spans...))
+			owner := wire.NewLease(chain, nil)
+			defer owner.Release()
+			p := func() *Page[row] {
+				opaqueStorageValuexx := new(Page[row])
+				PageData(opaqueStorageValuexx).InternalResponse = &transport.InternalResponsePage{InternalResponseData: model.ResponseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner}}
+				PageData(opaqueStorageValuexx).InternalPlan = codecTestMust(decoder.Compile(columns))
+				PageData(opaqueStorageValuexx).InternalCursor = wire.CursorOver(chain)
+				return opaqueStorageValuexx
+			}()
+			cursor := PageData(p).InternalCursor
+			var dst row
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				PageData(p).InternalCursor = cursor
+				PageData(p).InternalIndex = 0
+				PageData(p).InternalExhausted = false
+				if !p.NextInto(&dst) {
+					b.Fatal(p.Err())
 				}
-				chain := codecTestMust(wire.NewChain(spans...))
-				owner := wire.NewLease(chain, nil)
-				defer owner.Release()
-				p := func() *Page[row] {
-					opaqueStorageValuexx := new(Page[row])
-					PageData(opaqueStorageValuexx).InternalResponse = &transport.InternalResponsePage{InternalResponseData: model.ResponseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner}}
-					PageData(opaqueStorageValuexx).InternalPlan = codecTestMust(decoder.Compile(columns))
-					PageData(opaqueStorageValuexx).InternalCursor = wire.CursorOver(chain)
-					return opaqueStorageValuexx
-				}()
-				cursor := PageData(p).InternalCursor
-				var dst row
-				b.ReportAllocs()
-				b.ResetTimer()
-				for i := 0; i < b.N; i++ {
-					PageData(p).InternalCursor = cursor
-					PageData(p).InternalIndex = 0
-					PageData(p).InternalExhausted = false
-					if into {
-						if !p.NextInto(&dst) {
-							b.Fatal(p.Err())
-						}
-					} else if !p.Next() {
-						b.Fatal(p.Err())
-					}
-				}
-			})
-		}
+			}
+		})
 	}
 }
 

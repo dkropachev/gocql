@@ -268,7 +268,8 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 	defer query.Close()
 	rows := codecTestMust(Run(ctx, s, query, gocql.SessionOptions{}))
 	defer rows.Close()
-	if !rows.Next() {
+	var id int32
+	if !rows.NextInto(&id) {
 		t.Fatal("shared execution after repair", rows.Err())
 	}
 	t.Logf("live streaming proto=%d TLS=%v compression=%d rows=%d pages=%d", config.Protocol, *flagRunSslTest, config.Compression, len(seen), pages)

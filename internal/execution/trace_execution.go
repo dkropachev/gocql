@@ -57,15 +57,15 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id UUID) (implCluste
 			return result, err
 		}
 		ready := false
-		if rows.Next() {
-			row := rows.Row()
+		var row InternalTraceSessionRow
+		if rows.NextInto(&row) {
 			if row.InternalCoordinator.Valid && row.InternalStarted.Valid && row.InternalDuration.Valid {
 				result.Coordinator = row.InternalCoordinator.Value
 				result.Started = time.UnixMilli(int64(row.InternalStarted.Value))
 				result.Duration = time.Duration(row.InternalDuration.Value) * time.Microsecond
 				ready = true
 			}
-			if rows.Next() {
+			if rows.NextInto(&row) {
 				_ = rows.Close()
 				return result, &ProtocolError{Stage: "trace", Err: fmt.Errorf("duplicate tracing session")}
 			}
@@ -103,8 +103,8 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id UUID) (implCluste
 		return result, err
 	}
 	defer rows.Close()
-	for rows.Next() {
-		r := rows.Row()
+	var r InternalTraceActivityRow
+	for rows.NextInto(&r) {
 		e := implCluster.TraceEvent{ID: UUID(r.InternalId), Activity: r.InternalActivity.String(), Source: r.InternalSource, Thread: r.InternalThread.String()}
 		if r.InternalElapsed.Valid {
 			e.Elapsed = time.Duration(r.InternalElapsed.Value) * time.Microsecond

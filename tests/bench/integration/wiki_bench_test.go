@@ -205,13 +205,13 @@ func BenchmarkWikiSelectAllPages(b *testing.B) {
 	w.CreatePages(100)
 	b.StartTimer()
 
+	var page WikiPage
 	for i := 0; i < b.N; i++ {
 		rows, err := serializationRows(w.session, fmt.Sprintf("SELECT title,revid,body,views,protected,modified,tags,attachments,rating FROM %s", w.table), wikiRows)
 		if err != nil {
 			b.Fatal(err)
 		}
-		for rows.Next() {
-			_ = rows.Row()
+		for rows.NextInto(&page) {
 		}
 		if err := rows.Err(); err != nil {
 			b.Error(err)
@@ -238,11 +238,12 @@ func BenchmarkWikiSelectSinglePage(b *testing.B) {
 		b.Fatal(err)
 	}
 	n := 0
-	for rows.Next() {
+	var row WikiPage
+	for rows.NextInto(&row) {
 		if n == len(pages) {
 			break
 		}
-		pages[n] = rows.Row()
+		pages[n] = row
 		n++
 	}
 	pages = pages[:n]

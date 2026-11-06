@@ -758,7 +758,8 @@ func TestV3NegotiatedTabletPayloadEnvelope(t *testing.T) {
 					var page *Page[cqltype.Bytes]
 					page, err = RunPage(ctx, s, b, model.StartPage(), Options{})
 					if err == nil {
-						if !page.Next() || string(page.Row().OwnedBytes()) != "value" {
+						var row cqltype.Bytes
+						if !page.NextInto(&row) || string(row.OwnedBytes()) != "value" {
 							t.Fatal(page.Err())
 						}
 						page.Close()

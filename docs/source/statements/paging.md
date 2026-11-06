@@ -1,8 +1,10 @@
 # Paging and borrowed results
 
-`query.Run(ctx, parameters)` advances pages through `Rows.Next`/`NextInto`; `Row()` returns the current
-typed value. `NextInto` writes fields into a caller struct after the page has
-arrived. Payload fields still borrow the receive page. Their lifetime ends on
+Prefer `query.One` for a single row and `query.Each` to visit every row:
+they reuse the query's scratch space and leave nothing to close.
+`query.Run(ctx, parameters)` returns `Rows`, which must be closed; iterate it
+with `NextInto`, which decodes each row into a caller-owned destination and
+fetches continuation pages as needed. Payload fields still borrow the receive page. Their lifetime ends on
 the next advancement or Close unless a retained `PageLease` pins that page.
 Clone explicitly detaches a value. A retained page survives Session.Close and
 does not retain query input storage.

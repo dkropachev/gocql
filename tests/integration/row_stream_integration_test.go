@@ -187,7 +187,8 @@ func TestRunStreamLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	count := 0
-	for rows.Next() {
+	var row cql.DynamicRow
+	for rows.NextInto(&row) {
 		count++
 	}
 	if err := rows.Close(); err != nil || count != 5 {
@@ -325,7 +326,8 @@ func TestRunStreamLive(t *testing.T) {
 		probe, probeErr := Run(ctx, s, bound, bindOptions(s, gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: target}, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
 		if probeErr == nil {
 			n := 0
-			for probe.Next() {
+			var probeRow cql.DynamicRow
+			for probe.NextInto(&probeRow) {
 				n++
 			}
 			probeErr = probe.Close()

@@ -191,7 +191,8 @@ func testNamespace(t *testing.T, cfg gocql.Config, namespace string, wantPresent
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	present := rows.Next()
+	var row cql.DynamicRow
+	present := rows.NextInto(&row)
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}

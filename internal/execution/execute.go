@@ -775,7 +775,8 @@ func Exec[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], optio
 	}
 	defer rows.Close()
 	rows.impl.privateStorage.rejectColumns = true
-	for rows.Next() {
+	var row EmptyRecord
+	for rows.NextInto(&row) {
 	}
 	return rows.Info(), rows.Err()
 }

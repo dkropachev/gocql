@@ -47,13 +47,14 @@ func Example_paging() {
 	}
 	defer func() { _ = b.CloseAndWait(ctx) }()
 	var state gocql.PageState
+	var id int32
 	for {
 		page, err := b.RunPage(ctx, cql.EmptyParams{}, state)
 		if err != nil {
 			log.Fatal(err)
 		}
-		for page.Next() {
-			fmt.Println(page.Row())
+		for page.NextInto(&id) {
+			fmt.Println(id)
 		}
 		state = page.State()
 		if err := page.Close(); err != nil {

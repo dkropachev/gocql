@@ -459,7 +459,7 @@ values or `map[string]any`. Value's private representation contains the actual
 DataType, state, scalar payload or a lazy encoded aggregate. Constructors store
 borrowed input payloads; normal binding lifetime rules apply. Decoded Value and
 DynamicRow borrow the current page owner without acquiring an independent lease
-reference. Their views expire under the same Next/NextInto/Close rule as typed rows; only
+reference. Their views expire under the same NextInto/Close rule as typed rows; only
 an explicit PageLease or Clone extends their usable lifetime. An aggregate may
 hold explicitly supplied `[]Value` descriptors on input or encoded bytes on
 output, but neither form causes eager payload flattening.
@@ -633,9 +633,7 @@ No unsafe cache-metadata opt-in bypasses these rules.
 
 ```go
 type Rows[R any] struct { /* value handle: iterator storage + generation */ }
-func (r Rows[R]) Next() bool
 func (r Rows[R]) NextInto(dst *R) bool
-func (r Rows[R]) Row() R
 func (r Rows[R]) Err() error
 func (r Rows[R]) Close() error
 func (r Rows[R]) Retain() (*PageLease, error)
@@ -644,9 +642,7 @@ func (r Rows[R]) Info() Result
 func (r Rows[R]) Columns() Columns
 
 type Page[R any] struct { /* exactly one response page */ }
-func (p *Page[R]) Next() bool
 func (p *Page[R]) NextInto(dst *R) bool
-func (p *Page[R]) Row() R
 func (p *Page[R]) Err() error
 func (p *Page[R]) Close() error
 func (p *Page[R]) Retain() (*PageLease, error)
@@ -668,12 +664,12 @@ type CASResult[R any] struct { Applied bool; Previous Option[R] }
 func CASRows[R any](RowDecoder[R]) RowDecoder[CASResult[R]]
 ```
 
-Row() is valid after successful Next or NextInto; its views remain valid until
-the **next** Next/NextInto call or Close, whichever comes first. Retain pins the
+NextInto is the only row iterator. Views it decodes into the destination
+remain valid until the **next** NextInto call or Close, whichever comes first. Retain pins the
 current physical page before advancing; its owner has stable identity independent
 of pooled parsers.
 All views from that page remain valid until that lease closes. Clone detaches
-the current row using RowPlan.Clone. Copying a Go row struct does not detach it.
+the row the last NextInto decoded, using RowPlan.Clone. Copying a Go row struct does not detach it.
 Access through a released view reports ErrReleased where a method returns error;
 methods without error results panic with ErrReleased rather than reading
 recycled storage. Len/type metadata remain inspectable. Do not concurrently use
@@ -1429,7 +1425,7 @@ Session.Close atomically rejects new session work, sets Closed()==true, cancels
 active requests/pagers and background control/pool work, and closes connections
 to interrupt blocked I/O. It waits for accepted writers and driver workers to
 finish and releases only undelivered/prefetched pages. A delivered current page
-keeps its independent output owner until the application's next Next/NextInto or
+keeps its independent output owner until the application's next NextInto or
 Rows/Page Close, so Session.Close cannot recycle a still-valid current row.
 Shutdown and binding input drains do not wait for that output owner or
 independently retained PageLease objects. A subsequent Next releases the current

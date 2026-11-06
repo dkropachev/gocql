@@ -64,7 +64,8 @@ func TestV2IntegrationHelpers(t *testing.T) {
 	}
 	defer rows.Close()
 	count := 0
-	for rows.Next() {
+	var cur cql.DynamicRow
+	for rows.NextInto(&cur) {
 		count++
 	}
 	if err := rows.Close(); err != nil {

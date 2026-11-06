@@ -61,8 +61,9 @@ func cleanupNamespaces(t *testing.T, allowed []string) {
 		t.Fatal(err)
 	}
 	var names []string
-	for rows.Next() {
-		value, err := rows.Row().At(0)
+	var row cql.DynamicRow
+	for rows.NextInto(&row) {
+		value, err := row.At(0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -91,8 +92,8 @@ func cleanupNamespaces(t *testing.T, allowed []string) {
 		t.Fatal(err)
 	}
 	defer remaining.Close()
-	for remaining.Next() {
-		value, err := remaining.Row().At(0)
+	for remaining.NextInto(&row) {
+		value, err := row.At(0)
 		if err != nil {
 			t.Fatal(err)
 		}

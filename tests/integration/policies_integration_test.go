@@ -162,16 +162,17 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster gocql.Config, keyspac
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !rows.Next() {
+		var row cql.DynamicRow
+		if !rows.NextInto(&row) {
 			rows.Close()
 			t.Fatalf("missing routed row: %v", rows.Err())
 		}
-		if v2SchemaRoutingInt(t, rows.Row(), "pk") != 7 || v2SchemaRoutingInt(t, rows.Row(), "v") != 9 {
+		if v2SchemaRoutingInt(t, row, "pk") != 7 || v2SchemaRoutingInt(t, row, "v") != 9 {
 			rows.Close()
 			t.Fatal("unexpected routed row")
 		}
 		coordinator := rows.Info().HostID
-		if rows.Next() {
+		if rows.NextInto(&row) {
 			rows.Close()
 			t.Fatal("unexpected additional routed row")
 		}

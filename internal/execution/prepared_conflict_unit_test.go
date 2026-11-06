@@ -166,12 +166,12 @@ func TestV2PreparedConflictOverflowPropagatesAndRetries(t *testing.T) {
 	state.InternalHosts[host] = &other
 	page := testPage(t, "retained")
 	defer page.Close()
-	if !page.Next() {
+	var view cqltype.Bytes
+	if !page.NextInto(&view) {
 		t.Fatal(page.Err())
 	}
 	retained := codecTestMust(page.Retain())
 	defer retained.Close()
-	view := page.Row()
 	p := implCluster.InternalSessionPeripheral(s)
 	p.InternalMu.Lock()
 	p.InternalPreparedRefreshScopes = make(map[string]uint64)

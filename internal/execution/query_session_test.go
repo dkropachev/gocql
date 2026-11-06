@@ -279,7 +279,8 @@ func TestQueryRowsHandleGoesStaleOnNextExecution(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	first := codecTestMust(q.Run(ctx, codec.EmptyRecord{}))
-	if !first.Next() || string(first.Row().OwnedBytes()) != "first" {
+	var row cqltype.Bytes
+	if !first.NextInto(&row) || string(row.OwnedBytes()) != "first" {
 		t.Fatal(first.Err())
 	}
 	if err := first.Close(); err != nil {
@@ -290,7 +291,7 @@ func TestQueryRowsHandleGoesStaleOnNextExecution(t *testing.T) {
 	}
 	second := codecTestMust(q.Run(ctx, codec.EmptyRecord{}))
 	// The stale handle reports nothing and leaves the new execution alone.
-	if first.Next() || first.NextInto(new(cqltype.Bytes)) {
+	if first.NextInto(new(cqltype.Bytes)) {
 		t.Fatal("stale handle advanced")
 	}
 	if !errors.Is(first.Err(), ErrStaleRows) {
@@ -308,10 +309,10 @@ func TestQueryRowsHandleGoesStaleOnNextExecution(t *testing.T) {
 	if err := first.Close(); err != nil {
 		t.Fatal("stale close", err)
 	}
-	if !second.Next() || string(second.Row().OwnedBytes()) != "second" {
+	if !second.NextInto(&row) || string(row.OwnedBytes()) != "second" {
 		t.Fatal("stale close disturbed the new execution", second.Err())
 	}
-	if second.Next() || second.Err() != nil {
+	if second.NextInto(&row) || second.Err() != nil {
 		t.Fatal(second.Err())
 	}
 	if err := second.Close(); err != nil {
@@ -322,7 +323,7 @@ func TestQueryRowsHandleGoesStaleOnNextExecution(t *testing.T) {
 	}
 	<-served
 	var zero Rows[cqltype.Bytes]
-	if zero.Next() || zero.Err() != nil || zero.Close() != nil {
+	if zero.NextInto(&row) || zero.Err() != nil || zero.Close() != nil {
 		t.Fatal("zero Rows is not empty")
 	}
 }

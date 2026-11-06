@@ -35,9 +35,10 @@ func TestTracingNewAPI(t *testing.T) {
 	rows, err := Run(ctx, session, read, bindOptions(session, gocql.Options{Trace: true}))
 	require.NoError(t, err)
 	defer rows.Close()
-	require.True(t, rows.Next())
-	require.Equal(t, int32(42), rows.Row())
-	require.False(t, rows.Next())
+	var value int32
+	require.True(t, rows.NextInto(&value))
+	require.Equal(t, int32(42), value)
+	require.False(t, rows.NextInto(&value))
 	require.NoError(t, rows.Err())
 	selected := rows.Info()
 	require.NoError(t, rows.Close())

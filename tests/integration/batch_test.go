@@ -109,9 +109,10 @@ func TestBatch_WithNowInSeconds(t *testing.T) {
 	rows, err := Run(ctx, session, read, bindOptions(session, gocql.Options{NowInSeconds: cql.Option[int32]{Value: 10, Set: true}}))
 	require.NoError(t, err)
 	defer rows.Close()
-	require.True(t, rows.Next())
-	require.Equal(t, int32(10), rows.Row())
-	require.False(t, rows.Next())
+	var ttl int32
+	require.True(t, rows.NextInto(&ttl))
+	require.Equal(t, int32(10), ttl)
+	require.False(t, rows.NextInto(&ttl))
 	require.NoError(t, rows.Err())
 }
 
@@ -141,8 +142,8 @@ func TestBatch_SetKeyspace(t *testing.T) {
 	require.NoError(t, err)
 	defer rows.Close()
 	got := map[int64]string{}
-	for rows.Next() {
-		row := rows.Row()
+	var row cql.DynamicRow
+	for rows.NextInto(&row) {
 		value, err := row.Get("value")
 		require.NoError(t, err)
 		text, err := value.Text()

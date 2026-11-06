@@ -138,7 +138,8 @@ func TestMapScanUDT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !rows.Next() {
+	var retained cql.DynamicRow
+	if !rows.NextInto(&retained) {
 		t.Fatalf("missing row: %v", rows.Err())
 	}
 	lease, err := rows.Retain()
@@ -146,7 +147,6 @@ func TestMapScanUDT(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer lease.Close()
-	retained := rows.Row()
 	clone, err := rows.Clone()
 	if err != nil {
 		t.Fatal(err)

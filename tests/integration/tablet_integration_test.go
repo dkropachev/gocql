@@ -92,11 +92,11 @@ func TestTablets(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !rows.Next() {
+			var row cql.DynamicRow
+			if !rows.NextInto(&row) {
 				rows.Close()
 				t.Fatalf("missing tablet row %d: %v", i, rows.Err())
 			}
-			row := rows.Row()
 			if v2SchemaRoutingInt(t, row, "pk") != i || v2SchemaRoutingInt(t, row, "ck") != i%5 || v2SchemaRoutingInt(t, row, "v") != i%2 {
 				rows.Close()
 				t.Fatal("unexpected tablet row")
@@ -115,7 +115,7 @@ func TestTablets(t *testing.T) {
 				}
 				t.Logf("Attempt %d: received tablet hint (replicas: %s), backing off %v", attempt, tablet.Replicas(), backoffDelay)
 			}
-			if rows.Next() {
+			if rows.NextInto(&row) {
 				rows.Close()
 				t.Fatal("unexpected additional tablet row")
 			}

@@ -87,7 +87,8 @@ func TestTimestampHookOnceAcrossRetryAndPages(t *testing.T) {
 	b := runtimeQuery(t)
 	rows := codecTestMust(Run(ctx, s, b, options))
 	var count int
-	for rows.Next() {
+	var row cqltype.Bytes
+	for rows.NextInto(&row) {
 		count++
 	}
 	if err := rows.Close(); err != nil {
@@ -445,7 +446,8 @@ func TestIncludeMetadataOverrideChangesExecuteWireFlag(t *testing.T) {
 	defer cancel()
 	for _, include := range []bool{false, true, false} {
 		page := codecTestMust(RunUnpaged(ctx, s, bound, testOptions(OptionValues{IncludeMetadata: include})))
-		if !page.Next() || string(page.Row().OwnedBytes()) != "value" {
+		var row cqltype.Bytes
+		if !page.NextInto(&row) || string(row.OwnedBytes()) != "value" {
 			t.Fatal(page.Err())
 		}
 		if err := page.Close(); err != nil {

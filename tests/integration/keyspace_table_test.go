@@ -74,12 +74,12 @@ func TestKeyspaceTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	if !rows.Next() {
+	var row cql.DynamicRow
+	if !rows.NextInto(&row) {
 		t.Fatalf("missing row: %v", rows.Err())
 	}
-	row := rows.Row()
 	tests.AssertEqual(t, "pk", int32(1), v2SchemaRoutingInt(t, row, "pk"))
-	if rows.Next() {
+	if rows.NextInto(&row) {
 		t.Fatal("unexpected extra row")
 	}
 	if err := rows.Err(); err != nil {

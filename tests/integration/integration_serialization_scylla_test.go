@@ -338,10 +338,10 @@ func dynamicSerializationResult(t *testing.T, s *gocql.Session, stmt, method str
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	if !rows.Next() {
+	var row cql.DynamicRow
+	if !rows.NextInto(&row) {
 		t.Fatalf("expected one row: %v", rows.Err())
 	}
-	var row cql.DynamicRow
 	if method == "SliceMap" {
 		row, err = rows.Clone()
 		if err != nil {
@@ -353,7 +353,6 @@ func dynamicSerializationResult(t *testing.T, s *gocql.Session, stmt, method str
 			t.Fatal(e)
 		}
 		defer lease.Close()
-		row = rows.Row()
 		if e = rows.Close(); e != nil {
 			t.Fatal(e)
 		}
@@ -367,7 +366,8 @@ func dynamicSerializationResult(t *testing.T, s *gocql.Session, stmt, method str
 		t.Fatal(err)
 	}
 	if method == "SliceMap" {
-		if rows.Next() {
+		var extra cql.DynamicRow
+		if rows.NextInto(&extra) {
 			t.Fatal("more than one row")
 		}
 		if err := rows.Err(); err != nil {

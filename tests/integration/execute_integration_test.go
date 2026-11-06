@@ -148,8 +148,8 @@ func TestV2RuntimeDatabaseSmoke(t *testing.T) {
 	var retained *gocql.PageLease
 	var view cql.Bytes
 	var detached output
-	for result.Next() {
-		row := result.Row()
+	var row output
+	for result.NextInto(&row) {
 		if !bytes.Equal(row.Value.OwnedBytes(), payload) {
 			t.Fatal("large payload changed")
 		}

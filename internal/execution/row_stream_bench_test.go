@@ -36,7 +36,7 @@ import (
 // logical API setup; they are not database/socket throughput numbers.
 func BenchmarkExecutionStorage(b *testing.B) {
 	for _, shape := range []struct{ rows, cell int }{{1, 1024}, {100, 1024}, {1000, 1024}, {1, 400 << 10}, {1, 8 << 20}} {
-		for _, mode := range []string{"row", "into", "stream"} {
+		for _, mode := range []string{"into", "stream"} {
 			b.Run(fmt.Sprintf("%s/rows=%d/cell=%d", mode, shape.rows, shape.cell), func(b *testing.B) {
 				s, cs, peers := runtimeTestSession(b, 1)
 				c, peer := cs[0], peers[0]
@@ -88,19 +88,7 @@ func BenchmarkExecutionStorage(b *testing.B) {
 						}
 						count := 0
 						var view cqltype.Bytes
-						for {
-							ok := false
-							if mode == "row" {
-								ok = rows.Next()
-								if ok {
-									view = rows.Row()
-								}
-							} else {
-								ok = rows.NextInto(&view)
-							}
-							if !ok {
-								break
-							}
+						for rows.NextInto(&view) {
 							if view.Len() != int64(shape.cell) {
 								b.Fatal("size")
 							}

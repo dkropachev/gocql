@@ -51,8 +51,9 @@ func Example_dynamicColumns() {
 		log.Fatal(err)
 	}
 	defer rows.Close()
-	for rows.Next() {
-		fmt.Println(rows.Columns(), rows.Row())
+	var row cql.DynamicRow
+	for rows.NextInto(&row) {
+		fmt.Println(rows.Columns(), row)
 	}
 	if err := rows.Err(); err != nil {
 		log.Fatal(err)

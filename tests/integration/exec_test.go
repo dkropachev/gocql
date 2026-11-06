@@ -33,9 +33,10 @@ func TestSingleHostQueryExecutor(t *testing.T) {
 	rows, err := Run(ctx, session, bound, gocql.SessionOptions{})
 	require.NoError(t, err)
 	defer rows.Close()
-	require.True(t, rows.Next())
-	require.False(t, cql.UUID(rows.Row()).IsEmpty())
-	require.False(t, rows.Next())
+	var now cql.TimeUUID
+	require.True(t, rows.NextInto(&now))
+	require.False(t, cql.UUID(now).IsEmpty())
+	require.False(t, rows.NextInto(&now))
 	require.NoError(t, rows.Err())
 	require.Equal(t, hostID, rows.Info().HostID)
 	for _, host := range session.Metadata().Hosts() {

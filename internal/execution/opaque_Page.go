@@ -13,7 +13,6 @@ import (
 type PageStorage[R any] struct {
 	InternalCtx       context.Context
 	InternalPlan      RowPlan[R]
-	current           R
 	err               error
 	pendingRelease    func()
 	destination       *R

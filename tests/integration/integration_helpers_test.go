@@ -266,7 +266,8 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 		return cql.DynamicRow{}, err
 	}
 	defer rows.Close()
-	if !rows.Next() {
+	var cur cql.DynamicRow
+	if !rows.NextInto(&cur) {
 		if err := rows.Err(); err != nil {
 			return cql.DynamicRow{}, err
 		}
@@ -276,7 +277,7 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 	if err != nil {
 		return cql.DynamicRow{}, err
 	}
-	if rows.Next() {
+	if rows.NextInto(&cur) {
 		return cql.DynamicRow{}, gocql.ErrMultipleRows
 	}
 	if err := rows.Err(); err != nil {

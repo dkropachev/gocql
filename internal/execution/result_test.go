@@ -26,10 +26,10 @@ func TestV2RuntimePageLeaseAndClone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !page.Next() {
+	var view cql.Bytes
+	if !page.NextInto(&view) {
 		t.Fatal(page.Err())
 	}
-	view := page.Row()
 	clone, err := page.Clone()
 	if err != nil {
 		t.Fatal(err)

@@ -127,14 +127,15 @@ func cassandraReadBound[R any](t testing.TB, s *gocql.Session, b *Bound[R], opti
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	if !rows.Next() {
+	var cur R
+	if !rows.NextInto(&cur) {
 		t.Fatalf("expected one row: %v", rows.Err())
 	}
 	row, err := rows.Clone()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rows.Next() {
+	if rows.NextInto(&cur) {
 		t.Fatal("expected exactly one row")
 	}
 	if err := rows.Err(); err != nil {
@@ -166,7 +167,8 @@ func cassandraRows(t testing.TB, s *gocql.Session, b *Bound[cql.DynamicRow], opt
 	}
 	defer rows.Close()
 	var result []cql.DynamicRow
-	for rows.Next() {
+	var cur cql.DynamicRow
+	for rows.NextInto(&cur) {
 		row, err := rows.Clone()
 		if err != nil {
 			t.Fatal(err)

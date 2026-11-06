@@ -38,15 +38,8 @@ func (r Rows[R]) live() *rowsImpl[R] {
 
 func (r Rows[R]) stale() bool { return r.impl != nil && r.impl.gen.Load() != r.gen }
 
-// Next advances to the next row, fetching continuation pages as needed.
-func (r Rows[R]) Next() bool {
-	if impl := r.live(); impl != nil {
-		return impl.Next()
-	}
-	return false
-}
-
-// NextInto decodes the next row into dst.
+// NextInto decodes the next row into dst, fetching continuation pages as
+// needed, and reports whether there was one.
 func (r Rows[R]) NextInto(dst *R) bool {
 	if impl := r.live(); impl != nil {
 		return impl.NextInto(dst)
@@ -55,14 +48,6 @@ func (r Rows[R]) NextInto(dst *R) bool {
 		InternalClearDestination(dst)
 	}
 	return false
-}
-
-// Row returns the current row. It panics with ErrNoRows without one.
-func (r Rows[R]) Row() R {
-	if impl := r.live(); impl != nil {
-		return impl.Row()
-	}
-	panic(ErrNoRows)
 }
 
 // Err returns the error that ended iteration, if any.
@@ -93,7 +78,7 @@ func (r Rows[R]) Retain() (*PageLease, error) {
 	return nil, ErrNoRows
 }
 
-// Clone returns an owned copy of the current row.
+// Clone returns an owned copy of the row the last NextInto decoded.
 func (r Rows[R]) Clone() (R, error) {
 	if impl := r.live(); impl != nil {
 		return impl.Clone()

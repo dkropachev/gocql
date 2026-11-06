@@ -146,11 +146,10 @@ func TestSessionClosePreservesDeliveredPageAndDrains(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !r.Next() {
+				if !r.NextInto(&view) {
 					t.Fatal(r.Err())
 				}
-				view = r.Row()
-				advance = r.Next
+				advance = func() bool { var next cqltype.Bytes; return r.NextInto(&next) }
 				closeRows = r.Close
 				retain = r.Retain
 			} else {
@@ -158,11 +157,10 @@ func TestSessionClosePreservesDeliveredPageAndDrains(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !p.Next() {
+				if !p.NextInto(&view) {
 					t.Fatal(p.Err())
 				}
-				view = p.Row()
-				advance = p.Next
+				advance = func() bool { var next cqltype.Bytes; return p.NextInto(&next) }
 				closeRows = p.Close
 				retain = p.Retain
 			}
@@ -245,7 +243,8 @@ func TestObserverAndLoggerPanicsContained(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !rows.Next() {
+	var row cqltype.Bytes
+	if !rows.NextInto(&row) {
 		t.Fatal(rows.Err())
 	}
 	rows.Close()

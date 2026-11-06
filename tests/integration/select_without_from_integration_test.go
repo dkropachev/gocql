@@ -174,13 +174,14 @@ func TestSelectWithoutFromLiteral(t *testing.T) {
 	if rows.Info().Rows != 1 {
 		t.Fatalf("page rows=%d want1", rows.Info().Rows)
 	}
-	if !rows.Next() {
+	var row cql.DynamicRow
+	if !rows.NextInto(&row) {
 		t.Fatalf("missing row: %v", rows.Err())
 	}
-	if n := noFromInt(t, rows.Row(), 0); n != 1 {
+	if n := noFromInt(t, row, 0); n != 1 {
 		t.Fatalf("got%d want1", n)
 	}
-	if rows.Next() {
+	if rows.NextInto(&row) {
 		t.Fatal("virtual table returned a second row")
 	}
 	if err := rows.Err(); err != nil {
@@ -204,7 +205,8 @@ func TestSelectWithoutFromFilteredOut(t *testing.T) {
 		if rows.Columns().Len() != 1 || rows.Info().Rows != 0 {
 			t.Fatal("empty result must retain one column and zero rows")
 		}
-		if rows.Next() {
+		var row cql.DynamicRow
+		if rows.NextInto(&row) {
 			t.Fatal("filtered virtual row returned")
 		}
 		if err := rows.Err(); err != nil {
@@ -357,15 +359,15 @@ func TestSelectWithoutFromExecutionModes(t *testing.T) {
 			} else if !columns.Equal(baseline) {
 				t.Fatal("metadata differs across execution modes")
 			}
-			if !rows.Next() {
+			var row cql.DynamicRow
+			if !rows.NextInto(&row) {
 				t.Fatalf("missing row: %v", rows.Err())
 			}
-			row := rows.Row()
 			yes, e := noFromValue(t, row, 2).Bool()
 			if e != nil || !yes || noFromInt(t, row, 0) != 1 || noFromText(t, row, 1) != "a" {
 				t.Fatal("wrong selector values")
 			}
-			if rows.Next() {
+			if rows.NextInto(&row) {
 				t.Fatal("extra virtual row")
 			}
 			if err := rows.Err(); err != nil {
@@ -450,10 +452,11 @@ func TestSelectWithoutFromRoutingKey(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer rows.Close()
-			if !rows.Next() {
+			var row cql.DynamicRow
+			if !rows.NextInto(&row) {
 				t.Fatalf("query after routing failed: %v", rows.Err())
 			}
-			if rows.Next() {
+			if rows.NextInto(&row) {
 				t.Fatal("unexpected extra row")
 			}
 			if err := rows.Err(); err != nil {
@@ -515,8 +518,9 @@ func TestSelectWithoutFromMapScan(t *testing.T) {
 	t.Run("SliceMap", func(t *testing.T) {
 		rows := noFromRows(t, session, stmt)
 		var owned []cql.DynamicRow
-		for rows.Next() {
-			owned = append(owned, rows.Row().Clone())
+		var row cql.DynamicRow
+		for rows.NextInto(&row) {
+			owned = append(owned, row.Clone())
 		}
 		if err := rows.Err(); err != nil {
 			t.Fatal(err)
@@ -630,10 +634,11 @@ func TestSelectWithoutFromRejected(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer typed.Close()
-			if !typed.Next() || typed.Row() != 1 {
+			var value int32
+			if !typed.NextInto(&value) || value != 1 {
 				t.Fatalf("same connection wrong row: %v", typed.Err())
 			}
-			if typed.Next() {
+			if typed.NextInto(&value) {
 				t.Fatal("extra virtual row")
 			}
 			if err := typed.Err(); err != nil {

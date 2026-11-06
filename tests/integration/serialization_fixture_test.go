@@ -64,7 +64,8 @@ func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecod
 		return zero, err
 	}
 	defer rows.Close()
-	if !rows.Next() {
+	var current R
+	if !rows.NextInto(&current) {
 		if err := rows.Err(); err != nil {
 			return zero, err
 		}
@@ -74,7 +75,7 @@ func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecod
 	if err != nil {
 		return zero, err
 	}
-	if rows.Next() {
+	if rows.NextInto(&current) {
 		return zero, gocql.ErrMultipleRows
 	}
 	if err := rows.Err(); err != nil {

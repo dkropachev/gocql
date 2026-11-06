@@ -119,7 +119,8 @@ func ExecBatch(ctx context.Context, s *implCluster.Session, kind BatchKind, item
 		return InternalExecutionErrorResult(err), err
 	}
 	defer page.Close()
-	for page.Next() {
+	var row EmptyRecord
+	for page.NextInto(&row) {
 	}
 	if page.Err() == nil && page.Columns().Len() > 0 {
 		page.privateStorage.err = typeValidation("ExecBatch", "result columns require RunBatch")

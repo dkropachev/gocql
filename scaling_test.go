@@ -213,7 +213,8 @@ func TestOptionalWorkCounts(t *testing.T) {
 			implExecution.ResetPerfCounters()
 			wire.ResetPerfCounters()
 			rows := codecTestMust(Run(context.Background(), s, bound, bindOptions(s, options)))
-			for rows.Next() {
+			var row cql.Bytes
+			for rows.NextInto(&row) {
 			}
 			if e := rows.Err(); e != nil {
 				t.Fatal(e)
@@ -289,18 +290,19 @@ func TestRetainedPrefetchCharges(t *testing.T) {
 								errors <- e
 								return
 							}
-							if !rows.Next() {
+							var view cql.Bytes
+							if !rows.NextInto(&view) {
 								errors <- rows.Err()
 								return
 							}
-							view := rows.Row()
 							lease, e := rows.Retain()
 							if e != nil {
 								errors <- e
 								return
 							}
 							count := 1
-							for rows.Next() {
+							var next cql.Bytes
+							for rows.NextInto(&next) {
 								count++
 							}
 							if rows.Err() != nil || count != 3*cells {

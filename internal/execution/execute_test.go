@@ -120,15 +120,16 @@ func TestV2RuntimePagerEmptyContinuationAndProfileSnapshot(t *testing.T) {
 		t.Fatal("profile changed after admission")
 	}
 	bound.Close()
-	if !rows.Next() || string(rows.Row().OwnedBytes()) != "row" {
+	var view cqltype.Bytes
+	if !rows.NextInto(&view) || string(view.OwnedBytes()) != "row" {
 		t.Fatal(rows.Err())
 	}
 	retained, err := rows.Retain()
 	if err != nil {
 		t.Fatal(err)
 	}
-	view := rows.Row()
-	if rows.Next() {
+	var tail cqltype.Bytes
+	if rows.NextInto(&tail) {
 		t.Fatal("unexpected row")
 	}
 	if err = rows.Err(); err != nil {
@@ -161,7 +162,8 @@ func TestV2RuntimeRepeatedPagingState(t *testing.T) {
 	}
 	defer rows.Close()
 	count := 0
-	for rows.Next() {
+	var row cqltype.Bytes
+	for rows.NextInto(&row) {
 		count++
 	}
 	if count != 2 || !errors.Is(rows.Err(), runtimeerrors.ErrPagingNoProgress) {
@@ -215,7 +217,8 @@ func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Dura
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !page.Next() || string(page.Row().OwnedBytes()) != "winner" {
+	var row cqltype.Bytes
+	if !page.NextInto(&row) || string(row.OwnedBytes()) != "winner" {
 		t.Fatal(page.Err())
 	}
 	bound.Close()
@@ -315,7 +318,8 @@ func TestV2RuntimeDelayedRetries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !page.Next() || string(page.Row().OwnedBytes()) != "retried" {
+	var row cqltype.Bytes
+	if !page.NextInto(&row) || string(row.OwnedBytes()) != "retried" {
 		t.Fatal("delayed retry result", page.Err())
 	}
 	page.Close()

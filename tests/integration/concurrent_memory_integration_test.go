@@ -108,7 +108,7 @@ func TestConcurrentLiveMemory(t *testing.T) {
 	fixed := mem().HeapAlloc
 	records := []concurrentMemory{}
 	for _, workers := range []int{1, 4, 8} {
-		for _, api := range []string{"row", "into", "stream"} {
+		for _, api := range []string{"into", "stream"} {
 			if api == "stream" && config.Protocol < 5 && config.Compression != gocql.NoCompression {
 				continue
 			}
@@ -195,19 +195,7 @@ func TestConcurrentLiveMemory(t *testing.T) {
 							}
 							defer rows.Close()
 							var view testBorrowed
-							for {
-								ok := false
-								if api == "row" {
-									ok = rows.Next()
-									if ok {
-										view = rows.Row()
-									}
-								} else {
-									ok = rows.NextInto(&view)
-								}
-								if !ok {
-									break
-								}
+							for rows.NextInto(&view) {
 								dst.ID = view.ID
 								dst.Payload = dst.Payload[:4096]
 								if _, e = view.Payload.CopyTo(dst.Payload); e != nil {

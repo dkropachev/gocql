@@ -124,7 +124,8 @@ func cleanupNamespace(s *gocql.Session) error {
 		return err
 	}
 	defer rows.Close()
-	if rows.Next() {
+	var name cql.Text
+	if rows.NextInto(&name) {
 		return fmt.Errorf("owned benchmark namespace survived cleanup: %s", corpus.Namespace)
 	}
 	if err := rows.Err(); err != nil {
@@ -219,9 +220,10 @@ func benchReadContext(ctx context.Context, s *gocql.Session, id int32) error {
 	}
 	defer rows.Close()
 	count := 0
-	for rows.Next() {
+	var name cql.Text
+	for rows.NextInto(&name) {
 		count++
-		if got, want := rows.Row().String(), fmt.Sprintf("Name_%d", id); got != want {
+		if got, want := name.String(), fmt.Sprintf("Name_%d", id); got != want {
 			return fmt.Errorf("recorded name %q, want %q", got, want)
 		}
 	}

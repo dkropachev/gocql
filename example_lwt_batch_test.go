@@ -85,8 +85,8 @@ func ExampleRunBatch_conditional() {
 		log.Fatal(err)
 	}
 	defer page.Close()
-	for page.Next() {
-		value := page.Row()
+	var value cql.CASResult[previous]
+	for page.NextInto(&value) {
 		fmt.Println("applied:", value.Applied)
 		if value.Previous.Set {
 			fmt.Println(value.Previous.Value.CK, value.Previous.Value.Version)

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/endpoint"
 )
 
@@ -75,7 +76,8 @@ func TestDNS(t *testing.T) {
 
 		rows, err := v2Query(context.Background(), s, "select * from system.peers")
 		if err == nil {
-			for rows.Next() {
+			var row cql.DynamicRow
+			for rows.NextInto(&row) {
 			}
 			err = rows.Err()
 			rows.Close()

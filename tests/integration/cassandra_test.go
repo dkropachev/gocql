@@ -141,9 +141,10 @@ func TestTracing(t *testing.T) {
 		rows, err := Run(context.Background(), session, read, bindOptions(session, gocql.Options{Trace: true}))
 		require.NoError(t, err)
 		defer rows.Close()
-		require.True(t, rows.Next())
-		require.Equal(t, int64(42), cassandraInt(t, rows.Row(), "id"))
-		require.False(t, rows.Next())
+		var row cql.DynamicRow
+		require.True(t, rows.NextInto(&row))
+		require.Equal(t, int64(42), cassandraInt(t, row, "id"))
+		require.False(t, rows.NextInto(&row))
 		require.NoError(t, rows.Close())
 		checkTrace(rows.Info().TraceIDs())
 	}
@@ -170,7 +171,8 @@ func TestObserve(t *testing.T) {
 	rows, err := Run(context.Background(), session, read, bindOptions(session, gocql.Options{Observer: observer}))
 	require.NoError(t, err)
 	defer rows.Close()
-	require.False(t, rows.Next())
+	var row cql.DynamicRow
+	require.False(t, rows.NextInto(&row))
 	require.NoError(t, rows.Close())
 	check(selectCQL, false)
 	observer.reset()
@@ -213,12 +215,13 @@ func TestObserve_Pagination(t *testing.T) {
 	rows, err := Run(context.Background(), session, bound, bindOptions(session, gocql.Options{PageSize: cql.Option[int32]{Value: 10, Set: true}, Prefetch: cql.Option[int]{Value: 0, Set: true}, Observer: observer}))
 	require.NoError(t, err)
 	defer rows.Close()
+	var row cql.DynamicRow
 	for i := 0; i < 50; i++ {
-		require.True(t, rows.Next(), "row %d: %v", i, rows.Err())
+		require.True(t, rows.NextInto(&row), "row %d: %v", i, rows.Err())
 		_, attempts := observer.snapshot()
 		require.Equal(t, i/10+1, len(attempts))
 	}
-	require.False(t, rows.Next())
+	require.False(t, rows.NextInto(&row))
 	require.NoError(t, rows.Close())
 	events, attempts := observer.snapshot()
 	require.Len(t, events, 1)
@@ -293,7 +296,8 @@ func TestPagingWithAllowFiltering(t *testing.T) {
 					// RunPage exposes empty tombstone/filter pages. Their continuation
 					// must still advance, and their reported count must match decoded rows.
 					pageRows := int64(0)
-					for page.Next() {
+					var cur cql.DynamicRow
+					for page.NextInto(&cur) {
 						pageRows++
 						row, err := page.Clone()
 						require.NoError(t, err)
@@ -377,10 +381,11 @@ func TestCAS(t *testing.T) {
 		require.NoError(t, err)
 		defer page.Close()
 		count := 0
-		for page.Next() {
-			require.Equal(t, wantApplied, page.Row().Applied)
+		var row cql.CASResult[cql.DynamicRow]
+		for page.NextInto(&row) {
+			require.Equal(t, wantApplied, row.Applied)
 			if !wantApplied {
-				require.True(t, page.Row().Previous.Set)
+				require.True(t, row.Previous.Set)
 			}
 			count++
 		}
@@ -746,8 +751,9 @@ func TestSliceMap(t *testing.T) {
 	cursor, err := Run(context.Background(), session, bound, gocql.SessionOptions{})
 	require.NoError(t, err)
 	defer cursor.Close()
-	require.True(t, cursor.Next())
-	check(cursor.Row())
+	var row cql.DynamicRow
+	require.True(t, cursor.NextInto(&row))
+	check(row)
 	require.NoError(t, cursor.Close())
 	check(cassandraRead(t, session, "SELECT * FROM "+table))
 }
@@ -799,8 +805,9 @@ func TestScanWithNilArguments(t *testing.T) {
 	require.NoError(t, err)
 	defer rows.Close()
 	var sum int32
-	for rows.Next() {
-		sum += rows.Row().N
+	var row result
+	for rows.NextInto(&row) {
+		sum += row.N
 	}
 	require.NoError(t, rows.Close())
 	require.Equal(t, int32(2870), sum)
@@ -1218,7 +1225,8 @@ func TestVarint(t *testing.T) {
 	rows, err := Run(context.Background(), session, cassandraUnprepared(t, selectCQL, cql.OneColumn(cassandraVarintInt64{})), gocql.SessionOptions{})
 	require.NoError(t, err)
 	defer rows.Close()
-	require.False(t, rows.Next())
+	var narrowed int64
+	require.False(t, rows.NextInto(&narrowed))
 	require.ErrorContains(t, rows.Close(), "int64 range")
 	absent := cassandraReadBound(t, session, cassandraUnprepared(t, "SELECT test2 FROM "+table, cql.OneColumn(cql.NullableCodec(cql.VarintCodec))), gocql.Options{})
 	require.False(t, absent.Valid)
@@ -1233,7 +1241,8 @@ func TestQueryStats(t *testing.T) {
 	before := session.Metrics()
 	rows, err := v2Query(context.Background(), session, "SELECT * FROM system.peers")
 	require.NoError(t, err)
-	for rows.Next() {
+	var row cql.DynamicRow
+	for rows.NextInto(&row) {
 	}
 	require.NoError(t, rows.Close())
 	info := rows.Info()
@@ -1809,8 +1818,8 @@ func TestManualQueryPaging(t *testing.T) {
 		page, err := RunPage(context.Background(), session, bound, state, bindOptions(session, gocql.Options{PageSize: cql.Option[int32]{Value: 2, Set: true}}))
 		require.NoError(t, err)
 		defer page.Close()
-		for page.Next() {
-			row := page.Row()
+		var row cql.DynamicRow
+		for page.NextInto(&row) {
 			id := cassandraInt(t, row, "id")
 			require.Equal(t, id*id, cassandraInt(t, row, "count"))
 			fetched++
@@ -2274,8 +2283,8 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 		require.NoError(t, err)
 		defer rows.Close()
 		found := map[int64]cql.Value{}
-		for rows.Next() {
-			row := rows.Row()
+		var row cql.DynamicRow
+		for rows.NextInto(&row) {
 			require.Equal(t, 2, row.Columns().Len())
 			found[cassandraInt(t, row, "id")] = cassandraField(t, row, "new_col").Clone()
 		}

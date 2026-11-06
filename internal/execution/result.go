@@ -83,16 +83,8 @@ func (p *Page[R]) initResponse(response *responsePage, plan RowPlan[R], release 
 	p.privateStorage.InternalCursor = wire.CursorOver(response.Rows)
 	p.privateStorage.InternalRelease = release
 }
-func (p *Page[R]) Next() bool {
-	if p == nil {
-		return false
-	}
-	if !p.privateStorage.cursor.current() {
-		return false
-	}
-	defer p.afterAdvance()
-	return p.advance(nil, false)
-}
+
+// NextInto decodes the next row into dst, reporting whether there was one.
 func (p *Page[R]) NextInto(dst *R) bool {
 	if p == nil {
 		InternalClearDestination(dst)
@@ -102,7 +94,7 @@ func (p *Page[R]) NextInto(dst *R) bool {
 		return false
 	}
 	defer p.afterAdvance()
-	ok := p.advance(dst, true)
+	ok := p.advance(dst)
 	if !ok && !codec.PreservesRowDestination(p.privateStorage.InternalPlan) {
 		InternalClearDestination(dst)
 	}
@@ -114,13 +106,13 @@ func InternalClearDestination[R any](dst *R) {
 		*dst = zero
 	}
 }
-func (p *Page[R]) advance(dst *R, into bool) bool {
+func (p *Page[R]) advance(dst *R) bool {
 	p.privateStorage.valid = false
 	p.privateStorage.destination = nil
 	if p.privateStorage.closed || p.privateStorage.InternalExhausted || p.privateStorage.err != nil {
 		return false
 	}
-	if into && dst == nil {
+	if dst == nil {
 		p.privateStorage.err = typeValidation("destination", "nil row destination")
 		return false
 	}
@@ -137,23 +129,17 @@ func (p *Page[R]) advance(dst *R, into bool) bool {
 	if p.privateStorage.InternalIndex >= p.privateStorage.InternalResponse.RowCount {
 		p.privateStorage.InternalExhausted = true
 		p.privateStorage.reader = RowReader{}
-		InternalClearDestination(&p.privateStorage.current)
 		if err := (&p.privateStorage.InternalCursor).RequireEnd(); err != nil {
 			p.privateStorage.err = &ProtocolError{Stage: "rows", Err: err}
 		}
 		return false
 	}
 	p.privateStorage.reader = codec.RowReaderFromCursor(p.privateStorage.InternalResponse.Columns, &p.privateStorage.InternalCursor, p.privateStorage.InternalResponse.Owner)
-	var err error
-	if into {
-		// The plan receives the actual application destination, never a row temporary.
-		if !codec.PreservesRowDestination(p.privateStorage.InternalPlan) {
-			InternalClearDestination(dst)
-		}
-		err = p.privateStorage.InternalPlan.DecodeInto(&p.privateStorage.reader, dst)
-	} else {
-		p.privateStorage.current, err = p.privateStorage.InternalPlan.Decode(&p.privateStorage.reader)
+	// The plan receives the actual application destination, never a row temporary.
+	if !codec.PreservesRowDestination(p.privateStorage.InternalPlan) {
+		InternalClearDestination(dst)
 	}
+	err := p.privateStorage.InternalPlan.DecodeInto(&p.privateStorage.reader, dst)
 	if err == nil {
 		err = finishRowReader(&p.privateStorage.reader)
 	}
@@ -165,31 +151,12 @@ func (p *Page[R]) advance(dst *R, into bool) bool {
 	}
 	if err != nil {
 		p.privateStorage.err = err
-		InternalClearDestination(&p.privateStorage.current)
 		return false
 	}
 	p.privateStorage.InternalIndex++
 	p.privateStorage.valid = true
-	if into {
-		p.privateStorage.destination = dst
-		InternalClearDestination(&p.privateStorage.current)
-	}
+	p.privateStorage.destination = dst
 	return true
-}
-func (p *Page[R]) currentRow() R {
-	if p.privateStorage.destination != nil {
-		return *p.privateStorage.destination
-	}
-	return p.privateStorage.current
-}
-func (p *Page[R]) Row() R {
-	if p == nil {
-		panic(ErrNoRows)
-	}
-	if !p.privateStorage.valid || p.privateStorage.closed {
-		panic(ErrNoRows)
-	}
-	return p.currentRow()
 }
 func (p *Page[R]) Err() error {
 	if p == nil {
@@ -218,7 +185,6 @@ func (p *Page[R]) closeLocked() {
 	p.privateStorage.closed = true
 	p.privateStorage.valid = false
 	p.privateStorage.destination = nil
-	InternalClearDestination(&p.privateStorage.current)
 	p.privateStorage.reader = RowReader{}
 	p.privateStorage.InternalResponse.Owner.Release()
 	if p.privateStorage.InternalRelease != nil {
@@ -251,7 +217,7 @@ func (p *Page[R]) Clone() (R, error) {
 		var zero R
 		return zero, ErrNoRows
 	}
-	return p.privateStorage.InternalPlan.Clone(p.currentRow()), nil
+	return p.privateStorage.InternalPlan.Clone(*p.privateStorage.destination), nil
 }
 func (p *Page[R]) State() PageState {
 	if p == nil {
@@ -279,17 +245,6 @@ type rowsImpl[R any] struct {
 	gen            atomic.Uint64 // the generation handles must carry to use it
 }
 
-func (r *rowsImpl[R]) Next() bool {
-	if r == nil {
-		return false
-	}
-	if !r.privateStorage.cursor.current() {
-		return false
-	}
-	r.privateStorage.mu.Lock()
-	defer r.unlockAfterAdvance()
-	return r.advance(nil, false)
-}
 func (r *rowsImpl[R]) NextInto(dst *R) bool {
 	if r == nil {
 		InternalClearDestination(dst)
@@ -300,18 +255,18 @@ func (r *rowsImpl[R]) NextInto(dst *R) bool {
 	}
 	r.privateStorage.mu.Lock()
 	defer r.unlockAfterAdvance()
-	ok := r.advance(dst, true)
+	ok := r.advance(dst)
 	if !ok && (r.privateStorage.InternalPage == nil || !codec.PreservesRowDestination(r.privateStorage.InternalPage.privateStorage.InternalPlan)) {
 		InternalClearDestination(dst)
 	}
 	return ok
 }
-func (r *rowsImpl[R]) advance(dst *R, into bool) bool {
+func (r *rowsImpl[R]) advance(dst *R) bool {
 	if r == nil || r.privateStorage.closed || r.privateStorage.err != nil {
 		return false
 	}
 	r.privateStorage.valid = false
-	if into && dst == nil {
+	if dst == nil {
 		r.privateStorage.err = typeValidation("destination", "nil row destination")
 		r.closeLocked()
 		return false
@@ -330,13 +285,7 @@ func (r *rowsImpl[R]) advance(dst *R, into bool) bool {
 			r.closeLocked()
 			return false
 		}
-		var advanced bool
-		if into {
-			advanced = r.privateStorage.InternalPage.NextInto(dst)
-		} else {
-			advanced = r.privateStorage.InternalPage.Next()
-		}
-		if advanced {
+		if r.privateStorage.InternalPage.NextInto(dst) {
 			if err := r.privateStorage.InternalCtx.Err(); err != nil {
 				r.privateStorage.err = err
 				r.closeLocked()
@@ -399,17 +348,6 @@ func (r *rowsImpl[R]) advance(dst *R, into bool) bool {
 		}
 		r.startPrefetch()
 	}
-}
-func (r *rowsImpl[R]) Row() R {
-	if r == nil {
-		panic(ErrNoRows)
-	}
-	r.privateStorage.mu.Lock()
-	defer r.privateStorage.mu.Unlock()
-	if !r.privateStorage.valid || r.privateStorage.closed {
-		panic(ErrNoRows)
-	}
-	return r.privateStorage.InternalPage.Row()
 }
 func (r *rowsImpl[R]) Err() error {
 	if r == nil {

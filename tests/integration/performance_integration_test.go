@@ -259,7 +259,7 @@ func TestNativePerformance(t *testing.T) {
 	results := []testResult{}
 	var measureMu sync.Mutex
 	for _, shape := range shapes {
-		for _, api := range []string{"row", "into", "stream"} {
+		for _, api := range []string{"into", "stream"} {
 			if api == "stream" && config.Protocol < 5 && config.Compression != gocql.NoCompression {
 				continue
 			}
@@ -317,19 +317,7 @@ func TestNativePerformance(t *testing.T) {
 						}
 						defer rows.Close()
 						var view testBorrowed
-						for {
-							ok := false
-							if api == "row" {
-								ok = rows.Next()
-								if ok {
-									view = rows.Row()
-								}
-							} else {
-								ok = rows.NextInto(&view)
-							}
-							if !ok {
-								break
-							}
+						for rows.NextInto(&view) {
 							dst.ID = view.ID
 							dst.Payload = dst.Payload[:shape.Cell]
 							if _, e = view.Payload.CopyTo(dst.Payload); e != nil {

@@ -41,8 +41,11 @@ if err != nil { return err }
 fmt.Println(found, name)
 ```
 
-`Exec` handles statements with no result columns; `Each` visits every row and
-`Run` returns an iterator; `RunPage` gives explicit paging. A nil `Params` or
+`Exec` handles statements with no result columns. Read rows with `One` for a
+single row and `Each` to visit every row: both reuse the query's scratch space
+and leave nothing to close. `Run` returns `Rows`, iterated with `NextInto` and
+closed by the caller; `RunPage` resumes from a saved `PageState` for explicit
+paging, and `RunUnpaged` requests one unpaged response. A nil `Params` or
 `Rows` means none when the type is `cql.EmptyParams` or `cql.EmptyRow`.
 `cql.StringCodec` decodes text into an owned `string`; `cql.TextCodec` decodes
 a `cql.Text` view of the response without copying. `Params`/`Row` compose typed struct mappings, while `DynamicRows` and

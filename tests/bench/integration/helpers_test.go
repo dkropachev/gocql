@@ -604,7 +604,8 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 		return cql.DynamicRow{}, err
 	}
 	defer rows.Close()
-	if !rows.Next() {
+	var current cql.DynamicRow
+	if !rows.NextInto(&current) {
 		if err := rows.Err(); err != nil {
 			return cql.DynamicRow{}, err
 		}
@@ -614,7 +615,7 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 	if err != nil {
 		return cql.DynamicRow{}, err
 	}
-	if rows.Next() {
+	if rows.NextInto(&current) {
 		return cql.DynamicRow{}, gocql.ErrMultipleRows
 	}
 	if err := rows.Err(); err != nil {
@@ -1182,7 +1183,8 @@ func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecod
 		return zero, err
 	}
 	defer rows.Close()
-	if !rows.Next() {
+	var current R
+	if !rows.NextInto(&current) {
 		if err := rows.Err(); err != nil {
 			return zero, err
 		}
@@ -1192,7 +1194,7 @@ func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecod
 	if err != nil {
 		return zero, err
 	}
-	if rows.Next() {
+	if rows.NextInto(&current) {
 		return zero, gocql.ErrMultipleRows
 	}
 	if err := rows.Err(); err != nil {
