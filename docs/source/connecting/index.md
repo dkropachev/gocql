@@ -18,9 +18,9 @@ Session.Close rejects new work, cancels requests and joins writers/workers.
 Queries copy parameters during admission; Wait joins transport cleanup before
 executing the same query again.
 
-`Dialer` receives a typed `DialTarget`; `DialHost` and `TLSForHost` customize
+`endpoint.Dialer` receives a typed `endpoint.DialTarget`; `DialHost` and `TLSForHost` customize
 host setup. Hooks honor context cancellation and the selected endpoint/source.
-`DNSResolver`, `AddressTranslator`, `HostFilter` and `ReconnectPolicy` are
+`endpoint.DNSResolver`, `endpoint.Translator`, `HostFilter` and `ReconnectPolicy` are
 independent extension points. Synchronous callbacks must be prompt and must
 not reenter blocking Close/Wait.
 

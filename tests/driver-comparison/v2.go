@@ -10,35 +10,37 @@ import (
 	"time"
 
 	g "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/retry"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 const driverName = "v2"
 
 type borrowedRow struct {
 	K, R int32
-	P    g.Bytes
+	P    cql.Bytes
 }
 type v2Adapter struct {
 	s        *g.Session
 	mu       sync.Mutex
 	reads    [2]*g.Prepared[int32, row]
-	writes   [2]*g.Prepared[row, g.Unit]
-	lwt      *g.Prepared[lwtArgs, g.CASResult[int32]]
+	writes   [2]*g.Prepared[row, cql.Unit]
+	lwt      *g.Prepared[lwtArgs, cql.CASResult[int32]]
 	lwtRead  *g.Prepared[int32, int32]
 	metadata g.Options // includes result metadata, as master's writes request
 }
 type v2Worker struct {
 	a           *v2Adapter
 	read        *g.Query[int32, row]
-	write       *g.Query[row, g.Unit]
+	write       *g.Query[row, cql.Unit]
 	streamQuery *g.StreamQuery[int32, row]
 	stream      bool
 	out         row
 }
 
-var streamDecoder = g.StreamRow(func(*row) {}, g.StreamColumn("k", g.StreamInt32, func(r *row) *int32 { return &r.K }), g.StreamColumn("r", g.StreamInt32, func(r *row) *int32 { return &r.R }), g.StreamColumn("p", g.StreamBlob, func(r *row) *[]byte { return &r.P }))
-var bufferedDecoder = g.RowInto(func(*row) {}, g.Column("k", g.Int32, func(r *row) *int32 { return &r.K }), g.Column("r", g.Int32, func(r *row) *int32 { return &r.R }), g.Column("p", g.OwnedBlobCodec, func(r *row) *[]byte { return &r.P }))
+var streamDecoder = cql.StreamRow(func(*row) {}, cql.StreamColumn("k", cql.StreamInt32, func(r *row) *int32 { return &r.K }), cql.StreamColumn("r", cql.StreamInt32, func(r *row) *int32 { return &r.R }), cql.StreamColumn("p", cql.StreamBlob, func(r *row) *[]byte { return &r.P }))
+var bufferedDecoder = cql.RowInto(func(*row) {}, cql.Column("k", cql.Int32, func(r *row) *int32 { return &r.K }), cql.Column("r", cql.Int32, func(r *row) *int32 { return &r.R }), cql.Column("p", cql.OwnedBlobCodec, func(r *row) *[]byte { return &r.P }))
 
 func connect(hosts []string) (adapter, error) {
 	c := g.DefaultConfig(hosts...)
@@ -47,15 +49,15 @@ func connect(hosts []string) (adapter, error) {
 	c.Pool.ConnectionsPerShard = 1
 	c.Pool.MaxExcessPerShard = 0
 	p := *c.DefaultProfile
-	p.Consistency = g.LocalQuorum
-	p.SerialConsistency = g.Option[g.Consistency]{}
+	p.Consistency = cql.LocalQuorum
+	p.SerialConsistency = cql.Option[cql.Consistency]{}
 	p.Timeout = 10 * time.Second
 	p.PageTimeout = 10 * time.Second
 	p.PageSize = 32
 	p.Prefetch = 0
 	p.Retry = retry.Safe{MaxAttempts: 1}
 	p.Speculation = nil
-	p.Routing, _ = g.NewRoutingPolicy(g.RoutingOptions{TokenAware: true, Datacenter: "datacenter1"})
+	p.Routing, _ = routing.NewPolicy(routing.Options{TokenAware: true, Datacenter: "datacenter1"})
 	c.DefaultProfile = &p
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -77,16 +79,16 @@ func connect(hosts []string) (adapter, error) {
 }
 func (a *v2Adapter) Close() error { return a.s.Close() }
 func (a *v2Adapter) Exec(ctx context.Context, q string) error {
-	b, e := g.NewUnpreparedQuery(a.s, g.Statement[g.Unit, g.Unit]{Kind: g.OrdinaryStatement, CQL: q, Params: g.NoParams, Rows: g.NoRows}, g.NewColumns(), g.Options{})
+	b, e := g.NewUnpreparedQuery(a.s, cql.Statement[cql.Unit, cql.Unit]{Kind: cql.OrdinaryStatement, CQL: q, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), g.Options{})
 	if e != nil {
 		return e
 	}
 	defer b.Close()
-	e = b.Exec(ctx, g.Unit{})
+	e = b.Exec(ctx, cql.Unit{})
 	return e
 }
 func (a *v2Adapter) Evidence() any {
-	routing := []g.RoutingInfo{}
+	routing := []routing.Info{}
 	for _, prepared := range a.reads {
 		if prepared != nil {
 			b, e := g.NewQuery(prepared, g.Options{})
@@ -103,12 +105,12 @@ func (a *v2Adapter) Evidence() any {
 	return map[string]any{"keyspace_strategy": keyspace.StrategyOptions, "keyspace_strategy_class": keyspace.StrategyClass, "metrics": a.s.Metrics(), "routing_samples": routing, "hosts": a.s.Metadata().Hosts(), "protocol": 4, "consistency": "LOCAL_QUORUM", "page_size": 32, "prefetch": 0, "retries": 0, "compression": "none", "tls": false, "coalesce_wait_ns": 0, "incremental_receive": *incremental, "metadata_refresh_ns": int64(*metadataRefresh)}
 }
 
-var keyParams = g.Params(g.Param("k", g.Int32, func(k int32) int32 { return k }))
-var rowParams = g.Params(g.Param("k", g.Int32, func(r row) int32 { return r.K }), g.Param("r", g.Int32, func(r row) int32 { return r.R }), g.Param("p", g.BytesEncoder, func(r row) []byte { return r.P }))
+var keyParams = cql.Params(cql.Param("k", cql.Int32, func(k int32) int32 { return k }))
+var rowParams = cql.Params(cql.Param("k", cql.Int32, func(r row) int32 { return r.K }), cql.Param("r", cql.Int32, func(r row) int32 { return r.R }), cql.Param("p", cql.BytesEncoder, func(r row) []byte { return r.P }))
 
 // prepared prepares, once, the read and write statements of the point or
 // paged table and checks that the read is token routed.
-func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[row, g.Unit], error) {
+func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[row, cql.Unit], error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	idx := 0
@@ -119,7 +121,7 @@ func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[r
 	}
 	ctx := context.Background()
 	if a.reads[idx] == nil {
-		p, e := g.Prepare(ctx, a.s, g.Statement[int32, row]{Kind: g.OrdinaryStatement, CQL: rd, Params: keyParams, Rows: bufferedDecoder}, g.PrepareOptions{})
+		p, e := g.Prepare(ctx, a.s, cql.Statement[int32, row]{Kind: cql.OrdinaryStatement, CQL: rd, Params: keyParams, Rows: bufferedDecoder}, g.PrepareOptions{})
 		if e != nil {
 			return nil, nil, e
 		}
@@ -138,7 +140,7 @@ func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[r
 		a.reads[idx] = p
 	}
 	if a.writes[idx] == nil {
-		p, e := g.Prepare(ctx, a.s, g.Statement[row, g.Unit]{Kind: g.OrdinaryStatement, CQL: wr, Params: rowParams, Rows: g.NoRows}, g.PrepareOptions{})
+		p, e := g.Prepare(ctx, a.s, cql.Statement[row, cql.Unit]{Kind: cql.OrdinaryStatement, CQL: wr, Params: rowParams, Rows: cql.NoRows}, g.PrepareOptions{})
 		if e != nil {
 			return nil, nil, e
 		}

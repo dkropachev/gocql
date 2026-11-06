@@ -16,10 +16,10 @@ type Download struct {
     Pieces [][]byte
     ApplicationState string
 }
-decoder := gocql.StreamRow(func(r *Download) { r.ApplicationState = "" },
-    gocql.StreamColumn("id", gocql.StreamInt32, func(r *Download) *int32 { return &r.ID }),
-    gocql.StreamColumn("payload", gocql.StreamBlob, func(r *Download) *[]byte { return &r.Payload }),
-    gocql.StreamColumn("pieces", gocql.StreamList(gocql.StreamBlob), func(r *Download) *[][]byte { return &r.Pieces }),
+decoder := cql.StreamRow(func(r *Download) { r.ApplicationState = "" },
+    cql.StreamColumn("id", cql.StreamInt32, func(r *Download) *int32 { return &r.ID }),
+    cql.StreamColumn("payload", cql.StreamBlob, func(r *Download) *[]byte { return &r.Payload }),
+    cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(r *Download) *[][]byte { return &r.Pieces }),
 )
 row := Download{
     Payload: make([]byte, 0, 1<<20),

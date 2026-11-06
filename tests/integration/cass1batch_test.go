@@ -35,6 +35,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
@@ -54,9 +55,9 @@ func TestProto1BatchInsert(t *testing.T) {
 	end := "APPLY BATCH"
 	query := fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table)
 	fullQuery := strings.Join([]string{begin, query, end}, "\n")
-	bound := sessionTestBind(t, session, fullQuery, gocql.IntValue(5))
+	bound := sessionTestBind(t, session, fullQuery, cql.IntValue(5))
 	defer bound.Close()
-	if _, err := Exec(context.Background(), session, bound, testOptions(gocql.OptionValues{Consistency: gocql.Option[gocql.Consistency]{Value: gocql.Quorum, Set: true}})); err != nil {
+	if _, err := Exec(context.Background(), session, bound, testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.Quorum, Set: true}})); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -100,8 +101,8 @@ func TestShouldPrepareFunction(t *testing.T) {
 	defer session.Close()
 	for _, test := range shouldPrepareTests {
 		t.Run(fmt.Sprintf("formerly_prepared_%t_%s", test.Result, firstCQLWord(test.Stmt)), func(t *testing.T) {
-			statement := gocql.Statement[gocql.Unit, gocql.Unit]{CQL: test.Stmt, Params: gocql.NoParams, Rows: gocql.NoRows}
-			bound, err := BindUnpreparedOwned(statement, gocql.NewColumns(), gocql.Unit{})
+			statement := cql.Statement[cql.Unit, cql.Unit]{CQL: test.Stmt, Params: cql.NoParams, Rows: cql.NoRows}
+			bound, err := BindUnpreparedOwned(statement, cql.NewColumns(), cql.Unit{})
 			if err != nil {
 				t.Fatal(err)
 			}

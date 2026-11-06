@@ -31,6 +31,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 
+	"github.com/scylladb/gocql/v2/cql"
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 
 	"fmt"
@@ -69,36 +70,36 @@ func serializationVectorGate(t *testing.T, allTypes bool) {
 	}
 }
 
-var serializationBlob = gocql.NamedScalar(gocql.BlobCodec, func(v []byte) gocql.Bytes { return gocql.BorrowBytes(v) }, func(v gocql.Bytes) []byte { return v.OwnedBytes() })
-var serializationTimestamp = gocql.NamedScalar(gocql.TimestampCodec, func(v time.Time) gocql.Timestamp {
-	n, e := gocql.TimestampFromTime(v)
+var serializationBlob = cql.NamedScalar(cql.BlobCodec, func(v []byte) cql.Bytes { return cql.BorrowBytes(v) }, func(v cql.Bytes) []byte { return v.OwnedBytes() })
+var serializationTimestamp = cql.NamedScalar(cql.TimestampCodec, func(v time.Time) cql.Timestamp {
+	n, e := cql.TimestampFromTime(v)
 	if e != nil {
 		panic(e)
 	}
 	return n
-}, func(v gocql.Timestamp) time.Time {
+}, func(v cql.Timestamp) time.Time {
 	n, e := v.Time()
 	if e != nil {
 		panic(e)
 	}
 	return n.UTC()
 })
-var serializationDate = gocql.NamedScalar(gocql.DateCodec, func(v time.Time) gocql.Date {
-	n, e := gocql.DateFromTime(v)
+var serializationDate = cql.NamedScalar(cql.DateCodec, func(v time.Time) cql.Date {
+	n, e := cql.DateFromTime(v)
 	if e != nil {
 		panic(e)
 	}
 	return n
-}, func(v gocql.Date) time.Time {
+}, func(v cql.Date) time.Time {
 	n, e := v.Time()
 	if e != nil {
 		panic(e)
 	}
 	return n.UTC()
 })
-var serializationDecimal = gocql.NamedScalar(gocql.DecimalCodec, func(v inf.Dec) gocql.Decimal {
-	return gocql.Decimal{Scale: int32(v.Scale()), Unscaled: gocql.VarintFromBigInt(v.UnscaledBig())}
-}, func(v gocql.Decimal) inf.Dec { return *inf.NewDecBig(v.Unscaled.BigInt(), inf.Scale(v.Scale)) })
+var serializationDecimal = cql.NamedScalar(cql.DecimalCodec, func(v inf.Dec) cql.Decimal {
+	return cql.Decimal{Scale: int32(v.Scale()), Unscaled: cql.VarintFromBigInt(v.UnscaledBig())}
+}, func(v cql.Decimal) inf.Dec { return *inf.NewDecBig(v.Unscaled.BigInt(), inf.Scale(v.Scale)) })
 
 func TestVector_Marshaler(t *testing.T) {
 	t.Parallel()
@@ -109,18 +110,18 @@ func TestVector_Marshaler(t *testing.T) {
 	serializationDDL(t, s, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,vec vector<float,3>)", fixed))
 	serializationDDL(t, s, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,vec vector<text,4>)", variable))
 	floats := []float32{8, 2.5, -5}
-	require.Equal(t, floats, serializationRoundTrip(t, s, fixed, "vec", 1, serializationVector(gocql.Float32), floats))
+	require.Equal(t, floats, serializationRoundTrip(t, s, fixed, "vec", 1, serializationVector(cql.Float32), floats))
 	texts := []string{"apache", "cassandra", tests.RandomText(500), "gocql"}
 	require.Equal(t, texts, serializationRoundTrip(t, s, variable, "vec", 1, serializationVector(serializationString), texts))
 }
 
 type serializationVectorCase struct {
-	name, cql string
-	run       func(*testing.T, *gocql.Session, string, string)
+	name, stmt string
+	run        func(*testing.T, *gocql.Session, string, string)
 }
 
-func vectorCase[T any](name, cql string, codec gocql.Codec[T], input []T, compare func(*testing.T, []T, []T)) serializationVectorCase {
-	return serializationVectorCase{name, cql, func(t *testing.T, s *gocql.Session, table, column string) {
+func vectorCase[T any](name, stmt string, codec cql.Codec[T], input []T, compare func(*testing.T, []T, []T)) serializationVectorCase {
+	return serializationVectorCase{name, stmt, func(t *testing.T, s *gocql.Session, table, column string) {
 		got := serializationRoundTrip(t, s, table, column, 1, serializationVector(codec), input)
 		if compare != nil {
 			compare(t, input, got)
@@ -146,43 +147,43 @@ func TestVector_Types(t *testing.T) {
 	times := []time.Time{parse("15:04:05", "01:00:00"), parse("15:04:05", "15:23:59"), parse("15:04:05.000", "10:31:45.987")}
 	// The historical time subcase stores timestamp values anchored at year zero.
 	// Preserve that wire coverage alongside the scalar time fixtures above.
-	ascii := gocql.NamedScalar(gocql.ASCIICodec, func(s string) gocql.Text { return codecTestMust(gocql.BorrowText(s)) }, func(t gocql.Text) string { return t.String() })
-	uintVarint := gocql.NamedScalar(gocql.VarintCodec, func(n uint64) gocql.Varint { return gocql.VarintFromBigInt(new(big.Int).SetUint64(n)) }, func(n gocql.Varint) uint64 { return n.BigInt().Uint64() })
+	ascii := cql.NamedScalar(cql.ASCIICodec, func(s string) cql.Text { return codecTestMust(cql.BorrowText(s)) }, func(t cql.Text) string { return t.String() })
+	uintVarint := cql.NamedScalar(cql.VarintCodec, func(n uint64) cql.Varint { return cql.VarintFromBigInt(new(big.Int).SetUint64(n)) }, func(n cql.Varint) uint64 { return n.BigInt().Uint64() })
 	type triple struct {
 		Text  string
 		Int   int32
 		Float float32
 	}
-	tripleCodec := serializationTuple(gocql.Params(gocql.ParamAt(0, serializationString, func(v triple) string { return v.Text }), gocql.ParamAt(1, gocql.Int32, func(v triple) int32 { return v.Int }), gocql.ParamAt(2, gocql.Float32, func(v triple) float32 { return v.Float })), gocql.Row(gocql.ColumnAt(0, serializationString, func(v *triple) *string { return &v.Text }), gocql.ColumnAt(1, gocql.Int32, func(v *triple) *int32 { return &v.Int }), gocql.ColumnAt(2, gocql.Float32, func(v *triple) *float32 { return &v.Float })))
+	tripleCodec := serializationTuple(cql.Params(cql.ParamAt(0, serializationString, func(v triple) string { return v.Text }), cql.ParamAt(1, cql.Int32, func(v triple) int32 { return v.Int }), cql.ParamAt(2, cql.Float32, func(v triple) float32 { return v.Float })), cql.Row(cql.ColumnAt(0, serializationString, func(v *triple) *string { return &v.Text }), cql.ColumnAt(1, cql.Int32, func(v *triple) *int32 { return &v.Int }), cql.ColumnAt(2, cql.Float32, func(v *triple) *float32 { return &v.Float })))
 	type textList struct {
 		Text string
 		List []string
 	}
-	textListCodec := serializationTuple(gocql.Params(gocql.ParamAt(0, serializationString, func(v textList) string { return v.Text }), gocql.ParamAt(1, serializationList(serializationString), func(v textList) []string { return v.List })), gocql.Row(gocql.ColumnAt(0, serializationString, func(v *textList) *string { return &v.Text }), gocql.ColumnAt(1, serializationList(serializationString), func(v *textList) *[]string { return &v.List })))
+	textListCodec := serializationTuple(cql.Params(cql.ParamAt(0, serializationString, func(v textList) string { return v.Text }), cql.ParamAt(1, serializationList(serializationString), func(v textList) []string { return v.List })), cql.Row(cql.ColumnAt(0, serializationString, func(v *textList) *string { return &v.Text }), cql.ColumnAt(1, serializationList(serializationString), func(v *textList) *[]string { return &v.List })))
 	cases := []serializationVectorCase{
 		vectorCase("ascii", "ascii", ascii, []string{"a", "1", "Z"}, nil),
-		vectorCase("bigint", "bigint", gocql.Int64, []int64{1, 2, 3}, nil),
+		vectorCase("bigint", "bigint", cql.Int64, []int64{1, 2, 3}, nil),
 		vectorCase("blob", "blob", serializationBlob, [][]byte{{1, 2, 3}, {4, 5, 6, 7}, {8, 9}}, nil),
-		vectorCase("boolean", "boolean", gocql.Bool, []bool{true, false, true}, nil),
-		vectorCase("counter", "counter", gocql.CounterCodec, []gocql.Counter{5, 6, 7}, nil),
+		vectorCase("boolean", "boolean", cql.Bool, []bool{true, false, true}, nil),
+		vectorCase("counter", "counter", cql.CounterCodec, []cql.Counter{5, 6, 7}, nil),
 		vectorCase("decimal", "decimal", serializationDecimal, []inf.Dec{*inf.NewDec(1, 0), *inf.NewDec(2, 1), *inf.NewDec(-3, 2)}, nil),
-		vectorCase("double", "double", gocql.Float64, []float64{0.1, -1.2, 3}, nil),
-		vectorCase("float", "float", gocql.Float32, []float32{0.1, -1.2, 3}, nil),
-		vectorCase("int", "int", gocql.Int32, []int32{1, 2, 3}, nil),
+		vectorCase("double", "double", cql.Float64, []float64{0.1, -1.2, 3}, nil),
+		vectorCase("float", "float", cql.Float32, []float32{0.1, -1.2, 3}, nil),
+		vectorCase("int", "int", cql.Int32, []int32{1, 2, 3}, nil),
 		vectorCase("text", "text", serializationString, []string{"a", "b", "c"}, nil),
 		vectorCase("timestamp", "timestamp", serializationTimestamp, timestamps, nil),
-		vectorCase("uuid", "uuid", gocql.UUIDCodec, []gocql.UUID{gocql.MustRandomUUID(), gocql.MustRandomUUID(), gocql.MustRandomUUID()}, nil),
+		vectorCase("uuid", "uuid", cql.UUIDCodec, []cql.UUID{cql.MustRandomUUID(), cql.MustRandomUUID(), cql.MustRandomUUID()}, nil),
 		vectorCase("varchar", "varchar", serializationString, []string{"abc", "def", "ghi"}, nil),
 		vectorCase("varint", "varint", uintVarint, []uint64{1234, 123498765, 18446744073709551615}, nil),
-		vectorCase("timeuuid", "timeuuid", gocql.TimeUUIDCodec, []gocql.TimeUUID{gocql.TimeUUID(gocql.NewTimeUUID()), gocql.TimeUUID(gocql.NewTimeUUID()), gocql.TimeUUID(gocql.NewTimeUUID())}, nil),
-		vectorCase("inet", "inet", gocql.InetCodec, []netip.Addr{netip.MustParseAddr("127.0.0.1"), netip.MustParseAddr("192.168.1.1"), netip.MustParseAddr("8.8.8.8")}, nil),
+		vectorCase("timeuuid", "timeuuid", cql.TimeUUIDCodec, []cql.TimeUUID{cql.TimeUUID(cql.NewTimeUUID()), cql.TimeUUID(cql.NewTimeUUID()), cql.TimeUUID(cql.NewTimeUUID())}, nil),
+		vectorCase("inet", "inet", cql.InetCodec, []netip.Addr{netip.MustParseAddr("127.0.0.1"), netip.MustParseAddr("192.168.1.1"), netip.MustParseAddr("8.8.8.8")}, nil),
 		vectorCase("date", "date", serializationDate, dates, nil),
 		vectorCase("time", "timestamp", serializationTimestamp, times, nil),
-		vectorCase("smallint", "smallint", gocql.Int16, []int16{127, 256, -1234}, nil),
-		vectorCase("tinyint", "tinyint", gocql.Int8, []int8{127, 9, -123}, nil),
-		vectorCase("duration", "duration", gocql.DurationCodec, []gocql.Duration{{Months: 0, Days: 1, Nanoseconds: 1920000000000}, {Months: 1, Days: 1, Nanoseconds: 1920000000000}, {Months: 31, Days: 0, Nanoseconds: 60000000000}}, nil),
-		vectorCase("vector_vector_float", "vector<float,5>", serializationVector(gocql.Float32), [][]float32{{0.1, -1.2, 3, 5, 5}, {10.1, -122222.0002, 35, 1, 1}, {0, 0, 0, 0, 0}}, nil),
-		vectorCase("vector_vector_set_float", "vector<set<float>,5>", serializationVector(serializationSet(gocql.Float32)), [][][]float32{{{1, 2}, {2, -1}, {3}, {0}, {-1.3}}, {{2, 3}, {2, -1}, {3}, {0}, {-1.3}}, {{1, 1000}, {0}, {}, {12, 14, 15, 16}, {-1.3}}}, func(t *testing.T, want, got [][][]float32) {
+		vectorCase("smallint", "smallint", cql.Int16, []int16{127, 256, -1234}, nil),
+		vectorCase("tinyint", "tinyint", cql.Int8, []int8{127, 9, -123}, nil),
+		vectorCase("duration", "duration", cql.DurationCodec, []cql.Duration{{Months: 0, Days: 1, Nanoseconds: 1920000000000}, {Months: 1, Days: 1, Nanoseconds: 1920000000000}, {Months: 31, Days: 0, Nanoseconds: 60000000000}}, nil),
+		vectorCase("vector_vector_float", "vector<float,5>", serializationVector(cql.Float32), [][]float32{{0.1, -1.2, 3, 5, 5}, {10.1, -122222.0002, 35, 1, 1}, {0, 0, 0, 0, 0}}, nil),
+		vectorCase("vector_vector_set_float", "vector<set<float>,5>", serializationVector(serializationSet(cql.Float32)), [][][]float32{{{1, 2}, {2, -1}, {3}, {0}, {-1.3}}, {{2, 3}, {2, -1}, {3}, {0}, {-1.3}}, {{1, 1000}, {0}, {}, {12, 14, 15, 16}, {-1.3}}}, func(t *testing.T, want, got [][][]float32) {
 			require.Len(t, got, len(want))
 			for i := range want {
 				require.Len(t, got[i], len(want[i]))
@@ -205,13 +206,13 @@ func TestVector_Types(t *testing.T) {
 				require.Equal(t, a, b)
 			}
 		}),
-		vectorCase("vector_list_int", "list<int>", serializationList(gocql.Int32), [][]int32{{1, 2, 3}, {-1, -2, -3}, {0, 0, 0}}, nil),
-		vectorCase("vector_map_text_int", "map<text,int>", serializationMap(serializationString, gocql.Int32), []map[string]int32{{"a": 1, "b": 2, "c": 3}, {"abc": 123}, {}}, nil),
+		vectorCase("vector_list_int", "list<int>", serializationList(cql.Int32), [][]int32{{1, 2, 3}, {-1, -2, -3}, {0, 0, 0}}, nil),
+		vectorCase("vector_map_text_int", "map<text,int>", serializationMap(serializationString, cql.Int32), []map[string]int32{{"a": 1, "b": 2, "c": 3}, {"abc": 123}, {}}, nil),
 	}
 	table := serializationTableName(t, "all_types")
 	cols := ""
 	for _, tc := range cases {
-		cols += fmt.Sprintf(",vec_%s vector<%s,3>", tc.name, tc.cql)
+		cols += fmt.Sprintf(",vec_%s vector<%s,3>", tc.name, tc.stmt)
 	}
 	serializationDDL(t, s, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY%s)", table, cols))
 	for _, tc := range cases {
@@ -226,7 +227,7 @@ func TestVector_MarshalerUDT(t *testing.T) {
 	table, typ := serializationTableName(t), serializationTypeName(t)
 	serializationDDL(t, s, fmt.Sprintf("CREATE TYPE %s(first_name text,last_name text,age int)", typ))
 	serializationDDL(t, s, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,couple vector<%s,2>)", table, typ))
-	codec := serializationUDT(gocql.Params(gocql.Param("first_name", serializationString, func(v person) string { return v.FirstName }), gocql.Param("last_name", serializationString, func(v person) string { return v.LastName }), gocql.Param("age", gocql.Int32, func(v person) int32 { return v.Age })), gocql.Row(gocql.Column("first_name", serializationString, func(v *person) *string { return &v.FirstName }), gocql.Column("last_name", serializationString, func(v *person) *string { return &v.LastName }), gocql.Column("age", gocql.Int32, func(v *person) *int32 { return &v.Age })), serializationUDTOptions(typ))
+	codec := serializationUDT(cql.Params(cql.Param("first_name", serializationString, func(v person) string { return v.FirstName }), cql.Param("last_name", serializationString, func(v person) string { return v.LastName }), cql.Param("age", cql.Int32, func(v person) int32 { return v.Age })), cql.Row(cql.Column("first_name", serializationString, func(v *person) *string { return &v.FirstName }), cql.Column("last_name", serializationString, func(v *person) *string { return &v.LastName }), cql.Column("age", cql.Int32, func(v *person) *int32 { return &v.Age })), serializationUDTOptions(typ))
 	want := []person{{"Johny", "Bravo", 25}, {"Capitan", "Planet", 5}}
 	require.Equal(t, want, serializationRoundTrip(t, s, table, "couple", 1, serializationVector(codec), want))
 }
@@ -240,11 +241,11 @@ func TestVector_Empty(t *testing.T) {
 	serializationDDL(t, s, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,vec vector<text,4>)", variable))
 	serializationWrite(t, s, fmt.Sprintf("INSERT INTO %s(id) VALUES(1)", fixed))
 	serializationWrite(t, s, fmt.Sprintf("INSERT INTO %s(id) VALUES(1)", variable))
-	fl, e := serializationOne(s, fmt.Sprintf("SELECT vec FROM %s WHERE id=1", fixed), gocql.OneColumn(gocql.NullableDecoder(serializationVector(gocql.Float32))))
+	fl, e := serializationOne(s, fmt.Sprintf("SELECT vec FROM %s WHERE id=1", fixed), cql.OneColumn(cql.NullableDecoder(serializationVector(cql.Float32))))
 	require.NoError(t, e)
 	require.False(t, fl.Valid)
 	require.Nil(t, fl.Value)
-	tx, e := serializationOne(s, fmt.Sprintf("SELECT vec FROM %s WHERE id=1", variable), gocql.OneColumn(gocql.NullableDecoder(serializationVector(serializationString))))
+	tx, e := serializationOne(s, fmt.Sprintf("SELECT vec FROM %s WHERE id=1", variable), cql.OneColumn(cql.NullableDecoder(serializationVector(serializationString))))
 	require.NoError(t, e)
 	require.False(t, tx.Valid)
 	require.Nil(t, tx.Value)
@@ -257,7 +258,7 @@ func TestVector_MissingDimension(t *testing.T) {
 	table := serializationTableName(t)
 	serializationDDL(t, s, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,vec vector<float,3>)", table))
 	for _, v := range [][]float32{{8, -5}, {8, -5, 1, 3}} {
-		err := serializationExec(s, fmt.Sprintf("INSERT INTO %s(id,vec) VALUES(1,?)", table), gocql.OneParam(gocql.VectorEncoder(gocql.Float32)), v)
+		err := serializationExec(s, fmt.Sprintf("INSERT INTO %s(id,vec) VALUES(1,?)", table), cql.OneParam(cql.VectorEncoder(cql.Float32)), v)
 		require.Error(t, err, "expected vector with 3 dimensions, received %d", len(v))
 	}
 }
@@ -273,40 +274,40 @@ func TestVector_SubTypeParsing(t *testing.T) {
 	testCases := []struct {
 		name     string
 		custom   string
-		expected gocql.TypeInfo
+		expected cql.TypeInfo
 	}{
-		{name: "text", custom: prefix + "UTF8Type", expected: cqltype.NewCustomType(0, gocql.TypeVarchar, "")},
-		{name: "set_int", custom: prefix + "SetType(" + prefix + "Int32Type)", expected: gocql.CollectionType{NativeType: cqltype.NewCustomType(0, gocql.TypeSet, ""), Key: nil, Elem: cqltype.NewCustomType(0, gocql.TypeInt, "")}},
+		{name: "text", custom: prefix + "UTF8Type", expected: cqltype.NewCustomType(0, cql.TypeVarchar, "")},
+		{name: "set_int", custom: prefix + "SetType(" + prefix + "Int32Type)", expected: cql.CollectionType{NativeType: cqltype.NewCustomType(0, cql.TypeSet, ""), Key: nil, Elem: cqltype.NewCustomType(0, cql.TypeInt, "")}},
 		{
 			name:   "udt",
 			custom: prefix + ("UserType(" + fixtureKeyspace("") + ",706572736f6e,66697273745f6e616d65:") + prefix + "UTF8Type,6c6173745f6e616d65:" + prefix + "UTF8Type,616765:" + prefix + "Int32Type)",
-			expected: gocql.UDTTypeInfo{
-				NativeType: cqltype.NewCustomType(0, gocql.TypeUDT, ""),
+			expected: cql.UDTTypeInfo{
+				NativeType: cqltype.NewCustomType(0, cql.TypeUDT, ""),
 				KeySpace:   fixtureKeyspace(""),
 				Name:       "person",
-				Elements: []gocql.UDTField{
-					gocql.UDTField{Name: "first_name", Type: cqltype.NewCustomType(0, gocql.TypeVarchar, "")},
-					gocql.UDTField{Name: "last_name", Type: cqltype.NewCustomType(0, gocql.TypeVarchar, "")},
-					gocql.UDTField{Name: "age", Type: cqltype.NewCustomType(0, gocql.TypeInt, "")},
+				Elements: []cql.UDTField{
+					cql.UDTField{Name: "first_name", Type: cqltype.NewCustomType(0, cql.TypeVarchar, "")},
+					cql.UDTField{Name: "last_name", Type: cqltype.NewCustomType(0, cql.TypeVarchar, "")},
+					cql.UDTField{Name: "age", Type: cqltype.NewCustomType(0, cql.TypeInt, "")},
 				},
 			},
 		},
 		{
 			name:   "tuple",
 			custom: prefix + "TupleType(" + prefix + "UTF8Type," + prefix + "Int32Type," + prefix + "UTF8Type)",
-			expected: gocql.TupleTypeInfo{
-				NativeType: cqltype.NewCustomType(0, gocql.TypeTuple, ""),
-				Elems:      []gocql.TypeInfo{cqltype.NewCustomType(0, gocql.TypeVarchar, ""), cqltype.NewCustomType(0, gocql.TypeInt, ""), cqltype.NewCustomType(0, gocql.TypeVarchar, "")},
+			expected: cql.TupleTypeInfo{
+				NativeType: cqltype.NewCustomType(0, cql.TypeTuple, ""),
+				Elems:      []cql.TypeInfo{cqltype.NewCustomType(0, cql.TypeVarchar, ""), cqltype.NewCustomType(0, cql.TypeInt, ""), cqltype.NewCustomType(0, cql.TypeVarchar, "")},
 			},
 		},
 		{
 			name:   "vector_vector_inet",
 			custom: prefix + "VectorType(" + prefix + "VectorType(" + prefix + "InetAddressType, 2), 3)",
-			expected: gocql.VectorType{
-				NativeType: cqltype.NewCustomType(0, gocql.TypeCustom, vectorTypePrefix),
-				SubType: gocql.VectorType{
-					NativeType: cqltype.NewCustomType(0, gocql.TypeCustom, vectorTypePrefix),
-					SubType:    cqltype.NewCustomType(0, gocql.TypeInet, ""),
+			expected: cql.VectorType{
+				NativeType: cqltype.NewCustomType(0, cql.TypeCustom, vectorTypePrefix),
+				SubType: cql.VectorType{
+					NativeType: cqltype.NewCustomType(0, cql.TypeCustom, vectorTypePrefix),
+					SubType:    cqltype.NewCustomType(0, cql.TypeInet, ""),
 					Dimensions: 2,
 				},
 				Dimensions: 3,
@@ -315,12 +316,12 @@ func TestVector_SubTypeParsing(t *testing.T) {
 		{
 			name:   "map_int_vector_text",
 			custom: prefix + "MapType(" + prefix + "Int32Type," + prefix + "VectorType(" + prefix + "UTF8Type, 10))",
-			expected: gocql.CollectionType{
-				NativeType: cqltype.NewCustomType(0, gocql.TypeMap, ""),
-				Key:        cqltype.NewCustomType(0, gocql.TypeInt, ""),
-				Elem: gocql.VectorType{
-					NativeType: cqltype.NewCustomType(0, gocql.TypeCustom, vectorTypePrefix),
-					SubType:    cqltype.NewCustomType(0, gocql.TypeVarchar, ""),
+			expected: cql.CollectionType{
+				NativeType: cqltype.NewCustomType(0, cql.TypeMap, ""),
+				Key:        cqltype.NewCustomType(0, cql.TypeInt, ""),
+				Elem: cql.VectorType{
+					NativeType: cqltype.NewCustomType(0, cql.TypeCustom, vectorTypePrefix),
+					SubType:    cqltype.NewCustomType(0, cql.TypeVarchar, ""),
 					Dimensions: 10,
 				},
 			},
@@ -328,17 +329,17 @@ func TestVector_SubTypeParsing(t *testing.T) {
 		{
 			name:   "set_map_vector_text_text",
 			custom: prefix + "SetType(" + prefix + "MapType(" + prefix + "VectorType(" + prefix + "Int32Type, 10)," + prefix + "UTF8Type))",
-			expected: gocql.CollectionType{
-				NativeType: cqltype.NewCustomType(0, gocql.TypeSet, ""),
+			expected: cql.CollectionType{
+				NativeType: cqltype.NewCustomType(0, cql.TypeSet, ""),
 				Key:        nil,
-				Elem: gocql.CollectionType{
-					NativeType: cqltype.NewCustomType(0, gocql.TypeMap, ""),
-					Key: gocql.VectorType{
-						NativeType: cqltype.NewCustomType(0, gocql.TypeCustom, vectorTypePrefix),
-						SubType:    cqltype.NewCustomType(0, gocql.TypeInt, ""),
+				Elem: cql.CollectionType{
+					NativeType: cqltype.NewCustomType(0, cql.TypeMap, ""),
+					Key: cql.VectorType{
+						NativeType: cqltype.NewCustomType(0, cql.TypeCustom, vectorTypePrefix),
+						SubType:    cqltype.NewCustomType(0, cql.TypeInt, ""),
 						Dimensions: 10,
 					},
-					Elem: cqltype.NewCustomType(0, gocql.TypeVarchar, ""),
+					Elem: cqltype.NewCustomType(0, cql.TypeVarchar, ""),
 				},
 			},
 		},

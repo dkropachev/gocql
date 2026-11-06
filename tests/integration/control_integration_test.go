@@ -10,6 +10,7 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/endpoint"
 )
 
 // unixSocketDialer is a special dialer which connects only to the maintenance_socket.
@@ -18,7 +19,7 @@ type unixSocketDialer struct {
 	socketPath string
 }
 
-func (d unixSocketDialer) DialContext(ctx context.Context, target gocql.DialTarget) (net.Conn, error) {
+func (d unixSocketDialer) DialContext(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 	return d.dialer.DialContext(ctx, target.Network, target.Address)
 }
 
@@ -45,7 +46,7 @@ func TestUnixSockets(t *testing.T) {
 	c.Metadata.SchemaEvents = false
 
 	c.ContactPoints = []string{"unix:" + socketFiles[0]}
-	c.Dialer = gocql.DialerFunc(func(ctx context.Context, target gocql.DialTarget) (net.Conn, error) {
+	c.Dialer = endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 		return (&net.Dialer{Timeout: c.ConnectTimeout}).DialContext(ctx, target.Network, target.Address)
 	})
 

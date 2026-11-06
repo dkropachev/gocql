@@ -10,18 +10,19 @@ import (
 	"testing"
 
 	. "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 func TestV2RuntimePageLeaseAndClone(t *testing.T) {
-	typ, _ := ScalarType(TypeBlob)
-	columns := NewColumns(ColumnSpec{Name: "v", Type: typ})
+	typ, _ := cql.ScalarType(cql.TypeBlob)
+	columns := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: typ})
 	body := append(binary.BigEndian.AppendUint32(nil, 5), []byte("value")...)
 	chain, _ := wire.NewChain(wire.Borrow(body))
 	released := false
 	owner := wire.NewLease(chain, func() { released = true })
 	response := &responsePage{InternalResponseData: responseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner, State: RestorePageState([]byte{1})}}
-	page, err := newPage(response, OneColumn(BlobCodec), nil)
+	page, err := newPage(response, cql.OneColumn(cql.BlobCodec), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +49,7 @@ func TestV2RuntimePageLeaseAndClone(t *testing.T) {
 	if !released {
 		t.Fatal("page not released")
 	}
-	if _, err = view.At(0); !errors.Is(err, ErrReleased) {
+	if _, err = view.At(0); !errors.Is(err, cql.ErrReleased) {
 		t.Fatal(err)
 	}
 	if string(clone.OwnedBytes()) != "value" {
@@ -59,10 +60,10 @@ func TestV2RuntimePageLeaseAndClone(t *testing.T) {
 	}
 }
 func TestV2RuntimeCASMetadataAndEmptyPageValidation(t *testing.T) {
-	boolean, _ := ScalarType(TypeBoolean)
-	integer, _ := ScalarType(TypeInt)
-	codec := CASRows(OneColumn(Int32))
-	columns := NewColumns(ColumnSpec{Name: "[applied]", Type: boolean})
+	boolean, _ := cql.ScalarType(cql.TypeBoolean)
+	integer, _ := cql.ScalarType(cql.TypeInt)
+	codec := cql.CASRows(cql.OneColumn(cql.Int32))
+	columns := cql.NewColumns(cql.ColumnSpec{Name: "[applied]", Type: boolean})
 	plan, err := codec.Compile(columns)
 	if err != nil {
 		t.Fatal(err)
@@ -73,7 +74,7 @@ func TestV2RuntimeCASMetadataAndEmptyPageValidation(t *testing.T) {
 	if err != nil || !result.Applied || result.Previous.Set {
 		t.Fatal(result, err)
 	}
-	columns = NewColumns(ColumnSpec{Name: "[applied]", Type: boolean}, ColumnSpec{Name: "previous", Type: integer})
+	columns = cql.NewColumns(cql.ColumnSpec{Name: "[applied]", Type: boolean}, cql.ColumnSpec{Name: "previous", Type: integer})
 	plan, err = codec.Compile(columns)
 	if err != nil {
 		t.Fatal(err)
@@ -83,9 +84,9 @@ func TestV2RuntimeCASMetadataAndEmptyPageValidation(t *testing.T) {
 	if err != nil || result.Applied || !result.Previous.Set || result.Previous.Value != 7 {
 		t.Fatal(result, err)
 	}
-	bad, _ := ScalarType(TypeBlob)
-	response := &responsePage{InternalResponseData: responseData{Columns: NewColumns(ColumnSpec{Name: "bad", Type: bad}), Owner: wire.NewLease(wire.Chain{}, nil)}}
-	if _, err := newPage(response, OneColumn(Int32), nil); err == nil {
+	bad, _ := cql.ScalarType(cql.TypeBlob)
+	response := &responsePage{InternalResponseData: responseData{Columns: cql.NewColumns(cql.ColumnSpec{Name: "bad", Type: bad}), Owner: wire.NewLease(wire.Chain{}, nil)}}
+	if _, err := newPage(response, cql.OneColumn(cql.Int32), nil); err == nil {
 		t.Fatal("empty page skipped metadata validation")
 	}
 }

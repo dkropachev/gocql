@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/dialer"
+	"github.com/scylladb/gocql/v2/endpoint"
 )
 
 // TestConnectionRecorderFailKeepsOneCause pins that fail reports the latched failure
@@ -863,7 +863,7 @@ func TestRecordDialerClosesTheSocketWhenRecordingCannotStart(t *testing.T) {
 	}()
 
 	d := NewRecordDialer(filepath.Join(t.TempDir(), "no-such-directory"))
-	if conn, err := d.DialContext(context.Background(), gocql.DialTarget{Network: "tcp", Address: ln.Addr().String()}); err == nil {
+	if conn, err := d.DialContext(context.Background(), endpoint.DialTarget{Network: "tcp", Address: ln.Addr().String()}); err == nil {
 		conn.Close()
 		t.Fatal("DialContext succeeded although the recording directory does not exist")
 	}

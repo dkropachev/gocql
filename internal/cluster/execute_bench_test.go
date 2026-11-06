@@ -6,7 +6,6 @@ package cluster
 import (
 	"context"
 
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -43,7 +42,7 @@ func BenchmarkHostRouting(b *testing.B) {
 					i := 0
 					for pb.Next() {
 						m := s.Metadata()
-						info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: tokens[i&4095], Set: true}, Consistency: cqltype.Quorum, Kind: cqltype.OrdinaryStatement}
+						info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: tokens[i&4095], Set: true}, Consistency: cqltype.Quorum, Kind: cqltype.OrdinaryStatement}
 						i++
 						tablet := routing.InternalLookupTabletCached(m, info, &cache)
 						conn, err := InternalSessionSelectTypedConn(s, ctx, info, p.InternalPlanWith(info, m, &plan, &tablet))

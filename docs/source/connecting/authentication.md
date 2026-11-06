@@ -1,7 +1,8 @@
 # Authentication
 
-Set `config.Auth = gocql.PasswordAuth(username, password)` before Connect.
-Custom `AuthProvider.Start` creates an `AuthExchange` per connection; providers
+Set `config.Auth = auth.Password(username, password)` (package
+`github.com/scylladb/gocql/v2/auth`) before Connect.
+Custom `auth.Provider.Start` creates an `auth.Exchange` per connection; providers
 must support concurrent calls, and exchanges implement typed challenge and
 success handling with context cancellation. Authentication bytes use typed
 nullable values. Configuration and logs should not expose credentials.

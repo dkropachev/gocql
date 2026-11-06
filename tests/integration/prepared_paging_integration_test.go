@@ -27,18 +27,19 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 type liveDestination struct {
 	Value   int32
-	Payload gocql.Bytes
+	Payload cql.Bytes
 }
 type liveDecoder struct {
 	calls *atomic.Int32
-	base  gocql.RowDecoder[liveDestination]
+	base  cql.RowDecoder[liveDestination]
 }
 
-func (d liveDecoder) Compile(c gocql.Columns) (gocql.RowPlan[liveDestination], error) {
+func (d liveDecoder) Compile(c cql.Columns) (cql.RowPlan[liveDestination], error) {
 	d.calls.Add(1)
 	return d.base.Compile(c)
 }
@@ -63,11 +64,11 @@ func TestV2PreparedPagingConcurrentSchemaAndDestinations(t *testing.T) {
 	}()
 	payload := bytes.Repeat([]byte("live-borrowed"), 512)
 	for i := int32(0); i < 64; i++ {
-		cassandraWrite(t, session, "INSERT INTO "+table+"(id,val,payload) VALUES(?,?,?)", gocql.IntValue(1), gocql.IntValue(i), gocql.BlobValue(payload))
+		cassandraWrite(t, session, "INSERT INTO "+table+"(id,val,payload) VALUES(?,?,?)", cql.IntValue(1), cql.IntValue(i), cql.BlobValue(payload))
 	}
 	var calls atomic.Int32
-	decoder := liveDecoder{calls: &calls, base: gocql.Row(gocql.Column("val", gocql.Int32, func(r *liveDestination) *int32 { return &r.Value }), gocql.Column("payload", gocql.BlobCodec, func(r *liveDestination) *gocql.Bytes { return &r.Payload }))}
-	prepared := codecTestMust(gocql.Prepare(ctx, session, gocql.Statement[int32, liveDestination]{CQL: "SELECT val,payload FROM " + table + " WHERE id=?", Params: gocql.OneParam(gocql.Int32), Rows: decoder}, gocql.PrepareOptions{}))
+	decoder := liveDecoder{calls: &calls, base: cql.Row(cql.Column("val", cql.Int32, func(r *liveDestination) *int32 { return &r.Value }), cql.Column("payload", cql.BlobCodec, func(r *liveDestination) *cql.Bytes { return &r.Payload }))}
+	prepared := codecTestMust(gocql.Prepare(ctx, session, cql.Statement[int32, liveDestination]{CQL: "SELECT val,payload FROM " + table + " WHERE id=?", Params: cql.OneParam(cql.Int32), Rows: decoder}, gocql.PrepareOptions{}))
 	bound := codecTestMust(BindBorrowed(prepared, int32(1)))
 	defer bound.Close()
 	churn := make(chan error, 1)
@@ -84,11 +85,11 @@ func TestV2PreparedPagingConcurrentSchemaAndDestinations(t *testing.T) {
 		}
 		churn <- nil
 	}()
-	rows := codecTestMust(Run(ctx, session, bound, testOptions(gocql.OptionValues{PageSize: gocql.Option[int32]{Value: 3, Set: true}})))
+	rows := codecTestMust(Run(ctx, session, bound, testOptions(gocql.OptionValues{PageSize: cql.Option[int32]{Value: 3, Set: true}})))
 	defer rows.Close()
 	var dst liveDestination
 	var retained *gocql.PageLease
-	var first gocql.Bytes
+	var first cql.Bytes
 	count := 0
 	for rows.NextInto(&dst) {
 		if dst.Value != int32(count) || !bytes.Equal(dst.Payload.OwnedBytes(), payload) {

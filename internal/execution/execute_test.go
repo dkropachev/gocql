@@ -1,7 +1,6 @@
 package execution
 
 import (
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -248,7 +247,7 @@ func TestV2RuntimeBufferedPageDeadlinePreservesCaller(t *testing.T) {
 	defer cancel()
 	bound := runtimeQuery(t)
 	page, err := RunPage(ctx, s, bound, model.StartPage(), testOptions(OptionValues{
-		PageTimeout: cql.Option[time.Duration]{Set: true, Value: 20 * time.Millisecond},
+		PageTimeout: cqltype.Option[time.Duration]{Set: true, Value: 20 * time.Millisecond},
 	}))
 	if page != nil {
 		page.Close()

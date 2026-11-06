@@ -17,7 +17,6 @@
 package execution
 
 import (
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
@@ -437,7 +436,7 @@ func TestStreamCapabilityBeforeQuery(t *testing.T) {
 	if c.InternalStreams.InUse() != 0 {
 		t.Fatal("capability leaked stream")
 	}
-	_, err = RunStream(ctx, s, b, codec.StreamOneColumn(codec.StreamBlob), StreamOptions{Incremental: true, Options: testOptions(OptionValues{Prefetch: cql.Option[int]{Set: true, Value: 1}})})
+	_, err = RunStream(ctx, s, b, codec.StreamOneColumn(codec.StreamBlob), StreamOptions{Incremental: true, Options: testOptions(OptionValues{Prefetch: cqltype.Option[int]{Set: true, Value: 1}})})
 	var validation *cqltype.ValidationError
 	if !errors.As(err, &validation) {
 		t.Fatal(err)
@@ -580,7 +579,7 @@ func TestStreamPageDeadlineEndsAtExactBoundary(t *testing.T) {
 	}()
 	b := runtimeQuery(t)
 	defer b.Close()
-	cursor, err := RunStream(context.Background(), s, b, codec.StreamOneColumn(codec.StreamBlob), StreamOptions{Incremental: true, Options: testOptions(OptionValues{PageTimeout: cql.Option[time.Duration]{Set: true, Value: 20 * time.Millisecond}})})
+	cursor, err := RunStream(context.Background(), s, b, codec.StreamOneColumn(codec.StreamBlob), StreamOptions{Incremental: true, Options: testOptions(OptionValues{PageTimeout: cqltype.Option[time.Duration]{Set: true, Value: 20 * time.Millisecond}})})
 	if err != nil {
 		t.Fatal(err)
 	}

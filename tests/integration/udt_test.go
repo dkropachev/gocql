@@ -33,6 +33,7 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 type position struct {
@@ -40,20 +41,20 @@ type position struct {
 	Padding  string
 }
 
-func positionFields(options gocql.UDTOptions) gocql.Codec[position] {
+func positionFields(options cql.UDTOptions) cql.Codec[position] {
 	return serializationUDT(
-		gocql.Params(gocql.Param("lat", gocql.Int32, func(p position) int32 { return p.Lat }), gocql.Param("lon", gocql.Int32, func(p position) int32 { return p.Lon }), gocql.Param("padding", serializationString, func(p position) string { return p.Padding })),
-		gocql.Row(gocql.Column("lat", gocql.Int32, func(p *position) *int32 { return &p.Lat }), gocql.Column("lon", gocql.Int32, func(p *position) *int32 { return &p.Lon }), gocql.Column("padding", serializationString, func(p *position) *string { return &p.Padding })), options)
+		cql.Params(cql.Param("lat", cql.Int32, func(p position) int32 { return p.Lat }), cql.Param("lon", cql.Int32, func(p position) int32 { return p.Lon }), cql.Param("padding", serializationString, func(p position) string { return p.Padding })),
+		cql.Row(cql.Column("lat", cql.Int32, func(p *position) *int32 { return &p.Lat }), cql.Column("lon", cql.Int32, func(p *position) *int32 { return &p.Lon }), cql.Column("padding", serializationString, func(p *position) *string { return &p.Padding })), options)
 }
 
 // The original per-member hooks become an application-owned typed Codec.
 // Clone is valid before any metadata has been compiled.
-type positionCodec struct{ fields gocql.Codec[position] }
+type positionCodec struct{ fields cql.Codec[position] }
 
-func (c positionCodec) CheckType(t gocql.DataType) error              { return c.fields.CheckType(t) }
-func (c positionCodec) Encode(w *gocql.ValueWriter, p position) error { return c.fields.Encode(w, p) }
-func (c positionCodec) Decode(r gocql.ValueReader) (position, error)  { return c.fields.Decode(r) }
-func (positionCodec) Clone(p position) position                       { return p }
+func (c positionCodec) CheckType(t cql.DataType) error              { return c.fields.CheckType(t) }
+func (c positionCodec) Encode(w *cql.ValueWriter, p position) error { return c.fields.Encode(w, p) }
+func (c positionCodec) Decode(r cql.ValueReader) (position, error)  { return c.fields.Decode(r) }
+func (positionCodec) Clone(p position) position                     { return p }
 
 func udtTable(t *testing.T, s *gocql.Session, fields string) (string, string) {
 	t.Helper()
@@ -76,10 +77,10 @@ func TestUDT_Marshaler(t *testing.T) {
 
 type serializationHorse struct{ Name, Owner string }
 
-func serializationHorseCodec(typ string) gocql.Codec[serializationHorse] {
+func serializationHorseCodec(typ string) cql.Codec[serializationHorse] {
 	return serializationUDT(
-		gocql.Params(gocql.Param("name", serializationString, func(v serializationHorse) string { return v.Name }), gocql.Param("owner", serializationString, func(v serializationHorse) string { return v.Owner })),
-		gocql.Row(gocql.Column("name", serializationString, func(v *serializationHorse) *string { return &v.Name }), gocql.Column("owner", serializationString, func(v *serializationHorse) *string { return &v.Owner })), serializationUDTOptions(typ))
+		cql.Params(cql.Param("name", serializationString, func(v serializationHorse) string { return v.Name }), cql.Param("owner", serializationString, func(v serializationHorse) string { return v.Owner })),
+		cql.Row(cql.Column("name", serializationString, func(v *serializationHorse) *string { return &v.Name }), cql.Column("owner", serializationString, func(v *serializationHorse) *string { return &v.Owner })), serializationUDTOptions(typ))
 }
 
 func TestUDT_Reflect(t *testing.T) {
@@ -100,16 +101,16 @@ func TestUDT_NullObject(t *testing.T) {
 	defer s.Close()
 	table, typ := udtTable(t, s, "name text,owner text")
 	serializationWrite(t, s, fmt.Sprintf("INSERT INTO %s(id) VALUES(1)", table))
-	got := gocql.Nullable[serializationHorse]{Value: serializationHorse{"temp", "temp"}, Valid: true}
+	got := cql.Nullable[serializationHorse]{Value: serializationHorse{"temp", "temp"}, Valid: true}
 	var err error
-	got, err = serializationOne(s, fmt.Sprintf("SELECT udt_col FROM %s WHERE id=1", table), gocql.OneColumn(gocql.NullableDecoder(serializationHorseCodec(typ))))
+	got, err = serializationOne(s, fmt.Sprintf("SELECT udt_col FROM %s WHERE id=1", table), cql.OneColumn(cql.NullableDecoder(serializationHorseCodec(typ))))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Valid || got.Value != (serializationHorse{}) {
 		t.Fatalf("null UDT did not reset destination: %+v", got)
 	}
-	if _, err := serializationOne(s, fmt.Sprintf("SELECT udt_col FROM %s WHERE id=1", table), gocql.OneColumn(serializationHorseCodec(typ))); err == nil {
+	if _, err := serializationOne(s, fmt.Sprintf("SELECT udt_col FROM %s WHERE id=1", table), cql.OneColumn(serializationHorseCodec(typ))); err == nil {
 		t.Fatal("nonnullable UDT accepted null")
 	}
 }
@@ -121,12 +122,12 @@ func TestMapScanUDT(t *testing.T) {
 	serializationDDL(t, s, fmt.Sprintf("CREATE TYPE %s(created_timestamp timestamp,message text)", typ))
 	serializationDDL(t, s, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,type int,log_entries list<frozen<%s>>)", table, typ))
 	type entry struct {
-		Created gocql.Timestamp
+		Created cql.Timestamp
 		Message string
 	}
-	codec := serializationUDT(gocql.Params(gocql.Param("created_timestamp", gocql.TimestampCodec, func(v entry) gocql.Timestamp { return v.Created }), gocql.Param("message", serializationString, func(v entry) string { return v.Message })), gocql.Row(gocql.Column("created_timestamp", gocql.TimestampCodec, func(v *entry) *gocql.Timestamp { return &v.Created }), gocql.Column("message", serializationString, func(v *entry) *string { return &v.Message })), serializationUDTOptions(typ))
+	codec := serializationUDT(cql.Params(cql.Param("created_timestamp", cql.TimestampCodec, func(v entry) cql.Timestamp { return v.Created }), cql.Param("message", serializationString, func(v entry) string { return v.Message })), cql.Row(cql.Column("created_timestamp", cql.TimestampCodec, func(v *entry) *cql.Timestamp { return &v.Created }), cql.Column("message", serializationString, func(v *entry) *string { return &v.Message })), serializationUDTOptions(typ))
 	now := time.Now().Truncate(time.Millisecond)
-	stamp, err := gocql.TimestampFromTime(now)
+	stamp, err := cql.TimestampFromTime(now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +154,7 @@ func TestMapScanUDT(t *testing.T) {
 	if err := rows.Close(); err != nil {
 		t.Fatal(err)
 	}
-	for _, r := range []gocql.DynamicRow{retained, clone} {
+	for _, r := range []cql.DynamicRow{retained, clone} {
 		v, err := r.Get("log_entries")
 		if err != nil {
 			t.Fatal(err)
@@ -162,7 +163,7 @@ func TestMapScanUDT(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		entries, err := gocql.Collect(it)
+		entries, err := cql.Collect(it)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -173,7 +174,7 @@ func TestMapScanUDT(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		fields, err := gocql.Collect(fs)
+		fields, err := cql.Collect(fs)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -184,7 +185,7 @@ func TestMapScanUDT(t *testing.T) {
 			switch f.Name {
 			case "created_timestamp":
 				n, e := f.Value.Signed()
-				if e != nil || gocql.Timestamp(n) != stamp {
+				if e != nil || cql.Timestamp(n) != stamp {
 					t.Fatalf("timestamp: %d %v", n, e)
 				}
 			case "message":
@@ -204,13 +205,13 @@ func TestUDT_MissingField(t *testing.T) {
 	defer s.Close()
 	table, typ := udtTable(t, s, "name text,owner text")
 	type col struct{ Name string }
-	p := gocql.Params(gocql.Param("name", serializationString, func(v col) string { return v.Name }))
-	r := gocql.Row(gocql.Column("name", serializationString, func(v *col) *string { return &v.Name }))
+	p := cql.Params(cql.Param("name", serializationString, func(v col) string { return v.Name }))
+	r := cql.Row(cql.Column("name", serializationString, func(v *col) *string { return &v.Name }))
 	strict := serializationUDT(p, r, serializationUDTOptions(typ))
-	if err := serializationExec(s, fmt.Sprintf("INSERT INTO %s(id,udt_col) VALUES(1,?)", table), gocql.OneParam(strict), col{"test"}); err == nil {
+	if err := serializationExec(s, fmt.Sprintf("INSERT INTO %s(id,udt_col) VALUES(1,?)", table), cql.OneParam(strict), col{"test"}); err == nil {
 		t.Fatal("strict UDT accepted an unaccounted database field")
 	}
-	codec := serializationUDT(p, r, gocql.UDTOptions{Keyspace: fixtureKeyspace(""), Name: typ, AllowExtraDatabaseFields: true})
+	codec := serializationUDT(p, r, cql.UDTOptions{Keyspace: fixtureKeyspace(""), Name: typ, AllowExtraDatabaseFields: true})
 	want := col{"test"}
 	got := serializationRoundTrip(t, s, table, "udt_col", 1, codec, want)
 	if got != want {
@@ -223,17 +224,17 @@ func TestUDT_EmptyCollections(t *testing.T) {
 	defer s.Close()
 	table, typ := udtTable(t, s, "a list<text>,b map<text,text>,c set<text>")
 	type udt struct {
-		A gocql.Nullable[[]string]
-		B gocql.Nullable[map[string]string]
-		C gocql.Nullable[[]string]
+		A cql.Nullable[[]string]
+		B cql.Nullable[map[string]string]
+		C cql.Nullable[[]string]
 	}
-	list, mp, set := gocql.NullableCodec(serializationList(serializationString)), gocql.NullableCodec(serializationMap(serializationString, serializationString)), gocql.NullableCodec(serializationSet(serializationString))
-	codec := serializationUDT(gocql.Params(gocql.Param("a", list, func(v udt) gocql.Nullable[[]string] { return v.A }), gocql.Param("b", mp, func(v udt) gocql.Nullable[map[string]string] { return v.B }), gocql.Param("c", set, func(v udt) gocql.Nullable[[]string] { return v.C })), gocql.Row(gocql.Column("a", list, func(v *udt) *gocql.Nullable[[]string] { return &v.A }), gocql.Column("b", mp, func(v *udt) *gocql.Nullable[map[string]string] { return &v.B }), gocql.Column("c", set, func(v *udt) *gocql.Nullable[[]string] { return &v.C })), serializationUDTOptions(typ))
+	list, mp, set := cql.NullableCodec(serializationList(serializationString)), cql.NullableCodec(serializationMap(serializationString, serializationString)), cql.NullableCodec(serializationSet(serializationString))
+	codec := serializationUDT(cql.Params(cql.Param("a", list, func(v udt) cql.Nullable[[]string] { return v.A }), cql.Param("b", mp, func(v udt) cql.Nullable[map[string]string] { return v.B }), cql.Param("c", set, func(v udt) cql.Nullable[[]string] { return v.C })), cql.Row(cql.Column("a", list, func(v *udt) *cql.Nullable[[]string] { return &v.A }), cql.Column("b", mp, func(v *udt) *cql.Nullable[map[string]string] { return &v.B }), cql.Column("c", set, func(v *udt) *cql.Nullable[[]string] { return &v.C })), serializationUDTOptions(typ))
 	got := serializationRoundTrip(t, s, table, "udt_col", 1, codec, udt{})
 	if got.A.Valid || got.B.Valid || got.C.Valid || got.A.Value != nil || got.B.Value != nil || got.C.Value != nil {
 		t.Fatalf("null collections: %+v", got)
 	}
-	got = serializationRoundTrip(t, s, table, "udt_col", 2, codec, udt{A: gocql.Nullable[[]string]{Valid: true}, B: gocql.Nullable[map[string]string]{Valid: true}, C: gocql.Nullable[[]string]{Valid: true}})
+	got = serializationRoundTrip(t, s, table, "udt_col", 2, codec, udt{A: cql.Nullable[[]string]{Valid: true}, B: cql.Nullable[map[string]string]{Valid: true}, C: cql.Nullable[[]string]{Valid: true}})
 	if !got.A.Valid || !got.B.Valid || !got.C.Valid || len(got.A.Value) != 0 || len(got.B.Value) != 0 || len(got.C.Value) != 0 {
 		t.Fatalf("present empty collections: %+v", got)
 	}
@@ -245,19 +246,19 @@ func TestUDT_UpdateField(t *testing.T) {
 	table, typ := udtTable(t, s, "name text,owner text")
 	type col struct {
 		Name, Owner string
-		Data        gocql.Nullable[string]
+		Data        cql.Nullable[string]
 	}
-	p := gocql.Params(gocql.Param("name", serializationString, func(v col) string { return v.Name }), gocql.Param("owner", serializationString, func(v col) string { return v.Owner }), gocql.Param("data", gocql.NullableCodec(serializationString), func(v col) gocql.Nullable[string] { return v.Data }))
-	r := gocql.Row(gocql.Column("name", serializationString, func(v *col) *string { return &v.Name }), gocql.Column("owner", serializationString, func(v *col) *string { return &v.Owner }), gocql.Column("data", gocql.NullableCodec(serializationString), func(v *col) *gocql.Nullable[string] { return &v.Data }))
+	p := cql.Params(cql.Param("name", serializationString, func(v col) string { return v.Name }), cql.Param("owner", serializationString, func(v col) string { return v.Owner }), cql.Param("data", cql.NullableCodec(serializationString), func(v col) cql.Nullable[string] { return v.Data }))
+	r := cql.Row(cql.Column("name", serializationString, func(v *col) *string { return &v.Name }), cql.Column("owner", serializationString, func(v *col) *string { return &v.Owner }), cql.Column("data", cql.NullableCodec(serializationString), func(v *col) *cql.Nullable[string] { return &v.Data }))
 	want := col{Name: "test-name", Owner: "test-owner"}
-	if err := serializationExec(s, fmt.Sprintf("INSERT INTO %s(id,udt_col) VALUES(1,?)", table), gocql.OneParam(gocql.UDTEncoder(p, serializationUDTOptions(typ))), want); err == nil {
+	if err := serializationExec(s, fmt.Sprintf("INSERT INTO %s(id,udt_col) VALUES(1,?)", table), cql.OneParam(cql.UDTEncoder(p, serializationUDTOptions(typ))), want); err == nil {
 		t.Fatal("unknown application field accepted without AllowMissingFields")
 	}
-	if err := serializationExec(s, fmt.Sprintf("INSERT INTO %s(id,udt_col) VALUES(1,?)", table), gocql.OneParam(gocql.UDTEncoder(p, gocql.UDTOptions{Keyspace: fixtureKeyspace(""), Name: typ, AllowMissingFields: true})), want); err != nil {
+	if err := serializationExec(s, fmt.Sprintf("INSERT INTO %s(id,udt_col) VALUES(1,?)", table), cql.OneParam(cql.UDTEncoder(p, cql.UDTOptions{Keyspace: fixtureKeyspace(""), Name: typ, AllowMissingFields: true})), want); err != nil {
 		t.Fatal(err)
 	}
 	serializationDDL(t, s, fmt.Sprintf("ALTER TYPE %s ADD data text", typ))
-	got, err := serializationOne(s, fmt.Sprintf("SELECT udt_col FROM %s WHERE id=1", table), gocql.OneColumn(gocql.UDTDecoder(r, serializationUDTOptions(typ))))
+	got, err := serializationOne(s, fmt.Sprintf("SELECT udt_col FROM %s WHERE id=1", table), cql.OneColumn(cql.UDTDecoder(r, serializationUDTOptions(typ))))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +272,7 @@ func TestUDT_ScanNullUDT(t *testing.T) {
 	defer s.Close()
 	table, typ := udtTable(t, s, "lat int,lon int,padding text")
 	serializationWrite(t, s, fmt.Sprintf("INSERT INTO %s(id) VALUES(1)", table))
-	got, err := serializationOne(s, fmt.Sprintf("SELECT udt_col FROM %s WHERE id=1", table), gocql.OneColumn(gocql.NullableDecoder(positionCodec{fields: positionFields(serializationUDTOptions(typ))})))
+	got, err := serializationOne(s, fmt.Sprintf("SELECT udt_col FROM %s WHERE id=1", table), cql.OneColumn(cql.NullableDecoder(positionCodec{fields: positionFields(serializationUDTOptions(typ))})))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -27,7 +27,7 @@ package gocql_test
 import (
 	"fmt"
 
-	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 
 	"log"
 )
@@ -35,26 +35,26 @@ import (
 type temperature int32
 type temperatureCodec struct{}
 
-func (temperatureCodec) CheckType(t gocql.DataType) error { return gocql.Int32.CheckType(t) }
-func (temperatureCodec) Encode(w *gocql.ValueWriter, v temperature) error {
-	return gocql.Int32.Encode(w, int32(v))
+func (temperatureCodec) CheckType(t cql.DataType) error { return cql.Int32.CheckType(t) }
+func (temperatureCodec) Encode(w *cql.ValueWriter, v temperature) error {
+	return cql.Int32.Encode(w, int32(v))
 }
-func (temperatureCodec) Decode(r gocql.ValueReader) (temperature, error) {
-	v, e := gocql.Int32.Decode(r)
+func (temperatureCodec) Decode(r cql.ValueReader) (temperature, error) {
+	v, e := cql.Int32.Decode(r)
 	return temperature(v), e
 }
 func (temperatureCodec) Clone(v temperature) temperature { return v }
 
 func Example_customCodec() {
-	typ, err := gocql.ScalarType(gocql.TypeInt)
+	typ, err := cql.ScalarType(cql.TypeInt)
 	if err != nil {
 		log.Fatal(err)
 	}
-	encoded, err := gocql.EncodeValueOwned(typ, temperatureCodec{}, temperature(23))
+	encoded, err := cql.EncodeValueOwned(typ, temperatureCodec{}, temperature(23))
 	if err != nil {
 		log.Fatal(err)
 	}
-	value, err := gocql.DecodeValue(temperatureCodec{}, encoded)
+	value, err := cql.DecodeValue(temperatureCodec{}, encoded)
 	if err != nil {
 		log.Fatal(err)
 	}

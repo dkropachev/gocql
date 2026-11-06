@@ -10,6 +10,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/retry"
 
@@ -22,28 +23,28 @@ func TestV2RuntimeSafeRetryPreservesServerErrors(t *testing.T) {
 		code       int
 		idempotent bool
 		want       retry.Action
-	}{{ErrCodeOverloaded, true, retry.Next}, {ErrCodeBootstrapping, true, retry.Next}, {ErrCodeOverloaded, false, retry.Stop}, {ErrCodeSyntax, true, retry.Stop}, {ErrCodeInvalid, true, retry.Stop}, {ErrCodeProtocol, true, retry.Stop}} {
+	}{{cql.ErrCodeOverloaded, true, retry.Next}, {cql.ErrCodeBootstrapping, true, retry.Next}, {cql.ErrCodeOverloaded, false, retry.Stop}, {cql.ErrCodeSyntax, true, retry.Stop}, {cql.ErrCodeInvalid, true, retry.Stop}, {cql.ErrCodeProtocol, true, retry.Stop}} {
 		server := &frm.ErrorFrame{Code: test.code, Message: "test error"}
 		err := runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: server, InternalPotentiallyExecuted: true})
 		decision := policy.Decide(retry.Attempt{Err: err, Number: 1, Idempotent: test.idempotent, BytesWritten: true})
 		if decision.Action != test.want {
 			t.Fatalf("code %x idempotent %t got %d want %d", test.code, test.idempotent, decision.Action, test.want)
 		}
-		var extracted RequestError
+		var extracted cql.RequestError
 		if !errors.As(err, &extracted) || extracted.GetCode() != test.code {
 			t.Fatal("server identity lost")
 		}
 	}
-	for _, err := range []error{context.Canceled, context.DeadlineExceeded, &ProtocolError{Stage: "response", Err: errors.New("invalid frame")}, &ValidationError{Field: "page size", Err: errors.New("invalid")}} {
+	for _, err := range []error{context.Canceled, context.DeadlineExceeded, &cql.ProtocolError{Stage: "response", Err: errors.New("invalid frame")}, &cql.ValidationError{Field: "page size", Err: errors.New("invalid")}} {
 		if got := policy.Decide(retry.Attempt{Err: err, Number: 1, Idempotent: true}); got.Action != retry.Stop {
 			t.Fatalf("retry deterministic error %v", err)
 		}
 	}
 }
 func TestV2RuntimeStatementKeywords(t *testing.T) {
-	for _, cql := range []string{"USE ks", " -- comment\n use ks", "/* comment */ USE ks"} {
-		if _, err := BindUnpreparedBorrowed(Statement[Unit, Unit]{CQL: cql, Params: NoParams, Rows: NoRows}, NewColumns(), Unit{}); !errors.Is(err, ErrUseStmt) {
-			t.Fatalf("USE accepted %q: %v", cql, err)
+	for _, stmt := range []string{"USE ks", " -- comment\n use ks", "/* comment */ USE ks"} {
+		if _, err := BindUnpreparedBorrowed(cql.Statement[cql.Unit, cql.Unit]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{}); !errors.Is(err, ErrUseStmt) {
+			t.Fatalf("USE accepted %q: %v", stmt, err)
 		}
 	}
 	if conditionalCQL("INSERT INTO t(a) VALUES ('IF')") || !conditionalCQL("INSERT INTO t(a) VALUES ('x') IF NOT EXISTS") {

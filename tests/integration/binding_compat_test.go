@@ -12,6 +12,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 )
 
@@ -27,7 +28,7 @@ func BindOwned[P any, R any](a0 *gocql.Prepared[P, R], a1 P) (*Bound[R], error) 
 	return implExecution.BindOwned[P, R](a0, a1)
 }
 
-func BindUnpreparedOwned[P any, R any](a0 gocql.Statement[P, R], a1 gocql.Columns, a2 P) (*Bound[R], error) {
+func BindUnpreparedOwned[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a2 P) (*Bound[R], error) {
 	return implExecution.BindUnpreparedOwned[P, R](a0, a1, a2)
 }
 
@@ -43,7 +44,7 @@ func RunPage[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocq
 	return implExecution.RunPage[R](a0, a1, a2, a3, a4)
 }
 
-func RunStream[B any, R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[B], a3 gocql.StreamRowDecoder[R], a4 gocql.StreamOptions) (*gocql.RowStream[R], error) {
+func RunStream[B any, R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[B], a3 cql.StreamRowDecoder[R], a4 gocql.StreamOptions) (*gocql.RowStream[R], error) {
 	return implExecution.RunStream[B, R](a0, a1, a2, a3, a4)
 }
 

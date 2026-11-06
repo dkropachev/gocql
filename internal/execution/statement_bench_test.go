@@ -10,7 +10,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
@@ -62,7 +61,7 @@ func BenchmarkWarmConcurrentBindings(b *testing.B) {
 							current := s.Metadata()
 							info := model.RoutingInfo{Keyspace: "ks", Table: "table"}
 							stamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, current)
-							hint := testHint(b, 0, 1, cql.Option[uint64]{Set: true, Value: i}, hTarget(1, 0))
+							hint := testHint(b, 0, 1, cqltype.Option[uint64]{Set: true, Value: i}, hTarget(1, 0))
 							implCluster.InternalSessionPublishTabletFeedback(s, p, map[cluster.InternalV2TabletFeedbackKey]cluster.InternalV2PendingTabletFeedback{{InternalKeyspace: "ks", InternalTable: "table", InternalEnd: 1}: {InternalHint: hint, InternalStamp: stamp}}, false)
 							runtime.Gosched()
 						}

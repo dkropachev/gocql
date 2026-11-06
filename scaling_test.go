@@ -14,13 +14,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implCodec "github.com/scylladb/gocql/v2/internal/codec"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
-	"github.com/scylladb/gocql/v2/internal/routing"
+	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/wire"
+	routing "github.com/scylladb/gocql/v2/routing"
 )
 
 func TestHostWorkCounts(t *testing.T) {
@@ -28,21 +30,21 @@ func TestHostWorkCounts(t *testing.T) {
 		for _, kind := range []string{"ordinary", "pinned", "conditional", "leader", "latency", "fallback"} {
 			t.Run(fmt.Sprintf("hosts%d/%s", hosts, kind), func(t *testing.T) {
 				m := v2TestMetadata()
-				storage := routing.SnapshotData(m)
-				storage.InternalHosts = make([]HostSnapshot, hosts)
+				storage := implRouting.SnapshotData(m)
+				storage.InternalHosts = make([]routing.HostSnapshot, hosts)
 				for i := range storage.InternalHosts {
 					h := v2TestHost(0, "a", "r1")
 					binary.BigEndian.PutUint64(h.ID[8:], uint64(i+1))
 					storage.InternalHosts[i] = h
 				}
 				storage.InternalHostIndex = buildRoutingHostIndex(storage.InternalHosts)
-				hint := testHint(t, 0, 100, Option[uint64]{Set: true, Value: 1}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0))
+				hint := testHint(t, 0, 100, cql.Option[uint64]{Set: true, Value: 1}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0))
 				root, _ := updateTabletRange(nil, hint)
 				storage.InternalPlacements = placementPut(storage.InternalPlacements, metadataTable{InternalKeyspace: "ks", InternalTable: "table"}, tabletPlacement{InternalRanges: root}, comparePlacementTable)
-				info := RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Set: true, Value: 1}, Consistency: Quorum, Kind: OrdinaryStatement}
-				opts := RoutingOptions{TokenAware: true, Datacenter: "a", Rack: "r1", LeaderAware: kind == "leader"}
+				info := routing.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true, Value: 1}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
+				opts := routing.Options{TokenAware: true, Datacenter: "a", Rack: "r1", LeaderAware: kind == "leader"}
 				if kind == "pinned" {
-					info.HostID = Option[UUID]{Set: true, Value: storage.InternalHosts[0].ID}
+					info.HostID = cql.Option[cql.UUID]{Set: true, Value: storage.InternalHosts[0].ID}
 				}
 				if kind == "conditional" {
 					info.Conditional = true
@@ -58,17 +60,17 @@ func TestHostWorkCounts(t *testing.T) {
 				if kind == "latency" {
 					opts.Latency.Enabled = true
 				}
-				policy := codecTestMust(NewRoutingPolicy(opts))
+				policy := codecTestMust(routing.NewPolicy(opts))
 				if kind == "latency" {
-					policy.(*routingPolicy).InternalDecisions.Store(&routingDecisions{InternalSlow: map[UUID]time.Time{storage.InternalHosts[2].ID: time.Now().Add(time.Hour)}})
+					policy.(*routingPolicy).InternalDecisions.Store(&routingDecisions{InternalSlow: map[cql.UUID]time.Time{storage.InternalHosts[2].ID: time.Now().Add(time.Hour)}})
 				}
-				routing.ResetPerfCounters()
-				plan := NewQueryPlan(policy, info, m)
+				implRouting.ResetPerfCounters()
+				plan := routing.NewPlan(policy, info, m)
 				target, ok := plan.Next()
 				if !ok {
 					t.Fatal("no target")
 				}
-				c := routing.ReadPerfCounters()
+				c := implRouting.ReadPerfCounters()
 				if c.HostIndexVisits != 0 || kind != "fallback" && c.FallbackVisits != 0 || kind != "fallback" && c.HostLookups > 3 {
 					t.Fatal(c)
 				}
@@ -130,10 +132,10 @@ func TestHistoryCounts(t *testing.T) {
 	}
 }
 func TestWarmAndChangedPlans(t *testing.T) {
-	cols := NewColumns(ColumnSpec{Name: "v", Type: codecTestMust(ScalarType(TypeBlob))})
+	cols := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: codecTestMust(cql.ScalarType(cql.TypeBlob))})
 	entry := &typedResultMetadata{InternalColumns: cols}
 	response := &responsePage{InternalMetadata: entry, InternalResponseData: responseData{Columns: cols}}
-	cache := &resultPlanCache[Bytes]{}
+	cache := &resultPlanCache[cql.Bytes]{}
 	var calls atomic.Int32
 	decoder := countingDecoder{calls: &calls}
 	if _, e := cache.InternalSelectPlan(response, decoder); e != nil {
@@ -149,7 +151,7 @@ func TestWarmAndChangedPlans(t *testing.T) {
 	if comp != 0 || maps != 0 || calls.Load() != 1 || implCodec.ReadPerfTypeChecks() != 0 {
 		t.Fatal(comp, maps, calls.Load())
 	}
-	changed := NewColumns(ColumnSpec{Name: "changed", Type: codecTestMust(ScalarType(TypeBlob))})
+	changed := cql.NewColumns(cql.ColumnSpec{Name: "changed", Type: codecTestMust(cql.ScalarType(cql.TypeBlob))})
 	second := &responsePage{InternalMetadata: &typedResultMetadata{InternalColumns: changed}, InternalResponseData: responseData{Columns: changed}}
 	if _, e := cache.InternalSelectPlan(second, decoder); e != nil {
 		t.Fatal(e)
@@ -172,7 +174,9 @@ func (o *testObserver) ObserveAttempt(AttemptEvent) { o.attempts.Add(1) }
 
 type speculation struct{}
 
-func (speculation) Delay(int, MetricsSnapshot) (time.Duration, bool) { return time.Hour, true }
+func (speculation) Delay(int, routing.MetricsSnapshot) (time.Duration, bool) {
+	return time.Hour, true
+}
 func TestOptionalWorkCounts(t *testing.T) {
 	for _, mode := range []string{"disabled", "enabled", "default"} {
 		enabled := mode == "enabled"
@@ -233,7 +237,7 @@ func TestOptionalWorkCounts(t *testing.T) {
 	// unrelated schema events leave the captured table generation current.
 	s := new(Session)
 	implCluster.SessionData(s).InternalLogger = nopLogger{}
-	cols := NewColumns(ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "v", Type: codecTestMust(ScalarType(TypeBlob))})
+	cols := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "v", Type: codecTestMust(cql.ScalarType(cql.TypeBlob))})
 	_, hp := testPreparedState(t, s, cols)
 	for i := 0; i < 1000; i++ {
 		implCluster.InternalSessionInvalidatePreparedSchema(s, Event{Keyspace: "unrelated", Object: fmt.Sprint(i), Target: "TABLE"})

@@ -51,13 +51,18 @@ import (
 	inf "gopkg.in/inf.v0"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/auth"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	protocol "github.com/scylladb/gocql/v2/internal/protocol"
-	routing "github.com/scylladb/gocql/v2/internal/routing"
+	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/testkit"
+	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/retry"
+	routing "github.com/scylladb/gocql/v2/routing"
 )
 
 var (
@@ -184,7 +189,7 @@ func BindOwned[P any, R any](a0 *gocql.Prepared[P, R], a1 P) (*Bound[R], error) 
 	return implExecution.BindOwned[P, R](a0, a1)
 }
 
-func BindUnpreparedOwned[P any, R any](a0 gocql.Statement[P, R], a1 gocql.Columns, a2 P) (*Bound[R], error) {
+func BindUnpreparedOwned[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a2 P) (*Bound[R], error) {
 	return implExecution.BindUnpreparedOwned[P, R](a0, a1, a2)
 }
 
@@ -236,12 +241,12 @@ func (cassandraRetry) Decide(a retry.Attempt) retry.Decision {
 // Custom values use explicit codecs; field discovery and reflection are absent.
 type fullNameCodec struct{}
 
-func (fullNameCodec) CheckType(t gocql.DataType) error { return gocql.TextCodec.CheckType(t) }
-func (fullNameCodec) Encode(w *gocql.ValueWriter, n FullName) error {
-	return gocql.StringEncoder.Encode(w, n.FirstName+" "+n.LastName)
+func (fullNameCodec) CheckType(t cql.DataType) error { return cql.TextCodec.CheckType(t) }
+func (fullNameCodec) Encode(w *cql.ValueWriter, n FullName) error {
+	return cql.StringEncoder.Encode(w, n.FirstName+" "+n.LastName)
 }
-func (fullNameCodec) Decode(r gocql.ValueReader) (FullName, error) {
-	text, err := gocql.TextCodec.Decode(r)
+func (fullNameCodec) Decode(r cql.ValueReader) (FullName, error) {
+	text, err := cql.TextCodec.Decode(r)
 	if err != nil {
 		return FullName{}, err
 	}
@@ -255,9 +260,9 @@ func (fullNameCodec) Clone(n FullName) FullName { return n }
 
 type cassandraVarintInt64 struct{}
 
-func (cassandraVarintInt64) CheckType(t gocql.DataType) error { return gocql.VarintCodec.CheckType(t) }
-func (cassandraVarintInt64) Decode(r gocql.ValueReader) (int64, error) {
-	v, err := gocql.VarintCodec.Decode(r)
+func (cassandraVarintInt64) CheckType(t cql.DataType) error { return cql.VarintCodec.CheckType(t) }
+func (cassandraVarintInt64) Decode(r cql.ValueReader) (int64, error) {
+	v, err := cql.VarintCodec.Decode(r)
 	if err != nil {
 		return 0, err
 	}
@@ -284,7 +289,7 @@ type unixSocketDialer struct {
 	socketPath string
 }
 
-func (d unixSocketDialer) DialContext(ctx context.Context, target gocql.DialTarget) (net.Conn, error) {
+func (d unixSocketDialer) DialContext(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 	return d.dialer.DialContext(ctx, target.Network, target.Address)
 }
 
@@ -382,12 +387,12 @@ func createV2Cluster(opts ...func(*gocql.Config)) gocql.Config {
 	config.CQLVersion = *flagCQL
 	config.Metadata.AgreementTimeout = 2 * time.Minute
 	profile := *config.DefaultProfile
-	profile.Consistency = gocql.Quorum
+	profile.Consistency = cql.Quorum
 	profile.Timeout = *flagTimeout
 	profile.Retry = retry.Safe{MaxAttempts: max(1, *flagRetry+1)}
 	config.DefaultProfile = &profile
 	if *flagRunAuthTest {
-		config.Auth = gocql.PasswordAuth("cassandra", "cassandra")
+		config.Auth = auth.Password("cassandra", "cassandra")
 	}
 	switch *flagCompressTest {
 	case "snappy":
@@ -474,7 +479,7 @@ func createV2Cluster(opts ...func(*gocql.Config)) gocql.Config {
 		config.TLS = fixtureTLS
 		// The per-host API uses this complete TLS configuration directly and
 		// avoids the legacy SSL option's mandatory DNS verification override.
-		config.TLSForHost = func(context.Context, gocql.HostSnapshot) (*tls.Config, error) {
+		config.TLSForHost = func(context.Context, routing.HostSnapshot) (*tls.Config, error) {
 			return fixtureTLS.Clone(), nil
 		}
 	}
@@ -511,11 +516,11 @@ func createV2SessionFromConfig(config gocql.Config, t testing.TB, tabletsDisable
 		if err != nil {
 			t.Fatalf("probe tablet support: %v", err)
 		}
-		cql := fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': %d}", keyspace, *flagRF)
+		stmt := fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': %d}", keyspace, *flagRF)
 		if supported {
-			cql += fmt.Sprintf(" AND tablets = {'enabled': %t}", !tabletsDisabled)
+			stmt += fmt.Sprintf(" AND tablets = {'enabled': %t}", !tabletsDisabled)
 		}
-		if err := v2CreateTable(ctx, session, cql); err != nil {
+		if err := v2CreateTable(ctx, session, stmt); err != nil {
 			t.Fatalf("create typed integration keyspace: %v", err)
 		}
 	})
@@ -553,7 +558,7 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session) (bool, erro
 		if err != nil {
 			return false, err
 		}
-		if value.State() == gocql.Null {
+		if value.State() == cql.Null {
 			return false, nil
 		}
 		features, err := value.Text()
@@ -570,21 +575,21 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session) (bool, erro
 	return false, nil
 }
 
-func v2Query(ctx context.Context, session *gocql.Session, cql string, values ...gocql.Value) (gocql.Rows[gocql.DynamicRow], error) {
-	statement := gocql.Statement[[]gocql.Value, gocql.DynamicRow]{CQL: cql, Params: gocql.DynamicParams, Rows: gocql.DynamicRows}
-	var bound *Bound[gocql.DynamicRow]
+func v2Query(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (gocql.Rows[cql.DynamicRow], error) {
+	statement := cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}
+	var bound *Bound[cql.DynamicRow]
 	var err error
 	if len(values) == 0 {
-		bound, err = BindUnpreparedOwned(statement, gocql.NewColumns(), values)
+		bound, err = BindUnpreparedOwned(statement, cql.NewColumns(), values)
 	} else {
-		var prepared *gocql.Prepared[[]gocql.Value, gocql.DynamicRow]
+		var prepared *gocql.Prepared[[]cql.Value, cql.DynamicRow]
 		prepared, err = gocql.Prepare(ctx, session, statement, gocql.PrepareOptions{})
 		if err == nil {
 			bound, err = BindOwned(prepared, values)
 		}
 	}
 	if err != nil {
-		return gocql.Rows[gocql.DynamicRow]{}, err
+		return gocql.Rows[cql.DynamicRow]{}, err
 	}
 	// Run admits the request before returning. Rows owns the execution reference
 	// until it is exhausted or closed, even after closing the binding here.
@@ -592,33 +597,33 @@ func v2Query(ctx context.Context, session *gocql.Session, cql string, values ...
 	return Run(ctx, session, bound, gocql.Options{})
 }
 
-func v2ReadOne(ctx context.Context, session *gocql.Session, cql string, values ...gocql.Value) (gocql.DynamicRow, error) {
-	rows, err := v2Query(ctx, session, cql, values...)
+func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (cql.DynamicRow, error) {
+	rows, err := v2Query(ctx, session, stmt, values...)
 	if err != nil {
-		return gocql.DynamicRow{}, err
+		return cql.DynamicRow{}, err
 	}
 	defer rows.Close()
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
-			return gocql.DynamicRow{}, err
+			return cql.DynamicRow{}, err
 		}
-		return gocql.DynamicRow{}, gocql.ErrNoRows
+		return cql.DynamicRow{}, gocql.ErrNoRows
 	}
 	row, err := rows.Clone()
 	if err != nil {
-		return gocql.DynamicRow{}, err
+		return cql.DynamicRow{}, err
 	}
 	if rows.Next() {
-		return gocql.DynamicRow{}, gocql.ErrMultipleRows
+		return cql.DynamicRow{}, gocql.ErrMultipleRows
 	}
 	if err := rows.Err(); err != nil {
-		return gocql.DynamicRow{}, err
+		return cql.DynamicRow{}, err
 	}
 	return row, rows.Close()
 }
 
-func v2CreateTable(ctx context.Context, session *gocql.Session, cql string) error {
-	bound, err := BindUnpreparedOwned(gocql.Statement[gocql.Unit, gocql.Unit]{CQL: cql, Params: gocql.NoParams, Rows: gocql.NoRows}, gocql.NewColumns(), gocql.Unit{})
+func v2CreateTable(ctx context.Context, session *gocql.Session, stmt string) error {
+	bound, err := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{})
 	if err != nil {
 		return err
 	}
@@ -641,7 +646,7 @@ type incompletePeerDialer struct {
 	injected atomic.Int64
 }
 
-func (d *incompletePeerDialer) DialContext(ctx context.Context, target gocql.DialTarget) (net.Conn, error) {
+func (d *incompletePeerDialer) DialContext(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 	network, address := target.Network, target.Address
 	conn, err := d.Dialer.DialContext(ctx, network, address)
 	if err != nil {
@@ -785,43 +790,43 @@ func (c *incompletePeerConn) SetLinger(v int) error { return c.Conn.(*net.TCPCon
 // query admission and routing. Session metadata snapshots are immutable, so this
 // fault injection cannot change shared HostInfo objects used by other sessions.
 type v2UnavailableHostsRouting struct {
-	gocql.RoutingPolicy
+	routing.Policy
 	oneHost bool
 }
 
-func (p v2UnavailableHostsRouting) Pick(info gocql.RoutingInfo, metadata *gocql.MetadataSnapshot) (gocql.Route, bool) {
-	return p.RoutingPolicy.Pick(info, p.unavailable(metadata))
+func (p v2UnavailableHostsRouting) Pick(info routing.Info, metadata *metadata.Snapshot) (routing.Route, bool) {
+	return p.Policy.Pick(info, p.unavailable(metadata))
 }
 
-func (p v2UnavailableHostsRouting) Fallback(info gocql.RoutingInfo, metadata *gocql.MetadataSnapshot) gocql.QueryPlan {
-	return p.RoutingPolicy.Fallback(info, p.unavailable(metadata))
+func (p v2UnavailableHostsRouting) Fallback(info routing.Info, metadata *metadata.Snapshot) routing.Plan {
+	return p.Policy.Fallback(info, p.unavailable(metadata))
 }
 
 // unavailable returns metadata with every host down.
-func (p v2UnavailableHostsRouting) unavailable(metadata *gocql.MetadataSnapshot) *gocql.MetadataSnapshot {
+func (p v2UnavailableHostsRouting) unavailable(metadata *metadata.Snapshot) *metadata.Snapshot {
 	snapshot := *metadata
-	routing.SnapshotData(&snapshot).InternalHostIndex = nil
-	routing. // rebuild indices after test-only membership changes
+	implRouting.SnapshotData(&snapshot).InternalHostIndex = nil
+	implRouting. // rebuild indices after test-only membership changes
 			SnapshotData(&snapshot).InternalHosts = metadata.Hosts()
-	for i := range routing.SnapshotData(&snapshot).InternalHosts {
-		routing.SnapshotData(&snapshot).InternalHosts[i].Up = false
+	for i := range implRouting.SnapshotData(&snapshot).InternalHosts {
+		implRouting.SnapshotData(&snapshot).InternalHosts[i].Up = false
 	}
-	if p.oneHost && len(routing.SnapshotData(&snapshot).InternalHosts) > 1 {
-		routing.SnapshotData(&snapshot).InternalHosts = routing.SnapshotData(&snapshot).InternalHosts[:1]
+	if p.oneHost && len(implRouting.SnapshotData(&snapshot).InternalHosts) > 1 {
+		implRouting.SnapshotData(&snapshot).InternalHosts = implRouting.SnapshotData(&snapshot).InternalHosts[:1]
 	}
 	return &snapshot
 }
 
 type liveDestination struct {
 	Value   int32
-	Payload gocql.Bytes
+	Payload cql.Bytes
 }
 type liveDecoder struct {
 	calls *atomic.Int32
-	base  gocql.RowDecoder[liveDestination]
+	base  cql.RowDecoder[liveDestination]
 }
 
-func (d liveDecoder) Compile(c gocql.Columns) (gocql.RowPlan[liveDestination], error) {
+func (d liveDecoder) Compile(c cql.Columns) (cql.RowPlan[liveDestination], error) {
 	d.calls.Add(1)
 	return d.base.Compile(c)
 }
@@ -834,14 +839,14 @@ type countingDecoder struct {
 	hook  func()
 }
 
-func (d countingDecoder) Compile(c gocql.Columns) (gocql.RowPlan[gocql.Bytes], error) {
+func (d countingDecoder) Compile(c cql.Columns) (cql.RowPlan[cql.Bytes], error) {
 	d.calls.Add(1)
 	if d.hook != nil {
 		d.hook()
 	}
-	return gocql.OneColumn(gocql.BlobCodec).Compile(c)
+	return cql.OneColumn(cql.BlobCodec).Compile(c)
 }
-func (d countingDecoder) Clone(v gocql.Bytes) gocql.Bytes { return v.Clone() }
+func (d countingDecoder) Clone(v cql.Bytes) cql.Bytes { return v.Clone() }
 
 // Independent native request fixtures produce byte oracles for the canonical
 // span writer. These own already-encoded test bytes only; no production request
@@ -859,8 +864,8 @@ type fixtureQueryParams struct {
 	pagingState           []byte
 	pageSize              int
 	defaultTimestampValue int64
-	consistency           gocql.Consistency
-	serialConsistency     gocql.Consistency
+	consistency           cql.Consistency
+	serialConsistency     cql.Consistency
 	skipMeta              bool
 	defaultTimestamp      bool
 }
@@ -1027,13 +1032,13 @@ func fixtureWriteExecute(f *framer, streamID int, preparedID, resultMetadataID [
 type testConviction struct {
 	mu      sync.Mutex
 	cause   error
-	hosts   []gocql.HostSnapshot
-	targets []gocql.HostSnapshot
+	hosts   []routing.HostSnapshot
+	targets []routing.HostSnapshot
 	verdict bool
 	resets  int
 }
 
-func (p *testConviction) AddFailure(err error, host gocql.HostSnapshot) bool {
+func (p *testConviction) AddFailure(err error, host routing.HostSnapshot) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if !errors.Is(err, p.cause) {
@@ -1043,7 +1048,7 @@ func (p *testConviction) AddFailure(err error, host gocql.HostSnapshot) bool {
 	p.hosts = append(p.hosts, host)
 	return p.verdict
 }
-func (p *testConviction) Reset(host gocql.HostSnapshot) {
+func (p *testConviction) Reset(host routing.HostSnapshot) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if len(p.hosts) == 0 || p.hosts[0].ID != host.ID {
@@ -1140,9 +1145,9 @@ func (ltd *loggingTestDialer) connectionEvents(address string) []testConnectionE
 
 // These fixture helpers compose the public codecs; the integration values never
 // pass through reflected parameter binding or result destination discovery.
-func serializationExec[P any](s *gocql.Session, cql string, encoder gocql.ParamEncoder[P], value P) error {
+func serializationExec[P any](s *gocql.Session, stmt string, encoder cql.ParamEncoder[P], value P) error {
 	ctx := context.Background()
-	p, err := gocql.Prepare(ctx, s, gocql.Statement[P, gocql.Unit]{CQL: cql, Params: encoder, Rows: gocql.NoRows}, gocql.PrepareOptions{})
+	p, err := gocql.Prepare(ctx, s, cql.Statement[P, cql.Unit]{CQL: stmt, Params: encoder, Rows: cql.NoRows}, gocql.PrepareOptions{})
 	if err != nil {
 		return err
 	}
@@ -1155,9 +1160,9 @@ func serializationExec[P any](s *gocql.Session, cql string, encoder gocql.ParamE
 	return err
 }
 
-func serializationRows[R any](s *gocql.Session, cql string, decoder gocql.RowDecoder[R], values ...gocql.Value) (gocql.Rows[R], error) {
+func serializationRows[R any](s *gocql.Session, stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (gocql.Rows[R], error) {
 	ctx := context.Background()
-	p, err := gocql.Prepare(ctx, s, gocql.Statement[[]gocql.Value, R]{CQL: cql, Params: gocql.DynamicParams, Rows: decoder}, gocql.PrepareOptions{})
+	p, err := gocql.Prepare(ctx, s, cql.Statement[[]cql.Value, R]{CQL: stmt, Params: cql.DynamicParams, Rows: decoder}, gocql.PrepareOptions{})
 	if err != nil {
 		return gocql.Rows[R]{}, err
 	}
@@ -1169,9 +1174,9 @@ func serializationRows[R any](s *gocql.Session, cql string, decoder gocql.RowDec
 	return Run(ctx, s, b, gocql.Options{})
 }
 
-func serializationOne[R any](s *gocql.Session, cql string, decoder gocql.RowDecoder[R], values ...gocql.Value) (R, error) {
+func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (R, error) {
 	var zero R
-	rows, err := serializationRows(s, cql, decoder, values...)
+	rows, err := serializationRows(s, stmt, decoder, values...)
 	if err != nil {
 		return zero, err
 	}
@@ -1198,14 +1203,14 @@ func serializationOne[R any](s *gocql.Session, cql string, decoder gocql.RowDeco
 // Owned application representations are explicit, opt-in conversions in tests.
 type serializationStringCodec struct{}
 
-func (serializationStringCodec) CheckType(t gocql.DataType) error {
-	return gocql.TextCodec.CheckType(t)
+func (serializationStringCodec) CheckType(t cql.DataType) error {
+	return cql.TextCodec.CheckType(t)
 }
-func (serializationStringCodec) Encode(w *gocql.ValueWriter, s string) error {
-	return gocql.StringEncoder.Encode(w, s)
+func (serializationStringCodec) Encode(w *cql.ValueWriter, s string) error {
+	return cql.StringEncoder.Encode(w, s)
 }
-func (serializationStringCodec) Decode(r gocql.ValueReader) (string, error) {
-	v, e := gocql.TextCodec.Decode(r)
+func (serializationStringCodec) Decode(r cql.ValueReader) (string, error) {
+	v, e := cql.TextCodec.Decode(r)
 	if e != nil {
 		return "", e
 	}
@@ -1213,29 +1218,29 @@ func (serializationStringCodec) Decode(r gocql.ValueReader) (string, error) {
 }
 func (serializationStringCodec) Clone(s string) string { return s }
 
-var serializationString gocql.Codec[string] = serializationStringCodec{}
+var serializationString cql.Codec[string] = serializationStringCodec{}
 
 type serializationSliceCodec[T any] struct {
-	encoder gocql.Encoder[[]T]
-	decoder gocql.Decoder[gocql.Sequence[T]]
-	element gocql.Decoder[T]
+	encoder cql.Encoder[[]T]
+	decoder cql.Decoder[cql.Sequence[T]]
+	element cql.Decoder[T]
 }
 
-func (c serializationSliceCodec[T]) CheckType(t gocql.DataType) error {
+func (c serializationSliceCodec[T]) CheckType(t cql.DataType) error {
 	if err := c.encoder.CheckType(t); err != nil {
 		return err
 	}
 	return c.decoder.CheckType(t)
 }
-func (c serializationSliceCodec[T]) Encode(w *gocql.ValueWriter, v []T) error {
+func (c serializationSliceCodec[T]) Encode(w *cql.ValueWriter, v []T) error {
 	return c.encoder.Encode(w, v)
 }
-func (c serializationSliceCodec[T]) Decode(r gocql.ValueReader) ([]T, error) {
+func (c serializationSliceCodec[T]) Decode(r cql.ValueReader) ([]T, error) {
 	s, e := c.decoder.Decode(r)
 	if e != nil {
 		return nil, e
 	}
-	return gocql.Collect(s.Iterator())
+	return cql.Collect(s.Iterator())
 }
 func (c serializationSliceCodec[T]) Clone(v []T) []T {
 	if v == nil {
@@ -1248,16 +1253,16 @@ func (c serializationSliceCodec[T]) Clone(v []T) []T {
 	return out
 }
 
-func serializationSet[T any](c gocql.Codec[T]) gocql.Codec[[]T] {
-	return serializationSliceCodec[T]{gocql.SetEncoder(c), gocql.SetDecoder(c), c}
+func serializationSet[T any](c cql.Codec[T]) cql.Codec[[]T] {
+	return serializationSliceCodec[T]{cql.SetEncoder(c), cql.SetDecoder(c), c}
 }
 
 type serializationCodec[T any] struct {
-	gocql.Encoder[T]
-	gocql.Decoder[T]
+	cql.Encoder[T]
+	cql.Decoder[T]
 }
 
-func (c serializationCodec[T]) CheckType(t gocql.DataType) error {
+func (c serializationCodec[T]) CheckType(t cql.DataType) error {
 	if err := c.Encoder.CheckType(t); err != nil {
 		return err
 	}
@@ -1265,25 +1270,25 @@ func (c serializationCodec[T]) CheckType(t gocql.DataType) error {
 }
 
 type serializationMapCodec[K comparable, V any] struct {
-	key   gocql.Codec[K]
-	value gocql.Codec[V]
+	key   cql.Codec[K]
+	value cql.Codec[V]
 }
 
-func (c serializationMapCodec[K, V]) CheckType(t gocql.DataType) error {
-	if e := gocql.MapEncoder(c.key, c.value).CheckType(t); e != nil {
+func (c serializationMapCodec[K, V]) CheckType(t cql.DataType) error {
+	if e := cql.MapEncoder(c.key, c.value).CheckType(t); e != nil {
 		return e
 	}
-	return gocql.MapDecoder(c.key, c.value).CheckType(t)
+	return cql.MapDecoder(c.key, c.value).CheckType(t)
 }
-func (c serializationMapCodec[K, V]) Encode(w *gocql.ValueWriter, v map[K]V) error {
-	entries := make([]gocql.Entry[K, V], 0, len(v))
+func (c serializationMapCodec[K, V]) Encode(w *cql.ValueWriter, v map[K]V) error {
+	entries := make([]cql.Entry[K, V], 0, len(v))
 	for k, x := range v {
-		entries = append(entries, gocql.Entry[K, V]{Key: k, Value: x})
+		entries = append(entries, cql.Entry[K, V]{Key: k, Value: x})
 	}
-	return gocql.MapEncoder(c.key, c.value).Encode(w, entries)
+	return cql.MapEncoder(c.key, c.value).Encode(w, entries)
 }
-func (c serializationMapCodec[K, V]) Decode(r gocql.ValueReader) (map[K]V, error) {
-	m, e := gocql.MapDecoder(c.key, c.value).Decode(r)
+func (c serializationMapCodec[K, V]) Decode(r cql.ValueReader) (map[K]V, error) {
+	m, e := cql.MapDecoder(c.key, c.value).Decode(r)
 	if e != nil {
 		return nil, e
 	}
@@ -1305,23 +1310,23 @@ func (c serializationMapCodec[K, V]) Clone(v map[K]V) map[K]V {
 	}
 	return o
 }
-func serializationMap[K comparable, V any](k gocql.Codec[K], v gocql.Codec[V]) gocql.Codec[map[K]V] {
+func serializationMap[K comparable, V any](k cql.Codec[K], v cql.Codec[V]) cql.Codec[map[K]V] {
 	return serializationMapCodec[K, V]{k, v}
 }
 
 type serializationRawDecoder struct{}
 
-func (serializationRawDecoder) CheckType(t gocql.DataType) error {
-	return gocql.DynamicCodec.CheckType(t)
+func (serializationRawDecoder) CheckType(t cql.DataType) error {
+	return cql.DynamicCodec.CheckType(t)
 }
-func (serializationRawDecoder) Decode(r gocql.ValueReader) (gocql.EncodedValue, error) {
-	return gocql.NewEncodedValue(r.Type(), r.State(), r.Bytes())
+func (serializationRawDecoder) Decode(r cql.ValueReader) (cql.EncodedValue, error) {
+	return cql.NewEncodedValue(r.Type(), r.State(), r.Bytes())
 }
-func (serializationRawDecoder) Clone(v gocql.EncodedValue) gocql.EncodedValue { return v.Clone() }
+func (serializationRawDecoder) Clone(v cql.EncodedValue) cql.EncodedValue { return v.Clone() }
 
 // The shared typed session intentionally preserves its keyspace. Names include
 // a process nonce so repeated runs remain isolated from previous run data/schema.
-var serializationFixtureNamespace = gocql.NewTimeUUID().String()
+var serializationFixtureNamespace = cql.NewTimeUUID().String()
 
 func serializationTableName(t testing.TB, parts ...string) string {
 	parts = append(parts, "v2", serializationFixtureNamespace)
@@ -1492,7 +1497,7 @@ func (s *testIO) snapshot() (reads, writes, readBytes, writeBytes int64) {
 
 type v2TabletAttemptObserver struct {
 	mu      sync.Mutex
-	targets []gocql.Target
+	targets []routing.Target
 }
 
 func (*v2TabletAttemptObserver) ObserveRequest(gocql.RequestEvent) {}
@@ -1503,10 +1508,10 @@ func (o *v2TabletAttemptObserver) ObserveAttempt(event gocql.AttemptEvent) {
 		o.targets = append(o.targets, event.Target)
 	}
 }
-func (o *v2TabletAttemptObserver) snapshot() []gocql.Target {
+func (o *v2TabletAttemptObserver) snapshot() []routing.Target {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]gocql.Target(nil), o.targets...)
+	return append([]routing.Target(nil), o.targets...)
 }
 
 type position struct {
@@ -1516,12 +1521,12 @@ type position struct {
 
 // The original per-member hooks become an application-owned typed Codec.
 // Clone is valid before any metadata has been compiled.
-type positionCodec struct{ fields gocql.Codec[position] }
+type positionCodec struct{ fields cql.Codec[position] }
 
-func (c positionCodec) CheckType(t gocql.DataType) error              { return c.fields.CheckType(t) }
-func (c positionCodec) Encode(w *gocql.ValueWriter, p position) error { return c.fields.Encode(w, p) }
-func (c positionCodec) Decode(r gocql.ValueReader) (position, error)  { return c.fields.Decode(r) }
-func (positionCodec) Clone(p position) position                       { return p }
+func (c positionCodec) CheckType(t cql.DataType) error              { return c.fields.CheckType(t) }
+func (c positionCodec) Encode(w *cql.ValueWriter, p position) error { return c.fields.Encode(w, p) }
+func (c positionCodec) Decode(r cql.ValueReader) (position, error)  { return c.fields.Decode(r) }
+func (positionCodec) Clone(p position) position                     { return p }
 
 type person struct {
 	FirstName, LastName string
@@ -1532,14 +1537,14 @@ func (p person) String() string {
 	return fmt.Sprintf("Person{firstName: %s, lastName: %s, Age: %d}", p.FirstName, p.LastName, p.Age)
 }
 
-var serializationBlob = gocql.NamedScalar(gocql.BlobCodec, func(v []byte) gocql.Bytes { return gocql.BorrowBytes(v) }, func(v gocql.Bytes) []byte { return v.OwnedBytes() })
-var serializationTimestamp = gocql.NamedScalar(gocql.TimestampCodec, func(v time.Time) gocql.Timestamp {
-	n, e := gocql.TimestampFromTime(v)
+var serializationBlob = cql.NamedScalar(cql.BlobCodec, func(v []byte) cql.Bytes { return cql.BorrowBytes(v) }, func(v cql.Bytes) []byte { return v.OwnedBytes() })
+var serializationTimestamp = cql.NamedScalar(cql.TimestampCodec, func(v time.Time) cql.Timestamp {
+	n, e := cql.TimestampFromTime(v)
 	if e != nil {
 		panic(e)
 	}
 	return n
-}, func(v gocql.Timestamp) time.Time {
+}, func(v cql.Timestamp) time.Time {
 	n, e := v.Time()
 	if e != nil {
 		panic(e)
@@ -1547,6 +1552,6 @@ var serializationTimestamp = gocql.NamedScalar(gocql.TimestampCodec, func(v time
 	return n.UTC()
 })
 
-var serializationDecimal = gocql.NamedScalar(gocql.DecimalCodec, func(v inf.Dec) gocql.Decimal {
-	return gocql.Decimal{Scale: int32(v.Scale()), Unscaled: gocql.VarintFromBigInt(v.UnscaledBig())}
-}, func(v gocql.Decimal) inf.Dec { return *inf.NewDecBig(v.Unscaled.BigInt(), inf.Scale(v.Scale)) })
+var serializationDecimal = cql.NamedScalar(cql.DecimalCodec, func(v inf.Dec) cql.Decimal {
+	return cql.Decimal{Scale: int32(v.Scale()), Unscaled: cql.VarintFromBigInt(v.UnscaledBig())}
+}, func(v cql.Decimal) inf.Dec { return *inf.NewDecBig(v.Unscaled.BigInt(), inf.Scale(v.Scale)) })

@@ -1,6 +1,7 @@
 package gocql
 
 import (
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 
 	"encoding/binary"
@@ -18,12 +19,12 @@ func runtimeTestSession(t testing.TB, n int) (*Session, []*driverConn, []net.Con
 		return opaqueStorageValue
 	}()
 	implCluster.SessionData(s).InternalHostSource = &ringDescriber{InternalHosts: map[string]*HostInfo{}}
-	implCluster.SessionData(s).InternalPool = &policyConnPool{InternalHostConnPools: map[UUID]*hostConnPool{}}
+	implCluster.SessionData(s).InternalPool = &policyConnPool{InternalHostConnPools: map[cql.UUID]*hostConnPool{}}
 	var conns []*driverConn
 	var peers []net.Conn
 	for i := 0; i < n; i++ {
 		conn, peer := typedTestConn(t, 4, nil)
-		id := UUID{15: byte(i + 1)}
+		id := cql.UUID{15: byte(i + 1)}
 		host := func() *HostInfo {
 			opaqueStorageValuex := new(HostInfo)
 			implEndpoint.HostInfoData(opaqueStorageValuex).InternalHostId = id
@@ -58,7 +59,7 @@ func runtimeRowsBody(token []byte, values ...string) []byte {
 		b = binary.BigEndian.AppendUint16(b, uint16(len(name)))
 		b = append(b, name...)
 	}
-	b = binary.BigEndian.AppendUint16(b, uint16(TypeBlob))
+	b = binary.BigEndian.AppendUint16(b, uint16(cql.TypeBlob))
 	b = binary.BigEndian.AppendUint32(b, uint32(len(values)))
 	for _, value := range values {
 		b = binary.BigEndian.AppendUint32(b, uint32(len(value)))
@@ -66,9 +67,9 @@ func runtimeRowsBody(token []byte, values ...string) []byte {
 	}
 	return b
 }
-func runtimeQuery(t testing.TB) *Bound[Bytes] {
+func runtimeQuery(t testing.TB) *Bound[cql.Bytes] {
 	t.Helper()
-	b, err := BindUnpreparedBorrowed(Statement[Unit, Bytes]{Kind: OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: NoParams, Rows: OneColumn(BlobCodec)}, NewColumns(), Unit{})
+	b, err := BindUnpreparedBorrowed(cql.Statement[cql.Unit, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.NoParams, Rows: cql.OneColumn(cql.BlobCodec)}, cql.NewColumns(), cql.Unit{})
 	if err != nil {
 		t.Fatal(err)
 	}

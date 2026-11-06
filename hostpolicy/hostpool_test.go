@@ -24,15 +24,17 @@ import (
 	"github.com/hailocab/go-hostpool"
 
 	"github.com/scylladb/gocql/v2"
-	"github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/cql"
+	implRouting "github.com/scylladb/gocql/v2/internal/routing"
+	routing "github.com/scylladb/gocql/v2/routing"
 )
 
 func TestHostPolicy_HostPool(t *testing.T) {
 	p := HostPool(hostpool.New(nil)).(*hostPoolHostPolicy)
-	ids := []gocql.UUID{gocql.ParseUUIDMust("a0000000-0000-0000-0000-000000000000"), gocql.ParseUUIDMust("a0000000-0000-0000-0000-000000000001")}
-	hosts := []gocql.HostSnapshot{{ID: ids[0], Address: netip.MustParseAddrPort("10.0.0.1:9042"), Enabled: true, Up: true}, {ID: ids[1], Address: netip.MustParseAddrPort("10.0.0.2:9042"), Enabled: true, Up: true}}
-	p.setHosts(hosts, []gocql.Route{routing.InternalRouteOf(gocql.Target{HostID: ids[0]}), routing.InternalRouteOf(gocql.Target{HostID: ids[1]})})
-	plan := gocql.NewQueryPlan(p, gocql.RoutingInfo{}, nil)
+	ids := []cql.UUID{cql.ParseUUIDMust("a0000000-0000-0000-0000-000000000000"), cql.ParseUUIDMust("a0000000-0000-0000-0000-000000000001")}
+	hosts := []routing.HostSnapshot{{ID: ids[0], Address: netip.MustParseAddrPort("10.0.0.1:9042"), Enabled: true, Up: true}, {ID: ids[1], Address: netip.MustParseAddrPort("10.0.0.2:9042"), Enabled: true, Up: true}}
+	p.setHosts(hosts, []routing.Route{implRouting.InternalRouteOf(routing.Target{HostID: ids[0]}), implRouting.InternalRouteOf(routing.Target{HostID: ids[1]})})
+	plan := routing.NewPlan(p, routing.Info{}, nil)
 	a, ok := plan.Next()
 	if !ok || a.HostID() != ids[0] {
 		t.Fatalf("first host: %+v %t", a, ok)
@@ -46,12 +48,12 @@ func TestHostPolicy_HostPool(t *testing.T) {
 	if _, ok := plan.Next(); ok {
 		t.Fatal("routing plan repeated a host")
 	}
-	next := gocql.NewQueryPlan(p, gocql.RoutingInfo{}, nil)
+	next := routing.NewPlan(p, routing.Info{}, nil)
 	a, ok = next.Next()
 	if !ok || a.HostID() != ids[0] {
 		t.Fatalf("healthy host: %+v %t", a, ok)
 	}
-	pinned := gocql.NewQueryPlan(p, gocql.RoutingInfo{HostID: gocql.Option[gocql.UUID]{Set: true, Value: ids[1]}, ShardID: gocql.Option[uint32]{Set: true, Value: 2}}, nil)
+	pinned := routing.NewPlan(p, routing.Info{HostID: cql.Option[cql.UUID]{Set: true, Value: ids[1]}, ShardID: cql.Option[uint32]{Set: true, Value: 2}}, nil)
 	target, ok := pinned.Next()
 	if !ok || target.HostID() != ids[1] || target.Shard != 2 {
 		t.Fatalf("strict target: %+v %t", target, ok)

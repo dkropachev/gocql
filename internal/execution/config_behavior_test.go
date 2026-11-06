@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -103,7 +102,7 @@ func TestTimestampHookOnceAcrossRetryAndPages(t *testing.T) {
 	}
 	explicit := runtimeQuery(t)
 	values := options.Values()
-	values.Timestamp = cql.Option[int64]{Set: true, Value: 0}
+	values.Timestamp = cqltype.Option[int64]{Set: true, Value: 0}
 	opts := testOptions(values)
 	page := codecTestMust(RunUnpaged(ctx, s, explicit, opts))
 	if err := page.Close(); err != nil {
@@ -172,9 +171,9 @@ func TestSocketBufferSettingsReachActualSocket(t *testing.T) {
 	defer peer.Close()
 	wrapped := &socketOptions{TCPConn: raw.(*net.TCPConn)}
 	config := settings.DefaultConfig("localhost")
-	config.ReceiveBuffer = cql.Option[int]{Set: true, Value: 4096}
-	config.SendBuffer = cql.Option[int]{Set: true, Value: 8192}
-	config.Linger = cql.Option[time.Duration]{Set: true, Value: 2 * time.Second}
+	config.ReceiveBuffer = cqltype.Option[int]{Set: true, Value: 4096}
+	config.SendBuffer = cqltype.Option[int]{Set: true, Value: 8192}
+	config.Linger = cqltype.Option[time.Duration]{Set: true, Value: 2 * time.Second}
 	config.SocketKeepalive = 7 * time.Second
 	if err := applyV2SocketOptions(wrapped, config, "tcp"); err != nil {
 		t.Fatal(err)
@@ -183,9 +182,9 @@ func TestSocketBufferSettingsReachActualSocket(t *testing.T) {
 		t.Fatal("socket settings were not applied", wrapped)
 	}
 	zero := config
-	zero.ReceiveBuffer = cql.Option[int]{Set: true}
-	zero.SendBuffer = cql.Option[int]{Set: true}
-	zero.Linger = cql.Option[time.Duration]{Set: true}
+	zero.ReceiveBuffer = cqltype.Option[int]{Set: true}
+	zero.SendBuffer = cqltype.Option[int]{Set: true}
+	zero.Linger = cqltype.Option[time.Duration]{Set: true}
 	if err := applyV2SocketOptions(wrapped, zero, "tcp"); err != nil {
 		t.Fatal(err)
 	}
@@ -473,7 +472,7 @@ func TestLatencyLargeRetryWholePlan(t *testing.T) {
 	policy.Observe(implRouting.AttemptEvent{Target: model.Target{HostID: healthy}, Started: old, Latency: time.Millisecond})
 	policy.Observe(implRouting.AttemptEvent{Target: model.Target{HostID: slow}, Started: old, Latency: 10 * time.Millisecond})
 	policy.InternalDecisions.Store(&routing.InternalRoutingDecisions{InternalSlow: map[cqltype.UUID]time.Time{slow: now.Add(-time.Minute)}})
-	info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true}, Kind: cqltype.OrdinaryStatement}
+	info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Set: true}, Kind: cqltype.OrdinaryStatement}
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 	var probes atomic.Int32

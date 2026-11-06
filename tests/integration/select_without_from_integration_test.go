@@ -15,7 +15,9 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/routing"
 
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
@@ -65,12 +67,12 @@ func probeSelectWithoutFrom() {
 		selectWithoutFromSupported = true
 		return
 	}
-	if serverErrorCode(err) != gocql.ErrCodeSyntax {
+	if serverErrorCode(err) != cql.ErrCodeSyntax {
 		selectWithoutFromProbeErr = err
 	}
 }
 func serverErrorCode(err error) int {
-	var server gocql.RequestError
+	var server cql.RequestError
 	if errors.As(err, &server) {
 		return server.GetCode()
 	}
@@ -82,7 +84,7 @@ func serverErrorCode(err error) int {
 }
 func isRejectedByServer(err error) bool {
 	code := serverErrorCode(err)
-	return code == gocql.ErrCodeSyntax || code == gocql.ErrCodeInvalid
+	return code == cql.ErrCodeSyntax || code == cql.ErrCodeInvalid
 }
 func createSessionWithoutKeyspace(t testing.TB) *gocql.Session {
 	t.Helper()
@@ -96,7 +98,7 @@ func createSessionWithoutKeyspace(t testing.TB) *gocql.Session {
 	}
 	return session
 }
-func noFromOne(t testing.TB, s *gocql.Session, stmt string, values ...gocql.Value) gocql.DynamicRow {
+func noFromOne(t testing.TB, s *gocql.Session, stmt string, values ...cql.Value) cql.DynamicRow {
 	t.Helper()
 	row, err := v2ReadOne(context.Background(), s, stmt, values...)
 	if err != nil {
@@ -104,7 +106,7 @@ func noFromOne(t testing.TB, s *gocql.Session, stmt string, values ...gocql.Valu
 	}
 	return row
 }
-func noFromValue(t testing.TB, row gocql.DynamicRow, index int) gocql.Value {
+func noFromValue(t testing.TB, row cql.DynamicRow, index int) cql.Value {
 	t.Helper()
 	value, err := row.At(index)
 	if err != nil {
@@ -112,7 +114,7 @@ func noFromValue(t testing.TB, row gocql.DynamicRow, index int) gocql.Value {
 	}
 	return value
 }
-func noFromInt(t testing.TB, row gocql.DynamicRow, index int) int64 {
+func noFromInt(t testing.TB, row cql.DynamicRow, index int) int64 {
 	t.Helper()
 	n, err := noFromValue(t, row, index).Signed()
 	if err != nil {
@@ -120,7 +122,7 @@ func noFromInt(t testing.TB, row gocql.DynamicRow, index int) int64 {
 	}
 	return n
 }
-func noFromText(t testing.TB, row gocql.DynamicRow, index int) string {
+func noFromText(t testing.TB, row cql.DynamicRow, index int) string {
 	t.Helper()
 	value, err := noFromValue(t, row, index).Text()
 	if err != nil {
@@ -128,7 +130,7 @@ func noFromText(t testing.TB, row gocql.DynamicRow, index int) string {
 	}
 	return value.String()
 }
-func noFromRows(t testing.TB, s *gocql.Session, stmt string, values ...gocql.Value) gocql.Rows[gocql.DynamicRow] {
+func noFromRows(t testing.TB, s *gocql.Session, stmt string, values ...cql.Value) gocql.Rows[cql.DynamicRow] {
 	t.Helper()
 	rows, err := v2Query(context.Background(), s, stmt, values...)
 	if err != nil {
@@ -141,7 +143,7 @@ func noFromRows(t testing.TB, s *gocql.Session, stmt string, values ...gocql.Val
 	})
 	return rows
 }
-func noFromColumn(t testing.TB, columns gocql.Columns, index int) gocql.ColumnSpec {
+func noFromColumn(t testing.TB, columns cql.Columns, index int) cql.ColumnSpec {
 	t.Helper()
 	column, ok := columns.At(index)
 	if !ok {
@@ -149,7 +151,7 @@ func noFromColumn(t testing.TB, columns gocql.Columns, index int) gocql.ColumnSp
 	}
 	return column
 }
-func logColumns(t testing.TB, stmt string, columns gocql.Columns) {
+func logColumns(t testing.TB, stmt string, columns cql.Columns) {
 	t.Helper()
 	for i := 0; i < columns.Len(); i++ {
 		column, _ := columns.At(i)
@@ -166,7 +168,7 @@ func TestSelectWithoutFromLiteral(t *testing.T) {
 	if rows.Columns().Len() != 1 {
 		t.Fatal("SELECT 1 must have one column")
 	}
-	if noFromColumn(t, rows.Columns(), 0).Type.Kind() != gocql.TypeInt {
+	if noFromColumn(t, rows.Columns(), 0).Type.Kind() != cql.TypeInt {
 		t.Fatal("literal must have int metadata")
 	}
 	if rows.Info().Rows != 1 {
@@ -221,7 +223,7 @@ func TestSelectWithoutFromNow(t *testing.T) {
 	before := time.Now()
 	row := noFromOne(t, session, "SELECT now()")
 	after := time.Now()
-	if noFromColumn(t, row.Columns(), 0).Type.Kind() != gocql.TypeTimeUUID {
+	if noFromColumn(t, row.Columns(), 0).Type.Kind() != cql.TypeTimeUUID {
 		t.Fatal("now() metadata must be timeuuid")
 	}
 	got, err := noFromValue(t, row, 0).UUID()
@@ -243,10 +245,10 @@ func TestSelectWithoutFromFunctionCast(t *testing.T) {
 	before := time.Now()
 	row := noFromOne(t, session, "SELECT toTimestamp(now())")
 	after := time.Now()
-	if noFromColumn(t, row.Columns(), 0).Type.Kind() != gocql.TypeTimestamp {
+	if noFromColumn(t, row.Columns(), 0).Type.Kind() != cql.TypeTimestamp {
 		t.Fatal("timestamp metadata expected")
 	}
-	got, err := gocql.Timestamp(noFromInt(t, row, 0)).Time()
+	got, err := cql.Timestamp(noFromInt(t, row, 0)).Time()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +265,7 @@ func TestSelectWithoutFromMultipleSelectors(t *testing.T) {
 	if row.Columns().Len() != 3 {
 		t.Fatal("expected three columns")
 	}
-	for i, kind := range []gocql.Type{gocql.TypeInt, gocql.TypeVarchar, gocql.TypeBoolean} {
+	for i, kind := range []cql.Type{cql.TypeInt, cql.TypeVarchar, cql.TypeBoolean} {
 		if noFromColumn(t, row.Columns(), i).Type.Kind() != kind {
 			t.Fatalf("column%d wrong type", i)
 		}
@@ -309,21 +311,21 @@ func TestSelectWithoutFromExecutionModes(t *testing.T) {
 	skipUnlessSelectWithoutFrom(t)
 	session := createSessionWithoutKeyspace(t)
 	defer session.Close()
-	const cql = "SELECT 1, 'a', true"
-	statement := gocql.Statement[gocql.Unit, gocql.DynamicRow]{CQL: cql, Params: gocql.NoParams, Rows: gocql.DynamicRows}
-	var baseline gocql.Columns
+	const stmt = "SELECT 1, 'a', true"
+	statement := cql.Statement[cql.Unit, cql.DynamicRow]{CQL: stmt, Params: cql.NoParams, Rows: cql.DynamicRows}
+	var baseline cql.Columns
 	for _, mode := range []string{"prepared", "prepared with metadata", "not prepared"} {
 		t.Run(mode, func(t *testing.T) {
-			var bound *Bound[gocql.DynamicRow]
+			var bound *Bound[cql.DynamicRow]
 			var err error
 			if mode == "not prepared" {
-				bound, err = BindUnpreparedOwned(statement, gocql.NewColumns(), gocql.Unit{})
+				bound, err = BindUnpreparedOwned(statement, cql.NewColumns(), cql.Unit{})
 			} else {
 				prepared, e := gocql.Prepare(context.Background(), session, statement, gocql.PrepareOptions{})
 				if e != nil {
 					t.Fatal(e)
 				}
-				bound, err = BindOwned(prepared, gocql.Unit{})
+				bound, err = BindOwned(prepared, cql.Unit{})
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -340,7 +342,7 @@ func TestSelectWithoutFromExecutionModes(t *testing.T) {
 			}
 			defer rows.Close()
 			columns := rows.Columns()
-			logColumns(t, cql+" "+mode, columns)
+			logColumns(t, stmt+" "+mode, columns)
 			if columns.Len() != 3 {
 				t.Fatal("expected three columns")
 			}
@@ -378,13 +380,13 @@ func TestSelectWithoutFromBindMarker(t *testing.T) {
 	session := createSessionWithoutKeyspace(t)
 	defer session.Close()
 	t.Run("value round trip", func(t *testing.T) {
-		if noFromInt(t, noFromOne(t, session, "SELECT blobAsInt(?)", gocql.BlobValue([]byte{0, 0, 0, 42})), 0) != 42 {
+		if noFromInt(t, noFromOne(t, session, "SELECT blobAsInt(?)", cql.BlobValue([]byte{0, 0, 0, 42})), 0) != 42 {
 			t.Fatal("wrong bind result")
 		}
 	})
 	t.Run("marker types the column", func(t *testing.T) {
-		row := noFromOne(t, session, "SELECT intAsBlob(?)", gocql.IntValue(42))
-		if noFromColumn(t, row.Columns(), 0).Type.Kind() != gocql.TypeBlob {
+		row := noFromOne(t, session, "SELECT intAsBlob(?)", cql.IntValue(42))
+		if noFromColumn(t, row.Columns(), 0).Type.Kind() != cql.TypeBlob {
 			t.Fatal("blob type expected")
 		}
 		blob, err := noFromValue(t, row, 0).Bytes()
@@ -393,16 +395,16 @@ func TestSelectWithoutFromBindMarker(t *testing.T) {
 		}
 	})
 	t.Run("marker in LIMIT", func(t *testing.T) {
-		if noFromInt(t, noFromOne(t, session, "SELECT 1 LIMIT ?", gocql.IntValue(1)), 0) != 1 {
+		if noFromInt(t, noFromOne(t, session, "SELECT 1 LIMIT ?", cql.IntValue(1)), 0) != 1 {
 			t.Fatal("wrong LIMIT result")
 		}
 	})
 	t.Run("untyped markers rejected", func(t *testing.T) {
-		for _, cql := range []string{"SELECT ?", "SELECT (int)?", "SELECT CAST(? AS int)"} {
-			rows, err := v2Query(context.Background(), session, cql, gocql.IntValue(42))
+		for _, stmt := range []string{"SELECT ?", "SELECT (int)?", "SELECT CAST(? AS int)"} {
+			rows, err := v2Query(context.Background(), session, stmt, cql.IntValue(42))
 			_ = rows.Close()
 			if !isRejectedByServer(err) {
-				t.Fatalf("%q error=%v", cql, err)
+				t.Fatalf("%q error=%v", stmt, err)
 			}
 		}
 	})
@@ -411,14 +413,14 @@ func TestSelectWithoutFromRoutingKey(t *testing.T) {
 	t.Parallel()
 	skipUnlessSelectWithoutFrom(t)
 	cases := []struct {
-		name, cql string
-		keyspace  bool
-		values    []gocql.Value
+		name, stmt string
+		keyspace   bool
+		values     []cql.Value
 	}{
-		{name: "no bind markers", cql: "SELECT 1"},
-		{name: "no bind markers, with keyspace", cql: "SELECT 1", keyspace: true},
-		{name: "bind marker", cql: "SELECT intAsBlob(?)", values: []gocql.Value{gocql.IntValue(42)}},
-		{name: "bind marker, with keyspace", cql: "SELECT intAsBlob(?)", keyspace: true, values: []gocql.Value{gocql.IntValue(42)}},
+		{name: "no bind markers", stmt: "SELECT 1"},
+		{name: "no bind markers, with keyspace", stmt: "SELECT 1", keyspace: true},
+		{name: "bind marker", stmt: "SELECT intAsBlob(?)", values: []cql.Value{cql.IntValue(42)}},
+		{name: "bind marker, with keyspace", stmt: "SELECT intAsBlob(?)", keyspace: true, values: []cql.Value{cql.IntValue(42)}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -429,7 +431,7 @@ func TestSelectWithoutFromRoutingKey(t *testing.T) {
 				session = createSessionWithoutKeyspace(t)
 			}
 			defer session.Close()
-			p, err := gocql.Prepare(context.Background(), session, gocql.Statement[[]gocql.Value, gocql.DynamicRow]{CQL: tc.cql, Params: gocql.DynamicParams, Rows: gocql.DynamicRows}, gocql.PrepareOptions{})
+			p, err := gocql.Prepare(context.Background(), session, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: tc.stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -465,7 +467,7 @@ func TestSelectWithoutFromTokenAware(t *testing.T) {
 	skipUnlessSelectWithoutFrom(t)
 	config := createV2Cluster()
 	profile := *config.DefaultProfile
-	policy, err := gocql.NewRoutingPolicy(gocql.RoutingOptions{TokenAware: true, ShuffleReplicas: true})
+	policy, err := routing.NewPolicy(routing.Options{TokenAware: true, ShuffleReplicas: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -477,13 +479,13 @@ func TestSelectWithoutFromTokenAware(t *testing.T) {
 	}
 	defer session.Close()
 	for _, tc := range []struct {
-		name, cql string
-		values    []gocql.Value
-		want      int64
-	}{{name: "nil routing key", cql: "SELECT 1", want: 1}, {name: "routing lookup error", cql: "SELECT blobAsInt(?)", values: []gocql.Value{gocql.BlobValue([]byte{0, 0, 0, 42})}, want: 42}} {
+		name, stmt string
+		values     []cql.Value
+		want       int64
+	}{{name: "nil routing key", stmt: "SELECT 1", want: 1}, {name: "routing lookup error", stmt: "SELECT blobAsInt(?)", values: []cql.Value{cql.BlobValue([]byte{0, 0, 0, 42})}, want: 42}} {
 		t.Run(tc.name, func(t *testing.T) {
 			for i := 0; i < 3; i++ {
-				if got := noFromInt(t, noFromOne(t, session, tc.cql, tc.values...), 0); got != tc.want {
+				if got := noFromInt(t, noFromOne(t, session, tc.stmt, tc.values...), 0); got != tc.want {
 					t.Fatalf("execution%d got%d want%d", i, got, tc.want)
 				}
 			}
@@ -495,9 +497,9 @@ func TestSelectWithoutFromMapScan(t *testing.T) {
 	skipUnlessSelectWithoutFrom(t)
 	session := createSessionWithoutKeyspace(t)
 	defer session.Close()
-	const cql = "SELECT 1, now()"
+	const stmt = "SELECT 1, now()"
 	t.Run("MapScan", func(t *testing.T) {
-		row := noFromOne(t, session, cql)
+		row := noFromOne(t, session, stmt)
 		seen := map[string]bool{}
 		for i := 0; i < row.Columns().Len(); i++ {
 			col, _ := row.Columns().At(i)
@@ -511,8 +513,8 @@ func TestSelectWithoutFromMapScan(t *testing.T) {
 		}
 	})
 	t.Run("SliceMap", func(t *testing.T) {
-		rows := noFromRows(t, session, cql)
-		var owned []gocql.DynamicRow
+		rows := noFromRows(t, session, stmt)
+		var owned []cql.DynamicRow
 		for rows.Next() {
 			owned = append(owned, rows.Row().Clone())
 		}
@@ -571,8 +573,8 @@ func TestSelectWithoutFromUnqualifiedUDF(t *testing.T) {
 	keyspaced := createV2Session(t)
 	defer keyspaced.Close()
 	const fn = "select_without_from_plus_one"
-	cql := fmt.Sprintf(`CREATE OR REPLACE FUNCTION %s.%s(x int) RETURNS NULL ON NULL INPUT RETURNS int LANGUAGE lua AS 'return x + 1'`, implCluster.SessionData(keyspaced).InternalCfg.Keyspace, fn)
-	if err := v2CreateTable(context.Background(), keyspaced, cql); err != nil {
+	stmt := fmt.Sprintf(`CREATE OR REPLACE FUNCTION %s.%s(x int) RETURNS NULL ON NULL INPUT RETURNS int LANGUAGE lua AS 'return x + 1'`, implCluster.SessionData(keyspaced).InternalCfg.Keyspace, fn)
+	if err := v2CreateTable(context.Background(), keyspaced, stmt); err != nil {
 		if isRejectedByServer(err) {
 			t.Skipf("server refuses UDF creation: %v", err)
 		}
@@ -606,24 +608,24 @@ func TestSelectWithoutFromRejected(t *testing.T) {
 	defer session.Close()
 	// Exercise the typed transport on the identical connection after every error;
 	// host pinning alone would allow a different pooled socket to hide corruption.
-	conn, err := implCluster.InternalSessionSelectTypedConn(session, context.Background(), gocql.RoutingInfo{}, nil)
+	conn, err := implCluster.InternalSessionSelectTypedConn(session, context.Background(), routing.Info{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, tc := range []struct{ name, cql string }{{"star", "SELECT *"}, {"column reference", "SELECT some_column"}, {"distinct", "SELECT DISTINCT 1"}} {
+	for _, tc := range []struct{ name, stmt string }{{"star", "SELECT *"}, {"column reference", "SELECT some_column"}, {"distinct", "SELECT DISTINCT 1"}} {
 		t.Run(tc.name, func(t *testing.T) {
-			page, err := conn.InternalExecuteTyped(context.Background(), &attemptRequest{Statement: tc.cql, Consistency: gocql.One})
+			page, err := conn.InternalExecuteTyped(context.Background(), &attemptRequest{Statement: tc.stmt, Consistency: cql.One})
 			if page != nil {
 				page.Owner.Release()
 			}
 			if !isRejectedByServer(err) {
-				t.Fatalf("%q rejection=%v", tc.cql, err)
+				t.Fatalf("%q rejection=%v", tc.stmt, err)
 			}
-			page, err = conn.InternalExecuteTyped(context.Background(), &attemptRequest{Statement: "SELECT 1", Consistency: gocql.One})
+			page, err = conn.InternalExecuteTyped(context.Background(), &attemptRequest{Statement: "SELECT 1", Consistency: cql.One})
 			if err != nil {
 				t.Fatalf("same connection unusable after rejection: %v", err)
 			}
-			typed, err := newPage(page, gocql.OneColumn(gocql.Int32), nil)
+			typed, err := newPage(page, cql.OneColumn(cql.Int32), nil)
 			if err != nil {
 				t.Fatal(err)
 			}

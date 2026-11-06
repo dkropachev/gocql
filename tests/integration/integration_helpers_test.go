@@ -14,7 +14,10 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 
+	"github.com/scylladb/gocql/v2/auth"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/retry"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 // createV2Cluster applies the integration flags to the public typed configuration.
@@ -25,12 +28,12 @@ func createV2Cluster(opts ...func(*gocql.Config)) gocql.Config {
 	config.CQLVersion = *flagCQL
 	config.Metadata.AgreementTimeout = 2 * time.Minute
 	profile := *config.DefaultProfile
-	profile.Consistency = gocql.Quorum
+	profile.Consistency = cql.Quorum
 	profile.Timeout = *flagTimeout
 	profile.Retry = retry.Safe{MaxAttempts: max(1, *flagRetry+1)}
 	config.DefaultProfile = &profile
 	if *flagRunAuthTest {
-		config.Auth = gocql.PasswordAuth("cassandra", "cassandra")
+		config.Auth = auth.Password("cassandra", "cassandra")
 	}
 	switch *flagCompressTest {
 	case "snappy":
@@ -117,7 +120,7 @@ func createV2Cluster(opts ...func(*gocql.Config)) gocql.Config {
 		config.TLS = fixtureTLS
 		// The per-host API uses this complete TLS configuration directly and
 		// avoids the legacy SSL option's mandatory DNS verification override.
-		config.TLSForHost = func(context.Context, gocql.HostSnapshot) (*tls.Config, error) {
+		config.TLSForHost = func(context.Context, routing.HostSnapshot) (*tls.Config, error) {
 			return fixtureTLS.Clone(), nil
 		}
 	}
@@ -154,11 +157,11 @@ func createV2SessionFromConfig(config gocql.Config, t testing.TB, tabletsDisable
 		if err != nil {
 			t.Fatalf("probe tablet support: %v", err)
 		}
-		cql := fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': %d}", keyspace, *flagRF)
+		stmt := fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': %d}", keyspace, *flagRF)
 		if supported {
-			cql += fmt.Sprintf(" AND tablets = {'enabled': %t}", !tabletsDisabled)
+			stmt += fmt.Sprintf(" AND tablets = {'enabled': %t}", !tabletsDisabled)
 		}
-		if err := v2CreateTable(ctx, session, cql); err != nil {
+		if err := v2CreateTable(ctx, session, stmt); err != nil {
 			t.Fatalf("create typed integration keyspace: %v", err)
 		}
 	})
@@ -196,7 +199,7 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session) (bool, erro
 		if err != nil {
 			return false, err
 		}
-		if value.State() == gocql.Null {
+		if value.State() == cql.Null {
 			return false, nil
 		}
 		features, err := value.Text()
@@ -215,14 +218,14 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session) (bool, erro
 
 // v2Exec and v2Query accept only explicitly typed dynamic values. Owned binding
 // lets callers release or change their inputs as soon as these helpers return.
-func v2Exec(ctx context.Context, session *gocql.Session, cql string, values ...gocql.Value) (gocql.Result, error) {
-	statement := gocql.Statement[[]gocql.Value, gocql.Unit]{CQL: cql, Params: gocql.DynamicParams, Rows: gocql.NoRows}
-	var bound *Bound[gocql.Unit]
+func v2Exec(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (gocql.Result, error) {
+	statement := cql.Statement[[]cql.Value, cql.Unit]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.NoRows}
+	var bound *Bound[cql.Unit]
 	var err error
 	if len(values) == 0 {
-		bound, err = BindUnpreparedOwned(statement, gocql.NewColumns(), values)
+		bound, err = BindUnpreparedOwned(statement, cql.NewColumns(), values)
 	} else {
-		var prepared *gocql.Prepared[[]gocql.Value, gocql.Unit]
+		var prepared *gocql.Prepared[[]cql.Value, cql.Unit]
 		prepared, err = gocql.Prepare(ctx, session, statement, gocql.PrepareOptions{})
 		if err == nil {
 			bound, err = BindOwned(prepared, values)
@@ -235,21 +238,21 @@ func v2Exec(ctx context.Context, session *gocql.Session, cql string, values ...g
 	return Exec(ctx, session, bound, gocql.Options{})
 }
 
-func v2Query(ctx context.Context, session *gocql.Session, cql string, values ...gocql.Value) (gocql.Rows[gocql.DynamicRow], error) {
-	statement := gocql.Statement[[]gocql.Value, gocql.DynamicRow]{CQL: cql, Params: gocql.DynamicParams, Rows: gocql.DynamicRows}
-	var bound *Bound[gocql.DynamicRow]
+func v2Query(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (gocql.Rows[cql.DynamicRow], error) {
+	statement := cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}
+	var bound *Bound[cql.DynamicRow]
 	var err error
 	if len(values) == 0 {
-		bound, err = BindUnpreparedOwned(statement, gocql.NewColumns(), values)
+		bound, err = BindUnpreparedOwned(statement, cql.NewColumns(), values)
 	} else {
-		var prepared *gocql.Prepared[[]gocql.Value, gocql.DynamicRow]
+		var prepared *gocql.Prepared[[]cql.Value, cql.DynamicRow]
 		prepared, err = gocql.Prepare(ctx, session, statement, gocql.PrepareOptions{})
 		if err == nil {
 			bound, err = BindOwned(prepared, values)
 		}
 	}
 	if err != nil {
-		return gocql.Rows[gocql.DynamicRow]{}, err
+		return gocql.Rows[cql.DynamicRow]{}, err
 	}
 	// Run admits the request before returning. Rows owns the execution reference
 	// until it is exhausted or closed, even after closing the binding here.
@@ -257,33 +260,33 @@ func v2Query(ctx context.Context, session *gocql.Session, cql string, values ...
 	return Run(ctx, session, bound, gocql.Options{})
 }
 
-func v2ReadOne(ctx context.Context, session *gocql.Session, cql string, values ...gocql.Value) (gocql.DynamicRow, error) {
-	rows, err := v2Query(ctx, session, cql, values...)
+func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (cql.DynamicRow, error) {
+	rows, err := v2Query(ctx, session, stmt, values...)
 	if err != nil {
-		return gocql.DynamicRow{}, err
+		return cql.DynamicRow{}, err
 	}
 	defer rows.Close()
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
-			return gocql.DynamicRow{}, err
+			return cql.DynamicRow{}, err
 		}
-		return gocql.DynamicRow{}, gocql.ErrNoRows
+		return cql.DynamicRow{}, gocql.ErrNoRows
 	}
 	row, err := rows.Clone()
 	if err != nil {
-		return gocql.DynamicRow{}, err
+		return cql.DynamicRow{}, err
 	}
 	if rows.Next() {
-		return gocql.DynamicRow{}, gocql.ErrMultipleRows
+		return cql.DynamicRow{}, gocql.ErrMultipleRows
 	}
 	if err := rows.Err(); err != nil {
-		return gocql.DynamicRow{}, err
+		return cql.DynamicRow{}, err
 	}
 	return row, rows.Close()
 }
 
-func v2CreateTable(ctx context.Context, session *gocql.Session, cql string) error {
-	bound, err := BindUnpreparedOwned(gocql.Statement[gocql.Unit, gocql.Unit]{CQL: cql, Params: gocql.NoParams, Rows: gocql.NoRows}, gocql.NewColumns(), gocql.Unit{})
+func v2CreateTable(ctx context.Context, session *gocql.Session, stmt string) error {
+	bound, err := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{})
 	if err != nil {
 		return err
 	}

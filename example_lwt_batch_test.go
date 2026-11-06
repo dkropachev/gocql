@@ -30,6 +30,7 @@ import (
 	"log"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 // ExampleRunBatch_conditional consumes every typed row returned by a conditional batch.
@@ -49,22 +50,22 @@ func ExampleRunBatch_conditional() {
 		Version       int32
 	}
 	type previous struct {
-		PK, CK  gocql.Text
+		PK, CK  cql.Text
 		Version int32
 	}
-	previousRows := gocql.Row(
-		gocql.Column("pk", gocql.TextCodec, func(v *previous) *gocql.Text { return &v.PK }),
-		gocql.Column("ck", gocql.TextCodec, func(v *previous) *gocql.Text { return &v.CK }),
-		gocql.Column("version", gocql.Int32, func(v *previous) *int32 { return &v.Version }),
+	previousRows := cql.Row(
+		cql.Column("pk", cql.TextCodec, func(v *previous) *cql.Text { return &v.PK }),
+		cql.Column("ck", cql.TextCodec, func(v *previous) *cql.Text { return &v.CK }),
+		cql.Column("version", cql.Int32, func(v *previous) *int32 { return &v.Version }),
 	)
-	conditional := gocql.CASRows(previousRows)
-	prepared, err := gocql.Prepare(ctx, session, gocql.Statement[update, gocql.CASResult[previous]]{
+	conditional := cql.CASRows(previousRows)
+	prepared, err := gocql.Prepare(ctx, session, cql.Statement[update, cql.CASResult[previous]]{
 		CQL: "UPDATE example.my_lwt_batch_table SET value=? WHERE pk=? AND ck=? IF version=?",
-		Params: gocql.Params(
-			gocql.Param("value", gocql.StringEncoder, func(v update) string { return v.Value }),
-			gocql.Param("pk", gocql.StringEncoder, func(v update) string { return v.PK }),
-			gocql.Param("ck", gocql.StringEncoder, func(v update) string { return v.CK }),
-			gocql.Param("version", gocql.Int32, func(v update) int32 { return v.Version }),
+		Params: cql.Params(
+			cql.Param("value", cql.StringEncoder, func(v update) string { return v.Value }),
+			cql.Param("pk", cql.StringEncoder, func(v update) string { return v.PK }),
+			cql.Param("ck", cql.StringEncoder, func(v update) string { return v.CK }),
+			cql.Param("version", cql.Int32, func(v update) int32 { return v.Version }),
 		), Rows: conditional,
 	}, gocql.PrepareOptions{})
 	if err != nil {
@@ -83,7 +84,7 @@ func ExampleRunBatch_conditional() {
 		}
 		entries = append(entries, entry)
 	}
-	page, err := gocql.RunBatch(ctx, session, gocql.LoggedBatch, entries, conditional, gocql.Options{})
+	page, err := gocql.RunBatch(ctx, session, cql.LoggedBatch, entries, conditional, gocql.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -4,7 +4,10 @@ package integration
 
 import (
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/metadata"
+	routing "github.com/scylladb/gocql/v2/routing"
 
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 
@@ -14,25 +17,25 @@ import (
 	"testing"
 	"time"
 
-	routing "github.com/scylladb/gocql/v2/internal/routing"
+	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 )
 
 func TestDCValidationTokenAware(t *testing.T) {
 	t.Parallel()
-	testV2InvalidDatacenter(t, gocql.RoutingOptions{TokenAware: true, Datacenter: "WRONG_DC"})
+	testV2InvalidDatacenter(t, routing.Options{TokenAware: true, Datacenter: "WRONG_DC"})
 }
 
 func TestDCValidationDCAware(t *testing.T) {
 	t.Parallel()
-	testV2InvalidDatacenter(t, gocql.RoutingOptions{Datacenter: "WRONG_DC"})
+	testV2InvalidDatacenter(t, routing.Options{Datacenter: "WRONG_DC"})
 }
 
 func TestDCValidationRackAware(t *testing.T) {
 	t.Parallel()
-	testV2InvalidDatacenter(t, gocql.RoutingOptions{Datacenter: "WRONG_DC", Rack: "RACK"})
+	testV2InvalidDatacenter(t, routing.Options{Datacenter: "WRONG_DC", Rack: "RACK"})
 }
 
-func testV2InvalidDatacenter(t *testing.T, options gocql.RoutingOptions) {
+func testV2InvalidDatacenter(t *testing.T, options routing.Options) {
 	t.Helper()
 	cluster := createV2Cluster()
 	v2ConfigureRouting(t, &cluster, options)
@@ -43,7 +46,7 @@ func testV2InvalidDatacenter(t *testing.T, options gocql.RoutingOptions) {
 	if err == nil {
 		t.Fatal("Connect was expected to fail with an unknown datacenter")
 	}
-	var validation *gocql.ValidationError
+	var validation *cql.ValidationError
 	if !errors.As(err, &validation) {
 		t.Fatalf("expected datacenter validation error, got %T: %v", err, err)
 	}
@@ -63,7 +66,7 @@ func TestTokenAwareHostPolicy(t *testing.T) {
 			v2CreateRoutingKeyspace(t, bootstrap, keyspace, 1)
 			defer cleanup(t, bootstrap, keyspace)
 			cluster := createV2Cluster()
-			v2ConfigureRouting(t, &cluster, gocql.RoutingOptions{TokenAware: true})
+			v2ConfigureRouting(t, &cluster, routing.Options{TokenAware: true})
 			if configuredKeyspace {
 				cluster.Keyspace = keyspace
 			}
@@ -123,39 +126,39 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster gocql.Config, keyspac
 	if err := v2CreateTable(ctx, session, fmt.Sprintf("CREATE TABLE %s.%s (pk int PRIMARY KEY, v int)", keyspace, table)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := v2Exec(ctx, session, fmt.Sprintf("INSERT INTO %s.%s (pk, v) VALUES (?, ?)", keyspace, table), gocql.IntValue(7), gocql.IntValue(9)); err != nil {
+	if _, err := v2Exec(ctx, session, fmt.Sprintf("INSERT INTO %s.%s (pk, v) VALUES (?, ?)", keyspace, table), cql.IntValue(7), cql.IntValue(9)); err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := gocql.Prepare(ctx, session, gocql.Statement[[]gocql.Value, gocql.DynamicRow]{CQL: fmt.Sprintf("SELECT pk, v FROM %s.%s WHERE pk = ?", keyspace, table), Params: gocql.DynamicParams, Rows: gocql.DynamicRows}, gocql.PrepareOptions{})
+	prepared, err := gocql.Prepare(ctx, session, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT pk, v FROM %s.%s WHERE pk = ?", keyspace, table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	bound, err := BindOwned(prepared, []gocql.Value{gocql.IntValue(7)})
+	bound, err := BindOwned(prepared, []cql.Value{cql.IntValue(7)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer bound.Close()
-	routing := bound.Routing()
-	if !routing.Token.Set {
+	ri := bound.Routing()
+	if !ri.Token.Set {
 		t.Fatal("prepared partition key has no routing token")
 	}
-	replicas, err := session.Metadata().Replicas(keyspace, table, routing.Token.Value)
+	replicas, err := session.Metadata().Replicas(keyspace, table, ri.Token.Value)
 	if err != nil || len(replicas) == 0 {
 		t.Fatalf("missing bound token replicas: %v", err)
 	}
-	for _, options := range []gocql.RoutingOptions{
+	for _, options := range []routing.Options{
 		{TokenAware: true},
 		{TokenAware: true, Datacenter: hosts[0].Datacenter},
 		{TokenAware: true, Datacenter: hosts[0].Datacenter, Rack: hosts[0].Rack},
 	} {
-		policy, err := gocql.NewRoutingPolicy(options)
+		policy, err := routing.NewPolicy(options)
 		if err != nil {
 			t.Fatal(err)
 		}
 		profile := *cluster.DefaultProfile
 		profile.Routing = policy
 		handle := profileOf(profile)
-		rows, err := Run(ctx, session, bound, testOptions(gocql.OptionValues{Profile: handle, Consistency: gocql.Option[gocql.Consistency]{Value: gocql.One, Set: true}}))
+		rows, err := Run(ctx, session, bound, testOptions(gocql.OptionValues{Profile: handle, Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -194,29 +197,29 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster gocql.Config, keyspac
 // query admission and routing. Session metadata snapshots are immutable, so this
 // fault injection cannot change shared HostInfo objects used by other sessions.
 type v2UnavailableHostsRouting struct {
-	gocql.RoutingPolicy
+	routing.Policy
 	oneHost bool
 }
 
-func (p v2UnavailableHostsRouting) Pick(info gocql.RoutingInfo, metadata *gocql.MetadataSnapshot) (gocql.Route, bool) {
-	return p.RoutingPolicy.Pick(info, p.unavailable(metadata))
+func (p v2UnavailableHostsRouting) Pick(info routing.Info, metadata *metadata.Snapshot) (routing.Route, bool) {
+	return p.Policy.Pick(info, p.unavailable(metadata))
 }
 
-func (p v2UnavailableHostsRouting) Fallback(info gocql.RoutingInfo, metadata *gocql.MetadataSnapshot) gocql.QueryPlan {
-	return p.RoutingPolicy.Fallback(info, p.unavailable(metadata))
+func (p v2UnavailableHostsRouting) Fallback(info routing.Info, metadata *metadata.Snapshot) routing.Plan {
+	return p.Policy.Fallback(info, p.unavailable(metadata))
 }
 
 // unavailable returns metadata with every host down.
-func (p v2UnavailableHostsRouting) unavailable(metadata *gocql.MetadataSnapshot) *gocql.MetadataSnapshot {
+func (p v2UnavailableHostsRouting) unavailable(metadata *metadata.Snapshot) *metadata.Snapshot {
 	snapshot := *metadata
-	routing.SnapshotData(&snapshot).InternalHostIndex = nil
-	routing. // rebuild indices after test-only membership changes
+	implRouting.SnapshotData(&snapshot).InternalHostIndex = nil
+	implRouting. // rebuild indices after test-only membership changes
 			SnapshotData(&snapshot).InternalHosts = metadata.Hosts()
-	for i := range routing.SnapshotData(&snapshot).InternalHosts {
-		routing.SnapshotData(&snapshot).InternalHosts[i].Up = false
+	for i := range implRouting.SnapshotData(&snapshot).InternalHosts {
+		implRouting.SnapshotData(&snapshot).InternalHosts[i].Up = false
 	}
-	if p.oneHost && len(routing.SnapshotData(&snapshot).InternalHosts) > 1 {
-		routing.SnapshotData(&snapshot).InternalHosts = routing.SnapshotData(&snapshot).InternalHosts[:1]
+	if p.oneHost && len(implRouting.SnapshotData(&snapshot).InternalHosts) > 1 {
+		implRouting.SnapshotData(&snapshot).InternalHosts = implRouting.SnapshotData(&snapshot).InternalHosts[:1]
 	}
 	return &snapshot
 }
@@ -238,7 +241,7 @@ func TestNoHangAllHostsDown(t *testing.T) {
 		defer implEndpoint.InternalHostInfoSetState(host, NodeUp)
 	}
 	dc, rack := hosts[0].Datacenter, hosts[0].Rack
-	policies := []gocql.RoutingOptions{
+	policies := []routing.Options{
 		{Datacenter: dc, AllowRemote: true},
 		{Datacenter: dc},
 		{TokenAware: true, Datacenter: dc, AllowRemote: true},
@@ -249,19 +252,19 @@ func TestNoHangAllHostsDown(t *testing.T) {
 		{TokenAware: true, Datacenter: dc, Rack: rack},
 		{},
 	}
-	bound, err := BindUnpreparedOwned(gocql.Statement[gocql.Unit, gocql.DynamicRow]{CQL: "SELECT host_id FROM system.local", Params: gocql.NoParams, Rows: gocql.DynamicRows}, gocql.NewColumns(), gocql.Unit{})
+	bound, err := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.DynamicRow]{CQL: "SELECT host_id FROM system.local", Params: cql.NoParams, Rows: cql.DynamicRows}, cql.NewColumns(), cql.Unit{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer bound.Close()
 	for i, options := range policies {
-		policy, err := gocql.NewRoutingPolicy(options)
+		policy, err := routing.NewPolicy(options)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, oneHost := range []bool{false, true} {
 			profile := *createV2Cluster().DefaultProfile
-			profile.Routing = v2UnavailableHostsRouting{RoutingPolicy: policy, oneHost: oneHost}
+			profile.Routing = v2UnavailableHostsRouting{Policy: policy, oneHost: oneHost}
 			handle := profileOf(profile)
 			ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 			rows, queryErr := Run(ctx, session, bound, testOptions(gocql.OptionValues{Profile: handle}))

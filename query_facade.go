@@ -4,7 +4,7 @@
 package gocql
 
 import (
-	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/execution"
 )
 
@@ -15,19 +15,13 @@ var ErrBusy = execution.ErrBusy
 // ErrStaleRows is reported by a Rows handle from an earlier execution of its query.
 var ErrStaleRows = execution.ErrStaleRows
 
-var OwnedBlobCodec = codec.OwnedBlobCodec
-
-func RowInto[R any](reset func(*R), fields ...OutputField[R]) RowDecoder[R] {
-	return codec.RowInto(reset, fields...)
-}
-
 type StreamQuery[P, R any] = execution.StreamQuery[P, R]
 
-func NewStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
+func NewStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder cql.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
 	return execution.NewStreamQuery(prepared, decoder, options)
 }
 
-func NewUnpreparedStreamQuery[P, B, R any](session *Session, statement Statement[P, B], columns Columns, decoder StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
+func NewUnpreparedStreamQuery[P, B, R any](session *Session, statement cql.Statement[P, B], columns cql.Columns, decoder cql.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
 	return execution.NewUnpreparedStreamQuery(session, statement, columns, decoder, options)
 }
 
@@ -35,6 +29,6 @@ func NewQuery[P, R any](prepared *Prepared[P, R], options Options) (*Query[P, R]
 	return execution.NewQuery(prepared, options)
 }
 
-func NewUnpreparedQuery[P, R any](session *Session, statement Statement[P, R], columns Columns, options Options) (*Query[P, R], error) {
+func NewUnpreparedQuery[P, R any](session *Session, statement cql.Statement[P, R], columns cql.Columns, options Options) (*Query[P, R], error) {
 	return execution.NewUnpreparedQuery(session, statement, columns, options)
 }

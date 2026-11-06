@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
@@ -42,7 +41,7 @@ import (
 	"github.com/scylladb/gocql/v2/tablets"
 )
 
-func testHint(t testing.TB, first, last int64, version cql.Option[uint64], replicas ...implModel.Target) tablets.TabletInfo {
+func testHint(t testing.TB, first, last int64, version implCqltype.Option[uint64], replicas ...implModel.Target) tablets.TabletInfo {
 	t.Helper()
 	rs := make([]tablets.ReplicaInfo, len(replicas))
 	for i, r := range replicas {
@@ -76,14 +75,14 @@ func testPayload(h tablets.TabletInfo) []byte {
 	return b
 }
 func TestTabletPayloadAndWire(t *testing.T) {
-	target := implModel.Target{HostID: implCqltype.UUID{15: 7}, ShardID: cql.Option[uint32]{Value: math.MaxInt32, Set: true}}
+	target := implModel.Target{HostID: implCqltype.UUID{15: 7}, ShardID: implCqltype.Option[uint32]{Value: math.MaxInt32, Set: true}}
 	for _, v2 := range []bool{false, true} {
-		h := testHint(t, math.MinInt64, math.MaxInt64, cql.Option[uint64]{Value: 0xfedcba9876543210, Set: v2}, target)
+		h := testHint(t, math.MinInt64, math.MaxInt64, implCqltype.Option[uint64]{Value: 0xfedcba9876543210, Set: v2}, target)
 		raw := testPayload(h)
 		for split := 0; split <= len(raw); split++ {
 			chain := typedTestChain(t, raw[:split], raw[split:])
 			parsed, err := transport.InternalParseTypedTabletPayload(cqltype.BytesView(chain, wire.Ref{}), "ks", "table", v2)
-			if err != nil || !implRouting.InternalSameTabletObservation(&implRouting.InternalTabletRange{InternalSpan: implRouting.TokenRange{Start: h.FirstToken(), End: h.LastToken(), Replicas: []implModel.Target{target}}, InternalVersion: cql.Option[uint64]{Value: 0xfedcba9876543210, Set: v2}}, parsed) {
+			if err != nil || !implRouting.InternalSameTabletObservation(&implRouting.InternalTabletRange{InternalSpan: implRouting.TokenRange{Start: h.FirstToken(), End: h.LastToken(), Replicas: []implModel.Target{target}}, InternalVersion: implCqltype.Option[uint64]{Value: 0xfedcba9876543210, Set: v2}}, parsed) {
 				t.Fatalf("v2=%t split=%d: %v", v2, split, err)
 			}
 		}
@@ -210,7 +209,7 @@ func TestPlacementFencesSharingAndOverflow(t *testing.T) {
 	info := implModel.RoutingInfo{Keyspace: "ks", Table: "table"}
 	first := s.Metadata()
 	stamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, first)
-	h := testHint(t, 0, 100, cql.Option[uint64]{Value: 7, Set: true}, implModel.Target{HostID: routing.SnapshotData(first).InternalHosts[0].ID, ShardID: cql.Option[uint32]{Set: true}})
+	h := testHint(t, 0, 100, implCqltype.Option[uint64]{Value: 7, Set: true}, implModel.Target{HostID: routing.SnapshotData(first).InternalHosts[0].ID, ShardID: implCqltype.Option[uint32]{Set: true}})
 	implCluster.InternalSessionQueueTabletFeedback(s, h, stamp)
 	testDrain(s)
 	a := s.Metadata()
@@ -227,7 +226,7 @@ func TestPlacementFencesSharingAndOverflow(t *testing.T) {
 	}
 	// A numerically smaller opaque version is a valid update. The stale request
 	// captured before the first update cannot overwrite its overlapping range.
-	moved := testHint(t, 0, 100, cql.Option[uint64]{Value: 1, Set: true}, implModel.Target{HostID: routing.SnapshotData(first).InternalHosts[1].ID, ShardID: cql.Option[uint32]{Value: 1, Set: true}})
+	moved := testHint(t, 0, 100, implCqltype.Option[uint64]{Value: 1, Set: true}, implModel.Target{HostID: routing.SnapshotData(first).InternalHosts[1].ID, ShardID: implCqltype.Option[uint32]{Value: 1, Set: true}})
 	implCluster.InternalSessionQueueTabletFeedback(s, moved, stamp)
 	testDrain(s)
 	if s.Metadata() != a {
@@ -243,7 +242,7 @@ func TestPlacementFencesSharingAndOverflow(t *testing.T) {
 	// Disjoint observations captured together merge, preserving the old record.
 	left := implCluster.InternalSessionCaptureTabletFeedback(s, info, b)
 	for _, bounds := range [][2]int64{{100, 200}, {200, 300}} {
-		implCluster.InternalSessionQueueTabletFeedback(s, testHint(t, bounds[0], bounds[1], cql.Option[uint64]{}, hTarget(3, 2)), left)
+		implCluster.InternalSessionQueueTabletFeedback(s, testHint(t, bounds[0], bounds[1], implCqltype.Option[uint64]{}, hTarget(3, 2)), left)
 	}
 	testDrain(s)
 	c := s.Metadata()
@@ -253,7 +252,7 @@ func TestPlacementFencesSharingAndOverflow(t *testing.T) {
 	}
 	implCluster.
 		// A split removes the old overlapping range entirely; adjacent ranges survive.
-		InternalSessionQueueTabletFeedback(s, testHint(t, 10, 50, cql.Option[uint64]{}, hTarget(2, 1)), implCluster.InternalSessionCaptureTabletFeedback(s, info, c))
+		InternalSessionQueueTabletFeedback(s, testHint(t, 10, 50, implCqltype.Option[uint64]{}, hTarget(2, 1)), implCluster.InternalSessionCaptureTabletFeedback(s, info, c))
 	testDrain(s)
 	root, _ := routing.InternalMetadataSnapshotTabletRoot(s.Metadata(), implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"})
 	if implRouting.InternalTabletRangeFor(root, 1) != nil || implRouting.InternalTabletRangeFor(root, 51) != nil || implRouting.InternalTabletRangeFor(root, 150) == nil {
@@ -261,7 +260,7 @@ func TestPlacementFencesSharingAndOverflow(t *testing.T) {
 	}
 	beforeEpoch := s.Metadata()
 	oldStamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, beforeEpoch)
-	lazy := implRouting.NewPlan(codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true})), implModel.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 20, Set: true}}, beforeEpoch)
+	lazy := implRouting.NewPlan(codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true})), implModel.RoutingInfo{Keyspace: "ks", Table: "table", Token: implCqltype.Option[int64]{Value: 20, Set: true}}, beforeEpoch)
 
 	p.InternalMu.Lock()
 	p.InternalBumpTableRevisionLocked(implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"})
@@ -299,7 +298,7 @@ func TestPlacementFencesSharingAndOverflow(t *testing.T) {
 		// a worker can publish, with bounded queue ownership and later relearning.
 		MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", routing.SnapshotData(before).InternalKeyspaces["ks"])
 	for i := 0; i < 1025; i++ {
-		implCluster.InternalSessionQueueTabletFeedback(s, testHint(t, int64(i*2), int64(i*2+1), cql.Option[uint64]{}, hTarget(1, 0)), implCluster.InternalSessionCaptureTabletFeedback(s, info, before))
+		implCluster.InternalSessionQueueTabletFeedback(s, testHint(t, int64(i*2), int64(i*2+1), implCqltype.Option[uint64]{}, hTarget(1, 0)), implCluster.InternalSessionCaptureTabletFeedback(s, info, before))
 	}
 	if target, ok := implRouting.InternalNextTarget(lazy); !ok || target.ShardID.Set {
 		t.Fatal("preexisting plan used invalidated placement", target)
@@ -325,7 +324,7 @@ func TestPlacementFencesSharingAndOverflow(t *testing.T) {
 	}
 }
 func hTarget(id byte, shard uint32) implModel.Target {
-	return implModel.Target{HostID: implCqltype.UUID{15: id}, ShardID: cql.Option[uint32]{Value: shard, Set: true}}
+	return implModel.Target{HostID: implCqltype.UUID{15: id}, ShardID: implCqltype.Option[uint32]{Value: shard, Set: true}}
 }
 
 func TestLeaderLocalityLWTAndFallback(t *testing.T) {
@@ -333,12 +332,12 @@ func TestLeaderLocalityLWTAndFallback(t *testing.T) {
 	routing.SnapshotData(m).InternalKeyspaces["ks"].ConsistencyMode = "global"
 	k := implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}
 	set := func(targets ...implModel.Target) {
-		h := testHint(t, 0, 100, cql.Option[uint64]{Value: 9, Set: true}, targets...)
+		h := testHint(t, 0, 100, implCqltype.Option[uint64]{Value: 9, Set: true}, targets...)
 		r, _ := implRouting.InternalUpdateTabletRange(nil, h)
 		routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, k, implRouting.InternalTabletPlacement{InternalRanges: r}, implRouting.InternalComparePlacementTable)
 	}
 	set(hTarget(3, 1), hTarget(2, 2), hTarget(1, 3))
-	info := implModel.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: implCqltype.LocalQuorum, Conditional: true}
+	info := implModel.RoutingInfo{Keyspace: "ks", Table: "table", Token: implCqltype.Option[int64]{Value: 1, Set: true}, Consistency: implCqltype.LocalQuorum, Conditional: true}
 	policy := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true, LeaderAware: true, Datacenter: "a", Rack: "r1", AllowRemote: true, ShuffleReplicas: true}))
 	for i := 0; i < 10; i++ {
 		plan := implRouting.NewPlan(policy, info, m)
@@ -392,7 +391,7 @@ func TestLeaderLocalityLWTAndFallback(t *testing.T) {
 }
 func TestConcurrentPlansAndFeedback(t *testing.T) {
 	s := testSession(t)
-	info := implModel.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Conditional: true}
+	info := implModel.RoutingInfo{Keyspace: "ks", Table: "table", Token: implCqltype.Option[int64]{Value: 1, Set: true}, Conditional: true}
 	policy := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true, ShuffleReplicas: true}))
 	var wg sync.WaitGroup
 	for i := 0; i < 4; i++ {
@@ -408,7 +407,7 @@ func TestConcurrentPlansAndFeedback(t *testing.T) {
 		}()
 	}
 	for i := 0; i < 100; i++ {
-		implCluster.InternalSessionQueueTabletFeedback(s, testHint(t, 0, 100, cql.Option[uint64]{Value: uint64(i), Set: true}, hTarget(byte(i%3+1), 0)), implCluster.InternalSessionCaptureTabletFeedback(s, info, s.Metadata()))
+		implCluster.InternalSessionQueueTabletFeedback(s, testHint(t, 0, 100, implCqltype.Option[uint64]{Value: uint64(i), Set: true}, hTarget(byte(i%3+1), 0)), implCluster.InternalSessionCaptureTabletFeedback(s, info, s.Metadata()))
 		testDrain(s)
 	}
 	wg.Wait()
@@ -432,13 +431,13 @@ func TestPickerStrictAndAdvisory(t *testing.T) {
 	_ = p.Put(a)
 	_ = p.Put(b)
 	a.InternalExclusiveFlag.Store(true)
-	if got := p.InternalPickTarget(implModel.Target{ShardID: cql.Option[uint32]{Value: 0, Set: true}}, implModel.RoutingInfo{}); got != b {
+	if got := p.InternalPickTarget(implModel.Target{ShardID: implCqltype.Option[uint32]{Value: 0, Set: true}}, implModel.RoutingInfo{}); got != b {
 		t.Fatal("advisory hint could not use free capacity")
 	}
-	if got := p.InternalPickTarget(implModel.Target{StrictShard: true, ShardID: cql.Option[uint32]{Value: 0, Set: true}}, implModel.RoutingInfo{}); got != a {
+	if got := p.InternalPickTarget(implModel.Target{StrictShard: true, ShardID: implCqltype.Option[uint32]{Value: 0, Set: true}}, implModel.RoutingInfo{}); got != a {
 		t.Fatal("strict target relaxed while reserved")
 	}
-	if got := p.InternalPickTarget(implModel.Target{StrictShard: true, ShardID: cql.Option[uint32]{Value: math.MaxUint32, Set: true}}, implModel.RoutingInfo{}); got != nil {
+	if got := p.InternalPickTarget(implModel.Target{StrictShard: true, ShardID: implCqltype.Option[uint32]{Value: math.MaxUint32, Set: true}}, implModel.RoutingInfo{}); got != nil {
 		t.Fatal("invalid strict target relaxed")
 	}
 }
@@ -480,8 +479,8 @@ func TestNegotiationVersionAndFailedExecuteFeedback(t *testing.T) {
 		}
 	}
 	s := testSession(t)
-	info := implModel.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true, Value: 1}}
-	h := testHint(t, 0, 100, cql.Option[uint64]{Set: true, Value: 0xfedcba9876543210}, hTarget(1, 1))
+	info := implModel.RoutingInfo{Keyspace: "ks", Table: "table", Token: implCqltype.Option[int64]{Set: true, Value: 1}}
+	h := testHint(t, 0, 100, implCqltype.Option[uint64]{Set: true, Value: 0xfedcba9876543210}, hTarget(1, 1))
 	stamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, s.Metadata())
 	// applyTypedFeedbackStamped is deliberately before execute-error/UNPREPARED
 	// interpretation; a response page can carry payload independently of rows.
@@ -500,7 +499,7 @@ func TestNegotiationVersionAndFailedExecuteFeedback(t *testing.T) {
 		t.Fatal("absent identity/token hint is not zero")
 	}
 	// A malformed V2 body never falls back to the simultaneously supplied V1.
-	page.Extras.Payload = append([]implModel.PayloadEntry{{Key: "tablets-routing-v1", Value: implCqltype.Nullable[implCqltype.Bytes]{Valid: true, Value: implCqltype.BorrowBytes(testPayload(testHint(t, 100, 200, cql.Option[uint64]{}, hTarget(2, 0))))}}}, page.Extras.Payload...)
+	page.Extras.Payload = append([]implModel.PayloadEntry{{Key: "tablets-routing-v1", Value: implCqltype.Nullable[implCqltype.Bytes]{Valid: true, Value: implCqltype.BorrowBytes(testPayload(testHint(t, 100, 200, implCqltype.Option[uint64]{}, hTarget(2, 0))))}}}, page.Extras.Payload...)
 	page.Extras.Payload[1].Value.Value = implCqltype.BorrowBytes([]byte{0})
 	implCluster.InternalSessionApplyTypedFeedbackStamped(s, page, info, implCluster.InternalSessionCaptureTabletFeedback(s, info, m), transport.InternalFramerConfig{InternalTabletsRoutingV1: true, InternalTabletsRoutingV2: true})
 	testDrain(s)
@@ -582,11 +581,11 @@ func TestAllDisconnectedAndMissingFollowers(t *testing.T) {
 	}
 	m = v2TestMetadata()
 	routing.SnapshotData(m).InternalKeyspaces["ks"].ConsistencyMode = "global"
-	h := testHint(t, 0, 100, cql.Option[uint64]{Set: true}, hTarget(2, 1), hTarget(99, 2), hTarget(1, 1))
+	h := testHint(t, 0, 100, implCqltype.Option[uint64]{Set: true}, hTarget(2, 1), hTarget(99, 2), hTarget(1, 1))
 	r, _ := implRouting.InternalUpdateTabletRange(nil, h)
 	routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, implRouting.InternalTabletPlacement{InternalRanges: r}, implRouting.InternalComparePlacementTable)
 	leader := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true, LeaderAware: true}))
-	first, _ := implRouting.InternalNextTarget(implRouting.NewPlan(leader, implModel.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true, Value: 1}, Consistency: implCqltype.Quorum}, m))
+	first, _ := implRouting.InternalNextTarget(implRouting.NewPlan(leader, implModel.RoutingInfo{Keyspace: "ks", Table: "table", Token: implCqltype.Option[int64]{Set: true, Value: 1}, Consistency: implCqltype.Quorum}, m))
 	if first.HostID[15] != 2 {
 		t.Fatal("missing follower hid resolved leader")
 	}
@@ -608,7 +607,7 @@ func TestStrictStreamingReservationUsesExistingCapacity(t *testing.T) {
 	pool.InternalConnPicker = codecTestMust(implPool.InternalNewTypedConnPicker(c, config.Pool))
 	pool.InternalConnPicker.Put(c)
 	c.InternalErrorHandler = pool
-	target := implModel.Target{HostID: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), ShardID: cql.Option[uint32]{Value: 0, Set: true}, StrictShard: true}
+	target := implModel.Target{HostID: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), ShardID: implCqltype.Option[uint32]{Value: 0, Set: true}, StrictShard: true}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	first := codecTestMust(pool.InternalReserveStream(ctx, target, implModel.RoutingInfo{}))
@@ -745,7 +744,7 @@ func TestFeedbackEnqueueDoesNotWaitForPublication(t *testing.T) {
 	p := implCluster.InternalSessionPeripheral(s)
 	info := implModel.RoutingInfo{Keyspace: "ks", Table: "table"}
 	stamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, s.Metadata())
-	h := testHint(t, 0, 100, cql.Option[uint64]{}, hTarget(1, 0))
+	h := testHint(t, 0, 100, implCqltype.Option[uint64]{}, hTarget(1, 0))
 	p.InternalMu.Lock()
 	done := make(chan struct{})
 	go func() { implCluster.InternalSessionQueueTabletFeedback(s, h, stamp); close(done) }()

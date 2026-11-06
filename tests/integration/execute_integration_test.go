@@ -16,6 +16,8 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/auth"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 func TestV2RuntimeDatabaseSmoke(t *testing.T) {
@@ -26,7 +28,7 @@ func TestV2RuntimeDatabaseSmoke(t *testing.T) {
 	config.Metadata.RefreshAfterAgreement = true
 	profile := *config.DefaultProfile
 	profile.Timeout = 30 * time.Second
-	profile.Consistency = gocql.LocalQuorum
+	profile.Consistency = cql.LocalQuorum
 	config.DefaultProfile = &profile
 	switch v2SmokeOption("compressor", "no-compression") {
 	case "lz4":
@@ -35,7 +37,7 @@ func TestV2RuntimeDatabaseSmoke(t *testing.T) {
 		config.Compression = gocql.SnappyCompression
 	}
 	if v2SmokeOption("runauth", "false") == "true" {
-		config.Auth = gocql.PasswordAuth("cassandra", "cassandra")
+		config.Auth = auth.Password("cassandra", "cassandra")
 	}
 	if v2SmokeOption("runssl", "false") == "true" {
 		if v2SmokeOption("distribution", "scylla") != "cassandra" {
@@ -81,9 +83,9 @@ func TestV2RuntimeDatabaseSmoke(t *testing.T) {
 	}
 	defer session.Close()
 	keyspace := fmt.Sprintf("v2_runtime_%x", time.Now().UnixNano())
-	exec := func(cql string) {
+	exec := func(stmt string) {
 		t.Helper()
-		bound, err := BindUnpreparedOwned(gocql.Statement[gocql.Unit, gocql.Unit]{CQL: cql, Params: gocql.NoParams, Rows: gocql.NoRows}, gocql.NewColumns(), gocql.Unit{})
+		bound, err := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -94,7 +96,7 @@ func TestV2RuntimeDatabaseSmoke(t *testing.T) {
 	}
 	exec("CREATE KEYSPACE " + keyspace + " WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':1}")
 	defer func() {
-		bound, err := BindUnpreparedOwned(gocql.Statement[gocql.Unit, gocql.Unit]{CQL: "DROP KEYSPACE " + keyspace, Params: gocql.NoParams, Rows: gocql.NoRows}, gocql.NewColumns(), gocql.Unit{})
+		bound, err := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: "DROP KEYSPACE " + keyspace, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{})
 		if err == nil {
 			defer bound.Close()
 			if _, err = Exec(context.Background(), session, bound, gocql.Options{}); err != nil {
@@ -109,11 +111,11 @@ func TestV2RuntimeDatabaseSmoke(t *testing.T) {
 	}
 	type output struct {
 		ID    int32
-		Value gocql.Bytes
+		Value cql.Bytes
 	}
-	inputs := gocql.Params(gocql.Param("id", gocql.Int32, func(v input) int32 { return v.ID }), gocql.Param("value", gocql.BytesEncoder, func(v input) []byte { return v.Value }))
-	rows := gocql.Row(gocql.Column("id", gocql.Int32, func(v *output) *int32 { return &v.ID }), gocql.Column("value", gocql.BlobCodec, func(v *output) *gocql.Bytes { return &v.Value }))
-	prepared, err := gocql.Prepare(ctx, session, gocql.Statement[input, gocql.Unit]{CQL: "INSERT INTO " + keyspace + ".values (id,value) VALUES (?,?)", Params: inputs, Rows: gocql.NoRows}, gocql.PrepareOptions{})
+	inputs := cql.Params(cql.Param("id", cql.Int32, func(v input) int32 { return v.ID }), cql.Param("value", cql.BytesEncoder, func(v input) []byte { return v.Value }))
+	rows := cql.Row(cql.Column("id", cql.Int32, func(v *output) *int32 { return &v.ID }), cql.Column("value", cql.BlobCodec, func(v *output) *cql.Bytes { return &v.Value }))
+	prepared, err := gocql.Prepare(ctx, session, cql.Statement[input, cql.Unit]{CQL: "INSERT INTO " + keyspace + ".values (id,value) VALUES (?,?)", Params: inputs, Rows: cql.NoRows}, gocql.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,17 +136,17 @@ func TestV2RuntimeDatabaseSmoke(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	selectBound, err := BindUnpreparedOwned(gocql.Statement[gocql.Unit, output]{CQL: "SELECT id,value FROM " + keyspace + ".values", Params: gocql.NoParams, Rows: rows}, gocql.NewColumns(), gocql.Unit{})
+	selectBound, err := BindUnpreparedOwned(cql.Statement[cql.Unit, output]{CQL: "SELECT id,value FROM " + keyspace + ".values", Params: cql.NoParams, Rows: rows}, cql.NewColumns(), cql.Unit{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := Run(ctx, session, selectBound, testOptions(gocql.OptionValues{PageSize: gocql.Option[int32]{Value: 1, Set: true}}))
+	result, err := Run(ctx, session, selectBound, testOptions(gocql.OptionValues{PageSize: cql.Option[int32]{Value: 1, Set: true}}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	count := 0
 	var retained *gocql.PageLease
-	var view gocql.Bytes
+	var view cql.Bytes
 	var detached output
 	for result.Next() {
 		row := result.Row()

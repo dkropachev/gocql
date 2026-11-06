@@ -20,7 +20,7 @@ import (
 	"reflect"
 	"testing"
 
-	. "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 // The Equals family decides whether a schema refresh sees a table as changed
@@ -118,8 +118,8 @@ func assertEveryFieldCompared(t *testing.T, want any, equals func(a, b any) bool
 	}
 }
 
-func populatedTableMetadataOptions() *TableMetadataOptions {
-	return &TableMetadataOptions{
+func populatedTableMetadataOptions() *metadata.TableOptions {
+	return &metadata.TableOptions{
 		Caching:                 map[string]string{"keys": "ALL"},
 		Compaction:              map[string]string{"class": "SizeTieredCompactionStrategy"},
 		Compression:             map[string]string{"sstable_compression": "LZ4Compressor"},
@@ -141,17 +141,17 @@ func populatedTableMetadataOptions() *TableMetadataOptions {
 	}
 }
 
-func populatedColumnMetadata() *ColumnMetadata {
-	return &ColumnMetadata{
+func populatedColumnMetadata() *metadata.Column {
+	return &metadata.Column{
 		Keyspace:        "ks",
 		Table:           "tbl",
 		Name:            "col",
 		Type:            "text",
 		ClusteringOrder: "asc",
 		ComponentIndex:  1,
-		Kind:            ColumnRegular,
-		Order:           ASC,
-		Index: ColumnIndexMetadata{
+		Kind:            metadata.ColumnRegular,
+		Order:           metadata.ASC,
+		Index: metadata.ColumnIndex{
 			Name:    "idx",
 			Type:    "COMPOSITES",
 			Options: map[string]any{"target": "col"},
@@ -159,18 +159,18 @@ func populatedColumnMetadata() *ColumnMetadata {
 	}
 }
 
-func populatedTableMetadata() *TableMetadata {
+func populatedTableMetadata() *metadata.Table {
 	partitionKey := populatedColumnMetadata()
 	partitionKey.Name = "pk"
 	clustering := populatedColumnMetadata()
 	clustering.Name = "ck"
 
-	return &TableMetadata{
+	return &metadata.Table{
 		Keyspace:          "ks",
 		Name:              "tbl",
-		PartitionKey:      []*ColumnMetadata{partitionKey},
-		ClusteringColumns: []*ColumnMetadata{clustering},
-		Columns: map[string]*ColumnMetadata{
+		PartitionKey:      []*metadata.Column{partitionKey},
+		ClusteringColumns: []*metadata.Column{clustering},
+		Columns: map[string]*metadata.Column{
 			"pk": partitionKey,
 			"ck": clustering,
 		},
@@ -183,20 +183,20 @@ func populatedTableMetadata() *TableMetadata {
 
 // deepCopyTableMetadata produces an independent value that must compare equal,
 // so a test can mutate one side without disturbing the other.
-func deepCopyTableMetadata(src *TableMetadata) *TableMetadata {
+func deepCopyTableMetadata(src *metadata.Table) *metadata.Table {
 	dst := *src
 
-	dst.PartitionKey = make([]*ColumnMetadata, len(src.PartitionKey))
+	dst.PartitionKey = make([]*metadata.Column, len(src.PartitionKey))
 	for i, c := range src.PartitionKey {
 		col := *c
 		dst.PartitionKey[i] = &col
 	}
-	dst.ClusteringColumns = make([]*ColumnMetadata, len(src.ClusteringColumns))
+	dst.ClusteringColumns = make([]*metadata.Column, len(src.ClusteringColumns))
 	for i, c := range src.ClusteringColumns {
 		col := *c
 		dst.ClusteringColumns[i] = &col
 	}
-	dst.Columns = make(map[string]*ColumnMetadata, len(src.Columns))
+	dst.Columns = make(map[string]*metadata.Column, len(src.Columns))
 	for k, c := range src.Columns {
 		col := *c
 		dst.Columns[k] = &col
@@ -220,7 +220,7 @@ func TestTableMetadataOptionsEqualsComparesEveryField(t *testing.T) {
 	}
 
 	assertEveryFieldCompared(t, want, func(a, b any) bool {
-		return a.(*TableMetadataOptions).Equals(b.(*TableMetadataOptions))
+		return a.(*metadata.TableOptions).Equals(b.(*metadata.TableOptions))
 	})
 }
 
@@ -235,31 +235,31 @@ func TestTableMetadataOptionsEqualsMapKeys(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		mutate func(*TableMetadataOptions)
+		mutate func(*metadata.TableOptions)
 		want   bool
 	}{
-		{name: "identical", mutate: func(*TableMetadataOptions) {}, want: true},
+		{name: "identical", mutate: func(*metadata.TableOptions) {}, want: true},
 		{
 			name: "caching key renamed",
-			mutate: func(o *TableMetadataOptions) {
+			mutate: func(o *metadata.TableOptions) {
 				o.Caching = map[string]string{"rows_per_partition": "ALL"}
 			},
 		},
 		{
 			name: "caching value changed",
-			mutate: func(o *TableMetadataOptions) {
+			mutate: func(o *metadata.TableOptions) {
 				o.Caching = map[string]string{"keys": "NONE"}
 			},
 		},
 		{
 			name: "compaction key renamed",
-			mutate: func(o *TableMetadataOptions) {
+			mutate: func(o *metadata.TableOptions) {
 				o.Compaction = map[string]string{"strategy": "SizeTieredCompactionStrategy"}
 			},
 		},
 		{
 			name:   "nil map versus populated",
-			mutate: func(o *TableMetadataOptions) { o.CDC = nil },
+			mutate: func(o *metadata.TableOptions) { o.CDC = nil },
 		},
 	}
 
@@ -287,7 +287,7 @@ func TestColumnMetadataEqualsComparesEveryField(t *testing.T) {
 	}
 
 	assertEveryFieldCompared(t, want, func(a, b any) bool {
-		return a.(*ColumnMetadata).Equals(b.(*ColumnMetadata))
+		return a.(*metadata.Column).Equals(b.(*metadata.Column))
 	})
 }
 
@@ -322,15 +322,15 @@ func TestColumnIndexMetadataEqualsComparesEveryField(t *testing.T) {
 	}
 
 	assertEveryFieldCompared(t, &want, func(a, b any) bool {
-		return a.(*ColumnIndexMetadata).Equals(b.(*ColumnIndexMetadata))
+		return a.(*metadata.ColumnIndex).Equals(b.(*metadata.ColumnIndex))
 	})
 }
 
 func TestColumnIndexMetadataEquals(t *testing.T) {
 	t.Parallel()
 
-	base := func() *ColumnIndexMetadata {
-		return &ColumnIndexMetadata{
+	base := func() *metadata.ColumnIndex {
+		return &metadata.ColumnIndex{
 			Name:    "idx",
 			Type:    "COMPOSITES",
 			Options: map[string]any{"target": "col", "nested": []string{"a", "b"}},
@@ -339,35 +339,35 @@ func TestColumnIndexMetadataEquals(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		mutate func(*ColumnIndexMetadata)
+		mutate func(*metadata.ColumnIndex)
 		want   bool
 	}{
-		{name: "identical", mutate: func(*ColumnIndexMetadata) {}, want: true},
-		{name: "different name", mutate: func(c *ColumnIndexMetadata) { c.Name = "other" }},
-		{name: "different type", mutate: func(c *ColumnIndexMetadata) { c.Type = "KEYS" }},
+		{name: "identical", mutate: func(*metadata.ColumnIndex) {}, want: true},
+		{name: "different name", mutate: func(c *metadata.ColumnIndex) { c.Name = "other" }},
+		{name: "different type", mutate: func(c *metadata.ColumnIndex) { c.Type = "KEYS" }},
 		{
 			name:   "extra option",
-			mutate: func(c *ColumnIndexMetadata) { c.Options["extra"] = "value" },
+			mutate: func(c *metadata.ColumnIndex) { c.Options["extra"] = "value" },
 		},
 		{
 			name:   "missing option",
-			mutate: func(c *ColumnIndexMetadata) { delete(c.Options, "target") },
+			mutate: func(c *metadata.ColumnIndex) { delete(c.Options, "target") },
 		},
 		{
 			name:   "same key different value",
-			mutate: func(c *ColumnIndexMetadata) { c.Options["target"] = "other" },
+			mutate: func(c *metadata.ColumnIndex) { c.Options["target"] = "other" },
 		},
 		{
 			// Options is map[string]any, so its values are compared with
 			// reflect.DeepEqual rather than ==. A slice value must still be
 			// compared by content.
 			name:   "same key different slice value",
-			mutate: func(c *ColumnIndexMetadata) { c.Options["nested"] = []string{"a", "c"} },
+			mutate: func(c *metadata.ColumnIndex) { c.Options["nested"] = []string{"a", "c"} },
 		},
 		{
 			// Equal length, disjoint keys: a length-only check would pass this.
 			name: "same size different keys",
-			mutate: func(c *ColumnIndexMetadata) {
+			mutate: func(c *metadata.ColumnIndex) {
 				delete(c.Options, "target")
 				c.Options["renamed"] = "col"
 			},
@@ -470,7 +470,7 @@ func TestTableMetadataEqualsComparesEveryField(t *testing.T) {
 	}
 
 	assertEveryFieldCompared(t, want, func(a, b any) bool {
-		return a.(*TableMetadata).Equals(b.(*TableMetadata))
+		return a.(*metadata.Table).Equals(b.(*metadata.Table))
 	})
 }
 
@@ -479,55 +479,55 @@ func TestTableMetadataEquals(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		mutate func(*TableMetadata)
+		mutate func(*metadata.Table)
 		want   bool
 	}{
-		{name: "identical", mutate: func(*TableMetadata) {}, want: true},
-		{name: "keyspace", mutate: func(m *TableMetadata) { m.Keyspace = "other" }},
-		{name: "name", mutate: func(m *TableMetadata) { m.Name = "other" }},
+		{name: "identical", mutate: func(*metadata.Table) {}, want: true},
+		{name: "keyspace", mutate: func(m *metadata.Table) { m.Keyspace = "other" }},
+		{name: "name", mutate: func(m *metadata.Table) { m.Name = "other" }},
 		{
 			name:   "partition key column",
-			mutate: func(m *TableMetadata) { m.PartitionKey[0].Name = "other" },
+			mutate: func(m *metadata.Table) { m.PartitionKey[0].Name = "other" },
 		},
 		{
 			name:   "clustering column",
-			mutate: func(m *TableMetadata) { m.ClusteringColumns[0].Type = "int" },
+			mutate: func(m *metadata.Table) { m.ClusteringColumns[0].Type = "int" },
 		},
 		{
 			name:   "column map value",
-			mutate: func(m *TableMetadata) { m.Columns["pk"].Type = "int" },
+			mutate: func(m *metadata.Table) { m.Columns["pk"].Type = "int" },
 		},
 		{
 			// Same count, different key: the length guard passes and
 			// compareColumnsMap has to do the work.
 			name: "column map key renamed",
-			mutate: func(m *TableMetadata) {
+			mutate: func(m *metadata.Table) {
 				m.Columns["renamed"] = m.Columns["pk"]
 				delete(m.Columns, "pk")
 			},
 		},
 		{
 			name:   "ordered columns reordered",
-			mutate: func(m *TableMetadata) { m.OrderedColumns = []string{"ck", "pk"} },
+			mutate: func(m *metadata.Table) { m.OrderedColumns = []string{"ck", "pk"} },
 		},
-		{name: "flags", mutate: func(m *TableMetadata) { m.Flags = []string{"dense"} }},
+		{name: "flags", mutate: func(m *metadata.Table) { m.Flags = []string{"dense"} }},
 		{
 			name:   "options",
-			mutate: func(m *TableMetadata) { m.Options.GcGraceSeconds = 0 },
+			mutate: func(m *metadata.Table) { m.Options.GcGraceSeconds = 0 },
 		},
 		{
 			name:   "extension value",
-			mutate: func(m *TableMetadata) { m.Extensions["scylla_encryption_options"] = []byte("other") },
+			mutate: func(m *metadata.Table) { m.Extensions["scylla_encryption_options"] = []byte("other") },
 		},
 		{
 			name:   "extension added",
-			mutate: func(m *TableMetadata) { m.Extensions["extra"] = []byte("x") },
+			mutate: func(m *metadata.Table) { m.Extensions["extra"] = []byte("x") },
 		},
 		{
 			// Equal length, disjoint keys: compareInterfaceMaps has to notice
 			// the missing key rather than stopping at the length check.
 			name: "extension key renamed",
-			mutate: func(m *TableMetadata) {
+			mutate: func(m *metadata.Table) {
 				m.Extensions["renamed"] = m.Extensions["scylla_encryption_options"]
 				delete(m.Extensions, "scylla_encryption_options")
 			},
@@ -568,15 +568,15 @@ func TestTableMetadataEquals(t *testing.T) {
 func TestTableMetadataEqualsLengthMismatch(t *testing.T) {
 	t.Parallel()
 
-	shorten := map[string]func(*TableMetadata){
-		"partition key": func(m *TableMetadata) { m.PartitionKey = nil },
-		"clustering columns": func(m *TableMetadata) {
+	shorten := map[string]func(*metadata.Table){
+		"partition key": func(m *metadata.Table) { m.PartitionKey = nil },
+		"clustering columns": func(m *metadata.Table) {
 			m.ClusteringColumns = nil
 		},
-		"columns":         func(m *TableMetadata) { delete(m.Columns, "pk") },
-		"ordered columns": func(m *TableMetadata) { m.OrderedColumns = []string{"pk"} },
-		"flags":           func(m *TableMetadata) { m.Flags = nil },
-		"extensions":      func(m *TableMetadata) { m.Extensions = nil },
+		"columns":         func(m *metadata.Table) { delete(m.Columns, "pk") },
+		"ordered columns": func(m *metadata.Table) { m.OrderedColumns = []string{"pk"} },
+		"flags":           func(m *metadata.Table) { m.Flags = nil },
+		"extensions":      func(m *metadata.Table) { m.Extensions = nil },
 	}
 
 	for name, shorter := range shorten {
@@ -613,7 +613,7 @@ func TestMetadataEqualsNilHandling(t *testing.T) {
 	t.Run("TableMetadataOptions", func(t *testing.T) {
 		t.Parallel()
 
-		var nilOpts *TableMetadataOptions
+		var nilOpts *metadata.TableOptions
 		populated := populatedTableMetadataOptions()
 
 		if !nilOpts.Equals(nil) {
@@ -630,7 +630,7 @@ func TestMetadataEqualsNilHandling(t *testing.T) {
 	t.Run("ColumnMetadata", func(t *testing.T) {
 		t.Parallel()
 
-		var nilCol *ColumnMetadata
+		var nilCol *metadata.Column
 		populated := populatedColumnMetadata()
 
 		if !nilCol.Equals(nil) {
@@ -647,8 +647,8 @@ func TestMetadataEqualsNilHandling(t *testing.T) {
 	t.Run("ColumnIndexMetadata", func(t *testing.T) {
 		t.Parallel()
 
-		var nilIdx *ColumnIndexMetadata
-		populated := &ColumnIndexMetadata{Name: "idx"}
+		var nilIdx *metadata.ColumnIndex
+		populated := &metadata.ColumnIndex{Name: "idx"}
 
 		if !nilIdx.Equals(nil) {
 			t.Error("Equals() = false for two nils, want true")
@@ -664,7 +664,7 @@ func TestMetadataEqualsNilHandling(t *testing.T) {
 	t.Run("TableMetadata", func(t *testing.T) {
 		t.Parallel()
 
-		var nilTable *TableMetadata
+		var nilTable *metadata.Table
 		populated := populatedTableMetadata()
 
 		if !nilTable.Equals(nil) {
@@ -702,15 +702,15 @@ func TestMetadataEqualsNilHandling(t *testing.T) {
 func TestTableMetadataEqualsEmptyAndZero(t *testing.T) {
 	t.Parallel()
 
-	if !(&TableMetadata{}).Equals(&TableMetadata{}) {
+	if !(&metadata.Table{}).Equals(&metadata.Table{}) {
 		t.Error("Equals() = false for two zero-valued tables")
 	}
 
-	nilMaps := &TableMetadata{Keyspace: "ks", Name: "tbl"}
-	emptyMaps := &TableMetadata{
+	nilMaps := &metadata.Table{Keyspace: "ks", Name: "tbl"}
+	emptyMaps := &metadata.Table{
 		Keyspace:   "ks",
 		Name:       "tbl",
-		Columns:    map[string]*ColumnMetadata{},
+		Columns:    map[string]*metadata.Column{},
 		Extensions: map[string]any{},
 	}
 

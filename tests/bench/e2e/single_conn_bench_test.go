@@ -34,8 +34,11 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/auth"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/dialer/recorder"
 	"github.com/scylladb/gocql/v2/dialer/replayer"
+	"github.com/scylladb/gocql/v2/endpoint"
 )
 
 type corpusConfig struct {
@@ -53,7 +56,7 @@ func freshNamespace() (string, error) {
 	if prefix == "" {
 		prefix = "gocql"
 	}
-	id, err := gocql.RandomUUID()
+	id, err := cql.RandomUUID()
 	if err != nil {
 		return "", err
 	}
@@ -64,7 +67,7 @@ func freshNamespace() (string, error) {
 	return name, nil
 }
 func corpusPath(name string) string { return filepath.Join(corpusRoot, name) }
-func benchConfig(d gocql.Dialer) gocql.Config {
+func benchConfig(d endpoint.Dialer) gocql.Config {
 	address := os.Getenv("GOCQL_BENCH_ADDRESS")
 	if address == "" {
 		address = corpus.Address
@@ -74,7 +77,7 @@ func benchConfig(d gocql.Dialer) gocql.Config {
 	}
 	c := gocql.DefaultConfig(address)
 	c.Protocol = 4
-	c.Auth = gocql.PasswordAuth("cassandra", "cassandra")
+	c.Auth = auth.Password("cassandra", "cassandra")
 	c.SocketKeepalive = 0
 	c.KeepaliveInterval = 0
 	c.Metadata.PeriodicRefresh = 0
@@ -84,18 +87,18 @@ func benchConfig(d gocql.Dialer) gocql.Config {
 	c.Dialer = d
 	return c
 }
-func benchExec(ctx context.Context, s *gocql.Session, cql string) error {
-	b, e := gocql.NewUnpreparedQuery(s, gocql.Statement[gocql.Unit, gocql.Unit]{CQL: cql, Params: gocql.NoParams, Rows: gocql.NoRows}, gocql.NewColumns(), gocql.Options{})
+func benchExec(ctx context.Context, s *gocql.Session, text string) error {
+	b, e := gocql.NewUnpreparedQuery(s, cql.Statement[cql.Unit, cql.Unit]{CQL: text, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), gocql.Options{})
 	if e != nil {
 		return e
 	}
 	defer b.Close()
-	e = b.Exec(ctx, gocql.Unit{})
+	e = b.Exec(ctx, cql.Unit{})
 	return e
 }
 func InitializeCluster(ctx context.Context, s *gocql.Session) error {
-	for _, cql := range []string{"CREATE TABLE " + corpus.Namespace + ".table1(pk int PRIMARY KEY,ck int,v text)"} {
-		if err := benchExec(ctx, s, cql); err != nil {
+	for _, text := range []string{"CREATE TABLE " + corpus.Namespace + ".table1(pk int PRIMARY KEY,ck int,v text)"} {
+		if err := benchExec(ctx, s, text); err != nil {
 			return err
 		}
 	}
@@ -107,7 +110,7 @@ func cleanupNamespace(s *gocql.Session) error {
 	if err := benchExec(ctx, s, "DROP KEYSPACE IF EXISTS "+corpus.Namespace); err != nil {
 		return err
 	}
-	p, err := gocql.Prepare(ctx, s, gocql.Statement[string, gocql.Text]{CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name = ?", Params: gocql.OneParam(gocql.StringEncoder), Rows: gocql.OneColumn(gocql.TextCodec)}, gocql.PrepareOptions{})
+	p, err := gocql.Prepare(ctx, s, cql.Statement[string, cql.Text]{CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name = ?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.TextCodec)}, gocql.PrepareOptions{})
 	if err != nil {
 		return err
 	}
@@ -156,7 +159,7 @@ func generateCaptures(ctx context.Context) (err error) {
 	// A namespace is fresh and exclusively generated here. An AlreadyExists
 	// response relinquishes ownership instead of deleting a pre-existing name.
 	if err = benchExec(ctx, s, "CREATE KEYSPACE "+corpus.Namespace+" WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':1}"); err != nil {
-		var exists *gocql.RequestErrAlreadyExists
+		var exists *cql.RequestErrAlreadyExists
 		if errors.As(err, &exists) {
 			owned = false
 		}
@@ -201,7 +204,7 @@ func benchRead(s *gocql.Session, id int32) error {
 	return benchReadContext(context.Background(), s, id)
 }
 func benchReadContext(ctx context.Context, s *gocql.Session, id int32) error {
-	p, e := gocql.Prepare(ctx, s, gocql.Statement[int32, gocql.Text]{CQL: "SELECT v FROM " + corpus.Namespace + ".table1 WHERE pk = ?;", Params: gocql.OneParam(gocql.Int32), Rows: gocql.OneColumn(gocql.TextCodec)}, gocql.PrepareOptions{})
+	p, e := gocql.Prepare(ctx, s, cql.Statement[int32, cql.Text]{CQL: "SELECT v FROM " + corpus.Namespace + ".table1 WHERE pk = ?;", Params: cql.OneParam(cql.Int32), Rows: cql.OneColumn(cql.TextCodec)}, gocql.PrepareOptions{})
 	if e != nil {
 		return e
 	}
@@ -240,7 +243,7 @@ func benchWrite(s *gocql.Session, id int32) error {
 	return benchWriteContext(context.Background(), s, id)
 }
 func benchWriteContext(ctx context.Context, s *gocql.Session, id int32) error {
-	p, e := gocql.Prepare(ctx, s, gocql.Statement[benchInsert, gocql.Unit]{CQL: "INSERT INTO " + corpus.Namespace + ".table1 (pk, ck, v) VALUES (?, ?, ?);", Params: gocql.Params(gocql.Param("pk", gocql.Int32, func(v benchInsert) int32 { return v.PK }), gocql.Param("ck", gocql.Int32, func(v benchInsert) int32 { return v.CK }), gocql.Param("v", gocql.StringEncoder, func(v benchInsert) string { return v.Value })), Rows: gocql.NoRows}, gocql.PrepareOptions{})
+	p, e := gocql.Prepare(ctx, s, cql.Statement[benchInsert, cql.Unit]{CQL: "INSERT INTO " + corpus.Namespace + ".table1 (pk, ck, v) VALUES (?, ?, ?);", Params: cql.Params(cql.Param("pk", cql.Int32, func(v benchInsert) int32 { return v.PK }), cql.Param("ck", cql.Int32, func(v benchInsert) int32 { return v.CK }), cql.Param("v", cql.StringEncoder, func(v benchInsert) string { return v.Value })), Rows: cql.NoRows}, gocql.PrepareOptions{})
 	if e != nil {
 		return e
 	}
@@ -366,7 +369,7 @@ type captureDialer struct {
 func newCaptureDialer(dir string, replay bool) *captureDialer {
 	return &captureDialer{dir: dir, replay: replay}
 }
-func (d *captureDialer) DialContext(ctx context.Context, target gocql.DialTarget) (net.Conn, error) {
+func (d *captureDialer) DialContext(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 	n := d.ordinal.Add(1) - 1
 	base := filepath.Join(d.dir, fmt.Sprintf("connection-%d", n))
 	if d.replay {
@@ -376,7 +379,7 @@ func (d *captureDialer) DialContext(ctx context.Context, target gocql.DialTarget
 		}
 		return conn, err
 	}
-	conn, err := (gocql.DefaultDialer{}).DialContext(ctx, target)
+	conn, err := (endpoint.DefaultDialer{}).DialContext(ctx, target)
 	if err != nil {
 		return nil, err
 	}

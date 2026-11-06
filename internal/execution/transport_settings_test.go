@@ -36,7 +36,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
@@ -60,7 +59,7 @@ func TestV2TransportDefaultsAndValidation(t *testing.T) {
 	if c.ConnectTimeout != 5*time.Second || c.DNSTimeout != 5*time.Second || c.ReadTimeout != 0 || c.WriteTimeout != 0 || c.SocketKeepalive != 0 || c.CoalesceWait != 0 || c.KeepaliveInterval != 30*time.Second || c.KeepaliveTimeout != 30*time.Second || c.Pool.SourcePortStart != 49152 || c.Pool.SourcePortEnd != 65535 {
 		t.Fatal("transport defaults", c)
 	}
-	for _, change := range []func(*settings.Config){func(c *settings.Config) { c.Pool.ConnectionsPerShard = 0 }, func(c *settings.Config) { c.Pool.MaxRequestsPerConnection = 0 }, func(c *settings.Config) { c.Pool.MaxOrphanedStreams = -1 }, func(c *settings.Config) { c.Pool.SourcePortStart = 0 }, func(c *settings.Config) { c.Pool.SourcePortStart = 65535; c.Pool.SourcePortEnd = 49152 }, func(c *settings.Config) { c.Linger = cql.Option[time.Duration]{Value: time.Millisecond, Set: true} }} {
+	for _, change := range []func(*settings.Config){func(c *settings.Config) { c.Pool.ConnectionsPerShard = 0 }, func(c *settings.Config) { c.Pool.MaxRequestsPerConnection = 0 }, func(c *settings.Config) { c.Pool.MaxOrphanedStreams = -1 }, func(c *settings.Config) { c.Pool.SourcePortStart = 0 }, func(c *settings.Config) { c.Pool.SourcePortStart = 65535; c.Pool.SourcePortEnd = 49152 }, func(c *settings.Config) { c.Linger = cqltype.Option[time.Duration]{Value: time.Millisecond, Set: true} }} {
 		invalid := settings.DefaultConfig("localhost")
 		change(&invalid)
 		if err := settings.InternalValidateConfig(invalid); err == nil {
@@ -238,7 +237,7 @@ func TestV2SourcePortExhaustionAndNATFallback(t *testing.T) {
 		}()
 		implEndpoint.ScyllaConnectionFeaturesData(opaqueStorageValuexxx).InternalShard = 0
 		return opaqueStorageValuexxx
-	}(), InternalRequestedShard: cql.Option[uint32]{Value: 1, Set: true}, InternalStreams: streams.New()}
+	}(), InternalRequestedShard: cqltype.Option[uint32]{Value: 1, Set: true}, InternalStreams: streams.New()}
 	p := codecTestMust(implPool.InternalNewTypedConnPicker(c, config.Pool))
 	if p.Put(c) == nil {
 		t.Fatal("NAT wrong shard accepted")
@@ -521,7 +520,7 @@ func TestV2UnsupportedSocketSettingsKeepTypedError(t *testing.T) {
 	defer a.Close()
 	defer b.Close()
 	config := settings.DefaultConfig("localhost")
-	config.ReceiveBuffer = cql.Option[int]{Value: 4096, Set: true}
+	config.ReceiveBuffer = cqltype.Option[int]{Value: 4096, Set: true}
 	var unsupported *settings.UnsupportedSettingError
 	if err := applyV2SocketOptions(a, config, "tcp"); !errors.As(err, &unsupported) {
 		t.Fatal("unsupported backend setting", err)
@@ -719,7 +718,7 @@ func TestV2TypedSelectionWaitsForReservedCapacity(t *testing.T) {
 	defer bound.Close()
 	done := make(chan error, 1)
 	go func() {
-		rows, err := Run(ctx, s, bound, testOptions(OptionValues{HostID: cql.Option[cqltype.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), Set: true}}))
+		rows, err := Run(ctx, s, bound, testOptions(OptionValues{HostID: cqltype.Option[cqltype.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), Set: true}}))
 		rows.Close()
 		done <- err
 	}()
@@ -750,7 +749,7 @@ func TestV2TypedSelectionWaitsForReservedCapacity(t *testing.T) {
 	defer r.InternalClose(true)
 	wait, cancelWait := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancelWait()
-	_, err := Run(wait, s, bound, testOptions(OptionValues{HostID: cql.Option[cqltype.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), Set: true}}))
+	_, err := Run(wait, s, bound, testOptions(OptionValues{HostID: cqltype.Option[cqltype.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), Set: true}}))
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal("waiting ignored caller cancellation", err)
 	}
@@ -866,11 +865,11 @@ func TestV2ReservedPreferredShardUsesAllowedFreeAlternative(t *testing.T) {
 	p.Put(first)
 	p.Put(second)
 	first.InternalExclusiveFlag.Store(true)
-	routing := model.RoutingInfo{Token: cql.Option[int64]{Value: math.MinInt64, Set: true}}
+	routing := model.RoutingInfo{Token: cqltype.Option[int64]{Value: math.MinInt64, Set: true}}
 	if got := p.InternalPickTarget(model.Target{}, routing); got != second {
 		t.Fatal("non-strict selection waited despite idle eligible connection")
 	}
-	if got := p.InternalPickTarget(model.Target{StrictShard: true, ShardID: cql.Option[uint32]{Value: 0, Set: true}}, routing); got != first {
+	if got := p.InternalPickTarget(model.Target{StrictShard: true, ShardID: cqltype.Option[uint32]{Value: 0, Set: true}}, routing); got != first {
 		t.Fatal("strict shard was not preserved")
 	}
 }

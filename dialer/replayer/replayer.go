@@ -18,8 +18,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/dialer"
+	"github.com/scylladb/gocql/v2/endpoint"
 )
 
 // Option configures a ReplayDialer.
@@ -53,7 +53,7 @@ type ReplayDialer struct {
 	net.Dialer
 }
 
-func (d *ReplayDialer) DialContext(ctx context.Context, target gocql.DialTarget) (conn net.Conn, err error) {
+func (d *ReplayDialer) DialContext(ctx context.Context, target endpoint.DialTarget) (conn net.Conn, err error) {
 	sourcePort := target.LocalAddress.Port()
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -623,7 +623,7 @@ type FrameRecorded struct {
 	Hash     int64
 }
 
-var _ gocql.Dialer = (*ReplayDialer)(nil)
+var _ endpoint.Dialer = (*ReplayDialer)(nil)
 
 // sameRecordedFrame ignores only the native stream ID. It does not normalize
 // payloads, timestamps, metadata IDs, flags or any other protocol bytes.

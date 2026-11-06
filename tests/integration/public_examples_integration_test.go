@@ -24,6 +24,9 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/endpoint"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 // This subprocess is a normal consumer build: root _test.go aliases cannot make
@@ -179,7 +182,7 @@ func testNamespace(t *testing.T, cfg gocql.Config, namespace string, wantPresent
 	if err := s.AwaitSchemaAgreement(ctx); err != nil {
 		t.Fatal("namespace observation schema agreement", err)
 	}
-	value, err := gocql.TextValue(namespace)
+	value, err := cql.TextValue(namespace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,13 +265,13 @@ func ownedChild(t *testing.T, binary string, args, env []string, kill bool, cfg 
 type testConviction struct {
 	mu      sync.Mutex
 	cause   error
-	hosts   []gocql.HostSnapshot
-	targets []gocql.HostSnapshot
+	hosts   []routing.HostSnapshot
+	targets []routing.HostSnapshot
 	verdict bool
 	resets  int
 }
 
-func (p *testConviction) AddFailure(err error, host gocql.HostSnapshot) bool {
+func (p *testConviction) AddFailure(err error, host routing.HostSnapshot) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if !errors.Is(err, p.cause) {
@@ -278,7 +281,7 @@ func (p *testConviction) AddFailure(err error, host gocql.HostSnapshot) bool {
 	p.hosts = append(p.hosts, host)
 	return p.verdict
 }
-func (p *testConviction) Reset(host gocql.HostSnapshot) {
+func (p *testConviction) Reset(host routing.HostSnapshot) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if len(p.hosts) == 0 || p.hosts[0].ID != host.ID {
@@ -313,14 +316,14 @@ func TestConvictionLive(t *testing.T) {
 				c.Metadata.PeriodicRefresh = 0
 			})
 			var dials atomic.Int32
-			config.Dialer = gocql.DialerFunc(func(ctx context.Context, target gocql.DialTarget) (net.Conn, error) {
+			config.Dialer = endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 				if dials.Add(1) > 1 {
 					policy.mu.Lock()
 					policy.targets = append(policy.targets, target.Host)
 					policy.mu.Unlock()
 					return nil, cause
 				}
-				return (gocql.DefaultDialer{}).DialContext(ctx, target)
+				return (endpoint.DefaultDialer{}).DialContext(ctx, target)
 			})
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -332,8 +335,8 @@ func TestConvictionLive(t *testing.T) {
 				t.Fatal("failed data connection unexpectedly connected")
 			}
 			policy.mu.Lock()
-			hosts := append([]gocql.HostSnapshot(nil), policy.hosts...)
-			targets := append([]gocql.HostSnapshot(nil), policy.targets...)
+			hosts := append([]routing.HostSnapshot(nil), policy.hosts...)
+			targets := append([]routing.HostSnapshot(nil), policy.targets...)
 			resets := policy.resets
 			policy.mu.Unlock()
 			if len(hosts) == 0 || len(targets) == 0 {

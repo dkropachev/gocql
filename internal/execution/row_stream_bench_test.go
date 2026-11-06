@@ -22,8 +22,6 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/scylladb/gocql/v2/cql"
-
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 
@@ -84,7 +82,7 @@ func BenchmarkExecutionStorage(b *testing.B) {
 						}
 						cursor.Close()
 					} else {
-						rows, err := Run(context.Background(), s, bound, testOptions(OptionValues{Prefetch: cql.Option[int]{Set: true, Value: 0}}))
+						rows, err := Run(context.Background(), s, bound, testOptions(OptionValues{Prefetch: cqltype.Option[int]{Set: true, Value: 0}}))
 						if err != nil {
 							b.Fatal(err)
 						}

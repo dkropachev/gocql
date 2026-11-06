@@ -12,8 +12,10 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 
+	"github.com/scylladb/gocql/v2/cql"
 	binding "github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	routing "github.com/scylladb/gocql/v2/routing"
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -25,7 +27,7 @@ import (
 
 	pool "github.com/scylladb/gocql/v2/internal/pool"
 	protocol "github.com/scylladb/gocql/v2/internal/protocol"
-	routing "github.com/scylladb/gocql/v2/internal/routing"
+	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 
@@ -58,7 +60,7 @@ func getHostPortMappingForPairs(a0 controlConnection, a1 string, a2 []pair, a3 b
 
 type hostPrepared = implExecution.InternalHostPrepared
 
-func newPage[R any](a0 *responsePage, a1 gocql.RowDecoder[R], a2 func()) (*gocql.Page[R], error) {
+func newPage[R any](a0 *responsePage, a1 cql.RowDecoder[R], a2 func()) (*gocql.Page[R], error) {
 	return implExecution.InternalNewPage[R](a0, a1, a2)
 }
 
@@ -68,7 +70,7 @@ func newSchemaSource(a0 *gocql.Session) implMetadata.Source {
 
 type pair = implCluster.InternalPair
 
-func readV2SystemRows[P any, R any](a0 context.Context, a1 *driverConn, a2 gocql.Statement[P, R], a3 gocql.Columns, a4 P) ([]R, error) {
+func readV2SystemRows[P any, R any](a0 context.Context, a1 *driverConn, a2 cql.Statement[P, R], a3 cql.Columns, a4 P) ([]R, error) {
 	return implCluster.InternalReadV2SystemRows[P, R](a0, a1, a2, a3, a4)
 }
 
@@ -90,11 +92,11 @@ func getV2CreateStatements(a0 context.Context, a1 implMetadata.Source, a2 string
 
 type driverConn = implTransport.Conn
 
-func decodeStreamRow[R any](a0 *streamResponse, a1 gocql.StreamRowPlan[R], a2 *R) (bool, error) {
+func decodeStreamRow[R any](a0 *streamResponse, a1 cql.StreamRowPlan[R], a2 *R) (bool, error) {
 	return implTransport.InternalDecodeStreamRow[R](a0, a1, a2)
 }
 
-func parseTypedTabletPayload(a0 gocql.Bytes, a1 string, a2 string, a3 bool) (tablets.TabletInfo, error) {
+func parseTypedTabletPayload(a0 cql.Bytes, a1 string, a2 string, a3 bool) (tablets.TabletInfo, error) {
 	return implTransport.InternalParseTypedTabletPayload(a0, a1, a2, a3)
 }
 
@@ -106,7 +108,7 @@ type streamResponse = implTransport.InternalStreamResponse
 
 type attemptRequest = model.AttemptRequest
 
-func dataTypeFromInfo(a0 gocql.TypeInfo) (gocql.DataType, error) { return cqltype.DataTypeFromInfo(a0) }
+func dataTypeFromInfo(a0 cql.TypeInfo) (cql.DataType, error) { return cqltype.DataTypeFromInfo(a0) }
 
 type encodedCell = model.EncodedCell
 
@@ -166,8 +168,8 @@ type nopLogger = logging.InternalNopLogger
 
 type scyllaSourcePortCtx = implEndpoint.InternalScyllaSourcePortCtx
 
-func newPartitionKey(a0 []encodedCell, a1 []int) (gocql.PartitionKey, bool, error) {
-	return routing.InternalNewPartitionKey(a0, a1)
+func newPartitionKey(a0 []encodedCell, a1 []int) (routing.PartitionKey, bool, error) {
+	return implRouting.InternalNewPartitionKey(a0, a1)
 }
 
-func comparePlacementToken(a, b int64) int { return routing.InternalComparePlacementToken(a, b) }
+func comparePlacementToken(a, b int64) int { return implRouting.InternalComparePlacementToken(a, b) }

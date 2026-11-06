@@ -35,13 +35,14 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 
 	inf "gopkg.in/inf.v0"
 )
 
 type WikiPage struct {
 	Title       string
-	RevId       gocql.UUID
+	RevId       cql.UUID
 	Body        string
 	Views       int64
 	Protected   bool
@@ -56,7 +57,7 @@ type WikiAttachment []byte
 var wikiTestData = []*WikiPage{
 	{
 		Title:    "Frontpage",
-		RevId:    gocql.NewTimeUUID(),
+		RevId:    cql.NewTimeUUID(),
 		Body:     "Welcome to this wiki page!",
 		Rating:   inf.NewDec(131, 3),
 		Modified: time.Date(2013, time.August, 13, 9, 52, 3, 0, time.UTC),
@@ -68,7 +69,7 @@ var wikiTestData = []*WikiPage{
 	},
 	{
 		Title:    "Foobar",
-		RevId:    gocql.NewTimeUUID(),
+		RevId:    cql.NewTimeUUID(),
 		Body:     "foo::Foo f = new foo::Foo(foo::Foo::INIT);",
 		Modified: time.Date(2013, time.August, 13, 9, 52, 3, 0, time.UTC),
 	},
@@ -117,7 +118,7 @@ func (w *WikiTest) CreatePages(n int) {
 	for i := 0; i < n; i++ {
 		page.Title = fmt.Sprintf("generated_%d", (i&16)+1)
 		page.Modified = t0.Add(time.Duration(i-n) * time.Minute)
-		page.RevId = gocql.UUIDFromTime(page.Modified)
+		page.RevId = cql.UUIDFromTime(page.Modified)
 		page.Body = fmt.Sprintf("text %d", i)
 		if err := w.InsertPage(&page); err != nil {
 			w.tb.Error("CreatePages:", err)
@@ -125,60 +126,60 @@ func (w *WikiTest) CreatePages(n int) {
 	}
 }
 
-var wikiRevisionCodec = gocql.NamedScalar(gocql.TimeUUIDCodec, func(v gocql.UUID) gocql.TimeUUID { return gocql.TimeUUID(v) }, func(v gocql.TimeUUID) gocql.UUID { return gocql.UUID(v) })
-var wikiRatingCodec = gocql.NamedScalar(gocql.NullableCodec(serializationDecimal), func(v *inf.Dec) gocql.Nullable[inf.Dec] {
+var wikiRevisionCodec = cql.NamedScalar(cql.TimeUUIDCodec, func(v cql.UUID) cql.TimeUUID { return cql.TimeUUID(v) }, func(v cql.TimeUUID) cql.UUID { return cql.UUID(v) })
+var wikiRatingCodec = cql.NamedScalar(cql.NullableCodec(serializationDecimal), func(v *inf.Dec) cql.Nullable[inf.Dec] {
 	if v == nil {
-		return gocql.Nullable[inf.Dec]{}
+		return cql.Nullable[inf.Dec]{}
 	}
-	return gocql.Nullable[inf.Dec]{Value: *v, Valid: true}
-}, func(v gocql.Nullable[inf.Dec]) *inf.Dec {
+	return cql.Nullable[inf.Dec]{Value: *v, Valid: true}
+}, func(v cql.Nullable[inf.Dec]) *inf.Dec {
 	if !v.Valid {
 		return nil
 	}
 	return &v.Value
 })
-var wikiTagsCodec = gocql.NamedScalar(gocql.NullableCodec(serializationSet(serializationString)), func(v []string) gocql.Nullable[[]string] { return gocql.Nullable[[]string]{Value: v, Valid: v != nil} }, func(v gocql.Nullable[[]string]) []string { return v.Value })
-var wikiAttachmentCodec = gocql.NamedScalar(serializationBlob, func(v WikiAttachment) []byte { return []byte(v) }, func(v []byte) WikiAttachment { return WikiAttachment(v) })
-var wikiAttachmentsCodec = gocql.NamedScalar(gocql.NullableCodec(serializationMap(serializationString, wikiAttachmentCodec)), func(v map[string]WikiAttachment) gocql.Nullable[map[string]WikiAttachment] {
-	return gocql.Nullable[map[string]WikiAttachment]{Value: v, Valid: v != nil}
-}, func(v gocql.Nullable[map[string]WikiAttachment]) map[string]WikiAttachment { return v.Value })
-var wikiParams = gocql.Params(
-	gocql.Param("title", serializationString, func(v WikiPage) string { return v.Title }),
-	gocql.Param("revid", wikiRevisionCodec, func(v WikiPage) gocql.UUID { return v.RevId }),
-	gocql.Param("body", serializationString, func(v WikiPage) string { return v.Body }),
-	gocql.Param("views", gocql.Int64, func(v WikiPage) int64 { return v.Views }),
-	gocql.Param("protected", gocql.Bool, func(v WikiPage) bool { return v.Protected }),
-	gocql.Param("modified", serializationTimestamp, func(v WikiPage) time.Time { return v.Modified }),
-	gocql.Param("rating", wikiRatingCodec, func(v WikiPage) *inf.Dec { return v.Rating }),
-	gocql.Param("tags", wikiTagsCodec, func(v WikiPage) []string { return v.Tags }),
-	gocql.Param("attachments", wikiAttachmentsCodec, func(v WikiPage) map[string]WikiAttachment { return v.Attachments }))
-var wikiRows = gocql.Row(
-	gocql.Column("title", serializationString, func(v *WikiPage) *string { return &v.Title }),
-	gocql.Column("revid", wikiRevisionCodec, func(v *WikiPage) *gocql.UUID { return &v.RevId }),
-	gocql.Column("body", serializationString, func(v *WikiPage) *string { return &v.Body }),
-	gocql.Column("views", gocql.Int64, func(v *WikiPage) *int64 { return &v.Views }),
-	gocql.Column("protected", gocql.Bool, func(v *WikiPage) *bool { return &v.Protected }),
-	gocql.Column("modified", serializationTimestamp, func(v *WikiPage) *time.Time { return &v.Modified }),
-	gocql.Column("rating", wikiRatingCodec, func(v *WikiPage) **inf.Dec { return &v.Rating }),
-	gocql.Column("tags", wikiTagsCodec, func(v *WikiPage) *[]string { return &v.Tags }),
-	gocql.Column("attachments", wikiAttachmentsCodec, func(v *WikiPage) *map[string]WikiAttachment { return &v.Attachments }))
+var wikiTagsCodec = cql.NamedScalar(cql.NullableCodec(serializationSet(serializationString)), func(v []string) cql.Nullable[[]string] { return cql.Nullable[[]string]{Value: v, Valid: v != nil} }, func(v cql.Nullable[[]string]) []string { return v.Value })
+var wikiAttachmentCodec = cql.NamedScalar(serializationBlob, func(v WikiAttachment) []byte { return []byte(v) }, func(v []byte) WikiAttachment { return WikiAttachment(v) })
+var wikiAttachmentsCodec = cql.NamedScalar(cql.NullableCodec(serializationMap(serializationString, wikiAttachmentCodec)), func(v map[string]WikiAttachment) cql.Nullable[map[string]WikiAttachment] {
+	return cql.Nullable[map[string]WikiAttachment]{Value: v, Valid: v != nil}
+}, func(v cql.Nullable[map[string]WikiAttachment]) map[string]WikiAttachment { return v.Value })
+var wikiParams = cql.Params(
+	cql.Param("title", serializationString, func(v WikiPage) string { return v.Title }),
+	cql.Param("revid", wikiRevisionCodec, func(v WikiPage) cql.UUID { return v.RevId }),
+	cql.Param("body", serializationString, func(v WikiPage) string { return v.Body }),
+	cql.Param("views", cql.Int64, func(v WikiPage) int64 { return v.Views }),
+	cql.Param("protected", cql.Bool, func(v WikiPage) bool { return v.Protected }),
+	cql.Param("modified", serializationTimestamp, func(v WikiPage) time.Time { return v.Modified }),
+	cql.Param("rating", wikiRatingCodec, func(v WikiPage) *inf.Dec { return v.Rating }),
+	cql.Param("tags", wikiTagsCodec, func(v WikiPage) []string { return v.Tags }),
+	cql.Param("attachments", wikiAttachmentsCodec, func(v WikiPage) map[string]WikiAttachment { return v.Attachments }))
+var wikiRows = cql.Row(
+	cql.Column("title", serializationString, func(v *WikiPage) *string { return &v.Title }),
+	cql.Column("revid", wikiRevisionCodec, func(v *WikiPage) *cql.UUID { return &v.RevId }),
+	cql.Column("body", serializationString, func(v *WikiPage) *string { return &v.Body }),
+	cql.Column("views", cql.Int64, func(v *WikiPage) *int64 { return &v.Views }),
+	cql.Column("protected", cql.Bool, func(v *WikiPage) *bool { return &v.Protected }),
+	cql.Column("modified", serializationTimestamp, func(v *WikiPage) *time.Time { return &v.Modified }),
+	cql.Column("rating", wikiRatingCodec, func(v *WikiPage) **inf.Dec { return &v.Rating }),
+	cql.Column("tags", wikiTagsCodec, func(v *WikiPage) *[]string { return &v.Tags }),
+	cql.Column("attachments", wikiAttachmentsCodec, func(v *WikiPage) *map[string]WikiAttachment { return &v.Attachments }))
 
 func (w *WikiTest) InsertPage(page *WikiPage) error {
 	return serializationExec(w.session, fmt.Sprintf("INSERT INTO %s (title,revid,body,views,protected,modified,rating,tags,attachments) VALUES(?,?,?,?,?,?,?,?,?)", w.table), wikiParams, *page)
 }
-func (w *WikiTest) SelectPage(page *WikiPage, title string, revid gocql.UUID) error {
-	revision, err := gocql.TimeUUIDValue(gocql.TimeUUID(revid))
+func (w *WikiTest) SelectPage(page *WikiPage, title string, revid cql.UUID) error {
+	revision, err := cql.TimeUUIDValue(cql.TimeUUID(revid))
 	if err != nil {
 		return err
 	}
-	result, err := serializationOne(w.session, fmt.Sprintf("SELECT title,revid,body,views,protected,modified,tags,attachments,rating FROM %s WHERE title=? AND revid=? LIMIT 1", w.table), wikiRows, codecTestMust(gocql.TextValue(title)), revision)
+	result, err := serializationOne(w.session, fmt.Sprintf("SELECT title,revid,body,views,protected,modified,tags,attachments,rating FROM %s WHERE title=? AND revid=? LIMIT 1", w.table), wikiRows, codecTestMust(cql.TextValue(title)), revision)
 	if err == nil {
 		*page = result
 	}
 	return err
 }
 func (w *WikiTest) GetPageCount() int {
-	count, err := serializationOne(w.session, fmt.Sprintf("SELECT COUNT(*) FROM %s", w.table), gocql.OneColumn(gocql.Int64))
+	count, err := serializationOne(w.session, fmt.Sprintf("SELECT COUNT(*) FROM %s", w.table), cql.OneColumn(cql.Int64))
 	if err != nil {
 		w.tb.Error("GetPageCount", err)
 	}

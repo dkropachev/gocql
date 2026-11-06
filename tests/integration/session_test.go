@@ -34,6 +34,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/retry"
 
@@ -48,9 +49,9 @@ import (
 )
 
 // Typed request helpers keep parameter construction explicit and bind inputs once.
-func sessionTestBind(t testing.TB, session *gocql.Session, cql string, values ...gocql.Value) *Bound[gocql.Unit] {
+func sessionTestBind(t testing.TB, session *gocql.Session, stmt string, values ...cql.Value) *Bound[cql.Unit] {
 	t.Helper()
-	prepared, err := gocql.Prepare(context.Background(), session, gocql.Statement[[]gocql.Value, gocql.Unit]{CQL: cql, Params: gocql.DynamicParams, Rows: gocql.NoRows}, gocql.PrepareOptions{})
+	prepared, err := gocql.Prepare(context.Background(), session, cql.Statement[[]cql.Value, cql.Unit]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.NoRows}, gocql.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +69,7 @@ func sessionTestItem[R any](t testing.TB, bound *Bound[R]) gocql.BatchItem {
 	}
 	return item
 }
-func sessionTestInt(t testing.TB, row gocql.DynamicRow, name string) int64 {
+func sessionTestInt(t testing.TB, row cql.DynamicRow, name string) int64 {
 	t.Helper()
 	value, err := row.Get(name)
 	if err != nil {
@@ -86,7 +87,7 @@ func TestSessionAPI(t *testing.T) {
 	ctx := context.Background()
 	config := gocql.DefaultConfig("127.0.0.1")
 	profile := *config.DefaultProfile
-	profile.Consistency, profile.PageSize, profile.Prefetch = gocql.All, 100, 1
+	profile.Consistency, profile.PageSize, profile.Prefetch = cql.All, 100, 1
 	config.DefaultProfile = &profile
 	// Session setters are replaced by atomic profile snapshots. Fractional
 	// prefetch became a bounded count of zero or one physical page.
@@ -99,16 +100,16 @@ func TestSessionAPI(t *testing.T) {
 	defer session.Close()
 	resolved, err := resolveOptions(session, testOptions(gocql.OptionValues{Trace: true}))
 	require.NoError(t, err)
-	require.Equal(t, gocql.All, resolved.InternalProfile.Consistency)
+	require.Equal(t, cql.All, resolved.InternalProfile.Consistency)
 	require.Equal(t, int32(100), resolved.InternalProfile.PageSize)
 	require.Equal(t, 1, resolved.InternalProfile.Prefetch)
 	require.True(t, resolved.InternalOptions.Trace)
 
-	intType, err := gocql.ScalarType(gocql.TypeInt)
+	intType, err := cql.ScalarType(cql.TypeInt)
 	require.NoError(t, err)
 	var encoded int32
-	statement := gocql.Statement[int32, gocql.Unit]{CQL: "INSERT INTO test(id) VALUES (?)", Params: gocql.Params(gocql.ParamAt(0, gocql.Int32, func(n int32) int32 { encoded = n; return n })), Rows: gocql.NoRows}
-	bound, err := BindUnpreparedOwned(statement, gocql.NewColumns(gocql.ColumnSpec{Name: "id", Type: intType}), int32(1))
+	statement := cql.Statement[int32, cql.Unit]{CQL: "INSERT INTO test(id) VALUES (?)", Params: cql.Params(cql.ParamAt(0, cql.Int32, func(n int32) int32 { encoded = n; return n })), Rows: cql.NoRows}
+	bound, err := BindUnpreparedOwned(statement, cql.NewColumns(cql.ColumnSpec{Name: "id", Type: intType}), int32(1))
 	require.NoError(t, err)
 	defer bound.Close()
 	require.Equal(t, int32(1), encoded, "typed parameter accessor replaces callback binding")
@@ -117,12 +118,12 @@ func TestSessionAPI(t *testing.T) {
 	_, err = Run(ctx, session, bound, gocql.Options{})
 	require.ErrorIs(t, err, gocql.ErrNoConnections)
 	batch := []gocql.BatchItem{sessionTestItem(t, bound)}
-	_, err = gocql.ExecBatch(ctx, session, gocql.LoggedBatch, batch, gocql.Options{})
+	_, err = gocql.ExecBatch(ctx, session, cql.LoggedBatch, batch, gocql.Options{})
 	require.ErrorIs(t, err, gocql.ErrNoConnections)
 	require.NoError(t, session.Close())
 	require.True(t, session.Closed())
 	require.NoError(t, session.Close())
-	_, err = gocql.ExecBatch(ctx, session, gocql.LoggedBatch, batch, gocql.Options{})
+	_, err = gocql.ExecBatch(ctx, session, cql.LoggedBatch, batch, gocql.Options{})
 	require.ErrorIs(t, err, gocql.ErrClosed)
 	_, err = Exec(ctx, session, bound, gocql.Options{})
 	require.ErrorIs(t, err, gocql.ErrClosed)
@@ -169,7 +170,7 @@ func TestQueryBasicAPI(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	require.NoError(t, v2CreateTable(ctx, session, fmt.Sprintf("CREATE TABLE %s (id int PRIMARY KEY)", table)))
-	prepared, err := gocql.Prepare(ctx, session, gocql.Statement[int32, gocql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), Params: gocql.OneParam(gocql.Int32), Rows: gocql.NoRows}, gocql.PrepareOptions{})
+	prepared, err := gocql.Prepare(ctx, session, cql.Statement[int32, cql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), Params: cql.OneParam(cql.Int32), Rows: cql.NoRows}, gocql.PrepareOptions{})
 	require.NoError(t, err)
 	require.Equal(t, 1, prepared.Parameters().Len())
 	require.Equal(t, table, prepared.Info().Table)
@@ -187,27 +188,27 @@ func TestQueryBasicAPI(t *testing.T) {
 	require.Zero(t, zero.Latency)
 	retryPolicy := sessionTestRetry{action: retry.Next, maxAttempts: 3}
 	observer := new(sessionTestObserver)
-	options := testOptions(gocql.OptionValues{Consistency: gocql.Option[gocql.Consistency]{Value: gocql.All, Set: true}, SerialConsistency: gocql.Option[gocql.Option[gocql.Consistency]]{Value: gocql.Option[gocql.Consistency]{Value: gocql.LocalSerial, Set: true}, Set: true}, PageSize: gocql.Option[int32]{Value: 10, Set: true}, Prefetch: gocql.Option[int]{Value: 1, Set: true}, Retry: retryPolicy, Trace: true, Observer: observer})
+	options := testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, SerialConsistency: cql.Option[cql.Option[cql.Consistency]]{Value: cql.Option[cql.Consistency]{Value: cql.LocalSerial, Set: true}, Set: true}, PageSize: cql.Option[int32]{Value: 10, Set: true}, Prefetch: cql.Option[int]{Value: 1, Set: true}, Retry: retryPolicy, Trace: true, Observer: observer})
 	resolved, err := resolveOptions(session, options)
 	require.NoError(t, err)
-	require.Equal(t, gocql.All, resolved.InternalProfile.Consistency)
-	require.Equal(t, gocql.LocalSerial, resolved.InternalProfile.SerialConsistency.Value)
+	require.Equal(t, cql.All, resolved.InternalProfile.Consistency)
+	require.Equal(t, cql.LocalSerial, resolved.InternalProfile.SerialConsistency.Value)
 	require.Equal(t, int32(10), resolved.InternalProfile.PageSize)
 	require.Equal(t, 1, resolved.InternalProfile.Prefetch)
 	require.Equal(t, retryPolicy, resolved.InternalProfile.Retry)
 	serialValues := options.Values()
-	serialValues.Consistency.Value = gocql.LocalSerial
+	serialValues.Consistency.Value = cql.LocalSerial
 	serialRead := testOptions(serialValues)
 	resolvedSerial, err := resolveOptions(session, serialRead)
 	require.NoError(t, err)
-	require.Equal(t, gocql.LocalSerial, resolvedSerial.InternalProfile.Consistency)
+	require.Equal(t, cql.LocalSerial, resolvedSerial.InternalProfile.Consistency)
 
-	for _, bound := range []*Bound[gocql.Unit]{original, rebound, original} {
+	for _, bound := range []*Bound[cql.Unit]{original, rebound, original} {
 		result, err := Exec(ctx, session, bound, options)
 		require.NoError(t, err)
 		require.Equal(t, 1, result.Attempts)
 		require.Greater(t, result.Latency, time.Duration(0))
-		require.Equal(t, gocql.All, result.AchievedConsistency)
+		require.Equal(t, cql.All, result.AchievedConsistency)
 		require.NotEmpty(t, result.TraceIDs)
 	}
 	requests, attempts := observer.snapshot()
@@ -218,7 +219,7 @@ func TestQueryBasicAPI(t *testing.T) {
 		require.NoError(t, attempts[i].Err)
 	}
 	for _, id := range []int32{1, 2} {
-		row, err := v2ReadOne(ctx, session, fmt.Sprintf("SELECT id FROM %s WHERE id=?", table), gocql.IntValue(id))
+		row, err := v2ReadOne(ctx, session, fmt.Sprintf("SELECT id FROM %s WHERE id=?", table), cql.IntValue(id))
 		require.NoError(t, err)
 		require.Equal(t, int64(id), sessionTestInt(t, row, "id"))
 	}
@@ -252,11 +253,11 @@ func TestQueryShouldPrepare(t *testing.T) {
 		return opaqueStorageValuex
 	}()
 	defer session.Close()
-	for _, cql := range append(toPrepare, cantPrepare...) {
-		t.Run(cql, func(t *testing.T) {
-			statement := gocql.Statement[gocql.Unit, gocql.Unit]{CQL: cql, Params: gocql.NoParams, Rows: gocql.NoRows}
-			bound, err := BindUnpreparedOwned(statement, gocql.NewColumns(), gocql.Unit{})
-			if firstCQLWord(cql) == "USE" {
+	for _, stmt := range append(toPrepare, cantPrepare...) {
+		t.Run(stmt, func(t *testing.T) {
+			statement := cql.Statement[cql.Unit, cql.Unit]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}
+			bound, err := BindUnpreparedOwned(statement, cql.NewColumns(), cql.Unit{})
+			if firstCQLWord(stmt) == "USE" {
 				require.ErrorIs(t, err, gocql.ErrUseStmt)
 				_, err = gocql.Prepare(context.Background(), session, statement, gocql.PrepareOptions{})
 				require.ErrorIs(t, err, gocql.ErrUseStmt)
@@ -282,9 +283,9 @@ func TestBatchBasicAPI(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	require.NoError(t, v2CreateTable(ctx, session, fmt.Sprintf("CREATE TABLE %s (id int PRIMARY KEY)", table)))
-	first := sessionTestBind(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), gocql.IntValue(1))
+	first := sessionTestBind(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), cql.IntValue(1))
 	defer first.Close()
-	second := sessionTestBind(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), gocql.IntValue(2))
+	second := sessionTestBind(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), cql.IntValue(2))
 	defer second.Close()
 	items := []gocql.BatchItem{sessionTestItem(t, first), sessionTestItem(t, second)}
 	require.Len(t, items, 2)
@@ -293,22 +294,22 @@ func TestBatchBasicAPI(t *testing.T) {
 	require.Equal(t, retryPolicy, inherited.InternalProfile.Retry)
 	override := sessionTestRetry{action: retry.Next, maxAttempts: 4}
 	observer := new(sessionTestObserver)
-	options := testOptions(gocql.OptionValues{Consistency: gocql.Option[gocql.Consistency]{Value: gocql.One, Set: true}, Retry: override, Trace: true, Observer: observer})
+	options := testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, Retry: override, Trace: true, Observer: observer})
 	resolved, err := resolveOptions(session, options)
 	require.NoError(t, err)
 	require.Equal(t, override, resolved.InternalProfile.Retry)
-	require.Equal(t, gocql.One, resolved.InternalProfile.Consistency)
+	require.Equal(t, cql.One, resolved.InternalProfile.Consistency)
 	require.True(t, resolved.InternalOptions.Trace)
 	// Native batch kind remains explicit; entries are immutable bound plans.
 	// Per-request Result/Observer replace attempts/latency on a mutable batch.
 	require.Zero(t, (gocql.Result{}).Attempts)
 	require.Zero(t, (gocql.Result{}).Latency)
-	for _, kind := range []gocql.BatchKind{gocql.UnloggedBatch, gocql.LoggedBatch} {
+	for _, kind := range []cql.BatchKind{cql.UnloggedBatch, cql.LoggedBatch} {
 		result, err := gocql.ExecBatch(ctx, session, kind, items, options)
 		require.NoError(t, err)
 		require.Equal(t, 1, result.Attempts)
 		require.Greater(t, result.Latency, time.Duration(0))
-		require.Equal(t, gocql.One, result.AchievedConsistency)
+		require.Equal(t, cql.One, result.AchievedConsistency)
 		require.NotEmpty(t, result.TraceIDs)
 	}
 	requests, attempts := observer.snapshot()
@@ -318,14 +319,14 @@ func TestBatchBasicAPI(t *testing.T) {
 		require.Len(t, request.BatchStatements, 2)
 	}
 	for _, id := range []int32{1, 2} {
-		row, err := v2ReadOne(ctx, session, fmt.Sprintf("SELECT id FROM %s WHERE id=?", table), gocql.IntValue(id))
+		row, err := v2ReadOne(ctx, session, fmt.Sprintf("SELECT id FROM %s WHERE id=?", table), cql.IntValue(id))
 		require.NoError(t, err)
 		require.Equal(t, int64(id), sessionTestInt(t, row, "id"))
 	}
 	// BatchEntry is only a descriptor. Closing any member prevents the entire
 	// batch admission, and other members remain available for separate work.
 	first.Close()
-	_, err = gocql.ExecBatch(ctx, session, gocql.LoggedBatch, items, options)
+	_, err = gocql.ExecBatch(ctx, session, cql.LoggedBatch, items, options)
 	require.ErrorIs(t, err, gocql.ErrClosed)
 	require.NoError(t, first.Wait(ctx))
 	_, err = Exec(ctx, session, second, gocql.Options{})
@@ -336,17 +337,17 @@ func TestConsistencyNames(t *testing.T) {
 	t.Parallel()
 
 	names := map[fmt.Stringer]string{
-		gocql.Any:         "ANY",
-		gocql.One:         "ONE",
-		gocql.Two:         "TWO",
-		gocql.Three:       "THREE",
-		gocql.Quorum:      "QUORUM",
-		gocql.All:         "ALL",
-		gocql.LocalQuorum: "LOCAL_QUORUM",
-		gocql.EachQuorum:  "EACH_QUORUM",
-		gocql.Serial:      "SERIAL",
-		gocql.LocalSerial: "LOCAL_SERIAL",
-		gocql.LocalOne:    "LOCAL_ONE",
+		cql.Any:         "ANY",
+		cql.One:         "ONE",
+		cql.Two:         "TWO",
+		cql.Three:       "THREE",
+		cql.Quorum:      "QUORUM",
+		cql.All:         "ALL",
+		cql.LocalQuorum: "LOCAL_QUORUM",
+		cql.EachQuorum:  "EACH_QUORUM",
+		cql.Serial:      "SERIAL",
+		cql.LocalSerial: "LOCAL_SERIAL",
+		cql.LocalOne:    "LOCAL_ONE",
 	}
 
 	for k, v := range names {
@@ -378,7 +379,7 @@ func TestIsUseStatement(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		bound, err := BindUnpreparedOwned(gocql.Statement[gocql.Unit, gocql.Unit]{CQL: tc.input, Params: gocql.NoParams, Rows: gocql.NoRows}, gocql.NewColumns(), gocql.Unit{})
+		bound, err := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: tc.input, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{})
 		if bound != nil {
 			bound.Close()
 		}
@@ -396,7 +397,7 @@ func TestRetryType_IgnoreRethrow(t *testing.T) {
 	session := createV2Session(t)
 	defer session.Close()
 	ctx := context.Background()
-	bound, err := BindUnpreparedOwned(gocql.Statement[gocql.Unit, gocql.Unit]{CQL: ("INSERT INTO " + fixtureKeyspace("") + ".invalid_table(value) VALUES(1)"), Params: gocql.NoParams, Rows: gocql.NoRows}, gocql.NewColumns(), gocql.Unit{})
+	bound, err := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: ("INSERT INTO " + fixtureKeyspace("") + ".invalid_table(value) VALUES(1)"), Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{})
 	require.NoError(t, err)
 	defer bound.Close()
 	for _, mode := range []string{"Ignore", "Rethrow"} {
@@ -406,7 +407,7 @@ func TestRetryType_IgnoreRethrow(t *testing.T) {
 				retryPolicy := sessionTestRetry{action: retry.Stop, maxAttempts: retries + 1}
 				_, err := Exec(ctx, session, bound, testOptions(gocql.OptionValues{Idempotent: true, Retry: retryPolicy, Observer: observer}))
 				require.Error(t, err)
-				var server gocql.RequestError
+				var server cql.RequestError
 				require.ErrorAs(t, err, &server)
 				requests, attempts := observer.snapshot()
 				require.Len(t, requests, 1)

@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
@@ -27,7 +26,7 @@ import (
 // oneShotRequest is an EXECUTE the fake server received.
 type oneShotRequest struct {
 	stream      int
-	consistency cql.Consistency
+	consistency cqltype.Consistency
 	pageSize    int32 // -1 without a page size
 	key         int32
 }
@@ -61,7 +60,7 @@ func oneShotServer(t *testing.T, peer net.Conn, requests chan<- oneShotRequest) 
 func parseOneShotExecute(stream int, b []byte) oneShotRequest {
 	r := oneShotRequest{stream: stream, pageSize: -1}
 	b = b[2+int(binary.BigEndian.Uint16(b)):] // statement id
-	r.consistency = cql.Consistency(binary.BigEndian.Uint16(b))
+	r.consistency = cqltype.Consistency(binary.BigEndian.Uint16(b))
 	flags := b[2]
 	b = b[3:]
 	if flags&0x01 != 0 {
@@ -113,12 +112,12 @@ func TestPreparedOneShotOptionsPerCall(t *testing.T) {
 	defer peers[0].Close()
 	requests := make(chan oneShotRequest, 1)
 	p := oneShotPrepare(t, s, peers[0], requests)
-	quorum := testOptions(OptionValues{Consistency: cql.Option[cql.Consistency]{Set: true, Value: cqltype.Quorum}, PageSize: cql.Option[int32]{Set: true, Value: 7}})
-	two := testOptions(OptionValues{Consistency: cql.Option[cql.Consistency]{Set: true, Value: cqltype.Two}})
+	quorum := testOptions(OptionValues{Consistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.Quorum}, PageSize: cqltype.Option[int32]{Set: true, Value: 7}})
+	two := testOptions(OptionValues{Consistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.Two}})
 	defaults := settings.InternalDefaultProfile()
 	for i, tc := range []struct {
 		options     Options
-		consistency cql.Consistency
+		consistency cqltype.Consistency
 		pageSize    int32
 	}{
 		{quorum, cqltype.Quorum, 7},

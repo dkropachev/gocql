@@ -30,7 +30,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -412,7 +412,7 @@ func (h staticSelectedHost) Token() endpoint.Token    { return nil }
 func (h staticSelectedHost) Mark(error)               {}
 
 type consistencyRetryPolicy struct {
-	consistency cql.Consistency
+	consistency cqltype.Consistency
 }
 
 type synchronizedRetryPolicy struct {

@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
@@ -221,7 +220,7 @@ func eachPageTimeoutQuery(t *testing.T) (*Query[codec.Unit, []byte], net.Conn) {
 	t.Helper()
 	s, _, peers := runtimeTestSession(t, 1)
 	statement := binding.Statement[codec.Unit, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
-	options := testOptions(OptionValues{Timeout: cql.Option[time.Duration]{Set: true, Value: 5 * time.Second}, PageTimeout: cql.Option[time.Duration]{Set: true, Value: 100 * time.Millisecond}})
+	options := testOptions(OptionValues{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Second}, PageTimeout: cqltype.Option[time.Duration]{Set: true, Value: 100 * time.Millisecond}})
 	q := codecTestMust(NewUnpreparedQuery(s, statement, cqltype.NewColumns(), options))
 	t.Cleanup(q.Close)
 	return q, peers[0]
@@ -303,7 +302,7 @@ func TestQueryEachParentCancelReachesPageContext(t *testing.T) {
 func TestQueryEachParentCancelInterruptsWait(t *testing.T) {
 	s, _, peers := runtimeTestSession(t, 1)
 	statement := binding.Statement[codec.Unit, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
-	q := codecTestMust(NewUnpreparedQuery(s, statement, cqltype.NewColumns(), testOptions(OptionValues{Timeout: cql.Option[time.Duration]{Set: true, Value: 5 * time.Second}})))
+	q := codecTestMust(NewUnpreparedQuery(s, statement, cqltype.NewColumns(), testOptions(OptionValues{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Second}})))
 	t.Cleanup(q.Close)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
@@ -332,7 +331,7 @@ func TestQueryEachParentCancelInterruptsRetryDelay(t *testing.T) {
 	statement := binding.Statement[codec.Unit, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 	profile := settings.InternalDefaultProfile()
 	profile.Retry = eachRetryAfterDelay{}
-	q := codecTestMust(NewUnpreparedQuery(s, statement, cqltype.NewColumns(), testOptions(OptionValues{Profile: profileOf(profile), Timeout: cql.Option[time.Duration]{Set: true, Value: 5 * time.Minute}})))
+	q := codecTestMust(NewUnpreparedQuery(s, statement, cqltype.NewColumns(), testOptions(OptionValues{Profile: profileOf(profile), Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Minute}})))
 	t.Cleanup(q.Close)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {

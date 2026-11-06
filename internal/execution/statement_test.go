@@ -4,27 +4,26 @@
 package execution_test
 
 import (
-	. "github.com/scylladb/gocql/v2"
-
 	"bytes"
 	"context"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 )
 
 type countingBlobEncoder struct{ calls *int }
 
-func (c countingBlobEncoder) CheckType(t DataType) error { return BytesEncoder.CheckType(t) }
-func (c countingBlobEncoder) Encode(w *ValueWriter, b []byte) error {
+func (c countingBlobEncoder) CheckType(t cql.DataType) error { return cql.BytesEncoder.CheckType(t) }
+func (c countingBlobEncoder) Encode(w *cql.ValueWriter, b []byte) error {
 	*c.calls++
-	return BytesEncoder.Encode(w, b)
+	return cql.BytesEncoder.Encode(w, b)
 }
 func TestV2RuntimeBindCanonicalOwnership(t *testing.T) {
-	typ, _ := ScalarType(TypeBlob)
-	columns := NewColumns(ColumnSpec{Name: "v", Type: typ})
+	typ, _ := cql.ScalarType(cql.TypeBlob)
+	columns := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: typ})
 	calls := 0
-	statement := Statement[[]byte, Unit]{CQL: "INSERT INTO ks.tbl(v) VALUES (?)", Params: OneParam[[]byte](countingBlobEncoder{calls: &calls}), Rows: NoRows}
+	statement := cql.Statement[[]byte, cql.Unit]{CQL: "INSERT INTO ks.tbl(v) VALUES (?)", Params: cql.OneParam[[]byte](countingBlobEncoder{calls: &calls}), Rows: cql.NoRows}
 	input := []byte("original")
 	borrowed, err := BindUnpreparedBorrowed(statement, columns, input)
 	if err != nil {
@@ -47,7 +46,7 @@ func TestV2RuntimeBindCanonicalOwnership(t *testing.T) {
 	if !bytes.Equal(a, input) || string(b) != "original" {
 		t.Fatalf("borrowed=%q owned=%q", a, b)
 	}
-	for _, bound := range []*Bound[Unit]{borrowed, owned} {
+	for _, bound := range []*Bound[cql.Unit]{borrowed, owned} {
 		bound.Close()
 		if err := bound.Wait(context.Background()); err != nil {
 			t.Fatal(err)

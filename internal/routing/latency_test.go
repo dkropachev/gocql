@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 )
@@ -26,7 +25,7 @@ func TestLatencyProbeReservation(t *testing.T) {
 	policy.Observe(AttemptEvent{Target: model.Target{HostID: slow}, Started: time.Now().Add(-2 * time.Minute), Latency: 10 * time.Millisecond})
 	// Publish both real samples; the regular hourly updater is deliberately idle.
 	policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[cqltype.UUID]time.Time{slow: time.Now().Add(-time.Minute)}})
-	info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true}, Kind: cqltype.OrdinaryStatement}
+	info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Set: true}, Kind: cqltype.OrdinaryStatement}
 	// Constructing an abandoned plan must not reserve a probe.
 	_ = NewPlan(policy, info, metadata)
 	start := make(chan struct{})

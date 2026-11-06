@@ -27,7 +27,7 @@ package gocql_test
 import (
 	"fmt"
 
-	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 
 	"log"
 )
@@ -37,24 +37,24 @@ func Example_userDefinedTypes() {
 		Street string
 		Number int32
 	}
-	text, _ := gocql.ScalarType(gocql.TypeText)
-	integer, _ := gocql.ScalarType(gocql.TypeInt)
-	typ, err := gocql.UDTType("example", "address", gocql.ColumnSpec{Name: "street", Type: text}, gocql.ColumnSpec{Name: "number", Type: integer})
+	text, _ := cql.ScalarType(cql.TypeText)
+	integer, _ := cql.ScalarType(cql.TypeInt)
+	typ, err := cql.UDTType("example", "address", cql.ColumnSpec{Name: "street", Type: text}, cql.ColumnSpec{Name: "number", Type: integer})
 	if err != nil {
 		log.Fatal(err)
 	}
-	opts := gocql.UDTOptions{Keyspace: "example", Name: "address"}
-	encoder := gocql.UDTEncoder(gocql.Params(gocql.Param("street", gocql.StringEncoder, func(v address) string { return v.Street }), gocql.Param("number", gocql.Int32, func(v address) int32 { return v.Number })), opts)
-	encoded, err := gocql.EncodeValueOwned(typ, encoder, address{"Main Street", 42})
+	opts := cql.UDTOptions{Keyspace: "example", Name: "address"}
+	encoder := cql.UDTEncoder(cql.Params(cql.Param("street", cql.StringEncoder, func(v address) string { return v.Street }), cql.Param("number", cql.Int32, func(v address) int32 { return v.Number })), opts)
+	encoded, err := cql.EncodeValueOwned(typ, encoder, address{"Main Street", 42})
 	if err != nil {
 		log.Fatal(err)
 	}
 	type view struct {
-		Street gocql.Text
+		Street cql.Text
 		Number int32
 	}
-	decoder := gocql.UDTDecoder(gocql.Row(gocql.Column("street", gocql.TextCodec, func(v *view) *gocql.Text { return &v.Street }), gocql.Column("number", gocql.Int32, func(v *view) *int32 { return &v.Number })), opts)
-	value, err := gocql.DecodeValue(decoder, encoded)
+	decoder := cql.UDTDecoder(cql.Row(cql.Column("street", cql.TextCodec, func(v *view) *cql.Text { return &v.Street }), cql.Column("number", cql.Int32, func(v *view) *int32 { return &v.Number })), opts)
+	value, err := cql.DecodeValue(decoder, encoded)
 	if err != nil {
 		log.Fatal(err)
 	}

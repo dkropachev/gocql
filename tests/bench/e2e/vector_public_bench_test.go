@@ -20,13 +20,13 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 func BenchmarkVectorPublic(b *testing.B) {
 	for _, dim := range []int{128, 384, 768, 1536} {
 		b.Run(fmt.Sprint(dim), func(b *testing.B) {
-			typ, err := gocql.VectorDataType(scalar(gocql.TypeFloat), uint16(dim))
+			typ, err := cql.VectorDataType(scalar(cql.TypeFloat), uint16(dim))
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -34,7 +34,7 @@ func BenchmarkVectorPublic(b *testing.B) {
 			for i := range vector {
 				vector[i] = float32(i) * 0.1
 			}
-			benchmarkValue(b, typ, gocql.VectorEncoder(gocql.Float32), gocql.VectorDecoder(gocql.Float32), vector)
+			benchmarkValue(b, typ, cql.VectorEncoder(cql.Float32), cql.VectorDecoder(cql.Float32), vector)
 		})
 	}
 }

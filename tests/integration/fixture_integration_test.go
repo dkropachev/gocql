@@ -12,6 +12,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
@@ -116,7 +117,7 @@ func checkAggregate(t *testing.T, s *gocql.Session, keyspace string) {
 		t.Fatal(err)
 	}
 	for id, value := range []float64{2, 4, 9} {
-		if _, err := v2Exec(context.Background(), s, "INSERT INTO "+table+" (id,value) VALUES (?,?)", gocql.IntValue(int32(id)), gocql.DoubleValue(value)); err != nil {
+		if _, err := v2Exec(context.Background(), s, "INSERT INTO "+table+" (id,value) VALUES (?,?)", cql.IntValue(int32(id)), cql.DoubleValue(value)); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -10,6 +10,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 
+	"github.com/scylladb/gocql/v2/cql"
 	valcases "github.com/scylladb/gocql/v2/internal/tests/valuecases"
 
 	"math/big"
@@ -181,20 +182,20 @@ func TestSerializationSimpleTypesCassandra(t *testing.T) {
 				for _, vc := range tc.Cases {
 					for _, lc := range vc.LangCases {
 						t.Run(vc.Name+"/"+lc.LangType, func(t *testing.T) {
-							typ, err := gocql.ScalarType(gocql.Type(tc.CQLType))
+							typ, err := cql.ScalarType(cql.Type(tc.CQLType))
 							if err != nil {
 								t.Fatal(err)
 							}
-							value, err := serializationFixtureValue(gocql.Type(tc.CQLType), lc.Value)
+							value, err := serializationFixtureValue(cql.Type(tc.CQLType), lc.Value)
 							if err != nil {
 								t.Fatal(err)
 							}
 							for _, owned := range []bool{false, true} {
-								var encoded gocql.EncodedValue
+								var encoded cql.EncodedValue
 								if owned {
-									encoded, err = gocql.EncodeValueOwned(typ, gocql.DynamicCodec, value)
+									encoded, err = cql.EncodeValueOwned(typ, cql.DynamicCodec, value)
 								} else {
-									encoded, err = gocql.EncodeValueBorrowed(typ, gocql.DynamicCodec, value)
+									encoded, err = cql.EncodeValueBorrowed(typ, cql.DynamicCodec, value)
 								}
 								if (err != nil) != lc.ErrInsert {
 									t.Fatalf("encode error: %v (expected error %t)", err, lc.ErrInsert)
@@ -205,7 +206,7 @@ func TestSerializationSimpleTypesCassandra(t *testing.T) {
 								if !bytes.Equal(vc.Data, encoded.Bytes().OwnedBytes()) {
 									t.Fatalf("binary fixture: expected %x, got %x", vc.Data, encoded.Bytes().OwnedBytes())
 								}
-								if (vc.Data == nil) != (encoded.State() == gocql.Null) {
+								if (vc.Data == nil) != (encoded.State() == cql.Null) {
 									t.Fatalf("null/present distinction lost: %s", vc.Name)
 								}
 							}
@@ -221,26 +222,26 @@ func TestSerializationSimpleTypesCassandra(t *testing.T) {
 				for _, vc := range tc.Cases {
 					for _, lc := range vc.LangCases {
 						t.Run(vc.Name+"/"+lc.LangType, func(t *testing.T) {
-							typ, err := gocql.ScalarType(gocql.Type(tc.CQLType))
+							typ, err := cql.ScalarType(cql.Type(tc.CQLType))
 							if err != nil {
 								t.Fatal(err)
 							}
-							state := gocql.Present
+							state := cql.Present
 							if vc.Data == nil {
-								state = gocql.Null
+								state = cql.Null
 							}
-							encoded, err := gocql.NewEncodedValue(typ, state, gocql.BorrowBytes(vc.Data))
+							encoded, err := cql.NewEncodedValue(typ, state, cql.BorrowBytes(vc.Data))
 							if err != nil {
 								t.Fatal(err)
 							}
-							actual, err := gocql.DecodeValue(gocql.DynamicCodec, encoded)
+							actual, err := cql.DecodeValue(cql.DynamicCodec, encoded)
 							if (err != nil) != lc.ErrSelect {
 								t.Fatalf("decode error: %v (expected error %t)", err, lc.ErrSelect)
 							}
 							if err != nil {
 								return
 							}
-							expected, err := serializationFixtureValue(gocql.Type(tc.CQLType), lc.Value)
+							expected, err := serializationFixtureValue(cql.Type(tc.CQLType), lc.Value)
 							if err != nil {
 								t.Fatal(err)
 							}
@@ -264,29 +265,29 @@ func TestSerializationSimpleTypesCassandra(t *testing.T) {
 				for _, vc := range tc.Cases {
 					for _, lc := range vc.LangCases {
 						t.Run(vc.Name+"/"+lc.LangType, func(t *testing.T) {
-							input, err := serializationFixtureValue(gocql.Type(tc.CQLType), lc.Value)
+							input, err := serializationFixtureValue(cql.Type(tc.CQLType), lc.Value)
 							if err != nil {
 								t.Fatal(err)
 							}
 							id := vc.Name + "/" + lc.LangType
-							_, err = v2Exec(t.Context(), s, fmt.Sprintf("INSERT INTO %s(test_id,test_col) VALUES(?,?)", tables[i]), codecTestMust(gocql.TextValue(id)), input)
+							_, err = v2Exec(t.Context(), s, fmt.Sprintf("INSERT INTO %s(test_id,test_col) VALUES(?,?)", tables[i]), codecTestMust(cql.TextValue(id)), input)
 							if (err != nil) != lc.ErrInsert {
 								t.Fatalf("insert error: %v (expected error %t)", err, lc.ErrInsert)
 							}
 							if err != nil {
 								return
 							}
-							cql := fmt.Sprintf("SELECT test_col FROM %s WHERE test_id=?", tables[i])
-							got := serializationColumn(t, s, cql, codecTestMust(gocql.TextValue(id)))
+							stmt := fmt.Sprintf("SELECT test_col FROM %s WHERE test_id=?", tables[i])
+							got := serializationColumn(t, s, stmt, codecTestMust(cql.TextValue(id)))
 							assertSerializationValue(t, input, got)
-							raw, err := serializationOne(s, cql, gocql.OneColumn(serializationRawDecoder{}), codecTestMust(gocql.TextValue(id)))
+							raw, err := serializationOne(s, stmt, cql.OneColumn(serializationRawDecoder{}), codecTestMust(cql.TextValue(id)))
 							if err != nil {
 								t.Fatal(err)
 							}
 							if !bytes.Equal(vc.Data, raw.Bytes().OwnedBytes()) {
 								t.Fatalf("database binary fixture: expected %x, got %x", vc.Data, raw.Bytes().OwnedBytes())
 							}
-							if (vc.Data == nil) != (raw.State() == gocql.Null) {
+							if (vc.Data == nil) != (raw.State() == cql.Null) {
 								t.Fatal("database null/present distinction lost")
 							}
 						})
@@ -297,8 +298,8 @@ func TestSerializationSimpleTypesCassandra(t *testing.T) {
 	})
 }
 
-func mustParseUUID(s string) gocql.UUID {
-	u, e := gocql.ParseUUID(s)
+func mustParseUUID(s string) cql.UUID {
+	u, e := cql.ParseUUID(s)
 	if e != nil {
 		panic(e)
 	}
@@ -312,16 +313,16 @@ func mustParseBigInt(s string) *big.Int {
 	return n
 }
 
-func mustCreateDuration(m, d int32, n time.Duration) gocql.Duration {
-	return gocql.Duration{Months: m, Days: d, Nanoseconds: int64(n)}
+func mustCreateDuration(m, d int32, n time.Duration) cql.Duration {
+	return cql.Duration{Months: m, Days: d, Nanoseconds: int64(n)}
 }
-func serializationMustValue(v gocql.Value, err error) gocql.Value {
+func serializationMustValue(v cql.Value, err error) cql.Value {
 	if err != nil {
 		panic(err)
 	}
 	return v
 }
-func serializationMustType(v gocql.DataType, err error) gocql.DataType {
+func serializationMustType(v cql.DataType, err error) cql.DataType {
 	if err != nil {
 		panic(err)
 	}
@@ -330,9 +331,9 @@ func serializationMustType(v gocql.DataType, err error) gocql.DataType {
 
 // Historical method subcase names identify the preserved coverage: collection
 // of cloned rows and single-row access with an explicitly retained page.
-func dynamicSerializationResult(t *testing.T, s *gocql.Session, cql, method string, args ...gocql.Value) gocql.Value {
+func dynamicSerializationResult(t *testing.T, s *gocql.Session, stmt, method string, args ...cql.Value) cql.Value {
 	t.Helper()
-	rows, err := v2Query(t.Context(), s, cql, args...)
+	rows, err := v2Query(t.Context(), s, stmt, args...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -340,7 +341,7 @@ func dynamicSerializationResult(t *testing.T, s *gocql.Session, cql, method stri
 	if !rows.Next() {
 		t.Fatalf("expected one row: %v", rows.Err())
 	}
-	var row gocql.DynamicRow
+	var row cql.DynamicRow
 	if method == "SliceMap" {
 		row, err = rows.Clone()
 		if err != nil {
@@ -377,8 +378,8 @@ func dynamicSerializationResult(t *testing.T, s *gocql.Session, cql, method stri
 }
 
 type serializationDynamicCase struct {
-	name, cql string
-	expected  gocql.Value
+	name, stmt string
+	expected   cql.Value
 }
 
 func checkDynamicSerializationCases(t *testing.T, s *gocql.Session, table string, cases []serializationDynamicCase) {
@@ -386,21 +387,21 @@ func checkDynamicSerializationCases(t *testing.T, s *gocql.Session, table string
 	for i, tc := range cases {
 		run := func(t *testing.T) {
 			for _, present := range []bool{true, false} {
-				name, literal := "NonNull", tc.cql
+				name, literal := "NonNull", tc.stmt
 				expected := tc.expected
 				if !present {
 					name, literal = "Null", "NULL"
-					expected = gocql.NullValue(tc.expected.Type())
+					expected = cql.NullValue(tc.expected.Type())
 				}
 				t.Run(name, func(t *testing.T) {
 					id := int32(i * 2)
 					if !present {
 						id++
 					}
-					serializationWrite(t, s, fmt.Sprintf("INSERT INTO %s(id,%s_col) VALUES(?,%s)", table, tc.name, literal), gocql.IntValue(id))
+					serializationWrite(t, s, fmt.Sprintf("INSERT INTO %s(id,%s_col) VALUES(?,%s)", table, tc.name, literal), cql.IntValue(id))
 					for _, method := range []string{"SliceMap", "MapScan"} {
 						t.Run(method, func(t *testing.T) {
-							got := dynamicSerializationResult(t, s, fmt.Sprintf("SELECT %s_col FROM %s WHERE id=?", tc.name, table), method, gocql.IntValue(id))
+							got := dynamicSerializationResult(t, s, fmt.Sprintf("SELECT %s_col FROM %s WHERE id=?", tc.name, table), method, cql.IntValue(id))
 							assertSerializationValue(t, expected, got)
 						})
 					}
@@ -423,21 +424,21 @@ func TestSliceMapMapScanTypes(t *testing.T) {
 	s := createV2Session(t)
 	defer s.Close()
 	table := serializationTableName(t)
-	date, err := gocql.DateFromTime(time.Date(2015, 5, 3, 0, 0, 0, 0, time.UTC))
+	date, err := cql.DateFromTime(time.Date(2015, 5, 3, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatal(err)
 	}
 	cases := []serializationDynamicCase{
-		{"tinyint", "42", gocql.TinyIntValue(42)}, {"smallint", "1234", gocql.SmallIntValue(1234)}, {"int", "123456", gocql.IntValue(123456)}, {"bigint", "1234567890", gocql.BigIntValue(1234567890)},
-		{"float", "3.14", gocql.FloatValue(3.14)}, {"double", "2.718281828", gocql.DoubleValue(2.718281828)}, {"boolean", "true", gocql.BoolValue(true)},
-		{"text", "'hello world'", codecTestMust(gocql.TextValue("hello world"))}, {"ascii", "'hello ascii'", serializationMustValue(gocql.ASCIIValue("hello ascii"))}, {"varchar", "'hello varchar'", codecTestMust(gocql.TextValue("hello varchar"))},
-		{"timestamp", "1388534400000", gocql.TimestampValue(1388534400000)}, {"uuid", "550e8400-e29b-41d4-a716-446655440000", gocql.UUIDValue(mustParseUUID("550e8400-e29b-41d4-a716-446655440000"))},
-		{"timeuuid", "60d79c23-5793-11f0-8afe-bcfce78b517a", serializationMustValue(gocql.TimeUUIDValue(gocql.TimeUUID(mustParseUUID("60d79c23-5793-11f0-8afe-bcfce78b517a"))))},
-		{"inet", "'127.0.0.1'", serializationMustValue(gocql.InetValue(netip.MustParseAddr("127.0.0.1")))}, {"blob", "0x48656c6c6f", gocql.BlobValue([]byte("Hello"))},
-		{"varint", "123456789012345678901234567890", gocql.VarintValue(gocql.VarintFromBigInt(mustParseBigInt("123456789012345678901234567890")))},
-		{"decimal", "123.45", gocql.DecimalValue(gocql.Decimal{Scale: 2, Unscaled: gocql.VarintFromBigInt(big.NewInt(12345))})}, {"date", "'2015-05-03'", gocql.DateValue(date)},
-		{"time", "'13:30:54.234'", serializationMustValue(gocql.TimeValue(gocql.TimeOfDay(13*time.Hour + 30*time.Minute + 54*time.Second + 234*time.Millisecond)))},
-		{"duration", "1y2mo3d4h5m6s789ms", serializationMustValue(gocql.DurationValue(mustCreateDuration(14, 3, 4*time.Hour+5*time.Minute+6*time.Second+789*time.Millisecond)))},
+		{"tinyint", "42", cql.TinyIntValue(42)}, {"smallint", "1234", cql.SmallIntValue(1234)}, {"int", "123456", cql.IntValue(123456)}, {"bigint", "1234567890", cql.BigIntValue(1234567890)},
+		{"float", "3.14", cql.FloatValue(3.14)}, {"double", "2.718281828", cql.DoubleValue(2.718281828)}, {"boolean", "true", cql.BoolValue(true)},
+		{"text", "'hello world'", codecTestMust(cql.TextValue("hello world"))}, {"ascii", "'hello ascii'", serializationMustValue(cql.ASCIIValue("hello ascii"))}, {"varchar", "'hello varchar'", codecTestMust(cql.TextValue("hello varchar"))},
+		{"timestamp", "1388534400000", cql.TimestampValue(1388534400000)}, {"uuid", "550e8400-e29b-41d4-a716-446655440000", cql.UUIDValue(mustParseUUID("550e8400-e29b-41d4-a716-446655440000"))},
+		{"timeuuid", "60d79c23-5793-11f0-8afe-bcfce78b517a", serializationMustValue(cql.TimeUUIDValue(cql.TimeUUID(mustParseUUID("60d79c23-5793-11f0-8afe-bcfce78b517a"))))},
+		{"inet", "'127.0.0.1'", serializationMustValue(cql.InetValue(netip.MustParseAddr("127.0.0.1")))}, {"blob", "0x48656c6c6f", cql.BlobValue([]byte("Hello"))},
+		{"varint", "123456789012345678901234567890", cql.VarintValue(cql.VarintFromBigInt(mustParseBigInt("123456789012345678901234567890")))},
+		{"decimal", "123.45", cql.DecimalValue(cql.Decimal{Scale: 2, Unscaled: cql.VarintFromBigInt(big.NewInt(12345))})}, {"date", "'2015-05-03'", cql.DateValue(date)},
+		{"time", "'13:30:54.234'", serializationMustValue(cql.TimeValue(cql.TimeOfDay(13*time.Hour + 30*time.Minute + 54*time.Second + 234*time.Millisecond)))},
+		{"duration", "1y2mo3d4h5m6s789ms", serializationMustValue(cql.DurationValue(mustCreateDuration(14, 3, 4*time.Hour+5*time.Minute+6*time.Second+789*time.Millisecond)))},
 	}
 	cols := ""
 	for _, tc := range cases {
@@ -458,11 +459,11 @@ func TestSliceMapMapScanCounterTypes(t *testing.T) {
 	if err := truncateTable(t, s, table); err != nil {
 		t.Fatal(err)
 	}
-	serializationWrite(t, s, fmt.Sprintf("UPDATE %s SET counter_col=counter_col+42 WHERE id=?", table), gocql.IntValue(1))
+	serializationWrite(t, s, fmt.Sprintf("UPDATE %s SET counter_col=counter_col+42 WHERE id=?", table), cql.IntValue(1))
 	for _, method := range []string{"SliceMap", "MapScan"} {
 		t.Run(method, func(t *testing.T) {
-			got := dynamicSerializationResult(t, s, fmt.Sprintf("SELECT counter_col FROM %s WHERE id=?", table), method, gocql.IntValue(1))
-			assertSerializationValue(t, gocql.CounterValue(42), got)
+			got := dynamicSerializationResult(t, s, fmt.Sprintf("SELECT counter_col FROM %s WHERE id=?", table), method, cql.IntValue(1))
+			assertSerializationValue(t, cql.CounterValue(42), got)
 		})
 	}
 }
@@ -475,8 +476,8 @@ func TestSliceMapMapScanTupleTypes(t *testing.T) {
 	if err := truncateTable(t, s, table); err != nil {
 		t.Fatal(err)
 	}
-	typ := serializationMustType(gocql.TupleType(serializationMustType(gocql.ScalarType(gocql.TypeInt)), serializationMustType(gocql.ScalarType(gocql.TypeText))))
-	checkDynamicSerializationCases(t, s, table, []serializationDynamicCase{{"tuple", "(42,'hello')", serializationMustValue(gocql.TupleValue(typ, []gocql.Value{gocql.IntValue(42), codecTestMust(gocql.TextValue("hello"))}))}})
+	typ := serializationMustType(cql.TupleType(serializationMustType(cql.ScalarType(cql.TypeInt)), serializationMustType(cql.ScalarType(cql.TypeText))))
+	checkDynamicSerializationCases(t, s, table, []serializationDynamicCase{{"tuple", "(42,'hello')", serializationMustValue(cql.TupleValue(typ, []cql.Value{cql.IntValue(42), codecTestMust(cql.TextValue("hello"))}))}})
 }
 func TestSliceMapMapScanVectorTypes(t *testing.T) {
 	t.Parallel()
@@ -488,9 +489,9 @@ func TestSliceMapMapScanVectorTypes(t *testing.T) {
 	if err := truncateTable(t, s, table); err != nil {
 		t.Fatal(err)
 	}
-	fl := serializationMustType(gocql.VectorDataType(serializationMustType(gocql.ScalarType(gocql.TypeFloat)), 3))
-	tx := serializationMustType(gocql.VectorDataType(serializationMustType(gocql.ScalarType(gocql.TypeText)), 2))
-	checkDynamicSerializationCases(t, s, table, []serializationDynamicCase{{"vector_float", "[1.0,2.5,-3.0]", serializationMustValue(gocql.VectorValue(fl, []gocql.Value{gocql.FloatValue(1), gocql.FloatValue(2.5), gocql.FloatValue(-3)}))}, {"vector_text", "['hello','world']", serializationMustValue(gocql.VectorValue(tx, []gocql.Value{codecTestMust(gocql.TextValue("hello")), codecTestMust(gocql.TextValue("world"))}))}})
+	fl := serializationMustType(cql.VectorDataType(serializationMustType(cql.ScalarType(cql.TypeFloat)), 3))
+	tx := serializationMustType(cql.VectorDataType(serializationMustType(cql.ScalarType(cql.TypeText)), 2))
+	checkDynamicSerializationCases(t, s, table, []serializationDynamicCase{{"vector_float", "[1.0,2.5,-3.0]", serializationMustValue(cql.VectorValue(fl, []cql.Value{cql.FloatValue(1), cql.FloatValue(2.5), cql.FloatValue(-3)}))}, {"vector_text", "['hello','world']", serializationMustValue(cql.VectorValue(tx, []cql.Value{codecTestMust(cql.TextValue("hello")), codecTestMust(cql.TextValue("world"))}))}})
 }
 func TestSliceMapMapScanCollectionTypes(t *testing.T) {
 	t.Parallel()
@@ -501,11 +502,11 @@ func TestSliceMapMapScanCollectionTypes(t *testing.T) {
 	if err := truncateTable(t, s, table); err != nil {
 		t.Fatal(err)
 	}
-	tx, in := serializationMustType(gocql.ScalarType(gocql.TypeText)), serializationMustType(gocql.ScalarType(gocql.TypeInt))
-	list, set, mp := serializationMustType(gocql.ListType(tx)), serializationMustType(gocql.SetType(in)), serializationMustType(gocql.MapType(tx, in))
+	tx, in := serializationMustType(cql.ScalarType(cql.TypeText)), serializationMustType(cql.ScalarType(cql.TypeInt))
+	list, set, mp := serializationMustType(cql.ListType(tx)), serializationMustType(cql.SetType(in)), serializationMustType(cql.MapType(tx, in))
 	checkDynamicSerializationCases(t, s, table, []serializationDynamicCase{
-		{"list", "['a','b','c']", serializationMustValue(gocql.ListValue(list, []gocql.Value{codecTestMust(gocql.TextValue("a")), codecTestMust(gocql.TextValue("b")), codecTestMust(gocql.TextValue("c"))}))},
-		{"set", "{1,2,3}", serializationMustValue(gocql.SetValue(set, []gocql.Value{gocql.IntValue(1), gocql.IntValue(2), gocql.IntValue(3)}))},
-		{"map", "{'key1':1,'key2':2}", serializationMustValue(gocql.MapValue(mp, []gocql.ValueEntry{{Key: codecTestMust(gocql.TextValue("key1")), Value: gocql.IntValue(1)}, {Key: codecTestMust(gocql.TextValue("key2")), Value: gocql.IntValue(2)}}))},
+		{"list", "['a','b','c']", serializationMustValue(cql.ListValue(list, []cql.Value{codecTestMust(cql.TextValue("a")), codecTestMust(cql.TextValue("b")), codecTestMust(cql.TextValue("c"))}))},
+		{"set", "{1,2,3}", serializationMustValue(cql.SetValue(set, []cql.Value{cql.IntValue(1), cql.IntValue(2), cql.IntValue(3)}))},
+		{"map", "{'key1':1,'key2':2}", serializationMustValue(cql.MapValue(mp, []cql.ValueEntry{{Key: codecTestMust(cql.TextValue("key1")), Value: cql.IntValue(1)}, {Key: codecTestMust(cql.TextValue("key2")), Value: cql.IntValue(2)}}))},
 	})
 }

@@ -4,17 +4,17 @@
 package execution_test
 
 import (
-	. "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 )
 
 // Internal immutable-binding fixtures remain separate from the public query contract.
 type Bound[R any] = implExecution.Bound[R]
 
-func BindUnpreparedBorrowed[P any, R any](a0 Statement[P, R], a1 Columns, a2 P) (*Bound[R], error) {
+func BindUnpreparedBorrowed[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a2 P) (*Bound[R], error) {
 	return implExecution.BindUnpreparedBorrowed[P, R](a0, a1, a2)
 }
 
-func BindUnpreparedOwned[P any, R any](a0 Statement[P, R], a1 Columns, a2 P) (*Bound[R], error) {
+func BindUnpreparedOwned[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a2 P) (*Bound[R], error) {
 	return implExecution.BindUnpreparedOwned[P, R](a0, a1, a2)
 }

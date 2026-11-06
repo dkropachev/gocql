@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 
 	"github.com/scylladb/gocql/v2/internal/codec"
@@ -81,7 +80,7 @@ func BenchmarkReusableQueryDecoding(b *testing.B) {
 					}
 					served <- nil
 				}()
-				options := testOptions(OptionValues{PageSize: cql.Option[int32]{Set: true, Value: 32}, Prefetch: cql.Option[int]{Set: true, Value: 0}, Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
+				options := testOptions(OptionValues{PageSize: cqltype.Option[int32]{Set: true, Value: 32}, Prefetch: cqltype.Option[int]{Set: true, Value: 0}, Timeout: cqltype.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
 				statement := binding.Statement[codec.Unit, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 				var query *Query[codec.Unit, []byte]
 				var streaming *StreamQuery[codec.Unit, []byte]
@@ -172,7 +171,7 @@ func BenchmarkReusableQueryDecoding(b *testing.B) {
 // keeps queries in a sync.Pool; prepared calls Prepared.Exec and One. ns/op
 // is wall time per completed operation.
 func BenchmarkOneShotLoopback(b *testing.B) {
-	options := testOptions(OptionValues{Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
+	options := testOptions(OptionValues{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
 	writeStmt := binding.Statement[loopbackRow, codec.Unit]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k, value) VALUES(?, ?)", Params: codec.Params(codec.ParamAt(0, codec.Int32, func(r loopbackRow) int32 { return r.k }), codec.ParamAt(1, codec.BytesEncoder, func(r loopbackRow) []byte { return r.value })), Rows: codec.NoRows}
 	readStmt := binding.Statement[int32, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: codec.OneParam(codec.Int32), Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 	variants := []string{"bind", "bindborrowed", "query", "userpool", "prepared"}
@@ -314,7 +313,7 @@ func BenchmarkOneShotLoopback(b *testing.B) {
 // BenchmarkReusableQueryLoopback measures per-request fixed cost under
 // concurrency. ns/op is wall time per completed operation across all workers.
 func BenchmarkReusableQueryLoopback(b *testing.B) {
-	options := testOptions(OptionValues{Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
+	options := testOptions(OptionValues{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
 	value := loopbackValue
 	for _, workload := range []string{"read", "write", "pread", "pwrite", "pone", "preadctx", "page", "pagectx", "pagepto", "pageb"} {
 		workerCounts := []int{1, 8, 64}
@@ -330,7 +329,7 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 					case "pageb":
 						// Borrowed column values, valid until the callback returns: no
 						// per-row copy. Measurement only; master's client copies.
-						pageOptions := testOptions(OptionValues{PageSize: cql.Option[int32]{Set: true, Value: loopbackPageRows}, Prefetch: cql.Option[int]{Set: true, Value: 0}, Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
+						pageOptions := testOptions(OptionValues{PageSize: cqltype.Option[int32]{Set: true, Value: loopbackPageRows}, Prefetch: cqltype.Option[int]{Set: true, Value: 0}, Timeout: cqltype.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
 						statement := binding.Statement[codec.Unit, implCqltype.Bytes]{Kind: implCqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.OneColumn(codec.BlobCodec)}
 						query := codecTestMust(NewUnpreparedQuery(s, statement, implCqltype.NewColumns(), pageOptions))
 						b.Cleanup(query.Close)
@@ -353,9 +352,9 @@ func BenchmarkReusableQueryLoopback(b *testing.B) {
 							return nil
 						}
 					case "page", "pagectx", "pagepto":
-						pageValues := OptionValues{PageSize: cql.Option[int32]{Set: true, Value: loopbackPageRows}, Prefetch: cql.Option[int]{Set: true, Value: 0}, Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}}
+						pageValues := OptionValues{PageSize: cqltype.Option[int32]{Set: true, Value: loopbackPageRows}, Prefetch: cqltype.Option[int]{Set: true, Value: 0}, Timeout: cqltype.Option[time.Duration]{Set: true, Value: 10 * time.Second}}
 						if workload == "pagepto" {
-							pageValues.PageTimeout = cql.Option[time.Duration]{Set: true, Value: 2 * time.Second}
+							pageValues.PageTimeout = cqltype.Option[time.Duration]{Set: true, Value: 2 * time.Second}
 						}
 						pageOptions := testOptions(pageValues)
 						statement := binding.Statement[codec.Unit, []byte]{Kind: implCqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.NoParams, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}

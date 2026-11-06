@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
@@ -43,11 +44,11 @@ func TestGetHostPortMapping(t *testing.T) {
 
 	var hostIDs []string
 	for i := 0; i < 3; i++ {
-		hostIDs = append(hostIDs, gocql.MustRandomUUID().String())
+		hostIDs = append(hostIDs, cql.MustRandomUUID().String())
 	}
 	var connectionIDs []string
 	for i := 0; i < 3; i++ {
-		connectionIDs = append(connectionIDs, gocql.MustRandomUUID().String())
+		connectionIDs = append(connectionIDs, cql.MustRandomUUID().String())
 	}
 
 	// These rows are read back below through session.control, and controlConn.query
@@ -62,20 +63,20 @@ func TestGetHostPortMapping(t *testing.T) {
 		rack := racks[id]
 		ip := net.ParseIP(fmt.Sprintf("127.0.0.%d", id+1))
 		for _, connectionID := range connectionIDs {
-			prepared, err := gocql.Prepare(ctx, session, gocql.Statement[[]gocql.Value, gocql.Unit]{
+			prepared, err := gocql.Prepare(ctx, session, cql.Statement[[]cql.Value, cql.Unit]{
 				CQL: fmt.Sprintf(`INSERT INTO %s (
                     connection_id, host_id, Address, port, tls_port, alternator_port, alternator_https_port, Datacenter, Rack)
                     VALUES (?, ?, ?, 9042, 9142, 0, 0, 'dc1', ?)`, qualifiedTable),
-				Kind: gocql.OrdinaryStatement, Params: gocql.DynamicParams, Rows: gocql.NoRows,
+				Kind: cql.OrdinaryStatement, Params: cql.DynamicParams, Rows: cql.NoRows,
 			}, gocql.PrepareOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
-			bound, err := BindOwned(prepared, []gocql.Value{gocql.UUIDValue(codecTestMust(gocql.ParseUUID(connectionID))), gocql.UUIDValue(codecTestMust(gocql.ParseUUID(hostID))), codecTestMust(gocql.TextValue(ip.String())), codecTestMust(gocql.TextValue(rack))})
+			bound, err := BindOwned(prepared, []cql.Value{cql.UUIDValue(codecTestMust(cql.ParseUUID(connectionID))), cql.UUIDValue(codecTestMust(cql.ParseUUID(hostID))), codecTestMust(cql.TextValue(ip.String())), codecTestMust(cql.TextValue(rack))})
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = Exec(ctx, session, bound, testOptions(gocql.OptionValues{Consistency: gocql.Option[gocql.Consistency]{Set: true, Value: gocql.All}}))
+			_, err = Exec(ctx, session, bound, testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Set: true, Value: cql.All}}))
 			bound.Close()
 			if waitErr := bound.Wait(ctx); waitErr != nil {
 				t.Fatal(waitErr)

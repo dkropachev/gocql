@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 
 	"github.com/stretchr/testify/require"
 )
@@ -26,14 +27,14 @@ func TestSingleHostQueryExecutor(t *testing.T) {
 	session, err := gocql.OpenSingleHost(ctx, config, hostID)
 	require.NoError(t, err)
 	defer session.Close()
-	bound, err := BindUnpreparedOwned(gocql.Statement[gocql.Unit, gocql.TimeUUID]{CQL: "SELECT now() FROM system.local", Params: gocql.NoParams, Rows: gocql.OneColumn(gocql.TimeUUIDCodec)}, gocql.NewColumns(), gocql.Unit{})
+	bound, err := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.TimeUUID]{CQL: "SELECT now() FROM system.local", Params: cql.NoParams, Rows: cql.OneColumn(cql.TimeUUIDCodec)}, cql.NewColumns(), cql.Unit{})
 	require.NoError(t, err)
 	defer bound.Close()
 	rows, err := Run(ctx, session, bound, gocql.Options{})
 	require.NoError(t, err)
 	defer rows.Close()
 	require.True(t, rows.Next())
-	require.False(t, gocql.UUID(rows.Row()).IsEmpty())
+	require.False(t, cql.UUID(rows.Row()).IsEmpty())
 	require.False(t, rows.Next())
 	require.NoError(t, rows.Err())
 	require.Equal(t, hostID, rows.Info().HostID)

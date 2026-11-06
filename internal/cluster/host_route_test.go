@@ -8,7 +8,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -39,7 +38,7 @@ func TestHostRoutePlanFallsBackToAnyShardOfHost(t *testing.T) {
 	s := hostRoutingSession(t, false)
 	m := s.Metadata()
 	p := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true})).(*routing.InternalRoutingPolicy)
-	info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 42, Set: true}, Consistency: cqltype.Quorum, Kind: cqltype.OrdinaryStatement}
+	info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: 42, Set: true}, Consistency: cqltype.Quorum, Kind: cqltype.OrdinaryStatement}
 	var storage routing.InternalLazyRoutingPlan
 	plan := p.InternalPlanWith(info, m, &storage, nil)
 	first, ok := plan.Next()
@@ -137,7 +136,7 @@ func hostRoutingSession(b testing.TB, tablets bool) *Session {
 	m := s.Metadata()
 	k := implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}
 	if tablets {
-		root, _ := implRouting.InternalUpdateTabletRange(nil, testHint(b, -1<<63+1, 1<<63-1, cql.Option[uint64]{Value: 1, Set: true}, hTarget(1, 1), hTarget(2, 2), hTarget(3, 3)))
+		root, _ := implRouting.InternalUpdateTabletRange(nil, testHint(b, -1<<63+1, 1<<63-1, cqltype.Option[uint64]{Value: 1, Set: true}, hTarget(1, 1), hTarget(2, 2), hTarget(3, 3)))
 		routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, k, routing.InternalIndexTabletPlacement(implRouting.InternalTabletPlacement{InternalIdentity: "identity-1", InternalRanges: root}), implRouting.InternalComparePlacementTable)
 	} else {
 		routing.SnapshotData(m).InternalKeyspaces["ks"].TabletBased = false

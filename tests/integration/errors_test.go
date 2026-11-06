@@ -32,7 +32,7 @@ import (
 	"fmt"
 	"testing"
 
-	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 func TestErrorsParse(t *testing.T) {
@@ -50,7 +50,7 @@ func TestErrorsParse(t *testing.T) {
 	if err := v2CreateTable(context.Background(), session, fmt.Sprintf((`CREATE TABLE `+fixtureKeyspace("")+`.%s (id int primary key)`), table)); err == nil {
 		t.Fatal("Should have gotten already exists error from cassandra server.")
 	} else {
-		e := &gocql.RequestErrAlreadyExists{}
+		e := &cql.RequestErrAlreadyExists{}
 		if errors.As(err, &e) {
 			if e.Table != table {
 				t.Fatalf("expected error table to be %q but was %q", table, e.Table)

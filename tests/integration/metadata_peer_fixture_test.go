@@ -13,8 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	gocql "github.com/scylladb/gocql/v2"
-
+	"github.com/scylladb/gocql/v2/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/testkit"
 )
@@ -28,7 +27,7 @@ type incompletePeerDialer struct {
 	injected atomic.Int64
 }
 
-func (d *incompletePeerDialer) DialContext(ctx context.Context, target gocql.DialTarget) (net.Conn, error) {
+func (d *incompletePeerDialer) DialContext(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 	network, address := target.Network, target.Address
 	conn, err := d.Dialer.DialContext(ctx, network, address)
 	if err != nil {

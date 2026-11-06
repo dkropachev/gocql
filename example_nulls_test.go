@@ -27,31 +27,31 @@ package gocql_test
 import (
 	"fmt"
 
-	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 
 	"log"
 )
 
 func Example_nulls() {
-	typ, err := gocql.ScalarType(gocql.TypeVarchar)
+	typ, err := cql.ScalarType(cql.TypeVarchar)
 	if err != nil {
 		log.Fatal(err)
 	}
-	codec := gocql.NullableCodec(gocql.TextCodec)
-	null, err := gocql.NewEncodedValue(typ, gocql.Null, gocql.BorrowBytes(nil))
+	codec := cql.NullableCodec(cql.TextCodec)
+	null, err := cql.NewEncodedValue(typ, cql.Null, cql.BorrowBytes(nil))
 	if err != nil {
 		log.Fatal(err)
 	}
-	value, err := gocql.DecodeValue(codec, null)
+	value, err := cql.DecodeValue(codec, null)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println(value.Valid)
-	empty, err := gocql.NewEncodedValue(typ, gocql.Present, gocql.BorrowBytes([]byte{}))
+	empty, err := cql.NewEncodedValue(typ, cql.Present, cql.BorrowBytes([]byte{}))
 	if err != nil {
 		log.Fatal(err)
 	}
-	value, err = gocql.DecodeValue(codec, empty)
+	value, err = cql.DecodeValue(codec, empty)
 	if err != nil {
 		log.Fatal(err)
 	}

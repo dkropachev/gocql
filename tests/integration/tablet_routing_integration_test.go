@@ -7,7 +7,9 @@ package integration
 
 import (
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	routing "github.com/scylladb/gocql/v2/routing"
 
 	"context"
 	"fmt"
@@ -16,14 +18,14 @@ import (
 	"testing"
 	"time"
 
-	routing "github.com/scylladb/gocql/v2/internal/routing"
+	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 )
 
 func TestTabletRoutingLive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	config := createV2Cluster()
-	v2ConfigureRouting(t, &config, gocql.RoutingOptions{TokenAware: true, LeaderAware: true, ShuffleReplicas: true})
+	v2ConfigureRouting(t, &config, routing.Options{TokenAware: true, LeaderAware: true, ShuffleReplicas: true})
 	s, err := gocql.Connect(ctx, config)
 	if err != nil {
 		t.Fatal(err)
@@ -54,8 +56,8 @@ func TestTabletRoutingLive(t *testing.T) {
 	if !ks.TabletBased || ks.Tables["records"].ID == "" {
 		t.Fatal("server tablet/table UUID metadata absent", ks)
 	}
-	insert := codecTestMust(gocql.Prepare(ctx, s, gocql.Statement[int32, gocql.Unit]{CQL: "INSERT INTO " + keyspace + ".records(pk,v) VALUES(?,7)", Params: gocql.OneParam(gocql.Int32), Rows: gocql.NoRows}, gocql.PrepareOptions{}))
-	read := codecTestMust(gocql.Prepare(ctx, s, gocql.Statement[int32, gocql.DynamicRow]{CQL: "SELECT pk,v FROM " + keyspace + ".records WHERE pk=?", Params: gocql.OneParam(gocql.Int32), Rows: gocql.DynamicRows}, gocql.PrepareOptions{}))
+	insert := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[int32, cql.Unit]{CQL: "INSERT INTO " + keyspace + ".records(pk,v) VALUES(?,7)", Params: cql.OneParam(cql.Int32), Rows: cql.NoRows}, gocql.PrepareOptions{}))
+	read := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[int32, cql.DynamicRow]{CQL: "SELECT pk,v FROM " + keyspace + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows}, gocql.PrepareOptions{}))
 	feedback := 0
 	for key := int32(0); key < 8; key++ {
 		bound := codecTestMust(BindBorrowed(insert, key))
@@ -71,17 +73,17 @@ func TestTabletRoutingLive(t *testing.T) {
 		bound.Close()
 	}
 	// Read the server's authoritative tablet table independently of feedback.
-	id := codecTestMust(gocql.ParseUUID(ks.Tables["records"].ID))
-	serverRows, err := v2Query(ctx, s, "SELECT last_token,replicas FROM system.tablets WHERE table_id=?", gocql.UUIDValue(id))
+	id := codecTestMust(cql.ParseUUID(ks.Tables["records"].ID))
+	serverRows, err := v2Query(ctx, s, "SELECT last_token,replicas FROM system.tablets WHERE table_id=?", cql.UUIDValue(id))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var authoritative []gocql.TokenRange
+	var authoritative []routing.TokenRange
 	for serverRows.Next() {
 		row := serverRows.Row()
 		last := codecTestMust(codecTestMust(row.Get("last_token")).Signed())
 		list := codecTestMust(codecTestMust(row.Get("replicas")).Elements())
-		r := gocql.TokenRange{End: last}
+		r := routing.TokenRange{End: last}
 		for list.Next() {
 			tuple := codecTestMust(list.Value().Elements())
 			if !tuple.Next() {
@@ -92,7 +94,7 @@ func TestTabletRoutingLive(t *testing.T) {
 				t.Fatal("missing shard")
 			}
 			shard := codecTestMust(tuple.Value().Signed())
-			r.Replicas = append(r.Replicas, gocql.Target{HostID: host, ShardID: gocql.Option[uint32]{Value: uint32(shard), Set: true}})
+			r.Replicas = append(r.Replicas, routing.Target{HostID: host, ShardID: cql.Option[uint32]{Value: uint32(shard), Set: true}})
 		}
 		if err := list.Err(); err != nil {
 			t.Fatal(err)
@@ -107,7 +109,7 @@ func TestTabletRoutingLive(t *testing.T) {
 	if len(authoritative) == 0 {
 		t.Fatal("no authoritative tablet records")
 	}
-	slices.SortFunc(authoritative, func(a, b gocql.TokenRange) int { return comparePlacementToken(a.End, b.End) })
+	slices.SortFunc(authoritative, func(a, b routing.TokenRange) int { return comparePlacementToken(a.End, b.End) })
 	for i := range authoritative {
 		authoritative[i].Start = math.MinInt64
 		if i > 0 {
@@ -122,7 +124,7 @@ func TestTabletRoutingLive(t *testing.T) {
 		if !token.Set {
 			t.Fatal("prepared partition key did not produce token")
 		}
-		var expected []gocql.Target
+		var expected []routing.Target
 		for _, r := range authoritative {
 			if token.Value > r.Start && token.Value <= r.End {
 				expected = r.Replicas
@@ -141,7 +143,7 @@ func TestTabletRoutingLive(t *testing.T) {
 			before := tabletAuthority(t, ctx, s, id, token.Value)
 			opts := gocql.Options{}
 			if attempt < 3 {
-				opts = testOptions(gocql.OptionValues{HostID: gocql.Option[gocql.UUID]{Value: routing.SnapshotData(s.Metadata()).InternalHosts[attempt%len(routing.SnapshotData(s.Metadata()).InternalHosts)].ID, Set: true}})
+				opts = testOptions(gocql.OptionValues{HostID: cql.Option[cql.UUID]{Value: implRouting.SnapshotData(s.Metadata()).InternalHosts[attempt%len(implRouting.SnapshotData(s.Metadata()).InternalHosts)].ID, Set: true}})
 			}
 			rows, err := Run(ctx, s, b, opts)
 			if err != nil {
@@ -213,7 +215,7 @@ func TestLeaderRoutingLive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	config := createV2Cluster()
-	v2ConfigureRouting(t, &config, gocql.RoutingOptions{TokenAware: true, LeaderAware: true, ShuffleReplicas: true})
+	v2ConfigureRouting(t, &config, routing.Options{TokenAware: true, LeaderAware: true, ShuffleReplicas: true})
 	s, err := gocql.Connect(ctx, config)
 	if err != nil {
 		t.Fatal(err)
@@ -243,14 +245,14 @@ func TestLeaderRoutingLive(t *testing.T) {
 	if _, err := v2Exec(ctx, s, "INSERT INTO "+ks+".records(pk,v) VALUES(1,7)"); err != nil {
 		t.Fatal(err)
 	}
-	p := codecTestMust(gocql.Prepare(ctx, s, gocql.Statement[int32, gocql.DynamicRow]{CQL: "SELECT v FROM " + ks + ".records WHERE pk=?", Params: gocql.OneParam(gocql.Int32), Rows: gocql.DynamicRows}, gocql.PrepareOptions{}))
+	p := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[int32, cql.DynamicRow]{CQL: "SELECT v FROM " + ks + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows}, gocql.PrepareOptions{}))
 	b := codecTestMust(BindBorrowed(p, int32(1)))
 	defer b.Close()
-	var leader gocql.UUID
+	var leader cql.UUID
 	stable := 0
 	feedback := 0
 	for attempt := 0; attempt < 256 && stable < 16; attempt++ {
-		rows, err := Run(ctx, s, b, testOptions(gocql.OptionValues{Consistency: gocql.Option[gocql.Consistency]{Value: gocql.LocalQuorum, Set: true}}))
+		rows, err := Run(ctx, s, b, testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.LocalQuorum, Set: true}}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -304,28 +306,28 @@ func TestLeaderRoutingLive(t *testing.T) {
 // During a transition or disagreement it supplies no correctness credit.
 type tabletObservation struct {
 	last      int64
-	replicas  []gocql.Target
-	readNodes []gocql.UUID
+	replicas  []routing.Target
+	readNodes []cql.UUID
 	stable    bool
 }
 
-func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table gocql.UUID, token int64) tabletObservation {
+func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table cql.UUID, token int64) tabletObservation {
 	t.Helper()
 	type parameters struct {
-		Table gocql.UUID
+		Table cql.UUID
 		Token int64
 	}
-	statement := gocql.Statement[parameters, gocql.DynamicRow]{
+	statement := cql.Statement[parameters, cql.DynamicRow]{
 		CQL:    "SELECT last_token,replicas,new_replicas,stage FROM system.tablets WHERE table_id=? AND last_token>=? LIMIT 1",
-		Params: gocql.Params(gocql.Param("id", gocql.UUIDCodec, func(p parameters) gocql.UUID { return p.Table }), gocql.Param("token", gocql.Int64, func(p parameters) int64 { return p.Token })),
-		Rows:   gocql.DynamicRows,
+		Params: cql.Params(cql.Param("id", cql.UUIDCodec, func(p parameters) cql.UUID { return p.Table }), cql.Param("token", cql.Int64, func(p parameters) int64 { return p.Token })),
+		Rows:   cql.DynamicRows,
 	}
-	columns := gocql.NewColumns(gocql.ColumnSpec{Name: "id", Type: codecTestMust(gocql.ScalarType(gocql.TypeUUID))}, gocql.ColumnSpec{Name: "token", Type: codecTestMust(gocql.ScalarType(gocql.TypeBigInt))})
+	columns := cql.NewColumns(cql.ColumnSpec{Name: "id", Type: codecTestMust(cql.ScalarType(cql.TypeUUID))}, cql.ColumnSpec{Name: "token", Type: codecTestMust(cql.ScalarType(cql.TypeBigInt))})
 	bound := codecTestMust(BindUnpreparedOwned(statement, columns, parameters{table, token}))
 	defer bound.Close()
 	observation := tabletObservation{stable: true}
 	for index, host := range s.Metadata().Hosts() {
-		page := codecTestMust(RunUnpaged(ctx, s, bound, testOptions(gocql.OptionValues{HostID: gocql.Option[gocql.UUID]{Set: true, Value: host.ID}})))
+		page := codecTestMust(RunUnpaged(ctx, s, bound, testOptions(gocql.OptionValues{HostID: cql.Option[cql.UUID]{Set: true, Value: host.ID}})))
 		if page.Info().HostID != host.ID {
 			t.Fatal("authoritative read lost exact host pin", page.Info().HostID, host.ID)
 		}
@@ -336,7 +338,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table 
 		row := page.Row()
 		last := codecTestMust(codecTestMust(row.Get("last_token")).Signed())
 		iterator := codecTestMust(codecTestMust(row.Get("replicas")).Elements())
-		var replicas []gocql.Target
+		var replicas []routing.Target
 		for iterator.Next() {
 			tuple := codecTestMust(iterator.Value().Elements())
 			if !tuple.Next() {
@@ -353,12 +355,12 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table 
 			if tuple.Next() || tuple.Err() != nil {
 				t.Fatal("authoritative replica extra member", tuple.Err())
 			}
-			replicas = append(replicas, gocql.Target{HostID: id, ShardID: gocql.Option[uint32]{Set: true, Value: uint32(shard)}})
+			replicas = append(replicas, routing.Target{HostID: id, ShardID: cql.Option[uint32]{Set: true, Value: uint32(shard)}})
 		}
 		if iterator.Err() != nil {
 			t.Fatal(iterator.Err())
 		}
-		if codecTestMust(row.Get("new_replicas")).State() != gocql.Null || codecTestMust(row.Get("stage")).State() != gocql.Null {
+		if codecTestMust(row.Get("new_replicas")).State() != cql.Null || codecTestMust(row.Get("stage")).State() != cql.Null {
 			observation.stable = false
 		}
 		if page.Next() || page.Err() != nil {
@@ -385,7 +387,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table 
 
 // Placement is a set of distinct host/shard destinations. Duplicate entries
 // cannot satisfy an exact authoritative-set assertion in either direction.
-func sameReplicaSet(a, b []gocql.Target) bool {
+func sameReplicaSet(a, b []routing.Target) bool {
 	if len(a) != len(b) {
 		return false
 	}

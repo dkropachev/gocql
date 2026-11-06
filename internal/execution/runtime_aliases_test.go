@@ -5,6 +5,7 @@ package execution_test
 
 import (
 	. "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/execution"
@@ -20,6 +21,6 @@ type responsePage = transport.InternalResponsePage
 type responseData = model.ResponseData
 type pageFuture = execution.InternalPageFuture
 
-func newPage[R any](response *responsePage, decoder RowDecoder[R], release func()) (*Page[R], error) {
+func newPage[R any](response *responsePage, decoder cql.RowDecoder[R], release func()) (*Page[R], error) {
 	return execution.InternalNewPage(response, decoder, release)
 }

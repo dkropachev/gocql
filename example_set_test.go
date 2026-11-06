@@ -27,22 +27,22 @@ package gocql_test
 import (
 	"fmt"
 
-	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 
 	"log"
 )
 
 func Example_set() {
-	text, _ := gocql.ScalarType(gocql.TypeText)
-	typ, err := gocql.SetType(text)
+	text, _ := cql.ScalarType(cql.TypeText)
+	typ, err := cql.SetType(text)
 	if err != nil {
 		log.Fatal(err)
 	}
-	encoded, err := gocql.EncodeValueOwned(typ, gocql.SetEncoder(gocql.StringEncoder), []string{"alpha", "beta"})
+	encoded, err := cql.EncodeValueOwned(typ, cql.SetEncoder(cql.StringEncoder), []string{"alpha", "beta"})
 	if err != nil {
 		log.Fatal(err)
 	}
-	values, err := gocql.DecodeValue(gocql.SetDecoder(gocql.TextCodec), encoded)
+	values, err := cql.DecodeValue(cql.SetDecoder(cql.TextCodec), encoded)
 	if err != nil {
 		log.Fatal(err)
 	}

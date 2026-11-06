@@ -33,7 +33,9 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/tests"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 // TestKeyspaceTable checks that fully qualified prepared statements retain the
@@ -42,7 +44,7 @@ func TestKeyspaceTable(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	cluster := createV2Cluster()
-	v2ConfigureRouting(t, &cluster, gocql.RoutingOptions{TokenAware: true})
+	v2ConfigureRouting(t, &cluster, routing.Options{TokenAware: true})
 	session, err := gocql.Connect(ctx, cluster)
 	if err != nil {
 		t.Fatal("connect:", err)
@@ -55,19 +57,19 @@ func TestKeyspaceTable(t *testing.T) {
 	if err := v2CreateTable(ctx, session, fmt.Sprintf(`CREATE TABLE %s.%s (pk int, ck int, v int, PRIMARY KEY (pk, ck))`, keyspace, table)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := v2SchemaRoutingExec(ctx, session, fmt.Sprintf(`INSERT INTO %s.%s(pk, ck, v) VALUES (?, ?, ?)`, keyspace, table), testOptions(gocql.OptionValues{Consistency: gocql.Option[gocql.Consistency]{Value: gocql.One, Set: true}}), gocql.IntValue(1), gocql.IntValue(2), gocql.IntValue(3)); err != nil {
+	if _, err := v2SchemaRoutingExec(ctx, session, fmt.Sprintf(`INSERT INTO %s.%s(pk, ck, v) VALUES (?, ?, ?)`, keyspace, table), testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}), cql.IntValue(1), cql.IntValue(2), cql.IntValue(3)); err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := gocql.Prepare(ctx, session, gocql.Statement[[]gocql.Value, gocql.DynamicRow]{CQL: fmt.Sprintf(`SELECT pk FROM %s.%s WHERE pk = ? LIMIT 1`, keyspace, table), Params: gocql.DynamicParams, Rows: gocql.DynamicRows}, gocql.PrepareOptions{})
+	prepared, err := gocql.Prepare(ctx, session, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf(`SELECT pk FROM %s.%s WHERE pk = ? LIMIT 1`, keyspace, table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	bound, err := BindOwned(prepared, []gocql.Value{gocql.IntValue(1)})
+	bound, err := BindOwned(prepared, []cql.Value{cql.IntValue(1)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer bound.Close()
-	rows, err := Run(ctx, session, bound, testOptions(gocql.OptionValues{Consistency: gocql.Option[gocql.Consistency]{Value: gocql.One, Set: true}}))
+	rows, err := Run(ctx, session, bound, testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}))
 	if err != nil {
 		t.Fatal(err)
 	}

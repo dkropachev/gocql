@@ -9,6 +9,7 @@ import (
 	"context"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	routing "github.com/scylladb/gocql/v2/routing"
 
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
@@ -19,7 +20,7 @@ import (
 	paging "github.com/scylladb/gocql/v2/internal/paging"
 	pool "github.com/scylladb/gocql/v2/internal/pool"
 	protocol "github.com/scylladb/gocql/v2/internal/protocol"
-	routing "github.com/scylladb/gocql/v2/internal/routing"
+	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
@@ -101,32 +102,32 @@ type retiredSnappyCompressor = wirecompress.SnappyCompressor
 
 type responseData = model.ResponseData
 
-func buildRoutingHostIndex(a0 []HostSnapshot) *routingHostIndex {
-	return routing.InternalBuildRoutingHostIndex(a0)
+func buildRoutingHostIndex(a0 []routing.HostSnapshot) *routingHostIndex {
+	return implRouting.InternalBuildRoutingHostIndex(a0)
 }
 
 func comparePlacementTable(a0 metadataTable, a1 metadataTable) int {
-	return routing.InternalComparePlacementTable(a0, a1)
+	return implRouting.InternalComparePlacementTable(a0, a1)
 }
 
-type metadataTable = routing.InternalMetadataTable
+type metadataTable = implRouting.InternalMetadataTable
 
 func placementPut[K any, V any](a0 *placementTree[K, V], a1 K, a2 V, a3 func(K, K) int) *placementTree[K, V] {
-	return routing.InternalPlacementPut[K, V](a0, a1, a2, a3)
+	return implRouting.InternalPlacementPut[K, V](a0, a1, a2, a3)
 }
 
-type routingDecisions = routing.InternalRoutingDecisions
+type routingDecisions = implRouting.InternalRoutingDecisions
 
-type routingPolicy = routing.InternalRoutingPolicy
+type routingPolicy = implRouting.InternalRoutingPolicy
 
-type tabletPlacement = routing.InternalTabletPlacement
+type tabletPlacement = implRouting.InternalTabletPlacement
 
-type tabletRangeTree = routing.InternalTabletRangeTree
+type tabletRangeTree = implRouting.InternalTabletRangeTree
 
 func updateTabletRange(a0 *tabletRangeTree, a1 tablets.TabletInfo) (*tabletRangeTree, bool) {
-	return routing.InternalUpdateTabletRange(a0, a1)
+	return implRouting.InternalUpdateTabletRange(a0, a1)
 }
 
-type routingHostIndex = routing.InternalRoutingHostIndex
+type routingHostIndex = implRouting.InternalRoutingHostIndex
 
-type placementTree[K, V any] = routing.InternalPlacementTree[K, V]
+type placementTree[K, V any] = implRouting.InternalPlacementTree[K, V]

@@ -38,8 +38,11 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 
+	"github.com/scylladb/gocql/v2/auth"
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/tests"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 // TestAuthentication verifies that gocql will work with a host configured to only accept authenticated connections
@@ -52,7 +55,7 @@ func TestAuthentication(t *testing.T) {
 
 	cluster := createV2Cluster()
 
-	cluster.Auth = gocql.PasswordAuth("cassandra", "cassandra")
+	cluster.Auth = auth.Password("cassandra", "cassandra")
 
 	session, err := gocql.Connect(context.Background(), cluster)
 
@@ -61,14 +64,14 @@ func TestAuthentication(t *testing.T) {
 	}
 
 	session.Close()
-	cluster.Auth = gocql.PasswordAuth("cassandra", "invalid-password")
+	cluster.Auth = auth.Password("cassandra", "invalid-password")
 	rejected, err := gocql.Connect(context.Background(), cluster)
 	if err == nil {
 		rejected.Close()
 		t.Fatal("server accepted rejected credentials")
 	}
-	var authErr gocql.RequestError
-	if !errors.As(err, &authErr) || authErr.GetCode() != gocql.ErrCodeCredentials {
+	var authErr cql.RequestError
+	if !errors.As(err, &authErr) || authErr.GetCode() != cql.ErrCodeCredentials {
 		t.Fatalf("expected authentication rejection, got %T: %v", err, err)
 	}
 }
@@ -136,7 +139,7 @@ func TestHostFilterDiscovery(t *testing.T) {
 		t.Skip("skipping because we don't have 2 or more hosts")
 	}
 	cluster := createV2Cluster()
-	rr, err := gocql.NewRoutingPolicy(gocql.RoutingOptions{})
+	rr, err := routing.NewPolicy(routing.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,12 +149,12 @@ func TestHostFilterDiscovery(t *testing.T) {
 	// we'll filter out the second host
 	filtered := clusterHosts[1]
 	cluster.ContactPoints = clusterHosts[:1]
-	cluster.HostFilter = func(host gocql.HostSnapshot) bool { return host.Address.Addr().String() != filtered }
+	cluster.HostFilter = func(host routing.HostSnapshot) bool { return host.Address.Addr().String() != filtered }
 	session := createV2SessionFromConfig(cluster, t, false)
 	defer session.Close()
 
-	plan := gocql.NewQueryPlan(rr, gocql.RoutingInfo{}, session.Metadata())
-	targets := make(map[gocql.UUID]bool)
+	plan := routing.NewPlan(rr, routing.Info{}, session.Metadata())
+	targets := make(map[cql.UUID]bool)
 	for target, ok := plan.Next(); ok; target, ok = plan.Next() {
 		targets[target.HostID()] = true
 	}
@@ -176,7 +179,7 @@ func TestHostFilterInitial(t *testing.T) {
 		t.Skip("skipping because we don't have 2 or more hosts")
 	}
 	cluster := createV2Cluster()
-	rr, err := gocql.NewRoutingPolicy(gocql.RoutingOptions{})
+	rr, err := routing.NewPolicy(routing.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,12 +188,12 @@ func TestHostFilterInitial(t *testing.T) {
 	cluster.DefaultProfile = &profile
 	// we'll filter out the second host
 	filtered := clusterHosts[1]
-	cluster.HostFilter = func(host gocql.HostSnapshot) bool { return host.Address.Addr().String() != filtered }
+	cluster.HostFilter = func(host routing.HostSnapshot) bool { return host.Address.Addr().String() != filtered }
 	session := createV2SessionFromConfig(cluster, t, false)
 	defer session.Close()
 
-	plan := gocql.NewQueryPlan(rr, gocql.RoutingInfo{}, session.Metadata())
-	targets := make(map[gocql.UUID]bool)
+	plan := routing.NewPlan(rr, routing.Info{}, session.Metadata())
+	targets := make(map[cql.UUID]bool)
 	for target, ok := plan.Next(); ok; target, ok = plan.Next() {
 		targets[target.HostID()] = true
 	}
@@ -478,7 +481,7 @@ func TestWriteFailure(t *testing.T) {
 		t.Fatalf("failed to create table with error '%v'", err)
 	}
 	if _, err := v2Exec(context.Background(), session, fmt.Sprintf(`INSERT INTO %s.%s (id, value) VALUES (1, 1)`, fixtureKeyspace("_fail"), table)); err != nil {
-		var errWrite *gocql.RequestErrWriteFailure
+		var errWrite *cql.RequestErrWriteFailure
 		if errors.As(err, &errWrite) {
 			if implCluster.SessionData(session).InternalCfg.ProtoVersion >= protoVersion5 {
 				// ErrorMap should be filled with some hosts that should've errored
@@ -517,16 +520,16 @@ func TestCustomPayloadMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	customPayload := []gocql.PayloadEntry{{Key: "a", Value: gocql.Nullable[gocql.Bytes]{Valid: true, Value: gocql.BorrowBytes([]byte{10, 20})}}, {Key: "b", Value: gocql.Nullable[gocql.Bytes]{Valid: true, Value: gocql.BorrowBytes([]byte{20, 30})}}}
-	options := testOptions(gocql.OptionValues{Consistency: gocql.Option[gocql.Consistency]{Value: gocql.One, Set: true}, CustomPayload: customPayload})
+	customPayload := []cql.PayloadEntry{{Key: "a", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes([]byte{10, 20})}}, {Key: "b", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes([]byte{20, 30})}}}
+	options := testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, CustomPayload: customPayload})
 
 	// Prepared SELECT retains the EXECUTE custom-payload path.
-	selectStatement := gocql.Statement[[]gocql.Value, gocql.DynamicRow]{CQL: fmt.Sprintf("SELECT id FROM %s where id = ?", table), Params: gocql.DynamicParams, Rows: gocql.DynamicRows}
+	selectStatement := cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id FROM %s where id = ?", table), Params: cql.DynamicParams, Rows: cql.DynamicRows}
 	prepared, err := gocql.Prepare(context.Background(), session, selectStatement, gocql.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	bound, err := BindOwned(prepared, []gocql.Value{gocql.IntValue(42)})
+	bound, err := BindOwned(prepared, []cql.Value{cql.IntValue(42)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -541,7 +544,7 @@ func TestCustomPayloadMessages(t *testing.T) {
 	}
 
 	// Unprepared INSERT retains the QUERY custom-payload path.
-	insert, err := BindUnpreparedOwned(gocql.Statement[gocql.Unit, gocql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id,value) VALUES(1, 1)", table), Params: gocql.NoParams, Rows: gocql.NoRows}, gocql.NewColumns(), gocql.Unit{})
+	insert, err := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id,value) VALUES(1, 1)", table), Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -557,7 +560,7 @@ func TestCustomPayloadMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err = gocql.ExecBatch(context.Background(), session, gocql.LoggedBatch, []gocql.BatchItem{item}, options)
+	result, err = gocql.ExecBatch(context.Background(), session, cql.LoggedBatch, []gocql.BatchItem{item}, options)
 	if err != nil {
 		t.Fatalf("query failed: %v", err)
 	}
@@ -574,23 +577,23 @@ func TestCustomPayloadValues(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	values := [][]gocql.PayloadEntry{
-		{{Key: "a", Value: gocql.Nullable[gocql.Bytes]{Valid: true, Value: gocql.BorrowBytes([]byte{10, 20})}}, {Key: "b", Value: gocql.Nullable[gocql.Bytes]{Valid: true, Value: gocql.BorrowBytes([]byte{20, 30})}}},
+	values := [][]cql.PayloadEntry{
+		{{Key: "a", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes([]byte{10, 20})}}, {Key: "b", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes([]byte{20, 30})}}},
 		nil,
-		{{Key: "a", Value: gocql.Nullable[gocql.Bytes]{Valid: true, Value: gocql.BorrowBytes([]byte{10, 20})}}, {Key: "b", Value: gocql.Nullable[gocql.Bytes]{}}},
+		{{Key: "a", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes([]byte{10, 20})}}, {Key: "b", Value: cql.Nullable[cql.Bytes]{}}},
 	}
-	statement := gocql.Statement[[]gocql.Value, gocql.DynamicRow]{CQL: fmt.Sprintf("SELECT id FROM %s where id = ?", table), Params: gocql.DynamicParams, Rows: gocql.DynamicRows}
+	statement := cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id FROM %s where id = ?", table), Params: cql.DynamicParams, Rows: cql.DynamicRows}
 	prepared, err := gocql.Prepare(context.Background(), session, statement, gocql.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	bound, err := BindOwned(prepared, []gocql.Value{gocql.IntValue(42)})
+	bound, err := BindOwned(prepared, []cql.Value{cql.IntValue(42)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer bound.Close()
 	for _, customPayload := range values {
-		page, err := RunPage(context.Background(), session, bound, gocql.StartPage(), testOptions(gocql.OptionValues{Consistency: gocql.Option[gocql.Consistency]{Value: gocql.One, Set: true}, CustomPayload: customPayload}))
+		page, err := RunPage(context.Background(), session, bound, gocql.StartPage(), testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, CustomPayload: customPayload}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -601,9 +604,9 @@ func TestCustomPayloadValues(t *testing.T) {
 	}
 }
 
-func assertV2CustomPayload(t testing.TB, want, got []gocql.PayloadEntry) {
+func assertV2CustomPayload(t testing.TB, want, got []cql.PayloadEntry) {
 	t.Helper()
-	decode := func(entries []gocql.PayloadEntry) map[string][]byte {
+	decode := func(entries []cql.PayloadEntry) map[string][]byte {
 		if entries == nil {
 			return nil
 		}
@@ -855,7 +858,7 @@ func TestNewConnectWithLowTimeout(t *testing.T) {
 }
 
 // readV2ClientOptions keeps node-local startup reports on the control connection.
-func readV2ClientOptions(ctx context.Context, session *gocql.Session, cql string) ([]map[string]string, error) {
+func readV2ClientOptions(ctx context.Context, session *gocql.Session, stmt string) ([]map[string]string, error) {
 	handle := implCluster.SessionData(session).InternalControl.InternalGetConn()
 	if handle == nil {
 		return nil, errNoControl
@@ -864,8 +867,8 @@ func readV2ClientOptions(ctx context.Context, session *gocql.Session, cql string
 	if !ok {
 		return nil, fmt.Errorf("control connection does not support typed queries")
 	}
-	statement := gocql.Statement[gocql.Unit, gocql.Mapping[gocql.Text, gocql.Text]]{CQL: cql, Params: gocql.NoParams, Rows: gocql.OneColumn(gocql.MapDecoder(gocql.TextCodec, gocql.TextCodec))}
-	rows, err := readV2SystemRows(ctx, conn, statement, gocql.NewColumns(), gocql.Unit{})
+	statement := cql.Statement[cql.Unit, cql.Mapping[cql.Text, cql.Text]]{CQL: stmt, Params: cql.NoParams, Rows: cql.OneColumn(cql.MapDecoder(cql.TextCodec, cql.TextCodec))}
+	rows, err := readV2SystemRows(ctx, conn, statement, cql.NewColumns(), cql.Unit{})
 	if err != nil {
 		return nil, err
 	}
@@ -894,7 +897,7 @@ func queryV2ControlKey(ctx context.Context, session *gocql.Session) error {
 	if !ok {
 		return fmt.Errorf("control connection does not support typed queries")
 	}
-	statement := gocql.Statement[gocql.Unit, gocql.Text]{CQL: "SELECT key FROM system.local WHERE key='local'", Params: gocql.NoParams, Rows: gocql.OneColumn(gocql.TextCodec)}
-	_, err := readV2SystemRows(ctx, conn, statement, gocql.NewColumns(), gocql.Unit{})
+	statement := cql.Statement[cql.Unit, cql.Text]{CQL: "SELECT key FROM system.local WHERE key='local'", Params: cql.NoParams, Rows: cql.OneColumn(cql.TextCodec)}
+	_, err := readV2SystemRows(ctx, conn, statement, cql.NewColumns(), cql.Unit{})
 	return err
 }

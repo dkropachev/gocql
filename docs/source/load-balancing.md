@@ -1,24 +1,24 @@
 # Routing
 
-Set `Profile.Routing` to a typed `RoutingPolicy` in `Config.DefaultProfile` or in
-the `Profile` passed with a query's options. `NewRoutingPolicy(RoutingOptions{...})` configures
+Set `Profile.Routing` to a typed `routing.Policy` in `Config.DefaultProfile` or in
+the `Profile` passed with a query's options. `routing.NewPolicy(routing.Options{...})` configures
 token awareness, datacenter/rack preference, remote fallback, replica shuffling,
 leader-aware routing and latency ordering. Missing required locality is an
-explicit validation error. `SingleTargetRouting` pins a typed host/shard target.
+explicit validation error. `routing.SingleTarget` pins a typed host/shard target.
 
-A custom RoutingPolicy implements Validate, Pick, Fallback and Observe against
-immutable MetadataSnapshot and RoutingInfo values. The split serves the happy
+A custom `routing.Policy` implements Validate, Pick, Fallback and Observe against
+immutable `metadata.Snapshot` and `routing.Info` values. The split serves the happy
 path, where the first route serves the request:
 
 - `Pick` returns the first route without building a plan or allocating, or
   false when it has no cheap answer.
-- `Fallback` returns a QueryPlan of every route the request may take, in
+- `Fallback` returns a `routing.Plan` of every route the request may take, in
   order. The driver calls it only when the picked route fails or `Pick`
   returned false, and skips the picked route if the plan returns it again.
 - `Observe` receives every attempt's outcome.
 
-`NewQueryPlan(policy, info, metadata)` combines Pick and Fallback into the plan
-a request follows. QueryPlan.Next lazily returns Route values; Pick and Next
+`routing.NewPlan(policy, info, snapshot)` combines Pick and Fallback into the plan
+a request follows. `Plan.Next` lazily returns `routing.Route` values; Pick and Next
 must not perform I/O or mutate inputs. A Route is a host and a shard,
 or `AnyShard`, resolved by the plan: a request takes a connection for exactly
 that shard of that host and does not move to another shard or host on its own;
@@ -39,5 +39,5 @@ consume borrowed spans synchronously. Unknown partitioners disable token routing
 with a diagnostic. Tablet placement and opaque version identities survive in
 immutable snapshots; retained snapshots remain valid after refresh.
 
-The optional hostpolicy subpackage adapts go-hostpool to the typed RoutingPolicy
+The optional hostpolicy subpackage adapts go-hostpool to the typed `routing.Policy`
 and attempt observation seams.

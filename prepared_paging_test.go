@@ -19,6 +19,8 @@ package gocql
 import (
 	"sync/atomic"
 	"testing"
+
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 type countingDecoder struct {
@@ -26,22 +28,22 @@ type countingDecoder struct {
 	hook  func()
 }
 
-func (d countingDecoder) Compile(c Columns) (RowPlan[Bytes], error) {
+func (d countingDecoder) Compile(c cql.Columns) (cql.RowPlan[cql.Bytes], error) {
 	d.calls.Add(1)
 	if d.hook != nil {
 		d.hook()
 	}
-	return OneColumn(BlobCodec).Compile(c)
+	return cql.OneColumn(cql.BlobCodec).Compile(c)
 }
-func (d countingDecoder) Clone(v Bytes) Bytes { return v.Clone() }
+func (d countingDecoder) Clone(v cql.Bytes) cql.Bytes { return v.Clone() }
 
-func testPreparedState(t *testing.T, s *Session, columns Columns) (*preparedState, *hostPrepared) {
+func testPreparedState(t *testing.T, s *Session, columns cql.Columns) (*preparedState, *hostPrepared) {
 	t.Helper()
 	tracker := runtimeFor(s).InternalSchemaTracker()
-	dependencies := tracker.InternalDependencies("ks", NewColumns(), columns)
+	dependencies := tracker.InternalDependencies("ks", cql.NewColumns(), columns)
 	epoch := dependencies.InternalSnapshot()
 	result := &typedResultMetadata{InternalColumns: columns, InternalEpoch: epoch, InternalTracker: tracker}
 	hp := &hostPrepared{InternalId: []byte("id"), InternalMetadataID: []byte("meta"), InternalColumns: columns, InternalResult: result, InternalEpoch: epoch, InternalRevision: 1}
-	state := &preparedState{InternalSession: s, InternalProtocol: 4, InternalStatement: "SELECT value FROM ks.tbl", InternalKeyspace: "ks", InternalParameters: NewColumns(), InternalColumns: columns, InternalResult: result, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalResultHost: UUID{15: 1}, InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl"}, InternalHosts: map[UUID]*hostPrepared{{15: 1}: hp}}
+	state := &preparedState{InternalSession: s, InternalProtocol: 4, InternalStatement: "SELECT value FROM ks.tbl", InternalKeyspace: "ks", InternalParameters: cql.NewColumns(), InternalColumns: columns, InternalResult: result, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalResultHost: cql.UUID{15: 1}, InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl"}, InternalHosts: map[cql.UUID]*hostPrepared{{15: 1}: hp}}
 	return state, hp
 }

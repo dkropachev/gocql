@@ -5,9 +5,8 @@ package integration
 import (
 	"testing"
 
-	gocql "github.com/scylladb/gocql/v2"
-
 	"github.com/scylladb/gocql/v2/internal/tests"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 func TestSchemaQueries(t *testing.T) {
@@ -15,7 +14,7 @@ func TestSchemaQueries(t *testing.T) {
 
 	cluster := createV2Cluster()
 
-	v2ConfigureRouting(t, &cluster, gocql.RoutingOptions{TokenAware: true})
+	v2ConfigureRouting(t, &cluster, routing.Options{TokenAware: true})
 
 	session := createV2SessionFromConfig(cluster, t, false)
 	defer session.Close()

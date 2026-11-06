@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
@@ -89,7 +88,7 @@ func TestValidateRejects(t *testing.T) {
 func TestValidateAcceptsBoundaryValues(t *testing.T) {
 	t.Parallel()
 
-	for _, serial := range []cql.Consistency{cqltype.Serial, cqltype.LocalSerial} {
+	for _, serial := range []cqltype.Consistency{cqltype.Serial, cqltype.LocalSerial} {
 		cfg := InternalNewClusterSettings("10.0.0.1")
 		cfg.Logger = logging.InternalNopLogger{}
 		cfg.SerialConsistency = serial

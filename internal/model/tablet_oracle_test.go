@@ -7,7 +7,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
@@ -31,8 +30,8 @@ func sameReplicaSet(a, b []Target) bool {
 }
 
 func TestAuthoritativeReplicaSetEquality(t *testing.T) {
-	a := Target{HostID: cqltype.UUID{15: 1}, ShardID: cql.Option[uint32]{Set: true}}
-	b := Target{HostID: cqltype.UUID{15: 2}, ShardID: cql.Option[uint32]{Set: true, Value: 1}}
+	a := Target{HostID: cqltype.UUID{15: 1}, ShardID: cqltype.Option[uint32]{Set: true}}
+	b := Target{HostID: cqltype.UUID{15: 2}, ShardID: cqltype.Option[uint32]{Set: true, Value: 1}}
 	otherShard := a
 	otherShard.ShardID.Value = 1
 	for _, test := range []struct {

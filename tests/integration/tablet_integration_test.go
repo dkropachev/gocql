@@ -12,11 +12,13 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 type v2TabletAttemptObserver struct {
 	mu      sync.Mutex
-	targets []gocql.Target
+	targets []routing.Target
 }
 
 func (*v2TabletAttemptObserver) ObserveRequest(gocql.RequestEvent) {}
@@ -27,10 +29,10 @@ func (o *v2TabletAttemptObserver) ObserveAttempt(event gocql.AttemptEvent) {
 		o.targets = append(o.targets, event.Target)
 	}
 }
-func (o *v2TabletAttemptObserver) snapshot() []gocql.Target {
+func (o *v2TabletAttemptObserver) snapshot() []routing.Target {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]gocql.Target(nil), o.targets...)
+	return append([]routing.Target(nil), o.targets...)
 }
 
 // Token-aware execution must converge on tablet host/shard targets without a
@@ -39,7 +41,7 @@ func TestTablets(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	cluster := createV2Cluster()
-	v2ConfigureRouting(t, &cluster, gocql.RoutingOptions{TokenAware: true})
+	v2ConfigureRouting(t, &cluster, routing.Options{TokenAware: true})
 	session := createV2SessionFromConfig(cluster, t, false)
 	defer session.Close()
 	supported, err := v2TabletsSupported(ctx, session)
@@ -54,16 +56,16 @@ func TestTablets(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := int32(0); i < 5; i++ {
-		if _, err := v2Exec(ctx, session, fmt.Sprintf(`INSERT INTO %s (pk, ck, v) VALUES (?, ?, ?)`, table), gocql.IntValue(i), gocql.IntValue(i%5), gocql.IntValue(i%2)); err != nil {
+		if _, err := v2Exec(ctx, session, fmt.Sprintf(`INSERT INTO %s (pk, ck, v) VALUES (?, ?, ?)`, table), cql.IntValue(i), cql.IntValue(i%5), cql.IntValue(i%2)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	prepared, err := gocql.Prepare(ctx, session, gocql.Statement[[]gocql.Value, gocql.DynamicRow]{CQL: fmt.Sprintf(`SELECT pk, ck, v FROM %s WHERE pk = ?`, table), Params: gocql.DynamicParams, Rows: gocql.DynamicRows}, gocql.PrepareOptions{})
+	prepared, err := gocql.Prepare(ctx, session, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf(`SELECT pk, ck, v FROM %s WHERE pk = ?`, table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i := int32(0); i < 5; i++ {
-		bound, err := BindOwned(prepared, []gocql.Value{gocql.IntValue(i)})
+		bound, err := BindOwned(prepared, []cql.Value{cql.IntValue(i)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -72,7 +74,7 @@ func TestTablets(t *testing.T) {
 		success := false
 		for attempt := 1; time.Since(startTime) < timeout; attempt++ {
 			observer := new(v2TabletAttemptObserver)
-			options := testOptions(gocql.OptionValues{Consistency: gocql.Option[gocql.Consistency]{Value: gocql.One, Set: true}, Observer: observer})
+			options := testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, Observer: observer})
 			// Warm the cache by visiting existing shard slots. With RF equal to the
 			// cluster size and token-aligned tablet shards, every ordinary V1 request
 			// can already reach an owner and legitimately receive no feedback.
@@ -81,8 +83,8 @@ func TestTablets(t *testing.T) {
 				hosts := session.Metadata().Hosts()
 				if len(hosts) > 0 && hosts[0].Shards > 1 {
 					values := options.Values()
-					values.HostID = gocql.Option[gocql.UUID]{Value: hosts[0].ID, Set: true}
-					values.ShardID = gocql.Option[uint32]{Value: uint32(attempt) % hosts[0].Shards, Set: true}
+					values.HostID = cql.Option[cql.UUID]{Value: hosts[0].ID, Set: true}
+					values.ShardID = cql.Option[uint32]{Value: uint32(attempt) % hosts[0].Shards, Set: true}
 					options = testOptions(values)
 				}
 			}
@@ -167,7 +169,7 @@ func TestTablets(t *testing.T) {
 	}
 	for _, tokenRange := range ranges {
 		for _, token := range []int64{tokenRange.End, tokenRange.Start, math.MinInt64, math.MaxInt64} {
-			var expected []gocql.Target
+			var expected []routing.Target
 			for _, candidate := range ranges {
 				if token > candidate.Start && token <= candidate.End || candidate.Start >= candidate.End && (token > candidate.Start || token <= candidate.End) {
 					expected = candidate.Replicas
@@ -181,7 +183,7 @@ func TestTablets(t *testing.T) {
 		}
 	}
 	firstRange := ranges[0]
-	expectedReplicas := append([]gocql.Target(nil), firstRange.Replicas...)
+	expectedReplicas := append([]routing.Target(nil), firstRange.Replicas...)
 	ranges[0].Replicas[0].ShardID.Value++
 	actual, err := snapshot.Replicas(prepared.Info().Keyspace, table, firstRange.End)
 	if err != nil || !slices.Equal(actual, expectedReplicas) {

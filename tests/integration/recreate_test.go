@@ -16,6 +16,7 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 
 	"github.com/google/go-cmp/cmp"
 )
@@ -121,7 +122,7 @@ func TestRecreateSchema(t *testing.T) {
 
 			// Generate a unique keyspace name to avoid collisions under parallel execution.
 			// Replace the fixed keyspace name in CQL input/golden files with the unique name.
-			ks := fixtureKeyspace("_agg_") + strings.ReplaceAll(gocql.MustRandomUUID().String(), "-", "")[:12]
+			ks := fixtureKeyspace("_agg_") + strings.ReplaceAll(cql.MustRandomUUID().String(), "-", "")[:12]
 			cleanup(t, session, ks)
 			t.Cleanup(func() { cleanup(t, session, ks) })
 
@@ -269,8 +270,8 @@ func isDescribeKeyspaceSupported(t *testing.T, s *gocql.Session) bool {
 		err = rows.Close()
 	}
 	if err != nil {
-		var server gocql.RequestError
-		if errors.As(err, &server) && server.GetCode() == gocql.ErrCodeSyntax {
+		var server cql.RequestError
+		if errors.As(err, &server) && server.GetCode() == cql.ErrCodeSyntax {
 			// DESCRIBE KEYSPACE is not supported on older versions of Cassandra and Scylla
 			// For such case schema statement is going to be recreated on the client side
 			return false
@@ -337,13 +338,13 @@ func v2SchemaRoutingTabletsAutoEnabled(t *testing.T, session *gocql.Session) boo
 // Development group-0 schema transactions can explicitly abort on a concurrent
 // topology/schema change. Retry only this server-declared aborted transaction;
 // keep all input/dump/golden assertions and propagate every other failure.
-func recreateExec(t testing.TB, s *gocql.Session, cql string) (gocql.Result, error) {
+func recreateExec(t testing.TB, s *gocql.Session, stmt string) (gocql.Result, error) {
 	t.Helper()
 	var result gocql.Result
 	var err error
 	for attempt := 1; attempt <= 4; attempt++ {
-		result, err = v2Exec(context.Background(), s, cql)
-		var server gocql.RequestError
+		result, err = v2Exec(context.Background(), s, stmt)
+		var server cql.RequestError
 		if err == nil || !errors.As(err, &server) || server.GetMessage() != "Failed to apply group 0 change due to concurrent modification" || attempt == 4 {
 			return result, err
 		}

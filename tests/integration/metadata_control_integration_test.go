@@ -4,7 +4,9 @@ package integration
 
 import (
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	"github.com/scylladb/gocql/v2/routing"
 
 	"context"
 	"fmt"
@@ -27,7 +29,7 @@ func TestMetadataControlLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	identities := map[gocql.UUID]bool{}
+	identities := map[cql.UUID]bool{}
 	for _, host := range s.Metadata().Hosts() {
 		if host.ID.IsEmpty() || identities[host.ID] {
 			t.Fatal("invalid configured contact identities", s.Metadata().Hosts())
@@ -47,13 +49,13 @@ func TestMetadataControlLive(t *testing.T) {
 	}
 	defer sub.Close()
 	before := s.Metadata() // subscribe-before-snapshot, then discard <= generation
-	conn, err := implCluster.InternalSessionSelectTypedConn(s, ctx, gocql.RoutingInfo{}, nil)
+	conn, err := implCluster.InternalSessionSelectTypedConn(s, ctx, routing.Info{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	exec := func(cql string) {
+	exec := func(stmt string) {
 		t.Helper()
-		b, err := BindUnpreparedOwned(gocql.Statement[gocql.Unit, gocql.Unit]{CQL: cql, Params: gocql.NoParams, Rows: gocql.NoRows}, gocql.NewColumns(), gocql.Unit{})
+		b, err := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -70,7 +72,7 @@ func TestMetadataControlLive(t *testing.T) {
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		b, err := BindUnpreparedOwned(gocql.Statement[gocql.Unit, gocql.Unit]{CQL: "DROP KEYSPACE IF EXISTS " + keyspace, Params: gocql.NoParams, Rows: gocql.NoRows}, gocql.NewColumns(), gocql.Unit{})
+		b, err := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: "DROP KEYSPACE IF EXISTS " + keyspace, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{})
 		if err == nil {
 			defer b.Close()
 			_, err = Exec(cleanup, s, b, testOptions(*func() *gocql.OptionValues {

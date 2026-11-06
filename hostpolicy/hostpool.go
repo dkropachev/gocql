@@ -24,40 +24,43 @@ import (
 	"github.com/hailocab/go-hostpool"
 
 	"github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 // HostPool adapts go-hostpool to the typed routing and attempt-observation API.
 // Each instance belongs to one session. Metadata generations update membership;
-// attempts report their outcome through RoutingPolicy.Observe.
-func HostPool(hp hostpool.HostPool) gocql.RoutingPolicy {
+// attempts report their outcome through routing.Policy.Observe.
+func HostPool(hp hostpool.HostPool) routing.Policy {
 	return &hostPoolHostPolicy{hp: hp}
 }
 
 type hostPoolHostPolicy struct {
 	hp          hostpool.HostPool
-	byAddress   map[string]gocql.HostSnapshot
-	routes      map[gocql.UUID]gocql.Route
-	responses   map[gocql.UUID]hostpool.HostPoolResponse
-	hosts       []gocql.HostSnapshot
+	byAddress   map[string]routing.HostSnapshot
+	routes      map[cql.UUID]routing.Route
+	responses   map[cql.UUID]hostpool.HostPoolResponse
+	hosts       []routing.HostSnapshot
 	generation  uint64
 	mu          sync.Mutex
 	initialized bool
 }
 
-func (p *hostPoolHostPolicy) Validate(_ *gocql.MetadataSnapshot) error {
+func (p *hostPoolHostPolicy) Validate(_ *metadata.Snapshot) error {
 	if p.hp == nil {
-		return &gocql.ValidationError{Field: "hostpool", Err: fmt.Errorf("nil host pool")}
+		return &cql.ValidationError{Field: "hostpool", Err: fmt.Errorf("nil host pool")}
 	}
 	return nil
 }
 
 // setHosts takes hosts and their routes, in the same order.
-func (p *hostPoolHostPolicy) setHosts(hosts []gocql.HostSnapshot, routes []gocql.Route) {
+func (p *hostPoolHostPolicy) setHosts(hosts []routing.HostSnapshot, routes []routing.Route) {
 	addresses := make([]string, 0, len(hosts))
 	p.hosts = nil
-	p.byAddress = make(map[string]gocql.HostSnapshot, len(hosts))
-	p.routes = make(map[gocql.UUID]gocql.Route, len(hosts))
-	p.responses = make(map[gocql.UUID]hostpool.HostPoolResponse, len(hosts))
+	p.byAddress = make(map[string]routing.HostSnapshot, len(hosts))
+	p.routes = make(map[cql.UUID]routing.Route, len(hosts))
+	p.responses = make(map[cql.UUID]hostpool.HostPoolResponse, len(hosts))
 	for i, h := range hosts {
 		if h.Enabled && h.Up {
 			p.routes[h.ID] = routes[i]
@@ -71,7 +74,7 @@ func (p *hostPoolHostPolicy) setHosts(hosts []gocql.HostSnapshot, routes []gocql
 }
 
 // refresh takes m's hosts when they changed. p.mu must be held.
-func (p *hostPoolHostPolicy) refresh(m *gocql.MetadataSnapshot) {
+func (p *hostPoolHostPolicy) refresh(m *metadata.Snapshot) {
 	if m != nil && (!p.initialized || p.generation != m.Generation()) {
 		p.setHosts(m.Hosts(), m.HostRoutes())
 		p.generation = m.Generation()
@@ -80,17 +83,17 @@ func (p *hostPoolHostPolicy) refresh(m *gocql.MetadataSnapshot) {
 }
 
 // Pick routes to the host go-hostpool chooses, when the request may go there.
-func (p *hostPoolHostPolicy) Pick(info gocql.RoutingInfo, m *gocql.MetadataSnapshot) (gocql.Route, bool) {
+func (p *hostPoolHostPolicy) Pick(info routing.Info, m *metadata.Snapshot) (routing.Route, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.refresh(m)
 	if len(p.hosts) == 0 {
-		return gocql.Route{}, false
+		return routing.Route{}, false
 	}
 	response := p.hp.Get()
 	h, ok := p.byAddress[response.Host()]
 	if !ok || info.HostID.Set && info.HostID.Value != h.ID {
-		return gocql.Route{}, false
+		return routing.Route{}, false
 	}
 	p.responses[h.ID] = response
 	r := p.routes[h.ID]
@@ -101,11 +104,11 @@ func (p *hostPoolHostPolicy) Pick(info gocql.RoutingInfo, m *gocql.MetadataSnaps
 }
 
 // Fallback returns go-hostpool's choices, then every other host in order.
-func (p *hostPoolHostPolicy) Fallback(info gocql.RoutingInfo, m *gocql.MetadataSnapshot) gocql.QueryPlan {
+func (p *hostPoolHostPolicy) Fallback(info routing.Info, m *metadata.Snapshot) routing.Plan {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.refresh(m)
-	return &hostPoolPlan{policy: p, hosts: p.hosts, byAddress: p.byAddress, routes: p.routes, info: info, seen: make(map[gocql.UUID]bool)}
+	return &hostPoolPlan{policy: p, hosts: p.hosts, byAddress: p.byAddress, routes: p.routes, info: info, seen: make(map[cql.UUID]bool)}
 }
 func (p *hostPoolHostPolicy) Observe(event gocql.AttemptEvent) {
 	p.mu.Lock()
@@ -117,21 +120,21 @@ func (p *hostPoolHostPolicy) Observe(event gocql.AttemptEvent) {
 
 type hostPoolPlan struct {
 	policy    *hostPoolHostPolicy
-	byAddress map[string]gocql.HostSnapshot
-	routes    map[gocql.UUID]gocql.Route
-	seen      map[gocql.UUID]bool
-	hosts     []gocql.HostSnapshot
-	info      gocql.RoutingInfo
+	byAddress map[string]routing.HostSnapshot
+	routes    map[cql.UUID]routing.Route
+	seen      map[cql.UUID]bool
+	hosts     []routing.HostSnapshot
+	info      routing.Info
 	fallback  int
 }
 
-func (p *hostPoolPlan) Next() (gocql.Route, bool) {
+func (p *hostPoolPlan) Next() (routing.Route, bool) {
 	policy := p.policy
 	policy.mu.Lock()
 	defer policy.mu.Unlock()
-	emit := func(h gocql.HostSnapshot) (gocql.Route, bool) {
+	emit := func(h routing.HostSnapshot) (routing.Route, bool) {
 		if p.seen[h.ID] || p.info.HostID.Set && p.info.HostID.Value != h.ID {
-			return gocql.Route{}, false
+			return routing.Route{}, false
 		}
 		p.seen[h.ID] = true
 		r := p.routes[h.ID]
@@ -158,5 +161,5 @@ func (p *hostPoolPlan) Next() (gocql.Route, bool) {
 			return t, true
 		}
 	}
-	return gocql.Route{}, false
+	return routing.Route{}, false
 }

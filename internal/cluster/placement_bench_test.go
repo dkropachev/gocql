@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -34,10 +33,10 @@ func BenchmarkFirstTarget(b *testing.B) {
 					routing.SnapshotData(m).InternalHosts[i] = h
 				}
 				routing.SnapshotData(m).InternalHostIndex = implRouting.InternalBuildRoutingHostIndex(routing.SnapshotData(m).InternalHosts)
-				h := testHint(b, 0, 100, cql.Option[uint64]{Value: 7, Set: true}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0))
+				h := testHint(b, 0, 100, cqltype.Option[uint64]{Value: 7, Set: true}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0))
 				root, _ := implRouting.InternalUpdateTabletRange(nil, h)
 				routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, implRouting.InternalTabletPlacement{InternalRanges: root}, implRouting.InternalComparePlacementTable)
-				info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cqltype.Quorum}
+				info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: 1, Set: true}, Consistency: cqltype.Quorum}
 				options := implRouting.RoutingOptions{TokenAware: true, Datacenter: "a", Rack: "r1", ShuffleReplicas: true, LeaderAware: kind == "leader"}
 				if kind == "lwt" {
 					info.Conditional = true
@@ -49,7 +48,7 @@ func BenchmarkFirstTarget(b *testing.B) {
 					options.Latency.Enabled = true
 				}
 				if kind == "pinned" {
-					info.HostID = cql.Option[cqltype.UUID]{Value: routing.SnapshotData(m).InternalHosts[0].ID, Set: true}
+					info.HostID = cqltype.Option[cqltype.UUID]{Value: routing.SnapshotData(m).InternalHosts[0].ID, Set: true}
 				}
 				p := codecTestMust(implRouting.NewRoutingPolicy(options))
 				if kind == "latency" {
@@ -83,7 +82,7 @@ func BenchmarkPlacementUpdate(b *testing.B) {
 					m := s.Metadata()
 					var root *implRouting.InternalTabletRangeTree
 					for i := 0; i < ranges; i++ {
-						root, _ = implRouting.InternalUpdateTabletRange(root, testHint(b, int64(i*2), int64(i*2+1), cql.Option[uint64]{Value: uint64(i), Set: true}, hTarget(1, 0)))
+						root, _ = implRouting.InternalUpdateTabletRange(root, testHint(b, int64(i*2), int64(i*2+1), cqltype.Option[uint64]{Value: uint64(i), Set: true}, hTarget(1, 0)))
 					}
 					k := implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}
 					routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, k, implRouting.InternalTabletPlacement{InternalIdentity: "identity-1", InternalRanges: root}, implRouting.InternalComparePlacementTable)
@@ -92,7 +91,7 @@ func BenchmarkPlacementUpdate(b *testing.B) {
 						routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, other, implRouting.InternalTabletPlacement{InternalRanges: root}, implRouting.InternalComparePlacementTable)
 					}
 					info := model.RoutingInfo{Keyspace: "ks", Table: "table"}
-					h := testHint(b, 0, 1, cql.Option[uint64]{Value: 0, Set: true}, hTarget(1, 0))
+					h := testHint(b, 0, 1, cqltype.Option[uint64]{Value: 0, Set: true}, hTarget(1, 0))
 					updates := make(map[InternalV2TabletFeedbackKey]InternalV2PendingTabletFeedback, 1)
 					b.ReportAllocs()
 					b.ResetTimer()
@@ -122,7 +121,7 @@ func BenchmarkFeedbackQueue(b *testing.B) {
 			stamp := InternalSessionCaptureTabletFeedback(s, info, s.Metadata())
 			hints := make([]InternalV2PendingTabletFeedback, ranges)
 			for i := range hints {
-				hints[i].InternalHint = testHint(b, int64(i*2), int64(i*2+1), cql.Option[uint64]{}, hTarget(1, 0))
+				hints[i].InternalHint = testHint(b, int64(i*2), int64(i*2+1), cqltype.Option[uint64]{}, hTarget(1, 0))
 			}
 			b.ReportAllocs()
 			b.ResetTimer()
@@ -148,10 +147,10 @@ func BenchmarkRoutingFirstRoute(b *testing.B) {
 						routing.SnapshotData(m).InternalHosts[i] = h
 					}
 					routing.SnapshotData(m).InternalHostIndex = implRouting.InternalBuildRoutingHostIndex(routing.SnapshotData(m).InternalHosts)
-					h := testHint(b, 0, 100, cql.Option[uint64]{}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0))
+					h := testHint(b, 0, 100, cqltype.Option[uint64]{}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0))
 					root, _ := implRouting.InternalUpdateTabletRange(nil, h)
 					routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, implRouting.InternalTabletPlacement{InternalRanges: root}, implRouting.InternalComparePlacementTable)
-					info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cqltype.Quorum, Kind: routing.OrdinaryStatement}
+					info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: 1, Set: true}, Consistency: cqltype.Quorum, Kind: routing.OrdinaryStatement}
 					p := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true, Datacenter: "a", Rack: rack, ShuffleReplicas: shuffle})).(*implRouting.InternalRoutingPolicy)
 					var storage routing.InternalLazyRoutingPlan
 					b.ReportAllocs()
@@ -202,7 +201,7 @@ func BenchmarkTabletLookup(b *testing.B) {
 				var root *implRouting.InternalTabletRangeTree
 				for i := 0; i < count; i++ {
 					first := math.MinInt64 + int64(uint64(i)*step)
-					root, _ = implRouting.InternalUpdateTabletRange(root, testHint(b, first, first+int64(step), cql.Option[uint64]{Value: uint64(i), Set: true}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0)))
+					root, _ = implRouting.InternalUpdateTabletRange(root, testHint(b, first, first+int64(step), cqltype.Option[uint64]{Value: uint64(i), Set: true}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0)))
 				}
 				k := implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}
 				routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, k, routing.InternalIndexTabletPlacement(implRouting.InternalTabletPlacement{InternalIdentity: "identity-1", InternalRanges: root}), implRouting.InternalComparePlacementTable)
@@ -222,7 +221,7 @@ func BenchmarkTabletLookup(b *testing.B) {
 				b.ReportAllocs()
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: tokens[i&4095], Set: true}, Consistency: cqltype.Quorum}
+					info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: tokens[i&4095], Set: true}, Consistency: cqltype.Quorum}
 					stamp := InternalSessionCaptureTabletFeedback(s, info, m)
 					tablet := routing.InternalLookupTabletCached(m, info, &cache)
 					block := tablet.VersionBlock(info)
@@ -245,7 +244,7 @@ var benchmarkBlock byte
 func BenchmarkTabletFeedbackCaptureParallel(b *testing.B) {
 	s := testSession(b)
 	m := s.Metadata()
-	info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cqltype.Quorum}
+	info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: 1, Set: true}, Consistency: cqltype.Quorum}
 	b.ReportAllocs()
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -260,7 +259,7 @@ func BenchmarkTabletFeedbackCaptureParallel(b *testing.B) {
 // BenchmarkTabletHintParse parses a tablets-routing-v2 custom payload of a
 // tablet with three replicas, as each response carrying a hint does.
 func BenchmarkTabletHintParse(b *testing.B) {
-	h := testHint(b, -100, 100, cql.Option[uint64]{Value: 7, Set: true}, hTarget(1, 0), hTarget(2, 1), hTarget(3, 2))
+	h := testHint(b, -100, 100, cqltype.Option[uint64]{Value: 7, Set: true}, hTarget(1, 0), hTarget(2, 1), hTarget(3, 2))
 	raw := testPayload(h)
 	value := cqltype.BorrowBytes(raw)
 	b.ReportAllocs()

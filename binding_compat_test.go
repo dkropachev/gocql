@@ -8,12 +8,13 @@ package gocql
 import (
 	"context"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 )
 
 type Bound[R any] = implExecution.Bound[R]
 
-func BindUnpreparedBorrowed[P any, R any](a0 Statement[P, R], a1 Columns, a2 P) (*Bound[R], error) {
+func BindUnpreparedBorrowed[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a2 P) (*Bound[R], error) {
 	return implExecution.BindUnpreparedBorrowed[P, R](a0, a1, a2)
 }
 

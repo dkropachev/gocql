@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 // This verifies the helpers' ownership and cardinality contract against a real
@@ -32,11 +33,11 @@ func TestV2IntegrationHelpers(t *testing.T) {
 	}()
 	payload := []byte("owned helper result")
 	for id := int32(1); id <= 2; id++ {
-		if _, err := v2Exec(ctx, session, "INSERT INTO "+table+" (bucket, id, payload) VALUES (?, ?, ?)", gocql.IntValue(1), gocql.IntValue(id), gocql.BlobValue(payload)); err != nil {
+		if _, err := v2Exec(ctx, session, "INSERT INTO "+table+" (bucket, id, payload) VALUES (?, ?, ?)", cql.IntValue(1), cql.IntValue(id), cql.BlobValue(payload)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	row, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ? AND id = ?", gocql.IntValue(1), gocql.IntValue(1))
+	row, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ? AND id = ?", cql.IntValue(1), cql.IntValue(1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,13 +52,13 @@ func TestV2IntegrationHelpers(t *testing.T) {
 	if !bytes.Equal(got.OwnedBytes(), payload) {
 		t.Fatal("single-row helper did not retain an owned payload")
 	}
-	if _, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ?", gocql.IntValue(2)); !errors.Is(err, gocql.ErrNoRows) {
+	if _, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ?", cql.IntValue(2)); !errors.Is(err, gocql.ErrNoRows) {
 		t.Fatalf("empty result: got %v, want ErrNoRows", err)
 	}
-	if _, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ?", gocql.IntValue(1)); !errors.Is(err, gocql.ErrMultipleRows) {
+	if _, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ?", cql.IntValue(1)); !errors.Is(err, gocql.ErrMultipleRows) {
 		t.Fatalf("multiple result pages: got %v, want ErrMultipleRows", err)
 	}
-	rows, err := v2Query(ctx, session, "SELECT id FROM "+table+" WHERE bucket = ?", gocql.IntValue(1))
+	rows, err := v2Query(ctx, session, "SELECT id FROM "+table+" WHERE bucket = ?", cql.IntValue(1))
 	if err != nil {
 		t.Fatal(err)
 	}

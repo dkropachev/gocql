@@ -29,6 +29,7 @@ import (
 	"fmt"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 
 	"log"
 )
@@ -40,18 +41,18 @@ func Example_paging() {
 		log.Fatal(err)
 	}
 	defer s.Close()
-	options, err := gocql.NewOptions(s, gocql.OptionValues{PageSize: gocql.Option[int32]{Set: true, Value: 2}})
+	options, err := gocql.NewOptions(s, gocql.OptionValues{PageSize: cql.Option[int32]{Set: true, Value: 2}})
 	if err != nil {
 		log.Fatal(err)
 	}
-	b, err := gocql.NewUnpreparedQuery(s, gocql.Statement[gocql.Unit, int32]{CQL: "SELECT id FROM example.itoa", Params: gocql.NoParams, Rows: gocql.OneColumn(gocql.Int32)}, gocql.NewColumns(), options)
+	b, err := gocql.NewUnpreparedQuery(s, cql.Statement[cql.Unit, int32]{CQL: "SELECT id FROM example.itoa", Params: cql.NoParams, Rows: cql.OneColumn(cql.Int32)}, cql.NewColumns(), options)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer func() { b.Close(); _ = b.Wait(ctx) }()
 	var state gocql.PageState
 	for {
-		page, err := b.RunPage(ctx, gocql.Unit{}, state)
+		page, err := b.RunPage(ctx, cql.Unit{}, state)
 		if err != nil {
 			log.Fatal(err)
 		}

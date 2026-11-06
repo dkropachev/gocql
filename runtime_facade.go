@@ -6,6 +6,7 @@ package gocql
 import (
 	"context"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 )
@@ -29,13 +30,13 @@ type Event = implCluster.Event
 type EventFilter = implCluster.EventFilter
 type EventKind = implCluster.EventKind
 
-func ExecBatch(a0 context.Context, a1 *Session, a2 BatchKind, a3 []BatchItem, a4 Options) (Result, error) {
+func ExecBatch(a0 context.Context, a1 *Session, a2 cql.BatchKind, a3 []BatchItem, a4 Options) (Result, error) {
 	return implExecution.ExecOwnedBatch(a0, a1, a2, a3, a4)
 }
 
 type ExecutionError = implExecution.ExecutionError
 
-func OpenSingleHost(a0 context.Context, a1 Config, a2 UUID) (*Session, error) {
+func OpenSingleHost(a0 context.Context, a1 Config, a2 cql.UUID) (*Session, error) {
 	return implExecution.OpenSingleHost(a0, a1, a2)
 }
 
@@ -58,7 +59,7 @@ const OverflowEvent = implCluster.OverflowEvent
 type Page[R any] = implExecution.Page[R]
 type PageLease = implExecution.PageLease
 
-func Prepare[P any, R any](a0 context.Context, a1 *Session, a2 Statement[P, R], a3 PrepareOptions) (*Prepared[P, R], error) {
+func Prepare[P any, R any](a0 context.Context, a1 *Session, a2 cql.Statement[P, R], a3 PrepareOptions) (*Prepared[P, R], error) {
 	return implExecution.Prepare[P, R](a0, a1, a2, a3)
 }
 
@@ -69,7 +70,7 @@ type PreparedInfo = implExecution.PreparedInfo
 type RowStream[R any] = implExecution.RowStream[R]
 type Rows[R any] = implExecution.Rows[R]
 
-func RunBatch[R any](a0 context.Context, a1 *Session, a2 BatchKind, a3 []BatchItem, a4 RowDecoder[R], a5 Options) (*Page[R], error) {
+func RunBatch[R any](a0 context.Context, a1 *Session, a2 cql.BatchKind, a3 []BatchItem, a4 cql.RowDecoder[R], a5 Options) (*Page[R], error) {
 	return implExecution.RunOwnedBatch[R](a0, a1, a2, a3, a4, a5)
 }
 

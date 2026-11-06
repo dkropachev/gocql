@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/auth"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 type record struct {
@@ -74,7 +76,7 @@ func run() (resultErr error) {
 		*password = os.Getenv("GOCQL_PASSWORD")
 	}
 	if *username != "" {
-		cfg.Auth = gocql.PasswordAuth(*username, *password)
+		cfg.Auth = auth.Password(*username, *password)
 	}
 	if *ca != "" {
 		pem, err := os.ReadFile(*ca)
@@ -127,7 +129,7 @@ func run() (resultErr error) {
 	if prefix == "" {
 		prefix = "gocql"
 	}
-	id, err := gocql.RandomUUID()
+	id, err := cql.RandomUUID()
 	if err != nil {
 		return err
 	}
@@ -135,16 +137,16 @@ func run() (resultErr error) {
 	if !regexp.MustCompile(`^[a-z][a-z0-9_]{0,47}$`).MatchString(namespace) {
 		return fmt.Errorf("invalid owned namespace %q", namespace)
 	}
-	execContext := func(operation context.Context, cql string) error {
-		b, err := gocql.NewUnpreparedQuery(s, gocql.Statement[gocql.Unit, gocql.Unit]{CQL: cql, Params: gocql.NoParams, Rows: gocql.NoRows}, gocql.NewColumns(), gocql.Options{})
+	execContext := func(operation context.Context, text string) error {
+		b, err := gocql.NewUnpreparedQuery(s, cql.Statement[cql.Unit, cql.Unit]{CQL: text, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), gocql.Options{})
 		if err != nil {
 			return err
 		}
 		defer b.Close()
-		err = b.Exec(operation, gocql.Unit{})
+		err = b.Exec(operation, cql.Unit{})
 		return err
 	}
-	exec := func(cql string) error { return execContext(ctx, cql) }
+	exec := func(text string) error { return execContext(ctx, text) }
 	owned := true
 	defer func() {
 		if owned {
@@ -158,7 +160,7 @@ func run() (resultErr error) {
 		}
 	}()
 	if err := exec("CREATE KEYSPACE " + namespace + " WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':1}"); err != nil {
-		var exists *gocql.RequestErrAlreadyExists
+		var exists *cql.RequestErrAlreadyExists
 		if errors.As(err, &exists) {
 			owned = false
 		}
@@ -179,11 +181,11 @@ func run() (resultErr error) {
 	if err := exec("CREATE TABLE " + table + " (id int PRIMARY KEY,payload blob,pieces list<blob>)"); err != nil {
 		return err
 	}
-	insert, err := gocql.Prepare(ctx, s, gocql.Statement[record, gocql.Unit]{CQL: "INSERT INTO " + table + " (id,payload,pieces) VALUES (?,?,?)", Params: gocql.Params(
-		gocql.Param("id", gocql.Int32, func(v record) int32 { return v.ID }),
-		gocql.Param("payload", gocql.BytesEncoder, func(v record) []byte { return v.Payload }),
-		gocql.Param("pieces", gocql.ListEncoder(gocql.BytesEncoder), func(v record) [][]byte { return v.Pieces }),
-	), Rows: gocql.NoRows}, gocql.PrepareOptions{})
+	insert, err := gocql.Prepare(ctx, s, cql.Statement[record, cql.Unit]{CQL: "INSERT INTO " + table + " (id,payload,pieces) VALUES (?,?,?)", Params: cql.Params(
+		cql.Param("id", cql.Int32, func(v record) int32 { return v.ID }),
+		cql.Param("payload", cql.BytesEncoder, func(v record) []byte { return v.Payload }),
+		cql.Param("pieces", cql.ListEncoder(cql.BytesEncoder), func(v record) [][]byte { return v.Pieces }),
+	), Rows: cql.NoRows}, gocql.PrepareOptions{})
 	if err != nil {
 		return err
 	}
@@ -201,20 +203,20 @@ func run() (resultErr error) {
 			return err
 		}
 	}
-	prepared, err := gocql.Prepare(ctx, s, gocql.Statement[gocql.Unit, gocql.DynamicRow]{CQL: "SELECT id,payload,pieces FROM " + table, Params: gocql.NoParams, Rows: gocql.DynamicRows}, gocql.PrepareOptions{})
+	prepared, err := gocql.Prepare(ctx, s, cql.Statement[cql.Unit, cql.DynamicRow]{CQL: "SELECT id,payload,pieces FROM " + table, Params: cql.NoParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
 	if err != nil {
 		return err
 	}
-	decoder := gocql.StreamRow(func(r *record) { r.ApplicationState = "" },
-		gocql.StreamColumn("id", gocql.StreamInt32, func(r *record) *int32 { return &r.ID }),
-		gocql.StreamColumn("payload", gocql.StreamBlob, func(r *record) *[]byte { return &r.Payload }),
-		gocql.StreamColumn("pieces", gocql.StreamList(gocql.StreamBlob), func(r *record) *[][]byte { return &r.Pieces }),
+	decoder := cql.StreamRow(func(r *record) { r.ApplicationState = "" },
+		cql.StreamColumn("id", cql.StreamInt32, func(r *record) *int32 { return &r.ID }),
+		cql.StreamColumn("payload", cql.StreamBlob, func(r *record) *[]byte { return &r.Payload }),
+		cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(r *record) *[][]byte { return &r.Pieces }),
 	)
 	hostsSnapshot := s.Metadata().Hosts()
 	if len(hostsSnapshot) == 0 {
 		return fmt.Errorf("missing discovered hosts")
 	}
-	pinned, err := gocql.NewOptions(s, gocql.OptionValues{PageSize: gocql.Option[int32]{Set: true, Value: 2}, HostID: gocql.Option[gocql.UUID]{Set: true, Value: hostsSnapshot[0].ID}})
+	pinned, err := gocql.NewOptions(s, gocql.OptionValues{PageSize: cql.Option[int32]{Set: true, Value: 2}, HostID: cql.Option[cql.UUID]{Set: true, Value: hostsSnapshot[0].ID}})
 	if err != nil {
 		return err
 	}
@@ -224,9 +226,9 @@ func run() (resultErr error) {
 		return err
 	}
 	defer query.Close()
-	stream, err := query.Run(ctx, gocql.Unit{})
+	stream, err := query.Run(ctx, cql.Unit{})
 	if *incremental && cfg.Protocol < 5 && cfg.Compression != gocql.NoCompression {
-		var unsupported *gocql.StreamCapabilityError
+		var unsupported *cql.StreamCapabilityError
 		if !errors.As(err, &unsupported) {
 			return fmt.Errorf("expected frame compression capability error, got %v", err)
 		}
@@ -239,7 +241,7 @@ func run() (resultErr error) {
 	defer stream.Close()
 	// One worker owns one query; overlapping use is rejected immediately.
 	blockedCtx, blockedCancel := context.WithTimeout(ctx, 20*time.Millisecond)
-	_, blockedErr := query.Run(blockedCtx, gocql.Unit{})
+	_, blockedErr := query.Run(blockedCtx, cql.Unit{})
 	blockedCancel()
 	if !errors.Is(blockedErr, gocql.ErrBusy) {
 		return fmt.Errorf("query admission: %v", blockedErr)

@@ -107,7 +107,7 @@ type toString interface {
 	String() string
 }
 
-// uuidProvider is satisfied by types that can provide raw UUID bytes (e.g., gocql.UUID).
+// uuidProvider is satisfied by types that can provide raw UUID bytes (e.g., cql.UUID).
 type uuidProvider interface {
 	Bytes() []byte
 }

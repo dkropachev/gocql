@@ -9,6 +9,7 @@ import (
 	"time"
 
 	g "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 // The v2 query-execution cases. cases.tsv matches each to a master case of
@@ -16,9 +17,9 @@ import (
 
 type lwtArgs struct{ V, K, Cur int32 }
 
-var lwtParams = g.Params(g.ParamAt(0, g.Int32, func(a lwtArgs) int32 { return a.V }), g.ParamAt(1, g.Int32, func(a lwtArgs) int32 { return a.K }), g.ParamAt(2, g.Int32, func(a lwtArgs) int32 { return a.Cur }))
-var lwtValue = g.RowInto(func(*int32) {}, g.Column("v", g.Int32, func(v *int32) *int32 { return v }))
-var lwtRows = g.CASRows(lwtValue)
+var lwtParams = cql.Params(cql.ParamAt(0, cql.Int32, func(a lwtArgs) int32 { return a.V }), cql.ParamAt(1, cql.Int32, func(a lwtArgs) int32 { return a.K }), cql.ParamAt(2, cql.Int32, func(a lwtArgs) int32 { return a.Cur }))
+var lwtValue = cql.RowInto(func(*int32) {}, cql.Column("v", cql.Int32, func(v *int32) *int32 { return v }))
+var lwtRows = cql.CASRows(lwtValue)
 
 // v2Case is the per-worker state of a case: an owned output row and a row
 // validator whose method value is bound once.
@@ -49,19 +50,19 @@ func settle[P, R any](ctx context.Context, q *g.Query[P, R], err error) error {
 	return nil
 }
 
-func (a *v2Adapter) lwtPrepared() (*g.Prepared[lwtArgs, g.CASResult[int32]], *g.Prepared[int32, int32], error) {
+func (a *v2Adapter) lwtPrepared() (*g.Prepared[lwtArgs, cql.CASResult[int32]], *g.Prepared[int32, int32], error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	ctx := context.Background()
 	if a.lwt == nil {
-		p, err := g.Prepare(ctx, a.s, g.Statement[lwtArgs, g.CASResult[int32]]{Kind: g.ConditionalStatement, CQL: lwtUpdate, Params: lwtParams, Rows: lwtRows}, g.PrepareOptions{})
+		p, err := g.Prepare(ctx, a.s, cql.Statement[lwtArgs, cql.CASResult[int32]]{Kind: cql.ConditionalStatement, CQL: lwtUpdate, Params: lwtParams, Rows: lwtRows}, g.PrepareOptions{})
 		if err != nil {
 			return nil, nil, err
 		}
 		a.lwt = p
 	}
 	if a.lwtRead == nil {
-		p, err := g.Prepare(ctx, a.s, g.Statement[int32, int32]{Kind: g.OrdinaryStatement, CQL: lwtRead, Params: keyParams, Rows: lwtValue}, g.PrepareOptions{})
+		p, err := g.Prepare(ctx, a.s, cql.Statement[int32, int32]{Kind: cql.OrdinaryStatement, CQL: lwtRead, Params: keyParams, Rows: lwtValue}, g.PrepareOptions{})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -87,25 +88,25 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 	}
 	c := &v2Case{a: a, out: row{P: make([]byte, 0, size)}}
 	c.row = c.check.row
-	intType, err := g.ScalarType(g.TypeInt)
+	intType, err := cql.ScalarType(cql.TypeInt)
 	if err != nil {
 		return nil, err
 	}
-	blobType, err := g.ScalarType(g.TypeBlob)
+	blobType, err := cql.ScalarType(cql.TypeBlob)
 	if err != nil {
 		return nil, err
 	}
-	keyColumns := g.NewColumns(g.ColumnSpec{Name: "k", Type: intType})
-	rowColumns := g.NewColumns(g.ColumnSpec{Name: "k", Type: intType}, g.ColumnSpec{Name: "r", Type: intType}, g.ColumnSpec{Name: "p", Type: blobType})
+	keyColumns := cql.NewColumns(cql.ColumnSpec{Name: "k", Type: intType})
+	rowColumns := cql.NewColumns(cql.ColumnSpec{Name: "k", Type: intType}, cql.ColumnSpec{Name: "r", Type: intType}, cql.ColumnSpec{Name: "p", Type: blobType})
 
 	switch name {
 	case "A1", "B5", "B7", "A3", "B1":
 		opts := g.Options{}
 		switch name {
 		case "B5":
-			opts, err = a.options(g.OptionValues{Prefetch: g.Option[int]{Set: true, Value: 1}})
+			opts, err = a.options(g.OptionValues{Prefetch: cql.Option[int]{Set: true, Value: 1}})
 		case "B7":
-			opts, err = a.options(g.OptionValues{PageSize: g.Option[int32]{Set: true, Value: 5000}})
+			opts, err = a.options(g.OptionValues{PageSize: cql.Option[int32]{Set: true, Value: 5000}})
 		}
 		if err != nil {
 			return nil, err
@@ -196,7 +197,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return c.check.done(want, settle(ctx, q, errors.Join(err, page.Err(), page.Close())))
 		}, nil
 	case "A7":
-		statement := g.Statement[int32, row]{Kind: g.OrdinaryStatement, CQL: pointRead, Params: keyParams, Rows: bufferedDecoder}
+		statement := cql.Statement[int32, row]{Kind: cql.OrdinaryStatement, CQL: pointRead, Params: keyParams, Rows: bufferedDecoder}
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
 			c.check.reset(false, k, 0)
@@ -247,7 +248,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 	case "D3":
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
-			opts, err := a.options(g.OptionValues{IncludeMetadata: true, Idempotent: true, Timestamp: g.Option[int64]{Set: true, Value: time.Now().UnixMicro()}})
+			opts, err := a.options(g.OptionValues{IncludeMetadata: true, Idempotent: true, Timestamp: cql.Option[int64]{Set: true, Value: time.Now().UnixMicro()}})
 			if err != nil {
 				return err
 			}
@@ -255,7 +256,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return err
 		}, nil
 	case "D4":
-		statement := g.Statement[row, g.Unit]{Kind: g.OrdinaryStatement, CQL: pointWrite, Params: rowParams, Rows: g.NoRows}
+		statement := cql.Statement[row, cql.Unit]{Kind: cql.OrdinaryStatement, CQL: pointWrite, Params: rowParams, Rows: cql.NoRows}
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
 			q, err := g.NewUnpreparedQuery(a.s, statement, rowColumns, a.metadata)
@@ -273,7 +274,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		items := make([]g.BatchItem, 0, 8)
 		return func(ctx context.Context, seq uint64) error {
 			items = items[:0]
-			kind := g.UnloggedBatch
+			kind := cql.UnloggedBatch
 			if name == "E1" {
 				k, base := partKey(seq), int32(seq%16)*8
 				for r := base; r < base+8; r++ {
@@ -284,7 +285,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 					items = append(items, item)
 				}
 			} else {
-				kind = g.LoggedBatch
+				kind = cql.LoggedBatch
 				for i := uint64(0); i < 4; i++ {
 					k := pointKey(seq*4 + i)
 					item, err := q.BatchEntry(row{K: k, P: payload(false, k, 0)})
@@ -360,14 +361,14 @@ func (c *v2Case) preparedOne(p *g.Prepared[int32, row]) op {
 	}
 }
 
-func execOp(q *g.Query[row, g.Unit]) op {
+func execOp(q *g.Query[row, cql.Unit]) op {
 	return func(ctx context.Context, seq uint64) error {
 		k := pointKey(seq)
 		return settle(ctx, q, q.Exec(ctx, row{K: k, P: payload(false, k, 0)}))
 	}
 }
 
-func preparedExec(p *g.Prepared[row, g.Unit], opts g.Options) op {
+func preparedExec(p *g.Prepared[row, cql.Unit], opts g.Options) op {
 	return func(ctx context.Context, seq uint64) error {
 		k := pointKey(seq)
 		_, err := p.Exec(ctx, row{K: k, P: payload(false, k, 0)}, opts)
@@ -397,7 +398,7 @@ func (c *v2Case) lwt(id, n int) (op, error) {
 			return nil, fmt.Errorf("lwt key %d missing; run -mode prepare -scenario lwt", keys[j])
 		}
 	}
-	opts, err := c.a.options(g.OptionValues{SerialConsistency: g.Option[g.Option[g.Consistency]]{Set: true, Value: g.Option[g.Consistency]{Set: true, Value: g.LocalSerial}}})
+	opts, err := c.a.options(g.OptionValues{SerialConsistency: cql.Option[cql.Option[cql.Consistency]]{Set: true, Value: cql.Option[cql.Consistency]{Set: true, Value: cql.LocalSerial}}})
 	if err != nil {
 		return nil, err
 	}
@@ -405,7 +406,7 @@ func (c *v2Case) lwt(id, n int) (op, error) {
 	if err != nil {
 		return nil, err
 	}
-	var result g.CASResult[int32]
+	var result cql.CASResult[int32]
 	next := 0
 	return func(ctx context.Context, _ uint64) error {
 		j := next % lwtKeysPerWorker

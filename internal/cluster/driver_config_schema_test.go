@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -362,9 +361,9 @@ func TestDriverConfigReportUnrepresentableConsistency(t *testing.T) {
 
 	for _, tt := range []struct {
 		name string
-		cons cql.Consistency
+		cons cqltype.Consistency
 	}{
-		{"unrecognized default consistency", cql.Consistency(0x42)},
+		{"unrecognized default consistency", cqltype.Consistency(0x42)},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			report := buildCaseReport(t, func(c *InternalClusterSettings) { c.Consistency = tt.cons }, nil, false)

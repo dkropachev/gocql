@@ -1,14 +1,13 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package gocql
+package cql
 
 import (
 	"math/big"
 	"net/netip"
 	"time"
 
-	"github.com/scylladb/gocql/v2/cql"
 	codec "github.com/scylladb/gocql/v2/internal/codec"
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	model "github.com/scylladb/gocql/v2/internal/model"
@@ -18,9 +17,6 @@ var ASCIICodec = codec.ASCIICodec
 var ASCIIEncoder = codec.ASCIIEncoder
 
 func ASCIIValue(a0 string) (Value, error) { return codec.ASCIIValue(a0) }
-
-const All = cqltype.All
-const Any = cqltype.Any
 
 type BatchKind = cqltype.BatchKind
 
@@ -65,11 +61,9 @@ func ColumnAt[R any, V any](a0 int, a1 Decoder[V], a2 func(*R) *V) OutputField[R
 type ColumnInfo = cqltype.ColumnInfo
 type ColumnSpec = cqltype.ColumnSpec
 type Columns = cqltype.Columns
-type Compression = cqltype.Compression
 
 const ConditionalStatement = cqltype.ConditionalStatement
 
-type Consistency = cql.Consistency
 type Counter = codec.Counter
 
 var CounterCodec = codec.CounterCodec
@@ -110,7 +104,6 @@ type DynamicRow = codec.DynamicRow
 
 var DynamicRows = codec.DynamicRows
 
-const EachQuorum = cqltype.EachQuorum
 const Empty = cqltype.Empty
 
 func EmptyCodec[T any](a0 Codec[T]) Codec[EmptyValueOf[T]] { return codec.EmptyCodec[T](a0) }
@@ -149,16 +142,10 @@ var Int8 = codec.Int8
 
 func IntValue(a0 int32) Value { return codec.IntValue(a0) }
 
-const LZ4Compression = cqltype.LZ4Compression
-
 func ListDecoder[T any](a0 Decoder[T]) Decoder[Sequence[T]] { return codec.ListDecoder[T](a0) }
 func ListEncoder[T any](a0 Encoder[T]) Encoder[[]T]         { return codec.ListEncoder[T](a0) }
 func ListType(a0 DataType) (DataType, error)                { return cqltype.ListType(a0) }
 func ListValue(a0 DataType, a1 []Value) (Value, error)      { return codec.ListValue(a0, a1) }
-
-const LocalOne = cqltype.LocalOne
-const LocalQuorum = cqltype.LocalQuorum
-const LocalSerial = cqltype.LocalSerial
 
 func MapDecoder[K any, V any](a0 Decoder[K], a1 Decoder[V]) Decoder[Mapping[K, V]] {
 	return codec.MapDecoder[K, V](a0, a1)
@@ -197,8 +184,6 @@ func NewEncodedValue(a0 DataType, a1 CellState, a2 Bytes) (EncodedValue, error) 
 
 func NewTimeUUID() UUID { return cqltype.NewTimeUUID() }
 
-const NoCompression = cqltype.NoCompression
-
 var NoParams = codec.NoParams
 var NoRows = codec.NoRows
 
@@ -212,12 +197,8 @@ func NullableCodec[T any](a0 Codec[T]) Codec[Nullable[T]]       { return codec.N
 func NullableDecoder[T any](a0 Decoder[T]) Decoder[Nullable[T]] { return codec.NullableDecoder[T](a0) }
 func NullableEncoder[T any](a0 Encoder[T]) Encoder[Nullable[T]] { return codec.NullableEncoder[T](a0) }
 
-const One = cqltype.One
-
 func OneColumn[T any](a0 Decoder[T]) RowDecoder[T]  { return codec.OneColumn[T](a0) }
 func OneParam[T any](a0 Encoder[T]) ParamEncoder[T] { return codec.OneParam[T](a0) }
-
-type Option[T any] = cql.Option[T]
 
 const OrdinaryStatement = cqltype.OrdinaryStatement
 
@@ -251,8 +232,6 @@ const Present = cqltype.Present
 
 type ProtocolError = cqltype.ProtocolError
 
-const Quorum = cqltype.Quorum
-
 func RandomUUID() (UUID, error)                                 { return cqltype.RandomUUID() }
 func ReadColumn[T any](a0 *RowReader, a1 Decoder[T]) (T, error) { return codec.ReadColumn[T](a0, a1) }
 func ReadStreamColumn[T any](a0 *StreamRowReader, a1 StreamValuePlan[T], a2 *T) error {
@@ -269,15 +248,11 @@ func ScalarType(a0 Type) (DataType, error) { return cqltype.ScalarType(a0) }
 
 type Sequence[T any] = codec.Sequence[T]
 
-const Serial = cqltype.Serial
-
 func SetDecoder[T any](a0 Decoder[T]) Decoder[Sequence[T]] { return codec.SetDecoder[T](a0) }
 func SetEncoder[T any](a0 Encoder[T]) Encoder[[]T]         { return codec.SetEncoder[T](a0) }
 func SetType(a0 DataType) (DataType, error)                { return cqltype.SetType(a0) }
 func SetValue(a0 DataType, a1 []Value) (Value, error)      { return codec.SetValue(a0, a1) }
 func SmallIntValue(a0 int16) Value                         { return codec.SmallIntValue(a0) }
-
-const SnappyCompression = cqltype.SnappyCompression
 
 type StatementKind = cqltype.StatementKind
 
@@ -374,8 +349,6 @@ var TextCodec = codec.TextCodec
 
 func TextValue(a0 string) (Value, error) { return codec.TextValue(a0) }
 
-const Three = cqltype.Three
-
 var TimeCodec = codec.TimeCodec
 
 type TimeOfDay = codec.TimeOfDay
@@ -401,8 +374,6 @@ func TupleType(a0 ...DataType) (DataType, error)        { return cqltype.TupleTy
 type TupleTypeInfo = cqltype.TupleTypeInfo
 
 func TupleValue(a0 DataType, a1 []Value) (Value, error) { return codec.TupleValue(a0, a1) }
-
-const Two = cqltype.Two
 
 type Type = cqltype.Type
 

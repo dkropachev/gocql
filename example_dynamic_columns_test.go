@@ -29,6 +29,7 @@ import (
 	"fmt"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 
 	"log"
 )
@@ -40,12 +41,12 @@ func Example_dynamicColumns() {
 		log.Fatal(err)
 	}
 	defer s.Close()
-	b, err := gocql.NewUnpreparedQuery(s, gocql.Statement[gocql.Unit, gocql.DynamicRow]{CQL: "SELECT * FROM example.table1", Params: gocql.NoParams, Rows: gocql.DynamicRows}, gocql.NewColumns(), gocql.Options{})
+	b, err := gocql.NewUnpreparedQuery(s, cql.Statement[cql.Unit, cql.DynamicRow]{CQL: "SELECT * FROM example.table1", Params: cql.NoParams, Rows: cql.DynamicRows}, cql.NewColumns(), gocql.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer func() { b.Close(); _ = b.Wait(ctx) }()
-	rows, err := b.Run(ctx, gocql.Unit{})
+	rows, err := b.Run(ctx, cql.Unit{})
 	if err != nil {
 		log.Fatal(err)
 	}

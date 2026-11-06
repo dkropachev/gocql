@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/endpoint"
 )
 
 type mockDNSResolver struct {
@@ -142,7 +143,7 @@ func TestDNS(t *testing.T) {
 			clusterHosts = append(clusterHosts, fromAddress.String())
 		}
 
-		c.AddressTranslator = gocql.AddressTranslatorFunc(func(addr net.IP, port int) (net.IP, int) {
+		c.AddressTranslator = endpoint.TranslatorFunc(func(addr net.IP, port int) (net.IP, int) {
 			for id, host := range fromAddresses {
 				if host.Equal(addr) {
 					return toAddresses[id], port

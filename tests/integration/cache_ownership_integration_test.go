@@ -16,6 +16,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/wire"
@@ -39,9 +40,9 @@ func TestNativeCacheOwnership(t *testing.T) {
 	defer s.Close()
 	ks := testKeyspaceName(t, fmt.Sprintf("%x", time.Now().UnixNano()))
 	created := false
-	exec := func(cql string) {
+	exec := func(stmt string) {
 		t.Helper()
-		b := codecTestMust(BindUnpreparedOwned(gocql.Statement[gocql.Unit, gocql.Unit]{CQL: cql, Kind: gocql.OrdinaryStatement, Params: gocql.NoParams, Rows: gocql.NoRows}, gocql.NewColumns(), gocql.Unit{}))
+		b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{}))
 		defer b.Close()
 		if _, e := Exec(ctx, s, b, gocql.Options{}); e != nil {
 			t.Fatal(e)
@@ -61,7 +62,7 @@ func TestNativeCacheOwnership(t *testing.T) {
 			return
 		}
 		defer cleanupSession.Close()
-		b, e := BindUnpreparedOwned(gocql.Statement[gocql.Unit, gocql.Unit]{CQL: "DROP KEYSPACE " + ks, Kind: gocql.OrdinaryStatement, Params: gocql.NoParams, Rows: gocql.NoRows}, gocql.NewColumns(), gocql.Unit{})
+		b, e := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: "DROP KEYSPACE " + ks, Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{})
 		if e == nil {
 			defer b.Close()
 			_, e = Exec(cleanup, cleanupSession, b, gocql.Options{})
@@ -71,7 +72,7 @@ func TestNativeCacheOwnership(t *testing.T) {
 		}
 	}()
 	exec("CREATE TABLE " + ks + ".records(id int PRIMARY KEY,value blob)")
-	insert := codecTestMust(gocql.Prepare(ctx, s, gocql.Statement[[]byte, gocql.Unit]{CQL: "INSERT INTO " + ks + ".records(id,value)VALUES(1,?)", Kind: gocql.OrdinaryStatement, Params: gocql.OneParam(gocql.BytesEncoder), Rows: gocql.NoRows}, gocql.PrepareOptions{}))
+	insert := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[[]byte, cql.Unit]{CQL: "INSERT INTO " + ks + ".records(id,value)VALUES(1,?)", Kind: cql.OrdinaryStatement, Params: cql.OneParam(cql.BytesEncoder), Rows: cql.NoRows}, gocql.PrepareOptions{}))
 	write := func(value byte) {
 		t.Helper()
 		payload := bytes.Repeat([]byte{value}, 1<<20)
@@ -86,11 +87,11 @@ func TestNativeCacheOwnership(t *testing.T) {
 		}
 	}
 	write(0x71)
-	prepared := codecTestMust(gocql.Prepare(ctx, s, gocql.Statement[gocql.Unit, gocql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: gocql.OrdinaryStatement, Params: gocql.NoParams, Rows: gocql.OneColumn(gocql.BlobCodec)}, gocql.PrepareOptions{}))
-	bound := codecTestMust(BindOwned(prepared, gocql.Unit{}))
+	prepared := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[cql.Unit, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.OneColumn(cql.BlobCodec)}, gocql.PrepareOptions{}))
+	bound := codecTestMust(BindOwned(prepared, cql.Unit{}))
 	defer bound.Close()
-	rows := codecTestMust(Run(ctx, s, bound, testOptions(gocql.OptionValues{Prefetch: gocql.Option[int]{Set: true, Value: 0}})))
-	var old gocql.Bytes
+	rows := codecTestMust(Run(ctx, s, bound, testOptions(gocql.OptionValues{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
+	var old cql.Bytes
 	if !rows.NextInto(&old) {
 		t.Fatal(rows.Err())
 	}
@@ -110,8 +111,8 @@ func TestNativeCacheOwnership(t *testing.T) {
 	})
 	for generation := 0; generation < 8; generation++ {
 		write(byte(0x72 + generation))
-		freshRows := codecTestMust(Run(ctx, s, bound, testOptions(gocql.OptionValues{Prefetch: gocql.Option[int]{Set: true, Value: 0}})))
-		var view gocql.Bytes
+		freshRows := codecTestMust(Run(ctx, s, bound, testOptions(gocql.OptionValues{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
+		var view cql.Bytes
 		if !freshRows.NextInto(&view) {
 			t.Fatal(freshRows.Err())
 		}
@@ -147,7 +148,7 @@ func TestNativeCacheOwnership(t *testing.T) {
 	if owner.Alive() {
 		t.Fatal("owner final release did not finish")
 	}
-	if _, e = old.At(0); !errors.Is(e, gocql.ErrReleased) {
+	if _, e = old.At(0); !errors.Is(e, cql.ErrReleased) {
 		t.Fatal("old backing remained accessible", e)
 	}
 	if n, c := cache.Storage(); n != 0 || c != 0 {

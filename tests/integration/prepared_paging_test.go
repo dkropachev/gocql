@@ -21,7 +21,7 @@ package integration
 import (
 	"sync/atomic"
 
-	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 type countingDecoder struct {
@@ -29,11 +29,11 @@ type countingDecoder struct {
 	hook  func()
 }
 
-func (d countingDecoder) Compile(c gocql.Columns) (gocql.RowPlan[gocql.Bytes], error) {
+func (d countingDecoder) Compile(c cql.Columns) (cql.RowPlan[cql.Bytes], error) {
 	d.calls.Add(1)
 	if d.hook != nil {
 		d.hook()
 	}
-	return gocql.OneColumn(gocql.BlobCodec).Compile(c)
+	return cql.OneColumn(cql.BlobCodec).Compile(c)
 }
-func (d countingDecoder) Clone(v gocql.Bytes) gocql.Bytes { return v.Clone() }
+func (d countingDecoder) Clone(v cql.Bytes) cql.Bytes { return v.Clone() }

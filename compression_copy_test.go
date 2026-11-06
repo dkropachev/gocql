@@ -12,6 +12,7 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
@@ -46,7 +47,7 @@ func TestCompressionOutputFrameIdentity(t *testing.T) {
 			values := typedTestChain(t, binary.BigEndian.AppendUint32(nil, uint32(len(data))), data)
 			wirecompress.ResetPerfCounters()
 			wire.ResetPerfCounters()
-			frame := codecTestMust(c.InternalBuildTypedRequest(&attemptRequest{Statement: "INSERT INTO ks.tbl(v)VALUES(?)", Values: values, ValueCount: 1, Consistency: One}, 0))
+			frame := codecTestMust(c.InternalBuildTypedRequest(&attemptRequest{Statement: "INSERT INTO ks.tbl(v)VALUES(?)", Values: values, ValueCount: 1, Consistency: cql.One}, 0))
 			calls, input, size, ptr := wirecompress.ReadPerfCounters()
 			found := false
 			frame.Each(func(s wire.Span) error {

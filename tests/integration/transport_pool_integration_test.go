@@ -20,7 +20,9 @@ package integration
 
 import (
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	"github.com/scylladb/gocql/v2/routing"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 
@@ -51,7 +53,7 @@ func TestV2TransportPoolSizingLive(t *testing.T) {
 			}
 			var tlsCalls atomic.Int32
 			if hook := config.TLSForHost; hook != nil {
-				config.TLSForHost = func(ctx context.Context, host gocql.HostSnapshot) (*tls.Config, error) {
+				config.TLSForHost = func(ctx context.Context, host routing.HostSnapshot) (*tls.Config, error) {
 					tlsCalls.Add(1)
 					return hook(ctx, host)
 				}
@@ -137,11 +139,11 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 	defer s.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	conn := codecTestMust(implCluster.InternalSessionSelectTypedConn(s, ctx, gocql.RoutingInfo{}, nil))
+	conn := codecTestMust(implCluster.InternalSessionSelectTypedConn(s, ctx, routing.Info{}, nil))
 	table := fmt.Sprintf("pool_stream_%x", time.Now().UnixNano())
 	qualified := (fixtureKeyspace("") + ".") + table
-	ddl := func(cql string) {
-		b := codecTestMust(BindUnpreparedOwned(gocql.Statement[gocql.Unit, gocql.Unit]{CQL: cql, Params: gocql.NoParams, Rows: gocql.NoRows}, gocql.NewColumns(), gocql.Unit{}))
+	ddl := func(stmt string) {
+		b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: stmt, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{}))
 		defer b.Close()
 		if _, err := Exec(ctx, s, b, testOptions(*func() *gocql.OptionValues {
 			opaqueStorageValue := new(gocql.OptionValues)
@@ -158,7 +160,7 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
-		b, err := BindUnpreparedOwned(gocql.Statement[gocql.Unit, gocql.Unit]{CQL: "DROP TABLE IF EXISTS " + qualified, Params: gocql.NoParams, Rows: gocql.NoRows}, gocql.NewColumns(), gocql.Unit{})
+		b, err := BindUnpreparedOwned(cql.Statement[cql.Unit, cql.Unit]{CQL: "DROP TABLE IF EXISTS " + qualified, Params: cql.NoParams, Rows: cql.NoRows}, cql.NewColumns(), cql.Unit{})
 		if err == nil {
 			defer b.Close()
 			_, err = Exec(cleanup, s, b, gocql.Options{})
@@ -167,11 +169,11 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 			t.Errorf("cleanup unique stream table: %v", err)
 		}
 	}()
-	insert := codecTestMust(gocql.Prepare(ctx, s, gocql.Statement[gocql.Pair[int32, []byte], gocql.Unit]{CQL: "INSERT INTO " + qualified + "(id,value) VALUES(?,?)", Params: gocql.PairParams(1, gocql.OneParam(gocql.Int32), gocql.OneParam(gocql.BytesEncoder)), Rows: gocql.NoRows}, gocql.PrepareOptions{}))
+	insert := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[cql.Pair[int32, []byte], cql.Unit]{CQL: "INSERT INTO " + qualified + "(id,value) VALUES(?,?)", Params: cql.PairParams(1, cql.OneParam(cql.Int32), cql.OneParam(cql.BytesEncoder)), Rows: cql.NoRows}, gocql.PrepareOptions{}))
 	size := 400 << 10
 	for i := 0; i < 4; i++ {
 		payload := bytes.Repeat([]byte{byte(i + 1)}, size)
-		bound := codecTestMust(BindOwned(insert, gocql.Pair[int32, []byte]{First: int32(i), Second: payload}))
+		bound := codecTestMust(BindOwned(insert, cql.Pair[int32, []byte]{First: int32(i), Second: payload}))
 		_, err := Exec(ctx, s, bound, gocql.Options{})
 		bound.Close()
 		if err != nil {
@@ -182,13 +184,13 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 	if !ok {
 		t.Fatal("pool missing")
 	}
-	r, err := pool.InternalReserveStream(ctx, gocql.Target{HostID: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)}, gocql.RoutingInfo{})
+	r, err := pool.InternalReserveStream(ctx, routing.Target{HostID: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)}, routing.Info{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer r.InternalClose(false)
-	decoder := gocql.StreamRow(func(*gocql.Pair[int32, []byte]) {}, gocql.StreamColumn("id", gocql.StreamInt32, func(r *gocql.Pair[int32, []byte]) *int32 { return &r.First }), gocql.StreamColumn("value", gocql.StreamBlob, func(r *gocql.Pair[int32, []byte]) *[]byte { return &r.Second }))
-	request := &attemptRequest{Statement: "SELECT id,value FROM " + qualified, Consistency: gocql.Quorum, PageSize: 2}
+	decoder := cql.StreamRow(func(*cql.Pair[int32, []byte]) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *cql.Pair[int32, []byte]) *int32 { return &r.First }), cql.StreamColumn("value", cql.StreamBlob, func(r *cql.Pair[int32, []byte]) *[]byte { return &r.Second }))
+	request := &attemptRequest{Statement: "SELECT id,value FROM " + qualified, Consistency: cql.Quorum, PageSize: 2}
 	seen := map[int32]bool{}
 	pages := 0
 	for {
@@ -201,7 +203,7 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 			t.Fatal(err)
 		}
 		plan := codecTestMust(decoder.Compile(response.InternalColumns))
-		dst := gocql.Pair[int32, []byte]{Second: make([]byte, 0, size)}
+		dst := cql.Pair[int32, []byte]{Second: make([]byte, 0, size)}
 		for {
 			ok, err := decodeStreamRow(response, plan, &dst)
 			if err != nil {
@@ -236,7 +238,7 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 	}
 	// Early abandonment discards the reserved slot, and ordinary bounded pool
 	// repair restores healthy shared execution without growing its target.
-	r, err = pool.InternalReserveStream(ctx, gocql.Target{HostID: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)}, gocql.RoutingInfo{})
+	r, err = pool.InternalReserveStream(ctx, routing.Target{HostID: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)}, routing.Info{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +264,7 @@ func TestV2ExclusiveTransportLive(t *testing.T) {
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
-	query := codecTestMust(BindUnpreparedOwned(gocql.Statement[gocql.Unit, int32]{CQL: "SELECT id FROM " + qualified + " LIMIT 1", Params: gocql.NoParams, Rows: gocql.OneColumn(gocql.Int32)}, gocql.NewColumns(), gocql.Unit{}))
+	query := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.Unit, int32]{CQL: "SELECT id FROM " + qualified + " LIMIT 1", Params: cql.NoParams, Rows: cql.OneColumn(cql.Int32)}, cql.NewColumns(), cql.Unit{}))
 	defer query.Close()
 	rows := codecTestMust(Run(ctx, s, query, gocql.Options{}))
 	defer rows.Close()

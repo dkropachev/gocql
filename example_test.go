@@ -29,6 +29,7 @@ import (
 	"fmt"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 
 	"log"
 )
@@ -44,12 +45,12 @@ func Example() {
 	}
 	defer session.Close()
 	type tweet struct {
-		ID             gocql.UUID
+		ID             cql.UUID
 		Timeline, Text string
 	}
-	insert, err := gocql.Prepare(ctx, session, gocql.Statement[tweet, gocql.Unit]{
+	insert, err := gocql.Prepare(ctx, session, cql.Statement[tweet, cql.Unit]{
 		CQL:    "INSERT INTO tweet (id,timeline,text) VALUES (?,?,?)",
-		Params: gocql.Params(gocql.Param("id", gocql.UUIDCodec, func(v tweet) gocql.UUID { return v.ID }), gocql.Param("timeline", gocql.StringEncoder, func(v tweet) string { return v.Timeline }), gocql.Param("text", gocql.StringEncoder, func(v tweet) string { return v.Text })), Rows: gocql.NoRows,
+		Params: cql.Params(cql.Param("id", cql.UUIDCodec, func(v tweet) cql.UUID { return v.ID }), cql.Param("timeline", cql.StringEncoder, func(v tweet) string { return v.Timeline }), cql.Param("text", cql.StringEncoder, func(v tweet) string { return v.Text })), Rows: cql.NoRows,
 	}, gocql.PrepareOptions{})
 	if err != nil {
 		log.Fatal(err)
@@ -64,14 +65,14 @@ func Example() {
 			log.Print(err)
 		}
 	}()
-	if err := bound.Exec(ctx, tweet{gocql.NewTimeUUID(), "me", "hello world"}); err != nil {
+	if err := bound.Exec(ctx, tweet{cql.NewTimeUUID(), "me", "hello world"}); err != nil {
 		log.Fatal(err)
 	}
 	type result struct {
-		ID   gocql.UUID
-		Text gocql.Text
+		ID   cql.UUID
+		Text cql.Text
 	}
-	query, err := gocql.Prepare(ctx, session, gocql.Statement[string, result]{CQL: "SELECT id,text FROM tweet WHERE timeline = ?", Params: gocql.OneParam(gocql.StringEncoder), Rows: gocql.Row(gocql.Column("id", gocql.UUIDCodec, func(v *result) *gocql.UUID { return &v.ID }), gocql.Column("text", gocql.TextCodec, func(v *result) *gocql.Text { return &v.Text }))}, gocql.PrepareOptions{})
+	query, err := gocql.Prepare(ctx, session, cql.Statement[string, result]{CQL: "SELECT id,text FROM tweet WHERE timeline = ?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.Row(cql.Column("id", cql.UUIDCodec, func(v *result) *cql.UUID { return &v.ID }), cql.Column("text", cql.TextCodec, func(v *result) *cql.Text { return &v.Text }))}, gocql.PrepareOptions{})
 	if err != nil {
 		log.Fatal(err)
 	}

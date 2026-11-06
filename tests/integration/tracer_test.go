@@ -9,6 +9,7 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 
 	"github.com/stretchr/testify/require"
 )
@@ -21,12 +22,12 @@ func TestTracingNewAPI(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	require.NoError(t, v2CreateTable(ctx, session, fmt.Sprintf((`CREATE TABLE `+fixtureKeyspace("")+`.%s (id int primary key)`), table)))
-	write := sessionTestBind(t, session, fmt.Sprintf(`INSERT INTO %s (id) VALUES (?)`, table), gocql.IntValue(42))
+	write := sessionTestBind(t, session, fmt.Sprintf(`INSERT INTO %s (id) VALUES (?)`, table), cql.IntValue(42))
 	defer write.Close()
 	inserted, err := Exec(ctx, session, write, testOptions(gocql.OptionValues{Trace: true}))
 	require.NoError(t, err)
 	require.NotEmpty(t, inserted.TraceIDs)
-	prepared, err := gocql.Prepare(ctx, session, gocql.Statement[int32, int32]{CQL: fmt.Sprintf(`SELECT id FROM %s WHERE id = ?`, table), Params: gocql.OneParam(gocql.Int32), Rows: gocql.OneColumn(gocql.Int32)}, gocql.PrepareOptions{})
+	prepared, err := gocql.Prepare(ctx, session, cql.Statement[int32, int32]{CQL: fmt.Sprintf(`SELECT id FROM %s WHERE id = ?`, table), Params: cql.OneParam(cql.Int32), Rows: cql.OneColumn(cql.Int32)}, gocql.PrepareOptions{})
 	require.NoError(t, err)
 	read, err := BindOwned(prepared, int32(42))
 	require.NoError(t, err)

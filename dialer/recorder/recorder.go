@@ -15,8 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/dialer"
+	"github.com/scylladb/gocql/v2/endpoint"
 )
 
 // Option configures a RecordDialer.
@@ -50,7 +50,7 @@ type RecordDialer struct {
 	net.Dialer
 }
 
-func (d *RecordDialer) DialContext(ctx context.Context, target gocql.DialTarget) (conn net.Conn, err error) {
+func (d *RecordDialer) DialContext(ctx context.Context, target endpoint.DialTarget) (conn net.Conn, err error) {
 	sourcePort := target.LocalAddress.Port()
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -502,4 +502,4 @@ func (c *ConnectionRecorder) SetWriteDeadline(t time.Time) error {
 	return c.orig.SetWriteDeadline(t)
 }
 
-var _ gocql.Dialer = (*RecordDialer)(nil)
+var _ endpoint.Dialer = (*RecordDialer)(nil)

@@ -28,7 +28,9 @@ package integration
 
 import (
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	"github.com/scylladb/gocql/v2/metadata"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 
@@ -116,11 +118,11 @@ func TestTracing(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s (id int PRIMARY KEY)", table))
-	write := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), []gocql.Value{gocql.IntValue(42)}, gocql.PrepareOptions{})
+	write := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), []cql.Value{cql.IntValue(42)}, gocql.PrepareOptions{})
 	result, err := Exec(context.Background(), session, write, testOptions(gocql.OptionValues{Trace: true}))
 	require.NoError(t, err)
 	require.NotEmpty(t, result.TraceIDs)
-	checkTrace := func(ids []gocql.UUID) {
+	checkTrace := func(ids []cql.UUID) {
 		t.Helper()
 		require.NotEmpty(t, ids)
 		for _, id := range ids {
@@ -133,7 +135,7 @@ func TestTracing(t *testing.T) {
 		}
 	}
 	checkTrace(result.TraceIDs())
-	read := cassandraDynamicBound(t, session, fmt.Sprintf("SELECT id FROM %s WHERE id = ?", table), []gocql.Value{gocql.IntValue(42)}, gocql.PrepareOptions{})
+	read := cassandraDynamicBound(t, session, fmt.Sprintf("SELECT id FROM %s WHERE id = ?", table), []cql.Value{cql.IntValue(42)}, gocql.PrepareOptions{})
 	// Options are explicit per execution; the same binding can be traced repeatedly.
 	for i := 0; i < 2; i++ {
 		rows, err := Run(context.Background(), session, read, testOptions(gocql.OptionValues{Trace: true}))
@@ -164,7 +166,7 @@ func TestObserve(t *testing.T) {
 		require.Equal(t, wantErr, events[0].Err != nil)
 	}
 	selectCQL := fmt.Sprintf("SELECT id FROM %s WHERE id = ?", table)
-	read := cassandraDynamicBound(t, session, selectCQL, []gocql.Value{gocql.IntValue(43)}, gocql.PrepareOptions{})
+	read := cassandraDynamicBound(t, session, selectCQL, []cql.Value{cql.IntValue(43)}, gocql.PrepareOptions{})
 	rows, err := Run(context.Background(), session, read, testOptions(gocql.OptionValues{Observer: observer}))
 	require.NoError(t, err)
 	defer rows.Close()
@@ -173,23 +175,23 @@ func TestObserve(t *testing.T) {
 	check(selectCQL, false)
 	observer.reset()
 	insertCQL := fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table)
-	write := cassandraWriteBound(t, session, insertCQL, []gocql.Value{gocql.IntValue(42)}, gocql.PrepareOptions{})
+	write := cassandraWriteBound(t, session, insertCQL, []cql.Value{cql.IntValue(42)}, gocql.PrepareOptions{})
 	_, err = Exec(context.Background(), session, write, testOptions(gocql.OptionValues{Observer: observer}))
 	require.NoError(t, err)
 	check(insertCQL, false)
 	observer.reset()
-	read = cassandraDynamicBound(t, session, selectCQL, []gocql.Value{gocql.IntValue(42)}, gocql.PrepareOptions{})
+	read = cassandraDynamicBound(t, session, selectCQL, []cql.Value{cql.IntValue(42)}, gocql.PrepareOptions{})
 	require.Equal(t, int64(42), cassandraInt(t, cassandraReadBound(t, session, read, testOptions(gocql.OptionValues{Observer: observer})), "id"))
 	check(selectCQL, false)
 	observer.reset()
 	other := createV2Session(t, func(c *gocql.Config) { c.Observer = observer })
 	defer other.Close()
 	observer.reset()
-	read = cassandraDynamicBound(t, other, selectCQL, []gocql.Value{gocql.IntValue(42)}, gocql.PrepareOptions{})
+	read = cassandraDynamicBound(t, other, selectCQL, []cql.Value{cql.IntValue(42)}, gocql.PrepareOptions{})
 	require.Equal(t, int64(42), cassandraInt(t, cassandraReadBound(t, other, read, gocql.Options{}), "id"))
 	check(selectCQL, false)
 	observer.reset()
-	bad := cassandraUnprepared(t, "SELECT id FROM unknown_table WHERE id = 42", gocql.DynamicRows)
+	bad := cassandraUnprepared(t, "SELECT id FROM unknown_table WHERE id = 42", cql.DynamicRows)
 	_, err = Run(context.Background(), session, bad, testOptions(gocql.OptionValues{Observer: observer}))
 	require.Error(t, err)
 	check("SELECT id FROM unknown_table WHERE id = 42", true)
@@ -202,13 +204,13 @@ func TestObserve_Pagination(t *testing.T) {
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s (id int PRIMARY KEY)", table))
 	for i := int32(0); i < 50; i++ {
-		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), gocql.IntValue(i))
+		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), cql.IntValue(i))
 	}
 	observer := &cassandraObserver{}
-	bound := cassandraUnprepared(t, fmt.Sprintf("SELECT id FROM %s LIMIT 100", table), gocql.DynamicRows)
+	bound := cassandraUnprepared(t, fmt.Sprintf("SELECT id FROM %s LIMIT 100", table), cql.DynamicRows)
 	// The typed observer reports each transport attempt and one completed logical
 	// request; row counts belong to Result instead of mutable per-page callbacks.
-	rows, err := Run(context.Background(), session, bound, testOptions(gocql.OptionValues{PageSize: gocql.Option[int32]{Value: 10, Set: true}, Prefetch: gocql.Option[int]{Value: 0, Set: true}, Observer: observer}))
+	rows, err := Run(context.Background(), session, bound, testOptions(gocql.OptionValues{PageSize: cql.Option[int32]{Value: 10, Set: true}, Prefetch: cql.Option[int]{Value: 0, Set: true}, Observer: observer}))
 	require.NoError(t, err)
 	defer rows.Close()
 	for i := 0; i < 50; i++ {
@@ -231,10 +233,10 @@ func TestPaging(t *testing.T) {
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s (id int PRIMARY KEY)", table))
 	for i := int32(0); i < 100; i++ {
-		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), gocql.IntValue(i))
+		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), cql.IntValue(i))
 	}
-	bound := cassandraUnprepared(t, fmt.Sprintf("SELECT id FROM %s", table), gocql.DynamicRows)
-	rows := cassandraRows(t, session, bound, testOptions(gocql.OptionValues{PageSize: gocql.Option[int32]{Value: 10, Set: true}}))
+	bound := cassandraUnprepared(t, fmt.Sprintf("SELECT id FROM %s", table), cql.DynamicRows)
+	rows := cassandraRows(t, session, bound, testOptions(gocql.OptionValues{PageSize: cql.Option[int32]{Value: 10, Set: true}}))
 	require.Len(t, rows, 100)
 }
 
@@ -245,7 +247,7 @@ func TestPagingWithAllowFiltering(t *testing.T) {
 	table := testTableName(t)
 	const targetP1, targetP2, totalExpectedResults, pageSize, deletedRangeStart, deletedRangeEnd = 50, 50, 30, 5, 10, 20
 	selectCQL := fmt.Sprintf("SELECT c1,f1 FROM %s WHERE p1=50 AND p2=50 AND f1<30 ALLOW FILTERING", table)
-	validate := func(t *testing.T, rows []gocql.DynamicRow) {
+	validate := func(t *testing.T, rows []cql.DynamicRow) {
 		t.Helper()
 		var got []int
 		for _, row := range rows {
@@ -265,26 +267,26 @@ func TestPagingWithAllowFiltering(t *testing.T) {
 	t.Run("Prepare", func(t *testing.T) {
 		cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s (p1 int,p2 int,c1 int,f1 int,PRIMARY KEY ((p1,p2),c1)) WITH CLUSTERING ORDER BY (c1 DESC)", table))
 		for i := int32(0); i < 100; i++ {
-			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s (p1,p2,c1,f1) VALUES (?,?,?,?)", table), gocql.IntValue(i), gocql.IntValue(i), gocql.IntValue(i), gocql.IntValue(i))
-			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s (p1,p2,c1,f1) VALUES (?,?,?,?)", table), gocql.IntValue(targetP1), gocql.IntValue(targetP2), gocql.IntValue(i), gocql.IntValue(i))
+			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s (p1,p2,c1,f1) VALUES (?,?,?,?)", table), cql.IntValue(i), cql.IntValue(i), cql.IntValue(i), cql.IntValue(i))
+			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s (p1,p2,c1,f1) VALUES (?,?,?,?)", table), cql.IntValue(targetP1), cql.IntValue(targetP2), cql.IntValue(i), cql.IntValue(i))
 		}
-		cassandraWrite(t, session, fmt.Sprintf("DELETE FROM %s WHERE p1=? AND p2=? AND c1>=? AND c1<?", table), gocql.IntValue(targetP1), gocql.IntValue(targetP2), gocql.IntValue(deletedRangeStart), gocql.IntValue(deletedRangeEnd))
+		cassandraWrite(t, session, fmt.Sprintf("DELETE FROM %s WHERE p1=? AND p2=? AND c1>=? AND c1<?", table), cql.IntValue(targetP1), cql.IntValue(targetP2), cql.IntValue(deletedRangeStart), cql.IntValue(deletedRangeEnd))
 	})
-	bound := cassandraUnprepared(t, selectCQL, gocql.DynamicRows)
+	bound := cassandraUnprepared(t, selectCQL, cql.DynamicRows)
 	t.Run("AutoPagination", func(t *testing.T) {
-		for _, c := range []gocql.Consistency{gocql.One, gocql.Quorum} {
+		for _, c := range []cql.Consistency{cql.One, cql.Quorum} {
 			t.Run(c.String(), func(t *testing.T) {
-				validate(t, cassandraRows(t, session, bound, testOptions(gocql.OptionValues{Consistency: gocql.Option[gocql.Consistency]{Value: c, Set: true}, PageSize: gocql.Option[int32]{Value: pageSize, Set: true}})))
+				validate(t, cassandraRows(t, session, bound, testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: c, Set: true}, PageSize: cql.Option[int32]{Value: pageSize, Set: true}})))
 			})
 		}
 	})
 	t.Run("ManualPagination", func(t *testing.T) {
-		for _, c := range []gocql.Consistency{gocql.One, gocql.Quorum} {
+		for _, c := range []cql.Consistency{cql.One, cql.Quorum} {
 			t.Run(c.String(), func(t *testing.T) {
-				var result []gocql.DynamicRow
+				var result []cql.DynamicRow
 				state := gocql.StartPage()
 				for {
-					page, err := RunPage(context.Background(), session, bound, state, testOptions(gocql.OptionValues{Consistency: gocql.Option[gocql.Consistency]{Value: c, Set: true}, PageSize: gocql.Option[int32]{Value: pageSize, Set: true}}))
+					page, err := RunPage(context.Background(), session, bound, state, testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: c, Set: true}, PageSize: cql.Option[int32]{Value: pageSize, Set: true}}))
 					require.NoError(t, err)
 					defer page.Close()
 					next := page.State()
@@ -319,12 +321,12 @@ func TestPagingWithBind(t *testing.T) {
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s (id int,val int,PRIMARY KEY(id,val))", table))
 	for i := int32(0); i < 100; i++ {
-		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES (?,?)", table), gocql.IntValue(1), gocql.IntValue(i))
+		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES (?,?)", table), cql.IntValue(1), cql.IntValue(i))
 	}
-	prepared := cassandraPrepared(t, session, gocql.Statement[[]gocql.Value, gocql.DynamicRow]{CQL: fmt.Sprintf("SELECT val FROM %s WHERE id=? AND val<?", table), Params: gocql.DynamicParams, Rows: gocql.DynamicRows}, gocql.PrepareOptions{})
-	first := cassandraBound(t, prepared, []gocql.Value{gocql.IntValue(1), gocql.IntValue(50)})
-	second := cassandraBound(t, prepared, []gocql.Value{gocql.IntValue(1), gocql.IntValue(20)})
-	options := testOptions(gocql.OptionValues{PageSize: gocql.Option[int32]{Value: 10, Set: true}})
+	prepared := cassandraPrepared(t, session, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT val FROM %s WHERE id=? AND val<?", table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
+	first := cassandraBound(t, prepared, []cql.Value{cql.IntValue(1), cql.IntValue(50)})
+	second := cassandraBound(t, prepared, []cql.Value{cql.IntValue(1), cql.IntValue(20)})
+	options := testOptions(gocql.OptionValues{PageSize: cql.Option[int32]{Value: 10, Set: true}})
 	require.Len(t, cassandraRows(t, session, first, options), 50)
 	require.Len(t, cassandraRows(t, session, second, options), 20)
 	require.Len(t, cassandraRows(t, session, first, options), 50, "new binding must not mutate old binding")
@@ -337,12 +339,12 @@ func TestCAS(t *testing.T) {
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(title varchar,revid timeuuid,last_modified timestamp,PRIMARY KEY(title,revid))", table))
 	title := "baz"
-	rev := gocql.NewTimeUUID()
-	modified := gocql.Timestamp(time.Now().UnixMilli())
-	revValue := cassandraValue(gocql.TimeUUIDValue(gocql.TimeUUID(rev)))
+	rev := cql.NewTimeUUID()
+	modified := cql.Timestamp(time.Now().UnixMilli())
+	revValue := cassandraValue(cql.TimeUUIDValue(cql.TimeUUID(rev)))
 	insertCQL := fmt.Sprintf("INSERT INTO %s(title,revid,last_modified) VALUES (?,?,?) IF NOT EXISTS", table)
-	values := []gocql.Value{codecTestMust(gocql.TextValue(title)), revValue, gocql.TimestampValue(modified)}
-	insert := cassandraCASBound(t, session, insertCQL, values, gocql.DynamicRows)
+	values := []cql.Value{codecTestMust(cql.TextValue(title)), revValue, cql.TimestampValue(modified)}
+	insert := cassandraCASBound(t, session, insertCQL, values, cql.DynamicRows)
 	first := cassandraReadBound(t, session, insert, gocql.Options{})
 	require.True(t, first.Applied)
 	second := cassandraReadBound(t, session, insert, gocql.Options{})
@@ -353,25 +355,25 @@ func TestCAS(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, rev, gotRev)
 	deleteCQL := fmt.Sprintf("DELETE FROM %s WHERE title=? AND revid=? IF last_modified=?", table)
-	failedDelete := cassandraCASBound(t, session, deleteCQL, []gocql.Value{codecTestMust(gocql.TextValue(title)), revValue, gocql.TimestampValue(modified + 10000)}, gocql.DynamicRows)
+	failedDelete := cassandraCASBound(t, session, deleteCQL, []cql.Value{codecTestMust(cql.TextValue(title)), revValue, cql.TimestampValue(modified + 10000)}, cql.DynamicRows)
 	deleted := cassandraReadBound(t, session, failedDelete, gocql.Options{})
 	require.False(t, deleted.Applied)
 	require.Equal(t, int64(modified), cassandraInt(t, deleted.Previous.Value, "last_modified"))
 	// Missing or incompatible previous-value decoders fail explicitly.
-	invalid, err := gocql.Prepare(context.Background(), session, gocql.Statement[[]gocql.Value, gocql.CASResult[gocql.Unit]]{CQL: deleteCQL, Params: gocql.DynamicParams, Rows: gocql.CASRows(gocql.NoRows)}, gocql.PrepareOptions{})
+	invalid, err := gocql.Prepare(context.Background(), session, cql.Statement[[]cql.Value, cql.CASResult[cql.Unit]]{CQL: deleteCQL, Params: cql.DynamicParams, Rows: cql.CASRows(cql.NoRows)}, gocql.PrepareOptions{})
 	if err == nil {
-		bound := cassandraBound(t, invalid, []gocql.Value{codecTestMust(gocql.TextValue(title)), revValue, gocql.TimestampValue(modified + 10000)})
+		bound := cassandraBound(t, invalid, []cql.Value{codecTestMust(cql.TextValue(title)), revValue, cql.TimestampValue(modified + 10000)})
 		rows, e := Run(context.Background(), session, bound, gocql.Options{})
 		defer rows.Close()
 		err = e
 	}
 	require.Error(t, err)
-	successDelete := cassandraCASBound(t, session, deleteCQL, values, gocql.DynamicRows)
+	successDelete := cassandraCASBound(t, session, deleteCQL, values, cql.DynamicRows)
 	require.True(t, cassandraReadBound(t, session, successDelete, gocql.Options{}).Applied)
 	cassandraWrite(t, session, "TRUNCATE "+table)
 	runBatch := func(items []gocql.BatchItem, wantApplied bool, wantRows int) {
 		t.Helper()
-		page, err := gocql.RunBatch(context.Background(), session, gocql.LoggedBatch, items, gocql.CASRows(gocql.DynamicRows), gocql.Options{})
+		page, err := gocql.RunBatch(context.Background(), session, cql.LoggedBatch, items, cql.CASRows(cql.DynamicRows), gocql.Options{})
 		require.NoError(t, err)
 		defer page.Close()
 		count := 0
@@ -386,42 +388,42 @@ func TestCAS(t *testing.T) {
 		require.Equal(t, wantRows, count)
 	}
 	runBatch([]gocql.BatchItem{cassandraItem(t, insert)}, true, 1)
-	other := cassandraCASBound(t, session, insertCQL, []gocql.Value{codecTestMust(gocql.TextValue(title + "_foo")), revValue, gocql.TimestampValue(modified)}, gocql.DynamicRows)
+	other := cassandraCASBound(t, session, insertCQL, []cql.Value{codecTestMust(cql.TextValue(title + "_foo")), revValue, cql.TimestampValue(modified)}, cql.DynamicRows)
 	runBatch([]gocql.BatchItem{cassandraItem(t, other)}, true, 1)
 	runBatch([]gocql.BatchItem{cassandraItem(t, other)}, false, 1)
 	var seed, conditional []gocql.BatchItem
 	for _, id := range []string{"2c3af400-73a4-11e5-9381-29463d90c3f0", "3e4ad2f1-73a4-11e5-9381-29463d90c3f0"} {
-		r, e := gocql.ParseUUID(id)
+		r, e := cql.ParseUUID(id)
 		require.NoError(t, e)
-		rv := cassandraValue(gocql.TimeUUIDValue(gocql.TimeUUID(r)))
-		seed = append(seed, cassandraItem(t, cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(title,revid,last_modified) VALUES (?,?,?)", table), []gocql.Value{codecTestMust(gocql.TextValue("_foo")), rv, gocql.TimestampValue(modified)}, gocql.PrepareOptions{})))
-		conditional = append(conditional, cassandraItem(t, cassandraCASBound(t, session, fmt.Sprintf("UPDATE %s SET last_modified=? WHERE title=? AND revid=? IF last_modified=?", table), []gocql.Value{gocql.TimestampValue(modified + 10000), codecTestMust(gocql.TextValue("_foo")), rv, gocql.TimestampValue(modified + 20000)}, gocql.DynamicRows)))
+		rv := cassandraValue(cql.TimeUUIDValue(cql.TimeUUID(r)))
+		seed = append(seed, cassandraItem(t, cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(title,revid,last_modified) VALUES (?,?,?)", table), []cql.Value{codecTestMust(cql.TextValue("_foo")), rv, cql.TimestampValue(modified)}, gocql.PrepareOptions{})))
+		conditional = append(conditional, cassandraItem(t, cassandraCASBound(t, session, fmt.Sprintf("UPDATE %s SET last_modified=? WHERE title=? AND revid=? IF last_modified=?", table), []cql.Value{cql.TimestampValue(modified + 10000), codecTestMust(cql.TextValue("_foo")), rv, cql.TimestampValue(modified + 20000)}, cql.DynamicRows)))
 	}
-	cassandraBatch(t, session, gocql.LoggedBatch, seed, gocql.Options{})
+	cassandraBatch(t, session, cql.LoggedBatch, seed, gocql.Options{})
 	runBatch(conditional, false, 2)
 	// CASRows rejects ordinary SELECTs and unconditional batches; the former
 	// MapScanCAS silent false result is replaced by validated result metadata.
-	_, err = gocql.Prepare(context.Background(), session, gocql.Statement[[]gocql.Value, gocql.CASResult[gocql.DynamicRow]]{CQL: fmt.Sprintf("SELECT revid FROM %s WHERE title=?", table), Params: gocql.DynamicParams, Rows: gocql.CASRows(gocql.DynamicRows)}, gocql.PrepareOptions{})
+	_, err = gocql.Prepare(context.Background(), session, cql.Statement[[]cql.Value, cql.CASResult[cql.DynamicRow]]{CQL: fmt.Sprintf("SELECT revid FROM %s WHERE title=?", table), Params: cql.DynamicParams, Rows: cql.CASRows(cql.DynamicRows)}, gocql.PrepareOptions{})
 	require.Error(t, err)
 	for i := 0; i < 2; i++ {
-		page, err := gocql.RunBatch(context.Background(), session, gocql.LoggedBatch, seed, gocql.CASRows(gocql.DynamicRows), gocql.Options{})
+		page, err := gocql.RunBatch(context.Background(), session, cql.LoggedBatch, seed, cql.CASRows(cql.DynamicRows), gocql.Options{})
 		if page != nil {
 			page.Close()
 		}
 		require.Error(t, err)
 	}
 	for _, batch := range []bool{false, true} {
-		badDecoder := gocql.CASRows(gocql.OneColumn(gocql.Bool))
-		bound := cassandraDynamicBound(t, session, fmt.Sprintf("UPDATE %s SET last_modified=? WHERE title=? AND revid=? IF last_modified=?", table), []gocql.Value{gocql.TimestampValue(modified + 10000), codecTestMust(gocql.TextValue("_foo")), cassandraValue(gocql.TimeUUIDValue(gocql.TimeUUID(cassandraUUID("3e4ad2f1-73a4-11e5-9381-29463d90c3f0")))), gocql.TimestampValue(modified + 20000)}, gocql.PrepareOptions{})
+		badDecoder := cql.CASRows(cql.OneColumn(cql.Bool))
+		bound := cassandraDynamicBound(t, session, fmt.Sprintf("UPDATE %s SET last_modified=? WHERE title=? AND revid=? IF last_modified=?", table), []cql.Value{cql.TimestampValue(modified + 10000), codecTestMust(cql.TextValue("_foo")), cassandraValue(cql.TimeUUIDValue(cql.TimeUUID(cassandraUUID("3e4ad2f1-73a4-11e5-9381-29463d90c3f0")))), cql.TimestampValue(modified + 20000)}, gocql.PrepareOptions{})
 		if batch {
-			page, e := gocql.RunBatch(context.Background(), session, gocql.LoggedBatch, []gocql.BatchItem{cassandraItem(t, bound)}, badDecoder, gocql.Options{})
+			page, e := gocql.RunBatch(context.Background(), session, cql.LoggedBatch, []gocql.BatchItem{cassandraItem(t, bound)}, badDecoder, gocql.Options{})
 			if page != nil {
 				page.Close()
 			}
 			require.Error(t, e)
 		} else {
-			bad := func() *Bound[gocql.CASResult[bool]] {
-				opaqueStorageValue := new(Bound[gocql.CASResult[bool]])
+			bad := func() *Bound[cql.CASResult[bool]] {
+				opaqueStorageValue := new(Bound[cql.CASResult[bool]])
 				implExecution.BoundData(opaqueStorageValue).InternalRequest = implExecution.BoundData(bound).InternalRequest
 				implExecution.BoundData(opaqueStorageValue).InternalRows = badDecoder
 				return opaqueStorageValue
@@ -441,18 +443,18 @@ func TestConsistencySerial(t *testing.T) {
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY)", table))
 	for i, tc := range []struct {
 		name        string
-		consistency gocql.Consistency
-	}{{"Any", gocql.Any}, {"One", gocql.One}, {"Two", gocql.Two}, {"Three", gocql.Three}, {"Quorum", gocql.Quorum}, {"LocalQuorum", gocql.LocalQuorum}, {"EachQuorum", gocql.EachQuorum}, {"Serial", gocql.Serial}, {"LocalSerial", gocql.LocalSerial}, {"LocalOne", gocql.LocalOne}} {
+		consistency cql.Consistency
+	}{{"Any", cql.Any}, {"One", cql.One}, {"Two", cql.Two}, {"Three", cql.Three}, {"Quorum", cql.Quorum}, {"LocalQuorum", cql.LocalQuorum}, {"EachQuorum", cql.EachQuorum}, {"Serial", cql.Serial}, {"LocalSerial", cql.LocalSerial}, {"LocalOne", cql.LocalOne}} {
 		t.Run(tc.name, func(t *testing.T) {
-			bound := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), []gocql.Value{gocql.IntValue(int32(i + 1))}, gocql.PrepareOptions{})
+			bound := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), []cql.Value{cql.IntValue(int32(i + 1))}, gocql.PrepareOptions{})
 			// Serial consistency is checked when the options are built.
-			options, err := gocql.NewOptions(session, gocql.OptionValues{SerialConsistency: gocql.Option[gocql.Option[gocql.Consistency]]{Set: true, Value: gocql.Option[gocql.Consistency]{Set: true, Value: tc.consistency}}})
+			options, err := gocql.NewOptions(session, gocql.OptionValues{SerialConsistency: cql.Option[cql.Option[cql.Consistency]]{Set: true, Value: cql.Option[cql.Consistency]{Set: true, Value: tc.consistency}}})
 			if err == nil {
 				_, err = Exec(context.Background(), session, bound, options)
 			}
-			if tc.consistency == gocql.Serial || tc.consistency == gocql.LocalSerial {
+			if tc.consistency == cql.Serial || tc.consistency == cql.LocalSerial {
 				require.NoError(t, err)
-				require.Equal(t, int64(i+1), cassandraInt(t, cassandraRead(t, session, fmt.Sprintf("SELECT id FROM %s WHERE id=?", table), gocql.IntValue(int32(i+1))), "id"))
+				require.Equal(t, int64(i+1), cassandraInt(t, cassandraRead(t, session, fmt.Sprintf("SELECT id FROM %s WHERE id=?", table), cql.IntValue(int32(i+1))), "id"))
 			} else {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), "serial consistency")
@@ -470,8 +472,8 @@ func TestDurationType(t *testing.T) {
 	}
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(k int PRIMARY KEY,v duration)", table))
-	for _, want := range []gocql.Duration{{Months: 250, Days: 500, Nanoseconds: 300010001}, {Months: -250, Days: -500, Nanoseconds: -300010001}, {Days: 128, Nanoseconds: 127}, {Months: 0x7fffffff, Days: 0x7fffffff, Nanoseconds: 0x7fffffffffffffff}} {
-		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(k,v) VALUES(1,?)", table), cassandraValue(gocql.DurationValue(want)))
+	for _, want := range []cql.Duration{{Months: 250, Days: 500, Nanoseconds: 300010001}, {Months: -250, Days: -500, Nanoseconds: -300010001}, {Days: 128, Nanoseconds: 127}, {Months: 0x7fffffff, Days: 0x7fffffff, Nanoseconds: 0x7fffffffffffffff}} {
+		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(k,v) VALUES(1,?)", table), cassandraValue(cql.DurationValue(want)))
 		row := cassandraRead(t, session, "SELECT k,v FROM "+table)
 		require.Equal(t, int64(1), cassandraInt(t, row, "k"))
 		got, e := cassandraField(t, row, "v").Duration()
@@ -486,9 +488,9 @@ func TestMapScanCAS(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(title varchar,revid timeuuid,last_modified timestamp,deleted boolean,PRIMARY KEY(title,revid))", table))
-	rev := gocql.NewTimeUUID()
-	modified := gocql.Timestamp(time.Now().UnixMilli())
-	bound := cassandraCASBound(t, session, fmt.Sprintf("INSERT INTO %s(title,revid,last_modified,deleted) VALUES(?,?,?,?) IF NOT EXISTS", table), []gocql.Value{codecTestMust(gocql.TextValue("baz")), cassandraValue(gocql.TimeUUIDValue(gocql.TimeUUID(rev))), gocql.TimestampValue(modified), gocql.BoolValue(false)}, gocql.DynamicRows)
+	rev := cql.NewTimeUUID()
+	modified := cql.Timestamp(time.Now().UnixMilli())
+	bound := cassandraCASBound(t, session, fmt.Sprintf("INSERT INTO %s(title,revid,last_modified,deleted) VALUES(?,?,?,?) IF NOT EXISTS", table), []cql.Value{codecTestMust(cql.TextValue("baz")), cassandraValue(cql.TimeUUIDValue(cql.TimeUUID(rev))), cql.TimestampValue(modified), cql.BoolValue(false)}, cql.DynamicRows)
 	require.True(t, cassandraReadBound(t, session, bound, gocql.Options{}).Applied)
 	result := cassandraReadBound(t, session, bound, gocql.Options{})
 	require.False(t, result.Applied)
@@ -508,12 +510,12 @@ func TestBatch(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY)", table))
-	prepared := cassandraPrepared(t, session, gocql.Statement[int32, gocql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), Params: gocql.OneParam(gocql.Int32), Rows: gocql.NoRows}, gocql.PrepareOptions{})
+	prepared := cassandraPrepared(t, session, cql.Statement[int32, cql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), Params: cql.OneParam(cql.Int32), Rows: cql.NoRows}, gocql.PrepareOptions{})
 	var items []gocql.BatchItem
 	for i := int32(0); i < 100; i++ {
 		items = append(items, cassandraItem(t, cassandraBound(t, prepared, i)))
 	}
-	cassandraBatch(t, session, gocql.LoggedBatch, items, gocql.Options{})
+	cassandraBatch(t, session, cql.LoggedBatch, items, gocql.Options{})
 	require.Equal(t, int64(100), cassandraInt(t, cassandraRead(t, session, "SELECT COUNT(*) FROM "+table), "count"))
 }
 
@@ -523,12 +525,12 @@ func TestUnpreparedBatch(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,c counter)", table))
-	bound := cassandraUnprepared(t, fmt.Sprintf("UPDATE %s SET c=c+1 WHERE id=1", table), gocql.NoRows)
+	bound := cassandraUnprepared(t, fmt.Sprintf("UPDATE %s SET c=c+1 WHERE id=1", table), cql.NoRows)
 	items := make([]gocql.BatchItem, 100)
 	for i := range items {
 		items[i] = cassandraItem(t, bound)
 	}
-	cassandraBatch(t, session, gocql.UnloggedBatch, items, gocql.Options{})
+	cassandraBatch(t, session, cql.UnloggedBatch, items, gocql.Options{})
 	require.Equal(t, int64(1), cassandraInt(t, cassandraRead(t, session, "SELECT COUNT(*) FROM "+table), "count"))
 	require.Equal(t, int64(100), cassandraInt(t, cassandraRead(t, session, "SELECT c FROM "+table), "c"))
 }
@@ -541,13 +543,13 @@ func TestBatchLimit(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY)", table))
-	bound := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), []gocql.Value{gocql.IntValue(1)}, gocql.PrepareOptions{})
+	bound := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), []cql.Value{cql.IntValue(1)}, gocql.PrepareOptions{})
 	items := make([]gocql.BatchItem, 65537)
 	for i := range items {
 		items[i] = cassandraItem(t, bound)
 	}
 	before := session.Metrics()
-	_, err := gocql.ExecBatch(context.Background(), session, gocql.LoggedBatch, items, gocql.Options{})
+	_, err := gocql.ExecBatch(context.Background(), session, cql.LoggedBatch, items, gocql.Options{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "65535")
 	require.Equal(t, before.Requests, session.Metrics().Requests, "oversized batches must be rejected before submission")
@@ -559,8 +561,8 @@ func TestWhereIn(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int,cluster int,PRIMARY KEY(id,cluster))", table))
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,cluster) VALUES(?,?)", table), gocql.IntValue(100), gocql.IntValue(200))
-	row := cassandraRead(t, session, fmt.Sprintf("SELECT * FROM %s WHERE id=? AND cluster IN (?)", table), gocql.IntValue(100), gocql.IntValue(200))
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,cluster) VALUES(?,?)", table), cql.IntValue(100), cql.IntValue(200))
+	row := cassandraRead(t, session, fmt.Sprintf("SELECT * FROM %s WHERE id=? AND cluster IN (?)", table), cql.IntValue(100), cql.IntValue(200))
 	require.Equal(t, int64(100), cassandraInt(t, row, "id"))
 	require.Equal(t, int64(200), cassandraInt(t, row, "cluster"))
 }
@@ -573,11 +575,11 @@ func TestTooManyQueryArgs(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,value int)", table))
-	read := cassandraPrepared(t, session, gocql.Statement[[]gocql.Value, gocql.DynamicRow]{CQL: fmt.Sprintf("SELECT * FROM %s WHERE id=?", table), Params: gocql.DynamicParams, Rows: gocql.DynamicRows}, gocql.PrepareOptions{})
-	_, err := BindOwned(read, []gocql.Value{gocql.IntValue(1), gocql.IntValue(2)})
+	read := cassandraPrepared(t, session, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT * FROM %s WHERE id=?", table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
+	_, err := BindOwned(read, []cql.Value{cql.IntValue(1), cql.IntValue(2)})
 	require.Error(t, err)
-	write := cassandraPrepared(t, session, gocql.Statement[[]gocql.Value, gocql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id,value) VALUES(?,?)", table), Params: gocql.DynamicParams, Rows: gocql.NoRows}, gocql.PrepareOptions{})
-	_, err = BindOwned(write, []gocql.Value{gocql.IntValue(1), gocql.IntValue(2), gocql.IntValue(3)})
+	write := cassandraPrepared(t, session, cql.Statement[[]cql.Value, cql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id,value) VALUES(?,?)", table), Params: cql.DynamicParams, Rows: cql.NoRows}, gocql.PrepareOptions{})
+	_, err = BindOwned(write, []cql.Value{cql.IntValue(1), cql.IntValue(2), cql.IntValue(3)})
 	require.Error(t, err, "invalid batch entry must fail during binding")
 }
 
@@ -589,11 +591,11 @@ func TestNotEnoughQueryArgs(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int,cluster int,value int,PRIMARY KEY(id,cluster))", table))
-	read := cassandraPrepared(t, session, gocql.Statement[[]gocql.Value, gocql.DynamicRow]{CQL: fmt.Sprintf("SELECT * FROM %s WHERE id=? AND cluster=?", table), Params: gocql.DynamicParams, Rows: gocql.DynamicRows}, gocql.PrepareOptions{})
-	_, err := BindOwned(read, []gocql.Value{gocql.IntValue(1)})
+	read := cassandraPrepared(t, session, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT * FROM %s WHERE id=? AND cluster=?", table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
+	_, err := BindOwned(read, []cql.Value{cql.IntValue(1)})
 	require.Error(t, err)
-	write := cassandraPrepared(t, session, gocql.Statement[[]gocql.Value, gocql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id,cluster,value) VALUES(?,?,?)", table), Params: gocql.DynamicParams, Rows: gocql.NoRows}, gocql.PrepareOptions{})
-	_, err = BindOwned(write, []gocql.Value{gocql.IntValue(1), gocql.IntValue(2)})
+	write := cassandraPrepared(t, session, cql.Statement[[]cql.Value, cql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id,cluster,value) VALUES(?,?,?)", table), Params: cql.DynamicParams, Rows: cql.NoRows}, gocql.PrepareOptions{})
+	_, err = BindOwned(write, []cql.Value{cql.IntValue(1), cql.IntValue(2)})
 	require.Error(t, err, "invalid batch entry must fail during binding")
 }
 
@@ -646,22 +648,22 @@ func TestMapScanWithRefMap(t *testing.T) {
 		Name   FullName
 		Number int32
 	}
-	params := gocql.Params(gocql.Param("testtext", gocql.StringEncoder, func(v input) string { return v.Text }), gocql.Param("testfullname", fullNameCodec{}, func(v input) FullName { return v.Name }), gocql.Param("testint", gocql.Int32, func(v input) int32 { return v.Number }))
-	prepared := cassandraPrepared(t, session, gocql.Statement[input, gocql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(testtext,testfullname,testint) VALUES(?,?,?)", table), Params: params, Rows: gocql.NoRows}, gocql.PrepareOptions{})
+	params := cql.Params(cql.Param("testtext", cql.StringEncoder, func(v input) string { return v.Text }), cql.Param("testfullname", fullNameCodec{}, func(v input) FullName { return v.Name }), cql.Param("testint", cql.Int32, func(v input) int32 { return v.Number }))
+	prepared := cassandraPrepared(t, session, cql.Statement[input, cql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(testtext,testfullname,testint) VALUES(?,?,?)", table), Params: params, Rows: cql.NoRows}, gocql.PrepareOptions{})
 	_, err := Exec(context.Background(), session, cassandraBound(t, prepared, input{"testtext", FullName{"John", "Doe"}, 100}), gocql.Options{})
 	require.NoError(t, err)
 	type output struct {
-		Text   gocql.Text
+		Text   cql.Text
 		Name   FullName
 		Number int32
 	}
-	decoder := gocql.Row(gocql.Column("testtext", gocql.TextCodec, func(v *output) *gocql.Text { return &v.Text }), gocql.Column("testfullname", fullNameCodec{}, func(v *output) *FullName { return &v.Name }), gocql.Column("testint", gocql.Int32, func(v *output) *int32 { return &v.Number }))
+	decoder := cql.Row(cql.Column("testtext", cql.TextCodec, func(v *output) *cql.Text { return &v.Text }), cql.Column("testfullname", fullNameCodec{}, func(v *output) *FullName { return &v.Name }), cql.Column("testint", cql.Int32, func(v *output) *int32 { return &v.Number }))
 	got := cassandraReadBound(t, session, cassandraUnprepared(t, "SELECT * FROM "+table, decoder), gocql.Options{})
 	require.Equal(t, "testtext", got.Text.String())
 	require.Equal(t, FullName{"John", "Doe"}, got.Name)
 	require.Equal(t, int32(100), got.Number)
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(testtext,testint) VALUES(?,?)", table), codecTestMust(gocql.TextValue("null-int")), gocql.NullValue(gocql.IntValue(0).Type()))
-	nullable := cassandraPrepared(t, session, gocql.Statement[string, gocql.Nullable[int32]]{CQL: fmt.Sprintf("SELECT testint FROM %s WHERE testtext=?", table), Params: gocql.OneParam(gocql.StringEncoder), Rows: gocql.OneColumn(gocql.NullableCodec(gocql.Int32))}, gocql.PrepareOptions{})
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(testtext,testint) VALUES(?,?)", table), codecTestMust(cql.TextValue("null-int")), cql.NullValue(cql.IntValue(0).Type()))
+	nullable := cassandraPrepared(t, session, cql.Statement[string, cql.Nullable[int32]]{CQL: fmt.Sprintf("SELECT testint FROM %s WHERE testtext=?", table), Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.NullableCodec(cql.Int32))}, gocql.PrepareOptions{})
 	require.False(t, cassandraReadBound(t, session, cassandraBound(t, nullable, "null-int"), gocql.Options{}).Valid)
 }
 
@@ -671,9 +673,9 @@ func TestMapScan(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(fullname text PRIMARY KEY,age int,address inet,data blob)", table))
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(fullname,age,address) VALUES(?,?,?)", table), codecTestMust(gocql.TextValue("Grace Hopper")), gocql.IntValue(31), cassandraValue(gocql.InetValue(netip.MustParseAddr("10.0.0.1"))))
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(fullname,age,address,data) VALUES(?,?,?,?)", table), codecTestMust(gocql.TextValue("Ada Lovelace")), gocql.IntValue(30), cassandraValue(gocql.InetValue(netip.MustParseAddr("10.0.0.2"))), gocql.BlobValue([]byte(`{"foo": "bar"}`)))
-	rows := cassandraRows(t, session, cassandraUnprepared(t, "SELECT * FROM "+table, gocql.DynamicRows), gocql.Options{})
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(fullname,age,address) VALUES(?,?,?)", table), codecTestMust(cql.TextValue("Grace Hopper")), cql.IntValue(31), cassandraValue(cql.InetValue(netip.MustParseAddr("10.0.0.1"))))
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(fullname,age,address,data) VALUES(?,?,?,?)", table), codecTestMust(cql.TextValue("Ada Lovelace")), cql.IntValue(30), cassandraValue(cql.InetValue(netip.MustParseAddr("10.0.0.2"))), cql.BlobValue([]byte(`{"foo": "bar"}`)))
+	rows := cassandraRows(t, session, cassandraUnprepared(t, "SELECT * FROM "+table, cql.DynamicRows), gocql.Options{})
 	require.Len(t, rows, 2)
 	for i, want := range []struct {
 		name    string
@@ -692,7 +694,7 @@ func TestMapScan(t *testing.T) {
 			require.NoError(t, e)
 			require.Equal(t, []byte(`{"foo": "bar"}`), b.OwnedBytes())
 		} else {
-			require.Equal(t, gocql.Null, data.State())
+			require.Equal(t, cql.Null, data.State())
 		}
 	}
 }
@@ -703,33 +705,33 @@ func TestSliceMap(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(testuuid timeuuid PRIMARY KEY,testtimestamp timestamp,testvarchar varchar,testbigint bigint,testblob blob,testbool boolean,testfloat float,testdouble double,testint int,testdecimal decimal,testlist list<text>,testset set<int>,testmap map<varchar,varchar>,testvarint varint,testinet inet)", table))
-	textType, err := gocql.ScalarType(gocql.TypeVarchar)
+	textType, err := cql.ScalarType(cql.TypeVarchar)
 	require.NoError(t, err)
-	intType := gocql.IntValue(0).Type()
-	listType, err := gocql.ListType(textType)
+	intType := cql.IntValue(0).Type()
+	listType, err := cql.ListType(textType)
 	require.NoError(t, err)
-	setType, err := gocql.SetType(intType)
+	setType, err := cql.SetType(intType)
 	require.NoError(t, err)
-	varcharType, err := gocql.ScalarType(gocql.TypeVarchar)
+	varcharType, err := cql.ScalarType(cql.TypeVarchar)
 	require.NoError(t, err)
-	mapType, err := gocql.MapType(varcharType, varcharType)
+	mapType, err := cql.MapType(varcharType, varcharType)
 	require.NoError(t, err)
 	bigInt, ok := new(big.Int).SetString("830169365738487321165427203929228", 10)
 	require.True(t, ok)
-	expected := []gocql.ValueField{{Name: "testuuid", Value: cassandraValue(gocql.TimeUUIDValue(gocql.TimeUUID(gocql.NewTimeUUID())))}, {Name: "testtimestamp", Value: gocql.TimestampValue(gocql.Timestamp(time.Now().UnixMilli()))}, {Name: "testvarchar", Value: codecTestMust(gocql.TextValue("Test VarChar"))}, {Name: "testbigint", Value: gocql.BigIntValue(time.Now().Unix())}, {Name: "testblob", Value: gocql.BlobValue([]byte("test blob"))}, {Name: "testbool", Value: gocql.BoolValue(true)}, {Name: "testfloat", Value: gocql.FloatValue(4.564)}, {Name: "testdouble", Value: gocql.DoubleValue(4.815162342)}, {Name: "testint", Value: gocql.IntValue(2343)}, {Name: "testdecimal", Value: gocql.DecimalValue(gocql.Decimal{Unscaled: gocql.VarintFromBigInt(big.NewInt(100))})}, {Name: "testlist", Value: cassandraValue(gocql.ListValue(listType, []gocql.Value{codecTestMust(gocql.TextValue("quux")), codecTestMust(gocql.TextValue("foo")), codecTestMust(gocql.TextValue("bar")), codecTestMust(gocql.TextValue("baz")), codecTestMust(gocql.TextValue("quux"))}))}, {Name: "testset", Value: cassandraValue(gocql.SetValue(setType, []gocql.Value{gocql.IntValue(1), gocql.IntValue(2), gocql.IntValue(3), gocql.IntValue(4), gocql.IntValue(5), gocql.IntValue(6), gocql.IntValue(7), gocql.IntValue(8), gocql.IntValue(9)}))}, {Name: "testmap", Value: cassandraValue(gocql.MapValue(mapType, []gocql.ValueEntry{{Key: codecTestMust(gocql.TextValue("field1")), Value: codecTestMust(gocql.TextValue("val1"))}, {Key: codecTestMust(gocql.TextValue("field2")), Value: codecTestMust(gocql.TextValue("val2"))}, {Key: codecTestMust(gocql.TextValue("field3")), Value: codecTestMust(gocql.TextValue("val3"))}}))}, {Name: "testvarint", Value: gocql.VarintValue(gocql.VarintFromBigInt(bigInt))}, {Name: "testinet", Value: cassandraValue(gocql.InetValue(netip.MustParseAddr("213.212.2.19")))}}
-	var values []gocql.Value
+	expected := []cql.ValueField{{Name: "testuuid", Value: cassandraValue(cql.TimeUUIDValue(cql.TimeUUID(cql.NewTimeUUID())))}, {Name: "testtimestamp", Value: cql.TimestampValue(cql.Timestamp(time.Now().UnixMilli()))}, {Name: "testvarchar", Value: codecTestMust(cql.TextValue("Test VarChar"))}, {Name: "testbigint", Value: cql.BigIntValue(time.Now().Unix())}, {Name: "testblob", Value: cql.BlobValue([]byte("test blob"))}, {Name: "testbool", Value: cql.BoolValue(true)}, {Name: "testfloat", Value: cql.FloatValue(4.564)}, {Name: "testdouble", Value: cql.DoubleValue(4.815162342)}, {Name: "testint", Value: cql.IntValue(2343)}, {Name: "testdecimal", Value: cql.DecimalValue(cql.Decimal{Unscaled: cql.VarintFromBigInt(big.NewInt(100))})}, {Name: "testlist", Value: cassandraValue(cql.ListValue(listType, []cql.Value{codecTestMust(cql.TextValue("quux")), codecTestMust(cql.TextValue("foo")), codecTestMust(cql.TextValue("bar")), codecTestMust(cql.TextValue("baz")), codecTestMust(cql.TextValue("quux"))}))}, {Name: "testset", Value: cassandraValue(cql.SetValue(setType, []cql.Value{cql.IntValue(1), cql.IntValue(2), cql.IntValue(3), cql.IntValue(4), cql.IntValue(5), cql.IntValue(6), cql.IntValue(7), cql.IntValue(8), cql.IntValue(9)}))}, {Name: "testmap", Value: cassandraValue(cql.MapValue(mapType, []cql.ValueEntry{{Key: codecTestMust(cql.TextValue("field1")), Value: codecTestMust(cql.TextValue("val1"))}, {Key: codecTestMust(cql.TextValue("field2")), Value: codecTestMust(cql.TextValue("val2"))}, {Key: codecTestMust(cql.TextValue("field3")), Value: codecTestMust(cql.TextValue("val3"))}}))}, {Name: "testvarint", Value: cql.VarintValue(cql.VarintFromBigInt(bigInt))}, {Name: "testinet", Value: cassandraValue(cql.InetValue(netip.MustParseAddr("213.212.2.19")))}}
+	var values []cql.Value
 	for _, field := range expected {
 		values = append(values, field.Value)
 	}
 	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(testuuid,testtimestamp,testvarchar,testbigint,testblob,testbool,testfloat,testdouble,testint,testdecimal,testlist,testset,testmap,testvarint,testinet) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", table), values...)
-	check := func(row gocql.DynamicRow) {
+	check := func(row cql.DynamicRow) {
 		t.Helper()
 		require.Equal(t, len(expected), row.Columns().Len())
 		for _, field := range expected {
 			actual := cassandraField(t, row, field.Name)
-			want, err := gocql.EncodeValueOwned(actual.Type(), gocql.DynamicCodec, field.Value)
+			want, err := cql.EncodeValueOwned(actual.Type(), cql.DynamicCodec, field.Value)
 			require.NoError(t, err, field.Name)
-			got, err := gocql.EncodeValueOwned(actual.Type(), gocql.DynamicCodec, actual)
+			got, err := cql.EncodeValueOwned(actual.Type(), cql.DynamicCodec, actual)
 			require.NoError(t, err, field.Name)
 			require.Equal(t, want.State(), got.State(), field.Name)
 			require.Equal(t, want.Bytes().OwnedBytes(), got.Bytes().OwnedBytes(), field.Name)
@@ -737,7 +739,7 @@ func TestSliceMap(t *testing.T) {
 	}
 	// Preserve the three result-consumption forms as cloned slices, a cursor,
 	// and an exactly-one-row read, all with explicit dynamic values.
-	bound := cassandraUnprepared(t, "SELECT * FROM "+table, gocql.DynamicRows)
+	bound := cassandraUnprepared(t, "SELECT * FROM "+table, cql.DynamicRows)
 	rows := cassandraRows(t, session, bound, gocql.Options{})
 	require.Len(t, rows, 1)
 	check(rows[0])
@@ -761,8 +763,8 @@ func Test_RetryPolicyIdempotence(t *testing.T) {
 	}{{"with retry", true, 6}, {"without retry", false, 1}} {
 		t.Run(tc.name, func(t *testing.T) {
 			observer := &cassandraObserver{}
-			bound := cassandraUnprepared(t, ("INSERT INTO " + fixtureKeyspace("") + ".not_existing_table(event_id,time,args) VALUES(4,now(),'test')"), gocql.NoRows)
-			_, err := Exec(context.Background(), session, bound, testOptions(gocql.OptionValues{Idempotent: tc.idempotent, Retry: cassandraRetry{}, Consistency: gocql.Option[gocql.Consistency]{Value: gocql.All, Set: true}, Observer: observer}))
+			bound := cassandraUnprepared(t, ("INSERT INTO " + fixtureKeyspace("") + ".not_existing_table(event_id,time,args) VALUES(4,now(),'test')"), cql.NoRows)
+			_, err := Exec(context.Background(), session, bound, testOptions(gocql.OptionValues{Idempotent: tc.idempotent, Retry: cassandraRetry{}, Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, Observer: observer}))
 			require.Error(t, err)
 			events, attempts := observer.snapshot()
 			require.Len(t, attempts, tc.attempts)
@@ -777,7 +779,7 @@ func TestSmallInt(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(testsmallint smallint PRIMARY KEY)", table))
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(testsmallint) VALUES(?)", table), gocql.SmallIntValue(2))
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(testsmallint) VALUES(?)", table), cql.SmallIntValue(2))
 	require.Equal(t, int64(2), cassandraInt(t, cassandraRead(t, session, "SELECT * FROM "+table), "testsmallint"))
 }
 
@@ -788,11 +790,11 @@ func TestScanWithNilArguments(t *testing.T) {
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(foo varchar,bar int,PRIMARY KEY(foo,bar))", table))
 	for i := int32(1); i <= 20; i++ {
-		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,?)", table), codecTestMust(gocql.TextValue("squares")), gocql.IntValue(i*i))
+		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,?)", table), codecTestMust(cql.TextValue("squares")), cql.IntValue(i*i))
 	}
 	type result struct{ N int32 }
-	decoder := gocql.Row(gocql.IgnoreColumn[result]("foo"), gocql.Column("bar", gocql.Int32, func(r *result) *int32 { return &r.N }))
-	prepared := cassandraPrepared(t, session, gocql.Statement[string, result]{CQL: fmt.Sprintf("SELECT * FROM %s WHERE foo=?", table), Params: gocql.OneParam(gocql.StringEncoder), Rows: decoder}, gocql.PrepareOptions{})
+	decoder := cql.Row(cql.IgnoreColumn[result]("foo"), cql.Column("bar", cql.Int32, func(r *result) *int32 { return &r.N }))
+	prepared := cassandraPrepared(t, session, cql.Statement[string, result]{CQL: fmt.Sprintf("SELECT * FROM %s WHERE foo=?", table), Params: cql.OneParam(cql.StringEncoder), Rows: decoder}, gocql.PrepareOptions{})
 	rows, err := Run(context.Background(), session, cassandraBound(t, prepared, "squares"), gocql.Options{})
 	require.NoError(t, err)
 	defer rows.Close()
@@ -810,18 +812,18 @@ func TestScanCASWithNilArguments(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(foo varchar,bar varchar,PRIMARY KEY(foo,bar))", table))
-	cql := fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,?) IF NOT EXISTS", table)
-	values := []gocql.Value{codecTestMust(gocql.TextValue("baz")), codecTestMust(gocql.TextValue("baz"))}
-	ignored := gocql.Row(gocql.IgnoreColumn[gocql.Unit]("foo"), gocql.IgnoreColumn[gocql.Unit]("bar"))
-	require.True(t, cassandraReadBound(t, session, cassandraCASBound(t, session, cql, values, ignored), gocql.Options{}).Applied)
-	type result struct{ Text gocql.Text }
+	stmt := fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,?) IF NOT EXISTS", table)
+	values := []cql.Value{codecTestMust(cql.TextValue("baz")), codecTestMust(cql.TextValue("baz"))}
+	ignored := cql.Row(cql.IgnoreColumn[cql.Unit]("foo"), cql.IgnoreColumn[cql.Unit]("bar"))
+	require.True(t, cassandraReadBound(t, session, cassandraCASBound(t, session, stmt, values, ignored), gocql.Options{}).Applied)
+	type result struct{ Text cql.Text }
 	for _, selected := range []string{"foo", "bar"} {
 		other := "foo"
 		if selected == "foo" {
 			other = "bar"
 		}
-		decoder := gocql.Row(gocql.Column(selected, gocql.TextCodec, func(v *result) *gocql.Text { return &v.Text }), gocql.IgnoreColumn[result](other))
-		got := cassandraReadBound(t, session, cassandraCASBound(t, session, cql, values, decoder), gocql.Options{})
+		decoder := cql.Row(cql.Column(selected, cql.TextCodec, func(v *result) *cql.Text { return &v.Text }), cql.IgnoreColumn[result](other))
+		got := cassandraReadBound(t, session, cassandraCASBound(t, session, stmt, values, decoder), gocql.Options{})
 		require.False(t, got.Applied)
 		require.True(t, got.Previous.Set)
 		require.Equal(t, "baz", got.Previous.Value.Text.String())
@@ -834,9 +836,9 @@ func TestRebindQueryInfo(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,value text)", table))
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,value) VALUES(?,?)", table), gocql.IntValue(23), codecTestMust(gocql.TextValue("quux")))
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,value) VALUES(?,?)", table), gocql.IntValue(24), codecTestMust(gocql.TextValue("w00t")))
-	prepared := cassandraPrepared(t, session, gocql.Statement[int32, gocql.Text]{CQL: fmt.Sprintf("SELECT value FROM %s WHERE id=?", table), Params: gocql.OneParam(gocql.Int32), Rows: gocql.OneColumn(gocql.TextCodec)}, gocql.PrepareOptions{})
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,value) VALUES(?,?)", table), cql.IntValue(23), codecTestMust(cql.TextValue("quux")))
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,value) VALUES(?,?)", table), cql.IntValue(24), codecTestMust(cql.TextValue("w00t")))
+	prepared := cassandraPrepared(t, session, cql.Statement[int32, cql.Text]{CQL: fmt.Sprintf("SELECT value FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32), Rows: cql.OneColumn(cql.TextCodec)}, gocql.PrepareOptions{})
 	first := cassandraBound(t, prepared, int32(23))
 	second := cassandraBound(t, prepared, int32(24))
 	require.Equal(t, "quux", cassandraReadBound(t, session, first, gocql.Options{}).String())
@@ -851,8 +853,8 @@ func TestStaticQueryInfo(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,value text)", table))
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,value) VALUES(?,?)", table), gocql.IntValue(113), codecTestMust(gocql.TextValue("foo")))
-	prepared := cassandraPrepared(t, session, gocql.Statement[int32, gocql.DynamicRow]{CQL: fmt.Sprintf("SELECT id,value FROM %s WHERE id=?", table), Params: gocql.OneParam(gocql.Int32), Rows: gocql.DynamicRows}, gocql.PrepareOptions{})
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,value) VALUES(?,?)", table), cql.IntValue(113), codecTestMust(cql.TextValue("foo")))
+	prepared := cassandraPrepared(t, session, cql.Statement[int32, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id,value FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows}, gocql.PrepareOptions{})
 	require.Equal(t, 1, prepared.Parameters().Len())
 	bound := cassandraBound(t, prepared, int32(113))
 	for i := 0; i < 2; i++ {
@@ -875,13 +877,13 @@ func TestBoundQueryInfo(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int,cluster int,value text,PRIMARY KEY(id,cluster))", table))
-	params := gocql.Params(gocql.Param("value", gocql.StringEncoder, func(v ClusteredKeyValue) string { return v.Value }), gocql.Param("cluster", gocql.Int32, func(v ClusteredKeyValue) int32 { return v.Cluster }), gocql.Param("id", gocql.Int32, func(v ClusteredKeyValue) int32 { return v.Id }))
-	prepared := cassandraPrepared(t, session, gocql.Statement[ClusteredKeyValue, gocql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id,cluster,value) VALUES(?,?,?)", table), Params: params, Rows: gocql.NoRows}, gocql.PrepareOptions{})
+	params := cql.Params(cql.Param("value", cql.StringEncoder, func(v ClusteredKeyValue) string { return v.Value }), cql.Param("cluster", cql.Int32, func(v ClusteredKeyValue) int32 { return v.Cluster }), cql.Param("id", cql.Int32, func(v ClusteredKeyValue) int32 { return v.Id }))
+	prepared := cassandraPrepared(t, session, cql.Statement[ClusteredKeyValue, cql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id,cluster,value) VALUES(?,?,?)", table), Params: params, Rows: cql.NoRows}, gocql.PrepareOptions{})
 	require.Equal(t, 3, prepared.Parameters().Len())
 	_, err := Exec(context.Background(), session, cassandraBound(t, prepared, ClusteredKeyValue{200, 300, "baz"}), gocql.Options{})
 	require.NoError(t, err)
-	readParams := gocql.Params(gocql.Param("cluster", gocql.Int32, func(v ClusteredKeyValue) int32 { return v.Cluster }), gocql.Param("id", gocql.Int32, func(v ClusteredKeyValue) int32 { return v.Id }))
-	read := cassandraPrepared(t, session, gocql.Statement[ClusteredKeyValue, gocql.DynamicRow]{CQL: fmt.Sprintf("SELECT id,cluster,value FROM %s WHERE id=? AND cluster=?", table), Params: readParams, Rows: gocql.DynamicRows}, gocql.PrepareOptions{})
+	readParams := cql.Params(cql.Param("cluster", cql.Int32, func(v ClusteredKeyValue) int32 { return v.Cluster }), cql.Param("id", cql.Int32, func(v ClusteredKeyValue) int32 { return v.Id }))
+	read := cassandraPrepared(t, session, cql.Statement[ClusteredKeyValue, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id,cluster,value FROM %s WHERE id=? AND cluster=?", table), Params: readParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
 	row := cassandraReadBound(t, session, cassandraBound(t, read, ClusteredKeyValue{Id: 200, Cluster: 300}), gocql.Options{})
 	require.Equal(t, "baz", cassandraText(t, row, "value"))
 	require.Equal(t, int64(200), cassandraInt(t, row, "id"))
@@ -895,12 +897,12 @@ func TestBatchQueryInfo(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int,cluster int,value text,PRIMARY KEY(id,cluster))", table))
-	params := gocql.Params(gocql.Param("id", gocql.Int32, func(v ClusteredKeyValue) int32 { return v.Id }), gocql.Param("cluster", gocql.Int32, func(v ClusteredKeyValue) int32 { return v.Cluster }), gocql.Param("value", gocql.StringEncoder, func(v ClusteredKeyValue) string { return v.Value }))
-	prepared := cassandraPrepared(t, session, gocql.Statement[ClusteredKeyValue, gocql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id,cluster,value) VALUES(?,?,?)", table), Params: params, Rows: gocql.NoRows}, gocql.PrepareOptions{})
+	params := cql.Params(cql.Param("id", cql.Int32, func(v ClusteredKeyValue) int32 { return v.Id }), cql.Param("cluster", cql.Int32, func(v ClusteredKeyValue) int32 { return v.Cluster }), cql.Param("value", cql.StringEncoder, func(v ClusteredKeyValue) string { return v.Value }))
+	prepared := cassandraPrepared(t, session, cql.Statement[ClusteredKeyValue, cql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id,cluster,value) VALUES(?,?,?)", table), Params: params, Rows: cql.NoRows}, gocql.PrepareOptions{})
 	require.Equal(t, 3, prepared.Parameters().Len())
 	bound := cassandraBound(t, prepared, ClusteredKeyValue{4000, 5000, "bar"})
-	cassandraBatch(t, session, gocql.LoggedBatch, []gocql.BatchItem{cassandraItem(t, bound)}, gocql.Options{})
-	read := cassandraDynamicBound(t, session, fmt.Sprintf("SELECT id,cluster,value FROM %s WHERE id=? AND cluster=?", table), []gocql.Value{gocql.IntValue(4000), gocql.IntValue(5000)}, gocql.PrepareOptions{})
+	cassandraBatch(t, session, cql.LoggedBatch, []gocql.BatchItem{cassandraItem(t, bound)}, gocql.Options{})
+	read := cassandraDynamicBound(t, session, fmt.Sprintf("SELECT id,cluster,value FROM %s WHERE id=? AND cluster=?", table), []cql.Value{cql.IntValue(4000), cql.IntValue(5000)}, gocql.PrepareOptions{})
 	row := cassandraReadBound(t, session, read, gocql.Options{})
 	require.Equal(t, "bar", cassandraText(t, row, "value"))
 	require.Equal(t, int64(4000), cassandraInt(t, row, "id"))
@@ -1007,13 +1009,13 @@ func getRandomConn(t *testing.T, session *gocql.Session) *driverConn {
 	return conn
 }
 
-func injectInvalidPreparedStatement(t *testing.T, session *gocql.Session, table string) (*Bound[gocql.Unit], *driverConn) {
+func injectInvalidPreparedStatement(t *testing.T, session *gocql.Session, table string) (*Bound[cql.Unit], *driverConn) {
 	t.Helper()
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(foo varchar,bar int,PRIMARY KEY(foo,bar))", table))
 	conn := getRandomConn(t, session)
-	prepared := cassandraPrepared(t, session, gocql.Statement[string, gocql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,7)", table), Params: gocql.OneParam(gocql.StringEncoder), Rows: gocql.NoRows}, *func() *gocql.PrepareOptions {
+	prepared := cassandraPrepared(t, session, cql.Statement[string, cql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,7)", table), Params: cql.OneParam(cql.StringEncoder), Rows: cql.NoRows}, *func() *gocql.PrepareOptions {
 		opaqueStorageValuex := new(gocql.PrepareOptions)
-		opaqueStorageValuex.HostID = gocql.Option[gocql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
+		opaqueStorageValuex.HostID = cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
 		implExecution.PrepareOptionsData(opaqueStorageValuex).InternalConnection = conn
 		return opaqueStorageValuex
 	}())
@@ -1031,8 +1033,8 @@ func TestPrepare_MissingSchemaPrepare(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	conn := getRandomConn(t, session)
-	statement := gocql.Statement[int32, gocql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(val) VALUES(?)", table), Params: gocql.OneParam(gocql.Int32), Rows: gocql.NoRows}
-	options := gocql.PrepareOptions{HostID: gocql.Option[gocql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}}
+	statement := cql.Statement[int32, cql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(val) VALUES(?)", table), Params: cql.OneParam(cql.Int32), Rows: cql.NoRows}
+	options := gocql.PrepareOptions{HostID: cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}}
 	_, err := gocql.Prepare(context.Background(), session, statement, options)
 	require.Error(t, err)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(val int PRIMARY KEY)", table))
@@ -1049,7 +1051,7 @@ func TestPrepare_ReprepareStatement(t *testing.T) {
 	bound, conn := injectInvalidPreparedStatement(t, session, table)
 	_, err := Exec(context.Background(), session, bound, testOptions(*func() *gocql.OptionValues {
 		opaqueStorageValuexx := new(gocql.OptionValues)
-		opaqueStorageValuexx.HostID = gocql.Option[gocql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
+		opaqueStorageValuexx.HostID = cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
 		implExecution.OptionsData(opaqueStorageValuexx).InternalConnection = conn
 		return opaqueStorageValuexx
 	}()))
@@ -1058,7 +1060,7 @@ func TestPrepare_ReprepareStatement(t *testing.T) {
 	id := append([]byte(nil), implExecution.BoundData(bound).InternalRequest.InternalPrepared().InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)].InternalId...)
 	implExecution.BoundData(bound).InternalRequest.InternalPrepared().InternalMu.RUnlock()
 	require.NotEqual(t, []byte("foobar"), id)
-	require.Equal(t, int64(7), cassandraInt(t, cassandraRead(t, session, "SELECT bar FROM "+table+" WHERE foo=?", codecTestMust(gocql.TextValue("bar"))), "bar"))
+	require.Equal(t, int64(7), cassandraInt(t, cassandraRead(t, session, "SELECT bar FROM "+table+" WHERE foo=?", codecTestMust(cql.TextValue("bar"))), "bar"))
 }
 
 func TestPrepare_ReprepareBatch(t *testing.T) {
@@ -1067,9 +1069,9 @@ func TestPrepare_ReprepareBatch(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	bound, conn := injectInvalidPreparedStatement(t, session, table)
-	cassandraBatch(t, session, gocql.UnloggedBatch, []gocql.BatchItem{cassandraItem(t, bound)}, testOptions(*func() *gocql.OptionValues {
+	cassandraBatch(t, session, cql.UnloggedBatch, []gocql.BatchItem{cassandraItem(t, bound)}, testOptions(*func() *gocql.OptionValues {
 		opaqueStorageValuexxx := new(gocql.OptionValues)
-		opaqueStorageValuexxx.HostID = gocql.Option[gocql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
+		opaqueStorageValuexxx.HostID = cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
 		implExecution.OptionsData(opaqueStorageValuexxx).InternalConnection = conn
 		return opaqueStorageValuexxx
 	}()))
@@ -1077,14 +1079,14 @@ func TestPrepare_ReprepareBatch(t *testing.T) {
 	id := append([]byte(nil), implExecution.BoundData(bound).InternalRequest.InternalPrepared().InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)].InternalId...)
 	implExecution.BoundData(bound).InternalRequest.InternalPrepared().InternalMu.RUnlock()
 	require.NotEqual(t, []byte("foobar"), id)
-	require.Equal(t, int64(7), cassandraInt(t, cassandraRead(t, session, "SELECT bar FROM "+table+" WHERE foo=?", codecTestMust(gocql.TextValue("bar"))), "bar"))
+	require.Equal(t, int64(7), cassandraInt(t, cassandraRead(t, session, "SELECT bar FROM "+table+" WHERE foo=?", codecTestMust(cql.TextValue("bar"))), "bar"))
 }
 
 func TestQueryInfo(t *testing.T) {
 	t.Parallel()
 	session := createV2Session(t)
 	defer session.Close()
-	prepared := cassandraPrepared(t, session, gocql.Statement[string, gocql.DynamicRow]{CQL: "SELECT release_version,host_id FROM system.local WHERE key=?", Params: gocql.OneParam(gocql.StringEncoder), Rows: gocql.DynamicRows}, gocql.PrepareOptions{})
+	prepared := cassandraPrepared(t, session, cql.Statement[string, cql.DynamicRow]{CQL: "SELECT release_version,host_id FROM system.local WHERE key=?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.DynamicRows}, gocql.PrepareOptions{})
 	require.Equal(t, 1, prepared.Parameters().Len())
 	require.Equal(t, 2, prepared.Columns().Len())
 }
@@ -1104,18 +1106,18 @@ func TestPrepare_PreparedCacheEviction(t *testing.T) {
 	runtime.InternalMu.Unlock()
 	insert := fmt.Sprintf("INSERT INTO %s(id,mod) VALUES(?,?)", table)
 	for i := int32(0); i < 2; i++ {
-		cassandraWrite(t, session, insert, gocql.IntValue(i), gocql.IntValue(10000%(i+1)))
+		cassandraWrite(t, session, insert, cql.IntValue(i), cql.IntValue(10000%(i+1)))
 	}
 	selects := []string{fmt.Sprintf("SELECT id,mod FROM %s WHERE id=0", table), fmt.Sprintf("SELECT id,mod FROM %s WHERE id=1", table)}
-	for _, cql := range selects {
-		prepared := cassandraPrepared(t, session, gocql.Statement[gocql.Unit, gocql.DynamicRow]{CQL: cql, Params: gocql.NoParams, Rows: gocql.DynamicRows}, gocql.PrepareOptions{})
-		cassandraReadBound(t, session, cassandraBound(t, prepared, gocql.Unit{}), gocql.Options{})
+	for _, stmt := range selects {
+		prepared := cassandraPrepared(t, session, cql.Statement[cql.Unit, cql.DynamicRow]{CQL: stmt, Params: cql.NoParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
+		cassandraReadBound(t, session, cassandraBound(t, prepared, cql.Unit{}), gocql.Options{})
 	}
 	update := fmt.Sprintf("UPDATE %s SET mod=? WHERE id=?", table)
-	cassandraWrite(t, session, update, gocql.IntValue(1), gocql.IntValue(11))
+	cassandraWrite(t, session, update, cql.IntValue(1), cql.IntValue(11))
 	del := fmt.Sprintf("DELETE FROM %s WHERE id=?", table)
-	cassandraWrite(t, session, del, gocql.IntValue(1))
-	cassandraWrite(t, session, insert, gocql.IntValue(3), gocql.IntValue(11))
+	cassandraWrite(t, session, del, cql.IntValue(1))
+	cassandraWrite(t, session, insert, cql.IntValue(3), cql.IntValue(11))
 	runtime.InternalMu.Lock()
 	defer runtime.InternalMu.Unlock()
 	require.Len(t, runtime.InternalPrepared, maxPrepared)
@@ -1124,8 +1126,8 @@ func TestPrepare_PreparedCacheEviction(t *testing.T) {
 		cached[key.InternalCql] = true
 	}
 	require.False(t, cached[selects[0]])
-	for _, cql := range []string{selects[1], insert, update, del} {
-		require.True(t, cached[cql], "expected cached %q", cql)
+	for _, stmt := range []string{selects[1], insert, update, del} {
+		require.True(t, cached[stmt], "expected cached %q", stmt)
 	}
 }
 
@@ -1141,11 +1143,11 @@ func TestPrepare_PreparedCacheKey(t *testing.T) {
 	for _, s := range []*gocql.Session{session, other} {
 		cassandraDDL(t, s, fmt.Sprintf("CREATE TABLE %s(id varchar PRIMARY KEY,field varchar)", table))
 	}
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,field) VALUES(?,?)", table), codecTestMust(gocql.TextValue("key")), codecTestMust(gocql.TextValue("one")))
-	cassandraWrite(t, other, fmt.Sprintf("INSERT INTO %s(id,field) VALUES(?,?)", table), codecTestMust(gocql.TextValue("key")), codecTestMust(gocql.TextValue("two")))
-	cql := fmt.Sprintf("SELECT field FROM %s WHERE id=?", table)
-	require.Equal(t, "one", cassandraText(t, cassandraRead(t, session, cql, codecTestMust(gocql.TextValue("key"))), "field"))
-	require.Equal(t, "two", cassandraText(t, cassandraRead(t, other, cql, codecTestMust(gocql.TextValue("key"))), "field"))
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,field) VALUES(?,?)", table), codecTestMust(cql.TextValue("key")), codecTestMust(cql.TextValue("one")))
+	cassandraWrite(t, other, fmt.Sprintf("INSERT INTO %s(id,field) VALUES(?,?)", table), codecTestMust(cql.TextValue("key")), codecTestMust(cql.TextValue("two")))
+	stmt := fmt.Sprintf("SELECT field FROM %s WHERE id=?", table)
+	require.Equal(t, "one", cassandraText(t, cassandraRead(t, session, stmt, codecTestMust(cql.TextValue("key"))), "field"))
+	require.Equal(t, "two", cassandraText(t, cassandraRead(t, other, stmt, codecTestMust(cql.TextValue("key"))), "field"))
 }
 
 // TestMarshalFloat64Ptr tests to see that a pointer to a float64 is marshalled correctly.
@@ -1156,8 +1158,8 @@ func TestMarshalFloat64Ptr(t *testing.T) {
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id double PRIMARY KEY,test double)", table))
 	testNum := 7500.0
-	params := gocql.Params(gocql.Param("id", gocql.Float64, func(v *float64) float64 { return *v }), gocql.Param("test", gocql.Float64, func(v *float64) float64 { return *v }))
-	prepared := cassandraPrepared(t, session, gocql.Statement[*float64, gocql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id,test) VALUES(?,?)", table), Params: params, Rows: gocql.NoRows}, gocql.PrepareOptions{})
+	params := cql.Params(cql.Param("id", cql.Float64, func(v *float64) float64 { return *v }), cql.Param("test", cql.Float64, func(v *float64) float64 { return *v }))
+	prepared := cassandraPrepared(t, session, cql.Statement[*float64, cql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id,test) VALUES(?,?)", table), Params: params, Rows: cql.NoRows}, gocql.PrepareOptions{})
 	_, err := Exec(context.Background(), session, cassandraBound(t, prepared, &testNum), gocql.Options{})
 	require.NoError(t, err)
 	got, err := cassandraField(t, cassandraRead(t, session, "SELECT test FROM "+table), "test").Float()
@@ -1175,7 +1177,7 @@ func TestMarshalInet(t *testing.T) {
 	ipFromNet, ok := netip.AddrFromSlice(net.ParseIP("222.43.54.65"))
 	require.True(t, ok)
 	for _, want := range []netip.Addr{netip.MustParseAddr("123.34.45.56"), ipFromNet.Unmap()} {
-		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(ip,name) VALUES(?,?)", table), cassandraValue(gocql.InetValue(want)), codecTestMust(gocql.TextValue("Test IP")))
+		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(ip,name) VALUES(?,?)", table), cassandraValue(cql.InetValue(want)), codecTestMust(cql.TextValue("Test IP")))
 		for i := 0; i < 2; i++ {
 			row := cassandraRead(t, session, "SELECT ip FROM "+table)
 			got, err := cassandraField(t, row, "ip").Inet()
@@ -1183,7 +1185,7 @@ func TestMarshalInet(t *testing.T) {
 			require.Equal(t, want.String(), got.String())
 			require.Equal(t, want, got)
 		}
-		cassandraWrite(t, session, fmt.Sprintf("DELETE FROM %s WHERE ip=?", table), cassandraValue(gocql.InetValue(want)))
+		cassandraWrite(t, session, fmt.Sprintf("DELETE FROM %s WHERE ip=?", table), cassandraValue(cql.InetValue(want)))
 	}
 }
 
@@ -1196,29 +1198,29 @@ func TestVarint(t *testing.T) {
 	insert := fmt.Sprintf("INSERT INTO %s(id,test) VALUES(?,?)", table)
 	selectCQL := "SELECT test FROM " + table
 	for _, want := range []int64{0, -1, int64(math.MaxInt32) + 1} {
-		cassandraWrite(t, session, insert, codecTestMust(gocql.TextValue("id")), gocql.VarintValue(gocql.VarintFromBigInt(big.NewInt(want))))
+		cassandraWrite(t, session, insert, codecTestMust(cql.TextValue("id")), cql.VarintValue(cql.VarintFromBigInt(big.NewInt(want))))
 		row := cassandraRead(t, session, selectCQL)
 		got, err := cassandraField(t, row, "test").Varint()
 		require.NoError(t, err)
 		require.Equal(t, want, got.BigInt().Int64())
 	}
-	cassandraWrite(t, session, insert, codecTestMust(gocql.TextValue("id")), gocql.NullValue(gocql.VarintValue(gocql.Varint{}).Type()))
-	nullable := cassandraUnprepared(t, selectCQL, gocql.OneColumn(gocql.NullableCodec(gocql.VarintCodec)))
+	cassandraWrite(t, session, insert, codecTestMust(cql.TextValue("id")), cql.NullValue(cql.VarintValue(cql.Varint{}).Type()))
+	nullable := cassandraUnprepared(t, selectCQL, cql.OneColumn(cql.NullableCodec(cql.VarintCodec)))
 	null := cassandraReadBound(t, session, nullable, gocql.Options{})
 	require.False(t, null.Valid)
 	require.Zero(t, null.Value.BigInt().Sign())
 	biggie, ok := new(big.Int).SetString("36893488147419103232", 10)
 	require.True(t, ok)
-	cassandraWrite(t, session, insert, codecTestMust(gocql.TextValue("id")), gocql.VarintValue(gocql.VarintFromBigInt(biggie)))
+	cassandraWrite(t, session, insert, codecTestMust(cql.TextValue("id")), cql.VarintValue(cql.VarintFromBigInt(biggie)))
 	got, err := cassandraField(t, cassandraRead(t, session, selectCQL), "test").Varint()
 	require.NoError(t, err)
 	require.Equal(t, biggie.String(), got.BigInt().String())
-	rows, err := Run(context.Background(), session, cassandraUnprepared(t, selectCQL, gocql.OneColumn(cassandraVarintInt64{})), gocql.Options{})
+	rows, err := Run(context.Background(), session, cassandraUnprepared(t, selectCQL, cql.OneColumn(cassandraVarintInt64{})), gocql.Options{})
 	require.NoError(t, err)
 	defer rows.Close()
 	require.False(t, rows.Next())
 	require.ErrorContains(t, rows.Close(), "int64 range")
-	absent := cassandraReadBound(t, session, cassandraUnprepared(t, "SELECT test2 FROM "+table, gocql.OneColumn(gocql.NullableCodec(gocql.VarintCodec))), gocql.Options{})
+	absent := cassandraReadBound(t, session, cassandraUnprepared(t, "SELECT test2 FROM "+table, cql.OneColumn(cql.NullableCodec(cql.VarintCodec))), gocql.Options{})
 	require.False(t, absent.Valid)
 	require.Zero(t, absent.Value.BigInt().Sign())
 }
@@ -1248,7 +1250,7 @@ func TestIterHost(t *testing.T) {
 	rows, err := v2Query(context.Background(), session, "SELECT * FROM system.peers")
 	require.NoError(t, err)
 	defer rows.Close()
-	require.NotEqual(t, gocql.UUID{}, rows.Info().HostID)
+	require.NotEqual(t, cql.UUID{}, rows.Info().HostID)
 }
 
 // TestBatchStats confirms that the stats are returning valid data. Accuracy may be questionable.
@@ -1260,9 +1262,9 @@ func TestBatchStats(t *testing.T) {
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY)", table))
 	var items []gocql.BatchItem
 	for _, id := range []int32{1, 2} {
-		items = append(items, cassandraItem(t, cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), []gocql.Value{gocql.IntValue(id)}, gocql.PrepareOptions{})))
+		items = append(items, cassandraItem(t, cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), []cql.Value{cql.IntValue(id)}, gocql.PrepareOptions{})))
 	}
-	info := cassandraBatch(t, session, gocql.LoggedBatch, items, gocql.Options{})
+	info := cassandraBatch(t, session, cql.LoggedBatch, items, gocql.Options{})
 	require.Positive(t, info.Attempts)
 	require.Positive(t, info.Latency)
 }
@@ -1277,11 +1279,11 @@ func TestBatchObserve(t *testing.T) {
 	var items []gocql.BatchItem
 	var cqls []string
 	for i := int32(0); i < 100; i++ {
-		cql := fmt.Sprintf("INSERT INTO %s(id,other) VALUES(?,%d)", table, i)
-		cqls = append(cqls, cql)
-		items = append(items, cassandraItem(t, cassandraWriteBound(t, session, cql, []gocql.Value{gocql.IntValue(i)}, gocql.PrepareOptions{})))
+		stmt := fmt.Sprintf("INSERT INTO %s(id,other) VALUES(?,%d)", table, i)
+		cqls = append(cqls, stmt)
+		items = append(items, cassandraItem(t, cassandraWriteBound(t, session, stmt, []cql.Value{cql.IntValue(i)}, gocql.PrepareOptions{})))
 	}
-	cassandraBatch(t, session, gocql.LoggedBatch, items, testOptions(gocql.OptionValues{Observer: observer}))
+	cassandraBatch(t, session, cql.LoggedBatch, items, testOptions(gocql.OptionValues{Observer: observer}))
 	events, _ := observer.snapshot()
 	require.Len(t, events, 1)
 	require.NoError(t, events[0].Err)
@@ -1289,7 +1291,7 @@ func TestBatchObserve(t *testing.T) {
 	require.Equal(t, cqls, events[0].BatchStatements)
 	// Observations expose typed parameter descriptors, never retained input
 	// payloads. Verify each bound value by reading the resulting rows.
-	rows := cassandraRows(t, session, cassandraUnprepared(t, "SELECT id,other FROM "+table, gocql.DynamicRows), gocql.Options{})
+	rows := cassandraRows(t, session, cassandraUnprepared(t, "SELECT id,other FROM "+table, cql.DynamicRows), gocql.Options{})
 	require.Len(t, rows, 100)
 	for _, row := range rows {
 		require.Equal(t, cassandraInt(t, row, "id"), cassandraInt(t, row, "other"))
@@ -1304,10 +1306,10 @@ func TestNilInQuery(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,count int)", table))
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,count) VALUES(?,?)", table), gocql.IntValue(1), gocql.NullValue(gocql.IntValue(0).Type()))
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,count) VALUES(?,?)", table), cql.IntValue(1), cql.NullValue(cql.IntValue(0).Type()))
 	row := cassandraRead(t, session, "SELECT id,count FROM "+table)
 	require.Equal(t, int64(1), cassandraInt(t, row, "id"))
-	require.Equal(t, gocql.Null, cassandraField(t, row, "count").State())
+	require.Equal(t, cql.Null, cassandraField(t, row, "count").State())
 }
 
 // Don't initialize time.Time bind variable if cassandra timestamp column is empty
@@ -1317,8 +1319,8 @@ func TestEmptyTimestamp(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,time timestamp,num int)", table))
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,num) VALUES(?,?)", table), gocql.IntValue(1), gocql.IntValue(561))
-	read := cassandraPrepared(t, session, gocql.Statement[int32, gocql.Nullable[gocql.Timestamp]]{CQL: fmt.Sprintf("SELECT time FROM %s WHERE id=?", table), Params: gocql.OneParam(gocql.Int32), Rows: gocql.OneColumn(gocql.NullableCodec(gocql.TimestampCodec))}, gocql.PrepareOptions{})
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,num) VALUES(?,?)", table), cql.IntValue(1), cql.IntValue(561))
+	read := cassandraPrepared(t, session, cql.Statement[int32, cql.Nullable[cql.Timestamp]]{CQL: fmt.Sprintf("SELECT time FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32), Rows: cql.OneColumn(cql.NullableCodec(cql.TimestampCodec))}, gocql.PrepareOptions{})
 	value := cassandraReadBound(t, session, cassandraBound(t, read, int32(1)), gocql.Options{})
 	require.False(t, value.Valid)
 	require.Zero(t, value.Value)
@@ -1678,7 +1680,7 @@ func TestSessionMetadataAPIs(t *testing.T) {
 	})
 }
 
-func tableNames(tables map[string]*gocql.TableMetadata) []string {
+func tableNames(tables map[string]*metadata.Table) []string {
 	names := make([]string, 0, len(tables))
 	for name := range tables {
 		names = append(names, name)
@@ -1686,7 +1688,7 @@ func tableNames(tables map[string]*gocql.TableMetadata) []string {
 	return names
 }
 
-func columnNames(columns map[string]*gocql.ColumnMetadata) []string {
+func columnNames(columns map[string]*metadata.Column) []string {
 	names := make([]string, 0, len(columns))
 	for name := range columns {
 		names = append(names, name)
@@ -1720,22 +1722,22 @@ func TestRoutingKey(t *testing.T) {
 		indexes []int
 		key     []byte
 	}{{single, []int{1}, []byte{0, 0, 0, 2}}, {composite, []int{1, 0}, []byte{0, 4, 0, 0, 0, 2, 0, 0, 4, 0, 0, 0, 1, 0}}} {
-		statement := gocql.Statement[[]gocql.Value, gocql.DynamicRow]{CQL: fmt.Sprintf("SELECT * FROM %s WHERE second_id=? AND first_id=?", tc.table), Params: gocql.DynamicParams, Rows: gocql.DynamicRows}
+		statement := cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT * FROM %s WHERE second_id=? AND first_id=?", tc.table), Params: cql.DynamicParams, Rows: cql.DynamicRows}
 		prepared := cassandraPrepared(t, session, statement, gocql.PrepareOptions{})
 		require.Equal(t, tc.indexes, prepared.Info().PartitionKeyIndexes)
 		for _, index := range tc.indexes {
 			column, ok := prepared.Parameters().At(index)
 			require.True(t, ok)
-			require.Equal(t, gocql.TypeInt, column.Type.Kind())
+			require.Equal(t, cql.TypeInt, column.Type.Kind())
 		}
 		again := cassandraPrepared(t, session, statement, gocql.PrepareOptions{})
 		require.Same(t, implExecution.PreparedData(prepared).InternalState, implExecution.PreparedData(again).InternalState, "preparing again must hit typed cache")
-		bound := cassandraBound(t, prepared, []gocql.Value{gocql.IntValue(1), gocql.IntValue(2)})
+		bound := cassandraBound(t, prepared, []cql.Value{cql.IntValue(1), cql.IntValue(2)})
 		key, present, err := newPartitionKey(implExecution.BoundData(bound).InternalRequest.InternalValues.Cells, prepared.Info().PartitionKeyIndexes)
 		require.NoError(t, err)
 		require.True(t, present)
 		var keyBytes []byte
-		require.NoError(t, key.ForEach(func(span gocql.Bytes) error { keyBytes = append(keyBytes, span.OwnedBytes()...); return nil }))
+		require.NoError(t, key.ForEach(func(span cql.Bytes) error { keyBytes = append(keyBytes, span.OwnedBytes()...); return nil }))
 		require.Equal(t, tc.key, keyBytes, "canonical single/composite partition-key bytes")
 		require.True(t, bound.Routing().Token.Set)
 		require.Equal(t, murmur.Murmur3H1(tc.key), bound.Routing().Token.Value)
@@ -1762,10 +1764,10 @@ func TestTokenAwareConnPool(t *testing.T) {
 	for _, name := range []string{table, other} {
 		cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,data text)", name))
 	}
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,data) VALUES(?,?)", table), gocql.IntValue(42), codecTestMust(gocql.TextValue("8 * 6 =")))
-	bound := cassandraDynamicBound(t, session, fmt.Sprintf("SELECT data FROM %s WHERE id=?", table), []gocql.Value{gocql.IntValue(42)}, gocql.PrepareOptions{})
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,data) VALUES(?,?)", table), cql.IntValue(42), codecTestMust(cql.TextValue("8 * 6 =")))
+	bound := cassandraDynamicBound(t, session, fmt.Sprintf("SELECT data FROM %s WHERE id=?", table), []cql.Value{cql.IntValue(42)}, gocql.PrepareOptions{})
 	require.True(t, bound.Routing().Token.Set)
-	require.Equal(t, "8 * 6 =", cassandraText(t, cassandraReadBound(t, session, bound, testOptions(gocql.OptionValues{Consistency: gocql.Option[gocql.Consistency]{Value: gocql.One, Set: true}})), "data"))
+	require.Equal(t, "8 * 6 =", cassandraText(t, cassandraReadBound(t, session, bound, testOptions(gocql.OptionValues{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}})), "data"))
 }
 
 func TestNegativeStream(t *testing.T) {
@@ -1798,13 +1800,13 @@ func TestManualQueryPaging(t *testing.T) {
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,count int)", table))
 	for i := int32(0); i < count; i++ {
-		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,count) VALUES(?,?)", table), gocql.IntValue(i), gocql.IntValue(i*i))
+		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,count) VALUES(?,?)", table), cql.IntValue(i), cql.IntValue(i*i))
 	}
-	bound := cassandraUnprepared(t, "SELECT id,count FROM "+table, gocql.DynamicRows)
+	bound := cassandraUnprepared(t, "SELECT id,count FROM "+table, cql.DynamicRows)
 	state := gocql.StartPage()
 	fetched := 0
 	for {
-		page, err := RunPage(context.Background(), session, bound, state, testOptions(gocql.OptionValues{PageSize: gocql.Option[int32]{Value: 2, Set: true}}))
+		page, err := RunPage(context.Background(), session, bound, state, testOptions(gocql.OptionValues{PageSize: cql.Option[int32]{Value: 2, Set: true}}))
 		require.NoError(t, err)
 		defer page.Close()
 		for page.Next() {
@@ -1834,8 +1836,8 @@ func TestSessionBindRoutingKey(t *testing.T) {
 		Key   string
 		Value int32
 	}
-	params := gocql.Params(gocql.Param("key", gocql.StringEncoder, func(v input) string { return v.Key }), gocql.Param("value", gocql.Int32, func(v input) int32 { return v.Value }))
-	prepared := cassandraPrepared(t, session, gocql.Statement[input, gocql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(key,value) VALUES(?,?)", table), Params: params, Rows: gocql.NoRows}, gocql.PrepareOptions{})
+	params := cql.Params(cql.Param("key", cql.StringEncoder, func(v input) string { return v.Key }), cql.Param("value", cql.Int32, func(v input) int32 { return v.Value }))
+	prepared := cassandraPrepared(t, session, cql.Statement[input, cql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(key,value) VALUES(?,?)", table), Params: params, Rows: cql.NoRows}, gocql.PrepareOptions{})
 	require.Equal(t, []int{0}, prepared.Info().PartitionKeyIndexes)
 	bound := cassandraBound(t, prepared, input{"routing-key", 5})
 	require.True(t, bound.Routing().Token.Set)
@@ -1853,8 +1855,8 @@ func TestJSONSupport(t *testing.T) {
 	}
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id text PRIMARY KEY,age int,state text)", table))
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s JSON ?", table), codecTestMust(gocql.TextValue(`{"id": "user123", "age": 42, "state": "TX"}`)))
-	row := cassandraRead(t, session, fmt.Sprintf("SELECT id,age,state FROM %s WHERE id=?", table), codecTestMust(gocql.TextValue("user123")))
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s JSON ?", table), codecTestMust(cql.TextValue(`{"id": "user123", "age": 42, "state": "TX"}`)))
+	row := cassandraRead(t, session, fmt.Sprintf("SELECT id,age,state FROM %s WHERE id=?", table), codecTestMust(cql.TextValue("user123")))
 	require.Equal(t, "user123", cassandraText(t, row, "id"))
 	require.Equal(t, int64(42), cassandraInt(t, row, "age"))
 	require.Equal(t, "TX", cassandraText(t, row, "state"))
@@ -1866,12 +1868,12 @@ func TestUnmarshallNestedTypes(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id text PRIMARY KEY,val list<frozen<map<text,text>>>)", table))
-	type nested = []gocql.Entry[string, string]
+	type nested = []cql.Entry[string, string]
 	want := []nested{{{Key: "key1", Value: "val1"}}, {{Key: "key2", Value: "val2"}}}
-	prepared := cassandraPrepared(t, session, gocql.Statement[[]nested, gocql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id,val) VALUES('key',?)", table), Params: gocql.OneParam(gocql.ListEncoder(gocql.MapEncoder(gocql.StringEncoder, gocql.StringEncoder))), Rows: gocql.NoRows}, gocql.PrepareOptions{})
+	prepared := cassandraPrepared(t, session, cql.Statement[[]nested, cql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id,val) VALUES('key',?)", table), Params: cql.OneParam(cql.ListEncoder(cql.MapEncoder(cql.StringEncoder, cql.StringEncoder))), Rows: cql.NoRows}, gocql.PrepareOptions{})
 	_, err := Exec(context.Background(), session, cassandraBound(t, prepared, want), gocql.Options{})
 	require.NoError(t, err)
-	row := cassandraReadBound(t, session, cassandraUnprepared(t, fmt.Sprintf("SELECT val FROM %s WHERE id='key'", table), gocql.OneColumn(gocql.ListDecoder(gocql.MapDecoder(gocql.TextCodec, gocql.TextCodec)))), gocql.Options{})
+	row := cassandraReadBound(t, session, cassandraUnprepared(t, fmt.Sprintf("SELECT val FROM %s WHERE id='key'", table), cql.OneColumn(cql.ListDecoder(cql.MapDecoder(cql.TextCodec, cql.TextCodec)))), gocql.Options{})
 	iter := row.Iterator()
 	var got []nested
 	for iter.Next() {
@@ -1879,7 +1881,7 @@ func TestUnmarshallNestedTypes(t *testing.T) {
 		mapIter := iter.Value().Iterator()
 		for mapIter.Next() {
 			entry := mapIter.Value()
-			entries = append(entries, gocql.Entry[string, string]{Key: entry.Key.String(), Value: entry.Value.String()})
+			entries = append(entries, cql.Entry[string, string]{Key: entry.Key.String(), Value: entry.Value.String()})
 		}
 		require.NoError(t, mapIter.Err())
 		got = append(got, entries)
@@ -1897,12 +1899,12 @@ func TestSchemaReset(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id text PRIMARY KEY)", table))
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), codecTestMust(gocql.TextValue("test")))
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), codecTestMust(cql.TextValue("test")))
 	selectCQL := fmt.Sprintf("SELECT * FROM %s WHERE id=?", table)
-	before := cassandraDynamicBound(t, session, selectCQL, []gocql.Value{codecTestMust(gocql.TextValue("test"))}, gocql.PrepareOptions{})
+	before := cassandraDynamicBound(t, session, selectCQL, []cql.Value{codecTestMust(cql.TextValue("test"))}, gocql.PrepareOptions{})
 	require.Equal(t, "test", cassandraText(t, cassandraReadBound(t, session, before, gocql.Options{}), "id"))
 	cassandraDDL(t, session, fmt.Sprintf("ALTER TABLE %s ADD val text", table))
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES(?,?)", table), codecTestMust(gocql.TextValue("test")), codecTestMust(gocql.TextValue("test-val")))
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES(?,?)", table), codecTestMust(cql.TextValue("test")), codecTestMust(cql.TextValue("test-val")))
 	row := cassandraReadBound(t, session, before, gocql.Options{})
 	require.Equal(t, "test", cassandraText(t, row, "id"))
 	require.Equal(t, "test-val", cassandraText(t, row, "val"))
@@ -1941,9 +1943,9 @@ func TestUnsetCol(t *testing.T) {
 	}
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,my_int int,my_text text)", table))
-	cql := fmt.Sprintf("INSERT INTO %s(id,my_int,my_text) VALUES(?,?,?)", table)
-	cassandraWrite(t, session, cql, gocql.IntValue(1), gocql.IntValue(2), codecTestMust(gocql.TextValue("3")))
-	cassandraWrite(t, session, cql, gocql.IntValue(1), gocql.UnsetDynamic(gocql.IntValue(0).Type()), gocql.UnsetDynamic(codecTestMust(gocql.TextValue("")).Type()))
+	stmt := fmt.Sprintf("INSERT INTO %s(id,my_int,my_text) VALUES(?,?,?)", table)
+	cassandraWrite(t, session, stmt, cql.IntValue(1), cql.IntValue(2), codecTestMust(cql.TextValue("3")))
+	cassandraWrite(t, session, stmt, cql.IntValue(1), cql.UnsetDynamic(cql.IntValue(0).Type()), cql.UnsetDynamic(codecTestMust(cql.TextValue("")).Type()))
 	row := cassandraRead(t, session, "SELECT id,my_int,my_text FROM "+table)
 	require.Equal(t, int64(1), cassandraInt(t, row, "id"))
 	require.Equal(t, int64(2), cassandraInt(t, row, "my_int"))
@@ -1960,12 +1962,12 @@ func TestUnsetColBatch(t *testing.T) {
 	}
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,my_int int,my_text text)", table))
-	cql := fmt.Sprintf("INSERT INTO %s(id,my_int,my_text) VALUES(?,?,?)", table)
+	stmt := fmt.Sprintf("INSERT INTO %s(id,my_int,my_text) VALUES(?,?,?)", table)
 	var items []gocql.BatchItem
-	for _, values := range [][]gocql.Value{{gocql.IntValue(1), gocql.IntValue(1), gocql.UnsetDynamic(codecTestMust(gocql.TextValue("")).Type())}, {gocql.IntValue(1), gocql.UnsetDynamic(gocql.IntValue(0).Type()), codecTestMust(gocql.TextValue(""))}, {gocql.IntValue(2), gocql.IntValue(2), gocql.UnsetDynamic(codecTestMust(gocql.TextValue("")).Type())}} {
-		items = append(items, cassandraItem(t, cassandraWriteBound(t, session, cql, values, gocql.PrepareOptions{})))
+	for _, values := range [][]cql.Value{{cql.IntValue(1), cql.IntValue(1), cql.UnsetDynamic(codecTestMust(cql.TextValue("")).Type())}, {cql.IntValue(1), cql.UnsetDynamic(cql.IntValue(0).Type()), codecTestMust(cql.TextValue(""))}, {cql.IntValue(2), cql.IntValue(2), cql.UnsetDynamic(codecTestMust(cql.TextValue("")).Type())}} {
+		items = append(items, cassandraItem(t, cassandraWriteBound(t, session, stmt, values, gocql.PrepareOptions{})))
 	}
-	info := cassandraBatch(t, session, gocql.LoggedBatch, items, gocql.Options{})
+	info := cassandraBatch(t, session, cql.LoggedBatch, items, gocql.Options{})
 	require.Positive(t, info.Attempts)
 	require.Positive(t, info.Latency)
 	require.Equal(t, int64(2), cassandraInt(t, cassandraRead(t, session, "SELECT count(*) FROM "+table), "count"))
@@ -1981,12 +1983,12 @@ func TestQuery_NamedValues(t *testing.T) {
 	defer session.Close()
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,value text)", table))
-	prepared := cassandraPrepared(t, session, gocql.Statement[[]gocql.ValueField, gocql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id,value) VALUES(:id,:value)", table), Params: gocql.NamedDynamicParams, Rows: gocql.NoRows}, gocql.PrepareOptions{})
-	bound := cassandraBound(t, prepared, []gocql.ValueField{{Name: "value", Value: codecTestMust(gocql.TextValue("i am a value"))}, {Name: "id", Value: gocql.IntValue(1)}})
+	prepared := cassandraPrepared(t, session, cql.Statement[[]cql.ValueField, cql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s(id,value) VALUES(:id,:value)", table), Params: cql.NamedDynamicParams, Rows: cql.NoRows}, gocql.PrepareOptions{})
+	bound := cassandraBound(t, prepared, []cql.ValueField{{Name: "value", Value: codecTestMust(cql.TextValue("i am a value"))}, {Name: "id", Value: cql.IntValue(1)}})
 	_, err := Exec(context.Background(), session, bound, gocql.Options{})
 	require.NoError(t, err)
-	read := cassandraPrepared(t, session, gocql.Statement[[]gocql.ValueField, gocql.Text]{CQL: fmt.Sprintf("SELECT value FROM %s WHERE id=:id", table), Params: gocql.NamedDynamicParams, Rows: gocql.OneColumn(gocql.TextCodec)}, gocql.PrepareOptions{})
-	require.Equal(t, "i am a value", cassandraReadBound(t, session, cassandraBound(t, read, []gocql.ValueField{{Name: "id", Value: gocql.IntValue(1)}}), gocql.Options{}).String())
+	read := cassandraPrepared(t, session, cql.Statement[[]cql.ValueField, cql.Text]{CQL: fmt.Sprintf("SELECT value FROM %s WHERE id=:id", table), Params: cql.NamedDynamicParams, Rows: cql.OneColumn(cql.TextCodec)}, gocql.PrepareOptions{})
+	require.Equal(t, "i am a value", cassandraReadBound(t, session, cassandraBound(t, read, []cql.ValueField{{Name: "id", Value: cql.IntValue(1)}}), gocql.Options{}).String())
 }
 
 // TestQuery_SetHostID ensures that queries are sent to the specified host only.
@@ -1998,26 +2000,26 @@ func TestQuery_SetHostID(t *testing.T) {
 	session := createV2Session(t)
 	defer session.Close()
 	waitForHostConns(t, session)
-	bound := cassandraUnprepared(t, "SELECT host_id FROM system.local", gocql.OneColumn(gocql.UUIDCodec))
+	bound := cassandraUnprepared(t, "SELECT host_id FROM system.local", cql.OneColumn(cql.UUIDCodec))
 	hosts := session.Metadata().Hosts()
 	for _, host := range hosts {
 		for i := 0; i < 5; i++ {
-			require.Equal(t, host.ID, cassandraReadBound(t, session, bound, testOptions(gocql.OptionValues{HostID: gocql.Option[gocql.UUID]{Value: host.ID, Set: true}})))
+			require.Equal(t, host.ID, cassandraReadBound(t, session, bound, testOptions(gocql.OptionValues{HostID: cql.Option[cql.UUID]{Value: host.ID, Set: true}})))
 		}
 	}
-	_, err := gocql.ParseUUID("[invalid]")
+	_, err := cql.ParseUUID("[invalid]")
 	require.Error(t, err, "invalid host IDs are rejected while constructing typed UUIDs")
-	_, err = gocql.NewOptions(session, gocql.OptionValues{HostID: gocql.Option[gocql.UUID]{Value: gocql.UUID{}, Set: true}})
-	var invalidHost *gocql.ValidationError
+	_, err = gocql.NewOptions(session, gocql.OptionValues{HostID: cql.Option[cql.UUID]{Value: cql.UUID{}, Set: true}})
+	var invalidHost *cql.ValidationError
 	require.ErrorAs(t, err, &invalidHost, "an empty host ID is rejected when options are built")
-	_, err = Run(context.Background(), session, bound, testOptions(gocql.OptionValues{HostID: gocql.Option[gocql.UUID]{Value: codecTestMust(gocql.RandomUUID()), Set: true}}))
+	_, err = Run(context.Background(), session, bound, testOptions(gocql.OptionValues{HostID: cql.Option[cql.UUID]{Value: codecTestMust(cql.RandomUUID()), Set: true}}))
 	require.ErrorIs(t, err, gocql.ErrNoConnections)
 	host := hosts[0]
 	pool, ok := implCluster.SessionData(session).InternalPool.InternalGetPoolByHostID(host.ID.String())
 	require.True(t, ok)
 	implEndpoint.InternalHostInfoSetState(pool.InternalHost, NodeDown)
 	defer implEndpoint.InternalHostInfoSetState(pool.InternalHost, NodeUp)
-	_, err = Run(context.Background(), session, bound, testOptions(gocql.OptionValues{HostID: gocql.Option[gocql.UUID]{Value: host.ID, Set: true}}))
+	_, err = Run(context.Background(), session, bound, testOptions(gocql.OptionValues{HostID: cql.Option[cql.UUID]{Value: host.ID, Set: true}}))
 	require.ErrorIs(t, err, gocql.ErrNoConnections)
 }
 
@@ -2029,11 +2031,11 @@ func TestQuery_WithNowInSeconds(t *testing.T) {
 	}
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,val text)", table))
-	write := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES(?,?) USING TTL 20", table), []gocql.Value{gocql.IntValue(1), codecTestMust(gocql.TextValue("val"))}, gocql.PrepareOptions{})
-	_, err := Exec(context.Background(), session, write, testOptions(gocql.OptionValues{NowInSeconds: gocql.Option[int32]{Value: 0, Set: true}}))
+	write := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES(?,?) USING TTL 20", table), []cql.Value{cql.IntValue(1), codecTestMust(cql.TextValue("val"))}, gocql.PrepareOptions{})
+	_, err := Exec(context.Background(), session, write, testOptions(gocql.OptionValues{NowInSeconds: cql.Option[int32]{Value: 0, Set: true}}))
 	require.NoError(t, err)
-	read := cassandraPrepared(t, session, gocql.Statement[int32, int32]{CQL: fmt.Sprintf("SELECT TTL(val) FROM %s WHERE id=?", table), Params: gocql.OneParam(gocql.Int32), Rows: gocql.OneColumn(gocql.Int32)}, gocql.PrepareOptions{})
-	require.Equal(t, int32(10), cassandraReadBound(t, session, cassandraBound(t, read, int32(1)), testOptions(gocql.OptionValues{NowInSeconds: gocql.Option[int32]{Value: 10, Set: true}})))
+	read := cassandraPrepared(t, session, cql.Statement[int32, int32]{CQL: fmt.Sprintf("SELECT TTL(val) FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32), Rows: cql.OneColumn(cql.Int32)}, gocql.PrepareOptions{})
+	require.Equal(t, int32(10), cassandraReadBound(t, session, cassandraBound(t, read, int32(1)), testOptions(gocql.OptionValues{NowInSeconds: cql.Option[int32]{Value: 10, Set: true}})))
 }
 
 func TestQuery_SetKeyspace(t *testing.T) {
@@ -2047,11 +2049,11 @@ func TestQuery_SetKeyspace(t *testing.T) {
 	cassandraDDL(t, session, fmt.Sprintf("CREATE KEYSPACE %s WITH replication={'class':'SimpleStrategy','replication_factor':'1'}", ks))
 	defer cassandraDDL(t, session, "DROP KEYSPACE "+ks)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s.%s(id int PRIMARY KEY,value text)", ks, table))
-	write := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id,value) VALUES(?,?)", table), []gocql.Value{gocql.IntValue(1), codecTestMust(gocql.TextValue("text"))}, gocql.PrepareOptions{Keyspace: ks})
+	write := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id,value) VALUES(?,?)", table), []cql.Value{cql.IntValue(1), codecTestMust(cql.TextValue("text"))}, gocql.PrepareOptions{Keyspace: ks})
 	_, err := Exec(context.Background(), session, write, testOptions(gocql.OptionValues{Keyspace: ks}))
 	require.NoError(t, err)
-	prepared := cassandraPrepared(t, session, gocql.Statement[gocql.Unit, gocql.DynamicRow]{CQL: "SELECT * FROM " + table, Params: gocql.NoParams, Rows: gocql.DynamicRows}, gocql.PrepareOptions{Keyspace: ks})
-	for _, bound := range []*Bound[gocql.DynamicRow]{cassandraBound(t, prepared, gocql.Unit{}), cassandraUnprepared(t, "SELECT * FROM "+table, gocql.DynamicRows)} {
+	prepared := cassandraPrepared(t, session, cql.Statement[cql.Unit, cql.DynamicRow]{CQL: "SELECT * FROM " + table, Params: cql.NoParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{Keyspace: ks})
+	for _, bound := range []*Bound[cql.DynamicRow]{cassandraBound(t, prepared, cql.Unit{}), cassandraUnprepared(t, "SELECT * FROM "+table, cql.DynamicRows)} {
 		row := cassandraReadBound(t, session, bound, testOptions(gocql.OptionValues{Keyspace: ks}))
 		require.Equal(t, int64(1), cassandraInt(t, row, "id"))
 		require.Equal(t, "text", cassandraText(t, row, "value"))
@@ -2069,7 +2071,7 @@ func TestLargeSizeQuery(t *testing.T) {
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,text_col text)", table))
 	text := strings.Repeat("a", 500000)
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,text_col) VALUES(?,?)", table), gocql.IntValue(1), codecTestMust(gocql.TextValue(text)))
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,text_col) VALUES(?,?)", table), cql.IntValue(1), codecTestMust(cql.TextValue(text)))
 	require.Equal(t, text, cassandraText(t, cassandraRead(t, session, "SELECT text_col FROM "+table), "text_col"))
 }
 
@@ -2137,8 +2139,8 @@ func TestQueryCompressionNotWorthIt(t *testing.T) {
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,text_col text)", table))
 	text := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()_+"
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,text_col) VALUES(?,?)", table), gocql.IntValue(1), codecTestMust(gocql.TextValue(text)))
-	require.Equal(t, text, cassandraText(t, cassandraRead(t, session, fmt.Sprintf("SELECT text_col FROM %s WHERE id=?", table), gocql.IntValue(1)), "text_col"))
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,text_col) VALUES(?,?)", table), cql.IntValue(1), codecTestMust(cql.TextValue(text)))
+	require.Equal(t, text, cassandraText(t, cassandraRead(t, session, fmt.Sprintf("SELECT text_col FROM %s WHERE id=?", table), cql.IntValue(1)), "text_col"))
 }
 
 // TestPrepareExecuteMetadataChangedFlag covers native v5 result metadata IDs
@@ -2219,7 +2221,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 	qualified := (fixtureKeyspace("") + ".") + table
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	host := gocql.Option[gocql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
+	host := cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
 	options := testOptions(*func() *gocql.OptionValues {
 		opaqueStorageValuexxxx := new(gocql.OptionValues)
 		opaqueStorageValuexxxx.HostID = host
@@ -2232,15 +2234,15 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 		implExecution.PrepareOptionsData(opaqueStorageValuexxxxx).InternalConnection = conn
 		return opaqueStorageValuexxxxx
 	}()
-	create := cassandraUnprepared(t, "CREATE TABLE "+qualified+"(id int PRIMARY KEY)", gocql.NoRows)
+	create := cassandraUnprepared(t, "CREATE TABLE "+qualified+"(id int PRIMARY KEY)", cql.NoRows)
 	_, err := Exec(ctx, session, create, options)
 	require.NoError(t, err)
 	require.NoError(t, implCluster.InternalSessionAwaitV2SchemaAgreementOn(session, ctx, conn))
-	write := cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id) VALUES(?)", []gocql.Value{gocql.IntValue(1)}, prepareOptions)
+	write := cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id) VALUES(?)", []cql.Value{cql.IntValue(1)}, prepareOptions)
 	_, err = Exec(ctx, session, write, options)
 	require.NoError(t, err)
-	prepared := cassandraPrepared(t, session, gocql.Statement[gocql.Unit, gocql.DynamicRow]{CQL: "SELECT * FROM " + qualified, Params: gocql.NoParams, Rows: gocql.DynamicRows}, prepareOptions)
-	bound := cassandraBound(t, prepared, gocql.Unit{})
+	prepared := cassandraPrepared(t, session, cql.Statement[cql.Unit, cql.DynamicRow]{CQL: "SELECT * FROM " + qualified, Params: cql.NoParams, Rows: cql.DynamicRows}, prepareOptions)
+	bound := cassandraBound(t, prepared, cql.Unit{})
 	row := cassandraReadBound(t, session, bound, options)
 	require.Equal(t, 1, row.Columns().Len())
 	require.Equal(t, int64(1), cassandraInt(t, row, "id"))
@@ -2257,13 +2259,13 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 	}
 	before := cached()
 	require.NotEmpty(t, before.InternalMetadataID)
-	alter := cassandraUnprepared(t, "ALTER TABLE "+qualified+" ADD new_col int", gocql.NoRows)
+	alter := cassandraUnprepared(t, "ALTER TABLE "+qualified+" ADD new_col int", cql.NoRows)
 	_, err = Exec(ctx, session, alter, options)
 	require.NoError(t, err)
 	// Include the exact host that applied ALTER; checking another host can
 	// falsely agree on the old version before schema propagation starts.
 	require.NoError(t, implCluster.InternalSessionAwaitV2SchemaAgreementOn(session, ctx, conn))
-	write = cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id,new_col) VALUES(?,?)", []gocql.Value{gocql.IntValue(2), gocql.IntValue(10)}, prepareOptions)
+	write = cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id,new_col) VALUES(?,?)", []cql.Value{cql.IntValue(2), cql.IntValue(10)}, prepareOptions)
 	_, err = Exec(ctx, session, write, options)
 	require.NoError(t, err)
 	checkRows := func() {
@@ -2271,7 +2273,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 		rows, err := Run(ctx, session, bound, options)
 		require.NoError(t, err)
 		defer rows.Close()
-		found := map[int64]gocql.Value{}
+		found := map[int64]cql.Value{}
 		for rows.Next() {
 			row := rows.Row()
 			require.Equal(t, 2, row.Columns().Len())
@@ -2279,7 +2281,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 		}
 		require.NoError(t, rows.Close())
 		require.Len(t, found, 2)
-		require.Equal(t, gocql.Null, found[1].State())
+		require.Equal(t, cql.Null, found[1].State())
 		value, err := found[2].Signed()
 		require.NoError(t, err)
 		require.Equal(t, int64(10), value)
@@ -2328,13 +2330,13 @@ func TestStmtCacheUsesOverriddenKeyspace(t *testing.T) {
 	defer cassandraDDL(t, session, ("DROP TABLE "+fixtureKeyspace("")+".")+table)
 	insert := "INSERT INTO " + table + "(id) VALUES(?)"
 	for i, keyspace := range []string{fixtureKeyspace(""), ks} {
-		bound := cassandraWriteBound(t, session, insert, []gocql.Value{gocql.IntValue(int32(i + 1))}, gocql.PrepareOptions{Keyspace: keyspace})
-		cassandraBatch(t, session, gocql.LoggedBatch, []gocql.BatchItem{cassandraItem(t, bound)}, testOptions(gocql.OptionValues{Keyspace: keyspace}))
+		bound := cassandraWriteBound(t, session, insert, []cql.Value{cql.IntValue(int32(i + 1))}, gocql.PrepareOptions{Keyspace: keyspace})
+		cassandraBatch(t, session, cql.LoggedBatch, []gocql.BatchItem{cassandraItem(t, bound)}, testOptions(gocql.OptionValues{Keyspace: keyspace}))
 	}
 	for i, keyspace := range []string{fixtureKeyspace(""), ks} {
-		prepared := cassandraPrepared(t, session, gocql.Statement[gocql.Unit, int32]{CQL: "SELECT * FROM " + table, Params: gocql.NoParams, Rows: gocql.OneColumn(gocql.Int32)}, gocql.PrepareOptions{Keyspace: keyspace})
+		prepared := cassandraPrepared(t, session, cql.Statement[cql.Unit, int32]{CQL: "SELECT * FROM " + table, Params: cql.NoParams, Rows: cql.OneColumn(cql.Int32)}, gocql.PrepareOptions{Keyspace: keyspace})
 		require.Equal(t, keyspace, prepared.Info().Keyspace)
-		require.Equal(t, int32(i+1), cassandraReadBound(t, session, cassandraBound(t, prepared, gocql.Unit{}), testOptions(gocql.OptionValues{Keyspace: keyspace})))
+		require.Equal(t, int32(i+1), cassandraReadBound(t, session, cassandraBound(t, prepared, cql.Unit{}), testOptions(gocql.OptionValues{Keyspace: keyspace})))
 	}
 }
 
@@ -2355,7 +2357,7 @@ func TestRoutingKeyCacheUsesOverriddenKeyspace(t *testing.T) {
 	insert := "INSERT INTO " + table + "(id) VALUES(?)"
 	selectCQL := "SELECT * FROM " + table + " WHERE id=?"
 	for i, keyspace := range []string{fixtureKeyspace(""), ks} {
-		write := cassandraWriteBound(t, session, insert, []gocql.Value{gocql.IntValue(int32(i + 1))}, gocql.PrepareOptions{Keyspace: keyspace})
+		write := cassandraWriteBound(t, session, insert, []cql.Value{cql.IntValue(int32(i + 1))}, gocql.PrepareOptions{Keyspace: keyspace})
 		require.Equal(t, keyspace, write.Routing().Keyspace)
 		require.True(t, write.Routing().Token.Set)
 		item := cassandraItem(t, write)
@@ -2371,7 +2373,7 @@ func TestRoutingKeyCacheUsesOverriddenKeyspace(t *testing.T) {
 		}
 		runtime.InternalMu.Unlock()
 		require.True(t, found, "cache must include keyspace-specific binding")
-		read := cassandraDynamicBound(t, session, selectCQL, []gocql.Value{gocql.IntValue(1)}, gocql.PrepareOptions{Keyspace: keyspace})
+		read := cassandraDynamicBound(t, session, selectCQL, []cql.Value{cql.IntValue(1)}, gocql.PrepareOptions{Keyspace: keyspace})
 		require.Equal(t, keyspace, read.Routing().Keyspace)
 		require.True(t, read.Routing().Token.Set)
 	}
@@ -2409,9 +2411,9 @@ func TestPrepareExecuteScyllaEmptyMetadataID(t *testing.T) {
 	require.True(t, conn.InternalUsesMetadataID(), "server advertises metadata IDs but driver did not negotiate them")
 	table := testTableName(t)
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,val int)", table))
-	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES(?,?)", table), gocql.IntValue(1), gocql.IntValue(7))
-	host := gocql.Option[gocql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
-	prepared := cassandraPrepared(t, session, gocql.Statement[int32, gocql.DynamicRow]{CQL: fmt.Sprintf("SELECT id,val FROM %s WHERE id=?", table), Params: gocql.OneParam(gocql.Int32), Rows: gocql.DynamicRows}, *func() *gocql.PrepareOptions {
+	cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES(?,?)", table), cql.IntValue(1), cql.IntValue(7))
+	host := cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
+	prepared := cassandraPrepared(t, session, cql.Statement[int32, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id,val FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows}, *func() *gocql.PrepareOptions {
 		opaqueStorageValuexxxxxx := new(gocql.PrepareOptions)
 		opaqueStorageValuexxxxxx.HostID = host
 		implExecution.PrepareOptionsData(opaqueStorageValuexxxxxx).InternalConnection = conn

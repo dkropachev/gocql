@@ -7,21 +7,30 @@ pair explicit parameter encoders with result decoders. Worker-owned queries reus
 go get github.com/scylladb/gocql/v2@v2.0.0
 ```
 
-Import `github.com/scylladb/gocql/v2`. The repository has one Go module;
-compression and benchmarks are included in it.
+The root package `github.com/scylladb/gocql/v2` (`gocql`) connects and runs
+statements. The data vocabulary (statements, types, codecs, values,
+consistency levels and server errors) lives in `github.com/scylladb/gocql/v2/cql`.
+Schema metadata is in `metadata`, host selection in `routing`, authentication
+in `auth`, and addressing and dialing in `endpoint`. The repository has one Go
+module; compression and benchmarks are included in it.
 
 ## Typed execution
 
 ```go
+import (
+    gocql "github.com/scylladb/gocql/v2"
+    "github.com/scylladb/gocql/v2/cql"
+)
+
 config := gocql.DefaultConfig("127.0.0.1:9042")
 session, err := gocql.Connect(ctx, config)
 if err != nil { return err }
 defer session.Close()
 
-statement := gocql.Statement[int32, gocql.Text]{
+statement := cql.Statement[int32, cql.Text]{
     CQL: "SELECT name FROM app.users WHERE id = ?",
-    Params: gocql.OneParam(gocql.Int32),
-    Rows: gocql.OneColumn(gocql.TextCodec),
+    Params: cql.OneParam(cql.Int32),
+    Rows: cql.OneColumn(cql.TextCodec),
 }
 prepared, err := gocql.Prepare(ctx, session, statement, gocql.PrepareOptions{})
 if err != nil { return err }
@@ -100,13 +109,14 @@ protocol rules; protocol 5 compression uses LZ4. Configure
 ## Configuration and extensions
 
 `Connect` snapshots validated configuration before starting workers. Configure
-TLS with `crypto/tls`, authentication with `PasswordAuth` or `AuthProvider`, and
+TLS with `crypto/tls`, authentication with `auth.Password` or an `auth.Provider`, and
 routing/retry/speculation through `DefaultProfile` or a per-query `*Profile`.
 Per-call settings are frozen once with `NewOptions(session, OptionValues{...})`,
 resolved for that session so executions do no per-call work; the zero `Options{}`
 uses the session default.
-`Dialer`, `DialHost`, `TLSForHost`, `DNSResolver`, `AddressTranslator`,
-`ReconnectPolicy`, `TokenPartitioner`, `RoutingPolicy`, observers and immutable
+`endpoint.Dialer`, `DialHost`, `TLSForHost`, `endpoint.DNSResolver`,
+`endpoint.Translator`, `ReconnectPolicy`, `routing.TokenPartitioner`,
+`routing.Policy`, observers and immutable
 metadata snapshots provide typed extension points. Host/shard pool sizing,
 source ports, cancellation and orphan budgets are independently configured.
 

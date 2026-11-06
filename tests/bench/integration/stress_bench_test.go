@@ -33,6 +33,8 @@ import (
 	"testing"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 func BenchmarkConnStress(b *testing.B) {
@@ -44,7 +46,7 @@ func BenchmarkConnStress(b *testing.B) {
 	if err := v2CreateTable(ctx, session, fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (id int primary key)", table)); err != nil {
 		b.Fatal(err)
 	}
-	prepared, err := gocql.Prepare(ctx, session, gocql.Statement[int32, gocql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), Params: gocql.OneParam(gocql.Int32), Rows: gocql.NoRows}, gocql.PrepareOptions{})
+	prepared, err := gocql.Prepare(ctx, session, cql.Statement[int32, cql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), Params: cql.OneParam(cql.Int32), Rows: cql.NoRows}, gocql.PrepareOptions{})
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -79,7 +81,7 @@ func BenchmarkConnRoutingKey(b *testing.B) {
 	ctx := context.Background()
 	session := createV2Session(b, func(config *gocql.Config) {
 		config.Pool.ConnectionsPerHost = 1
-		policy, err := gocql.NewRoutingPolicy(gocql.RoutingOptions{TokenAware: true})
+		policy, err := routing.NewPolicy(routing.Options{TokenAware: true})
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -92,7 +94,7 @@ func BenchmarkConnRoutingKey(b *testing.B) {
 	if err := v2CreateTable(ctx, session, fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (id int primary key)", table)); err != nil {
 		b.Fatal(err)
 	}
-	prepared, err := gocql.Prepare(ctx, session, gocql.Statement[int32, gocql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), Params: gocql.OneParam(gocql.Int32), Rows: gocql.NoRows}, gocql.PrepareOptions{})
+	prepared, err := gocql.Prepare(ctx, session, cql.Statement[int32, cql.Unit]{CQL: fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), Params: cql.OneParam(cql.Int32), Rows: cql.NoRows}, gocql.PrepareOptions{})
 	if err != nil {
 		b.Fatal(err)
 	}

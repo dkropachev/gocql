@@ -4,7 +4,6 @@
 package cluster
 
 import (
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -749,14 +748,14 @@ func (fakeHostDialer) DialHost(ctx context.Context, host *endpoint.HostInfo) (*e
 // value has no representation, and nothing rejects one today, so it must be
 // omitted rather than emitted as a token no consumer can interpret.
 func TestConsistencyName(t *testing.T) {
-	for _, c := range []cql.Consistency{
+	for _, c := range []cqltype.Consistency{
 		cqltype.Any, cqltype.One, cqltype.Two, cqltype.Three, cqltype.Quorum, cqltype.All, cqltype.LocalQuorum, cqltype.EachQuorum, cqltype.LocalOne, cqltype.Serial, cqltype.LocalSerial,
 	} {
 		if got := InternalConsistencyName(c); got != c.String() {
 			t.Errorf("consistencyName(%v) = %q, want %q", c, got, c.String())
 		}
 	}
-	if got := InternalConsistencyName(cql.Consistency(0x42)); got != "" {
+	if got := InternalConsistencyName(cqltype.Consistency(0x42)); got != "" {
 		t.Errorf("consistencyName(0x42) = %q, want it omitted: outside the schema enum", got)
 	}
 }
@@ -766,7 +765,7 @@ func TestConsistencyName(t *testing.T) {
 // left in the field must not be reported there either.
 func TestBuildQueryDefaultsReport_SerialConsistencyIsSerialOnly(t *testing.T) {
 	for _, tt := range []struct {
-		cons cql.Consistency
+		cons cqltype.Consistency
 		want string
 	}{
 		{0, ""},
