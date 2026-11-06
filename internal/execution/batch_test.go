@@ -248,7 +248,7 @@ func BenchmarkBatchAddTo(b *testing.B) {
 
 // batchBenchSession returns a session whose one connection answers every
 // request with a void result.
-func batchBenchSession(b *testing.B) *implCluster.Session {
+func batchBenchSession(b testing.TB) *implCluster.Session {
 	s, _, peers := runtimeTestSession(b, 1)
 	go func() {
 		var header [9]byte
