@@ -63,3 +63,35 @@ func TestV2MetadataPartialRefreshRetainsPriorSnapshot(t *testing.T) {
 		}
 	}
 }
+
+// A concurrent DDL can fail one schema read while the keyspace is still
+// listed, as DESCRIBE does for a keyspace being dropped or a table read does
+// for a table created without its columns yet. The refresh reads the keyspace
+// again instead of reporting stale data.
+func TestV2MetadataTransientSchemaReadFailureIsRetried(t *testing.T) {
+	for _, full := range []bool{true, false} {
+		s, mock := refreshAllSchemaSession(t)
+		var failed atomic.Int32
+		mock.iterFor = func(statement string) *nativeResultFixture {
+			if strings.Contains(statement, "FROM system_schema.columns") && failed.Add(1) == 1 {
+				return &nativeResultFixture{err: errors.New("'ks1' not found in keyspaces")}
+			}
+			return nil
+		}
+		var err error
+		if full {
+			err = InternalSessionRefreshV2AllSchema(s, context.Background())
+		} else {
+			err = InternalSessionRefreshV2Keyspace(s, context.Background(), "ks1")
+		}
+		if err != nil {
+			t.Fatalf("full=%t: transient failure reported: %v", full, err)
+		}
+		if failed.Load() < 2 {
+			t.Fatalf("full=%t: schema was not read again", full)
+		}
+		if ks, ok := s.Metadata().Keyspace("ks1"); !ok || ks.Tables["t1"] == nil {
+			t.Fatalf("full=%t: keyspace not refreshed", full)
+		}
+	}
+}

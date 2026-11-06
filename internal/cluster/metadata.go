@@ -179,10 +179,22 @@ func (s *Session) Metrics() MetricsSnapshot {
 	}
 	return result
 }
+
+// InternalSessionPublishV2Metadata publishes a snapshot of the current
+// metadata sources. A build loses when a source changes while it runs, and
+// every schema event in the cluster changes one, so under concurrent DDL a
+// few immediate rebuilds can all lose. That is transient: each change
+// publishes again itself. After four immediate attempts it backs off, 1 ms
+// doubling up to 100 ms, for about a second in all before reporting failure.
 func InternalSessionPublishV2Metadata(s *Session) bool {
-	for attempt := 0; attempt < 8; attempt++ {
+	delay := time.Millisecond
+	for attempt := 0; attempt < 16; attempt++ {
 		if s.tryPublishV2Metadata() {
 			return true
+		}
+		if attempt >= 3 {
+			time.Sleep(delay)
+			delay = min(2*delay, 100*time.Millisecond)
 		}
 	}
 	return false
@@ -858,6 +870,13 @@ func InternalSessionRefreshV2AllSchema(s *Session, ctx context.Context) error {
 			if err != nil {
 				p.InternalMu.Unlock()
 				failures[name] = err
+				// A concurrent DDL can make one schema read fail while the
+				// keyspace is still listed: DESCRIBE no longer finds a keyspace
+				// being dropped, or a table being created has no columns yet.
+				// Read the keyspace again once that change has landed.
+				if attempt < 7 && waitV2SchemaRetry(ctx, attempt) {
+					continue
+				}
 				break
 			}
 			if s.privateStorage.InternalMetadataDescriber != nil {
@@ -959,6 +978,17 @@ func (s *Session) refreshV2KeyspaceAttempt(ctx context.Context, name string, att
 		ks, err = fetchV2Keyspace(ctx, InternalNewSchemaSource(s), base)
 	}
 	if err != nil {
+		// As in a full refresh, a concurrent DDL can fail one schema read;
+		// confirm a drop, or read the keyspace again once the change landed.
+		if dropped, _ := s.confirmV2DroppedKeyspace(ctx, name); dropped {
+			if !InternalSessionPublishV2Metadata(s) {
+				return s.v2MetadataPublicationError()
+			}
+			return ErrKeyspaceDoesNotExist
+		}
+		if attempt < 7 && waitV2SchemaRetry(ctx, attempt) {
+			return s.refreshV2KeyspaceAttempt(ctx, name, attempt+1)
+		}
 		return s.v2SchemaRefreshFailure(name, err)
 	}
 	p.InternalMu.Lock()
@@ -981,6 +1011,21 @@ func (s *Session) refreshV2KeyspaceAttempt(ctx context.Context, name string, att
 	}
 	return nil
 }
+
+// waitV2SchemaRetry waits before reading a keyspace's schema again after a
+// failed read, 25 ms doubling per attempt up to 400 ms, and reports whether
+// ctx still allows the retry.
+func waitV2SchemaRetry(ctx context.Context, attempt int) bool {
+	timer := time.NewTimer(min(25*time.Millisecond<<attempt, 400*time.Millisecond))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
 func (s *Session) scheduleV2SchemaRetry() {
 	InternalSessionPeripheral(s).schemaRetryNeeded.Store(true)
 	InternalSessionStartV2SchemaRetry(s)
