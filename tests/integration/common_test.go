@@ -61,6 +61,11 @@ var (
 
 func TestMain(m *testing.M) {
 	flag.Parse()
+	// A failed cleanup is reported, not fatal: tests that need no cluster still
+	// run, and the ones that do fail on their own with the connection error.
+	if err := dropLeftoverKeyspaces(); err != nil {
+		fmt.Fprintln(os.Stderr, "pre-run keyspace cleanup:", err)
+	}
 	os.Exit(m.Run())
 }
 
