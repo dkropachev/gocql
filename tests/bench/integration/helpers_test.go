@@ -60,6 +60,7 @@ import (
 	protocol "github.com/scylladb/gocql/v2/internal/protocol"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/testkit"
+	"github.com/scylladb/gocql/v2/internal/testkit/ccm"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/retry"
 	routing "github.com/scylladb/gocql/v2/routing"
@@ -94,7 +95,34 @@ var (
 
 func TestMain(m *testing.M) {
 	flag.Parse()
+	useSharedCluster()
 	os.Exit(m.Run())
+}
+
+// useSharedCluster points the benchmarks at the cluster make scylla-start or
+// make cassandra-start created, read through ccm, unless -cluster is given.
+// It also takes -gocql.cversion from the running nodes when not given.
+func useSharedCluster() {
+	given := map[string]bool{}
+	flag.Visit(func(f *flag.Flag) { given[f.Name] = true })
+	if given["cluster"] || ccm.Available() != nil {
+		return
+	}
+	dist, err := ccm.ParseDistribution(*flagDistribution)
+	if err != nil {
+		return
+	}
+	c, v, err := ccm.RunningShared(dist, 5*time.Second)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "bench: no running ccm cluster, using -cluster default:", err)
+		return
+	}
+	defer c.Close()
+	*flagCluster = strings.Join(c.IPs(), ",")
+	if !given["gocql.cversion"] {
+		_ = flagCassVersion.Set(fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch))
+	}
+	fmt.Fprintf(os.Stderr, "bench: using ccm cluster %s (%s, version %s)\n", c.Name(), *flagCluster, v.Raw)
 }
 
 func getClusterHosts() []string {

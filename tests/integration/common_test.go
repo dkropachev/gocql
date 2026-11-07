@@ -61,12 +61,16 @@ var (
 
 func TestMain(m *testing.M) {
 	flag.Parse()
+	// Before the keyspace cleanup: with no -cluster, this finds the cluster.
+	teardownCCM := setupCCM()
 	// A failed cleanup is reported, not fatal: tests that need no cluster still
 	// run, and the ones that do fail on their own with the connection error.
 	if err := dropLeftoverKeyspaces(); err != nil {
 		fmt.Fprintln(os.Stderr, "pre-run keyspace cleanup:", err)
 	}
-	os.Exit(m.Run())
+	code := m.Run()
+	teardownCCM()
+	os.Exit(code)
 }
 
 func getClusterHosts() []string {

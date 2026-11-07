@@ -158,6 +158,21 @@ jobs:
         if: steps.scylla-version.outputs.value != 'NOT-FOUND'
         run: make test-integration-scylla
 
+      - name: Run ccm package live tests with ScyllaDB ${{ matrix.version }}(${{ steps.scylla-version.outputs.value }})
+        if: steps.scylla-version.outputs.value != 'NOT-FOUND'
+        run: make test-integration-ccm
+
+      # Clusters the suite creates through internal/testkit/ccm (node-control
+      # tests) keep ccm.log and the node logs of failed tests here.
+      - name: Upload ccm artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ccm-artifacts-scylla-${{ matrix.version }}-${{ runner.arch }}-${{ github.run_attempt }}
+          path: .ccm-artifacts
+          if-no-files-found: ignore
+          retention-days: 7
+
 
   test-integration-cassandra:
     name: Integration Tests On Cassandra (${{ matrix.version }}, ${{ matrix.suite }}, ${{ matrix.arch }})
@@ -291,3 +306,14 @@ jobs:
           # away from the shell that runs make's recipe.
           TEST_OPTS="-run='TestFraming/Segment|TestFraming/ResultMetadataID/ChangedFlag'" \
           make test-integration-cassandra
+
+      # Clusters the suite creates through internal/testkit/ccm (node-control
+      # tests) keep ccm.log and the node logs of failed tests here.
+      - name: Upload ccm artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ccm-artifacts-cassandra-${{ matrix.version }}-${{ matrix.suite }}-${{ matrix.arch }}-${{ github.run_attempt }}
+          path: .ccm-artifacts
+          if-no-files-found: ignore
+          retention-days: 7

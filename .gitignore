@@ -45,3 +45,4 @@ CLAUDE.md
 
 # Python documentation and evidence tooling caches.
 __pycache__/
+.ccm-artifacts/

@@ -88,6 +88,13 @@ ifeq (${CCM_CONFIG_DIR},)
 	CCM_CONFIG_DIR = ~/.ccm
 endif
 CCM_CONFIG_DIR := $(shell readlink --canonicalize ${CCM_CONFIG_DIR})
+# Clusters the integration suite creates through internal/testkit/ccm keep
+# their files, ccm.log and the node logs of failed tests here.
+CCM_ARTIFACTS_DIR ?= $(MAKEFILE_PATH)/.ccm-artifacts
+# The integration suites find the make-created cluster through ccm and read
+# its addresses and version from the running nodes, so they never depend on
+# ccm's current cluster (tests/integration/ccm_test.go).
+CCM_TEST_ENV = CCM_CONFIG_DIR=${CCM_CONFIG_DIR} GOCQL_CCM_ARTIFACTS=${CCM_ARTIFACTS_DIR}
 
 CASSANDRA_CONFIG ?= "client_encryption_options.enabled: true" \
 "client_encryption_options.keystore: ${KEY_PATH}/.keystore" \
@@ -348,15 +355,9 @@ scylla-stop: .prepare-scylla-ccm
 # still measured under test-integration-*-coverage.
 test-integration-cassandra: cassandra-start
 	@echo "Run integration tests for proto ${TEST_CQL_PROTOCOL} on cassandra ${CASSANDRA_VERSION}"
-	if [[ -z "$${CASSANDRA_VERSION_RESOLVED}" ]]; then
-		CASSANDRA_VERSION_RESOLVED=$$(cat '${CASSANDRA_VERSION_FILE}')
-	fi
-	if [[ -z "$${CASSANDRA_VERSION_RESOLVED}" ]]; then
-		echo "Cassandra version ${CASSANDRA_VERSION} was not resolved"
-		exit 1
-	fi
-	echo "go test -v ${TEST_OPTS} -tags \"${TEST_INTEGRATION_TAGS}\" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution cassandra -runauth -runcassandrafixtures -gocql.timeout=60s -runssl -proto=${TEST_CQL_PROTOCOL} -rf=3 -clusterSize=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} -gocql.cversion=$${CASSANDRA_VERSION_RESOLVED} -cluster=$$(ccm liveset) ${COVER_RUNTIME_ARGS}"
-	go test -v ${TEST_OPTS} -tags "${TEST_INTEGRATION_TAGS}" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution cassandra -runauth -runcassandrafixtures -gocql.timeout=60s -runssl -proto=${TEST_CQL_PROTOCOL} -rf=3 -clusterSize=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} -gocql.cversion=$$(ccm node1 versionfrombuild) -cluster=$$(ccm liveset) ${COVER_RUNTIME_ARGS}
+	export ${CCM_TEST_ENV} GOCQL_CCM_CLUSTER=${CCM_CASSANDRA_CLUSTER_NAME}
+	echo "go test -v ${TEST_OPTS} -tags \"${TEST_INTEGRATION_TAGS}\" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution cassandra -runauth -runcassandrafixtures -gocql.timeout=60s -runssl -proto=${TEST_CQL_PROTOCOL} -rf=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} ${COVER_RUNTIME_ARGS}"
+	go test -v ${TEST_OPTS} -tags "${TEST_INTEGRATION_TAGS}" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution cassandra -runauth -runcassandrafixtures -gocql.timeout=60s -runssl -proto=${TEST_CQL_PROTOCOL} -rf=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} ${COVER_RUNTIME_ARGS}
 
 test-integration-scylla: scylla-start
 	@echo "Run integration tests for proto ${TEST_CQL_PROTOCOL} on scylla ${SCYLLA_VERSION}"
@@ -365,16 +366,15 @@ test-integration-scylla: scylla-start
 	else
 		echo "Cluster socket is not found"
 	fi
-	SCYLLA_VERSION_RESOLVED=$$(cat '${SCYLLA_VERSION_FILE}')
-	if [[ -z "$${SCYLLA_VERSION_RESOLVED}" ]]; then
-		echo "ScyllaDB version ${SCYLLA_VERSION} was not resolved"
-		exit 1
-	fi
-	# CCM references describe where a build came from, not the version string the
-	# test binary parses. Read the installed build so unstable references work too.
-	SCYLLA_SERVER_VERSION=$$(ccm node1 versionfrombuild | sed -E 's/~([[:alpha:]])/-\1/; s/^([0-9]+\.[0-9]+)\.([[:alpha:]])/\1.0-\2/')
-	echo "go test -v ${TEST_OPTS} -tags \"${TEST_INTEGRATION_TAGS}\" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution scylla $${CLUSTER_SOCKET} -gocql.timeout=60s -proto=${TEST_CQL_PROTOCOL} -rf=3 -clusterSize=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} -gocql.cversion=$${SCYLLA_SERVER_VERSION} -cluster=$$(ccm liveset) ${COVER_RUNTIME_ARGS}"
-	go test -v ${TEST_OPTS} -tags "${TEST_INTEGRATION_TAGS}" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution scylla $${CLUSTER_SOCKET} -gocql.timeout=60s -proto=${TEST_CQL_PROTOCOL} -rf=3 -clusterSize=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} -gocql.cversion=$${SCYLLA_SERVER_VERSION} -cluster=$$(ccm liveset) ${COVER_RUNTIME_ARGS}
+	export ${CCM_TEST_ENV} GOCQL_CCM_CLUSTER=${CCM_SCYLLA_CLUSTER_NAME}
+	echo "go test -v ${TEST_OPTS} -tags \"${TEST_INTEGRATION_TAGS}\" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution scylla $${CLUSTER_SOCKET} -gocql.timeout=60s -proto=${TEST_CQL_PROTOCOL} -rf=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} ${COVER_RUNTIME_ARGS}"
+	go test -v ${TEST_OPTS} -tags "${TEST_INTEGRATION_TAGS}" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution scylla $${CLUSTER_SOCKET} -gocql.timeout=60s -proto=${TEST_CQL_PROTOCOL} -rf=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} ${COVER_RUNTIME_ARGS}
+
+# Live tests of internal/testkit/ccm: they create, stop and remove clusters of
+# their own next to the shared one, with the shared cluster's version.
+test-integration-ccm: scylla-start
+	export ${CCM_TEST_ENV} GOCQL_CCM_CLUSTER=${CCM_SCYLLA_CLUSTER_NAME}
+	go test -v -tags integration -timeout=${TEST_INTEGRATION_TIMEOUT} ./internal/testkit/ccm
 
 # One module includes compressor and replay workload tests.
 test-unit: .prepare-pki
