@@ -644,8 +644,11 @@ func TestSession(t *testing.T) {
 			}
 
 			for _, lowTimeout := range []time.Duration{1 * time.Nanosecond, 10 * time.Nanosecond, 100 * time.Nanosecond} {
+				// The timeout arms a timer, and a fast query can finish before it
+				// fires. That has been seen at 10ns and 100ns (scylladb/gocql#973,
+				// #1135), so those may pass; 1ns stays a required failure.
 				canPassOnHighTimeout := Fail
-				if lowTimeout >= 100*time.Nanosecond {
+				if lowTimeout > time.Nanosecond {
 					canPassOnHighTimeout = CanPass
 				}
 				t.Run(lowTimeout.String(), func(t *testing.T) {
@@ -667,7 +670,7 @@ func TestSession(t *testing.T) {
 								return cluster
 							},
 							connect: Pass,
-							// At 100ns the query can complete before the deadline fires,
+							// Above 1ns the query can complete before the deadline fires,
 							// the same race already tolerated below for WriteTimeout/ReadTimeout.
 							regularQuery:               canPassOnHighTimeout,
 							controlQuery:               Pass,
