@@ -417,6 +417,9 @@ func TestStructMapping(t *testing.T) {
 	})
 	t.Run("RegisterStruct", func(t *testing.T) {
 		type registered struct{ ID int64 }
+		// The registry is process-wide; forget the mapping so that -count>1
+		// registers it afresh instead of panicking on the second run.
+		t.Cleanup(func() { structRegistry.Delete(reflect.TypeFor[registered]()) })
 		called := false
 		RegisterStruct(StructFields[registered]{
 			Params: []InputField[registered]{Param("id", Int64, func(v registered) int64 { called = true; return v.ID })},

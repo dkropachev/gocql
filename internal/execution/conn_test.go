@@ -1245,19 +1245,20 @@ var _ net.Error = timeoutErr{}
 // failFromArm onwards, with a plain error that is deliberately not a net.Error —
 // net.Conn.SetReadDeadline is only conventionally a *net.OpError, and a connection
 // from a user-supplied Dialer or HostDialer need not follow that.
+// armFailingConn serves data and then fails every read-deadline arm, so the
+// first read that must reach the socket for bytes beyond data cannot start.
+// Failing on the data being used up rather than on an arm count keeps it
+// independent of how many arms the header read takes, which buffering changes.
 type armFailingConn struct {
-	data        []byte
-	off         int
-	failFromArm int
-	err         error
-	arms        int
+	data []byte
+	off  int
+	err  error
 }
 
 var _ net.Conn = (*armFailingConn)(nil)
 
 func (c *armFailingConn) SetReadDeadline(time.Time) error {
-	c.arms++
-	if c.arms >= c.failFromArm {
+	if c.off >= len(c.data) {
 		return c.err
 	}
 	return nil
@@ -2565,12 +2566,10 @@ func TestConn(t *testing.T) {
 				{
 					name: "failed deadline arm",
 					source: func() (transport.InternalFrameSource, func()) {
-						// Two arms read the header — one for its first byte with the deadline
-						// disarmed, one for the rest (headerReader) — so the third is the body's.
-						// If that arithmetic ever changes, the header read fails instead and the
-						// "caller was woken" assertion below catches it rather than the test
-						// passing for the wrong reason.
-						mock := &armFailingConn{data: header, failFromArm: 3, err: armErr}
+						// The mock serves the header, then fails the next arm, which is the
+						// body's: the header is read in full first (checked below), and the
+						// body is not buffered, so reading it must arm a deadline.
+						mock := &armFailingConn{data: header, err: armErr}
 						cr := &transport.InternalConnReader{InternalConn: mock, InternalR: bufio.NewReader(mock)}
 						cr.SetTimeout(5 * time.Second)
 						return transport.InternalFrameSource{InternalR: cr}, func() {
