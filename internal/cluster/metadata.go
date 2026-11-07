@@ -8,6 +8,7 @@ import (
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
+	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 
 	model "github.com/scylladb/gocql/v2/internal/model"
 
@@ -689,12 +690,11 @@ func InternalTerminalV2AgreementError(err error) bool {
 	}
 	var server RequestError
 	if errors.As(err, &server) {
-		switch server.GetCode() {
-		case ErrCodeOverloaded, ErrCodeBootstrapping, ErrCodeReadTimeout, ErrCodeWriteTimeout, ErrCodeUnprepared:
+		switch runtimeerrors.KindOf(server) {
+		case runtimeerrors.KindOverloaded, runtimeerrors.KindTimeout:
 			return false
-		default:
-			return true
 		}
+		return server.GetCode() != ErrCodeUnprepared
 	}
 	return false
 }

@@ -32,8 +32,7 @@ func (p Safe) Decide(a Attempt) Decision {
 	}
 	var server cqlerr.RequestError
 	if errors.As(a.Err, &server) {
-		switch server.GetCode() {
-		case cqlerr.ErrCodeOverloaded, cqlerr.ErrCodeBootstrapping:
+		if cqlerr.KindOf(server) == cqlerr.KindOverloaded {
 			// Rejected before execution: another host may serve even a
 			// non-idempotent request.
 			return Decision{Action: Next}

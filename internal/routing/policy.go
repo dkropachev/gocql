@@ -1038,12 +1038,12 @@ func InternalRoutingLatencySample(err error) bool {
 	}
 	var server RequestError
 	if errors.As(err, &server) {
-		switch server.GetCode() {
-		case ErrCodeUnavailable, ErrCodeOverloaded, ErrCodeBootstrapping, ErrCodeUnprepared:
+		// Fast rejections say nothing about how long the replica takes.
+		switch runtimeerrors.KindOf(server) {
+		case runtimeerrors.KindUnavailable, runtimeerrors.KindOverloaded, runtimeerrors.KindRateLimited:
 			return false
 		}
-		var rate *RequestErrRateLimitReached
-		return !errors.As(err, &rate)
+		return server.GetCode() != ErrCodeUnprepared
 	}
 	// Local validation/serialization and broken transport are not response latency.
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, runtimeerrors.ErrNoConnections) || errors.Is(err, runtimeerrors.ErrConnectionClosed) {

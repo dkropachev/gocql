@@ -13,8 +13,10 @@
 //	case cqlerr.PartiallyExecuted: // applied in part; reconcile before retrying
 //	}
 //
-// ExecutionError.Attempts lists every failed attempt with the host it went
-// to.
+// KindOf groups any error by what a caller can do about it (timeout,
+// overloaded, invalid, connection, ...), and Kind.Transient reports whether
+// trying again can help. ExecutionError.Attempts lists every failed attempt
+// with the host it went to.
 //
 // Server errors are typed by their CQL error code (RequestErrWriteTimeout,
 // RequestErrUnavailable, ...) and all implement RequestError; find them with
@@ -59,6 +61,31 @@ func ExecutionStatusOf(err error) ExecutionStatus { return runtimeerrors.Executi
 func ServerErrorExecutionStatus(err RequestError) ExecutionStatus {
 	return protocol.ServerErrorExecutionStatus(err)
 }
+
+// Classification.
+
+// Kind groups errors by what a caller can do about them.
+type Kind = runtimeerrors.Kind
+
+const (
+	KindUnknown      = runtimeerrors.KindUnknown
+	KindTimeout      = runtimeerrors.KindTimeout
+	KindUnavailable  = runtimeerrors.KindUnavailable
+	KindOverloaded   = runtimeerrors.KindOverloaded
+	KindRateLimited  = runtimeerrors.KindRateLimited
+	KindInvalid      = runtimeerrors.KindInvalid
+	KindUnauthorized = runtimeerrors.KindUnauthorized
+	KindConnection   = runtimeerrors.KindConnection
+	KindCanceled     = runtimeerrors.KindCanceled
+	KindClosed       = runtimeerrors.KindClosed
+	KindProtocol     = runtimeerrors.KindProtocol
+	KindServer       = runtimeerrors.KindServer
+)
+
+// KindOf classifies err. For a request that failed after several attempts it
+// classifies the reason the request stopped. Kind.Transient reports whether
+// trying again can help; ExecutionStatusOf reports whether it is safe.
+func KindOf(err error) Kind { return runtimeerrors.KindOf(err) }
 
 // Request errors.
 
