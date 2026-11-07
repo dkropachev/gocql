@@ -37,6 +37,8 @@ var ErrNoConnectionsStarted = implCluster.ErrNoConnectionsStarted
 // Deprecated: use cqlerr.ErrNoHosts.
 var ErrNoHosts = implCluster.ErrNoHosts
 
+// Deprecated: the driver never returns Error; server errors implement
+// cqlerr.RequestError.
 type Error = implCluster.Error
 type Event = implCluster.Event
 type EventFilter = implCluster.EventFilter

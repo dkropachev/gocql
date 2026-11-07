@@ -6,9 +6,9 @@ package runtimeerrors
 import "errors"
 
 var (
-	ErrNoHosts              = errors.New("no hosts provided")
-	ErrNoConnectionsStarted = errors.New("no connections were made when creating the session")
-	ErrHostQueryFailed      = errors.New("unable to populate Hosts")
+	ErrNoHosts              = errors.New("gocql: no hosts provided")
+	ErrNoConnectionsStarted = errors.New("gocql: no connections were made when creating the session")
+	ErrHostQueryFailed      = errors.New("gocql: unable to populate Hosts")
 )
 
 // ErrBusy indicates that a query still owns an active execution, transport

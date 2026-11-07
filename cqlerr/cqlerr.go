@@ -205,20 +205,25 @@ type (
 // Sentinels.
 
 var (
-	ErrBusy                         = runtimeerrors.ErrBusy
-	ErrClosed                       = runtimeerrors.ErrClosed
-	ErrConnectionClosed             = runtimeerrors.ErrConnectionClosed
-	ErrFrameTooBig                  = protocol.ErrFrameTooBig
-	ErrHostDown                     = runtimeerrors.ErrHostDown
-	ErrHostQueryFailed              = runtimeerrors.ErrHostQueryFailed
-	ErrKeyspaceDoesNotExist         = runtimeerrors.ErrKeyspaceDoesNotExist
-	ErrMultipleRows                 = runtimeerrors.ErrMultipleRows
-	ErrNoConnections                = runtimeerrors.ErrNoConnections
-	ErrNoConnectionsInPool          = runtimeerrors.ErrNoConnectionsInPool
-	ErrNoConnectionsStarted         = runtimeerrors.ErrNoConnectionsStarted
-	ErrNoHosts                      = runtimeerrors.ErrNoHosts
-	ErrNoKeyspace                   = runtimeerrors.ErrNoKeyspace
-	ErrNoMetadata                   = runtimeerrors.ErrNoMetadata
+	ErrBusy             = runtimeerrors.ErrBusy
+	ErrClosed           = runtimeerrors.ErrClosed
+	ErrConnectionClosed = runtimeerrors.ErrConnectionClosed
+	ErrFrameTooBig      = protocol.ErrFrameTooBig
+	// Deprecated: the driver never returns ErrHostDown.
+	ErrHostDown = runtimeerrors.ErrHostDown
+	// Deprecated: the driver never returns ErrHostQueryFailed.
+	ErrHostQueryFailed      = runtimeerrors.ErrHostQueryFailed
+	ErrKeyspaceDoesNotExist = runtimeerrors.ErrKeyspaceDoesNotExist
+	ErrMultipleRows         = runtimeerrors.ErrMultipleRows
+	ErrNoConnections        = runtimeerrors.ErrNoConnections
+	// Deprecated: the driver never returns ErrNoConnectionsInPool.
+	ErrNoConnectionsInPool  = runtimeerrors.ErrNoConnectionsInPool
+	ErrNoConnectionsStarted = runtimeerrors.ErrNoConnectionsStarted
+	ErrNoHosts              = runtimeerrors.ErrNoHosts
+	ErrNoKeyspace           = runtimeerrors.ErrNoKeyspace
+	// Deprecated: the driver never returns ErrNoMetadata.
+	ErrNoMetadata = runtimeerrors.ErrNoMetadata
+	// Deprecated: the driver never returns ErrNoPool.
 	ErrNoPool                       = runtimeerrors.ErrNoPool
 	ErrNoRows                       = runtimeerrors.ErrNoRows
 	ErrNoStreams                    = runtimeerrors.ErrNoStreams
@@ -236,9 +241,13 @@ var (
 	ErrStaleRows                    = runtimeerrors.ErrStaleRows
 	ErrTabletsNotUsed               = runtimeerrors.ErrTabletsNotUsed
 	ErrTimeoutNoResponse            = runtimeerrors.ErrTimeoutNoResponse
-	ErrTooManyStmts                 = runtimeerrors.ErrTooManyStmts
-	ErrTooManyTimeouts              = runtimeerrors.ErrTooManyTimeouts
-	ErrUnavailable                  = runtimeerrors.ErrUnavailable
-	ErrUnsupported                  = runtimeerrors.ErrUnsupported
-	ErrUseStmt                      = runtimeerrors.ErrUseStmt
+	// Deprecated: the driver never returns ErrTooManyStmts.
+	ErrTooManyStmts = runtimeerrors.ErrTooManyStmts
+	// Deprecated: the driver never returns ErrTooManyTimeouts.
+	ErrTooManyTimeouts = runtimeerrors.ErrTooManyTimeouts
+	// Deprecated: the driver never returns ErrUnavailable.
+	ErrUnavailable = runtimeerrors.ErrUnavailable
+	// Deprecated: the driver never returns ErrUnsupported.
+	ErrUnsupported = runtimeerrors.ErrUnsupported
+	ErrUseStmt     = runtimeerrors.ErrUseStmt
 )

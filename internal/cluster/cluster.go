@@ -535,47 +535,47 @@ func (cfg *InternalClusterSettings) Validate() error {
 	}
 
 	if cfg.Authenticator != nil && cfg.AuthProvider != nil {
-		return errors.New("Can't use both Authenticator and AuthProvider in cluster config.")
+		return typeValidation("Authenticator", "cannot be combined with AuthProvider")
 	}
 
 	if cfg.InitialReconnectionPolicy == nil {
-		return errors.New("InitialReconnectionPolicy is nil")
+		return typeValidation("InitialReconnectionPolicy", "is nil")
 	}
 
 	if cfg.InitialReconnectionPolicy.GetMaxRetries() <= 0 {
-		return errors.New("InitialReconnectionPolicy.GetMaxRetries must return a positive number")
+		return typeValidation("InitialReconnectionPolicy", "GetMaxRetries must return a positive number")
 	}
 
 	if cfg.ReconnectionPolicy == nil {
-		return errors.New("ReconnectionPolicy is nil")
+		return typeValidation("ReconnectionPolicy", "is nil")
 	}
 
 	if cfg.ReconnectionPolicy.GetMaxRetries() <= 0 {
-		return errors.New("ReconnectionPolicy.GetMaxRetries must return a positive number")
+		return typeValidation("ReconnectionPolicy", "GetMaxRetries must return a positive number")
 	}
 
 	if cfg.PageSize < 0 {
-		return errors.New("PageSize should be positive number or zero")
+		return typeValidation("PageSize", "must not be negative")
 	}
 
 	if cfg.MaxRoutingKeyInfo < 0 {
-		return errors.New("MaxRoutingKeyInfo should be positive number or zero")
+		return typeValidation("MaxRoutingKeyInfo", "must not be negative")
 	}
 
 	if cfg.MaxPreparedStmts < 0 {
-		return errors.New("MaxPreparedStmts should be positive number or zero")
+		return typeValidation("MaxPreparedStmts", "must not be negative")
 	}
 
 	if cfg.SocketKeepalive < 0 {
-		return errors.New("SocketKeepalive should be positive time.Duration or zero")
+		return typeValidation("SocketKeepalive", "must not be negative")
 	}
 
 	if cfg.MaxRequestsPerConn < 0 || cfg.MaxRequestsPerConn > 32768 {
-		return errors.New("MaxRequestsPerConn must be 0..32768")
+		return typeValidation("MaxRequestsPerConn", "must be between 0 and 32768")
 	}
 
 	if cfg.NumConns < 0 {
-		return errors.New("NumConns should be positive non-zero number or zero")
+		return typeValidation("NumConns", "must not be negative")
 	}
 
 	// Resolve cfg.Port: when the user has not set it explicitly (Port == 0),
@@ -603,43 +603,43 @@ func (cfg *InternalClusterSettings) Validate() error {
 	}
 
 	if cfg.Port <= 0 || cfg.Port > 65535 {
-		return errors.New("Port should be a valid port number: a number between 1 and 65535")
+		return typeValidation("Port", "must be between 1 and 65535")
 	}
 
 	if cfg.WriteTimeout < 0 {
-		return errors.New("WriteTimeout should be positive time.Duration or zero")
+		return typeValidation("WriteTimeout", "must not be negative")
 	}
 
 	if cfg.Timeout < 0 {
-		return errors.New("Timeout should be positive time.Duration or zero")
+		return typeValidation("Timeout", "must not be negative")
 	}
 
 	if cfg.ConnectTimeout < 0 {
-		return errors.New("ConnectTimeout should be positive time.Duration or zero")
+		return typeValidation("ConnectTimeout", "must not be negative")
 	}
 
 	if cfg.ReadTimeout < 0 {
-		return errors.New("ReadTimeout should be positive time.Duration or zero")
+		return typeValidation("ReadTimeout", "must not be negative")
 	}
 
 	if cfg.MetadataSchemaRequestTimeout < 0 {
-		return errors.New("MetadataSchemaRequestTimeout should be positive time.Duration or zero")
+		return typeValidation("MetadataSchemaRequestTimeout", "must not be negative")
 	}
 
 	if cfg.WriteCoalesceWaitTime < 0 {
-		return errors.New("WriteCoalesceWaitTime should be positive time.Duration or zero")
+		return typeValidation("WriteCoalesceWaitTime", "must not be negative")
 	}
 
 	if cfg.ReconnectInterval < 0 {
-		return errors.New("ReconnectInterval should be positive time.Duration or zero")
+		return typeValidation("ReconnectInterval", "must not be negative")
 	}
 
 	if cfg.MaxWaitSchemaAgreement < 0 {
-		return errors.New("MaxWaitSchemaAgreement should be positive time.Duration or zero")
+		return typeValidation("MaxWaitSchemaAgreement", "must not be negative")
 	}
 
 	if cfg.ProtoVersion < 0 || cfg.ProtoVersion > 127 {
-		return errors.New("ProtoVersion should be between 0 and 127")
+		return typeValidation("ProtoVersion", "must be between 0 and 127")
 	}
 
 	if cfg.ProtoVersion >= protoVersion5 && cfg.Compressor != nil {
@@ -655,7 +655,7 @@ func (cfg *InternalClusterSettings) Validate() error {
 		// The built-in SnappyCompressor deliberately does not; LZ4Compressor does.
 		// A nil compressor (no compression) is always allowed on v5.
 		if _, ok := cfg.Compressor.(SegmentCompressor); !ok {
-			return fmt.Errorf("compressor %q does not support protocol v5 segment framing; use LZ4Compressor or no compression with ProtoVersion >= 5", cfg.Compressor.Name())
+			return typeValidation("Compressor", "%q does not support protocol v5 segment framing; use LZ4Compressor or no compression with ProtoVersion >= 5", cfg.Compressor.Name())
 		}
 	}
 
@@ -671,23 +671,23 @@ func (cfg *InternalClusterSettings) Validate() error {
 	}
 
 	if cfg.SerialConsistency > 0 && !cfg.SerialConsistency.IsSerial() {
-		return fmt.Errorf("the default SerialConsistency level is not allowed to be anything else but SERIAL or LOCAL_SERIAL. Recived value: %v", cfg.SerialConsistency)
+		return typeValidation("SerialConsistency", "must be SERIAL or LOCAL_SERIAL, got %v", cfg.SerialConsistency)
 	}
 
 	if cfg.DNSResolver == nil {
-		return fmt.Errorf("DNSResolver is empty")
+		return typeValidation("DNSResolver", "is nil")
 	}
 
 	if cfg.MaxExcessShardConnectionsRate < 0 {
-		return fmt.Errorf("MaxExcessShardConnectionsRate should be positive number or zero")
+		return typeValidation("MaxExcessShardConnectionsRate", "must not be negative")
 	}
 
 	if cfg.ClientRoutesConfig != nil {
 		if cfg.AddressTranslator != nil {
-			return fmt.Errorf("AddressTranslator and ClientRoutesConfig should not be set at the same time")
+			return typeValidation("AddressTranslator", "cannot be combined with ClientRoutesConfig")
 		}
 		if err := cfg.ClientRoutesConfig.Validate(); err != nil {
-			return fmt.Errorf("ClientRoutesConfig is invalid: %v", err)
+			return &ValidationError{Field: "ClientRoutesConfig", Err: err}
 		}
 	}
 

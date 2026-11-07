@@ -26,6 +26,7 @@ package cluster
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"reflect"
@@ -382,7 +383,7 @@ func TestClusterSettings(t *testing.T) {
 			t.Run("negative is rejected", func(t *testing.T) {
 				t.Parallel()
 				err := newCfg(-time.Second).Validate()
-				if err == nil || !strings.Contains(err.Error(), "ReadTimeout should be positive") {
+				if err == nil || !strings.Contains(err.Error(), "invalid ReadTimeout") {
 					t.Fatalf("expected ReadTimeout validation error, got: %v", err)
 				}
 			})
@@ -417,41 +418,41 @@ func TestClusterSettings(t *testing.T) {
 				{"AuthenticatorAndAuthProvider", func(c *InternalClusterSettings) {
 					c.Authenticator = transport.PasswordAuthenticator{}
 					c.AuthProvider = func(*endpoint.HostInfo) (transport.Authenticator, error) { return nil, nil }
-				}, "both Authenticator and AuthProvider"},
-				{"NilInitialReconnectionPolicy", func(c *InternalClusterSettings) { c.InitialReconnectionPolicy = nil }, "InitialReconnectionPolicy is nil"},
+				}, "invalid Authenticator: cannot be combined with AuthProvider"},
+				{"NilInitialReconnectionPolicy", func(c *InternalClusterSettings) { c.InitialReconnectionPolicy = nil }, "invalid InitialReconnectionPolicy: is nil"},
 				{"InitialReconnectionPolicyNoRetries", func(c *InternalClusterSettings) {
 					c.InitialReconnectionPolicy = &pool.ConstantReconnectionPolicy{MaxRetries: 0}
-				}, "InitialReconnectionPolicy.GetMaxRetries"},
-				{"NilReconnectionPolicy", func(c *InternalClusterSettings) { c.ReconnectionPolicy = nil }, "ReconnectionPolicy is nil"},
+				}, "invalid InitialReconnectionPolicy: GetMaxRetries"},
+				{"NilReconnectionPolicy", func(c *InternalClusterSettings) { c.ReconnectionPolicy = nil }, "invalid ReconnectionPolicy: is nil"},
 				// hostConnPool.InternalConnect makes GetMaxRetries attempts; with none every pool
 				// fill fails.
 				{"ReconnectionPolicyNoRetries", func(c *InternalClusterSettings) {
 					c.ReconnectionPolicy = &pool.ConstantReconnectionPolicy{MaxRetries: 0}
-				}, "ReconnectionPolicy.GetMaxRetries"},
+				}, "invalid ReconnectionPolicy: GetMaxRetries"},
 				{"NegativePageSize", func(c *InternalClusterSettings) { c.PageSize = -1 }, "PageSize"},
 				{"NegativeMaxRoutingKeyInfo", func(c *InternalClusterSettings) { c.MaxRoutingKeyInfo = -1 }, "MaxRoutingKeyInfo"},
 				{"NegativeMaxPreparedStmts", func(c *InternalClusterSettings) { c.MaxPreparedStmts = -1 }, "MaxPreparedStmts"},
 				{"NegativeSocketKeepalive", func(c *InternalClusterSettings) { c.SocketKeepalive = -time.Second }, "SocketKeepalive"},
 				{"NegativeMaxRequestsPerConn", func(c *InternalClusterSettings) { c.MaxRequestsPerConn = -1 }, "MaxRequestsPerConn"},
 				{"NegativeNumConns", func(c *InternalClusterSettings) { c.NumConns = -1 }, "NumConns"},
-				{"PortTooLarge", func(c *InternalClusterSettings) { c.Port = 65536 }, "valid port number"},
-				{"NegativePort", func(c *InternalClusterSettings) { c.Port = -1 }, "valid port number"},
+				{"PortTooLarge", func(c *InternalClusterSettings) { c.Port = 65536 }, "invalid Port"},
+				{"NegativePort", func(c *InternalClusterSettings) { c.Port = -1 }, "invalid Port"},
 				{"MixedHostPorts", func(c *InternalClusterSettings) { c.Hosts = []string{"10.0.0.1:9042", "10.0.0.2"} }, "all include a port or none"},
 				{"NegativeWriteTimeout", func(c *InternalClusterSettings) { c.WriteTimeout = -time.Second }, "WriteTimeout"},
-				{"NegativeTimeout", func(c *InternalClusterSettings) { c.Timeout = -time.Second }, "Timeout should be"},
+				{"NegativeTimeout", func(c *InternalClusterSettings) { c.Timeout = -time.Second }, "invalid Timeout:"},
 				{"NegativeConnectTimeout", func(c *InternalClusterSettings) { c.ConnectTimeout = -time.Second }, "ConnectTimeout"},
 				{"NegativeMetadataSchemaRequestTimeout", func(c *InternalClusterSettings) { c.MetadataSchemaRequestTimeout = -time.Second }, "MetadataSchemaRequestTimeout"},
 				{"NegativeWriteCoalesceWaitTime", func(c *InternalClusterSettings) { c.WriteCoalesceWaitTime = -time.Second }, "WriteCoalesceWaitTime"},
 				{"NegativeReconnectInterval", func(c *InternalClusterSettings) { c.ReconnectInterval = -time.Second }, "ReconnectInterval"},
 				{"NegativeMaxWaitSchemaAgreement", func(c *InternalClusterSettings) { c.MaxWaitSchemaAgreement = -time.Second }, "MaxWaitSchemaAgreement"},
 				{"NonSerialSerialConsistency", func(c *InternalClusterSettings) { c.SerialConsistency = cqltype.Quorum }, "SERIAL or LOCAL_SERIAL"},
-				{"NilDNSResolver", func(c *InternalClusterSettings) { c.DNSResolver = nil }, "DNSResolver is empty"},
+				{"NilDNSResolver", func(c *InternalClusterSettings) { c.DNSResolver = nil }, "invalid DNSResolver"},
 				{"NegativeMaxExcessShardConnectionsRate", func(c *InternalClusterSettings) { c.MaxExcessShardConnectionsRate = -1 }, "MaxExcessShardConnectionsRate"},
 				{"ClientRoutesWithAddressTranslator", func(c *InternalClusterSettings) {
 					c.ClientRoutesConfig = &ClientRoutesConfig{}
 					c.AddressTranslator = endpoint.AddressTranslatorFunc(func(addr net.IP, port int) (net.IP, int) { return addr, port })
-				}, "should not be set at the same time"},
-				{"InvalidClientRoutesConfig", func(c *InternalClusterSettings) { c.ClientRoutesConfig = &ClientRoutesConfig{} }, "ClientRoutesConfig is invalid"},
+				}, "invalid AddressTranslator: cannot be combined with ClientRoutesConfig"},
+				{"InvalidClientRoutesConfig", func(c *InternalClusterSettings) { c.ClientRoutesConfig = &ClientRoutesConfig{} }, "invalid ClientRoutesConfig"},
 			}
 
 			for _, tc := range tests {
@@ -469,6 +470,10 @@ func TestClusterSettings(t *testing.T) {
 					err := cfg.Validate()
 					if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 						t.Fatalf("Validate() = %v, want an error containing %q", err, tc.wantErr)
+					}
+					var validation *ValidationError
+					if strings.HasPrefix(tc.wantErr, "invalid ") && !errors.As(err, &validation) {
+						t.Fatalf("Validate() = %T, want a *ValidationError", err)
 					}
 				})
 			}
