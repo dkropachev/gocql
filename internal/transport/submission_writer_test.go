@@ -185,8 +185,8 @@ func TestSubmissionWriter(t *testing.T) {
 		conn := &Conn{InternalCtx: ctx, InternalCancel: cancel, InternalW: socket, InternalR: socket, InternalStreams: streams.New(), InternalErrorHandler: ignoreConnErrors{}}
 		// The call of a request queued while the failing write is in progress:
 		// close joins it, and it ends only once its ticket is finished.
+		// InternalGetCallReq already counts the call's one pending exec.
 		call := InternalGetCallReq(1)
-		call.InternalDone.Add(1)
 		conn.InternalCalls = InternalNewCallTable()
 		conn.InternalCalls.Set(1, call)
 		var late *writeTicket
