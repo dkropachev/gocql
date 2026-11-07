@@ -80,7 +80,9 @@ func TestConditional(t *testing.T) {
 		require.Error(t, err)
 		successDelete := cassandraCASBound(t, session, deleteCQL, values, cql.DynamicRows)
 		require.True(t, cassandraReadBound(t, session, successDelete, gocql.Options{}).Applied)
-		cassandraWrite(t, session, "TRUNCATE "+table)
+		if err := truncateTable(t, session, table); err != nil {
+			t.Fatal(err)
+		}
 		runCASBatch := func(items []batchItem, wantApplied bool, wantRows int) {
 			t.Helper()
 			page, err := runBatch(context.Background(), session, cql.LoggedBatch, items, cql.CASRows(cql.DynamicRows), gocql.SessionOptions{})

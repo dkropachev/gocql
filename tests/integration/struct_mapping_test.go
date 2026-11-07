@@ -69,7 +69,7 @@ func TestStructMapping(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer add.Close()
-		if _, err := v2Exec(ctx, f.session, "TRUNCATE "+counters); err != nil {
+		if err := truncateTable(t, f.session, counters); err != nil {
 			t.Fatal(err)
 		}
 		batch.Reset()

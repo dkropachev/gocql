@@ -80,7 +80,7 @@ func newSMFixture(t *testing.T) (context.Context, smFixture) {
 		PRIMARY KEY (bucket, id))`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := v2Exec(ctx, session, "TRUNCATE "+table); err != nil {
+	if err := truncateTable(t, session, table); err != nil {
 		t.Fatal(err)
 	}
 	return ctx, smFixture{session: session, table: table}

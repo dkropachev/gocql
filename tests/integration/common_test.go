@@ -121,11 +121,38 @@ func getClusterSocketFile() []string {
 const maxCQLIdentifierLen = 48
 const testTableNameHashLen = 16
 
-// testTableName builds a CQL-safe table name from t.Name() and optional parts.
-// Truncates to 48 chars (CQL limit) using <first-n>_<fnv64a hash>_<last-n>
-// when needed.
+var (
+	testNamesMu sync.Mutex
+	// testNameRuns counts the test instances that have asked for a name per
+	// t.Name(), and testNames remembers the name each instance was given.
+	testNameRuns = map[string]int{}
+	testNames    = map[testing.TB]string{}
+)
+
+// uniqueTestName is t.Name() for the first instance of a test in this process
+// and t.Name()_runN for later ones, so that go test -count=N does not reuse
+// the tables and keyspaces an earlier iteration created. Every call for the
+// same instance returns the same name.
+func uniqueTestName(t testing.TB) string {
+	testNamesMu.Lock()
+	defer testNamesMu.Unlock()
+	if name, ok := testNames[t]; ok {
+		return name
+	}
+	name := t.Name()
+	testNameRuns[name]++
+	if run := testNameRuns[name]; run > 1 {
+		name = fmt.Sprintf("%s_run%d", name, run)
+	}
+	testNames[t] = name
+	return name
+}
+
+// testTableName builds a CQL-safe table name from the test's name (see
+// uniqueTestName) and optional parts. Truncates to 48 chars (CQL limit) using
+// <first-n>_<fnv64a hash>_<last-n> when needed.
 func testTableName(t testing.TB, parts ...string) string {
-	name := strings.ToLower(t.Name())
+	name := strings.ToLower(uniqueTestName(t))
 	for _, p := range parts {
 		name += "_" + strings.ToLower(p)
 	}
