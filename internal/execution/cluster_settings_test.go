@@ -409,32 +409,32 @@ func TestClusterSettings(t *testing.T) {
 					NumRetries:               1,
 					ProtoVersion:             0,
 					ExpectedGetIntervalCalls: nil,
-					ExpectedErr:              "gocql: unable to create session: unable to connect to the cluster, last error: unable to discover protocol version:"},
+					ExpectedErr:              "gocql: unable to create session: no host reachable during protocol discovery: "},
 				{
 					NumRetries:               2,
 					ProtoVersion:             0,
 					ExpectedGetIntervalCalls: []int{1},
-					ExpectedErr:              "gocql: unable to create session: unable to connect to the cluster, last error: unable to discover protocol version:"},
+					ExpectedErr:              "gocql: unable to create session: no host reachable during protocol discovery: "},
 				{
 					NumRetries:               3,
 					ProtoVersion:             0,
 					ExpectedGetIntervalCalls: []int{1, 2},
-					ExpectedErr:              "gocql: unable to create session: unable to connect to the cluster, last error: unable to discover protocol version:"},
+					ExpectedErr:              "gocql: unable to create session: no host reachable during protocol discovery: "},
 				{
 					NumRetries:               1,
 					ProtoVersion:             implProtocol.ProtoVersion4,
 					ExpectedGetIntervalCalls: nil,
-					ExpectedErr:              "gocql: unable to create session: unable to connect to the cluster, last error: unable to create control connection: unable to connect to initial hosts:"},
+					ExpectedErr:              "gocql: unable to create session: no host reachable during control connection: "},
 				{
 					NumRetries:               2,
 					ProtoVersion:             implProtocol.ProtoVersion4,
 					ExpectedGetIntervalCalls: []int{1},
-					ExpectedErr:              "gocql: unable to create session: unable to connect to the cluster, last error: unable to create control connection: unable to connect to initial hosts:"},
+					ExpectedErr:              "gocql: unable to create session: no host reachable during control connection: "},
 				{
 					NumRetries:               3,
 					ProtoVersion:             implProtocol.ProtoVersion4,
 					ExpectedGetIntervalCalls: []int{1, 2},
-					ExpectedErr:              "gocql: unable to create session: unable to connect to the cluster, last error: unable to create control connection: unable to connect to initial hosts:"},
+					ExpectedErr:              "gocql: unable to create session: no host reachable during control connection: "},
 			}
 
 			for id := range tcase {

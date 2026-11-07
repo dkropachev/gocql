@@ -26,6 +26,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"net"
 	"strings"
 	"sync"
@@ -277,7 +278,7 @@ func TestSession(t *testing.T) {
 			// Validate's call passes, Session.init's sees zero.
 			{name: "after Validate", allowed: 1, wantErr: "no connection attempted"},
 			// Session.init must keep the limit it checked, not ask again.
-			{name: "after the check", allowed: 2, wantErr: "unable to connect to the cluster"},
+			{name: "after the check", allowed: 2, wantErr: "no host reachable during protocol discovery: 127.0.0.1:1: "},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
@@ -295,6 +296,12 @@ func TestSession(t *testing.T) {
 				}
 				if !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("connectSettings() = %v, want %q", err, tt.wantErr)
+				}
+				if tt.allowed > 1 {
+					var dial *net.OpError
+					if !errors.Is(err, ErrNoConnectionsStarted) || !errors.As(err, &dial) {
+						t.Fatalf("connectSettings() = %v, want ErrNoConnectionsStarted wrapping a dial error", err)
+					}
 				}
 			})
 		}

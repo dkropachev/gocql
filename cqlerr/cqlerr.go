@@ -169,6 +169,10 @@ type (
 	PartialRefreshError     = metadata.PartialRefreshError
 	ErrProtocol             = protocol.ErrProtocol
 	ErrSchemaMismatch       = transport.ErrSchemaMismatch
+	// ConnectError reports that no host was reachable while a session was
+	// connecting; it matches ErrNoConnectionsStarted.
+	ConnectError = runtimeerrors.ConnectError
+	HostError    = runtimeerrors.HostError
 )
 
 // Sentinels.

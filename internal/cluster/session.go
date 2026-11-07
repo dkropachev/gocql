@@ -287,13 +287,12 @@ func (s *Session) init() error {
 				var proto int
 				proto, err = s.privateStorage.InternalControl.InternalDiscoverProtocol(hosts)
 				if err != nil {
-					err = fmt.Errorf("unable to discover protocol version: %w\n", err)
 					if debug.Enabled {
 						s.privateStorage.InternalLogger.Println(err.Error())
 					}
 					continue
 				} else if proto == 0 {
-					return errors.New("unable to discovery protocol version")
+					return errors.New("unable to discover protocol version")
 				}
 
 				// TODO(zariel): we really only need this in 1 place
@@ -302,7 +301,6 @@ func (s *Session) init() error {
 			}
 
 			if err = s.privateStorage.InternalControl.InternalConnect(hosts); err != nil {
-				err = fmt.Errorf("unable to create control connection: %w\n", err)
 				if debug.Enabled {
 					s.privateStorage.InternalLogger.Println(err.Error())
 				}
@@ -311,7 +309,7 @@ func (s *Session) init() error {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("unable to connect to the cluster, last error: %w", err)
+			return err
 		}
 
 		conn := s.privateStorage.InternalControl.InternalGetConn().InternalConn.(*Conn)

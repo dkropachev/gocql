@@ -26,8 +26,10 @@ package cluster
 
 import (
 	"context"
+	"net"
 
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 
 	crand "crypto/rand"
 	"errors"
@@ -198,10 +200,9 @@ func (c *InternalControlConn) InternalDiscoverProtocol(hosts []*HostInfo) (int, 
 		}
 	})
 
-	var err error
+	failure := &runtimeerrors.ConnectError{Stage: "protocol discovery"}
 	for _, host := range hosts {
-		var conn *Conn
-		conn, err = InternalSessionDial(c.InternalSession, c.InternalSession.privateStorage.InternalCtx, host, &connCfg, handler)
+		conn, err := InternalSessionDial(c.InternalSession, c.InternalSession.privateStorage.InternalCtx, host, &connCfg, handler)
 		// not need to call conn.finalizeConnection since this connection to be terminated right away
 		if conn != nil {
 			conn.Close()
@@ -214,9 +215,16 @@ func (c *InternalControlConn) InternalDiscoverProtocol(hosts []*HostInfo) (int, 
 		if proto := InternalParseProtocolFromError(err); proto > 0 {
 			return proto, nil
 		}
+		failure.Hosts = append(failure.Hosts, runtimeerrors.HostError{Address: hostAddress(host), Err: err})
 	}
+	if len(failure.Hosts) == 0 {
+		return 0, errors.New("control: no endpoints specified")
+	}
+	return 0, failure
+}
 
-	return 0, err
+func hostAddress(host *HostInfo) string {
+	return net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(host.Port()))
 }
 
 // controlConnConfig returns the connection config used for control connections.
@@ -250,12 +258,14 @@ func (c *InternalControlConn) InternalConnect(hosts []*HostInfo) error {
 	cfg := InternalSessionControlConnConfig(c.InternalSession)
 
 	var conn *Conn
-	var err error
+	failure := &runtimeerrors.ConnectError{Stage: "control connection"}
 	for _, host := range hosts {
+		var err error
 		conn, err = InternalSessionDial(c.InternalSession, c.InternalSession.privateStorage.InternalCtx, host, cfg, c)
 		// conn.finalizeConnection() to be called outside of this function, since initialization process is not completed yet
 		if err != nil {
 			c.InternalSession.privateStorage.InternalLogger.Printf("gocql: unable to dial control conn %v:%v: %v\n", host.ConnectAddress(), host.Port(), err)
+			failure.Hosts = append(failure.Hosts, runtimeerrors.HostError{Address: hostAddress(host), Err: err})
 			continue
 		}
 		err = c.setupConn(conn)
@@ -263,11 +273,12 @@ func (c *InternalControlConn) InternalConnect(hosts []*HostInfo) error {
 			break
 		}
 		c.InternalSession.privateStorage.InternalLogger.Printf("gocql: unable setup control conn %v:%v: %v\n", host.ConnectAddress(), host.Port(), err)
+		failure.Hosts = append(failure.Hosts, runtimeerrors.HostError{Address: hostAddress(host), Err: err})
 		conn.Close()
 		conn = nil
 	}
 	if conn == nil {
-		return fmt.Errorf("unable to connect to initial hosts: %w", err)
+		return failure
 	}
 
 	// we could fetch the initial ring here and update initial host data. So that
