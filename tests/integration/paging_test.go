@@ -47,7 +47,14 @@ import (
 func TestPaging(t *testing.T) {
 	t.Run("AllowFiltering", func(t *testing.T) {
 		t.Parallel()
-		session := createV2Session(t)
+		// The reads below run at ONE and QUORUM. Writes at the default QUORUM
+		// leave a replica that a ONE read can reach before it has every row
+		// (W+R must exceed RF), so the fixture is written at ALL.
+		session := createV2Session(t, func(c *gocql.Config) {
+			profile := *c.DefaultProfile
+			profile.Consistency = cql.All
+			c.DefaultProfile = &profile
+		})
 		defer session.Close()
 		table := testTableName(t)
 		const targetP1, targetP2, totalExpectedResults, pageSize, deletedRangeStart, deletedRangeEnd = 50, 50, 30, 5, 10, 20

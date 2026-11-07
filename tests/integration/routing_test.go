@@ -453,6 +453,11 @@ func TestRouting(t *testing.T) {
 			ctx := context.Background()
 			cluster := createV2Cluster()
 			v2ConfigureRouting(t, &cluster, routing.Options{TokenAware: true})
+			// The rows are read back at ONE from whichever replica the tablet
+			// routes to: write them at ALL so a lagging replica cannot miss one.
+			profile := *cluster.DefaultProfile
+			profile.Consistency = cql.All
+			cluster.DefaultProfile = &profile
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
 			supported, err := v2TabletsSupported(ctx, session)
@@ -904,6 +909,8 @@ func TestRouting(t *testing.T) {
 				c.Pool.ConnectionsPerHost = 1
 				p := *c.DefaultProfile
 				p.PageSize = 1
+				// The row is read back at ONE: write it at ALL so any replica has it.
+				p.Consistency = cql.All
 				c.DefaultProfile = &p
 			})
 			defer session.Close()

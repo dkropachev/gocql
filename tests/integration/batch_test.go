@@ -99,6 +99,9 @@ func TestBatch(t *testing.T) {
 			session := createV2Session(t, func(config *gocql.Config) {
 				profile := *config.DefaultProfile
 				profile.Retry = retryPolicy
+				// The batch below writes at ONE, so the rows are read back at ALL:
+				// a QUORUM read could miss the one replica that took the write.
+				profile.Consistency = cql.All
 				config.DefaultProfile = &profile
 			})
 			defer session.Close()
