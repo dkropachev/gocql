@@ -481,7 +481,10 @@ func TestRouting(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer bound.Close()
-				startTime, timeout, backoffDelay := time.Now(), 2*time.Second, 100*time.Millisecond
+				// Tablet placement settles asynchronously, and under the parallel suite
+				// a 2s budget left only about four attempts (scylladb/gocql#635). The
+				// budget bounds waiting, not success: a converged key returns at once.
+				startTime, timeout, backoffDelay := time.Now(), 30*time.Second, 100*time.Millisecond
 				success := false
 				for attempt := 1; time.Since(startTime) < timeout; attempt++ {
 					observer := new(v2TabletAttemptObserver)
@@ -567,7 +570,7 @@ func TestRouting(t *testing.T) {
 						break
 					}
 					time.Sleep(min(backoffDelay, remaining))
-					backoffDelay *= 2
+					backoffDelay = min(2*backoffDelay, time.Second)
 				}
 				if !success {
 					t.Fatalf("Timed out after %v (elapsed %v) waiting for tablets to stabilize (migrations still in progress)", timeout, time.Since(startTime))
