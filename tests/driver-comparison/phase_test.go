@@ -5,13 +5,34 @@ package main
 
 import (
 	"context"
+	"os"
+	"strings"
 	"testing"
 	"time"
 )
 
+// expectCurrentAffinity points phase's affinity guard at the CPUs this process
+// already runs on. The guard protects benchmark runs pinned with taskset; the
+// accounting tests below must not depend on how the test process is pinned.
+func expectCurrentAffinity(t *testing.T) {
+	t.Helper()
+	b, err := os.ReadFile("/proc/self/status")
+	if err != nil {
+		t.Skip("no /proc/self/status to read the CPU affinity from:", err)
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if cpus, ok := strings.CutPrefix(line, "Cpus_allowed_list:"); ok {
+			t.Setenv("GOCQL_BENCH_CPUS", strings.TrimSpace(cpus))
+			return
+		}
+	}
+	t.Fatal("no Cpus_allowed_list in /proc/self/status")
+}
+
 func TestPhase(t *testing.T) {
 	t.Run("Queue", func(t *testing.T) {
 		t.Run("Bounded", func(t *testing.T) {
+			expectCurrentAffinity(t)
 			oldQueueSize := *queueSize
 			*queueSize = 4
 			t.Cleanup(func() { *queueSize = oldQueueSize })
@@ -31,6 +52,7 @@ func TestPhase(t *testing.T) {
 
 	t.Run("Window", func(t *testing.T) {
 		t.Run("BoundaryDrainsEveryArrival", func(t *testing.T) {
+			expectCurrentAffinity(t)
 			initialize()
 			s, err := phaseWithSleep([]op{scenarioOp(fakeWorker{}, "read")}, 20*time.Millisecond, 100,
 				func(wait time.Duration) { time.Sleep(wait + 30*time.Millisecond) })
@@ -47,6 +69,7 @@ func TestPhase(t *testing.T) {
 		})
 
 		t.Run("Drain", func(t *testing.T) {
+			expectCurrentAffinity(t)
 			initialize()
 			s, e := phase([]op{scenarioOp(fakeWorker{8 * time.Millisecond}, "read")}, 30*time.Millisecond, 0)
 			if e != nil {
