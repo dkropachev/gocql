@@ -24,7 +24,8 @@ import (
 // still be using these keyspaces.
 //
 // It only touches the shared default namespace: the gocql_test fixture
-// keyspaces and the keyspaces testKeyspaceName derives from test paths, which
+// keyspaces (including gocql_test_fail, whose writes Cassandra is told to
+// fail) and the keyspaces testKeyspaceName derives from test paths, which
 // all start with "test". An owned fixture run (GOCQL_TEST_RUN) has a fresh
 // namespace and its own cleanup, so it is left alone, as is a run that selects
 // no tests.
@@ -38,7 +39,7 @@ func dropLeftoverKeyspaces() error {
 	if f := flag.Lookup("test.list"); f != nil && f.Value.String() != "" {
 		return nil
 	}
-	fixture := map[string]bool{fixtureKeyspace(""): true, fixtureKeyspace("_td"): true}
+	fixture := map[string]bool{fixtureKeyspace(""): true, fixtureKeyspace("_td"): true, fixtureKeyspace("_fail"): true}
 	leftover := func(name string) bool { return fixture[name] || strings.HasPrefix(name, "test") }
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)

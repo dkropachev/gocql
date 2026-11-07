@@ -44,7 +44,7 @@ INTEGRATION_PKG ?= ./tests/integration
 # changes how long a hung run burns before it dumps.
 TEST_INTEGRATION_TIMEOUT ?= 10m
 TEST_INTEGRATION_TAGS ?= integration gocql_debug
-JVM_EXTRA_OPTS ?= -Dcassandra.test.fail_writes_ks=test -Dcassandra.custom_query_handler_class=org.apache.cassandra.cql3.CustomPayloadMirroringQueryHandler
+JVM_EXTRA_OPTS ?= -Dcassandra.test.fail_writes_ks=gocql_test_fail -Dcassandra.custom_query_handler_class=org.apache.cassandra.cql3.CustomPayloadMirroringQueryHandler
 
 # COVER_ARGS is appended to every `go test ... ./...` invocation below. It is
 # empty by default, so plain `make test-unit` behaves exactly as before; the
@@ -98,7 +98,8 @@ CASSANDRA_CONFIG ?= "client_encryption_options.enabled: true" \
 "concurrent_reads: 2" \
 "concurrent_writes: 2" \
 "write_request_timeout_in_ms: 5000" \
-"read_request_timeout_in_ms: 5000"
+"read_request_timeout_in_ms: 5000" \
+"authenticator: PasswordAuthenticator"
 
 ifeq (${CASSANDRA_VERSION},3-LATEST)
 	CASSANDRA_CONFIG += "rpc_server_type: sync" \
@@ -264,10 +265,10 @@ cassandra-start: .prepare-pki .prepare-cassandra-ccm .prepare-java resolve-cassa
 	echo "Start Cassandra ${CASSANDRA_VERSION}($${CASSANDRA_VERSION_RESOLVED}) cluster"
 	ccm stop ${CCM_CASSANDRA_CLUSTER_NAME} 2>/dev/null 1>&2 || true
 	ccm remove ${CCM_CASSANDRA_CLUSTER_NAME} 2>/dev/null 1>&2 || true
-	ccm create ${CCM_CASSANDRA_CLUSTER_NAME} -i ${CCM_CASSANDRA_IP_PREFIX} -v "$${CASSANDRA_VERSION_RESOLVED}" -n3 -d --vnodes --jvm_arg="-Xmx256m -XX:NewSize=100m"
+	ccm create ${CCM_CASSANDRA_CLUSTER_NAME} -i ${CCM_CASSANDRA_IP_PREFIX} -v "$${CASSANDRA_VERSION_RESOLVED}" -n3 -d --vnodes --jvm_arg="-Xmx512m -XX:NewSize=100m"
 	ccm updateconf ${CASSANDRA_CONFIG}
 	for conf_dir in ${CCM_CONFIG_DIR}/${CCM_CASSANDRA_CLUSTER_NAME}/node*/conf; do \
-		sed -i 's/^#MAX_HEAP_SIZE=.*/MAX_HEAP_SIZE="256M"/' "$$conf_dir/cassandra-env.sh"; \
+		sed -i 's/^#MAX_HEAP_SIZE=.*/MAX_HEAP_SIZE="512M"/' "$$conf_dir/cassandra-env.sh"; \
 	done
 	ccm start --wait-for-binary-proto --wait-other-notice --verbose
 	ccm status

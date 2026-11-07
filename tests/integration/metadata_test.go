@@ -274,6 +274,11 @@ func TestMetadata(t *testing.T) {
 			if *flagDistribution != "cassandra" {
 				t.Skip("incomplete-peer wire fixture uses Cassandra's native v4 metadata")
 			}
+			if *flagRunSslTest {
+				// The fixture rewrites plaintext protocol bytes, so it needs a cluster
+				// that accepts unencrypted clients; with -runssl the server resets them.
+				t.Skip("incomplete-peer wire fixture needs a plaintext native transport")
+			}
 			fixture := &incompletePeerDialer{}
 			config := createV2Cluster(func(c *gocql.Config) {
 				c.Protocol = 4
