@@ -7,6 +7,7 @@ import (
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 )
 
+// Deprecated: use cqlerr.ErrSchemaMismatch.
 type ErrSchemaMismatch = implTransport.ErrSchemaMismatch
 
 type StreamLimits = implTransport.StreamLimits

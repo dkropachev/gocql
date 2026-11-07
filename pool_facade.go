@@ -7,4 +7,5 @@ import (
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 )
 
+// Deprecated: use cqlerr.ErrScyllaSourcePortAlreadyInUse.
 var ErrScyllaSourcePortAlreadyInUse = implTransport.ErrScyllaSourcePortAlreadyInUse

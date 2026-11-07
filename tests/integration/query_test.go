@@ -38,6 +38,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/retry"
@@ -73,7 +74,7 @@ func TestQuery(t *testing.T) {
 				if bound != nil {
 					bound.Close()
 				}
-				v := errors.Is(err, gocql.ErrUseStmt)
+				v := errors.Is(err, cqlerr.ErrUseStmt)
 				if v != tc.exp {
 					t.Fatalf("expected %v but got %v for statement %q", tc.exp, v, tc.input)
 				}
@@ -161,7 +162,7 @@ func TestQuery(t *testing.T) {
 			defer session.Close()
 			_, err := v2Exec(context.Background(), session, ("USE " + fixtureKeyspace("")))
 			require.Error(t, err)
-			require.ErrorIs(t, err, gocql.ErrUseStmt)
+			require.ErrorIs(t, err, cqlerr.ErrUseStmt)
 		})
 		// Makes sure that the application can manually bind query parameters using the simplest possible static binding strategy
 		t.Run("Static", func(t *testing.T) {
@@ -358,7 +359,7 @@ func TestQuery(t *testing.T) {
 			if err := v2CreateTable(context.Background(), session, fmt.Sprintf((`CREATE TABLE `+fixtureKeyspace("")+`.%s (id int primary key)`), table)); err == nil {
 				t.Fatal("Should have gotten already exists error from cassandra server.")
 			} else {
-				e := &cql.RequestErrAlreadyExists{}
+				e := &cqlerr.RequestErrAlreadyExists{}
 				if errors.As(err, &e) {
 					if e.Table != table {
 						t.Fatalf("expected error table to be %q but was %q", table, e.Table)
@@ -388,7 +389,7 @@ func TestQuery(t *testing.T) {
 				t.Fatalf("failed to create table with error '%v'", err)
 			}
 			if _, err := v2Exec(context.Background(), session, fmt.Sprintf(`INSERT INTO %s.%s (id, value) VALUES (1, 1)`, fixtureKeyspace("_fail"), table)); err != nil {
-				var errWrite *cql.RequestErrWriteFailure
+				var errWrite *cqlerr.RequestErrWriteFailure
 				if errors.As(err, &errWrite) {
 					if implCluster.SessionData(session).InternalCfg.ProtoVersion >= protoVersion5 {
 						// ErrorMap should be filled with some hosts that should've errored
@@ -491,7 +492,7 @@ func TestQuery(t *testing.T) {
 			original.Close()
 			require.NoError(t, original.Wait(ctx))
 			_, err = Exec(ctx, session, original, gocql.SessionOptions{})
-			require.ErrorIs(t, err, gocql.ErrClosed)
+			require.ErrorIs(t, err, cqlerr.ErrClosed)
 		})
 		t.Run("JSON", func(t *testing.T) {
 			t.Parallel()
@@ -541,17 +542,17 @@ func TestQuery(t *testing.T) {
 			_, err := cql.ParseUUID("[invalid]")
 			require.Error(t, err, "invalid host IDs are rejected while constructing typed UUIDs")
 			_, err = gocql.BindOptions(session, gocql.Options{HostID: cql.Option[cql.UUID]{Value: cql.UUID{}, Set: true}})
-			var invalidHost *cql.ValidationError
+			var invalidHost *cqlerr.ValidationError
 			require.ErrorAs(t, err, &invalidHost, "an empty host ID is rejected when options are built")
 			_, err = Run(context.Background(), session, bound, bindOptions(session, gocql.Options{HostID: cql.Option[cql.UUID]{Value: codecTestMust(cql.RandomUUID()), Set: true}}))
-			require.ErrorIs(t, err, gocql.ErrNoConnections)
+			require.ErrorIs(t, err, cqlerr.ErrNoConnections)
 			host := hosts[0]
 			pool, ok := implCluster.SessionData(session).InternalPool.InternalGetPoolByHostID(host.ID.String())
 			require.True(t, ok)
 			implEndpoint.InternalHostInfoSetState(pool.InternalHost, NodeDown)
 			defer implEndpoint.InternalHostInfoSetState(pool.InternalHost, NodeUp)
 			_, err = Run(context.Background(), session, bound, bindOptions(session, gocql.Options{HostID: cql.Option[cql.UUID]{Value: host.ID, Set: true}}))
-			require.ErrorIs(t, err, gocql.ErrNoConnections)
+			require.ErrorIs(t, err, cqlerr.ErrNoConnections)
 		})
 		t.Run("Keyspace", func(t *testing.T) {
 			session := createV2Session(t)
@@ -662,7 +663,7 @@ func TestQuery(t *testing.T) {
 						retryPolicy := sessionTestRetry{action: retry.Stop, maxAttempts: retries + 1}
 						_, err := Exec(ctx, session, bound, bindOptions(session, gocql.Options{Idempotent: true, Retry: retryPolicy, Observer: observer}))
 						require.Error(t, err)
-						var server cql.RequestError
+						var server cqlerr.RequestError
 						require.ErrorAs(t, err, &server)
 						requests, attempts := observer.snapshot()
 						require.Len(t, requests, 1)
@@ -786,7 +787,7 @@ func TestQuery(t *testing.T) {
 			if err := previous.Close(); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := q.Run(ctx, int32(1)); !errors.Is(err, gocql.ErrBusy) {
+			if _, err := q.Run(ctx, int32(1)); !errors.Is(err, cqlerr.ErrBusy) {
 				t.Fatal(err)
 			}
 			dst := record{P: make([]byte, 0, len(payload))}
@@ -856,7 +857,7 @@ func TestQuery(t *testing.T) {
 			streamQuery := codecTestMust(gocql.NewStreamQuery(read, streamDecoder, gocql.StreamOptions{Incremental: incremental, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}))
 			cursor, err := streamQuery.Run(ctx, int32(1))
 			if incremental && config.Protocol < 5 && config.Compression != gocql.NoCompression {
-				var unsupported *cql.StreamCapabilityError
+				var unsupported *cqlerr.StreamCapabilityError
 				if !errors.As(err, &unsupported) {
 					t.Fatal(err)
 				}
@@ -933,15 +934,15 @@ func TestQuery(t *testing.T) {
 					statement := cql.Command(stmt)
 					bound, err := BindUnpreparedOwned(statement, cql.NewColumns(), cql.EmptyParams{})
 					if firstCQLWord(stmt) == "USE" {
-						require.ErrorIs(t, err, gocql.ErrUseStmt)
+						require.ErrorIs(t, err, cqlerr.ErrUseStmt)
 						_, err = gocql.Prepare(context.Background(), session, statement, gocql.PrepareOptions{})
-						require.ErrorIs(t, err, gocql.ErrUseStmt)
+						require.ErrorIs(t, err, cqlerr.ErrUseStmt)
 						return
 					}
 					require.NoError(t, err)
 					bound.Close()
 					_, err = gocql.Prepare(context.Background(), session, statement, gocql.PrepareOptions{})
-					require.ErrorIs(t, err, gocql.ErrNoConnections)
+					require.ErrorIs(t, err, cqlerr.ErrNoConnections)
 				})
 			}
 		})
@@ -990,7 +991,7 @@ func TestQuery(t *testing.T) {
 						t.Fatal(err)
 					}
 					bound.Close()
-					if _, err := gocql.Prepare(context.Background(), session, statement, gocql.PrepareOptions{}); !errors.Is(err, gocql.ErrNoConnections) {
+					if _, err := gocql.Prepare(context.Background(), session, statement, gocql.PrepareOptions{}); !errors.Is(err, cqlerr.ErrNoConnections) {
 						t.Fatalf("explicit Prepare must attempt a connection for %q: %v", test.Stmt, err)
 					}
 				})

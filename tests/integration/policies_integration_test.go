@@ -5,6 +5,7 @@ package integration
 import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/metadata"
 	routing "github.com/scylladb/gocql/v2/routing"
 
@@ -27,7 +28,7 @@ func testV2InvalidDatacenter(t *testing.T, options routing.Options) {
 	if err == nil {
 		t.Fatal("Connect was expected to fail with an unknown datacenter")
 	}
-	var validation *cql.ValidationError
+	var validation *cqlerr.ValidationError
 	if !errors.As(err, &validation) {
 		t.Fatalf("expected datacenter validation error, got %T: %v", err, err)
 	}

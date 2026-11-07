@@ -23,6 +23,7 @@ import (
 	"github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
 type record struct {
@@ -160,7 +161,7 @@ func run() (resultErr error) {
 		}
 	}()
 	if err := exec("CREATE KEYSPACE " + namespace + " WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':1}"); err != nil {
-		var exists *cql.RequestErrAlreadyExists
+		var exists *cqlerr.RequestErrAlreadyExists
 		if errors.As(err, &exists) {
 			owned = false
 		}
@@ -225,9 +226,9 @@ func run() (resultErr error) {
 	defer query.Close()
 	stream, err := query.Run(ctx, cql.EmptyParams{})
 	if *incremental && cfg.Protocol < 5 && cfg.Compression != gocql.NoCompression {
-		var unsupported *cql.StreamCapabilityError
+		var unsupported *cqlerr.StreamCapabilityError
 		if !errors.As(err, &unsupported) {
-			return fmt.Errorf("expected frame compression capability error, got %v", err)
+			return fmt.Errorf("expected frame compression capability error, got %w", err)
 		}
 		fmt.Println("frame compression explicitly rejected before streaming submission")
 		return nil
@@ -240,14 +241,14 @@ func run() (resultErr error) {
 	blockedCtx, blockedCancel := context.WithTimeout(ctx, 20*time.Millisecond)
 	_, blockedErr := query.Run(blockedCtx, cql.EmptyParams{})
 	blockedCancel()
-	if !errors.Is(blockedErr, gocql.ErrBusy) {
-		return fmt.Errorf("query admission: %v", blockedErr)
+	if !errors.Is(blockedErr, cqlerr.ErrBusy) {
+		return fmt.Errorf("query admission: %w", blockedErr)
 	}
 	waitCtx, waitCancel := context.WithTimeout(ctx, 20*time.Millisecond)
 	waitErr := query.Wait(waitCtx)
 	waitCancel()
 	if !errors.Is(waitErr, context.DeadlineExceeded) {
-		return fmt.Errorf("active query drain: %v", waitErr)
+		return fmt.Errorf("active query drain: %w", waitErr)
 	}
 	// Seed both the outer slots and every nested payload before the first NextInto.
 	row := record{Payload: make([]byte, 0, len(payload)), Pieces: [][]byte{make([]byte, 0, 16), make([]byte, 0, 16)}}

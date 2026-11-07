@@ -7,5 +7,8 @@ import (
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 )
 
+// Deprecated: use cqlerr.NoHostsError.
 type NoHostsError = implMetadata.NoHostsError
+
+// Deprecated: use cqlerr.PartialRefreshError.
 type PartialRefreshError = implMetadata.PartialRefreshError

@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/internal/eventbus"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 // PoolConfig configures the connection pool used by the driver, it defaults to
@@ -696,9 +697,9 @@ func (cfg *InternalClusterSettings) Validate() error {
 const InternalDefaultCQLPort = 9042
 
 var (
-	ErrNoHosts              = errors.New("no hosts provided")
-	ErrNoConnectionsStarted = errors.New("no connections were made when creating the session")
-	ErrHostQueryFailed      = errors.New("unable to populate Hosts")
+	ErrNoHosts              = runtimeerrors.ErrNoHosts
+	ErrNoConnectionsStarted = runtimeerrors.ErrNoConnectionsStarted
+	ErrHostQueryFailed      = runtimeerrors.ErrHostQueryFailed
 )
 
 // learnPortFromHosts inspects the host entries for embedded ports.

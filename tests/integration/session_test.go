@@ -49,6 +49,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
@@ -215,7 +216,7 @@ func TestSession(t *testing.T) {
 			session := createV2Session(t)
 			session.Close()
 
-			if err := session.AwaitSchemaAgreement(context.Background()); !errors.Is(err, gocql.ErrClosed) {
+			if err := session.AwaitSchemaAgreement(context.Background()); !errors.Is(err, cqlerr.ErrClosed) {
 				t.Fatalf("expected session.AwaitSchemaAgreement to return ErrClosed but got '%v'", err)
 			}
 
@@ -349,7 +350,7 @@ func TestSession(t *testing.T) {
 			if owner.Alive() {
 				t.Fatal("owner final release did not finish")
 			}
-			if _, e = old.At(0); !errors.Is(e, cql.ErrReleased) {
+			if _, e = old.At(0); !errors.Is(e, cqlerr.ErrReleased) {
 				t.Fatal("old backing remained accessible", e)
 			}
 			if n, c := cache.Storage(); n != 0 || c != 0 {
@@ -393,17 +394,17 @@ func TestSession(t *testing.T) {
 			// An incomplete session now reports ErrNoConnections from the typed path.
 			// It does not construct the old mutable Query/Iter error holder.
 			_, err = Run(ctx, session, bound, gocql.SessionOptions{})
-			require.ErrorIs(t, err, gocql.ErrNoConnections)
+			require.ErrorIs(t, err, cqlerr.ErrNoConnections)
 			batch := []batchItem{sessionTestItem(t, bound)}
 			_, err = execBatch(ctx, session, cql.LoggedBatch, batch, gocql.SessionOptions{})
-			require.ErrorIs(t, err, gocql.ErrNoConnections)
+			require.ErrorIs(t, err, cqlerr.ErrNoConnections)
 			require.NoError(t, session.Close())
 			require.True(t, session.Closed())
 			require.NoError(t, session.Close())
 			_, err = execBatch(ctx, session, cql.LoggedBatch, batch, gocql.SessionOptions{})
-			require.ErrorIs(t, err, gocql.ErrClosed)
+			require.ErrorIs(t, err, cqlerr.ErrClosed)
 			_, err = Exec(ctx, session, bound, gocql.SessionOptions{})
-			require.ErrorIs(t, err, gocql.ErrClosed)
+			require.ErrorIs(t, err, cqlerr.ErrClosed)
 		})
 	})
 
@@ -435,8 +436,8 @@ func TestSession(t *testing.T) {
 				rejected.Close()
 				t.Fatal("server accepted rejected credentials")
 			}
-			var authErr cql.RequestError
-			if !errors.As(err, &authErr) || authErr.GetCode() != cql.ErrCodeCredentials {
+			var authErr cqlerr.RequestError
+			if !errors.As(err, &authErr) || authErr.GetCode() != cqlerr.ErrCodeCredentials {
 				t.Fatalf("expected authentication rejection, got %T: %v", err, err)
 			}
 		})

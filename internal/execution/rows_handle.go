@@ -3,11 +3,9 @@
 
 package execution
 
-import "errors"
+import "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 
-// ErrStaleRows is reported by a Rows handle whose query has started a later
-// execution. Its storage now belongs to that execution.
-var ErrStaleRows = errors.New("gocql: rows belong to an earlier execution of the query")
+var ErrStaleRows = runtimeerrors.ErrStaleRows
 
 // Rows iterates the rows of one execution across its pages.
 //

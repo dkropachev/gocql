@@ -27,8 +27,10 @@ package runtimeerrors
 import (
 	"errors"
 	"fmt"
-
 	"time"
+
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
 var (
@@ -52,15 +54,42 @@ func (e *QueryError) IsIdempotent() bool {
 	return QueryErrorData(e).InternalIsIdempotent
 }
 
+// PotentiallyExecuted reports that request bytes reached the server.
+//
+// Deprecated: use ExecutionStatus, which also accounts for server errors that
+// guarantee nothing was applied.
 func (e *QueryError) PotentiallyExecuted() bool {
 	return QueryErrorData(e).InternalPotentiallyExecuted
 }
 
-func (e *QueryError) Error() string {
-	if QueryErrorData(e).InternalTimeout > 0 {
-		return fmt.Sprintf("%s (timeout: %v, in-flight: %d) (potentially executed: %v)", QueryErrorData(e).InternalErr.Error(), QueryErrorData(e).InternalTimeout, QueryErrorData(e).InternalInFlight, QueryErrorData(e).InternalPotentiallyExecuted)
+// ExecutionStatus reports what this attempt may have done on the cluster.
+func (e *QueryError) ExecutionStatus() cqltype.ExecutionStatus {
+	d := QueryErrorData(e)
+	if !d.InternalPotentiallyExecuted {
+		return cqltype.NotExecuted
 	}
-	return fmt.Sprintf("%s (potentially executed: %v)", QueryErrorData(e).InternalErr.Error(), QueryErrorData(e).InternalPotentiallyExecuted)
+	var server protocol.RequestError
+	if errors.As(d.InternalErr, &server) {
+		return protocol.ServerErrorExecutionStatus(server)
+	}
+	return cqltype.MaybeExecuted
+}
+
+func (e *QueryError) Error() string {
+	d := QueryErrorData(e)
+	msg := d.InternalErr.Error()
+	if d.InternalTimeout > 0 {
+		msg = fmt.Sprintf("%s (timeout: %v, in-flight: %d)", msg, d.InternalTimeout, d.InternalInFlight)
+	}
+	return msg + ExecutionSuffix(e.ExecutionStatus())
+}
+
+// ExecutionSuffix renders a non-default execution state for error messages.
+func ExecutionSuffix(x cqltype.ExecutionStatus) string {
+	if x == cqltype.NotExecuted {
+		return ""
+	}
+	return " (" + x.String() + ")"
 }
 
 func (e *QueryError) Unwrap() error {

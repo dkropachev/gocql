@@ -27,6 +27,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+
 	"time"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -116,7 +118,12 @@ func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Sess
 		cursor.privateStorage.InternalActive.Lock()
 		InternalRowStreamCleanup(cursor, false)
 		cursor.privateStorage.InternalActive.Unlock()
-		return nil, &ExecutionError{Err: err, Result: cursor.Info().Result}
+		var failure *ExecutionError
+		if errors.As(err, &failure) {
+			failure.Result = cursor.Info().Result
+			return nil, failure
+		}
+		return nil, newExecutionError(err, cursor.Info().Result, runtimeerrors.ExecutionStatusOf(err), nil)
 	}
 	request.InternalLogical.installStop(stopFunc(func() { InternalRowStreamCloseWithError(cursor, ErrClosed) }))
 	return cursor, nil
@@ -511,6 +518,16 @@ func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
 	if s.privateStorage.pageBuffered {
 		return s.loadBufferedPage()
 	}
+	var log attemptLog
+	err := rowStreamLoadPage(s, &log)
+	if err == nil || log.empty() {
+		return err
+	}
+	return log.error(err, Result{})
+}
+
+// rowStreamLoadPage loads the next page, recording its failed attempts in log.
+func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 	request := s.privateStorage.InternalRequest
 	metadata := s.privateStorage.InternalSession.Metadata()
 	request.tabletFeedback = implCluster.InternalSessionCaptureTabletFeedback(s.privateStorage.InternalSession, request.InternalRouting, metadata)
@@ -532,14 +549,13 @@ func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
 		pagectx, s.privateStorage.pageCancel = context.WithTimeout(s.privateStorage.InternalCtx, timeout)
 	}
 	consistency := request.InternalOptions.InternalProfile.Consistency
-	var lastErr error
 	for attempt := 1; ; attempt++ {
 		if err := pagectx.Err(); err != nil {
 			return err
 		}
 		if s.privateStorage.InternalReservation == nil {
 			if err := s.acquire(plan); err != nil {
-				return errors.Join(lastErr, err)
+				return err
 			}
 		}
 		if s.privateStorage.prepared != nil && !s.privateStorage.prepared.InternalEpoch.InternalCurrent() {
@@ -640,7 +656,7 @@ func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
 		if response != nil {
 			s.privateStorage.attemptMetadata = response
 		}
-		lastErr = err
+		attemptStatus := log.fail(err, conn, attempt, consistency)
 		// OutputStarted is set before Reset, so no decoder/partial row ever replays.
 		if s.Info().OutputStarted {
 			return err
@@ -661,7 +677,7 @@ func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
 		}
 		decision := retry.Decision{}
 		if policy := request.InternalOptions.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.InternalRouting.Conditional, BytesWritten: InternalAttemptBytesWritten(err)})
+			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.InternalRouting.Conditional, BytesWritten: attemptStatus != NotExecuted, ExecutionStatus: attemptStatus})
 		}
 		if decision.Action == retry.Stop {
 			return err

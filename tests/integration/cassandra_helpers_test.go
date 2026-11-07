@@ -14,6 +14,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/retry"
 )
@@ -190,17 +191,17 @@ func cassandraBatch(t testing.TB, s *gocql.Session, kind cql.BatchKind, items []
 }
 func cassandraKeyspace(s *gocql.Session, name string) (*metadata.Keyspace, error) {
 	if name == "" {
-		return nil, gocql.ErrNoKeyspace
+		return nil, cqlerr.ErrNoKeyspace
 	}
 	ks, ok := s.Metadata().Keyspace(name)
 	if !ok {
-		return nil, gocql.ErrKeyspaceDoesNotExist
+		return nil, cqlerr.ErrKeyspaceDoesNotExist
 	}
 	return ks, nil
 }
 func cassandraTable(s *gocql.Session, ks, name string) (*metadata.Table, error) {
 	if name == "" {
-		return nil, gocql.ErrNoTable
+		return nil, cqlerr.ErrNoTable
 	}
 	k, err := cassandraKeyspace(s, ks)
 	if err != nil {
@@ -208,7 +209,7 @@ func cassandraTable(s *gocql.Session, ks, name string) (*metadata.Table, error) 
 	}
 	table, ok := k.Tables[name]
 	if !ok {
-		return nil, gocql.ErrNotFound
+		return nil, cqlerr.ErrNotFound
 	}
 	return table, nil
 }

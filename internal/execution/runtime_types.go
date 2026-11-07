@@ -7,6 +7,7 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -198,10 +199,8 @@ type InternalExecutionRequest struct {
 	tabletVersionBlock byte
 }
 
-type ExecutionError struct {
-	Err    error
-	Result Result
-}
+type ExecutionError = runtimeerrors.ExecutionError
 
-func (e *ExecutionError) Error() string { return "gocql: request: " + e.Err.Error() }
-func (e *ExecutionError) Unwrap() error { return e.Err }
+func newExecutionError(err error, result Result, status ExecutionStatus, attempts []AttemptFailure) *ExecutionError {
+	return runtimeerrors.NewExecutionError(err, result, status, attempts)
+}

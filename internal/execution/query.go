@@ -5,7 +5,6 @@ package execution
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -15,11 +14,10 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
-// ErrBusy indicates that a query still owns an active execution, transport
-// write, or callback. Wait joins that execution before the query is reused.
-var ErrBusy = errors.New("gocql: query is busy")
+var ErrBusy = runtimeerrors.ErrBusy
 
 type queryState struct {
 	owner        *inputOwner

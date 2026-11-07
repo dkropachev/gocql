@@ -25,6 +25,7 @@ import (
 
 	"github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -49,7 +50,7 @@ type hostPoolHostPolicy struct {
 
 func (p *hostPoolHostPolicy) Validate(_ *metadata.Snapshot) error {
 	if p.hp == nil {
-		return &cql.ValidationError{Field: "hostpool", Err: fmt.Errorf("nil host pool")}
+		return &cqlerr.ValidationError{Field: "hostpool", Err: fmt.Errorf("nil host pool")}
 	}
 	return nil
 }

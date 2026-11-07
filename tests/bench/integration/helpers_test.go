@@ -53,6 +53,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
@@ -637,14 +638,14 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 		if err := rows.Err(); err != nil {
 			return cql.DynamicRow{}, err
 		}
-		return cql.DynamicRow{}, gocql.ErrNoRows
+		return cql.DynamicRow{}, cqlerr.ErrNoRows
 	}
 	row, err := rows.Clone()
 	if err != nil {
 		return cql.DynamicRow{}, err
 	}
 	if rows.NextInto(&current) {
-		return cql.DynamicRow{}, gocql.ErrMultipleRows
+		return cql.DynamicRow{}, cqlerr.ErrMultipleRows
 	}
 	if err := rows.Err(); err != nil {
 		return cql.DynamicRow{}, err
@@ -1216,14 +1217,14 @@ func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecod
 		if err := rows.Err(); err != nil {
 			return zero, err
 		}
-		return zero, gocql.ErrNoRows
+		return zero, cqlerr.ErrNoRows
 	}
 	row, err := rows.Clone()
 	if err != nil {
 		return zero, err
 	}
 	if rows.NextInto(&current) {
-		return zero, gocql.ErrMultipleRows
+		return zero, cqlerr.ErrMultipleRows
 	}
 	if err := rows.Err(); err != nil {
 		return zero, err

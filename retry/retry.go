@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
 // Action is what the driver does after a failed attempt.
@@ -34,9 +35,13 @@ type Attempt struct {
 	Consistency cql.Consistency
 	// Conditional reports a lightweight transaction.
 	Conditional bool
-	// BytesWritten reports that request bytes reached the socket, so the
-	// server may have executed the request.
+	// BytesWritten reports that the attempt may have been applied, that is
+	// ExecutionStatus != cqlerr.NotExecuted.
+	//
+	// Deprecated: use ExecutionStatus.
 	BytesWritten bool
+	// ExecutionStatus reports what this attempt may have done on the cluster.
+	ExecutionStatus cqlerr.ExecutionStatus
 }
 
 // Decision is a policy's answer. The zero value stops retrying.

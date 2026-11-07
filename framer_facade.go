@@ -7,8 +7,10 @@ import (
 	protocol "github.com/scylladb/gocql/v2/internal/protocol"
 )
 
+// Deprecated: use cqlerr.ErrProtocol.
 type ErrProtocol = protocol.ErrProtocol
 
+// Deprecated: use cqlerr.ErrReadHeaderTimeout.
 var ErrReadHeaderTimeout = protocol.ErrReadHeaderTimeout
 
 func NewErrProtocol(a0 string, a1 ...any) error { return protocol.NewErrProtocol(a0, a1...) }

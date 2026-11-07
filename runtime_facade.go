@@ -28,8 +28,13 @@ func Connect(a0 context.Context, a1 Config) (*Session, error) { return implExecu
 
 const ControlEvent = implCluster.ControlEvent
 
+// Deprecated: use cqlerr.ErrHostQueryFailed.
 var ErrHostQueryFailed = implCluster.ErrHostQueryFailed
+
+// Deprecated: use cqlerr.ErrNoConnectionsStarted.
 var ErrNoConnectionsStarted = implCluster.ErrNoConnectionsStarted
+
+// Deprecated: use cqlerr.ErrNoHosts.
 var ErrNoHosts = implCluster.ErrNoHosts
 
 type Error = implCluster.Error
@@ -37,6 +42,7 @@ type Event = implCluster.Event
 type EventFilter = implCluster.EventFilter
 type EventKind = implCluster.EventKind
 
+// Deprecated: use cqlerr.ExecutionError.
 type ExecutionError = implExecution.ExecutionError
 
 func OpenSingleHost(a0 context.Context, a1 Config, a2 cql.UUID) (*Session, error) {

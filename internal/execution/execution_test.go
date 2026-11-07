@@ -598,7 +598,8 @@ func TestExecution(t *testing.T) {
 		t.Run("SafeBytesWritten", func(t *testing.T) {
 			for _, written := range []bool{false, true} {
 				err := runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: errors.New("write"), InternalPotentiallyExecuted: written})
-				decision := (retry.Safe{}).Decide(retry.Attempt{Err: err, Number: 1, BytesWritten: InternalAttemptBytesWritten(err)})
+				status := runtimeerrors.ExecutionStatusOf(err)
+				decision := (retry.Safe{}).Decide(retry.Attempt{Err: err, Number: 1, BytesWritten: InternalAttemptBytesWritten(err), ExecutionStatus: status})
 				if (decision.Action == retry.Next) == written {
 					t.Fatal(written, decision)
 				}

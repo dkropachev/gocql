@@ -37,6 +37,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/retry"
 )
@@ -151,7 +152,7 @@ func TestBatch(t *testing.T) {
 			// available for separate work.
 			first.Close()
 			_, err = execBatch(ctx, session, cql.LoggedBatch, items, bindOptions(session, options))
-			require.ErrorIs(t, err, gocql.ErrClosed)
+			require.ErrorIs(t, err, cqlerr.ErrClosed)
 			require.NoError(t, first.Wait(ctx))
 			_, err = Exec(ctx, session, second, gocql.SessionOptions{})
 			require.NoError(t, err)
@@ -213,7 +214,7 @@ func TestBatch(t *testing.T) {
 			require.NoError(t, err)
 			_, err = execBatch(ctx, session, cql.LoggedBatch, []batchItem{item}, gocql.SessionOptions{})
 			require.Error(t, err, "expected to get error for invalid query in batch")
-			var server cql.RequestError
+			var server cqlerr.RequestError
 			require.ErrorAs(t, err, &server)
 		})
 		// Tests gocql to make sure batch operations larger than the maximum

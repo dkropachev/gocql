@@ -5,6 +5,7 @@ import (
 	protocol "github.com/scylladb/gocql/v2/internal/protocol"
 )
 
+// Deprecated: use cqlerr.ErrFrameTooBig.
 var ErrFrameTooBig = protocol.ErrFrameTooBig
 
 type PageState = model.PageState

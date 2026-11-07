@@ -17,6 +17,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
 // dropLeftoverKeyspaces removes what an earlier run against the same cluster
@@ -102,8 +103,8 @@ func dropLeftoverKeyspaces() error {
 func connectOnceCredentialsWork(ctx context.Context, config gocql.Config) (*gocql.Session, error) {
 	for {
 		s, err := gocql.Connect(ctx, config)
-		var request cql.RequestError
-		if err == nil || !errors.As(err, &request) || request.GetCode() != cql.ErrCodeCredentials {
+		var request cqlerr.RequestError
+		if err == nil || !errors.As(err, &request) || request.GetCode() != cqlerr.ErrCodeCredentials {
 			return s, err
 		}
 		select {

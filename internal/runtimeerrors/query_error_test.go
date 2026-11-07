@@ -24,13 +24,13 @@ func TestQueryError(t *testing.T) {
 				name:                "with potentially executed true",
 				err:                 errors.New("connection error"),
 				potentiallyExecuted: true,
-				expected:            "connection error (potentially executed: true)",
+				expected:            "connection error (maybe executed)",
 			},
 			{
 				name:                "with potentially executed false",
 				err:                 errors.New("syntax error"),
 				potentiallyExecuted: false,
-				expected:            "syntax error (potentially executed: false)",
+				expected:            "syntax error",
 			},
 			{
 				name:                "with timeout",
@@ -38,14 +38,14 @@ func TestQueryError(t *testing.T) {
 				potentiallyExecuted: true,
 				timeout:             11 * time.Second,
 				inFlight:            42,
-				expected:            "gocql: no response received from cassandra within timeout period (timeout: 11s, in-flight: 42) (potentially executed: true)",
+				expected:            "gocql: no response received from cassandra within timeout period (timeout: 11s, in-flight: 42) (maybe executed)",
 			},
 			{
 				name:                "with zero timeout omits timeout",
 				err:                 errors.New("some error"),
 				potentiallyExecuted: false,
 				timeout:             0,
-				expected:            "some error (potentially executed: false)",
+				expected:            "some error",
 			},
 		}
 

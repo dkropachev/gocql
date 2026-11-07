@@ -36,6 +36,7 @@ import (
 	"github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/dialer/recorder"
 	"github.com/scylladb/gocql/v2/dialer/replayer"
 	"github.com/scylladb/gocql/v2/endpoint"
@@ -160,7 +161,7 @@ func generateCaptures(ctx context.Context) (err error) {
 	// A namespace is fresh and exclusively generated here. An AlreadyExists
 	// response relinquishes ownership instead of deleting a pre-existing name.
 	if err = benchExec(ctx, s, "CREATE KEYSPACE "+corpus.Namespace+" WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':1}"); err != nil {
-		var exists *cql.RequestErrAlreadyExists
+		var exists *cqlerr.RequestErrAlreadyExists
 		if errors.As(err, &exists) {
 			owned = false
 		}

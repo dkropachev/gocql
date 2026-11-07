@@ -16,6 +16,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/retry"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -271,14 +272,14 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 		if err := rows.Err(); err != nil {
 			return cql.DynamicRow{}, err
 		}
-		return cql.DynamicRow{}, gocql.ErrNoRows
+		return cql.DynamicRow{}, cqlerr.ErrNoRows
 	}
 	row, err := rows.Clone()
 	if err != nil {
 		return cql.DynamicRow{}, err
 	}
 	if rows.NextInto(&cur) {
-		return cql.DynamicRow{}, gocql.ErrMultipleRows
+		return cql.DynamicRow{}, cqlerr.ErrMultipleRows
 	}
 	if err := rows.Err(); err != nil {
 		return cql.DynamicRow{}, err

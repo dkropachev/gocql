@@ -250,6 +250,45 @@ func (e *RequestErrRateLimitReached) String() string {
 	return fmt.Sprintf("[request_error_rate_limit_reached OpType=%s RejectedByCoordinator=%t]", opType, e.RejectedByCoordinator)
 }
 
+// ServerErrorExecutionStatus reports what a request that failed with err may have
+// done on the cluster. It is the single classification of server error codes
+// by execution outcome.
+func ServerErrorExecutionStatus(err RequestError) ExecutionStatus {
+	switch e := err.(type) {
+	case *RequestErrWriteTimeout:
+		return writeExecution(e.Received, e.WriteType)
+	case *RequestErrWriteFailure:
+		return writeExecution(e.Received, e.WriteType)
+	case *RequestErrRateLimitReached:
+		if e.RejectedByCoordinator {
+			return NotExecuted
+		}
+		return MaybeExecuted
+	}
+	switch err.GetCode() {
+	case ErrCodeUnavailable, ErrCodeOverloaded, ErrCodeBootstrapping, ErrCodeSyntax,
+		ErrCodeInvalid, ErrCodeUnauthorized, ErrCodeCredentials, ErrCodeConfig,
+		ErrCodeProtocol, ErrCodeAlreadyExists, ErrCodeUnprepared, ErrCodeFunctionFailure:
+		return NotExecuted
+	default:
+		return MaybeExecuted
+	}
+}
+
+// writeExecution classifies a write that some replicas acknowledged. Batch log
+// and Paxos acknowledgements do not mean the data itself was applied.
+func writeExecution(received int, writeType string) ExecutionStatus {
+	if received <= 0 {
+		return MaybeExecuted
+	}
+	switch writeType {
+	case "SIMPLE", "BATCH", "UNLOGGED_BATCH", "COUNTER", "VIEW", "CDC":
+		return PartiallyExecuted
+	default:
+		return MaybeExecuted
+	}
+}
+
 // errorBody reads the fields of an ERROR response body.
 type errorBody interface {
 	I32() int

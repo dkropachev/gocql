@@ -41,6 +41,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
@@ -345,7 +346,7 @@ func TestPaging(t *testing.T) {
 		options := gocql.StreamOptions{Incremental: true, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}
 		if config.Protocol < 5 && config.Compression != gocql.NoCompression {
 			_, err := RunStream(ctx, s, bound, decoder, options)
-			var capability *cql.StreamCapabilityError
+			var capability *cqlerr.StreamCapabilityError
 			if !errors.As(err, &capability) {
 				t.Fatal("frame compression pre-submit capability", err)
 			}

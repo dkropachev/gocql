@@ -15,7 +15,7 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
-	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
 var updateGolden = flag.Bool("update-golden", false, "update golden files")
@@ -36,8 +36,8 @@ func isDescribeKeyspaceSupported(t *testing.T, s *gocql.Session) bool {
 		err = rows.Close()
 	}
 	if err != nil {
-		var server cql.RequestError
-		if errors.As(err, &server) && server.GetCode() == cql.ErrCodeSyntax {
+		var server cqlerr.RequestError
+		if errors.As(err, &server) && server.GetCode() == cqlerr.ErrCodeSyntax {
 			// DESCRIBE KEYSPACE is not supported on older versions of Cassandra and Scylla
 			// For such case schema statement is going to be recreated on the client side
 			return false
@@ -110,7 +110,7 @@ func recreateExec(t testing.TB, s *gocql.Session, stmt string) (gocql.Result, er
 	var err error
 	for attempt := 1; attempt <= 4; attempt++ {
 		result, err = v2Exec(context.Background(), s, stmt)
-		var server cql.RequestError
+		var server cqlerr.RequestError
 		if err == nil || !errors.As(err, &server) || server.GetMessage() != "Failed to apply group 0 change due to concurrent modification" || attempt == 4 {
 			return result, err
 		}

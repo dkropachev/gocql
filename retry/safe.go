@@ -7,9 +7,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
 // Safe retries bounded transient failures only when replay is safe.
@@ -24,35 +22,35 @@ func (p Safe) Decide(a Attempt) Decision {
 	if a.Number >= limit || errors.Is(a.Err, context.Canceled) || errors.Is(a.Err, context.DeadlineExceeded) {
 		return Decision{}
 	}
-	var unavailable *protocol.RequestErrUnavailable
+	var unavailable *cqlerr.RequestErrUnavailable
 	if errors.As(a.Err, &unavailable) {
 		return Decision{Action: Next}
 	}
-	var read *protocol.RequestErrReadTimeout
+	var read *cqlerr.RequestErrReadTimeout
 	if errors.As(a.Err, &read) && read.Received >= read.BlockFor && read.DataPresent == 0 {
 		return Decision{Action: Same}
 	}
-	if !a.Idempotent {
-		var query *runtimeerrors.QueryError
-		if !a.BytesWritten && errors.As(a.Err, &query) && !query.PotentiallyExecuted() {
+	var server cqlerr.RequestError
+	if errors.As(a.Err, &server) {
+		switch server.GetCode() {
+		case cqlerr.ErrCodeOverloaded, cqlerr.ErrCodeBootstrapping:
+			// Rejected before execution: another host may serve even a
+			// non-idempotent request.
+			return Decision{Action: Next}
+		}
+		if a.Idempotent && server.GetCode() == cqlerr.ErrCodeServer {
 			return Decision{Action: Next}
 		}
 		return Decision{}
 	}
-	var server protocol.RequestError
-	if errors.As(a.Err, &server) {
-		switch server.GetCode() {
-		case protocol.ErrCodeOverloaded, protocol.ErrCodeBootstrapping, protocol.ErrCodeServer:
-			return Decision{Action: Next}
-		default:
-			return Decision{}
-		}
-	}
-	var schema *runtimeerrors.SchemaChangedError
-	var validation *cqltype.ValidationError
-	var protocolErr *cqltype.ProtocolError
+	var schema *cqlerr.SchemaChangedError
+	var validation *cqlerr.ValidationError
+	var protocolErr *cqlerr.ProtocolError
 	if errors.As(a.Err, &schema) || errors.As(a.Err, &validation) || errors.As(a.Err, &protocolErr) {
 		return Decision{}
 	}
-	return Decision{Action: Next}
+	if a.Idempotent || a.ExecutionStatus == cqlerr.NotExecuted {
+		return Decision{Action: Next}
+	}
+	return Decision{}
 }

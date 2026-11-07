@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/retry"
@@ -22,19 +22,19 @@ func TestRetryAPI(t *testing.T) {
 				code       int
 				idempotent bool
 				want       retry.Action
-			}{{cql.ErrCodeOverloaded, true, retry.Next}, {cql.ErrCodeBootstrapping, true, retry.Next}, {cql.ErrCodeOverloaded, false, retry.Stop}, {cql.ErrCodeSyntax, true, retry.Stop}, {cql.ErrCodeInvalid, true, retry.Stop}, {cql.ErrCodeProtocol, true, retry.Stop}} {
+			}{{cqlerr.ErrCodeOverloaded, true, retry.Next}, {cqlerr.ErrCodeBootstrapping, true, retry.Next}, {cqlerr.ErrCodeOverloaded, false, retry.Next}, {cqlerr.ErrCodeWriteTimeout, false, retry.Stop}, {cqlerr.ErrCodeSyntax, true, retry.Stop}, {cqlerr.ErrCodeInvalid, true, retry.Stop}, {cqlerr.ErrCodeProtocol, true, retry.Stop}} {
 				server := &frm.ErrorFrame{Code: test.code, Message: "test error"}
 				err := runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: server, InternalPotentiallyExecuted: true})
-				decision := policy.Decide(retry.Attempt{Err: err, Number: 1, Idempotent: test.idempotent, BytesWritten: true})
+				decision := policy.Decide(retry.Attempt{Err: err, Number: 1, Idempotent: test.idempotent, BytesWritten: true, ExecutionStatus: runtimeerrors.ExecutionStatusOf(err)})
 				if decision.Action != test.want {
 					t.Fatalf("code %x idempotent %t got %d want %d", test.code, test.idempotent, decision.Action, test.want)
 				}
-				var extracted cql.RequestError
+				var extracted cqlerr.RequestError
 				if !errors.As(err, &extracted) || extracted.GetCode() != test.code {
 					t.Fatal("server identity lost")
 				}
 			}
-			for _, err := range []error{context.Canceled, context.DeadlineExceeded, &cql.ProtocolError{Stage: "response", Err: errors.New("invalid frame")}, &cql.ValidationError{Field: "page size", Err: errors.New("invalid")}} {
+			for _, err := range []error{context.Canceled, context.DeadlineExceeded, &cqlerr.ProtocolError{Stage: "response", Err: errors.New("invalid frame")}, &cqlerr.ValidationError{Field: "page size", Err: errors.New("invalid")}} {
 				if got := policy.Decide(retry.Attempt{Err: err, Number: 1, Idempotent: true}); got.Action != retry.Stop {
 					t.Fatalf("retry deterministic error %v", err)
 				}

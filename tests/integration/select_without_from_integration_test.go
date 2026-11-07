@@ -12,6 +12,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
 // Scylla's no-FROM SELECT resolves selectors against virtual system.one_row.
@@ -59,12 +60,12 @@ func probeSelectWithoutFrom() {
 		selectWithoutFromSupported = true
 		return
 	}
-	if serverErrorCode(err) != cql.ErrCodeSyntax {
+	if serverErrorCode(err) != cqlerr.ErrCodeSyntax {
 		selectWithoutFromProbeErr = err
 	}
 }
 func serverErrorCode(err error) int {
-	var server cql.RequestError
+	var server cqlerr.RequestError
 	if errors.As(err, &server) {
 		return server.GetCode()
 	}
@@ -72,7 +73,7 @@ func serverErrorCode(err error) int {
 }
 func isRejectedByServer(err error) bool {
 	code := serverErrorCode(err)
-	return code == cql.ErrCodeSyntax || code == cql.ErrCodeInvalid
+	return code == cqlerr.ErrCodeSyntax || code == cqlerr.ErrCodeInvalid
 }
 func createSessionWithoutKeyspace(t testing.TB) *gocql.Session {
 	t.Helper()

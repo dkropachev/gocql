@@ -55,6 +55,14 @@ func OneParam[T any](a0 Encoder[T]) ParamEncoder[T] { return codec.OneParam[T](a
 
 type Option[T any] = cqltype.Option[T]
 
+type ExecutionStatus = cqltype.ExecutionStatus
+
+const (
+	NotExecuted       = cqltype.NotExecuted
+	MaybeExecuted     = cqltype.MaybeExecuted
+	PartiallyExecuted = cqltype.PartiallyExecuted
+)
+
 const OrdinaryStatement = cqltype.OrdinaryStatement
 
 type OutputField[R any] = codec.OutputField[R]

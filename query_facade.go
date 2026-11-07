@@ -10,9 +10,10 @@ import (
 
 type Query[P, R any] = execution.Query[P, R]
 
+// Deprecated: use cqlerr.ErrBusy.
 var ErrBusy = execution.ErrBusy
 
-// ErrStaleRows is reported by a Rows handle from an earlier execution of its query.
+// Deprecated: use cqlerr.ErrStaleRows.
 var ErrStaleRows = execution.ErrStaleRows
 
 type StreamQuery[P, R any] = execution.StreamQuery[P, R]

@@ -10,6 +10,7 @@ import (
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 
 	"bytes"
 	"context"
@@ -921,7 +922,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 		return nil
 	}
 	if err := launch(nil, request.InternalOptions.InternalProfile.Consistency, false); err != nil {
-		return nil, &ExecutionError{Err: err, Result: aggregate}
+		return nil, newExecutionError(err, aggregate, NotExecuted, nil)
 	}
 	var timer *time.Timer
 	var speculate <-chan time.Time
@@ -950,24 +951,30 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 		}
 	}()
 	var lastErr error
+	var log attemptLog
 	for {
 		select {
 		case <-ctx.Done():
 			aggregate.Attempts = startedCount
 			failure := ctx.Err()
+			if active > 0 {
+				// An abandoned in-flight attempt may have been applied.
+				log.raise(MaybeExecuted)
+			}
 			if request.InternalLogical != nil {
 				if coordinator := request.InternalLogical.ddlCoordinator.Load(); coordinator != nil {
 					aggregate.HostID = *coordinator
 					failure = fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", failure)
+					log.raise(PartiallyExecuted)
 				}
 			}
-			return nil, &ExecutionError{Err: failure, Result: aggregate}
+			return nil, log.error(failure, aggregate)
 		case pending := <-delayed:
 			scheduled--
 			if err := launch(pending.conn, pending.consistency, false); err != nil {
 				lastErr = err
 				if active == 0 && scheduled == 0 {
-					return nil, &ExecutionError{Err: err, Result: aggregate}
+					return nil, log.error(err, aggregate)
 				}
 			} else {
 				s.retries.Add(1)
@@ -1006,37 +1013,40 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			// Automatic post-DDL work cannot cause a successful statement to replay.
 			if response != nil && response.SchemaChange() {
 				response.Owner.Release()
-				return nil, &ExecutionError{Err: fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", attemptErr), Result: aggregate}
+				log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency)
+				log.raise(PartiallyExecuted)
+				return nil, log.error(fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", attemptErr), aggregate)
 			}
 			lastErr = attemptErr
+			attemptStatus := log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency)
 			if response != nil {
 				response.Owner.Release()
 			}
 			decision := retry.Decision{}
 			if policy := request.InternalOptions.InternalProfile.Retry; policy != nil {
-				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.InternalRouting.Conditional, BytesWritten: InternalAttemptBytesWritten(attemptErr)})
+				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.InternalRouting.Conditional, BytesWritten: attemptStatus != NotExecuted, ExecutionStatus: attemptStatus})
 			}
 			if decision.Action == retry.IgnoreWrite {
 				return &responsePage{InternalResponseData: responseData{State: completePageState(), Result: aggregate}}, nil
 			}
 			if decision.Action == retry.Stop {
 				if active == 0 && scheduled == 0 {
-					return nil, &ExecutionError{Err: lastErr, Result: aggregate}
+					return nil, log.error(lastErr, aggregate)
 				}
 				continue
 			}
 			if decision.Action != retry.Same && decision.Action != retry.Next {
-				return nil, &ExecutionError{Err: typeValidation("retry", "unknown retry action"), Result: aggregate}
+				return nil, log.error(typeValidation("retry", "unknown retry action"), aggregate)
 			}
 			consistency := outcome.consistency
 			if decision.Consistency.Set {
 				if !validConsistency(decision.Consistency.Value) {
-					return nil, typeValidation("retry consistency", "invalid consistency")
+					return nil, log.error(typeValidation("retry consistency", "invalid consistency"), aggregate)
 				}
 				consistency = decision.Consistency.Value
 			}
 			if decision.Delay < 0 {
-				return nil, typeValidation("retry delay", "negative delay")
+				return nil, log.error(typeValidation("retry delay", "negative delay"), aggregate)
 			}
 			conn := outcome.conn
 			if decision.Action == retry.Next {
@@ -1069,7 +1079,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			if err := launch(conn, consistency, false); err != nil {
 				lastErr = err
 				if active == 0 {
-					return nil, &ExecutionError{Err: lastErr, Result: aggregate}
+					return nil, log.error(lastErr, aggregate)
 				}
 			} else {
 				s.retries.Add(1)
@@ -1263,11 +1273,7 @@ func InternalExecutionErrorResult(err error) Result {
 	return Result{}
 }
 func InternalAttemptBytesWritten(err error) bool {
-	var query *QueryError
-	if errors.As(err, &query) {
-		return query.PotentiallyExecuted()
-	}
-	return true
+	return runtimeerrors.ExecutionStatusOf(err) != NotExecuted
 }
 
 func InternalRequestHasCounter(request *InternalExecutionRequest) bool {

@@ -35,4 +35,6 @@ type SimpleConvictionPolicy = implSettings.SimpleConvictionPolicy
 type SpeculationPolicy = implSettings.SpeculationPolicy
 
 type StdLogger = logging.StdLogger
+
+// Deprecated: use cqlerr.UnsupportedSettingError.
 type UnsupportedSettingError = implSettings.UnsupportedSettingError
