@@ -183,10 +183,18 @@ func (s *InternalMetadataDescriber) InternalInvalidateTableSchema(keyspaceName, 
 	s.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalInvalidateTable(keyspaceName, tableName)
 }
 
-// deduplicatedRefreshKeyspace collapses concurrent refreshKeyspaceSchema calls
-// for the same keyspace into a single in-flight operation.
+// deduplicatedRefreshKeyspace loads a keyspace that is missing from the cache,
+// collapsing concurrent calls for the same keyspace into a single in-flight
+// operation. Every caller found the keyspace absent; singleflight only joins
+// calls that overlap, so a caller that decided just before another flight
+// published and completed would start a second full refresh. The flight
+// rechecks the current snapshot first and skips the queries when the keyspace
+// is already there.
 func (s *InternalMetadataDescriber) deduplicatedRefreshKeyspace(keyspaceName string) error {
 	_, err, _ := s.keyspaceGroup.Do(keyspaceName, func() (any, error) {
+		if _, ok := s.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalGetKeyspace(keyspaceName); ok {
+			return nil, nil
+		}
 		return nil, s.refreshKeyspaceSchema(keyspaceName)
 	})
 	return err

@@ -585,6 +585,30 @@ func TestSchemaMetadata(t *testing.T) {
 					t.Fatalf("expected stale snapshot lookup to avoid extra queries, got %d", got)
 				}
 			})
+
+			// A caller that found the keyspace missing but reaches the flight only
+			// after another load published and completed must not refresh again.
+			t.Run("GetKeyspace/late_caller_after_load_does_not_refresh_twice", func(t *testing.T) {
+				t.Parallel()
+				ctrl := &schemaDataMock{
+					knownKeyspaces: knownKeyspaces,
+				}
+				s := newSchemaEventTestSessionWithMock(ctrl)
+				defer s.Close()
+				describer := SessionData(s).InternalMetadataDescriber
+				if _, err := describer.GetKeyspace("test_ks"); err != nil {
+					t.Fatalf("GetKeyspace returned unexpected error: %v", err)
+				}
+
+				ctrl.resetQueries()
+
+				if err := describer.deduplicatedRefreshKeyspace("test_ks"); err != nil {
+					t.Fatalf("deduplicatedRefreshKeyspace returned unexpected error: %v", err)
+				}
+				if got := ctrl.getQueryCount(); got != 0 {
+					t.Fatalf("expected a late load to reuse the published keyspace, got %d queries", got)
+				}
+			})
 		})
 	})
 
