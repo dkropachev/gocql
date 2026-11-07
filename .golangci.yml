@@ -20,11 +20,16 @@ linters:
         text: "fieldalignment"
         linters:
           - govet
+      # Tests assert that an exact error value is returned.
+      - path: '(.+)_test\.go'
+        linters:
+          - errorlint
 
   default: none
   enable:
     - nolintlint
     - govet
+    - errorlint
   settings:
     govet:
       enable-all: true

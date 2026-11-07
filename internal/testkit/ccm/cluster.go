@@ -300,7 +300,7 @@ func (c *Cluster) WaitUp(ctx context.Context) error {
 		}
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("ccm: cluster %s not up: %w (last status %v, %v)", c.name, ctx.Err(), st, err)
+			return fmt.Errorf("ccm: cluster %s not up: %w (last status %v, %w)", c.name, ctx.Err(), st, err)
 		case <-time.After(time.Second):
 		}
 	}

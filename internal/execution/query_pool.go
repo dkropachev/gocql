@@ -5,6 +5,7 @@ package execution
 
 import (
 	"context"
+	"errors"
 	"math/rand/v2"
 	"runtime"
 	"sync"
@@ -203,7 +204,7 @@ func (p *queryPool[P, R]) capture(ctx context.Context, value P) (*Query[P, R], e
 		// for a closed query, which is dropped, or for the context, which
 		// can end between the check above and the capture; that query is
 		// still idle and goes back.
-		if ctxErr := ctx.Err(); ctxErr != nil && err == ctxErr {
+		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
 			p.put(q)
 		}
 		return nil, err

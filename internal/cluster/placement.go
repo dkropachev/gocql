@@ -4,6 +4,8 @@
 package cluster
 
 import (
+	"errors"
+
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 
@@ -141,7 +143,8 @@ func InternalSessionPublishTabletFeedback(s *Session, p *InternalV2PeripheralSta
 		ensureNext()
 		routing.SnapshotData(next).InternalDiagnostics = make([]error, 0, len(routing.SnapshotData(old).InternalDiagnostics)+1)
 		for _, diagnostic := range routing.SnapshotData(old).InternalDiagnostics {
-			if v, ok := diagnostic.(*ValidationError); ok && v.Field == "tablet placement" {
+			var v *ValidationError
+			if errors.As(diagnostic, &v) && v.Field == "tablet placement" {
 				continue
 			}
 			routing.SnapshotData(next).InternalDiagnostics = append(routing.SnapshotData(next).InternalDiagnostics, diagnostic)

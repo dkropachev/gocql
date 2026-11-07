@@ -170,7 +170,7 @@ func (r *StreamValueReader) Read(p []byte) (int, error) {
 		copy(p, target[:n]) // Bounded scalar/framing scratch, never a payload gather.
 		r.capture.offset += n
 	}
-	if err != nil && err != io.EOF {
+	if err != nil && err != io.EOF { //nolint:errorlint // io.Reader returns io.EOF unwrapped; hot path
 		return n, r.fail(err)
 	}
 	return n, err
@@ -186,7 +186,7 @@ func (r *StreamValueReader) readFull(p []byte) error {
 		n, err := r.Read(p)
 		p = p[n:]
 		if err != nil {
-			if err == io.EOF && len(p) == 0 {
+			if err == io.EOF && len(p) == 0 { //nolint:errorlint // io.Reader returns io.EOF unwrapped; hot path
 				return nil
 			}
 			return r.fail(err)
@@ -327,7 +327,7 @@ func (r *StreamValueReader) rawSkip(validate func([]byte) error) error {
 					return r.fail(e)
 				}
 			}
-			if err != nil && !(err == io.EOF && r.Remaining() == 0) {
+			if err != nil && !(err == io.EOF && r.Remaining() == 0) { //nolint:errorlint // io.Reader returns io.EOF unwrapped; hot path
 				return r.fail(err)
 			}
 		} else {

@@ -235,7 +235,7 @@ func (p streamBytesPlan) DecodeInto(r *StreamValueReader, dst *[]byte) error {
 		}
 		b = b[n:]
 		if err != nil {
-			if len(b) == 0 && err == io.EOF {
+			if len(b) == 0 && err == io.EOF { //nolint:errorlint // io.Reader returns io.EOF unwrapped; hot path
 				break
 			}
 			return r.fail(err)

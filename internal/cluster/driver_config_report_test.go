@@ -65,7 +65,7 @@ func TestDriverConfigReport(t *testing.T) {
 				{name: "deny-all states no location", filter: DenyAllFilter(), want: nil},
 				{
 					// Selects by address, which the schema has no branch for.
-					name: "whitelist filter is not a location", filter: WhiteListHostFilter("127.0.0.1"),
+					name: "whitelist filter is not a location", filter: mustWhiteList(t, "127.0.0.1"),
 					want: nil,
 				},
 				{

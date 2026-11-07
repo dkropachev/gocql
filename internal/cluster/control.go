@@ -169,7 +169,8 @@ func InternalParseProtocolFromError(err error) int {
 	// I really wish this had the actual info in the error frame...
 	matches := InternalProtocolSupportRe.FindAllStringSubmatch(err.Error(), -1)
 	if len(matches) != 1 || len(matches[0]) != 2 {
-		if verr, ok := err.(*protocolError); ok {
+		var verr *protocolError
+		if errors.As(err, &verr) {
 			return int(verr.InternalFrame.Header().Version.Version())
 		}
 		return 0
@@ -308,7 +309,7 @@ func (c *InternalControlConn) setupConn(conn *Conn) error {
 	}
 
 	if err := c.registerEventsContext(setupCtx, conn); err != nil {
-		return fmt.Errorf("register events: %v", err)
+		return fmt.Errorf("register events: %w", err)
 	}
 
 	if err := conn.InternalValidateOpeningTarget(setupCtx); err != nil {
@@ -461,7 +462,7 @@ func (c *InternalControlConn) attemptReconnect() error {
 	// changed their IPs while keeping the same hostname(s).
 	initialHosts, resolvErr := resolveInitialEndpoints(c.InternalSession.privateStorage.InternalCfg.DNSResolver, c.InternalSession.privateStorage.InternalCfg.Hosts, c.InternalSession.privateStorage.InternalCfg.Port, c.InternalSession.privateStorage.InternalLogger)
 	if resolvErr != nil {
-		return fmt.Errorf("resolve contact points' hostnames: %v", resolvErr)
+		return fmt.Errorf("resolve contact points' hostnames: %w", resolvErr)
 	}
 
 	return c.attemptReconnectToAnyOfHosts(initialHosts)

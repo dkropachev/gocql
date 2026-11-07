@@ -211,7 +211,13 @@ func driverConfigCases() []struct {
 		},
 		{
 			name: "whitelist host filter",
-			cfg:  func(c *InternalClusterSettings) { c.HostFilter = WhiteListHostFilter("127.0.0.1") },
+			cfg: func(c *InternalClusterSettings) {
+				f, err := WhiteListHostFilter("127.0.0.1")
+				if err != nil {
+					panic(err)
+				}
+				c.HostFilter = f
+			},
 		},
 		{
 			name: "host dialer that cannot target a shard",

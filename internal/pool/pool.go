@@ -21,6 +21,7 @@ package pool
 
 import (
 	"context"
+	"errors"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -441,7 +442,8 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 				if ctx.Err() != nil {
 					return nil, ctx.Err()
 				}
-				if _, ok := err.(*StreamCapabilityError); ok {
+				var unsupported *StreamCapabilityError
+				if errors.As(err, &unsupported) {
 					capability = err
 				}
 			}

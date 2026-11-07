@@ -65,7 +65,7 @@ func InternalNewSessionCommon(cfg InternalClusterSettings) (*Session, error) {
 func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *Config, initialize func(*Session, Config) *Config) (*Session, error) {
 	cfg.applyClientRoutesConfig()
 	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("gocql: unable to create session: cluster config validation failed: %v", err)
+		return nil, fmt.Errorf("gocql: unable to create session: cluster config validation failed: %w", err)
 	}
 
 	// TODO: we should take a context in here at some point
@@ -111,7 +111,7 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *Confi
 	connCfg, err := InternalConnConfig(&s.privateStorage.InternalCfg)
 	if err != nil {
 		//TODO: Return a typed error
-		return nil, fmt.Errorf("gocql: unable to create session: %v", err)
+		return nil, fmt.Errorf("gocql: unable to create session: %w", err)
 	}
 	s.privateStorage.InternalConnCfg = connCfg
 	if runtimeConfig != nil {
@@ -127,7 +127,7 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *Confi
 	s.privateStorage.InternalMetadataDescriber = InternalNewMetadataDescriber(s)
 	s.privateStorage.InternalEventBus = eventbus.New[events.Event](cfg.EventBusConfig, cfg.Logger)
 	if err = s.privateStorage.InternalEventBus.Start(); err != nil {
-		return nil, fmt.Errorf("gocql: unable to create session: %v", err)
+		return nil, fmt.Errorf("gocql: unable to create session: %w", err)
 	}
 	s.privateStorage.InternalNodeEvents = InternalNewEventDebouncer("NodeEvents", func(receiver *Session) func(a0 []frame) {
 		return func(a0 []frame) {
@@ -217,14 +217,10 @@ func InternalConnectSettings(cfg InternalClusterSettings) (*Session, error) {
 	}
 
 	if err = s.init(); err != nil {
-		if err == ErrNoConnectionsStarted {
-			//This error used to be generated inside connectSettings & returned directly
-			//Forward it on up to be backwards compatible
-			return nil, ErrNoConnectionsStarted
-		} else {
-			// TODO(zariel): dont wrap this error in fmt.Errorf, return a typed error
-			return nil, fmt.Errorf("gocql: unable to create session: %v", err)
+		if err == ErrNoConnectionsStarted { //nolint:errorlint // the bare sentinel is returned as is for compatibility
+			return nil, err
 		}
+		return nil, fmt.Errorf("gocql: unable to create session: %w", err)
 	}
 	s.privateStorage.readyCh <- struct{}{}
 	close(s.privateStorage.readyCh)
@@ -241,7 +237,7 @@ func InternalConnectSettingsAsync(cfg InternalClusterSettings) (*Session, error)
 	go func() {
 		if initErr := s.init(); initErr != nil {
 			s.privateStorage.InternalSessionStateMu.Lock()
-			s.privateStorage.initErr = fmt.Errorf("gocql: unable to create session: %v", initErr)
+			s.privateStorage.initErr = fmt.Errorf("gocql: unable to create session: %w", initErr)
 			s.privateStorage.InternalSessionStateMu.Unlock()
 		}
 		s.privateStorage.readyCh <- struct{}{}
@@ -449,7 +445,7 @@ func (s *Session) init() error {
 	}
 
 	if err = s.privateStorage.InternalPolicy.IsOperational(s); err != nil {
-		return fmt.Errorf("gocql: unable to create session: %v", err)
+		return fmt.Errorf("gocql: unable to create session: %w", err)
 	}
 	s.privateStorage.InternalSessionStateMu.Lock()
 	s.privateStorage.InternalIsInitialized = true

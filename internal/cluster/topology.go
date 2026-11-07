@@ -106,7 +106,7 @@ func InternalGetReplicationFactorFromOpts(val any) (int, error) {
 	case string:
 		n, err := strconv.Atoi(v)
 		if err != nil {
-			return 0, fmt.Errorf("invalid replication_factor %q: %v", v, err)
+			return 0, fmt.Errorf("invalid replication_factor %q: %w", v, err)
 		} else if n < 0 {
 			return 0, fmt.Errorf("invalid replication_factor %d", n)
 		}

@@ -87,11 +87,10 @@ func DataCentreHostFilter(dataCenter string) HostFilter {
 // WhiteListHostFilter filters incoming hosts by checking that their address is
 // in the initial hosts whitelist. It probes all known addresses of a host
 // (connect, rpc, broadcast, listen, peer, preferred, translated CQL) for a match.
-func WhiteListHostFilter(hosts ...string) HostFilter {
+func WhiteListHostFilter(hosts ...string) (HostFilter, error) {
 	hostInfos, err := resolveInitialEndpoints(defaultDnsResolver, hosts, 9042, nopLogger{})
 	if err != nil {
-		// dont want to panic here, but rather not break the API
-		panic(fmt.Errorf("unable to lookup host info from address: %v", err))
+		return nil, fmt.Errorf("gocql: unable to look up white-listed hosts: %w", err)
 	}
 
 	m := make(map[string]bool, len(hostInfos))
@@ -122,5 +121,5 @@ func WhiteListHostFilter(hosts ...string) HostFilter {
 			return true
 		}
 		return false
-	})
+	}), nil
 }

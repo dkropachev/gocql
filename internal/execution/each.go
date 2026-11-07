@@ -86,7 +86,7 @@ func eachPage[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], r
 		state = response.State
 		err = decodeEach(ctx, s, response, b.privateStorage.InternalRows, plans, dst, fn, scratch)
 		response.Owner.Release()
-		if err == errStopEach {
+		if errors.Is(err, errStopEach) {
 			return true, result, nil
 		}
 		if err != nil {

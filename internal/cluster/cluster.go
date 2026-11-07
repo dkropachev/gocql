@@ -427,7 +427,7 @@ func (cfg *InternalClusterSettings) ValidateAndInitSSL() error {
 	}
 	actualTLSConfig, err := InternalSetupTLSConfig(cfg.SslOpts, cfg.logger())
 	if err != nil {
-		return fmt.Errorf("failed to initialize ssl configuration: %s", err.Error())
+		return fmt.Errorf("failed to initialize ssl configuration: %w", err)
 	}
 	cfg.privateStorage.actualSslOpts = new(atomic.Pointer[tls.Config])
 	cfg.privateStorage.actualSslOpts.Store(actualTLSConfig)
@@ -776,7 +776,7 @@ func InternalSetupTLSConfig(sslOpts *SslOptions, logger StdLogger) (*tls.Config,
 
 		pem, err := os.ReadFile(sslOpts.CaPath)
 		if err != nil {
-			return nil, fmt.Errorf("unable to open CA certs: %v", err)
+			return nil, fmt.Errorf("unable to open CA certs: %w", err)
 		}
 
 		if !tlsConfig.RootCAs.AppendCertsFromPEM(pem) {
@@ -787,7 +787,7 @@ func InternalSetupTLSConfig(sslOpts *SslOptions, logger StdLogger) (*tls.Config,
 	if sslOpts.CertPath != "" || sslOpts.KeyPath != "" {
 		mycert, err := tls.LoadX509KeyPair(sslOpts.CertPath, sslOpts.KeyPath)
 		if err != nil {
-			return nil, fmt.Errorf("unable to load X509 key pair: %v", err)
+			return nil, fmt.Errorf("unable to load X509 key pair: %w", err)
 		}
 		tlsConfig.Certificates = append(tlsConfig.Certificates, mycert)
 	}
@@ -833,13 +833,13 @@ func InternalStrictVerifyPeerCertificate(rootCAs *x509.CertPool) func([][]byte, 
 			}
 			cert, err := x509.ParseCertificate(rawCerts[0])
 			if err != nil {
-				return fmt.Errorf("failed to parse certificate: %v", err)
+				return fmt.Errorf("failed to parse certificate: %w", err)
 			}
 			intermediates := x509.NewCertPool()
 			for i := 1; i < len(rawCerts); i++ {
 				intermediateCert, err := x509.ParseCertificate(rawCerts[i])
 				if err != nil {
-					return fmt.Errorf("failed to parse intermediate certificate: %v", err)
+					return fmt.Errorf("failed to parse intermediate certificate: %w", err)
 				}
 				intermediates.AddCert(intermediateCert)
 			}
@@ -850,7 +850,7 @@ func InternalStrictVerifyPeerCertificate(rootCAs *x509.CertPool) func([][]byte, 
 			}
 			chains, err = cert.Verify(opts)
 			if err != nil {
-				return fmt.Errorf("certificate verification failed for subject=%q, issuer=%q: %v",
+				return fmt.Errorf("certificate verification failed for subject=%q, issuer=%q: %w",
 					cert.Subject.String(), cert.Issuer.String(), err)
 			}
 			if len(chains) == 0 {

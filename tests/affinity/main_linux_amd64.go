@@ -298,7 +298,7 @@ func makeOperation(cfg config, id, targetCPU, perWorker int, shared *cache) (*op
 			value, err := socketOption(o.conn, incomingCPU, &targetCPU)
 			if err != nil || value != targetCPU {
 				o.conn.Close()
-				return nil, fmt.Errorf("SO_INCOMING_CPU: value=%d err=%v", value, err)
+				return nil, fmt.Errorf("SO_INCOMING_CPU: value=%d err=%w", value, err)
 			}
 			o.incomingAtSetup = value
 		}

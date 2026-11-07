@@ -87,14 +87,14 @@ func (c *InternalCassVersion) unmarshal(data []byte) error {
 	var err error
 	c.Major, err = strconv.Atoi(v[0])
 	if err != nil {
-		return fmt.Errorf("invalid major version %v: %v", v[0], err)
+		return fmt.Errorf("invalid major version %v: %w", v[0], err)
 	}
 
 	if len(v) == 2 {
 		vMinor := strings.SplitN(v[1], "-", 2)
 		c.Minor, err = strconv.Atoi(vMinor[0])
 		if err != nil {
-			return fmt.Errorf("invalid minor version %v: %v", vMinor[0], err)
+			return fmt.Errorf("invalid minor version %v: %w", vMinor[0], err)
 		}
 		if len(vMinor) == 2 {
 			c.Qualifier = vMinor[1]
@@ -104,13 +104,13 @@ func (c *InternalCassVersion) unmarshal(data []byte) error {
 
 	c.Minor, err = strconv.Atoi(v[1])
 	if err != nil {
-		return fmt.Errorf("invalid minor version %v: %v", v[1], err)
+		return fmt.Errorf("invalid minor version %v: %w", v[1], err)
 	}
 
 	vPatch := strings.SplitN(v[2], "-", 2)
 	c.Patch, err = strconv.Atoi(vPatch[0])
 	if err != nil {
-		return fmt.Errorf("invalid patch version %v: %v", vPatch[0], err)
+		return fmt.Errorf("invalid patch version %v: %w", vPatch[0], err)
 	}
 	if len(vPatch) == 2 {
 		c.Qualifier = vPatch[1]

@@ -199,7 +199,7 @@ func (s *Stream) ReadFull(p []byte) error {
 		n, err := s.Read(p)
 		p = p[n:]
 		if err != nil {
-			if err == io.EOF && len(p) == 0 {
+			if err == io.EOF && len(p) == 0 { //nolint:errorlint // io.Reader returns io.EOF unwrapped; hot path
 				return nil
 			}
 			return err

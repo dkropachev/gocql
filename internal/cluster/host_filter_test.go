@@ -157,7 +157,7 @@ func TestHostFilter(t *testing.T) {
 		t.Run("Basic", func(t *testing.T) {
 			t.Parallel()
 
-			f := WhiteListHostFilter("127.0.0.1", "127.0.0.2")
+			f := mustWhiteList(t, "127.0.0.1", "127.0.0.2")
 			tests := [...]struct {
 				addr   net.IP
 				accept bool
@@ -185,7 +185,7 @@ func TestHostFilter(t *testing.T) {
 		t.Run("EmptyHost", func(t *testing.T) {
 			t.Parallel()
 
-			f := WhiteListHostFilter("127.0.0.1")
+			f := mustWhiteList(t, "127.0.0.1")
 
 			host := func() *endpoint.HostInfo {
 				opaqueStorageValuexxxxxxxxxx := new(endpoint.HostInfo)
@@ -200,7 +200,7 @@ func TestHostFilter(t *testing.T) {
 		t.Run("MatchesBroadcastAddress", func(t *testing.T) {
 			t.Parallel()
 
-			f := WhiteListHostFilter("127.0.0.1")
+			f := mustWhiteList(t, "127.0.0.1")
 
 			host := func() *endpoint.HostInfo {
 				opaqueStorageValuexxxx := new(endpoint.HostInfo)
@@ -217,7 +217,7 @@ func TestHostFilter(t *testing.T) {
 		t.Run("MatchesListenAddress", func(t *testing.T) {
 			t.Parallel()
 
-			f := WhiteListHostFilter("127.0.0.1")
+			f := mustWhiteList(t, "127.0.0.1")
 
 			host := func() *endpoint.HostInfo {
 				opaqueStorageValuexxxxx := new(endpoint.HostInfo)
@@ -234,7 +234,7 @@ func TestHostFilter(t *testing.T) {
 		t.Run("MatchesPeer", func(t *testing.T) {
 			t.Parallel()
 
-			f := WhiteListHostFilter("127.0.0.1")
+			f := mustWhiteList(t, "127.0.0.1")
 
 			host := func() *endpoint.HostInfo {
 				opaqueStorageValuexxxxxx := new(endpoint.HostInfo)
@@ -251,7 +251,7 @@ func TestHostFilter(t *testing.T) {
 		t.Run("MatchesPreferredIP", func(t *testing.T) {
 			t.Parallel()
 
-			f := WhiteListHostFilter("127.0.0.1")
+			f := mustWhiteList(t, "127.0.0.1")
 
 			host := func() *endpoint.HostInfo {
 				opaqueStorageValuexxxxxxx := new(endpoint.HostInfo)
@@ -268,7 +268,7 @@ func TestHostFilter(t *testing.T) {
 		t.Run("MatchesRPCAddress", func(t *testing.T) {
 			t.Parallel()
 
-			f := WhiteListHostFilter("127.0.0.1")
+			f := mustWhiteList(t, "127.0.0.1")
 
 			host := func() *endpoint.HostInfo {
 				opaqueStorageValuexxx := new(endpoint.HostInfo)
@@ -285,7 +285,7 @@ func TestHostFilter(t *testing.T) {
 		t.Run("MatchesTranslatedAddress", func(t *testing.T) {
 			t.Parallel()
 
-			f := WhiteListHostFilter("127.0.0.1")
+			f := mustWhiteList(t, "127.0.0.1")
 
 			host := func() *endpoint.HostInfo {
 				opaqueStorageValuexxxxxxxx := new(endpoint.HostInfo)
@@ -304,7 +304,7 @@ func TestHostFilter(t *testing.T) {
 		t.Run("NoMatch", func(t *testing.T) {
 			t.Parallel()
 
-			f := WhiteListHostFilter("127.0.0.1")
+			f := mustWhiteList(t, "127.0.0.1")
 
 			host := func() *endpoint.HostInfo {
 				opaqueStorageValuexxxxxxxxx := new(endpoint.HostInfo)
@@ -322,4 +322,13 @@ func TestHostFilter(t *testing.T) {
 			}
 		})
 	})
+}
+
+func mustWhiteList(t *testing.T, hosts ...string) HostFilter {
+	t.Helper()
+	f, err := WhiteListHostFilter(hosts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f
 }
