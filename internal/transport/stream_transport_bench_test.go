@@ -224,7 +224,10 @@ func (c *plaintextCounter) Read(p []byte) (int, error) {
 		address := uintptr(unsafe.Pointer(&p[0]))
 		if address >= c.start && address+uintptr(n) <= c.end {
 			c.outputBytes += int64(n)
-		} else if n > 64 {
+		} else if n > 256 {
+			// Headers and metadata may land in scratch: nativeStreamReadAhead
+			// speculates small reads into a window that starts at 256 bytes.
+			// A larger read outside the destination is a gathered value.
 			return n, fmt.Errorf("driver gathered TLS plaintext instead of final output")
 		}
 	}
