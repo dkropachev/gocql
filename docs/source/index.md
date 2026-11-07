@@ -13,6 +13,7 @@ statements/index
 data-types
 load-balancing
 retry-policy
+errors
 speculative-execution
 client-routes
 ```
