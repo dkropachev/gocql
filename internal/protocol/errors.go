@@ -204,6 +204,16 @@ type RequestErrCASWriteUnknown struct {
 	BlockFor    int
 }
 
+// RequestErrServer is a server error whose code carries no fields of its own:
+// Server, Protocol, Credentials, Overloaded, Bootstrapping, Truncate, Syntax,
+// Unauthorized, Invalid and Config.
+type RequestErrServer struct {
+	frm.ErrorFrame
+}
+
+// ErrorCode matches every server error with its code through errors.Is.
+type ErrorCode = frm.ErrorCode
+
 type UnknownServerError struct {
 	frm.ErrorFrame
 }
@@ -221,6 +231,13 @@ type RequestErrRateLimitReached struct {
 	RejectedByCoordinator bool
 }
 
+func (e *RequestErrRateLimitReached) Error() string {
+	if e.Message == "" {
+		return "rate limit reached"
+	}
+	return "rate limit reached: " + e.Message
+}
+
 func (e *RequestErrRateLimitReached) String() string {
 	var opType string
 	if e.OpType == OpTypeRead {
@@ -231,4 +248,67 @@ func (e *RequestErrRateLimitReached) String() string {
 		opType = "Other"
 	}
 	return fmt.Sprintf("[request_error_rate_limit_reached OpType=%s RejectedByCoordinator=%t]", opType, e.RejectedByCoordinator)
+}
+
+// errorBody reads the fields of an ERROR response body.
+type errorBody interface {
+	I32() int
+	U16() uint16
+	U8() byte
+	Str() string
+	Strings() []string
+	shortBytes() []byte
+	errorMap() ErrorMap
+}
+
+// decodeServerError decodes an ERROR response body into its typed error.
+// It is the only decoder of server errors.
+func decodeServerError(r errorBody, head frm.FrameHeader, proto byte, rateLimitCode int) error {
+	code, msg := r.I32(), r.Str()
+	base := frm.NewErrorFrame(head, code, msg)
+	switch code {
+	case ErrCodeUnavailable:
+		return &RequestErrUnavailable{ErrorFrame: base, Consistency: Consistency(r.U16()), Required: r.I32(), Alive: r.I32()}
+	case ErrCodeWriteTimeout:
+		return &RequestErrWriteTimeout{ErrorFrame: base, Consistency: Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32(), WriteType: r.Str()}
+	case ErrCodeReadTimeout:
+		return &RequestErrReadTimeout{ErrorFrame: base, Consistency: Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32(), DataPresent: r.U8()}
+	case ErrCodeAlreadyExists:
+		return &RequestErrAlreadyExists{ErrorFrame: base, Keyspace: r.Str(), Table: r.Str()}
+	case ErrCodeUnprepared:
+		return &RequestErrUnprepared{ErrorFrame: base, StatementId: r.shortBytes()}
+	case ErrCodeReadFailure:
+		e := &RequestErrReadFailure{ErrorFrame: base, Consistency: Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32()}
+		if proto >= ProtoVersion5 {
+			e.ErrorMap = r.errorMap()
+			e.NumFailures = len(e.ErrorMap)
+		} else {
+			e.NumFailures = r.I32()
+		}
+		e.DataPresent = r.U8() != 0
+		return e
+	case ErrCodeWriteFailure:
+		e := &RequestErrWriteFailure{ErrorFrame: base, Consistency: Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32()}
+		if proto >= ProtoVersion5 {
+			e.ErrorMap = r.errorMap()
+			e.NumFailures = len(e.ErrorMap)
+		} else {
+			e.NumFailures = r.I32()
+		}
+		e.WriteType = r.Str()
+		return e
+	case ErrCodeFunctionFailure:
+		return &RequestErrFunctionFailure{ErrorFrame: base, Keyspace: r.Str(), Function: r.Str(), ArgTypes: r.Strings()}
+	case ErrCodeCDCWriteFailure:
+		return &RequestErrCDCWriteFailure{ErrorFrame: base}
+	case ErrCodeCASWriteUnknown:
+		return &RequestErrCASWriteUnknown{ErrorFrame: base, Consistency: Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32()}
+	case ErrCodeInvalid, ErrCodeBootstrapping, ErrCodeConfig, ErrCodeCredentials, ErrCodeOverloaded, ErrCodeProtocol, ErrCodeServer, ErrCodeSyntax, ErrCodeTruncate, ErrCodeUnauthorized:
+		return &RequestErrServer{ErrorFrame: base}
+	default:
+		if rateLimitCode != 0 && code == rateLimitCode {
+			return &RequestErrRateLimitReached{ErrorFrame: base, OpType: OpType(r.U8()), RejectedByCoordinator: r.U8() != 0}
+		}
+		return &UnknownServerError{ErrorFrame: base}
+	}
 }

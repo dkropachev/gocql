@@ -12,8 +12,6 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 
 	"github.com/scylladb/gocql/v2/cql"
-
-	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
 // Scylla's no-FROM SELECT resolves selectors against virtual system.one_row.
@@ -69,10 +67,6 @@ func serverErrorCode(err error) int {
 	var server cql.RequestError
 	if errors.As(err, &server) {
 		return server.GetCode()
-	}
-	var frame frm.ErrorFrame
-	if errors.As(err, &frame) {
-		return frame.Code
 	}
 	return 0
 }

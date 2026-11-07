@@ -71,7 +71,7 @@ func errorFrameCases() []errorFrameCase {
 		return frm.FrameHeader{Version: frm.ProtoVersion(proto) | ProtoDirectionMask, Op: frm.OpError, Stream: 7}
 	}
 	base := func(proto byte, code int, msg string) frm.ErrorFrame {
-		return frm.ErrorFrame{FrameHeader: hdr(proto), Code: code, Message: msg}
+		return frm.NewErrorFrame(hdr(proto), code, msg)
 	}
 
 	var cases []errorFrameCase
@@ -84,7 +84,7 @@ func errorFrameCases() []errorFrameCase {
 			name:  "Plain" + strings.ToUpper(errCodeName(code)),
 			proto: ProtoVersion4,
 			body:  errBody(ProtoVersion4, code, "boom", nil),
-			want:  base(ProtoVersion4, code, "boom"),
+			want:  &RequestErrServer{ErrorFrame: base(ProtoVersion4, code, "boom")},
 		})
 	}
 

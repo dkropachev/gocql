@@ -375,135 +375,20 @@ func (f *Framer) ParseFrame() (frame Frame, err error) {
 }
 
 func (f *Framer) parseErrorFrame() Frame {
-	code := f.ReadInt()
-	msg := f.ReadString()
-
-	errD := frm.ErrorFrame{
-		FrameHeader: *f.Header,
-		Code:        code,
-		Message:     msg,
-	}
-
-	switch code {
-	case ErrCodeUnavailable:
-		cl := f.ReadConsistency()
-		required := f.ReadInt()
-		alive := f.ReadInt()
-		return &RequestErrUnavailable{
-			ErrorFrame:  errD,
-			Consistency: cl,
-			Required:    required,
-			Alive:       alive,
-		}
-	case ErrCodeWriteTimeout:
-		cl := f.ReadConsistency()
-		received := f.ReadInt()
-		blockfor := f.ReadInt()
-		writeType := f.ReadString()
-		return &RequestErrWriteTimeout{
-			ErrorFrame:  errD,
-			Consistency: cl,
-			Received:    received,
-			BlockFor:    blockfor,
-			WriteType:   writeType,
-		}
-	case ErrCodeReadTimeout:
-		cl := f.ReadConsistency()
-		received := f.ReadInt()
-		blockfor := f.ReadInt()
-		dataPresent := f.ReadByteValue()
-		return &RequestErrReadTimeout{
-			ErrorFrame:  errD,
-			Consistency: cl,
-			Received:    received,
-			BlockFor:    blockfor,
-			DataPresent: dataPresent,
-		}
-	case ErrCodeAlreadyExists:
-		ks := f.ReadString()
-		table := f.ReadString()
-		return &RequestErrAlreadyExists{
-			ErrorFrame: errD,
-			Keyspace:   ks,
-			Table:      table,
-		}
-	case ErrCodeUnprepared:
-		return &RequestErrUnprepared{
-			ErrorFrame:  errD,
-			StatementId: f.ReadShortBytesCopy(),
-		}
-	case ErrCodeReadFailure:
-		res := &RequestErrReadFailure{
-			ErrorFrame: errD,
-		}
-		res.Consistency = f.ReadConsistency()
-		res.Received = f.ReadInt()
-		res.BlockFor = f.ReadInt()
-		if f.Proto > ProtoVersion4 {
-			res.ErrorMap = f.readErrorMap()
-			res.NumFailures = len(res.ErrorMap)
-		} else {
-			res.NumFailures = f.ReadInt()
-		}
-		res.DataPresent = f.ReadByteValue() != 0
-
-		return res
-	case ErrCodeWriteFailure:
-		res := &RequestErrWriteFailure{
-			ErrorFrame: errD,
-		}
-		res.Consistency = f.ReadConsistency()
-		res.Received = f.ReadInt()
-		res.BlockFor = f.ReadInt()
-		if f.Proto > ProtoVersion4 {
-			res.ErrorMap = f.readErrorMap()
-			res.NumFailures = len(res.ErrorMap)
-		} else {
-			res.NumFailures = f.ReadInt()
-		}
-		res.WriteType = f.ReadString()
-		return res
-	case ErrCodeFunctionFailure:
-		res := &RequestErrFunctionFailure{
-			ErrorFrame: errD,
-		}
-		res.Keyspace = f.ReadString()
-		res.Function = f.ReadString()
-		res.ArgTypes = f.ReadStringList()
-		return res
-
-	case ErrCodeCDCWriteFailure:
-		res := &RequestErrCDCWriteFailure{
-			ErrorFrame: errD,
-		}
-		return res
-	case ErrCodeCASWriteUnknown:
-		res := &RequestErrCASWriteUnknown{
-			ErrorFrame: errD,
-		}
-		res.Consistency = f.ReadConsistency()
-		res.Received = f.ReadInt()
-		res.BlockFor = f.ReadInt()
-		return res
-	case ErrCodeInvalid, ErrCodeBootstrapping, ErrCodeConfig, ErrCodeCredentials, ErrCodeOverloaded,
-		ErrCodeProtocol, ErrCodeServer, ErrCodeSyntax, ErrCodeTruncate, ErrCodeUnauthorized:
-		// TODO(zariel): we should have some distinct types for these errors
-		return errD
-	default:
-		if f.RateLimitingErrorCode != 0 && code == f.RateLimitingErrorCode {
-			res := &RequestErrRateLimitReached{
-				ErrorFrame: errD,
-			}
-			res.OpType = OpType(f.ReadByteValue())
-			res.RejectedByCoordinator = f.ReadByteValue() != 0
-			return res
-		} else {
-			return &UnknownServerError{
-				ErrorFrame: errD,
-			}
-		}
-	}
+	return decodeServerError(framerErrorBody{f}, *f.Header, f.Proto, f.RateLimitingErrorCode).(Frame)
 }
+
+// framerErrorBody reads an ERROR body with a Framer, which panics on short
+// input like every other Framer read.
+type framerErrorBody struct{ f *Framer }
+
+func (r framerErrorBody) I32() int           { return r.f.ReadInt() }
+func (r framerErrorBody) U16() uint16        { return r.f.ReadShort() }
+func (r framerErrorBody) U8() byte           { return r.f.ReadByteValue() }
+func (r framerErrorBody) Str() string        { return r.f.ReadString() }
+func (r framerErrorBody) Strings() []string  { return r.f.ReadStringList() }
+func (r framerErrorBody) shortBytes() []byte { return r.f.ReadShortBytesCopy() }
+func (r framerErrorBody) errorMap() ErrorMap { return r.f.readErrorMap() }
 
 func (f *Framer) readErrorMap() (errMap ErrorMap) {
 	errMap = make(ErrorMap)

@@ -142,10 +142,10 @@ func TestResponse(t *testing.T) {
 					if !reflect.DeepEqual(got, tc.want) {
 						t.Fatalf("parsed %#v\nwant   %#v", got, tc.want)
 					}
-					// Every server error must surface as an error with the server's
-					// message, whatever its concrete type.
+					// Every server error must surface as an error ending with the
+					// server's message, whatever its concrete type.
 					e, ok := got.(error)
-					if !ok || e.Error() != messageOf(tc.want) {
+					if !ok || !strings.HasSuffix(e.Error(), ": "+messageOf(tc.want)) {
 						t.Fatalf("parsed frame %T is not an error carrying the server message", got)
 					}
 				})
@@ -738,7 +738,7 @@ func TestResponse(t *testing.T) {
 	})
 	t.Run("ServerErrorCode", func(t *testing.T) {
 		for _, err := range []error{
-			frm.ErrorFrame{Code: ErrCodeSyntax, Message: "syntax"},
+			&RequestErrServer{ErrorFrame: frm.ErrorFrame{Code: ErrCodeSyntax, Message: "syntax"}},
 			&RequestErrUnavailable{ErrorFrame: frm.ErrorFrame{Code: ErrCodeUnavailable, Message: "unavailable"}},
 			&RequestErrWriteTimeout{ErrorFrame: frm.ErrorFrame{Code: ErrCodeWriteTimeout, Message: "write timeout"}},
 			&RequestErrUnprepared{ErrorFrame: frm.ErrorFrame{Code: ErrCodeUnprepared, Message: "unprepared"}},

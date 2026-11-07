@@ -406,7 +406,7 @@ func TestSession(t *testing.T) {
 		}{
 			{
 				err: &transport.InternalProtocolError{
-					InternalFrame: frm.ErrorFrame{
+					InternalFrame: &frm.ErrorFrame{
 						Code:    0x10,
 						Message: "Invalid or unsupported protocol version (5); the lowest supported version is 3 and the greatest is 4",
 					},
@@ -415,13 +415,10 @@ func TestSession(t *testing.T) {
 			},
 			{
 				err: &transport.InternalProtocolError{
-					InternalFrame: frm.ErrorFrame{
-						FrameHeader: frm.FrameHeader{
-							Version: 0x83,
-						},
-						Code:    0x10,
-						Message: "Invalid or unsupported protocol version: 5",
-					},
+					InternalFrame: func() *frm.ErrorFrame {
+						f := frm.NewErrorFrame(frm.FrameHeader{Version: 0x83}, 0x10, "Invalid or unsupported protocol version: 5")
+						return &f
+					}(),
 				},
 				proto: protocol.ProtoVersion3,
 			},

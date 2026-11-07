@@ -539,53 +539,13 @@ func (p *TypedParser) errorMap() ErrorMap {
 	return out
 }
 func (p *TypedParser) ServerError(head frm.FrameHeader, rateLimitCode int) error {
-	code, msg := p.I32(), p.Str()
-	base := frm.ErrorFrame{FrameHeader: head, Code: code, Message: msg}
-	switch code {
-	case ErrCodeUnavailable:
-		return &RequestErrUnavailable{ErrorFrame: base, Consistency: Consistency(p.U16()), Required: p.I32(), Alive: p.I32()}
-	case ErrCodeWriteTimeout:
-		return &RequestErrWriteTimeout{ErrorFrame: base, Consistency: Consistency(p.U16()), Received: p.I32(), BlockFor: p.I32(), WriteType: p.Str()}
-	case ErrCodeReadTimeout:
-		return &RequestErrReadTimeout{ErrorFrame: base, Consistency: Consistency(p.U16()), Received: p.I32(), BlockFor: p.I32(), DataPresent: p.U8()}
-	case ErrCodeAlreadyExists:
-		return &RequestErrAlreadyExists{ErrorFrame: base, Keyspace: p.Str(), Table: p.Str()}
-	case ErrCodeUnprepared:
-		return &RequestErrUnprepared{ErrorFrame: base, StatementId: p.shortBytes()}
-	case ErrCodeReadFailure:
-		e := &RequestErrReadFailure{ErrorFrame: base, Consistency: Consistency(p.U16()), Received: p.I32(), BlockFor: p.I32()}
-		if p.Proto >= 5 {
-			e.ErrorMap = p.errorMap()
-			e.NumFailures = len(e.ErrorMap)
-		} else {
-			e.NumFailures = p.I32()
-		}
-		e.DataPresent = p.U8() != 0
-		return e
-	case ErrCodeWriteFailure:
-		e := &RequestErrWriteFailure{ErrorFrame: base, Consistency: Consistency(p.U16()), Received: p.I32(), BlockFor: p.I32()}
-		if p.Proto >= 5 {
-			e.ErrorMap = p.errorMap()
-			e.NumFailures = len(e.ErrorMap)
-		} else {
-			e.NumFailures = p.I32()
-		}
-		e.WriteType = p.Str()
-		return e
-	case ErrCodeFunctionFailure:
-		return &RequestErrFunctionFailure{ErrorFrame: base, Keyspace: p.Str(), Function: p.Str(), ArgTypes: p.Strings()}
-	case ErrCodeCDCWriteFailure:
-		return &RequestErrCDCWriteFailure{ErrorFrame: base}
-	case ErrCodeCASWriteUnknown:
-		return &RequestErrCASWriteUnknown{ErrorFrame: base, Consistency: Consistency(p.U16()), Received: p.I32(), BlockFor: p.I32()}
-	case ErrCodeInvalid, ErrCodeBootstrapping, ErrCodeConfig, ErrCodeCredentials, ErrCodeOverloaded, ErrCodeProtocol, ErrCodeServer, ErrCodeSyntax, ErrCodeTruncate, ErrCodeUnauthorized:
-		return base
-	default:
-		if rateLimitCode != 0 && code == rateLimitCode {
-			return &RequestErrRateLimitReached{ErrorFrame: base, OpType: OpType(p.U8()), RejectedByCoordinator: p.U8() != 0}
-		}
-		return &UnknownServerError{ErrorFrame: base}
-	}
+	// The decoder reads through an interface, which would move every parser
+	// to the heap; only an error response pays for a heap copy.
+	q := new(TypedParser)
+	*q = *p
+	err := decodeServerError(q, head, p.Proto, rateLimitCode)
+	*p = *q
+	return err
 }
 
 // budgetedMetadataCursor accounts all incremental metadata allocations before reading.

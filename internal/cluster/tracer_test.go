@@ -122,7 +122,7 @@ func TestTracer(t *testing.T) {
 
 			w.Trace(traceID)
 
-			if got := out.String(); !strings.HasPrefix(got, "Error: traces unavailable") || strings.Contains(got, "Tracing session") {
+			if got := out.String(); !strings.HasPrefix(got, "Error: server error: traces unavailable") || strings.Contains(got, "Tracing session") {
 				t.Fatalf("trace output = %q, want only the error", got)
 			}
 		})

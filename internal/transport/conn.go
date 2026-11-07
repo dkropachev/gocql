@@ -931,6 +931,12 @@ func (p *InternalProtocolError) Error() string {
 	return fmt.Sprintf("gocql: received unexpected frame on stream %d: %v", p.InternalFrame.Header().Stream, p.InternalFrame)
 }
 
+// Unwrap returns the frame when it is a server error.
+func (p *InternalProtocolError) Unwrap() error {
+	err, _ := p.InternalFrame.(error)
+	return err
+}
+
 func (c *Conn) InternalHeartBeat(ctx context.Context) {
 	if c.InternalCfg != nil && c.InternalCfg.TypedConfig != nil {
 		c.typedHeartbeat(ctx)
