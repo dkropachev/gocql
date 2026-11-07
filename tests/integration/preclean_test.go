@@ -7,6 +7,7 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -52,7 +53,7 @@ func dropLeftoverKeyspaces() error {
 		c.Metadata.AutomaticAgreement = false
 		c.Metadata.RefreshAfterAgreement = false
 	})
-	s, err := gocql.Connect(ctx, config)
+	s, err := connectOnceCredentialsWork(ctx, config)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
@@ -91,4 +92,24 @@ func dropLeftoverKeyspaces() error {
 		fmt.Fprintf(os.Stderr, "dropped %d keyspaces left by an earlier run\n", len(names))
 	}
 	return nil
+}
+
+// connectOnceCredentialsWork connects, retrying while the server rejects the
+// credentials. With PasswordAuthenticator, Cassandra creates its default
+// superuser a few seconds after the native transport starts accepting
+// connections, so a suite started right after make cassandra-start would see
+// every session refused. Any other error is returned at once.
+func connectOnceCredentialsWork(ctx context.Context, config gocql.Config) (*gocql.Session, error) {
+	for {
+		s, err := gocql.Connect(ctx, config)
+		var request cql.RequestError
+		if err == nil || !errors.As(err, &request) || request.GetCode() != cql.ErrCodeCredentials {
+			return s, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, err
+		case <-time.After(time.Second):
+		}
+	}
 }

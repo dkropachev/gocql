@@ -44,7 +44,7 @@ INTEGRATION_PKG ?= ./tests/integration
 # changes how long a hung run burns before it dumps.
 TEST_INTEGRATION_TIMEOUT ?= 10m
 TEST_INTEGRATION_TAGS ?= integration gocql_debug
-JVM_EXTRA_OPTS ?= -Dcassandra.test.fail_writes_ks=gocql_test_fail -Dcassandra.custom_query_handler_class=org.apache.cassandra.cql3.CustomPayloadMirroringQueryHandler
+JVM_EXTRA_OPTS ?= -Dcassandra.superuser_setup_delay_ms=0 -Dcassandra.test.fail_writes_ks=gocql_test_fail -Dcassandra.custom_query_handler_class=org.apache.cassandra.cql3.CustomPayloadMirroringQueryHandler
 
 # COVER_ARGS is appended to every `go test ... ./...` invocation below. It is
 # empty by default, so plain `make test-unit` behaves exactly as before; the
