@@ -32,7 +32,8 @@ The driver must provide:
 - Token, replica, shard, tablet, and LWT-aware routing; connection pools; topology
   and schema metadata; a control connection; events; retry and execution policies.
 - Cassandra and Scylla native-protocol support, compression, TLS, authentication,
-  cloud/SNI and client-route connectivity, tracing, and metrics.
+  client-route connectivity, tracing, and metrics. SNI endpoints, including
+  Scylla Cloud bundles, are not supported.
 - Direct migration of all 174 original integration/CCM tests, preserving their
   behavioral coverage and recording intentional API-semantic changes.
 
@@ -56,6 +57,7 @@ accidental Rust limitations are not requirements to reproduce.
 | Errors | Typed errors compatible with `errors.Is`/`errors.As`; malformed input returns errors rather than panics. |
 | Compatibility | Remove public `Query`, `Iter`, reflection-based `Batch`, `Scan`, `MapScan`, `Marshal`, and `Unmarshal`. |
 | Migration | Reuse correct lower-level machinery, but remove legacy execution paths after their callers migrate. |
+| SNI endpoints | Not supported, including Scylla Cloud bundles; the `scyllacloud` package is removed. |
 
 The current experimental `v2_*.go` files are implementation scaffolding. Their
 location in the root package is not the intended final internal organization.
@@ -420,7 +422,7 @@ remain separate from internal execution.
 
 ## 5. Module and package structure
 
-Use one new Go module. Keep optional cloud support in a subpackage. V2 should
+Use one new Go module. V2 should
 not depend on the old driver's standalone compressor module for its new data
 path; compression implementations and tests belong under the new module.
 Consolidate the benchmark module after migration rather than introducing more
@@ -555,9 +557,9 @@ not completion of the feature.
 | M0: design reviewed in this session | Completed ten sequential review-and-fix cycles, reconciled detailed API/implementation specs, and recorded API-semantic changes and package boundaries. Not a future implementation-agent task. | 33 findings fixed; no unresolved findings from those cycles. Reports and document hashes are retained in the individual design review reports. |
 | M1: stabilize foundations | Finish codec, wire, compression, hashing, protocol and ownership tests; enforce size/depth/count limits. | Goldens, cross-span cases, fuzz/race tests and copy-identity checks pass. |
 | M2: close runtime gaps | Fix metadata-generation races, TLS shard dialing, pool overrides, config behavior, discovery-disabled identities, and control/client-route typed queries. | Every exposed option works or is explicitly rejected; required features have no silent omissions. |
-| M3: finish API/test migration | Complete all 174 test mappings; migrate examples, helpers, cloud, tracing, topology and client routes. Review standalone public functions using the step below. Remove the old public API and unused legacy execution. | Standalone-function decisions are recorded; export/call-site audit and all package/build-tag compilations pass. |
+| M3: finish API/test migration | Complete all 174 test mappings; migrate examples, helpers, tracing, topology and client routes. Review standalone public functions using the step below. Remove the old public API and unused legacy execution. | Standalone-function decisions are recorded; export/call-site audit and all package/build-tag compilations pass. |
 | M4: extract internals | Move shared types, codecs, protocol, transport, pool, metadata, routing and execution in dependency order. Preserve useful test access through testkit. | No import cycles; unit and integration behavior unchanged by extraction. |
-| M5: verify complete matrix | Run full suites on one pinned final tree, including auth/socket/cloud/failure fixtures and race lanes. | Every baseline test has a real pass in a successful applicable lane; skips remain explicit. |
+| M5: verify complete matrix | Run full suites on one pinned final tree, including auth/socket/failure fixtures and race lanes. | Every baseline test has a real pass in a successful applicable lane; skips remain explicit. |
 | M6: performance and final review | Measure encoding, decoding, segmented containers, routing, transport and end-to-end paths; review cancellation and recovery independently. | Copy/allocation contracts met and requirement-by-requirement completion audit passes. |
 
 ### Current gaps to address first
@@ -577,7 +579,6 @@ not completion of the feature.
 - Leader-aware routing/tablet-v2 leader metadata is not implemented.
 - Ring/control topology and client-route queries still contain legacy execution.
 - Multiple discovery-disabled contact points can retain colliding empty host IDs.
-- Cloud TLS tests exposed a race in the test logger; repair the fixture and rerun.
 - Client-route integration migration remains unfinished; schema/routing and
   session/batch groups still need live verification.
 - Cassandra schema recreation needs an equivalent Java aggregate fixture rather
@@ -613,72 +614,6 @@ affected callers and examples, and verify the resulting public API compiles.
 Review affected ownership and encoding behavior so API cleanup preserves reuse
 of encoded inputs without introducing extra serialization or copies.
 
-### Bulk operations step: distribute work and form batches
-
-- [ ] Design, implement, and verify distribution of N queries across eligible
-  nodes and shards, with reusable primitives that let callers build their own
-  routers. Reconcile the design with the current exported API and reusable-query
-  amendment before adding public types or methods. Keep replica ownership lookup,
-  assignment/grouping, and execution scheduling as distinct responsibilities;
-  do not require the per-request load-balancing policy to own bulk distribution.
-
-Define the balancing objective and its trade-off with batch consolidation.
-Different replica sets can share a useful owner: if ten of twenty inputs share
-node X, they can be assigned to X without requiring identical replica sets.
-Choose that assignment only within the selected capacity and locality rules;
-maximizing overlap alone can overload X. Balance estimated work using encoded
-bytes, optional caller weights, and available queue/in-flight observations.
-Distinguish balancing this submission from estimating total cluster load, and
-coordinator load from replica/storage work. Expose estimates as estimates.
-
-The design and implementation must address:
-
-- Candidate ownership and eligibility: vnode and tablet replica/shard lookup,
-  native replica order and explicitly known leader identity, health, locality,
-  explicit host/shard pins, unknown tokens/tablets/partitioners, missing metadata,
-  and unknown shard IDs. Define unassigned results and permitted fallback or
-  waiting behavior; never silently drop inputs or invent placement.
-- Dynamic placement: tablet moves, splits/merges, leader changes, topology and
-  schema changes. Re-evaluate unsent work and safely retryable work against newly
-  learned metadata. No local snapshot/version check proves server freshness;
-  already submitted work must be handled using its execution status.
-- Capacity and fairness: host and shard budgets, heterogeneous query costs,
-  constrained candidate sets, concurrent submissions and reservation accounting,
-  starvation, synchronized choices across clients, bounded waiting, and
-  impossible assignments. Evaluate constrained-input-first assignment with
-  projected-load scoring and a bounded reward for filling compatible batches;
-  treat it as a heuristic rather than claiming optimal distribution.
-- Operation semantics: regular queries, deterministic LWT coordinator preference,
-  serial reads, and SC leader preference. State which constraints are mandatory
-  and when policy permits departing from a preference under failure or overload.
-  Preserve explicit ordering/dependencies for repeated partition keys; token
-  equality alone cannot establish partition-key identity.
-- Batch and SELECT compatibility: session/keyspace, batch kind, counters,
-  conditional partition/table restrictions, execution options, timestamps and
-  deadlines. Preserve caller-specified atomic units. Define bulk SELECT result
-  association, duplicates, ordering, limits and paging; SELECTs are not native
-  batch entries, and combining keys into IN must preserve promised semantics.
-- Ownership and execution: encode once and reuse canonical input bytes through
-  routing, batch assembly and safe retries, with explicit copy/lifetime rules.
-  Bound statement count, encoded batch bytes, queued/response memory and host/shard
-  concurrency. Handle oversized inputs, cancellation, draining and shutdown.
-- Failure reporting: retain input identities through assignment, batching and
-  splitting; report successful, unassigned and failed/uncertain work. Use existing
-  execution-status and idempotence rules for partial or ambiguous execution.
-  Bound retries and avoid multiplying retries across distribution and execution
-  layers or replaying the whole submission blindly.
-
-Completion gate: record the API and behavioral contract, implement the chosen
-scope, and supply examples plus focused correctness/race tests and allocation,
-copy and throughput benchmarks. Cover empty input, invalid limits, partial
-replica overlap, weighted skew, a hot shard, forced destinations, concurrent
-submissions, unavailable/unknown placement, migration/leader changes, repeated
-keys, LWT/SC behavior, incompatible batches, oversized inputs, cancellation and
-partial/ambiguous failures. Demonstrate that inputs are accounted for without
-silent loss or unintended duplicate submission. Coordinate routing/execution
-work with steps 6/7, public API review with step 13, and acceptance evidence with
-steps 14/15/17; adding this task does not mark it implemented or verified.
-
 ## 8. Verification plan
 
 Track each original test by identity in
@@ -691,7 +626,7 @@ earlier baseline or a compile-only run does not prove v2 correctness.
 | Stable Scylla v4 | Routing/LWT, tablets, shards, pools, metadata/events, normal statements and paging. |
 | Scylla development v4 | SELECT without FROM and newer server capabilities. |
 | Cassandra v4 and v5 | Protocol-specific options, segmentation, large responses, metadata IDs, server errors, compression. |
-| TLS | Client certificates, trusted identity, ticket resumption, shard ports, cloud SNI, per-host dial hooks. |
+| TLS | Client certificates, trusted identity, ticket resumption, shard ports, per-host dial hooks. |
 | Authentication | A server enforcing authentication; successful and rejected credentials. |
 | Maintenance socket/CCM | Unix transport and actual node stop/start lifecycle. |
 | Injected server fixtures | Custom payload echo, write failures, incomplete-peer responses without mutating system tables. |
@@ -872,3 +807,74 @@ unchanged. Agent 09 must map these recorded API-semantic choices to affected
 original assertions. The future execution sequence now contains 17
 implementation agents, beginning with wire/protocol foundations; design
 reconciliation is not a queued task.
+
+## 13. Deferred items
+
+These items are out of scope for this driver version. Each gets its own GitHub
+issue once this version is released, not earlier; until then they are not
+release blockers and no work is scheduled for them.
+
+### Bulk operations: distribute work and form batches
+
+- Design, implement, and verify distribution of N queries across eligible
+  nodes and shards, with reusable primitives that let callers build their own
+  routers. Reconcile the design with the current exported API and reusable-query
+  amendment before adding public types or methods. Keep replica ownership lookup,
+  assignment/grouping, and execution scheduling as distinct responsibilities;
+  do not require the per-request load-balancing policy to own bulk distribution.
+
+Define the balancing objective and its trade-off with batch consolidation.
+Different replica sets can share a useful owner: if ten of twenty inputs share
+node X, they can be assigned to X without requiring identical replica sets.
+Choose that assignment only within the selected capacity and locality rules;
+maximizing overlap alone can overload X. Balance estimated work using encoded
+bytes, optional caller weights, and available queue/in-flight observations.
+Distinguish balancing this submission from estimating total cluster load, and
+coordinator load from replica/storage work. Expose estimates as estimates.
+
+The design and implementation must address:
+
+- Candidate ownership and eligibility: vnode and tablet replica/shard lookup,
+  native replica order and explicitly known leader identity, health, locality,
+  explicit host/shard pins, unknown tokens/tablets/partitioners, missing metadata,
+  and unknown shard IDs. Define unassigned results and permitted fallback or
+  waiting behavior; never silently drop inputs or invent placement.
+- Dynamic placement: tablet moves, splits/merges, leader changes, topology and
+  schema changes. Re-evaluate unsent work and safely retryable work against newly
+  learned metadata. No local snapshot/version check proves server freshness;
+  already submitted work must be handled using its execution status.
+- Capacity and fairness: host and shard budgets, heterogeneous query costs,
+  constrained candidate sets, concurrent submissions and reservation accounting,
+  starvation, synchronized choices across clients, bounded waiting, and
+  impossible assignments. Evaluate constrained-input-first assignment with
+  projected-load scoring and a bounded reward for filling compatible batches;
+  treat it as a heuristic rather than claiming optimal distribution.
+- Operation semantics: regular queries, deterministic LWT coordinator preference,
+  serial reads, and SC leader preference. State which constraints are mandatory
+  and when policy permits departing from a preference under failure or overload.
+  Preserve explicit ordering/dependencies for repeated partition keys; token
+  equality alone cannot establish partition-key identity.
+- Batch and SELECT compatibility: session/keyspace, batch kind, counters,
+  conditional partition/table restrictions, execution options, timestamps and
+  deadlines. Preserve caller-specified atomic units. Define bulk SELECT result
+  association, duplicates, ordering, limits and paging; SELECTs are not native
+  batch entries, and combining keys into IN must preserve promised semantics.
+- Ownership and execution: encode once and reuse canonical input bytes through
+  routing, batch assembly and safe retries, with explicit copy/lifetime rules.
+  Bound statement count, encoded batch bytes, queued/response memory and host/shard
+  concurrency. Handle oversized inputs, cancellation, draining and shutdown.
+- Failure reporting: retain input identities through assignment, batching and
+  splitting; report successful, unassigned and failed/uncertain work. Use existing
+  execution-status and idempotence rules for partial or ambiguous execution.
+  Bound retries and avoid multiplying retries across distribution and execution
+  layers or replaying the whole submission blindly.
+
+Completion gate: record the API and behavioral contract, implement the chosen
+scope, and supply examples plus focused correctness/race tests and allocation,
+copy and throughput benchmarks. Cover empty input, invalid limits, partial
+replica overlap, weighted skew, a hot shard, forced destinations, concurrent
+submissions, unavailable/unknown placement, migration/leader changes, repeated
+keys, LWT/SC behavior, incompatible batches, oversized inputs, cancellation and
+partial/ambiguous failures. Demonstrate that inputs are accounted for without
+silent loss or unintended duplicate submission. Recording this item does not
+mark it implemented or verified.
