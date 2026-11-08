@@ -42,7 +42,7 @@ func TestFixture(t *testing.T) {
 		config := createV2ClusterWithout(fixtureTLS, func(c *gocql.ConfigBuilder) {
 			noCertificate := fixtureClientTLS()
 			noCertificate.Certificates = nil
-			c.WithTLS(fixtureTLSConfig(noCertificate))
+			c.WithTLS(gocql.StaticTLS(fixtureTLSConfig(noCertificate)))
 		})
 		rejected, err := gocql.Connect(context.Background(), mustBuild(t, config))
 		if err == nil {

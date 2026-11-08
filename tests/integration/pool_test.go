@@ -319,7 +319,7 @@ func TestPool(t *testing.T) {
 						tlsCalls.Add(1)
 						return nil
 					}
-					config.WithTLS(fixtureTLSConfig(base))
+					config.WithTLS(gocql.StaticTLS(fixtureTLSConfig(base)))
 				}
 				s := createV2SessionFromConfig(config, t, false)
 				defer s.Close()

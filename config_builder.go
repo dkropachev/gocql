@@ -4,7 +4,6 @@
 package gocql
 
 import (
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/netip"
@@ -114,7 +113,7 @@ func (b *ConfigBuilder) Build() (Config, error) {
 	}
 	if settings.TLSSource != nil {
 		if settings.TLS = settings.TLSSource.TLSConfig(); settings.TLS == nil {
-			errs = append(errs, &cqlerr.ValidationError{Field: "WithTLSSource(...)", Err: errors.New("source returned no config")})
+			errs = append(errs, &cqlerr.ValidationError{Field: "WithTLS(...)", Err: errors.New("source returned no config")})
 		}
 	}
 	if settings.ClientRoutes != nil && !b.has("advanced shard awareness") {
@@ -159,19 +158,14 @@ func (b *ConfigBuilder) WithAuth(provider auth.Provider) *ConfigBuilder {
 	return b.set("auth", "WithAuth(...)", provider != nil, "provider is required", func() { b.settings.Auth = provider })
 }
 
-// WithTLS encrypts every connection with config, which is copied. Unless config
-// skips verification or names a server, each connection verifies the node's
-// IP address. It replaces WithTLSSource. Default plaintext.
-func (b *ConfigBuilder) WithTLS(config *tls.Config) *ConfigBuilder {
-	return b.set("tls", "WithTLS(...)", config != nil, "config is required", func() { b.settings.TLS, b.settings.TLSSource = config.Clone(), nil })
-}
-
-// WithTLSSource encrypts every connection with the configuration source
-// returns when the connection is dialed, so the configuration can change while
-// the session runs; see TLSSource. Build validates the configuration source
-// returns at that time. It replaces WithTLS.
-func (b *ConfigBuilder) WithTLSSource(source TLSSource) *ConfigBuilder {
-	return b.set("tls", "WithTLSSource(...)", source != nil, "source is required", func() { b.settings.TLS, b.settings.TLSSource = nil, source })
+// WithTLS encrypts every connection with the configuration source returns
+// when the connection is dialed: StaticTLS for a fixed configuration,
+// TLSHolder or NewTLSFiles for one that changes while the session runs. Build
+// validates the configuration source returns at that time. Unless it skips
+// verification or names a server, each connection verifies the node's IP
+// address. Default plaintext.
+func (b *ConfigBuilder) WithTLS(source TLSSource) *ConfigBuilder {
+	return b.set("tls", "WithTLS(...)", source != nil, "source is required", func() { b.settings.TLSSource = source })
 }
 
 // WithProtocolVersion pins the native protocol version. Default ProtocolAuto, or

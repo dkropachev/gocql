@@ -124,31 +124,27 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("TLSCopiedOnSet", func(t *testing.T) {
 		config := &tls.Config{ServerName: "before"}
-		b := NewConfig("h").WithTLS(config)
+		b := NewConfig("h").WithTLS(StaticTLS(config))
 		config.ServerName = "after"
 		if got := mustBuildConfig(t, b).settings.TLS.ServerName; got != "before" {
-			t.Fatalf("ServerName = %q, want the value at WithTLS()", got)
+			t.Fatalf("ServerName = %q, want the value at StaticTLS()", got)
 		}
 	})
 
-	t.Run("TLSSource", func(t *testing.T) {
+	t.Run("TLS", func(t *testing.T) {
 		holder := NewTLSHolder(&tls.Config{ServerName: "node"})
-		c := mustBuildConfig(t, NewConfig("h").WithTLS(&tls.Config{ServerName: "static"}).WithTLSSource(holder)).settings
+		c := mustBuildConfig(t, NewConfig("h").WithTLS(StaticTLS(&tls.Config{ServerName: "static"})).WithTLS(holder)).settings
 		if c.TLSSource != holder || c.TLS == nil || c.TLS.ServerName != "node" {
-			t.Fatal("WithTLSSource did not replace WithTLS or validate the source's config")
-		}
-		c = mustBuildConfig(t, NewConfig("h").WithTLSSource(holder).WithTLS(&tls.Config{ServerName: "static"})).settings
-		if c.TLSSource != nil || c.TLS.ServerName != "static" {
-			t.Fatal("WithTLS did not replace WithTLSSource")
+			t.Fatal("the last WithTLS did not win or its config was not validated")
 		}
 		for name, tc := range map[string]struct {
 			b    *ConfigBuilder
 			want string
 		}{
-			"Nil":              {NewConfig("h").WithTLSSource(nil), "source is required"},
-			"NoConfig":         {NewConfig("h").WithTLSSource(NewTLSHolder(nil)), "returned no config"},
-			"UnixSocket":       {NewConfig("/var/lib/scylla/cql.m").WithTLSSource(holder), "Unix TLS"},
-			"UnverifiedRoutes": {NewConfig("h").WithClientRoutes(NewClientRoutes("c").WithTLS()).WithTLSSource(NewTLSHolder(&tls.Config{InsecureSkipVerify: true})), "client routes TLS"},
+			"Nil":              {NewConfig("h").WithTLS(nil), "source is required"},
+			"NoConfig":         {NewConfig("h").WithTLS(StaticTLS(nil)), "returned no config"},
+			"UnixSocket":       {NewConfig("/var/lib/scylla/cql.m").WithTLS(holder), "Unix TLS"},
+			"UnverifiedRoutes": {NewConfig("h").WithClientRoutes(NewClientRoutes("c").WithTLS()).WithTLS(NewTLSHolder(&tls.Config{InsecureSkipVerify: true})), "client routes TLS"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				if _, err := tc.b.Build(); err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -166,7 +162,7 @@ func TestConfigBuilder(t *testing.T) {
 		if _, err := NewConfig("/var/lib/scylla/cql.m").WithProtocolVersion(Protocol4).Build(); err == nil {
 			t.Fatal("explicit protocol 4 on a Unix socket was accepted")
 		}
-		if _, err := NewConfig("/var/lib/scylla/cql.m").WithTLS(&tls.Config{}).Build(); err == nil {
+		if _, err := NewConfig("/var/lib/scylla/cql.m").WithTLS(StaticTLS(&tls.Config{})).Build(); err == nil {
 			t.Fatal("TLS on a Unix socket was accepted")
 		}
 	})

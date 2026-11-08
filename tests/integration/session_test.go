@@ -184,7 +184,7 @@ func withSessionCache(cache tls.ClientSessionCache, verify func(tls.ConnectionSt
 		base := fixtureClientTLS()
 		base.ClientSessionCache = cache
 		base.VerifyConnection = verify
-		b.WithTLS(fixtureTLSConfig(base))
+		b.WithTLS(gocql.StaticTLS(fixtureTLSConfig(base)))
 	}
 }
 
@@ -1006,7 +1006,7 @@ func TestSession(t *testing.T) {
 			if !roots.AppendCertsFromPEM(ca) {
 				t.Fatal("invalid root CA")
 			}
-			config.WithTLS(&tls.Config{RootCAs: roots, Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12, InsecureSkipVerify: true, VerifyConnection: func(state tls.ConnectionState) error {
+			config.WithTLS(gocql.StaticTLS(&tls.Config{RootCAs: roots, Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12, InsecureSkipVerify: true, VerifyConnection: func(state tls.ConnectionState) error {
 				if len(state.PeerCertificates) == 0 {
 					return fmt.Errorf("missing fixture server certificate")
 				}
@@ -1023,7 +1023,7 @@ func TestSession(t *testing.T) {
 					}
 				}
 				return fmt.Errorf("unexpected fixture server identity")
-			}})
+			}}))
 			// The existing fixture identifies nodes with a verified SPIFFE URI rather than IP SANs.
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)

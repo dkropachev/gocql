@@ -469,7 +469,7 @@ func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*gocql.Con
 			b.WithPort(9142)
 		}
 		if skip&fixtureTLS == 0 {
-			b.WithTLS(fixtureTLSConfig(fixtureClientTLS()))
+			b.WithTLS(gocql.StaticTLS(fixtureTLSConfig(fixtureClientTLS())))
 		}
 	}
 	for _, opt := range opts {

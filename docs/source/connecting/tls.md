@@ -1,7 +1,15 @@
 # TLS
 
-Pass a `crypto/tls.Config` with trusted `RootCAs`, optional client certificates
-and a minimum TLS version to `ConfigBuilder.WithTLS`; it is copied when called.
+`ConfigBuilder.WithTLS` takes a `TLSSource`. For a fixed configuration, wrap a
+`crypto/tls.Config` with trusted `RootCAs`, optional client certificates and a
+minimum TLS version in `gocql.StaticTLS`, which copies it:
+
+```go
+config, err := gocql.NewConfig("10.0.0.1").
+	WithTLS(gocql.StaticTLS(&tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS13})).
+	Build()
+```
+
 Standard verification remains enabled: unless the config sets `ServerName` or
 skips verification, each connection verifies the node's IP address. One
 configuration serves every node; customize checks with `VerifyConnection`.
@@ -15,13 +23,12 @@ the standalone streaming command has an explicit `-tls-uri` example.
 
 ## Changing TLS while sessions run
 
-`ConfigBuilder.WithTLSSource` takes a `TLSSource` instead of a fixed config.
 The driver calls its `TLSConfig` method on every dial and uses the result for
 that connection: reconnects, pool refills, new shards and the control
 connection all pick up the current config. Connections that are already open
 keep the config they were dialed with until they close; nothing closes them
-early. `Build` validates the config the source returns at that time, the same
-way as `WithTLS`. A source must never return nil; a dial that gets nil fails
+early. `Build` validates the config the source returns at that time. A source
+must never return nil; a dial that gets nil fails
 instead of falling back to plaintext.
 
 `TLSHolder` is a source you update by hand. One holder can serve several
@@ -29,7 +36,7 @@ sessions:
 
 ```go
 holder := gocql.NewTLSHolder(&tls.Config{MinVersion: tls.VersionTLS13, RootCAs: roots})
-config, err := gocql.NewConfig("10.0.0.1").WithTLSSource(holder).Build()
+config, err := gocql.NewConfig("10.0.0.1").WithTLS(holder).Build()
 // later, for example after a rotation event:
 err = holder.Update(newConfig) // copied; new dials use it
 ```
@@ -42,7 +49,7 @@ files, err := gocql.NewTLSFiles(&tls.Config{MinVersion: tls.VersionTLS13}, gocql
 	KeyFile:  "/etc/scylla-client/tls.key",
 	CAFile:   "/etc/scylla-client/ca.crt",
 })
-config, err := gocql.NewConfig("10.0.0.1").WithTLSSource(files).Build()
+config, err := gocql.NewConfig("10.0.0.1").WithTLS(files).Build()
 ```
 
 The files replace `Certificates` and `RootCAs` of the base config, or of TLS

@@ -120,7 +120,7 @@ func run() (resultErr error) {
 				return fmt.Errorf("missing expected TLS URI %q", *uri)
 			}
 		}
-		builder.WithTLS(tlsConfig)
+		builder.WithTLS(gocql.StaticTLS(tlsConfig))
 	}
 	cfg, err := builder.Build()
 	if err != nil {

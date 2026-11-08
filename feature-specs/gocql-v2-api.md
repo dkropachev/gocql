@@ -1498,9 +1498,9 @@ metrics/history/logger and timestamp generation. TLS uses Go crypto/tls,
 validates host/CA by default, and never downgrades after a TLS failure. Each
 auth exchange is per connection; providers are concurrency-safe. One TLS
 configuration serves every node; without an explicit ServerName each
-connection verifies the node's IP address. `ConfigBuilder.WithTLSSource`
+connection verifies the node's IP address. `ConfigBuilder.WithTLS`
 takes a `TLSSource` (`TLSConfig() *tls.Config`) that the dialer asks for the
-config of every new connection; open connections keep theirs, and a nil result
+config of every new connection; `StaticTLS(*tls.Config)` serves a fixed copy; open connections keep theirs, and a nil result
 fails the dial. Build validates the source's config at that time. `TLSHolder`
 (`NewTLSHolder`, `Update`) is replaced by hand and can serve several sessions;
 `TLSFileSource` (`NewTLSFiles(base, TLSFiles)`) loads the client

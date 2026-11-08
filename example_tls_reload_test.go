@@ -23,7 +23,7 @@ func ExampleNewTLSFiles() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	config, err := gocql.NewConfig("192.168.1.1", "192.168.1.2").WithTLSSource(files).Build()
+	config, err := gocql.NewConfig("192.168.1.1", "192.168.1.2").WithTLS(files).Build()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func ExampleNewTLSFiles() {
 // Replace the whole TLS configuration of running sessions.
 func ExampleTLSHolder() {
 	holder := gocql.NewTLSHolder(&tls.Config{MinVersion: tls.VersionTLS13})
-	config, err := gocql.NewConfig("192.168.1.1").WithTLSSource(holder).Build()
+	config, err := gocql.NewConfig("192.168.1.1").WithTLS(holder).Build()
 	if err != nil {
 		log.Fatal(err)
 	}
