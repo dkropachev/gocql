@@ -13,42 +13,53 @@ Per-host hooks honor cancellation and preserve shard/source selection. Custom
 URI identity verification must validate both the CA chain and expected identity;
 the standalone streaming command has an explicit `-tls-uri` example.
 
-## Changing TLS on a running session
+## Changing TLS while sessions run
 
-`Session.UpdateTLS` replaces the whole TLS configuration: certificates, CAs,
-versions, cipher suites and callbacks. It is copied, checked like
-`ConfigBuilder.WithTLS`, and used by every connection dialed afterwards:
-reconnects, pool refills, new shards and the control connection. Connections
-that are already open keep the configuration they were dialed with until they
-close; nothing closes them early. A session created without TLS cannot start
-using it, and TLS cannot be turned off.
+`ConfigBuilder.WithTLSSource` takes a `TLSSource` instead of a fixed config.
+The driver calls its `TLSConfig` method on every dial and uses the result for
+that connection: reconnects, pool refills, new shards and the control
+connection all pick up the current config. Connections that are already open
+keep the config they were dialed with until they close; nothing closes them
+early. `Build` validates the config the source returns at that time, the same
+way as `WithTLS`. A source must never return nil; a dial that gets nil fails
+instead of falling back to plaintext.
 
-To reload certificates from disk, pass their paths to `ConfigBuilder.WithTLSFiles`:
+`TLSHolder` is a source you update by hand. One holder can serve several
+sessions:
 
 ```go
-config, err := gocql.NewConfig("10.0.0.1").
-	WithTLS(&tls.Config{MinVersion: tls.VersionTLS13}).
-	WithTLSFiles(gocql.TLSFiles{
-		CertFile: "/etc/scylla-client/tls.crt",
-		KeyFile:  "/etc/scylla-client/tls.key",
-		CAFile:   "/etc/scylla-client/ca.crt",
-	}).
-	Build()
+holder := gocql.NewTLSHolder(&tls.Config{MinVersion: tls.VersionTLS13, RootCAs: roots})
+config, err := gocql.NewConfig("10.0.0.1").WithTLSSource(holder).Build()
+// later, for example after a rotation event:
+err = holder.Update(newConfig) // copied; new dials use it
 ```
 
-The files replace `Certificates` and `RootCAs` of the `TLS` config, or of TLS
-1.2+ defaults without it. `Build` fails if they cannot be loaded. The session
-then checks their content every `Interval` (one minute by default), including
-Kubernetes secret volumes that swap a symlink, and applies a change to new
-connections. A failed reload, such as a key that does not match its
-certificate yet, keeps the current files, is logged once, and is retried on the
-next check. A config passed to `UpdateTLS` later replaces the settings the files
-apply to; the files still supply the certificate and CA.
+`TLSFileSource` reloads the client certificate, key and CA from PEM files:
+
+```go
+files, err := gocql.NewTLSFiles(&tls.Config{MinVersion: tls.VersionTLS13}, gocql.TLSFiles{
+	CertFile: "/etc/scylla-client/tls.crt",
+	KeyFile:  "/etc/scylla-client/tls.key",
+	CAFile:   "/etc/scylla-client/ca.crt",
+})
+config, err := gocql.NewConfig("10.0.0.1").WithTLSSource(files).Build()
+```
+
+The files replace `Certificates` and `RootCAs` of the base config, or of TLS
+1.2+ defaults when the base is nil. `NewTLSFiles` fails if they cannot be
+loaded. The source runs no goroutine: a dial checks the files when `Interval`
+(one minute by default) has passed since the last check, and compares their
+content, so Kubernetes secret volumes that swap a symlink are seen. A check that
+fails, such as a key that does not match its certificate yet, keeps the current
+files; `Err` reports it and the next due check retries. `Reload` checks
+immediately.
 
 A resumed TLS 1.3 connection does not send its client certificate again. When
-the file certificate changes and the config has a `ClientSessionCache`, the
-session switches to a new cache so no connection resumes the old identity.
-After `UpdateTLS` with a new identity, pass a new `ClientSessionCache` too.
+the file certificate changes and the base has a `ClientSessionCache`, the
+source switches to a new cache so no connection resumes the old identity. When
+you give a holder a new identity, give it a new `ClientSessionCache` too.
 
-`GetClientCertificate` still works for rotating only the client certificate on
-every handshake; it cannot be combined with `TLSFiles.CertFile`.
+Any type with a `TLSConfig() *tls.Config` method is a source, for example one
+fed by Vault or cert-manager. `GetClientCertificate` in a fixed config still
+rotates only the client certificate on every handshake; it cannot be combined
+with `TLSFiles.CertFile`.

@@ -131,57 +131,31 @@ func TestConfigBuilder(t *testing.T) {
 		}
 	})
 
-	t.Run("TLSFiles", func(t *testing.T) {
-		pki := TLSFiles{CertFile: "testdata/pki/gocql.crt", KeyFile: "testdata/pki/gocql.key", CAFile: "testdata/pki/ca.crt"}
-		for _, tc := range []struct {
-			name  string
-			files TLSFiles
-			want  string
+	t.Run("TLSSource", func(t *testing.T) {
+		holder := NewTLSHolder(&tls.Config{ServerName: "node"})
+		c := mustBuildConfig(t, NewConfig("h").WithTLS(&tls.Config{ServerName: "static"}).WithTLSSource(holder)).settings
+		if c.TLSSource != holder || c.TLS == nil || c.TLS.ServerName != "node" {
+			t.Fatal("WithTLSSource did not replace WithTLS or validate the source's config")
+		}
+		c = mustBuildConfig(t, NewConfig("h").WithTLSSource(holder).WithTLS(&tls.Config{ServerName: "static"})).settings
+		if c.TLSSource != nil || c.TLS.ServerName != "static" {
+			t.Fatal("WithTLS did not replace WithTLSSource")
+		}
+		for name, tc := range map[string]struct {
+			b    *ConfigBuilder
+			want string
 		}{
-			{"CertWithoutKey", TLSFiles{CertFile: pki.CertFile}, "set together"},
-			{"Empty", TLSFiles{}, "pair or a CA file is required"},
-			{"NegativeInterval", TLSFiles{CAFile: pki.CAFile, Interval: -time.Second}, "must not be negative"},
-			{"MissingFile", TLSFiles{CAFile: "testdata/pki/missing.crt"}, "missing.crt"},
-			{"MismatchedPair", TLSFiles{CertFile: pki.CertFile, KeyFile: "testdata/pki/cassandra.key"}, "cert and key"},
-			{"NotPEM", TLSFiles{CAFile: "testdata/pki/ca.cnf"}, "no PEM certificates"},
+			"Nil":              {NewConfig("h").WithTLSSource(nil), "source is required"},
+			"NoConfig":         {NewConfig("h").WithTLSSource(NewTLSHolder(nil)), "returned no config"},
+			"UnixSocket":       {NewConfig("/var/lib/scylla/cql.m").WithTLSSource(holder), "Unix TLS"},
+			"UnverifiedRoutes": {NewConfig("h").WithClientRoutes(NewClientRoutes("c").WithTLS()).WithTLSSource(NewTLSHolder(&tls.Config{InsecureSkipVerify: true})), "client routes TLS"},
 		} {
-			t.Run(tc.name, func(t *testing.T) {
-				if _, err := NewConfig("h").WithTLSFiles(tc.files).Build(); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Run(name, func(t *testing.T) {
+				if _, err := tc.b.Build(); err == nil || !strings.Contains(err.Error(), tc.want) {
 					t.Fatalf("Build = %v, want an error containing %q", err, tc.want)
 				}
 			})
 		}
-
-		t.Run("AppliedOverTLS", func(t *testing.T) {
-			base := &tls.Config{ServerName: "node", MinVersion: tls.VersionTLS13}
-			c := mustBuildConfig(t, NewConfig("h").WithTLSFiles(pki).WithTLS(base)).settings
-			if c.TLS.ServerName != "node" || c.TLS.MinVersion != tls.VersionTLS13 || len(c.TLS.Certificates) != 1 || c.TLS.RootCAs == nil {
-				t.Fatal("files were not applied over the TLS settings")
-			}
-			if c.TLSFilesBase == nil || c.TLSFilesBase.ServerName != "node" || len(c.TLSFilesBase.Certificates) != 0 {
-				t.Fatal("the base for reloads is not the TLS config")
-			}
-		})
-
-		t.Run("DefaultsWithoutTLS", func(t *testing.T) {
-			c := mustBuildConfig(t, NewConfig("h").WithTLSFiles(TLSFiles{CAFile: pki.CAFile})).settings
-			if c.TLS == nil || c.TLS.MinVersion != tls.VersionTLS12 || c.TLS.RootCAs == nil || len(c.TLS.Certificates) != 0 {
-				t.Fatal("CA-only files without TLS did not build a TLS 1.2+ config")
-			}
-		})
-
-		t.Run("GetClientCertificateConflicts", func(t *testing.T) {
-			base := &tls.Config{GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) { return nil, nil }}
-			if _, err := NewConfig("h").WithTLS(base).WithTLSFiles(pki).Build(); err == nil || !strings.Contains(err.Error(), "GetClientCertificate") {
-				t.Fatalf("Build = %v", err)
-			}
-		})
-
-		t.Run("UnixSocketRejected", func(t *testing.T) {
-			if _, err := NewConfig("/var/lib/scylla/cql.m").WithTLSFiles(TLSFiles{CAFile: pki.CAFile}).Build(); err == nil {
-				t.Fatal("TLS files on a Unix socket were accepted")
-			}
-		})
 	})
 
 	t.Run("UnixSocketInfersProtocolAndDiscovery", func(t *testing.T) {

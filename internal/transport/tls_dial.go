@@ -27,7 +27,6 @@ import (
 
 	"net"
 	"net/netip"
-	"sync/atomic"
 
 	"slices"
 	"strconv"
@@ -37,17 +36,14 @@ import (
 
 type InternalV2TLSHostDialer struct {
 	InternalUnixHostID func() UUID
-	// InternalTLS, when set and non-nil, is the session's current TLS config;
-	// it replaces InternalConfig.TLS so a running session can change it.
-	InternalTLS    *atomic.Pointer[tls.Config]
-	InternalConfig Config
+	InternalConfig     Config
 }
 
 func (d *InternalV2TLSHostDialer) InternalSelectedTLS(ctx context.Context, host HostSnapshot) (*tls.Config, error) {
 	c := d.InternalConfig.TLS
-	if d.InternalTLS != nil {
-		if current := d.InternalTLS.Load(); current != nil {
-			c = current
+	if source := d.InternalConfig.TLSSource; source != nil {
+		if c = source.TLSConfig(); c == nil {
+			return nil, typeValidation("TLS source", "returned no config")
 		}
 	}
 	if c != nil {

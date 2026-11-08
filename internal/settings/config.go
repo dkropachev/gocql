@@ -34,10 +34,9 @@ type Config struct {
 	Logger            logging.StdLogger
 	DialHost          func(context.Context, implEndpoint.DialTarget) (net.Conn, error)
 	TLS               *tls.Config
-	// TLSFiles, when set, reloads the certificate and CA in TLS from files;
-	// TLSFilesBase is the TLS config those files are applied to.
-	TLSFiles                                          *TLSFiles
-	TLSFilesBase                                      *tls.Config
+	// TLSSource, when set, supplies TLS for every dial; TLS then holds its
+	// config at Build, for validation.
+	TLSSource                                         TLSSource
 	HostFilter                                        func(HostSnapshot) bool
 	ClientRoutes                                      *ClientRoutesOptions
 	DefaultProfile                                    *Profile
@@ -88,6 +87,7 @@ const (
 
 type IdentityOptions struct{ DriverName, DriverVersion, ApplicationName, ApplicationVersion, ClientID string }
 type ClientRoutesOptions = connectivity.ClientRoutesOptions
+type TLSSource = connectivity.TLSSource
 
 func DefaultConfig(contactPoints ...string) Config {
 	profile := InternalDefaultProfile()
@@ -222,11 +222,6 @@ func InternalSnapshotConfig(config Config) Config {
 	config.Metadata.Keyspaces = append([]string(nil), config.Metadata.Keyspaces...)
 	if config.TLS != nil {
 		config.TLS = InternalCloneV2TLSConfig(config.TLS)
-	}
-	if config.TLSFiles != nil {
-		files := *config.TLSFiles
-		config.TLSFiles = &files
-		config.TLSFilesBase = InternalCloneV2TLSConfig(config.TLSFilesBase)
 	}
 	if config.ClientRoutes != nil {
 		routes := *config.ClientRoutes

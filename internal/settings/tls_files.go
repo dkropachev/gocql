@@ -9,52 +9,15 @@ import (
 	"crypto/x509"
 	"encoding/binary"
 	"os"
-	"time"
 )
 
-// TLSFiles names the PEM files a session loads its client certificate and CA
-// from, and reloads when their content changes.
-type TLSFiles struct {
-	// CertFile and KeyFile hold the client certificate chain and its private
-	// key. Set both or neither.
-	CertFile, KeyFile string
-	// CAFile holds the CA certificates that verify nodes. It replaces RootCAs.
-	CAFile string
-	// Interval is how often the files are checked. Zero means one minute.
-	Interval time.Duration
-}
-
-// DefaultTLSFilesInterval is the poll period of a zero TLSFiles.Interval.
-const DefaultTLSFilesInterval = time.Minute
-
-// Check reports why files cannot be used, or "".
-func (files TLSFiles) Check() string {
-	switch {
-	case (files.CertFile == "") != (files.KeyFile == ""):
-		return "cert and key files must be set together"
-	case files.CertFile == "" && files.CAFile == "":
-		return "a cert and key pair or a CA file is required"
-	case files.Interval < 0:
-		return "interval must not be negative"
-	}
-	return ""
-}
-
-// PollInterval is the effective poll period.
-func (files TLSFiles) PollInterval() time.Duration {
-	if files.Interval == 0 {
-		return DefaultTLSFilesInterval
-	}
-	return files.Interval
-}
-
-// TLSFilesContent is one read of a TLSFiles set.
+// TLSFilesContent is one read of a certificate, key and CA file set.
 type TLSFilesContent struct {
 	Cert, Key, CA []byte
 }
 
-// ReadTLSFiles reads every named file.
-func ReadTLSFiles(files TLSFiles) (TLSFilesContent, error) {
+// ReadTLSFiles reads every named file; an empty name is skipped.
+func ReadTLSFiles(certFile, keyFile, caFile string) (TLSFilesContent, error) {
 	var content TLSFilesContent
 	read := func(path string, into *[]byte) error {
 		if path == "" {
@@ -67,13 +30,13 @@ func ReadTLSFiles(files TLSFiles) (TLSFilesContent, error) {
 		*into = data
 		return nil
 	}
-	if err := read(files.CertFile, &content.Cert); err != nil {
+	if err := read(certFile, &content.Cert); err != nil {
 		return TLSFilesContent{}, err
 	}
-	if err := read(files.KeyFile, &content.Key); err != nil {
+	if err := read(keyFile, &content.Key); err != nil {
 		return TLSFilesContent{}, err
 	}
-	if err := read(files.CAFile, &content.CA); err != nil {
+	if err := read(caFile, &content.CA); err != nil {
 		return TLSFilesContent{}, err
 	}
 	return content, nil
@@ -126,15 +89,6 @@ func BuildTLSFromFiles(base *tls.Config, content TLSFilesContent) (*tls.Config, 
 		config.RootCAs = pool
 	}
 	return config, nil
-}
-
-// CheckTLSFilesBase reports a base TLS config that would override the
-// certificate loaded from files.
-func CheckTLSFilesBase(base *tls.Config, files TLSFiles) error {
-	if base != nil && files.CertFile != "" && base.GetClientCertificate != nil {
-		return typeValidation("TLS files", "TLS config sets GetClientCertificate, which would ignore CertFile")
-	}
-	return nil
 }
 
 // ValidateClientRoutesTLS reports a TLS config that client routes cannot use.

@@ -48,6 +48,14 @@ type MetadataIO struct {
 	ServerTimeout    Option[time.Duration]
 }
 
+// TLSSource supplies the TLS configuration of each new connection.
+type TLSSource interface {
+	// TLSConfig returns the configuration for the next connection. It is
+	// called on every dial, from many goroutines; the result is copied and
+	// must not be nil.
+	TLSConfig() *tls.Config
+}
+
 type ClientRoutesOptions struct {
 	HostnameOverrides map[string]string
 	ConnectionIDs     []string
@@ -79,6 +87,7 @@ type Config struct {
 	Reconnect                                                                        ReconnectPolicy
 	DialHost                                                                         func(context.Context, implEndpoint.DialTarget) (net.Conn, error)
 	TLS                                                                              *tls.Config
+	TLSSource                                                                        TLSSource
 	ClientRoutes                                                                     *ClientRoutesOptions
 	ContactPoints                                                                    []string
 	Pool                                                                             PoolOptions

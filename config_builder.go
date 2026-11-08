@@ -112,9 +112,9 @@ func (b *ConfigBuilder) Build() (Config, error) {
 			settings.Metadata.InitialDiscovery = false
 		}
 	}
-	if settings.TLSFiles != nil {
-		if err := loadTLSFiles(&settings); err != nil {
-			errs = append(errs, err)
+	if settings.TLSSource != nil {
+		if settings.TLS = settings.TLSSource.TLSConfig(); settings.TLS == nil {
+			errs = append(errs, &cqlerr.ValidationError{Field: "WithTLSSource(...)", Err: errors.New("source returned no config")})
 		}
 	}
 	if settings.ClientRoutes != nil && !b.has("advanced shard awareness") {
@@ -130,26 +130,6 @@ func (b *ConfigBuilder) Build() (Config, error) {
 	}
 	resolved := implSettings.InternalSnapshotConfig(settings)
 	return Config{settings: &resolved}, nil
-}
-
-// loadTLSFiles makes the files' content settings.TLS, keeping the config it
-// replaces as the base later reloads apply the files to.
-func loadTLSFiles(settings *implSettings.Config) error {
-	base := settings.TLS
-	if err := implSettings.CheckTLSFilesBase(base, *settings.TLSFiles); err != nil {
-		return err
-	}
-	content, err := implSettings.ReadTLSFiles(*settings.TLSFiles)
-	if err != nil {
-		return err
-	}
-	config, err := implSettings.BuildTLSFromFiles(base, content)
-	if err != nil {
-		return err
-	}
-	settings.TLSFilesBase = base
-	settings.TLS = config
-	return nil
 }
 
 // set applies a choice of key when valid; otherwise it records reason as
@@ -181,23 +161,17 @@ func (b *ConfigBuilder) WithAuth(provider auth.Provider) *ConfigBuilder {
 
 // WithTLS encrypts every connection with config, which is copied. Unless config
 // skips verification or names a server, each connection verifies the node's
-// IP address. Default plaintext.
+// IP address. It replaces WithTLSSource. Default plaintext.
 func (b *ConfigBuilder) WithTLS(config *tls.Config) *ConfigBuilder {
-	return b.set("tls", "WithTLS(...)", config != nil, "config is required", func() { b.settings.TLS = config.Clone() })
+	return b.set("tls", "WithTLS(...)", config != nil, "config is required", func() { b.settings.TLS, b.settings.TLSSource = config.Clone(), nil })
 }
 
-// TLSFiles names PEM files for ConfigBuilder.WithTLSFiles.
-type TLSFiles = implSettings.TLSFiles
-
-// WithTLSFiles loads the client certificate and key, and the CA certificates that
-// replace RootCAs, from files, and has the session reload them whenever their
-// content changes. Other TLS settings come from WithTLS, or are TLS 1.2+ defaults
-// when WithTLS is not called. Build fails if the files cannot be loaded; a reload
-// that fails keeps the previous files. Open connections keep the certificate
-// they were dialed with; see Session.UpdateTLS.
-func (b *ConfigBuilder) WithTLSFiles(files TLSFiles) *ConfigBuilder {
-	reason := files.Check()
-	return b.set("tls files", "WithTLSFiles(...)", reason == "", reason, func() { b.settings.TLSFiles = &files })
+// WithTLSSource encrypts every connection with the configuration source
+// returns when the connection is dialed, so the configuration can change while
+// the session runs; see TLSSource. Build validates the configuration source
+// returns at that time. It replaces WithTLS.
+func (b *ConfigBuilder) WithTLSSource(source TLSSource) *ConfigBuilder {
+	return b.set("tls", "WithTLSSource(...)", source != nil, "source is required", func() { b.settings.TLS, b.settings.TLSSource = nil, source })
 }
 
 // WithProtocolVersion pins the native protocol version. Default ProtocolAuto, or

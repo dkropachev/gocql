@@ -23,6 +23,7 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -344,7 +345,7 @@ func TestConnectionSetup(t *testing.T) {
 			}
 		})
 
-		t.Run("LiveConfig", func(t *testing.T) {
+		t.Run("Source", func(t *testing.T) {
 			serverCert, clientTLS := testTLS(t)
 			listener := codecTestMust(net.Listen("tcp", "127.0.0.1:0"))
 			defer listener.Close()
@@ -371,12 +372,13 @@ func TestConnectionSetup(t *testing.T) {
 				return c
 			}
 			first, second := withClientCert(), withClientCert()
+			live := &testTLSSource{}
+			live.Store(first)
 			config := settings.DefaultConfig("localhost")
 			config.TLS = first
+			config.TLSSource = live
 			config.Pool.ShardAwarePort = false
-			live := new(atomic.Pointer[tls.Config])
-			live.Store(first)
-			dialer := &transport.InternalV2TLSHostDialer{InternalConfig: settings.InternalConnectivityConfig(config), InternalTLS: live}
+			dialer := &transport.InternalV2TLSHostDialer{InternalConfig: settings.InternalConnectivityConfig(config)}
 			host := testHost(t, listener.Addr())
 			dial := func() error {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -425,6 +427,11 @@ func TestConnectionSetup(t *testing.T) {
 				}()
 			}
 			wg.Wait()
+
+			live.Store(nil)
+			if err := dial(); err == nil || !strings.Contains(err.Error(), "TLS source") {
+				t.Fatal("a source with no config did not fail the dial:", err)
+			}
 		})
 
 		t.Run("ShardDialSource", func(t *testing.T) {
@@ -506,3 +513,8 @@ func TestConnectionSetup(t *testing.T) {
 		})
 	})
 }
+
+// testTLSSource serves whatever config was stored last.
+type testTLSSource struct{ atomic.Pointer[tls.Config] }
+
+func (s *testTLSSource) TLSConfig() *tls.Config { return s.Load() }

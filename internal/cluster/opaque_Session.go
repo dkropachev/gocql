@@ -62,7 +62,6 @@ type SessionStorage struct {
 	InternalConnCfg              *ConnConfig
 	InternalClientRoutesHandler  *ClientRoutesHandler
 	InternalDriverConfigReporter *InternalDriverConfigReporter
-	tls                          *InternalSessionTLS
 	closeDone                    chan struct{}
 	// id is a globally unique identifier for this session, reported to
 	// the cluster via the SESSION_ID STARTUP option so that all connections

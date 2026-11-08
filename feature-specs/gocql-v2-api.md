@@ -1498,12 +1498,15 @@ metrics/history/logger and timestamp generation. TLS uses Go crypto/tls,
 validates host/CA by default, and never downgrades after a TLS failure. Each
 auth exchange is per connection; providers are concurrency-safe. One TLS
 configuration serves every node; without an explicit ServerName each
-connection verifies the node's IP address. `Session.UpdateTLS(*tls.Config)`
-replaces it for connections dialed afterwards; open connections keep theirs,
-and TLS cannot be turned on or off. `ConfigBuilder.WithTLSFiles(TLSFiles)` loads
-the client certificate/key and CA from files over the TLS config, fails Build
-if they cannot be loaded, and reloads them on a content change; a failed reload
-keeps the current files. Context-taking hooks honor cancellation; synchronous callbacks are
+connection verifies the node's IP address. `ConfigBuilder.WithTLSSource`
+takes a `TLSSource` (`TLSConfig() *tls.Config`) that the dialer asks for the
+config of every new connection; open connections keep theirs, and a nil result
+fails the dial. Build validates the source's config at that time. `TLSHolder`
+(`NewTLSHolder`, `Update`) is replaced by hand and can serve several sessions;
+`TLSFileSource` (`NewTLSFiles(base, TLSFiles)`) loads the client
+certificate/key and CA from files over base, fails if they cannot be loaded,
+and rechecks them during a dial once `Interval` has passed, keeping the current
+files when a check fails. Context-taking hooks honor cancellation; synchronous callbacks are
 prompt/nonblocking and cannot reenter blocking Close/Wait. The implementation
 contract defines route selection, snapshots and duration defaults. Client
 routes supply per-connection-ID endpoint overrides and disable advanced shard
