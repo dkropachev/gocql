@@ -35,6 +35,11 @@ func InternalCloneV2TLSConfig(source *tls.Config) *tls.Config {
 
 type UnsupportedSettingError = runtimeerrors.UnsupportedSettingError
 
+// InternalUnixSocketPath reports the Unix socket contactPoints name, if any.
+func InternalUnixSocketPath(contactPoints []string) (string, error) {
+	return connectivity.UnixSocketPath(contactPoints)
+}
+
 func InternalUnixContact(c Config) (string, error) {
 	return connectivity.UnixContact(InternalConnectivityConfig(c))
 }

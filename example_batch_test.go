@@ -37,8 +37,10 @@ import (
 func ExampleQuery_ExecBatch() {
 	// Assumes example.batches(pk int, ck int, description text, PRIMARY KEY(pk, ck)).
 	ctx := context.Background()
-	config := gocql.DefaultConfig("localhost:9042")
-	config.Keyspace = "example"
+	config, err := gocql.NewConfig("localhost:9042").Keyspace("example").Build()
+	if err != nil {
+		log.Fatal(err)
+	}
 	session, err := gocql.Connect(ctx, config)
 	if err != nil {
 		log.Fatal(err)

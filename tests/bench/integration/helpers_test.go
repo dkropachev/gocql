@@ -409,119 +409,178 @@ func bindOptions(session *gocql.Session, v gocql.Options) gocql.SessionOptions {
 	return o
 }
 
-// createV2Cluster applies the integration flags to the public typed configuration.
-// Options run last so each test can override the shared fixture defaults.
-func createV2Cluster(opts ...func(*gocql.Config)) gocql.Config {
-	config := gocql.DefaultConfig(getClusterHosts()...)
-	config.Protocol = *flagProto
-	config.CQLVersion = *flagCQL
-	config.Metadata.AgreementTimeout = 2 * time.Minute
-	profile := *config.DefaultProfile
-	profile.Consistency = cql.Quorum
-	profile.Timeout = *flagTimeout
-	profile.Retry = retry.Safe{MaxAttempts: max(1, *flagRetry+1)}
-	config.DefaultProfile = &profile
-	if *flagRunAuthTest {
-		config.Auth = auth.Password("cassandra", "cassandra")
+// fixtureParts names the settings the shared fixture chooses from the
+// integration flags. A test that chooses one of them itself leaves that part
+// out, because a setting can be chosen only once.
+type fixtureParts uint
+
+const (
+	fixtureProtocol    fixtureParts = 1 << iota // ProtocolVersion and CQLVersion
+	fixtureCompression                          // Compression
+	fixtureAuth                                 // Auth
+	fixtureTLS                                  // TLS; the port is still chosen
+	fixtureAgreement                            // SchemaAgreement
+	fixtureConsistency                          // default profile Consistency
+	fixtureTimeout                              // default profile Timeout
+	fixtureRetry                                // default profile Retry
+)
+
+// createV2Cluster starts a fixture config for the integration cluster.
+func createV2Cluster(opts ...func(*gocql.ConfigBuilder)) *gocql.ConfigBuilder {
+	return newFixtureConfig(getClusterHosts(), 0, opts...)
+}
+
+// createV2ClusterWithout starts a fixture config that leaves out skip, for a
+// test that chooses those settings itself.
+func createV2ClusterWithout(skip fixtureParts, opts ...func(*gocql.ConfigBuilder)) *gocql.ConfigBuilder {
+	return newFixtureConfig(getClusterHosts(), skip, opts...)
+}
+
+// newFixtureConfig applies the integration flags, except skip, to a config
+// for hosts, then opts.
+func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*gocql.ConfigBuilder)) *gocql.ConfigBuilder {
+	b := gocql.NewConfig(hosts...)
+	if skip&fixtureProtocol == 0 {
+		b.ProtocolVersion(gocql.ProtocolVersion(*flagProto)).CQLVersion(*flagCQL)
 	}
-	switch *flagCompressTest {
-	case "snappy":
-		config.Compression = gocql.SnappyCompression
-	case "lz4":
-		config.Compression = gocql.LZ4Compression
-	case "no-compression", "":
-		config.Compression = gocql.NoCompression
-	default:
-		panic("invalid compressor: " + *flagCompressTest)
+	if skip&fixtureAgreement == 0 {
+		b.SchemaAgreement(2*time.Minute, 200*time.Millisecond)
+	}
+	b.DefaultProfile(func(p *gocql.ProfileBuilder) { fixtureProfileExcept(p, skip) })
+	if *flagRunAuthTest && skip&fixtureAuth == 0 {
+		b.Auth(auth.Password("cassandra", "cassandra"))
+	}
+	if skip&fixtureCompression == 0 {
+		switch *flagCompressTest {
+		case "snappy":
+			b.Compression(gocql.SnappyCompression)
+		case "lz4":
+			b.Compression(gocql.LZ4Compression)
+		case "no-compression", "":
+			b.Compression(gocql.NoCompression)
+		default:
+			panic("invalid compressor: " + *flagCompressTest)
+		}
 	}
 	if *flagRunSslTest {
 		if *flagDistribution == "cassandra" {
-			config.Port = 9042
+			b.Port(9042)
 		} else {
-			config.Port = 9142
+			b.Port(9142)
 		}
-		certificate, err := tls.LoadX509KeyPair("../../../testdata/pki/gocql.crt", "../../../testdata/pki/gocql.key")
-		if err != nil {
-			panic(fmt.Errorf("load integration client certificate: %w", err))
-		}
-		pem, err := os.ReadFile("../../../testdata/pki/ca.crt")
-		if err != nil {
-			panic(fmt.Errorf("load integration CA: %w", err))
-		}
-		roots := x509.NewCertPool()
-		if !roots.AppendCertsFromPEM(pem) {
-			panic("invalid integration CA certificate")
-		}
-		config.TLS = &tls.Config{
-			Certificates: []tls.Certificate{certificate},
-			RootCAs:      roots,
-			MinVersion:   tls.VersionTLS12,
+		if skip&fixtureTLS == 0 {
+			b.TLS(fixtureTLSConfig(fixtureClientTLS()))
 		}
 	}
 	for _, opt := range opts {
-		opt(&config)
+		opt(b)
 	}
-	if *flagRunSslTest && config.TLS != nil && config.TLSForHost == nil {
-		// The fixture identifies its server with a SPIFFE URI, not an IP SAN.
-		// Keep the configured client certificates, session cache and callbacks,
-		// but replace the default DNS check with chain and URI verification.
-		fixtureTLS := config.TLS.Clone()
-		verifyConnection := fixtureTLS.VerifyConnection
-		fixtureTLS.InsecureSkipVerify = true
-		fixtureTLS.VerifyConnection = func(state tls.ConnectionState) error {
-			if len(state.PeerCertificates) == 0 {
-				return fmt.Errorf("integration TLS server supplied no certificate")
-			}
-			intermediates := x509.NewCertPool()
-			for _, certificate := range state.PeerCertificates[1:] {
-				intermediates.AddCert(certificate)
-			}
-			now := time.Now()
-			if fixtureTLS.Time != nil {
-				now = fixtureTLS.Time()
-			}
-			chains, err := state.PeerCertificates[0].Verify(x509.VerifyOptions{
-				Roots:         fixtureTLS.RootCAs,
-				Intermediates: intermediates,
-				KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-				CurrentTime:   now,
-			})
-			if err != nil {
-				return fmt.Errorf("verify integration TLS server chain: %w", err)
-			}
-			const expectedURI = "spiffe://test.cassandra.apache.org/cassandra-gocql-driver/integrationTest/cassandra"
-			matched := false
-			for _, identity := range state.PeerCertificates[0].URIs {
-				if identity.String() == expectedURI {
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				return fmt.Errorf("integration TLS server certificate has no expected URI SAN %q", expectedURI)
-			}
-			if verifyConnection != nil {
-				state.VerifiedChains = chains
-				return verifyConnection(state)
-			}
-			return nil
-		}
-		config.TLS = fixtureTLS
-		// The per-host API uses this complete TLS configuration directly and
-		// avoids the legacy SSL option's mandatory DNS verification override.
-		config.TLSForHost = func(context.Context, routing.HostSnapshot) (*tls.Config, error) {
-			return fixtureTLS.Clone(), nil
-		}
-	}
-	return config
+	return b
 }
 
-func createV2Session(t testing.TB, opts ...func(*gocql.Config)) *gocql.Session {
+// fixtureProfileExcept applies the fixture's profile choices, except skip.
+func fixtureProfileExcept(p *gocql.ProfileBuilder, skip fixtureParts) {
+	if skip&fixtureConsistency == 0 {
+		p.Consistency(cql.Quorum)
+	}
+	if skip&fixtureTimeout == 0 {
+		p.Timeout(*flagTimeout)
+	}
+	if skip&fixtureRetry == 0 {
+		p.Retry(retry.Safe{MaxAttempts: max(1, *flagRetry+1)})
+	}
+}
+
+// fixtureProfile applies the integration flags to a profile. createV2Cluster
+// uses it for the default profile; tests use it for per-query profiles.
+func fixtureProfile(p *gocql.ProfileBuilder) { fixtureProfileExcept(p, 0) }
+
+// fixtureClientTLS returns the integration client's certificate and CA.
+func fixtureClientTLS() *tls.Config {
+	certificate, err := tls.LoadX509KeyPair("../../../testdata/pki/gocql.crt", "../../../testdata/pki/gocql.key")
+	if err != nil {
+		panic(fmt.Errorf("load integration client certificate: %w", err))
+	}
+	pem, err := os.ReadFile("../../../testdata/pki/ca.crt")
+	if err != nil {
+		panic(fmt.Errorf("load integration CA: %w", err))
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(pem) {
+		panic("invalid integration CA certificate")
+	}
+	return &tls.Config{
+		Certificates: []tls.Certificate{certificate},
+		RootCAs:      roots,
+		MinVersion:   tls.VersionTLS12,
+	}
+}
+
+// fixtureTLSConfig verifies the fixture server, which identifies itself with
+// a SPIFFE URI rather than an IP SAN. It keeps base's client certificates,
+// session cache and callbacks, but replaces the default IP check with chain
+// and URI verification; base's VerifyConnection runs after those checks.
+func fixtureTLSConfig(base *tls.Config) *tls.Config {
+	fixtureTLS := base.Clone()
+	verifyConnection := fixtureTLS.VerifyConnection
+	fixtureTLS.InsecureSkipVerify = true
+	fixtureTLS.VerifyConnection = func(state tls.ConnectionState) error {
+		if len(state.PeerCertificates) == 0 {
+			return fmt.Errorf("integration TLS server supplied no certificate")
+		}
+		intermediates := x509.NewCertPool()
+		for _, certificate := range state.PeerCertificates[1:] {
+			intermediates.AddCert(certificate)
+		}
+		now := time.Now()
+		if fixtureTLS.Time != nil {
+			now = fixtureTLS.Time()
+		}
+		chains, err := state.PeerCertificates[0].Verify(x509.VerifyOptions{
+			Roots:         fixtureTLS.RootCAs,
+			Intermediates: intermediates,
+			KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+			CurrentTime:   now,
+		})
+		if err != nil {
+			return fmt.Errorf("verify integration TLS server chain: %w", err)
+		}
+		const expectedURI = "spiffe://test.cassandra.apache.org/cassandra-gocql-driver/integrationTest/cassandra"
+		matched := false
+		for _, identity := range state.PeerCertificates[0].URIs {
+			if identity.String() == expectedURI {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return fmt.Errorf("integration TLS server certificate has no expected URI SAN %q", expectedURI)
+		}
+		if verifyConnection != nil {
+			state.VerifiedChains = chains
+			return verifyConnection(state)
+		}
+		return nil
+	}
+	return fixtureTLS
+}
+
+func createV2Session(t testing.TB, opts ...func(*gocql.ConfigBuilder)) *gocql.Session {
 	t.Helper()
 	return createV2SessionFromConfig(createV2Cluster(opts...), t, false)
 }
 
-func createV2SessionFromConfig(config gocql.Config, t testing.TB, tabletsDisabled bool) *gocql.Session {
+// mustBuild builds b or fails the test.
+func mustBuild(t testing.TB, b *gocql.ConfigBuilder) gocql.Config {
+	t.Helper()
+	config, err := b.Build()
+	if err != nil {
+		t.Fatalf("build integration config: %v", err)
+	}
+	return config
+}
+
+func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisabled bool) *gocql.Session {
 	t.Helper()
 	keyspace := fixtureKeyspace("")
 	if tabletsDisabled {
@@ -530,11 +589,10 @@ func createV2SessionFromConfig(config gocql.Config, t testing.TB, tabletsDisable
 	// Use a separate once key while both fixture implementations coexist. Creating
 	// an existing keyspace is harmless; dropping it would race other test sessions.
 	initKeyspaceOnce.GetOnce("v2:" + keyspace).Do(func() {
-		bootstrap := config
-		bootstrap.Keyspace = "system"
-		profile := *config.DefaultProfile
-		profile.Timeout = 30 * time.Second
-		bootstrap.DefaultProfile = &profile
+		// Keyspace creation uses a fresh fixture config: the test's own
+		// choices may not reach a working cluster.
+		bootstrap := mustBuild(t, createV2ClusterWithout(fixtureTimeout).Keyspace("system").
+			DefaultProfile(func(p *gocql.ProfileBuilder) { p.Timeout(30 * time.Second) }))
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 		session, err := gocql.Connect(ctx, bootstrap)
@@ -554,7 +612,7 @@ func createV2SessionFromConfig(config gocql.Config, t testing.TB, tabletsDisable
 			t.Fatalf("create typed integration keyspace: %v", err)
 		}
 	})
-	config.Keyspace = keyspace
+	config := mustBuild(t, b.Keyspace(keyspace))
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	session, err := gocql.Connect(ctx, config)

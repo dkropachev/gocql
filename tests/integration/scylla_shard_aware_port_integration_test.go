@@ -11,19 +11,24 @@ import (
 )
 
 func makeIntegrationShardAwareCluster() shardAwareTestCluster {
-	config := createV2Cluster()
 	return shardAwareTestCluster{
-		useTLS: config.TLS != nil || config.TLSForHost != nil,
-		port:   shardTestContactPort(config.ContactPoints, config.Port),
+		useTLS: *flagRunSslTest,
+		port:   shardTestContactPort(getClusterHosts(), fixturePort()),
 		connect: func(ctx context.Context, dialer legacyDialer, disableShardAwarePort bool) (*gocql.Session, error) {
-			config.Dialer = endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
+			config := createV2Cluster().Dialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 				if target.LocalAddress.IsValid() {
 					ctx = context.WithValue(ctx, scyllaSourcePortCtx{}, target.LocalAddress.Port())
 				}
 				return dialer.DialContext(ctx, target.Network, target.Address)
-			})
-			config.Pool.ShardAwarePort = !disableShardAwarePort
-			return gocql.Connect(ctx, config)
+			}))
+			if disableShardAwarePort {
+				config.NoAdvancedShardAwareness()
+			}
+			built, err := config.Build()
+			if err != nil {
+				return nil, err
+			}
+			return gocql.Connect(ctx, built)
 		},
 	}
 }

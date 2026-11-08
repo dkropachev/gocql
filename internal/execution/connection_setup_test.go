@@ -35,7 +35,6 @@ import (
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
-	"github.com/scylladb/gocql/v2/internal/model"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
@@ -292,7 +291,7 @@ func TestConnectionSetup(t *testing.T) {
 	})
 
 	t.Run("TLS", func(t *testing.T) {
-		t.Run("DetachAndHookContext", func(t *testing.T) {
+		t.Run("Detach", func(t *testing.T) {
 			cert, tlsConfig := testTLS(t)
 			tlsConfig.Certificates = []tls.Certificate{cert}
 			tlsConfig.NextProtos = []string{"cql"}
@@ -305,33 +304,6 @@ func TestConnectionSetup(t *testing.T) {
 			tlsConfig.NextProtos[0] = "mutated"
 			if !bytes.Equal(cloned.Certificates[0].Certificate[0], originalDER) || string(cloned.Certificates[0].OCSPStaple) != "ocsp" || string(cloned.Certificates[0].SignedCertificateTimestamps[0]) != "sct" || cloned.NextProtos[0] != "cql" || cloned.RootCAs == tlsConfig.RootCAs || cloned.ClientCAs == tlsConfig.ClientCAs {
 				t.Fatal("TLS mutable containers alias")
-			}
-			config := settings.DefaultConfig("localhost")
-			config.TLS = cloned
-			config.TLSForHost = func(ctx context.Context, host model.HostSnapshot) (*tls.Config, error) {
-				if err := ctx.Err(); err != nil {
-					return nil, err
-				}
-				if len(host.Tokens) > 0 {
-					host.Tokens[0] = 999
-				}
-				return nil, nil
-			}
-			d := transport.InternalV2TLSHostDialer{InternalConfig: settings.InternalConnectivityConfig(config)}
-			snapshot := model.HostSnapshot{Tokens: []int64{7}}
-			inherited, err := d.InternalSelectedTLS(context.Background(), snapshot)
-			if err != nil || inherited.ServerName != "transport.test" || snapshot.Tokens[0] != 7 {
-				t.Fatal("inheritance/host isolation", err)
-			}
-			config.TLS = nil
-			d.InternalConfig = settings.InternalConnectivityConfig(config)
-			if _, err = d.InternalSelectedTLS(context.Background(), snapshot); err == nil {
-				t.Fatal("TLS hook silently disabled TLS")
-			}
-			ctx, cancel := context.WithCancel(context.Background())
-			cancel()
-			if _, err = d.InternalSelectedTLS(ctx, snapshot); !errors.Is(err, context.Canceled) {
-				t.Fatal("hook context", err)
 			}
 		})
 
@@ -416,7 +388,7 @@ func TestConnectionSetup(t *testing.T) {
 			}
 		})
 
-		t.Run("ShardDialSourceAndHook", func(t *testing.T) {
+		t.Run("ShardDialSource", func(t *testing.T) {
 			cert, tlsConfig := testTLS(t)
 			listener := codecTestMust(net.Listen("tcp", "127.0.0.1:0"))
 			defer listener.Close()
@@ -432,7 +404,7 @@ func TestConnectionSetup(t *testing.T) {
 				accepted <- tls.Server(raw, &tls.Config{Certificates: []tls.Certificate{cert}}).Handshake()
 			}()
 			config := settings.DefaultConfig("localhost")
-			config.TLSForHost = func(ctx context.Context, s model.HostSnapshot) (*tls.Config, error) { return tlsConfig, nil }
+			config.TLS = tlsConfig
 			var selected endpoint.DialTarget
 			config.DialHost = func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 				selected = target
@@ -451,11 +423,6 @@ func TestConnectionSetup(t *testing.T) {
 			}
 			if !selected.ShardID.Set || selected.ShardID.Value != 1 || !selected.LocalAddress.IsValid() || selected.LocalAddress.Port()%2 != 1 || selected.LocalAddress.Port() < config.Pool.SourcePortStart || !implEndpoint.DialedHostData(conn).InternalShardTarget.Set {
 				t.Fatal("shard target/source lost", selected)
-			}
-			// A changed TLS target is detected before publication, without holding locks.
-			tlsConfig.ServerName = "changed.test"
-			if err = implEndpoint.DialedHostData(conn).InternalValidateTarget(ctx); err == nil {
-				t.Fatal("late TLS target accepted")
 			}
 		})
 	})

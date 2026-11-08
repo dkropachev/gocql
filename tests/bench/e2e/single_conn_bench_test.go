@@ -76,16 +76,19 @@ func benchConfig(d endpoint.Dialer) gocql.Config {
 			address = "127.0.20.1:9042"
 		}
 	}
-	c := gocql.DefaultConfig(address)
-	c.Protocol = 4
-	c.Auth = auth.Password("cassandra", "cassandra")
-	c.SocketKeepalive = 0
-	c.KeepaliveInterval = 0
-	c.Metadata.PeriodicRefresh = 0
-	c.ReportConfiguration = false
-	c.Pool.ConnectionsPerHost = 1
-	c.Metadata.InitialDiscovery = false
-	c.Dialer = d
+	c, err := gocql.NewConfig(address).
+		ProtocolVersion(gocql.Protocol4).
+		Auth(auth.Password("cassandra", "cassandra")).
+		NoHeartbeat().
+		NoMetadataRefresh().
+		NoConfigReport().
+		ConnectionsPerHost(1).
+		NoDiscovery().
+		Dialer(d).
+		Build()
+	if err != nil {
+		panic(err)
+	}
 	return c
 }
 func benchExec(ctx context.Context, s *gocql.Session, text string) error {

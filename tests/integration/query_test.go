@@ -374,7 +374,7 @@ func TestQuery(t *testing.T) {
 
 			requireCassandraFixtures(t)
 			cluster := createV2Cluster()
-			session, err := gocql.Connect(context.Background(), cluster)
+			session, err := gocql.Connect(context.Background(), mustBuild(t, cluster))
 			if err != nil {
 				t.Fatal("create session:", err)
 			}
@@ -681,8 +681,7 @@ func TestQuery(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		config := createV2Cluster()
-		config.Keyspace = ""
-		session, err := gocql.Connect(ctx, config)
+		session, err := gocql.Connect(ctx, mustBuild(t, config))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -856,7 +855,7 @@ func TestQuery(t *testing.T) {
 			streamDecoder := cql.StreamRow(func(*record) {}, cql.StreamColumn("c", cql.StreamInt32, func(r *record) *int32 { return &r.C }), cql.StreamColumn("p", cql.StreamBlob, func(r *record) *[]byte { return &r.P }))
 			streamQuery := codecTestMust(gocql.NewStreamQuery(read, streamDecoder, gocql.StreamOptions{Incremental: incremental, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}))
 			cursor, err := streamQuery.Run(ctx, int32(1))
-			if incremental && config.Protocol < 5 && config.Compression != gocql.NoCompression {
+			if incremental && *flagProto < 5 && fixtureCompressed() {
 				var unsupported *cqlerr.StreamCapabilityError
 				if !errors.As(err, &unsupported) {
 					t.Fatal(err)

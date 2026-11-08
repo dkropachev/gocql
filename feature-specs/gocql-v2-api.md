@@ -548,7 +548,7 @@ import `gocql`. Every other operation is a method on the type that owns it.
 
 | Function | Decision | Reason |
 |---|---|---|
-| `DefaultConfig`, `Connect` | keep | construct a value from nothing |
+| `NewConfig`, `NewProfile`, `NewClientRoutes`, `Connect` | keep | construct a value from nothing |
 | `OpenSingleHost` | keep | single-host sessions are a supported entry point |
 | `Prepare` | keep | needs `P`, `R` that the non-generic `Session` cannot carry |
 | `NewUnpreparedQuery`, `NewUnpreparedStreamQuery` | keep | same; `cql.Statement` cannot own a method returning a `gocql` type |
@@ -1281,7 +1281,7 @@ type PolicyFunc func(Attempt) Decision
 type Safe struct { MaxAttempts int }
 ```
 
-Built-in routing has a concrete configuration surface. DefaultConfig selects a
+Built-in routing has a concrete configuration surface. The default profile selects a
 token-aware policy with local preference when configured, replica shuffling for
 ordinary requests, deterministic conditional ordering and no remote fallback
 unless allowed. Validate runs at session startup and on eligible-topology
@@ -1464,15 +1464,29 @@ for the same shutdown completion and return the same shutdown result. Bindings
 still require their own Close/Wait before input reuse; shutdown drains all
 admissions made by this session without closing unadmitted bindings.
 
-Configuration retains useful existing setup capabilities but is an immutable
-snapshot after Connect. Exact public field definitions are given in the
-companion implementation contract; these functions are the entry points:
+Configuration retains useful existing setup capabilities. A `Config` is an
+opaque, immutable value made only by `ConfigBuilder.Build`; users never write a
+`Config` literal or assign its fields. Each builder method sets one setting,
+settings not chosen keep the driver's behavior, and when a setting is chosen
+again the last call wins. Features that are on by default are turned off by
+`No*` methods; features that are off by default, such as TLS, have no off
+switch. Methods never fail: `Build` reports every invalid call at once through
+`errors.Join`, each as a ValidationError naming the call; an invalid call
+leaves the setting unchanged. Settings with a single valid value are inferred
+only when not chosen; an explicit conflicting choice is a Build error. Values
+passed in are copied when the method is called. These functions are the entry
+points:
 
 ```go
-func DefaultConfig(contactPoints ...string) Config
+func NewConfig(contactPoints ...string) *ConfigBuilder
+func (*ConfigBuilder) Build() (Config, error)
+func NewProfile() *ProfileBuilder
+func NewClientRoutes(connectionIDs ...string) *ClientRoutesBuilder
 func Connect(context.Context, Config) (*Session, error)
 func OpenSingleHost(context.Context, Config, UUID) (*Session, error)
 ```
+
+`Connect` rejects the zero `Config`.
 
 Configuration covers protocol 3/4/5 and autodiscovery, timeouts,
 pools/shards/source ports, DNS/dial hooks, TLS and ticket cache, auth-provider
@@ -1481,13 +1495,14 @@ translation/filtering/client routes/cloud, startup identity and configuration
 reporting, metadata scope/events/agreement, profiles/retry/speculation,
 metrics/history/logger and timestamp generation. TLS uses Go crypto/tls,
 validates host/CA by default, and never downgrades after a TLS failure. Each
-auth exchange is per connection; providers are concurrency-safe. TLSForHost
-accepts context, inherits TLS on a nil result, and cannot disable required
-encryption. Context-taking hooks honor cancellation; synchronous callbacks are
+auth exchange is per connection; providers are concurrency-safe. One TLS
+configuration serves every node; without an explicit ServerName each
+connection verifies the node's IP address. Context-taking hooks honor cancellation; synchronous callbacks are
 prompt/nonblocking and cannot reenter blocking Close/Wait. The implementation
 contract defines route selection, snapshots and duration defaults. Client
-routes/cloud supply SNI-aware dial/TLS resolution and disable incompatible shard
-source-port assumptions. Keepalive, orphan-stream budget, connection repair and
+routes/cloud supply SNI-aware dial/TLS resolution and disable advanced shard
+awareness (shard selection by source port through the shard-aware port), which
+their proxy breaks. Keepalive, orphan-stream budget, connection repair and
 graceful close remain separate from user-request timeout.
 
 Errors preserve `errors.Is`/`errors.As` and server error codes/details. Define
@@ -1508,31 +1523,27 @@ counts.
 ### Transport setup details settled during step 04
 
 A Unix maintenance target is one `ContactPoints` entry `unix:/absolute/path`;
-a bare absolute path is accepted as a convenience. It requires explicit
-`Protocol = 3` and `Metadata.InitialDiscovery = false`. Mixed Unix/TCP contacts,
-TLS or TLSForHost, and explicit LocalAddress on this transport fail with
-UnsupportedSettingError. Default shard settings do not target a Unix socket.
+a bare absolute path is accepted as a convenience. `Build` fills in protocol 3
+and no host discovery unless set explicitly; an explicit other protocol version
+or discovery, mixed Unix/TCP contacts, TLS, and explicit
+LocalAddress on this transport fail with UnsupportedSettingError. Default shard settings do not target a Unix socket.
 Dialer receives Network `unix` and the exact path as Address; an unknown
 bootstrap Host.Address is invalid rather than a fabricated TCP endpoint. A
 socket represents only its reconciled local host, so remote strict targets fail.
 For example:
 
 ```go
-config := DefaultConfig("unix:/run/scylla/cql.m")
-config.Protocol = 3
-config.Metadata.InitialDiscovery = false
+config, err := NewConfig("unix:/run/scylla/cql.m").Build()
 session, err := Connect(ctx, config)
 ```
 
-The context-aware Dialer, DialHost and TLSForHost contracts above apply to all
+The context-aware Dialer contract above applies to all
 new connections. DefaultDialer implements the raw target contract; DialerFunc
 adapts a function. TCP endpoints and source ranges are selected before hooks;
-TLSForHost nil inherits TLS, and cannot downgrade required TLS. TLS containers,
+TLS containers,
 trust-pool containers and certificate byte arrays are snapshotted. Private keys,
 callbacks, parsed trust-certificate objects and session caches/providers retain
-their immutable/shared concurrency obligations. TLSForHost can be called again
-before publication to verify that its SNI/TLS target is still current, always
-outside driver locks. A superseded endpoint, route or sharder opening is closed.
+their immutable/shared concurrency obligations. A superseded endpoint, route or sharder opening is closed.
 
 The per-connection setup deadline starts before its target resolution and is
 not restarted for translation, raw dialing, TLS, authentication, initial USE,

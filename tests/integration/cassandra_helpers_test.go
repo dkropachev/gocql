@@ -213,12 +213,25 @@ func cassandraTable(s *gocql.Session, ks, name string) (*metadata.Table, error) 
 	}
 	return table, nil
 }
+
+// fixtureCompressed reports whether the suite's sessions compress frames.
+func fixtureCompressed() bool {
+	return *flagCompressTest == "snappy" || *flagCompressTest == "lz4"
+}
+
+// fixturePort is the native transport port createV2Cluster connects to.
+func fixturePort() uint16 {
+	if *flagRunSslTest && *flagDistribution != "cassandra" {
+		return 9142
+	}
+	return 9042
+}
+
 func cassandraOtherSession(t testing.TB, s *gocql.Session, keyspace string) *gocql.Session {
 	t.Helper()
 	cassandraDDL(t, s, fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':%d}", keyspace, *flagRF))
-	config := createV2Cluster()
-	config.Keyspace = keyspace
-	other, err := gocql.Connect(context.Background(), config)
+	config := createV2Cluster().Keyspace(keyspace)
+	other, err := gocql.Connect(context.Background(), mustBuild(t, config))
 	if err != nil {
 		t.Fatal(err)
 	}

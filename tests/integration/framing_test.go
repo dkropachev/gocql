@@ -187,10 +187,8 @@ func TestFraming(t *testing.T) {
 				},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
-					session := createV2Session(t, func(c *gocql.Config) {
-						c.Metadata.SchemaEvents = false
-						c.Metadata.AutomaticAgreement = false
-						c.Metadata.RefreshAfterAgreement = false
+					session := createV2Session(t, func(c *gocql.ConfigBuilder) {
+						c.IgnoreEvents(gocql.SchemaEvent).ManualSchemaAgreement().NoRefreshAfterAgreement()
 					})
 					defer session.Close()
 
@@ -221,10 +219,8 @@ func TestFraming(t *testing.T) {
 		// (scylladb/java-driver#758) and python-driver's
 		// test_empty_sentinel_id_triggers_metadata_changed (scylladb/python-driver#770).
 		t.Run("ScyllaEmpty", func(t *testing.T) {
-			session := createV2Session(t, func(c *gocql.Config) {
-				c.Metadata.SchemaEvents = false
-				c.Metadata.AutomaticAgreement = false
-				c.Metadata.RefreshAfterAgreement = false
+			session := createV2Session(t, func(c *gocql.ConfigBuilder) {
+				c.IgnoreEvents(gocql.SchemaEvent).ManualSchemaAgreement().NoRefreshAfterAgreement()
 			})
 			defer session.Close()
 			conn := getRandomConn(t, session)

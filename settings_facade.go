@@ -9,13 +9,7 @@ import (
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 )
 
-type ClientRoutesOptions = implSettings.ClientRoutesOptions
-type Config = implSettings.Config
 type ConvictionPolicy = implSettings.ConvictionPolicy
-
-func DefaultConfig(a0 ...string) Config { return implSettings.DefaultConfig(a0...) }
-
-type IdentityOptions = implSettings.IdentityOptions
 
 type LifecycleEvent = implSettings.LifecycleEvent
 type LifecycleObserver = implSettings.LifecycleObserver
@@ -24,9 +18,7 @@ type Observer = implSettings.Observer
 
 type AttemptEvent = implRouting.AttemptEvent
 
-type PoolOptions = implSettings.PoolOptions
 type Profile = implSettings.Profile
-type ProtocolLimits = implSettings.ProtocolLimits
 type ReconnectPolicy = implSettings.ReconnectPolicy
 type RequestEvent = implSettings.RequestEvent
 

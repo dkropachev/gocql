@@ -38,8 +38,10 @@ func ExampleQuery_RunBatch_conditional() {
 	// Assumes example.my_lwt_batch_table(pk text, ck text, version int, value text,
 	// PRIMARY KEY(pk, ck)), with initial rows (pk1,ck1,1,a) and (pk1,ck2,1,A).
 	ctx := context.Background()
-	config := gocql.DefaultConfig("localhost:9042")
-	config.Keyspace = "example"
+	config, err := gocql.NewConfig("localhost:9042").Keyspace("example").Build()
+	if err != nil {
+		log.Fatal(err)
+	}
 	session, err := gocql.Connect(ctx, config)
 	if err != nil {
 		log.Fatal(err)

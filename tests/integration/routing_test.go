@@ -89,8 +89,12 @@ func TestRouting(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, oneHost := range []bool{false, true} {
-				profile := *createV2Cluster().DefaultProfile
-				profile.Routing = v2UnavailableHostsRouting{Policy: policy, oneHost: oneHost}
+				builder := gocql.NewProfile()
+				fixtureProfile(builder)
+				profile, err := builder.Routing(v2UnavailableHostsRouting{Policy: policy, oneHost: oneHost}).Build()
+				if err != nil {
+					t.Fatal(err)
+				}
 				handle := profileOf(profile)
 				ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 				rows, queryErr := Run(ctx, session, bound, bindOptions(session, gocql.Options{Profile: handle}))
@@ -274,18 +278,15 @@ func TestRouting(t *testing.T) {
 			if len(clusterHosts) < 2 {
 				t.Skip("skipping because we don't have 2 or more hosts")
 			}
-			cluster := createV2Cluster()
+			cluster := newFixtureConfig(clusterHosts[:1], 0)
 			rr, err := routing.NewPolicy(routing.Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
-			profile := *cluster.DefaultProfile
-			profile.Routing = rr
-			cluster.DefaultProfile = &profile
+			cluster.DefaultProfile(func(p *gocql.ProfileBuilder) { p.Routing(rr) })
 			// we'll filter out the second host
 			filtered := clusterHosts[1]
-			cluster.ContactPoints = clusterHosts[:1]
-			cluster.HostFilter = func(host routing.HostSnapshot) bool { return host.Address.Addr().String() != filtered }
+			cluster.HostFilter(func(host routing.HostSnapshot) bool { return host.Address.Addr().String() != filtered })
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
 
@@ -318,12 +319,10 @@ func TestRouting(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			profile := *cluster.DefaultProfile
-			profile.Routing = rr
-			cluster.DefaultProfile = &profile
+			cluster.DefaultProfile(func(p *gocql.ProfileBuilder) { p.Routing(rr) })
 			// we'll filter out the second host
 			filtered := clusterHosts[1]
-			cluster.HostFilter = func(host routing.HostSnapshot) bool { return host.Address.Addr().String() != filtered }
+			cluster.HostFilter(func(host routing.HostSnapshot) bool { return host.Address.Addr().String() != filtered })
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
 
@@ -368,7 +367,7 @@ func TestRouting(t *testing.T) {
 		// Integration test of the routing key calculation
 		t.Run("Computed", func(t *testing.T) {
 			t.Parallel()
-			session := createV2Session(t, func(c *gocql.Config) { c.Metadata.SchemaEvents = false })
+			session := createV2Session(t, func(c *gocql.ConfigBuilder) { c.IgnoreEvents(gocql.SchemaEvent) })
 			defer session.Close()
 			single, composite := testTableName(t, "single"), testTableName(t, "composite")
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(first_id int,second_id int,PRIMARY KEY(first_id,second_id))", single))
@@ -451,13 +450,11 @@ func TestRouting(t *testing.T) {
 		t.Run("Converge", func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
-			cluster := createV2Cluster()
-			v2ConfigureRouting(t, &cluster, routing.Options{TokenAware: true})
+			cluster := createV2ClusterWithout(fixtureConsistency)
+			v2ConfigureRouting(t, cluster, routing.Options{TokenAware: true})
 			// The rows are read back at ONE from whichever replica the tablet
 			// routes to: write them at ALL so a lagging replica cannot miss one.
-			profile := *cluster.DefaultProfile
-			profile.Consistency = cql.All
-			cluster.DefaultProfile = &profile
+			cluster.DefaultProfile(func(p *gocql.ProfileBuilder) { p.Consistency(cql.All) })
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
 			supported, err := v2TabletsSupported(ctx, session)
@@ -620,8 +617,8 @@ func TestRouting(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
 			config := createV2Cluster()
-			v2ConfigureRouting(t, &config, routing.Options{TokenAware: true, LeaderAware: true, ShuffleReplicas: true})
-			s, err := gocql.Connect(ctx, config)
+			v2ConfigureRouting(t, config, routing.Options{TokenAware: true, LeaderAware: true, ShuffleReplicas: true})
+			s, err := gocql.Connect(ctx, mustBuild(t, config))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -711,8 +708,8 @@ func TestRouting(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
 			config := createV2Cluster()
-			v2ConfigureRouting(t, &config, routing.Options{TokenAware: true, LeaderAware: true, ShuffleReplicas: true})
-			s, err := gocql.Connect(ctx, config)
+			v2ConfigureRouting(t, config, routing.Options{TokenAware: true, LeaderAware: true, ShuffleReplicas: true})
+			s, err := gocql.Connect(ctx, mustBuild(t, config))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -905,14 +902,11 @@ func TestRouting(t *testing.T) {
 		// Integration test of the token-aware policy-based connection pool
 		t.Run("ConnPool", func(t *testing.T) {
 			t.Parallel()
-			session := createV2Session(t, func(c *gocql.Config) {
-				c.Pool.ConnectionsPerHost = 1
-				p := *c.DefaultProfile
-				p.PageSize = 1
+			session := createV2SessionFromConfig(createV2ClusterWithout(fixtureConsistency, func(c *gocql.ConfigBuilder) {
+				c.ConnectionsPerHost(1)
 				// The row is read back at ONE: write it at ALL so any replica has it.
-				p.Consistency = cql.All
-				c.DefaultProfile = &p
-			})
+				c.DefaultProfile(func(p *gocql.ProfileBuilder) { p.PageSize(1).Consistency(cql.All) })
+			}), t, false)
 			defer session.Close()
 			conns := waitForHostConns(t, session)
 			require.Len(t, conns, len(session.Metadata().Hosts()))
@@ -939,11 +933,11 @@ func TestRouting(t *testing.T) {
 					v2CreateRoutingKeyspace(t, bootstrap, keyspace, 1)
 					defer cleanup(t, bootstrap, keyspace)
 					cluster := createV2Cluster()
-					v2ConfigureRouting(t, &cluster, routing.Options{TokenAware: true})
+					v2ConfigureRouting(t, cluster, routing.Options{TokenAware: true})
 					if configuredKeyspace {
-						cluster.Keyspace = keyspace
+						cluster.Keyspace(keyspace)
 					}
-					testIfPolicyInitializedProperly(t, cluster, keyspace)
+					testIfPolicyInitializedProperly(t, mustBuild(t, cluster), keyspace)
 				})
 			}
 		})

@@ -33,8 +33,10 @@ var (
 func ExampleParamsOf() {
 	// Assumes example.tweet(timeline text, id uuid, text text, PRIMARY KEY(timeline,id)).
 	ctx := context.Background()
-	config := gocql.DefaultConfig("localhost:9042")
-	config.Keyspace = "example"
+	config, err := gocql.NewConfig("localhost:9042").Keyspace("example").Build()
+	if err != nil {
+		log.Fatal(err)
+	}
 	session, err := gocql.Connect(ctx, config)
 	if err != nil {
 		log.Fatal(err)

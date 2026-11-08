@@ -7,8 +7,9 @@ go get github.com/scylladb/gocql/v2@v2.0.0
 ```
 
 Import `github.com/scylladb/gocql/v2` (`gocql`) and
-`github.com/scylladb/gocql/v2/cql`. Create `gocql.DefaultConfig(contactPoints...)`
-and open it with `gocql.Connect(ctx, config)`. Close the session when finished.
+`github.com/scylladb/gocql/v2/cql`. Build a configuration with
+`gocql.NewConfig(contactPoints...).Build()` and open it with
+`gocql.Connect(ctx, config)`. Close the session when finished.
 
 Declare a `cql.Statement[P,R]` with `CQL`, `Params` and `Rows`.
 `Prepare(ctx, session, statement)` prepares it and validates its codecs

@@ -41,15 +41,12 @@ func BenchmarkConn(b *testing.B) {
 	b.Run("RoutingKey", func(b *testing.B) {
 		const workers = 16
 		ctx := context.Background()
-		session := createV2Session(b, func(config *gocql.Config) {
-			config.Pool.ConnectionsPerHost = 1
+		session := createV2Session(b, func(config *gocql.ConfigBuilder) {
 			policy, err := routing.NewPolicy(routing.Options{TokenAware: true})
 			if err != nil {
 				b.Fatal(err)
 			}
-			profile := *config.DefaultProfile
-			profile.Routing = policy
-			config.DefaultProfile = &profile
+			config.ConnectionsPerHost(1).DefaultProfile(func(p *gocql.ProfileBuilder) { p.Routing(policy) })
 		})
 		defer session.Close()
 		table := testTableName(b)
@@ -91,7 +88,7 @@ func BenchmarkConn(b *testing.B) {
 	b.Run("Stress", func(b *testing.B) {
 		const workers = 16
 		ctx := context.Background()
-		session := createV2Session(b, func(config *gocql.Config) { config.Pool.ConnectionsPerHost = 1 })
+		session := createV2Session(b, func(config *gocql.ConfigBuilder) { config.ConnectionsPerHost(1) })
 		defer session.Close()
 		table := testTableName(b)
 		if err := v2CreateTable(ctx, session, fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (id int primary key)", table)); err != nil {

@@ -13,6 +13,7 @@ import (
 	metadata "github.com/scylladb/gocql/v2/internal/metadata"
 	model "github.com/scylladb/gocql/v2/internal/model"
 	protocol "github.com/scylladb/gocql/v2/internal/protocol"
+	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 
 	"github.com/scylladb/gocql/v2/dialer"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -39,7 +40,7 @@ func benchControlParams(t *testing.T) []byte {
 	t.Helper()
 	sentinel := errors.New("capture encoded control request")
 	var request *model.AttemptRequest
-	_, err := metadata.ReadRows(context.Background(), 4, DefaultConfig().Metadata.RequestTimeout,
+	_, err := metadata.ReadRows(context.Background(), 4, implSettings.DefaultConfig().Metadata.RequestTimeout,
 		func(_ context.Context, r *model.AttemptRequest) (*model.ResponseData, error) {
 			request = r
 			return nil, sentinel
@@ -48,7 +49,7 @@ func benchControlParams(t *testing.T) []byte {
 	if !errors.Is(err, sentinel) || request == nil {
 		t.Fatalf("capture canonical metadata request: %v", err)
 	}
-	frame, err := (&protocol.Settings{Protocol: 4, MaxFrameBytes: DefaultConfig().Limits.MaxFrameBytes, MaxDecompressedBytes: DefaultConfig().Limits.MaxDecompressedBytes}).BuildTypedRequest(request, 0)
+	frame, err := (&protocol.Settings{Protocol: 4, MaxFrameBytes: implSettings.DefaultConfig().Limits.MaxFrameBytes, MaxDecompressedBytes: implSettings.DefaultConfig().Limits.MaxDecompressedBytes}).BuildTypedRequest(request, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -80,7 +80,6 @@ type Config struct {
 	Reconnect                                                                        ReconnectPolicy
 	DialHost                                                                         func(context.Context, implEndpoint.DialTarget) (net.Conn, error)
 	TLS                                                                              *tls.Config
-	TLSForHost                                                                       func(context.Context, HostSnapshot) (*tls.Config, error)
 	ClientRoutes                                                                     *ClientRoutesOptions
 	ContactPoints                                                                    []string
 	Pool                                                                             PoolOptions

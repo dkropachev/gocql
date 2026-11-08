@@ -97,14 +97,11 @@ func TestBatch(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
 			retryPolicy := sessionTestRetry{action: retry.Next, maxAttempts: 2}
-			session := createV2Session(t, func(config *gocql.Config) {
-				profile := *config.DefaultProfile
-				profile.Retry = retryPolicy
+			session := createV2SessionFromConfig(createV2ClusterWithout(fixtureRetry|fixtureConsistency, func(config *gocql.ConfigBuilder) {
 				// The batch below writes at ONE, so the rows are read back at ALL:
 				// a QUORUM read could miss the one replica that took the write.
-				profile.Consistency = cql.All
-				config.DefaultProfile = &profile
-			})
+				config.DefaultProfile(func(p *gocql.ProfileBuilder) { p.Retry(retryPolicy).Consistency(cql.All) })
+			}), t, false)
 			defer session.Close()
 			table := testTableName(t)
 			require.NoError(t, v2CreateTable(ctx, session, fmt.Sprintf("CREATE TABLE %s (id int PRIMARY KEY)", table)))

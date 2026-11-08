@@ -24,7 +24,15 @@ const BatchSizeMaximum = implCluster.BatchSizeMaximum
 
 const ClientRouteEvent = implCluster.ClientRouteEvent
 
-func Connect(a0 context.Context, a1 Config) (*Session, error) { return implExecution.Connect(a0, a1) }
+// Connect opens a session with config, which must come from
+// ConfigBuilder.Build.
+func Connect(ctx context.Context, config Config) (*Session, error) {
+	settings, err := config.resolved()
+	if err != nil {
+		return nil, err
+	}
+	return implExecution.Connect(ctx, settings)
+}
 
 const ControlEvent = implCluster.ControlEvent
 
@@ -47,8 +55,13 @@ type EventKind = implCluster.EventKind
 // Deprecated: use cqlerr.ExecutionError.
 type ExecutionError = implExecution.ExecutionError
 
-func OpenSingleHost(a0 context.Context, a1 Config, a2 cql.UUID) (*Session, error) {
-	return implExecution.OpenSingleHost(a0, a1, a2)
+// OpenSingleHost opens a session that uses only the node hostID.
+func OpenSingleHost(ctx context.Context, config Config, hostID cql.UUID) (*Session, error) {
+	settings, err := config.resolved()
+	if err != nil {
+		return nil, err
+	}
+	return implExecution.OpenSingleHost(ctx, settings, hostID)
 }
 
 // Options lists the settings of an execution. The zero Options uses the

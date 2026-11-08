@@ -34,7 +34,6 @@ type Config struct {
 	Logger                                            logging.StdLogger
 	DialHost                                          func(context.Context, implEndpoint.DialTarget) (net.Conn, error)
 	TLS                                               *tls.Config
-	TLSForHost                                        func(context.Context, HostSnapshot) (*tls.Config, error)
 	HostFilter                                        func(HostSnapshot) bool
 	ClientRoutes                                      *ClientRoutesOptions
 	DefaultProfile                                    *Profile
@@ -178,9 +177,9 @@ func InternalValidateConfig(config Config) error {
 			}
 		}
 		if config.AddressTranslator != nil || config.Pool.ShardAwarePort {
-			return typeValidation("client routes", "user address translator and source-port shard dialing are incompatible")
+			return typeValidation("client routes", "user address translator and advanced shard awareness are incompatible")
 		}
-		if routes.TLS && (config.TLS == nil && config.TLSForHost == nil || config.TLS != nil && config.TLS.InsecureSkipVerify && config.TLS.VerifyConnection == nil && config.TLS.VerifyPeerCertificate == nil) {
+		if routes.TLS && (config.TLS == nil || config.TLS.InsecureSkipVerify && config.TLS.VerifyConnection == nil && config.TLS.VerifyPeerCertificate == nil) {
 			return typeValidation("client routes TLS", "verified TLS configuration required")
 		}
 		if routes.SNIProxyAddress != "" && !routes.TLS {

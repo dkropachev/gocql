@@ -132,7 +132,7 @@ func main() {
 			public[name] = types.ObjectString(root.Scope().Lookup(name), func(p *types.Package) string { return p.Path() })
 		}
 	}
-	required := strings.Fields("Config DefaultConfig Connect OpenSingleHost Session Statement Prepare Prepared PrepareOptions Query NewQuery NewUnpreparedQuery StreamQuery NewStreamQuery NewUnpreparedStreamQuery ErrBusy RowInto OwnedBlobCodec Batch Options Result Profile AuthProvider AuthExchange PasswordAuth ReconnectPolicy ConvictionPolicy RoutingPolicy RoutingInfo QueryPlan Target TokenPartitioner PartitionKey Observer RequestEvent AttemptEvent MetadataSnapshot HostSnapshot Event EventFilter Subscription DialTarget Dialer DialerFunc DNSResolver AddressTranslator StreamLimits StreamOptions StreamRowDecoder StreamDecoder StreamRowPlan StreamValuePlan StreamResetter StreamRowReader StreamValueReader StreamRow StreamColumn StreamList StreamBlob StreamText StreamCapacityError StreamCapabilityError")
+	required := strings.Fields("Config ConfigBuilder NewConfig ProfileBuilder NewProfile Connect OpenSingleHost Session Statement Prepare Prepared PrepareOptions Query NewQuery NewUnpreparedQuery StreamQuery NewStreamQuery NewUnpreparedStreamQuery ErrBusy RowInto OwnedBlobCodec Batch Options Result Profile AuthProvider AuthExchange PasswordAuth ReconnectPolicy ConvictionPolicy RoutingPolicy RoutingInfo QueryPlan Target TokenPartitioner PartitionKey Observer RequestEvent AttemptEvent MetadataSnapshot HostSnapshot Event EventFilter Subscription DialTarget Dialer DialerFunc DNSResolver AddressTranslator StreamLimits StreamOptions StreamRowDecoder StreamDecoder StreamRowPlan StreamValuePlan StreamResetter StreamRowReader StreamValueReader StreamRow StreamColumn StreamList StreamBlob StreamText StreamCapacityError StreamCapabilityError")
 	missing := []string{}
 	for _, name := range required {
 		if root.Scope().Lookup(name) == nil {
@@ -410,12 +410,12 @@ func (p *statefulConviction) AddFailure(_ error,host gocql.HostSnapshot)bool {p.
 func (p *statefulConviction) Reset(host gocql.HostSnapshot){delete(p.failures,host.ID)}
 func TestExternalConvictionImplementation(t *testing.T){
  policy:=&statefulConviction{failures:map[gocql.UUID]int{}}
- config:=gocql.DefaultConfig("127.0.0.1");config.Conviction=policy
+ if _,err:=gocql.NewConfig("127.0.0.1").Conviction(policy).Build();err!=nil{t.Fatal(err)}
  host:=gocql.HostSnapshot{ID:gocql.ParseUUIDMust("ed8ea335-19d6-4652-9d9a-4519c3b6eff0"),Address:netip.MustParseAddrPort("127.0.0.1:9042"),Datacenter:"dc1",Rack:"r1",Tokens:[]int64{-1,1},Enabled:true,Up:true}
  failure:=errors.New("external failure")
- if config.Conviction.AddFailure(failure,host)||!config.Conviction.AddFailure(failure,host){t.Fatal("stateful conviction decision")}
- config.Conviction.Reset(host)
- if config.Conviction.AddFailure(failure,host){t.Fatal("reset did not clear the selected host")}
+ if policy.AddFailure(failure,host)||!policy.AddFailure(failure,host){t.Fatal("stateful conviction decision")}
+ policy.Reset(host)
+ if policy.AddFailure(failure,host){t.Fatal("reset did not clear the selected host")}
  var simple gocql.ConvictionPolicy=&gocql.SimpleConvictionPolicy{}
  if !simple.AddFailure(failure,host){t.Fatal("simple conviction behavior changed")};simple.Reset(host)
  if !simple.AddFailure(failure,host){t.Fatal("simple reset behavior changed")}

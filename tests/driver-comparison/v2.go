@@ -44,22 +44,31 @@ var streamDecoder = cql.StreamRow(func(*row) {}, cql.StreamColumn("k", cql.Strea
 var bufferedDecoder = cql.RowInto(func(*row) {}, cql.Column("k", cql.Int32, func(r *row) *int32 { return &r.K }), cql.Column("r", cql.Int32, func(r *row) *int32 { return &r.R }), cql.Column("p", cql.OwnedBlobCodec, func(r *row) *[]byte { return &r.P }))
 
 func connect(hosts []string) (adapter, error) {
-	c := g.DefaultConfig(hosts...)
-	c.Protocol = 4
-	c.Metadata.PeriodicRefresh = *metadataRefresh
-	c.Pool.ConnectionsPerShard = 1
-	c.Pool.MaxExcessPerShard = 0
-	p := *c.DefaultProfile
-	p.Consistency = cql.LocalQuorum
-	p.SerialConsistency = cql.Option[cql.Consistency]{}
-	p.Timeout = 10 * time.Second
-	p.PageTimeout = 10 * time.Second
-	p.PageSize = 32
-	p.Prefetch = 0
-	p.Retry = retry.Safe{MaxAttempts: 1}
-	p.Speculation = nil
-	p.Routing, _ = routing.NewPolicy(routing.Options{TokenAware: true, Datacenter: "datacenter1"})
-	c.DefaultProfile = &p
+	policy, _ := routing.NewPolicy(routing.Options{TokenAware: true, Datacenter: "datacenter1"})
+	builder := g.NewConfig(hosts...).
+		ProtocolVersion(g.Protocol4).
+		ConnectionsPerShard(1).
+		MaxExcessPerShard(0).
+		DefaultProfile(func(p *g.ProfileBuilder) {
+			p.Consistency(cql.LocalQuorum).
+				NoSerialConsistency().
+				Timeout(10 * time.Second).
+				PageTimeout(10 * time.Second).
+				PageSize(32).
+				NoPrefetch().
+				Retry(retry.Safe{MaxAttempts: 1}).
+				Speculation(nil).
+				Routing(policy)
+		})
+	if *metadataRefresh > 0 {
+		builder.MetadataRefresh(*metadataRefresh)
+	} else {
+		builder.NoMetadataRefresh()
+	}
+	c, e := builder.Build()
+	if e != nil {
+		return nil, e
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	s, e := g.Connect(ctx, c)

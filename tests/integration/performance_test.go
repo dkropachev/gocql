@@ -42,14 +42,12 @@ func TestPerformance(t *testing.T) {
 		}
 		runtime.GC()
 		initial := mem().HeapAlloc
-		config := createV2Cluster(func(c *gocql.Config) {
-			c.Pool.ConnectionsPerHost = 8
-			c.KeepaliveInterval = 0
-			c.Metadata.PeriodicRefresh = 0
+		config := createV2Cluster(func(c *gocql.ConfigBuilder) {
+			c.ConnectionsPerHost(8).NoHeartbeat().NoMetadataRefresh()
 		})
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 		defer cancel()
-		s, e := gocql.Connect(ctx, config)
+		s, e := gocql.Connect(ctx, mustBuild(t, config))
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -104,7 +102,7 @@ func TestPerformance(t *testing.T) {
 		records := []concurrentMemory{}
 		for _, workers := range []int{1, 4, 8} {
 			for _, api := range []string{"into", "stream"} {
-				if api == "stream" && config.Protocol < 5 && config.Compression != gocql.NoCompression {
+				if api == "stream" && *flagProto < 5 && *flagCompressTest != "no-compression" && *flagCompressTest != "" {
 					continue
 				}
 				t.Run(fmt.Sprintf("%s/workers%d", api, workers), func(t *testing.T) {
@@ -336,28 +334,25 @@ func TestPerformance(t *testing.T) {
 		if e := os.WriteFile(filepath.Join(outputDir, "counter-calibration.json"), append(calibrationBytes, '\n'), 0644); e != nil {
 			t.Fatal(e)
 		}
-		config := createV2Cluster(func(c *gocql.Config) {
-			c.Pool.ConnectionsPerHost = 0
-			c.Pool.ConnectionsPerShard = 1
-			c.Pool.SourcePortStart = 32768
-			c.Pool.SourcePortEnd = 65535
-			c.CoalesceWait = 0
-			c.KeepaliveInterval = 30 * time.Second
-			c.Metadata.PeriodicRefresh = 0
-			c.Dialer = endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
+		config := createV2Cluster(func(c *gocql.ConfigBuilder) {
+			c.ConnectionsPerShard(1).
+				AdvancedShardAwareness(32768, 65535).
+				Heartbeat(30*time.Second, 30*time.Second).
+				NoMetadataRefresh()
+			c.Dialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 				conn, err := (endpoint.DefaultDialer{}).DialContext(ctx, target)
 				if err != nil {
 					return nil, err
 				}
 				stats.add(conn)
 				return conn, nil
-			})
+			}))
 		})
 		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
 		defer cancel()
 		runtime.GC()
 		baseRuntime := mem().HeapAlloc
-		s, err := gocql.Connect(ctx, config)
+		s, err := gocql.Connect(ctx, mustBuild(t, config))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -417,7 +412,7 @@ func TestPerformance(t *testing.T) {
 		var measureMu sync.Mutex
 		for _, shape := range shapes {
 			for _, api := range []string{"into", "stream"} {
-				if api == "stream" && config.Protocol < 5 && config.Compression != gocql.NoCompression {
+				if api == "stream" && *flagProto < 5 && *flagCompressTest != "no-compression" && *flagCompressTest != "" {
 					continue
 				}
 				t.Run(shape.Name+"/"+api, func(t *testing.T) {
@@ -526,7 +521,7 @@ func TestPerformance(t *testing.T) {
 					if shape.Slow {
 						perWorker = 8
 					}
-					r := testResult{Shape: shape, API: api, Operations: perWorker * shape.Concurrency, Protocol: config.Protocol, TLS: config.TLS != nil, Compression: *flagCompressTest, ApplicationStorageBytes: int64(shape.Concurrency * (shape.Cell + 11)), Sampling: "100us HeapAlloc during separate diagnostic; post-GC at every row and post-Close; inclusive driver+harness delta uses pre-Connect runtime baseline and separately seeded output; warm idle retained pools included; no process syscall overhead subtraction"}
+					r := testResult{Shape: shape, API: api, Operations: perWorker * shape.Concurrency, Protocol: *flagProto, TLS: *flagRunSslTest, Compression: *flagCompressTest, ApplicationStorageBytes: int64(shape.Concurrency * (shape.Cell + 11)), Sampling: "100us HeapAlloc during separate diagnostic; post-GC at every row and post-Close; inclusive driver+harness delta uses pre-Connect runtime baseline and separately seeded output; warm idle retained pools included; no process syscall overhead subtraction"}
 					if api != "stream" {
 						r.ApplicationCopyBytes = int64(r.Operations * shape.Rows * (shape.Cell + 11))
 					}

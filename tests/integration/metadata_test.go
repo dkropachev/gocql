@@ -50,12 +50,11 @@ func TestMetadata(t *testing.T) {
 	t.Run("Control", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		config := createV2Cluster(func(c *gocql.Config) {
-			c.Metadata.InitialDiscovery = false
-			c.Pool.ConnectionsPerHost = 1
-			c.Pool.ShardAwarePort = false
+		contactPoints := getClusterHosts()
+		config := createV2Cluster(func(c *gocql.ConfigBuilder) {
+			c.NoDiscovery().ConnectionsPerHost(1).NoAdvancedShardAwareness()
 		})
-		s, err := gocql.Connect(ctx, config)
+		s, err := gocql.Connect(ctx, mustBuild(t, config))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -67,7 +66,7 @@ func TestMetadata(t *testing.T) {
 			}
 			identities[host.ID] = true
 		}
-		if len(identities) != len(config.ContactPoints) {
+		if len(identities) != len(contactPoints) {
 			t.Fatal("configured contacts collapsed", s.Metadata().Hosts())
 		}
 		if err := s.AwaitSchemaAgreement(ctx); err != nil {
@@ -168,11 +167,9 @@ func TestMetadata(t *testing.T) {
 		t.Run("ControlReconnect", func(t *testing.T) {
 			t.Parallel()
 
-			cluster := createV2Cluster()
-			cluster.Metadata.TopologyEvents = false
-			cluster.Metadata.StatusEvents = false
+			cluster := createV2Cluster().IgnoreEvents(gocql.TopologyEvent, gocql.StatusEvent)
 
-			sess, err := gocql.Connect(context.Background(), cluster)
+			sess, err := gocql.Connect(context.Background(), mustBuild(t, cluster))
 			if err != nil {
 				t.Fatalf("unable to create session: %v", err)
 			}
@@ -203,9 +200,8 @@ func TestMetadata(t *testing.T) {
 		//nolint:paralleltest // listens for schema events from the global control connection
 		t.Run("SchemaChange", func(t *testing.T) {
 			cluster := createV2Cluster()
-			cluster.Metadata.SchemaEvents = true
 
-			sess, err := gocql.Connect(context.Background(), cluster)
+			sess, err := gocql.Connect(context.Background(), mustBuild(t, cluster))
 			if err != nil {
 				t.Fatalf("unable to create session: %v", err)
 			}
@@ -280,13 +276,11 @@ func TestMetadata(t *testing.T) {
 				t.Skip("incomplete-peer wire fixture needs a plaintext native transport")
 			}
 			fixture := &incompletePeerDialer{}
-			config := createV2Cluster(func(c *gocql.Config) {
-				c.Protocol = 4
-				c.Compression = gocql.NoCompression
-				c.TLS = nil
-				c.Dialer = fixture
+			// TLS is never set here: the test skips under -runssl above.
+			config := createV2ClusterWithout(fixtureProtocol|fixtureCompression, func(c *gocql.ConfigBuilder) {
+				c.ProtocolVersion(gocql.Protocol4).Compression(gocql.NoCompression).Dialer(fixture)
 			})
-			session, err := gocql.Connect(context.Background(), config)
+			session, err := gocql.Connect(context.Background(), mustBuild(t, config))
 			require.NoError(t, err)
 			defer session.Close()
 			require.Positive(t, fixture.injected.Load(), "discovery must consume injected incomplete peer")
@@ -303,8 +297,7 @@ func TestMetadata(t *testing.T) {
 			t.Parallel()
 
 			clusterHosts := getClusterHosts()
-			cluster := createV2Cluster()
-			cluster.ContactPoints = clusterHosts[:1]
+			cluster := newFixtureConfig(clusterHosts[:1], 0)
 
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
@@ -378,7 +371,7 @@ func TestMetadata(t *testing.T) {
 
 			cluster := createV2Cluster()
 
-			v2ConfigureRouting(t, &cluster, routing.Options{TokenAware: true})
+			v2ConfigureRouting(t, cluster, routing.Options{TokenAware: true})
 
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()

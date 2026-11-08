@@ -86,11 +86,13 @@ func CloneTLSConfig(source *tls.Config) *tls.Config {
 	return c
 }
 
-func UnixContact(config Config) (string, error) {
+// UnixSocketPath returns the socket path when contactPoints name a Unix
+// socket, without checking the settings a socket requires.
+func UnixSocketPath(contactPoints []string) (string, error) {
 	path := ""
-	for _, point := range config.ContactPoints {
+	for _, point := range contactPoints {
 		if strings.HasPrefix(point, "unix:") || filepath.IsAbs(point) {
-			if len(config.ContactPoints) != 1 {
+			if len(contactPoints) != 1 {
 				return "", typeValidation("contact points", "Unix and TCP contacts cannot be mixed")
 			}
 			path = strings.TrimPrefix(point, "unix:")
@@ -99,6 +101,14 @@ func UnixContact(config Config) (string, error) {
 			}
 		}
 	}
+	return path, nil
+}
+
+func UnixContact(config Config) (string, error) {
+	path, err := UnixSocketPath(config.ContactPoints)
+	if err != nil {
+		return "", err
+	}
 	if path != "" {
 		if config.Metadata.InitialDiscovery {
 			return "", &UnsupportedSettingError{Setting: "Unix discovery", Reason: "one local socket requires InitialDiscovery=false"}
@@ -106,7 +116,7 @@ func UnixContact(config Config) (string, error) {
 		if config.Protocol != 3 {
 			return "", &UnsupportedSettingError{Setting: "Unix protocol", Reason: "explicit native protocol 3 is required"}
 		}
-		if config.TLS != nil || config.TLSForHost != nil {
+		if config.TLS != nil {
 			return "", &UnsupportedSettingError{Setting: "Unix TLS", Reason: "maintenance sockets carry plaintext native protocol"}
 		}
 		if config.LocalAddress.IsValid() {

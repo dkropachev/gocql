@@ -1,9 +1,11 @@
 # TLS
 
-Set `Config.TLS` to a `crypto/tls.Config` with trusted `RootCAs`, optional client
-certificates and a minimum TLS version. Standard hostname verification remains
-enabled. `TLSForHost(ctx, HostSnapshot)` selects host-specific TLS settings;
-a nil result inherits configured TLS and cannot disable required encryption.
+Pass a `crypto/tls.Config` with trusted `RootCAs`, optional client certificates
+and a minimum TLS version to `ConfigBuilder.TLS`; it is copied when called.
+Standard verification remains enabled: unless the config sets `ServerName` or
+skips verification, each connection verifies the node's IP address. One
+configuration serves every node; rotate certificates with
+`GetClientCertificate` and customize checks with `VerifyConnection`.
 Use `ClientSessionCache` for ticket resumption. TLS failure never downgrades to
 plaintext.
 

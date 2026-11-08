@@ -20,8 +20,8 @@ import (
 func testV2InvalidDatacenter(t *testing.T, options routing.Options) {
 	t.Helper()
 	cluster := createV2Cluster()
-	v2ConfigureRouting(t, &cluster, options)
-	session, err := gocql.Connect(context.Background(), cluster)
+	v2ConfigureRouting(t, cluster, options)
+	session, err := gocql.Connect(context.Background(), mustBuild(t, cluster))
 	if session != nil {
 		session.Close()
 	}
@@ -114,8 +114,12 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster gocql.Config, keyspac
 		if err != nil {
 			t.Fatal(err)
 		}
-		profile := *cluster.DefaultProfile
-		profile.Routing = policy
+		builder := gocql.NewProfile()
+		fixtureProfile(builder)
+		profile, err := builder.Routing(policy).Build()
+		if err != nil {
+			t.Fatal(err)
+		}
 		handle := profileOf(profile)
 		rows, err := Run(ctx, session, bound, bindOptions(session, gocql.Options{Profile: handle, Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}))
 		if err != nil {

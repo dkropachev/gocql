@@ -54,6 +54,3 @@ const (
 	Minimal  = implSettings.MetadataMinimal
 	Full     = implSettings.MetadataFull
 )
-
-// Options configures metadata loading and schema agreement.
-type Options = implSettings.MetadataOptions

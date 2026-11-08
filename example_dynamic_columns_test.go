@@ -36,7 +36,11 @@ import (
 
 func Example_dynamicColumns() {
 	ctx := context.Background()
-	s, err := gocql.Connect(ctx, gocql.DefaultConfig("localhost:9042"))
+	config, err := gocql.NewConfig("localhost:9042").Build()
+	if err != nil {
+		log.Fatal(err)
+	}
+	s, err := gocql.Connect(ctx, config)
 	if err != nil {
 		log.Fatal(err)
 	}

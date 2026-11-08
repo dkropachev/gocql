@@ -48,7 +48,7 @@ func TestPrepared(t *testing.T) {
 		t.Run("Eviction", func(t *testing.T) {
 			t.Parallel()
 			const maxPrepared = 4
-			session := createV2Session(t, func(c *gocql.Config) { c.PreparedCacheSize = maxPrepared; c.Metadata.SchemaEvents = false })
+			session := createV2Session(t, func(c *gocql.ConfigBuilder) { c.PreparedCacheSize(maxPrepared).IgnoreEvents(gocql.SchemaEvent) })
 			defer session.Close()
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,mod int)", table))
@@ -137,13 +137,13 @@ func TestPrepared(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
 			cluster := createV2Cluster()
-			v2ConfigureRouting(t, &cluster, routing.Options{TokenAware: true})
-			session, err := gocql.Connect(ctx, cluster)
+			v2ConfigureRouting(t, cluster, routing.Options{TokenAware: true})
+			session, err := gocql.Connect(ctx, mustBuild(t, cluster))
 			if err != nil {
 				t.Fatal("connect:", err)
 			}
 			defer session.Close()
-			cluster.Keyspace = "wrong_keyspace"
+			cluster.Keyspace("wrong_keyspace")
 			keyspace, table := v2SchemaRoutingName(t), v2SchemaRoutingName(t)
 			v2CreateRoutingKeyspace(t, session, keyspace, 1)
 			defer cleanup(t, session, keyspace)
@@ -224,7 +224,7 @@ func TestPrepared(t *testing.T) {
 			if flagCassVersion.Major == 0 || flagCassVersion.Before(2, 1, 3) {
 				t.Skipf("skipping TestPrepared/Reprepare/AfterAlterTable due to CASSANDRA-7910 in Cassandra <2.1.3 version=%v", flagCassVersion)
 			}
-			session := createV2Session(t, func(c *gocql.Config) { c.Pool.ConnectionsPerHost = 1 })
+			session := createV2Session(t, func(c *gocql.ConfigBuilder) { c.ConnectionsPerHost(1) })
 			defer session.Close()
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id text PRIMARY KEY)", table))

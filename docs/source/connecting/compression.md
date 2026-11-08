@@ -1,7 +1,7 @@
 # Compression
 
-Set `config.Compression` to `NoCompression`, `LZ4Compression` or
-`SnappyCompression`. Implementations belong to the single v2 module; no
+Call `Compression` on the `ConfigBuilder` with `NoCompression`,
+`LZ4Compression` or `SnappyCompression`. Implementations belong to the single v2 module; no
 standalone compressor module or `replace` directive is needed. Native protocol
 5 supports LZ4 segment compression. The outbound data path compresses encoded
 spans directly and sends original spans when a v5 segment is incompressible.

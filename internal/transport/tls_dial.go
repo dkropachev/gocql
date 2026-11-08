@@ -20,7 +20,6 @@
 package transport
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 
@@ -42,18 +41,6 @@ type InternalV2TLSHostDialer struct {
 
 func (d *InternalV2TLSHostDialer) InternalSelectedTLS(ctx context.Context, host HostSnapshot) (*tls.Config, error) {
 	c := d.InternalConfig.TLS
-	if d.InternalConfig.TLSForHost != nil {
-		v, err := d.InternalConfig.TLSForHost(ctx, InternalCloneV2HostSnapshot(host))
-		if err != nil {
-			return nil, err
-		}
-		if v != nil {
-			c = v
-		}
-		if c == nil {
-			return nil, typeValidation("TLSForHost", "TLS hook supplied no configuration and no inherited TLS configuration exists")
-		}
-	}
 	if c != nil {
 		c = cloneV2TLSConfig(c)
 	}
@@ -304,15 +291,6 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *HostInfo, shar
 		if current.ID != snapshot.ID || current.Address != snapshot.Address || current.Datacenter != snapshot.Datacenter || current.Rack != snapshot.Rack || InternalLogicalV2TLSAddress(host) != logicalAddress {
 			return typeValidation("dial target generation", "host identity/endpoint changed during opening")
 		}
-		if d.InternalConfig.TLSForHost != nil {
-			now, err := d.InternalSelectedTLS(ctx, current)
-			if err != nil {
-				return err
-			}
-			if !InternalEqualV2TLSConfig(tlsConfig, now) {
-				return typeValidation("dial target generation", "TLS/SNI target changed during opening")
-			}
-		}
 		return nil
 	}
 	return result, nil
@@ -325,41 +303,6 @@ func InternalCloneV2HostSnapshot(v HostSnapshot) HostSnapshot {
 func InternalCloneV2DialTarget(v DialTarget) DialTarget {
 	v.Host = InternalCloneV2HostSnapshot(v.Host)
 	return v
-}
-
-func InternalEqualV2TLSConfig(a, b *tls.Config) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	if a.ServerName != b.ServerName || a.InsecureSkipVerify != b.InsecureSkipVerify || a.MinVersion != b.MinVersion || a.MaxVersion != b.MaxVersion || !slices.Equal(a.NextProtos, b.NextProtos) || !slices.Equal(a.CipherSuites, b.CipherSuites) || !slices.Equal(a.CurvePreferences, b.CurvePreferences) || len(a.Certificates) != len(b.Certificates) {
-		return false
-	}
-	if a.RootCAs == nil || b.RootCAs == nil {
-		if a.RootCAs != b.RootCAs {
-			return false
-		}
-	} else if !a.RootCAs.Equal(b.RootCAs) {
-		return false
-	}
-	if a.ClientCAs == nil || b.ClientCAs == nil {
-		if a.ClientCAs != b.ClientCAs {
-			return false
-		}
-	} else if !a.ClientCAs.Equal(b.ClientCAs) {
-		return false
-	}
-	for i, c := range a.Certificates {
-		other := b.Certificates[i]
-		if len(c.Certificate) != len(other.Certificate) || !bytes.Equal(c.OCSPStaple, other.OCSPStaple) {
-			return false
-		}
-		for j, der := range c.Certificate {
-			if !bytes.Equal(der, other.Certificate[j]) {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 func InternalLogicalV2TLSAddress(host *HostInfo) string {

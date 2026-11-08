@@ -34,14 +34,12 @@ func cleanupNamespaces(t *testing.T, allowed []string) {
 		selected[name] = true
 	}
 	matches := func(name string) bool { return owns(name) && (allowed == nil || selected[name]) }
-	config := createV2Cluster(func(c *gocql.Config) {
-		c.Metadata.SchemaEvents = false
-		c.Metadata.TopologyEvents = false
-		c.Metadata.StatusEvents = false
-		c.Metadata.AutomaticAgreement = false
-		c.Metadata.RefreshAfterAgreement = false
+	config := createV2Cluster(func(c *gocql.ConfigBuilder) {
+		c.IgnoreEvents(gocql.SchemaEvent, gocql.TopologyEvent, gocql.StatusEvent).
+			ManualSchemaAgreement().
+			NoRefreshAfterAgreement()
 	})
-	s, err := gocql.Connect(ctx, config)
+	s, err := gocql.Connect(ctx, mustBuild(t, config))
 	if err != nil {
 		t.Fatal(err)
 	}

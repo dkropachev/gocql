@@ -22,7 +22,8 @@ import (
     "github.com/scylladb/gocql/v2/cql"
 )
 
-config := gocql.DefaultConfig("127.0.0.1:9042")
+config, err := gocql.NewConfig("127.0.0.1:9042").Build()
+if err != nil { return err }
 session, err := gocql.Connect(ctx, config)
 if err != nil { return err }
 defer session.Close()
@@ -126,11 +127,11 @@ session once, so query executions do no per-call work. One-shot executions
 options carry their session's default profile and keyspace and are not checked
 against the session that runs them: use them only on the session they were
 bound to.
-`endpoint.Dialer`, `DialHost`, `TLSForHost`, `endpoint.DNSResolver`,
+`endpoint.Dialer`, `endpoint.DNSResolver`,
 `endpoint.Translator`, `ReconnectPolicy`, `routing.TokenPartitioner`,
 `routing.Policy`, observers and immutable
 metadata snapshots provide typed extension points. Host/shard pool sizing,
-source ports, cancellation and orphan budgets are independently configured.
+advanced shard awareness, cancellation and orphan budgets are independently configured.
 
 ## Development
 

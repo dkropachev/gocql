@@ -16,8 +16,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	gocql "github.com/scylladb/gocql/v2"
 )
 
 func TestExamples(t *testing.T) {
@@ -27,8 +25,8 @@ func TestExamples(t *testing.T) {
 		if os.Getenv("GOCQL_TEST_RUN") == "" {
 			t.Skip("requires locked native run")
 		}
-		cfg := createV2Cluster()
-		if cfg.Protocol != 4 || cfg.TLS != nil {
+		cfg := mustBuild(t, createV2Cluster())
+		if *flagProto != 4 || *flagRunSslTest {
 			t.Skip("raw v4 ownership lane")
 		}
 		dir := t.TempDir()
@@ -43,7 +41,7 @@ func TestExamples(t *testing.T) {
 		}
 		host := net.JoinHostPort(getClusterHosts()[0], "9042")
 		exampleArgs := []string{"-hosts", host, "-protocol", "4"}
-		if cfg.Auth != nil {
+		if *flagRunAuthTest {
 			exampleArgs = append(exampleArgs, "-username", "cassandra", "-password", "cassandra")
 		}
 		var killed []string
@@ -115,26 +113,26 @@ func TestExamples(t *testing.T) {
 		if err := json.Unmarshal(data, &corpus); err != nil {
 			t.Fatal(err)
 		}
-		testNamespace(t, createV2Cluster(), corpus.Namespace, false)
+		testNamespace(t, mustBuild(t, createV2Cluster()), corpus.Namespace, false)
 		t.Log("GENERATED CORPUS NAMESPACE ABSENT", corpus.Namespace)
 	})
 
 	// This subprocess is a normal consumer build: root _test.go aliases cannot make
 	// the standalone example compile or run.
 	t.Run("Streaming", func(t *testing.T) {
-		cfg := createV2Cluster()
+		cfg := mustBuild(t, createV2Cluster())
 		host := getClusterHosts()[0]
-		args := []string{"run", "./examples/streaming", "-hosts", net.JoinHostPort(host, strconv.Itoa(int(cfg.Port))), "-protocol", strconv.Itoa(cfg.Protocol)}
-		switch cfg.Compression {
-		case gocql.LZ4Compression:
+		args := []string{"run", "./examples/streaming", "-hosts", net.JoinHostPort(host, strconv.Itoa(int(fixturePort()))), "-protocol", strconv.Itoa(*flagProto)}
+		switch *flagCompressTest {
+		case "lz4":
 			args = append(args, "-compression", "lz4")
-		case gocql.SnappyCompression:
+		case "snappy":
 			args = append(args, "-compression", "snappy")
 		}
-		if cfg.Auth != nil {
+		if *flagRunAuthTest {
 			args = append(args, "-username", "cassandra", "-password", "cassandra")
 		}
-		if cfg.TLS != nil {
+		if *flagRunSslTest {
 			args = append(args, "-ca", "testdata/pki/ca.crt", "-cert", "testdata/pki/gocql.crt", "-key", "testdata/pki/gocql.key", "-tls-uri", "spiffe://test.cassandra.apache.org/cassandra-gocql-driver/integrationTest/cassandra")
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)

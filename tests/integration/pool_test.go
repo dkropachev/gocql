@@ -51,26 +51,24 @@ func TestPool(t *testing.T) {
 	// The control connection completes real startup, then the data dial fails. The
 	// public conviction hook must receive the discovered host, not a mutable core.
 	t.Run("Conviction", func(t *testing.T) {
-		cfg := createV2Cluster()
-		if cfg.Protocol != 4 || cfg.TLS != nil {
+		if *flagProto != 4 || *flagRunSslTest {
 			t.Skip("raw v4 callback lane")
 		}
 		for _, verdict := range []bool{false, true} {
 			t.Run(fmt.Sprint(verdict), func(t *testing.T) {
 				cause := errors.New("injected data connection failure")
 				policy := &testConviction{cause: cause, verdict: verdict}
-				config := createV2Cluster(func(c *gocql.Config) {
-					c.ContactPoints = []string{getClusterHosts()[0]}
-					c.Metadata.InitialDiscovery = false
-					c.Pool.ConnectionsPerHost = 1
-					c.Pool.ShardAwarePort = false
-					c.Reconnect = noReconnect{}
-					c.Conviction = policy
-					c.KeepaliveInterval = 0
-					c.Metadata.PeriodicRefresh = 0
-				})
 				var dials atomic.Int32
-				config.Dialer = endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
+				config := newFixtureConfig(getClusterHosts()[:1], 0, func(c *gocql.ConfigBuilder) {
+					c.NoDiscovery().
+						ConnectionsPerHost(1).
+						NoAdvancedShardAwareness().
+						Reconnect(noReconnect{}).
+						Conviction(policy).
+						NoHeartbeat().
+						NoMetadataRefresh()
+				})
+				config.Dialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 					if dials.Add(1) > 1 {
 						policy.mu.Lock()
 						policy.targets = append(policy.targets, target.Host)
@@ -78,10 +76,10 @@ func TestPool(t *testing.T) {
 						return nil, cause
 					}
 					return (endpoint.DefaultDialer{}).DialContext(ctx, target)
-				})
+				}))
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
-				s, err := gocql.Connect(ctx, config)
+				s, err := gocql.Connect(ctx, mustBuild(t, config))
 				if s != nil {
 					s.Close()
 				}
@@ -107,7 +105,7 @@ func TestPool(t *testing.T) {
 				if resets != 0 {
 					t.Fatal("driver introduced a new reset call")
 				}
-				config.Conviction.Reset(hosts[0])
+				policy.Reset(hosts[0])
 				policy.mu.Lock()
 				resets = policy.resets
 				policy.mu.Unlock()
@@ -120,13 +118,18 @@ func TestPool(t *testing.T) {
 	})
 
 	t.Run("ExclusiveTransport", func(t *testing.T) {
-		config := createV2Cluster()
-		config.Pool.ConnectionsPerHost = 1
-		config.KeepaliveInterval = 0
 		// v3/v4 frame compression is intentionally unsupported for streaming; this
 		// lane explicitly negotiates raw, while v5 retains its raw/LZ4 selection.
-		if config.Protocol < 5 {
-			config.Compression = gocql.NoCompression
+		compression := *flagCompressTest
+		var skip fixtureParts
+		if *flagProto < 5 {
+			skip = fixtureCompression
+			compression = "no-compression"
+		}
+		config := createV2ClusterWithout(skip)
+		config.ConnectionsPerHost(1).NoHeartbeat()
+		if *flagProto < 5 {
+			config.Compression(gocql.NoCompression)
 		}
 		s := createV2SessionFromConfig(config, t, false)
 		defer s.Close()
@@ -265,7 +268,7 @@ func TestPool(t *testing.T) {
 		if !rows.NextInto(&id) {
 			t.Fatal("shared execution after repair", rows.Err())
 		}
-		t.Logf("live streaming proto=%d TLS=%v compression=%d rows=%d pages=%d", config.Protocol, *flagRunSslTest, config.Compression, len(seen), pages)
+		t.Logf("live streaming proto=%d TLS=%v compression=%s rows=%d pages=%d", *flagProto, *flagRunSslTest, compression, len(seen), pages)
 	})
 
 	t.Run("ShardAwarePort", func(t *testing.T) {
@@ -296,23 +299,27 @@ func TestPool(t *testing.T) {
 	t.Run("Sizing", func(t *testing.T) {
 		for _, mode := range []string{"host", "shard"} {
 			t.Run(mode, func(t *testing.T) {
-				config := createV2Cluster()
-				config.KeepaliveInterval = 0
+				config := createV2ClusterWithout(fixtureTLS)
+				config.NoHeartbeat()
 				if *flagRunSslTest {
-					config.CoalesceWait = 100 * time.Microsecond
+					config.CoalesceWrites(100 * time.Microsecond)
 				}
 				if mode == "host" {
-					config.Pool.ConnectionsPerHost = 2
+					config.ConnectionsPerHost(2)
 				} else {
-					config.Pool.ConnectionsPerHost = 0
-					config.Pool.ConnectionsPerShard = 2
+					config.ConnectionsPerShard(2)
 				}
+				// The fixture enables the shard-aware port by default.
+				const shardAwarePort = true
 				var tlsCalls atomic.Int32
-				if hook := config.TLSForHost; hook != nil {
-					config.TLSForHost = func(ctx context.Context, host routing.HostSnapshot) (*tls.Config, error) {
+				if *flagRunSslTest {
+					// Every handshake runs VerifyConnection once.
+					base := fixtureClientTLS()
+					base.VerifyConnection = func(tls.ConnectionState) error {
 						tlsCalls.Add(1)
-						return hook(ctx, host)
+						return nil
 					}
+					config.TLS(fixtureTLSConfig(base))
 				}
 				s := createV2SessionFromConfig(config, t, false)
 				defer s.Close()
@@ -368,7 +375,7 @@ func TestPool(t *testing.T) {
 					if mode == "host" && targeted != 0 {
 						t.Fatal("per-host override performed targeted fills")
 					}
-					if mode == "shard" && p.InternalNrShards > 1 && config.Pool.ShardAwarePort && targeted == 0 {
+					if mode == "shard" && p.InternalNrShards > 1 && shardAwarePort && targeted == 0 {
 						t.Fatal("shard mode never used source-port routing")
 					}
 					if pool.InternalTransportState() != poolReady {

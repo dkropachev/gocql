@@ -34,13 +34,17 @@ func TestFixture(t *testing.T) {
 		if !*flagRunSslTest || *flagDistribution != "scylla" {
 			t.Skip("requires Scylla mutual-TLS fixture")
 		}
-		accepted, err := gocql.Connect(context.Background(), createV2Cluster())
+		accepted, err := gocql.Connect(context.Background(), mustBuild(t, createV2Cluster()))
 		if err != nil {
 			t.Fatal("valid client certificate rejected", err)
 		}
 		accepted.Close()
-		config := createV2Cluster(func(c *gocql.Config) { c.TLS = c.TLS.Clone(); c.TLS.Certificates = nil })
-		rejected, err := gocql.Connect(context.Background(), config)
+		config := createV2ClusterWithout(fixtureTLS, func(c *gocql.ConfigBuilder) {
+			noCertificate := fixtureClientTLS()
+			noCertificate.Certificates = nil
+			c.TLS(fixtureTLSConfig(noCertificate))
+		})
+		rejected, err := gocql.Connect(context.Background(), mustBuild(t, config))
 		if err == nil {
 			rejected.Close()
 			t.Fatal("mutual-TLS server accepted missing client certificate")
@@ -75,10 +79,8 @@ func TestFixture(t *testing.T) {
 	// This verifies the helpers' ownership and cardinality contract against a real
 	// server, including the second page after the helper closes its bound handle.
 	t.Run("Helpers", func(t *testing.T) {
-		session := createV2Session(t, func(config *gocql.Config) {
-			profile := *config.DefaultProfile
-			profile.PageSize = 1
-			config.DefaultProfile = &profile
+		session := createV2Session(t, func(config *gocql.ConfigBuilder) {
+			config.DefaultProfile(func(p *gocql.ProfileBuilder) { p.PageSize(1) })
 		})
 		defer session.Close()
 		ctx := context.Background()
@@ -137,7 +139,7 @@ func TestFixture(t *testing.T) {
 	})
 
 	t.Run("Identity", func(t *testing.T) {
-		s, err := gocql.Connect(context.Background(), createV2Cluster())
+		s, err := gocql.Connect(context.Background(), mustBuild(t, createV2Cluster()))
 		if err != nil {
 			t.Fatal(err)
 		}

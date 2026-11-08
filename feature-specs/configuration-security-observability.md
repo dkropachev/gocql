@@ -66,7 +66,7 @@ The default configuration is:
 | Contact points | Empty; creation fails until at least one is supplied. |
 | Node location preference | Any datacenter/rack; individual load-balancing policies may override this preference. |
 | Local bind IP | Unspecified address of the destination's IP family. |
-| Shard-aware source ports | Inclusive range 49152–65535. |
+| Advanced shard awareness source ports | Inclusive range 49152–65535. |
 | Compression | Disabled; selectable LZ4 or Snappy. |
 | TCP no-delay | Enabled. |
 | TCP keepalive | Not configured. |
@@ -76,7 +76,7 @@ The default configuration is:
 | TCP connect timeout | 5 seconds. See connections for its precise scope. |
 | Hostname-resolution timeout | 5 seconds per lookup, including a fresh budget for the default-port fallback; an absent timeout permits indefinite resolution. |
 | Connection pool target | One connection per shard; non-sharded nodes count as one shard. |
-| Shard-aware port | Allowed; the specialized client-routes builder disables it. |
+| Advanced shard awareness | Enabled; client routes disable it. |
 | Pool reconnect policy | Exponential, initial 50 ms, maximum 10 s, jitter multiplier 0.85–1.15, clamped to the configured limits. |
 | Initial keyspace | None; case-insensitive interpretation if one is supplied without changing the flag. |
 | Client timestamp generator | None: server-generated timestamps unless a statement supplies one. |

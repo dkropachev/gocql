@@ -16,7 +16,11 @@ import (
 // Example_errors shows how to tell whether a failed write changed data.
 func Example_errors() {
 	ctx := context.Background()
-	session, err := gocql.Connect(ctx, gocql.DefaultConfig("localhost:9042"))
+	config, err := gocql.NewConfig("localhost:9042").Build()
+	if err != nil {
+		log.Fatal(err)
+	}
+	session, err := gocql.Connect(ctx, config)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -70,7 +74,11 @@ func Example_errors() {
 
 // Example_connectErrors shows how to inspect a failed connect.
 func Example_connectErrors() {
-	_, err := gocql.Connect(context.Background(), gocql.DefaultConfig("localhost:9042"))
+	config, err := gocql.NewConfig("localhost:9042").Build()
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = gocql.Connect(context.Background(), config)
 	if errors.Is(err, cqlerr.ErrNoConnectionsStarted) {
 		var connect *cqlerr.ConnectError
 		if errors.As(err, &connect) {

@@ -25,7 +25,6 @@ func InternalConnectivityConfig(c Config) connectivity.Config {
 		Dialer:            c.Dialer,
 		DNSResolver:       c.DNSResolver,
 		TLS:               c.TLS,
-		TLSForHost:        c.TLSForHost,
 		Pool:              c.Pool,
 		ClientRoutes:      c.ClientRoutes,
 		Metadata: connectivity.MetadataIO{

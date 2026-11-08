@@ -18,15 +18,13 @@ func v2SchemaRoutingName(t testing.TB) string {
 	return testKeyspaceName(t, strings.ReplaceAll(cql.MustRandomUUID().String(), "-", ""))
 }
 
-func v2ConfigureRouting(t testing.TB, config *gocql.Config, options routing.Options) routing.Policy {
+func v2ConfigureRouting(t testing.TB, config *gocql.ConfigBuilder, options routing.Options) routing.Policy {
 	t.Helper()
 	policy, err := routing.NewPolicy(options)
 	if err != nil {
 		t.Fatal(err)
 	}
-	profile := *config.DefaultProfile
-	profile.Routing = policy
-	config.DefaultProfile = &profile
+	config.DefaultProfile(func(p *gocql.ProfileBuilder) { p.Routing(policy) })
 	return policy
 }
 

@@ -51,33 +51,35 @@ func run() (resultErr error) {
 	serverName := flag.String("server-name", "", "TLS server DNS identity")
 	uri := flag.String("tls-uri", "", "explicit TLS URI identity instead of DNS")
 	flag.Parse()
-	cfg := gocql.DefaultConfig(strings.Split(*hosts, ",")...)
+	builder := gocql.NewConfig(strings.Split(*hosts, ",")...).
+		ProtocolVersion(gocql.ProtocolVersion(*protocol)).
+		ConnectionsPerHost(1).
+		NoAdvancedShardAwareness().
+		NoHeartbeat().
+		NoMetadataRefresh()
 	if _, port, err := net.SplitHostPort(strings.Split(*hosts, ",")[0]); err == nil {
 		n, err := strconv.ParseUint(port, 10, 16)
 		if err != nil {
 			return err
 		}
-		cfg.Port = uint16(n)
+		builder.Port(uint16(n))
 	}
-	cfg.Protocol = *protocol
-	cfg.Pool.ConnectionsPerHost = 1
-	cfg.Pool.ShardAwarePort = false
-	cfg.KeepaliveInterval = 0
-	cfg.Metadata.PeriodicRefresh = 0
+	frameCompression := gocql.NoCompression
 	switch *compression {
 	case "none":
 	case "lz4":
-		cfg.Compression = gocql.LZ4Compression
+		frameCompression = gocql.LZ4Compression
 	case "snappy":
-		cfg.Compression = gocql.SnappyCompression
+		frameCompression = gocql.SnappyCompression
 	default:
 		return fmt.Errorf("unknown compression %q", *compression)
 	}
 	if *password == "" {
 		*password = os.Getenv("GOCQL_PASSWORD")
 	}
+	builder.Compression(frameCompression)
 	if *username != "" {
-		cfg.Auth = auth.Password(*username, *password)
+		builder.Auth(auth.Password(*username, *password))
 	}
 	if *ca != "" {
 		pem, err := os.ReadFile(*ca)
@@ -88,18 +90,18 @@ func run() (resultErr error) {
 		if !roots.AppendCertsFromPEM(pem) {
 			return fmt.Errorf("invalid CA PEM")
 		}
-		cfg.TLS = &tls.Config{RootCAs: roots, ServerName: *serverName, MinVersion: tls.VersionTLS12}
+		tlsConfig := &tls.Config{RootCAs: roots, ServerName: *serverName, MinVersion: tls.VersionTLS12}
 		if *cert != "" {
 			pair, err := tls.LoadX509KeyPair(*cert, *key)
 			if err != nil {
 				return err
 			}
-			cfg.TLS.Certificates = []tls.Certificate{pair}
+			tlsConfig.Certificates = []tls.Certificate{pair}
 		}
 		if *uri != "" {
 			// Explicit URI identity verification also verifies the complete CA chain.
-			cfg.TLS.InsecureSkipVerify = true
-			cfg.TLS.VerifyConnection = func(state tls.ConnectionState) error {
+			tlsConfig.InsecureSkipVerify = true
+			tlsConfig.VerifyConnection = func(state tls.ConnectionState) error {
 				if len(state.PeerCertificates) == 0 {
 					return fmt.Errorf("missing peer certificate")
 				}
@@ -118,6 +120,11 @@ func run() (resultErr error) {
 				return fmt.Errorf("missing expected TLS URI %q", *uri)
 			}
 		}
+		builder.TLS(tlsConfig)
+	}
+	cfg, err := builder.Build()
+	if err != nil {
+		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -225,7 +232,7 @@ func run() (resultErr error) {
 	}
 	defer query.Close()
 	stream, err := query.Run(ctx, cql.EmptyParams{})
-	if *incremental && cfg.Protocol < 5 && cfg.Compression != gocql.NoCompression {
+	if *incremental && *protocol < 5 && frameCompression != gocql.NoCompression {
 		var unsupported *cqlerr.StreamCapabilityError
 		if !errors.As(err, &unsupported) {
 			return fmt.Errorf("expected frame compression capability error, got %w", err)

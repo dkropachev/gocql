@@ -35,7 +35,12 @@ func skipUnlessSelectWithoutFrom(tb testing.TB) {
 	}
 }
 func probeSelectWithoutFrom() {
-	session, err := gocql.Connect(context.Background(), createV2Cluster())
+	config, err := createV2Cluster().Build()
+	if err != nil {
+		selectWithoutFromProbeErr = err
+		return
+	}
+	session, err := gocql.Connect(context.Background(), config)
 	if err != nil {
 		selectWithoutFromProbeErr = err
 		return
@@ -77,11 +82,8 @@ func isRejectedByServer(err error) bool {
 }
 func createSessionWithoutKeyspace(t testing.TB) *gocql.Session {
 	t.Helper()
-	config := createV2Cluster()
-	if config.Keyspace != "" {
-		t.Fatal("unexpected default keyspace")
-	}
-	session, err := gocql.Connect(context.Background(), config)
+	// createV2Cluster never sets a keyspace; only createV2SessionFromConfig does.
+	session, err := gocql.Connect(context.Background(), mustBuild(t, createV2Cluster()))
 	if err != nil {
 		t.Fatal(err)
 	}

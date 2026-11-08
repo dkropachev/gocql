@@ -619,8 +619,7 @@ func TestStructMapping(t *testing.T) {
 		}
 		// Protocol 4 frame compression has no incremental receive transform, so an
 		// incremental stream is rejected before the query is sent.
-		config := createV2Cluster()
-		frameCompressed := config.Protocol < 5 && config.Compression != gocql.NoCompression
+		frameCompressed := *flagProto < 5 && fixtureCompressed()
 		for _, incremental := range []bool{false, true} {
 			options := gocql.StreamOptions{Incremental: incremental, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}
 			q, err := gocql.NewStreamQuery(read, cql.MustStreamRowOf[smStream](), options)

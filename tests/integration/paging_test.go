@@ -51,11 +51,9 @@ func TestPaging(t *testing.T) {
 		// The reads below run at ONE and QUORUM. Writes at the default QUORUM
 		// leave a replica that a ONE read can reach before it has every row
 		// (W+R must exceed RF), so the fixture is written at ALL.
-		session := createV2Session(t, func(c *gocql.Config) {
-			profile := *c.DefaultProfile
-			profile.Consistency = cql.All
-			c.DefaultProfile = &profile
-		})
+		session := createV2SessionFromConfig(createV2ClusterWithout(fixtureConsistency, func(c *gocql.ConfigBuilder) {
+			c.DefaultProfile(func(p *gocql.ProfileBuilder) { p.Consistency(cql.All) })
+		}), t, false)
 		defer session.Close()
 		table := testTableName(t)
 		const targetP1, targetP2, totalExpectedResults, pageSize, deletedRangeStart, deletedRangeEnd = 50, 50, 30, 5, 10, 20
@@ -276,11 +274,9 @@ func TestPaging(t *testing.T) {
 	})
 
 	t.Run("Stream", func(t *testing.T) {
-		config := createV2Cluster(func(c *gocql.Config) {
-			c.Pool.ConnectionsPerHost = 1
-			c.KeepaliveInterval = 0
-			c.Metadata.PeriodicRefresh = 0
-		})
+		config := mustBuild(t, createV2Cluster(func(c *gocql.ConfigBuilder) {
+			c.ConnectionsPerHost(1).NoHeartbeat().NoMetadataRefresh()
+		}))
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 		s, err := gocql.Connect(ctx, config)
@@ -344,7 +340,7 @@ func TestPaging(t *testing.T) {
 		}
 		decoder := cql.StreamRow(func(*output) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *output) *int32 { return &r.ID }), cql.StreamColumn("value", cql.StreamBlob, func(r *output) *[]byte { return &r.Value }), cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(r *output) *[][]byte { return &r.Pieces }), cql.StreamColumn("txt", cql.StreamText, func(r *output) *[]byte { return &r.Text }))
 		options := gocql.StreamOptions{Incremental: true, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}
-		if config.Protocol < 5 && config.Compression != gocql.NoCompression {
+		if *flagProto < 5 && fixtureCompressed() {
 			_, err := RunStream(ctx, s, bound, decoder, options)
 			var capability *cqlerr.StreamCapabilityError
 			if !errors.As(err, &capability) {
@@ -518,6 +514,6 @@ func TestPaging(t *testing.T) {
 		if err := bound.Wait(ctx); err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("public RunStream protocol=%d compression=%d tls=%v rows=%d pages=%d bytes/row=%d attempts=%d", config.Protocol, config.Compression, *flagRunSslTest, info.DeliveredRows, info.Pages, len(payload), info.Result.Attempts)
+		t.Logf("public RunStream protocol=%d compression=%s tls=%v rows=%d pages=%d bytes/row=%d attempts=%d", *flagProto, *flagCompressTest, *flagRunSslTest, info.DeliveredRows, info.Pages, len(payload), info.Result.Attempts)
 	})
 }

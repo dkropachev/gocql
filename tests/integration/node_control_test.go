@@ -23,21 +23,18 @@ import (
 // stream must fail terminally without replaying rows, and once the node is
 // back, queries pinned to it must succeed again on the same session.
 func TestRunStreamCoordinatorStop(t *testing.T) {
-	config := createV2Cluster(func(c *gocql.Config) {
-		c.Pool.ConnectionsPerHost = 1
-		c.KeepaliveInterval = 0
-		c.Metadata.PeriodicRefresh = 0
-		// Streaming rejects frame compression before protocol v5, and the
-		// suite's default compressor would skip this test on every v4 lane.
-		// Compression is not what it tests.
-		c.Compression = gocql.NoCompression
-	})
 	cluster := nodeControlCluster(t, 1)
 	node := cluster.Node(1)
-	config.ContactPoints = cluster.IPs()
+	config := newFixtureConfig(cluster.IPs(), fixtureCompression, func(c *gocql.ConfigBuilder) {
+		c.ConnectionsPerHost(1).NoHeartbeat().NoMetadataRefresh().
+			// Streaming rejects frame compression before protocol v5, and the
+			// suite's default compressor would skip this test on every v4 lane.
+			// Compression is not what it tests.
+			Compression(gocql.NoCompression)
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	s, err := gocql.Connect(ctx, config)
+	s, err := gocql.Connect(ctx, mustBuild(t, config))
 	if err != nil {
 		t.Fatal(err)
 	}

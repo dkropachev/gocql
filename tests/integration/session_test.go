@@ -175,11 +175,16 @@ func newSessionCache() *sessionCache {
 	}
 }
 
-func withSessionCache(cache tls.ClientSessionCache) func(*gocql.Config) {
-	return func(config *gocql.Config) {
+// withSessionCache returns the fixture client TLS with cache installed, wrapped
+// for the fixture's per-host verification. verify, when set, runs after the
+// fixture's chain and identity checks.
+func withSessionCache(cache tls.ClientSessionCache, verify func(tls.ConnectionState) error) func(*gocql.ConfigBuilder) {
+	return func(b *gocql.ConfigBuilder) {
 		// Preserve fixture roots, mutual TLS identity, and verifier callbacks.
-		config.TLS = config.TLS.Clone()
-		config.TLS.ClientSessionCache = cache
+		base := fixtureClientTLS()
+		base.ClientSessionCache = cache
+		base.VerifyConnection = verify
+		b.TLS(fixtureTLSConfig(base))
 	}
 }
 
@@ -228,11 +233,9 @@ func TestSession(t *testing.T) {
 		// page alias is released. Session close drains idle storage without invalidating
 		// retained delivered pages, and a late lease cannot repopulate the closed cache.
 		t.Run("PageCacheOwnership", func(t *testing.T) {
-			config := createV2Cluster(func(c *gocql.Config) {
-				c.Pool.ConnectionsPerHost = 1
-				c.KeepaliveInterval = 0
-				c.Metadata.PeriodicRefresh = 0
-			})
+			config := mustBuild(t, createV2Cluster(func(c *gocql.ConfigBuilder) {
+				c.ConnectionsPerHost(1).NoHeartbeat().NoMetadataRefresh()
+			}))
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
 			s, e := gocql.Connect(ctx, config)
@@ -364,10 +367,9 @@ func TestSession(t *testing.T) {
 		t.Run("Unconnected", func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
-			config := gocql.DefaultConfig("127.0.0.1")
-			profile := *config.DefaultProfile
-			profile.Consistency, profile.PageSize, profile.Prefetch = cql.All, 100, 1
-			config.DefaultProfile = &profile
+			// The default profile already prefetches one page.
+			profile, err := gocql.NewProfile().Consistency(cql.All).PageSize(100).Build()
+			require.NoError(t, err)
 			// Session setters are replaced by atomic profile snapshots. Fractional
 			// prefetch became a bounded count of zero or one physical page.
 			session := func() *gocql.Session {
@@ -375,7 +377,7 @@ func TestSession(t *testing.T) {
 				implCluster.SessionData(opaqueStorageValue).InternalLogger = nopLogger{}
 				return opaqueStorageValue
 			}()
-			runtimeFor(session).InternalSetProfile(config.DefaultProfile)
+			runtimeFor(session).InternalSetProfile(&profile)
 			defer session.Close()
 			resolved, err := resolveOptions(session, gocql.Options{Trace: true})
 			require.NoError(t, err)
@@ -419,19 +421,16 @@ func TestSession(t *testing.T) {
 				t.Skip("Authentication is not configured in the target cluster")
 			}
 
-			cluster := createV2Cluster()
-
-			cluster.Auth = auth.Password("cassandra", "cassandra")
-
-			session, err := gocql.Connect(context.Background(), cluster)
+			cluster := createV2ClusterWithout(fixtureAuth).Auth(auth.Password("cassandra", "cassandra"))
+			session, err := gocql.Connect(context.Background(), mustBuild(t, cluster))
 
 			if err != nil {
 				t.Fatalf("Authentication error: %s", err)
 			}
 
 			session.Close()
-			cluster.Auth = auth.Password("cassandra", "invalid-password")
-			rejected, err := gocql.Connect(context.Background(), cluster)
+			invalid := createV2ClusterWithout(fixtureAuth).Auth(auth.Password("cassandra", "invalid-password"))
+			rejected, err := gocql.Connect(context.Background(), mustBuild(t, invalid))
 			if err == nil {
 				rejected.Close()
 				t.Fatal("server accepted rejected credentials")
@@ -473,46 +472,47 @@ func TestSession(t *testing.T) {
 				}
 			}
 
-			OneDNSPerNode := func(c *gocql.Config) {
+			// A mod rewrites the contact points the previous one produced and
+			// returns the option that makes them resolvable.
+			type clusterMod func(contactPoints []string) ([]string, func(*gocql.ConfigBuilder))
+
+			OneDNSPerNode := func(contactPoints []string) ([]string, func(*gocql.ConfigBuilder)) {
 				r := newMockDNSResolver()
 				var dnsRecords []string
-				for id, host := range c.ContactPoints {
+				for id, host := range contactPoints {
 					dns := fmt.Sprintf("node%d.cluster.local", id+1)
 					dnsRecords = append(dnsRecords, dns)
 					r.Update(dns, MustIP(host))
 				}
-				c.DNSResolver = r
-				c.ContactPoints = dnsRecords
+				return dnsRecords, func(c *gocql.ConfigBuilder) { c.Resolver(r) }
 			}
 
-			OneDNSPerCluster := func(c *gocql.Config) {
+			OneDNSPerCluster := func(contactPoints []string) ([]string, func(*gocql.ConfigBuilder)) {
 				r := newMockDNSResolver()
 				var hostIPs []net.IP
-				for _, host := range c.ContactPoints {
+				for _, host := range contactPoints {
 					hostIPs = append(hostIPs, MustIP(host))
 				}
 				r.Update("cluster.local", hostIPs...)
-				c.DNSResolver = r
-				c.ContactPoints = []string{"cluster.local"}
+				return []string{"cluster.local"}, func(c *gocql.ConfigBuilder) { c.Resolver(r) }
 			}
 
-			OneDNSPerClusterFirstBroken := func(c *gocql.Config) {
+			OneDNSPerClusterFirstBroken := func(contactPoints []string) ([]string, func(*gocql.ConfigBuilder)) {
 				r := newMockDNSResolver()
 				var hostIPs []net.IP
-				for _, host := range c.ContactPoints {
+				for _, host := range contactPoints {
 					hostIPs = append(hostIPs, MustIP(host))
 				}
 				hostIPs[0] = MustIP("0.0.0.0")
 				r.Update("cluster.local", hostIPs...)
-				c.DNSResolver = r
-				c.ContactPoints = []string{"cluster.local"}
+				return []string{"cluster.local"}, func(c *gocql.ConfigBuilder) { c.Resolver(r) }
 			}
 
-			WithAddressTranslator := func(c *gocql.Config) {
+			WithAddressTranslator := func(contactPoints []string) ([]string, func(*gocql.ConfigBuilder)) {
 				var toAddresses []net.IP
 				var fromAddresses []net.IP
 				var clusterHosts []string
-				for _, host := range c.ContactPoints {
+				for _, host := range contactPoints {
 					ip := MustIP(host)
 
 					var fromAddress net.IP
@@ -527,7 +527,7 @@ func TestSession(t *testing.T) {
 					clusterHosts = append(clusterHosts, fromAddress.String())
 				}
 
-				c.AddressTranslator = endpoint.TranslatorFunc(func(addr net.IP, port int) (net.IP, int) {
+				translator := endpoint.TranslatorFunc(func(addr net.IP, port int) (net.IP, int) {
 					for id, host := range fromAddresses {
 						if host.Equal(addr) {
 							return toAddresses[id], port
@@ -540,68 +540,69 @@ func TestSession(t *testing.T) {
 					}
 					panic("failed to translate address")
 				})
-				c.ContactPoints = clusterHosts
+				return clusterHosts, func(c *gocql.ConfigBuilder) { c.AddressTranslator(translator) }
 			}
 
 			testCases := []struct {
 				name        string
-				clusterMods []func(*gocql.Config)
+				clusterMods []clusterMod
 			}{
 				{
 					name:        "OneDNSPerNode",
-					clusterMods: []func(*gocql.Config){OneDNSPerNode},
+					clusterMods: []clusterMod{OneDNSPerNode},
 				},
 				{
 					name:        "OneDNSPerCluster",
-					clusterMods: []func(*gocql.Config){OneDNSPerCluster},
+					clusterMods: []clusterMod{OneDNSPerCluster},
 				},
 				{
 					name:        "AddressTranslator+OneDNSPerNode",
-					clusterMods: []func(*gocql.Config){WithAddressTranslator, OneDNSPerNode},
+					clusterMods: []clusterMod{WithAddressTranslator, OneDNSPerNode},
 				},
 				{
 					name:        "AddressTranslator+OneDNSPerCluster",
-					clusterMods: []func(*gocql.Config){WithAddressTranslator, OneDNSPerCluster},
+					clusterMods: []clusterMod{WithAddressTranslator, OneDNSPerCluster},
 				},
 				{
 					name:        "OneDNSPerClusterFirstBroken",
-					clusterMods: []func(*gocql.Config){OneDNSPerClusterFirstBroken},
+					clusterMods: []clusterMod{OneDNSPerClusterFirstBroken},
 				},
 			}
 
 			for _, tc := range testCases {
 				t.Run(tc.name, func(t *testing.T) {
-					cluster := createV2Cluster(tc.clusterMods...)
+					contactPoints := getClusterHosts()
+					var opts []func(*gocql.ConfigBuilder)
+					for _, mod := range tc.clusterMods {
+						var opt func(*gocql.ConfigBuilder)
+						contactPoints, opt = mod(contactPoints)
+						opts = append(opts, opt)
+					}
+					cluster := mustBuild(t, newFixtureConfig(contactPoints, 0, opts...))
 					checkIfSessionWorking(t, cluster, getClusterHosts())
 				})
 			}
 		})
 		t.Run("DiscoverProtocol", func(t *testing.T) {
 			t.Parallel()
-			config := createV2Cluster()
-			config.Protocol = 0
-			config.Compression = gocql.NoCompression
-			session, err := gocql.Connect(context.Background(), config)
+			config := createV2ClusterWithout(fixtureProtocol | fixtureCompression).ProtocolVersion(gocql.ProtocolAuto).Compression(gocql.NoCompression)
+			session, err := gocql.Connect(context.Background(), mustBuild(t, config))
 			require.NoError(t, err)
 			defer session.Close()
 			require.NotZero(t, implCluster.SessionData(session).InternalCfg.ProtoVersion)
 		})
 		t.Run("EmptyHosts", func(t *testing.T) {
 			t.Parallel()
-			config := createV2Cluster()
-			config.ContactPoints = nil
-			session, err := gocql.Connect(context.Background(), config)
-			if err == nil {
-				session.Close()
+			// Empty contact points are now rejected when the config is built.
+			if _, err := newFixtureConfig(nil, 0).Build(); err == nil {
 				t.Fatal("expected error for empty contact points")
 			}
 		})
 		// Checks that an invalid keyspace will return promptly and without a flood of connections
 		t.Run("InvalidKeyspace", func(t *testing.T) {
 			t.Parallel()
-			config := createV2Cluster()
-			config.Keyspace = "invalidKeyspace"
-			session, err := gocql.Connect(context.Background(), config)
+			config := createV2Cluster().Keyspace("invalidKeyspace")
+			session, err := gocql.Connect(context.Background(), mustBuild(t, config))
 			if err == nil {
 				session.Close()
 				t.Fatal("expected invalid keyspace to fail")
@@ -664,11 +665,7 @@ func TestSession(t *testing.T) {
 						{
 							name: "Timeout",
 							getCluster: func() gocql.Config {
-								cluster := createV2Cluster()
-								profile := *cluster.DefaultProfile
-								profile.Timeout = lowTimeout
-								cluster.DefaultProfile = &profile
-								return cluster
+								return mustBuild(t, createV2ClusterWithout(fixtureTimeout).DefaultProfile(func(p *gocql.ProfileBuilder) { p.Timeout(lowTimeout) }))
 							},
 							connect: Pass,
 							// Above 1ns the query can complete before the deadline fires,
@@ -680,9 +677,7 @@ func TestSession(t *testing.T) {
 						{
 							name: "MetadataSchemaRequestTimeout",
 							getCluster: func() gocql.Config {
-								cluster := createV2Cluster()
-								cluster.Metadata.RequestTimeout = lowTimeout
-								return cluster
+								return mustBuild(t, createV2Cluster().MetadataTimeout(lowTimeout))
 							},
 							connect:                    Pass,
 							regularQuery:               Pass,
@@ -692,9 +687,7 @@ func TestSession(t *testing.T) {
 						{
 							name: "WriteTimeout",
 							getCluster: func() gocql.Config {
-								cluster := createV2Cluster()
-								cluster.WriteTimeout = lowTimeout
-								return cluster
+								return mustBuild(t, createV2Cluster().WriteTimeout(lowTimeout))
 							},
 							connect:      Pass,
 							regularQuery: canPassOnHighTimeout,
@@ -706,9 +699,7 @@ func TestSession(t *testing.T) {
 						{
 							name: "ReadTimeout",
 							getCluster: func() gocql.Config {
-								cluster := createV2Cluster()
-								cluster.ReadTimeout = lowTimeout
-								return cluster
+								return mustBuild(t, createV2Cluster().ReadTimeout(lowTimeout))
 							},
 							connect: Pass,
 							// When data is available immediately reading from socket is not failing,
@@ -723,14 +714,11 @@ func TestSession(t *testing.T) {
 						{
 							name: "AllTimeouts",
 							getCluster: func() gocql.Config {
-								cluster := createV2Cluster()
-								profile := *cluster.DefaultProfile
-								profile.Timeout = lowTimeout
-								cluster.DefaultProfile = &profile
-								cluster.ReadTimeout = lowTimeout
-								cluster.WriteTimeout = lowTimeout
-								cluster.Metadata.RequestTimeout = lowTimeout
-								return cluster
+								return mustBuild(t, createV2ClusterWithout(fixtureTimeout).
+									DefaultProfile(func(p *gocql.ProfileBuilder) { p.Timeout(lowTimeout) }).
+									ReadTimeout(lowTimeout).
+									WriteTimeout(lowTimeout).
+									MetadataTimeout(lowTimeout))
 							},
 							connect:                    Pass,
 							regularQuery:               Fail,
@@ -797,11 +785,9 @@ func TestSession(t *testing.T) {
 		})
 		t.Run("ReportsProtocolError", func(t *testing.T) {
 			t.Parallel()
-			config := createV2Cluster()
-			config.Protocol = 0x100
-			session, err := gocql.Connect(context.Background(), config)
+			// An unsupported version is now rejected when the config is built.
+			_, err := createV2ClusterWithout(fixtureProtocol).ProtocolVersion(gocql.ProtocolVersion(0xff)).Build()
 			if err == nil {
-				session.Close()
 				t.Fatal("expected unsupported protocol error")
 			}
 			require.Contains(t, err.Error(), "protocol")
@@ -818,15 +804,13 @@ func TestSession(t *testing.T) {
 
 			c := newSessionCache()
 			var handshakes, resumed atomic.Int64
-			session := createV2Session(t, withSessionCache(c), func(config *gocql.Config) {
-				config.TLS.VerifyConnection = func(state tls.ConnectionState) error {
-					handshakes.Add(1)
-					if state.DidResume {
-						resumed.Add(1)
-					}
-					return nil
+			session := createV2SessionWithout(t, fixtureTLS, withSessionCache(c, func(state tls.ConnectionState) error {
+				handshakes.Add(1)
+				if state.DidResume {
+					resumed.Add(1)
 				}
-			})
+				return nil
+			}))
 			defer session.Close()
 
 			waitAllConnectionsOpened := func() error {
@@ -872,8 +856,7 @@ func TestSession(t *testing.T) {
 		// and prevents an infinite loop of connection retries.
 		t.Run("Timeout", func(t *testing.T) {
 			t.Parallel()
-			config := createV2Cluster()
-			config.ContactPoints = []string{"127.0.0.1:1"}
+			config := mustBuild(t, newFixtureConfig([]string{"127.0.0.1:1"}, 0))
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			start := time.Now()
@@ -892,26 +875,30 @@ func TestSession(t *testing.T) {
 				t.Skip("this test needs path to socket file provided into -cluster-socket cli option")
 			}
 
-			c := createV2Cluster()
-			// The maintenance socket carries plaintext CQL even when TCP clients use TLS.
-			c.TLS = nil
-			c.TLSForHost = nil
-			c.Pool.ConnectionsPerHost = 1
-			c.Metadata.InitialDiscovery = false
-			c.Protocol = protoVersion3
-			c.Reconnect = unixSocketNoReconnect{}
-			c.CoalesceWait = 0
+			const connectTimeout = 5 * time.Second
+			// The maintenance socket carries plaintext CQL even when TCP clients use
+			// TLS. A builder cannot drop TLS once set, so this starts from NewConfig
+			// rather than createV2Cluster and copies the fixture's non-TLS settings.
+			c := gocql.NewConfig("unix:"+socketFiles[0]).
+				CQLVersion(*flagCQL).
+				SchemaAgreement(2*time.Minute, 200*time.Millisecond).
+				DefaultProfile(func(p *gocql.ProfileBuilder) {
+					p.Consistency(cql.Quorum).Timeout(*flagTimeout).Retry(retry.Safe{MaxAttempts: max(1, *flagRetry+1)})
+				}).
+				ConnectionsPerHost(1).
+				NoDiscovery().
+				ProtocolVersion(gocql.Protocol3).
+				Reconnect(unixSocketNoReconnect{}).
+				IgnoreEvents(gocql.StatusEvent, gocql.TopologyEvent, gocql.SchemaEvent).
+				ConnectTimeout(connectTimeout).
+				Dialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
+					return (&net.Dialer{Timeout: connectTimeout}).DialContext(ctx, target.Network, target.Address)
+				}))
+			if *flagRunAuthTest {
+				c.Auth(auth.Password("cassandra", "cassandra"))
+			}
 
-			c.Metadata.StatusEvents = false
-			c.Metadata.TopologyEvents = false
-			c.Metadata.SchemaEvents = false
-
-			c.ContactPoints = []string{"unix:" + socketFiles[0]}
-			c.Dialer = endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
-				return (&net.Dialer{Timeout: c.ConnectTimeout}).DialContext(ctx, target.Network, target.Address)
-			})
-
-			sess, err := gocql.Connect(context.Background(), c)
+			sess, err := gocql.Connect(context.Background(), mustBuild(t, c))
 			if err != nil {
 				t.Fatalf("unable to create session: %v", err)
 			}
@@ -939,7 +926,7 @@ func TestSession(t *testing.T) {
 	t.Run("OpenSingleHost", func(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
-		config := createV2Cluster()
+		config := mustBuild(t, createV2Cluster())
 		// The standalone executor is replaced by a typed session restricted to a
 		// discovered host identity, rather than a second query execution engine.
 		discovery, err := gocql.Connect(ctx, config)
@@ -976,7 +963,7 @@ func TestSession(t *testing.T) {
 	//
 	//nolint:paralleltest // mutates shared HostInfo state via handleNodeDown()
 	t.Run("Reconnect", func(t *testing.T) {
-		config := createV2Cluster(func(c *gocql.Config) { c.Reconnect = cassandraReconnect{} })
+		config := createV2Cluster(func(c *gocql.ConfigBuilder) { c.Reconnect(cassandraReconnect{}) })
 		session := createV2SessionFromConfig(config, t, false)
 		defer session.Close()
 		host := implCluster.SessionData(session).InternalHostSource.InternalGetHostsList()[0]
@@ -987,27 +974,25 @@ func TestSession(t *testing.T) {
 	})
 
 	t.Run("Smoke", func(t *testing.T) {
-		config := gocql.DefaultConfig(strings.Split(v2SmokeOption("cluster", "127.0.20.1,127.0.20.2,127.0.20.3"), ",")...)
-		config.Protocol, _ = strconv.Atoi(v2SmokeOption("proto", "4"))
-		config.ReportConfiguration = false
-		config.Metadata.AutomaticAgreement = true
-		config.Metadata.RefreshAfterAgreement = true
-		profile := *config.DefaultProfile
-		profile.Timeout = 30 * time.Second
-		profile.Consistency = cql.LocalQuorum
-		config.DefaultProfile = &profile
+		proto, _ := strconv.Atoi(v2SmokeOption("proto", "4"))
+		config := gocql.NewConfig(strings.Split(v2SmokeOption("cluster", "127.0.20.1,127.0.20.2,127.0.20.3"), ",")...).
+			ProtocolVersion(gocql.ProtocolVersion(proto)).
+			NoConfigReport().
+			DefaultProfile(func(p *gocql.ProfileBuilder) {
+				p.Timeout(30 * time.Second).Consistency(cql.LocalQuorum)
+			})
 		switch v2SmokeOption("compressor", "no-compression") {
 		case "lz4":
-			config.Compression = gocql.LZ4Compression
+			config.Compression(gocql.LZ4Compression)
 		case "snappy":
-			config.Compression = gocql.SnappyCompression
+			config.Compression(gocql.SnappyCompression)
 		}
 		if v2SmokeOption("runauth", "false") == "true" {
-			config.Auth = auth.Password("cassandra", "cassandra")
+			config.Auth(auth.Password("cassandra", "cassandra"))
 		}
 		if v2SmokeOption("runssl", "false") == "true" {
 			if v2SmokeOption("distribution", "scylla") != "cassandra" {
-				config.Port = 9142
+				config.Port(9142)
 			}
 			cert, err := tls.LoadX509KeyPair("../../testdata/pki/gocql.crt", "../../testdata/pki/gocql.key")
 			if err != nil {
@@ -1021,7 +1006,7 @@ func TestSession(t *testing.T) {
 			if !roots.AppendCertsFromPEM(ca) {
 				t.Fatal("invalid root CA")
 			}
-			config.TLS = &tls.Config{RootCAs: roots, Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12, InsecureSkipVerify: true, VerifyConnection: func(state tls.ConnectionState) error {
+			config.TLS(&tls.Config{RootCAs: roots, Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12, InsecureSkipVerify: true, VerifyConnection: func(state tls.ConnectionState) error {
 				if len(state.PeerCertificates) == 0 {
 					return fmt.Errorf("missing fixture server certificate")
 				}
@@ -1038,12 +1023,12 @@ func TestSession(t *testing.T) {
 					}
 				}
 				return fmt.Errorf("unexpected fixture server identity")
-			}}
+			}})
 			// The existing fixture identifies nodes with a verified SPIFFE URI rather than IP SANs.
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		session, err := gocql.Connect(ctx, config)
+		session, err := gocql.Connect(ctx, mustBuild(t, config))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1160,7 +1145,7 @@ func TestSession(t *testing.T) {
 		t.Run("ApplicationInfo", func(t *testing.T) {
 			t.Parallel()
 
-			cluster := createV2Cluster()
+			cluster := mustBuild(t, createV2Cluster())
 			s, err := gocql.Connect(context.Background(), cluster)
 			if err != nil {
 				t.Fatalf("ApplicationInformation error: %s", err)
@@ -1209,9 +1194,8 @@ func TestSession(t *testing.T) {
 			}
 			for _, tcase := range tcases {
 				t.Run(tcase.testName, func(t *testing.T) {
-					cluster := createV2Cluster()
-					cluster.Identity = gocql.IdentityOptions{ApplicationName: tcase.name, ApplicationVersion: tcase.version, ClientID: tcase.clientID}
-					s, err := gocql.Connect(context.Background(), cluster)
+					cluster := createV2Cluster().Application(tcase.name, tcase.version).ClientID(tcase.clientID)
+					s, err := gocql.Connect(context.Background(), mustBuild(t, cluster))
 					if err != nil {
 						t.Fatalf("failed to connect to the cluster: %s", err)
 					}
@@ -1270,8 +1254,9 @@ func TestSession(t *testing.T) {
 		t.Run("DriverConfig", func(t *testing.T) {
 			t.Parallel()
 
-			cluster := createV2Cluster()
-			s, err := gocql.Connect(context.Background(), cluster)
+			const agreementTimeout = 2 * time.Minute
+			cluster := createV2ClusterWithout(fixtureAgreement).SchemaAgreement(agreementTimeout, 200*time.Millisecond)
+			s, err := gocql.Connect(context.Background(), mustBuild(t, cluster))
 			if err != nil {
 				t.Fatalf("failed to connect to the cluster: %s", err)
 			}
@@ -1393,7 +1378,7 @@ func TestSession(t *testing.T) {
 				if report.Version != driverConfigVersion {
 					t.Errorf("expected %s version %d, got %d", driverConfigStartupKey, driverConfigVersion, report.Version)
 				}
-				if got, want := report.ControlPlane.Schema.Agreement.TimeoutMs, cluster.Metadata.AgreementTimeout.Milliseconds(); got != want {
+				if got, want := report.ControlPlane.Schema.Agreement.TimeoutMs, agreementTimeout.Milliseconds(); got != want {
 					t.Errorf("expected schema agreement timeout-ms %d, got %d", want, got)
 				}
 				// server-side-ms describes the USING TIMEOUT clause, which only ScyllaDB

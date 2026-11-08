@@ -46,14 +46,15 @@ func dropLeftoverKeyspaces() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	config := createV2Cluster(func(c *gocql.Config) {
-		c.Keyspace = "system"
-		c.Metadata.SchemaEvents = false
-		c.Metadata.TopologyEvents = false
-		c.Metadata.StatusEvents = false
-		c.Metadata.AutomaticAgreement = false
-		c.Metadata.RefreshAfterAgreement = false
-	})
+	config, err := createV2Cluster(func(c *gocql.ConfigBuilder) {
+		c.Keyspace("system").
+			IgnoreEvents(gocql.SchemaEvent, gocql.TopologyEvent, gocql.StatusEvent).
+			ManualSchemaAgreement().
+			NoRefreshAfterAgreement()
+	}).Build()
+	if err != nil {
+		return fmt.Errorf("build config: %w", err)
+	}
 	s, err := connectOnceCredentialsWork(ctx, config)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
