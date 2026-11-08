@@ -41,10 +41,14 @@ func ExampleParamsOf() {
 	}
 	defer session.Close()
 
-	insert, err := gocql.PrepareQuery(ctx, session, cql.Statement[Tweet, cql.EmptyRow]{
+	insertPrepared, err := gocql.Prepare(ctx, session, cql.Statement[Tweet, cql.EmptyRow]{
 		CQL:    "INSERT INTO tweet (timeline, id, text) VALUES (?, ?, ?)",
 		Params: tweetParams,
-	}, gocql.Options{})
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	insert, err := insertPrepared.Query(gocql.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -54,20 +58,28 @@ func ExampleParamsOf() {
 	}
 
 	// The same struct binds a statement that uses a subset of its columns.
-	edit, err := gocql.PrepareQuery(ctx, session, cql.Statement[Tweet, cql.EmptyRow]{
+	editPrepared, err := gocql.Prepare(ctx, session, cql.Statement[Tweet, cql.EmptyRow]{
 		CQL:    "UPDATE tweet SET text = ? WHERE timeline = ? AND id = ?",
 		Params: tweetParams,
-	}, gocql.Options{})
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	edit, err := editPrepared.Query(gocql.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer edit.CloseAndWait(ctx)
 
-	selectTweets, err := gocql.PrepareQuery(ctx, session, cql.Statement[string, Tweet]{
+	selectTweetsPrepared, err := gocql.Prepare(ctx, session, cql.Statement[string, Tweet]{
 		CQL:    "SELECT id, timeline, text FROM tweet WHERE timeline = ?",
 		Params: cql.OneParam(cql.StringCodec),
 		Rows:   tweetRow,
-	}, gocql.Options{})
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	selectTweets, err := selectTweetsPrepared.Query(gocql.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}

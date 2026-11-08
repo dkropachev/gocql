@@ -121,14 +121,14 @@ func TestBatch(t *testing.T) {
 		})
 	})
 
-	t.Run("AddTo", func(t *testing.T) {
+	t.Run("AddToBatch", func(t *testing.T) {
 		t.Run("DoesNotAllocate", func(t *testing.T) {
 			q := testOwnedQuery(t)
 			var batch Batch
 			value := []byte("batch entry")
 			fill := func() {
 				for i := 0; i < 16; i++ {
-					if err := q.AddTo(&batch, value); err != nil {
+					if err := q.AddToBatch(&batch, value); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -136,7 +136,7 @@ func TestBatch(t *testing.T) {
 			}
 			fill() // grow the batch to its working size
 			if n := testing.AllocsPerRun(100, fill); n != 0 {
-				t.Fatalf("AddTo and Reset allocate %v times per batch", n)
+				t.Fatalf("AddToBatch and Reset allocate %v times per batch", n)
 			}
 		})
 	})
@@ -146,7 +146,7 @@ func TestBatch(t *testing.T) {
 			s, conns, _ := runtimeTestSession(t, 1)
 			q := batchTestQuery(t, s)
 			var batch Batch
-			if err := q.AddTo(&batch, []byte("v")); err != nil {
+			if err := q.AddToBatch(&batch, []byte("v")); err != nil {
 				t.Fatal(err)
 			}
 			state := batch.begin(LoggedBatch)
@@ -200,10 +200,10 @@ func TestBatch(t *testing.T) {
 			}
 			first, second := query("id1"), query("id2")
 			var batch Batch
-			if err := first.AddTo(&batch, []byte("a")); err != nil {
+			if err := first.AddToBatch(&batch, []byte("a")); err != nil {
 				t.Fatal(err)
 			}
-			if err := second.AddTo(&batch, []byte("b")); err != nil {
+			if err := second.AddToBatch(&batch, []byte("b")); err != nil {
 				t.Fatal(err)
 			}
 			serverDone := make(chan error, 1)
@@ -262,7 +262,7 @@ func TestBatch(t *testing.T) {
 			}()
 			var batch Batch
 			for _, v := range []string{"first", "second"} {
-				if err := q.AddTo(&batch, []byte(v)); err != nil {
+				if err := q.AddToBatch(&batch, []byte(v)); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -287,7 +287,7 @@ func TestBatch(t *testing.T) {
 			if batch.Len() != 0 {
 				t.Fatal(batch.Len())
 			}
-			if err := q.AddTo(&batch, []byte("third")); err != nil {
+			if err := q.AddToBatch(&batch, []byte("third")); err != nil {
 				t.Fatal(err)
 			}
 			if &batch.values[0] != values {
@@ -334,13 +334,13 @@ func TestBatch(t *testing.T) {
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					var batch Batch
-					if err := q.AddTo(&batch, []byte("in flight")); err != nil {
+					if err := q.AddToBatch(&batch, []byte("in flight")); err != nil {
 						t.Fatal(err)
 					}
 					release := tc.start(&batch)
 					inflight, entry := batch.values, batch.entries[0]
 					batch.Reset()
-					if err := q.AddTo(&batch, []byte("next batch")); err != nil {
+					if err := q.AddToBatch(&batch, []byte("next batch")); err != nil {
 						t.Fatal(err)
 					}
 					if got := string(inflight[entry.start+4 : entry.end]); got != "in flight" {
@@ -354,7 +354,7 @@ func TestBatch(t *testing.T) {
 					}
 					values := &batch.values[0]
 					batch.Reset()
-					if err := q.AddTo(&batch, []byte("reused")); err != nil {
+					if err := q.AddToBatch(&batch, []byte("reused")); err != nil {
 						t.Fatal(err)
 					}
 					if &batch.values[0] != values {
@@ -397,13 +397,13 @@ func TestBatch(t *testing.T) {
 		if _, err := q.ExecBatch(ctx, LoggedBatch, &batch, Options{}); err == nil {
 			t.Fatal("empty batch sent")
 		}
-		if err := q.AddTo(nil, []byte("v")); err == nil {
+		if err := q.AddToBatch(nil, []byte("v")); err == nil {
 			t.Fatal("nil batch accepted")
 		}
-		if err := q.AddTo(&batch, []byte("v")); err != nil {
+		if err := q.AddToBatch(&batch, []byte("v")); err != nil {
 			t.Fatal(err)
 		}
-		if err := other.AddTo(&batch, []byte("v")); err == nil || batch.Len() != 1 {
+		if err := other.AddToBatch(&batch, []byte("v")); err == nil || batch.Len() != 1 {
 			t.Fatal("statement of another session added", err)
 		}
 		if _, err := other.ExecBatch(ctx, LoggedBatch, &batch, Options{}); err == nil {
@@ -415,12 +415,12 @@ func TestBatch(t *testing.T) {
 		if err := q.state.begin(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := q.AddTo(&batch, []byte("v")); !errors.Is(err, ErrBusy) {
+		if err := q.AddToBatch(&batch, []byte("v")); !errors.Is(err, ErrBusy) {
 			t.Fatal("busy query appended", err)
 		}
 		q.state.owner.InternalRelease()
 		q.Close()
-		if err := q.AddTo(&batch, []byte("v")); !errors.Is(err, ErrClosed) {
+		if err := q.AddToBatch(&batch, []byte("v")); !errors.Is(err, ErrClosed) {
 			t.Fatal("closed query appended", err)
 		}
 		if batch.Len() != 1 {

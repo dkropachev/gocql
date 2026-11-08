@@ -130,6 +130,12 @@ func newQueryState(s *implCluster.Session, state *queryState, retire func(), poo
 	return nil
 }
 
+// Query creates a reusable query from p. Its options are validated and
+// resolved for p's session once, here.
+func (p *Prepared[P, R]) Query(options OptionValues) (*Query[P, R], error) {
+	return NewQuery(p, options)
+}
+
 // NewQuery creates a reusable query from a prepared statement. Its options
 // are validated and resolved for the statement's session once, here.
 func NewQuery[P, R any](p *Prepared[P, R], values OptionValues) (*Query[P, R], error) {
@@ -353,11 +359,11 @@ func (q *Query[P, R]) Routing(value P) (RoutingInfo, error) {
 	return q.bound.privateStorage.InternalRequest.InternalRouting, nil
 }
 
-// AddTo encodes value with the query's parameters and appends the statement
+// AddToBatch encodes value with the query's parameters and appends the statement
 // to batch. The values are copied into the batch, so the query is free for
-// its next use as soon as AddTo returns, and closing it does not affect the
-// batch. Like the query's executions, AddTo fails while the query is busy.
-func (q *Query[P, R]) AddTo(batch *Batch, value P) error {
+// its next use as soon as AddToBatch returns, and closing it does not affect the
+// batch. Like the query's executions, AddToBatch fails while the query is busy.
+func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
 	if batch == nil {
 		return typeValidation("batch", "nil batch")
 	}

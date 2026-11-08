@@ -343,7 +343,7 @@ func (o Options) Values() OptionValues
 type Batch struct { /* reusable owned members */ }
 func (b *Batch) Len() int
 func (b *Batch) Reset()
-func (q *Query[P, R]) AddTo(*Batch, P) error
+func (q *Query[P, R]) AddToBatch(*Batch, P) error
 func (q *Query[P, R]) ExecBatch(context.Context, BatchKind, *Batch, Options) (Result, error)
 func (q *Query[P, R]) RunBatch(context.Context, BatchKind, *Batch, Options) (*Page[R], error)
 func CASRows[R any](RowDecoder[R]) RowDecoder[CASResult[R]]
@@ -357,7 +357,7 @@ func (s *Session) Trace(context.Context, UUID) (TraceInfo, error)
 ```
 
 Options are resolved before admission and stay fixed through retries and
-later pages. `AddTo` copies a member's encoded values into storage the batch
+later pages. `AddToBatch` copies a member's encoded values into storage the batch
 owns, checking its session and keyspace as it is appended; the query is free
 again at once. `Reset` keeps that storage, so a reused batch appends without
 allocating, unless a cancelled execution may still be writing it, in which case
@@ -555,7 +555,7 @@ not completion of the feature.
 | M0: design reviewed in this session | Completed ten sequential review-and-fix cycles, reconciled detailed API/implementation specs, and recorded API-semantic changes and package boundaries. Not a future implementation-agent task. | 33 findings fixed; no unresolved findings from those cycles. Reports and document hashes are retained in the individual design review reports. |
 | M1: stabilize foundations | Finish codec, wire, compression, hashing, protocol and ownership tests; enforce size/depth/count limits. | Goldens, cross-span cases, fuzz/race tests and copy-identity checks pass. |
 | M2: close runtime gaps | Fix metadata-generation races, TLS shard dialing, pool overrides, config behavior, discovery-disabled identities, and control/client-route typed queries. | Every exposed option works or is explicitly rejected; required features have no silent omissions. |
-| M3: finish API/test migration | Complete all 174 test mappings; migrate examples, helpers, cloud, tracing, topology and client routes. Remove the old public API and unused legacy execution. | Export/call-site audit and all package/build-tag compilations pass. |
+| M3: finish API/test migration | Complete all 174 test mappings; migrate examples, helpers, cloud, tracing, topology and client routes. Review standalone public functions using the step below. Remove the old public API and unused legacy execution. | Standalone-function decisions are recorded; export/call-site audit and all package/build-tag compilations pass. |
 | M4: extract internals | Move shared types, codecs, protocol, transport, pool, metadata, routing and execution in dependency order. Preserve useful test access through testkit. | No import cycles; unit and integration behavior unchanged by extraction. |
 | M5: verify complete matrix | Run full suites on one pinned final tree, including auth/socket/cloud/failure fixtures and race lanes. | Every baseline test has a real pass in a successful applicable lane; skips remain explicit. |
 | M6: performance and final review | Measure encoding, decoding, segmented containers, routing, transport and end-to-end paths; review cancellation and recovery independently. | Copy/allocation contracts met and requirement-by-requirement completion audit passes. |
@@ -584,6 +584,100 @@ not completion of the feature.
   than assuming Scylla's Lua fixture works there.
 - Old public API removal, final package extraction, documentation/examples, and
   a complete same-tree test matrix remain unfinished.
+
+### Public API step: review standalone functions
+
+- [x] Evaluate every existing and proposed standalone public function for queries,
+  bindings, batches, and their constructors before finalizing the public facade.
+  Use the current exported API and the reusable-query amendment in the API
+  contract as the baseline; internal helpers and historical signatures are not
+  public API requirements.
+
+For each function, identify its purpose, natural receiver, ownership/lifetime
+rules, and overlap with existing operations. Keep it standalone only when that
+shape has a concrete benefit, such as construction without an existing receiver
+or type parameters that Go cannot express on the appropriate receiver method.
+A receiver's existing type parameters do not require a standalone function.
+
+Batch-only append methods use the explicit name `AddToBatch`:
+`Query[P, R].AddToBatch(*Batch, P)` for typed values, and, if an encoded-binding
+append API is exposed, `Bound[R].AddToBatch(*Batch)` for already-encoded inputs.
+The latter remains a proposed method; this naming decision does not expose the
+internal binding API.
+
+Move operations to methods when an existing object naturally owns them. Drop
+functions that add no useful capability or duplicate another operation without
+justification; do not retain compatibility wrappers merely to preserve their
+names. Record keep/move/remove decisions and reasons in the API contract, update
+affected callers and examples, and verify the resulting public API compiles.
+Review affected ownership and encoding behavior so API cleanup preserves reuse
+of encoded inputs without introducing extra serialization or copies.
+
+### Bulk operations step: distribute work and form batches
+
+- [ ] Design, implement, and verify distribution of N queries across eligible
+  nodes and shards, with reusable primitives that let callers build their own
+  routers. Reconcile the design with the current exported API and reusable-query
+  amendment before adding public types or methods. Keep replica ownership lookup,
+  assignment/grouping, and execution scheduling as distinct responsibilities;
+  do not require the per-request load-balancing policy to own bulk distribution.
+
+Define the balancing objective and its trade-off with batch consolidation.
+Different replica sets can share a useful owner: if ten of twenty inputs share
+node X, they can be assigned to X without requiring identical replica sets.
+Choose that assignment only within the selected capacity and locality rules;
+maximizing overlap alone can overload X. Balance estimated work using encoded
+bytes, optional caller weights, and available queue/in-flight observations.
+Distinguish balancing this submission from estimating total cluster load, and
+coordinator load from replica/storage work. Expose estimates as estimates.
+
+The design and implementation must address:
+
+- Candidate ownership and eligibility: vnode and tablet replica/shard lookup,
+  native replica order and explicitly known leader identity, health, locality,
+  explicit host/shard pins, unknown tokens/tablets/partitioners, missing metadata,
+  and unknown shard IDs. Define unassigned results and permitted fallback or
+  waiting behavior; never silently drop inputs or invent placement.
+- Dynamic placement: tablet moves, splits/merges, leader changes, topology and
+  schema changes. Re-evaluate unsent work and safely retryable work against newly
+  learned metadata. No local snapshot/version check proves server freshness;
+  already submitted work must be handled using its execution status.
+- Capacity and fairness: host and shard budgets, heterogeneous query costs,
+  constrained candidate sets, concurrent submissions and reservation accounting,
+  starvation, synchronized choices across clients, bounded waiting, and
+  impossible assignments. Evaluate constrained-input-first assignment with
+  projected-load scoring and a bounded reward for filling compatible batches;
+  treat it as a heuristic rather than claiming optimal distribution.
+- Operation semantics: regular queries, deterministic LWT coordinator preference,
+  serial reads, and SC leader preference. State which constraints are mandatory
+  and when policy permits departing from a preference under failure or overload.
+  Preserve explicit ordering/dependencies for repeated partition keys; token
+  equality alone cannot establish partition-key identity.
+- Batch and SELECT compatibility: session/keyspace, batch kind, counters,
+  conditional partition/table restrictions, execution options, timestamps and
+  deadlines. Preserve caller-specified atomic units. Define bulk SELECT result
+  association, duplicates, ordering, limits and paging; SELECTs are not native
+  batch entries, and combining keys into IN must preserve promised semantics.
+- Ownership and execution: encode once and reuse canonical input bytes through
+  routing, batch assembly and safe retries, with explicit copy/lifetime rules.
+  Bound statement count, encoded batch bytes, queued/response memory and host/shard
+  concurrency. Handle oversized inputs, cancellation, draining and shutdown.
+- Failure reporting: retain input identities through assignment, batching and
+  splitting; report successful, unassigned and failed/uncertain work. Use existing
+  execution-status and idempotence rules for partial or ambiguous execution.
+  Bound retries and avoid multiplying retries across distribution and execution
+  layers or replaying the whole submission blindly.
+
+Completion gate: record the API and behavioral contract, implement the chosen
+scope, and supply examples plus focused correctness/race tests and allocation,
+copy and throughput benchmarks. Cover empty input, invalid limits, partial
+replica overlap, weighted skew, a hot shard, forced destinations, concurrent
+submissions, unavailable/unknown placement, migration/leader changes, repeated
+keys, LWT/SC behavior, incompatible batches, oversized inputs, cancellation and
+partial/ambiguous failures. Demonstrate that inputs are accounted for without
+silent loss or unintended duplicate submission. Coordinate routing/execution
+work with steps 6/7, public API review with step 13, and acceptance evidence with
+steps 14/15/17; adding this task does not mark it implemented or verified.
 
 ## 8. Verification plan
 
@@ -715,7 +809,7 @@ evidence. Each subsequent branch must include the accepted predecessor's work.
 | 10 | `v2-10-remove-legacy` | Migrate remaining callers, helpers, examples, cloud, tracing, and supporting packages. Remove the old public API and unused legacy execution/serialization paths. Pass export, call-site, and build-tag audits. Audit streaming paths for forbidden buffered-decoder adapters, reflection and gathers. |
 | 11 | `v2-11-extract-foundations` | Extract shared types, wire/compression primitives, codecs, model contracts, and protocol into the target internal packages. Preserve behavior and enforce dependency rules. Extract incremental readers and streaming plans/model contracts without full-cell/row/page storage. |
 | 12 | `v2-12-extract-runtime` | Extract transport, pools, metadata, routing, cluster orchestration, and execution in dependency order. Introduce focused testkit hooks; eliminate import cycles. Preserve exclusive streaming reservation/read ownership, bounded transforms and paging execution across extraction. |
-| 13 | `v2-13-public-module-docs` | Finalize the public facade and scyllacloud, consolidate the benchmark module, and update documentation/examples. Verify module paths and ensure facades introduce no second serializer or payload conversion. Publish working RunStream examples including seeded nested storage, Reset/capacity rules, supported modes and pool/cancellation behavior. |
+| 13 | `v2-13-public-module-docs` | Finalize the public facade and scyllacloud, consolidate the benchmark module, and update documentation/examples. Complete section 7's standalone-function API review: justify retained functions, move suitable operations to methods, and remove unjustified or redundant functions. Verify module paths and ensure facades introduce no second serializer or payload conversion. Publish working RunStream examples including seeded nested storage, Reset/capacity rules, supported modes and pool/cancellation behavior. |
 | 14 | `v2-14-full-matrix` | Run the complete verification matrix on one pinned tree: Scylla stable/development, Cassandra v4/v5, compression, TLS/cloud, authentication, Unix/CCM, injected failures, race, and fuzz coverage. Record actual outcomes per baseline test. Include every streaming split/race/fuzz, first-row gate, bounded-memory, integrity, required live-mode and interruption acceptance case. |
 | 15 | `v2-15-performance` | Measure codecs, fragmented containers, routing, transport, and end-to-end execution across compression/TLS modes. Verify backing-storage identity and copy boundaries as well as allocations; fix violations and rerun affected checks. Compare equivalent Run/Row, buffered NextInto and RunStream; record direct-read identity, live working memory, copy categories, first-row latency, read/syscall counts, CPU/throughput and independent page/row/cell/segment/slow-consumer scaling. |
 | 16 | `v2-16-independent-review` | Independently review ownership, cancellation, recovery, metadata generations, dependency boundaries, and requirement completeness. Resolve findings and verify fixes. Independently review streaming no-gather/budget/integrity/no-replay and reservation/destination lifetime invariants. |

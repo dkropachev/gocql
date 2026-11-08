@@ -102,7 +102,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		case "B7":
 			opts = g.Options{PageSize: cql.Some[int32](5000)}
 		}
-		q, err := g.NewQuery(read, opts)
+		q, err := read.Query(opts)
 		if err != nil {
 			return nil, err
 		}
@@ -121,7 +121,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 	case "A2":
 		return c.preparedOne(read), nil
 	case "A4", "B2", "B8":
-		q, err := g.NewQuery(read, g.Options{})
+		q, err := read.Query(g.Options{})
 		if err != nil {
 			return nil, err
 		}
@@ -169,7 +169,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return c.check.done(want, errors.Join(err, rs.Err(), rs.Close(), sq.Wait(ctx)))
 		}, nil
 	case "A6", "B6":
-		q, err := g.NewQuery(read, g.Options{})
+		q, err := read.Query(g.Options{})
 		if err != nil {
 			return nil, err
 		}
@@ -201,7 +201,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return c.found(found, settle(ctx, q, err))
 		}, nil
 	case "C1":
-		q, err := g.NewQuery(read, g.Options{})
+		q, err := read.Query(g.Options{})
 		if err != nil {
 			return nil, err
 		}
@@ -210,7 +210,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		return func(ctx context.Context, _ uint64) error {
 			c.check.reset(true, cursor.k, cursor.next)
 			want := cursor.expect()
-			state := g.StartPage()
+			state := g.StartPage
 			if len(cursor.state) > 0 {
 				state = g.RestorePageState(cursor.state)
 			}
@@ -229,7 +229,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return cursor.advance(c.check.seen, next)
 		}, nil
 	case "D1":
-		q, err := g.NewQuery(write, a.metadata)
+		q, err := write.Query(a.metadata)
 		if err != nil {
 			return nil, err
 		}
@@ -258,7 +258,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return settle(ctx, q, q.Exec(ctx, row{K: k, P: payload(false, k, 0)}))
 		}, nil
 	case "E1", "E2":
-		q, err := g.NewQuery(write, a.metadata)
+		q, err := write.Query(a.metadata)
 		if err != nil {
 			return nil, err
 		}
@@ -269,7 +269,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			if name == "E1" {
 				k, base := partKey(seq), int32(seq%16)*8
 				for r := base; r < base+8; r++ {
-					if err := q.AddTo(&batch, row{K: k, R: r, P: payload(true, k, r)}); err != nil {
+					if err := q.AddToBatch(&batch, row{K: k, R: r, P: payload(true, k, r)}); err != nil {
 						return err
 					}
 				}
@@ -277,7 +277,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 				kind = cql.LoggedBatch
 				for i := uint64(0); i < 4; i++ {
 					k := pointKey(seq*4 + i)
-					if err := q.AddTo(&batch, row{K: k, P: payload(false, k, 0)}); err != nil {
+					if err := q.AddToBatch(&batch, row{K: k, P: payload(false, k, 0)}); err != nil {
 						return err
 					}
 				}
@@ -290,11 +290,11 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 	case "G1", "G2":
 		var readOp, writeOp op
 		if name == "G1" {
-			rq, err := g.NewQuery(read, g.Options{})
+			rq, err := read.Query(g.Options{})
 			if err != nil {
 				return nil, err
 			}
-			wq, err := g.NewQuery(write, a.metadata)
+			wq, err := write.Query(a.metadata)
 			if err != nil {
 				return nil, err
 			}
@@ -385,7 +385,7 @@ func (c *v2Case) lwt(id, n int) (op, error) {
 			return nil, fmt.Errorf("lwt key %d missing; run -mode prepare -scenario lwt", keys[j])
 		}
 	}
-	q, err := g.NewQuery(update, g.Options{SerialConsistency: cql.Some(cql.LocalSerial)})
+	q, err := update.Query(g.Options{SerialConsistency: cql.Some(cql.LocalSerial)})
 	if err != nil {
 		return nil, err
 	}

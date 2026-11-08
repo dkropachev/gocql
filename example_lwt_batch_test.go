@@ -53,7 +53,7 @@ func ExampleQuery_RunBatch_conditional() {
 		PK, CK  string
 		Version int32
 	}
-	query, err := gocql.PrepareQuery(ctx, session, cql.Statement[update, cql.CASResult[previous]]{
+	queryPrepared, err := gocql.Prepare(ctx, session, cql.Statement[update, cql.CASResult[previous]]{
 		CQL: "UPDATE example.my_lwt_batch_table SET value=? WHERE pk=? AND ck=? IF version=?",
 		Params: cql.Params(
 			cql.Param("value", cql.StringCodec, func(v update) string { return v.Value }),
@@ -66,7 +66,11 @@ func ExampleQuery_RunBatch_conditional() {
 			cql.Column("ck", cql.StringCodec, func(v *previous) *string { return &v.CK }),
 			cql.Column("version", cql.Int32, func(v *previous) *int32 { return &v.Version }),
 		)),
-	}, gocql.Options{})
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	query, err := queryPrepared.Query(gocql.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -76,7 +80,7 @@ func ExampleQuery_RunBatch_conditional() {
 		{PK: "pk1", CK: "ck1", Value: "b", Version: 1},
 		{PK: "pk1", CK: "ck2", Value: "B", Version: 0},
 	} {
-		if err := query.AddTo(&batch, value); err != nil {
+		if err := query.AddToBatch(&batch, value); err != nil {
 			log.Fatal(err)
 		}
 	}

@@ -24,8 +24,8 @@
 
 // Package gocql implements the typed Cassandra and ScyllaDB native protocol API.
 // Connect opens a validated Config. Statements declare parameter encoders and row
-// decoders. Prepare creates shareable immutable plans; NewQuery creates a reusable
-// worker-owned query whose methods accept input directly. Read rows with One for
+// decoders. Prepare creates shareable immutable plans; Prepared.Query creates a
+// reusable worker-owned query whose methods accept input directly. Read rows with One for
 // a single row and Each to visit every row; both reuse the query's scratch space
 // and leave nothing to close. Run returns Rows to iterate with NextInto and close;
 // RunPage pages explicitly from a saved PageState, and RunUnpaged requests one

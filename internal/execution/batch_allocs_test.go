@@ -22,7 +22,7 @@ func TestBatchAllocs(t *testing.T) {
 		send := func() {
 			batch.Reset()
 			for i := 0; i < 8; i++ {
-				if err := q.AddTo(&batch, value); err != nil {
+				if err := q.AddToBatch(&batch, value); err != nil {
 					t.Fatal(err)
 				}
 			}

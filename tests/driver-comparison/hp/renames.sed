@@ -7,9 +7,13 @@ s#^BenchmarkBaselineEquivalent$#BenchmarkScalar/BaselineEquivalent#
 t
 s#^BenchmarkBaselineEquivalent\([-/[:space:]]\)#BenchmarkScalar/BaselineEquivalent\1#
 t
-s#^BenchmarkBatchAddTo$#BenchmarkBatch/AddTo#
+s#^BenchmarkBatchAddTo$#BenchmarkBatch/AddToBatch#
 t
-s#^BenchmarkBatchAddTo\([-/[:space:]]\)#BenchmarkBatch/AddTo\1#
+s#^BenchmarkBatchAddTo\([-/[:space:]]\)#BenchmarkBatch/AddToBatch\1#
+t
+s#^BenchmarkBatch/AddTo$#BenchmarkBatch/AddToBatch#
+t
+s#^BenchmarkBatch/AddTo\([-/[:space:]]\)#BenchmarkBatch/AddToBatch\1#
 t
 s#^BenchmarkBatchExec$#BenchmarkBatch/Exec#
 t

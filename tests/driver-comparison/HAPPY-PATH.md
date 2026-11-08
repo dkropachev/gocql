@@ -262,7 +262,7 @@ prepared variant before further allocation work is ranked.
 
 ## T1 prepared variants
 
-`BenchmarkReusableQuery/Loopback/pread` and `/pwrite` use `Prepare` + `NewQuery`
+`BenchmarkReusableQuery/Loopback/pread` and `/pwrite` use `Prepare` + `Prepared.Query`
 with an `int32` key, as the canonical point workloads do. The fake server
 answers PREPARE with a Prepared result and every EXECUTE with the workload
 body. The same benchmark file was compiled against the T1 commit (before any

@@ -190,7 +190,7 @@ func run() (resultErr error) {
 	if err != nil {
 		return err
 	}
-	writeQuery, err := gocql.NewQuery(insert, gocql.Options{})
+	writeQuery, err := insert.Query(gocql.Options{})
 	if err != nil {
 		return err
 	}

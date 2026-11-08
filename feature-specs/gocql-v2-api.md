@@ -540,6 +540,26 @@ Dynamic malformed scalars are
 rejected with the same rules as typed codecs; no implicit universal Empty
 fallback.
 
+## Standalone functions
+
+Package-level functions are kept only where a method cannot express them: Go
+methods cannot add type parameters, `Session` is not generic, and `cql` cannot
+import `gocql`. Every other operation is a method on the type that owns it.
+
+| Function | Decision | Reason |
+|---|---|---|
+| `DefaultConfig`, `Connect` | keep | construct a value from nothing |
+| `OpenSingleHost` | keep | single-host sessions are a supported entry point |
+| `Prepare` | keep | needs `P`, `R` that the non-generic `Session` cannot carry |
+| `NewUnpreparedQuery`, `NewUnpreparedStreamQuery` | keep | same; `cql.Statement` cannot own a method returning a `gocql` type |
+| `NewStreamQuery` | keep | adds the decoder's row type, which `Prepared[P, B]` does not carry |
+| `BindOptions` | keep | belongs on `Session`, whose package cannot see `Options` |
+| `RestorePageState` | keep | `PageState` fields are private |
+| `NewQuery` | moved to `Prepared.Query` | `Prepared[P, R]` already carries the type parameters |
+| `PrepareQuery` | removed | `Prepare` then `Prepared.Query`; it saved one call |
+| `StartPage()` | replaced by `var StartPage` | it only returned the zero `PageState` |
+| `NewErrProtocol` | removed | builds an internal error callers have no use for |
+
 ## Statements, preparation, queries and execution
 
 Prepared statements and compiled plans remain immutable and shareable. Each
@@ -548,8 +568,7 @@ captured parameters through retries, pages, accepted writes and callbacks.
 
 ```go
 func Prepare[P, R any](context.Context, *Session, Statement[P, R], ...PrepareOptions) (*Prepared[P, R], error) // at most one
-func PrepareQuery[P, R any](context.Context, *Session, Statement[P, R], Options, ...PrepareOptions) (*Query[P, R], error)
-func NewQuery[P, R any](*Prepared[P, R], Options) (*Query[P, R], error)
+func (p *Prepared[P, R]) Query(Options) (*Query[P, R], error)
 func NewUnpreparedQuery[P, R any](*Session, Statement[P, R], Options) (*Query[P, R], error)
 func (q *Query[P, R]) Exec(context.Context, P) error
 func (q *Query[P, R]) Each(context.Context, P, *R, func(*R) error) error
@@ -559,7 +578,7 @@ func (q *Query[P, R]) Run(context.Context, P) (Rows[R], error)
 func (q *Query[P, R]) RunPage(context.Context, P, PageState) (*Page[R], error)
 func (q *Query[P, R]) RunUnpaged(context.Context, P) (*Page[R], error)
 func (q *Query[P, R]) Routing(P) (RoutingInfo, error)
-func (q *Query[P, R]) AddTo(*Batch, P) error
+func (q *Query[P, R]) AddToBatch(*Batch, P) error
 func (q *Query[P, R]) ExecBatch(context.Context, BatchKind, *Batch, SessionOptions) (Result, error)
 func (q *Query[P, R]) RunBatch(context.Context, BatchKind, *Batch, SessionOptions) (*Page[R], error)
 func (q *Query[P, R]) Close()
@@ -661,7 +680,7 @@ func (p *Page[R]) Columns() Columns
 type PageLease struct { /* stable shared reference to receive storage */ }
 func (l *PageLease) Close()
 type PageState struct { /* start / more / complete, opaque owned token */ }
-func StartPage() PageState
+var StartPage PageState // the zero PageState
 func RestorePageState([]byte) PageState
 func (p PageState) More() bool
 func (p PageState) Complete() bool
@@ -1122,7 +1141,7 @@ type Profile struct {
 
 type BatchKind uint8
 const (LoggedBatch BatchKind = iota; UnloggedBatch; CounterBatch)
-type Batch struct { /* reusable owned members appended by query.AddTo */ }
+type Batch struct { /* reusable owned members appended by query.AddToBatch */ }
 func (b *Batch) Len() int
 func (b *Batch) Reset()
 
@@ -1155,7 +1174,7 @@ queueing and cleanup waits. Cleanup continues independently where required to
 release an orphan stream; returning a context error never authorizes reuse of
 still-borrowed input before Wait. Query construction copies custom payload bytes and checks source views while
 capturing options. Public batch execution also owns its options payload; batch
-parameters are copied into the batch when query.AddTo appends them. There is no public
+parameters are copied into the batch when query.AddToBatch appends them. There is no public
 binding drain obligation. Returned Result
 payloads use owned storage, because Result outlives pages; this explicit escape
 is an ownership conversion, not a per-cell receive copy.
@@ -1174,7 +1193,7 @@ before send. Timestamps use one value per logical execution reused across
 retries; generated timestamps are concurrency-safe.
 
 A Batch owns its members' encoded parameters in storage it reuses after Reset:
-appending to a batch at its working size does not allocate. AddTo validates
+appending to a batch at its working size does not allocate. AddToBatch validates
 the session and keyspace of each member as it is appended. An execution that
 returns before its writer finished, after cancellation, keeps the storage it
 reads: a later Reset gives the batch fresh storage instead. At most 65,535

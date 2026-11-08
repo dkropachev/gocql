@@ -10,13 +10,13 @@ import (
 )
 
 func BenchmarkBatch(b *testing.B) {
-	b.Run("AddTo", func(b *testing.B) {
+	b.Run("AddToBatch", func(b *testing.B) {
 		q := testOwnedQuery(b)
 		var batch Batch
 		value := []byte("batch entry")
 		b.ReportAllocs()
 		for b.Loop() {
-			if err := q.AddTo(&batch, value); err != nil {
+			if err := q.AddToBatch(&batch, value); err != nil {
 				b.Fatal(err)
 			}
 			if batch.Len() == 64 {
@@ -37,7 +37,7 @@ func BenchmarkBatch(b *testing.B) {
 				for b.Loop() {
 					batch.Reset()
 					for i := 0; i < n; i++ {
-						if err := q.AddTo(&batch, value); err != nil {
+						if err := q.AddToBatch(&batch, value); err != nil {
 							b.Fatal(err)
 						}
 					}

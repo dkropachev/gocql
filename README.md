@@ -32,7 +32,9 @@ statement := cql.Statement[int32, string]{
     Params: cql.OneParam(cql.Int32),
     Rows: cql.OneColumn(cql.StringCodec),
 }
-query, err := gocql.PrepareQuery(ctx, session, statement, gocql.Options{})
+prepared, err := gocql.Prepare(ctx, session, statement)
+if err != nil { return err }
+query, err := prepared.Query(gocql.Options{})
 if err != nil { return err }
 defer query.CloseAndWait(ctx)
 var name string
@@ -55,8 +57,8 @@ from arbitrary Go values.
 
 ## Ownership and streaming
 
-`PrepareQuery` (or `Prepare` then `NewQuery`, to share one preparation)
-creates a reusable query for one worker. Each `Exec`, `Run`,
+`prepared.Query(options)` creates a reusable query for one worker; any number
+of queries can share one preparation. Each `Exec`, `Run`,
 `RunPage` or `RunUnpaged` call copies its parameters during admission. Prepared
 statements and compiled plans remain shareable. Overlapping executions return
 `ErrBusy`; `query.Wait(ctx)` joins accepted writes and callbacks before reuse.

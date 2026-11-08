@@ -115,7 +115,7 @@ func cleanupNamespace(s *gocql.Session) error {
 	if err != nil {
 		return err
 	}
-	b, err := gocql.NewQuery(p, gocql.Options{})
+	b, err := p.Query(gocql.Options{})
 	if err != nil {
 		return err
 	}
@@ -210,7 +210,7 @@ func benchReadContext(ctx context.Context, s *gocql.Session, id int32) error {
 	if e != nil {
 		return e
 	}
-	b, e := gocql.NewQuery(p, gocql.Options{})
+	b, e := p.Query(gocql.Options{})
 	if e != nil {
 		return e
 	}
@@ -250,7 +250,7 @@ func benchWriteContext(ctx context.Context, s *gocql.Session, id int32) error {
 	if e != nil {
 		return e
 	}
-	b, e := gocql.NewQuery(p, gocql.Options{})
+	b, e := p.Query(gocql.Options{})
 	if e != nil {
 		return e
 	}

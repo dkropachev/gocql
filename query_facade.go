@@ -26,10 +26,6 @@ func NewUnpreparedStreamQuery[P, B, R any](session *Session, statement cql.State
 	return execution.NewUnpreparedStreamQuery(session, statement, decoder, options)
 }
 
-func NewQuery[P, R any](prepared *Prepared[P, R], options Options) (*Query[P, R], error) {
-	return execution.NewQuery(prepared, options)
-}
-
 func NewUnpreparedQuery[P, R any](session *Session, statement cql.Statement[P, R], options Options) (*Query[P, R], error) {
 	return execution.NewUnpreparedQuery(session, statement, options)
 }

@@ -17,7 +17,7 @@ import (
 const maxBatchEntries = 65535
 
 // Batch collects statements, each with its values, to send as one CQL
-// BATCH request. Query.AddTo appends a statement; Query.ExecBatch and
+// BATCH request. Query.AddToBatch appends a statement; Query.ExecBatch and
 // Query.RunBatch send the batch. Statements of several queries may share a
 // batch when the queries belong to one session.
 //

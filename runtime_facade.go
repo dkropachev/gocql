@@ -13,7 +13,7 @@ import (
 )
 
 // Batch collects statements, each with its values, to send as one CQL
-// BATCH request: Query.AddTo appends a statement, Query.ExecBatch and
+// BATCH request: Query.AddToBatch appends a statement, Query.ExecBatch and
 // Query.RunBatch send the batch, and Reset empties it for reuse. Once a
 // batch has grown to its working size, appending allocates nothing. The
 // zero Batch is ready to use; a Batch is not safe for concurrent use and
@@ -90,17 +90,6 @@ func Prepare[P any, R any](ctx context.Context, session *Session, statement cql.
 		return nil, err
 	}
 	return implExecution.Prepare[P, R](ctx, session, statement, o)
-}
-
-// PrepareQuery prepares statement and returns a query that executes it with
-// options, for the common case of one query per prepared statement. Use
-// Prepare and NewQuery to run several queries from one preparation.
-func PrepareQuery[P any, R any](ctx context.Context, session *Session, statement cql.Statement[P, R], options Options, prepareOptions ...PrepareOptions) (*Query[P, R], error) {
-	prepared, err := Prepare(ctx, session, statement, prepareOptions...)
-	if err != nil {
-		return nil, err
-	}
-	return implExecution.NewQuery(prepared, options)
 }
 
 func onePrepareOptions(options []PrepareOptions) (PrepareOptions, error) {

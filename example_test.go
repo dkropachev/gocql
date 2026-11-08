@@ -48,14 +48,18 @@ func Example() {
 		ID             cql.UUID
 		Timeline, Text string
 	}
-	insert, err := gocql.PrepareQuery(ctx, session, cql.Statement[tweet, cql.EmptyRow]{
+	insertPrepared, err := gocql.Prepare(ctx, session, cql.Statement[tweet, cql.EmptyRow]{
 		CQL: "INSERT INTO tweet (id,timeline,text) VALUES (?,?,?)",
 		Params: cql.Params(
 			cql.Param("id", cql.UUIDCodec, func(v tweet) cql.UUID { return v.ID }),
 			cql.Param("timeline", cql.StringCodec, func(v tweet) string { return v.Timeline }),
 			cql.Param("text", cql.StringCodec, func(v tweet) string { return v.Text }),
 		),
-	}, gocql.Options{})
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	insert, err := insertPrepared.Query(gocql.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -67,7 +71,7 @@ func Example() {
 	if err := insert.Exec(ctx, tweet{cql.NewTimeUUID(), "me", "hello world"}); err != nil {
 		log.Fatal(err)
 	}
-	selectTweets, err := gocql.PrepareQuery(ctx, session, cql.Statement[string, tweet]{
+	selectTweetsPrepared, err := gocql.Prepare(ctx, session, cql.Statement[string, tweet]{
 		CQL:    "SELECT id,timeline,text FROM tweet WHERE timeline = ?",
 		Params: cql.OneParam(cql.StringCodec),
 		Rows: cql.Row(
@@ -75,7 +79,11 @@ func Example() {
 			cql.Column("timeline", cql.StringCodec, func(v *tweet) *string { return &v.Timeline }),
 			cql.Column("text", cql.StringCodec, func(v *tweet) *string { return &v.Text }),
 		),
-	}, gocql.Options{})
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	selectTweets, err := selectTweetsPrepared.Query(gocql.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}

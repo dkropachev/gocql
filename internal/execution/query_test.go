@@ -249,7 +249,7 @@ func TestQuery(t *testing.T) {
 			}
 			input = []byte("batch entry")
 			var batch Batch
-			if err := q.AddTo(&batch, input); err != nil {
+			if err := q.AddToBatch(&batch, input); err != nil {
 				t.Fatal(err)
 			}
 			input[0] = 'X'

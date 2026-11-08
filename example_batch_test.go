@@ -48,14 +48,18 @@ func ExampleQuery_ExecBatch() {
 		PK, CK      int32
 		Description string
 	}
-	query, err := gocql.PrepareQuery(ctx, session, cql.Statement[item, cql.EmptyRow]{
+	queryPrepared, err := gocql.Prepare(ctx, session, cql.Statement[item, cql.EmptyRow]{
 		CQL: "INSERT INTO example.batches (pk, ck, description) VALUES (?, ?, ?)",
 		Params: cql.Params(
 			cql.Param("pk", cql.Int32, func(v item) int32 { return v.PK }),
 			cql.Param("ck", cql.Int32, func(v item) int32 { return v.CK }),
 			cql.Param("description", cql.StringCodec, func(v item) string { return v.Description }),
 		),
-	}, gocql.Options{})
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	query, err := queryPrepared.Query(gocql.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -67,7 +71,7 @@ func ExampleQuery_ExecBatch() {
 		{PK: 1, CK: 4, Description: "1.4"},
 		{PK: 1, CK: 5, Description: "1.5"},
 	} {
-		if err := query.AddTo(&batch, value); err != nil {
+		if err := query.AddToBatch(&batch, value); err != nil {
 			log.Fatal(err)
 		}
 	}

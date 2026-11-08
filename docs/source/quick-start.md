@@ -11,10 +11,9 @@ Import `github.com/scylladb/gocql/v2` (`gocql`) and
 and open it with `gocql.Connect(ctx, config)`. Close the session when finished.
 
 Declare a `cql.Statement[P,R]` with `CQL`, `Params` and `Rows`.
-`PrepareQuery(ctx, session, statement, options)` prepares it, validates its
-codecs against server metadata and returns a worker-owned reusable query;
-`Prepare` and `NewQuery` do the same in two steps when several queries share
-one preparation. `query.One` reads one row, `query.Each` visits every row and
+`Prepare(ctx, session, statement)` prepares it and validates its codecs
+against server metadata; `prepared.Query(options)` returns a worker-owned
+reusable query, and several queries can share one preparation. `query.One` reads one row, `query.Each` visits every row and
 `query.Run` returns typed rows: check `Rows.Err()` after iteration and close
 the rows. Use `query.Exec` for statements without results: their row type is
 `cql.EmptyRow`. A statement with no bind markers takes `cql.EmptyParams`. Leave

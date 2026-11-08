@@ -97,7 +97,7 @@ func TestPaging(t *testing.T) {
 			for _, c := range []cql.Consistency{cql.One, cql.Quorum} {
 				t.Run(c.String(), func(t *testing.T) {
 					var result []cql.DynamicRow
-					state := gocql.StartPage()
+					state := gocql.StartPage
 					for {
 						page, err := RunPage(context.Background(), session, bound, state, bindOptions(session, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: c, Set: true}, PageSize: cql.Option[int32]{Value: pageSize, Set: true}}))
 						require.NoError(t, err)
@@ -174,7 +174,7 @@ func TestPaging(t *testing.T) {
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,count) VALUES(?,?)", table), cql.IntValue(i), cql.IntValue(i*i))
 		}
 		bound := cassandraUnprepared(t, "SELECT id,count FROM "+table, cql.DynamicRows)
-		state := gocql.StartPage()
+		state := gocql.StartPage
 		fetched := 0
 		for {
 			page, err := RunPage(context.Background(), session, bound, state, bindOptions(session, gocql.Options{PageSize: cql.Option[int32]{Value: 2, Set: true}}))

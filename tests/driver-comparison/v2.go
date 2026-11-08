@@ -93,7 +93,7 @@ func (a *v2Adapter) Evidence() any {
 	routing := []routing.Info{}
 	for _, prepared := range a.reads {
 		if prepared != nil {
-			b, e := g.NewQuery(prepared, g.Options{})
+			b, e := prepared.Query(g.Options{})
 			if e == nil {
 				info, err := b.Routing(int32(0))
 				if err == nil {
@@ -127,7 +127,7 @@ func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[r
 		if e != nil {
 			return nil, nil, e
 		}
-		q, e := g.NewQuery(p, g.Options{})
+		q, e := p.Query(g.Options{})
 		if e != nil {
 			return nil, nil, e
 		}
@@ -160,11 +160,11 @@ func (a *v2Adapter) Worker(paged, stream bool) (worker, error) {
 	if paged {
 		size = 4096
 	}
-	readQuery, e := g.NewQuery(read, g.Options{})
+	readQuery, e := read.Query(g.Options{})
 	if e != nil {
 		return nil, e
 	}
-	writeQuery, e := g.NewQuery(write, a.metadata)
+	writeQuery, e := write.Query(a.metadata)
 	if e != nil {
 		readQuery.Close()
 		return nil, e

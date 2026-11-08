@@ -1,13 +1,13 @@
 # Batches
 
-Append each typed member with `query.AddTo(&batch, parameters)`, then send the
+Append each typed member with `query.AddToBatch(&batch, parameters)`, then send the
 batch with `query.ExecBatch(ctx, kind, &batch, options)`. Any query of the
 session can send the batch, and members of several queries may share one batch:
 
 ```go
 var batch gocql.Batch
 for _, r := range rows {
-	if err := insert.AddTo(&batch, r); err != nil {
+	if err := insert.AddToBatch(&batch, r); err != nil {
 		return err
 	}
 }
@@ -17,7 +17,7 @@ if _, err := insert.ExecBatch(ctx, cql.UnloggedBatch, &batch, gocql.SessionOptio
 batch.Reset()
 ```
 
-`AddTo` encodes the parameters into storage the batch owns, so the query is
+`AddToBatch` encodes the parameters into storage the batch owns, so the query is
 free for reuse at once and later input mutation cannot change the batch. A batch
 may be sent again unchanged. `Reset` empties it and keeps its storage, so a
 reused batch appends without allocating; if a cancelled execution may still be
