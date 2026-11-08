@@ -21,7 +21,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"net"
 	"net/netip"
 	"sync/atomic"
@@ -341,50 +340,6 @@ func TestConnectionSetup(t *testing.T) {
 			}
 			if name != "transport.test" {
 				t.Fatal("proxy/translated address replaced logical TLS identity", name)
-			}
-		})
-
-		t.Run("SNIProxyAddress", func(t *testing.T) {
-			cert, clientTLS := testTLS(t)
-			listener := codecTestMust(net.Listen("tcp", "127.0.0.1:0"))
-			defer listener.Close()
-			done := make(chan error, 1)
-			go func() {
-				raw, err := listener.Accept()
-				if err != nil {
-					done <- err
-					return
-				}
-				defer raw.Close()
-				server := tls.Server(raw, &tls.Config{Certificates: []tls.Certificate{cert}})
-				err = server.Handshake()
-				if err == nil && server.ConnectionState().ServerName != "transport.test" {
-					err = fmt.Errorf("logical SNI lost: %q", server.ConnectionState().ServerName)
-				}
-				done <- err
-			}()
-			config := settings.DefaultConfig("localhost")
-			config.TLS = clientTLS
-			config.Pool.ShardAwarePort = false
-			config.ClientRoutes = &settings.ClientRoutesOptions{TLS: true, ConnectionIDs: []string{"proxy"}, HostnameOverrides: map[string]string{"proxy": "transport.test"}, SNIProxyAddress: listener.Addr().String()}
-			var endpoint string
-			config.DialHost = func(ctx context.Context, target implEndpoint.DialTarget) (net.Conn, error) {
-				endpoint = target.Address
-				return (implEndpoint.DefaultDialer{}).DialContext(ctx, target)
-			}
-			host := testHost(t, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1})
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			defer cancel()
-			connection, err := (&transport.InternalV2TLSHostDialer{InternalConfig: settings.InternalConnectivityConfig(config)}).DialHost(ctx, host)
-			if err != nil {
-				t.Fatal(err)
-			}
-			connection.Conn.Close()
-			if err = <-done; err != nil {
-				t.Fatal(err)
-			}
-			if endpoint != listener.Addr().String() {
-				t.Fatal("SNI proxy endpoint ignored", endpoint, listener.Addr())
 			}
 		})
 

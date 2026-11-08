@@ -1500,7 +1500,7 @@ configuration serves every node; without an explicit ServerName each
 connection verifies the node's IP address. Context-taking hooks honor cancellation; synchronous callbacks are
 prompt/nonblocking and cannot reenter blocking Close/Wait. The implementation
 contract defines route selection, snapshots and duration defaults. Client
-routes/cloud supply SNI-aware dial/TLS resolution and disable advanced shard
+routes supply per-connection-ID endpoint overrides and disable advanced shard
 awareness (shard selection by source port through the shard-aware port), which
 their proxy breaks. Keepalive, orphan-stream budget, connection repair and
 graceful close remain separate from user-request timeout.

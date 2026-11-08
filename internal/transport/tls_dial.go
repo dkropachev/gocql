@@ -202,22 +202,6 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *HostInfo, shar
 	if translated != nil && translated.CQL.IsValid() {
 		address = translated.CQL.ToNetAddr()
 	}
-	if routes := d.InternalConfig.ClientRoutes; routes != nil && routes.SNIProxyAddress != "" {
-		proxy, port, err := net.SplitHostPort(routes.SNIProxyAddress)
-		if err != nil {
-			proxy = routes.SNIProxyAddress
-			_, port, _ = net.SplitHostPort(address)
-		}
-		resolver := &v2DNSResolver{InternalBase: d.InternalConfig.DNSResolver, InternalTimeout: d.InternalConfig.DNSTimeout}
-		ips, err := resolver.LookupIPContext(ctx, proxy)
-		if err != nil {
-			return nil, err
-		}
-		if len(ips) == 0 {
-			return nil, typeValidation("SNI proxy", "no resolved addresses")
-		}
-		address = net.JoinHostPort(ips[0].String(), port)
-	}
 	target := DialTarget{Host: snapshot, Network: "tcp", Address: address}
 	if d.InternalConfig.LocalAddress.IsValid() {
 		target.LocalAddress = netip.AddrPortFrom(d.InternalConfig.LocalAddress, 0)

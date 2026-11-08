@@ -78,7 +78,7 @@ waits for agreement and queries the schema again to prove none survived.
 The checked-in `testdata/pki` material is dedicated test PKI, with a trusted
 server URI identity and client certificates. Its exact hashes are included in
 source snapshots. Scylla requires client certificates and password auth. Tests
-prove successful and rejected credentials, cloud UUID SNI and ticket resumption.
+prove successful and rejected credentials and ticket resumption.
 Cassandra uses its real PKCS12/TLS implementation. Certificate generation remains
 in `testdata/pki/generate_certs.sh`; run it only in a new scratch directory with
 copied configurations when replacing the dedicated fixture material.

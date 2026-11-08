@@ -50,7 +50,6 @@ type MetadataIO struct {
 
 type ClientRoutesOptions struct {
 	HostnameOverrides map[string]string
-	SNIProxyAddress   string
 	ConnectionIDs     []string
 	TLS               bool
 }

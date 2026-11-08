@@ -876,7 +876,6 @@ type ClientRoutesOptions struct {
     ConnectionIDs []string
     HostnameOverrides map[string]string // per configured connection ID
     TLS bool
-    SNIProxyAddress string
 }
 type AuthProvider interface { Start(context.Context, HostSnapshot, string) (AuthExchange, Nullable[[]byte], error) }
 type AuthExchange interface {
@@ -896,20 +895,18 @@ changing a hook argument cannot mutate routing state. Hook errors preserve
 context cancellation. The hook returns a raw net.Conn; the driver selects
 TLSForHost (when present) over TLS, applies TLS once, then runs protocol
 negotiation/authentication. A nil TLSForHost result inherits TLS. If TLS is
-required by TLS, a non-nil hook, cloud or client routes and no usable config
+required by TLS, a non-nil hook or client routes and no usable config
 remains, fail setup explicitly; never interpret nil as permission to downgrade.
-A hook cannot turn off configured TLS. TLS identity uses the logical host/SNI
-configuration, not a rewritten proxy address; a missing required logical name is
+A hook cannot turn off configured TLS. TLS identity uses the logical host name,
+not a translated route address; a missing required logical name is
 a validation error. A Unix target carries its path in Address and has no
 shard/source-port selection.
 
 Auth output owns or borrows bytes until its handshake write completes, then the
 runtime releases them. Exchange.Close always runs, including aborted handshakes;
 Success runs only after AUTH_SUCCESS. Metadata internal queries obey context
-bounds and new codecs. Unix sockets use Dialer and protocol 3 explicitly. Cloud
-configuration is a builder for Config/TLSForHost/dial hooks; it retains SNI
-UUID, per-host routing and ticket-cache verification without old query
-interfaces. Pool sizing validates nonnegative ConnectionsPerHost and
+bounds and new codecs. Unix sockets use Dialer and protocol 3 explicitly. SNI endpoints,
+including Scylla Cloud bundles, are not supported. Pool sizing validates nonnegative ConnectionsPerHost and
 ConnectionsPerShard. DefaultConfig sets host count 0 and shard count 1. Positive
 ConnectionsPerHost selects per-host mode even when the shard count remains
 positive; otherwise a positive ConnectionsPerShard is required. Both zero is
@@ -926,7 +923,7 @@ uses the documented ordinary-port fallback; no helper panic is permitted.
 Initializing/ready/broken/closed are distinct pool states; closed is terminal
 and cannot schedule refills. Endpoint/reshard generations fence late opening
 attempts so they cannot reinstall superseded endpoint/sharder state. The same
-fence covers route, proxy, SNI and TLS-target generations; late successful
+fence covers route and TLS-target generations; late successful
 handshakes for old targets are closed rather than published. Reconnect uses
 bounded exponential backoff with jitter, independently of startup timeout. Host
 filtering applies before query pool acquisition; bootstrap/control contact
@@ -951,8 +948,8 @@ under the same deadline, without changing unrelated hosts. Missing required
 routes/ports fail explicitly; there is no fallback to the advertised direct
 address. Route reads/partial deletions obey per-pair generation fences.
 Combining client routes with a user AddressTranslator or enabled shard-aware
-source-port dialing is invalid; the cloud/client-route builder disables the
-latter explicitly. TLS routes require usable verified TLS and logical SNI;
+source-port dialing is invalid; the client-route builder disables the
+latter explicitly. TLS routes require usable verified TLS and a logical host name;
 setting the route flag alone never supplies trust configuration. Config
 snapshots copy route IDs and override maps.
 
@@ -1053,8 +1050,8 @@ source limitation is silently a Go feature requirement.
 | Parameters/rows/batches; scalar conversions; null/unset/empty | Exact generic codecs, explicit states, strict widths/text/time/duration/UUID rules, no nullable-collection-to-empty coercion, clear Go changes from permissive Rust quirks. |
 | Collections/vectors/dynamic/custom codecs; generated row/UDT codecs | Lazy typed views, tagged Value, explicit accessors/code-generation-compatible interfaces, strict checked framing and vector dimension, UDT evolution options. Rust macro attributes become explicit Go descriptors; no reflection-based derivation is required or retained. |
 | Result metadata/type checking/ownership; formatting/helper boundaries; validation/errors | Generation-bound plans, stable leases, streaming views, explicit materialization, structured path/stage errors; no implicit debug formatter reads released payload. CQL identifier/literal formatting is explicit utility behavior, not raw-query interpolation. |
-| Configuration/startup; transport/compression; auth; TLS/resumption | Immutable Config, typed lifecycle, bounded DNS/setup, existing dial/unix/cloud behavior, per-connection challenge exchange and cleanup, crypto/tls and certificate validation, real ticket-resumption assertion; no Rust TLS backend duplication. |
-| Address translation/filtering; client routes | Translation resolves peer addresses without rewriting contact points unexpectedly; host filters and SNI-aware route changes are explicit; client-routes events update route snapshots and pools; route fallback is tested. |
+| Configuration/startup; transport/compression; auth; TLS/resumption | Immutable Config, typed lifecycle, bounded DNS/setup, existing dial/unix behavior, per-connection challenge exchange and cleanup, crypto/tls and certificate validation, real ticket-resumption assertion; no Rust TLS backend duplication. |
+| Address translation/filtering; client routes | Translation resolves peer addresses without rewriting contact points unexpectedly; host filters and route changes are explicit; client-routes events update route snapshots and pools; route fallback is tested. |
 | Identity/effective configuration; metrics/history/logs/server tracing | STARTUP identity, opt-out configuration report with secrets redacted, typed observer/metrics/lifecycle/Trace APIs; no original dynamic argument arrays in observations. Report configured versus effective negotiated values distinctly. |
 | Configuration ownership; Cargo feature availability | No Go Cargo feature emulation. Native big.Int/netip/time adapters explicit; existing inf.Dec migration may use a custom codec. TLS/metrics available through Go configuration. Foreign-runtime adapters and Rust serde external formats are not applicable, not missing Go features. Experimental routing/client-routes/leader capabilities have explicit Config/policy controls and tests. |
 
@@ -1122,7 +1119,7 @@ Migration translations are mandatory:
   UNPREPARED repair and metadata-ID changes, without re-encoding on the hot path.
 - Observers retain attempts/latency/host/empty-result/page-row/batch-entry assertions
   using statement/schema metadata and canonical routing, not original `[][]any`.
-- TLS resumption, SNI cloud counts, shard-aware fallback/NAT/excess refill, unix
+- TLS resumption, shard-aware fallback/NAT/excess refill, unix
   sockets, custom DNS/translation, direct connection affinity, controlled stale
   cache injections, negative streams, payload fixtures and auth remain real tests.
 - Control/schema/tablet and CCM disruption assertions retain their actual effects;
@@ -1165,7 +1162,7 @@ Migration translations are mandatory:
    plus helpers on stable Scylla v4 uncompressed/Snappy/LZ4/TLS, development Scylla
    v4 for SELECT without FROM/new capabilities, Cassandra v4 and v5 including
    segmentation/metadata IDs/large results and uncompressed/LZ4/TLS, enforcing-auth,
-   cloud/SNI/resumption, Unix maintenance sockets and CCM lifecycle lanes. Injected
+   TLS resumption, Unix maintenance sockets and CCM lifecycle lanes. Injected
    fixtures cover custom payload echo, write failures and incomplete peers. Race
    and fuzz lanes cover the ownership/framing/metadata hazards in plan section 8.
    Current Scylla fixtures reject v5; that rejection is an explicit skip, never

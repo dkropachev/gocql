@@ -680,12 +680,6 @@ func (r *ClientRoutesBuilder) HostnameOverride(connectionID, hostname string) *C
 	return r
 }
 
-// SNIProxy connects through the SNI proxy at address. Requires TLS.
-func (r *ClientRoutesBuilder) SNIProxy(address string) *ClientRoutesBuilder {
-	r.routes.SNIProxyAddress = address
-	return r
-}
-
 // TLS requires verified TLS on routed connections.
 func (r *ClientRoutesBuilder) TLS() *ClientRoutesBuilder {
 	r.routes.TLS = true

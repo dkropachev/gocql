@@ -182,9 +182,6 @@ func InternalValidateConfig(config Config) error {
 		if routes.TLS && (config.TLS == nil || config.TLS.InsecureSkipVerify && config.TLS.VerifyConnection == nil && config.TLS.VerifyPeerCertificate == nil) {
 			return typeValidation("client routes TLS", "verified TLS configuration required")
 		}
-		if routes.SNIProxyAddress != "" && !routes.TLS {
-			return typeValidation("client routes proxy", "requires verified TLS")
-		}
 	}
 	keys := make(map[string]bool, len(config.Metadata.Keyspaces))
 	for _, keyspace := range config.Metadata.Keyspaces {

@@ -7,5 +7,4 @@ off, because the proxy in front of them rewrites the source port that picks the
 shard; an explicit `AdvancedShardAwareness` call makes `Build` fail. Shard-aware
 routing still works: the pool keeps dialing the regular port until every shard
 has a connection.
-The driver uses typed internal metadata queries and SNI-aware per-host hooks;
-route refresh and connection lifecycle obey context cancellation.
+The driver uses typed internal metadata queries; route refresh and connection lifecycle obey context cancellation.
