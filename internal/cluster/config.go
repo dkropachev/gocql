@@ -100,6 +100,10 @@ func InternalConnectCluster(ctx context.Context, config Config, initialize func(
 		})
 	}
 	hostDialer := &v2TLSHostDialer{InternalConfig: implSettings.InternalConnectivityConfig(config)}
+	sessionTLS := newSessionTLS(config)
+	if sessionTLS != nil {
+		hostDialer.InternalTLS = &sessionTLS.current
+	}
 	legacy.HostDialer = hostDialer
 	var typedSession *Session
 	if path, _ := unixContact(config); path != "" {
@@ -134,6 +138,7 @@ func InternalConnectCluster(ctx context.Context, config Config, initialize func(
 		return nil, err
 	}
 	typedSession = s
+	s.privateStorage.tls = sessionTLS
 
 	stop := context.AfterFunc(ctx, s.privateStorage.InternalCancel)
 	err = s.init()
@@ -151,6 +156,10 @@ func InternalConnectCluster(ctx context.Context, config Config, initialize func(
 	if err = s.initV2Peripheral(config); err != nil {
 		_ = s.Close()
 		return nil, err
+	}
+	if sessionTLS != nil && sessionTLS.files != nil {
+		p := InternalSessionPeripheral(s)
+		p.InternalStartWorker(func() { sessionTLS.poll(p.InternalDone, s.privateStorage.InternalLogger) })
 	}
 	s.privateStorage.readyCh <- struct{}{}
 	close(s.privateStorage.readyCh)

@@ -1491,13 +1491,18 @@ func OpenSingleHost(context.Context, Config, UUID) (*Session, error)
 Configuration covers protocol 3/4/5 and autodiscovery, timeouts,
 pools/shards/source ports, DNS/dial hooks, TLS and ticket cache, auth-provider
 exchanges, LZ4/Snappy, coalescing/socket options, address
-translation/filtering/client routes/cloud, startup identity and configuration
+translation/filtering/client routes, startup identity and configuration
 reporting, metadata scope/events/agreement, profiles/retry/speculation,
 metrics/history/logger and timestamp generation. TLS uses Go crypto/tls,
 validates host/CA by default, and never downgrades after a TLS failure. Each
 auth exchange is per connection; providers are concurrency-safe. One TLS
 configuration serves every node; without an explicit ServerName each
-connection verifies the node's IP address. Context-taking hooks honor cancellation; synchronous callbacks are
+connection verifies the node's IP address. `Session.UpdateTLS(*tls.Config)`
+replaces it for connections dialed afterwards; open connections keep theirs,
+and TLS cannot be turned on or off. `ConfigBuilder.TLSFiles(TLSFiles)` loads
+the client certificate/key and CA from files over the TLS config, fails Build
+if they cannot be loaded, and reloads them on a content change; a failed reload
+keeps the current files. Context-taking hooks honor cancellation; synchronous callbacks are
 prompt/nonblocking and cannot reenter blocking Close/Wait. The implementation
 contract defines route selection, snapshots and duration defaults. Client
 routes supply per-connection-ID endpoint overrides and disable advanced shard

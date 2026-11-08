@@ -112,6 +112,11 @@ func (b *ConfigBuilder) Build() (Config, error) {
 			settings.Metadata.InitialDiscovery = false
 		}
 	}
+	if settings.TLSFiles != nil {
+		if err := loadTLSFiles(&settings); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	if settings.ClientRoutes != nil && !b.has("advanced shard awareness") {
 		settings.Pool.ShardAwarePort = false
 	}
@@ -125,6 +130,26 @@ func (b *ConfigBuilder) Build() (Config, error) {
 	}
 	resolved := implSettings.InternalSnapshotConfig(settings)
 	return Config{settings: &resolved}, nil
+}
+
+// loadTLSFiles makes the files' content settings.TLS, keeping the config it
+// replaces as the base later reloads apply the files to.
+func loadTLSFiles(settings *implSettings.Config) error {
+	base := settings.TLS
+	if err := implSettings.CheckTLSFilesBase(base, *settings.TLSFiles); err != nil {
+		return err
+	}
+	content, err := implSettings.ReadTLSFiles(*settings.TLSFiles)
+	if err != nil {
+		return err
+	}
+	config, err := implSettings.BuildTLSFromFiles(base, content)
+	if err != nil {
+		return err
+	}
+	settings.TLSFilesBase = base
+	settings.TLS = config
+	return nil
 }
 
 // set applies a choice of key when valid; otherwise it records reason as
@@ -159,6 +184,20 @@ func (b *ConfigBuilder) Auth(provider auth.Provider) *ConfigBuilder {
 // IP address. Default plaintext.
 func (b *ConfigBuilder) TLS(config *tls.Config) *ConfigBuilder {
 	return b.set("tls", "TLS(...)", config != nil, "config is required", func() { b.settings.TLS = config.Clone() })
+}
+
+// TLSFiles names PEM files for ConfigBuilder.TLSFiles.
+type TLSFiles = implSettings.TLSFiles
+
+// TLSFiles loads the client certificate and key, and the CA certificates that
+// replace RootCAs, from files, and has the session reload them whenever their
+// content changes. Other TLS settings come from TLS, or are TLS 1.2+ defaults
+// when TLS is not called. Build fails if the files cannot be loaded; a reload
+// that fails keeps the previous files. Open connections keep the certificate
+// they were dialed with; see Session.UpdateTLS.
+func (b *ConfigBuilder) TLSFiles(files TLSFiles) *ConfigBuilder {
+	reason := files.Check()
+	return b.set("tls files", "TLSFiles(...)", reason == "", reason, func() { b.settings.TLSFiles = &files })
 }
 
 // ProtocolVersion pins the native protocol version. Default ProtocolAuto, or

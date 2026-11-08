@@ -900,7 +900,12 @@ remains, fail setup explicitly; never interpret nil as permission to downgrade.
 A hook cannot turn off configured TLS. TLS identity uses the logical host name,
 not a translated route address; a missing required logical name is
 a validation error. A Unix target carries its path in Address and has no
-shard/source-port selection.
+shard/source-port selection. The dialer reads the session's TLS config from
+one atomic pointer on every dial and copies it; UpdateTLS and the TLSFiles
+poller replace the pointer after the same validation as Config. The poller is
+a session peripheral worker: it compares a SHA-256 of the file content, keeps
+the current config on any read or parse failure, and stops on Close. A changed
+client identity gets a fresh ClientSessionCache when the base config has one.
 
 Auth output owns or borrows bytes until its handshake write completes, then the
 runtime releases them. Exchange.Close always runs, including aborted handshakes;

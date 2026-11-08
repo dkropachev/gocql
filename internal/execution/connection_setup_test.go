@@ -23,6 +23,7 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -341,6 +342,89 @@ func TestConnectionSetup(t *testing.T) {
 			if name != "transport.test" {
 				t.Fatal("proxy/translated address replaced logical TLS identity", name)
 			}
+		})
+
+		t.Run("LiveConfig", func(t *testing.T) {
+			serverCert, clientTLS := testTLS(t)
+			listener := codecTestMust(net.Listen("tcp", "127.0.0.1:0"))
+			defer listener.Close()
+			peers := make(chan []byte, 64)
+			go func() {
+				for {
+					raw, err := listener.Accept()
+					if err != nil {
+						return
+					}
+					go func() {
+						defer raw.Close()
+						server := tls.Server(raw, &tls.Config{Certificates: []tls.Certificate{serverCert}, ClientAuth: tls.RequireAnyClientCert})
+						if server.Handshake() == nil {
+							peers <- server.ConnectionState().PeerCertificates[0].Raw
+						}
+					}()
+				}
+			}()
+			withClientCert := func() *tls.Config {
+				clientCert, _ := testTLS(t)
+				c := clientTLS.Clone()
+				c.Certificates = []tls.Certificate{clientCert}
+				return c
+			}
+			first, second := withClientCert(), withClientCert()
+			config := settings.DefaultConfig("localhost")
+			config.TLS = first
+			config.Pool.ShardAwarePort = false
+			live := new(atomic.Pointer[tls.Config])
+			live.Store(first)
+			dialer := &transport.InternalV2TLSHostDialer{InternalConfig: settings.InternalConnectivityConfig(config), InternalTLS: live}
+			host := testHost(t, listener.Addr())
+			dial := func() error {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				connection, err := dialer.DialHost(ctx, host)
+				if err == nil {
+					connection.Conn.Close()
+				}
+				return err
+			}
+			if err := dial(); err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(<-peers, first.Certificates[0].Certificate[0]) {
+				t.Fatal("first dial did not present the initial certificate")
+			}
+			live.Store(second)
+			if err := dial(); err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(<-peers, second.Certificates[0].Certificate[0]) {
+				t.Fatal("dial after the swap presented the old certificate")
+			}
+
+			_, otherCA := testTLS(t)
+			untrusting := second.Clone()
+			untrusting.RootCAs = otherCA.RootCAs
+			live.Store(untrusting)
+			if err := dial(); err == nil {
+				t.Fatal("dial after swapping in an unrelated CA trusted the old server")
+			}
+
+			live.Store(first)
+			var wg sync.WaitGroup
+			for i := range 8 {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					if i%2 == 0 {
+						live.Store([]*tls.Config{first, second}[i/2%2])
+						return
+					}
+					if err := dial(); err != nil {
+						t.Error(err)
+					}
+				}()
+			}
+			wg.Wait()
 		})
 
 		t.Run("ShardDialSource", func(t *testing.T) {

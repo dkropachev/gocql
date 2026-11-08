@@ -22,18 +22,22 @@ import (
 )
 
 type Config struct {
-	LocalAddress                                      netip.Addr
-	Dialer                                            implEndpoint.Dialer
-	DNSResolver                                       implEndpoint.DNSResolver
-	Auth                                              AuthProvider
-	Reconnect                                         ReconnectPolicy
-	Conviction                                        ConvictionPolicy
-	AddressTranslator                                 implEndpoint.AddressTranslator
-	Observer                                          Observer
-	LifecycleObserver                                 LifecycleObserver
-	Logger                                            logging.StdLogger
-	DialHost                                          func(context.Context, implEndpoint.DialTarget) (net.Conn, error)
-	TLS                                               *tls.Config
+	LocalAddress      netip.Addr
+	Dialer            implEndpoint.Dialer
+	DNSResolver       implEndpoint.DNSResolver
+	Auth              AuthProvider
+	Reconnect         ReconnectPolicy
+	Conviction        ConvictionPolicy
+	AddressTranslator implEndpoint.AddressTranslator
+	Observer          Observer
+	LifecycleObserver LifecycleObserver
+	Logger            logging.StdLogger
+	DialHost          func(context.Context, implEndpoint.DialTarget) (net.Conn, error)
+	TLS               *tls.Config
+	// TLSFiles, when set, reloads the certificate and CA in TLS from files;
+	// TLSFilesBase is the TLS config those files are applied to.
+	TLSFiles                                          *TLSFiles
+	TLSFilesBase                                      *tls.Config
 	HostFilter                                        func(HostSnapshot) bool
 	ClientRoutes                                      *ClientRoutesOptions
 	DefaultProfile                                    *Profile
@@ -179,8 +183,8 @@ func InternalValidateConfig(config Config) error {
 		if config.AddressTranslator != nil || config.Pool.ShardAwarePort {
 			return typeValidation("client routes", "user address translator and advanced shard awareness are incompatible")
 		}
-		if routes.TLS && (config.TLS == nil || config.TLS.InsecureSkipVerify && config.TLS.VerifyConnection == nil && config.TLS.VerifyPeerCertificate == nil) {
-			return typeValidation("client routes TLS", "verified TLS configuration required")
+		if err := ValidateClientRoutesTLS(routes, config.TLS); err != nil {
+			return err
 		}
 	}
 	keys := make(map[string]bool, len(config.Metadata.Keyspaces))
@@ -218,6 +222,11 @@ func InternalSnapshotConfig(config Config) Config {
 	config.Metadata.Keyspaces = append([]string(nil), config.Metadata.Keyspaces...)
 	if config.TLS != nil {
 		config.TLS = InternalCloneV2TLSConfig(config.TLS)
+	}
+	if config.TLSFiles != nil {
+		files := *config.TLSFiles
+		config.TLSFiles = &files
+		config.TLSFilesBase = InternalCloneV2TLSConfig(config.TLSFilesBase)
 	}
 	if config.ClientRoutes != nil {
 		routes := *config.ClientRoutes
