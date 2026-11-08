@@ -116,7 +116,7 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster gocql.Config, keyspac
 		}
 		builder := gocql.NewProfile()
 		fixtureProfile(builder)
-		profile, err := builder.Routing(policy).Build()
+		profile, err := builder.WithRouting(policy).Build()
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -1466,8 +1466,9 @@ admissions made by this session without closing unadmitted bindings.
 
 Configuration retains useful existing setup capabilities. A `Config` is an
 opaque, immutable value made only by `ConfigBuilder.Build`; users never write a
-`Config` literal or assign its fields. Each builder method sets one setting,
-settings not chosen keep the driver's behavior, and when a setting is chosen
+`Config` literal or assign its fields. Each builder method sets one setting
+and is named `With*` (`WithPort`, `WithTLS`, `WithTimeout`), except `Build`
+and the `No*` off switches; settings not chosen keep the driver's behavior, and when a setting is chosen
 again the last call wins. Features that are on by default are turned off by
 `No*` methods; features that are off by default, such as TLS, have no off
 switch. Methods never fail: `Build` reports every invalid call at once through
@@ -1499,7 +1500,7 @@ auth exchange is per connection; providers are concurrency-safe. One TLS
 configuration serves every node; without an explicit ServerName each
 connection verifies the node's IP address. `Session.UpdateTLS(*tls.Config)`
 replaces it for connections dialed afterwards; open connections keep theirs,
-and TLS cannot be turned on or off. `ConfigBuilder.TLSFiles(TLSFiles)` loads
+and TLS cannot be turned on or off. `ConfigBuilder.WithTLSFiles(TLSFiles)` loads
 the client certificate/key and CA from files over the TLS config, fails Build
 if they cannot be loaded, and reloads them on a content change; a failed reload
 keeps the current files. Context-taking hooks honor cancellation; synchronous callbacks are

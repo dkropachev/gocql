@@ -47,9 +47,9 @@ func dropLeftoverKeyspaces() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	config, err := createV2Cluster(func(c *gocql.ConfigBuilder) {
-		c.Keyspace("system").
-			IgnoreEvents(gocql.SchemaEvent, gocql.TopologyEvent, gocql.StatusEvent).
-			ManualSchemaAgreement().
+		c.WithKeyspace("system").
+			WithIgnoreEvents(gocql.SchemaEvent, gocql.TopologyEvent, gocql.StatusEvent).
+			WithManualSchemaAgreement().
 			NoRefreshAfterAgreement()
 	}).Build()
 	if err != nil {

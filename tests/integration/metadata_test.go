@@ -52,7 +52,7 @@ func TestMetadata(t *testing.T) {
 		defer cancel()
 		contactPoints := getClusterHosts()
 		config := createV2Cluster(func(c *gocql.ConfigBuilder) {
-			c.NoDiscovery().ConnectionsPerHost(1).NoAdvancedShardAwareness()
+			c.NoDiscovery().WithConnectionsPerHost(1).NoAdvancedShardAwareness()
 		})
 		s, err := gocql.Connect(ctx, mustBuild(t, config))
 		if err != nil {
@@ -167,7 +167,7 @@ func TestMetadata(t *testing.T) {
 		t.Run("ControlReconnect", func(t *testing.T) {
 			t.Parallel()
 
-			cluster := createV2Cluster().IgnoreEvents(gocql.TopologyEvent, gocql.StatusEvent)
+			cluster := createV2Cluster().WithIgnoreEvents(gocql.TopologyEvent, gocql.StatusEvent)
 
 			sess, err := gocql.Connect(context.Background(), mustBuild(t, cluster))
 			if err != nil {
@@ -278,7 +278,7 @@ func TestMetadata(t *testing.T) {
 			fixture := &incompletePeerDialer{}
 			// TLS is never set here: the test skips under -runssl above.
 			config := createV2ClusterWithout(fixtureProtocol|fixtureCompression, func(c *gocql.ConfigBuilder) {
-				c.ProtocolVersion(gocql.Protocol4).Compression(gocql.NoCompression).Dialer(fixture)
+				c.WithProtocolVersion(gocql.Protocol4).WithCompression(gocql.NoCompression).WithDialer(fixture)
 			})
 			session, err := gocql.Connect(context.Background(), mustBuild(t, config))
 			require.NoError(t, err)

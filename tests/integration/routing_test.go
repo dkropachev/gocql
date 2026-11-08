@@ -91,7 +91,7 @@ func TestRouting(t *testing.T) {
 			for _, oneHost := range []bool{false, true} {
 				builder := gocql.NewProfile()
 				fixtureProfile(builder)
-				profile, err := builder.Routing(v2UnavailableHostsRouting{Policy: policy, oneHost: oneHost}).Build()
+				profile, err := builder.WithRouting(v2UnavailableHostsRouting{Policy: policy, oneHost: oneHost}).Build()
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -283,10 +283,10 @@ func TestRouting(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cluster.DefaultProfile(func(p *gocql.ProfileBuilder) { p.Routing(rr) })
+			cluster.WithDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithRouting(rr) })
 			// we'll filter out the second host
 			filtered := clusterHosts[1]
-			cluster.HostFilter(func(host routing.HostSnapshot) bool { return host.Address.Addr().String() != filtered })
+			cluster.WithHostFilter(func(host routing.HostSnapshot) bool { return host.Address.Addr().String() != filtered })
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
 
@@ -319,10 +319,10 @@ func TestRouting(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cluster.DefaultProfile(func(p *gocql.ProfileBuilder) { p.Routing(rr) })
+			cluster.WithDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithRouting(rr) })
 			// we'll filter out the second host
 			filtered := clusterHosts[1]
-			cluster.HostFilter(func(host routing.HostSnapshot) bool { return host.Address.Addr().String() != filtered })
+			cluster.WithHostFilter(func(host routing.HostSnapshot) bool { return host.Address.Addr().String() != filtered })
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
 
@@ -367,7 +367,7 @@ func TestRouting(t *testing.T) {
 		// Integration test of the routing key calculation
 		t.Run("Computed", func(t *testing.T) {
 			t.Parallel()
-			session := createV2Session(t, func(c *gocql.ConfigBuilder) { c.IgnoreEvents(gocql.SchemaEvent) })
+			session := createV2Session(t, func(c *gocql.ConfigBuilder) { c.WithIgnoreEvents(gocql.SchemaEvent) })
 			defer session.Close()
 			single, composite := testTableName(t, "single"), testTableName(t, "composite")
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(first_id int,second_id int,PRIMARY KEY(first_id,second_id))", single))
@@ -454,7 +454,7 @@ func TestRouting(t *testing.T) {
 			v2ConfigureRouting(t, cluster, routing.Options{TokenAware: true})
 			// The rows are read back at ONE from whichever replica the tablet
 			// routes to: write them at ALL so a lagging replica cannot miss one.
-			cluster.DefaultProfile(func(p *gocql.ProfileBuilder) { p.Consistency(cql.All) })
+			cluster.WithDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithConsistency(cql.All) })
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
 			supported, err := v2TabletsSupported(ctx, session)
@@ -903,9 +903,9 @@ func TestRouting(t *testing.T) {
 		t.Run("ConnPool", func(t *testing.T) {
 			t.Parallel()
 			session := createV2SessionFromConfig(createV2ClusterWithout(fixtureConsistency, func(c *gocql.ConfigBuilder) {
-				c.ConnectionsPerHost(1)
+				c.WithConnectionsPerHost(1)
 				// The row is read back at ONE: write it at ALL so any replica has it.
-				c.DefaultProfile(func(p *gocql.ProfileBuilder) { p.PageSize(1).Consistency(cql.All) })
+				c.WithDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithPageSize(1).WithConsistency(cql.All) })
 			}), t, false)
 			defer session.Close()
 			conns := waitForHostConns(t, session)
@@ -935,7 +935,7 @@ func TestRouting(t *testing.T) {
 					cluster := createV2Cluster()
 					v2ConfigureRouting(t, cluster, routing.Options{TokenAware: true})
 					if configuredKeyspace {
-						cluster.Keyspace(keyspace)
+						cluster.WithKeyspace(keyspace)
 					}
 					testIfPolicyInitializedProperly(t, mustBuild(t, cluster), keyspace)
 				})

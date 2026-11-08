@@ -52,8 +52,8 @@ func run() (resultErr error) {
 	uri := flag.String("tls-uri", "", "explicit TLS URI identity instead of DNS")
 	flag.Parse()
 	builder := gocql.NewConfig(strings.Split(*hosts, ",")...).
-		ProtocolVersion(gocql.ProtocolVersion(*protocol)).
-		ConnectionsPerHost(1).
+		WithProtocolVersion(gocql.ProtocolVersion(*protocol)).
+		WithConnectionsPerHost(1).
 		NoAdvancedShardAwareness().
 		NoHeartbeat().
 		NoMetadataRefresh()
@@ -62,7 +62,7 @@ func run() (resultErr error) {
 		if err != nil {
 			return err
 		}
-		builder.Port(uint16(n))
+		builder.WithPort(uint16(n))
 	}
 	frameCompression := gocql.NoCompression
 	switch *compression {
@@ -77,9 +77,9 @@ func run() (resultErr error) {
 	if *password == "" {
 		*password = os.Getenv("GOCQL_PASSWORD")
 	}
-	builder.Compression(frameCompression)
+	builder.WithCompression(frameCompression)
 	if *username != "" {
-		builder.Auth(auth.Password(*username, *password))
+		builder.WithAuth(auth.Password(*username, *password))
 	}
 	if *ca != "" {
 		pem, err := os.ReadFile(*ca)
@@ -120,7 +120,7 @@ func run() (resultErr error) {
 				return fmt.Errorf("missing expected TLS URI %q", *uri)
 			}
 		}
-		builder.TLS(tlsConfig)
+		builder.WithTLS(tlsConfig)
 	}
 	cfg, err := builder.Build()
 	if err != nil {

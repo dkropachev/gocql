@@ -15,7 +15,7 @@ func makeIntegrationShardAwareCluster() shardAwareTestCluster {
 		useTLS: *flagRunSslTest,
 		port:   shardTestContactPort(getClusterHosts(), fixturePort()),
 		connect: func(ctx context.Context, dialer legacyDialer, disableShardAwarePort bool) (*gocql.Session, error) {
-			config := createV2Cluster().Dialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
+			config := createV2Cluster().WithDialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 				if target.LocalAddress.IsValid() {
 					ctx = context.WithValue(ctx, scyllaSourcePortCtx{}, target.LocalAddress.Port())
 				}

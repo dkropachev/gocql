@@ -37,7 +37,7 @@ import (
 func Example() {
 	// Assumes example.tweet(timeline text, id uuid, text text, PRIMARY KEY(timeline,id)).
 	ctx := context.Background()
-	config, err := gocql.NewConfig("localhost:9042").Keyspace("example").Build()
+	config, err := gocql.NewConfig("localhost:9042").WithKeyspace("example").Build()
 	if err != nil {
 		log.Fatal(err)
 	}

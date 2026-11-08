@@ -230,7 +230,7 @@ func fixturePort() uint16 {
 func cassandraOtherSession(t testing.TB, s *gocql.Session, keyspace string) *gocql.Session {
 	t.Helper()
 	cassandraDDL(t, s, fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':%d}", keyspace, *flagRF))
-	config := createV2Cluster().Keyspace(keyspace)
+	config := createV2Cluster().WithKeyspace(keyspace)
 	other, err := gocql.Connect(context.Background(), mustBuild(t, config))
 	if err != nil {
 		t.Fatal(err)

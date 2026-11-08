@@ -117,7 +117,7 @@ protocol rules; protocol 5 compression uses LZ4. Configure
 
 `Connect` snapshots validated configuration before starting workers. Configure
 TLS with `crypto/tls`, authentication with `auth.Password` or an `auth.Provider`, and
-routing/retry/speculation through `DefaultProfile` or a per-query `*Profile`.
+routing/retry/speculation through `WithDefaultProfile` or a per-query `*Profile`.
 Per-execution settings are plain `gocql.Options` values, for example
 `gocql.Options{PageSize: cql.Some[int32](100)}`; the zero `Options{}` uses the
 session default. Query constructors validate, resolve and encode them for their

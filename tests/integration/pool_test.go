@@ -61,14 +61,14 @@ func TestPool(t *testing.T) {
 				var dials atomic.Int32
 				config := newFixtureConfig(getClusterHosts()[:1], 0, func(c *gocql.ConfigBuilder) {
 					c.NoDiscovery().
-						ConnectionsPerHost(1).
+						WithConnectionsPerHost(1).
 						NoAdvancedShardAwareness().
-						Reconnect(noReconnect{}).
-						Conviction(policy).
+						WithReconnect(noReconnect{}).
+						WithConviction(policy).
 						NoHeartbeat().
 						NoMetadataRefresh()
 				})
-				config.Dialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
+				config.WithDialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 					if dials.Add(1) > 1 {
 						policy.mu.Lock()
 						policy.targets = append(policy.targets, target.Host)
@@ -127,9 +127,9 @@ func TestPool(t *testing.T) {
 			compression = "no-compression"
 		}
 		config := createV2ClusterWithout(skip)
-		config.ConnectionsPerHost(1).NoHeartbeat()
+		config.WithConnectionsPerHost(1).NoHeartbeat()
 		if *flagProto < 5 {
-			config.Compression(gocql.NoCompression)
+			config.WithCompression(gocql.NoCompression)
 		}
 		s := createV2SessionFromConfig(config, t, false)
 		defer s.Close()
@@ -302,12 +302,12 @@ func TestPool(t *testing.T) {
 				config := createV2ClusterWithout(fixtureTLS)
 				config.NoHeartbeat()
 				if *flagRunSslTest {
-					config.CoalesceWrites(100 * time.Microsecond)
+					config.WithCoalesceWrites(100 * time.Microsecond)
 				}
 				if mode == "host" {
-					config.ConnectionsPerHost(2)
+					config.WithConnectionsPerHost(2)
 				} else {
-					config.ConnectionsPerShard(2)
+					config.WithConnectionsPerShard(2)
 				}
 				// The fixture enables the shard-aware port by default.
 				const shardAwarePort = true
@@ -319,7 +319,7 @@ func TestPool(t *testing.T) {
 						tlsCalls.Add(1)
 						return nil
 					}
-					config.TLS(fixtureTLSConfig(base))
+					config.WithTLS(fixtureTLSConfig(base))
 				}
 				s := createV2SessionFromConfig(config, t, false)
 				defer s.Close()

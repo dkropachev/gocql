@@ -136,7 +136,7 @@ func TestObserver(t *testing.T) {
 		require.Equal(t, int64(42), cassandraInt(t, cassandraReadBound(t, session, read, gocql.Options{Observer: observer}), "id"))
 		check(selectCQL, false)
 		observer.reset()
-		other := createV2Session(t, func(c *gocql.ConfigBuilder) { c.Observer(observer) })
+		other := createV2Session(t, func(c *gocql.ConfigBuilder) { c.WithObserver(observer) })
 		defer other.Close()
 		observer.reset()
 		read = cassandraDynamicBound(t, other, selectCQL, []cql.Value{cql.IntValue(42)}, gocql.PrepareOptions{})

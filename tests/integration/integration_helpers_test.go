@@ -52,35 +52,35 @@ func createV2ClusterWithout(skip fixtureParts, opts ...func(*gocql.ConfigBuilder
 func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*gocql.ConfigBuilder)) *gocql.ConfigBuilder {
 	b := gocql.NewConfig(hosts...)
 	if skip&fixtureProtocol == 0 {
-		b.ProtocolVersion(gocql.ProtocolVersion(*flagProto)).CQLVersion(*flagCQL)
+		b.WithProtocolVersion(gocql.ProtocolVersion(*flagProto)).WithCQLVersion(*flagCQL)
 	}
 	if skip&fixtureAgreement == 0 {
-		b.SchemaAgreement(2*time.Minute, 200*time.Millisecond)
+		b.WithSchemaAgreement(2*time.Minute, 200*time.Millisecond)
 	}
-	b.DefaultProfile(func(p *gocql.ProfileBuilder) { fixtureProfileExcept(p, skip) })
+	b.WithDefaultProfile(func(p *gocql.ProfileBuilder) { fixtureProfileExcept(p, skip) })
 	if *flagRunAuthTest && skip&fixtureAuth == 0 {
-		b.Auth(auth.Password("cassandra", "cassandra"))
+		b.WithAuth(auth.Password("cassandra", "cassandra"))
 	}
 	if skip&fixtureCompression == 0 {
 		switch *flagCompressTest {
 		case "snappy":
-			b.Compression(gocql.SnappyCompression)
+			b.WithCompression(gocql.SnappyCompression)
 		case "lz4":
-			b.Compression(gocql.LZ4Compression)
+			b.WithCompression(gocql.LZ4Compression)
 		case "no-compression", "":
-			b.Compression(gocql.NoCompression)
+			b.WithCompression(gocql.NoCompression)
 		default:
 			panic("invalid compressor: " + *flagCompressTest)
 		}
 	}
 	if *flagRunSslTest {
 		if *flagDistribution == "cassandra" {
-			b.Port(9042)
+			b.WithPort(9042)
 		} else {
-			b.Port(9142)
+			b.WithPort(9142)
 		}
 		if skip&fixtureTLS == 0 {
-			b.TLS(fixtureTLSConfig(fixtureClientTLS()))
+			b.WithTLS(fixtureTLSConfig(fixtureClientTLS()))
 		}
 	}
 	for _, opt := range opts {
@@ -92,13 +92,13 @@ func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*gocql.Con
 // fixtureProfileExcept applies the fixture's profile choices, except skip.
 func fixtureProfileExcept(p *gocql.ProfileBuilder, skip fixtureParts) {
 	if skip&fixtureConsistency == 0 {
-		p.Consistency(cql.Quorum)
+		p.WithConsistency(cql.Quorum)
 	}
 	if skip&fixtureTimeout == 0 {
-		p.Timeout(*flagTimeout)
+		p.WithTimeout(*flagTimeout)
 	}
 	if skip&fixtureRetry == 0 {
-		p.Retry(retry.Safe{MaxAttempts: max(1, *flagRetry+1)})
+		p.WithRetry(retry.Safe{MaxAttempts: max(1, *flagRetry+1)})
 	}
 }
 
@@ -209,8 +209,8 @@ func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisa
 	initKeyspaceOnce.GetOnce("v2:" + keyspace).Do(func() {
 		// Keyspace creation uses a fresh fixture config: the test's own
 		// choices may not reach a working cluster.
-		bootstrap := mustBuild(t, createV2ClusterWithout(fixtureTimeout).Keyspace("system").
-			DefaultProfile(func(p *gocql.ProfileBuilder) { p.Timeout(30 * time.Second) }))
+		bootstrap := mustBuild(t, createV2ClusterWithout(fixtureTimeout).WithKeyspace("system").
+			WithDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithTimeout(30 * time.Second) }))
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 		session, err := gocql.Connect(ctx, bootstrap)
@@ -230,7 +230,7 @@ func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisa
 			t.Fatalf("create typed integration keyspace: %v", err)
 		}
 	})
-	config := mustBuild(t, b.Keyspace(keyspace))
+	config := mustBuild(t, b.WithKeyspace(keyspace))
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	session, err := gocql.Connect(ctx, config)

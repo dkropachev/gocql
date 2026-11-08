@@ -57,7 +57,7 @@ func newSessionTLS(config Config) *InternalSessionTLS {
 // from now on. Open connections keep the configuration they were dialed with
 // until they close, and reconnects, refills and new shards use the new one.
 // config is copied. A session created without TLS cannot start using it, and
-// TLS cannot be turned off. With ConfigBuilder.TLSFiles, config replaces the
+// TLS cannot be turned off. With ConfigBuilder.WithTLSFiles, config replaces the
 // settings the files apply to, and the loaded certificate and CA still
 // override its Certificates and RootCAs.
 func (s *Session) UpdateTLS(config *tls.Config) error {

@@ -10,18 +10,18 @@ every invalid call:
 
 ```go
 config, err := gocql.NewConfig("10.0.0.1", "10.0.0.2").
-    Keyspace("app").
-    ConnectionsPerShard(2).
-    DefaultProfile(func(p *gocql.ProfileBuilder) {
-        p.Consistency(cql.LocalQuorum).Timeout(5 * time.Second)
+    WithKeyspace("app").
+    WithConnectionsPerShard(2).
+    WithDefaultProfile(func(p *gocql.ProfileBuilder) {
+        p.WithConsistency(cql.LocalQuorum).WithTimeout(5 * time.Second)
     }).
     Build()
 ```
 
-Contact points may include native ports; `Port` supplies the port when one is
+Contact points may include native ports; `WithPort` supplies the port when one is
 absent. A single absolute path, optionally prefixed with `unix:`, connects to a
 Unix socket: protocol 3 and no host discovery are then filled in unless
-chosen. `ProtocolVersion` selects 3, 4 or 5; automatic negotiation caps at
+chosen. `WithProtocolVersion` selects 3, 4 or 5; automatic negotiation caps at
 4, so select `Protocol5` explicitly for a server that supports it.
 
 Features that are on by default are turned off by `No*` methods, such as
@@ -30,7 +30,7 @@ Values passed to the builder, such as a `tls.Config`, are copied
 when the method is called. Callbacks and provider objects must support
 concurrent use.
 
-Use `ConnectionsPerHost` for a host override or `ConnectionsPerShard` for
+Use `WithConnectionsPerHost` for a host override or `WithConnectionsPerShard` for
 shard sizing; the later call replaces the earlier one. An explicit incremental stream occupies one configured connection through
 idle time and pages. Default page-buffered streams use normal multiplexing. Cancellation interrupts work;
 Session.Close rejects new work, cancels requests and joins writers/workers.

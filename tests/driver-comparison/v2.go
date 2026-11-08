@@ -46,22 +46,22 @@ var bufferedDecoder = cql.RowInto(func(*row) {}, cql.Column("k", cql.Int32, func
 func connect(hosts []string) (adapter, error) {
 	policy, _ := routing.NewPolicy(routing.Options{TokenAware: true, Datacenter: "datacenter1"})
 	builder := g.NewConfig(hosts...).
-		ProtocolVersion(g.Protocol4).
-		ConnectionsPerShard(1).
-		MaxExcessPerShard(0).
-		DefaultProfile(func(p *g.ProfileBuilder) {
-			p.Consistency(cql.LocalQuorum).
+		WithProtocolVersion(g.Protocol4).
+		WithConnectionsPerShard(1).
+		WithMaxExcessPerShard(0).
+		WithDefaultProfile(func(p *g.ProfileBuilder) {
+			p.WithConsistency(cql.LocalQuorum).
 				NoSerialConsistency().
-				Timeout(10 * time.Second).
-				PageTimeout(10 * time.Second).
-				PageSize(32).
+				WithTimeout(10 * time.Second).
+				WithPageTimeout(10 * time.Second).
+				WithPageSize(32).
 				NoPrefetch().
-				Retry(retry.Safe{MaxAttempts: 1}).
-				Speculation(nil).
-				Routing(policy)
+				WithRetry(retry.Safe{MaxAttempts: 1}).
+				WithSpeculation(nil).
+				WithRouting(policy)
 		})
 	if *metadataRefresh > 0 {
-		builder.MetadataRefresh(*metadataRefresh)
+		builder.WithMetadataRefresh(*metadataRefresh)
 	} else {
 		builder.NoMetadataRefresh()
 	}

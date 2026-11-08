@@ -42,7 +42,7 @@ func TestFixture(t *testing.T) {
 		config := createV2ClusterWithout(fixtureTLS, func(c *gocql.ConfigBuilder) {
 			noCertificate := fixtureClientTLS()
 			noCertificate.Certificates = nil
-			c.TLS(fixtureTLSConfig(noCertificate))
+			c.WithTLS(fixtureTLSConfig(noCertificate))
 		})
 		rejected, err := gocql.Connect(context.Background(), mustBuild(t, config))
 		if err == nil {
@@ -80,7 +80,7 @@ func TestFixture(t *testing.T) {
 	// server, including the second page after the helper closes its bound handle.
 	t.Run("Helpers", func(t *testing.T) {
 		session := createV2Session(t, func(config *gocql.ConfigBuilder) {
-			config.DefaultProfile(func(p *gocql.ProfileBuilder) { p.PageSize(1) })
+			config.WithDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithPageSize(1) })
 		})
 		defer session.Close()
 		ctx := context.Background()

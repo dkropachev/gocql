@@ -14,10 +14,10 @@ import (
 )
 
 // Reload the client certificate and CA from files while the session runs.
-func ExampleConfigBuilder_TLSFiles() {
+func ExampleConfigBuilder_WithTLSFiles() {
 	config, err := gocql.NewConfig("192.168.1.1", "192.168.1.2").
-		TLS(&tls.Config{MinVersion: tls.VersionTLS13}).
-		TLSFiles(gocql.TLSFiles{
+		WithTLS(&tls.Config{MinVersion: tls.VersionTLS13}).
+		WithTLSFiles(gocql.TLSFiles{
 			CertFile: "/etc/scylla-client/tls.crt",
 			KeyFile:  "/etc/scylla-client/tls.key",
 			CAFile:   "/etc/scylla-client/ca.crt",

@@ -62,11 +62,11 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("BuildReportsEveryInvalidCall", func(t *testing.T) {
-		_, err := NewConfig("h").ConnectionsPerShard(0).Port(0).Heartbeat(-time.Second, time.Second).Build()
+		_, err := NewConfig("h").WithConnectionsPerShard(0).WithPort(0).WithHeartbeat(-time.Second, time.Second).Build()
 		if err == nil {
 			t.Fatal("Build accepted invalid settings")
 		}
-		for _, call := range []string{"ConnectionsPerShard(0)", "Port(0)", "Heartbeat(-1s, 1s)"} {
+		for _, call := range []string{"WithConnectionsPerShard(0)", "WithPort(0)", "WithHeartbeat(-1s, 1s)"} {
 			if !strings.Contains(err.Error(), call) {
 				t.Errorf("error %q does not name %s", err, call)
 			}
@@ -84,10 +84,10 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("LastCallWins", func(t *testing.T) {
-		c := mustBuildConfig(t, NewConfig("h").ConnectionsPerShard(3).ConnectionsPerShard(4).
-			DefaultProfile(func(p *ProfileBuilder) { p.Consistency(cql.One) }).
-			DefaultProfile(func(p *ProfileBuilder) { p.Consistency(cql.All) }).
-			ClientRoutes(NewClientRoutes("c1").HostnameOverride("c1", "a").HostnameOverride("c1", "b")).
+		c := mustBuildConfig(t, NewConfig("h").WithConnectionsPerShard(3).WithConnectionsPerShard(4).
+			WithDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.One) }).
+			WithDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.All) }).
+			WithClientRoutes(NewClientRoutes("c1").WithHostnameOverride("c1", "a").WithHostnameOverride("c1", "b")).
 			NoAdvancedShardAwareness()).settings
 		if c.Pool.ConnectionsPerShard != 4 || c.DefaultProfile.Consistency != cql.All || c.ClientRoutes.HostnameOverrides["c1"] != "b" {
 			t.Fatalf("pool %+v consistency %v overrides %v", c.Pool, c.DefaultProfile.Consistency, c.ClientRoutes.HostnameOverrides)
@@ -96,38 +96,38 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("ExclusiveOptionsReplace", func(t *testing.T) {
 		c := mustBuildConfig(t, NewConfig("h").
-			Heartbeat(time.Second, time.Second).NoHeartbeat().
-			ConnectionsPerHost(4).ConnectionsPerShard(2).
-			AdvancedShardAwareness(50000, 60000).NoAdvancedShardAwareness().
-			MetadataRefresh(time.Second).NoMetadataRefresh().
-			PreparedCacheSize(10).NoPreparedCache().
-			TimestampGenerator(func() int64 { return 1 }).ServerTimestamps()).settings
+			WithHeartbeat(time.Second, time.Second).NoHeartbeat().
+			WithConnectionsPerHost(4).WithConnectionsPerShard(2).
+			WithAdvancedShardAwareness(50000, 60000).NoAdvancedShardAwareness().
+			WithMetadataRefresh(time.Second).NoMetadataRefresh().
+			WithPreparedCacheSize(10).NoPreparedCache().
+			WithTimestampGenerator(func() int64 { return 1 }).WithServerTimestamps()).settings
 		if c.KeepaliveInterval != 0 || c.Pool.ConnectionsPerHost != 0 || c.Pool.ConnectionsPerShard != 2 || c.Pool.ShardAwarePort ||
 			c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.TimestampGenerator != nil {
 			t.Fatalf("a later call did not replace an earlier one: %+v", c)
 		}
-		c = mustBuildConfig(t, NewConfig("h").NoHeartbeat().Heartbeat(time.Second, 2*time.Second).ConnectionsPerShard(2).ConnectionsPerHost(4)).settings
+		c = mustBuildConfig(t, NewConfig("h").NoHeartbeat().WithHeartbeat(time.Second, 2*time.Second).WithConnectionsPerShard(2).WithConnectionsPerHost(4)).settings
 		if c.KeepaliveInterval != time.Second || c.KeepaliveTimeout != 2*time.Second || c.Pool.ConnectionsPerHost != 4 {
 			t.Fatalf("reverse order: %+v", c)
 		}
 	})
 
 	t.Run("InvalidArgumentKeepsPreviousValue", func(t *testing.T) {
-		b := NewConfig("h").ConnectionsPerShard(3).ConnectionsPerShard(-1)
+		b := NewConfig("h").WithConnectionsPerShard(3).WithConnectionsPerShard(-1)
 		if got := b.settings.Pool.ConnectionsPerShard; got != 3 {
 			t.Fatalf("ConnectionsPerShard = %d, want 3", got)
 		}
-		if _, err := b.Build(); err == nil || !strings.Contains(err.Error(), "ConnectionsPerShard(-1)") {
+		if _, err := b.Build(); err == nil || !strings.Contains(err.Error(), "WithConnectionsPerShard(-1)") {
 			t.Fatalf("Build = %v", err)
 		}
 	})
 
 	t.Run("TLSCopiedOnSet", func(t *testing.T) {
 		config := &tls.Config{ServerName: "before"}
-		b := NewConfig("h").TLS(config)
+		b := NewConfig("h").WithTLS(config)
 		config.ServerName = "after"
 		if got := mustBuildConfig(t, b).settings.TLS.ServerName; got != "before" {
-			t.Fatalf("ServerName = %q, want the value at TLS()", got)
+			t.Fatalf("ServerName = %q, want the value at WithTLS()", got)
 		}
 	})
 
@@ -146,7 +146,7 @@ func TestConfigBuilder(t *testing.T) {
 			{"NotPEM", TLSFiles{CAFile: "testdata/pki/ca.cnf"}, "no PEM certificates"},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				if _, err := NewConfig("h").TLSFiles(tc.files).Build(); err == nil || !strings.Contains(err.Error(), tc.want) {
+				if _, err := NewConfig("h").WithTLSFiles(tc.files).Build(); err == nil || !strings.Contains(err.Error(), tc.want) {
 					t.Fatalf("Build = %v, want an error containing %q", err, tc.want)
 				}
 			})
@@ -154,7 +154,7 @@ func TestConfigBuilder(t *testing.T) {
 
 		t.Run("AppliedOverTLS", func(t *testing.T) {
 			base := &tls.Config{ServerName: "node", MinVersion: tls.VersionTLS13}
-			c := mustBuildConfig(t, NewConfig("h").TLSFiles(pki).TLS(base)).settings
+			c := mustBuildConfig(t, NewConfig("h").WithTLSFiles(pki).WithTLS(base)).settings
 			if c.TLS.ServerName != "node" || c.TLS.MinVersion != tls.VersionTLS13 || len(c.TLS.Certificates) != 1 || c.TLS.RootCAs == nil {
 				t.Fatal("files were not applied over the TLS settings")
 			}
@@ -164,7 +164,7 @@ func TestConfigBuilder(t *testing.T) {
 		})
 
 		t.Run("DefaultsWithoutTLS", func(t *testing.T) {
-			c := mustBuildConfig(t, NewConfig("h").TLSFiles(TLSFiles{CAFile: pki.CAFile})).settings
+			c := mustBuildConfig(t, NewConfig("h").WithTLSFiles(TLSFiles{CAFile: pki.CAFile})).settings
 			if c.TLS == nil || c.TLS.MinVersion != tls.VersionTLS12 || c.TLS.RootCAs == nil || len(c.TLS.Certificates) != 0 {
 				t.Fatal("CA-only files without TLS did not build a TLS 1.2+ config")
 			}
@@ -172,13 +172,13 @@ func TestConfigBuilder(t *testing.T) {
 
 		t.Run("GetClientCertificateConflicts", func(t *testing.T) {
 			base := &tls.Config{GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) { return nil, nil }}
-			if _, err := NewConfig("h").TLS(base).TLSFiles(pki).Build(); err == nil || !strings.Contains(err.Error(), "GetClientCertificate") {
+			if _, err := NewConfig("h").WithTLS(base).WithTLSFiles(pki).Build(); err == nil || !strings.Contains(err.Error(), "GetClientCertificate") {
 				t.Fatalf("Build = %v", err)
 			}
 		})
 
 		t.Run("UnixSocketRejected", func(t *testing.T) {
-			if _, err := NewConfig("/var/lib/scylla/cql.m").TLSFiles(TLSFiles{CAFile: pki.CAFile}).Build(); err == nil {
+			if _, err := NewConfig("/var/lib/scylla/cql.m").WithTLSFiles(TLSFiles{CAFile: pki.CAFile}).Build(); err == nil {
 				t.Fatal("TLS files on a Unix socket were accepted")
 			}
 		})
@@ -189,28 +189,28 @@ func TestConfigBuilder(t *testing.T) {
 		if c.Protocol != 3 || c.Metadata.InitialDiscovery {
 			t.Fatalf("protocol %d discovery %t, want 3 and false", c.Protocol, c.Metadata.InitialDiscovery)
 		}
-		if _, err := NewConfig("/var/lib/scylla/cql.m").ProtocolVersion(Protocol4).Build(); err == nil {
+		if _, err := NewConfig("/var/lib/scylla/cql.m").WithProtocolVersion(Protocol4).Build(); err == nil {
 			t.Fatal("explicit protocol 4 on a Unix socket was accepted")
 		}
-		if _, err := NewConfig("/var/lib/scylla/cql.m").TLS(&tls.Config{}).Build(); err == nil {
+		if _, err := NewConfig("/var/lib/scylla/cql.m").WithTLS(&tls.Config{}).Build(); err == nil {
 			t.Fatal("TLS on a Unix socket was accepted")
 		}
 	})
 
 	t.Run("ClientRoutesInfersNoAdvancedShardAwareness", func(t *testing.T) {
-		c := mustBuildConfig(t, NewConfig("h").ClientRoutes(NewClientRoutes("c1"))).settings
+		c := mustBuildConfig(t, NewConfig("h").WithClientRoutes(NewClientRoutes("c1"))).settings
 		if c.Pool.ShardAwarePort {
 			t.Fatal("advanced shard awareness stayed on under client routes")
 		}
-		if _, err := NewConfig("h").AdvancedShardAwareness(49152, 65535).ClientRoutes(NewClientRoutes("c1")).Build(); err == nil {
+		if _, err := NewConfig("h").WithAdvancedShardAwareness(49152, 65535).WithClientRoutes(NewClientRoutes("c1")).Build(); err == nil {
 			t.Fatal("explicit advanced shard awareness with client routes was accepted")
 		}
 	})
 
 	t.Run("BuildSnapshotsBuilder", func(t *testing.T) {
-		b := NewConfig("h").MetadataKeyspaces("a")
+		b := NewConfig("h").WithMetadataKeyspaces("a")
 		first := mustBuildConfig(t, b)
-		b.MetadataKeyspaces("b", "c").Partitioner("X", routing.Murmur3TokenPartitioner)
+		b.WithMetadataKeyspaces("b", "c").WithPartitioner("X", routing.Murmur3TokenPartitioner)
 		second := mustBuildConfig(t, b)
 		if len(first.settings.Metadata.Keyspaces) != 1 || first.settings.Partitioners["X"] != nil {
 			t.Fatal("changing the builder changed an already built Config")
@@ -222,37 +222,37 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("DefaultProfileChoicesAccumulate", func(t *testing.T) {
 		c := mustBuildConfig(t, NewConfig("h").
-			DefaultProfile(func(p *ProfileBuilder) { p.Consistency(cql.Quorum) }).
-			DefaultProfile(func(p *ProfileBuilder) { p.PageSize(7) })).settings
+			WithDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.Quorum) }).
+			WithDefaultProfile(func(p *ProfileBuilder) { p.WithPageSize(7) })).settings
 		if c.DefaultProfile.Consistency != cql.Quorum || c.DefaultProfile.PageSize != 7 {
 			t.Fatalf("profile = %+v", *c.DefaultProfile)
 		}
-		_, err := NewConfig("h").DefaultProfile(func(p *ProfileBuilder) { p.PageSize(0) }).Build()
-		if err == nil || !strings.Contains(err.Error(), "DefaultProfile") || !strings.Contains(err.Error(), "PageSize(0)") {
+		_, err := NewConfig("h").WithDefaultProfile(func(p *ProfileBuilder) { p.WithPageSize(0) }).Build()
+		if err == nil || !strings.Contains(err.Error(), "WithDefaultProfile") || !strings.Contains(err.Error(), "WithPageSize(0)") {
 			t.Fatalf("invalid profile error = %v", err)
 		}
 	})
 
 	t.Run("PartitionerAddsToBuiltins", func(t *testing.T) {
-		c := mustBuildConfig(t, NewConfig("h").Partitioner("Custom", routing.Murmur3TokenPartitioner)).settings
+		c := mustBuildConfig(t, NewConfig("h").WithPartitioner("Custom", routing.Murmur3TokenPartitioner)).settings
 		if c.Partitioners["Custom"] == nil || c.Partitioners["Murmur3Partitioner"] == nil {
 			t.Fatalf("partitioners = %v", c.Partitioners)
 		}
 	})
 
 	t.Run("IgnoreEvents", func(t *testing.T) {
-		m := mustBuildConfig(t, NewConfig("h").IgnoreEvents(SchemaEvent, StatusEvent)).settings.Metadata
+		m := mustBuildConfig(t, NewConfig("h").WithIgnoreEvents(SchemaEvent, StatusEvent)).settings.Metadata
 		if m.SchemaEvents || m.StatusEvents || !m.TopologyEvents || !m.ClientRouteEvents {
 			t.Fatalf("events = %+v", m)
 		}
-		if _, err := NewConfig("h").IgnoreEvents(OverflowEvent).Build(); err == nil {
+		if _, err := NewConfig("h").WithIgnoreEvents(OverflowEvent).Build(); err == nil {
 			t.Fatal("IgnoreEvents accepted a client-side event")
 		}
 	})
 
 	t.Run("DisableMethods", func(t *testing.T) {
-		c := mustBuildConfig(t, NewConfig("h").NoHeartbeat().NoMetadataRefresh().NoPreparedCache().ServerTimestamps().
-			NoConfigReport().NoDiscovery().ManualSchemaAgreement().NoRefreshAfterAgreement().NoAdvancedShardAwareness()).settings
+		c := mustBuildConfig(t, NewConfig("h").NoHeartbeat().NoMetadataRefresh().NoPreparedCache().WithServerTimestamps().
+			NoConfigReport().NoDiscovery().WithManualSchemaAgreement().NoRefreshAfterAgreement().NoAdvancedShardAwareness()).settings
 		if c.KeepaliveInterval != 0 || c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.TimestampGenerator != nil ||
 			c.ReportConfiguration || c.Metadata.InitialDiscovery || c.Metadata.AutomaticAgreement || c.Metadata.RefreshAfterAgreement || c.Pool.ShardAwarePort {
 			t.Fatalf("a No* method left its feature on: %+v", c)
@@ -260,7 +260,7 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("StringHidesCredentials", func(t *testing.T) {
-		s := mustBuildConfig(t, NewConfig("h").Auth(auth.Password("user", "secret-password"))).String()
+		s := mustBuildConfig(t, NewConfig("h").WithAuth(auth.Password("user", "secret-password"))).String()
 		if strings.Contains(s, "secret-password") || !strings.Contains(s, "auth=true") {
 			t.Fatalf("String() = %q", s)
 		}
@@ -270,14 +270,14 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("ProfileBuild", func(t *testing.T) {
-		p, err := NewProfile().Consistency(cql.One).NoSerialConsistency().NoPrefetch().Build()
+		p, err := NewProfile().WithConsistency(cql.One).NoSerialConsistency().NoPrefetch().Build()
 		if err != nil {
 			t.Fatal(err)
 		}
 		if p.Consistency != cql.One || p.SerialConsistency.Set || p.Prefetch != 0 || p.Routing == nil {
 			t.Fatalf("profile = %+v", p)
 		}
-		if _, err := NewProfile().SerialConsistency(cql.Quorum).Build(); err == nil {
+		if _, err := NewProfile().WithSerialConsistency(cql.Quorum).Build(); err == nil {
 			t.Fatal("non-serial serial consistency accepted")
 		}
 	})

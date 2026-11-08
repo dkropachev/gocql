@@ -52,7 +52,7 @@ func TestPaging(t *testing.T) {
 		// leave a replica that a ONE read can reach before it has every row
 		// (W+R must exceed RF), so the fixture is written at ALL.
 		session := createV2SessionFromConfig(createV2ClusterWithout(fixtureConsistency, func(c *gocql.ConfigBuilder) {
-			c.DefaultProfile(func(p *gocql.ProfileBuilder) { p.Consistency(cql.All) })
+			c.WithDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithConsistency(cql.All) })
 		}), t, false)
 		defer session.Close()
 		table := testTableName(t)
@@ -275,7 +275,7 @@ func TestPaging(t *testing.T) {
 
 	t.Run("Stream", func(t *testing.T) {
 		config := mustBuild(t, createV2Cluster(func(c *gocql.ConfigBuilder) {
-			c.ConnectionsPerHost(1).NoHeartbeat().NoMetadataRefresh()
+			c.WithConnectionsPerHost(1).NoHeartbeat().NoMetadataRefresh()
 		}))
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
