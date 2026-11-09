@@ -81,12 +81,17 @@ For each family (`bench.py`):
 3. Latency: the same reset, then an open loop at 70 % of the lowest of the
    three drivers' median maximum throughputs, the same scheduled rate for
    all three, so latencies compare at equal offered load. Arrivals are
-   evenly scheduled into a bounded queue; latency is measured from each
+   evenly scheduled into a bounded queue holding 2 s of arrivals at the
+   rate (at least 1,024), so a shorter cluster stall shows in the latency
+   percentiles instead of rejecting arrivals; latency is measured from each
    arrival's scheduled time, so client queueing counts. The closed-loop
    maximum can exceed what the cluster sustains in an open loop (a closed
    loop backs off while nodes flush and compact), so if any run of any
-   driver rejects more than 0.5 % of its arrivals the rate was not
-   sustained: the whole latency phase (reset, conditioning, every round of
+   driver rejects more than 0.5 % of its arrivals or has a p99 above
+   50 ms the rate was not sustained (on the reference host such p99s are
+   cluster stalls: the nodes' failure-detector pings time out and their
+   task queues back up while write families flush, and the stall lands on
+   whichever driver happens to run): the whole latency phase (reset, conditioning, every round of
    every driver) repeats at 0.7 x that rate, up to eight attempts. The report
    lists every attempt; unsustained ones are kept under `unsustained/`.
    (`GOCQL_THREE_FIXED_RATE`, e.g. `E1=1000`, pins a family's rate instead.)

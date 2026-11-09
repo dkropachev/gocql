@@ -16,7 +16,8 @@ this directory has the pseudocode). For every family:
      flushing and settling compactions between runs;
   3. latency: open loop at FRACTION of the lowest driver's median throughput,
      the same scheduled rate for all drivers, same rotation; if any run
-     rejects more than MAX_REJECTED of its arrivals, the cluster did not
+     rejects more than MAX_REJECTED of its arrivals or has a p99 above
+     MAX_P99_US (a cluster stall), the cluster did not
      sustain the rate, and the phase repeats from a reset at STEP x the rate.
 
 Every client runs through three/loader.sh: one dedicated CPU, half a CPU of
@@ -56,7 +57,19 @@ SKIP_LATENCY = {}
 # rate is lowered by STEP and the whole latency phase (reset, conditioning,
 # every round of every driver) runs again, up to MAX_ATTEMPTS times. Every
 # driver is always measured at the same rate.
+# Latency runs queue up to QUEUE_SECONDS of arrivals at their rate (at least
+# the clients' default 1,024): a shorter cluster stall then shows in the
+# latency percentiles (measured from each arrival's scheduled time) instead
+# of rejecting arrivals, and only a rate the cluster cannot keep up with on
+# average overflows the queue. A fixed 1,024 entries rejected arrivals on any
+# stall longer than 1,024 / rate (0.19 s at 5,400/s), whatever the rate.
+QUEUE_SECONDS = float(os.environ.get('GOCQL_THREE_QUEUE_SECONDS', '2'))
 MAX_REJECTED = float(os.environ.get('GOCQL_THREE_MAX_REJECTED', '0.005'))
+# A run whose p99 exceeds MAX_P99_US hit a cluster stall (on the reference
+# host: nodes' failure-detector pings time out and their task queues back up
+# while write families flush), which lands on whichever driver happens to run
+# and makes the comparison measure the stall; the rate is not sustained.
+MAX_P99_US = float(os.environ.get('GOCQL_THREE_MAX_P99_US', '50000'))
 STEP = float(os.environ.get('GOCQL_THREE_STEP', '0.7'))
 MAX_ATTEMPTS = int(os.environ.get('GOCQL_THREE_MAX_ATTEMPTS', '8'))
 DRIVERS = ['old', 'v2', 'rust']
@@ -180,6 +193,7 @@ def run_one(out, kind, family, round_index, driver, rate):
     host_snapshot(path + '.host-before')
     rc = loader(driver, '-mode', 'run', '-case', cases[driver], '-concurrency', str(workers),
                 '-warmup', WARMUP, '-duration', DURATION, '-rate', str(rate), '-output', path,
+                '-queue-size', str(max(1024, int(rate * QUEUE_SECONDS))),
                 check=False, out=path + '.log')
     host_snapshot(path + '.host-after')
     info, problems = loader_check(path + '.log')
@@ -269,19 +283,22 @@ def family_run(out, family):
                     run_one(out, 'latency', family, r, driver, rate)
         worst = max(rejected_share(p) for d in DRIVERS
                     for p in glob.glob(os.path.join(out, f'latency-{family}-r*-{d}.json')))
-        sustained = fixed or worst <= MAX_REJECTED
-        attempts.append({'rate': rate, 'worst_rejected_share': worst, 'sustained': sustained})
+        worst_p99 = max(measurement(p)['latency']['p99_us'] for d in DRIVERS
+                        for p in glob.glob(os.path.join(out, f'latency-{family}-r*-{d}.json')))
+        sustained = fixed or (worst <= MAX_REJECTED and worst_p99 <= MAX_P99_US)
+        attempts.append({'rate': rate, 'worst_rejected_share': worst, 'worst_p99_us': worst_p99, 'sustained': sustained})
         json.dump({'maxima': maxima, 'fraction': None if fixed else FRACTION, 'rate': rate, 'attempts': attempts},
                   open(rate_path, 'w'), indent=2)
         if sustained:
-            log(f'family {family}: {rate}/s sustained (worst rejected share {worst:.3%})')
+            log(f'family {family}: {rate}/s sustained (worst rejected share {worst:.3%}, worst p99 {worst_p99:,.0f} us)')
             return
         # Keep the unsustained attempt for the record, out of the report's glob.
         keep = os.path.join(out, 'unsustained', f'{family}-{rate:g}')
         os.makedirs(keep, exist_ok=True)
         for p in glob.glob(os.path.join(out, f'latency-{family}-r*')) + glob.glob(os.path.join(out, f'condition-latency-{family}.*')):
             os.rename(p, os.path.join(keep, os.path.basename(p)))
-        log(f'family {family}: {rate}/s not sustained (worst rejected share {worst:.3%} > {MAX_REJECTED:.1%})')
+        log(f'family {family}: {rate}/s not sustained (worst rejected share {worst:.3%}, limit {MAX_REJECTED:.1%}; '
+            f'worst p99 {worst_p99:,.0f} us, limit {MAX_P99_US:,.0f} us)')
     log(f'family {family}: no sustained latency rate in {MAX_ATTEMPTS} attempts')
 
 
@@ -353,16 +370,18 @@ def report(out):
         print()
     print('## latency rates\n')
     print(f'Start at {FRACTION} x the lowest median maximum; a rate is sustained when no run rejects more than '
-          f'{MAX_REJECTED:.1%} of its arrivals, otherwise the whole phase repeats from a reset at {STEP} x the rate. '
+          f'{MAX_REJECTED:.1%} of its arrivals and no run has a p99 above {MAX_P99_US / 1000:g} ms (a cluster stall), otherwise the whole phase repeats from a reset at {STEP} x the rate. '
           'Unsustained attempts are kept under unsustained/.\n')
-    print('| family | lowest maximum | attempts (rate/s: worst rejected share) | measured at |')
+    print('| family | lowest maximum | attempts (rate/s: worst rejected share, worst p99) | measured at |')
     print('|---|---:|---|---:|')
     for family in FAMILIES:
         rf = os.path.join(out, f'rate-{family}.json')
         if not os.path.exists(rf):
             continue
         r = json.load(open(rf))
-        tries = ', '.join(f'{a["rate"]:,.0f}: {a["worst_rejected_share"]:.2%}{"" if a["sustained"] else " (not sustained)"}'
+        tries = ', '.join(f'{a["rate"]:,.0f}: {a["worst_rejected_share"]:.2%}'
+                          + (f', p99 {a["worst_p99_us"] / 1000:,.1f} ms' if 'worst_p99_us' in a else '')
+                          + ('' if a['sustained'] else ' (not sustained)')
                           for a in r.get('attempts', []))
         print(f'| {family} | {min(r["maxima"].values()):,.0f} | {tries} | {r["rate"]:,.0f}{"" if r["fraction"] else " (fixed)"} |')
     print()
