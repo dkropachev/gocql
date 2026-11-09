@@ -47,11 +47,6 @@ func (c TLSFilesContent) Digest() [sha256.Size]byte {
 	return digestParts(c.Cert, c.Key, c.CA)
 }
 
-// IdentityDigest identifies the client certificate and key only.
-func (c TLSFilesContent) IdentityDigest() [sha256.Size]byte {
-	return digestParts(c.Cert, c.Key)
-}
-
 func digestParts(parts ...[]byte) [sha256.Size]byte {
 	h := sha256.New()
 	var n [8]byte

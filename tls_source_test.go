@@ -10,7 +10,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"io"
 	"math/big"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -234,7 +236,7 @@ func TestTLSSource(t *testing.T) {
 		}
 	})
 
-	t.Run("Files/IdentityChangeReplacesSessionCache", func(t *testing.T) {
+	t.Run("Files/ChangeReplacesSessionCache", func(t *testing.T) {
 		f := newTLSTestFiles(t)
 		f.set(1, 10)
 		cache := tls.NewLRUClientSessionCache(8)
@@ -248,21 +250,119 @@ func TestTLSSource(t *testing.T) {
 		if s.TLSConfig().ClientSessionCache != cache {
 			t.Fatal("initial config lost the base's session cache")
 		}
-		f.set(1, 20)
 		reload()
 		if s.TLSConfig().ClientSessionCache != cache {
-			t.Fatal("CA-only change replaced the session cache")
+			t.Fatal("unchanged files replaced the session cache")
+		}
+		f.set(1, 20)
+		reload()
+		afterCA := s.TLSConfig().ClientSessionCache
+		if afterCA == nil || afterCA == cache {
+			t.Fatal("CA change kept tickets verified under the old CA")
 		}
 		f.set(2, 20)
 		reload()
-		replaced := s.TLSConfig().ClientSessionCache
-		if replaced == nil || replaced == cache {
+		if replaced := s.TLSConfig().ClientSessionCache; replaced == nil || replaced == afterCA {
 			t.Fatal("identity change kept tickets of the old identity")
 		}
-		f.set(2, 10)
+	})
+
+	t.Run("Files/ChangeStopsResumption", func(t *testing.T) {
+		serverKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		template := &x509.Certificate{SerialNumber: big.NewInt(100), NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature, IPAddresses: []net.IP{net.IPv4(127, 0, 0, 1)}}
+		serverDER, err := x509.CreateCertificate(rand.Reader, template, template, &serverKey.PublicKey, serverKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		serverPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: serverDER})
+		ln, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{
+			MinVersion:   tls.VersionTLS13,
+			Certificates: []tls.Certificate{{Certificate: [][]byte{serverDER}, PrivateKey: serverKey}},
+			ClientAuth:   tls.RequireAnyClientCert,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { ln.Close() })
+		peers := make(chan int64, 16)
+		go func() {
+			for {
+				c, err := ln.Accept()
+				if err != nil {
+					return
+				}
+				go func() {
+					defer c.Close()
+					tc := c.(*tls.Conn)
+					if tc.Handshake() != nil {
+						return
+					}
+					peers <- tc.ConnectionState().PeerCertificates[0].SerialNumber.Int64()
+					_, _ = tc.Write([]byte{1})
+					_, _ = io.Copy(io.Discard, tc)
+				}()
+			}
+		}()
+
+		f := newTLSTestFiles(t)
+		writeFiles := func(client int64, ca []byte) {
+			t.Helper()
+			p := f.pair(client)
+			f.write(f.files.CertFile, p[0])
+			f.write(f.files.KeyFile, p[1])
+			f.write(f.files.CAFile, ca)
+		}
+		writeFiles(1, serverPEM)
+		s := f.source(&tls.Config{MinVersion: tls.VersionTLS13, ClientSessionCache: tls.NewLRUClientSessionCache(8)})
+		// dial reports whether the connection resumed a session and which
+		// client certificate the server saw.
+		dial := func() (bool, int64) {
+			t.Helper()
+			c, err := tls.Dial("tcp", ln.Addr().String(), s.TLSConfig())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer c.Close()
+			// Reading processes the session ticket the server sent.
+			if _, err := io.ReadFull(c, make([]byte, 1)); err != nil {
+				t.Fatal(err)
+			}
+			return c.ConnectionState().DidResume, <-peers
+		}
+		reload := func() {
+			t.Helper()
+			if err := s.Reload(); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if resumed, _ := dial(); resumed {
+			t.Fatal("first dial resumed")
+		}
+		if resumed, _ := dial(); !resumed {
+			t.Fatal("second dial did not resume; the test cannot observe tickets")
+		}
 		reload()
-		if s.TLSConfig().ClientSessionCache != replaced {
-			t.Fatal("CA-only change after rotation replaced the cache again")
+		if resumed, _ := dial(); !resumed {
+			t.Fatal("unchanged files dropped tickets")
+		}
+
+		writeFiles(1, append(append([]byte{}, serverPEM...), f.pair(20)[0]...))
+		reload()
+		if resumed, _ := dial(); resumed {
+			t.Fatal("CA change resumed a session verified under the old CA")
+		}
+		if resumed, _ := dial(); !resumed {
+			t.Fatal("new cache does not collect tickets")
+		}
+
+		writeFiles(2, serverPEM)
+		reload()
+		if resumed, peer := dial(); resumed || peer != 2 {
+			t.Fatalf("identity change: resumed=%v, server saw client %d, want a full handshake with client 2", resumed, peer)
 		}
 	})
 

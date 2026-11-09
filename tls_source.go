@@ -54,18 +54,18 @@ type TLSFiles struct {
 type TLSFileSource struct {
 	current atomic.Pointer[tls.Config]
 
-	// base, sessionCache, err, digest and identity are guarded by mu; files
+	// base, sessionCache, err and digest are guarded by mu; files
 	// does not change after NewTLSFiles.
 
 	base *tls.Config
-	// sessionCache replaces base's ClientSessionCache after the client
-	// identity changed, so no connection resumes a session of the old one.
-	sessionCache     tls.ClientSessionCache
-	err              error
-	files            TLSFiles
-	next             atomic.Int64 // UnixNano of the next due check
-	mu               sync.Mutex
-	digest, identity [sha256.Size]byte
+	// sessionCache replaces base's ClientSessionCache after the files changed,
+	// so no connection resumes a session of the old identity or trust.
+	sessionCache tls.ClientSessionCache
+	err          error
+	files        TLSFiles
+	next         atomic.Int64 // UnixNano of the next due check
+	mu           sync.Mutex
+	digest       [sha256.Size]byte
 }
 
 // NewTLSFiles loads files over a copy of base, or over TLS 1.2+ defaults when
@@ -144,14 +144,13 @@ func (s *TLSFileSource) loadLocked(first bool) error {
 	if err != nil {
 		return err
 	}
-	identity := content.IdentityDigest()
-	if !first && identity != s.identity && s.base != nil && s.base.ClientSessionCache != nil {
+	if !first && s.base != nil && s.base.ClientSessionCache != nil {
 		s.sessionCache = tls.NewLRUClientSessionCache(0)
 	}
 	if s.sessionCache != nil {
 		config.ClientSessionCache = s.sessionCache
 	}
-	s.digest, s.identity = digest, identity
+	s.digest = digest
 	s.current.Store(config)
 	return nil
 }

@@ -51,9 +51,12 @@ fails, such as a key that does not match its certificate yet, keeps the current
 files; `Err` reports it and the next due check retries. `Reload` checks
 immediately.
 
-A resumed TLS 1.3 connection does not send its client certificate again. When
-the file certificate changes and the base has a `ClientSessionCache`, the
-source switches to a new cache so no connection resumes the old identity.
+A resumed connection does not send its client certificate again, and Go checks
+only the expiry and host name of the cached server certificate, not the current
+`RootCAs`. So when the files change and the base has a `ClientSessionCache`, the
+source switches to a new cache: no connection resumes a session of the old
+identity or one verified under the old CA. Each node then needs one full
+handshake before tickets are reused.
 
 Any type with a `TLSConfig() *tls.Config` method is a source, for example one
 fed by Vault or cert-manager:
@@ -71,6 +74,8 @@ source.current.Store(next)
 ```
 
 Do not modify a config after storing it; store a new one. When the client
-identity changes, give the new config a new `ClientSessionCache`. `GetClientCertificate` in a fixed config still
+certificate or the trusted CAs change, give the new config a new
+`ClientSessionCache`; changes to versions, cipher suites or `ServerName` need
+none. `GetClientCertificate` in a fixed config still
 rotates only the client certificate on every handshake; it cannot be combined
 with `TLSFiles.CertFile`.

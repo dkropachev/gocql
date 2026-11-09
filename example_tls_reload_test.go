@@ -71,7 +71,7 @@ func ExampleTLSSource() {
 		MinVersion:         tls.VersionTLS13,
 		RootCAs:            roots,
 		Certificates:       []tls.Certificate{pair},
-		ClientSessionCache: tls.NewLRUClientSessionCache(0), // new identity, new tickets
+		ClientSessionCache: tls.NewLRUClientSessionCache(0), // new identity and CA, new tickets
 	})
 	// Open connections keep their TLS session; new dials use this config.
 }

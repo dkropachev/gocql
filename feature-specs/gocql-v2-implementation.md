@@ -905,8 +905,9 @@ dial, copies the result and applies the client-routes TLS rule to it; nil fails
 the dial. TLSFileSource runs no goroutine: the first dial after its interval
 takes a TryLock, compares a SHA-256 of the file content and swaps an atomic
 pointer, while concurrent dials keep the current config; any read or parse
-failure keeps it. A changed client identity gets a fresh ClientSessionCache when
-the base config has one.
+failure keeps it. Any applied file change gets a fresh ClientSessionCache when
+the base config has one, since resumption skips both the client certificate and
+the CA check.
 
 Auth output owns or borrows bytes until its handshake write completes, then the
 runtime releases them. Exchange.Close always runs, including aborted handshakes;
