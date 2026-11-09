@@ -133,8 +133,8 @@ func TestSchemaAgreement(t *testing.T) {
 			c, count := agreementConn(t, s, id, cqltype.MustRandomUUID(), protocol.ErrCodeUnauthorized)
 			agreementPool(s, c)
 			implCluster.InternalSessionPeripheral(s).InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: []model.HostSnapshot{{ID: id, Enabled: true}}}))
-			var request protocol.RequestError
-			if err := s.AwaitSchemaAgreement(context.Background()); !errors.As(err, &request) || request.GetCode() != protocol.ErrCodeUnauthorized {
+			err := s.AwaitSchemaAgreement(context.Background())
+			if request, ok := errors.AsType[protocol.RequestError](err); !ok || request.GetCode() != protocol.ErrCodeUnauthorized {
 				t.Fatal(err)
 			}
 			if count.Load() != 1 {

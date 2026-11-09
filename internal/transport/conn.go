@@ -1178,8 +1178,8 @@ func InternalBodyReadDesyncedConn(err error) bool {
 	if errors.Is(err, errArmReadDeadline) {
 		return true
 	}
-	var netErr net.Error
-	return errors.As(err, &netErr)
+	_, ok := errors.AsType[net.Error](err)
+	return ok
 }
 
 func (c *Conn) readFrameIntoFramer(src frameSource, head frm.FrameHeader) (*framer, error) {
@@ -1260,8 +1260,7 @@ func (c *Conn) InternalReadFirstSegmentHeader() (segment.Header, error) {
 
 	hdr, err := segment.ReadHeader(&c.headerReader, c.InternalSegCompressor != nil)
 	if err != nil {
-		var netErr net.Error
-		if c.headerReader.InternalN == 0 && errors.As(err, &netErr) && netErr.Timeout() {
+		if netErr, ok := errors.AsType[net.Error](err); c.headerReader.InternalN == 0 && ok && netErr.Timeout() {
 			return segment.Header{}, fmt.Errorf("%w: %w", ErrReadHeaderTimeout, err)
 		}
 		return segment.Header{}, err
@@ -2230,8 +2229,7 @@ func (c *InternalConnReader) Read(p []byte) (n int, err error) {
 		}
 		err = rerr
 
-		var netErr net.Error
-		if !errors.As(err, &netErr) || !netErr.Timeout() {
+		if netErr, ok := errors.AsType[net.Error](err); !ok || !netErr.Timeout() {
 
 			break
 		}

@@ -33,8 +33,8 @@ func TestAttemptLog(t *testing.T) {
 		log.fail(timeout, nil, 1, 0)
 		later := newExecutionError(overloaded, Result{Attempts: 1}, NotExecuted, []AttemptFailure{{Err: overloaded, Number: 1, Status: NotExecuted}})
 		err := log.merge(later, Result{})
-		var merged *ExecutionError
-		if !errors.As(err, &merged) {
+		merged, ok := errors.AsType[*ExecutionError](err)
+		if !ok {
 			t.Fatal(err)
 		}
 		if merged.ExecutionStatus() != MaybeExecuted || len(merged.Attempts) != 2 || merged.Result.Attempts != 2 {

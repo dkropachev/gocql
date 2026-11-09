@@ -202,12 +202,11 @@ func TestConfig(t *testing.T) {
 			b := runtimeQuery(t)
 			defer b.Close()
 			_, err := RunUnpaged(context.Background(), s, b, testOptions(OptionValues{PageSize: implCql.Option[int32]{Set: true, Value: 1}}))
-			var unsupported *settings.UnsupportedSettingError
-			if !errors.As(err, &unsupported) {
+			if !hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal(err)
 			}
 			_, err = RunPage(context.Background(), s, b, model.StartPage(), testOptions(OptionValues{Prefetch: implCql.Option[int]{Set: true, Value: 1}}))
-			if !errors.As(err, &unsupported) {
+			if !hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal(err)
 			}
 			var batch Batch
@@ -215,7 +214,7 @@ func TestConfig(t *testing.T) {
 				t.Fatal(err)
 			}
 			_, err = InternalRunBatch(context.Background(), s, cqltype.LoggedBatch, &batch, codec.EmptyRowDecoder, testOptions(OptionValues{PageSize: implCql.Option[int32]{Set: true, Value: 1}}))
-			if !errors.As(err, &unsupported) {
+			if !hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal(err)
 			}
 		})
@@ -292,8 +291,8 @@ func TestConfig(t *testing.T) {
 		for _, edit := range []func(*settings.Config){func(c *settings.Config) { c.Protocol = 6 }, func(c *settings.Config) { c.Metadata.AgreementPoll = -1 }, func(c *settings.Config) { c.Limits.MaxMetadataDepth = 129 }, func(c *settings.Config) { c.Pool.MaxRequestsPerConnection = 32769 }, func(c *settings.Config) { c.Metadata.Keyspaces = []string{"a", "a"} }} {
 			invalid := settings.DefaultConfig("localhost")
 			edit(&invalid)
-			var validation *cqltype.ValidationError
-			if err := settings.InternalValidateConfig(invalid); !errors.As(err, &validation) {
+			err := settings.InternalValidateConfig(invalid)
+			if _, ok := errors.AsType[*cqltype.ValidationError](err); !ok {
 				t.Fatalf("validation error %v", err)
 			}
 		}
@@ -349,11 +348,10 @@ func TestConfig(t *testing.T) {
 				case "linger":
 					c.Linger = config.Linger
 				}
-				var unsupported *settings.UnsupportedSettingError
 				e := applyV2SocketOptions(a, c, "tcp")
 				a.Close()
 				b.Close()
-				if !errors.As(e, &unsupported) || unsupported.Setting != map[string]string{"receive": "receive buffer", "send": "send buffer", "linger": "linger"}[field] {
+				if unsupported, ok := errors.AsType[*settings.UnsupportedSettingError](e); !ok || unsupported.Setting != map[string]string{"receive": "receive buffer", "send": "send buffer", "linger": "linger"}[field] {
 					t.Fatal("wrong unsupported setting", field, e)
 				}
 			}
@@ -365,8 +363,7 @@ func TestConfig(t *testing.T) {
 			defer b.Close()
 			config := settings.DefaultConfig("localhost")
 			config.ReceiveBuffer = cqltype.Option[int]{Value: 4096, Set: true}
-			var unsupported *settings.UnsupportedSettingError
-			if err := applyV2SocketOptions(a, config, "tcp"); !errors.As(err, &unsupported) {
+			if err := applyV2SocketOptions(a, config, "tcp"); !hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal("unsupported backend setting", err)
 			}
 		})

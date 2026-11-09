@@ -193,8 +193,8 @@ func TestRowsCodec(t *testing.T) {
 			if cloned.Inner.Text.String() != "borrowed" {
 				t.Fatal("schema independent record Clone")
 			}
-			var validation *cqltype.ValidationError
-			if err := plan.DecodeInto(NewRowReader(columns, body, nil), nil); !errors.As(err, &validation) {
+			err := plan.DecodeInto(NewRowReader(columns, body, nil), nil)
+			if _, ok := errors.AsType[*cqltype.ValidationError](err); !ok {
 				t.Fatal("nil destination", err)
 			}
 		})

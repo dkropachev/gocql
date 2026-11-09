@@ -1036,8 +1036,7 @@ func InternalRoutingLatencySample(err error) bool {
 	if err == nil {
 		return true
 	}
-	var server RequestError
-	if errors.As(err, &server) {
+	if server, ok := errors.AsType[RequestError](err); ok {
 		// Fast rejections say nothing about how long the replica takes.
 		switch runtimeerrors.KindOf(server) {
 		case runtimeerrors.KindUnavailable, runtimeerrors.KindOverloaded, runtimeerrors.KindRateLimited:
@@ -1049,9 +1048,10 @@ func InternalRoutingLatencySample(err error) bool {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, runtimeerrors.ErrNoConnections) || errors.Is(err, runtimeerrors.ErrConnectionClosed) {
 		return false
 	}
-	var validation *ValidationError
-	var network net.Error
-	if errors.As(err, &validation) || errors.As(err, &network) {
+	if _, ok := errors.AsType[*ValidationError](err); ok {
+		return false
+	}
+	if _, ok := errors.AsType[net.Error](err); ok {
 		return false
 	}
 	return true

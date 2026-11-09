@@ -284,11 +284,10 @@ func TestValue(t *testing.T) {
 	t.Run("TextView", func(t *testing.T) {
 		t.Run("BorrowValidates", func(t *testing.T) {
 			_, err := cqltype.BorrowText(string([]byte{0xff}))
-			var validation *cqltype.ValidationError
-			if !errors.As(err, &validation) {
+			if _, ok := errors.AsType[*cqltype.ValidationError](err); !ok {
 				t.Fatalf("invalid UTF-8: %v", err)
 			}
-			if _, err := TextValue(string([]byte{0xff})); !errors.As(err, &validation) {
+			if _, err := TextValue(string([]byte{0xff})); !hasErrorType[*cqltype.ValidationError](err) {
 				t.Fatalf("invalid dynamic text: %v", err)
 			}
 		})
@@ -323,8 +322,7 @@ func TestValue(t *testing.T) {
 				c := wire.NewCursor(foundationChain(t, data))
 				before := c.Remaining()
 				_, err := ReadValue(c, typ, nil, false)
-				var p *cqltype.ProtocolError
-				if !errors.As(err, &p) {
+				if _, ok := errors.AsType[*cqltype.ProtocolError](err); !ok {
 					t.Fatalf("%x: expected protocol error, got %v", data, err)
 				}
 				if c.Remaining() != before {

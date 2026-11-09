@@ -683,13 +683,13 @@ func InternalReadV2AgreementHost(ctx context.Context, id UUID, conns []*Conn) (U
 	return UUID{}, last
 }
 func InternalTerminalV2AgreementError(err error) bool {
-	var protocol *ProtocolError
-	var validation *ValidationError
-	if errors.As(err, &protocol) || errors.As(err, &validation) {
+	if _, ok := errors.AsType[*ProtocolError](err); ok {
 		return true
 	}
-	var server RequestError
-	if errors.As(err, &server) {
+	if _, ok := errors.AsType[*ValidationError](err); ok {
+		return true
+	}
+	if server, ok := errors.AsType[RequestError](err); ok {
 		switch runtimeerrors.KindOf(server) {
 		case runtimeerrors.KindOverloaded, runtimeerrors.KindTimeout:
 			return false

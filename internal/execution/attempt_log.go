@@ -72,8 +72,8 @@ func (l *attemptLog) merge(err error, result Result) error {
 	if l.empty() {
 		return err
 	}
-	var later *ExecutionError
-	if !errors.As(err, &later) {
+	later, ok := errors.AsType[*ExecutionError](err)
+	if !ok {
 		return l.error(err, result)
 	}
 	failures := append(l.failures[:len(l.failures):len(l.failures)], later.Attempts...)

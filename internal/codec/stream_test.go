@@ -158,8 +158,8 @@ func TestStream(t *testing.T) {
 			}
 			group.Wait()
 			r, _ := streamReaderFixture(t, cols, bytes.NewReader(data), len(data))
-			var validation *cqltype.ValidationError
-			if err := plan.DecodeInto(r, nil); !errors.As(err, &validation) {
+			err := plan.DecodeInto(r, nil)
+			if _, ok := errors.AsType[*cqltype.ValidationError](err); !ok {
 				t.Fatal("nil destination", err)
 			}
 		})
@@ -205,8 +205,8 @@ func TestStream(t *testing.T) {
 				func() error { return TupleEncoder(nilBufferedParams{}).CheckType(tuple) },
 			}
 			for i, test := range cases {
-				var validation *cqltype.ValidationError
-				if err := test(); !errors.As(err, &validation) {
+				err := test()
+				if _, ok := errors.AsType[*cqltype.ValidationError](err); !ok {
 					t.Fatalf("case %d: %v", i, err)
 				}
 			}
@@ -609,8 +609,7 @@ func TestStream(t *testing.T) {
 			r, _ := streamReaderFixture(t, cols, source, len(data))
 			plan := CodecTestMust(StreamOneColumn(StreamText).Compile(cols))
 			err := plan.DecodeInto(r, &dst)
-			var capacity *StreamCapacityError
-			if !errors.As(err, &capacity) || source.offset != 4 {
+			if _, ok := errors.AsType[*StreamCapacityError](err); !ok || source.offset != 4 {
 				t.Fatalf("capacity consumed body: %v read %d", err, source.offset)
 			}
 			var invalid []byte = make([]byte, 0, 10)
@@ -745,8 +744,8 @@ func TestStream(t *testing.T) {
 					},
 				}
 				for _, check := range checks {
-					var validation *cqltype.ValidationError
-					if err := check(); !errors.As(err, &validation) || validation.Field != "kind" {
+					err := check()
+					if validation, ok := errors.AsType[*cqltype.ValidationError](err); !ok || validation.Field != "kind" {
 						t.Fatalf("unsupported scalar %v must retain kind ValidationError: %v", kind, err)
 					}
 				}

@@ -604,8 +604,7 @@ func TestConnectionRecorder(t *testing.T) {
 			if n != split {
 				t.Fatalf("first Read = %d bytes, want %d", n, split)
 			}
-			var netErr net.Error
-			if !errors.As(err, &netErr) || !netErr.Timeout() {
+			if netErr, ok := errors.AsType[net.Error](err); !ok || !netErr.Timeout() {
 				t.Fatalf("first Read error = %v, want a timeout the driver would resume", err)
 			}
 

@@ -57,8 +57,7 @@ func InternalCheckSystemSchema(control InternalControlConnection) (bool, error) 
 		defer page.Owner.Release()
 	}
 	if err != nil {
-		var server RequestError
-		if errors.As(err, &server) && server.GetCode() == ErrCodeSyntax {
+		if server, ok := errors.AsType[RequestError](err); ok && server.GetCode() == ErrCodeSyntax {
 			return false, nil
 		}
 		return false, err

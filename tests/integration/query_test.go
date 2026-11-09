@@ -359,8 +359,7 @@ func TestQuery(t *testing.T) {
 			if err := v2CreateTable(context.Background(), session, fmt.Sprintf((`CREATE TABLE `+fixtureKeyspace("")+`.%s (id int primary key)`), table)); err == nil {
 				t.Fatal("Should have gotten already exists error from cassandra server.")
 			} else {
-				e := &cqlerr.RequestErrAlreadyExists{}
-				if errors.As(err, &e) {
+				if e, ok := errors.AsType[*cqlerr.RequestErrAlreadyExists](err); ok {
 					if e.Table != table {
 						t.Fatalf("expected error table to be %q but was %q", table, e.Table)
 					}
@@ -389,8 +388,7 @@ func TestQuery(t *testing.T) {
 				t.Fatalf("failed to create table with error '%v'", err)
 			}
 			if _, err := v2Exec(context.Background(), session, fmt.Sprintf(`INSERT INTO %s.%s (id, value) VALUES (1, 1)`, fixtureKeyspace("_fail"), table)); err != nil {
-				var errWrite *cqlerr.RequestErrWriteFailure
-				if errors.As(err, &errWrite) {
+				if errWrite, ok := errors.AsType[*cqlerr.RequestErrWriteFailure](err); ok {
 					if implCluster.SessionData(session).InternalCfg.ProtoVersion >= protoVersion5 {
 						// ErrorMap should be filled with some hosts that should've errored
 						if len(errWrite.ErrorMap) == 0 {
@@ -747,8 +745,7 @@ func TestQuery(t *testing.T) {
 			if err == nil {
 				break
 			}
-			var partial *gocql.PartialRefreshError
-			if attempt >= 2 || !errors.As(err, &partial) || len(partial.Keyspaces) != 1 || partial.Keyspaces["<publication>"] == nil {
+			if partial, ok := errors.AsType[*gocql.PartialRefreshError](err); attempt >= 2 || !ok || len(partial.Keyspaces) != 1 || partial.Keyspaces["<publication>"] == nil {
 				t.Fatal(err)
 			}
 			timer := time.NewTimer(100 * time.Millisecond)
@@ -856,8 +853,7 @@ func TestQuery(t *testing.T) {
 			streamQuery := codecTestMust(gocql.NewStreamQuery(read, streamDecoder, gocql.StreamOptions{Incremental: incremental, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}))
 			cursor, err := streamQuery.Run(ctx, int32(1))
 			if incremental && *flagProto < 5 && fixtureCompressed() {
-				var unsupported *cqlerr.StreamCapabilityError
-				if !errors.As(err, &unsupported) {
+				if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {
 					t.Fatal(err)
 				}
 				streamQuery.Close()

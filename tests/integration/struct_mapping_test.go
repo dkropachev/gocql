@@ -628,8 +628,7 @@ func TestStructMapping(t *testing.T) {
 			}
 			stream, err := q.Run(ctx, 9)
 			if incremental && frameCompressed {
-				var unsupported *cqlerr.StreamCapabilityError
-				if !errors.As(err, &unsupported) {
+				if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {
 					t.Fatal("frame-compressed incremental stream not rejected:", err)
 				}
 				q.Close()

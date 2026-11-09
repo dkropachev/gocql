@@ -15,6 +15,7 @@ import (
 )
 
 type executionStatusReporter interface {
+	error
 	ExecutionStatus() cqltype.ExecutionStatus
 }
 
@@ -27,19 +28,16 @@ func ExecutionStatusOf(err error) cqltype.ExecutionStatus {
 	if err == nil {
 		return cqltype.NotExecuted
 	}
-	var reporter executionStatusReporter
-	if errors.As(err, &reporter) {
+	if reporter, ok := errors.AsType[executionStatusReporter](err); ok {
 		return reporter.ExecutionStatus()
 	}
-	var server protocol.RequestError
-	if errors.As(err, &server) {
+	if server, ok := errors.AsType[protocol.RequestError](err); ok {
 		return protocol.ServerErrorExecutionStatus(server)
 	}
 	// Only conditions raised before anything is sent prove the request had
 	// no effect. Validation and codec errors also arise from decoding a
 	// response, after the server executed the request.
-	var schema *SchemaChangedError
-	if errors.As(err, &schema) ||
+	if hasType[*SchemaChangedError](err) ||
 		errors.Is(err, ErrNoConnections) || errors.Is(err, ErrNoConnectionsInPool) ||
 		errors.Is(err, ErrNoPool) || errors.Is(err, ErrHostDown) || errors.Is(err, ErrSessionClosed) ||
 		errors.Is(err, ErrSessionNotReady) || errors.Is(err, ErrQueryArgLength) || errors.Is(err, ErrBusy) ||

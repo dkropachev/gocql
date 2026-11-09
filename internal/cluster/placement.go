@@ -143,8 +143,7 @@ func InternalSessionPublishTabletFeedback(s *Session, p *InternalV2PeripheralSta
 		ensureNext()
 		routing.SnapshotData(next).InternalDiagnostics = make([]error, 0, len(routing.SnapshotData(old).InternalDiagnostics)+1)
 		for _, diagnostic := range routing.SnapshotData(old).InternalDiagnostics {
-			var v *ValidationError
-			if errors.As(diagnostic, &v) && v.Field == "tablet placement" {
+			if v, ok := errors.AsType[*ValidationError](diagnostic); ok && v.Field == "tablet placement" {
 				continue
 			}
 			routing.SnapshotData(next).InternalDiagnostics = append(routing.SnapshotData(next).InternalDiagnostics, diagnostic)

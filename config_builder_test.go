@@ -55,8 +55,7 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("ZeroConfigRejected", func(t *testing.T) {
 		_, err := Connect(context.Background(), Config{})
-		var invalid *cqlerr.ValidationError
-		if !errors.As(err, &invalid) || !strings.Contains(err.Error(), "NewConfig") {
+		if _, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || !strings.Contains(err.Error(), "NewConfig") {
 			t.Fatalf("Connect(Config{}) = %v, want a validation error naming NewConfig", err)
 		}
 	})
@@ -71,8 +70,7 @@ func TestConfigBuilder(t *testing.T) {
 				t.Errorf("error %q does not name %s", err, call)
 			}
 		}
-		var invalid *cqlerr.ValidationError
-		if !errors.As(err, &invalid) {
+		if _, ok := errors.AsType[*cqlerr.ValidationError](err); !ok {
 			t.Fatalf("error %v is not a ValidationError", err)
 		}
 	})

@@ -743,12 +743,11 @@ func TestResponse(t *testing.T) {
 			&RequestErrWriteTimeout{ErrorFrame: frm.ErrorFrame{Code: ErrCodeWriteTimeout, Message: "write timeout"}},
 			&RequestErrUnprepared{ErrorFrame: frm.ErrorFrame{Code: ErrCodeUnprepared, Message: "unprepared"}},
 		} {
-			var direct RequestError
-			if !errors.As(err, &direct) {
+			direct, ok := errors.AsType[RequestError](err)
+			if !ok {
 				t.Fatalf("%T does not satisfy server error contract", err)
 			}
-			var wrapped RequestError
-			if !errors.As(fmt.Errorf("outer: %w", err), &wrapped) || wrapped.GetCode() != direct.GetCode() || wrapped.GetMessage() != direct.GetMessage() {
+			if wrapped, ok := errors.AsType[RequestError](fmt.Errorf("outer: %w", err)); !ok || wrapped.GetCode() != direct.GetCode() || wrapped.GetMessage() != direct.GetMessage() {
 				t.Fatalf("wrapped %T lost server details", err)
 			}
 		}

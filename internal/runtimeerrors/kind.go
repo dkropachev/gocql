@@ -91,8 +91,7 @@ func KindOf(err error) Kind {
 	if err == nil {
 		return KindUnknown
 	}
-	var request *ExecutionError
-	if errors.As(err, &request) {
+	if request, ok := errors.AsType[*ExecutionError](err); ok {
 		err = request.Err
 	}
 	switch {
@@ -101,40 +100,41 @@ func KindOf(err error) Kind {
 	case errors.Is(err, context.DeadlineExceeded):
 		return KindTimeout
 	}
-	var server protocol.RequestError
-	if errors.As(err, &server) {
+	if server, ok := errors.AsType[protocol.RequestError](err); ok {
 		return serverKind(server)
 	}
-	var validation *cqltype.ValidationError
-	var codec *cqltype.CodecError
-	var schema *SchemaChangedError
-	var unsupported *UnsupportedSettingError
-	var protocolErr *cqltype.ProtocolError
-	var frameErr protocol.ErrProtocol
-	var malformed *protocol.MalformedFrameError
-	var connect *ConnectError
-	var network net.Error
 	switch {
 	case errors.Is(err, ErrClosed), errors.Is(err, ErrSessionClosed), errors.Is(err, ErrStaleRows), errors.Is(err, cqltype.ErrReleased):
 		return KindClosed
-	case errors.As(err, &validation), errors.As(err, &codec), errors.As(err, &schema), errors.As(err, &unsupported),
+	case hasType[*cqltype.ValidationError](err), hasType[*cqltype.CodecError](err), hasType[*SchemaChangedError](err), hasType[*UnsupportedSettingError](err),
 		errors.Is(err, ErrQueryArgLength), errors.Is(err, ErrUseStmt), errors.Is(err, ErrTooManyStmts),
 		errors.Is(err, ErrNoKeyspace), errors.Is(err, ErrNoTable), errors.Is(err, ErrKeyspaceDoesNotExist),
 		errors.Is(err, ErrBusy), errors.Is(err, ErrPagingComplete), errors.Is(err, ErrUnsupported):
 		return KindInvalid
-	case errors.As(err, &protocolErr), errors.As(err, &frameErr), errors.As(err, &malformed), errors.Is(err, protocol.ErrFrameTooBig):
+	case hasType[*cqltype.ProtocolError](err), hasType[protocol.ErrProtocol](err), hasType[*protocol.MalformedFrameError](err), errors.Is(err, protocol.ErrFrameTooBig):
 		return KindProtocol
 	case errors.Is(err, ErrTimeoutNoResponse), errors.Is(err, ErrTooManyTimeouts), errors.Is(err, protocol.ErrReadHeaderTimeout):
 		return KindTimeout
-	case errors.As(err, &network) && network.Timeout():
+	case isNetTimeout(err):
 		return KindTimeout
-	case errors.As(err, &connect), errors.Is(err, ErrNoConnections), errors.Is(err, ErrNoConnectionsInPool),
+	case hasType[*ConnectError](err), errors.Is(err, ErrNoConnections), errors.Is(err, ErrNoConnectionsInPool),
 		errors.Is(err, ErrNoConnectionsStarted), errors.Is(err, ErrConnectionClosed), errors.Is(err, ErrHostDown),
 		errors.Is(err, ErrNoPool), errors.Is(err, ErrNoStreams), errors.Is(err, ErrNoHosts), errors.Is(err, ErrSessionNotReady),
-		errors.As(err, &network), errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, net.ErrClosed):
+		hasType[net.Error](err), errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, net.ErrClosed):
 		return KindConnection
 	}
 	return KindUnknown
+}
+
+// hasType reports whether err's tree holds an error of type E.
+func hasType[E error](err error) bool {
+	_, ok := errors.AsType[E](err)
+	return ok
+}
+
+func isNetTimeout(err error) bool {
+	network, ok := errors.AsType[net.Error](err)
+	return ok && network.Timeout()
 }
 
 func serverKind(err protocol.RequestError) Kind {

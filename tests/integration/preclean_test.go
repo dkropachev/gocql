@@ -104,8 +104,7 @@ func dropLeftoverKeyspaces() error {
 func connectOnceCredentialsWork(ctx context.Context, config gocql.Config) (*gocql.Session, error) {
 	for {
 		s, err := gocql.Connect(ctx, config)
-		var request cqlerr.RequestError
-		if err == nil || !errors.As(err, &request) || request.GetCode() != cqlerr.ErrCodeCredentials {
+		if request, ok := errors.AsType[cqlerr.RequestError](err); err == nil || !ok || request.GetCode() != cqlerr.ErrCodeCredentials {
 			return s, err
 		}
 		select {

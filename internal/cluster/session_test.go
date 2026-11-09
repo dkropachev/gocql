@@ -298,8 +298,7 @@ func TestSession(t *testing.T) {
 					t.Fatalf("connectSettings() = %v, want %q", err, tt.wantErr)
 				}
 				if tt.allowed > 1 {
-					var dial *net.OpError
-					if !errors.Is(err, ErrNoConnectionsStarted) || !errors.As(err, &dial) {
+					if _, ok := errors.AsType[*net.OpError](err); !errors.Is(err, ErrNoConnectionsStarted) || !ok {
 						t.Fatalf("connectSettings() = %v, want ErrNoConnectionsStarted wrapping a dial error", err)
 					}
 				}

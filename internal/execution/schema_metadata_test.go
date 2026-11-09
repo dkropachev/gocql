@@ -84,8 +84,7 @@ func TestSchemaMetadata(t *testing.T) {
 			if err := implCluster.InternalSessionRefreshV2AllSchema(s, context.Background()); err == nil {
 				t.Fatal("unsupported schema silently succeeded")
 			} else {
-				var unsupported *settings.UnsupportedSettingError
-				if !errors.As(err, &unsupported) {
+				if _, ok := errors.AsType[*settings.UnsupportedSettingError](err); !ok {
 					t.Fatal(err)
 				}
 			}
@@ -126,8 +125,8 @@ func TestSchemaMetadata(t *testing.T) {
 			mock.mu.Lock()
 			mock.queryError = errors.New("base schema denied temporarily")
 			mock.mu.Unlock()
-			var partial *implMetadata.PartialRefreshError
-			if err := implCluster.InternalSessionRefreshV2Keyspace(s, context.Background(), "ks1"); !errors.As(err, &partial) {
+			err := implCluster.InternalSessionRefreshV2Keyspace(s, context.Background(), "ks1")
+			if _, ok := errors.AsType[*implMetadata.PartialRefreshError](err); !ok {
 				t.Fatal("retained stale base schema lacks partial error", err)
 			}
 			if ks, _ := s.Metadata().Keyspace("ks1"); ks == nil || ks.Tables["t1"] == nil {
@@ -156,8 +155,8 @@ func TestSchemaMetadata(t *testing.T) {
 			<-entered
 			implCluster.InternalSessionPublishV2Event(s, &oldevents.SchemaChangeTableEvent{Change: "DROPPED", Keyspace: "ks1", Table: "t1"})
 			close(release)
-			var partial *implMetadata.PartialRefreshError
-			if err := <-done; !errors.As(err, &partial) {
+			err := <-done
+			if _, ok := errors.AsType[*implMetadata.PartialRefreshError](err); !ok {
 				t.Fatal("stale table refresh accepted", err)
 			}
 			if ks, _ := s.Metadata().Keyspace("ks1"); ks.Tables["t1"] != nil {

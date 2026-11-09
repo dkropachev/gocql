@@ -744,8 +744,8 @@ func TestTypedConn(t *testing.T) {
 		tcp := raw.(*net.TCPConn)
 		config := settings.DefaultConfig("localhost")
 		opaque := &opaqueTCP{Conn: tcp}
-		var unsupported *settings.UnsupportedSettingError
-		if err := applyV2SocketOptions(opaque, config, "tcp"); !errors.As(err, &unsupported) {
+		err := applyV2SocketOptions(opaque, config, "tcp")
+		if _, ok := errors.AsType[*settings.UnsupportedSettingError](err); !ok {
 			t.Fatal("TCP wrapper silently ignored NODELAY", err)
 		}
 		forwarding := &forwardingTCP{TCPConn: tcp}
@@ -810,8 +810,7 @@ func TestTypedConn(t *testing.T) {
 				}()
 				cfg := &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config), ProtoVersion: 4, CQLVersion: "3.0.0", ConnectTimeout: time.Second, HostDialer: fixedHostDialer{client}, Compressor: compressor, Logger: logging.InternalNopLogger{}}
 				conn, err := InternalSessionDialWithoutObserver(session, ctx, host, cfg, transport.InternalConnErrorHandlerFn(func(*transport.Conn, error, bool) {}), 0, 0)
-				var unsupported *settings.UnsupportedSettingError
-				if conn != nil || !errors.As(err, &unsupported) {
+				if _, ok := errors.AsType[*settings.UnsupportedSettingError](err); conn != nil || !ok {
 					t.Fatal("requested compression silently downgraded", err)
 				}
 				if err := <-done; err != nil {
@@ -822,8 +821,8 @@ func TestTypedConn(t *testing.T) {
 		config := settings.DefaultConfig("localhost")
 		config.Protocol = 5
 		config.Compression = cqltype.SnappyCompression
-		var unsupported *settings.UnsupportedSettingError
-		if err := settings.InternalValidateConfig(config); !errors.As(err, &unsupported) {
+		err := settings.InternalValidateConfig(config)
+		if _, ok := errors.AsType[*settings.UnsupportedSettingError](err); !ok {
 			t.Fatal("known protocol/compressor incompatibility not explicit", err)
 		}
 	})
@@ -872,8 +871,7 @@ func TestTypedConn(t *testing.T) {
 				owner.Release()
 				err := <-result
 				if partial {
-					var query *implRuntimeerrors.QueryError
-					if err == nil || !errors.As(err, &query) || !runtimeerrors.QueryErrorData(query).InternalPotentiallyExecuted || !c.Closed() {
+					if query, ok := errors.AsType[*implRuntimeerrors.QueryError](err); err == nil || !ok || !runtimeerrors.QueryErrorData(query).InternalPotentiallyExecuted || !c.Closed() {
 						t.Fatal("partial TLS write not poisoned", err)
 					}
 				} else if err != nil || recorder.borrowed != len(payload) {

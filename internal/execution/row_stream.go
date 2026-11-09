@@ -118,8 +118,7 @@ func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Sess
 		cursor.privateStorage.InternalActive.Lock()
 		InternalRowStreamCleanup(cursor, false)
 		cursor.privateStorage.InternalActive.Unlock()
-		var failure *ExecutionError
-		if errors.As(err, &failure) {
+		if failure, ok := errors.AsType[*ExecutionError](err); ok {
 			failure.Result = cursor.Info().Result
 			return nil, failure
 		}
@@ -661,8 +660,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		if s.Info().OutputStarted {
 			return err
 		}
-		var unprepared *RequestErrUnprepared
-		if attempt == 1 && errors.As(err, &unprepared) && request.source().rejected(unprepared.StatementId, wireRequest.PreparedID) {
+		if unprepared, ok := errors.AsType[*RequestErrUnprepared](err); attempt == 1 && ok && request.source().rejected(unprepared.StatementId, wireRequest.PreparedID) {
 			if closeErr := s.privateStorage.InternalReservation.InternalClose(true); closeErr != nil {
 				return closeErr
 			}

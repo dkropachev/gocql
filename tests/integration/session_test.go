@@ -435,8 +435,7 @@ func TestSession(t *testing.T) {
 				rejected.Close()
 				t.Fatal("server accepted rejected credentials")
 			}
-			var authErr cqlerr.RequestError
-			if !errors.As(err, &authErr) || authErr.GetCode() != cqlerr.ErrCodeCredentials {
+			if authErr, ok := errors.AsType[cqlerr.RequestError](err); !ok || authErr.GetCode() != cqlerr.ErrCodeCredentials {
 				t.Fatalf("expected authentication rejection, got %T: %v", err, err)
 			}
 		})

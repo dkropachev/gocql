@@ -4,6 +4,7 @@
 package codec
 
 import (
+	"errors"
 	"testing"
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
@@ -16,4 +17,10 @@ func FoundationScalar(t *testing.T, kind cqltype.Type) cqltype.DataType {
 		t.Fatal(err)
 	}
 	return d
+}
+
+// hasErrorType reports whether err's tree holds an error of type E.
+func hasErrorType[E error](err error) bool {
+	_, ok := errors.AsType[E](err)
+	return ok
 }

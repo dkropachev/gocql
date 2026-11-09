@@ -28,8 +28,7 @@ func testV2InvalidDatacenter(t *testing.T, options routing.Options) {
 	if err == nil {
 		t.Fatal("Connect was expected to fail with an unknown datacenter")
 	}
-	var validation *cqlerr.ValidationError
-	if !errors.As(err, &validation) {
+	if _, ok := errors.AsType[*cqlerr.ValidationError](err); !ok {
 		t.Fatalf("expected datacenter validation error, got %T: %v", err, err)
 	}
 }

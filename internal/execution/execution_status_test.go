@@ -106,8 +106,8 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 	}
 	requestError := func(t *testing.T, err error) *cqlerr.ExecutionError {
 		t.Helper()
-		var failure *cqlerr.ExecutionError
-		if !errors.As(err, &failure) {
+		failure, ok := errors.AsType[*cqlerr.ExecutionError](err)
+		if !ok {
 			t.Fatalf("not an ExecutionError: %v", err)
 		}
 		if got := cqlerr.ExecutionStatusOf(err); got != failure.ExecutionStatus() {
@@ -145,8 +145,7 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 		if got := requestError(t, err).ExecutionStatus(); got != cqlerr.MaybeExecuted {
 			t.Fatalf("status %v: %v", got, err)
 		}
-		var unavailable *cqlerr.RequestErrUnavailable
-		if !errors.As(err, &unavailable) {
+		if _, ok := errors.AsType[*cqlerr.RequestErrUnavailable](err); !ok {
 			t.Fatalf("last server error lost: %v", err)
 		}
 		failure := requestError(t, err)
@@ -185,8 +184,7 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("cancellation lost: %v", err)
 		}
-		var server cqlerr.RequestError
-		if !errors.As(err, &server) || server.GetCode() != cqlerr.ErrCodeOverloaded {
+		if server, ok := errors.AsType[cqlerr.RequestError](err); !ok || server.GetCode() != cqlerr.ErrCodeOverloaded {
 			t.Fatalf("earlier server error lost: %v", err)
 		}
 	})

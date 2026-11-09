@@ -58,14 +58,12 @@ func Example_errors() {
 	if errors.Is(err, cqlerr.ErrServerOverloaded) {
 		log.Print("coordinator overloaded")
 	}
-	var timeout *cqlerr.RequestErrWriteTimeout
-	if errors.As(err, &timeout) {
+	if timeout, ok := errors.AsType[*cqlerr.RequestErrWriteTimeout](err); ok {
 		log.Printf("write timeout: %d of %d replicas acknowledged", timeout.Received, timeout.BlockFor)
 	}
 
 	// Every failed attempt is kept, with the host it went to.
-	var failure *cqlerr.ExecutionError
-	if errors.As(err, &failure) {
+	if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); ok {
 		for _, attempt := range failure.Attempts {
 			log.Printf("attempt %d on %s: %v", attempt.Number, attempt.Address, attempt.Err)
 		}
@@ -80,8 +78,7 @@ func Example_connectErrors() {
 	}
 	_, err = gocql.Connect(context.Background(), config)
 	if errors.Is(err, cqlerr.ErrNoConnectionsStarted) {
-		var connect *cqlerr.ConnectError
-		if errors.As(err, &connect) {
+		if connect, ok := errors.AsType[*cqlerr.ConnectError](err); ok {
 			for _, host := range connect.Hosts {
 				log.Printf("%s: %v", host.Address, host.Err)
 			}

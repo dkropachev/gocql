@@ -171,8 +171,7 @@ func InternalParseProtocolFromError(err error) int {
 	// I really wish this had the actual info in the error frame...
 	matches := InternalProtocolSupportRe.FindAllStringSubmatch(err.Error(), -1)
 	if len(matches) != 1 || len(matches[0]) != 2 {
-		var verr *protocolError
-		if errors.As(err, &verr) {
+		if verr, ok := errors.AsType[*protocolError](err); ok {
 			return int(verr.InternalFrame.Header().Version.Version())
 		}
 		return 0

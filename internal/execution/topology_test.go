@@ -81,8 +81,8 @@ func TestTopology(t *testing.T) {
 			incomplete := good
 			incomplete.rack = ""
 			srv.setPeers(incomplete)
-			var partial *implMetadata.PartialRefreshError
-			if err := implCluster.InternalSessionRefreshRingNow(s); !errors.As(err, &partial) || partial.Topology == nil {
+			err := implCluster.InternalSessionRefreshRingNow(s)
+			if partial, ok := errors.AsType[*implMetadata.PartialRefreshError](err); !ok || partial.Topology == nil {
 				t.Fatal("incomplete read was not a visible partial failure", err)
 			}
 			if got := ringHosts(s); !reflect.DeepEqual(got, before) {

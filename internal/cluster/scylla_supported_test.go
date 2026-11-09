@@ -320,8 +320,8 @@ func TestScyllaSupported(t *testing.T) {
 		} {
 			values := validSupported()
 			change(values)
-			var protocol *cqltype.ProtocolError
-			if err := transport.InternalValidateV2Supported(values, options); !errors.As(err, &protocol) {
+			err := transport.InternalValidateV2Supported(values, options)
+			if _, ok := errors.AsType[*cqltype.ProtocolError](err); !ok {
 				t.Fatal("malformed SUPPORTED not rejected before parse", values, err)
 			}
 			// Legacy callers are also panic-free, even if they do not request typed setup.

@@ -70,8 +70,7 @@ func probeSelectWithoutFrom() {
 	}
 }
 func serverErrorCode(err error) int {
-	var server cqlerr.RequestError
-	if errors.As(err, &server) {
+	if server, ok := errors.AsType[cqlerr.RequestError](err); ok {
 		return server.GetCode()
 	}
 	return 0

@@ -22,16 +22,13 @@ func (p Safe) Decide(a Attempt) Decision {
 	if a.Number >= limit || errors.Is(a.Err, context.Canceled) || errors.Is(a.Err, context.DeadlineExceeded) {
 		return Decision{}
 	}
-	var unavailable *cqlerr.RequestErrUnavailable
-	if errors.As(a.Err, &unavailable) {
+	if _, ok := errors.AsType[*cqlerr.RequestErrUnavailable](a.Err); ok {
 		return Decision{Action: Next}
 	}
-	var read *cqlerr.RequestErrReadTimeout
-	if errors.As(a.Err, &read) && read.Received >= read.BlockFor && read.DataPresent == 0 {
+	if read, ok := errors.AsType[*cqlerr.RequestErrReadTimeout](a.Err); ok && read.Received >= read.BlockFor && read.DataPresent == 0 {
 		return Decision{Action: Same}
 	}
-	var server cqlerr.RequestError
-	if errors.As(a.Err, &server) {
+	if server, ok := errors.AsType[cqlerr.RequestError](a.Err); ok {
 		if cqlerr.KindOf(server) == cqlerr.KindOverloaded {
 			// Rejected before execution: another host may serve even a
 			// non-idempotent request.
@@ -42,10 +39,13 @@ func (p Safe) Decide(a Attempt) Decision {
 		}
 		return Decision{}
 	}
-	var schema *cqlerr.SchemaChangedError
-	var validation *cqlerr.ValidationError
-	var protocolErr *cqlerr.ProtocolError
-	if errors.As(a.Err, &schema) || errors.As(a.Err, &validation) || errors.As(a.Err, &protocolErr) {
+	if _, ok := errors.AsType[*cqlerr.SchemaChangedError](a.Err); ok {
+		return Decision{}
+	}
+	if _, ok := errors.AsType[*cqlerr.ValidationError](a.Err); ok {
+		return Decision{}
+	}
+	if _, ok := errors.AsType[*cqlerr.ProtocolError](a.Err); ok {
 		return Decision{}
 	}
 	if a.Idempotent || a.ExecutionStatus == cqlerr.NotExecuted {

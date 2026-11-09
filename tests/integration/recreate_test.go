@@ -36,8 +36,7 @@ func isDescribeKeyspaceSupported(t *testing.T, s *gocql.Session) bool {
 		err = rows.Close()
 	}
 	if err != nil {
-		var server cqlerr.RequestError
-		if errors.As(err, &server) && server.GetCode() == cqlerr.ErrCodeSyntax {
+		if server, ok := errors.AsType[cqlerr.RequestError](err); ok && server.GetCode() == cqlerr.ErrCodeSyntax {
 			// DESCRIBE KEYSPACE is not supported on older versions of Cassandra and Scylla
 			// For such case schema statement is going to be recreated on the client side
 			return false
@@ -110,8 +109,7 @@ func recreateExec(t testing.TB, s *gocql.Session, stmt string) (gocql.Result, er
 	var err error
 	for attempt := 1; attempt <= 4; attempt++ {
 		result, err = v2Exec(context.Background(), s, stmt)
-		var server cqlerr.RequestError
-		if err == nil || !errors.As(err, &server) || server.GetMessage() != "Failed to apply group 0 change due to concurrent modification" || attempt == 4 {
+		if server, ok := errors.AsType[cqlerr.RequestError](err); err == nil || !ok || server.GetMessage() != "Failed to apply group 0 change due to concurrent modification" || attempt == 4 {
 			return result, err
 		}
 		t.Logf("retry explicitly aborted group-0 fixture transaction, attempt %d", attempt)

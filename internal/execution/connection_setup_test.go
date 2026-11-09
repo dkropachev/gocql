@@ -68,8 +68,7 @@ func TestConnectionSetup(t *testing.T) {
 					t.Fatalf("bootstrap discarded dial cause: %v", err)
 				}
 				if request, ok := cause.(protocol.RequestError); ok {
-					var got protocol.RequestError
-					if !errors.As(err, &got) || got.GetCode() != request.GetCode() {
+					if got, ok := errors.AsType[protocol.RequestError](err); !ok || got.GetCode() != request.GetCode() {
 						t.Fatal("bootstrap discarded server error", err)
 					}
 				}
@@ -505,8 +504,8 @@ func TestConnectionSetup(t *testing.T) {
 			for _, change := range []func(*settings.Config){func(c *settings.Config) { c.Protocol = 4 }, func(c *settings.Config) { c.TLS = &tls.Config{} }, func(c *settings.Config) { c.LocalAddress = netip.MustParseAddr("127.0.0.1") }} {
 				invalid := config
 				change(&invalid)
-				var unsupported *settings.UnsupportedSettingError
-				if err := settings.InternalValidateConfig(invalid); !errors.As(err, &unsupported) {
+				err := settings.InternalValidateConfig(invalid)
+				if _, ok := errors.AsType[*settings.UnsupportedSettingError](err); !ok {
 					t.Fatal("Unix unsupported", err)
 				}
 			}

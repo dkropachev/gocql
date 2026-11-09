@@ -497,8 +497,7 @@ func (pool *InternalHostConnPool) InternalFill_debounce() {
 }
 
 func (pool *InternalHostConnPool) logConnectErr(err error) {
-	var opErr *net.OpError
-	if errors.As(err, &opErr) && (opErr.Op == "dial" || opErr.Op == "read") {
+	if opErr, ok := errors.AsType[*net.OpError](err); ok && (opErr.Op == "dial" || opErr.Op == "read") {
 		// connection refused
 		// these are typical during a node outage so avoid log spam.
 		if debug.Enabled {
@@ -628,8 +627,7 @@ func (pool *InternalHostConnPool) InternalConnect() (err error) {
 		if err == nil {
 			break
 		}
-		var opErr *net.OpError
-		if errors.As(err, &opErr) {
+		if opErr, ok := errors.AsType[*net.OpError](err); ok {
 			// if the error is not a temporary error (ex: network unreachable) don't
 			//  retry
 			if !opErr.Temporary() {

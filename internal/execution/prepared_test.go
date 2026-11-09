@@ -77,8 +77,7 @@ func TestPrepared(t *testing.T) {
 			changed := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.IntType})
 			response := &transport.InternalResponsePage{InternalResponseData: model.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("conflict")}}
 			err := InternalSelectPreparedResponse(state, host, &other, other.InternalMetadataID, true, response)
-			var protocol *cqltype.ProtocolError
-			if !errors.As(err, &protocol) || protocol.Stage != "prepared schema reconciliation" {
+			if protocol, ok := errors.AsType[*cqltype.ProtocolError](err); !ok || protocol.Stage != "prepared schema reconciliation" {
 				t.Fatal("overflow disappeared from logical result", err)
 			}
 			if !state.InternalConflictDirty.Load() || state.InternalConflictEpoch.Load() != 0 {
@@ -89,7 +88,7 @@ func TestPrepared(t *testing.T) {
 			if _, err := InternalRuntimeFor(s).InternalPrepareOnConnExpected(cancelled, nil, state, model.EncodedValues{}, false, nil); !errors.Is(err, context.Canceled) {
 				t.Fatal("canceled waiter performed reconciliation work", err)
 			}
-			if err := state.InternalReconcilePendingConflict(); !errors.As(err, &protocol) {
+			if err := state.InternalReconcilePendingConflict(); !hasErrorType[*cqltype.ProtocolError](err) {
 				t.Fatal("future operation silently bypassed unresolved conflict", err)
 			}
 			if string(view.OwnedBytes()) != "retained" {
@@ -439,9 +438,8 @@ func TestPrepared(t *testing.T) {
 					}
 					close(release)
 					err := <-second
-					var changed *runtimeerrors.SchemaChangedError
 					if incompatible {
-						if !errors.As(err, &changed) {
+						if _, ok := errors.AsType[*runtimeerrors.SchemaChangedError](err); !ok {
 							t.Fatal(err)
 						}
 					} else if err != nil {
@@ -647,9 +645,8 @@ func TestPrepared(t *testing.T) {
 						done <- err
 					}()
 					prepared, err := Prepare(ctx, s, binding.Statement[codec.EmptyRecord, codec.CASResult[codec.DynamicRow]]{CQL: "INSERT INTO ks.tbl(id)VALUES(1)IF NOT EXISTS", Kind: tc.kind, Params: codec.EmptyParamsEncoder, Rows: codec.CASRows(codec.DynamicRows)}, PrepareOptions{})
-					var validation *implCqltype.ValidationError
 					if tc.prepareError {
-						if !errors.As(err, &validation) {
+						if !hasErrorType[*implCqltype.ValidationError](err) {
 							t.Fatalf("eager metadata validation: %v", err)
 						}
 					} else {
@@ -663,7 +660,7 @@ func TestPrepared(t *testing.T) {
 						defer bound.Close()
 						rows, err := Run(ctx, s, bound, Options{})
 						if tc.badResult {
-							if !errors.As(err, &validation) {
+							if !hasErrorType[*implCqltype.ValidationError](err) {
 								t.Fatalf("actual metadata was not validated before output: %v", err)
 							}
 						} else {
@@ -1105,8 +1102,7 @@ func TestPrepared(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 					defer cancel()
 					_, err := InternalRuntimeFor(s).InternalPrepareOnConnExpected(ctx, conns[0], state, implModel.EncodedValues{Columns: parameters}, true, old)
-					var changed *runtimeerrors.SchemaChangedError
-					if !errors.As(err, &changed) {
+					if _, ok := errors.AsType[*runtimeerrors.SchemaChangedError](err); !ok {
 						t.Fatal(mode, err)
 					}
 					if state.InternalHosts[implCqltype.UUID{15: 1}] != old {

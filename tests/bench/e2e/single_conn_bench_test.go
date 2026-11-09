@@ -164,8 +164,7 @@ func generateCaptures(ctx context.Context) (err error) {
 	// A namespace is fresh and exclusively generated here. An AlreadyExists
 	// response relinquishes ownership instead of deleting a pre-existing name.
 	if err = benchExec(ctx, s, "CREATE KEYSPACE "+corpus.Namespace+" WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':1}"); err != nil {
-		var exists *cqlerr.RequestErrAlreadyExists
-		if errors.As(err, &exists) {
+		if _, ok := errors.AsType[*cqlerr.RequestErrAlreadyExists](err); ok {
 			owned = false
 		}
 		return err

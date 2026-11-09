@@ -190,11 +190,10 @@ func ReadHeader(r io.Reader, p []byte) (head frm.FrameHeader, err error) {
 		// normalised to ErrReadHeaderTimeout; the latter stays a plain error and
 		// takes the connection down.
 		//
-		// errors.As rather than a bare type assertion, matching
+		// errors.AsType rather than a bare type assertion, matching
 		// Conn.readFirstSegmentHeader: the two timeout checks must stay in
 		// agreement even if a caller in between starts wrapping the error.
-		var netErr net.Error
-		if n == 0 && errors.As(err, &netErr) && netErr.Timeout() {
+		if netErr, ok := errors.AsType[net.Error](err); n == 0 && ok && netErr.Timeout() {
 			return frm.FrameHeader{}, fmt.Errorf("%w: %w", ErrReadHeaderTimeout, err)
 		}
 		return frm.FrameHeader{}, err

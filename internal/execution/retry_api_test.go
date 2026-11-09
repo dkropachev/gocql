@@ -29,8 +29,7 @@ func TestRetryAPI(t *testing.T) {
 				if decision.Action != test.want {
 					t.Fatalf("code %x idempotent %t got %d want %d", test.code, test.idempotent, decision.Action, test.want)
 				}
-				var extracted cqlerr.RequestError
-				if !errors.As(err, &extracted) || extracted.GetCode() != test.code {
+				if extracted, ok := errors.AsType[cqlerr.RequestError](err); !ok || extracted.GetCode() != test.code {
 					t.Fatal("server identity lost")
 				}
 			}

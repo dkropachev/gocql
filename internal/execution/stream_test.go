@@ -99,16 +99,14 @@ func TestStream(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			_, err := RunStream(ctx, s, b, codec.StreamOneColumn(codec.StreamBlob), StreamOptions{Incremental: true})
-			var capability *codec.StreamCapabilityError
-			if !errors.As(err, &capability) {
+			if _, ok := errors.AsType[*codec.StreamCapabilityError](err); !ok {
 				t.Fatal(err)
 			}
 			if c.InternalStreams.InUse() != 0 {
 				t.Fatal("capability leaked stream")
 			}
 			_, err = RunStream(ctx, s, b, codec.StreamOneColumn(codec.StreamBlob), StreamOptions{Incremental: true, Options: OptionValues{Prefetch: cqltype.Option[int]{Set: true, Value: 1}}})
-			var validation *cqltype.ValidationError
-			if !errors.As(err, &validation) {
+			if _, ok := errors.AsType[*cqltype.ValidationError](err); !ok {
 				t.Fatal(err)
 			}
 		})
@@ -502,8 +500,7 @@ func TestStream(t *testing.T) {
 						t.Fatal("invalid destination succeeded")
 					}
 					if !nilDst {
-						var capacity *codec.StreamCapacityError
-						if !errors.As(cursor.Err(), &capacity) || capacity.Required != 7 || capacity.Available != 2 {
+						if capacity, ok := errors.AsType[*codec.StreamCapacityError](cursor.Err()); !ok || capacity.Required != 7 || capacity.Available != 2 {
 							t.Fatal(cursor.Err())
 						}
 					}
@@ -938,8 +935,7 @@ func TestStream(t *testing.T) {
 					defer cancel()
 					cursor, err := RunStream(ctx, s, bound, decoder, StreamOptions{Incremental: true})
 					if mismatch {
-						var protocol *cqltype.ProtocolError
-						if !errors.As(err, &protocol) || cursor != nil {
+						if _, ok := errors.AsType[*cqltype.ProtocolError](err); !ok || cursor != nil {
 							t.Fatal(cursor, err)
 						}
 					} else {
@@ -1037,8 +1033,7 @@ func TestStream(t *testing.T) {
 			if cursor.NextInto(&dst) {
 				t.Fatal("unprepared replay after output")
 			}
-			var unprepared *implProtocol.RequestErrUnprepared
-			if !errors.As(cursor.Err(), &unprepared) {
+			if _, ok := errors.AsType[*implProtocol.RequestErrUnprepared](cursor.Err()); !ok {
 				t.Fatal(cursor.Err())
 			}
 			if count != 1 || cursor.Info().DeliveredRows != 1 || cursor.Info().Result.Attempts != 3 {
@@ -1240,8 +1235,7 @@ func TestStream(t *testing.T) {
 			if cursor.NextInto(&dst) {
 				t.Fatal("metadata budget ignored old latest-attempt storage")
 			}
-			var protocol *cqltype.ProtocolError
-			if !errors.As(cursor.Err(), &protocol) {
+			if _, ok := errors.AsType[*cqltype.ProtocolError](cursor.Err()); !ok {
 				t.Fatal(cursor.Err())
 			}
 			cursor.Close()

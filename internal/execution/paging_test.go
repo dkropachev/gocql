@@ -182,8 +182,7 @@ func TestPaging(t *testing.T) {
 			if rows.NextInto(nil) {
 				t.Fatal("nil accepted")
 			}
-			var e *implCqltype.ValidationError
-			if !errors.As(rows.Err(), &e) {
+			if _, ok := errors.AsType[*implCqltype.ValidationError](rows.Err()); !ok {
 				t.Fatal(rows.Err())
 			}
 			if PageData(RowsData(rows).InternalPage).InternalIndex != 0 {

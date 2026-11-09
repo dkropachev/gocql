@@ -166,8 +166,7 @@ func TestPage(t *testing.T) {
 						if p.NextInto(nil) {
 							t.Fatal("nil accepted")
 						}
-						var e *implCqltype.ValidationError
-						if !errors.As(p.Err(), &e) || PageData(p).InternalIndex != 0 {
+						if _, ok := errors.AsType[*implCqltype.ValidationError](p.Err()); !ok || PageData(p).InternalIndex != 0 {
 							t.Fatal(p.Err())
 						}
 					case "closed":

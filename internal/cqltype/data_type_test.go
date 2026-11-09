@@ -78,8 +78,7 @@ func TestDataType(t *testing.T) {
 			}}
 			for i, test := range cases {
 				_, err := test()
-				var validation *ValidationError
-				if !errors.As(err, &validation) {
+				if _, ok := errors.AsType[*ValidationError](err); !ok {
 					t.Errorf("case %d: expected ValidationError, got %v", i, err)
 				}
 			}
@@ -104,8 +103,7 @@ func TestDataType(t *testing.T) {
 		}
 		for _, kind := range []Type{-1, TypeCustom, TypeDuration + 1, TypeList, TypeMap, TypeSet, TypeTuple, TypeUDT, 65535} {
 			err := ValidateScalarKind(kind)
-			var validation *ValidationError
-			if !errors.As(err, &validation) || validation.Field != "kind" {
+			if validation, ok := errors.AsType[*ValidationError](err); !ok || validation.Field != "kind" {
 				t.Fatalf("unsupported scalar %v: expected kind ValidationError, got %v", kind, err)
 			}
 			if _, constructorErr := ScalarType(kind); constructorErr == nil || constructorErr.Error() != err.Error() {

@@ -342,8 +342,7 @@ func TestPaging(t *testing.T) {
 		options := gocql.StreamOptions{Incremental: true, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}
 		if *flagProto < 5 && fixtureCompressed() {
 			_, err := RunStream(ctx, s, bound, decoder, options)
-			var capability *cqlerr.StreamCapabilityError
-			if !errors.As(err, &capability) {
+			if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {
 				t.Fatal("frame compression pre-submit capability", err)
 			}
 			t.Log("frame-compressed streaming explicitly rejected before query")

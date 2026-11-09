@@ -173,8 +173,7 @@ func TestExecutionErrorAttempts(t *testing.T) {
 		if !errors.Is(err, context.Canceled) || !errors.Is(err, ErrTimeoutNoResponse) {
 			t.Fatal("cause not reachable")
 		}
-		var server protocol.RequestError
-		if !errors.As(err, &server) || server.GetCode() != protocol.ErrCodeOverloaded {
+		if server, ok := errors.AsType[protocol.RequestError](err); !ok || server.GetCode() != protocol.ErrCodeOverloaded {
 			t.Fatal("earlier server error not reachable")
 		}
 	})

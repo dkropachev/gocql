@@ -1412,8 +1412,8 @@ func TestSchemaMetadata(t *testing.T) {
 			// must never be restored from the older enumerated rows.
 			err := InternalSessionRefreshV2AllSchema(s, context.Background())
 			if err != nil {
-				var partial *metadata.PartialRefreshError
-				if !errors.As(err, &partial) {
+				partial, ok := errors.AsType[*metadata.PartialRefreshError](err)
+				if !ok {
 					t.Fatal(err)
 				}
 				if _, wrong := partial.Keyspaces["ks2"]; wrong {
@@ -1437,8 +1437,7 @@ func TestSchemaMetadata(t *testing.T) {
 				return nil
 			}
 			err := InternalSessionRefreshV2AllSchema(s, context.Background())
-			var partial *metadata.PartialRefreshError
-			if !errors.As(err, &partial) || !errors.Is(err, cause) {
+			if _, ok := errors.AsType[*metadata.PartialRefreshError](err); !ok || !errors.Is(err, cause) {
 				t.Fatal("partial error lost cause", err)
 			}
 			for _, snapshot := range []*routing.MetadataSnapshot{before, s.Metadata()} {

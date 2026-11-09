@@ -442,8 +442,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 				if ctx.Err() != nil {
 					return nil, ctx.Err()
 				}
-				var unsupported *StreamCapabilityError
-				if errors.As(err, &unsupported) {
+				if _, ok := errors.AsType[*StreamCapabilityError](err); ok {
 					capability = err
 				}
 			}

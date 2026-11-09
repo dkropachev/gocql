@@ -494,9 +494,9 @@ func TestFramer(t *testing.T) {
 					err := f.ReadFrame(tc.r, &head)
 					require.Error(t, err)
 
-					var netErr net.Error
-					require.Equal(t, tc.want, errors.As(err, &netErr),
-						"errors.As(net.Error) on %q", err)
+					_, isNetErr := errors.AsType[net.Error](err)
+					require.Equal(t, tc.want, isNetErr,
+						"errors.AsType[net.Error] on %q", err)
 				})
 			}
 		})
@@ -647,8 +647,8 @@ func TestFramer(t *testing.T) {
 			require.Error(t, err)
 			require.NotErrorIs(t, err, ErrFrameTooBig, "the discard failed, so the frame was not skipped")
 
-			var netErr net.Error
-			require.True(t, errors.As(err, &netErr), "errors.As(net.Error) on %q", err)
+			_, isNetErr := errors.AsType[net.Error](err)
+			require.True(t, isNetErr, "errors.AsType[net.Error] on %q", err)
 		})
 		t.Run("RejectsTooLong", func(t *testing.T) {
 			t.Parallel()

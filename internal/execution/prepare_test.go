@@ -121,8 +121,7 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 		if cursor.NextInto(&dst) {
 			t.Fatal("failed continuation delivered output")
 		}
-		var server protocol.RequestError
-		if !errors.As(cursor.Err(), &server) || server.GetCode() != protocol.ErrCodeServer {
+		if server, ok := errors.AsType[protocol.RequestError](cursor.Err()); !ok || server.GetCode() != protocol.ErrCodeServer {
 			t.Fatal(cursor.Err())
 		}
 		info := cursor.Info()

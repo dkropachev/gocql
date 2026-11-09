@@ -94,8 +94,7 @@ func (r ExecRunner) Run(ctx context.Context, configDir string, args ...string) (
 	err := cmd.Run()
 	if err != nil {
 		code := -1
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			code = exitErr.ExitCode()
 		}
 		if ctxErr := ctx.Err(); ctxErr != nil {

@@ -168,8 +168,7 @@ func run() (resultErr error) {
 		}
 	}()
 	if err := exec("CREATE KEYSPACE " + namespace + " WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':1}"); err != nil {
-		var exists *cqlerr.RequestErrAlreadyExists
-		if errors.As(err, &exists) {
+		if _, ok := errors.AsType[*cqlerr.RequestErrAlreadyExists](err); ok {
 			owned = false
 		}
 		return err
@@ -233,8 +232,7 @@ func run() (resultErr error) {
 	defer query.Close()
 	stream, err := query.Run(ctx, cql.EmptyParams{})
 	if *incremental && *protocol < 5 && frameCompression != gocql.NoCompression {
-		var unsupported *cqlerr.StreamCapabilityError
-		if !errors.As(err, &unsupported) {
+		if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {
 			return fmt.Errorf("expected frame compression capability error, got %w", err)
 		}
 		fmt.Println("frame compression explicitly rejected before streaming submission")

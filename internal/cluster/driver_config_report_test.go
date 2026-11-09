@@ -973,8 +973,8 @@ func TestDriverConfigReport(t *testing.T) {
 						t.Fatal("expected the report to be non-conforming; if consistency is now representable, delete this test")
 					}
 
-					var validationErr *jsonschema.ValidationError
-					if !errors.As(err, &validationErr) {
+					validationErr, ok := errors.AsType[*jsonschema.ValidationError](err)
+					if !ok {
 						t.Fatalf("expected a validation error, got %T: %v", err, err)
 					}
 					causes := leafCauses(validationErr)

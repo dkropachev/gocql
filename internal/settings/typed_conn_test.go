@@ -400,8 +400,7 @@ func TestTypedConn(t *testing.T) {
 				}
 			}()
 			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value FROM ks.tbl", Consistency: implCqltype.One, Timeout: time.Second})
-			var unprepared *protocol.RequestErrUnprepared
-			if !errors.As(err, &unprepared) || !bytes.Equal(unprepared.StatementId, []byte{1, 2}) {
+			if unprepared, ok := errors.AsType[*protocol.RequestErrUnprepared](err); !ok || !bytes.Equal(unprepared.StatementId, []byte{1, 2}) {
 				t.Fatalf("wrong error %v", err)
 			}
 			if page == nil || len(page.Warnings()) != 1 || len(page.TraceID()) != 16 || len(page.Payload()) != 1 {

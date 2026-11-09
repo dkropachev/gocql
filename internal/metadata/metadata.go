@@ -617,8 +617,7 @@ func InternalGetV2CreateStatements(ctx context.Context, s Source, keyspace strin
 	stmt := `DESCRIBE KEYSPACE "` + strings.ReplaceAll(keyspace, `"`, `""`) + `" WITH INTERNALS`
 	rows, err := InternalQueryV2SchemaRows(ctx, s, stmt, nil, decoder)
 	if err != nil {
-		var server RequestError
-		if errors.As(err, &server) && server.GetCode() == ErrCodeSyntax {
+		if server, ok := errors.AsType[RequestError](err); ok && server.GetCode() == ErrCodeSyntax {
 			return nil, nil
 		}
 		return nil, err
