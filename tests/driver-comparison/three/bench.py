@@ -37,6 +37,14 @@ WARMUP = os.environ.get('GOCQL_THREE_WARMUP', '10s')
 DURATION = os.environ.get('GOCQL_THREE_DURATION', '30s')
 ROUNDS = int(os.environ.get('GOCQL_THREE_ROUNDS', '2'))
 FRACTION = float(os.environ.get('GOCQL_THREE_FRACTION', '0.7'))
+# Families whose open-loop latency is not measured, with the reason. On the
+# reference host, unlogged 32 KiB single-partition batches at any rate the
+# drivers can offer (2,000/s and up) stall the nodes for seconds at a time
+# (commitlog queues, failure-detector RPC timeouts, in-flight hint limits), so
+# their latency measures the host's disk and container network, not the
+# drivers. Their closed-loop maximum is reported, marked cluster-bound.
+SKIP_LATENCY = dict(item.split('=', 1) for item in os.environ.get(
+    'GOCQL_THREE_SKIP_LATENCY', 'E1=cluster-bound: 32 KiB batches stall the nodes at any offered rate').split(';') if item)
 DRIVERS = ['old', 'v2', 'rust']
 
 # family: (workers, table to reset, {driver: case}, description)
@@ -134,11 +142,18 @@ def throughput(out, family, driver):
 
 def family_run(out, family):
     workers, table, cases, description = FAMILIES[family]
-    log(f'family {family}: {description}, {workers} workers; resetting {table}')
-    reset(table)
-    for r in range(ROUNDS):
-        for driver in order(r):
-            run_one(out, 'throughput', family, r, driver, 0)
+    log(f'family {family}: {description}, {workers} workers')
+    done = all(os.path.exists(os.path.join(out, f'throughput-{family}-r{r + 1}-{d}.json'))
+               for r in range(ROUNDS) for d in DRIVERS)
+    if not done:
+        log(f'family {family}: resetting {table}')
+        reset(table)
+        for r in range(ROUNDS):
+            for driver in order(r):
+                run_one(out, 'throughput', family, r, driver, 0)
+    if family in SKIP_LATENCY:
+        log(f'family {family}: latency not measured: {SKIP_LATENCY[family]}')
+        return
     maxima = {d: throughput(out, family, d) for d in DRIVERS}
     if any(v is None for v in maxima.values()):
         log(f'family {family}: missing throughput results {maxima}; skipping latency')
@@ -192,6 +207,9 @@ def report(out):
             rf = os.path.join(out, f'rate-{family}.json')
             if kind == 'latency' and os.path.exists(rf):
                 rate = f'{json.load(open(rf))["rate"]:,.0f}'
+            if kind == 'latency' and family in SKIP_LATENCY:
+                print(f'| {family} | {description} | {workers} | - | all | not measured: {SKIP_LATENCY[family]} |||||||||')
+                continue
             stats = {d: summary(sorted(glob.glob(os.path.join(out, f'{kind}-{family}-r*-{d}.json')))) for d in DRIVERS}
             base = stats['old']
             for d in DRIVERS:
