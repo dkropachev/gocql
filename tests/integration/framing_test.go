@@ -37,7 +37,6 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -99,7 +98,7 @@ func TestFraming(t *testing.T) {
 		t.Run("NotWorthIt", func(t *testing.T) {
 			session := createV2Session(t)
 			defer session.Close()
-			if implCluster.SessionData(session).InternalCfg.ProtoVersion < 5 {
+			if implExecution.InternalSessionData(session).InternalCfg.ProtoVersion < 5 {
 				t.Skip("compressed segments are only produced on protocol >= 5")
 			}
 			if getRandomConn(t, session).InternalCompressor == nil {
@@ -152,7 +151,7 @@ func TestFraming(t *testing.T) {
 					name:  "native protocol v5",
 					table: "metadata_changed",
 					gate: func(t *testing.T, session *gocql.Session, conn *driverConn) string {
-						if implCluster.SessionData(session).InternalCfg.ProtoVersion < protoVersion5 {
+						if implExecution.InternalSessionData(session).InternalCfg.ProtoVersion < protoVersion5 {
 							return "Metadata_changed mechanism is only available in proto > 4"
 						}
 						if *flagDistribution == "scylla" && flagCassVersion.Before(2025, 3, 0) {
@@ -279,7 +278,7 @@ func TestFraming(t *testing.T) {
 	t.Run("Segment", func(t *testing.T) {
 		session := createV2Session(t)
 		defer session.Close()
-		if implCluster.SessionData(session).InternalCfg.ProtoVersion < 5 {
+		if implExecution.InternalSessionData(session).InternalCfg.ProtoVersion < 5 {
 			t.Skip("segmented frames are only produced on protocol >= 5")
 		}
 		table := testTableName(t)

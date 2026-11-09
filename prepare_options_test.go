@@ -3,7 +3,13 @@
 
 package gocql
 
-import "testing"
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/scylladb/gocql/v2/cql"
+)
 
 func TestPrepareOptions(t *testing.T) {
 	t.Run("BindOptions", func(t *testing.T) {
@@ -16,16 +22,16 @@ func TestPrepareOptions(t *testing.T) {
 
 	t.Run("OnePrepareOptions", func(t *testing.T) {
 		t.Run("AcceptsAtMostOne", func(t *testing.T) {
-			if _, err := onePrepareOptions(nil); err != nil {
-				t.Fatal(err)
+			var s *Session
+			statement := cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "SELECT now() FROM system.local"}
+			ctx := context.Background()
+			for _, options := range [][]PrepareOptions{nil, {{Keyspace: "ks"}}} {
+				if _, err := s.Prepare(ctx, statement, options...); err == nil || strings.Contains(err.Error(), "at most one") {
+					t.Fatalf("%d PrepareOptions: %v", len(options), err)
+				}
 			}
-			want := PrepareOptions{Keyspace: "ks"}
-			got, err := onePrepareOptions([]PrepareOptions{want})
-			if err != nil || got.Keyspace != "ks" {
-				t.Fatalf("onePrepareOptions = %+v, %v", got, err)
-			}
-			if _, err := onePrepareOptions([]PrepareOptions{{}, {}}); err == nil {
-				t.Fatal("two PrepareOptions accepted")
+			if _, err := s.Prepare(ctx, statement, PrepareOptions{}, PrepareOptions{}); err == nil || !strings.Contains(err.Error(), "at most one") {
+				t.Fatalf("two PrepareOptions accepted: %v", err)
 			}
 		})
 	})

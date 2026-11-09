@@ -15,8 +15,8 @@ import (
 func TestSessionAPI(t *testing.T) {
 	t.Run("Subscribe", func(t *testing.T) {
 		t.Run("ClosePublishRace", func(t *testing.T) {
-			s := func() *Session {
-				opaqueStorageValuex := new(Session)
+			s := func() *implCluster.Core {
+				opaqueStorageValuex := new(implCluster.Core)
 				return opaqueStorageValuex
 			}()
 
@@ -37,8 +37,8 @@ func TestSessionAPI(t *testing.T) {
 		})
 
 		t.Run("FilterOverflowAndClose", func(t *testing.T) {
-			s := func() *Session {
-				opaqueStorageValue := new(Session)
+			s := func() *implCluster.Core {
+				opaqueStorageValue := new(implCluster.Core)
 				return opaqueStorageValue
 			}()
 

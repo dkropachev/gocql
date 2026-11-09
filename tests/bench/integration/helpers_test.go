@@ -223,11 +223,11 @@ func BindUnpreparedOwned[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a
 }
 
 func Exec[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.SessionOptions) (gocql.Result, error) {
-	return implExecution.Exec[R](a0, a1, a2, a3)
+	return implExecution.Exec[R](a0, implExecution.InternalCore(a1), a2, a3)
 }
 
 func Run[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.SessionOptions) (gocql.Rows[R], error) {
-	return implExecution.Run[R](a0, a1, a2, a3)
+	return implExecution.Run[R](a0, implExecution.InternalCore(a1), a2, a3)
 }
 
 type cassandraObserver struct {

@@ -18,10 +18,11 @@ import (
 	"syscall"
 	"unsafe"
 
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+
 	gocql "github.com/scylladb/gocql/v2"
 
 	"github.com/scylladb/gocql/v2/cql"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 // Keep native sockets unwrapped so net.Buffers retains the OS writev path.
@@ -138,7 +139,7 @@ func mem() runtime.MemStats { var m runtime.MemStats; runtime.ReadMemStats(&m); 
 
 // Negotiated metadata is captured outside all normal measurement intervals.
 func testNegotiated(s *gocql.Session) []map[string]interface{} {
-	p := implCluster.SessionData(s).InternalPool
+	p := implExecution.InternalSessionData(s).InternalPool
 	p.InternalMu.RLock()
 	defer p.InternalMu.RUnlock()
 	result := []map[string]interface{}{}

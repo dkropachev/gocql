@@ -62,7 +62,7 @@ func TestRouting(t *testing.T) {
 		}
 		// Match the original fault injection at the actual connection picker too:
 		// routing intentionally includes disconnected fallback candidates.
-		for _, host := range implCluster.SessionData(session).InternalHostSource.InternalGetHostsList() {
+		for _, host := range implExecution.InternalSessionData(session).InternalHostSource.InternalGetHostsList() {
 			implEndpoint.InternalHostInfoSetState(host, NodeDown)
 			defer implEndpoint.InternalHostInfoSetState(host, NodeUp)
 		}
@@ -207,28 +207,28 @@ func TestRouting(t *testing.T) {
 			{
 				name: "get-for-connection-ids",
 				method: func(controlConnection) ([]clientRoute, error) {
-					return getHostPortMappingForConnectionIDs(implCluster.SessionData(session).InternalControl, qualifiedTable, connectionIDs, false)
+					return getHostPortMappingForConnectionIDs(implExecution.InternalSessionData(session).InternalControl, qualifiedTable, connectionIDs, false)
 				},
 				expected: expected,
 			},
 			{
 				name: "get-for-pairs",
 				method: func(controlConnection) ([]clientRoute, error) {
-					return getHostPortMappingForPairs(implCluster.SessionData(session).InternalControl, qualifiedTable, makeClientRoutePairs(connectionIDs, hostIDs), false)
+					return getHostPortMappingForPairs(implExecution.InternalSessionData(session).InternalControl, qualifiedTable, makeClientRoutePairs(connectionIDs, hostIDs), false)
 				},
 				expected: expected,
 			},
 			{
 				name: "get-for-single-host-pairs",
 				method: func(controlConnection) ([]clientRoute, error) {
-					return getHostPortMappingForPairs(implCluster.SessionData(session).InternalControl, qualifiedTable, makeClientRoutePairs(connectionIDs, hostIDs[:1]), false)
+					return getHostPortMappingForPairs(implExecution.InternalSessionData(session).InternalControl, qualifiedTable, makeClientRoutePairs(connectionIDs, hostIDs[:1]), false)
 				},
 				expected: expectedFirstHost,
 			},
 			{
 				name: "get-for-connection-ids-tls",
 				method: func(controlConnection) ([]clientRoute, error) {
-					return getHostPortMappingForConnectionIDs(implCluster.SessionData(session).InternalControl, qualifiedTable, connectionIDs, true)
+					return getHostPortMappingForConnectionIDs(implExecution.InternalSessionData(session).InternalControl, qualifiedTable, connectionIDs, true)
 				},
 				expected: expectedTLS,
 			},
@@ -236,7 +236,7 @@ func TestRouting(t *testing.T) {
 
 		for _, tc := range tcases {
 			t.Run(tc.name, func(t *testing.T) {
-				got, err := tc.method(implCluster.SessionData(session).InternalControl)
+				got, err := tc.method(implExecution.InternalSessionData(session).InternalControl)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -301,7 +301,7 @@ func TestRouting(t *testing.T) {
 					t.Fatalf("filtered host remains eligible: %+v", host)
 				}
 			}
-			if ch := implCluster.SessionData(session).InternalControl.InternalGetConn(); ch != nil && ch.InternalHost.ConnectAddress().String() == filtered {
+			if ch := implExecution.InternalSessionData(session).InternalControl.InternalGetConn(); ch != nil && ch.InternalHost.ConnectAddress().String() == filtered {
 				t.Fatal("control connection selected a filtered host")
 			}
 		})
@@ -337,7 +337,7 @@ func TestRouting(t *testing.T) {
 					t.Fatalf("filtered host remains eligible: %+v", host)
 				}
 			}
-			if ch := implCluster.SessionData(session).InternalControl.InternalGetConn(); ch != nil && ch.InternalHost.ConnectAddress().String() == filtered {
+			if ch := implExecution.InternalSessionData(session).InternalControl.InternalGetConn(); ch != nil && ch.InternalHost.ConnectAddress().String() == filtered {
 				t.Fatal("control connection selected a filtered host")
 			}
 		})
@@ -409,7 +409,7 @@ func TestRouting(t *testing.T) {
 		t.Run("OverriddenKeyspace", func(t *testing.T) {
 			session := createV2Session(t)
 			defer session.Close()
-			if implCluster.SessionData(session).InternalCfg.ProtoVersion < 5 {
+			if implExecution.InternalSessionData(session).InternalCfg.ProtoVersion < 5 {
 				t.Skip("This tests only runs on proto > 4 due SetKeyspace availability")
 			}
 			ks := testKeyspaceName(t)
@@ -623,7 +623,7 @@ func TestRouting(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer s.Close()
-			if !implCluster.InternalSessionGetConn(s).InternalFramers.InternalDefaults.InternalTabletsRoutingV2 {
+			if !implCluster.InternalSessionGetConn(implExecution.InternalCore(s)).InternalFramers.InternalDefaults.InternalTabletsRoutingV2 {
 				t.Skip("server did not advertise TABLETS_ROUTING_V2_EXPERIMENTAL; source-accurate wire fixtures cover V2 separately")
 			}
 			ks := testKeyspaceName(t, fmt.Sprintf("tablet_leader_%x", time.Now().UnixNano()))
@@ -799,7 +799,7 @@ func TestRouting(t *testing.T) {
 					authoritative[i].Start = authoritative[i-1].End
 				}
 			}
-			v2 := implCluster.InternalSessionGetConn(s).InternalFramers.InternalDefaults.InternalTabletsRoutingV2
+			v2 := implCluster.InternalSessionGetConn(implExecution.InternalCore(s)).InternalFramers.InternalDefaults.InternalTabletsRoutingV2
 			t.Logf("tablet v2 negotiated=%t, server table ID=%s, authoritative ranges=%d", v2, id, len(authoritative))
 			for key := int32(0); key < 8; key++ {
 				b := codecTestMust(BindBorrowed(read, key))

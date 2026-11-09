@@ -33,12 +33,13 @@ import (
 	"testing"
 	"time"
 
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+
 	"github.com/stretchr/testify/require"
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/retry"
 )
 
@@ -69,7 +70,7 @@ func TestBatch(t *testing.T) {
 			t.Parallel()
 			session := createV2Session(t)
 			defer session.Close()
-			if implCluster.SessionData(session).InternalCfg.ProtoVersion < 4 {
+			if implExecution.InternalSessionData(session).InternalCfg.ProtoVersion < 4 {
 				t.Skip("Unset Values are not supported in protocol < 4")
 			}
 			table := testTableName(t)
@@ -255,7 +256,7 @@ func TestBatch(t *testing.T) {
 			ctx := context.Background()
 			session := createV2Session(t)
 			defer session.Close()
-			if implCluster.SessionData(session).InternalCfg.ProtoVersion < protoVersion5 {
+			if implExecution.InternalSessionData(session).InternalCfg.ProtoVersion < protoVersion5 {
 				t.Skip("keyspace for BATCH message is not supported in protocol < 5")
 			}
 			const keyspace = "gocql_keyspace_override_test"
@@ -293,7 +294,7 @@ func TestBatch(t *testing.T) {
 			ctx := context.Background()
 			session := createV2Session(t)
 			defer session.Close()
-			if implCluster.SessionData(session).InternalCfg.ProtoVersion < protoVersion5 {
+			if implExecution.InternalSessionData(session).InternalCfg.ProtoVersion < protoVersion5 {
 				t.Skip("Batch now in seconds are only available on protocol >= 5")
 			}
 			table := testTableName(t)

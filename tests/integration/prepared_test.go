@@ -35,7 +35,6 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 	"github.com/scylladb/gocql/v2/internal/tests"
@@ -104,7 +103,7 @@ func TestPrepared(t *testing.T) {
 		t.Run("OverriddenKeyspace", func(t *testing.T) {
 			session := createV2Session(t)
 			defer session.Close()
-			if implCluster.SessionData(session).InternalCfg.ProtoVersion < 5 {
+			if implExecution.InternalSessionData(session).InternalCfg.ProtoVersion < 5 {
 				t.Skip("This tests only runs on proto > 4 due SetKeyspace availability")
 			}
 			ks := testKeyspaceName(t)

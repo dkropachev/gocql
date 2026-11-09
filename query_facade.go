@@ -23,10 +23,12 @@ func NewStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder cql.StreamRow
 	return prepared.StreamQuery(decoder, options)
 }
 
+// Deprecated: use (*Session).StreamQuery.
 func NewUnpreparedStreamQuery[P, B, R any](session *Session, statement cql.Statement[P, B], decoder cql.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
-	return execution.NewUnpreparedStreamQuery(session, statement, decoder, options)
+	return session.StreamQuery(statement, decoder, options)
 }
 
+// Deprecated: use (*Session).Query.
 func NewUnpreparedQuery[P, R any](session *Session, statement cql.Statement[P, R], options Options) (*Query[P, R], error) {
-	return execution.NewUnpreparedQuery(session, statement, options)
+	return session.Query(statement, options)
 }

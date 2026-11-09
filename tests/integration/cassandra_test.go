@@ -96,7 +96,7 @@ func waitForHostConns(t *testing.T, session *gocql.Session) map[string]*driverCo
 		pending = pending[:0]
 		down = down[:0]
 
-		for _, host := range implCluster.SessionData(session).InternalHostSource.InternalGetHostsList() {
+		for _, host := range implExecution.InternalSessionData(session).InternalHostSource.InternalGetHostsList() {
 			// Collected rather than merely skipped: a host that stays down keeps the
 			// count below *clusterSize while contributing nothing to pending, so the
 			// failure below would otherwise report "2 of 3 connected, 0 still without
@@ -107,7 +107,7 @@ func waitForHostConns(t *testing.T, session *gocql.Session) map[string]*driverCo
 			}
 
 			addr := host.ConnectAddressAndPort()
-			pool, found := implCluster.SessionData(session).InternalPool.InternalGetPool(host)
+			pool, found := implExecution.InternalSessionData(session).InternalPool.InternalGetPool(host)
 			if !found {
 				pending = append(pending, addr)
 				continue
@@ -147,7 +147,7 @@ func getRandomConn(t *testing.T, session *gocql.Session) *driverConn {
 
 	var conn *driverConn
 	if !pollUntil(hostConnWaitTimeout, func() bool {
-		conn = implCluster.InternalSessionGetConn(session)
+		conn = implCluster.InternalSessionGetConn(implExecution.InternalCore(session))
 		return conn != nil
 	}) {
 		t.Fatal("unable to get a connection")
@@ -213,7 +213,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 	create := cassandraUnprepared(t, "CREATE TABLE "+qualified+"(id int PRIMARY KEY)", cql.EmptyRowDecoder)
 	_, err := Exec(ctx, session, create, bindOptions(session, options))
 	require.NoError(t, err)
-	require.NoError(t, implCluster.InternalSessionAwaitV2SchemaAgreementOn(session, ctx, conn))
+	require.NoError(t, implCluster.InternalSessionAwaitV2SchemaAgreementOn(implExecution.InternalCore(session), ctx, conn))
 	write := cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id) VALUES(?)", []cql.Value{cql.IntValue(1)}, prepareOptions)
 	_, err = Exec(ctx, session, write, bindOptions(session, options))
 	require.NoError(t, err)
@@ -240,7 +240,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 	require.NoError(t, err)
 	// Include the exact host that applied ALTER; checking another host can
 	// falsely agree on the old version before schema propagation starts.
-	require.NoError(t, implCluster.InternalSessionAwaitV2SchemaAgreementOn(session, ctx, conn))
+	require.NoError(t, implCluster.InternalSessionAwaitV2SchemaAgreementOn(implExecution.InternalCore(session), ctx, conn))
 	write = cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id,new_col) VALUES(?,?)", []cql.Value{cql.IntValue(2), cql.IntValue(10)}, prepareOptions)
 	_, err = Exec(ctx, session, write, bindOptions(session, options))
 	require.NoError(t, err)
@@ -262,7 +262,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 		require.NoError(t, err)
 		require.Equal(t, int64(10), value)
 	}
-	require.Equal(t, before.InternalGeneration, implCluster.InternalSessionTypedGeneration(session), "metadata-ID coverage must not be replaced by generation-triggered reprepare")
+	require.Equal(t, before.InternalGeneration, implCluster.InternalSessionTypedGeneration(implExecution.InternalCore(session)), "metadata-ID coverage must not be replaced by generation-triggered reprepare")
 	checkRows()
 	after := cached()
 	require.NotEqual(t, before.InternalMetadataID, after.InternalMetadataID)

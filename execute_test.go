@@ -3,6 +3,7 @@ package gocql
 import (
 	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 
 	"encoding/binary"
 	"net"
@@ -14,12 +15,12 @@ import (
 func runtimeTestSession(t testing.TB, n int) (*Session, []*driverConn, []net.Conn) {
 	t.Helper()
 	s := func() *Session {
-		opaqueStorageValue := new(Session)
-		implCluster.SessionData(opaqueStorageValue).InternalLogger = nopLogger{}
+		opaqueStorageValue := implExecution.InternalWrapSession(new(implCluster.Core))
+		implExecution.InternalSessionData(opaqueStorageValue).InternalLogger = nopLogger{}
 		return opaqueStorageValue
 	}()
-	implCluster.SessionData(s).InternalHostSource = &ringDescriber{InternalHosts: map[string]*HostInfo{}}
-	implCluster.SessionData(s).InternalPool = &policyConnPool{InternalHostConnPools: map[cql.UUID]*hostConnPool{}}
+	implExecution.InternalSessionData(s).InternalHostSource = &ringDescriber{InternalHosts: map[string]*HostInfo{}}
+	implExecution.InternalSessionData(s).InternalPool = &policyConnPool{InternalHostConnPools: map[cql.UUID]*hostConnPool{}}
 	var conns []*driverConn
 	var peers []net.Conn
 	for i := 0; i < n; i++ {
@@ -33,10 +34,10 @@ func runtimeTestSession(t testing.TB, n int) (*Session, []*driverConn, []net.Con
 		}()
 		conn.InternalHost = host
 		conn.InternalHooks = newConnectionHooks(s)
-		implCluster.SessionData(s).InternalHostSource.InternalHosts[id.String()] = host
+		implExecution.InternalSessionData(s).InternalHostSource.InternalHosts[id.String()] = host
 		picker := newDefaultConnPicker(1)
 		picker.Put(conn)
-		implCluster.SessionData(s).InternalPool.InternalHostConnPools[id] = &hostConnPool{InternalHost: host, InternalConnPicker: picker}
+		implExecution.InternalSessionData(s).InternalPool.InternalHostConnPools[id] = &hostConnPool{InternalHost: host, InternalConnPicker: picker}
 		conns = append(conns, conn)
 		peers = append(peers, peer)
 		go conn.InternalServe(conn.InternalCtx)

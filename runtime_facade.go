@@ -87,7 +87,7 @@ func BindOptions(session *Session, options Options) (SessionOptions, error) {
 	if session == nil {
 		return SessionOptions{}, errors.New("gocql: BindOptions requires a session")
 	}
-	return implExecution.InternalBindOptions(session, options)
+	return implExecution.InternalBindOptions(implExecution.InternalCore(session), options)
 }
 
 const OverflowEvent = implCluster.OverflowEvent
@@ -97,23 +97,10 @@ type PageLease = implExecution.PageLease
 
 // Prepare prepares statement on session. At most one PrepareOptions may be
 // given; none prepares with the session's keyspace on any host.
+//
+// Deprecated: use (*Session).Prepare.
 func Prepare[P any, R any](ctx context.Context, session *Session, statement cql.Statement[P, R], options ...PrepareOptions) (*Prepared[P, R], error) {
-	o, err := onePrepareOptions(options)
-	if err != nil {
-		return nil, err
-	}
-	return implExecution.Prepare[P, R](ctx, session, statement, o)
-}
-
-func onePrepareOptions(options []PrepareOptions) (PrepareOptions, error) {
-	switch len(options) {
-	case 0:
-		return PrepareOptions{}, nil
-	case 1:
-		return options[0], nil
-	default:
-		return PrepareOptions{}, errors.New("gocql: at most one PrepareOptions")
-	}
+	return session.Prepare(ctx, statement, options...)
 }
 
 type PrepareOptions = implExecution.PrepareOptions
@@ -125,7 +112,7 @@ type Rows[R any] = implExecution.Rows[R]
 
 const SchemaEvent = implCluster.SchemaEvent
 
-type Session = implCluster.Core
+type Session = implExecution.Session
 
 const StatusEvent = implCluster.StatusEvent
 

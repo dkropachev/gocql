@@ -37,12 +37,13 @@ import (
 	"testing"
 	"time"
 
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+
 	"github.com/stretchr/testify/require"
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 func TestPaging(t *testing.T) {
@@ -393,8 +394,8 @@ func TestPaging(t *testing.T) {
 		deadline := time.Now().Add(20 * time.Second)
 		for {
 			ready := true
-			for _, host := range implCluster.SessionData(s).InternalHostSource.InternalGetHostsList() {
-				pool, ok := implCluster.SessionData(s).InternalPool.InternalGetPool(host)
+			for _, host := range implExecution.InternalSessionData(s).InternalHostSource.InternalGetHostsList() {
+				pool, ok := implExecution.InternalSessionData(s).InternalPool.InternalGetPool(host)
 				if !ok {
 					ready = false
 					break

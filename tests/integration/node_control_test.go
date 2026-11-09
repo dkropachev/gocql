@@ -12,9 +12,10 @@ import (
 	"testing"
 	"time"
 
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
@@ -57,7 +58,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	}
 
 	var target cql.UUID
-	for _, host := range implCluster.SessionData(s).InternalHostSource.InternalGetHostsList() {
+	for _, host := range implExecution.InternalSessionData(s).InternalHostSource.InternalGetHostsList() {
 		if host.ConnectAddress().String() == node.IP() {
 			target = implEndpoint.InternalHostInfoHostUUID(host)
 		}

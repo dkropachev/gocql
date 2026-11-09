@@ -44,6 +44,8 @@ import (
 	"time"
 	"unsafe"
 
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+
 	"github.com/stretchr/testify/require"
 
 	gocql "github.com/scylladb/gocql/v2"
@@ -336,7 +338,7 @@ func TestSession(t *testing.T) {
 				}
 			}
 			clone := old.Clone()
-			cache := implCluster.SessionData(s).InternalConnCfg.InternalReceiveCache
+			cache := implExecution.InternalSessionData(s).InternalConnCfg.InternalReceiveCache
 			if n, c := cache.Storage(); n > wire.ReceiveCacheMaxBytes || c > wire.ReceiveCacheMaxObjects {
 				t.Fatal("idle cache bound", n, c)
 			}
@@ -373,8 +375,8 @@ func TestSession(t *testing.T) {
 			// Session setters are replaced by atomic profile snapshots. Fractional
 			// prefetch became a bounded count of zero or one physical page.
 			session := func() *gocql.Session {
-				opaqueStorageValue := new(gocql.Session)
-				implCluster.SessionData(opaqueStorageValue).InternalLogger = nopLogger{}
+				opaqueStorageValue := implExecution.InternalWrapSession(new(implCluster.Core))
+				implExecution.InternalSessionData(opaqueStorageValue).InternalLogger = nopLogger{}
 				return opaqueStorageValue
 			}()
 			runtimeFor(session).InternalSetProfile(&profile)
@@ -588,7 +590,7 @@ func TestSession(t *testing.T) {
 			session, err := gocql.Connect(context.Background(), mustBuild(t, config))
 			require.NoError(t, err)
 			defer session.Close()
-			require.NotZero(t, implCluster.SessionData(session).InternalCfg.ProtoVersion)
+			require.NotZero(t, implExecution.InternalSessionData(session).InternalCfg.ProtoVersion)
 		})
 		t.Run("EmptyHosts", func(t *testing.T) {
 			t.Parallel()
@@ -769,7 +771,7 @@ func TestSession(t *testing.T) {
 										t.Fatal("failed to create session", err.Error())
 									}
 									defer s.Close()
-									err = implCluster.SessionData(s).InternalControl.InternalReconnect()
+									err = implExecution.InternalSessionData(s).InternalControl.InternalReconnect()
 									if err != nil {
 										t.Fatalf("failed to reconnect to control connection: %v", err)
 									}
@@ -818,7 +820,7 @@ func TestSession(t *testing.T) {
 					if time.Now().UTC().After(endtime) {
 						return fmt.Errorf("timed out waiting for all connections opened")
 					}
-					missing, err := clustertestkit.MissingConnections(session)
+					missing, err := clustertestkit.MissingConnections(implExecution.InternalCore(session))
 					if err != nil {
 						return fmt.Errorf("failed to get missing connections count: %w", err)
 					}
@@ -839,7 +841,7 @@ func TestSession(t *testing.T) {
 
 			for round := 0; round < 2; round++ {
 				previousHandshakes, previousResumed := handshakes.Load(), resumed.Load()
-				clustertestkit.CloseAllConnections(session)
+				clustertestkit.CloseAllConnections(implExecution.InternalCore(session))
 				if err := waitAllConnectionsOpened(); err != nil {
 					t.Fatal(err)
 				}
@@ -965,8 +967,8 @@ func TestSession(t *testing.T) {
 		config := createV2Cluster(func(c *gocql.ConfigBuilder) { c.WithReconnect(cassandraReconnect{}) })
 		session := createV2SessionFromConfig(config, t, false)
 		defer session.Close()
-		host := implCluster.SessionData(session).InternalHostSource.InternalGetHostsList()[0]
-		implCluster.InternalSessionHandleNodeDown(session, host.ConnectAddress(), host.Port())
+		host := implExecution.InternalSessionData(session).InternalHostSource.InternalGetHostsList()[0]
+		implCluster.InternalSessionHandleNodeDown(implExecution.InternalCore(session), host.ConnectAddress(), host.Port())
 		defer implEndpoint.InternalHostInfoSetState(host, NodeUp)
 		require.Equal(t, NodeDown, host.State())
 		require.True(t, pollUntil(31*time.Second, func() bool { return host.State() == NodeUp }), "host did not reconnect")
@@ -1309,7 +1311,7 @@ func TestSession(t *testing.T) {
 				// against has to belong to the same node. Re-reading the pool size also
 				// means that should a pool start filling again, the bar rises with it
 				// instead of leaving the loop free to exit on a stale count.
-				ch := implCluster.SessionData(s).InternalControl.InternalGetConn()
+				ch := implExecution.InternalSessionData(s).InternalControl.InternalGetConn()
 				if ch == nil {
 					t.Fatal("expected the session to have a control connection")
 				}
@@ -1319,7 +1321,7 @@ func TestSession(t *testing.T) {
 				// pool for that host, plus the control connection itself, which is
 				// dialed outside the pool.
 				wantConns := 1
-				if hostPool, ok := implCluster.SessionData(s).InternalPool.InternalGetPool(controlHost); ok {
+				if hostPool, ok := implExecution.InternalSessionData(s).InternalPool.InternalGetPool(controlHost); ok {
 					wantConns += hostPool.Size()
 				}
 
@@ -1384,7 +1386,7 @@ func TestSession(t *testing.T) {
 				// understands. The fake server the unit tests run against cannot
 				// exercise either side of that gate.
 				wantServerSide := false
-				if ch := implCluster.SessionData(s).InternalControl.InternalGetConn(); ch != nil {
+				if ch := implExecution.InternalSessionData(s).InternalControl.InternalGetConn(); ch != nil {
 					wantServerSide = ch.InternalConn.InternalIsScyllaConn()
 				}
 				if got := report.ControlPlane.Queries.System.Timeout.ServerSideMs != nil; got != wantServerSide {

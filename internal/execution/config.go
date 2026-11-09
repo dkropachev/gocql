@@ -9,7 +9,7 @@ import (
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
-func OpenSingleHost(ctx context.Context, config Config, hostID UUID) (*implCluster.Core, error) {
+func OpenSingleHost(ctx context.Context, config Config, hostID UUID) (*Session, error) {
 	if hostID.IsEmpty() {
 		return nil, typeValidation("host ID", "empty UUID")
 	}
@@ -18,11 +18,15 @@ func OpenSingleHost(ctx context.Context, config Config, hostID UUID) (*implClust
 	return Connect(ctx, config)
 }
 
-func Connect(ctx context.Context, config Config) (*implCluster.Core, error) {
-	return implCluster.InternalConnectCluster(ctx, config, func(s *implCluster.Core, c Config) *Config {
+func Connect(ctx context.Context, config Config) (*Session, error) {
+	core, err := implCluster.InternalConnectCluster(ctx, config, func(s *implCluster.Core, c Config) *Config {
 		rt := InternalRuntimeFor(s)
 		rt.InternalConfig = c
 		rt.InternalSetProfile(c.DefaultProfile)
 		return &rt.InternalConfig
 	})
+	if err != nil {
+		return nil, err
+	}
+	return InternalWrapSession(core), nil
 }

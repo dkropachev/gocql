@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
@@ -51,11 +50,11 @@ func TestTLSSourceSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Close()
-	dialer, ok := implCluster.SessionData(session).InternalConnCfg.HostDialer.(*transport.InternalV2TLSHostDialer)
+	dialer, ok := InternalSessionData(session).InternalConnCfg.HostDialer.(*transport.InternalV2TLSHostDialer)
 	if !ok || dialer.InternalConfig.TLSSource != source {
 		t.Fatal("the session dialer does not read the TLS source")
 	}
-	if err := execTestStatement(ctx, session, "void", Options{}); err != nil {
+	if err := execTestStatement(ctx, InternalCore(session), "void", Options{}); err != nil {
 		t.Fatal(err)
 	}
 }

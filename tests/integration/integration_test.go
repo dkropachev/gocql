@@ -32,10 +32,11 @@ import (
 	"reflect"
 	"testing"
 
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+
 	gocql "github.com/scylladb/gocql/v2"
 
 	"github.com/scylladb/gocql/v2/cql"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 func assertV2CustomPayload(t testing.TB, want, got []cql.PayloadEntry) {
@@ -71,7 +72,7 @@ func requireCassandraFixtures(t *testing.T) {
 
 // readV2ClientOptions keeps node-local startup reports on the control connection.
 func readV2ClientOptions(ctx context.Context, session *gocql.Session, stmt string) ([]map[string]string, error) {
-	handle := implCluster.SessionData(session).InternalControl.InternalGetConn()
+	handle := implExecution.InternalSessionData(session).InternalControl.InternalGetConn()
 	if handle == nil {
 		return nil, errNoControl
 	}
@@ -101,7 +102,7 @@ func readV2ClientOptions(ctx context.Context, session *gocql.Session, stmt strin
 }
 
 func queryV2ControlKey(ctx context.Context, session *gocql.Session) error {
-	handle := implCluster.SessionData(session).InternalControl.InternalGetConn()
+	handle := implExecution.InternalSessionData(session).InternalControl.InternalGetConn()
 	if handle == nil {
 		return errNoControl
 	}
