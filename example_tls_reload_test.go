@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"log"
 	"os"
+	"sync/atomic"
 
 	gocql "github.com/scylladb/gocql/v2"
 )
@@ -36,10 +37,17 @@ func ExampleNewTLSFiles() {
 	// files.Err reports a change that could not be loaded.
 }
 
+// rotatingTLS is a TLSSource the application updates, for example from a
+// secrets manager.
+type rotatingTLS struct{ current atomic.Pointer[tls.Config] }
+
+func (r *rotatingTLS) TLSConfig() *tls.Config { return r.current.Load() }
+
 // Replace the whole TLS configuration of running sessions.
-func ExampleTLSHolder() {
-	holder := gocql.NewTLSHolder(&tls.Config{MinVersion: tls.VersionTLS13})
-	config, err := gocql.NewConfig("192.168.1.1").WithTLS(holder).Build()
+func ExampleTLSSource() {
+	source := &rotatingTLS{}
+	source.current.Store(&tls.Config{MinVersion: tls.VersionTLS13})
+	config, err := gocql.NewConfig("192.168.1.1").WithTLS(source).Build()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -59,14 +67,11 @@ func ExampleTLSHolder() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = holder.Update(&tls.Config{
+	source.current.Store(&tls.Config{
 		MinVersion:         tls.VersionTLS13,
 		RootCAs:            roots,
 		Certificates:       []tls.Certificate{pair},
 		ClientSessionCache: tls.NewLRUClientSessionCache(0), // new identity, new tickets
 	})
-	if err != nil {
-		log.Fatal(err)
-	}
 	// Open connections keep their TLS session; new dials use this config.
 }

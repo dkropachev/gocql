@@ -160,7 +160,7 @@ func (b *ConfigBuilder) WithAuth(provider auth.Provider) *ConfigBuilder {
 
 // WithTLS encrypts every connection with the configuration source returns
 // when the connection is dialed: StaticTLS for a fixed configuration,
-// TLSHolder or NewTLSFiles for one that changes while the session runs. Build
+// NewTLSFiles or your own TLSSource for one that changes while the session runs. Build
 // validates the configuration source returns at that time. Unless it skips
 // verification or names a server, each connection verifies the node's IP
 // address. Default plaintext.

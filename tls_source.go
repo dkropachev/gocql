@@ -19,7 +19,7 @@ import (
 // configuration can change while sessions run. The driver calls TLSConfig on
 // every dial, from many goroutines, and copies the result; it must be fast and
 // must not return nil. Connections already open keep the configuration they
-// were dialed with. Pass a source to ConfigBuilder.WithTLS; StaticTLS, TLSHolder and
+// were dialed with. Pass a source to ConfigBuilder.WithTLS; StaticTLS and
 // TLSFileSource are ready-made sources.
 type TLSSource = implSettings.TLSSource
 
@@ -32,36 +32,6 @@ func StaticTLS(config *tls.Config) TLSSource {
 type staticTLS struct{ config *tls.Config }
 
 func (s staticTLS) TLSConfig() *tls.Config { return s.config }
-
-// TLSHolder is a TLSSource whose configuration is replaced by Update. One
-// holder can serve several sessions. It is safe for concurrent use.
-type TLSHolder struct {
-	current atomic.Pointer[tls.Config]
-}
-
-// NewTLSHolder returns a holder serving a copy of config. A holder made from
-// nil serves nil, which ConfigBuilder.Build rejects.
-func NewTLSHolder(config *tls.Config) *TLSHolder {
-	h := &TLSHolder{}
-	if config != nil {
-		h.current.Store(implSettings.InternalCloneV2TLSConfig(config))
-	}
-	return h
-}
-
-// Update makes a copy of config the configuration of connections dialed from
-// now on. A session whose client routes require verified TLS fails such dials
-// if config skips verification without its own check.
-func (h *TLSHolder) Update(config *tls.Config) error {
-	if config == nil {
-		return &cqlerr.ValidationError{Field: "TLSHolder.Update", Err: errors.New("config is required")}
-	}
-	h.current.Store(implSettings.InternalCloneV2TLSConfig(config))
-	return nil
-}
-
-// TLSConfig returns the current configuration. Callers must not modify it.
-func (h *TLSHolder) TLSConfig() *tls.Config { return h.current.Load() }
 
 // TLSFiles names the PEM files of a TLSFileSource.
 type TLSFiles struct {

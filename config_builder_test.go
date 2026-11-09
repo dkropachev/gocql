@@ -132,9 +132,9 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("TLS", func(t *testing.T) {
-		holder := NewTLSHolder(&tls.Config{ServerName: "node"})
-		c := mustBuildConfig(t, NewConfig("h").WithTLS(StaticTLS(&tls.Config{ServerName: "static"})).WithTLS(holder)).settings
-		if c.TLSSource != holder || c.TLS == nil || c.TLS.ServerName != "node" {
+		source := StaticTLS(&tls.Config{ServerName: "node"})
+		c := mustBuildConfig(t, NewConfig("h").WithTLS(StaticTLS(&tls.Config{ServerName: "first"})).WithTLS(source)).settings
+		if c.TLSSource != source || c.TLS == nil || c.TLS.ServerName != "node" {
 			t.Fatal("the last WithTLS did not win or its config was not validated")
 		}
 		for name, tc := range map[string]struct {
@@ -143,8 +143,8 @@ func TestConfigBuilder(t *testing.T) {
 		}{
 			"Nil":              {NewConfig("h").WithTLS(nil), "source is required"},
 			"NoConfig":         {NewConfig("h").WithTLS(StaticTLS(nil)), "returned no config"},
-			"UnixSocket":       {NewConfig("/var/lib/scylla/cql.m").WithTLS(holder), "Unix TLS"},
-			"UnverifiedRoutes": {NewConfig("h").WithClientRoutes(NewClientRoutes("c").WithTLS()).WithTLS(NewTLSHolder(&tls.Config{InsecureSkipVerify: true})), "client routes TLS"},
+			"UnixSocket":       {NewConfig("/var/lib/scylla/cql.m").WithTLS(source), "Unix TLS"},
+			"UnverifiedRoutes": {NewConfig("h").WithClientRoutes(NewClientRoutes("c").WithTLS()).WithTLS(StaticTLS(&tls.Config{InsecureSkipVerify: true})), "client routes TLS"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				if _, err := tc.b.Build(); err == nil || !strings.Contains(err.Error(), tc.want) {

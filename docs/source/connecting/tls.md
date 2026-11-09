@@ -31,16 +31,6 @@ early. `Build` validates the config the source returns at that time. A source
 must never return nil; a dial that gets nil fails
 instead of falling back to plaintext.
 
-`TLSHolder` is a source you update by hand. One holder can serve several
-sessions:
-
-```go
-holder := gocql.NewTLSHolder(&tls.Config{MinVersion: tls.VersionTLS13, RootCAs: roots})
-config, err := gocql.NewConfig("10.0.0.1").WithTLS(holder).Build()
-// later, for example after a rotation event:
-err = holder.Update(newConfig) // copied; new dials use it
-```
-
 `TLSFileSource` reloads the client certificate, key and CA from PEM files:
 
 ```go
@@ -63,10 +53,24 @@ immediately.
 
 A resumed TLS 1.3 connection does not send its client certificate again. When
 the file certificate changes and the base has a `ClientSessionCache`, the
-source switches to a new cache so no connection resumes the old identity. When
-you give a holder a new identity, give it a new `ClientSessionCache` too.
+source switches to a new cache so no connection resumes the old identity.
 
 Any type with a `TLSConfig() *tls.Config` method is a source, for example one
-fed by Vault or cert-manager. `GetClientCertificate` in a fixed config still
+fed by Vault or cert-manager:
+
+```go
+type rotatingTLS struct{ current atomic.Pointer[tls.Config] }
+
+func (r *rotatingTLS) TLSConfig() *tls.Config { return r.current.Load() }
+
+source := &rotatingTLS{}
+source.current.Store(initial)
+config, err := gocql.NewConfig("10.0.0.1").WithTLS(source).Build()
+// later: new dials use the new config
+source.current.Store(next)
+```
+
+Do not modify a config after storing it; store a new one. When the client
+identity changes, give the new config a new `ClientSessionCache`. `GetClientCertificate` in a fixed config still
 rotates only the client certificate on every handshake; it cannot be combined
 with `TLSFiles.CertFile`.

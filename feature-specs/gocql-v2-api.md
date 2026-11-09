@@ -1501,9 +1501,7 @@ configuration serves every node; without an explicit ServerName each
 connection verifies the node's IP address. `ConfigBuilder.WithTLS`
 takes a `TLSSource` (`TLSConfig() *tls.Config`) that the dialer asks for the
 config of every new connection; `StaticTLS(*tls.Config)` serves a fixed copy; open connections keep theirs, and a nil result
-fails the dial. Build validates the source's config at that time. `TLSHolder`
-(`NewTLSHolder`, `Update`) is replaced by hand and can serve several sessions;
-`TLSFileSource` (`NewTLSFiles(base, TLSFiles)`) loads the client
+fails the dial. Build validates the source's config at that time. `TLSFileSource` (`NewTLSFiles(base, TLSFiles)`) loads the client
 certificate/key and CA from files over base, fails if they cannot be loaded,
 and rechecks them during a dial once `Interval` has passed, keeping the current
 files when a check fails. Context-taking hooks honor cancellation; synchronous callbacks are

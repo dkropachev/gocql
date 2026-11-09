@@ -103,46 +103,6 @@ func (f *tlsTestFiles) trusts(config *tls.Config, serial int64) bool {
 }
 
 func TestTLSSource(t *testing.T) {
-	t.Run("Holder", func(t *testing.T) {
-		config := &tls.Config{ServerName: "first"}
-		holder := NewTLSHolder(config)
-		config.ServerName = "mutated"
-		if got := holder.TLSConfig().ServerName; got != "first" {
-			t.Fatalf("ServerName = %q, want the copy taken at NewTLSHolder", got)
-		}
-		next := &tls.Config{ServerName: "second"}
-		if err := holder.Update(next); err != nil {
-			t.Fatal(err)
-		}
-		next.ServerName = "mutated"
-		if got := holder.TLSConfig().ServerName; got != "second" {
-			t.Fatalf("ServerName = %q, want the copy taken at Update", got)
-		}
-		if err := holder.Update(nil); err == nil || holder.TLSConfig().ServerName != "second" {
-			t.Fatal("nil update accepted or replaced the config")
-		}
-		if NewTLSHolder(nil).TLSConfig() != nil {
-			t.Fatal("holder made from nil serves a config")
-		}
-	})
-
-	t.Run("Holder/Concurrent", func(t *testing.T) {
-		holder := NewTLSHolder(&tls.Config{})
-		var wg sync.WaitGroup
-		for i := range 16 {
-			wg.Go(func() {
-				for range 100 {
-					if i%2 == 0 {
-						_ = holder.Update(&tls.Config{MinVersion: tls.VersionTLS12})
-					} else if holder.TLSConfig() == nil {
-						t.Error("nil config")
-					}
-				}
-			})
-		}
-		wg.Wait()
-	})
-
 	t.Run("Files/Arguments", func(t *testing.T) {
 		pki := TLSFiles{CertFile: "testdata/pki/gocql.crt", KeyFile: "testdata/pki/gocql.key", CAFile: "testdata/pki/ca.crt"}
 		getCert := &tls.Config{GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) { return nil, nil }}
