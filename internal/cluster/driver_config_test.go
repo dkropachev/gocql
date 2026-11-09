@@ -38,8 +38,6 @@ type fakeHostSelectionPolicy struct {
 	HostSelectionPolicy
 }
 
-func ptr[T any](v T) *T { return &v }
-
 // fakeShardDialer is a HostDialer that can target a shard, like the
 // *scyllaDialer the driver substitutes when no HostDialer is configured.
 type fakeShardDialer struct{ fakeHostDialer }

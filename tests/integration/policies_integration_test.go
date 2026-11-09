@@ -119,7 +119,7 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster gocql.Config, keyspac
 		if err != nil {
 			t.Fatal(err)
 		}
-		handle := profileOf(profile)
+		handle := new(profile)
 		rows, err := Run(ctx, session, bound, bindOptions(session, gocql.Options{Profile: handle, Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}))
 		if err != nil {
 			t.Fatal(err)

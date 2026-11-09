@@ -511,7 +511,7 @@ func TestExecution(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			profile := settings.InternalDefaultProfile()
 			profile.Retry = runtimeDelayedRetry{delay: time.Millisecond}
-			handle := profileOf(profile)
+			handle := new(profile)
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
@@ -554,7 +554,7 @@ func TestExecution(t *testing.T) {
 			scheduled := make(chan struct{}, 1)
 			profile := settings.InternalDefaultProfile()
 			profile.Retry = runtimeDelayedRetry{delay: time.Hour, scheduled: scheduled}
-			handle := profileOf(profile)
+			handle := new(profile)
 			go func() {
 				stream := typedTestReadRequest(t, conns[0], peers[0])
 				_, _ = peers[0].Write(errorResponse(t, stream, protocol.ErrCodeOverloaded, nil))
@@ -627,7 +627,7 @@ func TestExecution(t *testing.T) {
 					profile := settings.InternalDefaultProfile()
 					profile.Speculation = spec
 					profile.Prefetch = 0
-					handle := profileOf(profile)
+					handle := new(profile)
 					seen := make(chan struct{})
 					resume := make(chan struct{})
 					done := make(chan struct{})

@@ -511,7 +511,7 @@ func TestQuery(t *testing.T) {
 			statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 			profile := settings.InternalDefaultProfile()
 			profile.Retry = eachRetryAfterDelay{}
-			q := codecTestMust(NewUnpreparedQuery(s, statement, OptionValues{Profile: profileOf(profile), Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Minute}}))
+			q := codecTestMust(NewUnpreparedQuery(s, statement, OptionValues{Profile: new(profile), Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Minute}}))
 			t.Cleanup(q.Close)
 			ctx, cancel := context.WithCancel(context.Background())
 			go func() {
@@ -918,7 +918,7 @@ func TestQuery(t *testing.T) {
 			})
 			profile := settings.InternalDefaultProfile()
 			profile.Retry = pinRetryNext{}
-			q := pinTestQuery(t, s, testOptions(OptionValues{Profile: profileOf(profile)}))
+			q := pinTestQuery(t, s, testOptions(OptionValues{Profile: new(profile)}))
 			for range 16 {
 				mu.Lock()
 				failNext = true

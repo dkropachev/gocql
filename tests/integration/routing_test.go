@@ -95,7 +95,7 @@ func TestRouting(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				handle := profileOf(profile)
+				handle := new(profile)
 				ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 				rows, queryErr := Run(ctx, session, bound, bindOptions(session, gocql.Options{Profile: handle}))
 				if queryErr == nil {

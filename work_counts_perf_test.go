@@ -145,7 +145,7 @@ func TestWorkCountsPerf(t *testing.T) {
 					if enabled {
 						profile.Speculation = speculation{}
 					}
-					handle := profileOf(profile)
+					handle := new(profile)
 					options := Options{Profile: handle, Idempotent: true}
 					if mode == "default" {
 						options = Options{}
@@ -322,7 +322,7 @@ func TestWorkCountsPerf(t *testing.T) {
 									defer bound.Close()
 									profile := defaultProfile()
 									profile.Prefetch = prefetch
-									options := Options{Profile: profileOf(profile)}
+									options := Options{Profile: new(profile)}
 									values := make([]string, cells)
 									for i := range values {
 										values[i] = "q"

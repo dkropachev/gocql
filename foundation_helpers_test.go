@@ -7,10 +7,6 @@ func codecTestMust[T any](v T, err error) T {
 	return v
 }
 
-// profileOf returns a pointer to a copy of p, so later changes to p do not
-// reach options that already hold it.
-func profileOf(p Profile) *Profile { return &p }
-
 // bindOptions binds v to session, failing loudly on values a test meant to
 // be valid.
 func bindOptions(session *Session, v Options) SessionOptions {

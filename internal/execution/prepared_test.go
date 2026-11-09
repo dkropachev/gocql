@@ -1001,7 +1001,7 @@ func TestPrepared(t *testing.T) {
 			}()
 			profile := settings.InternalDefaultProfile()
 			profile.Retry = retryOnce{}
-			options := testOptions(OptionValues{Profile: profileOf(profile)})
+			options := testOptions(OptionValues{Profile: new(profile)})
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			rows := codecTestMust(Run(ctx, s, bound, options))

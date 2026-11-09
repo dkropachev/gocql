@@ -189,7 +189,7 @@ func TestDriverConfigReport(t *testing.T) {
 				isScyllaConn: false,
 				want: InternalControlPlaneReport{
 					Queries: InternalControlPlaneQueriesReport{System: InternalSystemQueriesReport{Timeout: InternalSystemQueriesTimeoutReport{
-						ClientSideMs: ptr(int64(30000)),
+						ClientSideMs: new(int64(30000)),
 					}}},
 					Schema: InternalControlPlaneSchemaReport{Agreement: InternalSchemaAgreementReport{TimeoutMs: 60000}},
 				},
@@ -201,8 +201,8 @@ func TestDriverConfigReport(t *testing.T) {
 				isScyllaConn: true,
 				want: InternalControlPlaneReport{
 					Queries: InternalControlPlaneQueriesReport{System: InternalSystemQueriesReport{Timeout: InternalSystemQueriesTimeoutReport{
-						ClientSideMs: ptr(int64(30000)),
-						ServerSideMs: ptr(int64(30000)),
+						ClientSideMs: new(int64(30000)),
+						ServerSideMs: new(int64(30000)),
 					}}},
 					Schema: InternalControlPlaneSchemaReport{Agreement: InternalSchemaAgreementReport{TimeoutMs: 60000}},
 				},
@@ -218,7 +218,7 @@ func TestDriverConfigReport(t *testing.T) {
 				isScyllaConn: true,
 				want: InternalControlPlaneReport{
 					Queries: InternalControlPlaneQueriesReport{System: InternalSystemQueriesReport{Timeout: InternalSystemQueriesTimeoutReport{
-						ClientSideMs: ptr(int64(1)),
+						ClientSideMs: new(int64(1)),
 					}}},
 					Schema: InternalControlPlaneSchemaReport{Agreement: InternalSchemaAgreementReport{TimeoutMs: 60000}},
 				},
@@ -867,9 +867,9 @@ func TestDriverConfigReport(t *testing.T) {
 		}{
 			{"unset is omitted", 0, nil},
 			{"negative is omitted", -time.Second, nil},
-			{"sub-millisecond floors at the schema minimum", 500 * time.Microsecond, ptr(int64(1))},
-			{"exactly one millisecond", time.Millisecond, ptr(int64(1))},
-			{"whole milliseconds pass through", 11 * time.Second, ptr(int64(11000))},
+			{"sub-millisecond floors at the schema minimum", 500 * time.Microsecond, new(int64(1))},
+			{"exactly one millisecond", time.Millisecond, new(int64(1))},
+			{"whole milliseconds pass through", 11 * time.Second, new(int64(11000))},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {

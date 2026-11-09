@@ -117,7 +117,7 @@ func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Dura
 	profile.Routing = policy
 	profile.Speculation = runtimeSpeculation{}
 	profile.PageTimeout = pageTimeout
-	handle := profileOf(profile)
+	handle := new(profile)
 	go func() {
 		stream := typedTestReadRequest(t, conns[1], peers[1])
 		_, _ = peers[1].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "winner")))

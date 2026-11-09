@@ -15,7 +15,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/segment"
-	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/streams"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
@@ -95,10 +94,6 @@ func streamReaderFixture(t testing.TB, columns cqltype.Columns, source io.Reader
 	}
 	return r, scope
 }
-
-// profileOf returns a pointer to a copy of p, so later changes to p do not
-// reach options that already hold it.
-func profileOf(p settings.Profile) *settings.Profile { return &p }
 
 type memoryConn struct {
 	source                 *bytes.Reader

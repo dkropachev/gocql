@@ -1195,7 +1195,7 @@ func TestStream(t *testing.T) {
 			s, c, peer := rowStreamSession(t, 4, nil)
 			profile := settings.InternalDefaultProfile()
 			profile.Retry = retryOnce{}
-			handle := profileOf(profile)
+			handle := new(profile)
 			payload := bytes.Repeat([]byte{'x'}, 12000)
 			extension := binary.BigEndian.AppendUint16(nil, 1)
 			extension = binary.BigEndian.AppendUint16(extension, 3)

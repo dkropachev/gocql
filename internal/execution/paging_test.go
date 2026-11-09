@@ -200,7 +200,7 @@ func TestPaging(t *testing.T) {
 						rt.InternalConfig.Limits.MaxPagingStateBytes = 2
 						profile := settings.InternalDefaultProfile()
 						profile.Prefetch = prefetch
-						handle := profileOf(profile)
+						handle := new(profile)
 						tokens := []string{"a", "b", "a"}
 						if mode == "budget" {
 							tokens = tokens[:2]
@@ -342,7 +342,7 @@ func TestPaging(t *testing.T) {
 			}()
 			p := settings.InternalDefaultProfile()
 			p.PageSize = 7
-			profile := profileOf(p)
+			profile := new(p)
 			bound := runtimeQuery(t)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
