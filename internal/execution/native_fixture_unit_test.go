@@ -117,7 +117,7 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 	}
 }
 
-func execTestStatement(ctx context.Context, s *cluster.Core, cql string, opts Options) error {
+func execTestStatement(ctx context.Context, s *cluster.Core, cql string, opts BoundOptions) error {
 	bound, err := BindUnpreparedOwned(binding.Statement[implCodec.EmptyRecord, implCodec.EmptyRecord]{CQL: cql, Params: implCodec.EmptyParamsEncoder, Rows: implCodec.EmptyRowDecoder}, cqltype.NewColumns(), implCodec.EmptyRecord{})
 	if err != nil {
 		return err

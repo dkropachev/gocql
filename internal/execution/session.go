@@ -51,18 +51,77 @@ func (s *Session) Prepare[P, R any](ctx context.Context, statement Statement[P, 
 	return Prepare(ctx, InternalCore(s), statement, o)
 }
 
-// Query returns a reusable query that runs statement on s without server
-// preparation. It compiles parameters once against statement.BindMarkers and
-// captures each execution's input in query-owned storage, including values
-// passed to custom codecs.
-func (s *Session) Query[P, R any](statement Statement[P, R], options OptionValues) (*Query[P, R], error) {
+// UnpreparedQuery returns a reusable query that sends statement's CQL text
+// to s on every execution, without server preparation. It compiles
+// parameters once against statement.BindMarkers and captures each
+// execution's input in query-owned storage, including values passed to
+// custom codecs. Prefer Prepare for statements that run often: a prepared
+// statement sends only its id and decodes rows with cached metadata.
+func (s *Session) UnpreparedQuery[P, R any](statement Statement[P, R], options Options) (*Query[P, R], error) {
 	return NewUnpreparedQuery(InternalCore(s), statement, options)
 }
 
-// StreamQuery returns a reusable query that runs statement on s without
-// server preparation and streams each row into decoder.
-func (s *Session) StreamQuery[P, B, R any](statement Statement[P, B], decoder StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
+// UnpreparedStreamQuery returns a reusable query that sends statement's CQL
+// text to s on every execution, without server preparation, and streams each
+// row into decoder. The statement declares no row decoder of its own.
+func (s *Session) UnpreparedStreamQuery[P, R any](statement Statement[P, EmptyRecord], decoder StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
 	return NewUnpreparedStreamQuery(InternalCore(s), statement, decoder, options)
+}
+
+// BindOptions validates options and resolves them for s into BoundOptions,
+// for one-shot executions; the zero Options gives the zero BoundOptions. The
+// custom payload and the profile are copied, so later changes to options do
+// not reach the result. BoundOptions executed on another session are resolved
+// again for it on each execution.
+func (s *Session) BindOptions(options Options) (BoundOptions, error) {
+	if s == nil {
+		return BoundOptions{}, typeValidation("session", "nil session")
+	}
+	return InternalBindOptions(InternalCore(s), options)
+}
+
+// ExecBatch sends batch as one CQL BATCH of kind on s. The batch's
+// statements must produce no result columns; RunBatch reads the rows of a
+// conditional batch. At most one BoundOptions may be given; none uses the
+// session's default profile. ExecBatch is safe for concurrent use with other
+// session calls, but a Batch must not be changed while it is sent.
+func (s *Session) ExecBatch(ctx context.Context, kind BatchKind, batch *Batch, options ...BoundOptions) (Result, error) {
+	if s == nil {
+		err := typeValidation("session", "nil session")
+		return InternalExecutionErrorResult(err), err
+	}
+	core := InternalCore(s)
+	q, o, err := beginBatch(ctx, core, kind, batch, options)
+	if err != nil {
+		return InternalExecutionErrorResult(err), err
+	}
+	batch.queryExec(&batch.exec.privateStorage.InternalRequest, &q.state, kind)
+	result, err := Exec(ctx, core, &batch.exec, o)
+	q.state.owner.InternalRelease()
+	return result, err
+}
+
+// RunBatch sends batch as one CQL BATCH of kind on s and returns its rows,
+// decoded with decoder. A conditional batch returns one row per conditional
+// statement, or one row reporting that it was not applied. Options are as for
+// ExecBatch. Close the page when done with it.
+func (s *Session) RunBatch[R any](ctx context.Context, kind BatchKind, batch *Batch, decoder RowDecoder[R], options ...BoundOptions) (*Page[R], error) {
+	if s == nil {
+		return nil, typeValidation("session", "nil session")
+	}
+	if decoder == nil {
+		return nil, typeValidation("batch rows", "nil decoder")
+	}
+	core := InternalCore(s)
+	q, o, err := beginBatch(ctx, core, kind, batch, options)
+	if err != nil {
+		return nil, err
+	}
+	bound := &Bound[R]{privateStorage: BoundStorage[R]{InternalRows: decoder}}
+	batch.queryExec(&bound.privateStorage.InternalRequest, &q.state, kind)
+	page, err := RunPage(ctx, core, bound, StartPage(), o)
+	q.state.owner.InternalRelease()
+	return page, err
 }
 
 // ID returns the globally unique identifier of this session. The driver sends

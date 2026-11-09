@@ -77,9 +77,8 @@ func (c queryCursor) current() bool {
 // Prepared statements remain shareable; a Query must not be copied.
 type Query[P, R any] struct {
 	params  ParamPlan[P]
-	options Options
+	options BoundOptions
 	columns Columns
-	last    Result        // the latest Exec, Each or One outcome
 	scratch eachScratch   // Each and One decoding state
 	rows    rowsHolder[R] // Run's iterator storage, reused each execution
 	buffer  binding.ParameterBuffer
@@ -88,17 +87,6 @@ type Query[P, R any] struct {
 	// allowUnset reports whether parameters may be unset: always for CQL
 	// text, from Protocol v4 for a prepared statement.
 	allowUnset bool
-}
-
-// LastResult returns the result information of the query's latest Exec,
-// Each or One: the coordinator, attempts, latency, row count and any
-// warnings, trace IDs or custom payload. Run reports it through Rows.Info.
-// Like the query's other methods, it is not safe for concurrent use.
-func (q *Query[P, R]) LastResult() Result {
-	if q == nil {
-		return Result{}
-	}
-	return cloneResult(q.last)
 }
 
 // newQueryState sets up state for session. A query of a pool is not tracked
@@ -133,13 +121,13 @@ func newQueryState(s *implCluster.Core, state *queryState, retire func(), pool *
 
 // Query creates a reusable query from p. Its options are validated and
 // resolved for p's session once, here.
-func (p *Prepared[P, R]) Query(options OptionValues) (*Query[P, R], error) {
+func (p *Prepared[P, R]) Query(options Options) (*Query[P, R], error) {
 	return NewQuery(p, options)
 }
 
 // NewQuery creates a reusable query from a prepared statement. Its options
 // are validated and resolved for the statement's session once, here.
-func NewQuery[P, R any](p *Prepared[P, R], values OptionValues) (*Query[P, R], error) {
+func NewQuery[P, R any](p *Prepared[P, R], values Options) (*Query[P, R], error) {
 	if p == nil || p.privateStorage.InternalState == nil {
 		return nil, typeValidation("prepared", "nil handle")
 	}
@@ -151,24 +139,24 @@ func NewQuery[P, R any](p *Prepared[P, R], values OptionValues) (*Query[P, R], e
 }
 
 // InternalBindOptions freezes values for session s. Empty values become the
-// zero Options, which use the session's shared default resolution.
-func InternalBindOptions(s *implCluster.Core, values OptionValues) (Options, error) {
+// zero BoundOptions, which use the session's shared default resolution.
+func InternalBindOptions(s *implCluster.Core, values Options) (BoundOptions, error) {
 	return queryOptions(s, values)
 }
 
 // queryOptions freezes a query's values for its session. Empty values use
 // the session's shared default resolution.
-func queryOptions(s *implCluster.Core, values OptionValues) (Options, error) {
+func queryOptions(s *implCluster.Core, values Options) (BoundOptions, error) {
 	if reflect.ValueOf(&values).Elem().IsZero() {
-		return Options{}, nil
+		return BoundOptions{}, nil
 	}
 	if s == nil {
-		return Options{}, typeValidation("query", "nil session")
+		return BoundOptions{}, typeValidation("query", "nil session")
 	}
-	return NewOptions(s, values)
+	return NewBoundOptions(s, values)
 }
 
-func newPreparedQuery[P, R any](p *Prepared[P, R], options Options, pool *queryPoolBase) (*Query[P, R], error) {
+func newPreparedQuery[P, R any](p *Prepared[P, R], options BoundOptions, pool *queryPoolBase) (*Query[P, R], error) {
 	if p == nil || p.privateStorage.InternalState == nil {
 		return nil, typeValidation("prepared", "nil handle")
 	}
@@ -193,7 +181,7 @@ func newPreparedQuery[P, R any](p *Prepared[P, R], options Options, pool *queryP
 // NewUnpreparedQuery compiles parameters once against statement.BindMarkers
 // and captures each execution's input in query-owned storage, including
 // values passed to custom codecs.
-func NewUnpreparedQuery[P, R any](s *implCluster.Core, statement Statement[P, R], values OptionValues) (*Query[P, R], error) {
+func NewUnpreparedQuery[P, R any](s *implCluster.Core, statement Statement[P, R], values Options) (*Query[P, R], error) {
 	options, err := queryOptions(s, values)
 	if err != nil {
 		return nil, err
@@ -201,7 +189,7 @@ func NewUnpreparedQuery[P, R any](s *implCluster.Core, statement Statement[P, R]
 	return newUnpreparedQuery(s, statement, options)
 }
 
-func newUnpreparedQuery[P, R any](s *implCluster.Core, statement Statement[P, R], options Options) (*Query[P, R], error) {
+func newUnpreparedQuery[P, R any](s *implCluster.Core, statement Statement[P, R], options BoundOptions) (*Query[P, R], error) {
 	if err := validateStatement(&statement); err != nil {
 		return nil, err
 	}
@@ -249,7 +237,15 @@ func (s *queryState) idle() {
 	}
 }
 
-func (s *queryState) begin(ctx context.Context) error {
+// begin starts an execution generation, waiting within ctx while the
+// previous execution only drains.
+func (s *queryState) begin(ctx context.Context) error { return s.admit(ctx, true) }
+
+// admit starts an execution generation. With wait, a previous execution that
+// already finished and only drains is waited for within ctx; without, it
+// makes admit return ErrBusy, for callers that have no context to bound the
+// wait.
+func (s *queryState) admit(ctx context.Context, wait bool) error {
 	if s.owner == nil || s.runtime == nil {
 		return typeValidation("query", "uninitialized query")
 	}
@@ -260,13 +256,31 @@ func (s *queryState) begin(ctx context.Context) error {
 		return err
 	}
 	s.mu.Lock()
+	for s.busy && !s.closed {
+		// The previous execution is busy. If it has released its input, it
+		// has finished and only drains (accepted writes and attempts), so
+		// wait for it; otherwise it is still running or a handle the caller
+		// holds keeps it open, and overlapping use is an error.
+		l := s.logical
+		if !wait || l == nil || !l.lifetime.inputReleased.Load() {
+			s.mu.Unlock()
+			return ErrBusy
+		}
+		if s.done == nil {
+			s.done = make(chan struct{})
+		}
+		done := s.done
+		s.mu.Unlock()
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		s.mu.Lock()
+	}
 	if s.closed {
 		s.mu.Unlock()
 		return ErrClosed
-	}
-	if s.busy {
-		s.mu.Unlock()
-		return ErrBusy
 	}
 	s.busy = true
 	s.generation.Add(1)
@@ -289,10 +303,16 @@ func (s *queryState) begin(ctx context.Context) error {
 }
 
 func (q *Query[P, R]) capture(ctx context.Context, value P) error {
+	return q.captureWith(ctx, value, true)
+}
+
+// captureWith captures value into the query's storage in a new execution
+// generation; wait is as for queryState.admit.
+func (q *Query[P, R]) captureWith(ctx context.Context, value P, wait bool) error {
 	if q == nil {
 		return typeValidation("query", "nil query")
 	}
-	if err := q.state.begin(ctx); err != nil {
+	if err := q.state.admit(ctx, wait); err != nil {
 		return err
 	}
 	request := &q.bound.privateStorage.InternalRequest
@@ -326,17 +346,14 @@ func (q *Query[P, R]) retire() {
 	q.buffer.Retire()
 }
 
-// Exec executes the query, which must not return rows. LastResult reports
-// the outcome's result information.
-func (q *Query[P, R]) Exec(ctx context.Context, value P) error {
+// Exec executes the query with value. The statement must not return rows.
+// The query is ready for its next execution when Exec returns.
+func (q *Query[P, R]) Exec(ctx context.Context, value P) (Result, error) {
 	if err := q.capture(ctx, value); err != nil {
-		q.last = InternalExecutionErrorResult(err)
-		return err
+		return InternalExecutionErrorResult(err), err
 	}
 	defer q.state.owner.InternalRelease()
-	var err error
-	q.last, err = Exec(ctx, q.state.runtime.Core, &q.bound, q.options)
-	return err
+	return Exec(ctx, q.state.runtime.Core, &q.bound, q.options)
 }
 
 // Run executes the query and returns an iterator over its rows. The query
@@ -364,9 +381,10 @@ func (q *Query[P, R]) RunUnpaged(ctx context.Context, value P) (*Page[R], error)
 }
 
 // Routing captures parameters and returns their routing information without
-// sending a request. It observes the same single-execution admission rules.
+// sending a request. It takes no context, so unlike the executions it returns
+// ErrBusy while the previous execution still drains.
 func (q *Query[P, R]) Routing(value P) (RoutingInfo, error) {
-	if err := q.capture(context.Background(), value); err != nil {
+	if err := q.captureWith(context.Background(), value, false); err != nil {
 		return RoutingInfo{}, err
 	}
 	defer q.state.owner.InternalRelease()
@@ -376,7 +394,8 @@ func (q *Query[P, R]) Routing(value P) (RoutingInfo, error) {
 // AddToBatch encodes value with the query's parameters and appends the statement
 // to batch. The values are copied into the batch, so the query is free for
 // its next use as soon as AddToBatch returns, and closing it does not affect the
-// batch. Like the query's executions, AddToBatch fails while the query is busy.
+// batch. AddToBatch takes no context, so it returns ErrBusy while the query is
+// busy, including while its previous execution still drains.
 func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
 	if batch == nil {
 		return typeValidation("batch", "nil batch")
@@ -409,49 +428,6 @@ func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
 		q.buffer.Retire()
 	}
 	return err
-}
-
-// ExecBatch sends batch as one CQL BATCH of kind on the query's session.
-// The batch's statements must produce no result columns; RunBatch reads
-// the rows of a conditional batch. The query need not be one of the
-// batch's statements; it is busy while the batch runs, as for its own
-// executions.
-func (q *Query[P, R]) ExecBatch(ctx context.Context, kind BatchKind, batch *Batch, options Options) (Result, error) {
-	if q == nil || q.state.runtime == nil {
-		err := typeValidation("query", "nil query")
-		return InternalExecutionErrorResult(err), err
-	}
-	s := q.state.runtime.Core
-	if err := validateBatch(s, kind, batch, options); err != nil {
-		return InternalExecutionErrorResult(err), err
-	}
-	if err := q.state.begin(ctx); err != nil {
-		return InternalExecutionErrorResult(err), err
-	}
-	defer q.state.owner.InternalRelease()
-	batch.queryExec(&batch.exec.privateStorage.InternalRequest, &q.state, kind)
-	return Exec(ctx, s, &batch.exec, options)
-}
-
-// RunBatch sends batch as one CQL BATCH of kind on the query's session and
-// returns its rows, decoded with the query's row decoder. A conditional
-// batch returns one row per conditional statement, or one row reporting
-// that it was not applied. The query is busy until the page is closed.
-func (q *Query[P, R]) RunBatch(ctx context.Context, kind BatchKind, batch *Batch, options Options) (*Page[R], error) {
-	if q == nil || q.state.runtime == nil {
-		return nil, typeValidation("query", "nil query")
-	}
-	s := q.state.runtime.Core
-	if err := validateBatch(s, kind, batch, options); err != nil {
-		return nil, err
-	}
-	if err := q.state.begin(ctx); err != nil {
-		return nil, err
-	}
-	defer q.state.owner.InternalRelease()
-	bound := &Bound[R]{privateStorage: BoundStorage[R]{InternalRows: q.bound.privateStorage.InternalRows}}
-	batch.queryExec(&bound.privateStorage.InternalRequest, &q.state, kind)
-	return RunPage(ctx, s, bound, StartPage(), options)
 }
 
 func (s *queryState) close() {
@@ -515,34 +491,26 @@ func (s *queryState) wait(ctx context.Context) error {
 	}
 }
 
-// Close permanently stops this query. Wait joins all accepted transport writes
-// and callbacks; cancellation alone does not make a busy query reusable.
-func (q *Query[P, R]) Close() {
-	if q != nil {
-		q.state.close()
-	}
-}
-func (q *Query[P, R]) Wait(ctx context.Context) error {
+// Close stops the query permanently and waits until its last execution has
+// drained: accepted transport writes, attempts in flight and their observer
+// callbacks. Rows, a Page or a batch page of the query that is still open is
+// stopped and reports ErrClosed. If ctx ends first, Close returns ctx.Err();
+// the query is closed regardless, and Session.Close waits for its drain.
+func (q *Query[P, R]) Close(ctx context.Context) error {
 	if q == nil {
 		return typeValidation("query", "nil query")
 	}
+	q.state.close()
 	return q.state.wait(ctx)
 }
 
-// CloseAndWait closes the query and waits until its accepted transport writes
-// and callbacks finish or ctx is done.
-func (q *Query[P, R]) CloseAndWait(ctx context.Context) error {
-	q.Close()
-	return q.Wait(ctx)
-}
-
-func cloneQueryOptions(options OptionValues) (OptionValues, error) {
+func cloneQueryOptions(options Options) (Options, error) {
 	options.CustomPayload = append([]PayloadEntry(nil), options.CustomPayload...)
 	for i := range options.CustomPayload {
 		entry := &options.CustomPayload[i]
 		if entry.Value.Valid {
 			if err := cqltype.CheckBytesAlive(entry.Value.Value); err != nil {
-				return OptionValues{}, err
+				return Options{}, err
 			}
 			entry.Value.Value = entry.Value.Value.Clone()
 		}

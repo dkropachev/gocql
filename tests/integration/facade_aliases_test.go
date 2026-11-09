@@ -34,7 +34,7 @@ import (
 	"github.com/scylladb/gocql/v2/tablets"
 )
 
-func admitExecution[R any](a0 context.Context, a1 *gocql.Session, a2 *implExecution.Bound[R], a3 gocql.SessionOptions) (context.Context, context.CancelFunc, *executionRequest, error) {
+func admitExecution[R any](a0 context.Context, a1 *gocql.Session, a2 *implExecution.Bound[R], a3 gocql.BoundOptions) (context.Context, context.CancelFunc, *executionRequest, error) {
 	return implExecution.InternalAdmitExecution[R](a0, implExecution.InternalCore(a1), a2, a3)
 }
 
@@ -75,7 +75,7 @@ func readV2SystemRows[P any, R any](a0 context.Context, a1 *driverConn, a2 cql.S
 }
 
 func resolveOptions(a0 *gocql.Session, a1 gocql.Options) (resolvedOptions, error) {
-	o, err := gocql.BindOptions(a0, a1)
+	o, err := a0.BindOptions(a1)
 	if err != nil {
 		return resolvedOptions{}, err
 	}

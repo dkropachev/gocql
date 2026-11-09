@@ -222,11 +222,11 @@ func BindUnpreparedOwned[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a
 	return implExecution.BindUnpreparedOwned[P, R](a0, a1, a2)
 }
 
-func Exec[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.SessionOptions) (gocql.Result, error) {
+func Exec[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.BoundOptions) (gocql.Result, error) {
 	return implExecution.Exec[R](a0, implExecution.InternalCore(a1), a2, a3)
 }
 
-func Run[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.SessionOptions) (gocql.Rows[R], error) {
+func Run[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.BoundOptions) (gocql.Rows[R], error) {
 	return implExecution.Run[R](a0, implExecution.InternalCore(a1), a2, a3)
 }
 
@@ -401,8 +401,8 @@ func codecTestMust[T any](v T, err error) T {
 
 // bindOptions binds v to session, failing loudly on values a test meant to
 // be valid.
-func bindOptions(session *gocql.Session, v gocql.Options) gocql.SessionOptions {
-	o, err := gocql.BindOptions(session, v)
+func bindOptions(session *gocql.Session, v gocql.Options) gocql.BoundOptions {
+	o, err := session.BindOptions(v)
 	if err != nil {
 		panic(err)
 	}
@@ -682,7 +682,7 @@ func v2Query(ctx context.Context, session *gocql.Session, stmt string, values ..
 	// Run admits the request before returning. Rows owns the execution reference
 	// until it is exhausted or closed, even after closing the binding here.
 	defer bound.Close()
-	return Run(ctx, session, bound, gocql.SessionOptions{})
+	return Run(ctx, session, bound, gocql.BoundOptions{})
 }
 
 func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (cql.DynamicRow, error) {
@@ -1245,7 +1245,7 @@ func serializationExec[P any](s *gocql.Session, stmt string, encoder cql.ParamEn
 		return err
 	}
 	defer b.Close()
-	_, err = Exec(ctx, s, b, gocql.SessionOptions{})
+	_, err = Exec(ctx, s, b, gocql.BoundOptions{})
 	return err
 }
 
@@ -1260,7 +1260,7 @@ func serializationRows[R any](s *gocql.Session, stmt string, decoder cql.RowDeco
 		return gocql.Rows[R]{}, err
 	}
 	defer b.Close()
-	return Run(ctx, s, b, gocql.SessionOptions{})
+	return Run(ctx, s, b, gocql.BoundOptions{})
 }
 
 func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (R, error) {

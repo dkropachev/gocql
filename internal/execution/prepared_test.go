@@ -658,7 +658,7 @@ func TestPrepared(t *testing.T) {
 						}
 						bound := codecTestMust(BindOwned(prepared, codec.EmptyRecord{}))
 						defer bound.Close()
-						rows, err := Run(ctx, s, bound, Options{})
+						rows, err := Run(ctx, s, bound, BoundOptions{})
 						if tc.badResult {
 							if !hasErrorType[*implCqltype.ValidationError](err) {
 								t.Fatalf("actual metadata was not validated before output: %v", err)
@@ -1001,7 +1001,7 @@ func TestPrepared(t *testing.T) {
 			}()
 			profile := settings.InternalDefaultProfile()
 			profile.Retry = retryOnce{}
-			options := testOptions(OptionValues{Profile: new(profile)})
+			options := testOptions(Options{Profile: new(profile)})
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			rows := codecTestMust(Run(ctx, s, bound, options))

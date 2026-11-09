@@ -73,7 +73,7 @@ func TestConditional(t *testing.T) {
 		invalid, err := session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.CASResult[cql.EmptyRow]]{CQL: deleteCQL, Params: cql.DynamicParams, Rows: cql.CASRows(cql.EmptyRowDecoder)}, gocql.PrepareOptions{})
 		if err == nil {
 			bound := cassandraBound(t, invalid, []cql.Value{codecTestMust(cql.TextValue(title)), revValue, cql.TimestampValue(modified + 10000)})
-			rows, e := Run(context.Background(), session, bound, gocql.SessionOptions{})
+			rows, e := Run(context.Background(), session, bound, gocql.BoundOptions{})
 			defer rows.Close()
 			err = e
 		}
@@ -85,7 +85,7 @@ func TestConditional(t *testing.T) {
 		}
 		runCASBatch := func(items []batchItem, wantApplied bool, wantRows int) {
 			t.Helper()
-			page, err := runBatch(context.Background(), session, cql.LoggedBatch, items, cql.CASRows(cql.DynamicRows), gocql.SessionOptions{})
+			page, err := runBatch(context.Background(), session, cql.LoggedBatch, items, cql.CASRows(cql.DynamicRows), gocql.BoundOptions{})
 			require.NoError(t, err)
 			defer page.Close()
 			count := 0
@@ -119,7 +119,7 @@ func TestConditional(t *testing.T) {
 		_, err = session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.CASResult[cql.DynamicRow]]{CQL: fmt.Sprintf("SELECT revid FROM %s WHERE title=?", table), Params: cql.DynamicParams, Rows: cql.CASRows(cql.DynamicRows)}, gocql.PrepareOptions{})
 		require.Error(t, err)
 		for i := 0; i < 2; i++ {
-			page, err := runBatch(context.Background(), session, cql.LoggedBatch, seed, cql.CASRows(cql.DynamicRows), gocql.SessionOptions{})
+			page, err := runBatch(context.Background(), session, cql.LoggedBatch, seed, cql.CASRows(cql.DynamicRows), gocql.BoundOptions{})
 			if page != nil {
 				page.Close()
 			}
@@ -129,7 +129,7 @@ func TestConditional(t *testing.T) {
 			badDecoder := cql.CASRows(cql.OneColumn(cql.Bool))
 			bound := cassandraDynamicBound(t, session, fmt.Sprintf("UPDATE %s SET last_modified=? WHERE title=? AND revid=? IF last_modified=?", table), []cql.Value{cql.TimestampValue(modified + 10000), codecTestMust(cql.TextValue("_foo")), cassandraValue(cql.TimeUUIDValue(cql.TimeUUID(cassandraUUID("3e4ad2f1-73a4-11e5-9381-29463d90c3f0")))), cql.TimestampValue(modified + 20000)}, gocql.PrepareOptions{})
 			if batch {
-				page, e := runBatch(context.Background(), session, cql.LoggedBatch, []batchItem{cassandraItem(t, bound)}, badDecoder, gocql.SessionOptions{})
+				page, e := runBatch(context.Background(), session, cql.LoggedBatch, []batchItem{cassandraItem(t, bound)}, badDecoder, gocql.BoundOptions{})
 				if page != nil {
 					page.Close()
 				}
@@ -141,7 +141,7 @@ func TestConditional(t *testing.T) {
 					implExecution.BoundData(opaqueStorageValue).InternalRows = badDecoder
 					return opaqueStorageValue
 				}()
-				rows, e := Run(context.Background(), session, bad, gocql.SessionOptions{})
+				rows, e := Run(context.Background(), session, bad, gocql.BoundOptions{})
 				rows.Close()
 				require.Error(t, e)
 			}
@@ -207,7 +207,7 @@ func TestConditional(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				bound := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), []cql.Value{cql.IntValue(int32(i + 1))}, gocql.PrepareOptions{})
 				// Serial consistency is checked when the options are built.
-				options, err := gocql.BindOptions(session, gocql.Options{SerialConsistency: cql.Some(tc.consistency)})
+				options, err := session.BindOptions(gocql.Options{SerialConsistency: cql.Some(tc.consistency)})
 				if err == nil {
 					_, err = Exec(context.Background(), session, bound, options)
 				}

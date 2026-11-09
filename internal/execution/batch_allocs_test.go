@@ -11,11 +11,13 @@ import (
 )
 
 func TestBatchAllocs(t *testing.T) {
-	// A reused batch sent through a query takes the query's inline execution and
-	// the void-result path: once warm, appending and sending allocate nothing.
+	// A reused batch sent through Session.ExecBatch runs on a pooled query: it
+	// takes that query's inline execution and the void-result path, so once
+	// warm, appending and sending allocate nothing.
 	t.Run("Exec", func(t *testing.T) {
 		s := batchBenchSession(t)
 		q := batchTestQuery(t, s)
+		session := InternalWrapSession(s)
 		ctx := context.Background()
 		value := []byte("0123456789abcdef0123456789abcdef")
 		var batch Batch
@@ -26,7 +28,7 @@ func TestBatchAllocs(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if _, err := q.ExecBatch(ctx, UnloggedBatch, &batch, Options{}); err != nil {
+			if _, err := session.ExecBatch(ctx, UnloggedBatch, &batch); err != nil {
 				t.Fatal(err)
 			}
 		}

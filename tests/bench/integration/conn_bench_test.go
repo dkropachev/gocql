@@ -109,7 +109,7 @@ func BenchmarkConn(b *testing.B) {
 					b.Error(err)
 					return
 				}
-				_, err = Exec(ctx, session, bound, gocql.SessionOptions{})
+				_, err = Exec(ctx, session, bound, gocql.BoundOptions{})
 				bound.Close()
 				waitErr := bound.Wait(ctx)
 				if err != nil {

@@ -361,7 +361,7 @@ func TestRouting(t *testing.T) {
 			bound := cassandraBound(t, prepared, input{"routing-key", 5})
 			require.True(t, bound.Routing().Token.Set)
 			require.Equal(t, murmur.Murmur3H1([]byte("routing-key")), bound.Routing().Token.Value)
-			_, err := Exec(context.Background(), session, bound, gocql.SessionOptions{})
+			_, err := Exec(context.Background(), session, bound, gocql.BoundOptions{})
 			require.NoError(t, err)
 		})
 		// Integration test of the routing key calculation
@@ -744,7 +744,7 @@ func TestRouting(t *testing.T) {
 			feedback := 0
 			for key := int32(0); key < 8; key++ {
 				bound := codecTestMust(BindBorrowed(insert, key))
-				result, err := Exec(ctx, s, bound, gocql.SessionOptions{})
+				result, err := Exec(ctx, s, bound, gocql.BoundOptions{})
 				if err != nil {
 					t.Fatal(err)
 				}

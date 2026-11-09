@@ -90,7 +90,7 @@ func TestQuery(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,value text)", table))
 			prepared := cassandraPrepared(t, session, cql.Statement[[]cql.ValueField, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,value) VALUES(:id,:value)", table), Params: cql.NamedDynamicParams, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 			bound := cassandraBound(t, prepared, []cql.ValueField{{Name: "value", Value: codecTestMust(cql.TextValue("i am a value"))}, {Name: "id", Value: cql.IntValue(1)}})
-			_, err := Exec(context.Background(), session, bound, gocql.SessionOptions{})
+			_, err := Exec(context.Background(), session, bound, gocql.BoundOptions{})
 			require.NoError(t, err)
 			read := cassandraPrepared(t, session, cql.Statement[[]cql.ValueField, cql.Text]{CQL: fmt.Sprintf("SELECT value FROM %s WHERE id=:id", table), Params: cql.NamedDynamicParams, Rows: cql.OneColumn(cql.TextCodec)}, gocql.PrepareOptions{})
 			require.Equal(t, "i am a value", cassandraReadBound(t, session, cassandraBound(t, read, []cql.ValueField{{Name: "id", Value: cql.IntValue(1)}}), gocql.Options{}).String())
@@ -133,7 +133,7 @@ func TestQuery(t *testing.T) {
 			params := cql.Params(cql.Param("value", cql.StringEncoder, func(v ClusteredKeyValue) string { return v.Value }), cql.Param("cluster", cql.Int32, func(v ClusteredKeyValue) int32 { return v.Cluster }), cql.Param("id", cql.Int32, func(v ClusteredKeyValue) int32 { return v.Id }))
 			prepared := cassandraPrepared(t, session, cql.Statement[ClusteredKeyValue, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,cluster,value) VALUES(?,?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 			require.Equal(t, 3, prepared.Parameters().Len())
-			_, err := Exec(context.Background(), session, cassandraBound(t, prepared, ClusteredKeyValue{200, 300, "baz"}), gocql.SessionOptions{})
+			_, err := Exec(context.Background(), session, cassandraBound(t, prepared, ClusteredKeyValue{200, 300, "baz"}), gocql.BoundOptions{})
 			require.NoError(t, err)
 			readParams := cql.Params(cql.Param("cluster", cql.Int32, func(v ClusteredKeyValue) int32 { return v.Cluster }), cql.Param("id", cql.Int32, func(v ClusteredKeyValue) int32 { return v.Id }))
 			read := cassandraPrepared(t, session, cql.Statement[ClusteredKeyValue, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id,cluster,value FROM %s WHERE id=? AND cluster=?", table), Params: readParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
@@ -491,7 +491,7 @@ func TestQuery(t *testing.T) {
 			cancel()
 			original.Close()
 			require.NoError(t, original.Wait(ctx))
-			_, err = Exec(ctx, session, original, gocql.SessionOptions{})
+			_, err = Exec(ctx, session, original, gocql.BoundOptions{})
 			require.ErrorIs(t, err, cqlerr.ErrClosed)
 		})
 		t.Run("JSON", func(t *testing.T) {
@@ -541,7 +541,7 @@ func TestQuery(t *testing.T) {
 			}
 			_, err := cql.ParseUUID("[invalid]")
 			require.Error(t, err, "invalid host IDs are rejected while constructing typed UUIDs")
-			_, err = gocql.BindOptions(session, gocql.Options{HostID: cql.Option[cql.UUID]{Value: cql.UUID{}, Set: true}})
+			_, err = session.BindOptions(gocql.Options{HostID: cql.Option[cql.UUID]{Value: cql.UUID{}, Set: true}})
 			var invalidHost *cqlerr.ValidationError
 			require.ErrorAs(t, err, &invalidHost, "an empty host ID is rejected when options are built")
 			_, err = Run(context.Background(), session, bound, bindOptions(session, gocql.Options{HostID: cql.Option[cql.UUID]{Value: codecTestMust(cql.RandomUUID()), Set: true}}))
@@ -688,12 +688,12 @@ func TestQuery(t *testing.T) {
 		defer session.Close()
 		namespace := fmt.Sprintf("gocql_query_%x", time.Now().UnixNano())
 		exec := func(ctx context.Context, stmt string) error {
-			q, err := session.Query(cql.Command(stmt), gocql.Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 30 * time.Second}})
+			q, err := session.UnpreparedQuery(cql.Command(stmt), gocql.Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 30 * time.Second}})
 			if err != nil {
 				return err
 			}
-			defer q.Close()
-			err = q.Exec(ctx, cql.EmptyParams{})
+			defer func() { _ = q.Close(ctx) }()
+			_, err = q.Exec(ctx, cql.EmptyParams{})
 			return err
 		}
 		if err := exec(ctx, fmt.Sprintf("CREATE KEYSPACE %s WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':%d}", namespace, *flagRF)); err != nil {
@@ -712,12 +712,12 @@ func TestQuery(t *testing.T) {
 				return
 			}
 			typ := cql.TextType
-			query, err := session.Query(cql.Statement[string, cql.Text]{Kind: cql.OrdinaryStatement, CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name=?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.TextCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "keyspace_name", Type: typ})}, gocql.Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
+			query, err := session.UnpreparedQuery(cql.Statement[string, cql.Text]{Kind: cql.OrdinaryStatement, CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name=?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.TextCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "keyspace_name", Type: typ})}, gocql.Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
 			if err != nil {
 				t.Error(err)
 				return
 			}
-			defer query.Close()
+			defer func() { _ = query.Close(verify) }()
 			rows, err := query.Run(verify, namespace)
 			if err != nil {
 				t.Error(err)
@@ -764,20 +764,17 @@ func TestQuery(t *testing.T) {
 		}
 		write := codecTestMust(session.Prepare(ctx, cql.Statement[record, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO " + table + "(k,c,p)VALUES(?,?,?)", Params: cql.Params(cql.Param("k", cql.Int32, func(r record) int32 { return r.K }), cql.Param("c", cql.Int32, func(r record) int32 { return r.C }), cql.Param("p", cql.BytesEncoder, func(r record) []byte { return r.P })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
 		w := codecTestMust(write.Query(gocql.Options{}))
-		defer w.Close()
+		defer func() { _ = w.Close(ctx) }()
 		payload := bytes.Repeat([]byte{42}, 4096)
 		for i := int32(0); i < 6; i++ {
-			if err := w.Exec(ctx, record{K: 1, C: i, P: payload}); err != nil {
-				t.Fatal(err)
-			}
-			if err := w.Wait(ctx); err != nil {
+			if _, err := w.Exec(ctx, record{K: 1, C: i, P: payload}); err != nil {
 				t.Fatal(err)
 			}
 		}
 		decoder := cql.RowInto(func(*record) {}, cql.Column("c", cql.Int32, func(r *record) *int32 { return &r.C }), cql.Column("p", cql.OwnedBlobCodec, func(r *record) *[]byte { return &r.P }))
 		read := codecTestMust(session.Prepare(ctx, cql.Statement[int32, record]{Kind: cql.OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32), Rows: decoder}, gocql.PrepareOptions{}))
 		q := codecTestMust(read.Query(gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
-		defer q.Close()
+		defer func() { _ = q.Close(ctx) }()
 		var previous gocql.Rows[record]
 		for range 2 {
 			rows := codecTestMust(q.Run(ctx, int32(1)))
@@ -803,9 +800,6 @@ func TestQuery(t *testing.T) {
 			if count != 6 {
 				t.Fatal("row count", count)
 			}
-			if err := q.Wait(ctx); err != nil {
-				t.Fatal(err)
-			}
 			previous = rows
 		}
 		state := gocql.StartPage
@@ -827,9 +821,6 @@ func TestQuery(t *testing.T) {
 			if err := page.Close(); err != nil {
 				t.Fatal(err)
 			}
-			if err := q.Wait(ctx); err != nil {
-				t.Fatal(err)
-			}
 			stalePage = page
 			if state.Complete() {
 				break
@@ -840,7 +831,7 @@ func TestQuery(t *testing.T) {
 		}
 		t.Log("query reuse, stale cursors, owned destinations and explicit paging passed")
 		unpaged := codecTestMust(read.Query(gocql.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}}))
-		defer unpaged.Close()
+		defer func() { _ = unpaged.Close(ctx) }()
 		page := codecTestMust(unpaged.RunUnpaged(ctx, int32(1)))
 		n := 0
 		var unpagedRow record
@@ -858,7 +849,9 @@ func TestQuery(t *testing.T) {
 				if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {
 					t.Fatal(err)
 				}
-				streamQuery.Close()
+				if err := streamQuery.Close(ctx); err != nil {
+					t.Fatal(err)
+				}
 				continue
 			}
 			if err != nil {
@@ -875,10 +868,9 @@ func TestQuery(t *testing.T) {
 			if err := cursor.Close(); err != nil {
 				t.Fatal(err)
 			}
-			if err := streamQuery.Wait(ctx); err != nil {
+			if err := streamQuery.Close(ctx); err != nil {
 				t.Fatal(err)
 			}
-			streamQuery.Close()
 			if count != 6 {
 				t.Fatal("stream count", count)
 			}
@@ -891,7 +883,7 @@ func TestQuery(t *testing.T) {
 			}
 		}
 		payload[0] = 99
-		if _, err := w.ExecBatch(ctx, cql.UnloggedBatch, &batch, gocql.SessionOptions{}); err != nil {
+		if _, err := session.ExecBatch(ctx, cql.UnloggedBatch, &batch); err != nil {
 			t.Fatal(err)
 		}
 		rows := codecTestMust(q.Run(ctx, int32(2)))

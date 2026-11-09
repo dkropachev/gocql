@@ -81,7 +81,7 @@ func BenchmarkStream(b *testing.B) {
 							}
 							cursor.Close()
 						} else {
-							rows, err := Run(context.Background(), s, bound, testOptions(OptionValues{Prefetch: cqltype.Option[int]{Set: true, Value: 0}}))
+							rows, err := Run(context.Background(), s, bound, testOptions(Options{Prefetch: cqltype.Option[int]{Set: true, Value: 0}}))
 							if err != nil {
 								b.Fatal(err)
 							}

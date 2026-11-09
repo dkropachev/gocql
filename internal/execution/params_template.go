@@ -17,9 +17,9 @@ import (
 type optionTemplates [3][2]model.ParamsTemplate
 
 // newOptionTemplates encodes the parameters blocks of options resolved to
-// profile and values, for requests in keyspace. Options with a timestamp
+// profile and values, for requests in keyspace. BoundOptions with a timestamp
 // encode only the templates that send one.
-func newOptionTemplates(profile *Profile, values *OptionValues, keyspace string) *optionTemplates {
+func newOptionTemplates(profile *Profile, values *Options, keyspace string) *optionTemplates {
 	t := new(optionTemplates)
 	// One buffer holds every tail: a page size, a serial consistency, a
 	// timestamp and now_in_seconds, and the keyspace in two of the shapes.

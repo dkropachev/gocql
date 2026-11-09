@@ -1,8 +1,9 @@
 # Batches
 
-Append each typed member with `query.AddToBatch(&batch, parameters)`, then send the
-batch with `query.ExecBatch(ctx, kind, &batch, options)`. Any query of the
-session can send the batch, and members of several queries may share one batch:
+Append each typed member with `prepared.AddToBatch(&batch, parameters)` (or
+`query.AddToBatch`), then send the batch with
+`session.ExecBatch(ctx, kind, &batch)`. Members of several statements of one
+session may share a batch:
 
 ```go
 var batch gocql.Batch
@@ -11,14 +12,15 @@ for _, r := range rows {
 		return err
 	}
 }
-if _, err := insert.ExecBatch(ctx, cql.UnloggedBatch, &batch, gocql.SessionOptions{}); err != nil {
+if _, err := session.ExecBatch(ctx, cql.UnloggedBatch, &batch); err != nil {
 	return err
 }
 batch.Reset()
 ```
 
-`AddToBatch` encodes the parameters into storage the batch owns, so the query is
-free for reuse at once and later input mutation cannot change the batch. A batch
+`AddToBatch` encodes the parameters into storage the batch owns, so later input
+mutation cannot change the batch. `ExecBatch` and `RunBatch` take at most one
+`BoundOptions` from `session.BindOptions`. A batch
 may be sent again unchanged. `Reset` empties it and keeps its storage, so a
 reused batch appends without allocating; if a cancelled execution may still be
 writing the batch, `Reset` leaves that storage to it. A `Batch` is not safe for
@@ -27,6 +29,6 @@ concurrent use.
 A counter batch contains only counter updates. Prepared metadata, routing,
 parameter schemas and observation remain typed. Batches do not speculate.
 
-Conditional batch results use `query.RunBatch`, which decodes the rows with the
-query's row decoder. See
+Conditional batch results use `session.RunBatch(ctx, kind, &batch, decoder)`,
+which decodes the rows with `decoder` and returns a page to close. See
 [lightweight transactions](lightweight-transactions.md).

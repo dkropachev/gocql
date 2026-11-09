@@ -17,9 +17,10 @@ import (
 const maxBatchEntries = 65535
 
 // Batch collects statements, each with its values, to send as one CQL
-// BATCH request. Query.AddToBatch appends a statement; Query.ExecBatch and
-// Query.RunBatch send the batch. Statements of several queries may share a
-// batch when the queries belong to one session.
+// BATCH request. Prepared.AddToBatch and Query.AddToBatch append a
+// statement; Session.ExecBatch and Session.RunBatch send the batch.
+// Statements of several prepared statements and queries may share a batch
+// when they belong to one session.
 //
 // Appending copies the encoded values into storage the batch owns and reuses:
 // once a batch has grown to its working size, appending and Reset allocate
@@ -39,7 +40,7 @@ type Batch struct {
 	// one may still read it.
 	state   InternalBatchState
 	routing RoutingInfo
-	// exec is the request a query's ExecBatch admits; admission copies it.
+	// exec is the request Session.ExecBatch admits; admission copies it.
 	exec    Bound[EmptyRecord]
 	lastGen uint64
 	// shared reports that an execution no longer tracked may still read
@@ -128,7 +129,7 @@ func (b *Batch) requestRouting() RoutingInfo {
 }
 
 // validate checks that batch can be sent as kind with options on s.
-func validateBatch(s *implCluster.Core, kind BatchKind, batch *Batch, options Options) error {
+func validateBatch(s *implCluster.Core, kind BatchKind, batch *Batch, options BoundOptions) error {
 	if batch == nil {
 		return typeValidation("batch", "nil batch")
 	}
@@ -225,7 +226,7 @@ func InternalAddBound[R any](batch *Batch, s *implCluster.Core, bound *Bound[R])
 
 // runBatch sends batch on s without a query and returns its first and
 // only page.
-func runBatch[R any](ctx context.Context, s *implCluster.Core, kind BatchKind, batch *Batch, decoder RowDecoder[R], options Options) (*Page[R], error) {
+func runBatch[R any](ctx context.Context, s *implCluster.Core, kind BatchKind, batch *Batch, decoder RowDecoder[R], options BoundOptions) (*Page[R], error) {
 	if err := validateBatch(s, kind, batch, options); err != nil {
 		return nil, err
 	}
@@ -254,7 +255,7 @@ func (b *Batch) queryExec(dst *InternalExecutionRequest, q *queryState, kind Bat
 
 // execBatch sends batch on s and drains its result, which must have no
 // columns.
-func execBatch(ctx context.Context, s *implCluster.Core, kind BatchKind, batch *Batch, options Options) (Result, error) {
+func execBatch(ctx context.Context, s *implCluster.Core, kind BatchKind, batch *Batch, options BoundOptions) (Result, error) {
 	page, err := runBatch(ctx, s, kind, batch, InternalExecRowsDecoder{}, options)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
@@ -269,14 +270,53 @@ func execBatch(ctx context.Context, s *implCluster.Core, kind BatchKind, batch *
 	return page.Info(), page.Err()
 }
 
+// batchQueries returns the pool of queries that run rt's batches, created on
+// first use. A batch runs on a pooled query, as a prepared statement's
+// one-shot call does, so that sending a reused batch allocates nothing.
+func (rt *InternalSessionRuntime) batchQueries() (*queryPool[EmptyRecord, EmptyRecord], error) {
+	rt.batchOnce.Do(func() {
+		s := rt.Core
+		rt.batchPool, rt.batchErr = newQueryPool(s, func(base *queryPoolBase) (*Query[EmptyRecord, EmptyRecord], error) {
+			q := &Query[EmptyRecord, EmptyRecord]{}
+			q.bound.privateStorage.rows = &q.rows
+			if err := newQueryState(s, &q.state, q.retire, base); err != nil {
+				return nil, err
+			}
+			q.state.resolved = BoundOptions{}.resolveFixed(q.state.runtime)
+			q.state.execCtx = newExecutionContext()
+			return q, nil
+		})
+	})
+	return rt.batchPool, rt.batchErr
+}
+
+// beginBatch validates a batch call on s and takes a pooled query that has
+// begun an execution for it. The caller releases the query's owner when the
+// execution no longer needs it.
+func beginBatch(ctx context.Context, s *implCluster.Core, kind BatchKind, batch *Batch, options []BoundOptions) (*Query[EmptyRecord, EmptyRecord], BoundOptions, error) {
+	o, err := oneShotOptions(options)
+	if err != nil {
+		return nil, o, err
+	}
+	if err := validateBatch(s, kind, batch, o); err != nil {
+		return nil, o, err
+	}
+	pool, err := InternalRuntimeFor(s).batchQueries()
+	if err != nil {
+		return nil, o, err
+	}
+	q, err := pool.begin(ctx)
+	return q, o, err
+}
+
 // InternalRunBatch sends batch on s; tests use it to run batches built from
 // bindings.
-func InternalRunBatch[R any](ctx context.Context, s *implCluster.Core, kind BatchKind, batch *Batch, decoder RowDecoder[R], options Options) (*Page[R], error) {
+func InternalRunBatch[R any](ctx context.Context, s *implCluster.Core, kind BatchKind, batch *Batch, decoder RowDecoder[R], options BoundOptions) (*Page[R], error) {
 	return runBatch(ctx, s, kind, batch, decoder, options)
 }
 
 // InternalExecBatch sends batch on s and drains its result.
-func InternalExecBatch(ctx context.Context, s *implCluster.Core, kind BatchKind, batch *Batch, options Options) (Result, error) {
+func InternalExecBatch(ctx context.Context, s *implCluster.Core, kind BatchKind, batch *Batch, options BoundOptions) (Result, error) {
 	return execBatch(ctx, s, kind, batch, options)
 }
 

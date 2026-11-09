@@ -55,8 +55,9 @@ func (prepared *Prepared[P, B]) StreamQuery[R any](decoder StreamRowDecoder[R], 
 }
 
 // NewUnpreparedStreamQuery uses the same owned input and receive-mode contract
-// for a statement executed without server preparation.
-func NewUnpreparedStreamQuery[P, B, R any](session *implCluster.Core, statement Statement[P, B], decoder StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
+// for a statement executed without server preparation. Rows are decoded by
+// decoder, so the statement declares none.
+func NewUnpreparedStreamQuery[P, R any](session *implCluster.Core, statement Statement[P, EmptyRecord], decoder StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
 	if err := validateStatement(&statement); err != nil {
 		return nil, err
 	}
@@ -89,23 +90,15 @@ func (q *StreamQuery[P, R]) Run(ctx context.Context, value P) (*RowStream[R], er
 	defer q.query.state.owner.InternalRelease()
 	return runStreamWithCache(ctx, q.query.state.runtime.Core, &q.query.bound, q.decoder, q.query.options, q.options.Limits, q.options.Incremental, &q.plans)
 }
-func (q *StreamQuery[P, R]) Close() {
-	if q != nil {
-		q.query.Close()
-	}
-}
-func (q *StreamQuery[P, R]) Wait(ctx context.Context) error {
+
+// Close stops the query permanently and waits until its last execution has
+// drained, as Query.Close does. A RowStream that is still open is stopped and
+// reports ErrClosed.
+func (q *StreamQuery[P, R]) Close(ctx context.Context) error {
 	if q == nil {
 		return typeValidation("query", "nil query")
 	}
-	return q.query.Wait(ctx)
-}
-
-// CloseAndWait closes the query and waits until its accepted transport writes
-// and callbacks finish or ctx is done.
-func (q *StreamQuery[P, R]) CloseAndWait(ctx context.Context) error {
-	q.Close()
-	return q.Wait(ctx)
+	return q.query.Close(ctx)
 }
 
 func (s *RowStream[R]) loadBufferedPage() error {

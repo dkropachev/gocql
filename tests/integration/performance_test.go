@@ -58,7 +58,7 @@ func TestPerformance(t *testing.T) {
 			t.Helper()
 			b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{}))
 			defer b.Close()
-			if _, e := Exec(ctx, s, b, gocql.SessionOptions{}); e != nil {
+			if _, e := Exec(ctx, s, b, gocql.BoundOptions{}); e != nil {
 				t.Fatal(e)
 			}
 		}
@@ -69,7 +69,7 @@ func TestPerformance(t *testing.T) {
 			b, e := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + ks, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{})
 			if e == nil {
 				defer b.Close()
-				_, e = Exec(cleanup, s, b, gocql.SessionOptions{})
+				_, e = Exec(cleanup, s, b, gocql.BoundOptions{})
 			}
 			if e != nil {
 				t.Error(e)
@@ -83,7 +83,7 @@ func TestPerformance(t *testing.T) {
 			payload := bytes.Repeat([]byte{0x71}, 4096)
 			for id := int32(0); id < 128; id++ {
 				b := codecTestMust(BindBorrowed(insert, testInput{4096, id, payload, [][]byte{[]byte("first"), []byte("second")}}))
-				_, e := Exec(ctx, s, b, gocql.SessionOptions{})
+				_, e := Exec(ctx, s, b, gocql.BoundOptions{})
 				b.Close()
 				if e != nil {
 					t.Fatal(e)
@@ -366,7 +366,7 @@ func TestPerformance(t *testing.T) {
 			t.Helper()
 			b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{}))
 			defer b.Close()
-			if _, e := Exec(ctx, s, b, gocql.SessionOptions{}); e != nil {
+			if _, e := Exec(ctx, s, b, gocql.BoundOptions{}); e != nil {
 				t.Fatal(e)
 			}
 		}
@@ -377,7 +377,7 @@ func TestPerformance(t *testing.T) {
 			b, e := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + ks, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{})
 			if e == nil {
 				defer b.Close()
-				_, e = Exec(cleanup, s, b, gocql.SessionOptions{})
+				_, e = Exec(cleanup, s, b, gocql.BoundOptions{})
 			}
 			if e != nil {
 				t.Error("owned cleanup", e)
@@ -393,7 +393,7 @@ func TestPerformance(t *testing.T) {
 			payload := bytes.Repeat([]byte{0x71}, size)
 			for i := 0; i < count; i++ {
 				b := codecTestMust(BindBorrowed(insert, testInput{int32(size), int32(i), payload, [][]byte{[]byte("first"), []byte("second")}}))
-				_, e := Exec(ctx, s, b, gocql.SessionOptions{})
+				_, e := Exec(ctx, s, b, gocql.BoundOptions{})
 				b.Close()
 				if e != nil {
 					t.Fatal(e)

@@ -24,25 +24,38 @@
 
 // Package gocql implements the typed Cassandra and ScyllaDB native protocol API.
 // Connect opens a validated Config. Statements declare parameter encoders and row
-// decoders. Prepare creates shareable immutable plans; Prepared.Query creates a
-// reusable worker-owned query whose methods accept input directly. Read rows with One for
-// a single row and Each to visit every row; both reuse the query's scratch space
-// and leave nothing to close. Run returns Rows to iterate with NextInto and close;
-// RunPage pages explicitly from a saved PageState, and RunUnpaged requests one
-// unpaged response. Parameters are copied during execution admission. Overlapping use
-// returns ErrBusy; Wait joins transport writes and callbacks before reuse.
+// decoders. Session.Prepare creates shareable immutable plans.
 //
-// Prepared.Exec, One and Each execute a prepared statement once with the
-// options of the call. They are safe for concurrent use and reuse queries the
-// statement keeps for them, so they are the cheapest way to run point reads
-// and writes from many goroutines. Do not keep Query values in a sync.Pool:
-// a query the pool drops stays open until it is closed.
+// Prepared.Exec, One and Each execute a prepared statement once. They are safe
+// for concurrent use and run on queries the statement keeps for them, so they
+// allocate no per-call execution state. Each takes at most one BoundOptions,
+// made once by Session.BindOptions; none uses the session's default profile.
+// Exec and Each return (Result, error) and One returns (bool, Result, error),
+// on Prepared and Query alike.
 //
-// NewStreamQuery decodes into seeded caller storage and buffers one response page
-// on normal multiplexed connections by default. StreamOptions.Incremental opts
-// into bounded incremental receive through an exclusive connection reservation.
+// Prepared.Query creates a reusable query owned by one goroutine. It resolves
+// its Options once and saves the pool hand-off of the one-shot calls (about 2
+// to 4 percent of client CPU at high concurrency), and it adds the executions
+// whose handles outlive the call: Run returns Rows to iterate with NextInto and
+// close, RunPage pages explicitly from a saved PageState, and RunUnpaged
+// requests one unpaged response. Session.UnpreparedQuery creates the same kind
+// of query for a statement sent as CQL text on every execution, without server
+// preparation. Parameters are copied during execution admission. A call while
+// a Rows, Page or RowStream of the query is open, or while another goroutine's
+// call runs, returns ErrBusy; a call after an execution that already returned
+// waits until its accepted writes drain. Close stops a query and waits for its
+// drain. Do not keep Query values in a sync.Pool: a query the pool drops stays
+// open until it is closed.
+//
+// Prepared.AddToBatch and Query.AddToBatch append statements to a Batch;
+// Session.ExecBatch and Session.RunBatch send it.
+//
+// Prepared.StreamQuery and Session.UnpreparedStreamQuery decode into seeded
+// caller storage and buffer one response page on normal multiplexed
+// connections by default. StreamOptions.Incremental opts into bounded
+// incremental receive through an exclusive connection reservation.
 // Page-buffered memory scales with concurrent response pages and is bounded by
-// configured frame and decompression limits. Close permanently stops a query.
-// Borrowed result views expire on advancement or cursor Close unless a PageLease
-// retains their page. OwnedBlobCodec fills reusable owned slices with RowInto.
+// configured frame and decompression limits. Borrowed result views expire on
+// advancement or cursor Close unless a PageLease retains their page.
+// OwnedBlobCodec fills reusable owned slices with RowInto.
 package gocql

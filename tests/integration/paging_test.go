@@ -290,7 +290,7 @@ func TestPaging(t *testing.T) {
 			t.Helper()
 			b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{}))
 			defer b.Close()
-			if _, err := Exec(ctx, s, b, gocql.SessionOptions{}); err != nil {
+			if _, err := Exec(ctx, s, b, gocql.BoundOptions{}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -301,7 +301,7 @@ func TestPaging(t *testing.T) {
 			b, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + keyspace, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{})
 			if err == nil {
 				defer b.Close()
-				_, err = Exec(cleanup, s, b, gocql.SessionOptions{})
+				_, err = Exec(cleanup, s, b, gocql.BoundOptions{})
 			}
 			if err != nil {
 				t.Error("unique keyspace cleanup", err)
@@ -320,7 +320,7 @@ func TestPaging(t *testing.T) {
 		textPayload := strings.Repeat("stream-🙂-", 24000)
 		for i := 0; i < 5; i++ {
 			b := codecTestMust(BindOwned(prepared, input{int32(i), payload, [][]byte{[]byte("nested"), []byte("storage")}, textPayload}))
-			_, err := Exec(ctx, s, b, gocql.SessionOptions{})
+			_, err := Exec(ctx, s, b, gocql.BoundOptions{})
 			b.Close()
 			if err != nil {
 				t.Fatal(err)

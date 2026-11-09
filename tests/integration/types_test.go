@@ -79,7 +79,7 @@ func TestTypes(t *testing.T) {
 			testNum := 7500.0
 			params := cql.Params(cql.Param("id", cql.Float64, func(v *float64) float64 { return *v }), cql.Param("test", cql.Float64, func(v *float64) float64 { return *v }))
 			prepared := cassandraPrepared(t, session, cql.Statement[*float64, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,test) VALUES(?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
-			_, err := Exec(context.Background(), session, cassandraBound(t, prepared, &testNum), gocql.SessionOptions{})
+			_, err := Exec(context.Background(), session, cassandraBound(t, prepared, &testNum), gocql.BoundOptions{})
 			require.NoError(t, err)
 			got, err := cassandraField(t, cassandraRead(t, session, "SELECT test FROM "+table), "test").Float()
 			require.NoError(t, err)
@@ -141,7 +141,7 @@ func TestTypes(t *testing.T) {
 			got, err := cassandraField(t, cassandraRead(t, session, selectCQL), "test").Varint()
 			require.NoError(t, err)
 			require.Equal(t, biggie.String(), got.BigInt().String())
-			rows, err := Run(context.Background(), session, cassandraUnprepared(t, selectCQL, cql.OneColumn(cassandraVarintInt64{})), gocql.SessionOptions{})
+			rows, err := Run(context.Background(), session, cassandraUnprepared(t, selectCQL, cql.OneColumn(cassandraVarintInt64{})), gocql.BoundOptions{})
 			require.NoError(t, err)
 			defer rows.Close()
 			var narrowed int64

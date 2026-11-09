@@ -201,8 +201,8 @@ func TestSchemaAgreement(t *testing.T) {
 			}()
 			b := codecTestMust(BindUnpreparedOwned(binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{CQL: "CREATE KEYSPACE schema_events", Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, cqltype.NewColumns(), codec.EmptyRecord{}))
 			defer b.Close()
-			_, err := Exec(ctx, s, b, testOptions(*func() *OptionValues {
-				opaqueStorageValuexxxxxx := new(OptionValues)
+			_, err := Exec(ctx, s, b, testOptions(*func() *Options {
+				opaqueStorageValuexxxxxx := new(Options)
 				OptionsData(opaqueStorageValuexxxxxx).InternalConnection = conn
 				opaqueStorageValuexxxxxx.Idempotent = true
 				opaqueStorageValuexxxxxx.Retry = retryOnce{}
@@ -249,8 +249,8 @@ func TestSchemaAgreement(t *testing.T) {
 			defer bound.Close()
 			result := make(chan error, 1)
 			go func() {
-				_, err := Exec(ctx, s, bound, testOptions(*func() *OptionValues {
-					opaqueStorageValuexxxxxxxxxxxxx := new(OptionValues)
+				_, err := Exec(ctx, s, bound, testOptions(*func() *Options {
+					opaqueStorageValuexxxxxxxxxxxxx := new(Options)
 					OptionsData(opaqueStorageValuexxxxxxxxxxxxx).InternalConnection = conn
 					return opaqueStorageValuexxxxxxxxxxxxx
 				}()))

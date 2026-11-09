@@ -33,8 +33,8 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 )
 
-// ExampleQuery_ExecBatch builds a batch one statement at a time and sends it.
-func ExampleQuery_ExecBatch() {
+// ExampleSession_ExecBatch builds a batch one statement at a time and sends it.
+func ExampleSession_ExecBatch() {
 	// Assumes example.batches(pk int, ck int, description text, PRIMARY KEY(pk, ck)).
 	ctx := context.Background()
 	config, err := gocql.NewConfig("localhost:9042").WithKeyspace("example").Build()
@@ -61,11 +61,6 @@ func ExampleQuery_ExecBatch() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	query, err := queryPrepared.Query(gocql.Options{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer query.Close()
 	var batch gocql.Batch
 	for _, value := range []item{
 		{PK: 1, CK: 2, Description: "1.2"},
@@ -73,18 +68,18 @@ func ExampleQuery_ExecBatch() {
 		{PK: 1, CK: 4, Description: "1.4"},
 		{PK: 1, CK: 5, Description: "1.5"},
 	} {
-		if err := query.AddToBatch(&batch, value); err != nil {
+		if err := queryPrepared.AddToBatch(&batch, value); err != nil {
 			log.Fatal(err)
 		}
 	}
-	idempotent, err := gocql.BindOptions(session, gocql.Options{Idempotent: true})
+	idempotent, err := session.BindOptions(gocql.Options{Idempotent: true})
 	if err != nil {
 		log.Fatal(err)
 	}
-	if _, err := query.ExecBatch(ctx, cql.UnloggedBatch, &batch, idempotent); err != nil {
+	if _, err := session.ExecBatch(ctx, cql.UnloggedBatch, &batch, idempotent); err != nil {
 		log.Fatal(err)
 	}
-	selectAll, err := session.Query(cql.Statement[cql.EmptyParams, item]{
+	selectAll, err := session.UnpreparedQuery(cql.Statement[cql.EmptyParams, item]{
 		CQL: "SELECT pk, ck, description FROM example.batches",
 		Rows: cql.Row(
 			cql.Column("pk", cql.Int32, func(v *item) *int32 { return &v.PK }),
@@ -96,12 +91,12 @@ func ExampleQuery_ExecBatch() {
 		log.Fatal(err)
 	}
 	defer func() {
-		if err := selectAll.CloseAndWait(ctx); err != nil {
+		if err := selectAll.Close(ctx); err != nil {
 			log.Print(err)
 		}
 	}()
 	var row item
-	err = selectAll.Each(ctx, cql.EmptyParams{}, &row, func(v *item) error {
+	_, err = selectAll.Each(ctx, cql.EmptyParams{}, &row, func(v *item) error {
 		fmt.Println(v.PK, v.CK, v.Description)
 		return nil
 	})

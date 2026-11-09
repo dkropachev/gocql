@@ -54,14 +54,14 @@ func BenchmarkExecution(b *testing.B) {
 	})
 
 	// BenchmarkExecution/NewOptionTemplates encodes the templates of resolved options, as
-	// NewOptions and a query created with options for another session do.
+	// NewBoundOptions and a query created with options for another session do.
 	b.Run("NewOptionTemplates", func(b *testing.B) {
 		profile := defaultProfile()
 		profile.PageSize = 5000
 		for _, c := range []struct {
 			name   string
-			values OptionValues
-		}{{"plain", OptionValues{}}, {"timestamp", OptionValues{Timestamp: Option[int64]{Value: 1, Set: true}}}} {
+			values Options
+		}{{"plain", Options{}}, {"timestamp", Options{Timestamp: Option[int64]{Value: 1, Set: true}}}} {
 			b.Run(c.name, func(b *testing.B) {
 				b.ReportAllocs()
 				for i := 0; i < b.N; i++ {
@@ -79,7 +79,7 @@ func BenchmarkExecution(b *testing.B) {
 	// keeps queries in a sync.Pool; prepared calls Prepared.Exec and One. ns/op
 	// is wall time per completed operation.
 	b.Run("OneShotLoopback", func(b *testing.B) {
-		options := testOptions(OptionValues{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
+		options := testOptions(Options{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
 		writeStmt := binding.Statement[loopbackRow, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k, value) VALUES(?, ?)", Params: codec.Params(codec.ParamAt(0, codec.Int32, func(r loopbackRow) int32 { return r.k }), codec.ParamAt(1, codec.BytesEncoder, func(r loopbackRow) []byte { return r.value })), Rows: codec.EmptyRowDecoder}
 		readStmt := binding.Statement[int32, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: codec.OneParam(codec.Int32), Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 		variants := []string{"bind", "bindborrowed", "query", "userpool", "prepared"}
@@ -89,6 +89,9 @@ func BenchmarkExecution(b *testing.B) {
 				for _, workers := range []int{1, 8, 64} {
 					b.Run(fmt.Sprintf("%s/%s/w%d", op, variant, workers), func(b *testing.B) {
 						s := loopbackTestSession(b, workload)
+						// One-shot calls take options bound to their session, as
+						// the public API requires.
+						bound := codecTestMust(InternalBindOptions(s, options.Values()))
 						var wp *Prepared[loopbackRow, codec.EmptyRecord]
 						var rp *Prepared[int32, []byte]
 						var wpool, rpool sync.Pool
@@ -104,7 +107,7 @@ func BenchmarkExecution(b *testing.B) {
 							input := loopbackRow{k: int32(i), value: []byte(loopbackValue)}
 							key := int32(i)
 							dst := make([]byte, 0, len(loopbackValue))
-							check := func(found bool, err error) error {
+							check := func(found bool, _ Result, err error) error {
 								if err != nil {
 									return err
 								}
@@ -117,10 +120,10 @@ func BenchmarkExecution(b *testing.B) {
 							var rq *Query[int32, []byte]
 							if variant == "query" && op == "exec" {
 								wq = codecTestMust(NewQuery(wp, options.Values()))
-								b.Cleanup(wq.Close)
+								b.Cleanup(func() { _ = wq.Close(context.Background()) })
 							} else if variant == "query" {
 								rq = codecTestMust(NewQuery(rp, options.Values()))
-								b.Cleanup(rq.Close)
+								b.Cleanup(func() { _ = rq.Close(context.Background()) })
 							}
 							switch variant + "/" + op {
 							case "bind/exec", "bindborrowed/exec":
@@ -152,31 +155,30 @@ func BenchmarkExecution(b *testing.B) {
 									if err != nil {
 										return err
 									}
-									found, _, err := RunOne(ctx, s, bound, options, &dst)
-									return check(found, err)
+									return check(RunOne(ctx, s, bound, options, &dst))
 								}
 							case "query/exec":
-								run[i] = func(ctx context.Context) error { return wq.Exec(ctx, input) }
+								run[i] = func(ctx context.Context) error { _, err := wq.Exec(ctx, input); return err }
 							case "query/one":
 								run[i] = func(ctx context.Context) error { return check(rq.One(ctx, key, &dst)) }
 							case "userpool/exec":
 								run[i] = func(ctx context.Context) error {
 									q := wpool.Get().(*Query[loopbackRow, codec.EmptyRecord])
-									err := q.Exec(ctx, input)
+									_, err := q.Exec(ctx, input)
 									wpool.Put(q)
 									return err
 								}
 							case "userpool/one":
 								run[i] = func(ctx context.Context) error {
 									q := rpool.Get().(*Query[int32, []byte])
-									found, err := q.One(ctx, key, &dst)
+									found, result, err := q.One(ctx, key, &dst)
 									rpool.Put(q)
-									return check(found, err)
+									return check(found, result, err)
 								}
 							case "prepared/exec":
-								run[i] = func(ctx context.Context) error { _, err := wp.Exec(ctx, input, options); return err }
+								run[i] = func(ctx context.Context) error { _, err := wp.Exec(ctx, input, bound); return err }
 							case "prepared/one":
-								run[i] = func(ctx context.Context) error { return check(rp.One(ctx, key, &dst, options)) }
+								run[i] = func(ctx context.Context) error { return check(rp.One(ctx, key, &dst, bound)) }
 							}
 						}
 						ctx := context.Background()
@@ -233,7 +235,7 @@ func BenchmarkExecution(b *testing.B) {
 				b.ResetTimer()
 				b.RunParallel(func(pb *testing.PB) {
 					for pb.Next() {
-						ctx, cancel, request, err := InternalAdmitExecution(context.Background(), s, bound, Options{})
+						ctx, cancel, request, err := InternalAdmitExecution(context.Background(), s, bound, BoundOptions{})
 						if err != nil {
 							b.Error(err)
 							return
@@ -269,7 +271,7 @@ func BenchmarkExecution(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				err := execTestStatement(context.Background(), db, "void", Options{})
+				err := execTestStatement(context.Background(), db, "void", BoundOptions{})
 				if err != nil {
 					b.Error(err)
 					return

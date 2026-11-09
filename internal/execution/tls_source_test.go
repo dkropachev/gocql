@@ -54,7 +54,7 @@ func TestTLSSourceSession(t *testing.T) {
 	if !ok || dialer.InternalConfig.TLSSource != source {
 		t.Fatal("the session dialer does not read the TLS source")
 	}
-	if err := execTestStatement(ctx, InternalCore(session), "void", Options{}); err != nil {
+	if err := execTestStatement(ctx, InternalCore(session), "void", BoundOptions{}); err != nil {
 		t.Fatal(err)
 	}
 }

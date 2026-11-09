@@ -146,12 +146,12 @@ func run() (resultErr error) {
 		return fmt.Errorf("invalid owned namespace %q", namespace)
 	}
 	execContext := func(operation context.Context, text string) error {
-		b, err := s.Query(cql.Command(text), gocql.Options{})
+		b, err := s.UnpreparedQuery(cql.Command(text), gocql.Options{})
 		if err != nil {
 			return err
 		}
-		defer b.Close()
-		err = b.Exec(operation, cql.EmptyParams{})
+		defer func() { _ = b.Close(operation) }()
+		_, err = b.Exec(operation, cql.EmptyParams{})
 		return err
 	}
 	exec := func(text string) error { return execContext(ctx, text) }
@@ -200,13 +200,10 @@ func run() (resultErr error) {
 	if err != nil {
 		return err
 	}
-	defer writeQuery.Close()
+	defer func() { _ = writeQuery.Close(ctx) }()
 	payload := bytes.Repeat([]byte("typed-stream-"), 16384)
 	for i := int32(0); i < 3; i++ {
-		if err := writeQuery.Exec(ctx, record{ID: i, Payload: payload, Pieces: [][]byte{[]byte("nested"), []byte("storage")}}); err != nil {
-			return err
-		}
-		if err := writeQuery.Wait(ctx); err != nil {
+		if _, err := writeQuery.Exec(ctx, record{ID: i, Payload: payload, Pieces: [][]byte{[]byte("nested"), []byte("storage")}}); err != nil {
 			return err
 		}
 	}
@@ -229,7 +226,7 @@ func run() (resultErr error) {
 	if err != nil {
 		return err
 	}
-	defer query.Close()
+	defer func() { _ = query.Close(ctx) }()
 	stream, err := query.Run(ctx, cql.EmptyParams{})
 	if *incremental && *protocol < 5 && frameCompression != gocql.NoCompression {
 		if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {
@@ -248,12 +245,6 @@ func run() (resultErr error) {
 	blockedCancel()
 	if !errors.Is(blockedErr, cqlerr.ErrBusy) {
 		return fmt.Errorf("query admission: %w", blockedErr)
-	}
-	waitCtx, waitCancel := context.WithTimeout(ctx, 20*time.Millisecond)
-	waitErr := query.Wait(waitCtx)
-	waitCancel()
-	if !errors.Is(waitErr, context.DeadlineExceeded) {
-		return fmt.Errorf("active query drain: %w", waitErr)
 	}
 	// Seed both the outer slots and every nested payload before the first NextInto.
 	row := record{Payload: make([]byte, 0, len(payload)), Pieces: [][]byte{make([]byte, 0, 16), make([]byte, 0, 16)}}
@@ -276,7 +267,7 @@ func run() (resultErr error) {
 	if err := stream.Close(); err != nil {
 		return err
 	}
-	if err := query.Wait(ctx); err != nil {
+	if err := query.Close(ctx); err != nil {
 		return err
 	}
 	if len(seen) != 3 || !bytes.Equal(row.Payload, payload) {

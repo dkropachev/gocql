@@ -44,7 +44,7 @@ func buildBatch(s *gocql.Session, items []batchItem) (*gocql.Batch, error) {
 	return batch, nil
 }
 
-func execBatch(ctx context.Context, s *gocql.Session, kind cql.BatchKind, items []batchItem, options gocql.SessionOptions) (gocql.Result, error) {
+func execBatch(ctx context.Context, s *gocql.Session, kind cql.BatchKind, items []batchItem, options gocql.BoundOptions) (gocql.Result, error) {
 	batch, err := buildBatch(s, items)
 	if err != nil {
 		return gocql.Result{}, err
@@ -52,7 +52,7 @@ func execBatch(ctx context.Context, s *gocql.Session, kind cql.BatchKind, items 
 	return implExecution.InternalExecBatch(ctx, implExecution.InternalCore(s), kind, batch, options)
 }
 
-func runBatch[R any](ctx context.Context, s *gocql.Session, kind cql.BatchKind, items []batchItem, decoder cql.RowDecoder[R], options gocql.SessionOptions) (*gocql.Page[R], error) {
+func runBatch[R any](ctx context.Context, s *gocql.Session, kind cql.BatchKind, items []batchItem, decoder cql.RowDecoder[R], options gocql.BoundOptions) (*gocql.Page[R], error) {
 	batch, err := buildBatch(s, items)
 	if err != nil {
 		return nil, err
@@ -72,15 +72,15 @@ func BindUnpreparedOwned[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a
 	return implExecution.BindUnpreparedOwned[P, R](a0, a1, a2)
 }
 
-func Exec[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.SessionOptions) (gocql.Result, error) {
+func Exec[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.BoundOptions) (gocql.Result, error) {
 	return implExecution.Exec[R](a0, implExecution.InternalCore(a1), a2, a3)
 }
 
-func Run[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.SessionOptions) (gocql.Rows[R], error) {
+func Run[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.BoundOptions) (gocql.Rows[R], error) {
 	return implExecution.Run[R](a0, implExecution.InternalCore(a1), a2, a3)
 }
 
-func RunPage[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.PageState, a4 gocql.SessionOptions) (*gocql.Page[R], error) {
+func RunPage[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.PageState, a4 gocql.BoundOptions) (*gocql.Page[R], error) {
 	return implExecution.RunPage[R](a0, implExecution.InternalCore(a1), a2, a3, a4)
 }
 
@@ -88,6 +88,6 @@ func RunStream[B any, R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[B]
 	return implExecution.RunStream[B, R](a0, implExecution.InternalCore(a1), a2, a3, a4)
 }
 
-func RunUnpaged[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.SessionOptions) (*gocql.Page[R], error) {
+func RunUnpaged[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.BoundOptions) (*gocql.Page[R], error) {
 	return implExecution.RunUnpaged[R](a0, implExecution.InternalCore(a1), a2, a3)
 }

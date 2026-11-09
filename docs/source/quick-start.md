@@ -20,9 +20,11 @@ the rows. Use `query.Exec` for statements without results: their row type is
 `cql.EmptyRow`. A statement with no bind markers takes `cql.EmptyParams`. Leave
 `Params` or `Rows` nil for those empty types; `cql.Command(text)` builds a
 statement with neither, such as DDL. Parameters are copied on admission.
-Overlapping executions return `ErrBusy`; `query.Wait(ctx)` waits for transport
-and callbacks to drain. Close queries when finished, or call
-`query.CloseAndWait(ctx)` to close and wait in one step.
+`prepared.One`, `prepared.Each` and `prepared.Exec` run a prepared statement
+once from any goroutine without creating a query. A query call while a `Rows`
+of that query is open, or while another goroutine's call runs, returns
+`ErrBusy`. Close queries when finished with `query.Close(ctx)`, which also waits
+for transport writes and callbacks to drain.
 
 The repository's external-package `Example` and other `example_*_test.go` files
 compile against the normal public API. The complete `examples/streaming` command

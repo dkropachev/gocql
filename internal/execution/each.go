@@ -20,6 +20,15 @@ type eachScratch struct {
 	cursor wire.Cursor
 }
 
+// nilEachCallback reports Each's nil callback. It stays out of line: building
+// the error inside Query.Each slows its row loop by about 1.4%.
+//
+//go:noinline
+func nilEachCallback() (Result, error) {
+	err := typeValidation("row callback", "nil callback")
+	return InternalExecutionErrorResult(err), err
+}
+
 // errStopEach ends Each early without reporting an error.
 var errStopEach = errors.New("gocql: stop iteration")
 
@@ -28,13 +37,13 @@ var errStopEach = errors.New("gocql: stop iteration")
 // response storage released before Each returns, so there is no iterator to
 // close or wait for. Values that borrow response storage are valid only until
 // fn returns. A non-nil error from fn stops the iteration and is returned.
-func RunEach[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options Options, dst *R, fn func(*R) error) (Result, error) {
+func RunEach[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions, dst *R, fn func(*R) error) (Result, error) {
 	_, result, err := each(ctx, s, b, options, dst, fn, new(eachScratch))
 	return result, err
 }
 
 // each runs RunEach, or RunOne when fn is nil.
-func each[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options Options, dst *R, fn func(*R) error, scratch *eachScratch) (bool, Result, error) {
+func each[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions, dst *R, fn func(*R) error, scratch *eachScratch) (bool, Result, error) {
 	if b == nil {
 		return false, Result{}, typeValidation("binding", "nil binding")
 	}
@@ -151,7 +160,7 @@ func decodeEach[R any](ctx context.Context, s *implCluster.Core, response *respo
 // reporting whether a row existed. Further rows are ignored, as with
 // database/sql's QueryRow. Values that borrow response storage are invalid
 // once RunOne returns; use owning codecs for them.
-func RunOne[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options Options, dst *R) (bool, Result, error) {
+func RunOne[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions, dst *R) (bool, Result, error) {
 	found, result, err := each(ctx, s, b, options, dst, nil, new(eachScratch))
 	if !found && err == nil {
 		InternalClearDestination(dst)
@@ -159,33 +168,36 @@ func RunOne[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], option
 	return found, result, err
 }
 
-// Each captures value and runs RunEach with this query's storage. The query
-// is idle again when Each returns; LastResult reports the outcome's result
-// information.
-func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error) error {
+// Each executes the query with value and decodes every row, across all
+// pages, into dst, calling fn after each row. Values that borrow response
+// storage are valid only until fn returns. A non-nil error from fn stops the
+// iteration and is returned. The query is ready for its next execution when
+// Each returns. The Result reports the coordinator, attempts, latency, row
+// count and any warnings, trace IDs or custom payload.
+func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error) (Result, error) {
+	if fn == nil {
+		return nilEachCallback()
+	}
 	if err := q.capture(ctx, value); err != nil {
-		q.last = InternalExecutionErrorResult(err)
-		return err
+		return InternalExecutionErrorResult(err), err
 	}
 	defer q.state.owner.InternalRelease()
-	var err error
-	_, q.last, err = each(ctx, q.state.runtime.Core, &q.bound, q.options, dst, fn, &q.scratch)
-	return err
+	_, result, err := each(ctx, q.state.runtime.Core, &q.bound, q.options, dst, fn, &q.scratch)
+	return result, err
 }
 
-// One captures value and runs RunOne with this query's storage. The query
-// is idle again when One returns; LastResult reports the outcome's result
-// information.
-func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, error) {
+// One executes the query with value and decodes its first row into dst,
+// reporting whether a row existed; without one, dst is cleared. Values that
+// borrow response storage are invalid once One returns. The query is ready
+// for its next execution when One returns.
+func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, Result, error) {
 	if err := q.capture(ctx, value); err != nil {
-		q.last = InternalExecutionErrorResult(err)
-		return false, err
+		return false, InternalExecutionErrorResult(err), err
 	}
 	defer q.state.owner.InternalRelease()
 	found, result, err := each(ctx, q.state.runtime.Core, &q.bound, q.options, dst, nil, &q.scratch)
-	q.last = result
 	if !found && err == nil {
 		InternalClearDestination(dst)
 	}
-	return found, err
+	return found, result, err
 }

@@ -125,7 +125,7 @@ func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Dura
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	bound := runtimeQuery(t)
-	page, err := RunPage(ctx, s, bound, model.StartPage(), testOptions(OptionValues{Profile: handle, Idempotent: true, CustomPayload: []model.PayloadEntry{{Key: "borrowed", Value: cqltype.Nullable[cqltype.Bytes]{Valid: true, Value: cqltype.BorrowBytes([]byte("per-call-payload"))}}}}))
+	page, err := RunPage(ctx, s, bound, model.StartPage(), testOptions(Options{Profile: handle, Idempotent: true, CustomPayload: []model.PayloadEntry{{Key: "borrowed", Value: cqltype.Nullable[cqltype.Bytes]{Valid: true, Value: cqltype.BorrowBytes([]byte("per-call-payload"))}}}}))
 	if err != nil {
 		t.Fatal(err)
 	}

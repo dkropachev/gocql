@@ -36,10 +36,10 @@ import (
 )
 
 // StreamOptions configures a stream query; streaming is pull-driven. The
-// query validates and resolves Options for its session once, when it is
+// query validates and resolves BoundOptions for its session once, when it is
 // created.
 type StreamOptions struct {
-	Options OptionValues
+	Options Options
 	Limits  StreamLimits
 	// Incremental reserves an exclusive connection and bounds receive scratch.
 	// The default buffers a complete page on normal multiplexed connections.
@@ -65,7 +65,7 @@ func RunStream[B, R any](ctx context.Context, session *implCluster.Core, bound *
 	}
 	return runStreamWithCache(ctx, session, bound, decoder, frozen, options.Limits, options.Incremental, nil)
 }
-func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core, bound *Bound[B], decoder StreamRowDecoder[R], options Options, streamLimits StreamLimits, incremental bool, plans *streamPlanCache[R]) (*RowStream[R], error) {
+func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core, bound *Bound[B], decoder StreamRowDecoder[R], options BoundOptions, streamLimits StreamLimits, incremental bool, plans *streamPlanCache[R]) (*RowStream[R], error) {
 	if decoder == nil {
 		return nil, typeValidation("stream decoder", "nil decoder")
 	}

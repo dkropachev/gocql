@@ -152,7 +152,7 @@ func TestBatch(t *testing.T) {
 			_, err = execBatch(ctx, session, cql.LoggedBatch, items, bindOptions(session, options))
 			require.ErrorIs(t, err, cqlerr.ErrClosed)
 			require.NoError(t, first.Wait(ctx))
-			_, err = Exec(ctx, session, second, gocql.SessionOptions{})
+			_, err = Exec(ctx, session, second, gocql.BoundOptions{})
 			require.NoError(t, err)
 		})
 		t.Run("BeginApplyStatement", func(t *testing.T) {
@@ -210,7 +210,7 @@ func TestBatch(t *testing.T) {
 			defer bound.Close()
 			item, err := BatchEntry(bound)
 			require.NoError(t, err)
-			_, err = execBatch(ctx, session, cql.LoggedBatch, []batchItem{item}, gocql.SessionOptions{})
+			_, err = execBatch(ctx, session, cql.LoggedBatch, []batchItem{item}, gocql.BoundOptions{})
 			require.Error(t, err, "expected to get error for invalid query in batch")
 			var server cqlerr.RequestError
 			require.ErrorAs(t, err, &server)
@@ -229,7 +229,7 @@ func TestBatch(t *testing.T) {
 				items[i] = cassandraItem(t, bound)
 			}
 			before := session.Metrics()
-			_, err := execBatch(context.Background(), session, cql.LoggedBatch, items, gocql.SessionOptions{})
+			_, err := execBatch(context.Background(), session, cql.LoggedBatch, items, gocql.BoundOptions{})
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "65535")
 			require.Equal(t, before.Requests, session.Metrics().Requests, "oversized batches must be rejected before submission")

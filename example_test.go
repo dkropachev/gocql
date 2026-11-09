@@ -66,11 +66,11 @@ func Example() {
 		log.Fatal(err)
 	}
 	defer func() {
-		if err := insert.CloseAndWait(ctx); err != nil {
+		if err := insert.Close(ctx); err != nil {
 			log.Print(err)
 		}
 	}()
-	if err := insert.Exec(ctx, tweet{cql.NewTimeUUID(), "me", "hello world"}); err != nil {
+	if _, err := insert.Exec(ctx, tweet{cql.NewTimeUUID(), "me", "hello world"}); err != nil {
 		log.Fatal(err)
 	}
 	selectTweetsPrepared, err := session.Prepare(ctx, cql.Statement[string, tweet]{
@@ -90,12 +90,12 @@ func Example() {
 		log.Fatal(err)
 	}
 	defer func() {
-		if err := selectTweets.CloseAndWait(ctx); err != nil {
+		if err := selectTweets.Close(ctx); err != nil {
 			log.Print(err)
 		}
 	}()
 	var row tweet
-	err = selectTweets.Each(ctx, "me", &row, func(row *tweet) error {
+	_, err = selectTweets.Each(ctx, "me", &row, func(row *tweet) error {
 		fmt.Println(row.ID, row.Text)
 		return nil
 	})

@@ -100,7 +100,7 @@ func TestConnStartup(t *testing.T) {
 					require.NoError(t, err)
 					defer db.Close()
 
-					require.NoError(t, execTestStatement(context.Background(), db, "void", Options{}))
+					require.NoError(t, execTestStatement(context.Background(), db, "void", BoundOptions{}))
 
 					conn := implCluster.InternalSessionGetConn(db)
 					require.NotNil(t, conn)
@@ -167,7 +167,7 @@ func TestConnStartup(t *testing.T) {
 			require.Contains(t, logged, "lz4", "the warning must name what the server offered instead")
 
 			// The connection is still expected to work -- the point of the fallback.
-			require.NoError(t, execTestStatement(context.Background(), db, "void", Options{}))
+			require.NoError(t, execTestStatement(context.Background(), db, "void", BoundOptions{}))
 		})
 	})
 
@@ -254,8 +254,8 @@ func TestConnStartup(t *testing.T) {
 		})
 	})
 
-	t.Run("Options", func(t *testing.T) {
-		// TestConnStartup/Options/KeepDriverKeys pins that ApplicationInfo cannot overwrite the
+	t.Run("BoundOptions", func(t *testing.T) {
+		// TestConnStartup/BoundOptions/KeepDriverKeys pins that ApplicationInfo cannot overwrite the
 		// STARTUP options the driver owns.
 		//
 		// CQL_VERSION, DRIVER_NAME and DRIVER_VERSION describe the driver and the

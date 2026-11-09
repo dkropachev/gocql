@@ -37,7 +37,7 @@ func TestPreparedOneShot(t *testing.T) {
 			first := make(chan error, 1)
 			go func() {
 				var dst []byte
-				_, err := p.One(ctx, 1, &dst, Options{})
+				_, _, err := p.One(ctx, 1, &dst)
 				first <- err
 			}()
 			r1 := <-requests
@@ -49,7 +49,7 @@ func TestPreparedOneShot(t *testing.T) {
 			second := make(chan error, 1)
 			go func() {
 				var dst []byte
-				found, err := p.One(context.Background(), 2, &dst, Options{})
+				found, _, err := p.One(context.Background(), 2, &dst)
 				if err == nil && (!found || string(dst) != "fresh") {
 					err = fmt.Errorf("found %t, row %q", found, dst)
 				}
@@ -88,7 +88,7 @@ func TestPreparedOneShot(t *testing.T) {
 					for w := range 32 {
 						wg.Go(func() {
 							for i := range 100 {
-								if _, err := p.Exec(ctx, loopbackRow{k: int32(w*100 + i), value: []byte(loopbackValue)}, Options{}); err != nil {
+								if _, err := p.Exec(ctx, loopbackRow{k: int32(w*100 + i), value: []byte(loopbackValue)}); err != nil {
 									errs <- err
 									return
 								}
@@ -104,19 +104,19 @@ func TestPreparedOneShot(t *testing.T) {
 								var err error
 								if i%2 == 0 {
 									var found bool
-									found, err = p.One(ctx, int32(w), &dst, Options{})
+									found, _, err = p.One(ctx, int32(w), &dst)
 									if err == nil && (!found || string(dst) != loopbackValue) {
 										err = fmt.Errorf("bad row")
 									}
 								} else {
 									rows := 0
-									err = p.Each(ctx, int32(w), &dst, func(row *[]byte) error {
+									_, err = p.Each(ctx, int32(w), &dst, func(row *[]byte) error {
 										if string(*row) != loopbackValue {
 											return fmt.Errorf("bad row")
 										}
 										rows++
 										return nil
-									}, Options{})
+									})
 									if err == nil && rows != 1 {
 										err = fmt.Errorf("%d rows", rows)
 									}
@@ -138,8 +138,8 @@ func TestPreparedOneShot(t *testing.T) {
 		}
 	})
 
-	t.Run("Options", func(t *testing.T) {
-		// TestPreparedOneShot/Options/PerCall checks that each call's options reach the
+	t.Run("BoundOptions", func(t *testing.T) {
+		// TestPreparedOneShot/BoundOptions/PerCall checks that each call's options reach the
 		// wire while calls reuse one pooled query.
 		t.Run("PerCall", func(t *testing.T) {
 			s, _, peers := runtimeTestSession(t, 1)
@@ -147,23 +147,23 @@ func TestPreparedOneShot(t *testing.T) {
 			defer peers[0].Close()
 			requests := make(chan oneShotRequest, 1)
 			p := oneShotPrepare(t, s, peers[0], requests)
-			quorum := testOptions(OptionValues{Consistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.Quorum}, PageSize: cqltype.Option[int32]{Set: true, Value: 7}})
-			two := testOptions(OptionValues{Consistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.Two}})
+			quorum := testOptions(Options{Consistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.Quorum}, PageSize: cqltype.Option[int32]{Set: true, Value: 7}})
+			two := testOptions(Options{Consistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.Two}})
 			defaults := settings.InternalDefaultProfile()
 			for i, tc := range []struct {
-				options     Options
+				options     BoundOptions
 				consistency cqltype.Consistency
 				pageSize    int32
 			}{
 				{quorum, cqltype.Quorum, 7},
 				{two, cqltype.Two, defaults.PageSize},
-				{Options{}, defaults.Consistency, defaults.PageSize},
+				{BoundOptions{}, defaults.Consistency, defaults.PageSize},
 				{quorum, cqltype.Quorum, 7},
 			} {
 				errs := make(chan error, 1)
 				var dst []byte
 				go func() {
-					found, err := p.One(context.Background(), int32(i), &dst, tc.options)
+					found, _, err := p.One(context.Background(), int32(i), &dst, tc.options)
 					if err == nil && (!found || string(dst) != "row") {
 						err = fmt.Errorf("found %t, row %q", found, dst)
 					}
@@ -197,7 +197,7 @@ func TestPreparedOneShot(t *testing.T) {
 				errs := make(chan error, 1)
 				go func() {
 					var dst []byte
-					_, err := p.One(context.Background(), 1, &dst, Options{})
+					_, _, err := p.One(context.Background(), 1, &dst)
 					errs <- err
 				}()
 				r := <-requests
@@ -237,7 +237,7 @@ func TestPreparedOneShot(t *testing.T) {
 			for i := range burst {
 				go func() {
 					var dst []byte
-					_, err := p.One(context.Background(), int32(i), &dst, Options{})
+					_, _, err := p.One(context.Background(), int32(i), &dst)
 					errs <- err
 				}()
 			}
@@ -275,7 +275,7 @@ func TestPreparedOneShot(t *testing.T) {
 		inflight := make(chan error, 1)
 		go func() {
 			var dst []byte
-			_, err := p.One(context.Background(), 1, &dst, Options{})
+			_, _, err := p.One(context.Background(), 1, &dst)
 			inflight <- err
 		}()
 		<-requests
@@ -290,7 +290,7 @@ func TestPreparedOneShot(t *testing.T) {
 			t.Fatal("close did not stop the unanswered call")
 		}
 		<-closed
-		if _, err := p.Exec(context.Background(), 2, Options{}); !errors.Is(err, runtimeerrors.ErrClosed) {
+		if _, err := p.Exec(context.Background(), 2); !errors.Is(err, runtimeerrors.ErrClosed) {
 			t.Fatalf("call after close: %v", err)
 		}
 	})
@@ -316,7 +316,7 @@ func TestPreparedOneShot(t *testing.T) {
 				}
 				call := make(chan error, 1)
 				go func() {
-					_, err := p.Exec(context.Background(), 1, testOptions(OptionValues{Profile: &profile}))
+					_, err := p.Exec(context.Background(), 1, testOptions(Options{Profile: &profile}))
 					call <- err
 				}()
 				r := <-requests
@@ -353,12 +353,13 @@ func TestPreparedOneShot(t *testing.T) {
 		call := make(chan error, 1)
 		go func() {
 			var dst []byte
-			call <- p.Each(context.Background(), 1, &dst, func(*[]byte) error {
+			_, err := p.Each(context.Background(), 1, &dst, func(*[]byte) error {
 				close(entered)
 				<-release
 				returned.Store(true)
 				return nil
-			}, Options{})
+			})
+			call <- err
 		}()
 		r := <-requests
 		if _, err := peers[0].Write(typedTestResponse(t, 4, r.stream, runtimeRowsBody(nil, "row"))); err != nil {

@@ -5,7 +5,6 @@ package gocql
 
 import (
 	"context"
-	"errors"
 
 	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -67,28 +66,16 @@ func OpenSingleHost(ctx context.Context, config Config, hostID cql.UUID) (*Sessi
 // Options lists the settings of an execution. The zero Options uses the
 // session's default profile. Query constructors take Options and validate and
 // resolve them for their session once, so query executions do no per-call
-// work; one-shot executions take SessionOptions from BindOptions instead.
-type Options = implExecution.OptionValues
+// work; one-shot executions take BoundOptions from Session.BindOptions
+// instead.
+type Options = implExecution.Options
 
-// SessionOptions are Options validated, resolved against one session's
-// default profile and keyspace, and encoded once by BindOptions, for one-shot
-// executions such as Prepared.Exec, Query.ExecBatch and Query.RunBatch. They are
-// immutable and safe to share between goroutines. Executions use them as they
-// are, without checking which session runs them: using them on another
-// session applies the binding session's default profile and keyspace. The
-// zero SessionOptions uses the executing session's default profile.
-type SessionOptions = implExecution.Options
-
-// BindOptions validates options and resolves them for session into
-// SessionOptions; the zero Options gives the zero SessionOptions. The custom
-// payload and the profile are copied, so later changes to options do not
-// reach the result.
-func BindOptions(session *Session, options Options) (SessionOptions, error) {
-	if session == nil {
-		return SessionOptions{}, errors.New("gocql: BindOptions requires a session")
-	}
-	return implExecution.InternalBindOptions(implExecution.InternalCore(session), options)
-}
+// BoundOptions are Options validated, resolved against one session's default
+// profile and keyspace, and encoded once by Session.BindOptions, for one-shot
+// executions such as Prepared.Exec and Session.ExecBatch. They are immutable
+// and safe to share between goroutines. The zero BoundOptions uses the
+// executing session's default profile.
+type BoundOptions = implExecution.BoundOptions
 
 const OverflowEvent = implCluster.OverflowEvent
 

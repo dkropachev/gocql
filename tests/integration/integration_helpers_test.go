@@ -300,7 +300,7 @@ func v2Exec(ctx context.Context, session *gocql.Session, stmt string, values ...
 		return gocql.Result{}, err
 	}
 	defer bound.Close()
-	return Exec(ctx, session, bound, gocql.SessionOptions{})
+	return Exec(ctx, session, bound, gocql.BoundOptions{})
 }
 
 func v2Query(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (gocql.Rows[cql.DynamicRow], error) {
@@ -322,7 +322,7 @@ func v2Query(ctx context.Context, session *gocql.Session, stmt string, values ..
 	// Run admits the request before returning. Rows owns the execution reference
 	// until it is exhausted or closed, even after closing the binding here.
 	defer bound.Close()
-	return Run(ctx, session, bound, gocql.SessionOptions{})
+	return Run(ctx, session, bound, gocql.BoundOptions{})
 }
 
 func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (cql.DynamicRow, error) {

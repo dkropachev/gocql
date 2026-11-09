@@ -54,8 +54,8 @@ func ExampleParamsOf() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer insert.CloseAndWait(ctx)
-	if err := insert.Exec(ctx, Tweet{ID: cql.NewTimeUUID(), Timeline: "me", Text: "hello world"}); err != nil {
+	defer insert.Close(ctx)
+	if _, err := insert.Exec(ctx, Tweet{ID: cql.NewTimeUUID(), Timeline: "me", Text: "hello world"}); err != nil {
 		log.Fatal(err)
 	}
 
@@ -71,7 +71,7 @@ func ExampleParamsOf() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer edit.CloseAndWait(ctx)
+	defer edit.Close(ctx)
 
 	selectTweetsPrepared, err := session.Prepare(ctx, cql.Statement[string, Tweet]{
 		CQL:    "SELECT id, timeline, text FROM tweet WHERE timeline = ?",
@@ -85,9 +85,9 @@ func ExampleParamsOf() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer selectTweets.CloseAndWait(ctx)
+	defer selectTweets.Close(ctx)
 	var row Tweet
-	err = selectTweets.Each(ctx, "me", &row, func(row *Tweet) error {
+	_, err = selectTweets.Each(ctx, "me", &row, func(row *Tweet) error {
 		fmt.Println(row.ID, row.Text)
 		return nil
 	})

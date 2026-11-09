@@ -38,11 +38,11 @@ import (
 func batchTestQuery(t testing.TB, s *implCluster.Core) *Query[[]byte, EmptyRecord] {
 	t.Helper()
 	typ := cqltype.BlobType
-	q, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, OptionValues{})
+	q, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(q.Close)
+	t.Cleanup(func() { _ = q.Close(context.Background()) })
 	return q
 }
 
@@ -194,8 +194,8 @@ func TestBatch(t *testing.T) {
 				PreparedData(handle).InternalParams = codecTestMust(codec.OneParam(codec.BytesEncoder).Compile(columns))
 				PreparedData(handle).InternalRows = codec.EmptyRowDecoder
 				PreparedData(handle).InternalPlans = &InternalResultPlanCache[EmptyRecord]{}
-				q := codecTestMust(NewQuery(handle, OptionValues{}))
-				t.Cleanup(q.Close)
+				q := codecTestMust(NewQuery(handle, Options{}))
+				t.Cleanup(func() { _ = q.Close(context.Background()) })
 				return q
 			}
 			first, second := query("id1"), query("id2")
@@ -236,7 +236,7 @@ func TestBatch(t *testing.T) {
 			}()
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			if _, err := first.ExecBatch(ctx, LoggedBatch, &batch, Options{}); err != nil {
+			if _, err := InternalWrapSession(s).ExecBatch(ctx, LoggedBatch, &batch); err != nil {
 				t.Fatal(err)
 			}
 			if err := <-serverDone; err != nil {
@@ -271,7 +271,7 @@ func TestBatch(t *testing.T) {
 			}
 			// A batch may be sent again unchanged.
 			for i := 0; i < 2; i++ {
-				if _, err := q.ExecBatch(ctx, LoggedBatch, &batch, Options{}); err != nil {
+				if _, err := InternalWrapSession(s).ExecBatch(ctx, LoggedBatch, &batch); err != nil {
 					t.Fatal(err)
 				}
 				r := <-requests
@@ -293,7 +293,7 @@ func TestBatch(t *testing.T) {
 			if &batch.values[0] != values {
 				t.Fatal("Reset did not keep the storage")
 			}
-			if _, err := q.ExecBatch(ctx, UnloggedBatch, &batch, Options{}); err != nil {
+			if _, err := InternalWrapSession(s).ExecBatch(ctx, UnloggedBatch, &batch); err != nil {
 				t.Fatal(err)
 			}
 			r := <-requests
@@ -391,10 +391,12 @@ func TestBatch(t *testing.T) {
 	t.Run("Validation", func(t *testing.T) {
 		s, _, _ := runtimeTestSession(t, 0)
 		q := batchTestQuery(t, s)
+		session := InternalWrapSession(s)
 		other := testOwnedQuery(t)
+		otherSession := InternalWrapSession(other.state.runtime.Core)
 		ctx := context.Background()
 		var batch Batch
-		if _, err := q.ExecBatch(ctx, LoggedBatch, &batch, Options{}); err == nil {
+		if _, err := session.ExecBatch(ctx, LoggedBatch, &batch); err == nil {
 			t.Fatal("empty batch sent")
 		}
 		if err := q.AddToBatch(nil, []byte("v")); err == nil {
@@ -406,10 +408,10 @@ func TestBatch(t *testing.T) {
 		if err := other.AddToBatch(&batch, []byte("v")); err == nil || batch.Len() != 1 {
 			t.Fatal("statement of another session added", err)
 		}
-		if _, err := other.ExecBatch(ctx, LoggedBatch, &batch, Options{}); err == nil {
+		if _, err := otherSession.ExecBatch(ctx, LoggedBatch, &batch); err == nil {
 			t.Fatal("batch sent on another session")
 		}
-		if _, err := q.ExecBatch(ctx, BatchKind(42), &batch, Options{}); err == nil {
+		if _, err := session.ExecBatch(ctx, BatchKind(42), &batch); err == nil {
 			t.Fatal("unknown batch kind sent")
 		}
 		if err := q.state.begin(ctx); err != nil {
@@ -419,7 +421,11 @@ func TestBatch(t *testing.T) {
 			t.Fatal("busy query appended", err)
 		}
 		q.state.owner.InternalRelease()
-		q.Close()
+		closeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		if err := q.Close(closeCtx); err != nil {
+			t.Fatal(err)
+		}
 		if err := q.AddToBatch(&batch, []byte("v")); !errors.Is(err, ErrClosed) {
 			t.Fatal("closed query appended", err)
 		}

@@ -30,6 +30,7 @@ func BenchmarkBatch(b *testing.B) {
 			b.Run(fmt.Sprint(n), func(b *testing.B) {
 				s := batchBenchSession(b)
 				q := batchTestQuery(b, s)
+				session := InternalWrapSession(s)
 				ctx := context.Background()
 				value := []byte("0123456789abcdef0123456789abcdef")
 				var batch Batch
@@ -41,7 +42,7 @@ func BenchmarkBatch(b *testing.B) {
 							b.Fatal(err)
 						}
 					}
-					if _, err := q.ExecBatch(ctx, UnloggedBatch, &batch, Options{}); err != nil {
+					if _, err := session.ExecBatch(ctx, UnloggedBatch, &batch); err != nil {
 						b.Fatal(err)
 					}
 				}

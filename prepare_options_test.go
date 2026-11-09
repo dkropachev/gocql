@@ -14,7 +14,8 @@ import (
 func TestPrepareOptions(t *testing.T) {
 	t.Run("BindOptions", func(t *testing.T) {
 		t.Run("RequiresSession", func(t *testing.T) {
-			if _, err := BindOptions(nil, Options{}); err == nil {
+			var s *Session
+			if _, err := s.BindOptions(Options{}); err == nil {
 				t.Fatal("options bound without a session")
 			}
 		})

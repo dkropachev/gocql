@@ -442,7 +442,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 				if b.Routing().Token.Set {
 					t.Fatal("no-FROM SELECT invented a partition token")
 				}
-				rows, err := Run(context.Background(), session, b, gocql.SessionOptions{})
+				rows, err := Run(context.Background(), session, b, gocql.BoundOptions{})
 				if err != nil {
 					t.Fatal(err)
 				}

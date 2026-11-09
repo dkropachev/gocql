@@ -3,10 +3,7 @@
 
 package gocql
 
-import (
-	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/internal/execution"
-)
+import "github.com/scylladb/gocql/v2/internal/execution"
 
 type Query[P, R any] = execution.Query[P, R]
 
@@ -17,18 +14,3 @@ var ErrBusy = execution.ErrBusy
 var ErrStaleRows = execution.ErrStaleRows
 
 type StreamQuery[P, R any] = execution.StreamQuery[P, R]
-
-// Deprecated: use (*Prepared[P, B]).StreamQuery.
-func NewStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder cql.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
-	return prepared.StreamQuery(decoder, options)
-}
-
-// Deprecated: use (*Session).StreamQuery.
-func NewUnpreparedStreamQuery[P, B, R any](session *Session, statement cql.Statement[P, B], decoder cql.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
-	return session.StreamQuery(statement, decoder, options)
-}
-
-// Deprecated: use (*Session).Query.
-func NewUnpreparedQuery[P, R any](session *Session, statement cql.Statement[P, R], options Options) (*Query[P, R], error) {
-	return session.Query(statement, options)
-}

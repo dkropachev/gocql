@@ -370,7 +370,9 @@ DDL coordinator.
 
 Profiles are plain values copied at Connect and when options are bound, which
 validates and freezes them once: by a query constructor, which keeps them
-resolved for the query, or by BindOptions for one-shot executions.
+resolved for the query, or by Session.BindOptions for one-shot executions.
+BoundOptions executed on a session other than the binding one are resolved
+again for that session on each execution.
 Admission stores the resolved options
 for the logical request; retries/pages reuse it without whole-profile copies,
 validation or new custom-payload descriptor arrays. A batch has one resolved

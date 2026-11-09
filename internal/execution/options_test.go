@@ -16,15 +16,15 @@ func TestOptions(t *testing.T) {
 	t.Run("BindOptions", func(t *testing.T) {
 		t.Run("KeepsEmptyOnSessionDefault", func(t *testing.T) {
 			s, _ := attachmentSession()
-			zero, err := InternalBindOptions(s, OptionValues{})
+			zero, err := InternalBindOptions(s, Options{})
 			if err != nil || zero.p != nil {
-				t.Fatalf("empty values bound to %+v, %v; want the zero Options", zero.p, err)
+				t.Fatalf("empty values bound to %+v, %v; want the zero BoundOptions", zero.p, err)
 			}
-			set, err := InternalBindOptions(s, OptionValues{Idempotent: true})
+			set, err := InternalBindOptions(s, Options{Idempotent: true})
 			if err != nil || set.p == nil || !set.p.bound {
 				t.Fatalf("values not bound to the session: %+v, %v", set.p, err)
 			}
-			if _, err := InternalBindOptions(nil, OptionValues{Idempotent: true}); err == nil {
+			if _, err := InternalBindOptions(nil, Options{Idempotent: true}); err == nil {
 				t.Fatal("values bound without a session")
 			}
 		})
@@ -35,8 +35,8 @@ func TestOptions(t *testing.T) {
 			payload := []byte("value")
 			profile := defaultProfile()
 			profile.PageSize = 10
-			values := OptionValues{Profile: &profile, CustomPayload: []PayloadEntry{{Key: "k", Value: cqltype.Nullable[cqltype.Bytes]{Valid: true, Value: cqltype.BorrowBytes(payload)}}}}
-			o, err := NewOptions(nil, values)
+			values := Options{Profile: &profile, CustomPayload: []PayloadEntry{{Key: "k", Value: cqltype.Nullable[cqltype.Bytes]{Valid: true, Value: cqltype.BorrowBytes(payload)}}}}
+			o, err := NewBoundOptions(nil, values)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -55,7 +55,7 @@ func TestOptions(t *testing.T) {
 		})
 
 		t.Run("RejectsInvalidValues", func(t *testing.T) {
-			invalid := map[string]OptionValues{
+			invalid := map[string]Options{
 				"consistency":  {Consistency: Option[Consistency]{Set: true, Value: Consistency(0xff)}},
 				"serial":       {SerialConsistency: Option[Consistency]{Set: true, Value: One}},
 				"timeout":      {Timeout: Option[time.Duration]{Set: true, Value: -1}},
@@ -68,28 +68,28 @@ func TestOptions(t *testing.T) {
 				"serial both":  {SerialConsistency: Option[Consistency]{Set: true, Value: LocalSerial}, NoSerialConsistency: true},
 			}
 			for name, values := range invalid {
-				if _, err := NewOptions(nil, values); err == nil {
+				if _, err := NewBoundOptions(nil, values); err == nil {
 					t.Errorf("%s: invalid values accepted", name)
 				}
 			}
 		})
 
 		t.Run("SerialConsistencyOverrides", func(t *testing.T) {
-			set, err := resolveOptionValues(nil, OptionValues{SerialConsistency: cqltype.Some(Serial)})
+			set, err := resolveOptionValues(nil, Options{SerialConsistency: cqltype.Some(Serial)})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if !set.InternalProfile.SerialConsistency.Set || set.InternalProfile.SerialConsistency.Value != Serial {
 				t.Fatalf("SerialConsistency = %+v, want SERIAL", set.InternalProfile.SerialConsistency)
 			}
-			none, err := resolveOptionValues(nil, OptionValues{NoSerialConsistency: true})
+			none, err := resolveOptionValues(nil, Options{NoSerialConsistency: true})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if none.InternalProfile.SerialConsistency.Set {
 				t.Fatalf("SerialConsistency = %+v, want omitted", none.InternalProfile.SerialConsistency)
 			}
-			inherited, err := resolveOptionValues(nil, OptionValues{})
+			inherited, err := resolveOptionValues(nil, Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -107,20 +107,20 @@ func TestOptions(t *testing.T) {
 			rt.InternalSetProfile(&sessionProfile)
 			var scratch InternalResolvedOptions
 
-			var zero Options
+			var zero BoundOptions
 			if r := zero.resolve(rt, &scratch); r != &rt.defaultOptions || r.InternalProfile.PageSize != 7 {
 				t.Fatal("zero options do not use the session default", r.InternalProfile.PageSize)
 			}
 
 			own := defaultProfile()
 			own.PageSize = 9
-			fixed := testOptions(OptionValues{Profile: &own})
+			fixed := testOptions(Options{Profile: &own})
 			if r := fixed.resolve(rt, &scratch); r != &fixed.p.resolved || r.InternalProfile.PageSize != 9 {
 				t.Fatal("options with a profile not resolved at creation")
 			}
 
-			overrides := OptionValues{Consistency: Option[Consistency]{Set: true, Value: One}}
-			bound, err := NewOptions(s, overrides)
+			overrides := Options{Consistency: Option[Consistency]{Set: true, Value: One}}
+			bound, err := NewBoundOptions(s, overrides)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -129,11 +129,23 @@ func TestOptions(t *testing.T) {
 				t.Fatal("options not resolved for their session at creation", r.InternalProfile)
 			}
 
-			// Bound options are used as they are on any session, with the defaults
-			// of the session they were bound to.
+			// On another session, bound options are resolved again for that
+			// session: its defaults apply, not those of the binding session.
 			_, other := attachmentSession()
-			if r := bound.resolve(other, &scratch); r != &bound.p.resolved || r.InternalProfile.PageSize != 7 {
-				t.Fatal("bound options resolved again on another session", r.InternalProfile)
+			otherProfile := defaultProfile()
+			otherProfile.PageSize = 11
+			other.InternalSetProfile(&otherProfile)
+			scratch = InternalResolvedOptions{}
+			if r := bound.resolve(other, &scratch); r != &scratch || r.InternalProfile.PageSize != 11 || r.InternalProfile.Consistency != One {
+				t.Fatal("bound options not resolved for another session", r.InternalProfile)
+			}
+			if r := bound.resolveFixed(other); r == &bound.p.resolved || r.InternalProfile.PageSize != 11 || r.templates == nil {
+				t.Fatal("bound options not fixed for another session", r.InternalProfile)
+			}
+			// Options that name their own profile and were built without a
+			// session hold on every session.
+			if r := fixed.resolve(other, &scratch); r != &fixed.p.resolved {
+				t.Fatal("profile options resolved again on another session")
 			}
 			unbound := testOptions(overrides)
 			scratch = InternalResolvedOptions{}
@@ -147,7 +159,7 @@ func TestOptions(t *testing.T) {
 		t.Run("EncodedAtResolution", func(t *testing.T) {
 			own := defaultProfile()
 			own.PageSize = 10
-			o := testOptions(OptionValues{Profile: &own, Keyspace: "ks"})
+			o := testOptions(Options{Profile: &own, Keyspace: "ks"})
 			resolved := o.p.resolved
 			if resolved.templates == nil {
 				t.Fatal("options resolved without templates")
@@ -215,11 +227,11 @@ func TestOptions(t *testing.T) {
 			}
 		})
 
-		// Options with a timestamp send one with every request, so they encode no
+		// BoundOptions with a timestamp send one with every request, so they encode no
 		// template without it.
 		t.Run("WithTimestamp", func(t *testing.T) {
 			profile := defaultProfile()
-			templates := newOptionTemplates(&profile, &OptionValues{Timestamp: Option[int64]{Value: 1, Set: true}}, "ks")
+			templates := newOptionTemplates(&profile, &Options{Timestamp: Option[int64]{Value: 1, Set: true}}, "ks")
 			for shape := range templates {
 				if templates[shape][0].Protocol != 0 || templates[shape][1].Protocol == 0 {
 					t.Fatalf("shape %d: want only the timestamp template", shape)

@@ -206,7 +206,7 @@ func TestPage(t *testing.T) {
 					defer b.Close()
 					var dst implCqltype.Bytes
 					if manual {
-						p := codecTestMust(RunPage(context.Background(), s, b, implModel.StartPage(), Options{}))
+						p := codecTestMust(RunPage(context.Background(), s, b, implModel.StartPage(), BoundOptions{}))
 						defer p.Close()
 						if !p.NextInto(&dst) {
 							t.Fatal(p.Err())
@@ -220,7 +220,7 @@ func TestPage(t *testing.T) {
 							t.Fatal("closed page advance", p.Err())
 						}
 					} else {
-						r := codecTestMust(Run(context.Background(), s, b, Options{}))
+						r := codecTestMust(Run(context.Background(), s, b, BoundOptions{}))
 						defer r.Close()
 						if !r.NextInto(&dst) {
 							t.Fatal(r.Err())
@@ -254,7 +254,7 @@ func TestPage(t *testing.T) {
 					var closeRows func() error
 					var retain func() (*PageLease, error)
 					if automatic {
-						r, err := Run(context.Background(), s, b, Options{})
+						r, err := Run(context.Background(), s, b, BoundOptions{})
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -265,7 +265,7 @@ func TestPage(t *testing.T) {
 						closeRows = r.Close
 						retain = r.Retain
 					} else {
-						p, err := RunPage(context.Background(), s, b, model.StartPage(), Options{})
+						p, err := RunPage(context.Background(), s, b, model.StartPage(), BoundOptions{})
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -303,7 +303,7 @@ func TestPage(t *testing.T) {
 					if string(view.OwnedBytes()) != "retained" {
 						t.Fatal("retained lease lost")
 					}
-					if _, err := Run(context.Background(), s, b, Options{}); !errors.Is(err, implRuntimeerrors.ErrClosed) {
+					if _, err := Run(context.Background(), s, b, BoundOptions{}); !errors.Is(err, implRuntimeerrors.ErrClosed) {
 						t.Fatal(err)
 					}
 				})

@@ -23,14 +23,14 @@ import (
 // Prepared, Query, unprepared queries, batches, conditional statements and row
 // streams.
 func TestStructMapping(t *testing.T) {
-	// Query.AddToBatch with ExecBatch, and a counter table updated through a struct.
+	// Query.AddToBatch with Session.ExecBatch, and a counter table updated through a struct.
 	t.Run("Batch", func(t *testing.T) {
 		ctx, f := newSMFixture(t)
 		insert, err := f.insert(t, ctx).Query(gocql.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer insert.Close()
+		defer func() { _ = insert.Close(ctx) }()
 		var batch gocql.Batch
 		var want []smRecord
 		for i := range 3 {
@@ -40,16 +40,16 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if _, err := insert.ExecBatch(ctx, cql.LoggedBatch, &batch, gocql.SessionOptions{}); err != nil {
+		if _, err := f.session.ExecBatch(ctx, cql.LoggedBatch, &batch); err != nil {
 			t.Fatal(err)
 		}
 		var got smRecord
 		n := 0
-		if err := f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)).Each(ctx, 6, &got, func(r *smRecord) error {
+		if _, err := f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)).Each(ctx, 6, &got, func(r *smRecord) error {
 			err := recordError(*r, want[n])
 			n++
 			return err
-		}, gocql.SessionOptions{}); err != nil || n != len(want) {
+		}); err != nil || n != len(want) {
 			t.Fatal(n, err)
 		}
 
@@ -73,7 +73,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer add.Close()
+		defer func() { _ = add.Close(ctx) }()
 		if err := truncateTable(t, f.session, counters); err != nil {
 			t.Fatal(err)
 		}
@@ -83,7 +83,7 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if _, err := add.ExecBatch(ctx, cql.CounterBatch, &batch, gocql.SessionOptions{}); err != nil {
+		if _, err := f.session.ExecBatch(ctx, cql.CounterBatch, &batch); err != nil {
 			t.Fatal(err)
 		}
 		readPrepared, err := f.session.Prepare(ctx, cql.Statement[int32, hit]{
@@ -97,9 +97,9 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer read.Close()
+		defer func() { _ = read.Close(ctx) }()
 		var h hit
-		if ok, err := read.One(ctx, 1, &h); err != nil || !ok || h != (hit{K: 1, Hits: 5}) {
+		if ok, _, err := read.One(ctx, 1, &h); err != nil || !ok || h != (hit{K: 1, Hits: 5}) {
 			t.Fatal(h, ok, err)
 		}
 	})
@@ -121,15 +121,15 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer insert.Close()
+		defer func() { _ = insert.Close(ctx) }()
 		r := smRecordAt(7, 0)
 		var result cql.CASResult[smRecord]
-		if ok, err := insert.One(ctx, r, &result); err != nil || !ok || !result.Applied {
+		if ok, _, err := insert.One(ctx, r, &result); err != nil || !ok || !result.Applied {
 			t.Fatal("first insert:", ok, err, result.Applied)
 		}
 		changed := r
 		changed.Name = "other"
-		if ok, err := insert.One(ctx, changed, &result); err != nil || !ok || result.Applied || !result.Previous.Set {
+		if ok, _, err := insert.One(ctx, changed, &result); err != nil || !ok || result.Applied || !result.Previous.Set {
 			t.Fatal("second insert:", ok, err, result)
 		}
 		requireRecord(t, result.Previous.Value, r)
@@ -140,11 +140,12 @@ func TestStructMapping(t *testing.T) {
 			Name   string
 			Big    int64
 		}
+		updateRows := cql.CASRows(cql.MustRowOf(smAttrs))
 		updatePrepared, err := f.session.Prepare(ctx, cql.Statement[guard, cql.CASResult[smRecord]]{
 			Kind:   cql.ConditionalStatement,
 			CQL:    "UPDATE " + f.table + " SET name = ? WHERE bucket = ? AND id = ? IF big = ?",
 			Params: cql.MustParamsOf[guard](),
-			Rows:   cql.CASRows(cql.MustRowOf(smAttrs)),
+			Rows:   updateRows,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -153,12 +154,12 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer update.Close()
+		defer func() { _ = update.Close(ctx) }()
 		var batch gocql.Batch
 		if err := update.AddToBatch(&batch, guard{Bucket: 7, ID: r.ID, Name: "batched", Big: r.Big}); err != nil {
 			t.Fatal(err)
 		}
-		page, err := update.RunBatch(ctx, cql.LoggedBatch, &batch, gocql.SessionOptions{})
+		page, err := f.session.RunBatch(ctx, cql.LoggedBatch, &batch, updateRows)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -205,10 +206,12 @@ func TestStructMapping(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := insert.Exec(ctx, event(i)); err != nil {
+			if _, err := insert.Exec(ctx, event(i)); err != nil {
 				t.Fatal(err)
 			}
-			insert.Close()
+			if err := insert.Close(ctx); err != nil {
+				t.Fatal(err)
+			}
 		}
 		for _, rows := range []cql.RowDecoder[mapped.Event]{cql.MustRowOf[mapped.Event](), reflectedRows} {
 			readPrepared, err := f.session.Prepare(ctx, cql.Statement[int32, mapped.Event]{
@@ -223,7 +226,7 @@ func TestStructMapping(t *testing.T) {
 			}
 			var got mapped.Event
 			n := 0
-			if err := read.Each(ctx, 10, &got, func(e *mapped.Event) error {
+			if _, err := read.Each(ctx, 10, &got, func(e *mapped.Event) error {
 				if !reflect.DeepEqual(*e, event(n)) {
 					return fmt.Errorf("row %d:\ngot  %+v\nwant %+v", n, *e, event(n))
 				}
@@ -232,7 +235,9 @@ func TestStructMapping(t *testing.T) {
 			}); err != nil || n != 2 {
 				t.Fatal(n, err)
 			}
-			read.Close()
+			if err := read.Close(ctx); err != nil {
+				t.Fatal(err)
+			}
 		}
 		prepared, err := f.session.Prepare(ctx, cql.Statement[int32, cql.DynamicRow]{
 			Kind: cql.OrdinaryStatement, CQL: "SELECT bucket, id, name, blob, big, maybe, scores, createdat, updatedat FROM " + f.table + " WHERE bucket = ?",
@@ -263,7 +268,7 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(n, err)
 			}
 			stream.Close()
-			if err := q.CloseAndWait(ctx); err != nil {
+			if err := q.Close(ctx); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -275,11 +280,11 @@ func TestStructMapping(t *testing.T) {
 		ctx, f := newSMFixture(t)
 		r := smRecordAt(4, 0)
 		r.Maybe, r.Tags, r.Scores, r.Attrs, r.Blob = cql.Nullable[int32]{}, []string{}, nil, nil, []byte{}
-		if _, err := f.insert(t, ctx).Exec(ctx, r, gocql.SessionOptions{}); err != nil {
+		if _, err := f.insert(t, ctx).Exec(ctx, r); err != nil {
 			t.Fatal(err)
 		}
 		var got smRecord
-		if ok, err := f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)).One(ctx, 4, &got, gocql.SessionOptions{}); err != nil || !ok {
+		if ok, _, err := f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)).One(ctx, 4, &got); err != nil || !ok {
 			t.Fatal(ok, err)
 		}
 		if got.Maybe.Valid || len(got.Tags) != 0 || len(got.Scores) != 0 || len(got.Attrs) != 0 || len(got.Blob) != 0 {
@@ -309,10 +314,10 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer insert.Close()
+		defer func() { _ = insert.Close(ctx) }()
 		huge, _ := new(big.Int).SetString("-123456789012345678901234567890", 10)
 		in := numeric{K: 1, V: cql.VarintFromBigInt(huge), D: cql.Decimal{Unscaled: cql.VarintFromBigInt(big.NewInt(314)), Scale: 2}}
-		if err := insert.Exec(ctx, in); err != nil {
+		if _, err := insert.Exec(ctx, in); err != nil {
 			t.Fatal(err)
 		}
 		readPrepared, err := f.session.Prepare(ctx, cql.Statement[int32, numeric]{
@@ -325,7 +330,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer read.Close()
+		defer func() { _ = read.Close(ctx) }()
 		// Varint and Decimal borrow the response page: read them while the row is
 		// current, or Clone the row to keep it.
 		rows, err := read.Run(ctx, 1)
@@ -360,7 +365,7 @@ func TestStructMapping(t *testing.T) {
 		insert := f.insert(t, ctx)
 		want := []smRecord{smRecordAt(1, 0), smRecordAt(1, 1), smRecordAt(1, 2)}
 		for _, r := range want {
-			if _, err := insert.Exec(ctx, r, gocql.SessionOptions{}); err != nil {
+			if _, err := insert.Exec(ctx, r); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -374,18 +379,18 @@ func TestStructMapping(t *testing.T) {
 			t.Fatal(err)
 		}
 		var got smRecord
-		if ok, err := one.One(ctx, smKey{Bucket: 1, ID: want[1].ID}, &got, gocql.SessionOptions{}); err != nil || !ok {
+		if ok, _, err := one.One(ctx, smKey{Bucket: 1, ID: want[1].ID}, &got); err != nil || !ok {
 			t.Fatal(ok, err)
 		}
 		requireRecord(t, got, want[1])
-		if ok, err := one.One(ctx, smKey{Bucket: 1, ID: cql.UUID{}}, &got, gocql.SessionOptions{}); err != nil || ok {
+		if ok, _, err := one.One(ctx, smKey{Bucket: 1, ID: cql.UUID{}}, &got); err != nil || ok {
 			t.Fatal("missing row:", ok, err)
 		}
 		var all []smRecord
-		err = f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)).Each(ctx, 1, &got, func(r *smRecord) error {
+		_, err = f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)).Each(ctx, 1, &got, func(r *smRecord) error {
 			all = append(all, *r)
 			return nil
-		}, gocql.SessionOptions{})
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -397,7 +402,7 @@ func TestStructMapping(t *testing.T) {
 		}
 	})
 
-	// Query.Exec, Run, RunPage, RunUnpaged, Each, One, Routing and LastResult,
+	// Query.Exec, Run, RunPage, RunUnpaged, Each, One and Routing,
 	// with paging across pages of two rows.
 	t.Run("Query", func(t *testing.T) {
 		ctx, f := newSMFixture(t)
@@ -405,26 +410,23 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer insert.Close()
+		defer func() { _ = insert.Close(ctx) }()
 		var want []smRecord
 		for i := range 5 {
 			r := smRecordAt(2, i)
 			want = append(want, r)
-			if err := insert.Exec(ctx, r); err != nil {
+			if _, err := insert.Exec(ctx, r); err != nil {
 				t.Fatal(err)
 			}
 		}
 		if _, err := insert.Routing(want[0]); err != nil {
 			t.Fatal(err)
 		}
-		if err := insert.Wait(ctx); err != nil {
-			t.Fatal(err)
-		}
 		read, err := f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)).Query(gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer read.Close()
+		defer func() { _ = read.Close(ctx) }()
 
 		t.Run("Run", func(t *testing.T) {
 			rows, err := read.Run(ctx, 2)
@@ -451,9 +453,6 @@ func TestStructMapping(t *testing.T) {
 			if n != len(want) {
 				t.Fatalf("Run: %d rows across pages, want %d", n, len(want))
 			}
-			if err := read.Wait(ctx); err != nil {
-				t.Fatal(err)
-			}
 		})
 		t.Run("RunPage", func(t *testing.T) {
 			state, n := gocql.StartPage, 0
@@ -472,9 +471,6 @@ func TestStructMapping(t *testing.T) {
 				}
 				next := page.State()
 				if err := page.Close(); err != nil {
-					t.Fatal(err)
-				}
-				if err := read.Wait(ctx); err != nil {
 					t.Fatal(err)
 				}
 				if !next.More() {
@@ -496,7 +492,7 @@ func TestStructMapping(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer read.Close()
+			defer func() { _ = read.Close(ctx) }()
 			page, err := read.RunUnpaged(ctx, 2)
 			if err != nil {
 				t.Fatal(err)
@@ -514,14 +510,11 @@ func TestStructMapping(t *testing.T) {
 			if err := page.Close(); err != nil {
 				t.Fatal(err)
 			}
-			if err := read.Wait(ctx); err != nil {
-				t.Fatal(err)
-			}
 		})
 		t.Run("Each", func(t *testing.T) {
 			var got smRecord
 			n := 0
-			if err := read.Each(ctx, 2, &got, func(r *smRecord) error {
+			if _, err := read.Each(ctx, 2, &got, func(r *smRecord) error {
 				err := recordError(*r, want[n])
 				n++
 				return err
@@ -531,11 +524,11 @@ func TestStructMapping(t *testing.T) {
 		})
 		t.Run("One", func(t *testing.T) {
 			var got smRecord
-			if ok, err := read.One(ctx, 2, &got); err != nil || !ok {
+			if ok, _, err := read.One(ctx, 2, &got); err != nil || !ok {
 				t.Fatal(ok, err)
 			}
 			requireRecord(t, got, want[0])
-			if ok, err := read.One(ctx, 99, &got); err != nil || ok {
+			if ok, _, err := read.One(ctx, 99, &got); err != nil || ok {
 				t.Fatal("empty bucket:", ok, err)
 			}
 		})
@@ -550,7 +543,7 @@ func TestStructMapping(t *testing.T) {
 		for i := range 4 {
 			r := smRecordAt(5, i)
 			want = append(want, r)
-			if _, err := insert.Exec(ctx, r, gocql.SessionOptions{}); err != nil {
+			if _, err := insert.Exec(ctx, r); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -558,7 +551,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer read.Close()
+		defer func() { _ = read.Close(ctx) }()
 		rows, err := read.Run(ctx, 5)
 		if err != nil {
 			t.Fatal(err)
@@ -588,7 +581,7 @@ func TestStructMapping(t *testing.T) {
 		for i := range 5 {
 			r := smRecordAt(9, i)
 			want = append(want, r)
-			if _, err := insert.Exec(ctx, r, gocql.SessionOptions{}); err != nil {
+			if _, err := insert.Exec(ctx, r); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -631,18 +624,20 @@ func TestStructMapping(t *testing.T) {
 				if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {
 					t.Fatal("frame-compressed incremental stream not rejected:", err)
 				}
-				q.Close()
+				if err := q.Close(ctx); err != nil {
+					t.Fatal(err)
+				}
 				continue
 			}
 			if err != nil {
 				t.Fatal(err)
 			}
 			check(t, stream)
-			if err := q.CloseAndWait(ctx); err != nil {
+			if err := q.Close(ctx); err != nil {
 				t.Fatal(err)
 			}
-			u, err := f.session.StreamQuery(cql.Statement[int32, cql.DynamicRow]{
-				Kind: cql.OrdinaryStatement, CQL: query + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows,
+			u, err := f.session.UnpreparedStreamQuery(cql.Statement[int32, cql.EmptyRow]{
+				Kind: cql.OrdinaryStatement, CQL: query + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32),
 				BindMarkers: read.Parameters(),
 			}, cql.MustStreamRowOf[smStream](), options)
 			if err != nil {
@@ -653,7 +648,7 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 			check(t, stream)
-			if err := u.CloseAndWait(ctx); err != nil {
+			if err := u.Close(ctx); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -664,7 +659,7 @@ func TestStructMapping(t *testing.T) {
 	t.Run("Subset", func(t *testing.T) {
 		ctx, f := newSMFixture(t)
 		r := smRecordAt(3, 0)
-		if _, err := f.insert(t, ctx).Exec(ctx, r, gocql.SessionOptions{}); err != nil {
+		if _, err := f.insert(t, ctx).Exec(ctx, r); err != nil {
 			t.Fatal(err)
 		}
 		updatePrepared, err := f.session.Prepare(ctx, cql.Statement[smRecord, cql.EmptyRow]{
@@ -679,9 +674,9 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer update.Close()
+		defer func() { _ = update.Close(ctx) }()
 		edit := smRecord{Bucket: r.Bucket, ID: r.ID, Name: "edited", Tags: []string{"z"}, Big: 12345}
-		if err := update.Exec(ctx, edit); err != nil {
+		if _, err := update.Exec(ctx, edit); err != nil {
 			t.Fatal(err)
 		}
 		type partial struct {
@@ -704,9 +699,9 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer read.Close()
+		defer func() { _ = read.Close(ctx) }()
 		got := partial{Big: 7, Note: "kept"}
-		if ok, err := read.One(ctx, smKey{Bucket: r.Bucket, ID: r.ID}, &got); err != nil || !ok {
+		if ok, _, err := read.One(ctx, smKey{Bucket: r.Bucket, ID: r.ID}, &got); err != nil || !ok {
 			t.Fatal(ok, err)
 		}
 		if want := (partial{ID: r.ID, Name: "edited", Tags: []string{"z"}}); !reflect.DeepEqual(got, want) {
@@ -721,7 +716,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if ok, err := one.One(ctx, smKey{Bucket: r.Bucket, ID: r.ID}, &full, gocql.SessionOptions{}); err != nil || !ok {
+		if ok, _, err := one.One(ctx, smKey{Bucket: r.Bucket, ID: r.ID}, &full); err != nil || !ok {
 			t.Fatal(ok, err)
 		}
 		want := r
@@ -733,7 +728,7 @@ func TestStructMapping(t *testing.T) {
 	t.Run("Unprepared", func(t *testing.T) {
 		ctx, f := newSMFixture(t)
 		prepared := f.insert(t, ctx) // for the bind marker metadata
-		insert, err := f.session.Query(cql.Statement[smRecord, cql.EmptyRow]{
+		insert, err := f.session.UnpreparedQuery(cql.Statement[smRecord, cql.EmptyRow]{
 			Kind:        cql.OrdinaryStatement,
 			CQL:         "INSERT INTO " + f.table + " (" + smColumns + ") VALUES (?" + repeatMarkers(21) + ")",
 			Params:      cql.MustParamsOf(smAttrs),
@@ -742,16 +737,16 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer insert.Close()
+		defer func() { _ = insert.Close(ctx) }()
 		r := smRecordAt(8, 0)
-		if err := insert.Exec(ctx, r); err != nil {
+		if _, err := insert.Exec(ctx, r); err != nil {
 			t.Fatal(err)
 		}
 		keyMarkers := cql.NewColumns(
 			cql.ColumnSpec{Name: "bucket", Type: cql.IntType},
 			cql.ColumnSpec{Name: "id", Type: cql.UUIDType},
 		)
-		read, err := f.session.Query(cql.Statement[smKey, smRecord]{
+		read, err := f.session.UnpreparedQuery(cql.Statement[smKey, smRecord]{
 			Kind:        cql.OrdinaryStatement,
 			CQL:         "SELECT " + smColumns + " FROM " + f.table + " WHERE bucket = ? AND id = ?",
 			Params:      cql.MustParamsOf[smKey](),
@@ -761,9 +756,9 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer read.Close()
+		defer func() { _ = read.Close(ctx) }()
 		var got smRecord
-		if ok, err := read.One(ctx, smKey{Bucket: 8, ID: r.ID}, &got); err != nil || !ok {
+		if ok, _, err := read.One(ctx, smKey{Bucket: 8, ID: r.ID}, &got); err != nil || !ok {
 			t.Fatal(ok, err)
 		}
 		requireRecord(t, got, r)

@@ -225,7 +225,7 @@ func TestExecution(t *testing.T) {
 					defer cancel()
 					done := make(chan error, 1)
 					go func() {
-						_, err := Exec(ctx, s, b, testOptions(OptionValues{Observer: observer}))
+						_, err := Exec(ctx, s, b, testOptions(Options{Observer: observer}))
 						done <- err
 					}()
 					select {
@@ -294,7 +294,7 @@ func TestExecution(t *testing.T) {
 					defer cancel()
 					done := make(chan error, 1)
 					go func() {
-						_, err := Exec(ctx, s, b, Options{})
+						_, err := Exec(ctx, s, b, BoundOptions{})
 						done <- err
 					}()
 					<-accepted
@@ -366,7 +366,7 @@ func TestExecution(t *testing.T) {
 					b := runtimeQuery(t)
 					ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 					defer cancel()
-					result, err := Exec(ctx, s, b, Options{})
+					result, err := Exec(ctx, s, b, BoundOptions{})
 					if err == nil || result.Rows != tc.rows {
 						t.Fatalf("result = %+v, %v", result, err)
 					}
@@ -412,7 +412,7 @@ func TestExecution(t *testing.T) {
 			observer := new(execVoidObserver)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			result, err := Exec(ctx, s, b, testOptions(OptionValues{Trace: true, Observer: observer}))
+			result, err := Exec(ctx, s, b, testOptions(Options{Trace: true, Observer: observer}))
 			if err != nil || result.Attempts != 1 || result.Rows != 0 || len(result.TraceIDs()) != 1 || result.TraceIDs()[0] != trace || len(result.Warnings()) != 1 || result.Warnings()[0] != "warning" {
 				t.Fatalf("result = %+v, %v", result, err)
 			}
@@ -478,7 +478,7 @@ func TestExecution(t *testing.T) {
 			}()
 			b := runtimeQuery(t)
 			defer b.Close()
-			rows, err := Run(context.Background(), s, b, testOptions(OptionValues{Observer: panicObserver{}}))
+			rows, err := Run(context.Background(), s, b, testOptions(Options{Observer: panicObserver{}}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -530,7 +530,7 @@ func TestExecution(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			bound := runtimeQuery(t)
-			page, err := RunPage(ctx, s, bound, model.StartPage(), testOptions(OptionValues{Profile: handle}))
+			page, err := RunPage(ctx, s, bound, model.StartPage(), testOptions(Options{Profile: handle}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -564,7 +564,7 @@ func TestExecution(t *testing.T) {
 			bound := runtimeQuery(t)
 			finished := make(chan error, 1)
 			go func() {
-				page, err := RunPage(ctx, s, bound, model.StartPage(), testOptions(OptionValues{Profile: handle}))
+				page, err := RunPage(ctx, s, bound, model.StartPage(), testOptions(Options{Profile: handle}))
 				if page != nil {
 					page.Close()
 				}
@@ -643,7 +643,7 @@ func TestExecution(t *testing.T) {
 					BoundData(b).InternalRequest.InternalRouting.Conditional = kind != cqltype.OrdinaryStatement
 					result := make(chan error, 1)
 					go func() {
-						page, err := RunPage(context.Background(), s, b, model.StartPage(), testOptions(OptionValues{Profile: handle, Idempotent: true}))
+						page, err := RunPage(context.Background(), s, b, model.StartPage(), testOptions(Options{Profile: handle, Idempotent: true}))
 						if page != nil {
 							page.Close()
 						}

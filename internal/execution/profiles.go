@@ -12,9 +12,9 @@ import (
 	// IncludeMetadata requests full result metadata even when a validated cache exists.
 )
 
-// OptionValues lists the settings of an execution. NewOptions validates and
-// freezes them into Options.
-type OptionValues struct {
+// Options lists the settings of an execution. NewOptions validates and
+// freezes them into BoundOptions.
+type Options struct {
 	Retry                retry.Policy
 	Observer             Observer
 	Profile              *Profile
@@ -43,10 +43,10 @@ type InternalResolvedOptions struct {
 	// resolved; nil for options resolved for one execution.
 	templates       *optionTemplates
 	InternalProfile Profile
-	InternalOptions OptionValues
+	InternalOptions Options
 }
 
-func InternalResolveOptions(s *implCluster.Core, options OptionValues) (InternalResolvedOptions, error) {
+func InternalResolveOptions(s *implCluster.Core, options Options) (InternalResolvedOptions, error) {
 	var base *Profile
 	if s != nil {
 		base = InternalRuntimeFor(s).InternalProfile
@@ -56,7 +56,7 @@ func InternalResolveOptions(s *implCluster.Core, options OptionValues) (Internal
 
 // resolveOptionValues merges options over base, the session's default
 // profile, or the default profile when base is nil.
-func resolveOptionValues(base *Profile, options OptionValues) (InternalResolvedOptions, error) {
+func resolveOptionValues(base *Profile, options Options) (InternalResolvedOptions, error) {
 	p := defaultProfile()
 	if base != nil {
 		p = *base

@@ -92,12 +92,12 @@ func benchConfig(d endpoint.Dialer) gocql.Config {
 	return c
 }
 func benchExec(ctx context.Context, s *gocql.Session, text string) error {
-	b, e := s.Query(cql.Command(text), gocql.Options{})
+	b, e := s.UnpreparedQuery(cql.Command(text), gocql.Options{})
 	if e != nil {
 		return e
 	}
-	defer b.Close()
-	e = b.Exec(ctx, cql.EmptyParams{})
+	defer func() { _ = b.Close(ctx) }()
+	_, e = b.Exec(ctx, cql.EmptyParams{})
 	return e
 }
 func InitializeCluster(ctx context.Context, s *gocql.Session) error {
@@ -122,7 +122,7 @@ func cleanupNamespace(s *gocql.Session) error {
 	if err != nil {
 		return err
 	}
-	defer b.Close()
+	defer func() { _ = b.Close(ctx) }()
 	rows, err := b.Run(ctx, corpus.Namespace)
 	if err != nil {
 		return err
@@ -216,7 +216,7 @@ func benchReadContext(ctx context.Context, s *gocql.Session, id int32) error {
 	if e != nil {
 		return e
 	}
-	defer b.Close()
+	defer func() { _ = b.Close(ctx) }()
 	rows, e := b.Run(ctx, id)
 	if e != nil {
 		return e
@@ -256,8 +256,8 @@ func benchWriteContext(ctx context.Context, s *gocql.Session, id int32) error {
 	if e != nil {
 		return e
 	}
-	defer b.Close()
-	e = b.Exec(ctx, benchInsert{id, id % 5, fmt.Sprintf("Name_%d", id)})
+	defer func() { _ = b.Close(ctx) }()
+	_, e = b.Exec(ctx, benchInsert{id, id % 5, fmt.Sprintf("Name_%d", id)})
 	return e
 }
 func RecordSelectTraffic(ctx context.Context, size int, dir string) error {

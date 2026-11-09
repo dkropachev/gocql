@@ -42,14 +42,6 @@ func (c *v2Case) drain(src rowSource, limit int32) error {
 	return nil
 }
 
-// settle joins a failed execution of q so that the worker can reuse it.
-func settle[P, R any](ctx context.Context, q *g.Query[P, R], err error) error {
-	if err != nil {
-		return errors.Join(err, q.Wait(ctx))
-	}
-	return nil
-}
-
 func (a *v2Adapter) lwtPrepared() (*g.Prepared[lwtArgs, cql.CASResult[int32]], *g.Prepared[int32, int32], error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -71,7 +63,7 @@ func (a *v2Adapter) lwtPrepared() (*g.Prepared[lwtArgs, cql.CASResult[int32]], *
 	return a.lwt, a.lwtRead, nil
 }
 
-func (a *v2Adapter) options(v g.Options) (g.SessionOptions, error) { return g.BindOptions(a.s, v) }
+func (a *v2Adapter) options(v g.Options) (g.BoundOptions, error) { return a.s.BindOptions(v) }
 
 func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 	if len(name) == 0 {
@@ -116,7 +108,8 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		return func(ctx context.Context, seq uint64) error {
 			k := c.key(paged, seq)
 			c.check.reset(paged, k, 0)
-			return c.check.done(want, settle(ctx, q, q.Each(ctx, k, &c.out, c.row)))
+			_, err := q.Each(ctx, k, &c.out, c.row)
+			return c.check.done(want, err)
 		}, nil
 	case "A2":
 		return c.preparedOne(read), nil
@@ -137,14 +130,15 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			c.check.reset(paged, k, 0)
 			rows, err := q.Run(ctx, k)
 			if err != nil {
-				return settle(ctx, q, err)
+				return err
 			}
 			err = c.drain(rows, limit)
 			if name == "B8" {
-				// Abandon the rest of the partition, then join the cancelled execution.
-				return c.check.done(want, errors.Join(err, rows.Close(), q.Wait(ctx)))
+				// Abandon the rest of the partition; the next Run waits for the
+				// cancelled execution to drain.
+				return c.check.done(want, errors.Join(err, rows.Close()))
 			}
-			return c.check.done(want, settle(ctx, q, errors.Join(err, rows.Err(), rows.Close())))
+			return c.check.done(want, errors.Join(err, rows.Err(), rows.Close()))
 		}, nil
 	case "A5", "B3", "B4", "B9":
 		sq, err := read.StreamQuery(streamDecoder, g.StreamOptions{Incremental: name == "B4" || name == "B9"})
@@ -163,10 +157,10 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			c.check.reset(paged, k, 0)
 			rs, err := sq.Run(ctx, k)
 			if err != nil {
-				return errors.Join(err, sq.Wait(ctx))
+				return err
 			}
 			err = c.drain(rs, limit)
-			return c.check.done(want, errors.Join(err, rs.Err(), rs.Close(), sq.Wait(ctx)))
+			return c.check.done(want, errors.Join(err, rs.Err(), rs.Close()))
 		}, nil
 	case "A6", "B6":
 		q, err := read.Query(g.Options{})
@@ -182,23 +176,23 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			c.check.reset(paged, k, 0)
 			page, err := q.RunUnpaged(ctx, k)
 			if err != nil {
-				return settle(ctx, q, err)
+				return err
 			}
 			err = c.drain(page, allRows)
-			return c.check.done(want, settle(ctx, q, errors.Join(err, page.Err(), page.Close())))
+			return c.check.done(want, errors.Join(err, page.Err(), page.Close()))
 		}, nil
 	case "A7":
 		statement := cql.Statement[int32, row]{Kind: cql.OrdinaryStatement, CQL: pointRead, Params: keyParams, Rows: bufferedDecoder, BindMarkers: keyColumns}
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
 			c.check.reset(false, k, 0)
-			q, err := a.s.Query(statement, g.Options{})
+			q, err := a.s.UnpreparedQuery(statement, g.Options{})
 			if err != nil {
 				return err
 			}
-			defer q.Close()
-			found, err := q.One(ctx, k, &c.out)
-			return c.found(found, settle(ctx, q, err))
+			defer func() { _ = q.Close(ctx) }()
+			found, _, err := q.One(ctx, k, &c.out)
+			return c.found(found, err)
 		}, nil
 	case "C1":
 		q, err := read.Query(g.Options{})
@@ -216,11 +210,11 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			}
 			page, err := q.RunPage(ctx, cursor.k, state)
 			if err != nil {
-				return settle(ctx, q, err)
+				return err
 			}
 			err = c.drain(page, allRows)
 			next := page.State().Bytes()
-			if err = settle(ctx, q, errors.Join(err, page.Err(), page.Close())); err != nil {
+			if err = errors.Join(err, page.Err(), page.Close()); err != nil {
 				return err
 			}
 			if err = c.check.done(want, nil); err != nil {
@@ -250,12 +244,13 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		statement := cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: pointWrite, Params: rowParams, Rows: cql.EmptyRowDecoder, BindMarkers: rowColumns}
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
-			q, err := a.s.Query(statement, a.metadata)
+			q, err := a.s.UnpreparedQuery(statement, a.metadata)
 			if err != nil {
 				return err
 			}
-			defer q.Close()
-			return settle(ctx, q, q.Exec(ctx, row{K: k, P: payload(false, k, 0)}))
+			defer func() { _ = q.Close(ctx) }()
+			_, err = q.Exec(ctx, row{K: k, P: payload(false, k, 0)})
+			return err
 		}, nil
 	case "E1", "E2":
 		q, err := write.Query(a.metadata)
@@ -282,7 +277,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 					}
 				}
 			}
-			_, err := q.ExecBatch(ctx, kind, &batch, g.SessionOptions{})
+			_, err := a.s.ExecBatch(ctx, kind, &batch)
 			return err
 		}, nil
 	case "F1":
@@ -334,8 +329,8 @@ func (c *v2Case) one(q *g.Query[int32, row]) op {
 	return func(ctx context.Context, seq uint64) error {
 		k := pointKey(seq)
 		c.check.reset(false, k, 0)
-		found, err := q.One(ctx, k, &c.out)
-		return c.found(found, settle(ctx, q, err))
+		found, _, err := q.One(ctx, k, &c.out)
+		return c.found(found, err)
 	}
 }
 
@@ -343,7 +338,7 @@ func (c *v2Case) preparedOne(p *g.Prepared[int32, row]) op {
 	return func(ctx context.Context, seq uint64) error {
 		k := pointKey(seq)
 		c.check.reset(false, k, 0)
-		found, err := p.One(ctx, k, &c.out, g.SessionOptions{})
+		found, _, err := p.One(ctx, k, &c.out)
 		return c.found(found, err)
 	}
 }
@@ -351,11 +346,12 @@ func (c *v2Case) preparedOne(p *g.Prepared[int32, row]) op {
 func execOp(q *g.Query[row, cql.EmptyRow]) op {
 	return func(ctx context.Context, seq uint64) error {
 		k := pointKey(seq)
-		return settle(ctx, q, q.Exec(ctx, row{K: k, P: payload(false, k, 0)}))
+		_, err := q.Exec(ctx, row{K: k, P: payload(false, k, 0)})
+		return err
 	}
 }
 
-func preparedExec(p *g.Prepared[row, cql.EmptyRow], opts g.SessionOptions) op {
+func preparedExec(p *g.Prepared[row, cql.EmptyRow], opts g.BoundOptions) op {
 	return func(ctx context.Context, seq uint64) error {
 		k := pointKey(seq)
 		_, err := p.Exec(ctx, row{K: k, P: payload(false, k, 0)}, opts)
@@ -377,7 +373,7 @@ func (c *v2Case) lwt(id, n int) (op, error) {
 	var keys, values [lwtKeysPerWorker]int32
 	for j := range keys {
 		keys[j] = int32(id + n*j)
-		found, err := read.One(ctx, keys[j], &values[j], g.SessionOptions{})
+		found, _, err := read.One(ctx, keys[j], &values[j])
 		if err != nil {
 			return nil, err
 		}
@@ -395,8 +391,8 @@ func (c *v2Case) lwt(id, n int) (op, error) {
 		j := next % lwtKeysPerWorker
 		next++
 		cur := values[j]
-		found, err := q.One(ctx, lwtArgs{V: cur + 1, K: keys[j], Cur: cur}, &result)
-		if err = settle(ctx, q, err); err != nil {
+		found, _, err := q.One(ctx, lwtArgs{V: cur + 1, K: keys[j], Cur: cur}, &result)
+		if err != nil {
 			return err
 		}
 		if !found || !result.Applied {

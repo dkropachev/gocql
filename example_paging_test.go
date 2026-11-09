@@ -45,11 +45,11 @@ func Example_paging() {
 		log.Fatal(err)
 	}
 	defer s.Close()
-	b, err := s.Query(cql.Statement[cql.EmptyParams, int32]{CQL: "SELECT id FROM example.itoa", Rows: cql.OneColumn(cql.Int32)}, gocql.Options{PageSize: cql.Some[int32](2)})
+	b, err := s.UnpreparedQuery(cql.Statement[cql.EmptyParams, int32]{CQL: "SELECT id FROM example.itoa", Rows: cql.OneColumn(cql.Int32)}, gocql.Options{PageSize: cql.Some[int32](2)})
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer func() { _ = b.CloseAndWait(ctx) }()
+	defer func() { _ = b.Close(ctx) }()
 	var state gocql.PageState
 	var id int32
 	for {

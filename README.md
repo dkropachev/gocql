@@ -35,20 +35,17 @@ statement := cql.Statement[int32, string]{
 }
 prepared, err := session.Prepare(ctx, statement)
 if err != nil { return err }
-query, err := prepared.Query(gocql.Options{})
-if err != nil { return err }
-defer query.CloseAndWait(ctx)
 var name string
-found, err := query.One(ctx, int32(42), &name)
+found, _, err := prepared.One(ctx, int32(42), &name)
 if err != nil { return err }
 fmt.Println(found, name)
 ```
 
 `Exec` handles statements with no result columns. Read rows with `One` for a
-single row and `Each` to visit every row: both reuse the query's scratch space
-and leave nothing to close. `Run` returns `Rows`, iterated with `NextInto` and
-closed by the caller; `RunPage` resumes from a saved `PageState` for explicit
-paging, and `RunUnpaged` requests one unpaged response. A nil `Params` or
+single row and `Each` to visit every row: both leave nothing to close. `Exec`
+and `Each` return `(Result, error)` and `One` returns `(bool, Result, error)`;
+the `Result` reports the coordinator, attempts, latency, row count and any
+warnings, trace IDs or custom payload. A nil `Params` or
 `Rows` means none when the type is `cql.EmptyParams` or `cql.EmptyRow`.
 `cql.StringCodec` decodes text into an owned `string`; `cql.TextCodec` decodes
 a `cql.Text` view of the response without copying. `Params`/`Row` compose typed struct mappings, while `DynamicRows` and
@@ -58,23 +55,29 @@ from arbitrary Go values.
 
 ## Ownership and streaming
 
-`prepared.Query(options)` creates a reusable query for one worker; any number
-of queries can share one preparation. Each `Exec`, `Run`,
-`RunPage` or `RunUnpaged` call copies its parameters during admission. Prepared
-statements and compiled plans remain shareable. Overlapping executions return
-`ErrBusy`; `query.Wait(ctx)` joins accepted writes and callbacks before reuse.
-`Close` cancels the active execution and permanently stops the query;
-`CloseAndWait(ctx)` closes it and waits for that drain.
+`prepared.Exec(ctx, input)`, `prepared.One(ctx, input, &dst)` and
+`prepared.Each(ctx, input, &dst, fn)` run the statement once. They are safe for
+concurrent use and run on queries the statement keeps for them, so they
+allocate no per-call execution state. Each takes at most one `BoundOptions`
+from `session.BindOptions(options)`; none uses the session default. They return
+only when the execution has finished: values that borrow response storage are
+valid until `One` returns or `fn` returns.
 
-For point reads and writes from many goroutines, call the prepared statement
-directly. `prepared.Exec(ctx, input, options)`, `prepared.One(ctx, input, &dst,
-options)` and `prepared.Each(ctx, input, &dst, fn, options)`, with
-`SessionOptions` from `BindOptions` (or the zero value), are safe for
-concurrent use and reuse queries the statement keeps, so they cost about the
-same as a query per worker. They return only when the execution has finished:
-values that borrow response storage are valid until `One` returns or `fn`
-returns. Don't keep `Query` values in a `sync.Pool`: a query the pool drops
-stays open until it is closed.
+`prepared.Query(options)` creates a reusable query owned by one worker; any
+number of queries can share one preparation. It resolves its options once and
+skips the one-shot calls' pool hand-off, which saves about 2 to 4 percent of
+client CPU at high concurrency, and it adds the executions whose handles
+outlive the call: `Run` returns `Rows`, iterated with `NextInto` and closed by
+the caller; `RunPage` resumes from a saved `PageState` for explicit paging, and
+`RunUnpaged` requests one unpaged response. `session.UnpreparedQuery(statement,
+options)` creates the same kind of query for a statement sent as CQL text on
+every execution. Each call copies its parameters during admission. A call while
+a `Rows`, `Page` or stream of the query is open, or while another goroutine's
+call runs, returns `ErrBusy`; a call after an execution that already returned
+waits until that execution's accepted writes drain. `query.Close(ctx)`
+permanently stops the query, stops any open handle, and waits for the drain.
+Don't keep `Query` values in a `sync.Pool`: a query the pool drops stays open
+until it is closed.
 
 Buffered rows borrow receive pages. Views expire at the next advancement or
 Close unless a retained `PageLease` pins the page. `Clone` explicitly detaches
@@ -122,11 +125,10 @@ Per-execution settings are plain `gocql.Options` values, for example
 `gocql.Options{PageSize: cql.Some[int32](100)}`; the zero `Options{}` uses the
 session default. Query constructors validate, resolve and encode them for their
 session once, so query executions do no per-call work. One-shot executions
-(`prepared.Exec/One/Each`, `query.ExecBatch`, `query.RunBatch`) take `SessionOptions` from
-`BindOptions(session, options)`, which does the same work up front. Session
-options carry their session's default profile and keyspace and are not checked
-against the session that runs them: use them only on the session they were
-bound to.
+(`prepared.Exec/One/Each`, `session.ExecBatch`, `session.RunBatch`) take
+`BoundOptions` from `session.BindOptions(options)`, which does the same work up
+front. Bound options carry their session's default profile and keyspace; on
+another session they are resolved again for that session on each execution.
 `endpoint.Dialer`, `endpoint.DNSResolver`,
 `endpoint.Translator`, `ReconnectPolicy`, `routing.TokenPartitioner`,
 `routing.Policy`, observers and immutable

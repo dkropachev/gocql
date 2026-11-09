@@ -55,10 +55,10 @@ func (p *pinServe) take() []string {
 	return seen
 }
 
-func pinTestQuery(t *testing.T, s *cluster.Core, options Options) *Query[codec.EmptyRecord, []byte] {
+func pinTestQuery(t *testing.T, s *cluster.Core, options BoundOptions) *Query[codec.EmptyRecord, []byte] {
 	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 	q := codecTestMust(NewUnpreparedQuery(s, statement, options.Values()))
-	t.Cleanup(q.Close)
+	t.Cleanup(func() { _ = q.Close(context.Background()) })
 	return q
 }
 
@@ -79,7 +79,7 @@ func pinEach(t *testing.T, q *Query[codec.EmptyRecord, []byte]) {
 	defer cancel()
 	var got string
 	dst := make([]byte, 0, 8)
-	if err := q.Each(ctx, codec.EmptyRecord{}, &dst, func(row *[]byte) error { got += string(*row); return nil }); err != nil || got != "abc" {
+	if _, err := q.Each(ctx, codec.EmptyRecord{}, &dst, func(row *[]byte) error { got += string(*row); return nil }); err != nil || got != "abc" {
 		t.Fatal(got, err)
 	}
 }

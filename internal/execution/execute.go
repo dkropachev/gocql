@@ -45,7 +45,7 @@ type InternalSessionRuntime struct {
 	InternalPrepared                                             map[InternalPrepareCacheKey]*InternalPreparedState
 	pools                                                        map[*queryPoolEntry]struct{}
 	InternalPrepareOrder                                         []InternalPrepareCacheKey
-	defaultOptions                                               InternalResolvedOptions // the zero Options resolved for this session
+	defaultOptions                                               InternalResolvedOptions // the zero BoundOptions resolved for this session
 	InternalConfig                                               Config
 	prepareWorkers                                               sync.WaitGroup
 	requestID                                                    atomic.Uint64
@@ -56,6 +56,11 @@ type InternalSessionRuntime struct {
 	// is the channel it waits on.
 	pooledBusy atomic.Int64
 	pooledWake chan struct{}
+	// batchPool keeps the queries that run the session's batches, created
+	// by the first batch.
+	batchPool *queryPool[EmptyRecord, EmptyRecord]
+	batchErr  error
+	batchOnce sync.Once
 	// closing is closed when Close starts stopping executions.
 	closing              chan struct{}
 	closingOnce          sync.Once
@@ -512,7 +517,7 @@ func (l *InternalLogicalExecution) InternalFinish(result Result, err error) {
 	}
 }
 
-func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options Options) (context.Context, context.CancelFunc, *InternalExecutionRequest, error) {
+func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions) (context.Context, context.CancelFunc, *InternalExecutionRequest, error) {
 	if ctx == nil || s == nil || b == nil || b.privateStorage.InternalRequest.InternalOwner == nil {
 		return nil, nil, nil, typeValidation("execution", "nil context, session or binding")
 	}
@@ -532,7 +537,7 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Core, b *
 	}
 	*request = b.privateStorage.InternalRequest
 	// A query resolved its own options when it was created; a pooled
-	// query's come with each call. Options that need resolving for this
+	// query's come with each call. BoundOptions that need resolving for this
 	// session resolve straight into the request.
 	var resolved *InternalResolvedOptions
 	if query != nil && !query.perCall && request.batch == nil {
@@ -627,7 +632,7 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Core, b *
 	}
 	return runctx, cancel, request, nil
 }
-func Run[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options Options) (Rows[R], error) {
+func Run[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions) (Rows[R], error) {
 	runctx, cancel, request, err := InternalAdmitExecution(ctx, s, b, options)
 	if err != nil {
 		return Rows[R]{}, err
@@ -687,13 +692,13 @@ func newRowsFromResponse[R any](runctx context.Context, cancel context.CancelFun
 	request.InternalLogical.installStop(rows)
 	return newRowsHandle(rows), nil
 }
-func RunPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state PageState, options Options) (*Page[R], error) {
+func RunPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state PageState, options BoundOptions) (*Page[R], error) {
 	return InternalRunSinglePage(ctx, s, b, state, options, false)
 }
-func RunUnpaged[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options Options) (*Page[R], error) {
+func RunUnpaged[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions) (*Page[R], error) {
 	return InternalRunSinglePage(ctx, s, b, StartPage(), options, true)
 }
-func InternalRunSinglePage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state PageState, options Options, unpaged bool) (*Page[R], error) {
+func InternalRunSinglePage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state PageState, options BoundOptions, unpaged bool) (*Page[R], error) {
 	if state.Complete() {
 		return nil, ErrPagingComplete
 	}
@@ -754,7 +759,7 @@ func InternalRunSinglePage[R any](ctx context.Context, s *implCluster.Core, b *B
 	}))
 	return page, nil
 }
-func Exec[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options Options) (Result, error) {
+func Exec[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions) (Result, error) {
 	if b == nil {
 		return Result{}, typeValidation("binding", "nil binding")
 	}

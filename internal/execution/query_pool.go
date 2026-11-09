@@ -199,9 +199,34 @@ func (p *queryPool[P, R]) capture(ctx context.Context, value P) (*Query[P, R], e
 	return q, nil
 }
 
+// begin takes an idle query and begins an execution on it without capturing
+// parameters. On success the caller owns the query until it releases the
+// query's owner.
+func (p *queryPool[P, R]) begin(ctx context.Context) (*Query[P, R], error) {
+	if ctx == nil {
+		return nil, typeValidation("context", "nil context")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	q, err := p.get()
+	if err != nil {
+		return nil, err
+	}
+	if err := q.state.begin(ctx); err != nil {
+		// begin fails before the query turned busy: for a closed query,
+		// which is dropped, or for the context, which leaves it idle.
+		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
+			p.put(q)
+		}
+		return nil, err
+	}
+	return q, nil
+}
+
 // exec executes value with options, which are frozen, so the execution can
 // outlive a cancelled call without copying them.
-func (p *queryPool[P, R]) exec(ctx context.Context, value P, options Options) (Result, error) {
+func (p *queryPool[P, R]) exec(ctx context.Context, value P, options BoundOptions) (Result, error) {
 	q, err := p.capture(ctx, value)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
@@ -211,80 +236,116 @@ func (p *queryPool[P, R]) exec(ctx context.Context, value P, options Options) (R
 	return result, err
 }
 
-func (p *queryPool[P, R]) each(ctx context.Context, value P, dst *R, fn func(*R) error, options Options) (bool, error) {
+func (p *queryPool[P, R]) each(ctx context.Context, value P, dst *R, fn func(*R) error, options BoundOptions) (bool, Result, error) {
 	q, err := p.capture(ctx, value)
 	if err != nil {
-		return false, err
+		return false, InternalExecutionErrorResult(err), err
 	}
-	found, _, err := each(ctx, q.state.runtime.Core, &q.bound, options, dst, fn, &q.scratch)
+	found, result, err := each(ctx, q.state.runtime.Core, &q.bound, options, dst, fn, &q.scratch)
 	q.state.owner.InternalRelease()
-	return found, err
+	return found, result, err
 }
 
 // pool returns p's query pool, created on first use.
 func (p *Prepared[P, R]) pool() (*queryPool[P, R], error) {
+	if p == nil || p.privateStorage.InternalState == nil {
+		return nil, typeValidation("prepared", "nil handle")
+	}
 	s := &p.privateStorage
 	s.poolOnce.Do(func() {
 		s.pool, s.poolErr = newQueryPool(s.InternalState.InternalSession, func(base *queryPoolBase) (*Query[P, R], error) {
-			return newPreparedQuery(p, Options{}, base)
+			return newPreparedQuery(p, BoundOptions{}, base)
 		})
 	})
 	return s.pool, s.poolErr
 }
 
-// Exec binds value and executes the statement once with options, which
-// apply to this call only. The statement must not return rows. Exec is safe
-// for concurrent use; it reuses the storage of earlier calls, so it is the
-// cheapest way to execute a prepared statement.
-func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options Options) (Result, error) {
-	if p == nil || p.privateStorage.InternalState == nil {
-		err := typeValidation("prepared", "nil handle")
-		return InternalExecutionErrorResult(err), err
-	}
-	pool, err := p.pool()
-	if err != nil {
-		return InternalExecutionErrorResult(err), err
-	}
-	return pool.exec(ctx, value, options)
-}
-
-// One binds value, executes the statement once with options and decodes its
-// first row into dst, reporting whether a row existed. Values that borrow
-// response storage are invalid once One returns. One is safe for concurrent
-// use.
-func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options Options) (bool, error) {
-	if p == nil || p.privateStorage.InternalState == nil {
-		return false, typeValidation("prepared", "nil handle")
-	}
-	pool, err := p.pool()
-	if err != nil {
-		return false, err
-	}
-	found, err := pool.each(ctx, value, dst, nil, options)
-	if !found && err == nil {
-		InternalClearDestination(dst)
-	}
-	return found, err
-}
-
-// Each binds value, executes the statement once with options and decodes
-// every row, across all pages, into dst, calling fn after each row. Values
-// that borrow response storage are valid only until fn returns. A non-nil
-// error from fn stops the iteration and is returned. Each is safe for
-// concurrent use.
-func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options Options) error {
-	if p == nil || p.privateStorage.InternalState == nil {
-		return typeValidation("prepared", "nil handle")
-	}
-	if fn == nil {
-		return typeValidation("row callback", "nil callback")
-	}
+// AddToBatch encodes value with the statement's parameters and appends the
+// statement to batch, as Query.AddToBatch does. The values are copied into
+// the batch. AddToBatch is safe for concurrent use with other calls on p, but
+// a Batch is not: append to one batch from one goroutine at a time.
+func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
 	pool, err := p.pool()
 	if err != nil {
 		return err
 	}
-	_, err = pool.each(ctx, value, dst, fn, options)
+	q, err := pool.get()
+	if err != nil {
+		return err
+	}
+	err = q.AddToBatch(batch, value)
+	pool.put(q)
 	return err
+}
+
+// oneShotOptions returns the options of a one-shot call: none gives the zero
+// BoundOptions.
+func oneShotOptions(options []BoundOptions) (BoundOptions, error) {
+	switch len(options) {
+	case 0:
+		return BoundOptions{}, nil
+	case 1:
+		return options[0], nil
+	}
+	return BoundOptions{}, typeValidation("options", "at most one BoundOptions")
+}
+
+// Exec binds value and executes the statement once. The statement must not
+// return rows. At most one BoundOptions may be given, for this call only;
+// none uses the session's default profile. Exec is safe for concurrent use:
+// it runs on a query the statement keeps for one-shot calls, so it allocates
+// no per-call execution state.
+func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...BoundOptions) (Result, error) {
+	o, err := oneShotOptions(options)
+	if err != nil {
+		return InternalExecutionErrorResult(err), err
+	}
+	pool, err := p.pool()
+	if err != nil {
+		return InternalExecutionErrorResult(err), err
+	}
+	return pool.exec(ctx, value, o)
+}
+
+// One binds value, executes the statement once and decodes its first row
+// into dst, reporting whether a row existed; without one, dst is cleared.
+// Values that borrow response storage are invalid once One returns. Options
+// are as for Exec. One is safe for concurrent use.
+func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...BoundOptions) (bool, Result, error) {
+	o, err := oneShotOptions(options)
+	if err != nil {
+		return false, InternalExecutionErrorResult(err), err
+	}
+	pool, err := p.pool()
+	if err != nil {
+		return false, InternalExecutionErrorResult(err), err
+	}
+	found, result, err := pool.each(ctx, value, dst, nil, o)
+	if !found && err == nil {
+		InternalClearDestination(dst)
+	}
+	return found, result, err
+}
+
+// Each binds value, executes the statement once and decodes every row,
+// across all pages, into dst, calling fn after each row. Values that borrow
+// response storage are valid only until fn returns. A non-nil error from fn
+// stops the iteration and is returned. Options are as for Exec. Each is safe
+// for concurrent use.
+func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...BoundOptions) (Result, error) {
+	if fn == nil {
+		return nilEachCallback()
+	}
+	o, err := oneShotOptions(options)
+	if err != nil {
+		return InternalExecutionErrorResult(err), err
+	}
+	pool, err := p.pool()
+	if err != nil {
+		return InternalExecutionErrorResult(err), err
+	}
+	_, result, err := pool.each(ctx, value, dst, fn, o)
+	return result, err
 }
 
 // InternalPreparedPoolIdle reports how many idle queries p's pool holds.

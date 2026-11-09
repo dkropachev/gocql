@@ -33,8 +33,8 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 )
 
-// ExampleQuery_RunBatch_conditional consumes every typed row returned by a conditional batch.
-func ExampleQuery_RunBatch_conditional() {
+// ExampleSession_RunBatch_conditional consumes every typed row returned by a conditional batch.
+func ExampleSession_RunBatch_conditional() {
 	// Assumes example.my_lwt_batch_table(pk text, ck text, version int, value text,
 	// PRIMARY KEY(pk, ck)), with initial rows (pk1,ck1,1,a) and (pk1,ck2,1,A).
 	ctx := context.Background()
@@ -55,7 +55,7 @@ func ExampleQuery_RunBatch_conditional() {
 		PK, CK  string
 		Version int32
 	}
-	queryPrepared, err := session.Prepare(ctx, cql.Statement[update, cql.CASResult[previous]]{
+	statement := cql.Statement[update, cql.CASResult[previous]]{
 		CQL: "UPDATE example.my_lwt_batch_table SET value=? WHERE pk=? AND ck=? IF version=?",
 		Params: cql.Params(
 			cql.Param("value", cql.StringCodec, func(v update) string { return v.Value }),
@@ -68,25 +68,21 @@ func ExampleQuery_RunBatch_conditional() {
 			cql.Column("ck", cql.StringCodec, func(v *previous) *string { return &v.CK }),
 			cql.Column("version", cql.Int32, func(v *previous) *int32 { return &v.Version }),
 		)),
-	})
+	}
+	queryPrepared, err := session.Prepare(ctx, statement)
 	if err != nil {
 		log.Fatal(err)
 	}
-	query, err := queryPrepared.Query(gocql.Options{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer query.Close()
 	var batch gocql.Batch
 	for _, value := range []update{
 		{PK: "pk1", CK: "ck1", Value: "b", Version: 1},
 		{PK: "pk1", CK: "ck2", Value: "B", Version: 0},
 	} {
-		if err := query.AddToBatch(&batch, value); err != nil {
+		if err := queryPrepared.AddToBatch(&batch, value); err != nil {
 			log.Fatal(err)
 		}
 	}
-	page, err := query.RunBatch(ctx, cql.LoggedBatch, &batch, gocql.SessionOptions{})
+	page, err := session.RunBatch(ctx, cql.LoggedBatch, &batch, statement.Rows)
 	if err != nil {
 		log.Fatal(err)
 	}

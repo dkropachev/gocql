@@ -36,9 +36,13 @@ func Example_errors() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer insert.Close()
+	defer func() {
+		if err := insert.Close(ctx); err != nil {
+			log.Print(err)
+		}
+	}()
 
-	err = insert.Exec(ctx, "hello")
+	_, err = insert.Exec(ctx, "hello")
 	switch cqlerr.ExecutionStatusOf(err) {
 	case cqlerr.NotExecuted:
 		// Nothing was applied, e.g. Unavailable or a syntax error: retrying

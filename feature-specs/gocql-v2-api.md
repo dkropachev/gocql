@@ -542,18 +542,20 @@ fallback.
 
 ## Standalone functions
 
-Package-level functions are kept only where a method cannot express them: Go
-methods cannot add type parameters, `Session` is not generic, and `cql` cannot
-import `gocql`. Every other operation is a method on the type that owns it.
+Package-level functions are kept only where a method cannot express them.
+Go 1.27 methods may declare their own type parameters, so the generic
+constructors are methods on `Session` and `Prepared`; every operation is a
+method on the type that owns it.
 
 | Function | Decision | Reason |
 |---|---|---|
 | `NewConfig`, `NewProfile`, `NewClientRoutes`, `Connect` | keep | construct a value from nothing |
 | `OpenSingleHost` | keep | single-host sessions are a supported entry point |
-| `Prepare` | keep | needs `P`, `R` that the non-generic `Session` cannot carry |
-| `NewUnpreparedQuery`, `NewUnpreparedStreamQuery` | keep | same; `cql.Statement` cannot own a method returning a `gocql` type |
-| `NewStreamQuery` | keep | adds the decoder's row type, which `Prepared[P, B]` does not carry |
-| `BindOptions` | keep | belongs on `Session`, whose package cannot see `Options` |
+| `Prepare` | keep, also `Session.Prepare` | the method form is preferred |
+| `NewUnpreparedQuery`, `NewUnpreparedStreamQuery` | removed | `Session.UnpreparedQuery`, `Session.UnpreparedStreamQuery`; the `Unprepared` prefix keeps the slow path from being the obvious name |
+| `NewStreamQuery` | removed | `Prepared.StreamQuery[R]` declares the decoder's row type itself |
+| `BindOptions` | moved to `Session.BindOptions` | |
+| `Query.ExecBatch`, `Query.RunBatch` | moved to `Session.ExecBatch`, `Session.RunBatch[R]` | a batch is a session operation and need not include the query's statement |
 | `RestorePageState` | keep | `PageState` fields are private |
 | `NewQuery` | moved to `Prepared.Query` | `Prepared[P, R]` already carries the type parameters |
 | `PrepareQuery` | removed | `Prepare` then `Prepared.Query`; it saved one call |
@@ -568,23 +570,38 @@ captured parameters through retries, pages, accepted writes and callbacks.
 
 ```go
 func Prepare[P, R any](context.Context, *Session, Statement[P, R], ...PrepareOptions) (*Prepared[P, R], error) // at most one
+func (s *Session) Prepare[P, R any](context.Context, Statement[P, R], ...PrepareOptions) (*Prepared[P, R], error)
+
+// One-shot calls, safe for concurrent use; at most one BoundOptions.
+func (p *Prepared[P, R]) Exec(context.Context, P, ...BoundOptions) (Result, error)
+func (p *Prepared[P, R]) One(context.Context, P, *R, ...BoundOptions) (bool, Result, error)
+func (p *Prepared[P, R]) Each(context.Context, P, *R, func(*R) error, ...BoundOptions) (Result, error)
+func (p *Prepared[P, R]) AddToBatch(*Batch, P) error
+
+// Worker-owned reusable queries.
 func (p *Prepared[P, R]) Query(Options) (*Query[P, R], error)
-func NewUnpreparedQuery[P, R any](*Session, Statement[P, R], Options) (*Query[P, R], error)
-func (q *Query[P, R]) Exec(context.Context, P) error
-func (q *Query[P, R]) Each(context.Context, P, *R, func(*R) error) error
-func (q *Query[P, R]) One(context.Context, P, *R) (bool, error)
-func (q *Query[P, R]) LastResult() Result // latest Exec, Each or One
+func (s *Session) UnpreparedQuery[P, R any](Statement[P, R], Options) (*Query[P, R], error)
+func (q *Query[P, R]) Exec(context.Context, P) (Result, error)
+func (q *Query[P, R]) Each(context.Context, P, *R, func(*R) error) (Result, error)
+func (q *Query[P, R]) One(context.Context, P, *R) (bool, Result, error)
 func (q *Query[P, R]) Run(context.Context, P) (Rows[R], error)
 func (q *Query[P, R]) RunPage(context.Context, P, PageState) (*Page[R], error)
 func (q *Query[P, R]) RunUnpaged(context.Context, P) (*Page[R], error)
 func (q *Query[P, R]) Routing(P) (RoutingInfo, error)
 func (q *Query[P, R]) AddToBatch(*Batch, P) error
-func (q *Query[P, R]) ExecBatch(context.Context, BatchKind, *Batch, SessionOptions) (Result, error)
-func (q *Query[P, R]) RunBatch(context.Context, BatchKind, *Batch, SessionOptions) (*Page[R], error)
-func (q *Query[P, R]) Close()
-func (q *Query[P, R]) Wait(context.Context) error
-func (q *Query[P, R]) CloseAndWait(context.Context) error // Close, then Wait
+func (q *Query[P, R]) Close(context.Context) error // stop, then join the drain
+
+func (s *Session) ExecBatch(context.Context, BatchKind, *Batch, ...BoundOptions) (Result, error)
+func (s *Session) RunBatch[R any](context.Context, BatchKind, *Batch, RowDecoder[R], ...BoundOptions) (*Page[R], error)
 ```
+
+Prepared.Exec, One and Each run on queries the prepared statement keeps in a
+lock-free pool, so they allocate no per-call execution state. A worker-owned
+Query skips that pool hand-off (about 2 to 4 percent of client CPU at 64
+workers on the loopback benchmark), resolves its Options once, and is the only
+form whose handles (Rows, Page) outlive the call. Session.UnpreparedQuery is
+the only reusable handle for statements that are not prepared, so Query keeps
+Exec, One and Each too. Both forms report results the same way.
 
 The public immutable binding API and standalone binding-based execution
 functions have been removed. Input is copied during execution admission,
@@ -595,16 +612,20 @@ Columns from Statement.BindMarkers. Query options are captured at construction, 
 custom payload bytes; the selected profile is loaded per execution. Profile
 replacement never changes an active execution's retry or continuation options.
 
-Overlapping executions return ErrBusy. Cancellation may return while accepted
-transport writes or callbacks still drain; the query remains busy and Wait joins
-that work. Wait does not require Close. Cursor handles capture their execution
+A call while a Rows, Page or RowStream of the query is open, or while another
+goroutine's call runs, returns ErrBusy. Cancellation may return while accepted
+transport writes or callbacks still drain; the query's next execution waits for
+that drain within its own context instead of returning ErrBusy. Routing and
+AddToBatch, which take no context, return ErrBusy during the drain. Close(ctx)
+stops the query, stops an open handle with ErrClosed, and joins the drain; when
+ctx ends first it returns ctx.Err() and Session.Close joins the rest. Cursor handles capture their execution
 generation; stale handles cannot advance, close or modify another execution.
 Rows is a value handle over iterator storage that a reusable query keeps and
 reuses for its next execution. A stale Rows reports no rows, Err returns
 ErrStaleRows and Close does nothing; the zero Rows has no rows. Rows is not
 safe for concurrent use.
-Close permanently stops admission and cancels active execution; it is idempotent.
-Close a cursor on early termination before waiting for query reuse. Session
+Close is idempotent. Close a cursor on early termination before reusing its
+query. Session
 shutdown stops all queries before joining their transport/callback drains.
 
 Prepare retains its existing schema-scoped dependency validation, per-host IDs,
@@ -825,10 +846,11 @@ ownership and acceptance rules are in
 
 ```go
 // B is the prepared buffered result type; R is the streaming destination type.
-func NewStreamQuery[P, B, R any](*Prepared[P, B], StreamRowDecoder[R], StreamOptions) (*StreamQuery[P, R], error)
+func (p *Prepared[P, B]) StreamQuery[R any](StreamRowDecoder[R], StreamOptions) (*StreamQuery[P, R], error)
+// The statement declares no row decoder; decoder decodes every row.
+func (s *Session) UnpreparedStreamQuery[P, R any](Statement[P, EmptyRow], StreamRowDecoder[R], StreamOptions) (*StreamQuery[P, R], error)
 func (q *StreamQuery[P, R]) Run(context.Context, P) (*RowStream[R], error)
-func (q *StreamQuery[P, R]) Close()
-func (q *StreamQuery[P, R]) Wait(context.Context) error
+func (q *StreamQuery[P, R]) Close(context.Context) error
 type RowStream[R any] struct { /* exclusive pull receiver, automatic paging */ }
 func (s *RowStream[R]) NextInto(*R) bool
 func (s *RowStream[R]) Err() error
@@ -1041,7 +1063,7 @@ defaults. Explicit nonzero Options.Prefetch fails validation before submission;
 zero or inherited Prefetch is accepted. Retry and reprepare are permitted only
 before OutputStarted and any delivered row, under the ordinary safe-request
 rules. A row decoder/reset error or later I/O failure is terminal, with no
-transparent replay. Query Close/Wait covers the cursor through final transport and callback drain;
+transparent replay. Query.Close(ctx) covers the cursor through final transport and callback drain;
 streamed output remains caller-owned.
 
 StreamLimits zero fields select defaults: 1 MiB simultaneously retained
@@ -1097,14 +1119,13 @@ also interrupts active streams; already written caller output remains valid.
 // Options are plain values; the zero Options uses the session default
 // profile. Query constructors take Options and validate, resolve and encode
 // them for their session once. One-shot executions (Prepared.Exec/One/Each,
-// Query.ExecBatch, Query.RunBatch) take SessionOptions: Options bound by BindOptions to
-// one session's default profile and keyspace. Executions use SessionOptions as
-// they are and do not check which session runs them; on another session they
-// apply the binding session's defaults. The zero SessionOptions uses the
-// executing session's default profile.
-type SessionOptions struct { /* frozen, resolved options */ }
-func BindOptions(session *Session, options Options) (SessionOptions, error)
-func (SessionOptions) Values() Options        // a copy, to derive other options
+// Session.ExecBatch, Session.RunBatch) take BoundOptions: Options bound by
+// Session.BindOptions to one session's default profile and keyspace. On
+// another session, BoundOptions are resolved again for that session on each
+// execution. The zero BoundOptions uses the executing session's default profile.
+type BoundOptions struct { /* frozen, resolved options */ }
+func (s *Session) BindOptions(Options) (BoundOptions, error)
+func (BoundOptions) Values() Options          // a copy, to derive other options
 
 type Options struct {
     Profile *Profile                              // copied when resolved
@@ -1141,7 +1162,7 @@ type Profile struct {
 
 type BatchKind uint8
 const (LoggedBatch BatchKind = iota; UnloggedBatch; CounterBatch)
-type Batch struct { /* reusable owned members appended by query.AddToBatch */ }
+type Batch struct { /* reusable owned members appended by AddToBatch */ }
 func (b *Batch) Len() int
 func (b *Batch) Reset()
 
@@ -1157,7 +1178,7 @@ type Result struct {
 }
 ```
 
-Invalid values fail in the query constructor or BindOptions, before any
+Invalid values fail in the query constructor or Session.BindOptions, before any
 execution. A query uses its options as resolved when it is created; options
 passed per call use the resolution BindOptions made. A zero Options inherits the selected session profile, is non-idempotent, and has
 no tracing/timestamp/keyspace override. Override validation returns typed

@@ -454,7 +454,7 @@ func TestHostConnPool(t *testing.T) {
 			defer bound.Close()
 			done := make(chan error, 1)
 			go func() {
-				rows, err := Run(ctx, s, bound, testOptions(OptionValues{HostID: cqltype.Option[cqltype.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), Set: true}}))
+				rows, err := Run(ctx, s, bound, testOptions(Options{HostID: cqltype.Option[cqltype.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), Set: true}}))
 				rows.Close()
 				done <- err
 			}()
@@ -485,7 +485,7 @@ func TestHostConnPool(t *testing.T) {
 			defer r.InternalClose(true)
 			wait, cancelWait := context.WithTimeout(context.Background(), 10*time.Millisecond)
 			defer cancelWait()
-			_, err := Run(wait, s, bound, testOptions(OptionValues{HostID: cqltype.Option[cqltype.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), Set: true}}))
+			_, err := Run(wait, s, bound, testOptions(Options{HostID: cqltype.Option[cqltype.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), Set: true}}))
 			if !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatal("waiting ignored caller cancellation", err)
 			}

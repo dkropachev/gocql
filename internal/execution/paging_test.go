@@ -162,7 +162,7 @@ func TestPaging(t *testing.T) {
 			if settings.InternalValidateConfig(c) == nil {
 				t.Fatal("negative byte budget")
 			}
-			if _, err := RunPage[codec.EmptyRecord](nil, nil, nil, implModel.CompletePageState(), Options{}); !errors.Is(err, runtimeerrors.ErrPagingComplete) {
+			if _, err := RunPage[codec.EmptyRecord](nil, nil, nil, implModel.CompletePageState(), BoundOptions{}); !errors.Is(err, runtimeerrors.ErrPagingComplete) {
 				t.Fatal("complete admitted", err)
 			}
 		})
@@ -177,7 +177,7 @@ func TestPaging(t *testing.T) {
 			}()
 			b := runtimeQuery(t)
 			defer b.Close()
-			rows := codecTestMust(Run(context.Background(), s, b, Options{}))
+			rows := codecTestMust(Run(context.Background(), s, b, BoundOptions{}))
 			defer rows.Close()
 			if rows.NextInto(nil) {
 				t.Fatal("nil accepted")
@@ -215,7 +215,7 @@ func TestPaging(t *testing.T) {
 						}()
 						b := runtimeQuery(t)
 						defer b.Close()
-						rows := codecTestMust(Run(context.Background(), s, b, testOptions(OptionValues{Profile: handle})))
+						rows := codecTestMust(Run(context.Background(), s, b, testOptions(Options{Profile: handle})))
 						defer rows.Close()
 						if mode == "budget" {
 							RowsData(rows).InternalHistory.InternalMaxCount = 1
@@ -257,7 +257,7 @@ func TestPaging(t *testing.T) {
 			}()
 			b := runtimeQuery(t)
 			defer b.Close()
-			rows := codecTestMust(Run(context.Background(), s, b, Options{}))
+			rows := codecTestMust(Run(context.Background(), s, b, BoundOptions{}))
 			defer rows.Close()
 			var dst implCqltype.Bytes
 			if !rows.NextInto(&dst) || string(dst.OwnedBytes()) != "one" {
@@ -304,7 +304,7 @@ func TestPaging(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			bound := runtimeQuery(t)
-			page, err := RunPage(ctx, s, bound, model.StartPage(), testOptions(OptionValues{
+			page, err := RunPage(ctx, s, bound, model.StartPage(), testOptions(Options{
 				PageTimeout: cqltype.Option[time.Duration]{Set: true, Value: 20 * time.Millisecond},
 			}))
 			if page != nil {
@@ -346,7 +346,7 @@ func TestPaging(t *testing.T) {
 			bound := runtimeQuery(t)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			rows, err := Run(ctx, s, bound, testOptions(OptionValues{Profile: profile}))
+			rows, err := Run(ctx, s, bound, testOptions(Options{Profile: profile}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -392,7 +392,7 @@ func TestPaging(t *testing.T) {
 			defer bound.Close()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			rows, err := Run(ctx, s, bound, Options{})
+			rows, err := Run(ctx, s, bound, BoundOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}

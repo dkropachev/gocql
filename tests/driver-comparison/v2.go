@@ -28,8 +28,8 @@ type v2Adapter struct {
 	writes        [2]*g.Prepared[row, cql.EmptyRow]
 	lwt           *g.Prepared[lwtArgs, cql.CASResult[int32]]
 	lwtRead       *g.Prepared[int32, int32]
-	metadata      g.Options        // includes result metadata, as master's writes request
-	boundMetadata g.SessionOptions // metadata bound to the session, for one-shot executions
+	metadata      g.Options      // includes result metadata, as master's writes request
+	boundMetadata g.BoundOptions // metadata bound to the session, for one-shot executions
 }
 type v2Worker struct {
 	a           *v2Adapter
@@ -80,7 +80,7 @@ func connect(hosts []string) (adapter, error) {
 		return nil, e
 	}
 	metadata := g.Options{IncludeMetadata: true}
-	boundMetadata, e := g.BindOptions(s, metadata)
+	boundMetadata, e := s.BindOptions(metadata)
 	if e != nil {
 		s.Close()
 		return nil, e
@@ -89,12 +89,12 @@ func connect(hosts []string) (adapter, error) {
 }
 func (a *v2Adapter) Close() error { return a.s.Close() }
 func (a *v2Adapter) Exec(ctx context.Context, q string) error {
-	b, e := a.s.Query(cql.Statement[cql.EmptyParams, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: q, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, g.Options{})
+	b, e := a.s.UnpreparedQuery(cql.Statement[cql.EmptyParams, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: q, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, g.Options{})
 	if e != nil {
 		return e
 	}
-	defer b.Close()
-	e = b.Exec(ctx, cql.EmptyParams{})
+	defer func() { _ = b.Close(ctx) }()
+	_, e = b.Exec(ctx, cql.EmptyParams{})
 	return e
 }
 func (a *v2Adapter) Evidence() any {
@@ -107,7 +107,7 @@ func (a *v2Adapter) Evidence() any {
 				if err == nil {
 					routing = append(routing, info)
 				}
-				b.Close()
+				_ = b.Close(context.Background())
 			}
 		}
 	}
@@ -140,7 +140,7 @@ func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[r
 			return nil, nil, e
 		}
 		routing, e := q.Routing(int32(0))
-		q.Close()
+		_ = q.Close(ctx)
 		if e != nil {
 			return nil, nil, e
 		}
@@ -174,26 +174,23 @@ func (a *v2Adapter) Worker(paged, stream bool) (worker, error) {
 	}
 	writeQuery, e := write.Query(a.metadata)
 	if e != nil {
-		readQuery.Close()
+		_ = readQuery.Close(context.Background())
 		return nil, e
 	}
 	streamQuery, e := read.StreamQuery(streamDecoder, g.StreamOptions{Incremental: *incremental})
 	if e != nil {
-		readQuery.Close()
-		writeQuery.Close()
+		_ = readQuery.Close(context.Background())
+		_ = writeQuery.Close(context.Background())
 		return nil, e
 	}
 	return &v2Worker{a: a, read: readQuery, write: writeQuery, streamQuery: streamQuery, stream: stream, out: row{P: make([]byte, 0, size)}}, nil
 }
 
-// Write executes the acknowledged upsert. A successful Exec returns with the
-// query idle; after a failure the query may still drain an accepted write, so
-// Wait joins it before the worker reuses the query.
+// Write executes the acknowledged upsert. After a failure the query may still
+// drain an accepted write; its next execution waits for that drain.
 func (w *v2Worker) Write(ctx context.Context, k, r int32, p []byte) error {
-	if e := w.write.Exec(ctx, row{K: k, R: r, P: p}); e != nil {
-		return errors.Join(e, w.write.Wait(ctx))
-	}
-	return nil
+	_, e := w.write.Exec(ctx, row{K: k, R: r, P: p})
+	return e
 }
 func (w *v2Worker) Read(ctx context.Context, k int32, consume consumer) (resultErr error) {
 	if w.stream {
@@ -201,7 +198,7 @@ func (w *v2Worker) Read(ctx context.Context, k int32, consume consumer) (resultE
 		if e != nil {
 			return e
 		}
-		defer func() { resultErr = errors.Join(resultErr, rs.Close(), w.streamQuery.Wait(ctx)) }()
+		defer func() { resultErr = errors.Join(resultErr, rs.Close()) }()
 		for rs.NextInto(&w.out) {
 			if e := consume(&w.out); e != nil {
 				return e
@@ -212,8 +209,6 @@ func (w *v2Worker) Read(ctx context.Context, k int32, consume consumer) (resultE
 	// Each decodes every row of every page into the worker's owned row and
 	// returns with the query idle: no iterator to close. It keeps the exact
 	// row count the consumer validates, which One (first row only) would not.
-	if e := w.read.Each(ctx, k, &w.out, consume); e != nil {
-		return errors.Join(e, w.read.Wait(ctx))
-	}
-	return nil
+	_, e := w.read.Each(ctx, k, &w.out, consume)
+	return e
 }

@@ -107,7 +107,7 @@ func TestConfig(t *testing.T) {
 			}()
 
 			InternalRuntimeFor(s).InternalSetProfile(c.DefaultProfile)
-			options := testOptions(OptionValues{Timeout: implCql.Option[time.Duration]{Set: true}, PageTimeout: implCql.Option[time.Duration]{Set: true}, NoSerialConsistency: true, Prefetch: implCql.Option[int]{Set: true}, Timestamp: implCql.Option[int64]{Set: true}, NowInSeconds: implCql.Option[int32]{Set: true}})
+			options := testOptions(Options{Timeout: implCql.Option[time.Duration]{Set: true}, PageTimeout: implCql.Option[time.Duration]{Set: true}, NoSerialConsistency: true, Prefetch: implCql.Option[int]{Set: true}, Timestamp: implCql.Option[int64]{Set: true}, NowInSeconds: implCql.Option[int32]{Set: true}})
 			resolved, err := resolveOptions(s, options)
 			if err != nil {
 				t.Fatal(err)
@@ -177,7 +177,7 @@ func TestConfig(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			for _, include := range []bool{false, true, false} {
-				page := codecTestMust(RunUnpaged(ctx, s, bound, testOptions(OptionValues{IncludeMetadata: include})))
+				page := codecTestMust(RunUnpaged(ctx, s, bound, testOptions(Options{IncludeMetadata: include})))
 				var row cqltype.Bytes
 				if !page.NextInto(&row) || string(row.OwnedBytes()) != "value" {
 					t.Fatal(page.Err())
@@ -201,11 +201,11 @@ func TestConfig(t *testing.T) {
 			s, _, _ := runtimeTestSession(t, 0)
 			b := runtimeQuery(t)
 			defer b.Close()
-			_, err := RunUnpaged(context.Background(), s, b, testOptions(OptionValues{PageSize: implCql.Option[int32]{Set: true, Value: 1}}))
+			_, err := RunUnpaged(context.Background(), s, b, testOptions(Options{PageSize: implCql.Option[int32]{Set: true, Value: 1}}))
 			if !hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal(err)
 			}
-			_, err = RunPage(context.Background(), s, b, model.StartPage(), testOptions(OptionValues{Prefetch: implCql.Option[int]{Set: true, Value: 1}}))
+			_, err = RunPage(context.Background(), s, b, model.StartPage(), testOptions(Options{Prefetch: implCql.Option[int]{Set: true, Value: 1}}))
 			if !hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal(err)
 			}
@@ -213,7 +213,7 @@ func TestConfig(t *testing.T) {
 			if err := InternalAddBound(&batch, s, b); err != nil {
 				t.Fatal(err)
 			}
-			_, err = InternalRunBatch(context.Background(), s, cqltype.LoggedBatch, &batch, codec.EmptyRowDecoder, testOptions(OptionValues{PageSize: implCql.Option[int32]{Set: true, Value: 1}}))
+			_, err = InternalRunBatch(context.Background(), s, cqltype.LoggedBatch, &batch, codec.EmptyRowDecoder, testOptions(Options{PageSize: implCql.Option[int32]{Set: true, Value: 1}}))
 			if !hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal(err)
 			}
@@ -437,7 +437,7 @@ func TestConfig(t *testing.T) {
 			profile := settings.InternalDefaultProfile()
 			profile.Prefetch = 0
 			profile.Retry = retryOnce{}
-			options := testOptions(OptionValues{Profile: new(profile)})
+			options := testOptions(Options{Profile: new(profile)})
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			b := runtimeQuery(t)

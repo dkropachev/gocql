@@ -4,6 +4,7 @@
 package execution
 
 import (
+	"context"
 	"net"
 	"testing"
 	"time"
@@ -18,8 +19,8 @@ func eachTestQuery(t *testing.T) (*Query[codec.EmptyRecord, []byte], func(bodies
 	t.Helper()
 	s, conns, peers := runtimeTestSession(t, 1)
 	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
-	q := codecTestMust(NewUnpreparedQuery(s, statement, OptionValues{}))
-	t.Cleanup(q.Close)
+	q := codecTestMust(NewUnpreparedQuery(s, statement, Options{}))
+	t.Cleanup(func() { _ = q.Close(context.Background()) })
 	serve := func(bodies ...[]byte) chan struct{} {
 		served := make(chan struct{})
 		go func() {
@@ -43,9 +44,9 @@ func eachPageTimeoutQuery(t *testing.T) (*Query[codec.EmptyRecord, []byte], net.
 	t.Helper()
 	s, _, peers := runtimeTestSession(t, 1)
 	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
-	options := testOptions(OptionValues{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Second}, PageTimeout: cqltype.Option[time.Duration]{Set: true, Value: 100 * time.Millisecond}})
+	options := testOptions(Options{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Second}, PageTimeout: cqltype.Option[time.Duration]{Set: true, Value: 100 * time.Millisecond}})
 	q := codecTestMust(NewUnpreparedQuery(s, statement, options.Values()))
-	t.Cleanup(q.Close)
+	t.Cleanup(func() { _ = q.Close(context.Background()) })
 	return q, peers[0]
 }
 
