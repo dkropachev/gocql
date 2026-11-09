@@ -464,7 +464,20 @@ func scenarioOp(w worker, scenario string) op {
 }
 
 func phase(workers []op, duration time.Duration, rate float64) (*stats, error) {
-	return phaseWithSleep(workers, duration, rate, time.Sleep)
+	return phaseWithSleep(workers, duration, rate, preciseSleep)
+}
+
+// preciseSleep waits for the next scheduled arrival in a blocking nanosleep
+// system call. time.Sleep wakes through the runtime's timers, which, while the
+// only P is idle, sleep in the network poller with millisecond rounding: at
+// low arrival rates that added up to 1 ms of scheduling lag to every
+// open-loop latency. A blocking system call hands the P to the workers while
+// it sleeps and wakes with the kernel's timer precision, as the Rust client's
+// scheduler thread does.
+func preciseSleep(d time.Duration) {
+	ts := syscall.NsecToTimespec(int64(d))
+	for syscall.Nanosleep(&ts, &ts) == syscall.EINTR {
+	}
 }
 
 func phaseWithSleep(workers []op, duration time.Duration, rate float64, sleep func(time.Duration)) (*stats, error) {
