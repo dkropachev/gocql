@@ -1,5 +1,5 @@
 #!/bin/sh
-# usage: three/cluster.sh start|stop|restart|status|flush|settle
+# usage: three/cluster.sh start|stop|restart|status|flush|clearsnapshot|settle
 #
 # Three Scylla nodes for the three-driver comparison, four shards each, every
 # node pinned to two whole physical cores (both SMT threads). The CPU sets
@@ -42,7 +42,12 @@ start() {
 # restart stops every node and starts them again, seed first, so that each
 # measurement group begins with empty memtables and caches.
 restart() {
-	for spec in $NODES; do $CTR stop -t 60 gocql-bench3-${spec%%:*} >/dev/null; done
+	# drain flushes memtables and stops accepting writes, so that the nodes
+	# shut down cleanly instead of being killed with hints and commitlog
+	# segments pending (podman's SIGTERM alone left two of three nodes running
+	# past a 60 s stop timeout).
+	for spec in $NODES; do $CTR exec gocql-bench3-${spec%%:*} nodetool drain >/dev/null; done
+	for spec in $NODES; do $CTR stop -t 120 gocql-bench3-${spec%%:*} >/dev/null; done
 	for spec in $NODES; do
 		n=${spec%%:*}; rest=${spec#*:}; ip=${rest#*:}
 		$CTR start gocql-bench3-$n >/dev/null
@@ -71,6 +76,12 @@ wait_up() { # node ip expected-UN-count
 	echo "node $1 did not come up" >&2
 	$CTR logs --tail 30 gocql-bench3-$1 >&2
 	exit 1
+}
+
+# clearsnapshot removes the benchmark keyspace's snapshots, which every
+# TRUNCATE takes (auto_snapshot), so that resets do not accumulate them.
+clearsnapshot() {
+	for spec in $NODES; do $CTR exec gocql-bench3-${spec%%:*} nodetool clearsnapshot -- bench_compare >/dev/null; done
 }
 
 # flush writes memtables to disk on every node.
@@ -104,6 +115,7 @@ stop) stop ;;
 restart) restart ;;
 status) $CTR exec gocql-bench3-1 nodetool status ;;
 flush) flush ;;
+clearsnapshot) clearsnapshot ;;
 settle) settle ;;
-*) echo "usage: $0 start|stop|restart|status|flush|settle" >&2; exit 2 ;;
+*) echo "usage: $0 start|stop|restart|status|flush|clearsnapshot|settle" >&2; exit 2 ;;
 esac

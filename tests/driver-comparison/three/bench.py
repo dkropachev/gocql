@@ -82,6 +82,7 @@ def reset(table):
     then warm the cache by reading the whole dataset."""
     # Setup is untimed; it gets a whole CPU so loading keeps its paced rate.
     loader('old', '-mode', 'prepare', '-scenario', table, quota='100%')
+    cluster('clearsnapshot')
     cluster('flush')
     cluster('settle')
     cluster('restart')
@@ -170,6 +171,7 @@ def summary(paths):
         m = measurement(p)
         rows.append({'ops': m['in_window'] / m['duration_seconds'], 'p90': m['latency']['p90_us'],
                      'p95': m['latency']['p95_us'], 'p99': m['latency']['p99_us'],
+                     'svc90': m['dispatch_latency']['p90_us'], 'svc99': m['dispatch_latency']['p99_us'],
                      'cpu_us': 1e6 * m['cpu_seconds_including_drain'] / max(m['completed'], 1),
                      'errors': m['errors'], 'rejected': m.get('rejected', 0)})
     if not rows:
@@ -179,10 +181,12 @@ def summary(paths):
 
 def report(out):
     print(f'# Three-driver comparison: {out}\n')
+    print('Latency p90/p95/p99 run from each arrival\'s scheduled time (client queueing included);')
+    print('service latency runs from the moment a worker starts the operation. Medians over rounds.\n')
     for kind in ('throughput', 'latency'):
         print(f'## {kind}\n')
-        print('| family | case | workers | rate/s | driver | ops/s | p90 µs | p95 µs | p99 µs | CPU µs/op | vs master ops | errors |')
-        print('|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|')
+        print('| family | case | workers | rate/s | driver | ops/s | p90 µs | p95 µs | p99 µs | service p90/p99 µs | CPU µs/op | vs master ops | errors | rejected |')
+        print('|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|')
         for family, (workers, _, cases, description) in FAMILIES.items():
             rate = ''
             rf = os.path.join(out, f'rate-{family}.json')
@@ -196,7 +200,8 @@ def report(out):
                     continue
                 ratio = f'{s["ops"] / base["ops"]:.2f}x' if base and base['ops'] else ''
                 print(f'| {family} | {description} | {workers} | {rate if kind == "latency" else "max"} | {d} | '
-                      f'{s["ops"]:,.0f} | {s["p90"]:,.0f} | {s["p95"]:,.0f} | {s["p99"]:,.0f} | {s["cpu_us"]:,.1f} | {ratio} | {s["errors"]:.0f} |')
+                      f'{s["ops"]:,.0f} | {s["p90"]:,.0f} | {s["p95"]:,.0f} | {s["p99"]:,.0f} | {s["svc90"]:,.0f}/{s["svc99"]:,.0f} | '
+                      f'{s["cpu_us"]:,.1f} | {ratio} | {s["errors"]:.0f} | {s["rejected"]:.0f} |')
         print()
 
 
