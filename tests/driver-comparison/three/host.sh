@@ -7,7 +7,8 @@
 #            - sets every CPU to the performance governor and energy policy and
 #              turns boost off, so that every core runs at its fixed base clock
 #              and no run is slowed by thermal or power limits mid-way;
-#            - confines user.slice, system.slice and init.scope (every other
+#            - confines user.slice, system.slice, init.scope and machine.slice
+#              (other users' containers; every other
 #              process on the host) to OTHER_CPUS, and gives the benchmark
 #              slice, which holds the Scylla containers and the loader, the
 #              whole benchmark CCD (BENCH_CPUS). Runtime properties only.
@@ -19,7 +20,7 @@ BENCH_CPUS=${GOCQL_THREE_BENCH_CPUS:-0-7,16-23}
 OTHER_CPUS=${GOCQL_THREE_OTHER_CPUS:-8-15,24-31}
 SLICE=${GOCQL_THREE_SLICE:-gocqlbench.slice}
 STATE=${GOCQL_THREE_HOST_STATE:-/var/tmp/gocql-three-host.state}
-UNITS="user.slice system.slice init.scope"
+UNITS="user.slice system.slice init.scope machine.slice"
 CPUFREQ=/sys/devices/system/cpu
 
 setup() {
