@@ -55,7 +55,7 @@ func ExampleQuery_RunBatch_conditional() {
 		PK, CK  string
 		Version int32
 	}
-	queryPrepared, err := gocql.Prepare(ctx, session, cql.Statement[update, cql.CASResult[previous]]{
+	queryPrepared, err := session.Prepare(ctx, cql.Statement[update, cql.CASResult[previous]]{
 		CQL: "UPDATE example.my_lwt_batch_table SET value=? WHERE pk=? AND ck=? IF version=?",
 		Params: cql.Params(
 			cql.Param("value", cql.StringCodec, func(v update) string { return v.Value }),

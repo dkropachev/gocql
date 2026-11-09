@@ -87,7 +87,7 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster gocql.Config, keyspac
 	if _, err := v2Exec(ctx, session, fmt.Sprintf("INSERT INTO %s.%s (pk, v) VALUES (?, ?)", keyspace, table), cql.IntValue(7), cql.IntValue(9)); err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := gocql.Prepare(ctx, session, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT pk, v FROM %s.%s WHERE pk = ?", keyspace, table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
+	prepared, err := session.Prepare(ctx, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT pk, v FROM %s.%s WHERE pk = ?", keyspace, table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

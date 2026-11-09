@@ -45,7 +45,7 @@ func Example_dynamicColumns() {
 		log.Fatal(err)
 	}
 	defer s.Close()
-	b, err := gocql.NewUnpreparedQuery(s, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT * FROM example.table1", Rows: cql.DynamicRows}, gocql.Options{})
+	b, err := s.Query(cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT * FROM example.table1", Rows: cql.DynamicRows}, gocql.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}

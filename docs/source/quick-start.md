@@ -12,7 +12,7 @@ Import `github.com/scylladb/gocql/v2` (`gocql`) and
 `gocql.Connect(ctx, config)`. Close the session when finished.
 
 Declare a `cql.Statement[P,R]` with `CQL`, `Params` and `Rows`.
-`Prepare(ctx, session, statement)` prepares it and validates its codecs
+`session.Prepare(ctx, statement)` prepares it and validates its codecs
 against server metadata; `prepared.Query(options)` returns a worker-owned
 reusable query, and several queries can share one preparation. `query.One` reads one row, `query.Each` visits every row and
 `query.Run` returns typed rows: check `Rows.Err()` after iteration and close

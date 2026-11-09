@@ -291,7 +291,7 @@ func v2Exec(ctx context.Context, session *gocql.Session, stmt string, values ...
 		bound, err = BindUnpreparedOwned(statement, cql.NewColumns(), values)
 	} else {
 		var prepared *gocql.Prepared[[]cql.Value, cql.EmptyRow]
-		prepared, err = gocql.Prepare(ctx, session, statement, gocql.PrepareOptions{})
+		prepared, err = session.Prepare(ctx, statement, gocql.PrepareOptions{})
 		if err == nil {
 			bound, err = BindOwned(prepared, values)
 		}
@@ -311,7 +311,7 @@ func v2Query(ctx context.Context, session *gocql.Session, stmt string, values ..
 		bound, err = BindUnpreparedOwned(statement, cql.NewColumns(), values)
 	} else {
 		var prepared *gocql.Prepared[[]cql.Value, cql.DynamicRow]
-		prepared, err = gocql.Prepare(ctx, session, statement, gocql.PrepareOptions{})
+		prepared, err = session.Prepare(ctx, statement, gocql.PrepareOptions{})
 		if err == nil {
 			bound, err = BindOwned(prepared, values)
 		}

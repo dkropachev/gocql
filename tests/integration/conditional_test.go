@@ -70,7 +70,7 @@ func TestConditional(t *testing.T) {
 		require.False(t, deleted.Applied)
 		require.Equal(t, int64(modified), cassandraInt(t, deleted.Previous.Value, "last_modified"))
 		// Missing or incompatible previous-value decoders fail explicitly.
-		invalid, err := gocql.Prepare(context.Background(), session, cql.Statement[[]cql.Value, cql.CASResult[cql.EmptyRow]]{CQL: deleteCQL, Params: cql.DynamicParams, Rows: cql.CASRows(cql.EmptyRowDecoder)}, gocql.PrepareOptions{})
+		invalid, err := session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.CASResult[cql.EmptyRow]]{CQL: deleteCQL, Params: cql.DynamicParams, Rows: cql.CASRows(cql.EmptyRowDecoder)}, gocql.PrepareOptions{})
 		if err == nil {
 			bound := cassandraBound(t, invalid, []cql.Value{codecTestMust(cql.TextValue(title)), revValue, cql.TimestampValue(modified + 10000)})
 			rows, e := Run(context.Background(), session, bound, gocql.SessionOptions{})
@@ -116,7 +116,7 @@ func TestConditional(t *testing.T) {
 		runCASBatch(conditional, false, 2)
 		// CASRows rejects ordinary SELECTs and unconditional batches; the former
 		// MapScanCAS silent false result is replaced by validated result metadata.
-		_, err = gocql.Prepare(context.Background(), session, cql.Statement[[]cql.Value, cql.CASResult[cql.DynamicRow]]{CQL: fmt.Sprintf("SELECT revid FROM %s WHERE title=?", table), Params: cql.DynamicParams, Rows: cql.CASRows(cql.DynamicRows)}, gocql.PrepareOptions{})
+		_, err = session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.CASResult[cql.DynamicRow]]{CQL: fmt.Sprintf("SELECT revid FROM %s WHERE title=?", table), Params: cql.DynamicParams, Rows: cql.CASRows(cql.DynamicRows)}, gocql.PrepareOptions{})
 		require.Error(t, err)
 		for i := 0; i < 2; i++ {
 			page, err := runBatch(context.Background(), session, cql.LoggedBatch, seed, cql.CASRows(cql.DynamicRows), gocql.SessionOptions{})

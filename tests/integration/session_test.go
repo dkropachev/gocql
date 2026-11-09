@@ -64,7 +64,7 @@ import (
 // Typed request helpers keep parameter construction explicit and bind inputs once.
 func sessionTestBind(t testing.TB, session *gocql.Session, stmt string, values ...cql.Value) *Bound[cql.EmptyRow] {
 	t.Helper()
-	prepared, err := gocql.Prepare(context.Background(), session, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
+	prepared, err := session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +279,7 @@ func TestSession(t *testing.T) {
 				}
 			}()
 			exec("CREATE TABLE " + ks + ".records(id int PRIMARY KEY,value blob)")
-			insert := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[[]byte, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(id,value)VALUES(1,?)", Kind: cql.OrdinaryStatement, Params: cql.OneParam(cql.BytesEncoder), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
+			insert := codecTestMust(s.Prepare(ctx, cql.Statement[[]byte, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(id,value)VALUES(1,?)", Kind: cql.OrdinaryStatement, Params: cql.OneParam(cql.BytesEncoder), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
 			write := func(value byte) {
 				t.Helper()
 				payload := bytes.Repeat([]byte{value}, 1<<20)
@@ -294,7 +294,7 @@ func TestSession(t *testing.T) {
 				}
 			}
 			write(0x71)
-			prepared := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[cql.EmptyParams, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}, gocql.PrepareOptions{}))
+			prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}, gocql.PrepareOptions{}))
 			bound := codecTestMust(BindOwned(prepared, cql.EmptyParams{}))
 			defer bound.Close()
 			rows := codecTestMust(Run(ctx, s, bound, bindOptions(s, gocql.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
@@ -1067,7 +1067,7 @@ func TestSession(t *testing.T) {
 		}
 		inputs := cql.Params(cql.Param("id", cql.Int32, func(v input) int32 { return v.ID }), cql.Param("value", cql.BytesEncoder, func(v input) []byte { return v.Value }))
 		rows := cql.Row(cql.Column("id", cql.Int32, func(v *output) *int32 { return &v.ID }), cql.Column("value", cql.BlobCodec, func(v *output) *cql.Bytes { return &v.Value }))
-		prepared, err := gocql.Prepare(ctx, session, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".values (id,value) VALUES (?,?)", Params: inputs, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
+		prepared, err := session.Prepare(ctx, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".values (id,value) VALUES (?,?)", Params: inputs, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}

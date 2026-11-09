@@ -92,7 +92,7 @@ func benchConfig(d endpoint.Dialer) gocql.Config {
 	return c
 }
 func benchExec(ctx context.Context, s *gocql.Session, text string) error {
-	b, e := gocql.NewUnpreparedQuery(s, cql.Command(text), gocql.Options{})
+	b, e := s.Query(cql.Command(text), gocql.Options{})
 	if e != nil {
 		return e
 	}
@@ -114,7 +114,7 @@ func cleanupNamespace(s *gocql.Session) error {
 	if err := benchExec(ctx, s, "DROP KEYSPACE IF EXISTS "+corpus.Namespace); err != nil {
 		return err
 	}
-	p, err := gocql.Prepare(ctx, s, cql.Statement[string, cql.Text]{CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name = ?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.TextCodec)}, gocql.PrepareOptions{})
+	p, err := s.Prepare(ctx, cql.Statement[string, cql.Text]{CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name = ?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.TextCodec)}, gocql.PrepareOptions{})
 	if err != nil {
 		return err
 	}
@@ -208,7 +208,7 @@ func benchRead(s *gocql.Session, id int32) error {
 	return benchReadContext(context.Background(), s, id)
 }
 func benchReadContext(ctx context.Context, s *gocql.Session, id int32) error {
-	p, e := gocql.Prepare(ctx, s, cql.Statement[int32, cql.Text]{CQL: "SELECT v FROM " + corpus.Namespace + ".table1 WHERE pk = ?;", Params: cql.OneParam(cql.Int32), Rows: cql.OneColumn(cql.TextCodec)}, gocql.PrepareOptions{})
+	p, e := s.Prepare(ctx, cql.Statement[int32, cql.Text]{CQL: "SELECT v FROM " + corpus.Namespace + ".table1 WHERE pk = ?;", Params: cql.OneParam(cql.Int32), Rows: cql.OneColumn(cql.TextCodec)}, gocql.PrepareOptions{})
 	if e != nil {
 		return e
 	}
@@ -248,7 +248,7 @@ func benchWrite(s *gocql.Session, id int32) error {
 	return benchWriteContext(context.Background(), s, id)
 }
 func benchWriteContext(ctx context.Context, s *gocql.Session, id int32) error {
-	p, e := gocql.Prepare(ctx, s, cql.Statement[benchInsert, cql.EmptyRow]{CQL: "INSERT INTO " + corpus.Namespace + ".table1 (pk, ck, v) VALUES (?, ?, ?);", Params: cql.Params(cql.Param("pk", cql.Int32, func(v benchInsert) int32 { return v.PK }), cql.Param("ck", cql.Int32, func(v benchInsert) int32 { return v.CK }), cql.Param("v", cql.StringEncoder, func(v benchInsert) string { return v.Value })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
+	p, e := s.Prepare(ctx, cql.Statement[benchInsert, cql.EmptyRow]{CQL: "INSERT INTO " + corpus.Namespace + ".table1 (pk, ck, v) VALUES (?, ?, ?);", Params: cql.Params(cql.Param("pk", cql.Int32, func(v benchInsert) int32 { return v.PK }), cql.Param("ck", cql.Int32, func(v benchInsert) int32 { return v.CK }), cql.Param("v", cql.StringEncoder, func(v benchInsert) string { return v.Value })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 	if e != nil {
 		return e
 	}

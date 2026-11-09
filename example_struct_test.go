@@ -43,7 +43,7 @@ func ExampleParamsOf() {
 	}
 	defer session.Close()
 
-	insertPrepared, err := gocql.Prepare(ctx, session, cql.Statement[Tweet, cql.EmptyRow]{
+	insertPrepared, err := session.Prepare(ctx, cql.Statement[Tweet, cql.EmptyRow]{
 		CQL:    "INSERT INTO tweet (timeline, id, text) VALUES (?, ?, ?)",
 		Params: tweetParams,
 	})
@@ -60,7 +60,7 @@ func ExampleParamsOf() {
 	}
 
 	// The same struct binds a statement that uses a subset of its columns.
-	editPrepared, err := gocql.Prepare(ctx, session, cql.Statement[Tweet, cql.EmptyRow]{
+	editPrepared, err := session.Prepare(ctx, cql.Statement[Tweet, cql.EmptyRow]{
 		CQL:    "UPDATE tweet SET text = ? WHERE timeline = ? AND id = ?",
 		Params: tweetParams,
 	})
@@ -73,7 +73,7 @@ func ExampleParamsOf() {
 	}
 	defer edit.CloseAndWait(ctx)
 
-	selectTweetsPrepared, err := gocql.Prepare(ctx, session, cql.Statement[string, Tweet]{
+	selectTweetsPrepared, err := session.Prepare(ctx, cql.Statement[string, Tweet]{
 		CQL:    "SELECT id, timeline, text FROM tweet WHERE timeline = ?",
 		Params: cql.OneParam(cql.StringCodec),
 		Rows:   tweetRow,

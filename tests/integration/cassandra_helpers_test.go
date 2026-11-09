@@ -83,7 +83,7 @@ func cassandraDDL(t testing.TB, s *gocql.Session, stmt string) {
 }
 func cassandraPrepared[P, R any](t testing.TB, s *gocql.Session, statement cql.Statement[P, R], options gocql.PrepareOptions) *gocql.Prepared[P, R] {
 	t.Helper()
-	p, err := gocql.Prepare(context.Background(), s, statement, options)
+	p, err := s.Prepare(context.Background(), statement, options)
 	if err != nil {
 		t.Fatal(err)
 	}

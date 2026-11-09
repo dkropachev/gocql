@@ -216,7 +216,7 @@ func TestPaging(t *testing.T) {
 		}
 		var calls atomic.Int32
 		decoder := liveDecoder{calls: &calls, base: cql.Row(cql.Column("val", cql.Int32, func(r *liveDestination) *int32 { return &r.Value }), cql.Column("payload", cql.BlobCodec, func(r *liveDestination) *cql.Bytes { return &r.Payload }))}
-		prepared := codecTestMust(gocql.Prepare(ctx, session, cql.Statement[int32, liveDestination]{CQL: "SELECT val,payload FROM " + table + " WHERE id=?", Params: cql.OneParam(cql.Int32), Rows: decoder}, gocql.PrepareOptions{}))
+		prepared := codecTestMust(session.Prepare(ctx, cql.Statement[int32, liveDestination]{CQL: "SELECT val,payload FROM " + table + " WHERE id=?", Params: cql.OneParam(cql.Int32), Rows: decoder}, gocql.PrepareOptions{}))
 		bound := codecTestMust(BindBorrowed(prepared, int32(1)))
 		defer bound.Close()
 		churn := make(chan error, 1)
@@ -315,7 +315,7 @@ func TestPaging(t *testing.T) {
 			Text   string
 		}
 		params := cql.Params(cql.Param("id", cql.Int32, func(v input) int32 { return v.ID }), cql.Param("value", cql.BytesEncoder, func(v input) []byte { return v.Value }), cql.Param("pieces", cql.ListEncoder(cql.BytesEncoder), func(v input) [][]byte { return v.Pieces }), cql.Param("txt", cql.StringEncoder, func(v input) string { return v.Text }))
-		prepared := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".records(id,value,pieces,txt)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: params, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
+		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".records(id,value,pieces,txt)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: params, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
 		payload := bytes.Repeat([]byte("segment-crossing"), 30000)
 		textPayload := strings.Repeat("stream-🙂-", 24000)
 		for i := 0; i < 5; i++ {
@@ -330,7 +330,7 @@ func TestPaging(t *testing.T) {
 			}
 		}
 		statement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,value,pieces,txt FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}
-		selectPrepared := codecTestMust(gocql.Prepare(ctx, s, statement, gocql.PrepareOptions{}))
+		selectPrepared := codecTestMust(s.Prepare(ctx, statement, gocql.PrepareOptions{}))
 		bound := codecTestMust(BindOwned(selectPrepared, cql.EmptyParams{}))
 		defer bound.Close()
 		type output struct {
@@ -441,7 +441,7 @@ func TestPaging(t *testing.T) {
 
 		// Change a SELECT * result while its pull-driven continuation is live. The
 		// existing binding must select a new streaming plan from real server metadata.
-		changedPrepared := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT * FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}, gocql.PrepareOptions{}))
+		changedPrepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT * FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}, gocql.PrepareOptions{}))
 		changedBound := codecTestMust(BindOwned(changedPrepared, cql.EmptyParams{}))
 		defer changedBound.Close()
 		changed, err := RunStream(ctx, s, changedBound, decoder, gocql.StreamOptions{Incremental: true, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 1}}})

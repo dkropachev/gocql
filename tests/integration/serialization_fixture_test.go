@@ -31,7 +31,7 @@ import (
 // pass through reflected parameter binding or result destination discovery.
 func serializationExec[P any](s *gocql.Session, stmt string, encoder cql.ParamEncoder[P], value P) error {
 	ctx := context.Background()
-	p, err := gocql.Prepare(ctx, s, cql.Statement[P, cql.EmptyRow]{CQL: stmt, Params: encoder, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
+	p, err := s.Prepare(ctx, cql.Statement[P, cql.EmptyRow]{CQL: stmt, Params: encoder, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 	if err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func serializationExec[P any](s *gocql.Session, stmt string, encoder cql.ParamEn
 
 func serializationRows[R any](s *gocql.Session, stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (gocql.Rows[R], error) {
 	ctx := context.Background()
-	p, err := gocql.Prepare(ctx, s, cql.Statement[[]cql.Value, R]{CQL: stmt, Params: cql.DynamicParams, Rows: decoder}, gocql.PrepareOptions{})
+	p, err := s.Prepare(ctx, cql.Statement[[]cql.Value, R]{CQL: stmt, Params: cql.DynamicParams, Rows: decoder}, gocql.PrepareOptions{})
 	if err != nil {
 		return gocql.Rows[R]{}, err
 	}

@@ -264,7 +264,7 @@ func TestQuery(t *testing.T) {
 
 			// Prepared SELECT retains the EXECUTE custom-payload path.
 			selectStatement := cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id FROM %s where id = ?", table), Params: cql.DynamicParams, Rows: cql.DynamicRows}
-			prepared, err := gocql.Prepare(context.Background(), session, selectStatement, gocql.PrepareOptions{})
+			prepared, err := session.Prepare(context.Background(), selectStatement, gocql.PrepareOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -321,7 +321,7 @@ func TestQuery(t *testing.T) {
 				{{Key: "a", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes([]byte{10, 20})}}, {Key: "b", Value: cql.Nullable[cql.Bytes]{}}},
 			}
 			statement := cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id FROM %s where id = ?", table), Params: cql.DynamicParams, Rows: cql.DynamicRows}
-			prepared, err := gocql.Prepare(context.Background(), session, statement, gocql.PrepareOptions{})
+			prepared, err := session.Prepare(context.Background(), statement, gocql.PrepareOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -425,7 +425,7 @@ func TestQuery(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			require.NoError(t, v2CreateTable(ctx, session, fmt.Sprintf("CREATE TABLE %s (id int PRIMARY KEY)", table)))
-			prepared, err := gocql.Prepare(ctx, session, cql.Statement[int32, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), Params: cql.OneParam(cql.Int32), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
+			prepared, err := session.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), Params: cql.OneParam(cql.Int32), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 			require.NoError(t, err)
 			require.Equal(t, 1, prepared.Parameters().Len())
 			require.Equal(t, table, prepared.Info().Table)
@@ -688,7 +688,7 @@ func TestQuery(t *testing.T) {
 		defer session.Close()
 		namespace := fmt.Sprintf("gocql_query_%x", time.Now().UnixNano())
 		exec := func(ctx context.Context, stmt string) error {
-			q, err := gocql.NewUnpreparedQuery(session, cql.Command(stmt), gocql.Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 30 * time.Second}})
+			q, err := session.Query(cql.Command(stmt), gocql.Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 30 * time.Second}})
 			if err != nil {
 				return err
 			}
@@ -712,7 +712,7 @@ func TestQuery(t *testing.T) {
 				return
 			}
 			typ := cql.TextType
-			query, err := gocql.NewUnpreparedQuery(session, cql.Statement[string, cql.Text]{Kind: cql.OrdinaryStatement, CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name=?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.TextCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "keyspace_name", Type: typ})}, gocql.Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
+			query, err := session.Query(cql.Statement[string, cql.Text]{Kind: cql.OrdinaryStatement, CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name=?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.TextCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "keyspace_name", Type: typ})}, gocql.Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
 			if err != nil {
 				t.Error(err)
 				return
@@ -762,7 +762,7 @@ func TestQuery(t *testing.T) {
 			K, C int32
 			P    []byte
 		}
-		write := codecTestMust(gocql.Prepare(ctx, session, cql.Statement[record, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO " + table + "(k,c,p)VALUES(?,?,?)", Params: cql.Params(cql.Param("k", cql.Int32, func(r record) int32 { return r.K }), cql.Param("c", cql.Int32, func(r record) int32 { return r.C }), cql.Param("p", cql.BytesEncoder, func(r record) []byte { return r.P })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
+		write := codecTestMust(session.Prepare(ctx, cql.Statement[record, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO " + table + "(k,c,p)VALUES(?,?,?)", Params: cql.Params(cql.Param("k", cql.Int32, func(r record) int32 { return r.K }), cql.Param("c", cql.Int32, func(r record) int32 { return r.C }), cql.Param("p", cql.BytesEncoder, func(r record) []byte { return r.P })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
 		w := codecTestMust(write.Query(gocql.Options{}))
 		defer w.Close()
 		payload := bytes.Repeat([]byte{42}, 4096)
@@ -775,7 +775,7 @@ func TestQuery(t *testing.T) {
 			}
 		}
 		decoder := cql.RowInto(func(*record) {}, cql.Column("c", cql.Int32, func(r *record) *int32 { return &r.C }), cql.Column("p", cql.OwnedBlobCodec, func(r *record) *[]byte { return &r.P }))
-		read := codecTestMust(gocql.Prepare(ctx, session, cql.Statement[int32, record]{Kind: cql.OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32), Rows: decoder}, gocql.PrepareOptions{}))
+		read := codecTestMust(session.Prepare(ctx, cql.Statement[int32, record]{Kind: cql.OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32), Rows: decoder}, gocql.PrepareOptions{}))
 		q := codecTestMust(read.Query(gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
 		defer q.Close()
 		var previous gocql.Rows[record]
@@ -932,13 +932,13 @@ func TestQuery(t *testing.T) {
 					bound, err := BindUnpreparedOwned(statement, cql.NewColumns(), cql.EmptyParams{})
 					if firstCQLWord(stmt) == "USE" {
 						require.ErrorIs(t, err, cqlerr.ErrUseStmt)
-						_, err = gocql.Prepare(context.Background(), session, statement, gocql.PrepareOptions{})
+						_, err = session.Prepare(context.Background(), statement, gocql.PrepareOptions{})
 						require.ErrorIs(t, err, cqlerr.ErrUseStmt)
 						return
 					}
 					require.NoError(t, err)
 					bound.Close()
-					_, err = gocql.Prepare(context.Background(), session, statement, gocql.PrepareOptions{})
+					_, err = session.Prepare(context.Background(), statement, gocql.PrepareOptions{})
 					require.ErrorIs(t, err, cqlerr.ErrNoConnections)
 				})
 			}
@@ -988,7 +988,7 @@ func TestQuery(t *testing.T) {
 						t.Fatal(err)
 					}
 					bound.Close()
-					if _, err := gocql.Prepare(context.Background(), session, statement, gocql.PrepareOptions{}); !errors.Is(err, cqlerr.ErrNoConnections) {
+					if _, err := session.Prepare(context.Background(), statement, gocql.PrepareOptions{}); !errors.Is(err, cqlerr.ErrNoConnections) {
 						t.Fatalf("explicit Prepare must attempt a connection for %q: %v", test.Stmt, err)
 					}
 				})

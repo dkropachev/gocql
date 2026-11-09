@@ -1,6 +1,6 @@
 # Streaming into caller storage
 
-`NewStreamQuery(prepared, decoder, StreamOptions{})` creates a reusable query.
+`prepared.StreamQuery(decoder, StreamOptions{})` creates a reusable query.
 Its `Run(ctx, parameters)` method returns a cursor; `NextInto(&row)` decodes
 into seeded caller storage. By default it buffers a complete response page on
 normal multiplexed connections. `StreamOptions{Incremental: true}` selects
@@ -25,7 +25,7 @@ row := Download{
     Payload: make([]byte, 0, 1<<20),
     Pieces: [][]byte{make([]byte, 0, 1024), make([]byte, 0, 1024)},
 }
-query, err := gocql.NewStreamQuery(prepared, decoder, gocql.StreamOptions{})
+query, err := prepared.StreamQuery(decoder, gocql.StreamOptions{})
 if err != nil { return err }
 defer query.Close()
 stream, err := query.Run(ctx, parameters)

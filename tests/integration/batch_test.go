@@ -264,7 +264,7 @@ func TestBatch(t *testing.T) {
 			require.NoError(t, v2CreateTable(ctx, session, "CREATE TABLE IF NOT EXISTS "+keyspace+".batch_keyspace(id int, value text, PRIMARY KEY (id))"))
 			// Explicit prepare keyspace and execution keyspace must agree. Unqualified
 			// member CQL still exercises the v5 BATCH keyspace flag.
-			prepared, err := gocql.Prepare(ctx, session, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: "INSERT INTO batch_keyspace(id, value) VALUES (?, ?)", Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{Keyspace: keyspace})
+			prepared, err := session.Prepare(ctx, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: "INSERT INTO batch_keyspace(id, value) VALUES (?, ?)", Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{Keyspace: keyspace})
 			require.NoError(t, err)
 			first, err := BindOwned(prepared, []cql.Value{cql.IntValue(1), codecTestMust(cql.TextValue("val1"))})
 			require.NoError(t, err)
@@ -304,7 +304,7 @@ func TestBatch(t *testing.T) {
 			_, err := execBatch(ctx, session, cql.LoggedBatch, []batchItem{sessionTestItem(t, bound)}, bindOptions(session, gocql.Options{NowInSeconds: cql.Option[int32]{Value: 0, Set: true}}))
 			require.NoError(t, err)
 
-			prepared, err := gocql.Prepare(ctx, session, cql.Statement[int32, int32]{CQL: fmt.Sprintf(`SELECT TTL(val) FROM %s WHERE id = ?`, table), Params: cql.OneParam(cql.Int32), Rows: cql.OneColumn(cql.Int32)}, gocql.PrepareOptions{})
+			prepared, err := session.Prepare(ctx, cql.Statement[int32, int32]{CQL: fmt.Sprintf(`SELECT TTL(val) FROM %s WHERE id = ?`, table), Params: cql.OneParam(cql.Int32), Rows: cql.OneColumn(cql.Int32)}, gocql.PrepareOptions{})
 			require.NoError(t, err)
 			read, err := BindOwned(prepared, int32(1))
 			require.NoError(t, err)

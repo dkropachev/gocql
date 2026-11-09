@@ -152,7 +152,7 @@ func TestPrepared(t *testing.T) {
 			if _, err := v2SchemaRoutingExec(ctx, session, fmt.Sprintf(`INSERT INTO %s.%s(pk, ck, v) VALUES (?, ?, ?)`, keyspace, table), gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}, cql.IntValue(1), cql.IntValue(2), cql.IntValue(3)); err != nil {
 				t.Fatal(err)
 			}
-			prepared, err := gocql.Prepare(ctx, session, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf(`SELECT pk FROM %s.%s WHERE pk = ? LIMIT 1`, keyspace, table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
+			prepared, err := session.Prepare(ctx, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf(`SELECT pk FROM %s.%s WHERE pk = ? LIMIT 1`, keyspace, table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -206,7 +206,7 @@ func TestPrepared(t *testing.T) {
 			conn := getRandomConn(t, session)
 			statement := cql.Statement[int32, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(val) VALUES(?)", table), Params: cql.OneParam(cql.Int32), Rows: cql.EmptyRowDecoder}
 			options := gocql.PrepareOptions{HostID: cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}}
-			_, err := gocql.Prepare(context.Background(), session, statement, options)
+			_, err := session.Prepare(context.Background(), statement, options)
 			require.Error(t, err)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(val int PRIMARY KEY)", table))
 			prepared := cassandraPrepared(t, session, statement, options)

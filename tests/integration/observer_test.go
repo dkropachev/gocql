@@ -202,7 +202,7 @@ func TestObserver(t *testing.T) {
 			inserted, err := Exec(ctx, session, write, bindOptions(session, gocql.Options{Trace: true}))
 			require.NoError(t, err)
 			require.NotEmpty(t, inserted.TraceIDs)
-			prepared, err := gocql.Prepare(ctx, session, cql.Statement[int32, int32]{CQL: fmt.Sprintf(`SELECT id FROM %s WHERE id = ?`, table), Params: cql.OneParam(cql.Int32), Rows: cql.OneColumn(cql.Int32)}, gocql.PrepareOptions{})
+			prepared, err := session.Prepare(ctx, cql.Statement[int32, int32]{CQL: fmt.Sprintf(`SELECT id FROM %s WHERE id = ?`, table), Params: cql.OneParam(cql.Int32), Rows: cql.OneColumn(cql.Int32)}, gocql.PrepareOptions{})
 			require.NoError(t, err)
 			read, err := BindOwned(prepared, int32(42))
 			require.NoError(t, err)

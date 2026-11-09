@@ -50,7 +50,7 @@ func ExampleQuery_ExecBatch() {
 		PK, CK      int32
 		Description string
 	}
-	queryPrepared, err := gocql.Prepare(ctx, session, cql.Statement[item, cql.EmptyRow]{
+	queryPrepared, err := session.Prepare(ctx, cql.Statement[item, cql.EmptyRow]{
 		CQL: "INSERT INTO example.batches (pk, ck, description) VALUES (?, ?, ?)",
 		Params: cql.Params(
 			cql.Param("pk", cql.Int32, func(v item) int32 { return v.PK }),
@@ -84,7 +84,7 @@ func ExampleQuery_ExecBatch() {
 	if _, err := query.ExecBatch(ctx, cql.UnloggedBatch, &batch, idempotent); err != nil {
 		log.Fatal(err)
 	}
-	selectAll, err := gocql.NewUnpreparedQuery(session, cql.Statement[cql.EmptyParams, item]{
+	selectAll, err := session.Query(cql.Statement[cql.EmptyParams, item]{
 		CQL: "SELECT pk, ck, description FROM example.batches",
 		Rows: cql.Row(
 			cql.Column("pk", cql.Int32, func(v *item) *int32 { return &v.PK }),

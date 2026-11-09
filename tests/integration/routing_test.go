@@ -158,7 +158,7 @@ func TestRouting(t *testing.T) {
 			rack := racks[id]
 			ip := net.ParseIP(fmt.Sprintf("127.0.0.%d", id+1))
 			for _, connectionID := range connectionIDs {
-				prepared, err := gocql.Prepare(ctx, session, cql.Statement[[]cql.Value, cql.EmptyRow]{
+				prepared, err := session.Prepare(ctx, cql.Statement[[]cql.Value, cql.EmptyRow]{
 					CQL: fmt.Sprintf(`INSERT INTO %s (
                     connection_id, host_id, Address, port, tls_port, alternator_port, alternator_https_port, Datacenter, Rack)
                     VALUES (?, ?, ?, 9042, 9142, 0, 0, 'dc1', ?)`, qualifiedTable),
@@ -473,7 +473,7 @@ func TestRouting(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			prepared, err := gocql.Prepare(ctx, session, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf(`SELECT pk, ck, v FROM %s WHERE pk = ?`, table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
+			prepared, err := session.Prepare(ctx, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf(`SELECT pk, ck, v FROM %s WHERE pk = ?`, table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -647,7 +647,7 @@ func TestRouting(t *testing.T) {
 			if _, err := v2Exec(ctx, s, "INSERT INTO "+ks+".records(pk,v) VALUES(1,7)"); err != nil {
 				t.Fatal(err)
 			}
-			p := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[int32, cql.DynamicRow]{CQL: "SELECT v FROM " + ks + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows}, gocql.PrepareOptions{}))
+			p := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.DynamicRow]{CQL: "SELECT v FROM " + ks + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows}, gocql.PrepareOptions{}))
 			b := codecTestMust(BindBorrowed(p, int32(1)))
 			defer b.Close()
 			var leader cql.UUID
@@ -739,8 +739,8 @@ func TestRouting(t *testing.T) {
 			if !ks.TabletBased || ks.Tables["records"].ID == "" {
 				t.Fatal("server tablet/table UUID metadata absent", ks)
 			}
-			insert := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".records(pk,v) VALUES(?,7)", Params: cql.OneParam(cql.Int32), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
-			read := codecTestMust(gocql.Prepare(ctx, s, cql.Statement[int32, cql.DynamicRow]{CQL: "SELECT pk,v FROM " + keyspace + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows}, gocql.PrepareOptions{}))
+			insert := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".records(pk,v) VALUES(?,7)", Params: cql.OneParam(cql.Int32), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
+			read := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.DynamicRow]{CQL: "SELECT pk,v FROM " + keyspace + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows}, gocql.PrepareOptions{}))
 			feedback := 0
 			for key := int32(0); key < 8; key++ {
 				bound := codecTestMust(BindBorrowed(insert, key))

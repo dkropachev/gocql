@@ -146,7 +146,7 @@ func run() (resultErr error) {
 		return fmt.Errorf("invalid owned namespace %q", namespace)
 	}
 	execContext := func(operation context.Context, text string) error {
-		b, err := gocql.NewUnpreparedQuery(s, cql.Command(text), gocql.Options{})
+		b, err := s.Query(cql.Command(text), gocql.Options{})
 		if err != nil {
 			return err
 		}
@@ -188,7 +188,7 @@ func run() (resultErr error) {
 	if err := exec("CREATE TABLE " + table + " (id int PRIMARY KEY,payload blob,pieces list<blob>)"); err != nil {
 		return err
 	}
-	insert, err := gocql.Prepare(ctx, s, cql.Statement[record, cql.EmptyRow]{CQL: "INSERT INTO " + table + " (id,payload,pieces) VALUES (?,?,?)", Params: cql.Params(
+	insert, err := s.Prepare(ctx, cql.Statement[record, cql.EmptyRow]{CQL: "INSERT INTO " + table + " (id,payload,pieces) VALUES (?,?,?)", Params: cql.Params(
 		cql.Param("id", cql.Int32, func(v record) int32 { return v.ID }),
 		cql.Param("payload", cql.BytesEncoder, func(v record) []byte { return v.Payload }),
 		cql.Param("pieces", cql.ListEncoder(cql.BytesEncoder), func(v record) [][]byte { return v.Pieces }),
@@ -210,7 +210,7 @@ func run() (resultErr error) {
 			return err
 		}
 	}
-	prepared, err := gocql.Prepare(ctx, s, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,payload,pieces FROM " + table, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
+	prepared, err := s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,payload,pieces FROM " + table, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
 	if err != nil {
 		return err
 	}

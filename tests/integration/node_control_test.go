@@ -69,7 +69,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	pinned := gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: target}}
 
 	statement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,value FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}
-	prepared := codecTestMust(gocql.Prepare(ctx, s, statement, gocql.PrepareOptions{}))
+	prepared := codecTestMust(s.Prepare(ctx, statement, gocql.PrepareOptions{}))
 	bound := codecTestMust(BindOwned(prepared, cql.EmptyParams{}))
 	defer bound.Close()
 	type output struct {

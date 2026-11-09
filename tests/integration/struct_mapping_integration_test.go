@@ -122,7 +122,7 @@ func requireRecord(t *testing.T, got, want smRecord) {
 
 func (f smFixture) insert(t *testing.T, ctx context.Context) *gocql.Prepared[smRecord, cql.EmptyRow] {
 	t.Helper()
-	insert, err := gocql.Prepare(ctx, f.session, cql.Statement[smRecord, cql.EmptyRow]{
+	insert, err := f.session.Prepare(ctx, cql.Statement[smRecord, cql.EmptyRow]{
 		Kind:   cql.OrdinaryStatement,
 		CQL:    "INSERT INTO " + f.table + " (" + smColumns + ") VALUES (?" + repeatMarkers(21) + ")",
 		Params: cql.MustParamsOf(smAttrs),
@@ -135,7 +135,7 @@ func (f smFixture) insert(t *testing.T, ctx context.Context) *gocql.Prepared[smR
 
 func (f smFixture) selectBucket(t *testing.T, ctx context.Context, rows cql.RowDecoder[smRecord]) *gocql.Prepared[int32, smRecord] {
 	t.Helper()
-	read, err := gocql.Prepare(ctx, f.session, cql.Statement[int32, smRecord]{
+	read, err := f.session.Prepare(ctx, cql.Statement[int32, smRecord]{
 		Kind:   cql.OrdinaryStatement,
 		CQL:    "SELECT " + smColumns + " FROM " + f.table + " WHERE bucket = ?",
 		Params: cql.OneParam(cql.Int32),

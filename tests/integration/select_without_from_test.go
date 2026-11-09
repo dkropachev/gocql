@@ -309,7 +309,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 				if mode == "not prepared" {
 					bound, err = BindUnpreparedOwned(statement, cql.NewColumns(), cql.EmptyParams{})
 				} else {
-					prepared, e := gocql.Prepare(context.Background(), session, statement, gocql.PrepareOptions{})
+					prepared, e := session.Prepare(context.Background(), statement, gocql.PrepareOptions{})
 					if e != nil {
 						t.Fatal(e)
 					}
@@ -428,7 +428,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 					session = createSessionWithoutKeyspace(t)
 				}
 				defer session.Close()
-				p, err := gocql.Prepare(context.Background(), session, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: tc.stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
+				p, err := session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: tc.stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
 				if err != nil {
 					t.Fatal(err)
 				}

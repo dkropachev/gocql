@@ -33,7 +33,7 @@ statement := cql.Statement[int32, string]{
     Params: cql.OneParam(cql.Int32),
     Rows: cql.OneColumn(cql.StringCodec),
 }
-prepared, err := gocql.Prepare(ctx, session, statement)
+prepared, err := session.Prepare(ctx, statement)
 if err != nil { return err }
 query, err := prepared.Query(gocql.Options{})
 if err != nil { return err }
@@ -81,7 +81,7 @@ Close unless a retained `PageLease` pins the page. `Clone` explicitly detaches
 values. `NextInto` writes typed fields into caller structs while payloads still
 borrow their pages.
 
-`NewStreamQuery` decodes into seeded caller storage. It buffers each page on
+`prepared.StreamQuery(decoder, options)` decodes into seeded caller storage. It buffers each page on
 normal multiplexed connections by default. `StreamOptions{Incremental: true}`
 selects bounded incremental receive with an exclusive connection reservation. Read the
 [streaming guide](docs/source/statements/streaming.md) and run the complete
