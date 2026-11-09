@@ -29,9 +29,9 @@ the same L3; the second CCD runs everything else.
 
 | | |
 |---|---|
-| cluster | 3 Scylla nodes (`scylladb/scylla:2026.3.3`), `--smp 4` (4 shards), 4 GiB Scylla memory in a 6 GiB container, developer mode, `--overprovisioned 0` |
+| cluster | 3 Scylla nodes (`scylladb/scylla:2026.3.3`), `--smp 4` (4 shards), 4 GiB Scylla memory in a 6 GiB container, developer mode, commitlog on the host's `/dev/shm` tmpfs (1 GiB cap per node; the host disk is shared with other tenants and its contention stalled writes at random; data files stay on disk), `--overprovisioned 0` |
 | node CPUs | two whole cores each, both SMT threads: node1 CPUs 0,1,16,17, node2 2,3,18,19, node3 4,5,20,21 (`GOCQL_THREE_NODE_CPUS`) |
-| loader | one client process at a time, in its own systemd scope: CPU 6 (core 6; its SMT sibling 22 stays idle; `GOCQL_LOADER_CPU`), `CPUQuota=50%` with a 10 ms period (5 ms of CPU per 10 ms). Go clients run with `GOMAXPROCS=1`, the Rust client on a current-thread Tokio runtime. Every client checks once a second that all its threads may run only on its CPU |
+| loader | one client process at a time, in its own systemd scope: CPU 6 (core 6; its SMT sibling 22 stays idle; `GOCQL_LOADER_CPU`), `CPUQuota=50%` with a 10 ms period (5 ms of CPU per 10 ms). Go clients run with `GOMAXPROCS=1`, the Rust client on a current-thread Tokio runtime. Every client checks once a second that all its threads may run only on its CPU. The wrapper also records, from inside the scope, the enforced `cpu.max` and `cpuset.cpus.effective` and the scope's `cpu.stat` over the client's lifetime; a run whose quota is not 5000/10000, whose CPU set is not the loader CPU, or whose CPU use exceeds 0.51 CPU is invalid |
 | host | `host.sh setup`: performance governor and energy policy, boost off (fixed base clock, no thermal or power throttling mid-run); user.slice, system.slice and init.scope confined to the second CCD; the containers and the loader run in `gocqlbench.slice` on the first. Each run records the benchmark CPUs' clocks and the CPU temperature before and after (`*.host-before`, `*.host-after`) |
 
 ## Driver settings
@@ -67,20 +67,37 @@ For each family (`bench.py`):
 
 1. Reset: truncate and reload the family's table (`-mode prepare`, paced at
    20,000 point rows/s or 5,000 paged rows/s), `nodetool flush` on every
-   node, wait for compactions to finish, restart all nodes, then read the
-   whole dataset once to warm the caches.
+   node, wait for compactions to finish, restart all nodes, read the
+   whole dataset once to warm the caches, then run the family's workload
+   unmeasured for 20 s (master's case, closed loop) and flush and settle
+   again. Restarted nodes allocate fresh commitlog segments and fill empty
+   memtables on their first heavy writes; without this step the first
+   measured write run after every reset stalled the cluster.
 2. Throughput (maximum): closed loop with the family's workers, 10 s warmup
    and 30 s measurement, `GOCQL_THREE_ROUNDS` (2) rounds per driver in
    rotating order (`old v2 rust`, then `rust v2 old`). Between runs every
    node flushes and compactions settle, so no run inherits another's
    background work.
 3. Latency: the same reset, then an open loop at 70 % of the lowest of the
-   three drivers' median maximum throughputs (E1 runs at a fixed 1,000/s:
-   its maximum is the cluster's, and on the reference host 2,000/s and more
-   of its 32 KiB batches stall the nodes for seconds): the same scheduled rate for
+   three drivers' median maximum throughputs, the same scheduled rate for
    all three, so latencies compare at equal offered load. Arrivals are
    evenly scheduled into a bounded queue; latency is measured from each
-   arrival's scheduled time, so client queueing counts.
+   arrival's scheduled time, so client queueing counts. The closed-loop
+   maximum can exceed what the cluster sustains in an open loop (a closed
+   loop backs off while nodes flush and compact), so if any run of any
+   driver rejects more than 0.5 % of its arrivals the rate was not
+   sustained: the whole latency phase (reset, conditioning, every round of
+   every driver) repeats at 0.7 x that rate, up to eight attempts. The report
+   lists every attempt; unsustained ones are kept under `unsustained/`.
+   (`GOCQL_THREE_FIXED_RATE`, e.g. `E1=1000`, pins a family's rate instead.)
+
+A run is valid when the client exits cleanly and the loader check passes.
+Clients fail a run on any error except the cluster's own read/write
+timeouts and failures (Scylla's `Operation timed out for <table>` and
+`Operation failed for <table>`, carried verbatim by all three drivers): those are the cluster's answer to saturation, so they are
+counted (`server timeouts/failures`) and kept in the measurement, not treated as a
+driver failure. The report takes medians over valid runs only and lists
+every invalid run.
 
 Every run reports throughput (successful operations completed inside the
 measurement window per second) and latency p90, p95 and p99 (HDR histogram,

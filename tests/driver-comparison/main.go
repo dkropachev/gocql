@@ -384,20 +384,20 @@ func (h *hist) export() any {
 }
 
 type stats struct {
-	mu                                                                         sync.Mutex
-	Latency, Dispatch, Queue, Schedule                                         *hist
-	Admitted, Completed, InWindow, Errors, Timeouts, Offered, Rejected, Missed int64
-	ErrorSamples                                                               []string
-	QueueCapacity, PeakQueue, EndQueue                                         int
-	AllocBytes, Mallocs, GC                                                    uint64
-	CPUSeconds, Elapsed, Rate                                                  float64
-	Start, End, DrainEnd                                                       string
-	Drained                                                                    int64
-	AffinityChecks                                                             int64
-	AffinityError                                                              string
-	Backlog                                                                    []int
-	MemoryBefore, MemoryAfter                                                  memorySnapshot
-	LateArrivals, QueueRejected, ArrivalDeadlineRejected                       int64
+	mu                                                                                       sync.Mutex
+	Latency, Dispatch, Queue, Schedule                                                       *hist
+	Admitted, Completed, InWindow, Errors, Timeouts, ServerErrors, Offered, Rejected, Missed int64
+	ErrorSamples, OtherErrorSamples                                                          []string
+	QueueCapacity, PeakQueue, EndQueue                                                       int
+	AllocBytes, Mallocs, GC                                                                  uint64
+	CPUSeconds, Elapsed, Rate                                                                float64
+	Start, End, DrainEnd                                                                     string
+	Drained                                                                                  int64
+	AffinityChecks                                                                           int64
+	AffinityError                                                                            string
+	Backlog                                                                                  []int
+	MemoryBefore, MemoryAfter                                                                memorySnapshot
+	LateArrivals, QueueRejected, ArrivalDeadlineRejected                                     int64
 }
 
 // Use the phase's existing ReadMemStats calls; never force collection in a
@@ -414,7 +414,7 @@ func memory(m *runtime.MemStats) memorySnapshot {
 }
 
 func (s *stats) result() any {
-	return map[string]any{"admitted": s.Admitted, "completed": s.Completed, "in_window": s.InWindow, "drained": s.Drained, "errors": s.Errors, "timeouts": s.Timeouts, "error_samples": s.ErrorSamples, "offered": s.Offered, "rejected": s.Rejected, "missed_schedules_over_1ms": s.Missed, "queue_capacity": s.QueueCapacity, "peak_queue": s.PeakQueue, "end_queue": s.EndQueue, "backlog_samples": s.Backlog, "latency": s.Latency.export(), "dispatch_latency": s.Dispatch.export(), "queue_latency": s.Queue.export(), "schedule_lag": s.Schedule.export(), "alloc_bytes": s.AllocBytes, "mallocs": s.Mallocs, "gc": s.GC, "cpu_seconds_including_drain": s.CPUSeconds, "duration_seconds": s.Elapsed, "throughput": float64(s.InWindow) / s.Elapsed, "target_rate": s.Rate, "start": s.Start, "end": s.End, "drain_end": s.DrainEnd, "late_arrivals": s.LateArrivals, "queue_rejected": s.QueueRejected, "arrival_deadline_rejected": s.ArrivalDeadlineRejected, "affinity_checks": s.AffinityChecks, "affinity_error": s.AffinityError, "memory_before": s.MemoryBefore, "memory_after": s.MemoryAfter}
+	return map[string]any{"admitted": s.Admitted, "completed": s.Completed, "in_window": s.InWindow, "drained": s.Drained, "errors": s.Errors, "timeouts": s.Timeouts, "server_errors": s.ServerErrors, "other_error_samples": s.OtherErrorSamples, "error_samples": s.ErrorSamples, "offered": s.Offered, "rejected": s.Rejected, "missed_schedules_over_1ms": s.Missed, "queue_capacity": s.QueueCapacity, "peak_queue": s.PeakQueue, "end_queue": s.EndQueue, "backlog_samples": s.Backlog, "latency": s.Latency.export(), "dispatch_latency": s.Dispatch.export(), "queue_latency": s.Queue.export(), "schedule_lag": s.Schedule.export(), "alloc_bytes": s.AllocBytes, "mallocs": s.Mallocs, "gc": s.GC, "cpu_seconds_including_drain": s.CPUSeconds, "duration_seconds": s.Elapsed, "throughput": float64(s.InWindow) / s.Elapsed, "target_rate": s.Rate, "start": s.Start, "end": s.End, "drain_end": s.DrainEnd, "late_arrivals": s.LateArrivals, "queue_rejected": s.QueueRejected, "arrival_deadline_rejected": s.ArrivalDeadlineRejected, "affinity_checks": s.AffinityChecks, "affinity_error": s.AffinityError, "memory_before": s.MemoryBefore, "memory_after": s.MemoryAfter}
 }
 func cpu() float64 {
 	var r syscall.Rusage
@@ -573,6 +573,11 @@ func phaseWithSleep(workers []op, duration time.Duration, rate float64, sleep fu
 			s.Errors++
 			if errors.Is(e, context.DeadlineExceeded) || strings.Contains(strings.ToLower(e.Error()), "timeout") {
 				s.Timeouts++
+			}
+			if serverError(e.Error()) {
+				s.ServerErrors++
+			} else if len(s.OtherErrorSamples) < 8 {
+				s.OtherErrorSamples = append(s.OtherErrorSamples, e.Error())
 			}
 			if len(s.ErrorSamples) < 8 {
 				s.ErrorSamples = append(s.ErrorSamples, e.Error())
@@ -784,8 +789,8 @@ func run() (resultErr error) {
 		if e != nil {
 			return e
 		}
-		if warm.Errors > 0 {
-			return fmt.Errorf("warmup errors: %v", warm.ErrorSamples)
+		if warm.Errors > warm.ServerErrors {
+			return fmt.Errorf("warmup errors: %v", warm.OtherErrorSamples)
 		}
 	}
 	profiles, e := startProfiles(*profilePrefix, *synchronizationProfiles)
@@ -823,8 +828,8 @@ func run() (resultErr error) {
 	} else {
 		fmt.Println(string(b))
 	}
-	if measured.Errors > 0 {
-		return errors.Join(measurementErr, fmt.Errorf("measured errors: %v", measured.ErrorSamples))
+	if measured.Errors > measured.ServerErrors {
+		return errors.Join(measurementErr, fmt.Errorf("measured errors: %v", measured.OtherErrorSamples))
 	}
 	return measurementErr
 }
@@ -833,4 +838,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, e)
 		os.Exit(1)
 	}
+}
+
+// serverError reports whether an operation failed because the cluster
+// answered that the replicas did not complete it: Scylla's read/write timeout
+// ("Operation timed out for <table>") or read/write failure ("Operation failed
+// for <table>") message, which every driver carries verbatim. Such errors are
+// the cluster's response to saturation, are counted (server_errors) and do
+// not invalidate a run; every other error does.
+func serverError(msg string) bool {
+	return strings.Contains(msg, "Operation timed out for ") || strings.Contains(msg, "Operation failed for ")
 }

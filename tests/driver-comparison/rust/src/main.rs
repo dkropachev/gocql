@@ -481,6 +481,8 @@ struct Stats {
     drained: i64,
     errors: i64,
     timeouts: i64,
+    server_errors: i64,
+    other_error_samples: Vec<String>,
     offered: i64,
     rejected: i64,
     missed: i64,
@@ -504,7 +506,7 @@ struct Stats {
 impl Stats {
     fn result(&self) -> Value {
         json!({"admitted": self.admitted, "completed": self.completed, "in_window": self.in_window,
-            "drained": self.drained, "errors": self.errors, "timeouts": self.timeouts,
+            "drained": self.drained, "errors": self.errors, "timeouts": self.timeouts, "server_errors": self.server_errors, "other_error_samples": self.other_error_samples,
             "error_samples": self.error_samples, "offered": self.offered, "rejected": self.rejected,
             "missed_schedules_over_1ms": self.missed, "queue_capacity": self.queue_capacity,
             "peak_queue": self.peak_queue, "end_queue": self.end_queue, "backlog_samples": self.backlog,
@@ -576,6 +578,12 @@ async fn execute(w: &mut Worker, a: Arrival, end: Instant, delivery_end: Instant
             if e.to_lowercase().contains("timeout") || e.contains("deadline") {
                 s.timeouts += 1;
             }
+            // Scylla's read/write timeout or failure message, as in main.go's serverError.
+            if e.contains("Operation timed out for ") || e.contains("Operation failed for ") {
+                s.server_errors += 1;
+            } else if s.other_error_samples.len() < 8 {
+                s.other_error_samples.push(e.clone());
+            }
             if s.error_samples.len() < 8 {
                 s.error_samples.push(e);
             }
@@ -601,6 +609,8 @@ async fn phase(workers: Vec<Worker>, duration: Duration, rate: f64, queue_size: 
         drained: 0,
         errors: 0,
         timeouts: 0,
+        server_errors: 0,
+        other_error_samples: Vec::new(),
         offered: 0,
         rejected: 0,
         missed: 0,
@@ -857,8 +867,8 @@ async fn run() -> Result<(), Error> {
     if !f.warmup.is_zero() {
         let (stats, back) = phase(workers, f.warmup, f.rate, f.queue_size).await;
         workers = back;
-        if stats.errors > 0 {
-            return Err(format!("warmup errors: {:?}", stats.error_samples));
+        if stats.errors > stats.server_errors {
+            return Err(format!("warmup errors: {:?}", stats.other_error_samples));
         }
         warm = Some(stats.result());
     }
@@ -883,8 +893,8 @@ async fn run() -> Result<(), Error> {
     }
     affinity()?;
     eprintln!("AFFINITY final: checked all application threads");
-    if measured.errors > 0 {
-        return Err(format!("measured errors: {:?}", measured.error_samples));
+    if measured.errors > measured.server_errors {
+        return Err(format!("measured errors: {:?}", measured.other_error_samples));
     }
     if !measured.affinity_error.is_empty() {
         return Err(measured.affinity_error);

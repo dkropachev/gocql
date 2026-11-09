@@ -23,15 +23,28 @@ SLICE=${GOCQL_THREE_SLICE:-gocqlbench.slice}
 # 1 GiB per shard; the dataset (100 MiB point, 512 MiB paged) stays in cache.
 SCYLLA_MEMORY=${GOCQL_THREE_SCYLLA_MEMORY:-4G}
 CONTAINER_MEMORY=${GOCQL_THREE_CONTAINER_MEMORY:-6g}
+# Each node's commitlog is on the host's /dev/shm tmpfs (COMMITLOG_ROOT/N),
+# capped at COMMITLOG_MB: the host's disk is shared with other tenants, and
+# commitlog writes behind its I/O contention stalled write requests for up to
+# seconds at random. Data files stay on disk; restart drains first, so the
+# commitlog holds nothing that must survive. The image runs Scylla as uid
+# 998, which must own the directory.
+COMMITLOG_ROOT=${GOCQL_THREE_COMMITLOG_ROOT:-/dev/shm/gocql-bench3}
+COMMITLOG_MB=${GOCQL_THREE_COMMITLOG_MB:-1024}
+SCYLLA_UID=${GOCQL_THREE_SCYLLA_UID:-998}
 
 start() {
 	$CTR network inspect $NET >/dev/null 2>&1 || $CTR network create --subnet $SUBNET $NET >/dev/null
 	for spec in $NODES; do
 		n=${spec%%:*}; rest=${spec#*:}; cpus=${rest%%:*}; ip=${rest#*:}
 		$CTR rm -f gocql-bench3-$n >/dev/null 2>&1 || true
+		sudo rm -rf $COMMITLOG_ROOT/$n
+		sudo install -d -o $SCYLLA_UID -g $SCYLLA_UID -m 0755 $COMMITLOG_ROOT/$n
 		$CTR run -d --name gocql-bench3-$n --network $NET --ip $ip --cgroup-parent $SLICE \
 			--cpuset-cpus $cpus --memory $CONTAINER_MEMORY --memory-swap $CONTAINER_MEMORY \
+			-v $COMMITLOG_ROOT/$n:/var/lib/scylla/commitlog:Z \
 			$IMAGE --smp 4 --memory $SCYLLA_MEMORY --overprovisioned 0 --developer-mode 1 \
+			--commitlog-total-space-in-mb $COMMITLOG_MB \
 			--seeds $SEED --listen-address $ip --rpc-address $ip --broadcast-rpc-address $ip \
 			--api-address 0.0.0.0 >/dev/null
 		wait_up $n "$ip" "$n"
@@ -106,6 +119,7 @@ settle() {
 
 stop() {
 	for spec in $NODES; do $CTR rm -f gocql-bench3-${spec%%:*} >/dev/null 2>&1 || true; done
+	sudo rm -rf $COMMITLOG_ROOT
 	$CTR network rm $NET >/dev/null 2>&1 || true
 }
 
