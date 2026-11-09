@@ -997,7 +997,7 @@ func (p dynamicParamsPlan) Encode(w *ParamWriter, values []Value) error {
 	}
 	mark, start := w.builder.Mark(), w.index
 	for _, v := range values {
-		if err := WriteParam(w, checkedDynamicEncoder{typ: cqltype.ColumnSlice(p.columns)[w.index-start].Type, shape: p.shapes[w.index-start]}, v); err != nil {
+		if err := w.WriteParam(checkedDynamicEncoder{typ: cqltype.ColumnSlice(p.columns)[w.index-start].Type, shape: p.shapes[w.index-start]}, v); err != nil {
 			w.builder.Rollback(mark)
 			w.index = start
 			return err
@@ -1033,7 +1033,7 @@ func (p namedDynamicParamsPlan) Encode(w *ParamWriter, fields []ValueField) erro
 	}
 	mark, start := w.builder.Mark(), w.index
 	for _, index := range p.ordered {
-		if err := WriteParam(w, checkedDynamicEncoder{typ: cqltype.ColumnSlice(p.columns)[w.index-start].Type, shape: p.shapes[w.index-start]}, fields[positions[index]].Value); err != nil {
+		if err := w.WriteParam(checkedDynamicEncoder{typ: cqltype.ColumnSlice(p.columns)[w.index-start].Type, shape: p.shapes[w.index-start]}, fields[positions[index]].Value); err != nil {
 			w.builder.Rollback(mark)
 			w.index = start
 			return err

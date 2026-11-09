@@ -241,7 +241,7 @@ func InternalV2SchemaColumn[R, V any](name string, decoder Decoder[V], field fun
 			return nil, err
 		}
 		return func(row *R, reader *RowReader) error {
-			v, err := ReadColumn(reader, nullable)
+			v, err := reader.ReadColumn(nullable)
 			if err != nil {
 				return err
 			}
@@ -258,7 +258,7 @@ func InternalV2RequiredSchemaColumn[R, V any](name string, decoder Decoder[V], f
 			return nil, err
 		}
 		return func(row *R, reader *RowReader) error {
-			value, err := ReadColumn(reader, decoder)
+			value, err := reader.ReadColumn(decoder)
 			if err != nil {
 				return err
 			}
@@ -367,7 +367,7 @@ func (p InternalV2SchemaParams) Encode(w *ParamWriter, values []string) error {
 		return typeValidation("schema parameters", "wrong count")
 	}
 	for _, value := range values {
-		if err := WriteParam(w, StringEncoder, value); err != nil {
+		if err := w.WriteParam(StringEncoder, value); err != nil {
 			return err
 		}
 	}

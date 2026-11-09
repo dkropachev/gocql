@@ -18,8 +18,9 @@ var ErrStaleRows = execution.ErrStaleRows
 
 type StreamQuery[P, R any] = execution.StreamQuery[P, R]
 
+// Deprecated: use (*Prepared[P, B]).StreamQuery.
 func NewStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder cql.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
-	return execution.NewStreamQuery(prepared, decoder, options)
+	return prepared.StreamQuery(decoder, options)
 }
 
 func NewUnpreparedStreamQuery[P, B, R any](session *Session, statement cql.Statement[P, B], decoder cql.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {

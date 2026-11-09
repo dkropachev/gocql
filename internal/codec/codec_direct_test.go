@@ -34,7 +34,7 @@ func (d directTestRowDecoder) Compile(cqltype.Columns) (RowPlan[int32], error) {
 func (d directTestRowDecoder) Clone(v int32) int32 { return v }
 func (p directTestRowPlan) Decode(r *RowReader) (int32, error) {
 	*p.decodes++
-	return ReadColumn(r, Int32)
+	return r.ReadColumn(Int32)
 }
 func (p directTestRowPlan) DecodeInto(r *RowReader, dst *int32) error {
 	*p.into++

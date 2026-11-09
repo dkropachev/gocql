@@ -463,7 +463,7 @@ func TestRowsCodec(t *testing.T) {
 				t.Fatal(err)
 			}
 			payload[0] = 'X'
-			value, err := ReadColumn(NewRowReader(columns, chain, nil), BlobCodec)
+			value, err := NewRowReader(columns, chain, nil).ReadColumn(BlobCodec)
 			if err != nil || string(value.OwnedBytes()) != "original" {
 				t.Fatalf("value=%q err=%v", value.OwnedBytes(), err)
 			}

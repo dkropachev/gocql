@@ -23,7 +23,7 @@ func TestParameterBuffer(t *testing.T) {
 			}
 			var storage ParameterBuffer
 			value := cqltype.EmptyValueOf[int32]{Empty: true}
-			got, err := EncodeInto(&storage, plan, columns, value, true)
+			got, err := storage.Encode(plan, columns, value, true)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -47,7 +47,7 @@ func TestParameterBuffer(t *testing.T) {
 			for _, state := range []cqltype.CellState{cqltype.Present, cqltype.Null, cqltype.Unset} {
 				for _, size := range []int{0, 1, 257, 128 << 10} {
 					input := cqltype.BindValue[[]byte]{State: state, Value: bytes.Repeat([]byte{41}, size)}
-					got, err := EncodeInto(&storage, plan, columns, input, true)
+					got, err := storage.Encode(plan, columns, input, true)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -93,7 +93,7 @@ func TestParameterBuffer(t *testing.T) {
 				t.Fatal(err)
 			}
 			var storage ParameterBuffer
-			values, err := EncodeInto(&storage, plan, metadata, codec.EmptyRecord{}, true)
+			values, err := storage.Encode(plan, metadata, codec.EmptyRecord{}, true)
 			if err != nil {
 				t.Fatal(err)
 			}

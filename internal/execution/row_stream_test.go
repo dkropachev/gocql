@@ -107,7 +107,7 @@ func (d *gatedDecoder) DecodeInto(r *codec.StreamRowReader, dst *[]byte) error {
 	if err != nil {
 		return err
 	}
-	return codec.ReadStreamColumn(r, plan, dst)
+	return r.ReadColumn(plan, dst)
 }
 
 // Raw bulk reads must target caller storage after at most a bounded prefix.

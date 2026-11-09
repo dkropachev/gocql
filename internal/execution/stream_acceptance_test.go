@@ -194,7 +194,7 @@ func (d decoderError) DecodeInto(r *codec.StreamRowReader, dst *[]byte) error {
 	if err != nil {
 		return err
 	}
-	if err = codec.ReadStreamColumn(r, p, dst); err != nil {
+	if err = r.ReadColumn(p, dst); err != nil {
 		return err
 	}
 	return d.cause

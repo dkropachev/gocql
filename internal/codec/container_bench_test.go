@@ -124,7 +124,7 @@ func BenchmarkContainer(b *testing.B) {
 										b.Fatal(e)
 									}
 								case "collect":
-									values, e := Collect(seq.Iterator())
+									values, e := seq.Iterator().Collect()
 									if e != nil {
 										b.Fatal(e)
 									}

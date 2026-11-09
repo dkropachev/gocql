@@ -850,7 +850,7 @@ func TestQuery(t *testing.T) {
 		}
 		for _, incremental := range []bool{false, true} {
 			streamDecoder := cql.StreamRow(func(*record) {}, cql.StreamColumn("c", cql.StreamInt32, func(r *record) *int32 { return &r.C }), cql.StreamColumn("p", cql.StreamBlob, func(r *record) *[]byte { return &r.P }))
-			streamQuery := codecTestMust(gocql.NewStreamQuery(read, streamDecoder, gocql.StreamOptions{Incremental: incremental, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}))
+			streamQuery := codecTestMust(read.StreamQuery(streamDecoder, gocql.StreamOptions{Incremental: incremental, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}))
 			cursor, err := streamQuery.Run(ctx, int32(1))
 			if incremental && *flagProto < 5 && fixtureCompressed() {
 				if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {

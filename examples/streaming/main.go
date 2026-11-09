@@ -225,7 +225,7 @@ func run() (resultErr error) {
 	}
 	pinned := gocql.Options{PageSize: cql.Some[int32](2), HostID: cql.Some(hostsSnapshot[0].ID)}
 	options := gocql.StreamOptions{Incremental: *incremental, Options: pinned}
-	query, err := gocql.NewStreamQuery(prepared, decoder, options)
+	query, err := prepared.StreamQuery(decoder, options)
 	if err != nil {
 		return err
 	}

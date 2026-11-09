@@ -28,7 +28,9 @@ type StreamQuery[P, R any] struct {
 	options StreamOptions
 }
 
-func NewStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
+// StreamQuery returns a reusable query that runs prepared and streams each row
+// into decoder instead of prepared's buffered row decoder.
+func (prepared *Prepared[P, B]) StreamQuery[R any](decoder StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
 	if prepared == nil || prepared.privateStorage.InternalState == nil {
 		return nil, typeValidation("prepared", "nil handle")
 	}

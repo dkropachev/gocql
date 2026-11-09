@@ -124,7 +124,7 @@ func TestUDT(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			entries, err := cql.Collect(it)
+			entries, err := it.Collect()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -135,7 +135,7 @@ func TestUDT(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			fields, err := cql.Collect(fs)
+			fields, err := fs.Collect()
 			if err != nil {
 				t.Fatal(err)
 			}

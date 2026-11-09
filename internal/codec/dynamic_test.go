@@ -348,7 +348,7 @@ func TestDynamic(t *testing.T) {
 			if !composite.Type().Equal(tuple) {
 				t.Fatal("tuple lost physical type")
 			}
-			fields := dynamicTestMust(Collect(dynamicTestMust(composite.Elements())))
+			fields := dynamicTestMust(dynamicTestMust(composite.Elements()).Collect())
 			if len(fields) != 2 {
 				t.Fatal("tuple members missing")
 			}
@@ -372,7 +372,7 @@ func TestDynamic(t *testing.T) {
 			if s.String() != "hello" {
 				t.Fatal("row Clone did not detach")
 			}
-			values := dynamicTestMust(Collect(dynamicTestMust(detachedTuple.Elements())))
+			values := dynamicTestMust(dynamicTestMust(detachedTuple.Elements()).Collect())
 			if n, _ := values[0].Signed(); n != 8 {
 				t.Fatal("aggregate Clone did not detach")
 			}
@@ -426,7 +426,7 @@ func TestDynamic(t *testing.T) {
 					got := dynamicTestRoundTrip(t, test.value, test.wire)
 					switch got.Type().Kind() {
 					case cqltype.TypeMap:
-						values, err := Collect(dynamicTestMust(got.Entries()))
+						values, err := dynamicTestMust(got.Entries()).Collect()
 						if err != nil || len(values) != 1 {
 							t.Fatalf("map entries %d: %v", len(values), err)
 						}
@@ -436,12 +436,12 @@ func TestDynamic(t *testing.T) {
 							t.Fatal("map values changed")
 						}
 					case cqltype.TypeUDT:
-						fields, err := Collect(dynamicTestMust(got.Fields()))
+						fields, err := dynamicTestMust(got.Fields()).Collect()
 						if err != nil || len(fields) != 2 || fields[0].Name != "name" || fields[1].Name != "number" {
 							t.Fatal("UDT order or names changed", err)
 						}
 					default:
-						values, err := Collect(dynamicTestMust(got.Elements()))
+						values, err := dynamicTestMust(got.Elements()).Collect()
 						if err != nil || len(values) != 2 {
 							t.Fatalf("elements %d: %v", len(values), err)
 						}
@@ -497,7 +497,7 @@ func TestDynamic(t *testing.T) {
 			if err := iterator.Err(); err != nil {
 				t.Fatal(err)
 			}
-			collected := dynamicTestMust(Collect(dynamicTestMust(value.Elements())))
+			collected := dynamicTestMust(dynamicTestMust(value.Elements()).Collect())
 			euro := dynamicTestMust(values[0].Text())
 			if euro.String() != "€" {
 				t.Fatal("UTF-8 split across segments changed")
@@ -526,7 +526,7 @@ func TestDynamic(t *testing.T) {
 			if _, err := values[0].Text(); !errors.Is(err, cqltype.ErrReleased) {
 				t.Fatalf("released child: %v", err)
 			}
-			clonedValues := dynamicTestMust(Collect(dynamicTestMust(cloned.Elements())))
+			clonedValues := dynamicTestMust(dynamicTestMust(cloned.Elements()).Collect())
 			if s, _ := clonedValues[0].Text(); s.String() != "€" {
 				t.Fatal("lazy Clone did not detach")
 			}
@@ -543,16 +543,16 @@ func TestDynamic(t *testing.T) {
 			owned := dynamicTestMust(EncodeValue(blobs, DynamicCodec, input))
 			payload[0] = 'X'
 			descriptors[0] = BlobValue([]byte("replaced"))
-			clonedInputValues := dynamicTestMust(Collect(dynamicTestMust(inputClone.Elements())))
+			clonedInputValues := dynamicTestMust(dynamicTestMust(inputClone.Elements()).Collect())
 			cloneBytes := dynamicTestMust(clonedInputValues[0].Bytes())
 			if string(cloneBytes.OwnedBytes()) != "payload" {
 				t.Fatal("input Clone kept borrowed descriptors or payload")
 			}
-			ownedValues := dynamicTestMust(Collect(dynamicTestMust(dynamicTestMust(DecodeValue(DynamicCodec, owned)).Elements())))
+			ownedValues := dynamicTestMust(dynamicTestMust(dynamicTestMust(DecodeValue(DynamicCodec, owned)).Elements()).Collect())
 			if b, _ := ownedValues[0].Bytes(); string(b.OwnedBytes()) != "payload" {
 				t.Fatal("owned encoding retained caller payload")
 			}
-			borrowedValues := dynamicTestMust(Collect(dynamicTestMust(dynamicTestMust(DecodeValue(DynamicCodec, borrowed)).Elements())))
+			borrowedValues := dynamicTestMust(dynamicTestMust(dynamicTestMust(DecodeValue(DynamicCodec, borrowed)).Elements()).Collect())
 			if b, _ := borrowedValues[0].Bytes(); string(b.OwnedBytes()) != "Xayload" {
 				t.Fatal("borrowed encoding did not retain source payload")
 			}
@@ -628,7 +628,7 @@ func TestDynamic(t *testing.T) {
 			if _, err := EncodeValueBorrowed(listBool, DynamicCodec, lazy); err == nil {
 				t.Fatal("binding forwarded an unvalidated malformed child")
 			}
-			if values, err := Collect(dynamicTestMust(lazy.Elements())); err == nil || values != nil {
+			if values, err := dynamicTestMust(lazy.Elements()).Collect(); err == nil || values != nil {
 				t.Fatal("Collect published partial malformed aggregate")
 			}
 		})
@@ -804,13 +804,13 @@ func TestDynamic(t *testing.T) {
 			}
 			tuple := dynamicTestMust(cqltype.TupleType(integer, text))
 			truncated := dynamicTestDecode(t, tuple, dynamicTestHex("0000000400000001"))
-			values, err := Collect(dynamicTestMust(truncated.Elements()))
+			values, err := dynamicTestMust(truncated.Elements()).Collect()
 			if err != nil || len(values) != 2 || values[1].State() != cqltype.Null || !values[1].Type().Equal(text) {
 				t.Fatal("missing trailing tuple member did not retain typed null", err)
 			}
 			udt := dynamicTestMust(cqltype.UDTType("ks", "record", cqltype.ColumnSpec{Name: "x", Type: integer}, cqltype.ColumnSpec{Name: "y", Type: text}))
 			omitted := dynamicTestDecode(t, udt, nil)
-			fields, err := Collect(dynamicTestMust(omitted.Fields()))
+			fields, err := dynamicTestMust(omitted.Fields()).Collect()
 			if err != nil || len(fields) != 2 || fields[0].Value.State() != cqltype.Null || fields[1].Value.State() != cqltype.Null {
 				t.Fatal("omitted UDT trailing fields", err)
 			}

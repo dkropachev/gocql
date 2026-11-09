@@ -153,7 +153,7 @@ func (c serializationSliceCodec[T]) Decode(r cql.ValueReader) ([]T, error) {
 	if e != nil {
 		return nil, e
 	}
-	return cql.Collect(s.Iterator())
+	return s.Iterator().Collect()
 }
 func (c serializationSliceCodec[T]) Clone(v []T) []T {
 	if v == nil {
@@ -314,8 +314,8 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 		if e != nil || f != nil {
 			t.Fatalf("map iterators: %v %v", e, f)
 		}
-		a, e := cql.Collect(ai)
-		b, f := cql.Collect(bi)
+		a, e := ai.Collect()
+		b, f := bi.Collect()
 		if e != nil || f != nil || len(a) != len(b) {
 			t.Fatalf("map cardinality: %d %d %v %v", len(a), len(b), e, f)
 		}
@@ -344,8 +344,8 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 		if e != nil || f != nil {
 			t.Fatalf("UDT iterators: %v %v", e, f)
 		}
-		a, e := cql.Collect(ai)
-		b, f := cql.Collect(bi)
+		a, e := ai.Collect()
+		b, f := bi.Collect()
 		if e != nil || f != nil || len(a) != len(b) {
 			t.Fatal("UDT field count mismatch")
 		}
@@ -362,8 +362,8 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 		if e != nil || f != nil {
 			t.Fatalf("element iterators: %v %v", e, f)
 		}
-		a, e := cql.Collect(ai)
-		b, f := cql.Collect(bi)
+		a, e := ai.Collect()
+		b, f := bi.Collect()
 		if e != nil || f != nil || len(a) != len(b) {
 			t.Fatalf("elements: %d %d %v %v", len(a), len(b), e, f)
 		}

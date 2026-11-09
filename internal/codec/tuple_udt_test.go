@@ -49,7 +49,7 @@ func TestTupleUDT(t *testing.T) {
 		if it := value.Iterator(); it.Next() || !errors.Is(it.Err(), cqltype.ErrReleased) {
 			t.Fatal("released nested view survived")
 		}
-		values, err := Collect(clone.Iterator())
+		values, err := clone.Iterator().Collect()
 		if err != nil || values[1].String() != "second" {
 			t.Fatalf("nested clone: %v", err)
 		}

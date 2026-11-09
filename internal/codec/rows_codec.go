@@ -80,7 +80,7 @@ func FinishParamWriter(w *ParamWriter) error {
 }
 
 // WriteParam encodes one typed parameter with transactional cell framing.
-func WriteParam[T any](w *ParamWriter, encoder Encoder[T], value T) error {
+func (w *ParamWriter) WriteParam[T any](encoder Encoder[T], value T) error {
 	if w == nil || w.builder == nil || encoder == nil {
 		return fmt.Errorf("gocql: nil parameter writer or encoder")
 	}
@@ -155,7 +155,8 @@ func (r *RowReader) nextValue() (ValueReader, error) {
 	return v, nil
 }
 
-func ReadColumn[T any](r *RowReader, decoder Decoder[T]) (T, error) {
+// ReadColumn decodes the next column with decoder.
+func (r *RowReader) ReadColumn[T any](decoder Decoder[T]) (T, error) {
 	var zero T
 	if decoder == nil {
 		return zero, fmt.Errorf("gocql: nil column decoder")
@@ -217,7 +218,7 @@ func (f inputField[P, V]) compile(typ cqltype.DataType) (InputField[P], error) {
 	return f, nil
 }
 func (f inputField[P, V]) encode(w *ParamWriter, value P) error {
-	return WriteParam(w, f.codec, f.get(value))
+	return w.WriteParam(f.codec, f.get(value))
 }
 
 type paramsCodec[P any] struct {
@@ -507,7 +508,7 @@ func (c singleColumnRows[T]) Compile(columns cqltype.Columns) (RowPlan[T], error
 }
 func (c singleColumnRows[T]) Clone(value T) T { return c.decoder.Clone(value) }
 func (p singleColumnPlan[T]) Decode(reader *RowReader) (T, error) {
-	return ReadColumn(reader, p.decoder)
+	return reader.ReadColumn(p.decoder)
 }
 func (p singleColumnPlan[T]) DecodeInto(reader *RowReader, dst *T) error {
 	if dst == nil {

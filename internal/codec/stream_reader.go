@@ -496,7 +496,9 @@ func (r *StreamRowReader) column(fn func(*StreamValueReader) error) error {
 	}
 	return nil
 }
-func ReadStreamColumn[T any](r *StreamRowReader, plan StreamValuePlan[T], dst *T) error {
+
+// ReadColumn decodes the next column into dst with plan.
+func (r *StreamRowReader) ReadColumn[T any](plan StreamValuePlan[T], dst *T) error {
 	if plan == nil || dst == nil {
 		return cqltype.TypeValidation("stream column", "nil plan or destination")
 	}

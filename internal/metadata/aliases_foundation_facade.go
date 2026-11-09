@@ -46,8 +46,6 @@ type ParamPlan[P any] = codec.ParamPlan[P]
 
 type ParamWriter = codec.ParamWriter
 
-func ReadColumn[T any](a0 *RowReader, a1 Decoder[T]) (T, error) { return codec.ReadColumn[T](a0, a1) }
-
 type RowDecoder[R any] = codec.RowDecoder[R]
 
 type RowPlan[R any] = codec.RowPlan[R]
@@ -67,10 +65,6 @@ var VarcharType = cqltype.VarcharType
 type UUID = cqltype.UUID
 
 var UUIDCodec = codec.UUIDCodec
-
-func WriteParam[T any](a0 *ParamWriter, a1 Encoder[T], a2 T) error {
-	return codec.WriteParam[T](a0, a1, a2)
-}
 
 func typeValidation(a0 string, a1 string, a2 ...any) error {
 	return cqltype.TypeValidation(a0, a1, a2...)
@@ -117,8 +111,6 @@ type CellState = cqltype.CellState
 type Codec[T any] = codec.Codec[T]
 
 type CodecError = cqltype.CodecError
-
-func Collect[T any](a0 *ValueIterator[T]) ([]T, error) { return codec.Collect[T](a0) }
 
 type CollectionType = cqltype.CollectionType
 
@@ -355,10 +347,6 @@ type ProtocolError = cqltype.ProtocolError
 const Quorum = cqltype.Quorum
 
 func RandomUUID() (UUID, error) { return cqltype.RandomUUID() }
-
-func ReadStreamColumn[T any](a0 *StreamRowReader, a1 StreamValuePlan[T], a2 *T) error {
-	return codec.ReadStreamColumn[T](a0, a1, a2)
-}
 
 func Row[R any](a0 ...OutputField[R]) RowDecoder[R] { return codec.Row[R](a0...) }
 

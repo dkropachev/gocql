@@ -88,7 +88,7 @@ func checkDynamicTuple(t *testing.T, mode string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	members, err := cql.Collect(iter)
+	members, err := iter.Collect()
 	if err != nil {
 		t.Fatal(err)
 	}

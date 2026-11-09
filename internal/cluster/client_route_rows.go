@@ -67,10 +67,10 @@ func (p InternalV2RouteParams) Encode(w *ParamWriter, values [][]string) error {
 				}
 				ids[j] = id
 			}
-			if err := WriteParam(w, ListEncoder(UUIDCodec), ids); err != nil {
+			if err := w.WriteParam(ListEncoder(UUIDCodec), ids); err != nil {
 				return err
 			}
-		} else if err := WriteParam(w, ListEncoder(StringEncoder), vs); err != nil {
+		} else if err := w.WriteParam(ListEncoder(StringEncoder), vs); err != nil {
 			return err
 		}
 	}

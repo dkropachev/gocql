@@ -25,7 +25,7 @@ func (b *ParameterBuffer) RetainedBytes() int {
 	return cap(b.storage) + cap(b.cells)*int(unsafe.Sizeof(model.EncodedCell{})) + cap(b.positions)*int(unsafe.Sizeof(codec.ParamCell{}))
 }
 
-func EncodeInto[P any](b *ParameterBuffer, plan ParamPlan[P], columns Columns, value P, allowUnset bool) (encodedValues, error) {
+func (b *ParameterBuffer) Encode[P any](plan ParamPlan[P], columns Columns, value P, allowUnset bool) (encodedValues, error) {
 	if columns.Len() > 65535 {
 		return encodedValues{}, typeValidation("parameters", "maximum count is 65535")
 	}

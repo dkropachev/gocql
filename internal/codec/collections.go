@@ -85,7 +85,7 @@ func (i *ValueIterator[T]) Err() error {
 
 // Collect explicitly materializes the iterator's remaining values. It returns
 // no partial slice on failure and recursively detaches every yielded value.
-func Collect[T any](i *ValueIterator[T]) ([]T, error) {
+func (i *ValueIterator[T]) Collect() ([]T, error) {
 	if i == nil {
 		return nil, cqltype.TypeValidation("iterator", "nil iterator")
 	}

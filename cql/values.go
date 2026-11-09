@@ -49,7 +49,8 @@ type Codec[T any] = codec.Codec[T]
 // Deprecated: use cqlerr.CodecError.
 type CodecError = cqltype.CodecError
 
-func Collect[T any](a0 *ValueIterator[T]) ([]T, error) { return codec.Collect[T](a0) }
+// Deprecated: use (*ValueIterator[T]).Collect.
+func Collect[T any](a0 *ValueIterator[T]) ([]T, error) { return a0.Collect() }
 
 type CollectionType = cqltype.CollectionType
 
@@ -236,10 +237,14 @@ const Present = cqltype.Present
 // Deprecated: use cqlerr.ProtocolError.
 type ProtocolError = cqltype.ProtocolError
 
-func RandomUUID() (UUID, error)                                 { return cqltype.RandomUUID() }
-func ReadColumn[T any](a0 *RowReader, a1 Decoder[T]) (T, error) { return codec.ReadColumn[T](a0, a1) }
+func RandomUUID() (UUID, error) { return cqltype.RandomUUID() }
+
+// Deprecated: use (*RowReader).ReadColumn.
+func ReadColumn[T any](a0 *RowReader, a1 Decoder[T]) (T, error) { return a0.ReadColumn(a1) }
+
+// Deprecated: use (*StreamRowReader).ReadColumn.
 func ReadStreamColumn[T any](a0 *StreamRowReader, a1 StreamValuePlan[T], a2 *T) error {
-	return codec.ReadStreamColumn[T](a0, a1, a2)
+	return a0.ReadColumn(a1, a2)
 }
 
 func Row[R any](a0 ...OutputField[R]) RowDecoder[R] { return codec.Row[R](a0...) }
@@ -512,8 +517,10 @@ func VectorEncoder[T any](a0 Encoder[T]) Encoder[[]T]         { return codec.Vec
 type VectorType = cqltype.VectorType
 
 func VectorValue(a0 DataType, a1 []Value) (Value, error) { return codec.VectorValue(a0, a1) }
+
+// Deprecated: use (*ParamWriter).WriteParam.
 func WriteParam[T any](a0 *ParamWriter, a1 Encoder[T], a2 T) error {
-	return codec.WriteParam[T](a0, a1, a2)
+	return a0.WriteParam(a1, a2)
 }
 
 const (

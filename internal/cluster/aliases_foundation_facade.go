@@ -119,10 +119,6 @@ type ValidationError = cqltype.ValidationError
 
 type ValueReader = codec.ValueReader
 
-func WriteParam[T any](a0 *ParamWriter, a1 Encoder[T], a2 T) error {
-	return codec.WriteParam[T](a0, a1, a2)
-}
-
 type attemptRequest = model.AttemptRequest
 
 func typeValidation(a0 string, a1 string, a2 ...any) error {

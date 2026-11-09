@@ -242,7 +242,7 @@ func TestStructMapping(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, decoder := range []cql.StreamRowDecoder[mapped.StreamEvent]{cql.MustStreamRowOf[mapped.StreamEvent](), codecTestMust(codec.ReflectStreamRow[mapped.StreamEvent]())} {
-			q, err := gocql.NewStreamQuery(prepared, decoder, gocql.StreamOptions{})
+			q, err := prepared.StreamQuery(decoder, gocql.StreamOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -622,7 +622,7 @@ func TestStructMapping(t *testing.T) {
 		frameCompressed := *flagProto < 5 && fixtureCompressed()
 		for _, incremental := range []bool{false, true} {
 			options := gocql.StreamOptions{Incremental: incremental, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}
-			q, err := gocql.NewStreamQuery(read, cql.MustStreamRowOf[smStream](), options)
+			q, err := read.StreamQuery(cql.MustStreamRowOf[smStream](), options)
 			if err != nil {
 				t.Fatal(err)
 			}

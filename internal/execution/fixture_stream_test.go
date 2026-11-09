@@ -102,7 +102,7 @@ func (d *finalAccess) DecodeInto(r *codec.StreamRowReader, dst *[]byte) error {
 	if err != nil {
 		return err
 	}
-	if err = codec.ReadStreamColumn(r, plan, dst); err != nil {
+	if err = r.ReadColumn(plan, dst); err != nil {
 		return err
 	}
 	close(d.entered)

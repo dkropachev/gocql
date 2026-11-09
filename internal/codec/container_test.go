@@ -81,7 +81,7 @@ func TestContainer(t *testing.T) {
 			if it := sequence.Iterator(); it.Next() || !errors.Is(it.Err(), cqltype.ErrReleased) {
 				t.Fatalf("released sequence: %v", it.Err())
 			}
-			values, err := Collect(clone.Iterator())
+			values, err := clone.Iterator().Collect()
 			if err != nil || string(values[0].OwnedBytes()) != "fragmented" {
 				t.Fatalf("detached clone failed: %v", err)
 			}
@@ -105,14 +105,14 @@ func TestContainer(t *testing.T) {
 		borrowed := EncodedValue{typ: list, state: cqltype.Present, body: cqltype.BytesView(cqltype.BytesChain(encoded.body), wire.RefOf(lease))}
 		decoder := ListDecoder(TupleDecoder(PairRows(1, OneColumn(TextCodec), OneColumn(BlobCodec))))
 		seq := CodecTestMust(DecodeValue(decoder, borrowed))
-		values := CodecTestMust(Collect(seq.Iterator()))
+		values := CodecTestMust(seq.Iterator().Collect())
 		dynamic := CodecTestMust(DynamicCodec.Decode(NewValueReader(list, cqltype.Present, cqltype.BytesChain(encoded.body), lease)))
-		dynamicValues := CodecTestMust(Collect(CodecTestMust(dynamic.Elements())))
+		dynamicValues := CodecTestMust(CodecTestMust(dynamic.Elements()).Collect())
 		lease.Release()
 		if values[0].First.String() != "one" || !bytes.Equal(values[1].Second.OwnedBytes(), []byte("more")) {
 			t.Fatal("typed Collect retained lease")
 		}
-		fields := CodecTestMust(Collect(CodecTestMust(dynamicValues[0].Fields())))
+		fields := CodecTestMust(CodecTestMust(dynamicValues[0].Fields()).Collect())
 		txt := CodecTestMust(fields[0].Value.Text())
 		if txt.String() != "one" {
 			t.Fatal("dynamic Collect retained lease")
@@ -120,7 +120,7 @@ func TestContainer(t *testing.T) {
 		// Input-side dynamic values borrow caller arrays too; Collect detaches them.
 		payload := []byte("input")
 		value := CodecTestMust(ListValue(CodecTestMust(cqltype.ListType(blob)), []Value{BlobValue(payload)}))
-		input := CodecTestMust(Collect(CodecTestMust(value.Elements())))
+		input := CodecTestMust(CodecTestMust(value.Elements()).Collect())
 		payload[0] = 'X'
 		b := CodecTestMust(input[0].Bytes())
 		if string(b.OwnedBytes()) != "input" {
@@ -149,7 +149,7 @@ func TestContainer(t *testing.T) {
 							t.Error(err)
 							return
 						}
-						values, err := Collect(sequence.Iterator())
+						values, err := sequence.Iterator().Collect()
 						if err != nil || len(values) != 3 || values[2] != 3 {
 							t.Errorf("decode values=%v err=%v", values, err)
 							return
@@ -176,7 +176,7 @@ func TestContainer(t *testing.T) {
 			if it.Next() || it.Err() == nil || it.Value() != 0 || it.Next() {
 				t.Fatal("failed iterator continued or exposed a partial value")
 			}
-			if values, err := Collect(sequence.Iterator()); err == nil || values != nil {
+			if values, err := sequence.Iterator().Collect(); err == nil || values != nil {
 				t.Fatal("Collect exposed partial malformed collection")
 			}
 			clone := sequence.Clone()
@@ -243,7 +243,7 @@ func TestContainer(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			values, err := Collect(sequence.Iterator())
+			values, err := sequence.Iterator().Collect()
 			if err != nil || !reflect.DeepEqual(values, []int32{1, -1}) {
 				t.Fatalf("values=%v err=%v", values, err)
 			}
@@ -256,7 +256,7 @@ func TestContainer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		entries, err := Collect(mapping.Iterator())
+		entries, err := mapping.Iterator().Collect()
 		if err != nil || len(entries) != 1 || entries[0].Key.String() != "x" || string(entries[0].Value.OwnedBytes()) != "y" {
 			t.Fatalf("entries=%v err=%v", entries, err)
 		}
@@ -268,7 +268,7 @@ func TestContainer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		stringsValues, err := Collect(strings.Iterator())
+		stringsValues, err := strings.Iterator().Collect()
 		if err != nil || stringsValues[0].String() != "" || stringsValues[1].String() != "é" {
 			t.Fatalf("variable vector: %v", err)
 		}
@@ -280,7 +280,7 @@ func TestContainer(t *testing.T) {
 		}
 		outerIt := outer.Iterator()
 		for n := int32(1); outerIt.Next(); n += 2 {
-			inner, err := Collect(outerIt.Value().Iterator())
+			inner, err := outerIt.Value().Iterator().Collect()
 			if err != nil || !reflect.DeepEqual(inner, []int32{n, n + 1}) {
 				t.Fatalf("nested vector=%v err=%v", inner, err)
 			}
@@ -399,7 +399,7 @@ func TestContainer(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			values, err := Collect(empty.Iterator())
+			values, err := empty.Iterator().Collect()
 			if err != nil || len(values) != 1 || values[0].String() != "" {
 				t.Fatalf("final zero length must stay present: %v", err)
 			}
@@ -449,7 +449,7 @@ func TestContainer(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			values, err := Collect(sequence.Iterator())
+			values, err := sequence.Iterator().Collect()
 			if err != nil || len(values) != 2 || values[0].Len() != 128 || values[1].Len() != 0 {
 				t.Fatalf("segmented vector values=%v err=%v", values, err)
 			}

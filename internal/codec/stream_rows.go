@@ -64,7 +64,7 @@ func makeStreamColumn[R, V any](loc fieldLocation, decoder StreamDecoder[V], fie
 			if ptr == nil {
 				return cqltype.TypeValidation("stream field", "accessor returned nil")
 			}
-			return ReadStreamColumn(reader, plan, ptr)
+			return reader.ReadColumn(plan, ptr)
 		}}, nil
 	}}
 }
@@ -203,7 +203,7 @@ func (p streamOneColumnPlan[T]) DecodeInto(r *StreamRowReader, dst *T) error {
 	if r.index != 0 || !r.matches(p.columns) {
 		return r.shared.fail(cqltype.TypeValidation("stream metadata", "single column shape changed"))
 	}
-	if err := ReadStreamColumn(r, p.plan, dst); err != nil {
+	if err := r.ReadColumn(p.plan, dst); err != nil {
 		return err
 	}
 	return r.RequireEnd()

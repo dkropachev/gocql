@@ -282,7 +282,7 @@ func (q *Query[P, R]) capture(ctx context.Context, value P) error {
 		return err
 	}
 	request := &q.bound.privateStorage.InternalRequest
-	values, err := binding.EncodeInto(&q.buffer, q.params, q.columns, value, q.allowUnset)
+	values, err := q.buffer.Encode(q.params, q.columns, value, q.allowUnset)
 	if err != nil {
 		q.state.owner.InternalRelease()
 		return err
@@ -381,7 +381,7 @@ func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
 	if busy {
 		return ErrBusy
 	}
-	values, err := binding.EncodeInto(&q.buffer, q.params, q.columns, value, q.allowUnset)
+	values, err := q.buffer.Encode(q.params, q.columns, value, q.allowUnset)
 	if err != nil {
 		return err
 	}

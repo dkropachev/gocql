@@ -1330,7 +1330,7 @@ func (c serializationSliceCodec[T]) Decode(r cql.ValueReader) ([]T, error) {
 	if e != nil {
 		return nil, e
 	}
-	return cql.Collect(s.Iterator())
+	return s.Iterator().Collect()
 }
 func (c serializationSliceCodec[T]) Clone(v []T) []T {
 	if v == nil {
