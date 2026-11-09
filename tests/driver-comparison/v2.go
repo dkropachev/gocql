@@ -57,8 +57,7 @@ func connect(hosts []string) (adapter, error) {
 				WithPageSize(32).
 				NoPrefetch().
 				WithRetry(retry.Safe{MaxAttempts: 1}).
-				WithSpeculation(nil).
-				WithRouting(policy)
+				WithRouting(policy) // no speculation: the default
 		})
 	if *metadataRefresh > 0 {
 		builder.WithMetadataRefresh(*metadataRefresh)
@@ -90,7 +89,7 @@ func connect(hosts []string) (adapter, error) {
 }
 func (a *v2Adapter) Close() error { return a.s.Close() }
 func (a *v2Adapter) Exec(ctx context.Context, q string) error {
-	b, e := g.NewUnpreparedQuery(a.s, cql.Statement[cql.EmptyParams, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: q, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, g.Options{})
+	b, e := a.s.Query(cql.Statement[cql.EmptyParams, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: q, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, g.Options{})
 	if e != nil {
 		return e
 	}
@@ -132,7 +131,7 @@ func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[r
 	}
 	ctx := context.Background()
 	if a.reads[idx] == nil {
-		p, e := g.Prepare(ctx, a.s, cql.Statement[int32, row]{Kind: cql.OrdinaryStatement, CQL: rd, Params: keyParams, Rows: bufferedDecoder}, g.PrepareOptions{})
+		p, e := a.s.Prepare(ctx, cql.Statement[int32, row]{Kind: cql.OrdinaryStatement, CQL: rd, Params: keyParams, Rows: bufferedDecoder}, g.PrepareOptions{})
 		if e != nil {
 			return nil, nil, e
 		}
@@ -151,7 +150,7 @@ func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[r
 		a.reads[idx] = p
 	}
 	if a.writes[idx] == nil {
-		p, e := g.Prepare(ctx, a.s, cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: wr, Params: rowParams, Rows: cql.EmptyRowDecoder}, g.PrepareOptions{})
+		p, e := a.s.Prepare(ctx, cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: wr, Params: rowParams, Rows: cql.EmptyRowDecoder}, g.PrepareOptions{})
 		if e != nil {
 			return nil, nil, e
 		}
@@ -178,7 +177,7 @@ func (a *v2Adapter) Worker(paged, stream bool) (worker, error) {
 		readQuery.Close()
 		return nil, e
 	}
-	streamQuery, e := g.NewStreamQuery(read, streamDecoder, g.StreamOptions{Incremental: *incremental})
+	streamQuery, e := read.StreamQuery(streamDecoder, g.StreamOptions{Incremental: *incremental})
 	if e != nil {
 		readQuery.Close()
 		writeQuery.Close()

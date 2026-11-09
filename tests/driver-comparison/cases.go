@@ -55,14 +55,14 @@ func (a *v2Adapter) lwtPrepared() (*g.Prepared[lwtArgs, cql.CASResult[int32]], *
 	defer a.mu.Unlock()
 	ctx := context.Background()
 	if a.lwt == nil {
-		p, err := g.Prepare(ctx, a.s, cql.Statement[lwtArgs, cql.CASResult[int32]]{Kind: cql.ConditionalStatement, CQL: lwtUpdate, Params: lwtParams, Rows: lwtRows}, g.PrepareOptions{})
+		p, err := a.s.Prepare(ctx, cql.Statement[lwtArgs, cql.CASResult[int32]]{Kind: cql.ConditionalStatement, CQL: lwtUpdate, Params: lwtParams, Rows: lwtRows}, g.PrepareOptions{})
 		if err != nil {
 			return nil, nil, err
 		}
 		a.lwt = p
 	}
 	if a.lwtRead == nil {
-		p, err := g.Prepare(ctx, a.s, cql.Statement[int32, int32]{Kind: cql.OrdinaryStatement, CQL: lwtRead, Params: keyParams, Rows: lwtValue}, g.PrepareOptions{})
+		p, err := a.s.Prepare(ctx, cql.Statement[int32, int32]{Kind: cql.OrdinaryStatement, CQL: lwtRead, Params: keyParams, Rows: lwtValue}, g.PrepareOptions{})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -147,7 +147,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return c.check.done(want, settle(ctx, q, errors.Join(err, rows.Err(), rows.Close())))
 		}, nil
 	case "A5", "B3", "B4", "B9":
-		sq, err := g.NewStreamQuery(read, streamDecoder, g.StreamOptions{Incremental: name == "B4" || name == "B9"})
+		sq, err := read.StreamQuery(streamDecoder, g.StreamOptions{Incremental: name == "B4" || name == "B9"})
 		if err != nil {
 			return nil, err
 		}
@@ -192,7 +192,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
 			c.check.reset(false, k, 0)
-			q, err := g.NewUnpreparedQuery(a.s, statement, g.Options{})
+			q, err := a.s.Query(statement, g.Options{})
 			if err != nil {
 				return err
 			}
@@ -250,7 +250,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		statement := cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: pointWrite, Params: rowParams, Rows: cql.EmptyRowDecoder, BindMarkers: rowColumns}
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
-			q, err := g.NewUnpreparedQuery(a.s, statement, a.metadata)
+			q, err := a.s.Query(statement, a.metadata)
 			if err != nil {
 				return err
 			}

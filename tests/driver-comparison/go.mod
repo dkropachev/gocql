@@ -16,6 +16,6 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 )
 
-replace github.com/gocql/gocql => ../../.codex-cache/driver-comparison/old-source
+replace github.com/gocql/gocql => ../../.codex-cache/driver-comparison/master-a61c57f
 
 replace github.com/scylladb/gocql/v2 => ../..
