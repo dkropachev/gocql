@@ -17,6 +17,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unsafe"
 
 	hdr "github.com/HdrHistogram/hdrhistogram-go"
 )
@@ -467,17 +468,53 @@ func phase(workers []op, duration time.Duration, rate float64) (*stats, error) {
 	return phaseWithSleep(workers, duration, rate, preciseSleep)
 }
 
-// preciseSleep waits for the next scheduled arrival in a blocking nanosleep
-// system call. time.Sleep wakes through the runtime's timers, which, while the
-// only P is idle, sleep in the network poller with millisecond rounding: at
-// low arrival rates that added up to 1 ms of scheduling lag to every
-// open-loop latency. A blocking system call hands the P to the workers while
-// it sleeps and wakes with the kernel's timer precision, as the Rust client's
-// scheduler thread does.
+// preciseSleep waits for the next scheduled arrival.
+//
+// time.Sleep is precise while the only P is busy, as at high arrival rates,
+// where the runtime checks its timers at every scheduling point. While the P
+// is idle, as at low rates, it sleeps in the network poller with millisecond
+// rounding, which added up to 1 ms of scheduling lag to every open-loop
+// latency. A blocking system call is no remedy: the P stays with the sleeping
+// thread until sysmon retakes it, which starves the workers at high rates.
+// Longer waits therefore park on a timerfd registered with the network
+// poller: the goroutine holds no P while it waits, and epoll wakes it when
+// the kernel timer expires, as the Rust client's scheduler thread wakes.
 func preciseSleep(d time.Duration) {
-	ts := syscall.NsecToTimespec(int64(d))
-	for syscall.Nanosleep(&ts, &ts) == syscall.EINTR {
+	if d < 50*time.Microsecond || !timerSleep(d) {
+		time.Sleep(d)
 	}
+}
+
+var timer struct {
+	file *os.File
+	fd   uintptr
+	err  bool
+}
+
+// timerSleep sleeps d on a timerfd; false means no timerfd is available.
+func timerSleep(d time.Duration) bool {
+	if timer.err {
+		return false
+	}
+	if timer.file == nil {
+		const clockMonotonic, nonblock, cloexec = 1, syscall.O_NONBLOCK, syscall.O_CLOEXEC
+		fd, _, errno := syscall.RawSyscall(syscall.SYS_TIMERFD_CREATE, clockMonotonic, nonblock|cloexec, 0)
+		if errno != 0 {
+			timer.err = true
+			return false
+		}
+		// A non-blocking descriptor makes os.NewFile register it with the
+		// network poller, so Read parks the goroutine instead of the thread.
+		timer.file, timer.fd = os.NewFile(fd, "timerfd"), fd
+	}
+	// struct itimerspec: zero interval, then the relative expiry.
+	spec := [4]int64{0, 0, int64(d / time.Second), int64(d % time.Second)}
+	if _, _, errno := syscall.Syscall6(syscall.SYS_TIMERFD_SETTIME, timer.fd, 0, uintptr(unsafe.Pointer(&spec)), 0, 0, 0); errno != 0 {
+		return false
+	}
+	var expirations [8]byte
+	_, err := timer.file.Read(expirations[:])
+	return err == nil
 }
 
 func phaseWithSleep(workers []op, duration time.Duration, rate float64, sleep func(time.Duration)) (*stats, error) {
