@@ -37,8 +37,8 @@ import (
 func TestResultPlanCache(t *testing.T) {
 	t.Run("Compile", func(t *testing.T) {
 		t.Run("OldPageKeepsMatchingPlan", func(t *testing.T) {
-			s := func() *cluster.Session {
-				opaqueStorageValuexxxxxx := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValuexxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxx).InternalLogger = logging.InternalNopLogger{}
 				return opaqueStorageValuexxxxxx
 			}()
@@ -64,8 +64,8 @@ func TestResultPlanCache(t *testing.T) {
 		})
 
 		t.Run("SchemaFenceKeepsRetainedPage", func(t *testing.T) {
-			s := func() *cluster.Session {
-				opaqueStorageValuexxxxxxx := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValuexxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxx).InternalLogger = logging.InternalNopLogger{}
 				return opaqueStorageValuexxxxxxx
 			}()
@@ -91,8 +91,8 @@ func TestResultPlanCache(t *testing.T) {
 
 	t.Run("Publication", func(t *testing.T) {
 		t.Run("SharesEpochGate", func(t *testing.T) {
-			s := func() *cluster.Session {
-				opaqueStorageValuexxxxxxxxxxx := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValuexxxxxxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalLogger = logging.InternalNopLogger{}
 				return opaqueStorageValuexxxxxxxxxxx
 			}()

@@ -13,7 +13,7 @@ var _ cqlProtocolExtension = &scyllaUseMetadataIDExt{}
 
 // Returns a partitioner specific to the table, or "nil"
 // if the cluster-global partitioner should be used
-func InternalScyllaGetTablePartitioner(session *Session, keyspaceName, tableName string) (Partitioner, error) {
+func InternalScyllaGetTablePartitioner(session *Core, keyspaceName, tableName string) (Partitioner, error) {
 	isCdc, err := InternalScyllaIsCdcTable(session, keyspaceName, tableName)
 	if err != nil {
 		return nil, err

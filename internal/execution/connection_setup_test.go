@@ -138,8 +138,8 @@ func TestConnectionSetup(t *testing.T) {
 				<-ctx.Done()
 				return nil, ctx.Err()
 			}
-			session := func() *cluster.Session {
-				opaqueStorageValuexxxxxxxx := new(cluster.Session)
+			session := func() *cluster.Core {
+				opaqueStorageValuexxxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalLogger = logging.InternalNopLogger{}
 				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalAddressTranslator = endpoint.AddressTranslatorFunc(func(ip net.IP, port int) (net.IP, int) { time.Sleep(20 * time.Millisecond); return ip, port })
 				return opaqueStorageValuexxxxxxxx

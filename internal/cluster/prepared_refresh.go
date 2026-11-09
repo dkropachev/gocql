@@ -30,7 +30,7 @@ const InternalMaxPreparedRefreshScopes = 64
 
 // Register only affected keyspaces. A full queue fails the logical operation
 // visibly; it neither drops required work nor enables a broader schema refresh.
-func InternalSessionScheduleV2PreparedRefresh(s *Session, keyspace string) error {
+func InternalSessionScheduleV2PreparedRefresh(s *Core, keyspace string) error {
 	p := InternalSessionPeripheral(s)
 	p.InternalMu.Lock()
 	if p.closed || s.Closed() {
@@ -54,7 +54,7 @@ func InternalSessionScheduleV2PreparedRefresh(s *Session, keyspace string) error
 // Required reconciliation validates actual typed schema independently of
 // optional background metadata publication. Known scopes never enumerate peers'
 // unrelated keyspaces; an unknown statement scope alone requires enumeration.
-func (s *Session) reconcileV2PreparedScope(ctx context.Context, keyspace string) error {
+func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) error {
 	if keyspace == "" {
 		rows, err := queryV2SchemaRows(ctx, InternalNewSchemaSource(s), `SELECT keyspace_name, durable_writes, replication FROM system_schema.keyspaces`, nil, v2DecodeKeyspace())
 		if err != nil {

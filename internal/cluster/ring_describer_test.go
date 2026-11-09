@@ -204,7 +204,7 @@ func (m *mockControlConn) InternalDiscoverProtocol(hosts []*endpoint.HostInfo) (
 }
 func (m *mockControlConn) InternalConnect(hosts []*endpoint.HostInfo) error { return nil }
 func (m *mockControlConn) InternalClose()                                   {}
-func (m *mockControlConn) InternalGetSession() *Session                     { return nil }
+func (m *mockControlConn) InternalGetSession() *Core                        { return nil }
 
 func marshalMetadataMust(metadata protocol.ResultMetadata, data []any) [][]byte {
 	if len(metadata.Columns) != len(data) {

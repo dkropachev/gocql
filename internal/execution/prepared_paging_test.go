@@ -63,7 +63,7 @@ func (d countingDecoder) Compile(c implCqltype.Columns) (codec.RowPlan[implCqlty
 	return codec.OneColumn(codec.BlobCodec).Compile(c)
 }
 func (d countingDecoder) Clone(v implCqltype.Bytes) implCqltype.Bytes { return v.Clone() }
-func preparedState(t *testing.T, s *cluster.Session, columns implCqltype.Columns) (*InternalPreparedState, *InternalHostPrepared) {
+func preparedState(t *testing.T, s *cluster.Core, columns implCqltype.Columns) (*InternalPreparedState, *InternalHostPrepared) {
 	t.Helper()
 	tracker := InternalRuntimeFor(s).InternalSchemaTracker()
 	dependencies := tracker.InternalDependencies("ks", implCqltype.NewColumns(), columns)

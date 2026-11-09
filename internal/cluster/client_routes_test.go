@@ -187,8 +187,8 @@ func TestClientRoutes(t *testing.T) {
 	})
 
 	t.Run("Initialize", func(t *testing.T) {
-		s := func() *Session {
-			opaqueStorageValuexxxxxxxxxxx := new(Session)
+		s := func() *Core {
+			opaqueStorageValuexxxxxxxxxxx := new(Core)
 			SessionData(opaqueStorageValuexxxxxxxxxxx).InternalControl = &fakeControlConn{}
 			SessionData(opaqueStorageValuexxxxxxxxxxx).InternalEventBus = eventbus.New[events.Event](eventbus.EventBusConfig{
 				InputEventsQueueSize: 1,

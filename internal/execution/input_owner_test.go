@@ -63,14 +63,14 @@ func TestInputOwner(t *testing.T) {
 			var rt *InternalSessionRuntime
 			stopped := make(chan struct{})
 			config.DialHost = func(context.Context, endpoint.DialTarget) (net.Conn, error) {
-				if rt == nil || cluster.InternalCurrentExecution(rt.Session) != rt {
+				if rt == nil || cluster.InternalCurrentExecution(rt.Core) != rt {
 					t.Error("startup preceded execution attachment")
 				}
 				return nil, dialError
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			session, err := cluster.InternalConnectCluster(ctx, config, func(s *cluster.Session, c Config) *Config {
+			session, err := cluster.InternalConnectCluster(ctx, config, func(s *cluster.Core, c Config) *Config {
 				rt = InternalRuntimeFor(s)
 				if InternalRuntimeFor(s) != rt {
 					t.Error("execution attachment replaced")
@@ -86,7 +86,7 @@ func TestInputOwner(t *testing.T) {
 			if err == nil || session != nil || !strings.Contains(err.Error(), dialError.Error()) {
 				t.Fatalf("startup result session=%p err=%v", session, err)
 			}
-			if rt == nil || !rt.Session.Closed() {
+			if rt == nil || !rt.Core.Closed() {
 				t.Fatal("failed startup retained a live owner")
 			}
 			select {

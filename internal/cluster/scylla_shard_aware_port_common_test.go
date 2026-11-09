@@ -18,7 +18,7 @@ import (
 )
 
 type shardAwareTestCluster struct {
-	connect func(context.Context, endpoint.InternalLegacyDialer, bool) (*Session, error)
+	connect func(context.Context, endpoint.InternalLegacyDialer, bool) (*Core, error)
 	useTLS  bool
 	port    uint16
 }
@@ -235,7 +235,7 @@ func getShardAwarePort(pool *implPool.InternalHostConnPool, useTLS bool) uint16 
 	return pool.Host().ScyllaShardAwarePort()
 }
 
-func triggerPoolsRefill(sess *Session) {
+func triggerPoolsRefill(sess *Core) {
 	hosts := SessionData(sess).InternalHostSource.InternalGetHostsList()
 	for _, host := range hosts {
 		hostPool, _ := SessionData(sess).InternalPool.InternalGetPool(host)
@@ -243,7 +243,7 @@ func triggerPoolsRefill(sess *Session) {
 	}
 }
 
-func waitUntilPoolsStopFilling(ctx context.Context, sess *Session, timeout time.Duration) error {
+func waitUntilPoolsStopFilling(ctx context.Context, sess *Core, timeout time.Duration) error {
 	deadline := time.After(timeout)
 	for !checkIfPoolsStoppedFilling(sess) {
 		select {
@@ -261,7 +261,7 @@ func waitUntilPoolsStopFilling(ctx context.Context, sess *Session, timeout time.
 	return nil
 }
 
-func checkIfPoolsStoppedFilling(sess *Session) bool {
+func checkIfPoolsStoppedFilling(sess *Core) bool {
 	hosts := SessionData(sess).InternalHostSource.InternalGetHostsList()
 	for _, host := range hosts {
 		hostPool, _ := SessionData(sess).InternalPool.InternalGetPool(host)
@@ -278,7 +278,7 @@ func checkIfPoolsStoppedFilling(sess *Session) bool {
 	return true
 }
 
-func checkIfPoolsAreFull(sess *Session) bool {
+func checkIfPoolsAreFull(sess *Core) bool {
 	hosts := SessionData(sess).InternalHostSource.InternalGetHostsList()
 	for _, host := range hosts {
 		hostPool, _ := SessionData(sess).InternalPool.InternalGetPool(host)

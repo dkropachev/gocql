@@ -54,5 +54,5 @@ func (*systemSchemaTestControl) InternalDiscoverProtocol([]*endpoint.HostInfo) (
 }
 func (*systemSchemaTestControl) InternalConnect([]*endpoint.HostInfo) error { return nil }
 func (*systemSchemaTestControl) InternalClose()                             {}
-func (*systemSchemaTestControl) InternalGetSession() *Session               { return nil }
+func (*systemSchemaTestControl) InternalGetSession() *Core                  { return nil }
 func (*systemSchemaTestControl) InternalReconnect() error                   { return nil }

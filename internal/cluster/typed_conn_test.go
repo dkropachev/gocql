@@ -53,8 +53,8 @@ func TestTypedConn(t *testing.T) {
 	t.Run("DispatchEvent", func(t *testing.T) {
 		for iteration := 0; iteration < 20; iteration++ {
 			c, _ := typedTestConn(t, 4, nil)
-			c.InternalHooks = InternalNewConnectionHooks(func() *Session {
-				opaqueStorageValuexxxx := new(Session)
+			c.InternalHooks = InternalNewConnectionHooks(func() *Core {
+				opaqueStorageValuexxxx := new(Core)
 				SessionData(opaqueStorageValuexxxx).InternalCtx = c.InternalCtx
 				SessionData(opaqueStorageValuexxxx).InternalLogger = logging.InternalNopLogger{}
 				return opaqueStorageValuexxxx
@@ -213,8 +213,8 @@ func TestTypedConn(t *testing.T) {
 					consumer := &InternalEventDebouncer{InternalTimer: time.NewTimer(time.Hour), InternalLogger: logging.InternalNopLogger{}}
 					defer consumer.InternalTimer.Stop()
 					consumer.InternalMu.Lock()
-					c.InternalHooks = InternalNewConnectionHooks(func() *Session {
-						opaqueStorageValuexxx := new(Session)
+					c.InternalHooks = InternalNewConnectionHooks(func() *Core {
+						opaqueStorageValuexxx := new(Core)
 						SessionData(opaqueStorageValuexxx).InternalCtx = c.InternalCtx
 						SessionData(opaqueStorageValuexxx).InternalLogger = logging.InternalNopLogger{}
 						SessionData(opaqueStorageValuexxx).InternalNodeEvents = consumer
@@ -491,8 +491,8 @@ func TestTypedConn(t *testing.T) {
 			for _, bad := range []bool{false, true} {
 				t.Run(fmt.Sprint(bad), func(t *testing.T) {
 					c, server := typedTestConn(t, 5, nil)
-					c.InternalHooks = InternalNewConnectionHooks(func() *Session {
-						opaqueStorageValuexx := new(Session)
+					c.InternalHooks = InternalNewConnectionHooks(func() *Core {
+						opaqueStorageValuexx := new(Core)
 						SessionData(opaqueStorageValuexx).InternalCtx = c.InternalCtx
 						SessionData(opaqueStorageValuexx).InternalLogger = logging.InternalNopLogger{}
 						return opaqueStorageValuexx
@@ -768,8 +768,8 @@ func TestTypedConn(t *testing.T) {
 				config := settings.DefaultConfig("localhost")
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 				defer cancel()
-				session := func() *Session {
-					opaqueStorageValuexxxxxxx := new(Session)
+				session := func() *Core {
+					opaqueStorageValuexxxxxxx := new(Core)
 					SessionData(opaqueStorageValuexxxxxxx).InternalCtx = ctx
 					SessionData(opaqueStorageValuexxxxxxx).InternalLogger = logging.InternalNopLogger{}
 					return opaqueStorageValuexxxxxxx

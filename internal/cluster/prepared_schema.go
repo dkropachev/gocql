@@ -27,7 +27,7 @@ import (
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 )
 
-func InternalSessionInvalidatePreparedSchema(s *Session, e Event) {
+func InternalSessionInvalidatePreparedSchema(s *Core, e Event) {
 	t := InternalSessionSchemaTracker(s)
 	keys := []preparedDependencyKey{{InternalKind: 'a', InternalKeyspace: "", InternalName: ""}, {InternalKind: 'a', InternalKeyspace: e.Keyspace, InternalName: ""}}
 	switch e.Target {
@@ -42,7 +42,7 @@ func InternalSessionInvalidatePreparedSchema(s *Session, e Event) {
 	}
 	t.InternalBump(keys...)
 }
-func InternalSessionUpdatePreparedSchemaSnapshot(s *Session, old, next *MetadataSnapshot) {
+func InternalSessionUpdatePreparedSchemaSnapshot(s *Core, old, next *MetadataSnapshot) {
 	if old == nil {
 		return
 	}
@@ -140,7 +140,7 @@ func InternalEqualPreparedAggregates(a, b map[string]*AggregateMetadata) bool {
 	}
 	return true
 }
-func InternalSessionPreparedPartitionerName(s *Session, keyspace, table string) string {
+func InternalSessionPreparedPartitionerName(s *Core, keyspace, table string) string {
 	m := s.Metadata()
 	if table == "" {
 		return ""

@@ -34,7 +34,7 @@ type fixtureMode struct {
 
 var fixtureModes = []fixtureMode{{"v3", 3, nil, false}, {"v4", 4, nil, false}, {"v4tls", 4, nil, true}, {"v5raw", 5, nil, false}, {"v5lz4", 5, lz4.LZ4Compressor{}, false}, {"v3tls", 3, nil, true}, {"v5rawtls", 5, nil, true}, {"v5lz4tls", 5, lz4.LZ4Compressor{}, true}}
 
-func fixtureStreamSession(t testing.TB, mode fixtureMode, spy ...bool) (*cluster.Session, *transport.Conn, net.Conn) {
+func fixtureStreamSession(t testing.TB, mode fixtureMode, spy ...bool) (*cluster.Core, *transport.Conn, net.Conn) {
 	t.Helper()
 	s, _, _ := runtimeTestSession(t, 0)
 	c, peer := typedTestConn(t, mode.version, mode.compression)

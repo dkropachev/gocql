@@ -54,7 +54,7 @@ func BenchmarkReusableQuery(b *testing.B) {
 			if err := q.capture(ctx, value); err != nil {
 				b.Fatal(err)
 			}
-			_, cancel, request, err := InternalAdmitExecution(ctx, q.state.runtime.Session, &q.bound, Options{})
+			_, cancel, request, err := InternalAdmitExecution(ctx, q.state.runtime.Core, &q.bound, Options{})
 			if err != nil {
 				b.Fatal(err)
 			}

@@ -46,7 +46,7 @@ func InternalTimeForTopology(conn ConnInterface) time.Duration {
 
 // Resolve each explicitly configured endpoint through its own system.local.
 // This establishes real identities without discovering additional peers.
-func (s *Session) v2ContactIdentities(ctx context.Context, contacts []*HostInfo) ([]*HostInfo, error) {
+func (s *Core) v2ContactIdentities(ctx context.Context, contacts []*HostInfo) ([]*HostInfo, error) {
 	var hosts []*HostInfo
 	current := s.privateStorage.InternalControl.InternalGetConn()
 	seen := make(map[UUID]bool)

@@ -16,7 +16,7 @@ type ClientRoutesHandlerStorage struct {
 	InternalLog           StdLogger
 	InternalC             InternalControlConnection
 	InternalResolver      DNSResolver
-	InternalSession       *Session
+	InternalSession       *Core
 	connectionEpoch       map[string]uint64
 	pairEpoch             map[InternalPair]uint64
 	InternalSub           *eventbus.Subscriber[events.Event]

@@ -221,8 +221,8 @@ func BenchmarkExecution(b *testing.B) {
 	b.Run("SharedAdmission", func(b *testing.B) {
 		for _, parallelism := range []int{1, 4, 16} {
 			b.Run(fmt.Sprint(parallelism), func(b *testing.B) {
-				s := func() *cluster.Session {
-					opaqueStorageValue := new(cluster.Session)
+				s := func() *cluster.Core {
+					opaqueStorageValue := new(cluster.Core)
 					return opaqueStorageValue
 				}()
 

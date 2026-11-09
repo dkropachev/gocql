@@ -12,7 +12,7 @@ import (
 	"github.com/scylladb/gocql/v2/tablets"
 )
 
-func InternalSessionCaptureTabletFeedback(s *Session, info RoutingInfo, m *MetadataSnapshot) tabletFeedbackStamp {
+func InternalSessionCaptureTabletFeedback(s *Core, info RoutingInfo, m *MetadataSnapshot) tabletFeedbackStamp {
 	p := InternalSessionPeripheral(s)
 	if p == nil {
 		return tabletFeedbackStamp{}
@@ -56,11 +56,11 @@ type InternalV2PendingTabletFeedback struct {
 
 // applyV2TabletHint is retained for internal legacy callers/tests. Actual EXECUTE
 // responses supply the stamp captured before sending, never a receipt-time stamp.
-func InternalSessionApplyV2TabletHint(s *Session, h tablets.TabletInfo) {
+func InternalSessionApplyV2TabletHint(s *Core, h tablets.TabletInfo) {
 	info := RoutingInfo{Keyspace: h.KeyspaceName(), Table: h.TableName()}
 	InternalSessionQueueTabletFeedback(s, h, InternalSessionCaptureTabletFeedback(s, info, s.Metadata()))
 }
-func InternalSessionQueueTabletFeedback(s *Session, h tablets.TabletInfo, stamp tabletFeedbackStamp) {
+func InternalSessionQueueTabletFeedback(s *Core, h tablets.TabletInfo, stamp tabletFeedbackStamp) {
 	p := InternalSessionPeripheral(s)
 	if p == nil || stamp.InternalSnapshot == nil || !stamp.InternalValid {
 		return
@@ -103,7 +103,7 @@ func InternalSessionQueueTabletFeedback(s *Session, h tablets.TabletInfo, stamp 
 	default:
 	}
 }
-func InternalSessionPublishTabletFeedback(s *Session, p *InternalV2PeripheralState, updates map[InternalV2TabletFeedbackKey]InternalV2PendingTabletFeedback, resync bool) {
+func InternalSessionPublishTabletFeedback(s *Core, p *InternalV2PeripheralState, updates map[InternalV2TabletFeedbackKey]InternalV2PendingTabletFeedback, resync bool) {
 	var known []metadataTable
 	if resync {
 		p.InternalFeedbackMu.Lock()
@@ -198,7 +198,7 @@ func InternalSessionPublishTabletFeedback(s *Session, p *InternalV2PeripheralSta
 		InternalSessionPublishV2LocalEvent(s, Event{Kind: OverflowEvent, Generation: routing.SnapshotData(next).InternalGeneration, Change: "TABLET_RESYNC"})
 	}
 }
-func InternalSessionRunV2TabletFeedback(s *Session, p *InternalV2PeripheralState) {
+func InternalSessionRunV2TabletFeedback(s *Core, p *InternalV2PeripheralState) {
 	for {
 		select {
 		case <-p.InternalDone:
@@ -215,7 +215,7 @@ func InternalSessionRunV2TabletFeedback(s *Session, p *InternalV2PeripheralState
 	}
 }
 
-func InternalSessionCapturedRoutingPartitioner(s *Session, name string) TokenPartitioner {
+func InternalSessionCapturedRoutingPartitioner(s *Core, name string) TokenPartitioner {
 	p := InternalSessionPeripheral(s)
 	if p == nil {
 		return nil
@@ -230,14 +230,14 @@ func InternalSessionCapturedRoutingPartitioner(s *Session, name string) TokenPar
 
 // Source identity is checked as well as the public
 // snapshot: a drop can already be fenced while its snapshot build is pending.
-func (s *Session) tabletSchemaCurrent(k metadataTable, identity string) bool {
+func (s *Core) tabletSchemaCurrent(k metadataTable, identity string) bool {
 	id, ok := s.tabletSchemaIdentity(k.InternalKeyspace, k.InternalTable)
 	return ok && id == identity
 }
 
 // tabletSchemaIdentity returns the identity of a table or view in the
 // schema source, or false when the source lacks it or has invalidated it.
-func (s *Session) tabletSchemaIdentity(keyspace, table string) (string, bool) {
+func (s *Core) tabletSchemaIdentity(keyspace, table string) (string, bool) {
 	if s.privateStorage.InternalMetadataDescriber == nil || s.privateStorage.InternalMetadataDescriber.InternalMetadata == nil {
 		return "", false
 	}

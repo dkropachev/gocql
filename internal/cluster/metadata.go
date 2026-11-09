@@ -89,7 +89,7 @@ type InternalV2PeripheralState struct {
 	InternalFeedbackResync        bool
 }
 
-func InternalSessionPeripheral(s *Session) *InternalV2PeripheralState {
+func InternalSessionPeripheral(s *Core) *InternalV2PeripheralState {
 	if s == nil {
 		return nil
 	}
@@ -104,7 +104,7 @@ func InternalSessionPeripheral(s *Session) *InternalV2PeripheralState {
 	}
 	return s.privateStorage.v2Peripheral.Load()
 }
-func (s *Session) initV2Peripheral(config Config) error {
+func (s *Core) initV2Peripheral(config Config) error {
 	InternalSessionConfigureV2Peripheral(s, config)
 	p := InternalSessionPeripheral(s)
 	p.InternalFeedbackOnce.Do(func() { p.InternalStartWorker(func() { InternalSessionRunV2TabletFeedback(s, p) }) })
@@ -140,7 +140,7 @@ func (s *Session) initV2Peripheral(config Config) error {
 	}
 	return nil
 }
-func InternalSessionConfigureV2Peripheral(s *Session, config Config) {
+func InternalSessionConfigureV2Peripheral(s *Core, config Config) {
 	p := InternalSessionPeripheral(s)
 	p.InternalMu.Lock()
 	p.InternalConfig = config
@@ -148,7 +148,7 @@ func InternalSessionConfigureV2Peripheral(s *Session, config Config) {
 	p.partitioners.Store(&partitioners)
 	p.InternalMu.Unlock()
 }
-func (s *Session) Metadata() *MetadataSnapshot {
+func (s *Core) Metadata() *MetadataSnapshot {
 	p := InternalSessionPeripheral(s)
 	if p == nil {
 		return routing.NewMetadataSnapshot(routing.SnapshotState{})
@@ -163,7 +163,7 @@ func (s *Session) Metadata() *MetadataSnapshot {
 		}
 	}
 }
-func (s *Session) Metrics() MetricsSnapshot {
+func (s *Core) Metrics() MetricsSnapshot {
 	if s == nil {
 		return MetricsSnapshot{}
 	}
@@ -187,7 +187,7 @@ func (s *Session) Metrics() MetricsSnapshot {
 // few immediate rebuilds can all lose. That is transient: each change
 // publishes again itself. After four immediate attempts it backs off, 1 ms
 // doubling up to 100 ms, for about a second in all before reporting failure.
-func InternalSessionPublishV2Metadata(s *Session) bool {
+func InternalSessionPublishV2Metadata(s *Core) bool {
 	delay := time.Millisecond
 	for attempt := 0; attempt < 16; attempt++ {
 		if s.tryPublishV2Metadata() {
@@ -200,7 +200,7 @@ func InternalSessionPublishV2Metadata(s *Session) bool {
 	}
 	return false
 }
-func (s *Session) tryPublishV2Metadata() bool {
+func (s *Core) tryPublishV2Metadata() bool {
 	p := InternalSessionPeripheral(s)
 	if p == nil {
 		return false
@@ -408,7 +408,7 @@ func (s *Session) tryPublishV2Metadata() bool {
 	p.InternalSnapshot.Store(m)
 	return true
 }
-func InternalSnapshotV2Host(s *Session, h *HostInfo) (HostSnapshot, error) {
+func InternalSnapshotV2Host(s *Core, h *HostInfo) (HostSnapshot, error) {
 	out, tokenErr := implEndpoint.SnapshotHost(h)
 	if h == nil {
 		return out, tokenErr
@@ -429,7 +429,7 @@ func InternalSnapshotV2Host(s *Session, h *HostInfo) (HostSnapshot, error) {
 	}
 	return out, tokenErr
 }
-func InternalSessionObserveV2Lifecycle(s *Session, event LifecycleEvent) {
+func InternalSessionObserveV2Lifecycle(s *Core, event LifecycleEvent) {
 	p := InternalSessionPeripheral(s)
 	if p == nil {
 		return
@@ -445,7 +445,7 @@ func InternalSessionObserveV2Lifecycle(s *Session, event LifecycleEvent) {
 
 // RefreshMetadata waits for the shared topology refresh under the caller's
 // context. Metadata queries themselves use the session metadata timeout.
-func (s *Session) RefreshMetadata(ctx context.Context) error {
+func (s *Core) RefreshMetadata(ctx context.Context) error {
 	if ctx == nil {
 		return typeValidation("context", "nil context")
 	}
@@ -487,13 +487,13 @@ func (s *Session) RefreshMetadata(ctx context.Context) error {
 // routingPartitioner chooses the configured server/table partitioner. Unknown
 // names deliberately leave routing tokenless; hashing with a guessed algorithm
 // would send requests to the wrong replicas.
-func (s *Session) routingPartitioner(keyspace, table string) TokenPartitioner {
+func (s *Core) routingPartitioner(keyspace, table string) TokenPartitioner {
 	return InternalSessionCapturedRoutingPartitioner(s, InternalSessionPreparedPartitionerName(s, keyspace, table))
 }
 
 // Trace reads tracing tables through the same typed QUERY/codec path as user
 // requests. Readiness polling is governed by one context across every round.
-func (s *Session) Trace(ctx context.Context, id UUID) (TraceInfo, error) {
+func (s *Core) Trace(ctx context.Context, id UUID) (TraceInfo, error) {
 	result := TraceInfo{ID: id}
 	if ctx == nil {
 		return result, typeValidation("trace context", "nil context")
@@ -537,7 +537,7 @@ type InternalAgreementPeer struct {
 	version Nullable[UUID]
 }
 
-func (s *Session) awaitV2SchemaAgreement(ctx context.Context) error {
+func (s *Core) awaitV2SchemaAgreement(ctx context.Context) error {
 	if ctx == nil {
 		return typeValidation("schema agreement context", "nil context")
 	}
@@ -546,7 +546,7 @@ func (s *Session) awaitV2SchemaAgreement(ctx context.Context) error {
 	}
 	return s.awaitV2SchemaAgreementUsing(ctx, nil, UUID{})
 }
-func InternalSessionAwaitV2SchemaAgreementOn(s *Session, ctx context.Context, conn *Conn) error {
+func InternalSessionAwaitV2SchemaAgreementOn(s *Core, ctx context.Context, conn *Conn) error {
 	if ctx == nil || conn == nil || conn.InternalHost == nil {
 		return typeValidation("schema agreement", "nil context or coordinator")
 	}
@@ -555,7 +555,7 @@ func InternalSessionAwaitV2SchemaAgreementOn(s *Session, ctx context.Context, co
 	}
 	return s.awaitV2SchemaAgreementUsing(ctx, conn, implEndpoint.InternalHostInfoHostUUID(conn.InternalHost))
 }
-func (s *Session) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *Conn, required UUID) error {
+func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *Conn, required UUID) error {
 	p := InternalSessionPeripheral(s)
 	if !p.admitMetadataWork() {
 		return ErrClosed
@@ -698,7 +698,7 @@ func InternalTerminalV2AgreementError(err error) bool {
 	}
 	return false
 }
-func (s *Session) v2AgreementConnections(id UUID) []*Conn {
+func (s *Core) v2AgreementConnections(id UUID) []*Conn {
 	if s.privateStorage.InternalPool == nil {
 		return nil
 	}
@@ -751,7 +751,7 @@ func (c *InternalControlConn) InternalQueryV2System(ctx context.Context, request
 	return conn.InternalExecuteV2System(ctx, request)
 }
 
-func InternalSessionRefreshV2AllSchema(s *Session, ctx context.Context) error {
+func InternalSessionRefreshV2AllSchema(s *Core, ctx context.Context) error {
 	p := InternalSessionPeripheral(s)
 	if !p.admitMetadataWork() {
 		return ErrClosed
@@ -926,7 +926,7 @@ func InternalSessionRefreshV2AllSchema(s *Session, ctx context.Context) error {
 	}
 	return nil
 }
-func InternalSessionRefreshV2Keyspace(s *Session, ctx context.Context, name string) error {
+func InternalSessionRefreshV2Keyspace(s *Core, ctx context.Context, name string) error {
 	p := InternalSessionPeripheral(s)
 	if !p.admitMetadataWork() {
 		return ErrClosed
@@ -934,7 +934,7 @@ func InternalSessionRefreshV2Keyspace(s *Session, ctx context.Context, name stri
 	defer p.workers.Done()
 	return s.refreshV2KeyspaceAttempt(ctx, name, 0)
 }
-func (s *Session) refreshV2KeyspaceAttempt(ctx context.Context, name string, attempt int) error {
+func (s *Core) refreshV2KeyspaceAttempt(ctx context.Context, name string, attempt int) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -1026,11 +1026,11 @@ func waitV2SchemaRetry(ctx context.Context, attempt int) bool {
 	}
 }
 
-func (s *Session) scheduleV2SchemaRetry() {
+func (s *Core) scheduleV2SchemaRetry() {
 	InternalSessionPeripheral(s).schemaRetryNeeded.Store(true)
 	InternalSessionStartV2SchemaRetry(s)
 }
-func InternalSessionStartV2SchemaRetry(s *Session) {
+func InternalSessionStartV2SchemaRetry(s *Core) {
 	p := InternalSessionPeripheral(s)
 	if !p.InternalRetryScheduled.CompareAndSwap(false, true) {
 		return
@@ -1088,7 +1088,7 @@ func InternalSessionStartV2SchemaRetry(s *Session) {
 
 // typedSchemaGeneration deliberately excludes topology and tablet-cache updates.
 // Those changes must not invalidate every prepared statement.
-func InternalSessionTypedSchemaGeneration(s *Session) uint64 {
+func InternalSessionTypedSchemaGeneration(s *Core) uint64 {
 	p := InternalSessionPeripheral(s)
 	if p == nil {
 		return 0
@@ -1096,7 +1096,7 @@ func InternalSessionTypedSchemaGeneration(s *Session) uint64 {
 	return p.schemaGeneration.Load() + 1
 }
 
-func InternalSessionRecordV2Latency(s *Session, latency time.Duration) {
+func InternalSessionRecordV2Latency(s *Core, latency time.Duration) {
 	if s == nil || latency < 0 {
 		return
 	}
@@ -1119,13 +1119,13 @@ func (p *InternalV2PeripheralState) InternalPublishLatencySummary() {
 	p.latencySummary.Store(&InternalV2LatencySummary{p50: percentile(50), p95: percentile(95), p99: percentile(99)})
 }
 
-func InternalSessionRecordV2Orphan(s *Session) {
+func InternalSessionRecordV2Orphan(s *Core) {
 	if s != nil {
 		InternalSessionPeripheral(s).orphans.Add(1)
 	}
 }
 
-func InternalSessionMarkV2SchemaStale(s *Session, keyspace string, dropped bool) {
+func InternalSessionMarkV2SchemaStale(s *Core, keyspace string, dropped bool) {
 	p := InternalSessionPeripheral(s)
 	p.InternalMu.Lock()
 	if dropped {
@@ -1135,7 +1135,7 @@ func InternalSessionMarkV2SchemaStale(s *Session, keyspace string, dropped bool)
 	}
 	p.InternalMu.Unlock()
 }
-func (s *Session) invalidateV2ChangedTablets(keyspace string, current *KeyspaceMetadata) {
+func (s *Core) invalidateV2ChangedTablets(keyspace string, current *KeyspaceMetadata) {
 	if s.privateStorage.InternalMetadataDescriber == nil {
 		return
 	}
@@ -1160,7 +1160,7 @@ func (s *Session) invalidateV2ChangedTablets(keyspace string, current *KeyspaceM
 	}
 }
 
-func (s *Session) dropV2KeyspaceIfCurrent(name string, epoch uint64, revision ...uint64) bool {
+func (s *Core) dropV2KeyspaceIfCurrent(name string, epoch uint64, revision ...uint64) bool {
 	p := InternalSessionPeripheral(s)
 	p.InternalMu.Lock()
 	defer p.InternalMu.Unlock()
@@ -1176,7 +1176,7 @@ func (s *Session) dropV2KeyspaceIfCurrent(name string, epoch uint64, revision ..
 	p.schemaDropped[name] = true
 	return true
 }
-func (s *Session) confirmV2DroppedKeyspace(ctx context.Context, name string) (bool, error) {
+func (s *Core) confirmV2DroppedKeyspace(ctx context.Context, name string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -1192,7 +1192,7 @@ func (s *Session) confirmV2DroppedKeyspace(ctx context.Context, name string) (bo
 	return false, err
 }
 
-func (s *Session) runV2PeriodicRefresh(options MetadataOptions) {
+func (s *Core) runV2PeriodicRefresh(options MetadataOptions) {
 	ticker := time.NewTicker(options.PeriodicRefresh)
 	defer ticker.Stop()
 	p := InternalSessionPeripheral(s)
@@ -1213,7 +1213,7 @@ func (s *Session) runV2PeriodicRefresh(options MetadataOptions) {
 	}
 }
 
-func (s *Session) v2MetadataDepthLimit() int {
+func (s *Core) v2MetadataDepthLimit() int {
 	p := InternalSessionPeripheral(s)
 	p.InternalMu.Lock()
 	limit := p.InternalConfig.Limits.MaxMetadataDepth
@@ -1276,7 +1276,7 @@ func (p *InternalV2PeripheralState) tableRevisionsCurrentLocked(keyspace string,
 	return true
 }
 
-func (s *Session) v2SchemaRefreshFailure(name string, cause error) error {
+func (s *Core) v2SchemaRefreshFailure(name string, cause error) error {
 	p := InternalSessionPeripheral(s)
 	p.InternalMu.Lock()
 	if !p.schemaDropped[name] {
@@ -1289,13 +1289,13 @@ func (s *Session) v2SchemaRefreshFailure(name string, cause error) error {
 	return &PartialRefreshError{Generation: s.Metadata().Generation(), Keyspaces: map[string]error{name: cause}}
 }
 
-func (s *Session) v2MetadataPublicationError() error {
+func (s *Core) v2MetadataPublicationError() error {
 	return &PartialRefreshError{Generation: s.Metadata().Generation(), Keyspaces: map[string]error{"<publication>": fmt.Errorf("metadata sources changed throughout publication; refresh again")}}
 }
 
 // InternalSessionRoutingHostIndex indexes hosts with the session's routes to
 // them, so that plans route to their pools without looking them up.
-func InternalSessionRoutingHostIndex(s *Session, hosts []HostSnapshot) *routingHostIndex {
+func InternalSessionRoutingHostIndex(s *Core, hosts []HostSnapshot) *routingHostIndex {
 	if s.privateStorage.InternalPool == nil {
 		return buildRoutingHostIndex(hosts)
 	}

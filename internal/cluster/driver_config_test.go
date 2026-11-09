@@ -15,9 +15,9 @@ import (
 // newTestReportSession builds a *Session suitable for exercising the report
 // builders directly, without dialing anything. Only the fields the builders
 // read (cfg, policy, logger) are populated.
-func newTestReportSession(cfg InternalClusterSettings, policy HostSelectionPolicy) *Session {
-	return func() *Session {
-		opaqueStorageValuex := new(Session)
+func newTestReportSession(cfg InternalClusterSettings, policy HostSelectionPolicy) *Core {
+	return func() *Core {
+		opaqueStorageValuex := new(Core)
 		SessionData(opaqueStorageValuex).InternalCfg = cfg
 		SessionData(opaqueStorageValuex).InternalPolicy = policy
 		SessionData(opaqueStorageValuex).InternalLogger = &logging.InternalDefaultLogger{}

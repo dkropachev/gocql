@@ -11,7 +11,7 @@ import (
 	runtime "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
-func MissingConnections(s *runtime.Session) (int, error) {
+func MissingConnections(s *runtime.Core) (int, error) {
 	pool := runtime.SessionData(s).InternalPool
 	if pool == nil {
 		return 0, fmt.Errorf("pool is nil")
@@ -21,7 +21,7 @@ func MissingConnections(s *runtime.Session) (int, error) {
 
 // CloseAllConnections injects loss of the existing configured connections;
 // repair continues through the same pool capacity and scheduling state.
-func CloseAllConnections(s *runtime.Session) {
+func CloseAllConnections(s *runtime.Core) {
 	if pool := runtime.SessionData(s).InternalPool; pool != nil {
 		pool.CloseAllConnections()
 	}

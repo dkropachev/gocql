@@ -72,14 +72,14 @@ type InternalControlConnection interface {
 	InternalDiscoverProtocol(hosts []*HostInfo) (int, error)
 	InternalConnect(hosts []*HostInfo) error
 	InternalClose()
-	InternalGetSession() *Session
+	InternalGetSession() *Core
 	InternalReconnect() error
 }
 
 type InternalControlConn struct {
 	connections     map[*Conn]struct{}
 	InternalConn    atomic.Pointer[InternalConnHost]
-	InternalSession *Session
+	InternalSession *Core
 	InternalQuit    chan struct{}
 	workers         sync.WaitGroup
 	closeOnce       sync.Once
@@ -88,11 +88,11 @@ type InternalControlConn struct {
 	reconnecting    int32
 }
 
-func (c *InternalControlConn) InternalGetSession() *Session {
+func (c *InternalControlConn) InternalGetSession() *Core {
 	return c.InternalSession
 }
 
-func InternalCreateControlConn(session *Session) *InternalControlConn {
+func InternalCreateControlConn(session *Core) *InternalControlConn {
 
 	control := &InternalControlConn{
 		InternalSession: session,
@@ -238,7 +238,7 @@ func hostAddress(host *HostInfo) string {
 // connections are discarded immediately and must not be marked as the control
 // connection - doing so would race the real control connection and report
 // DRIVER_CONFIG more than once.
-func InternalSessionControlConnConfig(s *Session) *ConnConfig {
+func InternalSessionControlConnConfig(s *Core) *ConnConfig {
 	cfg := *s.privateStorage.InternalConnCfg
 	cfg.InternalDisableCoalesce = true
 	cfg.InternalIsControlConn = true

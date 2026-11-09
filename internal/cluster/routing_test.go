@@ -31,10 +31,10 @@ func testHint(t testing.TB, first, last int64, version implCqltype.Option[uint64
 	return h
 }
 
-func testSession(t testing.TB) *Session {
+func testSession(t testing.TB) *Core {
 	t.Helper()
-	s := func() *Session {
-		opaqueStorageValue := new(Session)
+	s := func() *Core {
+		opaqueStorageValue := new(Core)
 		return opaqueStorageValue
 	}()
 	SessionData(s).InternalMetadataDescriber = InternalNewMetadataDescriber(s)

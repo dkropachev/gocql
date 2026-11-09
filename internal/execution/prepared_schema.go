@@ -39,7 +39,7 @@ func (s *InternalPreparedState) InternalCacheCurrent() bool {
 	defer s.InternalMu.RUnlock()
 	return s.InternalInitialEpoch.InternalCurrent()
 }
-func (rt *InternalSessionRuntime) beginPreparedWorker(s *implCluster.Session) bool {
+func (rt *InternalSessionRuntime) beginPreparedWorker(s *implCluster.Core) bool {
 	rt.prepareWorkersMu.Lock()
 	defer rt.prepareWorkersMu.Unlock()
 	if rt.prepareWorkersClosed || s.Closed() {

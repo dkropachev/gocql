@@ -9,13 +9,13 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cluster"
 )
 
-func attachmentSession() (*cluster.Session, *InternalSessionRuntime) {
-	s := new(cluster.Session)
+func attachmentSession() (*cluster.Core, *InternalSessionRuntime) {
+	s := new(cluster.Core)
 	data := cluster.SessionData(s)
 	data.InternalCtx, data.InternalCancel = context.WithCancel(context.Background())
 	return s, InternalRuntimeFor(s)
 }
-func attachmentLogical(s *cluster.Session, parent *inputOwner) (*InternalLogicalExecution, context.CancelFunc) {
+func attachmentLogical(s *cluster.Core, parent *inputOwner) (*InternalLogicalExecution, context.CancelFunc) {
 	_, cancel := context.WithCancel(context.Background())
 	return &InternalLogicalExecution{session: s, request: &InternalExecutionRequest{InternalOwner: parent}, lifetime: InternalExecutionLifetime{cancel: cancel, done: make(chan struct{})}}, cancel
 }

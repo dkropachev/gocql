@@ -39,7 +39,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-func rowStreamSession(t *testing.T, proto byte, compressor implProtocol.Compressor) (*cluster.Session, *transport.Conn, net.Conn) {
+func rowStreamSession(t *testing.T, proto byte, compressor implProtocol.Compressor) (*cluster.Core, *transport.Conn, net.Conn) {
 	t.Helper()
 	s, cs, ps := runtimeTestSession(t, 0)
 	c, peer := typedTestConn(t, proto, compressor)

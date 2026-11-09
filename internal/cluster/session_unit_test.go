@@ -32,7 +32,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
-func newTestSessionForTableMetadata(ctrl *schemaDataMock) *Session {
+func newTestSessionForTableMetadata(ctrl *schemaDataMock) *Core {
 	s := newSchemaEventTestSessionWithMock(ctrl)
 	SessionData(s).InternalIsInitialized = true
 	return s

@@ -122,8 +122,8 @@ func TestHostConnPool(t *testing.T) {
 						implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxxxx).InternalHostId = cqltype.UUID{15: 1}
 						return opaqueStorageValuexxxxxxxxxxxxx
 					}()
-					s := func() *cluster.Session {
-						opaqueStorageValuexxxxxxxxxxxxxx := new(cluster.Session)
+					s := func() *cluster.Core {
+						opaqueStorageValuexxxxxxxxxxxxxx := new(cluster.Core)
 						implCluster.SessionData(opaqueStorageValuexxxxxxxxxxxxxx).InternalCtx = ctx
 						implCluster.SessionData(opaqueStorageValuexxxxxxxxxxxxxx).InternalLogger = logging.InternalNopLogger{}
 						return opaqueStorageValuexxxxxxxxxxxxxx
@@ -194,8 +194,8 @@ func TestHostConnPool(t *testing.T) {
 			config := settings.DefaultConfig("localhost")
 			policy := &testReconnect{calls: make(chan int, 4), again: true}
 			config.Reconnect = policy
-			s := func() *cluster.Session {
-				opaqueStorageValuexxxxxxxxx := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValuexxxxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxx).InternalCtx = ctx
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxx).InternalLogger = logging.InternalNopLogger{}
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxx).InternalConnCfg = &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config)}
@@ -256,8 +256,8 @@ func TestHostConnPool(t *testing.T) {
 					policy := &longRepairPolicy{again: again}
 					config.Reconnect = policy
 					var dials atomic.Int32
-					s := func() *cluster.Session {
-						opaqueStorageValuexxxxxxxxxxx := new(cluster.Session)
+					s := func() *cluster.Core {
+						opaqueStorageValuexxxxxxxxxxx := new(cluster.Core)
 						implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalCtx = ctx
 						implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalLogger = logging.InternalNopLogger{}
 						implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalConnCfg = &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config), HostDialer: countingHostDialer{&dials}}

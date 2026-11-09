@@ -7,7 +7,7 @@ import (
 // refreshAllSchemaSession returns a session whose schema mock knows ks1 with
 // tables t1 and t2, and ks2 with t3; all three are loaded into the cache and
 // have tablets.
-func refreshAllSchemaSession(t *testing.T) (*Session, *schemaDataMock) {
+func refreshAllSchemaSession(t *testing.T) (*Core, *schemaDataMock) {
 	t.Helper()
 
 	col := func(name string) []columnInfo { return []columnInfo{{name: name, kind: "partition_key"}} }
@@ -29,7 +29,7 @@ func refreshAllSchemaSession(t *testing.T) (*Session, *schemaDataMock) {
 	return s, ctrl
 }
 
-func refreshAllSchemaNow(t *testing.T, s *Session) {
+func refreshAllSchemaNow(t *testing.T, s *Core) {
 	t.Helper()
 	if err := SessionData(s).InternalMetadataDescriber.InternalRefreshAllSchema(); err != nil {
 		t.Fatalf("refreshAllSchema: %v", err)
@@ -37,12 +37,12 @@ func refreshAllSchemaNow(t *testing.T, s *Session) {
 	MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalTabletsMetadata.Flush()
 }
 
-func hasTablets(s *Session, keyspace, table string) bool {
+func hasTablets(s *Core, keyspace, table string) bool {
 	return len(MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalTabletsMetadata.GetTableTablets(keyspace, table)) > 0
 }
 
 // requireTablets checks which of the three tables still have tablets.
-func requireTablets(t *testing.T, s *Session, want map[string]bool) {
+func requireTablets(t *testing.T, s *Core, want map[string]bool) {
 	t.Helper()
 	for _, kt := range [][2]string{{"ks1", "t1"}, {"ks1", "t2"}, {"ks2", "t3"}} {
 		key := kt[0] + "." + kt[1]

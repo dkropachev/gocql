@@ -36,7 +36,7 @@ type InternalPrepareFlight struct {
 	err   error
 }
 type InternalSessionRuntime struct {
-	*implCluster.Session
+	*implCluster.Core
 	InternalExecutions                                           map[*InternalLogicalExecution]struct{}
 	queries                                                      map[*queryState]struct{}
 	schema                                                       *preparedSchemaTracker
@@ -56,7 +56,7 @@ type InternalSessionRuntime struct {
 	prepareWorkersClosed                                         bool
 }
 
-func InternalRuntimeFor(s *implCluster.Session) *InternalSessionRuntime {
+func InternalRuntimeFor(s *implCluster.Core) *InternalSessionRuntime {
 	// The runtime is created once per session and never replaced, so every
 	// call after initialization takes this lock-free path.
 	if rt, ok := implCluster.SessionData(s).InternalTypedReady.Load().(*InternalSessionRuntime); ok {
@@ -65,13 +65,13 @@ func InternalRuntimeFor(s *implCluster.Session) *InternalSessionRuntime {
 	implCluster.SessionData(s).InternalTypedMu.Lock()
 	defer implCluster.SessionData(s).InternalTypedMu.Unlock()
 	if implCluster.SessionData(s).InternalTypedState == nil {
-		rt := &InternalSessionRuntime{Session: s, InternalPrepared: make(map[InternalPrepareCacheKey]*InternalPreparedState)}
+		rt := &InternalSessionRuntime{Core: s, InternalPrepared: make(map[InternalPrepareCacheKey]*InternalPreparedState)}
 		rt.InternalSetProfile(nil)
 		implCluster.SessionData(s).InternalTypedState = rt
 	}
 	rt := implCluster.SessionData(s).InternalTypedState.(*InternalSessionRuntime)
-	if rt.Session == nil {
-		rt.Session = s
+	if rt.Core == nil {
+		rt.Core = s
 	}
 	if rt.schema == nil {
 		rt.schema = implCluster.InternalSessionSchemaTracker(s)
@@ -81,7 +81,7 @@ func InternalRuntimeFor(s *implCluster.Session) *InternalSessionRuntime {
 }
 
 func (rt *InternalSessionRuntime) metricsSnapshot() MetricsSnapshot {
-	cache := implCluster.SessionData(rt.Session).InternalConnCfg
+	cache := implCluster.SessionData(rt.Core).InternalConnCfg
 	result := MetricsSnapshot{Requests: rt.requests.Load(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), Cancelled: rt.cancelled.Load(), InFlight: rt.inflight.Load()}
 	if cache != nil {
 		stats := cache.InternalReceiveCache.Stats()
@@ -93,7 +93,7 @@ func (rt *InternalSessionRuntime) metricsSnapshot() MetricsSnapshot {
 
 func (s *InternalSessionRuntime) InternalPrepareTyped(ctx context.Context, statement, keyspace string, options PrepareOptions) (state *InternalPreparedState, err error) {
 	rt := s
-	generation := implCluster.InternalSessionTypedGeneration(s.Session)
+	generation := implCluster.InternalSessionTypedGeneration(s.Core)
 	tracker := rt.InternalSchemaTracker()
 	started := tracker.InternalStart()
 	key := InternalPrepareCacheKey{InternalCql: statement, InternalKeyspace: keyspace}
@@ -133,14 +133,14 @@ func (s *InternalSessionRuntime) InternalPrepareTyped(ctx context.Context, state
 	}()
 	conn := options.privateStorage.InternalConnection
 	if conn == nil {
-		conn, err = implCluster.InternalSessionSelectTypedConn(s.Session, ctx, RoutingInfo{HostID: options.HostID}, nil)
+		conn, err = implCluster.InternalSessionSelectTypedConn(s.Core, ctx, RoutingInfo{HostID: options.HostID}, nil)
 	}
 	if err != nil {
 		return nil, err
 	}
 	wireKeyspace := keyspace
 	if conn.InternalVersion < 5 {
-		if keyspace != implCluster.SessionData(s.Session).InternalCfg.Keyspace && !InternalQualifiedForKeyspace(statement, keyspace) {
+		if keyspace != implCluster.SessionData(s.Core).InternalCfg.Keyspace && !InternalQualifiedForKeyspace(statement, keyspace) {
 			return nil, typeValidation("prepare keyspace", "protocol v3/v4 requires the session keyspace")
 		}
 		wireKeyspace = ""
@@ -163,7 +163,7 @@ func (s *InternalSessionRuntime) InternalPrepareTyped(ctx context.Context, state
 	dependencies := tracker.InternalDependencies(info.Keyspace, page.BindColumns(), page.Columns)
 	epoch := dependencies.InternalSince(started)
 	result := &typedResultMetadata{InternalColumns: page.Columns, InternalEpoch: epoch, InternalTracker: dependencies.InternalTracker}
-	state = &InternalPreparedState{InternalSession: s.Session, InternalProtocol: conn.InternalVersion, InternalStatement: statement, InternalKeyspace: keyspace, InternalParameters: page.BindColumns(), InternalColumns: page.Columns, InternalInfo: info, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalResult: result, InternalResultHost: conn.InternalHostID(), InternalPartitioner: implCluster.InternalSessionPreparedPartitionerName(s.Session, info.Keyspace, info.Table), InternalHosts: map[UUID]*InternalHostPrepared{conn.InternalHostID(): {InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: page.Columns, InternalGeneration: generation, InternalRevision: 1, InternalEpoch: epoch, InternalResult: result}}}
+	state = &InternalPreparedState{InternalSession: s.Core, InternalProtocol: conn.InternalVersion, InternalStatement: statement, InternalKeyspace: keyspace, InternalParameters: page.BindColumns(), InternalColumns: page.Columns, InternalInfo: info, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalResult: result, InternalResultHost: conn.InternalHostID(), InternalPartitioner: implCluster.InternalSessionPreparedPartitionerName(s.Core, info.Keyspace, info.Table), InternalHosts: map[UUID]*InternalHostPrepared{conn.InternalHostID(): {InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: page.Columns, InternalGeneration: generation, InternalRevision: 1, InternalEpoch: epoch, InternalResult: result}}}
 
 	tracker.InternalMu.RLock()
 	defer tracker.InternalMu.RUnlock()
@@ -197,7 +197,7 @@ func (s *InternalSessionRuntime) InternalPrepareOnConnExpected(ctx context.Conte
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if s.Session.Closed() {
+	if s.Core.Closed() {
 		return nil, ErrClosed
 	}
 	if err := state.InternalReconcilePendingConflict(); err != nil {
@@ -224,7 +224,7 @@ func (s *InternalSessionRuntime) InternalPrepareOnConnExpected(ctx context.Conte
 			state.InternalPreparing = make(map[UUID]*InternalHostPrepareFlight)
 		}
 		rt := s
-		if !rt.beginPreparedWorker(s.Session) {
+		if !rt.beginPreparedWorker(s.Core) {
 			state.InternalMu.Unlock()
 			return nil, ErrClosed
 		}
@@ -285,7 +285,7 @@ func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *Conn, st
 	if err != nil {
 		return nil, err
 	}
-	if !slices.Equal(info.PartitionKeyIndexes, state.InternalInfo.PartitionKeyIndexes) || info.Keyspace != state.InternalInfo.Keyspace || info.Table != state.InternalInfo.Table || info.Kind != state.InternalInfo.Kind || info.Conditional != state.InternalInfo.Conditional || len(state.InternalInfo.PartitionKeyIndexes) > 0 && implCluster.InternalSessionPreparedPartitionerName(s.Session, info.Keyspace, info.Table) != state.InternalPartitioner {
+	if !slices.Equal(info.PartitionKeyIndexes, state.InternalInfo.PartitionKeyIndexes) || info.Keyspace != state.InternalInfo.Keyspace || info.Table != state.InternalInfo.Table || info.Kind != state.InternalInfo.Kind || info.Conditional != state.InternalInfo.Conditional || len(state.InternalInfo.PartitionKeyIndexes) > 0 && implCluster.InternalSessionPreparedPartitionerName(s.Core, info.Keyspace, info.Table) != state.InternalPartitioner {
 		return nil, &SchemaChangedError{Statement: state.InternalStatement, Previous: state.InternalParameters, Current: page.BindColumns()}
 	}
 	revision := uint64(1)
@@ -303,7 +303,7 @@ func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *Conn, st
 		}
 	}
 	state.InternalMu.RUnlock()
-	candidate := &InternalHostPrepared{InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: result.InternalColumns, InternalGeneration: implCluster.InternalSessionTypedGeneration(s.Session), InternalRevision: revision, InternalEpoch: epoch, InternalResult: result}
+	candidate := &InternalHostPrepared{InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: result.InternalColumns, InternalGeneration: implCluster.InternalSessionTypedGeneration(s.Core), InternalRevision: revision, InternalEpoch: epoch, InternalResult: result}
 
 	// Exact-entry/epoch CAS. A losing response keeps its own immutable candidate;
 	// it is never republished against a newly loaded host revision.
@@ -340,7 +340,7 @@ func (s *InternalSessionRuntime) InternalHostPreparedInfo(conn *Conn, page *resp
 		}
 	}
 	if conn.InternalVersion < 4 && len(info.PartitionKeyIndexes) == 0 && info.Table != "" {
-		if ks := routing.SnapshotData(s.Session.Metadata()).InternalKeyspaces[info.Keyspace]; ks != nil {
+		if ks := routing.SnapshotData(s.Core.Metadata()).InternalKeyspaces[info.Keyspace]; ks != nil {
 			if table := ks.Tables[info.Table]; table != nil {
 				for _, key := range table.PartitionKey {
 					index := -1
@@ -457,7 +457,7 @@ type InternalLogicalExecution struct {
 	started        time.Time
 	observer       Observer
 	ddlCoordinator atomic.Pointer[UUID]
-	session        *implCluster.Session
+	session        *implCluster.Core
 	request        *InternalExecutionRequest
 	lifetime       InternalExecutionLifetime
 	id             uint64
@@ -499,7 +499,7 @@ func (l *InternalLogicalExecution) InternalFinish(result Result, err error) {
 	}
 }
 
-func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], options Options) (context.Context, context.CancelFunc, *InternalExecutionRequest, error) {
+func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options Options) (context.Context, context.CancelFunc, *InternalExecutionRequest, error) {
 	if ctx == nil || s == nil || b == nil || b.privateStorage.InternalRequest.InternalOwner == nil {
 		return nil, nil, nil, typeValidation("execution", "nil context, session or binding")
 	}
@@ -614,7 +614,7 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Session, 
 	}
 	return runctx, cancel, request, nil
 }
-func Run[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], options Options) (Rows[R], error) {
+func Run[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options Options) (Rows[R], error) {
 	runctx, cancel, request, err := InternalAdmitExecution(ctx, s, b, options)
 	if err != nil {
 		return Rows[R]{}, err
@@ -628,7 +628,7 @@ func Run[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], option
 	}
 	return newRowsFromResponse(runctx, cancel, s, b, request, response)
 }
-func newRowsFromResponse[R any](runctx context.Context, cancel context.CancelFunc, s *implCluster.Session, b *Bound[R], request *InternalExecutionRequest, response *responsePage) (Rows[R], error) {
+func newRowsFromResponse[R any](runctx context.Context, cancel context.CancelFunc, s *implCluster.Core, b *Bound[R], request *InternalExecutionRequest, response *responsePage) (Rows[R], error) {
 	plans := b.privateStorage.plans
 	if plans == nil {
 		plans = &InternalResultPlanCache[R]{}
@@ -674,13 +674,13 @@ func newRowsFromResponse[R any](runctx context.Context, cancel context.CancelFun
 	request.InternalLogical.installStop(rows)
 	return newRowsHandle(rows), nil
 }
-func RunPage[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], state PageState, options Options) (*Page[R], error) {
+func RunPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state PageState, options Options) (*Page[R], error) {
 	return InternalRunSinglePage(ctx, s, b, state, options, false)
 }
-func RunUnpaged[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], options Options) (*Page[R], error) {
+func RunUnpaged[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options Options) (*Page[R], error) {
 	return InternalRunSinglePage(ctx, s, b, StartPage(), options, true)
 }
-func InternalRunSinglePage[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], state PageState, options Options, unpaged bool) (*Page[R], error) {
+func InternalRunSinglePage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state PageState, options Options, unpaged bool) (*Page[R], error) {
 	if state.Complete() {
 		return nil, ErrPagingComplete
 	}
@@ -741,7 +741,7 @@ func InternalRunSinglePage[R any](ctx context.Context, s *implCluster.Session, b
 	}))
 	return page, nil
 }
-func Exec[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], options Options) (Result, error) {
+func Exec[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options Options) (Result, error) {
 	if b == nil {
 		return Result{}, typeValidation("binding", "nil binding")
 	}
@@ -847,8 +847,8 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 		}
 	}
 	defer cancel()
-	metadata := s.Session.Metadata()
-	request.tabletFeedback = implCluster.InternalSessionCaptureTabletFeedback(s.Session, request.InternalRouting, metadata)
+	metadata := s.Core.Metadata()
+	request.tabletFeedback = implCluster.InternalSessionCaptureTabletFeedback(s.Core, request.InternalRouting, metadata)
 	tablet := lookupRequestTablet(metadata, request)
 	request.tabletVersionBlock = tablet.VersionBlock(request.InternalRouting)
 	if direct && pinnedUsable(request.pinned) {
@@ -880,7 +880,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			conn = request.connection
 		}
 		if conn == nil {
-			conn, err = implCluster.InternalSessionSelectTypedConn(s.Session, ctx, request.InternalRouting, plan)
+			conn, err = implCluster.InternalSessionSelectTypedConn(s.Core, ctx, request.InternalRouting, plan)
 			if err != nil {
 				return err
 			}
@@ -905,11 +905,11 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				event.RequestID = request.InternalLogical.id
 				if request.InternalLogical.observer != nil {
 					perfAdd(1, 1)
-					implCluster.InternalSessionObserveSafely(s.Session, func() { request.InternalLogical.observer.ObserveAttempt(event) })
+					implCluster.InternalSessionObserveSafely(s.Core, func() { request.InternalLogical.observer.ObserveAttempt(event) })
 				}
 			}
 			if policy := request.InternalOptions.InternalProfile.Routing; policy != nil {
-				implCluster.InternalSessionObserveSafely(s.Session, func() { policy.Observe(event) })
+				implCluster.InternalSessionObserveSafely(s.Core, func() { policy.Observe(event) })
 			}
 			select {
 			case outcomes <- InternalTypedAttemptOutcome{response: response, err: err, conn: conn, event: event, consistency: consistency}:
@@ -936,7 +936,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			return
 		}
 		perfAdd(2, 1)
-		delay, ok := request.InternalOptions.InternalProfile.Speculation.Delay(startedCount, s.Session.Metrics())
+		delay, ok := request.InternalOptions.InternalProfile.Speculation.Delay(startedCount, s.Core.Metrics())
 		if !ok || delay < 0 {
 			return
 		}
@@ -1095,7 +1095,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 // off the heap.
 func (s *InternalSessionRuntime) newAttempt(w *attemptRequest, conn *Conn, request *InternalExecutionRequest, state PageState, consistency Consistency) error {
 	opts := &request.InternalOptions.InternalOptions
-	if conn.InternalVersion < 5 && request.keyspace != "" && request.keyspace != implCluster.SessionData(s.Session).InternalCfg.Keyspace && !InternalRequestQualifiedForKeyspace(request, request.keyspace) {
+	if conn.InternalVersion < 5 && request.keyspace != "" && request.keyspace != implCluster.SessionData(s.Core).InternalCfg.Keyspace && !InternalRequestQualifiedForKeyspace(request, request.keyspace) {
 		return typeValidation("keyspace", "protocol v3/v4 requires the session keyspace")
 	}
 	if conn.InternalVersion < 4 {
@@ -1171,7 +1171,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		}
 		response, executeErr := conn.InternalExecuteTypedInto(ctx, wireRequest, request.responseDest)
 		if len(wireRequest.PreparedID) > 0 && wireRequest.Batch == nil {
-			implCluster.InternalSessionApplyTypedFeedbackStamped(s.Session, response, request.InternalRouting, request.tabletFeedback, conn.InternalFramers.InternalDefaults)
+			implCluster.InternalSessionApplyTypedFeedbackStamped(s.Core, response, request.InternalRouting, request.tabletFeedback, conn.InternalFramers.InternalDefaults)
 		}
 		if unprepared, ok := errors.AsType[*RequestErrUnprepared](executeErr); ok && repair < repairs && !bytes.Equal(unprepared.StatementId, repaired) {
 			repaired = unprepared.StatementId
@@ -1216,16 +1216,16 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 			}
 			config := s.InternalConfig.Metadata
 			if config.AutomaticAgreement {
-				if err := implCluster.InternalSessionAwaitV2SchemaAgreementOn(s.Session, ctx, conn); err != nil {
+				if err := implCluster.InternalSessionAwaitV2SchemaAgreementOn(s.Core, ctx, conn); err != nil {
 					return response, err
 				}
 			}
 			if config.AutomaticAgreement && config.RefreshAfterAgreement {
 				var refreshErr error
 				if response.Keyspace() != "" {
-					refreshErr = implCluster.InternalSessionRefreshV2Keyspace(s.Session, ctx, response.Keyspace())
+					refreshErr = implCluster.InternalSessionRefreshV2Keyspace(s.Core, ctx, response.Keyspace())
 				} else {
-					refreshErr = s.Session.RefreshMetadata(ctx)
+					refreshErr = s.Core.RefreshMetadata(ctx)
 				}
 				if refreshErr != nil && !errors.Is(refreshErr, ErrKeyspaceDoesNotExist) {
 					return response, refreshErr

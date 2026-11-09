@@ -409,9 +409,9 @@ func (m *schemaDataMock) getAwaitSchemaAgreementCalls() int {
 	return m.awaitSchemaAgreementCalls
 }
 
-func newSchemaEventTestSession(control InternalControlConnection, policy HostSelectionPolicy, keyspace string) *Session {
-	s := func() *Session {
-		opaqueStorageValue := new(Session)
+func newSchemaEventTestSession(control InternalControlConnection, policy HostSelectionPolicy, keyspace string) *Core {
+	s := func() *Core {
+		opaqueStorageValue := new(Core)
 		SessionData(opaqueStorageValue).InternalControl = control
 		SessionData(opaqueStorageValue).InternalPolicy = policy
 		SessionData(opaqueStorageValue).InternalLogger = log.Default()
@@ -427,20 +427,20 @@ func newSchemaEventTestSession(control InternalControlConnection, policy HostSel
 			return opaqueStorageValuex
 		}(),
 	}
-	runtime.SetFinalizer(s, func(s *Session) {
+	runtime.SetFinalizer(s, func(s *Core) {
 		s.Close()
 	})
 	return s
 }
 
-func newSchemaEventTestSessionWithMock(mockCtrl *schemaDataMock) *Session {
+func newSchemaEventTestSessionWithMock(mockCtrl *schemaDataMock) *Core {
 	s := newSchemaEventTestSession(mockCtrl, &trackingPolicy{}, "")
 	SessionData(s).InternalUseSystemSchema = true
 	SessionData(s).InternalHasAggregatesAndFunctions = false
 	return s
 }
 
-func populateKeyspace(s *Session, ksName string, tableNames ...string) {
+func populateKeyspace(s *Core, ksName string, tableNames ...string) {
 	ks := &metadata.KeyspaceMetadata{
 		Name:          ksName,
 		DurableWrites: true,
@@ -483,7 +483,7 @@ type queryRecord struct {
 	stmt   string
 }
 
-func addTestTablets(t *testing.T, session *Session, ksName, tblName string) {
+func addTestTablets(t *testing.T, session *Core, ksName, tblName string) {
 	t.Helper()
 	t1, err := tablets.TabletInfoBuilder{
 		KeyspaceName: ksName,

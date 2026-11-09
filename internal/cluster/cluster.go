@@ -50,7 +50,7 @@ type PoolConfig struct {
 	HostSelectionPolicy HostSelectionPolicy
 }
 
-func (p PoolConfig) buildPool(session *Session) *policyConnPool {
+func (p PoolConfig) buildPool(session *Core) *policyConnPool {
 	return InternalNewPolicyConnPool(session)
 }
 
@@ -409,11 +409,11 @@ func (cfg *InternalClusterSettings) logger() StdLogger {
 
 // open initializes the cluster based on this config and returns a
 // session object that can be used to interact with the database.
-func InternalClusterSettingsOpen(cfg *InternalClusterSettings) (*Session, error) {
+func InternalClusterSettingsOpen(cfg *InternalClusterSettings) (*Core, error) {
 	return InternalConnectSettings(*cfg)
 }
 
-func (cfg *InternalClusterSettings) openAsync() (*Session, error) {
+func (cfg *InternalClusterSettings) openAsync() (*Core, error) {
 	return InternalConnectSettingsAsync(*cfg)
 }
 

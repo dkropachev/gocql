@@ -37,7 +37,7 @@ const hostRoutingShards = 4
 // hostRoutingSession is a session whose hosts 1-4 of v2TestMetadata each have
 // a ready typed pool of one connection per shard, with tablet or vnode
 // placement for ks.table whose replicas are hosts 1, 2 and 3.
-func hostRoutingSession(b testing.TB, tablets bool) *Session {
+func hostRoutingSession(b testing.TB, tablets bool) *Core {
 	b.Helper()
 	s := testSession(b)
 	m := s.Metadata()

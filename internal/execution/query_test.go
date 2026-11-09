@@ -69,7 +69,7 @@ func (p *slicePlan) Next() (Route, bool) {
 //
 // The fake server runs in a child process pinned by GOCQL_LOOPBACK_SERVER_CPUS
 // (default 6-7), so client CPU time and scheduling are not shared with it.
-func loopbackTestSession(t testing.TB, workload string) *cluster.Session {
+func loopbackTestSession(t testing.TB, workload string) *cluster.Core {
 	t.Helper()
 	cpus := os.Getenv("GOCQL_LOOPBACK_SERVER_CPUS")
 	if cpus == "" {
@@ -91,7 +91,7 @@ func loopbackTestSession(t testing.TB, workload string) *cluster.Session {
 	if err != nil || !ok {
 		t.Fatalf("loopback server did not start: %q %v", line, err)
 	}
-	s := new(cluster.Session)
+	s := new(cluster.Core)
 	implCluster.SessionData(s).InternalLogger = logging.InternalNopLogger{}
 	implCluster.SessionData(s).InternalHostSource = &cluster.InternalRingDescriber{InternalHosts: map[string]*endpoint.HostInfo{}}
 	implCluster.SessionData(s).InternalPool = &pool.InternalPolicyConnPool{InternalHostConnPools: map[implCqltype.UUID]*pool.InternalHostConnPool{}}
@@ -312,7 +312,7 @@ func TestQuery(t *testing.T) {
 			if err := q.capture(context.Background(), []byte("owned")); err != nil {
 				t.Fatal(err)
 			}
-			_, cancel, request, err := InternalAdmitExecution(context.Background(), q.state.runtime.Session, &q.bound, Options{})
+			_, cancel, request, err := InternalAdmitExecution(context.Background(), q.state.runtime.Core, &q.bound, Options{})
 			if err != nil {
 				t.Fatal(err)
 			}

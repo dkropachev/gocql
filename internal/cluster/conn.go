@@ -34,18 +34,18 @@ import (
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 )
 
-func (s *Session) connectShard(ctx context.Context, host *HostInfo, errorHandler ConnErrorHandler,
+func (s *Core) connectShard(ctx context.Context, host *HostInfo, errorHandler ConnErrorHandler,
 	shardID, nrShards int) (*Conn, error) {
 	return InternalSessionDialShard(s, ctx, host, s.privateStorage.InternalConnCfg, errorHandler, shardID, nrShards)
 }
 
 // dial establishes a connection to a Cassandra node and notifies the session's connectObserver.
 // note: every connection needs to get `conn.finalizeConnection` called on it when initialization process is done
-func InternalSessionDial(s *Session, ctx context.Context, host *HostInfo, connConfig *ConnConfig, errorHandler ConnErrorHandler) (*Conn, error) {
+func InternalSessionDial(s *Core, ctx context.Context, host *HostInfo, connConfig *ConnConfig, errorHandler ConnErrorHandler) (*Conn, error) {
 	return InternalSessionDialShard(s, ctx, host, connConfig, errorHandler, 0, 0)
 }
 
-func InternalSessionDialShard(s *Session, ctx context.Context, host *HostInfo, connConfig *ConnConfig, errorHandler ConnErrorHandler,
+func InternalSessionDialShard(s *Core, ctx context.Context, host *HostInfo, connConfig *ConnConfig, errorHandler ConnErrorHandler,
 	shardID, nrShards int) (*Conn, error) {
 	lifetimeCtx := ctx
 	if connConfig.TypedConfig != nil {
@@ -107,7 +107,7 @@ func InternalSessionDialShard(s *Session, ctx context.Context, host *HostInfo, c
 // dialWithoutObserver does not notify the connection observer, so you most probably want to call dial() instead.
 //
 // If nrShards is zero, shard-aware dialing is disabled.
-func InternalSessionDialWithoutObserver(s *Session, ctx context.Context, host *HostInfo, cfg *ConnConfig, errorHandler ConnErrorHandler, shardID, nrShards int) (*Conn, error) {
+func InternalSessionDialWithoutObserver(s *Core, ctx context.Context, host *HostInfo, cfg *ConnConfig, errorHandler ConnErrorHandler, shardID, nrShards int) (*Conn, error) {
 	var reporter implTransport.InternalStartupReporter
 	if s.privateStorage.InternalDriverConfigReporter != nil {
 		reporter = s.privateStorage.InternalDriverConfigReporter

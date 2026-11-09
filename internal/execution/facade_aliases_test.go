@@ -14,7 +14,7 @@ import (
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 )
 
-func resolveOptions(a0 *cluster.Session, a1 Options) (InternalResolvedOptions, error) {
+func resolveOptions(a0 *cluster.Core, a1 Options) (InternalResolvedOptions, error) {
 	return InternalResolveFor(a0, a1), nil
 }
 

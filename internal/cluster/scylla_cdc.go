@@ -9,7 +9,7 @@ var _ Partitioner = scyllaCDCPartitioner{InternalLogger: &defaultLogger{}}
 
 var _ int64Hasher = scyllaCDCPartitioner{}
 
-func InternalScyllaIsCdcTable(session *Session, keyspaceName, tableName string) (bool, error) {
+func InternalScyllaIsCdcTable(session *Core, keyspaceName, tableName string) (bool, error) {
 	if !strings.HasSuffix(tableName, scyllaCDCLogTableNameSuffix) {
 		// Not a CDC table, use the default partitioner
 		return false, nil

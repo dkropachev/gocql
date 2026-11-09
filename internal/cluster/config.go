@@ -16,7 +16,7 @@ import (
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 )
 
-func InternalConnectCluster(ctx context.Context, config Config, initialize func(*Session, Config) *Config) (*Session, error) {
+func InternalConnectCluster(ctx context.Context, config Config, initialize func(*Core, Config) *Config) (*Core, error) {
 	if ctx == nil {
 		return nil, typeValidation("context", "nil context")
 	}
@@ -101,7 +101,7 @@ func InternalConnectCluster(ctx context.Context, config Config, initialize func(
 	}
 	hostDialer := &v2TLSHostDialer{InternalConfig: implSettings.InternalConnectivityConfig(config)}
 	legacy.HostDialer = hostDialer
-	var typedSession *Session
+	var typedSession *Core
 	if path, _ := unixContact(config); path != "" {
 		hostDialer.InternalUnixHostID = func() UUID {
 			if typedSession != nil && typedSession.privateStorage.InternalControl != nil {
@@ -158,7 +158,7 @@ func InternalConnectCluster(ctx context.Context, config Config, initialize func(
 }
 
 // reconnectTypedDownedHosts keeps independent bounded backoff state for each host.
-func (s *Session) reconnectTypedDownedHosts(policy ReconnectPolicy, initial time.Duration) {
+func (s *Core) reconnectTypedDownedHosts(policy ReconnectPolicy, initial time.Duration) {
 	type retryState struct {
 		next    time.Time
 		attempt int

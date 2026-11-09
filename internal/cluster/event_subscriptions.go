@@ -119,7 +119,7 @@ func InternalSubscriptionPublish(s *Subscription, e Event) {
 		}
 	}
 }
-func (s *Session) Subscribe(filter EventFilter) (*Subscription, error) {
+func (s *Core) Subscribe(filter EventFilter) (*Subscription, error) {
 	if s == nil || s.Closed() {
 		return nil, ErrClosed
 	}
@@ -151,7 +151,7 @@ func (s *Session) Subscribe(filter EventFilter) (*Subscription, error) {
 	p.InternalSubscribers[sub] = struct{}{}
 	return sub, nil
 }
-func InternalSessionCloseV2Peripheral(s *Session) {
+func InternalSessionCloseV2Peripheral(s *Core) {
 	p := InternalSessionPeripheral(s)
 	if p == nil {
 		return
@@ -180,12 +180,12 @@ func InternalEventV2Address(host net.IP, port int) netip.AddrPort {
 	}
 	return netip.AddrPortFrom(ip.Unmap(), uint16(port))
 }
-func InternalSessionPublishV2Event(s *Session, source oldevents.Event) {
+func InternalSessionPublishV2Event(s *Core, source oldevents.Event) {
 	s.publishV2EventMode(source, true, true)
 }
-func (s *Session) recordV2Event(source oldevents.Event) { s.publishV2EventMode(source, true, false) }
-func (s *Session) emitV2Event(source oldevents.Event)   { s.publishV2EventMode(source, false, true) }
-func (s *Session) publishV2EventMode(source oldevents.Event, invalidate, deliver bool) {
+func (s *Core) recordV2Event(source oldevents.Event) { s.publishV2EventMode(source, true, false) }
+func (s *Core) emitV2Event(source oldevents.Event)   { s.publishV2EventMode(source, false, true) }
+func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bool) {
 	p := InternalSessionPeripheral(s)
 	if p == nil {
 		return
@@ -323,7 +323,7 @@ func (s *Session) publishV2EventMode(source oldevents.Event, invalidate, deliver
 	}
 }
 
-func InternalSessionPublishV2LocalEvent(s *Session, event Event) {
+func InternalSessionPublishV2LocalEvent(s *Core, event Event) {
 	p := InternalSessionPeripheral(s)
 	if p == nil {
 		return

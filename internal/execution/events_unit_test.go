@@ -411,9 +411,9 @@ func (m *schemaDataMock) getAwaitSchemaAgreementCalls() int {
 	return m.awaitSchemaAgreementCalls
 }
 
-func newSchemaEventTestSession(control cluster.InternalControlConnection, policy cluster.HostSelectionPolicy, keyspace string) *cluster.Session {
-	s := func() *cluster.Session {
-		opaqueStorageValue := new(cluster.Session)
+func newSchemaEventTestSession(control cluster.InternalControlConnection, policy cluster.HostSelectionPolicy, keyspace string) *cluster.Core {
+	s := func() *cluster.Core {
+		opaqueStorageValue := new(cluster.Core)
 		implCluster.SessionData(opaqueStorageValue).InternalControl = control
 		implCluster.SessionData(opaqueStorageValue).InternalPolicy = policy
 		implCluster.SessionData(opaqueStorageValue).InternalLogger = log.Default()
@@ -429,13 +429,13 @@ func newSchemaEventTestSession(control cluster.InternalControlConnection, policy
 			return opaqueStorageValuex
 		}(),
 	}
-	runtime.SetFinalizer(s, func(s *cluster.Session) {
+	runtime.SetFinalizer(s, func(s *cluster.Core) {
 		s.Close()
 	})
 	return s
 }
 
-func newSchemaEventTestSessionWithMock(mockCtrl *schemaDataMock) *cluster.Session {
+func newSchemaEventTestSessionWithMock(mockCtrl *schemaDataMock) *cluster.Core {
 	s := newSchemaEventTestSession(mockCtrl, &trackingPolicy{}, "")
 	implCluster.SessionData(s).InternalUseSystemSchema = true
 	implCluster.SessionData(s).InternalHasAggregatesAndFunctions = false
@@ -467,7 +467,7 @@ type queryRecord struct {
 	stmt   string
 }
 
-func addTestTablets(t *testing.T, session *cluster.Session, ksName, tblName string) {
+func addTestTablets(t *testing.T, session *cluster.Core, ksName, tblName string) {
 	t.Helper()
 	t1, err := tablets.TabletInfoBuilder{
 		KeyspaceName: ksName,

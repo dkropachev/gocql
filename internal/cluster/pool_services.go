@@ -5,19 +5,19 @@ package cluster
 
 import implNet "net"
 
-func InternalNewPoolServices(s *Session) poolServices {
+func InternalNewPoolServices(s *Core) poolServices {
 	cfg, _ := s.v2PoolConfig()
-	return poolServices{Context: s.privateStorage.InternalCtx, Logger: s.privateStorage.InternalLogger, Config: cfg, Conviction: s.privateStorage.InternalCfg.ConvictionPolicy, Reconnection: s.privateStorage.InternalCfg.ReconnectionPolicy, Worker: func(f func()) bool { return InternalSessionPeripheral(s).InternalStartWorker(f) }, Dial: s.connectShard, Connected: func(receiver *Session) func(a0 *hostConnPool) {
+	return poolServices{Context: s.privateStorage.InternalCtx, Logger: s.privateStorage.InternalLogger, Config: cfg, Conviction: s.privateStorage.InternalCfg.ConvictionPolicy, Reconnection: s.privateStorage.InternalCfg.ReconnectionPolicy, Worker: func(f func()) bool { return InternalSessionPeripheral(s).InternalStartWorker(f) }, Dial: s.connectShard, Connected: func(receiver *Core) func(a0 *hostConnPool) {
 		return func(a0 *hostConnPool) {
 			InternalSessionHandlePoolConnected(receiver, a0)
 		}
-	}(s), Down: func(receiver *Session) func(a0 implNet.
+	}(s), Down: func(receiver *Core) func(a0 implNet.
 		IP, a1 int) {
 		return func(a0 implNet.IP, a1 int) {
 			InternalSessionHandleNodeDown(receiver, a0, a1)
 		}
 	}(s)}
 }
-func InternalNewHostConnPool(s *Session, h *HostInfo, size int, keyspace string) *hostConnPool {
+func InternalNewHostConnPool(s *Core, h *HostInfo, size int, keyspace string) *hostConnPool {
 	return newHostPool(InternalNewPoolServices(s), h, size, keyspace)
 }

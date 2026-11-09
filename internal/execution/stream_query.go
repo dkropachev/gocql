@@ -56,7 +56,7 @@ func (prepared *Prepared[P, B]) StreamQuery[R any](decoder StreamRowDecoder[R], 
 
 // NewUnpreparedStreamQuery uses the same owned input and receive-mode contract
 // for a statement executed without server preparation.
-func NewUnpreparedStreamQuery[P, B, R any](session *implCluster.Session, statement Statement[P, B], decoder StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
+func NewUnpreparedStreamQuery[P, B, R any](session *implCluster.Core, statement Statement[P, B], decoder StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
 	if err := validateStatement(&statement); err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func (q *StreamQuery[P, R]) Run(ctx context.Context, value P) (*RowStream[R], er
 		return nil, err
 	}
 	defer q.query.state.owner.InternalRelease()
-	return runStreamWithCache(ctx, q.query.state.runtime.Session, &q.query.bound, q.decoder, q.query.options, q.options.Limits, q.options.Incremental, &q.plans)
+	return runStreamWithCache(ctx, q.query.state.runtime.Core, &q.query.bound, q.decoder, q.query.options, q.options.Limits, q.options.Incremental, &q.plans)
 }
 func (q *StreamQuery[P, R]) Close() {
 	if q != nil {

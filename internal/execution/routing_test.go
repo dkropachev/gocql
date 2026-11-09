@@ -54,10 +54,10 @@ func testPayload(h tablets.TabletInfo) []byte {
 	}
 	return b
 }
-func testSession(t testing.TB) *cluster.Session {
+func testSession(t testing.TB) *cluster.Core {
 	t.Helper()
-	s := func() *cluster.Session {
-		opaqueStorageValue := new(cluster.Session)
+	s := func() *cluster.Core {
+		opaqueStorageValue := new(cluster.Core)
 		return opaqueStorageValue
 	}()
 	implCluster.SessionData(s).InternalMetadataDescriber = cluster.InternalNewMetadataDescriber(s)
@@ -76,7 +76,7 @@ func testSession(t testing.TB) *cluster.Session {
 	})
 	return s
 }
-func testDrain(s *cluster.Session) {
+func testDrain(s *cluster.Core) {
 	p := implCluster.InternalSessionPeripheral(s)
 	p.InternalFeedbackMu.Lock()
 	updates := p.InternalFeedback

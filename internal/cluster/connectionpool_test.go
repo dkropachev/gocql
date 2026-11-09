@@ -58,7 +58,7 @@ func (e errorConn) InternalSetDisarm(_ bool) {}
 // newHostConnPool is a pure constructor -- it installs a nopConnPicker and
 // leaves the pool unfilled -- so this needs no server, and every HostPoolInfo
 // accessor the iteration exposes is safe on the result.
-func newUndialedHostPool(t *testing.T, session *Session, ip string) *implPool.InternalHostConnPool {
+func newUndialedHostPool(t *testing.T, session *Core, ip string) *implPool.InternalHostConnPool {
 	t.Helper()
 
 	addr := net.ParseIP(ip)
@@ -106,7 +106,7 @@ func (p *closeSignalPicker) Close() {
 // newSignallingHostPool builds an undialed pool for host whose Close is
 // observable. The connPicker is replaced before the pool is published to
 // hostConnPools, so nothing else can be reading it yet.
-func newSignallingHostPool(session *Session, host *endpoint.HostInfo) (*implPool.InternalHostConnPool, *closeSignalPicker) {
+func newSignallingHostPool(session *Core, host *endpoint.HostInfo) (*implPool.InternalHostConnPool, *closeSignalPicker) {
 	pool := InternalNewHostConnPool(session, host, 1, "")
 	picker := newCloseSignalPicker()
 	pool.InternalConnPicker = picker

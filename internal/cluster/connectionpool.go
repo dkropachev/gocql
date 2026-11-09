@@ -65,7 +65,7 @@ func InternalConnConfig(cfg *InternalClusterSettings) (*ConnConfig, error) {
 	}, nil
 }
 
-func InternalNewPolicyConnPool(session *Session) *policyConnPool {
+func InternalNewPolicyConnPool(session *Core) *policyConnPool {
 	// create the pool
 	pool := &policyConnPool{
 		InternalServices:      InternalNewPoolServices(session),

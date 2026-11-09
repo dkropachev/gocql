@@ -26,10 +26,10 @@ import (
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
-func runtimeTestSession(t testing.TB, n int) (*cluster.Session, []*transport.Conn, []net.Conn) {
+func runtimeTestSession(t testing.TB, n int) (*cluster.Core, []*transport.Conn, []net.Conn) {
 	t.Helper()
-	s := func() *cluster.Session {
-		opaqueStorageValue := new(cluster.Session)
+	s := func() *cluster.Core {
+		opaqueStorageValue := new(cluster.Core)
 		implCluster.SessionData(opaqueStorageValue).InternalLogger = logging.InternalNopLogger{}
 		return opaqueStorageValue
 	}()

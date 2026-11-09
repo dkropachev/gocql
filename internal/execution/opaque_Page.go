@@ -17,7 +17,7 @@ type PageStorage[R any] struct {
 	pendingRelease    func()
 	destination       *R
 	cancel            context.CancelFunc
-	session           *implCluster.Session
+	session           *implCluster.Core
 	InternalResponse  *responsePage
 	InternalRelease   func()
 	cursor            queryCursor

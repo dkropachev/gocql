@@ -54,7 +54,7 @@ func uuidRows(id, version cqltype.UUID) []byte {
 	}
 	return body
 }
-func agreementConn(t *testing.T, s *cluster.Session, id, version cqltype.UUID, code int) (*transport.Conn, *atomic.Int32) {
+func agreementConn(t *testing.T, s *cluster.Core, id, version cqltype.UUID, code int) (*transport.Conn, *atomic.Int32) {
 	t.Helper()
 	c, server := typedTestConn(t, 4, nil)
 	c.InternalHost = func() *endpoint.HostInfo {
@@ -93,10 +93,10 @@ func agreementConn(t *testing.T, s *cluster.Session, id, version cqltype.UUID, c
 	t.Cleanup(func() { c.Close(); server.Close(); <-done; c.InternalWaitEventDispatch() })
 	return c, count
 }
-func agreementSession(t *testing.T) (*cluster.Session, cqltype.UUID, cqltype.UUID) {
+func agreementSession(t *testing.T) (*cluster.Core, cqltype.UUID, cqltype.UUID) {
 	t.Helper()
-	s := func() *cluster.Session {
-		opaqueStorageValuexxx := new(cluster.Session)
+	s := func() *cluster.Core {
+		opaqueStorageValuexxx := new(cluster.Core)
 		implCluster.SessionData(opaqueStorageValuexxx).InternalLogger = logging.InternalNopLogger{}
 		return opaqueStorageValuexxx
 	}()
@@ -108,7 +108,7 @@ func agreementSession(t *testing.T) (*cluster.Session, cqltype.UUID, cqltype.UUI
 	t.Cleanup(func() { s.Close() })
 	return s, cqltype.MustRandomUUID(), cqltype.MustRandomUUID()
 }
-func agreementPool(s *cluster.Session, c *transport.Conn) {
+func agreementPool(s *cluster.Core, c *transport.Conn) {
 	implCluster.SessionData(s).InternalPool.InternalHostConnPools[implEndpoint.InternalHostInfoHostUUID(c.InternalHost)] = &implPool.InternalHostConnPool{InternalHost: c.InternalHost, InternalConnPicker: &implPool.InternalDefaultConnPicker{InternalConns: []*transport.Conn{c}}}
 }
 
@@ -118,7 +118,7 @@ func (f lifecycleFunc) ObserveLifecycle(e settings.LifecycleEvent) { f(e) }
 
 type unstablePolicy struct {
 	RoutingPolicy
-	session *cluster.Session
+	session *cluster.Core
 }
 
 func (p unstablePolicy) Validate(*implRouting.MetadataSnapshot) error {

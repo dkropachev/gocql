@@ -44,7 +44,7 @@ type RowStreamStorage[R any] struct {
 	retryTarget         *Target
 	InternalCancel      context.CancelFunc
 	stop                func() bool
-	InternalSession     *implCluster.Session
+	InternalSession     *implCluster.Core
 	InternalRequest     *InternalExecutionRequest
 	response            *streamResponse
 	InternalReservation *exclusiveConn

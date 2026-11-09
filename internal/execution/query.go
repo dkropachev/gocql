@@ -103,7 +103,7 @@ func (q *Query[P, R]) LastResult() Result {
 
 // newQueryState sets up state for session. A query of a pool is tracked by
 // the pool, not by the session runtime.
-func newQueryState(s *implCluster.Session, state *queryState, retire func(), pool *queryPoolBase) error {
+func newQueryState(s *implCluster.Core, state *queryState, retire func(), pool *queryPoolBase) error {
 	if s == nil {
 		return typeValidation("query", "nil session")
 	}
@@ -151,13 +151,13 @@ func NewQuery[P, R any](p *Prepared[P, R], values OptionValues) (*Query[P, R], e
 
 // InternalBindOptions freezes values for session s. Empty values become the
 // zero Options, which use the session's shared default resolution.
-func InternalBindOptions(s *implCluster.Session, values OptionValues) (Options, error) {
+func InternalBindOptions(s *implCluster.Core, values OptionValues) (Options, error) {
 	return queryOptions(s, values)
 }
 
 // queryOptions freezes a query's values for its session. Empty values use
 // the session's shared default resolution.
-func queryOptions(s *implCluster.Session, values OptionValues) (Options, error) {
+func queryOptions(s *implCluster.Core, values OptionValues) (Options, error) {
 	if reflect.ValueOf(&values).Elem().IsZero() {
 		return Options{}, nil
 	}
@@ -192,7 +192,7 @@ func newPreparedQuery[P, R any](p *Prepared[P, R], options Options, pool *queryP
 // NewUnpreparedQuery compiles parameters once against statement.BindMarkers
 // and captures each execution's input in query-owned storage, including
 // values passed to custom codecs.
-func NewUnpreparedQuery[P, R any](s *implCluster.Session, statement Statement[P, R], values OptionValues) (*Query[P, R], error) {
+func NewUnpreparedQuery[P, R any](s *implCluster.Core, statement Statement[P, R], values OptionValues) (*Query[P, R], error) {
 	options, err := queryOptions(s, values)
 	if err != nil {
 		return nil, err
@@ -200,7 +200,7 @@ func NewUnpreparedQuery[P, R any](s *implCluster.Session, statement Statement[P,
 	return newUnpreparedQuery(s, statement, options)
 }
 
-func newUnpreparedQuery[P, R any](s *implCluster.Session, statement Statement[P, R], options Options) (*Query[P, R], error) {
+func newUnpreparedQuery[P, R any](s *implCluster.Core, statement Statement[P, R], options Options) (*Query[P, R], error) {
 	if err := validateStatement(&statement); err != nil {
 		return nil, err
 	}
@@ -321,7 +321,7 @@ func (q *Query[P, R]) Exec(ctx context.Context, value P) error {
 	}
 	defer q.state.owner.InternalRelease()
 	var err error
-	q.last, err = Exec(ctx, q.state.runtime.Session, &q.bound, q.options)
+	q.last, err = Exec(ctx, q.state.runtime.Core, &q.bound, q.options)
 	return err
 }
 
@@ -332,21 +332,21 @@ func (q *Query[P, R]) Run(ctx context.Context, value P) (Rows[R], error) {
 		return Rows[R]{}, err
 	}
 	defer q.state.owner.InternalRelease()
-	return Run(ctx, q.state.runtime.Session, &q.bound, q.options)
+	return Run(ctx, q.state.runtime.Core, &q.bound, q.options)
 }
 func (q *Query[P, R]) RunPage(ctx context.Context, value P, state PageState) (*Page[R], error) {
 	if err := q.capture(ctx, value); err != nil {
 		return nil, err
 	}
 	defer q.state.owner.InternalRelease()
-	return RunPage(ctx, q.state.runtime.Session, &q.bound, state, q.options)
+	return RunPage(ctx, q.state.runtime.Core, &q.bound, state, q.options)
 }
 func (q *Query[P, R]) RunUnpaged(ctx context.Context, value P) (*Page[R], error) {
 	if err := q.capture(ctx, value); err != nil {
 		return nil, err
 	}
 	defer q.state.owner.InternalRelease()
-	return RunUnpaged(ctx, q.state.runtime.Session, &q.bound, q.options)
+	return RunUnpaged(ctx, q.state.runtime.Core, &q.bound, q.options)
 }
 
 // Routing captures parameters and returns their routing information without
@@ -390,7 +390,7 @@ func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
 	if routing.Token, err = request.InternalSource.token(values.Cells); err != nil {
 		return err
 	}
-	err = batch.add(q.state.runtime.Session, request.InternalSource, request.InternalStatement, &routing, values)
+	err = batch.add(q.state.runtime.Core, request.InternalSource, request.InternalStatement, &routing, values)
 	if q.buffer.RetainedBytes() > 64<<10 {
 		q.buffer.Retire()
 	}
@@ -407,7 +407,7 @@ func (q *Query[P, R]) ExecBatch(ctx context.Context, kind BatchKind, batch *Batc
 		err := typeValidation("query", "nil query")
 		return InternalExecutionErrorResult(err), err
 	}
-	s := q.state.runtime.Session
+	s := q.state.runtime.Core
 	if err := validateBatch(s, kind, batch, options); err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
@@ -427,7 +427,7 @@ func (q *Query[P, R]) RunBatch(ctx context.Context, kind BatchKind, batch *Batch
 	if q == nil || q.state.runtime == nil {
 		return nil, typeValidation("query", "nil query")
 	}
-	s := q.state.runtime.Session
+	s := q.state.runtime.Core
 	if err := validateBatch(s, kind, batch, options); err != nil {
 		return nil, err
 	}

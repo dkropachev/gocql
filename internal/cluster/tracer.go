@@ -20,7 +20,7 @@ type TraceWriter struct {
 
 // NewTraceWriter returns a simple Tracer implementation that outputs
 // the event log in a textual format.
-func NewTraceWriter(session *Session, w io.Writer) *TraceWriter {
+func NewTraceWriter(session *Core, w io.Writer) *TraceWriter {
 	return func() *TraceWriter {
 		opaqueStorageValue := new(TraceWriter)
 		opaqueStorageValue.privateStorage.session = session
@@ -96,7 +96,7 @@ type TracerEnhanced struct {
 	privateStorage TracerEnhancedStorage
 }
 
-func NewTracer(session *Session) *TracerEnhanced {
+func NewTracer(session *Core) *TracerEnhanced {
 	return func() *TracerEnhanced {
 		opaqueStorageValuex := new(TracerEnhanced)
 		opaqueStorageValuex.privateStorage.session = session
@@ -161,7 +161,7 @@ func (t *TracerEnhanced) GetActivities(traceId []byte) ([]TraceEntry, error) {
 	return out, nil
 }
 
-func InternalReadV2TraceRows[R any](s *Session, traceID []byte, cql string, decoder RowDecoder[R]) ([]R, error) {
+func InternalReadV2TraceRows[R any](s *Core, traceID []byte, cql string, decoder RowDecoder[R]) ([]R, error) {
 	if s == nil || s.Closed() {
 		return nil, ErrClosed
 	}

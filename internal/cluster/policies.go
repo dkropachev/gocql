@@ -238,7 +238,7 @@ type HostSelectionPolicy interface {
 	HostStateNotifier
 	SetPartitioner
 	KeyspaceChanged(KeyspaceUpdateEvent)
-	Init(*Session)
+	Init(*Core)
 	// Reset is opprotunity to reset HostSelectionPolicy if Session initilization failed and we want to
 	// call HostSelectionPolicy.Init() again with new Session
 	Reset()
@@ -248,7 +248,7 @@ type HostSelectionPolicy interface {
 	// so it's safe to have internal state without additional synchronization as long as every call to Pick returns
 	// a different instance of NextHost.
 	// IsOperational checks if host policy can properly work with given Session/Cluster/clusterSettings
-	IsOperational(*Session) error
+	IsOperational(*Core) error
 }
 
 type InternalSelectedHost struct {
@@ -337,9 +337,9 @@ type InternalRoundRobinHostPolicy struct {
 func (r *InternalRoundRobinHostPolicy) IsLocal(*HostInfo) bool              { return true }
 func (r *InternalRoundRobinHostPolicy) KeyspaceChanged(KeyspaceUpdateEvent) {}
 func (r *InternalRoundRobinHostPolicy) SetPartitioner(partitioner string)   {}
-func (r *InternalRoundRobinHostPolicy) Init(*Session)                       {}
+func (r *InternalRoundRobinHostPolicy) Init(*Core)                          {}
 func (r *InternalRoundRobinHostPolicy) Reset()                              {}
-func (r *InternalRoundRobinHostPolicy) IsOperational(*Session) error        { return nil }
+func (r *InternalRoundRobinHostPolicy) IsOperational(*Core) error           { return nil }
 
 func (r *InternalRoundRobinHostPolicy) AddHost(host *HostInfo) {
 	r.hosts.InternalAdd(host)
@@ -431,7 +431,7 @@ type InternalTokenAwareHostPolicy struct {
 
 }
 
-func (t *InternalTokenAwareHostPolicy) Init(s *Session) {
+func (t *InternalTokenAwareHostPolicy) Init(s *Core) {
 	t.privateStorage.mu.Lock()
 	defer t.privateStorage.mu.Unlock()
 	if t.privateStorage.InternalGetKeyspaceMetadata != nil {
@@ -462,7 +462,7 @@ func (t *InternalTokenAwareHostPolicy) Reset() {
 	t.privateStorage.InternalLogger = nil
 }
 
-func (t *InternalTokenAwareHostPolicy) IsOperational(session *Session) error {
+func (t *InternalTokenAwareHostPolicy) IsOperational(session *Core) error {
 	return t.privateStorage.InternalFallback.IsOperational(session)
 }
 
@@ -650,7 +650,7 @@ func InternalShuffleHostsInPlace(hosts []*HostInfo) {
 
 // partitionHealthy performs an in-place stable partition of replicas, moving
 // healthy (non-busy) hosts to the front while preserving relative order.
-func InternalPartitionHealthy(replicas []*HostInfo, s *Session) {
+func InternalPartitionHealthy(replicas []*HostInfo, s *Core) {
 	n := len(replicas)
 	if n <= 1 {
 		return
@@ -761,12 +761,12 @@ func (d *InternalDcAwareRR) localDatacenter() string {
 	return d.local
 }
 
-func (d *InternalDcAwareRR) Init(*Session)                       {}
+func (d *InternalDcAwareRR) Init(*Core)                          {}
 func (d *InternalDcAwareRR) Reset()                              {}
 func (d *InternalDcAwareRR) KeyspaceChanged(KeyspaceUpdateEvent) {}
 func (d *InternalDcAwareRR) SetPartitioner(p string)             {}
 
-func (d *InternalDcAwareRR) IsOperational(session *Session) error {
+func (d *InternalDcAwareRR) IsOperational(session *Core) error {
 	if session.privateStorage.InternalCfg.privateStorage.disableInit || session.privateStorage.InternalCfg.privateStorage.InternalDisableControlConn {
 		return nil
 	}
@@ -872,12 +872,12 @@ func RackAwareRoundRobinPolicy(localDC string, localRack string, opts ...Interna
 	return p
 }
 
-func (d *InternalRackAwareRR) Init(*Session)                       {}
+func (d *InternalRackAwareRR) Init(*Core)                          {}
 func (d *InternalRackAwareRR) Reset()                              {}
 func (d *InternalRackAwareRR) KeyspaceChanged(KeyspaceUpdateEvent) {}
 func (d *InternalRackAwareRR) SetPartitioner(p string)             {}
 
-func (d *InternalRackAwareRR) IsOperational(session *Session) error {
+func (d *InternalRackAwareRR) IsOperational(session *Core) error {
 	if session.privateStorage.InternalCfg.privateStorage.disableInit || session.privateStorage.InternalCfg.privateStorage.InternalDisableControlConn {
 		return nil
 	}
@@ -993,7 +993,7 @@ func (s *InternalSingleHostReadyPolicy) Ready() bool {
 	return true
 }
 
-func InternalHostBusy(s *Session, h *HostInfo) bool {
+func InternalHostBusy(s *Core, h *HostInfo) bool {
 	pool, ok := s.privateStorage.InternalPool.InternalGetPool(h)
 	return ok && h != nil && pool.InFlight() >= MAX_IN_FLIGHT_THRESHOLD
 }

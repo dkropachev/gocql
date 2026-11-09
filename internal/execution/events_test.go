@@ -45,8 +45,8 @@ func TestEvents(t *testing.T) {
 			var freed atomic.Int32
 			downstream := cluster.InternalNewEventDebouncer("owned", func([]protocol.Frame) { close(entered); <-release }, logging.InternalNopLogger{})
 			conn, _ := typedTestConn(t, 4, nil)
-			s := func() *cluster.Session {
-				opaqueStorageValuexxxxxxxx := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValuexxxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalLogger = logging.InternalNopLogger{}
 				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalSchemaEvents = downstream
 				return opaqueStorageValuexxxxxxxx
@@ -87,8 +87,8 @@ func TestEvents(t *testing.T) {
 			defer timer.Stop()
 			consumer := &cluster.InternalEventDebouncer{InternalTimer: timer, InternalLogger: logging.InternalNopLogger{}}
 			consumer.InternalMu.Lock()
-			session := func() *cluster.Session {
-				opaqueStorageValuexxxxxxx := new(cluster.Session)
+			session := func() *cluster.Core {
+				opaqueStorageValuexxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxx).InternalCtx = c.InternalCtx
 				implCluster.SessionData(opaqueStorageValuexxxxxxx).InternalLogger = logging.InternalNopLogger{}
 				implCluster.SessionData(opaqueStorageValuexxxxxxx).InternalNodeEvents = consumer
@@ -191,8 +191,8 @@ func TestEvents(t *testing.T) {
 
 	t.Run("Overflow", func(t *testing.T) {
 		t.Run("HighestGenerationAndIsolation", func(t *testing.T) {
-			s := func() *cluster.Session {
-				opaqueStorageValue := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValue := new(cluster.Core)
 				return opaqueStorageValue
 			}()
 
@@ -223,8 +223,8 @@ func TestEvents(t *testing.T) {
 
 	t.Run("Register", func(t *testing.T) {
 		t.Run("DisabledDoNotMutateMetadata", func(t *testing.T) {
-			s := func() *cluster.Session {
-				opaqueStorageValuexxxxxxx := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValuexxxxxxx := new(cluster.Core)
 				return opaqueStorageValuexxxxxxx
 			}()
 
@@ -316,8 +316,8 @@ func TestEvents(t *testing.T) {
 
 	t.Run("Shutdown", func(t *testing.T) {
 		t.Run("JoinsWorkersAndRepeatedClosers", func(t *testing.T) {
-			s := func() *cluster.Session {
-				opaqueStorageValuex := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValuex := new(cluster.Core)
 				return opaqueStorageValuex
 			}()
 

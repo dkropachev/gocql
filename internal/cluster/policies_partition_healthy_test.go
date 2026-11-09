@@ -116,7 +116,7 @@ func requireUsableThreshold(t *testing.T) {
 // hostsWithPickers builds replicas backed by the given pickers, the session
 // those lookups resolve against, and labels naming each host by its input
 // position.
-func hostsWithPickers(t *testing.T, pickers []pool.ConnPicker) ([]*endpoint.HostInfo, *Session, hostLabels) {
+func hostsWithPickers(t *testing.T, pickers []pool.ConnPicker) ([]*endpoint.HostInfo, *Core, hostLabels) {
 	t.Helper()
 	requireUsableThreshold(t)
 
@@ -137,8 +137,8 @@ func hostsWithPickers(t *testing.T, pickers []pool.ConnPicker) ([]*endpoint.Host
 		}
 	}
 
-	return replicas, func() *Session {
-		opaqueStorageValue := new(Session)
+	return replicas, func() *Core {
+		opaqueStorageValue := new(Core)
 		SessionData(opaqueStorageValue).InternalPool = &pool.InternalPolicyConnPool{InternalHostConnPools: pools}
 		return opaqueStorageValue
 
@@ -147,7 +147,7 @@ func hostsWithPickers(t *testing.T, pickers []pool.ConnPicker) ([]*endpoint.Host
 	}(), labels
 }
 
-func hostsWithInFlight(t *testing.T, inFlight []int) ([]*endpoint.HostInfo, *Session, hostLabels) {
+func hostsWithInFlight(t *testing.T, inFlight []int) ([]*endpoint.HostInfo, *Core, hostLabels) {
 	t.Helper()
 
 	pickers := make([]pool.ConnPicker, len(inFlight))
@@ -166,7 +166,7 @@ func hostsWithInFlight(t *testing.T, inFlight []int) ([]*endpoint.HostInfo, *Ses
 // above the threshold. Tests that care about the threshold itself use
 // hostsWithInFlight directly. The threshold is a package global; this file only
 // reads it, and requireUsableThreshold above covers what that does not.
-func busyHosts(t *testing.T, busy []bool) ([]*endpoint.HostInfo, *Session, hostLabels) {
+func busyHosts(t *testing.T, busy []bool) ([]*endpoint.HostInfo, *Core, hostLabels) {
 	t.Helper()
 
 	inFlight := make([]int, len(busy))

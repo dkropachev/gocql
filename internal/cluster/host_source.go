@@ -179,12 +179,12 @@ func InternalHostInfoFromMap(row map[string]any, defaultPort int) (*HostInfo, er
 	return &host, nil
 }
 
-func (s *Session) debounceRingRefresh() {
+func (s *Core) debounceRingRefresh() {
 	s.privateStorage.InternalRingRefresher.Debounce()
 }
 
 // refreshRing executes a ring refresh immediately and cancels pending debounce ring refresh requests.
-func InternalSessionRefreshRingNow(s *Session) error {
+func InternalSessionRefreshRingNow(s *Core) error {
 	err, ok := <-s.privateStorage.InternalRingRefresher.RefreshNow()
 	if !ok {
 		return errors.New("could not refresh ring because stop was requested")
@@ -193,7 +193,7 @@ func InternalSessionRefreshRingNow(s *Session) error {
 	return err
 }
 
-func (s *Session) refreshRing() error {
+func (s *Core) refreshRing() error {
 	r := s.privateStorage.InternalHostSource
 	r.mu.Lock()
 	r.refreshSequence++

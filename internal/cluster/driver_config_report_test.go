@@ -685,8 +685,8 @@ func TestDriverConfigReport(t *testing.T) {
 	// Session.controlConnConfig. discoverProtocol's throwaway probe connections are a
 	// deliberate exception, documented on controlConnConfig itself.
 	t.Run("ControlConnConfig", func(t *testing.T) {
-		s := func() *Session {
-			opaqueStorageValue := new(Session)
+		s := func() *Core {
+			opaqueStorageValue := new(Core)
 			SessionData(opaqueStorageValue).InternalConnCfg = &transport.ConnConfig{}
 			return opaqueStorageValue
 		}()
@@ -725,7 +725,7 @@ func TestDriverConfigReport(t *testing.T) {
 			// connConfig picks the driverConnConfig to dial with: the one every path
 			// (re)establishing the control connection goes through, or the
 			// session-wide one every pool connection is dialed with.
-			connConfig    func(*Session) *transport.ConnConfig
+			connConfig    func(*Core) *transport.ConnConfig
 			wantReporting bool
 		}{
 			{
@@ -735,7 +735,7 @@ func TestDriverConfigReport(t *testing.T) {
 			},
 			{
 				name:          "regular connection",
-				connConfig:    func(s *Session) *transport.ConnConfig { return SessionData(s).InternalConnCfg },
+				connConfig:    func(s *Core) *transport.ConnConfig { return SessionData(s).InternalConnCfg },
 				wantReporting: false,
 			},
 		}

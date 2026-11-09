@@ -125,7 +125,7 @@ type Rows[R any] = implExecution.Rows[R]
 
 const SchemaEvent = implCluster.SchemaEvent
 
-type Session = implCluster.Session
+type Session = implCluster.Core
 
 const StatusEvent = implCluster.StatusEvent
 

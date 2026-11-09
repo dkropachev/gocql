@@ -70,7 +70,7 @@ type queryPoolEntry struct {
 
 // registerPool makes the session's close stop the queries of base. The entry
 // goes away when base is collected.
-func (rt *InternalSessionRuntime) registerPool(s *implCluster.Session, base *queryPoolBase) error {
+func (rt *InternalSessionRuntime) registerPool(s *implCluster.Core, base *queryPoolBase) error {
 	data := implCluster.SessionData(s)
 	data.InternalSessionStateMu.RLock()
 	defer data.InternalSessionStateMu.RUnlock()
@@ -105,7 +105,7 @@ func (rt *InternalSessionRuntime) livePools() []*queryPoolBase {
 }
 
 // InternalQueryPools reports how many query pools the session tracks.
-func InternalQueryPools(s *implCluster.Session) int {
+func InternalQueryPools(s *implCluster.Core) int {
 	rt := InternalRuntimeFor(s)
 	rt.InternalMu.Lock()
 	defer rt.InternalMu.Unlock()
@@ -132,7 +132,7 @@ func idleQueryCap() int {
 	return max(16, 4*runtime.GOMAXPROCS(0))
 }
 
-func newQueryPool[P, R any](s *implCluster.Session, newQuery func(*queryPoolBase) (*Query[P, R], error)) (*queryPool[P, R], error) {
+func newQueryPool[P, R any](s *implCluster.Core, newQuery func(*queryPoolBase) (*Query[P, R], error)) (*queryPool[P, R], error) {
 	p := &queryPool[P, R]{base: new(queryPoolBase), slots: make([]atomic.Pointer[Query[P, R]], idleQueryCap()), newQuery: newQuery}
 	if err := InternalRuntimeFor(s).registerPool(s, p.base); err != nil {
 		return nil, err
@@ -219,7 +219,7 @@ func (p *queryPool[P, R]) exec(ctx context.Context, value P, options Options) (R
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
-	result, err := Exec(ctx, q.state.runtime.Session, &q.bound, options)
+	result, err := Exec(ctx, q.state.runtime.Core, &q.bound, options)
 	q.state.owner.InternalRelease()
 	return result, err
 }
@@ -229,7 +229,7 @@ func (p *queryPool[P, R]) each(ctx context.Context, value P, dst *R, fn func(*R)
 	if err != nil {
 		return false, err
 	}
-	found, _, err := each(ctx, q.state.runtime.Session, &q.bound, options, dst, fn, &q.scratch)
+	found, _, err := each(ctx, q.state.runtime.Core, &q.bound, options, dst, fn, &q.scratch)
 	q.state.owner.InternalRelease()
 	return found, err
 }

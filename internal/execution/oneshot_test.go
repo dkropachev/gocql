@@ -75,7 +75,7 @@ func oneShotStatement() binding.Statement[int32, []byte] {
 	return binding.Statement[int32, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: codec.OneParam(codec.Int32), Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 }
 
-func oneShotPrepare(t *testing.T, s *cluster.Session, peer net.Conn, requests chan oneShotRequest) *Prepared[int32, []byte] {
+func oneShotPrepare(t *testing.T, s *cluster.Core, peer net.Conn, requests chan oneShotRequest) *Prepared[int32, []byte] {
 	t.Helper()
 	oneShotServer(t, peer, requests)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

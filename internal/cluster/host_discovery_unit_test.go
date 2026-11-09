@@ -88,7 +88,7 @@ func (rs *ringTestServer) failPeers(msg string) {
 	rs.peersErr = msg
 }
 
-func (rs *ringTestServer) session(t *testing.T, configure func(cfg *InternalClusterSettings)) *Session {
+func (rs *ringTestServer) session(t *testing.T, configure func(cfg *InternalClusterSettings)) *Core {
 	t.Helper()
 	cfg := rs.cluster()
 	if configure != nil {
@@ -104,7 +104,7 @@ func (rs *ringTestServer) session(t *testing.T, configure func(cfg *InternalClus
 
 // ringHosts lists the session's known hosts as "hostID@ip" sorted, so tests
 // can compare the whole ring at once.
-func ringHosts(s *Session) []string {
+func ringHosts(s *Core) []string {
 	var out []string
 	for _, h := range SessionData(s).InternalHostSource.InternalGetHostsList() {
 		out = append(out, h.HostID()+"@"+h.ConnectAddress().String())

@@ -46,7 +46,7 @@ type InternalResolvedOptions struct {
 	InternalOptions OptionValues
 }
 
-func InternalResolveOptions(s *implCluster.Session, options OptionValues) (InternalResolvedOptions, error) {
+func InternalResolveOptions(s *implCluster.Core, options OptionValues) (InternalResolvedOptions, error) {
 	var base *Profile
 	if s != nil {
 		base = InternalRuntimeFor(s).InternalProfile

@@ -41,7 +41,7 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id UUID) (implCluste
 		return result, err
 	}
 	defer func() { bound.Close(); _ = bound.Wait(ctx) }()
-	options, err := NewOptions(s.Session, traceValues)
+	options, err := NewOptions(s.Core, traceValues)
 	if err != nil {
 		return result, err
 	}
@@ -49,7 +49,7 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id UUID) (implCluste
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		rows, err := Run(ctx, s.Session, bound, options)
+		rows, err := Run(ctx, s.Core, bound, options)
 		if err != nil {
 			return result, err
 		}
@@ -95,7 +95,7 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id UUID) (implCluste
 		return result, err
 	}
 	defer func() { eventsBound.Close(); _ = eventsBound.Wait(ctx) }()
-	rows, err := Run(ctx, s.Session, eventsBound, options)
+	rows, err := Run(ctx, s.Core, eventsBound, options)
 	if err != nil {
 		return result, err
 	}

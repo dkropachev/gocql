@@ -339,7 +339,7 @@ type InternalUpdateTask struct {
 	InternalConnectionIDs []string
 }
 
-func (p *ClientRoutesHandler) Initialize(s *Session) error {
+func (p *ClientRoutesHandler) Initialize(s *Core) error {
 	p.privateStorage.queueMu.Lock()
 	if p.privateStorage.InternalInitialized.Load() {
 		p.privateStorage.queueMu.Unlock()

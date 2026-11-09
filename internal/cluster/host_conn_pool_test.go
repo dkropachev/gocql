@@ -63,8 +63,8 @@ func TestHostConnPool(t *testing.T) {
 			implEndpoint.HostInfoData(opaqueStorageValue).InternalPort = 9042
 			return opaqueStorageValue
 		}()
-		session := func() *Session {
-			opaqueStorageValuex := new(Session)
+		session := func() *Core {
+			opaqueStorageValuex := new(Core)
 			SessionData(opaqueStorageValuex).InternalCfg = InternalClusterSettings{
 				NumConns:         2,
 				ConvictionPolicy: &settings.SimpleConvictionPolicy{},
@@ -127,8 +127,8 @@ func TestHostConnPool(t *testing.T) {
 				implEndpoint.HostInfoData(opaqueStorageValuexx).InternalPort = 9042
 				return opaqueStorageValuexx
 			}()
-			session := func() *Session {
-				opaqueStorageValuexxx := new(Session)
+			session := func() *Core {
+				opaqueStorageValuexxx := new(Core)
 				SessionData(opaqueStorageValuexxx).InternalCfg = InternalClusterSettings{
 					NumConns:         1,
 					ConvictionPolicy: &settings.SimpleConvictionPolicy{},
@@ -182,8 +182,8 @@ func TestHostConnPool(t *testing.T) {
 
 			for _, retries := range []int{0, -1} {
 				t.Run(strconv.Itoa(retries), func(t *testing.T) {
-					session := func() *Session {
-						opaqueStorageValuexxxxxxxx := new(Session)
+					session := func() *Core {
+						opaqueStorageValuexxxxxxxx := new(Core)
 						SessionData(opaqueStorageValuexxxxxxxx).InternalCfg = InternalClusterSettings{ReconnectionPolicy: &implPool.ConstantReconnectionPolicy{MaxRetries: retries}}
 						SessionData(opaqueStorageValuexxxxxxxx).InternalLogger = logging.InternalNopLogger{}
 						return opaqueStorageValuexxxxxxxx
@@ -206,8 +206,8 @@ func TestHostConnPool(t *testing.T) {
 		config := settings.DefaultConfig("localhost")
 		config.Pool.ConnectionsPerHost = math.MaxInt
 		dialer := &boundedOpeningDialer{entered: make(chan struct{}, 64), release: make(chan struct{})}
-		s := func() *Session {
-			opaqueStorageValuexxxxxx := new(Session)
+		s := func() *Core {
+			opaqueStorageValuexxxxxx := new(Core)
 			SessionData(opaqueStorageValuexxxxxx).InternalCtx = ctx
 			SessionData(opaqueStorageValuexxxxxx).InternalLogger = logging.InternalNopLogger{}
 			SessionData(opaqueStorageValuexxxxxx).InternalConnCfg = &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config), ProtoVersion: 4, HostDialer: dialer, Logger: logging.InternalNopLogger{}}

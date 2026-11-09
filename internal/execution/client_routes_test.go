@@ -133,8 +133,8 @@ func TestClientRoutes(t *testing.T) {
 				implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxx).InternalPort = 9042
 				return opaqueStorageValuexxxxxxxxxxx
 			}()
-			s := func() *cluster.Session {
-				opaqueStorageValuexxxxxxxxxxxx := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValuexxxxxxxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxxxxx).InternalHostSource = &cluster.InternalRingDescriber{InternalHosts: map[string]*endpoint.HostInfo{host.HostID(): host}}
 				return opaqueStorageValuexxxxxxxxxxxx
 			}()

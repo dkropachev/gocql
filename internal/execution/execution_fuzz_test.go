@@ -43,8 +43,8 @@ func FuzzStreamExecutionBoundary(f *testing.F) {
 		frame = append(frame, body...)
 		memory := &memoryConn{source: bytes.NewReader(frame)}
 		reservation := memoryReservation(4, nil, memory)
-		s := func() *cluster.Session {
-			opaqueStorageValue := new(cluster.Session)
+		s := func() *cluster.Core {
+			opaqueStorageValue := new(cluster.Core)
 			return opaqueStorageValue
 		}()
 

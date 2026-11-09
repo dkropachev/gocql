@@ -128,7 +128,7 @@ func newTraceServer(t *testing.T, cfg traceConfig) *traceServer {
 	return ts
 }
 
-func (ts *traceServer) session(t *testing.T) *Session {
+func (ts *traceServer) session(t *testing.T) *Core {
 	t.Helper()
 	s, err := InternalClusterSettingsOpen(ts.cluster())
 	if err != nil {

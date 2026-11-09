@@ -346,10 +346,10 @@ type InternalNodeLocationRackReport struct {
 // s.cfg.PoolConfig.HostSelectionPolicy: the latter is never assigned the
 // default policy that newSessionCommon applies.
 type InternalDriverConfigReporter struct {
-	session *Session
+	session *Core
 }
 
-func InternalNewDriverConfigReporter(s *Session) *InternalDriverConfigReporter {
+func InternalNewDriverConfigReporter(s *Core) *InternalDriverConfigReporter {
 	return &InternalDriverConfigReporter{session: s}
 }
 
@@ -659,7 +659,7 @@ func InternalBuildControlPlaneReport(cfg *InternalClusterSettings, isScyllaConn 
 	}
 }
 
-func InternalBuildQueryReport(s *Session) InternalQueryReport {
+func InternalBuildQueryReport(s *Core) InternalQueryReport {
 	cfg := s.privateStorage.InternalCfg
 	loadBalancing := InternalBuildLoadBalancingReport(s.privateStorage.InternalPolicy)
 	runtime := InternalCurrentExecution(s)

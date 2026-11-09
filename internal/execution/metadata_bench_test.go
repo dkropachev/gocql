@@ -12,8 +12,8 @@ import (
 
 func BenchmarkMetadata(b *testing.B) {
 	b.Run("EventPublication", func(b *testing.B) {
-		s := func() *cluster.Session {
-			opaqueStorageValuexxxxx := new(cluster.Session)
+		s := func() *cluster.Core {
+			opaqueStorageValuexxxxx := new(cluster.Core)
 			return opaqueStorageValuexxxxx
 		}()
 
@@ -27,8 +27,8 @@ func BenchmarkMetadata(b *testing.B) {
 	})
 
 	b.Run("Read", func(b *testing.B) {
-		s := func() *cluster.Session {
-			opaqueStorageValuexxxx := new(cluster.Session)
+		s := func() *cluster.Core {
+			opaqueStorageValuexxxx := new(cluster.Core)
 			return opaqueStorageValuexxxx
 		}()
 
@@ -48,8 +48,8 @@ func BenchmarkMetadata(b *testing.B) {
 					name := fmt.Sprint(i)
 					ks.Tables[name] = &implMetadata.TableMetadata{Name: name, Columns: map[string]*implMetadata.ColumnMetadata{"id": {Name: "id", Type: "int"}}}
 				}
-				s := func() *cluster.Session {
-					opaqueStorageValuexxxxxxxxxx := new(cluster.Session)
+				s := func() *cluster.Core {
+					opaqueStorageValuexxxxxxxxxx := new(cluster.Core)
 					implCluster.SessionData(opaqueStorageValuexxxxxxxxxx).InternalMetadataDescriber = &cluster.InternalMetadataDescriber{InternalMetadata: func() *cluster.Metadata {
 						opaqueStorageValuexxxxxxxxx := new(cluster.Metadata)
 						return opaqueStorageValuexxxxxxxxx

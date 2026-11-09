@@ -94,7 +94,7 @@ func (s *InternalSessionRuntime) registerExecution(l *InternalLogicalExecution, 
 		// StopActive's stop of the query, which then cancels it, or after the
 		// mark, which refuses it; no session lock is needed.
 		query.mu.Lock()
-		if query.closed || s.Session.Closed() {
+		if query.closed || s.Core.Closed() {
 			query.mu.Unlock()
 			return ErrClosed
 		}
@@ -107,9 +107,9 @@ func (s *InternalSessionRuntime) registerExecution(l *InternalLogicalExecution, 
 		l.request.InternalOwner = &query.execOwner
 		return nil
 	}
-	implCluster.SessionData(s.Session).InternalSessionStateMu.RLock()
-	defer implCluster.SessionData(s.Session).InternalSessionStateMu.RUnlock()
-	if implCluster.SessionData(s.Session).InternalIsClosing || implCluster.SessionData(s.Session).InternalIsClosed {
+	implCluster.SessionData(s.Core).InternalSessionStateMu.RLock()
+	defer implCluster.SessionData(s.Core).InternalSessionStateMu.RUnlock()
+	if implCluster.SessionData(s.Core).InternalIsClosing || implCluster.SessionData(s.Core).InternalIsClosed {
 		return ErrClosed
 	}
 	rt := s

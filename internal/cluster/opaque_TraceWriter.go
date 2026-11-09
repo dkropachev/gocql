@@ -11,7 +11,7 @@ import (
 )
 
 type TraceWriterStorage struct {
-	session *Session
+	session *Core
 	w       io.Writer
 	mu      sync.Mutex
 

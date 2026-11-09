@@ -9,9 +9,9 @@ import (
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 )
 
-type InternalSessionConnectionHooks struct{ session *Session }
+type InternalSessionConnectionHooks struct{ session *Core }
 
-func InternalNewConnectionHooks(s *Session) implTransport.InternalConnectionHooks {
+func InternalNewConnectionHooks(s *Core) implTransport.InternalConnectionHooks {
 	return InternalSessionConnectionHooks{s}
 }
 func (h InternalSessionConnectionHooks) InternalStartConnectionWorker(f func()) bool {
@@ -23,7 +23,7 @@ func (h InternalSessionConnectionHooks) InternalConnectionWorkersDone() <-chan s
 func (h InternalSessionConnectionHooks) InternalHandleConnectionEvent(ctx context.Context, f frame, release func()) bool {
 	return h.session.handleEventOwnedContext(ctx, f, release)
 }
-func InternalConnectionOwnedBy(c *Conn, s *Session) bool {
+func InternalConnectionOwnedBy(c *Conn, s *Core) bool {
 	h, ok := c.InternalHooks.(InternalSessionConnectionHooks)
 	return ok && h.session == s
 }

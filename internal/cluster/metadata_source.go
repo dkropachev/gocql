@@ -10,9 +10,9 @@ import (
 	"github.com/scylladb/gocql/v2/internal/model"
 )
 
-type InternalSchemaSource struct{ session *Session }
+type InternalSchemaSource struct{ session *Core }
 
-func InternalNewSchemaSource(s *Session) implMetadata.Source { return InternalSchemaSource{s} }
+func InternalNewSchemaSource(s *Core) implMetadata.Source { return InternalSchemaSource{s} }
 func (source InternalSchemaSource) InternalSchemaContext() context.Context {
 	s := source.session
 	if s != nil && s.privateStorage.InternalCtx != nil {

@@ -58,14 +58,14 @@ type RowStream[R any] struct {
 	privateStorage RowStreamStorage[R]
 }
 
-func RunStream[B, R any](ctx context.Context, session *implCluster.Session, bound *Bound[B], decoder StreamRowDecoder[R], options StreamOptions) (*RowStream[R], error) {
+func RunStream[B, R any](ctx context.Context, session *implCluster.Core, bound *Bound[B], decoder StreamRowDecoder[R], options StreamOptions) (*RowStream[R], error) {
 	frozen, err := queryOptions(session, options.Options)
 	if err != nil {
 		return nil, err
 	}
 	return runStreamWithCache(ctx, session, bound, decoder, frozen, options.Limits, options.Incremental, nil)
 }
-func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Session, bound *Bound[B], decoder StreamRowDecoder[R], options Options, streamLimits StreamLimits, incremental bool, plans *streamPlanCache[R]) (*RowStream[R], error) {
+func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core, bound *Bound[B], decoder StreamRowDecoder[R], options Options, streamLimits StreamLimits, incremental bool, plans *streamPlanCache[R]) (*RowStream[R], error) {
 	if decoder == nil {
 		return nil, typeValidation("stream decoder", "nil decoder")
 	}

@@ -52,8 +52,8 @@ func TestSchemaMetadata(t *testing.T) {
 		})
 
 		t.Run("ContentionEmitsTerminalResync", func(t *testing.T) {
-			s := func() *cluster.Session {
-				opaqueStorageValuexxxxxxxxxxxxxx := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValuexxxxxxxxxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxxxxxxx).InternalHostSource = &cluster.InternalRingDescriber{}
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxxxxxxx).InternalLogger = logging.InternalNopLogger{}
 				return opaqueStorageValuexxxxxxxxxxxxxx
@@ -176,8 +176,8 @@ func TestSchemaMetadata(t *testing.T) {
 
 	t.Run("Retry", func(t *testing.T) {
 		t.Run("RejectedAfterShutdown", func(t *testing.T) {
-			s := func() *cluster.Session {
-				opaqueStorageValuexxxxxxxxxxxxxxx := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValuexxxxxxxxxxxxxxx := new(cluster.Core)
 				return opaqueStorageValuexxxxxxxxxxxxxxx
 			}()
 

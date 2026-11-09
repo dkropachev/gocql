@@ -38,5 +38,5 @@ func (f *fakeControlConn) InternalDiscoverProtocol(hosts []*endpoint.HostInfo) (
 }
 func (f *fakeControlConn) InternalConnect(hosts []*endpoint.HostInfo) error { return nil }
 func (f *fakeControlConn) InternalClose()                                   {}
-func (f *fakeControlConn) InternalGetSession() *cluster.Session             { return nil }
+func (f *fakeControlConn) InternalGetSession() *cluster.Core                { return nil }
 func (f *fakeControlConn) InternalReconnect() error                         { return nil }

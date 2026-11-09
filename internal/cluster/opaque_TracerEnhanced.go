@@ -8,7 +8,7 @@ import (
 )
 
 type TracerEnhancedStorage struct {
-	session  *Session
+	session  *Core
 	traceIDs [][]byte
 	mu       sync.Mutex
 }

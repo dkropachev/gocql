@@ -36,7 +36,7 @@ type InternalHostPrepared struct {
 }
 type InternalPreparedState struct {
 	InternalResult       *typedResultMetadata
-	InternalSession      *implCluster.Session
+	InternalSession      *implCluster.Core
 	InternalHosts        map[UUID]*InternalHostPrepared
 	InternalPreparing    map[UUID]*InternalHostPrepareFlight
 	InternalDependencies *preparedDependencies
@@ -71,7 +71,7 @@ type Bound[R any] struct {
 	privateStorage BoundStorage[R]
 }
 
-func Prepare[P, R any](ctx context.Context, s *implCluster.Session, statement Statement[P, R], options PrepareOptions) (*Prepared[P, R], error) {
+func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement Statement[P, R], options PrepareOptions) (*Prepared[P, R], error) {
 	if ctx == nil || s == nil {
 		return nil, typeValidation("prepare", "nil context or session")
 	}

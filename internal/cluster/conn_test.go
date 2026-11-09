@@ -65,7 +65,7 @@ func testCluster(proto frm.ProtoVersion, addresses ...string) *InternalClusterSe
 // a pool is filled asynchronously, so a test making a claim about every
 // connection of a session has to wait for them rather than assert on whichever
 // ones it happened to observe.
-func waitForPoolSize(session *Session, want int, timeout time.Duration) error {
+func waitForPoolSize(session *Core, want int, timeout time.Duration) error {
 	deadline := time.After(timeout)
 	for {
 		if got := SessionData(session).InternalPool.Size(); got >= want {
@@ -303,7 +303,7 @@ func (srv *TestServer) port() int {
 	return srv.listen.Addr().(*net.TCPAddr).Port
 }
 
-func (srv *TestServer) session() (*Session, error) {
+func (srv *TestServer) session() (*Core, error) {
 	return InternalClusterSettingsOpen(testCluster(frm.ProtoVersion(srv.protocol), srv.Address))
 }
 

@@ -128,7 +128,7 @@ func (p *nodeEventPolicy) hostDownCalls() []string {
 // hostConnPools itself, or the short-circuit makes the call unobservable; see
 // TestNodeEvents/RemoveHost in node_events_test.go.
 type nodeEventFixture struct {
-	session   *Session
+	session   *Core
 	policy    *nodeEventPolicy
 	refreshes chan struct{}
 }
@@ -139,8 +139,8 @@ func newNodeEventFixture(t *testing.T, opts ...func(*InternalClusterSettings)) *
 	policy := &nodeEventPolicy{}
 	refreshes := make(chan struct{}, 16)
 
-	s := func() *Session {
-		opaqueStorageValue := new(Session)
+	s := func() *Core {
+		opaqueStorageValue := new(Core)
 		SessionData(opaqueStorageValue).InternalPolicy = policy
 		SessionData(opaqueStorageValue).InternalLogger = &logging.InternalTestLogger{}
 		return opaqueStorageValue

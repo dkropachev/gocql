@@ -35,7 +35,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
-func batchTestQuery(t testing.TB, s *implCluster.Session) *Query[[]byte, EmptyRecord] {
+func batchTestQuery(t testing.TB, s *implCluster.Core) *Query[[]byte, EmptyRecord] {
 	t.Helper()
 	typ := cqltype.BlobType
 	q, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, OptionValues{})
@@ -69,7 +69,7 @@ func batchTestServe(t testing.TB, server net.Conn) (byte, []byte) {
 
 // batchBenchSession returns a session whose one connection answers every
 // request with a void result.
-func batchBenchSession(b testing.TB) *implCluster.Session {
+func batchBenchSession(b testing.TB) *implCluster.Core {
 	s, _, peers := runtimeTestSession(b, 1)
 	go func() {
 		var header [9]byte

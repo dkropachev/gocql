@@ -30,7 +30,7 @@ type Batch struct {
 	entries []batchEntry
 	// values holds the encoded values of every entry back to back.
 	values  []byte
-	session *implCluster.Session
+	session *implCluster.Core
 	// The latest execution: one sent through a query is tracked by the
 	// query's generation, one sent without by its owner.
 	lastQuery *queryState
@@ -128,7 +128,7 @@ func (b *Batch) requestRouting() RoutingInfo {
 }
 
 // validate checks that batch can be sent as kind with options on s.
-func validateBatch(s *implCluster.Session, kind BatchKind, batch *Batch, options Options) error {
+func validateBatch(s *implCluster.Core, kind BatchKind, batch *Batch, options Options) error {
 	if batch == nil {
 		return typeValidation("batch", "nil batch")
 	}
@@ -152,7 +152,7 @@ func validateBatch(s *implCluster.Session, kind BatchKind, batch *Batch, options
 
 // add appends one statement whose encoded values are values. request carries
 // the statement, its source and its routing.
-func (b *Batch) add(s *implCluster.Session, source statementSource, statement string, r *RoutingInfo, values encodedValues) error {
+func (b *Batch) add(s *implCluster.Core, source statementSource, statement string, r *RoutingInfo, values encodedValues) error {
 	if b == nil {
 		return typeValidation("batch", "nil batch")
 	}
@@ -208,7 +208,7 @@ func (b *Batch) add(s *implCluster.Session, source statementSource, statement st
 }
 
 // InternalAddBound appends bound's statement and values to batch.
-func InternalAddBound[R any](batch *Batch, s *implCluster.Session, bound *Bound[R]) error {
+func InternalAddBound[R any](batch *Batch, s *implCluster.Core, bound *Bound[R]) error {
 	if bound == nil || bound.privateStorage.InternalRequest.InternalOwner == nil {
 		return typeValidation("batch item", "nil binding")
 	}
@@ -225,7 +225,7 @@ func InternalAddBound[R any](batch *Batch, s *implCluster.Session, bound *Bound[
 
 // runBatch sends batch on s without a query and returns its first and
 // only page.
-func runBatch[R any](ctx context.Context, s *implCluster.Session, kind BatchKind, batch *Batch, decoder RowDecoder[R], options Options) (*Page[R], error) {
+func runBatch[R any](ctx context.Context, s *implCluster.Core, kind BatchKind, batch *Batch, decoder RowDecoder[R], options Options) (*Page[R], error) {
 	if err := validateBatch(s, kind, batch, options); err != nil {
 		return nil, err
 	}
@@ -254,7 +254,7 @@ func (b *Batch) queryExec(dst *InternalExecutionRequest, q *queryState, kind Bat
 
 // execBatch sends batch on s and drains its result, which must have no
 // columns.
-func execBatch(ctx context.Context, s *implCluster.Session, kind BatchKind, batch *Batch, options Options) (Result, error) {
+func execBatch(ctx context.Context, s *implCluster.Core, kind BatchKind, batch *Batch, options Options) (Result, error) {
 	page, err := runBatch(ctx, s, kind, batch, InternalExecRowsDecoder{}, options)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
@@ -271,12 +271,12 @@ func execBatch(ctx context.Context, s *implCluster.Session, kind BatchKind, batc
 
 // InternalRunBatch sends batch on s; tests use it to run batches built from
 // bindings.
-func InternalRunBatch[R any](ctx context.Context, s *implCluster.Session, kind BatchKind, batch *Batch, decoder RowDecoder[R], options Options) (*Page[R], error) {
+func InternalRunBatch[R any](ctx context.Context, s *implCluster.Core, kind BatchKind, batch *Batch, decoder RowDecoder[R], options Options) (*Page[R], error) {
 	return runBatch(ctx, s, kind, batch, decoder, options)
 }
 
 // InternalExecBatch sends batch on s and drains its result.
-func InternalExecBatch(ctx context.Context, s *implCluster.Session, kind BatchKind, batch *Batch, options Options) (Result, error) {
+func InternalExecBatch(ctx context.Context, s *implCluster.Core, kind BatchKind, batch *Batch, options Options) (Result, error) {
 	return execBatch(ctx, s, kind, batch, options)
 }
 

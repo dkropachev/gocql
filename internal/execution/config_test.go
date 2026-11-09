@@ -101,8 +101,8 @@ func TestConfig(t *testing.T) {
 			if err := settings.InternalValidateConfig(c); err != nil {
 				t.Fatal(err)
 			}
-			s := func() *cluster.Session {
-				opaqueStorageValue := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValue := new(cluster.Core)
 				return opaqueStorageValue
 			}()
 
@@ -232,8 +232,8 @@ func TestConfig(t *testing.T) {
 			profile.Retry = retry.Safe{MaxAttempts: 7}
 			profile.PageSize = 23
 			config.DefaultProfile = &profile
-			s := func() *cluster.Session {
-				opaqueStorageValue := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValue := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValue).InternalCfg = *cluster.InternalNewClusterSettings()
 				implCluster.SessionData(opaqueStorageValue).InternalTypedState = &InternalSessionRuntime{InternalProfile: config.DefaultProfile, InternalConfig: config}
 				return opaqueStorageValue

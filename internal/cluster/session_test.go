@@ -50,8 +50,8 @@ import (
 
 func TestSession(t *testing.T) {
 	t.Run("EventBus", func(t *testing.T) {
-		s := func() *Session {
-			opaqueStorageValue := new(Session)
+		s := func() *Core {
+			opaqueStorageValue := new(Core)
 			SessionData(opaqueStorageValue).InternalEventBus = eventbus.New[events.Event](eventbus.EventBusConfig{
 				InputEventsQueueSize: 1,
 			}, nil)
@@ -95,8 +95,8 @@ func TestSession(t *testing.T) {
 	t.Run("GetHostPoolByID", func(t *testing.T) {
 		t.Parallel()
 
-		session := func() *Session {
-			opaqueStorageValuexxxxxx := new(Session)
+		session := func() *Core {
+			opaqueStorageValuexxxxxx := new(Core)
 			SessionData(opaqueStorageValuexxxxxx).InternalLogger = &logging.InternalTestLogger{}
 			return opaqueStorageValuexxxxxx
 		}()
@@ -153,8 +153,8 @@ func TestSession(t *testing.T) {
 
 		newPool := func(t *testing.T, ips ...string) *implPool.InternalPolicyConnPool {
 			t.Helper()
-			session := func() *Session {
-				opaqueStorageValuexxxxx := new(Session)
+			session := func() *Core {
+				opaqueStorageValuexxxxx := new(Core)
 				SessionData(opaqueStorageValuexxxxx).InternalLogger = &logging.InternalTestLogger{}
 				return opaqueStorageValuexxxxx
 			}()
@@ -243,8 +243,8 @@ func TestSession(t *testing.T) {
 	})
 
 	t.Run("Metrics", func(t *testing.T) {
-		s := func() *Session {
-			opaqueStorageValuexx := new(Session)
+		s := func() *Core {
+			opaqueStorageValuexx := new(Core)
 			return opaqueStorageValuexx
 		}()
 
@@ -338,7 +338,7 @@ func TestSession(t *testing.T) {
 					typed.Pool.ConnectionsPerShard = tc.shard
 					cfg := InternalNewClusterSettings("127.0.0.1")
 					var captured *Config
-					s, err := newSessionCommonWithRuntime(*cfg, &typed, func(s *Session, c Config) *Config {
+					s, err := newSessionCommonWithRuntime(*cfg, &typed, func(s *Core, c Config) *Config {
 						if s.privateStorage.InternalPool != nil || s.privateStorage.InternalEventBus != nil || s.privateStorage.InternalMetadataDescriber != nil {
 							t.Fatal("typed settings attached after coordinator publication")
 						}
@@ -392,8 +392,8 @@ func TestSession(t *testing.T) {
 	})
 
 	t.Run("ObserveLifecycle", func(t *testing.T) {
-		s := func() *Session {
-			opaqueStorageValuex := new(Session)
+		s := func() *Core {
+			opaqueStorageValuex := new(Core)
 			return opaqueStorageValuex
 		}()
 
@@ -459,8 +459,8 @@ func TestSession(t *testing.T) {
 	})
 
 	t.Run("PublishMetadata", func(t *testing.T) {
-		s := func() *Session {
-			opaqueStorageValue := new(Session)
+		s := func() *Core {
+			opaqueStorageValue := new(Core)
 			return opaqueStorageValue
 		}()
 
@@ -555,7 +555,7 @@ func TestSession(t *testing.T) {
 				}.newServer(t, ctx)
 				defer srv.Stop()
 
-				sessions := make([]*Session, 0, tt.sessionCount)
+				sessions := make([]*Core, 0, tt.sessionCount)
 				for i := 0; i < tt.sessionCount; i++ {
 					cluster := testCluster(implProtocol.ProtoVersion3, srv.Address)
 					cluster.NumConns = connsPerSession

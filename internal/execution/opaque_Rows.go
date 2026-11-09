@@ -22,7 +22,7 @@ type RowsStorage[R any] struct {
 	plans           *InternalResultPlanCache[R]
 	future          *InternalPageFuture
 	cancel          context.CancelFunc
-	session         *implCluster.Session
+	session         *implCluster.Core
 	InternalRequest *InternalExecutionRequest
 	InternalPage    *Page[R]
 	InternalRelease func()

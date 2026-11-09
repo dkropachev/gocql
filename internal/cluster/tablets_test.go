@@ -38,8 +38,8 @@ import (
 
 func TestTablets(t *testing.T) {
 	t.Run("Feedback", func(t *testing.T) {
-		s := func() *Session {
-			opaqueStorageValuexxx := new(Session)
+		s := func() *Core {
+			opaqueStorageValuexxx := new(Core)
 			return opaqueStorageValuexxx
 		}()
 		SessionData(s).InternalMetadataDescriber = InternalNewMetadataDescriber(s)

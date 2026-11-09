@@ -390,8 +390,8 @@ func TestHostSelectionPolicy(t *testing.T) {
 			t.Parallel()
 
 			replicas, _, labels := busyHosts(t, []bool{false, false, false, false})
-			session := func() *Session {
-				opaqueStorageValuex := new(Session)
+			session := func() *Core {
+				opaqueStorageValuex := new(Core)
 				SessionData(opaqueStorageValuex).InternalPool = &pool.InternalPolicyConnPool{InternalHostConnPools: map[cqltype.UUID]*pool.InternalHostConnPool{}}
 				return opaqueStorageValuex
 			}()
@@ -611,8 +611,8 @@ func TestHostSelectionPolicy(t *testing.T) {
 			t.Fatal("nonLocalReplicasFallback is false")
 		}
 
-		policy.Init(func() *Session {
-			opaqueStorageValuexxx := new(Session)
+		policy.Init(func() *Core {
+			opaqueStorageValuexxx := new(Core)
 			SessionData(opaqueStorageValuexxx).InternalLogger = &logging.InternalDefaultLogger{}
 			return opaqueStorageValuexxx
 		}())

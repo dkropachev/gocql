@@ -467,7 +467,7 @@ func (p *ClientRoutesHandler) routeMatches(route InternalClientRoute, epochs Int
 	i := entry.routeIndex(route.InternalConnectionID)
 	return i >= 0 && entry.InternalAllRoutes[i] == route
 }
-func (s *Session) dialV2Routes(ctx context.Context, host *HostInfo, cfg *ConnConfig, handler ConnErrorHandler) (*Conn, error) {
+func (s *Core) dialV2Routes(ctx context.Context, host *HostInfo, cfg *ConnConfig, handler ConnErrorHandler) (*Conn, error) {
 	p := s.privateStorage.InternalClientRoutesHandler
 	var causes []error
 	epochs := p.captureHostRouteEpochs(host.HostID())

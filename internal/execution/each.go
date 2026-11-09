@@ -28,13 +28,13 @@ var errStopEach = errors.New("gocql: stop iteration")
 // response storage released before Each returns, so there is no iterator to
 // close or wait for. Values that borrow response storage are valid only until
 // fn returns. A non-nil error from fn stops the iteration and is returned.
-func RunEach[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], options Options, dst *R, fn func(*R) error) (Result, error) {
+func RunEach[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options Options, dst *R, fn func(*R) error) (Result, error) {
 	_, result, err := each(ctx, s, b, options, dst, fn, new(eachScratch))
 	return result, err
 }
 
 // each runs RunEach, or RunOne when fn is nil.
-func each[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], options Options, dst *R, fn func(*R) error, scratch *eachScratch) (bool, Result, error) {
+func each[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options Options, dst *R, fn func(*R) error, scratch *eachScratch) (bool, Result, error) {
 	if b == nil {
 		return false, Result{}, typeValidation("binding", "nil binding")
 	}
@@ -53,7 +53,7 @@ func each[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], optio
 	return found, result, err
 }
 
-func eachPage[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], request *InternalExecutionRequest, dst *R, fn func(*R) error, scratch *eachScratch) (bool, Result, error) {
+func eachPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], request *InternalExecutionRequest, dst *R, fn func(*R) error, scratch *eachScratch) (bool, Result, error) {
 	rt := InternalRuntimeFor(s)
 	plans := b.privateStorage.plans
 	if plans == nil {
@@ -106,7 +106,7 @@ func eachPage[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], r
 
 // decodeEach decodes one page, calling fn after each row; a nil fn stops after
 // the first row with errStopEach. The caller releases the response.
-func decodeEach[R any](ctx context.Context, s *implCluster.Session, response *responsePage, decoder RowDecoder[R], plans *InternalResultPlanCache[R], dst *R, fn func(*R) error, scratch *eachScratch) error {
+func decodeEach[R any](ctx context.Context, s *implCluster.Core, response *responsePage, decoder RowDecoder[R], plans *InternalResultPlanCache[R], dst *R, fn func(*R) error, scratch *eachScratch) error {
 	plan, err := plans.InternalSelectPlan(response, decoder)
 	if err != nil {
 		return err
@@ -151,7 +151,7 @@ func decodeEach[R any](ctx context.Context, s *implCluster.Session, response *re
 // reporting whether a row existed. Further rows are ignored, as with
 // database/sql's QueryRow. Values that borrow response storage are invalid
 // once RunOne returns; use owning codecs for them.
-func RunOne[R any](ctx context.Context, s *implCluster.Session, b *Bound[R], options Options, dst *R) (bool, Result, error) {
+func RunOne[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options Options, dst *R) (bool, Result, error) {
 	found, result, err := each(ctx, s, b, options, dst, nil, new(eachScratch))
 	if !found && err == nil {
 		InternalClearDestination(dst)
@@ -169,7 +169,7 @@ func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) err
 	}
 	defer q.state.owner.InternalRelease()
 	var err error
-	_, q.last, err = each(ctx, q.state.runtime.Session, &q.bound, q.options, dst, fn, &q.scratch)
+	_, q.last, err = each(ctx, q.state.runtime.Core, &q.bound, q.options, dst, fn, &q.scratch)
 	return err
 }
 
@@ -182,7 +182,7 @@ func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, error) {
 		return false, err
 	}
 	defer q.state.owner.InternalRelease()
-	found, result, err := each(ctx, q.state.runtime.Session, &q.bound, q.options, dst, nil, &q.scratch)
+	found, result, err := each(ctx, q.state.runtime.Core, &q.bound, q.options, dst, nil, &q.scratch)
 	q.last = result
 	if !found && err == nil {
 		InternalClearDestination(dst)

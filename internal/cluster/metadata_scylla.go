@@ -24,7 +24,7 @@ type Metadata struct {
 type InternalMetadataDescriber struct {
 	keyspaceGroup    singleflight.Group
 	tableGroup       singleflight.Group
-	InternalSession  *Session
+	InternalSession  *Core
 	InternalMetadata *Metadata
 
 	// mu serialises refreshAllSchema calls so the snapshot-compare-refresh
@@ -38,7 +38,7 @@ type InternalMetadataDescriber struct {
 
 // creates a session bound schema describer which will query and cache
 // keyspace metadata and tablets metadata
-func InternalNewMetadataDescriber(session *Session) *InternalMetadataDescriber {
+func InternalNewMetadataDescriber(session *Core) *InternalMetadataDescriber {
 	return &InternalMetadataDescriber{
 		InternalSession: session,
 		InternalMetadata: func() *Metadata {
@@ -310,48 +310,48 @@ func (s *InternalMetadataDescriber) InternalRefreshTableSchema(keyspaceName, tab
 	return nil
 }
 
-func InternalGetKeyspaceMetadata(s *Session, keyspace string) (*KeyspaceMetadata, error) {
+func InternalGetKeyspaceMetadata(s *Core, keyspace string) (*KeyspaceMetadata, error) {
 	return getV2KeyspaceMetadata(v2SchemaContext(InternalNewSchemaSource(s)), InternalNewSchemaSource(s), keyspace)
 }
-func InternalGetTableMetadata(s *Session, keyspace string) ([]TableMetadata, error) {
+func InternalGetTableMetadata(s *Core, keyspace string) ([]TableMetadata, error) {
 	return getV2TableMetadata(v2SchemaContext(InternalNewSchemaSource(s)), InternalNewSchemaSource(s), keyspace, "")
 }
-func InternalGetTableMetadataByName(s *Session, keyspace, table string) ([]TableMetadata, error) {
+func InternalGetTableMetadataByName(s *Core, keyspace, table string) ([]TableMetadata, error) {
 	return getV2TableMetadata(v2SchemaContext(InternalNewSchemaSource(s)), InternalNewSchemaSource(s), keyspace, table)
 }
-func InternalGetColumnMetadata(s *Session, keyspace string) ([]ColumnMetadata, error) {
+func InternalGetColumnMetadata(s *Core, keyspace string) ([]ColumnMetadata, error) {
 	return getV2ColumnMetadata(v2SchemaContext(InternalNewSchemaSource(s)), InternalNewSchemaSource(s), keyspace, "")
 }
-func InternalGetColumnMetadataByTable(s *Session, keyspace, table string) ([]ColumnMetadata, error) {
+func InternalGetColumnMetadataByTable(s *Core, keyspace, table string) ([]ColumnMetadata, error) {
 	return getV2ColumnMetadata(v2SchemaContext(InternalNewSchemaSource(s)), InternalNewSchemaSource(s), keyspace, table)
 }
-func InternalGetIndexMetadata(s *Session, keyspace string) ([]IndexMetadata, error) {
+func InternalGetIndexMetadata(s *Core, keyspace string) ([]IndexMetadata, error) {
 	return getV2IndexMetadata(v2SchemaContext(InternalNewSchemaSource(s)), InternalNewSchemaSource(s), keyspace, "")
 }
-func InternalGetIndexMetadataByTable(s *Session, keyspace, table string) ([]IndexMetadata, error) {
+func InternalGetIndexMetadataByTable(s *Core, keyspace, table string) ([]IndexMetadata, error) {
 	return getV2IndexMetadata(v2SchemaContext(InternalNewSchemaSource(s)), InternalNewSchemaSource(s), keyspace, table)
 }
-func InternalGetViewMetadata(s *Session, keyspace string) ([]ViewMetadata, error) {
+func InternalGetViewMetadata(s *Core, keyspace string) ([]ViewMetadata, error) {
 	return getV2ViewMetadata(v2SchemaContext(InternalNewSchemaSource(s)), InternalNewSchemaSource(s), keyspace, "")
 }
-func InternalGetViewMetadataByTable(s *Session, keyspace, table string) ([]ViewMetadata, error) {
+func InternalGetViewMetadataByTable(s *Core, keyspace, table string) ([]ViewMetadata, error) {
 	return getV2ViewMetadata(v2SchemaContext(InternalNewSchemaSource(s)), InternalNewSchemaSource(s), keyspace, table)
 }
-func InternalGetTypeMetadata(s *Session, keyspace string) ([]TypeMetadata, error) {
+func InternalGetTypeMetadata(s *Core, keyspace string) ([]TypeMetadata, error) {
 	return queryV2SchemaRows(v2SchemaContext(InternalNewSchemaSource(s)), InternalNewSchemaSource(s), `SELECT * FROM system_schema.types WHERE keyspace_name = ?`, []string{keyspace}, v2DecodeTypeMetadata(keyspace))
 }
-func InternalGetFunctionsMetadata(s *Session, keyspace string) ([]FunctionMetadata, error) {
+func InternalGetFunctionsMetadata(s *Core, keyspace string) ([]FunctionMetadata, error) {
 	if !s.privateStorage.InternalHasAggregatesAndFunctions {
 		return nil, nil
 	}
 	return queryV2SchemaRows(v2SchemaContext(InternalNewSchemaSource(s)), InternalNewSchemaSource(s), `SELECT * FROM system_schema.functions WHERE keyspace_name = ?`, []string{keyspace}, v2DecodeFunctionMetadata(keyspace))
 }
-func InternalGetAggregatesMetadata(s *Session, keyspace string) ([]AggregateMetadata, error) {
+func InternalGetAggregatesMetadata(s *Core, keyspace string) ([]AggregateMetadata, error) {
 	if !s.privateStorage.InternalHasAggregatesAndFunctions {
 		return nil, nil
 	}
 	return queryV2SchemaRows(v2SchemaContext(InternalNewSchemaSource(s)), InternalNewSchemaSource(s), `SELECT * FROM system_schema.aggregates WHERE keyspace_name = ?`, []string{keyspace}, v2DecodeAggregateMetadata(keyspace))
 }
-func InternalGetCreateStatements(s *Session, keyspace string) ([]byte, error) {
+func InternalGetCreateStatements(s *Core, keyspace string) ([]byte, error) {
 	return getV2CreateStatements(v2SchemaContext(InternalNewSchemaSource(s)), InternalNewSchemaSource(s), keyspace)
 }

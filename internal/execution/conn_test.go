@@ -88,7 +88,7 @@ func testCluster(proto frm.ProtoVersion, addresses ...string) *implCluster.Inter
 // a pool is filled asynchronously, so a test making a claim about every
 // connection of a session has to wait for them rather than assert on whichever
 // ones it happened to observe.
-func waitForPoolSize(session *implCluster.Session, want int, timeout time.Duration) error {
+func waitForPoolSize(session *implCluster.Core, want int, timeout time.Duration) error {
 	deadline := time.After(timeout)
 	for {
 		if got := implCluster.SessionData(session).InternalPool.Size(); got >= want {
@@ -119,7 +119,7 @@ func createTestSslCluster(addr string, proto frm.ProtoVersion, useClientCert boo
 	return cluster
 }
 
-func newTestSession(proto frm.ProtoVersion, addresses ...string) (*implCluster.Session, error) {
+func newTestSession(proto frm.ProtoVersion, addresses ...string) (*implCluster.Core, error) {
 	return implCluster.InternalClusterSettingsOpen(testCluster(proto, addresses...))
 }
 
@@ -560,7 +560,7 @@ func (srv *TestServer) port() int {
 	return srv.listen.Addr().(*net.TCPAddr).Port
 }
 
-func (srv *TestServer) session() (*implCluster.Session, error) {
+func (srv *TestServer) session() (*implCluster.Core, error) {
 	return implCluster.InternalClusterSettingsOpen(testCluster(frm.ProtoVersion(srv.protocol), srv.Address))
 }
 
@@ -2371,8 +2371,8 @@ func TestConn(t *testing.T) {
 
 			// Only the fields the failing reconnect reaches. With no hosts and no contact
 			// points it fails in resolveInitialEndpoints, well before refreshRingNow.
-			sess := func() *implCluster.Session {
-				opaqueStorageValue := new(implCluster.Session)
+			sess := func() *implCluster.Core {
+				opaqueStorageValue := new(implCluster.Core)
 				implCluster.SessionData(opaqueStorageValue).InternalLogger = log
 				implCluster.SessionData(opaqueStorageValue).InternalConnCfg = &transport.ConnConfig{}
 				return opaqueStorageValue

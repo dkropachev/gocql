@@ -10,7 +10,7 @@ import (
 // refreshAllSchemaSession returns a session whose schema mock knows ks1 with
 // tables t1 and t2, and ks2 with t3; all three are loaded into the cache and
 // have tablets.
-func refreshAllSchemaSession(t *testing.T) (*cluster.Session, *schemaDataMock) {
+func refreshAllSchemaSession(t *testing.T) (*cluster.Core, *schemaDataMock) {
 	t.Helper()
 
 	col := func(name string) []columnInfo { return []columnInfo{{name: name, kind: "partition_key"}} }

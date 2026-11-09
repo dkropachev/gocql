@@ -35,7 +35,7 @@ var noOptionValues OptionValues
 // resolved again on each execution, unless they name their own profile. The
 // custom payload and the profile are copied, so later changes to values do
 // not reach the Options.
-func NewOptions(session *implCluster.Session, values OptionValues) (Options, error) {
+func NewOptions(session *implCluster.Core, values OptionValues) (Options, error) {
 	values, err := cloneQueryOptions(values)
 	if err != nil {
 		return Options{}, err
@@ -114,7 +114,7 @@ func (o Options) resolveFixed(rt *InternalSessionRuntime) *InternalResolvedOptio
 }
 
 // InternalResolveFor returns o resolved for session s.
-func InternalResolveFor(s *implCluster.Session, o Options) InternalResolvedOptions {
+func InternalResolveFor(s *implCluster.Core, o Options) InternalResolvedOptions {
 	var scratch InternalResolvedOptions
 	return *o.resolve(InternalRuntimeFor(s), &scratch)
 }

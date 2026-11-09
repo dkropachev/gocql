@@ -47,8 +47,8 @@ import (
 func TestPrepared(t *testing.T) {
 	t.Run("Conflict", func(t *testing.T) {
 		t.Run("OverflowPropagatesAndRetries", func(t *testing.T) {
-			s := func() *cluster.Session {
-				opaqueStorageValue := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValue := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValue).InternalLogger = logging.InternalNopLogger{}
 				return opaqueStorageValue
 			}()
@@ -136,8 +136,8 @@ func TestPrepared(t *testing.T) {
 		})
 
 		t.Run("RescheduleAfterReconciliation", func(t *testing.T) {
-			s := func() *cluster.Session {
-				opaqueStorageValuex := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValuex := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuex).InternalLogger = logging.InternalNopLogger{}
 				return opaqueStorageValuex
 			}()
@@ -503,8 +503,8 @@ func TestPrepared(t *testing.T) {
 		})
 
 		t.Run("ConflictingHostsCoalesce", func(t *testing.T) {
-			s := func() *cluster.Session {
-				opaqueStorageValuexxxxxxxxxx := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValuexxxxxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxxx).InternalLogger = logging.InternalNopLogger{}
 				return opaqueStorageValuexxxxxxxxxx
 			}()
@@ -684,8 +684,8 @@ func TestPrepared(t *testing.T) {
 		})
 
 		t.Run("DependencyTypesAndSnapshotChanges", func(t *testing.T) {
-			s := func() *cluster.Session {
-				opaqueStorageValuexx := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValuexx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexx).InternalLogger = logging.InternalNopLogger{}
 				return opaqueStorageValuexx
 			}()
@@ -723,8 +723,8 @@ func TestPrepared(t *testing.T) {
 		})
 
 		t.Run("IntroducesUDTDependency", func(t *testing.T) {
-			s := func() *cluster.Session {
-				opaqueStorageValuexxx := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValuexxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxx).InternalLogger = logging.InternalNopLogger{}
 				return opaqueStorageValuexxx
 			}()
@@ -747,8 +747,8 @@ func TestPrepared(t *testing.T) {
 		})
 
 		t.Run("RetainedAcrossSchemaChange", func(t *testing.T) {
-			s := func() *cluster.Session {
-				opaqueStorageValue := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValue := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValue).InternalLogger = logging.InternalNopLogger{}
 				return opaqueStorageValue
 			}()
@@ -780,8 +780,8 @@ func TestPrepared(t *testing.T) {
 
 	t.Run("Publication", func(t *testing.T) {
 		t.Run("ExactEntryEpochAndOpaqueIDs", func(t *testing.T) {
-			s := func() *cluster.Session {
-				opaqueStorageValuex := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValuex := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuex).InternalLogger = logging.InternalNopLogger{}
 				return opaqueStorageValuex
 			}()
@@ -855,8 +855,8 @@ func TestPrepared(t *testing.T) {
 		})
 
 		t.Run("NewDependencyEventFences", func(t *testing.T) {
-			s := func() *cluster.Session {
-				opaqueStorageValuexxxx := new(cluster.Session)
+			s := func() *cluster.Core {
+				opaqueStorageValuexxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxx).InternalLogger = logging.InternalNopLogger{}
 				return opaqueStorageValuexxxx
 			}()

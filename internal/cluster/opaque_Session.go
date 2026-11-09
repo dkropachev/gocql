@@ -84,4 +84,4 @@ type SessionStorage struct {
 	InternalIsClosed                  bool
 }
 
-func SessionData(v *Session) *SessionStorage { return &v.privateStorage }
+func SessionData(v *Core) *SessionStorage { return &v.privateStorage }
