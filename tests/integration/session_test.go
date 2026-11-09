@@ -791,7 +791,7 @@ func TestSession(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected unsupported protocol error")
 			}
-			require.Contains(t, err.Error(), "protocol")
+			require.Contains(t, err.Error(), "WithProtocolVersion")
 		})
 		t.Run("TLSTicketResumption", func(t *testing.T) {
 			t.Parallel()
@@ -1195,7 +1195,21 @@ func TestSession(t *testing.T) {
 			}
 			for _, tcase := range tcases {
 				t.Run(tcase.testName, func(t *testing.T) {
-					cluster := createV2Cluster().WithApplication(tcase.name, tcase.version).WithClientID(tcase.clientID)
+					// Unset identity fields leave the setters uncalled; the
+					// builder rejects an empty name or client id.
+					cluster := createV2Cluster()
+					if tcase.name != "" || tcase.version != "" {
+						cluster = cluster.WithApplication(tcase.name, tcase.version)
+					}
+					if tcase.clientID != "" {
+						cluster = cluster.WithClientID(tcase.clientID)
+					}
+					if tcase.name == "" && tcase.version != "" {
+						if _, err := cluster.Build(); err == nil {
+							t.Fatal("application version without a name accepted")
+						}
+						return
+					}
 					s, err := gocql.Connect(context.Background(), mustBuild(t, cluster))
 					if err != nil {
 						t.Fatalf("failed to connect to the cluster: %s", err)
