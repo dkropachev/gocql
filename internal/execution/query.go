@@ -101,8 +101,9 @@ func (q *Query[P, R]) LastResult() Result {
 	return cloneResult(q.last)
 }
 
-// newQueryState sets up state for session. A query of a pool is tracked by
-// the pool, not by the session runtime.
+// newQueryState sets up state for session. A query of a pool is not tracked
+// by the session runtime: the runtime counts busy pooled queries instead,
+// and the pool hands its idle ones to Close.
 func newQueryState(s *implCluster.Core, state *queryState, retire func(), pool *queryPoolBase) error {
 	if s == nil {
 		return typeValidation("query", "nil session")
@@ -119,7 +120,7 @@ func newQueryState(s *implCluster.Core, state *queryState, retire func(), pool *
 	state.retire = retire
 	state.owner.onIdle = state.idle
 	if pool != nil {
-		return pool.adopt(state)
+		return nil
 	}
 	state.runtime.InternalMu.Lock()
 	if state.runtime.queries == nil {
@@ -237,6 +238,10 @@ func (s *queryState) idle() {
 	}
 	closed := s.closed
 	s.mu.Unlock()
+	if s.perCall {
+		s.runtime.pooledIdle()
+		return
+	}
 	if closed {
 		s.runtime.InternalMu.Lock()
 		delete(s.runtime.queries, s)
@@ -266,6 +271,15 @@ func (s *queryState) begin(ctx context.Context) error {
 	s.busy = true
 	s.generation.Add(1)
 	s.mu.Unlock()
+	if s.perCall {
+		// Close waits until no pooled query is busy. Counting before the
+		// closed check means Close either sees this query or this sees Close.
+		s.runtime.pooledBusy.Add(1)
+		if s.runtime.Core.Closed() {
+			s.idle()
+			return ErrClosed
+		}
+	}
 	// Never acquire owner.mu while holding state.mu: the final release calls idle.
 	if err := s.owner.InternalAdmit(); err != nil {
 		s.idle()
@@ -460,7 +474,7 @@ func (s *queryState) stop() *InternalLogicalExecution {
 	busy := s.busy
 	s.mu.Unlock()
 	s.owner.InternalClose()
-	if !busy {
+	if !busy && !s.perCall {
 		s.runtime.InternalMu.Lock()
 		delete(s.runtime.queries, s)
 		s.runtime.InternalMu.Unlock()

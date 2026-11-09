@@ -165,6 +165,11 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 			case <-ctx.Done():
 				timer.Stop()
 				return failure(ctx.Err())
+			case <-s.sessionDone():
+				// No attempt is in flight during the delay, so a closing
+				// session ends the execution here.
+				timer.Stop()
+				return failure(ErrClosed)
 			case <-timer.C:
 			}
 		}

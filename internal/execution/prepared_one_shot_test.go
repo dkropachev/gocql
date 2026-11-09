@@ -9,14 +9,17 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/retry"
 )
 
 func TestPreparedOneShot(t *testing.T) {
@@ -242,8 +245,8 @@ func TestPreparedOneShot(t *testing.T) {
 			for range burst {
 				pending = append(pending, <-requests)
 			}
-			if n := InternalPreparedPoolTracked(p); n != burst {
-				t.Fatalf("tracked %d queries during the burst, want %d", n, burst)
+			if n := InternalPooledBusy(s); n != burst {
+				t.Fatalf("%d busy pooled queries during the burst, want %d", n, burst)
 			}
 			for _, r := range pending {
 				if _, err := peers[0].Write(typedTestResponse(t, 4, r.stream, runtimeRowsBody(nil, "row"))); err != nil {
@@ -256,8 +259,8 @@ func TestPreparedOneShot(t *testing.T) {
 				}
 			}
 			waitIdle(t, p, 16)
-			if n := InternalPreparedPoolTracked(p); n != 16 {
-				t.Fatalf("tracked %d queries after the burst, want 16", n)
+			if n := InternalPooledBusy(s); n != 0 {
+				t.Fatalf("%d busy pooled queries after the burst, want 0", n)
 			}
 		})
 	})
@@ -289,6 +292,97 @@ func TestPreparedOneShot(t *testing.T) {
 		<-closed
 		if _, err := p.Exec(context.Background(), 2, Options{}); !errors.Is(err, runtimeerrors.ErrClosed) {
 			t.Fatalf("call after close: %v", err)
+		}
+	})
+
+	// TestPreparedOneShot/SessionCloseDuringBackoff checks that closing the
+	// session ends a call waiting out a retry delay, on both execution paths,
+	// and that Close returns only after the call's query is idle.
+	t.Run("SessionCloseDuringBackoff", func(t *testing.T) {
+		for _, general := range []bool{false, true} {
+			t.Run(map[bool]string{false: "Direct", true: "General"}[general], func(t *testing.T) {
+				s, _, peers := runtimeTestSession(t, 1)
+				defer peers[0].Close()
+				requests := make(chan oneShotRequest, 1)
+				p := oneShotPrepare(t, s, peers[0], requests)
+				decided := make(chan struct{}, 1)
+				profile := settings.InternalDefaultProfile()
+				profile.Retry = retry.PolicyFunc(func(retry.Attempt) retry.Decision {
+					decided <- struct{}{}
+					return retry.Decision{Action: retry.Same, Delay: time.Hour}
+				})
+				if general {
+					profile.Speculation = neverSpeculate{}
+				}
+				call := make(chan error, 1)
+				go func() {
+					_, err := p.Exec(context.Background(), 1, testOptions(OptionValues{Profile: &profile}))
+					call <- err
+				}()
+				r := <-requests
+				if _, err := peers[0].Write(serverError(t, r.stream, protocol.ErrCodeUnavailable, unavailableBody())); err != nil {
+					t.Fatal(err)
+				}
+				<-decided
+				closed := make(chan struct{})
+				go func() { s.Close(); close(closed) }()
+				select {
+				case <-closed:
+				case <-time.After(5 * time.Second):
+					t.Fatal("close waited out the retry delay")
+				}
+				if n := InternalPooledBusy(s); n != 0 {
+					t.Fatalf("%d busy pooled queries after close", n)
+				}
+				if err := <-call; !errors.Is(err, runtimeerrors.ErrClosed) {
+					t.Fatalf("call in backoff ended with %v, want ErrClosed", err)
+				}
+			})
+		}
+	})
+
+	// TestPreparedOneShot/SessionCloseWaitsForEach checks that Close returns
+	// only after an Each callback that is running returns.
+	t.Run("SessionCloseWaitsForEach", func(t *testing.T) {
+		s, _, peers := runtimeTestSession(t, 1)
+		defer peers[0].Close()
+		requests := make(chan oneShotRequest, 1)
+		p := oneShotPrepare(t, s, peers[0], requests)
+		entered, release := make(chan struct{}), make(chan struct{})
+		var returned atomic.Bool
+		call := make(chan error, 1)
+		go func() {
+			var dst []byte
+			call <- p.Each(context.Background(), 1, &dst, func(*[]byte) error {
+				close(entered)
+				<-release
+				returned.Store(true)
+				return nil
+			}, Options{})
+		}()
+		r := <-requests
+		if _, err := peers[0].Write(typedTestResponse(t, 4, r.stream, runtimeRowsBody(nil, "row"))); err != nil {
+			t.Fatal(err)
+		}
+		<-entered
+		closed := make(chan struct{})
+		go func() { s.Close(); close(closed) }()
+		select {
+		case <-closed:
+			t.Fatal("close returned while an Each callback ran")
+		case <-time.After(100 * time.Millisecond):
+		}
+		close(release)
+		select {
+		case <-closed:
+		case <-time.After(5 * time.Second):
+			t.Fatal("close did not return after the callback")
+		}
+		if !returned.Load() {
+			t.Fatal("close returned before the callback")
+		}
+		if err := <-call; err != nil {
+			t.Fatal(err)
 		}
 	})
 }

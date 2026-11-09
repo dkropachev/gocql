@@ -51,9 +51,17 @@ type InternalSessionRuntime struct {
 	requestID                                                    atomic.Uint64
 	requests, attempts, errors, retries, speculations, cancelled atomic.Uint64
 	inflight                                                     atomic.Int64
-	prepareWorkersMu                                             sync.Mutex
-	InternalMu                                                   sync.Mutex
-	prepareWorkersClosed                                         bool
+	// pooledBusy counts busy queries of prepared statements' one-shot pools.
+	// Close waits for it to reach zero; pooledWake, guarded by InternalMu,
+	// is the channel it waits on.
+	pooledBusy atomic.Int64
+	pooledWake chan struct{}
+	// closing is closed when Close starts stopping executions.
+	closing              chan struct{}
+	closingOnce          sync.Once
+	prepareWorkersMu     sync.Mutex
+	InternalMu           sync.Mutex
+	prepareWorkersClosed bool
 }
 
 func InternalRuntimeFor(s *implCluster.Core) *InternalSessionRuntime {
@@ -65,7 +73,7 @@ func InternalRuntimeFor(s *implCluster.Core) *InternalSessionRuntime {
 	implCluster.SessionData(s).InternalTypedMu.Lock()
 	defer implCluster.SessionData(s).InternalTypedMu.Unlock()
 	if implCluster.SessionData(s).InternalTypedState == nil {
-		rt := &InternalSessionRuntime{Core: s, InternalPrepared: make(map[InternalPrepareCacheKey]*InternalPreparedState)}
+		rt := &InternalSessionRuntime{Core: s, InternalPrepared: make(map[InternalPrepareCacheKey]*InternalPreparedState), closing: make(chan struct{})}
 		rt.InternalSetProfile(nil)
 		implCluster.SessionData(s).InternalTypedState = rt
 	}
@@ -79,6 +87,11 @@ func InternalRuntimeFor(s *implCluster.Core) *InternalSessionRuntime {
 	implCluster.SessionData(s).InternalTypedReady.Store(rt)
 	return rt
 }
+
+// sessionDone is closed once Close starts stopping executions. Waits that
+// involve no connection, such as retry delays, select on it: closing the
+// connections ends the others, so Close need not cancel each execution.
+func (rt *InternalSessionRuntime) sessionDone() <-chan struct{} { return rt.closing }
 
 func (rt *InternalSessionRuntime) metricsSnapshot() MetricsSnapshot {
 	cache := implCluster.SessionData(rt.Core).InternalConnCfg
@@ -971,6 +984,14 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			return nil, log.error(failure, aggregate)
 		case pending := <-delayed:
 			scheduled--
+			if s.Core.Closed() {
+				// The delay ended early because the session is closing.
+				lastErr = ErrClosed
+				if active == 0 && scheduled == 0 {
+					return nil, log.error(lastErr, aggregate)
+				}
+				continue
+			}
 			if err := launch(pending.conn, pending.consistency, false); err != nil {
 				lastErr = err
 				if active == 0 && scheduled == 0 {
@@ -1058,21 +1079,24 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				}
 				scheduled++
 				request.InternalOwner.InternalRetain()
-				go func(wait time.Duration, next delayedAttempt, ready chan<- delayedAttempt) {
+				go func(wait time.Duration, next delayedAttempt, ready chan<- delayedAttempt, closing <-chan struct{}) {
 					defer request.InternalOwner.InternalRelease()
 					perfAdd(5, 1)
 					timer := time.NewTimer(wait)
 					defer timer.Stop()
+					// A closing session hands the attempt back early; the
+					// loop then ends the execution instead of launching it.
 					select {
 					case <-ctx.Done():
 						return
+					case <-closing:
 					case <-timer.C:
 					}
 					select {
 					case ready <- next:
 					case <-ctx.Done():
 					}
-				}(decision.Delay, delayedAttempt{conn: conn, consistency: consistency}, delayed)
+				}(decision.Delay, delayedAttempt{conn: conn, consistency: consistency}, delayed, s.sessionDone())
 				continue
 			}
 

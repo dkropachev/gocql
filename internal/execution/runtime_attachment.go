@@ -24,6 +24,9 @@ func (d InternalActiveExecutionDrain) Wait() {
 	}
 }
 func (rt *InternalSessionRuntime) StopActive() implCluster.InternalExecutionWaiter {
+	if rt.closing != nil {
+		rt.closingOnce.Do(func() { close(rt.closing) })
+	}
 	rt.InternalMu.Lock()
 	queries := make([]*queryState, 0, len(rt.queries))
 	for q := range rt.queries {
@@ -31,6 +34,8 @@ func (rt *InternalSessionRuntime) StopActive() implCluster.InternalExecutionWait
 	}
 	pools := rt.livePools()
 	rt.InternalMu.Unlock()
+	// Pools hand over their idle queries; their busy ones are counted, and
+	// close themselves when they become idle.
 	for _, pool := range pools {
 		queries = append(queries, pool.close()...)
 	}
@@ -45,10 +50,11 @@ func (rt *InternalSessionRuntime) StopActive() implCluster.InternalExecutionWait
 	for _, l := range active {
 		l.shutdown()
 	}
-	return queryDrain{queries: queries, legacy: InternalActiveExecutionDrain(legacy)}
+	return queryDrain{runtime: rt, queries: queries, legacy: InternalActiveExecutionDrain(legacy)}
 }
 
 type queryDrain struct {
+	runtime *InternalSessionRuntime
 	queries []*queryState
 	legacy  InternalActiveExecutionDrain
 }
@@ -58,6 +64,7 @@ func (d queryDrain) Wait() {
 	for _, q := range d.queries {
 		_ = q.wait(context.Background())
 	}
+	d.runtime.waitPooled()
 }
 func (rt *InternalSessionRuntime) MetricsSnapshot() MetricsSnapshot { return rt.metricsSnapshot() }
 func (rt *InternalSessionRuntime) Profile() *Profile                { return rt.InternalProfile }

@@ -8,59 +8,31 @@ import (
 	"errors"
 	"math/rand/v2"
 	"runtime"
-	"sync"
 	"sync/atomic"
 	"weak"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
-// queryPoolBase is what the session runtime sees of a query pool: every query
-// the pool created, so that closing the session stops them. The runtime
-// refers to it weakly, so a pool nobody uses is collected with its queries.
+// queryPoolBase is what the session runtime sees of a query pool: its idle
+// queries, so that closing the session stops them. The runtime refers to it
+// weakly, so a pool nobody uses is collected with its queries. A query that
+// is running is not tracked here: the session runtime counts busy pooled
+// queries, and Close waits for that count to reach zero.
 type queryPoolBase struct {
-	all    []*queryState
-	mu     sync.Mutex
-	closed atomic.Bool // set under mu
+	// takeIdle empties the pool's slots and returns the queries they held.
+	takeIdle func() []*queryState
+	closed   atomic.Bool
 }
 
-// adopt tracks q, a query the pool is creating.
-func (b *queryPoolBase) adopt(q *queryState) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.closed.Load() {
-		return ErrClosed
-	}
-	b.all = append(b.all, q)
-	return nil
-}
-
-// forget stops tracking q, a query the pool is closing.
-func (b *queryPoolBase) forget(q *queryState) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for i, tracked := range b.all {
-		if tracked == q {
-			last := len(b.all) - 1
-			b.all[i], b.all[last] = b.all[last], nil
-			b.all = b.all[:last]
-			return
-		}
-	}
-}
-
-// close stops the pool from taking or creating queries and returns those it
-// created, for the caller to stop.
+// close stops the pool from taking or creating queries and returns its idle
+// queries, for the caller to stop. Queries running at the time close
+// themselves when they become idle.
 func (b *queryPoolBase) close() []*queryState {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.closed.Load() {
+	if !b.closed.CompareAndSwap(false, true) {
 		return nil
 	}
-	b.closed.Store(true)
-	all := b.all
-	b.all = nil
-	return all
+	return b.takeIdle()
 }
 
 // queryPoolEntry is the session runtime's weak reference to a pool.
@@ -134,6 +106,7 @@ func idleQueryCap() int {
 
 func newQueryPool[P, R any](s *implCluster.Core, newQuery func(*queryPoolBase) (*Query[P, R], error)) (*queryPool[P, R], error) {
 	p := &queryPool[P, R]{base: new(queryPoolBase), slots: make([]atomic.Pointer[Query[P, R]], idleQueryCap()), newQuery: newQuery}
+	p.base.takeIdle = p.takeIdle
 	if err := InternalRuntimeFor(s).registerPool(s, p.base); err != nil {
 		return nil, err
 	}
@@ -170,18 +143,32 @@ func (p *queryPool[P, R]) get() (*Query[P, R], error) {
 
 // put keeps q, which just became idle, or closes it when every slot is full.
 func (p *queryPool[P, R]) put(q *Query[P, R]) {
-	if p.base.closed.Load() {
-		return
-	}
-	n := len(p.slots)
-	for i, start := 0, int(rand.Uint32N(uint32(n))); i < n; i++ {
-		slot := &p.slots[(start+i)%n]
-		if slot.Load() == nil && slot.CompareAndSwap(nil, q) {
-			return
+	if !p.base.closed.Load() {
+		n := len(p.slots)
+		for i, start := 0, int(rand.Uint32N(uint32(n))); i < n; i++ {
+			slot := &p.slots[(start+i)%n]
+			if slot.Load() == nil && slot.CompareAndSwap(nil, q) {
+				// close may have emptied the slots between the check above
+				// and this store; take the query back out if so.
+				if p.base.closed.Load() && slot.CompareAndSwap(q, nil) {
+					break
+				}
+				return
+			}
 		}
 	}
-	p.base.forget(&q.state)
 	q.state.close()
+}
+
+// takeIdle empties the slots and returns the queries they held.
+func (p *queryPool[P, R]) takeIdle() []*queryState {
+	var idle []*queryState
+	for i := range p.slots {
+		if q := p.slots[i].Swap(nil); q != nil {
+			idle = append(idle, &q.state)
+		}
+	}
+	return idle
 }
 
 // capture takes an idle query and captures value into it. On success the
@@ -315,13 +302,39 @@ func InternalPreparedPoolIdle[P, R any](p *Prepared[P, R]) int {
 	return idle
 }
 
-// InternalPreparedPoolTracked reports how many queries p's pool tracks.
-func InternalPreparedPoolTracked[P, R any](p *Prepared[P, R]) int {
-	pool := p.privateStorage.pool
-	if pool == nil {
-		return 0
+// InternalPooledBusy reports how many pooled one-shot queries of s are busy.
+func InternalPooledBusy(s *implCluster.Core) int64 {
+	return InternalRuntimeFor(s).pooledBusy.Load()
+}
+
+// pooledIdle records that a pooled query became idle, waking Close when it
+// was the last busy one.
+func (rt *InternalSessionRuntime) pooledIdle() {
+	if rt.pooledBusy.Add(-1) != 0 || !rt.Core.Closed() {
+		return
 	}
-	pool.base.mu.Lock()
-	defer pool.base.mu.Unlock()
-	return len(pool.base.all)
+	rt.InternalMu.Lock()
+	if rt.pooledWake != nil {
+		close(rt.pooledWake)
+		rt.pooledWake = nil
+	}
+	rt.InternalMu.Unlock()
+}
+
+// waitPooled waits until no pooled query is busy. The session is closed, so
+// busy queries only finish: begin refuses new ones.
+func (rt *InternalSessionRuntime) waitPooled() {
+	for rt.pooledBusy.Load() != 0 {
+		rt.InternalMu.Lock()
+		if rt.pooledWake == nil {
+			rt.pooledWake = make(chan struct{})
+		}
+		wake := rt.pooledWake
+		rt.InternalMu.Unlock()
+		// The last idle may have run before the channel existed.
+		if rt.pooledBusy.Load() == 0 {
+			return
+		}
+		<-wake
+	}
 }
