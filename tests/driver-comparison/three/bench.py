@@ -37,14 +37,15 @@ WARMUP = os.environ.get('GOCQL_THREE_WARMUP', '10s')
 DURATION = os.environ.get('GOCQL_THREE_DURATION', '30s')
 ROUNDS = int(os.environ.get('GOCQL_THREE_ROUNDS', '2'))
 FRACTION = float(os.environ.get('GOCQL_THREE_FRACTION', '0.7'))
-# Families whose open-loop latency is not measured, with the reason. On the
-# reference host, unlogged 32 KiB single-partition batches at any rate the
-# drivers can offer (2,000/s and up) stall the nodes for seconds at a time
-# (commitlog queues, failure-detector RPC timeouts, in-flight hint limits), so
-# their latency measures the host's disk and container network, not the
-# drivers. Their closed-loop maximum is reported, marked cluster-bound.
-SKIP_LATENCY = dict(item.split('=', 1) for item in os.environ.get(
-    'GOCQL_THREE_SKIP_LATENCY', 'E1=cluster-bound: 32 KiB batches stall the nodes at any offered rate').split(';') if item)
+# Families whose latency runs at a fixed rate instead of FRACTION of the
+# lowest maximum. On the reference host, E1's closed-loop maximum is the
+# cluster's: unlogged 32 KiB single-partition batches at 2,000/s and more
+# stall the nodes for seconds (commitlog queues, failure-detector RPC
+# timeouts, in-flight hint limits), so 70 % of it measures the disk and the
+# container network. 1,000/s is sustained by every driver without errors.
+FIXED_RATE = {k: float(v) for k, v in (item.split('=', 1) for item in os.environ.get(
+    'GOCQL_THREE_FIXED_RATE', 'E1=1000').split(';') if item)}
+SKIP_LATENCY = {}
 DRIVERS = ['old', 'v2', 'rust']
 
 # family: (workers, table to reset, {driver: case}, description)
@@ -159,9 +160,14 @@ def family_run(out, family):
         log(f'family {family}: missing throughput results {maxima}; skipping latency')
         return
     rate = round(FRACTION * min(maxima.values()), 1)
-    json.dump({'maxima': maxima, 'fraction': FRACTION, 'rate': rate},
+    if family in FIXED_RATE:
+        rate = FIXED_RATE[family]
+    json.dump({'maxima': maxima, 'fraction': None if family in FIXED_RATE else FRACTION, 'rate': rate},
               open(os.path.join(out, f'rate-{family}.json'), 'w'), indent=2)
-    log(f'family {family}: latency rate {rate}/s = {FRACTION} x min{maxima}')
+    if family in FIXED_RATE:
+        log(f'family {family}: latency rate {rate}/s (fixed: the maximum {maxima} is cluster-bound)')
+    else:
+        log(f'family {family}: latency rate {rate}/s = {FRACTION} x min{maxima}')
     # The latency runs start from the same state as the throughput runs.
     reset(table)
     for r in range(ROUNDS):

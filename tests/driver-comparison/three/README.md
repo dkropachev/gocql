@@ -75,7 +75,9 @@ For each family (`bench.py`):
    node flushes and compactions settle, so no run inherits another's
    background work.
 3. Latency: the same reset, then an open loop at 70 % of the lowest of the
-   three drivers' median maximum throughputs: the same scheduled rate for
+   three drivers' median maximum throughputs (E1 runs at a fixed 1,000/s:
+   its maximum is the cluster's, and on the reference host 2,000/s and more
+   of its 32 KiB batches stall the nodes for seconds): the same scheduled rate for
    all three, so latencies compare at equal offered load. Arrivals are
    evenly scheduled into a bounded queue; latency is measured from each
    arrival's scheduled time, so client queueing counts.
