@@ -51,7 +51,7 @@ type QueryError struct {
 }
 
 func (e *QueryError) IsIdempotent() bool {
-	return QueryErrorData(e).InternalIsIdempotent
+	return QueryErrorData(e).isIdempotent
 }
 
 // PotentiallyExecuted reports that request bytes reached the server.
@@ -100,5 +100,5 @@ type QueryErrorState struct {
 	InternalTimeout             time.Duration
 	InternalInFlight            int
 	InternalPotentiallyExecuted bool
-	InternalIsIdempotent        bool
+	isIdempotent                bool
 }

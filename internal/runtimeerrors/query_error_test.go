@@ -89,8 +89,8 @@ func TestQueryError(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				qErr := NewQueryError(QueryErrorState{
-					InternalErr:          errors.New("test error"),
-					InternalIsIdempotent: tt.isIdempotent,
+					InternalErr:  errors.New("test error"),
+					isIdempotent: tt.isIdempotent,
 				})
 
 				got := qErr.IsIdempotent()
