@@ -50,7 +50,7 @@ type InternalScyllaConnPicker struct {
 	InternalShardAwarePortDisabled     bool
 }
 
-func InternalNewScyllaConnPicker(conn *transport.Conn, logger logging.StdLogger) *InternalScyllaConnPicker {
+func newScyllaConnPicker(conn *transport.Conn, logger logging.StdLogger) *InternalScyllaConnPicker {
 	addr := conn.Address()
 
 	if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards == 0 {
@@ -129,7 +129,7 @@ func (p *InternalScyllaConnPicker) pickInt64Locked(mmt implEndpoint.InternalInt6
 }
 
 func (p *InternalScyllaConnPicker) InternalMaybeReplaceWithLessBusyConnection(c *transport.Conn) *transport.Conn {
-	if !InternalIsHeavyLoaded(c) {
+	if !isHeavyLoaded(c) {
 		return c
 	}
 	alternative := p.InternalLeastBusyConn()
@@ -140,7 +140,7 @@ func (p *InternalScyllaConnPicker) InternalMaybeReplaceWithLessBusyConnection(c 
 	}
 }
 
-func InternalIsHeavyLoaded(c *transport.Conn) bool {
+func isHeavyLoaded(c *transport.Conn) bool {
 	return c.InternalStreams.NumStreams/2 > c.AvailableStreams()
 }
 
@@ -209,9 +209,9 @@ func (p *InternalScyllaConnPicker) Put(conn *transport.Conn) error {
 			p.InternalLogger.Printf(
 				"scylla: connection to shard-aware address %s resulted in wrong shard being assigned; please check that you are not behind a NAT or AddressTranslater which changes source ports; falling back to non-shard-aware port for %v",
 				p.InternalAddress,
-				InternalScyllaShardAwarePortFallbackDuration,
+				scyllaShardAwarePortFallbackDuration,
 			)
-			until := time.Now().Add(InternalScyllaShardAwarePortFallbackDuration)
+			until := time.Now().Add(scyllaShardAwarePortFallbackDuration)
 			p.InternalDisableShardAwarePortUntil.Store(&until)
 
 			return fmt.Errorf("connection landed on %d shard that already has connection", shard)
@@ -268,7 +268,7 @@ func (p *InternalScyllaConnPicker) handleShardCountChange(newConn *transport.Con
 	p.InternalLastAttemptedShard = 0
 
 	if len(toClose) > 0 {
-		go InternalCloseConns(toClose...)
+		go closeConns(toClose...)
 	}
 
 	if debug.Enabled {
@@ -358,7 +358,7 @@ func (p *InternalScyllaConnPicker) Close() {
 		if debug.Enabled {
 			p.InternalLogger.Printf("scylla: %s closing %d connections", p.InternalAddress, len(conns))
 		}
-		go InternalCloseConns(conns...)
+		go closeConns(conns...)
 	} else if debug.Enabled {
 		p.InternalLogger.Printf("scylla: %s no connections to close", p.InternalAddress)
 	}
@@ -367,7 +367,7 @@ func (p *InternalScyllaConnPicker) Close() {
 		if debug.Enabled {
 			p.InternalLogger.Printf("scylla: %s closing %d excess connections", p.InternalAddress, len(excessConns))
 		}
-		go InternalCloseConns(excessConns...)
+		go closeConns(excessConns...)
 	} else if debug.Enabled {
 		p.InternalLogger.Printf("scylla: %s no excess connections to close", p.InternalAddress)
 	}
@@ -389,13 +389,13 @@ func (p *InternalScyllaConnPicker) closeExcessConnsLocked() {
 	if debug.Enabled {
 		p.InternalLogger.Printf("scylla: %s closing %d excess connections", p.InternalAddress, len(conns))
 	}
-	go InternalCloseConns(conns...)
+	go closeConns(conns...)
 }
 
 // closeConns closes a list of connections. Must be called outside of any lock
 // to avoid deadlocks when a connection close triggers HandleError.
 // See scylladb/gocql#53.
-func InternalCloseConns(conns ...*transport.Conn) {
+func closeConns(conns ...*transport.Conn) {
 	for _, conn := range conns {
 		if conn != nil {
 			conn.Close()
@@ -436,4 +436,4 @@ func (p *InternalScyllaConnPicker) NextShard() (shardID, nrShards int) {
 	return 0, 0
 }
 
-const InternalScyllaShardAwarePortFallbackDuration time.Duration = 5 * time.Minute
+const scyllaShardAwarePortFallbackDuration time.Duration = 5 * time.Minute

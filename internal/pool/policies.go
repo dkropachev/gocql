@@ -31,7 +31,7 @@ import (
 	"time"
 )
 
-func InternalGetExponentialTime(min time.Duration, max time.Duration, attempts int) time.Duration {
+func getExponentialTime(min time.Duration, max time.Duration, attempts int) time.Duration {
 	if min <= 0 {
 		min = 100 * time.Millisecond
 	}
@@ -102,7 +102,7 @@ func (e *ExponentialReconnectionPolicy) GetInterval(currentRetry int) time.Durat
 	if max < e.InitialInterval {
 		max = math.MaxInt16 * time.Second
 	}
-	return InternalGetExponentialTime(e.InitialInterval, max, currentRetry)
+	return getExponentialTime(e.InitialInterval, max, currentRetry)
 }
 
 func (e *ExponentialReconnectionPolicy) GetMaxRetries() int {

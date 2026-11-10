@@ -36,12 +36,12 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
-type InternalPoolState uint8
+type poolState uint8
 
 const (
-	InternalPoolInitializing InternalPoolState = iota
+	poolInitializing poolState = iota
 	InternalPoolReady
-	InternalPoolBroken
+	poolBroken
 	InternalPoolClosed
 )
 
@@ -193,7 +193,7 @@ func (p *InternalTypedConnPicker) putMode(c *transport.Conn, expected uint64, ch
 		p.generation++
 	}
 	if c.InternalRequestedShard.Set && uint32(shard) != c.InternalRequestedShard.Value {
-		p.fallbackUntil = time.Now().Add(InternalScyllaShardAwarePortFallbackDuration)
+		p.fallbackUntil = time.Now().Add(scyllaShardAwarePortFallbackDuration)
 		p.retired = append(p.retired, retired...)
 		p.publishLocked()
 		p.InternalMu.Unlock()
@@ -264,7 +264,7 @@ func (p *InternalTypedConnPicker) Close() {
 	p.InternalExcess = nil
 	p.publishLocked()
 	p.InternalMu.Unlock()
-	InternalCloseConns(all...)
+	closeConns(all...)
 }
 func (p *InternalTypedConnPicker) InternalShardOf(token int64) int {
 	z := uint64(token+math.MinInt64) << p.msbIgnore
@@ -487,7 +487,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 	}
 }
 
-func (pool *InternalHostConnPool) InternalTransportState() InternalPoolState {
+func (pool *InternalHostConnPool) InternalTransportState() poolState {
 	pool.InternalMu.RLock()
 	defer pool.InternalMu.RUnlock()
 	return pool.InternalState

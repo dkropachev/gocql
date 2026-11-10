@@ -33,7 +33,7 @@ func (p *InternalPolicyConnPool) MissingConnections() (int, error) {
 
 func (p *InternalScyllaConnPicker) CloseAllConnections() {
 	p.InternalNrConns = 0
-	InternalCloseConns(p.InternalConns...)
+	closeConns(p.InternalConns...)
 	for id := range p.InternalConns {
 		p.InternalConns[id] = nil
 	}
@@ -64,10 +64,10 @@ func (pool *InternalHostConnPool) CloseAllConnections() {
 	for _, conn := range conns {
 		pool.InternalConnPicker.Remove(conn)
 	}
-	pool.InternalState = InternalPoolBroken
+	pool.InternalState = poolBroken
 	pool.signalReservationLocked()
 	pool.InternalMu.Unlock()
-	InternalCloseConns(conns...)
+	closeConns(conns...)
 	pool.InternalFill()
 }
 
@@ -84,7 +84,7 @@ func (p *InternalPolicyConnPool) CloseAllConnections() {
 }
 
 func (p *InternalDefaultConnPicker) CloseAllConnections() {
-	InternalCloseConns(p.InternalConns...)
+	closeConns(p.InternalConns...)
 	p.InternalConns = p.InternalConns[:0]
 }
 func (p *InternalNopConnPicker) CloseAllConnections() {

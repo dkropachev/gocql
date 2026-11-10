@@ -256,7 +256,7 @@ type InternalHostConnPool struct {
 	InternalMu                            sync.RWMutex
 	InternalClosed                        bool
 	InternalFilling                       bool
-	InternalState                         InternalPoolState
+	InternalState                         poolState
 	InternalStarted                       bool
 	InternalRepairScheduled, retryStopped bool
 }
@@ -453,7 +453,7 @@ func (pool *InternalHostConnPool) fillNow() {
 	// ok fill the pool
 	pool.InternalFilling = true
 	if startCount == 0 {
-		pool.InternalState = InternalPoolInitializing
+		pool.InternalState = poolInitializing
 	}
 
 	// allow others to access the pool while filling
@@ -537,7 +537,7 @@ func (pool *InternalHostConnPool) fillingStopped(err error) {
 				pool.retryStopped = false
 			}
 		} else if err != nil {
-			pool.InternalState = InternalPoolBroken
+			pool.InternalState = poolBroken
 		}
 	}
 	host := pool.InternalHost
@@ -719,7 +719,7 @@ func (pool *InternalHostConnPool) InternalConnect() (err error) {
 		}
 		pool.InternalMu.Unlock()
 		if p, ok := pool.InternalConnPicker.(*InternalTypedConnPicker); ok {
-			InternalCloseConns(p.takeRetired()...)
+			closeConns(p.takeRetired()...)
 		}
 		conn.Close()
 		if debug.Enabled {
@@ -737,7 +737,7 @@ func (pool *InternalHostConnPool) InternalConnect() (err error) {
 	pool.signalReservationLocked()
 	pool.InternalMu.Unlock()
 	if p, ok := pool.InternalConnPicker.(*InternalTypedConnPicker); ok {
-		InternalCloseConns(p.takeRetired()...)
+		closeConns(p.takeRetired()...)
 	}
 	conn.InternalFinalizeConnection()
 
@@ -758,7 +758,7 @@ func (pool *InternalHostConnPool) InternalInitConnPicker(conn *transport.Conn) e
 		return nil
 	}
 	if conn.InternalIsScyllaConn() && implEndpoint.ScyllaHostFeaturesValueData(conn.InternalGetScyllaSupported().ScyllaHostFeatures).InternalNrShards != 0 {
-		pool.InternalConnPicker = InternalNewScyllaConnPicker(conn, pool.InternalLogger)
+		pool.InternalConnPicker = newScyllaConnPicker(conn, pool.InternalLogger)
 		return nil
 	}
 	pool.InternalConnPicker = InternalNewDefaultConnPicker(pool.InternalSize)
@@ -778,7 +778,7 @@ func (pool *InternalHostConnPool) HandleError(conn *transport.Conn, err error, c
 	pool.InternalConnPicker.Remove(conn)
 	pool.signalReservationLocked()
 	if n, _ := pool.InternalConnPicker.Size(); n == 0 {
-		pool.InternalState = InternalPoolBroken
+		pool.InternalState = poolBroken
 	}
 	pool.InternalMu.Unlock()
 	if debug.Enabled {
