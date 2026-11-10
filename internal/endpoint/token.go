@@ -131,14 +131,14 @@ func (r InternalRandomPartitioner) Name() string {
 }
 
 // 2 ** 128
-var InternalMaxHashInt, _ = new(big.Int).SetString("340282366920938463463374607431768211456", 10)
+var maxHashInt, _ = new(big.Int).SetString("340282366920938463463374607431768211456", 10)
 
 func (p InternalRandomPartitioner) Hash(partitionKey []byte) Token {
 	sum := md5.Sum(partitionKey)
 	val := new(big.Int)
 	val.SetBytes(sum[:])
 	if sum[0] > 127 {
-		val.Sub(val, InternalMaxHashInt)
+		val.Sub(val, maxHashInt)
 		val.Abs(val)
 	}
 

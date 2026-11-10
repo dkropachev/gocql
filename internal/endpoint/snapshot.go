@@ -17,7 +17,7 @@ func SnapshotHost(h *HostInfo) (model.HostSnapshot, error) {
 		return model.HostSnapshot{}, cqltype.TypeValidation("host", "nil host")
 	}
 	h.privateStorage.InternalMu.RLock()
-	address, _ := InternalHostInfoConnectAddressLocked(h)
+	address, _ := hostInfoConnectAddressLocked(h)
 	addr, _ := netip.AddrFromSlice(address)
 	out := model.HostSnapshot{ID: h.privateStorage.InternalHostId, Address: netip.AddrPortFrom(addr.Unmap(), uint16(h.privateStorage.InternalPort)), Datacenter: h.privateStorage.InternalDataCenter, Rack: h.privateStorage.InternalRack, Up: h.privateStorage.InternalState.Load() == NodeUp, Enabled: true}
 	var tokenErr error

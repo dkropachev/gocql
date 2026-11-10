@@ -16,11 +16,11 @@ import (
 )
 
 // V2's version block follows the pinned extension, independent of protocol v3/4/5.
-type InternalTabletsRoutingV2Ext struct{}
+type tabletsRoutingV2Ext struct{}
 
-func (InternalTabletsRoutingV2Ext) InternalName() string { return InternalTabletsRoutingV2 }
+func (tabletsRoutingV2Ext) InternalName() string { return InternalTabletsRoutingV2 }
 
-func (InternalTabletsRoutingV2Ext) InternalSerialize() map[string]string {
+func (tabletsRoutingV2Ext) InternalSerialize() map[string]string {
 	return map[string]string{InternalTabletsRoutingV2: ""}
 }
 
@@ -34,7 +34,7 @@ func InternalTypedTabletExtensions(exts []InternalCqlProtocolExtension, supporte
 			filtered = append(filtered, ext)
 		}
 	}
-	return append(filtered, InternalTabletsRoutingV2Ext{})
+	return append(filtered, tabletsRoutingV2Ext{})
 }
 
 type ScyllaConnectionFeatures struct {
@@ -155,7 +155,7 @@ type InternalTabletsRoutingV1Ext struct {
 
 // Factory function to deserialize and create an `tabletsRoutingV1Ext` instance
 // from SUPPORTED message payload.
-func InternalNewTabletsRoutingV1Ext(supported map[string][]string) *InternalTabletsRoutingV1Ext {
+func newTabletsRoutingV1Ext(supported map[string][]string) *InternalTabletsRoutingV1Ext {
 	if _, found := supported[InternalTabletsRoutingV1]; found {
 		return &InternalTabletsRoutingV1Ext{}
 	}
@@ -183,7 +183,7 @@ type InternalRateLimitExt struct {
 
 // Factory function to deserialize and create an `rateLimitExt` instance
 // from SUPPORTED message payload.
-func InternalNewRateLimitExt(supported map[string][]string, logger logging.StdLogger) *InternalRateLimitExt {
+func newRateLimitExt(supported map[string][]string, logger logging.StdLogger) *InternalRateLimitExt {
 	const rateLimitErrorCode = "ERROR_CODE"
 
 	if v, found := supported[InternalRateLimitError]; found {
@@ -383,7 +383,7 @@ func InternalParseSupported(supported map[string][]string, logger logging.StdLog
 		si.ScyllaHostFeatures.privateStorage.InternalLwtFlagMask = lwtInfo.InternalLwtOptMetaBitMask
 	}
 
-	if rateLimitInfo := InternalNewRateLimitExt(supported, logger); rateLimitInfo != nil {
+	if rateLimitInfo := newRateLimitExt(supported, logger); rateLimitInfo != nil {
 		si.ScyllaHostFeatures.privateStorage.InternalRateLimitErrorCode = rateLimitInfo.InternalRateLimitErrorCode
 	}
 
@@ -428,12 +428,12 @@ func InternalParseCQLProtocolExtensions(supported map[string][]string, version b
 		exts = append(exts, lwtExt)
 	}
 
-	rateLimitExt := InternalNewRateLimitExt(supported, logger)
+	rateLimitExt := newRateLimitExt(supported, logger)
 	if rateLimitExt != nil {
 		exts = append(exts, rateLimitExt)
 	}
 
-	tabletsExt := InternalNewTabletsRoutingV1Ext(supported)
+	tabletsExt := newTabletsRoutingV1Ext(supported)
 	if tabletsExt != nil {
 		exts = append(exts, tabletsExt)
 	}

@@ -14,17 +14,17 @@ import (
 // cdc partitioner
 
 const (
-	InternalScyllaCDCPartitionerName     = "CDCPartitioner"
+	scyllaCDCPartitionerName             = "CDCPartitioner"
 	InternalScyllaCDCPartitionerFullName = "com.scylladb.dht.CDCPartitioner"
 
-	InternalScyllaCDCPartitionKeyLength  = 16
-	InternalScyllaCDCVersionMask         = 0x0F
-	InternalScyllaCDCMinSupportedVersion = 1
-	InternalScyllaCDCMaxSupportedVersion = 1
+	scyllaCDCPartitionKeyLength  = 16
+	scyllaCDCVersionMask         = 0x0F
+	scyllaCDCMinSupportedVersion = 1
+	scyllaCDCMaxSupportedVersion = 1
 
-	InternalScyllaCDCMinToken           = InternalInt64Token(math.MinInt64)
+	scyllaCDCMinToken                   = InternalInt64Token(math.MinInt64)
 	InternalScyllaCDCLogTableNameSuffix = "_scylla_cdc_log"
-	InternalScyllaCDCExtensionName      = "cdc"
+	scyllaCDCExtensionName              = "cdc"
 )
 
 type InternalScyllaCDCPartitioner struct {
@@ -32,7 +32,7 @@ type InternalScyllaCDCPartitioner struct {
 }
 
 func (p InternalScyllaCDCPartitioner) Name() string {
-	return InternalScyllaCDCPartitionerName
+	return scyllaCDCPartitionerName
 }
 
 func (p InternalScyllaCDCPartitioner) Hash(partitionKey []byte) Token {
@@ -46,7 +46,7 @@ func (p InternalScyllaCDCPartitioner) InternalHashInt64(partitionKey []byte) int
 		if debug.Enabled {
 			p.InternalLogger.Printf("scylla: cdc partition key too short: %d < 8", len(partitionKey))
 		}
-		return int64(InternalScyllaCDCMinToken)
+		return int64(scyllaCDCMinToken)
 	}
 
 	upperQword := binary.BigEndian.Uint64(partitionKey[0:])
@@ -54,22 +54,22 @@ func (p InternalScyllaCDCPartitioner) InternalHashInt64(partitionKey []byte) int
 	if debug.Enabled {
 		// In debug mode, do some more checks
 
-		if len(partitionKey) != InternalScyllaCDCPartitionKeyLength {
+		if len(partitionKey) != scyllaCDCPartitionKeyLength {
 			// The token has unrecognized format, but the first quadword
 			// should be the token value that we want
 			p.InternalLogger.Printf("scylla: wrong size of cdc partition key: %d", len(partitionKey))
 		}
 
 		lowerQword := binary.BigEndian.Uint64(partitionKey[8:])
-		version := lowerQword & InternalScyllaCDCVersionMask
-		if version < InternalScyllaCDCMinSupportedVersion || version > InternalScyllaCDCMaxSupportedVersion {
+		version := lowerQword & scyllaCDCVersionMask
+		if version < scyllaCDCMinSupportedVersion || version > scyllaCDCMaxSupportedVersion {
 			// We don't support this version yet,
 			// the token may be wrong
 			p.InternalLogger.Printf(
 				"scylla: unsupported version: %d is not in range [%d, %d]",
 				version,
-				InternalScyllaCDCMinSupportedVersion,
-				InternalScyllaCDCMaxSupportedVersion,
+				scyllaCDCMinSupportedVersion,
+				scyllaCDCMaxSupportedVersion,
 			)
 		}
 	}

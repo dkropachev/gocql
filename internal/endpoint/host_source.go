@@ -261,7 +261,7 @@ func (h *HostInfo) Peer() net.IP {
 func InternalHostInfoInvalidConnectAddr(h *HostInfo) bool {
 	h.privateStorage.InternalMu.RLock()
 	defer h.privateStorage.InternalMu.RUnlock()
-	addr, _ := InternalHostInfoConnectAddressLocked(h)
+	addr, _ := hostInfoConnectAddressLocked(h)
 	return !InternalValidIpAddr(addr)
 }
 
@@ -269,7 +269,7 @@ func InternalValidIpAddr(addr net.IP) bool {
 	return addr != nil && !addr.IsUnspecified()
 }
 
-func InternalHostInfoConnectAddressLocked(h *HostInfo) (net.IP, string) {
+func hostInfoConnectAddressLocked(h *HostInfo) (net.IP, string) {
 	if h.privateStorage.InternalTranslatedAddresses != nil && h.privateStorage.InternalTranslatedAddresses.CQL.IsValid() {
 		return h.privateStorage.InternalTranslatedAddresses.CQL.Address, "connect_address"
 	} else if InternalValidIpAddr(h.privateStorage.InternalConnectAddress) {
@@ -322,7 +322,7 @@ func (h *HostInfo) ConnectAddress() net.IP {
 	h.privateStorage.InternalMu.RLock()
 	defer h.privateStorage.InternalMu.RUnlock()
 
-	if addr, _ := InternalHostInfoConnectAddressLocked(h); InternalValidIpAddr(addr) {
+	if addr, _ := hostInfoConnectAddressLocked(h); InternalValidIpAddr(addr) {
 		return addr
 	}
 	panic(fmt.Sprintf("no valid connect address for host: %v. Is your cluster configured correctly?", h))
@@ -479,14 +479,14 @@ func InternalHostInfoUpdate(h *HostInfo, from *HostInfo) {
 	from.privateStorage.InternalMu.RLock()
 	defer from.privateStorage.InternalMu.RUnlock()
 
-	beforeAddr, _ := InternalHostInfoConnectAddressLocked(h)
+	beforeAddr, _ := hostInfoConnectAddressLocked(h)
 	beforeNative := h.privateStorage.InternalConnectAddress.String()
 	beforeName := h.privateStorage.InternalHostname
 	beforeIdentity := h.privateStorage.InternalHostId
 	beforePort := h.privateStorage.InternalPort
 	beforeDC, beforeRack := h.privateStorage.InternalDataCenter, h.privateStorage.InternalRack
 	defer func() {
-		afterAddr, _ := InternalHostInfoConnectAddressLocked(h)
+		afterAddr, _ := hostInfoConnectAddressLocked(h)
 		if beforeNative != h.privateStorage.InternalConnectAddress.String() || beforeName != h.privateStorage.InternalHostname || !beforeAddr.Equal(afterAddr) || beforeIdentity != h.privateStorage.InternalHostId || beforePort != h.privateStorage.InternalPort || beforeDC != h.privateStorage.InternalDataCenter || beforeRack != h.privateStorage.InternalRack {
 			h.privateStorage.InternalTransportGeneration++
 		}
@@ -565,7 +565,7 @@ func (h *HostInfo) IsUp() bool {
 func (h *HostInfo) ConnectAddressAndPort() string {
 	h.privateStorage.InternalMu.RLock()
 	defer h.privateStorage.InternalMu.RUnlock()
-	addr, _ := InternalHostInfoConnectAddressLocked(h)
+	addr, _ := hostInfoConnectAddressLocked(h)
 	return net.JoinHostPort(addr.String(), strconv.Itoa(h.privateStorage.InternalPort))
 }
 
@@ -573,7 +573,7 @@ func (h *HostInfo) String() string {
 	h.privateStorage.InternalMu.RLock()
 	defer h.privateStorage.InternalMu.RUnlock()
 
-	connectAddr, source := InternalHostInfoConnectAddressLocked(h)
+	connectAddr, source := hostInfoConnectAddressLocked(h)
 	return fmt.Sprintf("[HostInfo hostname=%q connectAddress=%q peer=%q rpc_address=%q broadcast_address=%q "+
 		"preferred_ip=%q connect_addr=%q connect_addr_source=%q "+
 		"port=%d data_center=%q rack=%q host_id=%q version=%q state=%s num_tokens=%d]", h.privateStorage.InternalHostname, h.privateStorage.InternalConnectAddress, h.privateStorage.InternalPeer, h.privateStorage.InternalRpcAddress, h.privateStorage.InternalBroadcastAddress, h.privateStorage.InternalPreferredIP, connectAddr, source, h.privateStorage.InternalPort, h.privateStorage.InternalDataCenter, h.privateStorage.InternalRack, h.privateStorage.InternalHostId.String(), h.privateStorage.InternalVersion, h.privateStorage.InternalState.Load(), len(h.privateStorage.InternalTokens))

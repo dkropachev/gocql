@@ -48,8 +48,8 @@ func TestScyllaCDCPartitioner(t *testing.T) {
 				{1, 2, 3},             // < 8 bytes: min-token path
 				{1, 2, 3, 4, 5, 6, 7}, // 7 bytes: still < 8
 				mk16(0, 1)[:8],        // exactly 8 bytes: upper-qword path, no debug checks possible
-				mk16(1, InternalScyllaCDCMinSupportedVersion),
-				mk16(math.MaxUint64, InternalScyllaCDCMaxSupportedVersion),
+				mk16(1, scyllaCDCMinSupportedVersion),
+				mk16(math.MaxUint64, scyllaCDCMaxSupportedVersion),
 				mk16(12345, 0),                  // unsupported version (0 < min) -- still just logs in debug mode
 				mk16(12345, 99),                 // unsupported version (99 > max) -- still just logs in debug mode
 				append(mk16(42, 1), 0xFF, 0xFF), // >16 bytes: wrong-size path, still just logs
@@ -73,8 +73,8 @@ func TestScyllaCDCPartitioner(t *testing.T) {
 
 			p := InternalScyllaCDCPartitioner{InternalLogger: &logging.InternalDefaultLogger{}}
 			got := p.InternalHashInt64([]byte{1, 2, 3})
-			if got != int64(InternalScyllaCDCMinToken) {
-				t.Fatalf("hashInt64(short key) = %d, want %d (scyllaCDCMinToken)", got, int64(InternalScyllaCDCMinToken))
+			if got != int64(scyllaCDCMinToken) {
+				t.Fatalf("hashInt64(short key) = %d, want %d (scyllaCDCMinToken)", got, int64(scyllaCDCMinToken))
 			}
 		})
 
