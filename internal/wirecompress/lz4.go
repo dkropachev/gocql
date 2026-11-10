@@ -29,6 +29,7 @@ import (
 	"fmt"
 
 	"github.com/pierrec/lz4/v4"
+
 	"github.com/scylladb/gocql/v2/internal/syncx"
 )
 
