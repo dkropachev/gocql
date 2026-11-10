@@ -57,5 +57,5 @@ func (source InternalSchemaSource) InternalQuerySystem(ctx context.Context, requ
 	if response == nil {
 		return nil, err
 	}
-	return &response.InternalResponseData, err
+	return &response.ResponseData, err
 }

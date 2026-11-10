@@ -21,7 +21,7 @@ func TestPageAPI(t *testing.T) {
 			future := &pageFuture{InternalDone: make(chan struct{})}
 			future.InternalClose()
 			released := false
-			future.InternalComplete(&responsePage{InternalResponseData: responseData{Owner: wire.NewLease(wire.Chain{}, func() { released = true })}}, nil)
+			future.InternalComplete(&responsePage{ResponseData: responseData{Owner: wire.NewLease(wire.Chain{}, func() { released = true })}}, nil)
 			if !released {
 				t.Fatal("late page leaked")
 			}
@@ -42,7 +42,7 @@ func TestPageAPI(t *testing.T) {
 			chain, _ := wire.NewChain(wire.Borrow(body))
 			released := false
 			owner := wire.NewLease(chain, func() { released = true })
-			response := &responsePage{InternalResponseData: responseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner, State: RestorePageState([]byte{1})}}
+			response := &responsePage{ResponseData: responseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner, State: RestorePageState([]byte{1})}}
 			page, err := newPage(response, cql.OneColumn(cql.BlobCodec), nil)
 			if err != nil {
 				t.Fatal(err)
@@ -109,7 +109,7 @@ func TestPageAPI(t *testing.T) {
 				t.Fatal(result, err)
 			}
 			bad := cql.BlobType
-			response := &responsePage{InternalResponseData: responseData{Columns: cql.NewColumns(cql.ColumnSpec{Name: "bad", Type: bad}), Owner: wire.NewLease(wire.Chain{}, nil)}}
+			response := &responsePage{ResponseData: responseData{Columns: cql.NewColumns(cql.ColumnSpec{Name: "bad", Type: bad}), Owner: wire.NewLease(wire.Chain{}, nil)}}
 			if _, err := newPage(response, cql.OneColumn(cql.Int32), nil); err == nil {
 				t.Fatal("empty page skipped metadata validation")
 			}

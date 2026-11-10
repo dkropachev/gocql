@@ -116,7 +116,7 @@ func v2SchemaMockResponse(statement string, fixture *nativeResultFixture) (*tran
 		release()
 		return nil, err
 	}
-	return &transport.InternalResponsePage{InternalResponseData: model.ResponseData{Kind: 2,
+	return &transport.InternalResponsePage{ResponseData: model.ResponseData{Kind: 2,
 		Columns:     columns,
 		ColumnCount: columns.Len(),
 		Rows:        chain,
@@ -206,5 +206,5 @@ func (f *fakeControlConn) InternalQueryV2System(ctx context.Context, r *model.At
 	integer := cqltype.IntType
 	cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "connection_id", Type: text}, cqltype.ColumnSpec{Name: "host_id", Type: text}, cqltype.ColumnSpec{Name: "address", Type: text}, cqltype.ColumnSpec{Name: "port", Type: integer}, cqltype.ColumnSpec{Name: "tls_port", Type: integer})
 	chain, _ := wire.NewChain()
-	return &transport.InternalResponsePage{InternalResponseData: model.ResponseData{Columns: cols, ColumnCount: 5, Rows: chain, Owner: wire.NewLease(chain, nil)}}, nil
+	return &transport.InternalResponsePage{ResponseData: model.ResponseData{Columns: cols, ColumnCount: 5, Rows: chain, Owner: wire.NewLease(chain, nil)}}, nil
 }

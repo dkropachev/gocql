@@ -75,7 +75,7 @@ func TestPrepared(t *testing.T) {
 			}
 			p.InternalMu.Unlock()
 			changed := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.IntType})
-			response := &transport.InternalResponsePage{InternalResponseData: model.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("conflict")}}
+			response := &transport.InternalResponsePage{ResponseData: model.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("conflict")}}
 			err := InternalSelectPreparedResponse(state, host, &other, other.InternalMetadataID, true, response)
 			if protocol, ok := errors.AsType[*cqltype.ProtocolError](err); !ok || protocol.Stage != "prepared schema reconciliation" {
 				t.Fatal("overflow disappeared from logical result", err)
@@ -517,7 +517,7 @@ func TestPrepared(t *testing.T) {
 			state.InternalHosts[host] = &second
 			changed := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))})
 			for i := 0; i < 100; i++ {
-				response := &transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("conflict")}}
+				response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("conflict")}}
 				if err := InternalSelectPreparedResponse(state, host, &second, second.InternalMetadataID, true, response); err != nil {
 					t.Fatal(err)
 				}
@@ -732,7 +732,7 @@ func TestPrepared(t *testing.T) {
 			state, old := preparedState(t, s, columns)
 			udt := codecTestMust(implCqltype.UDTType("ks", "introduced", implCqltype.ColumnSpec{Name: "n", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))}))
 			changed := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: udt})
-			response := &transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("next")}}
+			response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("next")}}
 			if err := InternalSelectPreparedResponse(state, implCqltype.UUID{15: 1}, old, old.InternalMetadataID, true, response, state.InternalDependencies.InternalTracker.InternalStart()); err != nil {
 				t.Fatal(err)
 			}
@@ -766,11 +766,11 @@ func TestPrepared(t *testing.T) {
 			if hp.InternalEpoch.InternalCurrent() {
 				t.Fatal("related table not invalidated")
 			}
-			response := &transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{NoMetadata: true, ColumnCount: 1}}
+			response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{NoMetadata: true, ColumnCount: 1}}
 			if err := InternalSelectPreparedResponse(state, implCqltype.UUID{15: 1}, hp, hp.InternalMetadataID, true, response); err != nil || response.InternalMetadata != hp.InternalResult || !response.Columns.Equal(columns) {
 				t.Fatal("retained response rejected", err)
 			}
-			for _, bad := range []*transport.InternalResponsePage{{InternalResponseData: implModel.ResponseData{NoMetadata: true, ColumnCount: 2}}, {InternalResponseData: implModel.ResponseData{NoMetadata: true, ColumnCount: 1, MetadataID: []byte("bad")}}} {
+			for _, bad := range []*transport.InternalResponsePage{{ResponseData: implModel.ResponseData{NoMetadata: true, ColumnCount: 2}}, {ResponseData: implModel.ResponseData{NoMetadata: true, ColumnCount: 1, MetadataID: []byte("bad")}}} {
 				if InternalSelectPreparedResponse(state, implCqltype.UUID{15: 1}, hp, hp.InternalMetadataID, true, bad) == nil {
 					t.Fatal("mismatched metadata accepted")
 				}
@@ -793,14 +793,14 @@ func TestPrepared(t *testing.T) {
 			newer.InternalRevision++
 			newer.InternalMetadataID = []byte("a")
 			state.InternalHosts[id] = &newer
-			response := &transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{Kind: 2, Columns: columns, MetadataID: []byte("z")}}
+			response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: columns, MetadataID: []byte("z")}}
 			if err := InternalSelectPreparedResponse(state, id, old, old.InternalMetadataID, true, response); err != nil {
 				t.Fatal(err)
 			}
 			if state.InternalHosts[id] != &newer {
 				t.Fatal("stale response replaced newer entry")
 			}
-			response = &transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{Kind: 2, Columns: columns, MetadataID: []byte("0")}}
+			response = &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: columns, MetadataID: []byte("0")}}
 			if err := InternalSelectPreparedResponse(state, id, &newer, newer.InternalMetadataID, true, response); err != nil {
 				t.Fatal(err)
 			}
@@ -809,7 +809,7 @@ func TestPrepared(t *testing.T) {
 			}
 			current := state.InternalHosts[id]
 			implCluster.InternalSessionInvalidatePreparedSchema(s, cluster.Event{Keyspace: "ks", Object: "tbl", Target: "TABLE"})
-			response = &transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{Kind: 2, Columns: columns, MetadataID: []byte("later")}}
+			response = &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: columns, MetadataID: []byte("later")}}
 			_ = InternalSelectPreparedResponse(state, id, current, current.InternalMetadataID, true, response)
 			if state.InternalHosts[id] != current {
 				t.Fatal("stale schema publication")
@@ -866,7 +866,7 @@ func TestPrepared(t *testing.T) {
 			implCluster.InternalSessionInvalidatePreparedSchema(s, cluster.Event{Keyspace: "ks", Target: "TYPE", Object: "introduced"})
 			udt := codecTestMust(implCqltype.UDTType("ks", "introduced", implCqltype.ColumnSpec{Name: "n", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))}))
 			changed := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: udt})
-			response := &transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("stale")}}
+			response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("stale")}}
 			if err := InternalSelectPreparedResponse(state, implCqltype.UUID{15: 1}, old, old.InternalMetadataID, true, response, started); err != nil {
 				t.Fatal(err)
 			}

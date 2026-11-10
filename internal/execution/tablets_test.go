@@ -111,7 +111,7 @@ func TestTablets(t *testing.T) {
 			stamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, s.Metadata())
 			// applyTypedFeedbackStamped is deliberately before execute-error/UNPREPARED
 			// interpretation; a response page can carry payload independently of rows.
-			page := &transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{Extras: &model.ResponseExtras{Payload: []implModel.PayloadEntry{{Key: "tablets-routing-v2", Value: implCqltype.Nullable[implCqltype.Bytes]{Valid: true, Value: implCqltype.BorrowBytes(testPayload(h))}}}}}}
+			page := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Extras: &model.ResponseExtras{Payload: []implModel.PayloadEntry{{Key: "tablets-routing-v2", Value: implCqltype.Nullable[implCqltype.Bytes]{Valid: true, Value: implCqltype.BorrowBytes(testPayload(h))}}}}}}
 			implCluster.InternalSessionApplyTypedFeedbackStamped(s, page, info, stamp, transport.InternalFramerConfig{InternalTabletsRoutingV1: true, InternalTabletsRoutingV2: true})
 			testDrain(s)
 			m := s.Metadata()

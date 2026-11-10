@@ -147,7 +147,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		}
 		switch decision.Action {
 		case retry.IgnoreWrite:
-			return &transport.InternalResponsePage{InternalResponseData: model.ResponseData{State: model.CompletePageState(), Result: aggregate}}, nil
+			return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: model.CompletePageState(), Result: aggregate}}, nil
 		case retry.Stop:
 			return failure(err)
 		case retry.Same, retry.Next:

@@ -9,5 +9,5 @@ import (
 
 type InternalResponsePage struct {
 	InternalMetadata *model.ResultSchemaIdentity
-	InternalResponseData
+	model.ResponseData
 }

@@ -1059,7 +1059,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.InternalRouting.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
 			}
 			if decision.Action == retry.IgnoreWrite {
-				return &transport.InternalResponsePage{InternalResponseData: model.ResponseData{State: model.CompletePageState(), Result: aggregate}}, nil
+				return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: model.CompletePageState(), Result: aggregate}}, nil
 			}
 			if decision.Action == retry.Stop {
 				if active == 0 && scheduled == 0 {

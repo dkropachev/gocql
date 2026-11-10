@@ -151,7 +151,7 @@ func TestExecution(t *testing.T) {
 					cs[0].InternalFramers.InternalDefaults.InternalFlagLWT = 1 << 30
 				}
 				cs[0].InternalRefreshNativeProtocol()
-				info, err := InternalRuntimeFor(s).InternalHostPreparedInfo(cs[0], &transport.InternalResponsePage{InternalResponseData: model.ResponseData{Lwt: test.lwt}}, &InternalPreparedState{InternalStatement: "INSERT x IF y"})
+				info, err := InternalRuntimeFor(s).InternalHostPreparedInfo(cs[0], &transport.InternalResponsePage{ResponseData: model.ResponseData{Lwt: test.lwt}}, &InternalPreparedState{InternalStatement: "INSERT x IF y"})
 				if err != nil || info.Kind != test.want {
 					t.Fatal(info, err)
 				}

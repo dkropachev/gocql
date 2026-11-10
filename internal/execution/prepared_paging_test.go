@@ -47,7 +47,7 @@ func testPage(t *testing.T, values ...string) *Page[implCqltype.Bytes] {
 		body = append(body, v...)
 	}
 	chain := typedTestChain(t, body)
-	return codecTestMust(InternalNewPage(&transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{Columns: columns, Rows: chain, RowCount: int32(len(values)), Owner: wire.NewLease(chain, nil), State: implModel.CompletePageState()}}, codec.OneColumn(codec.BlobCodec), nil))
+	return codecTestMust(InternalNewPage(&transport.InternalResponsePage{ResponseData: implModel.ResponseData{Columns: columns, Rows: chain, RowCount: int32(len(values)), Owner: wire.NewLease(chain, nil), State: implModel.CompletePageState()}}, codec.OneColumn(codec.BlobCodec), nil))
 }
 
 type countingDecoder struct {

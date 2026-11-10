@@ -535,7 +535,7 @@ func InternalReadV2SystemRowsVia[P, R any](ctx context.Context, version byte, ti
 		if response == nil {
 			return nil, err
 		}
-		return &response.InternalResponseData, err
+		return &response.ResponseData, err
 	}, implMetadata.Query[P, R]{CQL: statement.CQL, Params: statement.Params, Rows: statement.Rows}, columns, value)
 }
 

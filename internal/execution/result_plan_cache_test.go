@@ -46,12 +46,12 @@ func TestResultPlanCache(t *testing.T) {
 			state, old := preparedState(t, s, columns)
 			host := implCqltype.UUID{15: 1}
 			changed := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))})
-			replacement := &transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("new")}}
+			replacement := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("new")}}
 			if err := InternalSelectPreparedResponse(state, host, old, old.InternalMetadataID, true, replacement); err != nil {
 				t.Fatal(err)
 			}
 			chain := typedTestChain(t, []byte{0, 0, 0, 3, 'o', 'l', 'd'})
-			response := &transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{NoMetadata: true, ColumnCount: 1, RowCount: 1, Rows: chain, Owner: wire.NewLease(chain, nil)}}
+			response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{NoMetadata: true, ColumnCount: 1, RowCount: 1, Rows: chain, Owner: wire.NewLease(chain, nil)}}
 			if err := InternalSelectPreparedResponse(state, host, old, old.InternalMetadataID, true, response); err != nil {
 				t.Fatal(err)
 			}
@@ -76,7 +76,7 @@ func TestResultPlanCache(t *testing.T) {
 				implCluster.InternalSessionInvalidatePreparedSchema(s, cluster.Event{Keyspace: "ks", Target: "TABLE", Object: "tbl"})
 			}}
 			cache := &InternalResultPlanCache[implCqltype.Bytes]{}
-			response := &transport.InternalResponsePage{InternalMetadata: hp.InternalResult, InternalResponseData: implModel.ResponseData{Columns: columns}}
+			response := &transport.InternalResponsePage{InternalMetadata: hp.InternalResult, ResponseData: implModel.ResponseData{Columns: columns}}
 			if _, err := cache.InternalSelectPlan(response, decoder); err != nil {
 				t.Fatal(err)
 			}
@@ -113,7 +113,7 @@ func TestResultPlanCache(t *testing.T) {
 			cache := &InternalResultPlanCache[implCqltype.Bytes]{}
 			done := make(chan error, 1)
 			go func() {
-				_, err := cache.InternalSelectPlan(&transport.InternalResponsePage{InternalMetadata: hp.InternalResult, InternalResponseData: implModel.ResponseData{Columns: columns}}, decoder)
+				_, err := cache.InternalSelectPlan(&transport.InternalResponsePage{InternalMetadata: hp.InternalResult, ResponseData: implModel.ResponseData{Columns: columns}}, decoder)
 				done <- err
 			}()
 			<-entered
@@ -160,7 +160,7 @@ func TestResultPlanCache(t *testing.T) {
 			var calls atomic.Int32
 			d := countingDecoder{calls: &calls}
 			for i := 0; i < 100; i++ {
-				if _, err := cache.InternalSelectPlan(&transport.InternalResponsePage{InternalMetadata: entry, InternalResponseData: implModel.ResponseData{Columns: cols}}, d); err != nil {
+				if _, err := cache.InternalSelectPlan(&transport.InternalResponsePage{InternalMetadata: entry, ResponseData: implModel.ResponseData{Columns: cols}}, d); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -168,14 +168,14 @@ func TestResultPlanCache(t *testing.T) {
 				t.Fatal("recompiled exact entry", calls.Load())
 			}
 			equivalent := implCqltype.NewColumns(cqltype.ColumnSlice(cols)...)
-			if _, err := cache.InternalSelectPlan(&transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{Columns: equivalent}}, d); err != nil {
+			if _, err := cache.InternalSelectPlan(&transport.InternalResponsePage{ResponseData: implModel.ResponseData{Columns: equivalent}}, d); err != nil {
 				t.Fatal(err)
 			}
 			if calls.Load() != 1 {
 				t.Fatal("recompiled equal shape")
 			}
 			another := &InternalResultPlanCache[implCqltype.Bytes]{}
-			_, _ = another.InternalSelectPlan(&transport.InternalResponsePage{InternalMetadata: entry, InternalResponseData: implModel.ResponseData{Columns: cols}}, d)
+			_, _ = another.InternalSelectPlan(&transport.InternalResponsePage{InternalMetadata: entry, ResponseData: implModel.ResponseData{Columns: cols}}, d)
 			if calls.Load() != 2 {
 				t.Fatal("shared different decoder cache")
 			}
@@ -184,7 +184,7 @@ func TestResultPlanCache(t *testing.T) {
 			d.hook = func() { close(entered); <-done }
 			completed := make(chan error)
 			go func() {
-				_, err := cold.InternalSelectPlan(&transport.InternalResponsePage{InternalMetadata: entry, InternalResponseData: implModel.ResponseData{Columns: cols}}, d)
+				_, err := cold.InternalSelectPlan(&transport.InternalResponsePage{InternalMetadata: entry, ResponseData: implModel.ResponseData{Columns: cols}}, d)
 				completed <- err
 			}()
 			<-entered
@@ -208,14 +208,14 @@ func TestResultPlanCache(t *testing.T) {
 			cache := &InternalResultPlanCache[implCqltype.Bytes]{}
 			var calls atomic.Int32
 			d := countingDecoder{calls: &calls}
-			identified := &transport.InternalResponsePage{InternalMetadata: entry, InternalResponseData: implModel.ResponseData{Columns: cols}}
+			identified := &transport.InternalResponsePage{InternalMetadata: entry, ResponseData: implModel.ResponseData{Columns: cols}}
 			for _, step := range []struct {
 				response *transport.InternalResponsePage
 				calls    int32
 			}{
 				{identified, 1},
 				{identified, 1},
-				{&transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{Columns: other}}, 2},
+				{&transport.InternalResponsePage{ResponseData: implModel.ResponseData{Columns: other}}, 2},
 				{identified, 3},
 				{identified, 3},
 			} {

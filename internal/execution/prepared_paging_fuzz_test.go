@@ -41,7 +41,7 @@ func FuzzV2PageDestinationFraming(f *testing.F) {
 		cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: cqltype.IntType})
 		chain := codecTestMust(wire.NewChain(wire.Borrow(data)))
 		owner := wire.NewLease(chain, nil)
-		p := codecTestMust(InternalNewPage(&transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{Columns: cols, Rows: chain, RowCount: int32(count % 8), Owner: owner}}, codec.OneColumn(codec.Int32), nil))
+		p := codecTestMust(InternalNewPage(&transport.InternalResponsePage{ResponseData: implModel.ResponseData{Columns: cols, Rows: chain, RowCount: int32(count % 8), Owner: owner}}, codec.OneColumn(codec.Int32), nil))
 		defer p.Close()
 		dst := int32(99)
 		for i := 0; i < 9; i++ {

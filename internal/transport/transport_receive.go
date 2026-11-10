@@ -301,7 +301,7 @@ func (c *Conn) parseTypedResponseInto(head frm.FrameHeader, body wire.Chain, own
 	} else {
 		page.InternalMetadata = nil
 	}
-	data, err := c.nativeProtocol().ParseTypedResponseInto(head, body, owner, &page.InternalResponseData)
+	data, err := c.nativeProtocol().ParseTypedResponseInto(head, body, owner, &page.ResponseData)
 	if data == nil {
 		return nil, err
 	}

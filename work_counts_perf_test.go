@@ -211,7 +211,7 @@ func TestWorkCountsPerf(t *testing.T) {
 		t.Run("WarmAndChanged", func(t *testing.T) {
 			cols := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: cql.BlobType})
 			entry := &typedResultMetadata{InternalColumns: cols}
-			response := &responsePage{InternalMetadata: entry, InternalResponseData: responseData{Columns: cols}}
+			response := &responsePage{InternalMetadata: entry, ResponseData: responseData{Columns: cols}}
 			cache := &resultPlanCache[cql.Bytes]{}
 			var calls atomic.Int32
 			decoder := countingDecoder{calls: &calls}
@@ -229,7 +229,7 @@ func TestWorkCountsPerf(t *testing.T) {
 				t.Fatal(comp, maps, calls.Load())
 			}
 			changed := cql.NewColumns(cql.ColumnSpec{Name: "changed", Type: cql.BlobType})
-			second := &responsePage{InternalMetadata: &typedResultMetadata{InternalColumns: changed}, InternalResponseData: responseData{Columns: changed}}
+			second := &responsePage{InternalMetadata: &typedResultMetadata{InternalColumns: changed}, ResponseData: responseData{Columns: changed}}
 			if _, e := cache.InternalSelectPlan(second, decoder); e != nil {
 				t.Fatal(e)
 			}

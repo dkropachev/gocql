@@ -144,7 +144,7 @@ func TestPage(t *testing.T) {
 			cols := implCqltype.NewColumns(implCqltype.ColumnSpec{Name: "n", Type: integer}, implCqltype.ColumnSpec{Name: "v", Type: blob})
 			body := typedTestChain(t, []byte{0, 0, 0, 4, 0, 0, 0, 7, 0, 0, 0, 5, 1})
 			decoder := codec.Row(codec.Column("n", codec.Int32, func(r *row) *int32 { return &r.Number }), codec.Column("v", codec.BlobCodec, func(r *row) *implCqltype.Bytes { return &r.Value }))
-			p := codecTestMust(InternalNewPage(&transport.InternalResponsePage{InternalResponseData: implModel.ResponseData{Columns: cols, Rows: body, RowCount: 1, Owner: wire.NewLease(body, nil)}}, decoder, nil))
+			p := codecTestMust(InternalNewPage(&transport.InternalResponsePage{ResponseData: implModel.ResponseData{Columns: cols, Rows: body, RowCount: 1, Owner: wire.NewLease(body, nil)}}, decoder, nil))
 			defer p.Close()
 			dst := row{Unused: 8}
 			if p.NextInto(&dst) || dst.Number != 0 || dst.Unused != 0 || p.Err() == nil {

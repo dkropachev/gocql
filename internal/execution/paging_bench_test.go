@@ -53,7 +53,7 @@ func BenchmarkPaging(b *testing.B) {
 				defer owner.Release()
 				p := func() *Page[row] {
 					opaqueStorageValuexx := new(Page[row])
-					PageData(opaqueStorageValuexx).InternalResponse = &transport.InternalResponsePage{InternalResponseData: model.ResponseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner}}
+					PageData(opaqueStorageValuexx).InternalResponse = &transport.InternalResponsePage{ResponseData: model.ResponseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner}}
 					PageData(opaqueStorageValuexx).InternalPlan = codecTestMust(decoder.Compile(columns))
 					PageData(opaqueStorageValuexx).InternalCursor = wire.CursorOver(chain)
 					return opaqueStorageValuexx
@@ -99,7 +99,7 @@ func BenchmarkPaging(b *testing.B) {
 	b.Run("ResultPlanExactEntry", func(b *testing.B) {
 		columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: cqltype.BlobType})
 		entry := &model.ResultSchemaIdentity{InternalColumns: columns}
-		response := &transport.InternalResponsePage{InternalMetadata: entry, InternalResponseData: model.ResponseData{Columns: columns}}
+		response := &transport.InternalResponsePage{InternalMetadata: entry, ResponseData: model.ResponseData{Columns: columns}}
 		cache := &InternalResultPlanCache[cqltype.Bytes]{}
 		decoder := codec.OneColumn(codec.BlobCodec)
 		if _, err := cache.InternalSelectPlan(response, decoder); err != nil {
