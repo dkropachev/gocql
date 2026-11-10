@@ -35,7 +35,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/internal/debug"
-	"github.com/scylladb/gocql/v2/tablets"
+	"github.com/scylladb/gocql/v2/internal/tablets"
 
 	"github.com/scylladb/gocql/v2/internal/debounce"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"

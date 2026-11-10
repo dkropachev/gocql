@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/tablets"
+	"github.com/scylladb/gocql/v2/internal/tablets"
 	// Immutable AVL indices share every unaffected subtree. Neither an observation
 	// nor a routing plan may mutate a published node or replica slice.
 )

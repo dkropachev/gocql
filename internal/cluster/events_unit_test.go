@@ -34,8 +34,8 @@ import (
 	"time"
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/tests/mock"
-	"github.com/scylladb/gocql/v2/tablets"
 )
 
 var (

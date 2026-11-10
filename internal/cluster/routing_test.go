@@ -12,7 +12,7 @@ import (
 
 	"testing"
 
-	"github.com/scylladb/gocql/v2/tablets"
+	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
 func testHint(t testing.TB, first, last int64, version implCqltype.Option[uint64], replicas ...implModel.Target) tablets.TabletInfo {

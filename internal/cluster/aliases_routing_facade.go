@@ -8,7 +8,7 @@ import (
 	model "github.com/scylladb/gocql/v2/internal/model"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
-	"github.com/scylladb/gocql/v2/tablets"
+	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
 type AggregateMetadata = implMetadata.AggregateMetadata

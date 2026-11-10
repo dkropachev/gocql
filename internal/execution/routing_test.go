@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/wire"
-	"github.com/scylladb/gocql/v2/tablets"
 )
 
 func testHint(t testing.TB, first, last int64, version implCqltype.Option[uint64], replicas ...implModel.Target) tablets.TabletInfo {

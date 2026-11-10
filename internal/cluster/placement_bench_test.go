@@ -7,7 +7,7 @@ import (
 	"encoding/binary"
 
 	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/tablets"
+	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
 var benchmarkTarget model.Target

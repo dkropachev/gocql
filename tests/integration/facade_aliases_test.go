@@ -31,7 +31,7 @@ import (
 
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 
-	"github.com/scylladb/gocql/v2/tablets"
+	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
 func admitExecution[R any](a0 context.Context, a1 *gocql.Session, a2 *implExecution.Bound[R], a3 gocql.BoundOptions) (context.Context, context.CancelFunc, *executionRequest, error) {

@@ -49,8 +49,8 @@ import (
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	"github.com/scylladb/gocql/v2/internal/streams"
+	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/wire"
-	"github.com/scylladb/gocql/v2/tablets"
 )
 
 func InternalApprove(authenticator string, approvedAuthenticators []string) bool {

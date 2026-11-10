@@ -13,7 +13,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/tablets"
+	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
 type Metadata struct {

@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/routing"
-	"github.com/scylladb/gocql/v2/tablets"
 )
 
 func testHint(t testing.TB, first, last int64, version cql.Option[uint64], replicas ...routing.Target) tablets.TabletInfo {

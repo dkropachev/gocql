@@ -5,8 +5,8 @@ package cluster
 
 import (
 	schemafence "github.com/scylladb/gocql/v2/internal/schemafence"
+	"github.com/scylladb/gocql/v2/internal/tablets"
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
-	"github.com/scylladb/gocql/v2/tablets"
 )
 
 type Authenticator = implTransport.Authenticator

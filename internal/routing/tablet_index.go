@@ -3,7 +3,7 @@
 
 package routing
 
-import "github.com/scylladb/gocql/v2/tablets"
+import "github.com/scylladb/gocql/v2/internal/tablets"
 
 // tabletChunkMax bounds the ranges of one index chunk, and so what an update
 // copies: the chunks it touches and the slice of chunk ends.

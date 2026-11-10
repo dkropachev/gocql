@@ -9,7 +9,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/tablets"
+	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
 func checkTabletRangeIndex(t *testing.T, p InternalTabletPlacement, rng *rand.Rand, span int64) {

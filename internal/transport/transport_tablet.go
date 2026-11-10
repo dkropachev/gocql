@@ -9,8 +9,8 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/wire"
-	"github.com/scylladb/gocql/v2/tablets"
 )
 
 // parseTypedTabletHint consumes the tuple<bigint,bigint,list<tuple<uuid,int>>>

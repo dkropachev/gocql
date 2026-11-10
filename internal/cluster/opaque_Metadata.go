@@ -5,7 +5,7 @@
 package cluster
 
 import (
-	"github.com/scylladb/gocql/v2/tablets"
+	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
 type MetadataStorage struct {

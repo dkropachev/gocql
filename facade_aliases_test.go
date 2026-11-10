@@ -27,7 +27,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
 
-	"github.com/scylladb/gocql/v2/tablets"
+	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
 type hostPrepared = implExecution.InternalHostPrepared

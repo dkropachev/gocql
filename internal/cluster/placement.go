@@ -9,7 +9,7 @@ import (
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 
-	"github.com/scylladb/gocql/v2/tablets"
+	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
 func InternalSessionCaptureTabletFeedback(s *Core, info RoutingInfo, m *MetadataSnapshot) tabletFeedbackStamp {
