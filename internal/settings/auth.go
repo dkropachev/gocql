@@ -16,12 +16,12 @@ import (
 // AuthProvider creates independent exchanges and must be concurrency safe.
 type AuthProvider = connectivity.AuthProvider
 type AuthExchange = connectivity.AuthExchange
-type InternalPasswordAuth struct{ username, password string }
+type passwordAuth struct{ username, password string }
 
 func PasswordAuth(username, password string) AuthProvider {
-	return InternalPasswordAuth{username: username, password: password}
+	return passwordAuth{username: username, password: password}
 }
-func (p InternalPasswordAuth) Start(ctx context.Context, _ model.HostSnapshot, _ string) (AuthExchange, cqltype.Nullable[[]byte], error) {
+func (p passwordAuth) Start(ctx context.Context, _ model.HostSnapshot, _ string) (AuthExchange, cqltype.Nullable[[]byte], error) {
 	if err := ctx.Err(); err != nil {
 		return nil, cqltype.Nullable[[]byte]{}, err
 	}
@@ -31,18 +31,18 @@ func (p InternalPasswordAuth) Start(ctx context.Context, _ model.HostSnapshot, _
 	response := make([]byte, len(p.username)+len(p.password)+2)
 	copy(response[1:], p.username)
 	copy(response[len(p.username)+2:], p.password)
-	return &InternalPasswordExchange{}, cqltype.Nullable[[]byte]{Value: response, Valid: true}, nil
+	return &passwordExchange{}, cqltype.Nullable[[]byte]{Value: response, Valid: true}, nil
 }
 
-type InternalPasswordExchange struct{}
+type passwordExchange struct{}
 
-func (*InternalPasswordExchange) Challenge(ctx context.Context, _ cqltype.Nullable[cqltype.Bytes]) (cqltype.Nullable[[]byte], error) {
+func (*passwordExchange) Challenge(ctx context.Context, _ cqltype.Nullable[cqltype.Bytes]) (cqltype.Nullable[[]byte], error) {
 	if err := ctx.Err(); err != nil {
 		return cqltype.Nullable[[]byte]{}, err
 	}
 	return cqltype.Nullable[[]byte]{}, errors.New("gocql: password authenticator received an unexpected challenge")
 }
-func (*InternalPasswordExchange) Success(ctx context.Context, _ cqltype.Nullable[cqltype.Bytes]) error {
+func (*passwordExchange) Success(ctx context.Context, _ cqltype.Nullable[cqltype.Bytes]) error {
 	return ctx.Err()
 }
-func (*InternalPasswordExchange) Close() {}
+func (*passwordExchange) Close() {}

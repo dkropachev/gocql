@@ -27,7 +27,7 @@ package settings
 import "runtime/debug"
 
 const (
-	InternalMainPackage = "github.com/scylladb/gocql/v2"
+	mainPackage = "github.com/scylladb/gocql/v2"
 )
 
 var InternalDefaultDriverVersion string
@@ -36,7 +36,7 @@ func init() {
 	buildInfo, ok := debug.ReadBuildInfo()
 	if ok {
 		for _, d := range buildInfo.Deps {
-			if d.Path == InternalMainPackage {
+			if d.Path == mainPackage {
 				InternalDefaultDriverVersion = d.Version
 				if d.Replace != nil {
 					InternalDefaultDriverVersion = d.Replace.Version
