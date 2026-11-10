@@ -203,7 +203,7 @@ func TestQuery(t *testing.T) {
 			t.Parallel()
 			session := createV2Session(t)
 			defer session.Close()
-			if implExecution.InternalSessionData((*implExecution.Session)(session)).InternalCfg.ProtoVersion < 4 {
+			if (*implExecution.Session)(session).Data().InternalCfg.ProtoVersion < 4 {
 				t.Skip("Unset Values are not supported in protocol < 4")
 			}
 			table := testTableName(t)
@@ -255,7 +255,7 @@ func TestQuery(t *testing.T) {
 
 			table := testTableName(t, session.ID())
 
-			if err := v2CreateTable(context.Background(), session, fmt.Sprintf("CREATE TABLE %s.%s (id int, value int, PRIMARY KEY (id))", implExecution.InternalSessionData((*implExecution.Session)(session)).InternalCfg.Keyspace, table)); err != nil {
+			if err := v2CreateTable(context.Background(), session, fmt.Sprintf("CREATE TABLE %s.%s (id int, value int, PRIMARY KEY (id))", (*implExecution.Session)(session).Data().InternalCfg.Keyspace, table)); err != nil {
 				t.Fatal(err)
 			}
 
@@ -311,7 +311,7 @@ func TestQuery(t *testing.T) {
 			session := createV2Session(t)
 			defer session.Close()
 			table := testTableName(t, session.ID())
-			if err := v2CreateTable(context.Background(), session, fmt.Sprintf("CREATE TABLE %s.%s (id int, value int, PRIMARY KEY (id))", implExecution.InternalSessionData((*implExecution.Session)(session)).InternalCfg.Keyspace, table)); err != nil {
+			if err := v2CreateTable(context.Background(), session, fmt.Sprintf("CREATE TABLE %s.%s (id int, value int, PRIMARY KEY (id))", (*implExecution.Session)(session).Data().InternalCfg.Keyspace, table)); err != nil {
 				t.Fatal(err)
 			}
 
@@ -391,7 +391,7 @@ func TestQuery(t *testing.T) {
 			}
 			if _, err := v2Exec(context.Background(), session, fmt.Sprintf(`INSERT INTO %s.%s (id, value) VALUES (1, 1)`, fixtureKeyspace("_fail"), table)); err != nil {
 				if errWrite, ok := errors.AsType[*cqlerr.RequestErrWriteFailure](err); ok {
-					if implExecution.InternalSessionData((*implExecution.Session)(session)).InternalCfg.ProtoVersion >= protoVersion5 {
+					if (*implExecution.Session)(session).Data().InternalCfg.ProtoVersion >= protoVersion5 {
 						// ErrorMap should be filled with some hosts that should've errored
 						if len(errWrite.ErrorMap) == 0 {
 							t.Fatal("errWrite.ErrorMap should have some failed hosts but it didn't have any")
@@ -498,7 +498,7 @@ func TestQuery(t *testing.T) {
 			t.Parallel()
 			session := createV2Session(t)
 			defer session.Close()
-			if implExecution.InternalSessionData((*implExecution.Session)(session)).InternalCfg.ProtoVersion < 4 {
+			if (*implExecution.Session)(session).Data().InternalCfg.ProtoVersion < 4 {
 				t.Skip("skipping JSON support on proto < 4")
 			}
 			table := testTableName(t)
@@ -547,7 +547,7 @@ func TestQuery(t *testing.T) {
 			_, err = Run(context.Background(), session, bound, bindOptions(session, gocql.Options{HostID: cql.Option[cql.UUID]{Value: codecTestMust(cql.RandomUUID()), Set: true}}))
 			require.ErrorIs(t, err, cqlerr.ErrNoConnections)
 			host := hosts[0]
-			pool, ok := implExecution.InternalSessionData((*implExecution.Session)(session)).InternalPool.InternalGetPoolByHostID(host.ID.String())
+			pool, ok := (*implExecution.Session)(session).Data().InternalPool.InternalGetPoolByHostID(host.ID.String())
 			require.True(t, ok)
 			implEndpoint.InternalHostInfoSetState(pool.InternalHost, NodeDown)
 			defer implEndpoint.InternalHostInfoSetState(pool.InternalHost, NodeUp)
@@ -557,7 +557,7 @@ func TestQuery(t *testing.T) {
 		t.Run("Keyspace", func(t *testing.T) {
 			session := createV2Session(t)
 			defer session.Close()
-			if implExecution.InternalSessionData((*implExecution.Session)(session)).InternalCfg.ProtoVersion < 5 {
+			if (*implExecution.Session)(session).Data().InternalCfg.ProtoVersion < 5 {
 				t.Skip("keyspace for QUERY message is not supported in protocol < 5")
 			}
 			ks := testKeyspaceName(t)
@@ -578,7 +578,7 @@ func TestQuery(t *testing.T) {
 		t.Run("NowInSeconds", func(t *testing.T) {
 			session := createV2Session(t)
 			defer session.Close()
-			if implExecution.InternalSessionData((*implExecution.Session)(session)).InternalCfg.ProtoVersion < 5 {
+			if (*implExecution.Session)(session).Data().InternalCfg.ProtoVersion < 5 {
 				t.Skip("Query now in seconds are only available on protocol >= 5")
 			}
 			table := testTableName(t)
@@ -914,7 +914,7 @@ func TestQuery(t *testing.T) {
 			// reaches connection selection even for formerly unprepared DDL.
 			session := func() *gocql.Session {
 				opaqueStorageValuex := (*gocql.Session)(implExecution.InternalWrapSession(new(implCluster.Core)))
-				implExecution.InternalSessionData((*implExecution.Session)(opaqueStorageValuex)).InternalLogger = nopLogger{}
+				(*implExecution.Session)(opaqueStorageValuex).Data().InternalLogger = nopLogger{}
 				return opaqueStorageValuex
 			}()
 			defer session.Close()
@@ -968,7 +968,7 @@ func TestQuery(t *testing.T) {
 			// the server for metadata, including DDL previously classified false.
 			session := func() *gocql.Session {
 				opaqueStorageValue := (*gocql.Session)(implExecution.InternalWrapSession(new(implCluster.Core)))
-				implExecution.InternalSessionData((*implExecution.Session)(opaqueStorageValue)).InternalLogger = nopLogger{}
+				(*implExecution.Session)(opaqueStorageValue).Data().InternalLogger = nopLogger{}
 				return opaqueStorageValue
 			}()
 			defer session.Close()

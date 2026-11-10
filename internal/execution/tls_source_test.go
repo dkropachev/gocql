@@ -50,11 +50,11 @@ func TestTLSSourceSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Close()
-	dialer, ok := InternalSessionData(session).InternalConnCfg.HostDialer.(*transport.InternalV2TLSHostDialer)
+	dialer, ok := session.Data().InternalConnCfg.HostDialer.(*transport.InternalV2TLSHostDialer)
 	if !ok || dialer.InternalConfig.TLSSource != source {
 		t.Fatal("the session dialer does not read the TLS source")
 	}
-	if err := execTestStatement(ctx, InternalCore(session), "void", CompiledOptions{}); err != nil {
+	if err := execTestStatement(ctx, session.Core(), "void", CompiledOptions{}); err != nil {
 		t.Fatal(err)
 	}
 }

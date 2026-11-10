@@ -55,7 +55,7 @@ func TestTypes(t *testing.T) {
 			t.Parallel()
 			session := createV2Session(t)
 			defer session.Close()
-			if implExecution.InternalSessionData((*implExecution.Session)(session)).InternalCfg.ProtoVersion < 5 {
+			if (*implExecution.Session)(session).Data().InternalCfg.ProtoVersion < 5 {
 				t.Skip("skipped below protocol 5 by this test's own guard, not by a limit of the duration type")
 			}
 			table := testTableName(t)

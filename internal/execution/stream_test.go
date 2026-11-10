@@ -915,7 +915,7 @@ func TestStream(t *testing.T) {
 					state, _ := preparedState(t, s, columns)
 					bound := func() *Bound[cqltype.Bytes] {
 						opaqueStorageValuex := new(Bound[cqltype.Bytes])
-						BoundData(opaqueStorageValuex).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: InternalPreparedSource(state), InternalValues: model.EncodedValues{Columns: cqltype.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Kind: cqltype.OrdinaryStatement}}
+						BoundData(opaqueStorageValuex).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cqltype.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Kind: cqltype.OrdinaryStatement}}
 						BoundData(opaqueStorageValuex).InternalRows = codec.OneColumn(codec.BlobCodec)
 						return opaqueStorageValuex
 					}()
@@ -1382,7 +1382,7 @@ func TestStream(t *testing.T) {
 			columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.BlobType})
 			state, _ := preparedState(t, s, columns)
 			bound := new(Bound[cqltype.Bytes])
-			BoundData(bound).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: InternalPreparedSource(state), InternalValues: model.EncodedValues{Columns: cqltype.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Kind: cqltype.OrdinaryStatement}}
+			BoundData(bound).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cqltype.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Kind: cqltype.OrdinaryStatement}}
 			BoundData(bound).InternalRows = codec.OneColumn(codec.BlobCodec)
 			defer bound.Close()
 			// The first page is empty. The next omits metadata, then an equal full

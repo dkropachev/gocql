@@ -394,8 +394,8 @@ func TestPaging(t *testing.T) {
 		deadline := time.Now().Add(20 * time.Second)
 		for {
 			ready := true
-			for _, host := range implExecution.InternalSessionData((*implExecution.Session)(s)).InternalHostSource.InternalGetHostsList() {
-				pool, ok := implExecution.InternalSessionData((*implExecution.Session)(s)).InternalPool.InternalGetPool(host)
+			for _, host := range (*implExecution.Session)(s).Data().InternalHostSource.InternalGetHostsList() {
+				pool, ok := (*implExecution.Session)(s).Data().InternalPool.InternalGetPool(host)
 				if !ok {
 					ready = false
 					break

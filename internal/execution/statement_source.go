@@ -53,7 +53,7 @@ func (cqlText) observe() uint64           { return 0 }
 type preparedSource struct{ state *InternalPreparedState }
 
 // InternalPreparedSource returns the source executing state.
-func InternalPreparedSource(state *InternalPreparedState) statementSource {
+func (state *InternalPreparedState) preparedSource() statementSource {
 	if state == nil {
 		return cqlText{}
 	}

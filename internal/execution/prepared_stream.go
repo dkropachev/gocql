@@ -38,7 +38,7 @@ func (s *Session) PrepareStream[P, R any](ctx context.Context, statement StreamS
 	if len(options) == 1 {
 		o = options[0]
 	}
-	return PrepareStream(ctx, InternalCore(s), statement, o)
+	return PrepareStream(ctx, s.Core(), statement, o)
 }
 
 func PrepareStream[P, R any](ctx context.Context, session *implCluster.Core, statement StreamStatement[P, R], options PrepareOptions) (*PreparedStream[P, R], error) {

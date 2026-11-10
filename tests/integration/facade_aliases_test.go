@@ -35,7 +35,7 @@ import (
 )
 
 func admitExecution[R any](a0 context.Context, a1 *gocql.Session, a2 *implExecution.Bound[R], a3 gocql.CompiledOptions) (context.Context, context.CancelFunc, *executionRequest, error) {
-	return implExecution.InternalAdmitExecution[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, implExecution.CompiledOptions(a3))
+	return implExecution.InternalAdmitExecution[R](a0, (*implExecution.Session)(a1).Core(), a2, implExecution.CompiledOptions(a3))
 }
 
 type clientRoute = implCluster.InternalClientRoute
@@ -66,7 +66,7 @@ func newPage[R any](a0 *responsePage, a1 cql.RowDecoder[R], a2 func()) (*gocql.P
 }
 
 func newSchemaSource(a0 *gocql.Session) implMetadata.Source {
-	return implExecution.InternalCore((*implExecution.Session)(a0)).NewSchemaSource()
+	return (*implExecution.Session)(a0).Core().NewSchemaSource()
 }
 
 type pair = implCluster.InternalPair
@@ -80,13 +80,13 @@ func resolveOptions(a0 *gocql.Session, a1 gocql.Options) (resolvedOptions, error
 	if err != nil {
 		return resolvedOptions{}, err
 	}
-	return implExecution.InternalResolveFor(implExecution.InternalCore((*implExecution.Session)(a0)), implExecution.CompiledOptions(o)), nil
+	return implExecution.InternalResolveFor((*implExecution.Session)(a0).Core(), implExecution.CompiledOptions(o)), nil
 }
 
 type resolvedOptions = implExecution.InternalResolvedOptions
 
 func runtimeFor(a0 *gocql.Session) *sessionRuntime {
-	return implExecution.InternalRuntimeFor(implExecution.InternalCore((*implExecution.Session)(a0)))
+	return implExecution.InternalRuntimeFor((*implExecution.Session)(a0).Core())
 }
 
 type sessionRuntime = implExecution.InternalSessionRuntime

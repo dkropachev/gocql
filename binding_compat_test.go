@@ -19,6 +19,6 @@ func BindUnpreparedBorrowed[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns
 }
 
 func Run[R any](a0 context.Context, a1 *Session, a2 *Bound[R], a3 CompiledOptions) (Rows[R], error) {
-	result, err := implExecution.Run[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, implExecution.CompiledOptions(a3))
+	result, err := implExecution.Run[R](a0, (*implExecution.Session)(a1).Core(), a2, implExecution.CompiledOptions(a3))
 	return Rows[R](result), err
 }

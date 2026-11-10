@@ -63,7 +63,7 @@ func TestFixture(t *testing.T) {
 		s := createV2Session(t)
 		defer s.Close()
 		if marker := os.Getenv("GOCQL_FIXTURE_MARKER"); marker != "" {
-			if err := os.WriteFile(marker, []byte(implExecution.InternalSessionData((*implExecution.Session)(s)).InternalCfg.Keyspace), 0600); err != nil {
+			if err := os.WriteFile(marker, []byte((*implExecution.Session)(s).Data().InternalCfg.Keyspace), 0600); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -161,7 +161,7 @@ func TestFixture(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Log("ACTUAL_SERVER_VERSION", version.String(), "PROTOCOL", implExecution.InternalSessionData((*implExecution.Session)(s)).InternalCfg.ProtoVersion)
+		t.Log("ACTUAL_SERVER_VERSION", version.String(), "PROTOCOL", (*implExecution.Session)(s).Data().InternalCfg.ProtoVersion)
 		if !strings.HasPrefix(version.String(), strings.TrimPrefix(flagCassVersion.String(), "v")) {
 			t.Fatalf("unexpected server version %q", version.String())
 		}

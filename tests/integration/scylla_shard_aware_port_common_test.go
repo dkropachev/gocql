@@ -73,10 +73,10 @@ func testShardAwarePortNoReconnections(t *testing.T, makeCluster makeClusterTest
 				return
 			}
 
-			hosts := implExecution.InternalSessionData((*implExecution.Session)(sess)).InternalHostSource.InternalGetHostsList()
+			hosts := (*implExecution.Session)(sess).Data().InternalHostSource.InternalGetHostsList()
 			for _, host := range hosts {
 				t.Logf("checking host %s:%d hostID: %q", host.ConnectAddress(), host.Port(), implEndpoint.HostInfoData(host).InternalHostId)
-				hostPool, ok := implExecution.InternalSessionData((*implExecution.Session)(sess)).InternalPool.InternalGetPool(host)
+				hostPool, ok := (*implExecution.Session)(sess).Data().InternalPool.InternalGetPool(host)
 				if !ok {
 					pushErr(fmt.Errorf("host %q hostID not found", implEndpoint.HostInfoData(host).InternalHostname))
 					return
@@ -189,10 +189,10 @@ func testShardAwarePortUnusedIfNotEnabled(t *testing.T, makeCluster makeClusterT
 		t.Fatal(err)
 	}
 
-	hosts := implExecution.InternalSessionData((*implExecution.Session)(sess)).InternalHostSource.InternalGetHostsList()
+	hosts := (*implExecution.Session)(sess).Data().InternalHostSource.InternalGetHostsList()
 	for _, host := range hosts {
 		t.Logf("checking host %s", implEndpoint.HostInfoData(host).InternalHostname)
-		hostPool, _ := implExecution.InternalSessionData((*implExecution.Session)(sess)).InternalPool.InternalGetPool(host)
+		hostPool, _ := (*implExecution.Session)(sess).Data().InternalPool.InternalGetPool(host)
 
 		shardAwarePort := getShardAwarePort(hostPool, useTLS)
 		if shardAwarePort == 0 {
@@ -219,9 +219,9 @@ func getShardAwarePort(pool *hostConnPool, useTLS bool) uint16 {
 }
 
 func triggerPoolsRefill(sess *gocql.Session) {
-	hosts := implExecution.InternalSessionData((*implExecution.Session)(sess)).InternalHostSource.InternalGetHostsList()
+	hosts := (*implExecution.Session)(sess).Data().InternalHostSource.InternalGetHostsList()
 	for _, host := range hosts {
-		hostPool, _ := implExecution.InternalSessionData((*implExecution.Session)(sess)).InternalPool.InternalGetPool(host)
+		hostPool, _ := (*implExecution.Session)(sess).Data().InternalPool.InternalGetPool(host)
 		go hostPool.InternalFill_debounce()
 	}
 }
@@ -268,9 +268,9 @@ func waitUntilPoolsStopFilling(ctx context.Context, sess *gocql.Session, timeout
 }
 
 func checkIfPoolsStoppedFilling(sess *gocql.Session) bool {
-	hosts := implExecution.InternalSessionData((*implExecution.Session)(sess)).InternalHostSource.InternalGetHostsList()
+	hosts := (*implExecution.Session)(sess).Data().InternalHostSource.InternalGetHostsList()
 	for _, host := range hosts {
-		hostPool, _ := implExecution.InternalSessionData((*implExecution.Session)(sess)).InternalPool.InternalGetPool(host)
+		hostPool, _ := (*implExecution.Session)(sess).Data().InternalPool.InternalGetPool(host)
 
 		hostPool.InternalMu.Lock()
 		isFilling := hostPool.InternalFilling || hostPool.InternalRepairScheduled
@@ -285,9 +285,9 @@ func checkIfPoolsStoppedFilling(sess *gocql.Session) bool {
 }
 
 func checkIfPoolsAreFull(sess *gocql.Session) bool {
-	hosts := implExecution.InternalSessionData((*implExecution.Session)(sess)).InternalHostSource.InternalGetHostsList()
+	hosts := (*implExecution.Session)(sess).Data().InternalHostSource.InternalGetHostsList()
 	for _, host := range hosts {
-		hostPool, _ := implExecution.InternalSessionData((*implExecution.Session)(sess)).InternalPool.InternalGetPool(host)
+		hostPool, _ := (*implExecution.Session)(sess).Data().InternalPool.InternalGetPool(host)
 
 		hostPool.InternalMu.Lock()
 		_, remaining := hostPool.InternalConnPicker.Size()

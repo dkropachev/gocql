@@ -17,7 +17,7 @@ import (
 )
 
 func unpreparedQueries(s *Session) int {
-	rt := InternalRuntimeFor(InternalCore(s))
+	rt := InternalRuntimeFor(s.Core())
 	rt.InternalMu.Lock()
 	defer rt.InternalMu.Unlock()
 	return len(rt.queries)

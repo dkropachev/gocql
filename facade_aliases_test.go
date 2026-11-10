@@ -33,7 +33,7 @@ import (
 type hostPrepared = implExecution.InternalHostPrepared
 
 func newConnectionHooks(a0 *Session) implTransport.InternalConnectionHooks {
-	return implExecution.InternalCore((*implExecution.Session)(a0)).NewConnectionHooks()
+	return (*implExecution.Session)(a0).Core().NewConnectionHooks()
 }
 
 type preparedState = implExecution.InternalPreparedState
@@ -43,7 +43,7 @@ type resultPlanCache[R any] = implExecution.InternalResultPlanCache[R]
 type ringDescriber = implCluster.InternalRingDescriber
 
 func runtimeFor(a0 *Session) *sessionRuntime {
-	return implExecution.InternalRuntimeFor(implExecution.InternalCore((*implExecution.Session)(a0)))
+	return implExecution.InternalRuntimeFor((*implExecution.Session)(a0).Core())
 }
 
 type sessionRuntime = implExecution.InternalSessionRuntime

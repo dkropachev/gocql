@@ -30,7 +30,7 @@ func InternalWrapSession(core *implCluster.Core) *Session {
 }
 
 // InternalCore returns the cluster state s wraps, or nil for a nil s.
-func InternalCore(s *Session) *implCluster.Core {
+func (s *Session) Core() *implCluster.Core {
 	if s == nil {
 		return nil
 	}
@@ -38,8 +38,8 @@ func InternalCore(s *Session) *implCluster.Core {
 }
 
 // InternalSessionData returns the storage of the cluster state s wraps.
-func InternalSessionData(s *Session) *implCluster.SessionStorage {
-	return implCluster.SessionData(InternalCore(s))
+func (s *Session) Data() *implCluster.SessionStorage {
+	return implCluster.SessionData(s.Core())
 }
 
 // Prepare prepares statement on s. At most one PrepareOptions may be given;
@@ -53,7 +53,7 @@ func (s *Session) Prepare[P, R any](ctx context.Context, statement binding.State
 	default:
 		return nil, errors.New("gocql: at most one PrepareOptions")
 	}
-	return Prepare(ctx, InternalCore(s), statement, o)
+	return Prepare(ctx, s.Core(), statement, o)
 }
 
 // UnpreparedQuery returns a reusable query that sends statement's CQL text
@@ -63,14 +63,14 @@ func (s *Session) Prepare[P, R any](ctx context.Context, statement binding.State
 // custom codecs. Prefer Prepare for statements that run often: a prepared
 // statement sends only its id and decodes rows with cached metadata.
 func (s *Session) UnpreparedQuery[P, R any](statement binding.Statement[P, R], options Options) (*Query[P, R], error) {
-	return NewUnpreparedQuery(InternalCore(s), statement, options)
+	return NewUnpreparedQuery(s.Core(), statement, options)
 }
 
 // UnpreparedStreamQuery returns a reusable query that sends statement's CQL
 // text to s on every execution, without server preparation. BindMarkers supplies
 // its parameter metadata and Rows decodes into caller-owned storage.
 func (s *Session) UnpreparedStreamQuery[P, R any](statement StreamStatement[P, R], options StreamOptions) (*StreamQuery[P, R], error) {
-	return NewUnpreparedStreamQuery(InternalCore(s), statement, options)
+	return NewUnpreparedStreamQuery(s.Core(), statement, options)
 }
 
 // BindOptions validates options and resolves them for s into CompiledOptions,
@@ -82,7 +82,7 @@ func (s *Session) BindOptions(options Options) (CompiledOptions, error) {
 	if s == nil {
 		return CompiledOptions{}, cqltype.TypeValidation("session", "nil session")
 	}
-	return InternalBindOptions(InternalCore(s), options)
+	return InternalBindOptions(s.Core(), options)
 }
 
 // ExecBatch sends batch as one CQL BATCH of kind on s. The batch's
@@ -95,7 +95,7 @@ func (s *Session) ExecBatch(ctx context.Context, kind cqltype.BatchKind, batch *
 		err := cqltype.TypeValidation("session", "nil session")
 		return InternalExecutionErrorResult(err), err
 	}
-	core := InternalCore(s)
+	core := s.Core()
 	q, o, err := beginBatch(ctx, core, kind, batch, options)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
@@ -117,7 +117,7 @@ func (s *Session) RunBatch[R any](ctx context.Context, kind cqltype.BatchKind, b
 	if decoder == nil {
 		return nil, cqltype.TypeValidation("batch rows", "nil decoder")
 	}
-	core := InternalCore(s)
+	core := s.Core()
 	q, o, err := beginBatch(ctx, core, kind, batch, options)
 	if err != nil {
 		return nil, err
@@ -159,7 +159,7 @@ func (s *Session) Closed() bool { return s.core.Closed() }
 func (s *Session) Metadata() *routing.MetadataSnapshot { return s.core.Metadata() }
 
 // Metrics returns a snapshot of the session's metrics.
-func (s *Session) Metrics() routing.MetricsSnapshot { return InternalCore(s).Metrics() }
+func (s *Session) Metrics() routing.MetricsSnapshot { return s.Core().Metrics() }
 
 // RefreshMetadata waits for the shared topology refresh under the caller's
 // context. Metadata queries themselves use the session metadata timeout.

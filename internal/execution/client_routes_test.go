@@ -111,7 +111,7 @@ func TestClientRoutes(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer s.Close()
-			route, ok := implCluster.ClientRoutesHandlerData(InternalSessionData(s).InternalClientRoutesHandler).InternalRouteCache.PreferredRoute(testLocalHostID.String())
+			route, ok := implCluster.ClientRoutesHandlerData(s.Data().InternalClientRoutesHandler).InternalRouteCache.PreferredRoute(testLocalHostID.String())
 			if !ok || route.InternalConnectionID != ids[2].String() {
 				t.Fatal("did not bind successful configured alternative", route)
 			}

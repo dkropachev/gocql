@@ -32,7 +32,7 @@ func bindOptions[O fixtureOptions](session *gocql.Session, v O) gocql.CompiledOp
 	case gocql.Options:
 		return codecTestMust(session.BindOptions(o))
 	case implExecution.Options:
-		return gocql.CompiledOptions(codecTestMust(implExecution.InternalBindOptions(implExecution.InternalCore((*implExecution.Session)(session)), o)))
+		return gocql.CompiledOptions(codecTestMust(implExecution.InternalBindOptions((*implExecution.Session)(session).Core(), o)))
 	}
 	panic("unreachable fixture options type")
 }
@@ -47,7 +47,7 @@ func prepareFixture[P, R any, O fixturePrepareOptions](ctx context.Context, sess
 	case implExecution.PrepareOptions:
 		internal = o
 	}
-	p, err := implExecution.Prepare(ctx, implExecution.InternalCore((*implExecution.Session)(session)), fixtureStatement(statement), internal)
+	p, err := implExecution.Prepare(ctx, (*implExecution.Session)(session).Core(), fixtureStatement(statement), internal)
 	return (*gocql.Prepared[P, R])(p), err
 }
 

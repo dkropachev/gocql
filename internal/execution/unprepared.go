@@ -49,5 +49,5 @@ func unpreparedCall[P, R any](s *Session, statement binding.Statement[P, R], opt
 	if err != nil {
 		return nil, err
 	}
-	return newUnpreparedQuery(InternalCore(s), statement, o)
+	return newUnpreparedQuery(s.Core(), statement, o)
 }

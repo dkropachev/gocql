@@ -103,7 +103,7 @@ func TestPrepared(t *testing.T) {
 		t.Run("OverriddenKeyspace", func(t *testing.T) {
 			session := createV2Session(t)
 			defer session.Close()
-			if implExecution.InternalSessionData((*implExecution.Session)(session)).InternalCfg.ProtoVersion < 5 {
+			if (*implExecution.Session)(session).Data().InternalCfg.ProtoVersion < 5 {
 				t.Skip("This tests only runs on proto > 4 due SetKeyspace availability")
 			}
 			ks := testKeyspaceName(t)
