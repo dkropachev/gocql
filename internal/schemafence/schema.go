@@ -37,11 +37,11 @@ type InternalPreparedSchemaTracker struct {
 	sequence       atomic.Uint64
 	InternalMu     sync.RWMutex
 }
-type InternalPreparedEpochRead struct {
+type preparedEpochRead struct {
 	clock *atomic.Uint64
 	value uint64
 }
-type InternalPreparedSchemaStamp []InternalPreparedEpochRead
+type InternalPreparedSchemaStamp []preparedEpochRead
 
 func (s InternalPreparedSchemaStamp) InternalCurrent() bool {
 	for _, e := range s {
@@ -77,7 +77,7 @@ func (d *InternalPreparedDependencies) InternalSnapshot() InternalPreparedSchema
 	defer d.mu.RUnlock()
 	s := make(InternalPreparedSchemaStamp, len(d.clocks))
 	for i, c := range d.clocks {
-		s[i] = InternalPreparedEpochRead{c, c.Load()}
+		s[i] = preparedEpochRead{c, c.Load()}
 	}
 	return s
 }
