@@ -45,6 +45,19 @@ Rate attempts (worst rejected share, worst p99 over all runs of all drivers):
 | E1 | 22,628: 6.1 %, 3.7 s; 15,840: 30.1 %, 6.0 s; 11,088: 0 %, 1.6 s; 7,762: 0 %, 516 ms; 5,433: 0 %, 76 ms; 3,803: 0 %, 1.5 ms |
 | E2 | 13,459: 64.7 %, 9.6 s; 9,421: 0 %, 80 ms; 6,595: 0 %, 3.7 ms |
 
+Strict 70 % for E1 and E2, measured in the same pass and the same way
+(first attempt, all runs valid), ops/s and p90 / p95 / p99 in ms, median of
+2 rounds, rejected share per round:
+
+| family | rate/s | master | v2 | rust |
+|---|---:|---|---|---|
+| E1 | 22,628 | 21,408; 1,102 / 2,462 / 2,802; 0.8 %, 3.4 % | 21,111; 1,744 / 3,080 / 3,624; 5.4 %, 6.1 % | 21,587; 1,151 / 2,333 / 2,833; 3.1 %, 3.4 % |
+| E2 | 13,459 | 8,598; 3,970 / 4,517 / 5,102; 0 %, 64.7 % | 13,458; 96 / 217 / 407; 0 %, 0 % | 13,458; 390 / 840 / 1,206; 0 %, 0 % |
+
+At this rate every driver sits in multi-second cluster stalls and the
+ranking follows which round a stall hit (E2 master lost one round to a
+stall), so these rows compare the cluster, not the drivers.
+
 All rates were found in one pass under the final rule (2026-11-09,
 `results/final3-fresh.log`); every run was valid. Data from unsustained
 attempts is under `unsustained/`.
