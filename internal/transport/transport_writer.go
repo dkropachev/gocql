@@ -117,7 +117,7 @@ func (w *InternalWriteCoalescer) InternalWriteSpans(ctx context.Context, chain w
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	resultChan := InternalWriteResultChanPool.Get().(chan InternalWriteResult)
+	resultChan := InternalWriteResultChanPool.Get()
 	req := InternalWriteRequest{ctx: ctx, chain: chain, resultChan: resultChan}
 	select {
 	case <-ctx.Done():

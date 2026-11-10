@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/scylladb/gocql/v2/internal/syncx"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -39,7 +40,7 @@ const (
 	ticketFinished // result is published
 )
 
-var ticketPool = sync.Pool{New: func() any { return &writeTicket{wake: make(chan struct{}, 1)} }}
+var ticketPool = syncx.NewPool(func() *writeTicket { return &writeTicket{wake: make(chan struct{}, 1)} })
 
 func (t *writeTicket) release() {
 	if t.refs.Add(-1) != 0 {
@@ -138,7 +139,7 @@ func (c *Conn) submitTyped(ctx context.Context, packet wire.Chain, lease *wire.L
 
 // getTicket returns an unused ticket, for a caller that builds its request in
 // the ticket's embedded lease before enqueueing it.
-func getTicket() *writeTicket { return ticketPool.Get().(*writeTicket) }
+func getTicket() *writeTicket { return ticketPool.Get() }
 
 // enqueueTyped is submitTyped for a ticket from getTicket.
 func (c *Conn) enqueueTyped(ctx context.Context, t *writeTicket, packet wire.Chain, lease *wire.Lease) (*writeTicket, error) {

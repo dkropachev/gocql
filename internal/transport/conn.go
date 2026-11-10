@@ -33,6 +33,7 @@ import (
 	"fmt"
 
 	"github.com/scylladb/gocql/v2/internal/protocol"
+	"github.com/scylladb/gocql/v2/internal/syncx"
 
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 
@@ -1439,15 +1440,13 @@ type InternalCallReq struct {
 	InternalTyped         bool
 }
 
-var InternalCallReqPool = sync.Pool{
-	New: func() any {
-		resp := make(chan InternalCallResp, 1)
-		return &InternalCallReq{InternalResp: resp, ownResp: resp}
-	},
-}
+var InternalCallReqPool = syncx.NewPool(func() *InternalCallReq {
+	resp := make(chan InternalCallResp, 1)
+	return &InternalCallReq{InternalResp: resp, ownResp: resp}
+})
 
 func InternalGetCallReq(streamID int) *InternalCallReq {
-	call := InternalCallReqPool.Get().(*InternalCallReq)
+	call := InternalCallReqPool.Get()
 	call.state.Store(callWaiting)
 	call.InternalTyped = false
 	call.orphaned = false
@@ -2425,15 +2424,13 @@ type InternalWriteResult struct {
 // Each channel is used in a strict produce-once/consume-once pattern:
 // the flusher goroutine sends exactly one writeResult, and writeContext
 // reads exactly one. After reading, the channel is empty and safe to reuse.
-var InternalWriteResultChanPool = sync.Pool{
-	New: func() interface{} {
-		return make(chan InternalWriteResult, 1)
-	},
-}
+var InternalWriteResultChanPool = syncx.NewPool(func() chan InternalWriteResult {
+	return make(chan InternalWriteResult, 1)
+})
 
 // writeContext implements contextWriter.
 func (w *InternalWriteCoalescer) InternalWriteContext(ctx context.Context, p []byte) (int, error) {
-	resultChan := InternalWriteResultChanPool.Get().(chan InternalWriteResult)
+	resultChan := InternalWriteResultChanPool.Get()
 	wr := InternalWriteRequest{
 		ctx:        ctx,
 		resultChan: resultChan,

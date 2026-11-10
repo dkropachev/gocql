@@ -84,7 +84,7 @@ func TestSubmissionWriter(t *testing.T) {
 
 	t.Run("Ticket", func(t *testing.T) {
 		t.Run("ReportsWriterOutcome", func(t *testing.T) {
-			ticket := ticketPool.Get().(*writeTicket)
+			ticket := ticketPool.Get()
 			ticket.refs.Store(2)
 			ticket.phase.Store(0)
 			ticket.state.Store(ticketPending)
@@ -106,7 +106,7 @@ func TestSubmissionWriter(t *testing.T) {
 			ticket.release()
 		})
 		t.Run("AwaitWrittenBlocksUntilFinish", func(t *testing.T) {
-			ticket := ticketPool.Get().(*writeTicket)
+			ticket := ticketPool.Get()
 			ticket.refs.Store(2)
 			ticket.phase.Store(1)
 			ticket.state.Store(ticketPending)

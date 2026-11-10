@@ -19,8 +19,9 @@
 package wire
 
 import (
-	"sync"
 	"sync/atomic"
+
+	"github.com/scylladb/gocql/v2/internal/syncx"
 )
 
 // Lease keeps a Chain's backing storage alive until its final Release. A Lease
@@ -80,7 +81,7 @@ type cachedLease struct {
 	epoch uint64
 }
 
-var cachedLeasePool = sync.Pool{New: func() any { return new(cachedLease) }}
+var cachedLeasePool = syncx.NewPool(func() *cachedLease { return new(cachedLease) })
 
 func (c *cachedLease) ReleaseLease() {
 	cache, buf, epoch := c.cache, c.buf, c.epoch
@@ -92,7 +93,7 @@ func (c *cachedLease) ReleaseLease() {
 // NewCachedLease is NewLease whose final release returns buf, acquired with
 // epoch, to cache.
 func NewCachedLease(chain Chain, cache *ReceiveCache, buf []byte, epoch uint64) *Lease {
-	c := cachedLeasePool.Get().(*cachedLease)
+	c := cachedLeasePool.Get()
 	c.cache, c.buf, c.epoch = cache, buf, epoch
 	c.init(chain, c)
 	return &c.Lease

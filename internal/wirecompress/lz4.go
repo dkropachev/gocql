@@ -27,9 +27,9 @@ package wirecompress
 import (
 	"encoding/binary"
 	"fmt"
-	"sync"
 
 	"github.com/pierrec/lz4/v4"
+	"github.com/scylladb/gocql/v2/internal/syncx"
 )
 
 // compressorPool pools the lz4 compression state. lz4.Compressor carries the
@@ -38,9 +38,7 @@ import (
 // 128 KiB segment of every frame). It holds no reference to the source or
 // destination buffers, so one instance is reusable for any input; the pool only
 // exists to keep concurrent compressions from sharing a table.
-var compressorPool = sync.Pool{
-	New: func() any { return new(lz4.Compressor) },
-}
+var compressorPool = syncx.NewPool(func() *lz4.Compressor { return new(lz4.Compressor) })
 
 // LZ4Compressor implements the gocql.Compressor interface (and, for native
 // protocol v5 segment compression, gocql.SegmentCompressor). It can be used to
@@ -82,7 +80,7 @@ func (s LZ4Compressor) Encode(data []byte) ([]byte, error) {
 	maxLength := lz4.CompressBlockBound(len(data))
 	buf := make([]byte, maxLength+dataLengthSize)
 
-	compressor := compressorPool.Get().(*lz4.Compressor)
+	compressor := compressorPool.Get()
 	n, err := compressor.CompressBlock(data, buf[dataLengthSize:])
 	compressorPool.Put(compressor)
 	// According to lz4.CompressBlock doc, it doesn't fail as long as the dst
@@ -131,7 +129,7 @@ func (s LZ4Compressor) AppendCompressed(dst, src []byte) ([]byte, error) {
 	oldDstLen := len(dst)
 	dst = grow(dst, maxLength)
 
-	compressor := compressorPool.Get().(*lz4.Compressor)
+	compressor := compressorPool.Get()
 	n, err := compressor.CompressBlock(src, dst[oldDstLen:])
 	compressorPool.Put(compressor)
 	if err != nil {

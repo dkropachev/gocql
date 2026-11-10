@@ -4,9 +4,8 @@
 package transport
 
 import (
-	"sync"
-
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/syncx"
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 
@@ -354,9 +353,9 @@ func (r *typedRequestLease) ReleaseLease() {
 
 // Frame scratch holds a request envelope's scalar bytes and span descriptors.
 // It returns to the pool only once the writer finished with the frame.
-var frameScratchPool = sync.Pool{New: func() any { return wire.NewBuilderScratch(256, 16) }}
+var frameScratchPool = syncx.NewPool(func() *wire.BuilderScratch { return wire.NewBuilderScratch(256, 16) })
 
-func getFrameScratch() *wire.BuilderScratch { return frameScratchPool.Get().(*wire.BuilderScratch) }
+func getFrameScratch() *wire.BuilderScratch { return frameScratchPool.Get() }
 
 func putFrameScratch(s *wire.BuilderScratch) {
 	if s == nil {
