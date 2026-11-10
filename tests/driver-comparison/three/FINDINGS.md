@@ -23,35 +23,27 @@ Max throughput, closed loop, ops/s, median of 2 rounds:
 
 Client CPU per operation (A, D, G): master ~7.0 µs, v2 ~5.2 µs, rust ~3.2 µs.
 
-Latency, open loop at 70 % of the lowest maximum for every family, the same
-rate for all three drivers, first attempt after a reset and conditioning,
-µs p90 / p95 / p99, median of 2 rounds (E1/E2 in ms, see note):
-
-| family | rate/s | master | v2 | rust |
-|---|---:|---|---|---|
-| A | 49,322 | 72 / 78 / 1,122 | 72 / 76 / 846 | 95 / 99 / 107 |
-| B | 1,040 | 692 / 707 / 747 | 690 / 705 / 731 | 748 / 758 / 775 |
-| C | 5,408 | 187 / 192 / 291 | 188 / 194 / 323 | 230 / 236 / 243 |
-| D | 51,769 | 113 / 688 / 1,656 | 80 / 444 / 1,745 | 97 / 101 / 1,465 |
-| E1 | 22,628 | 1,102 / 2,462 / 2,802 ms | 1,744 / 3,080 / 3,624 ms | 1,151 / 2,333 / 2,833 ms |
-| E2 | 13,459 | 3,970 / 4,517 / 5,102 ms | 96 / 217 / 407 ms | 390 / 840 / 1,206 ms |
-| F | 29,555 | 982 / 1,946 / 10,336 | 934 / 1,747 / 13,220 | 920 / 1,554 / 8,895 |
-| G | 49,327 | 79 / 366 / 1,499 | 78 / 155 / 1,604 | 100 / 106 / 758 |
-
-Achieved ops/s equals the rate everywhere except E1 (master 21,408, v2
-21,111, rust 21,587; rejected per round 0.8/3.4 %, 5.4/6.1 %, 3.1/3.4 %)
-and E2 master (8,598; one round lost 64.7 % of arrivals to a stall). At
-70 % E1 and E2 sit in multi-second cluster stalls and the ranking follows
-which round a stall hit, so those rows compare the cluster, not the
-drivers.
-
-Supplementary: E1 and E2 at the highest rate that passes the
-sustained-rate rule (below), measured the same way:
+Latency, open loop, one rule for every family (chosen 2026-11-09): start at
+70 % of the lowest maximum and step down 0.7x until no run of any driver
+rejects > 0.5 % of arrivals or has p99 > 50 ms. Same rate for all three
+drivers, µs p90 / p95 / p99, median of 2 rounds:
 
 | family | rate/s | % of lowest max | master | v2 | rust |
 |---|---:|---:|---|---|---|
+| A | 49,322 | 70 % | 72 / 78 / 1,122 | 72 / 76 / 846 | 95 / 99 / 107 |
+| B | 1,040 | 70 % | 692 / 707 / 747 | 690 / 705 / 731 | 748 / 758 / 775 |
+| C | 5,408 | 70 % | 187 / 192 / 291 | 188 / 194 / 323 | 230 / 236 / 243 |
+| D | 51,769 | 70 % | 113 / 688 / 1,656 | 80 / 444 / 1,745 | 97 / 101 / 1,465 |
 | E1 | 3,803 | 12 % | 83 / 92 / 822 | 82 / 86 / 117 | 126 / 133 / 161 |
 | E2 | 6,595 | 34 % | 126 / 541 / 3,413 | 132 / 880 / 3,662 | 170 / 601 / 3,558 |
+| F | 29,555 | 70 % | 982 / 1,946 / 10,336 | 934 / 1,747 / 13,220 | 920 / 1,554 / 8,895 |
+| G | 49,327 | 70 % | 79 / 366 / 1,499 | 78 / 155 / 1,604 | 100 / 106 / 758 |
+
+For reference, E1 and E2 at 70 % (first attempt, not sustained): E1
+22,628/s gave p99 2.8 / 3.6 / 2.8 s (master / v2 / rust) with 0.8-6.1 %
+rejected; E2 13,459/s gave p99 5.1 s / 407 ms / 1.2 s, master losing
+64.7 % of one round to a stall. Those rows measure cluster stalls, not
+drivers.
 
 Rate attempts (worst rejected share, worst p99 over all runs of all drivers):
 
@@ -67,7 +59,7 @@ E1/E2 data is under `unsustained/`.
 
 - Client-bound families (A, D, G): v2 is 1.31-1.33x master, rust ~2x; the
   ratio follows CPU per operation under the 0.5 CPU budget.
-- At equal offered load (A-D, F, G, and E1/E2 at the sustained rates) the Go drivers have lower p90 than rust in every
+- At equal offered load the Go drivers have lower p90 than rust in every
   family except F (LWT, where rust is lowest at every percentile); rust has
   the tightest tail on A, D and G. v2 matches or beats master at p90/p95
   everywhere except E2, where p95 (880 vs 541 µs) falls in a cluster-bound
