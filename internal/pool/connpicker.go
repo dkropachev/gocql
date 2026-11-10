@@ -9,12 +9,13 @@ import (
 	"sync/atomic"
 
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 type ConnPicker interface {
-	Pick(implEndpoint.Token) *Conn
-	Put(*Conn) error
-	Remove(conn *Conn)
+	Pick(implEndpoint.Token) *transport.Conn
+	Put(*transport.Conn) error
+	Remove(conn *transport.Conn)
 	InFlight() int
 	Size() (int, int)
 	Close()
@@ -33,11 +34,11 @@ type ConnPicker interface {
 // selection from a raw int64 routing token, avoiding the Token interface
 // boxing. hostConnPool uses it when the routing token is an int64Token.
 type InternalInt64ConnPicker interface {
-	PickInt64(int64) *Conn
+	PickInt64(int64) *transport.Conn
 }
 
 type InternalDefaultConnPicker struct {
-	InternalConns []*Conn
+	InternalConns []*transport.Conn
 	pos           uint32
 	InternalSize  int
 	InternalMu    sync.RWMutex
@@ -67,7 +68,7 @@ func InternalNewDefaultConnPicker(size int) *InternalDefaultConnPicker {
 	}
 }
 
-func (p *InternalDefaultConnPicker) Remove(conn *Conn) {
+func (p *InternalDefaultConnPicker) Remove(conn *transport.Conn) {
 	p.InternalMu.Lock()
 	defer p.InternalMu.Unlock()
 
@@ -107,24 +108,24 @@ func (p *InternalDefaultConnPicker) Size() (int, int) {
 	return size, p.InternalSize - size
 }
 
-func (p *InternalDefaultConnPicker) Pick(implEndpoint.Token) *Conn {
+func (p *InternalDefaultConnPicker) Pick(implEndpoint.Token) *transport.Conn {
 	return p.pickLeastBusy()
 }
 
 // PickInt64 is the raw-int64 variant of Pick; the token is unused, the least
 // busy connection is picked either way.
-func (p *InternalDefaultConnPicker) PickInt64(int64) *Conn {
+func (p *InternalDefaultConnPicker) PickInt64(int64) *transport.Conn {
 	return p.pickLeastBusy()
 }
 
-func (p *InternalDefaultConnPicker) pickLeastBusy() *Conn {
+func (p *InternalDefaultConnPicker) pickLeastBusy() *transport.Conn {
 	pos := int(atomic.AddUint32(&p.pos, 1) - 1)
 
 	p.InternalMu.RLock()
 	size := len(p.InternalConns)
 
 	var (
-		leastBusyConn    *Conn
+		leastBusyConn    *transport.Conn
 		streamsAvailable int
 	)
 
@@ -144,7 +145,7 @@ func (p *InternalDefaultConnPicker) pickLeastBusy() *Conn {
 	return leastBusyConn
 }
 
-func (p *InternalDefaultConnPicker) Put(conn *Conn) error {
+func (p *InternalDefaultConnPicker) Put(conn *transport.Conn) error {
 	p.InternalMu.Lock()
 	p.InternalConns = append(p.InternalConns, conn)
 	p.InternalMu.Unlock()
@@ -172,19 +173,19 @@ func (p InternalNopConnPicker) GetShardCount() int {
 	return 0
 }
 
-func (InternalNopConnPicker) Pick(implEndpoint.Token) *Conn {
+func (InternalNopConnPicker) Pick(implEndpoint.Token) *transport.Conn {
 	return nil
 }
 
-func (InternalNopConnPicker) PickInt64(int64) *Conn {
+func (InternalNopConnPicker) PickInt64(int64) *transport.Conn {
 	return nil
 }
 
-func (InternalNopConnPicker) Put(*Conn) error {
+func (InternalNopConnPicker) Put(*transport.Conn) error {
 	return nil
 }
 
-func (InternalNopConnPicker) Remove(conn *Conn) {
+func (InternalNopConnPicker) Remove(conn *transport.Conn) {
 }
 
 func (InternalNopConnPicker) InFlight() int {

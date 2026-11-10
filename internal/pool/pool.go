@@ -27,7 +27,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 type InternalPoolState uint8
@@ -45,11 +51,11 @@ const (
 type InternalTypedConnPicker struct {
 	view             atomic.Pointer[typedView]
 	fallbackUntil    time.Time
-	InternalConns    [][]*Conn
-	InternalExcess   []*Conn
-	retired          []*Conn
+	InternalConns    [][]*transport.Conn
+	InternalExcess   []*transport.Conn
+	retired          []*transport.Conn
 	pending          []int
-	options          PoolOptions
+	options          connectivity.PoolOptions
 	InternalNrShards int
 	msbIgnore        uint64
 	InternalPos      atomic.Uint64
@@ -58,15 +64,15 @@ type InternalTypedConnPicker struct {
 	closed           bool
 }
 
-func InternalNewTypedConnPicker(c *Conn, opts PoolOptions) (*InternalTypedConnPicker, error) {
-	if err := validateV2ConnectionSharding(c.InternalScyllaSupported); err != nil {
+func InternalNewTypedConnPicker(c *transport.Conn, opts connectivity.PoolOptions) (*InternalTypedConnPicker, error) {
+	if err := transport.InternalValidateV2ConnectionSharding(c.InternalScyllaSupported); err != nil {
 		return nil, err
 	}
 	shards := max(1, implEndpoint.ScyllaHostFeaturesData(&c.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards)
-	if _, err := checkedV2PoolBudget(opts, shards); err != nil {
+	if _, err := transport.InternalCheckedV2PoolBudget(opts, shards); err != nil {
 		return nil, err
 	}
-	return &InternalTypedConnPicker{InternalConns: make([][]*Conn, shards), pending: make([]int, shards), InternalNrShards: shards, msbIgnore: implEndpoint.ScyllaHostFeaturesData(&c.InternalScyllaSupported.ScyllaHostFeatures).InternalMsbIgnore, options: opts}, nil
+	return &InternalTypedConnPicker{InternalConns: make([][]*transport.Conn, shards), pending: make([]int, shards), InternalNrShards: shards, msbIgnore: implEndpoint.ScyllaHostFeaturesData(&c.InternalScyllaSupported.ScyllaHostFeatures).InternalMsbIgnore, options: opts}, nil
 }
 func (p *InternalTypedConnPicker) InternalTarget() int {
 	if p.options.ConnectionsPerHost > 0 {
@@ -136,50 +142,50 @@ func (p *InternalTypedConnPicker) InternalDialFinished(shard, shards int) {
 		p.pending[shard]--
 	}
 }
-func (p *InternalTypedConnPicker) Put(c *Conn) error { return p.InternalPut(c, 0, false) }
-func (p *InternalTypedConnPicker) InternalPut(c *Conn, expected uint64, check bool) error {
+func (p *InternalTypedConnPicker) Put(c *transport.Conn) error { return p.InternalPut(c, 0, false) }
+func (p *InternalTypedConnPicker) InternalPut(c *transport.Conn, expected uint64, check bool) error {
 	return p.putMode(c, expected, check, false)
 }
-func (p *InternalTypedConnPicker) InternalPutInitial(c *Conn) error {
+func (p *InternalTypedConnPicker) InternalPutInitial(c *transport.Conn) error {
 	return p.putMode(c, 0, false, true)
 }
-func (p *InternalTypedConnPicker) putMode(c *Conn, expected uint64, check, initial bool) error {
-	if err := validateV2ConnectionSharding(c.InternalScyllaSupported); err != nil {
+func (p *InternalTypedConnPicker) putMode(c *transport.Conn, expected uint64, check, initial bool) error {
+	if err := transport.InternalValidateV2ConnectionSharding(c.InternalScyllaSupported); err != nil {
 		return err
 	}
-	if _, err := checkedV2PoolBudget(p.options, max(1, implEndpoint.ScyllaHostFeaturesData(&c.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards)); err != nil {
+	if _, err := transport.InternalCheckedV2PoolBudget(p.options, max(1, implEndpoint.ScyllaHostFeaturesData(&c.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards)); err != nil {
 		return err
 	}
 	p.InternalMu.Lock()
 	if check && p.generation != expected {
 		p.publishLocked()
 		p.InternalMu.Unlock()
-		return typeValidation("pool generation", "opening attempt belongs to superseded sharder")
+		return cqltype.TypeValidation("pool generation", "opening attempt belongs to superseded sharder")
 	}
 	if p.closed {
 		p.publishLocked()
 		p.InternalMu.Unlock()
-		return ErrClosed
+		return runtimeerrors.ErrClosed
 	}
 	shards := max(1, implEndpoint.ScyllaHostFeaturesData(&c.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards)
 	shard := implEndpoint.ScyllaConnectionFeaturesData(&c.InternalScyllaSupported).InternalShard
 	if initial && p.InternalCount() > 0 && (shards != p.InternalNrShards || implEndpoint.ScyllaHostFeaturesData(&c.InternalScyllaSupported.ScyllaHostFeatures).InternalMsbIgnore != p.msbIgnore) {
 		p.publishLocked()
 		p.InternalMu.Unlock()
-		return typeValidation("pool generation", "late initial opening conflicts with installed sharder")
+		return cqltype.TypeValidation("pool generation", "late initial opening conflicts with installed sharder")
 	}
 	if shard < 0 || shard >= shards {
 		p.publishLocked()
 		p.InternalMu.Unlock()
-		return typeValidation("shard", "server reported invalid shard")
+		return cqltype.TypeValidation("shard", "server reported invalid shard")
 	}
-	var retired []*Conn
+	var retired []*transport.Conn
 	if shards != p.InternalNrShards || implEndpoint.ScyllaHostFeaturesData(&c.InternalScyllaSupported.ScyllaHostFeatures).InternalMsbIgnore != p.msbIgnore {
 		for _, cs := range p.InternalConns {
 			retired = append(retired, cs...)
 		}
 		retired = append(retired, p.InternalExcess...)
-		p.InternalConns = make([][]*Conn, shards)
+		p.InternalConns = make([][]*transport.Conn, shards)
 		p.pending = make([]int, shards)
 		p.InternalExcess = nil
 		p.InternalNrShards = shards
@@ -191,13 +197,13 @@ func (p *InternalTypedConnPicker) putMode(c *Conn, expected uint64, check, initi
 		p.retired = append(p.retired, retired...)
 		p.publishLocked()
 		p.InternalMu.Unlock()
-		return typeValidation("shard target", "source-port/NAT mapping assigned shard %d instead of %d; ordinary-port fallback enabled", shard, c.InternalRequestedShard.Value)
+		return cqltype.TypeValidation("shard target", "source-port/NAT mapping assigned shard %d instead of %d; ordinary-port fallback enabled", shard, c.InternalRequestedShard.Value)
 	}
 	if p.options.ConnectionsPerHost > 0 && p.InternalCount() >= p.InternalTarget() {
 		p.retired = append(p.retired, retired...)
 		p.publishLocked()
 		p.InternalMu.Unlock()
-		return ErrNoStreams
+		return runtimeerrors.ErrNoStreams
 	}
 	if p.options.ConnectionsPerHost > 0 || len(p.InternalConns[shard]) < p.options.ConnectionsPerShard {
 		p.InternalConns[shard] = append(p.InternalConns[shard], c)
@@ -207,7 +213,7 @@ func (p *InternalTypedConnPicker) putMode(c *Conn, expected uint64, check, initi
 		p.retired = append(p.retired, retired...)
 		p.publishLocked()
 		p.InternalMu.Unlock()
-		return ErrNoStreams
+		return runtimeerrors.ErrNoStreams
 	}
 	if p.InternalCount() >= p.InternalTarget() {
 		retired = append(retired, p.InternalExcess...)
@@ -218,7 +224,7 @@ func (p *InternalTypedConnPicker) putMode(c *Conn, expected uint64, check, initi
 	p.InternalMu.Unlock()
 	return nil
 }
-func (p *InternalTypedConnPicker) Remove(c *Conn) {
+func (p *InternalTypedConnPicker) Remove(c *transport.Conn) {
 	p.InternalMu.Lock()
 	defer p.InternalMu.Unlock()
 	for i, cs := range p.InternalConns {
@@ -247,7 +253,7 @@ func (p *InternalTypedConnPicker) Close() {
 		return
 	}
 	p.closed = true
-	var all []*Conn
+	var all []*transport.Conn
 	for _, cs := range p.InternalConns {
 		all = append(all, cs...)
 	}
@@ -265,7 +271,7 @@ func (p *InternalTypedConnPicker) InternalShardOf(token int64) int {
 	sum := ((z & 0xffffffff) * uint64(p.InternalNrShards) >> 32) + (z>>32)*uint64(p.InternalNrShards)
 	return int(sum >> 32)
 }
-func (p *InternalTypedConnPicker) takeRetired() []*Conn {
+func (p *InternalTypedConnPicker) takeRetired() []*transport.Conn {
 	p.InternalMu.Lock()
 	defer p.InternalMu.Unlock()
 	v := p.retired
@@ -273,16 +279,16 @@ func (p *InternalTypedConnPicker) takeRetired() []*Conn {
 	return v
 }
 
-func (p *InternalTypedConnPicker) Pick(t implEndpoint.Token) *Conn {
+func (p *InternalTypedConnPicker) Pick(t implEndpoint.Token) *transport.Conn {
 	if raw, ok := t.(implEndpoint.InternalInt64Token); ok {
 		return p.PickInt64(int64(raw))
 	}
-	return p.InternalPickTarget(Target{}, RoutingInfo{})
+	return p.InternalPickTarget(model.Target{}, model.RoutingInfo{})
 }
-func (p *InternalTypedConnPicker) PickInt64(t int64) *Conn {
-	return p.InternalPickTarget(Target{}, RoutingInfo{Token: Option[int64]{Value: t, Set: true}})
+func (p *InternalTypedConnPicker) PickInt64(t int64) *transport.Conn {
+	return p.InternalPickTarget(model.Target{}, model.RoutingInfo{Token: cqltype.Option[int64]{Value: t, Set: true}})
 }
-func (p *InternalTypedConnPicker) InternalPickTarget(target Target, routing RoutingInfo) *Conn {
+func (p *InternalTypedConnPicker) InternalPickTarget(target model.Target, routing model.RoutingInfo) *transport.Conn {
 	p.InternalMu.RLock()
 	defer p.InternalMu.RUnlock()
 	if p.closed {
@@ -303,7 +309,7 @@ func (p *InternalTypedConnPicker) InternalPickTarget(target Target, routing Rout
 		shard = p.InternalShardOf(routing.Token.Value)
 	}
 	choose := p.choose
-	var preferred *Conn
+	var preferred *transport.Conn
 	if shard >= 0 && shard < len(p.InternalConns) {
 		cs := p.InternalConns[shard]
 		// A shard usually has one connection: take it when it has a free stream.
@@ -319,7 +325,7 @@ func (p *InternalTypedConnPicker) InternalPickTarget(target Target, routing Rout
 		return preferred
 	}
 
-	var best *Conn
+	var best *transport.Conn
 	available := 0
 	for _, cs := range p.InternalConns {
 		if c := choose(cs); c != nil {
@@ -349,23 +355,23 @@ func (pool *InternalHostConnPool) signalReservation() {
 	pool.signalReservationLocked()
 	pool.InternalMu.Unlock()
 }
-func (pool *InternalHostConnPool) InternalReserveStream(ctx context.Context, target Target, routing RoutingInfo) (*exclusiveConn, error) {
-	return pool.InternalReserveStreamWithLimits(ctx, target, routing, StreamLimits{})
+func (pool *InternalHostConnPool) InternalReserveStream(ctx context.Context, target model.Target, routing model.RoutingInfo) (*transport.InternalExclusiveConn, error) {
+	return pool.InternalReserveStreamWithLimits(ctx, target, routing, transport.StreamLimits{})
 }
-func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Context, target Target, routing RoutingInfo, limits StreamLimits) (*exclusiveConn, error) {
+func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Context, target model.Target, routing model.RoutingInfo, limits transport.StreamLimits) (*transport.InternalExclusiveConn, error) {
 	if ctx == nil {
-		return nil, typeValidation("stream context", "nil context")
+		return nil, cqltype.TypeValidation("stream context", "nil context")
 	}
 	if (!target.HostID.IsEmpty() && target.HostID != implEndpoint.InternalHostInfoHostUUID(pool.InternalHost)) || routing.HostID.Set && routing.HostID.Value != implEndpoint.InternalHostInfoHostUUID(pool.InternalHost) {
-		return nil, ErrNoConnections
+		return nil, runtimeerrors.ErrNoConnections
 	}
 	for {
 		pool.InternalMu.RLock()
 		if pool.InternalClosed {
 			pool.InternalMu.RUnlock()
-			return nil, ErrClosed
+			return nil, runtimeerrors.ErrClosed
 		}
-		var candidates []*Conn
+		var candidates []*transport.Conn
 		if p, ok := pool.InternalConnPicker.(*InternalTypedConnPicker); ok {
 			p.InternalMu.RLock()
 			shard := -1
@@ -380,7 +386,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 				} else if strict {
 					p.InternalMu.RUnlock()
 					pool.InternalMu.RUnlock()
-					return nil, ErrNoConnections
+					return nil, runtimeerrors.ErrNoConnections
 				}
 			} else if routing.Token.Set {
 				shard = p.InternalShardOf(routing.Token.Value)
@@ -388,14 +394,14 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 			if strict && shard >= len(p.InternalConns) {
 				p.InternalMu.RUnlock()
 				pool.InternalMu.RUnlock()
-				return nil, ErrNoConnections
+				return nil, runtimeerrors.ErrNoConnections
 			}
 			for i, cs := range p.InternalConns {
 				if strict && shard >= 0 && i != shard {
 					continue
 				}
 				if i == shard {
-					candidates = append(append([]*Conn(nil), cs...), candidates...)
+					candidates = append(append([]*transport.Conn(nil), cs...), candidates...)
 				} else {
 					candidates = append(candidates, cs...)
 				}
@@ -442,7 +448,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 				if ctx.Err() != nil {
 					return nil, ctx.Err()
 				}
-				if _, ok := errors.AsType[*StreamCapabilityError](err); ok {
+				if _, ok := errors.AsType[*codec.StreamCapabilityError](err); ok {
 					capability = err
 				}
 			}
@@ -453,7 +459,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 		pool.InternalMu.Lock()
 		if pool.InternalClosed {
 			pool.InternalMu.Unlock()
-			return nil, ErrClosed
+			return nil, runtimeerrors.ErrClosed
 		}
 		if pool.reservationChanged == nil {
 			pool.reservationChanged = make(chan struct{})
@@ -475,7 +481,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-pool.InternalRepairCtx.Done():
-			return nil, ErrClosed
+			return nil, runtimeerrors.ErrClosed
 		case <-changed:
 		}
 	}

@@ -6,6 +6,9 @@ package pool
 import (
 	"math"
 	"sync/atomic"
+
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 // AnyShard picks the least busy connection of a host instead of one shard's.
@@ -19,14 +22,14 @@ const AnyShard int32 = -1
 type HostRoute struct {
 	owner *InternalPolicyConnPool // nil for a route made outside a session
 	pool  atomic.Pointer[InternalHostConnPool]
-	id    UUID
+	id    cqltype.UUID
 }
 
 // NewHostRoute returns a route of id that belongs to no session; it has no
 // pool, and a request resolves it through its session's pools by ID.
-func NewHostRoute(id UUID) *HostRoute { return &HostRoute{id: id} }
+func NewHostRoute(id cqltype.UUID) *HostRoute { return &HostRoute{id: id} }
 
-func (r *HostRoute) ID() UUID { return r.id }
+func (r *HostRoute) ID() cqltype.UUID { return r.id }
 
 // Bound reports whether the route belongs to a session's pools.
 func (r *HostRoute) Bound() bool { return r.owner != nil }
@@ -43,7 +46,7 @@ func (r *HostRoute) Pool() *InternalHostConnPool {
 }
 
 // InternalRoute returns the session's route of a host, made on first use.
-func (p *InternalPolicyConnPool) InternalRoute(id UUID) *HostRoute {
+func (p *InternalPolicyConnPool) InternalRoute(id cqltype.UUID) *HostRoute {
 	p.InternalMu.RLock()
 	r := p.routes[id]
 	p.InternalMu.RUnlock()
@@ -54,7 +57,7 @@ func (p *InternalPolicyConnPool) InternalRoute(id UUID) *HostRoute {
 	defer p.InternalMu.Unlock()
 	if r = p.routes[id]; r == nil {
 		if p.routes == nil {
-			p.routes = make(map[UUID]*HostRoute)
+			p.routes = make(map[cqltype.UUID]*HostRoute)
 		}
 		r = &HostRoute{owner: p, id: id}
 		if pool := p.InternalHostConnPools[id]; pool != nil {
@@ -78,7 +81,7 @@ func (p *InternalPolicyConnPool) bindRoute(r *HostRoute) *InternalHostConnPool {
 
 // routeChangedLocked tells a host's route, if it has one, that the host's
 // pool is now pool (nil once removed). Must be called with p.InternalMu held.
-func (p *InternalPolicyConnPool) routeChangedLocked(id UUID, pool *InternalHostConnPool) {
+func (p *InternalPolicyConnPool) routeChangedLocked(id cqltype.UUID, pool *InternalHostConnPool) {
 	if r := p.routes[id]; r != nil {
 		r.pool.Store(pool)
 	}
@@ -88,7 +91,7 @@ func (p *InternalPolicyConnPool) routeChangedLocked(id UUID, pool *InternalHostC
 // connections per shard, which are never modified once published, its
 // sharding, and how many connections it misses.
 type typedView struct {
-	conns     [][]*Conn
+	conns     [][]*transport.Conn
 	shards    int
 	msbIgnore uint64
 	count     int
@@ -103,7 +106,7 @@ func (p *InternalTypedConnPicker) publishLocked() {
 		return
 	}
 	n := p.InternalCount()
-	p.view.Store(&typedView{conns: append([][]*Conn(nil), p.InternalConns...), shards: p.InternalNrShards, msbIgnore: p.msbIgnore, count: n, missing: max(0, p.InternalTarget()-n)})
+	p.view.Store(&typedView{conns: append([][]*transport.Conn(nil), p.InternalConns...), shards: p.InternalNrShards, msbIgnore: p.msbIgnore, count: n, missing: max(0, p.InternalTarget()-n)})
 }
 
 func shardOf(token int64, shards int, msbIgnore uint64) int {
@@ -167,7 +170,7 @@ func (pool *InternalHostConnPool) typedPicker() *InternalTypedConnPicker {
 // the least busy one for AnyShard, or nil when it has none: it never moves
 // to another shard, which is the routing plan's next route. ok is false
 // when the pool has no typed picker and the caller picks the legacy way.
-func (pool *InternalHostConnPool) PickRoute(shard int32) (conn *Conn, ok bool) {
+func (pool *InternalHostConnPool) PickRoute(shard int32) (conn *transport.Conn, ok bool) {
 	t := pool.typedPicker()
 	if t == nil {
 		return nil, false
@@ -193,7 +196,7 @@ func (pool *InternalHostConnPool) PickRoute(shard int32) (conn *Conn, ok bool) {
 		}
 		return t.choose(cs), true
 	}
-	var best *Conn
+	var best *transport.Conn
 	available := 0
 	for _, cs := range v.conns {
 		if c := t.choose(cs); c != nil {
@@ -209,8 +212,8 @@ func (pool *InternalHostConnPool) PickRoute(shard int32) (conn *Conn, ok bool) {
 
 // choose returns the connection of cs with the most free streams, or one
 // held exclusively that still has a stream, or nil.
-func (p *InternalTypedConnPicker) choose(cs []*Conn) *Conn {
-	var best, waiting *Conn
+func (p *InternalTypedConnPicker) choose(cs []*transport.Conn) *transport.Conn {
+	var best, waiting *transport.Conn
 	available := 0
 	if len(cs) == 0 {
 		return nil

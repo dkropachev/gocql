@@ -13,8 +13,11 @@ import (
 
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/debug"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 // scyllaConnPicker is a specialised ConnPicker that selects connections based
@@ -30,12 +33,12 @@ import (
 // it tries to make, the shard that it aims to connect to is chosen
 // in a round-robin fashion.
 type InternalScyllaConnPicker struct {
-	InternalLogger StdLogger
+	InternalLogger logging.StdLogger
 	// disableShardAwarePortUntil is used to temporarily disable new connections to the shard-aware port temporarily
 	InternalDisableShardAwarePortUntil *atomic.Pointer[time.Time]
 	InternalAddress                    string
-	InternalExcessConns                []*Conn
-	InternalConns                      []*Conn
+	InternalExcessConns                []*transport.Conn
+	InternalConns                      []*transport.Conn
 	InternalMu                         sync.RWMutex
 	InternalNrShards                   int
 	InternalPos                        uint64
@@ -43,11 +46,11 @@ type InternalScyllaConnPicker struct {
 	InternalMsbIgnore                  uint64
 	InternalNrConns                    int
 	InternalExcessConnsLimitRate       float32
-	InternalHostId                     UUID
+	InternalHostId                     cqltype.UUID
 	InternalShardAwarePortDisabled     bool
 }
 
-func InternalNewScyllaConnPicker(conn *Conn, logger StdLogger) *InternalScyllaConnPicker {
+func InternalNewScyllaConnPicker(conn *transport.Conn, logger logging.StdLogger) *InternalScyllaConnPicker {
 	addr := conn.Address()
 
 	if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards == 0 {
@@ -72,7 +75,7 @@ func InternalNewScyllaConnPicker(conn *Conn, logger StdLogger) *InternalScyllaCo
 	}
 }
 
-func (p *InternalScyllaConnPicker) Pick(t implEndpoint.Token) *Conn {
+func (p *InternalScyllaConnPicker) Pick(t implEndpoint.Token) *transport.Conn {
 	p.InternalMu.RLock()
 	defer p.InternalMu.RUnlock()
 
@@ -96,7 +99,7 @@ func (p *InternalScyllaConnPicker) Pick(t implEndpoint.Token) *Conn {
 // PickInt64 is the raw-int64 fast-path variant of Pick, avoiding the Token
 // interface boxing. It must only be called with int64-based routing tokens
 // (Murmur3/ScyllaCDC), which is guaranteed by int64TokenSelectedHost.
-func (p *InternalScyllaConnPicker) PickInt64(token int64) *Conn {
+func (p *InternalScyllaConnPicker) PickInt64(token int64) *transport.Conn {
 	p.InternalMu.RLock()
 	defer p.InternalMu.RUnlock()
 
@@ -109,7 +112,7 @@ func (p *InternalScyllaConnPicker) PickInt64(token int64) *Conn {
 
 // pickInt64Locked selects the shard-aware connection for the given raw token.
 // Must be called with p.mu held.
-func (p *InternalScyllaConnPicker) pickInt64Locked(mmt implEndpoint.InternalInt64Token) *Conn {
+func (p *InternalScyllaConnPicker) pickInt64Locked(mmt implEndpoint.InternalInt64Token) *transport.Conn {
 	idx := -1
 
 	if idx == -1 {
@@ -125,7 +128,7 @@ func (p *InternalScyllaConnPicker) pickInt64Locked(mmt implEndpoint.InternalInt6
 	return p.InternalLeastBusyConn()
 }
 
-func (p *InternalScyllaConnPicker) InternalMaybeReplaceWithLessBusyConnection(c *Conn) *Conn {
+func (p *InternalScyllaConnPicker) InternalMaybeReplaceWithLessBusyConnection(c *transport.Conn) *transport.Conn {
 	if !InternalIsHeavyLoaded(c) {
 		return c
 	}
@@ -137,13 +140,13 @@ func (p *InternalScyllaConnPicker) InternalMaybeReplaceWithLessBusyConnection(c 
 	}
 }
 
-func InternalIsHeavyLoaded(c *Conn) bool {
+func InternalIsHeavyLoaded(c *transport.Conn) bool {
 	return c.InternalStreams.NumStreams/2 > c.AvailableStreams()
 }
 
-func (p *InternalScyllaConnPicker) InternalLeastBusyConn() *Conn {
+func (p *InternalScyllaConnPicker) InternalLeastBusyConn() *transport.Conn {
 	var (
-		leastBusyConn    *Conn
+		leastBusyConn    *transport.Conn
 		streamsAvailable int
 	)
 	idx := int(atomic.AddUint64(&p.InternalPos, 1))
@@ -170,7 +173,7 @@ func (p *InternalScyllaConnPicker) InternalShardOf(token implEndpoint.InternalIn
 	return int(sum >> 32)
 }
 
-func (p *InternalScyllaConnPicker) Put(conn *Conn) error {
+func (p *InternalScyllaConnPicker) Put(conn *transport.Conn) error {
 	var (
 		nrShards = implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards
 		shard    = implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard
@@ -191,7 +194,7 @@ func (p *InternalScyllaConnPicker) Put(conn *Conn) error {
 		p.handleShardCountChange(conn, nrShards)
 	} else if nrShards != len(p.InternalConns) {
 		conns := p.InternalConns
-		p.InternalConns = make([]*Conn, nrShards)
+		p.InternalConns = make([]*transport.Conn, nrShards)
 		copy(p.InternalConns, conns)
 	}
 
@@ -233,17 +236,17 @@ func (p *InternalScyllaConnPicker) Put(conn *Conn) error {
 	return nil
 }
 
-func (p *InternalScyllaConnPicker) handleShardCountChange(newConn *Conn, newShardCount int) {
+func (p *InternalScyllaConnPicker) handleShardCountChange(newConn *transport.Conn, newShardCount int) {
 	oldShardCount := p.InternalNrShards
-	oldConns := make([]*Conn, len(p.InternalConns))
+	oldConns := make([]*transport.Conn, len(p.InternalConns))
 	copy(oldConns, p.InternalConns)
 
 	if debug.Enabled {
 		p.InternalLogger.Printf("scylla: %s handling shard topology change from %d to %d", p.InternalAddress, oldShardCount, newShardCount)
 	}
 
-	newConns := make([]*Conn, newShardCount)
-	var toClose []*Conn
+	newConns := make([]*transport.Conn, newShardCount)
+	var toClose []*transport.Conn
 	migratedCount := 0
 
 	for i, conn := range oldConns {
@@ -298,7 +301,7 @@ func (p *InternalScyllaConnPicker) GetShardCount() int {
 	return p.InternalNrShards
 }
 
-func (p *InternalScyllaConnPicker) Remove(conn *Conn) {
+func (p *InternalScyllaConnPicker) Remove(conn *transport.Conn) {
 	shard := implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard
 
 	if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards == 0 {
@@ -392,7 +395,7 @@ func (p *InternalScyllaConnPicker) closeExcessConnsLocked() {
 // closeConns closes a list of connections. Must be called outside of any lock
 // to avoid deadlocks when a connection close triggers HandleError.
 // See scylladb/gocql#53.
-func InternalCloseConns(conns ...*Conn) {
+func InternalCloseConns(conns ...*transport.Conn) {
 	for _, conn := range conns {
 		if conn != nil {
 			conn.Close()

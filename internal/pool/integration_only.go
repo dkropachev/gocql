@@ -5,7 +5,11 @@
 
 package pool
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/scylladb/gocql/v2/internal/transport"
+)
 
 func (p *InternalPolicyConnPool) MissingConnections() (int, error) {
 	p.InternalMu.Lock()
@@ -43,7 +47,7 @@ func (pool *InternalHostConnPool) CloseAllConnections() {
 		pool.InternalMu.Unlock()
 		return
 	}
-	var conns []*Conn
+	var conns []*transport.Conn
 	switch picker := pool.InternalConnPicker.(type) {
 	case *InternalTypedConnPicker:
 		picker.InternalMu.RLock()

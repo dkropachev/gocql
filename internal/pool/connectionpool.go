@@ -34,8 +34,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/debug"
+	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/tablets"
+	"github.com/scylladb/gocql/v2/internal/transport"
 
 	"github.com/scylladb/gocql/v2/internal/debounce"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -43,7 +46,7 @@ import (
 )
 
 type SetHosts interface {
-	SetHosts(hosts []*HostInfo)
+	SetHosts(hosts []*implEndpoint.HostInfo)
 }
 
 // interface to implement to receive the partitioner value
@@ -58,19 +61,19 @@ type SetTablets interface {
 
 type InternalPolicyConnPool struct {
 	InternalServices      InternalPoolServices
-	InternalHostConnPools map[UUID]*InternalHostConnPool
-	routes                map[UUID]*HostRoute
+	InternalHostConnPools map[cqltype.UUID]*InternalHostConnPool
+	routes                map[cqltype.UUID]*HostRoute
 	InternalKeyspace      string
 	InternalPort          int
 	InternalNumConns      int
 	InternalMu            sync.RWMutex
 }
 
-func (p *InternalPolicyConnPool) SetHosts(hosts []*HostInfo) {
+func (p *InternalPolicyConnPool) SetHosts(hosts []*implEndpoint.HostInfo) {
 	p.InternalMu.Lock()
 	defer p.InternalMu.Unlock()
 
-	toRemove := make(map[UUID]struct{})
+	toRemove := make(map[cqltype.UUID]struct{})
 	for hostID := range p.InternalHostConnPools {
 		toRemove[hostID] = struct{}{}
 	}
@@ -90,7 +93,7 @@ func (p *InternalPolicyConnPool) SetHosts(hosts []*HostInfo) {
 		}
 
 		createCount++
-		go func(host *HostInfo) {
+		go func(host *implEndpoint.HostInfo) {
 			// create a connection pool for the host
 			pools <- InternalNewHostPool(
 				p.InternalServices,
@@ -142,7 +145,7 @@ func (p *InternalPolicyConnPool) Size() int {
 	return count
 }
 
-func (p *InternalPolicyConnPool) InternalGetPool(host *HostInfo) (pool *InternalHostConnPool, ok bool) {
+func (p *InternalPolicyConnPool) InternalGetPool(host *implEndpoint.HostInfo) (pool *InternalHostConnPool, ok bool) {
 	hostID := implEndpoint.InternalHostInfoHostUUID(host)
 	p.InternalMu.RLock()
 	pool, ok = p.InternalHostConnPools[hostID]
@@ -152,7 +155,7 @@ func (p *InternalPolicyConnPool) InternalGetPool(host *HostInfo) (pool *Internal
 
 // Rare path (SetHostID/GetHostPoolByID); getPool is the hot path and skips this parse.
 func (p *InternalPolicyConnPool) InternalGetPoolByHostID(hostID string) (pool *InternalHostConnPool, ok bool) {
-	id, err := ParseUUID(hostID)
+	id, err := cqltype.ParseUUID(hostID)
 	if err != nil {
 		return nil, false
 	}
@@ -194,7 +197,7 @@ func (p *InternalPolicyConnPool) Close() {
 	}
 }
 
-func (p *InternalPolicyConnPool) InternalEnsureHost(host *HostInfo) *InternalHostConnPool {
+func (p *InternalPolicyConnPool) InternalEnsureHost(host *implEndpoint.HostInfo) *InternalHostConnPool {
 	hostID := implEndpoint.InternalHostInfoHostUUID(host)
 	p.InternalMu.Lock()
 	pool, ok := p.InternalHostConnPools[hostID]
@@ -213,11 +216,11 @@ func (p *InternalPolicyConnPool) InternalEnsureHost(host *HostInfo) *InternalHos
 
 	return pool
 }
-func (p *InternalPolicyConnPool) InternalAddHost(host *HostInfo) {
+func (p *InternalPolicyConnPool) InternalAddHost(host *implEndpoint.HostInfo) {
 	p.InternalEnsureHost(host).InternalFill_debounce()
 }
 
-func (p *InternalPolicyConnPool) InternalRemoveHost(hostID UUID) {
+func (p *InternalPolicyConnPool) InternalRemoveHost(hostID cqltype.UUID) {
 	p.InternalMu.Lock()
 	pool, ok := p.InternalHostConnPools[hostID]
 	if !ok {
@@ -238,9 +241,9 @@ type InternalHostConnPool struct {
 	InternalServices     InternalPoolServices
 	InternalConnPicker   ConnPicker
 	typed                atomic.Pointer[InternalTypedConnPicker]
-	InternalLogger       StdLogger
+	InternalLogger       logging.StdLogger
 	InternalRepairCtx    context.Context
-	InternalHost         *HostInfo
+	InternalHost         *implEndpoint.HostInfo
 	InternalDebouncer    *debounce.SimpleDebouncer
 	reservationChanged   chan struct{}
 	InternalRepairCancel context.CancelFunc
@@ -266,7 +269,7 @@ func (pool *InternalHostConnPool) String() string {
 		pool.InternalFilling, pool.InternalClosed, size, pool.InternalSize, pool.InternalHost)
 }
 
-func InternalNewHostPool(services InternalPoolServices, host *HostInfo, size int, keyspace string) *InternalHostConnPool {
+func InternalNewHostPool(services InternalPoolServices, host *implEndpoint.HostInfo, size int, keyspace string) *InternalHostConnPool {
 	baseCtx := services.Context
 	if baseCtx == nil {
 		baseCtx = context.Background()
@@ -290,10 +293,10 @@ func InternalNewHostPool(services InternalPoolServices, host *HostInfo, size int
 }
 
 // Pick a connection from this connection pool for the given query.
-func (pool *InternalHostConnPool) Pick(token implEndpoint.Token) *Conn {
+func (pool *InternalHostConnPool) Pick(token implEndpoint.Token) *transport.Conn {
 	pool.InternalMu.RLock()
 	pickable, repair := pool.InternalPickable()
-	var conn *Conn
+	var conn *transport.Conn
 	if pickable {
 		conn = pool.InternalConnPicker.Pick(token)
 	}
@@ -307,10 +310,10 @@ func (pool *InternalHostConnPool) Pick(token implEndpoint.Token) *Conn {
 // PickInt64 picks a connection for the given raw int64 routing token, avoiding
 // the Token interface boxing. Picks fall back to the boxed path when the
 // connPicker does not support raw-int64 picking.
-func (pool *InternalHostConnPool) PickInt64(token int64) *Conn {
+func (pool *InternalHostConnPool) PickInt64(token int64) *transport.Conn {
 	pool.InternalMu.RLock()
 	pickable, repair := pool.InternalPickable()
-	var conn *Conn
+	var conn *transport.Conn
 	if pickable {
 		if p, ok := pool.InternalConnPicker.(InternalInt64ConnPicker); ok {
 			conn = p.PickInt64(token)
@@ -327,7 +330,7 @@ func (pool *InternalHostConnPool) PickInt64(token int64) *Conn {
 
 // PickConn routes a picked host to the raw-int64 fast path when it exposes one,
 // and to the boxed Token path otherwise.
-func (pool *InternalHostConnPool) PickConn(host implEndpoint.SelectedHost) *Conn {
+func (pool *InternalHostConnPool) PickConn(host implEndpoint.SelectedHost) *transport.Conn {
 	if th, ok := host.(implEndpoint.InternalInt64TokenSelectedHost); ok {
 		if token, has := th.TokenInt64(); has {
 			return pool.PickInt64(int64(token))
@@ -620,7 +623,7 @@ func (pool *InternalHostConnPool) InternalConnect() (err error) {
 	// TODO: provide a more robust connection retry mechanism, we should also
 	// be able to detect hosts that come up by trying to connect to downed ones.
 	// try to connect
-	var conn *Conn
+	var conn *transport.Conn
 	reconnectionPolicy := pool.InternalServices.Reconnection
 	for i := 0; i < reconnectionPolicy.GetMaxRetries(); i++ {
 		conn, err = pool.InternalServices.Dial(pool.InternalRepairCtx, pool.InternalHost, pool, shardID, nrShards)
@@ -688,7 +691,7 @@ func (pool *InternalHostConnPool) InternalConnect() (err error) {
 			implEndpoint.HostInfoData(pool.InternalHost).InternalMu.Unlock()
 			pool.InternalMu.Unlock()
 			conn.Close()
-			return typeValidation("pool generation", "opening attempt belongs to superseded endpoint/route")
+			return cqltype.TypeValidation("pool generation", "opening attempt belongs to superseded endpoint/route")
 		}
 	}
 	// lazily initialize the connPicker when we know the required type
@@ -741,7 +744,7 @@ func (pool *InternalHostConnPool) InternalConnect() (err error) {
 	return nil
 }
 
-func (pool *InternalHostConnPool) InternalInitConnPicker(conn *Conn) error {
+func (pool *InternalHostConnPool) InternalInitConnPicker(conn *transport.Conn) error {
 	if _, ok := pool.InternalConnPicker.(InternalNopConnPicker); !ok {
 		return nil
 	}
@@ -763,7 +766,7 @@ func (pool *InternalHostConnPool) InternalInitConnPicker(conn *Conn) error {
 }
 
 // handle any error from a Conn
-func (pool *InternalHostConnPool) HandleError(conn *Conn, err error, closed bool) {
+func (pool *InternalHostConnPool) HandleError(conn *transport.Conn, err error, closed bool) {
 	if !closed {
 		return
 	}
