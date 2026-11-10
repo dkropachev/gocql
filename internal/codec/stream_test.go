@@ -95,7 +95,7 @@ func TestStream(t *testing.T) {
 			m := CodecTestMust(cqltype.MapType(blob, list))
 			input := []Entry[[]byte, [][]byte]{{Key: []byte("k"), Value: [][]byte{[]byte("one"), []byte("two")}}}
 			mdata := streamEncodedFixture(t, m, MapEncoder(BytesEncoder, ListEncoder(BytesEncoder)), input)
-			mapped := []StreamMapEntry[[]byte, [][]byte]{{Key: make([]byte, 0, 4), Value: [][]byte{first[:0], second[:0]}}}
+			mapped := []Entry[[]byte, [][]byte]{{Key: make([]byte, 0, 4), Value: [][]byte{first[:0], second[:0]}}}
 			if err := StreamDecodeFixture(t, m, StreamMap(StreamBlob, StreamList(StreamBlob)), mdata, &mapped, 1); err != nil || string(mapped[0].Key) != "k" || string(mapped[0].Value[1]) != "two" {
 				t.Fatal("map", mapped, err)
 			}

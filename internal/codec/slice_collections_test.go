@@ -4,6 +4,7 @@
 package codec
 
 import (
+	"reflect"
 	"testing"
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
@@ -30,3 +31,22 @@ func collectionColumns(t testing.TB) cqltype.Columns {
 }
 
 var attrsCodec = WithCodec[collectionRow](MapCodec(StringCodec, Int64))
+
+func TestVectorStructMapping(t *testing.T) {
+	type row struct {
+		Values []int32 `cql:"values,codec=VectorCodec,stream=StreamVector"`
+	}
+	typ := CodecTestMust(cqltype.VectorDataType(cqltype.IntType, 3))
+	columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "values", Type: typ})
+	want := row{Values: []int32{7, 2, -3}}
+	body := encodeTestParams(t, columns, MustParamsOf[row](), want)
+	got := decodeTestRow(t, columns, MustRowOf[row](), body)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("buffered vector = %v; want %v", got, want)
+	}
+	streamed := row{Values: make([]int32, 0, 3)}
+	streamDecodeRow(t, columns, MustStreamRowOf[row](), chainBytes(t, body), &streamed)
+	if !reflect.DeepEqual(streamed, want) {
+		t.Fatalf("streamed vector = %v; want %v", streamed, want)
+	}
+}

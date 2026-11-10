@@ -162,6 +162,7 @@ func builtin[P, V any](enc Encoder[V], dec Decoder[V], elem Codec[V], typeSrc, e
 		collection(ListCodec(elem), "cql.ListCodec(cql."+elemName+")", names, def)}
 	if def {
 		fields = append(fields, collection(SetCodec(elem), "cql.SetCodec(cql."+elemName+")", []string{"SetCodec"}, false))
+		fields = append(fields, collection(VectorCodec(elem), "cql.VectorCodec(cql."+elemName+")", []string{"VectorCodec"}, false))
 	}
 	return fields
 }
@@ -608,7 +609,7 @@ func streamBuiltinFields[P any]() []streamBuiltinField[P] {
 }
 
 // streamBuiltin returns the entries for V, Nullable[V], and []V as a list
-// (the default) or a set (`stream=StreamSet`).
+// (the default), a set (`stream=StreamSet`), or a vector (`stream=StreamVector`).
 func streamBuiltin[P, V any](dec StreamDecoder[V], typeSrc, name string, def bool) []streamBuiltinField[P] {
 	entry := func(typ reflect.Type, typeSrc, decSrc string, names []string, def bool, column func(string, uintptr) StreamOutputField[P]) streamBuiltinField[P] {
 		return streamBuiltinField[P]{column: column, BuiltinFieldType: BuiltinFieldType{
@@ -625,6 +626,8 @@ func streamBuiltin[P, V any](dec StreamDecoder[V], typeSrc, name string, def boo
 			[]string{"StreamList"}, def, fieldStreamColumn[P](StreamList(dec))),
 		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamSet("+src+")",
 			[]string{"StreamSet"}, false, fieldStreamColumn[P](StreamSet(dec))),
+		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamVector("+src+")",
+			[]string{"StreamVector"}, false, fieldStreamColumn[P](StreamVector(dec))),
 	}
 }
 

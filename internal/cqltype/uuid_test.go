@@ -213,11 +213,11 @@ func TestUUID(t *testing.T) {
 		}
 	})
 
-	t.Run("ParseUUIDMust", func(t *testing.T) {
+	t.Run("MustParseUUID", func(t *testing.T) {
 		t.Run("Time", func(t *testing.T) {
 			t.Parallel()
 
-			uuid := ParseUUIDMust("486f3a88-775b-11e3-ae07-d231feb1dc81")
+			uuid := MustParseUUID("486f3a88-775b-11e3-ae07-d231feb1dc81")
 			if uuid.Time() != time.Date(2014, 1, 7, 5, 19, 29, 222516000, time.UTC) {
 				t.Errorf("Expected date of 1/7/2014 at 5:19:29.222516, got %v", uuid.Time())
 			}

@@ -24,30 +24,27 @@ import (
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
-// sync.Pool deliberately drops entries randomly under -race; allocation
-// contracts are measured without that instrumentation. Concurrency and borrowed
-// lifetime tests still run with -race in TestContainer and TestTupleUDT.
+// sync.Pool deliberately drops entries under -race. Measure allocation counts
+// without that instrumentation; ownership and concurrency tests also run with it.
 func TestContainerAllocs(t *testing.T) {
-	t.Run("TupleIteration", func(t *testing.T) {
+	t.Run("TupleDecode", func(t *testing.T) {
 		integer := FoundationScalar(t, cqltype.TypeInt)
 		tuple := CodecTestMust(cqltype.TupleType(integer))
 		list := CodecTestMust(cqltype.ListType(tuple))
 		allocated := func(count int) float64 {
 			encoded := CodecTestMust(EncodeValueBorrowed(list, ListEncoder(TupleEncoder(OneParam(Int32))), make([]int32, count)))
-			sequence := CodecTestMust(DecodeValue(ListDecoder(TupleDecoder(OneColumn(Int32))), encoded))
+			decoder := CodecTestMust(compileValueDecoder(ListDecoder(TupleDecoder(OneColumn(Int32))), list))
+			reader := NewValueReader(list, cqltype.Present, cqltype.BytesChain(encoded.body), nil)
 			return testing.AllocsPerRun(20, func() {
-				iterator := sequence.Iterator()
-				for iterator.Next() {
-					_ = iterator.Value()
-				}
-				if err := iterator.Err(); err != nil {
-					t.Fatal(err)
+				values, err := decoder.Decode(reader)
+				if err != nil || len(values) != count {
+					t.Fatal(values, err)
 				}
 			})
 		}
 		small, large := allocated(1), allocated(1024)
 		if large > small {
-			t.Fatalf("tuple value scratch allocations scale with elements: %g -> %g", small, large)
+			t.Fatalf("tuple scratch allocations scale with elements: %g -> %g", small, large)
 		}
 	})
 }

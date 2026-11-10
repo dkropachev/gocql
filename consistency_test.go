@@ -33,14 +33,13 @@ func TestConsistency(t *testing.T) {
 	})
 
 	t.Run("ParseConsistency", func(t *testing.T) {
-		// ParseConsistency panics on input it cannot parse; ParseConsistencyWrapper is
-		// the non-panicking form and returns the same error instead.
+		// MustParseConsistency panics on invalid input; ParseConsistency returns an error.
 		t.Run("Invalid", func(t *testing.T) {
 			t.Parallel()
 
 			for _, in := range []string{"", "bogus", " one", "LOCAL QUORUM"} {
-				if _, err := cql.ParseConsistencyWrapper(in); err == nil {
-					t.Fatalf("ParseConsistencyWrapper(%q) returned no error", in)
+				if _, err := cql.ParseConsistency(in); err == nil {
+					t.Fatalf("ParseConsistency(%q) returned no error", in)
 				}
 
 				func() {
@@ -48,10 +47,10 @@ func TestConsistency(t *testing.T) {
 						r := recover()
 						err, ok := r.(error)
 						if !ok || !strings.Contains(err.Error(), "invalid consistency") {
-							t.Fatalf("ParseConsistency(%q) panicked with %v, want an invalid consistency error", in, r)
+							t.Fatalf("MustParseConsistency(%q) panicked with %v, want an invalid consistency error", in, r)
 						}
 					}()
-					cql.ParseConsistency(in)
+					cql.MustParseConsistency(in)
 				}()
 			}
 		})
@@ -61,17 +60,17 @@ func TestConsistency(t *testing.T) {
 
 			for _, tc := range allConsistencies {
 				for _, in := range []string{tc.name, strings.ToLower(tc.name)} {
-					if got := cql.ParseConsistency(in); got != tc.c {
-						t.Fatalf("ParseConsistency(%q) = %v, want %v", in, got, tc.c)
+					if got := cql.MustParseConsistency(in); got != tc.c {
+						t.Fatalf("MustParseConsistency(%q) = %v, want %v", in, got, tc.c)
 					}
-					got, err := cql.ParseConsistencyWrapper(in)
+					got, err := cql.ParseConsistency(in)
 					if err != nil || got != tc.c {
-						t.Fatalf("ParseConsistencyWrapper(%q) = %v, %v; want %v", in, got, err, tc.c)
+						t.Fatalf("ParseConsistency(%q) = %v, %v; want %v", in, got, err, tc.c)
 					}
 				}
 			}
 
-			if got := cql.ParseConsistency("Local_Quorum"); got != cql.LocalQuorum {
+			if got := cql.MustParseConsistency("Local_Quorum"); got != cql.LocalQuorum {
 				t.Fatalf("ParseConsistency is case-insensitive: got %v for Local_Quorum", got)
 			}
 		})

@@ -120,7 +120,7 @@ not pooled. Chain() is valid only while a reference is held. Root Bytes/Text
 carry the lease identity for error detection. Page leases aggregate segment
 leases by retaining/releasing them in their finalizer; segment storage may
 return to pools only at final release. A page does not reference outbound
-binding storage. Rows, cells, range slices and lazy elements borrow the page's
+binding storage. Rows, cells, range slices and borrowed collection elements borrow the page's
 held reference; constructing/advancing each view does not Retain/Release an
 independent lease. Retain adds a reference only for an explicit PageLease or an
 actual owner transfer requiring one. A page retains each distinct physical
@@ -479,21 +479,20 @@ state and configured locality remain authoritative at acquisition. User policy
 methods still run outside driver locks; these fast paths do not bypass custom
 Plan/Observe callbacks.
 
-## Lazy container traversal
+## Eager typed collection decoding
 
-List/set/map and variable-width vector construction checks their immediate
-count/length framing with a sequential cursor and checked skips. It does not
-recursively walk nested payloads, call child Decode, build element objects or
-allocate an element-offset table. Child layout and scalar semantics are checked
-on demand. At most one enclosing layout scan plus one iterator pass is expected
-for each visited container; repeated user-created iterators are separate work.
-Nested-body skips locate endpoints using the shared source span-offset index;
-shallow validation must not walk every skipped fragment again at each ancestor.
-Count such jumps separately from linear streaming descriptor visits.
-Fixed-width vectors reuse their compiled checked width and require only an
-aggregate-length check before iteration. Nested fixed vectors do not recompute
-width or scan elements to establish shape. Truncation, invalid child states and
-trailing enclosing bytes still fail before publishing that container.
+List/set/map/vector codecs and decoder-only constructors share eager decoding
+into slices. Map and streaming map results share Entry[K,V]. Enclosing framing
+is checked before allocating a result slice, then every child is decoded before
+success. No Sequence or Mapping view is exposed or constructed. Decode returns
+no partial result on failure. DecodeInto reuses sufficient destination capacity;
+a caller must discard the destination contents on failure.
+
+Collection elements may still borrow page storage. Clone allocates independent
+container storage and recursively clones every child. Fixed-width vectors use
+compiled aggregate widths; variable-width vectors read checked unsigned-vint
+lengths. Framing scans and child decoding use sequential cursors, including
+fragmented receive buffers. Nested-body skips use shared source span indices.
 
 DynamicRows has a compiled immutable name-to-index lookup and builds a physical
 cell-offset index at most once on first At/Get for each row. That index belongs
@@ -502,7 +501,7 @@ is released with the row/page owner. No variable payload is materialized for the
 index. Repeated access is independent of column position after indexing;
 iteration over dynamic aggregates uses the same sequential wire cursors as
 typed containers. Report dynamic row index allocations separately from typed
-streaming rows and lazy scalar element traversal.
+streaming rows and eager typed element decoding.
 
 ## Sending, compression, receive ownership and limits
 
@@ -1144,7 +1143,8 @@ Migration translations are mandatory:
 2. **Codec/protocol gate:** every scalar and aggregate type is covered by golden
    byte cases, null/empty/unset distinctions, metadata mismatch, nested custom
    codecs, every split point of lengths/scalars/UTF-8, overflow/truncation/trailing
-   bytes, lazy terminal errors, strict UDT/vector schema changes, and rollback.
+   bytes, eager typed element errors, dynamic iterator terminal errors, strict
+   UDT/vector schema changes, and rollback.
    Protocol fuzzing bounds allocation by configured limits and never panics.
    Caller-destination decoding also satisfies the direct-write, reuse, mixed
    iteration, terminal failure and buffer-lifetime cases above for Rows and Page.

@@ -144,38 +144,38 @@ func TestVector(t *testing.T) {
 		testCases := []struct {
 			name     string
 			custom   string
-			expected cql.TypeInfo
+			expected cqltype.TypeInfo
 		}{
 			{name: "text", custom: prefix + "UTF8Type", expected: cqltype.NewCustomType(0, cql.TypeVarchar, "")},
-			{name: "set_int", custom: prefix + "SetType(" + prefix + "Int32Type)", expected: cql.CollectionType{NativeType: cqltype.NewCustomType(0, cql.TypeSet, ""), Key: nil, Elem: cqltype.NewCustomType(0, cql.TypeInt, "")}},
+			{name: "set_int", custom: prefix + "SetType(" + prefix + "Int32Type)", expected: cqltype.CollectionType{NativeType: cqltype.NewCustomType(0, cql.TypeSet, ""), Key: nil, Elem: cqltype.NewCustomType(0, cql.TypeInt, "")}},
 			{
 				name:   "udt",
 				custom: prefix + ("UserType(" + fixtureKeyspace("") + ",706572736f6e,66697273745f6e616d65:") + prefix + "UTF8Type,6c6173745f6e616d65:" + prefix + "UTF8Type,616765:" + prefix + "Int32Type)",
-				expected: cql.UDTTypeInfo{
+				expected: cqltype.UDTTypeInfo{
 					NativeType: cqltype.NewCustomType(0, cql.TypeUDT, ""),
 					KeySpace:   fixtureKeyspace(""),
 					Name:       "person",
-					Elements: []cql.UDTField{
-						cql.UDTField{Name: "first_name", Type: cqltype.NewCustomType(0, cql.TypeVarchar, "")},
-						cql.UDTField{Name: "last_name", Type: cqltype.NewCustomType(0, cql.TypeVarchar, "")},
-						cql.UDTField{Name: "age", Type: cqltype.NewCustomType(0, cql.TypeInt, "")},
+					Elements: []cqltype.UDTField{
+						cqltype.UDTField{Name: "first_name", Type: cqltype.NewCustomType(0, cql.TypeVarchar, "")},
+						cqltype.UDTField{Name: "last_name", Type: cqltype.NewCustomType(0, cql.TypeVarchar, "")},
+						cqltype.UDTField{Name: "age", Type: cqltype.NewCustomType(0, cql.TypeInt, "")},
 					},
 				},
 			},
 			{
 				name:   "tuple",
 				custom: prefix + "TupleType(" + prefix + "UTF8Type," + prefix + "Int32Type," + prefix + "UTF8Type)",
-				expected: cql.TupleTypeInfo{
+				expected: cqltype.TupleTypeInfo{
 					NativeType: cqltype.NewCustomType(0, cql.TypeTuple, ""),
-					Elems:      []cql.TypeInfo{cqltype.NewCustomType(0, cql.TypeVarchar, ""), cqltype.NewCustomType(0, cql.TypeInt, ""), cqltype.NewCustomType(0, cql.TypeVarchar, "")},
+					Elems:      []cqltype.TypeInfo{cqltype.NewCustomType(0, cql.TypeVarchar, ""), cqltype.NewCustomType(0, cql.TypeInt, ""), cqltype.NewCustomType(0, cql.TypeVarchar, "")},
 				},
 			},
 			{
 				name:   "vector_vector_inet",
 				custom: prefix + "VectorType(" + prefix + "VectorType(" + prefix + "InetAddressType, 2), 3)",
-				expected: cql.VectorType{
+				expected: cqltype.VectorType{
 					NativeType: cqltype.NewCustomType(0, cql.TypeCustom, vectorTypePrefix),
-					SubType: cql.VectorType{
+					SubType: cqltype.VectorType{
 						NativeType: cqltype.NewCustomType(0, cql.TypeCustom, vectorTypePrefix),
 						SubType:    cqltype.NewCustomType(0, cql.TypeInet, ""),
 						Dimensions: 2,
@@ -186,10 +186,10 @@ func TestVector(t *testing.T) {
 			{
 				name:   "map_int_vector_text",
 				custom: prefix + "MapType(" + prefix + "Int32Type," + prefix + "VectorType(" + prefix + "UTF8Type, 10))",
-				expected: cql.CollectionType{
+				expected: cqltype.CollectionType{
 					NativeType: cqltype.NewCustomType(0, cql.TypeMap, ""),
 					Key:        cqltype.NewCustomType(0, cql.TypeInt, ""),
-					Elem: cql.VectorType{
+					Elem: cqltype.VectorType{
 						NativeType: cqltype.NewCustomType(0, cql.TypeCustom, vectorTypePrefix),
 						SubType:    cqltype.NewCustomType(0, cql.TypeVarchar, ""),
 						Dimensions: 10,
@@ -199,12 +199,12 @@ func TestVector(t *testing.T) {
 			{
 				name:   "set_map_vector_text_text",
 				custom: prefix + "SetType(" + prefix + "MapType(" + prefix + "VectorType(" + prefix + "Int32Type, 10)," + prefix + "UTF8Type))",
-				expected: cql.CollectionType{
+				expected: cqltype.CollectionType{
 					NativeType: cqltype.NewCustomType(0, cql.TypeSet, ""),
 					Key:        nil,
-					Elem: cql.CollectionType{
+					Elem: cqltype.CollectionType{
 						NativeType: cqltype.NewCustomType(0, cql.TypeMap, ""),
-						Key: cql.VectorType{
+						Key: cqltype.VectorType{
 							NativeType: cqltype.NewCustomType(0, cql.TypeCustom, vectorTypePrefix),
 							SubType:    cqltype.NewCustomType(0, cql.TypeInt, ""),
 							Dimensions: 10,

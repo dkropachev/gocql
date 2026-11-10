@@ -32,7 +32,7 @@ import (
 func TestHostPool(t *testing.T) {
 	t.Run("Plan", func(t *testing.T) {
 		p := HostPool(hostpool.New(nil)).(*hostPoolHostPolicy)
-		ids := []cql.UUID{cql.ParseUUIDMust("a0000000-0000-0000-0000-000000000000"), cql.ParseUUIDMust("a0000000-0000-0000-0000-000000000001")}
+		ids := []cql.UUID{cql.MustParseUUID("a0000000-0000-0000-0000-000000000000"), cql.MustParseUUID("a0000000-0000-0000-0000-000000000001")}
 		hosts := []routing.HostSnapshot{{ID: ids[0], Address: netip.MustParseAddrPort("10.0.0.1:9042"), Enabled: true, Up: true}, {ID: ids[1], Address: netip.MustParseAddrPort("10.0.0.2:9042"), Enabled: true, Up: true}}
 		p.setHosts(hosts, []routing.Route{implRouting.InternalRouteOf(routing.Target{HostID: ids[0]}), implRouting.InternalRouteOf(routing.Target{HostID: ids[1]})})
 		plan := routing.NewPlan(p, routing.Info{}, nil)

@@ -13,7 +13,7 @@ type Encoder[T any] interface {
 	Encode(*ValueWriter, T) error
 }
 
-// Decoder reads one checked CQL value and recursively detaches borrowed values.
+// Decoder reads one checked CQL value. Clone recursively detaches borrowed values.
 type Decoder[T any] interface {
 	CheckType(cqltype.DataType) error
 	Decode(ValueReader) (T, error)

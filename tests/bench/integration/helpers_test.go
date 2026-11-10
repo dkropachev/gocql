@@ -1310,42 +1310,7 @@ func (serializationStringCodec) Clone(s string) string { return s }
 
 var serializationString cql.Codec[string] = serializationStringCodec{}
 
-type serializationSliceCodec[T any] struct {
-	encoder cql.Encoder[[]T]
-	decoder cql.Decoder[cql.Sequence[T]]
-	element cql.Decoder[T]
-}
-
-func (c serializationSliceCodec[T]) CheckType(t cql.DataType) error {
-	if err := c.encoder.CheckType(t); err != nil {
-		return err
-	}
-	return c.decoder.CheckType(t)
-}
-func (c serializationSliceCodec[T]) Encode(w *cql.ValueWriter, v []T) error {
-	return c.encoder.Encode(w, v)
-}
-func (c serializationSliceCodec[T]) Decode(r cql.ValueReader) ([]T, error) {
-	s, e := c.decoder.Decode(r)
-	if e != nil {
-		return nil, e
-	}
-	return s.Iterator().Collect()
-}
-func (c serializationSliceCodec[T]) Clone(v []T) []T {
-	if v == nil {
-		return nil
-	}
-	out := make([]T, len(v))
-	for i := range v {
-		out[i] = c.element.Clone(v[i])
-	}
-	return out
-}
-
-func serializationSet[T any](c cql.Codec[T]) cql.Codec[[]T] {
-	return serializationSliceCodec[T]{cql.SetEncoder(c), cql.SetDecoder(c), c}
-}
+func serializationSet[T any](c cql.Codec[T]) cql.Codec[[]T] { return cql.SetCodec(c) }
 
 type serializationCodec[T any] struct {
 	cql.Encoder[T]
@@ -1382,13 +1347,11 @@ func (c serializationMapCodec[K, V]) Decode(r cql.ValueReader) (map[K]V, error) 
 	if e != nil {
 		return nil, e
 	}
-	out := make(map[K]V, m.Len())
-	it := m.Iterator()
-	for it.Next() {
-		v := it.Value()
+	out := make(map[K]V, len(m))
+	for _, v := range m {
 		out[v.Key] = v.Value
 	}
-	return out, it.Err()
+	return out, nil
 }
 func (c serializationMapCodec[K, V]) Clone(v map[K]V) map[K]V {
 	if v == nil {

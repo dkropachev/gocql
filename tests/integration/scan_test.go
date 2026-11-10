@@ -92,19 +92,14 @@ func TestScan(t *testing.T) {
 			_, err := Exec(context.Background(), session, cassandraBound(t, prepared, want), gocql.BoundOptions{})
 			require.NoError(t, err)
 			row := cassandraReadBound(t, session, cassandraUnprepared(t, fmt.Sprintf("SELECT val FROM %s WHERE id='key'", table), cql.OneColumn(cql.ListDecoder(cql.MapDecoder(cql.TextCodec, cql.TextCodec)))), gocql.Options{})
-			iter := row.Iterator()
 			var got []nested
-			for iter.Next() {
+			for _, mapping := range row {
 				var entries nested
-				mapIter := iter.Value().Iterator()
-				for mapIter.Next() {
-					entry := mapIter.Value()
+				for _, entry := range mapping {
 					entries = append(entries, cql.Entry[string, string]{Key: entry.Key.String(), Value: entry.Value.String()})
 				}
-				require.NoError(t, mapIter.Err())
 				got = append(got, entries)
 			}
-			require.NoError(t, iter.Err())
 			require.Equal(t, want, got)
 		})
 		t.Run("Scalars", func(t *testing.T) {

@@ -72,12 +72,11 @@ func (InternalV2MetadataStrings) Decode(r ValueReader) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := make([]string, 0, v.Len())
-	it := v.Iterator()
-	for it.Next() {
-		out = append(out, it.Value().String())
+	out := make([]string, 0, len(v))
+	for _, value := range v {
+		out = append(out, value.String())
 	}
-	return out, it.Err()
+	return out, nil
 }
 func (InternalV2MetadataStrings) Clone(v []string) []string { return append([]string(nil), v...) }
 
@@ -89,17 +88,15 @@ func (InternalV2MetadataStringMap) Decode(r ValueReader) (map[string]string, err
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]string, v.Len())
-	it := v.Iterator()
-	for it.Next() {
-		entry := it.Value()
+	out := make(map[string]string, len(v))
+	for _, entry := range v {
 		key := entry.Key.String()
 		if _, ok := out[key]; ok {
 			return nil, typeValidation("schema map", "duplicate key %q", key)
 		}
 		out[key] = entry.Value.String()
 	}
-	return out, it.Err()
+	return out, nil
 }
 func (InternalV2MetadataStringMap) Clone(v map[string]string) map[string]string { return maps.Clone(v) }
 
@@ -111,17 +108,15 @@ func (InternalV2MetadataExtensions) Decode(r ValueReader) (map[string]any, error
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]any, v.Len())
-	it := v.Iterator()
-	for it.Next() {
-		entry := it.Value()
+	out := make(map[string]any, len(v))
+	for _, entry := range v {
 		key := entry.Key.String()
 		if _, ok := out[key]; ok {
 			return nil, typeValidation("schema extensions", "duplicate key %q", key)
 		}
 		out[key] = entry.Value.OwnedBytes()
 	}
-	return out, it.Err()
+	return out, nil
 }
 func (InternalV2MetadataExtensions) Clone(v map[string]any) map[string]any {
 	return InternalCloneV2AnyMap(v)

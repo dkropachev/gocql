@@ -9,13 +9,9 @@ import (
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
-// Slice codecs encode and decode a list, set or map as a Go slice, so one
-// struct field type works in both directions. ListDecoder and friends decode
-// into a lazy Sequence instead, which copies nothing; the slice codecs decode
-// every element up front and allocate the slice, except when DecodeInto (as
-// RowOf with ReuseBuffers uses it) finds enough capacity in the destination.
-// A null cell, which is how CQL stores an empty collection, decodes as an
-// empty slice.
+// Collection codecs and decoder-only constructors use the same eager decoders.
+// They allocate result slices unless DecodeInto finds enough capacity. Elements
+// may borrow page storage; Clone recursively detaches them.
 
 type sliceCodec[T any] struct {
 	enc sequenceEncoder[T]
@@ -35,6 +31,14 @@ func SetCodec[T any](element Codec[T]) Codec[[]T] {
 	return sliceCodec[T]{
 		enc: sequenceEncoder[T]{kind: cqltype.TypeSet, element: element},
 		dec: sequenceDecoder[T]{kind: cqltype.TypeSet, element: element},
+	}
+}
+
+// VectorCodec encodes and decodes a vector as a []T of its declared dimension.
+func VectorCodec[T any](element Codec[T]) Codec[[]T] {
+	return sliceCodec[T]{
+		enc: sequenceEncoder[T]{kind: cqltype.TypeCustom, element: element},
+		dec: sequenceDecoder[T]{kind: cqltype.TypeCustom, element: element},
 	}
 }
 
@@ -67,19 +71,26 @@ func (c sliceCodec[T]) compileValueDecoder(typ cqltype.DataType) (Decoder[[]T], 
 
 func (c sliceCodec[T]) Encode(w *ValueWriter, values []T) error { return c.enc.Encode(w, values) }
 
-func (c sliceCodec[T]) Decode(r ValueReader) ([]T, error) {
+func (c sliceCodec[T]) Decode(r ValueReader) ([]T, error)        { return c.dec.Decode(r) }
+func (c sliceCodec[T]) DecodeInto(r ValueReader, dst *[]T) error { return c.dec.DecodeInto(r, dst) }
+func (c sliceCodec[T]) Clone(v []T) []T                          { return c.dec.Clone(v) }
+
+func (c sequenceDecoder[T]) Decode(r ValueReader) ([]T, error) {
 	var values []T
 	err := c.DecodeInto(r, &values)
-	return values, err
+	if err != nil {
+		return nil, err
+	}
+	return values, nil
 }
 
 // DecodeInto decodes into dst's storage when it has the capacity, and into
 // its elements' storage when the element codec decodes in place.
-func (c sliceCodec[T]) DecodeInto(r ValueReader, dst *[]T) error {
+func (c sequenceDecoder[T]) DecodeInto(r ValueReader, dst *[]T) error {
 	if dst == nil {
 		return cqltype.TypeValidation("destination", "nil slice destination")
 	}
-	dec := c.dec
+	dec := c
 	if cqltype.DescriptorOf(dec.typ) == nil {
 		compiled, err := dec.compileValueDecoder(r.Type())
 		if err != nil {
@@ -89,7 +100,10 @@ func (c sliceCodec[T]) DecodeInto(r ValueReader, dst *[]T) error {
 	} else if !dec.typ.Equal(r.Type()) {
 		return cqltype.TypeValidation("type", "sequence metadata changed after compilation")
 	}
-	if r.err == nil && r.State() == cqltype.Null {
+	if dec.kind != cqltype.TypeCustom && r.err == nil && r.State() == cqltype.Null {
+		if err := cqltype.CheckBytesAlive(r.Bytes()); err != nil {
+			return err
+		}
 		*dst = (*dst)[:0]
 		return nil
 	}
@@ -106,7 +120,13 @@ func (c sliceCodec[T]) DecodeInto(r ValueReader, dst *[]T) error {
 	}
 	cursor := ValueReader{body: cqltype.BytesChain(body), lease: cqltype.BytesLease(body)}.cursorValue()
 	for i := range out {
-		child, err := cursor.Child(element)
+		var child ValueReader
+		var err error
+		if dec.kind == cqltype.TypeCustom {
+			child, err = readVectorElement(&cursor, element, dec.width)
+		} else {
+			child, err = cursor.Child(element)
+		}
 		if err == nil {
 			err = decodeValueInto(dec.element, child, &out[i])
 		}
@@ -118,13 +138,13 @@ func (c sliceCodec[T]) DecodeInto(r ValueReader, dst *[]T) error {
 	return nil
 }
 
-func (c sliceCodec[T]) Clone(values []T) []T {
+func (c sequenceDecoder[T]) Clone(values []T) []T {
 	if values == nil {
 		return nil
 	}
 	out := make([]T, len(values))
 	for i, v := range values {
-		out[i] = c.dec.element.Clone(v)
+		out[i] = c.element.Clone(v)
 	}
 	return out
 }
@@ -171,17 +191,26 @@ func (c mapSliceCodec[K, V]) Encode(w *ValueWriter, entries []Entry[K, V]) error
 	return c.enc.Encode(w, entries)
 }
 
-func (c mapSliceCodec[K, V]) Decode(r ValueReader) ([]Entry[K, V], error) {
+func (c mapSliceCodec[K, V]) Decode(r ValueReader) ([]Entry[K, V], error) { return c.dec.Decode(r) }
+func (c mapSliceCodec[K, V]) DecodeInto(r ValueReader, dst *[]Entry[K, V]) error {
+	return c.dec.DecodeInto(r, dst)
+}
+func (c mapSliceCodec[K, V]) Clone(v []Entry[K, V]) []Entry[K, V] { return c.dec.Clone(v) }
+
+func (c mapDecoder[K, V]) Decode(r ValueReader) ([]Entry[K, V], error) {
 	var entries []Entry[K, V]
 	err := c.DecodeInto(r, &entries)
-	return entries, err
+	if err != nil {
+		return nil, err
+	}
+	return entries, nil
 }
 
-func (c mapSliceCodec[K, V]) DecodeInto(r ValueReader, dst *[]Entry[K, V]) error {
+func (c mapDecoder[K, V]) DecodeInto(r ValueReader, dst *[]Entry[K, V]) error {
 	if dst == nil {
 		return cqltype.TypeValidation("destination", "nil map destination")
 	}
-	dec := c.dec
+	dec := c
 	if cqltype.DescriptorOf(dec.typ) == nil {
 		compiled, err := dec.compileValueDecoder(r.Type())
 		if err != nil {
@@ -192,6 +221,9 @@ func (c mapSliceCodec[K, V]) DecodeInto(r ValueReader, dst *[]Entry[K, V]) error
 		return cqltype.TypeValidation("type", "map metadata changed after compilation")
 	}
 	if r.err == nil && r.State() == cqltype.Null {
+		if err := cqltype.CheckBytesAlive(r.Bytes()); err != nil {
+			return err
+		}
 		*dst = (*dst)[:0]
 		return nil
 	}
@@ -227,13 +259,13 @@ func (c mapSliceCodec[K, V]) DecodeInto(r ValueReader, dst *[]Entry[K, V]) error
 	return nil
 }
 
-func (c mapSliceCodec[K, V]) Clone(entries []Entry[K, V]) []Entry[K, V] {
+func (c mapDecoder[K, V]) Clone(entries []Entry[K, V]) []Entry[K, V] {
 	if entries == nil {
 		return nil
 	}
 	out := make([]Entry[K, V], len(entries))
 	for i, e := range entries {
-		out[i] = Entry[K, V]{Key: c.dec.key.Clone(e.Key), Value: c.dec.value.Clone(e.Value)}
+		out[i] = Entry[K, V]{Key: c.key.Clone(e.Key), Value: c.value.Clone(e.Value)}
 	}
 	return out
 }

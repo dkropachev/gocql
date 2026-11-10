@@ -24,7 +24,7 @@ type wideRow struct {
 	Numbers [32]int32
 	Texts   [32]cqltype.Text
 	Blobs   [32]cqltype.Bytes
-	Lists   [32]Sequence[int32]
+	Lists   [32][]int32
 }
 
 func BenchmarkRowsCodec(b *testing.B) {
@@ -187,7 +187,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 					index := i
 					names := [4]string{fmt.Sprint("n", i), fmt.Sprint("t", i), fmt.Sprint("b", i), fmt.Sprint("l", i)}
 					specs = append(specs, cqltype.ColumnSpec{Name: names[0], Type: integer}, cqltype.ColumnSpec{Name: names[1], Type: text}, cqltype.ColumnSpec{Name: names[2], Type: blob}, cqltype.ColumnSpec{Name: names[3], Type: list})
-					fields = append(fields, Column(names[0], Int32, func(r *wideRow) *int32 { return &r.Numbers[index] }), Column(names[1], TextCodec, func(r *wideRow) *cqltype.Text { return &r.Texts[index] }), Column(names[2], BlobCodec, func(r *wideRow) *cqltype.Bytes { return &r.Blobs[index] }), Column(names[3], ListDecoder(Int32), func(r *wideRow) *Sequence[int32] { return &r.Lists[index] }))
+					fields = append(fields, Column(names[0], Int32, func(r *wideRow) *int32 { return &r.Numbers[index] }), Column(names[1], TextCodec, func(r *wideRow) *cqltype.Text { return &r.Texts[index] }), Column(names[2], BlobCodec, func(r *wideRow) *cqltype.Bytes { return &r.Blobs[index] }), Column(names[3], ListDecoder(Int32), func(r *wideRow) *[]int32 { return &r.Lists[index] }))
 					values = append(values, IntValue(int32(i)), CodecTestMust(TextValue("safe-🙂")), BlobValue(make([]byte, 4096)), CodecTestMust(ListValue(list, []Value{IntValue(1), IntValue(2)})))
 				}
 				columns := cqltype.NewColumns(specs...)

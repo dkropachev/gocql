@@ -19,20 +19,20 @@ func RowInto[R any](reset func(*R), fields ...OutputField[R]) RowDecoder[R] {
 	return codec.RowInto(reset, fields...)
 }
 
-// ParseConsistency parses a consistency name, ignoring case. It panics on an
-// unknown name; use ParseConsistencyWrapper to get an error instead.
-func ParseConsistency(s string) Consistency {
-	var c Consistency
-	if err := c.UnmarshalText([]byte(strings.ToUpper(s))); err != nil {
-		panic(err)
-	}
-	return c
+// ParseConsistency parses a consistency name, ignoring case.
+func ParseConsistency(s string) (Consistency, error) {
+	var consistency Consistency
+	err := consistency.UnmarshalText([]byte(strings.ToUpper(s)))
+	return consistency, err
 }
 
-// ParseConsistencyWrapper parses a consistency name, ignoring case.
-func ParseConsistencyWrapper(s string) (consistency Consistency, err error) {
-	err = consistency.UnmarshalText([]byte(strings.ToUpper(s)))
-	return
+// MustParseConsistency is ParseConsistency that panics on error.
+func MustParseConsistency(s string) Consistency {
+	consistency, err := ParseConsistency(s)
+	if err != nil {
+		panic(err)
+	}
+	return consistency
 }
 
 // Command returns a statement with no bind markers and no result columns,

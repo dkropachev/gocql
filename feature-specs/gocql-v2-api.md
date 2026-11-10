@@ -347,6 +347,20 @@ calendar and owned-string conversions are allocation/representation operations,
 not implicit work in typed execution. No numeric coercion silently narrows
 values.
 
+Public type descriptions use DataType and ColumnSpec only. Legacy protocol
+metadata descriptors remain internal and are not part of the v2 API.
+ParseConsistency and ParseUUID return errors; MustParseConsistency and
+MustParseUUID panic on invalid input. EncodeValue owns its output payloads;
+EncodeValueBorrowed preserves borrowed inputs.
+
+The wrapper roles are separate: Option is for inherited settings; Nullable is
+for nullable application data and decoded results; BindValue controls binding
+with Present, Null or Unset; EmptyValueOf represents supported empty CQL values.
+Their zero values mean inherited, NULL, present zero value and ordinary zero
+value, respectively. NullableEncoder remains useful for nullable struct fields;
+BindEncoder is preferred when a parameter also needs UNSET. BindValue does not
+accept EmptyCell; wrap its underlying encoder with EmptyCodec when needed.
+
 ## Borrowed bytes, text and container values
 
 ```go
@@ -365,27 +379,23 @@ func (t Text) Bytes() Bytes
 func (t Text) Clone() Text
 func (t Text) String() string
 
-type Sequence[T any] struct { /* lazy list/set/vector view */ }
-type Mapping[K, V any] struct { /* lazy map view */ }
 type Entry[K, V any] struct { Key K; Value V }
-type ValueIterator[T any] struct { /* bounded checked cursor */ }
-func (s Sequence[T]) Len() int
-func (s Sequence[T]) Iterator() *ValueIterator[T]
-func (s Sequence[T]) Clone() Sequence[T]
-func (m Mapping[K, V]) Len() int
-func (m Mapping[K, V]) Iterator() *ValueIterator[Entry[K, V]]
-func (m Mapping[K, V]) Clone() Mapping[K, V]
+type ValueIterator[T any] struct { /* bounded cursor for dynamic Value traversal */ }
 func (i *ValueIterator[T]) Next() bool
 func (i *ValueIterator[T]) Value() T
 func (i *ValueIterator[T]) Err() error
+func ListCodec[T any](Codec[T]) Codec[[]T]
+func SetCodec[T any](Codec[T]) Codec[[]T]
+func MapCodec[K, V any](Codec[K], Codec[V]) Codec[[]Entry[K, V]]
+func VectorCodec[T any](Codec[T]) Codec[[]T]
 func ListEncoder[T any](Encoder[T]) Encoder[[]T]
 func SetEncoder[T any](Encoder[T]) Encoder[[]T]
 func MapEncoder[K, V any](Encoder[K], Encoder[V]) Encoder[[]Entry[K, V]]
-func ListDecoder[T any](Decoder[T]) Decoder[Sequence[T]]
-func SetDecoder[T any](Decoder[T]) Decoder[Sequence[T]]
-func MapDecoder[K, V any](Decoder[K], Decoder[V]) Decoder[Mapping[K, V]]
+func ListDecoder[T any](Decoder[T]) Decoder[[]T]
+func SetDecoder[T any](Decoder[T]) Decoder[[]T]
+func MapDecoder[K, V any](Decoder[K], Decoder[V]) Decoder[[]Entry[K, V]]
 func VectorEncoder[T any](Encoder[T]) Encoder[[]T]
-func VectorDecoder[T any](Decoder[T]) Decoder[Sequence[T]]
+func VectorDecoder[T any](Decoder[T]) Decoder[[]T]
 func TupleEncoder[T any](ParamEncoder[T]) Encoder[T]
 func TupleDecoder[T any](RowDecoder[T]) Decoder[T]
 type UDTOptions struct {
@@ -403,30 +413,29 @@ TextValue likewise returns an error for invalid UTF-8. StringEncoder and
 ASCIIEncoder return ordinary codec errors for invalid encoded input. Malformed
 input is never a reason for a constructor panic.
 
-The default receive representations retain fragments; no cell is flattened when
-it crosses a v5 segment. String(), OwnedBytes(), Clone(), Collect() and explicit
-big.Int/calendar adapters are requested materializations. Clone on a lazy
-container clones its encoded backing range without eager child decoding. It
-detaches from pool ownership; GC reclaims the clone. Collect allocates the
-output slice and recursively detaches every yielded element using the iterator
-decoder's Clone; Text, Bytes, Value and nested aggregates therefore remain
-usable after the source page is released. On any iterator error it returns no
-partial slice. Iterators are allocation-free per element, stop permanently on
-the first error, enforce counts, reject malformed negative
-lengths/overflows/trailing payload, and never publish partial malformed values.
-A successful lazy decode validates enclosing framing/count structure; each
-scalar is checked when requested. Enclosing validation walks only immediate
-child lengths/states, skipping child bodies without decoding descendants or
-allocating an offset per element. A nested container validates its own layout
-when that child is requested. Fragmented nested-body skips share a source
-span-offset index, avoiding a walk through every skipped span at every ancestor;
-they add at most logarithmic span-lookup work per jump. Ordinary nonoverlapping
-sequential traversal remains linear in cells plus spans, and scalar validation
-reads only the requested payload. Fixed-width vectors check the compiled aggregate width
-against the body length without an element prepass; scalar semantics remain
-checked during iteration. An explicit second Iterator is a new traversal.
-An early-stopped iterator does not claim semantic validation of unvisited
-scalar values or unvisited nested bodies.
+Buffered Bytes and Text retain fragments; a cell is not flattened when it
+crosses a v5 segment. Typed list, set, map and vector decoders eagerly decode
+all elements into slices. Codec and decoder-only forms return the same Go
+container types; stream forms also use slices and the shared Entry type.
+There are no typed lazy collection views. List/set/map NULL cells decode as
+empty collections; Nullable preserves NULL when required. Vectors require the
+declared dimension and reject NULL without a Nullable wrapper.
+
+Eager materialization does not detach borrowed elements. Decoder.Clone
+recursively copies collection storage and borrowed Text, Bytes, Value and
+nested aggregates so they survive page release. String(), OwnedBytes(), Clone()
+and explicit big.Int/calendar adapters are requested materializations.
+Collection framing and all selected child decoders run before Decode succeeds;
+a malformed element returns an error and no partial slice. DecodeInto may reuse
+caller storage, whose contents must be discarded after an error. Fixed-width
+vectors check the compiled aggregate width before decoding elements; variable
+vectors use checked unsigned-vint lengths.
+
+Dynamic Value retains explicit cursor traversal through Elements, Entries and
+Fields. ValueIterator stops permanently at the first error, enforces framing
+and counts, and does not publish the failed value. Its Collect method allocates
+an output slice and recursively detaches yielded values; errors return no
+partial slice. Dynamic traversal does not imply typed lazy collection decoders.
 
 Tuples preserve physical columns: they never expand implicitly into destination
 arguments. Missing serialized trailing tuple/UDT members are null only where the
@@ -754,8 +763,8 @@ NextInto advances exactly one logical row, using the same framing, plan
 selection, metadata validation and automatic/explicit paging rules as Next.
 The compiled RowPlan.DecodeInto fills dst directly. The driver does not first
 decode a complete temporary row, copy payloads, flatten split cells, or discover
-fields through reflection. Text, Bytes and lazy container fields preserve the
-original immutable receive/decompression backing and its page lease identity.
+fields through reflection. Text, Bytes and borrowed collection elements preserve
+the original immutable receive/decompression backing and its page lease identity.
 Fixed-width Go fields hold decoded values; compression/TLS transformations
 retain their separately documented cost and ownership boundaries. Neither a Go
 string nor an owned byte slice is implicitly materialized.
@@ -942,11 +951,10 @@ var StreamVarint StreamDecoder[[]byte] // exact signed two's-complement bytes
 type StreamDecimalValue struct { Scale int32; Unscaled []byte }
 var StreamDecimal StreamDecoder[StreamDecimalValue]
 func StreamNullable[T any](StreamDecoder[T]) StreamDecoder[Nullable[T]]
-func StreamEmpty[T any](StreamDecoder[T]) StreamDecoder[EmptyValueOf[T]]
+func EmptyStream[T any](StreamDecoder[T]) StreamDecoder[EmptyValueOf[T]]
 func StreamList[T any](StreamDecoder[T]) StreamDecoder[[]T]
 func StreamSet[T any](StreamDecoder[T]) StreamDecoder[[]T]
-type StreamMapEntry[K, V any] struct { Key K; Value V }
-func StreamMap[K, V any](StreamDecoder[K], StreamDecoder[V]) StreamDecoder[[]StreamMapEntry[K, V]]
+func StreamMap[K, V any](StreamDecoder[K], StreamDecoder[V]) StreamDecoder[[]Entry[K, V]]
 func StreamVector[T any](StreamDecoder[T]) StreamDecoder[[]T]
 func StreamTuple[R any](StreamRowDecoder[R]) StreamDecoder[R]
 func StreamUDT[R any](UDTOptions, StreamRowDecoder[R]) StreamDecoder[R]
@@ -967,7 +975,7 @@ Compile validates actual metadata recursively, including children of null and
 empty values, and returns immutable plans safe for independent cursors. Plans
 capture neither readers nor destinations. Scalar rules match the buffered
 codecs, including exact widths, UTF-8/ASCII, numeric ranges, null/unset and
-logical Empty. StreamEmpty accepts exactly the types accepted by EmptyCodec.
+logical Empty. EmptyStream accepts exactly the types accepted by EmptyCodec.
 No adapter may run an arbitrary buffered Decoder by accumulating its input.
 StreamEncoded explicitly writes the entire encoded body into caller storage,
 then exposes that caller-owned representation; nested framing/type validation

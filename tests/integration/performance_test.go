@@ -93,7 +93,7 @@ func TestPerformance(t *testing.T) {
 				}
 			}
 		}()
-		decoder := cql.Row(cql.Column("id", cql.Int32, func(v *testBorrowed) *int32 { return &v.ID }), cql.Column("payload", cql.BlobCodec, func(v *testBorrowed) *cql.Bytes { return &v.Payload }), cql.Column("pieces", cql.ListDecoder(cql.BlobCodec), func(v *testBorrowed) *cql.Sequence[cql.Bytes] { return &v.Pieces }))
+		decoder := cql.Row(cql.Column("id", cql.Int32, func(v *testBorrowed) *int32 { return &v.ID }), cql.Column("payload", cql.BlobCodec, func(v *testBorrowed) *cql.Bytes { return &v.Payload }), cql.Column("pieces", cql.ListDecoder(cql.BlobCodec), func(v *testBorrowed) *[]cql.Bytes { return &v.Pieces }))
 		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, testBorrowed]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=4096 AND id<128", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: decoder}, gocql.PrepareOptions{}))
 		bound := codecTestMust(BindOwned(prepared, cql.EmptyParams{}))
 		defer bound.Close()
@@ -195,21 +195,16 @@ func TestPerformance(t *testing.T) {
 									if _, e = view.Payload.CopyTo(dst.Payload); e != nil {
 										return e
 									}
-									it := view.Pieces.Iterator()
 									index := 0
-									for it.Next() {
+									for _, v := range view.Pieces {
 										if index >= 2 {
 											return fmt.Errorf("extra nested output")
 										}
-										v := it.Value()
 										dst.Pieces[index] = dst.Pieces[index][:int(v.Len())]
 										if _, e = v.CopyTo(dst.Pieces[index]); e != nil {
 											return e
 										}
 										index++
-									}
-									if e = it.Err(); e != nil {
-										return e
 									}
 									if index != 2 {
 										return fmt.Errorf("short nested output")
@@ -403,7 +398,7 @@ func TestPerformance(t *testing.T) {
 				}
 			}
 		}
-		borrowedDecoder := cql.Row(cql.Column("id", cql.Int32, func(v *testBorrowed) *int32 { return &v.ID }), cql.Column("payload", cql.BlobCodec, func(v *testBorrowed) *cql.Bytes { return &v.Payload }), cql.Column("pieces", cql.ListDecoder(cql.BlobCodec), func(v *testBorrowed) *cql.Sequence[cql.Bytes] { return &v.Pieces }))
+		borrowedDecoder := cql.Row(cql.Column("id", cql.Int32, func(v *testBorrowed) *int32 { return &v.ID }), cql.Column("payload", cql.BlobCodec, func(v *testBorrowed) *cql.Bytes { return &v.Payload }), cql.Column("pieces", cql.ListDecoder(cql.BlobCodec), func(v *testBorrowed) *[]cql.Bytes { return &v.Pieces }))
 		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[testQuery, testBorrowed]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=? AND id<?", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32, func(v testQuery) int32 { return v.Cell }), cql.Param("id", cql.Int32, func(v testQuery) int32 { return v.Rows })), Rows: borrowedDecoder}, gocql.PrepareOptions{}))
 		streamDecoder := cql.StreamRow(func(*testOutput) {}, cql.StreamColumn("id", cql.StreamInt32, func(v *testOutput) *int32 { return &v.ID }), cql.StreamColumn("payload", cql.StreamBlob, func(v *testOutput) *[]byte { return &v.Payload }), cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(v *testOutput) *[][]byte { return &v.Pieces }))
 		shapes := []testShape{{"small", 1, 32, 1, 1, false}, {"page1", 128, 4096, 1, 1, false}, {"page32", 128, 4096, 32, 1, false}, {"rows1", 1, 4096, 128, 1, false}, {"rows128", 128, 4096, 128, 1, false}, {"cell256K", 1, 256 << 10, 1, 1, false}, {"cell8M", 1, 8 << 20, 1, 1, false}, {"concurrent", 128, 4096, 32, 4, false}, {"slow", 128, 4096, 32, 1, true}}
@@ -476,21 +471,16 @@ func TestPerformance(t *testing.T) {
 								if _, e = view.Payload.CopyTo(dst.Payload); e != nil {
 									return 0, 0, e
 								}
-								it := view.Pieces.Iterator()
 								index := 0
-								for it.Next() {
+								for _, v := range view.Pieces {
 									if index >= 2 {
 										return 0, 0, fmt.Errorf("extra nested value")
 									}
-									v := it.Value()
 									dst.Pieces[index] = dst.Pieces[index][:int(v.Len())]
 									if _, e = v.CopyTo(dst.Pieces[index]); e != nil {
 										return 0, 0, e
 									}
 									index++
-								}
-								if e = it.Err(); e != nil {
-									return 0, 0, e
 								}
 								if index != 2 {
 									return 0, 0, fmt.Errorf("short nested list: %d", index)

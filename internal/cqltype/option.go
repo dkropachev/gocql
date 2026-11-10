@@ -4,6 +4,7 @@
 package cqltype
 
 // Option distinguishes an explicit zero value from an inherited setting.
+// Its zero value inherits the setting; Set=true applies Value.
 type Option[T any] struct {
 	Value T
 	Set   bool

@@ -583,14 +583,7 @@ func TestScalar(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var got []string
-			it := values.Iterator()
-			for it.Next() {
-				got = append(got, it.Value())
-			}
-			if err := it.Err(); err != nil {
-				t.Fatal(err)
-			}
+			got := values
 			if len(got) != 2 || got[0] != "a" || got[1] != "bc" {
 				t.Fatalf("decoded %q", got)
 			}

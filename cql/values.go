@@ -23,6 +23,8 @@ type BatchKind = cqltype.BatchKind
 func BigIntValue(a0 int64) Value                             { return codec.BigIntValue(a0) }
 func BindEncoder[T any](a0 Encoder[T]) Encoder[BindValue[T]] { return codec.BindEncoder[T](a0) }
 
+// BindValue controls parameters using Present, Null, or Unset.
+// Its zero value binds the ordinary zero value of T.
 type BindValue[T any] = cqltype.BindValue[T]
 
 var BlobCodec = codec.BlobCodec
@@ -49,8 +51,6 @@ type Codec[T any] = codec.Codec[T]
 // Deprecated: use (*ValueIterator[T]).Collect.
 func Collect[T any](a0 *ValueIterator[T]) ([]T, error) { return a0.Collect() }
 
-type CollectionType = cqltype.CollectionType
-
 func Column[R any, V any](a0 string, a1 Decoder[V], a2 func(*R) *V) OutputField[R] {
 	return codec.Column[R, V](a0, a1, a2)
 }
@@ -58,7 +58,6 @@ func ColumnAt[R any, V any](a0 int, a1 Decoder[V], a2 func(*R) *V) OutputField[R
 	return codec.ColumnAt[R, V](a0, a1, a2)
 }
 
-type ColumnInfo = cqltype.ColumnInfo
 type ColumnSpec = cqltype.ColumnSpec
 type Columns = cqltype.Columns
 
@@ -109,6 +108,8 @@ const EmptyCell = cqltype.EmptyCell
 func EmptyCodec[T any](a0 Codec[T]) Codec[EmptyValueOf[T]] { return codec.EmptyCodec[T](a0) }
 func EmptyValue(a0 DataType) (Value, error)                { return codec.EmptyValue(a0) }
 
+// EmptyValueOf distinguishes an empty CQL value from an ordinary value.
+// Its zero value encodes the ordinary zero value of T; Empty=true selects empty.
 type EmptyValueOf[T any] = cqltype.EmptyValueOf[T]
 
 func EncodeValueBorrowed[T any](a0 DataType, a1 Encoder[T], a2 T) (EncodedValue, error) {
@@ -141,12 +142,16 @@ var Int8 = codec.Int8
 
 func IntValue(a0 int32) Value { return codec.IntValue(a0) }
 
-func ListDecoder[T any](a0 Decoder[T]) Decoder[Sequence[T]] { return codec.ListDecoder[T](a0) }
-func ListEncoder[T any](a0 Encoder[T]) Encoder[[]T]         { return codec.ListEncoder[T](a0) }
-func ListType(a0 DataType) (DataType, error)                { return cqltype.ListType(a0) }
-func ListValue(a0 DataType, a1 []Value) (Value, error)      { return codec.ListValue(a0, a1) }
+// ListDecoder eagerly decodes every element into a []T. Elements may borrow
+// page storage; Clone recursively detaches them.
+func ListDecoder[T any](a0 Decoder[T]) Decoder[[]T]    { return codec.ListDecoder[T](a0) }
+func ListEncoder[T any](a0 Encoder[T]) Encoder[[]T]    { return codec.ListEncoder[T](a0) }
+func ListType(a0 DataType) (DataType, error)           { return cqltype.ListType(a0) }
+func ListValue(a0 DataType, a1 []Value) (Value, error) { return codec.ListValue(a0, a1) }
 
-func MapDecoder[K any, V any](a0 Decoder[K], a1 Decoder[V]) Decoder[Mapping[K, V]] {
+// MapDecoder eagerly decodes ordered entries; keys need not be Go-comparable.
+// Entries may contain borrowed values; Clone recursively detaches them.
+func MapDecoder[K any, V any](a0 Decoder[K], a1 Decoder[V]) Decoder[[]Entry[K, V]] {
 	return codec.MapDecoder[K, V](a0, a1)
 }
 func MapEncoder[K any, V any](a0 Encoder[K], a1 Encoder[V]) Encoder[[]Entry[K, V]] {
@@ -161,8 +166,6 @@ func MapRows[A any, B any](a0 RowDecoder[A], a1 func(A) B, a2 func(B) B) RowDeco
 func MapType(a0 DataType, a1 DataType) (DataType, error)   { return cqltype.MapType(a0, a1) }
 func MapValue(a0 DataType, a1 []ValueEntry) (Value, error) { return codec.MapValue(a0, a1) }
 
-type Mapping[K any, V any] = codec.Mapping[K, V]
-
 func MaxTimeUUID(a0 time.Time) UUID { return cqltype.MaxTimeUUID(a0) }
 func MinTimeUUID(a0 time.Time) UUID { return cqltype.MinTimeUUID(a0) }
 func MustRandomUUID() UUID          { return cqltype.MustRandomUUID() }
@@ -172,8 +175,6 @@ var NamedDynamicParams = codec.NamedDynamicParams
 func NamedScalar[A any, B any](a0 Codec[B], a1 func(A) B, a2 func(B) A) Codec[A] {
 	return codec.NamedScalar[A, B](a0, a1, a2)
 }
-
-type NativeType = cqltype.NativeType
 
 func NewColumns(a0 ...ColumnSpec) Columns { return cqltype.NewColumns(a0...) }
 
@@ -190,6 +191,9 @@ const Null = cqltype.Null
 
 func NullValue(a0 DataType) Value { return codec.NullValue(a0) }
 
+// Nullable represents a value or CQL NULL; its zero value is NULL.
+// It supports result decoding and binding nullable application fields.
+// Use BindValue for parameters that also need UNSET.
 type Nullable[T any] = cqltype.Nullable[T]
 
 func NullableCodec[T any](a0 Codec[T]) Codec[Nullable[T]]       { return codec.NullableCodec[T](a0) }
@@ -223,7 +227,9 @@ type ParamWriter = codec.ParamWriter
 
 func Params[P any](a0 ...InputField[P]) ParamEncoder[P] { return codec.Params[P](a0...) }
 func ParseUUID(a0 string) (UUID, error)                 { return cqltype.ParseUUID(a0) }
-func ParseUUIDMust(a0 string) UUID                      { return cqltype.ParseUUIDMust(a0) }
+
+// MustParseUUID is ParseUUID that panics on error.
+func MustParseUUID(a0 string) UUID { return cqltype.MustParseUUID(a0) }
 
 type PayloadEntry = model.PayloadEntry
 
@@ -274,13 +280,13 @@ var (
 	DurationType  = cqltype.DurationType
 )
 
-type Sequence[T any] = codec.Sequence[T]
-
-func SetDecoder[T any](a0 Decoder[T]) Decoder[Sequence[T]] { return codec.SetDecoder[T](a0) }
-func SetEncoder[T any](a0 Encoder[T]) Encoder[[]T]         { return codec.SetEncoder[T](a0) }
-func SetType(a0 DataType) (DataType, error)                { return cqltype.SetType(a0) }
-func SetValue(a0 DataType, a1 []Value) (Value, error)      { return codec.SetValue(a0, a1) }
-func SmallIntValue(a0 int16) Value                         { return codec.SmallIntValue(a0) }
+// SetDecoder eagerly decodes every element into a []T. Elements may borrow
+// page storage; Clone recursively detaches them.
+func SetDecoder[T any](a0 Decoder[T]) Decoder[[]T]    { return codec.SetDecoder[T](a0) }
+func SetEncoder[T any](a0 Encoder[T]) Encoder[[]T]    { return codec.SetEncoder[T](a0) }
+func SetType(a0 DataType) (DataType, error)           { return cqltype.SetType(a0) }
+func SetValue(a0 DataType, a1 []Value) (Value, error) { return codec.SetValue(a0, a1) }
+func SmallIntValue(a0 int16) Value                    { return codec.SmallIntValue(a0) }
 
 type StatementKind = cqltype.StatementKind
 
@@ -321,11 +327,9 @@ var StreamInt64 = codec.StreamInt64
 var StreamInt8 = codec.StreamInt8
 
 func StreamList[T any](a0 StreamDecoder[T]) StreamDecoder[[]T] { return codec.StreamList[T](a0) }
-func StreamMap[K any, V any](a0 StreamDecoder[K], a1 StreamDecoder[V]) StreamDecoder[[]StreamMapEntry[K, V]] {
+func StreamMap[K any, V any](a0 StreamDecoder[K], a1 StreamDecoder[V]) StreamDecoder[[]Entry[K, V]] {
 	return codec.StreamMap[K, V](a0, a1)
 }
-
-type StreamMapEntry[K any, V any] = codec.StreamMapEntry[K, V]
 
 func StreamNullable[T any](a0 StreamDecoder[T]) StreamDecoder[Nullable[T]] {
 	return codec.StreamNullable[T](a0)
@@ -404,8 +408,6 @@ func TupleDecoder[T any](a0 RowDecoder[T]) Decoder[T]   { return codec.TupleDeco
 func TupleEncoder[T any](a0 ParamEncoder[T]) Encoder[T] { return codec.TupleEncoder[T](a0) }
 func TupleType(a0 ...DataType) (DataType, error)        { return cqltype.TupleType(a0...) }
 
-type TupleTypeInfo = cqltype.TupleTypeInfo
-
 func TupleValue(a0 DataType, a1 []Value) (Value, error) { return codec.TupleValue(a0, a1) }
 
 type Type = cqltype.Type
@@ -422,8 +424,6 @@ const TypeDouble = cqltype.TypeDouble
 const TypeDuration = cqltype.TypeDuration
 const TypeFloat = cqltype.TypeFloat
 const TypeInet = cqltype.TypeInet
-
-type TypeInfo = cqltype.TypeInfo
 
 const TypeInt = cqltype.TypeInt
 const TypeList = cqltype.TypeList
@@ -448,7 +448,6 @@ func UDTEncoder[T any](a0 ParamEncoder[T], a1 UDTOptions) Encoder[T] {
 	return codec.UDTEncoder[T](a0, a1)
 }
 
-type UDTField = cqltype.UDTField
 type UDTOptions = codec.UDTOptions
 
 func UDTOptionsFor(a0 DataType) (UDTOptions, error) { return codec.UDTOptionsFor(a0) }
@@ -456,8 +455,6 @@ func UDTOptionsFor(a0 DataType) (UDTOptions, error) { return codec.UDTOptionsFor
 func UDTType(a0 string, a1 string, a2 ...ColumnSpec) (DataType, error) {
 	return cqltype.UDTType(a0, a1, a2...)
 }
-
-type UDTTypeInfo = cqltype.UDTTypeInfo
 
 func UDTValue(a0 DataType, a1 []ValueField) (Value, error) { return codec.UDTValue(a0, a1) }
 
@@ -495,10 +492,11 @@ func VarintFromBigInt(a0 *big.Int) Varint                     { return codec.Var
 func VarintFromBytes(a0 []byte) (Varint, error)               { return codec.VarintFromBytes(a0) }
 func VarintValue(a0 Varint) Value                             { return codec.VarintValue(a0) }
 func VectorDataType(a0 DataType, a1 uint16) (DataType, error) { return cqltype.VectorDataType(a0, a1) }
-func VectorDecoder[T any](a0 Decoder[T]) Decoder[Sequence[T]] { return codec.VectorDecoder[T](a0) }
-func VectorEncoder[T any](a0 Encoder[T]) Encoder[[]T]         { return codec.VectorEncoder[T](a0) }
 
-type VectorType = cqltype.VectorType
+// VectorDecoder eagerly decodes every element into a []T. Elements may borrow
+// page storage; Clone recursively detaches them.
+func VectorDecoder[T any](a0 Decoder[T]) Decoder[[]T] { return codec.VectorDecoder[T](a0) }
+func VectorEncoder[T any](a0 Encoder[T]) Encoder[[]T] { return codec.VectorEncoder[T](a0) }
 
 func VectorValue(a0 DataType, a1 []Value) (Value, error) { return codec.VectorValue(a0, a1) }
 

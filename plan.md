@@ -174,7 +174,7 @@ and their states without retaining cross-call history or inventing rows.
 `Rows.NextInto(dst)` and `Page.NextInto(dst)` advance and decode directly into
 the supplied instance using the same compiled column mappings as `Next`.
 Built-in field plans write into that destination without an intermediate row
-or a decode-then-assign adapter. Text/blob and lazy collection fields reference
+or a decode-then-assign adapter. Text/blob fields and borrowed collection elements reference
 immutable leased receive storage, including segmented values; fixed scalars
 are decoded into Go values. This is required planned functionality, not an
 assertion that the current implementation already exposes it.
@@ -272,7 +272,7 @@ Supported value families:
 | Time and numeric domains | Date, TimeOfDay, Timestamp, Duration, Varint, Decimal; explicit standard-library conversions. |
 | Text/blob | Borrowed `Text` and `Bytes`; explicit string/byte materialization. |
 | Null/unset/empty | `Nullable[T]`, `BindValue[T]`, `EmptyValueOf[T]`; states remain distinct. |
-| Collections | Typed list/set/map encoders; lazy `Sequence[T]` and `Mapping[K,V]` decoders. |
+| Collections | Typed list/set/map/vector codecs, encoders and eager slice decoders; maps use `[]Entry[K,V]`. |
 | Tuples/UDTs | Explicit parameter/row compositions; checked names, identity, field evolution, and nullable suffixes. |
 | Vectors | Exact dimensions and native fixed/variable-width layouts, including nested vectors. |
 | Dynamic schemas | Tagged `Value` and ordered `DynamicRow`; no `map[string]any` execution representation. |

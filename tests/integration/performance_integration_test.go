@@ -86,7 +86,7 @@ type testQuery struct{ Cell, Rows int32 }
 type testBorrowed struct {
 	ID      int32
 	Payload cql.Bytes
-	Pieces  cql.Sequence[cql.Bytes]
+	Pieces  []cql.Bytes
 }
 type testOutput struct {
 	ID      int32

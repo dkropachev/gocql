@@ -269,28 +269,28 @@ func TestSchemaAgreement(t *testing.T) {
 	})
 
 	t.Run("Get", func(t *testing.T) {
-		schema_version1 := cqltype.ParseUUIDMust("af810386-a694-11ef-81fa-3aea73156247")
+		schema_version1 := cqltype.MustParseUUID("af810386-a694-11ef-81fa-3aea73156247")
 		peersRows := []transport.InternalSchemaAgreementHost{
 			{
 				DataCenter:    "datacenter1",
-				HostID:        cqltype.ParseUUIDMust("b2035fd9-e0ca-4857-8c45-e63c00fb7c43"),
+				HostID:        cqltype.MustParseUUID("b2035fd9-e0ca-4857-8c45-e63c00fb7c43"),
 				Rack:          "rack1",
 				RPCAddress:    "127.0.0.3",
 				SchemaVersion: schema_version1,
 			},
 			{
 				DataCenter:    "datacenter1",
-				HostID:        cqltype.ParseUUIDMust("4b21ee4c-acea-4267-8e20-aaed5361a0dd"),
+				HostID:        cqltype.MustParseUUID("4b21ee4c-acea-4267-8e20-aaed5361a0dd"),
 				Rack:          "rack1",
 				RPCAddress:    "127.0.0.2",
 				SchemaVersion: schema_version1,
 			},
 			{
 				DataCenter:    "datacenter2",
-				HostID:        cqltype.ParseUUIDMust("dfef4a22-b8d8-47e9-aee5-8c19d4b7a9e3"),
+				HostID:        cqltype.MustParseUUID("dfef4a22-b8d8-47e9-aee5-8c19d4b7a9e3"),
 				Rack:          "rack1",
 				RPCAddress:    "127.0.0.5",
-				SchemaVersion: cqltype.ParseUUIDMust("875a938a-a695-11ef-4314-85c8ef0ebaa2"),
+				SchemaVersion: cqltype.MustParseUUID("875a938a-a695-11ef-4314-85c8ef0ebaa2"),
 			},
 		}
 
@@ -333,7 +333,7 @@ func TestSchemaAgreement(t *testing.T) {
 				[]transport.InternalSchemaAgreementHost{
 					{
 						DataCenter:    "datacenter1",
-						HostID:        cqltype.ParseUUIDMust("b2035fd9-e0ca-4857-8c45-e63c00fb7c43"),
+						HostID:        cqltype.MustParseUUID("b2035fd9-e0ca-4857-8c45-e63c00fb7c43"),
 						Rack:          "rack1",
 						RPCAddress:    "127.0.0.3",
 						SchemaVersion: schema_version1,
@@ -357,17 +357,17 @@ func TestSchemaAgreement(t *testing.T) {
 				[]transport.InternalSchemaAgreementHost{
 					{
 						DataCenter:    "datacenter1",
-						HostID:        cqltype.ParseUUIDMust("b2035fd9-e0ca-4857-8c45-e63c00fb7c43"),
+						HostID:        cqltype.MustParseUUID("b2035fd9-e0ca-4857-8c45-e63c00fb7c43"),
 						Rack:          "rack1",
 						RPCAddress:    "127.0.0.3",
 						SchemaVersion: schema_version1,
 					},
 					{
 						DataCenter:    "datacenter2",
-						HostID:        cqltype.ParseUUIDMust("dfef4a22-b8d8-47e9-aee5-8c19d4b7a9e3"),
+						HostID:        cqltype.MustParseUUID("dfef4a22-b8d8-47e9-aee5-8c19d4b7a9e3"),
 						Rack:          "rack1",
 						RPCAddress:    "127.0.0.5",
-						SchemaVersion: cqltype.ParseUUIDMust("875a938a-a695-11ef-4314-85c8ef0ebaa2"),
+						SchemaVersion: cqltype.MustParseUUID("875a938a-a695-11ef-4314-85c8ef0ebaa2"),
 					},
 				},
 				logger,

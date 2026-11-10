@@ -289,38 +289,9 @@ func (p streamRecordPlan[R]) DecodeInto(r *StreamValueReader, dst *R) error {
 }
 
 func streamFieldMapping(columns cqltype.Columns, locations []fieldLocation, extra, missing bool) ([]int, error) {
-	mapping := make([]int, columns.Len())
-	for i := range mapping {
-		mapping[i] = -1
-	}
-	for i, loc := range locations {
-		if !loc.positional && loc.name == "" {
-			return nil, cqltype.TypeValidation("stream field", "empty field name")
-		}
-		matches := 0
-		for j, col := range cqltype.ColumnSlice(columns) {
-			if !(loc.positional && loc.index == j || !loc.positional && loc.name == col.Name) {
-				continue
-			}
-			if mapping[j] >= 0 {
-				return nil, cqltype.TypeValidation("stream field", "duplicate accessor for column %d", j)
-			}
-			mapping[j] = i
-			matches++
-		}
-		if matches > 1 {
-			return nil, cqltype.TypeValidation("stream field", "duplicate result name %q needs positional mapping", loc.name)
-		}
-		if matches == 0 && !missing {
-			return nil, cqltype.TypeValidation("stream field", "application field %q/%d has no column", loc.name, loc.index)
-		}
-	}
-	if !extra {
-		for i, m := range mapping {
-			if m < 0 {
-				return nil, cqltype.TypeValidation("stream field", "unaccounted database field %d", i)
-			}
-		}
+	mapping, err := mapColumnFields(columns, locations, false, missing, extra)
+	if err != nil {
+		return nil, cqltype.TypeValidation("stream field", "%v", err)
 	}
 	return mapping, nil
 }

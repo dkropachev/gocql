@@ -46,13 +46,13 @@ func TestTupleUDT(t *testing.T) {
 		}
 		clone := decoder.Clone(value)
 		lease.Release()
-		if it := value.Iterator(); it.Next() || !errors.Is(it.Err(), cqltype.ErrReleased) {
-			t.Fatal("released nested view survived")
+		if err := cqltype.CheckBytesAlive(cqltype.TextBytes(value[0])); !errors.Is(err, cqltype.ErrReleased) {
+			t.Fatal("released nested element survived")
 		}
-		values, err := clone.Iterator().Collect()
-		if err != nil || values[1].String() != "second" {
-			t.Fatalf("nested clone: %v", err)
+		if clone[1].String() != "second" {
+			t.Fatal("nested clone failed")
 		}
+
 	})
 	t.Run("Tuple", func(t *testing.T) {
 		t.Run("ConcurrentPlansCheckOnce", func(t *testing.T) {
@@ -133,9 +133,8 @@ func TestTupleUDT(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			it := sequence.Iterator()
-			if !it.Next() || it.Value().ID != 7 || it.Value().Name.Valid {
-				t.Fatalf("nested tuple: %v", it.Err())
+			if len(sequence) != 1 || sequence[0].ID != 7 || sequence[0].Name.Valid {
+				t.Fatalf("nested tuple: %v", sequence)
 			}
 			// The tuple stays one column even when adjacent to an ordinary scalar.
 			columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "record", Type: tuple}, cqltype.ColumnSpec{Name: "tail", Type: integer})

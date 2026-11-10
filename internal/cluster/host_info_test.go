@@ -749,13 +749,13 @@ func TestHostInfo(t *testing.T) {
 			net.IPv4(192, 168, 100, 12),
 			"cluster",
 			"datacenter1",
-			cqltype.ParseUUIDMust("045859a7-6b9f-4efd-a5e7-acd64a295e13"),
+			cqltype.MustParseUUID("045859a7-6b9f-4efd-a5e7-acd64a295e13"),
 			net.IPv4(192, 168, 100, 12),
 			"org.apache.cassandra.dht.Murmur3Partitioner",
 			"rack1",
 			"3.0.8",
 			net.IPv4(192, 168, 100, 12),
-			cqltype.ParseUUIDMust("daf4df2c-b708-11ef-5c25-3004361afd71"),
+			cqltype.MustParseUUID("daf4df2c-b708-11ef-5c25-3004361afd71"),
 			[]string{"1"},
 		}
 		framer := &trackingMockFramer{

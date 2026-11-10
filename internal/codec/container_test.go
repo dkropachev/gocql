@@ -61,13 +61,9 @@ func TestContainer(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			clone := sequence.Clone()
-			it := sequence.Iterator()
-			if !it.Next() {
-				t.Fatal(it.Err())
-			}
+			clone := ListDecoder(BlobCodec).Clone(sequence)
 			fragments := 0
-			cqltype.EachBytes(it.Value(), func(s wire.Span) error {
+			cqltype.EachBytes(sequence[0], func(s wire.Span) error {
 				if &s.Bytes()[0] != &body[8+fragments] {
 					t.Error("fragment payload was copied")
 				}
@@ -78,12 +74,11 @@ func TestContainer(t *testing.T) {
 				t.Fatalf("got %d fragments, want %d", fragments, len(payload))
 			}
 			lease.Release()
-			if it := sequence.Iterator(); it.Next() || !errors.Is(it.Err(), cqltype.ErrReleased) {
-				t.Fatalf("released sequence: %v", it.Err())
+			if err := cqltype.CheckBytesAlive(sequence[0]); !errors.Is(err, cqltype.ErrReleased) {
+				t.Fatalf("released element: %v", err)
 			}
-			values, err := clone.Iterator().Collect()
-			if err != nil || string(values[0].OwnedBytes()) != "fragmented" {
-				t.Fatalf("detached clone failed: %v", err)
+			if string(clone[0].OwnedBytes()) != "fragmented" {
+				t.Fatal("detached clone failed")
 			}
 			owned, err := EncodeValue(list, ListEncoder(BytesEncoder), [][]byte{payload})
 			if err != nil {
@@ -105,12 +100,12 @@ func TestContainer(t *testing.T) {
 		borrowed := EncodedValue{typ: list, state: cqltype.Present, body: cqltype.BytesView(cqltype.BytesChain(encoded.body), wire.RefOf(lease))}
 		decoder := ListDecoder(TupleDecoder(PairRows(1, OneColumn(TextCodec), OneColumn(BlobCodec))))
 		seq := CodecTestMust(DecodeValue(decoder, borrowed))
-		values := CodecTestMust(seq.Iterator().Collect())
+		values := decoder.Clone(seq)
 		dynamic := CodecTestMust(DynamicCodec.Decode(NewValueReader(list, cqltype.Present, cqltype.BytesChain(encoded.body), lease)))
 		dynamicValues := CodecTestMust(CodecTestMust(dynamic.Elements()).Collect())
 		lease.Release()
 		if values[0].First.String() != "one" || !bytes.Equal(values[1].Second.OwnedBytes(), []byte("more")) {
-			t.Fatal("typed Collect retained lease")
+			t.Fatal("typed Clone retained lease")
 		}
 		fields := CodecTestMust(CodecTestMust(dynamicValues[0].Fields()).Collect())
 		txt := CodecTestMust(fields[0].Value.Text())
@@ -149,7 +144,7 @@ func TestContainer(t *testing.T) {
 							t.Error(err)
 							return
 						}
-						values, err := sequence.Iterator().Collect()
+						values := sequence
 						if err != nil || len(values) != 3 || values[2] != 3 {
 							t.Errorf("decode values=%v err=%v", values, err)
 							return
@@ -164,24 +159,13 @@ func TestContainer(t *testing.T) {
 		})
 	})
 	t.Run("Decode", func(t *testing.T) {
-		t.Run("LazyFailureIsPermanent", func(t *testing.T) {
+		t.Run("ElementFailureIsEager", func(t *testing.T) {
 			list, _ := cqltype.ListType(rowTestType(t, cqltype.TypeInt))
-			// Both frames are valid; the first integer body is too short.
-			body, _ := hex.DecodeString("00000002000000030102030000000400000007")
-			sequence, err := DecodeValue(ListDecoder(Int32), containerValue(t, list, body))
-			if err != nil {
-				t.Fatalf("lazy decode eagerly checked scalar: %v", err)
-			}
-			it := sequence.Iterator()
-			if it.Next() || it.Err() == nil || it.Value() != 0 || it.Next() {
-				t.Fatal("failed iterator continued or exposed a partial value")
-			}
-			if values, err := sequence.Iterator().Collect(); err == nil || values != nil {
-				t.Fatal("Collect exposed partial malformed collection")
-			}
-			clone := sequence.Clone()
-			if clone.Len() != 2 {
-				t.Fatal("Clone eagerly decoded invalid scalar")
+			// Valid enclosing frames, but the second integer body is too short.
+			body, _ := hex.DecodeString("00000002000000040000000700000003010203")
+			values, err := DecodeValue(ListDecoder(Int32), containerValue(t, list, body))
+			if err == nil || values != nil {
+				t.Fatalf("malformed collection exposed partial values: %v, %v", values, err)
 			}
 		})
 		t.Run("StrictEnclosingFraming", func(t *testing.T) {
@@ -204,8 +188,8 @@ func TestContainer(t *testing.T) {
 					}
 				}
 				null, _ := NewEncodedValue(test.typ, cqltype.Null, cqltype.Bytes{})
-				if err := test.validate(null); err == nil {
-					t.Fatalf("%s accepted null without nullable wrapper", test.typ)
+				if err := test.validate(null); err != nil {
+					t.Fatalf("%s rejected null collection: %v", test.typ, err)
 				}
 				if err := test.validate(containerValue(t, test.typ, []byte{0, 0, 0, 0})); err != nil {
 					t.Fatalf("empty collection rejected: %v", err)
@@ -231,7 +215,7 @@ func TestContainer(t *testing.T) {
 		for _, test := range []struct {
 			typ    cqltype.DataType
 			enc    Encoder[[]int32]
-			dec    Decoder[Sequence[int32]]
+			dec    Decoder[[]int32]
 			golden string
 		}{
 			{list, ListEncoder(Int32), ListDecoder(Int32), "00000002000000040000000100000004ffffffff"},
@@ -243,7 +227,7 @@ func TestContainer(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			values, err := sequence.Iterator().Collect()
+			values := sequence
 			if err != nil || !reflect.DeepEqual(values, []int32{1, -1}) {
 				t.Fatalf("values=%v err=%v", values, err)
 			}
@@ -256,7 +240,7 @@ func TestContainer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		entries, err := mapping.Iterator().Collect()
+		entries := mapping
 		if err != nil || len(entries) != 1 || entries[0].Key.String() != "x" || string(entries[0].Value.OwnedBytes()) != "y" {
 			t.Fatalf("entries=%v err=%v", entries, err)
 		}
@@ -268,7 +252,7 @@ func TestContainer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		stringsValues, err := strings.Iterator().Collect()
+		stringsValues := strings
 		if err != nil || stringsValues[0].String() != "" || stringsValues[1].String() != "é" {
 			t.Fatalf("variable vector: %v", err)
 		}
@@ -278,100 +262,14 @@ func TestContainer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		outerIt := outer.Iterator()
-		for n := int32(1); outerIt.Next(); n += 2 {
-			inner, err := outerIt.Value().Iterator().Collect()
-			if err != nil || !reflect.DeepEqual(inner, []int32{n, n + 1}) {
-				t.Fatalf("nested vector=%v err=%v", inner, err)
+		for i, inner := range outer {
+			n := int32(2*i + 1)
+			if !reflect.DeepEqual(inner, []int32{n, n + 1}) {
+				t.Fatalf("nested vector=%v", inner)
 			}
 		}
-		if outerIt.Err() != nil {
-			t.Fatal(outerIt.Err())
-		}
 	})
-	t.Run("Iterator", func(t *testing.T) {
-		t.Run("AllocationsDoNotScale", func(t *testing.T) {
-			typ, _ := cqltype.ListType(rowTestType(t, cqltype.TypeInt))
-			allocationCount := func(count int) float64 {
-				encoded, err := EncodeValueBorrowed(typ, ListEncoder(Int32), make([]int32, count))
-				if err != nil {
-					t.Fatal(err)
-				}
-				sequence, err := DecodeValue(ListDecoder(Int32), encoded)
-				if err != nil {
-					t.Fatal(err)
-				}
-				return testing.AllocsPerRun(50, func() {
-					it := sequence.Iterator()
-					for it.Next() {
-						containerIntSink = it.Value()
-					}
-					if it.Err() != nil {
-						t.Fatal(it.Err())
-					}
-				})
-			}
-			small, large := allocationCount(1), allocationCount(1024)
-			if large > small {
-				t.Fatalf("iteration allocations scale with elements: one=%g, 1024=%g", small, large)
-			}
-		})
-		t.Run("EmptyDetectsRelease", func(t *testing.T) {
-			integer := rowTestType(t, cqltype.TypeInt)
-			list, _ := cqltype.ListType(integer)
-			mapType, _ := cqltype.MapType(integer, integer)
-			chain, _ := wire.NewChain(wire.Borrow([]byte{0, 0, 0, 0}))
-			lease := wire.NewLease(chain, nil)
-			sequence, err := ListDecoder(Int32).Decode(NewValueReader(list, cqltype.Present, chain, lease))
-			if err != nil {
-				t.Fatal(err)
-			}
-			mapping, err := MapDecoder(Int32, Int32).Decode(NewValueReader(mapType, cqltype.Present, chain, lease))
-			if err != nil {
-				t.Fatal(err)
-			}
-			items, entries := sequence.Iterator(), mapping.Iterator()
-			lease.Release()
-			if items.Next() || !errors.Is(items.Err(), cqltype.ErrReleased) {
-				t.Fatalf("empty sequence iterator: %v", items.Err())
-			}
-			if entries.Next() || !errors.Is(entries.Err(), cqltype.ErrReleased) {
-				t.Fatalf("empty map iterator: %v", entries.Err())
-			}
-		})
-		t.Run("SegmentedAllocationsDoNotScale", func(t *testing.T) {
-			typ, _ := cqltype.ListType(rowTestType(t, cqltype.TypeInt))
-			allocationCount := func(count int) float64 {
-				encoded, err := EncodeValueBorrowed(typ, ListEncoder(Int32), make([]int32, count))
-				if err != nil {
-					t.Fatal(err)
-				}
-				data := encoded.Bytes().OwnedBytes()
-				spans := make([]wire.Span, len(data))
-				for index := range data {
-					spans[index] = wire.Borrow(data[index : index+1])
-				}
-				chain, _ := wire.NewChain(spans...)
-				sequence, err := ListDecoder(Int32).Decode(NewValueReader(typ, cqltype.Present, chain, nil))
-				if err != nil {
-					t.Fatal(err)
-				}
-				return testing.AllocsPerRun(30, func() {
-					it := sequence.Iterator()
-					for it.Next() {
-						containerIntSink = it.Value()
-					}
-					if it.Err() != nil {
-						t.Fatal(it.Err())
-					}
-				})
-			}
-			small, large := allocationCount(1), allocationCount(1024)
-			if large > small {
-				t.Fatalf("cross-span allocations scale with elements: one=%g, 1024=%g", small, large)
-			}
-		})
-	})
+
 	t.Run("Vector", func(t *testing.T) {
 		t.Run("StrictDimensionsAndLengths", func(t *testing.T) {
 			integer := rowTestType(t, cqltype.TypeInt)
@@ -399,7 +297,7 @@ func TestContainer(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			values, err := empty.Iterator().Collect()
+			values := empty
 			if err != nil || len(values) != 1 || values[0].String() != "" {
 				t.Fatalf("final zero length must stay present: %v", err)
 			}
@@ -449,7 +347,7 @@ func TestContainer(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			values, err := sequence.Iterator().Collect()
+			values := sequence
 			if err != nil || len(values) != 2 || values[0].Len() != 128 || values[1].Len() != 0 {
 				t.Fatalf("segmented vector values=%v err=%v", values, err)
 			}

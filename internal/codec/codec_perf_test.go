@@ -109,14 +109,14 @@ func TestCodecPerf(t *testing.T) {
 			N        int32
 			Text     cqltype.Text
 			Blob     cqltype.Bytes
-			List     Sequence[int32]
+			List     []int32
 			Nullable cqltype.Nullable[int32]
 			Empty    cqltype.EmptyValueOf[int32]
 			Dynamic  Value
 		}
 		cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "n", Type: integer}, cqltype.ColumnSpec{Name: "text", Type: text}, cqltype.ColumnSpec{Name: "blob", Type: blob}, cqltype.ColumnSpec{Name: "list", Type: list}, cqltype.ColumnSpec{Name: "nullable", Type: integer}, cqltype.ColumnSpec{Name: "empty", Type: integer}, cqltype.ColumnSpec{Name: "dynamic", Type: integer})
 		body := encodeTestParams(t, cols, DynamicParams, []Value{IntValue(3), CodecTestMust(TextValue("safe-🙂")), BlobValue([]byte("borrowed")), CodecTestMust(ListValue(list, []Value{IntValue(7)})), IntValue(4), IntValue(5), IntValue(6)})
-		decoder := Row(Column("n", Int32, func(r *result) *int32 { return &r.N }), Column("text", TextCodec, func(r *result) *cqltype.Text { return &r.Text }), Column("blob", BlobCodec, func(r *result) *cqltype.Bytes { return &r.Blob }), Column("list", ListDecoder(Int32), func(r *result) *Sequence[int32] { return &r.List }), Column("nullable", NullableDecoder(Int32), func(r *result) *cqltype.Nullable[int32] { return &r.Nullable }), Column("empty", EmptyCodec(Int32), func(r *result) *cqltype.EmptyValueOf[int32] { return &r.Empty }), Column("dynamic", DynamicCodec, func(r *result) *Value { return &r.Dynamic }))
+		decoder := Row(Column("n", Int32, func(r *result) *int32 { return &r.N }), Column("text", TextCodec, func(r *result) *cqltype.Text { return &r.Text }), Column("blob", BlobCodec, func(r *result) *cqltype.Bytes { return &r.Blob }), Column("list", ListDecoder(Int32), func(r *result) *[]int32 { return &r.List }), Column("nullable", NullableDecoder(Int32), func(r *result) *cqltype.Nullable[int32] { return &r.Nullable }), Column("empty", EmptyCodec(Int32), func(r *result) *cqltype.EmptyValueOf[int32] { return &r.Empty }), Column("dynamic", DynamicCodec, func(r *result) *Value { return &r.Dynamic }))
 		plan := CodecTestMust(decoder.Compile(cols))
 		lease := wire.NewLease(body, nil)
 		var dst result
@@ -125,12 +125,10 @@ func TestCodecPerf(t *testing.T) {
 			if e := plan.DecodeInto(NewRowReader(cols, body, lease), &dst); e != nil {
 				t.Fatal(e)
 			}
-			it := dst.List.Iterator()
-			for it.Next() {
+			if len(dst.List) != 1 || dst.List[0] != 7 {
+				t.Fatal(dst.List)
 			}
-			if it.Err() != nil {
-				t.Fatal(it.Err())
-			}
+
 		}
 		comp, maps := ReadPerfCounters()
 		if comp != 0 || maps != 0 || ReadPerfTypeChecks() != 0 {
@@ -258,13 +256,8 @@ func TestCodecPerf(t *testing.T) {
 				ResetPerfCounters()
 				wire.ResetPerfCounters()
 				v := CodecTestMust(compiled.Decode(NewValueReader(typ, cqltype.Present, cqltype.BytesChain(encoded.body), nil)))
-				it := v.Iterator()
-				count := 0
-				for it.Next() {
-					count++
-				}
-				if it.Err() != nil || count != n {
-					t.Fatal(count, it.Err())
+				if len(v) != n {
+					t.Fatal(len(v))
 				}
 				c := wire.ReadPerfCounters()
 				comp, maps := ReadPerfCounters()

@@ -146,11 +146,11 @@ var systemPeersResultMetadata = protocol.ResultMetadata{
 func (*mockConnection) querySystem(ctx context.Context, query string, values ...any) *nativeResultFixture {
 	// Column order matches the explicit SELECT in qrySystemLocal:
 	// broadcast_address, cluster_name, data_center, host_id, listen_address, partitioner, rack, release_version, rpc_address, schema_version, tokens
-	localData := []any{net.IPv4(192, 168, 100, 12), "", "datacenter1", implCqltype.ParseUUIDMust("045859a7-6b9f-4efd-a5e7-acd64a295e13"), net.IPv4(192, 168, 100, 12), "org.apache.cassandra.dht.Murmur3Partitioner", "rack1", "3.0.8", net.IPv4(192, 168, 100, 12), implCqltype.ParseUUIDMust("daf4df2c-b708-11ef-5c25-3004361afd71"), []string{}}
+	localData := []any{net.IPv4(192, 168, 100, 12), "", "datacenter1", implCqltype.MustParseUUID("045859a7-6b9f-4efd-a5e7-acd64a295e13"), net.IPv4(192, 168, 100, 12), "org.apache.cassandra.dht.Murmur3Partitioner", "rack1", "3.0.8", net.IPv4(192, 168, 100, 12), implCqltype.MustParseUUID("daf4df2c-b708-11ef-5c25-3004361afd71"), []string{}}
 	// Column order matches the explicit SELECT in qrySystemPeersCassandra:
 	// peer, data_center, host_id, preferred_ip, rack, release_version, rpc_address, schema_version, tokens
-	peerData1 := []any{net.IPv4(192, 168, 100, 13), "datacenter1", implCqltype.ParseUUIDMust("b953309f-6e68-41f2-baf5-0e60da317a9c"), nil, "rack1", "3.0.8", net.IPv4(192, 168, 100, 13), implCqltype.ParseUUIDMust("b6ed5bde-b318-11ef-8f58-aeba19e31273"), []string{"-1032311531684407545", "-1112089412567859825"}}
-	peerData2 := []any{net.IPv4(192, 168, 100, 14), "datacenter1", implCqltype.ParseUUIDMust("8269e111-ea38-44bd-a73f-9d3d12cfaf78"), nil, "rack1", "3.0.8", net.IPv4(192, 168, 100, 14), implCqltype.ParseUUIDMust("b6ed5bde-b318-11ef-8f58-aeba19e31273"), []string{}}
+	peerData1 := []any{net.IPv4(192, 168, 100, 13), "datacenter1", implCqltype.MustParseUUID("b953309f-6e68-41f2-baf5-0e60da317a9c"), nil, "rack1", "3.0.8", net.IPv4(192, 168, 100, 13), implCqltype.MustParseUUID("b6ed5bde-b318-11ef-8f58-aeba19e31273"), []string{"-1032311531684407545", "-1112089412567859825"}}
+	peerData2 := []any{net.IPv4(192, 168, 100, 14), "datacenter1", implCqltype.MustParseUUID("8269e111-ea38-44bd-a73f-9d3d12cfaf78"), nil, "rack1", "3.0.8", net.IPv4(192, 168, 100, 14), implCqltype.MustParseUUID("b6ed5bde-b318-11ef-8f58-aeba19e31273"), []string{}}
 
 	if query == transport.InternalQrySystemLocal {
 		return &nativeResultFixture{

@@ -118,10 +118,6 @@ func (p streamSequencePlan[T]) DecodeInto(r *StreamValueReader, dst *[]T) error 
 	return r.RequireEnd()
 }
 
-type StreamMapEntry[K, V any] struct {
-	Key   K
-	Value V
-}
 type streamMapCodec[K, V any] struct {
 	key   StreamDecoder[K]
 	value StreamDecoder[V]
@@ -133,10 +129,10 @@ type streamMapPlan[K, V any] struct {
 	keyValidation, valueValidation *streamValidationPlan
 }
 
-func StreamMap[K, V any](key StreamDecoder[K], value StreamDecoder[V]) StreamDecoder[[]StreamMapEntry[K, V]] {
+func StreamMap[K, V any](key StreamDecoder[K], value StreamDecoder[V]) StreamDecoder[[]Entry[K, V]] {
 	return streamMapCodec[K, V]{key, value}
 }
-func (c streamMapCodec[K, V]) Compile(t cqltype.DataType) (StreamValuePlan[[]StreamMapEntry[K, V]], error) {
+func (c streamMapCodec[K, V]) Compile(t cqltype.DataType) (StreamValuePlan[[]Entry[K, V]], error) {
 	kt, vt, ok := t.KeyValue()
 	if !ok {
 		return nil, cqltype.TypeValidation("type", "expected map, got %s", t)
@@ -162,12 +158,12 @@ func (c streamMapCodec[K, V]) Compile(t cqltype.DataType) (StreamValuePlan[[]Str
 	}
 	return streamMapPlan[K, V]{typ: t, keyType: kt, valueType: vt, key: key, value: value, keyValidation: kp, valueValidation: vp}, nil
 }
-func (p streamMapPlan[K, V]) Reset(dst *[]StreamMapEntry[K, V]) {
+func (p streamMapPlan[K, V]) Reset(dst *[]Entry[K, V]) {
 	if dst != nil {
 		*dst = (*dst)[:0]
 	}
 }
-func (p streamMapPlan[K, V]) DecodeInto(r *StreamValueReader, dst *[]StreamMapEntry[K, V]) error {
+func (p streamMapPlan[K, V]) DecodeInto(r *StreamValueReader, dst *[]Entry[K, V]) error {
 	if dst == nil {
 		return r.fail(cqltype.TypeValidation("destination", "nil map destination"))
 	}
@@ -208,7 +204,7 @@ func (c streamSequenceCodec[T]) Reset(dst *[]T) {
 	}
 }
 func (c streamSequenceCodec[T]) streamCanReset() bool { return streamDeclarationCanReset(c.element) }
-func (c streamMapCodec[K, V]) Reset(dst *[]StreamMapEntry[K, V]) {
+func (c streamMapCodec[K, V]) Reset(dst *[]Entry[K, V]) {
 	if dst != nil {
 		for i := range *dst {
 			resetStreamDeclaration(c.key, &(*dst)[i].Key)

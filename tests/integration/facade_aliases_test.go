@@ -114,7 +114,7 @@ type streamResponse = implTransport.InternalStreamResponse
 
 type attemptRequest = model.AttemptRequest
 
-func dataTypeFromInfo(a0 cql.TypeInfo) (cql.DataType, error) { return cqltype.DataTypeFromInfo(a0) }
+func dataTypeFromInfo(a0 cqltype.TypeInfo) (cql.DataType, error) { return cqltype.DataTypeFromInfo(a0) }
 
 type encodedCell = model.EncodedCell
 

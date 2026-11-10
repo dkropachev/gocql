@@ -112,8 +112,6 @@ type Codec[T any] = codec.Codec[T]
 
 type CodecError = cqltype.CodecError
 
-type CollectionType = cqltype.CollectionType
-
 func Column[R any, V any](a0 string, a1 Decoder[V], a2 func(*R) *V) OutputField[R] {
 	return codec.Column[R, V](a0, a1, a2)
 }
@@ -121,8 +119,6 @@ func Column[R any, V any](a0 string, a1 Decoder[V], a2 func(*R) *V) OutputField[
 func ColumnAt[R any, V any](a0 int, a1 Decoder[V], a2 func(*R) *V) OutputField[R] {
 	return codec.ColumnAt[R, V](a0, a1, a2)
 }
-
-type ColumnInfo = cqltype.ColumnInfo
 
 type Compression = cqltype.Compression
 
@@ -214,7 +210,7 @@ func IntValue(a0 int32) Value { return codec.IntValue(a0) }
 
 const LZ4Compression = cqltype.LZ4Compression
 
-func ListDecoder[T any](a0 Decoder[T]) Decoder[Sequence[T]] { return codec.ListDecoder[T](a0) }
+func ListDecoder[T any](a0 Decoder[T]) Decoder[[]T] { return codec.ListDecoder[T](a0) }
 
 func ListEncoder[T any](a0 Encoder[T]) Encoder[[]T] { return codec.ListEncoder[T](a0) }
 
@@ -228,7 +224,7 @@ const LocalQuorum = cqltype.LocalQuorum
 
 const LocalSerial = cqltype.LocalSerial
 
-func MapDecoder[K any, V any](a0 Decoder[K], a1 Decoder[V]) Decoder[Mapping[K, V]] {
+func MapDecoder[K any, V any](a0 Decoder[K], a1 Decoder[V]) Decoder[[]Entry[K, V]] {
 	return codec.MapDecoder[K, V](a0, a1)
 }
 
@@ -248,8 +244,6 @@ func MapType(a0 DataType, a1 DataType) (DataType, error) { return cqltype.MapTyp
 
 func MapValue(a0 DataType, a1 []ValueEntry) (Value, error) { return codec.MapValue(a0, a1) }
 
-type Mapping[K any, V any] = codec.Mapping[K, V]
-
 func MaxTimeUUID(a0 time.Time) UUID { return cqltype.MaxTimeUUID(a0) }
 
 func MinTimeUUID(a0 time.Time) UUID { return cqltype.MinTimeUUID(a0) }
@@ -262,29 +256,11 @@ func NamedScalar[A any, B any](a0 Codec[B], a1 func(A) B, a2 func(B) A) Codec[A]
 	return codec.NamedScalar[A, B](a0, a1, a2)
 }
 
-type NativeType = cqltype.NativeType
-
-func NewCollectionType(a0 NativeType, a1 TypeInfo, a2 TypeInfo) CollectionType {
-	return cqltype.NewCollectionType(a0, a1, a2)
-}
-
-func NewCustomType(a0 byte, a1 Type, a2 string) NativeType { return cqltype.NewCustomType(a0, a1, a2) }
-
 func NewEncodedValue(a0 DataType, a1 CellState, a2 Bytes) (EncodedValue, error) {
 	return codec.NewEncodedValue(a0, a1, a2)
 }
 
-func NewNativeType(a0 byte, a1 Type) NativeType { return cqltype.NewNativeType(a0, a1) }
-
 func NewTimeUUID() UUID { return cqltype.NewTimeUUID() }
-
-func NewTupleType(a0 NativeType, a1 ...TypeInfo) TupleTypeInfo {
-	return cqltype.NewTupleType(a0, a1...)
-}
-
-func NewUDTType(a0 byte, a1 string, a2 string, a3 ...UDTField) UDTTypeInfo {
-	return cqltype.NewUDTType(a0, a1, a2, a3...)
-}
 
 const NoCompression = cqltype.NoCompression
 
@@ -336,7 +312,7 @@ func Params[P any](a0 ...InputField[P]) ParamEncoder[P] { return codec.Params[P]
 
 func ParseUUID(a0 string) (UUID, error) { return cqltype.ParseUUID(a0) }
 
-func ParseUUIDMust(a0 string) UUID { return cqltype.ParseUUIDMust(a0) }
+func MustParseUUID(a0 string) UUID { return cqltype.MustParseUUID(a0) }
 
 type PayloadEntry = model.PayloadEntry
 
@@ -350,11 +326,9 @@ func RandomUUID() (UUID, error) { return cqltype.RandomUUID() }
 
 func Row[R any](a0 ...OutputField[R]) RowDecoder[R] { return codec.Row[R](a0...) }
 
-type Sequence[T any] = codec.Sequence[T]
-
 const Serial = cqltype.Serial
 
-func SetDecoder[T any](a0 Decoder[T]) Decoder[Sequence[T]] { return codec.SetDecoder[T](a0) }
+func SetDecoder[T any](a0 Decoder[T]) Decoder[[]T] { return codec.SetDecoder[T](a0) }
 
 func SetEncoder[T any](a0 Encoder[T]) Encoder[[]T] { return codec.SetEncoder[T](a0) }
 
@@ -422,11 +396,9 @@ var StreamInt8 = codec.StreamInt8
 
 func StreamList[T any](a0 StreamDecoder[T]) StreamDecoder[[]T] { return codec.StreamList[T](a0) }
 
-func StreamMap[K any, V any](a0 StreamDecoder[K], a1 StreamDecoder[V]) StreamDecoder[[]StreamMapEntry[K, V]] {
+func StreamMap[K any, V any](a0 StreamDecoder[K], a1 StreamDecoder[V]) StreamDecoder[[]Entry[K, V]] {
 	return codec.StreamMap[K, V](a0, a1)
 }
-
-type StreamMapEntry[K any, V any] = codec.StreamMapEntry[K, V]
 
 func StreamNullable[T any](a0 StreamDecoder[T]) StreamDecoder[Nullable[T]] {
 	return codec.StreamNullable[T](a0)
@@ -514,8 +486,6 @@ func TupleEncoder[T any](a0 ParamEncoder[T]) Encoder[T] { return codec.TupleEnco
 
 func TupleType(a0 ...DataType) (DataType, error) { return cqltype.TupleType(a0...) }
 
-type TupleTypeInfo = cqltype.TupleTypeInfo
-
 func TupleValue(a0 DataType, a1 []Value) (Value, error) { return codec.TupleValue(a0, a1) }
 
 const Two = cqltype.Two
@@ -543,8 +513,6 @@ const TypeDuration = cqltype.TypeDuration
 const TypeFloat = cqltype.TypeFloat
 
 const TypeInet = cqltype.TypeInet
-
-type TypeInfo = cqltype.TypeInfo
 
 const TypeInt = cqltype.TypeInt
 
@@ -580,15 +548,11 @@ func UDTEncoder[T any](a0 ParamEncoder[T], a1 UDTOptions) Encoder[T] {
 	return codec.UDTEncoder[T](a0, a1)
 }
 
-type UDTField = cqltype.UDTField
-
 type UDTOptions = codec.UDTOptions
 
 func UDTType(a0 string, a1 string, a2 ...ColumnSpec) (DataType, error) {
 	return cqltype.UDTType(a0, a1, a2...)
 }
-
-type UDTTypeInfo = cqltype.UDTTypeInfo
 
 func UDTValue(a0 DataType, a1 []ValueField) (Value, error) { return codec.UDTValue(a0, a1) }
 
@@ -642,17 +606,13 @@ func VarintValue(a0 Varint) Value { return codec.VarintValue(a0) }
 
 func VectorDataType(a0 DataType, a1 uint16) (DataType, error) { return cqltype.VectorDataType(a0, a1) }
 
-func VectorDecoder[T any](a0 Decoder[T]) Decoder[Sequence[T]] { return codec.VectorDecoder[T](a0) }
+func VectorDecoder[T any](a0 Decoder[T]) Decoder[[]T] { return codec.VectorDecoder[T](a0) }
 
 func VectorEncoder[T any](a0 Encoder[T]) Encoder[[]T] { return codec.VectorEncoder[T](a0) }
-
-type VectorType = cqltype.VectorType
 
 func VectorValue(a0 DataType, a1 []Value) (Value, error) { return codec.VectorValue(a0, a1) }
 
 type attemptRequest = model.AttemptRequest
-
-func columnsFromInfo(a0 []ColumnInfo) (Columns, error) { return cqltype.ColumnsFromInfo(a0) }
 
 func compileParamPlan[P any](a0 ParamEncoder[P], a1 Columns) (ParamPlan[P], error) {
 	return codec.CompileParamPlan[P](a0, a1)
@@ -661,8 +621,6 @@ func compileParamPlan[P any](a0 ParamEncoder[P], a1 Columns) (ParamPlan[P], erro
 func compileRowPlan[R any](a0 RowDecoder[R], a1 Columns) (RowPlan[R], error) {
 	return codec.CompileRowPlan[R](a0, a1)
 }
-
-func dataTypeFromInfo(a0 TypeInfo) (DataType, error) { return cqltype.DataTypeFromInfo(a0) }
 
 type encodedCell = model.EncodedCell
 

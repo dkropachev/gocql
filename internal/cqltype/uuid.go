@@ -100,7 +100,8 @@ func ParseUUID(input string) (UUID, error) {
 	return u, nil
 }
 
-func ParseUUIDMust(input string) UUID {
+// MustParseUUID is ParseUUID that panics on error.
+func MustParseUUID(input string) UUID {
 	uuid, err := ParseUUID(input)
 	if err != nil {
 		panic(err)

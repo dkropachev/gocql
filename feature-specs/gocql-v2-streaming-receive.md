@@ -155,7 +155,7 @@ gathering a whole large cell is not a streaming implementation.
 
 For nested types, stream element counts/lengths and decode into declared final
 application storage. Enforce nesting, count and byte limits before allocations
-or writes. Returning lazy Sequence/Mapping/Bytes views requires retaining their
+or writes. Returning borrowed Bytes or dynamic Value views requires retaining their
 backing bytes; the stream must not promise lazy access to bytes already consumed
 and discarded. A mapping may explicitly preserve encoded bytes in final caller
 storage and build views over that storage, with its lifetime documented.

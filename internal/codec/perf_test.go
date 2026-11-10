@@ -12,7 +12,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-func sequenceWork[T any](t *testing.T, typ cqltype.DataType, encoder Encoder[[]T], decoder Decoder[Sequence[T]], input []T) {
+func sequenceWork[T any](t *testing.T, typ cqltype.DataType, encoder Encoder[[]T], decoder Decoder[[]T], input []T) {
 	t.Helper()
 	encoded := CodecTestMust(EncodeValueBorrowed(typ, encoder, input))
 	raw := encoded.Bytes().OwnedBytes()
@@ -25,14 +25,9 @@ func sequenceWork[T any](t *testing.T, typ cqltype.DataType, encoder Encoder[[]T
 	ResetPerfCounters()
 	wire.ResetPerfCounters()
 	seq := CodecTestMust(compiled.Decode(NewValueReader(typ, cqltype.Present, chain, nil)))
-	it := seq.Iterator()
-	n := 0
-	for it.Next() {
-		_ = it.Value()
-		n++
-	}
-	if it.Err() != nil || n != len(input) {
-		t.Fatal(n, it.Err())
+	n := len(seq)
+	if n != len(input) {
+		t.Fatal(n)
 	}
 	c := wire.ReadPerfCounters()
 	comp, maps := ReadPerfCounters()

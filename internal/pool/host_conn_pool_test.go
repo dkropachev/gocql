@@ -21,7 +21,7 @@ func TestHostConnPool(t *testing.T) {
 		t.Run("Conviction", func(t *testing.T) {
 			for _, convict := range []bool{false, true} {
 				t.Run(map[bool]string{false: "keep", true: "convict"}[convict], func(t *testing.T) {
-					id := cqltype.ParseUUIDMust("9f3b8cab-d382-4c16-9c4c-07283f206bbc")
+					id := cqltype.MustParseUUID("9f3b8cab-d382-4c16-9c4c-07283f206bbc")
 					host := (endpoint.HostInfoBuilder{HostId: id.String(), ConnectAddress: net.ParseIP("127.0.0.7"), Port: 9042, DataCenter: "dc1", Rack: "r2", Tokens: []string{"-12", "64"}}).Build()
 					endpoint.InternalHostInfoSetState(&host, endpoint.NodeUp)
 					features := endpoint.ScyllaHostFeatures{}

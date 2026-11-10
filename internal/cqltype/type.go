@@ -464,14 +464,25 @@ const (
 	EmptyCell
 )
 
+// Nullable represents a value or CQL NULL in application data and decoded results.
+// Its zero value is NULL. It can also bind nullable fields; use BindValue when
+// a parameter must distinguish NULL from UNSET.
 type Nullable[T any] struct {
 	Value T
 	Valid bool
 }
+
+// BindValue controls a parameter: Present encodes Value, Null sends NULL, and
+// Unset leaves the column unchanged. Its zero value encodes the zero value of T.
+// EmptyCell is not a valid binding state; use EmptyValueOf for empty values.
 type BindValue[T any] struct {
 	Value T
 	State CellState
 }
+
+// EmptyValueOf distinguishes a supported type's empty CQL value from Value.
+// Its zero value encodes the ordinary zero value of T; Empty=true encodes an
+// empty value, which differs from NULL and from an empty collection.
 type EmptyValueOf[T any] struct {
 	Value T
 	Empty bool

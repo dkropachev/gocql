@@ -45,12 +45,8 @@ func Example_set() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	iterator := values.Iterator()
-	for iterator.Next() {
-		fmt.Println(iterator.Value().String())
-	}
-	if err := iterator.Err(); err != nil {
-		log.Fatal(err)
+	for _, value := range values {
+		fmt.Println(value.String())
 	}
 	// Output:
 	// alpha

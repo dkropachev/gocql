@@ -32,6 +32,22 @@ func TestGenerator(t *testing.T) {
 	})
 
 	t.Run("GenerateSource", func(t *testing.T) {
+		t.Run("Vector", func(t *testing.T) {
+			_, out, err := generateSource(t, "x.go", "package x\n\ntype T struct { Values []int32 `cql:\"values,codec=VectorCodec,stream=StreamVector\"` }\n", "T")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range []string{
+				`cql.Param("values", cql.VectorCodec(cql.Int32),`,
+				`cql.Column("values", cql.VectorCodec(cql.Int32),`,
+				`cql.StreamColumn("values", cql.StreamVector(cql.StreamInt32),`,
+			} {
+				if !strings.Contains(out, want) {
+					t.Errorf("missing %s in:\n%s", want, out)
+				}
+			}
+		})
+
 		t.Run("AliasedImportTestFile", func(t *testing.T) {
 			name, out, err := generateSource(t, "model_test.go", `package model_test
 

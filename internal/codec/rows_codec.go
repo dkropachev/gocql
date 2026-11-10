@@ -240,6 +240,12 @@ func Params[P any](fields ...InputField[P]) ParamEncoder[P] {
 // one struct mapping serves statements that use a subset of its fields; every
 // column still needs a field.
 func mapFields(columns cqltype.Columns, locations []fieldLocation, repeatedNames, optional bool) ([]int, error) {
+	return mapColumnFields(columns, locations, repeatedNames, optional, false)
+}
+
+// mapColumnFields is shared by buffered and streaming row/record compilation.
+// Missing application fields and extra database columns are independent policies.
+func mapColumnFields(columns cqltype.Columns, locations []fieldLocation, repeatedNames, optional, extra bool) ([]int, error) {
 	perfNameMap()
 	ordered := make([]int, columns.Len())
 	for i := range ordered {
@@ -273,7 +279,7 @@ func mapFields(columns cqltype.Columns, locations []fieldLocation, repeatedNames
 		}
 	}
 	for i, field := range ordered {
-		if field < 0 {
+		if field < 0 && !extra {
 			column, _ := columns.At(i)
 			return nil, fmt.Errorf("gocql: no accessor for column %d (%s)", i, column.Name)
 		}

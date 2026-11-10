@@ -106,98 +106,6 @@ func (i *ValueIterator[T]) Collect() ([]T, error) {
 	return values, nil
 }
 
-// Sequence is a lazy list, set, or vector. Its encoded backing storage retains
-// the source page lease; Clone detaches that storage without decoding elements.
-type Sequence[T any] struct {
-	decoder Decoder[T]
-	element cqltype.DataType
-	body    cqltype.Bytes
-	count   int
-	width   int64
-	vector  bool
-}
-
-func (s Sequence[T]) Len() int           { return s.count }
-func (s Sequence[T]) Clone() Sequence[T] { s.body = s.body.Clone(); return s }
-func (s Sequence[T]) Iterator() *ValueIterator[T] {
-	r := ValueReader{body: cqltype.BytesChain(s.body), lease: cqltype.BytesLease(s.body)}
-	i := &ValueIterator[T]{count: s.count, cursor: r.cursorValue()}
-	if s.decoder == nil {
-		i.err = cqltype.TypeValidation("iterator", "uninitialized sequence")
-		return i
-	}
-	i.clone = s.decoder.Clone
-	if err := cqltype.CheckBytesAlive(s.body); err != nil {
-		i.err = err
-		return i
-	}
-	i.nextCursor = func(cursor *ValueCursor, index int) (T, error) {
-		var zero T
-		var child ValueReader
-		var err error
-		if s.vector {
-			child, err = readVectorElement(cursor, s.element, s.width)
-		} else {
-			child, err = cursor.Child(s.element)
-		}
-		if err == nil {
-			var value T
-			value, err = s.decoder.Decode(child)
-			if err == nil {
-				return value, nil
-			}
-		}
-		return zero, fmt.Errorf("gocql: element %d: %w", index, err)
-	}
-	return i
-}
-
-// Mapping is a lazy ordered map view; keys need not be Go-comparable.
-type Mapping[K, V any] struct {
-	keyDecoder   Decoder[K]
-	valueDecoder Decoder[V]
-	key, value   cqltype.DataType
-	body         cqltype.Bytes
-	count        int
-}
-
-func (m Mapping[K, V]) Len() int             { return m.count }
-func (m Mapping[K, V]) Clone() Mapping[K, V] { m.body = m.body.Clone(); return m }
-func (m Mapping[K, V]) Iterator() *ValueIterator[Entry[K, V]] {
-	r := ValueReader{body: cqltype.BytesChain(m.body), lease: cqltype.BytesLease(m.body)}
-	if m.keyDecoder == nil || m.valueDecoder == nil {
-		return &ValueIterator[Entry[K, V]]{err: cqltype.TypeValidation("iterator", "uninitialized mapping")}
-	}
-	i := &ValueIterator[Entry[K, V]]{count: m.count, cursor: r.cursorValue(), clone: func(v Entry[K, V]) Entry[K, V] {
-		return Entry[K, V]{Key: m.keyDecoder.Clone(v.Key), Value: m.valueDecoder.Clone(v.Value)}
-	}}
-	if err := cqltype.CheckBytesAlive(m.body); err != nil {
-		i.err = err
-		return i
-	}
-	i.nextCursor = func(cursor *ValueCursor, index int) (Entry[K, V], error) {
-		var zero Entry[K, V]
-		kr, err := cursor.Child(m.key)
-		if err != nil {
-			return zero, fmt.Errorf("gocql: map key %d: %w", index, err)
-		}
-		vr, err := cursor.Child(m.value)
-		if err != nil {
-			return zero, fmt.Errorf("gocql: map value %d: %w", index, err)
-		}
-		key, err := m.keyDecoder.Decode(kr)
-		if err != nil {
-			return zero, fmt.Errorf("gocql: map key %d: %w", index, err)
-		}
-		value, err := m.valueDecoder.Decode(vr)
-		if err != nil {
-			return zero, fmt.Errorf("gocql: map value %d: %w", index, err)
-		}
-		return Entry[K, V]{Key: key, Value: value}, nil
-	}
-	return i
-}
-
 type sequenceEncoder[T any] struct {
 	element Encoder[T]
 	typ     cqltype.DataType
@@ -310,13 +218,13 @@ type sequenceDecoder[T any] struct {
 	width   int64
 }
 
-func ListDecoder[T any](element Decoder[T]) Decoder[Sequence[T]] {
+func ListDecoder[T any](element Decoder[T]) Decoder[[]T] {
 	return sequenceDecoder[T]{kind: cqltype.TypeList, element: element}
 }
-func SetDecoder[T any](element Decoder[T]) Decoder[Sequence[T]] {
+func SetDecoder[T any](element Decoder[T]) Decoder[[]T] {
 	return sequenceDecoder[T]{kind: cqltype.TypeSet, element: element}
 }
-func VectorDecoder[T any](element Decoder[T]) Decoder[Sequence[T]] {
+func VectorDecoder[T any](element Decoder[T]) Decoder[[]T] {
 	return sequenceDecoder[T]{kind: cqltype.TypeCustom, element: element}
 }
 func (c sequenceDecoder[T]) CheckType(typ cqltype.DataType) error {
@@ -325,7 +233,7 @@ func (c sequenceDecoder[T]) CheckType(typ cqltype.DataType) error {
 	_, err := c.compileValueDecoder(typ)
 	return err
 }
-func (c sequenceDecoder[T]) compileValueDecoder(typ cqltype.DataType) (Decoder[Sequence[T]], error) {
+func (c sequenceDecoder[T]) compileValueDecoder(typ cqltype.DataType) (Decoder[[]T], error) {
 	element, width, err := sequenceElement(typ, c.kind)
 	if err != nil {
 		return nil, err
@@ -337,25 +245,6 @@ func (c sequenceDecoder[T]) compileValueDecoder(typ cqltype.DataType) (Decoder[S
 	c.typ, c.element, c.width = typ, decoder, width
 	return c, nil
 }
-func (c sequenceDecoder[T]) Decode(r ValueReader) (Sequence[T], error) {
-	if cqltype.DescriptorOf(c.typ) == nil {
-		bound, err := c.compileValueDecoder(r.Type())
-		if err != nil {
-			return Sequence[T]{}, err
-		}
-		return bound.Decode(r)
-	}
-	if !c.typ.Equal(r.Type()) {
-		return Sequence[T]{}, cqltype.TypeValidation("type", "sequence metadata changed after compilation")
-	}
-	element, _ := c.typ.Element()
-	body, count, width, err := validateSequenceLayout(r, c.kind, element, c.width)
-	if err != nil {
-		return Sequence[T]{}, err
-	}
-	return Sequence[T]{body: body, count: count, element: element, decoder: c.element, vector: c.kind == cqltype.TypeCustom, width: width}, nil
-}
-func (c sequenceDecoder[T]) Clone(value Sequence[T]) Sequence[T] { return value.Clone() }
 
 type mapEncoder[K, V any] struct {
 	key   Encoder[K]
@@ -423,7 +312,7 @@ type mapDecoder[K, V any] struct {
 	typ   cqltype.DataType
 }
 
-func MapDecoder[K, V any](key Decoder[K], value Decoder[V]) Decoder[Mapping[K, V]] {
+func MapDecoder[K, V any](key Decoder[K], value Decoder[V]) Decoder[[]Entry[K, V]] {
 	return mapDecoder[K, V]{key: key, value: value}
 }
 func (c mapDecoder[K, V]) CheckType(typ cqltype.DataType) error {
@@ -432,7 +321,7 @@ func (c mapDecoder[K, V]) CheckType(typ cqltype.DataType) error {
 	_, err := c.compileValueDecoder(typ)
 	return err
 }
-func (c mapDecoder[K, V]) compileValueDecoder(typ cqltype.DataType) (Decoder[Mapping[K, V]], error) {
+func (c mapDecoder[K, V]) compileValueDecoder(typ cqltype.DataType) (Decoder[[]Entry[K, V]], error) {
 	kt, vt, ok := typ.KeyValue()
 	if !ok {
 		return nil, cqltype.TypeValidation("type", "expected map, got %s", typ)
@@ -448,28 +337,8 @@ func (c mapDecoder[K, V]) compileValueDecoder(typ cqltype.DataType) (Decoder[Map
 	c.typ, c.key, c.value = typ, key, value
 	return c, nil
 }
-func (c mapDecoder[K, V]) Decode(r ValueReader) (Mapping[K, V], error) {
-	if cqltype.DescriptorOf(c.typ) == nil {
-		bound, err := c.compileValueDecoder(r.Type())
-		if err != nil {
-			return Mapping[K, V]{}, err
-		}
-		return bound.Decode(r)
-	}
-	if !c.typ.Equal(r.Type()) {
-		return Mapping[K, V]{}, cqltype.TypeValidation("type", "map metadata changed after compilation")
-	}
-	body, count, err := validateMapBody(r)
-	if err != nil {
-		return Mapping[K, V]{}, err
-	}
-	kt, vt, _ := c.typ.KeyValue()
-	return Mapping[K, V]{body: body, count: count, key: kt, value: vt, keyDecoder: c.key, valueDecoder: c.value}, nil
-}
-func (c mapDecoder[K, V]) Clone(value Mapping[K, V]) Mapping[K, V] { return value.Clone() }
 
-// Collection structure is checked before publishing a lazy view. This pass
-// examines only framing; semantic checks remain in each requested child codec.
+// Collection framing is checked before allocating and decoding elements.
 func collectionCount(cursor *ValueCursor, minimum int64) (int, error) {
 	n, err := cursor.Uint32()
 	if err != nil {

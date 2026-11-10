@@ -158,12 +158,12 @@ func TestHostDiscovery(t *testing.T) {
 			row := []any{
 				net.IPv4(192, 168, 100, 13),
 				"datacenter1",
-				implCqltype.ParseUUIDMust("b953309f-6e68-41f2-baf5-0e60da317a9c"),
+				implCqltype.MustParseUUID("b953309f-6e68-41f2-baf5-0e60da317a9c"),
 				nil,
 				"rack1",
 				"3.0.8",
 				net.IPv4(192, 168, 100, 13),
-				implCqltype.ParseUUIDMust("b6ed5bde-b318-11ef-8f58-aeba19e31273"),
+				implCqltype.MustParseUUID("b6ed5bde-b318-11ef-8f58-aeba19e31273"),
 				[]string{"-1032311531684407545"},
 			}
 			framer := &trackingMockFramer{
@@ -222,12 +222,12 @@ func TestHostDiscovery(t *testing.T) {
 		t.Run("ZeroToken", func(t *testing.T) {
 			t.Parallel()
 
-			schema_version1 := implCqltype.ParseUUIDMust("af810386-a694-11ef-81fa-3aea73156247")
+			schema_version1 := implCqltype.MustParseUUID("af810386-a694-11ef-81fa-3aea73156247")
 
 			peersRows := []map[string]any{
 				{
 					"data_center":     "datacenter1",
-					"host_id":         implCqltype.ParseUUIDMust("b2035fd9-e0ca-4857-8c45-e63c00fb7c43"),
+					"host_id":         implCqltype.MustParseUUID("b2035fd9-e0ca-4857-8c45-e63c00fb7c43"),
 					"peer":            "127.0.0.3",
 					"preferred_ip":    "127.0.0.3",
 					"rack":            "rack1",
@@ -238,7 +238,7 @@ func TestHostDiscovery(t *testing.T) {
 				},
 				{
 					"data_center":     "datacenter1",
-					"host_id":         implCqltype.ParseUUIDMust("4b21ee4c-acea-4267-8e20-aaed5361a0dd"),
+					"host_id":         implCqltype.MustParseUUID("4b21ee4c-acea-4267-8e20-aaed5361a0dd"),
 					"peer":            "127.0.0.2",
 					"preferred_ip":    "127.0.0.2",
 					"rack":            "rack1",
@@ -249,7 +249,7 @@ func TestHostDiscovery(t *testing.T) {
 				},
 				{
 					"data_center":     "datacenter2",
-					"host_id":         implCqltype.ParseUUIDMust("dfef4a22-b8d8-47e9-aee5-8c19d4b7a9e3"),
+					"host_id":         implCqltype.MustParseUUID("dfef4a22-b8d8-47e9-aee5-8c19d4b7a9e3"),
 					"peer":            "127.0.0.5",
 					"preferred_ip":    "127.0.0.5",
 					"rack":            "rack1",
