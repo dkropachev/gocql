@@ -1531,7 +1531,7 @@ func (call *InternalCallReq) finishExec() {
 }
 
 func (call *InternalCallReq) waitExecDone(where string) {
-	InternalWaitCallReqDone(call, where)
+	call.waitCallReqDone(where)
 }
 
 // removeCallIfOpen removes a call from c.calls only if exec() still owns its

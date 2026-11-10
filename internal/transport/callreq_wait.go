@@ -5,6 +5,6 @@
 
 package transport
 
-func InternalWaitCallReqDone(call *InternalCallReq, where string) {
+func (call *InternalCallReq) waitCallReqDone(where string) {
 	call.done.Wait()
 }

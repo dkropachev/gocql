@@ -14,7 +14,7 @@ import (
 // short deadlock guards even when cleanup is progressing.
 const callReqDoneTimeout = 10 * time.Second
 
-func InternalWaitCallReqDone(call *InternalCallReq, where string) {
+func (call *InternalCallReq) waitCallReqDone(where string) {
 	done := make(chan struct{})
 	go func() {
 		call.done.Wait()
