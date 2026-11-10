@@ -95,8 +95,7 @@ func (p *InternalPolicyConnPool) SetHosts(hosts []*implEndpoint.HostInfo) {
 		createCount++
 		go func(host *implEndpoint.HostInfo) {
 			// create a connection pool for the host
-			pools <- InternalNewHostPool(
-				p.InternalServices,
+			pools <- p.InternalServices.NewHostPool(
 				host,
 				p.InternalNumConns,
 				p.InternalKeyspace,
@@ -202,8 +201,7 @@ func (p *InternalPolicyConnPool) InternalEnsureHost(host *implEndpoint.HostInfo)
 	p.InternalMu.Lock()
 	pool, ok := p.InternalHostConnPools[hostID]
 	if !ok {
-		pool = InternalNewHostPool(
-			p.InternalServices,
+		pool = p.InternalServices.NewHostPool(
 			host,
 			p.InternalNumConns,
 			p.InternalKeyspace,
@@ -269,7 +267,7 @@ func (pool *InternalHostConnPool) String() string {
 		pool.InternalFilling, pool.InternalClosed, size, pool.InternalSize, pool.InternalHost)
 }
 
-func InternalNewHostPool(services InternalPoolServices, host *implEndpoint.HostInfo, size int, keyspace string) *InternalHostConnPool {
+func (services InternalPoolServices) NewHostPool(host *implEndpoint.HostInfo, size int, keyspace string) *InternalHostConnPool {
 	baseCtx := services.Context
 	if baseCtx == nil {
 		baseCtx = context.Background()

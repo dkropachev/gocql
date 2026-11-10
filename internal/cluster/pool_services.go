@@ -24,5 +24,5 @@ func (s *Core) NewPoolServices() pool.InternalPoolServices {
 	}(s)}
 }
 func (s *Core) NewHostConnPool(h *endpoint.HostInfo, size int, keyspace string) *pool.InternalHostConnPool {
-	return pool.InternalNewHostPool(s.NewPoolServices(), h, size, keyspace)
+	return s.NewPoolServices().NewHostPool(h, size, keyspace)
 }

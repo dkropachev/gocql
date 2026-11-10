@@ -317,7 +317,7 @@ func TestSession(t *testing.T) {
 			if s.privateStorage.InternalPool.InternalServices.Config != nil {
 				t.Fatal("unset configuration became a typed override")
 			}
-			p := pool.InternalNewHostPool(s.privateStorage.InternalPool.InternalServices, new(endpoint.HostInfo), 2, "")
+			p := s.privateStorage.InternalPool.InternalServices.NewHostPool(new(endpoint.HostInfo), 2, "")
 			defer p.Close()
 			if err := p.InternalInitConnPicker(new(transport.Conn)); err != nil {
 				t.Fatal(err)
@@ -360,7 +360,7 @@ func TestSession(t *testing.T) {
 					endpoint.ScyllaHostFeaturesData(&features.ScyllaHostFeatures).InternalNrShards = 2
 					endpoint.ScyllaHostFeaturesData(&features.ScyllaHostFeatures).InternalMsbIgnore = 12
 					conn := &transport.Conn{InternalScyllaSupported: features}
-					p := pool.InternalNewHostPool(s.privateStorage.InternalPool.InternalServices, new(endpoint.HostInfo), 17, "")
+					p := s.privateStorage.InternalPool.InternalServices.NewHostPool(new(endpoint.HostInfo), 17, "")
 					defer p.Close()
 					if err := p.InternalInitConnPicker(conn); err != nil {
 						t.Fatal(err)
