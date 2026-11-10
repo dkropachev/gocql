@@ -35,24 +35,9 @@ func Connect(ctx context.Context, config Config) (*Session, error) {
 
 const ControlEvent = implCluster.ControlEvent
 
-// Deprecated: use cqlerr.ErrHostQueryFailed.
-var ErrHostQueryFailed = implCluster.ErrHostQueryFailed
-
-// Deprecated: use cqlerr.ErrNoConnectionsStarted.
-var ErrNoConnectionsStarted = implCluster.ErrNoConnectionsStarted
-
-// Deprecated: use cqlerr.ErrNoHosts.
-var ErrNoHosts = implCluster.ErrNoHosts
-
-// Deprecated: the driver never returns Error; server errors implement
-// cqlerr.RequestError.
-type Error = implCluster.Error
 type Event = implCluster.Event
 type EventFilter = implCluster.EventFilter
 type EventKind = implCluster.EventKind
-
-// Deprecated: use cqlerr.ExecutionError.
-type ExecutionError = implExecution.ExecutionError
 
 // OpenSingleHost opens a session that uses only the node hostID.
 func OpenSingleHost(ctx context.Context, config Config, hostID cql.UUID) (*Session, error) {

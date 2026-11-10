@@ -9,8 +9,8 @@ import (
 	"errors"
 	"testing"
 
-	. "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 )
 
@@ -18,7 +18,7 @@ func TestBindAPI(t *testing.T) {
 	t.Run("Keywords", func(t *testing.T) {
 		t.Run("RejectsUseAndClassifiesConditional", func(t *testing.T) {
 			for _, stmt := range []string{"USE ks", " -- comment\n use ks", "/* comment */ USE ks"} {
-				if _, err := BindUnpreparedBorrowed(cql.Command(stmt), cql.NewColumns(), cql.EmptyParams{}); !errors.Is(err, ErrUseStmt) {
+				if _, err := BindUnpreparedBorrowed(cql.Command(stmt), cql.NewColumns(), cql.EmptyParams{}); !errors.Is(err, cqlerr.ErrUseStmt) {
 					t.Fatalf("USE accepted %q: %v", stmt, err)
 				}
 			}

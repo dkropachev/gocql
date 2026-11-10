@@ -747,7 +747,7 @@ func TestQuery(t *testing.T) {
 			if err == nil {
 				break
 			}
-			if partial, ok := errors.AsType[*gocql.PartialRefreshError](err); attempt >= 2 || !ok || len(partial.Keyspaces) != 1 || partial.Keyspaces["<publication>"] == nil {
+			if partial, ok := errors.AsType[*cqlerr.PartialRefreshError](err); attempt >= 2 || !ok || len(partial.Keyspaces) != 1 || partial.Keyspaces["<publication>"] == nil {
 				t.Fatal(err)
 			}
 			timer := time.NewTimer(100 * time.Millisecond)

@@ -46,9 +46,6 @@ func CASRows[R any](a0 RowDecoder[R]) RowDecoder[CASResult[R]] { return codec.CA
 type CellState = cqltype.CellState
 type Codec[T any] = codec.Codec[T]
 
-// Deprecated: use cqlerr.CodecError.
-type CodecError = cqltype.CodecError
-
 // Deprecated: use (*ValueIterator[T]).Collect.
 func Collect[T any](a0 *ValueIterator[T]) ([]T, error) { return a0.Collect() }
 
@@ -125,8 +122,6 @@ type EncodedValue = codec.EncodedValue
 type Encoder[T any] = codec.Encoder[T]
 type Entry[K any, V any] = codec.Entry[K, V]
 
-// Deprecated: use cqlerr.ErrReleased.
-var ErrReleased = cqltype.ErrReleased
 var Float32 = codec.Float32
 var Float64 = codec.Float64
 
@@ -234,9 +229,6 @@ type PayloadEntry = model.PayloadEntry
 
 const Present = cqltype.Present
 
-// Deprecated: use cqlerr.ProtocolError.
-type ProtocolError = cqltype.ProtocolError
-
 func RandomUUID() (UUID, error) { return cqltype.RandomUUID() }
 
 // Deprecated: use (*RowReader).ReadColumn.
@@ -295,12 +287,6 @@ type StatementKind = cqltype.StatementKind
 var StreamASCII = codec.StreamASCII
 var StreamBlob = codec.StreamBlob
 var StreamBool = codec.StreamBool
-
-// Deprecated: use cqlerr.StreamCapabilityError.
-type StreamCapabilityError = codec.StreamCapabilityError
-
-// Deprecated: use cqlerr.StreamCapacityError.
-type StreamCapacityError = codec.StreamCapacityError
 
 func StreamColumn[R any, V any](a0 string, a1 StreamDecoder[V], a2 func(*R) *V) StreamOutputField[R] {
 	return codec.StreamColumn[R, V](a0, a1, a2)
@@ -488,8 +474,6 @@ const Unset = cqltype.Unset
 
 func UnsetDynamic(a0 DataType) Value { return codec.UnsetDynamic(a0) }
 
-// Deprecated: use cqlerr.ValidationError.
-type ValidationError = cqltype.ValidationError
 type Value = codec.Value
 type ValueCursor = codec.ValueCursor
 type ValueEntry = codec.ValueEntry

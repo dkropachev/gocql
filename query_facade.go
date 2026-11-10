@@ -7,10 +7,4 @@ import "github.com/scylladb/gocql/v2/internal/execution"
 
 type Query[P, R any] = execution.Query[P, R]
 
-// Deprecated: use cqlerr.ErrBusy.
-var ErrBusy = execution.ErrBusy
-
-// Deprecated: use cqlerr.ErrStaleRows.
-var ErrStaleRows = execution.ErrStaleRows
-
 type StreamQuery[P, R any] = execution.StreamQuery[P, R]

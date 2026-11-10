@@ -17,6 +17,7 @@ import (
 	"unsafe"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implCodec "github.com/scylladb/gocql/v2/internal/codec"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
@@ -93,7 +94,7 @@ func TestWorkCountsPerf(t *testing.T) {
 				}
 				for _, index := range []int{0, count - 1, count / 2} {
 					paging.ResetPerfCounters()
-					if h.InternalAdd(tokens[index]) != ErrPagingNoProgress {
+					if h.InternalAdd(tokens[index]) != cqlerr.ErrPagingNoProgress {
 						t.Fatal("cycle")
 					}
 					c := paging.ReadPerfCounters()
@@ -106,7 +107,7 @@ func TestWorkCountsPerf(t *testing.T) {
 				if e := h.InternalAdd(empty); e != nil {
 					t.Fatal(e)
 				}
-				if h.InternalAdd(empty) != ErrPagingNoProgress {
+				if h.InternalAdd(empty) != cqlerr.ErrPagingNoProgress {
 					t.Fatal("empty")
 				}
 				collision := model.PageStateOwned([]byte("collision"), 1)
@@ -117,7 +118,7 @@ func TestWorkCountsPerf(t *testing.T) {
 				if e := h.InternalAdd(collision); e != nil {
 					t.Fatal(e)
 				}
-				if h.InternalAdd(collision) != ErrPagingNoProgress {
+				if h.InternalAdd(collision) != cqlerr.ErrPagingNoProgress {
 					t.Fatal("collision equality")
 				}
 				c := paging.ReadPerfCounters()

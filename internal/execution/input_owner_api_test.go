@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -29,7 +29,7 @@ func TestInputOwnerAPI(t *testing.T) {
 				t.Fatal("writer retain")
 			}
 			owner.InternalClose()
-			if !errors.Is(owner.InternalAdmit(), ErrClosed) {
+			if !errors.Is(owner.InternalAdmit(), cqlerr.ErrClosed) {
 				t.Fatal("closed owner admitted")
 			}
 			owner.InternalRelease()
