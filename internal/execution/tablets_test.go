@@ -62,7 +62,7 @@ func TestTablets(t *testing.T) {
 				}()
 			}
 			for i := 0; i < 100; i++ {
-				implCluster.InternalSessionQueueTabletFeedback(s, testHint(t, 0, 100, implCqltype.Option[uint64]{Value: uint64(i), Set: true}, hTarget(byte(i%3+1), 0)), implCluster.InternalSessionCaptureTabletFeedback(s, info, s.Metadata()))
+				s.QueueTabletFeedback(testHint(t, 0, 100, implCqltype.Option[uint64]{Value: uint64(i), Set: true}, hTarget(byte(i%3+1), 0)), s.CaptureTabletFeedback(info, s.Metadata()))
 				testDrain(s)
 			}
 			wg.Wait()
@@ -70,13 +70,13 @@ func TestTablets(t *testing.T) {
 
 		t.Run("EnqueueDoesNotWaitForPublication", func(t *testing.T) {
 			s := testSession(t)
-			p := implCluster.InternalSessionPeripheral(s)
+			p := s.Peripheral()
 			info := implModel.RoutingInfo{Keyspace: "ks", Table: "table"}
-			stamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, s.Metadata())
+			stamp := s.CaptureTabletFeedback(info, s.Metadata())
 			h := testHint(t, 0, 100, implCqltype.Option[uint64]{}, hTarget(1, 0))
 			p.InternalMu.Lock()
 			done := make(chan struct{})
-			go func() { implCluster.InternalSessionQueueTabletFeedback(s, h, stamp); close(done) }()
+			go func() { s.QueueTabletFeedback(h, stamp); close(done) }()
 			select {
 			case <-done:
 				p.InternalMu.Unlock()
@@ -108,11 +108,11 @@ func TestTablets(t *testing.T) {
 			s := testSession(t)
 			info := implModel.RoutingInfo{Keyspace: "ks", Table: "table", Token: implCqltype.Option[int64]{Set: true, Value: 1}}
 			h := testHint(t, 0, 100, implCqltype.Option[uint64]{Set: true, Value: 0xfedcba9876543210}, hTarget(1, 1))
-			stamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, s.Metadata())
+			stamp := s.CaptureTabletFeedback(info, s.Metadata())
 			// applyTypedFeedbackStamped is deliberately before execute-error/UNPREPARED
 			// interpretation; a response page can carry payload independently of rows.
 			page := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Extras: &model.ResponseExtras{Payload: []implModel.PayloadEntry{{Key: "tablets-routing-v2", Value: implCqltype.Nullable[implCqltype.Bytes]{Valid: true, Value: implCqltype.BorrowBytes(testPayload(h))}}}}}}
-			implCluster.InternalSessionApplyTypedFeedbackStamped(s, page, info, stamp, transport.InternalFramerConfig{InternalTabletsRoutingV1: true, InternalTabletsRoutingV2: true})
+			s.ApplyTypedFeedbackStamped(page, info, stamp, transport.InternalFramerConfig{InternalTabletsRoutingV1: true, InternalTabletsRoutingV2: true})
 			testDrain(s)
 			m := s.Metadata()
 			for i := 0; i < 1024; i++ {
@@ -128,7 +128,7 @@ func TestTablets(t *testing.T) {
 			// A malformed V2 body never falls back to the simultaneously supplied V1.
 			page.Extras.Payload = append([]implModel.PayloadEntry{{Key: "tablets-routing-v1", Value: implCqltype.Nullable[implCqltype.Bytes]{Valid: true, Value: implCqltype.BorrowBytes(testPayload(testHint(t, 100, 200, implCqltype.Option[uint64]{}, hTarget(2, 0))))}}}, page.Extras.Payload...)
 			page.Extras.Payload[1].Value.Value = implCqltype.BorrowBytes([]byte{0})
-			implCluster.InternalSessionApplyTypedFeedbackStamped(s, page, info, implCluster.InternalSessionCaptureTabletFeedback(s, info, m), transport.InternalFramerConfig{InternalTabletsRoutingV1: true, InternalTabletsRoutingV2: true})
+			s.ApplyTypedFeedbackStamped(page, info, s.CaptureTabletFeedback(info, m), transport.InternalFramerConfig{InternalTabletsRoutingV1: true, InternalTabletsRoutingV2: true})
 			testDrain(s)
 			if s.Metadata() != m {
 				t.Fatal("malformed V2 fell back to V1")
@@ -290,12 +290,12 @@ func TestTablets(t *testing.T) {
 	t.Run("Placement", func(t *testing.T) {
 		t.Run("FencesSharingAndOverflow", func(t *testing.T) {
 			s := testSession(t)
-			p := implCluster.InternalSessionPeripheral(s)
+			p := s.Peripheral()
 			info := implModel.RoutingInfo{Keyspace: "ks", Table: "table"}
 			first := s.Metadata()
-			stamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, first)
+			stamp := s.CaptureTabletFeedback(info, first)
 			h := testHint(t, 0, 100, implCqltype.Option[uint64]{Value: 7, Set: true}, implModel.Target{HostID: routing.SnapshotData(first).InternalHosts[0].ID, ShardID: implCqltype.Option[uint32]{Set: true}})
-			implCluster.InternalSessionQueueTabletFeedback(s, h, stamp)
+			s.QueueTabletFeedback(h, stamp)
 			testDrain(s)
 			a := s.Metadata()
 			if a == first || routing.SnapshotData(a).InternalHostIndex != routing.SnapshotData(first).InternalHostIndex || routing.SnapshotData(a).InternalKeyspaces["ks"] != routing.SnapshotData(first).InternalKeyspaces["ks"] {
@@ -304,7 +304,7 @@ func TestTablets(t *testing.T) {
 			if root, _ := routing.InternalMetadataSnapshotTabletRoot(first, implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}); root != nil {
 				t.Fatal("mutated retained snapshot")
 			}
-			implCluster.InternalSessionQueueTabletFeedback(s, h, implCluster.InternalSessionCaptureTabletFeedback(s, info, a))
+			s.QueueTabletFeedback(h, s.CaptureTabletFeedback(info, a))
 			testDrain(s)
 			if s.Metadata() != a {
 				t.Fatal("duplicate advanced snapshot")
@@ -312,12 +312,12 @@ func TestTablets(t *testing.T) {
 			// A numerically smaller opaque version is a valid update. The stale request
 			// captured before the first update cannot overwrite its overlapping range.
 			moved := testHint(t, 0, 100, implCqltype.Option[uint64]{Value: 1, Set: true}, implModel.Target{HostID: routing.SnapshotData(first).InternalHosts[1].ID, ShardID: implCqltype.Option[uint32]{Value: 1, Set: true}})
-			implCluster.InternalSessionQueueTabletFeedback(s, moved, stamp)
+			s.QueueTabletFeedback(moved, stamp)
 			testDrain(s)
 			if s.Metadata() != a {
 				t.Fatal("stale response overwrote newer range")
 			}
-			implCluster.InternalSessionQueueTabletFeedback(s, moved, implCluster.InternalSessionCaptureTabletFeedback(s, info, a))
+			s.QueueTabletFeedback(moved, s.CaptureTabletFeedback(info, a))
 			testDrain(s)
 			b := s.Metadata()
 			r, _ := routing.InternalMetadataSnapshotTabletRoot(b, implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"})
@@ -325,9 +325,9 @@ func TestTablets(t *testing.T) {
 				t.Fatal("ordered opaque versions numerically")
 			}
 			// Disjoint observations captured together merge, preserving the old record.
-			left := implCluster.InternalSessionCaptureTabletFeedback(s, info, b)
+			left := s.CaptureTabletFeedback(info, b)
 			for _, bounds := range [][2]int64{{100, 200}, {200, 300}} {
-				implCluster.InternalSessionQueueTabletFeedback(s, testHint(t, bounds[0], bounds[1], implCqltype.Option[uint64]{}, hTarget(3, 2)), left)
+				s.QueueTabletFeedback(testHint(t, bounds[0], bounds[1], implCqltype.Option[uint64]{}, hTarget(3, 2)), left)
 			}
 			testDrain(s)
 			c := s.Metadata()
@@ -335,33 +335,31 @@ func TestTablets(t *testing.T) {
 			if implRouting.InternalTabletRangeFor(newRoot, 1).InternalValue != implRouting.InternalTabletRangeFor(r, 1).InternalValue || implRouting.InternalTabletRangeFor(newRoot, 150) == nil || implRouting.InternalTabletRangeFor(newRoot, 250) == nil {
 				t.Fatal("disjoint ranges were copied or lost")
 			}
-			implCluster.
-				// A split removes the old overlapping range entirely; adjacent ranges survive.
-				InternalSessionQueueTabletFeedback(s, testHint(t, 10, 50, implCqltype.Option[uint64]{}, hTarget(2, 1)), implCluster.InternalSessionCaptureTabletFeedback(s, info, c))
+			s.QueueTabletFeedback(testHint(t, 10, 50, implCqltype.Option[uint64]{}, hTarget(2, 1)), s.CaptureTabletFeedback(info, c))
 			testDrain(s)
 			root, _ := routing.InternalMetadataSnapshotTabletRoot(s.Metadata(), implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"})
 			if implRouting.InternalTabletRangeFor(root, 1) != nil || implRouting.InternalTabletRangeFor(root, 51) != nil || implRouting.InternalTabletRangeFor(root, 150) == nil {
 				t.Fatal("split retained old fragments or removed adjacent range")
 			}
 			beforeEpoch := s.Metadata()
-			oldStamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, beforeEpoch)
+			oldStamp := s.CaptureTabletFeedback(info, beforeEpoch)
 			lazy := implRouting.NewPlan(codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true})), implModel.RoutingInfo{Keyspace: "ks", Table: "table", Token: implCqltype.Option[int64]{Value: 20, Set: true}}, beforeEpoch)
 
 			p.InternalMu.Lock()
 			p.InternalBumpTableRevisionLocked(implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"})
 			p.InternalMu.Unlock()
-			implCluster.InternalSessionQueueTabletFeedback(s, h, oldStamp)
+			s.QueueTabletFeedback(h, oldStamp)
 			testDrain(s)
 			if s.Metadata() != beforeEpoch {
 				t.Fatal("table epoch fence failed")
 			}
 			// Even before snapshot publication, a source drop/recreate rejects old replies.
 			before := s.Metadata()
-			sourceStamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, before)
+			sourceStamp := s.CaptureTabletFeedback(info, before)
 			dropped := implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalGet()["ks"].Clone()
 			delete(dropped.Tables, "table")
 			implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", dropped)
-			implCluster.InternalSessionQueueTabletFeedback(s, h, sourceStamp)
+			s.QueueTabletFeedback(h, sourceStamp)
 			testDrain(s)
 			if s.Metadata() != before {
 				t.Fatal("dropped source table resurrected")
@@ -373,7 +371,7 @@ func TestTablets(t *testing.T) {
 			table.ID = "identity-2"
 			ks.Tables["table"] = &table
 			implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", ks)
-			implCluster.InternalSessionQueueTabletFeedback(s, h, sourceStamp)
+			s.QueueTabletFeedback(h, sourceStamp)
 			testDrain(s)
 			if s.Metadata() != before {
 				t.Fatal("source identity fence failed")
@@ -383,7 +381,7 @@ func TestTablets(t *testing.T) {
 				// a worker can publish, with bounded queue ownership and later relearning.
 				MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", routing.SnapshotData(before).InternalKeyspaces["ks"])
 			for i := 0; i < 1025; i++ {
-				implCluster.InternalSessionQueueTabletFeedback(s, testHint(t, int64(i*2), int64(i*2+1), implCqltype.Option[uint64]{}, hTarget(1, 0)), implCluster.InternalSessionCaptureTabletFeedback(s, info, before))
+				s.QueueTabletFeedback(testHint(t, int64(i*2), int64(i*2+1), implCqltype.Option[uint64]{}, hTarget(1, 0)), s.CaptureTabletFeedback(info, before))
 			}
 			if target, ok := implRouting.InternalNextTarget(lazy); !ok || target.ShardID.Set {
 				t.Fatal("preexisting plan used invalidated placement", target)
@@ -402,7 +400,7 @@ func TestTablets(t *testing.T) {
 			}
 			p.InternalFeedbackMu.Unlock()
 			testDrain(s)
-			implCluster.InternalSessionQueueTabletFeedback(s, h, implCluster.InternalSessionCaptureTabletFeedback(s, info, s.Metadata()))
+			s.QueueTabletFeedback(h, s.CaptureTabletFeedback(info, s.Metadata()))
 			testDrain(s)
 			if got, _ := s.Metadata().Replicas("ks", "table", 1); len(got) != 1 {
 				t.Fatal("overflow could not relearn")

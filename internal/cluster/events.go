@@ -189,7 +189,7 @@ func (e *InternalEventDebouncer) debounceOwnedContext(ctx context.Context, frame
 }
 
 func sessionPublishEvent(s *Core, event events.Event) {
-	InternalSessionPublishV2Event(s, event)
+	s.PublishV2Event(event)
 	if s.privateStorage.InternalClientRoutesHandler != nil && s.privateStorage.InternalClientRoutesHandler.privateStorage.initialized.Load() {
 		s.privateStorage.InternalClientRoutesHandler.handleRouteEvent(event)
 	}
@@ -202,7 +202,7 @@ func sessionPublishEvent(s *Core, event events.Event) {
 	}
 }
 
-func InternalSessionHandleEvent(s *Core, frame protocol.Frame) { s.handleEventOwned(frame, nil) }
+func (s *Core) HandleEvent(frame protocol.Frame) { s.handleEventOwned(frame, nil) }
 func (s *Core) handleEventOwned(frame protocol.Frame, release func()) bool {
 	return s.handleEventOwnedContext(context.Background(), frame, release)
 }
@@ -235,7 +235,7 @@ func (s *Core) handleEventOwnedContext(ctx context.Context, frame protocol.Frame
 	}
 	switch e := source.(type) {
 	case *events.TopologyChangeEvent:
-		InternalSessionRecordV2Topology(s, e)
+		s.RecordV2Topology(e)
 	case *events.StatusChangeEvent:
 		if e.Change == "DOWN" && !s.privateStorage.InternalCfg.Events.DisableNodeStatusEvents {
 			s.fenceV2Down(e.Host, e.Port)
@@ -248,7 +248,7 @@ func (s *Core) handleEventOwnedContext(ctx context.Context, frame protocol.Frame
 		return s.privateStorage.InternalNodeEvents.debounceOwnedContext(ctx, frame, release)
 	case *frm.ClientRoutesChanged:
 		if s.privateStorage.InternalClientRoutesHandler != nil {
-			return InternalClientRoutesHandlerHandleRouteEventOwned(s.privateStorage.InternalClientRoutesHandler, source, release)
+			return s.privateStorage.InternalClientRoutesHandler.HandleRouteEventOwned(source, release)
 		}
 	default:
 		s.privateStorage.InternalLogger.Printf("gocql: invalid event frame (%T): %v\n", f, f)
@@ -258,27 +258,27 @@ func (s *Core) handleEventOwnedContext(ctx context.Context, frame protocol.Frame
 }
 
 func sessionHandleSchemaEvent(s *Core, frames []protocol.Frame) {
-	InternalSessionPublishV2Metadata(s)
-	defer InternalSessionPublishV2Metadata(s)
+	s.PublishV2Metadata()
+	defer s.PublishV2Metadata()
 	defer s.scheduleV2SchemaRetry()
 	// TODO: debounce events
 	for _, frame := range frames {
 		switch f := frame.(type) {
 		case *frm.SchemaChangeKeyspace:
-			InternalSessionMarkV2SchemaStale(s, f.Keyspace, f.Change == "DROPPED")
+			s.MarkV2SchemaStale(f.Keyspace, f.Change == "DROPPED")
 			s.privateStorage.InternalMetadataDescriber.invalidateKeyspaceSchema(f.Keyspace)
 			s.handleKeyspaceChange(f.Keyspace, f.Change)
 		case *frm.SchemaChangeTable:
 			s.privateStorage.InternalMetadataDescriber.invalidateTableSchema(f.Keyspace, f.Object)
 			s.handleTableChange(f.Keyspace, f.Object, f.Change)
 		case *frm.SchemaChangeAggregate:
-			InternalSessionMarkV2SchemaStale(s, f.Keyspace, false)
+			s.MarkV2SchemaStale(f.Keyspace, false)
 			s.privateStorage.InternalMetadataDescriber.invalidateKeyspaceSchema(f.Keyspace)
 		case *frm.SchemaChangeFunction:
-			InternalSessionMarkV2SchemaStale(s, f.Keyspace, false)
+			s.MarkV2SchemaStale(f.Keyspace, false)
 			s.privateStorage.InternalMetadataDescriber.invalidateKeyspaceSchema(f.Keyspace)
 		case *frm.SchemaChangeType:
-			InternalSessionMarkV2SchemaStale(s, f.Keyspace, false)
+			s.MarkV2SchemaStale(f.Keyspace, false)
 			s.privateStorage.InternalMetadataDescriber.invalidateKeyspaceSchema(f.Keyspace)
 		}
 	}
@@ -295,12 +295,12 @@ func (s *Core) handleSchemaEventAndPublish(frames []protocol.Frame) {
 		}
 	}
 	for scope := range scopes {
-		if err := InternalSessionRefreshV2Keyspace(s, metadata.InternalV2SchemaContext(InternalNewSchemaSource(s)), scope); err != nil {
+		if err := s.RefreshV2Keyspace(metadata.InternalV2SchemaContext(s.NewSchemaSource()), scope); err != nil {
 			s.scheduleV2SchemaRetry()
 		}
 	}
-	if !InternalSessionPublishV2Metadata(s) {
-		InternalSessionPublishV2LocalEvent(s, Event{Kind: OverflowEvent, Generation: s.Metadata().Generation(), Change: "PUBLICATION_RESYNC"})
+	if !s.PublishV2Metadata() {
+		s.PublishV2LocalEvent(Event{Kind: OverflowEvent, Generation: s.Metadata().Generation(), Change: "PUBLICATION_RESYNC"})
 		return
 	}
 	for _, f := range frames {
@@ -338,7 +338,7 @@ func (s *Core) handleTableChange(keyspace, table, change string) {
 // (which would itself be dropped/ignored, as the node is not yet known). They
 // are also refreshed regardless of DisableNodeStatusEvents -- only
 // DisableTopologyEvents suppresses them.
-func InternalSessionHandleNodeEvent(s *Core, frames []protocol.Frame) {
+func (s *Core) HandleNodeEvent(frames []protocol.Frame) {
 	type nodeEvent struct {
 		change string
 		host   net.IP
@@ -364,7 +364,7 @@ func InternalSessionHandleNodeEvent(s *Core, frames []protocol.Frame) {
 	}
 
 	if topologyEventReceived && !s.privateStorage.InternalCfg.Events.DisableTopologyEvents {
-		_ = InternalSessionRefreshRingNow(s)
+		_ = s.RefreshRingNow()
 	}
 
 	for _, f := range sEvents {
@@ -381,12 +381,12 @@ func InternalSessionHandleNodeEvent(s *Core, frames []protocol.Frame) {
 			}
 		case "DOWN":
 			if !s.privateStorage.InternalCfg.Events.DisableNodeStatusEvents {
-				InternalSessionHandleNodeDown(s, f.host, f.port)
+				s.HandleNodeDown(f.host, f.port)
 			}
 		}
 	}
-	if !InternalSessionPublishV2Metadata(s) {
-		InternalSessionPublishV2LocalEvent(s, Event{Kind: OverflowEvent, Generation: s.Metadata().Generation(), Change: "PUBLICATION_RESYNC"})
+	if !s.PublishV2Metadata() {
+		s.PublishV2LocalEvent(Event{Kind: OverflowEvent, Generation: s.Metadata().Generation(), Change: "PUBLICATION_RESYNC"})
 		return
 	}
 	for _, f := range frames {
@@ -411,7 +411,7 @@ func sessionHandleNodeUp(s *Core, eventIp net.IP, eventPort int) {
 		return
 	}
 
-	if InternalClusterSettingsFilterHost(&s.privateStorage.InternalCfg, host) {
+	if (&s.privateStorage.InternalCfg).FilterHost(host) {
 		return
 	}
 
@@ -422,7 +422,7 @@ func (s *Core) startPoolFill(host *implEndpoint.HostInfo) {
 	if s.Closed() {
 		return
 	}
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	p.hostMu.Lock()
 	if s.privateStorage.InternalHostSource.InternalGetHost(host.HostID()) != host {
 		p.hostMu.Unlock()
@@ -434,11 +434,11 @@ func (s *Core) startPoolFill(host *implEndpoint.HostInfo) {
 	pool.InternalFill_debounce()
 }
 
-func InternalSessionHandlePoolConnected(s *Core, pool *pool.InternalHostConnPool) {
+func (s *Core) HandlePoolConnected(pool *pool.InternalHostConnPool) {
 	if s == nil || s.Closed() || s.privateStorage.InternalPool == nil || s.privateStorage.InternalHostSource == nil {
 		return
 	}
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	p.hostMu.Lock()
 	current, ok := s.privateStorage.InternalPool.InternalGetPool(pool.InternalHost)
 	known := s.privateStorage.InternalHostSource.InternalGetHost(pool.InternalHost.HostID())
@@ -451,39 +451,39 @@ func InternalSessionHandlePoolConnected(s *Core, pool *pool.InternalHostConnPool
 	p.InternalPublicationRevision++
 	p.InternalMu.Unlock()
 	p.hostMu.Unlock()
-	InternalSessionPublishV2Metadata(s)
+	s.PublishV2Metadata()
 	sessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "host", Stage: "connected", HostID: implEndpoint.InternalHostInfoHostUUID(pool.InternalHost), At: time.Now()})
 	s.synchronizeV2HostPolicy(pool.InternalHost)
 }
 func sessionHandleNodeConnected(s *Core, host *implEndpoint.HostInfo) {
 	if s.privateStorage.InternalPool != nil {
 		if pool, ok := s.privateStorage.InternalPool.InternalGetPool(host); ok {
-			InternalSessionHandlePoolConnected(s, pool)
+			s.HandlePoolConnected(pool)
 		}
 		return
 	}
-	defer InternalSessionPublishV2Metadata(s)
+	defer s.PublishV2Metadata()
 	if debug.Enabled {
 		s.privateStorage.InternalLogger.Printf("gocql: Session.handleNodeConnected: %s:%d\n", host.ConnectAddress(), host.Port())
 	}
 	implEndpoint.InternalHostInfoSetState(host, implEndpoint.NodeUp)
 	sessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "host", Stage: "connected", HostID: implEndpoint.InternalHostInfoHostUUID(host), At: time.Now()})
 
-	if !InternalClusterSettingsFilterHost(&s.privateStorage.InternalCfg, host) {
+	if !(&s.privateStorage.InternalCfg).FilterHost(host) {
 		s.privateStorage.InternalPolicy.HostUp(host)
 	}
 }
 
-func InternalSessionHandleNodeDown(s *Core, ip net.IP, port int) {
-	defer InternalSessionPublishV2Metadata(s)
+func (s *Core) HandleNodeDown(ip net.IP, port int) {
+	defer s.PublishV2Metadata()
 	if debug.Enabled {
 		s.privateStorage.InternalLogger.Printf("gocql: Session.handleNodeDown: %s:%d\n", ip.String(), port)
 	}
 
 	host, ok := s.privateStorage.InternalHostSource.getHostByIP(ip.String())
 	if ok {
-		filtered := InternalClusterSettingsFilterHost(&s.privateStorage.InternalCfg, host)
-		p := InternalSessionPeripheral(s)
+		filtered := (&s.privateStorage.InternalCfg).FilterHost(host)
+		p := s.Peripheral()
 		p.hostMu.Lock()
 		implEndpoint.InternalHostInfoSetState(host, implEndpoint.NodeDown)
 		p.InternalMu.Lock()
@@ -501,7 +501,7 @@ func InternalSessionHandleNodeDown(s *Core, ip net.IP, port int) {
 	}
 }
 
-func InternalSessionRecordV2Topology(s *Core, event *events.TopologyChangeEvent) {
+func (s *Core) RecordV2Topology(event *events.TopologyChangeEvent) {
 	if s.privateStorage.InternalHostSource == nil || s.privateStorage.InternalCfg.Events.DisableTopologyEvents {
 		return
 	}
@@ -541,7 +541,7 @@ func InternalSessionRecordV2Topology(s *Core, event *events.TopologyChangeEvent)
 			s.privateStorage.InternalMetadataDescriber.RemoveTabletsWithHost(removed)
 		}
 	}
-	InternalSessionPublishV2Metadata(s)
+	s.PublishV2Metadata()
 }
 func (s *Core) fenceV2Down(ip net.IP, port int) {
 	if s.privateStorage.InternalHostSource == nil || s.privateStorage.InternalPool == nil {
@@ -551,8 +551,8 @@ func (s *Core) fenceV2Down(ip net.IP, port int) {
 	if !ok {
 		return
 	}
-	filtered := InternalClusterSettingsFilterHost(&s.privateStorage.InternalCfg, host)
-	p := InternalSessionPeripheral(s)
+	filtered := (&s.privateStorage.InternalCfg).FilterHost(host)
+	p := s.Peripheral()
 	p.hostMu.Lock()
 	implEndpoint.InternalHostInfoSetState(host, implEndpoint.NodeDown)
 	p.InternalMu.Lock()
@@ -562,7 +562,7 @@ func (s *Core) fenceV2Down(ip net.IP, port int) {
 		s.privateStorage.InternalPool.InternalRemoveHost(implEndpoint.InternalHostInfoHostUUID(host))
 	}
 	p.hostMu.Unlock()
-	InternalSessionPublishV2Metadata(s)
+	s.PublishV2Metadata()
 }
 
 // A notification may run user code and race a newer DOWN/removal/replacement.
@@ -576,7 +576,7 @@ func (s *Core) synchronizeV2HostPolicy(fallback *implEndpoint.HostInfo) {
 		generation uint64
 	}
 	capture := func() stamp {
-		p := InternalSessionPeripheral(s)
+		p := s.Peripheral()
 		p.hostMu.Lock()
 		defer p.hostMu.Unlock()
 		h := s.privateStorage.InternalHostSource.InternalGetHost(fallback.HostID())
@@ -593,7 +593,7 @@ func (s *Core) synchronizeV2HostPolicy(fallback *implEndpoint.HostInfo) {
 		before := capture()
 		if before.host == nil {
 			s.privateStorage.InternalPolicy.RemoveHost(fallback)
-		} else if before.state == implEndpoint.NodeUp && before.pool != nil && before.pool.Size() > 0 && !InternalClusterSettingsFilterHost(&s.privateStorage.InternalCfg, before.host) {
+		} else if before.state == implEndpoint.NodeUp && before.pool != nil && before.pool.Size() > 0 && !(&s.privateStorage.InternalCfg).FilterHost(before.host) {
 			s.privateStorage.InternalPolicy.HostUp(before.host)
 		} else {
 			s.privateStorage.InternalPolicy.HostDown(before.host)

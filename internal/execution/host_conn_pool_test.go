@@ -53,13 +53,13 @@ func TestHostConnPool(t *testing.T) {
 			f := newNodeEventFixture(t)
 			h := f.addHost(t, "127.0.10.1")
 			old, _ := implCluster.SessionData(f.session).InternalPool.InternalGetPool(h)
-			implCluster.InternalSessionHandleNodeDown(f.session, h.ConnectAddress(), h.Port())
-			implCluster.InternalSessionHandlePoolConnected(f.session, old)
+			f.session.HandleNodeDown(h.ConnectAddress(), h.Port())
+			f.session.HandlePoolConnected(old)
 			if h.IsUp() {
 				t.Fatal("delayed fill callback undid down")
 			}
 			implCluster.SessionData(f.session).InternalHostSource.InternalRemoveHost(h.HostID())
-			implCluster.InternalSessionHandlePoolConnected(f.session, old)
+			f.session.HandlePoolConnected(old)
 			if h.IsUp() {
 				t.Fatal("delayed callback resurrected removed host")
 			}
@@ -70,21 +70,21 @@ func TestHostConnPool(t *testing.T) {
 			host := f.addHost(t, "127.0.10.1")
 			conn, _ := typedTestConn(t, 4, nil)
 			conn.InternalHost = host
-			pool := &implPool.InternalHostConnPool{InternalHost: host, InternalServices: cluster.InternalNewPoolServices(f.session), InternalConnPicker: &implPool.InternalDefaultConnPicker{InternalConns: []*transport.Conn{conn}}}
+			pool := &implPool.InternalHostConnPool{InternalHost: host, InternalServices: f.session.NewPoolServices(), InternalConnPicker: &implPool.InternalDefaultConnPicker{InternalConns: []*transport.Conn{conn}}}
 			implCluster.SessionData(f.session).InternalPool.InternalMu.Lock()
 			implCluster.SessionData(f.session).InternalPool.InternalHostConnPools[implEndpoint.InternalHostInfoHostUUID(host)] = pool
 			implCluster.SessionData(f.session).InternalPool.InternalMu.Unlock()
 			entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
-			p := implCluster.InternalSessionPeripheral(f.session)
+			p := f.session.Peripheral()
 			p.InternalConfig.LifecycleObserver = lifecycleFunc(func(e settings.LifecycleEvent) {
 				if e.Stage == "connected" {
 					close(entered)
 					<-release
 				}
 			})
-			go func() { defer close(done); implCluster.InternalSessionHandlePoolConnected(f.session, pool) }()
+			go func() { defer close(done); f.session.HandlePoolConnected(pool) }()
 			<-entered
-			implCluster.InternalSessionHandleNodeDown(f.session, host.ConnectAddress(), host.Port())
+			f.session.HandleNodeDown(host.ConnectAddress(), host.Port())
 			close(release)
 			<-done
 			if host.IsUp() || len(f.policy.hostUpCalls()) != 0 {
@@ -130,7 +130,7 @@ func TestHostConnPool(t *testing.T) {
 					}()
 					implCluster.SessionData(s).InternalCfg.ReconnectionPolicy = &implPool.NoReconnectionPolicy{}
 					implCluster.SessionData(s).InternalConnCfg = &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config), ProtoVersion: 4, CQLVersion: "3.0.0", ConnectTimeout: time.Second, HostDialer: &transport.InternalV2TLSHostDialer{InternalConfig: settings.InternalConnectivityConfig(config)}, Logger: logging.InternalNopLogger{}}
-					pool := cluster.InternalNewHostConnPool(s, host, 1, "")
+					pool := s.NewHostConnPool(host, 1, "")
 					defer pool.Close()
 					serverDone := make(chan struct{})
 					go func() {
@@ -201,7 +201,7 @@ func TestHostConnPool(t *testing.T) {
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxx).InternalConnCfg = &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config)}
 				return opaqueStorageValuexxxxxxxxx
 			}()
-			pool := cluster.InternalNewHostConnPool(s, func() *endpoint.HostInfo {
+			pool := s.NewHostConnPool(func() *endpoint.HostInfo {
 				opaqueStorageValuexxxxxxxxxx := new(endpoint.HostInfo)
 				return opaqueStorageValuexxxxxxxxxx
 			}(), 1, "")
@@ -271,8 +271,8 @@ func TestHostConnPool(t *testing.T) {
 						return opaqueStorageValuexxxxxxxxxxxx
 					}()
 					c.InternalHost = h
-					c.InternalHooks = cluster.InternalNewConnectionHooks(s)
-					pool := cluster.InternalNewHostConnPool(s, h, 1, "")
+					c.InternalHooks = s.NewConnectionHooks()
+					pool := s.NewHostConnPool(h, 1, "")
 					defer pool.Close()
 					pool.InternalStarted = true
 					pool.InternalState = implPool.InternalPoolReady
@@ -283,7 +283,7 @@ func TestHostConnPool(t *testing.T) {
 					pool.HandleError(c, io.EOF, true)
 					for i := 0; i < 10; i++ {
 						pool.Pick(nil)
-						implCluster.InternalSessionPickTypedPool(s, pool, model.Target{}, model.RoutingInfo{})
+						s.PickTypedPool(pool, model.Target{}, model.RoutingInfo{})
 						pool.InternalFill()
 					}
 					wait, cancelWait := context.WithTimeout(context.Background(), 10*time.Millisecond)
@@ -312,7 +312,7 @@ func TestHostConnPool(t *testing.T) {
 			pinned := implEndpoint.InternalHostInfoHostUUID(cs[0].InternalHost)
 			other := implEndpoint.InternalHostInfoHostUUID(cs[1].InternalHost)
 			plan := &routing.InternalTargetPlan{InternalTargets: []model.Target{{HostID: other}}}
-			if conn, err := implCluster.InternalSessionSelectTypedConn(s, context.Background(), model.RoutingInfo{HostID: implCql.Option[cqltype.UUID]{Set: true, Value: pinned}}, plan); conn != nil || !errors.Is(err, implRuntimeerrors.ErrNoConnections) {
+			if conn, err := s.SelectTypedConn(context.Background(), model.RoutingInfo{HostID: implCql.Option[cqltype.UUID]{Set: true, Value: pinned}}, plan); conn != nil || !errors.Is(err, implRuntimeerrors.ErrNoConnections) {
 				t.Fatal("host pin escaped", conn, err)
 			}
 		})
@@ -382,7 +382,7 @@ func TestHostConnPool(t *testing.T) {
 			config.Pool.ConnectionsPerHost = 1
 			implCluster.SessionData(s).InternalConnCfg = &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config)}
 			c.InternalCfg = implCluster.SessionData(s).InternalConnCfg
-			pool.InternalServices = cluster.InternalNewPoolServices(s)
+			pool.InternalServices = s.NewPoolServices()
 			pool.InternalRepairCtx, pool.InternalRepairCancel = context.WithCancel(c.InternalCtx)
 			defer pool.InternalRepairCancel()
 			pool.InternalStarted = true
@@ -439,7 +439,7 @@ func TestHostConnPool(t *testing.T) {
 			config.Pool.ConnectionsPerHost = 1
 			implCluster.SessionData(s).InternalConnCfg = &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config)}
 			c.InternalCfg = &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config)}
-			pool.InternalServices = cluster.InternalNewPoolServices(s)
+			pool.InternalServices = s.NewPoolServices()
 			pool.InternalRepairCtx, pool.InternalRepairCancel = context.WithCancel(c.InternalCtx)
 			defer pool.InternalRepairCancel()
 			pool.InternalStarted = true

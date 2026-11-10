@@ -74,7 +74,7 @@ func newUndialedHostPool(t *testing.T, session *Core, ip string) *implPool.Inter
 		return opaqueStorageValuexxxx
 	}()
 
-	return InternalNewHostConnPool(session, host, 1, "")
+	return session.NewHostConnPool(host, 1, "")
 }
 
 // closeSignalPicker is a driverConnPicker that reports when it has been closed.
@@ -107,7 +107,7 @@ func (p *closeSignalPicker) Close() {
 // observable. The connPicker is replaced before the pool is published to
 // hostConnPools, so nothing else can be reading it yet.
 func newSignallingHostPool(session *Core, host *endpoint.HostInfo) (*implPool.InternalHostConnPool, *closeSignalPicker) {
-	pool := InternalNewHostConnPool(session, host, 1, "")
+	pool := session.NewHostConnPool(host, 1, "")
 	picker := newCloseSignalPicker()
 	pool.InternalConnPicker = picker
 	return pool, picker

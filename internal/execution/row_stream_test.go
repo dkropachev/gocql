@@ -49,7 +49,7 @@ func rowStreamSession(t *testing.T, proto byte, compressor implProtocol.Compress
 		implEndpoint.HostInfoData(opaqueStorageValue).InternalState.Store(endpoint.NodeUp)
 		return opaqueStorageValue
 	}()
-	c.InternalHooks = cluster.InternalNewConnectionHooks(s)
+	c.InternalHooks = s.NewConnectionHooks()
 	implCluster.SessionData(s).InternalHostSource.InternalHosts[c.InternalHost.HostID()] = c.InternalHost
 	picker := implPool.InternalNewDefaultConnPicker(1)
 	picker.Put(c)

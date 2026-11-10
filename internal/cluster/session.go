@@ -127,26 +127,26 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 		connCfg.TypedConfig = implSettings.InternalConnectivityConfigPointer(*runtimeConfig)
 		connCfg.TypedAuth = runtimeConfig.Auth
 		connCfg.TypedLimits = runtimeConfig.Limits
-		InternalSessionConfigureV2Peripheral(s, *runtimeConfig)
+		s.ConfigureV2Peripheral(*runtimeConfig)
 		if s.privateStorage.InternalClientRoutesHandler != nil {
 			s.privateStorage.InternalClientRoutesHandler.privateStorage.pickTLSPorts = runtimeConfig.ClientRoutes.TLS
 		}
 	}
-	s.privateStorage.InternalMetadataDescriber = InternalNewMetadataDescriber(s)
+	s.privateStorage.InternalMetadataDescriber = s.NewMetadataDescriber()
 	s.privateStorage.eventBus = eventbus.New[events.Event](cfg.EventBusConfig, cfg.Logger)
 	if err = s.privateStorage.eventBus.Start(); err != nil {
 		return nil, fmt.Errorf("gocql: unable to create session: %w", err)
 	}
 	s.privateStorage.InternalNodeEvents = InternalNewEventDebouncer("NodeEvents", func(receiver *Core) func(a0 []protocol.Frame) {
 		return func(a0 []protocol.Frame) {
-			InternalSessionHandleNodeEvent(receiver, a0)
+			receiver.HandleNodeEvent(a0)
 		}
 	}(s), s.privateStorage.InternalLogger)
 	s.privateStorage.InternalSchemaEvents = InternalNewEventDebouncer("SchemaEvents", s.handleSchemaEventAndPublish, s.privateStorage.InternalLogger)
 	resync := func() {
 		s.debounceRingRefresh()
 		s.scheduleV2SchemaRetry()
-		InternalSessionPublishV2LocalEvent(s, Event{Kind: OverflowEvent, Generation: s.Metadata().Generation(), Change: "CONTROL_RESYNC"})
+		s.PublishV2LocalEvent(Event{Kind: OverflowEvent, Generation: s.Metadata().Generation(), Change: "CONTROL_RESYNC"})
 	}
 	s.privateStorage.InternalSchemaEvents.InternalResync = resync
 	s.privateStorage.InternalNodeEvents.InternalResync = resync
@@ -341,7 +341,7 @@ func (s *Core) init() error {
 
 			hosts = newHosts // filtered nodes remain visible without pools
 		} else {
-			hosts, err = s.v2ContactIdentities(metadata.InternalV2SchemaContext(InternalNewSchemaSource(s)), hosts)
+			hosts, err = s.v2ContactIdentities(metadata.InternalV2SchemaContext(s.NewSchemaSource()), hosts)
 			if err != nil {
 				return err
 			}
@@ -381,7 +381,7 @@ func (s *Core) init() error {
 	atomic.AddInt64(&left, 1)
 	for _, host := range hostMap {
 		host := s.privateStorage.InternalHostSource.InternalAddOrUpdate(host)
-		if InternalClusterSettingsFilterHost(&s.privateStorage.InternalCfg, host) {
+		if (&s.privateStorage.InternalCfg).FilterHost(host) {
 			continue
 		}
 
@@ -472,7 +472,7 @@ func (s *Core) AwaitSchemaAgreement(ctx context.Context) error {
 
 func (s *Core) reconnectDownedHosts(intv time.Duration) {
 	var reconnect implSettings.ReconnectPolicy
-	if owner := InternalCurrentExecution(s); owner != nil {
+	if owner := s.CurrentExecution(); owner != nil {
 		reconnect = owner.ConfigSnapshot().Reconnect
 	}
 	if policy := reconnect; policy != nil {
@@ -529,7 +529,7 @@ func (s *Core) Close() error {
 	done := s.privateStorage.closeDone
 	s.privateStorage.InternalSessionStateMu.Unlock()
 	defer close(done)
-	owner := InternalCurrentExecution(s)
+	owner := s.CurrentExecution()
 	var preparedDrain, activeDrain InternalExecutionWaiter
 	if owner != nil {
 		preparedDrain = owner.StopPrepared()
@@ -538,7 +538,7 @@ func (s *Core) Close() error {
 	if s.privateStorage.InternalCancel != nil {
 		s.privateStorage.InternalCancel()
 	}
-	InternalSessionCloseV2Peripheral(s)
+	s.CloseV2Peripheral()
 	if s.privateStorage.InternalConnCfg != nil {
 		s.privateStorage.InternalConnCfg.InternalReceiveCache.Close()
 	}
@@ -574,7 +574,7 @@ func (s *Core) Close() error {
 	s.privateStorage.InternalIsClosed = true
 	s.privateStorage.closedOrClosing.Store(true)
 	s.privateStorage.InternalSessionStateMu.Unlock()
-	InternalSessionPeripheral(s).workers.Wait()
+	s.Peripheral().workers.Wait()
 	if s.privateStorage.InternalMetadataDescriber != nil && s.privateStorage.InternalMetadataDescriber.InternalMetadata != nil {
 		s.privateStorage.InternalMetadataDescriber.InternalMetadata.privateStorage.InternalTabletsMetadata.Close()
 	}
@@ -710,7 +710,7 @@ func sessionForEachTablet(s *Core, fn func(keyspace, table string, entries table
 	return nil
 }
 
-func InternalSessionGetConn(s *Core) *transport.Conn {
+func (s *Core) GetConn() *transport.Conn {
 	hosts := s.privateStorage.InternalHostSource.InternalGetHostsList()
 	for _, host := range hosts {
 		if !host.IsUp() {

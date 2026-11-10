@@ -43,6 +43,6 @@ type clusterSettingsStorage struct {
 	disableInit                bool
 }
 
-func InternalClusterSettingsData(v *InternalClusterSettings) *clusterSettingsStorage {
+func (v *InternalClusterSettings) Data() *clusterSettingsStorage {
 	return &v.privateStorage
 }

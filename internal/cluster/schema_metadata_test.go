@@ -1410,7 +1410,7 @@ func TestSchemaMetadata(t *testing.T) {
 			// The injected failure may target either fetched keyspace. The keyspace that
 			// still exists must retain and report its failure; the confirmed absent one
 			// must never be restored from the older enumerated rows.
-			err := InternalSessionRefreshV2AllSchema(s, context.Background())
+			err := s.RefreshV2AllSchema(context.Background())
 			if err != nil {
 				partial, ok := errors.AsType[*metadata.PartialRefreshError](err)
 				if !ok {
@@ -1436,7 +1436,7 @@ func TestSchemaMetadata(t *testing.T) {
 				}
 				return nil
 			}
-			err := InternalSessionRefreshV2AllSchema(s, context.Background())
+			err := s.RefreshV2AllSchema(context.Background())
 			if _, ok := errors.AsType[*metadata.PartialRefreshError](err); !ok || !errors.Is(err, cause) {
 				t.Fatal("partial error lost cause", err)
 			}
@@ -1464,9 +1464,9 @@ func TestSchemaMetadata(t *testing.T) {
 				}
 				var err error
 				if full {
-					err = InternalSessionRefreshV2AllSchema(s, context.Background())
+					err = s.RefreshV2AllSchema(context.Background())
 				} else {
-					err = InternalSessionRefreshV2Keyspace(s, context.Background(), "ks1")
+					err = s.RefreshV2Keyspace(context.Background(), "ks1")
 				}
 				if err != nil {
 					t.Fatalf("full=%t: transient failure reported: %v", full, err)

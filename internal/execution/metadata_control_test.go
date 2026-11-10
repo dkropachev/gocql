@@ -64,7 +64,7 @@ func agreementConn(t *testing.T, s *cluster.Core, id, version cqltype.UUID, code
 		implEndpoint.HostInfoData(opaqueStorageValuexx).InternalPort = 9042
 		return opaqueStorageValuexx
 	}()
-	c.InternalHooks = cluster.InternalNewConnectionHooks(s)
+	c.InternalHooks = s.NewConnectionHooks()
 	go c.InternalServe(c.InternalCtx)
 	count := &atomic.Int32{}
 	done := make(chan struct{})
@@ -103,7 +103,7 @@ func agreementSession(t *testing.T) (*cluster.Core, cqltype.UUID, cqltype.UUID) 
 	config := settings.DefaultConfig("localhost")
 	config.Metadata.AgreementTimeout = 35 * time.Millisecond
 	config.Metadata.AgreementPoll = time.Millisecond
-	implCluster.InternalSessionConfigureV2Peripheral(s, config)
+	s.ConfigureV2Peripheral(config)
 	implCluster.SessionData(s).InternalPool = &implPool.InternalPolicyConnPool{InternalHostConnPools: make(map[cqltype.UUID]*implPool.InternalHostConnPool)}
 	t.Cleanup(func() { s.Close() })
 	return s, cqltype.MustRandomUUID(), cqltype.MustRandomUUID()
@@ -122,7 +122,7 @@ type unstablePolicy struct {
 }
 
 func (p unstablePolicy) Validate(*implRouting.MetadataSnapshot) error {
-	state := implCluster.InternalSessionPeripheral(p.session)
+	state := p.session.Peripheral()
 	state.InternalMu.Lock()
 	state.InternalPublicationRevision++
 	state.InternalMu.Unlock()

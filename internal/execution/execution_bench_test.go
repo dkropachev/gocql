@@ -35,7 +35,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -263,7 +262,7 @@ func BenchmarkExecution(b *testing.B) {
 		// timely manner.
 		cluster.Timeout = 500 * time.Millisecond
 		cluster.NumConns = 1
-		db, err := implCluster.InternalClusterSettingsOpen(cluster)
+		db, err := cluster.Open()
 		if err != nil {
 			b.Fatalf("newClusterSettings: %v", err)
 		}

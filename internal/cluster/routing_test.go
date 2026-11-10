@@ -37,18 +37,18 @@ func testSession(t testing.TB) *Core {
 		opaqueStorageValue := new(Core)
 		return opaqueStorageValue
 	}()
-	SessionData(s).InternalMetadataDescriber = InternalNewMetadataDescriber(s)
+	SessionData(s).InternalMetadataDescriber = s.NewMetadataDescriber()
 	m := v2TestMetadata()
 	routing.SnapshotData(m).InternalKeyspaces["ks"].Tables["table"].ID = "identity-1"
 	routing.SnapshotData(m).InternalKeyspaces["ks"].TabletBased = true
 	MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", routing.SnapshotData(m).InternalKeyspaces["ks"])
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	p.InternalFeedbackOnce.Do(func() {})
 	routing.SnapshotData(m).InternalPlacementSignal = &p.InternalPlacementEpoch
 	routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, implRouting.InternalTabletPlacement{InternalIdentity: "identity-1"}, implRouting.InternalComparePlacementTable)
 	p.InternalSnapshot.Store(m)
 	t.Cleanup(func() {
-		InternalSessionCloseV2Peripheral(s)
+		s.CloseV2Peripheral()
 		MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalTabletsMetadata.Close()
 	})
 	return s

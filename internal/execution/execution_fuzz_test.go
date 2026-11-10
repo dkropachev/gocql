@@ -54,7 +54,7 @@ func FuzzStreamExecutionBoundary(f *testing.F) {
 			implEndpoint.HostInfoData(opaqueStorageValuex).InternalState.Store(endpoint.NodeUp)
 			return opaqueStorageValuex
 		}()
-		reservation.InternalConn.InternalHooks = cluster.InternalNewConnectionHooks(s)
+		reservation.InternalConn.InternalHooks = s.NewConnectionHooks()
 		bound := runtimeQuery(t)
 		defer bound.Close()
 		ctx, cancel, request, err := InternalAdmitExecution(context.Background(), s, bound, CompiledOptions{})

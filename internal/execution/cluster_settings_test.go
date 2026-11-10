@@ -86,7 +86,7 @@ func TestClusterSettings(t *testing.T) {
 
 			cluster := testCluster(defaultProto, srv.Address)
 			cluster.Timeout = 5 * time.Second
-			db, err := implCluster.InternalClusterSettingsOpen(cluster)
+			db, err := cluster.Open()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -122,7 +122,7 @@ func TestClusterSettings(t *testing.T) {
 
 			cluster := testCluster(defaultProto, srv.Address)
 			cluster.Timeout = 5 * time.Second
-			db, err := implCluster.InternalClusterSettingsOpen(cluster)
+			db, err := cluster.Open()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -146,7 +146,7 @@ func TestClusterSettings(t *testing.T) {
 			observer := &recordingFrameHeaderObserver{t: t}
 			cluster.FrameHeaderObserver = observer
 
-			db, err := implCluster.InternalClusterSettingsOpen(cluster)
+			db, err := cluster.Open()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -181,7 +181,7 @@ func TestClusterSettings(t *testing.T) {
 			// timely manner.
 			cluster.Timeout = 1 * time.Millisecond
 
-			db, err := implCluster.InternalClusterSettingsOpen(cluster)
+			db, err := cluster.Open()
 			if err != nil {
 				t.Fatalf("newClusterSettings: %v", err)
 			}
@@ -219,7 +219,7 @@ func TestClusterSettings(t *testing.T) {
 			cluster.Timeout = 1000 * time.Millisecond
 			cluster.NumConns = 1
 
-			db, err := implCluster.InternalClusterSettingsOpen(cluster)
+			db, err := cluster.Open()
 			if err != nil {
 				t.Fatalf("newClusterSettings: %v", err)
 			}
@@ -258,7 +258,7 @@ func TestClusterSettings(t *testing.T) {
 			cluster.Timeout = 1 * time.Millisecond
 			cluster.NumConns = 1
 
-			db, err := implCluster.InternalClusterSettingsOpen(cluster)
+			db, err := cluster.Open()
 			if err != nil {
 				t.Fatalf("newClusterSettings: %v", err)
 			}
@@ -282,7 +282,7 @@ func TestClusterSettings(t *testing.T) {
 			cfg := testCluster(implProtocol.ProtoVersion4, srv.Address)
 			cfg.DisableSkipMetadata = false
 
-			db, err := implCluster.InternalClusterSettingsOpen(cfg)
+			db, err := cfg.Open()
 			if err != nil {
 				t.Fatalf("newClusterSettings: %v", err)
 			}
@@ -346,12 +346,12 @@ func TestClusterSettings(t *testing.T) {
 			cluster.Port = srv.port()
 			cluster.Logger = log
 			cluster.ProtoVersion = int(defaultProto)
-			implCluster.InternalClusterSettingsData(cluster).InternalDisableControlConn = true
+			cluster.Data().InternalDisableControlConn = true
 			cluster.DNSResolver = brokenDNSResolver{}
 
 			// open() should attempt to resolve the DNS name "cassandraX.invalid"
 			// and fail, but continue to connect via 127.0.0.1
-			_, err := implCluster.InternalClusterSettingsOpen(cluster)
+			_, err := cluster.Open()
 			if err != nil {
 				t.Fatal("open() should have connected")
 			}
@@ -370,12 +370,12 @@ func TestClusterSettings(t *testing.T) {
 			cluster := implCluster.InternalNewClusterSettings(hosts...)
 			cluster.Logger = log
 			cluster.ProtoVersion = int(defaultProto)
-			implCluster.InternalClusterSettingsData(cluster).InternalDisableControlConn = true
+			cluster.Data().InternalDisableControlConn = true
 			cluster.DNSResolver = brokenDNSResolver{}
 
 			// open() should attempt to resolve each DNS name "cassandraX.invalid"
 			// and fail since it could not resolve any dns entries
-			_, err := implCluster.InternalClusterSettingsOpen(cluster)
+			_, err := cluster.Open()
 			if err == nil {
 				t.Fatal("open() should have returned an error")
 			}
@@ -449,7 +449,7 @@ func TestClusterSettings(t *testing.T) {
 					policy := &TestReconnectionPolicy{NumRetries: tc.NumRetries}
 					cluster.InitialReconnectionPolicy = policy
 					cluster.ProtoVersion = tc.ProtoVersion
-					_, err := implCluster.InternalClusterSettingsOpen(cluster)
+					_, err := cluster.Open()
 					if err == nil {
 						t.Fatal("expected to get an error")
 					}
@@ -467,7 +467,7 @@ func TestClusterSettings(t *testing.T) {
 			srv := NewSSLTestServer(t, defaultProto, context.Background())
 			defer srv.Stop()
 
-			db, err := implCluster.InternalClusterSettingsOpen(createTestSslCluster(srv.Address, defaultProto, true))
+			db, err := createTestSslCluster(srv.Address, defaultProto, true).Open()
 			if err != nil {
 				t.Fatalf("0x%x: newClusterSettings: %v", defaultProto, err)
 			}
@@ -481,7 +481,7 @@ func TestClusterSettings(t *testing.T) {
 			srv := NewSSLTestServer(t, defaultProto, context.Background())
 			defer srv.Stop()
 
-			db, err := implCluster.InternalClusterSettingsOpen(createTestSslCluster(srv.Address, defaultProto, false))
+			db, err := createTestSslCluster(srv.Address, defaultProto, false).Open()
 			if err != nil {
 				t.Fatalf("0x%x: newClusterSettings: %v", defaultProto, err)
 			}
@@ -498,7 +498,7 @@ func TestClusterSettings(t *testing.T) {
 			cluster := createTestSslCluster(srv.Address, defaultProto, true)
 			cluster.PoolConfig.HostSelectionPolicy = implCluster.RoundRobinHostPolicy()
 
-			db, err := implCluster.InternalClusterSettingsOpen(cluster)
+			db, err := cluster.Open()
 			if err != nil {
 				t.Fatalf("failed to create new session: %v", err)
 			}
@@ -521,7 +521,7 @@ func TestClusterSettings(t *testing.T) {
 			defer srv.Stop()
 
 			cluster := testCluster(defaultProto, srv.Address)
-			db, err := implCluster.InternalClusterSettingsOpen(cluster)
+			db, err := cluster.Open()
 			if err != nil {
 				t.Fatalf("0x%x: newClusterSettings: %v", defaultProto, err)
 			}
@@ -545,14 +545,14 @@ func TestClusterSettings(t *testing.T) {
 			cluster := implCluster.InternalNewClusterSettings(srv.Address)
 			cluster.Logger = log
 			cluster.ProtoVersion = int(defaultProto)
-			implCluster.InternalClusterSettingsData(cluster).InternalDisableControlConn = true
+			cluster.Data().InternalDisableControlConn = true
 			// Set very long query connection timeout
 			// so we know open() is using the ConnectTimeout
 			cluster.Timeout = time.Second * 5
 			cluster.ConnectTimeout = 600 * time.Millisecond
 
 			// Create session should timeout during connect attempt
-			_, err := implCluster.InternalClusterSettingsOpen(cluster)
+			_, err := cluster.Open()
 			if err == nil {
 				t.Fatal("open() should have returned a timeout error")
 			}
@@ -583,13 +583,13 @@ func TestClusterSettings(t *testing.T) {
 			defer srv.Stop()
 
 			cfg := testCluster(implProtocol.ProtoVersion4, srv.Address)
-			db, err := implCluster.InternalClusterSettingsOpen(cfg)
+			db, err := cfg.Open()
 			if err != nil {
 				t.Fatalf("open: %v", err)
 			}
 			defer db.Close()
 
-			conn := implCluster.InternalSessionGetConn(db)
+			conn := db.GetConn()
 			if conn == nil {
 				t.Fatal("expected connection, got nil")
 			}

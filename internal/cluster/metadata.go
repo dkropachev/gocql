@@ -96,7 +96,7 @@ type InternalV2PeripheralState struct {
 	InternalFeedbackResync        bool
 }
 
-func InternalSessionPeripheral(s *Core) *InternalV2PeripheralState {
+func (s *Core) Peripheral() *InternalV2PeripheralState {
 	if s == nil {
 		return nil
 	}
@@ -112,8 +112,8 @@ func InternalSessionPeripheral(s *Core) *InternalV2PeripheralState {
 	return s.privateStorage.v2Peripheral.Load()
 }
 func (s *Core) initV2Peripheral(config settings.Config) error {
-	InternalSessionConfigureV2Peripheral(s, config)
-	p := InternalSessionPeripheral(s)
+	s.ConfigureV2Peripheral(config)
+	p := s.Peripheral()
 	p.InternalFeedbackOnce.Do(func() { p.InternalStartWorker(func() { sessionRunV2TabletFeedback(s, p) }) })
 	p.metricsOnce.Do(func() {
 		p.InternalStartWorker(func() {
@@ -129,7 +129,7 @@ func (s *Core) initV2Peripheral(config settings.Config) error {
 			}
 		})
 	})
-	if !InternalSessionPublishV2Metadata(s) {
+	if !s.PublishV2Metadata() {
 		return s.v2MetadataPublicationError()
 	}
 	if config.DefaultProfile != nil {
@@ -141,14 +141,14 @@ func (s *Core) initV2Peripheral(config settings.Config) error {
 	}
 	sessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "session", Stage: "ready", At: time.Now()})
 	if config.Metadata.PeriodicRefresh > 0 {
-		InternalSessionPeripheral(s).periodicOnce.Do(func() {
-			InternalSessionPeripheral(s).InternalStartWorker(func() { s.runV2PeriodicRefresh(config.Metadata) })
+		s.Peripheral().periodicOnce.Do(func() {
+			s.Peripheral().InternalStartWorker(func() { s.runV2PeriodicRefresh(config.Metadata) })
 		})
 	}
 	return nil
 }
-func InternalSessionConfigureV2Peripheral(s *Core, config settings.Config) {
-	p := InternalSessionPeripheral(s)
+func (s *Core) ConfigureV2Peripheral(config settings.Config) {
+	p := s.Peripheral()
 	p.InternalMu.Lock()
 	p.InternalConfig = config
 	partitioners := config.Partitioners
@@ -156,7 +156,7 @@ func InternalSessionConfigureV2Peripheral(s *Core, config settings.Config) {
 	p.InternalMu.Unlock()
 }
 func (s *Core) Metadata() *routing.MetadataSnapshot {
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	if p == nil {
 		return routing.NewMetadataSnapshot(routing.SnapshotState{})
 	}
@@ -164,7 +164,7 @@ func (s *Core) Metadata() *routing.MetadataSnapshot {
 		return snapshot
 	}
 	for {
-		InternalSessionPublishV2Metadata(s)
+		s.PublishV2Metadata()
 		if snapshot := p.InternalSnapshot.Load(); snapshot != nil {
 			return snapshot
 		}
@@ -175,10 +175,10 @@ func (s *Core) Metrics() routing.MetricsSnapshot {
 		return routing.MetricsSnapshot{}
 	}
 	var result routing.MetricsSnapshot
-	if owner := InternalCurrentExecution(s); owner != nil {
+	if owner := s.CurrentExecution(); owner != nil {
 		result = owner.MetricsSnapshot()
 	}
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	result.Orphans = p.orphans.Load()
 	if summary := p.latencySummary.Load(); summary != nil {
 		result.LatencyP50 = summary.p50
@@ -194,7 +194,7 @@ func (s *Core) Metrics() routing.MetricsSnapshot {
 // few immediate rebuilds can all lose. That is transient: each change
 // publishes again itself. After four immediate attempts it backs off, 1 ms
 // doubling up to 100 ms, for about a second in all before reporting failure.
-func InternalSessionPublishV2Metadata(s *Core) bool {
+func (s *Core) PublishV2Metadata() bool {
 	delay := time.Millisecond
 	for attempt := 0; attempt < 16; attempt++ {
 		if s.tryPublishV2Metadata() {
@@ -208,7 +208,7 @@ func InternalSessionPublishV2Metadata(s *Core) bool {
 	return false
 }
 func (s *Core) tryPublishV2Metadata() bool {
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	if p == nil {
 		return false
 	}
@@ -411,7 +411,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 	if s.privateStorage.InternalMetadataDescriber != nil && s.privateStorage.InternalMetadataDescriber.InternalMetadata != nil && s.privateStorage.InternalMetadataDescriber.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalKeyspaceMap.Load() != schemaSource {
 		return false
 	}
-	InternalSessionUpdatePreparedSchemaSnapshot(s, old, m)
+	s.UpdatePreparedSchemaSnapshot(old, m)
 	p.InternalSnapshot.Store(m)
 	return true
 }
@@ -428,7 +428,7 @@ func snapshotV2Host(s *Core, h *implEndpoint.HostInfo) (model.HostSnapshot, erro
 		}
 	}
 	if s != nil {
-		out.Enabled = !InternalClusterSettingsFilterHost(&s.privateStorage.InternalCfg, h)
+		out.Enabled = !(&s.privateStorage.InternalCfg).FilterHost(h)
 		if s.privateStorage.InternalPool != nil {
 			pool, ok := s.privateStorage.InternalPool.InternalGetPool(h)
 			out.Connected = ok && pool.Size() > 0
@@ -437,7 +437,7 @@ func snapshotV2Host(s *Core, h *implEndpoint.HostInfo) (model.HostSnapshot, erro
 	return out, tokenErr
 }
 func sessionObserveV2Lifecycle(s *Core, event settings.LifecycleEvent) {
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	if p == nil {
 		return
 	}
@@ -447,7 +447,7 @@ func sessionObserveV2Lifecycle(s *Core, event settings.LifecycleEvent) {
 	if observer == nil {
 		return
 	}
-	InternalSessionObserveSafely(s, func() { observer.ObserveLifecycle(event) })
+	s.ObserveSafely(func() { observer.ObserveLifecycle(event) })
 }
 
 // RefreshMetadata waits for the shared topology refresh under the caller's
@@ -465,7 +465,7 @@ func (s *Core) RefreshMetadata(ctx context.Context) error {
 	if s.privateStorage.InternalRingRefresher == nil {
 		return implMetadata.InternalErrNoControl
 	}
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	if !p.admitMetadataWork() {
 		return runtimeerrors.ErrClosed
 	}
@@ -484,7 +484,7 @@ func (s *Core) RefreshMetadata(ctx context.Context) error {
 	if s.privateStorage.InternalClientRoutesHandler != nil {
 		routeErr = s.privateStorage.InternalClientRoutesHandler.refreshContext(ctx)
 	}
-	schemaErr := InternalSessionRefreshV2AllSchema(s, ctx)
+	schemaErr := s.RefreshV2AllSchema(ctx)
 	if topologyErr != nil || routeErr != nil {
 		return errors.Join(&implMetadata.PartialRefreshError{Generation: s.Metadata().Generation(), Topology: topologyErr, ClientRoutes: routeErr}, schemaErr)
 	}
@@ -495,7 +495,7 @@ func (s *Core) RefreshMetadata(ctx context.Context) error {
 // names deliberately leave routing tokenless; hashing with a guessed algorithm
 // would send requests to the wrong replicas.
 func (s *Core) routingPartitioner(keyspace, table string) routing.TokenPartitioner {
-	return InternalSessionCapturedRoutingPartitioner(s, InternalSessionPreparedPartitionerName(s, keyspace, table))
+	return s.CapturedRoutingPartitioner(s.PreparedPartitionerName(keyspace, table))
 }
 
 // Trace reads tracing tables through the same typed QUERY/codec path as user
@@ -508,7 +508,7 @@ func (s *Core) Trace(ctx context.Context, id cqltype.UUID) (TraceInfo, error) {
 	if s == nil || s.Closed() {
 		return result, runtimeerrors.ErrClosed
 	}
-	owner := InternalCurrentExecution(s)
+	owner := s.CurrentExecution()
 	if owner == nil {
 		return result, runtimeerrors.ErrNoConnections
 	}
@@ -553,7 +553,7 @@ func (s *Core) awaitV2SchemaAgreement(ctx context.Context) error {
 	}
 	return s.awaitV2SchemaAgreementUsing(ctx, nil, cqltype.UUID{})
 }
-func InternalSessionAwaitV2SchemaAgreementOn(s *Core, ctx context.Context, conn *transport.Conn) error {
+func (s *Core) AwaitV2SchemaAgreementOn(ctx context.Context, conn *transport.Conn) error {
 	if ctx == nil || conn == nil || conn.InternalHost == nil {
 		return cqltype.TypeValidation("schema agreement", "nil context or coordinator")
 	}
@@ -563,7 +563,7 @@ func InternalSessionAwaitV2SchemaAgreementOn(s *Core, ctx context.Context, conn 
 	return s.awaitV2SchemaAgreementUsing(ctx, conn, implEndpoint.InternalHostInfoHostUUID(conn.InternalHost))
 }
 func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *transport.Conn, required cqltype.UUID) error {
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	if !p.admitMetadataWork() {
 		return runtimeerrors.ErrClosed
 	}
@@ -758,8 +758,8 @@ func (c *InternalControlConn) InternalQueryV2System(ctx context.Context, request
 	return conn.InternalExecuteV2System(ctx, request)
 }
 
-func InternalSessionRefreshV2AllSchema(s *Core, ctx context.Context) error {
-	p := InternalSessionPeripheral(s)
+func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
+	p := s.Peripheral()
 	if !p.admitMetadataWork() {
 		return runtimeerrors.ErrClosed
 	}
@@ -773,12 +773,12 @@ func InternalSessionRefreshV2AllSchema(s *Core, ctx context.Context) error {
 	revisions := maps.Clone(p.schemaRevision)
 	p.InternalMu.Unlock()
 	if config.DefaultProfile != nil && config.Metadata.Mode == settings.MetadataDisabled {
-		if !InternalSessionPublishV2Metadata(s) {
+		if !s.PublishV2Metadata() {
 			return s.v2MetadataPublicationError()
 		}
 		return nil
 	}
-	rows, err := implMetadata.InternalQueryV2SchemaRows(ctx, InternalNewSchemaSource(s), `SELECT keyspace_name, durable_writes, replication FROM system_schema.keyspaces`, nil, implMetadata.InternalV2DecodeKeyspace())
+	rows, err := implMetadata.InternalQueryV2SchemaRows(ctx, s.NewSchemaSource(), `SELECT keyspace_name, durable_writes, replication FROM system_schema.keyspaces`, nil, implMetadata.InternalV2DecodeKeyspace())
 	if err != nil {
 		return err
 	}
@@ -799,7 +799,7 @@ func InternalSessionRefreshV2AllSchema(s *Core, ctx context.Context) error {
 		}
 		keyspaces[row.InternalName] = implMetadata.InternalV2KeyspaceFromRow(row.InternalName, row)
 	}
-	if err := implMetadata.InternalReadV2ScyllaKeyspaces(ctx, InternalNewSchemaSource(s), keyspaces, ""); err != nil {
+	if err := implMetadata.InternalReadV2ScyllaKeyspaces(ctx, s.NewSchemaSource(), keyspaces, ""); err != nil {
 		return err
 	}
 
@@ -816,7 +816,7 @@ func InternalSessionRefreshV2AllSchema(s *Core, ctx context.Context) error {
 			tables := p.captureTableRevisionsLocked(name)
 			p.InternalMu.Unlock()
 			if attempt > 0 {
-				base, err = implMetadata.InternalGetV2KeyspaceMetadata(ctx, InternalNewSchemaSource(s), name)
+				base, err = implMetadata.InternalGetV2KeyspaceMetadata(ctx, s.NewSchemaSource(), name)
 				if errors.Is(err, runtimeerrors.ErrKeyspaceDoesNotExist) {
 					if s.dropV2KeyspaceIfCurrent(name, epoch, revision) {
 						delete(failures, name)
@@ -834,7 +834,7 @@ func InternalSessionRefreshV2AllSchema(s *Core, ctx context.Context) error {
 				ks = base
 				ks.Tables = make(map[string]*implMetadata.TableMetadata)
 			} else {
-				ks, err = implMetadata.InternalFetchV2Keyspace(ctx, InternalNewSchemaSource(s), base)
+				ks, err = implMetadata.InternalFetchV2Keyspace(ctx, s.NewSchemaSource(), base)
 			}
 			if err != nil {
 				// A DROP can occur after the keyspace enumeration but before its
@@ -850,7 +850,7 @@ func InternalSessionRefreshV2AllSchema(s *Core, ctx context.Context) error {
 			} else {
 				// Empty table/type result sets are legal, so they cannot by
 				// themselves reveal a keyspace dropped during this fetch.
-				current, checkErr := implMetadata.InternalGetV2KeyspaceMetadata(ctx, InternalNewSchemaSource(s), name)
+				current, checkErr := implMetadata.InternalGetV2KeyspaceMetadata(ctx, s.NewSchemaSource(), name)
 				if errors.Is(checkErr, runtimeerrors.ErrKeyspaceDoesNotExist) {
 					if s.dropV2KeyspaceIfCurrent(name, epoch, revision) {
 						delete(failures, name)
@@ -924,7 +924,7 @@ func InternalSessionRefreshV2AllSchema(s *Core, ctx context.Context) error {
 	}
 	p.InternalMu.Unlock()
 	p.schemaGeneration.Add(1)
-	if !InternalSessionPublishV2Metadata(s) {
+	if !s.PublishV2Metadata() {
 		return s.v2MetadataPublicationError()
 	}
 	if len(failures) > 0 {
@@ -933,8 +933,8 @@ func InternalSessionRefreshV2AllSchema(s *Core, ctx context.Context) error {
 	}
 	return nil
 }
-func InternalSessionRefreshV2Keyspace(s *Core, ctx context.Context, name string) error {
-	p := InternalSessionPeripheral(s)
+func (s *Core) RefreshV2Keyspace(ctx context.Context, name string) error {
+	p := s.Peripheral()
 	if !p.admitMetadataWork() {
 		return runtimeerrors.ErrClosed
 	}
@@ -946,7 +946,7 @@ func (s *Core) refreshV2KeyspaceAttempt(ctx context.Context, name string, attemp
 		return err
 	}
 
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	p.InternalMu.Lock()
 	epoch := p.schemaEpoch[name]
 	revision := p.schemaRevision[name]
@@ -954,12 +954,12 @@ func (s *Core) refreshV2KeyspaceAttempt(ctx context.Context, name string, attemp
 	config := p.InternalConfig
 	p.InternalMu.Unlock()
 	if config.DefaultProfile != nil && (config.Metadata.Mode == settings.MetadataDisabled || len(config.Metadata.Keyspaces) > 0 && !slices.Contains(config.Metadata.Keyspaces, name)) {
-		if !InternalSessionPublishV2Metadata(s) {
+		if !s.PublishV2Metadata() {
 			return s.v2MetadataPublicationError()
 		}
 		return nil
 	}
-	base, err := implMetadata.InternalGetV2KeyspaceMetadata(ctx, InternalNewSchemaSource(s), name)
+	base, err := implMetadata.InternalGetV2KeyspaceMetadata(ctx, s.NewSchemaSource(), name)
 	if errors.Is(err, runtimeerrors.ErrKeyspaceDoesNotExist) {
 		p.InternalMu.Lock()
 		if p.schemaEpoch[name] == epoch && p.schemaRevision[name] == revision {
@@ -969,7 +969,7 @@ func (s *Core) refreshV2KeyspaceAttempt(ctx context.Context, name string, attemp
 			s.privateStorage.InternalMetadataDescriber.RemoveTabletsWithKeyspace(name)
 		}
 		p.InternalMu.Unlock()
-		if !InternalSessionPublishV2Metadata(s) {
+		if !s.PublishV2Metadata() {
 			return s.v2MetadataPublicationError()
 		}
 		return err
@@ -982,13 +982,13 @@ func (s *Core) refreshV2KeyspaceAttempt(ctx context.Context, name string, attemp
 		ks = base
 		ks.Tables = make(map[string]*implMetadata.TableMetadata)
 	} else {
-		ks, err = implMetadata.InternalFetchV2Keyspace(ctx, InternalNewSchemaSource(s), base)
+		ks, err = implMetadata.InternalFetchV2Keyspace(ctx, s.NewSchemaSource(), base)
 	}
 	if err != nil {
 		// As in a full refresh, a concurrent DDL can fail one schema read;
 		// confirm a drop, or read the keyspace again once the change landed.
 		if dropped, _ := s.confirmV2DroppedKeyspace(ctx, name); dropped {
-			if !InternalSessionPublishV2Metadata(s) {
+			if !s.PublishV2Metadata() {
 				return s.v2MetadataPublicationError()
 			}
 			return runtimeerrors.ErrKeyspaceDoesNotExist
@@ -1013,7 +1013,7 @@ func (s *Core) refreshV2KeyspaceAttempt(ctx context.Context, name string, attemp
 	delete(p.schemaDropped, name)
 	p.schemaGeneration.Add(1)
 	p.InternalMu.Unlock()
-	if !InternalSessionPublishV2Metadata(s) {
+	if !s.PublishV2Metadata() {
 		return s.v2MetadataPublicationError()
 	}
 	return nil
@@ -1034,16 +1034,16 @@ func waitV2SchemaRetry(ctx context.Context, attempt int) bool {
 }
 
 func (s *Core) scheduleV2SchemaRetry() {
-	InternalSessionPeripheral(s).schemaRetryNeeded.Store(true)
-	InternalSessionStartV2SchemaRetry(s)
+	s.Peripheral().schemaRetryNeeded.Store(true)
+	s.StartV2SchemaRetry()
 }
-func InternalSessionStartV2SchemaRetry(s *Core) {
-	p := InternalSessionPeripheral(s)
+func (s *Core) StartV2SchemaRetry() {
+	p := s.Peripheral()
 	if !p.InternalRetryScheduled.CompareAndSwap(false, true) {
 		return
 	}
 	if !p.InternalStartWorker(func() {
-		ctx := implMetadata.InternalV2SchemaContext(InternalNewSchemaSource(s))
+		ctx := implMetadata.InternalV2SchemaContext(s.NewSchemaSource())
 		timer := time.NewTimer(time.Second)
 		defer timer.Stop()
 		select {
@@ -1066,7 +1066,7 @@ func InternalSessionStartV2SchemaRetry(s *Core) {
 		}
 		ctx, cancel := InternalExecutionContext(ctx, timeout)
 		if p.schemaRetryNeeded.Swap(false) {
-			if err := InternalSessionRefreshV2AllSchema(s, ctx); err != nil {
+			if err := s.RefreshV2AllSchema(ctx); err != nil {
 				p.schemaRetryNeeded.Store(true)
 			}
 		}
@@ -1086,7 +1086,7 @@ func InternalSessionStartV2SchemaRetry(s *Core) {
 		pending := len(p.InternalPreparedRefreshScopes) > 0
 		p.InternalMu.Unlock()
 		if (pending || p.schemaRetryNeeded.Load()) && !s.Closed() {
-			InternalSessionStartV2SchemaRetry(s)
+			s.StartV2SchemaRetry()
 		}
 	}) {
 		p.InternalRetryScheduled.Store(false)
@@ -1096,18 +1096,18 @@ func InternalSessionStartV2SchemaRetry(s *Core) {
 // typedSchemaGeneration deliberately excludes topology and tablet-cache updates.
 // Those changes must not invalidate every prepared statement.
 func sessionTypedSchemaGeneration(s *Core) uint64 {
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	if p == nil {
 		return 0
 	}
 	return p.schemaGeneration.Load() + 1
 }
 
-func InternalSessionRecordV2Latency(s *Core, latency time.Duration) {
+func (s *Core) RecordV2Latency(latency time.Duration) {
 	if s == nil || latency < 0 {
 		return
 	}
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	index := p.latencyCount.Add(1) - 1
 	p.latency[index%uint64(len(p.latency))].Store(int64(latency))
 
@@ -1128,12 +1128,12 @@ func (p *InternalV2PeripheralState) publishLatencySummary() {
 
 func sessionRecordV2Orphan(s *Core) {
 	if s != nil {
-		InternalSessionPeripheral(s).orphans.Add(1)
+		s.Peripheral().orphans.Add(1)
 	}
 }
 
-func InternalSessionMarkV2SchemaStale(s *Core, keyspace string, dropped bool) {
-	p := InternalSessionPeripheral(s)
+func (s *Core) MarkV2SchemaStale(keyspace string, dropped bool) {
+	p := s.Peripheral()
 	p.InternalMu.Lock()
 	if dropped {
 		delete(p.schemaStale, keyspace)
@@ -1148,7 +1148,7 @@ func (s *Core) invalidateV2ChangedTablets(keyspace string, current *implMetadata
 	}
 	previous, _ := s.privateStorage.InternalMetadataDescriber.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalGetKeyspace(keyspace)
 	if previous == nil {
-		if m := InternalSessionPeripheral(s).InternalSnapshot.Load(); m != nil {
+		if m := s.Peripheral().InternalSnapshot.Load(); m != nil {
 			previous = routing.SnapshotData(m).InternalKeyspaces[keyspace]
 		}
 	}
@@ -1168,7 +1168,7 @@ func (s *Core) invalidateV2ChangedTablets(keyspace string, current *implMetadata
 }
 
 func (s *Core) dropV2KeyspaceIfCurrent(name string, epoch uint64, revision ...uint64) bool {
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	p.InternalMu.Lock()
 	defer p.InternalMu.Unlock()
 	if p.schemaEpoch[name] != epoch || len(revision) > 0 && p.schemaRevision[name] != revision[0] {
@@ -1187,12 +1187,12 @@ func (s *Core) confirmV2DroppedKeyspace(ctx context.Context, name string) (bool,
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	p.InternalMu.Lock()
 	epoch := p.schemaEpoch[name]
 	revision := p.schemaRevision[name]
 	p.InternalMu.Unlock()
-	_, err := implMetadata.InternalGetV2KeyspaceMetadata(ctx, InternalNewSchemaSource(s), name)
+	_, err := implMetadata.InternalGetV2KeyspaceMetadata(ctx, s.NewSchemaSource(), name)
 	if errors.Is(err, runtimeerrors.ErrKeyspaceDoesNotExist) {
 		return s.dropV2KeyspaceIfCurrent(name, epoch, revision), nil
 	}
@@ -1202,14 +1202,14 @@ func (s *Core) confirmV2DroppedKeyspace(ctx context.Context, name string) (bool,
 func (s *Core) runV2PeriodicRefresh(options settings.MetadataOptions) {
 	ticker := time.NewTicker(options.PeriodicRefresh)
 	defer ticker.Stop()
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	for {
 		select {
 		case <-p.InternalDone:
 			return
 		case <-ticker.C:
 		}
-		ctx := implMetadata.InternalV2SchemaContext(InternalNewSchemaSource(s))
+		ctx := implMetadata.InternalV2SchemaContext(s.NewSchemaSource())
 		timeout := options.RequestTimeout
 		ctx, cancel := InternalExecutionContext(ctx, timeout)
 		err := s.RefreshMetadata(ctx)
@@ -1221,7 +1221,7 @@ func (s *Core) runV2PeriodicRefresh(options settings.MetadataOptions) {
 }
 
 func (s *Core) v2MetadataDepthLimit() int {
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	p.InternalMu.Lock()
 	limit := p.InternalConfig.Limits.MaxMetadataDepth
 	p.InternalMu.Unlock()
@@ -1284,14 +1284,14 @@ func (p *InternalV2PeripheralState) tableRevisionsCurrentLocked(keyspace string,
 }
 
 func (s *Core) v2SchemaRefreshFailure(name string, cause error) error {
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	p.InternalMu.Lock()
 	if !p.schemaDropped[name] {
 		p.schemaStale[name] = true
 	}
 	p.refreshDiagnostics = []error{fmt.Errorf("keyspace %s: %w", name, cause)}
 	p.InternalMu.Unlock()
-	InternalSessionPublishV2Metadata(s)
+	s.PublishV2Metadata()
 	s.scheduleV2SchemaRetry()
 	return &implMetadata.PartialRefreshError{Generation: s.Metadata().Generation(), Keyspaces: map[string]error{name: cause}}
 }

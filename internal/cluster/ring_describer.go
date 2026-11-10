@@ -158,7 +158,7 @@ func (r *InternalRingDescriber) GetHostsFromSystem() ([]*implEndpoint.HostInfo, 
 		firstErr  error
 	)
 
-	ctx, cancel := context.WithCancel(metadata.InternalV2SchemaContext(InternalNewSchemaSource(control.InternalGetSession())))
+	ctx, cancel := context.WithCancel(metadata.InternalV2SchemaContext(control.InternalGetSession().NewSchemaSource()))
 	defer cancel()
 
 	recordErr := func(err error) {

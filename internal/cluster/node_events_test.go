@@ -97,8 +97,8 @@ func TestNodeEvents(t *testing.T) {
 
 			f := newNodeEventFixture(t)
 			host := f.addHost(t, "127.0.10.1")
-			SessionData(f.session).InternalPool.InternalHostConnPools = map[cqltype.UUID]*implPool.InternalHostConnPool{implEndpoint.InternalHostInfoHostUUID(host): InternalNewHostConnPool(f.session, host, 1, "")}
-			InternalSessionHandleNodeDown(f.session, net.ParseIP("127.0.10.1"), 9042)
+			SessionData(f.session).InternalPool.InternalHostConnPools = map[cqltype.UUID]*implPool.InternalHostConnPool{implEndpoint.InternalHostInfoHostUUID(host): f.session.NewHostConnPool(host, 1, "")}
+			f.session.HandleNodeDown(net.ParseIP("127.0.10.1"), 9042)
 
 			if state := host.State(); state != endpoint.NodeDown {
 				t.Errorf("host state: got %v, want %v", state, endpoint.NodeDown)
@@ -116,8 +116,8 @@ func TestNodeEvents(t *testing.T) {
 				cfg.HostFilter = HostFilterFunc(func(*endpoint.HostInfo) bool { return false })
 			})
 			host := f.addHost(t, "127.0.10.1")
-			SessionData(f.session).InternalPool.InternalHostConnPools = map[cqltype.UUID]*implPool.InternalHostConnPool{implEndpoint.InternalHostInfoHostUUID(host): InternalNewHostConnPool(f.session, host, 1, "")}
-			InternalSessionHandleNodeDown(f.session, net.ParseIP("127.0.10.1"), 9042)
+			SessionData(f.session).InternalPool.InternalHostConnPools = map[cqltype.UUID]*implPool.InternalHostConnPool{implEndpoint.InternalHostInfoHostUUID(host): f.session.NewHostConnPool(host, 1, "")}
+			f.session.HandleNodeDown(net.ParseIP("127.0.10.1"), 9042)
 
 			// setState happens before the filter check, so it still lands.
 			if state := host.State(); state != endpoint.NodeDown {
@@ -139,7 +139,7 @@ func TestNodeEvents(t *testing.T) {
 			// dropped outright -- there is nothing to mark down and no reason to
 			// re-read the ring for a node that just left.
 			f := newNodeEventFixture(t)
-			InternalSessionHandleNodeDown(f.session, net.ParseIP("127.0.10.9"), 9042)
+			f.session.HandleNodeDown(net.ParseIP("127.0.10.9"), 9042)
 
 			assertStrings(t, "HostDown", f.policy.hostDownCalls(), nil)
 			f.assertNoRefresh(t)
@@ -164,7 +164,7 @@ func TestNodeEvents(t *testing.T) {
 
 				f := newNodeEventFixture(t)
 				f.addHost(t, "127.0.10.1")
-				InternalSessionHandleNodeEvent(f.session, []protocol.Frame{
+				f.session.HandleNodeEvent([]protocol.Frame{
 					statusChange("DOWN", "127.0.10.1"),
 					statusChange("DOWN", "127.0.10.1"),
 					statusChange("DOWN", "127.0.10.1"),
@@ -179,7 +179,7 @@ func TestNodeEvents(t *testing.T) {
 				f := newNodeEventFixture(t)
 				f.addHost(t, "127.0.10.1")
 				f.addHost(t, "127.0.10.2")
-				InternalSessionHandleNodeEvent(f.session, []protocol.Frame{
+				f.session.HandleNodeEvent([]protocol.Frame{
 					statusChange("DOWN", "127.0.10.1"),
 					statusChange("DOWN", "127.0.10.2"),
 				})
@@ -201,7 +201,7 @@ func TestNodeEvents(t *testing.T) {
 
 				f := newNodeEventFixture(t)
 				host := f.addHost(t, "127.0.10.1")
-				InternalSessionHandleNodeEvent(f.session, []protocol.Frame{
+				f.session.HandleNodeEvent([]protocol.Frame{
 					statusChange("UP", "127.0.10.1"),
 					statusChange("DOWN", "127.0.10.1"),
 				})
@@ -230,7 +230,7 @@ func TestNodeEvents(t *testing.T) {
 				})
 				host := f.addHost(t, "127.0.10.1")
 				implEndpoint.InternalHostInfoSetState(host, endpoint.NodeUp)
-				InternalSessionHandleNodeEvent(f.session, []protocol.Frame{
+				f.session.HandleNodeEvent([]protocol.Frame{
 					statusChange("DOWN", "127.0.10.1"),
 					statusChange("UP", "127.0.10.1"),
 				})
@@ -253,7 +253,7 @@ func TestNodeEvents(t *testing.T) {
 
 				f := newNodeEventFixture(t)
 				f.addHost(t, "127.0.10.1")
-				InternalSessionHandleNodeEvent(f.session, []protocol.Frame{statusChange("DOWN", "127.0.10.1")})
+				f.session.HandleNodeEvent([]protocol.Frame{statusChange("DOWN", "127.0.10.1")})
 
 				assertStrings(t, "HostDown", f.policy.hostDownCalls(), []string{"127.0.10.1"})
 			})
@@ -265,7 +265,7 @@ func TestNodeEvents(t *testing.T) {
 					cfg.Events.DisableNodeStatusEvents = true
 				})
 				host := f.addHost(t, "127.0.10.1")
-				InternalSessionHandleNodeEvent(f.session, []protocol.Frame{statusChange("DOWN", "127.0.10.1")})
+				f.session.HandleNodeEvent([]protocol.Frame{statusChange("DOWN", "127.0.10.1")})
 
 				assertStrings(t, "HostDown", f.policy.hostDownCalls(), nil)
 				if state := host.State(); state == endpoint.NodeDown {
@@ -281,7 +281,7 @@ func TestNodeEvents(t *testing.T) {
 				f := newNodeEventFixture(t, func(cfg *InternalClusterSettings) {
 					cfg.Events.DisableNodeStatusEvents = true
 				})
-				InternalSessionHandleNodeEvent(f.session, []protocol.Frame{statusChange("UP", "127.0.10.9")})
+				f.session.HandleNodeEvent([]protocol.Frame{statusChange("UP", "127.0.10.9")})
 
 				f.assertNoRefresh(t)
 			})
@@ -297,7 +297,7 @@ func TestNodeEvents(t *testing.T) {
 				t.Parallel()
 
 				f := newNodeEventFixture(t)
-				InternalSessionHandleNodeEvent(f.session, []protocol.Frame{topologyChange("NEW_NODE", "127.0.10.1")})
+				f.session.HandleNodeEvent([]protocol.Frame{topologyChange("NEW_NODE", "127.0.10.1")})
 				f.awaitRefresh(t)
 			})
 
@@ -307,7 +307,7 @@ func TestNodeEvents(t *testing.T) {
 				f := newNodeEventFixture(t, func(cfg *InternalClusterSettings) {
 					cfg.Events.DisableTopologyEvents = true
 				})
-				InternalSessionHandleNodeEvent(f.session, []protocol.Frame{topologyChange("NEW_NODE", "127.0.10.1")})
+				f.session.HandleNodeEvent([]protocol.Frame{topologyChange("NEW_NODE", "127.0.10.1")})
 				f.assertNoRefresh(t)
 			})
 
@@ -320,7 +320,7 @@ func TestNodeEvents(t *testing.T) {
 					cfg.Events.DisableTopologyEvents = true
 				})
 				f.addHost(t, "127.0.10.1")
-				InternalSessionHandleNodeEvent(f.session, []protocol.Frame{
+				f.session.HandleNodeEvent([]protocol.Frame{
 					topologyChange("NEW_NODE", "127.0.10.1"),
 					statusChange("DOWN", "127.0.10.1"),
 				})
@@ -356,7 +356,7 @@ func TestNodeEvents(t *testing.T) {
 			f := newNodeEventFixture(t, func(cfg *InternalClusterSettings) {
 				cfg.Events.DisableNodeStatusEvents = true
 			})
-			InternalSessionHandleNodeEvent(f.session, []protocol.Frame{
+			f.session.HandleNodeEvent([]protocol.Frame{
 				topologyChange("NEW_NODE", "127.0.10.9"),
 				statusChange("UP", "127.0.10.9"),
 			})

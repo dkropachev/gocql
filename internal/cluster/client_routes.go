@@ -304,13 +304,13 @@ func (p *ClientRoutesHandler) TranslateHost(host endpoint.AddressTranslatorHostI
 	}
 
 	var causes []error
-	for _, route := range InternalClientRoutesHandlerOrderedRoutes(p, hostID) {
+	for _, route := range p.OrderedRoutes(hostID) {
 		endpoints, err := p.resolveRoute(context.Background(), route)
 		if err != nil {
 			causes = append(causes, err)
 			continue
 		}
-		if InternalClientRoutesHandlerBindRoute(p, route) {
+		if p.BindRoute(route) {
 			return endpoints[0], nil
 		}
 	}
@@ -348,7 +348,7 @@ func (p *ClientRoutesHandler) Initialize(s *Core) error {
 	}
 	p.privateStorage.InternalSession = s
 	p.privateStorage.c = s.privateStorage.InternalControl
-	InternalClientRoutesHandlerStartUpdateWorker(p)
+	p.StartUpdateWorker()
 	p.privateStorage.initialized.Store(true)
 	p.privateStorage.queueMu.Unlock()
 	err := clientRoutesHandlerUpdateHostPortMappingSync(p, InternalUpdateTask{InternalConnectionIDs: p.privateStorage.cfg.Endpoints.GetAllConnectionIDs()})
@@ -372,8 +372,8 @@ func (p *ClientRoutesHandler) Stop() {
 	p.privateStorage.InternalWorkers.Wait()
 }
 
-func InternalClientRoutesHandlerUpdateHostPortMappingAsync(p *ClientRoutesHandler, task InternalUpdateTask) bool {
-	InternalClientRoutesHandlerInvalidateRouteTask(p, task)
+func (p *ClientRoutesHandler) UpdateHostPortMappingAsync(task InternalUpdateTask) bool {
+	p.InvalidateRouteTask(task)
 	p.privateStorage.queueMu.Lock()
 	defer p.privateStorage.queueMu.Unlock()
 	select {
@@ -395,7 +395,7 @@ func clientRoutesHandlerUpdateHostPortMappingSync(p *ClientRoutesHandler, task I
 		return runtimeerrors.ErrClosed
 	default:
 	}
-	return p.updateHostPortMappingContext(metadata.InternalV2SchemaContext(InternalNewSchemaSource(p.privateStorage.InternalSession)), task)
+	return p.updateHostPortMappingContext(metadata.InternalV2SchemaContext(p.privateStorage.InternalSession.NewSchemaSource()), task)
 }
 
 func clientRoutesHandlerStartReadingEvents(p *ClientRoutesHandler, connectionIDs []string) {
@@ -419,17 +419,17 @@ func clientRoutesHandlerStartReadingEvents(p *ClientRoutesHandler, connectionIDs
 					continue
 				}
 				if len(evt.HostIDs) == 0 {
-					InternalClientRoutesHandlerUpdateHostPortMappingAsync(p, InternalUpdateTask{InternalConnectionIDs: filteredConnectionIDs})
+					p.UpdateHostPortMappingAsync(InternalUpdateTask{InternalConnectionIDs: filteredConnectionIDs})
 					continue
 				}
 				pairs := getPairsFromEvent(filteredConnectionIDs, evt.HostIDs)
 				if len(pairs) > 0 {
-					InternalClientRoutesHandlerUpdateHostPortMappingAsync(p, InternalUpdateTask{InternalPairs: pairs})
+					p.UpdateHostPortMappingAsync(InternalUpdateTask{InternalPairs: pairs})
 				} else {
-					InternalClientRoutesHandlerUpdateHostPortMappingAsync(p, InternalUpdateTask{InternalConnectionIDs: filteredConnectionIDs})
+					p.UpdateHostPortMappingAsync(InternalUpdateTask{InternalConnectionIDs: filteredConnectionIDs})
 				}
 			case *events.ControlConnectionRecreatedEvent:
-				InternalClientRoutesHandlerUpdateHostPortMappingAsync(p, InternalUpdateTask{InternalConnectionIDs: connectionIDs})
+				p.UpdateHostPortMappingAsync(InternalUpdateTask{InternalConnectionIDs: connectionIDs})
 			}
 		}
 	}()
@@ -467,7 +467,7 @@ func filterAllowedConnectionIDs(connectionIDs, allowed []string) []string {
 	return filtered
 }
 
-func InternalClientRoutesHandlerStartUpdateWorker(p *ClientRoutesHandler) {
+func (p *ClientRoutesHandler) StartUpdateWorker() {
 	p.privateStorage.InternalWorkers.Add(1)
 	go func() {
 		defer p.privateStorage.InternalWorkers.Done()
@@ -501,7 +501,7 @@ func InternalClientRoutesHandlerStartUpdateWorker(p *ClientRoutesHandler) {
 					}
 				}
 				if p.privateStorage.needsResync.Swap(false) {
-					_ = p.refreshContext(metadata.InternalV2SchemaContext(InternalNewSchemaSource(p.privateStorage.InternalSession)))
+					_ = p.refreshContext(metadata.InternalV2SchemaContext(p.privateStorage.InternalSession.NewSchemaSource()))
 				}
 				if task.result != nil {
 					task.result <- err
@@ -515,7 +515,7 @@ func InternalClientRoutesHandlerStartUpdateWorker(p *ClientRoutesHandler) {
 }
 
 func (p *ClientRoutesHandler) updateHostPortMapping(task InternalUpdateTask) error {
-	ctx := metadata.InternalV2SchemaContext(InternalNewSchemaSource(p.privateStorage.InternalSession))
+	ctx := metadata.InternalV2SchemaContext(p.privateStorage.InternalSession.NewSchemaSource())
 	return p.updateHostPortMappingContext(ctx, task)
 }
 
@@ -555,8 +555,8 @@ var _ endpoint.AddressTranslator = func() *ClientRoutesHandler {
 }()
 
 func InternalGetHostPortMappingForConnectionIDs(c InternalControlConnection, table string, ids []string, tls bool) ([]InternalClientRoute, error) {
-	return getV2RoutesConnections(metadata.InternalV2SchemaContext(InternalNewSchemaSource(c.InternalGetSession())), c, table, ids, tls)
+	return getV2RoutesConnections(metadata.InternalV2SchemaContext(c.InternalGetSession().NewSchemaSource()), c, table, ids, tls)
 }
 func InternalGetHostPortMappingForPairs(c InternalControlConnection, table string, pairs []InternalPair, tls bool) ([]InternalClientRoute, error) {
-	return getV2RoutesPairs(metadata.InternalV2SchemaContext(InternalNewSchemaSource(c.InternalGetSession())), c, table, pairs, tls)
+	return getV2RoutesPairs(metadata.InternalV2SchemaContext(c.InternalGetSession().NewSchemaSource()), c, table, pairs, tls)
 }

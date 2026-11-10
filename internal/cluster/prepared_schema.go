@@ -28,8 +28,8 @@ import (
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 )
 
-func InternalSessionInvalidatePreparedSchema(s *Core, e Event) {
-	t := InternalSessionSchemaTracker(s)
+func (s *Core) InvalidatePreparedSchema(e Event) {
+	t := s.SchemaTracker()
 	keys := []schemafence.InternalPreparedDependencyKey{{InternalKind: 'a', InternalKeyspace: "", InternalName: ""}, {InternalKind: 'a', InternalKeyspace: e.Keyspace, InternalName: ""}}
 	switch e.Target {
 	case "TABLE", "VIEW":
@@ -43,11 +43,11 @@ func InternalSessionInvalidatePreparedSchema(s *Core, e Event) {
 	}
 	t.InternalBump(keys...)
 }
-func InternalSessionUpdatePreparedSchemaSnapshot(s *Core, old, next *routing.MetadataSnapshot) {
+func (s *Core) UpdatePreparedSchemaSnapshot(old, next *routing.MetadataSnapshot) {
 	if old == nil {
 		return
 	}
-	t := InternalSessionSchemaTracker(s)
+	t := s.SchemaTracker()
 	if routing.SnapshotData(old).InternalPartitioner != routing.SnapshotData(next).InternalPartitioner {
 		t.InternalBump(schemafence.InternalPreparedDependencyKey{InternalKind: 'p'})
 	}
@@ -65,7 +65,7 @@ func InternalSessionUpdatePreparedSchemaSnapshot(s *Core, old, next *routing.Met
 		}
 		if a == nil || b == nil {
 			if a != b {
-				InternalSessionInvalidatePreparedSchema(s, Event{Keyspace: n, Target: "KEYSPACE"})
+				s.InvalidatePreparedSchema(Event{Keyspace: n, Target: "KEYSPACE"})
 			}
 			continue
 		}
@@ -78,7 +78,7 @@ func InternalSessionUpdatePreparedSchemaSnapshot(s *Core, old, next *routing.Met
 		}
 		for name := range tables {
 			if !a.Tables[name].Equals(b.Tables[name]) {
-				InternalSessionInvalidatePreparedSchema(s, Event{Keyspace: n, Object: name, Target: "TABLE"})
+				s.InvalidatePreparedSchema(Event{Keyspace: n, Object: name, Target: "TABLE"})
 			}
 		}
 		types := make(map[string]bool, len(a.Types)+len(b.Types))
@@ -92,13 +92,13 @@ func InternalSessionUpdatePreparedSchemaSnapshot(s *Core, old, next *routing.Met
 			x, y := a.Types[name], b.Types[name]
 			same := x == y || x != nil && y != nil && x.Keyspace == y.Keyspace && x.Name == y.Name && slices.Equal(x.FieldNames, y.FieldNames) && slices.Equal(x.FieldTypes, y.FieldTypes)
 			if !same {
-				InternalSessionInvalidatePreparedSchema(s, Event{Keyspace: n, Object: name, Target: "TYPE"})
+				s.InvalidatePreparedSchema(Event{Keyspace: n, Object: name, Target: "TYPE"})
 			}
 		}
 		// Function dependencies are not exposed by PREPARED, so use their keyspace
 		// scope conservatively; unrelated table/type publications stay isolated.
 		if !equalPreparedFunctions(a.Functions, b.Functions) || !equalPreparedAggregates(a.Aggregates, b.Aggregates) {
-			InternalSessionInvalidatePreparedSchema(s, Event{Keyspace: n, Target: "FUNCTION"})
+			s.InvalidatePreparedSchema(Event{Keyspace: n, Target: "FUNCTION"})
 		}
 	}
 }
@@ -141,7 +141,7 @@ func equalPreparedAggregates(a, b map[string]*implMetadata.AggregateMetadata) bo
 	}
 	return true
 }
-func InternalSessionPreparedPartitionerName(s *Core, keyspace, table string) string {
+func (s *Core) PreparedPartitionerName(keyspace, table string) string {
 	m := s.Metadata()
 	if table == "" {
 		return ""

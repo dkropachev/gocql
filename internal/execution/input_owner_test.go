@@ -64,7 +64,7 @@ func TestInputOwner(t *testing.T) {
 			var rt *InternalSessionRuntime
 			stopped := make(chan struct{})
 			config.DialHost = func(context.Context, endpoint.DialTarget) (net.Conn, error) {
-				if rt == nil || cluster.InternalCurrentExecution(rt.Core) != rt {
+				if rt == nil || rt.Core.CurrentExecution() != rt {
 					t.Error("startup preceded execution attachment")
 				}
 				return nil, dialError

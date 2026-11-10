@@ -66,7 +66,7 @@ func newPage[R any](a0 *responsePage, a1 cql.RowDecoder[R], a2 func()) (*gocql.P
 }
 
 func newSchemaSource(a0 *gocql.Session) implMetadata.Source {
-	return implCluster.InternalNewSchemaSource(implExecution.InternalCore((*implExecution.Session)(a0)))
+	return implExecution.InternalCore((*implExecution.Session)(a0)).NewSchemaSource()
 }
 
 type pair = implCluster.InternalPair

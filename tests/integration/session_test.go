@@ -970,7 +970,7 @@ func TestSession(t *testing.T) {
 		session := createV2SessionFromConfig(config, t, false)
 		defer session.Close()
 		host := implExecution.InternalSessionData((*implExecution.Session)(session)).InternalHostSource.InternalGetHostsList()[0]
-		implCluster.InternalSessionHandleNodeDown(implExecution.InternalCore((*implExecution.Session)(session)), host.ConnectAddress(), host.Port())
+		implExecution.InternalCore((*implExecution.Session)(session)).HandleNodeDown(host.ConnectAddress(), host.Port())
 		defer implEndpoint.InternalHostInfoSetState(host, NodeUp)
 		require.Equal(t, NodeDown, host.State())
 		require.True(t, pollUntil(31*time.Second, func() bool { return host.State() == NodeUp }), "host did not reconnect")

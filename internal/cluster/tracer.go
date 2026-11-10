@@ -68,7 +68,7 @@ func (t *TraceWriter) Trace(traceId []byte) {
 			break
 		}
 		timer := time.NewTimer(t.privateStorage.sleepInterval)
-		ctx := metadata.InternalV2SchemaContext(InternalNewSchemaSource(t.privateStorage.session))
+		ctx := metadata.InternalV2SchemaContext(t.privateStorage.session.NewSchemaSource())
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -183,7 +183,7 @@ func readV2TraceRows[R any](s *Core, traceID []byte, cql string, decoder codec.R
 	var id cqltype.UUID
 	copy(id[:], traceID)
 	typ := cqltype.UUIDType
-	ctx := metadata.InternalV2SchemaContext(InternalNewSchemaSource(s))
+	ctx := metadata.InternalV2SchemaContext(s.NewSchemaSource())
 	timeout := s.privateStorage.InternalCfg.MetadataSchemaRequestTimeout
 	if timeout <= 0 {
 		timeout = 30 * time.Second

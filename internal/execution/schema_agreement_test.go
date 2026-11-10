@@ -38,7 +38,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/scylladb/gocql/v2/internal/binding"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -65,13 +64,13 @@ func TestSchemaAgreement(t *testing.T) {
 			cluster.MaxWaitSchemaAgreement = maxWaitSchemaAgreement
 			cluster.MetadataSchemaRequestTimeout = metadataSchemaRequestTimeout
 
-			session, err := implCluster.InternalClusterSettingsOpen(cluster)
+			session, err := cluster.Open()
 			if err != nil {
 				t.Fatalf("open: %v", err)
 			}
 			defer session.Close()
 
-			conn := implCluster.InternalSessionGetConn(session)
+			conn := session.GetConn()
 			if conn == nil {
 				t.Fatal("unable to get a connection")
 			}
@@ -79,7 +78,7 @@ func TestSchemaAgreement(t *testing.T) {
 			atomic.StoreInt32(&srv.stallSystemQueries, 1)
 
 			start := time.Now()
-			err = implCluster.InternalSessionAwaitV2SchemaAgreementOn(session, context.Background(), conn)
+			err = session.AwaitV2SchemaAgreementOn(context.Background(), conn)
 			elapsed := time.Since(start)
 
 			if err == nil {
@@ -101,7 +100,7 @@ func TestSchemaAgreement(t *testing.T) {
 						agreementPool(s, c)
 						hosts = append(hosts, model.HostSnapshot{ID: id, Enabled: true, Up: true})
 					}
-					implCluster.InternalSessionPeripheral(s).InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: hosts}))
+					s.Peripheral().InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: hosts}))
 					if err := s.AwaitSchemaAgreement(context.Background()); !errors.Is(err, context.DeadlineExceeded) {
 						t.Fatal("missing enabled host/zero successes counted as agreement", err)
 					}
@@ -115,15 +114,15 @@ func TestSchemaAgreement(t *testing.T) {
 			c, _ := agreementConn(t, s, id, version, 0)
 			agreementPool(s, c)
 			coordinator, count := agreementConn(t, s, coordinatorID, version, 0)
-			implCluster.InternalSessionPeripheral(s).InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: []model.HostSnapshot{{ID: id, Enabled: true}, {ID: cqltype.MustRandomUUID(), Enabled: false}}}))
-			if err := implCluster.InternalSessionAwaitV2SchemaAgreementOn(s, context.Background(), coordinator); err != nil {
+			s.Peripheral().InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: []model.HostSnapshot{{ID: id, Enabled: true}, {ID: cqltype.MustRandomUUID(), Enabled: false}}}))
+			if err := s.AwaitV2SchemaAgreementOn(context.Background(), coordinator); err != nil {
 				t.Fatal(err)
 			}
 			if count.Load() != 1 {
 				t.Fatal("excluded exact coordinator not queried", count.Load())
 			}
 			different, _ := agreementConn(t, s, coordinatorID, cqltype.MustRandomUUID(), 0)
-			if err := implCluster.InternalSessionAwaitV2SchemaAgreementOn(s, context.Background(), different); !errors.Is(err, context.DeadlineExceeded) {
+			if err := s.AwaitV2SchemaAgreementOn(context.Background(), different); !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatal("older topology agreement ignored coordinator schema", err)
 			}
 		})
@@ -132,7 +131,7 @@ func TestSchemaAgreement(t *testing.T) {
 			s, id, _ := agreementSession(t)
 			c, count := agreementConn(t, s, id, cqltype.MustRandomUUID(), protocol.ErrCodeUnauthorized)
 			agreementPool(s, c)
-			implCluster.InternalSessionPeripheral(s).InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: []model.HostSnapshot{{ID: id, Enabled: true}}}))
+			s.Peripheral().InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: []model.HostSnapshot{{ID: id, Enabled: true}}}))
 			err := s.AwaitSchemaAgreement(context.Background())
 			if request, ok := errors.AsType[protocol.RequestError](err); !ok || request.GetCode() != protocol.ErrCodeUnauthorized {
 				t.Fatal(err)
@@ -152,12 +151,12 @@ func TestSchemaAgreement(t *testing.T) {
 			config.Metadata.RefreshAfterAgreement = false
 			config.Metadata.AgreementTimeout = 100 * time.Millisecond
 			InternalRuntimeFor(s).config = config
-			implCluster.InternalSessionConfigureV2Peripheral(s, config)
+			s.ConfigureV2Peripheral(config)
 			metadata := s.Metadata()
 			metadataCopy := *metadata
 			routing.SnapshotData(&metadataCopy).InternalHosts = append([]model.HostSnapshot(nil), routing.SnapshotData(metadata).InternalHosts...)
 			routing.SnapshotData(&metadataCopy).InternalHosts = append(routing.SnapshotData(&metadataCopy).InternalHosts, model.HostSnapshot{ID: cqltype.MustRandomUUID(), Enabled: true})
-			implCluster.InternalSessionPeripheral(s).InternalSnapshot.Store(&metadataCopy)
+			s.Peripheral().InternalSnapshot.Store(&metadataCopy)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			var ddl atomic.Int32
@@ -226,7 +225,7 @@ func TestSchemaAgreement(t *testing.T) {
 			config.Metadata.AutomaticAgreement = true
 			config.Metadata.RefreshAfterAgreement = false
 			InternalRuntimeFor(s).config = config
-			implCluster.InternalSessionConfigureV2Peripheral(s, config)
+			s.ConfigureV2Peripheral(config)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			entered, serverDone := make(chan struct{}), make(chan struct{})

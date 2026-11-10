@@ -780,7 +780,7 @@ func TestDriverConfigReport(t *testing.T) {
 				// asynchronously and could land a frame mid-test.
 				cluster := testCluster(implProtocol.ProtoVersion3, srv.Address)
 				cluster.NumConns = 1
-				session, err := InternalClusterSettingsOpen(cluster)
+				session, err := cluster.Open()
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -1053,7 +1053,7 @@ func TestDriverConfigReport(t *testing.T) {
 			cluster := testCluster(implProtocol.ProtoVersion3, srv.Address)
 			cluster.NumConns = 1
 			cluster.DisableDriverConfigReporting = true
-			session, err := InternalClusterSettingsOpen(cluster)
+			session, err := cluster.Open()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1144,7 +1144,7 @@ func TestDriverConfigReport(t *testing.T) {
 
 			cluster := testCluster(implProtocol.ProtoVersion3, srv.Address)
 			cluster.NumConns = connsPerSession
-			session, err := InternalClusterSettingsOpen(cluster)
+			session, err := cluster.Open()
 			if err != nil {
 				t.Fatal(err)
 			}

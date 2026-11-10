@@ -416,7 +416,7 @@ func (cfg *InternalClusterSettings) logger() logging.StdLogger {
 
 // open initializes the cluster based on this config and returns a
 // session object that can be used to interact with the database.
-func InternalClusterSettingsOpen(cfg *InternalClusterSettings) (*Core, error) {
+func (cfg *InternalClusterSettings) Open() (*Core, error) {
 	return connectSettings(*cfg)
 }
 
@@ -424,7 +424,7 @@ func (cfg *InternalClusterSettings) openAsync() (*Core, error) {
 	return connectSettingsAsync(*cfg)
 }
 
-func InternalClusterSettingsFilterHost(cfg *InternalClusterSettings, host *endpoint.HostInfo) bool {
+func (cfg *InternalClusterSettings) FilterHost(host *endpoint.HostInfo) bool {
 	return !(cfg.HostFilter == nil || cfg.HostFilter.Accept(host))
 }
 

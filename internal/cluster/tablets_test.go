@@ -42,11 +42,11 @@ func TestTablets(t *testing.T) {
 			opaqueStorageValuexxx := new(Core)
 			return opaqueStorageValuexxx
 		}()
-		SessionData(s).InternalMetadataDescriber = InternalNewMetadataDescriber(s)
+		SessionData(s).InternalMetadataDescriber = s.NewMetadataDescriber()
 		defer MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalTabletsMetadata.Close()
-		defer InternalSessionCloseV2Peripheral(s)
+		defer s.CloseV2Peripheral()
 		MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", &metadata.KeyspaceMetadata{Name: "ks", Tables: map[string]*metadata.TableMetadata{"t": {Name: "t"}}})
-		p := InternalSessionPeripheral(s)
+		p := s.Peripheral()
 		p.InternalFeedbackOnce.Do(func() {}) // Hold the consumer while filling the bounded queue.
 		sub, err := s.Subscribe(EventFilter{Kinds: []EventKind{OverflowEvent}, Capacity: 1})
 		if err != nil {

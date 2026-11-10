@@ -15,7 +15,7 @@ import (
 
 type schemaSource struct{ session *Core }
 
-func InternalNewSchemaSource(s *Core) implMetadata.Source { return schemaSource{s} }
+func (s *Core) NewSchemaSource() implMetadata.Source { return schemaSource{s} }
 func (source schemaSource) InternalSchemaContext() context.Context {
 	s := source.session
 	if s != nil && s.privateStorage.InternalCtx != nil {
@@ -27,7 +27,7 @@ func (source schemaSource) InternalSchemaSettings() implMetadata.QuerySettings {
 	s := source.session
 	v := implMetadata.QuerySettings{SystemSchema: s.privateStorage.InternalUseSystemSchema, Available: s.privateStorage.InternalControl != nil, Aggregates: s.privateStorage.InternalHasAggregatesAndFunctions, Timeout: s.privateStorage.InternalCfg.MetadataSchemaRequestTimeout, Depth: s.v2MetadataDepthLimit()}
 	if s.privateStorage.InternalHostSource != nil && s.privateStorage.InternalPool != nil {
-		if c := InternalSessionGetConn(s); c != nil {
+		if c := s.GetConn(); c != nil {
 			v.Scylla = c.InternalIsScyllaConn()
 			v.TabletsV2 = c.InternalFramers.InternalDefaults.InternalTabletsRoutingV2
 		}

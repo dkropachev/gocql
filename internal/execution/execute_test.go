@@ -47,7 +47,7 @@ func runtimeTestSession(t testing.TB, n int) (*cluster.Core, []*transport.Conn, 
 			return opaqueStorageValuex
 		}()
 		conn.InternalHost = host
-		conn.InternalHooks = cluster.InternalNewConnectionHooks(s)
+		conn.InternalHooks = s.NewConnectionHooks()
 		implCluster.SessionData(s).InternalHostSource.InternalHosts[id.String()] = host
 		picker := pool.InternalNewDefaultConnPicker(1)
 		picker.Put(conn)

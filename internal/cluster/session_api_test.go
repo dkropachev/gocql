@@ -29,10 +29,10 @@ func TestSessionAPI(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for i := 0; i < 100; i++ {
-					implCluster.InternalSessionPublishV2Event(s, &oldevents.SchemaChangeKeyspaceEvent{Keyspace: "k"})
+					s.PublishV2Event(&oldevents.SchemaChangeKeyspaceEvent{Keyspace: "k"})
 				}
 			}()
-			go func() { defer wg.Done(); sub.Close(); implCluster.InternalSessionCloseV2Peripheral(s) }()
+			go func() { defer wg.Done(); sub.Close(); s.CloseV2Peripheral() }()
 			wg.Wait()
 		})
 
@@ -48,19 +48,19 @@ func TestSessionAPI(t *testing.T) {
 				t.Fatal(err)
 			}
 			filter.Kinds[0] = StatusEvent
-			implCluster.InternalSessionPublishV2Event(s, &oldevents.SchemaChangeTableEvent{Change: "CREATED", Keyspace: "other", Table: "x"})
+			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "CREATED", Keyspace: "other", Table: "x"})
 			select {
 			case e := <-sub.Events():
 				t.Fatal("keyspace filter ignored", e)
 			default:
 			}
-			implCluster.InternalSessionPublishV2Event(s, &oldevents.SchemaChangeTableEvent{Change: "CREATED", Keyspace: "ks", Table: "a"})
-			implCluster.InternalSessionPublishV2Event(s, &oldevents.SchemaChangeTableEvent{Change: "CREATED", Keyspace: "ks", Table: "b"})
+			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "CREATED", Keyspace: "ks", Table: "a"})
+			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "CREATED", Keyspace: "ks", Table: "b"})
 			event := <-sub.Events()
 			if event.Kind != OverflowEvent || event.Change != "RESYNC" || event.Generation != s.Metadata().Generation() {
 				t.Fatal(event)
 			}
-			implCluster.InternalSessionPublishV2Event(s, &oldevents.SchemaChangeTableEvent{Change: "DROPPED", Keyspace: "ks", Table: "b"})
+			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "DROPPED", Keyspace: "ks", Table: "b"})
 			if _, ok := <-sub.Events(); ok {
 				t.Fatal("overflow subscription must close after terminal marker")
 			}
@@ -69,7 +69,7 @@ func TestSessionAPI(t *testing.T) {
 				t.Fatal(err)
 			}
 			snapshot := s.Metadata()
-			implCluster.InternalSessionPublishV2Event(s, &oldevents.SchemaChangeTableEvent{Change: "CREATED", Keyspace: "ks", Table: "c"})
+			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "CREATED", Keyspace: "ks", Table: "c"})
 			event = <-fresh.Events()
 			if event.Generation <= snapshot.Generation() {
 				t.Fatal("publication event did not follow subscribed snapshot", event)
@@ -80,7 +80,7 @@ func TestSessionAPI(t *testing.T) {
 			if _, ok := <-sub.Events(); ok {
 				t.Fatal("closed subscription not closed")
 			}
-			implCluster.InternalSessionCloseV2Peripheral(s)
+			s.CloseV2Peripheral()
 			if _, err := s.Subscribe(EventFilter{}); err == nil {
 				t.Fatal("subscribe after close succeeded")
 			}

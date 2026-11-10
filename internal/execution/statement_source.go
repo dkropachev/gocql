@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
@@ -67,7 +66,7 @@ func (p preparedSource) prepared() *InternalPreparedState { return p.state }
 // are fixed when the prepared state is built.
 func (p preparedSource) token(cells []model.EncodedCell) (cqltype.Option[int64], error) {
 	state := p.state
-	return routing.InternalComputeRoutingToken(cells, state.InternalInfo.PartitionKeyIndexes, implCluster.InternalSessionCapturedRoutingPartitioner(state.InternalSession, state.partitioner))
+	return routing.InternalComputeRoutingToken(cells, state.InternalInfo.PartitionKeyIndexes, state.InternalSession.CapturedRoutingPartitioner(state.partitioner))
 }
 func (p preparedSource) onConn(ctx context.Context, rt *InternalSessionRuntime, conn *transport.Conn, values model.EncodedValues, force bool, failed *InternalHostPrepared) (*InternalHostPrepared, error) {
 	return rt.prepareOnConnExpected(ctx, conn, p.state, values, force, failed)

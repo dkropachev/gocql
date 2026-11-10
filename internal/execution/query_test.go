@@ -102,7 +102,7 @@ func loopbackTestSession(t testing.TB, workload string) *cluster.Core {
 	implEndpoint.HostInfoData(host).InternalHostId = id
 	implEndpoint.HostInfoData(host).InternalState.Store(endpoint.NodeUp)
 	conn.InternalHost = host
-	conn.InternalHooks = cluster.InternalNewConnectionHooks(s)
+	conn.InternalHooks = s.NewConnectionHooks()
 	implCluster.SessionData(s).InternalHostSource.InternalHosts[id.String()] = host
 	picker := pool.InternalNewDefaultConnPicker(1)
 	picker.Put(conn)

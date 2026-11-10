@@ -100,7 +100,7 @@ func TestSession(t *testing.T) {
 			SessionData(opaqueStorageValuexxxxxx).InternalLogger = &logging.InternalTestLogger{}
 			return opaqueStorageValuexxxxxx
 		}()
-		SessionData(session).InternalPool = &implPool.InternalPolicyConnPool{InternalServices: InternalNewPoolServices(session), InternalHostConnPools: map[cqltype.UUID]*implPool.InternalHostConnPool{}}
+		SessionData(session).InternalPool = &implPool.InternalPolicyConnPool{InternalServices: session.NewPoolServices(), InternalHostConnPools: map[cqltype.UUID]*implPool.InternalHostConnPool{}}
 
 		present := func() *endpoint.HostInfo {
 			opaqueStorageValuexxxxxxx := new(endpoint.HostInfo)
@@ -108,7 +108,7 @@ func TestSession(t *testing.T) {
 			implEndpoint.HostInfoData(opaqueStorageValuexxxxxxx).InternalConnectAddress = net.ParseIP("127.0.40.1")
 			return opaqueStorageValuexxxxxxx
 		}()
-		SessionData(session).InternalPool.InternalHostConnPools[implEndpoint.InternalHostInfoHostUUID(present)] = InternalNewHostConnPool(session, present, 1, "")
+		SessionData(session).InternalPool.InternalHostConnPools[implEndpoint.InternalHostInfoHostUUID(present)] = session.NewHostConnPool(present, 1, "")
 
 		t.Run("present id returns the pool", func(t *testing.T) {
 			info := sessionGetHostPoolByID(session, present.HostID())
@@ -249,16 +249,16 @@ func TestSession(t *testing.T) {
 		}()
 
 		for i := 1; i <= 100; i++ {
-			InternalSessionRecordV2Latency(s, time.Duration(i)*time.Millisecond)
+			s.RecordV2Latency(time.Duration(i) * time.Millisecond)
 		}
 		sessionRecordV2Orphan(s)
-		InternalSessionPeripheral(s).publishLatencySummary()
+		s.Peripheral().publishLatencySummary()
 		m := s.Metrics()
 		if m.LatencyP50 != 50*time.Millisecond || m.LatencyP95 != 95*time.Millisecond || m.LatencyP99 != 99*time.Millisecond || m.Orphans != 1 {
 			t.Fatal(m)
 		}
 		generation := sessionTypedSchemaGeneration(s)
-		InternalSessionPublishV2Metadata(s)
+		s.PublishV2Metadata()
 		if sessionTypedSchemaGeneration(s) != generation {
 			t.Fatal("topology invalidated prepared schema")
 		}
@@ -397,10 +397,10 @@ func TestSession(t *testing.T) {
 			return opaqueStorageValuex
 		}()
 
-		p := InternalSessionPeripheral(s)
+		p := s.Peripheral()
 		p.InternalConfig.LifecycleObserver = panicLifecycle{}
 		sessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "test", At: time.Now()})
-		InternalSessionCloseV2Peripheral(s)
+		s.CloseV2Peripheral()
 	})
 
 	t.Run("ParseProtocolFromError", func(t *testing.T) {
@@ -465,12 +465,12 @@ func TestSession(t *testing.T) {
 		}()
 
 		first := s.Metadata()
-		InternalSessionPublishV2Metadata(s)
+		s.PublishV2Metadata()
 		second := s.Metadata()
 		if first == second || second.Generation() <= first.Generation() {
 			t.Fatal("publication did not advance")
 		}
-		InternalSessionCloseV2Peripheral(s)
+		s.CloseV2Peripheral()
 		if first.Generation() == 0 {
 			t.Fatal("retained snapshot invalidated")
 		}
@@ -559,7 +559,7 @@ func TestSession(t *testing.T) {
 				for i := 0; i < tt.sessionCount; i++ {
 					cluster := testCluster(implProtocol.ProtoVersion3, srv.Address)
 					cluster.NumConns = connsPerSession
-					session, err := InternalClusterSettingsOpen(cluster)
+					session, err := cluster.Open()
 					if err != nil {
 						t.Fatal(err)
 					}

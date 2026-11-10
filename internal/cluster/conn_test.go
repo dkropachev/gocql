@@ -53,7 +53,7 @@ import (
 func testCluster(proto frm.ProtoVersion, addresses ...string) *InternalClusterSettings {
 	cluster := InternalNewClusterSettings(addresses...)
 	cluster.ProtoVersion = int(proto)
-	InternalClusterSettingsData(cluster).InternalDisableControlConn = true
+	cluster.Data().InternalDisableControlConn = true
 	cluster.PoolConfig.HostSelectionPolicy = RoundRobinHostPolicy()
 	return cluster
 }
@@ -304,7 +304,7 @@ func (srv *TestServer) port() int {
 }
 
 func (srv *TestServer) session() (*Core, error) {
-	return InternalClusterSettingsOpen(testCluster(frm.ProtoVersion(srv.protocol), srv.Address))
+	return testCluster(frm.ProtoVersion(srv.protocol), srv.Address).Open()
 }
 
 func (srv *TestServer) host() *endpoint.HostInfo {

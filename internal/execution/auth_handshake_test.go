@@ -31,7 +31,6 @@ import (
 	"sync"
 	"testing"
 
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/protocol"
@@ -85,7 +84,7 @@ func TestAuthHandshake(t *testing.T) {
 			mu.Unlock()
 			return transport.PasswordAuthenticator{Username: "per-host", Password: "pw"}, nil
 		}
-		s, err := implCluster.InternalClusterSettingsOpen(cfg)
+		s, err := cfg.Open()
 		if err != nil {
 			t.Fatalf("open: %v", err)
 		}
@@ -197,7 +196,7 @@ func TestAuthHandshake(t *testing.T) {
 		srv := newAuthTestServer(t, multiStepReply)
 		log := &authLog{}
 		cfg, _ := srv.cluster(stepAuthenticator{log: log})
-		s, err := implCluster.InternalClusterSettingsOpen(cfg)
+		s, err := cfg.Open()
 		if err != nil {
 			t.Fatalf("open: %v", err)
 		}
@@ -231,7 +230,7 @@ func TestAuthHandshake(t *testing.T) {
 		})
 
 		cfg, _ := srv.cluster(transport.PasswordAuthenticator{Username: "cassandra", Password: "secret"})
-		s, err := implCluster.InternalClusterSettingsOpen(cfg)
+		s, err := cfg.Open()
 		if err != nil {
 			t.Fatalf("open: %v", err)
 		}

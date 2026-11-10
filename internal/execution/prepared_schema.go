@@ -65,7 +65,7 @@ func (s *InternalPreparedState) noteMetadataConflict() error {
 	return s.queueMetadataConflict()
 }
 func (s *InternalPreparedState) queueMetadataConflict() error {
-	p := implCluster.InternalSessionPeripheral(s.InternalSession)
+	p := s.InternalSession.Peripheral()
 	s.conflictDirty.Store(true)
 	p.InternalMu.Lock()
 	epoch := p.InternalSchemaReconciled.Load() + 1
@@ -74,7 +74,7 @@ func (s *InternalPreparedState) queueMetadataConflict() error {
 	if s.conflictEpoch.Load() == epoch && pending {
 		return nil
 	}
-	if err := implCluster.InternalSessionScheduleV2PreparedRefresh(s.InternalSession, s.InternalInfo.Keyspace); err != nil {
+	if err := s.InternalSession.ScheduleV2PreparedRefresh(s.InternalInfo.Keyspace); err != nil {
 		s.conflictEpoch.Store(0)
 		return err
 	}
@@ -84,8 +84,8 @@ func (s *InternalPreparedState) queueMetadataConflict() error {
 	if s.InternalInfo.Table == "" {
 		target = "KEYSPACE"
 	}
-	implCluster.InternalSessionInvalidatePreparedSchema(s.InternalSession, implCluster.Event{Keyspace: s.InternalInfo.Keyspace, Object: s.InternalInfo.Table, Target: target})
-	implCluster.InternalSessionMarkV2SchemaStale(s.InternalSession, s.InternalInfo.Keyspace, false)
+	s.InternalSession.InvalidatePreparedSchema(implCluster.Event{Keyspace: s.InternalInfo.Keyspace, Object: s.InternalInfo.Table, Target: target})
+	s.InternalSession.MarkV2SchemaStale(s.InternalInfo.Keyspace, false)
 	return nil
 }
 func (s *InternalPreparedState) reconcilePendingConflict() error {
@@ -94,7 +94,7 @@ func (s *InternalPreparedState) reconcilePendingConflict() error {
 	}
 	s.conflictMu.Lock()
 	defer s.conflictMu.Unlock()
-	p := implCluster.InternalSessionPeripheral(s.InternalSession)
+	p := s.InternalSession.Peripheral()
 	p.InternalMu.Lock()
 	_, pending := p.InternalPreparedRefreshScopes[s.InternalInfo.Keyspace]
 	p.InternalMu.Unlock()

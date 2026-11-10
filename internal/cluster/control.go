@@ -318,7 +318,7 @@ func (c *InternalControlConn) setupConn(conn *transport.Conn) error {
 		return err
 	}
 
-	if InternalClusterSettingsFilterHost(&c.InternalSession.privateStorage.InternalCfg, host) {
+	if (&c.InternalSession.privateStorage.InternalCfg).FilterHost(host) {
 		return fmt.Errorf("host was filtered: %v", host.ConnectAddress())
 	}
 
@@ -353,7 +353,7 @@ func (c *InternalControlConn) setupConn(conn *transport.Conn) error {
 		oldHost.Host = old.InternalHost.ConnectAddress()
 		oldHost.Port = old.InternalHost.Port()
 	}
-	InternalSessionPublishV2Metadata(c.InternalSession)
+	c.InternalSession.PublishV2Metadata()
 	sessionPublishEvent(c.InternalSession, &events.ControlConnectionRecreatedEvent{
 		OldHost: oldHost,
 		NewHost: events.HostInfo{
@@ -363,13 +363,13 @@ func (c *InternalControlConn) setupConn(conn *transport.Conn) error {
 		},
 	})
 	if c.InternalSession.initialized() {
-		InternalSessionPeripheral( // We connected to control conn, so add the connect the host in pool as well.
-			// Notify session we can start trying to connect to the node.
-			// We can't start the fill before the session is initialized, otherwise the fill would interfere
-			// with the fill called by Session.init. Session.init needs to wait for its fill to finish and that
-			// would return immediately if we started the fill here.
-			// TODO(martin-sucha): Trigger pool refill for all hosts, like in reconnectDownedHosts?
-			c.InternalSession).InternalStartWorker(func() { c.InternalSession.startPoolFill(host) })
+		c.InternalSession.Peripheral( // We connected to control conn, so add the connect the host in pool as well.
+		// Notify session we can start trying to connect to the node.
+		// We can't start the fill before the session is initialized, otherwise the fill would interfere
+		// with the fill called by Session.init. Session.init needs to wait for its fill to finish and that
+		// would return immediately if we started the fill here.
+		// TODO(martin-sucha): Trigger pool refill for all hosts, like in reconnectDownedHosts?
+		).InternalStartWorker(func() { c.InternalSession.startPoolFill(host) })
 	}
 	return nil
 }
@@ -434,7 +434,7 @@ func (c *InternalControlConn) InternalReconnect() error {
 		return err
 	}
 
-	err = InternalSessionRefreshRingNow(c.InternalSession)
+	err = c.InternalSession.RefreshRingNow()
 	if err != nil {
 		c.InternalSession.privateStorage.InternalLogger.Printf("gocql: unable to refresh ring: %v\n", err)
 	}
@@ -489,7 +489,7 @@ func (c *InternalControlConn) attemptReconnectToAnyOfHosts(hosts []*implEndpoint
 		if err != nil {
 			snapshot, _ := snapshotV2Host(c.InternalSession, host)
 			if c.InternalSession.privateStorage.InternalCfg.ConvictionPolicy.AddFailure(err, snapshot) {
-				InternalSessionHandleNodeDown(c.InternalSession, host.ConnectAddress(), host.Port())
+				c.InternalSession.HandleNodeDown(host.ConnectAddress(), host.Port())
 			}
 			c.InternalSession.privateStorage.InternalLogger.Printf("gocql: unable to dial control conn %v:%v: %v\n", host.ConnectAddress(), host.Port(), err)
 			continue
@@ -548,7 +548,7 @@ func (c *InternalControlConn) writeFrame(w protocol.FrameBuilder) (protocol.Fram
 		return nil, metadata.InternalErrNoControl
 	}
 
-	framer, err := ch.InternalConn.InternalExec(metadata.InternalV2SchemaContext(InternalNewSchemaSource(c.InternalSession)), w, nil, c.InternalSession.privateStorage.InternalCfg.MetadataSchemaRequestTimeout)
+	framer, err := ch.InternalConn.InternalExec(metadata.InternalV2SchemaContext(c.InternalSession.NewSchemaSource()), w, nil, c.InternalSession.privateStorage.InternalCfg.MetadataSchemaRequestTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -558,7 +558,7 @@ func (c *InternalControlConn) writeFrame(w protocol.FrameBuilder) (protocol.Fram
 }
 
 func (c *InternalControlConn) InternalAwaitSchemaAgreement() error {
-	return c.InternalSession.awaitV2SchemaAgreement(metadata.InternalV2SchemaContext(InternalNewSchemaSource(c.InternalSession)))
+	return c.InternalSession.awaitV2SchemaAgreement(metadata.InternalV2SchemaContext(c.InternalSession.NewSchemaSource()))
 }
 
 func (c *InternalControlConn) startWorker(fn func()) bool {

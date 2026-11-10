@@ -79,13 +79,13 @@ func BenchmarkPrepared(b *testing.B) {
 									return
 								default:
 								}
-								implCluster.InternalSessionInvalidatePreparedSchema(s, cluster.Event{Keyspace: "other", Object: "unrelated", Target: "TABLE"})
-								p := implCluster.InternalSessionPeripheral(s)
+								s.InvalidatePreparedSchema(cluster.Event{Keyspace: "other", Object: "unrelated", Target: "TABLE"})
+								p := s.Peripheral()
 								current := s.Metadata()
 								info := model.RoutingInfo{Keyspace: "ks", Table: "table"}
-								stamp := implCluster.InternalSessionCaptureTabletFeedback(s, info, current)
+								stamp := s.CaptureTabletFeedback(info, current)
 								hint := testHint(b, 0, 1, cqltype.Option[uint64]{Set: true, Value: i}, hTarget(1, 0))
-								implCluster.InternalSessionPublishTabletFeedback(s, p, map[cluster.InternalV2TabletFeedbackKey]cluster.InternalV2PendingTabletFeedback{{InternalKeyspace: "ks", InternalTable: "table", InternalEnd: 1}: {InternalHint: hint, InternalStamp: stamp}}, false)
+								s.PublishTabletFeedback(p, map[cluster.InternalV2TabletFeedbackKey]cluster.InternalV2PendingTabletFeedback{{InternalKeyspace: "ks", InternalTable: "table", InternalEnd: 1}: {InternalHint: hint, InternalStamp: stamp}}, false)
 								runtime.Gosched()
 							}
 						}()

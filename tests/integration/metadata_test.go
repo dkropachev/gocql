@@ -40,7 +40,6 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 	"github.com/scylladb/gocql/v2/internal/tests"
 	"github.com/scylladb/gocql/v2/routing"
@@ -79,7 +78,7 @@ func TestMetadata(t *testing.T) {
 		}
 		defer sub.Close()
 		before := s.Metadata() // subscribe-before-snapshot, then discard <= generation
-		conn, err := implCluster.InternalSessionSelectTypedConn(implExecution.InternalCore((*implExecution.Session)(s)), ctx, routing.Info{}, nil)
+		conn, err := implExecution.InternalCore((*implExecution.Session)(s)).SelectTypedConn(ctx, routing.Info{}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

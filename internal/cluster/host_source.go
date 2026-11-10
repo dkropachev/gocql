@@ -49,7 +49,7 @@ func checkSystemSchema(control InternalControlConnection) (bool, error) {
 	ctx := context.Background()
 	timeout := 60 * time.Second
 	if session := control.InternalGetSession(); session != nil {
-		ctx = metadata.InternalV2SchemaContext(InternalNewSchemaSource(session))
+		ctx = metadata.InternalV2SchemaContext(session.NewSchemaSource())
 		if session.privateStorage.InternalCfg.MetadataSchemaRequestTimeout > 0 {
 			timeout = session.privateStorage.InternalCfg.MetadataSchemaRequestTimeout
 		}
@@ -188,7 +188,7 @@ func (s *Core) debounceRingRefresh() {
 }
 
 // refreshRing executes a ring refresh immediately and cancels pending debounce ring refresh requests.
-func InternalSessionRefreshRingNow(s *Core) error {
+func (s *Core) RefreshRingNow() error {
 	err, ok := <-s.privateStorage.InternalRingRefresher.RefreshNow()
 	if !ok {
 		return errors.New("could not refresh ring because stop was requested")
@@ -208,7 +208,7 @@ func (s *Core) refreshRing() error {
 	var partitioner string
 	var err error
 	if s.privateStorage.InternalCfg.DisableInitialHostLookup {
-		hosts, err = s.v2ContactIdentities(metadata.InternalV2SchemaContext(InternalNewSchemaSource(s)), r.InternalGetHostsList())
+		hosts, err = s.v2ContactIdentities(metadata.InternalV2SchemaContext(s.NewSchemaSource()), r.InternalGetHostsList())
 		if len(hosts) > 0 {
 			partitioner = hosts[0].Partitioner()
 		}
@@ -220,7 +220,7 @@ func (s *Core) refreshRing() error {
 	}
 	enabled := make(map[string]bool, len(hosts))
 	for _, h := range hosts {
-		enabled[h.HostID()] = !InternalClusterSettingsFilterHost(&s.privateStorage.InternalCfg, h)
+		enabled[h.HostID()] = !(&s.privateStorage.InternalCfg).FilterHost(h)
 	}
 	r.mu.Lock()
 	if r.eventEpoch != epoch || r.refreshSequence != sequence {
@@ -267,7 +267,7 @@ func (s *Core) refreshRing() error {
 		s.privateStorage.InternalPool.InternalRemoveHost(implEndpoint.InternalHostInfoHostUUID(h))
 		s.privateStorage.InternalPolicy.RemoveHost(h)
 	}
-	InternalSessionPublishV2Metadata(s)
+	s.PublishV2Metadata()
 	for _, h := range added {
 		if enabled[h.HostID()] {
 			s.startPoolFill(h)
@@ -279,7 +279,7 @@ func (s *Core) refreshRing() error {
 		}
 	}
 	s.privateStorage.InternalPolicy.SetPartitioner(partitioner)
-	if !InternalSessionPublishV2Metadata(s) {
+	if !s.PublishV2Metadata() {
 		return s.v2MetadataPublicationError()
 	}
 	return nil

@@ -138,7 +138,7 @@ func (s *Core) Subscribe(filter EventFilter) (*Subscription, error) {
 		}
 	}
 	filter.Kinds = append([]EventKind(nil), filter.Kinds...)
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	p.InternalMu.Lock()
 	defer p.InternalMu.Unlock()
 	if p.closed {
@@ -154,8 +154,8 @@ func (s *Core) Subscribe(filter EventFilter) (*Subscription, error) {
 	p.InternalSubscribers[sub] = struct{}{}
 	return sub, nil
 }
-func InternalSessionCloseV2Peripheral(s *Core) {
-	p := InternalSessionPeripheral(s)
+func (s *Core) CloseV2Peripheral() {
+	p := s.Peripheral()
 	if p == nil {
 		return
 	}
@@ -183,13 +183,13 @@ func eventV2Address(host net.IP, port int) netip.AddrPort {
 	}
 	return netip.AddrPortFrom(ip.Unmap(), uint16(port))
 }
-func InternalSessionPublishV2Event(s *Core, source oldevents.Event) {
+func (s *Core) PublishV2Event(source oldevents.Event) {
 	s.publishV2EventMode(source, true, true)
 }
 func (s *Core) recordV2Event(source oldevents.Event) { s.publishV2EventMode(source, true, false) }
 func (s *Core) emitV2Event(source oldevents.Event)   { s.publishV2EventMode(source, false, true) }
 func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bool) {
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	if p == nil {
 		return
 	}
@@ -247,7 +247,7 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 		return
 	}
 	if e.Kind == SchemaEvent && invalidate {
-		InternalSessionInvalidatePreparedSchema(s, e)
+		s.InvalidatePreparedSchema(e)
 		p.InternalMu.Lock()
 		p.InternalPublicationRevision++
 		p.bumpSchemaEpochLocked(e.Keyspace)
@@ -289,8 +289,8 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 		}
 		p.InternalMu.Unlock()
 		if deliver || e.Change == "DROPPED" {
-			if !InternalSessionPublishV2Metadata(s) {
-				InternalSessionPublishV2LocalEvent(s, Event{Kind: OverflowEvent, Generation: s.Metadata().Generation(), Change: "PUBLICATION_RESYNC"})
+			if !s.PublishV2Metadata() {
+				s.PublishV2LocalEvent(Event{Kind: OverflowEvent, Generation: s.Metadata().Generation(), Change: "PUBLICATION_RESYNC"})
 				return
 			}
 			e.Generation = s.Metadata().Generation()
@@ -326,8 +326,8 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 	}
 }
 
-func InternalSessionPublishV2LocalEvent(s *Core, event Event) {
-	p := InternalSessionPeripheral(s)
+func (s *Core) PublishV2LocalEvent(event Event) {
+	p := s.Peripheral()
 	if p == nil {
 		return
 	}

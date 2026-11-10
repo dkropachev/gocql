@@ -32,8 +32,6 @@ import (
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 	"github.com/scylladb/gocql/v2/metadata"
 
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
 	"context"
 	"fmt"
 	"testing"
@@ -147,7 +145,7 @@ func getRandomConn(t *testing.T, session *gocql.Session) *driverConn {
 
 	var conn *driverConn
 	if !pollUntil(hostConnWaitTimeout, func() bool {
-		conn = implCluster.InternalSessionGetConn(implExecution.InternalCore((*implExecution.Session)(session)))
+		conn = implExecution.InternalCore((*implExecution.Session)(session)).GetConn()
 		return conn != nil
 	}) {
 		t.Fatal("unable to get a connection")
@@ -213,7 +211,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 	create := cassandraUnprepared(t, "CREATE TABLE "+qualified+"(id int PRIMARY KEY)", cql.EmptyRowDecoder)
 	_, err := Exec(ctx, session, create, bindOptions(session, options))
 	require.NoError(t, err)
-	require.NoError(t, implCluster.InternalSessionAwaitV2SchemaAgreementOn(implExecution.InternalCore((*implExecution.Session)(session)), ctx, conn))
+	require.NoError(t, implExecution.InternalCore((*implExecution.Session)(session)).AwaitV2SchemaAgreementOn(ctx, conn))
 	write := cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id) VALUES(?)", []cql.Value{cql.IntValue(1)}, prepareOptions)
 	_, err = Exec(ctx, session, write, bindOptions(session, options))
 	require.NoError(t, err)
@@ -240,7 +238,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 	require.NoError(t, err)
 	// Include the exact host that applied ALTER; checking another host can
 	// falsely agree on the old version before schema propagation starts.
-	require.NoError(t, implCluster.InternalSessionAwaitV2SchemaAgreementOn(implExecution.InternalCore((*implExecution.Session)(session)), ctx, conn))
+	require.NoError(t, implExecution.InternalCore((*implExecution.Session)(session)).AwaitV2SchemaAgreementOn(ctx, conn))
 	write = cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id,new_col) VALUES(?,?)", []cql.Value{cql.IntValue(2), cql.IntValue(10)}, prepareOptions)
 	_, err = Exec(ctx, session, write, bindOptions(session, options))
 	require.NoError(t, err)
@@ -262,7 +260,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 		require.NoError(t, err)
 		require.Equal(t, int64(10), value)
 	}
-	require.Equal(t, before.InternalGeneration, implCluster.InternalSessionTypedGeneration(implExecution.InternalCore((*implExecution.Session)(session))), "metadata-ID coverage must not be replaced by generation-triggered reprepare")
+	require.Equal(t, before.InternalGeneration, implExecution.InternalCore((*implExecution.Session)(session)).TypedGeneration(), "metadata-ID coverage must not be replaced by generation-triggered reprepare")
 	checkRows()
 	after := cached()
 	require.NotEqual(t, before.InternalMetadataID, after.InternalMetadataID)

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/internal/cluster"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
@@ -33,12 +32,12 @@ func TestRoutingPolicy(t *testing.T) {
 			payload := []byte{1, 2, 3}
 			old := &capturedPartitioner{expected: payload}
 			newer := &capturedPartitioner{expected: payload}
-			peripheral := implCluster.InternalSessionPeripheral(s)
+			peripheral := s.Peripheral()
 			peripheral.InternalMu.Lock()
 			config := peripheral.InternalConfig
 			peripheral.InternalMu.Unlock()
 			config.Partitioners = map[string]implRouting.TokenPartitioner{"old": old, "new": newer}
-			implCluster.InternalSessionConfigureV2Peripheral(s, config)
+			s.ConfigureV2Peripheral(config)
 			typ := codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))
 			columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Name: "key", Type: typ, Keyspace: "ks", Table: "table"})
 			encoder := codec.OneParam(codec.BlobCodec)

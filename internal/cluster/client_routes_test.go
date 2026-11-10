@@ -349,7 +349,7 @@ func TestClientRoutes(t *testing.T) {
 			return opaqueStorageValuexxxxxxxxx
 		}()
 
-		InternalClientRoutesHandlerStartUpdateWorker(h)
+		h.StartUpdateWorker()
 
 		const goroutines = 200
 		var wg sync.WaitGroup
@@ -359,7 +359,7 @@ func TestClientRoutes(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				<-start
-				InternalClientRoutesHandlerUpdateHostPortMappingAsync(h, InternalUpdateTask{InternalConnectionIDs: []string{"c1"}})
+				h.UpdateHostPortMappingAsync(InternalUpdateTask{InternalConnectionIDs: []string{"c1"}})
 			}()
 		}
 		close(start) // release all goroutines simultaneously
@@ -677,7 +677,7 @@ func TestClientRoutes(t *testing.T) {
 				return opaqueStorageValuexxxxxxxxxxxx
 			}()
 
-			InternalClientRoutesHandlerStartUpdateWorker(h)
+			h.StartUpdateWorker()
 			defer h.Stop()
 
 			before, err := h.TranslateHost(testHostInfo{hostID: "h1"}, addr)
@@ -715,7 +715,7 @@ func TestClientRoutes(t *testing.T) {
 			return opaqueStorageValuexxxxxxxxxx
 		}()
 
-		InternalClientRoutesHandlerStartUpdateWorker(h)
+		h.StartUpdateWorker()
 		defer h.Stop()
 
 		done := make(chan error, 1)

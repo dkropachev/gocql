@@ -51,7 +51,7 @@ func TestEvents(t *testing.T) {
 				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalSchemaEvents = downstream
 				return opaqueStorageValuexxxxxxxx
 			}()
-			conn.InternalHooks = cluster.InternalNewConnectionHooks(s)
+			conn.InternalHooks = s.NewConnectionHooks()
 			if err := conn.InternalDispatchEventOwned(&frm.SchemaChangeTable{Change: "CREATED", Keyspace: "ks", Object: "t"}, func() { freed.Add(1) }); err != nil {
 				t.Fatal(err)
 			}
@@ -94,7 +94,7 @@ func TestEvents(t *testing.T) {
 				implCluster.SessionData(opaqueStorageValuexxxxxxx).InternalNodeEvents = consumer
 				return opaqueStorageValuexxxxxxx
 			}()
-			c.InternalHooks = cluster.InternalNewConnectionHooks(session)
+			c.InternalHooks = session.NewConnectionHooks()
 			budget := &protocol.StreamMetadataBudget{Limit: 800}
 			if err := budget.Reserve(400); err != nil {
 				t.Fatal(err)
@@ -201,7 +201,7 @@ func TestEvents(t *testing.T) {
 			fast, _ := s.Subscribe(cluster.EventFilter{Capacity: 8})
 			defer fast.Close()
 			for _, generation := range []uint64{40, 99, 41} {
-				implCluster.InternalSessionPublishV2LocalEvent(s, cluster.Event{Kind: cluster.StatusEvent, Generation: generation})
+				s.PublishV2LocalEvent(cluster.Event{Kind: cluster.StatusEvent, Generation: generation})
 			}
 			marker, ok := <-slow.Events()
 			if !ok || marker.Kind != cluster.OverflowEvent || marker.Generation != 99 {
@@ -215,7 +215,7 @@ func TestEvents(t *testing.T) {
 					t.Fatal("one slow subscriber affected another", e)
 				}
 			}
-			if len(implCluster.InternalSessionPeripheral(s).InternalSubscribers) != 1 {
+			if len(s.Peripheral().InternalSubscribers) != 1 {
 				t.Fatal("terminal subscriber leaked in registry")
 			}
 		})
@@ -232,10 +232,10 @@ func TestEvents(t *testing.T) {
 			implCluster.SessionData(s).InternalCfg.Events.DisableSchemaEvents = true
 			implCluster.SessionData(s).InternalCfg.Events.DisableTopologyEvents = true
 			implCluster.SessionData(s).InternalCfg.Events.DisableNodeStatusEvents = true
-			implCluster.InternalClusterSettingsData(&implCluster.SessionData(s).InternalCfg).InternalDisableClientRouteEvents = true
+			(&implCluster.SessionData(s).InternalCfg).Data().InternalDisableClientRouteEvents = true
 			before := s.Metadata()
 			for _, event := range []protocol.Frame{&frm.SchemaChangeTable{Change: "DROPPED", Keyspace: "ks", Object: "t"}, &frm.TopologyChangeEventFrame{}, &frm.StatusChangeEventFrame{}, &frm.ClientRoutesChanged{}} {
-				implCluster.InternalSessionHandleEvent(s, event)
+				s.HandleEvent(event)
 			}
 			if s.Metadata() != before {
 				t.Fatal("disabled unsolicited event changed snapshot")
@@ -321,7 +321,7 @@ func TestEvents(t *testing.T) {
 				return opaqueStorageValuex
 			}()
 
-			p := implCluster.InternalSessionPeripheral(s)
+			p := s.Peripheral()
 			canceled, release := make(chan struct{}), make(chan struct{})
 			p.InternalStartWorker(func() { <-p.InternalDone; close(canceled); <-release })
 			first, second := make(chan struct{}), make(chan struct{})

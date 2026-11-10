@@ -104,7 +104,7 @@ func startServerWithShardAwarePort(t testing.TB, useTLS bool) (makeCluster makeC
 				cluster.PoolConfig.HostSelectionPolicy = TokenAwareHostPolicy(RoundRobinHostPolicy())
 				cluster.Dialer = dialer
 				cluster.DisableShardAwarePort = disableShardAwarePort
-				return InternalClusterSettingsOpen(cluster)
+				return cluster.Open()
 			},
 		}
 	}

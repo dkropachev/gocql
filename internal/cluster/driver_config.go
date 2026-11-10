@@ -391,7 +391,7 @@ func (r *driverConfigReporter) buildReport(isScyllaConn bool) (string, error) {
 		Version:      InternalDriverConfigVersion,
 		Connection:   buildConnectionReport(cfg),
 		ControlPlane: buildControlPlaneReport(cfg, isScyllaConn),
-		Query:        InternalBuildQueryReport(r.session),
+		Query:        r.session.BuildQueryReport(),
 	}
 	data, err := json.Marshal(report)
 	return string(data), err
@@ -664,10 +664,10 @@ func buildControlPlaneReport(cfg *InternalClusterSettings, isScyllaConn bool) co
 	}
 }
 
-func InternalBuildQueryReport(s *Core) queryReport {
+func (s *Core) BuildQueryReport() queryReport {
 	cfg := s.privateStorage.InternalCfg
 	loadBalancing := buildLoadBalancingReport(s.privateStorage.InternalPolicy)
-	runtime := InternalCurrentExecution(s)
+	runtime := s.CurrentExecution()
 	if runtime != nil && runtime.Profile() != nil {
 		profile := *runtime.Profile()
 		cfg.privateStorage.defaultProfile = profile

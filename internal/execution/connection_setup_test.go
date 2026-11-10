@@ -153,7 +153,7 @@ func TestConnectionSetup(t *testing.T) {
 			defer cancel()
 			done := make(chan error, 1)
 			go func() {
-				_, err := implCluster.InternalSessionDialShard(session, ctx, host, cfg, transport.InternalConnErrorHandlerFn(func(*transport.Conn, error, bool) {}), 0, 0)
+				_, err := session.DialShard(ctx, host, cfg, transport.InternalConnErrorHandlerFn(func(*transport.Conn, error, bool) {}), 0, 0)
 				done <- err
 			}()
 			select {

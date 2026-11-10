@@ -35,8 +35,8 @@ const InternalMaxPreparedRefreshScopes = 64
 
 // Register only affected keyspaces. A full queue fails the logical operation
 // visibly; it neither drops required work nor enables a broader schema refresh.
-func InternalSessionScheduleV2PreparedRefresh(s *Core, keyspace string) error {
-	p := InternalSessionPeripheral(s)
+func (s *Core) ScheduleV2PreparedRefresh(keyspace string) error {
+	p := s.Peripheral()
 	p.InternalMu.Lock()
 	if p.closed || s.Closed() {
 		p.InternalMu.Unlock()
@@ -52,7 +52,7 @@ func InternalSessionScheduleV2PreparedRefresh(s *Core, keyspace string) error {
 	p.preparedRefreshVersion++
 	p.InternalPreparedRefreshScopes[keyspace] = p.preparedRefreshVersion
 	p.InternalMu.Unlock()
-	InternalSessionStartV2SchemaRetry(s)
+	s.StartV2SchemaRetry()
 	return nil
 }
 
@@ -61,7 +61,7 @@ func InternalSessionScheduleV2PreparedRefresh(s *Core, keyspace string) error {
 // unrelated keyspaces; an unknown statement scope alone requires enumeration.
 func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) error {
 	if keyspace == "" {
-		rows, err := metadata.InternalQueryV2SchemaRows(ctx, InternalNewSchemaSource(s), `SELECT keyspace_name, durable_writes, replication FROM system_schema.keyspaces`, nil, metadata.InternalV2DecodeKeyspace())
+		rows, err := metadata.InternalQueryV2SchemaRows(ctx, s.NewSchemaSource(), `SELECT keyspace_name, durable_writes, replication FROM system_schema.keyspaces`, nil, metadata.InternalV2DecodeKeyspace())
 		if err != nil {
 			return err
 		}
@@ -75,14 +75,14 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 		}
 		return nil
 	}
-	p := InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	p.InternalMu.Lock()
 	epoch := p.schemaEpoch[keyspace]
 	revision := p.schemaRevision[keyspace]
 	tables := p.captureTableRevisionsLocked(keyspace)
 	config := p.InternalConfig
 	p.InternalMu.Unlock()
-	base, err := metadata.InternalGetV2KeyspaceMetadata(ctx, InternalNewSchemaSource(s), keyspace)
+	base, err := metadata.InternalGetV2KeyspaceMetadata(ctx, s.NewSchemaSource(), keyspace)
 	absent := errors.Is(err, runtimeerrors.ErrKeyspaceDoesNotExist)
 	if err != nil && !absent {
 		return err
@@ -91,7 +91,7 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 	if !absent {
 		copyBase := *base
 		minimal = &copyBase
-		schema, err = metadata.InternalFetchV2Keyspace(ctx, InternalNewSchemaSource(s), base)
+		schema, err = metadata.InternalFetchV2Keyspace(ctx, s.NewSchemaSource(), base)
 		if err != nil {
 			return err
 		}
@@ -116,10 +116,10 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 	delete(p.schemaStale, keyspace)
 	p.InternalMu.Unlock()
 	if absent {
-		InternalSessionInvalidatePreparedSchema(s, Event{Keyspace: keyspace, Target: "KEYSPACE"})
+		s.InvalidatePreparedSchema(Event{Keyspace: keyspace, Target: "KEYSPACE"})
 	}
 	if publish {
-		InternalSessionPublishV2Metadata(s)
+		s.PublishV2Metadata()
 	}
 	return nil
 }

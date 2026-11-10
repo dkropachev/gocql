@@ -40,7 +40,6 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 	"github.com/scylladb/gocql/v2/internal/murmur"
@@ -623,7 +622,7 @@ func TestRouting(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer s.Close()
-			if !implCluster.InternalSessionGetConn(implExecution.InternalCore((*implExecution.Session)(s))).InternalFramers.InternalDefaults.InternalTabletsRoutingV2 {
+			if !implExecution.InternalCore((*implExecution.Session)(s)).GetConn().InternalFramers.InternalDefaults.InternalTabletsRoutingV2 {
 				t.Skip("server did not advertise TABLETS_ROUTING_V2_EXPERIMENTAL; source-accurate wire fixtures cover V2 separately")
 			}
 			ks := testKeyspaceName(t, fmt.Sprintf("tablet_leader_%x", time.Now().UnixNano()))
@@ -799,7 +798,7 @@ func TestRouting(t *testing.T) {
 					authoritative[i].Start = authoritative[i-1].End
 				}
 			}
-			v2 := implCluster.InternalSessionGetConn(implExecution.InternalCore((*implExecution.Session)(s))).InternalFramers.InternalDefaults.InternalTabletsRoutingV2
+			v2 := implExecution.InternalCore((*implExecution.Session)(s)).GetConn().InternalFramers.InternalDefaults.InternalTabletsRoutingV2
 			t.Logf("tablet v2 negotiated=%t, server table ID=%s, authoritative ranges=%d", v2, id, len(authoritative))
 			for key := int32(0); key < 8; key++ {
 				b := codecTestMust(BindBorrowed(read, key))

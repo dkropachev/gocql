@@ -132,7 +132,7 @@ func readV2ClientRoutes(ctx context.Context, c InternalControlConnection, table,
 func (p *ClientRoutesHandler) refreshContext(ctx context.Context) error {
 	return p.updateHostPortMappingContext(ctx, InternalUpdateTask{InternalConnectionIDs: p.privateStorage.cfg.Endpoints.GetAllConnectionIDs()})
 }
-func InternalClientRoutesHandlerOrderedRoutes(p *ClientRoutesHandler, hostID string) []InternalClientRoute {
+func (p *ClientRoutesHandler) OrderedRoutes(hostID string) []InternalClientRoute {
 	p.privateStorage.InternalRouteCache.mu.Lock()
 	defer p.privateStorage.InternalRouteCache.mu.Unlock()
 	entry, ok := p.privateStorage.InternalRouteCache.routes[hostID]
@@ -161,7 +161,7 @@ func InternalClientRoutesHandlerOrderedRoutes(p *ClientRoutesHandler, hostID str
 	}
 	return out
 }
-func InternalClientRoutesHandlerBindRoute(p *ClientRoutesHandler, route InternalClientRoute) bool {
+func (p *ClientRoutesHandler) BindRoute(route InternalClientRoute) bool {
 	p.privateStorage.InternalRouteCache.mu.Lock()
 	defer p.privateStorage.InternalRouteCache.mu.Unlock()
 	entry, ok := p.privateStorage.InternalRouteCache.routes[route.InternalHostID]
@@ -215,12 +215,12 @@ type v2RouteEpochs struct {
 	pairs       map[InternalPair]uint64
 }
 
-func InternalClientRoutesHandlerCaptureRouteEpochs(p *ClientRoutesHandler) v2RouteEpochs {
+func (p *ClientRoutesHandler) CaptureRouteEpochs() v2RouteEpochs {
 	p.privateStorage.InternalRouteCache.mu.Lock()
 	defer p.privateStorage.InternalRouteCache.mu.Unlock()
 	return v2RouteEpochs{maps.Clone(p.privateStorage.connectionEpoch), maps.Clone(p.privateStorage.pairEpoch)}
 }
-func InternalClientRoutesHandlerInvalidateRouteTask(p *ClientRoutesHandler, task InternalUpdateTask) {
+func (p *ClientRoutesHandler) InvalidateRouteTask(task InternalUpdateTask) {
 	p.privateStorage.InternalRouteCache.mu.Lock()
 	defer p.privateStorage.InternalRouteCache.mu.Unlock()
 	if p.privateStorage.connectionEpoch == nil {
@@ -256,7 +256,7 @@ func InternalClientRoutesHandlerInvalidateRouteTask(p *ClientRoutesHandler, task
 	p.advanceRouteHostEpochsLocked(touched)
 
 }
-func InternalClientRoutesHandlerApplyRouteRead(p *ClientRoutesHandler, task InternalUpdateTask, epochs v2RouteEpochs, incoming []InternalClientRoute) bool {
+func (p *ClientRoutesHandler) ApplyRouteRead(task InternalUpdateTask, epochs v2RouteEpochs, incoming []InternalClientRoute) bool {
 	p.privateStorage.InternalRouteCache.mu.Lock()
 	defer p.privateStorage.InternalRouteCache.mu.Unlock()
 	valid := func(key InternalPair) bool {
@@ -323,7 +323,7 @@ func InternalClientRoutesHandlerApplyRouteRead(p *ClientRoutesHandler, task Inte
 	return !stale
 }
 func (p *ClientRoutesHandler) updateHostPortMappingContext(ctx context.Context, task InternalUpdateTask) error {
-	epochs := InternalClientRoutesHandlerCaptureRouteEpochs(p)
+	epochs := p.CaptureRouteEpochs()
 	var rows []InternalClientRoute
 	var err error
 	switch {
@@ -336,26 +336,26 @@ func (p *ClientRoutesHandler) updateHostPortMappingContext(ctx context.Context, 
 	}
 	if err != nil {
 		if p.privateStorage.InternalSession != nil {
-			state := InternalSessionPeripheral(p.privateStorage.InternalSession)
+			state := p.privateStorage.InternalSession.Peripheral()
 			state.InternalMu.Lock()
 			state.routeDiagnostic = fmt.Errorf("client routes retained stale data: %w", err)
 			state.InternalMu.Unlock()
-			InternalSessionPublishV2Metadata(p.privateStorage.InternalSession)
+			p.privateStorage.InternalSession.PublishV2Metadata()
 		}
 		return &metadata.PartialRefreshError{Generation: p.routeGeneration(), ClientRoutes: err}
 	}
-	if !InternalClientRoutesHandlerApplyRouteRead(p, task, epochs, rows) {
+	if !p.ApplyRouteRead(task, epochs, rows) {
 		return &metadata.PartialRefreshError{Generation: p.routeGeneration(), ClientRoutes: fmt.Errorf("routes changed during refresh")}
 	}
 	if p.privateStorage.InternalSession != nil {
-		state := InternalSessionPeripheral(p.privateStorage.InternalSession)
+		state := p.privateStorage.InternalSession.Peripheral()
 		state.InternalMu.Lock()
 		state.routeDiagnostic = nil
 		state.InternalMu.Unlock()
-		if !InternalSessionPublishV2Metadata(p.privateStorage.InternalSession) {
+		if !p.privateStorage.InternalSession.PublishV2Metadata() {
 			return p.privateStorage.InternalSession.v2MetadataPublicationError()
 		}
-		InternalSessionPublishV2LocalEvent(p.privateStorage.InternalSession, Event{Kind: ClientRouteEvent, Generation: p.privateStorage.InternalSession.Metadata().Generation(), Change: "REFRESHED"})
+		p.privateStorage.InternalSession.PublishV2LocalEvent(Event{Kind: ClientRouteEvent, Generation: p.privateStorage.InternalSession.Metadata().Generation(), Change: "REFRESHED"})
 	}
 	return nil
 }
@@ -421,12 +421,12 @@ func validV2RouteTable(table string) bool {
 
 // Direct internal notification bypasses the best-effort legacy event bus.
 func (p *ClientRoutesHandler) handleRouteEvent(event events.Event) {
-	InternalClientRoutesHandlerHandleRouteEventOwned(p, event, nil)
+	p.HandleRouteEventOwned(event, nil)
 }
-func InternalClientRoutesHandlerHandleRouteEventOwned(p *ClientRoutesHandler, event events.Event, release func()) bool {
+func (p *ClientRoutesHandler) HandleRouteEventOwned(event events.Event, release func()) bool {
 	switch e := event.(type) {
 	case *events.ControlConnectionRecreatedEvent:
-		return InternalClientRoutesHandlerUpdateHostPortMappingAsync(p, InternalUpdateTask{InternalConnectionIDs: p.privateStorage.cfg.Endpoints.GetAllConnectionIDs(), InternalRelease: release})
+		return p.UpdateHostPortMappingAsync(InternalUpdateTask{InternalConnectionIDs: p.privateStorage.cfg.Endpoints.GetAllConnectionIDs(), InternalRelease: release})
 	case *events.ClientRoutesChangedEvent:
 		ids := filterAllowedConnectionIDs(e.ConnectionIDs, p.privateStorage.cfg.Endpoints.GetAllConnectionIDs())
 		if len(ids) == 0 {
@@ -437,7 +437,7 @@ func InternalClientRoutesHandlerHandleRouteEventOwned(p *ClientRoutesHandler, ev
 			task = InternalUpdateTask{InternalPairs: pairs}
 		}
 		if e.ChangeType == "DELETED" || e.ChangeType == "DROPPED" {
-			InternalClientRoutesHandlerInvalidateRouteTask(p, task)
+			p.InvalidateRouteTask(task)
 			p.privateStorage.InternalRouteCache.mu.Lock()
 			current := p.privateStorage.InternalRouteCache.snapshotCurrentConnectionIDsLocked()
 			if task.InternalPairs != nil {
@@ -448,12 +448,12 @@ func InternalClientRoutesHandlerHandleRouteEventOwned(p *ClientRoutesHandler, ev
 			p.privateStorage.InternalRouteCache.rebindCurrentConnectionIDsLocked(current)
 			p.privateStorage.InternalRouteCache.mu.Unlock()
 			if p.privateStorage.InternalSession != nil {
-				InternalSessionPublishV2Metadata(p.privateStorage.InternalSession)
+				p.privateStorage.InternalSession.PublishV2Metadata()
 				p.privateStorage.InternalSession.emitV2Event(e)
 			}
 		}
 		task.InternalRelease = release
-		return InternalClientRoutesHandlerUpdateHostPortMappingAsync(p, task)
+		return p.UpdateHostPortMappingAsync(task)
 	}
 	return false
 
@@ -476,7 +476,7 @@ func (s *Core) dialV2Routes(ctx context.Context, host *implEndpoint.HostInfo, cf
 	p := s.privateStorage.InternalClientRoutesHandler
 	var causes []error
 	epochs := p.captureHostRouteEpochs(host.HostID())
-	for _, route := range InternalClientRoutesHandlerOrderedRoutes(p, host.HostID()) {
+	for _, route := range p.OrderedRoutes(host.HostID()) {
 		endpoints, err := p.resolveRoute(ctx, route)
 		if err != nil {
 			causes = append(causes, err)
@@ -505,7 +505,7 @@ func (s *Core) dialV2Routes(ctx context.Context, host *implEndpoint.HostInfo, cf
 				}
 				return nil
 			}
-			if !p.routeMatches(route, epochs) || !InternalClientRoutesHandlerBindRoute(p, route) {
+			if !p.routeMatches(route, epochs) || !p.BindRoute(route) {
 				conn.Close()
 				conn.InternalWaitEventDispatch()
 				return nil, cqltype.TypeValidation("route generation", "route superseded during opening")

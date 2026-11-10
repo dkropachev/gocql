@@ -33,7 +33,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -96,13 +95,13 @@ func TestConnStartup(t *testing.T) {
 					cluster.Compressor = tc.compressor
 					cluster.ApplicationInfo = compressionInjectingAppInfo{algorithm: "lz4"}
 
-					db, err := implCluster.InternalClusterSettingsOpen(cluster)
+					db, err := cluster.Open()
 					require.NoError(t, err)
 					defer db.Close()
 
 					require.NoError(t, execTestStatement(context.Background(), db, "void", CompiledOptions{}))
 
-					conn := implCluster.InternalSessionGetConn(db)
+					conn := db.GetConn()
 					require.NotNil(t, conn)
 					require.Nil(t, conn.InternalCompressor, "no compressor was negotiated, so none may remain")
 					require.Zero(t, conn.InternalFramers.InternalDefaults.InternalFlags&frm.FlagCompress)
@@ -149,11 +148,11 @@ func TestConnStartup(t *testing.T) {
 			cluster.Compressor = wirecompress.SnappyCompressor{}
 			cluster.Logger = rec
 
-			db, err := implCluster.InternalClusterSettingsOpen(cluster)
+			db, err := cluster.Open()
 			require.NoError(t, err)
 			defer db.Close()
 
-			conn := implCluster.InternalSessionGetConn(db)
+			conn := db.GetConn()
 			require.NotNil(t, conn, "no connection available")
 
 			require.Nil(t, conn.InternalCompressor, "the refused compressor must be dropped")

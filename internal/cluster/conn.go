@@ -36,16 +36,16 @@ import (
 
 func (s *Core) connectShard(ctx context.Context, host *implEndpoint.HostInfo, errorHandler implTransport.ConnErrorHandler,
 	shardID, nrShards int) (*implTransport.Conn, error) {
-	return InternalSessionDialShard(s, ctx, host, s.privateStorage.InternalConnCfg, errorHandler, shardID, nrShards)
+	return s.DialShard(ctx, host, s.privateStorage.InternalConnCfg, errorHandler, shardID, nrShards)
 }
 
 // dial establishes a connection to a Cassandra node and notifies the session's connectObserver.
 // note: every connection needs to get `conn.finalizeConnection` called on it when initialization process is done
 func sessionDial(s *Core, ctx context.Context, host *implEndpoint.HostInfo, connConfig *implTransport.ConnConfig, errorHandler implTransport.ConnErrorHandler) (*implTransport.Conn, error) {
-	return InternalSessionDialShard(s, ctx, host, connConfig, errorHandler, 0, 0)
+	return s.DialShard(ctx, host, connConfig, errorHandler, 0, 0)
 }
 
-func InternalSessionDialShard(s *Core, ctx context.Context, host *implEndpoint.HostInfo, connConfig *implTransport.ConnConfig, errorHandler implTransport.ConnErrorHandler,
+func (s *Core) DialShard(ctx context.Context, host *implEndpoint.HostInfo, connConfig *implTransport.ConnConfig, errorHandler implTransport.ConnErrorHandler,
 	shardID, nrShards int) (*implTransport.Conn, error) {
 	lifetimeCtx := ctx
 	if connConfig.TypedConfig != nil {
@@ -112,5 +112,5 @@ func sessionDialWithoutObserver(s *Core, ctx context.Context, host *implEndpoint
 	if s.privateStorage.driverConfigReporter != nil {
 		reporter = s.privateStorage.driverConfigReporter
 	}
-	return implTransport.Dial(ctx, host, cfg, errorHandler, shardID, nrShards, implTransport.Opening{Context: s.privateStorage.InternalCtx, Hooks: InternalNewConnectionHooks(s), Identity: implTransport.InternalStartupIdentity{DriverName: s.privateStorage.InternalCfg.DriverName, DriverVersion: s.privateStorage.InternalCfg.DriverVersion, ApplicationInfo: s.privateStorage.InternalCfg.ApplicationInfo, SessionID: s.privateStorage.id}, Reporter: reporter, MetadataTimeout: s.privateStorage.InternalCfg.MetadataSchemaRequestTimeout, CoalesceWait: s.privateStorage.InternalCfg.WriteCoalesceWaitTime, PoolPolicy: implTransport.InternalConnectionPoolPolicy{InternalDisableShardAware: s.privateStorage.InternalCfg.DisableShardAwarePort, InternalMaxExcessRate: s.privateStorage.InternalCfg.MaxExcessShardConnectionsRate}, MaxRequests: s.privateStorage.InternalCfg.MaxRequestsPerConn, FrameObserver: s.privateStorage.frameObserver, StreamObserver: s.privateStorage.streamObserver})
+	return implTransport.Dial(ctx, host, cfg, errorHandler, shardID, nrShards, implTransport.Opening{Context: s.privateStorage.InternalCtx, Hooks: s.NewConnectionHooks(), Identity: implTransport.InternalStartupIdentity{DriverName: s.privateStorage.InternalCfg.DriverName, DriverVersion: s.privateStorage.InternalCfg.DriverVersion, ApplicationInfo: s.privateStorage.InternalCfg.ApplicationInfo, SessionID: s.privateStorage.id}, Reporter: reporter, MetadataTimeout: s.privateStorage.InternalCfg.MetadataSchemaRequestTimeout, CoalesceWait: s.privateStorage.InternalCfg.WriteCoalesceWaitTime, PoolPolicy: implTransport.InternalConnectionPoolPolicy{InternalDisableShardAware: s.privateStorage.InternalCfg.DisableShardAwarePort, InternalMaxExcessRate: s.privateStorage.InternalCfg.MaxExcessShardConnectionsRate}, MaxRequests: s.privateStorage.InternalCfg.MaxRequestsPerConn, FrameObserver: s.privateStorage.frameObserver, StreamObserver: s.privateStorage.streamObserver})
 }

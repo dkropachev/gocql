@@ -778,7 +778,7 @@ func (d *dcAwareRR) IsOperational(session *Core) error {
 
 	hosts := session.privateStorage.InternalHostSource.InternalGetHostsList()
 	for _, host := range hosts {
-		if !InternalClusterSettingsFilterHost(&session.privateStorage.InternalCfg, host) && host.DataCenter() == d.local {
+		if !(&session.privateStorage.InternalCfg).FilterHost(host) && host.DataCenter() == d.local {
 			// Policy can work properly only if there is at least one host from target DC
 			// No need to check host status, since it could be down due to the outage
 			// We only need to make sure that policy is not misconfigured with wrong DC
@@ -888,7 +888,7 @@ func (d *rackAwareRR) IsOperational(session *Core) error {
 	}
 	hosts := session.privateStorage.InternalHostSource.InternalGetHostsList()
 	for _, host := range hosts {
-		if !InternalClusterSettingsFilterHost(&session.privateStorage.InternalCfg, host) && host.DataCenter() == d.localDC && host.Rack() == d.localRack {
+		if !(&session.privateStorage.InternalCfg).FilterHost(host) && host.DataCenter() == d.localDC && host.Rack() == d.localRack {
 			// Policy can work properly only if there is at least one host from target DC+Rack
 			// No need to check host status, since it could be down due to the outage
 			// We only need to make sure that policy is not misconfigured with wrong DC+Rack

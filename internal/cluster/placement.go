@@ -14,8 +14,8 @@ import (
 	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
-func InternalSessionCaptureTabletFeedback(s *Core, info model.RoutingInfo, m *routing.MetadataSnapshot) routing.InternalTabletFeedbackStamp {
-	p := InternalSessionPeripheral(s)
+func (s *Core) CaptureTabletFeedback(info model.RoutingInfo, m *routing.MetadataSnapshot) routing.InternalTabletFeedbackStamp {
+	p := s.Peripheral()
 	if p == nil {
 		return routing.InternalTabletFeedbackStamp{}
 	}
@@ -60,10 +60,10 @@ type InternalV2PendingTabletFeedback struct {
 // responses supply the stamp captured before sending, never a receipt-time stamp.
 func sessionApplyV2TabletHint(s *Core, h tablets.TabletInfo) {
 	info := model.RoutingInfo{Keyspace: h.KeyspaceName(), Table: h.TableName()}
-	InternalSessionQueueTabletFeedback(s, h, InternalSessionCaptureTabletFeedback(s, info, s.Metadata()))
+	s.QueueTabletFeedback(h, s.CaptureTabletFeedback(info, s.Metadata()))
 }
-func InternalSessionQueueTabletFeedback(s *Core, h tablets.TabletInfo, stamp routing.InternalTabletFeedbackStamp) {
-	p := InternalSessionPeripheral(s)
+func (s *Core) QueueTabletFeedback(h tablets.TabletInfo, stamp routing.InternalTabletFeedbackStamp) {
+	p := s.Peripheral()
 	if p == nil || stamp.InternalSnapshot == nil || !stamp.InternalValid {
 		return
 	}
@@ -105,7 +105,7 @@ func InternalSessionQueueTabletFeedback(s *Core, h tablets.TabletInfo, stamp rou
 	default:
 	}
 }
-func InternalSessionPublishTabletFeedback(s *Core, p *InternalV2PeripheralState, updates map[InternalV2TabletFeedbackKey]InternalV2PendingTabletFeedback, resync bool) {
+func (s *Core) PublishTabletFeedback(p *InternalV2PeripheralState, updates map[InternalV2TabletFeedbackKey]InternalV2PendingTabletFeedback, resync bool) {
 	var known []routing.InternalMetadataTable
 	if resync {
 		p.InternalFeedbackMu.Lock()
@@ -197,7 +197,7 @@ func InternalSessionPublishTabletFeedback(s *Core, p *InternalV2PeripheralState,
 	p.InternalMu.Unlock()
 	p.publishMu.Unlock()
 	if resync {
-		InternalSessionPublishV2LocalEvent(s, Event{Kind: OverflowEvent, Generation: routing.SnapshotData(next).InternalGeneration, Change: "TABLET_RESYNC"})
+		s.PublishV2LocalEvent(Event{Kind: OverflowEvent, Generation: routing.SnapshotData(next).InternalGeneration, Change: "TABLET_RESYNC"})
 	}
 }
 func sessionRunV2TabletFeedback(s *Core, p *InternalV2PeripheralState) {
@@ -213,12 +213,12 @@ func sessionRunV2TabletFeedback(s *Core, p *InternalV2PeripheralState) {
 		resync := p.InternalFeedbackResync
 		p.InternalFeedbackResync = false
 		p.InternalFeedbackMu.Unlock()
-		InternalSessionPublishTabletFeedback(s, p, pending, resync)
+		s.PublishTabletFeedback(p, pending, resync)
 	}
 }
 
-func InternalSessionCapturedRoutingPartitioner(s *Core, name string) routing.TokenPartitioner {
-	p := InternalSessionPeripheral(s)
+func (s *Core) CapturedRoutingPartitioner(name string) routing.TokenPartitioner {
+	p := s.Peripheral()
 	if p == nil {
 		return nil
 	}

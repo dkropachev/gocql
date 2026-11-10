@@ -93,7 +93,7 @@ func InternalRuntimeFor(s *implCluster.Core) *InternalSessionRuntime {
 		rt.Core = s
 	}
 	if rt.schema == nil {
-		rt.schema = implCluster.InternalSessionSchemaTracker(s)
+		rt.schema = s.SchemaTracker()
 	}
 	implCluster.SessionData(s).InternalTypedReady.Store(rt)
 	return rt
@@ -117,7 +117,7 @@ func (rt *InternalSessionRuntime) metricsSnapshot() routing.MetricsSnapshot {
 
 func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, keyspace string, options PrepareOptions) (state *InternalPreparedState, err error) {
 	rt := s
-	generation := implCluster.InternalSessionTypedGeneration(s.Core)
+	generation := s.Core.TypedGeneration()
 	tracker := rt.InternalSchemaTracker()
 	started := tracker.InternalStart()
 	key := prepareCacheKey{InternalCql: statement, InternalKeyspace: keyspace}
@@ -157,7 +157,7 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 	}()
 	conn := options.privateStorage.InternalConnection
 	if conn == nil {
-		conn, err = implCluster.InternalSessionSelectTypedConn(s.Core, ctx, model.RoutingInfo{HostID: options.HostID}, nil)
+		conn, err = s.Core.SelectTypedConn(ctx, model.RoutingInfo{HostID: options.HostID}, nil)
 	}
 	if err != nil {
 		return nil, err
@@ -187,7 +187,7 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 	dependencies := tracker.InternalDependencies(info.Keyspace, page.BindColumns(), page.Columns)
 	epoch := dependencies.InternalSince(started)
 	result := &model.ResultSchemaIdentity{InternalColumns: page.Columns, InternalEpoch: epoch, InternalTracker: dependencies.InternalTracker}
-	state = &InternalPreparedState{InternalSession: s.Core, InternalProtocol: conn.InternalVersion, InternalStatement: statement, InternalKeyspace: keyspace, InternalParameters: page.BindColumns(), InternalColumns: page.Columns, InternalInfo: info, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalResult: result, InternalResultHost: conn.InternalHostID(), partitioner: implCluster.InternalSessionPreparedPartitionerName(s.Core, info.Keyspace, info.Table), InternalHosts: map[cqltype.UUID]*InternalHostPrepared{conn.InternalHostID(): {InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: page.Columns, InternalGeneration: generation, InternalRevision: 1, InternalEpoch: epoch, InternalResult: result}}}
+	state = &InternalPreparedState{InternalSession: s.Core, InternalProtocol: conn.InternalVersion, InternalStatement: statement, InternalKeyspace: keyspace, InternalParameters: page.BindColumns(), InternalColumns: page.Columns, InternalInfo: info, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalResult: result, InternalResultHost: conn.InternalHostID(), partitioner: s.Core.PreparedPartitionerName(info.Keyspace, info.Table), InternalHosts: map[cqltype.UUID]*InternalHostPrepared{conn.InternalHostID(): {InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: page.Columns, InternalGeneration: generation, InternalRevision: 1, InternalEpoch: epoch, InternalResult: result}}}
 
 	tracker.InternalMu.RLock()
 	defer tracker.InternalMu.RUnlock()
@@ -309,7 +309,7 @@ func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *transpor
 	if err != nil {
 		return nil, err
 	}
-	if !slices.Equal(info.PartitionKeyIndexes, state.InternalInfo.PartitionKeyIndexes) || info.Keyspace != state.InternalInfo.Keyspace || info.Table != state.InternalInfo.Table || info.Kind != state.InternalInfo.Kind || info.Conditional != state.InternalInfo.Conditional || len(state.InternalInfo.PartitionKeyIndexes) > 0 && implCluster.InternalSessionPreparedPartitionerName(s.Core, info.Keyspace, info.Table) != state.partitioner {
+	if !slices.Equal(info.PartitionKeyIndexes, state.InternalInfo.PartitionKeyIndexes) || info.Keyspace != state.InternalInfo.Keyspace || info.Table != state.InternalInfo.Table || info.Kind != state.InternalInfo.Kind || info.Conditional != state.InternalInfo.Conditional || len(state.InternalInfo.PartitionKeyIndexes) > 0 && s.Core.PreparedPartitionerName(info.Keyspace, info.Table) != state.partitioner {
 		return nil, &runtimeerrors.SchemaChangedError{Statement: state.InternalStatement, Previous: state.InternalParameters, Current: page.BindColumns()}
 	}
 	revision := uint64(1)
@@ -327,7 +327,7 @@ func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *transpor
 		}
 	}
 	state.InternalMu.RUnlock()
-	candidate := &InternalHostPrepared{InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: result.InternalColumns, InternalGeneration: implCluster.InternalSessionTypedGeneration(s.Core), InternalRevision: revision, InternalEpoch: epoch, InternalResult: result}
+	candidate := &InternalHostPrepared{InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: result.InternalColumns, InternalGeneration: s.Core.TypedGeneration(), InternalRevision: revision, InternalEpoch: epoch, InternalResult: result}
 
 	// Exact-entry/epoch CAS. A losing response keeps its own immutable candidate;
 	// it is never republished against a newly loaded host revision.
@@ -501,7 +501,7 @@ func (l *logicalExecution) InternalFinish(result model.Result, err error) {
 	}
 	rt := InternalRuntimeFor(l.session)
 	rt.inflight.Add(-1)
-	implCluster.InternalSessionRecordV2Latency(l.session, time.Since(l.started))
+	l.session.RecordV2Latency(time.Since(l.started))
 	if err != nil {
 		rt.errors.Add(1)
 	}
@@ -519,7 +519,7 @@ func (l *logicalExecution) InternalFinish(result model.Result, err error) {
 				event.BatchStatements = append(event.BatchStatements, entry.statement)
 			}
 		}
-		implCluster.InternalSessionObserveSafely(l.session, func() { l.observer.ObserveRequest(event) })
+		l.session.ObserveSafely(func() { l.observer.ObserveRequest(event) })
 	}
 }
 
@@ -872,7 +872,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 	}
 	defer cancel()
 	metadata := s.Core.Metadata()
-	request.tabletFeedback = implCluster.InternalSessionCaptureTabletFeedback(s.Core, request.routing, metadata)
+	request.tabletFeedback = s.Core.CaptureTabletFeedback(request.routing, metadata)
 	tablet := lookupRequestTablet(metadata, request)
 	request.tabletVersionBlock = tablet.VersionBlock(request.routing)
 	if direct && pinnedUsable(request.pinned) {
@@ -904,7 +904,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			conn = request.connection
 		}
 		if conn == nil {
-			conn, err = implCluster.InternalSessionSelectTypedConn(s.Core, ctx, request.routing, plan)
+			conn, err = s.Core.SelectTypedConn(ctx, request.routing, plan)
 			if err != nil {
 				return err
 			}
@@ -929,11 +929,11 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				event.RequestID = request.InternalLogical.id
 				if request.InternalLogical.observer != nil {
 					perfAdd(1, 1)
-					implCluster.InternalSessionObserveSafely(s.Core, func() { request.InternalLogical.observer.ObserveAttempt(event) })
+					s.Core.ObserveSafely(func() { request.InternalLogical.observer.ObserveAttempt(event) })
 				}
 			}
 			if policy := request.InternalOptions.InternalProfile.Routing; policy != nil {
-				implCluster.InternalSessionObserveSafely(s.Core, func() { policy.Observe(event) })
+				s.Core.ObserveSafely(func() { policy.Observe(event) })
 			}
 			select {
 			case outcomes <- typedAttemptOutcome{response: response, err: err, conn: conn, event: event, consistency: consistency}:
@@ -1206,7 +1206,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		}
 		response, executeErr := conn.InternalExecuteTypedInto(ctx, wireRequest, request.responseDest)
 		if len(wireRequest.PreparedID) > 0 && wireRequest.Batch == nil {
-			implCluster.InternalSessionApplyTypedFeedbackStamped(s.Core, response, request.routing, request.tabletFeedback, conn.InternalFramers.InternalDefaults)
+			s.Core.ApplyTypedFeedbackStamped(response, request.routing, request.tabletFeedback, conn.InternalFramers.InternalDefaults)
 		}
 		if unprepared, ok := errors.AsType[*protocol.RequestErrUnprepared](executeErr); ok && repair < repairs && !bytes.Equal(unprepared.StatementId, repaired) {
 			repaired = unprepared.StatementId
@@ -1251,14 +1251,14 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 			}
 			config := s.config.Metadata
 			if config.AutomaticAgreement {
-				if err := implCluster.InternalSessionAwaitV2SchemaAgreementOn(s.Core, ctx, conn); err != nil {
+				if err := s.Core.AwaitV2SchemaAgreementOn(ctx, conn); err != nil {
 					return response, err
 				}
 			}
 			if config.AutomaticAgreement && config.RefreshAfterAgreement {
 				var refreshErr error
 				if response.Keyspace() != "" {
-					refreshErr = implCluster.InternalSessionRefreshV2Keyspace(s.Core, ctx, response.Keyspace())
+					refreshErr = s.Core.RefreshV2Keyspace(ctx, response.Keyspace())
 				} else {
 					refreshErr = s.Core.RefreshMetadata(ctx)
 				}

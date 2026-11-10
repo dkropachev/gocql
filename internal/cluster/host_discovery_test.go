@@ -366,7 +366,7 @@ func TestHostDiscovery(t *testing.T) {
 
 			// A new peer joins.
 			rs.setPeers(p2, p3)
-			if err := InternalSessionRefreshRingNow(s); err != nil {
+			if err := s.RefreshRingNow(); err != nil {
 				t.Fatal(err)
 			}
 			if got, want := ringHosts(s), sortedKeys(localKey(), peerKey(p2), peerKey(p3)); strings.Join(got, " ") != strings.Join(want, " ") {
@@ -380,7 +380,7 @@ func TestHostDiscovery(t *testing.T) {
 			moved := p2
 			moved.ip = net.ParseIP("127.0.0.4")
 			rs.setPeers(moved, p3)
-			if err := InternalSessionRefreshRingNow(s); err != nil {
+			if err := s.RefreshRingNow(); err != nil {
 				t.Fatal(err)
 			}
 			if got, want := ringHosts(s), sortedKeys(localKey(), peerKey(moved), peerKey(p3)); strings.Join(got, " ") != strings.Join(want, " ") {
@@ -389,7 +389,7 @@ func TestHostDiscovery(t *testing.T) {
 
 			// p3 leaves.
 			rs.setPeers(moved)
-			if err := InternalSessionRefreshRingNow(s); err != nil {
+			if err := s.RefreshRingNow(); err != nil {
 				t.Fatal(err)
 			}
 			if got, want := ringHosts(s), sortedKeys(localKey(), peerKey(moved)); strings.Join(got, " ") != strings.Join(want, " ") {
@@ -408,7 +408,7 @@ func TestHostDiscovery(t *testing.T) {
 			before := ringHosts(s)
 
 			rs.failPeers("peers unavailable")
-			err := InternalSessionRefreshRingNow(s)
+			err := s.RefreshRingNow()
 			if err == nil || !strings.Contains(err.Error(), "peers unavailable") {
 				t.Fatalf("refreshRingNow error = %v, want the peers error", err)
 			}
@@ -435,7 +435,7 @@ func TestHostDiscovery(t *testing.T) {
 			if got, want := ringHosts(s), sortedKeys(localKey(), peerKey(good), peerKey(zeroToken), peerKey(otherDC)); strings.Join(got, " ") != strings.Join(want, " ") {
 				t.Fatalf("ring = %v, want valid topology including zero-token and disabled peers %v", got, want)
 			}
-			if err := InternalSessionRefreshRingNow(s); err != nil {
+			if err := s.RefreshRingNow(); err != nil {
 				t.Fatal(err)
 			}
 			if got, want := ringHosts(s), sortedKeys(localKey(), peerKey(good), peerKey(zeroToken), peerKey(otherDC)); strings.Join(got, " ") != strings.Join(want, " ") {

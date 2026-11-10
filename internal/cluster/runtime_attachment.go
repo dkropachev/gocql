@@ -23,12 +23,12 @@ type executionLifecycle interface {
 	ConfigSnapshot() settings.Config
 }
 
-func InternalCurrentExecution(s *Core) executionLifecycle {
+func (s *Core) CurrentExecution() executionLifecycle {
 	s.privateStorage.InternalTypedMu.Lock()
 	defer s.privateStorage.InternalTypedMu.Unlock()
 	return s.privateStorage.InternalTypedState
 }
-func InternalSessionSchemaTracker(s *Core) *schemafence.InternalPreparedSchemaTracker {
+func (s *Core) SchemaTracker() *schemafence.InternalPreparedSchemaTracker {
 	s.privateStorage.schemaMu.Lock()
 	defer s.privateStorage.schemaMu.Unlock()
 	if s.privateStorage.schema == nil {

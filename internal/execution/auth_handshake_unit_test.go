@@ -113,7 +113,7 @@ func (srv *authTestServer) cluster(auth transport.Authenticator) (*implCluster.I
 // logged a cause containing want.
 func requireHandshakeError(t *testing.T, cfg *implCluster.InternalClusterSettings, log *syncLogger, want string) {
 	t.Helper()
-	s, err := implCluster.InternalClusterSettingsOpen(cfg)
+	s, err := cfg.Open()
 	if err == nil {
 		s.Close()
 		t.Fatal("open succeeded, want an authentication error")

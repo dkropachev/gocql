@@ -75,7 +75,7 @@ func connConfig(cfg *InternalClusterSettings) (*transport.ConnConfig, error) {
 func newPolicyConnPool(session *Core) *pool.InternalPolicyConnPool {
 	// create the pool
 	pool := &pool.InternalPolicyConnPool{
-		InternalServices:      InternalNewPoolServices(session),
+		InternalServices:      session.NewPoolServices(),
 		InternalPort:          session.privateStorage.InternalCfg.Port,
 		InternalNumConns:      session.privateStorage.InternalCfg.NumConns,
 		InternalKeyspace:      session.privateStorage.InternalCfg.Keyspace,

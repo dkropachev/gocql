@@ -76,7 +76,7 @@ func (b brokenDNSResolver) LookupIP(host string) ([]net.IP, error) {
 func testCluster(proto frm.ProtoVersion, addresses ...string) *implCluster.InternalClusterSettings {
 	cluster := implCluster.InternalNewClusterSettings(addresses...)
 	cluster.ProtoVersion = int(proto)
-	implCluster.InternalClusterSettingsData(cluster).InternalDisableControlConn = true
+	cluster.Data().InternalDisableControlConn = true
 	cluster.PoolConfig.HostSelectionPolicy = implCluster.RoundRobinHostPolicy()
 	return cluster
 }
@@ -120,7 +120,7 @@ func createTestSslCluster(addr string, proto frm.ProtoVersion, useClientCert boo
 }
 
 func newTestSession(proto frm.ProtoVersion, addresses ...string) (*implCluster.Core, error) {
-	return implCluster.InternalClusterSettingsOpen(testCluster(proto, addresses...))
+	return testCluster(proto, addresses...).Open()
 }
 
 var _ endpoint.DNSResolver = brokenDNSResolver{}
@@ -561,7 +561,7 @@ func (srv *TestServer) port() int {
 }
 
 func (srv *TestServer) session() (*implCluster.Core, error) {
-	return implCluster.InternalClusterSettingsOpen(testCluster(frm.ProtoVersion(srv.protocol), srv.Address))
+	return testCluster(frm.ProtoVersion(srv.protocol), srv.Address).Open()
 }
 
 func (srv *TestServer) host() *endpoint.HostInfo {
@@ -2461,7 +2461,7 @@ func TestConn(t *testing.T) {
 			cluster := testCluster(defaultProto, srv.Address)
 			cluster.NumConns = 1
 			cluster.Logger = log
-			db, err := implCluster.InternalClusterSettingsOpen(cluster)
+			db, err := cluster.Open()
 			if err != nil {
 				t.Fatal(err)
 			}

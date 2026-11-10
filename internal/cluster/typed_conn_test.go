@@ -53,12 +53,12 @@ func TestTypedConn(t *testing.T) {
 	t.Run("DispatchEvent", func(t *testing.T) {
 		for iteration := 0; iteration < 20; iteration++ {
 			c, _ := typedTestConn(t, 4, nil)
-			c.InternalHooks = InternalNewConnectionHooks(func() *Core {
+			c.InternalHooks = func() *Core {
 				opaqueStorageValuexxxx := new(Core)
 				SessionData(opaqueStorageValuexxxx).InternalCtx = c.InternalCtx
 				SessionData(opaqueStorageValuexxxx).InternalLogger = logging.InternalNopLogger{}
 				return opaqueStorageValuexxxx
-			}())
+			}().NewConnectionHooks()
 			budget := &protocol.StreamMetadataBudget{Limit: 1 << 20}
 			var wg sync.WaitGroup
 			wg.Add(4)
@@ -213,13 +213,13 @@ func TestTypedConn(t *testing.T) {
 					consumer := &InternalEventDebouncer{InternalTimer: time.NewTimer(time.Hour), InternalLogger: logging.InternalNopLogger{}}
 					defer consumer.InternalTimer.Stop()
 					consumer.InternalMu.Lock()
-					c.InternalHooks = InternalNewConnectionHooks(func() *Core {
+					c.InternalHooks = func() *Core {
 						opaqueStorageValuexxx := new(Core)
 						SessionData(opaqueStorageValuexxx).InternalCtx = c.InternalCtx
 						SessionData(opaqueStorageValuexxx).InternalLogger = logging.InternalNopLogger{}
 						SessionData(opaqueStorageValuexxx).InternalNodeEvents = consumer
 						return opaqueStorageValuexxx
-					}())
+					}().NewConnectionHooks()
 					go c.InternalServe(c.InternalCtx)
 					ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 					defer cancel()
@@ -491,12 +491,12 @@ func TestTypedConn(t *testing.T) {
 			for _, bad := range []bool{false, true} {
 				t.Run(fmt.Sprint(bad), func(t *testing.T) {
 					c, server := typedTestConn(t, 5, nil)
-					c.InternalHooks = InternalNewConnectionHooks(func() *Core {
+					c.InternalHooks = func() *Core {
 						opaqueStorageValuexx := new(Core)
 						SessionData(opaqueStorageValuexx).InternalCtx = c.InternalCtx
 						SessionData(opaqueStorageValuexx).InternalLogger = logging.InternalNopLogger{}
 						return opaqueStorageValuexx
-					}())
+					}().NewConnectionHooks()
 					r := reserve(t, c)
 					go func() {
 						stream := typedTestReadRequest(t, c, server)

@@ -134,7 +134,7 @@ func driverConfigCases() []struct {
 		{
 			name: "typed-nil custom retry policy",
 			cfg: func(c *InternalClusterSettings) {
-				InternalClusterSettingsData(c).defaultProfile.Retry = (*customRetry)(nil)
+				c.Data().defaultProfile.Retry = (*customRetry)(nil)
 			},
 		},
 		{
@@ -162,37 +162,37 @@ func driverConfigCases() []struct {
 		{
 			name: "safe retry three attempts",
 			cfg: func(c *InternalClusterSettings) {
-				InternalClusterSettingsData(c).defaultProfile.Retry = retry.Safe{MaxAttempts: 3}
+				c.Data().defaultProfile.Retry = retry.Safe{MaxAttempts: 3}
 			},
 		},
 		{
 			name: "safe retry one attempt",
 			cfg: func(c *InternalClusterSettings) {
-				InternalClusterSettingsData(c).defaultProfile.Retry = retry.Safe{MaxAttempts: 1}
+				c.Data().defaultProfile.Retry = retry.Safe{MaxAttempts: 1}
 			},
 		},
 		{
 			name: "safe retry default limit",
 			cfg: func(c *InternalClusterSettings) {
-				InternalClusterSettingsData(c).defaultProfile.Retry = retry.Safe{MaxAttempts: 0}
+				c.Data().defaultProfile.Retry = retry.Safe{MaxAttempts: 0}
 			},
 		},
 		{
 			name: "custom retry policy",
 			cfg: func(c *InternalClusterSettings) {
-				InternalClusterSettingsData(c).defaultProfile.Retry = &customRetry{}
+				c.Data().defaultProfile.Retry = &customRetry{}
 			},
 		},
 		{
 			name: "safe retry negative limit",
 			cfg: func(c *InternalClusterSettings) {
-				InternalClusterSettingsData(c).defaultProfile.Retry = retry.Safe{MaxAttempts: -1}
+				c.Data().defaultProfile.Retry = retry.Safe{MaxAttempts: -1}
 			},
 		},
 		{
 			name: "safe retry zero limit",
 			cfg: func(c *InternalClusterSettings) {
-				InternalClusterSettingsData(c).defaultProfile.Retry = retry.Safe{MaxAttempts: 0}
+				c.Data().defaultProfile.Retry = retry.Safe{MaxAttempts: 0}
 			},
 		},
 		{

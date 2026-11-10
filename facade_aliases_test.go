@@ -33,7 +33,7 @@ import (
 type hostPrepared = implExecution.InternalHostPrepared
 
 func newConnectionHooks(a0 *Session) implTransport.InternalConnectionHooks {
-	return implCluster.InternalNewConnectionHooks(implExecution.InternalCore((*implExecution.Session)(a0)))
+	return implExecution.InternalCore((*implExecution.Session)(a0)).NewConnectionHooks()
 }
 
 type preparedState = implExecution.InternalPreparedState

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"time"
 
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
@@ -80,7 +79,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 				}
 			}
 			var err error
-			conn, err = implCluster.InternalSessionSelectTypedConn(s.Core, ctx, request.routing, plan)
+			conn, err = s.Core.SelectTypedConn(ctx, request.routing, plan)
 			if err != nil {
 				return failure(err)
 			}

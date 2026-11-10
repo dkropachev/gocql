@@ -128,7 +128,7 @@ func TestConfig(t *testing.T) {
 			implEndpoint.HostInfoData(host).InternalHostId = id
 			implEndpoint.HostInfoData(host).InternalState.Store(implEndpoint.NodeUp)
 			c.InternalHost = host
-			c.InternalHooks = cluster.InternalNewConnectionHooks(s)
+			c.InternalHooks = s.NewConnectionHooks()
 			implCluster.SessionData(s).InternalHostSource.InternalHosts[id.String()] = host
 			picker := pool.InternalNewDefaultConnPicker(1)
 			picker.Put(c)
@@ -238,7 +238,7 @@ func TestConfig(t *testing.T) {
 				implCluster.SessionData(opaqueStorageValue).InternalTypedState = &InternalSessionRuntime{InternalProfile: config.DefaultProfile, config: config}
 				return opaqueStorageValue
 			}()
-			report := cluster.InternalBuildQueryReport(s)
+			report := s.BuildQueryReport()
 			if report.Defaults.Page.Size != 23 || report.Retry.Policy.(cluster.InternalRetryPolicySimpleReport).MaxRetries != 6 {
 				t.Fatalf("typed defaults: %+v", report)
 			}
@@ -253,7 +253,7 @@ func TestConfig(t *testing.T) {
 			profile.PageSize = 37
 			profile.Retry = retry.Safe{MaxAttempts: 1}
 			config.DefaultProfile = &profile
-			next := cluster.InternalBuildQueryReport(s)
+			next := s.BuildQueryReport()
 			if next.Defaults.Page.Size != 37 || next.Retry.Policy.(cluster.InternalRetryPolicySimpleReport).MaxRetries != 0 {
 				t.Fatalf("replaced profile: %+v", next)
 			}

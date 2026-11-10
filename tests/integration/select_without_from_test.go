@@ -20,7 +20,6 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/routing"
 )
 
@@ -370,7 +369,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 		defer session.Close()
 		// Exercise the typed transport on the identical connection after every error;
 		// host pinning alone would allow a different pooled socket to hide corruption.
-		conn, err := implCluster.InternalSessionSelectTypedConn(implExecution.InternalCore((*implExecution.Session)(session)), context.Background(), routing.Info{}, nil)
+		conn, err := implExecution.InternalCore((*implExecution.Session)(session)).SelectTypedConn(context.Background(), routing.Info{}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

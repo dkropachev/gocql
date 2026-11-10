@@ -41,7 +41,6 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/endpoint"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 	"github.com/scylladb/gocql/v2/routing"
@@ -135,7 +134,7 @@ func TestPool(t *testing.T) {
 		defer s.Close()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		conn := codecTestMust(implCluster.InternalSessionSelectTypedConn(implExecution.InternalCore((*implExecution.Session)(s)), ctx, routing.Info{}, nil))
+		conn := codecTestMust(implExecution.InternalCore((*implExecution.Session)(s)).SelectTypedConn(ctx, routing.Info{}, nil))
 		table := fmt.Sprintf("pool_stream_%x", time.Now().UnixNano())
 		qualified := (fixtureKeyspace("") + ".") + table
 		ddl := func(stmt string) {
@@ -148,7 +147,7 @@ func TestPool(t *testing.T) {
 			}())); err != nil {
 				t.Fatal(err)
 			}
-			if err := implCluster.InternalSessionAwaitV2SchemaAgreementOn(implExecution.InternalCore((*implExecution.Session)(s)), ctx, conn); err != nil {
+			if err := implExecution.InternalCore((*implExecution.Session)(s)).AwaitV2SchemaAgreementOn(ctx, conn); err != nil {
 				t.Fatal(err)
 			}
 		}

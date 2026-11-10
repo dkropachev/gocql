@@ -133,7 +133,7 @@ func BenchmarkRouting(b *testing.B) {
 							info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: tokens[i&4095], Set: true}, Consistency: cqltype.Quorum, Kind: cqltype.OrdinaryStatement}
 							i++
 							tablet := routing.InternalLookupTabletCached(m, info, &cache)
-							conn, err := InternalSessionSelectTypedConn(s, ctx, info, p.InternalPlanWith(info, m, &plan, &tablet))
+							conn, err := s.SelectTypedConn(ctx, info, p.InternalPlanWith(info, m, &plan, &tablet))
 							if err != nil || conn == nil {
 								b.Fatal("no connection", err)
 							}

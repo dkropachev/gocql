@@ -94,7 +94,7 @@ func (rs *ringTestServer) session(t *testing.T, configure func(cfg *InternalClus
 	if configure != nil {
 		configure(cfg)
 	}
-	s, err := InternalClusterSettingsOpen(cfg)
+	s, err := cfg.Open()
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

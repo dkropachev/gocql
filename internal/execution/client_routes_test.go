@@ -142,7 +142,7 @@ func TestClientRoutes(t *testing.T) {
 			route := cluster.InternalClientRoute{InternalConnectionID: "connection", InternalHostID: host.HostID(), InternalAddress: "proxy", InternalPort: 9042}
 			implCluster.ClientRoutesHandlerData(p).InternalRouteCache.ReplaceByConnectionIDs([]string{"connection"}, []cluster.InternalClientRoute{route})
 			before := implEndpoint.InternalHostInfoTransportEpoch(host)
-			implCluster.InternalClientRoutesHandlerInvalidateRouteTask(p, cluster.InternalUpdateTask{InternalPairs: []cluster.InternalPair{{InternalConnectionID: "connection", InternalHostID: host.HostID()}}})
+			p.InvalidateRouteTask(cluster.InternalUpdateTask{InternalPairs: []cluster.InternalPair{{InternalConnectionID: "connection", InternalHostID: host.HostID()}}})
 			if implEndpoint.InternalHostInfoTransportEpoch(host) == before {
 				t.Fatal("deletion left late validated transport insertion eligible")
 			}
@@ -150,9 +150,9 @@ func TestClientRoutes(t *testing.T) {
 
 		t.Run("EmptyFullReadDetectsNewerPair", func(t *testing.T) {
 			p := cluster.NewClientRoutesAddressTranslator(cluster.ClientRoutesConfig{}, nil, false, logging.InternalNopLogger{})
-			before := implCluster.InternalClientRoutesHandlerCaptureRouteEpochs(p)
-			implCluster.InternalClientRoutesHandlerInvalidateRouteTask(p, cluster.InternalUpdateTask{InternalPairs: []cluster.InternalPair{{InternalConnectionID: "connection", InternalHostID: "new-host"}}})
-			if implCluster.InternalClientRoutesHandlerApplyRouteRead(p, cluster.InternalUpdateTask{InternalConnectionIDs: []string{"connection"}}, before, nil) {
+			before := p.CaptureRouteEpochs()
+			p.InvalidateRouteTask(cluster.InternalUpdateTask{InternalPairs: []cluster.InternalPair{{InternalConnectionID: "connection", InternalHostID: "new-host"}}})
+			if p.ApplyRouteRead(cluster.InternalUpdateTask{InternalConnectionIDs: []string{"connection"}}, before, nil) {
 				t.Fatal("empty stale full read falsely reported accepted publication")
 			}
 		})
@@ -166,7 +166,7 @@ func TestClientRoutes(t *testing.T) {
 				hosts[i] = fmt.Sprint(i)
 			}
 			var freed atomic.Int32
-			if !implCluster.InternalClientRoutesHandlerHandleRouteEventOwned(p, &oldevents.ClientRoutesChangedEvent{ChangeType: "UPDATED", ConnectionIDs: []string{"allowed"}, HostIDs: hosts}, func() { freed.Add(1) }) {
+			if !p.HandleRouteEventOwned(&oldevents.ClientRoutesChangedEvent{ChangeType: "UPDATED", ConnectionIDs: []string{"allowed"}, HostIDs: hosts}, func() { freed.Add(1) }) {
 				t.Fatal("full-refresh fallback not admitted")
 			}
 			task := <-implCluster.ClientRoutesHandlerData(p).InternalUpdateTasks
@@ -182,12 +182,12 @@ func TestClientRoutes(t *testing.T) {
 			}
 			// Queue drain owns every accepted event release during terminal shutdown.
 			for i := 0; i < 3; i++ {
-				if !implCluster.InternalClientRoutesHandlerUpdateHostPortMappingAsync(p, cluster.InternalUpdateTask{InternalConnectionIDs: []string{"allowed"}, InternalRelease: func() { freed.Add(1) }}) {
+				if !p.UpdateHostPortMappingAsync(cluster.InternalUpdateTask{InternalConnectionIDs: []string{"allowed"}, InternalRelease: func() { freed.Add(1) }}) {
 					t.Fatal("owned task rejected")
 				}
 			}
 			close(implCluster.ClientRoutesHandlerData(p).InternalCloseChan)
-			implCluster.InternalClientRoutesHandlerStartUpdateWorker(p)
+			p.StartUpdateWorker()
 			implCluster.ClientRoutesHandlerData(p).InternalWorkers.Wait()
 			if freed.Load() != 4 {
 				t.Fatal("route worker terminal drain lost/duplicated ownership", freed.Load())
@@ -199,26 +199,26 @@ func TestClientRoutes(t *testing.T) {
 			a := cluster.InternalClientRoute{InternalConnectionID: "a", InternalHostID: "host", InternalAddress: "old", InternalPort: 9042}
 			b := cluster.InternalClientRoute{InternalConnectionID: "b", InternalHostID: "host", InternalAddress: "b", InternalPort: 9042}
 			implCluster.ClientRoutesHandlerData(p).InternalRouteCache.ReplaceByConnectionIDs([]string{"a", "b"}, []cluster.InternalClientRoute{b, a})
-			if route := implCluster.InternalClientRoutesHandlerOrderedRoutes(p, "host")[0]; route.InternalConnectionID != "a" {
+			if route := p.OrderedRoutes("host")[0]; route.InternalConnectionID != "a" {
 				t.Fatal("server row order overrode config order", route)
 			}
-			old := implCluster.InternalClientRoutesHandlerCaptureRouteEpochs(p)
+			old := p.CaptureRouteEpochs()
 			changed := cluster.InternalUpdateTask{InternalPairs: []cluster.InternalPair{{InternalConnectionID: "a", InternalHostID: "host"}}}
-			implCluster.InternalClientRoutesHandlerInvalidateRouteTask(p, changed)
-			implCluster.InternalClientRoutesHandlerApplyRouteRead(p, changed, implCluster.InternalClientRoutesHandlerCaptureRouteEpochs(p), nil)
+			p.InvalidateRouteTask(changed)
+			p.ApplyRouteRead(changed, p.CaptureRouteEpochs(), nil)
 			newer := b
 			newer.InternalAddress = "new-b"
-			implCluster.InternalClientRoutesHandlerInvalidateRouteTask(p, cluster.InternalUpdateTask{InternalPairs: []cluster.InternalPair{{InternalConnectionID: "b", InternalHostID: "host"}}})
-			implCluster.InternalClientRoutesHandlerApplyRouteRead(p, cluster.InternalUpdateTask{InternalPairs: []cluster.InternalPair{{InternalConnectionID: "b", InternalHostID: "host"}}}, implCluster.InternalClientRoutesHandlerCaptureRouteEpochs(p), []cluster.InternalClientRoute{newer})
-			if implCluster.InternalClientRoutesHandlerApplyRouteRead(p, cluster.InternalUpdateTask{InternalConnectionIDs: []string{"a", "b"}}, old, []cluster.InternalClientRoute{a, b}) {
+			p.InvalidateRouteTask(cluster.InternalUpdateTask{InternalPairs: []cluster.InternalPair{{InternalConnectionID: "b", InternalHostID: "host"}}})
+			p.ApplyRouteRead(cluster.InternalUpdateTask{InternalPairs: []cluster.InternalPair{{InternalConnectionID: "b", InternalHostID: "host"}}}, p.CaptureRouteEpochs(), []cluster.InternalClientRoute{newer})
+			if p.ApplyRouteRead(cluster.InternalUpdateTask{InternalConnectionIDs: []string{"a", "b"}}, old, []cluster.InternalClientRoute{a, b}) {
 				t.Fatal("late full read accepted changed pairs")
 			}
-			routes := implCluster.InternalClientRoutesHandlerOrderedRoutes(p, "host")
+			routes := p.OrderedRoutes("host")
 			if len(routes) != 1 || routes[0] != newer {
 				t.Fatal("stale full read restored deletion or erased disjoint new route", routes)
 			}
-			implCluster.InternalClientRoutesHandlerBindRoute(p, newer)
-			if route := implCluster.InternalClientRoutesHandlerOrderedRoutes(p, "host")[0]; route != newer {
+			p.BindRoute(newer)
+			if route := p.OrderedRoutes("host")[0]; route != newer {
 				t.Fatal("sticky route lost")
 			}
 		})

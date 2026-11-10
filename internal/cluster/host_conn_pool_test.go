@@ -74,7 +74,7 @@ func TestHostConnPool(t *testing.T) {
 		}()
 
 		pool := &implPool.InternalHostConnPool{
-			InternalServices:   InternalNewPoolServices(session),
+			InternalServices:   session.NewPoolServices(),
 			InternalHost:       host,
 			InternalSize:       2,
 			InternalKeyspace:   "test",
@@ -138,7 +138,7 @@ func TestHostConnPool(t *testing.T) {
 			}()
 
 			pool := &implPool.InternalHostConnPool{
-				InternalServices:   InternalNewPoolServices(session),
+				InternalServices:   session.NewPoolServices(),
 				InternalHost:       host,
 				InternalSize:       1,
 				InternalKeyspace:   "test",
@@ -214,7 +214,7 @@ func TestHostConnPool(t *testing.T) {
 			return opaqueStorageValuexxxxxx
 		}()
 		SessionData(s).InternalCfg.ReconnectionPolicy = &implPool.NoReconnectionPolicy{}
-		pool := InternalNewHostConnPool(s, func() *endpoint.HostInfo {
+		pool := s.NewHostConnPool(func() *endpoint.HostInfo {
 			opaqueStorageValuexxxxxxx := new(endpoint.HostInfo)
 			implEndpoint.HostInfoData(opaqueStorageValuexxxxxxx).InternalConnectAddress = net.ParseIP("127.0.0.1")
 			implEndpoint.HostInfoData(opaqueStorageValuexxxxxxx).InternalPort = 9042

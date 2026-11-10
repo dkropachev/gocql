@@ -447,7 +447,7 @@ func (s *RowStream[R]) acquire(plan implRouting.QueryPlan) error {
 	} else {
 		hosts := implCluster.SessionData(s.privateStorage.session).InternalHostSource.InternalGetHostsList()
 		for _, host := range hosts {
-			if host != nil && host.IsUp() && !implCluster.InternalClusterSettingsFilterHost(&implCluster.SessionData(s.privateStorage.session).InternalCfg, host) {
+			if host != nil && host.IsUp() && !(&implCluster.SessionData(s.privateStorage.session).InternalCfg).FilterHost(host) {
 				target.HostID = implEndpoint.InternalHostInfoHostUUID(host)
 				break
 			}
@@ -462,7 +462,7 @@ func (s *RowStream[R]) acquire(plan implRouting.QueryPlan) error {
 		pool = implCluster.SessionData(s.privateStorage.session).InternalPool.InternalHostConnPools[target.HostID]
 		implCluster.SessionData(s.privateStorage.session).InternalPool.InternalMu.RUnlock()
 	}
-	if pool == nil || pool.InternalHost == nil || !pool.InternalHost.IsUp() || implCluster.InternalClusterSettingsFilterHost(&implCluster.SessionData(s.privateStorage.session).InternalCfg, pool.InternalHost) {
+	if pool == nil || pool.InternalHost == nil || !pool.InternalHost.IsUp() || (&implCluster.SessionData(s.privateStorage.session).InternalCfg).FilterHost(pool.InternalHost) {
 		return runtimeerrors.ErrNoConnections
 	}
 	for {
@@ -546,7 +546,7 @@ func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
 func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 	request := s.privateStorage.request
 	metadata := s.privateStorage.session.Metadata()
-	request.tabletFeedback = implCluster.InternalSessionCaptureTabletFeedback(s.privateStorage.session, request.routing, metadata)
+	request.tabletFeedback = s.privateStorage.session.CaptureTabletFeedback(request.routing, metadata)
 	tablet := lookupRequestTablet(metadata, request)
 	request.tabletVersionBlock = tablet.VersionBlock(request.routing)
 	var plan implRouting.QueryPlan
@@ -613,10 +613,10 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		rt := InternalRuntimeFor(s.privateStorage.session)
 		rt.attempts.Add(1)
 		if observer := request.InternalLogical.observer; observer != nil {
-			implCluster.InternalSessionObserveSafely(s.privateStorage.session, func() { observer.ObserveAttempt(event) })
+			s.privateStorage.session.ObserveSafely(func() { observer.ObserveAttempt(event) })
 		}
 		if policy := request.InternalOptions.InternalProfile.Routing; policy != nil {
-			implCluster.InternalSessionObserveSafely(s.privateStorage.session, func() { policy.Observe(event) })
+			s.privateStorage.session.ObserveSafely(func() { policy.Observe(event) })
 		}
 		s.privateStorage.mu.Lock()
 		s.privateStorage.info.Result.Attempts++

@@ -15,14 +15,14 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
-func InternalSessionTypedGeneration(s *Core) uint64 {
+func (s *Core) TypedGeneration() uint64 {
 	return sessionTypedSchemaGeneration(s)
 }
 
 // InternalSessionSelectTypedConn returns a connection for a request: from the
 // first of plan's routes that has one, or, without a plan, of the request's
 // pinned host, or of any host.
-func InternalSessionSelectTypedConn(s *Core, ctx context.Context, routing model.RoutingInfo, plan implRouting.QueryPlan) (*transport.Conn, error) {
+func (s *Core) SelectTypedConn(ctx context.Context, routing model.RoutingInfo, plan implRouting.QueryPlan) (*transport.Conn, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func sessionPickRoute(s *Core, r implRouting.Route, routing model.RoutingInfo) *
 	if pool == nil && !host.Bound() {
 		pool = s.privateStorage.InternalPool.InternalRoute(host.ID()).Pool()
 	}
-	if pool == nil || pool.InternalHost == nil || InternalClusterSettingsFilterHost(&s.privateStorage.InternalCfg, pool.InternalHost) {
+	if pool == nil || pool.InternalHost == nil || (&s.privateStorage.InternalCfg).FilterHost(pool.InternalHost) {
 		return nil
 	}
 	if conn, ok := pool.PickRoute(r.Shard); ok {
@@ -91,10 +91,10 @@ func sessionPickRoute(s *Core, r implRouting.Route, routing model.RoutingInfo) *
 	// the route names a shard.
 	target := r.Target()
 	target.StrictShard = target.ShardID.Set
-	return InternalSessionPickTypedPool(s, pool, target, routing)
+	return s.PickTypedPool(pool, target, routing)
 }
 
-func InternalSessionObserveSafely(s *Core, fn func()) {
+func (s *Core) ObserveSafely(fn func()) {
 	defer func() {
 		if v := recover(); v != nil && s.privateStorage.InternalLogger != nil {
 			func() {
@@ -108,7 +108,7 @@ func InternalSessionObserveSafely(s *Core, fn func()) {
 
 // pickTypedPool carries native shard targets through connection selection without
 // manufacturing an old query object or discarding table-specific tablet routing.
-func InternalSessionPickTypedPool(s *Core, pool *pool1.InternalHostConnPool, target model.Target, routing model.RoutingInfo) *transport.Conn {
+func (s *Core) PickTypedPool(pool *pool1.InternalHostConnPool, target model.Target, routing model.RoutingInfo) *transport.Conn {
 	pool.InternalMu.RLock()
 	pickable, repair := pool.InternalPickable()
 	var conn *transport.Conn
@@ -183,7 +183,7 @@ func pickTypedPoolLocked(s *Core, pool *pool1.InternalHostConnPool, target model
 	return picker.InternalLeastBusyConn()
 }
 
-func InternalSessionApplyTypedFeedbackStamped(s *Core, response *transport.InternalResponsePage, routing model.RoutingInfo, stamp implRouting.InternalTabletFeedbackStamp, features transport.InternalFramerConfig) {
+func (s *Core) ApplyTypedFeedbackStamped(response *transport.InternalResponsePage, routing model.RoutingInfo, stamp implRouting.InternalTabletFeedbackStamp, features transport.InternalFramerConfig) {
 	if response == nil || routing.Keyspace == "" || routing.Table == "" || s.privateStorage.InternalMetadataDescriber == nil {
 		return
 	}
@@ -204,7 +204,7 @@ func InternalSessionApplyTypedFeedbackStamped(s *Core, response *transport.Inter
 			}
 			return
 		}
-		InternalSessionQueueTabletFeedback(s, hint, stamp)
+		s.QueueTabletFeedback(hint, stamp)
 		return
 	}
 }

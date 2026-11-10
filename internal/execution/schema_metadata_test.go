@@ -31,12 +31,12 @@ func TestSchemaMetadata(t *testing.T) {
 			profile := *base.DefaultProfile
 			profile.Routing = policy
 			base.DefaultProfile = &profile
-			implCluster.InternalSessionConfigureV2Peripheral(s, base)
+			s.ConfigureV2Peripheral(base)
 			policy.block.Store(true)
 			done := make(chan struct{})
-			go func() { defer close(done); implCluster.InternalSessionPublishV2Metadata(s) }()
+			go func() { defer close(done); s.PublishV2Metadata() }()
 			<-policy.entered
-			implCluster.InternalSessionPublishV2Event(s, &oldevents.SchemaChangeTableEvent{Change: "DROPPED", Keyspace: "ks1", Table: "t1"})
+			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "DROPPED", Keyspace: "ks1", Table: "t1"})
 			after := s.Metadata()
 			close(policy.release)
 			<-done
@@ -64,9 +64,9 @@ func TestSchemaMetadata(t *testing.T) {
 			profile := *config.DefaultProfile
 			profile.Routing = unstablePolicy{RoutingPolicy: profile.Routing, session: s}
 			config.DefaultProfile = &profile
-			implCluster.InternalSessionConfigureV2Peripheral(s, config)
+			s.ConfigureV2Peripheral(config)
 			sub, _ := s.Subscribe(cluster.EventFilter{Capacity: 4})
-			implCluster.InternalSessionHandleNodeEvent(s, []protocol.Frame{&frm.StatusChangeEventFrame{Change: "DOWN", Host: net.IPv4(127, 0, 0, 1), Port: 9042}})
+			s.HandleNodeEvent([]protocol.Frame{&frm.StatusChangeEventFrame{Change: "DOWN", Host: net.IPv4(127, 0, 0, 1), Port: 9042}})
 			event := <-sub.Events()
 			if event.Kind != cluster.OverflowEvent || event.Change != "PUBLICATION_RESYNC" {
 				t.Fatal("unpublished delta escaped", event)
@@ -81,7 +81,7 @@ func TestSchemaMetadata(t *testing.T) {
 		t.Run("CapabilityAndScope", func(t *testing.T) {
 			s, mock := refreshAllSchemaSession(t)
 			implCluster.SessionData(s).InternalUseSystemSchema = false
-			if err := implCluster.InternalSessionRefreshV2AllSchema(s, context.Background()); err == nil {
+			if err := s.RefreshV2AllSchema(context.Background()); err == nil {
 				t.Fatal("unsupported schema silently succeeded")
 			} else {
 				if _, ok := errors.AsType[*settings.UnsupportedSettingError](err); !ok {
@@ -93,11 +93,11 @@ func TestSchemaMetadata(t *testing.T) {
 				config := settings.DefaultConfig("localhost")
 				config.Metadata.Mode = mode
 				config.Metadata.Keyspaces = []string{"ks1"}
-				implCluster.InternalSessionConfigureV2Peripheral(s, config)
+				s.ConfigureV2Peripheral(config)
 				mock.mu.Lock()
 				mock.queries = nil
 				mock.mu.Unlock()
-				if err := implCluster.InternalSessionRefreshV2AllSchema(s, context.Background()); err != nil {
+				if err := s.RefreshV2AllSchema(context.Background()); err != nil {
 					t.Fatal(mode, err)
 				}
 				mock.mu.Lock()
@@ -125,7 +125,7 @@ func TestSchemaMetadata(t *testing.T) {
 			mock.mu.Lock()
 			mock.queryError = errors.New("base schema denied temporarily")
 			mock.mu.Unlock()
-			err := implCluster.InternalSessionRefreshV2Keyspace(s, context.Background(), "ks1")
+			err := s.RefreshV2Keyspace(context.Background(), "ks1")
 			if _, ok := errors.AsType[*implMetadata.PartialRefreshError](err); !ok {
 				t.Fatal("retained stale base schema lacks partial error", err)
 			}
@@ -153,7 +153,7 @@ func TestSchemaMetadata(t *testing.T) {
 				done <- implCluster.SessionData(s).InternalMetadataDescriber.InternalRefreshTableSchema("ks1", "t1")
 			}()
 			<-entered
-			implCluster.InternalSessionPublishV2Event(s, &oldevents.SchemaChangeTableEvent{Change: "DROPPED", Keyspace: "ks1", Table: "t1"})
+			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "DROPPED", Keyspace: "ks1", Table: "t1"})
 			close(release)
 			err := <-done
 			if _, ok := errors.AsType[*implMetadata.PartialRefreshError](err); !ok {
@@ -167,7 +167,7 @@ func TestSchemaMetadata(t *testing.T) {
 			mock.mu.Lock()
 			mock.queryError = errors.New("temporary failure")
 			mock.mu.Unlock()
-			_ = implCluster.InternalSessionRefreshV2Keyspace(s, context.Background(), "ks1")
+			_ = s.RefreshV2Keyspace(context.Background(), "ks1")
 			if ks, _ := s.Metadata().Keyspace("ks1"); ks.Tables["t1"] != nil {
 				t.Fatal("failure fallback resurrected table")
 			}
@@ -181,9 +181,9 @@ func TestSchemaMetadata(t *testing.T) {
 				return opaqueStorageValuexxxxxxxxxxxxxxx
 			}()
 
-			implCluster.InternalSessionCloseV2Peripheral(s)
-			implCluster.InternalSessionStartV2SchemaRetry(s)
-			if implCluster.InternalSessionPeripheral(s).InternalRetryScheduled.Load() {
+			s.CloseV2Peripheral()
+			s.StartV2SchemaRetry()
+			if s.Peripheral().InternalRetryScheduled.Load() {
 				t.Fatal("denied worker retained a retry registration")
 			}
 			s.Close()

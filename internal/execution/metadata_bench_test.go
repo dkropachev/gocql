@@ -58,12 +58,12 @@ func BenchmarkMetadata(b *testing.B) {
 					return opaqueStorageValuexxxxxxxxxx
 				}()
 				implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", ks)
-				implCluster.InternalSessionPublishV2Metadata(s)
+				s.PublishV2Metadata()
 				prior := routing.SnapshotData(s.Metadata()).InternalKeyspaces["ks"]
 				b.ReportAllocs()
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					implCluster.InternalSessionPublishV2Metadata(s)
+					s.PublishV2Metadata()
 				}
 				b.StopTimer()
 				if routing.SnapshotData(s.Metadata()).InternalKeyspaces["ks"] != prior {

@@ -130,7 +130,7 @@ func newTraceServer(t *testing.T, cfg traceConfig) *traceServer {
 
 func (ts *traceServer) session(t *testing.T) *Core {
 	t.Helper()
-	s, err := InternalClusterSettingsOpen(ts.cluster())
+	s, err := ts.cluster().Open()
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}

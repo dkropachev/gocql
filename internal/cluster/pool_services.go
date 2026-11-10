@@ -10,19 +10,19 @@ import (
 	"github.com/scylladb/gocql/v2/internal/pool"
 )
 
-func InternalNewPoolServices(s *Core) pool.InternalPoolServices {
+func (s *Core) NewPoolServices() pool.InternalPoolServices {
 	cfg, _ := s.v2PoolConfig()
-	return pool.InternalPoolServices{Context: s.privateStorage.InternalCtx, Logger: s.privateStorage.InternalLogger, Config: cfg, Conviction: s.privateStorage.InternalCfg.ConvictionPolicy, Reconnection: s.privateStorage.InternalCfg.ReconnectionPolicy, Worker: func(f func()) bool { return InternalSessionPeripheral(s).InternalStartWorker(f) }, Dial: s.connectShard, Connected: func(receiver *Core) func(a0 *pool.InternalHostConnPool) {
+	return pool.InternalPoolServices{Context: s.privateStorage.InternalCtx, Logger: s.privateStorage.InternalLogger, Config: cfg, Conviction: s.privateStorage.InternalCfg.ConvictionPolicy, Reconnection: s.privateStorage.InternalCfg.ReconnectionPolicy, Worker: func(f func()) bool { return s.Peripheral().InternalStartWorker(f) }, Dial: s.connectShard, Connected: func(receiver *Core) func(a0 *pool.InternalHostConnPool) {
 		return func(a0 *pool.InternalHostConnPool) {
-			InternalSessionHandlePoolConnected(receiver, a0)
+			receiver.HandlePoolConnected(a0)
 		}
 	}(s), Down: func(receiver *Core) func(a0 implNet.
 		IP, a1 int) {
 		return func(a0 implNet.IP, a1 int) {
-			InternalSessionHandleNodeDown(receiver, a0, a1)
+			receiver.HandleNodeDown(a0, a1)
 		}
 	}(s)}
 }
-func InternalNewHostConnPool(s *Core, h *endpoint.HostInfo, size int, keyspace string) *pool.InternalHostConnPool {
-	return pool.InternalNewHostPool(InternalNewPoolServices(s), h, size, keyspace)
+func (s *Core) NewHostConnPool(h *endpoint.HostInfo, size int, keyspace string) *pool.InternalHostConnPool {
+	return pool.InternalNewHostPool(s.NewPoolServices(), h, size, keyspace)
 }

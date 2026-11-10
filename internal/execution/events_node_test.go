@@ -148,7 +148,7 @@ func newNodeEventFixture(t *testing.T, opts ...func(*cluster.InternalClusterSett
 	for _, opt := range opts {
 		opt(&implCluster.SessionData(s).InternalCfg)
 	}
-	implCluster.SessionData(s).InternalPool = &implPool.InternalPolicyConnPool{InternalServices: cluster.InternalNewPoolServices(s), InternalHostConnPools: map[cqltype.UUID]*implPool.InternalHostConnPool{}}
+	implCluster.SessionData(s).InternalPool = &implPool.InternalPolicyConnPool{InternalServices: s.NewPoolServices(), InternalHostConnPools: map[cqltype.UUID]*implPool.InternalHostConnPool{}}
 	implCluster.SessionData(s).InternalHostSource = &cluster.InternalRingDescriber{InternalCfg: &implCluster.SessionData(s).InternalCfg, InternalLogger: implCluster.SessionData(s).InternalLogger}
 	implCluster.SessionData(s).InternalRingRefresher = debounce.NewRefreshDebouncer(nodeEventRefreshInterval, func() error {
 		select {
@@ -194,7 +194,7 @@ func (f *nodeEventFixture) addHost(t *testing.T, ip string) *endpoint.HostInfo {
 	// sibling test that correctly diagnoses whatever caused the stray UP.
 	// hostConnPool.fill returns before connecting when the picker asks for no
 	// more connections, so this makes a stray startPoolFill a no-op instead.
-	pool := cluster.InternalNewHostConnPool(f.session, host, 1, "")
+	pool := f.session.NewHostConnPool(host, 1, "")
 	pool.InternalConnPicker = satedConnPicker{}
 	implCluster.SessionData(f.session).InternalPool.InternalHostConnPools[implEndpoint.InternalHostInfoHostUUID(host)] = pool
 

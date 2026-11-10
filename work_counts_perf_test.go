@@ -199,7 +199,7 @@ func TestWorkCountsPerf(t *testing.T) {
 			cols := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "v", Type: cql.BlobType})
 			_, hp := testPreparedState(t, s, cols)
 			for i := 0; i < 1000; i++ {
-				implCluster.InternalSessionInvalidatePreparedSchema(implExecution.InternalCore((*implExecution.Session)(s)), Event{Keyspace: "unrelated", Object: fmt.Sprint(i), Target: "TABLE"})
+				implExecution.InternalCore((*implExecution.Session)(s)).InvalidatePreparedSchema(Event{Keyspace: "unrelated", Object: fmt.Sprint(i), Target: "TABLE"})
 			}
 			if !hp.InternalEpoch.InternalCurrent() {
 				t.Fatal("unrelated invalidation")

@@ -205,7 +205,7 @@ func bindPrepared[P, R any](p *Prepared[P, R], value P, owned bool) (*Bound[R], 
 	if err != nil {
 		return nil, err
 	}
-	token, err := routing.InternalComputeRoutingToken(values.Cells, info.PartitionKeyIndexes, implCluster.InternalSessionCapturedRoutingPartitioner(p.privateStorage.InternalState.InternalSession, p.privateStorage.InternalState.partitioner))
+	token, err := routing.InternalComputeRoutingToken(values.Cells, info.PartitionKeyIndexes, p.privateStorage.InternalState.InternalSession.CapturedRoutingPartitioner(p.privateStorage.InternalState.partitioner))
 	if err != nil {
 		return nil, err
 	}

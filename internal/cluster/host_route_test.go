@@ -62,7 +62,7 @@ func hostRoutingSession(b testing.TB, tablets bool) *Core {
 		implEndpoint.HostInfoData(host).InternalState.Store(endpoint.NodeUp)
 		SessionData(s).InternalHostSource.InternalHosts[snapshot.ID.String()] = host
 		pool := &implPool.InternalHostConnPool{InternalHost: host}
-		pool.InternalServices = InternalNewPoolServices(s)
+		pool.InternalServices = s.NewPoolServices()
 		pool.InternalStarted = true
 		pool.InternalState = implPool.InternalPoolReady
 		for shard := 0; shard < hostRoutingShards; shard++ {

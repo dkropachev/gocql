@@ -73,7 +73,7 @@ func TestResultPlanCache(t *testing.T) {
 			_, hp := preparedState(t, s, columns)
 			var calls atomic.Int32
 			decoder := countingDecoder{calls: &calls, hook: func() {
-				implCluster.InternalSessionInvalidatePreparedSchema(s, cluster.Event{Keyspace: "ks", Target: "TABLE", Object: "tbl"})
+				s.InvalidatePreparedSchema(cluster.Event{Keyspace: "ks", Target: "TABLE", Object: "tbl"})
 			}}
 			cache := &InternalResultPlanCache[implCqltype.Bytes]{}
 			response := &transport.InternalResponsePage{InternalMetadata: hp.InternalResult, ResponseData: implModel.ResponseData{Columns: columns}}

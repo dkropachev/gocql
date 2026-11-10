@@ -27,7 +27,7 @@ func BenchmarkTablets(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				if !InternalSessionCaptureTabletFeedback(s, info, m).InternalValid {
+				if !s.CaptureTabletFeedback(info, m).InternalValid {
 					b.Fatal("stale stamp")
 				}
 			}
@@ -39,7 +39,7 @@ func BenchmarkTablets(b *testing.B) {
 			b.Run(fmt.Sprintf("hints%d", ranges), func(b *testing.B) {
 				s := testSession(b)
 				info := model.RoutingInfo{Keyspace: "ks", Table: "table"}
-				stamp := InternalSessionCaptureTabletFeedback(s, info, s.Metadata())
+				stamp := s.CaptureTabletFeedback(info, s.Metadata())
 				hints := make([]InternalV2PendingTabletFeedback, ranges)
 				for i := range hints {
 					hints[i].InternalHint = testHint(b, int64(i*2), int64(i*2+1), cqltype.Option[uint64]{}, hTarget(1, 0))
@@ -47,7 +47,7 @@ func BenchmarkTablets(b *testing.B) {
 				b.ReportAllocs()
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					InternalSessionQueueTabletFeedback(s, hints[i%ranges].InternalHint, stamp)
+					s.QueueTabletFeedback(hints[i%ranges].InternalHint, stamp)
 				}
 			})
 		}
@@ -103,7 +103,7 @@ func BenchmarkTablets(b *testing.B) {
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: tokens[i&4095], Set: true}, Consistency: cqltype.Quorum}
-						stamp := InternalSessionCaptureTabletFeedback(s, info, m)
+						stamp := s.CaptureTabletFeedback(info, m)
 						tablet := routing.InternalLookupTabletCached(m, info, &cache)
 						block := tablet.VersionBlock(info)
 						target, ok := implRouting.InternalNextTarget(p.InternalPlanWith(info, m, &plan, &tablet))
@@ -123,7 +123,7 @@ func BenchmarkTablets(b *testing.B) {
 				for _, duplicate := range []bool{false, true} {
 					b.Run(fmt.Sprintf("tables%d/ranges%d/duplicate%t", tables, ranges, duplicate), func(b *testing.B) {
 						s := testSession(b)
-						p := InternalSessionPeripheral(s)
+						p := s.Peripheral()
 						m := s.Metadata()
 						var root *implRouting.InternalTabletRangeTree
 						for i := 0; i < ranges; i++ {
@@ -142,7 +142,7 @@ func BenchmarkTablets(b *testing.B) {
 						b.ResetTimer()
 						for i := 0; i < b.N; i++ {
 							current := p.InternalSnapshot.Load()
-							stamp := InternalSessionCaptureTabletFeedback(s, info, current)
+							stamp := s.CaptureTabletFeedback(info, current)
 							r, _ := routing.InternalMetadataSnapshotTabletRoot(current, k)
 							sessionResolveTabletFeedback(&stamp, k)
 							stamp.InternalSnapshot = nil
@@ -150,7 +150,7 @@ func BenchmarkTablets(b *testing.B) {
 								h = h.WithVersion(uint64(i + 1))
 							}
 							updates[InternalV2TabletFeedbackKey{InternalKeyspace: "ks", InternalTable: "table", InternalEnd: 1}] = InternalV2PendingTabletFeedback{InternalHint: h, InternalStamp: stamp, observation: implRouting.InternalObserveTabletRanges(r, 0, 1)}
-							InternalSessionPublishTabletFeedback(s, p, updates, false)
+							s.PublishTabletFeedback(p, updates, false)
 						}
 					})
 				}

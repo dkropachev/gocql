@@ -81,7 +81,7 @@ func TestTopology(t *testing.T) {
 			incomplete := good
 			incomplete.rack = ""
 			srv.setPeers(incomplete)
-			err := implCluster.InternalSessionRefreshRingNow(s)
+			err := s.RefreshRingNow()
 			if partial, ok := errors.AsType[*implMetadata.PartialRefreshError](err); !ok || partial.Topology == nil {
 				t.Fatal("incomplete read was not a visible partial failure", err)
 			}
@@ -96,19 +96,19 @@ func TestTopology(t *testing.T) {
 			peer := newTestPeer("127.0.0.2")
 			srv := newRingTestServer(t, peer)
 			s := srv.session(t, nil)
-			implCluster.InternalSessionRecordV2Topology(s, &oldevents.TopologyChangeEvent{Change: "REMOVED_NODE", Host: peer.ip, Port: 9042})
+			s.RecordV2Topology(&oldevents.TopologyChangeEvent{Change: "REMOVED_NODE", Host: peer.ip, Port: 9042})
 			if implCluster.SessionData(s).InternalHostSource.InternalGetHost(peer.hostID.String()) != nil {
 				t.Fatal("removed host still visible")
 			}
 			// Gossip still advertises its old row. A post-event fetch cannot resurrect it.
-			if err := implCluster.InternalSessionRefreshRingNow(s); err != nil {
+			if err := s.RefreshRingNow(); err != nil {
 				t.Fatal(err)
 			}
 			if implCluster.SessionData(s).InternalHostSource.InternalGetHost(peer.hostID.String()) != nil {
 				t.Fatal("stale gossip resurrected removed host")
 			}
-			implCluster.InternalSessionRecordV2Topology(s, &oldevents.TopologyChangeEvent{Change: "NEW_NODE", Host: peer.ip, Port: 9042})
-			if err := implCluster.InternalSessionRefreshRingNow(s); err != nil {
+			s.RecordV2Topology(&oldevents.TopologyChangeEvent{Change: "NEW_NODE", Host: peer.ip, Port: 9042})
+			if err := s.RefreshRingNow(); err != nil {
 				t.Fatal(err)
 			}
 			if implCluster.SessionData(s).InternalHostSource.InternalGetHost(peer.hostID.String()) == nil {

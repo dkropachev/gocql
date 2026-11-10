@@ -60,31 +60,31 @@ func testSession(t testing.TB) *cluster.Core {
 		opaqueStorageValue := new(cluster.Core)
 		return opaqueStorageValue
 	}()
-	implCluster.SessionData(s).InternalMetadataDescriber = cluster.InternalNewMetadataDescriber(s)
+	implCluster.SessionData(s).InternalMetadataDescriber = s.NewMetadataDescriber()
 	m := v2TestMetadata()
 	routing.SnapshotData(m).InternalKeyspaces["ks"].Tables["table"].ID = "identity-1"
 	routing.SnapshotData(m).InternalKeyspaces["ks"].TabletBased = true
 	implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", routing.SnapshotData(m).InternalKeyspaces["ks"])
-	p := implCluster.InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	p.InternalFeedbackOnce.Do(func() {})
 	routing.SnapshotData(m).InternalPlacementSignal = &p.InternalPlacementEpoch
 	routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, implRouting.InternalTabletPlacement{InternalIdentity: "identity-1"}, implRouting.InternalComparePlacementTable)
 	p.InternalSnapshot.Store(m)
 	t.Cleanup(func() {
-		implCluster.InternalSessionCloseV2Peripheral(s)
+		s.CloseV2Peripheral()
 		implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalTabletsMetadata.Close()
 	})
 	return s
 }
 func testDrain(s *cluster.Core) {
-	p := implCluster.InternalSessionPeripheral(s)
+	p := s.Peripheral()
 	p.InternalFeedbackMu.Lock()
 	updates := p.InternalFeedback
 	p.InternalFeedback = make(map[cluster.InternalV2TabletFeedbackKey]cluster.InternalV2PendingTabletFeedback)
 	resync := p.InternalFeedbackResync
 	p.InternalFeedbackResync = false
 	p.InternalFeedbackMu.Unlock()
-	implCluster.InternalSessionPublishTabletFeedback(s, p, updates, resync)
+	s.PublishTabletFeedback(p, updates, resync)
 }
 func hTarget(id byte, shard uint32) implModel.Target {
 	return implModel.Target{HostID: implCqltype.UUID{15: id}, ShardID: implCqltype.Option[uint32]{Value: shard, Set: true}}
