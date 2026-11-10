@@ -74,3 +74,24 @@ func TestMap(t *testing.T) {
 		t.Fatal("Load after Delete found a value")
 	}
 }
+
+func TestMapNilInterfaceValue(t *testing.T) {
+	var m Map[string, error]
+	m.Store("a", nil)
+	if v, ok := m.Load("a"); !ok || v != nil {
+		t.Fatalf("Load = %v, %v; want nil, true", v, ok)
+	}
+	if v, loaded := m.LoadOrStore("a", nil); !loaded || v != nil {
+		t.Fatalf("LoadOrStore = %v, %v; want nil, true", v, loaded)
+	}
+	n := 0
+	for k, v := range m.All() {
+		if k != "a" || v != nil {
+			t.Fatalf("All yielded %q, %v", k, v)
+		}
+		n++
+	}
+	if n != 1 {
+		t.Fatalf("All yielded %d entries, want 1", n)
+	}
+}
