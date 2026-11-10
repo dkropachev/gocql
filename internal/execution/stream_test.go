@@ -273,7 +273,7 @@ func TestStream(t *testing.T) {
 			<-decoder.entered
 			first := make(chan error, 1)
 			go func() { first <- cursor.Close() }()
-			for !RowStreamData(cursor).InternalClosing.Load() {
+			for !RowStreamData(cursor).closing.Load() {
 				select {
 				case <-ctx.Done():
 					t.Fatal("close did not begin")
@@ -282,7 +282,7 @@ func TestStream(t *testing.T) {
 				}
 			}
 			late := make(chan error, 1)
-			go func() { late <- InternalRowStreamCloseWithError(cursor, context.Canceled) }()
+			go func() { late <- rowStreamCloseWithError(cursor, context.Canceled) }()
 			select {
 			case err := <-late:
 				t.Fatal("duplicate close did not join", err)
@@ -331,7 +331,7 @@ func TestStream(t *testing.T) {
 			if cursor.NextInto(nil) || !errors.Is(cursor.Err(), runtimeerrors.ErrClosed) {
 				t.Fatal(cursor.Err())
 			}
-			if len(InternalRuntimeFor(s).InternalExecutions) != 0 {
+			if len(InternalRuntimeFor(s).executions) != 0 {
 				t.Fatal("idle operation leaked")
 			}
 		})
@@ -799,7 +799,7 @@ func TestStream(t *testing.T) {
 					if limit {
 						config.Limits.MaxPagingStates = 1
 					}
-					InternalRuntimeFor(s).InternalConfig = config
+					InternalRuntimeFor(s).config = config
 					done := make(chan struct{})
 					go func() {
 						defer close(done)
@@ -915,7 +915,7 @@ func TestStream(t *testing.T) {
 					state, _ := preparedState(t, s, columns)
 					bound := func() *Bound[cqltype.Bytes] {
 						opaqueStorageValuex := new(Bound[cqltype.Bytes])
-						BoundData(opaqueStorageValuex).InternalRequest = InternalExecutionRequest{InternalStatement: state.InternalStatement, InternalSource: InternalPreparedSource(state), InternalValues: model.EncodedValues{Columns: cqltype.NewColumns()}, InternalOwner: InternalNewInputOwner(), InternalRouting: model.RoutingInfo{Kind: cqltype.OrdinaryStatement}}
+						BoundData(opaqueStorageValuex).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: InternalPreparedSource(state), InternalValues: model.EncodedValues{Columns: cqltype.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Kind: cqltype.OrdinaryStatement}}
 						BoundData(opaqueStorageValuex).InternalRows = codec.OneColumn(codec.BlobCodec)
 						return opaqueStorageValuex
 					}()
@@ -976,9 +976,9 @@ func TestStream(t *testing.T) {
 				opaqueStorageValuexx := new(Prepared[[]byte,
 					cqltype.Bytes])
 				PreparedData(opaqueStorageValuexx).InternalState = state
-				PreparedData(opaqueStorageValuexx).InternalKind = cqltype.OrdinaryStatement
-				PreparedData(opaqueStorageValuexx).InternalParams = params
-				PreparedData(opaqueStorageValuexx).InternalRows = codec.OneColumn(codec.BlobCodec)
+				PreparedData(opaqueStorageValuexx).kind = cqltype.OrdinaryStatement
+				PreparedData(opaqueStorageValuexx).params = params
+				PreparedData(opaqueStorageValuexx).rows = codec.OneColumn(codec.BlobCodec)
 				return opaqueStorageValuexx
 			}()
 			input := []byte("canonical-input")
@@ -1382,7 +1382,7 @@ func TestStream(t *testing.T) {
 			columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.BlobType})
 			state, _ := preparedState(t, s, columns)
 			bound := new(Bound[cqltype.Bytes])
-			BoundData(bound).InternalRequest = InternalExecutionRequest{InternalStatement: state.InternalStatement, InternalSource: InternalPreparedSource(state), InternalValues: model.EncodedValues{Columns: cqltype.NewColumns()}, InternalOwner: InternalNewInputOwner(), InternalRouting: model.RoutingInfo{Kind: cqltype.OrdinaryStatement}}
+			BoundData(bound).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: InternalPreparedSource(state), InternalValues: model.EncodedValues{Columns: cqltype.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Kind: cqltype.OrdinaryStatement}}
 			BoundData(bound).InternalRows = codec.OneColumn(codec.BlobCodec)
 			defer bound.Close()
 			// The first page is empty. The next omits metadata, then an equal full

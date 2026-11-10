@@ -15,7 +15,7 @@ func attachmentSession() (*cluster.Core, *InternalSessionRuntime) {
 	data.InternalCtx, data.InternalCancel = context.WithCancel(context.Background())
 	return s, InternalRuntimeFor(s)
 }
-func attachmentLogical(s *cluster.Core, parent *InternalInputOwner) (*InternalLogicalExecution, context.CancelFunc) {
+func attachmentLogical(s *cluster.Core, parent *inputOwner) (*logicalExecution, context.CancelFunc) {
 	_, cancel := context.WithCancel(context.Background())
-	return &InternalLogicalExecution{session: s, request: &InternalExecutionRequest{InternalOwner: parent}, lifetime: InternalExecutionLifetime{cancel: cancel, done: make(chan struct{})}}, cancel
+	return &logicalExecution{session: s, request: &InternalExecutionRequest{InternalOwner: parent}, lifetime: executionLifetime{cancel: cancel, done: make(chan struct{})}}, cancel
 }

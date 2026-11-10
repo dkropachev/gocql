@@ -18,9 +18,9 @@ func (rt *InternalSessionRuntime) StopPrepared() implCluster.InternalExecutionWa
 	return &rt.prepareWorkers
 }
 
-type InternalActiveExecutionDrain []*InternalLogicalExecution
+type activeExecutionDrain []*logicalExecution
 
-func (d InternalActiveExecutionDrain) Wait() {
+func (d activeExecutionDrain) Wait() {
 	for _, l := range d {
 		<-l.lifetime.done
 	}
@@ -41,7 +41,7 @@ func (rt *InternalSessionRuntime) StopActive() implCluster.InternalExecutionWait
 	for _, pool := range pools {
 		queries = append(queries, pool.close()...)
 	}
-	active := make([]*InternalLogicalExecution, 0, len(queries))
+	active := make([]*logicalExecution, 0, len(queries))
 	// Stop admission and cancel every reusable query before joining callbacks.
 	for _, q := range queries {
 		if l := q.stop(); l != nil {
@@ -52,13 +52,13 @@ func (rt *InternalSessionRuntime) StopActive() implCluster.InternalExecutionWait
 	for _, l := range active {
 		l.shutdown()
 	}
-	return queryDrain{runtime: rt, queries: queries, legacy: InternalActiveExecutionDrain(legacy)}
+	return queryDrain{runtime: rt, queries: queries, legacy: activeExecutionDrain(legacy)}
 }
 
 type queryDrain struct {
 	runtime *InternalSessionRuntime
 	queries []*queryState
-	legacy  InternalActiveExecutionDrain
+	legacy  activeExecutionDrain
 }
 
 func (d queryDrain) Wait() {
@@ -72,4 +72,4 @@ func (rt *InternalSessionRuntime) MetricsSnapshot() routing.MetricsSnapshot {
 	return rt.metricsSnapshot()
 }
 func (rt *InternalSessionRuntime) Profile() *settings.Profile      { return rt.InternalProfile }
-func (rt *InternalSessionRuntime) ConfigSnapshot() settings.Config { return rt.InternalConfig }
+func (rt *InternalSessionRuntime) ConfigSnapshot() settings.Config { return rt.config }

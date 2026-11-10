@@ -76,19 +76,19 @@ func TestPrepared(t *testing.T) {
 			p.InternalMu.Unlock()
 			changed := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.IntType})
 			response := &transport.InternalResponsePage{ResponseData: model.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("conflict")}}
-			err := InternalSelectPreparedResponse(state, host, &other, other.InternalMetadataID, true, response)
+			err := selectPreparedResponse(state, host, &other, other.InternalMetadataID, true, response)
 			if protocol, ok := errors.AsType[*cqltype.ProtocolError](err); !ok || protocol.Stage != "prepared schema reconciliation" {
 				t.Fatal("overflow disappeared from logical result", err)
 			}
-			if !state.InternalConflictDirty.Load() || state.InternalConflictEpoch.Load() != 0 {
+			if !state.conflictDirty.Load() || state.conflictEpoch.Load() != 0 {
 				t.Fatal("unscheduled conflict not left dirty")
 			}
 			cancelled, cancel := context.WithCancel(context.Background())
 			cancel()
-			if _, err := InternalRuntimeFor(s).InternalPrepareOnConnExpected(cancelled, nil, state, model.EncodedValues{}, false, nil); !errors.Is(err, context.Canceled) {
+			if _, err := InternalRuntimeFor(s).prepareOnConnExpected(cancelled, nil, state, model.EncodedValues{}, false, nil); !errors.Is(err, context.Canceled) {
 				t.Fatal("canceled waiter performed reconciliation work", err)
 			}
-			if err := state.InternalReconcilePendingConflict(); !hasErrorType[*cqltype.ProtocolError](err) {
+			if err := state.reconcilePendingConflict(); !hasErrorType[*cqltype.ProtocolError](err) {
 				t.Fatal("future operation silently bypassed unresolved conflict", err)
 			}
 			if string(view.OwnedBytes()) != "retained" {
@@ -97,13 +97,13 @@ func TestPrepared(t *testing.T) {
 			p.InternalMu.Lock()
 			delete(p.InternalPreparedRefreshScopes, "0")
 			p.InternalMu.Unlock()
-			if err := state.InternalReconcilePendingConflict(); err != nil {
+			if err := state.reconcilePendingConflict(); err != nil {
 				t.Fatal("available scope did not retry", err)
 			}
 			p.InternalMu.Lock()
 			_, queued := p.InternalPreparedRefreshScopes["ks"]
 			p.InternalMu.Unlock()
-			if !queued || state.InternalConflictEpoch.Load() == 0 {
+			if !queued || state.conflictEpoch.Load() == 0 {
 				t.Fatal("retry was not registered")
 			}
 		})
@@ -119,7 +119,7 @@ func TestPrepared(t *testing.T) {
 			p.InternalConfig.Metadata.Mode = settings.MetadataDisabled
 			p.InternalMu.Unlock()
 			state := &InternalPreparedState{InternalSession: s, InternalInfo: PreparedInfo{Keyspace: "ks1", Table: "t1"}}
-			if err := state.InternalNoteMetadataConflict(); err != nil {
+			if err := state.noteMetadataConflict(); err != nil {
 				t.Fatal(err)
 			}
 			<-backend.queried
@@ -144,11 +144,11 @@ func TestPrepared(t *testing.T) {
 			implCluster.SessionData(s).InternalCtx, implCluster.SessionData(s).InternalCancel = context.WithCancel(context.Background())
 			defer s.Close()
 			state := &InternalPreparedState{InternalSession: s, InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl"}}
-			if err := state.InternalNoteMetadataConflict(); err != nil {
+			if err := state.noteMetadataConflict(); err != nil {
 				t.Fatal(err)
 			}
-			first := state.InternalConflictEpoch.Load()
-			if err := state.InternalNoteMetadataConflict(); err != nil || state.InternalConflictEpoch.Load() != first {
+			first := state.conflictEpoch.Load()
+			if err := state.noteMetadataConflict(); err != nil || state.conflictEpoch.Load() != first {
 				t.Fatal("same conflict not coalesced")
 			}
 			p := implCluster.InternalSessionPeripheral(s)
@@ -156,7 +156,7 @@ func TestPrepared(t *testing.T) {
 			delete(p.InternalPreparedRefreshScopes, "ks")
 			p.InternalSchemaReconciled.Add(1)
 			p.InternalMu.Unlock()
-			if err := state.InternalNoteMetadataConflict(); err != nil || state.InternalConflictEpoch.Load() == first {
+			if err := state.noteMetadataConflict(); err != nil || state.conflictEpoch.Load() == first {
 				t.Fatal("future conflicts permanently suppressed", err)
 			}
 		})
@@ -184,7 +184,7 @@ func TestPrepared(t *testing.T) {
 					mock.mu.Unlock()
 					state := &InternalPreparedState{InternalSession: s, InternalInfo: PreparedInfo{Keyspace: "ks1", Table: "t1"}}
 					for i := 0; i < 1000; i++ {
-						if err := state.InternalNoteMetadataConflict(); err != nil {
+						if err := state.noteMetadataConflict(); err != nil {
 							t.Fatal(err)
 						}
 					}
@@ -200,7 +200,7 @@ func TestPrepared(t *testing.T) {
 					if after := s.Metadata(); routing.SnapshotData(after).InternalKeyspaces["ks1"].Tables["from_conflict"] != nil || mode != "minimal" && after != before || mode == "minimal" && len(routing.SnapshotData(after).InternalKeyspaces["ks1"].Tables) != 0 {
 						t.Fatal("required refresh broadened public metadata")
 					}
-					if err := state.InternalReconcilePendingConflict(); err != nil || state.InternalConflictDirty.Load() {
+					if err := state.reconcilePendingConflict(); err != nil || state.conflictDirty.Load() {
 						t.Fatal("successful reconciliation left conflict dirty", err)
 					}
 				})
@@ -216,7 +216,7 @@ func TestPrepared(t *testing.T) {
 					implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
 					rt := InternalRuntimeFor(s)
 					rt.InternalSetProfile(settings.DefaultConfig("localhost").DefaultProfile)
-					rt.InternalConfig.PreparedCacheSize = capacity
+					rt.config.PreparedCacheSize = capacity
 					columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
 					serverDone := make(chan error, 1)
 					go func() {
@@ -242,7 +242,7 @@ func TestPrepared(t *testing.T) {
 					done := make(chan error, 2)
 					for _, cql := range []string{"A", "B"} {
 						go func(cql string) {
-							_, err := InternalRuntimeFor(s).InternalPrepareTyped(ctx, cql, "ks", *func() *PrepareOptions {
+							_, err := InternalRuntimeFor(s).prepareTyped(ctx, cql, "ks", *func() *PrepareOptions {
 								opaqueStorageValuexxxxxxxxxxxxxx := new(PrepareOptions)
 								PrepareOptionsData(opaqueStorageValuexxxxxxxxxxxxxx).InternalConnection = conns[0]
 								return opaqueStorageValuexxxxxxxxxxxxxx
@@ -269,13 +269,13 @@ func TestPrepared(t *testing.T) {
 		})
 
 		t.Run("OrderRemovesAllDuplicates", func(t *testing.T) {
-			a, b := InternalPrepareCacheKey{InternalCql: "a"}, InternalPrepareCacheKey{InternalCql: "b"}
-			rt := &InternalSessionRuntime{InternalPrepareOrder: []InternalPrepareCacheKey{a, b, a}}
-			rt.InternalTouchPrepare(a)
+			a, b := prepareCacheKey{InternalCql: "a"}, prepareCacheKey{InternalCql: "b"}
+			rt := &InternalSessionRuntime{InternalPrepareOrder: []prepareCacheKey{a, b, a}}
+			rt.touchPrepare(a)
 			if len(rt.InternalPrepareOrder) != 2 || rt.InternalPrepareOrder[0] != b || rt.InternalPrepareOrder[1] != a {
 				t.Fatal("duplicate LRU order", rt.InternalPrepareOrder)
 			}
-			rt.InternalForgetPrepareOrder(a)
+			rt.forgetPrepareOrder(a)
 			if len(rt.InternalPrepareOrder) != 1 || rt.InternalPrepareOrder[0] != b {
 				t.Fatal("forget did not remove key")
 			}
@@ -287,10 +287,10 @@ func TestPrepared(t *testing.T) {
 			cols := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
 			state, _ := preparedState(t, s, cols)
 			rt := InternalRuntimeFor(s)
-			rt.InternalConfig.PreparedCacheSize = 1
-			key := InternalPrepareCacheKey{InternalCql: "A", InternalKeyspace: "ks"}
+			rt.config.PreparedCacheSize = 1
+			key := prepareCacheKey{InternalCql: "A", InternalKeyspace: "ks"}
 			rt.InternalPrepared[key] = state
-			rt.InternalPrepareOrder = []InternalPrepareCacheKey{key}
+			rt.InternalPrepareOrder = []prepareCacheKey{key}
 			implCluster.InternalSessionInvalidatePreparedSchema(s, cluster.Event{Keyspace: "ks", Target: "TABLE", Object: "tbl"})
 			done := make(chan error, 1)
 			go func() {
@@ -320,7 +320,7 @@ func TestPrepared(t *testing.T) {
 				PrepareOptionsData(opaqueStorageValuexxxxxxxxxxxxx).InternalConnection = conns[0]
 				return opaqueStorageValuexxxxxxxxxxxxx
 			}()
-			if _, err := InternalRuntimeFor(s).InternalPrepareTyped(ctx, "A", "ks", options); err == nil {
+			if _, err := InternalRuntimeFor(s).prepareTyped(ctx, "A", "ks", options); err == nil {
 				t.Fatal("failed prepare accepted")
 			}
 			rt.InternalMu.Lock()
@@ -329,15 +329,15 @@ func TestPrepared(t *testing.T) {
 			if staleOrder != 0 {
 				t.Fatal("stale failed entry retained LRU record")
 			}
-			if _, err := InternalRuntimeFor(s).InternalPrepareTyped(ctx, "B", "ks", options); err != nil {
+			if _, err := InternalRuntimeFor(s).prepareTyped(ctx, "B", "ks", options); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := InternalRuntimeFor(s).InternalPrepareTyped(ctx, "C", "ks", options); err != nil {
+			if _, err := InternalRuntimeFor(s).prepareTyped(ctx, "C", "ks", options); err != nil {
 				t.Fatal(err)
 			}
 			rt.InternalMu.Lock()
 			count, order := len(rt.InternalPrepared), len(rt.InternalPrepareOrder)
-			_, latest := rt.InternalPrepared[InternalPrepareCacheKey{InternalCql: "C", InternalKeyspace: "ks"}]
+			_, latest := rt.InternalPrepared[prepareCacheKey{InternalCql: "C", InternalKeyspace: "ks"}]
 			rt.InternalMu.Unlock()
 			if count != 1 || order != 1 || !latest {
 				t.Fatal("discovery cache exceeded bound", count, order)
@@ -355,7 +355,7 @@ func TestPrepared(t *testing.T) {
 			rt.InternalMu.Lock()
 			done := make(chan error, 1)
 			go func() {
-				got, e := InternalRuntimeFor(s).InternalPrepareOnConn(context.Background(), conns[0], state, implModel.EncodedValues{}, false)
+				got, e := InternalRuntimeFor(s).prepareOnConn(context.Background(), conns[0], state, implModel.EncodedValues{}, false)
 				if e == nil && got != hp {
 					e = errors.New("wrong entry")
 				}
@@ -406,22 +406,22 @@ func TestPrepared(t *testing.T) {
 					ctx, cancel := context.WithCancel(context.Background())
 					done := make(chan error)
 					go func() {
-						_, e := InternalRuntimeFor(s).InternalPrepareOnConnExpected(ctx, conn, state, implModel.EncodedValues{Columns: implCqltype.NewColumns()}, true, old)
+						_, e := InternalRuntimeFor(s).prepareOnConnExpected(ctx, conn, state, implModel.EncodedValues{Columns: implCqltype.NewColumns()}, true, old)
 						done <- e
 					}()
 					<-entered
 					second := make(chan error)
 					go func() {
-						_, e := InternalRuntimeFor(s).InternalPrepareOnConnExpected(context.Background(), conn, state, implModel.EncodedValues{Columns: implCqltype.NewColumns()}, true, old)
+						_, e := InternalRuntimeFor(s).prepareOnConnExpected(context.Background(), conn, state, implModel.EncodedValues{Columns: implCqltype.NewColumns()}, true, old)
 						second <- e
 					}()
 					deadline := time.Now().Add(time.Second)
 					for {
 						state.InternalMu.RLock()
-						flight := state.InternalPreparing[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)]
+						flight := state.preparing[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)]
 						waiters := int32(0)
 						if flight != nil {
-							waiters = flight.InternalWaiters.Load()
+							waiters = flight.waiters.Load()
 						}
 						state.InternalMu.RUnlock()
 						if waiters >= 2 {
@@ -481,13 +481,13 @@ func TestPrepared(t *testing.T) {
 			}()
 			first := make(chan error, 1)
 			go func() {
-				_, err := InternalRuntimeFor(s).InternalPrepareOnConnExpected(context.Background(), conns[0], state, implModel.EncodedValues{Columns: implCqltype.NewColumns()}, true, old)
+				_, err := InternalRuntimeFor(s).prepareOnConnExpected(context.Background(), conns[0], state, implModel.EncodedValues{Columns: implCqltype.NewColumns()}, true, old)
 				first <- err
 			}()
 			<-firstRead
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			entry, err := InternalRuntimeFor(s).InternalPrepareOnConn(ctx, conns[1], state, implModel.EncodedValues{Columns: implCqltype.NewColumns()}, false)
+			entry, err := InternalRuntimeFor(s).prepareOnConn(ctx, conns[1], state, implModel.EncodedValues{Columns: implCqltype.NewColumns()}, false)
 			if err != nil || !bytes.Equal(entry.InternalId, []byte("second")) {
 				t.Fatal("unrelated host serialized", err)
 			}
@@ -518,14 +518,14 @@ func TestPrepared(t *testing.T) {
 			changed := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))})
 			for i := 0; i < 100; i++ {
 				response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("conflict")}}
-				if err := InternalSelectPreparedResponse(state, host, &second, second.InternalMetadataID, true, response); err != nil {
+				if err := selectPreparedResponse(state, host, &second, second.InternalMetadataID, true, response); err != nil {
 					t.Fatal(err)
 				}
 				if !response.Columns.Equal(changed) {
 					t.Fatal("matching response metadata lost")
 				}
 			}
-			if !state.InternalConflictRefresh.Load() || !implCluster.InternalSessionPeripheral(s).InternalRetryScheduled.Load() {
+			if !state.conflictRefresh.Load() || !implCluster.InternalSessionPeripheral(s).InternalRetryScheduled.Load() {
 				t.Fatal("conflict not scheduled")
 			}
 			state.InternalMu.RLock()
@@ -548,7 +548,7 @@ func TestPrepared(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			done := make(chan error, 1)
 			go func() {
-				_, err := InternalRuntimeFor(s).InternalPrepareOnConnExpected(ctx, conns[0], state, implModel.EncodedValues{Columns: implCqltype.NewColumns()}, true, old)
+				_, err := InternalRuntimeFor(s).prepareOnConnExpected(ctx, conns[0], state, implModel.EncodedValues{Columns: implCqltype.NewColumns()}, true, old)
 				done <- err
 			}()
 			<-requested
@@ -567,7 +567,7 @@ func TestPrepared(t *testing.T) {
 				t.Fatal("session did not join prepare worker")
 			}
 			state.InternalMu.RLock()
-			pending := len(state.InternalPreparing)
+			pending := len(state.preparing)
 			state.InternalMu.RUnlock()
 			if pending != 0 {
 				t.Fatal("worker retained after close")
@@ -653,7 +653,7 @@ func TestPrepared(t *testing.T) {
 						if err != nil {
 							t.Fatal(err)
 						}
-						if PreparedData(prepared).InternalPlans.InternalPlan != nil {
+						if PreparedData(prepared).plans.plan != nil {
 							t.Fatal("absent shape compiled eagerly")
 						}
 						bound := codecTestMust(BindOwned(prepared, codec.EmptyRecord{}))
@@ -733,7 +733,7 @@ func TestPrepared(t *testing.T) {
 			udt := codecTestMust(implCqltype.UDTType("ks", "introduced", implCqltype.ColumnSpec{Name: "n", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))}))
 			changed := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: udt})
 			response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("next")}}
-			if err := InternalSelectPreparedResponse(state, implCqltype.UUID{15: 1}, old, old.InternalMetadataID, true, response, state.InternalDependencies.InternalTracker.InternalStart()); err != nil {
+			if err := selectPreparedResponse(state, implCqltype.UUID{15: 1}, old, old.InternalMetadataID, true, response, state.InternalDependencies.InternalTracker.InternalStart()); err != nil {
 				t.Fatal(err)
 			}
 			current := state.InternalHosts[implCqltype.UUID{15: 1}]
@@ -741,7 +741,7 @@ func TestPrepared(t *testing.T) {
 				t.Fatal("changed result not installed")
 			}
 			implCluster.InternalSessionInvalidatePreparedSchema(s, cluster.Event{Keyspace: "ks", Target: "TYPE", Object: "introduced"})
-			if current.InternalEpoch.InternalCurrent() || state.InternalCacheCurrent() {
+			if current.InternalEpoch.InternalCurrent() || state.cacheCurrent() {
 				t.Fatal("new UDT dependency was not registered")
 			}
 		})
@@ -767,11 +767,11 @@ func TestPrepared(t *testing.T) {
 				t.Fatal("related table not invalidated")
 			}
 			response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{NoMetadata: true, ColumnCount: 1}}
-			if err := InternalSelectPreparedResponse(state, implCqltype.UUID{15: 1}, hp, hp.InternalMetadataID, true, response); err != nil || response.InternalMetadata != hp.InternalResult || !response.Columns.Equal(columns) {
+			if err := selectPreparedResponse(state, implCqltype.UUID{15: 1}, hp, hp.InternalMetadataID, true, response); err != nil || response.InternalMetadata != hp.InternalResult || !response.Columns.Equal(columns) {
 				t.Fatal("retained response rejected", err)
 			}
 			for _, bad := range []*transport.InternalResponsePage{{ResponseData: implModel.ResponseData{NoMetadata: true, ColumnCount: 2}}, {ResponseData: implModel.ResponseData{NoMetadata: true, ColumnCount: 1, MetadataID: []byte("bad")}}} {
-				if InternalSelectPreparedResponse(state, implCqltype.UUID{15: 1}, hp, hp.InternalMetadataID, true, bad) == nil {
+				if selectPreparedResponse(state, implCqltype.UUID{15: 1}, hp, hp.InternalMetadataID, true, bad) == nil {
 					t.Fatal("mismatched metadata accepted")
 				}
 			}
@@ -794,14 +794,14 @@ func TestPrepared(t *testing.T) {
 			newer.InternalMetadataID = []byte("a")
 			state.InternalHosts[id] = &newer
 			response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: columns, MetadataID: []byte("z")}}
-			if err := InternalSelectPreparedResponse(state, id, old, old.InternalMetadataID, true, response); err != nil {
+			if err := selectPreparedResponse(state, id, old, old.InternalMetadataID, true, response); err != nil {
 				t.Fatal(err)
 			}
 			if state.InternalHosts[id] != &newer {
 				t.Fatal("stale response replaced newer entry")
 			}
 			response = &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: columns, MetadataID: []byte("0")}}
-			if err := InternalSelectPreparedResponse(state, id, &newer, newer.InternalMetadataID, true, response); err != nil {
+			if err := selectPreparedResponse(state, id, &newer, newer.InternalMetadataID, true, response); err != nil {
 				t.Fatal(err)
 			}
 			if !bytes.Equal(state.InternalHosts[id].InternalMetadataID, []byte("0")) {
@@ -810,7 +810,7 @@ func TestPrepared(t *testing.T) {
 			current := state.InternalHosts[id]
 			implCluster.InternalSessionInvalidatePreparedSchema(s, cluster.Event{Keyspace: "ks", Object: "tbl", Target: "TABLE"})
 			response = &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: columns, MetadataID: []byte("later")}}
-			_ = InternalSelectPreparedResponse(state, id, current, current.InternalMetadataID, true, response)
+			_ = selectPreparedResponse(state, id, current, current.InternalMetadataID, true, response)
 			if state.InternalHosts[id] != current {
 				t.Fatal("stale schema publication")
 			}
@@ -831,7 +831,7 @@ func TestPrepared(t *testing.T) {
 			}()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			state, err := InternalRuntimeFor(s).InternalPrepareTyped(ctx, "SELECT value FROM ks.tbl", "ks", *func() *PrepareOptions {
+			state, err := InternalRuntimeFor(s).prepareTyped(ctx, "SELECT value FROM ks.tbl", "ks", *func() *PrepareOptions {
 				opaqueStorageValuexxxxxxxxxxxx := new(PrepareOptions)
 				PrepareOptionsData(opaqueStorageValuexxxxxxxxxxxx).InternalConnection = conns[0]
 				return opaqueStorageValuexxxxxxxxxxxx
@@ -839,7 +839,7 @@ func TestPrepared(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if state.InternalCacheCurrent() {
+			if state.cacheCurrent() {
 				t.Fatal("prepare crossing relevant epoch accepted as current")
 			}
 			rt := InternalRuntimeFor(s)
@@ -867,7 +867,7 @@ func TestPrepared(t *testing.T) {
 			udt := codecTestMust(implCqltype.UDTType("ks", "introduced", implCqltype.ColumnSpec{Name: "n", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))}))
 			changed := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: udt})
 			response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("stale")}}
-			if err := InternalSelectPreparedResponse(state, implCqltype.UUID{15: 1}, old, old.InternalMetadataID, true, response, started); err != nil {
+			if err := selectPreparedResponse(state, implCqltype.UUID{15: 1}, old, old.InternalMetadataID, true, response, started); err != nil {
 				t.Fatal(err)
 			}
 			if state.InternalHosts[implCqltype.UUID{15: 1}] != old {
@@ -898,7 +898,7 @@ func TestPrepared(t *testing.T) {
 					result := make(chan *InternalHostPrepared, 1)
 					failure := make(chan error, 1)
 					go func() {
-						entry, err := InternalRuntimeFor(s).InternalPrepareOnConnExpected(context.Background(), conns[0], state, implModel.EncodedValues{Columns: implCqltype.NewColumns()}, true, old)
+						entry, err := InternalRuntimeFor(s).prepareOnConnExpected(context.Background(), conns[0], state, implModel.EncodedValues{Columns: implCqltype.NewColumns()}, true, old)
 						result <- entry
 						failure <- err
 					}()
@@ -952,9 +952,9 @@ func TestPrepared(t *testing.T) {
 				opaqueStorageValuexxxxx := new(Prepared[[]byte,
 					implCqltype.Bytes])
 				PreparedData(opaqueStorageValuexxxxx).InternalState = state
-				PreparedData(opaqueStorageValuexxxxx).InternalParams = params
-				PreparedData(opaqueStorageValuexxxxx).InternalRows = codec.OneColumn(codec.BlobCodec)
-				PreparedData(opaqueStorageValuexxxxx).InternalPlans = &InternalResultPlanCache[implCqltype.Bytes]{}
+				PreparedData(opaqueStorageValuexxxxx).params = params
+				PreparedData(opaqueStorageValuexxxxx).rows = codec.OneColumn(codec.BlobCodec)
+				PreparedData(opaqueStorageValuexxxxx).plans = &InternalResultPlanCache[implCqltype.Bytes]{}
 				return opaqueStorageValuexxxxx
 			}()
 			input := []byte("canonical-payload")
@@ -1040,7 +1040,7 @@ func TestPrepared(t *testing.T) {
 			typ := codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))
 			oldColumns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: typ})
 			state, old := preparedState(t, s, oldColumns)
-			state.InternalPartitioner = "known-before-schema-invalidation"
+			state.partitioner = "known-before-schema-invalidation"
 			newColumns := implCqltype.NewColumns(cqltype.ColumnSlice(oldColumns)[0], implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "added", Type: typ})
 			done := make(chan error, 1)
 			go func() {
@@ -1052,7 +1052,7 @@ func TestPrepared(t *testing.T) {
 			}()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			updated, err := InternalRuntimeFor(s).InternalPrepareOnConnExpected(ctx, conns[0], state, model.EncodedValues{Columns: implCqltype.NewColumns()}, true, old)
+			updated, err := InternalRuntimeFor(s).prepareOnConnExpected(ctx, conns[0], state, model.EncodedValues{Columns: implCqltype.NewColumns()}, true, old)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1087,7 +1087,7 @@ func TestPrepared(t *testing.T) {
 						changed[1].Type = codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))
 						current = implCqltype.NewColumns(changed...)
 					case "partitioner":
-						state.InternalPartitioner = "different"
+						state.partitioner = "different"
 					case "conditional":
 						state.InternalInfo.Conditional = true
 					}
@@ -1101,7 +1101,7 @@ func TestPrepared(t *testing.T) {
 					}()
 					ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 					defer cancel()
-					_, err := InternalRuntimeFor(s).InternalPrepareOnConnExpected(ctx, conns[0], state, implModel.EncodedValues{Columns: parameters}, true, old)
+					_, err := InternalRuntimeFor(s).prepareOnConnExpected(ctx, conns[0], state, implModel.EncodedValues{Columns: parameters}, true, old)
 					if _, ok := errors.AsType[*runtimeerrors.SchemaChangedError](err); !ok {
 						t.Fatal(mode, err)
 					}

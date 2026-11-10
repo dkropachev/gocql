@@ -35,38 +35,38 @@ import (
 )
 
 type RowStreamStorage[R any] struct {
-	InternalCtx         context.Context
-	InternalDecoder     codec.StreamRowDecoder[R]
-	plan                codec.StreamRowPlan[R]
-	err                 error
-	bufferedPage        *transport.InternalResponsePage
-	bufferedBody        *wire.Stream
-	bufferedReader      *codec.StreamRowReader
-	bufferedPlans       *streamPlanCache[R]
-	attemptMetadata     *transport.InternalStreamResponse
-	closeDone           chan struct{}
-	retryTarget         *model.Target
-	InternalCancel      context.CancelFunc
-	stop                func() bool
-	InternalSession     *implCluster.Core
-	InternalRequest     *InternalExecutionRequest
-	response            *transport.InternalStreamResponse
-	InternalReservation *transport.InternalExclusiveConn
-	prepared            *InternalHostPrepared
-	pageCancel          context.CancelFunc
-	cursor              queryCursor
-	columns             cqltype.Columns
-	InternalHistory     paging.InternalPagingHistory
-	info                StreamInfo
-	limits              transport.StreamLimits
-	InternalActive      sync.Mutex
-	mu                  sync.Mutex
-	bufferedIndex       int32
-	advancing           atomic.Bool
-	InternalClosing     atomic.Bool
-	pageBuffered        bool
-	terminal            bool
-	cleaned             bool
+	ctx             context.Context
+	decoder         codec.StreamRowDecoder[R]
+	plan            codec.StreamRowPlan[R]
+	err             error
+	bufferedPage    *transport.InternalResponsePage
+	bufferedBody    *wire.Stream
+	bufferedReader  *codec.StreamRowReader
+	bufferedPlans   *streamPlanCache[R]
+	attemptMetadata *transport.InternalStreamResponse
+	closeDone       chan struct{}
+	retryTarget     *model.Target
+	cancel          context.CancelFunc
+	stop            func() bool
+	session         *implCluster.Core
+	request         *InternalExecutionRequest
+	response        *transport.InternalStreamResponse
+	reservation     *transport.InternalExclusiveConn
+	prepared        *InternalHostPrepared
+	pageCancel      context.CancelFunc
+	cursor          queryCursor
+	columns         cqltype.Columns
+	history         paging.InternalPagingHistory
+	info            StreamInfo
+	limits          transport.StreamLimits
+	active          sync.Mutex
+	mu              sync.Mutex
+	bufferedIndex   int32
+	advancing       atomic.Bool
+	closing         atomic.Bool
+	pageBuffered    bool
+	terminal        bool
+	cleaned         bool
 }
 
 func RowStreamData[R any](v *RowStream[R]) *RowStreamStorage[R] { return &v.privateStorage }

@@ -95,14 +95,14 @@ func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core
 	cursor := func() *RowStream[R] {
 		opaqueStorageValue := new(RowStream[R])
 		opaqueStorageValue.privateStorage.cursor = executionCursor(request)
-		opaqueStorageValue.privateStorage.InternalCtx = runctx
-		opaqueStorageValue.privateStorage.InternalCancel = cancel
-		opaqueStorageValue.privateStorage.InternalSession = session
-		opaqueStorageValue.privateStorage.InternalRequest = request
+		opaqueStorageValue.privateStorage.ctx = runctx
+		opaqueStorageValue.privateStorage.cancel = cancel
+		opaqueStorageValue.privateStorage.session = session
+		opaqueStorageValue.privateStorage.request = request
 		opaqueStorageValue.privateStorage.limits = limits
-		opaqueStorageValue.privateStorage.InternalDecoder = decoder
+		opaqueStorageValue.privateStorage.decoder = decoder
 		opaqueStorageValue.state = model.StartPage()
-		opaqueStorageValue.privateStorage.InternalHistory = paging.InternalPagingHistory{InternalMaxCount: InternalRuntimeFor(session).InternalConfig.Limits.MaxPagingStates, InternalMaxBytes: InternalRuntimeFor(session).InternalConfig.Limits.MaxPagingStateBytes}
+		opaqueStorageValue.privateStorage.history = paging.InternalPagingHistory{InternalMaxCount: InternalRuntimeFor(session).config.Limits.MaxPagingStates, InternalMaxBytes: InternalRuntimeFor(session).config.Limits.MaxPagingStateBytes}
 		opaqueStorageValue.privateStorage.pageBuffered = !incremental
 		opaqueStorageValue.privateStorage.bufferedPlans = plans
 		if plans != nil {
@@ -114,7 +114,7 @@ func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core
 		return opaqueStorageValue
 		// Construction owns active until headers/metadata have selected a checked plan.
 	}()
-	cursor.privateStorage.InternalActive.Lock()
+	cursor.privateStorage.active.Lock()
 	err = InternalRowStreamLoadPage(cursor)
 	if err == nil {
 		cursor.privateStorage.stop = context.AfterFunc(runctx, func() {
@@ -122,22 +122,22 @@ func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core
 			if session.Closed() {
 				cause = runtimeerrors.ErrClosed
 			}
-			InternalRowStreamCloseWithError(cursor, cause)
+			rowStreamCloseWithError(cursor, cause)
 		})
 	}
-	cursor.privateStorage.InternalActive.Unlock()
+	cursor.privateStorage.active.Unlock()
 	if err != nil {
-		InternalRowStreamFail(cursor, err)
-		cursor.privateStorage.InternalActive.Lock()
-		InternalRowStreamCleanup(cursor, false)
-		cursor.privateStorage.InternalActive.Unlock()
+		rowStreamFail(cursor, err)
+		cursor.privateStorage.active.Lock()
+		rowStreamCleanup(cursor, false)
+		cursor.privateStorage.active.Unlock()
 		if failure, ok := errors.AsType[*ExecutionError](err); ok {
 			failure.Result = cursor.Info().Result
 			return nil, failure
 		}
 		return nil, newExecutionError(err, cursor.Info().Result, runtimeerrors.ExecutionStatusOf(err), nil)
 	}
-	request.InternalLogical.installStop(stopFunc(func() { InternalRowStreamCloseWithError(cursor, runtimeerrors.ErrClosed) }))
+	request.InternalLogical.installStop(stopFunc(func() { rowStreamCloseWithError(cursor, runtimeerrors.ErrClosed) }))
 	return cursor, nil
 }
 
@@ -145,7 +145,7 @@ func (s *RowStream[R]) setError(err error) {
 	if err == nil {
 		return
 	}
-	if errors.Is(err, context.Canceled) && s.privateStorage.InternalSession.Closed() {
+	if errors.Is(err, context.Canceled) && s.privateStorage.session.Closed() {
 		err = runtimeerrors.ErrClosed
 	}
 	s.privateStorage.mu.Lock()
@@ -154,8 +154,8 @@ func (s *RowStream[R]) setError(err error) {
 	}
 	s.privateStorage.mu.Unlock()
 }
-func InternalRowStreamFail[R any](s *RowStream[R], err error) {
-	if errors.Is(err, context.Canceled) && s.privateStorage.InternalSession.Closed() {
+func rowStreamFail[R any](s *RowStream[R], err error) {
+	if errors.Is(err, context.Canceled) && s.privateStorage.session.Closed() {
 		err = runtimeerrors.ErrClosed
 	}
 	s.privateStorage.mu.Lock()
@@ -199,20 +199,20 @@ func (s *RowStream[R]) Close() error {
 	if !s.privateStorage.cursor.current() {
 		return s.Err()
 	}
-	return InternalRowStreamCloseWithError(s, nil)
+	return rowStreamCloseWithError(s, nil)
 }
-func InternalRowStreamCloseWithError[R any](s *RowStream[R], err error) error {
+func rowStreamCloseWithError[R any](s *RowStream[R], err error) error {
 	s.privateStorage.mu.Lock()
 	if s.privateStorage.closeDone == nil {
 		s.privateStorage.closeDone = make(chan struct{})
 	}
 	done := s.privateStorage.closeDone
-	if s.privateStorage.InternalClosing.Load() {
+	if s.privateStorage.closing.Load() {
 		s.privateStorage.mu.Unlock()
 		<-done
 		return s.Err()
 	}
-	s.privateStorage.InternalClosing.Store(true)
+	s.privateStorage.closing.Store(true)
 	if !s.privateStorage.terminal && s.privateStorage.err == nil && err != nil {
 		s.privateStorage.err = err
 	}
@@ -225,23 +225,23 @@ func InternalRowStreamCloseWithError[R any](s *RowStream[R], err error) error {
 	// discarding those bytes is far cheaper than closing the connection and
 	// dialing a replacement. The reservation is returned before cancellation,
 	// whose callback would otherwise close the connection.
-	if err == nil && s.privateStorage.InternalActive.TryLock() {
+	if err == nil && s.privateStorage.active.TryLock() {
 		if finishAbandonedResponse(s) {
-			if err := s.privateStorage.InternalReservation.InternalClose(true); err != nil {
+			if err := s.privateStorage.reservation.InternalClose(true); err != nil {
 				s.setError(err)
 			}
-			s.privateStorage.InternalReservation = nil
+			s.privateStorage.reservation = nil
 		}
-		s.privateStorage.InternalActive.Unlock()
+		s.privateStorage.active.Unlock()
 	}
 
 	// Publish termination before cancellation so our own cancellation callback
 	// cannot turn successful explicit Close into a context error. Every caller
 	// joins the same completion, including callback and session shutdown paths.
-	s.privateStorage.InternalCancel()
-	s.privateStorage.InternalActive.Lock()
-	InternalRowStreamCleanup(s, false)
-	s.privateStorage.InternalActive.Unlock()
+	s.privateStorage.cancel()
+	s.privateStorage.active.Lock()
+	rowStreamCleanup(s, false)
+	s.privateStorage.active.Unlock()
 	return s.Err()
 }
 
@@ -255,18 +255,18 @@ const abandonedResponseDrainLimit = 1 << 20
 // held.
 func finishAbandonedResponse[R any](s *RowStream[R]) bool {
 	p := &s.privateStorage
-	if p.pageBuffered || p.cleaned || p.InternalReservation == nil || p.response == nil || p.err != nil {
+	if p.pageBuffered || p.cleaned || p.reservation == nil || p.response == nil || p.err != nil {
 		return false
 	}
 	response := p.response
 	if response.InternalTerminal {
-		return p.InternalReservation.InternalComplete
+		return p.reservation.InternalComplete
 	}
 	body := response.InternalBody
 	if body == nil || body.Remaining() > abandonedResponseDrainLimit {
 		return false
 	}
-	err := p.InternalReservation.InternalWithIO(response.InternalCtx, func() error {
+	err := p.reservation.InternalWithIO(response.InternalCtx, func() error {
 		if err := body.Skip(); err != nil {
 			return err
 		}
@@ -274,13 +274,13 @@ func finishAbandonedResponse[R any](s *RowStream[R]) bool {
 			return err
 		}
 		response.InternalTerminal = true
-		return p.InternalReservation.InternalFinishResponse()
+		return p.reservation.InternalFinishResponse()
 	})
 	return err == nil
 }
 
 // active is held; no driver mutex is held while calling application code.
-func InternalRowStreamCleanup[R any](s *RowStream[R], reusable bool) {
+func rowStreamCleanup[R any](s *RowStream[R], reusable bool) {
 	if s.privateStorage.cleaned {
 		return
 	}
@@ -294,11 +294,11 @@ func InternalRowStreamCleanup[R any](s *RowStream[R], reusable bool) {
 	if s.privateStorage.stop != nil {
 		s.privateStorage.stop()
 	}
-	if s.privateStorage.InternalReservation != nil {
-		if err := s.privateStorage.InternalReservation.InternalClose(reusable); err != nil {
+	if s.privateStorage.reservation != nil {
+		if err := s.privateStorage.reservation.InternalClose(reusable); err != nil {
 			s.setError(err)
 		}
-		s.privateStorage.InternalReservation = nil
+		s.privateStorage.reservation = nil
 	}
 	if s.privateStorage.pageCancel != nil {
 		s.privateStorage.pageCancel()
@@ -312,10 +312,10 @@ func InternalRowStreamCleanup[R any](s *RowStream[R], reusable bool) {
 		s.privateStorage.attemptMetadata.InternalReleaseMetadata()
 		s.privateStorage.attemptMetadata = nil
 	}
-	s.privateStorage.InternalHistory.InternalClear()
-	s.privateStorage.InternalCancel()
-	s.privateStorage.InternalRequest.InternalLogical.InternalFinish(s.Info().Result, s.Err())
-	s.privateStorage.InternalRequest.InternalLogical.InternalReleaseInput()
+	s.privateStorage.history.InternalClear()
+	s.privateStorage.cancel()
+	s.privateStorage.request.InternalLogical.InternalFinish(s.Info().Result, s.Err())
+	s.privateStorage.request.InternalLogical.releaseInput()
 }
 func (s *RowStream[R]) NextInto(dst *R) bool {
 	if s == nil {
@@ -338,27 +338,27 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 		}
 		s.privateStorage.mu.Unlock()
 		if active {
-			s.privateStorage.InternalCancel()
+			s.privateStorage.cancel()
 		}
 		return false
 	}
 	defer s.privateStorage.advancing.Store(false)
-	s.privateStorage.InternalActive.Lock()
-	defer s.privateStorage.InternalActive.Unlock()
+	s.privateStorage.active.Lock()
+	defer s.privateStorage.active.Unlock()
 	s.privateStorage.mu.Lock()
 	terminal := s.privateStorage.terminal
 	s.privateStorage.mu.Unlock()
-	if terminal || s.privateStorage.InternalClosing.Load() {
+	if terminal || s.privateStorage.closing.Load() {
 		return false
 	}
-	if err := s.privateStorage.InternalCtx.Err(); err != nil {
-		InternalRowStreamFail(s, err)
-		InternalRowStreamCleanup(s, false)
+	if err := s.privateStorage.ctx.Err(); err != nil {
+		rowStreamFail(s, err)
+		rowStreamCleanup(s, false)
 		return false
 	}
 	if dst == nil {
-		InternalRowStreamFail(s, cqltype.TypeValidation("stream destination", "nil destination"))
-		InternalRowStreamCleanup(s, false)
+		rowStreamFail(s, cqltype.TypeValidation("stream destination", "nil destination"))
+		rowStreamCleanup(s, false)
 		return false
 	}
 	if s.privateStorage.pageBuffered {
@@ -371,8 +371,8 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 			s.privateStorage.mu.Unlock()
 			ok, err := transport.InternalDecodeStreamRow(s.privateStorage.response, s.privateStorage.plan, dst)
 			if err != nil {
-				InternalRowStreamFail(s, err)
-				InternalRowStreamCleanup(s, false)
+				rowStreamFail(s, err)
+				rowStreamCleanup(s, false)
 				return false
 			}
 			if ok {
@@ -384,16 +384,16 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 			}
 		} else if !s.privateStorage.response.InternalTerminal {
 			// Finish an empty response without touching a destination or Reset.
-			err := s.privateStorage.InternalReservation.InternalWithIO(s.privateStorage.response.InternalCtx, func() error {
+			err := s.privateStorage.reservation.InternalWithIO(s.privateStorage.response.InternalCtx, func() error {
 				if err := s.privateStorage.response.InternalBody.RequireEnd(); err != nil {
 					return err
 				}
 				s.privateStorage.response.InternalTerminal = true
-				return s.privateStorage.InternalReservation.InternalFinishResponse()
+				return s.privateStorage.reservation.InternalFinishResponse()
 			})
 			if err != nil {
-				InternalRowStreamFail(s, err)
-				InternalRowStreamCleanup(s, false)
+				rowStreamFail(s, err)
+				rowStreamCleanup(s, false)
 				return false
 			}
 		}
@@ -405,12 +405,12 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 			s.privateStorage.mu.Lock()
 			s.privateStorage.terminal = true
 			s.privateStorage.mu.Unlock()
-			InternalRowStreamCleanup(s, true)
+			rowStreamCleanup(s, true)
 			return false
 		}
-		if err := s.privateStorage.InternalHistory.InternalAdd(next); err != nil {
-			InternalRowStreamFail(s, err)
-			InternalRowStreamCleanup(s, false)
+		if err := s.privateStorage.history.InternalAdd(next); err != nil {
+			rowStreamFail(s, err)
+			rowStreamCleanup(s, false)
 			return false
 		}
 		s.state = next
@@ -419,15 +419,15 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 			s.privateStorage.pageCancel = nil
 		}
 		if err := InternalRowStreamLoadPage(s); err != nil {
-			InternalRowStreamFail(s, err)
-			InternalRowStreamCleanup(s, false)
+			rowStreamFail(s, err)
+			rowStreamCleanup(s, false)
 			return false
 		}
 	}
 }
 
 func (s *RowStream[R]) acquire(plan implRouting.QueryPlan) error {
-	request := s.privateStorage.InternalRequest
+	request := s.privateStorage.request
 	var target model.Target
 	var routed *implPool.InternalHostConnPool // the pool of the plan's route
 	if s.privateStorage.retryTarget != nil {
@@ -442,12 +442,12 @@ func (s *RowStream[R]) acquire(plan implRouting.QueryPlan) error {
 		}
 		target = r.Target()
 		routed = r.InternalHost().Pool()
-	} else if request.InternalRouting.HostID.Set {
-		target = model.Target{HostID: request.InternalRouting.HostID.Value, ShardID: request.InternalRouting.ShardID, StrictShard: request.InternalRouting.ShardID.Set}
+	} else if request.routing.HostID.Set {
+		target = model.Target{HostID: request.routing.HostID.Value, ShardID: request.routing.ShardID, StrictShard: request.routing.ShardID.Set}
 	} else {
-		hosts := implCluster.SessionData(s.privateStorage.InternalSession).InternalHostSource.InternalGetHostsList()
+		hosts := implCluster.SessionData(s.privateStorage.session).InternalHostSource.InternalGetHostsList()
 		for _, host := range hosts {
-			if host != nil && host.IsUp() && !implCluster.InternalClusterSettingsFilterHost(&implCluster.SessionData(s.privateStorage.InternalSession).InternalCfg, host) {
+			if host != nil && host.IsUp() && !implCluster.InternalClusterSettingsFilterHost(&implCluster.SessionData(s.privateStorage.session).InternalCfg, host) {
 				target.HostID = implEndpoint.InternalHostInfoHostUUID(host)
 				break
 			}
@@ -458,25 +458,25 @@ func (s *RowStream[R]) acquire(plan implRouting.QueryPlan) error {
 	}
 	pool := routed
 	if pool == nil {
-		implCluster.SessionData(s.privateStorage.InternalSession).InternalPool.InternalMu.RLock()
-		pool = implCluster.SessionData(s.privateStorage.InternalSession).InternalPool.InternalHostConnPools[target.HostID]
-		implCluster.SessionData(s.privateStorage.InternalSession).InternalPool.InternalMu.RUnlock()
+		implCluster.SessionData(s.privateStorage.session).InternalPool.InternalMu.RLock()
+		pool = implCluster.SessionData(s.privateStorage.session).InternalPool.InternalHostConnPools[target.HostID]
+		implCluster.SessionData(s.privateStorage.session).InternalPool.InternalMu.RUnlock()
 	}
-	if pool == nil || pool.InternalHost == nil || !pool.InternalHost.IsUp() || implCluster.InternalClusterSettingsFilterHost(&implCluster.SessionData(s.privateStorage.InternalSession).InternalCfg, pool.InternalHost) {
+	if pool == nil || pool.InternalHost == nil || !pool.InternalHost.IsUp() || implCluster.InternalClusterSettingsFilterHost(&implCluster.SessionData(s.privateStorage.session).InternalCfg, pool.InternalHost) {
 		return runtimeerrors.ErrNoConnections
 	}
 	for {
 		var reservation *transport.InternalExclusiveConn
 		var err error
 		if request.connection != nil {
-			reservation, err = request.connection.InternalReserveExclusiveWithLimits(s.privateStorage.InternalCtx, s.privateStorage.limits)
+			reservation, err = request.connection.InternalReserveExclusiveWithLimits(s.privateStorage.ctx, s.privateStorage.limits)
 		} else {
-			reservation, err = pool.InternalReserveStreamWithLimits(s.privateStorage.InternalCtx, target, request.InternalRouting, s.privateStorage.limits)
+			reservation, err = pool.InternalReserveStreamWithLimits(s.privateStorage.ctx, target, request.routing, s.privateStorage.limits)
 		}
 		if err != nil {
 			return err
 		}
-		s.privateStorage.InternalReservation = reservation
+		s.privateStorage.reservation = reservation
 		state := request.InternalPrepared()
 		if state == nil {
 			return nil
@@ -488,9 +488,9 @@ func (s *RowStream[R]) acquire(plan implRouting.QueryPlan) error {
 			s.privateStorage.prepared = prepared
 			// Conditional PREPARE responses may omit result columns. The actual
 			// response supplies and validates their shape before decoding output.
-			knownColumns := prepared.InternalColumns.Len() != 0 || request.InternalRouting.Kind == cqltype.OrdinaryStatement
+			knownColumns := prepared.InternalColumns.Len() != 0 || request.routing.Kind == cqltype.OrdinaryStatement
 			if knownColumns && (s.privateStorage.plan == nil || !s.privateStorage.columns.Equal(prepared.InternalColumns)) {
-				plan, err := s.privateStorage.InternalDecoder.Compile(prepared.InternalColumns)
+				plan, err := s.privateStorage.decoder.Compile(prepared.InternalColumns)
 				if err != nil {
 					return err
 				}
@@ -511,17 +511,17 @@ func (s *RowStream[R]) acquire(plan implRouting.QueryPlan) error {
 		if err = reservation.InternalClose(true); err != nil {
 			return err
 		}
-		s.privateStorage.InternalReservation = nil
-		s.privateStorage.prepared, err = request.source().onConn(s.privateStorage.InternalCtx, InternalRuntimeFor(s.privateStorage.InternalSession), conn, request.InternalValues, false, nil)
+		s.privateStorage.reservation = nil
+		s.privateStorage.prepared, err = request.source().onConn(s.privateStorage.ctx, InternalRuntimeFor(s.privateStorage.session), conn, request.InternalValues, false, nil)
 		if err != nil {
 			return err
 		}
 	}
 }
 func (s *RowStream[R]) wireRequest(consistency cqltype.Consistency) (*model.AttemptRequest, error) {
-	r := s.privateStorage.InternalRequest
-	conn := s.privateStorage.InternalReservation.InternalConn
-	rt := InternalRuntimeFor(s.privateStorage.InternalSession)
+	r := s.privateStorage.request
+	conn := s.privateStorage.reservation.InternalConn
+	rt := InternalRuntimeFor(s.privateStorage.session)
 	w := new(model.AttemptRequest)
 	if err := rt.newAttempt(w, conn, r, s.state, consistency); err != nil {
 		return nil, err
@@ -544,32 +544,32 @@ func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
 
 // rowStreamLoadPage loads the next page, recording its failed attempts in log.
 func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
-	request := s.privateStorage.InternalRequest
-	metadata := s.privateStorage.InternalSession.Metadata()
-	request.tabletFeedback = implCluster.InternalSessionCaptureTabletFeedback(s.privateStorage.InternalSession, request.InternalRouting, metadata)
+	request := s.privateStorage.request
+	metadata := s.privateStorage.session.Metadata()
+	request.tabletFeedback = implCluster.InternalSessionCaptureTabletFeedback(s.privateStorage.session, request.routing, metadata)
 	tablet := lookupRequestTablet(metadata, request)
-	request.tabletVersionBlock = tablet.VersionBlock(request.InternalRouting)
+	request.tabletVersionBlock = tablet.VersionBlock(request.routing)
 	var plan implRouting.QueryPlan
 	if policy := request.InternalOptions.InternalProfile.Routing; policy != nil {
 		if err := policy.Validate(metadata); err != nil {
 			return err
 		}
 		if builtin, ok := policy.(*implRouting.InternalRoutingPolicy); ok {
-			plan = builtin.InternalPlanWith(request.InternalRouting, metadata, new(implRouting.InternalLazyRoutingPlan), &tablet)
+			plan = builtin.InternalPlanWith(request.routing, metadata, new(implRouting.InternalLazyRoutingPlan), &tablet)
 		} else {
-			plan = implRouting.NewPlan(policy, request.InternalRouting, metadata)
+			plan = implRouting.NewPlan(policy, request.routing, metadata)
 		}
 	}
-	pagectx := s.privateStorage.InternalCtx
+	pagectx := s.privateStorage.ctx
 	if timeout := request.InternalOptions.InternalProfile.PageTimeout; timeout > 0 {
-		pagectx, s.privateStorage.pageCancel = context.WithTimeout(s.privateStorage.InternalCtx, timeout)
+		pagectx, s.privateStorage.pageCancel = context.WithTimeout(s.privateStorage.ctx, timeout)
 	}
 	consistency := request.InternalOptions.InternalProfile.Consistency
 	for attempt := 1; ; attempt++ {
 		if err := pagectx.Err(); err != nil {
 			return err
 		}
-		if s.privateStorage.InternalReservation == nil {
+		if s.privateStorage.reservation == nil {
 			if err := s.acquire(plan); err != nil {
 				return err
 			}
@@ -579,14 +579,14 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			// and validates the same canonical input, then sends the next page
 			// state; it never replays a page that has exposed caller output.
 			if s.Info().OutputStarted && !s.state.More() {
-				return &runtimeerrors.SchemaChangedError{Statement: request.InternalStatement, Previous: request.InternalValues.Columns, Current: request.InternalPrepared().InternalParameters}
+				return &runtimeerrors.SchemaChangedError{Statement: request.statement, Previous: request.InternalValues.Columns, Current: request.InternalPrepared().InternalParameters}
 			}
-			conn := s.privateStorage.InternalReservation.InternalConn
-			if err := s.privateStorage.InternalReservation.InternalClose(true); err != nil {
+			conn := s.privateStorage.reservation.InternalConn
+			if err := s.privateStorage.reservation.InternalClose(true); err != nil {
 				return err
 			}
-			s.privateStorage.InternalReservation = nil
-			prepared, err := request.source().onConn(pagectx, InternalRuntimeFor(s.privateStorage.InternalSession), conn, request.InternalValues, false, nil)
+			s.privateStorage.reservation = nil
+			prepared, err := request.source().onConn(pagectx, InternalRuntimeFor(s.privateStorage.session), conn, request.InternalValues, false, nil)
 			if err != nil {
 				return err
 			}
@@ -603,20 +603,20 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		wireRequest.Lease = request.InternalOwner.InternalWriterLease(request.InternalValues.Framed)
 		observed := request.source().observe()
 		started := time.Now()
-		response, err := s.privateStorage.InternalReservation.InternalExchange(pagectx, wireRequest)
+		response, err := s.privateStorage.reservation.InternalExchange(pagectx, wireRequest)
 		wireRequest.Lease.Release()
-		conn := s.privateStorage.InternalReservation.InternalConn
+		conn := s.privateStorage.reservation.InternalConn
 		event := implRouting.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: model.Target{HostID: conn.InternalHostID()}, Started: started, Latency: time.Since(started), Err: err, Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
 		if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0 {
 			event.Target.ShardID = cqltype.Option[uint32]{Set: true, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}
 		}
-		rt := InternalRuntimeFor(s.privateStorage.InternalSession)
+		rt := InternalRuntimeFor(s.privateStorage.session)
 		rt.attempts.Add(1)
 		if observer := request.InternalLogical.observer; observer != nil {
-			implCluster.InternalSessionObserveSafely(s.privateStorage.InternalSession, func() { observer.ObserveAttempt(event) })
+			implCluster.InternalSessionObserveSafely(s.privateStorage.session, func() { observer.ObserveAttempt(event) })
 		}
 		if policy := request.InternalOptions.InternalProfile.Routing; policy != nil {
-			implCluster.InternalSessionObserveSafely(s.privateStorage.InternalSession, func() { policy.Observe(event) })
+			implCluster.InternalSessionObserveSafely(s.privateStorage.session, func() { policy.Observe(event) })
 		}
 		s.privateStorage.mu.Lock()
 		s.privateStorage.info.Result.Attempts++
@@ -639,11 +639,11 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			s.privateStorage.attemptMetadata = nil
 		}
 		if err == nil {
-			page := &InternalResultMetadataObservation{kind: response.InternalKind, columns: response.InternalColumns, columnCount: response.InternalColumnCount, noMetadata: response.InternalMetadata.NoMetadata, metadataChanged: response.InternalMetadata.MetadataChanged, metadataID: response.InternalMetadata.MetadataID}
-			err = InternalSelectPreparedMetadata(request.InternalPrepared(), conn.InternalHostID(), s.privateStorage.prepared, wireRequest.ResultMetadataID, conn.InternalTracksResultMetadataID(), page, observed)
+			page := &resultMetadataObservation{kind: response.InternalKind, columns: response.InternalColumns, columnCount: response.InternalColumnCount, noMetadata: response.InternalMetadata.NoMetadata, metadataChanged: response.InternalMetadata.MetadataChanged, metadataID: response.InternalMetadata.MetadataID}
+			err = selectPreparedMetadata(request.InternalPrepared(), conn.InternalHostID(), s.privateStorage.prepared, wireRequest.ResultMetadataID, conn.InternalTracksResultMetadataID(), page, observed)
 			if err == nil {
 				if s.privateStorage.plan == nil || !s.privateStorage.columns.Equal(page.columns) {
-					s.privateStorage.plan, err = s.privateStorage.InternalDecoder.Compile(page.columns)
+					s.privateStorage.plan, err = s.privateStorage.decoder.Compile(page.columns)
 					if err == nil && s.privateStorage.plan == nil {
 						err = cqltype.TypeValidation("stream plan", "decoder returned nil plan")
 					}
@@ -681,12 +681,12 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			return err
 		}
 		if unprepared, ok := errors.AsType[*protocol.RequestErrUnprepared](err); attempt == 1 && ok && request.source().rejected(unprepared.StatementId, wireRequest.PreparedID) {
-			if closeErr := s.privateStorage.InternalReservation.InternalClose(true); closeErr != nil {
+			if closeErr := s.privateStorage.reservation.InternalClose(true); closeErr != nil {
 				return closeErr
 			}
-			s.privateStorage.InternalReservation = nil
+			s.privateStorage.reservation = nil
 			s.privateStorage.retryTarget = &model.Target{HostID: conn.InternalHostID(), ShardID: cqltype.Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
-			s.privateStorage.prepared, err = request.source().onConn(pagectx, InternalRuntimeFor(s.privateStorage.InternalSession), conn, request.InternalValues, true, s.privateStorage.prepared)
+			s.privateStorage.prepared, err = request.source().onConn(pagectx, InternalRuntimeFor(s.privateStorage.session), conn, request.InternalValues, true, s.privateStorage.prepared)
 			if err != nil {
 				return err
 			}
@@ -695,7 +695,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		}
 		decision := retry.Decision{}
 		if policy := request.InternalOptions.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.InternalRouting.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
+			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
 		}
 		if decision.Action == retry.Stop {
 			return err
@@ -712,12 +712,12 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			}
 			consistency = decision.Consistency.Value
 		}
-		if decision.Action == retry.Same && s.privateStorage.InternalReservation.InternalClosing.Load() {
+		if decision.Action == retry.Same && s.privateStorage.reservation.InternalClosing.Load() {
 			s.privateStorage.retryTarget = &model.Target{HostID: conn.InternalHostID(), ShardID: cqltype.Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
 		}
-		if decision.Action == retry.Next || s.privateStorage.InternalReservation.InternalClosing.Load() {
-			s.privateStorage.InternalReservation.InternalClose(false)
-			s.privateStorage.InternalReservation = nil
+		if decision.Action == retry.Next || s.privateStorage.reservation.InternalClosing.Load() {
+			s.privateStorage.reservation.InternalClose(false)
+			s.privateStorage.reservation = nil
 			s.privateStorage.prepared = nil
 		}
 		if decision.Delay > 0 {

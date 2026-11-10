@@ -47,7 +47,7 @@ func (r Rows[R]) NextInto(dst *R) bool {
 		return impl.NextInto(dst)
 	}
 	if r.impl == nil {
-		InternalClearDestination(dst)
+		clearDestination(dst)
 	}
 	return false
 }

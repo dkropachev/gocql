@@ -64,23 +64,23 @@ func FuzzStreamExecutionBoundary(f *testing.F) {
 		request.InternalOptions.InternalProfile.Speculation = nil
 		cursor := func() *RowStream[[]byte] {
 			opaqueStorageValuexx := new(RowStream[[]byte])
-			RowStreamData(opaqueStorageValuexx).InternalCtx = ctx
-			RowStreamData(opaqueStorageValuexx).InternalCancel = cancel
-			RowStreamData(opaqueStorageValuexx).InternalSession = s
-			RowStreamData(opaqueStorageValuexx).InternalRequest = request
-			RowStreamData(opaqueStorageValuexx).InternalDecoder = codec.StreamOneColumn(codec.StreamBlob)
-			RowStreamData(opaqueStorageValuexx).InternalReservation = reservation
-			RowStreamData(opaqueStorageValuexx).InternalHistory = paging.InternalPagingHistory{InternalMaxCount: 4, InternalMaxBytes: 64}
+			RowStreamData(opaqueStorageValuexx).ctx = ctx
+			RowStreamData(opaqueStorageValuexx).cancel = cancel
+			RowStreamData(opaqueStorageValuexx).session = s
+			RowStreamData(opaqueStorageValuexx).request = request
+			RowStreamData(opaqueStorageValuexx).decoder = codec.StreamOneColumn(codec.StreamBlob)
+			RowStreamData(opaqueStorageValuexx).reservation = reservation
+			RowStreamData(opaqueStorageValuexx).history = paging.InternalPagingHistory{InternalMaxCount: 4, InternalMaxBytes: 64}
 			return opaqueStorageValuexx
 		}()
-		RowStreamData(cursor).InternalActive.Lock()
+		RowStreamData(cursor).active.Lock()
 		err = InternalRowStreamLoadPage(cursor)
-		RowStreamData(cursor).InternalActive.Unlock()
+		RowStreamData(cursor).active.Unlock()
 		if err != nil {
-			InternalRowStreamFail(cursor, err)
-			RowStreamData(cursor).InternalActive.Lock()
-			InternalRowStreamCleanup(cursor, false)
-			RowStreamData(cursor).InternalActive.Unlock()
+			rowStreamFail(cursor, err)
+			RowStreamData(cursor).active.Lock()
+			rowStreamCleanup(cursor, false)
+			RowStreamData(cursor).active.Unlock()
 		} else {
 			dst := make([]byte, 0, int(capacity))
 			for i := 0; i < 4 && cursor.NextInto(&dst); i++ {

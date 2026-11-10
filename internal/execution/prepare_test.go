@@ -30,7 +30,7 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 	changed := implCqltype.NewColumns(cqltype.ColumnSlice(columns)[0], implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "added", Type: blob})
 	bound := func() *Bound[implCqltype.Bytes] {
 		opaqueStorageValue := new(Bound[implCqltype.Bytes])
-		BoundData(opaqueStorageValue).InternalRequest = InternalExecutionRequest{InternalStatement: state.InternalStatement, InternalSource: InternalPreparedSource(state), InternalValues: model.EncodedValues{Columns: implCqltype.NewColumns()}, InternalOwner: InternalNewInputOwner(), InternalRouting: model.RoutingInfo{Kind: implCqltype.OrdinaryStatement}}
+		BoundData(opaqueStorageValue).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: InternalPreparedSource(state), InternalValues: model.EncodedValues{Columns: implCqltype.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Kind: implCqltype.OrdinaryStatement}}
 		BoundData(opaqueStorageValue).InternalRows = codec.OneColumn(codec.BlobCodec)
 		return opaqueStorageValue
 	}()

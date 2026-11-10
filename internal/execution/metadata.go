@@ -5,5 +5,5 @@ package execution
 
 import "github.com/scylladb/gocql/v2/internal/model"
 
-type InternalTraceSessionRow = model.TraceSessionRow
-type InternalTraceActivityRow = model.TraceActivityRow
+type traceSessionRow = model.TraceSessionRow
+type traceActivityRow = model.TraceActivityRow

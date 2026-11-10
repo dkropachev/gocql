@@ -44,7 +44,7 @@ func PrepareStream[P, R any](ctx context.Context, session *implCluster.Core, sta
 	if statement.Rows == nil {
 		return nil, cqltype.TypeValidation("stream decoder", "nil decoder")
 	}
-	base := binding.Statement[P, codec.EmptyRecord]{CQL: statement.CQL, Params: statement.Params, Kind: statement.Kind, Rows: InternalExecRowsDecoder{}}
+	base := binding.Statement[P, codec.EmptyRecord]{CQL: statement.CQL, Params: statement.Params, Kind: statement.Kind, Rows: execRowsDecoder{}}
 	prepared, err := prepareStatement(ctx, session, &base, options)
 	if err != nil {
 		return nil, err
@@ -61,7 +61,7 @@ func PrepareStream[P, R any](ctx context.Context, session *implCluster.Core, sta
 			return nil, cqltype.TypeValidation("stream plan", "decoder returned nil plan")
 		}
 	}
-	p := &Prepared[P, codec.EmptyRecord]{privateStorage: PreparedStorage[P, codec.EmptyRecord]{InternalState: prepared.state, InternalKind: prepared.kind, InternalParams: prepared.params, InternalRows: InternalExecRowsDecoder{}}}
+	p := &Prepared[P, codec.EmptyRecord]{privateStorage: PreparedStorage[P, codec.EmptyRecord]{InternalState: prepared.state, kind: prepared.kind, params: prepared.params, rows: execRowsDecoder{}}}
 	return &PreparedStream[P, R]{prepared: p, decoder: statement.Rows, columns: prepared.columns, plan: plan}, nil
 }
 

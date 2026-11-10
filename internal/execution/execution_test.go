@@ -151,7 +151,7 @@ func TestExecution(t *testing.T) {
 					cs[0].InternalFramers.InternalDefaults.InternalFlagLWT = 1 << 30
 				}
 				cs[0].InternalRefreshNativeProtocol()
-				info, err := InternalRuntimeFor(s).InternalHostPreparedInfo(cs[0], &transport.InternalResponsePage{ResponseData: model.ResponseData{Lwt: test.lwt}}, &InternalPreparedState{InternalStatement: "INSERT x IF y"})
+				info, err := InternalRuntimeFor(s).hostPreparedInfo(cs[0], &transport.InternalResponsePage{ResponseData: model.ResponseData{Lwt: test.lwt}}, &InternalPreparedState{InternalStatement: "INSERT x IF y"})
 				if err != nil || info.Kind != test.want {
 					t.Fatal(info, err)
 				}
@@ -165,7 +165,7 @@ func TestExecution(t *testing.T) {
 	t.Run("CanExecuteDirect", func(t *testing.T) {
 		rt := &InternalSessionRuntime{}
 		request := func() *InternalExecutionRequest {
-			return &InternalExecutionRequest{InternalLogical: &InternalLogicalExecution{}, InternalOptions: InternalResolvedOptions{InternalProfile: settings.InternalDefaultProfile()}}
+			return &InternalExecutionRequest{InternalLogical: &logicalExecution{}, InternalOptions: InternalResolvedOptions{InternalProfile: settings.InternalDefaultProfile()}}
 		}
 		if !canExecuteDirect(rt, request()) {
 			t.Fatal("one-shot execution should run direct")
@@ -191,7 +191,7 @@ func TestExecution(t *testing.T) {
 			t.Fatal("an unadmitted request needs the general path")
 		}
 		coalescing := &InternalSessionRuntime{}
-		coalescing.InternalConfig.CoalesceWait = time.Millisecond
+		coalescing.config.CoalesceWait = time.Millisecond
 		if canExecuteDirect(coalescing, request()) {
 			t.Fatal("write coalescing needs the general path")
 		}
@@ -500,7 +500,7 @@ func TestExecution(t *testing.T) {
 		}{
 			{"SELECT value FROM ks.tbl", "ks", true}, {"INSERT INTO ks.tbl(k)VALUES('ks.tbl')", "ks", true}, {"UPDATE ks.tbl SET value=1 WHERE k=2", "ks", true}, {"DELETE FROM ks.tbl WHERE k=2", "ks", true}, {"TRUNCATE TABLE ks.tbl", "ks", true}, {"CREATE TABLE IF NOT EXISTS ks.tbl(k int PRIMARY KEY)", "ks", true}, {"SELECT * FROM \"Ks\".\"Tbl\"", "Ks", true}, {"SELECT * FROM tbl WHERE value='ks.tbl'", "ks", false}, {"SELECT * FROM other.tbl -- ks.tbl", "ks", false}, {"SELECT * FROM ks.tbl /* unfinished", "ks", false},
 		} {
-			if got := InternalQualifiedForKeyspace(test.cql, test.keyspace); got != test.want {
+			if got := qualifiedForKeyspace(test.cql, test.keyspace); got != test.want {
 				t.Fatal(test.cql, got, test.want)
 			}
 		}
@@ -599,12 +599,12 @@ func TestExecution(t *testing.T) {
 			for _, written := range []bool{false, true} {
 				err := runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: errors.New("write"), InternalPotentiallyExecuted: written})
 				status := runtimeerrors.ExecutionStatusOf(err)
-				decision := (retry.Safe{}).Decide(retry.Attempt{Err: err, Number: 1, BytesWritten: InternalAttemptBytesWritten(err), ExecutionStatus: status})
+				decision := (retry.Safe{}).Decide(retry.Attempt{Err: err, Number: 1, BytesWritten: attemptBytesWritten(err), ExecutionStatus: status})
 				if (decision.Action == retry.Next) == written {
 					t.Fatal(written, decision)
 				}
 			}
-			if !InternalAttemptBytesWritten(errors.New("unknown completion")) {
+			if !attemptBytesWritten(errors.New("unknown completion")) {
 				t.Fatal("unproven write classified safe")
 			}
 		})
@@ -639,8 +639,8 @@ func TestExecution(t *testing.T) {
 						_, _ = ps[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "result")))
 					}()
 					b := runtimeQuery(t)
-					BoundData(b).InternalRequest.InternalRouting.Kind = kind
-					BoundData(b).InternalRequest.InternalRouting.Conditional = kind != cqltype.OrdinaryStatement
+					BoundData(b).InternalRequest.routing.Kind = kind
+					BoundData(b).InternalRequest.routing.Conditional = kind != cqltype.OrdinaryStatement
 					result := make(chan error, 1)
 					go func() {
 						page, err := RunPage(context.Background(), s, b, model.StartPage(), testOptions(Options{Profile: handle, Idempotent: true}))

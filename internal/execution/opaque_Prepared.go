@@ -11,14 +11,14 @@ import (
 )
 
 type PreparedStorage[P, R any] struct {
-	InternalParams codec.ParamPlan[P]
-	InternalRows   codec.RowDecoder[R]
-	poolErr        error
-	InternalState  *InternalPreparedState
-	InternalPlans  *InternalResultPlanCache[R]
-	pool           *queryPool[P, R]
-	poolOnce       sync.Once
-	InternalKind   cqltype.StatementKind
+	params        codec.ParamPlan[P]
+	rows          codec.RowDecoder[R]
+	poolErr       error
+	InternalState *InternalPreparedState
+	plans         *InternalResultPlanCache[R]
+	pool          *queryPool[P, R]
+	poolOnce      sync.Once
+	kind          cqltype.StatementKind
 }
 
 func PreparedData[P any, R any](v *Prepared[P, R]) *PreparedStorage[P, R] { return &v.privateStorage }

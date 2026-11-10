@@ -36,7 +36,7 @@ func (rt *InternalSessionRuntime) InternalSchemaTracker() *schemafence.InternalP
 	return rt.schema
 }
 
-func (s *InternalPreparedState) InternalCacheCurrent() bool {
+func (s *InternalPreparedState) cacheCurrent() bool {
 	s.InternalMu.RLock()
 	defer s.InternalMu.RUnlock()
 	return s.InternalInitialEpoch.InternalCurrent()
@@ -53,7 +53,7 @@ func (rt *InternalSessionRuntime) beginPreparedWorker(s *implCluster.Core) bool 
 
 // Remote schema observations have no total order. Coalesce the need for an
 // authoritative typed refresh instead of picking a winner by opaque server ID.
-func (s *InternalPreparedState) InternalNoteMetadataConflict() error {
+func (s *InternalPreparedState) noteMetadataConflict() error {
 	if s.InternalSession == nil {
 		return nil
 	}
@@ -66,20 +66,20 @@ func (s *InternalPreparedState) InternalNoteMetadataConflict() error {
 }
 func (s *InternalPreparedState) queueMetadataConflict() error {
 	p := implCluster.InternalSessionPeripheral(s.InternalSession)
-	s.InternalConflictDirty.Store(true)
+	s.conflictDirty.Store(true)
 	p.InternalMu.Lock()
 	epoch := p.InternalSchemaReconciled.Load() + 1
 	_, pending := p.InternalPreparedRefreshScopes[s.InternalInfo.Keyspace]
 	p.InternalMu.Unlock()
-	if s.InternalConflictEpoch.Load() == epoch && pending {
+	if s.conflictEpoch.Load() == epoch && pending {
 		return nil
 	}
 	if err := implCluster.InternalSessionScheduleV2PreparedRefresh(s.InternalSession, s.InternalInfo.Keyspace); err != nil {
-		s.InternalConflictEpoch.Store(0)
+		s.conflictEpoch.Store(0)
 		return err
 	}
-	s.InternalConflictEpoch.Store(epoch)
-	s.InternalConflictRefresh.Store(true)
+	s.conflictEpoch.Store(epoch)
+	s.conflictRefresh.Store(true)
 	target := "TABLE"
 	if s.InternalInfo.Table == "" {
 		target = "KEYSPACE"
@@ -88,8 +88,8 @@ func (s *InternalPreparedState) queueMetadataConflict() error {
 	implCluster.InternalSessionMarkV2SchemaStale(s.InternalSession, s.InternalInfo.Keyspace, false)
 	return nil
 }
-func (s *InternalPreparedState) InternalReconcilePendingConflict() error {
-	if !s.InternalConflictDirty.Load() || s.InternalSession == nil {
+func (s *InternalPreparedState) reconcilePendingConflict() error {
+	if !s.conflictDirty.Load() || s.InternalSession == nil {
 		return nil
 	}
 	s.conflictMu.Lock()
@@ -101,8 +101,8 @@ func (s *InternalPreparedState) InternalReconcilePendingConflict() error {
 	if pending {
 		return nil
 	}
-	if s.InternalConflictEpoch.Load() != 0 {
-		s.InternalConflictDirty.Store(false)
+	if s.conflictEpoch.Load() != 0 {
+		s.conflictDirty.Store(false)
 		return nil
 	}
 	return s.queueMetadataConflict()

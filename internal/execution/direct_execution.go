@@ -29,7 +29,7 @@ func canExecuteDirect(s *InternalSessionRuntime, request *InternalExecutionReque
 	if request.connection != nil && request.connection.InternalStreamObserver != nil {
 		return false
 	}
-	return canUseDirectProfile(request.InternalOptions.InternalProfile) && s.InternalConfig.CoalesceWait == 0
+	return canUseDirectProfile(request.InternalOptions.InternalProfile) && s.config.CoalesceWait == 0
 }
 func canUseDirectProfile(profile settings.Profile) bool {
 	if profile.Speculation != nil {
@@ -80,7 +80,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 				}
 			}
 			var err error
-			conn, err = implCluster.InternalSessionSelectTypedConn(s.Core, ctx, request.InternalRouting, plan)
+			conn, err = implCluster.InternalSessionSelectTypedConn(s.Core, ctx, request.routing, plan)
 			if err != nil {
 				return failure(err)
 			}
@@ -143,7 +143,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		attemptStatus := log.fail(err, conn, attempt, consistency)
 		decision := retry.Decision{}
 		if policy := request.InternalOptions.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.InternalRouting.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
+			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
 		}
 		switch decision.Action {
 		case retry.IgnoreWrite:

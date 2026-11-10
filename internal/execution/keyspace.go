@@ -24,8 +24,8 @@ import "strings"
 // v3/v4 have no per-query keyspace flag. Accept a different effective keyspace
 // only when every statement table reference explicitly selects it. This checks
 // qualification only; statement kind is always declared/server confirmed.
-func InternalQualifiedForKeyspace(cql, keyspace string) bool {
-	tokens := InternalCqlIdentifiers(cql)
+func qualifiedForKeyspace(cql, keyspace string) bool {
+	tokens := cqlIdentifiers(cql)
 	if len(tokens) == 0 {
 		return false
 	}
@@ -59,7 +59,7 @@ func InternalQualifiedForKeyspace(cql, keyspace string) bool {
 
 // Quoted identifiers retain their case; unquoted identifiers are normalized.
 // Values/comments never supply namespace evidence.
-func InternalCqlIdentifiers(source string) []string {
+func cqlIdentifiers(source string) []string {
 	var tokens []string
 	for i := 0; i < len(source); {
 		ch := source[i]
@@ -139,14 +139,14 @@ func InternalCqlIdentifiers(source string) []string {
 	return tokens
 }
 
-func InternalRequestQualifiedForKeyspace(request *InternalExecutionRequest, keyspace string) bool {
+func requestQualifiedForKeyspace(request *InternalExecutionRequest, keyspace string) bool {
 	if request.batch != nil {
 		for _, item := range request.batch.entries {
-			if !InternalQualifiedForKeyspace(item.statement, keyspace) {
+			if !qualifiedForKeyspace(item.statement, keyspace) {
 				return false
 			}
 		}
 		return true
 	}
-	return InternalQualifiedForKeyspace(request.InternalStatement, keyspace)
+	return qualifiedForKeyspace(request.statement, keyspace)
 }

@@ -244,7 +244,7 @@ func BenchmarkExecution(b *testing.B) {
 						_ = ctx
 						request.InternalLogical.InternalFinish(model.Result{}, nil)
 						cancel()
-						request.InternalLogical.InternalReleaseInput()
+						request.InternalLogical.releaseInput()
 					}
 				})
 				b.StopTimer()

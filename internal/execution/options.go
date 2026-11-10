@@ -66,7 +66,7 @@ func NewBoundOptions(session *implCluster.Core, values Options) (BoundOptions, e
 	}
 	keyspace := values.Keyspace
 	if keyspace == "" && owner != nil {
-		keyspace = owner.InternalConfig.Keyspace
+		keyspace = owner.config.Keyspace
 	}
 	resolved.templates = newOptionTemplates(&resolved.InternalProfile, &resolved.InternalOptions, keyspace)
 	bound := values.Profile != nil || sessionProfile
@@ -124,7 +124,7 @@ func (o BoundOptions) resolveFixed(rt *InternalSessionRuntime) *InternalResolved
 	r := o.resolve(rt, new(InternalResolvedOptions))
 	keyspace := r.InternalOptions.Keyspace
 	if keyspace == "" {
-		keyspace = rt.InternalConfig.Keyspace
+		keyspace = rt.config.Keyspace
 	}
 	r.templates = newOptionTemplates(&r.InternalProfile, &r.InternalOptions, keyspace)
 	return r
@@ -142,5 +142,5 @@ func InternalResolveFor(s *implCluster.Core, o BoundOptions) InternalResolvedOpt
 func (rt *InternalSessionRuntime) InternalSetProfile(profile *settings.Profile) {
 	rt.InternalProfile = profile
 	rt.defaultOptions, _ = resolveOptionValues(profile, Options{})
-	rt.defaultOptions.templates = newOptionTemplates(&rt.defaultOptions.InternalProfile, &rt.defaultOptions.InternalOptions, rt.InternalConfig.Keyspace)
+	rt.defaultOptions.templates = newOptionTemplates(&rt.defaultOptions.InternalProfile, &rt.defaultOptions.InternalOptions, rt.config.Keyspace)
 }

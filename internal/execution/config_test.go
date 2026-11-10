@@ -141,9 +141,9 @@ func TestConfig(t *testing.T) {
 			handle := new(Prepared[codec.EmptyRecord, cqltype.Bytes])
 			storage := PreparedData(handle)
 			storage.InternalState = state
-			storage.InternalParams = codecTestMust(codec.EmptyParamsEncoder.Compile(cqltype.NewColumns()))
-			storage.InternalRows = codec.OneColumn(codec.BlobCodec)
-			storage.InternalPlans = &InternalResultPlanCache[cqltype.Bytes]{}
+			storage.params = codecTestMust(codec.EmptyParamsEncoder.Compile(cqltype.NewColumns()))
+			storage.rows = codec.OneColumn(codec.BlobCodec)
+			storage.plans = &InternalResultPlanCache[cqltype.Bytes]{}
 			bound := codecTestMust(BindBorrowed(handle, codec.EmptyRecord{}))
 			defer bound.Close()
 			done := make(chan error, 1)
@@ -235,7 +235,7 @@ func TestConfig(t *testing.T) {
 			s := func() *cluster.Core {
 				opaqueStorageValue := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValue).InternalCfg = *cluster.InternalNewClusterSettings()
-				implCluster.SessionData(opaqueStorageValue).InternalTypedState = &InternalSessionRuntime{InternalProfile: config.DefaultProfile, InternalConfig: config}
+				implCluster.SessionData(opaqueStorageValue).InternalTypedState = &InternalSessionRuntime{InternalProfile: config.DefaultProfile, config: config}
 				return opaqueStorageValue
 			}()
 			report := cluster.InternalBuildQueryReport(s)
@@ -394,7 +394,7 @@ func TestConfig(t *testing.T) {
 			s, _, peers := runtimeTestSession(t, 1)
 			defer s.Close()
 			var calls atomic.Int32
-			InternalRuntimeFor(s).InternalConfig.TimestampGenerator = func() int64 { calls.Add(1); return 987654321 }
+			InternalRuntimeFor(s).config.TimestampGenerator = func() int64 { calls.Add(1); return 987654321 }
 			done := make(chan error, 1)
 			go func() {
 				for step := 0; step < 5; step++ {

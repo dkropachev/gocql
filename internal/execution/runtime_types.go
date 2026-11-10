@@ -22,14 +22,14 @@ import (
 // retention and release take no lock. The transition to zero references runs
 // onIdle, and, once closed, the drain callback, as the releasing call's final
 // actions.
-type InternalInputOwner struct {
-	done            chan struct{} // nil for execution owners, which are never waited on
-	InternalOnDrain func()
-	onIdle          func()
-	release         func() // bound InternalRelease, reused by writer leases
-	writer          ownerWriterLease
-	state           atomic.Int64 // ownerClosed | reference count
-	drained         atomic.Bool
+type inputOwner struct {
+	done    chan struct{} // nil for execution owners, which are never waited on
+	onDrain func()
+	onIdle  func()
+	release func() // bound InternalRelease, reused by writer leases
+	writer  ownerWriterLease
+	state   atomic.Int64 // ownerClosed | reference count
+	drained atomic.Bool
 }
 
 // ownerWriterLease is an input owner's reusable writer lease. A writer lease
@@ -37,7 +37,7 @@ type InternalInputOwner struct {
 // release finished it can be initialised again. inUse covers the whole
 // lease lifetime, including the final release's reads of the lease.
 type ownerWriterLease struct {
-	owner *InternalInputOwner
+	owner *inputOwner
 	wire.Lease
 	inUse atomic.Bool
 }
@@ -53,14 +53,14 @@ const (
 	ownerRefsMask = ownerClosed - 1
 )
 
-func InternalNewInputOwner() *InternalInputOwner {
-	return &InternalInputOwner{done: make(chan struct{})}
+func InternalNewInputOwner() *inputOwner {
+	return &inputOwner{done: make(chan struct{})}
 }
 
 // newClosedInputOwner returns an execution owner holding the execution's own
 // reference: it drains when that reference and every writer's are released.
-func newClosedInputOwner() *InternalInputOwner {
-	o := new(InternalInputOwner)
+func newClosedInputOwner() *inputOwner {
+	o := new(inputOwner)
 	o.state.Store(ownerClosed | 1)
 	return o
 }
@@ -68,22 +68,22 @@ func newClosedInputOwner() *InternalInputOwner {
 // resetExecution prepares a reusable execution owner for its next generation.
 // The previous generation has drained: its last action was the drain callback,
 // which runs after the final release and never touches the owner again.
-func (o *InternalInputOwner) resetExecution(onDrain func()) {
+func (o *inputOwner) resetExecution(onDrain func()) {
 	o.state.Store(ownerClosed | 1)
 	o.drained.Store(false)
-	o.done, o.InternalOnDrain, o.onIdle = nil, onDrain, nil
+	o.done, o.onDrain, o.onIdle = nil, onDrain, nil
 	if o.release == nil {
 		o.release = o.InternalRelease
 	}
 }
 
 // InternalRefs reports the current reference count.
-func (o *InternalInputOwner) InternalRefs() int { return int(o.state.Load() & ownerRefsMask) }
+func (o *inputOwner) refs() int { return int(o.state.Load() & ownerRefsMask) }
 
 // InternalClosed reports whether the owner stopped admitting operations.
-func (o *InternalInputOwner) InternalClosed() bool { return o.state.Load()&ownerClosed != 0 }
+func (o *inputOwner) closed() bool { return o.state.Load()&ownerClosed != 0 }
 
-func (o *InternalInputOwner) InternalAdmit() error {
+func (o *inputOwner) InternalAdmit() error {
 	for {
 		v := o.state.Load()
 		if v&ownerClosed != 0 {
@@ -94,17 +94,17 @@ func (o *InternalInputOwner) InternalAdmit() error {
 		}
 	}
 }
-func (o *InternalInputOwner) InternalRetain() { o.state.Add(1) }
+func (o *inputOwner) retain() { o.state.Add(1) }
 
 // drain retires a closed owner whose last reference is gone, once. The drain
 // callback may admit the next generation of a reusable owner, so the caller
 // must not touch the owner after invoking it.
-func (o *InternalInputOwner) drain() {
+func (o *inputOwner) drain() {
 	if !o.drained.CompareAndSwap(false, true) {
 		return
 	}
-	drain := o.InternalOnDrain
-	o.InternalOnDrain = nil
+	drain := o.onDrain
+	o.onDrain = nil
 	if o.done != nil {
 		close(o.done)
 	}
@@ -112,7 +112,7 @@ func (o *InternalInputOwner) drain() {
 		drain()
 	}
 }
-func (o *InternalInputOwner) InternalRelease() {
+func (o *inputOwner) InternalRelease() {
 	var v int64
 	for {
 		v = o.state.Load()
@@ -133,7 +133,7 @@ func (o *InternalInputOwner) InternalRelease() {
 		o.drain()
 	}
 }
-func (o *InternalInputOwner) InternalClose() {
+func (o *inputOwner) InternalClose() {
 	for {
 		v := o.state.Load()
 		if v&ownerClosed != 0 {
@@ -147,9 +147,9 @@ func (o *InternalInputOwner) InternalClose() {
 		}
 	}
 }
-func (o *InternalInputOwner) InternalWait(ctx context.Context) error {
+func (o *inputOwner) InternalWait(ctx context.Context) error {
 	done := o.done
-	if !o.InternalClosed() {
+	if !o.closed() {
 		return cqltype.TypeValidation("binding", "Wait requires Close first")
 	}
 	select {
@@ -164,8 +164,8 @@ func (o *InternalInputOwner) InternalWait(ctx context.Context) error {
 		return ctx.Err()
 	}
 }
-func (o *InternalInputOwner) InternalWriterLease(chain wire.Chain) *wire.Lease {
-	o.InternalRetain()
+func (o *inputOwner) InternalWriterLease(chain wire.Chain) *wire.Lease {
+	o.retain()
 	// One attempt at a time normally holds the writer lease; a retry whose
 	// previous writer still holds it gets a lease of its own.
 	if w := &o.writer; w.inUse.CompareAndSwap(false, true) {
@@ -191,14 +191,14 @@ type InternalExecutionRequest struct {
 	// pinned, when set, is where the next page's first attempt goes.
 	served, pinned     *transport.Conn
 	connection         *transport.Conn
-	InternalOwner      *InternalInputOwner
-	batch              *InternalBatchState
-	InternalLogical    *InternalLogicalExecution
-	InternalStatement  string
+	InternalOwner      *inputOwner
+	batch              *batchState
+	InternalLogical    *logicalExecution
+	statement          string
 	keyspace           string
 	InternalValues     model.EncodedValues
 	tabletFeedback     routing.InternalTabletFeedbackStamp
-	InternalRouting    model.RoutingInfo
+	routing            model.RoutingInfo
 	InternalOptions    InternalResolvedOptions
 	tabletVersionBlock byte
 }

@@ -263,7 +263,7 @@ func TestQuery(t *testing.T) {
 			if got := string(batch.values[entry.start+4 : entry.end]); got != "batch entry" {
 				t.Fatal(got)
 			}
-			if len(q.state.runtime.InternalExecutions) != 0 || len(q.state.runtime.queries) != 1 {
+			if len(q.state.runtime.executions) != 0 || len(q.state.runtime.queries) != 1 {
 				t.Fatal("per-operation registration")
 			}
 		})
@@ -293,7 +293,7 @@ func TestQuery(t *testing.T) {
 			}
 			cancelExec()
 			request.InternalLogical.InternalFinish(model.Result{}, context.Canceled)
-			request.InternalLogical.InternalReleaseInput()
+			request.InternalLogical.releaseInput()
 			q.state.owner.InternalRelease()
 			// The next execution waits for the drain within its context; calls
 			// without a context still report the overlap.
@@ -344,7 +344,7 @@ func TestQuery(t *testing.T) {
 			request.InternalLogical.installStop(stopFunc(func() { t.Error("retired stop callback invoked") }))
 			cancel()
 			request.InternalLogical.InternalFinish(model.Result{}, nil)
-			request.InternalLogical.InternalReleaseInput()
+			request.InternalLogical.releaseInput()
 			q.state.owner.InternalRelease()
 			if q.state.inlineLogical.lifetime.stop != nil || q.state.request.InternalValues.Framed.Len() != 0 || q.state.request.InternalLogical != nil {
 				t.Fatal("idle execution retained captures")
@@ -660,9 +660,9 @@ func TestQuery(t *testing.T) {
 			state.InternalInfo.PartitionKeyIndexes = []int{0}
 			handle := new(Prepared[[]byte, cqltype.Bytes])
 			PreparedData(handle).InternalState = state
-			PreparedData(handle).InternalParams = codecTestMust(codec.OneParam(codec.BytesEncoder).Compile(columns))
-			PreparedData(handle).InternalRows = codec.OneColumn(codec.BlobCodec)
-			PreparedData(handle).InternalPlans = &InternalResultPlanCache[cqltype.Bytes]{}
+			PreparedData(handle).params = codecTestMust(codec.OneParam(codec.BytesEncoder).Compile(columns))
+			PreparedData(handle).rows = codec.OneColumn(codec.BlobCodec)
+			PreparedData(handle).plans = &InternalResultPlanCache[cqltype.Bytes]{}
 			q := codecTestMust(NewQuery(handle, Options{}))
 			defer func() { _ = q.Close(context.Background()) }()
 			serverDone := make(chan error, 1)

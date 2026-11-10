@@ -32,7 +32,7 @@ import (
 // Each logical operation has a closed input owner of its own. Its final drain
 // includes accepted writers and speculative/prefetch workers, independently of
 // output page leases and other operations using the same binding.
-type InternalExecutionLifetime struct {
+type executionLifetime struct {
 	stop          executionStopper
 	cancel        context.CancelFunc
 	done          chan struct{}
@@ -41,7 +41,7 @@ type InternalExecutionLifetime struct {
 	stopping      bool
 }
 
-func (l *InternalLogicalExecution) InternalReleaseInput() {
+func (l *logicalExecution) releaseInput() {
 	if l.lifetime.inputReleased.CompareAndSwap(false, true) {
 		l.request.InternalOwner.InternalRelease()
 	}
@@ -50,15 +50,15 @@ func (l *InternalLogicalExecution) InternalReleaseInput() {
 // executionStopper ends an execution on query or session shutdown. Result
 // handles implement it directly, so registering one allocates nothing.
 type executionStopper interface {
-	stopExecution(*InternalLogicalExecution)
+	stopExecution(*logicalExecution)
 }
 
 // stopFunc adapts a closure; func values are stored in interfaces directly.
 type stopFunc func()
 
-func (f stopFunc) stopExecution(*InternalLogicalExecution) { f() }
+func (f stopFunc) stopExecution(*logicalExecution) { f() }
 
-func (l *InternalLogicalExecution) installStop(stop executionStopper) {
+func (l *logicalExecution) installStop(stop executionStopper) {
 	l.lifetime.mu.Lock()
 	stopping := l.lifetime.stopping
 	if !stopping {
@@ -69,7 +69,7 @@ func (l *InternalLogicalExecution) installStop(stop executionStopper) {
 		stop.stopExecution(l)
 	}
 }
-func (l *InternalLogicalExecution) shutdown() {
+func (l *logicalExecution) shutdown() {
 	l.lifetime.mu.Lock()
 	l.lifetime.stopping = true
 	stop := l.lifetime.stop
@@ -81,13 +81,13 @@ func (l *InternalLogicalExecution) shutdown() {
 		stop.stopExecution(l)
 	}
 }
-func (l *InternalLogicalExecution) cancelExecution() {
+func (l *logicalExecution) cancelExecution() {
 	l.lifetime.mu.Lock()
 	cancel := l.lifetime.cancel
 	l.lifetime.mu.Unlock()
 	cancel()
 }
-func (s *InternalSessionRuntime) registerExecution(l *InternalLogicalExecution, parent *InternalInputOwner) error {
+func (s *InternalSessionRuntime) registerExecution(l *logicalExecution, parent *inputOwner) error {
 	if query := l.request.query; query != nil {
 		// Session.Close marks the session closing before StopActive, which
 		// finds the execution through query.logical under query.mu. Checking
@@ -115,16 +115,16 @@ func (s *InternalSessionRuntime) registerExecution(l *InternalLogicalExecution, 
 	}
 	rt := s
 	rt.InternalMu.Lock()
-	if rt.InternalExecutions == nil {
-		rt.InternalExecutions = make(map[*InternalLogicalExecution]struct{})
+	if rt.executions == nil {
+		rt.executions = make(map[*logicalExecution]struct{})
 	}
-	rt.InternalExecutions[l] = struct{}{}
+	rt.executions[l] = struct{}{}
 	rt.InternalMu.Unlock()
 	owner := newClosedInputOwner()
 	done := l.lifetime.done
-	owner.InternalOnDrain = func() {
+	owner.onDrain = func() {
 		rt.InternalMu.Lock()
-		delete(rt.InternalExecutions, l)
+		delete(rt.executions, l)
 		rt.InternalMu.Unlock()
 		close(done)
 		parent.InternalRelease()
@@ -132,11 +132,11 @@ func (s *InternalSessionRuntime) registerExecution(l *InternalLogicalExecution, 
 	l.request.InternalOwner = owner
 	return nil
 }
-func (s *InternalSessionRuntime) stopExecutions() []*InternalLogicalExecution {
+func (s *InternalSessionRuntime) stopExecutions() []*logicalExecution {
 	rt := s
 	rt.InternalMu.Lock()
-	active := make([]*InternalLogicalExecution, 0, len(rt.InternalExecutions))
-	for l := range rt.InternalExecutions {
+	active := make([]*logicalExecution, 0, len(rt.executions))
+	for l := range rt.executions {
 		active = append(active, l)
 	}
 	rt.InternalMu.Unlock()

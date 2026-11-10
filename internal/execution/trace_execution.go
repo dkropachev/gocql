@@ -36,10 +36,10 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id cqltype.UUID) (im
 	}
 	uuidType := cqltype.UUIDType
 	params := cqltype.NewColumns(cqltype.ColumnSpec{Name: "session_id", Type: uuidType})
-	sessionStatement := binding.Statement[cqltype.UUID, InternalTraceSessionRow]{CQL: "SELECT coordinator, started_at, duration FROM system_traces.sessions WHERE session_id = ?", Params: codec.OneParam(codec.UUIDCodec), Rows: codec.Row(
-		codec.Column("coordinator", codec.NullableCodec(codec.InetCodec), func(r *InternalTraceSessionRow) *cqltype.Nullable[netip.Addr] { return &r.InternalCoordinator }),
-		codec.Column("started_at", codec.NullableCodec(codec.TimestampCodec), func(r *InternalTraceSessionRow) *cqltype.Nullable[codec.Timestamp] { return &r.InternalStarted }),
-		codec.Column("duration", codec.NullableCodec(codec.Int32), func(r *InternalTraceSessionRow) *cqltype.Nullable[int32] { return &r.InternalDuration }),
+	sessionStatement := binding.Statement[cqltype.UUID, traceSessionRow]{CQL: "SELECT coordinator, started_at, duration FROM system_traces.sessions WHERE session_id = ?", Params: codec.OneParam(codec.UUIDCodec), Rows: codec.Row(
+		codec.Column("coordinator", codec.NullableCodec(codec.InetCodec), func(r *traceSessionRow) *cqltype.Nullable[netip.Addr] { return &r.InternalCoordinator }),
+		codec.Column("started_at", codec.NullableCodec(codec.TimestampCodec), func(r *traceSessionRow) *cqltype.Nullable[codec.Timestamp] { return &r.InternalStarted }),
+		codec.Column("duration", codec.NullableCodec(codec.Int32), func(r *traceSessionRow) *cqltype.Nullable[int32] { return &r.InternalDuration }),
 	)}
 	bound, err := BindUnpreparedOwned(sessionStatement, params, id)
 	if err != nil {
@@ -59,7 +59,7 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id cqltype.UUID) (im
 			return result, err
 		}
 		ready := false
-		var row InternalTraceSessionRow
+		var row traceSessionRow
 		if rows.NextInto(&row) {
 			if row.InternalCoordinator.Valid && row.InternalStarted.Valid && row.InternalDuration.Valid {
 				result.Coordinator = row.InternalCoordinator.Value
@@ -88,12 +88,12 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id cqltype.UUID) (im
 		case <-timer.C:
 		}
 	}
-	eventsStatement := binding.Statement[cqltype.UUID, InternalTraceActivityRow]{CQL: "SELECT event_id, activity, source, source_elapsed, thread FROM system_traces.events WHERE session_id = ?", Params: codec.OneParam(codec.UUIDCodec), Rows: codec.Row(
-		codec.Column("event_id", codec.TimeUUIDCodec, func(r *InternalTraceActivityRow) *codec.TimeUUID { return &r.InternalId }),
-		codec.Column("activity", codec.TextCodec, func(r *InternalTraceActivityRow) *cqltype.Text { return &r.InternalActivity }),
-		codec.Column("source", codec.InetCodec, func(r *InternalTraceActivityRow) *netip.Addr { return &r.InternalSource }),
-		codec.Column("source_elapsed", codec.NullableCodec(codec.Int32), func(r *InternalTraceActivityRow) *cqltype.Nullable[int32] { return &r.InternalElapsed }),
-		codec.Column("thread", codec.TextCodec, func(r *InternalTraceActivityRow) *cqltype.Text { return &r.InternalThread }),
+	eventsStatement := binding.Statement[cqltype.UUID, traceActivityRow]{CQL: "SELECT event_id, activity, source, source_elapsed, thread FROM system_traces.events WHERE session_id = ?", Params: codec.OneParam(codec.UUIDCodec), Rows: codec.Row(
+		codec.Column("event_id", codec.TimeUUIDCodec, func(r *traceActivityRow) *codec.TimeUUID { return &r.InternalId }),
+		codec.Column("activity", codec.TextCodec, func(r *traceActivityRow) *cqltype.Text { return &r.InternalActivity }),
+		codec.Column("source", codec.InetCodec, func(r *traceActivityRow) *netip.Addr { return &r.InternalSource }),
+		codec.Column("source_elapsed", codec.NullableCodec(codec.Int32), func(r *traceActivityRow) *cqltype.Nullable[int32] { return &r.InternalElapsed }),
+		codec.Column("thread", codec.TextCodec, func(r *traceActivityRow) *cqltype.Text { return &r.InternalThread }),
 	)}
 	eventsBound, err := BindUnpreparedOwned(eventsStatement, params, id)
 	if err != nil {
@@ -105,7 +105,7 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id cqltype.UUID) (im
 		return result, err
 	}
 	defer rows.Close()
-	var r InternalTraceActivityRow
+	var r traceActivityRow
 	for rows.NextInto(&r) {
 		e := implCluster.TraceEvent{ID: cqltype.UUID(r.InternalId), Activity: r.InternalActivity.String(), Source: r.InternalSource, Thread: r.InternalThread.String()}
 		if r.InternalElapsed.Valid {

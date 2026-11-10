@@ -31,7 +31,7 @@ func TestEachStopIteration(t *testing.T) {
 			q, serve := eachTestQuery(t)
 			observer := new(execVoidObserver)
 			rt := q.state.runtime
-			rt.InternalConfig.Observer = observer
+			rt.config.Observer = observer
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			pages := [][]byte{runtimeRowsBody([]byte{1}, "a", "b")}

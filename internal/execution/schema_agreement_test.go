@@ -147,11 +147,11 @@ func TestSchemaAgreement(t *testing.T) {
 		t.Run("ErrorNeverRetriesStatement", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			conn := conns[0]
-			config := InternalRuntimeFor(s).InternalConfig
+			config := InternalRuntimeFor(s).config
 			config.Metadata.AutomaticAgreement = true
 			config.Metadata.RefreshAfterAgreement = false
 			config.Metadata.AgreementTimeout = 100 * time.Millisecond
-			InternalRuntimeFor(s).InternalConfig = config
+			InternalRuntimeFor(s).config = config
 			implCluster.InternalSessionConfigureV2Peripheral(s, config)
 			metadata := s.Metadata()
 			metadataCopy := *metadata
@@ -222,10 +222,10 @@ func TestSchemaAgreement(t *testing.T) {
 		t.Run("StatusSurvivesAgreementCancellation", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			conn := conns[0]
-			config := InternalRuntimeFor(s).InternalConfig
+			config := InternalRuntimeFor(s).config
 			config.Metadata.AutomaticAgreement = true
 			config.Metadata.RefreshAfterAgreement = false
-			InternalRuntimeFor(s).InternalConfig = config
+			InternalRuntimeFor(s).config = config
 			implCluster.InternalSessionConfigureV2Peripheral(s, config)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

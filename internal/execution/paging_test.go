@@ -185,7 +185,7 @@ func TestPaging(t *testing.T) {
 			if _, ok := errors.AsType[*implCqltype.ValidationError](rows.Err()); !ok {
 				t.Fatal(rows.Err())
 			}
-			if PageData(RowsData(rows).InternalPage).InternalIndex != 0 {
+			if PageData(RowsData(rows).page).index != 0 {
 				t.Fatal("nil consumed row")
 			}
 		})
@@ -196,8 +196,8 @@ func TestPaging(t *testing.T) {
 					t.Run(fmt.Sprintf("prefetch=%v/%s", prefetch, mode), func(t *testing.T) {
 						s, conns, peers := runtimeTestSession(t, 1)
 						rt := InternalRuntimeFor(s)
-						rt.InternalConfig.Limits.MaxPagingStates = 2
-						rt.InternalConfig.Limits.MaxPagingStateBytes = 2
+						rt.config.Limits.MaxPagingStates = 2
+						rt.config.Limits.MaxPagingStateBytes = 2
 						profile := settings.InternalDefaultProfile()
 						profile.Prefetch = prefetch
 						handle := new(profile)
@@ -218,7 +218,7 @@ func TestPaging(t *testing.T) {
 						rows := codecTestMust(Run(context.Background(), s, b, testOptions(Options{Profile: handle})))
 						defer rows.Close()
 						if mode == "budget" {
-							RowsData(rows).InternalHistory.InternalMaxCount = 1
+							RowsData(rows).history.InternalMaxCount = 1
 						}
 						count := 0
 						var row implCqltype.Bytes
@@ -351,7 +351,7 @@ func TestPaging(t *testing.T) {
 				t.Fatal(err)
 			}
 			profile.PageSize = 11
-			if RowsData(rows).InternalRequest.InternalOptions.InternalProfile.PageSize != 7 {
+			if RowsData(rows).request.InternalOptions.InternalProfile.PageSize != 7 {
 				t.Fatal("profile changed after admission")
 			}
 			bound.Close()

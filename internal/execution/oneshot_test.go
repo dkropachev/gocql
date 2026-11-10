@@ -90,9 +90,9 @@ func oneShotPrepare(t testing.TB, s *cluster.Core, peer net.Conn, requests chan 
 func waitIdle(t *testing.T, p *Prepared[int32, []byte], want int) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
-	for InternalPreparedPoolIdle(p) != want {
+	for preparedPoolIdle(p) != want {
 		if time.Now().After(deadline) {
-			t.Fatalf("idle queries %d, want %d", InternalPreparedPoolIdle(p), want)
+			t.Fatalf("idle queries %d, want %d", preparedPoolIdle(p), want)
 		}
 		time.Sleep(time.Millisecond)
 	}

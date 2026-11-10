@@ -80,7 +80,7 @@ func (rt *InternalSessionRuntime) livePools() []*queryPoolBase {
 }
 
 // InternalQueryPools reports how many query pools the session tracks.
-func InternalQueryPools(s *implCluster.Core) int {
+func queryPools(s *implCluster.Core) int {
 	rt := InternalRuntimeFor(s)
 	rt.InternalMu.Lock()
 	defer rt.InternalMu.Unlock()
@@ -325,7 +325,7 @@ func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...Bo
 	}
 	found, result, err := pool.each(ctx, value, dst, nil, o)
 	if !found && err == nil {
-		InternalClearDestination(dst)
+		clearDestination(dst)
 	}
 	return found, result, err
 }
@@ -352,7 +352,7 @@ func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) 
 }
 
 // InternalPreparedPoolIdle reports how many idle queries p's pool holds.
-func InternalPreparedPoolIdle[P, R any](p *Prepared[P, R]) int {
+func preparedPoolIdle[P, R any](p *Prepared[P, R]) int {
 	pool := p.privateStorage.pool
 	if pool == nil {
 		return 0
@@ -367,7 +367,7 @@ func InternalPreparedPoolIdle[P, R any](p *Prepared[P, R]) int {
 }
 
 // InternalPooledBusy reports how many pooled one-shot queries of s are busy.
-func InternalPooledBusy(s *implCluster.Core) int64 {
+func pooledBusy(s *implCluster.Core) int64 {
 	return InternalRuntimeFor(s).pooledBusy.Load()
 }
 

@@ -44,31 +44,31 @@ type InternalPreparedState struct {
 	InternalResult       *model.ResultSchemaIdentity
 	InternalSession      *implCluster.Core
 	InternalHosts        map[cqltype.UUID]*InternalHostPrepared
-	InternalPreparing    map[cqltype.UUID]*InternalHostPrepareFlight
+	preparing            map[cqltype.UUID]*hostPrepareFlight
 	InternalDependencies *schemafence.InternalPreparedDependencies
 	// tabletPlacement finds the statement's table among tablet placements.
 	tabletPlacement                     routing.InternalPlacementCache
 	InternalStatement, InternalKeyspace string
-	InternalPartitioner                 string
+	partitioner                         string
 	InternalParameters, InternalColumns cqltype.Columns
 	InternalInitialEpoch                schemafence.InternalPreparedSchemaStamp
 	InternalInfo                        PreparedInfo
-	InternalConflictEpoch               atomic.Uint64
+	conflictEpoch                       atomic.Uint64
 	InternalMu                          sync.RWMutex
 	conflictMu                          sync.Mutex
-	InternalConflictDirty               atomic.Bool
-	InternalConflictRefresh             atomic.Bool
+	conflictDirty                       atomic.Bool
+	conflictRefresh                     atomic.Bool
 	InternalResultHost                  cqltype.UUID
 	InternalProtocol                    uint8
 }
-type InternalHostPrepareFlight struct {
-	err             error
-	done            chan struct{}
-	previous        *InternalHostPrepared
-	result          *InternalHostPrepared
-	epoch           schemafence.InternalPreparedSchemaStamp
-	started         uint64
-	InternalWaiters atomic.Int32
+type hostPrepareFlight struct {
+	err      error
+	done     chan struct{}
+	previous *InternalHostPrepared
+	result   *InternalHostPrepared
+	epoch    schemafence.InternalPreparedSchemaStamp
+	started  uint64
+	waiters  atomic.Int32
 }
 type Prepared[P, R any] struct {
 	privateStorage PreparedStorage[P, R]
@@ -110,7 +110,7 @@ func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statem
 	if keyspace == "" {
 		keyspace = implCluster.SessionData(s).InternalCfg.Keyspace
 	}
-	state, err := InternalRuntimeFor(s).InternalPrepareTyped(ctx, statement.CQL, keyspace, options)
+	state, err := InternalRuntimeFor(s).prepareTyped(ctx, statement.CQL, keyspace, options)
 	if err != nil {
 		return empty, err
 	}
@@ -148,11 +148,11 @@ func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement bindi
 	}
 	return func() *Prepared[P, R] {
 		opaqueStorageValue := new(Prepared[P, R])
-		opaqueStorageValue.privateStorage.InternalKind = kind
+		opaqueStorageValue.privateStorage.kind = kind
 		opaqueStorageValue.privateStorage.InternalState = state
-		opaqueStorageValue.privateStorage.InternalParams = plan
-		opaqueStorageValue.privateStorage.InternalRows = statement.Rows
-		opaqueStorageValue.privateStorage.InternalPlans = &InternalResultPlanCache[R]{columns: columns, InternalPlan: rows}
+		opaqueStorageValue.privateStorage.params = plan
+		opaqueStorageValue.privateStorage.rows = statement.Rows
+		opaqueStorageValue.privateStorage.plans = &InternalResultPlanCache[R]{columns: columns, plan: rows}
 		return opaqueStorageValue
 	}(), nil
 }
@@ -180,18 +180,18 @@ func (p *Prepared[P, R]) Info() PreparedInfo {
 	p.privateStorage.InternalState.InternalMu.RLock()
 	defer p.privateStorage.InternalState.InternalMu.RUnlock()
 	v := p.privateStorage.InternalState.InternalInfo
-	v.Kind = p.privateStorage.InternalKind
-	v.Conditional = p.privateStorage.InternalKind == cqltype.ConditionalStatement
+	v.Kind = p.privateStorage.kind
+	v.Conditional = p.privateStorage.kind == cqltype.ConditionalStatement
 	v.PartitionKeyIndexes = append([]int(nil), v.PartitionKeyIndexes...)
 	return v
 }
 func BindBorrowed[P, R any](p *Prepared[P, R], value P) (*Bound[R], error) {
-	return InternalBindPrepared(p, value, false)
+	return bindPrepared(p, value, false)
 }
 func BindOwned[P, R any](p *Prepared[P, R], value P) (*Bound[R], error) {
-	return InternalBindPrepared(p, value, true)
+	return bindPrepared(p, value, true)
 }
-func InternalBindPrepared[P, R any](p *Prepared[P, R], value P, owned bool) (*Bound[R], error) {
+func bindPrepared[P, R any](p *Prepared[P, R], value P, owned bool) (*Bound[R], error) {
 	if p == nil || p.privateStorage.InternalState == nil {
 		return nil, cqltype.TypeValidation("prepared", "nil handle")
 	}
@@ -201,29 +201,29 @@ func InternalBindPrepared[P, R any](p *Prepared[P, R], value P, owned bool) (*Bo
 	statement, keyspace := p.privateStorage.InternalState.InternalStatement, p.privateStorage.InternalState.InternalKeyspace
 	p.privateStorage.InternalState.InternalMu.RUnlock()
 	allowUnset := p.privateStorage.InternalState.InternalProtocol >= 4
-	values, err := binding.InternalEncodeParameters(p.privateStorage.InternalParams, columns, value, owned, allowUnset)
+	values, err := binding.InternalEncodeParameters(p.privateStorage.params, columns, value, owned, allowUnset)
 	if err != nil {
 		return nil, err
 	}
-	token, err := routing.InternalComputeRoutingToken(values.Cells, info.PartitionKeyIndexes, implCluster.InternalSessionCapturedRoutingPartitioner(p.privateStorage.InternalState.InternalSession, p.privateStorage.InternalState.InternalPartitioner))
+	token, err := routing.InternalComputeRoutingToken(values.Cells, info.PartitionKeyIndexes, implCluster.InternalSessionCapturedRoutingPartitioner(p.privateStorage.InternalState.InternalSession, p.privateStorage.InternalState.partitioner))
 	if err != nil {
 		return nil, err
 	}
 	return func() *Bound[R] {
 		opaqueStorageValuex := new(Bound[R])
-		opaqueStorageValuex.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: statement, keyspace: keyspace, InternalSource: preparedSource{state: p.privateStorage.InternalState}, InternalValues: values, InternalOwner: InternalNewInputOwner(), InternalRouting: model.RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Token: token, Kind: p.privateStorage.InternalKind, Conditional: p.privateStorage.InternalKind != cqltype.OrdinaryStatement}}
-		opaqueStorageValuex.privateStorage.InternalRows = p.privateStorage.InternalRows
-		opaqueStorageValuex.privateStorage.plans = p.privateStorage.InternalPlans
+		opaqueStorageValuex.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement, keyspace: keyspace, InternalSource: preparedSource{state: p.privateStorage.InternalState}, InternalValues: values, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Token: token, Kind: p.privateStorage.kind, Conditional: p.privateStorage.kind != cqltype.OrdinaryStatement}}
+		opaqueStorageValuex.privateStorage.InternalRows = p.privateStorage.rows
+		opaqueStorageValuex.privateStorage.plans = p.privateStorage.plans
 		return opaqueStorageValuex
 	}(), nil
 }
 func BindUnpreparedBorrowed[P, R any](s binding.Statement[P, R], columns cqltype.Columns, value P) (*Bound[R], error) {
-	return InternalBindUnprepared(s, columns, value, false)
+	return bindUnprepared(s, columns, value, false)
 }
 func BindUnpreparedOwned[P, R any](s binding.Statement[P, R], columns cqltype.Columns, value P) (*Bound[R], error) {
-	return InternalBindUnprepared(s, columns, value, true)
+	return bindUnprepared(s, columns, value, true)
 }
-func InternalBindUnprepared[P, R any](s binding.Statement[P, R], columns cqltype.Columns, value P, owned bool) (*Bound[R], error) {
+func bindUnprepared[P, R any](s binding.Statement[P, R], columns cqltype.Columns, value P, owned bool) (*Bound[R], error) {
 	if err := binding.ValidateStatement(&s); err != nil {
 		return nil, err
 	}
@@ -237,7 +237,7 @@ func InternalBindUnprepared[P, R any](s binding.Statement[P, R], columns cqltype
 	}
 	return func() *Bound[R] {
 		opaqueStorageValuexx := new(Bound[R])
-		opaqueStorageValuexx.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: s.CQL, InternalSource: cqlText{}, InternalValues: values, InternalOwner: InternalNewInputOwner(), InternalRouting: model.RoutingInfo{Kind: s.Kind, Conditional: s.Kind != cqltype.OrdinaryStatement}}
+		opaqueStorageValuexx.privateStorage.InternalRequest = InternalExecutionRequest{statement: s.CQL, InternalSource: cqlText{}, InternalValues: values, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Kind: s.Kind, Conditional: s.Kind != cqltype.OrdinaryStatement}}
 		opaqueStorageValuexx.privateStorage.InternalRows = s.Rows
 		opaqueStorageValuexx.privateStorage.plans = &InternalResultPlanCache[R]{}
 		return opaqueStorageValuexx
@@ -262,5 +262,5 @@ func (b *Bound[R]) Routing() model.RoutingInfo {
 	if b == nil {
 		return model.RoutingInfo{}
 	}
-	return b.privateStorage.InternalRequest.InternalRouting
+	return b.privateStorage.InternalRequest.routing
 }

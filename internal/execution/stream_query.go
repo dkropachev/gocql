@@ -56,7 +56,7 @@ func (prepared *Prepared[P, B]) StreamQuery[R any](decoder codec.StreamRowDecode
 	if v := options.Options; v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, cqltype.TypeValidation("stream prefetch", "must be zero")
 	}
-	p := &Prepared[P, codec.EmptyRecord]{privateStorage: PreparedStorage[P, codec.EmptyRecord]{InternalState: prepared.privateStorage.InternalState, InternalKind: prepared.privateStorage.InternalKind, InternalParams: prepared.privateStorage.InternalParams, InternalRows: InternalExecRowsDecoder{}}}
+	p := &Prepared[P, codec.EmptyRecord]{privateStorage: PreparedStorage[P, codec.EmptyRecord]{InternalState: prepared.privateStorage.InternalState, kind: prepared.privateStorage.kind, params: prepared.privateStorage.params, rows: execRowsDecoder{}}}
 	q, err := NewQuery(p, options.Options)
 	if err != nil {
 		return nil, err
@@ -83,7 +83,7 @@ func NewUnpreparedStreamQuery[P, R any](session *implCluster.Core, statement bin
 	if v := options.Options; v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, cqltype.TypeValidation("stream prefetch", "must be zero")
 	}
-	q, err := NewUnpreparedQuery(session, binding.Statement[P, codec.EmptyRecord]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: InternalExecRowsDecoder{}, BindMarkers: statement.BindMarkers}, options.Options)
+	q, err := NewUnpreparedQuery(session, binding.Statement[P, codec.EmptyRecord]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: execRowsDecoder{}, BindMarkers: statement.BindMarkers}, options.Options)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func (q *StreamQuery[P, R]) Close(ctx context.Context) error {
 
 func (s *RowStream[R]) loadBufferedPage() error {
 	p := &s.privateStorage
-	response, err := InternalRuntimeFor(p.InternalSession).executePage(p.InternalCtx, p.InternalRequest, s.state)
+	response, err := InternalRuntimeFor(p.session).executePage(p.ctx, p.request, s.state)
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ func (s *RowStream[R]) loadBufferedPage() error {
 	}
 	p.bufferedPage, p.bufferedIndex = response, 0
 	limits := wire.StreamLimits{DiscardBytes: p.limits.DiscardBytes}
-	configured := InternalRuntimeFor(p.InternalSession).InternalConfig.Limits
+	configured := InternalRuntimeFor(p.session).config.Limits
 	if configured.MaxMetadataDepth > 0 {
 		limits.MaxDepth = min(configured.MaxMetadataDepth, 128) + 2
 	}
@@ -138,7 +138,7 @@ func (s *RowStream[R]) loadBufferedPage() error {
 	if configured.MaxDecompressedBytes > 0 && (limits.MaxBytes == 0 || configured.MaxDecompressedBytes < limits.MaxBytes) {
 		limits.MaxBytes = configured.MaxDecompressedBytes
 	}
-	body, err := wire.NewStream(p.InternalCtx, wire.NewCursor(response.Rows), response.Rows.Len(), limits)
+	body, err := wire.NewStream(p.ctx, wire.NewCursor(response.Rows), response.Rows.Len(), limits)
 	if err != nil {
 		return err
 	}
@@ -158,7 +158,7 @@ func (s *RowStream[R]) loadBufferedPage() error {
 	} else if p.plan != nil && p.columns.Equal(response.Columns) {
 		plan = p.plan
 	} else {
-		plan, err = p.InternalDecoder.Compile(response.Columns)
+		plan, err = p.decoder.Compile(response.Columns)
 		if err != nil {
 			return err
 		}
@@ -185,7 +185,7 @@ func (s *RowStream[R]) loadBufferedPage() error {
 // InternalActive serializes this with Close and the cancellation callback.
 func (s *RowStream[R]) nextBuffered(dst *R) bool {
 	p := &s.privateStorage
-	fail := func(err error) bool { InternalRowStreamFail(s, err); InternalRowStreamCleanup(s, false); return false }
+	fail := func(err error) bool { rowStreamFail(s, err); rowStreamCleanup(s, false); return false }
 	for {
 		page := p.bufferedPage
 		if p.bufferedIndex < page.RowCount {
@@ -206,7 +206,7 @@ func (s *RowStream[R]) nextBuffered(dst *R) bool {
 					return fail(err)
 				}
 			}
-			if err := p.InternalCtx.Err(); err != nil {
+			if err := p.ctx.Err(); err != nil {
 				return fail(err)
 			}
 			p.mu.Lock()
@@ -223,10 +223,10 @@ func (s *RowStream[R]) nextBuffered(dst *R) bool {
 			p.mu.Lock()
 			p.terminal = true
 			p.mu.Unlock()
-			InternalRowStreamCleanup(s, true)
+			rowStreamCleanup(s, true)
 			return false
 		}
-		if err := p.InternalHistory.InternalAdd(next); err != nil {
+		if err := p.history.InternalAdd(next); err != nil {
 			return fail(err)
 		}
 		s.state = next

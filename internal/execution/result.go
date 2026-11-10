@@ -36,9 +36,9 @@ type Page[R any] struct {
 }
 
 func InternalNewPage[R any](response *transport.InternalResponsePage, decoder codec.RowDecoder[R], release func()) (*Page[R], error) {
-	return InternalNewPageWithPlans(response, decoder, nil, release)
+	return newPageWithPlans(response, decoder, nil, release)
 }
-func InternalNewPageWithPlans[R any](response *transport.InternalResponsePage, decoder codec.RowDecoder[R], plans *InternalResultPlanCache[R], release func()) (*Page[R], error) {
+func newPageWithPlans[R any](response *transport.InternalResponsePage, decoder codec.RowDecoder[R], plans *InternalResultPlanCache[R], release func()) (*Page[R], error) {
 	if response == nil {
 		return nil, cqltype.TypeValidation("response", "nil response")
 	}
@@ -82,16 +82,16 @@ func newPageInto[R any](page *Page[R], response *transport.InternalResponsePage,
 }
 
 func (p *Page[R]) initResponse(response *transport.InternalResponsePage, plan codec.RowPlan[R], release func()) {
-	p.privateStorage.InternalResponse = response
-	p.privateStorage.InternalPlan = plan
+	p.privateStorage.response = response
+	p.privateStorage.plan = plan
 	p.privateStorage.InternalCursor = wire.CursorOver(response.Rows)
-	p.privateStorage.InternalRelease = release
+	p.privateStorage.release = release
 }
 
 // NextInto decodes the next row into dst, reporting whether there was one.
 func (p *Page[R]) NextInto(dst *R) bool {
 	if p == nil {
-		InternalClearDestination(dst)
+		clearDestination(dst)
 		return false
 	}
 	if !p.privateStorage.cursor.current() {
@@ -99,12 +99,12 @@ func (p *Page[R]) NextInto(dst *R) bool {
 	}
 	defer p.afterAdvance()
 	ok := p.advance(dst)
-	if !ok && !codec.PreservesRowDestination(p.privateStorage.InternalPlan) {
-		InternalClearDestination(dst)
+	if !ok && !codec.PreservesRowDestination(p.privateStorage.plan) {
+		clearDestination(dst)
 	}
 	return ok
 }
-func InternalClearDestination[R any](dst *R) {
+func clearDestination[R any](dst *R) {
 	if dst != nil {
 		var zero R
 		*dst = zero
@@ -113,7 +113,7 @@ func InternalClearDestination[R any](dst *R) {
 func (p *Page[R]) advance(dst *R) bool {
 	p.privateStorage.valid = false
 	p.privateStorage.destination = nil
-	if p.privateStorage.closed || p.privateStorage.InternalExhausted || p.privateStorage.err != nil {
+	if p.privateStorage.closed || p.privateStorage.exhausted || p.privateStorage.err != nil {
 		return false
 	}
 	if dst == nil {
@@ -125,30 +125,30 @@ func (p *Page[R]) advance(dst *R) bool {
 		p.closeLocked()
 		return false
 	}
-	if p.privateStorage.InternalCtx != nil && p.privateStorage.InternalCtx.Err() != nil {
-		p.privateStorage.err = p.privateStorage.InternalCtx.Err()
+	if p.privateStorage.ctx != nil && p.privateStorage.ctx.Err() != nil {
+		p.privateStorage.err = p.privateStorage.ctx.Err()
 		p.closeLocked()
 		return false
 	}
-	if p.privateStorage.InternalIndex >= p.privateStorage.InternalResponse.RowCount {
-		p.privateStorage.InternalExhausted = true
+	if p.privateStorage.index >= p.privateStorage.response.RowCount {
+		p.privateStorage.exhausted = true
 		p.privateStorage.reader = codec.RowReader{}
 		if err := (&p.privateStorage.InternalCursor).RequireEnd(); err != nil {
 			p.privateStorage.err = &cqltype.ProtocolError{Stage: "rows", Err: err}
 		}
 		return false
 	}
-	p.privateStorage.reader = codec.RowReaderFromCursor(p.privateStorage.InternalResponse.Columns, &p.privateStorage.InternalCursor, p.privateStorage.InternalResponse.Owner)
+	p.privateStorage.reader = codec.RowReaderFromCursor(p.privateStorage.response.Columns, &p.privateStorage.InternalCursor, p.privateStorage.response.Owner)
 	// The plan receives the actual application destination, never a row temporary.
-	if !codec.PreservesRowDestination(p.privateStorage.InternalPlan) {
-		InternalClearDestination(dst)
+	if !codec.PreservesRowDestination(p.privateStorage.plan) {
+		clearDestination(dst)
 	}
-	err := p.privateStorage.InternalPlan.DecodeInto(&p.privateStorage.reader, dst)
+	err := p.privateStorage.plan.DecodeInto(&p.privateStorage.reader, dst)
 	if err == nil {
 		err = codec.FinishRowReader(&p.privateStorage.reader)
 	}
-	if err == nil && p.privateStorage.InternalCtx != nil {
-		err = p.privateStorage.InternalCtx.Err()
+	if err == nil && p.privateStorage.ctx != nil {
+		err = p.privateStorage.ctx.Err()
 	}
 	if err == nil && p.privateStorage.session != nil && p.privateStorage.session.Closed() {
 		err = runtimeerrors.ErrClosed
@@ -157,7 +157,7 @@ func (p *Page[R]) advance(dst *R) bool {
 		p.privateStorage.err = err
 		return false
 	}
-	p.privateStorage.InternalIndex++
+	p.privateStorage.index++
 	p.privateStorage.valid = true
 	p.privateStorage.destination = dst
 	return true
@@ -190,10 +190,10 @@ func (p *Page[R]) closeLocked() {
 	p.privateStorage.valid = false
 	p.privateStorage.destination = nil
 	p.privateStorage.reader = codec.RowReader{}
-	p.privateStorage.InternalResponse.Owner.Release()
-	if p.privateStorage.InternalRelease != nil {
-		p.privateStorage.pendingRelease = p.privateStorage.InternalRelease
-		p.privateStorage.InternalRelease = nil
+	p.privateStorage.response.Owner.Release()
+	if p.privateStorage.release != nil {
+		p.privateStorage.pendingRelease = p.privateStorage.release
+		p.privateStorage.release = nil
 	}
 }
 func (p *Page[R]) Retain() (*PageLease, error) {
@@ -203,12 +203,12 @@ func (p *Page[R]) Retain() (*PageLease, error) {
 	if !p.privateStorage.valid || p.privateStorage.closed {
 		return nil, runtimeerrors.ErrNoRows
 	}
-	if !p.privateStorage.InternalResponse.Owner.Retain() {
+	if !p.privateStorage.response.Owner.Retain() {
 		return nil, cqltype.ErrReleased
 	}
 	return func() *PageLease {
 		opaqueStorageValuex := new(PageLease)
-		opaqueStorageValuex.privateStorage.owner = p.privateStorage.InternalResponse.Owner
+		opaqueStorageValuex.privateStorage.owner = p.privateStorage.response.Owner
 		return opaqueStorageValuex
 	}(), nil
 }
@@ -221,22 +221,22 @@ func (p *Page[R]) Clone() (R, error) {
 		var zero R
 		return zero, runtimeerrors.ErrNoRows
 	}
-	return p.privateStorage.InternalPlan.Clone(*p.privateStorage.destination), nil
+	return p.privateStorage.plan.Clone(*p.privateStorage.destination), nil
 }
 func (p *Page[R]) State() model.PageState {
 	if p == nil {
 		return model.CompletePageState()
 	}
-	return p.privateStorage.InternalResponse.State
+	return p.privateStorage.response.State
 }
 func (p *Page[R]) Info() model.Result {
 	if p == nil {
 		return model.Result{}
 	}
-	return model.CloneResult(p.privateStorage.InternalResponse.Result)
+	return model.CloneResult(p.privateStorage.response.Result)
 }
 
-type InternalPrefetchJob struct {
+type prefetchJob struct {
 	future *InternalPageFuture
 	state  model.PageState
 }
@@ -251,7 +251,7 @@ type rowsImpl[R any] struct {
 
 func (r *rowsImpl[R]) NextInto(dst *R) bool {
 	if r == nil {
-		InternalClearDestination(dst)
+		clearDestination(dst)
 		return false
 	}
 	if !r.privateStorage.cursor.current() {
@@ -260,8 +260,8 @@ func (r *rowsImpl[R]) NextInto(dst *R) bool {
 	r.privateStorage.mu.Lock()
 	defer r.unlockAfterAdvance()
 	ok := r.advance(dst)
-	if !ok && (r.privateStorage.InternalPage == nil || !codec.PreservesRowDestination(r.privateStorage.InternalPage.privateStorage.InternalPlan)) {
-		InternalClearDestination(dst)
+	if !ok && (r.privateStorage.page == nil || !codec.PreservesRowDestination(r.privateStorage.page.privateStorage.plan)) {
+		clearDestination(dst)
 	}
 	return ok
 }
@@ -276,7 +276,7 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 		return false
 	}
 	for {
-		if r.privateStorage.rejectColumns && r.privateStorage.InternalPage != nil && r.privateStorage.InternalPage.Columns().Len() != 0 && r.privateStorage.terminalErr == nil {
+		if r.privateStorage.rejectColumns && r.privateStorage.page != nil && r.privateStorage.page.Columns().Len() != 0 && r.privateStorage.terminalErr == nil {
 			r.privateStorage.terminalErr = cqltype.TypeValidation("Exec", "result columns require Run")
 		}
 		if r.privateStorage.session != nil && r.privateStorage.session.Closed() {
@@ -284,13 +284,13 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 			r.closeLocked()
 			return false
 		}
-		if err := r.privateStorage.InternalCtx.Err(); err != nil {
+		if err := r.privateStorage.ctx.Err(); err != nil {
 			r.privateStorage.err = err
 			r.closeLocked()
 			return false
 		}
-		if r.privateStorage.InternalPage.NextInto(dst) {
-			if err := r.privateStorage.InternalCtx.Err(); err != nil {
+		if r.privateStorage.page.NextInto(dst) {
+			if err := r.privateStorage.ctx.Err(); err != nil {
 				r.privateStorage.err = err
 				r.closeLocked()
 				return false
@@ -303,13 +303,13 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 			r.privateStorage.valid = true
 			return true
 		}
-		if err := r.privateStorage.InternalPage.Err(); err != nil {
+		if err := r.privateStorage.page.Err(); err != nil {
 			r.privateStorage.err = err
 			r.closeLocked()
 			return false
 		}
-		state := r.privateStorage.InternalPage.State()
-		_ = r.privateStorage.InternalPage.Close()
+		state := r.privateStorage.page.State()
+		_ = r.privateStorage.page.Close()
 		if !state.More() {
 			if r.privateStorage.err == nil {
 				r.privateStorage.err = r.privateStorage.terminalErr
@@ -323,7 +323,7 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 			return false
 		}
 		if r.privateStorage.future == nil {
-			if err := r.privateStorage.InternalHistory.InternalAdd(state); err != nil {
+			if err := r.privateStorage.history.InternalAdd(state); err != nil {
 				r.privateStorage.err = err
 				r.closeLocked()
 				return false
@@ -332,10 +332,10 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 		var response *transport.InternalResponsePage
 		var err error
 		if r.privateStorage.future != nil {
-			response, err = r.privateStorage.future.InternalTake(r.privateStorage.InternalCtx)
+			response, err = r.privateStorage.future.InternalTake(r.privateStorage.ctx)
 			r.privateStorage.future = nil
 		} else {
-			response, err = InternalRuntimeFor(r.privateStorage.session).executePage(r.privateStorage.InternalCtx, r.privateStorage.InternalRequest, state)
+			response, err = InternalRuntimeFor(r.privateStorage.session).executePage(r.privateStorage.ctx, r.privateStorage.request, state)
 		}
 		if err != nil {
 			model.MergeResult(&r.privateStorage.info, InternalExecutionErrorResult(err))
@@ -344,7 +344,7 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 			return false
 		}
 		model.MergeResult(&r.privateStorage.info, response.Result)
-		r.privateStorage.InternalPage, err = InternalNewPageWithPlans(response, r.privateStorage.decoder, r.privateStorage.plans, nil)
+		r.privateStorage.page, err = newPageWithPlans(response, r.privateStorage.decoder, r.privateStorage.plans, nil)
 		if err != nil {
 			r.privateStorage.err = err
 			r.closeLocked()
@@ -382,8 +382,8 @@ func (r *rowsImpl[R]) closeLocked() {
 	}
 	r.privateStorage.closed = true
 	r.privateStorage.valid = false
-	if r.privateStorage.InternalPage != nil {
-		if err := r.privateStorage.InternalPage.Close(); r.privateStorage.err == nil {
+	if r.privateStorage.page != nil {
+		if err := r.privateStorage.page.Close(); r.privateStorage.err == nil {
 			r.privateStorage.err = err
 		}
 	}
@@ -394,10 +394,10 @@ func (r *rowsImpl[R]) closeLocked() {
 		r.privateStorage.future.InternalClose()
 		r.privateStorage.future = nil
 	}
-	r.privateStorage.InternalHistory.InternalClear()
-	if r.privateStorage.InternalRelease != nil {
-		r.privateStorage.pendingRelease = r.privateStorage.InternalRelease
-		r.privateStorage.InternalRelease = nil
+	r.privateStorage.history.InternalClear()
+	if r.privateStorage.release != nil {
+		r.privateStorage.pendingRelease = r.privateStorage.release
+		r.privateStorage.release = nil
 	}
 	if r.privateStorage.execution != nil {
 		r.privateStorage.pendingExecution = r.privateStorage.execution
@@ -413,7 +413,7 @@ func (r *rowsImpl[R]) Retain() (*PageLease, error) {
 	if !r.privateStorage.valid || r.privateStorage.closed {
 		return nil, runtimeerrors.ErrNoRows
 	}
-	return r.privateStorage.InternalPage.Retain()
+	return r.privateStorage.page.Retain()
 }
 func (r *rowsImpl[R]) Clone() (R, error) {
 	if r == nil {
@@ -426,7 +426,7 @@ func (r *rowsImpl[R]) Clone() (R, error) {
 		var z R
 		return z, runtimeerrors.ErrNoRows
 	}
-	return r.privateStorage.InternalPage.Clone()
+	return r.privateStorage.page.Clone()
 }
 func (r *rowsImpl[R]) Info() model.Result {
 	if r == nil {
@@ -438,14 +438,14 @@ func (r *rowsImpl[R]) Info() model.Result {
 }
 
 type InternalResultPlanCache[R any] struct {
-	InternalPlan codec.RowPlan[R]
-	entry        *model.ResultSchemaIdentity
+	plan  codec.RowPlan[R]
+	entry *model.ResultSchemaIdentity
 	// current mirrors entry and plan for lock-free hits on identified
 	// responses. It is replaced under InternalMu whenever entry changes.
-	current    atomic.Pointer[resultPlanSnapshot[R]]
-	columns    cqltype.Columns
-	revision   uint64
-	InternalMu sync.Mutex
+	current  atomic.Pointer[resultPlanSnapshot[R]]
+	columns  cqltype.Columns
+	revision uint64
+	mu       sync.Mutex
 }
 
 type resultPlanSnapshot[R any] struct {
@@ -461,16 +461,16 @@ func (c *InternalResultPlanCache[R]) InternalSelectPlan(response *transport.Inte
 	if current := c.current.Load(); current != nil && current.entry == entry {
 		return current.plan, nil
 	}
-	c.InternalMu.Lock()
-	if c.InternalPlan != nil && c.entry == entry {
-		plan := c.InternalPlan
-		c.InternalMu.Unlock()
+	c.mu.Lock()
+	if c.plan != nil && c.entry == entry {
+		plan := c.plan
+		c.mu.Unlock()
 		return plan, nil
 	}
-	previous, columns := c.InternalPlan, c.columns
+	previous, columns := c.plan, c.columns
 	c.revision++
 	revision := c.revision
-	c.InternalMu.Unlock()
+	c.mu.Unlock()
 	var plan codec.RowPlan[R]
 	var err error
 	if previous != nil && columns.Equal(response.Columns) {
@@ -485,14 +485,14 @@ func (c *InternalResultPlanCache[R]) InternalSelectPlan(response *transport.Inte
 		entry.InternalTracker.InternalMu.RLock()
 		defer entry.InternalTracker.InternalMu.RUnlock()
 	}
-	c.InternalMu.Lock()
+	c.mu.Lock()
 	if c.revision == revision && entry.InternalEpoch.InternalCurrent() {
 		c.entry = entry
 		c.columns = response.Columns
-		c.InternalPlan = plan
+		c.plan = plan
 		c.current.Store(&resultPlanSnapshot[R]{entry: entry, plan: plan})
 	}
-	c.InternalMu.Unlock()
+	c.mu.Unlock()
 	return plan, nil
 }
 
@@ -500,27 +500,27 @@ func (c *InternalResultPlanCache[R]) InternalSelectPlan(response *transport.Inte
 // unprepared queries. Their columns are compared directly instead of minting
 // a throwaway identity for every response.
 func (c *InternalResultPlanCache[R]) selectUnidentified(response *transport.InternalResponsePage, decoder codec.RowDecoder[R]) (codec.RowPlan[R], error) {
-	c.InternalMu.Lock()
-	if c.InternalPlan != nil && c.columns.Equal(response.Columns) {
-		plan := c.InternalPlan
-		c.InternalMu.Unlock()
+	c.mu.Lock()
+	if c.plan != nil && c.columns.Equal(response.Columns) {
+		plan := c.plan
+		c.mu.Unlock()
 		return plan, nil
 	}
 	c.revision++
 	revision := c.revision
-	c.InternalMu.Unlock()
+	c.mu.Unlock()
 	plan, err := codec.CompileRowPlan(decoder, response.Columns)
 	if err != nil {
 		return nil, err
 	}
-	c.InternalMu.Lock()
+	c.mu.Lock()
 	if c.revision == revision {
 		c.entry = nil
 		c.columns = response.Columns
-		c.InternalPlan = plan
+		c.plan = plan
 		c.current.Store(nil)
 	}
-	c.InternalMu.Unlock()
+	c.mu.Unlock()
 	return plan, nil
 }
 
@@ -570,14 +570,14 @@ func (f *InternalPageFuture) InternalClose() {
 	}
 }
 func (r *rowsImpl[R]) startPrefetch() {
-	if r.privateStorage.InternalRequest.InternalOptions.InternalProfile.Prefetch == 0 || r.privateStorage.InternalPage == nil || r.privateStorage.closed {
+	if r.privateStorage.request.InternalOptions.InternalProfile.Prefetch == 0 || r.privateStorage.page == nil || r.privateStorage.closed {
 		return
 	}
-	state := r.privateStorage.InternalPage.State()
+	state := r.privateStorage.page.State()
 	if !state.More() {
 		return
 	}
-	if err := r.privateStorage.InternalHistory.InternalAdd(state); err != nil {
+	if err := r.privateStorage.history.InternalAdd(state); err != nil {
 		r.privateStorage.nextErr = err
 		return
 	}
@@ -585,31 +585,31 @@ func (r *rowsImpl[R]) startPrefetch() {
 	r.privateStorage.future = future
 	if r.privateStorage.prefetchJobs == nil {
 		perfAdd(4, 1)
-		jobs := make(chan InternalPrefetchJob, 1)
+		jobs := make(chan prefetchJob, 1)
 		r.privateStorage.prefetchJobs = jobs
-		r.privateStorage.InternalRequest.InternalOwner.InternalRetain()
+		r.privateStorage.request.InternalOwner.retain()
 		go func() {
-			defer r.privateStorage.InternalRequest.InternalOwner.InternalRelease()
+			defer r.privateStorage.request.InternalOwner.InternalRelease()
 			for {
 				select {
-				case <-r.privateStorage.InternalCtx.Done():
+				case <-r.privateStorage.ctx.Done():
 					return
 				case job := <-jobs:
-					response, err := InternalRuntimeFor(r.privateStorage.session).executePage(r.privateStorage.InternalCtx, r.privateStorage.InternalRequest, job.state)
+					response, err := InternalRuntimeFor(r.privateStorage.session).executePage(r.privateStorage.ctx, r.privateStorage.request, job.state)
 					job.future.InternalComplete(response, err)
 				}
 			}
 		}()
 	}
-	r.privateStorage.prefetchJobs <- InternalPrefetchJob{state: state, future: future}
+	r.privateStorage.prefetchJobs <- prefetchJob{state: state, future: future}
 }
 
 // Columns returns the actual physical result metadata, including for empty pages.
 func (p *Page[R]) Columns() cqltype.Columns {
-	if p == nil || p.privateStorage.InternalResponse == nil {
+	if p == nil || p.privateStorage.response == nil {
 		return cqltype.Columns{}
 	}
-	return p.privateStorage.InternalResponse.Columns
+	return p.privateStorage.response.Columns
 }
 
 // Columns returns the current page's actual physical result metadata.
@@ -619,20 +619,20 @@ func (r *rowsImpl[R]) Columns() cqltype.Columns {
 	}
 	r.privateStorage.mu.Lock()
 	defer r.privateStorage.mu.Unlock()
-	if r.privateStorage.InternalPage == nil {
+	if r.privateStorage.page == nil {
 		return cqltype.Columns{}
 	}
-	return r.privateStorage.InternalPage.Columns()
+	return r.privateStorage.page.Columns()
 }
 
-type InternalExecRowsDecoder struct{}
-type InternalExecRowsPlan struct{ count int }
+type execRowsDecoder struct{}
+type execRowsPlan struct{ count int }
 
-func (InternalExecRowsDecoder) Compile(columns cqltype.Columns) (codec.RowPlan[codec.EmptyRecord], error) {
-	return InternalExecRowsPlan{count: columns.Len()}, nil
+func (execRowsDecoder) Compile(columns cqltype.Columns) (codec.RowPlan[codec.EmptyRecord], error) {
+	return execRowsPlan{count: columns.Len()}, nil
 }
-func (InternalExecRowsDecoder) Clone(value codec.EmptyRecord) codec.EmptyRecord { return value }
-func (p InternalExecRowsPlan) Decode(reader *codec.RowReader) (codec.EmptyRecord, error) {
+func (execRowsDecoder) Clone(value codec.EmptyRecord) codec.EmptyRecord { return value }
+func (p execRowsPlan) Decode(reader *codec.RowReader) (codec.EmptyRecord, error) {
 	for i := 0; i < p.count; i++ {
 		if err := reader.SkipColumn(); err != nil {
 			return codec.EmptyRecord{}, err
@@ -640,9 +640,9 @@ func (p InternalExecRowsPlan) Decode(reader *codec.RowReader) (codec.EmptyRecord
 	}
 	return codec.EmptyRecord{}, nil
 }
-func (InternalExecRowsPlan) Clone(value codec.EmptyRecord) codec.EmptyRecord { return value }
+func (execRowsPlan) Clone(value codec.EmptyRecord) codec.EmptyRecord { return value }
 
-func (p InternalExecRowsPlan) DecodeInto(reader *codec.RowReader, dst *codec.EmptyRecord) error {
+func (p execRowsPlan) DecodeInto(reader *codec.RowReader, dst *codec.EmptyRecord) error {
 	if dst == nil {
 		return cqltype.TypeValidation("destination", "nil row destination")
 	}
@@ -676,12 +676,12 @@ func (r *rowsImpl[R]) unlockAfterAdvance() {
 	}
 	if execution != nil {
 		execution.InternalFinish(info, err)
-		execution.InternalReleaseInput()
+		execution.releaseInput()
 	}
 }
 
 // stopExecution implements executionStopper for query and session shutdown.
-func (r *rowsImpl[R]) stopExecution(l *InternalLogicalExecution) {
+func (r *rowsImpl[R]) stopExecution(l *logicalExecution) {
 	r.privateStorage.mu.Lock()
 	if r.privateStorage.future != nil {
 		r.privateStorage.future.InternalClose()
@@ -689,5 +689,5 @@ func (r *rowsImpl[R]) stopExecution(l *InternalLogicalExecution) {
 	}
 	r.privateStorage.mu.Unlock()
 	l.InternalFinish(r.Info(), runtimeerrors.ErrClosed)
-	l.InternalReleaseInput()
+	l.releaseInput()
 }

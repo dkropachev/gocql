@@ -61,7 +61,7 @@ func BenchmarkReusableQuery(b *testing.B) {
 			}
 			cancel()
 			request.InternalLogical.InternalFinish(model.Result{}, nil)
-			request.InternalLogical.InternalReleaseInput()
+			request.InternalLogical.releaseInput()
 			q.state.owner.InternalRelease()
 		}
 	})

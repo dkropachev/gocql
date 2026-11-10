@@ -23,12 +23,12 @@ import (
 var ErrBusy = runtimeerrors.ErrBusy
 
 type queryState struct {
-	owner        *InternalInputOwner
+	owner        *inputOwner
 	execCtx      *executionContext // reusable direct-path context; nil keeps context.WithTimeout
 	pageCtx      *executionContext // reusable direct-path page timeout, created on first use
 	releaseOwner func()            // bound owner.InternalRelease, the execution drain
 	runtime      *InternalSessionRuntime
-	logical      *InternalLogicalExecution
+	logical      *logicalExecution
 	done         chan struct{} // created by the first waiter of a busy generation
 	retire       func()
 	resolved     *InternalResolvedOptions // the query's options, resolved at creation
@@ -38,9 +38,9 @@ type queryState struct {
 	// historyInline is the inline paging history storage the query's
 	// iterator lends its history.
 	historyInline [paging.InternalInlineHistory]model.PageState
-	inlineLogical InternalLogicalExecution
+	inlineLogical logicalExecution
 	request       InternalExecutionRequest
-	execOwner     InternalInputOwner // per-execution owner, reset each generation
+	execOwner     inputOwner // per-execution owner, reset each generation
 	// response holds an execution's first response page. The next execution
 	// can begin only after this one released it.
 	response     transport.InternalResponsePage
@@ -166,13 +166,13 @@ func newPreparedQuery[P, R any](p *Prepared[P, R], options BoundOptions, pool *q
 	state := p.privateStorage.InternalState
 	// Statement, keyspace, parameters and info are fixed when the prepared
 	// state is built, so the query's request takes them once.
-	q := &Query[P, R]{options: options, params: p.privateStorage.InternalParams, columns: state.InternalParameters, allowUnset: state.InternalProtocol >= 4}
-	q.bound.privateStorage.InternalRows = p.privateStorage.InternalRows
-	q.bound.privateStorage.plans = p.privateStorage.InternalPlans
+	q := &Query[P, R]{options: options, params: p.privateStorage.params, columns: state.InternalParameters, allowUnset: state.InternalProtocol >= 4}
+	q.bound.privateStorage.InternalRows = p.privateStorage.rows
+	q.bound.privateStorage.plans = p.privateStorage.plans
 	q.bound.privateStorage.rows = &q.rows
 	info := &state.InternalInfo
-	kind := p.privateStorage.InternalKind
-	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, InternalRouting: model.RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Kind: kind, Conditional: kind != cqltype.OrdinaryStatement}}
+	kind := p.privateStorage.kind
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, routing: model.RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Kind: kind, Conditional: kind != cqltype.OrdinaryStatement}}
 	if err := newQueryState(p.privateStorage.InternalState.InternalSession, &q.state, q.retire, pool); err != nil {
 		return nil, err
 	}
@@ -205,7 +205,7 @@ func newUnpreparedQuery[P, R any](s *implCluster.Core, statement binding.Stateme
 	q.bound.privateStorage.InternalRows = statement.Rows
 	q.bound.privateStorage.plans = &InternalResultPlanCache[R]{}
 	q.bound.privateStorage.rows = &q.rows
-	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: statement.CQL, InternalSource: cqlText{}, InternalRouting: model.RoutingInfo{Kind: statement.Kind, Conditional: statement.Kind != cqltype.OrdinaryStatement}}
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement.CQL, InternalSource: cqlText{}, routing: model.RoutingInfo{Kind: statement.Kind, Conditional: statement.Kind != cqltype.OrdinaryStatement}}
 	if err := newQueryState(s, &q.state, q.retire, nil); err != nil {
 		return nil, err
 	}
@@ -330,7 +330,7 @@ func (q *Query[P, R]) captureWith(ctx context.Context, value P, wait bool) error
 		q.state.owner.InternalRelease()
 		return err
 	}
-	request.InternalRouting.Token = token
+	request.routing.Token = token
 	request.InternalOwner, request.query = q.state.owner, &q.state
 	return nil
 }
@@ -391,7 +391,7 @@ func (q *Query[P, R]) Routing(value P) (model.RoutingInfo, error) {
 		return model.RoutingInfo{}, err
 	}
 	defer q.state.owner.InternalRelease()
-	return q.bound.privateStorage.InternalRequest.InternalRouting, nil
+	return q.bound.privateStorage.InternalRequest.routing, nil
 }
 
 // AddToBatch encodes value with the query's parameters and appends the statement
@@ -422,11 +422,11 @@ func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
 		return err
 	}
 	request := &q.bound.privateStorage.InternalRequest
-	routing := request.InternalRouting
+	routing := request.routing
 	if routing.Token, err = request.InternalSource.token(values.Cells); err != nil {
 		return err
 	}
-	err = batch.add(q.state.runtime.Core, request.InternalSource, request.InternalStatement, &routing, values)
+	err = batch.add(q.state.runtime.Core, request.InternalSource, request.statement, &routing, values)
 	if q.buffer.RetainedBytes() > 64<<10 {
 		q.buffer.Retire()
 	}
@@ -439,7 +439,7 @@ func (s *queryState) close() {
 		l.shutdown()
 	}
 }
-func (s *queryState) stop() *InternalLogicalExecution {
+func (s *queryState) stop() *logicalExecution {
 	if s.owner == nil {
 		return nil
 	}

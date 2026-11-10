@@ -53,8 +53,8 @@ func BenchmarkPaging(b *testing.B) {
 				defer owner.Release()
 				p := func() *Page[row] {
 					opaqueStorageValuexx := new(Page[row])
-					PageData(opaqueStorageValuexx).InternalResponse = &transport.InternalResponsePage{ResponseData: model.ResponseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner}}
-					PageData(opaqueStorageValuexx).InternalPlan = codecTestMust(decoder.Compile(columns))
+					PageData(opaqueStorageValuexx).response = &transport.InternalResponsePage{ResponseData: model.ResponseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner}}
+					PageData(opaqueStorageValuexx).plan = codecTestMust(decoder.Compile(columns))
 					PageData(opaqueStorageValuexx).InternalCursor = wire.CursorOver(chain)
 					return opaqueStorageValuexx
 				}()
@@ -64,8 +64,8 @@ func BenchmarkPaging(b *testing.B) {
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					PageData(p).InternalCursor = cursor
-					PageData(p).InternalIndex = 0
-					PageData(p).InternalExhausted = false
+					PageData(p).index = 0
+					PageData(p).exhausted = false
 					if !p.NextInto(&dst) {
 						b.Fatal(p.Err())
 					}

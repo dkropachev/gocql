@@ -43,18 +43,18 @@ func TestRoutingPolicy(t *testing.T) {
 			columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Name: "key", Type: typ, Keyspace: "ks", Table: "table"})
 			encoder := codec.OneParam(codec.BlobCodec)
 			params := codecTestMust(encoder.Compile(columns))
-			state := &InternalPreparedState{InternalSession: s, InternalProtocol: 4, InternalParameters: columns, InternalPartitioner: "old", InternalInfo: PreparedInfo{Keyspace: "ks", Table: "table", PartitionKeyIndexes: []int{0}}}
+			state := &InternalPreparedState{InternalSession: s, InternalProtocol: 4, InternalParameters: columns, partitioner: "old", InternalInfo: PreparedInfo{Keyspace: "ks", Table: "table", PartitionKeyIndexes: []int{0}}}
 			prepared := func() *Prepared[implCqltype.Bytes,
 				codec.EmptyRecord] {
 				opaqueStorageValuexxxxxxxx := new(Prepared[implCqltype.Bytes,
 					codec.EmptyRecord])
 				PreparedData(opaqueStorageValuexxxxxxxx).InternalState = state
-				PreparedData(opaqueStorageValuexxxxxxxx).InternalParams = params
-				PreparedData(opaqueStorageValuexxxxxxxx).InternalRows = codec.EmptyRowDecoder
+				PreparedData(opaqueStorageValuexxxxxxxx).params = params
+				PreparedData(opaqueStorageValuexxxxxxxx).rows = codec.EmptyRowDecoder
 				PreparedData(opaqueStorageValuexxxxxxxx).
 					// Later metadata selects a different partitioner. Existing preparation and
 					// binding still consume the canonical original parameter spans exactly once.
-					InternalPlans = &InternalResultPlanCache[codec.EmptyRecord]{}
+					plans = &InternalResultPlanCache[codec.EmptyRecord]{}
 				return opaqueStorageValuexxxxxxxx
 			}()
 

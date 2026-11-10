@@ -13,22 +13,22 @@ import (
 )
 
 type PageStorage[R any] struct {
-	InternalCtx       context.Context
-	InternalPlan      codec.RowPlan[R]
-	err               error
-	pendingRelease    func()
-	destination       *R
-	cancel            context.CancelFunc
-	session           *implCluster.Core
-	InternalResponse  *transport.InternalResponsePage
-	InternalRelease   func()
-	cursor            queryCursor
-	reader            codec.RowReader
-	InternalCursor    wire.Cursor
-	InternalIndex     int32
-	valid             bool
-	closed            bool
-	InternalExhausted bool
+	ctx            context.Context
+	plan           codec.RowPlan[R]
+	err            error
+	pendingRelease func()
+	destination    *R
+	cancel         context.CancelFunc
+	session        *implCluster.Core
+	response       *transport.InternalResponsePage
+	release        func()
+	cursor         queryCursor
+	reader         codec.RowReader
+	InternalCursor wire.Cursor
+	index          int32
+	valid          bool
+	closed         bool
+	exhausted      bool
 }
 
 func PageData[R any](v *Page[R]) *PageStorage[R] { return &v.privateStorage }

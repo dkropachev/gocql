@@ -15,25 +15,25 @@ import (
 )
 
 type RowsStorage[R any] struct {
-	nextErr         error
-	terminalErr     error
-	InternalCtx     context.Context
-	decoder         codec.RowDecoder[R]
-	err             error
-	prefetchJobs    chan InternalPrefetchJob
-	pendingRelease  func()
-	plans           *InternalResultPlanCache[R]
-	future          *InternalPageFuture
-	cancel          context.CancelFunc
-	session         *implCluster.Core
-	InternalRequest *InternalExecutionRequest
-	InternalPage    *Page[R]
-	InternalRelease func()
+	nextErr        error
+	terminalErr    error
+	ctx            context.Context
+	decoder        codec.RowDecoder[R]
+	err            error
+	prefetchJobs   chan prefetchJob
+	pendingRelease func()
+	plans          *InternalResultPlanCache[R]
+	future         *InternalPageFuture
+	cancel         context.CancelFunc
+	session        *implCluster.Core
+	request        *InternalExecutionRequest
+	page           *Page[R]
+	release        func()
 	// execution is finished and released when the rows close; pendingExecution
 	// carries that release past the unlock, like pendingRelease.
-	execution, pendingExecution *InternalLogicalExecution
+	execution, pendingExecution *logicalExecution
 	cursor                      queryCursor
-	InternalHistory             paging.InternalPagingHistory
+	history                     paging.InternalPagingHistory
 	info                        model.Result
 	mu                          sync.Mutex
 	rejectColumns               bool
@@ -45,4 +45,4 @@ func RowsData[R any](v Rows[R]) *RowsStorage[R] { return &v.impl.privateStorage 
 
 // InternalNewRows returns a handle over new, empty iterator storage, for tests
 // that assemble an iterator directly.
-func InternalNewRows[R any]() Rows[R] { return newRowsHandle(new(rowsImpl[R])) }
+func newRows[R any]() Rows[R] { return newRowsHandle(new(rowsImpl[R])) }

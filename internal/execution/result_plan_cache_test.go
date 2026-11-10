@@ -47,15 +47,15 @@ func TestResultPlanCache(t *testing.T) {
 			host := implCqltype.UUID{15: 1}
 			changed := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))})
 			replacement := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("new")}}
-			if err := InternalSelectPreparedResponse(state, host, old, old.InternalMetadataID, true, replacement); err != nil {
+			if err := selectPreparedResponse(state, host, old, old.InternalMetadataID, true, replacement); err != nil {
 				t.Fatal(err)
 			}
 			chain := typedTestChain(t, []byte{0, 0, 0, 3, 'o', 'l', 'd'})
 			response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{NoMetadata: true, ColumnCount: 1, RowCount: 1, Rows: chain, Owner: wire.NewLease(chain, nil)}}
-			if err := InternalSelectPreparedResponse(state, host, old, old.InternalMetadataID, true, response); err != nil {
+			if err := selectPreparedResponse(state, host, old, old.InternalMetadataID, true, response); err != nil {
 				t.Fatal(err)
 			}
-			p := codecTestMust(InternalNewPageWithPlans(response, codec.OneColumn(codec.BlobCodec), &InternalResultPlanCache[implCqltype.Bytes]{}, nil))
+			p := codecTestMust(newPageWithPlans(response, codec.OneColumn(codec.BlobCodec), &InternalResultPlanCache[implCqltype.Bytes]{}, nil))
 			defer p.Close()
 			var dst implCqltype.Bytes
 			if !p.NextInto(&dst) || string(dst.OwnedBytes()) != "old" {
@@ -80,9 +80,9 @@ func TestResultPlanCache(t *testing.T) {
 			if _, err := cache.InternalSelectPlan(response, decoder); err != nil {
 				t.Fatal(err)
 			}
-			cache.InternalMu.Lock()
-			cached := cache.InternalPlan
-			cache.InternalMu.Unlock()
+			cache.mu.Lock()
+			cached := cache.plan
+			cache.mu.Unlock()
 			if cached != nil {
 				t.Fatal("compile published through changed schema epoch")
 			}
@@ -117,13 +117,13 @@ func TestResultPlanCache(t *testing.T) {
 				done <- err
 			}()
 			<-entered
-			cache.InternalMu.Lock()
+			cache.mu.Lock()
 			close(release)
 			deadline := time.Now().Add(time.Second)
 			for tracker.InternalMu.TryLock() {
 				tracker.InternalMu.Unlock()
 				if time.Now().After(deadline) {
-					cache.InternalMu.Unlock()
+					cache.mu.Unlock()
 					t.Fatal("cache publication did not acquire epoch gate")
 				}
 				runtime.Gosched()
@@ -137,11 +137,11 @@ func TestResultPlanCache(t *testing.T) {
 			<-invalidating
 			select {
 			case <-invalidated:
-				cache.InternalMu.Unlock()
+				cache.mu.Unlock()
 				t.Fatal("invalidation interleaved with publication")
 			default:
 			}
-			cache.InternalMu.Unlock()
+			cache.mu.Unlock()
 			if err := <-done; err != nil {
 				t.Fatal(err)
 			}
@@ -188,8 +188,8 @@ func TestResultPlanCache(t *testing.T) {
 				completed <- err
 			}()
 			<-entered
-			cold.InternalMu.Lock()
-			cold.InternalMu.Unlock()
+			cold.mu.Lock()
+			cold.mu.Unlock()
 			close(done)
 			if err := <-completed; err != nil {
 				t.Fatal(err)

@@ -60,9 +60,9 @@ func BenchmarkPrepared(b *testing.B) {
 					state := &InternalPreparedState{InternalSession: s, InternalProtocol: 4, InternalStatement: "SELECT value FROM ks.tbl WHERE value=?", InternalParameters: columns, InternalColumns: columns, InternalHosts: map[cqltype.UUID]*InternalHostPrepared{id: hp}, InternalDependencies: deps, InternalInitialEpoch: deps.InternalSnapshot(), InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl", PartitionKeyIndexes: []int{0}}}
 					prepared := new(Prepared[[]byte, cqltype.Bytes])
 					PreparedData(prepared).InternalState = state
-					PreparedData(prepared).InternalKind = cqltype.OrdinaryStatement
-					PreparedData(prepared).InternalParams = codecTestMust(codec.OneParam(codec.BytesEncoder).Compile(columns))
-					PreparedData(prepared).InternalRows = codec.OneColumn(codec.BlobCodec)
+					PreparedData(prepared).kind = cqltype.OrdinaryStatement
+					PreparedData(prepared).params = codecTestMust(codec.OneParam(codec.BytesEncoder).Compile(columns))
+					PreparedData(prepared).rows = codec.OneColumn(codec.BlobCodec)
 					host := new(endpoint.HostInfo)
 					implEndpoint.HostInfoData(host).InternalHostId = id
 					conn := &transport.Conn{InternalHost: host}
@@ -107,7 +107,7 @@ func BenchmarkPrepared(b *testing.B) {
 								b.Error(e)
 								return
 							}
-							got, e := rt.InternalPrepareOnConn(context.Background(), conn, state, model.EncodedValues{}, false)
+							got, e := rt.prepareOnConn(context.Background(), conn, state, model.EncodedValues{}, false)
 							if e != nil || got != hp {
 								b.Error("unrelated reprepare", e)
 								return
@@ -151,7 +151,7 @@ func BenchmarkPrepared(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			got, err := InternalRuntimeFor(s).InternalPrepareOnConn(context.Background(), conn, state, model.EncodedValues{}, false)
+			got, err := InternalRuntimeFor(s).prepareOnConn(context.Background(), conn, state, model.EncodedValues{}, false)
 			if err != nil || got != hp {
 				b.Fatal(err)
 			}

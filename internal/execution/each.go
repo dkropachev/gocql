@@ -82,7 +82,7 @@ func each[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options 
 	*scratch = eachScratch{} // drop response references
 	cancel()
 	request.InternalLogical.InternalFinish(result, err)
-	request.InternalLogical.InternalReleaseInput()
+	request.InternalLogical.releaseInput()
 	return found, result, err
 }
 
@@ -129,7 +129,7 @@ func eachPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], requ
 			return fn != nil, result, nil
 		}
 		if first {
-			history = paging.InternalPagingHistory{InternalMaxCount: rt.InternalConfig.Limits.MaxPagingStates, InternalMaxBytes: rt.InternalConfig.Limits.MaxPagingStateBytes, InternalInline: &inline}
+			history = paging.InternalPagingHistory{InternalMaxCount: rt.config.Limits.MaxPagingStates, InternalMaxBytes: rt.config.Limits.MaxPagingStateBytes, InternalInline: &inline}
 		}
 		if err := history.InternalAdd(state); err != nil {
 			return false, result, err
@@ -153,7 +153,7 @@ func decodeEach[R any](ctx context.Context, s *implCluster.Core, response *trans
 	for i := int32(0); i < response.RowCount; i++ {
 		*reader = codec.RowReaderFromCursor(response.Columns, &scratch.cursor, response.Owner)
 		if !preserves {
-			InternalClearDestination(dst)
+			clearDestination(dst)
 		}
 		if err := plan.DecodeInto(reader, dst); err != nil {
 			return err
@@ -191,7 +191,7 @@ func decodeEach[R any](ctx context.Context, s *implCluster.Core, response *trans
 func RunOne[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions, dst *R) (bool, model.Result, error) {
 	found, result, err := each(ctx, s, b, options, dst, nil, new(eachScratch))
 	if !found && err == nil {
-		InternalClearDestination(dst)
+		clearDestination(dst)
 	}
 	return found, result, err
 }
@@ -225,7 +225,7 @@ func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, model.Res
 	defer q.state.owner.InternalRelease()
 	found, result, err := each(ctx, q.state.runtime.Core, &q.bound, q.options, dst, nil, &q.scratch)
 	if !found && err == nil {
-		InternalClearDestination(dst)
+		clearDestination(dst)
 	}
 	return found, result, err
 }

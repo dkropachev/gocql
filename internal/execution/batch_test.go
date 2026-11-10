@@ -193,9 +193,9 @@ func TestBatch(t *testing.T) {
 				state.InternalInfo.PartitionKeyIndexes = []int{0}
 				handle := new(Prepared[[]byte, codec.EmptyRecord])
 				PreparedData(handle).InternalState = state
-				PreparedData(handle).InternalParams = codecTestMust(codec.OneParam(codec.BytesEncoder).Compile(columns))
-				PreparedData(handle).InternalRows = codec.EmptyRowDecoder
-				PreparedData(handle).InternalPlans = &InternalResultPlanCache[codec.EmptyRecord]{}
+				PreparedData(handle).params = codecTestMust(codec.OneParam(codec.BytesEncoder).Compile(columns))
+				PreparedData(handle).rows = codec.EmptyRowDecoder
+				PreparedData(handle).plans = &InternalResultPlanCache[codec.EmptyRecord]{}
 				q := codecTestMust(NewQuery(handle, Options{}))
 				t.Cleanup(func() { _ = q.Close(context.Background()) })
 				return q

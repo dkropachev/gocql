@@ -40,10 +40,10 @@ type Batch struct {
 	// The latest execution: one sent through a query is tracked by the
 	// query's generation, one sent without by its owner.
 	lastQuery *queryState
-	lastOwner *InternalInputOwner
+	lastOwner *inputOwner
 	// state is the execution state lent to an execution while no earlier
 	// one may still read it.
-	state   InternalBatchState
+	state   batchState
 	routing model.RoutingInfo
 	// exec is the request Session.ExecBatch admits; admission copies it.
 	exec    Bound[codec.EmptyRecord]
@@ -66,7 +66,7 @@ type batchEntry struct {
 
 // InternalBatchState is the batch an execution sends: a snapshot of the
 // Batch's entries and values when the execution started.
-type InternalBatchState struct {
+type batchState struct {
 	entries []batchEntry
 	values  []byte
 	// attempt is the wire batch an attempt lends while attemptBusy is set;
@@ -115,10 +115,10 @@ func (b *Batch) drained() bool {
 // begin returns the state for an execution of kind. While an earlier
 // execution may still read the batch's state, this one gets its own, and
 // the batch's storage is left to the earlier one at the next Reset.
-func (b *Batch) begin(kind cqltype.BatchKind) *InternalBatchState {
+func (b *Batch) begin(kind cqltype.BatchKind) *batchState {
 	state := &b.state
 	if !b.drained() {
-		state = new(InternalBatchState)
+		state = new(batchState)
 		b.shared = true
 	}
 	// The wire batch's item storage is kept for the next execution.
@@ -226,7 +226,7 @@ func InternalAddBound[R any](batch *Batch, s *implCluster.Core, bound *Bound[R])
 		return err
 	}
 	defer request.InternalOwner.InternalRelease()
-	return batch.add(s, request.InternalSource, request.InternalStatement, &request.InternalRouting, request.InternalValues)
+	return batch.add(s, request.InternalSource, request.statement, &request.routing, request.InternalValues)
 }
 
 // runBatch sends batch on s without a query and returns its first and
@@ -242,7 +242,7 @@ func runBatch[R any](ctx context.Context, s *implCluster.Core, kind cqltype.Batc
 	owner := InternalNewInputOwner()
 	batch.lastOwner, batch.lastQuery = owner, nil
 	bound := new(Bound[R])
-	bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalOwner: owner, InternalRouting: batch.requestRouting(), batch: state}
+	bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalOwner: owner, routing: batch.requestRouting(), batch: state}
 	bound.privateStorage.InternalRows = decoder
 	page, err := RunPage(ctx, s, bound, model.StartPage(), options)
 	owner.InternalClose()
@@ -255,13 +255,13 @@ func runBatch[R any](ctx context.Context, s *implCluster.Core, kind cqltype.Batc
 func (b *Batch) queryExec(dst *InternalExecutionRequest, q *queryState, kind cqltype.BatchKind) {
 	state := b.begin(kind)
 	b.lastQuery, b.lastGen, b.lastOwner = q, q.generation.Load(), nil
-	*dst = InternalExecutionRequest{InternalOwner: q.owner, query: q, InternalRouting: b.requestRouting(), batch: state}
+	*dst = InternalExecutionRequest{InternalOwner: q.owner, query: q, routing: b.requestRouting(), batch: state}
 }
 
 // execBatch sends batch on s and drains its result, which must have no
 // columns.
 func execBatch(ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, options BoundOptions) (model.Result, error) {
-	page, err := runBatch(ctx, s, kind, batch, InternalExecRowsDecoder{}, options)
+	page, err := runBatch(ctx, s, kind, batch, execRowsDecoder{}, options)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
@@ -340,7 +340,7 @@ func (e *batchEntry) encoded() model.EncodedValues {
 // refills request when given one, and otherwise takes the state's own wire
 // batch unless another attempt holds it; the caller releases that with
 // releaseAttempt.
-func (s *InternalSessionRuntime) prepareBatchAttempt(ctx context.Context, conn *transport.Conn, batch *InternalBatchState, request *model.TypedBatchRequest) (*model.TypedBatchRequest, error) {
+func (s *InternalSessionRuntime) prepareBatchAttempt(ctx context.Context, conn *transport.Conn, batch *batchState, request *model.TypedBatchRequest) (*model.TypedBatchRequest, error) {
 	if request == nil {
 		if batch.attemptBusy.CompareAndSwap(false, true) {
 			request = &batch.attempt
@@ -373,13 +373,13 @@ func (s *InternalSessionRuntime) prepareBatchAttempt(ctx context.Context, conn *
 }
 
 // releaseAttempt returns the state's wire batch if request is it.
-func (batch *InternalBatchState) releaseAttempt(request *model.TypedBatchRequest) {
+func (batch *batchState) releaseAttempt(request *model.TypedBatchRequest) {
 	if request == &batch.attempt {
 		batch.attemptBusy.Store(false)
 	}
 }
 
-func (s *InternalSessionRuntime) repairBatch(ctx context.Context, conn *transport.Conn, batch *InternalBatchState, id []byte) error {
+func (s *InternalSessionRuntime) repairBatch(ctx context.Context, conn *transport.Conn, batch *batchState, id []byte) error {
 	for i := range batch.entries {
 		entry := &batch.entries[i]
 		state := entry.sourceOrText().prepared()

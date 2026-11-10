@@ -42,19 +42,19 @@ func TestPage(t *testing.T) {
 		t.Run("CompletionCanInspect", func(t *testing.T) {
 			p := testPage(t)
 			pageObserved := false
-			PageData(p).InternalRelease = func() { _ = p.Err(); _ = p.Close(); pageObserved = true }
+			PageData(p).release = func() { _ = p.Err(); _ = p.Close(); pageObserved = true }
 			p.Close()
 			if !pageObserved {
 				t.Fatal("page completion missing")
 			}
 			rows := func() Rows[implCqltype.Bytes] {
-				opaqueStorageValuexxxxxxxx := InternalNewRows[implCqltype.Bytes]()
-				RowsData(opaqueStorageValuexxxxxxxx).InternalPage = testPage(t)
-				RowsData(opaqueStorageValuexxxxxxxx).InternalCtx = context.Background()
+				opaqueStorageValuexxxxxxxx := newRows[implCqltype.Bytes]()
+				RowsData(opaqueStorageValuexxxxxxxx).page = testPage(t)
+				RowsData(opaqueStorageValuexxxxxxxx).ctx = context.Background()
 				return opaqueStorageValuexxxxxxxx
 			}()
 			rowsObserved := false
-			RowsData(rows).InternalRelease = func() { _ = rows.Err(); _ = rows.Info(); _ = rows.Close(); rowsObserved = true }
+			RowsData(rows).release = func() { _ = rows.Err(); _ = rows.Info(); _ = rows.Close(); rowsObserved = true }
 			rows.Close()
 			if !rowsObserved {
 				t.Fatal("rows completion missing")
@@ -64,7 +64,7 @@ func TestPage(t *testing.T) {
 		t.Run("ReleasesExactlyOnce", func(t *testing.T) {
 			p := testPage(t, "value")
 			var releases atomic.Int32
-			PageData(p).InternalRelease = func() { releases.Add(1); _ = p.Err(); _ = p.Close() }
+			PageData(p).release = func() { releases.Add(1); _ = p.Err(); _ = p.Close() }
 			// A Page is not safe for concurrent use: Close is idempotent, also from
 			// its own completion callback.
 			for i := 0; i < 32; i++ {
@@ -75,13 +75,13 @@ func TestPage(t *testing.T) {
 			}
 			var wg sync.WaitGroup
 			rows := func() Rows[implCqltype.Bytes] {
-				opaqueStorageValuexxxxxxxxx := InternalNewRows[implCqltype.Bytes]()
-				RowsData(opaqueStorageValuexxxxxxxxx).InternalPage = testPage(t)
-				RowsData(opaqueStorageValuexxxxxxxxx).InternalCtx = context.Background()
+				opaqueStorageValuexxxxxxxxx := newRows[implCqltype.Bytes]()
+				RowsData(opaqueStorageValuexxxxxxxxx).page = testPage(t)
+				RowsData(opaqueStorageValuexxxxxxxxx).ctx = context.Background()
 				return opaqueStorageValuexxxxxxxxx
 			}()
 			releases.Store(0)
-			RowsData(rows).InternalRelease = func() { releases.Add(1); _ = rows.Info(); _ = rows.Close() }
+			RowsData(rows).release = func() { releases.Add(1); _ = rows.Info(); _ = rows.Close() }
 			for i := 0; i < 32; i++ {
 				wg.Add(1)
 				go func() { defer wg.Done(); _ = rows.Close() }()
@@ -166,18 +166,18 @@ func TestPage(t *testing.T) {
 						if p.NextInto(nil) {
 							t.Fatal("nil accepted")
 						}
-						if _, ok := errors.AsType[*implCqltype.ValidationError](p.Err()); !ok || PageData(p).InternalIndex != 0 {
+						if _, ok := errors.AsType[*implCqltype.ValidationError](p.Err()); !ok || PageData(p).index != 0 {
 							t.Fatal(p.Err())
 						}
 					case "closed":
 						p.Close()
 					case "malformed":
-						PageData(p).InternalResponse.Rows = typedTestChain(t, []byte{0, 0, 0, 5, 1})
-						PageData(p).InternalCursor = wire.CursorOver(PageData(p).InternalResponse.Rows)
+						PageData(p).response.Rows = typedTestChain(t, []byte{0, 0, 0, 5, 1})
+						PageData(p).InternalCursor = wire.CursorOver(PageData(p).response.Rows)
 					case "cancelled":
 						ctx, cancel := context.WithCancel(context.Background())
 						cancel()
-						PageData(p).InternalCtx = ctx
+						PageData(p).ctx = ctx
 					}
 					if p.NextInto(&dst) || dst.Len() != 0 {
 						t.Fatal("false did not clear destination")
@@ -314,7 +314,7 @@ func TestPage(t *testing.T) {
 	t.Run("State", func(t *testing.T) {
 		t.Run("EmptyContinuationSurvivesClose", func(t *testing.T) {
 			p := testPage(t)
-			PageData(p).InternalResponse.State = implModel.RestorePageState(nil)
+			PageData(p).response.State = implModel.RestorePageState(nil)
 			state := p.State()
 			p.Close()
 			if !state.More() || state.Complete() || state.Bytes() == nil || len(state.Bytes()) != 0 {

@@ -208,13 +208,13 @@ func TestPreparedOneShot(t *testing.T) {
 					t.Fatal(err)
 				}
 				waitIdle(t, p, 1)
-				if n := InternalQueryPools(s); n != 1 {
+				if n := queryPools(s); n != 1 {
 					t.Fatalf("pools %d, want 1", n)
 				}
 			}
 			use()
 			deadline := time.Now().Add(5 * time.Second)
-			for InternalQueryPools(s) != 0 {
+			for queryPools(s) != 0 {
 				if time.Now().After(deadline) {
 					t.Fatal("unused pool still registered")
 				}
@@ -245,7 +245,7 @@ func TestPreparedOneShot(t *testing.T) {
 			for range burst {
 				pending = append(pending, <-requests)
 			}
-			if n := InternalPooledBusy(s); n != burst {
+			if n := pooledBusy(s); n != burst {
 				t.Fatalf("%d busy pooled queries during the burst, want %d", n, burst)
 			}
 			for _, r := range pending {
@@ -259,7 +259,7 @@ func TestPreparedOneShot(t *testing.T) {
 				}
 			}
 			waitIdle(t, p, 16)
-			if n := InternalPooledBusy(s); n != 0 {
+			if n := pooledBusy(s); n != 0 {
 				t.Fatalf("%d busy pooled queries after the burst, want 0", n)
 			}
 		})
@@ -331,7 +331,7 @@ func TestPreparedOneShot(t *testing.T) {
 				case <-time.After(5 * time.Second):
 					t.Fatal("close waited out the retry delay")
 				}
-				if n := InternalPooledBusy(s); n != 0 {
+				if n := pooledBusy(s); n != 0 {
 					t.Fatalf("%d busy pooled queries after close", n)
 				}
 				if err := <-call; !errors.Is(err, runtimeerrors.ErrClosed) {

@@ -28,7 +28,7 @@ func TestInputOwner(t *testing.T) {
 					t.Fatal(err)
 				}
 				logical, cancel := attachmentLogical(s, parent)
-				logical.installStop(stopFunc(logical.InternalReleaseInput))
+				logical.installStop(stopFunc(logical.releaseInput))
 				start := make(chan struct{})
 				admitted := make(chan error, 1)
 				closed := make(chan struct{})
@@ -76,13 +76,13 @@ func TestInputOwner(t *testing.T) {
 				if InternalRuntimeFor(s) != rt {
 					t.Error("execution attachment replaced")
 				}
-				rt.InternalConfig = c
+				rt.config = c
 				rt.InternalSetProfile(c.DefaultProfile)
 				if !rt.beginPreparedWorker(s) {
 					t.Fatal("initial prepare worker rejected")
 				}
 				go func() { defer rt.prepareWorkers.Done(); <-cluster.SessionData(s).InternalCtx.Done(); close(stopped) }()
-				return &rt.InternalConfig
+				return &rt.config
 			})
 			if err == nil || session != nil || !strings.Contains(err.Error(), dialError.Error()) {
 				t.Fatalf("startup result session=%p err=%v", session, err)
@@ -124,8 +124,8 @@ func TestInputOwner(t *testing.T) {
 			}
 			writer := first.request.InternalOwner.InternalWriterLease(wire.Chain{})
 			firstStopped, secondStopped := make(chan struct{}), make(chan struct{})
-			first.installStop(stopFunc(func() { first.InternalReleaseInput(); close(firstStopped) }))
-			second.installStop(stopFunc(func() { second.InternalReleaseInput(); close(secondStopped) }))
+			first.installStop(stopFunc(func() { first.releaseInput(); close(firstStopped) }))
+			second.installStop(stopFunc(func() { second.releaseInput(); close(secondStopped) }))
 			parent.InternalClose()
 			done := make(chan struct{})
 			go func() { _ = s.Close(); close(done) }()
@@ -151,7 +151,7 @@ func TestInputOwner(t *testing.T) {
 				t.Fatal(err)
 			}
 			rt.InternalMu.Lock()
-			remaining := len(rt.InternalExecutions)
+			remaining := len(rt.executions)
 			rt.InternalMu.Unlock()
 			if remaining != 0 {
 				t.Fatal("execution registry retained drained owners")
@@ -174,12 +174,12 @@ func TestInputOwner(t *testing.T) {
 			if first != &o.writer.Lease {
 				t.Fatal("first writer did not use the embedded lease")
 			}
-			if got := o.InternalRefs(); got != 2 {
+			if got := o.refs(); got != 2 {
 				t.Fatal("writer references", got)
 			}
 			second.Release()
 			first.Release()
-			if got := o.InternalRefs(); got != 0 {
+			if got := o.refs(); got != 0 {
 				t.Fatal("references after release", got)
 			}
 			again := o.InternalWriterLease(wire.Chain{})

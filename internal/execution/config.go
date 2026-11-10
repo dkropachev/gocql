@@ -24,9 +24,9 @@ func OpenSingleHost(ctx context.Context, config settings.Config, hostID cqltype.
 func Connect(ctx context.Context, config settings.Config) (*Session, error) {
 	core, err := implCluster.InternalConnectCluster(ctx, config, func(s *implCluster.Core, c settings.Config) *settings.Config {
 		rt := InternalRuntimeFor(s)
-		rt.InternalConfig = c
+		rt.config = c
 		rt.InternalSetProfile(c.DefaultProfile)
-		return &rt.InternalConfig
+		return &rt.config
 	})
 	if err != nil {
 		return nil, err
