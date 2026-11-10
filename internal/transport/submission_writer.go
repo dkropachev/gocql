@@ -205,7 +205,7 @@ func (t *writeTicket) written() (n int64, ok bool) {
 	if t.state.Load() != ticketFinished {
 		return 0, false
 	}
-	return t.result.InternalWritten, true
+	return t.result.written, true
 }
 
 // maxBatchTickets bounds the requests in one socket write.
@@ -253,7 +253,7 @@ func (w *submissionWriter) run() {
 					packet, buildErr := wire.NewChain(spans...)
 					err = buildErr
 					if err == nil {
-						written, err = w.conn.InternalW.(InternalSpanContextWriter).InternalWriteSpans(w.conn.InternalCtx, packet)
+						written, err = w.conn.InternalW.(spanContextWriter).InternalWriteSpans(w.conn.InternalCtx, packet)
 					}
 				}
 			}
@@ -269,7 +269,7 @@ func (w *submissionWriter) run() {
 				if n == t.packet.Len() {
 					requestErr = nil
 				}
-				t.finish(InternalWriteResult{InternalWritten: n, InternalErr: requestErr})
+				t.finish(InternalWriteResult{written: n, InternalErr: requestErr})
 				remaining -= n
 			}
 			clear(spans)

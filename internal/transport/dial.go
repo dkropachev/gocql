@@ -117,10 +117,10 @@ func Dial(ctx context.Context, host *implEndpoint.HostInfo, cfg *ConnConfig, err
 		InternalErrorHandler:        errorHandler,
 		InternalCompressor:          cfg.Compressor,
 		InternalHooks:               opening.Hooks,
-		InternalStartupIdentity:     opening.Identity,
-		InternalStartupReporter:     opening.Reporter,
+		startupIdentity:             opening.Identity,
+		startupReporter:             opening.Reporter,
 		InternalMetadataTimeout:     opening.MetadataTimeout,
-		InternalCoalesceWait:        opening.CoalesceWait,
+		coalesceWait:                opening.CoalesceWait,
 		InternalPoolPolicy:          opening.PoolPolicy,
 		InternalStreams:             newStreamIDs(opening.MaxRequests),
 		InternalHost:                host,
@@ -133,13 +133,13 @@ func Dial(ctx context.Context, host *implEndpoint.HostInfo, cfg *ConnConfig, err
 		},
 		InternalCtx:            connectionCtx,
 		InternalCancel:         cancel,
-		InternalLogger:         cfg.InternalLogger(),
+		InternalLogger:         cfg.logger(),
 		InternalStreamObserver: opening.StreamObserver,
 	}
 	c.InternalSetSystemRequestTimeout(cfg.ConnectTimeout)
 	c.InternalCloseOnCancel()
 
-	if err := c.InternalInit(ctx, dialedHost); err != nil {
+	if err := c.init(ctx, dialedHost); err != nil {
 		cancel()
 		c.Close()
 		return nil, err
@@ -148,12 +148,12 @@ func Dial(ctx context.Context, host *implEndpoint.HostInfo, cfg *ConnConfig, err
 	return c, nil
 }
 
-type InternalDefaultHostDialer struct {
+type defaultHostDialer struct {
 	dialer    implEndpoint.InternalLegacyDialer
 	tlsConfig *tls.Config
 }
 
-func (hd *InternalDefaultHostDialer) DialHost(ctx context.Context, host *implEndpoint.HostInfo) (*implEndpoint.DialedHost, error) {
+func (hd *defaultHostDialer) DialHost(ctx context.Context, host *implEndpoint.HostInfo) (*implEndpoint.DialedHost, error) {
 	ip := host.ConnectAddress()
 	port := host.Port()
 

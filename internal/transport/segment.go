@@ -51,7 +51,7 @@ import "github.com/scylladb/gocql/v2/internal/protocol"
 // reads the wrong segment layout, and failing the handshake is where a misconfigured
 // connection should die — not mid-stream, on a path whose callers can only turn it
 // into a per-request error.
-func (c *Conn) InternalResolveSegmentCompressor() error {
+func (c *Conn) resolveSegmentCompressor() error {
 	if c.InternalVersion <= protocol.ProtoVersion4 {
 		return nil
 	}

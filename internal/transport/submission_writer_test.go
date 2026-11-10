@@ -100,7 +100,7 @@ func TestSubmissionWriter(t *testing.T) {
 			if ticket.unsent() {
 				t.Fatal("claimed ticket withdrawn")
 			}
-			ticket.finish(InternalWriteResult{InternalWritten: 3, InternalErr: errors.New("reset")})
+			ticket.finish(InternalWriteResult{written: 3, InternalErr: errors.New("reset")})
 			if n, known := ticket.written(); !known || n != 3 {
 				t.Fatal("writer outcome not reported", n, known)
 			}
@@ -126,7 +126,7 @@ func TestSubmissionWriter(t *testing.T) {
 				t.Fatal("awaitWritten returned before the writer finished")
 			default:
 			}
-			ticket.finish(InternalWriteResult{InternalWritten: 7})
+			ticket.finish(InternalWriteResult{written: 7})
 			<-returned
 			if n, known := ticket.written(); !known || n != 7 {
 				t.Fatal("writer outcome not reported", n, known)
@@ -187,7 +187,7 @@ func TestSubmissionWriter(t *testing.T) {
 		// The call of a request queued while the failing write is in progress:
 		// close joins it, and it ends only once its ticket is finished.
 		// InternalGetCallReq already counts the call's one pending exec.
-		call := InternalGetCallReq(1)
+		call := getCallReq(1)
 		conn.InternalCalls = InternalNewCallTable()
 		conn.InternalCalls.Set(1, call)
 		var late *writeTicket
@@ -200,7 +200,7 @@ func TestSubmissionWriter(t *testing.T) {
 			}
 			go func() {
 				late.awaitWritten()
-				call.InternalDone.Done()
+				call.done.Done()
 				close(lateDone)
 			}()
 		}

@@ -259,9 +259,9 @@ func BenchmarkStreamTransport(b *testing.B) {
 						source.otherBulk = 0
 						if r.InternalUnits != nil {
 							r.InternalUnits.InternalData = nil
-							r.InternalUnits.InternalOffset = 0
-							r.InternalUnits.InternalFrameActive = false
-							r.InternalUnits.InternalStarted = false
+							r.InternalUnits.offset = 0
+							r.InternalUnits.frameActive = false
+							r.InternalUnits.started = false
 							r.InternalUnits.InternalCopies = 0
 						}
 						response, err := r.InternalExchange(context.Background(), request)

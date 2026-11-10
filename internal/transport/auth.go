@@ -15,7 +15,7 @@ import (
 
 // The bridge only adapts the handshake's state machine; no value marshaler is
 // involved. One bridge is created for each connection and closed on every exit.
-type InternalV2Authenticator struct {
+type v2Authenticator struct {
 	ctx      context.Context
 	provider connectivity.AuthProvider
 	exchange connectivity.AuthExchange
@@ -24,10 +24,10 @@ type InternalV2Authenticator struct {
 	started  bool
 }
 
-func InternalNewV2Authenticator(ctx context.Context, host model.HostSnapshot, provider connectivity.AuthProvider) *InternalV2Authenticator {
-	return &InternalV2Authenticator{ctx: ctx, host: host, provider: provider}
+func InternalNewV2Authenticator(ctx context.Context, host model.HostSnapshot, provider connectivity.AuthProvider) *v2Authenticator {
+	return &v2Authenticator{ctx: ctx, host: host, provider: provider}
 }
-func (a *InternalV2Authenticator) Challenge(req []byte) ([]byte, Authenticator, error) {
+func (a *v2Authenticator) Challenge(req []byte) ([]byte, Authenticator, error) {
 	if err := a.ctx.Err(); err != nil {
 		return nil, nil, err
 	}
@@ -40,7 +40,7 @@ func (a *InternalV2Authenticator) Challenge(req []byte) ([]byte, Authenticator, 
 			err = cqltype.TypeValidation("authentication", "provider returned a nil exchange")
 		}
 	} else {
-		response, err = a.exchange.Challenge(a.ctx, InternalNullableAuthBytes(req))
+		response, err = a.exchange.Challenge(a.ctx, nullableAuthBytes(req))
 	}
 	if err != nil {
 		return nil, nil, err
@@ -53,23 +53,23 @@ func (a *InternalV2Authenticator) Challenge(req []byte) ([]byte, Authenticator, 
 	}
 	return response.Value, a, nil
 }
-func (a *InternalV2Authenticator) Success(data []byte) error {
+func (a *v2Authenticator) Success(data []byte) error {
 	if err := a.ctx.Err(); err != nil {
 		return err
 	}
 	if a.exchange == nil {
 		return cqltype.TypeValidation("authentication", "success before exchange")
 	}
-	return a.exchange.Success(a.ctx, InternalNullableAuthBytes(data))
+	return a.exchange.Success(a.ctx, nullableAuthBytes(data))
 }
-func (a *InternalV2Authenticator) Close() {
+func (a *v2Authenticator) Close() {
 	a.once.Do(func() {
 		if a.exchange != nil {
 			a.exchange.Close()
 		}
 	})
 }
-func InternalNullableAuthBytes(data []byte) cqltype.Nullable[cqltype.Bytes] {
+func nullableAuthBytes(data []byte) cqltype.Nullable[cqltype.Bytes] {
 	if data == nil {
 		return cqltype.Nullable[cqltype.Bytes]{}
 	}

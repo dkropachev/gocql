@@ -36,7 +36,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
-var InternalErrOrphanBudget = errors.New("gocql: abandoned stream budget exceeded")
+var errOrphanBudget = errors.New("gocql: abandoned stream budget exceeded")
 
 // All admission state is protected by Conn.mu. Notifications allocate only
 // while an exclusive acquisition/shared waiter exists, never per ordinary call.
@@ -218,7 +218,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 			c.readerResumed = make(chan struct{})
 			paused := c.readerPaused
 			c.InternalMu.Unlock()
-			if err = reader.InternalRequestPause(true); err != nil {
+			if err = reader.requestPause(true); err != nil {
 				return nil, err
 			}
 			select {
@@ -282,7 +282,7 @@ func (c *Conn) restoreSharedReader(reader *InternalConnReader) {
 		}
 	}
 	c.InternalMu.Unlock()
-	reader.InternalRequestPause(false)
+	reader.requestPause(false)
 	if paused != nil {
 		select {
 		case <-paused:
@@ -297,7 +297,7 @@ func (c *Conn) restoreSharedReader(reader *InternalConnReader) {
 	c.InternalExclusiveFlag.Store(false)
 	c.changeLocked()
 	c.InternalMu.Unlock()
-	if pool, ok := c.InternalErrorHandler.(InternalPoolOwner); ok {
+	if pool, ok := c.InternalErrorHandler.(poolOwner); ok {
 		pool.InternalNotifyReservationChanged()
 	}
 }
@@ -352,7 +352,7 @@ func (r *InternalExclusiveConn) closeOwned(reusable bool) error {
 	}
 	if r.InternalUnits != nil {
 		r.InternalUnits.InternalData = nil
-		r.InternalUnits.InternalOffset = 0
+		r.InternalUnits.offset = 0
 		r.InternalUnits.InternalUnits.Close()
 		r.InternalUnits = nil
 	}
@@ -559,7 +559,7 @@ func (r *InternalExclusiveConn) InternalCancelIOGeneration(generation uint64, ca
 
 // requestPause interrupts only the idle first-header-byte wait. If a frame
 // races the request, its header/body complete normally before reader ack.
-func (r *InternalConnReader) InternalRequestPause(pause bool) error {
+func (r *InternalConnReader) requestPause(pause bool) error {
 	r.deadlineMu.Lock()
 	defer r.deadlineMu.Unlock()
 	r.pause.Store(pause)

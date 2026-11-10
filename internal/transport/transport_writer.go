@@ -14,7 +14,7 @@ import (
 
 // spanContextWriter consumes immutable span descriptors while serializing the
 // entire request. Completion, including cancellation, is a lifetime boundary.
-type InternalSpanContextWriter interface {
+type spanContextWriter interface {
 	InternalWriteSpans(context.Context, wire.Chain) (int64, error)
 }
 
@@ -28,7 +28,7 @@ type spanSliceWriter interface {
 // ordered spans without a driver gather buffer. TLS record assembly is owned by
 // the standard library. Checking every fallback Write prevents a short nil write
 // from accidentally skipping the unwritten suffix between spans.
-func InternalWriteSpanBuffers(w io.Writer, buffers *net.Buffers) (int64, error) {
+func writeSpanBuffers(w io.Writer, buffers *net.Buffers) (int64, error) {
 	switch w.(type) {
 	case *net.TCPConn, *net.UnixConn:
 		// WriteTo consumes *buffers; a caller-owned header keeps it off the heap.
@@ -81,7 +81,7 @@ func (w *InternalDeadlineContextWriter) writeSpans(ctx context.Context, chain wi
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	if err := w.InternalW.SetWriteDeadline(InternalEffectiveWriteDeadline(w.InternalTimeout.Load())); err != nil {
+	if err := w.InternalW.SetWriteDeadline(effectiveWriteDeadline(w.InternalTimeout.Load())); err != nil {
 		return 0, err
 	}
 
@@ -106,7 +106,7 @@ func (w *InternalDeadlineContextWriter) writeSpans(ctx context.Context, chain wi
 		_ = chain.Each(func(s wire.Span) error { spans = append(spans, s.Bytes()); return nil })
 	}
 	w.writeBuffers = spans
-	n, err := InternalWriteSpanBuffers(w.InternalW, &w.writeBuffers)
+	n, err := writeSpanBuffers(w.InternalW, &w.writeBuffers)
 	w.writeBuffers = nil
 	if err == nil && n != total {
 		err = io.ErrShortWrite
@@ -118,14 +118,14 @@ func (w *InternalWriteCoalescer) InternalWriteSpans(ctx context.Context, chain w
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	resultChan := InternalWriteResultChanPool.Get()
+	resultChan := writeResultChanPool.Get()
 	req := InternalWriteRequest{ctx: ctx, chain: chain, resultChan: resultChan}
 	select {
 	case <-ctx.Done():
-		InternalWriteResultChanPool.Put(resultChan)
+		writeResultChanPool.Put(resultChan)
 		return 0, ctx.Err()
 	case <-w.InternalQuit:
-		InternalWriteResultChanPool.Put(resultChan)
+		writeResultChanPool.Put(resultChan)
 		return 0, runtimeerrors.ErrConnectionClosed
 	case w.InternalWriteCh <- req:
 	}
@@ -134,6 +134,6 @@ func (w *InternalWriteCoalescer) InternalWriteSpans(ctx context.Context, chain w
 	}
 	// Cancellation after admission must join the writer before releasing input.
 	result := <-resultChan
-	InternalWriteResultChanPool.Put(resultChan)
-	return result.InternalWritten, result.InternalErr
+	writeResultChanPool.Put(resultChan)
+	return result.written, result.InternalErr
 }

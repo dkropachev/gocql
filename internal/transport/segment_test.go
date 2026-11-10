@@ -127,7 +127,7 @@ func TestSegment(t *testing.T) {
 			seg := mustUncompressedSegment(t, []byte("hello"), false)
 			c := &Conn{InternalR: newSegmentReader(seg)}
 
-			payload, err := c.InternalReadContinuationSegment()
+			payload, err := c.readContinuationSegment()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -139,7 +139,7 @@ func TestSegment(t *testing.T) {
 			seg := mustUncompressedSegment(t, []byte("hello"), true)
 			c := &Conn{InternalR: newSegmentReader(seg)}
 
-			_, err := c.InternalReadContinuationSegment()
+			_, err := c.readContinuationSegment()
 			if err == nil || !strings.Contains(err.Error(), "expected a continuation") {
 				t.Fatalf("expected self-contained rejection, got %v", err)
 			}
@@ -148,7 +148,7 @@ func TestSegment(t *testing.T) {
 			seg := mustUncompressedSegment(t, nil, false)
 			c := &Conn{InternalR: newSegmentReader(seg)}
 
-			_, err := c.InternalReadContinuationSegment()
+			_, err := c.readContinuationSegment()
 			if err == nil || !strings.Contains(err.Error(), "no progress") {
 				t.Fatalf("expected no-progress rejection, got %v", err)
 			}
@@ -169,7 +169,7 @@ func TestSegment(t *testing.T) {
 			seg := mustUncompressedSegment(t, []byte("01234567"), false)
 			c := &Conn{InternalR: newSegmentReader(seg)}
 
-			err := c.InternalRecvSplitFrame(context.Background(), header, time.Time{}, time.Time{})
+			err := c.recvSplitFrame(context.Background(), header, time.Time{}, time.Time{})
 			if err == nil || !strings.Contains(err.Error(), "exceeds its declared length") {
 				t.Fatalf("expected over-long rejection, got %v", err)
 			}
@@ -196,7 +196,7 @@ func TestSegment(t *testing.T) {
 			for i := 0; i < runs; i++ {
 				// A buffered receiver replaces the execution goroutine so process-wide
 				// allocation accounting measures the receive path without scheduling noise.
-				call := &InternalCallReq{InternalTyped: true, InternalStreamID: 1, InternalResp: make(chan InternalCallResp, 1)}
+				call := &InternalCallReq{typed: true, InternalStreamID: 1, InternalResp: make(chan InternalCallResp, 1)}
 				c.InternalCalls.Set(1, call)
 				reader.payloads = nil
 				if err := c.InternalRecvSegment(context.Background()); err != nil {
@@ -206,7 +206,7 @@ func TestSegment(t *testing.T) {
 				if response.InternalErr != nil {
 					t.Fatal(response.InternalErr)
 				}
-				page := response.InternalPage
+				page := response.page
 				if page == nil || page.RowCount != 1 {
 					t.Fatal("typed response was not delivered")
 				}
@@ -266,7 +266,7 @@ func TestSegment(t *testing.T) {
 			seg := mustUncompressedSegment(t, header, false)
 			c := &Conn{InternalR: newSegmentReader(seg)}
 
-			err := c.InternalRecvSplitFrame(context.Background(), nil, time.Time{}, time.Time{})
+			err := c.recvSplitFrame(context.Background(), nil, time.Time{}, time.Time{})
 			if err == nil || !strings.Contains(err.Error(), "invalid frame body length") {
 				t.Fatalf("expected oversized-length rejection, got %v", err)
 			}
@@ -280,7 +280,7 @@ func TestSegment(t *testing.T) {
 			seg := mustUncompressedSegment(t, []byte("abcd"), false)
 			c := &Conn{InternalR: newSegmentReader(seg)}
 
-			err := c.InternalRecvSplitFrame(context.Background(), nil, time.Time{}, time.Time{})
+			err := c.recvSplitFrame(context.Background(), nil, time.Time{}, time.Time{})
 			if err == nil {
 				t.Fatalf("expected error on truncated header stream, got nil")
 			}
@@ -453,7 +453,7 @@ func TestSegment(t *testing.T) {
 				InternalVersion:    protocol.ProtoVersion5,
 				InternalCompressor: invertingCompressor{},
 			}
-			if err := c.InternalResolveSegmentCompressor(); err != nil {
+			if err := c.resolveSegmentCompressor(); err != nil {
 				t.Fatalf("resolveSegmentCompressor: %v", err)
 			}
 
@@ -465,7 +465,7 @@ func TestSegment(t *testing.T) {
 				t.Error("a self-contained segment was read as a continuation")
 			}
 
-			got, err := c.InternalReadSegmentPayload(hdr)
+			got, err := c.readSegmentPayload(hdr)
 			if err != nil {
 				t.Fatalf("readSegmentPayload: %v", err)
 			}
@@ -529,7 +529,7 @@ func TestSegment(t *testing.T) {
 	t.Run("ResolveSegmentCompressor", func(t *testing.T) {
 		t.Run("v5 narrows the compressor once", func(t *testing.T) {
 			c := &Conn{InternalVersion: protocol.ProtoVersion5, InternalCompressor: testSegmentCompressor{}}
-			if err := c.InternalResolveSegmentCompressor(); err != nil {
+			if err := c.resolveSegmentCompressor(); err != nil {
 				t.Fatalf("resolveSegmentCompressor: %v", err)
 			}
 			if _, ok := c.InternalSegCompressor.(testSegmentCompressor); !ok {
@@ -539,7 +539,7 @@ func TestSegment(t *testing.T) {
 
 		t.Run("v4 leaves a frame-only compressor alone", func(t *testing.T) {
 			c := &Conn{InternalVersion: protocol.ProtoVersion4, InternalCompressor: wirecompress.SnappyCompressor{}}
-			if err := c.InternalResolveSegmentCompressor(); err != nil {
+			if err := c.resolveSegmentCompressor(); err != nil {
 				t.Fatalf("a protocol v4 connection with a frame compressor was refused: %v", err)
 			}
 			if c.InternalSegCompressor != nil {
@@ -549,7 +549,7 @@ func TestSegment(t *testing.T) {
 
 		t.Run("v5 refuses a frame-only compressor by name", func(t *testing.T) {
 			c := &Conn{InternalVersion: protocol.ProtoVersion5, InternalCompressor: wirecompress.SnappyCompressor{}}
-			err := c.InternalResolveSegmentCompressor()
+			err := c.resolveSegmentCompressor()
 			if err == nil {
 				t.Fatal("a v5 connection with a frame-only compressor was accepted")
 			}

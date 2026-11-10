@@ -15,15 +15,15 @@ func TestCall(t *testing.T) {
 
 		// A caller that stopped after a response was delivered drains it; a reused
 		// call must still start waiting with an empty slot.
-		oldCall := InternalGetCallReq(1)
+		oldCall := getCallReq(1)
 		if !oldCall.deliver(InternalCallResp{InternalErr: errors.New("stale")}) {
 			t.Fatal("deliver to a waiting call failed")
 		}
-		oldCall.InternalDone.Done()
-		InternalPutCallReq(oldCall)
+		oldCall.done.Done()
+		putCallReq(oldCall)
 
-		newCall := InternalGetCallReq(2)
-		defer newCall.InternalDone.Done()
+		newCall := getCallReq(2)
+		defer newCall.done.Done()
 		select {
 		case resp := <-newCall.InternalResp:
 			t.Fatalf("reused call observed a stale response: %v", resp.InternalErr)
@@ -32,7 +32,7 @@ func TestCall(t *testing.T) {
 		if !newCall.deliver(InternalCallResp{}) {
 			t.Fatal("reused call did not start waiting")
 		}
-		if _, owned := newCall.InternalStopWaiting(); !owned {
+		if _, owned := newCall.stopWaiting(); !owned {
 			t.Fatal("stopping after delivery did not hand over the response")
 		}
 	})
@@ -41,17 +41,17 @@ func TestCall(t *testing.T) {
 		t.Run("DecidesResponseOwnership", func(t *testing.T) {
 			t.Parallel()
 
-			stopped := InternalGetCallReq(1)
-			defer stopped.InternalDone.Done()
-			if _, owned := stopped.InternalStopWaiting(); owned {
+			stopped := getCallReq(1)
+			defer stopped.done.Done()
+			if _, owned := stopped.stopWaiting(); owned {
 				t.Fatal("stop before delivery claimed a response")
 			}
 			if stopped.deliver(InternalCallResp{}) {
 				t.Fatal("deliver succeeded after the caller stopped waiting")
 			}
 
-			delivered := InternalGetCallReq(2)
-			defer delivered.InternalDone.Done()
+			delivered := getCallReq(2)
+			defer delivered.done.Done()
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
@@ -60,7 +60,7 @@ func TestCall(t *testing.T) {
 				}
 			}()
 			<-done
-			resp, owned := delivered.InternalStopWaiting()
+			resp, owned := delivered.stopWaiting()
 			if !owned || !resp.removedFromCalls {
 				t.Fatal("stop after delivery did not return the delivered response")
 			}
@@ -73,14 +73,14 @@ func TestCall(t *testing.T) {
 			t.Parallel()
 
 			dest := new(InternalResponsePage)
-			call := InternalGetCallReq(1)
+			call := getCallReq(1)
 			call.dest = dest
 			if !call.claim() {
 				t.Fatal("reader could not claim a waiting call")
 			}
 			stopped := make(chan InternalCallResp)
 			go func() {
-				resp, owned := call.InternalStopWaiting()
+				resp, owned := call.stopWaiting()
 				if !owned {
 					t.Error("claimed response not handed to the caller")
 				}
@@ -91,17 +91,17 @@ func TestCall(t *testing.T) {
 				t.Fatal("caller stopped waiting while the reader still built its response")
 			case <-time.After(20 * time.Millisecond):
 			}
-			if !call.deliver(InternalCallResp{InternalPage: dest}) {
+			if !call.deliver(InternalCallResp{page: dest}) {
 				t.Fatal("claimed call refused delivery")
 			}
-			if resp := <-stopped; resp.InternalPage != dest {
+			if resp := <-stopped; resp.page != dest {
 				t.Fatal("caller received another response")
 			}
 
 			// A caller that stopped first keeps the reader out of its storage.
-			late := InternalGetCallReq(2)
+			late := getCallReq(2)
 			late.dest = dest
-			if _, owned := late.InternalStopWaiting(); owned {
+			if _, owned := late.stopWaiting(); owned {
 				t.Fatal("stopped caller owns a response")
 			}
 			if late.claim() {

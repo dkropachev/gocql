@@ -89,7 +89,7 @@ func (sd *InternalScyllaDialer) DialShard(ctx context.Context, host *implEndpoin
 	return WrapTLS(ctx, conn, addr, sd.InternalTlsConfig)
 }
 
-func (sd *InternalScyllaDialer) dialShardAware(ctx context.Context, addr, shardAwareAddr string, iter *InternalScyllaPortIterator) (net.Conn, error) {
+func (sd *InternalScyllaDialer) dialShardAware(ctx context.Context, addr, shardAwareAddr string, iter *scyllaPortIterator) (net.Conn, error) {
 	for {
 		port, ok := iter.Next()
 		if !ok {
@@ -100,7 +100,7 @@ func (sd *InternalScyllaDialer) dialShardAware(ctx context.Context, addr, shardA
 		ctxWithPort := context.WithValue(ctx, implEndpoint.InternalScyllaSourcePortCtx{}, port)
 		conn, err := sd.InternalDialer.DialContext(ctxWithPort, "tcp", shardAwareAddr)
 
-		if InternalIsLocalAddrInUseErr(err) {
+		if isLocalAddrInUseErr(err) {
 
 			continue
 		} else if err != nil {
@@ -123,11 +123,11 @@ func (sd *InternalScyllaDialer) dialShardAware(ctx context.Context, addr, shardA
 
 var ErrScyllaSourcePortAlreadyInUse = errors.New("scylla: source port is already in use")
 
-func InternalIsLocalAddrInUseErr(err error) bool {
+func isLocalAddrInUseErr(err error) bool {
 	return errors.Is(err, syscall.EADDRINUSE) || errors.Is(err, ErrScyllaSourcePortAlreadyInUse)
 }
 
-type InternalScyllaPortIterator struct {
+type scyllaPortIterator struct {
 	currentPort int
 	shardCount  int
 }
@@ -137,7 +137,7 @@ const (
 	InternalScyllaPortBasedBalancingMax = 0xFFFF
 )
 
-func InternalNewScyllaPortIterator(shardID, shardCount int) *InternalScyllaPortIterator {
+func InternalNewScyllaPortIterator(shardID, shardCount int) *scyllaPortIterator {
 	if shardCount == 0 {
 		panic("shardCount cannot be 0")
 	}
@@ -147,13 +147,13 @@ func InternalNewScyllaPortIterator(shardID, shardCount int) *InternalScyllaPortI
 		port += shardCount
 	}
 
-	return &InternalScyllaPortIterator{
+	return &scyllaPortIterator{
 		currentPort: port,
 		shardCount:  shardCount,
 	}
 }
 
-func (spi *InternalScyllaPortIterator) Next() (uint16, bool) {
+func (spi *scyllaPortIterator) Next() (uint16, bool) {
 	if spi == nil {
 		return 0, false
 	}

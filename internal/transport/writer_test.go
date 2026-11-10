@@ -35,13 +35,13 @@ func TestWriter(t *testing.T) {
 			done := make(chan InternalWriteResult, 1)
 			go func() {
 				n, err := w.InternalWriteSpans(ctx, chain)
-				done <- InternalWriteResult{InternalWritten: n, InternalErr: err}
+				done <- InternalWriteResult{written: n, InternalErr: err}
 			}()
 			<-armed
 			cancel()
 			tick <- time.Now()
 			result := <-done
-			if result.InternalWritten != 0 || !errors.Is(result.InternalErr, context.Canceled) {
+			if result.written != 0 || !errors.Is(result.InternalErr, context.Canceled) {
 				t.Fatal(result)
 			}
 			close(quit)

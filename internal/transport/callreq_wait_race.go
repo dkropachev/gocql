@@ -17,7 +17,7 @@ const callReqDoneTimeout = 10 * time.Second
 func InternalWaitCallReqDone(call *InternalCallReq, where string) {
 	done := make(chan struct{})
 	go func() {
-		call.InternalDone.Wait()
+		call.done.Wait()
 		close(done)
 	}()
 

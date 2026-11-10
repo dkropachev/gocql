@@ -42,7 +42,7 @@ type InternalV2TLSHostDialer struct {
 	InternalConfig     connectivity.Config
 }
 
-func (d *InternalV2TLSHostDialer) InternalSelectedTLS(ctx context.Context, host model.HostSnapshot) (*tls.Config, error) {
+func (d *InternalV2TLSHostDialer) selectedTLS(ctx context.Context, host model.HostSnapshot) (*tls.Config, error) {
 	c := d.InternalConfig.TLS
 	if source := d.InternalConfig.TLSSource; source != nil {
 		if c = source.TLSConfig(); c == nil {
@@ -64,9 +64,9 @@ func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target implEndpoint.D
 	var c net.Conn
 	var err error
 	if d.InternalConfig.DialHost != nil {
-		c, err = d.InternalConfig.DialHost(ctx, InternalCloneV2DialTarget(target))
+		c, err = d.InternalConfig.DialHost(ctx, cloneV2DialTarget(target))
 	} else if d.InternalConfig.Dialer != nil {
-		c, err = d.InternalConfig.Dialer.DialContext(ctx, InternalCloneV2DialTarget(target))
+		c, err = d.InternalConfig.Dialer.DialContext(ctx, cloneV2DialTarget(target))
 	} else {
 		c, err = (implEndpoint.DefaultDialer{ConnectTimeout: d.InternalConfig.ConnectTimeout, SocketKeepalive: d.InternalConfig.SocketKeepalive}).DialContext(ctx, target)
 	}
@@ -200,12 +200,12 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 			return opaqueStorageValue
 		}(), nil
 	}
-	tlsConfig, err := d.InternalSelectedTLS(ctx, snapshot)
+	tlsConfig, err := d.selectedTLS(ctx, snapshot)
 	if err != nil {
 		return nil, err
 	}
 	address := net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(host.Port()))
-	logicalAddress := InternalLogicalV2TLSAddress(host)
+	logicalAddress := logicalV2TLSAddress(host)
 	translated := implEndpoint.InternalHostInfoGetTranslatedConnectionInfo(host)
 	if translated != nil && translated.CQL.IsValid() {
 		address = translated.CQL.ToNetAddr()
@@ -252,7 +252,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 				if ctx.Err() != nil {
 					return nil, ctx.Err()
 				}
-				if !InternalIsLocalAddrInUseErr(err) {
+				if !isLocalAddrInUseErr(err) {
 					break
 				}
 			}
@@ -280,7 +280,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 		if err != nil {
 			return err
 		}
-		if current.ID != snapshot.ID || current.Address != snapshot.Address || current.Datacenter != snapshot.Datacenter || current.Rack != snapshot.Rack || InternalLogicalV2TLSAddress(host) != logicalAddress {
+		if current.ID != snapshot.ID || current.Address != snapshot.Address || current.Datacenter != snapshot.Datacenter || current.Rack != snapshot.Rack || logicalV2TLSAddress(host) != logicalAddress {
 			return cqltype.TypeValidation("dial target generation", "host identity/endpoint changed during opening")
 		}
 		return nil
@@ -288,16 +288,16 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 	return result, nil
 }
 
-func InternalCloneV2HostSnapshot(v model.HostSnapshot) model.HostSnapshot {
+func cloneV2HostSnapshot(v model.HostSnapshot) model.HostSnapshot {
 	v.Tokens = slices.Clone(v.Tokens)
 	return v
 }
-func InternalCloneV2DialTarget(v implEndpoint.DialTarget) implEndpoint.DialTarget {
-	v.Host = InternalCloneV2HostSnapshot(v.Host)
+func cloneV2DialTarget(v implEndpoint.DialTarget) implEndpoint.DialTarget {
+	v.Host = cloneV2HostSnapshot(v.Host)
 	return v
 }
 
-func InternalLogicalV2TLSAddress(host *implEndpoint.HostInfo) string {
+func logicalV2TLSAddress(host *implEndpoint.HostInfo) string {
 	implEndpoint.HostInfoData(host).InternalMu.RLock()
 	defer implEndpoint.HostInfoData(host).InternalMu.RUnlock()
 	name := implEndpoint.HostInfoData(host).InternalHostname

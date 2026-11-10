@@ -26,18 +26,18 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 	limits := c.typedProtocolLimits()
 	if int64(head.Length) > limits.MaxFrameBytes {
 		err = protocol.ErrFrameTooBig
-		if src.InternalOwner == nil {
+		if src.owner == nil {
 			if discardErr := c.discardFrame(src.InternalR, head); discardErr != nil {
 				err = discardErr
 				fatal = true
 			}
 		}
-	} else if src.InternalOwner != nil {
-		if !src.InternalOwner.Retain() {
+	} else if src.owner != nil {
+		if !src.owner.Retain() {
 			err = cqltype.ErrReleased
 		} else {
-			owner = src.InternalOwner
-			body = src.InternalChain
+			owner = src.owner
+			body = src.chain
 		}
 	} else {
 		var cache *wire.ReceiveCache
@@ -148,13 +148,13 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 		owner.Release()
 		owner = nil
 	}
-	if !call.deliver(InternalCallResp{InternalPage: page, InternalErr: err, removedFromCalls: true}) {
+	if !call.deliver(InternalCallResp{page: page, InternalErr: err, removedFromCalls: true}) {
 		if page != nil {
 			page.Owner.Release()
 		}
 		c.releaseStream(call)
 		call.waitExecDone("receiveTypedCall")
-		InternalPutCallReq(call)
+		putCallReq(call)
 	}
 	if fatal {
 		return err
@@ -181,7 +181,7 @@ func (c *Conn) InternalRecvLeasedSegment(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("gocql: incomplete frame header in self-contained segment: %w", err)
 			}
-			head, err := protocol.ReadHeader(InternalNewChainReader(frameHeader), c.headerBuf[:])
+			head, err := protocol.ReadHeader(newChainReader(frameHeader), c.headerBuf[:])
 			if err != nil {
 				return err
 			}
@@ -233,7 +233,7 @@ func (c *Conn) InternalRecvLeasedSegment(ctx context.Context) error {
 	}
 	chain, _ := wire.NewChain(spans...)
 	header, _ := chain.Slice(0, protocol.HeadSize)
-	head, err := protocol.ReadHeader(InternalNewChainReader(header), c.headerBuf[:])
+	head, err := protocol.ReadHeader(newChainReader(header), c.headerBuf[:])
 	if err != nil {
 		return err
 	}
@@ -271,7 +271,7 @@ func (c *Conn) processOwnedFrame(ctx context.Context, header, body wire.Chain, o
 	_ = header.Each(func(s wire.Span) error { spans = append(spans, s); return nil })
 	_ = body.Each(func(s wire.Span) error { spans = append(spans, s); return nil })
 	chain, _ := wire.NewChain(spans...)
-	return c.InternalProcessFrameSource(ctx, InternalFrameSource{InternalR: InternalNewChainReader(chain), InternalOwner: owner, InternalChain: body, InternalNetStart: start, InternalNetEnd: end})
+	return c.InternalProcessFrameSource(ctx, InternalFrameSource{InternalR: newChainReader(chain), owner: owner, chain: body, netStart: start, netEnd: end})
 }
 
 func (c *Conn) InternalReadTypedSegmentPayload(hdr segment.Header) (*wire.Lease, error) {
@@ -310,13 +310,13 @@ func (c *Conn) parseTypedResponseInto(head frm.FrameHeader, body wire.Chain, own
 
 // chainReader is used only for small frame headers and the migration adapter
 // serving legacy callers. Typed response payloads pass through checked cursors.
-type InternalChainReader struct{ cursor *wire.Cursor }
+type chainReader struct{ cursor *wire.Cursor }
 
-func InternalNewChainReader(c wire.Chain) *InternalChainReader {
-	return &InternalChainReader{cursor: wire.NewCursor(c)}
+func newChainReader(c wire.Chain) *chainReader {
+	return &chainReader{cursor: wire.NewCursor(c)}
 }
 
-func (r *InternalChainReader) Read(p []byte) (int, error) {
+func (r *chainReader) Read(p []byte) (int, error) {
 	if r.cursor.Remaining() == 0 {
 		return 0, io.EOF
 	}

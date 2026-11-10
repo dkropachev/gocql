@@ -6,5 +6,5 @@
 package transport
 
 func InternalWaitCallReqDone(call *InternalCallReq, where string) {
-	call.InternalDone.Wait()
+	call.done.Wait()
 }

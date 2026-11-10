@@ -72,10 +72,10 @@ func (x *typedExec) cleanup(req *model.AttemptRequest) {
 	}
 	if call := x.call; call != nil {
 		if x.stopWaiting {
-			if resp, ok := call.InternalStopWaiting(); ok {
+			if resp, ok := call.stopWaiting(); ok {
 				// The response arrived as we stopped waiting; it is ours to drop.
-				if resp.InternalPage != nil {
-					resp.InternalPage.Owner.Release()
+				if resp.page != nil {
+					resp.page.Owner.Release()
 				}
 				if resp.removedFromCalls {
 					x.releaseStream = true
@@ -88,7 +88,7 @@ func (x *typedExec) cleanup(req *model.AttemptRequest) {
 			c.releaseStream(call)
 		}
 		if x.recycleCall {
-			InternalPutCallReq(call)
+			putCallReq(call)
 		}
 		if x.closeErr != nil {
 			c.InternalCloseWithError(x.closeErr)
@@ -128,8 +128,8 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 			x.payloadOwners = append(x.payloadOwners, owner.Lease())
 		}
 	}
-	call := InternalGetCallReq(0)
-	call.InternalTyped = true
+	call := getCallReq(0)
+	call.typed = true
 	call.dest = dest
 	// A context that wakes a wait through a channel of its own lets the wait
 	// receive the response and the cancellation from that one channel, unless
@@ -142,7 +142,7 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 	}
 	if err := c.allocSharedCall(ctx, call); err != nil {
 		call.finishExec()
-		InternalPutCallReq(call)
+		putCallReq(call)
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err})
 	}
 	x.sharedHeld = true
@@ -168,7 +168,7 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 	if err != nil {
 		return failBeforeWrite(err)
 	}
-	writer, ok := c.InternalW.(InternalSpanContextWriter)
+	writer, ok := c.InternalW.(spanContextWriter)
 	if !ok {
 		putFrameScratch(scratch)
 		return failBeforeWrite(fmt.Errorf("gocql: connection writer does not support immutable spans"))
@@ -177,7 +177,7 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 		call.streamObserverContext.StreamStarted(ObservedStream{Host: c.InternalHost})
 	}
 	var ticket *writeTicket
-	if c.InternalCoalesceWait == 0 {
+	if c.coalesceWait == 0 {
 		// Hold both input and shared-connection admission until the persistent
 		// writer finishes, even if cancellation returns to the calling goroutine.
 		t := getTicket()
@@ -259,7 +259,7 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctx.Err()})
 		}
 		if c.markOrphan(call) {
-			x.closeErr = InternalErrOrphanBudget
+			x.closeErr = errOrphanBudget
 		}
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctx.Err(), InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
 	}
@@ -275,9 +275,9 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 			// A frame from the server proves execution; a connection failure
 			// delivered by close proves only what the writer transmitted.
 			executed := resp.removedFromCalls || potentiallyExecuted()
-			return resp.InternalPage, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: resp.InternalErr, InternalPotentiallyExecuted: executed})
+			return resp.page, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: resp.InternalErr, InternalPotentiallyExecuted: executed})
 		}
-		return resp.InternalPage, nil
+		return resp.page, nil
 	}
 	if wake != nil {
 		// The context sends a wake into the call's channel when cancelled.
@@ -300,7 +300,7 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: runtimeerrors.ErrTimeoutNoResponse, InternalTimeout: req.Timeout})
 		}
 		if c.markOrphan(call) {
-			x.closeErr = InternalErrOrphanBudget
+			x.closeErr = errOrphanBudget
 		}
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: runtimeerrors.ErrTimeoutNoResponse, InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
 	case <-attemptDone(ctx):

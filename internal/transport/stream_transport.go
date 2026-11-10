@@ -69,54 +69,54 @@ func InternalCheckedStreamLimits(l StreamLimits) (StreamLimits, error) {
 // verifiedStreamUnits exposes only one validated v5 unit. Native headers/cells
 // may cross non-self-contained units; self-contained units never split a frame.
 type InternalVerifiedStreamUnits struct {
-	InternalUnits                              *segment.UnitReader
-	InternalData                               []byte
-	InternalOffset                             int
-	self, InternalFrameActive, InternalStarted bool
-	InternalCopies                             int64
+	InternalUnits              *segment.UnitReader
+	InternalData               []byte
+	offset                     int
+	self, frameActive, started bool
+	InternalCopies             int64
 }
 
 func (s *InternalVerifiedStreamUnits) beginFrame() {
-	s.InternalFrameActive = true
-	s.InternalStarted = false
+	s.frameActive = true
+	s.started = false
 }
 func (s *InternalVerifiedStreamUnits) Read(p []byte) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
-	if s.InternalOffset == len(s.InternalData) {
-		if s.InternalFrameActive && s.InternalStarted && s.self {
+	if s.offset == len(s.InternalData) {
+		if s.frameActive && s.started && s.self {
 			return 0, fmt.Errorf("gocql: frame exceeds self-contained segment")
 		}
 		h, b, err := s.InternalUnits.Next()
 		if err != nil {
 			return 0, err
 		}
-		if s.InternalFrameActive && s.InternalStarted && h.IsSelfContained {
+		if s.frameActive && s.started && h.IsSelfContained {
 			return 0, fmt.Errorf("gocql: split frame continued by self-contained segment")
 		}
 		s.InternalData = b
-		s.InternalOffset = 0
+		s.offset = 0
 		s.self = h.IsSelfContained
 		if len(b) == 0 {
 			return 0, fmt.Errorf("gocql: empty v5 segment")
 		}
 	}
-	s.InternalStarted = true
-	n := copy(p, s.InternalData[s.InternalOffset:])
-	s.InternalOffset += n
+	s.started = true
+	n := copy(p, s.InternalData[s.offset:])
+	s.offset += n
 	s.InternalCopies += int64(n)
 	return n, nil
 }
 func (s *InternalVerifiedStreamUnits) endFrame() error {
-	if !s.self && s.InternalOffset != len(s.InternalData) {
+	if !s.self && s.offset != len(s.InternalData) {
 		return fmt.Errorf("gocql: non-self-contained segment has trailing frame bytes")
 	}
-	s.InternalFrameActive = false
+	s.frameActive = false
 	return nil
 }
 func (s *InternalVerifiedStreamUnits) boundary() bool {
-	return !s.InternalFrameActive && s.InternalOffset == len(s.InternalData)
+	return !s.frameActive && s.offset == len(s.InternalData)
 }
 
 type InternalStreamResponse struct {
@@ -298,7 +298,7 @@ func (r *InternalExclusiveConn) InternalExchange(ctx context.Context, request *m
 		if err != nil {
 			return err
 		}
-		writer, ok := r.InternalConn.InternalW.(InternalSpanContextWriter)
+		writer, ok := r.InternalConn.InternalW.(spanContextWriter)
 		if !ok {
 			return &codec.StreamCapabilityError{Protocol: int(r.InternalConn.InternalVersion), Reason: "writer lacks span support"}
 		}
@@ -501,7 +501,7 @@ func InternalDecodeStreamRow[R any](response *InternalStreamResponse, plan codec
 
 // One bounded event worker per connection replaces unbounded goroutine-per-event
 // dispatch. Ownership charges transfer with the queued event until consumption.
-type InternalConnEvent struct {
+type connEvent struct {
 	value   protocol.Frame
 	release func()
 }
@@ -525,7 +525,7 @@ func (c *Conn) InternalDispatchEventOwned(event protocol.Frame, release func()) 
 		return reject(runtimeerrors.ErrClosed)
 	}
 	c.eventOnce.Do(func() {
-		c.eventQueue = make(chan InternalConnEvent, 32)
+		c.eventQueue = make(chan connEvent, 32)
 		c.InternalMu.Lock()
 		c.eventDone = make(chan struct{})
 		done := c.eventDone
@@ -570,7 +570,7 @@ func (c *Conn) InternalDispatchEventOwned(event protocol.Frame, release func()) 
 		return reject(runtimeerrors.ErrClosed)
 	}
 	select {
-	case c.eventQueue <- InternalConnEvent{event, release}:
+	case c.eventQueue <- connEvent{event, release}:
 		return nil
 	default:
 		return reject(&cqltype.ProtocolError{Stage: "event queue", Err: errors.New("bounded event dispatch overflow")})
@@ -591,7 +591,7 @@ func (c *Conn) InternalWaitEventDispatch() {
 // Drain only control envelopes already present in the validated final unit.
 // No read of another socket unit is allowed when releasing a completed result.
 func (r *InternalExclusiveConn) drainVerifiedControl() error {
-	for r.InternalUnits != nil && r.InternalUnits.InternalOffset < len(r.InternalUnits.InternalData) {
+	for r.InternalUnits != nil && r.InternalUnits.offset < len(r.InternalUnits.InternalData) {
 		if !r.InternalUnits.self {
 			return &cqltype.ProtocolError{Stage: "stream trailing unit", Err: wire.ErrTrailingBytes}
 		}

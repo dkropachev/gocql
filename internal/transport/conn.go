@@ -166,7 +166,7 @@ type ConnConfig struct {
 	InternalIsControlConn bool
 }
 
-func (c *ConnConfig) InternalLogger() logging.StdLogger {
+func (c *ConnConfig) logger() logging.StdLogger {
 	if c.Logger == nil {
 		return &logging.InternalDefaultLogger{}
 	}
@@ -214,10 +214,10 @@ type Conn struct {
 	// Nil is the uncompressed segment layout, and is also what a pre-v5 connection
 	// leaves it as -- it never reaches the segment codec, and its compressor need not
 	// support segments at all.
-	InternalSegCompressor   segment.Compressor
-	InternalR               InternalConnReadSource
-	InternalHooks           InternalConnectionHooks
-	InternalStartupReporter InternalStartupReporter
+	InternalSegCompressor segment.Compressor
+	InternalR             InternalConnReadSource
+	InternalHooks         InternalConnectionHooks
+	startupReporter       InternalStartupReporter
 	// typedSettings is published once the framer cache is initialised, when
 	// every input to the native protocol settings is final.
 	typedSettings                             atomic.Pointer[protocol.Settings]
@@ -227,7 +227,7 @@ type Conn struct {
 	eventDone                                 chan struct{}
 	InternalValidateTarget                    func(context.Context) error
 	InternalStreamBudget                      *protocol.StreamMetadataBudget
-	eventQueue                                chan InternalConnEvent
+	eventQueue                                chan connEvent
 	sharedChanged                             chan struct{}
 	readerPaused, readerResume, readerResumed chan struct{}
 	InternalCfg                               *ConnConfig
@@ -257,8 +257,8 @@ type Conn struct {
 	// for server push events: a SCHEMA_CHANGE arriving inside that window makes
 	// the event-debouncer goroutine run querySystem on this connection
 	// concurrently with the write.
-	systemRequest           atomic.Pointer[InternalSystemRequestState]
-	InternalStartupIdentity InternalStartupIdentity
+	systemRequest   atomic.Pointer[InternalSystemRequestState]
+	startupIdentity InternalStartupIdentity
 	// headerReader is the reader the current frame or segment header is read
 	// through (see readFrameHeader, readFirstSegmentHeader). Reused rather than
 	// allocated per header, and like segScratch only touched by whichever
@@ -273,20 +273,20 @@ type Conn struct {
 	// close(frameTicker), so the startup reader can still be unwinding when
 	// serve() starts. Work added to processFrameSource after the response is
 	// delivered would need a real barrier here.
-	headerReader InternalHeaderReader
+	headerReader headerReader
 	InternalAddr string
 	// segScratch holds the reusable buffers inbound v5 segments are read into.
 	// Only touched by the receive path, which runs on the serve() goroutine.
 	segScratch                  segment.Scratch
 	InternalCqlProtoExts        []implEndpoint.InternalCqlProtocolExtension
-	InternalFramers             InternalConnFramers
+	InternalFramers             connFramers
 	typedMetadataReuse          protocol.MetadataReuse
 	InternalScyllaSupported     implEndpoint.ScyllaConnectionFeatures
 	InternalOpeningSharderEpoch uint64
 	InternalTargetEpoch         uint64
 	InternalSharedOps, orphans  int
 	InternalMetadataTimeout     time.Duration
-	InternalCoalesceWait        time.Duration
+	coalesceWait                time.Duration
 	InternalWriteTimeout        atomic.Int64
 	typedWriterOnce             sync.Once
 	eventOnce                   sync.Once
@@ -432,7 +432,7 @@ func InternalTranslateHostAddresses(addressTranslator implEndpoint.AddressTransl
 // note: every connection needs to get `conn.finalizeConnection` called on it when initialization process is done
 type InternalConnectionLifetimeKey struct{}
 
-func (c *Conn) InternalInit(ctx context.Context, dialedHost *implEndpoint.DialedHost) error {
+func (c *Conn) init(ctx context.Context, dialedHost *implEndpoint.DialedHost) error {
 	c.InternalR.SetTimeout(c.InternalCfg.ConnectTimeout)
 	c.InternalWriteTimeout.Store(int64(c.InternalCfg.ConnectTimeout))
 	c.InternalW.InternalSetWriteTimeout(c.InternalCfg.ConnectTimeout)
@@ -447,21 +447,21 @@ func (c *Conn) InternalInit(ctx context.Context, dialedHost *implEndpoint.Dialed
 		c.auth = c.InternalCfg.Authenticator
 	}
 
-	startup := &InternalStartupCoordinator{
+	startup := &startupCoordinator{
 		frameTicker: make(chan struct{}),
 		conn:        c,
 	}
 
 	if c.InternalCfg.InternalIsControlConn {
-		startup.driverConfigReporter = c.InternalStartupReporter
+		startup.driverConfigReporter = c.startupReporter
 	}
 
 	if err := startup.setupConn(ctx); err != nil {
 		return err
 	}
 
-	if c.InternalCoalesceWait > 0 && !c.InternalCfg.InternalDisableCoalesce && (!dialedHost.DisableCoalesce || c.InternalCfg.TypedConfig != nil) {
-		c.InternalW = InternalNewWriteCoalescer(dialedHost.Conn, c.InternalCfg.ConnectTimeout, c.InternalCoalesceWait, c.InternalCtx.Done())
+	if c.coalesceWait > 0 && !c.InternalCfg.InternalDisableCoalesce && (!dialedHost.DisableCoalesce || c.InternalCfg.TypedConfig != nil) {
+		c.InternalW = InternalNewWriteCoalescer(dialedHost.Conn, c.InternalCfg.ConnectTimeout, c.coalesceWait, c.InternalCtx.Done())
 	}
 
 	if c.InternalIsScyllaConn() {
@@ -494,13 +494,13 @@ func (c *Conn) Read(p []byte) (n int, err error) {
 	return c.InternalR.Read(p)
 }
 
-type InternalStartupCoordinator struct {
+type startupCoordinator struct {
 	conn                 *Conn
 	frameTicker          chan struct{}
 	driverConfigReporter InternalStartupReporter
 }
 
-func (s *InternalStartupCoordinator) setupConn(ctx context.Context) error {
+func (s *startupCoordinator) setupConn(ctx context.Context) error {
 	var cancel context.CancelFunc
 	if s.conn.InternalCfg.ConnectTimeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, s.conn.InternalCfg.ConnectTimeout)
@@ -557,7 +557,7 @@ func (s *InternalStartupCoordinator) setupConn(ctx context.Context) error {
 // readBytesCopy (e.g. SupportedFrame, AuthChallengeFrame, AuthSuccessFrame)
 // are safe; frame types that use readBytes and expose []byte fields would not
 // be safe and must not be returned from this function.
-func (s *InternalStartupCoordinator) write(ctx context.Context, frame protocol.FrameBuilder, startupCompleted *atomic.Bool) (protocol.Frame, error) {
+func (s *startupCoordinator) write(ctx context.Context, frame protocol.FrameBuilder, startupCompleted *atomic.Bool) (protocol.Frame, error) {
 	select {
 	case s.frameTicker <- struct{}{}:
 	case <-ctx.Done():
@@ -573,7 +573,7 @@ func (s *InternalStartupCoordinator) write(ctx context.Context, frame protocol.F
 	return framer.ParseFrame()
 }
 
-func (s *InternalStartupCoordinator) options(ctx context.Context, startupCompleted *atomic.Bool) error {
+func (s *startupCoordinator) options(ctx context.Context, startupCompleted *atomic.Bool) error {
 	frame, err := s.write(ctx, &protocol.WriteOptionsFrame{}, startupCompleted)
 	if err != nil {
 		return err
@@ -592,7 +592,7 @@ func (s *InternalStartupCoordinator) options(ctx context.Context, startupComplet
 	s.conn.InternalSupported = v.Supported
 	s.conn.InternalScyllaSupported = implEndpoint.InternalParseSupported(s.conn.InternalSupported, s.conn.InternalLogger)
 	s.conn.recalculateSystemRequestTimeout()
-	if _, poolOwned := s.conn.InternalErrorHandler.(InternalPoolOwner); !poolOwned || s.conn.InternalCfg.TypedConfig == nil {
+	if _, poolOwned := s.conn.InternalErrorHandler.(poolOwner); !poolOwned || s.conn.InternalCfg.TypedConfig == nil {
 		if current := s.conn.InternalHost.ScyllaFeatures(); current != s.conn.InternalScyllaSupported.ScyllaHostFeatures {
 			implEndpoint.InternalHostInfoSetScyllaFeatures(s.conn.InternalHost, s.conn.InternalScyllaSupported.ScyllaHostFeatures)
 		}
@@ -644,15 +644,15 @@ func InternalStartupOptions(cqlVersion, driverName, driverVersion string, info i
 	return m
 }
 
-func (s *InternalStartupCoordinator) startup(ctx context.Context, startupCompleted *atomic.Bool) error {
+func (s *startupCoordinator) startup(ctx context.Context, startupCompleted *atomic.Bool) error {
 
 	m := InternalStartupOptions(
 		s.conn.InternalCfg.CQLVersion,
-		s.conn.InternalStartupIdentity.DriverName,
-		s.conn.InternalStartupIdentity.DriverVersion,
-		s.conn.InternalStartupIdentity.ApplicationInfo,
+		s.conn.startupIdentity.DriverName,
+		s.conn.startupIdentity.DriverVersion,
+		s.conn.startupIdentity.ApplicationInfo,
 		s.driverConfigReporter,
-		s.conn.InternalStartupIdentity.SessionID,
+		s.conn.startupIdentity.SessionID,
 		s.conn.InternalIsScyllaConn(),
 	)
 
@@ -678,7 +678,7 @@ func (s *InternalStartupCoordinator) startup(ctx context.Context, startupComplet
 		}
 	}
 
-	if err := s.conn.InternalResolveSegmentCompressor(); err != nil {
+	if err := s.conn.resolveSegmentCompressor(); err != nil {
 		return err
 	}
 
@@ -710,7 +710,7 @@ func (s *InternalStartupCoordinator) startup(ctx context.Context, startupComplet
 	}
 }
 
-func (s *InternalStartupCoordinator) authenticateHandshake(ctx context.Context, authFrame *frm.AuthenticateFrame, startupCompleted *atomic.Bool) error {
+func (s *startupCoordinator) authenticateHandshake(ctx context.Context, authFrame *frm.AuthenticateFrame, startupCompleted *atomic.Bool) error {
 	if s.conn.InternalCfg != nil && s.conn.InternalCfg.TypedAuth != nil {
 		host, _ := implEndpoint.SnapshotHost(s.conn.InternalHost)
 		auth := InternalNewV2Authenticator(ctx, host, s.conn.InternalCfg.TypedAuth)
@@ -798,7 +798,7 @@ func (c *Conn) InternalCloseWithError(err error) {
 		if err != nil {
 
 			req.deliver(InternalCallResp{InternalErr: err})
-		} else if req.InternalTyped {
+		} else if req.typed {
 			// Typed callers of a connection that closes on cancellation do
 			// not watch InternalCtx; tell them directly.
 			req.deliver(InternalCallResp{InternalErr: runtimeerrors.ErrConnectionClosed})
@@ -811,7 +811,7 @@ func (c *Conn) InternalCloseWithError(err error) {
 				})
 			})
 		}
-		InternalPutCallReq(req)
+		putCallReq(req)
 	}
 
 	c.InternalFramers.close()
@@ -1029,13 +1029,13 @@ func (c *Conn) InternalProcessFrame(ctx context.Context, r io.Reader) error {
 // is a reader over an already-received segment payload, which has no deadline to
 // disarm. Missing it in that case is correct, not a bug.
 func (c *Conn) InternalReadFrameHeader(r io.Reader) (frm.FrameHeader, error) {
-	d, _ := r.(InternalDeadlineDisarmer)
+	d, _ := r.(deadlineDisarmer)
 	if d != nil {
 		d.InternalSetDisarm(true)
 		defer d.InternalSetDisarm(false)
 	}
 
-	c.headerReader.InternalReset(r, d)
+	c.headerReader.reset(r, d)
 	return protocol.ReadHeader(&c.headerReader, c.headerBuf[:])
 }
 
@@ -1043,7 +1043,7 @@ func (c *Conn) InternalProcessFrameSource(ctx context.Context, src InternalFrame
 
 	r := src.InternalR
 
-	headStartTime, headEndTime := src.InternalNetStart, src.InternalNetEnd
+	headStartTime, headEndTime := src.netStart, src.netEnd
 	measureHere := headStartTime.IsZero() && c.InternalFrameObserver != nil
 
 	if measureHere {
@@ -1072,8 +1072,8 @@ func (c *Conn) InternalProcessFrameSource(ctx context.Context, src InternalFrame
 		})
 	}
 
-	if src.InternalSegment != nil && head.Length > src.InternalSegment.Len() {
-		return fmt.Errorf("gocql: frame header declares a %d byte body but only %d bytes remain in the self-contained segment", head.Length, src.InternalSegment.Len())
+	if src.segment != nil && head.Length > src.segment.Len() {
+		return fmt.Errorf("gocql: frame header declares a %d byte body but only %d bytes remain in the self-contained segment", head.Length, src.segment.Len())
 	}
 
 	if head.Stream >= c.InternalStreams.NumStreams {
@@ -1132,7 +1132,7 @@ func (c *Conn) InternalProcessFrameSource(ctx context.Context, src InternalFrame
 		return c.discardFrame(r, head)
 	}
 
-	if call.InternalTyped {
+	if call.typed {
 		return c.receiveTypedCall(ctx, call, src, head)
 	}
 
@@ -1140,7 +1140,7 @@ func (c *Conn) InternalProcessFrameSource(ctx context.Context, src InternalFrame
 
 	// A copy keeps head on the stack for typed frames, which return above.
 	legacyHead := head
-	err = src.InternalReadBody(framer, &legacyHead)
+	err = src.readBody(framer, &legacyHead)
 
 	desynced := InternalBodyReadDesyncedConn(err)
 
@@ -1189,7 +1189,7 @@ func InternalBodyReadDesyncedConn(err error) bool {
 func (c *Conn) readFrameIntoFramer(src InternalFrameSource, head frm.FrameHeader) (*protocol.Framer, error) {
 	framer := c.InternalGetReadFramer()
 
-	if err := src.InternalReadBody(framer, &head); err != nil {
+	if err := src.readBody(framer, &head); err != nil {
 		c.InternalReleaseReadFramer(framer)
 		return nil, err
 	}
@@ -1200,7 +1200,7 @@ func (c *Conn) InternalAbandonRecvCall(call *InternalCallReq, framer *protocol.F
 	c.InternalReleaseReadFramer(framer)
 	c.releaseStream(call)
 	call.waitExecDone("abandonRecvCall")
-	InternalPutCallReq(call)
+	putCallReq(call)
 }
 
 func (c *Conn) releaseStream(call *InternalCallReq) {
@@ -1260,11 +1260,11 @@ func (c *Conn) InternalReadFirstSegmentHeader() (segment.Header, error) {
 	c.InternalR.InternalSetDisarm(true)
 	defer c.InternalR.InternalSetDisarm(false)
 
-	c.headerReader.InternalReset(c.InternalR, c.InternalR)
+	c.headerReader.reset(c.InternalR, c.InternalR)
 
 	hdr, err := segment.ReadHeader(&c.headerReader, c.InternalSegCompressor != nil)
 	if err != nil {
-		if netErr, ok := errors.AsType[net.Error](err); c.headerReader.InternalN == 0 && ok && netErr.Timeout() {
+		if netErr, ok := errors.AsType[net.Error](err); c.headerReader.n == 0 && ok && netErr.Timeout() {
 			return segment.Header{}, fmt.Errorf("%w: %w", protocol.ErrReadHeaderTimeout, err)
 		}
 		return segment.Header{}, err
@@ -1281,7 +1281,7 @@ func (c *Conn) InternalReadFirstSegmentHeader() (segment.Header, error) {
 // bool where this branches on the compressor being non-nil, and a connection whose two
 // answers disagreed would read an 8-byte compressed header as a 6-byte uncompressed
 // one and mis-frame everything after it.
-func (c *Conn) InternalReadSegmentPayload(hdr segment.Header) ([]byte, error) {
+func (c *Conn) readSegmentPayload(hdr segment.Header) ([]byte, error) {
 	return segment.ReadPayload(c.InternalR, hdr, c.InternalSegCompressor, &c.segScratch)
 }
 
@@ -1313,12 +1313,12 @@ func (c *Conn) InternalReadSegmentPayload(hdr segment.Header) ([]byte, error) {
 // FrameHeaderObserver. netEnd is extended below if the CQL header itself needed
 // more segments to arrive — but only that far: the observer's End is when the
 // header finished arriving, not the rest of the frame.
-func (c *Conn) InternalRecvSplitFrame(ctx context.Context, first []byte, netStart, netEnd time.Time) error {
+func (c *Conn) recvSplitFrame(ctx context.Context, first []byte, netStart, netEnd time.Time) error {
 
 	if len(first) < protocol.HeadSize {
 		accumulated := append([]byte(nil), first...)
 		for len(accumulated) < protocol.HeadSize {
-			payload, err := c.InternalReadContinuationSegment()
+			payload, err := c.readContinuationSegment()
 			if err != nil {
 				return err
 			}
@@ -1343,7 +1343,7 @@ func (c *Conn) InternalRecvSplitFrame(ctx context.Context, first []byte, netStar
 	frame := make([]byte, 0, total)
 	frame = append(frame, first...)
 	for len(frame) < total {
-		payload, err := c.InternalReadContinuationSegment()
+		payload, err := c.readContinuationSegment()
 		if err != nil {
 			return err
 		}
@@ -1354,10 +1354,10 @@ func (c *Conn) InternalRecvSplitFrame(ctx context.Context, first []byte, netStar
 	}
 
 	return c.InternalProcessFrameSource(ctx, InternalFrameSource{
-		InternalR:        bytes.NewReader(frame),
-		InternalBody:     frame[protocol.HeadSize:],
-		InternalNetStart: netStart,
-		InternalNetEnd:   netEnd,
+		InternalR: bytes.NewReader(frame),
+		body:      frame[protocol.HeadSize:],
+		netStart:  netStart,
+		netEnd:    netEnd,
 	})
 }
 
@@ -1368,7 +1368,7 @@ func (c *Conn) InternalRecvSplitFrame(ctx context.Context, first []byte, netStar
 // A self-contained segment, or one that makes no forward progress (empty
 // payload), is rejected so a hostile peer cannot drive an infinite reassembly
 // loop.
-func (c *Conn) InternalReadContinuationSegment() ([]byte, error) {
+func (c *Conn) readContinuationSegment() ([]byte, error) {
 	hdr, err := segment.ReadHeader(c.InternalR, c.InternalSegCompressor != nil)
 	if err != nil {
 		return nil, fmt.Errorf("gocql: failed to read continuation segment header: %w", err)
@@ -1376,7 +1376,7 @@ func (c *Conn) InternalReadContinuationSegment() ([]byte, error) {
 	if hdr.IsSelfContained {
 		return nil, fmt.Errorf("gocql: received self-contained segment, but expected a continuation")
 	}
-	payload, err := c.InternalReadSegmentPayload(hdr)
+	payload, err := c.readSegmentPayload(hdr)
 	if err != nil {
 		return nil, fmt.Errorf("gocql: failed to read continuation segment payload: %w", err)
 	}
@@ -1406,10 +1406,10 @@ func (c *Conn) processAllFramesInSegment(ctx context.Context, r *bytes.Reader, n
 	var err error
 	for r.Len() > 0 && err == nil {
 		err = c.InternalProcessFrameSource(ctx, InternalFrameSource{
-			InternalR:        r,
-			InternalSegment:  r,
-			InternalNetStart: netStart,
-			InternalNetEnd:   netEnd,
+			InternalR: r,
+			segment:   r,
+			netStart:  netStart,
+			netEnd:    netEnd,
 		})
 	}
 
@@ -1433,36 +1433,36 @@ type InternalCallReq struct {
 	// caller that stops waiting then receives the claimed response.
 	dest             *InternalResponsePage
 	timer            *time.Timer
-	InternalDone     sync.WaitGroup
+	done             sync.WaitGroup
 	InternalStreamID int // current stream in use
 	// streamObserverEndOnce ensures that either StreamAbandoned or StreamFinished is called,
 	// but not both.
 	streamObserverEndOnce sync.Once
 	state                 atomic.Uint32 // callWaiting, callClaimed, callDelivered or callStopped
 	orphaned              bool
-	InternalTyped         bool
+	typed                 bool
 }
 
-var InternalCallReqPool = syncx.NewPool(func() *InternalCallReq {
+var callReqPool = syncx.NewPool(func() *InternalCallReq {
 	resp := make(chan InternalCallResp, 1)
 	return &InternalCallReq{InternalResp: resp, ownResp: resp}
 })
 
-func InternalGetCallReq(streamID int) *InternalCallReq {
-	call := InternalCallReqPool.Get()
+func getCallReq(streamID int) *InternalCallReq {
+	call := callReqPool.Get()
 	call.state.Store(callWaiting)
-	call.InternalTyped = false
+	call.typed = false
 	call.orphaned = false
 	call.InternalStreamID = streamID
 	call.dest = nil
 	call.streamObserverContext = nil
 	call.streamObserverEndOnce = sync.Once{}
-	call.InternalDone = sync.WaitGroup{}
-	call.InternalDone.Add(1)
+	call.done = sync.WaitGroup{}
+	call.done.Add(1)
 	return call
 }
 
-func InternalPutCallReq(call *InternalCallReq) {
+func putCallReq(call *InternalCallReq) {
 	if call.timer != nil {
 		if !call.timer.Stop() {
 			select {
@@ -1484,7 +1484,7 @@ func InternalPutCallReq(call *InternalCallReq) {
 	case <-call.InternalResp:
 	default:
 	}
-	InternalCallReqPool.Put(call)
+	callReqPool.Put(call)
 }
 
 const (
@@ -1514,7 +1514,7 @@ func (call *InternalCallReq) claim() bool {
 	return call.state.CompareAndSwap(callWaiting, callClaimed)
 }
 
-func (call *InternalCallReq) InternalStopWaiting() (InternalCallResp, bool) {
+func (call *InternalCallReq) stopWaiting() (InternalCallResp, bool) {
 	if call.state.CompareAndSwap(callWaiting, callStopped) {
 		return InternalCallResp{}, false
 	}
@@ -1527,7 +1527,7 @@ func (call *InternalCallReq) InternalStopWaiting() (InternalCallResp, bool) {
 }
 
 func (call *InternalCallReq) finishExec() {
-	call.InternalDone.Done()
+	call.done.Done()
 }
 
 func (call *InternalCallReq) waitExecDone(where string) {
@@ -1549,7 +1549,7 @@ func (c *Conn) InternalRemoveCallIfOpen(streamID int) bool {
 }
 
 type InternalCallResp struct {
-	InternalPage *InternalResponsePage
+	page *InternalResponsePage
 	// framer is the response frame.
 	// May be nil if err is not nil.
 	InternalFramer *protocol.Framer
@@ -1662,10 +1662,10 @@ func (c *Conn) execAdmitted(ctx context.Context, req protocol.FrameBuilder, trac
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctxErr, InternalPotentiallyExecuted: false})
 	}
 
-	call := InternalGetCallReq(0)
+	call := getCallReq(0)
 	if err := c.allocCall(call); err != nil {
 		call.finishExec()
-		InternalPutCallReq(call)
+		putCallReq(call)
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err, InternalPotentiallyExecuted: false})
 	}
 	stream := call.InternalStreamID
@@ -1691,7 +1691,7 @@ func (c *Conn) execAdmitted(ctx context.Context, req protocol.FrameBuilder, trac
 
 	defer func() {
 		if stopWaiting {
-			if resp, ok := call.InternalStopWaiting(); ok {
+			if resp, ok := call.stopWaiting(); ok {
 				// The response arrived as we stopped waiting; it is ours to drop.
 				if resp.InternalFramer != nil {
 					c.InternalReleaseReadFramer(resp.InternalFramer)
@@ -1707,7 +1707,7 @@ func (c *Conn) execAdmitted(ctx context.Context, req protocol.FrameBuilder, trac
 			c.releaseStream(call)
 		}
 		if recycleCall {
-			InternalPutCallReq(call)
+			putCallReq(call)
 		}
 	}()
 
@@ -1811,13 +1811,13 @@ func (c *Conn) execAdmitted(ctx context.Context, req protocol.FrameBuilder, trac
 	case <-timeoutCh:
 		stopWaiting = true
 		if c.markOrphan(call) {
-			closeErr = InternalErrOrphanBudget
+			closeErr = errOrphanBudget
 		}
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: runtimeerrors.ErrTimeoutNoResponse, InternalPotentiallyExecuted: true, InternalTimeout: requestTimeout, InternalInFlight: c.InternalStreams.InUse()})
 	case <-ctxDone:
 		stopWaiting = true
 		if c.markOrphan(call) {
-			closeErr = InternalErrOrphanBudget
+			closeErr = errOrphanBudget
 		}
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctx.Err(), InternalPotentiallyExecuted: true, InternalTimeout: requestTimeout, InternalInFlight: c.InternalStreams.InUse()})
 	case <-c.InternalCtx.Done():
@@ -1994,7 +1994,7 @@ func (e *ErrSchemaMismatch) Error() string {
 	return fmt.Sprintf("gocql: cluster schema versions not consistent: %+v", e.privateStorage.schemas)
 }
 
-func InternalUnmarshalTabletHint(hint []byte, _ uint8, keyspace, table string) (tablets.TabletInfo, error) {
+func unmarshalTabletHint(hint []byte, _ uint8, keyspace, table string) (tablets.TabletInfo, error) {
 	return tablets.ParseHint(hint, keyspace, table)
 }
 
@@ -2022,7 +2022,7 @@ type InternalStartupIdentity struct {
 
 type InternalStartupReporter interface{ InternalUpdateStartupOptions(map[string]string, bool) }
 
-type InternalPoolOwner interface{ InternalNotifyReservationChanged() }
+type poolOwner interface{ InternalNotifyReservationChanged() }
 
 type InternalConnectionPoolPolicy struct {
 	InternalDisableShardAware bool
@@ -2045,9 +2045,9 @@ type InternalFrameSource struct {
 	//
 	// Zero means "not measured", which is the pre-v5 socket path: there
 	// processFrameSource reads the header off the wire and times it directly.
-	InternalNetStart, InternalNetEnd time.Time
-	InternalR                        io.Reader
-	InternalOwner                    *wire.Lease
+	netStart, netEnd time.Time
+	InternalR        io.Reader
+	owner            *wire.Lease
 	// segment, when non-nil, is the self-contained v5 segment payload r reads
 	// from. Such a segment carries only whole frames, so a header declaring a body
 	// longer than what is left in the segment is a framing violation, and
@@ -2063,22 +2063,22 @@ type InternalFrameSource struct {
 	//
 	// Nil on the pre-v5 socket path, and nil for a reassembled frame, where
 	// framer.adoptFrameBody already matches the declared length exactly.
-	InternalSegment *bytes.Reader
+	segment *bytes.Reader
 	// body is set only when the whole frame body is already in memory and the
 	// buffer holding it can be given away: the read framer then adopts it instead
 	// of reading and copying the body a second time (see framer.adoptFrameBody).
-	InternalBody  []byte
-	InternalChain wire.Chain
+	body  []byte
+	chain wire.Chain
 }
 
 // readBody fills f with the frame body described by head, either by reading it
 // from s.r or by adopting the buffer s already holds.
-func (s InternalFrameSource) InternalReadBody(f *protocol.Framer, head *frm.FrameHeader) error {
-	if s.InternalOwner != nil {
-		return f.ReadFrame(InternalNewChainReader(s.InternalChain), head)
+func (s InternalFrameSource) readBody(f *protocol.Framer, head *frm.FrameHeader) error {
+	if s.owner != nil {
+		return f.ReadFrame(newChainReader(s.chain), head)
 	}
-	if s.InternalBody != nil {
-		return f.AdoptFrameBody(s.InternalBody, head)
+	if s.body != nil {
+		return f.AdoptFrameBody(s.body, head)
 	}
 	return f.ReadFrame(s.InternalR, head)
 }
@@ -2102,29 +2102,29 @@ func (s InternalFrameSource) InternalReadBody(f *protocol.Framer, head *frm.Fram
 // n counts the bytes delivered. That is the caller's benign-vs-fatal signal for a
 // header-read timeout: nothing consumed is the idle peer, part of a header consumed
 // leaves the stream at an unknown offset (readFirstSegmentHeader, readHeader).
-type InternalHeaderReader struct {
+type headerReader struct {
 	r io.Reader
 	// disarm is the reader whose deadline is disarmed for the first byte, and is
 	// cleared once that byte arrives so the cap and the re-arm happen exactly once.
 	// Nil when there is no deadline to bound: on proto v5 the CQL header is parsed
 	// out of a segment payload that has already been received.
-	disarm    InternalDeadlineDisarmer
-	InternalN int
+	disarm deadlineDisarmer
+	n      int
 }
 
-func (h *InternalHeaderReader) InternalReset(r io.Reader, disarm InternalDeadlineDisarmer) {
+func (h *headerReader) reset(r io.Reader, disarm deadlineDisarmer) {
 	h.r = r
 	h.disarm = disarm
-	h.InternalN = 0
+	h.n = 0
 }
 
-func (h *InternalHeaderReader) Read(p []byte) (int, error) {
+func (h *headerReader) Read(p []byte) (int, error) {
 	if h.disarm != nil && len(p) > 1 {
 
 		p = p[:1]
 	}
 	n, err := h.r.Read(p)
-	h.InternalN += n
+	h.n += n
 	if n > 0 && h.disarm != nil {
 
 		h.disarm.InternalSetDisarm(false)
@@ -2136,7 +2136,7 @@ func (h *InternalHeaderReader) Read(p []byte) (int, error) {
 // deadlineDisarmer is a reader whose read deadline can be disarmed for a read
 // that is expected to wait indefinitely (the idle wait for the next frame or
 // segment header). See connReader.armDeadline.
-type InternalDeadlineDisarmer interface {
+type deadlineDisarmer interface {
 	InternalSetDisarm(bool)
 }
 
@@ -2164,7 +2164,7 @@ type InternalConnReadSource interface {
 	// GetTimeout returns the timeout duration.
 	GetTimeout() time.Duration
 
-	InternalDeadlineDisarmer
+	deadlineDisarmer
 }
 
 // connReader implements connReadSource.
@@ -2333,13 +2333,13 @@ type InternalContextWriter interface {
 	InternalSetWriteTimeout(timeout time.Duration)
 }
 
-type InternalDeadlineWriter interface {
+type deadlineWriter interface {
 	SetWriteDeadline(time.Time) error
 	io.Writer
 }
 
 type InternalDeadlineContextWriter struct {
-	InternalW InternalDeadlineWriter
+	InternalW deadlineWriter
 	// semaphore protects critical section for SetWriteDeadline/Write.
 	// It is a channel with capacity 1.
 	InternalSemaphore chan struct{}
@@ -2374,14 +2374,14 @@ func (c *InternalDeadlineContextWriter) InternalWriteContext(ctx context.Context
 		<-c.InternalSemaphore
 	}()
 
-	if err := c.InternalW.SetWriteDeadline(InternalEffectiveWriteDeadline(c.InternalTimeout.Load())); err != nil {
+	if err := c.InternalW.SetWriteDeadline(effectiveWriteDeadline(c.InternalTimeout.Load())); err != nil {
 		return 0, err
 	}
 
 	return c.InternalW.Write(p)
 }
 
-func InternalNewWriteCoalescer(conn InternalDeadlineWriter, writeTimeout, coalesceDuration time.Duration,
+func InternalNewWriteCoalescer(conn deadlineWriter, writeTimeout, coalesceDuration time.Duration,
 	quit <-chan struct{}) *InternalWriteCoalescer {
 	wc := &InternalWriteCoalescer{
 		InternalWriteCh: make(chan InternalWriteRequest),
@@ -2394,7 +2394,7 @@ func InternalNewWriteCoalescer(conn InternalDeadlineWriter, writeTimeout, coales
 }
 
 type InternalWriteCoalescer struct {
-	InternalC                InternalDeadlineWriter
+	InternalC                deadlineWriter
 	InternalQuit             <-chan struct{}
 	InternalWriteCh          chan InternalWriteRequest
 	InternalTestEnqueuedHook func()
@@ -2420,20 +2420,20 @@ type InternalWriteResult struct {
 	InternalN   int
 	// A span request can be MaxInt32 body bytes plus its header on 32-bit.
 	// Keep its completion independent of the io.Writer-sized legacy result.
-	InternalWritten int64
+	written int64
 }
 
 // writeResultChanPool pools buffered channels used for write coalescer results.
 // Each channel is used in a strict produce-once/consume-once pattern:
 // the flusher goroutine sends exactly one writeResult, and writeContext
 // reads exactly one. After reading, the channel is empty and safe to reuse.
-var InternalWriteResultChanPool = syncx.NewPool(func() chan InternalWriteResult {
+var writeResultChanPool = syncx.NewPool(func() chan InternalWriteResult {
 	return make(chan InternalWriteResult, 1)
 })
 
 // writeContext implements contextWriter.
 func (w *InternalWriteCoalescer) InternalWriteContext(ctx context.Context, p []byte) (int, error) {
-	resultChan := InternalWriteResultChanPool.Get()
+	resultChan := writeResultChanPool.Get()
 	wr := InternalWriteRequest{
 		ctx:        ctx,
 		resultChan: resultChan,
@@ -2442,10 +2442,10 @@ func (w *InternalWriteCoalescer) InternalWriteContext(ctx context.Context, p []b
 
 	select {
 	case <-ctx.Done():
-		InternalWriteResultChanPool.Put(resultChan)
+		writeResultChanPool.Put(resultChan)
 		return 0, ctx.Err()
 	case <-w.InternalQuit:
-		InternalWriteResultChanPool.Put(resultChan)
+		writeResultChanPool.Put(resultChan)
 		return 0, io.EOF
 	case w.InternalWriteCh <- wr:
 
@@ -2456,7 +2456,7 @@ func (w *InternalWriteCoalescer) InternalWriteContext(ctx context.Context, p []b
 	}
 
 	result := <-resultChan
-	InternalWriteResultChanPool.Put(resultChan)
+	writeResultChanPool.Put(resultChan)
 	return result.InternalN, result.InternalErr
 }
 
@@ -2534,7 +2534,7 @@ func (w *InternalWriteCoalescer) flush(resultChans []chan<- InternalWriteResult,
 }
 
 func (w *InternalWriteCoalescer) InternalFlushSizes(resultChans []chan<- InternalWriteResult, buffers net.Buffers, sizes []int64) {
-	if err := w.InternalC.SetWriteDeadline(InternalEffectiveWriteDeadline(w.timeout.Load())); err != nil {
+	if err := w.InternalC.SetWriteDeadline(effectiveWriteDeadline(w.timeout.Load())); err != nil {
 		for _, ch := range resultChans {
 			ch <- InternalWriteResult{InternalErr: err}
 		}
@@ -2542,7 +2542,7 @@ func (w *InternalWriteCoalescer) InternalFlushSizes(resultChans []chan<- Interna
 	}
 
 	scratch := append(net.Buffers(nil), buffers...)
-	n, err := InternalWriteSpanBuffers(w.InternalC, &scratch)
+	n, err := writeSpanBuffers(w.InternalC, &scratch)
 	var total int64
 	for _, size := range sizes {
 		total += size
@@ -2559,14 +2559,14 @@ func (w *InternalWriteCoalescer) InternalFlushSizes(resultChans []chan<- Interna
 		if completed == size {
 			resultErr = nil
 		}
-		resultChans[i] <- InternalWriteResult{InternalN: int(min(completed, int64(^uint(0)>>1))), InternalWritten: completed, InternalErr: resultErr}
+		resultChans[i] <- InternalWriteResult{InternalN: int(min(completed, int64(^uint(0)>>1))), written: completed, InternalErr: resultErr}
 		n -= completed
 	}
 }
 
 // Socket deadlines are absolute. Disabling the operational timeout must clear
 // the startup deadline, which may otherwise expire during a long-lived session.
-func InternalEffectiveWriteDeadline(timeout int64) time.Time {
+func effectiveWriteDeadline(timeout int64) time.Time {
 	if timeout > 0 {
 		return time.Now().Add(time.Duration(timeout))
 	}

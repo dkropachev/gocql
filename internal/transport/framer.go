@@ -27,16 +27,16 @@ import (
 
 // framerPool owns one sync.Pool plus the adaptive buffer-sizing state for one
 // framer usage class.
-type InternalFramerPool struct {
+type framerPool struct {
 	pool               sync.Pool
 	InternalBufAvgSize atomic.Int64
 	enabled            atomic.Bool
 }
 
 // connFramers owns connection-scoped framer configuration and reader/writer pools.
-type InternalConnFramers struct {
-	InternalReadPool  InternalFramerPool
-	InternalWritePool InternalFramerPool
+type connFramers struct {
+	InternalReadPool  framerPool
+	InternalWritePool framerPool
 	InternalDefaults  InternalFramerConfig
 }
 
@@ -64,15 +64,15 @@ const InternalFramerBufEWMAWeight = 8
 
 // framerBufShrinkThreshold is the multiplier applied to the EWMA to decide when a
 // framer's read buffer is too large relative to typical usage and should be shrunk.
-const InternalFramerBufShrinkThreshold = 2
+const framerBufShrinkThreshold = 2
 
 // maxReasonableBufferSize is a safety limit to prevent overflow in EWMA calculations
 // and to catch pathological cases where buffers grow unreasonably large.
-const InternalMaxReasonableBufferSize = 512 * 1024 * 1024 // 512MB
+const maxReasonableBufferSize = 512 * 1024 * 1024 // 512MB
 
 // maxCASRetries is the maximum number of CAS retries for updating EWMA.
 // This prevents infinite loops under extreme contention.
-const InternalMaxCASRetries = 100
+const maxCASRetries = 100
 
 // initFramerCache precomputes framer fields from cqlProtoExts so that
 // per-query framer creation avoids repeated linear scans and allocations.
@@ -80,7 +80,7 @@ func (c *Conn) InternalInitFramerCache() {
 	c.InternalFramers.initCache(c)
 }
 
-func (cf *InternalConnFramers) initCache(c *Conn) {
+func (cf *connFramers) initCache(c *Conn) {
 	cfg := InternalFramerConfig{
 		compressor:    c.InternalCompressor,
 		InternalProto: c.InternalVersion & protocol.ProtoVersionMask,
@@ -121,7 +121,7 @@ func (cf *InternalConnFramers) initCache(c *Conn) {
 	cf.InternalInitPool(c)
 }
 
-func (cf *InternalConnFramers) InternalInitPool(c *Conn) {
+func (cf *connFramers) InternalInitPool(c *Conn) {
 	defaults := cf.InternalDefaults
 	cf.InternalReadPool.init(defaults, func(f *protocol.Framer) { c.InternalReleaseReadFramer(f) })
 	cf.InternalWritePool.init(defaults, func(f *protocol.Framer) { c.InternalReleaseWriteFramer(f) })
@@ -132,7 +132,7 @@ func (c *Conn) InternalGetReadFramer() *protocol.Framer {
 	return c.InternalFramers.getRead(c)
 }
 
-func (cf *InternalConnFramers) getRead(c *Conn) *protocol.Framer {
+func (cf *connFramers) getRead(c *Conn) *protocol.Framer {
 	f := cf.InternalReadPool.get(c)
 	f.Released.Store(false)
 	return f
@@ -143,7 +143,7 @@ func (c *Conn) InternalGetWriteFramer() *protocol.Framer {
 	return c.InternalFramers.getWrite(c)
 }
 
-func (cf *InternalConnFramers) getWrite(c *Conn) *protocol.Framer {
+func (cf *connFramers) getWrite(c *Conn) *protocol.Framer {
 	f := cf.InternalWritePool.get(c)
 	f.Released.Store(false)
 	// Before initCache runs, cf.defaults is still zero, so handshake framers get
@@ -159,7 +159,7 @@ func (c *Conn) InternalReleaseReadFramer(f *protocol.Framer) {
 	c.InternalFramers.releaseRead(c, f)
 }
 
-func (cf *InternalConnFramers) releaseRead(c *Conn, f *protocol.Framer) {
+func (cf *connFramers) releaseRead(c *Conn, f *protocol.Framer) {
 	if f == nil {
 		return
 	}
@@ -179,7 +179,7 @@ func (cf *InternalConnFramers) releaseRead(c *Conn, f *protocol.Framer) {
 		cf.InternalReadPool.resetAndPut(f, false, 0)
 		return
 	}
-	cf.InternalReadPool.resetAndPut(f, true, InternalFpShrinkSize(bufCap, newAvg))
+	cf.InternalReadPool.resetAndPut(f, true, fpShrinkSize(bufCap, newAvg))
 }
 
 // releaseWriteFramer returns a request-builder framer to the writer pool.
@@ -187,7 +187,7 @@ func (c *Conn) InternalReleaseWriteFramer(f *protocol.Framer) {
 	c.InternalFramers.releaseWrite(f)
 }
 
-func (cf *InternalConnFramers) releaseWrite(f *protocol.Framer) {
+func (cf *connFramers) releaseWrite(f *protocol.Framer) {
 	if f == nil {
 		return
 	}
@@ -207,15 +207,15 @@ func (cf *InternalConnFramers) releaseWrite(f *protocol.Framer) {
 		cf.InternalWritePool.resetAndPut(f, false, 0)
 		return
 	}
-	cf.InternalWritePool.resetAndPut(f, false, InternalFpShrinkSize(bufCap, newAvg))
+	cf.InternalWritePool.resetAndPut(f, false, fpShrinkSize(bufCap, newAvg))
 }
 
-func (cf *InternalConnFramers) close() {
+func (cf *connFramers) close() {
 	cf.InternalReadPool.close()
 	cf.InternalWritePool.close()
 }
 
-func (fp *InternalFramerPool) init(defaults InternalFramerConfig, release func(*protocol.Framer)) {
+func (fp *framerPool) init(defaults InternalFramerConfig, release func(*protocol.Framer)) {
 	fp.InternalBufAvgSize.Store(int64(protocol.DefaultBufSize))
 	fp.enabled.Store(true)
 	fp.pool = sync.Pool{
@@ -238,7 +238,7 @@ func (fp *InternalFramerPool) init(defaults InternalFramerConfig, release func(*
 	}
 }
 
-func (fp *InternalFramerPool) get(c *Conn) *protocol.Framer {
+func (fp *framerPool) get(c *Conn) *protocol.Framer {
 	var f *protocol.Framer
 	if !fp.enabled.Load() {
 		f = protocol.NewFramer(c.InternalCompressor, c.InternalVersion)
@@ -251,26 +251,26 @@ func (fp *InternalFramerPool) get(c *Conn) *protocol.Framer {
 	return f
 }
 
-func (fp *InternalFramerPool) put(f *protocol.Framer) {
+func (fp *framerPool) put(f *protocol.Framer) {
 	if !fp.enabled.Load() {
 		return
 	}
 	fp.pool.Put(f)
 }
 
-func (fp *InternalFramerPool) close() {
+func (fp *framerPool) close() {
 	fp.enabled.Store(false)
 }
 
-func (fp *InternalFramerPool) updateAvg(logger logging.StdLogger, bufCap int64) (int64, bool) {
-	if bufCap > InternalMaxReasonableBufferSize {
-		bufCap = InternalMaxReasonableBufferSize
+func (fp *framerPool) updateAvg(logger logging.StdLogger, bufCap int64) (int64, bool) {
+	if bufCap > maxReasonableBufferSize {
+		bufCap = maxReasonableBufferSize
 	}
 	if bufCap < 0 {
 		bufCap = protocol.DefaultBufSize
 	}
 
-	for i := 0; i < InternalMaxCASRetries; i++ {
+	for i := 0; i < maxCASRetries; i++ {
 		avg := fp.InternalBufAvgSize.Load()
 		// EWMA update with upward-biased rounding: the +framerBufEWMAWeight/2 term
 		// biases the integer division toward ceiling for all deltas. This means:
@@ -287,16 +287,16 @@ func (fp *InternalFramerPool) updateAvg(logger logging.StdLogger, bufCap int64) 
 	}
 
 	if logger != nil {
-		logger.Printf("gocql: EWMA update failed after %d retries, skipping shrink decision", InternalMaxCASRetries)
+		logger.Printf("gocql: EWMA update failed after %d retries, skipping shrink decision", maxCASRetries)
 	}
 	return fp.InternalBufAvgSize.Load(), false
 }
 
-func InternalFpShrinkSize(bufCap, newAvg int64) int64 {
+func fpShrinkSize(bufCap, newAvg int64) int64 {
 	// If this framer's buffer is much larger than the running average,
 	// reallocate it to prevent a single large query from permanently
 	// bloating all pooled framers.
-	if bufCap <= newAvg*InternalFramerBufShrinkThreshold {
+	if bufCap <= newAvg*framerBufShrinkThreshold {
 		return 0
 	}
 	if newAvg < protocol.DefaultBufSize {
@@ -305,7 +305,7 @@ func InternalFpShrinkSize(bufCap, newAvg int64) int64 {
 	return newAvg
 }
 
-func (fp *InternalFramerPool) resetAndPut(f *protocol.Framer, alignBufWithReadBuffer bool, shrinkSize int64) {
+func (fp *framerPool) resetAndPut(f *protocol.Framer, alignBufWithReadBuffer bool, shrinkSize int64) {
 	if shrinkSize > 0 {
 		buf := make([]byte, shrinkSize)
 		f.ReadBuffer = buf
