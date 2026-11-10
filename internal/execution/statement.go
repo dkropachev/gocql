@@ -103,7 +103,7 @@ func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statem
 	if options.privateStorage.InternalConnection != nil && !implCluster.InternalConnectionOwnedBy(options.privateStorage.InternalConnection, s) {
 		return empty, cqltype.TypeValidation("prepare connection", "connection belongs to another session")
 	}
-	if err := validateStatement(statement); err != nil {
+	if err := binding.ValidateStatement(statement); err != nil {
 		return empty, err
 	}
 	keyspace := options.Keyspace
@@ -224,7 +224,7 @@ func BindUnpreparedOwned[P, R any](s binding.Statement[P, R], columns cqltype.Co
 	return InternalBindUnprepared(s, columns, value, true)
 }
 func InternalBindUnprepared[P, R any](s binding.Statement[P, R], columns cqltype.Columns, value P, owned bool) (*Bound[R], error) {
-	if err := validateStatement(&s); err != nil {
+	if err := binding.ValidateStatement(&s); err != nil {
 		return nil, err
 	}
 	plan, err := codec.CompileParamPlan(s.Params, columns)

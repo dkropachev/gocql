@@ -78,6 +78,12 @@ func InternalStatementDefaults[P, R any](s *Statement[P, R]) {
 	}
 }
 
+// ValidateStatement fills s's empty defaults and validates it.
+func ValidateStatement[P, R any](s *Statement[P, R]) error {
+	InternalStatementDefaults(s)
+	return InternalValidateStatement(*s)
+}
+
 func InternalValidateStatement[P, R any](s Statement[P, R]) error {
 	if s.Kind > cqltype.ConditionalStatement {
 		return cqltype.TypeValidation("statement kind", "unknown classification")

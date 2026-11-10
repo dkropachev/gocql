@@ -527,7 +527,7 @@ func InternalReadV2SystemRowsVia[P, R any](ctx context.Context, version byte, ti
 	if ctx == nil || execute == nil {
 		return nil, cqltype.TypeValidation("system query", "nil context or connection")
 	}
-	if err := validateStatement(&statement); err != nil {
+	if err := binding.ValidateStatement(&statement); err != nil {
 		return nil, err
 	}
 	return implMetadata.ReadRows(ctx, version, timeout, func(ctx context.Context, request *model.AttemptRequest) (*model.ResponseData, error) {

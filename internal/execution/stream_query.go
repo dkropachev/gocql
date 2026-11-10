@@ -71,7 +71,7 @@ func (prepared *Prepared[P, B]) StreamQuery[R any](decoder codec.StreamRowDecode
 // for a statement executed without server preparation. Rows are decoded by
 // decoder, so the statement declares none.
 func NewUnpreparedStreamQuery[P, R any](session *implCluster.Core, statement binding.Statement[P, codec.EmptyRecord], decoder codec.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
-	if err := validateStatement(&statement); err != nil {
+	if err := binding.ValidateStatement(&statement); err != nil {
 		return nil, err
 	}
 	if decoder == nil {

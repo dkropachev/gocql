@@ -193,7 +193,7 @@ func NewUnpreparedQuery[P, R any](s *implCluster.Core, statement binding.Stateme
 }
 
 func newUnpreparedQuery[P, R any](s *implCluster.Core, statement binding.Statement[P, R], options BoundOptions) (*Query[P, R], error) {
-	if err := validateStatement(&statement); err != nil {
+	if err := binding.ValidateStatement(&statement); err != nil {
 		return nil, err
 	}
 	columns := statement.BindMarkers
