@@ -21,6 +21,7 @@ package cluster
 
 import (
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/schemafence"
 
 	"slices"
 
@@ -29,26 +30,26 @@ import (
 
 func InternalSessionInvalidatePreparedSchema(s *Core, e Event) {
 	t := InternalSessionSchemaTracker(s)
-	keys := []preparedDependencyKey{{InternalKind: 'a', InternalKeyspace: "", InternalName: ""}, {InternalKind: 'a', InternalKeyspace: e.Keyspace, InternalName: ""}}
+	keys := []schemafence.InternalPreparedDependencyKey{{InternalKind: 'a', InternalKeyspace: "", InternalName: ""}, {InternalKind: 'a', InternalKeyspace: e.Keyspace, InternalName: ""}}
 	switch e.Target {
 	case "TABLE", "VIEW":
-		keys = append(keys, preparedDependencyKey{InternalKind: 'b', InternalKeyspace: e.Keyspace, InternalName: e.Object})
+		keys = append(keys, schemafence.InternalPreparedDependencyKey{InternalKind: 'b', InternalKeyspace: e.Keyspace, InternalName: e.Object})
 	case "TYPE":
-		keys = append(keys, preparedDependencyKey{InternalKind: 't', InternalKeyspace: e.Keyspace, InternalName: e.Object})
+		keys = append(keys, schemafence.InternalPreparedDependencyKey{InternalKind: 't', InternalKeyspace: e.Keyspace, InternalName: e.Object})
 	case "FUNCTION", "AGGREGATE":
-		keys = append(keys, preparedDependencyKey{InternalKind: 'f', InternalKeyspace: e.Keyspace, InternalName: ""})
+		keys = append(keys, schemafence.InternalPreparedDependencyKey{InternalKind: 'f', InternalKeyspace: e.Keyspace, InternalName: ""})
 	default:
-		keys = append(keys, preparedDependencyKey{InternalKind: 'k', InternalKeyspace: e.Keyspace, InternalName: ""})
+		keys = append(keys, schemafence.InternalPreparedDependencyKey{InternalKind: 'k', InternalKeyspace: e.Keyspace, InternalName: ""})
 	}
 	t.InternalBump(keys...)
 }
-func InternalSessionUpdatePreparedSchemaSnapshot(s *Core, old, next *MetadataSnapshot) {
+func InternalSessionUpdatePreparedSchemaSnapshot(s *Core, old, next *routing.MetadataSnapshot) {
 	if old == nil {
 		return
 	}
 	t := InternalSessionSchemaTracker(s)
 	if routing.SnapshotData(old).InternalPartitioner != routing.SnapshotData(next).InternalPartitioner {
-		t.InternalBump(preparedDependencyKey{InternalKind: 'p'})
+		t.InternalBump(schemafence.InternalPreparedDependencyKey{InternalKind: 'p'})
 	}
 	names := make(map[string]bool, len(routing.SnapshotData(old).InternalKeyspaces)+len(routing.SnapshotData(next).InternalKeyspaces))
 	for n := range routing.SnapshotData(old).InternalKeyspaces {
@@ -101,10 +102,10 @@ func InternalSessionUpdatePreparedSchemaSnapshot(s *Core, old, next *MetadataSna
 		}
 	}
 }
-func InternalEqualPreparedFunction(a, b FunctionMetadata) bool {
+func InternalEqualPreparedFunction(a, b implMetadata.FunctionMetadata) bool {
 	return a.Keyspace == b.Keyspace && a.Name == b.Name && a.Body == b.Body && a.Language == b.Language && a.ReturnType == b.ReturnType && a.CalledOnNullInput == b.CalledOnNullInput && slices.Equal(a.ArgumentTypes, b.ArgumentTypes) && slices.Equal(a.ArgumentNames, b.ArgumentNames)
 }
-func InternalEqualPreparedFunctions(a, b map[string]*FunctionMetadata) bool {
+func InternalEqualPreparedFunctions(a, b map[string]*implMetadata.FunctionMetadata) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -122,7 +123,7 @@ func InternalEqualPreparedFunctions(a, b map[string]*FunctionMetadata) bool {
 	}
 	return true
 }
-func InternalEqualPreparedAggregates(a, b map[string]*AggregateMetadata) bool {
+func InternalEqualPreparedAggregates(a, b map[string]*implMetadata.AggregateMetadata) bool {
 	if len(a) != len(b) {
 		return false
 	}

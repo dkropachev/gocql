@@ -27,7 +27,12 @@ package cluster
 import (
 	"fmt"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/pool"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 
 	randv2 "math/rand/v2"
 	"sync"
@@ -39,19 +44,19 @@ const InternalHostInfoListMapThreshold = 20
 
 // hostInfoList is an immutable host list snapshot with optional indexed lookup.
 type InternalHostInfoList struct {
-	hosts             []*HostInfo
-	InternalHostsByID map[UUID]*HostInfo
-	InternalHostIDs   []UUID
+	hosts             []*implEndpoint.HostInfo
+	InternalHostsByID map[cqltype.UUID]*implEndpoint.HostInfo
+	InternalHostIDs   []cqltype.UUID
 }
 
-func InternalNewHostInfoList(hosts []*HostInfo) *InternalHostInfoList {
+func InternalNewHostInfoList(hosts []*implEndpoint.HostInfo) *InternalHostInfoList {
 	hosts = hosts[:len(hosts):len(hosts)]
 	l := &InternalHostInfoList{
 		hosts: hosts,
 	}
 
 	if len(hosts) >= InternalHostInfoListMapThreshold {
-		hostsByID := make(map[UUID]*HostInfo, len(hosts))
+		hostsByID := make(map[cqltype.UUID]*implEndpoint.HostInfo, len(hosts))
 		l.InternalHostsByID = hostsByID
 		for _, host := range hosts {
 			hostID := implEndpoint.InternalHostInfoHostUUID(host)
@@ -65,7 +70,7 @@ func InternalNewHostInfoList(hosts []*HostInfo) *InternalHostInfoList {
 		return l
 	}
 
-	hostIDs := make([]UUID, len(hosts))
+	hostIDs := make([]cqltype.UUID, len(hosts))
 	for i, host := range hosts {
 		hostIDs[i] = implEndpoint.InternalHostInfoHostUUID(host)
 	}
@@ -75,7 +80,7 @@ func InternalNewHostInfoList(hosts []*HostInfo) *InternalHostInfoList {
 }
 
 // allHosts returns hosts in this snapshot. Callers must treat the returned slice as read-only.
-func (l *InternalHostInfoList) InternalAllHosts() []*HostInfo {
+func (l *InternalHostInfoList) InternalAllHosts() []*implEndpoint.HostInfo {
 	if l == nil {
 		return nil
 	}
@@ -91,7 +96,7 @@ func (l *InternalHostInfoList) InternalLen() int {
 }
 
 // hostByID finds a host in this snapshot by host_id.
-func (l *InternalHostInfoList) InternalHostByID(hostID UUID) *HostInfo {
+func (l *InternalHostInfoList) InternalHostByID(hostID cqltype.UUID) *implEndpoint.HostInfo {
 	if l == nil || hostID.IsEmpty() {
 		return nil
 	}
@@ -121,16 +126,16 @@ func (c *InternalCowHostList) InternalGet() *InternalHostInfoList {
 }
 
 // add will add a host if it not already in the list
-func (c *InternalCowHostList) InternalAdd(host *HostInfo) bool {
+func (c *InternalCowHostList) InternalAdd(host *implEndpoint.HostInfo) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	l := c.InternalGet().InternalAllHosts()
 
 	if n := len(l); n == 0 {
-		l = []*HostInfo{host}
+		l = []*implEndpoint.HostInfo{host}
 	} else {
-		newL := make([]*HostInfo, n+1)
+		newL := make([]*implEndpoint.HostInfo, n+1)
 		for i := 0; i < n; i++ {
 			if host.Equal(l[i]) {
 				return false
@@ -145,12 +150,12 @@ func (c *InternalCowHostList) InternalAdd(host *HostInfo) bool {
 	return true
 }
 
-func (c *InternalCowHostList) InternalAddAll(hosts []*HostInfo) bool {
+func (c *InternalCowHostList) InternalAddAll(hosts []*implEndpoint.HostInfo) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	l := c.InternalGet().InternalAllHosts()
-	newL := make([]*HostInfo, len(l), len(l)+len(hosts))
+	newL := make([]*implEndpoint.HostInfo, len(l), len(l)+len(hosts))
 	copy(newL, l)
 
 	added := false
@@ -176,7 +181,7 @@ func (c *InternalCowHostList) InternalAddAll(hosts []*HostInfo) bool {
 	return true
 }
 
-func (c *InternalCowHostList) remove(host *HostInfo) bool {
+func (c *InternalCowHostList) remove(host *implEndpoint.HostInfo) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -187,7 +192,7 @@ func (c *InternalCowHostList) remove(host *HostInfo) bool {
 	}
 
 	found := false
-	newL := make([]*HostInfo, 0, size)
+	newL := make([]*implEndpoint.HostInfo, 0, size)
 	for i := 0; i < len(l); i++ {
 		if !l[i].Equal(host) {
 			newL = append(newL, l[i])
@@ -206,10 +211,10 @@ func (c *InternalCowHostList) remove(host *HostInfo) bool {
 }
 
 type HostStateNotifier interface {
-	AddHost(host *HostInfo)
-	RemoveHost(host *HostInfo)
-	HostUp(host *HostInfo)
-	HostDown(host *HostInfo)
+	AddHost(host *implEndpoint.HostInfo)
+	RemoveHost(host *implEndpoint.HostInfo)
+	HostUp(host *implEndpoint.HostInfo)
+	HostDown(host *implEndpoint.HostInfo)
 }
 
 type KeyspaceUpdateEvent struct {
@@ -225,7 +230,7 @@ type HostTierer interface {
 	// 0 - local rack, 1 - local DC, 2 - remote DC
 	// or:
 	// 0 - local DC, 1 - remote DC
-	HostTier(host *HostInfo) uint
+	HostTier(host *implEndpoint.HostInfo) uint
 
 	// This function returns the maximum possible host tier
 	MaxHostTier() uint
@@ -236,13 +241,13 @@ type HostTierer interface {
 // HostSelectionPolicy instances cannot be shared between sessions.
 type HostSelectionPolicy interface {
 	HostStateNotifier
-	SetPartitioner
+	pool.SetPartitioner
 	KeyspaceChanged(KeyspaceUpdateEvent)
 	Init(*Core)
 	// Reset is opprotunity to reset HostSelectionPolicy if Session initilization failed and we want to
 	// call HostSelectionPolicy.Init() again with new Session
 	Reset()
-	IsLocal(host *HostInfo) bool
+	IsLocal(host *implEndpoint.HostInfo) bool
 	// Pick returns an iteration function over selected hosts.
 	// Multiple attempts of a single query execution won't call the returned NextHost function concurrently,
 	// so it's safe to have internal state without additional synchronization as long as every call to Pick returns
@@ -252,19 +257,19 @@ type HostSelectionPolicy interface {
 }
 
 type InternalSelectedHost struct {
-	InternalInfo  *HostInfo
-	InternalToken Token
+	InternalInfo  *implEndpoint.HostInfo
+	InternalToken implEndpoint.Token
 }
 
-func (host InternalSelectedHost) Info() *HostInfo {
+func (host InternalSelectedHost) Info() *implEndpoint.HostInfo {
 	return host.InternalInfo
 }
 
-func (host InternalSelectedHost) Token() Token {
+func (host InternalSelectedHost) Token() implEndpoint.Token {
 	return host.InternalToken
 }
 
-func (host InternalSelectedHost) TokenInt64() (int64Token, bool) {
+func (host InternalSelectedHost) TokenInt64() (implEndpoint.InternalInt64Token, bool) {
 	return 0, false
 }
 
@@ -274,36 +279,36 @@ func (host InternalSelectedHost) Mark(err error) {}
 // routing token as a raw int64 instead of a boxed Token, so shard-aware conn
 // picking consumes it without an interface allocation.
 type InternalInt64SelectedHost struct {
-	InternalInfo        *HostInfo
-	InternalTokenCasted int64Token
+	InternalInfo        *implEndpoint.HostInfo
+	InternalTokenCasted implEndpoint.InternalInt64Token
 }
 
-func (host InternalInt64SelectedHost) Info() *HostInfo {
+func (host InternalInt64SelectedHost) Info() *implEndpoint.HostInfo {
 	return host.InternalInfo
 }
 
-func (host InternalInt64SelectedHost) Token() Token {
+func (host InternalInt64SelectedHost) Token() implEndpoint.Token {
 	return host.InternalTokenCasted
 }
 
-func (host InternalInt64SelectedHost) TokenInt64() (int64Token, bool) {
+func (host InternalInt64SelectedHost) TokenInt64() (implEndpoint.InternalInt64Token, bool) {
 	return host.InternalTokenCasted, true
 }
 
 func (host InternalInt64SelectedHost) Mark(err error) {}
 
-func InternalNewSingleHost(info *HostInfo, maxRetries byte, retryDelay time.Duration) *InternalSingleHost {
+func InternalNewSingleHost(info *implEndpoint.HostInfo, maxRetries byte, retryDelay time.Duration) *InternalSingleHost {
 	return &InternalSingleHost{info: info, maxRetries: maxRetries, delay: retryDelay}
 }
 
 type InternalSingleHost struct {
-	info       *HostInfo
+	info       *implEndpoint.HostInfo
 	delay      time.Duration
 	retry      byte
 	maxRetries byte
 }
 
-func (s *InternalSingleHost) selectHost() SelectedHost {
+func (s *InternalSingleHost) selectHost() implEndpoint.SelectedHost {
 	if s.retry >= s.maxRetries {
 		return nil
 	}
@@ -314,14 +319,14 @@ func (s *InternalSingleHost) selectHost() SelectedHost {
 	return s
 }
 
-func (s InternalSingleHost) Info() *HostInfo { return s.info }
+func (s InternalSingleHost) Info() *implEndpoint.HostInfo { return s.info }
 
-func (s InternalSingleHost) Token() Token { return nil }
+func (s InternalSingleHost) Token() implEndpoint.Token { return nil }
 
 func (s InternalSingleHost) Mark(error) {}
 
 // NextHost is an iteration function over picked hosts
-type NextHost func() SelectedHost
+type NextHost func() implEndpoint.SelectedHost
 
 // RoundRobinHostPolicy is a round-robin load balancing policy, where each host
 // is tried sequentially for each query.
@@ -334,26 +339,26 @@ type InternalRoundRobinHostPolicy struct {
 	lastUsedHostIdx uint64
 }
 
-func (r *InternalRoundRobinHostPolicy) IsLocal(*HostInfo) bool              { return true }
+func (r *InternalRoundRobinHostPolicy) IsLocal(*implEndpoint.HostInfo) bool { return true }
 func (r *InternalRoundRobinHostPolicy) KeyspaceChanged(KeyspaceUpdateEvent) {}
 func (r *InternalRoundRobinHostPolicy) SetPartitioner(partitioner string)   {}
 func (r *InternalRoundRobinHostPolicy) Init(*Core)                          {}
 func (r *InternalRoundRobinHostPolicy) Reset()                              {}
 func (r *InternalRoundRobinHostPolicy) IsOperational(*Core) error           { return nil }
 
-func (r *InternalRoundRobinHostPolicy) AddHost(host *HostInfo) {
+func (r *InternalRoundRobinHostPolicy) AddHost(host *implEndpoint.HostInfo) {
 	r.hosts.InternalAdd(host)
 }
 
-func (r *InternalRoundRobinHostPolicy) RemoveHost(host *HostInfo) {
+func (r *InternalRoundRobinHostPolicy) RemoveHost(host *implEndpoint.HostInfo) {
 	r.hosts.remove(host)
 }
 
-func (r *InternalRoundRobinHostPolicy) HostUp(host *HostInfo) {
+func (r *InternalRoundRobinHostPolicy) HostUp(host *implEndpoint.HostInfo) {
 	r.AddHost(host)
 }
 
-func (r *InternalRoundRobinHostPolicy) HostDown(host *HostInfo) {
+func (r *InternalRoundRobinHostPolicy) HostDown(host *implEndpoint.HostInfo) {
 	r.RemoveHost(host)
 }
 
@@ -416,7 +421,7 @@ func TokenAwareHostPolicy(fallback HostSelectionPolicy, opts ...func(*InternalTo
 type InternalClusterMeta struct {
 	// replicas is map[keyspace]map[token]hosts
 	replicas  map[string]InternalTokenRingReplicas
-	tokenRing *tokenRing
+	tokenRing *implEndpoint.InternalTokenRing
 }
 
 var MAX_IN_FLIGHT_THRESHOLD int = 10
@@ -439,9 +444,9 @@ func (t *InternalTokenAwareHostPolicy) Init(s *Core) {
 		// See https://github.com/scylladb/gocql/issues/94.
 		panic("sharing token aware host selection policy between sessions is not supported")
 	}
-	t.privateStorage.InternalGetKeyspaceMetadata = func(keyspace string) (*KeyspaceMetadata, error) {
+	t.privateStorage.InternalGetKeyspaceMetadata = func(keyspace string) (*metadata.KeyspaceMetadata, error) {
 		if keyspace == "" {
-			return nil, ErrNoKeyspace
+			return nil, runtimeerrors.ErrNoKeyspace
 		}
 		return s.privateStorage.InternalMetadataDescriber.GetKeyspace(keyspace)
 	}
@@ -466,7 +471,7 @@ func (t *InternalTokenAwareHostPolicy) IsOperational(session *Core) error {
 	return t.privateStorage.InternalFallback.IsOperational(session)
 }
 
-func (t *InternalTokenAwareHostPolicy) IsLocal(host *HostInfo) bool {
+func (t *InternalTokenAwareHostPolicy) IsLocal(host *implEndpoint.HostInfo) bool {
 	return t.privateStorage.InternalFallback.IsLocal(host)
 }
 
@@ -518,7 +523,7 @@ func (t *InternalTokenAwareHostPolicy) SetPartitioner(partitioner string) {
 	}
 }
 
-func (t *InternalTokenAwareHostPolicy) AddHost(host *HostInfo) {
+func (t *InternalTokenAwareHostPolicy) AddHost(host *implEndpoint.HostInfo) {
 	t.privateStorage.mu.Lock()
 	if t.privateStorage.hosts.InternalAdd(host) {
 		meta := t.getMetadataForUpdate()
@@ -530,7 +535,7 @@ func (t *InternalTokenAwareHostPolicy) AddHost(host *HostInfo) {
 	t.privateStorage.InternalFallback.AddHost(host)
 }
 
-func (t *InternalTokenAwareHostPolicy) AddHosts(hosts []*HostInfo) {
+func (t *InternalTokenAwareHostPolicy) AddHosts(hosts []*implEndpoint.HostInfo) {
 	t.privateStorage.mu.Lock()
 	t.privateStorage.hosts.InternalAddAll(hosts)
 
@@ -545,7 +550,7 @@ func (t *InternalTokenAwareHostPolicy) AddHosts(hosts []*HostInfo) {
 	}
 }
 
-func (t *InternalTokenAwareHostPolicy) RemoveHost(host *HostInfo) {
+func (t *InternalTokenAwareHostPolicy) RemoveHost(host *implEndpoint.HostInfo) {
 	t.privateStorage.mu.Lock()
 	if t.privateStorage.hosts.remove(host) {
 		meta := t.getMetadataForUpdate()
@@ -557,11 +562,11 @@ func (t *InternalTokenAwareHostPolicy) RemoveHost(host *HostInfo) {
 	t.privateStorage.InternalFallback.RemoveHost(host)
 }
 
-func (t *InternalTokenAwareHostPolicy) HostUp(host *HostInfo) {
+func (t *InternalTokenAwareHostPolicy) HostUp(host *implEndpoint.HostInfo) {
 	t.privateStorage.InternalFallback.HostUp(host)
 }
 
-func (t *InternalTokenAwareHostPolicy) HostDown(host *HostInfo) {
+func (t *InternalTokenAwareHostPolicy) HostDown(host *implEndpoint.HostInfo) {
 	t.privateStorage.InternalFallback.HostDown(host)
 }
 
@@ -587,14 +592,14 @@ func (t *InternalTokenAwareHostPolicy) getMetadataForUpdate() *InternalClusterMe
 
 // resetTokenRing creates a new tokenRing.
 // It must be called with t.mu locked.
-func (m *InternalClusterMeta) resetTokenRing(partitioner string, hosts []*HostInfo, logger StdLogger) {
+func (m *InternalClusterMeta) resetTokenRing(partitioner string, hosts []*implEndpoint.HostInfo, logger logging.StdLogger) {
 	if partitioner == "" {
 		// partitioner not yet set
 		return
 	}
 
 	// create a new token ring
-	tokenRing, err := newTokenRing(partitioner, hosts)
+	tokenRing, err := implEndpoint.InternalNewTokenRing(partitioner, hosts)
 	if err != nil {
 		logger.Printf("Unable to update the token ring due to error: %s", err)
 		return
@@ -608,19 +613,19 @@ func (m *InternalClusterMeta) resetTokenRing(partitioner string, hosts []*HostIn
 // token-aware iterator. Uses an inline array for RF <= 9 (3 DCs × RF=3),
 // spilling to a map for larger replica sets.
 type InternalHostSet struct {
-	InternalOverflow map[*HostInfo]struct{}
-	arr              [9]*HostInfo
+	InternalOverflow map[*implEndpoint.HostInfo]struct{}
+	arr              [9]*implEndpoint.HostInfo
 	n                int
 }
 
-func (s *InternalHostSet) InternalAdd(h *HostInfo) {
+func (s *InternalHostSet) InternalAdd(h *implEndpoint.HostInfo) {
 	if s.n < len(s.arr) {
 		s.arr[s.n] = h
 		s.n++
 		return
 	}
 	if s.InternalOverflow == nil {
-		s.InternalOverflow = make(map[*HostInfo]struct{})
+		s.InternalOverflow = make(map[*implEndpoint.HostInfo]struct{})
 		for i := range s.n {
 			s.InternalOverflow[s.arr[i]] = struct{}{}
 		}
@@ -628,7 +633,7 @@ func (s *InternalHostSet) InternalAdd(h *HostInfo) {
 	s.InternalOverflow[h] = struct{}{}
 }
 
-func (s *InternalHostSet) InternalContains(h *HostInfo) bool {
+func (s *InternalHostSet) InternalContains(h *implEndpoint.HostInfo) bool {
 	if s.InternalOverflow != nil {
 		_, ok := s.InternalOverflow[h]
 		return ok
@@ -642,7 +647,7 @@ func (s *InternalHostSet) InternalContains(h *HostInfo) bool {
 }
 
 // shuffleHostsInPlace shuffles the given slice in-place using math/rand/v2.
-func InternalShuffleHostsInPlace(hosts []*HostInfo) {
+func InternalShuffleHostsInPlace(hosts []*implEndpoint.HostInfo) {
 	randv2.Shuffle(len(hosts), func(i, j int) {
 		hosts[i], hosts[j] = hosts[j], hosts[i]
 	})
@@ -650,7 +655,7 @@ func InternalShuffleHostsInPlace(hosts []*HostInfo) {
 
 // partitionHealthy performs an in-place stable partition of replicas, moving
 // healthy (non-busy) hosts to the front while preserving relative order.
-func InternalPartitionHealthy(replicas []*HostInfo, s *Core) {
+func InternalPartitionHealthy(replicas []*implEndpoint.HostInfo, s *Core) {
 	n := len(replicas)
 	if n <= 1 {
 		return
@@ -677,12 +682,12 @@ func InternalPartitionHealthy(replicas []*HostInfo, s *Core) {
 		return // all same category, nothing to do
 	}
 
-	var buf [9]*HostInfo
-	var tmp []*HostInfo
+	var buf [9]*implEndpoint.HostInfo
+	var tmp []*implEndpoint.HostInfo
 	if n <= len(buf) {
 		tmp = buf[:n]
 	} else {
-		tmp = make([]*HostInfo, n)
+		tmp = make([]*implEndpoint.HostInfo, n)
 	}
 	copy(tmp, replicas)
 
@@ -784,11 +789,11 @@ func (d *InternalDcAwareRR) IsOperational(session *Core) error {
 	return fmt.Errorf("gocql: datacenter %s in the policy was not found in the topology - probable DC aware policy misconfiguration", d.local)
 }
 
-func (d *InternalDcAwareRR) IsLocal(host *HostInfo) bool {
+func (d *InternalDcAwareRR) IsLocal(host *implEndpoint.HostInfo) bool {
 	return host.DataCenter() == d.local
 }
 
-func (d *InternalDcAwareRR) AddHost(host *HostInfo) {
+func (d *InternalDcAwareRR) AddHost(host *implEndpoint.HostInfo) {
 	if d.IsLocal(host) {
 		d.localHosts.InternalAdd(host)
 	} else {
@@ -796,7 +801,7 @@ func (d *InternalDcAwareRR) AddHost(host *HostInfo) {
 	}
 }
 
-func (d *InternalDcAwareRR) RemoveHost(host *HostInfo) {
+func (d *InternalDcAwareRR) RemoveHost(host *implEndpoint.HostInfo) {
 	if d.IsLocal(host) {
 		d.localHosts.remove(host)
 	} else {
@@ -804,8 +809,8 @@ func (d *InternalDcAwareRR) RemoveHost(host *HostInfo) {
 	}
 }
 
-func (d *InternalDcAwareRR) HostUp(host *HostInfo)   { d.AddHost(host) }
-func (d *InternalDcAwareRR) HostDown(host *HostInfo) { d.RemoveHost(host) }
+func (d *InternalDcAwareRR) HostUp(host *implEndpoint.HostInfo)   { d.AddHost(host) }
+func (d *InternalDcAwareRR) HostDown(host *implEndpoint.HostInfo) { d.RemoveHost(host) }
 
 // This function is supposed to be called in a fashion
 // roundRobbin(offset, hostsPriority1, hostsPriority2, hostsPriority3 ... )
@@ -815,11 +820,11 @@ func (d *InternalDcAwareRR) HostDown(host *HostInfo) { d.RemoveHost(host) }
 //
 // For tiered and DC-aware strategy:
 // roundRobbin(offset, localHosts, remoteHosts)
-func InternalRoundRobbin(shift int, hosts ...[]*HostInfo) NextHost {
+func InternalRoundRobbin(shift int, hosts ...[]*implEndpoint.HostInfo) NextHost {
 	currentLayer := 0
 	currentlyObserved := 0
 
-	return func() SelectedHost {
+	return func() implEndpoint.SelectedHost {
 		// iterate over layers
 		for {
 			if currentLayer == len(hosts) {
@@ -919,7 +924,7 @@ func (d *InternalRackAwareRR) localRackName() string {
 	return d.localRack
 }
 
-func (d *InternalRackAwareRR) HostTier(host *HostInfo) uint {
+func (d *InternalRackAwareRR) HostTier(host *implEndpoint.HostInfo) uint {
 	if host.DataCenter() == d.localDC {
 		if host.Rack() == d.localRack {
 			return 0
@@ -931,22 +936,22 @@ func (d *InternalRackAwareRR) HostTier(host *HostInfo) uint {
 	}
 }
 
-func (d *InternalRackAwareRR) IsLocal(host *HostInfo) bool {
+func (d *InternalRackAwareRR) IsLocal(host *implEndpoint.HostInfo) bool {
 	return d.HostTier(host) == 0
 }
 
-func (d *InternalRackAwareRR) AddHost(host *HostInfo) {
+func (d *InternalRackAwareRR) AddHost(host *implEndpoint.HostInfo) {
 	dist := d.HostTier(host)
 	d.hosts[dist].InternalAdd(host)
 }
 
-func (d *InternalRackAwareRR) RemoveHost(host *HostInfo) {
+func (d *InternalRackAwareRR) RemoveHost(host *implEndpoint.HostInfo) {
 	dist := d.HostTier(host)
 	d.hosts[dist].remove(host)
 }
 
-func (d *InternalRackAwareRR) HostUp(host *HostInfo)   { d.AddHost(host) }
-func (d *InternalRackAwareRR) HostDown(host *HostInfo) { d.RemoveHost(host) }
+func (d *InternalRackAwareRR) HostUp(host *implEndpoint.HostInfo)   { d.AddHost(host) }
+func (d *InternalRackAwareRR) HostDown(host *implEndpoint.HostInfo) { d.RemoveHost(host) }
 
 // ReadyPolicy defines a policy for when a HostSelectionPolicy can be used. After
 // each host connects during session initialization, the Ready method will be
@@ -970,7 +975,7 @@ type InternalSingleHostReadyPolicy struct {
 	readyMux sync.Mutex
 }
 
-func (s *InternalSingleHostReadyPolicy) HostUp(host *HostInfo) {
+func (s *InternalSingleHostReadyPolicy) HostUp(host *implEndpoint.HostInfo) {
 	s.HostSelectionPolicy.HostUp(host)
 
 	s.readyMux.Lock()
@@ -993,7 +998,7 @@ func (s *InternalSingleHostReadyPolicy) Ready() bool {
 	return true
 }
 
-func InternalHostBusy(s *Core, h *HostInfo) bool {
+func InternalHostBusy(s *Core, h *implEndpoint.HostInfo) bool {
 	pool, ok := s.privateStorage.InternalPool.InternalGetPool(h)
 	return ok && h != nil && pool.InFlight() >= MAX_IN_FLIGHT_THRESHOLD
 }

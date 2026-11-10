@@ -24,6 +24,11 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
 const InternalMaxPreparedRefreshScopes = 64
@@ -35,11 +40,11 @@ func InternalSessionScheduleV2PreparedRefresh(s *Core, keyspace string) error {
 	p.InternalMu.Lock()
 	if p.closed || s.Closed() {
 		p.InternalMu.Unlock()
-		return ErrClosed
+		return runtimeerrors.ErrClosed
 	}
 	if _, exists := p.InternalPreparedRefreshScopes[keyspace]; !exists && len(p.InternalPreparedRefreshScopes) >= InternalMaxPreparedRefreshScopes {
 		p.InternalMu.Unlock()
-		return &ProtocolError{Stage: "prepared schema reconciliation", Err: fmt.Errorf("pending keyspace limit %d exceeded", InternalMaxPreparedRefreshScopes)}
+		return &cqltype.ProtocolError{Stage: "prepared schema reconciliation", Err: fmt.Errorf("pending keyspace limit %d exceeded", InternalMaxPreparedRefreshScopes)}
 	}
 	if p.InternalPreparedRefreshScopes == nil {
 		p.InternalPreparedRefreshScopes = make(map[string]uint64)
@@ -56,13 +61,13 @@ func InternalSessionScheduleV2PreparedRefresh(s *Core, keyspace string) error {
 // unrelated keyspaces; an unknown statement scope alone requires enumeration.
 func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) error {
 	if keyspace == "" {
-		rows, err := queryV2SchemaRows(ctx, InternalNewSchemaSource(s), `SELECT keyspace_name, durable_writes, replication FROM system_schema.keyspaces`, nil, v2DecodeKeyspace())
+		rows, err := metadata.InternalQueryV2SchemaRows(ctx, InternalNewSchemaSource(s), `SELECT keyspace_name, durable_writes, replication FROM system_schema.keyspaces`, nil, metadata.InternalV2DecodeKeyspace())
 		if err != nil {
 			return err
 		}
 		for _, row := range rows {
 			if row.InternalName == "" {
-				return typeValidation("keyspace schema", "missing keyspace identity in required reconciliation")
+				return cqltype.TypeValidation("keyspace schema", "missing keyspace identity in required reconciliation")
 			}
 			if err := s.reconcileV2PreparedScope(ctx, row.InternalName); err != nil {
 				return err
@@ -77,32 +82,32 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 	tables := p.captureTableRevisionsLocked(keyspace)
 	config := p.InternalConfig
 	p.InternalMu.Unlock()
-	base, err := getV2KeyspaceMetadata(ctx, InternalNewSchemaSource(s), keyspace)
-	absent := errors.Is(err, ErrKeyspaceDoesNotExist)
+	base, err := metadata.InternalGetV2KeyspaceMetadata(ctx, InternalNewSchemaSource(s), keyspace)
+	absent := errors.Is(err, runtimeerrors.ErrKeyspaceDoesNotExist)
 	if err != nil && !absent {
 		return err
 	}
-	var schema, minimal *KeyspaceMetadata
+	var schema, minimal *metadata.KeyspaceMetadata
 	if !absent {
 		copyBase := *base
 		minimal = &copyBase
-		schema, err = fetchV2Keyspace(ctx, InternalNewSchemaSource(s), base)
+		schema, err = metadata.InternalFetchV2Keyspace(ctx, InternalNewSchemaSource(s), base)
 		if err != nil {
 			return err
 		}
 	}
-	publish := config.Metadata.Mode != MetadataDisabled && (len(config.Metadata.Keyspaces) == 0 || slices.Contains(config.Metadata.Keyspaces, keyspace))
+	publish := config.Metadata.Mode != settings.MetadataDisabled && (len(config.Metadata.Keyspaces) == 0 || slices.Contains(config.Metadata.Keyspaces, keyspace))
 	p.InternalMu.Lock()
 	if p.InternalSchemaEpoch[keyspace] != epoch || p.schemaRevision[keyspace] != revision || !p.tableRevisionsCurrentLocked(keyspace, tables) {
 		p.InternalMu.Unlock()
-		return &PartialRefreshError{Keyspaces: map[string]error{keyspace: errors.New("schema changed during prepared reconciliation")}}
+		return &metadata.PartialRefreshError{Keyspaces: map[string]error{keyspace: errors.New("schema changed during prepared reconciliation")}}
 	}
 	if publish && s.privateStorage.InternalMetadataDescriber != nil {
 		p.schemaRevision[keyspace]++
 		if absent {
 			s.privateStorage.InternalMetadataDescriber.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalRemoveKeyspace(keyspace)
 		} else {
-			if config.Metadata.Mode == MetadataMinimal {
+			if config.Metadata.Mode == settings.MetadataMinimal {
 				schema = minimal
 			}
 			s.privateStorage.InternalMetadataDescriber.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalSet(keyspace, schema)

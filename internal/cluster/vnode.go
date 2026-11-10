@@ -7,13 +7,17 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/routing"
 )
 
 // Cold-path replica precomputation uses the same distinct-node/rack-budget
 // traversal for every factor, then retains its global ring order for LWT.
-func InternalBuildV2VnodeRanges(ring *tokenRing, ks *KeyspaceMetadata) ([]TokenRange, error) {
-	hosts := make(map[UUID]*HostInfo)
+func InternalBuildV2VnodeRanges(ring *implEndpoint.InternalTokenRing, ks *metadata.KeyspaceMetadata) ([]routing.TokenRange, error) {
+	hosts := make(map[cqltype.UUID]*implEndpoint.HostInfo)
 	dcHosts := make(map[string]int)
 	dcRacks := make(map[string]map[string]bool)
 	for _, entry := range ring.InternalTokens {
@@ -33,7 +37,7 @@ func InternalBuildV2VnodeRanges(ring *tokenRing, ks *KeyspaceMetadata) ([]TokenR
 	factor := func(value string, cap int) (int, error) {
 		n, err := strconv.ParseUint(value, 10, 64)
 		if err != nil {
-			return 0, typeValidation("replication factor", "invalid value %q", value)
+			return 0, cqltype.TypeValidation("replication factor", "invalid value %q", value)
 		}
 		if n > uint64(cap) {
 			return cap, nil
@@ -63,14 +67,14 @@ func InternalBuildV2VnodeRanges(ring *tokenRing, ks *KeyspaceMetadata) ([]TokenR
 	case strings.HasSuffix(ks.StrategyClass, "EverywhereStrategy"):
 		rf = len(hosts)
 	}
-	out := make([]TokenRange, len(ring.InternalTokens))
+	out := make([]routing.TokenRange, len(ring.InternalTokens))
 	for i, entry := range ring.InternalTokens {
-		token, ok := entry.InternalToken.(int64Token)
+		token, ok := entry.InternalToken.(implEndpoint.InternalInt64Token)
 		if !ok {
-			return nil, typeValidation("replica placement", "non-int64 token")
+			return nil, cqltype.TypeValidation("replica placement", "non-int64 token")
 		}
 		out[i].End = int64(token)
-		seen := make(map[UUID]bool)
+		seen := make(map[cqltype.UUID]bool)
 		counts := make(map[string]int)
 		racks := make(map[string]map[string]bool)
 		repeats := make(map[string]int)
@@ -105,7 +109,7 @@ func InternalBuildV2VnodeRanges(ring *tokenRing, ks *KeyspaceMetadata) ([]TokenR
 			} else if len(out[i].Replicas) >= rf {
 				break
 			}
-			out[i].Replicas = append(out[i].Replicas, Target{HostID: id})
+			out[i].Replicas = append(out[i].Replicas, model.Target{HostID: id})
 		}
 	}
 	for i := range out {

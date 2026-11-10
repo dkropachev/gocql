@@ -3,23 +3,28 @@
 
 package cluster
 
-var _ cqlProtocolExtension = &tabletsRoutingV1Ext{}
+import (
+	"github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/logging"
+)
 
-var _ cqlProtocolExtension = &rateLimitExt{}
+var _ endpoint.InternalCqlProtocolExtension = &endpoint.InternalTabletsRoutingV1Ext{}
 
-var _ cqlProtocolExtension = &lwtAddMetadataMarkExt{}
+var _ endpoint.InternalCqlProtocolExtension = &endpoint.InternalRateLimitExt{}
 
-var _ cqlProtocolExtension = &scyllaUseMetadataIDExt{}
+var _ endpoint.InternalCqlProtocolExtension = &endpoint.InternalLwtAddMetadataMarkExt{}
+
+var _ endpoint.InternalCqlProtocolExtension = &endpoint.InternalScyllaUseMetadataIDExt{}
 
 // Returns a partitioner specific to the table, or "nil"
 // if the cluster-global partitioner should be used
-func InternalScyllaGetTablePartitioner(session *Core, keyspaceName, tableName string) (Partitioner, error) {
+func InternalScyllaGetTablePartitioner(session *Core, keyspaceName, tableName string) (endpoint.Partitioner, error) {
 	isCdc, err := InternalScyllaIsCdcTable(session, keyspaceName, tableName)
 	if err != nil {
 		return nil, err
 	}
 	if isCdc {
-		return scyllaCDCPartitioner{InternalLogger: &defaultLogger{}}, nil
+		return endpoint.InternalScyllaCDCPartitioner{InternalLogger: &logging.InternalDefaultLogger{}}, nil
 	}
 
 	return nil, nil

@@ -35,8 +35,15 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/pool"
+	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 // PoolConfig configures the connection pool used by the driver, it defaults to
@@ -50,7 +57,7 @@ type PoolConfig struct {
 	HostSelectionPolicy HostSelectionPolicy
 }
 
-func (p PoolConfig) buildPool(session *Core) *policyConnPool {
+func (p PoolConfig) buildPool(session *Core) *pool.InternalPolicyConnPool {
 	return InternalNewPolicyConnPool(session)
 }
 
@@ -64,25 +71,25 @@ type InternalClusterSettings struct {
 	// Dialer will be used to establish all connections created for this Cluster.
 	// If not provided, a default dialer configured with ConnectTimeout will be used.
 	// Dialer is ignored if HostDialer is provided.
-	Dialer legacyDialer
+	Dialer endpoint.InternalLegacyDialer
 	// ApplicationInfo reports application information to the server by inserting it into options of the STARTUP frame
-	ApplicationInfo ApplicationInfo
+	ApplicationInfo endpoint.ApplicationInfo
 	// DNSResolver Resolves DNS names to IP addresses
-	DNSResolver DNSResolver
+	DNSResolver endpoint.DNSResolver
 	// Logger for this clusterSettings.
 	// If not specified, defaults to the gocql.defaultLogger.
-	Logger StdLogger
+	Logger logging.StdLogger
 	// HostDialer will be used to establish all connections for this Cluster.
 	// Unlike Dialer, HostDialer is responsible for setting up the entire connection, including the TLS session.
 	// To support shard-aware port, HostDialer should implement ShardDialer.
 	// If not provided, Dialer will be used instead.
-	HostDialer HostDialer
+	HostDialer endpoint.HostDialer
 	// StreamObserver will be notified of stream state changes.
 	// This can be used to track in-flight protocol requests and responses.
-	StreamObserver StreamObserver
+	StreamObserver transport.StreamObserver
 	// FrameHeaderObserver will set the provided frame header observer on all frames' headers created from this session.
 	// Use it to collect metrics / stats from frames by providing an implementation of FrameHeaderObserver.
-	FrameHeaderObserver FrameHeaderObserver
+	FrameHeaderObserver transport.FrameHeaderObserver
 	// ConnectObserver will set the provided connect observer on all queries
 	// created from this session.
 	ConnectObserver ConnectObserver
@@ -90,16 +97,16 @@ type InternalClusterSettings struct {
 	// Use it to collect metrics / stats from queries by providing an implementation of QueryObserver.
 	// AddressTranslator will translate addresses found on peer discovery and/or
 	// node change events.
-	AddressTranslator AddressTranslator
+	AddressTranslator endpoint.AddressTranslator
 	// HostFilter will filter all incoming events for host, any which don't pass
 	// the filter will be ignored. If set will take precedence over any options set
 	// via Discovery
 	HostFilter HostFilter
 	// Compression algorithm.
 	// Default: nil
-	Compressor Compressor
+	Compressor protocol.Compressor
 	// Default: nil
-	Authenticator Authenticator
+	Authenticator transport.Authenticator
 	// PoolConfig configures the underlying connection pool, allowing the
 	// configuration of host selection and connection selection policies.
 	PoolConfig PoolConfig
@@ -107,17 +114,17 @@ type InternalClusterSettings struct {
 	// Default: SimpleRetryPolicy{NumRetries: 3}.
 	// ConvictionPolicy decides whether to mark host as down based on the error and host info.
 	// Default: SimpleConvictionPolicy
-	ConvictionPolicy ConvictionPolicy
+	ConvictionPolicy settings.ConvictionPolicy
 	// Default reconnection policy to use for reconnecting before trying to mark host as down.
-	ReconnectionPolicy ReconnectionPolicy
+	ReconnectionPolicy pool.ReconnectionPolicy
 	// A reconnection policy to use for reconnecting when connecting to the cluster first time.
-	InitialReconnectionPolicy ReconnectionPolicy
+	InitialReconnectionPolicy pool.ReconnectionPolicy
 	// SslOpts configures TLS use when HostDialer is not set.
 	// SslOpts is ignored if HostDialer is set.
-	SslOpts *SslOptions
+	SslOpts *transport.SslOptions
 	// An Authenticator factory. Can be used to create alternative authenticators.
 	// Default: nil
-	AuthProvider       func(h *HostInfo) (Authenticator, error)
+	AuthProvider       func(h *endpoint.HostInfo) (transport.Authenticator, error)
 	ClientRoutesConfig *ClientRoutesConfig
 	// The version of the driver that is going to be reported to the server.
 	// Defaulted to current library version
@@ -255,10 +262,10 @@ type InternalClusterSettings struct {
 	MaxExcessShardConnectionsRate float32
 	// Consistency for the serial part of queries, values can be either SERIAL or LOCAL_SERIAL.
 	// Default: unset
-	SerialConsistency Consistency
+	SerialConsistency cqltype.Consistency
 	// Default consistency level.
 	// Default: Quorum
-	Consistency Consistency
+	Consistency cqltype.Consistency
 	// Configure events the driver will register for
 	Events struct {
 		// disable registering for status events (node up/down)
@@ -364,7 +371,7 @@ type InternalClusterSettings struct {
 // resolves to more than 1 IP address then the driver may connect multiple times to
 // the same host, and will not mark the node being down or up from events.
 func InternalNewClusterSettings(hosts ...string) *InternalClusterSettings {
-	logger := &defaultLogger{}
+	logger := &logging.InternalDefaultLogger{}
 	cfg := &InternalClusterSettings{
 		Hosts:                         hosts,
 		CQLVersion:                    "3.0.0",
@@ -374,24 +381,24 @@ func InternalNewClusterSettings(hosts ...string) *InternalClusterSettings {
 		WriteTimeout:                  11 * time.Second,
 		MaxExcessShardConnectionsRate: 2,
 		NumConns:                      2,
-		Consistency:                   Quorum,
+		Consistency:                   cqltype.Quorum,
 		MaxPreparedStmts:              InternalDefaultMaxPreparedStmts,
 		MaxRoutingKeyInfo:             1000,
 		PageSize:                      5000,
 		DefaultTimestamp:              true,
-		DriverName:                    defaultDriverName,
-		DriverVersion:                 defaultDriverVersion,
+		DriverName:                    settings.InternalDefaultDriverName,
+		DriverVersion:                 settings.InternalDefaultDriverVersion,
 		MaxWaitSchemaAgreement:        60 * time.Second,
 		ReconnectInterval:             60 * time.Second,
-		ConvictionPolicy:              &SimpleConvictionPolicy{},
-		ReconnectionPolicy:            &ConstantReconnectionPolicy{MaxRetries: 3, Interval: 1 * time.Second},
-		InitialReconnectionPolicy:     &NoReconnectionPolicy{},
+		ConvictionPolicy:              &settings.SimpleConvictionPolicy{},
+		ReconnectionPolicy:            &pool.ConstantReconnectionPolicy{MaxRetries: 3, Interval: 1 * time.Second},
+		InitialReconnectionPolicy:     &pool.NoReconnectionPolicy{},
 		SocketKeepalive:               15 * time.Second,
 		WriteCoalesceWaitTime:         200 * time.Microsecond,
 		MetadataSchemaRequestTimeout:  60 * time.Second,
 		DisableSkipMetadata:           true,
 		Logger:                        logger,
-		DNSResolver:                   defaultDnsResolver,
+		DNSResolver:                   endpoint.InternalDefaultDnsResolver,
 		EventBusConfig: eventbus.EventBusConfig{
 			InputEventsQueueSize: 10240,
 		},
@@ -400,9 +407,9 @@ func InternalNewClusterSettings(hosts ...string) *InternalClusterSettings {
 	return cfg
 }
 
-func (cfg *InternalClusterSettings) logger() StdLogger {
+func (cfg *InternalClusterSettings) logger() logging.StdLogger {
 	if cfg.Logger == nil {
-		return &defaultLogger{}
+		return &logging.InternalDefaultLogger{}
 	}
 	return cfg.Logger
 }
@@ -417,7 +424,7 @@ func (cfg *InternalClusterSettings) openAsync() (*Core, error) {
 	return InternalConnectSettingsAsync(*cfg)
 }
 
-func InternalClusterSettingsFilterHost(cfg *InternalClusterSettings, host *HostInfo) bool {
+func InternalClusterSettingsFilterHost(cfg *InternalClusterSettings, host *endpoint.HostInfo) bool {
 	return !(cfg.HostFilter == nil || cfg.HostFilter.Accept(host))
 }
 
@@ -535,47 +542,47 @@ func (cfg *InternalClusterSettings) Validate() error {
 	}
 
 	if cfg.Authenticator != nil && cfg.AuthProvider != nil {
-		return typeValidation("Authenticator", "cannot be combined with AuthProvider")
+		return cqltype.TypeValidation("Authenticator", "cannot be combined with AuthProvider")
 	}
 
 	if cfg.InitialReconnectionPolicy == nil {
-		return typeValidation("InitialReconnectionPolicy", "is nil")
+		return cqltype.TypeValidation("InitialReconnectionPolicy", "is nil")
 	}
 
 	if cfg.InitialReconnectionPolicy.GetMaxRetries() <= 0 {
-		return typeValidation("InitialReconnectionPolicy", "GetMaxRetries must return a positive number")
+		return cqltype.TypeValidation("InitialReconnectionPolicy", "GetMaxRetries must return a positive number")
 	}
 
 	if cfg.ReconnectionPolicy == nil {
-		return typeValidation("ReconnectionPolicy", "is nil")
+		return cqltype.TypeValidation("ReconnectionPolicy", "is nil")
 	}
 
 	if cfg.ReconnectionPolicy.GetMaxRetries() <= 0 {
-		return typeValidation("ReconnectionPolicy", "GetMaxRetries must return a positive number")
+		return cqltype.TypeValidation("ReconnectionPolicy", "GetMaxRetries must return a positive number")
 	}
 
 	if cfg.PageSize < 0 {
-		return typeValidation("PageSize", "must not be negative")
+		return cqltype.TypeValidation("PageSize", "must not be negative")
 	}
 
 	if cfg.MaxRoutingKeyInfo < 0 {
-		return typeValidation("MaxRoutingKeyInfo", "must not be negative")
+		return cqltype.TypeValidation("MaxRoutingKeyInfo", "must not be negative")
 	}
 
 	if cfg.MaxPreparedStmts < 0 {
-		return typeValidation("MaxPreparedStmts", "must not be negative")
+		return cqltype.TypeValidation("MaxPreparedStmts", "must not be negative")
 	}
 
 	if cfg.SocketKeepalive < 0 {
-		return typeValidation("SocketKeepalive", "must not be negative")
+		return cqltype.TypeValidation("SocketKeepalive", "must not be negative")
 	}
 
 	if cfg.MaxRequestsPerConn < 0 || cfg.MaxRequestsPerConn > 32768 {
-		return typeValidation("MaxRequestsPerConn", "must be between 0 and 32768")
+		return cqltype.TypeValidation("MaxRequestsPerConn", "must be between 0 and 32768")
 	}
 
 	if cfg.NumConns < 0 {
-		return typeValidation("NumConns", "must not be negative")
+		return cqltype.TypeValidation("NumConns", "must not be negative")
 	}
 
 	// Resolve cfg.Port: when the user has not set it explicitly (Port == 0),
@@ -603,46 +610,46 @@ func (cfg *InternalClusterSettings) Validate() error {
 	}
 
 	if cfg.Port <= 0 || cfg.Port > 65535 {
-		return typeValidation("Port", "must be between 1 and 65535")
+		return cqltype.TypeValidation("Port", "must be between 1 and 65535")
 	}
 
 	if cfg.WriteTimeout < 0 {
-		return typeValidation("WriteTimeout", "must not be negative")
+		return cqltype.TypeValidation("WriteTimeout", "must not be negative")
 	}
 
 	if cfg.Timeout < 0 {
-		return typeValidation("Timeout", "must not be negative")
+		return cqltype.TypeValidation("Timeout", "must not be negative")
 	}
 
 	if cfg.ConnectTimeout < 0 {
-		return typeValidation("ConnectTimeout", "must not be negative")
+		return cqltype.TypeValidation("ConnectTimeout", "must not be negative")
 	}
 
 	if cfg.ReadTimeout < 0 {
-		return typeValidation("ReadTimeout", "must not be negative")
+		return cqltype.TypeValidation("ReadTimeout", "must not be negative")
 	}
 
 	if cfg.MetadataSchemaRequestTimeout < 0 {
-		return typeValidation("MetadataSchemaRequestTimeout", "must not be negative")
+		return cqltype.TypeValidation("MetadataSchemaRequestTimeout", "must not be negative")
 	}
 
 	if cfg.WriteCoalesceWaitTime < 0 {
-		return typeValidation("WriteCoalesceWaitTime", "must not be negative")
+		return cqltype.TypeValidation("WriteCoalesceWaitTime", "must not be negative")
 	}
 
 	if cfg.ReconnectInterval < 0 {
-		return typeValidation("ReconnectInterval", "must not be negative")
+		return cqltype.TypeValidation("ReconnectInterval", "must not be negative")
 	}
 
 	if cfg.MaxWaitSchemaAgreement < 0 {
-		return typeValidation("MaxWaitSchemaAgreement", "must not be negative")
+		return cqltype.TypeValidation("MaxWaitSchemaAgreement", "must not be negative")
 	}
 
 	if cfg.ProtoVersion < 0 || cfg.ProtoVersion > 127 {
-		return typeValidation("ProtoVersion", "must be between 0 and 127")
+		return cqltype.TypeValidation("ProtoVersion", "must be between 0 and 127")
 	}
 
-	if cfg.ProtoVersion >= protoVersion5 && cfg.Compressor != nil {
+	if cfg.ProtoVersion >= protocol.ProtoVersion5 && cfg.Compressor != nil {
 		// The native protocol v5 spec allows only lz4 for segment compression.
 		// A v5 server still advertises snappy in its OPTIONS response, but STARTUP
 		// with COMPRESSION=snappy on v5 is rejected server-side ("Snappy
@@ -654,8 +661,8 @@ func (cfg *InternalClusterSettings) Validate() error {
 		// supports v5 segment framing iff it also implements SegmentCompressor.
 		// The built-in SnappyCompressor deliberately does not; LZ4Compressor does.
 		// A nil compressor (no compression) is always allowed on v5.
-		if _, ok := cfg.Compressor.(SegmentCompressor); !ok {
-			return typeValidation("Compressor", "%q does not support protocol v5 segment framing; use LZ4Compressor or no compression with ProtoVersion >= 5", cfg.Compressor.Name())
+		if _, ok := cfg.Compressor.(protocol.SegmentCompressor); !ok {
+			return cqltype.TypeValidation("Compressor", "%q does not support protocol v5 segment framing; use LZ4Compressor or no compression with ProtoVersion >= 5", cfg.Compressor.Name())
 		}
 	}
 
@@ -671,23 +678,23 @@ func (cfg *InternalClusterSettings) Validate() error {
 	}
 
 	if cfg.SerialConsistency > 0 && !cfg.SerialConsistency.IsSerial() {
-		return typeValidation("SerialConsistency", "must be SERIAL or LOCAL_SERIAL, got %v", cfg.SerialConsistency)
+		return cqltype.TypeValidation("SerialConsistency", "must be SERIAL or LOCAL_SERIAL, got %v", cfg.SerialConsistency)
 	}
 
 	if cfg.DNSResolver == nil {
-		return typeValidation("DNSResolver", "is nil")
+		return cqltype.TypeValidation("DNSResolver", "is nil")
 	}
 
 	if cfg.MaxExcessShardConnectionsRate < 0 {
-		return typeValidation("MaxExcessShardConnectionsRate", "must not be negative")
+		return cqltype.TypeValidation("MaxExcessShardConnectionsRate", "must not be negative")
 	}
 
 	if cfg.ClientRoutesConfig != nil {
 		if cfg.AddressTranslator != nil {
-			return typeValidation("AddressTranslator", "cannot be combined with ClientRoutesConfig")
+			return cqltype.TypeValidation("AddressTranslator", "cannot be combined with ClientRoutesConfig")
 		}
 		if err := cfg.ClientRoutesConfig.Validate(); err != nil {
-			return &ValidationError{Field: "ClientRoutesConfig", Err: err}
+			return &cqltype.ValidationError{Field: "ClientRoutesConfig", Err: err}
 		}
 	}
 
@@ -745,7 +752,7 @@ func InternalLearnPortFromHosts(hosts []string) (int, error) {
 	return port, nil
 }
 
-func InternalSetupTLSConfig(sslOpts *SslOptions, logger StdLogger) (*tls.Config, error) {
+func InternalSetupTLSConfig(sslOpts *transport.SslOptions, logger logging.StdLogger) (*tls.Config, error) {
 	//  Config.InsecureSkipVerify | EnableHostVerification | Result
 	//  Config is nil             | true                   | verify host
 	//  Config is nil             | false                  | do not verify host

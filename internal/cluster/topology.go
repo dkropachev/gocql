@@ -29,12 +29,16 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/metadata"
 )
 
 type InternalHostTokens struct {
 	// token is end (inclusive) of token range these hosts belong to
-	InternalToken Token
-	InternalHosts []*HostInfo
+	InternalToken endpoint.Token
+	InternalHosts []*endpoint.HostInfo
 }
 
 // tokenRingReplicas maps token ranges to list of replicas.
@@ -50,7 +54,7 @@ func (h InternalTokenRingReplicas) Less(i, j int) bool {
 func (h InternalTokenRingReplicas) Len() int      { return len(h) }
 func (h InternalTokenRingReplicas) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 
-func (h InternalTokenRingReplicas) InternalReplicasFor(t Token) *InternalHostTokens {
+func (h InternalTokenRingReplicas) InternalReplicasFor(t endpoint.Token) *InternalHostTokens {
 	if len(h) == 0 {
 		return nil
 	}
@@ -69,13 +73,13 @@ func (h InternalTokenRingReplicas) InternalReplicasFor(t Token) *InternalHostTok
 
 // replicasForInt64 is replicasFor specialized for an already-unboxed int64Token,
 // avoiding a Token-interface comparison on every token-aware routing decision.
-func (h InternalTokenRingReplicas) InternalReplicasForInt64(t int64Token) *InternalHostTokens {
+func (h InternalTokenRingReplicas) InternalReplicasForInt64(t endpoint.InternalInt64Token) *InternalHostTokens {
 	if len(h) == 0 {
 		return nil
 	}
 
 	p := sort.Search(len(h), func(i int) bool {
-		if ht, ok := h[i].InternalToken.(int64Token); ok {
+		if ht, ok := h[i].InternalToken.(endpoint.InternalInt64Token); ok {
 			return ht >= t
 		}
 		// Ring token type differs from int64Token (mismatched partitioner) —
@@ -92,7 +96,7 @@ func (h InternalTokenRingReplicas) InternalReplicasForInt64(t int64Token) *Inter
 }
 
 type InternalPlacementStrategy interface {
-	InternalReplicaMap(tokenRing *tokenRing) InternalTokenRingReplicas
+	InternalReplicaMap(tokenRing *endpoint.InternalTokenRing) InternalTokenRingReplicas
 	InternalReplicationFactor(dc string) int
 }
 
@@ -107,7 +111,7 @@ func InternalGetReplicationFactorFromOpts(val string) (int, error) {
 	return n, nil
 }
 
-func InternalGetStrategy(ks *KeyspaceMetadata, logger StdLogger) InternalPlacementStrategy {
+func InternalGetStrategy(ks *metadata.KeyspaceMetadata, logger logging.StdLogger) InternalPlacementStrategy {
 	switch {
 	case strings.Contains(ks.StrategyClass, "SimpleStrategy"):
 		rf, err := InternalGetReplicationFactorFromOpts(ks.StrategyOptions["replication_factor"])
@@ -149,13 +153,13 @@ func (s *InternalSimpleStrategy) InternalReplicationFactor(dc string) int {
 	return s.InternalRf
 }
 
-func (s *InternalSimpleStrategy) InternalReplicaMap(tokenRing *tokenRing) InternalTokenRingReplicas {
+func (s *InternalSimpleStrategy) InternalReplicaMap(tokenRing *endpoint.InternalTokenRing) InternalTokenRingReplicas {
 	tokens := tokenRing.InternalTokens
 	ring := make(InternalTokenRingReplicas, len(tokens))
 
 	for i, th := range tokens {
-		replicas := make([]*HostInfo, 0, s.InternalRf)
-		seen := make(map[*HostInfo]bool)
+		replicas := make([]*endpoint.HostInfo, 0, s.InternalRf)
+		seen := make(map[*endpoint.HostInfo]bool)
 
 		for j := 0; j < len(tokens) && len(replicas) < s.InternalRf; j++ {
 			h := tokens[(i+j)%len(tokens)]
@@ -195,10 +199,10 @@ func (n *InternalNetworkTopology) haveRF(replicaCounts map[string]int) bool {
 	return true
 }
 
-func (n *InternalNetworkTopology) InternalReplicaMap(tokenRing *tokenRing) InternalTokenRingReplicas {
+func (n *InternalNetworkTopology) InternalReplicaMap(tokenRing *endpoint.InternalTokenRing) InternalTokenRingReplicas {
 	dcRacks := make(map[string]map[string]struct{}, len(n.InternalDcs))
 	// skipped hosts in a dc
-	skipped := make(map[string][]*HostInfo, len(n.InternalDcs))
+	skipped := make(map[string][]*endpoint.HostInfo, len(n.InternalDcs))
 	// number of replicas per dc
 	replicasInDC := make(map[string]int, len(n.InternalDcs))
 	// dc -> racks
@@ -246,7 +250,7 @@ func (n *InternalNetworkTopology) InternalReplicaMap(tokenRing *tokenRing) Inter
 			}
 		}
 
-		replicas := make([]*HostInfo, 0, totalRF)
+		replicas := make([]*endpoint.HostInfo, 0, totalRF)
 		for j := 0; j < len(tokens) && (len(replicas) < totalRF && !n.haveRF(replicasInDC)); j++ {
 			// TODO: ensure we dont add the same host twice
 			p := i + j

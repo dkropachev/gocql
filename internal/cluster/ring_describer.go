@@ -9,24 +9,28 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 // Polls system.peers at a specific interval to find new hosts
 type InternalRingDescriber struct {
 	InternalControl InternalControlConnection
-	InternalLogger  StdLogger
+	InternalLogger  logging.StdLogger
 	InternalCfg     *InternalClusterSettings
 	// hosts are the set of all hosts in the cassandra ring that we know of.
 	// key of map is host_id.
-	InternalHosts map[string]*HostInfo
+	InternalHosts map[string]*implEndpoint.HostInfo
 	// hostIPToUUID maps host native address to host_id.
 	hostIPToUUID       map[string]string
 	hostsView          atomic.Pointer[ringHostsView] // InternalHostsView cache
 	tombstones         map[string]bool
 	tombstoneAddresses map[string]string
 	prevPartitioner    string
-	prevHosts          []*HostInfo
+	prevHosts          []*implEndpoint.HostInfo
 	diagnostics        []error
 	revision           uint64
 	eventEpoch         uint64
@@ -43,23 +47,23 @@ func (r *InternalRingDescriber) setControlConn(c InternalControlConnection) {
 }
 
 // Ask the control node for the local host info
-func (r *InternalRingDescriber) getLocalHostInfo(ctx context.Context, conn ConnInterface) (*HostInfo, error) {
-	hosts, err := InternalReadV2Topology(ctx, conn, qrySystemLocal, r.InternalCfg.Port)
+func (r *InternalRingDescriber) getLocalHostInfo(ctx context.Context, conn transport.ConnInterface) (*implEndpoint.HostInfo, error) {
+	hosts, err := InternalReadV2Topology(ctx, conn, transport.InternalQrySystemLocal, r.InternalCfg.Port)
 	if err != nil {
 		return nil, fmt.Errorf("could not retrieve local host info: %w", err)
 	}
 	if len(hosts) != 1 || implEndpoint.InternalHostInfoHostUUID(hosts[0]).IsEmpty() || implEndpoint.InternalHostInfoInvalidConnectAddr(hosts[0]) {
-		return nil, typeValidation("local topology", "expected one valid local identity")
+		return nil, cqltype.TypeValidation("local topology", "expected one valid local identity")
 	}
 	return hosts[0], nil
 }
 
-func (r *InternalRingDescriber) InternalGetClusterPeerInfo(ctx context.Context, c ConnInterface) ([]*HostInfo, error) {
-	stmt := qrySystemPeersCassandra
+func (r *InternalRingDescriber) InternalGetClusterPeerInfo(ctx context.Context, c transport.ConnInterface) ([]*implEndpoint.HostInfo, error) {
+	stmt := transport.InternalQrySystemPeersCassandra
 	if c.InternalGetIsSchemaV2() {
-		stmt = qrySystemPeersV2
+		stmt = transport.InternalQrySystemPeersV2
 	} else if c.InternalIsScyllaConn() {
-		stmt = qrySystemPeers
+		stmt = transport.InternalQrySystemPeers
 	}
 	hosts, err := InternalReadV2Topology(ctx, c, stmt, r.InternalCfg.Port)
 	if err != nil {
@@ -71,7 +75,7 @@ func (r *InternalRingDescriber) InternalGetClusterPeerInfo(ctx context.Context, 
 			valid = append(valid, h)
 			continue
 		}
-		cause := typeValidation("peer topology", "incomplete peer %s", h.HostID())
+		cause := cqltype.TypeValidation("peer topology", "incomplete peer %s", h.HostID())
 		r.mu.Lock()
 		known := r.InternalHosts[h.HostID()] != nil
 		for _, old := range r.prevHosts {
@@ -92,8 +96,8 @@ func (r *InternalRingDescriber) InternalGetClusterPeerInfo(ctx context.Context, 
 	return valid, nil
 }
 
-func InternalGetPeersFromQuerySystemPeers(querySystemPeerRows []map[string]any, defaultPort int, logger StdLogger) ([]*HostInfo, error) {
-	var peers []*HostInfo
+func InternalGetPeersFromQuerySystemPeers(querySystemPeerRows []map[string]any, defaultPort int, logger logging.StdLogger) ([]*implEndpoint.HostInfo, error) {
+	var peers []*implEndpoint.HostInfo
 
 	for _, row := range querySystemPeerRows {
 		// extract all available info about the peer
@@ -116,16 +120,16 @@ func InternalGetPeersFromQuerySystemPeers(querySystemPeerRows []map[string]any, 
 }
 
 // Return true if the host is a valid peer
-func InternalIsValidPeer(host *HostInfo) bool {
+func InternalIsValidPeer(host *implEndpoint.HostInfo) bool {
 	return !(len(host.RPCAddress()) == 0 || implEndpoint.HostInfoData(host).InternalHostId.IsEmpty() || implEndpoint.HostInfoData(host).InternalDataCenter == "" || implEndpoint.HostInfoData(host).InternalRack == "")
 }
 
-func InternalIsZeroToken(host *HostInfo) bool {
+func InternalIsZeroToken(host *implEndpoint.HostInfo) bool {
 	return len(implEndpoint.HostInfoData(host).InternalTokens) == 0
 }
 
 // GetHostsFromSystem returns a list of hosts found via queries to system.local and system.peers
-func (r *InternalRingDescriber) GetHostsFromSystem() ([]*HostInfo, string, error) {
+func (r *InternalRingDescriber) GetHostsFromSystem() ([]*implEndpoint.HostInfo, string, error) {
 	r.readMu.Lock()
 	defer r.readMu.Unlock()
 	r.mu.Lock()
@@ -139,22 +143,22 @@ func (r *InternalRingDescriber) GetHostsFromSystem() ([]*HostInfo, string, error
 	r.mu.RUnlock()
 
 	if control == nil {
-		return previous, partitionerBefore, errNoControl
+		return previous, partitionerBefore, metadata.InternalErrNoControl
 	}
 	ch := control.InternalGetConn()
 	if ch == nil || ch.InternalConn == nil {
-		return previous, partitionerBefore, errNoControl
+		return previous, partitionerBefore, metadata.InternalErrNoControl
 	}
 
 	var (
-		localHost *HostInfo
-		peerHosts []*HostInfo
+		localHost *implEndpoint.HostInfo
+		peerHosts []*implEndpoint.HostInfo
 		wg        sync.WaitGroup
 		errMu     sync.Mutex
 		firstErr  error
 	)
 
-	ctx, cancel := context.WithCancel(v2SchemaContext(InternalNewSchemaSource(control.InternalGetSession())))
+	ctx, cancel := context.WithCancel(metadata.InternalV2SchemaContext(InternalNewSchemaSource(control.InternalGetSession())))
 	defer cancel()
 
 	recordErr := func(err error) {
@@ -188,12 +192,12 @@ func (r *InternalRingDescriber) GetHostsFromSystem() ([]*HostInfo, string, error
 		return previous, partitionerBefore, firstErr
 	}
 
-	hosts := []*HostInfo{localHost}
+	hosts := []*implEndpoint.HostInfo{localHost}
 	hosts = append(hosts, peerHosts...)
-	seen := make(map[UUID]bool, len(hosts))
+	seen := make(map[cqltype.UUID]bool, len(hosts))
 	for _, h := range hosts {
 		if seen[implEndpoint.InternalHostInfoHostUUID(h)] {
-			return previous, partitionerBefore, typeValidation("topology", "duplicate host identity %s", h.HostID())
+			return previous, partitionerBefore, cqltype.TypeValidation("topology", "duplicate host identity %s", h.HostID())
 		}
 		seen[implEndpoint.InternalHostInfoHostUUID(h)] = true
 	}
@@ -206,7 +210,7 @@ func (r *InternalRingDescriber) GetHostsFromSystem() ([]*HostInfo, string, error
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.eventEpoch != epoch {
-		return previous, partitionerBefore, typeValidation("topology generation", "topology changed during read")
+		return previous, partitionerBefore, cqltype.TypeValidation("topology generation", "topology changed during read")
 	}
 	filtered := hosts[:0]
 	for _, host := range hosts {
@@ -221,23 +225,23 @@ func (r *InternalRingDescriber) GetHostsFromSystem() ([]*HostInfo, string, error
 	return hosts, partitioner, nil
 }
 
-func (r *InternalRingDescriber) InternalGetHostByIP(ip string) (*HostInfo, bool) {
+func (r *InternalRingDescriber) InternalGetHostByIP(ip string) (*implEndpoint.HostInfo, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	hi, ok := r.hostIPToUUID[ip]
 	return r.InternalHosts[hi], ok
 }
 
-func (r *InternalRingDescriber) InternalGetHost(hostID string) *HostInfo {
+func (r *InternalRingDescriber) InternalGetHost(hostID string) *implEndpoint.HostInfo {
 	r.mu.RLock()
 	host := r.InternalHosts[hostID]
 	r.mu.RUnlock()
 	return host
 }
 
-func (r *InternalRingDescriber) InternalGetHostsList() []*HostInfo {
+func (r *InternalRingDescriber) InternalGetHostsList() []*implEndpoint.HostInfo {
 	r.mu.RLock()
-	hosts := make([]*HostInfo, 0, len(r.InternalHosts))
+	hosts := make([]*implEndpoint.HostInfo, 0, len(r.InternalHosts))
 	for _, host := range r.InternalHosts {
 		hosts = append(hosts, host)
 	}
@@ -247,7 +251,7 @@ func (r *InternalRingDescriber) InternalGetHostsList() []*HostInfo {
 
 // ringHostsView is an immutable host list for one ring revision.
 type ringHostsView struct {
-	hosts    []*HostInfo
+	hosts    []*implEndpoint.HostInfo
 	revision uint64
 }
 
@@ -255,7 +259,7 @@ type ringHostsView struct {
 // It is rebuilt only when the ring revision changes, so per-request callers
 // allocate nothing. Callers must not modify it; InternalGetHostsList returns
 // a private copy.
-func (r *InternalRingDescriber) InternalHostsView() []*HostInfo {
+func (r *InternalRingDescriber) InternalHostsView() []*implEndpoint.HostInfo {
 	// Every revision change clears the view under the write lock, so a
 	// published view is always current.
 	if v := r.hostsView.Load(); v != nil {
@@ -266,7 +270,7 @@ func (r *InternalRingDescriber) InternalHostsView() []*HostInfo {
 	if v := r.hostsView.Load(); v != nil && v.revision == r.revision {
 		return v.hosts
 	}
-	hosts := make([]*HostInfo, 0, len(r.InternalHosts))
+	hosts := make([]*implEndpoint.HostInfo, 0, len(r.InternalHosts))
 	for _, host := range r.InternalHosts {
 		hosts = append(hosts, host)
 	}
@@ -281,9 +285,9 @@ func (r *InternalRingDescriber) bumpRevisionLocked() {
 	r.hostsView.Store(nil)
 }
 
-func (r *InternalRingDescriber) getHostsMap() map[string]*HostInfo {
+func (r *InternalRingDescriber) getHostsMap() map[string]*implEndpoint.HostInfo {
 	r.mu.RLock()
-	hosts := make(map[string]*HostInfo, len(r.InternalHosts))
+	hosts := make(map[string]*implEndpoint.HostInfo, len(r.InternalHosts))
 	for k, v := range r.InternalHosts {
 		hosts[k] = v
 	}
@@ -291,7 +295,7 @@ func (r *InternalRingDescriber) getHostsMap() map[string]*HostInfo {
 	return hosts
 }
 
-func (r *InternalRingDescriber) InternalAddOrUpdate(host *HostInfo) *HostInfo {
+func (r *InternalRingDescriber) InternalAddOrUpdate(host *implEndpoint.HostInfo) *implEndpoint.HostInfo {
 	if existingHost, ok := r.InternalAddHostIfMissing(host); ok {
 		implEndpoint.InternalHostInfoUpdate(existingHost, host)
 		host = existingHost
@@ -299,15 +303,15 @@ func (r *InternalRingDescriber) InternalAddOrUpdate(host *HostInfo) *HostInfo {
 	return host
 }
 
-func (r *InternalRingDescriber) InternalAddHostIfMissing(host *HostInfo) (*HostInfo, bool) {
-	if !validIpAddr(host.ConnectAddress()) {
+func (r *InternalRingDescriber) InternalAddHostIfMissing(host *implEndpoint.HostInfo) (*implEndpoint.HostInfo, bool) {
+	if !implEndpoint.InternalValidIpAddr(host.ConnectAddress()) {
 		panic(fmt.Sprintf("invalid host: %v", host))
 	}
 	hostID := host.HostID()
 
 	r.mu.Lock()
 	if r.InternalHosts == nil {
-		r.InternalHosts = make(map[string]*HostInfo)
+		r.InternalHosts = make(map[string]*implEndpoint.HostInfo)
 	}
 	if r.hostIPToUUID == nil {
 		r.hostIPToUUID = make(map[string]string)
@@ -327,7 +331,7 @@ func (r *InternalRingDescriber) InternalAddHostIfMissing(host *HostInfo) (*HostI
 func (r *InternalRingDescriber) InternalRemoveHost(hostID string) bool {
 	r.mu.Lock()
 	if r.InternalHosts == nil {
-		r.InternalHosts = make(map[string]*HostInfo)
+		r.InternalHosts = make(map[string]*implEndpoint.HostInfo)
 	}
 	if r.hostIPToUUID == nil {
 		r.hostIPToUUID = make(map[string]string)

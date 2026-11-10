@@ -6,16 +6,21 @@ package cluster
 import (
 	"context"
 	"sync/atomic"
+
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/schemafence"
+	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
 type InternalExecutionWaiter interface{ Wait() }
 type InternalExecutionLifecycle interface {
-	Trace(context.Context, UUID) (TraceInfo, error)
+	Trace(context.Context, cqltype.UUID) (TraceInfo, error)
 	StopPrepared() InternalExecutionWaiter
 	StopActive() InternalExecutionWaiter
-	MetricsSnapshot() MetricsSnapshot
-	Profile() *Profile
-	ConfigSnapshot() Config
+	MetricsSnapshot() routing.MetricsSnapshot
+	Profile() *settings.Profile
+	ConfigSnapshot() settings.Config
 }
 
 func InternalCurrentExecution(s *Core) InternalExecutionLifecycle {
@@ -23,11 +28,11 @@ func InternalCurrentExecution(s *Core) InternalExecutionLifecycle {
 	defer s.privateStorage.InternalTypedMu.Unlock()
 	return s.privateStorage.InternalTypedState
 }
-func InternalSessionSchemaTracker(s *Core) *preparedSchemaTracker {
+func InternalSessionSchemaTracker(s *Core) *schemafence.InternalPreparedSchemaTracker {
 	s.privateStorage.schemaMu.Lock()
 	defer s.privateStorage.schemaMu.Unlock()
 	if s.privateStorage.schema == nil {
-		s.privateStorage.schema = &preparedSchemaTracker{InternalEpochs: make(map[preparedDependencyKey]*atomic.Uint64)}
+		s.privateStorage.schema = &schemafence.InternalPreparedSchemaTracker{InternalEpochs: make(map[schemafence.InternalPreparedDependencyKey]*atomic.Uint64)}
 	}
 	return s.privateStorage.schema
 }

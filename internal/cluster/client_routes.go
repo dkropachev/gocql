@@ -14,6 +14,10 @@ import (
 
 	"github.com/scylladb/gocql/v2/events"
 	"github.com/scylladb/gocql/v2/internal/debug"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 type ClientRoutesEndpoint struct {
@@ -293,7 +297,7 @@ type ClientRoutesHandler struct {
 // It resolves DNS on every call rather than caching resolved addresses.
 // If the user provided a ConnectionAddr for the route's connectionID,
 // that address is used instead of the one from the system.client_routes table.
-func (p *ClientRoutesHandler) TranslateHost(host AddressTranslatorHostInfo, addr AddressPort) (AddressPort, error) {
+func (p *ClientRoutesHandler) TranslateHost(host endpoint.AddressTranslatorHostInfo, addr endpoint.AddressPort) (endpoint.AddressPort, error) {
 	hostID := host.HostID()
 	if hostID == "" {
 		return addr, nil
@@ -310,7 +314,7 @@ func (p *ClientRoutesHandler) TranslateHost(host AddressTranslatorHostInfo, addr
 			return endpoints[0], nil
 		}
 	}
-	return AddressPort{}, fmt.Errorf("no usable route for host %s: %w", hostID, errors.Join(causes...))
+	return endpoint.AddressPort{}, fmt.Errorf("no usable route for host %s: %w", hostID, errors.Join(causes...))
 }
 
 type InternalPair struct {
@@ -339,7 +343,7 @@ func (p *ClientRoutesHandler) Initialize(s *Core) error {
 	select {
 	case <-p.privateStorage.InternalCloseChan:
 		p.privateStorage.queueMu.Unlock()
-		return ErrClosed
+		return runtimeerrors.ErrClosed
 	default:
 	}
 	p.privateStorage.InternalSession = s
@@ -388,10 +392,10 @@ func InternalClientRoutesHandlerUpdateHostPortMappingAsync(p *ClientRoutesHandle
 func InternalClientRoutesHandlerUpdateHostPortMappingSync(p *ClientRoutesHandler, task InternalUpdateTask) error {
 	select {
 	case <-p.privateStorage.InternalCloseChan:
-		return ErrClosed
+		return runtimeerrors.ErrClosed
 	default:
 	}
-	return p.updateHostPortMappingContext(v2SchemaContext(InternalNewSchemaSource(p.privateStorage.InternalSession)), task)
+	return p.updateHostPortMappingContext(metadata.InternalV2SchemaContext(InternalNewSchemaSource(p.privateStorage.InternalSession)), task)
 }
 
 func InternalClientRoutesHandlerStartReadingEvents(p *ClientRoutesHandler, connectionIDs []string) {
@@ -475,7 +479,7 @@ func InternalClientRoutesHandlerStartUpdateWorker(p *ClientRoutesHandler) {
 						task.InternalRelease()
 					}
 					if task.result != nil {
-						task.result <- ErrClosed
+						task.result <- runtimeerrors.ErrClosed
 					}
 				default:
 					return
@@ -497,7 +501,7 @@ func InternalClientRoutesHandlerStartUpdateWorker(p *ClientRoutesHandler) {
 					}
 				}
 				if p.privateStorage.needsResync.Swap(false) {
-					_ = p.refreshContext(v2SchemaContext(InternalNewSchemaSource(p.privateStorage.InternalSession)))
+					_ = p.refreshContext(metadata.InternalV2SchemaContext(InternalNewSchemaSource(p.privateStorage.InternalSession)))
 				}
 				if task.result != nil {
 					task.result <- err
@@ -511,18 +515,18 @@ func InternalClientRoutesHandlerStartUpdateWorker(p *ClientRoutesHandler) {
 }
 
 func (p *ClientRoutesHandler) updateHostPortMapping(task InternalUpdateTask) error {
-	ctx := v2SchemaContext(InternalNewSchemaSource(p.privateStorage.InternalSession))
+	ctx := metadata.InternalV2SchemaContext(InternalNewSchemaSource(p.privateStorage.InternalSession))
 	return p.updateHostPortMappingContext(ctx, task)
 }
 
 func NewClientRoutesAddressTranslator(
 	cfg ClientRoutesConfig,
-	resolver DNSResolver,
+	resolver endpoint.DNSResolver,
 	pickTLSPorts bool,
-	log StdLogger,
+	log logging.StdLogger,
 ) *ClientRoutesHandler {
 	if resolver == nil {
-		resolver = defaultDnsResolver
+		resolver = endpoint.InternalDefaultDnsResolver
 	}
 	overrides := make(map[string]string, len(cfg.Endpoints))
 	for _, ep := range cfg.Endpoints {
@@ -545,14 +549,14 @@ func NewClientRoutesAddressTranslator(
 
 }
 
-var _ AddressTranslator = func() *ClientRoutesHandler {
+var _ endpoint.AddressTranslator = func() *ClientRoutesHandler {
 	opaqueStorageValuex := new(ClientRoutesHandler)
 	return opaqueStorageValuex
 }()
 
 func InternalGetHostPortMappingForConnectionIDs(c InternalControlConnection, table string, ids []string, tls bool) ([]InternalClientRoute, error) {
-	return InternalGetV2RoutesConnections(v2SchemaContext(InternalNewSchemaSource(c.InternalGetSession())), c, table, ids, tls)
+	return InternalGetV2RoutesConnections(metadata.InternalV2SchemaContext(InternalNewSchemaSource(c.InternalGetSession())), c, table, ids, tls)
 }
 func InternalGetHostPortMappingForPairs(c InternalControlConnection, table string, pairs []InternalPair, tls bool) ([]InternalClientRoute, error) {
-	return InternalGetV2RoutesPairs(v2SchemaContext(InternalNewSchemaSource(c.InternalGetSession())), c, table, pairs, tls)
+	return InternalGetV2RoutesPairs(metadata.InternalV2SchemaContext(InternalNewSchemaSource(c.InternalGetSession())), c, table, pairs, tls)
 }

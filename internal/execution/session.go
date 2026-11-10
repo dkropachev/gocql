@@ -156,7 +156,7 @@ func (s *Session) Close() error { return s.core.Close() }
 func (s *Session) Closed() bool { return s.core.Closed() }
 
 // Metadata returns the current cluster metadata snapshot.
-func (s *Session) Metadata() *implCluster.MetadataSnapshot { return s.core.Metadata() }
+func (s *Session) Metadata() *routing.MetadataSnapshot { return s.core.Metadata() }
 
 // Metrics returns a snapshot of the session's metrics.
 func (s *Session) Metrics() routing.MetricsSnapshot { return InternalCore(s).Metrics() }

@@ -7,26 +7,32 @@ import (
 	"context"
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/binding"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
-func InternalReadV2Topology(ctx context.Context, conn ConnInterface, stmt string, port int) ([]*HostInfo, error) {
+func InternalReadV2Topology(ctx context.Context, conn transport.ConnInterface, stmt string, port int) ([]*implEndpoint.HostInfo, error) {
 	backend, ok := conn.(interface {
-		InternalExecuteTyped(context.Context, *attemptRequest) (*responsePage, error)
+		InternalExecuteTyped(context.Context, *model.AttemptRequest) (*transport.InternalResponsePage, error)
 	})
 	if !ok {
-		return nil, typeValidation("topology query", "connection does not support typed requests")
+		return nil, cqltype.TypeValidation("topology query", "connection does not support typed requests")
 	}
 	timeout := InternalTimeForTopology(conn)
 	execute := backend.InternalExecuteTyped
-	if c, ok := conn.(*Conn); ok {
+	if c, ok := conn.(*transport.Conn); ok {
 		execute = c.InternalExecuteV2System
 	}
-	rows, err := InternalReadV2SystemRowsVia(ctx, 4, timeout, execute, Statement[EmptyRecord, v2TopologyRow]{CQL: stmt, Params: EmptyParamsEncoder, Rows: v2DecodeTopology()}, NewColumns(), EmptyRecord{})
+	rows, err := InternalReadV2SystemRowsVia(ctx, 4, timeout, execute, binding.Statement[codec.EmptyRecord, metadata.InternalV2TopologyRow]{CQL: stmt, Params: codec.EmptyParamsEncoder, Rows: metadata.InternalV2DecodeTopology()}, cqltype.NewColumns(), codec.EmptyRecord{})
 	if err != nil {
 		return nil, err
 	}
-	hosts := make([]*HostInfo, 0, len(rows))
+	hosts := make([]*implEndpoint.HostInfo, 0, len(rows))
 	for _, row := range rows {
 		h, err := row.InternalHost(port)
 		if err != nil {
@@ -37,8 +43,8 @@ func InternalReadV2Topology(ctx context.Context, conn ConnInterface, stmt string
 	return hosts, nil
 }
 
-func InternalTimeForTopology(conn ConnInterface) time.Duration {
-	if c, ok := conn.(*Conn); ok {
+func InternalTimeForTopology(conn transport.ConnInterface) time.Duration {
+	if c, ok := conn.(*transport.Conn); ok {
 		return c.InternalGetSystemRequestState().InternalTimeout
 	}
 	return time.Minute
@@ -46,26 +52,26 @@ func InternalTimeForTopology(conn ConnInterface) time.Duration {
 
 // Resolve each explicitly configured endpoint through its own system.local.
 // This establishes real identities without discovering additional peers.
-func (s *Core) v2ContactIdentities(ctx context.Context, contacts []*HostInfo) ([]*HostInfo, error) {
-	var hosts []*HostInfo
+func (s *Core) v2ContactIdentities(ctx context.Context, contacts []*implEndpoint.HostInfo) ([]*implEndpoint.HostInfo, error) {
+	var hosts []*implEndpoint.HostInfo
 	current := s.privateStorage.InternalControl.InternalGetConn()
-	seen := make(map[UUID]bool)
+	seen := make(map[cqltype.UUID]bool)
 	for _, contact := range contacts {
-		var conn *Conn
+		var conn *transport.Conn
 		if current != nil {
-			if c, ok := current.InternalConn.(*Conn); ok && contact.ConnectAddress().Equal(c.InternalHost.ConnectAddress()) && contact.Port() == c.InternalHost.Port() {
+			if c, ok := current.InternalConn.(*transport.Conn); ok && contact.ConnectAddress().Equal(c.InternalHost.ConnectAddress()) && contact.Port() == c.InternalHost.Port() {
 				conn = c
 			}
 		}
 		temporary := conn == nil
 		var err error
 		if temporary {
-			conn, err = InternalSessionDial(s, ctx, contact, InternalSessionControlConnConfig(s), connErrorHandlerFn(func(c *Conn, _ error, _ bool) { c.Close() }))
+			conn, err = InternalSessionDial(s, ctx, contact, InternalSessionControlConnConfig(s), transport.InternalConnErrorHandlerFn(func(c *transport.Conn, _ error, _ bool) { c.Close() }))
 			if err != nil {
 				return nil, err
 			}
 		}
-		rows, err := InternalReadV2Topology(ctx, conn, qrySystemLocal, s.privateStorage.InternalCfg.Port)
+		rows, err := InternalReadV2Topology(ctx, conn, transport.InternalQrySystemLocal, s.privateStorage.InternalCfg.Port)
 		if temporary {
 			conn.Close()
 			conn.InternalWaitEventDispatch()
@@ -74,7 +80,7 @@ func (s *Core) v2ContactIdentities(ctx context.Context, contacts []*HostInfo) ([
 			return nil, err
 		}
 		if len(rows) != 1 || implEndpoint.InternalHostInfoHostUUID(rows[0]).IsEmpty() {
-			return nil, typeValidation("contact identity", "expected one actual local UUID")
+			return nil, cqltype.TypeValidation("contact identity", "expected one actual local UUID")
 		}
 		implEndpoint.InternalHostInfoUpdate(contact, rows[0])
 		if !seen[implEndpoint.InternalHostInfoHostUUID(contact)] {

@@ -307,7 +307,7 @@ func shardTestContactPort(contactPoints []string, defaultPort uint16) uint16 {
 }
 
 type sourcePortOffByOneTestDialer struct {
-	ScyllaShardAwareDialer
+	endpoint.ScyllaShardAwareDialer
 }
 
 func (spobo *sourcePortOffByOneTestDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -342,7 +342,7 @@ func (aonsa *allowOnlyNonShardAwarePortDialer) DialContext(ctx context.Context, 
 }
 
 type loggingTestDialer struct {
-	ScyllaShardAwareDialer
+	endpoint.ScyllaShardAwareDialer
 
 	events map[string][]testConnectionEvent
 	mu     sync.Mutex

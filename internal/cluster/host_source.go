@@ -31,51 +31,55 @@ import (
 	"net"
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
 func InternalCheckSystemSchema(control InternalControlConnection) (bool, error) {
 	if control == nil {
-		return false, errNoControl
+		return false, metadata.InternalErrNoControl
 	}
 	backend, ok := control.(InternalV2SystemQueryer)
 	if !ok {
-		return false, typeValidation("schema discovery", "control connection does not support typed queries")
+		return false, cqltype.TypeValidation("schema discovery", "control connection does not support typed queries")
 	}
 	ctx := context.Background()
 	timeout := 60 * time.Second
 	if session := control.InternalGetSession(); session != nil {
-		ctx = v2SchemaContext(InternalNewSchemaSource(session))
+		ctx = metadata.InternalV2SchemaContext(InternalNewSchemaSource(session))
 		if session.privateStorage.InternalCfg.MetadataSchemaRequestTimeout > 0 {
 			timeout = session.privateStorage.InternalCfg.MetadataSchemaRequestTimeout
 		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	page, err := backend.InternalQueryV2System(ctx, &attemptRequest{Statement: "SELECT * FROM system_schema.keyspaces", Consistency: One, PageSize: 1, Timeout: timeout})
+	page, err := backend.InternalQueryV2System(ctx, &model.AttemptRequest{Statement: "SELECT * FROM system_schema.keyspaces", Consistency: cqltype.One, PageSize: 1, Timeout: timeout})
 	if page != nil && page.Owner != nil {
 		defer page.Owner.Release()
 	}
 	if err != nil {
-		if server, ok := errors.AsType[RequestError](err); ok && server.GetCode() == ErrCodeSyntax {
+		if server, ok := errors.AsType[protocol.RequestError](err); ok && server.GetCode() == protocol.ErrCodeSyntax {
 			return false, nil
 		}
 		return false, err
 	}
 	if page == nil {
-		return false, errNoControl
+		return false, metadata.InternalErrNoControl
 	}
 	return true, nil
 }
 
 // Given a map that represents a row from either system.local or system.peers
 // return as much information as we can in *HostInfo
-func InternalHostInfoFromMap(row map[string]any, defaultPort int) (*HostInfo, error) {
+func InternalHostInfoFromMap(row map[string]any, defaultPort int) (*implEndpoint.HostInfo, error) {
 	const assertErrorMsg = "Assertion failed for %s"
 	var ok bool
 
-	host := *func() *HostInfo {
-		opaqueStorageValue := new(HostInfo)
+	host := *func() *implEndpoint.HostInfo {
+		opaqueStorageValue := new(implEndpoint.HostInfo)
 		return opaqueStorageValue
 	}()
 
@@ -93,7 +97,7 @@ func InternalHostInfoFromMap(row map[string]any, defaultPort int) (*HostInfo, er
 				return nil, fmt.Errorf(assertErrorMsg, "rack")
 			}
 		case "host_id":
-			hostId, ok := value.(UUID)
+			hostId, ok := value.(cqltype.UUID)
 			if !ok {
 				return nil, fmt.Errorf(assertErrorMsg, "host_id")
 			}
@@ -162,7 +166,7 @@ func InternalHostInfoFromMap(row map[string]any, defaultPort int) (*HostInfo, er
 				return nil, fmt.Errorf(assertErrorMsg, "tokens")
 			}
 		case "schema_version":
-			schemaVersion, ok := value.(UUID)
+			schemaVersion, ok := value.(cqltype.UUID)
 			if !ok {
 				return nil, fmt.Errorf(assertErrorMsg, "schema_version")
 			}
@@ -200,11 +204,11 @@ func (s *Core) refreshRing() error {
 	sequence := r.refreshSequence
 	epoch := r.eventEpoch
 	r.mu.Unlock()
-	var hosts []*HostInfo
+	var hosts []*implEndpoint.HostInfo
 	var partitioner string
 	var err error
 	if s.privateStorage.InternalCfg.DisableInitialHostLookup {
-		hosts, err = s.v2ContactIdentities(v2SchemaContext(InternalNewSchemaSource(s)), r.InternalGetHostsList())
+		hosts, err = s.v2ContactIdentities(metadata.InternalV2SchemaContext(InternalNewSchemaSource(s)), r.InternalGetHostsList())
 		if len(hosts) > 0 {
 			partitioner = hosts[0].Partitioner()
 		}
@@ -212,7 +216,7 @@ func (s *Core) refreshRing() error {
 		hosts, partitioner, err = r.GetHostsFromSystem()
 	}
 	if err != nil {
-		return &PartialRefreshError{Generation: s.Metadata().Generation(), Topology: err}
+		return &metadata.PartialRefreshError{Generation: s.Metadata().Generation(), Topology: err}
 	}
 	enabled := make(map[string]bool, len(hosts))
 	for _, h := range hosts {
@@ -221,12 +225,12 @@ func (s *Core) refreshRing() error {
 	r.mu.Lock()
 	if r.eventEpoch != epoch || r.refreshSequence != sequence {
 		r.mu.Unlock()
-		return &PartialRefreshError{Generation: s.Metadata().Generation(), Topology: typeValidation("topology generation", "topology changed during refresh")}
+		return &metadata.PartialRefreshError{Generation: s.Metadata().Generation(), Topology: cqltype.TypeValidation("topology generation", "topology changed during refresh")}
 	}
 	before := r.InternalHosts
-	next := make(map[string]*HostInfo, len(hosts))
+	next := make(map[string]*implEndpoint.HostInfo, len(hosts))
 	byIP := make(map[string]string, len(hosts))
-	var added, removed []*HostInfo
+	var added, removed []*implEndpoint.HostInfo
 	for _, h := range hosts {
 		id := h.HostID()
 		if r.tombstones[id] {

@@ -4,7 +4,10 @@
 package cluster
 
 import (
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/settings"
 
 	"net"
 	"net/netip"
@@ -32,7 +35,7 @@ type Event struct {
 	Change, Target, Keyspace, Object string
 	ArgumentTypes                    []string
 	Generation                       uint64
-	HostID                           UUID
+	HostID                           cqltype.UUID
 	Kind                             EventKind
 }
 type EventFilter struct {
@@ -121,17 +124,17 @@ func InternalSubscriptionPublish(s *Subscription, e Event) {
 }
 func (s *Core) Subscribe(filter EventFilter) (*Subscription, error) {
 	if s == nil || s.Closed() {
-		return nil, ErrClosed
+		return nil, runtimeerrors.ErrClosed
 	}
 	if filter.Capacity < 0 {
-		return nil, typeValidation("subscription capacity", "must not be negative")
+		return nil, cqltype.TypeValidation("subscription capacity", "must not be negative")
 	}
 	if filter.Capacity == 0 {
 		filter.Capacity = 64
 	}
 	for _, kind := range filter.Kinds {
 		if kind > OverflowEvent {
-			return nil, typeValidation("event filter", "unknown event kind")
+			return nil, cqltype.TypeValidation("event filter", "unknown event kind")
 		}
 	}
 	filter.Kinds = append([]EventKind(nil), filter.Kinds...)
@@ -139,7 +142,7 @@ func (s *Core) Subscribe(filter EventFilter) (*Subscription, error) {
 	p.InternalMu.Lock()
 	defer p.InternalMu.Unlock()
 	if p.closed {
-		return nil, ErrClosed
+		return nil, runtimeerrors.ErrClosed
 	}
 	sub := func() *Subscription {
 		opaqueStorageValue := new(Subscription)
@@ -171,7 +174,7 @@ func InternalSessionCloseV2Peripheral(s *Core) {
 	for _, sub := range subs {
 		sub.Close()
 	}
-	InternalSessionObserveV2Lifecycle(s, LifecycleEvent{Kind: "session", Stage: "closed", At: time.Now()})
+	InternalSessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "session", Stage: "closed", At: time.Now()})
 }
 func InternalEventV2Address(host net.IP, port int) netip.AddrPort {
 	ip, ok := netip.AddrFromSlice(host)
@@ -239,7 +242,7 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 		e.Kind = ControlEvent
 		e.Change = "RECONNECTED"
 		e.Address = InternalEventV2Address(v.NewHost.Host, v.NewHost.Port)
-		e.HostID, _ = ParseUUID(v.NewHost.HostID)
+		e.HostID, _ = cqltype.ParseUUID(v.NewHost.HostID)
 	default:
 		return
 	}
@@ -262,7 +265,7 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 			if e.Target == "KEYSPACE" {
 				md.privateStorage.InternalKeyspaceMetadata.InternalRemoveKeyspace(e.Keyspace)
 			} else {
-				md.privateStorage.InternalKeyspaceMetadata.InternalUpdateKeyspace(e.Keyspace, func(ks *KeyspaceMetadata) {
+				md.privateStorage.InternalKeyspaceMetadata.InternalUpdateKeyspace(e.Keyspace, func(ks *implMetadata.KeyspaceMetadata) {
 					switch e.Target {
 					case "TABLE":
 						implMetadata.InternalKeyspaceMetadataRemoveTable(ks, e.Object)
@@ -296,7 +299,7 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 	if !deliver {
 		return
 	}
-	if e.HostID == (UUID{}) && e.Address.IsValid() {
+	if e.HostID == (cqltype.UUID{}) && e.Address.IsValid() {
 		for _, host := range routing.SnapshotData(s.Metadata()).InternalHosts {
 			if host.Address == e.Address {
 				e.HostID = host.ID

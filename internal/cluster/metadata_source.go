@@ -6,8 +6,11 @@ package cluster
 import (
 	"context"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 type InternalSchemaSource struct{ session *Core }
@@ -34,20 +37,20 @@ func (source InternalSchemaSource) InternalSchemaSettings() implMetadata.QuerySe
 func (source InternalSchemaSource) InternalQuerySystem(ctx context.Context, request *model.AttemptRequest) (*model.ResponseData, error) {
 	s := source.session
 	if s.privateStorage.InternalControl == nil {
-		return nil, errNoControl
+		return nil, implMetadata.InternalErrNoControl
 	}
-	var response *responsePage
+	var response *transport.InternalResponsePage
 	var err error
 	if backend, ok := s.privateStorage.InternalControl.(InternalV2SystemQueryer); ok {
 		response, err = backend.InternalQueryV2System(ctx, request)
 	} else {
 		h := s.privateStorage.InternalControl.InternalGetConn()
 		if h == nil || h.InternalConn == nil {
-			return nil, ErrNoConnections
+			return nil, runtimeerrors.ErrNoConnections
 		}
-		c, ok := h.InternalConn.(*Conn)
+		c, ok := h.InternalConn.(*transport.Conn)
 		if !ok {
-			return nil, typeValidation("schema query", "control connection does not support typed requests")
+			return nil, cqltype.TypeValidation("schema query", "control connection does not support typed requests")
 		}
 		response, err = c.InternalExecuteV2System(ctx, request)
 	}

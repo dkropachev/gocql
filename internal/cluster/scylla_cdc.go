@@ -3,14 +3,19 @@
 
 package cluster
 
-import "strings"
+import (
+	"strings"
 
-var _ Partitioner = scyllaCDCPartitioner{InternalLogger: &defaultLogger{}}
+	"github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/logging"
+)
 
-var _ int64Hasher = scyllaCDCPartitioner{}
+var _ endpoint.Partitioner = endpoint.InternalScyllaCDCPartitioner{InternalLogger: &logging.InternalDefaultLogger{}}
+
+var _ endpoint.InternalInt64Hasher = endpoint.InternalScyllaCDCPartitioner{}
 
 func InternalScyllaIsCdcTable(session *Core, keyspaceName, tableName string) (bool, error) {
-	if !strings.HasSuffix(tableName, scyllaCDCLogTableNameSuffix) {
+	if !strings.HasSuffix(tableName, endpoint.InternalScyllaCDCLogTableNameSuffix) {
 		// Not a CDC table, use the default partitioner
 		return false, nil
 	}
@@ -21,5 +26,5 @@ func InternalScyllaIsCdcTable(session *Core, keyspaceName, tableName string) (bo
 		return false, err
 	}
 
-	return tableMeta.Options.Partitioner == scyllaCDCPartitionerFullName, nil
+	return tableMeta.Options.Partitioner == endpoint.InternalScyllaCDCPartitionerFullName, nil
 }

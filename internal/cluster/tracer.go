@@ -9,7 +9,12 @@ import (
 	"io"
 	"net/netip"
 
+	"github.com/scylladb/gocql/v2/internal/binding"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/metadata"
 	model "github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 
 	"time"
 )
@@ -63,7 +68,7 @@ func (t *TraceWriter) Trace(traceId []byte) {
 			break
 		}
 		timer := time.NewTimer(t.privateStorage.sleepInterval)
-		ctx := v2SchemaContext(InternalNewSchemaSource(t.privateStorage.session))
+		ctx := metadata.InternalV2SchemaContext(InternalNewSchemaSource(t.privateStorage.session))
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -117,7 +122,7 @@ func (t *TracerEnhanced) AllTraceIDs() [][]byte {
 }
 
 func (t *TracerEnhanced) IsReady(traceId []byte) (bool, error) {
-	rows, err := InternalReadV2TraceRows(t.privateStorage.session, traceId, "SELECT duration FROM system_traces.sessions WHERE session_id = ?", OneColumn(NullableCodec(Int32)))
+	rows, err := InternalReadV2TraceRows(t.privateStorage.session, traceId, "SELECT duration FROM system_traces.sessions WHERE session_id = ?", codec.OneColumn(codec.NullableCodec(codec.Int32)))
 	if err != nil {
 		return false, err
 	}
@@ -127,15 +132,15 @@ func (t *TracerEnhanced) IsReady(traceId []byte) (bool, error) {
 func (t *TracerEnhanced) GetCoordinatorTime(traceId []byte) (string, time.Duration, error) {
 	type row struct {
 		coordinator netip.Addr
-		duration    Nullable[int32]
+		duration    cqltype.Nullable[int32]
 	}
-	decoder := Row(Column("coordinator", InetCodec, func(r *row) *netip.Addr { return &r.coordinator }), Column("duration", NullableCodec(Int32), func(r *row) *Nullable[int32] { return &r.duration }))
+	decoder := codec.Row(codec.Column("coordinator", codec.InetCodec, func(r *row) *netip.Addr { return &r.coordinator }), codec.Column("duration", codec.NullableCodec(codec.Int32), func(r *row) *cqltype.Nullable[int32] { return &r.duration }))
 	rows, err := InternalReadV2TraceRows(t.privateStorage.session, traceId, "SELECT coordinator, duration FROM system_traces.sessions WHERE session_id = ?", decoder)
 	if err != nil {
 		return "", 0, err
 	}
 	if len(rows) == 0 {
-		return "", 0, ErrNoRows
+		return "", 0, runtimeerrors.ErrNoRows
 	}
 	return rows[0].coordinator.String(), time.Duration(rows[0].duration.Value) * time.Microsecond, nil
 }
@@ -149,41 +154,41 @@ type TraceEntry struct {
 }
 
 func (t *TracerEnhanced) GetActivities(traceId []byte) ([]TraceEntry, error) {
-	decoder := Row(Column("event_id", TimeUUIDCodec, func(r *model.TraceActivityRow) *TimeUUID { return &r.InternalId }), Column("activity", TextCodec, func(r *model.TraceActivityRow) *Text { return &r.InternalActivity }), Column("source", InetCodec, func(r *model.TraceActivityRow) *netip.Addr { return &r.InternalSource }), Column("source_elapsed", NullableCodec(Int32), func(r *model.TraceActivityRow) *Nullable[int32] { return &r.InternalElapsed }), Column("thread", TextCodec, func(r *model.TraceActivityRow) *Text { return &r.InternalThread }))
+	decoder := codec.Row(codec.Column("event_id", codec.TimeUUIDCodec, func(r *model.TraceActivityRow) *codec.TimeUUID { return &r.InternalId }), codec.Column("activity", codec.TextCodec, func(r *model.TraceActivityRow) *cqltype.Text { return &r.InternalActivity }), codec.Column("source", codec.InetCodec, func(r *model.TraceActivityRow) *netip.Addr { return &r.InternalSource }), codec.Column("source_elapsed", codec.NullableCodec(codec.Int32), func(r *model.TraceActivityRow) *cqltype.Nullable[int32] { return &r.InternalElapsed }), codec.Column("thread", codec.TextCodec, func(r *model.TraceActivityRow) *cqltype.Text { return &r.InternalThread }))
 	rows, err := InternalReadV2TraceRows(t.privateStorage.session, traceId, "SELECT event_id, activity, source, source_elapsed, thread FROM system_traces.events WHERE session_id = ?", decoder)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]TraceEntry, len(rows))
 	for i, r := range rows {
-		out[i] = TraceEntry{Timestamp: UUID(r.InternalId).Time(), Activity: r.InternalActivity.String(), Source: r.InternalSource.String(), Thread: r.InternalThread.String(), Elapsed: int(r.InternalElapsed.Value)}
+		out[i] = TraceEntry{Timestamp: cqltype.UUID(r.InternalId).Time(), Activity: r.InternalActivity.String(), Source: r.InternalSource.String(), Thread: r.InternalThread.String(), Elapsed: int(r.InternalElapsed.Value)}
 	}
 	return out, nil
 }
 
-func InternalReadV2TraceRows[R any](s *Core, traceID []byte, cql string, decoder RowDecoder[R]) ([]R, error) {
+func InternalReadV2TraceRows[R any](s *Core, traceID []byte, cql string, decoder codec.RowDecoder[R]) ([]R, error) {
 	if s == nil || s.Closed() {
-		return nil, ErrClosed
+		return nil, runtimeerrors.ErrClosed
 	}
 	if len(traceID) != 16 {
-		return nil, typeValidation("trace ID", "must contain 16 bytes")
+		return nil, cqltype.TypeValidation("trace ID", "must contain 16 bytes")
 	}
 	if s.privateStorage.InternalControl == nil {
-		return nil, errNoControl
+		return nil, metadata.InternalErrNoControl
 	}
 	backend, ok := s.privateStorage.InternalControl.(InternalV2SystemQueryer)
 	if !ok {
-		return nil, typeValidation("tracing", "control connection does not support typed requests")
+		return nil, cqltype.TypeValidation("tracing", "control connection does not support typed requests")
 	}
-	var id UUID
+	var id cqltype.UUID
 	copy(id[:], traceID)
-	typ := UUIDType
-	ctx := v2SchemaContext(InternalNewSchemaSource(s))
+	typ := cqltype.UUIDType
+	ctx := metadata.InternalV2SchemaContext(InternalNewSchemaSource(s))
 	timeout := s.privateStorage.InternalCfg.MetadataSchemaRequestTimeout
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	return InternalReadV2SystemRowsVia(ctx, 4, timeout, backend.InternalQueryV2System, Statement[UUID, R]{CQL: cql, Params: OneParam(UUIDCodec), Rows: decoder}, NewColumns(ColumnSpec{Name: "session_id", Type: typ}), id)
+	return InternalReadV2SystemRowsVia(ctx, 4, timeout, backend.InternalQueryV2System, binding.Statement[cqltype.UUID, R]{CQL: cql, Params: codec.OneParam(codec.UUIDCodec), Rows: decoder}, cqltype.NewColumns(cqltype.ColumnSpec{Name: "session_id", Type: typ}), id)
 }

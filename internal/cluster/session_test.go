@@ -337,8 +337,8 @@ func TestSession(t *testing.T) {
 					typed.Pool.ConnectionsPerHost = tc.host
 					typed.Pool.ConnectionsPerShard = tc.shard
 					cfg := InternalNewClusterSettings("127.0.0.1")
-					var captured *Config
-					s, err := newSessionCommonWithRuntime(*cfg, &typed, func(s *Core, c Config) *Config {
+					var captured *settings.Config
+					s, err := newSessionCommonWithRuntime(*cfg, &typed, func(s *Core, c settings.Config) *settings.Config {
 						if s.privateStorage.InternalPool != nil || s.privateStorage.InternalEventBus != nil || s.privateStorage.InternalMetadataDescriber != nil {
 							t.Fatal("typed settings attached after coordinator publication")
 						}

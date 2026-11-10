@@ -6,6 +6,7 @@ package cluster
 import (
 	"context"
 
+	"github.com/scylladb/gocql/v2/internal/protocol"
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 )
 
@@ -20,10 +21,10 @@ func (h InternalSessionConnectionHooks) InternalStartConnectionWorker(f func()) 
 func (h InternalSessionConnectionHooks) InternalConnectionWorkersDone() <-chan struct{} {
 	return InternalSessionPeripheral(h.session).InternalDone
 }
-func (h InternalSessionConnectionHooks) InternalHandleConnectionEvent(ctx context.Context, f frame, release func()) bool {
+func (h InternalSessionConnectionHooks) InternalHandleConnectionEvent(ctx context.Context, f protocol.Frame, release func()) bool {
 	return h.session.handleEventOwnedContext(ctx, f, release)
 }
-func InternalConnectionOwnedBy(c *Conn, s *Core) bool {
+func InternalConnectionOwnedBy(c *implTransport.Conn, s *Core) bool {
 	h, ok := c.InternalHooks.(InternalSessionConnectionHooks)
 	return ok && h.session == s
 }

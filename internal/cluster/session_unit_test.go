@@ -29,6 +29,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
@@ -93,7 +94,7 @@ type keyspaceCapturingBatchObserver struct{ keyspace string }
 // shrinkingRetryPolicy allows one attempt for its first `allowed`
 // GetMaxRetries calls, then none.
 type shrinkingRetryPolicy struct {
-	ConstantReconnectionPolicy
+	pool.ConstantReconnectionPolicy
 	allowed int32
 	calls   atomic.Int32
 }

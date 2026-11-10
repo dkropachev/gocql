@@ -5,12 +5,13 @@
 package cluster
 
 import (
+	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
 type MetadataStorage struct {
 	InternalTabletsMetadata  *tablets.CowTabletList
-	InternalKeyspaceMetadata cowKeyspaceMetadataMap
+	InternalKeyspaceMetadata metadata.InternalCowKeyspaceMetadataMap
 }
 
 func MetadataData(v *Metadata) *MetadataStorage { return &v.privateStorage }

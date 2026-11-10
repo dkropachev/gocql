@@ -5,10 +5,8 @@ package cluster
 
 import binding "github.com/scylladb/gocql/v2/internal/binding"
 
-type Statement[P any, R any] = binding.Statement[P, R]
-
 // validateStatement fills the statement's empty defaults and validates it.
-func validateStatement[P any, R any](a0 *Statement[P, R]) error {
+func validateStatement[P any, R any](a0 *binding.Statement[P, R]) error {
 	binding.InternalStatementDefaults(a0)
 	return binding.InternalValidateStatement[P, R](*a0)
 }

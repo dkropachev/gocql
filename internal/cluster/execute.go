@@ -8,7 +8,11 @@ import (
 	"math"
 
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/model"
+	pool1 "github.com/scylladb/gocql/v2/internal/pool"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 func InternalSessionTypedGeneration(s *Core) uint64 {
@@ -18,21 +22,21 @@ func InternalSessionTypedGeneration(s *Core) uint64 {
 // InternalSessionSelectTypedConn returns a connection for a request: from the
 // first of plan's routes that has one, or, without a plan, of the request's
 // pinned host, or of any host.
-func InternalSessionSelectTypedConn(s *Core, ctx context.Context, routing RoutingInfo, plan QueryPlan) (*Conn, error) {
+func InternalSessionSelectTypedConn(s *Core, ctx context.Context, routing model.RoutingInfo, plan implRouting.QueryPlan) (*transport.Conn, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if s.Closed() {
-		return nil, ErrClosed
+		return nil, runtimeerrors.ErrClosed
 	}
 	if s.privateStorage.InternalPool == nil || s.privateStorage.InternalHostSource == nil {
-		return nil, ErrNoConnections
+		return nil, runtimeerrors.ErrNoConnections
 	}
 	if plan != nil {
 		for {
 			r, ok := plan.Next()
 			if !ok {
-				return nil, ErrNoConnections
+				return nil, runtimeerrors.ErrNoConnections
 			}
 			if conn := InternalSessionPickRoute(s, r, routing); conn != nil {
 				return conn, nil
@@ -47,11 +51,11 @@ func InternalSessionSelectTypedConn(s *Core, ctx context.Context, routing Routin
 		if conn := InternalSessionPickRoute(s, implRouting.InternalNewRoute(s.privateStorage.InternalPool.InternalRoute(routing.HostID.Value), shard), routing); conn != nil {
 			return conn, nil
 		}
-		return nil, ErrNoConnections
+		return nil, runtimeerrors.ErrNoConnections
 	}
 	hosts := s.privateStorage.InternalHostSource.InternalHostsView()
 	if len(hosts) == 0 {
-		return nil, ErrNoConnections
+		return nil, runtimeerrors.ErrNoConnections
 	}
 	start := int(s.privateStorage.nextTypedHost.Add(1) % uint64(len(hosts)))
 	for i := 0; i < len(hosts); i++ {
@@ -60,12 +64,12 @@ func InternalSessionSelectTypedConn(s *Core, ctx context.Context, routing Routin
 			return conn, nil
 		}
 	}
-	return nil, ErrNoConnections
+	return nil, runtimeerrors.ErrNoConnections
 }
 
 // InternalSessionPickRoute returns a connection of r's host for r's shard,
 // or nil. A route that belongs to no session resolves its host by ID.
-func InternalSessionPickRoute(s *Core, r Route, routing RoutingInfo) *Conn {
+func InternalSessionPickRoute(s *Core, r implRouting.Route, routing model.RoutingInfo) *transport.Conn {
 	host := r.InternalHost()
 	if host == nil || routing.HostID.Set && host.ID() != routing.HostID.Value {
 		return nil
@@ -104,10 +108,10 @@ func InternalSessionObserveSafely(s *Core, fn func()) {
 
 // pickTypedPool carries native shard targets through connection selection without
 // manufacturing an old query object or discarding table-specific tablet routing.
-func InternalSessionPickTypedPool(s *Core, pool *hostConnPool, target Target, routing RoutingInfo) *Conn {
+func InternalSessionPickTypedPool(s *Core, pool *pool1.InternalHostConnPool, target model.Target, routing model.RoutingInfo) *transport.Conn {
 	pool.InternalMu.RLock()
 	pickable, repair := pool.InternalPickable()
-	var conn *Conn
+	var conn *transport.Conn
 	if pickable {
 		conn = pickTypedPoolLocked(s, pool, target, routing)
 	}
@@ -119,14 +123,14 @@ func InternalSessionPickTypedPool(s *Core, pool *hostConnPool, target Target, ro
 }
 
 // pickTypedPoolLocked picks from a pickable pool. Must be called with pool.mu held.
-func pickTypedPoolLocked(s *Core, pool *hostConnPool, target Target, routing RoutingInfo) *Conn {
-	if picker, ok := pool.InternalConnPicker.(*typedConnPicker); ok {
+func pickTypedPoolLocked(s *Core, pool *pool1.InternalHostConnPool, target model.Target, routing model.RoutingInfo) *transport.Conn {
+	if picker, ok := pool.InternalConnPicker.(*pool1.InternalTypedConnPicker); ok {
 		return picker.InternalPickTarget(target, routing)
 	}
-	picker, ok := pool.InternalConnPicker.(*scyllaConnPicker)
+	picker, ok := pool.InternalConnPicker.(*pool1.InternalScyllaConnPicker)
 	if !ok {
 		if routing.Token.Set && !target.ShardID.Set && !routing.ShardID.Set {
-			if p, ok := pool.InternalConnPicker.(int64ConnPicker); ok {
+			if p, ok := pool.InternalConnPicker.(pool1.InternalInt64ConnPicker); ok {
 				return p.PickInt64(routing.Token.Value)
 			}
 		}
@@ -164,7 +168,7 @@ func pickTypedPoolLocked(s *Core, pool *hostConnPool, target Target, routing Rou
 			return nil
 		}
 	} else if routing.Token.Set {
-		index = picker.InternalShardOf(int64Token(routing.Token.Value))
+		index = picker.InternalShardOf(implEndpoint.InternalInt64Token(routing.Token.Value))
 	}
 	if index >= 0 && index < len(picker.InternalConns) && picker.InternalConns[index] != nil {
 		conn := picker.InternalConns[index]
@@ -179,7 +183,7 @@ func pickTypedPoolLocked(s *Core, pool *hostConnPool, target Target, routing Rou
 	return picker.InternalLeastBusyConn()
 }
 
-func InternalSessionApplyTypedFeedbackStamped(s *Core, response *responsePage, routing RoutingInfo, stamp tabletFeedbackStamp, features framerConfig) {
+func InternalSessionApplyTypedFeedbackStamped(s *Core, response *transport.InternalResponsePage, routing model.RoutingInfo, stamp implRouting.InternalTabletFeedbackStamp, features transport.InternalFramerConfig) {
 	if response == nil || routing.Keyspace == "" || routing.Table == "" || s.privateStorage.InternalMetadataDescriber == nil {
 		return
 	}
@@ -193,7 +197,7 @@ func InternalSessionApplyTypedFeedbackStamped(s *Core, response *responsePage, r
 		if entry.Key != key || !entry.Value.Valid {
 			continue
 		}
-		hint, err := parseTypedTabletPayload(entry.Value.Value, routing.Keyspace, routing.Table, features.InternalTabletsRoutingV2)
+		hint, err := transport.InternalParseTypedTabletPayload(entry.Value.Value, routing.Keyspace, routing.Table, features.InternalTabletsRoutingV2)
 		if err != nil {
 			if s.privateStorage.InternalLogger != nil {
 				s.privateStorage.InternalLogger.Printf("gocql: tablet hint rejected: %v", err)

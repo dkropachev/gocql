@@ -6,6 +6,7 @@ package cluster
 import (
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/pool"
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
 
 	"context"
@@ -28,7 +29,7 @@ func newTestReportSession(cfg InternalClusterSettings, policy HostSelectionPolic
 // fakeReconnectionPolicy wraps a ReconnectionPolicy so its dynamic type name
 // (used for the "custom" report branch) is distinct from any built-in policy.
 type fakeReconnectionPolicy struct {
-	ReconnectionPolicy
+	pool.ReconnectionPolicy
 }
 
 // fakeHostSelectionPolicy wraps a HostSelectionPolicy so its dynamic type

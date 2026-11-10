@@ -32,6 +32,11 @@ import (
 
 	"github.com/scylladb/gocql/v2/events"
 	"github.com/scylladb/gocql/v2/internal/debounce"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/pool"
+	"github.com/scylladb/gocql/v2/internal/schemafence"
+	"github.com/scylladb/gocql/v2/internal/transport"
 
 	"github.com/scylladb/gocql/v2/internal/eventbus"
 )
@@ -41,25 +46,25 @@ type SessionStorage struct {
 	InternalTypedReady           atomic.Value // InternalTypedState once fully initialized; never replaced
 	InternalControl              InternalControlConnection
 	InternalCtx                  context.Context
-	InternalLogger               StdLogger
+	InternalLogger               logging.StdLogger
 	InternalPolicy               HostSelectionPolicy
 	connectObserver              ConnectObserver
-	frameObserver                FrameHeaderObserver
-	streamObserver               StreamObserver
+	frameObserver                transport.FrameHeaderObserver
+	streamObserver               transport.StreamObserver
 	initErr                      error
-	InternalAddressTranslator    AddressTranslator
-	schema                       *preparedSchemaTracker
+	InternalAddressTranslator    endpoint.AddressTranslator
+	schema                       *schemafence.InternalPreparedSchemaTracker
 	v2Peripheral                 atomic.Pointer[InternalV2PeripheralState]
 	InternalNodeEvents           *InternalEventDebouncer
 	InternalHostSource           *InternalRingDescriber
-	InternalPool                 *policyConnPool
+	InternalPool                 *pool.InternalPolicyConnPool
 	InternalRingRefresher        *debounce.RefreshDebouncer
 	readyCh                      chan struct{}
 	InternalCancel               context.CancelFunc
 	InternalSchemaEvents         *InternalEventDebouncer
 	InternalMetadataDescriber    *InternalMetadataDescriber
 	InternalEventBus             *eventbus.EventBus[events.Event]
-	InternalConnCfg              *ConnConfig
+	InternalConnCfg              *transport.ConnConfig
 	InternalClientRoutesHandler  *ClientRoutesHandler
 	InternalDriverConfigReporter *InternalDriverConfigReporter
 	closeDone                    chan struct{}

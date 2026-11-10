@@ -6,16 +6,18 @@ package cluster
 import (
 	"errors"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/model"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 
 	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
-func InternalSessionCaptureTabletFeedback(s *Core, info RoutingInfo, m *MetadataSnapshot) tabletFeedbackStamp {
+func InternalSessionCaptureTabletFeedback(s *Core, info model.RoutingInfo, m *routing.MetadataSnapshot) routing.InternalTabletFeedbackStamp {
 	p := InternalSessionPeripheral(s)
 	if p == nil {
-		return tabletFeedbackStamp{}
+		return routing.InternalTabletFeedbackStamp{}
 	}
 	// No lock: every input is an atomically published copy. A capture that
 	// races a schema change can mix values from before and after it; then at
@@ -26,13 +28,13 @@ func InternalSessionCaptureTabletFeedback(s *Core, info RoutingInfo, m *Metadata
 	// and the epoch maps are immutable, so what is read from them waits for
 	// a hint in InternalSessionResolveTabletFeedback.
 	identity, ok := s.tabletSchemaIdentity(info.Keyspace, info.Table)
-	return tabletFeedbackStamp{InternalValid: ok, InternalSnapshot: m, InternalEpoch: p.InternalPlacementEpoch.Load(), InternalSchemaEpochs: p.schemaEpochs.Load(), InternalTableRevisions: p.tableRevisions.Load(), InternalIdentity: identity}
+	return routing.InternalTabletFeedbackStamp{InternalValid: ok, InternalSnapshot: m, InternalEpoch: p.InternalPlacementEpoch.Load(), InternalSchemaEpochs: p.schemaEpochs.Load(), InternalTableRevisions: p.tableRevisions.Load(), InternalIdentity: identity}
 }
 
 // InternalSessionResolveTabletFeedback completes a stamp captured for table k
 // with the values it deferred, as they were at capture: the stamp is valid
 // only if the schema source identity matched the snapshot's.
-func InternalSessionResolveTabletFeedback(stamp *tabletFeedbackStamp, k metadataTable) {
+func InternalSessionResolveTabletFeedback(stamp *routing.InternalTabletFeedbackStamp, k routing.InternalMetadataTable) {
 	if stamp.InternalSchemaEpochs == nil {
 		return
 	}
@@ -49,23 +51,23 @@ type InternalV2TabletFeedbackKey struct {
 	InternalEnd                     int64
 }
 type InternalV2PendingTabletFeedback struct {
-	InternalStamp       tabletFeedbackStamp
+	InternalStamp       routing.InternalTabletFeedbackStamp
 	InternalHint        tablets.TabletInfo
-	InternalObservation tabletRangeObservation
+	InternalObservation routing.InternalTabletRangeObservation
 }
 
 // applyV2TabletHint is retained for internal legacy callers/tests. Actual EXECUTE
 // responses supply the stamp captured before sending, never a receipt-time stamp.
 func InternalSessionApplyV2TabletHint(s *Core, h tablets.TabletInfo) {
-	info := RoutingInfo{Keyspace: h.KeyspaceName(), Table: h.TableName()}
+	info := model.RoutingInfo{Keyspace: h.KeyspaceName(), Table: h.TableName()}
 	InternalSessionQueueTabletFeedback(s, h, InternalSessionCaptureTabletFeedback(s, info, s.Metadata()))
 }
-func InternalSessionQueueTabletFeedback(s *Core, h tablets.TabletInfo, stamp tabletFeedbackStamp) {
+func InternalSessionQueueTabletFeedback(s *Core, h tablets.TabletInfo, stamp routing.InternalTabletFeedbackStamp) {
 	p := InternalSessionPeripheral(s)
 	if p == nil || stamp.InternalSnapshot == nil || !stamp.InternalValid {
 		return
 	}
-	k := metadataTable{InternalKeyspace: h.KeyspaceName(), InternalTable: h.TableName()}
+	k := routing.InternalMetadataTable{InternalKeyspace: h.KeyspaceName(), InternalTable: h.TableName()}
 	if InternalSessionResolveTabletFeedback(&stamp, k); !stamp.InternalValid {
 		return
 	}
@@ -78,7 +80,7 @@ func InternalSessionQueueTabletFeedback(s *Core, h tablets.TabletInfo, stamp tab
 	default:
 	}
 	before, _ := routing.InternalMetadataSnapshotTabletRoot(stamp.InternalSnapshot, k)
-	observation := observeTabletRanges(before, h.FirstToken(), h.LastToken())
+	observation := routing.InternalObserveTabletRanges(before, h.FirstToken(), h.LastToken())
 	stamp.InternalSnapshot = nil // the queue never retains a cluster/schema snapshot or page.
 	p.InternalFeedbackMu.Lock()
 	key := InternalV2TabletFeedbackKey{k.InternalKeyspace, k.InternalTable, h.LastToken()}
@@ -104,7 +106,7 @@ func InternalSessionQueueTabletFeedback(s *Core, h tablets.TabletInfo, stamp tab
 	}
 }
 func InternalSessionPublishTabletFeedback(s *Core, p *InternalV2PeripheralState, updates map[InternalV2TabletFeedbackKey]InternalV2PendingTabletFeedback, resync bool) {
-	var known []metadataTable
+	var known []routing.InternalMetadataTable
 	if resync {
 		p.InternalFeedbackMu.Lock()
 		for k := range p.knownTabletTables {
@@ -123,7 +125,7 @@ func InternalSessionPublishTabletFeedback(s *Core, p *InternalV2PeripheralState,
 	next := old
 	ensureNext := func() {
 		if next == old {
-			next = clonePlacementSnapshot(old)
+			next = routing.InternalClonePlacementSnapshot(old)
 			routing.SnapshotData(next).InternalPlacementSignal = &p.InternalPlacementEpoch
 		}
 	}
@@ -134,30 +136,30 @@ func InternalSessionPublishTabletFeedback(s *Core, p *InternalV2PeripheralState,
 		routing.SnapshotData(next).InternalPlacementEpoch = epoch
 		// Invalidated mappings remain explicitly tablet-based, including tables
 		// learned by feedback before metadata advertised tablets.
-		placementEach(routing.SnapshotData(old).InternalPlacements, func(k metadataTable, t tabletPlacement) {
+		routing.InternalPlacementEach(routing.SnapshotData(old).InternalPlacements, func(k routing.InternalMetadataTable, t routing.InternalTabletPlacement) {
 			t.InternalRanges = nil
-			routing.SnapshotData(next).InternalPlacements = placementPut(routing.SnapshotData(next).InternalPlacements, k, t, comparePlacementTable)
+			routing.SnapshotData(next).InternalPlacements = routing.InternalPlacementPut(routing.SnapshotData(next).InternalPlacements, k, t, routing.InternalComparePlacementTable)
 		})
 	}
 	if resync {
 		ensureNext()
 		routing.SnapshotData(next).InternalDiagnostics = make([]error, 0, len(routing.SnapshotData(old).InternalDiagnostics)+1)
 		for _, diagnostic := range routing.SnapshotData(old).InternalDiagnostics {
-			if v, ok := errors.AsType[*ValidationError](diagnostic); ok && v.Field == "tablet placement" {
+			if v, ok := errors.AsType[*cqltype.ValidationError](diagnostic); ok && v.Field == "tablet placement" {
 				continue
 			}
 			routing.SnapshotData(next).InternalDiagnostics = append(routing.SnapshotData(next).InternalDiagnostics, diagnostic)
 		}
-		routing.SnapshotData(next).InternalDiagnostics = append(routing.SnapshotData(next).InternalDiagnostics, typeValidation("tablet placement", "feedback queue saturated; mappings invalidated"))
+		routing.SnapshotData(next).InternalDiagnostics = append(routing.SnapshotData(next).InternalDiagnostics, cqltype.TypeValidation("tablet placement", "feedback queue saturated; mappings invalidated"))
 		for _, k := range known {
-			if _, _, err := routing.InternalMetadataSnapshotLookupRanges(old, k.InternalKeyspace, k.InternalTable); err == nil && placementGet(routing.SnapshotData(next).InternalPlacements, k, comparePlacementTable) == nil {
-				routing.SnapshotData(next).InternalPlacements = placementPut(routing.SnapshotData(next).InternalPlacements, k, tabletPlacement{InternalIdentity: routing.InternalMetadataSnapshotTableIdentity(old, k)}, comparePlacementTable)
+			if _, _, err := routing.InternalMetadataSnapshotLookupRanges(old, k.InternalKeyspace, k.InternalTable); err == nil && routing.InternalPlacementGet(routing.SnapshotData(next).InternalPlacements, k, routing.InternalComparePlacementTable) == nil {
+				routing.SnapshotData(next).InternalPlacements = routing.InternalPlacementPut(routing.SnapshotData(next).InternalPlacements, k, routing.InternalTabletPlacement{InternalIdentity: routing.InternalMetadataSnapshotTableIdentity(old, k)}, routing.InternalComparePlacementTable)
 			}
 		}
 	}
 	for _, u := range updates {
 		h, stamp := u.InternalHint, u.InternalStamp
-		k := metadataTable{InternalKeyspace: h.KeyspaceName(), InternalTable: h.TableName()}
+		k := routing.InternalMetadataTable{InternalKeyspace: h.KeyspaceName(), InternalTable: h.TableName()}
 		if InternalSessionResolveTabletFeedback(&stamp, k); !stamp.InternalValid {
 			continue
 		}
@@ -167,25 +169,25 @@ func InternalSessionPublishTabletFeedback(s *Core, p *InternalV2PeripheralState,
 		if _, _, err := routing.InternalMetadataSnapshotLookupRanges(old, k.InternalKeyspace, k.InternalTable); err != nil {
 			continue
 		}
-		var current *tabletRangeTree
-		t := tabletPlacement{InternalIdentity: stamp.InternalIdentity}
-		if n := placementGet(routing.SnapshotData(next).InternalPlacements, k, comparePlacementTable); n != nil {
+		var current *routing.InternalTabletRangeTree
+		t := routing.InternalTabletPlacement{InternalIdentity: stamp.InternalIdentity}
+		if n := routing.InternalPlacementGet(routing.SnapshotData(next).InternalPlacements, k, routing.InternalComparePlacementTable); n != nil {
 			t = n.InternalValue
 			current = t.InternalRanges
 		}
 		// Exact duplicates do not replace nodes, generations, or events.
-		n := tabletRangeAfter(current, h.FirstToken())
-		if n != nil && sameTabletObservation(n.InternalValue, h) {
+		n := routing.InternalTabletRangeAfter(current, h.FirstToken())
+		if n != nil && routing.InternalSameTabletObservation(n.InternalValue, h) {
 			continue
 		}
-		if u.InternalObservation != observeTabletRanges(current, h.FirstToken(), h.LastToken()) {
+		if u.InternalObservation != routing.InternalObserveTabletRanges(current, h.FirstToken(), h.LastToken()) {
 			continue
 		}
 		var changed bool
 		t, changed = routing.InternalUpdateTabletPlacement(t, h)
 		if changed {
 			ensureNext()
-			routing.SnapshotData(next).InternalPlacements = placementPut(routing.SnapshotData(next).InternalPlacements, k, t, comparePlacementTable)
+			routing.SnapshotData(next).InternalPlacements = routing.InternalPlacementPut(routing.SnapshotData(next).InternalPlacements, k, t, routing.InternalComparePlacementTable)
 		}
 	}
 	changed := next != old
@@ -215,7 +217,7 @@ func InternalSessionRunV2TabletFeedback(s *Core, p *InternalV2PeripheralState) {
 	}
 }
 
-func InternalSessionCapturedRoutingPartitioner(s *Core, name string) TokenPartitioner {
+func InternalSessionCapturedRoutingPartitioner(s *Core, name string) routing.TokenPartitioner {
 	p := InternalSessionPeripheral(s)
 	if p == nil {
 		return nil
@@ -230,7 +232,7 @@ func InternalSessionCapturedRoutingPartitioner(s *Core, name string) TokenPartit
 
 // Source identity is checked as well as the public
 // snapshot: a drop can already be fenced while its snapshot build is pending.
-func (s *Core) tabletSchemaCurrent(k metadataTable, identity string) bool {
+func (s *Core) tabletSchemaCurrent(k routing.InternalMetadataTable, identity string) bool {
 	id, ok := s.tabletSchemaIdentity(k.InternalKeyspace, k.InternalTable)
 	return ok && id == identity
 }

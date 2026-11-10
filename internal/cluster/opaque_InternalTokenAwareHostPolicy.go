@@ -27,14 +27,17 @@ package cluster
 import (
 	"sync"
 	"sync/atomic"
+
+	"github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/metadata"
 )
 
 type InternalTokenAwareHostPolicyStorage struct {
 	InternalFallback HostSelectionPolicy
 	// atomic store for *clusterMeta
 	metadata                    atomic.Pointer[InternalClusterMeta]
-	InternalLogger              StdLogger
-	InternalGetKeyspaceMetadata func(keyspace string) (*KeyspaceMetadata, error)
+	InternalLogger              logging.StdLogger
+	InternalGetKeyspaceMetadata func(keyspace string) (*metadata.KeyspaceMetadata, error)
 	InternalGetKeyspaceName     func() string
 	hosts                       InternalCowHostList
 	partitioner                 string

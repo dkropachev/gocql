@@ -24,9 +24,16 @@
 
 package cluster
 
-import "net"
+import (
+	"net"
 
-func InternalConnConfig(cfg *InternalClusterSettings) (*ConnConfig, error) {
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/pool"
+	"github.com/scylladb/gocql/v2/internal/transport"
+)
+
+func InternalConnConfig(cfg *InternalClusterSettings) (*transport.ConnConfig, error) {
 	hostDialer := cfg.HostDialer
 
 	if hostDialer == nil {
@@ -38,17 +45,17 @@ func InternalConnConfig(cfg *InternalClusterSettings) (*ConnConfig, error) {
 			if cfg.SocketKeepalive > 0 {
 				d.KeepAlive = cfg.SocketKeepalive
 			}
-			dialer = &ScyllaShardAwareDialer{Dialer: d}
+			dialer = &endpoint.ScyllaShardAwareDialer{Dialer: d}
 		}
 
-		hostDialer = &scyllaDialer{
+		hostDialer = &transport.InternalScyllaDialer{
 			InternalDialer:    dialer,
 			InternalLogger:    cfg.logger(),
 			InternalTlsConfig: InternalClusterSettingsGetActualTLSConfig(cfg),
 		}
 	}
 
-	return &ConnConfig{
+	return &transport.ConnConfig{
 		ProtoVersion:      cfg.ProtoVersion,
 		CQLVersion:        cfg.CQLVersion,
 		WriteTimeout:      cfg.WriteTimeout,
@@ -65,14 +72,14 @@ func InternalConnConfig(cfg *InternalClusterSettings) (*ConnConfig, error) {
 	}, nil
 }
 
-func InternalNewPolicyConnPool(session *Core) *policyConnPool {
+func InternalNewPolicyConnPool(session *Core) *pool.InternalPolicyConnPool {
 	// create the pool
-	pool := &policyConnPool{
+	pool := &pool.InternalPolicyConnPool{
 		InternalServices:      InternalNewPoolServices(session),
 		InternalPort:          session.privateStorage.InternalCfg.Port,
 		InternalNumConns:      session.privateStorage.InternalCfg.NumConns,
 		InternalKeyspace:      session.privateStorage.InternalCfg.Keyspace,
-		InternalHostConnPools: map[UUID]*hostConnPool{},
+		InternalHostConnPools: map[cqltype.UUID]*pool.InternalHostConnPool{},
 	}
 
 	return pool

@@ -10,6 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/pool"
+	"github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/retry"
 )
 
@@ -552,7 +557,7 @@ func InternalShardAwareEnabled(cfg *InternalClusterSettings) bool {
 	if cfg.HostDialer == nil {
 		return true
 	}
-	_, ok := cfg.HostDialer.(ShardDialer)
+	_, ok := cfg.HostDialer.(endpoint.ShardDialer)
 	return ok
 }
 
@@ -586,14 +591,14 @@ func InternalBuildSocketReport() InternalSocketReport {
 // no attempt at all. Reporting it as a policy with max-attempts omitted would
 // state the opposite, since the schema reads an absent max-attempts as
 // unlimited attempts.
-func InternalBuildReconnectionPolicyReport(rp ReconnectionPolicy) any {
+func InternalBuildReconnectionPolicyReport(rp pool.ReconnectionPolicy) any {
 	if InternalIsNilPolicy(rp) {
 		return nil
 	}
 	switch p := rp.(type) {
-	case *NoReconnectionPolicy:
+	case *pool.NoReconnectionPolicy:
 		return nil
-	case *ConstantReconnectionPolicy:
+	case *pool.ConstantReconnectionPolicy:
 		if p.MaxRetries <= 0 {
 			return nil
 		}
@@ -602,7 +607,7 @@ func InternalBuildReconnectionPolicyReport(rp ReconnectionPolicy) any {
 			DelayMs:     InternalNonNegativeMillis(p.Interval),
 			MaxAttempts: p.MaxRetries,
 		}
-	case *ExponentialReconnectionPolicy:
+	case *pool.ExponentialReconnectionPolicy:
 		if p.MaxRetries <= 0 {
 			return nil
 		}
@@ -679,8 +684,8 @@ func InternalBuildQueryReport(s *Core) InternalQueryReport {
 	}
 	return InternalQueryReport{Defaults: InternalBuildQueryDefaultsReport(&cfg), Retry: InternalBuildQueryRetryReport(&cfg), LoadBalancing: loadBalancing}
 }
-func InternalBuildTypedLoadBalancingReport(policy RoutingPolicy) InternalQueryLoadBalancingReport {
-	builtin, ok := policy.(*routingPolicy)
+func InternalBuildTypedLoadBalancingReport(policy routing.RoutingPolicy) InternalQueryLoadBalancingReport {
+	builtin, ok := policy.(*routing.InternalRoutingPolicy)
 	if !ok || builtin == nil {
 		return InternalQueryLoadBalancingReport{Policy: InternalLoadBalancingCustomReport{Type: "custom", Name: InternalCustomPolicyName(policy)}}
 	}
@@ -735,9 +740,9 @@ func InternalBuildQueryDefaultsReport(cfg *InternalClusterSettings) InternalQuer
 // renders those as "UNKNOWN_CONS_0x..", which no consumer can interpret.
 // Nothing rejects such a value today; the fix belongs in clusterSettings.Validate
 // and is left to a follow-up.
-func InternalConsistencyName(c Consistency) string {
+func InternalConsistencyName(c cqltype.Consistency) string {
 	switch c {
-	case Any, One, Two, Three, Quorum, All, LocalQuorum, EachQuorum, LocalOne, Serial, LocalSerial:
+	case cqltype.Any, cqltype.One, cqltype.Two, cqltype.Three, cqltype.Quorum, cqltype.All, cqltype.LocalQuorum, cqltype.EachQuorum, cqltype.LocalOne, cqltype.Serial, cqltype.LocalSerial:
 		return c.String()
 	default:
 		return ""
@@ -747,7 +752,7 @@ func InternalConsistencyName(c Consistency) string {
 func InternalBuildQueryRetryReport(cfg *InternalClusterSettings) InternalQueryRetryReport {
 	policy := cfg.privateStorage.InternalDefaultProfile.Retry
 	if policy == nil {
-		policy = defaultProfile().Retry
+		policy = settings.InternalDefaultProfile().Retry
 	}
 	return InternalQueryRetryReport{Policy: InternalBuildRetryPolicyReport(policy)}
 }

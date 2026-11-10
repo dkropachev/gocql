@@ -471,7 +471,7 @@ func TestClusterSettings(t *testing.T) {
 					if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 						t.Fatalf("Validate() = %v, want an error containing %q", err, tc.wantErr)
 					}
-					if _, ok := errors.AsType[*ValidationError](err); strings.HasPrefix(tc.wantErr, "invalid ") && !ok {
+					if _, ok := errors.AsType[*cqltype.ValidationError](err); strings.HasPrefix(tc.wantErr, "invalid ") && !ok {
 						t.Fatalf("Validate() = %T, want a *ValidationError", err)
 					}
 				})

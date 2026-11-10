@@ -9,13 +9,15 @@ import (
 
 	"github.com/scylladb/gocql/v2/events"
 
+	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
+	"github.com/scylladb/gocql/v2/internal/logging"
 )
 
 type ClientRoutesHandlerStorage struct {
-	InternalLog           StdLogger
+	InternalLog           logging.StdLogger
 	InternalC             InternalControlConnection
-	InternalResolver      DNSResolver
+	InternalResolver      endpoint.DNSResolver
 	InternalSession       *Core
 	connectionEpoch       map[string]uint64
 	pairEpoch             map[InternalPair]uint64

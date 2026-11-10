@@ -28,13 +28,15 @@ import (
 	"crypto/tls"
 
 	"sync/atomic"
+
+	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
 type InternalClusterSettingsStorage struct {
 	actualSslOpts *atomic.Pointer[tls.Config]
 	// Default retry policy to use for queries.
 	// Default: SimpleRetryPolicy{NumRetries: 3}.
-	InternalDefaultProfile           Profile
+	InternalDefaultProfile           settings.Profile
 	InternalDisableClientRouteEvents bool
 	// internal config for testing
 	InternalDisableControlConn bool

@@ -28,31 +28,32 @@ import (
 	"fmt"
 
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/logging"
 )
 
 // HostFilter interface is used when a host is discovered via server sent events.
 type HostFilter interface {
 	// Called when a new host is discovered, returning true will cause the host
 	// to be added to the pools.
-	Accept(host *HostInfo) bool
+	Accept(host *implEndpoint.HostInfo) bool
 }
 
 // HostFilterFunc converts a func(host HostInfo) bool into a HostFilter
-type HostFilterFunc func(host *HostInfo) bool
+type HostFilterFunc func(host *implEndpoint.HostInfo) bool
 
-func (fn HostFilterFunc) Accept(host *HostInfo) bool {
+func (fn HostFilterFunc) Accept(host *implEndpoint.HostInfo) bool {
 	return fn(host)
 }
 
 // AcceptAllFilter will accept all hosts
 func AcceptAllFilter() HostFilter {
-	return HostFilterFunc(func(host *HostInfo) bool {
+	return HostFilterFunc(func(host *implEndpoint.HostInfo) bool {
 		return true
 	})
 }
 
 func DenyAllFilter() HostFilter {
-	return HostFilterFunc(func(host *HostInfo) bool {
+	return HostFilterFunc(func(host *implEndpoint.HostInfo) bool {
 		return false
 	})
 }
@@ -68,7 +69,7 @@ type InternalDataCenterHostFilter struct {
 	dataCenter string
 }
 
-func (f InternalDataCenterHostFilter) Accept(host *HostInfo) bool {
+func (f InternalDataCenterHostFilter) Accept(host *implEndpoint.HostInfo) bool {
 	return host.DataCenter() == f.dataCenter
 }
 
@@ -88,7 +89,7 @@ func DataCentreHostFilter(dataCenter string) HostFilter {
 // in the initial hosts whitelist. It probes all known addresses of a host
 // (connect, rpc, broadcast, listen, peer, preferred, translated CQL) for a match.
 func WhiteListHostFilter(hosts ...string) (HostFilter, error) {
-	hostInfos, err := resolveInitialEndpoints(defaultDnsResolver, hosts, 9042, nopLogger{})
+	hostInfos, err := implEndpoint.InternalResolveInitialEndpoints(implEndpoint.InternalDefaultDnsResolver, hosts, 9042, logging.InternalNopLogger{})
 	if err != nil {
 		return nil, fmt.Errorf("gocql: unable to look up white-listed hosts: %w", err)
 	}
@@ -98,23 +99,23 @@ func WhiteListHostFilter(hosts ...string) (HostFilter, error) {
 		m[host.ConnectAddress().String()] = true
 	}
 
-	return HostFilterFunc(func(host *HostInfo) bool {
+	return HostFilterFunc(func(host *implEndpoint.HostInfo) bool {
 		implEndpoint.HostInfoData(host).InternalMu.RLock()
 		defer implEndpoint.HostInfoData(host).InternalMu.RUnlock()
 
-		if validIpAddr(implEndpoint.HostInfoData(host).InternalRpcAddress) && m[implEndpoint.HostInfoData(host).InternalRpcAddress.String()] {
+		if implEndpoint.InternalValidIpAddr(implEndpoint.HostInfoData(host).InternalRpcAddress) && m[implEndpoint.HostInfoData(host).InternalRpcAddress.String()] {
 			return true
 		}
-		if validIpAddr(implEndpoint.HostInfoData(host).InternalBroadcastAddress) && m[implEndpoint.HostInfoData(host).InternalBroadcastAddress.String()] {
+		if implEndpoint.InternalValidIpAddr(implEndpoint.HostInfoData(host).InternalBroadcastAddress) && m[implEndpoint.HostInfoData(host).InternalBroadcastAddress.String()] {
 			return true
 		}
-		if validIpAddr(implEndpoint.HostInfoData(host).InternalListenAddress) && m[implEndpoint.HostInfoData(host).InternalListenAddress.String()] {
+		if implEndpoint.InternalValidIpAddr(implEndpoint.HostInfoData(host).InternalListenAddress) && m[implEndpoint.HostInfoData(host).InternalListenAddress.String()] {
 			return true
 		}
-		if validIpAddr(implEndpoint.HostInfoData(host).InternalPeer) && m[implEndpoint.HostInfoData(host).InternalPeer.String()] {
+		if implEndpoint.InternalValidIpAddr(implEndpoint.HostInfoData(host).InternalPeer) && m[implEndpoint.HostInfoData(host).InternalPeer.String()] {
 			return true
 		}
-		if validIpAddr(implEndpoint.HostInfoData(host).InternalPreferredIP) && m[implEndpoint.HostInfoData(host).InternalPreferredIP.String()] {
+		if implEndpoint.InternalValidIpAddr(implEndpoint.HostInfoData(host).InternalPreferredIP) && m[implEndpoint.HostInfoData(host).InternalPreferredIP.String()] {
 			return true
 		}
 		if implEndpoint.HostInfoData(host).InternalTranslatedAddresses != nil && implEndpoint.HostInfoData(host).InternalTranslatedAddresses.CQL.IsValid() && m[implEndpoint.HostInfoData(host).InternalTranslatedAddresses.CQL.Address.String()] {

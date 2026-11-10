@@ -6,7 +6,10 @@ package cluster
 import (
 	"context"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/pool"
+	"github.com/scylladb/gocql/v2/internal/transport"
 
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
@@ -16,22 +19,22 @@ import (
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 )
 
-func InternalConnectCluster(ctx context.Context, config Config, initialize func(*Core, Config) *Config) (*Core, error) {
+func InternalConnectCluster(ctx context.Context, config implSettings.Config, initialize func(*Core, implSettings.Config) *implSettings.Config) (*Core, error) {
 	if ctx == nil {
-		return nil, typeValidation("context", "nil context")
+		return nil, cqltype.TypeValidation("context", "nil context")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := validateConfig(config); err != nil {
+	if err := implSettings.InternalValidateConfig(config); err != nil {
 		return nil, err
 	}
-	config = snapshotConfig(config)
+	config = implSettings.InternalSnapshotConfig(config)
 	if config.Logger != nil {
 		config.Logger = logging.InternalV2SafeLogger{InternalLogger: config.Logger}
 	}
 	contacts := config.ContactPoints
-	if path, _ := unixContact(config); path != "" {
+	if path, _ := implSettings.InternalUnixContact(config); path != "" {
 		contacts = []string{"127.0.0.1"}
 	}
 	legacy := InternalNewClusterSettings(contacts...)
@@ -70,12 +73,12 @@ func InternalConnectCluster(ctx context.Context, config Config, initialize func(
 	if config.Conviction != nil {
 		legacy.ConvictionPolicy = config.Conviction
 	}
-	legacy.ReconnectionPolicy = &NoReconnectionPolicy{}
+	legacy.ReconnectionPolicy = &pool.NoReconnectionPolicy{}
 	legacy.ReconnectInterval = 0
 	if config.Reconnect != nil {
 		delay, again := config.Reconnect.Delay(0)
 		if delay < 0 {
-			return nil, typeValidation("reconnect delay", "must not be negative")
+			return nil, cqltype.TypeValidation("reconnect delay", "must not be negative")
 		}
 		if again {
 			legacy.ReconnectInterval = max(delay, time.Millisecond)
@@ -83,44 +86,44 @@ func InternalConnectCluster(ctx context.Context, config Config, initialize func(
 	}
 	legacy.DriverName = config.Identity.DriverName
 	legacy.DriverVersion = config.Identity.DriverVersion
-	legacy.ApplicationInfo = NewStaticApplicationInfo(config.Identity.ApplicationName, config.Identity.ApplicationVersion, config.Identity.ClientID)
+	legacy.ApplicationInfo = implEndpoint.NewStaticApplicationInfo(config.Identity.ApplicationName, config.Identity.ApplicationVersion, config.Identity.ClientID)
 	if config.TLS != nil {
-		legacy.SslOpts = &SslOptions{Config: config.TLS, EnableHostVerification: !config.TLS.InsecureSkipVerify}
+		legacy.SslOpts = &transport.SslOptions{Config: config.TLS, EnableHostVerification: !config.TLS.InsecureSkipVerify}
 	}
 	switch config.Compression {
-	case LZ4Compression:
+	case cqltype.LZ4Compression:
 		legacy.Compressor = wirecompress.LZ4Compressor{}
-	case SnappyCompression:
+	case cqltype.SnappyCompression:
 		legacy.Compressor = SnappyCompressor{}
 	}
 	if config.HostFilter != nil {
-		legacy.HostFilter = HostFilterFunc(func(host *HostInfo) bool {
+		legacy.HostFilter = HostFilterFunc(func(host *implEndpoint.HostInfo) bool {
 			snapshot, err := InternalSnapshotV2Host(nil, host)
 			return err == nil && config.HostFilter(snapshot)
 		})
 	}
-	hostDialer := &v2TLSHostDialer{InternalConfig: implSettings.InternalConnectivityConfig(config)}
+	hostDialer := &transport.InternalV2TLSHostDialer{InternalConfig: implSettings.InternalConnectivityConfig(config)}
 	legacy.HostDialer = hostDialer
 	var typedSession *Core
-	if path, _ := unixContact(config); path != "" {
-		hostDialer.InternalUnixHostID = func() UUID {
+	if path, _ := implSettings.InternalUnixContact(config); path != "" {
+		hostDialer.InternalUnixHostID = func() cqltype.UUID {
 			if typedSession != nil && typedSession.privateStorage.InternalControl != nil {
 				if current := typedSession.privateStorage.InternalControl.InternalGetConn(); current != nil && current.InternalHost != nil {
 					return implEndpoint.InternalHostInfoHostUUID(current.InternalHost)
 				}
 			}
-			return UUID{}
+			return cqltype.UUID{}
 		}
 		previous := legacy.HostFilter
-		legacy.HostFilter = HostFilterFunc(func(host *HostInfo) bool {
+		legacy.HostFilter = HostFilterFunc(func(host *implEndpoint.HostInfo) bool {
 			if local := hostDialer.InternalUnixHostID(); !local.IsEmpty() && !implEndpoint.InternalHostInfoHostUUID(host).IsEmpty() && implEndpoint.InternalHostInfoHostUUID(host) != local {
 				return false
 			}
 			return previous == nil || previous.Accept(host)
 		})
 	}
-	resolver := &v2DNSResolver{InternalBase: config.DNSResolver, InternalTimeout: config.DNSTimeout, InternalSetupTimeout: config.ConnectTimeout}
-	resolver.InternalStartup.Store(&contextBox{InternalCtx: ctx})
+	resolver := &implEndpoint.InternalV2DNSResolver{InternalBase: config.DNSResolver, InternalTimeout: config.DNSTimeout, InternalSetupTimeout: config.ConnectTimeout}
+	resolver.InternalStartup.Store(&implEndpoint.InternalContextBox{InternalCtx: ctx})
 	legacy.DNSResolver = resolver
 	if config.ClientRoutes != nil {
 		endpoints := make(ClientRoutesEndpointList, 0, len(config.ClientRoutes.ConnectionIDs))
@@ -158,13 +161,13 @@ func InternalConnectCluster(ctx context.Context, config Config, initialize func(
 }
 
 // reconnectTypedDownedHosts keeps independent bounded backoff state for each host.
-func (s *Core) reconnectTypedDownedHosts(policy ReconnectPolicy, initial time.Duration) {
+func (s *Core) reconnectTypedDownedHosts(policy implSettings.ReconnectPolicy, initial time.Duration) {
 	type retryState struct {
 		next    time.Time
 		attempt int
 		stopped bool
 	}
-	retries := make(map[UUID]retryState)
+	retries := make(map[cqltype.UUID]retryState)
 	tick := min(max(initial, time.Millisecond), time.Second)
 	timer := time.NewTicker(tick)
 	defer timer.Stop()

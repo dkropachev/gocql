@@ -28,8 +28,12 @@ import (
 	"context"
 	"net"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/protocol"
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/transport"
 
 	crand "crypto/rand"
 	"errors"
@@ -57,7 +61,7 @@ func init() {
 		panic(fmt.Sprintf("unable to seed random number generator: %v", err))
 	}
 
-	InternalRandr = rand.New(rand.NewSource(int64(readInt(b))))
+	InternalRandr = rand.New(rand.NewSource(int64(protocol.ReadInt(b))))
 }
 
 const (
@@ -69,15 +73,15 @@ const (
 type InternalControlConnection interface {
 	InternalGetConn() *InternalConnHost
 	InternalAwaitSchemaAgreement() error
-	InternalDiscoverProtocol(hosts []*HostInfo) (int, error)
-	InternalConnect(hosts []*HostInfo) error
+	InternalDiscoverProtocol(hosts []*implEndpoint.HostInfo) (int, error)
+	InternalConnect(hosts []*implEndpoint.HostInfo) error
 	InternalClose()
 	InternalGetSession() *Core
 	InternalReconnect() error
 }
 
 type InternalControlConn struct {
-	connections     map[*Conn]struct{}
+	connections     map[*transport.Conn]struct{}
 	InternalConn    atomic.Pointer[InternalConnHost]
 	InternalSession *Core
 	InternalQuit    chan struct{}
@@ -120,7 +124,7 @@ func (c *InternalControlConn) InternalHeartBeat() {
 		case <-timer.C:
 		}
 
-		resp, err := c.InternalWriteFrame(&writeOptionsFrame{})
+		resp, err := c.InternalWriteFrame(&protocol.WriteOptionsFrame{})
 		if err != nil {
 			goto reconn
 		}
@@ -151,8 +155,8 @@ func (c *InternalControlConn) InternalHeartBeat() {
 	}
 }
 
-func InternalShuffleHosts(hosts []*HostInfo) []*HostInfo {
-	shuffled := make([]*HostInfo, len(hosts))
+func InternalShuffleHosts(hosts []*implEndpoint.HostInfo) []*implEndpoint.HostInfo {
+	shuffled := make([]*implEndpoint.HostInfo, len(hosts))
 	copy(shuffled, hosts)
 
 	InternalMutRandr.Lock()
@@ -171,7 +175,7 @@ func InternalParseProtocolFromError(err error) int {
 	// I really wish this had the actual info in the error frame...
 	matches := InternalProtocolSupportRe.FindAllStringSubmatch(err.Error(), -1)
 	if len(matches) != 1 || len(matches[0]) != 2 {
-		if verr, ok := errors.AsType[*protocolError](err); ok {
+		if verr, ok := errors.AsType[*transport.InternalProtocolError](err); ok {
 			return int(verr.InternalFrame.Header().Version.Version())
 		}
 		return 0
@@ -185,13 +189,13 @@ func InternalParseProtocolFromError(err error) int {
 	return max
 }
 
-func (c *InternalControlConn) InternalDiscoverProtocol(hosts []*HostInfo) (int, error) {
+func (c *InternalControlConn) InternalDiscoverProtocol(hosts []*implEndpoint.HostInfo) (int, error) {
 	hosts = InternalShuffleHosts(hosts)
 
 	connCfg := *c.InternalSession.privateStorage.InternalConnCfg
-	connCfg.ProtoVersion = protoVersion4 // TODO: define maxProtocol
+	connCfg.ProtoVersion = protocol.ProtoVersion4 // TODO: define maxProtocol
 
-	handler := connErrorHandlerFn(func(c *Conn, err error, closed bool) {
+	handler := transport.InternalConnErrorHandlerFn(func(c *transport.Conn, err error, closed bool) {
 		// we should never get here, but if we do it means we connected to a
 		// host successfully which means our attempted protocol version worked
 		if !closed {
@@ -222,7 +226,7 @@ func (c *InternalControlConn) InternalDiscoverProtocol(hosts []*HostInfo) (int, 
 	return 0, failure
 }
 
-func hostAddress(host *HostInfo) string {
+func hostAddress(host *implEndpoint.HostInfo) string {
 	return net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(host.Port()))
 }
 
@@ -238,14 +242,14 @@ func hostAddress(host *HostInfo) string {
 // connections are discarded immediately and must not be marked as the control
 // connection - doing so would race the real control connection and report
 // DRIVER_CONFIG more than once.
-func InternalSessionControlConnConfig(s *Core) *ConnConfig {
+func InternalSessionControlConnConfig(s *Core) *transport.ConnConfig {
 	cfg := *s.privateStorage.InternalConnCfg
 	cfg.InternalDisableCoalesce = true
 	cfg.InternalIsControlConn = true
 	return &cfg
 }
 
-func (c *InternalControlConn) InternalConnect(hosts []*HostInfo) error {
+func (c *InternalControlConn) InternalConnect(hosts []*implEndpoint.HostInfo) error {
 	if len(hosts) == 0 {
 		return errors.New("control: no endpoints specified")
 	}
@@ -256,7 +260,7 @@ func (c *InternalControlConn) InternalConnect(hosts []*HostInfo) error {
 
 	cfg := InternalSessionControlConnConfig(c.InternalSession)
 
-	var conn *Conn
+	var conn *transport.Conn
 	failure := &runtimeerrors.ConnectError{Stage: "control connection"}
 	for _, host := range hosts {
 		var err error
@@ -289,23 +293,23 @@ func (c *InternalControlConn) InternalConnect(hosts []*HostInfo) error {
 }
 
 type InternalConnHost struct {
-	InternalConn ConnInterface
-	InternalHost *HostInfo
+	InternalConn transport.ConnInterface
+	InternalHost *implEndpoint.HostInfo
 }
 
-func (c *InternalControlConn) setupConn(conn *Conn) error {
+func (c *InternalControlConn) setupConn(conn *transport.Conn) error {
 	setupCtx, cancel := conn.InternalOpeningContext(conn.InternalCtx)
 	defer cancel()
 	stopAndJoin := conn.InternalSetupCancellation(setupCtx)
 	defer stopAndJoin()
 	// we need up-to-date host info for the filterHost call below
-	hosts, err := InternalReadV2Topology(setupCtx, conn, qrySystemLocal, c.InternalSession.privateStorage.InternalCfg.Port)
-	var host *HostInfo
+	hosts, err := InternalReadV2Topology(setupCtx, conn, transport.InternalQrySystemLocal, c.InternalSession.privateStorage.InternalCfg.Port)
+	var host *implEndpoint.HostInfo
 	if err == nil {
 		if len(hosts) == 0 {
-			err = typeValidation("control topology", "query returned 0 rows")
+			err = cqltype.TypeValidation("control topology", "query returned 0 rows")
 		} else if len(hosts) != 1 || implEndpoint.InternalHostInfoHostUUID(hosts[0]).IsEmpty() {
-			err = typeValidation("control topology", "expected one local identity")
+			err = cqltype.TypeValidation("control topology", "expected one local identity")
 		} else {
 			host = hosts[0]
 		}
@@ -335,10 +339,10 @@ func (c *InternalControlConn) setupConn(conn *Conn) error {
 	c.workerMu.Lock()
 	if atomic.LoadInt32(&c.state) == InternalControlConnClosing {
 		c.workerMu.Unlock()
-		return ErrClosed
+		return runtimeerrors.ErrClosed
 	}
 	if c.connections == nil {
-		c.connections = make(map[*Conn]struct{})
+		c.connections = make(map[*transport.Conn]struct{})
 	}
 	c.connections[conn] = struct{}{}
 	old := c.InternalConn.Swap(ch)
@@ -370,12 +374,12 @@ func (c *InternalControlConn) setupConn(conn *Conn) error {
 	return nil
 }
 
-func (c *InternalControlConn) registerEvents(conn *Conn) error {
+func (c *InternalControlConn) registerEvents(conn *transport.Conn) error {
 	ctx, cancel := conn.InternalOpeningContext(conn.InternalCtx)
 	defer cancel()
 	return c.registerEventsContext(ctx, conn)
 }
-func (c *InternalControlConn) registerEventsContext(ctx context.Context, conn *Conn) error {
+func (c *InternalControlConn) registerEventsContext(ctx context.Context, conn *transport.Conn) error {
 	var events []string
 
 	if !c.InternalSession.privateStorage.InternalCfg.Events.DisableTopologyEvents {
@@ -396,7 +400,7 @@ func (c *InternalControlConn) registerEventsContext(ctx context.Context, conn *C
 	}
 
 	framer, err := conn.InternalExec(ctx,
-		&writeRegisterFrame{
+		&protocol.WriteRegisterFrame{
 			Events: events,
 		}, nil, conn.InternalCfg.ConnectTimeout)
 	if err != nil {
@@ -470,7 +474,7 @@ func (c *InternalControlConn) attemptReconnect() error {
 	c.InternalSession.privateStorage.InternalLogger.Printf("gocql: control falling back to initial contact points.\n")
 	// Fallback to initial contact points, as it may be the case that all known initialHosts
 	// changed their IPs while keeping the same hostname(s).
-	initialHosts, resolvErr := resolveInitialEndpoints(c.InternalSession.privateStorage.InternalCfg.DNSResolver, c.InternalSession.privateStorage.InternalCfg.Hosts, c.InternalSession.privateStorage.InternalCfg.Port, c.InternalSession.privateStorage.InternalLogger)
+	initialHosts, resolvErr := implEndpoint.InternalResolveInitialEndpoints(c.InternalSession.privateStorage.InternalCfg.DNSResolver, c.InternalSession.privateStorage.InternalCfg.Hosts, c.InternalSession.privateStorage.InternalCfg.Port, c.InternalSession.privateStorage.InternalLogger)
 	if resolvErr != nil {
 		return fmt.Errorf("resolve contact points' hostnames: %w", resolvErr)
 	}
@@ -478,7 +482,7 @@ func (c *InternalControlConn) attemptReconnect() error {
 	return c.attemptReconnectToAnyOfHosts(initialHosts)
 }
 
-func (c *InternalControlConn) attemptReconnectToAnyOfHosts(hosts []*HostInfo) error {
+func (c *InternalControlConn) attemptReconnectToAnyOfHosts(hosts []*implEndpoint.HostInfo) error {
 	cfg := InternalSessionControlConnConfig(c.InternalSession)
 	for _, host := range hosts {
 		conn, err := InternalSessionDial(c.InternalSession, c.InternalSession.privateStorage.InternalCtx, host, cfg, c)
@@ -509,7 +513,7 @@ func (c *InternalControlConn) attemptReconnectToAnyOfHosts(hosts []*HostInfo) er
 	return fmt.Errorf("unable to connect to any known node: %v", hosts)
 }
 
-func (c *InternalControlConn) HandleError(conn *Conn, err error, closed bool) {
+func (c *InternalControlConn) HandleError(conn *transport.Conn, err error, closed bool) {
 	if !closed {
 		return
 	}
@@ -538,13 +542,13 @@ func (c *InternalControlConn) InternalGetConn() *InternalConnHost {
 // readBytesCopy (e.g. SupportedFrame, AuthChallengeFrame, AuthSuccessFrame)
 // are safe; frame types that use readBytes and expose []byte fields would not
 // be safe and must not be returned from this function.
-func (c *InternalControlConn) InternalWriteFrame(w frameBuilder) (frame, error) {
+func (c *InternalControlConn) InternalWriteFrame(w protocol.FrameBuilder) (protocol.Frame, error) {
 	ch := c.InternalGetConn()
 	if ch == nil {
-		return nil, errNoControl
+		return nil, metadata.InternalErrNoControl
 	}
 
-	framer, err := ch.InternalConn.InternalExec(v2SchemaContext(InternalNewSchemaSource(c.InternalSession)), w, nil, c.InternalSession.privateStorage.InternalCfg.MetadataSchemaRequestTimeout)
+	framer, err := ch.InternalConn.InternalExec(metadata.InternalV2SchemaContext(InternalNewSchemaSource(c.InternalSession)), w, nil, c.InternalSession.privateStorage.InternalCfg.MetadataSchemaRequestTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -554,7 +558,7 @@ func (c *InternalControlConn) InternalWriteFrame(w frameBuilder) (frame, error) 
 }
 
 func (c *InternalControlConn) InternalAwaitSchemaAgreement() error {
-	return c.InternalSession.awaitV2SchemaAgreement(v2SchemaContext(InternalNewSchemaSource(c.InternalSession)))
+	return c.InternalSession.awaitV2SchemaAgreement(metadata.InternalV2SchemaContext(InternalNewSchemaSource(c.InternalSession)))
 }
 
 func (c *InternalControlConn) startWorker(fn func()) bool {
@@ -581,7 +585,7 @@ func (c *InternalControlConn) InternalClose() {
 	}
 	c.workers.Wait()
 	c.workerMu.Lock()
-	connections := make([]*Conn, 0, len(c.connections))
+	connections := make([]*transport.Conn, 0, len(c.connections))
 	for conn := range c.connections {
 		connections = append(connections, conn)
 	}
