@@ -118,7 +118,7 @@ type MetricsSnapshot struct {
 }
 type SnapshotState struct {
 	InternalHostIndex       *InternalRoutingHostIndex
-	InternalPlacements      *InternalTabletPlacementTree
+	InternalPlacements      *tabletPlacementTree
 	InternalPlacementSignal *atomic.Uint64
 	InternalKeyspaces       map[string]*implMetadata.KeyspaceMetadata
 	InternalSchemaSources   map[string]*implMetadata.KeyspaceMetadata

@@ -156,7 +156,7 @@ type InternalTabletPlacement struct {
 	// while its root is still InternalRanges.
 	index *tabletRangeIndex
 }
-type InternalTabletPlacementTree = InternalPlacementTree[InternalMetadataTable, InternalTabletPlacement]
+type tabletPlacementTree = InternalPlacementTree[InternalMetadataTable, InternalTabletPlacement]
 
 func InternalTabletRangeAfter(n *InternalTabletRangeTree, token int64) *InternalTabletRangeTree {
 	var result *InternalTabletRangeTree
@@ -287,7 +287,7 @@ type InternalPlacementCache struct {
 }
 
 type placementCacheEntry struct {
-	root *InternalTabletPlacementTree
+	root *tabletPlacementTree
 	// placement is the table's placement in root, or nil without one.
 	placement *InternalTabletPlacement
 }
@@ -406,8 +406,8 @@ func InternalClonePlacementSnapshot(m *MetadataSnapshot) *MetadataSnapshot {
 
 // Schema/topology refresh is a cold path. It reconciles object identities and
 // removed replicas without constructing a new schema graph for tablet feedback.
-func InternalReconcileTabletPlacement(old, current *MetadataSnapshot) *InternalTabletPlacementTree {
-	var root *InternalTabletPlacementTree
+func InternalReconcileTabletPlacement(old, current *MetadataSnapshot) *tabletPlacementTree {
+	var root *tabletPlacementTree
 	if old != nil {
 		root = SnapshotData(old).InternalPlacements
 	}

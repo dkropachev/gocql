@@ -31,7 +31,7 @@ func TestPartitionKey(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					got, err := Murmur3TokenPartitioner.Token(*NewPartitionKey(PartitionKeyState{InternalChain: chain}))
+					got, err := Murmur3TokenPartitioner.Token(*NewPartitionKey(PartitionKeyState{chain: chain}))
 					if err != nil || got != expected {
 						t.Fatalf("length=%d split=%d: got %d,%v want %d", length, split, got, err, expected)
 					}
@@ -46,7 +46,7 @@ func TestPartitionKey(t *testing.T) {
 					spans = append(spans, wire.Borrow(test.input[i:i+1]))
 				}
 				chain, _ := wire.NewChain(spans...)
-				got, err := CDCTokenPartitioner.Token(*NewPartitionKey(PartitionKeyState{InternalChain: chain}))
+				got, err := CDCTokenPartitioner.Token(*NewPartitionKey(PartitionKeyState{chain: chain}))
 				if err != nil || got != test.expected {
 					t.Fatalf("CDC=%d,%v want %d", got, err, test.expected)
 				}

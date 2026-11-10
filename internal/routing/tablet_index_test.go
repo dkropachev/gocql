@@ -153,7 +153,7 @@ func TestTabletIndex(t *testing.T) {
 			return h
 		}
 		var c InternalPlacementCache
-		var roots []*InternalTabletPlacementTree
+		var roots []*tabletPlacementTree
 		var p InternalTabletPlacement
 		roots = append(roots, nil)
 		for i := int64(0); i < 4; i++ {

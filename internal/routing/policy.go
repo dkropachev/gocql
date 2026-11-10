@@ -29,12 +29,12 @@ import (
 
 type PartitionKey struct{ state PartitionKeyState }
 
-func (k PartitionKey) Len() int64 { return PartitionKeyData(&k).InternalChain.Len() }
+func (k PartitionKey) Len() int64 { return PartitionKeyData(&k).chain.Len() }
 func (k PartitionKey) ForEach(fn func(cqltype.Bytes) error) error {
 	if fn == nil {
 		return cqltype.TypeValidation("partition key", "nil visitor")
 	}
-	return PartitionKeyData(&k).InternalChain.Each(func(s wire.Span) error {
+	return PartitionKeyData(&k).chain.Each(func(s wire.Span) error {
 		c, e := wire.NewChain(s)
 		if e != nil {
 			return e
@@ -52,7 +52,7 @@ var CDCTokenPartitioner TokenPartitioner = cdcStreamingPartitioner{}
 
 // InternalValidatePartitionKey applies InternalNewPartitionKey's checks
 // without building the key.
-func InternalValidatePartitionKey(cells []model.EncodedCell, indexes []int) error {
+func validatePartitionKey(cells []model.EncodedCell, indexes []int) error {
 	for _, idx := range indexes {
 		if idx < 0 || idx >= len(cells) {
 			return cqltype.TypeValidation("partition key", "invalid column index")
@@ -120,7 +120,7 @@ func InternalNewPartitionKey(cells []model.EncodedCell, indexes []int) (Partitio
 		}
 	}
 	c, e := b.Freeze()
-	return *NewPartitionKey(PartitionKeyState{InternalChain: c}), e == nil, e
+	return *NewPartitionKey(PartitionKeyState{chain: c}), e == nil, e
 }
 func InternalComputeRoutingToken(cells []model.EncodedCell, indexes []int, p TokenPartitioner) (cqltype.Option[int64], error) {
 	if _, builtin := p.(murmur3StreamingPartitioner); builtin {
@@ -137,7 +137,7 @@ func InternalComputeRoutingToken(cells []model.EncodedCell, indexes []int, p Tok
 	}
 	if p == nil {
 		// No partitioner, no token: only validate, without building the key.
-		return cqltype.Option[int64]{}, InternalValidatePartitionKey(cells, indexes)
+		return cqltype.Option[int64]{}, validatePartitionKey(cells, indexes)
 	}
 	k, ok, e := InternalNewPartitionKey(cells, indexes)
 	if e != nil || !ok {
@@ -155,7 +155,7 @@ func (cdcStreamingPartitioner) Token(k PartitionKey) (int64, error) {
 	}
 	var n uint64
 	remaining := 8
-	e := PartitionKeyData(&k).InternalChain.Each(func(s wire.Span) error {
+	e := PartitionKeyData(&k).chain.Each(func(s wire.Span) error {
 		for _, b := range s.Bytes() {
 			if remaining == 0 {
 				break
@@ -176,7 +176,7 @@ type murmur3StreamingPartitioner struct{}
 
 func (murmur3StreamingPartitioner) Token(k PartitionKey) (int64, error) {
 	var hash murmur.Stream
-	err := PartitionKeyData(&k).InternalChain.Each(func(s wire.Span) error { _, err := hash.Write(s.Bytes()); return err })
+	err := PartitionKeyData(&k).chain.Each(func(s wire.Span) error { _, err := hash.Write(s.Bytes()); return err })
 	token := hash.Sum64()
 	if token == math.MinInt64 {
 		token = math.MaxInt64
@@ -1055,5 +1055,5 @@ func InternalRoutingLatencySample(err error) bool {
 }
 
 type PartitionKeyState struct {
-	InternalChain wire.Chain
+	chain wire.Chain
 }
