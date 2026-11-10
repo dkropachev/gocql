@@ -5,6 +5,7 @@ package paging
 
 import (
 	model "github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 
 	"bytes"
 
@@ -21,14 +22,14 @@ import (
 // streaming pager.
 type InternalPagingHistoryEntry struct {
 	InternalNext  *InternalPagingHistoryEntry
-	InternalState PageState
+	InternalState model.PageState
 }
 
 const InternalInlineHistory = 8
 
 type InternalPagingHistory struct {
 	InternalEntries  map[uint64]InternalPagingHistoryEntry
-	InternalInline   *[InternalInlineHistory]PageState
+	InternalInline   *[InternalInlineHistory]model.PageState
 	InternalSeed     maphash.Seed
 	InternalCount    int
 	InternalBytes    int64
@@ -36,7 +37,7 @@ type InternalPagingHistory struct {
 	InternalMaxBytes int64
 }
 
-func (h *InternalPagingHistory) InternalAdd(state PageState) error {
+func (h *InternalPagingHistory) InternalAdd(state model.PageState) error {
 	if !state.More() {
 		return nil
 	}
@@ -47,7 +48,7 @@ func (h *InternalPagingHistory) InternalAdd(state PageState) error {
 		for _, held := range h.InternalInline[:h.InternalCount] {
 			perfAdd(1, 1)
 			if bytes.Equal(model.PageToken(held), token) {
-				return ErrPagingNoProgress
+				return runtimeerrors.ErrPagingNoProgress
 			}
 		}
 		if err := h.checkLimits(token); err != nil {
@@ -68,12 +69,12 @@ func (h *InternalPagingHistory) InternalAdd(state PageState) error {
 	if entry, exists := h.InternalEntries[hash]; exists {
 		perfAdd(1, 1)
 		if bytes.Equal(model.PageToken(entry.InternalState), token) {
-			return ErrPagingNoProgress
+			return runtimeerrors.ErrPagingNoProgress
 		}
 		for p := entry.InternalNext; p != nil; p = p.InternalNext {
 			perfAdd(1, 1)
 			if bytes.Equal(model.PageToken(p.InternalState), token) {
-				return ErrPagingNoProgress
+				return runtimeerrors.ErrPagingNoProgress
 			}
 		}
 	}
@@ -98,7 +99,7 @@ func (h *InternalPagingHistory) InternalSpill() {
 	}
 	for i, held := range h.InternalInline[:h.InternalCount] {
 		h.insert(maphash.Bytes(h.InternalSeed, model.PageToken(held)), held)
-		h.InternalInline[i] = PageState{}
+		h.InternalInline[i] = model.PageState{}
 	}
 }
 
@@ -111,13 +112,13 @@ func (h *InternalPagingHistory) checkLimits(token []byte) error {
 		maxBytes = 16 << 20
 	}
 	if h.InternalCount >= maxCount || int64(len(token)) > maxBytes-h.InternalBytes {
-		return ErrPagingStateLimit
+		return runtimeerrors.ErrPagingStateLimit
 	}
 	return nil
 }
 
 // insert chains state under hash; the caller has ruled out an equal token.
-func (h *InternalPagingHistory) insert(hash uint64, state PageState) {
+func (h *InternalPagingHistory) insert(hash uint64, state model.PageState) {
 	candidate := InternalPagingHistoryEntry{InternalState: state}
 	if previous, exists := h.InternalEntries[hash]; exists {
 		candidate.InternalNext = &previous
