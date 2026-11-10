@@ -33,32 +33,21 @@ import (
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 )
 
-// findTabletReplicasUnsafeForToken returns the raw replica slice for the tablet
-// owning the given token. The returned slice must not be modified by callers.
+// InternalTranslateAddressPort applies addressTranslator to addr of host. A nil
+// translator or an invalid addr returns addr unchanged.
 func InternalTranslateAddressPort(addressTranslator AddressTranslator, host *HostInfo, addr AddressPort, logger StdLogger) (AddressPort, error) {
 	if addressTranslator == nil || !addr.IsValid() {
 		return addr, nil
 	}
-	translatorV2, ok := addressTranslator.(AddressTranslatorV2)
-	if !ok {
-		newAddr, newPort := addressTranslator.Translate(addr.Address, int(addr.Port))
-		if debug.Enabled {
-			logger.Printf("gocql: translated address %q to '%v:%d'", addr, newAddr, newPort)
-		}
-		if newPort < 1 || newPort > 65535 {
-			return addr, fmt.Errorf("invalid translated port %d: port must be between 1 and 65535", newPort)
-		}
-		return AddressPort{
-			Address: newAddr,
-			Port:    uint16(newPort),
-		}, nil
-	}
-	newAddr, err := translatorV2.TranslateHost(host, addr)
+	newAddr, err := addressTranslator.TranslateHost(host, addr)
 	if err != nil {
 		if debug.Enabled {
 			logger.Printf("gocql: failed to translate address %q: %s", addr, err.Error())
 		}
 		return addr, err
+	}
+	if newAddr.Port == 0 {
+		return addr, fmt.Errorf("invalid translated port 0 for %q: port must be between 1 and 65535", addr)
 	}
 	if debug.Enabled {
 		logger.Printf("gocql: translated address %q to %q", addr, newAddr)

@@ -528,15 +528,15 @@ func TestSession(t *testing.T) {
 					clusterHosts = append(clusterHosts, fromAddress.String())
 				}
 
-				translator := endpoint.TranslatorFunc(func(addr net.IP, port int) (net.IP, int) {
+				translator := endpoint.TranslatorFunc(func(_ endpoint.TranslatorHostInfo, addr endpoint.AddressPort) (endpoint.AddressPort, error) {
 					for id, host := range fromAddresses {
-						if host.Equal(addr) {
-							return toAddresses[id], port
+						if host.Equal(addr.Address) {
+							return endpoint.AddressPort{Address: toAddresses[id], Port: addr.Port}, nil
 						}
 					}
 					for _, host := range toAddresses {
-						if host.Equal(addr) {
-							return addr, port
+						if host.Equal(addr.Address) {
+							return addr, nil
 						}
 					}
 					panic("failed to translate address")

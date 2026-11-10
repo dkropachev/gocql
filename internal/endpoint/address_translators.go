@@ -26,26 +26,25 @@ package endpoint
 
 import "net"
 
-// AddressTranslator provides a way to translate node addresses (and ports) that are
-// discovered or received as a node event. This can be useful in an ec2 environment,
-// for instance, to translate public IPs to private IPs.
+// AddressTranslator translates node addresses (and ports) that are discovered
+// or received as a node event, for example public IPs to private IPs in EC2.
 type AddressTranslator interface {
-	// Translate will translate the provided address and/or port to another
-	// address and/or port. If no translation is possible, Translate will return the
-	// address and port provided to it.
-	Translate(addr net.IP, port int) (net.IP, int)
+	// TranslateHost returns the address and port to dial for addr, which belongs
+	// to host. Return addr unchanged when no translation applies.
+	TranslateHost(host AddressTranslatorHostInfo, addr AddressPort) (AddressPort, error)
 }
 
-type AddressTranslatorFunc func(addr net.IP, port int) (net.IP, int)
+// AddressTranslatorFunc adapts a function to AddressTranslator.
+type AddressTranslatorFunc func(host AddressTranslatorHostInfo, addr AddressPort) (AddressPort, error)
 
-func (fn AddressTranslatorFunc) Translate(addr net.IP, port int) (net.IP, int) {
-	return fn(addr, port)
+func (fn AddressTranslatorFunc) TranslateHost(host AddressTranslatorHostInfo, addr AddressPort) (AddressPort, error) {
+	return fn(host, addr)
 }
 
-// IdentityTranslator will do nothing but return what it was provided. It is essentially a no-op.
+// IdentityTranslator returns a translator that leaves addresses unchanged.
 func IdentityTranslator() AddressTranslator {
-	return AddressTranslatorFunc(func(addr net.IP, port int) (net.IP, int) {
-		return addr, port
+	return AddressTranslatorFunc(func(_ AddressTranslatorHostInfo, addr AddressPort) (AddressPort, error) {
+		return addr, nil
 	})
 }
 
@@ -66,27 +65,3 @@ type AddressTranslatorHostInfo interface {
 	ScyllaShardAwarePortTLS() uint16
 	ScyllaShardCount() int
 }
-
-// AddressTranslatorV2 provides a way to translate node addresses (and ports) that are
-// discovered or received as a node event. This can be useful in an ec2 environment,
-// for instance, to translate public IPs to private IPs.
-type AddressTranslatorV2 interface {
-	AddressTranslator
-	TranslateHost(host AddressTranslatorHostInfo, addr AddressPort) (AddressPort, error)
-}
-
-type AddressTranslatorFuncV2 func(hostID string, addr AddressPort) AddressPort
-
-func (fn AddressTranslatorFuncV2) Translate(addr net.IP, port int) (net.IP, int) {
-	res := fn("", AddressPort{
-		Address: addr,
-		Port:    uint16(port),
-	})
-	return res.Address, int(res.Port)
-}
-
-func (fn AddressTranslatorFuncV2) TranslateHost(host AddressTranslatorHostInfo, addr AddressPort) (AddressPort, error) {
-	return fn(host.HostID(), addr), nil
-}
-
-var _ AddressTranslatorV2 = AddressTranslatorFuncV2(nil)

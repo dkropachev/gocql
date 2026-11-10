@@ -11,8 +11,6 @@ type (
 	AddressPort        = implEndpoint.AddressPort
 	Translator         = implEndpoint.AddressTranslator
 	TranslatorFunc     = implEndpoint.AddressTranslatorFunc
-	TranslatorV2       = implEndpoint.AddressTranslatorV2
-	TranslatorFuncV2   = implEndpoint.AddressTranslatorFuncV2
 	TranslatorHostInfo = implEndpoint.AddressTranslatorHostInfo
 	DNSResolver        = implEndpoint.DNSResolver
 	SimpleDNSResolver  = implEndpoint.SimpleDNSResolver

@@ -15,7 +15,6 @@ type AddressPort = implEndpoint.AddressPort
 type AddressTranslator = implEndpoint.AddressTranslator
 
 type AddressTranslatorHostInfo = implEndpoint.AddressTranslatorHostInfo
-type AddressTranslatorV2 = implEndpoint.AddressTranslatorV2
 type ApplicationInfo = implEndpoint.ApplicationInfo
 
 type Config = implSettings.Config

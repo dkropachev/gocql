@@ -40,16 +40,12 @@ func TestAddressTranslation(t *testing.T) {
 			t.Parallel()
 
 			var tr endpoint.AddressTranslator = endpoint.IdentityTranslator()
-			hostIP := net.ParseIP("")
-			if hostIP != nil {
-				t.Errorf("expected host ip to be (nil) but was (%+v) instead", hostIP)
+			got, err := tr.TranslateHost(nil, endpoint.AddressPort{})
+			tests.AssertNil(t, "should return no error", err)
+			if got.Address != nil {
+				t.Errorf("expected translated host to be (nil) but was (%+v) instead", got.Address)
 			}
-
-			addr, port := tr.Translate(hostIP, 0)
-			if addr != nil {
-				t.Errorf("expected translated host to be (nil) but was (%+v) instead", addr)
-			}
-			tests.AssertEqual(t, "translated port", 0, port)
+			tests.AssertEqual(t, "translated port", uint16(0), got.Port)
 		})
 		t.Run("HostProvided", func(t *testing.T) {
 			t.Parallel()
@@ -60,11 +56,12 @@ func TestAddressTranslation(t *testing.T) {
 				t.Error("expected host ip not to be (nil)")
 			}
 
-			addr, port := tr.Translate(hostIP, 9042)
-			if !hostIP.Equal(addr) {
-				t.Errorf("expected translated addr to be (%+v) but was (%+v) instead", hostIP, addr)
+			got, err := tr.TranslateHost(nil, endpoint.AddressPort{Address: hostIP, Port: 9042})
+			tests.AssertNil(t, "should return no error", err)
+			if !hostIP.Equal(got.Address) {
+				t.Errorf("expected translated addr to be (%+v) but was (%+v) instead", hostIP, got.Address)
 			}
-			tests.AssertEqual(t, "translated port", 9042, port)
+			tests.AssertEqual(t, "translated port", uint16(9042), got.Port)
 		})
 	})
 
@@ -72,8 +69,8 @@ func TestAddressTranslation(t *testing.T) {
 		t.Run("NoScyllaPorts", func(t *testing.T) {
 			t.Parallel()
 
-			translator := endpoint.AddressTranslatorFunc(func(addr net.IP, port int) (net.IP, int) {
-				return net.ParseIP("10.10.10.10"), 9142
+			translator := endpoint.AddressTranslatorFunc(func(_ endpoint.AddressTranslatorHostInfo, _ endpoint.AddressPort) (endpoint.AddressPort, error) {
+				return endpoint.AddressPort{Address: net.ParseIP("10.10.10.10"), Port: 9142}, nil
 			})
 			host := endpoint.HostInfoBuilder{
 				ConnectAddress: net.ParseIP("10.0.0.1"),
@@ -104,14 +101,14 @@ func TestAddressTranslation(t *testing.T) {
 			t.Parallel()
 
 			translatedIP := net.ParseIP("192.0.2.10")
-			translator := endpoint.AddressTranslatorFuncV2(func(hostID string, addr endpoint.AddressPort) endpoint.AddressPort {
-				if hostID != "a0000000-0000-0000-0000-000000000001" {
+			translator := endpoint.AddressTranslatorFunc(func(host endpoint.AddressTranslatorHostInfo, addr endpoint.AddressPort) (endpoint.AddressPort, error) {
+				if hostID := host.HostID(); hostID != "a0000000-0000-0000-0000-000000000001" {
 					t.Errorf("expected host id %q, got %q", "a0000000-0000-0000-0000-000000000001", hostID)
 				}
 				return endpoint.AddressPort{
 					Address: translatedIP,
 					Port:    addr.Port + 1,
-				}
+				}, nil
 			})
 			host := endpoint.HostInfoBuilder{
 				ConnectAddress: net.ParseIP("10.0.0.1"),
@@ -140,15 +137,13 @@ func TestAddressTranslation(t *testing.T) {
 	t.Run("TranslateAddressPort", func(t *testing.T) {
 		host := endpoint.HostInfoBuilder{ConnectAddress: net.ParseIP("10.0.0.1"), Port: 9042}.Build()
 		addr := endpoint.AddressPort{Address: host.UntranslatedConnectAddress(), Port: 9042}
-		for _, port := range []int{-1, 0, 65536} {
-			t.Run(fmt.Sprint(port), func(t *testing.T) {
-				translator := endpoint.AddressTranslatorFunc(func(ip net.IP, originalPort int) (net.IP, int) {
-					return ip, port
-				})
-				if _, err := endpoint.InternalTranslateAddressPort(translator, &host, addr, nil); err == nil {
-					t.Fatalf("expected translated port %d to be rejected", port)
-				}
+		t.Run("ZeroPortRejected", func(t *testing.T) {
+			translator := endpoint.AddressTranslatorFunc(func(_ endpoint.AddressTranslatorHostInfo, a endpoint.AddressPort) (endpoint.AddressPort, error) {
+				return endpoint.AddressPort{Address: a.Address}, nil
 			})
-		}
+			if _, err := endpoint.InternalTranslateAddressPort(translator, &host, addr, nil); err == nil {
+				t.Fatal("expected translated port 0 to be rejected")
+			}
+		})
 	})
 }

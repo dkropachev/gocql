@@ -141,7 +141,10 @@ func TestConnectionSetup(t *testing.T) {
 			session := func() *cluster.Core {
 				opaqueStorageValuexxxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalLogger = logging.InternalNopLogger{}
-				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalAddressTranslator = endpoint.AddressTranslatorFunc(func(ip net.IP, port int) (net.IP, int) { time.Sleep(20 * time.Millisecond); return ip, port })
+				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalAddressTranslator = endpoint.AddressTranslatorFunc(func(_ endpoint.AddressTranslatorHostInfo, addr endpoint.AddressPort) (endpoint.AddressPort, error) {
+					time.Sleep(20 * time.Millisecond)
+					return addr, nil
+				})
 				return opaqueStorageValuexxxxxxxx
 			}()
 			implCluster.SessionData(session).InternalCfg.DNSResolver = resolver

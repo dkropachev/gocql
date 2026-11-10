@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"slices"
 	"sync"
 
@@ -290,15 +289,7 @@ type ClientRoutesHandler struct {
 
 }
 
-var _ AddressTranslatorV2 = (*ClientRoutesHandler)(nil)
-
-// Translate implements old AddressTranslator interface
-// should not be uses since driver prefer AddressTranslatorV2 API if it is implemented
-func (p *ClientRoutesHandler) Translate(addr net.IP, port int) (net.IP, int) {
-	panic("should never be called")
-}
-
-// TranslateHost implements AddressTranslatorV2 interface.
+// TranslateHost implements AddressTranslator.
 // It resolves DNS on every call rather than caching resolved addresses.
 // If the user provided a ConnectionAddr for the route's connectionID,
 // that address is used instead of the one from the system.client_routes table.

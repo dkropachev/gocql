@@ -105,7 +105,7 @@ func testTableName(t testing.TB, parts ...string) string {
 }
 
 func staticAddressTranslator(newAddr net.IP, newPort int) endpoint.AddressTranslator {
-	return endpoint.AddressTranslatorFunc(func(addr net.IP, port int) (net.IP, int) {
-		return newAddr, newPort
+	return endpoint.AddressTranslatorFunc(func(_ endpoint.AddressTranslatorHostInfo, _ endpoint.AddressPort) (endpoint.AddressPort, error) {
+		return endpoint.AddressPort{Address: newAddr, Port: uint16(newPort)}, nil
 	})
 }
