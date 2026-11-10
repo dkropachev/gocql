@@ -63,7 +63,7 @@ type Statement[P, R any] struct {
 	Kind        cqltype.StatementKind
 }
 
-// InternalStatementDefaults fills a nil Params or Rows that has an empty
+// statementDefaults fills a nil Params or Rows that has an empty
 // default.
 func statementDefaults[P, R any](s *Statement[P, R]) {
 	if s.Params == nil {

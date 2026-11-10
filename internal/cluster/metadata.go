@@ -1258,7 +1258,7 @@ func (p *InternalV2PeripheralState) admitMetadataWork() bool {
 	return true
 }
 
-// InternalBumpSchemaEpochLocked advances keyspace's schema epoch. Caller holds p.InternalMu.
+// bumpSchemaEpochLocked advances keyspace's schema epoch. Caller holds p.InternalMu.
 func (p *InternalV2PeripheralState) bumpSchemaEpochLocked(keyspace string) {
 	p.schemaEpoch[keyspace]++
 	p.schemaEpochs.Store(new(maps.Clone(p.schemaEpoch)))
@@ -1305,7 +1305,7 @@ func (s *Core) v2MetadataPublicationError() error {
 	return &implMetadata.PartialRefreshError{Generation: s.Metadata().Generation(), Keyspaces: map[string]error{"<publication>": fmt.Errorf("metadata sources changed throughout publication; refresh again")}}
 }
 
-// InternalSessionRoutingHostIndex indexes hosts with the session's routes to
+// sessionRoutingHostIndex indexes hosts with the session's routes to
 // them, so that plans route to their pools without looking them up.
 func sessionRoutingHostIndex(s *Core, hosts []model.HostSnapshot) *routing.InternalRoutingHostIndex {
 	if s.privateStorage.InternalPool == nil {

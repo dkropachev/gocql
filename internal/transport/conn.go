@@ -1505,15 +1505,15 @@ func (call *InternalCallReq) deliver(resp InternalCallResp) bool {
 	return true
 }
 
-// InternalStopWaiting ends a caller's wait that did not receive from
-// InternalResp. If a response was already delivered, it is returned and the
-// caller owns it; otherwise the sender keeps ownership of any later response.
 // claim reserves the call's response for the reader while the caller still
 // waits, so that the reader may build it in the caller's dest.
 func (call *InternalCallReq) claim() bool {
 	return call.state.CompareAndSwap(callWaiting, callClaimed)
 }
 
+// stopWaiting ends a caller's wait that did not receive from
+// InternalResp. If a response was already delivered, it is returned and the
+// caller owns it; otherwise the sender keeps ownership of any later response.
 func (call *InternalCallReq) stopWaiting() (InternalCallResp, bool) {
 	if call.state.CompareAndSwap(callWaiting, callStopped) {
 		return InternalCallResp{}, false

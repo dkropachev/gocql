@@ -50,7 +50,7 @@ type TokenPartitioner interface {
 var Murmur3TokenPartitioner TokenPartitioner = murmur3StreamingPartitioner{}
 var CDCTokenPartitioner TokenPartitioner = cdcStreamingPartitioner{}
 
-// InternalValidatePartitionKey applies InternalNewPartitionKey's checks
+// validatePartitionKey applies InternalNewPartitionKey's checks
 // without building the key.
 func validatePartitionKey(cells []model.EncodedCell, indexes []int) error {
 	for _, idx := range indexes {

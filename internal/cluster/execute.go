@@ -20,7 +20,7 @@ func (s *Core) TypedGeneration() uint64 {
 	return sessionTypedSchemaGeneration(s)
 }
 
-// InternalSessionSelectTypedConn returns a connection for a request: from the
+// SelectTypedConn returns a connection for a request: from the
 // first of plan's routes that has one, or, without a plan, of the request's
 // pinned host, or of any host.
 func (s *Core) SelectTypedConn(ctx context.Context, routing model.RoutingInfo, plan implRouting.QueryPlan) (*transport.Conn, error) {
@@ -68,7 +68,7 @@ func (s *Core) SelectTypedConn(ctx context.Context, routing model.RoutingInfo, p
 	return nil, runtimeerrors.ErrNoConnections
 }
 
-// InternalSessionPickRoute returns a connection of r's host for r's shard,
+// sessionPickRoute returns a connection of r's host for r's shard,
 // or nil. A route that belongs to no session resolves its host by ID.
 func sessionPickRoute(s *Core, r implRouting.Route, routing model.RoutingInfo) *transport.Conn {
 	host := r.InternalHost()

@@ -5,7 +5,7 @@ package settings
 
 import "github.com/scylladb/gocql/v2/internal/connectivity"
 
-// InternalConnectivityConfig projects the validated immutable configuration.
+// Connectivity projects the validated immutable configuration.
 // It transfers only settings/descriptors; request/result payloads are absent.
 func (c Config) Connectivity() connectivity.Config {
 	return connectivity.Config{

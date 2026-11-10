@@ -31,7 +31,7 @@ func (s *Core) CaptureTabletFeedback(info model.RoutingInfo, m *routing.Metadata
 	return routing.InternalTabletFeedbackStamp{InternalValid: ok, InternalSnapshot: m, InternalEpoch: p.InternalPlacementEpoch.Load(), InternalSchemaEpochs: p.schemaEpochs.Load(), InternalTableRevisions: p.tableRevisions.Load(), InternalIdentity: identity}
 }
 
-// InternalSessionResolveTabletFeedback completes a stamp captured for table k
+// sessionResolveTabletFeedback completes a stamp captured for table k
 // with the values it deferred, as they were at capture: the stamp is valid
 // only if the schema source identity matched the snapshot's.
 func sessionResolveTabletFeedback(stamp *routing.InternalTabletFeedbackStamp, k routing.InternalMetadataTable) {

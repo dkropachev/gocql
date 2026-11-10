@@ -77,10 +77,10 @@ func (o *inputOwner) resetExecution(onDrain func()) {
 	}
 }
 
-// InternalRefs reports the current reference count.
+// refs reports the current reference count.
 func (o *inputOwner) refs() int { return int(o.state.Load() & ownerRefsMask) }
 
-// InternalClosed reports whether the owner stopped admitting operations.
+// closed reports whether the owner stopped admitting operations.
 func (o *inputOwner) closed() bool { return o.state.Load()&ownerClosed != 0 }
 
 func (o *inputOwner) InternalAdmit() error {

@@ -29,7 +29,7 @@ func InternalWrapSession(core *implCluster.Core) *Session {
 	return &Session{core: core}
 }
 
-// InternalCore returns the cluster state s wraps, or nil for a nil s.
+// Core returns the cluster state s wraps, or nil for a nil s.
 func (s *Session) Core() *implCluster.Core {
 	if s == nil {
 		return nil
@@ -37,7 +37,7 @@ func (s *Session) Core() *implCluster.Core {
 	return s.core
 }
 
-// InternalSessionData returns the storage of the cluster state s wraps.
+// Data returns the storage of the cluster state s wraps.
 func (s *Session) Data() *implCluster.SessionStorage {
 	return implCluster.SessionData(s.Core())
 }

@@ -64,7 +64,7 @@ type batchEntry struct {
 	unset      bool // a value is unset, which requires protocol v4
 }
 
-// InternalBatchState is the batch an execution sends: a snapshot of the
+// batchState is the batch an execution sends: a snapshot of the
 // Batch's entries and values when the execution started.
 type batchState struct {
 	entries []batchEntry

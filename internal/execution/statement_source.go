@@ -52,7 +52,7 @@ func (cqlText) observe() uint64           { return 0 }
 // pointer, so storing it in a statementSource does not allocate.
 type preparedSource struct{ state *InternalPreparedState }
 
-// InternalPreparedSource returns the source executing state.
+// preparedSource returns the source executing state.
 func (state *InternalPreparedState) preparedSource() statementSource {
 	if state == nil {
 		return cqlText{}
