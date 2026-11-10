@@ -135,7 +135,7 @@ func TestPool(t *testing.T) {
 		defer s.Close()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		conn := codecTestMust(implCluster.InternalSessionSelectTypedConn(implExecution.InternalCore(s), ctx, routing.Info{}, nil))
+		conn := codecTestMust(implCluster.InternalSessionSelectTypedConn(implExecution.InternalCore((*implExecution.Session)(s)), ctx, routing.Info{}, nil))
 		table := fmt.Sprintf("pool_stream_%x", time.Now().UnixNano())
 		qualified := (fixtureKeyspace("") + ".") + table
 		ddl := func(stmt string) {
@@ -148,7 +148,7 @@ func TestPool(t *testing.T) {
 			}())); err != nil {
 				t.Fatal(err)
 			}
-			if err := implCluster.InternalSessionAwaitV2SchemaAgreementOn(implExecution.InternalCore(s), ctx, conn); err != nil {
+			if err := implCluster.InternalSessionAwaitV2SchemaAgreementOn(implExecution.InternalCore((*implExecution.Session)(s)), ctx, conn); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -176,7 +176,7 @@ func TestPool(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		pool, ok := implExecution.InternalSessionData(s).InternalPool.InternalGetPool(conn.InternalHost)
+		pool, ok := implExecution.InternalSessionData((*implExecution.Session)(s)).InternalPool.InternalGetPool(conn.InternalHost)
 		if !ok {
 			t.Fatal("pool missing")
 		}
@@ -325,8 +325,8 @@ func TestPool(t *testing.T) {
 				defer s.Close()
 				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
-				for _, host := range implExecution.InternalSessionData(s).InternalHostSource.InternalGetHostsList() {
-					pool, ok := implExecution.InternalSessionData(s).InternalPool.InternalGetPool(host)
+				for _, host := range implExecution.InternalSessionData((*implExecution.Session)(s)).InternalHostSource.InternalGetHostsList() {
+					pool, ok := implExecution.InternalSessionData((*implExecution.Session)(s)).InternalPool.InternalGetPool(host)
 					if !ok {
 						t.Fatal("missing host pool")
 					}

@@ -194,12 +194,12 @@ func TestWorkCountsPerf(t *testing.T) {
 			}
 			// Warm prepared lookup remains usable while the discovery LRU lock is held;
 			// unrelated schema events leave the captured table generation current.
-			s := implExecution.InternalWrapSession(new(implCluster.Core))
-			implExecution.InternalSessionData(s).InternalLogger = nopLogger{}
+			s := (*Session)(implExecution.InternalWrapSession(new(implCluster.Core)))
+			implExecution.InternalSessionData((*implExecution.Session)(s)).InternalLogger = nopLogger{}
 			cols := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "v", Type: cql.BlobType})
 			_, hp := testPreparedState(t, s, cols)
 			for i := 0; i < 1000; i++ {
-				implCluster.InternalSessionInvalidatePreparedSchema(implExecution.InternalCore(s), Event{Keyspace: "unrelated", Object: fmt.Sprint(i), Target: "TABLE"})
+				implCluster.InternalSessionInvalidatePreparedSchema(implExecution.InternalCore((*implExecution.Session)(s)), Event{Keyspace: "unrelated", Object: fmt.Sprint(i), Target: "TABLE"})
 			}
 			if !hp.InternalEpoch.InternalCurrent() {
 				t.Fatal("unrelated invalidation")

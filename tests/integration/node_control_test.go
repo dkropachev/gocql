@@ -58,7 +58,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	}
 
 	var target cql.UUID
-	for _, host := range implExecution.InternalSessionData(s).InternalHostSource.InternalGetHostsList() {
+	for _, host := range implExecution.InternalSessionData((*implExecution.Session)(s)).InternalHostSource.InternalGetHostsList() {
 		if host.ConnectAddress().String() == node.IP() {
 			target = implEndpoint.InternalHostInfoHostUUID(host)
 		}

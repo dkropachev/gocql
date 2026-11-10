@@ -590,6 +590,9 @@ func (p *Prepared[P, R]) AddToBatch(*Batch, P) error
 // Worker-owned reusable queries.
 func (p *Prepared[P, R]) Query(Options) (*Query[P, R], error)
 func (s *Session) UnpreparedQuery[P, R any](Statement[P, R], Options) (*Query[P, R], error)
+func (s *Session) UnpreparedExec[P any](context.Context, Statement[P, EmptyRow], P, ...BoundOptions) (Result, error)
+func (s *Session) UnpreparedOne[P, R any](context.Context, Statement[P, R], P, *R, ...BoundOptions) (bool, Result, error)
+func (s *Session) UnpreparedEach[P, R any](context.Context, Statement[P, R], P, *R, func(*R) error, ...BoundOptions) (Result, error)
 func (q *Query[P, R]) Exec(context.Context, P) (Result, error)
 func (q *Query[P, R]) Each(context.Context, P, *R, func(*R) error) (Result, error)
 func (q *Query[P, R]) One(context.Context, P, *R) (bool, Result, error)
@@ -610,7 +613,13 @@ Query skips that pool hand-off (about 2 to 4 percent of client CPU at 64
 workers on the loopback benchmark), resolves its Options once, and is the only
 form whose handles (Rows, Page) outlive the call. Session.UnpreparedQuery is
 the only reusable handle for statements that are not prepared, so Query keeps
-Exec, One and Each too. Both forms report results the same way.
+Exec, One and Each too. Both forms report results the same way. One detaches borrowed fields before
+releasing the response, preserving already-owned built-in destination buffers.
+Each lends borrowed fields only during its callback. Custom row/value decoders
+fall back to their recursive Clone contract when One detaches results.
+Session.UnpreparedExec, UnpreparedOne and UnpreparedEach provide occasional typed
+CQL text execution without a caller-owned query. Their cleanup stops admission
+on every return and keeps any remaining drain registered with the session.
 
 The public immutable binding API and standalone binding-based execution
 functions have been removed. Input is copied during execution admission,
@@ -1498,14 +1507,15 @@ opaque, immutable value made only by `ConfigBuilder.Build`; users never write a
 `Config` literal or assign its fields. Each builder method sets one setting
 and is named `With*` (`WithPort`, `WithTLS`, `WithTimeout`), except `Build`
 and the `No*` off switches; settings not chosen keep the driver's behavior, and when a setting is chosen
-again the last call wins. Features that are on by default are turned off by
-`No*` methods; features that are off by default, such as TLS, have no off
-switch. Methods never fail: `Build` reports every invalid call at once through
-`errors.Join`, each as a ValidationError naming the call; an invalid call
-leaves the setting unchanged. Settings with a single valid value are inferred
-only when not chosen; an explicit conflicting choice is a Build error. Values
-passed in are copied when the method is called. These functions are the entry
-points:
+again the last call wins. Setters store the latest value without validation or
+call history.
+`Build` validates only the final configuration and returns its first typed error.
+Correcting a setting clears the error on the next Build. Optional zero durations
+disable their budget, and nil optional providers remove overrides. With* methods
+restore features after No* switches. `WithIgnoreEvents` replaces its complete
+list; `WithDefaultProfile(nil)` resets the profile. Slice inputs are copied; Build snapshots
+configuration values while callback/provider objects remain shared and concurrency-safe.
+These functions are the entry points:
 
 ```go
 func NewConfig(contactPoints ...string) *ConfigBuilder

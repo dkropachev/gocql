@@ -10,11 +10,20 @@ import (
 	codec "github.com/scylladb/gocql/v2/internal/codec"
 )
 
-// Statement is CQL text with its typed parameter encoder and row decoder.
+// Statement pairs CQL text with a typed parameter encoder and row decoder.
+// Nil Params or Rows means none when its type is EmptyParams or EmptyRow.
+// BindMarkers supplies parameter metadata for unprepared execution; Prepare
+// takes that metadata from the server. Kind classifies conditional statements.
 type Statement[P any, R any] = binding.Statement[P, R]
 
+// OwnedBlobCodec encodes []byte and decodes into caller-owned storage. RowInto
+// and ReuseBuffers preserve a seeded slice when its capacity is sufficient.
+// The decoded bytes survive response release, including One returning.
 var OwnedBlobCodec = codec.OwnedBlobCodec
 
+// RowInto maps columns into the actual destination after calling reset. The
+// callback clears application state and may preserve owned slices for reuse.
+// Borrowed fields follow the execution's normal lifetime; One detaches them.
 func RowInto[R any](reset func(*R), fields ...OutputField[R]) RowDecoder[R] {
 	return codec.RowInto(reset, fields...)
 }

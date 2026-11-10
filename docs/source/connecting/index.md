@@ -3,10 +3,9 @@
 A `Config` is built, never written by hand. `NewConfig(contactPoints...)`
 returns a `ConfigBuilder`, and each method sets one setting; settings you do
 not choose keep the driver's behavior, and when a setting is chosen again the
-last call wins. Features that are on by default have a `No*` method to turn
-them off; features that are off by default, such as TLS, have none. `Build`
-validates everything and returns the immutable `Config`, or one error listing
-every invalid call:
+last call wins. Setters only store values. `Build` validates the final configuration and
+returns an immutable `Config` or the first validation error. A later setting
+replaces an earlier one even if it was invalid:
 
 ```go
 config, err := gocql.NewConfig("10.0.0.1", "10.0.0.2").
@@ -24,18 +23,27 @@ Unix socket: protocol 3 and no host discovery are then filled in unless
 chosen. `WithProtocolVersion` selects 3, 4 or 5; automatic negotiation caps at
 4, so select `Protocol5` explicitly for a server that supports it.
 
-Features that are on by default are turned off by `No*` methods, such as
-`NoHeartbeat`, `NoAdvancedShardAwareness`, `NoMetadataRefresh` and `NoPreparedCache`.
-Values passed to the builder, such as a `tls.Config`, are copied
-when the method is called. Callbacks and provider objects must support
+Use `NoHeartbeat`, `NoAdvancedShardAwareness`, `NoMetadataRefresh` and
+`NoPreparedCache` to disable features; their corresponding `With*` methods
+restore them. `WithDiscovery`, `WithConfigReport`, `WithAutomaticSchemaAgreement`
+and `WithRefreshAfterAgreement` restore those defaults after their off switches.
+`ProfileBuilder.WithPrefetch(0)` disables prefetch and `WithPrefetch(1)` restores it.
+Zero optional timeouts disable their budget; nil optional providers clear the
+override, including `WithTLS(nil)` for plaintext. `WithDefaultProfile(nil)` resets
+all profile settings. `WithIgnoreEvents` replaces the complete ignored-event
+list; calling it without arguments restores all events.
+
+`WithContactPoints` replaces the contact points. Slice arguments are copied,
+and `Build` snapshots the finished configuration. `StaticTLS` copies its input
+when constructed. Callbacks and provider objects remain shared and must support
 concurrent use.
 
 Use `WithConnectionsPerHost` for a host override or `WithConnectionsPerShard` for
 shard sizing; the later call replaces the earlier one. An explicit incremental stream occupies one configured connection through
 idle time and pages. Default page-buffered streams use normal multiplexing. Cancellation interrupts work;
 Session.Close rejects new work, cancels requests and joins writers/workers.
-Queries copy parameters during admission; Wait joins transport cleanup before
-executing the same query again.
+Queries copy parameters during admission; the next execution waits within its
+context for the preceding execution to drain.
 
 `endpoint.Dialer` receives a typed `endpoint.DialTarget` and customizes host
 setup. Hooks honor context cancellation and the selected endpoint/source.

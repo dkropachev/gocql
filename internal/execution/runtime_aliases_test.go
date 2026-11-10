@@ -22,5 +22,6 @@ type responseData = model.ResponseData
 type pageFuture = execution.InternalPageFuture
 
 func newPage[R any](response *responsePage, decoder cql.RowDecoder[R], release func()) (*Page[R], error) {
-	return execution.InternalNewPage(response, decoder, release)
+	page, err := execution.InternalNewPage(response, decoder, release)
+	return (*Page[R])(page), err
 }

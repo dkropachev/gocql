@@ -31,7 +31,8 @@
 // allocate no per-call execution state. Each takes at most one BoundOptions,
 // made once by Session.BindOptions; none uses the session's default profile.
 // Exec and Each return (Result, error) and One returns (bool, Result, error),
-// on Prepared and Query alike.
+// on Prepared and Query alike. One detaches borrowed fields before returning;
+// Each lends them only until its callback returns.
 //
 // Prepared.Query creates a reusable query owned by one goroutine. It resolves
 // its Options once and saves the pool hand-off of the one-shot calls (about 2
@@ -40,7 +41,9 @@
 // close, RunPage pages explicitly from a saved PageState, and RunUnpaged
 // requests one unpaged response. Session.UnpreparedQuery creates the same kind
 // of query for a statement sent as CQL text on every execution, without server
-// preparation. Parameters are copied during execution admission. A call while
+// preparation. Session.UnpreparedExec, UnpreparedOne and UnpreparedEach run
+// occasional CQL text statements without a query to close. Parameters are
+// copied during execution admission. A call while
 // a Rows, Page or RowStream of the query is open, or while another goroutine's
 // call runs, returns ErrBusy; a call after an execution that already returned
 // waits until its accepted writes drain. Close stops a query and waits for its

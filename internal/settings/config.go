@@ -122,8 +122,14 @@ func InternalValidateConfig(config Config) error {
 	if config.Port == 0 {
 		return typeValidation("port", "must not be zero")
 	}
+	if config.CQLVersion == "" {
+		return typeValidation("CQL version", "must not be empty")
+	}
 	if config.ReadTimeout < 0 || config.ConnectTimeout < 0 || config.DNSTimeout < 0 || config.WriteTimeout < 0 || config.KeepaliveInterval < 0 || config.KeepaliveTimeout < 0 || config.SocketKeepalive < 0 || config.CoalesceWait < 0 {
 		return typeValidation("timeouts", "must not be negative")
+	}
+	if config.KeepaliveInterval > 0 && config.KeepaliveTimeout == 0 {
+		return typeValidation("heartbeat", "timeout must be positive when heartbeats are enabled")
 	}
 	if config.Protocol == 5 && config.Compression == SnappyCompression {
 		return &UnsupportedSettingError{Setting: "compression", Reason: "native protocol5 supports raw or LZ4 segments"}

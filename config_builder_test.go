@@ -60,23 +60,23 @@ func TestConfigBuilder(t *testing.T) {
 		}
 	})
 
-	t.Run("BuildReportsEveryInvalidCall", func(t *testing.T) {
-		_, err := NewConfig("h").WithConnectionsPerShard(0).WithPort(0).WithHeartbeat(-time.Second, time.Second).Build()
-		if err == nil {
-			t.Fatal("Build accepted invalid settings")
+	t.Run("BuildValidatesFinalSettings", func(t *testing.T) {
+		b := NewConfig("h").WithPort(0).WithConnectionsPerShard(-1)
+		if _, err := b.Build(); err == nil {
+			t.Fatal("Build accepted an invalid port")
+		} else if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "port" {
+			t.Fatalf("Build = %v, want a port ValidationError", err)
 		}
-		for _, call := range []string{"WithConnectionsPerShard(0)", "WithPort(0)", "WithHeartbeat(-1s, 1s)"} {
-			if !strings.Contains(err.Error(), call) {
-				t.Errorf("error %q does not name %s", err, call)
-			}
+		b.WithPort(9042)
+		if _, err := b.Build(); err == nil {
+			t.Fatal("correcting the port hid the invalid pool size")
 		}
-		if _, ok := errors.AsType[*cqlerr.ValidationError](err); !ok {
-			t.Fatalf("error %v is not a ValidationError", err)
-		}
+		b.WithConnectionsPerShard(2)
+		mustBuildConfig(t, b)
 	})
 
 	t.Run("NoContactPoints", func(t *testing.T) {
-		if _, err := NewConfig().Build(); err == nil || !strings.Contains(err.Error(), "NewConfig()") {
+		if _, err := NewConfig().Build(); err == nil || !strings.Contains(err.Error(), "contact points") {
 			t.Fatalf("Build without contact points = %v", err)
 		}
 	})
@@ -110,13 +110,46 @@ func TestConfigBuilder(t *testing.T) {
 		}
 	})
 
-	t.Run("InvalidArgumentKeepsPreviousValue", func(t *testing.T) {
+	t.Run("InvalidLastValueReplacesPreviousValue", func(t *testing.T) {
 		b := NewConfig("h").WithConnectionsPerShard(3).WithConnectionsPerShard(-1)
-		if got := b.settings.Pool.ConnectionsPerShard; got != 3 {
-			t.Fatalf("ConnectionsPerShard = %d, want 3", got)
+		if got := b.settings.Pool.ConnectionsPerShard; got != -1 {
+			t.Fatalf("ConnectionsPerShard = %d, want the last value -1", got)
 		}
-		if _, err := b.Build(); err == nil || !strings.Contains(err.Error(), "WithConnectionsPerShard(-1)") {
-			t.Fatalf("Build = %v", err)
+		if _, err := b.Build(); err == nil {
+			t.Fatal("Build accepted the invalid last value")
+		}
+		b.WithConnectionsPerHost(4)
+		mustBuildConfig(t, b)
+	})
+
+	t.Run("CorrectionsAndResets", func(t *testing.T) {
+		b := NewConfig().WithContactPoints("h").WithProtocolVersion(99).WithProtocolVersion(Protocol4).
+			WithHeartbeat(-time.Second, -time.Second).NoHeartbeat().
+			WithIgnoreEvents(OverflowEvent).WithIgnoreEvents(StatusEvent).
+			WithTLS(StaticTLS(nil)).WithTLS(nil).
+			WithClientRoutes(NewClientRoutes()).WithClientRoutes(nil).
+			WithMetadataKeyspaces("").WithMetadataKeyspaces().
+			NoDiscovery().WithDiscovery().
+			NoConfigReport().WithConfigReport().
+			WithManualSchemaAgreement().WithAutomaticSchemaAgreement().
+			NoRefreshAfterAgreement().WithRefreshAfterAgreement().
+			WithDefaultProfile(func(p *ProfileBuilder) {
+				p.WithPageSize(0).WithPageSize(42).NoPrefetch().WithPrefetch(1)
+			})
+		c := mustBuildConfig(t, b).settings
+		if c.TLS != nil || c.ClientRoutes != nil || !c.Metadata.InitialDiscovery || !c.ReportConfiguration ||
+			!c.Metadata.AutomaticAgreement || !c.Metadata.RefreshAfterAgreement ||
+			!c.Metadata.SchemaEvents || c.Metadata.StatusEvents || c.DefaultProfile.PageSize != 42 || c.DefaultProfile.Prefetch != 1 {
+			t.Fatalf("later settings did not replace previous choices: %+v", c)
+		}
+		b.WithIgnoreEvents().WithDefaultProfile(nil)
+		reset := mustBuildConfig(t, b).settings
+		if !reset.Metadata.StatusEvents || reset.DefaultProfile.PageSize != 5000 {
+			t.Fatal("reset did not restore defaults")
+		}
+		// Already-built configurations are snapshots, including event choices.
+		if c.Metadata.StatusEvents || c.DefaultProfile.PageSize != 42 {
+			t.Fatal("later builder changes reached a built configuration")
 		}
 	})
 
@@ -139,7 +172,6 @@ func TestConfigBuilder(t *testing.T) {
 			b    *ConfigBuilder
 			want string
 		}{
-			"Nil":              {NewConfig("h").WithTLS(nil), "source is required"},
 			"NoConfig":         {NewConfig("h").WithTLS(StaticTLS(nil)), "returned no config"},
 			"UnixSocket":       {NewConfig("/var/lib/scylla/cql.m").WithTLS(source), "Unix TLS"},
 			"UnverifiedRoutes": {NewConfig("h").WithClientRoutes(NewClientRoutes("c").WithTLS()).WithTLS(StaticTLS(&tls.Config{InsecureSkipVerify: true})), "client routes TLS"},
@@ -196,7 +228,7 @@ func TestConfigBuilder(t *testing.T) {
 			t.Fatalf("profile = %+v", *c.DefaultProfile)
 		}
 		_, err := NewConfig("h").WithDefaultProfile(func(p *ProfileBuilder) { p.WithPageSize(0) }).Build()
-		if err == nil || !strings.Contains(err.Error(), "WithDefaultProfile") || !strings.Contains(err.Error(), "WithPageSize(0)") {
+		if err == nil || !strings.Contains(err.Error(), "page size") {
 			t.Fatalf("invalid profile error = %v", err)
 		}
 	})

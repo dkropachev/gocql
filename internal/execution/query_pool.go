@@ -309,7 +309,7 @@ func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...BoundOpti
 
 // One binds value, executes the statement once and decodes its first row
 // into dst, reporting whether a row existed; without one, dst is cleared.
-// Values that borrow response storage are invalid once One returns. Options
+// Borrowed fields are detached before response storage is released. Options
 // are as for Exec. One is safe for concurrent use.
 func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...BoundOptions) (bool, Result, error) {
 	o, err := oneShotOptions(options)

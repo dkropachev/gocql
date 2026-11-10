@@ -30,6 +30,8 @@ type ParamPlan[P any] interface {
 }
 
 // RowDecoder compiles a reusable immutable decoder against actual result metadata.
+// Clone must recursively detach response-backed fields. One uses it as the
+// fallback for custom plans before releasing response storage.
 type RowDecoder[R any] interface {
 	Compile(cqltype.Columns) (RowPlan[R], error)
 	Clone(R) R
@@ -338,6 +340,7 @@ type OutputField[R any] interface {
 	compile(cqltype.DataType) (OutputField[R], error)
 	decode(*RowReader, *R) error
 	clone(dst, source *R)
+	detachField(*R)
 }
 
 type outputField[R, V any] struct {

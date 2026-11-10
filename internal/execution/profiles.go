@@ -12,8 +12,8 @@ import (
 	// IncludeMetadata requests full result metadata even when a validated cache exists.
 )
 
-// Options lists the settings of an execution. NewOptions validates and
-// freezes them into BoundOptions.
+// Options lists execution overrides. Query constructors resolve them once;
+// Session.BindOptions resolves recurring overrides for one-shot calls.
 type Options struct {
 	Retry                retry.Policy
 	Observer             Observer

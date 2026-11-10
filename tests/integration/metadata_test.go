@@ -79,7 +79,7 @@ func TestMetadata(t *testing.T) {
 		}
 		defer sub.Close()
 		before := s.Metadata() // subscribe-before-snapshot, then discard <= generation
-		conn, err := implCluster.InternalSessionSelectTypedConn(implExecution.InternalCore(s), ctx, routing.Info{}, nil)
+		conn, err := implCluster.InternalSessionSelectTypedConn(implExecution.InternalCore((*implExecution.Session)(s)), ctx, routing.Info{}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -181,7 +181,7 @@ func TestMetadata(t *testing.T) {
 			}
 			defer sub.Close()
 
-			if err := implExecution.InternalSessionData(sess).InternalControl.InternalReconnect(); err != nil {
+			if err := implExecution.InternalSessionData((*implExecution.Session)(sess)).InternalControl.InternalReconnect(); err != nil {
 				t.Fatalf("control reconnect: %v", err)
 			}
 
@@ -306,12 +306,12 @@ func TestMetadata(t *testing.T) {
 				// wait for autodiscovery to update the pool with the list of known hosts
 				time.Sleep(*flagAutoWait)
 			}
-			implExecution.InternalSessionData(session).InternalPool.InternalMu.RLock()
-			defer implExecution.InternalSessionData(session).InternalPool.InternalMu.RUnlock()
-			size := len(implExecution.InternalSessionData(session).InternalPool.InternalHostConnPools)
+			implExecution.InternalSessionData((*implExecution.Session)(session)).InternalPool.InternalMu.RLock()
+			defer implExecution.InternalSessionData((*implExecution.Session)(session)).InternalPool.InternalMu.RUnlock()
+			size := len(implExecution.InternalSessionData((*implExecution.Session)(session)).InternalPool.InternalHostConnPools)
 
 			if *clusterSize != size {
-				for p, pool := range implExecution.InternalSessionData(session).InternalPool.InternalHostConnPools {
+				for p, pool := range implExecution.InternalSessionData((*implExecution.Session)(session)).InternalPool.InternalHostConnPools {
 					t.Logf("p=%q host=%v ips=%s", p, pool.InternalHost, pool.InternalHost.ConnectAddress().String())
 
 				}

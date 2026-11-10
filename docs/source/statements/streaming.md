@@ -27,7 +27,11 @@ row := Download{
 }
 query, err := prepared.StreamQuery(decoder, gocql.StreamOptions{})
 if err != nil { return err }
-defer query.Close(ctx)
+defer func() {
+    cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+    _ = query.Close(cleanup)
+}()
 stream, err := query.Run(ctx, parameters)
 if err != nil { return err }
 defer stream.Close()
@@ -36,6 +40,18 @@ for stream.NextInto(&row) {
 }
 return stream.Err()
 ```
+
+Choose execution and receive behavior independently:
+
+| Use case | API and behavior |
+| --- | --- |
+| Ordinary application reads | `One` for an owned result, `Each` for synchronous consumption, or `Run` for a borrowed cursor |
+| Reusing caller output buffers with normal connection multiplexing | Page-buffered `StreamQuery`, the default |
+| Large responses needing bounded receive scratch | `StreamQuery` with `Incremental: true`, reserving one connection |
+
+Both stream modes decode into caller-owned output. Page buffering holds a full
+page; incremental mode bounds receive scratch and has the protocol/compression
+restrictions below. Caller-buffer capacity is a separate budget in both modes.
 
 Seed the outer slice slots **and each nested slice's capacity** before the first
 NextInto. Decoders reuse capacity without growing or reallocating payloads. A
@@ -74,4 +90,5 @@ segment integrity and LZ4 use bounded staging/transform units. Protocol 3/4 LZ4
 or Snappy frame compression is explicitly rejected with StreamCapabilityError
 before streaming submission. Incremental mode reports its capability error explicitly.
 Set StreamOptions.Limits for metadata, read-ahead, discard and transform budgets;
-Config.Limits bounds row/cell sizes and nesting. A limit error is terminal. StreamInfo reports delivered rows, pages and attempts.
+The configuration builder's `WithMaxFrameSize`, `WithMaxDecompressedSize`
+and `WithMaxMetadataDepth` bound response sizes and nesting. A limit error is terminal. StreamInfo reports delivered rows, pages and attempts.

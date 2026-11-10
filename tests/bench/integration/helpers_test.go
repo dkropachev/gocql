@@ -211,11 +211,11 @@ func init() {
 type Bound[R any] = implExecution.Bound[R]
 
 func BindBorrowed[P any, R any](a0 *gocql.Prepared[P, R], a1 P) (*Bound[R], error) {
-	return implExecution.BindBorrowed[P, R](a0, a1)
+	return implExecution.BindBorrowed[P, R]((*implExecution.Prepared[P, R])(a0), a1)
 }
 
 func BindOwned[P any, R any](a0 *gocql.Prepared[P, R], a1 P) (*Bound[R], error) {
-	return implExecution.BindOwned[P, R](a0, a1)
+	return implExecution.BindOwned[P, R]((*implExecution.Prepared[P, R])(a0), a1)
 }
 
 func BindUnpreparedOwned[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a2 P) (*Bound[R], error) {
@@ -223,11 +223,12 @@ func BindUnpreparedOwned[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a
 }
 
 func Exec[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.BoundOptions) (gocql.Result, error) {
-	return implExecution.Exec[R](a0, implExecution.InternalCore(a1), a2, a3)
+	return implExecution.Exec[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, a3)
 }
 
 func Run[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.BoundOptions) (gocql.Rows[R], error) {
-	return implExecution.Run[R](a0, implExecution.InternalCore(a1), a2, a3)
+	result, err := implExecution.Run[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, a3)
+	return gocql.Rows[R](result), err
 }
 
 type cassandraObserver struct {

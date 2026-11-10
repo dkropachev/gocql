@@ -122,7 +122,7 @@ func TestPerformance(t *testing.T) {
 					runtime.GC()
 					before := mem()
 					r := concurrentMemory{API: api, Workers: workers, Rows: 128, Cell: 4096, Page: 128, RuntimeHeapBeforeConnect: initial, FixedSessionHeap: fixed, IdleHeapWithApplication: before.HeapAlloc, ApplicationStorageBytes: int64(workers * (4096 + 11))}
-					r.IdleCacheBytes, r.IdleCacheObjects = implExecution.InternalSessionData(s).InternalConnCfg.InternalReceiveCache.Storage()
+					r.IdleCacheBytes, r.IdleCacheObjects = implExecution.InternalSessionData((*implExecution.Session)(s)).InternalConnCfg.InternalReceiveCache.Storage()
 					var peak atomic.Uint64
 					monitorStop := make(chan struct{})
 					monitorDone := make(chan struct{})
@@ -247,7 +247,7 @@ func TestPerformance(t *testing.T) {
 						runtime.GC()
 						parked := mem()
 						r.AllParkedPostGCHeap = parked.HeapAlloc
-						r.ParkedCacheBytes, r.ParkedCacheObjects = implExecution.InternalSessionData(s).InternalConnCfg.InternalReceiveCache.Storage()
+						r.ParkedCacheBytes, r.ParkedCacheObjects = implExecution.InternalSessionData((*implExecution.Session)(s)).InternalConnCfg.InternalReceiveCache.Storage()
 						r.AllParkedStackBytes = parked.StackInuse
 						r.WorkerAllocatedBytes = parked.TotalAlloc - before.TotalAlloc
 						r.WorkerAllocations = parked.Mallocs - before.Mallocs
@@ -270,7 +270,7 @@ func TestPerformance(t *testing.T) {
 					r.PeakSampledHeap = peak.Load()
 					runtime.GC()
 					r.PostClosePostGCHeap = mem().HeapAlloc
-					r.PostCloseCacheBytes, r.PostCloseCacheObjects = implExecution.InternalSessionData(s).InternalConnCfg.InternalReceiveCache.Storage()
+					r.PostCloseCacheBytes, r.PostCloseCacheObjects = implExecution.InternalSessionData((*implExecution.Session)(s)).InternalConnCfg.InternalReceiveCache.Storage()
 					r.InclusiveDriverAndHarnessBytes = int64(r.AllParkedPostGCHeap) - int64(initial) - r.ApplicationStorageBytes
 					r.IncrementalOverWarmIdleBytes = int64(r.AllParkedPostGCHeap) - int64(r.IdleHeapWithApplication)
 					if firstErr != nil {
@@ -588,7 +588,7 @@ func TestPerformance(t *testing.T) {
 					}
 					runtime.GC()
 					r.IdleHeapBytes = mem().HeapAlloc
-					r.IdleReceiveCacheBytes, r.IdleReceiveCacheObjects = implExecution.InternalSessionData(s).InternalConnCfg.InternalReceiveCache.Storage()
+					r.IdleReceiveCacheBytes, r.IdleReceiveCacheObjects = implExecution.InternalSessionData((*implExecution.Session)(s)).InternalConnCfg.InternalReceiveCache.Storage()
 					r.Negotiated = testNegotiated(s)
 					var peak atomic.Uint64
 					stop := make(chan struct{})

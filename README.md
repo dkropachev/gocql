@@ -60,8 +60,10 @@ from arbitrary Go values.
 concurrent use and run on queries the statement keeps for them, so they
 allocate no per-call execution state. Each takes at most one `BoundOptions`
 from `session.BindOptions(options)`; none uses the session default. They return
-only when the execution has finished: values that borrow response storage are
-valid until `One` returns or `fn` returns.
+only when the execution has finished. `One` detaches borrowed fields before
+returning, so its result remains valid.
+`Each` lends borrowed fields only until `fn` returns; clone any values retained
+by the callback.
 
 `prepared.Query(options)` creates a reusable query owned by one worker; any
 number of queries can share one preparation. It resolves its options once and
@@ -69,9 +71,12 @@ skips the one-shot calls' pool hand-off, which saves about 2 to 4 percent of
 client CPU at high concurrency, and it adds the executions whose handles
 outlive the call: `Run` returns `Rows`, iterated with `NextInto` and closed by
 the caller; `RunPage` resumes from a saved `PageState` for explicit paging, and
-`RunUnpaged` requests one unpaged response. `session.UnpreparedQuery(statement,
-options)` creates the same kind of query for a statement sent as CQL text on
-every execution. Each call copies its parameters during admission. A call while
+`RunUnpaged` requests one unpaged response.
+
+`session.UnpreparedExec`, `session.UnpreparedOne`, and `session.UnpreparedEach`
+handle occasional CQL text executions without leaving a query to close. Repeated unprepared execution
+uses `session.UnpreparedQuery(statement, options)`, which creates the same kind
+of query for a statement sent as CQL text on every execution. Each call copies its parameters during admission. A call while
 a `Rows`, `Page` or stream of the query is open, or while another goroutine's
 call runs, returns `ErrBusy`; a call after an execution that already returned
 waits until that execution's accepted writes drain. `query.Close(ctx)`
@@ -114,9 +119,15 @@ per object and 64 objects per session.
 
 Normal buffered execution supports negotiated LZ4 and Snappy subject to native
 protocol rules; protocol 5 compression uses LZ4. Configure
-`config.Compression = gocql.LZ4Compression` without a compressor import.
+`gocql.NewConfig(hosts...).WithCompression(gocql.LZ4Compression)` without a
+compressor import.
 
 ## Configuration and extensions
+
+`NewConfig` and `NewProfile` setters store the latest value, including invalid
+values. `Build` validates the final settings and reports the first error;
+correcting a setting and building again clears that error. Nil optional
+providers remove overrides, and zero optional timeouts disable them.
 
 `Connect` snapshots validated configuration before starting workers. Configure
 TLS with `crypto/tls`, authentication with `auth.Password` or an `auth.Provider`, and

@@ -12,12 +12,18 @@ import (
 )
 
 // Batch collects statements, each with its values, to send as one CQL
-// BATCH request: Query.AddToBatch appends a statement, Query.ExecBatch and
-// Query.RunBatch send the batch, and Reset empties it for reuse. Once a
+// BATCH request: Query.AddToBatch appends a statement, Session.ExecBatch and
+// Session.RunBatch send the batch, and Reset empties it for reuse. Once a
 // batch has grown to its working size, appending allocates nothing. The
 // zero Batch is ready to use; a Batch is not safe for concurrent use and
 // must not be copied.
-type Batch = implExecution.Batch
+type Batch implExecution.Batch
+
+// Len returns the number of statements in the batch.
+func (b *Batch) Len() int { return (*implExecution.Batch)(b).Len() }
+
+// Reset clears statements while preserving the batch's reusable capacity.
+func (b *Batch) Reset() { (*implExecution.Batch)(b).Reset() }
 
 const BatchSizeMaximum = implCluster.BatchSizeMaximum
 
@@ -30,7 +36,8 @@ func Connect(ctx context.Context, config Config) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	return implExecution.Connect(ctx, settings)
+	session, err := implExecution.Connect(ctx, settings)
+	return (*Session)(session), err
 }
 
 const ControlEvent = implCluster.ControlEvent
@@ -45,7 +52,8 @@ func OpenSingleHost(ctx context.Context, config Config, hostID cql.UUID) (*Sessi
 	if err != nil {
 		return nil, err
 	}
-	return implExecution.OpenSingleHost(ctx, settings, hostID)
+	session, err := implExecution.OpenSingleHost(ctx, settings, hostID)
+	return (*Session)(session), err
 }
 
 // Options lists the settings of an execution. The zero Options uses the
@@ -60,12 +68,12 @@ type Options = implExecution.Options
 // executions such as Prepared.Exec and Session.ExecBatch. They are immutable
 // and safe to share between goroutines. The zero BoundOptions uses the
 // executing session's default profile.
+// Reuse bound options on their originating session for precomputed settings;
+// another session resolves their original overrides against its own defaults.
+// Values returns a copy of the original overrides for deriving another set.
 type BoundOptions = implExecution.BoundOptions
 
 const OverflowEvent = implCluster.OverflowEvent
-
-type Page[R any] = implExecution.Page[R]
-type PageLease = implExecution.PageLease
 
 // Prepare prepares statement on session. At most one PrepareOptions may be
 // given; none prepares with the session's keyspace on any host.
@@ -76,19 +84,19 @@ func Prepare[P any, R any](ctx context.Context, session *Session, statement cql.
 }
 
 type PrepareOptions = implExecution.PrepareOptions
-type Prepared[P any, R any] = implExecution.Prepared[P, R]
 type PreparedInfo = implExecution.PreparedInfo
-
-type RowStream[R any] = implExecution.RowStream[R]
-type Rows[R any] = implExecution.Rows[R]
 
 const SchemaEvent = implCluster.SchemaEvent
 
-type Session = implExecution.Session
-
 const StatusEvent = implCluster.StatusEvent
 
+// StreamInfo reports delivered rows, pages and execution progress.
 type StreamInfo = implExecution.StreamInfo
+
+// StreamOptions chooses caller-storage decoding and its receive mode. The zero
+// value buffers a whole page on a multiplexed connection. Incremental reserves
+// a connection and bounds receive scratch, with protocol/compression limits.
+// Both modes require seeded output capacity and disable prefetch/speculation.
 type StreamOptions = implExecution.StreamOptions
 type Subscription = implCluster.Subscription
 

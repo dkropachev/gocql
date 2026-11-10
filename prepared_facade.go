@@ -1,0 +1,77 @@
+// Copyright 2026 The Gocql Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license.
+
+package gocql
+
+import (
+	"context"
+
+	"github.com/scylladb/gocql/v2/cql"
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+)
+
+// Prepared is an immutable typed statement prepared on a session. Share it
+// between goroutines and call Exec, One or Each for ordinary executions. Each
+// call may take one BoundOptions, built once by Session.BindOptions, or omit
+// options for the session defaults. A Prepared has no Close obligation.
+type Prepared[P, R any] implExecution.Prepared[P, R]
+
+func (p *Prepared[P, R]) internal() *implExecution.Prepared[P, R] {
+	return (*implExecution.Prepared[P, R])(p)
+}
+
+// Exec executes a statement with no result columns. It is safe for concurrent
+// use. At most one BoundOptions may be passed.
+func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...BoundOptions) (Result, error) {
+	return p.internal().Exec(ctx, value, options...)
+}
+
+// One decodes the first row into dst, reporting whether a row exists. Further
+// rows are ignored; if none exists dst is cleared. Borrowed fields are detached
+// before return, while built-in owning fields retain reusable destination
+// buffers. The result stays valid after the call. One is safe for concurrent
+// use with independent destinations. At most one BoundOptions may be passed.
+func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...BoundOptions) (bool, Result, error) {
+	return p.internal().One(ctx, value, dst, options...)
+}
+
+// Each decodes every row across all pages into dst and calls fn. Borrowed
+// fields are valid only until fn returns; clone any values kept beyond that
+// point. A non-nil callback error stops iteration. Each is safe for concurrent
+// use with independent destinations. At most one BoundOptions may be passed.
+func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...BoundOptions) (Result, error) {
+	return p.internal().Each(ctx, value, dst, fn, options...)
+}
+
+// Query creates a worker-owned reusable query with fixed options. It also
+// provides cursors and explicit paging. Close it when the worker is done.
+func (p *Prepared[P, R]) Query(options Options) (*Query[P, R], error) {
+	q, err := p.internal().Query(options)
+	return (*Query[P, R])(q), err
+}
+
+// StreamQuery creates a reusable query decoding into seeded caller storage.
+// Page buffering preserves normal connection multiplexing. Incremental receive
+// additionally bounds receive scratch and reserves one connection. Close both
+// the query and its execution cursor. Capacity failures may leave partial row
+// data; only a successful NextInto publishes a complete row.
+func (p *Prepared[P, B]) StreamQuery[R any](decoder cql.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
+	q, err := p.internal().StreamQuery(decoder, options)
+	return (*StreamQuery[P, R])(q), err
+}
+
+// AddToBatch copies an encoded parameter snapshot into batch. Calls on p are
+// concurrency-safe, but appending to one batch requires exclusive ownership.
+func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
+	return p.internal().AddToBatch((*implExecution.Batch)(batch), value)
+}
+
+// Parameters returns the statement's immutable bind-marker metadata.
+func (p *Prepared[P, R]) Parameters() cql.Columns { return p.internal().Parameters() }
+
+// Columns returns the statement's initial immutable result metadata. Actual
+// execution metadata can change after schema updates; cursor Columns reports it.
+func (p *Prepared[P, R]) Columns() cql.Columns { return p.internal().Columns() }
+
+// Info returns the statement's preparation information.
+func (p *Prepared[P, R]) Info() PreparedInfo { return p.internal().Info() }

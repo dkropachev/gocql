@@ -61,16 +61,7 @@ func Example() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	insert, err := insertPrepared.Query(gocql.Options{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer func() {
-		if err := insert.Close(ctx); err != nil {
-			log.Print(err)
-		}
-	}()
-	if _, err := insert.Exec(ctx, tweet{cql.NewTimeUUID(), "me", "hello world"}); err != nil {
+	if _, err := insertPrepared.Exec(ctx, tweet{cql.NewTimeUUID(), "me", "hello world"}); err != nil {
 		log.Fatal(err)
 	}
 	selectTweetsPrepared, err := session.Prepare(ctx, cql.Statement[string, tweet]{
@@ -85,17 +76,8 @@ func Example() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	selectTweets, err := selectTweetsPrepared.Query(gocql.Options{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer func() {
-		if err := selectTweets.Close(ctx); err != nil {
-			log.Print(err)
-		}
-	}()
 	var row tweet
-	_, err = selectTweets.Each(ctx, "me", &row, func(row *tweet) error {
+	_, err = selectTweetsPrepared.Each(ctx, "me", &row, func(row *tweet) error {
 		fmt.Println(row.ID, row.Text)
 		return nil
 	})

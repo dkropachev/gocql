@@ -15,12 +15,12 @@ import (
 func runtimeTestSession(t testing.TB, n int) (*Session, []*driverConn, []net.Conn) {
 	t.Helper()
 	s := func() *Session {
-		opaqueStorageValue := implExecution.InternalWrapSession(new(implCluster.Core))
-		implExecution.InternalSessionData(opaqueStorageValue).InternalLogger = nopLogger{}
+		opaqueStorageValue := (*Session)(implExecution.InternalWrapSession(new(implCluster.Core)))
+		implExecution.InternalSessionData((*implExecution.Session)(opaqueStorageValue)).InternalLogger = nopLogger{}
 		return opaqueStorageValue
 	}()
-	implExecution.InternalSessionData(s).InternalHostSource = &ringDescriber{InternalHosts: map[string]*HostInfo{}}
-	implExecution.InternalSessionData(s).InternalPool = &policyConnPool{InternalHostConnPools: map[cql.UUID]*hostConnPool{}}
+	implExecution.InternalSessionData((*implExecution.Session)(s)).InternalHostSource = &ringDescriber{InternalHosts: map[string]*HostInfo{}}
+	implExecution.InternalSessionData((*implExecution.Session)(s)).InternalPool = &policyConnPool{InternalHostConnPools: map[cql.UUID]*hostConnPool{}}
 	var conns []*driverConn
 	var peers []net.Conn
 	for i := 0; i < n; i++ {
@@ -34,10 +34,10 @@ func runtimeTestSession(t testing.TB, n int) (*Session, []*driverConn, []net.Con
 		}()
 		conn.InternalHost = host
 		conn.InternalHooks = newConnectionHooks(s)
-		implExecution.InternalSessionData(s).InternalHostSource.InternalHosts[id.String()] = host
+		implExecution.InternalSessionData((*implExecution.Session)(s)).InternalHostSource.InternalHosts[id.String()] = host
 		picker := newDefaultConnPicker(1)
 		picker.Put(conn)
-		implExecution.InternalSessionData(s).InternalPool.InternalHostConnPools[id] = &hostConnPool{InternalHost: host, InternalConnPicker: picker}
+		implExecution.InternalSessionData((*implExecution.Session)(s)).InternalPool.InternalHostConnPools[id] = &hostConnPool{InternalHost: host, InternalConnPicker: picker}
 		conns = append(conns, conn)
 		peers = append(peers, peer)
 		go conn.InternalServe(conn.InternalCtx)

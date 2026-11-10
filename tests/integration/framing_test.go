@@ -98,7 +98,7 @@ func TestFraming(t *testing.T) {
 		t.Run("NotWorthIt", func(t *testing.T) {
 			session := createV2Session(t)
 			defer session.Close()
-			if implExecution.InternalSessionData(session).InternalCfg.ProtoVersion < 5 {
+			if implExecution.InternalSessionData((*implExecution.Session)(session)).InternalCfg.ProtoVersion < 5 {
 				t.Skip("compressed segments are only produced on protocol >= 5")
 			}
 			if getRandomConn(t, session).InternalCompressor == nil {
@@ -151,7 +151,7 @@ func TestFraming(t *testing.T) {
 					name:  "native protocol v5",
 					table: "metadata_changed",
 					gate: func(t *testing.T, session *gocql.Session, conn *driverConn) string {
-						if implExecution.InternalSessionData(session).InternalCfg.ProtoVersion < protoVersion5 {
+						if implExecution.InternalSessionData((*implExecution.Session)(session)).InternalCfg.ProtoVersion < protoVersion5 {
 							return "Metadata_changed mechanism is only available in proto > 4"
 						}
 						if *flagDistribution == "scylla" && flagCassVersion.Before(2025, 3, 0) {
@@ -247,15 +247,15 @@ func TestFraming(t *testing.T) {
 				implExecution.OptionsData(opaqueStorageValuexxxxxxx).InternalConnection = conn
 				return opaqueStorageValuexxxxxxx
 			}())
-			implExecution.PreparedData(prepared).InternalState.InternalMu.Lock()
-			entry, ok := implExecution.PreparedData(prepared).InternalState.InternalHosts[host.Value]
+			preparedData(prepared).InternalState.InternalMu.Lock()
+			entry, ok := preparedData(prepared).InternalState.InternalHosts[host.Value]
 			require.True(t, ok)
 			cached := *entry
 			require.NotEmpty(t, cached.InternalMetadataID)
 			cached.InternalMetadataID = nil
 			cached.InternalRevision++
-			implExecution.PreparedData(prepared).InternalState.InternalHosts[host.Value] = &cached
-			implExecution.PreparedData(prepared).InternalState.InternalMu.Unlock()
+			preparedData(prepared).InternalState.InternalHosts[host.Value] = &cached
+			preparedData(prepared).InternalState.InternalMu.Unlock()
 			row := cassandraReadBound(t, session, bound, *func() *gocql.Options {
 				opaqueStorageValuexxxxxxxx := new(gocql.Options)
 				opaqueStorageValuexxxxxxxx.HostID = host
@@ -264,9 +264,9 @@ func TestFraming(t *testing.T) {
 			}())
 			require.Equal(t, int64(1), cassandraInt(t, row, "id"))
 			require.Equal(t, int64(7), cassandraInt(t, row, "val"))
-			implExecution.PreparedData(prepared).InternalState.InternalMu.RLock()
-			healed := implExecution.PreparedData(prepared).InternalState.InternalHosts[host.Value]
-			implExecution.PreparedData(prepared).InternalState.InternalMu.RUnlock()
+			preparedData(prepared).InternalState.InternalMu.RLock()
+			healed := preparedData(prepared).InternalState.InternalHosts[host.Value]
+			preparedData(prepared).InternalState.InternalMu.RUnlock()
 			require.NotEmpty(t, healed.InternalMetadataID, "empty metadata ID must be repaired from response")
 			require.True(t, healed.InternalMetadataChanged)
 			require.Greater(t, healed.InternalRevision, cached.InternalRevision)
@@ -278,7 +278,7 @@ func TestFraming(t *testing.T) {
 	t.Run("Segment", func(t *testing.T) {
 		session := createV2Session(t)
 		defer session.Close()
-		if implExecution.InternalSessionData(session).InternalCfg.ProtoVersion < 5 {
+		if implExecution.InternalSessionData((*implExecution.Session)(session)).InternalCfg.ProtoVersion < 5 {
 			t.Skip("segmented frames are only produced on protocol >= 5")
 		}
 		table := testTableName(t)

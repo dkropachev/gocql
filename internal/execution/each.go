@@ -144,6 +144,7 @@ func decodeEach[R any](ctx context.Context, s *implCluster.Core, response *respo
 			return ErrClosed
 		}
 		if fn == nil {
+			codec.DetachRow(plan, dst)
 			return errStopEach
 		}
 		if err := fn(dst); err != nil {
@@ -158,8 +159,8 @@ func decodeEach[R any](ctx context.Context, s *implCluster.Core, response *respo
 
 // RunOne executes the bound statement and decodes its first row into dst,
 // reporting whether a row existed. Further rows are ignored, as with
-// database/sql's QueryRow. Values that borrow response storage are invalid
-// once RunOne returns; use owning codecs for them.
+// database/sql's QueryRow. Borrowed fields are detached before response storage
+// is released; built-in owning fields keep their destination storage.
 func RunOne[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions, dst *R) (bool, Result, error) {
 	found, result, err := each(ctx, s, b, options, dst, nil, new(eachScratch))
 	if !found && err == nil {
@@ -187,8 +188,8 @@ func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) err
 }
 
 // One executes the query with value and decodes its first row into dst,
-// reporting whether a row existed; without one, dst is cleared. Values that
-// borrow response storage are invalid once One returns. The query is ready
+// reporting whether a row existed; without one, dst is cleared. Borrowed fields
+// are detached, so the result stays valid after One returns. The query is ready
 // for its next execution when One returns.
 func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, Result, error) {
 	if err := q.capture(ctx, value); err != nil {

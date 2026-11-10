@@ -96,7 +96,7 @@ func waitForHostConns(t *testing.T, session *gocql.Session) map[string]*driverCo
 		pending = pending[:0]
 		down = down[:0]
 
-		for _, host := range implExecution.InternalSessionData(session).InternalHostSource.InternalGetHostsList() {
+		for _, host := range implExecution.InternalSessionData((*implExecution.Session)(session)).InternalHostSource.InternalGetHostsList() {
 			// Collected rather than merely skipped: a host that stays down keeps the
 			// count below *clusterSize while contributing nothing to pending, so the
 			// failure below would otherwise report "2 of 3 connected, 0 still without
@@ -107,7 +107,7 @@ func waitForHostConns(t *testing.T, session *gocql.Session) map[string]*driverCo
 			}
 
 			addr := host.ConnectAddressAndPort()
-			pool, found := implExecution.InternalSessionData(session).InternalPool.InternalGetPool(host)
+			pool, found := implExecution.InternalSessionData((*implExecution.Session)(session)).InternalPool.InternalGetPool(host)
 			if !found {
 				pending = append(pending, addr)
 				continue
@@ -147,7 +147,7 @@ func getRandomConn(t *testing.T, session *gocql.Session) *driverConn {
 
 	var conn *driverConn
 	if !pollUntil(hostConnWaitTimeout, func() bool {
-		conn = implCluster.InternalSessionGetConn(implExecution.InternalCore(session))
+		conn = implCluster.InternalSessionGetConn(implExecution.InternalCore((*implExecution.Session)(session)))
 		return conn != nil
 	}) {
 		t.Fatal("unable to get a connection")
@@ -165,11 +165,11 @@ func injectInvalidPreparedStatement(t *testing.T, session *gocql.Session, table 
 		implExecution.PrepareOptionsData(opaqueStorageValuex).InternalConnection = conn
 		return opaqueStorageValuex
 	}())
-	implExecution.PreparedData(prepared).InternalState.InternalMu.Lock()
-	host := implExecution.PreparedData(prepared).InternalState.InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)]
+	preparedData(prepared).InternalState.InternalMu.Lock()
+	host := preparedData(prepared).InternalState.InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)]
 	host.InternalId = []byte("foobar")
-	implExecution.PreparedData(prepared).InternalState.InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)] = host
-	implExecution.PreparedData(prepared).InternalState.InternalMu.Unlock()
+	preparedData(prepared).InternalState.InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)] = host
+	preparedData(prepared).InternalState.InternalMu.Unlock()
 	return cassandraBound(t, prepared, "bar"), conn
 }
 
@@ -213,7 +213,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 	create := cassandraUnprepared(t, "CREATE TABLE "+qualified+"(id int PRIMARY KEY)", cql.EmptyRowDecoder)
 	_, err := Exec(ctx, session, create, bindOptions(session, options))
 	require.NoError(t, err)
-	require.NoError(t, implCluster.InternalSessionAwaitV2SchemaAgreementOn(implExecution.InternalCore(session), ctx, conn))
+	require.NoError(t, implCluster.InternalSessionAwaitV2SchemaAgreementOn(implExecution.InternalCore((*implExecution.Session)(session)), ctx, conn))
 	write := cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id) VALUES(?)", []cql.Value{cql.IntValue(1)}, prepareOptions)
 	_, err = Exec(ctx, session, write, bindOptions(session, options))
 	require.NoError(t, err)
@@ -224,9 +224,9 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 	require.Equal(t, int64(1), cassandraInt(t, row, "id"))
 	cached := func() hostPrepared {
 		t.Helper()
-		implExecution.PreparedData(prepared).InternalState.InternalMu.RLock()
-		defer implExecution.PreparedData(prepared).InternalState.InternalMu.RUnlock()
-		entry, ok := implExecution.PreparedData(prepared).InternalState.InternalHosts[host.Value]
+		preparedData(prepared).InternalState.InternalMu.RLock()
+		defer preparedData(prepared).InternalState.InternalMu.RUnlock()
+		entry, ok := preparedData(prepared).InternalState.InternalHosts[host.Value]
 		require.True(t, ok)
 		v := *entry
 		v.InternalId = append([]byte(nil), v.InternalId...)
@@ -240,7 +240,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 	require.NoError(t, err)
 	// Include the exact host that applied ALTER; checking another host can
 	// falsely agree on the old version before schema propagation starts.
-	require.NoError(t, implCluster.InternalSessionAwaitV2SchemaAgreementOn(implExecution.InternalCore(session), ctx, conn))
+	require.NoError(t, implCluster.InternalSessionAwaitV2SchemaAgreementOn(implExecution.InternalCore((*implExecution.Session)(session)), ctx, conn))
 	write = cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id,new_col) VALUES(?,?)", []cql.Value{cql.IntValue(2), cql.IntValue(10)}, prepareOptions)
 	_, err = Exec(ctx, session, write, bindOptions(session, options))
 	require.NoError(t, err)
@@ -262,7 +262,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 		require.NoError(t, err)
 		require.Equal(t, int64(10), value)
 	}
-	require.Equal(t, before.InternalGeneration, implCluster.InternalSessionTypedGeneration(implExecution.InternalCore(session)), "metadata-ID coverage must not be replaced by generation-triggered reprepare")
+	require.Equal(t, before.InternalGeneration, implCluster.InternalSessionTypedGeneration(implExecution.InternalCore((*implExecution.Session)(session))), "metadata-ID coverage must not be replaced by generation-triggered reprepare")
 	checkRows()
 	after := cached()
 	require.NotEqual(t, before.InternalMetadataID, after.InternalMetadataID)
@@ -274,9 +274,9 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 	// revision ordering so the next change must be observable as a new revision.
 	stale := before
 	stale.InternalRevision = after.InternalRevision
-	implExecution.PreparedData(prepared).InternalState.InternalMu.Lock()
-	implExecution.PreparedData(prepared).InternalState.InternalHosts[host.Value] = &stale
-	implExecution.PreparedData(prepared).InternalState.InternalMu.Unlock()
+	preparedData(prepared).InternalState.InternalMu.Lock()
+	preparedData(prepared).InternalState.InternalHosts[host.Value] = &stale
+	preparedData(prepared).InternalState.InternalMu.Unlock()
 	checkRows()
 	healed := cached()
 	require.True(t, healed.InternalMetadataChanged)

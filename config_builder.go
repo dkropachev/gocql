@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
-	"slices"
 	"strings"
 	"time"
 
@@ -23,8 +22,8 @@ import (
 
 // Config is a validated, immutable session configuration. Build one with
 // NewConfig and ConfigBuilder.Build; the zero Config is rejected by Connect.
-// A Config shares nothing its builder or caller can change, so it is safe to
-// reuse for many sessions and from many goroutines.
+// Build snapshots configuration values. Callbacks and provider objects remain
+// shared and must support concurrent use. A Config can be reused for many sessions.
 type Config struct {
 	settings *implSettings.Config
 }
@@ -33,44 +32,27 @@ type Config struct {
 type ProtocolVersion uint8
 
 const (
-	// ProtocolAuto negotiates the highest version both sides support.
+	// ProtocolAuto negotiates a supported version up to protocol 4.
+	// Select Protocol5 explicitly to use protocol 5.
 	ProtocolAuto ProtocolVersion = 0
 	Protocol3    ProtocolVersion = 3
 	Protocol4    ProtocolVersion = 4
 	Protocol5    ProtocolVersion = 5
 )
 
-// choices records which settings the caller chose, so Build infers only the
-// ones left to the driver, and collects invalid calls for Build to report.
-type choices struct {
-	chosen map[string]bool
-	errs   []error
-}
-
-func (c *choices) choose(key string) {
-	if c.chosen == nil {
-		c.chosen = make(map[string]bool)
-	}
-	c.chosen[key] = true
-}
-
-func (c *choices) has(key string) bool { return c.chosen[key] }
-
-func (c *choices) fail(call, reason string) {
-	c.errs = append(c.errs, &cqlerr.ValidationError{Field: call, Err: errors.New(reason)})
-}
-
 // ConfigBuilder assembles a Config. Settings that are not chosen keep the
 // driver's behavior; when a setting is chosen again, the last call wins.
-// Features that are on by default are turned off by No* methods; features
-// that are off by default have no off switch. Methods never fail: invalid
-// arguments are reported by Build and leave the setting unchanged. A
-// ConfigBuilder is not safe for concurrent use.
+// Setters only store values; Build validates the final configuration.
+// Zero durations disable optional timeouts and background work. Nil optional
+// providers remove the override. A ConfigBuilder is not safe for concurrent use.
 type ConfigBuilder struct {
-	profile *ProfileBuilder
-	routes  *ClientRoutesBuilder
-	choices
-	settings implSettings.Config
+	profile              *ProfileBuilder
+	routes               *ClientRoutesBuilder
+	ignoredEvents        []EventKind
+	settings             implSettings.Config
+	protocolChosen       bool
+	discoveryChosen      bool
+	shardAwarenessChosen bool
 }
 
 // NewConfig starts a configuration that connects to contactPoints. A contact
@@ -78,84 +60,81 @@ type ConfigBuilder struct {
 // prefixed with "unix:"); for a socket, protocol 3 and no host discovery are
 // filled in unless chosen.
 func NewConfig(contactPoints ...string) *ConfigBuilder {
-	b := &ConfigBuilder{settings: implSettings.DefaultConfig(contactPoints...), profile: NewProfile()}
-	if len(contactPoints) == 0 {
-		b.fail("NewConfig()", "at least one contact point is required")
-	}
-	return b
+	return &ConfigBuilder{settings: implSettings.DefaultConfig(contactPoints...), profile: NewProfile()}
 }
 
-// Build validates every setting and returns the Config, or an error joining
-// every problem found. Later calls on the builder do not affect the returned
+// Build validates the final settings and returns the Config or the first
+// validation error. Later calls on the builder do not affect the returned
 // Config.
 func (b *ConfigBuilder) Build() (Config, error) {
-	errs := append([]error(nil), b.errs...)
 	settings := b.settings
-	profile, err := b.profile.build("WithDefaultProfile")
-	if err != nil {
-		errs = append(errs, err)
-	}
+	profile := b.profile.profile
 	settings.DefaultProfile = &profile
 	if b.routes != nil {
-		routes, err := b.routes.build()
-		if err != nil {
-			errs = append(errs, err)
-		}
+		routes := b.routes.routes
 		settings.ClientRoutes = &routes
 	}
 	if path, _ := implSettings.InternalUnixSocketPath(settings.ContactPoints); path != "" {
-		if !b.has("protocol") {
+		if !b.protocolChosen {
 			settings.Protocol = int(Protocol3)
 		}
-		if !b.has("discovery") {
+		if !b.discoveryChosen {
 			settings.Metadata.InitialDiscovery = false
 		}
 	}
 	if settings.TLSSource != nil {
-		if settings.TLS = settings.TLSSource.TLSConfig(); settings.TLS == nil {
-			errs = append(errs, &cqlerr.ValidationError{Field: "WithTLS(...)", Err: errors.New("source returned no config")})
+		settings.TLS = settings.TLSSource.TLSConfig()
+		if settings.TLS == nil {
+			return Config{}, &cqlerr.ValidationError{Field: "TLS", Err: errors.New("source returned no config")}
 		}
 	}
-	if settings.ClientRoutes != nil && !b.has("advanced shard awareness") {
+	if settings.ClientRoutes != nil && !b.shardAwarenessChosen {
 		settings.Pool.ShardAwarePort = false
 	}
-	if len(errs) == 0 {
-		if err := implSettings.InternalValidateConfig(settings); err != nil {
-			errs = append(errs, err)
+	for _, kind := range b.ignoredEvents {
+		switch kind {
+		case TopologyEvent:
+			settings.Metadata.TopologyEvents = false
+		case StatusEvent:
+			settings.Metadata.StatusEvents = false
+		case SchemaEvent:
+			settings.Metadata.SchemaEvents = false
+		case ClientRouteEvent:
+			settings.Metadata.ClientRouteEvents = false
+		default:
+			return Config{}, &cqlerr.ValidationError{Field: "ignored events", Err: fmt.Errorf("%d is not a server event", kind)}
 		}
 	}
-	if len(errs) > 0 {
-		return Config{}, errors.Join(errs...)
+	if err := implSettings.InternalValidateConfig(settings); err != nil {
+		return Config{}, err
 	}
 	resolved := implSettings.InternalSnapshotConfig(settings)
 	return Config{settings: &resolved}, nil
 }
 
-// set applies a choice of key when valid; otherwise it records reason as
-// call's error and leaves the setting unchanged.
-func (b *ConfigBuilder) set(key, call string, valid bool, reason string, apply func()) *ConfigBuilder {
-	if !valid {
-		b.fail(call, reason)
-		return b
-	}
-	b.choose(key)
-	apply()
+// WithPort sets the port used for contact points that name none. Default 9042.
+func (b *ConfigBuilder) WithPort(port uint16) *ConfigBuilder {
+	b.settings.Port = port
 	return b
 }
 
-// WithPort sets the port used for contact points that name none. Default 9042.
-func (b *ConfigBuilder) WithPort(port uint16) *ConfigBuilder {
-	return b.set("port", fmt.Sprintf("WithPort(%d)", port), port != 0, "must not be zero", func() { b.settings.Port = port })
+// WithContactPoints replaces all contact points, using the same address syntax
+// as NewConfig. Build requires at least one contact point.
+func (b *ConfigBuilder) WithContactPoints(contactPoints ...string) *ConfigBuilder {
+	b.settings.ContactPoints = append([]string(nil), contactPoints...)
+	return b
 }
 
 // WithKeyspace sets the keyspace every connection uses. Default none.
 func (b *ConfigBuilder) WithKeyspace(name string) *ConfigBuilder {
-	return b.set("keyspace", fmt.Sprintf("WithKeyspace(%q)", name), name != "", "must not be empty", func() { b.settings.Keyspace = name })
+	b.settings.Keyspace = name
+	return b
 }
 
 // WithAuth sets the authenticator. Default none.
 func (b *ConfigBuilder) WithAuth(provider auth.Provider) *ConfigBuilder {
-	return b.set("auth", "WithAuth(...)", provider != nil, "provider is required", func() { b.settings.Auth = provider })
+	b.settings.Auth = provider
+	return b
 }
 
 // WithTLS encrypts every connection with the configuration source returns
@@ -163,166 +142,196 @@ func (b *ConfigBuilder) WithAuth(provider auth.Provider) *ConfigBuilder {
 // NewTLSFiles or your own TLSSource for one that changes while the session runs. Build
 // validates the configuration source returns at that time. Unless it skips
 // verification or names a server, each connection verifies the node's IP
-// address. Default plaintext.
+// address. A nil source selects plaintext. Default plaintext.
 func (b *ConfigBuilder) WithTLS(source TLSSource) *ConfigBuilder {
-	return b.set("tls", "WithTLS(...)", source != nil, "source is required", func() { b.settings.TLSSource = source })
+	b.settings.TLSSource = source
+	return b
 }
 
 // WithProtocolVersion pins the native protocol version. Default ProtocolAuto, or
 // Protocol3 for a Unix socket.
 func (b *ConfigBuilder) WithProtocolVersion(version ProtocolVersion) *ConfigBuilder {
-	valid := version == ProtocolAuto || version == Protocol3 || version == Protocol4 || version == Protocol5
-	return b.set("protocol", fmt.Sprintf("WithProtocolVersion(%d)", version), valid, "supported versions are 3, 4 and 5", func() { b.settings.Protocol = int(version) })
+	b.protocolChosen = true
+	b.settings.Protocol = int(version)
+	return b
 }
 
 // WithCompression sets frame compression. Default none.
 func (b *ConfigBuilder) WithCompression(compression Compression) *ConfigBuilder {
-	return b.set("compression", fmt.Sprintf("WithCompression(%d)", compression), compression <= SnappyCompression, "unknown algorithm", func() { b.settings.Compression = compression })
+	b.settings.Compression = compression
+	return b
 }
 
 // WithCQLVersion sets the CQL version sent in STARTUP. Default "3.0.0".
 func (b *ConfigBuilder) WithCQLVersion(version string) *ConfigBuilder {
-	return b.set("cql version", fmt.Sprintf("WithCQLVersion(%q)", version), version != "", "must not be empty", func() { b.settings.CQLVersion = version })
+	b.settings.CQLVersion = version
+	return b
 }
 
 // WithMaxFrameSize caps a received frame's size in bytes. Default 256 MiB.
 func (b *ConfigBuilder) WithMaxFrameSize(bytes int64) *ConfigBuilder {
-	return b.set("max frame size", fmt.Sprintf("WithMaxFrameSize(%d)", bytes), bytes > 0, "must be positive", func() { b.settings.Limits.MaxFrameBytes = bytes })
+	b.settings.Limits.MaxFrameBytes = bytes
+	return b
 }
 
 // WithMaxDecompressedSize caps a frame's decompressed size in bytes. Default 256 MiB.
 func (b *ConfigBuilder) WithMaxDecompressedSize(bytes int64) *ConfigBuilder {
-	return b.set("max decompressed size", fmt.Sprintf("WithMaxDecompressedSize(%d)", bytes), bytes > 0, "must be positive", func() { b.settings.Limits.MaxDecompressedBytes = bytes })
+	b.settings.Limits.MaxDecompressedBytes = bytes
+	return b
 }
 
 // WithMaxMetadataDepth caps the nesting depth of result type metadata. Default 64.
 func (b *ConfigBuilder) WithMaxMetadataDepth(depth int) *ConfigBuilder {
-	return b.set("max metadata depth", fmt.Sprintf("WithMaxMetadataDepth(%d)", depth), depth > 0, "must be positive", func() { b.settings.Limits.MaxMetadataDepth = depth })
+	b.settings.Limits.MaxMetadataDepth = depth
+	return b
 }
 
 // WithMaxPagingStates caps the paging states a session keeps. Default 65536.
 func (b *ConfigBuilder) WithMaxPagingStates(n int) *ConfigBuilder {
-	return b.set("max paging states", fmt.Sprintf("WithMaxPagingStates(%d)", n), n > 0, "must be positive", func() { b.settings.Limits.MaxPagingStates = n })
+	b.settings.Limits.MaxPagingStates = n
+	return b
 }
 
 // WithMaxPagingStateSize caps one paging state's size in bytes. Default 16 MiB.
 func (b *ConfigBuilder) WithMaxPagingStateSize(bytes int64) *ConfigBuilder {
-	return b.set("max paging state size", fmt.Sprintf("WithMaxPagingStateSize(%d)", bytes), bytes > 0, "must be positive", func() { b.settings.Limits.MaxPagingStateBytes = bytes })
+	b.settings.Limits.MaxPagingStateBytes = bytes
+	return b
 }
 
 // WithDialer opens raw connections; TLS is applied afterward. Use
 // endpoint.DialerFunc to adapt a function. Default net.Dialer.
 func (b *ConfigBuilder) WithDialer(dialer endpoint.Dialer) *ConfigBuilder {
-	return b.set("dialer", "WithDialer(...)", dialer != nil, "dialer is required", func() { b.settings.Dialer = dialer })
+	b.settings.Dialer = dialer
+	return b
 }
 
 // WithResolver resolves contact point names. Default the system resolver.
 func (b *ConfigBuilder) WithResolver(resolver endpoint.DNSResolver) *ConfigBuilder {
-	return b.set("resolver", "WithResolver(...)", resolver != nil, "resolver is required", func() { b.settings.DNSResolver = resolver })
+	b.settings.DNSResolver = resolver
+	return b
 }
 
 // WithLocalAddress sets the source address of every connection. Default any.
 func (b *ConfigBuilder) WithLocalAddress(address netip.Addr) *ConfigBuilder {
-	return b.set("local address", fmt.Sprintf("WithLocalAddress(%v)", address), address.IsValid(), "address is required", func() { b.settings.LocalAddress = address })
+	b.settings.LocalAddress = address
+	return b
 }
 
 // WithConnectTimeout bounds opening one connection. Default 5s.
 func (b *ConfigBuilder) WithConnectTimeout(d time.Duration) *ConfigBuilder {
-	return b.set("connect timeout", fmt.Sprintf("WithConnectTimeout(%v)", d), d > 0, "must be positive", func() { b.settings.ConnectTimeout = d })
+	b.settings.ConnectTimeout = d
+	return b
 }
 
 // WithDNSTimeout bounds one name lookup. Default 5s.
 func (b *ConfigBuilder) WithDNSTimeout(d time.Duration) *ConfigBuilder {
-	return b.set("dns timeout", fmt.Sprintf("WithDNSTimeout(%v)", d), d > 0, "must be positive", func() { b.settings.DNSTimeout = d })
+	b.settings.DNSTimeout = d
+	return b
 }
 
 // WithNagle keeps Nagle's algorithm on. By default TCP_NODELAY turns it off.
 func (b *ConfigBuilder) WithNagle() *ConfigBuilder {
-	return b.set("nagle", "WithNagle()", true, "", func() { b.settings.NoDelay = false })
+	b.settings.NoDelay = false
+	return b
+}
+
+// NoNagle enables TCP_NODELAY. It replaces WithNagle and is the default.
+func (b *ConfigBuilder) NoNagle() *ConfigBuilder {
+	b.settings.NoDelay = true
+	return b
 }
 
 // WithTCPKeepalive enables TCP keepalive probes with period. Default off.
 func (b *ConfigBuilder) WithTCPKeepalive(period time.Duration) *ConfigBuilder {
-	return b.set("tcp keepalive", fmt.Sprintf("WithTCPKeepalive(%v)", period), period > 0, "must be positive", func() { b.settings.SocketKeepalive = period })
+	b.settings.SocketKeepalive = period
+	return b
 }
 
 // WithSocketBuffers sets SO_RCVBUF and SO_SNDBUF in bytes. Default the OS's.
 func (b *ConfigBuilder) WithSocketBuffers(receive, send int) *ConfigBuilder {
-	return b.set("socket buffers", fmt.Sprintf("WithSocketBuffers(%d, %d)", receive, send), receive > 0 && send > 0, "must be positive", func() {
-		b.settings.ReceiveBuffer = cql.Some(receive)
-		b.settings.SendBuffer = cql.Some(send)
-	})
+	b.settings.ReceiveBuffer = cql.Some(receive)
+	b.settings.SendBuffer = cql.Some(send)
+	return b
 }
 
 // WithLinger sets SO_LINGER in whole seconds; Linger(0) resets connections on
 // close. Default the OS's.
 func (b *ConfigBuilder) WithLinger(d time.Duration) *ConfigBuilder {
-	return b.set("linger", fmt.Sprintf("WithLinger(%v)", d), d >= 0 && d%time.Second == 0, "must be nonnegative whole seconds", func() { b.settings.Linger = cql.Some(d) })
+	b.settings.Linger = cql.Some(d)
+	return b
 }
 
 // WithReadTimeout drops a connection that delivers no bytes for d. Default none.
 func (b *ConfigBuilder) WithReadTimeout(d time.Duration) *ConfigBuilder {
-	return b.set("read timeout", fmt.Sprintf("WithReadTimeout(%v)", d), d > 0, "must be positive", func() { b.settings.ReadTimeout = d })
+	b.settings.ReadTimeout = d
+	return b
 }
 
 // WithWriteTimeout drops a connection that accepts no bytes for d. Default none.
 func (b *ConfigBuilder) WithWriteTimeout(d time.Duration) *ConfigBuilder {
-	return b.set("write timeout", fmt.Sprintf("WithWriteTimeout(%v)", d), d > 0, "must be positive", func() { b.settings.WriteTimeout = d })
+	b.settings.WriteTimeout = d
+	return b
 }
 
 // WithHeartbeat sends a CQL OPTIONS request on idle connections every interval
 // and drops a connection whose heartbeat takes longer than timeout. It
 // replaces NoHeartbeat. Default 30s and 30s.
 func (b *ConfigBuilder) WithHeartbeat(interval, timeout time.Duration) *ConfigBuilder {
-	return b.set("heartbeat", fmt.Sprintf("WithHeartbeat(%v, %v)", interval, timeout), interval > 0 && timeout > 0, "must be positive", func() {
-		b.settings.KeepaliveInterval = interval
-		b.settings.KeepaliveTimeout = timeout
-	})
+	b.settings.KeepaliveInterval = interval
+	b.settings.KeepaliveTimeout = timeout
+	return b
 }
 
 // NoHeartbeat sends no heartbeats. It replaces WithHeartbeat.
 func (b *ConfigBuilder) NoHeartbeat() *ConfigBuilder {
-	return b.set("heartbeat", "NoHeartbeat()", true, "", func() { b.settings.KeepaliveInterval = 0 })
+	b.settings.KeepaliveInterval = 0
+	b.settings.KeepaliveTimeout = 0
+	return b
 }
 
 // WithCoalesceWrites delays writes up to wait to send them together. Any wait
 // turns off the inline execution path, so it costs latency on a healthy
 // cluster. Default off.
 func (b *ConfigBuilder) WithCoalesceWrites(wait time.Duration) *ConfigBuilder {
-	return b.set("coalesce writes", fmt.Sprintf("WithCoalesceWrites(%v)", wait), wait > 0, "must be positive", func() { b.settings.CoalesceWait = wait })
+	b.settings.CoalesceWait = wait
+	return b
 }
 
 // WithConnectionsPerShard opens n connections per shard of each node. It
 // replaces WithConnectionsPerHost. Default 1.
 func (b *ConfigBuilder) WithConnectionsPerShard(n int) *ConfigBuilder {
-	return b.set("pool size", fmt.Sprintf("WithConnectionsPerShard(%d)", n), n > 0, "must be at least 1", func() {
-		b.settings.Pool.ConnectionsPerShard = n
-		b.settings.Pool.ConnectionsPerHost = 0
-	})
+	b.settings.Pool.ConnectionsPerShard = n
+	b.settings.Pool.ConnectionsPerHost = 0
+	return b
 }
 
 // WithConnectionsPerHost opens n connections per node regardless of its shard
 // count. It replaces WithConnectionsPerShard.
 func (b *ConfigBuilder) WithConnectionsPerHost(n int) *ConfigBuilder {
-	return b.set("pool size", fmt.Sprintf("WithConnectionsPerHost(%d)", n), n > 0, "must be at least 1", func() { b.settings.Pool.ConnectionsPerHost = n })
+	b.settings.Pool.ConnectionsPerHost = n
+	b.settings.Pool.ConnectionsPerShard = 0
+	return b
 }
 
 // WithMaxExcessPerShard caps connections opened beyond the target per shard.
 // Default 2.
 func (b *ConfigBuilder) WithMaxExcessPerShard(n int) *ConfigBuilder {
-	return b.set("max excess per shard", fmt.Sprintf("WithMaxExcessPerShard(%d)", n), n >= 0, "must not be negative", func() { b.settings.Pool.MaxExcessPerShard = n })
+	b.settings.Pool.MaxExcessPerShard = n
+	return b
 }
 
 // WithMaxRequestsPerConnection caps in-flight requests per connection, at most
 // 32768. Default 32768.
 func (b *ConfigBuilder) WithMaxRequestsPerConnection(n int) *ConfigBuilder {
-	return b.set("max requests per connection", fmt.Sprintf("WithMaxRequestsPerConnection(%d)", n), n >= 1 && n <= 32768, "must be 1..32768", func() { b.settings.Pool.MaxRequestsPerConnection = n })
+	b.settings.Pool.MaxRequestsPerConnection = n
+	return b
 }
 
 // WithMaxOrphanedStreams caps streams abandoned by cancelled requests before a
 // connection is recycled. Default 1024.
 func (b *ConfigBuilder) WithMaxOrphanedStreams(n int) *ConfigBuilder {
-	return b.set("max orphaned streams", fmt.Sprintf("WithMaxOrphanedStreams(%d)", n), n >= 0, "must not be negative", func() { b.settings.Pool.MaxOrphanedStreams = n })
+	b.settings.Pool.MaxOrphanedStreams = n
+	return b
 }
 
 // WithAdvancedShardAwareness picks the shard of each new connection by dialing
@@ -330,211 +339,241 @@ func (b *ConfigBuilder) WithMaxOrphanedStreams(n int) *ConfigBuilder {
 // last. It replaces NoAdvancedShardAwareness. Default on with ports
 // 49152-65535, except under WithClientRoutes.
 func (b *ConfigBuilder) WithAdvancedShardAwareness(first, last uint16) *ConfigBuilder {
-	return b.set("advanced shard awareness", fmt.Sprintf("WithAdvancedShardAwareness(%d, %d)", first, last), first >= 1024 && first <= last, "needs 1024 <= first <= last", func() {
-		b.settings.Pool.ShardAwarePort = true
-		b.settings.Pool.SourcePortStart, b.settings.Pool.SourcePortEnd = first, last
-	})
+	b.shardAwarenessChosen = true
+	b.settings.Pool.ShardAwarePort = true
+	b.settings.Pool.SourcePortStart, b.settings.Pool.SourcePortEnd = first, last
+	return b
 }
 
 // NoAdvancedShardAwareness connects through the regular port only and lets
 // the node assign the shard; the pool keeps dialing until every shard is
 // covered. It replaces WithAdvancedShardAwareness.
 func (b *ConfigBuilder) NoAdvancedShardAwareness() *ConfigBuilder {
-	return b.set("advanced shard awareness", "NoAdvancedShardAwareness()", true, "", func() { b.settings.Pool.ShardAwarePort = false })
+	b.shardAwarenessChosen = true
+	b.settings.Pool.ShardAwarePort = false
+	return b
 }
 
 // NoDiscovery connects only to the contact points instead of discovering the
 // cluster's nodes. Implied for a Unix socket.
 func (b *ConfigBuilder) NoDiscovery() *ConfigBuilder {
-	return b.set("discovery", "NoDiscovery()", true, "", func() { b.settings.Metadata.InitialDiscovery = false })
+	b.discoveryChosen = true
+	b.settings.Metadata.InitialDiscovery = false
+	return b
+}
+
+// WithDiscovery discovers and connects to the cluster's nodes. It replaces
+// NoDiscovery. Discovery is on by default except for Unix sockets.
+func (b *ConfigBuilder) WithDiscovery() *ConfigBuilder {
+	b.discoveryChosen = true
+	b.settings.Metadata.InitialDiscovery = true
+	return b
 }
 
 // WithHostFilter skips nodes for which keep returns false. Default all nodes.
 func (b *ConfigBuilder) WithHostFilter(keep func(routing.HostSnapshot) bool) *ConfigBuilder {
-	return b.set("host filter", "WithHostFilter(...)", keep != nil, "function is required", func() { b.settings.HostFilter = keep })
+	b.settings.HostFilter = keep
+	return b
 }
 
 // WithAddressTranslator rewrites node addresses before dialing. Default identity.
 func (b *ConfigBuilder) WithAddressTranslator(translator endpoint.Translator) *ConfigBuilder {
-	return b.set("address translator", "WithAddressTranslator(...)", translator != nil, "translator is required", func() { b.settings.AddressTranslator = translator })
+	b.settings.AddressTranslator = translator
+	return b
 }
 
-// WithClientRoutes connects through ScyllaDB client routes.
+// WithClientRoutes connects through ScyllaDB client routes. Nil removes routes.
 func (b *ConfigBuilder) WithClientRoutes(routes *ClientRoutesBuilder) *ConfigBuilder {
-	return b.set("client routes", "WithClientRoutes(...)", routes != nil, "builder is required", func() { b.routes = routes })
+	b.routes = routes
+	return b
 }
 
 // WithReconnect sets the delay between attempts to reopen a node's connections.
+// Nil disables reconnection attempts.
 // Default jittered backoff from 1s to 32s.
 func (b *ConfigBuilder) WithReconnect(policy ReconnectPolicy) *ConfigBuilder {
-	return b.set("reconnect", "WithReconnect(...)", policy != nil, "policy is required", func() { b.settings.Reconnect = policy })
+	b.settings.Reconnect = policy
+	return b
 }
 
 // WithConviction decides when connection errors mark a node down. Default none.
 func (b *ConfigBuilder) WithConviction(policy ConvictionPolicy) *ConfigBuilder {
-	return b.set("conviction", "WithConviction(...)", policy != nil, "policy is required", func() { b.settings.Conviction = policy })
+	b.settings.Conviction = policy
+	return b
 }
 
 // WithMetadataMode selects how much schema metadata is loaded. Default
 // metadata.Full.
 func (b *ConfigBuilder) WithMetadataMode(mode metadata.Mode) *ConfigBuilder {
-	return b.set("metadata mode", fmt.Sprintf("WithMetadataMode(%d)", mode), mode <= metadata.Full, "unknown mode", func() { b.settings.Metadata.Mode = mode })
+	b.settings.Metadata.Mode = mode
+	return b
 }
 
 // WithMetadataKeyspaces limits schema metadata to keyspaces. Default all.
 func (b *ConfigBuilder) WithMetadataKeyspaces(keyspaces ...string) *ConfigBuilder {
-	valid := len(keyspaces) > 0 && !slices.Contains(keyspaces, "")
-	return b.set("metadata keyspaces", fmt.Sprintf("WithMetadataKeyspaces(%q)", keyspaces), valid, "needs non-empty names", func() {
-		b.settings.Metadata.Keyspaces = append([]string(nil), keyspaces...)
-	})
+	b.settings.Metadata.Keyspaces = append([]string(nil), keyspaces...)
+	return b
 }
 
 // WithPartitioner sets the token partitioner for the partitioner class name,
 // next to the built-in Murmur3 and CDC partitioners.
 func (b *ConfigBuilder) WithPartitioner(name string, partitioner routing.TokenPartitioner) *ConfigBuilder {
-	return b.set("partitioner "+name, fmt.Sprintf("WithPartitioner(%q)", name), name != "" && partitioner != nil, "needs a name and a partitioner", func() {
-		partitioners := make(map[string]routing.TokenPartitioner, len(b.settings.Partitioners)+1)
-		for k, v := range b.settings.Partitioners {
-			partitioners[k] = v
-		}
-		partitioners[name] = partitioner
-		b.settings.Partitioners = partitioners
-	})
+	b.settings.Partitioners[name] = partitioner
+	return b
 }
 
 // WithMetadataRefresh reloads metadata every interval. It replaces
 // NoMetadataRefresh. Default 60s.
 func (b *ConfigBuilder) WithMetadataRefresh(interval time.Duration) *ConfigBuilder {
-	return b.set("metadata refresh", fmt.Sprintf("WithMetadataRefresh(%v)", interval), interval > 0, "must be positive", func() { b.settings.Metadata.PeriodicRefresh = interval })
+	b.settings.Metadata.PeriodicRefresh = interval
+	return b
 }
 
 // NoMetadataRefresh turns periodic metadata reloads off. It replaces
 // WithMetadataRefresh.
 func (b *ConfigBuilder) NoMetadataRefresh() *ConfigBuilder {
-	return b.set("metadata refresh", "NoMetadataRefresh()", true, "", func() { b.settings.Metadata.PeriodicRefresh = 0 })
+	b.settings.Metadata.PeriodicRefresh = 0
+	return b
 }
 
 // WithMetadataTimeout bounds one metadata request. Default 31s.
 func (b *ConfigBuilder) WithMetadataTimeout(d time.Duration) *ConfigBuilder {
-	return b.set("metadata timeout", fmt.Sprintf("WithMetadataTimeout(%v)", d), d > 0, "must be positive", func() { b.settings.Metadata.RequestTimeout = d })
+	b.settings.Metadata.RequestTimeout = d
+	return b
 }
 
 // WithMetadataServerTimeout asks the server to bound metadata queries with USING
 // TIMEOUT, in whole milliseconds. Default unset.
 func (b *ConfigBuilder) WithMetadataServerTimeout(d time.Duration) *ConfigBuilder {
-	return b.set("metadata server timeout", fmt.Sprintf("WithMetadataServerTimeout(%v)", d), d > 0 && d%time.Millisecond == 0, "must be positive whole milliseconds", func() {
-		b.settings.Metadata.ServerTimeout = cql.Some(d)
-	})
+	b.settings.Metadata.ServerTimeout = cql.Some(d)
+	return b
 }
 
 // WithIgnoreEvents stops listening for the given server events: TopologyEvent,
-// StatusEvent, SchemaEvent or ClientRouteEvent. Default none ignored.
+// StatusEvent, SchemaEvent or ClientRouteEvent. Each call replaces the complete
+// ignored-event list; no arguments restores all events. Default none ignored.
 func (b *ConfigBuilder) WithIgnoreEvents(kinds ...EventKind) *ConfigBuilder {
-	for _, kind := range kinds {
-		call := fmt.Sprintf("WithIgnoreEvents(%d)", kind)
-		var flag *bool
-		switch kind {
-		case TopologyEvent:
-			flag = &b.settings.Metadata.TopologyEvents
-		case StatusEvent:
-			flag = &b.settings.Metadata.StatusEvents
-		case SchemaEvent:
-			flag = &b.settings.Metadata.SchemaEvents
-		case ClientRouteEvent:
-			flag = &b.settings.Metadata.ClientRouteEvents
-		}
-		b.set(fmt.Sprintf("ignore event %d", kind), call, flag != nil, "not a server event", func() { *flag = false })
-	}
+	b.ignoredEvents = append([]EventKind(nil), kinds...)
 	return b
 }
 
 // WithSchemaAgreement waits up to timeout, polling every poll, for nodes to agree
 // on the schema. Default 60s and 200ms.
 func (b *ConfigBuilder) WithSchemaAgreement(timeout, poll time.Duration) *ConfigBuilder {
-	return b.set("schema agreement", fmt.Sprintf("WithSchemaAgreement(%v, %v)", timeout, poll), timeout > 0 && poll > 0, "must be positive", func() {
-		b.settings.Metadata.AgreementTimeout = timeout
-		b.settings.Metadata.AgreementPoll = poll
-	})
+	b.settings.Metadata.AgreementTimeout = timeout
+	b.settings.Metadata.AgreementPoll = poll
+	return b
 }
 
 // WithManualSchemaAgreement stops waiting for schema agreement after DDL; call
 // Session.AwaitSchemaAgreement instead.
 func (b *ConfigBuilder) WithManualSchemaAgreement() *ConfigBuilder {
-	return b.set("automatic schema agreement", "WithManualSchemaAgreement()", true, "", func() { b.settings.Metadata.AutomaticAgreement = false })
+	b.settings.Metadata.AutomaticAgreement = false
+	return b
+}
+
+// WithAutomaticSchemaAgreement waits for agreement after DDL. It replaces
+// WithManualSchemaAgreement and is the default.
+func (b *ConfigBuilder) WithAutomaticSchemaAgreement() *ConfigBuilder {
+	b.settings.Metadata.AutomaticAgreement = true
+	return b
 }
 
 // NoRefreshAfterAgreement skips the metadata reload after schema agreement.
 func (b *ConfigBuilder) NoRefreshAfterAgreement() *ConfigBuilder {
-	return b.set("refresh after agreement", "NoRefreshAfterAgreement()", true, "", func() { b.settings.Metadata.RefreshAfterAgreement = false })
+	b.settings.Metadata.RefreshAfterAgreement = false
+	return b
+}
+
+// WithRefreshAfterAgreement reloads metadata after schema agreement. It
+// replaces NoRefreshAfterAgreement and is the default.
+func (b *ConfigBuilder) WithRefreshAfterAgreement() *ConfigBuilder {
+	b.settings.Metadata.RefreshAfterAgreement = true
+	return b
 }
 
 // WithDefaultProfile chooses execution defaults for statements that pass no
 // Profile. choose receives the builder's default profile, so several calls
-// add to the same profile.
+// add to the same profile. A nil choose resets the entire default profile.
 func (b *ConfigBuilder) WithDefaultProfile(choose func(*ProfileBuilder)) *ConfigBuilder {
 	if choose == nil {
-		b.fail("WithDefaultProfile(nil)", "function is required")
-		return b
+		b.profile = NewProfile()
+	} else {
+		choose(b.profile)
 	}
-	choose(b.profile)
 	return b
 }
 
 // WithPreparedCacheSize keeps up to n prepared statements. It replaces
 // NoPreparedCache. Default 1000.
 func (b *ConfigBuilder) WithPreparedCacheSize(n int) *ConfigBuilder {
-	return b.set("prepared cache", fmt.Sprintf("WithPreparedCacheSize(%d)", n), n > 0, "must be at least 1", func() { b.settings.PreparedCacheSize = n })
+	b.settings.PreparedCacheSize = n
+	return b
 }
 
 // NoPreparedCache prepares statements without caching them. It replaces
 // WithPreparedCacheSize.
 func (b *ConfigBuilder) NoPreparedCache() *ConfigBuilder {
-	return b.set("prepared cache", "NoPreparedCache()", true, "", func() { b.settings.PreparedCacheSize = 0 })
+	b.settings.PreparedCacheSize = 0
+	return b
 }
 
 // WithTimestampGenerator supplies client timestamps in microseconds. It replaces
 // WithServerTimestamps. Default a monotonic clock.
 func (b *ConfigBuilder) WithTimestampGenerator(next func() int64) *ConfigBuilder {
-	return b.set("timestamps", "WithTimestampGenerator(...)", next != nil, "function is required", func() { b.settings.TimestampGenerator = next })
+	b.settings.TimestampGenerator = next
+	return b
 }
 
 // WithServerTimestamps sends no client timestamp, so the server assigns one. It
 // replaces WithTimestampGenerator.
 func (b *ConfigBuilder) WithServerTimestamps() *ConfigBuilder {
-	return b.set("timestamps", "WithServerTimestamps()", true, "", func() { b.settings.TimestampGenerator = nil })
+	b.settings.TimestampGenerator = nil
+	return b
 }
 
 // WithApplication reports the application's name and version in STARTUP.
 func (b *ConfigBuilder) WithApplication(name, version string) *ConfigBuilder {
-	return b.set("application", fmt.Sprintf("WithApplication(%q, %q)", name, version), name != "", "name is required", func() {
-		b.settings.Identity.ApplicationName = name
-		b.settings.Identity.ApplicationVersion = version
-	})
+	b.settings.Identity.ApplicationName = name
+	b.settings.Identity.ApplicationVersion = version
+	return b
 }
 
 // WithClientID reports id in STARTUP.
 func (b *ConfigBuilder) WithClientID(id string) *ConfigBuilder {
-	return b.set("client id", fmt.Sprintf("WithClientID(%q)", id), id != "", "must not be empty", func() { b.settings.Identity.ClientID = id })
+	b.settings.Identity.ClientID = id
+	return b
 }
 
 // WithLogger receives the driver's log lines. Default none.
 func (b *ConfigBuilder) WithLogger(logger StdLogger) *ConfigBuilder {
-	return b.set("logger", "WithLogger(...)", logger != nil, "logger is required", func() { b.settings.Logger = logger })
+	b.settings.Logger = logger
+	return b
 }
 
 // WithObserver receives every request and attempt. Default none.
 func (b *ConfigBuilder) WithObserver(observer Observer) *ConfigBuilder {
-	return b.set("observer", "WithObserver(...)", observer != nil, "observer is required", func() { b.settings.Observer = observer })
+	b.settings.Observer = observer
+	return b
 }
 
 // WithLifecycleObserver receives session and connection lifecycle events.
 func (b *ConfigBuilder) WithLifecycleObserver(observer LifecycleObserver) *ConfigBuilder {
-	return b.set("lifecycle observer", "WithLifecycleObserver(...)", observer != nil, "observer is required", func() { b.settings.LifecycleObserver = observer })
+	b.settings.LifecycleObserver = observer
+	return b
 }
 
 // NoConfigReport stops sending the driver configuration to the server.
 func (b *ConfigBuilder) NoConfigReport() *ConfigBuilder {
-	return b.set("config report", "NoConfigReport()", true, "", func() { b.settings.ReportConfiguration = false })
+	b.settings.ReportConfiguration = false
+	return b
+}
+
+// WithConfigReport sends the driver configuration to the server. It replaces
+// NoConfigReport and is the default.
+func (b *ConfigBuilder) WithConfigReport() *ConfigBuilder {
+	b.settings.ReportConfiguration = true
+	return b
 }
 
 // String lists the effective settings. Credentials and TLS material are not
@@ -569,7 +608,6 @@ func (c Config) resolved() (implSettings.Config, error) {
 // one page prefetched, token-aware routing and safe retries. The last call
 // for a setting wins.
 type ProfileBuilder struct {
-	choices
 	profile implSettings.Profile
 }
 
@@ -579,91 +617,92 @@ func NewProfile() *ProfileBuilder {
 }
 
 // Build validates the profile, for use as Options.Profile.
-func (p *ProfileBuilder) Build() (Profile, error) { return p.build("Profile") }
-
-func (p *ProfileBuilder) build(name string) (Profile, error) {
-	errs := append([]error(nil), p.errs...)
-	if len(errs) == 0 {
-		if err := implSettings.InternalValidateProfile(p.profile); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if len(errs) > 0 {
-		return Profile{}, fmt.Errorf("gocql: %s: %w", name, errors.Join(errs...))
+func (p *ProfileBuilder) Build() (Profile, error) {
+	if err := implSettings.InternalValidateProfile(p.profile); err != nil {
+		return Profile{}, err
 	}
 	return p.profile, nil
 }
 
-func (p *ProfileBuilder) set(key, call string, valid bool, reason string, apply func()) *ProfileBuilder {
-	if !valid {
-		p.fail(call, reason)
-		return p
-	}
-	p.choose(key)
-	apply()
-	return p
-}
-
 // WithConsistency sets the consistency level. Default LOCAL_QUORUM.
 func (p *ProfileBuilder) WithConsistency(c cql.Consistency) *ProfileBuilder {
-	return p.set("consistency", fmt.Sprintf("WithConsistency(%v)", c), implSettings.InternalValidConsistency(c), "invalid consistency", func() { p.profile.Consistency = c })
+	p.profile.Consistency = c
+	return p
 }
 
 // WithSerialConsistency sets the serial consistency of conditional statements:
 // SERIAL or LOCAL_SERIAL. It replaces NoSerialConsistency. Default
 // LOCAL_SERIAL.
 func (p *ProfileBuilder) WithSerialConsistency(c cql.Consistency) *ProfileBuilder {
-	return p.set("serial consistency", fmt.Sprintf("WithSerialConsistency(%v)", c), c == cql.Serial || c == cql.LocalSerial, "must be SERIAL or LOCAL_SERIAL", func() {
-		p.profile.SerialConsistency = cql.Some(c)
-	})
+	p.profile.SerialConsistency = cql.Some(c)
+	return p
 }
 
 // NoSerialConsistency sends no serial consistency. It replaces
 // WithSerialConsistency.
 func (p *ProfileBuilder) NoSerialConsistency() *ProfileBuilder {
-	return p.set("serial consistency", "NoSerialConsistency()", true, "", func() { p.profile.SerialConsistency = cql.Option[cql.Consistency]{} })
+	p.profile.SerialConsistency = cql.Option[cql.Consistency]{}
+	return p
 }
 
 // WithTimeout bounds one execution, including retries. It replaces NoTimeout.
 // Default 30s.
 func (p *ProfileBuilder) WithTimeout(d time.Duration) *ProfileBuilder {
-	return p.set("timeout", fmt.Sprintf("WithTimeout(%v)", d), d > 0, "must be positive", func() { p.profile.Timeout = d })
+	p.profile.Timeout = d
+	return p
 }
 
 // NoTimeout leaves executions bounded only by their context. It replaces
 // WithTimeout.
 func (p *ProfileBuilder) NoTimeout() *ProfileBuilder {
-	return p.set("timeout", "NoTimeout()", true, "", func() { p.profile.Timeout = 0 })
+	p.profile.Timeout = 0
+	return p
 }
 
 // WithPageTimeout bounds fetching one page. Default none.
 func (p *ProfileBuilder) WithPageTimeout(d time.Duration) *ProfileBuilder {
-	return p.set("page timeout", fmt.Sprintf("WithPageTimeout(%v)", d), d > 0, "must be positive", func() { p.profile.PageTimeout = d })
+	p.profile.PageTimeout = d
+	return p
 }
 
 // WithPageSize sets the rows per page. Default 5000.
 func (p *ProfileBuilder) WithPageSize(rows int32) *ProfileBuilder {
-	return p.set("page size", fmt.Sprintf("WithPageSize(%d)", rows), rows > 0, "must be at least 1", func() { p.profile.PageSize = rows })
+	p.profile.PageSize = rows
+	return p
 }
 
 // NoPrefetch fetches the next page only when the current one is consumed.
 func (p *ProfileBuilder) NoPrefetch() *ProfileBuilder {
-	return p.set("prefetch", "NoPrefetch()", true, "", func() { p.profile.Prefetch = 0 })
+	return p.WithPrefetch(0)
 }
 
-// WithRetry sets the retry policy. Default retry.Safe{MaxAttempts: 3}.
+// WithPrefetch sets how many continuation pages to prefetch: zero or one.
+// It replaces NoPrefetch. Default one.
+func (p *ProfileBuilder) WithPrefetch(pages int) *ProfileBuilder {
+	p.profile.Prefetch = pages
+	return p
+}
+
+// WithRetry sets the retry policy; nil disables retries.
+// Default retry.Safe{MaxAttempts: 3}.
 func (p *ProfileBuilder) WithRetry(policy retry.Policy) *ProfileBuilder {
-	return p.set("retry", "WithRetry(...)", policy != nil, "policy is required", func() { p.profile.Retry = policy })
+	p.profile.Retry = policy
+	return p
 }
 
-// WithRouting sets the routing policy. Default token-aware with shuffled replicas.
+// WithRouting sets the routing policy. Nil uses the session pool's host
+// selection without a request-specific routing plan. Default token-aware with
+// shuffled replicas.
 func (p *ProfileBuilder) WithRouting(policy routing.Policy) *ProfileBuilder {
-	return p.set("routing", "WithRouting(...)", policy != nil, "policy is required", func() { p.profile.Routing = policy })
+	p.profile.Routing = policy
+	return p
 }
 
-// WithSpeculation sets the speculative execution policy. Default none.
+// WithSpeculation sets the speculative execution policy; nil disables it.
+// Default none.
 func (p *ProfileBuilder) WithSpeculation(policy SpeculationPolicy) *ProfileBuilder {
-	return p.set("speculation", "WithSpeculation(...)", policy != nil, "policy is required", func() { p.profile.Speculation = policy })
+	p.profile.Speculation = policy
+	return p
 }
 
 // ClientRoutesBuilder assembles ScyllaDB client routes settings.
@@ -676,14 +715,17 @@ func NewClientRoutes(connectionIDs ...string) *ClientRoutesBuilder {
 	return &ClientRoutesBuilder{routes: implSettings.ClientRoutesOptions{ConnectionIDs: append([]string(nil), connectionIDs...)}}
 }
 
-// WithHostnameOverride dials hostname for connectionID.
+// WithHostnameOverride dials hostname for connectionID. An empty hostname
+// removes that connection's override.
 func (r *ClientRoutesBuilder) WithHostnameOverride(connectionID, hostname string) *ClientRoutesBuilder {
-	overrides := make(map[string]string, len(r.routes.HostnameOverrides)+1)
-	for k, v := range r.routes.HostnameOverrides {
-		overrides[k] = v
+	if hostname == "" {
+		delete(r.routes.HostnameOverrides, connectionID)
+		return r
 	}
-	overrides[connectionID] = hostname
-	r.routes.HostnameOverrides = overrides
+	if r.routes.HostnameOverrides == nil {
+		r.routes.HostnameOverrides = make(map[string]string)
+	}
+	r.routes.HostnameOverrides[connectionID] = hostname
 	return r
 }
 
@@ -693,8 +735,9 @@ func (r *ClientRoutesBuilder) WithTLS() *ClientRoutesBuilder {
 	return r
 }
 
-func (r *ClientRoutesBuilder) build() (implSettings.ClientRoutesOptions, error) {
-	routes := r.routes
-	routes.ConnectionIDs = append([]string(nil), routes.ConnectionIDs...)
-	return routes, nil
+// NoTLS removes the client-route requirement for verified TLS. It replaces
+// WithTLS; the session's WithTLS still controls connection encryption.
+func (r *ClientRoutesBuilder) NoTLS() *ClientRoutesBuilder {
+	r.routes.TLS = false
+	return r
 }
