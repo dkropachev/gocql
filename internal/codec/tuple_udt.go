@@ -5,9 +5,9 @@ package codec
 
 import (
 	"fmt"
-	"sync"
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/syncx"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -116,8 +116,8 @@ type recordDecoder[T any] struct {
 	codec   RowDecoder[T]
 	plan    RowPlan[T]
 	typ     cqltype.DataType
-	readers *sync.Pool
-	values  *sync.Pool
+	readers *syncx.Pool[*recordReaderState]
+	values  *syncx.Pool[*T]
 	options UDTOptions
 	columns cqltype.Columns
 	kind    cqltype.Type
@@ -165,8 +165,8 @@ func (c recordDecoder[T]) compileValueDecoder(typ cqltype.DataType) (Decoder[T],
 		return nil, err
 	}
 	c.typ, c.columns, c.plan = typ, columns, plan
-	c.readers = &sync.Pool{New: func() any { return new(recordReaderState) }}
-	c.values = &sync.Pool{New: func() any { return new(T) }}
+	c.readers = syncx.NewPool(func() *recordReaderState { return new(recordReaderState) })
+	c.values = syncx.NewPool(func() *T { return new(T) })
 	return c, nil
 }
 func (c recordDecoder[T]) Decode(r ValueReader) (T, error) {
@@ -177,7 +177,7 @@ func (c recordDecoder[T]) Decode(r ValueReader) (T, error) {
 		}
 		return bound.Decode(r)
 	}
-	slot := c.values.Get().(*T)
+	slot := c.values.Get()
 	err := c.DecodeInto(r, slot)
 	value := *slot
 	var zero T
@@ -208,7 +208,7 @@ func (c recordDecoder[T]) DecodeInto(r ValueReader, dst *T) error {
 	if err := validateRecordBody(r, c.columns); err != nil {
 		return err
 	}
-	state := c.readers.Get().(*recordReaderState)
+	state := c.readers.Get()
 	state.cursor = *wire.NewCursor(r.body)
 	state.reader = RowReader{columns: c.columns, cursor: &state.cursor, lease: r.lease, allowMissing: true}
 	err := c.plan.DecodeInto(&state.reader, dst)
@@ -339,7 +339,7 @@ func compileUDTRows[T any](codec rowCodec[T], columns cqltype.Columns, options U
 	if err != nil {
 		return nil, err
 	}
-	plan := rowPlan[T]{ordered: make([]OutputField[T], len(mapping)), scratch: &sync.Pool{New: func() any { return new(T) }}}
+	plan := rowPlan[T]{ordered: make([]OutputField[T], len(mapping)), scratch: syncx.NewPool(func() *T { return new(T) })}
 	for index, field := range mapping {
 		if field == -1 {
 			plan.ordered[index] = ignoredField[T]{}

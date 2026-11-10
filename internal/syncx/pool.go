@@ -8,22 +8,21 @@ import "sync"
 
 // Pool is a sync.Pool of T. T must be pointer-shaped (a pointer, chan, map or
 // func); any other T is copied into an interface on every Put and allocates.
-type Pool[T any] struct {
-	// New, if set, makes a value when the pool is empty.
-	New func() T
-	p   sync.Pool
+// Make one with NewPool.
+type Pool[T any] struct{ p sync.Pool }
+
+// NewPool returns a Pool whose Get calls newFn when the pool is empty.
+func NewPool[T any](newFn func() T) *Pool[T] {
+	p := &Pool[T]{}
+	p.p.New = func() any { return newFn() }
+	return p
 }
 
-// Get returns a pooled value, or New(), or the zero T when New is nil.
+// Get returns a pooled value, or a new one; the zero T for a Pool not made by
+// NewPool and empty.
 func (p *Pool[T]) Get() T {
-	if v := p.p.Get(); v != nil {
-		return v.(T)
-	}
-	if p.New != nil {
-		return p.New()
-	}
-	var zero T
-	return zero
+	v, _ := p.p.Get().(T)
+	return v
 }
 
 // Put returns v to the pool.

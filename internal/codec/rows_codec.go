@@ -5,9 +5,9 @@ package codec
 
 import (
 	"fmt"
-	"sync"
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/syncx"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -397,7 +397,7 @@ type rowPlan[R any] struct {
 	reset func(*R)
 	// Scratch addresses are confined to Decode; accessors must not retain them.
 	// The returned R is copied before scratch is cleared and recycled.
-	scratch *sync.Pool
+	scratch *syncx.Pool[*R]
 	ordered []OutputField[R]
 	ops     []rowOp[R] // ordered, with built-in codecs as direct ops
 }
@@ -438,7 +438,7 @@ func (c rowCodec[R]) Compile(columns cqltype.Columns) (RowPlan[R], error) {
 	if err != nil {
 		return nil, err
 	}
-	plan := rowPlan[R]{reset: c.reset, ordered: make([]OutputField[R], len(mapping)), scratch: &sync.Pool{New: func() any { return new(R) }}}
+	plan := rowPlan[R]{reset: c.reset, ordered: make([]OutputField[R], len(mapping)), scratch: syncx.NewPool(func() *R { return new(R) })}
 	for index, field := range mapping {
 		column, _ := columns.At(index)
 		compiled, err := c.fields[field].compile(column.Type)
@@ -451,7 +451,7 @@ func (c rowCodec[R]) Compile(columns cqltype.Columns) (RowPlan[R], error) {
 	return plan, nil
 }
 func (p rowPlan[R]) Decode(reader *RowReader) (R, error) {
-	row := p.scratch.Get().(*R)
+	row := p.scratch.Get()
 	err := p.DecodeInto(reader, row)
 	result := *row
 	var zero R

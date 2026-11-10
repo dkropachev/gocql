@@ -11,7 +11,7 @@ type item struct{ n int }
 
 func TestPoolNewAndReuse(t *testing.T) {
 	news := 0
-	p := Pool[*item]{New: func() *item { news++; return &item{} }}
+	p := NewPool(func() *item { news++; return &item{} })
 	a := p.Get()
 	if a == nil || news != 1 {
 		t.Fatalf("Get() = %v after %d News, want a fresh item", a, news)
@@ -32,7 +32,7 @@ func TestPoolWithoutNewReturnsZero(t *testing.T) {
 }
 
 func TestPoolPointerDoesNotAllocate(t *testing.T) {
-	p := Pool[*item]{New: func() *item { return &item{} }}
+	p := NewPool(func() *item { return &item{} })
 	p.Put(p.Get())
 	if allocs := testing.AllocsPerRun(1000, func() { p.Put(p.Get()) }); allocs != 0 {
 		t.Fatalf("Get/Put allocates %v times, want 0", allocs)
@@ -40,7 +40,7 @@ func TestPoolPointerDoesNotAllocate(t *testing.T) {
 }
 
 func TestPoolChan(t *testing.T) {
-	p := Pool[chan int]{New: func() chan int { return make(chan int, 1) }}
+	p := NewPool(func() chan int { return make(chan int, 1) })
 	c := p.Get()
 	c <- 1
 	<-c

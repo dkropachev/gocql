@@ -19,6 +19,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/murmur"
 	pool "github.com/scylladb/gocql/v2/internal/pool"
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/syncx"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	// PartitionKey is the canonical encoded component stream. It never owns a
 	// second serialization of the bound parameters.
@@ -208,7 +209,7 @@ type InternalRoutingPolicy struct {
 	// a plan applies when replicas are not shuffled per request, which
 	// depends only on seed and the count.
 	fixed             *[17][16]uint8
-	InternalLatencies sync.Map
+	InternalLatencies syncx.Map[UUID, *InternalRoutingLatency]
 	InternalOptions   RoutingOptions
 	seed              uint64
 	round             atomic.Uint64
@@ -697,7 +698,7 @@ func (p *InternalLazyRoutingPlan) InternalPenalty(t Target) bool {
 	if p.policy == nil {
 		return false
 	}
-	value, ok := p.policy.InternalLatencies.Load(t.HostID)
+	sample, ok := p.policy.InternalLatencies.Load(t.HostID)
 	if !ok {
 		return false
 	}
@@ -705,7 +706,6 @@ func (p *InternalLazyRoutingPlan) InternalPenalty(t Target) bool {
 	// publication. Reserve one probe across concurrent plans; other requests
 	// still keep this host behind healthy candidates. Penalized fallback is
 	// retained when the ordinary plan has no usable alternative.
-	sample := value.(*InternalRoutingLatency)
 	// time.Time retains the full configured duration and monotonic clock. An
 	// absolute UnixNano deadline can wrap even for a valid positive duration.
 	// Observe already uses this per-host lock; no policy-wide lock is involved.
@@ -908,11 +908,10 @@ func (p *InternalRoutingPolicy) Observe(e AttemptEvent) {
 	if !p.InternalOptions.Latency.Enabled || e.Cancelled || !InternalRoutingLatencySample(e.Err) || e.Latency <= 0 {
 		return
 	}
-	actual, found := p.InternalLatencies.Load(e.Target.HostID)
+	v, found := p.InternalLatencies.Load(e.Target.HostID)
 	if !found {
-		actual, _ = p.InternalLatencies.LoadOrStore(e.Target.HostID, &InternalRoutingLatency{})
+		v, _ = p.InternalLatencies.LoadOrStore(e.Target.HostID, &InternalRoutingLatency{})
 	}
-	v := actual.(*InternalRoutingLatency)
 	now := e.Started.Add(e.Latency)
 	if e.Started.IsZero() {
 		now = time.Now()
@@ -946,25 +945,21 @@ func (p *InternalRoutingPolicy) Observe(e AttemptEvent) {
 		return
 	}
 	minimum := math.Inf(1)
-	p.InternalLatencies.Range(func(_, value any) bool {
-		v := value.(*InternalRoutingLatency)
+	for _, v := range p.InternalLatencies.All() {
 		v.mu.Lock()
 		if v.InternalSamples >= p.InternalOptions.Latency.MinimumSamples && v.InternalValue > 0 {
 			minimum = min(minimum, v.InternalValue)
 		}
 		v.mu.Unlock()
-		return true
-	})
+	}
 	decisions := &InternalRoutingDecisions{InternalSlow: make(map[UUID]time.Time)}
-	p.InternalLatencies.Range(func(key, value any) bool {
-		v := value.(*InternalRoutingLatency)
+	for key, v := range p.InternalLatencies.All() {
 		v.mu.Lock()
 		if v.InternalSamples >= p.InternalOptions.Latency.MinimumSamples && v.InternalValue > minimum*p.InternalOptions.Latency.ExclusionThreshold {
-			decisions.InternalSlow[key.(UUID)] = v.InternalUpdated.Add(p.InternalOptions.Latency.RetryPeriod)
+			decisions.InternalSlow[key] = v.InternalUpdated.Add(p.InternalOptions.Latency.RetryPeriod)
 		}
 		v.mu.Unlock()
-		return true
-	})
+	}
 	p.InternalDecisions.Store(decisions)
 }
 
