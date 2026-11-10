@@ -13,14 +13,14 @@ func TestStatement(t *testing.T) {
 	t.Run("InternalStatementDefaults", func(t *testing.T) {
 		t.Run("FillsEmptyTypes", func(t *testing.T) {
 			s := Statement[codec.EmptyRecord, codec.EmptyRecord]{CQL: "TRUNCATE ks.t"}
-			InternalStatementDefaults(&s)
+			statementDefaults(&s)
 			if s.Params == nil || s.Rows == nil {
 				t.Fatalf("empty defaults not filled: %+v", s)
 			}
 		})
 		t.Run("LeavesTypedCodecsUnset", func(t *testing.T) {
 			s := Statement[int32, string]{CQL: "SELECT v FROM ks.t WHERE k = ?"}
-			InternalStatementDefaults(&s)
+			statementDefaults(&s)
 			if s.Params != nil || s.Rows != nil {
 				t.Fatalf("typed statement got empty defaults: %+v", s)
 			}
@@ -30,15 +30,15 @@ func TestStatement(t *testing.T) {
 	t.Run("InternalValidateStatement", func(t *testing.T) {
 		t.Run("AcceptsDefaultedEmptyTypes", func(t *testing.T) {
 			s := Statement[codec.EmptyRecord, codec.EmptyRecord]{CQL: "TRUNCATE ks.t"}
-			InternalStatementDefaults(&s)
-			if err := InternalValidateStatement(s); err != nil {
+			statementDefaults(&s)
+			if err := validateStatement(s); err != nil {
 				t.Fatal(err)
 			}
 		})
 		t.Run("RejectsTypedWithoutCodecs", func(t *testing.T) {
 			s := Statement[int32, string]{CQL: "SELECT v FROM ks.t WHERE k = ?"}
-			InternalStatementDefaults(&s)
-			if err := InternalValidateStatement(s); err == nil {
+			statementDefaults(&s)
+			if err := validateStatement(s); err == nil {
 				t.Fatal("statement without codecs accepted")
 			}
 		})

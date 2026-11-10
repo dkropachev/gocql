@@ -65,7 +65,7 @@ type Statement[P, R any] struct {
 
 // InternalStatementDefaults fills a nil Params or Rows that has an empty
 // default.
-func InternalStatementDefaults[P, R any](s *Statement[P, R]) {
+func statementDefaults[P, R any](s *Statement[P, R]) {
 	if s.Params == nil {
 		if e, ok := any(codec.EmptyParamsEncoder).(codec.ParamEncoder[P]); ok {
 			s.Params = e
@@ -80,11 +80,11 @@ func InternalStatementDefaults[P, R any](s *Statement[P, R]) {
 
 // ValidateStatement fills s's empty defaults and validates it.
 func ValidateStatement[P, R any](s *Statement[P, R]) error {
-	InternalStatementDefaults(s)
-	return InternalValidateStatement(*s)
+	statementDefaults(s)
+	return validateStatement(*s)
 }
 
-func InternalValidateStatement[P, R any](s Statement[P, R]) error {
+func validateStatement[P, R any](s Statement[P, R]) error {
 	if s.Kind > cqltype.ConditionalStatement {
 		return cqltype.TypeValidation("statement kind", "unknown classification")
 	}
@@ -102,12 +102,12 @@ func InternalValidateStatement[P, R any](s Statement[P, R]) error {
 
 func InternalFirstCQLWord(cql string) string {
 	word := ""
-	InternalVisitCQLWords(cql, func(next string) bool { word = next; return false })
+	visitCQLWords(cql, func(next string) bool { word = next; return false })
 	return word
 }
 func InternalConditionalCQL(cql string) bool {
 	conditional := false
-	InternalVisitCQLWords(cql, func(word string) bool {
+	visitCQLWords(cql, func(word string) bool {
 		if word == "IF" {
 			conditional = true
 			return false
@@ -116,7 +116,7 @@ func InternalConditionalCQL(cql string) bool {
 	})
 	return conditional
 }
-func InternalVisitCQLWords(cql string, visit func(string) bool) {
+func visitCQLWords(cql string, visit func(string) bool) {
 	for i := 0; i < len(cql); {
 		if cql[i] == '\'' || cql[i] == '"' {
 			quote := cql[i]
