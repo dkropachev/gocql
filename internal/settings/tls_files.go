@@ -9,6 +9,8 @@ import (
 	"crypto/x509"
 	"encoding/binary"
 	"os"
+
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 // TLSFilesContent is one read of a certificate, key and CA file set.
@@ -25,7 +27,7 @@ func ReadTLSFiles(certFile, keyFile, caFile string) (TLSFilesContent, error) {
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return typeValidation("TLS files", "%w", err)
+			return cqltype.TypeValidation("TLS files", "%w", err)
 		}
 		*into = data
 		return nil
@@ -72,14 +74,14 @@ func BuildTLSFromFiles(base *tls.Config, content TLSFilesContent) (*tls.Config, 
 	if content.Cert != nil {
 		pair, err := tls.X509KeyPair(content.Cert, content.Key)
 		if err != nil {
-			return nil, typeValidation("TLS files", "cert and key: %w", err)
+			return nil, cqltype.TypeValidation("TLS files", "cert and key: %w", err)
 		}
 		config.Certificates = []tls.Certificate{pair}
 	}
 	if content.CA != nil {
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(content.CA) {
-			return nil, typeValidation("TLS files", "CA file has no PEM certificates")
+			return nil, cqltype.TypeValidation("TLS files", "CA file has no PEM certificates")
 		}
 		config.RootCAs = pool
 	}
@@ -89,7 +91,7 @@ func BuildTLSFromFiles(base *tls.Config, content TLSFilesContent) (*tls.Config, 
 // ValidateClientRoutesTLS reports a TLS config that client routes cannot use.
 func ValidateClientRoutesTLS(routes *ClientRoutesOptions, config *tls.Config) error {
 	if routes != nil && routes.TLS && (config == nil || config.InsecureSkipVerify && config.VerifyConnection == nil && config.VerifyPeerCertificate == nil) {
-		return typeValidation("client routes TLS", "verified TLS configuration required")
+		return cqltype.TypeValidation("client routes TLS", "verified TLS configuration required")
 	}
 	return nil
 }

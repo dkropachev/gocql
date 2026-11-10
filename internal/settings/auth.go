@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
 )
 
 // AuthProvider creates independent exchanges and must be concurrency safe.
@@ -19,28 +21,28 @@ type InternalPasswordAuth struct{ username, password string }
 func PasswordAuth(username, password string) AuthProvider {
 	return InternalPasswordAuth{username: username, password: password}
 }
-func (p InternalPasswordAuth) Start(ctx context.Context, _ HostSnapshot, _ string) (AuthExchange, Nullable[[]byte], error) {
+func (p InternalPasswordAuth) Start(ctx context.Context, _ model.HostSnapshot, _ string) (AuthExchange, cqltype.Nullable[[]byte], error) {
 	if err := ctx.Err(); err != nil {
-		return nil, Nullable[[]byte]{}, err
+		return nil, cqltype.Nullable[[]byte]{}, err
 	}
 	if strings.ContainsRune(p.username, 0) || strings.ContainsRune(p.password, 0) {
-		return nil, Nullable[[]byte]{}, typeValidation("password authentication", "credentials contain NUL")
+		return nil, cqltype.Nullable[[]byte]{}, cqltype.TypeValidation("password authentication", "credentials contain NUL")
 	}
 	response := make([]byte, len(p.username)+len(p.password)+2)
 	copy(response[1:], p.username)
 	copy(response[len(p.username)+2:], p.password)
-	return &InternalPasswordExchange{}, Nullable[[]byte]{Value: response, Valid: true}, nil
+	return &InternalPasswordExchange{}, cqltype.Nullable[[]byte]{Value: response, Valid: true}, nil
 }
 
 type InternalPasswordExchange struct{}
 
-func (*InternalPasswordExchange) Challenge(ctx context.Context, _ Nullable[Bytes]) (Nullable[[]byte], error) {
+func (*InternalPasswordExchange) Challenge(ctx context.Context, _ cqltype.Nullable[cqltype.Bytes]) (cqltype.Nullable[[]byte], error) {
 	if err := ctx.Err(); err != nil {
-		return Nullable[[]byte]{}, err
+		return cqltype.Nullable[[]byte]{}, err
 	}
-	return Nullable[[]byte]{}, errors.New("gocql: password authenticator received an unexpected challenge")
+	return cqltype.Nullable[[]byte]{}, errors.New("gocql: password authenticator received an unexpected challenge")
 }
-func (*InternalPasswordExchange) Success(ctx context.Context, _ Nullable[Bytes]) error {
+func (*InternalPasswordExchange) Success(ctx context.Context, _ cqltype.Nullable[cqltype.Bytes]) error {
 	return ctx.Err()
 }
 func (*InternalPasswordExchange) Close() {}
