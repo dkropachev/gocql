@@ -6,6 +6,10 @@ package metadata
 import (
 	"context"
 	"errors"
+
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
 type InternalV2ScyllaKeyspaceRow struct {
@@ -22,7 +26,7 @@ func InternalReadV2ScyllaKeyspaces(ctx context.Context, s Source, keyspaces map[
 	}
 	decoder := InternalV2SchemaRows[InternalV2ScyllaKeyspaceRow]{initialize: func() *InternalV2ScyllaKeyspaceRow { return &InternalV2ScyllaKeyspaceRow{initial: -1} }, InternalFields: []InternalV2SchemaField[InternalV2ScyllaKeyspaceRow]{
 		InternalV2RequiredSchemaColumn("keyspace_name", InternalV2MetadataText{}, func(r *InternalV2ScyllaKeyspaceRow) *string { return &r.name }),
-		InternalV2SchemaColumn("initial_tablets", Int32, func(r *InternalV2ScyllaKeyspaceRow) *int32 { return &r.initial }),
+		InternalV2SchemaColumn("initial_tablets", codec.Int32, func(r *InternalV2ScyllaKeyspaceRow) *int32 { return &r.initial }),
 		InternalV2SchemaColumn("consistency", InternalV2MetadataText{}, func(r *InternalV2ScyllaKeyspaceRow) *string { return &r.consistency }),
 	}}
 	stmt := `SELECT * FROM system_schema.scylla_keyspaces`
@@ -33,7 +37,7 @@ func InternalReadV2ScyllaKeyspaces(ctx context.Context, s Source, keyspaces map[
 	}
 	rows, err := InternalQueryV2SchemaRows(ctx, s, stmt, args, decoder)
 	if err != nil {
-		if invalid, ok := errors.AsType[RequestError](err); ok && invalid.GetCode() == ErrCodeInvalid {
+		if invalid, ok := errors.AsType[protocol.RequestError](err); ok && invalid.GetCode() == protocol.ErrCodeInvalid {
 			return nil
 		}
 		return err
@@ -41,7 +45,7 @@ func InternalReadV2ScyllaKeyspaces(ctx context.Context, s Source, keyspaces map[
 	seen := make(map[string]bool, len(rows))
 	for _, r := range rows {
 		if seen[r.name] {
-			return typeValidation("scylla keyspace schema", "duplicate identity %q", r.name)
+			return cqltype.TypeValidation("scylla keyspace schema", "duplicate identity %q", r.name)
 		}
 		seen[r.name] = true
 		if ks := keyspaces[r.name]; ks != nil {
