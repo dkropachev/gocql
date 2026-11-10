@@ -9,7 +9,7 @@ import (
 
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/model"
-	pool1 "github.com/scylladb/gocql/v2/internal/pool"
+	implPool "github.com/scylladb/gocql/v2/internal/pool"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -109,7 +109,7 @@ func (s *Core) ObserveSafely(fn func()) {
 
 // pickTypedPool carries native shard targets through connection selection without
 // manufacturing an old query object or discarding table-specific tablet routing.
-func (s *Core) PickTypedPool(pool *pool1.InternalHostConnPool, target model.Target, routing model.RoutingInfo) *transport.Conn {
+func (s *Core) PickTypedPool(pool *implPool.InternalHostConnPool, target model.Target, routing model.RoutingInfo) *transport.Conn {
 	pool.InternalMu.RLock()
 	pickable, repair := pool.InternalPickable()
 	var conn *transport.Conn
@@ -124,14 +124,14 @@ func (s *Core) PickTypedPool(pool *pool1.InternalHostConnPool, target model.Targ
 }
 
 // pickTypedPoolLocked picks from a pickable pool. Must be called with pool.mu held.
-func pickTypedPoolLocked(s *Core, pool *pool1.InternalHostConnPool, target model.Target, routing model.RoutingInfo) *transport.Conn {
-	if picker, ok := pool.InternalConnPicker.(*pool1.InternalTypedConnPicker); ok {
+func pickTypedPoolLocked(s *Core, pool *implPool.InternalHostConnPool, target model.Target, routing model.RoutingInfo) *transport.Conn {
+	if picker, ok := pool.InternalConnPicker.(*implPool.InternalTypedConnPicker); ok {
 		return picker.InternalPickTarget(target, routing)
 	}
-	picker, ok := pool.InternalConnPicker.(*pool1.InternalScyllaConnPicker)
+	picker, ok := pool.InternalConnPicker.(*implPool.InternalScyllaConnPicker)
 	if !ok {
 		if routing.Token.Set && !target.ShardID.Set && !routing.ShardID.Set {
-			if p, ok := pool.InternalConnPicker.(pool1.InternalInt64ConnPicker); ok {
+			if p, ok := pool.InternalConnPicker.(implPool.InternalInt64ConnPicker); ok {
 				return p.PickInt64(routing.Token.Value)
 			}
 		}

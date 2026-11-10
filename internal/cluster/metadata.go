@@ -10,7 +10,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
-	pool1 "github.com/scylladb/gocql/v2/internal/pool"
+	implPool "github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -722,18 +722,18 @@ func (s *Core) v2AgreementConnections(id cqltype.UUID) []*transport.Conn {
 	}
 	var out []*transport.Conn
 	switch picker := pool.InternalConnPicker.(type) {
-	case *pool1.InternalTypedConnPicker:
+	case *implPool.InternalTypedConnPicker:
 		picker.InternalMu.RLock()
 		for _, cs := range picker.InternalConns {
 			out = append(out, cs...)
 		}
 		out = append(out, picker.InternalExcess...)
 		picker.InternalMu.RUnlock()
-	case *pool1.InternalDefaultConnPicker:
+	case *implPool.InternalDefaultConnPicker:
 		picker.InternalMu.RLock()
 		out = append(out, picker.InternalConns...)
 		picker.InternalMu.RUnlock()
-	case *pool1.InternalScyllaConnPicker:
+	case *implPool.InternalScyllaConnPicker:
 		picker.InternalMu.RLock()
 		out = append(out, picker.InternalConns...)
 		out = append(out, picker.InternalExcessConns...)

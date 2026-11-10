@@ -10,7 +10,7 @@ import (
 )
 
 func TestStatement(t *testing.T) {
-	t.Run("InternalStatementDefaults", func(t *testing.T) {
+	t.Run("statementDefaults", func(t *testing.T) {
 		t.Run("FillsEmptyTypes", func(t *testing.T) {
 			s := Statement[codec.EmptyRecord, codec.EmptyRecord]{CQL: "TRUNCATE ks.t"}
 			statementDefaults(&s)
@@ -27,7 +27,7 @@ func TestStatement(t *testing.T) {
 		})
 	})
 
-	t.Run("InternalValidateStatement", func(t *testing.T) {
+	t.Run("validateStatement", func(t *testing.T) {
 		t.Run("AcceptsDefaultedEmptyTypes", func(t *testing.T) {
 			s := Statement[codec.EmptyRecord, codec.EmptyRecord]{CQL: "TRUNCATE ks.t"}
 			statementDefaults(&s)
