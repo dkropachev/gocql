@@ -33,8 +33,8 @@ func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, Result, e
 }
 
 // Each visits every row across all pages, decoding into dst and calling fn.
-// Borrowed fields expire when fn returns. A non-nil callback error stops
-// iteration. There is no execution cursor to close.
+// Borrowed fields expire when fn returns. Return StopIteration to stop
+// successfully; any other callback error stops iteration and is returned. There is no execution cursor to close.
 func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error) (Result, error) {
 	return q.internal().Each(ctx, value, dst, fn)
 }

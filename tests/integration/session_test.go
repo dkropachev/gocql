@@ -379,7 +379,9 @@ func TestSession(t *testing.T) {
 				implExecution.InternalSessionData((*implExecution.Session)(opaqueStorageValue)).InternalLogger = nopLogger{}
 				return opaqueStorageValue
 			}()
-			runtimeFor(session).InternalSetProfile(&profile)
+			profileOptions, err := resolveOptions(session, gocql.Options{Profile: &profile})
+			require.NoError(t, err)
+			runtimeFor(session).InternalSetProfile(&profileOptions.InternalProfile)
 			defer session.Close()
 			resolved, err := resolveOptions(session, gocql.Options{Trace: true})
 			require.NoError(t, err)

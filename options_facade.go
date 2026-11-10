@@ -1,0 +1,138 @@
+// Copyright 2026 The Gocql Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license.
+
+package gocql
+
+import (
+	"errors"
+	"time"
+
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	implBinding "github.com/scylladb/gocql/v2/internal/binding"
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	"github.com/scylladb/gocql/v2/retry"
+)
+
+// Options overrides execution settings. Its zero value uses session defaults.
+// Query constructors validate and snapshot Options once. Bind recurring
+// overrides with Session.BindOptions for concurrent one-shot calls. Use context
+// deadlines for request time limits without rebuilding options.
+type Options struct {
+	Retry    retry.Policy
+	Observer Observer
+	// Profile replaces the session's default profile before other overrides.
+	Profile  *Profile
+	Keyspace string
+	// CustomPayload is copied, including borrowed payload bytes, when bound.
+	CustomPayload        []cql.PayloadEntry
+	Timeout, PageTimeout cql.Option[time.Duration]
+	Prefetch             cql.Option[int]
+	Timestamp            cql.Option[int64]
+	PageSize             cql.Option[int32]
+	NowInSeconds         cql.Option[int32]
+	ShardID              cql.Option[uint32]
+	// SerialConsistency and NoSerialConsistency are mutually exclusive.
+	SerialConsistency   cql.Option[cql.Consistency]
+	Consistency         cql.Option[cql.Consistency]
+	HostID              cql.Option[cql.UUID]
+	IncludeMetadata     bool
+	Idempotent          bool
+	Trace               bool
+	NoSerialConsistency bool
+}
+
+// BoundOptions is an immutable snapshot made by Session.BindOptions. Reuse it
+// for recurring one-shot execution settings; the zero value uses session
+// defaults. Binding validates overrides, copies payloads and precomputes request
+// settings. Reuse on another session resolves the original overrides against
+// that session's defaults instead.
+type BoundOptions implExecution.BoundOptions
+
+// Values returns an independent copy of the original overrides for deriving
+// another set. It does not include inherited session defaults. Policy and
+// observer objects remain shared and must support concurrent use.
+func (o BoundOptions) Values() Options {
+	return publicOptions(implExecution.BoundOptions(o).Values())
+}
+
+// PrepareOptions selects the keyspace, host and tracing of preparation.
+// The zero value uses the session's keyspace and any eligible host.
+type PrepareOptions struct {
+	Keyspace string
+	HostID   cql.Option[cql.UUID]
+	Trace    bool
+}
+
+// StreamOptions chooses caller-storage decoding and its receive mode. The zero
+// value buffers one response page on a multiplexed connection. Incremental
+// reserves a connection for bounded receive scratch. Both modes require seeded
+// output capacity and disable prefetch and speculation.
+type StreamOptions struct {
+	Options     Options
+	Limits      StreamLimits
+	Incremental bool
+}
+
+func internalOptions(o Options) implExecution.Options {
+	v := implExecution.Options{
+		Retry: o.Retry, Observer: o.Observer, Keyspace: o.Keyspace,
+		CustomPayload: o.CustomPayload, Timeout: o.Timeout, PageTimeout: o.PageTimeout,
+		Prefetch: o.Prefetch, Timestamp: o.Timestamp, PageSize: o.PageSize,
+		NowInSeconds: o.NowInSeconds, ShardID: o.ShardID,
+		SerialConsistency: o.SerialConsistency, Consistency: o.Consistency,
+		HostID: o.HostID, IncludeMetadata: o.IncludeMetadata,
+		Idempotent: o.Idempotent, Trace: o.Trace, NoSerialConsistency: o.NoSerialConsistency,
+	}
+	if o.Profile != nil {
+		profile := internalProfile(*o.Profile)
+		v.Profile = &profile
+	}
+	return v
+}
+
+func publicOptions(o implExecution.Options) Options {
+	v := Options{
+		Retry: o.Retry, Observer: o.Observer, Keyspace: o.Keyspace,
+		CustomPayload: o.CustomPayload, Timeout: o.Timeout, PageTimeout: o.PageTimeout,
+		Prefetch: o.Prefetch, Timestamp: o.Timestamp, PageSize: o.PageSize,
+		NowInSeconds: o.NowInSeconds, ShardID: o.ShardID,
+		SerialConsistency: o.SerialConsistency, Consistency: o.Consistency,
+		HostID: o.HostID, IncludeMetadata: o.IncludeMetadata,
+		Idempotent: o.Idempotent, Trace: o.Trace, NoSerialConsistency: o.NoSerialConsistency,
+	}
+	if o.Profile != nil {
+		profile := publicProfile(*o.Profile)
+		v.Profile = &profile
+	}
+	return v
+}
+
+func internalStreamOptions(o StreamOptions) implExecution.StreamOptions {
+	return implExecution.StreamOptions{Options: internalOptions(o.Options), Limits: o.Limits, Incremental: o.Incremental}
+}
+
+func internalPrepareOptions(options []PrepareOptions) (implExecution.PrepareOptions, error) {
+	if len(options) > 1 {
+		return implExecution.PrepareOptions{}, errors.New("gocql: at most one PrepareOptions")
+	}
+	if len(options) == 0 {
+		return implExecution.PrepareOptions{}, nil
+	}
+	o := options[0]
+	return implExecution.PrepareOptions{Keyspace: o.Keyspace, HostID: o.HostID, Trace: o.Trace}, nil
+}
+
+func internalBoundOptions(options []BoundOptions) (implExecution.BoundOptions, error) {
+	if len(options) > 1 {
+		return implExecution.BoundOptions{}, &cqlerr.ValidationError{Field: "options", Err: errors.New("at most one BoundOptions")}
+	}
+	if len(options) == 0 {
+		return implExecution.BoundOptions{}, nil
+	}
+	return implExecution.BoundOptions(options[0]), nil
+}
+
+func internalStatement[P, R any](s cql.Statement[P, R]) implBinding.Statement[P, R] {
+	return implBinding.Statement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, BindMarkers: s.BindMarkers, Kind: s.Kind}
+}

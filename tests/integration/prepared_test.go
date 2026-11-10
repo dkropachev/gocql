@@ -243,8 +243,8 @@ func TestPrepared(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			bound, conn := injectInvalidPreparedStatement(t, session, table)
-			cassandraBatch(t, session, cql.UnloggedBatch, []batchItem{cassandraItem(t, bound)}, *func() *gocql.Options {
-				opaqueStorageValuexxx := new(gocql.Options)
+			cassandraBatch(t, session, cql.UnloggedBatch, []batchItem{cassandraItem(t, bound)}, *func() *implExecution.Options {
+				opaqueStorageValuexxx := new(implExecution.Options)
 				opaqueStorageValuexxx.HostID = cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
 				implExecution.OptionsData(opaqueStorageValuexxx).InternalConnection = conn
 				return opaqueStorageValuexxx
@@ -261,8 +261,8 @@ func TestPrepared(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			bound, conn := injectInvalidPreparedStatement(t, session, table)
-			_, err := Exec(context.Background(), session, bound, bindOptions(session, *func() *gocql.Options {
-				opaqueStorageValuexx := new(gocql.Options)
+			_, err := Exec(context.Background(), session, bound, bindOptions(session, *func() *implExecution.Options {
+				opaqueStorageValuexx := new(implExecution.Options)
 				opaqueStorageValuexx.HostID = cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
 				implExecution.OptionsData(opaqueStorageValuexx).InternalConnection = conn
 				return opaqueStorageValuexx

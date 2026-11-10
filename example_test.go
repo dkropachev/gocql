@@ -61,7 +61,7 @@ func Example() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if _, err := insertPrepared.Exec(ctx, tweet{cql.NewTimeUUID(), "me", "hello world"}); err != nil {
+	if _, err := insertPrepared.Exec(ctx, tweet{cql.UUID(cql.NewTimeUUID()), "me", "hello world"}); err != nil {
 		log.Fatal(err)
 	}
 	selectTweetsPrepared, err := session.Prepare(ctx, cql.Statement[string, tweet]{

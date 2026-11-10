@@ -1,6 +1,10 @@
 # Streaming into caller storage
 
-`prepared.StreamQuery(decoder, StreamOptions{})` creates a reusable query.
+`session.PrepareStream(ctx, cql.StreamStatement[P,R]{CQL: text, Params: params,
+Rows: decoder})` prepares directly for caller-storage decoding. Its immutable
+`PreparedStream` handle can be shared; `prepared.Query(StreamOptions{})` creates
+a query for one worker. A buffered `Prepared` also offers
+`StreamQuery(decoder, StreamOptions{})` when both decoding modes are useful.
 Its `Run(ctx, parameters)` method returns a cursor; `NextInto(&row)` decodes
 into seeded caller storage. By default it buffers a complete response page on
 normal multiplexed connections. `StreamOptions{Incremental: true}` selects
@@ -25,14 +29,19 @@ row := Download{
     Payload: make([]byte, 0, 1<<20),
     Pieces: [][]byte{make([]byte, 0, 1024), make([]byte, 0, 1024)},
 }
-query, err := prepared.StreamQuery(decoder, gocql.StreamOptions{})
+prepared, err := session.PrepareStream(ctx, cql.StreamStatement[cql.EmptyParams, Download]{
+    CQL: "SELECT id,payload,pieces FROM app.downloads",
+    Rows: decoder,
+})
+if err != nil { return err }
+query, err := prepared.Query(gocql.StreamOptions{})
 if err != nil { return err }
 defer func() {
     cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
     _ = query.Close(cleanup)
 }()
-stream, err := query.Run(ctx, parameters)
+stream, err := query.Run(ctx, cql.EmptyParams{})
 if err != nil { return err }
 defer stream.Close()
 for stream.NextInto(&row) {
@@ -92,3 +101,11 @@ before streaming submission. Incremental mode reports its capability error expli
 Set StreamOptions.Limits for metadata, read-ahead, discard and transform budgets;
 The configuration builder's `WithMaxFrameSize`, `WithMaxDecompressedSize`
 and `WithMaxMetadataDepth` bound response sizes and nesting. A limit error is terminal. StreamInfo reports delivered rows, pages and attempts.
+
+Lists, sets, and maps decode NULL as empty, matching buffered decoding, while
+preserving the destination's seeded capacity. `StreamNullable` preserves the
+NULL/present distinction. Vectors remain strict about their dimension and need
+`StreamNullable` for NULL. This policy does not permit NULL collection elements.
+Preparation validates the streaming decoder against available result metadata;
+conditional statements whose PREPARE response omits result metadata are checked
+on execution. Actual changed metadata always triggers plan revalidation.

@@ -6,7 +6,6 @@ package cql
 import (
 	"strings"
 
-	binding "github.com/scylladb/gocql/v2/internal/binding"
 	codec "github.com/scylladb/gocql/v2/internal/codec"
 )
 
@@ -14,7 +13,32 @@ import (
 // Nil Params or Rows means none when its type is EmptyParams or EmptyRow.
 // BindMarkers supplies parameter metadata for unprepared execution; Prepare
 // takes that metadata from the server. Kind classifies conditional statements.
-type Statement[P any, R any] = binding.Statement[P, R]
+type Statement[P, R any] struct {
+	// CQL is the statement text sent to the server.
+	CQL string
+	// Params encodes P. It may be nil when P is EmptyParams.
+	Params ParamEncoder[P]
+	// Rows decodes R. It may be nil when R is EmptyRow.
+	Rows RowDecoder[R]
+	// BindMarkers supplies parameter metadata for unprepared execution.
+	// Preparation obtains this metadata from the server instead.
+	BindMarkers Columns
+	// Kind classifies ordinary and conditional statements for safe execution.
+	Kind StatementKind
+}
+
+// StreamStatement pairs CQL and typed parameters with a decoder that writes
+// rows into caller-owned storage. Use Session.PrepareStream to prepare it;
+// no buffered row decoder is required.
+type StreamStatement[P, R any] struct {
+	CQL string
+	// Params encodes P. It may be nil when P is EmptyParams.
+	Params ParamEncoder[P]
+	// Rows decodes into seeded caller storage and must not be nil.
+	Rows StreamRowDecoder[R]
+	// Kind classifies ordinary and conditional statements for safe execution.
+	Kind StatementKind
+}
 
 // OwnedBlobCodec encodes []byte and decodes into caller-owned storage. RowInto
 // and ReuseBuffers preserve a seeded slice when its capacity is sufficient.

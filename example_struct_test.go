@@ -55,7 +55,7 @@ func ExampleParamsOf() {
 		log.Fatal(err)
 	}
 	defer insert.Close(ctx)
-	if _, err := insert.Exec(ctx, Tweet{ID: cql.NewTimeUUID(), Timeline: "me", Text: "hello world"}); err != nil {
+	if _, err := insert.Exec(ctx, Tweet{ID: cql.UUID(cql.NewTimeUUID()), Timeline: "me", Text: "hello world"}); err != nil {
 		log.Fatal(err)
 	}
 

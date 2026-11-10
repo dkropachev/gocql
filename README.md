@@ -47,11 +47,14 @@ and `Each` return `(Result, error)` and `One` returns `(bool, Result, error)`;
 the `Result` reports the coordinator, attempts, latency, row count and any
 warnings, trace IDs or custom payload. A nil `Params` or
 `Rows` means none when the type is `cql.EmptyParams` or `cql.EmptyRow`.
+`cql.NewTimeUUID` and its range helpers return `cql.TimeUUID`, which supports
+canonical string/JSON/text formatting and timestamp extraction. Use
+`cql.TimeUUIDFromUUID` or `cql.ParseTimeUUID` for checked external input.
 `cql.StringCodec` decodes text into an owned `string`; `cql.TextCodec` decodes
 a `cql.Text` view of the response without copying. `Params`/`Row` compose typed struct mappings, while `DynamicRows` and
 `DynamicParams` support metadata-driven applications. Custom codecs compile
 against immutable `DataType`/`Columns` metadata; execution does not infer codecs
-from arbitrary Go values.
+from arbitrary Go values. See [custom codec contracts](docs/source/custom-codecs.md).
 
 ## Ownership and streaming
 
@@ -63,7 +66,8 @@ from `session.BindOptions(options)`; none uses the session default. They return
 only when the execution has finished. `One` detaches borrowed fields before
 returning, so its result remains valid.
 `Each` lends borrowed fields only until `fn` returns; clone any values retained
-by the callback.
+by the callback. Return `gocql.StopIteration` to stop `Each` successfully; other
+callback errors are returned and recorded as failures.
 
 `prepared.Query(options)` creates a reusable query owned by one worker; any
 number of queries can share one preparation. It resolves its options once and
@@ -89,7 +93,11 @@ Close unless a retained `PageLease` pins the page. `Clone` explicitly detaches
 values. `NextInto` writes typed fields into caller structs while payloads still
 borrow their pages.
 
-`prepared.StreamQuery(decoder, options)` decodes into seeded caller storage. It buffers each page on
+`session.PrepareStream(ctx, cql.StreamStatement[P, R]{CQL: text, Params: params, Rows: decoder})`
+prepares directly for caller-storage decoding. Share its immutable handle and
+create a query per worker with `prepared.Query(options)`. An ordinary buffered
+preparation also supports `prepared.StreamQuery(decoder, options)` to use both
+decoding modes. Both decode into seeded caller storage. It buffers each page on
 normal multiplexed connections by default. `StreamOptions{Incremental: true}`
 selects bounded incremental receive with an exclusive connection reservation. Read the
 [streaming guide](docs/source/statements/streaming.md) and run the complete

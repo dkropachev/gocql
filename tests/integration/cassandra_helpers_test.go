@@ -81,9 +81,9 @@ func cassandraDDL(t testing.TB, s *gocql.Session, stmt string) {
 		t.Fatal(err)
 	}
 }
-func cassandraPrepared[P, R any](t testing.TB, s *gocql.Session, statement cql.Statement[P, R], options gocql.PrepareOptions) *gocql.Prepared[P, R] {
+func cassandraPrepared[P, R any, O fixturePrepareOptions](t testing.TB, s *gocql.Session, statement cql.Statement[P, R], options O) *gocql.Prepared[P, R] {
 	t.Helper()
-	p, err := s.Prepare(context.Background(), statement, options)
+	p, err := prepareFixture(context.Background(), s, statement, options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func cassandraUnprepared[R any](t testing.TB, stmt string, decoder cql.RowDecode
 	})
 	return b
 }
-func cassandraReadBound[R any](t testing.TB, s *gocql.Session, b *Bound[R], options gocql.Options) R {
+func cassandraReadBound[R any, O fixtureOptions](t testing.TB, s *gocql.Session, b *Bound[R], options O) R {
 	t.Helper()
 	rows, err := Run(context.Background(), s, b, bindOptions(s, options))
 	if err != nil {
@@ -152,15 +152,15 @@ func cassandraItem[R any](t testing.TB, b *Bound[R]) batchItem {
 	}
 	return item
 }
-func cassandraDynamicBound(t testing.TB, s *gocql.Session, stmt string, values []cql.Value, options gocql.PrepareOptions) *Bound[cql.DynamicRow] {
+func cassandraDynamicBound[O fixturePrepareOptions](t testing.TB, s *gocql.Session, stmt string, values []cql.Value, options O) *Bound[cql.DynamicRow] {
 	t.Helper()
 	return cassandraBound(t, cassandraPrepared(t, s, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}, options), values)
 }
-func cassandraWriteBound(t testing.TB, s *gocql.Session, stmt string, values []cql.Value, options gocql.PrepareOptions) *Bound[cql.EmptyRow] {
+func cassandraWriteBound[O fixturePrepareOptions](t testing.TB, s *gocql.Session, stmt string, values []cql.Value, options O) *Bound[cql.EmptyRow] {
 	t.Helper()
 	return cassandraBound(t, cassandraPrepared(t, s, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}, options), values)
 }
-func cassandraRows(t testing.TB, s *gocql.Session, b *Bound[cql.DynamicRow], options gocql.Options) []cql.DynamicRow {
+func cassandraRows[O fixtureOptions](t testing.TB, s *gocql.Session, b *Bound[cql.DynamicRow], options O) []cql.DynamicRow {
 	t.Helper()
 	rows, err := Run(context.Background(), s, b, bindOptions(s, options))
 	if err != nil {
@@ -181,7 +181,7 @@ func cassandraRows(t testing.TB, s *gocql.Session, b *Bound[cql.DynamicRow], opt
 	}
 	return result
 }
-func cassandraBatch(t testing.TB, s *gocql.Session, kind cql.BatchKind, items []batchItem, options gocql.Options) gocql.Result {
+func cassandraBatch[O fixtureOptions](t testing.TB, s *gocql.Session, kind cql.BatchKind, items []batchItem, options O) gocql.Result {
 	t.Helper()
 	r, e := execBatch(context.Background(), s, kind, items, bindOptions(s, options))
 	if e != nil {

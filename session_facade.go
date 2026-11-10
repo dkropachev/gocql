@@ -23,8 +23,26 @@ func (s *Session) internal() *implExecution.Session { return (*implExecution.Ses
 // immutable and safe to share between goroutines. At most one PrepareOptions
 // may be passed; omitting it uses the session keyspace and any eligible host.
 func (s *Session) Prepare[P, R any](ctx context.Context, statement cql.Statement[P, R], options ...PrepareOptions) (*Prepared[P, R], error) {
-	p, err := s.internal().Prepare(ctx, statement, options...)
+	o, err := internalPrepareOptions(options)
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.internal().Prepare(ctx, internalStatement(statement), o)
 	return (*Prepared[P, R])(p), err
+}
+
+// PrepareStream prepares a statement for decoding into caller-owned storage.
+// The immutable handle can be shared between workers. It validates the streaming
+// decoder against server metadata when available; conditional result metadata
+// unavailable during preparation is checked on execution. At most one
+// PrepareOptions may be supplied.
+func (s *Session) PrepareStream[P, R any](ctx context.Context, statement cql.StreamStatement[P, R], options ...PrepareOptions) (*PreparedStream[P, R], error) {
+	o, err := internalPrepareOptions(options)
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.internal().PrepareStream(ctx, implExecution.StreamStatement[P, R]{CQL: statement.CQL, Params: statement.Params, Rows: statement.Rows, Kind: statement.Kind}, o)
+	return (*PreparedStream[P, R])(p), err
 }
 
 // BindOptions validates and snapshots overrides for reuse by one-shot calls.
@@ -34,7 +52,8 @@ func (s *Session) Prepare[P, R any](ctx context.Context, statement cql.Statement
 // time limits. Policy and observer objects remain shared and must be safe for
 // concurrent use.
 func (s *Session) BindOptions(options Options) (BoundOptions, error) {
-	return s.internal().BindOptions(options)
+	o, err := s.internal().BindOptions(internalOptions(options))
+	return BoundOptions(o), err
 }
 
 // UnpreparedQuery creates a reusable query that sends CQL text on every call.
@@ -42,7 +61,7 @@ func (s *Session) BindOptions(options Options) (BoundOptions, error) {
 // worker is done; use UnpreparedExec, UnpreparedOne or UnpreparedEach for an
 // occasional statement whose execution does not need a cursor.
 func (s *Session) UnpreparedQuery[P, R any](statement cql.Statement[P, R], options Options) (*Query[P, R], error) {
-	q, err := s.internal().UnpreparedQuery(statement, options)
+	q, err := s.internal().UnpreparedQuery(internalStatement(statement), internalOptions(options))
 	return (*Query[P, R])(q), err
 }
 
@@ -52,7 +71,7 @@ func (s *Session) UnpreparedQuery[P, R any](statement cql.Statement[P, R], optio
 // reserve a connection for bounded incremental receive. Close both the returned
 // query and each cursor. Prefer Prepare for frequently repeated statements.
 func (s *Session) UnpreparedStreamQuery[P, R any](statement cql.Statement[P, cql.EmptyRow], decoder cql.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
-	q, err := s.internal().UnpreparedStreamQuery(statement, decoder, options)
+	q, err := s.internal().UnpreparedStreamQuery(internalStatement(statement), decoder, internalStreamOptions(options))
 	return (*StreamQuery[P, R])(q), err
 }
 
@@ -60,7 +79,11 @@ func (s *Session) UnpreparedStreamQuery[P, R any](statement cql.Statement[P, cql
 // leaving a query to close. It must return no result columns. Parameters are
 // described by statement.BindMarkers. At most one BoundOptions may be passed.
 func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...BoundOptions) (Result, error) {
-	return s.internal().UnpreparedExec(ctx, statement, value, options...)
+	o, err := internalBoundOptions(options)
+	if err != nil {
+		return implExecution.InternalExecutionErrorResult(err), err
+	}
+	return s.internal().UnpreparedExec(ctx, internalStatement(statement), value, o)
 }
 
 // UnpreparedOne executes an occasional statement and decodes its first row.
@@ -68,29 +91,45 @@ func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.State
 // are detached before return; there is no query or cursor to close. Parameters
 // are described by statement.BindMarkers. At most one BoundOptions may be passed.
 func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...BoundOptions) (bool, Result, error) {
-	return s.internal().UnpreparedOne(ctx, statement, value, dst, options...)
+	o, err := internalBoundOptions(options)
+	if err != nil {
+		return false, implExecution.InternalExecutionErrorResult(err), err
+	}
+	return s.internal().UnpreparedOne(ctx, internalStatement(statement), value, dst, o)
 }
 
 // UnpreparedEach executes an occasional statement, calling fn for every row
-// across all pages. Borrowed fields are valid only during fn. Returning an error
-// from fn stops iteration. There is no query or cursor to close. Parameters are
+// across all pages. Borrowed fields are valid only during fn. Returning StopIteration
+// from fn stops successfully; other callback errors are returned. There is no query or cursor to close. Parameters are
 // described by statement.BindMarkers. At most one BoundOptions may be passed.
 func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...BoundOptions) (Result, error) {
-	return s.internal().UnpreparedEach(ctx, statement, value, dst, fn, options...)
+	o, err := internalBoundOptions(options)
+	if err != nil {
+		return implExecution.InternalExecutionErrorResult(err), err
+	}
+	return s.internal().UnpreparedEach(ctx, internalStatement(statement), value, dst, fn, o)
 }
 
 // ExecBatch sends batch as one CQL BATCH request. Its statements must return no
 // columns; use RunBatch for conditional results. At most one BoundOptions may be
 // passed. Do not modify batch until the call returns.
 func (s *Session) ExecBatch(ctx context.Context, kind cql.BatchKind, batch *Batch, options ...BoundOptions) (Result, error) {
-	return s.internal().ExecBatch(ctx, kind, (*implExecution.Batch)(batch), options...)
+	o, err := internalBoundOptions(options)
+	if err != nil {
+		return implExecution.InternalExecutionErrorResult(err), err
+	}
+	return s.internal().ExecBatch(ctx, kind, (*implExecution.Batch)(batch), o)
 }
 
 // RunBatch executes a conditional batch and returns its result page, decoded
 // with decoder. Close the page when done. Options and batch ownership are as for
 // ExecBatch.
 func (s *Session) RunBatch[R any](ctx context.Context, kind cql.BatchKind, batch *Batch, decoder cql.RowDecoder[R], options ...BoundOptions) (*Page[R], error) {
-	page, err := s.internal().RunBatch(ctx, kind, (*implExecution.Batch)(batch), decoder, options...)
+	o, err := internalBoundOptions(options)
+	if err != nil {
+		return nil, err
+	}
+	page, err := s.internal().RunBatch(ctx, kind, (*implExecution.Batch)(batch), decoder, o)
 	return (*Page[R])(page), err
 }
 

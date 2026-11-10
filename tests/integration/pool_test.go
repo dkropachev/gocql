@@ -141,8 +141,8 @@ func TestPool(t *testing.T) {
 		ddl := func(stmt string) {
 			b := codecTestMust(BindUnpreparedOwned(cql.Command(stmt), cql.NewColumns(), cql.EmptyParams{}))
 			defer b.Close()
-			if _, err := Exec(ctx, s, b, bindOptions(s, *func() *gocql.Options {
-				opaqueStorageValue := new(gocql.Options)
+			if _, err := Exec(ctx, s, b, bindOptions(s, *func() *implExecution.Options {
+				opaqueStorageValue := new(implExecution.Options)
 				implExecution.OptionsData(opaqueStorageValue).InternalConnection = conn
 				return opaqueStorageValue
 			}())); err != nil {

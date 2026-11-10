@@ -32,6 +32,26 @@ func nilEachCallback() (Result, error) {
 // errStopEach ends Each early without reporting an error.
 var errStopEach = errors.New("gocql: stop iteration")
 
+// StopIteration ends an Each callback successfully. It is recognized only as a
+// callback result, before request observers and error metrics are notified.
+// Returning a wrapped StopIteration has the same effect; joined errors remain
+// failures so that stopping cannot hide another cause.
+var StopIteration = errors.New("gocql: stop iteration successfully")
+
+func isStopIteration(err error) bool {
+	for err != nil {
+		if err == StopIteration {
+			return true
+		}
+		wrapper, ok := err.(interface{ Unwrap() error })
+		if !ok {
+			return false
+		}
+		err = wrapper.Unwrap()
+	}
+	return false
+}
+
 // RunEach executes the bound statement and decodes every row, across all pages,
 // into dst, calling fn after each row. The execution is finished and all
 // response storage released before Each returns, so there is no iterator to
@@ -148,6 +168,9 @@ func decodeEach[R any](ctx context.Context, s *implCluster.Core, response *respo
 			return errStopEach
 		}
 		if err := fn(dst); err != nil {
+			if isStopIteration(err) {
+				return errStopEach
+			}
 			return err
 		}
 	}

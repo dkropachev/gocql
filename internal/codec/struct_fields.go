@@ -228,7 +228,8 @@ func (o codecOption[P, V]) apply(c *structConfig[P]) {
 // WithCodec maps the fields of type V, and of Nullable[V], with codec. It is
 // how a reflected mapping covers a type with no built-in codec, such as a UDT,
 // and it replaces the built-in default for V. A field's `codec=` tag naming a
-// built-in codec still wins. cqlgen takes the codec from the tag instead.
+// built-in codec still wins. Generated mappings follow the same precedence;
+// their custom-expression codecs remain defaults when no option replaces them.
 func WithCodec[P, V any](codec Codec[V]) StructOption[P] { return codecOption[P, V]{codec: codec} }
 
 // StructFields is a struct's mapping, as cqlgen generates it. Params and
@@ -267,6 +268,14 @@ func RegisteredStruct[P any]() (StructFields[P], bool) {
 // reflected once, here.
 func ParamsOf[P any](opts ...StructOption[P]) (ParamEncoder[P], error) {
 	if f, ok := RegisteredStruct[P](); ok && f.Params != nil {
+		config, err := structOptions(reflect.TypeFor[P](), opts)
+		if err != nil {
+			return nil, err
+		}
+		f, err = registeredStructOptions(f, config)
+		if err != nil {
+			return nil, err
+		}
 		return structParams(f.Params), nil
 	}
 	return ReflectParams(opts...)
@@ -280,6 +289,10 @@ func RowOf[R any](opts ...StructOption[R]) (RowDecoder[R], error) {
 		if err != nil {
 			return nil, err
 		}
+		f, err = registeredStructOptions(f, config)
+		if err != nil {
+			return nil, err
+		}
 		reset, err := bufferReset[R](config.reuseBuffers)
 		if err != nil {
 			return nil, err
@@ -287,6 +300,77 @@ func RowOf[R any](opts ...StructOption[R]) (RowDecoder[R], error) {
 		return structRow(f.Columns, reset), nil
 	}
 	return ReflectRow(opts...)
+}
+
+// registeredStructOptions replaces only fields selected by type options. The
+// registered defaults may contain Go codec expressions that reflection cannot
+// evaluate, so rebuilding the entire mapping reflectively would lose them.
+// Field discovery and option resolution happen here, never during execution.
+func registeredStructOptions[P any](fields StructFields[P], config structConfig[P]) (StructFields[P], error) {
+	if len(config.codecs) == 0 && len(config.streams) == 0 {
+		return fields, nil
+	}
+	fields.Params = append([]InputField[P](nil), fields.Params...)
+	fields.Columns = append([]OutputField[P](nil), fields.Columns...)
+	fields.StreamColumns = append([]StreamOutputField[P](nil), fields.StreamColumns...)
+	params, columns, streams := map[string]int{}, map[string]int{}, map[string]int{}
+	for i, field := range fields.Params {
+		if field != nil && !field.location().positional {
+			params[field.location().name] = i
+		}
+	}
+	for i, field := range fields.Columns {
+		if field != nil && !field.location().positional {
+			columns[field.location().name] = i
+		}
+	}
+	for i, field := range fields.StreamColumns {
+		if !field.loc.positional {
+			streams[field.loc.name] = i
+		}
+	}
+	var builtins []builtinField[P]
+	var streamBuiltins []streamBuiltinField[P]
+	if len(config.codecs) != 0 {
+		builtins = builtinFields[P]()
+	}
+	if len(config.streams) != 0 {
+		streamBuiltins = streamBuiltinFields[P]()
+	}
+	err := eachStructField(reflect.TypeFor[P](), func(sf reflect.StructField, tag FieldTag) error {
+		if entry, ok := config.codecs[sf.Type]; ok && !tagSelectsBuiltin(builtins, sf.Type, tag.Codec) {
+			if i, ok := params[tag.Column]; ok {
+				fields.Params[i] = entry.param(tag.Column, sf.Offset)
+			}
+			if i, ok := columns[tag.Column]; ok {
+				fields.Columns[i] = entry.column(tag.Column, sf.Offset)
+			}
+		}
+		if entry, ok := config.streams[sf.Type]; ok && !tagSelectsBuiltin(streamBuiltins, sf.Type, tag.Stream) {
+			if i, ok := streams[tag.Column]; ok {
+				fields.StreamColumns[i] = entry.column(tag.Column, sf.Offset)
+			}
+		}
+		return nil
+	})
+	return fields, err
+}
+
+func tagSelectsBuiltin[E interface{ meta() BuiltinFieldType }](builtins []E, typ reflect.Type, name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, entry := range builtins {
+		meta := entry.meta()
+		if meta.Type == typ {
+			for _, candidate := range meta.Names {
+				if candidate == name {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func MustParamsOf[P any](opts ...StructOption[P]) ParamEncoder[P] {
@@ -668,6 +752,14 @@ func WithStreamCodec[P, V any](decoder StreamDecoder[V]) StructOption[P] {
 // alone. Decoders reuse the storage of []byte and slice fields across rows.
 func StreamRowOf[R any](opts ...StructOption[R]) (StreamRowDecoder[R], error) {
 	if f, ok := RegisteredStruct[R](); ok && f.StreamColumns != nil {
+		config, err := structOptions(reflect.TypeFor[R](), opts)
+		if err != nil {
+			return nil, err
+		}
+		f, err = registeredStructOptions(f, config)
+		if err != nil {
+			return nil, err
+		}
 		return structStreamRow(f.StreamColumns), nil
 	}
 	return ReflectStreamRow(opts...)

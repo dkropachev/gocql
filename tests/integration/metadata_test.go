@@ -90,8 +90,8 @@ func TestMetadata(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer b.Close()
-			if _, err := Exec(ctx, s, b, bindOptions(s, *func() *gocql.Options {
-				opaqueStorageValue := new(gocql.Options)
+			if _, err := Exec(ctx, s, b, bindOptions(s, *func() *implExecution.Options {
+				opaqueStorageValue := new(implExecution.Options)
 				implExecution.OptionsData(opaqueStorageValue).InternalConnection = conn
 				return opaqueStorageValue
 			}())); err != nil {
@@ -105,8 +105,8 @@ func TestMetadata(t *testing.T) {
 			b, err := BindUnpreparedOwned(cql.Command("DROP KEYSPACE IF EXISTS "+keyspace), cql.NewColumns(), cql.EmptyParams{})
 			if err == nil {
 				defer b.Close()
-				_, err = Exec(cleanup, s, b, bindOptions(s, *func() *gocql.Options {
-					opaqueStorageValuex := new(gocql.Options)
+				_, err = Exec(cleanup, s, b, bindOptions(s, *func() *implExecution.Options {
+					opaqueStorageValuex := new(implExecution.Options)
 					implExecution.OptionsData(opaqueStorageValuex).InternalConnection = conn
 					return opaqueStorageValuex
 				}()))

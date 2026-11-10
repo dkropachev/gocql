@@ -57,7 +57,7 @@ type WikiAttachment []byte
 var wikiTestData = []*WikiPage{
 	{
 		Title:    "Frontpage",
-		RevId:    cql.NewTimeUUID(),
+		RevId:    cql.UUID(cql.NewTimeUUID()),
 		Body:     "Welcome to this wiki page!",
 		Rating:   inf.NewDec(131, 3),
 		Modified: time.Date(2013, time.August, 13, 9, 52, 3, 0, time.UTC),
@@ -69,7 +69,7 @@ var wikiTestData = []*WikiPage{
 	},
 	{
 		Title:    "Foobar",
-		RevId:    cql.NewTimeUUID(),
+		RevId:    cql.UUID(cql.NewTimeUUID()),
 		Body:     "foo::Foo f = new foo::Foo(foo::Foo::INIT);",
 		Modified: time.Date(2013, time.August, 13, 9, 52, 3, 0, time.UTC),
 	},

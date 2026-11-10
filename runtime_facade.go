@@ -19,6 +19,13 @@ import (
 // must not be copied.
 type Batch implExecution.Batch
 
+// StopIteration may be returned by an Each callback to stop successfully.
+// A single-error wrapper has the same effect; joined errors remain failures.
+// The execution is recorded as successful and all response storage is released.
+// Other callback errors are returned unchanged. Borrowed callback fields still
+// expire when the callback returns.
+var StopIteration = implExecution.StopIteration
+
 // Len returns the number of statements in the batch.
 func (b *Batch) Len() int { return (*implExecution.Batch)(b).Len() }
 
@@ -56,23 +63,6 @@ func OpenSingleHost(ctx context.Context, config Config, hostID cql.UUID) (*Sessi
 	return (*Session)(session), err
 }
 
-// Options lists the settings of an execution. The zero Options uses the
-// session's default profile. Query constructors take Options and validate and
-// resolve them for their session once, so query executions do no per-call
-// work; one-shot executions take BoundOptions from Session.BindOptions
-// instead.
-type Options = implExecution.Options
-
-// BoundOptions are Options validated, resolved against one session's default
-// profile and keyspace, and encoded once by Session.BindOptions, for one-shot
-// executions such as Prepared.Exec and Session.ExecBatch. They are immutable
-// and safe to share between goroutines. The zero BoundOptions uses the
-// executing session's default profile.
-// Reuse bound options on their originating session for precomputed settings;
-// another session resolves their original overrides against its own defaults.
-// Values returns a copy of the original overrides for deriving another set.
-type BoundOptions = implExecution.BoundOptions
-
 const OverflowEvent = implCluster.OverflowEvent
 
 // Prepare prepares statement on session. At most one PrepareOptions may be
@@ -83,7 +73,6 @@ func Prepare[P any, R any](ctx context.Context, session *Session, statement cql.
 	return session.Prepare(ctx, statement, options...)
 }
 
-type PrepareOptions = implExecution.PrepareOptions
 type PreparedInfo = implExecution.PreparedInfo
 
 const SchemaEvent = implCluster.SchemaEvent
@@ -93,11 +82,6 @@ const StatusEvent = implCluster.StatusEvent
 // StreamInfo reports delivered rows, pages and execution progress.
 type StreamInfo = implExecution.StreamInfo
 
-// StreamOptions chooses caller-storage decoding and its receive mode. The zero
-// value buffers a whole page on a multiplexed connection. Incremental reserves
-// a connection and bounds receive scratch, with protocol/compression limits.
-// Both modes require seeded output capacity and disable prefetch/speculation.
-type StreamOptions = implExecution.StreamOptions
 type Subscription = implCluster.Subscription
 
 const TopologyEvent = implCluster.TopologyEvent

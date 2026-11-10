@@ -35,7 +35,7 @@ import (
 )
 
 func admitExecution[R any](a0 context.Context, a1 *gocql.Session, a2 *implExecution.Bound[R], a3 gocql.BoundOptions) (context.Context, context.CancelFunc, *executionRequest, error) {
-	return implExecution.InternalAdmitExecution[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, a3)
+	return implExecution.InternalAdmitExecution[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, implExecution.BoundOptions(a3))
 }
 
 type clientRoute = implCluster.InternalClientRoute
@@ -72,7 +72,7 @@ func newSchemaSource(a0 *gocql.Session) implMetadata.Source {
 type pair = implCluster.InternalPair
 
 func readV2SystemRows[P any, R any](a0 context.Context, a1 *driverConn, a2 cql.Statement[P, R], a3 cql.Columns, a4 P) ([]R, error) {
-	return implCluster.InternalReadV2SystemRows[P, R](a0, a1, a2, a3, a4)
+	return implCluster.InternalReadV2SystemRows[P, R](a0, a1, fixtureStatement(a2), a3, a4)
 }
 
 func resolveOptions(a0 *gocql.Session, a1 gocql.Options) (resolvedOptions, error) {
@@ -80,7 +80,7 @@ func resolveOptions(a0 *gocql.Session, a1 gocql.Options) (resolvedOptions, error
 	if err != nil {
 		return resolvedOptions{}, err
 	}
-	return implExecution.InternalResolveFor(implExecution.InternalCore((*implExecution.Session)(a0)), o), nil
+	return implExecution.InternalResolveFor(implExecution.InternalCore((*implExecution.Session)(a0)), implExecution.BoundOptions(o)), nil
 }
 
 type resolvedOptions = implExecution.InternalResolvedOptions

@@ -2,7 +2,20 @@
 
 package integration
 
-import gocql "github.com/scylladb/gocql/v2"
+import (
+	"context"
+
+	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
+	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+)
+
+type fixtureOptions interface {
+	gocql.Options | implExecution.Options
+}
+type fixturePrepareOptions interface {
+	gocql.PrepareOptions | implExecution.PrepareOptions
+}
 
 func codecTestMust[T any](v T, err error) T {
 	if err != nil {
@@ -13,10 +26,30 @@ func codecTestMust[T any](v T, err error) T {
 
 // bindOptions binds v to session, failing loudly on values a test meant to
 // be valid.
-func bindOptions(session *gocql.Session, v gocql.Options) gocql.BoundOptions {
-	o, err := session.BindOptions(v)
-	if err != nil {
-		panic(err)
+func bindOptions[O fixtureOptions](session *gocql.Session, v O) gocql.BoundOptions {
+	switch o := any(v).(type) {
+	case gocql.Options:
+		return codecTestMust(session.BindOptions(o))
+	case implExecution.Options:
+		return gocql.BoundOptions(codecTestMust(implExecution.InternalBindOptions(implExecution.InternalCore((*implExecution.Session)(session)), o)))
 	}
-	return o
+	panic("unreachable fixture options type")
+}
+
+// prepareFixture preserves connection injection only inside these historical
+// protocol fixtures. Public preparation remains free of transport hooks.
+func prepareFixture[P, R any, O fixturePrepareOptions](ctx context.Context, session *gocql.Session, statement cql.Statement[P, R], options O) (*gocql.Prepared[P, R], error) {
+	var internal implExecution.PrepareOptions
+	switch o := any(options).(type) {
+	case gocql.PrepareOptions:
+		internal = implExecution.PrepareOptions{Keyspace: o.Keyspace, HostID: o.HostID, Trace: o.Trace}
+	case implExecution.PrepareOptions:
+		internal = o
+	}
+	p, err := implExecution.Prepare(ctx, implExecution.InternalCore((*implExecution.Session)(session)), fixtureStatement(statement), internal)
+	return (*gocql.Prepared[P, R])(p), err
+}
+
+func fixtureStatement[P, R any](s cql.Statement[P, R]) implExecution.Statement[P, R] {
+	return implExecution.Statement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, Kind: s.Kind, BindMarkers: s.BindMarkers}
 }

@@ -207,22 +207,25 @@ func run() (resultErr error) {
 			return err
 		}
 	}
-	prepared, err := s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,payload,pieces FROM " + table, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
-	if err != nil {
-		return err
-	}
 	decoder := cql.StreamRow(func(r *record) { r.ApplicationState = "" },
 		cql.StreamColumn("id", cql.StreamInt32, func(r *record) *int32 { return &r.ID }),
 		cql.StreamColumn("payload", cql.StreamBlob, func(r *record) *[]byte { return &r.Payload }),
 		cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(r *record) *[][]byte { return &r.Pieces }),
 	)
+	prepared, err := s.PrepareStream(ctx, cql.StreamStatement[cql.EmptyParams, record]{
+		CQL:  "SELECT id,payload,pieces FROM " + table,
+		Rows: decoder,
+	})
+	if err != nil {
+		return err
+	}
 	hostsSnapshot := s.Metadata().Hosts()
 	if len(hostsSnapshot) == 0 {
 		return fmt.Errorf("missing discovered hosts")
 	}
 	pinned := gocql.Options{PageSize: cql.Some[int32](2), HostID: cql.Some(hostsSnapshot[0].ID)}
 	options := gocql.StreamOptions{Incremental: *incremental, Options: pinned}
-	query, err := prepared.StreamQuery(decoder, options)
+	query, err := prepared.Query(options)
 	if err != nil {
 		return err
 	}

@@ -234,15 +234,15 @@ func TestFraming(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,val int)", table))
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES(?,?)", table), cql.IntValue(1), cql.IntValue(7))
 			host := cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
-			prepared := cassandraPrepared(t, session, cql.Statement[int32, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id,val FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows}, *func() *gocql.PrepareOptions {
-				opaqueStorageValuexxxxxx := new(gocql.PrepareOptions)
+			prepared := cassandraPrepared(t, session, cql.Statement[int32, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id,val FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows}, *func() *implExecution.PrepareOptions {
+				opaqueStorageValuexxxxxx := new(implExecution.PrepareOptions)
 				opaqueStorageValuexxxxxx.HostID = host
 				implExecution.PrepareOptionsData(opaqueStorageValuexxxxxx).InternalConnection = conn
 				return opaqueStorageValuexxxxxx
 			}())
 			bound := cassandraBound(t, prepared, int32(1))
-			cassandraReadBound(t, session, bound, *func() *gocql.Options {
-				opaqueStorageValuexxxxxxx := new(gocql.Options)
+			cassandraReadBound(t, session, bound, *func() *implExecution.Options {
+				opaqueStorageValuexxxxxxx := new(implExecution.Options)
 				opaqueStorageValuexxxxxxx.HostID = host
 				implExecution.OptionsData(opaqueStorageValuexxxxxxx).InternalConnection = conn
 				return opaqueStorageValuexxxxxxx
@@ -256,8 +256,8 @@ func TestFraming(t *testing.T) {
 			cached.InternalRevision++
 			preparedData(prepared).InternalState.InternalHosts[host.Value] = &cached
 			preparedData(prepared).InternalState.InternalMu.Unlock()
-			row := cassandraReadBound(t, session, bound, *func() *gocql.Options {
-				opaqueStorageValuexxxxxxxx := new(gocql.Options)
+			row := cassandraReadBound(t, session, bound, *func() *implExecution.Options {
+				opaqueStorageValuexxxxxxxx := new(implExecution.Options)
 				opaqueStorageValuexxxxxxxx.HostID = host
 				implExecution.OptionsData(opaqueStorageValuexxxxxxxx).InternalConnection = conn
 				return opaqueStorageValuexxxxxxxx

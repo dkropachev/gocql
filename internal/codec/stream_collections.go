@@ -69,11 +69,18 @@ func (p streamSequencePlan[T]) DecodeInto(r *StreamValueReader, dst *[]T) error 
 	if dst == nil {
 		return r.fail(cqltype.TypeValidation("destination", "nil sequence destination"))
 	}
-	if err := r.present(); err != nil {
+	if err := r.check(); err != nil {
 		return err
 	}
 	if !r.matches(p.typ) {
 		return r.fail(cqltype.TypeValidation("type", "compiled sequence metadata changed"))
+	}
+	if r.state == cqltype.Null && p.typ.Kind() != cqltype.TypeCustom {
+		p.Reset(dst)
+		return r.RequireEnd()
+	}
+	if err := r.present(); err != nil {
+		return err
 	}
 	var count int
 	if p.typ.Kind() == cqltype.TypeCustom {
@@ -167,11 +174,18 @@ func (p streamMapPlan[K, V]) DecodeInto(r *StreamValueReader, dst *[]Entry[K, V]
 	if dst == nil {
 		return r.fail(cqltype.TypeValidation("destination", "nil map destination"))
 	}
-	if err := r.present(); err != nil {
+	if err := r.check(); err != nil {
 		return err
 	}
 	if !r.matches(p.typ) {
 		return r.fail(cqltype.TypeValidation("type", "compiled map metadata changed"))
+	}
+	if r.state == cqltype.Null {
+		p.Reset(dst)
+		return r.RequireEnd()
+	}
+	if err := r.present(); err != nil {
+		return err
 	}
 	count, err := r.count(8)
 	if err != nil {

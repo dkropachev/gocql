@@ -482,7 +482,7 @@ func TestQuery(t *testing.T) {
 			// admitted with.
 			profile := *runtimeFor(session).InternalProfile
 			profile.PageSize = 10
-			_, cancel, admitted, err := admitExecution(ctx, session, original, bindOptions(session, gocql.Options{Profile: &profile}))
+			_, cancel, admitted, err := admitExecution(ctx, session, original, bindOptions(session, implExecution.Options{Profile: &profile}))
 			require.NoError(t, err)
 			profile.PageSize = 100
 			require.Equal(t, int32(10), admitted.InternalOptions.InternalProfile.PageSize)

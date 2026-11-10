@@ -159,8 +159,8 @@ func injectInvalidPreparedStatement(t *testing.T, session *gocql.Session, table 
 	t.Helper()
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(foo varchar,bar int,PRIMARY KEY(foo,bar))", table))
 	conn := getRandomConn(t, session)
-	prepared := cassandraPrepared(t, session, cql.Statement[string, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,7)", table), Params: cql.OneParam(cql.StringEncoder), Rows: cql.EmptyRowDecoder}, *func() *gocql.PrepareOptions {
-		opaqueStorageValuex := new(gocql.PrepareOptions)
+	prepared := cassandraPrepared(t, session, cql.Statement[string, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,7)", table), Params: cql.OneParam(cql.StringEncoder), Rows: cql.EmptyRowDecoder}, *func() *implExecution.PrepareOptions {
+		opaqueStorageValuex := new(implExecution.PrepareOptions)
 		opaqueStorageValuex.HostID = cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
 		implExecution.PrepareOptionsData(opaqueStorageValuex).InternalConnection = conn
 		return opaqueStorageValuex
@@ -198,14 +198,14 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	host := cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
-	options := *func() *gocql.Options {
-		opaqueStorageValuexxxx := new(gocql.Options)
+	options := *func() *implExecution.Options {
+		opaqueStorageValuexxxx := new(implExecution.Options)
 		opaqueStorageValuexxxx.HostID = host
 		implExecution.OptionsData(opaqueStorageValuexxxx).InternalConnection = conn
 		return opaqueStorageValuexxxx
 	}()
-	prepareOptions := *func() *gocql.PrepareOptions {
-		opaqueStorageValuexxxxx := new(gocql.PrepareOptions)
+	prepareOptions := *func() *implExecution.PrepareOptions {
+		opaqueStorageValuexxxxx := new(implExecution.PrepareOptions)
 		opaqueStorageValuexxxxx.HostID = host
 		implExecution.PrepareOptionsData(opaqueStorageValuexxxxx).InternalConnection = conn
 		return opaqueStorageValuexxxxx

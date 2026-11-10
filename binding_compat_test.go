@@ -15,10 +15,10 @@ import (
 type Bound[R any] = implExecution.Bound[R]
 
 func BindUnpreparedBorrowed[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a2 P) (*Bound[R], error) {
-	return implExecution.BindUnpreparedBorrowed[P, R](a0, a1, a2)
+	return implExecution.BindUnpreparedBorrowed[P, R](internalStatement(a0), a1, a2)
 }
 
 func Run[R any](a0 context.Context, a1 *Session, a2 *Bound[R], a3 BoundOptions) (Rows[R], error) {
-	result, err := implExecution.Run[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, a3)
+	result, err := implExecution.Run[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, implExecution.BoundOptions(a3))
 	return Rows[R](result), err
 }

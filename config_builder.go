@@ -621,7 +621,7 @@ func (p *ProfileBuilder) Build() (Profile, error) {
 	if err := implSettings.InternalValidateProfile(p.profile); err != nil {
 		return Profile{}, err
 	}
-	return p.profile, nil
+	return publicProfile(p.profile), nil
 }
 
 // WithConsistency sets the consistency level. Default LOCAL_QUORUM.

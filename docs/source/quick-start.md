@@ -34,5 +34,9 @@ creates its own schema and validates its results:
 go run ./examples/streaming -hosts 127.0.0.1:9042
 ```
 
+Use `session.PrepareStream` with `cql.StreamStatement[P,R]` for a streaming-only
+statement, then `prepared.Query(streamOptions)` per worker. No buffered decoder
+is needed. `Each` callbacks can return `gocql.StopIteration` to stop successfully.
+
 See [streaming](statements/streaming.md) for capacity and ownership requirements,
 and [configuration](connecting/index.md) for TLS/authentication.

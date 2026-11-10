@@ -11,6 +11,7 @@ quick-start
 connecting/index
 statements/index
 data-types
+custom-codecs
 load-balancing
 retry-policy
 errors

@@ -32,7 +32,8 @@
 // made once by Session.BindOptions; none uses the session's default profile.
 // Exec and Each return (Result, error) and One returns (bool, Result, error),
 // on Prepared and Query alike. One detaches borrowed fields before returning;
-// Each lends them only until its callback returns.
+// Each lends them only until its callback returns. Returning StopIteration
+// from Each stops successfully; other callback errors are returned.
 //
 // Prepared.Query creates a reusable query owned by one goroutine. It resolves
 // its Options once and saves the pool hand-off of the one-shot calls (about 2
@@ -53,7 +54,9 @@
 // Prepared.AddToBatch and Query.AddToBatch append statements to a Batch;
 // Session.ExecBatch and Session.RunBatch send it.
 //
-// Prepared.StreamQuery and Session.UnpreparedStreamQuery decode into seeded
+// Session.PrepareStream prepares a cql.StreamStatement directly for caller
+// storage; its shareable PreparedStream creates a StreamQuery per worker.
+// Prepared.StreamQuery and Session.UnpreparedStreamQuery also decode into seeded
 // caller storage and buffer one response page on normal multiplexed
 // connections by default. StreamOptions.Incremental opts into bounded
 // incremental receive through an exclusive connection reservation.

@@ -322,15 +322,20 @@ func TimestampFromTime(time.Time) (Timestamp, error)
 func (t Timestamp) Time() (time.Time, error)
 ```
 
-Existing `TimeUUID()` UUID generator is renamed `NewTimeUUID()`; UUID creation,
-parsing, timestamp extraction and ordering helpers otherwise remain value APIs.
+`TimeUUID` remains distinct from `UUID`. `NewTimeUUID`, `MinTimeUUID`,
+`MaxTimeUUID` and `TimeUUIDWith` return `TimeUUID`; ordinary `UUIDFromTime`
+continues returning `UUID`. TimeUUID provides canonical string/JSON/text and
+UUID timestamp/time/byte helpers. ParseTimeUUID and TimeUUIDFromUUID validate
+version 1; codecs and checked unmarshaling do likewise. The zero value is not
+an encodable timeuuid; Nullable represents NULL.
 VectorDataType has Kind TypeCustom plus Dimension; ScalarType(TypeCustom)
 rejects an incomplete custom descriptor.
 
 Nil `[]byte` passed to BytesEncoder is present empty blob. Null is always
-explicit; nil collections likewise encode a zero count. Nonnullable decoders
-reject null, including collections; Nullable preserves null independently of
-empty. Unset is only an outer bound parameter on v4+; reject unset in results
+explicit; nil collections likewise encode a zero count. Nonnullable scalar and vector decoders
+reject null. List/set/map decoders, buffered and streaming, interpret NULL as
+empty while preserving destination capacity; Nullable preserves null independently
+of empty. Unset is only an outer bound parameter on v4+; reject unset in results
 and nested values. Empty is distinct from zero-byte text/blob. EmptyCodec
 rejects ASCII/text/blob, whose zero-length payload is Present. It accepts
 boolean, integers/floats, date, time, timestamp, UUID/timeuuid, inet, varint,
@@ -997,8 +1002,14 @@ Prepare validation, but is never invoked to decode a streaming response. Actual
 streaming response metadata selects this call's StreamRowPlan independently of
 the buffered plan; cache reuse is scoped to this decoder and exact metadata.
 NoRows still cannot be used to describe nonzero physical result columns.
-Applications can use an ordinary typed or DynamicRows decoder at preparation
-and a separate StreamRow decoder for streaming storage.
+Applications using both modes can use an ordinary typed decoder at preparation
+and a separate StreamRow decoder for streaming storage. Stream-only applications
+use Session.PrepareStream with cql.StreamStatement[P,R] (CQL, Params, Rows as a
+StreamRowDecoder, Kind), returning an immutable PreparedStream[P,R]. Its
+Query(StreamOptions) creates a worker-owned StreamQuery. Preparation validates
+the streaming plan against available metadata, deferring only absent conditional
+result metadata. No buffered decoder is needed. Query-local caches revalidate
+actual changed result metadata without changing the shared preparation.
 
 Streaming query execution installs the stream receiver before sending and returns after checked
 response headers/metadata and bounded integrity staging, without waiting for the
@@ -1601,3 +1612,30 @@ and reconnect policy; it never extends the spent attempt or caller deadline.
 This clarification records implemented transport seams; public streaming queries and
 its execution/paging composition remain later step 07 work. It does not extend
 the historical design review results or establish full release verification.
+
+## Public API consistency amendment
+
+Public Statement, StreamStatement, Options, PrepareOptions, StreamOptions and
+Profile records expose their fields directly in package documentation.
+BoundOptions.Values returns public Options. The high-level codec and observer
+interfaces expose their methods; lower-level plan contracts are documented in
+docs/source/custom-codecs.md. Facade adapters copy settings only, never payloads
+or codec plans, and introduce no serializer.
+
+Generated struct mappings honor WithCodec/WithStreamCodec at construction.
+Recognized built-in tags take precedence over type overrides; overrides replace
+untagged and custom-expression defaults of the matching Go type. Unaffected
+custom-expression defaults retain their generated implementations. Each mapping
+is independent and registered defaults are never mutated. ReuseBuffers is an
+independent mapping option. No per-row override resolution is permitted.
+
+All Each callbacks may return gocql.StopIteration or a chain of single-error
+wrappers to stop successfully. Joined errors remain failures. Only callback returns recognize this signal:
+decoder/transport errors are never suppressed. Normalize successful stopping
+before request metrics and observers. No later row callbacks or continuation
+pages run. Ordinary callback errors remain failures. Result.Rows continues
+counting fetched response rows, rather than callback invocations.
+
+Options and BoundOptions remain separate. Bind recurring settings once;
+request-specific options may be bound for one-shot calls. Query settings remain
+immutable and request context deadlines need no new options binding.

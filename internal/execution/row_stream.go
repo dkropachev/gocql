@@ -98,6 +98,12 @@ func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core
 		opaqueStorageValue.privateStorage.InternalHistory = pagingHistory{InternalMaxCount: InternalRuntimeFor(session).InternalConfig.Limits.MaxPagingStates, InternalMaxBytes: InternalRuntimeFor(session).InternalConfig.Limits.MaxPagingStateBytes}
 		opaqueStorageValue.privateStorage.pageBuffered = !incremental
 		opaqueStorageValue.privateStorage.bufferedPlans = plans
+		if plans != nil {
+			plans.mu.Lock()
+			opaqueStorageValue.privateStorage.plan = plans.plan
+			opaqueStorageValue.privateStorage.columns = plans.columns
+			plans.mu.Unlock()
+		}
 		return opaqueStorageValue
 		// Construction owns active until headers/metadata have selected a checked plan.
 	}()
@@ -473,7 +479,10 @@ func (s *RowStream[R]) acquire(plan QueryPlan) error {
 		state.InternalMu.RUnlock()
 		if prepared != nil && prepared.InternalEpoch.InternalCurrent() {
 			s.privateStorage.prepared = prepared
-			if s.privateStorage.plan == nil || !s.privateStorage.columns.Equal(prepared.InternalColumns) {
+			// Conditional PREPARE responses may omit result columns. The actual
+			// response supplies and validates their shape before decoding output.
+			knownColumns := prepared.InternalColumns.Len() != 0 || request.InternalRouting.Kind == OrdinaryStatement
+			if knownColumns && (s.privateStorage.plan == nil || !s.privateStorage.columns.Equal(prepared.InternalColumns)) {
 				plan, err := s.privateStorage.InternalDecoder.Compile(prepared.InternalColumns)
 				if err != nil {
 					return err
@@ -482,6 +491,7 @@ func (s *RowStream[R]) acquire(plan QueryPlan) error {
 					return typeValidation("stream plan", "decoder returned nil plan")
 				}
 				s.privateStorage.plan = plan
+				s.rememberPlan(prepared.InternalColumns, plan)
 				s.privateStorage.mu.Lock()
 				s.privateStorage.columns = prepared.InternalColumns
 				s.privateStorage.mu.Unlock()
@@ -629,6 +639,9 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 					s.privateStorage.plan, err = s.privateStorage.InternalDecoder.Compile(page.columns)
 					if err == nil && s.privateStorage.plan == nil {
 						err = typeValidation("stream plan", "decoder returned nil plan")
+					}
+					if err == nil {
+						s.rememberPlan(page.columns, s.privateStorage.plan)
 					}
 				}
 				if err == nil {

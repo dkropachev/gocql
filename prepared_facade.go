@@ -23,7 +23,11 @@ func (p *Prepared[P, R]) internal() *implExecution.Prepared[P, R] {
 // Exec executes a statement with no result columns. It is safe for concurrent
 // use. At most one BoundOptions may be passed.
 func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...BoundOptions) (Result, error) {
-	return p.internal().Exec(ctx, value, options...)
+	o, err := internalBoundOptions(options)
+	if err != nil {
+		return implExecution.InternalExecutionErrorResult(err), err
+	}
+	return p.internal().Exec(ctx, value, o)
 }
 
 // One decodes the first row into dst, reporting whether a row exists. Further
@@ -32,21 +36,29 @@ func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...BoundOpti
 // buffers. The result stays valid after the call. One is safe for concurrent
 // use with independent destinations. At most one BoundOptions may be passed.
 func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...BoundOptions) (bool, Result, error) {
-	return p.internal().One(ctx, value, dst, options...)
+	o, err := internalBoundOptions(options)
+	if err != nil {
+		return false, implExecution.InternalExecutionErrorResult(err), err
+	}
+	return p.internal().One(ctx, value, dst, o)
 }
 
 // Each decodes every row across all pages into dst and calls fn. Borrowed
 // fields are valid only until fn returns; clone any values kept beyond that
-// point. A non-nil callback error stops iteration. Each is safe for concurrent
+// point. Returning StopIteration stops successfully; other callback errors stop iteration and are returned. Each is safe for concurrent
 // use with independent destinations. At most one BoundOptions may be passed.
 func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...BoundOptions) (Result, error) {
-	return p.internal().Each(ctx, value, dst, fn, options...)
+	o, err := internalBoundOptions(options)
+	if err != nil {
+		return implExecution.InternalExecutionErrorResult(err), err
+	}
+	return p.internal().Each(ctx, value, dst, fn, o)
 }
 
 // Query creates a worker-owned reusable query with fixed options. It also
 // provides cursors and explicit paging. Close it when the worker is done.
 func (p *Prepared[P, R]) Query(options Options) (*Query[P, R], error) {
-	q, err := p.internal().Query(options)
+	q, err := p.internal().Query(internalOptions(options))
 	return (*Query[P, R])(q), err
 }
 
@@ -56,7 +68,7 @@ func (p *Prepared[P, R]) Query(options Options) (*Query[P, R], error) {
 // the query and its execution cursor. Capacity failures may leave partial row
 // data; only a successful NextInto publishes a complete row.
 func (p *Prepared[P, B]) StreamQuery[R any](decoder cql.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
-	q, err := p.internal().StreamQuery(decoder, options)
+	q, err := p.internal().StreamQuery(decoder, internalStreamOptions(options))
 	return (*StreamQuery[P, R])(q), err
 }
 

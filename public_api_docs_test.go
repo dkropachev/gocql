@@ -16,7 +16,7 @@ import (
 func TestPublicMethodDocumentation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	for _, symbol := range []string{"Session.Prepare", "Prepared.One", "Query.Close", "StreamQuery.Run", "Rows.NextInto", "Page.Retain", "RowStream.Close", "Batch.Reset"} {
+	for _, symbol := range []string{"Session.Prepare", "Session.PrepareStream", "PreparedStream.Query", "Prepared.One", "Query.Close", "StreamQuery.Run", "Rows.NextInto", "Page.Retain", "RowStream.Close", "Batch.Reset", "BoundOptions.Values"} {
 		t.Run(symbol, func(t *testing.T) {
 			out, err := exec.CommandContext(ctx, "go", "doc", "github.com/scylladb/gocql/v2."+symbol).CombinedOutput()
 			if err != nil {
@@ -30,5 +30,28 @@ func TestPublicMethodDocumentation(t *testing.T) {
 	out, err := exec.CommandContext(ctx, "go", "doc", "github.com/scylladb/gocql/v2/cql.Column").CombinedOutput()
 	if err != nil || strings.Contains(string(out), "a0") || !strings.Contains(string(out), "name string") || !strings.Contains(string(out), "Column maps") {
 		t.Fatalf("public field mapping documentation: %v\n%s", err, out)
+	}
+	for _, check := range []struct{ symbol, want string }{
+		{"github.com/scylladb/gocql/v2.Options.PageSize", "PageSize"},
+		{"github.com/scylladb/gocql/v2.Profile.Consistency", "Consistency"},
+		{"github.com/scylladb/gocql/v2.PrepareOptions.HostID", "HostID"},
+		{"github.com/scylladb/gocql/v2.StreamOptions.Incremental", "Incremental"},
+		{"github.com/scylladb/gocql/v2.Observer", "ObserveRequest"},
+		{"github.com/scylladb/gocql/v2/cql.Statement.Rows", "Rows"},
+		{"github.com/scylladb/gocql/v2/cql.StreamStatement.Rows", "Rows"},
+		{"github.com/scylladb/gocql/v2/cql.StructFields.StreamColumns", "StreamColumns"},
+		{"github.com/scylladb/gocql/v2/cql.Encoder", "CheckType"},
+		{"github.com/scylladb/gocql/v2/cql.Decoder", "Clone"},
+		{"github.com/scylladb/gocql/v2/cql.ParamEncoder", "Compile"},
+		{"github.com/scylladb/gocql/v2/cql.RowDecoder", "Compile"},
+		{"github.com/scylladb/gocql/v2/cql.StreamDecoder", "Compile"},
+		{"github.com/scylladb/gocql/v2/cql.StreamRowDecoder", "Compile"},
+	} {
+		t.Run(check.symbol, func(t *testing.T) {
+			out, err := exec.CommandContext(ctx, "go", "doc", check.symbol).CombinedOutput()
+			if err != nil || !strings.Contains(string(out), check.want) {
+				t.Fatalf("public contract is not discoverable: %v\n%s", err, out)
+			}
+		})
 	}
 }

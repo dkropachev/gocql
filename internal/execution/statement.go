@@ -71,24 +71,34 @@ type Bound[R any] struct {
 	privateStorage BoundStorage[R]
 }
 
-func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement Statement[P, R], options PrepareOptions) (*Prepared[P, R], error) {
+// preparedStatement contains the transport preparation and parameter plan shared
+// by buffered and streaming preparation. Result decoding is selected separately.
+type preparedStatement[P any] struct {
+	state   *InternalPreparedState
+	params  ParamPlan[P]
+	columns Columns
+	kind    StatementKind
+}
+
+func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statement *Statement[P, R], options PrepareOptions) (preparedStatement[P], error) {
+	var empty preparedStatement[P]
 	if ctx == nil || s == nil {
-		return nil, typeValidation("prepare", "nil context or session")
+		return empty, typeValidation("prepare", "nil context or session")
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return empty, err
 	}
 	if s.Closed() {
-		return nil, ErrClosed
+		return empty, ErrClosed
 	}
 	if options.HostID.Set && options.HostID.Value.IsEmpty() {
-		return nil, typeValidation("prepare host", "empty UUID")
+		return empty, typeValidation("prepare host", "empty UUID")
 	}
 	if options.privateStorage.InternalConnection != nil && !implCluster.InternalConnectionOwnedBy(options.privateStorage.InternalConnection, s) {
-		return nil, typeValidation("prepare connection", "connection belongs to another session")
+		return empty, typeValidation("prepare connection", "connection belongs to another session")
 	}
-	if err := validateStatement(&statement); err != nil {
-		return nil, err
+	if err := validateStatement(statement); err != nil {
+		return empty, err
 	}
 	keyspace := options.Keyspace
 	if keyspace == "" {
@@ -96,7 +106,7 @@ func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement State
 	}
 	state, err := InternalRuntimeFor(s).InternalPrepareTyped(ctx, statement.CQL, keyspace, options)
 	if err != nil {
-		return nil, err
+		return empty, err
 	}
 	state.InternalMu.RLock()
 	parameters, columns := state.InternalParameters, state.InternalColumns
@@ -104,12 +114,21 @@ func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement State
 	state.InternalMu.RUnlock()
 	plan, err := compileParamPlan(statement.Params, parameters)
 	if err != nil {
-		return nil, err
+		return empty, err
 	}
 	kind := statement.Kind
 	if confirmedKind == ConditionalStatement || kind == UnknownStatement {
 		kind = confirmedKind
 	}
+	return preparedStatement[P]{state: state, params: plan, columns: columns, kind: kind}, nil
+}
+
+func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement Statement[P, R], options PrepareOptions) (*Prepared[P, R], error) {
+	prepared, err := prepareStatement(ctx, s, &statement, options)
+	if err != nil {
+		return nil, err
+	}
+	state, plan, columns, kind := prepared.state, prepared.params, prepared.columns, prepared.kind
 	var rows RowPlan[R]
 	// Cassandra omits conditional result metadata from PREPARE. Unknown and
 	// conditional statements therefore defer absent result shapes until EXECUTE;

@@ -19,6 +19,16 @@ type streamPlanCache[R any] struct {
 	mu      sync.Mutex
 }
 
+// rememberPlan carries an incremental cursor's checked plan back to its query.
+// Buffered cursors update the same cache while selecting their page plan.
+func (s *RowStream[R]) rememberPlan(columns Columns, plan StreamRowPlan[R]) {
+	if cache := s.privateStorage.bufferedPlans; cache != nil {
+		cache.mu.Lock()
+		cache.columns, cache.plan = columns, plan
+		cache.mu.Unlock()
+	}
+}
+
 // StreamQuery reuses owned parameters and an immutable streaming decoder plan.
 // Page buffering is the default; Incremental explicitly bounds receive storage.
 type StreamQuery[P, R any] struct {

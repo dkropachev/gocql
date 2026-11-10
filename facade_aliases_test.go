@@ -94,7 +94,7 @@ type retiredScyllaShardAwareDialer = implEndpoint.ScyllaShardAwareDialer
 
 type cassVersion = implEndpoint.InternalCassVersion
 
-func defaultProfile() Profile { return implSettings.InternalDefaultProfile() }
+func defaultProfile() Profile { return publicProfile(implSettings.InternalDefaultProfile()) }
 
 type nopLogger = logging.InternalNopLogger
 

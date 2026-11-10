@@ -25,7 +25,8 @@
 // storage and require enough capacity; they report StreamCapacityError instead
 // of growing buffers. Streaming text and blob values use []byte, so applications
 // choose separate row structs when buffered and streaming field types differ.
-// StreamNullable preserves NULL; unwrapped stream collections reject it.
+// StreamNullable preserves NULL. Unwrapped list/set/map stream decoders accept
+// NULL as an empty collection, matching buffered decoding; vectors reject it.
 //
 // DataType and ColumnSpec describe public CQL types and columns. Option is for
 // inherited settings, Nullable for nullable application data and results,
