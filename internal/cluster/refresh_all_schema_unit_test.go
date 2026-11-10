@@ -31,7 +31,7 @@ func refreshAllSchemaSession(t *testing.T) (*Core, *schemaDataMock) {
 
 func refreshAllSchemaNow(t *testing.T, s *Core) {
 	t.Helper()
-	if err := SessionData(s).InternalMetadataDescriber.InternalRefreshAllSchema(); err != nil {
+	if err := SessionData(s).InternalMetadataDescriber.refreshAllSchema(); err != nil {
 		t.Fatalf("refreshAllSchema: %v", err)
 	}
 	MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalTabletsMetadata.Flush()

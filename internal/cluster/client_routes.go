@@ -115,131 +115,131 @@ func (r InternalClientRoute) String() string {
 	)
 }
 
-type InternalClientRouteCacheEntry struct {
-	current           *InternalClientRoute
-	InternalAllRoutes []InternalClientRoute
+type clientRouteCacheEntry struct {
+	current   *InternalClientRoute
+	allRoutes []InternalClientRoute
 }
 
-func (r *InternalClientRouteCacheEntry) routeIndex(connectionID string) int {
-	return slices.IndexFunc(r.InternalAllRoutes, func(route InternalClientRoute) bool {
+func (r *clientRouteCacheEntry) routeIndex(connectionID string) int {
+	return slices.IndexFunc(r.allRoutes, func(route InternalClientRoute) bool {
 		return route.InternalConnectionID == connectionID
 	})
 }
 
-func (r *InternalClientRouteCacheEntry) CurrentConnectionID() string {
+func (r *clientRouteCacheEntry) CurrentConnectionID() string {
 	if r.current == nil {
 		return ""
 	}
 	return r.current.InternalConnectionID
 }
 
-func (r *InternalClientRouteCacheEntry) BindCurrent(connectionID string) {
+func (r *clientRouteCacheEntry) BindCurrent(connectionID string) {
 	if idx := r.routeIndex(connectionID); idx >= 0 {
-		r.current = &r.InternalAllRoutes[idx]
+		r.current = &r.allRoutes[idx]
 		return
 	}
 	r.current = nil
 }
 
-func (r *InternalClientRouteCacheEntry) DeleteByConnectionID(connectionID string) {
+func (r *clientRouteCacheEntry) DeleteByConnectionID(connectionID string) {
 	current := r.CurrentConnectionID()
-	r.InternalAllRoutes = slices.DeleteFunc(r.InternalAllRoutes, func(route InternalClientRoute) bool {
+	r.allRoutes = slices.DeleteFunc(r.allRoutes, func(route InternalClientRoute) bool {
 		return route.InternalConnectionID == connectionID
 	})
 	r.BindCurrent(current)
 }
 
-func (r *InternalClientRouteCacheEntry) Upsert(route InternalClientRoute) {
+func (r *clientRouteCacheEntry) Upsert(route InternalClientRoute) {
 	current := r.CurrentConnectionID()
 	defer func() { r.BindCurrent(current) }()
 	if idx := r.routeIndex(route.InternalConnectionID); idx >= 0 {
-		r.InternalAllRoutes[idx] = route
+		r.allRoutes[idx] = route
 	} else {
-		r.InternalAllRoutes = append(r.InternalAllRoutes, route)
+		r.allRoutes = append(r.allRoutes, route)
 	}
 }
 
-func (r *InternalClientRouteCacheEntry) preferredRoute() (InternalClientRoute, bool) {
+func (r *clientRouteCacheEntry) preferredRoute() (InternalClientRoute, bool) {
 	if r.current != nil {
 		return *r.current, true
 	}
 
-	if len(r.InternalAllRoutes) == 0 {
+	if len(r.allRoutes) == 0 {
 		return InternalClientRoute{}, false
 	}
 
-	r.current = &r.InternalAllRoutes[0]
+	r.current = &r.allRoutes[0]
 	return *r.current, true
 }
 
 // clientRouteCache groups routes by hostID and owns synchronization for route selection and updates.
-type InternalClientRouteCache struct {
-	InternalRoutes map[string]InternalClientRouteCacheEntry
-	mu             sync.Mutex
+type clientRouteCache struct {
+	routes map[string]clientRouteCacheEntry
+	mu     sync.Mutex
 }
 
-func InternalNewClientRouteCache() InternalClientRouteCache {
-	return InternalClientRouteCache{InternalRoutes: make(map[string]InternalClientRouteCacheEntry)}
+func newClientRouteCache() clientRouteCache {
+	return clientRouteCache{routes: make(map[string]clientRouteCacheEntry)}
 }
 
 // deleteByPairs removes entries identified by (connectionID, hostID) pairs.
-func (c *InternalClientRouteCache) deleteByPairsLocked(pairs []InternalPair) {
+func (c *clientRouteCache) deleteByPairsLocked(pairs []InternalPair) {
 	for _, p := range pairs {
-		entry, ok := c.InternalRoutes[p.InternalHostID]
+		entry, ok := c.routes[p.InternalHostID]
 		if !ok {
 			continue
 		}
 		entry.DeleteByConnectionID(p.InternalConnectionID)
-		if len(entry.InternalAllRoutes) == 0 {
-			delete(c.InternalRoutes, p.InternalHostID)
+		if len(entry.allRoutes) == 0 {
+			delete(c.routes, p.InternalHostID)
 			continue
 		}
-		c.InternalRoutes[p.InternalHostID] = entry
+		c.routes[p.InternalHostID] = entry
 	}
 }
 
 // deleteByConnectionIDs removes all entries for the given connectionIDs across all hosts.
-func (c *InternalClientRouteCache) deleteByConnectionIDsLocked(connectionIDs []string) {
-	for hostID, entry := range c.InternalRoutes {
+func (c *clientRouteCache) deleteByConnectionIDsLocked(connectionIDs []string) {
+	for hostID, entry := range c.routes {
 		for _, connID := range connectionIDs {
 			entry.DeleteByConnectionID(connID)
 		}
-		if len(entry.InternalAllRoutes) == 0 {
-			delete(c.InternalRoutes, hostID)
+		if len(entry.allRoutes) == 0 {
+			delete(c.routes, hostID)
 			continue
 		}
-		c.InternalRoutes[hostID] = entry
+		c.routes[hostID] = entry
 	}
 }
 
-func (c *InternalClientRouteCache) upsertRecordsLocked(incoming []InternalClientRoute) {
+func (c *clientRouteCache) upsertRecordsLocked(incoming []InternalClientRoute) {
 	for _, inc := range incoming {
-		entry := c.InternalRoutes[inc.InternalHostID]
+		entry := c.routes[inc.InternalHostID]
 		entry.Upsert(inc)
-		c.InternalRoutes[inc.InternalHostID] = entry
+		c.routes[inc.InternalHostID] = entry
 	}
 }
 
 // preferredRoute returns the current route for hostID if one exists and is still valid,
 // otherwise picks the first available route and records it as current.
-func (c *InternalClientRouteCache) preferredRouteLocked(hostID string) (InternalClientRoute, bool) {
-	entry, ok := c.InternalRoutes[hostID]
+func (c *clientRouteCache) preferredRouteLocked(hostID string) (InternalClientRoute, bool) {
+	entry, ok := c.routes[hostID]
 	if !ok {
 		return InternalClientRoute{}, false
 	}
 
 	route, ok := entry.preferredRoute()
 	if !ok {
-		delete(c.InternalRoutes, hostID)
+		delete(c.routes, hostID)
 		return InternalClientRoute{}, false
 	}
-	c.InternalRoutes[hostID] = entry
+	c.routes[hostID] = entry
 	return route, true
 }
 
-func (c *InternalClientRouteCache) snapshotCurrentConnectionIDsLocked() map[string]string {
-	currentIDs := make(map[string]string, len(c.InternalRoutes))
-	for hostID, entry := range c.InternalRoutes {
+func (c *clientRouteCache) snapshotCurrentConnectionIDsLocked() map[string]string {
+	currentIDs := make(map[string]string, len(c.routes))
+	for hostID, entry := range c.routes {
 		if currentID := entry.CurrentConnectionID(); currentID != "" {
 			currentIDs[hostID] = currentID
 		}
@@ -247,28 +247,28 @@ func (c *InternalClientRouteCache) snapshotCurrentConnectionIDsLocked() map[stri
 	return currentIDs
 }
 
-func (c *InternalClientRouteCache) rebindCurrentConnectionIDsLocked(currentIDs map[string]string) {
+func (c *clientRouteCache) rebindCurrentConnectionIDsLocked(currentIDs map[string]string) {
 	for hostID, currentID := range currentIDs {
-		entry, ok := c.InternalRoutes[hostID]
+		entry, ok := c.routes[hostID]
 		if !ok {
 			continue
 		}
 		entry.BindCurrent(currentID)
-		if len(entry.InternalAllRoutes) == 0 {
-			delete(c.InternalRoutes, hostID)
+		if len(entry.allRoutes) == 0 {
+			delete(c.routes, hostID)
 			continue
 		}
-		c.InternalRoutes[hostID] = entry
+		c.routes[hostID] = entry
 	}
 }
 
-func (c *InternalClientRouteCache) PreferredRoute(hostID string) (InternalClientRoute, bool) {
+func (c *clientRouteCache) PreferredRoute(hostID string) (InternalClientRoute, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.preferredRouteLocked(hostID)
 }
 
-func (c *InternalClientRouteCache) ReplaceByPairs(pairs []InternalPair, incoming []InternalClientRoute) {
+func (c *clientRouteCache) ReplaceByPairs(pairs []InternalPair, incoming []InternalClientRoute) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	currentIDs := c.snapshotCurrentConnectionIDsLocked()
@@ -277,7 +277,7 @@ func (c *InternalClientRouteCache) ReplaceByPairs(pairs []InternalPair, incoming
 	c.rebindCurrentConnectionIDsLocked(currentIDs)
 }
 
-func (c *InternalClientRouteCache) ReplaceByConnectionIDs(connectionIDs []string, incoming []InternalClientRoute) {
+func (c *clientRouteCache) ReplaceByConnectionIDs(connectionIDs []string, incoming []InternalClientRoute) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	currentIDs := c.snapshotCurrentConnectionIDsLocked()
@@ -336,7 +336,7 @@ type InternalUpdateTask struct {
 
 func (p *ClientRoutesHandler) Initialize(s *Core) error {
 	p.privateStorage.queueMu.Lock()
-	if p.privateStorage.InternalInitialized.Load() {
+	if p.privateStorage.initialized.Load() {
 		p.privateStorage.queueMu.Unlock()
 		return errors.New("already initialized")
 	}
@@ -347,13 +347,13 @@ func (p *ClientRoutesHandler) Initialize(s *Core) error {
 	default:
 	}
 	p.privateStorage.InternalSession = s
-	p.privateStorage.InternalC = s.privateStorage.InternalControl
+	p.privateStorage.c = s.privateStorage.InternalControl
 	InternalClientRoutesHandlerStartUpdateWorker(p)
-	p.privateStorage.InternalInitialized.Store(true)
+	p.privateStorage.initialized.Store(true)
 	p.privateStorage.queueMu.Unlock()
-	err := InternalClientRoutesHandlerUpdateHostPortMappingSync(p, InternalUpdateTask{InternalConnectionIDs: p.privateStorage.InternalCfg.Endpoints.GetAllConnectionIDs()})
-	if err != nil && p.privateStorage.InternalLog != nil {
-		p.privateStorage.InternalLog.Printf("error updating host ports: %v", err)
+	err := clientRoutesHandlerUpdateHostPortMappingSync(p, InternalUpdateTask{InternalConnectionIDs: p.privateStorage.cfg.Endpoints.GetAllConnectionIDs()})
+	if err != nil && p.privateStorage.log != nil {
+		p.privateStorage.log.Printf("error updating host ports: %v", err)
 	}
 	return err
 }
@@ -365,8 +365,8 @@ func (p *ClientRoutesHandler) Stop() {
 			close(p.privateStorage.InternalCloseChan)
 		}
 		p.privateStorage.queueMu.Unlock()
-		if p.privateStorage.InternalSub != nil {
-			p.privateStorage.InternalSub.Stop()
+		if p.privateStorage.sub != nil {
+			p.privateStorage.sub.Stop()
 		}
 	})
 	p.privateStorage.InternalWorkers.Wait()
@@ -389,7 +389,7 @@ func InternalClientRoutesHandlerUpdateHostPortMappingAsync(p *ClientRoutesHandle
 		return false
 	}
 }
-func InternalClientRoutesHandlerUpdateHostPortMappingSync(p *ClientRoutesHandler, task InternalUpdateTask) error {
+func clientRoutesHandlerUpdateHostPortMappingSync(p *ClientRoutesHandler, task InternalUpdateTask) error {
 	select {
 	case <-p.privateStorage.InternalCloseChan:
 		return runtimeerrors.ErrClosed
@@ -398,23 +398,23 @@ func InternalClientRoutesHandlerUpdateHostPortMappingSync(p *ClientRoutesHandler
 	return p.updateHostPortMappingContext(metadata.InternalV2SchemaContext(InternalNewSchemaSource(p.privateStorage.InternalSession)), task)
 }
 
-func InternalClientRoutesHandlerStartReadingEvents(p *ClientRoutesHandler, connectionIDs []string) {
+func clientRoutesHandlerStartReadingEvents(p *ClientRoutesHandler, connectionIDs []string) {
 	p.privateStorage.InternalWorkers.Add(1)
 	go func() {
 		defer p.privateStorage.InternalWorkers.Done()
-		for event := range p.privateStorage.InternalSub.Events() {
+		for event := range p.privateStorage.sub.Events() {
 			switch evt := event.(type) {
 			case *events.ClientRoutesChangedEvent:
 				if debug.Enabled {
 					if len(evt.ConnectionIDs) == 0 {
-						p.privateStorage.InternalLog.Printf("got CLIENT_ROUTES_CHANGE event with no connection IDs")
+						p.privateStorage.log.Printf("got CLIENT_ROUTES_CHANGE event with no connection IDs")
 						continue
 					}
 					if len(evt.HostIDs) == 0 {
-						p.privateStorage.InternalLog.Printf("got CLIENT_ROUTES_CHANGE event with no host IDs")
+						p.privateStorage.log.Printf("got CLIENT_ROUTES_CHANGE event with no host IDs")
 					}
 				}
-				filteredConnectionIDs := InternalFilterAllowedConnectionIDs(evt.ConnectionIDs, connectionIDs)
+				filteredConnectionIDs := filterAllowedConnectionIDs(evt.ConnectionIDs, connectionIDs)
 				if len(filteredConnectionIDs) == 0 {
 					continue
 				}
@@ -422,7 +422,7 @@ func InternalClientRoutesHandlerStartReadingEvents(p *ClientRoutesHandler, conne
 					InternalClientRoutesHandlerUpdateHostPortMappingAsync(p, InternalUpdateTask{InternalConnectionIDs: filteredConnectionIDs})
 					continue
 				}
-				pairs := InternalGetPairsFromEvent(filteredConnectionIDs, evt.HostIDs)
+				pairs := getPairsFromEvent(filteredConnectionIDs, evt.HostIDs)
 				if len(pairs) > 0 {
 					InternalClientRoutesHandlerUpdateHostPortMappingAsync(p, InternalUpdateTask{InternalPairs: pairs})
 				} else {
@@ -435,7 +435,7 @@ func InternalClientRoutesHandlerStartReadingEvents(p *ClientRoutesHandler, conne
 	}()
 }
 
-func InternalGetPairsFromEvent(connectionIDs, hostIDs []string) (pairs []InternalPair) {
+func getPairsFromEvent(connectionIDs, hostIDs []string) (pairs []InternalPair) {
 	if len(connectionIDs) == 0 || len(hostIDs) == 0 || len(connectionIDs) > 1024/len(hostIDs) {
 		return nil
 	}
@@ -451,7 +451,7 @@ func InternalGetPairsFromEvent(connectionIDs, hostIDs []string) (pairs []Interna
 	return pairs
 }
 
-func InternalFilterAllowedConnectionIDs(connectionIDs, allowed []string) []string {
+func filterAllowedConnectionIDs(connectionIDs, allowed []string) []string {
 	canonical := make(map[string]string, len(allowed))
 	for _, id := range allowed {
 		canonical[id] = id
@@ -497,7 +497,7 @@ func InternalClientRoutesHandlerStartUpdateWorker(p *ClientRoutesHandler) {
 				}()
 				if err != nil {
 					if debug.Enabled {
-						p.privateStorage.InternalLog.Printf("failed to update host port mapping: %v", err)
+						p.privateStorage.log.Printf("failed to update host port mapping: %v", err)
 					}
 				}
 				if p.privateStorage.needsResync.Swap(false) {
@@ -536,14 +536,14 @@ func NewClientRoutesAddressTranslator(
 	}
 	return func() *ClientRoutesHandler {
 		opaqueStorageValue := new(ClientRoutesHandler)
-		opaqueStorageValue.privateStorage.InternalCfg = cfg
-		opaqueStorageValue.privateStorage.InternalLog = log
-		opaqueStorageValue.privateStorage.InternalPickTLSPorts = pickTLSPorts
+		opaqueStorageValue.privateStorage.cfg = cfg
+		opaqueStorageValue.privateStorage.log = log
+		opaqueStorageValue.privateStorage.pickTLSPorts = pickTLSPorts
 		opaqueStorageValue.privateStorage.InternalCloseChan = make(chan struct{})
 		opaqueStorageValue.privateStorage.InternalUpdateTasks = make(chan InternalUpdateTask, 1024)
-		opaqueStorageValue.privateStorage.InternalResolver = resolver
-		opaqueStorageValue.privateStorage.InternalRouteCache = InternalNewClientRouteCache()
-		opaqueStorageValue.privateStorage.InternalAddrOverrides = overrides
+		opaqueStorageValue.privateStorage.resolver = resolver
+		opaqueStorageValue.privateStorage.InternalRouteCache = newClientRouteCache()
+		opaqueStorageValue.privateStorage.addrOverrides = overrides
 		return opaqueStorageValue
 	}()
 
@@ -555,8 +555,8 @@ var _ endpoint.AddressTranslator = func() *ClientRoutesHandler {
 }()
 
 func InternalGetHostPortMappingForConnectionIDs(c InternalControlConnection, table string, ids []string, tls bool) ([]InternalClientRoute, error) {
-	return InternalGetV2RoutesConnections(metadata.InternalV2SchemaContext(InternalNewSchemaSource(c.InternalGetSession())), c, table, ids, tls)
+	return getV2RoutesConnections(metadata.InternalV2SchemaContext(InternalNewSchemaSource(c.InternalGetSession())), c, table, ids, tls)
 }
 func InternalGetHostPortMappingForPairs(c InternalControlConnection, table string, pairs []InternalPair, tls bool) ([]InternalClientRoute, error) {
-	return InternalGetV2RoutesPairs(metadata.InternalV2SchemaContext(InternalNewSchemaSource(c.InternalGetSession())), c, table, pairs, tls)
+	return getV2RoutesPairs(metadata.InternalV2SchemaContext(InternalNewSchemaSource(c.InternalGetSession())), c, table, pairs, tls)
 }

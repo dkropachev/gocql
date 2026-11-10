@@ -24,4 +24,4 @@
 
 package cluster
 
-const InternalDefaultMaxPreparedStmts = 1000
+const defaultMaxPreparedStmts = 1000

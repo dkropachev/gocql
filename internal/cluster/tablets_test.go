@@ -58,7 +58,7 @@ func TestTablets(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			InternalSessionApplyV2TabletHint(s, hint)
+			sessionApplyV2TabletHint(s, hint)
 		}
 		p.InternalFeedbackMu.Lock()
 		if len(p.InternalFeedback) > 1024 || !p.InternalFeedbackResync {
@@ -67,9 +67,9 @@ func TestTablets(t *testing.T) {
 		p.InternalFeedbackMu.Unlock()
 		// A newer schema event must win over every already queued hint.
 		p.InternalMu.Lock()
-		p.InternalBumpSchemaEpochLocked("ks")
+		p.bumpSchemaEpochLocked("ks")
 		p.InternalMu.Unlock()
-		go InternalSessionRunV2TabletFeedback(s, p)
+		go sessionRunV2TabletFeedback(s, p)
 		select {
 		case event := <-sub.Events():
 			if event.Kind != OverflowEvent || event.Change != "TABLET_RESYNC" {
@@ -99,14 +99,14 @@ func TestTablets(t *testing.T) {
 			ctrl := &schemaDataMock{knownKeyspaces: map[string][]tableInfo{}}
 			s := newSchemaEventTestSessionWithMock(ctrl)
 			defer s.Close()
-			SessionData(s).InternalIsInitialized = true
-			SessionData(s).InternalTabletsRoutingV1 = true
+			SessionData(s).isInitialized = true
+			SessionData(s).tabletsRoutingV1 = true
 
 			addTestTablets(t, s, "ks1", "tbl_a")
 			addTestTablets(t, s, "ks2", "tbl_b")
 
 			visited := make(map[string]int)
-			err := InternalSessionForEachTablet(s, func(keyspace, table string, entries tablets.TabletEntryList) bool {
+			err := sessionForEachTablet(s, func(keyspace, table string, entries tablets.TabletEntryList) bool {
 				visited[keyspace+"."+table] = len(entries)
 				return true
 			})
@@ -130,14 +130,14 @@ func TestTablets(t *testing.T) {
 			ctrl := &schemaDataMock{knownKeyspaces: map[string][]tableInfo{}}
 			s := newSchemaEventTestSessionWithMock(ctrl)
 			defer s.Close()
-			SessionData(s).InternalIsInitialized = true
-			SessionData(s).InternalTabletsRoutingV1 = true
+			SessionData(s).isInitialized = true
+			SessionData(s).tabletsRoutingV1 = true
 
 			addTestTablets(t, s, "ks1", "tbl_a")
 			addTestTablets(t, s, "ks2", "tbl_b")
 
 			count := 0
-			err := InternalSessionForEachTablet(s, func(keyspace, table string, entries tablets.TabletEntryList) bool {
+			err := sessionForEachTablet(s, func(keyspace, table string, entries tablets.TabletEntryList) bool {
 				count++
 				return false
 			})
@@ -155,11 +155,11 @@ func TestTablets(t *testing.T) {
 			ctrl := &schemaDataMock{knownKeyspaces: map[string][]tableInfo{}}
 			s := newSchemaEventTestSessionWithMock(ctrl)
 			defer s.Close()
-			SessionData(s).InternalIsInitialized = true
-			SessionData(s).InternalTabletsRoutingV1 = true
-			InternalSessionMarkClosed(s)
+			SessionData(s).isInitialized = true
+			SessionData(s).tabletsRoutingV1 = true
+			sessionMarkClosed(s)
 
-			err := InternalSessionForEachTablet(s, func(keyspace, table string, entries tablets.TabletEntryList) bool {
+			err := sessionForEachTablet(s, func(keyspace, table string, entries tablets.TabletEntryList) bool {
 				t.Fatal("callback should not be called on closed session")
 				return true
 			})
@@ -174,9 +174,9 @@ func TestTablets(t *testing.T) {
 			ctrl := &schemaDataMock{knownKeyspaces: map[string][]tableInfo{}}
 			s := newSchemaEventTestSessionWithMock(ctrl)
 			defer s.Close()
-			SessionData(s).InternalIsInitialized = true
+			SessionData(s).isInitialized = true
 
-			err := InternalSessionForEachTablet(s, func(keyspace, table string, entries tablets.TabletEntryList) bool {
+			err := sessionForEachTablet(s, func(keyspace, table string, entries tablets.TabletEntryList) bool {
 				t.Fatal("callback should not be called when tablets not enabled")
 				return true
 			})
@@ -191,12 +191,12 @@ func TestTablets(t *testing.T) {
 			ctrl := &schemaDataMock{knownKeyspaces: map[string][]tableInfo{}}
 			s := newSchemaEventTestSessionWithMock(ctrl)
 			defer s.Close()
-			SessionData(s).InternalIsInitialized = true
-			SessionData(s).InternalTabletsRoutingV1 = true
+			SessionData(s).isInitialized = true
+			SessionData(s).tabletsRoutingV1 = true
 
 			addTestTablets(t, s, "ks", "tb")
 
-			err := InternalSessionForEachTablet(s, nil)
+			err := sessionForEachTablet(s, nil)
 			if err != nil {
 				t.Fatalf("expected nil error for nil callback, got %v", err)
 			}
@@ -212,12 +212,12 @@ func TestTablets(t *testing.T) {
 			ctrl := &schemaDataMock{knownKeyspaces: map[string][]tableInfo{}}
 			s := newSchemaEventTestSessionWithMock(ctrl)
 			defer s.Close()
-			SessionData(s).InternalIsInitialized = true
-			SessionData(s).InternalTabletsRoutingV1 = true
+			SessionData(s).isInitialized = true
+			SessionData(s).tabletsRoutingV1 = true
 
 			addTestTablets(t, s, "test_ks", "tbl_a")
 
-			entries, err := InternalSessionTableTabletsMetadata(s, "test_ks", "tbl_a")
+			entries, err := sessionTableTabletsMetadata(s, "test_ks", "tbl_a")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -232,11 +232,11 @@ func TestTablets(t *testing.T) {
 			ctrl := &schemaDataMock{knownKeyspaces: map[string][]tableInfo{}}
 			s := newSchemaEventTestSessionWithMock(ctrl)
 			defer s.Close()
-			SessionData(s).InternalIsInitialized = true
-			SessionData(s).InternalTabletsRoutingV1 = true
-			InternalSessionMarkClosed(s)
+			SessionData(s).isInitialized = true
+			SessionData(s).tabletsRoutingV1 = true
+			sessionMarkClosed(s)
 
-			_, err := InternalSessionTableTabletsMetadata(s, "ks", "tb")
+			_, err := sessionTableTabletsMetadata(s, "ks", "tb")
 			if !errors.Is(err, runtimeerrors.ErrSessionClosed) {
 				t.Fatalf("expected ErrSessionClosed, got %v", err)
 			}
@@ -248,9 +248,9 @@ func TestTablets(t *testing.T) {
 			ctrl := &schemaDataMock{knownKeyspaces: map[string][]tableInfo{}}
 			s := newSchemaEventTestSessionWithMock(ctrl)
 			defer s.Close()
-			SessionData(s).InternalTabletsRoutingV1 = true
+			SessionData(s).tabletsRoutingV1 = true
 
-			_, err := InternalSessionTableTabletsMetadata(s, "ks", "tb")
+			_, err := sessionTableTabletsMetadata(s, "ks", "tb")
 			if !errors.Is(err, runtimeerrors.ErrSessionNotReady) {
 				t.Fatalf("expected ErrSessionNotReady, got %v", err)
 			}
@@ -262,9 +262,9 @@ func TestTablets(t *testing.T) {
 			ctrl := &schemaDataMock{knownKeyspaces: map[string][]tableInfo{}}
 			s := newSchemaEventTestSessionWithMock(ctrl)
 			defer s.Close()
-			SessionData(s).InternalIsInitialized = true
+			SessionData(s).isInitialized = true
 
-			_, err := InternalSessionTableTabletsMetadata(s, "ks", "tb")
+			_, err := sessionTableTabletsMetadata(s, "ks", "tb")
 			if !errors.Is(err, runtimeerrors.ErrTabletsNotUsed) {
 				t.Fatalf("expected ErrTabletsNotUsed, got %v", err)
 			}
@@ -276,10 +276,10 @@ func TestTablets(t *testing.T) {
 			ctrl := &schemaDataMock{knownKeyspaces: map[string][]tableInfo{}}
 			s := newSchemaEventTestSessionWithMock(ctrl)
 			defer s.Close()
-			SessionData(s).InternalIsInitialized = true
-			SessionData(s).InternalTabletsRoutingV1 = true
+			SessionData(s).isInitialized = true
+			SessionData(s).tabletsRoutingV1 = true
 
-			_, err := InternalSessionTableTabletsMetadata(s, "", "tb")
+			_, err := sessionTableTabletsMetadata(s, "", "tb")
 			if !errors.Is(err, runtimeerrors.ErrNoKeyspace) {
 				t.Fatalf("expected ErrNoKeyspace, got %v", err)
 			}
@@ -291,10 +291,10 @@ func TestTablets(t *testing.T) {
 			ctrl := &schemaDataMock{knownKeyspaces: map[string][]tableInfo{}}
 			s := newSchemaEventTestSessionWithMock(ctrl)
 			defer s.Close()
-			SessionData(s).InternalIsInitialized = true
-			SessionData(s).InternalTabletsRoutingV1 = true
+			SessionData(s).isInitialized = true
+			SessionData(s).tabletsRoutingV1 = true
 
-			_, err := InternalSessionTableTabletsMetadata(s, "ks", "")
+			_, err := sessionTableTabletsMetadata(s, "ks", "")
 			if !errors.Is(err, runtimeerrors.ErrNoTable) {
 				t.Fatalf("expected ErrNoTable, got %v", err)
 			}
@@ -306,10 +306,10 @@ func TestTablets(t *testing.T) {
 			ctrl := &schemaDataMock{knownKeyspaces: map[string][]tableInfo{}}
 			s := newSchemaEventTestSessionWithMock(ctrl)
 			defer s.Close()
-			SessionData(s).InternalIsInitialized = true
-			SessionData(s).InternalTabletsRoutingV1 = true
+			SessionData(s).isInitialized = true
+			SessionData(s).tabletsRoutingV1 = true
 
-			entries, err := InternalSessionTableTabletsMetadata(s, "ks", "nonexistent")
+			entries, err := sessionTableTabletsMetadata(s, "ks", "nonexistent")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

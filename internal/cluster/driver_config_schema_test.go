@@ -134,12 +134,12 @@ func driverConfigCases() []struct {
 		{
 			name: "typed-nil custom retry policy",
 			cfg: func(c *InternalClusterSettings) {
-				InternalClusterSettingsData(c).InternalDefaultProfile.Retry = (*customRetry)(nil)
+				InternalClusterSettingsData(c).defaultProfile.Retry = (*customRetry)(nil)
 			},
 		},
 		{
 			name:   "typed-nil load balancing fallback",
-			policy: TokenAwareHostPolicy((*InternalDcAwareRR)(nil)),
+			policy: TokenAwareHostPolicy((*dcAwareRR)(nil)),
 		},
 		{
 			name: "exponential reconnection with unset intervals",
@@ -162,37 +162,37 @@ func driverConfigCases() []struct {
 		{
 			name: "safe retry three attempts",
 			cfg: func(c *InternalClusterSettings) {
-				InternalClusterSettingsData(c).InternalDefaultProfile.Retry = retry.Safe{MaxAttempts: 3}
+				InternalClusterSettingsData(c).defaultProfile.Retry = retry.Safe{MaxAttempts: 3}
 			},
 		},
 		{
 			name: "safe retry one attempt",
 			cfg: func(c *InternalClusterSettings) {
-				InternalClusterSettingsData(c).InternalDefaultProfile.Retry = retry.Safe{MaxAttempts: 1}
+				InternalClusterSettingsData(c).defaultProfile.Retry = retry.Safe{MaxAttempts: 1}
 			},
 		},
 		{
 			name: "safe retry default limit",
 			cfg: func(c *InternalClusterSettings) {
-				InternalClusterSettingsData(c).InternalDefaultProfile.Retry = retry.Safe{MaxAttempts: 0}
+				InternalClusterSettingsData(c).defaultProfile.Retry = retry.Safe{MaxAttempts: 0}
 			},
 		},
 		{
 			name: "custom retry policy",
 			cfg: func(c *InternalClusterSettings) {
-				InternalClusterSettingsData(c).InternalDefaultProfile.Retry = &customRetry{}
+				InternalClusterSettingsData(c).defaultProfile.Retry = &customRetry{}
 			},
 		},
 		{
 			name: "safe retry negative limit",
 			cfg: func(c *InternalClusterSettings) {
-				InternalClusterSettingsData(c).InternalDefaultProfile.Retry = retry.Safe{MaxAttempts: -1}
+				InternalClusterSettingsData(c).defaultProfile.Retry = retry.Safe{MaxAttempts: -1}
 			},
 		},
 		{
 			name: "safe retry zero limit",
 			cfg: func(c *InternalClusterSettings) {
-				InternalClusterSettingsData(c).InternalDefaultProfile.Retry = retry.Safe{MaxAttempts: 0}
+				InternalClusterSettingsData(c).defaultProfile.Retry = retry.Safe{MaxAttempts: 0}
 			},
 		},
 		{
@@ -271,7 +271,7 @@ func buildCaseReport(t *testing.T, cfgFn func(*InternalClusterSettings), policy 
 		t.Fatalf("unable to initialize ssl config: %v", err)
 	}
 
-	raw, err := InternalNewDriverConfigReporter(newTestReportSession(cfg, policy)).InternalBuildReport(isScyllaConn)
+	raw, err := newDriverConfigReporter(newTestReportSession(cfg, policy)).buildReport(isScyllaConn)
 	if err != nil {
 		t.Fatalf("unable to build the report: %v", err)
 	}

@@ -107,7 +107,7 @@ func TestTLSConfig(t *testing.T) {
 			for _, test := range tests {
 				test := test
 				t.Run(test.name, func(t *testing.T) {
-					tlsConfig, err := InternalSetupTLSConfig(test.opts, &logging.InternalDefaultLogger{})
+					tlsConfig, err := setupTLSConfig(test.opts, &logging.InternalDefaultLogger{})
 					if err != nil {
 						t.Fatalf("unexpected error %q", err.Error())
 					}
@@ -137,7 +137,7 @@ func TestTLSConfig(t *testing.T) {
 					EnableHostVerification: true,
 				}
 
-				tlsConfig, err := InternalSetupTLSConfig(opts, &logging.InternalDefaultLogger{})
+				tlsConfig, err := setupTLSConfig(opts, &logging.InternalDefaultLogger{})
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -156,7 +156,7 @@ func TestTLSConfig(t *testing.T) {
 					EnableHostVerification: false,
 				}
 
-				tlsConfig, err := InternalSetupTLSConfig(opts, &logging.InternalDefaultLogger{})
+				tlsConfig, err := setupTLSConfig(opts, &logging.InternalDefaultLogger{})
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -177,7 +177,7 @@ func TestTLSConfig(t *testing.T) {
 					},
 				}
 
-				tlsConfig, err := InternalSetupTLSConfig(opts, &logging.InternalDefaultLogger{})
+				tlsConfig, err := setupTLSConfig(opts, &logging.InternalDefaultLogger{})
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -197,7 +197,7 @@ func TestTLSConfig(t *testing.T) {
 					DisableStrictCertificateValidation: true,
 				}
 
-				tlsConfig, err := InternalSetupTLSConfig(opts, &logging.InternalDefaultLogger{})
+				tlsConfig, err := setupTLSConfig(opts, &logging.InternalDefaultLogger{})
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -237,7 +237,7 @@ func TestTLSConfig(t *testing.T) {
 		rootPool.AddCert(rootCA)
 
 		t.Run("valid certificate chain", func(t *testing.T) {
-			verifyFunc := InternalStrictVerifyPeerCertificate(rootPool)
+			verifyFunc := strictVerifyPeerCertificate(rootPool)
 
 			// Prepare the certificate chain as it would be presented during TLS handshake
 			rawCerts := [][]byte{
@@ -252,7 +252,7 @@ func TestTLSConfig(t *testing.T) {
 		})
 
 		t.Run("empty certificate chain", func(t *testing.T) {
-			verifyFunc := InternalStrictVerifyPeerCertificate(rootPool)
+			verifyFunc := strictVerifyPeerCertificate(rootPool)
 
 			err := verifyFunc([][]byte{}, nil)
 			if err == nil {
@@ -265,7 +265,7 @@ func TestTLSConfig(t *testing.T) {
 			intermediatePool := x509.NewCertPool()
 			intermediatePool.AddCert(intermediateCA)
 
-			verifyFunc := InternalStrictVerifyPeerCertificate(intermediatePool)
+			verifyFunc := strictVerifyPeerCertificate(intermediatePool)
 
 			rawCerts := [][]byte{
 				leafCert.Raw,
@@ -293,7 +293,7 @@ func TestTLSConfig(t *testing.T) {
 			selfSignedPool := x509.NewCertPool()
 			selfSignedPool.AddCert(selfSigned)
 
-			verifyFunc := InternalStrictVerifyPeerCertificate(selfSignedPool)
+			verifyFunc := strictVerifyPeerCertificate(selfSignedPool)
 
 			rawCerts := [][]byte{
 				selfSigned.Raw,
@@ -322,7 +322,7 @@ func TestTLSConfig(t *testing.T) {
 				t.Fatalf("failed to generate untrusted leaf certificate: %v", err)
 			}
 
-			verifyFunc := InternalStrictVerifyPeerCertificate(rootPool)
+			verifyFunc := strictVerifyPeerCertificate(rootPool)
 
 			rawCerts := [][]byte{
 				untrustedLeaf.Raw,
@@ -336,7 +336,7 @@ func TestTLSConfig(t *testing.T) {
 		})
 
 		t.Run("malformed leaf certificate", func(t *testing.T) {
-			verifyFunc := InternalStrictVerifyPeerCertificate(rootPool)
+			verifyFunc := strictVerifyPeerCertificate(rootPool)
 
 			rawCerts := [][]byte{
 				{0x00, 0x01, 0x02}, // not a valid DER certificate
@@ -349,7 +349,7 @@ func TestTLSConfig(t *testing.T) {
 		})
 
 		t.Run("malformed intermediate certificate", func(t *testing.T) {
-			verifyFunc := InternalStrictVerifyPeerCertificate(rootPool)
+			verifyFunc := strictVerifyPeerCertificate(rootPool)
 
 			rawCerts := [][]byte{
 				leafCert.Raw,
@@ -363,7 +363,7 @@ func TestTLSConfig(t *testing.T) {
 		})
 
 		t.Run("valid certificate chain with verifiedChains", func(t *testing.T) {
-			verifyFunc := InternalStrictVerifyPeerCertificate(rootPool)
+			verifyFunc := strictVerifyPeerCertificate(rootPool)
 
 			verifiedChains := [][]*x509.Certificate{
 				{leafCert, intermediateCA, rootCA},
@@ -383,7 +383,7 @@ func TestTLSConfig(t *testing.T) {
 			intermediatePool := x509.NewCertPool()
 			intermediatePool.AddCert(intermediateCA)
 
-			verifyFunc := InternalStrictVerifyPeerCertificate(intermediatePool)
+			verifyFunc := strictVerifyPeerCertificate(intermediatePool)
 
 			verifiedChains := [][]*x509.Certificate{
 				{leafCert, intermediateCA},

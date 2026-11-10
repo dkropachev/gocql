@@ -18,9 +18,9 @@ import (
 
 // Polls system.peers at a specific interval to find new hosts
 type InternalRingDescriber struct {
-	InternalControl InternalControlConnection
-	InternalLogger  logging.StdLogger
-	InternalCfg     *InternalClusterSettings
+	control        InternalControlConnection
+	InternalLogger logging.StdLogger
+	InternalCfg    *InternalClusterSettings
 	// hosts are the set of all hosts in the cassandra ring that we know of.
 	// key of map is host_id.
 	InternalHosts map[string]*implEndpoint.HostInfo
@@ -43,12 +43,12 @@ func (r *InternalRingDescriber) setControlConn(c InternalControlConnection) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.InternalControl = c
+	r.control = c
 }
 
 // Ask the control node for the local host info
 func (r *InternalRingDescriber) getLocalHostInfo(ctx context.Context, conn transport.ConnInterface) (*implEndpoint.HostInfo, error) {
-	hosts, err := InternalReadV2Topology(ctx, conn, transport.InternalQrySystemLocal, r.InternalCfg.Port)
+	hosts, err := readV2Topology(ctx, conn, transport.InternalQrySystemLocal, r.InternalCfg.Port)
 	if err != nil {
 		return nil, fmt.Errorf("could not retrieve local host info: %w", err)
 	}
@@ -58,20 +58,20 @@ func (r *InternalRingDescriber) getLocalHostInfo(ctx context.Context, conn trans
 	return hosts[0], nil
 }
 
-func (r *InternalRingDescriber) InternalGetClusterPeerInfo(ctx context.Context, c transport.ConnInterface) ([]*implEndpoint.HostInfo, error) {
+func (r *InternalRingDescriber) getClusterPeerInfo(ctx context.Context, c transport.ConnInterface) ([]*implEndpoint.HostInfo, error) {
 	stmt := transport.InternalQrySystemPeersCassandra
 	if c.InternalGetIsSchemaV2() {
 		stmt = transport.InternalQrySystemPeersV2
 	} else if c.InternalIsScyllaConn() {
 		stmt = transport.InternalQrySystemPeers
 	}
-	hosts, err := InternalReadV2Topology(ctx, c, stmt, r.InternalCfg.Port)
+	hosts, err := readV2Topology(ctx, c, stmt, r.InternalCfg.Port)
 	if err != nil {
 		return nil, err
 	}
 	valid := hosts[:0]
 	for _, h := range hosts {
-		if InternalIsValidPeer(h) {
+		if isValidPeer(h) {
 			valid = append(valid, h)
 			continue
 		}
@@ -96,20 +96,20 @@ func (r *InternalRingDescriber) InternalGetClusterPeerInfo(ctx context.Context, 
 	return valid, nil
 }
 
-func InternalGetPeersFromQuerySystemPeers(querySystemPeerRows []map[string]any, defaultPort int, logger logging.StdLogger) ([]*implEndpoint.HostInfo, error) {
+func getPeersFromQuerySystemPeers(querySystemPeerRows []map[string]any, defaultPort int, logger logging.StdLogger) ([]*implEndpoint.HostInfo, error) {
 	var peers []*implEndpoint.HostInfo
 
 	for _, row := range querySystemPeerRows {
 		// extract all available info about the peer
-		host, err := InternalHostInfoFromMap(row, defaultPort)
+		host, err := hostInfoFromMap(row, defaultPort)
 		if err != nil {
 			return nil, err
-		} else if !InternalIsValidPeer(host) {
+		} else if !isValidPeer(host) {
 			// If it's not a valid peer
 			logger.Printf("Found invalid peer '%s' "+
 				"Likely due to a gossip or snitch issue, this host will be ignored", host)
 			continue
-		} else if InternalIsZeroToken(host) {
+		} else if isZeroToken(host) {
 			continue
 		}
 
@@ -120,11 +120,11 @@ func InternalGetPeersFromQuerySystemPeers(querySystemPeerRows []map[string]any, 
 }
 
 // Return true if the host is a valid peer
-func InternalIsValidPeer(host *implEndpoint.HostInfo) bool {
+func isValidPeer(host *implEndpoint.HostInfo) bool {
 	return !(len(host.RPCAddress()) == 0 || implEndpoint.HostInfoData(host).InternalHostId.IsEmpty() || implEndpoint.HostInfoData(host).InternalDataCenter == "" || implEndpoint.HostInfoData(host).InternalRack == "")
 }
 
-func InternalIsZeroToken(host *implEndpoint.HostInfo) bool {
+func isZeroToken(host *implEndpoint.HostInfo) bool {
 	return len(implEndpoint.HostInfoData(host).InternalTokens) == 0
 }
 
@@ -136,7 +136,7 @@ func (r *InternalRingDescriber) GetHostsFromSystem() ([]*implEndpoint.HostInfo, 
 	r.diagnostics = nil
 	r.mu.Unlock()
 	r.mu.RLock()
-	control := r.InternalControl
+	control := r.control
 	epoch := r.eventEpoch
 	previous := r.prevHosts
 	partitionerBefore := r.prevPartitioner
@@ -183,7 +183,7 @@ func (r *InternalRingDescriber) GetHostsFromSystem() ([]*implEndpoint.HostInfo, 
 	go func() {
 		defer wg.Done()
 		var peerErr error
-		peerHosts, peerErr = r.InternalGetClusterPeerInfo(ctx, ch.InternalConn)
+		peerHosts, peerErr = r.getClusterPeerInfo(ctx, ch.InternalConn)
 		recordErr(peerErr)
 	}()
 	wg.Wait()
@@ -225,7 +225,7 @@ func (r *InternalRingDescriber) GetHostsFromSystem() ([]*implEndpoint.HostInfo, 
 	return hosts, partitioner, nil
 }
 
-func (r *InternalRingDescriber) InternalGetHostByIP(ip string) (*implEndpoint.HostInfo, bool) {
+func (r *InternalRingDescriber) getHostByIP(ip string) (*implEndpoint.HostInfo, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	hi, ok := r.hostIPToUUID[ip]
@@ -296,14 +296,14 @@ func (r *InternalRingDescriber) getHostsMap() map[string]*implEndpoint.HostInfo 
 }
 
 func (r *InternalRingDescriber) InternalAddOrUpdate(host *implEndpoint.HostInfo) *implEndpoint.HostInfo {
-	if existingHost, ok := r.InternalAddHostIfMissing(host); ok {
+	if existingHost, ok := r.addHostIfMissing(host); ok {
 		implEndpoint.InternalHostInfoUpdate(existingHost, host)
 		host = existingHost
 	}
 	return host
 }
 
-func (r *InternalRingDescriber) InternalAddHostIfMissing(host *implEndpoint.HostInfo) (*implEndpoint.HostInfo, bool) {
+func (r *InternalRingDescriber) addHostIfMissing(host *implEndpoint.HostInfo) (*implEndpoint.HostInfo, bool) {
 	if !implEndpoint.InternalValidIpAddr(host.ConnectAddress()) {
 		panic(fmt.Sprintf("invalid host: %v", host))
 	}

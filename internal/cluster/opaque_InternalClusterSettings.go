@@ -32,17 +32,17 @@ import (
 	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
-type InternalClusterSettingsStorage struct {
+type clusterSettingsStorage struct {
 	actualSslOpts *atomic.Pointer[tls.Config]
 	// Default retry policy to use for queries.
 	// Default: SimpleRetryPolicy{NumRetries: 3}.
-	InternalDefaultProfile           settings.Profile
+	defaultProfile                   settings.Profile
 	InternalDisableClientRouteEvents bool
 	// internal config for testing
 	InternalDisableControlConn bool
 	disableInit                bool
 }
 
-func InternalClusterSettingsData(v *InternalClusterSettings) *InternalClusterSettingsStorage {
+func InternalClusterSettingsData(v *InternalClusterSettings) *clusterSettingsStorage {
 	return &v.privateStorage
 }

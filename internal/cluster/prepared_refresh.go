@@ -77,7 +77,7 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 	}
 	p := InternalSessionPeripheral(s)
 	p.InternalMu.Lock()
-	epoch := p.InternalSchemaEpoch[keyspace]
+	epoch := p.schemaEpoch[keyspace]
 	revision := p.schemaRevision[keyspace]
 	tables := p.captureTableRevisionsLocked(keyspace)
 	config := p.InternalConfig
@@ -98,7 +98,7 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 	}
 	publish := config.Metadata.Mode != settings.MetadataDisabled && (len(config.Metadata.Keyspaces) == 0 || slices.Contains(config.Metadata.Keyspaces, keyspace))
 	p.InternalMu.Lock()
-	if p.InternalSchemaEpoch[keyspace] != epoch || p.schemaRevision[keyspace] != revision || !p.tableRevisionsCurrentLocked(keyspace, tables) {
+	if p.schemaEpoch[keyspace] != epoch || p.schemaRevision[keyspace] != revision || !p.tableRevisionsCurrentLocked(keyspace, tables) {
 		p.InternalMu.Unlock()
 		return &metadata.PartialRefreshError{Keyspaces: map[string]error{keyspace: errors.New("schema changed during prepared reconciliation")}}
 	}

@@ -53,13 +53,13 @@ func newClientRoutesEventHarness(t *testing.T, allowedConnectionIDs []string) (*
 
 	h := func() *ClientRoutesHandler {
 		opaqueStorageValue := new(ClientRoutesHandler)
-		ClientRoutesHandlerData(opaqueStorageValue).InternalSub = bus.Subscribe("port-mux", 1, nil)
+		ClientRoutesHandlerData(opaqueStorageValue).sub = bus.Subscribe("port-mux", 1, nil)
 		ClientRoutesHandlerData(opaqueStorageValue).InternalUpdateTasks = make(chan InternalUpdateTask, 1)
 		ClientRoutesHandlerData(opaqueStorageValue).InternalCloseChan = make(chan struct{})
 		return opaqueStorageValue
 	}()
 
-	InternalClientRoutesHandlerStartReadingEvents(h, allowedConnectionIDs)
+	clientRoutesHandlerStartReadingEvents(h, allowedConnectionIDs)
 
 	t.Cleanup(func() {
 		if err := bus.Stop(); err != nil {
@@ -90,16 +90,16 @@ func (t testHostInfo) ScyllaShardAwarePort() uint16       { return 0 }
 func (t testHostInfo) ScyllaShardAwarePortTLS() uint16    { return 0 }
 func (t testHostInfo) ScyllaShardCount() int              { return 0 }
 
-func newCacheEntry(routes ...InternalClientRoute) InternalClientRouteCacheEntry {
-	return InternalClientRouteCacheEntry{InternalAllRoutes: routes}
+func newCacheEntry(routes ...InternalClientRoute) clientRouteCacheEntry {
+	return clientRouteCacheEntry{allRoutes: routes}
 }
 
-func newCache(routes map[string]InternalClientRouteCacheEntry) InternalClientRouteCache {
-	return InternalClientRouteCache{InternalRoutes: routes}
+func newCache(routes map[string]clientRouteCacheEntry) clientRouteCache {
+	return clientRouteCache{routes: routes}
 }
 
-func newCacheEntryWithCurrent(current InternalClientRoute, routes ...InternalClientRoute) InternalClientRouteCacheEntry {
-	entry := InternalClientRouteCacheEntry{InternalAllRoutes: routes}
+func newCacheEntryWithCurrent(current InternalClientRoute, routes ...InternalClientRoute) clientRouteCacheEntry {
+	entry := clientRouteCacheEntry{allRoutes: routes}
 	entry.BindCurrent(current.InternalConnectionID)
 	return entry
 }

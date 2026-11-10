@@ -284,10 +284,10 @@ func TestHostConnPool(t *testing.T) {
 		want := picker.InternalConns[shard]
 
 		pool := &implPool.InternalHostConnPool{InternalConnPicker: &picker}
-		host := InternalInt64SelectedHost{InternalInfo: func() *endpoint.HostInfo {
+		host := int64SelectedHost{info: func() *endpoint.HostInfo {
 			opaqueStorageValue := new(endpoint.HostInfo)
 			return opaqueStorageValue
-		}(), InternalTokenCasted: tok}
+		}(), tokenCasted: tok}
 
 		got := pool.PickConn(host)
 		if got != want {

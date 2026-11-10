@@ -42,32 +42,32 @@ import (
 )
 
 type SessionStorage struct {
-	InternalTypedState           InternalExecutionLifecycle
-	InternalTypedReady           atomic.Value // InternalTypedState once fully initialized; never replaced
-	InternalControl              InternalControlConnection
-	InternalCtx                  context.Context
-	InternalLogger               logging.StdLogger
-	InternalPolicy               HostSelectionPolicy
-	connectObserver              ConnectObserver
-	frameObserver                transport.FrameHeaderObserver
-	streamObserver               transport.StreamObserver
-	initErr                      error
-	InternalAddressTranslator    endpoint.AddressTranslator
-	schema                       *schemafence.InternalPreparedSchemaTracker
-	v2Peripheral                 atomic.Pointer[InternalV2PeripheralState]
-	InternalNodeEvents           *InternalEventDebouncer
-	InternalHostSource           *InternalRingDescriber
-	InternalPool                 *pool.InternalPolicyConnPool
-	InternalRingRefresher        *debounce.RefreshDebouncer
-	readyCh                      chan struct{}
-	InternalCancel               context.CancelFunc
-	InternalSchemaEvents         *InternalEventDebouncer
-	InternalMetadataDescriber    *InternalMetadataDescriber
-	InternalEventBus             *eventbus.EventBus[events.Event]
-	InternalConnCfg              *transport.ConnConfig
-	InternalClientRoutesHandler  *ClientRoutesHandler
-	InternalDriverConfigReporter *InternalDriverConfigReporter
-	closeDone                    chan struct{}
+	InternalTypedState          executionLifecycle
+	InternalTypedReady          atomic.Value // InternalTypedState once fully initialized; never replaced
+	InternalControl             InternalControlConnection
+	InternalCtx                 context.Context
+	InternalLogger              logging.StdLogger
+	InternalPolicy              HostSelectionPolicy
+	connectObserver             ConnectObserver
+	frameObserver               transport.FrameHeaderObserver
+	streamObserver              transport.StreamObserver
+	initErr                     error
+	InternalAddressTranslator   endpoint.AddressTranslator
+	schema                      *schemafence.InternalPreparedSchemaTracker
+	v2Peripheral                atomic.Pointer[InternalV2PeripheralState]
+	InternalNodeEvents          *InternalEventDebouncer
+	InternalHostSource          *InternalRingDescriber
+	InternalPool                *pool.InternalPolicyConnPool
+	InternalRingRefresher       *debounce.RefreshDebouncer
+	readyCh                     chan struct{}
+	InternalCancel              context.CancelFunc
+	InternalSchemaEvents        *InternalEventDebouncer
+	InternalMetadataDescriber   *InternalMetadataDescriber
+	eventBus                    *eventbus.EventBus[events.Event]
+	InternalConnCfg             *transport.ConnConfig
+	InternalClientRoutesHandler *ClientRoutesHandler
+	driverConfigReporter        *driverConfigReporter
+	closeDone                   chan struct{}
 	// id is a globally unique identifier for this session, reported to
 	// the cluster via the SESSION_ID STARTUP option so that all connections
 	// belonging to the same session can be correlated in system.clients.
@@ -84,8 +84,8 @@ type SessionStorage struct {
 	InternalIsClosing                 bool
 	InternalHasAggregatesAndFunctions bool
 	InternalUseSystemSchema           bool
-	InternalTabletsRoutingV1          bool
-	InternalIsInitialized             bool
+	tabletsRoutingV1                  bool
+	isInitialized                     bool
 	InternalIsClosed                  bool
 }
 

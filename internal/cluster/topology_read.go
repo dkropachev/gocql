@@ -16,19 +16,19 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
-func InternalReadV2Topology(ctx context.Context, conn transport.ConnInterface, stmt string, port int) ([]*implEndpoint.HostInfo, error) {
+func readV2Topology(ctx context.Context, conn transport.ConnInterface, stmt string, port int) ([]*implEndpoint.HostInfo, error) {
 	backend, ok := conn.(interface {
 		InternalExecuteTyped(context.Context, *model.AttemptRequest) (*transport.InternalResponsePage, error)
 	})
 	if !ok {
 		return nil, cqltype.TypeValidation("topology query", "connection does not support typed requests")
 	}
-	timeout := InternalTimeForTopology(conn)
+	timeout := timeForTopology(conn)
 	execute := backend.InternalExecuteTyped
 	if c, ok := conn.(*transport.Conn); ok {
 		execute = c.InternalExecuteV2System
 	}
-	rows, err := InternalReadV2SystemRowsVia(ctx, 4, timeout, execute, binding.Statement[codec.EmptyRecord, metadata.InternalV2TopologyRow]{CQL: stmt, Params: codec.EmptyParamsEncoder, Rows: metadata.InternalV2DecodeTopology()}, cqltype.NewColumns(), codec.EmptyRecord{})
+	rows, err := readV2SystemRowsVia(ctx, 4, timeout, execute, binding.Statement[codec.EmptyRecord, metadata.InternalV2TopologyRow]{CQL: stmt, Params: codec.EmptyParamsEncoder, Rows: metadata.InternalV2DecodeTopology()}, cqltype.NewColumns(), codec.EmptyRecord{})
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +43,7 @@ func InternalReadV2Topology(ctx context.Context, conn transport.ConnInterface, s
 	return hosts, nil
 }
 
-func InternalTimeForTopology(conn transport.ConnInterface) time.Duration {
+func timeForTopology(conn transport.ConnInterface) time.Duration {
 	if c, ok := conn.(*transport.Conn); ok {
 		return c.InternalGetSystemRequestState().InternalTimeout
 	}
@@ -66,12 +66,12 @@ func (s *Core) v2ContactIdentities(ctx context.Context, contacts []*implEndpoint
 		temporary := conn == nil
 		var err error
 		if temporary {
-			conn, err = InternalSessionDial(s, ctx, contact, InternalSessionControlConnConfig(s), transport.InternalConnErrorHandlerFn(func(c *transport.Conn, _ error, _ bool) { c.Close() }))
+			conn, err = sessionDial(s, ctx, contact, sessionControlConnConfig(s), transport.InternalConnErrorHandlerFn(func(c *transport.Conn, _ error, _ bool) { c.Close() }))
 			if err != nil {
 				return nil, err
 			}
 		}
-		rows, err := InternalReadV2Topology(ctx, conn, transport.InternalQrySystemLocal, s.privateStorage.InternalCfg.Port)
+		rows, err := readV2Topology(ctx, conn, transport.InternalQrySystemLocal, s.privateStorage.InternalCfg.Port)
 		if temporary {
 			conn.Close()
 			conn.InternalWaitEventDispatch()

@@ -33,7 +33,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
-func InternalConnConfig(cfg *InternalClusterSettings) (*transport.ConnConfig, error) {
+func connConfig(cfg *InternalClusterSettings) (*transport.ConnConfig, error) {
 	hostDialer := cfg.HostDialer
 
 	if hostDialer == nil {
@@ -51,7 +51,7 @@ func InternalConnConfig(cfg *InternalClusterSettings) (*transport.ConnConfig, er
 		hostDialer = &transport.InternalScyllaDialer{
 			InternalDialer:    dialer,
 			InternalLogger:    cfg.logger(),
-			InternalTlsConfig: InternalClusterSettingsGetActualTLSConfig(cfg),
+			InternalTlsConfig: clusterSettingsGetActualTLSConfig(cfg),
 		}
 	}
 
@@ -68,11 +68,11 @@ func InternalConnConfig(cfg *InternalClusterSettings) (*transport.ConnConfig, er
 		AuthProvider:      cfg.AuthProvider,
 		Keepalive:         cfg.SocketKeepalive,
 		Logger:            cfg.logger(),
-		InternalTlsConfig: InternalClusterSettingsGetActualTLSConfig(cfg),
+		InternalTlsConfig: clusterSettingsGetActualTLSConfig(cfg),
 	}, nil
 }
 
-func InternalNewPolicyConnPool(session *Core) *pool.InternalPolicyConnPool {
+func newPolicyConnPool(session *Core) *pool.InternalPolicyConnPool {
 	// create the pool
 	pool := &pool.InternalPolicyConnPool{
 		InternalServices:      InternalNewPoolServices(session),

@@ -45,14 +45,14 @@ func TestDriverConfigReport(t *testing.T) {
 				{
 					name:   "datacenter filter is the part of the cluster we hold connections to",
 					filter: DataCenterHostFilter("dc1"),
-					want:   InternalNodeLocationDCReport{Type: "dc", LocalDC: "dc1"},
+					want:   nodeLocationDCReport{Type: "dc", LocalDC: "dc1"},
 				},
 				{
 					// The deprecated spelling delegates to the same constructor, so it
 					// must report identically rather than fall through as opaque.
 					name:   "the deprecated spelling reports the same",
 					filter: DataCenterHostFilter("dc1"),
-					want:   InternalNodeLocationDCReport{Type: "dc", LocalDC: "dc1"},
+					want:   nodeLocationDCReport{Type: "dc", LocalDC: "dc1"},
 				},
 				{
 					// local-dc is nonEmptyString, and an empty datacenter expresses no
@@ -78,7 +78,7 @@ func TestDriverConfigReport(t *testing.T) {
 				t.Run(tt.name, func(t *testing.T) {
 					cfg := *InternalNewClusterSettings("127.0.0.1")
 					cfg.HostFilter = tt.filter
-					if diff := cmp.Diff(tt.want, InternalBuildConnectionReport(&cfg).NodePreference); diff != "" {
+					if diff := cmp.Diff(tt.want, buildConnectionReport(&cfg).NodePreference); diff != "" {
 						t.Errorf("connection.node-preference mismatch:\n%s", diff)
 					}
 				})
@@ -89,7 +89,7 @@ func TestDriverConfigReport(t *testing.T) {
 			cfg := *InternalNewClusterSettings("127.0.0.1")
 			cfg.ReadTimeout = 0
 			cfg.WriteTimeout = 0
-			report := InternalBuildConnectionReport(&cfg)
+			report := buildConnectionReport(&cfg)
 			if report.Read != nil {
 				t.Errorf("expected read to be omitted when ReadTimeout is 0, got %+v", report.Read)
 			}
@@ -103,7 +103,7 @@ func TestDriverConfigReport(t *testing.T) {
 			cfg.ReadTimeout = 5 * time.Second
 			cfg.WriteTimeout = 7 * time.Second
 			cfg.SslOpts = &transport.SslOptions{EnableHostVerification: true}
-			report = InternalBuildConnectionReport(&cfg)
+			report = buildConnectionReport(&cfg)
 			if report.Read == nil || report.Read.TimeoutMs != 5000 {
 				t.Errorf("expected read.timeout-ms 5000, got %+v", report.Read)
 			}
@@ -117,7 +117,7 @@ func TestDriverConfigReport(t *testing.T) {
 			// HostDialer takes over connection setup entirely, so SslOpts is ignored
 			// (see clusterSettings.SslOpts) and the effective TLS state is unknown.
 			cfg.HostDialer = fakeHostDialer{}
-			report = InternalBuildConnectionReport(&cfg)
+			report = buildConnectionReport(&cfg)
 			if report.TLS != nil {
 				t.Errorf("expected tls to be omitted when HostDialer is set, got %+v", report.TLS)
 			}
@@ -158,7 +158,7 @@ func TestDriverConfigReport(t *testing.T) {
 					cfg := *InternalNewClusterSettings("127.0.0.1")
 					cfg.DisableShardAwarePort = tt.disable
 					cfg.HostDialer = tt.hostDialer
-					if got := InternalBuildConnectionReport(&cfg).Pool.ShardAware.Enabled; got != tt.want {
+					if got := buildConnectionReport(&cfg).Pool.ShardAware.Enabled; got != tt.want {
 						t.Errorf("shard-aware.enabled = %v, want %v", got, tt.want)
 					}
 				})
@@ -172,14 +172,14 @@ func TestDriverConfigReport(t *testing.T) {
 			timeout      time.Duration
 			agreement    time.Duration
 			isScyllaConn bool
-			want         InternalControlPlaneReport
+			want         controlPlaneReport
 		}{
 			{
 				name:      "system query timeout disabled entirely omits the timeout object's contents",
 				timeout:   0,
 				agreement: 60 * time.Second,
-				want: InternalControlPlaneReport{
-					Schema: InternalControlPlaneSchemaReport{Agreement: InternalSchemaAgreementReport{TimeoutMs: 60000}},
+				want: controlPlaneReport{
+					Schema: controlPlaneSchemaReport{Agreement: schemaAgreementReport{TimeoutMs: 60000}},
 				},
 			},
 			{
@@ -187,11 +187,11 @@ func TestDriverConfigReport(t *testing.T) {
 				timeout:      30 * time.Second,
 				agreement:    60 * time.Second,
 				isScyllaConn: false,
-				want: InternalControlPlaneReport{
-					Queries: InternalControlPlaneQueriesReport{System: InternalSystemQueriesReport{Timeout: InternalSystemQueriesTimeoutReport{
+				want: controlPlaneReport{
+					Queries: controlPlaneQueriesReport{System: systemQueriesReport{Timeout: systemQueriesTimeoutReport{
 						ClientSideMs: new(int64(30000)),
 					}}},
-					Schema: InternalControlPlaneSchemaReport{Agreement: InternalSchemaAgreementReport{TimeoutMs: 60000}},
+					Schema: controlPlaneSchemaReport{Agreement: schemaAgreementReport{TimeoutMs: 60000}},
 				},
 			},
 			{
@@ -199,12 +199,12 @@ func TestDriverConfigReport(t *testing.T) {
 				timeout:      30 * time.Second,
 				agreement:    60 * time.Second,
 				isScyllaConn: true,
-				want: InternalControlPlaneReport{
-					Queries: InternalControlPlaneQueriesReport{System: InternalSystemQueriesReport{Timeout: InternalSystemQueriesTimeoutReport{
+				want: controlPlaneReport{
+					Queries: controlPlaneQueriesReport{System: systemQueriesReport{Timeout: systemQueriesTimeoutReport{
 						ClientSideMs: new(int64(30000)),
 						ServerSideMs: new(int64(30000)),
 					}}},
-					Schema: InternalControlPlaneSchemaReport{Agreement: InternalSchemaAgreementReport{TimeoutMs: 60000}},
+					Schema: controlPlaneSchemaReport{Agreement: schemaAgreementReport{TimeoutMs: 60000}},
 				},
 			},
 			{
@@ -216,19 +216,19 @@ func TestDriverConfigReport(t *testing.T) {
 				timeout:      500 * time.Microsecond,
 				agreement:    60 * time.Second,
 				isScyllaConn: true,
-				want: InternalControlPlaneReport{
-					Queries: InternalControlPlaneQueriesReport{System: InternalSystemQueriesReport{Timeout: InternalSystemQueriesTimeoutReport{
+				want: controlPlaneReport{
+					Queries: controlPlaneQueriesReport{System: systemQueriesReport{Timeout: systemQueriesTimeoutReport{
 						ClientSideMs: new(int64(1)),
 					}}},
-					Schema: InternalControlPlaneSchemaReport{Agreement: InternalSchemaAgreementReport{TimeoutMs: 60000}},
+					Schema: controlPlaneSchemaReport{Agreement: schemaAgreementReport{TimeoutMs: 60000}},
 				},
 			},
 			{
 				name:      "schema agreement of 0 is reported verbatim, not treated as unset",
 				timeout:   0,
 				agreement: 0,
-				want: InternalControlPlaneReport{
-					Schema: InternalControlPlaneSchemaReport{Agreement: InternalSchemaAgreementReport{TimeoutMs: 0}},
+				want: controlPlaneReport{
+					Schema: controlPlaneSchemaReport{Agreement: schemaAgreementReport{TimeoutMs: 0}},
 				},
 			},
 		}
@@ -237,7 +237,7 @@ func TestDriverConfigReport(t *testing.T) {
 				cfg := *InternalNewClusterSettings("127.0.0.1")
 				cfg.MetadataSchemaRequestTimeout = tt.timeout
 				cfg.MaxWaitSchemaAgreement = tt.agreement
-				got := InternalBuildControlPlaneReport(&cfg, tt.isScyllaConn)
+				got := buildControlPlaneReport(&cfg, tt.isScyllaConn)
 				if diff := cmp.Diff(tt.want, got); diff != "" {
 					t.Errorf("buildControlPlaneReport() mismatch:\n%s", diff)
 				}
@@ -250,9 +250,9 @@ func TestDriverConfigReport(t *testing.T) {
 		// reported rather than panicking. Reporting must never prevent a connection
 		// from being established, and this runs on the goroutine that establishes it.
 		t.Run("NilPolicy", func(t *testing.T) {
-			got, ok := InternalBuildLoadBalancingPolicyReport(nil).(InternalLoadBalancingCustomReport)
+			got, ok := buildLoadBalancingPolicyReport(nil).(loadBalancingCustomReport)
 			if !ok {
-				t.Fatalf("expected a custom policy report, got %#v", InternalBuildLoadBalancingPolicyReport(nil))
+				t.Fatalf("expected a custom policy report, got %#v", buildLoadBalancingPolicyReport(nil))
 			}
 			if got.Name == "" {
 				t.Error("expected a non-empty name, which the schema requires")
@@ -284,7 +284,7 @@ func TestDriverConfigReport(t *testing.T) {
 					policy: TokenAwareHostPolicy(RoundRobinHostPolicy(), AvoidSlowReplicas(MAX_IN_FLIGHT_THRESHOLD)),
 					want: InternalLoadBalancingTokenAwareReport{
 						Type: "token-aware", LoadDistribution: "shuffle", FallbackToNonPreferredNodes: true,
-						AdaptiveOrdering: &InternalAdaptiveOrderingReport{Signals: []string{"in-flight-requests"}},
+						AdaptiveOrdering: &adaptiveOrderingReport{Signals: []string{"in-flight-requests"}},
 					},
 				},
 				{
@@ -328,17 +328,17 @@ func TestDriverConfigReport(t *testing.T) {
 				{
 					name:   "non-token-aware built-in reports as custom",
 					policy: RoundRobinHostPolicy(),
-					want:   InternalLoadBalancingCustomReport{Type: "custom", Name: "roundRobinHostPolicy"},
+					want:   loadBalancingCustomReport{Type: "custom", Name: "roundRobinHostPolicy"},
 				},
 				{
 					name:   "custom",
 					policy: &fakeHostSelectionPolicy{HostSelectionPolicy: RoundRobinHostPolicy()},
-					want:   InternalLoadBalancingCustomReport{Type: "custom", Name: "fakeHostSelectionPolicy"},
+					want:   loadBalancingCustomReport{Type: "custom", Name: "fakeHostSelectionPolicy"},
 				},
 			}
 			for _, tt := range tests {
 				t.Run(tt.name, func(t *testing.T) {
-					got := InternalBuildLoadBalancingPolicyReport(tt.policy)
+					got := buildLoadBalancingPolicyReport(tt.policy)
 					if diff := cmp.Diff(tt.want, got); diff != "" {
 						t.Errorf("buildLoadBalancingPolicyReport() mismatch:\n%s", diff)
 					}
@@ -353,7 +353,7 @@ func TestDriverConfigReport(t *testing.T) {
 	// token-aware discriminant and the DC preference behind it.
 	t.Run("BuildLoadBalancingReport", func(t *testing.T) {
 		inner := TokenAwareHostPolicy(DCAwareRoundRobinPolicy("dc1"))
-		want := InternalBuildLoadBalancingReport(inner)
+		want := buildLoadBalancingReport(inner)
 
 		for _, tt := range []struct {
 			name   string
@@ -363,7 +363,7 @@ func TestDriverConfigReport(t *testing.T) {
 			{"wrapped twice", SingleHostReadyPolicy(SingleHostReadyPolicy(inner))},
 		} {
 			t.Run(tt.name, func(t *testing.T) {
-				if diff := cmp.Diff(want, InternalBuildLoadBalancingReport(tt.policy)); diff != "" {
+				if diff := cmp.Diff(want, buildLoadBalancingReport(tt.policy)); diff != "" {
 					t.Errorf("expected the wrapped policy to report as the policy it wraps:\n%s", diff)
 				}
 			})
@@ -384,7 +384,7 @@ func TestDriverConfigReport(t *testing.T) {
 			{
 				name:   "DC preference behind token-awareness",
 				policy: TokenAwareHostPolicy(DCAwareRoundRobinPolicy("dc1")),
-				want:   InternalNodeLocationDCReport{Type: "dc", LocalDC: "dc1"},
+				want:   nodeLocationDCReport{Type: "dc", LocalDC: "dc1"},
 			},
 			{
 				name:   "rack preference behind token-awareness",
@@ -394,7 +394,7 @@ func TestDriverConfigReport(t *testing.T) {
 			{
 				name:   "DC preference reported independently of the load-balancing discriminant, when not wrapped in token-awareness",
 				policy: DCAwareRoundRobinPolicy("dc1"),
-				want:   InternalNodeLocationDCReport{Type: "dc", LocalDC: "dc1"},
+				want:   nodeLocationDCReport{Type: "dc", LocalDC: "dc1"},
 			},
 			{
 				// local-dc is nonEmptyString and required on the branch that names
@@ -412,7 +412,7 @@ func TestDriverConfigReport(t *testing.T) {
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				got := InternalBuildNodeLocationPreferenceReport(tt.policy)
+				got := buildNodeLocationPreferenceReport(tt.policy)
 				if diff := cmp.Diff(tt.want, got); diff != "" {
 					t.Errorf("buildNodeLocationPreferenceReport() mismatch:\n%s", diff)
 				}
@@ -426,7 +426,7 @@ func TestDriverConfigReport(t *testing.T) {
 			cfg.PageSize = 0
 			cfg.SerialConsistency = 0
 			cfg.Timeout = 0
-			got := InternalBuildQueryDefaultsReport(&cfg)
+			got := buildQueryDefaultsReport(&cfg)
 			if got.Page != nil {
 				t.Errorf("expected page to be omitted when PageSize is 0, got %+v", got.Page)
 			}
@@ -440,7 +440,7 @@ func TestDriverConfigReport(t *testing.T) {
 			cfg.PageSize = 1000
 			cfg.SerialConsistency = cqltype.LocalSerial
 			cfg.Timeout = 3 * time.Second
-			got = InternalBuildQueryDefaultsReport(&cfg)
+			got = buildQueryDefaultsReport(&cfg)
 			if got.Page == nil || got.Page.Size != 1000 {
 				t.Errorf("expected page.size 1000, got %+v", got.Page)
 			}
@@ -467,7 +467,7 @@ func TestDriverConfigReport(t *testing.T) {
 			} {
 				cfg := *InternalNewClusterSettings("127.0.0.1")
 				cfg.SerialConsistency = tt.cons
-				if got := InternalBuildQueryDefaultsReport(&cfg).SerialConsistency; got != tt.want {
+				if got := buildQueryDefaultsReport(&cfg).SerialConsistency; got != tt.want {
 					t.Errorf("SerialConsistency=%v: serial-consistency = %q, want %q", tt.cons, got, tt.want)
 				}
 			}
@@ -488,17 +488,17 @@ func TestDriverConfigReport(t *testing.T) {
 			{
 				name:   "constant",
 				policy: &pool.ConstantReconnectionPolicy{MaxRetries: 5, Interval: 2 * time.Second},
-				want:   InternalReconnectionConstantReport{Type: "constant", DelayMs: 2000, MaxAttempts: 5},
+				want:   reconnectionConstantReport{Type: "constant", DelayMs: 2000, MaxAttempts: 5},
 			},
 			{
 				name:   "exponential",
 				policy: &pool.ExponentialReconnectionPolicy{MaxRetries: 10, InitialInterval: time.Second, MaxInterval: 30 * time.Second},
-				want:   InternalReconnectionExponentialReport{Type: "exponential", BaseMs: 1000, MaxMs: 30000, MaxAttempts: 10},
+				want:   reconnectionExponentialReport{Type: "exponential", BaseMs: 1000, MaxMs: 30000, MaxAttempts: 10},
 			},
 			{
 				name:   "exponential with max below base reports the effective fallback max",
 				policy: &pool.ExponentialReconnectionPolicy{MaxRetries: 3, InitialInterval: 5 * time.Second, MaxInterval: time.Second},
-				want: InternalReconnectionExponentialReport{
+				want: reconnectionExponentialReport{
 					Type: "exponential", BaseMs: 5000,
 					MaxMs:       (math.MaxInt16 * time.Second).Milliseconds(),
 					MaxAttempts: 3,
@@ -527,7 +527,7 @@ func TestDriverConfigReport(t *testing.T) {
 				// retry is what it means; delay-ms is nonNegativeInteger.
 				name:   "constant with a negative interval reports an immediate retry",
 				policy: &pool.ConstantReconnectionPolicy{MaxRetries: 3, Interval: -5 * time.Second},
-				want:   InternalReconnectionConstantReport{Type: "constant", DelayMs: 0, MaxAttempts: 3},
+				want:   reconnectionConstantReport{Type: "constant", DelayMs: 0, MaxAttempts: 3},
 			},
 			{
 				name:   "a typed-nil policy reports as no reconnection instead of panicking",
@@ -547,17 +547,17 @@ func TestDriverConfigReport(t *testing.T) {
 				// delays this policy really waits.
 				name:   "exponential with unset intervals reports getExponentialTime's own defaults",
 				policy: &pool.ExponentialReconnectionPolicy{MaxRetries: 3},
-				want:   InternalReconnectionExponentialReport{Type: "exponential", BaseMs: 100, MaxMs: 10000, MaxAttempts: 3},
+				want:   reconnectionExponentialReport{Type: "exponential", BaseMs: 100, MaxMs: 10000, MaxAttempts: 3},
 			},
 			{
 				name:   "custom",
 				policy: &fakeReconnectionPolicy{ReconnectionPolicy: &pool.NoReconnectionPolicy{}},
-				want:   InternalReconnectionCustomReport{Type: "custom", Name: "fakeReconnectionPolicy"},
+				want:   reconnectionCustomReport{Type: "custom", Name: "fakeReconnectionPolicy"},
 			},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				got := InternalBuildReconnectionPolicyReport(tt.policy)
+				got := buildReconnectionPolicyReport(tt.policy)
 				if diff := cmp.Diff(tt.want, got); diff != "" {
 					t.Errorf("buildReconnectionPolicyReport() mismatch:\n%s", diff)
 				}
@@ -587,13 +587,13 @@ func TestDriverConfigReport(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				cfg := *InternalNewClusterSettings("127.0.0.1")
 				cfg.MaxRequestsPerConn = tt.maxRequestsPerConn
-				got := InternalBuildRequestsReport(&cfg)
+				got := buildRequestsReport(&cfg)
 				if got.InFlight.Max != tt.want {
 					t.Errorf("in-flight.max = %d, want %d", got.InFlight.Max, tt.want)
 				}
 				// The runtime cannot exceed the native nonnegative stream-ID capacity.
-				if got.InFlight.Max < 1 || got.InFlight.Max > InternalMaxReportableInFlight {
-					t.Errorf("in-flight.max = %d, outside the native 1..%d capacity", got.InFlight.Max, InternalMaxReportableInFlight)
+				if got.InFlight.Max < 1 || got.InFlight.Max > maxReportableInFlight {
+					t.Errorf("in-flight.max = %d, outside the native 1..%d capacity", got.InFlight.Max, maxReportableInFlight)
 				}
 			})
 		}
@@ -603,8 +603,8 @@ func TestDriverConfigReport(t *testing.T) {
 		// gocql has no configuration surface for any of these beyond what Go's net
 		// package and clusterSettings.Validate already guarantee; this always
 		// reports the built-in dialer's fixed behavior.
-		want := InternalSocketReport{TCPNoDelay: true, KeepAlive: true, ReuseAddress: false}
-		if got := InternalBuildSocketReport(); got != want {
+		want := socketReport{TCPNoDelay: true, KeepAlive: true, ReuseAddress: false}
+		if got := buildSocketReport(); got != want {
 			t.Errorf("buildSocketReport() = %+v, want %+v", got, want)
 		}
 	})
@@ -635,13 +635,13 @@ func TestDriverConfigReport(t *testing.T) {
 				}
 				// The tls.Config the driver will actually hand to the dialer is the
 				// only authority on whether hostnames get verified.
-				actual := InternalClusterSettingsGetActualTLSConfig(&cfg)
+				actual := clusterSettingsGetActualTLSConfig(&cfg)
 				if actual == nil {
 					t.Fatal("expected ValidateAndInitSSL to produce a tls.Config")
 				}
 				want := !actual.InsecureSkipVerify
 
-				got := InternalBuildTLSReport(&cfg)
+				got := buildTLSReport(&cfg)
 				if got == nil {
 					t.Fatal("expected a tls group when SslOpts is set")
 				}
@@ -655,7 +655,7 @@ func TestDriverConfigReport(t *testing.T) {
 				// test reaches the reporter.
 				pristine := *InternalNewClusterSettings("127.0.0.1")
 				pristine.SslOpts = tt.opts
-				if fallback := InternalBuildTLSReport(&pristine); fallback == nil || fallback.HostnameVerification != want {
+				if fallback := buildTLSReport(&pristine); fallback == nil || fallback.HostnameVerification != want {
 					t.Errorf("without a resolved tls.Config: hostname-verification = %v, want %v", fallback, want)
 				}
 			})
@@ -670,11 +670,11 @@ func TestDriverConfigReport(t *testing.T) {
 		for _, c := range []cqltype.Consistency{
 			cqltype.Any, cqltype.One, cqltype.Two, cqltype.Three, cqltype.Quorum, cqltype.All, cqltype.LocalQuorum, cqltype.EachQuorum, cqltype.LocalOne, cqltype.Serial, cqltype.LocalSerial,
 		} {
-			if got := InternalConsistencyName(c); got != c.String() {
+			if got := consistencyName(c); got != c.String() {
 				t.Errorf("consistencyName(%v) = %q, want %q", c, got, c.String())
 			}
 		}
-		if got := InternalConsistencyName(cqltype.Consistency(0x42)); got != "" {
+		if got := consistencyName(cqltype.Consistency(0x42)); got != "" {
 			t.Errorf("consistencyName(0x42) = %q, want it omitted: outside the schema enum", got)
 		}
 	})
@@ -691,7 +691,7 @@ func TestDriverConfigReport(t *testing.T) {
 			return opaqueStorageValue
 		}()
 
-		cfg := InternalSessionControlConnConfig(s)
+		cfg := sessionControlConnConfig(s)
 		if !cfg.InternalIsControlConn {
 			t.Error("expected the control connection config to be marked as such")
 		}
@@ -713,7 +713,7 @@ func TestDriverConfigReport(t *testing.T) {
 			&namedPolicy{},
 			struct{ retry.Policy }{},
 		} {
-			if got := InternalCustomPolicyName(v); got == "" {
+			if got := customPolicyName(v); got == "" {
 				t.Errorf("customPolicyName(%T) is empty, which the schema rejects", v)
 			}
 		}
@@ -730,7 +730,7 @@ func TestDriverConfigReport(t *testing.T) {
 		}{
 			{
 				name:          "control connection",
-				connConfig:    InternalSessionControlConnConfig,
+				connConfig:    sessionControlConnConfig,
 				wantReporting: true,
 			},
 			{
@@ -790,7 +790,7 @@ func TestDriverConfigReport(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				hosts := InternalSessionGetHosts(session)
+				hosts := sessionGetHosts(session)
 				if len(hosts) == 0 {
 					t.Fatal("expected at least one host in the session")
 				}
@@ -799,7 +799,7 @@ func TestDriverConfigReport(t *testing.T) {
 				startupsBeforeDial := startups
 				mu.Unlock()
 
-				conn, err := InternalSessionDial(session, SessionData(session).InternalCtx, hosts[0], tt.connConfig(session), transport.InternalConnErrorHandlerFn(func(*transport.Conn, error, bool) {}))
+				conn, err := sessionDial(session, SessionData(session).InternalCtx, hosts[0], tt.connConfig(session), transport.InternalConnErrorHandlerFn(func(*transport.Conn, error, bool) {}))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -848,8 +848,8 @@ func TestDriverConfigReport(t *testing.T) {
 			if configured > 0 {
 				gen = streams.NewLimited(configured)
 			}
-			want := min(gen.Available(), InternalMaxReportableInFlight)
-			if got := InternalEffectiveInFlightMax(configured); got != want {
+			want := min(gen.Available(), maxReportableInFlight)
+			if got := effectiveInFlightMax(configured); got != want {
 				t.Errorf("effectiveInFlightMax(%d) = %d, but the generator allows %d", configured, got, want)
 			}
 		}
@@ -873,7 +873,7 @@ func TestDriverConfigReport(t *testing.T) {
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				if diff := cmp.Diff(tt.want, InternalPositiveMillis(tt.d)); diff != "" {
+				if diff := cmp.Diff(tt.want, positiveMillis(tt.d)); diff != "" {
 					t.Errorf("positiveMillis(%v) mismatch:\n%s", tt.d, diff)
 				}
 			})
@@ -1006,7 +1006,7 @@ func TestDriverConfigReport(t *testing.T) {
 			cfg.HostDialer = hostDialer
 
 			_, canDialShard := hostDialer.(endpoint.ShardDialer)
-			if got := InternalShardAwareEnabled(&cfg); got != canDialShard {
+			if got := shardAwareEnabled(&cfg); got != canDialShard {
 				t.Errorf("%T: reported %v, but dialWithoutObserver would take the shard-aware path = %v",
 					hostDialer, got, canDialShard)
 			}
@@ -1059,7 +1059,7 @@ func TestDriverConfigReport(t *testing.T) {
 			}
 			defer session.Close()
 
-			if SessionData(session).InternalDriverConfigReporter != nil {
+			if SessionData(session).driverConfigReporter != nil {
 				t.Error("expected a session with reporting disabled to hold no reporter")
 			}
 
@@ -1067,7 +1067,7 @@ func TestDriverConfigReport(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			hosts := InternalSessionGetHosts(session)
+			hosts := sessionGetHosts(session)
 			if len(hosts) == 0 {
 				t.Fatal("expected at least one host in the session")
 			}
@@ -1075,7 +1075,7 @@ func TestDriverConfigReport(t *testing.T) {
 			// Dial with the config that reports when the option is left at its
 			// default, so that the option is the only reason DRIVER_CONFIG is absent
 			// below rather than the connection simply not being a control connection.
-			conn, err := InternalSessionDial(session, SessionData(session).InternalCtx, hosts[0], InternalSessionControlConnConfig(session), transport.InternalConnErrorHandlerFn(func(*transport.Conn, error, bool) {}))
+			conn, err := sessionDial(session, SessionData(session).InternalCtx, hosts[0], sessionControlConnConfig(session), transport.InternalConnErrorHandlerFn(func(*transport.Conn, error, bool) {}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1178,7 +1178,7 @@ func TestDriverConfigReport(t *testing.T) {
 		t.Run("EncodesReport", func(t *testing.T) {
 			cfg := *InternalNewClusterSettings("127.0.0.1")
 			s := newTestReportSession(cfg, TokenAwareHostPolicy(RoundRobinHostPolicy()))
-			reporter := InternalNewDriverConfigReporter(s)
+			reporter := newDriverConfigReporter(s)
 
 			opts := map[string]string{}
 			reporter.InternalUpdateStartupOptions(opts, false)
@@ -1217,7 +1217,7 @@ func TestDriverConfigReport(t *testing.T) {
 		t.Run("ScyllaConnGatesServerSideMs", func(t *testing.T) {
 			cfg := *InternalNewClusterSettings("127.0.0.1")
 			s := newTestReportSession(cfg, TokenAwareHostPolicy(RoundRobinHostPolicy()))
-			reporter := InternalNewDriverConfigReporter(s)
+			reporter := newDriverConfigReporter(s)
 
 			for _, isScylla := range []bool{false, true} {
 				opts := map[string]string{}

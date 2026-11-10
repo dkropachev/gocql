@@ -66,7 +66,7 @@ type Core struct {
 
 }
 
-func InternalNewSessionCommon(cfg InternalClusterSettings) (*Core, error) {
+func newSessionCommon(cfg InternalClusterSettings) (*Core, error) {
 	return newSessionCommonWithRuntime(cfg, nil, nil)
 }
 
@@ -97,9 +97,9 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 	}
 
 	if !cfg.DisableDriverConfigReporting {
-		s.privateStorage.InternalDriverConfigReporter = InternalNewDriverConfigReporter(s)
+		s.privateStorage.driverConfigReporter = newDriverConfigReporter(s)
 	}
-	s.privateStorage.id = InternalNewSessionID(s.privateStorage.InternalLogger)
+	s.privateStorage.id = newSessionID(s.privateStorage.InternalLogger)
 
 	// Close created resources on error otherwise they'll leak
 	var err error
@@ -116,7 +116,7 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 		runtimeConfig = initialize(s, *typedConfig)
 	}
 	//Check the TLS Config before trying to connect to anything external
-	connCfg, err := InternalConnConfig(&s.privateStorage.InternalCfg)
+	connCfg, err := connConfig(&s.privateStorage.InternalCfg)
 	if err != nil {
 		//TODO: Return a typed error
 		return nil, fmt.Errorf("gocql: unable to create session: %w", err)
@@ -129,12 +129,12 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 		connCfg.TypedLimits = runtimeConfig.Limits
 		InternalSessionConfigureV2Peripheral(s, *runtimeConfig)
 		if s.privateStorage.InternalClientRoutesHandler != nil {
-			s.privateStorage.InternalClientRoutesHandler.privateStorage.InternalPickTLSPorts = runtimeConfig.ClientRoutes.TLS
+			s.privateStorage.InternalClientRoutesHandler.privateStorage.pickTLSPorts = runtimeConfig.ClientRoutes.TLS
 		}
 	}
 	s.privateStorage.InternalMetadataDescriber = InternalNewMetadataDescriber(s)
-	s.privateStorage.InternalEventBus = eventbus.New[events.Event](cfg.EventBusConfig, cfg.Logger)
-	if err = s.privateStorage.InternalEventBus.Start(); err != nil {
+	s.privateStorage.eventBus = eventbus.New[events.Event](cfg.EventBusConfig, cfg.Logger)
+	if err = s.privateStorage.eventBus.Start(); err != nil {
 		return nil, fmt.Errorf("gocql: unable to create session: %w", err)
 	}
 	s.privateStorage.InternalNodeEvents = InternalNewEventDebouncer("NodeEvents", func(receiver *Core) func(a0 []protocol.Frame) {
@@ -179,11 +179,11 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 // (golang/go#66821). Since RandomUUID's signature still admits an error,
 // handling it costs little and keeps the id unconditional whatever a future
 // implementation does.
-func InternalNewSessionID(logger logging.StdLogger) string {
+func newSessionID(logger logging.StdLogger) string {
 	id, err := cqltype.RandomUUID()
 	if err != nil {
 		logger.Printf("gocql: unable to generate a random session id, falling back to a pseudo-random one: %v", err)
-		id = InternalPseudoRandomUUID()
+		id = pseudoRandomUUID()
 	}
 	return id.String()
 }
@@ -193,7 +193,7 @@ func InternalNewSessionID(logger logging.StdLogger) string {
 // aborting the process. A session id merely correlates the connections of one
 // session in system.clients and is never a security token, so a weaker source
 // of randomness is preferable to no id at all.
-func InternalPseudoRandomUUID() cqltype.UUID {
+func pseudoRandomUUID() cqltype.UUID {
 	var u cqltype.UUID
 	binary.BigEndian.PutUint64(u[:8], mrand.Uint64())
 	binary.BigEndian.PutUint64(u[8:], mrand.Uint64())
@@ -218,8 +218,8 @@ func (s *Core) ID() string {
 }
 
 // connectSettings wraps an existing Node.
-func InternalConnectSettings(cfg InternalClusterSettings) (*Core, error) {
-	s, err := InternalNewSessionCommon(cfg)
+func connectSettings(cfg InternalClusterSettings) (*Core, error) {
+	s, err := newSessionCommon(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -236,8 +236,8 @@ func InternalConnectSettings(cfg InternalClusterSettings) (*Core, error) {
 	return s, nil
 }
 
-func InternalConnectSettingsAsync(cfg InternalClusterSettings) (*Core, error) {
-	s, err := InternalNewSessionCommon(cfg)
+func connectSettingsAsync(cfg InternalClusterSettings) (*Core, error) {
+	s, err := newSessionCommon(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -261,8 +261,8 @@ func InternalConnectSettingsAsync(cfg InternalClusterSettings) (*Core, error) {
 // filter: optional filter function (can be nil to receive all events)
 //
 // Returns a Subscriber instance that provides access to events and a Stop method.
-func InternalSessionSubscribeToEvents(s *Core, name string, queueSize int, filter eventbus.FilterFunc[events.Event]) *eventbus.Subscriber[events.Event] {
-	return s.privateStorage.InternalEventBus.Subscribe(name, queueSize, filter)
+func sessionSubscribeToEvents(s *Core, name string, queueSize int, filter eventbus.FilterFunc[events.Event]) *eventbus.Subscriber[events.Event] {
+	return s.privateStorage.eventBus.Subscribe(name, queueSize, filter)
 }
 
 func (s *Core) init() error {
@@ -278,7 +278,7 @@ func (s *Core) init() error {
 	var partitioner string
 
 	if !s.privateStorage.InternalCfg.privateStorage.InternalDisableControlConn {
-		s.privateStorage.InternalControl = InternalCreateControlConn(s)
+		s.privateStorage.InternalControl = createControlConn(s)
 		reconnectionPolicy := s.privateStorage.InternalCfg.InitialReconnectionPolicy
 		// Validate rejects a non-positive limit, but a custom policy can still
 		// return one here; read it once so the loop runs at least once.
@@ -322,7 +322,7 @@ func (s *Core) init() error {
 
 		conn := s.privateStorage.InternalControl.InternalGetConn().InternalConn.(*transport.Conn)
 		conn.InternalMu.Lock()
-		s.privateStorage.InternalTabletsRoutingV1 = conn.InternalIsTabletSupported()
+		s.privateStorage.tabletsRoutingV1 = conn.InternalIsTabletSupported()
 		conn.InternalMu.Unlock()
 		s.privateStorage.InternalHostSource.setControlConn(s.privateStorage.InternalControl)
 
@@ -347,7 +347,7 @@ func (s *Core) init() error {
 			}
 		}
 
-		newer, _ := InternalCheckSystemSchema(s.privateStorage.InternalControl)
+		newer, _ := checkSystemSchema(s.privateStorage.InternalControl)
 		s.privateStorage.InternalUseSystemSchema = newer
 		defer conn.InternalFinalizeConnection()
 	} else {
@@ -454,7 +454,7 @@ func (s *Core) init() error {
 		return fmt.Errorf("gocql: unable to create session: %w", err)
 	}
 	s.privateStorage.InternalSessionStateMu.Lock()
-	s.privateStorage.InternalIsInitialized = true
+	s.privateStorage.isInitialized = true
 	s.privateStorage.InternalSessionStateMu.Unlock()
 
 	return nil
@@ -559,8 +559,8 @@ func (s *Core) Close() error {
 		s.privateStorage.InternalSchemaEvents.InternalStop()
 	}
 
-	if s.privateStorage.InternalEventBus != nil {
-		_ = s.privateStorage.InternalEventBus.Stop()
+	if s.privateStorage.eventBus != nil {
+		_ = s.privateStorage.eventBus.Stop()
 	}
 
 	if s.privateStorage.InternalRingRefresher != nil {
@@ -589,7 +589,7 @@ func (s *Core) Close() error {
 
 // InternalSessionMarkClosed marks the session closed without shutting it down,
 // for tests of closed-session behaviour.
-func InternalSessionMarkClosed(s *Core) {
+func sessionMarkClosed(s *Core) {
 	s.privateStorage.InternalSessionStateMu.Lock()
 	s.privateStorage.InternalIsClosed = true
 	s.privateStorage.closedOrClosing.Store(true)
@@ -602,37 +602,37 @@ func (s *Core) Closed() bool {
 
 func (s *Core) initialized() bool {
 	s.privateStorage.InternalSessionStateMu.RLock()
-	initialized := s.privateStorage.InternalIsInitialized
+	initialized := s.privateStorage.isInitialized
 	s.privateStorage.InternalSessionStateMu.RUnlock()
 	return initialized
 }
 
-func InternalSessionReady(s *Core) error {
+func sessionReady(s *Core) error {
 	s.privateStorage.InternalSessionStateMu.RLock()
 	err := runtimeerrors.ErrSessionNotReady
-	if s.privateStorage.InternalIsInitialized || s.privateStorage.initErr != nil {
+	if s.privateStorage.isInitialized || s.privateStorage.initErr != nil {
 		err = s.privateStorage.initErr
 	}
 	s.privateStorage.InternalSessionStateMu.RUnlock()
 	return err
 }
 
-func InternalSessionWaitUntilReady(s *Core) error {
+func sessionWaitUntilReady(s *Core) error {
 	<-s.privateStorage.readyCh
 	return s.privateStorage.initErr
 }
 
-func InternalSessionRemoveHost(s *Core, h *implEndpoint.HostInfo) {
+func sessionRemoveHost(s *Core, h *implEndpoint.HostInfo) {
 	s.privateStorage.InternalPolicy.RemoveHost(h)
 	s.privateStorage.InternalPool.InternalRemoveHost(implEndpoint.InternalHostInfoHostUUID(h))
 	s.privateStorage.InternalHostSource.InternalRemoveHost(h.HostID())
 }
 
 // KeyspaceMetadata returns the schema metadata for the keyspace specified. Returns an error if the keyspace does not exist.
-func InternalSessionKeyspaceMetadata(s *Core, keyspace string) (*metadata.KeyspaceMetadata, error) {
+func sessionKeyspaceMetadata(s *Core, keyspace string) (*metadata.KeyspaceMetadata, error) {
 	if s.Closed() {
 		return nil, runtimeerrors.ErrSessionClosed
-	} else if err := InternalSessionReady(s); err != nil {
+	} else if err := sessionReady(s); err != nil {
 		return nil, err
 	} else if keyspace == "" {
 		return nil, runtimeerrors.ErrNoKeyspace
@@ -642,10 +642,10 @@ func InternalSessionKeyspaceMetadata(s *Core, keyspace string) (*metadata.Keyspa
 }
 
 // TableMetadata returns the schema metadata for the specified table. Returns an error if the keyspace or table does not exist.
-func InternalSessionTableMetadata(s *Core, keyspace, table string) (*metadata.TableMetadata, error) {
+func sessionTableMetadata(s *Core, keyspace, table string) (*metadata.TableMetadata, error) {
 	if s.Closed() {
 		return nil, runtimeerrors.ErrSessionClosed
-	} else if err := InternalSessionReady(s); err != nil {
+	} else if err := sessionReady(s); err != nil {
 		return nil, err
 	} else if keyspace == "" {
 		return nil, runtimeerrors.ErrNoKeyspace
@@ -660,27 +660,27 @@ func InternalSessionTableMetadata(s *Core, keyspace, table string) (*metadata.Ta
 //
 // Deprecated: Use [Session.TableTabletsMetadata] for per-table lookups or
 // [Session.ForEachTablet] to iterate without aggregating into a flat list.
-func InternalSessionTabletsMetadata(s *Core) (tablets.TabletInfoList, error) {
+func sessionTabletsMetadata(s *Core) (tablets.TabletInfoList, error) {
 	if s.Closed() {
 		return nil, runtimeerrors.ErrSessionClosed
-	} else if err := InternalSessionReady(s); err != nil {
+	} else if err := sessionReady(s); err != nil {
 		return nil, err
-	} else if !s.privateStorage.InternalTabletsRoutingV1 {
+	} else if !s.privateStorage.tabletsRoutingV1 {
 		return nil, runtimeerrors.ErrTabletsNotUsed
 	}
 
-	return s.privateStorage.InternalMetadataDescriber.InternalGetTablets(), nil
+	return s.privateStorage.InternalMetadataDescriber.getTablets(), nil
 }
 
 // TableTabletsMetadata returns the tablet metadata for the specified keyspace and table.
 // Returns (nil, nil) when no tablets exist for the given keyspace/table.
-func InternalSessionTableTabletsMetadata(s *Core, keyspace, table string) (tablets.TabletEntryList, error) {
+func sessionTableTabletsMetadata(s *Core, keyspace, table string) (tablets.TabletEntryList, error) {
 	// fail fast
 	if s.Closed() {
 		return nil, runtimeerrors.ErrSessionClosed
-	} else if err := InternalSessionReady(s); err != nil {
+	} else if err := sessionReady(s); err != nil {
 		return nil, err
-	} else if !s.privateStorage.InternalTabletsRoutingV1 {
+	} else if !s.privateStorage.tabletsRoutingV1 {
 		return nil, runtimeerrors.ErrTabletsNotUsed
 	} else if keyspace == "" {
 		return nil, runtimeerrors.ErrNoKeyspace
@@ -694,13 +694,13 @@ func InternalSessionTableTabletsMetadata(s *Core, keyspace, table string) (table
 // ForEachTablet iterates over all keyspace/table pairs and their tablet entries,
 // calling fn for each one. If fn returns false, iteration stops early.
 // The entries slice is a shallow copy; do not mutate individual entries.
-func InternalSessionForEachTablet(s *Core, fn func(keyspace, table string, entries tablets.TabletEntryList) bool) error {
+func sessionForEachTablet(s *Core, fn func(keyspace, table string, entries tablets.TabletEntryList) bool) error {
 	// fail fast
 	if s.Closed() {
 		return runtimeerrors.ErrSessionClosed
-	} else if err := InternalSessionReady(s); err != nil {
+	} else if err := sessionReady(s); err != nil {
 		return err
-	} else if !s.privateStorage.InternalTabletsRoutingV1 {
+	} else if !s.privateStorage.tabletsRoutingV1 {
 		return runtimeerrors.ErrTabletsNotUsed
 	}
 	if fn == nil {
@@ -732,7 +732,7 @@ func InternalSessionGetConn(s *Core) *transport.Conn {
 // routingKeyInfoCacheKey avoids concatenating keyspace+stmt into a string on
 // every cache lookup; lru.Cache already takes a comparable key type for
 // exactly this reason.
-func InternalSessionGetHosts(s *Core) []*implEndpoint.HostInfo {
+func sessionGetHosts(s *Core) []*implEndpoint.HostInfo {
 	return s.privateStorage.InternalHostSource.InternalGetHostsList()
 }
 
@@ -742,7 +742,7 @@ func InternalSessionGetHosts(s *Core) []*implEndpoint.HostInfo {
 // The explicit nil matters: returning the *hostConnPool unconditionally would
 // box a nil pointer into a non-nil HostPoolInfo, so a caller's `if pool != nil`
 // would pass and the first method call would panic.
-func InternalSessionGetHostPoolByID(s *Core, hostID string) pool.HostPoolInfo {
+func sessionGetHostPoolByID(s *Core, hostID string) pool.HostPoolInfo {
 	hostPool, ok := s.privateStorage.InternalPool.InternalGetPoolByHostID(hostID)
 	if !ok {
 		return nil
@@ -756,7 +756,7 @@ func InternalSessionGetHostPoolByID(s *Core, hostID string) pool.HostPoolInfo {
 // iter runs while an internal lock on the pool is held, so it must not call
 // back into the Session -- anything that adds or removes a host, or closes the
 // session, will deadlock -- and it should not block.
-func InternalSessionIterateHostPools(s *Core, iter func(info pool.HostPoolInfo) bool) {
+func sessionIterateHostPools(s *Core, iter func(info pool.HostPoolInfo) bool) {
 	s.privateStorage.InternalPool.InternalIteratePool(iter)
 }
 

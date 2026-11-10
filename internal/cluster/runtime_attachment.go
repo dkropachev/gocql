@@ -14,7 +14,7 @@ import (
 )
 
 type InternalExecutionWaiter interface{ Wait() }
-type InternalExecutionLifecycle interface {
+type executionLifecycle interface {
 	Trace(context.Context, cqltype.UUID) (TraceInfo, error)
 	StopPrepared() InternalExecutionWaiter
 	StopActive() InternalExecutionWaiter
@@ -23,7 +23,7 @@ type InternalExecutionLifecycle interface {
 	ConfigSnapshot() settings.Config
 }
 
-func InternalCurrentExecution(s *Core) InternalExecutionLifecycle {
+func InternalCurrentExecution(s *Core) executionLifecycle {
 	s.privateStorage.InternalTypedMu.Lock()
 	defer s.privateStorage.InternalTypedMu.Unlock()
 	return s.privateStorage.InternalTypedState

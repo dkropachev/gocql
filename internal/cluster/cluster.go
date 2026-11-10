@@ -58,7 +58,7 @@ type PoolConfig struct {
 }
 
 func (p PoolConfig) buildPool(session *Core) *pool.InternalPolicyConnPool {
-	return InternalNewPolicyConnPool(session)
+	return newPolicyConnPool(session)
 }
 
 // clusterSettings is a struct to configure the default cluster implementation
@@ -149,7 +149,7 @@ type InternalClusterSettings struct {
 	// set to a non-zero value, embedded ports in host strings are ignored for
 	// the purpose of peer discovery.
 	Hosts          []string
-	privateStorage InternalClusterSettingsStorage
+	privateStorage clusterSettingsStorage
 	// The time to wait for frames before flushing the frames connection to Cassandra.
 	// Can help reduce syscall overhead by making less calls to write. Set to 0 to
 	// disable.
@@ -382,7 +382,7 @@ func InternalNewClusterSettings(hosts ...string) *InternalClusterSettings {
 		MaxExcessShardConnectionsRate: 2,
 		NumConns:                      2,
 		Consistency:                   cqltype.Quorum,
-		MaxPreparedStmts:              InternalDefaultMaxPreparedStmts,
+		MaxPreparedStmts:              defaultMaxPreparedStmts,
 		MaxRoutingKeyInfo:             1000,
 		PageSize:                      5000,
 		DefaultTimestamp:              true,
@@ -417,11 +417,11 @@ func (cfg *InternalClusterSettings) logger() logging.StdLogger {
 // open initializes the cluster based on this config and returns a
 // session object that can be used to interact with the database.
 func InternalClusterSettingsOpen(cfg *InternalClusterSettings) (*Core, error) {
-	return InternalConnectSettings(*cfg)
+	return connectSettings(*cfg)
 }
 
 func (cfg *InternalClusterSettings) openAsync() (*Core, error) {
-	return InternalConnectSettingsAsync(*cfg)
+	return connectSettingsAsync(*cfg)
 }
 
 func InternalClusterSettingsFilterHost(cfg *InternalClusterSettings, host *endpoint.HostInfo) bool {
@@ -433,7 +433,7 @@ func (cfg *InternalClusterSettings) ValidateAndInitSSL() error {
 	if cfg.SslOpts == nil {
 		return nil
 	}
-	actualTLSConfig, err := InternalSetupTLSConfig(cfg.SslOpts, cfg.logger())
+	actualTLSConfig, err := setupTLSConfig(cfg.SslOpts, cfg.logger())
 	if err != nil {
 		return fmt.Errorf("failed to initialize ssl configuration: %w", err)
 	}
@@ -442,7 +442,7 @@ func (cfg *InternalClusterSettings) ValidateAndInitSSL() error {
 	return nil
 }
 
-func InternalClusterSettingsGetActualTLSConfig(cfg *InternalClusterSettings) *tls.Config {
+func clusterSettingsGetActualTLSConfig(cfg *InternalClusterSettings) *tls.Config {
 	if cfg.privateStorage.actualSslOpts == nil {
 		return nil
 	}
@@ -595,17 +595,17 @@ func (cfg *InternalClusterSettings) Validate() error {
 		// ports by design, so a uniform port derived from the initial contact
 		// points would be incorrect for peer-discovered nodes.
 		if cfg.ClientRoutesConfig == nil {
-			learned, err := InternalLearnPortFromHosts(cfg.Hosts)
+			learned, err := learnPortFromHosts(cfg.Hosts)
 			if err != nil {
 				return err
 			}
 			if learned != 0 {
 				cfg.Port = learned
 			} else {
-				cfg.Port = InternalDefaultCQLPort
+				cfg.Port = defaultCQLPort
 			}
 		} else {
-			cfg.Port = InternalDefaultCQLPort
+			cfg.Port = defaultCQLPort
 		}
 	}
 
@@ -701,7 +701,7 @@ func (cfg *InternalClusterSettings) Validate() error {
 	return cfg.ValidateAndInitSSL()
 }
 
-const InternalDefaultCQLPort = 9042
+const defaultCQLPort = 9042
 
 var (
 	ErrNoHosts              = runtimeerrors.ErrNoHosts
@@ -714,7 +714,7 @@ var (
 // port, 0 if no entry carries a port, or an error as soon as inconsistency
 // is detected: some entries have a port while others don't, or two entries
 // carry different port values.
-func InternalLearnPortFromHosts(hosts []string) (int, error) {
+func learnPortFromHosts(hosts []string) (int, error) {
 	var port int // 0 = not yet seen
 	sawPortless := false
 	for _, addr := range hosts {
@@ -752,7 +752,7 @@ func InternalLearnPortFromHosts(hosts []string) (int, error) {
 	return port, nil
 }
 
-func InternalSetupTLSConfig(sslOpts *transport.SslOptions, logger logging.StdLogger) (*tls.Config, error) {
+func setupTLSConfig(sslOpts *transport.SslOptions, logger logging.StdLogger) (*tls.Config, error) {
 	//  Config.InsecureSkipVerify | EnableHostVerification | Result
 	//  Config is nil             | true                   | verify host
 	//  Config is nil             | false                  | do not verify host
@@ -812,7 +812,7 @@ func InternalSetupTLSConfig(sslOpts *transport.SslOptions, logger logging.StdLog
 	// This ensures that the entire certificate chain is properly validated,
 	// not just that one intermediate certificate is trusted.
 	if !tlsConfig.InsecureSkipVerify && !sslOpts.DisableStrictCertificateValidation {
-		strictVerify := InternalStrictVerifyPeerCertificate(tlsConfig.RootCAs)
+		strictVerify := strictVerifyPeerCertificate(tlsConfig.RootCAs)
 		existingVerify := tlsConfig.VerifyPeerCertificate
 		tlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 			if err := strictVerify(rawCerts, verifiedChains); err != nil {
@@ -832,7 +832,7 @@ func InternalSetupTLSConfig(sslOpts *transport.SslOptions, logger logging.StdLog
 // certificate chain validation by explicitly calling cert.Verify(). This ensures that
 // the certificate chain is properly validated against the configured root CAs and
 // intermediate certificates, rather than relying on Go's default TLS behavior.
-func InternalStrictVerifyPeerCertificate(rootCAs *x509.CertPool) func([][]byte, [][]*x509.Certificate) error {
+func strictVerifyPeerCertificate(rootCAs *x509.CertPool) func([][]byte, [][]*x509.Certificate) error {
 	return func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 		chains := verifiedChains
 		if len(chains) == 0 {

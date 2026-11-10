@@ -52,7 +52,7 @@ func TestCassType(t *testing.T) {
 			t.Run(test.name, func(t *testing.T) {
 				t.Parallel()
 
-				got, ok := InternalAsVectorType(cqltype.NewCustomType(protocol.ProtoVersion4, cqltype.TypeCustom, test.typ))
+				got, ok := asVectorType(cqltype.NewCustomType(protocol.ProtoVersion4, cqltype.TypeCustom, test.typ))
 				if ok != test.wantOK {
 					t.Fatalf("asVectorType(%q) ok = %t, want %t (got %#v)", test.typ, ok, test.wantOK, got)
 				}
@@ -88,7 +88,7 @@ func TestCassType(t *testing.T) {
 					t.Parallel()
 
 					logger := &logging.InternalTestLogger{}
-					InternalGetCassandraLongType(test.typ, 0, logger)
+					getCassandraLongType(test.typ, 0, logger)
 
 					got := logger.String()
 					if !strings.Contains(got, test.want) {
@@ -131,7 +131,7 @@ func TestCassType(t *testing.T) {
 				t.Run(test.name, func(t *testing.T) {
 					t.Parallel()
 
-					assertResolvedType(t, test.typ, InternalGetCassandraLongType(test.typ, 0, logging.InternalNopLogger{}), test.want)
+					assertResolvedType(t, test.typ, getCassandraLongType(test.typ, 0, logging.InternalNopLogger{}), test.want)
 				})
 			}
 		})
@@ -188,7 +188,7 @@ func TestCassType(t *testing.T) {
 				t.Run(test.name, func(t *testing.T) {
 					t.Parallel()
 
-					assertResolvedType(t, test.typ, InternalGetCassandraLongType(test.typ, 0, logging.InternalNopLogger{}), test.want)
+					assertResolvedType(t, test.typ, getCassandraLongType(test.typ, 0, logging.InternalNopLogger{}), test.want)
 				})
 			}
 		})

@@ -18,8 +18,8 @@ var _ endpoint.InternalCqlProtocolExtension = &endpoint.InternalScyllaUseMetadat
 
 // Returns a partitioner specific to the table, or "nil"
 // if the cluster-global partitioner should be used
-func InternalScyllaGetTablePartitioner(session *Core, keyspaceName, tableName string) (endpoint.Partitioner, error) {
-	isCdc, err := InternalScyllaIsCdcTable(session, keyspaceName, tableName)
+func scyllaGetTablePartitioner(session *Core, keyspaceName, tableName string) (endpoint.Partitioner, error) {
+	isCdc, err := scyllaIsCdcTable(session, keyspaceName, tableName)
 	if err != nil {
 		return nil, err
 	}

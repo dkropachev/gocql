@@ -61,13 +61,13 @@ func tID(n int) string {
 
 func createPolicy(keyspace string, shuffle bool) HostSelectionPolicy {
 	policy := TokenAwareHostPolicy(RoundRobinHostPolicy())
-	policyInternal := policy.(*InternalTokenAwareHostPolicy)
-	InternalTokenAwareHostPolicyData(policyInternal).InternalGetKeyspaceName = func() string { return keyspace }
-	InternalTokenAwareHostPolicyData(policyInternal).InternalGetKeyspaceMetadata = func(ks string) (*metadata.KeyspaceMetadata, error) {
+	policyInternal := policy.(*tokenAwareHostPolicy)
+	tokenAwareHostPolicyData(policyInternal).getKeyspaceName = func() string { return keyspace }
+	tokenAwareHostPolicyData(policyInternal).getKeyspaceMetadata = func(ks string) (*metadata.KeyspaceMetadata, error) {
 		return nil, errors.New("not initalized")
 	}
 	policy.SetPartitioner("OrderedPartitioner")
-	InternalTokenAwareHostPolicyData(policyInternal).InternalGetKeyspaceMetadata = func(keyspaceName string) (*metadata.KeyspaceMetadata, error) {
+	tokenAwareHostPolicyData(policyInternal).getKeyspaceMetadata = func(keyspaceName string) (*metadata.KeyspaceMetadata, error) {
 		if keyspaceName != keyspace {
 			return nil, fmt.Errorf("unknown keyspace: %s", keyspaceName)
 		}
@@ -80,7 +80,7 @@ func createPolicy(keyspace string, shuffle bool) HostSelectionPolicy {
 			},
 		}, nil
 	}
-	InternalTokenAwareHostPolicyData(policyInternal).InternalShuffleReplicas = shuffle
+	tokenAwareHostPolicyData(policyInternal).shuffleReplicas = shuffle
 	policy.KeyspaceChanged(KeyspaceUpdateEvent{Keyspace: keyspace})
 	return policy
 }

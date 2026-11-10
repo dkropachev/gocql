@@ -16,7 +16,7 @@ import (
 )
 
 func InternalSessionTypedGeneration(s *Core) uint64 {
-	return InternalSessionTypedSchemaGeneration(s)
+	return sessionTypedSchemaGeneration(s)
 }
 
 // InternalSessionSelectTypedConn returns a connection for a request: from the
@@ -38,7 +38,7 @@ func InternalSessionSelectTypedConn(s *Core, ctx context.Context, routing model.
 			if !ok {
 				return nil, runtimeerrors.ErrNoConnections
 			}
-			if conn := InternalSessionPickRoute(s, r, routing); conn != nil {
+			if conn := sessionPickRoute(s, r, routing); conn != nil {
 				return conn, nil
 			}
 		}
@@ -48,7 +48,7 @@ func InternalSessionSelectTypedConn(s *Core, ctx context.Context, routing model.
 		if routing.ShardID.Set {
 			shard = int32(min(routing.ShardID.Value, math.MaxInt32))
 		}
-		if conn := InternalSessionPickRoute(s, implRouting.InternalNewRoute(s.privateStorage.InternalPool.InternalRoute(routing.HostID.Value), shard), routing); conn != nil {
+		if conn := sessionPickRoute(s, implRouting.InternalNewRoute(s.privateStorage.InternalPool.InternalRoute(routing.HostID.Value), shard), routing); conn != nil {
 			return conn, nil
 		}
 		return nil, runtimeerrors.ErrNoConnections
@@ -60,7 +60,7 @@ func InternalSessionSelectTypedConn(s *Core, ctx context.Context, routing model.
 	start := int(s.privateStorage.nextTypedHost.Add(1) % uint64(len(hosts)))
 	for i := 0; i < len(hosts); i++ {
 		r := implRouting.InternalNewRoute(s.privateStorage.InternalPool.InternalRoute(implEndpoint.InternalHostInfoHostUUID(hosts[(start+i)%len(hosts)])), implRouting.AnyShard)
-		if conn := InternalSessionPickRoute(s, r, routing); conn != nil {
+		if conn := sessionPickRoute(s, r, routing); conn != nil {
 			return conn, nil
 		}
 	}
@@ -69,7 +69,7 @@ func InternalSessionSelectTypedConn(s *Core, ctx context.Context, routing model.
 
 // InternalSessionPickRoute returns a connection of r's host for r's shard,
 // or nil. A route that belongs to no session resolves its host by ID.
-func InternalSessionPickRoute(s *Core, r implRouting.Route, routing model.RoutingInfo) *transport.Conn {
+func sessionPickRoute(s *Core, r implRouting.Route, routing model.RoutingInfo) *transport.Conn {
 	host := r.InternalHost()
 	if host == nil || routing.HostID.Set && host.ID() != routing.HostID.Value {
 		return nil

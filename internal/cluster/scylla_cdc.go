@@ -14,14 +14,14 @@ var _ endpoint.Partitioner = endpoint.InternalScyllaCDCPartitioner{InternalLogge
 
 var _ endpoint.InternalInt64Hasher = endpoint.InternalScyllaCDCPartitioner{}
 
-func InternalScyllaIsCdcTable(session *Core, keyspaceName, tableName string) (bool, error) {
+func scyllaIsCdcTable(session *Core, keyspaceName, tableName string) (bool, error) {
 	if !strings.HasSuffix(tableName, endpoint.InternalScyllaCDCLogTableNameSuffix) {
 		// Not a CDC table, use the default partitioner
 		return false, nil
 	}
 
 	// Check if the table has the CDC partitioner set.
-	tableMeta, err := InternalSessionTableMetadata(session, keyspaceName, tableName)
+	tableMeta, err := sessionTableMetadata(session, keyspaceName, tableName)
 	if err != nil {
 		return false, err
 	}

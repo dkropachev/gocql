@@ -803,7 +803,7 @@ func TestHostInfo(t *testing.T) {
 				"unknown_column":    42,
 			}
 
-			h, err := InternalHostInfoFromMap(row, 9042)
+			h, err := hostInfoFromMap(row, 9042)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -841,7 +841,7 @@ func TestHostInfo(t *testing.T) {
 		t.Run("PeersV2", func(t *testing.T) {
 			t.Parallel()
 
-			h, err := InternalHostInfoFromMap(map[string]any{
+			h, err := hostInfoFromMap(map[string]any{
 				"native_address": "10.1.0.1",
 				"native_port":    19042,
 			}, 9042)
@@ -863,7 +863,7 @@ func TestHostInfo(t *testing.T) {
 				"broadcast_address", "preferred_ip", "rpc_address", "native_address", "listen_address",
 				"native_port", "tokens", "schema_version",
 			} {
-				_, err := InternalHostInfoFromMap(map[string]any{col: struct{}{}}, 9042)
+				_, err := hostInfoFromMap(map[string]any{col: struct{}{}}, 9042)
 				if err == nil || err.Error() != "Assertion failed for "+col {
 					t.Errorf("%s: err = %v, want an assertion error for the column", col, err)
 				}

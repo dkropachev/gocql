@@ -65,18 +65,18 @@ func DenyAllFilter() HostFilter {
 // can reach it, and every filter built from one is indistinguishable as a
 // HostFilterFunc. driver_config.go reports this filter as the part of the
 // cluster the driver holds connections to.
-type InternalDataCenterHostFilter struct {
+type dataCenterHostFilter struct {
 	dataCenter string
 }
 
-func (f InternalDataCenterHostFilter) Accept(host *implEndpoint.HostInfo) bool {
+func (f dataCenterHostFilter) Accept(host *implEndpoint.HostInfo) bool {
 	return host.DataCenter() == f.dataCenter
 }
 
 // DataCenterHostFilter filters all hosts such that they are in the same data center
 // as the supplied data center.
 func DataCenterHostFilter(dataCenter string) HostFilter {
-	return InternalDataCenterHostFilter{dataCenter: dataCenter}
+	return dataCenterHostFilter{dataCenter: dataCenter}
 }
 
 // Deprecated: Use DataCenterHostFilter instead.

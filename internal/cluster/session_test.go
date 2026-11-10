@@ -52,19 +52,19 @@ func TestSession(t *testing.T) {
 	t.Run("EventBus", func(t *testing.T) {
 		s := func() *Core {
 			opaqueStorageValue := new(Core)
-			SessionData(opaqueStorageValue).InternalEventBus = eventbus.New[events.Event](eventbus.EventBusConfig{
+			SessionData(opaqueStorageValue).eventBus = eventbus.New[events.Event](eventbus.EventBusConfig{
 				InputEventsQueueSize: 1,
 			}, nil)
 			SessionData(opaqueStorageValue).InternalLogger = &logging.InternalNopLogger{}
 			return opaqueStorageValue
 		}()
 
-		if err := SessionData(s).InternalEventBus.Start(); err != nil {
+		if err := SessionData(s).eventBus.Start(); err != nil {
 			t.Fatalf("starting event bus: %v", err)
 		}
-		defer SessionData(s).InternalEventBus.Stop()
+		defer SessionData(s).eventBus.Stop()
 
-		sub := InternalSessionSubscribeToEvents(s, "test", 1, nil)
+		sub := sessionSubscribeToEvents(s, "test", 1, nil)
 		defer sub.Stop()
 
 		ev := &events.StatusChangeEvent{
@@ -72,7 +72,7 @@ func TestSession(t *testing.T) {
 			Host:   net.ParseIP("127.0.0.1"),
 			Port:   9042,
 		}
-		InternalSessionPublishEvent(s, ev)
+		sessionPublishEvent(s, ev)
 
 		select {
 		case received := <-sub.Events():
@@ -111,7 +111,7 @@ func TestSession(t *testing.T) {
 		SessionData(session).InternalPool.InternalHostConnPools[implEndpoint.InternalHostInfoHostUUID(present)] = InternalNewHostConnPool(session, present, 1, "")
 
 		t.Run("present id returns the pool", func(t *testing.T) {
-			info := InternalSessionGetHostPoolByID(session, present.HostID())
+			info := sessionGetHostPoolByID(session, present.HostID())
 			if info == nil {
 				t.Fatal("pool for a known host was not returned")
 			}
@@ -129,7 +129,7 @@ func TestSession(t *testing.T) {
 			{"empty id", ""},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				info := InternalSessionGetHostPoolByID(session, tc.hostID)
+				info := sessionGetHostPoolByID(session, tc.hostID)
 				if info != nil {
 					// Not t.Fatal: calling through the interface is the point, and
 					// it is what would panic before the fix.
@@ -251,15 +251,15 @@ func TestSession(t *testing.T) {
 		for i := 1; i <= 100; i++ {
 			InternalSessionRecordV2Latency(s, time.Duration(i)*time.Millisecond)
 		}
-		InternalSessionRecordV2Orphan(s)
-		InternalSessionPeripheral(s).InternalPublishLatencySummary()
+		sessionRecordV2Orphan(s)
+		InternalSessionPeripheral(s).publishLatencySummary()
 		m := s.Metrics()
 		if m.LatencyP50 != 50*time.Millisecond || m.LatencyP95 != 95*time.Millisecond || m.LatencyP99 != 99*time.Millisecond || m.Orphans != 1 {
 			t.Fatal(m)
 		}
-		generation := InternalSessionTypedSchemaGeneration(s)
+		generation := sessionTypedSchemaGeneration(s)
 		InternalSessionPublishV2Metadata(s)
-		if InternalSessionTypedSchemaGeneration(s) != generation {
+		if sessionTypedSchemaGeneration(s) != generation {
 			t.Fatal("topology invalidated prepared schema")
 		}
 	})
@@ -289,7 +289,7 @@ func TestSession(t *testing.T) {
 				cfg.InitialReconnectionPolicy = &shrinkingRetryPolicy{allowed: tt.allowed}
 				cfg.Logger = logging.InternalNopLogger{}
 
-				s, err := InternalConnectSettings(*cfg)
+				s, err := connectSettings(*cfg)
 				if err == nil {
 					s.Close()
 					t.Fatal("connectSettings() = nil error, want one")
@@ -309,7 +309,7 @@ func TestSession(t *testing.T) {
 	t.Run("NewSessionCommon", func(t *testing.T) {
 		t.Run("LegacyPickerWhenTypedUnset", func(t *testing.T) {
 			cfg := InternalNewClusterSettings("127.0.0.1")
-			s, err := InternalNewSessionCommon(*cfg)
+			s, err := newSessionCommon(*cfg)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -339,7 +339,7 @@ func TestSession(t *testing.T) {
 					cfg := InternalNewClusterSettings("127.0.0.1")
 					var captured *settings.Config
 					s, err := newSessionCommonWithRuntime(*cfg, &typed, func(s *Core, c settings.Config) *settings.Config {
-						if s.privateStorage.InternalPool != nil || s.privateStorage.InternalEventBus != nil || s.privateStorage.InternalMetadataDescriber != nil {
+						if s.privateStorage.InternalPool != nil || s.privateStorage.eventBus != nil || s.privateStorage.InternalMetadataDescriber != nil {
 							t.Fatal("typed settings attached after coordinator publication")
 						}
 						captured = &c
@@ -380,8 +380,8 @@ func TestSession(t *testing.T) {
 	t.Run("NewSessionID", func(t *testing.T) {
 		logger := &logging.InternalDefaultLogger{}
 
-		id1 := InternalNewSessionID(logger)
-		id2 := InternalNewSessionID(logger)
+		id1 := newSessionID(logger)
+		id2 := newSessionID(logger)
 
 		if id1 == "" || id2 == "" {
 			t.Fatal("expected non-empty session ids")
@@ -399,7 +399,7 @@ func TestSession(t *testing.T) {
 
 		p := InternalSessionPeripheral(s)
 		p.InternalConfig.LifecycleObserver = panicLifecycle{}
-		InternalSessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "test", At: time.Now()})
+		sessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "test", At: time.Now()})
 		InternalSessionCloseV2Peripheral(s)
 	})
 
@@ -431,7 +431,7 @@ func TestSession(t *testing.T) {
 		}
 
 		for i, test := range tests {
-			if proto := InternalParseProtocolFromError(test.err); proto != test.proto {
+			if proto := parseProtocolFromError(test.err); proto != test.proto {
 				t.Errorf("%d: exepcted proto %d got %d", i, test.proto, proto)
 			}
 		}
@@ -442,8 +442,8 @@ func TestSession(t *testing.T) {
 	// version, so the fallback is only exercised here: it must produce distinct,
 	// well-formed random UUIDs.
 	t.Run("PseudoRandomUUID", func(t *testing.T) {
-		first := InternalPseudoRandomUUID()
-		second := InternalPseudoRandomUUID()
+		first := pseudoRandomUUID()
+		second := pseudoRandomUUID()
 
 		if first == second {
 			t.Errorf("expected distinct uuids, got %q twice", first)

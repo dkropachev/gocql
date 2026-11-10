@@ -809,7 +809,7 @@ func TestTypedConn(t *testing.T) {
 					done <- nil
 				}()
 				cfg := &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config), ProtoVersion: 4, CQLVersion: "3.0.0", ConnectTimeout: time.Second, HostDialer: fixedHostDialer{client}, Compressor: compressor, Logger: logging.InternalNopLogger{}}
-				conn, err := InternalSessionDialWithoutObserver(session, ctx, host, cfg, transport.InternalConnErrorHandlerFn(func(*transport.Conn, error, bool) {}), 0, 0)
+				conn, err := sessionDialWithoutObserver(session, ctx, host, cfg, transport.InternalConnErrorHandlerFn(func(*transport.Conn, error, bool) {}), 0, 0)
 				if _, ok := errors.AsType[*settings.UnsupportedSettingError](err); conn != nil || !ok {
 					t.Fatal("requested compression silently downgraded", err)
 				}

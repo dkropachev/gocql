@@ -40,24 +40,24 @@ import (
 	"time"
 )
 
-const InternalHostInfoListMapThreshold = 20
+const hostInfoListMapThreshold = 20
 
 // hostInfoList is an immutable host list snapshot with optional indexed lookup.
-type InternalHostInfoList struct {
-	hosts             []*implEndpoint.HostInfo
-	InternalHostsByID map[cqltype.UUID]*implEndpoint.HostInfo
-	InternalHostIDs   []cqltype.UUID
+type hostInfoList struct {
+	hosts     []*implEndpoint.HostInfo
+	hostsByID map[cqltype.UUID]*implEndpoint.HostInfo
+	hostIDs   []cqltype.UUID
 }
 
-func InternalNewHostInfoList(hosts []*implEndpoint.HostInfo) *InternalHostInfoList {
+func newHostInfoList(hosts []*implEndpoint.HostInfo) *hostInfoList {
 	hosts = hosts[:len(hosts):len(hosts)]
-	l := &InternalHostInfoList{
+	l := &hostInfoList{
 		hosts: hosts,
 	}
 
-	if len(hosts) >= InternalHostInfoListMapThreshold {
+	if len(hosts) >= hostInfoListMapThreshold {
 		hostsByID := make(map[cqltype.UUID]*implEndpoint.HostInfo, len(hosts))
-		l.InternalHostsByID = hostsByID
+		l.hostsByID = hostsByID
 		for _, host := range hosts {
 			hostID := implEndpoint.InternalHostInfoHostUUID(host)
 			if hostID.IsEmpty() {
@@ -74,13 +74,13 @@ func InternalNewHostInfoList(hosts []*implEndpoint.HostInfo) *InternalHostInfoLi
 	for i, host := range hosts {
 		hostIDs[i] = implEndpoint.InternalHostInfoHostUUID(host)
 	}
-	l.InternalHostIDs = hostIDs
+	l.hostIDs = hostIDs
 
 	return l
 }
 
 // allHosts returns hosts in this snapshot. Callers must treat the returned slice as read-only.
-func (l *InternalHostInfoList) InternalAllHosts() []*implEndpoint.HostInfo {
+func (l *hostInfoList) allHosts() []*implEndpoint.HostInfo {
 	if l == nil {
 		return nil
 	}
@@ -88,7 +88,7 @@ func (l *InternalHostInfoList) InternalAllHosts() []*implEndpoint.HostInfo {
 }
 
 // len returns the number of hosts in this snapshot.
-func (l *InternalHostInfoList) InternalLen() int {
+func (l *hostInfoList) InternalLen() int {
 	if l == nil {
 		return 0
 	}
@@ -96,14 +96,14 @@ func (l *InternalHostInfoList) InternalLen() int {
 }
 
 // hostByID finds a host in this snapshot by host_id.
-func (l *InternalHostInfoList) InternalHostByID(hostID cqltype.UUID) *implEndpoint.HostInfo {
+func (l *hostInfoList) hostByID(hostID cqltype.UUID) *implEndpoint.HostInfo {
 	if l == nil || hostID.IsEmpty() {
 		return nil
 	}
-	if l.InternalHostsByID != nil {
-		return l.InternalHostsByID[hostID]
+	if l.hostsByID != nil {
+		return l.hostsByID[hostID]
 	}
-	for i, id := range l.InternalHostIDs {
+	for i, id := range l.hostIDs {
 		if id == hostID {
 			return l.hosts[i]
 		}
@@ -112,25 +112,25 @@ func (l *InternalHostInfoList) InternalHostByID(hostID cqltype.UUID) *implEndpoi
 }
 
 // cowHostList implements a copy-on-write host list.
-type InternalCowHostList struct {
-	list atomic.Pointer[InternalHostInfoList]
+type cowHostList struct {
+	list atomic.Pointer[hostInfoList]
 	mu   sync.Mutex
 }
 
-func (c *InternalCowHostList) String() string {
-	return fmt.Sprintf("%+v", c.InternalGet().InternalAllHosts())
+func (c *cowHostList) String() string {
+	return fmt.Sprintf("%+v", c.get().allHosts())
 }
 
-func (c *InternalCowHostList) InternalGet() *InternalHostInfoList {
+func (c *cowHostList) get() *hostInfoList {
 	return c.list.Load()
 }
 
 // add will add a host if it not already in the list
-func (c *InternalCowHostList) InternalAdd(host *implEndpoint.HostInfo) bool {
+func (c *cowHostList) add(host *implEndpoint.HostInfo) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	l := c.InternalGet().InternalAllHosts()
+	l := c.get().allHosts()
 
 	if n := len(l); n == 0 {
 		l = []*implEndpoint.HostInfo{host}
@@ -146,15 +146,15 @@ func (c *InternalCowHostList) InternalAdd(host *implEndpoint.HostInfo) bool {
 		l = newL
 	}
 
-	c.list.Store(InternalNewHostInfoList(l))
+	c.list.Store(newHostInfoList(l))
 	return true
 }
 
-func (c *InternalCowHostList) InternalAddAll(hosts []*implEndpoint.HostInfo) bool {
+func (c *cowHostList) addAll(hosts []*implEndpoint.HostInfo) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	l := c.InternalGet().InternalAllHosts()
+	l := c.get().allHosts()
 	newL := make([]*implEndpoint.HostInfo, len(l), len(l)+len(hosts))
 	copy(newL, l)
 
@@ -177,15 +177,15 @@ func (c *InternalCowHostList) InternalAddAll(hosts []*implEndpoint.HostInfo) boo
 		return false
 	}
 
-	c.list.Store(InternalNewHostInfoList(newL))
+	c.list.Store(newHostInfoList(newL))
 	return true
 }
 
-func (c *InternalCowHostList) remove(host *implEndpoint.HostInfo) bool {
+func (c *cowHostList) remove(host *implEndpoint.HostInfo) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	l := c.InternalGet().InternalAllHosts()
+	l := c.get().allHosts()
 	size := len(l)
 	if size == 0 {
 		return false
@@ -205,7 +205,7 @@ func (c *InternalCowHostList) remove(host *implEndpoint.HostInfo) bool {
 		return false
 	}
 
-	c.list.Store(InternalNewHostInfoList(newL))
+	c.list.Store(newHostInfoList(newL))
 
 	return true
 }
@@ -256,59 +256,59 @@ type HostSelectionPolicy interface {
 	IsOperational(*Core) error
 }
 
-type InternalSelectedHost struct {
-	InternalInfo  *implEndpoint.HostInfo
-	InternalToken implEndpoint.Token
+type selectedHost struct {
+	info  *implEndpoint.HostInfo
+	token implEndpoint.Token
 }
 
-func (host InternalSelectedHost) Info() *implEndpoint.HostInfo {
-	return host.InternalInfo
+func (host selectedHost) Info() *implEndpoint.HostInfo {
+	return host.info
 }
 
-func (host InternalSelectedHost) Token() implEndpoint.Token {
-	return host.InternalToken
+func (host selectedHost) Token() implEndpoint.Token {
+	return host.token
 }
 
-func (host InternalSelectedHost) TokenInt64() (implEndpoint.InternalInt64Token, bool) {
+func (host selectedHost) TokenInt64() (implEndpoint.InternalInt64Token, bool) {
 	return 0, false
 }
 
-func (host InternalSelectedHost) Mark(err error) {}
+func (host selectedHost) Mark(err error) {}
 
 // int64SelectedHost is the fast-path variant of selectedHost: it carries the
 // routing token as a raw int64 instead of a boxed Token, so shard-aware conn
 // picking consumes it without an interface allocation.
-type InternalInt64SelectedHost struct {
-	InternalInfo        *implEndpoint.HostInfo
-	InternalTokenCasted implEndpoint.InternalInt64Token
+type int64SelectedHost struct {
+	info        *implEndpoint.HostInfo
+	tokenCasted implEndpoint.InternalInt64Token
 }
 
-func (host InternalInt64SelectedHost) Info() *implEndpoint.HostInfo {
-	return host.InternalInfo
+func (host int64SelectedHost) Info() *implEndpoint.HostInfo {
+	return host.info
 }
 
-func (host InternalInt64SelectedHost) Token() implEndpoint.Token {
-	return host.InternalTokenCasted
+func (host int64SelectedHost) Token() implEndpoint.Token {
+	return host.tokenCasted
 }
 
-func (host InternalInt64SelectedHost) TokenInt64() (implEndpoint.InternalInt64Token, bool) {
-	return host.InternalTokenCasted, true
+func (host int64SelectedHost) TokenInt64() (implEndpoint.InternalInt64Token, bool) {
+	return host.tokenCasted, true
 }
 
-func (host InternalInt64SelectedHost) Mark(err error) {}
+func (host int64SelectedHost) Mark(err error) {}
 
-func InternalNewSingleHost(info *implEndpoint.HostInfo, maxRetries byte, retryDelay time.Duration) *InternalSingleHost {
-	return &InternalSingleHost{info: info, maxRetries: maxRetries, delay: retryDelay}
+func newSingleHost(info *implEndpoint.HostInfo, maxRetries byte, retryDelay time.Duration) *singleHost {
+	return &singleHost{info: info, maxRetries: maxRetries, delay: retryDelay}
 }
 
-type InternalSingleHost struct {
+type singleHost struct {
 	info       *implEndpoint.HostInfo
 	delay      time.Duration
 	retry      byte
 	maxRetries byte
 }
 
-func (s *InternalSingleHost) selectHost() implEndpoint.SelectedHost {
+func (s *singleHost) selectHost() implEndpoint.SelectedHost {
 	if s.retry >= s.maxRetries {
 		return nil
 	}
@@ -319,11 +319,11 @@ func (s *InternalSingleHost) selectHost() implEndpoint.SelectedHost {
 	return s
 }
 
-func (s InternalSingleHost) Info() *implEndpoint.HostInfo { return s.info }
+func (s singleHost) Info() *implEndpoint.HostInfo { return s.info }
 
-func (s InternalSingleHost) Token() implEndpoint.Token { return nil }
+func (s singleHost) Token() implEndpoint.Token { return nil }
 
-func (s InternalSingleHost) Mark(error) {}
+func (s singleHost) Mark(error) {}
 
 // NextHost is an iteration function over picked hosts
 type NextHost func() implEndpoint.SelectedHost
@@ -335,7 +335,7 @@ func RoundRobinHostPolicy() HostSelectionPolicy {
 }
 
 type InternalRoundRobinHostPolicy struct {
-	hosts           InternalCowHostList
+	hosts           cowHostList
 	lastUsedHostIdx uint64
 }
 
@@ -347,7 +347,7 @@ func (r *InternalRoundRobinHostPolicy) Reset()                              {}
 func (r *InternalRoundRobinHostPolicy) IsOperational(*Core) error           { return nil }
 
 func (r *InternalRoundRobinHostPolicy) AddHost(host *implEndpoint.HostInfo) {
-	r.hosts.InternalAdd(host)
+	r.hosts.add(host)
 }
 
 func (r *InternalRoundRobinHostPolicy) RemoveHost(host *implEndpoint.HostInfo) {
@@ -362,15 +362,15 @@ func (r *InternalRoundRobinHostPolicy) HostDown(host *implEndpoint.HostInfo) {
 	r.RemoveHost(host)
 }
 
-func ShuffleReplicas() func(*InternalTokenAwareHostPolicy) {
-	return func(t *InternalTokenAwareHostPolicy) {
-		t.privateStorage.InternalShuffleReplicas = true
+func ShuffleReplicas() func(*tokenAwareHostPolicy) {
+	return func(t *tokenAwareHostPolicy) {
+		t.privateStorage.shuffleReplicas = true
 	}
 }
 
-func DontShuffleReplicas() func(*InternalTokenAwareHostPolicy) {
-	return func(t *InternalTokenAwareHostPolicy) {
-		t.privateStorage.InternalShuffleReplicas = false
+func DontShuffleReplicas() func(*tokenAwareHostPolicy) {
+	return func(t *tokenAwareHostPolicy) {
+		t.privateStorage.shuffleReplicas = false
 	}
 }
 
@@ -378,8 +378,8 @@ func DontShuffleReplicas() func(*InternalTokenAwareHostPolicy) {
 //
 // TokenAwareHostPolicy normally does not check how busy replica is, with avoidSlowReplicas enabled it avoids replicas
 // if they have equal or more than MAX_IN_FLIGHT_THRESHOLD requests in flight
-func AvoidSlowReplicas(max_in_flight_threshold int) func(policy *InternalTokenAwareHostPolicy) {
-	return func(t *InternalTokenAwareHostPolicy) {
+func AvoidSlowReplicas(max_in_flight_threshold int) func(policy *tokenAwareHostPolicy) {
+	return func(t *tokenAwareHostPolicy) {
 		t.privateStorage.avoidSlowReplicas = true
 		MAX_IN_FLIGHT_THRESHOLD = max_in_flight_threshold
 	}
@@ -391,20 +391,20 @@ func AvoidSlowReplicas(max_in_flight_threshold int) func(policy *InternalTokenAw
 // falls back to other nodes in the local DC. Enabling NonLocalReplicasFallback causes TokenAwareHostPolicy
 // to first select replicas by partition key in local DC, then replicas by partition key in remote DCs and fall back
 // to other nodes in local DC.
-func NonLocalReplicasFallback() func(policy *InternalTokenAwareHostPolicy) {
-	return func(t *InternalTokenAwareHostPolicy) {
-		t.privateStorage.InternalNonLocalReplicasFallback = true
+func NonLocalReplicasFallback() func(policy *tokenAwareHostPolicy) {
+	return func(t *tokenAwareHostPolicy) {
+		t.privateStorage.nonLocalReplicasFallback = true
 	}
 }
 
 // TokenAwareHostPolicy is a token aware host selection policy, where hosts are
 // selected based on the partition key, so queries are sent to the host which
 // owns the partition. Fallback is used when routing information is not available.
-func TokenAwareHostPolicy(fallback HostSelectionPolicy, opts ...func(*InternalTokenAwareHostPolicy)) HostSelectionPolicy {
-	p := func() *InternalTokenAwareHostPolicy {
-		opaqueStorageValue := new(InternalTokenAwareHostPolicy)
-		opaqueStorageValue.privateStorage.InternalFallback = fallback
-		opaqueStorageValue.privateStorage.InternalShuffleReplicas = true
+func TokenAwareHostPolicy(fallback HostSelectionPolicy, opts ...func(*tokenAwareHostPolicy)) HostSelectionPolicy {
+	p := func() *tokenAwareHostPolicy {
+		opaqueStorageValue := new(tokenAwareHostPolicy)
+		opaqueStorageValue.privateStorage.fallback = fallback
+		opaqueStorageValue.privateStorage.shuffleReplicas = true
 		return opaqueStorageValue
 	}()
 
@@ -418,16 +418,16 @@ func TokenAwareHostPolicy(fallback HostSelectionPolicy, opts ...func(*InternalTo
 // It is used inside atomic.Pointer and shallow copies are used when replacing it,
 // so fields should not be modified in-place. Instead, to modify a field a copy of the field should be made
 // and the pointer in clusterMeta updated to point to the new value.
-type InternalClusterMeta struct {
+type clusterMeta struct {
 	// replicas is map[keyspace]map[token]hosts
-	replicas  map[string]InternalTokenRingReplicas
+	replicas  map[string]tokenRingReplicas
 	tokenRing *implEndpoint.InternalTokenRing
 }
 
 var MAX_IN_FLIGHT_THRESHOLD int = 10
 
-type InternalTokenAwareHostPolicy struct {
-	privateStorage InternalTokenAwareHostPolicyStorage
+type tokenAwareHostPolicy struct {
+	privateStorage tokenAwareHostPolicyStorage
 
 	// atomic store for *clusterMeta
 
@@ -436,25 +436,25 @@ type InternalTokenAwareHostPolicy struct {
 
 }
 
-func (t *InternalTokenAwareHostPolicy) Init(s *Core) {
+func (t *tokenAwareHostPolicy) Init(s *Core) {
 	t.privateStorage.mu.Lock()
 	defer t.privateStorage.mu.Unlock()
-	if t.privateStorage.InternalGetKeyspaceMetadata != nil {
+	if t.privateStorage.getKeyspaceMetadata != nil {
 		// Init was already called.
 		// See https://github.com/scylladb/gocql/issues/94.
 		panic("sharing token aware host selection policy between sessions is not supported")
 	}
-	t.privateStorage.InternalGetKeyspaceMetadata = func(keyspace string) (*metadata.KeyspaceMetadata, error) {
+	t.privateStorage.getKeyspaceMetadata = func(keyspace string) (*metadata.KeyspaceMetadata, error) {
 		if keyspace == "" {
 			return nil, runtimeerrors.ErrNoKeyspace
 		}
 		return s.privateStorage.InternalMetadataDescriber.GetKeyspace(keyspace)
 	}
-	t.privateStorage.InternalGetKeyspaceName = func() string { return s.privateStorage.InternalCfg.Keyspace }
-	t.privateStorage.InternalLogger = s.privateStorage.InternalLogger
+	t.privateStorage.getKeyspaceName = func() string { return s.privateStorage.InternalCfg.Keyspace }
+	t.privateStorage.logger = s.privateStorage.InternalLogger
 }
 
-func (t *InternalTokenAwareHostPolicy) Reset() {
+func (t *tokenAwareHostPolicy) Reset() {
 	t.privateStorage.mu.Lock()
 	defer t.privateStorage.mu.Unlock()
 
@@ -462,20 +462,20 @@ func (t *InternalTokenAwareHostPolicy) Reset() {
 	// but session initialization can failed for some reasons. So in our application
 	// may be we want to create new session again.
 	// Reset method should be called in Session.Close method
-	t.privateStorage.InternalGetKeyspaceMetadata = nil
-	t.privateStorage.InternalGetKeyspaceName = nil
-	t.privateStorage.InternalLogger = nil
+	t.privateStorage.getKeyspaceMetadata = nil
+	t.privateStorage.getKeyspaceName = nil
+	t.privateStorage.logger = nil
 }
 
-func (t *InternalTokenAwareHostPolicy) IsOperational(session *Core) error {
-	return t.privateStorage.InternalFallback.IsOperational(session)
+func (t *tokenAwareHostPolicy) IsOperational(session *Core) error {
+	return t.privateStorage.fallback.IsOperational(session)
 }
 
-func (t *InternalTokenAwareHostPolicy) IsLocal(host *implEndpoint.HostInfo) bool {
-	return t.privateStorage.InternalFallback.IsLocal(host)
+func (t *tokenAwareHostPolicy) IsLocal(host *implEndpoint.HostInfo) bool {
+	return t.privateStorage.fallback.IsLocal(host)
 }
 
-func (t *InternalTokenAwareHostPolicy) KeyspaceChanged(update KeyspaceUpdateEvent) {
+func (t *tokenAwareHostPolicy) KeyspaceChanged(update KeyspaceUpdateEvent) {
 	t.privateStorage.mu.Lock()
 	defer t.privateStorage.mu.Unlock()
 	meta := t.getMetadataForUpdate()
@@ -486,15 +486,15 @@ func (t *InternalTokenAwareHostPolicy) KeyspaceChanged(update KeyspaceUpdateEven
 // updateReplicas updates replicas in clusterMeta.
 // It must be called with t.mu mutex locked.
 // meta must not be nil and it's replicas field will be updated.
-func (t *InternalTokenAwareHostPolicy) updateReplicas(meta *InternalClusterMeta, keyspace string) {
+func (t *tokenAwareHostPolicy) updateReplicas(meta *clusterMeta, keyspace string) {
 	if keyspace == "" || meta == nil || meta.tokenRing == nil {
 		return
 	}
-	newReplicas := make(map[string]InternalTokenRingReplicas, len(meta.replicas))
+	newReplicas := make(map[string]tokenRingReplicas, len(meta.replicas))
 
-	ks, err := t.privateStorage.InternalGetKeyspaceMetadata(keyspace)
+	ks, err := t.privateStorage.getKeyspaceMetadata(keyspace)
 	if err == nil {
-		strat := InternalGetStrategy(ks, t.privateStorage.InternalLogger)
+		strat := getStrategy(ks, t.privateStorage.logger)
 		if strat != nil {
 			newReplicas[keyspace] = strat.InternalReplicaMap(meta.tokenRing)
 		}
@@ -509,71 +509,71 @@ func (t *InternalTokenAwareHostPolicy) updateReplicas(meta *InternalClusterMeta,
 	meta.replicas = newReplicas
 }
 
-func (t *InternalTokenAwareHostPolicy) SetPartitioner(partitioner string) {
+func (t *tokenAwareHostPolicy) SetPartitioner(partitioner string) {
 	t.privateStorage.mu.Lock()
 	defer t.privateStorage.mu.Unlock()
 
 	if t.privateStorage.partitioner != partitioner {
-		t.privateStorage.InternalFallback.SetPartitioner(partitioner)
+		t.privateStorage.fallback.SetPartitioner(partitioner)
 		t.privateStorage.partitioner = partitioner
 		meta := t.getMetadataForUpdate()
-		meta.resetTokenRing(t.privateStorage.partitioner, t.privateStorage.hosts.InternalGet().InternalAllHosts(), t.privateStorage.InternalLogger)
-		t.updateReplicas(meta, t.privateStorage.InternalGetKeyspaceName())
+		meta.resetTokenRing(t.privateStorage.partitioner, t.privateStorage.hosts.get().allHosts(), t.privateStorage.logger)
+		t.updateReplicas(meta, t.privateStorage.getKeyspaceName())
 		t.privateStorage.metadata.Store(meta)
 	}
 }
 
-func (t *InternalTokenAwareHostPolicy) AddHost(host *implEndpoint.HostInfo) {
+func (t *tokenAwareHostPolicy) AddHost(host *implEndpoint.HostInfo) {
 	t.privateStorage.mu.Lock()
-	if t.privateStorage.hosts.InternalAdd(host) {
+	if t.privateStorage.hosts.add(host) {
 		meta := t.getMetadataForUpdate()
-		meta.resetTokenRing(t.privateStorage.partitioner, t.privateStorage.hosts.InternalGet().InternalAllHosts(), t.privateStorage.InternalLogger)
-		t.updateReplicas(meta, t.privateStorage.InternalGetKeyspaceName())
+		meta.resetTokenRing(t.privateStorage.partitioner, t.privateStorage.hosts.get().allHosts(), t.privateStorage.logger)
+		t.updateReplicas(meta, t.privateStorage.getKeyspaceName())
 		t.privateStorage.metadata.Store(meta)
 	}
 	t.privateStorage.mu.Unlock()
-	t.privateStorage.InternalFallback.AddHost(host)
+	t.privateStorage.fallback.AddHost(host)
 }
 
-func (t *InternalTokenAwareHostPolicy) AddHosts(hosts []*implEndpoint.HostInfo) {
+func (t *tokenAwareHostPolicy) AddHosts(hosts []*implEndpoint.HostInfo) {
 	t.privateStorage.mu.Lock()
-	t.privateStorage.hosts.InternalAddAll(hosts)
+	t.privateStorage.hosts.addAll(hosts)
 
 	meta := t.getMetadataForUpdate()
-	meta.resetTokenRing(t.privateStorage.partitioner, t.privateStorage.hosts.InternalGet().InternalAllHosts(), t.privateStorage.InternalLogger)
-	t.updateReplicas(meta, t.privateStorage.InternalGetKeyspaceName())
+	meta.resetTokenRing(t.privateStorage.partitioner, t.privateStorage.hosts.get().allHosts(), t.privateStorage.logger)
+	t.updateReplicas(meta, t.privateStorage.getKeyspaceName())
 	t.privateStorage.metadata.Store(meta)
 	t.privateStorage.mu.Unlock()
 
 	for _, host := range hosts {
-		t.privateStorage.InternalFallback.AddHost(host)
+		t.privateStorage.fallback.AddHost(host)
 	}
 }
 
-func (t *InternalTokenAwareHostPolicy) RemoveHost(host *implEndpoint.HostInfo) {
+func (t *tokenAwareHostPolicy) RemoveHost(host *implEndpoint.HostInfo) {
 	t.privateStorage.mu.Lock()
 	if t.privateStorage.hosts.remove(host) {
 		meta := t.getMetadataForUpdate()
-		meta.resetTokenRing(t.privateStorage.partitioner, t.privateStorage.hosts.InternalGet().InternalAllHosts(), t.privateStorage.InternalLogger)
-		t.updateReplicas(meta, t.privateStorage.InternalGetKeyspaceName())
+		meta.resetTokenRing(t.privateStorage.partitioner, t.privateStorage.hosts.get().allHosts(), t.privateStorage.logger)
+		t.updateReplicas(meta, t.privateStorage.getKeyspaceName())
 		t.privateStorage.metadata.Store(meta)
 	}
 	t.privateStorage.mu.Unlock()
-	t.privateStorage.InternalFallback.RemoveHost(host)
+	t.privateStorage.fallback.RemoveHost(host)
 }
 
-func (t *InternalTokenAwareHostPolicy) HostUp(host *implEndpoint.HostInfo) {
-	t.privateStorage.InternalFallback.HostUp(host)
+func (t *tokenAwareHostPolicy) HostUp(host *implEndpoint.HostInfo) {
+	t.privateStorage.fallback.HostUp(host)
 }
 
-func (t *InternalTokenAwareHostPolicy) HostDown(host *implEndpoint.HostInfo) {
-	t.privateStorage.InternalFallback.HostDown(host)
+func (t *tokenAwareHostPolicy) HostDown(host *implEndpoint.HostInfo) {
+	t.privateStorage.fallback.HostDown(host)
 }
 
 // getMetadataReadOnly returns current cluster metadata.
 // Metadata uses copy on write, so the returned value should be only used for reading.
 // To obtain a copy that could be updated, use getMetadataForUpdate instead.
-func (t *InternalTokenAwareHostPolicy) getMetadataReadOnly() *InternalClusterMeta {
+func (t *tokenAwareHostPolicy) getMetadataReadOnly() *clusterMeta {
 	return t.privateStorage.metadata.Load()
 }
 
@@ -581,9 +581,9 @@ func (t *InternalTokenAwareHostPolicy) getMetadataReadOnly() *InternalClusterMet
 // It is a SHALLOW copy of current metadata in case it was already set or new empty clusterMeta otherwise.
 // This function should be called with t.mu mutex locked and the mutex should not be released before
 // storing the new metadata.
-func (t *InternalTokenAwareHostPolicy) getMetadataForUpdate() *InternalClusterMeta {
+func (t *tokenAwareHostPolicy) getMetadataForUpdate() *clusterMeta {
 	metaReadOnly := t.getMetadataReadOnly()
-	meta := new(InternalClusterMeta)
+	meta := new(clusterMeta)
 	if metaReadOnly != nil {
 		*meta = *metaReadOnly
 	}
@@ -592,7 +592,7 @@ func (t *InternalTokenAwareHostPolicy) getMetadataForUpdate() *InternalClusterMe
 
 // resetTokenRing creates a new tokenRing.
 // It must be called with t.mu locked.
-func (m *InternalClusterMeta) resetTokenRing(partitioner string, hosts []*implEndpoint.HostInfo, logger logging.StdLogger) {
+func (m *clusterMeta) resetTokenRing(partitioner string, hosts []*implEndpoint.HostInfo, logger logging.StdLogger) {
 	if partitioner == "" {
 		// partitioner not yet set
 		return
@@ -612,30 +612,30 @@ func (m *InternalClusterMeta) resetTokenRing(partitioner string, hosts []*implEn
 // hostSet is a small set optimized for tracking hosts returned by the
 // token-aware iterator. Uses an inline array for RF <= 9 (3 DCs × RF=3),
 // spilling to a map for larger replica sets.
-type InternalHostSet struct {
-	InternalOverflow map[*implEndpoint.HostInfo]struct{}
-	arr              [9]*implEndpoint.HostInfo
-	n                int
+type hostSet struct {
+	overflow map[*implEndpoint.HostInfo]struct{}
+	arr      [9]*implEndpoint.HostInfo
+	n        int
 }
 
-func (s *InternalHostSet) InternalAdd(h *implEndpoint.HostInfo) {
+func (s *hostSet) add(h *implEndpoint.HostInfo) {
 	if s.n < len(s.arr) {
 		s.arr[s.n] = h
 		s.n++
 		return
 	}
-	if s.InternalOverflow == nil {
-		s.InternalOverflow = make(map[*implEndpoint.HostInfo]struct{})
+	if s.overflow == nil {
+		s.overflow = make(map[*implEndpoint.HostInfo]struct{})
 		for i := range s.n {
-			s.InternalOverflow[s.arr[i]] = struct{}{}
+			s.overflow[s.arr[i]] = struct{}{}
 		}
 	}
-	s.InternalOverflow[h] = struct{}{}
+	s.overflow[h] = struct{}{}
 }
 
-func (s *InternalHostSet) InternalContains(h *implEndpoint.HostInfo) bool {
-	if s.InternalOverflow != nil {
-		_, ok := s.InternalOverflow[h]
+func (s *hostSet) contains(h *implEndpoint.HostInfo) bool {
+	if s.overflow != nil {
+		_, ok := s.overflow[h]
 		return ok
 	}
 	for i := range s.n {
@@ -647,7 +647,7 @@ func (s *InternalHostSet) InternalContains(h *implEndpoint.HostInfo) bool {
 }
 
 // shuffleHostsInPlace shuffles the given slice in-place using math/rand/v2.
-func InternalShuffleHostsInPlace(hosts []*implEndpoint.HostInfo) {
+func shuffleHostsInPlace(hosts []*implEndpoint.HostInfo) {
 	randv2.Shuffle(len(hosts), func(i, j int) {
 		hosts[i], hosts[j] = hosts[j], hosts[i]
 	})
@@ -655,7 +655,7 @@ func InternalShuffleHostsInPlace(hosts []*implEndpoint.HostInfo) {
 
 // partitionHealthy performs an in-place stable partition of replicas, moving
 // healthy (non-busy) hosts to the front while preserving relative order.
-func InternalPartitionHealthy(replicas []*implEndpoint.HostInfo, s *Core) {
+func partitionHealthy(replicas []*implEndpoint.HostInfo, s *Core) {
 	n := len(replicas)
 	if n <= 1 {
 		return
@@ -672,7 +672,7 @@ func InternalPartitionHealthy(replicas []*implEndpoint.HostInfo, s *Core) {
 
 	healthyCount := 0
 	for i, h := range replicas {
-		busy[i] = InternalHostBusy(s, h)
+		busy[i] = hostBusy(s, h)
 		if !busy[i] {
 			healthyCount++
 		}
@@ -720,58 +720,58 @@ func InternalPartitionHealthy(replicas []*implEndpoint.HostInfo, s *Core) {
 
 // filter the token aware selected hosts from the fallback hosts
 
-type InternalDcAwareRR struct {
+type dcAwareRR struct {
 	local             string
-	localHosts        InternalCowHostList
-	remoteHosts       InternalCowHostList
+	localHosts        cowHostList
+	remoteHosts       cowHostList
 	lastUsedHostIdx   uint64
 	disableDCFailover bool
 }
 
-type InternalDcFailoverDisabledPolicy interface {
+type dcFailoverDisabledPolicy interface {
 	setDCFailoverDisabled()
 }
 
-type InternalDcAwarePolicyOption func(p InternalDcFailoverDisabledPolicy)
+type dcAwarePolicyOption func(p dcFailoverDisabledPolicy)
 
-func HostPolicyOptionDisableDCFailover(p InternalDcFailoverDisabledPolicy) {
+func HostPolicyOptionDisableDCFailover(p dcFailoverDisabledPolicy) {
 	p.setDCFailoverDisabled()
 }
 
 // DCAwareRoundRobinPolicy is a host selection policies which will prioritize and
 // return hosts which are in the local datacentre before returning hosts in all
 // other datercentres
-func DCAwareRoundRobinPolicy(localDC string, opts ...InternalDcAwarePolicyOption) HostSelectionPolicy {
-	p := &InternalDcAwareRR{local: localDC, disableDCFailover: false}
+func DCAwareRoundRobinPolicy(localDC string, opts ...dcAwarePolicyOption) HostSelectionPolicy {
+	p := &dcAwareRR{local: localDC, disableDCFailover: false}
 	for _, opt := range opts {
 		opt(p)
 	}
 	return p
 }
 
-func (d *InternalDcAwareRR) setDCFailoverDisabled() {
+func (d *dcAwareRR) setDCFailoverDisabled() {
 	d.disableDCFailover = true
 }
 
 // dcFailoverDisabled reports whether this policy was constructed with
 // HostPolicyOptionDisableDCFailover. Used by driver_config.go to report
 // query.load-balancing.policy.fallback-to-non-preferred-nodes.
-func (d *InternalDcAwareRR) dcFailoverDisabled() bool {
+func (d *dcAwareRR) dcFailoverDisabled() bool {
 	return d.disableDCFailover
 }
 
 // localDatacenter reports the datacenter this policy prioritizes. Used by
 // driver_config.go to report query.load-balancing.node-preference.
-func (d *InternalDcAwareRR) localDatacenter() string {
+func (d *dcAwareRR) localDatacenter() string {
 	return d.local
 }
 
-func (d *InternalDcAwareRR) Init(*Core)                          {}
-func (d *InternalDcAwareRR) Reset()                              {}
-func (d *InternalDcAwareRR) KeyspaceChanged(KeyspaceUpdateEvent) {}
-func (d *InternalDcAwareRR) SetPartitioner(p string)             {}
+func (d *dcAwareRR) Init(*Core)                          {}
+func (d *dcAwareRR) Reset()                              {}
+func (d *dcAwareRR) KeyspaceChanged(KeyspaceUpdateEvent) {}
+func (d *dcAwareRR) SetPartitioner(p string)             {}
 
-func (d *InternalDcAwareRR) IsOperational(session *Core) error {
+func (d *dcAwareRR) IsOperational(session *Core) error {
 	if session.privateStorage.InternalCfg.privateStorage.disableInit || session.privateStorage.InternalCfg.privateStorage.InternalDisableControlConn {
 		return nil
 	}
@@ -789,19 +789,19 @@ func (d *InternalDcAwareRR) IsOperational(session *Core) error {
 	return fmt.Errorf("gocql: datacenter %s in the policy was not found in the topology - probable DC aware policy misconfiguration", d.local)
 }
 
-func (d *InternalDcAwareRR) IsLocal(host *implEndpoint.HostInfo) bool {
+func (d *dcAwareRR) IsLocal(host *implEndpoint.HostInfo) bool {
 	return host.DataCenter() == d.local
 }
 
-func (d *InternalDcAwareRR) AddHost(host *implEndpoint.HostInfo) {
+func (d *dcAwareRR) AddHost(host *implEndpoint.HostInfo) {
 	if d.IsLocal(host) {
-		d.localHosts.InternalAdd(host)
+		d.localHosts.add(host)
 	} else {
-		d.remoteHosts.InternalAdd(host)
+		d.remoteHosts.add(host)
 	}
 }
 
-func (d *InternalDcAwareRR) RemoveHost(host *implEndpoint.HostInfo) {
+func (d *dcAwareRR) RemoveHost(host *implEndpoint.HostInfo) {
 	if d.IsLocal(host) {
 		d.localHosts.remove(host)
 	} else {
@@ -809,8 +809,8 @@ func (d *InternalDcAwareRR) RemoveHost(host *implEndpoint.HostInfo) {
 	}
 }
 
-func (d *InternalDcAwareRR) HostUp(host *implEndpoint.HostInfo)   { d.AddHost(host) }
-func (d *InternalDcAwareRR) HostDown(host *implEndpoint.HostInfo) { d.RemoveHost(host) }
+func (d *dcAwareRR) HostUp(host *implEndpoint.HostInfo)   { d.AddHost(host) }
+func (d *dcAwareRR) HostDown(host *implEndpoint.HostInfo) { d.RemoveHost(host) }
 
 // This function is supposed to be called in a fashion
 // roundRobbin(offset, hostsPriority1, hostsPriority2, hostsPriority3 ... )
@@ -820,7 +820,7 @@ func (d *InternalDcAwareRR) HostDown(host *implEndpoint.HostInfo) { d.RemoveHost
 //
 // For tiered and DC-aware strategy:
 // roundRobbin(offset, localHosts, remoteHosts)
-func InternalRoundRobbin(shift int, hosts ...[]*implEndpoint.HostInfo) NextHost {
+func roundRobbin(shift int, hosts ...[]*implEndpoint.HostInfo) NextHost {
 	currentLayer := 0
 	currentlyObserved := 0
 
@@ -845,7 +845,7 @@ func InternalRoundRobbin(shift int, hosts ...[]*implEndpoint.HostInfo) NextHost 
 				h := hosts[currentLayer][(shift+currentlyObserved)%currentLayerSize]
 
 				if h.IsUp() {
-					return InternalSelectedHost{InternalInfo: h}
+					return selectedHost{info: h}
 				}
 
 			}
@@ -857,10 +857,10 @@ func InternalRoundRobbin(shift int, hosts ...[]*implEndpoint.HostInfo) NextHost 
 // return hosts which are in the local rack, before hosts in the local datacenter but
 // a different rack, before hosts in all other datacenters
 
-type InternalRackAwareRR struct {
+type rackAwareRR struct {
 	localDC   string
 	localRack string
-	hosts     []InternalCowHostList
+	hosts     []cowHostList
 	// lastUsedHostIdx keeps the index of the last used host.
 	// It is accessed atomically and needs to be aligned to 64 bits, so we
 	// keep it first in the struct. Do not move it or add new struct members
@@ -869,20 +869,20 @@ type InternalRackAwareRR struct {
 	disableDCFailover bool
 }
 
-func RackAwareRoundRobinPolicy(localDC string, localRack string, opts ...InternalDcAwarePolicyOption) HostSelectionPolicy {
-	p := &InternalRackAwareRR{localDC: localDC, localRack: localRack, hosts: make([]InternalCowHostList, 3), disableDCFailover: false}
+func RackAwareRoundRobinPolicy(localDC string, localRack string, opts ...dcAwarePolicyOption) HostSelectionPolicy {
+	p := &rackAwareRR{localDC: localDC, localRack: localRack, hosts: make([]cowHostList, 3), disableDCFailover: false}
 	for _, opt := range opts {
 		opt(p)
 	}
 	return p
 }
 
-func (d *InternalRackAwareRR) Init(*Core)                          {}
-func (d *InternalRackAwareRR) Reset()                              {}
-func (d *InternalRackAwareRR) KeyspaceChanged(KeyspaceUpdateEvent) {}
-func (d *InternalRackAwareRR) SetPartitioner(p string)             {}
+func (d *rackAwareRR) Init(*Core)                          {}
+func (d *rackAwareRR) Reset()                              {}
+func (d *rackAwareRR) KeyspaceChanged(KeyspaceUpdateEvent) {}
+func (d *rackAwareRR) SetPartitioner(p string)             {}
 
-func (d *InternalRackAwareRR) IsOperational(session *Core) error {
+func (d *rackAwareRR) IsOperational(session *Core) error {
 	if session.privateStorage.InternalCfg.privateStorage.disableInit || session.privateStorage.InternalCfg.privateStorage.InternalDisableControlConn {
 		return nil
 	}
@@ -898,33 +898,33 @@ func (d *InternalRackAwareRR) IsOperational(session *Core) error {
 	return fmt.Errorf("gocql: rack %s/%s was not found in the topology - probable Rack aware policy misconfiguration", d.localDC, d.localRack)
 }
 
-func (d *InternalRackAwareRR) MaxHostTier() uint {
+func (d *rackAwareRR) MaxHostTier() uint {
 	return 2
 }
 
-func (d *InternalRackAwareRR) setDCFailoverDisabled() {
+func (d *rackAwareRR) setDCFailoverDisabled() {
 	d.disableDCFailover = true
 }
 
 // dcFailoverDisabled reports whether this policy was constructed with
 // HostPolicyOptionDisableDCFailover. Used by driver_config.go to report
 // query.load-balancing.policy.fallback-to-non-preferred-nodes.
-func (d *InternalRackAwareRR) dcFailoverDisabled() bool {
+func (d *rackAwareRR) dcFailoverDisabled() bool {
 	return d.disableDCFailover
 }
 
 // localDatacenter and localRackName report the datacenter/rack this policy
 // prioritizes. Used by driver_config.go to report
 // query.load-balancing.node-preference.
-func (d *InternalRackAwareRR) localDatacenter() string {
+func (d *rackAwareRR) localDatacenter() string {
 	return d.localDC
 }
 
-func (d *InternalRackAwareRR) localRackName() string {
+func (d *rackAwareRR) localRackName() string {
 	return d.localRack
 }
 
-func (d *InternalRackAwareRR) HostTier(host *implEndpoint.HostInfo) uint {
+func (d *rackAwareRR) HostTier(host *implEndpoint.HostInfo) uint {
 	if host.DataCenter() == d.localDC {
 		if host.Rack() == d.localRack {
 			return 0
@@ -936,22 +936,22 @@ func (d *InternalRackAwareRR) HostTier(host *implEndpoint.HostInfo) uint {
 	}
 }
 
-func (d *InternalRackAwareRR) IsLocal(host *implEndpoint.HostInfo) bool {
+func (d *rackAwareRR) IsLocal(host *implEndpoint.HostInfo) bool {
 	return d.HostTier(host) == 0
 }
 
-func (d *InternalRackAwareRR) AddHost(host *implEndpoint.HostInfo) {
+func (d *rackAwareRR) AddHost(host *implEndpoint.HostInfo) {
 	dist := d.HostTier(host)
-	d.hosts[dist].InternalAdd(host)
+	d.hosts[dist].add(host)
 }
 
-func (d *InternalRackAwareRR) RemoveHost(host *implEndpoint.HostInfo) {
+func (d *rackAwareRR) RemoveHost(host *implEndpoint.HostInfo) {
 	dist := d.HostTier(host)
 	d.hosts[dist].remove(host)
 }
 
-func (d *InternalRackAwareRR) HostUp(host *implEndpoint.HostInfo)   { d.AddHost(host) }
-func (d *InternalRackAwareRR) HostDown(host *implEndpoint.HostInfo) { d.RemoveHost(host) }
+func (d *rackAwareRR) HostUp(host *implEndpoint.HostInfo)   { d.AddHost(host) }
+func (d *rackAwareRR) HostDown(host *implEndpoint.HostInfo) { d.RemoveHost(host) }
 
 // ReadyPolicy defines a policy for when a HostSelectionPolicy can be used. After
 // each host connects during session initialization, the Ready method will be
@@ -963,19 +963,19 @@ type ReadyPolicy interface {
 
 // SingleHostReadyPolicy wraps a HostSelectionPolicy and returns Ready after a
 // single host has been added via HostUp
-func SingleHostReadyPolicy(p HostSelectionPolicy) *InternalSingleHostReadyPolicy {
-	return &InternalSingleHostReadyPolicy{
+func SingleHostReadyPolicy(p HostSelectionPolicy) *singleHostReadyPolicy {
+	return &singleHostReadyPolicy{
 		HostSelectionPolicy: p,
 	}
 }
 
-type InternalSingleHostReadyPolicy struct {
+type singleHostReadyPolicy struct {
 	HostSelectionPolicy
 	ready    bool
 	readyMux sync.Mutex
 }
 
-func (s *InternalSingleHostReadyPolicy) HostUp(host *implEndpoint.HostInfo) {
+func (s *singleHostReadyPolicy) HostUp(host *implEndpoint.HostInfo) {
 	s.HostSelectionPolicy.HostUp(host)
 
 	s.readyMux.Lock()
@@ -983,7 +983,7 @@ func (s *InternalSingleHostReadyPolicy) HostUp(host *implEndpoint.HostInfo) {
 	s.readyMux.Unlock()
 }
 
-func (s *InternalSingleHostReadyPolicy) Ready() bool {
+func (s *singleHostReadyPolicy) Ready() bool {
 	s.readyMux.Lock()
 	ready := s.ready
 	s.readyMux.Unlock()
@@ -998,7 +998,7 @@ func (s *InternalSingleHostReadyPolicy) Ready() bool {
 	return true
 }
 
-func InternalHostBusy(s *Core, h *implEndpoint.HostInfo) bool {
+func hostBusy(s *Core, h *implEndpoint.HostInfo) bool {
 	pool, ok := s.privateStorage.InternalPool.InternalGetPool(h)
 	return ok && h != nil && pool.InFlight() >= MAX_IN_FLIGHT_THRESHOLD
 }

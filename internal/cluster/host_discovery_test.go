@@ -59,7 +59,7 @@ func TestHostDiscovery(t *testing.T) {
 				implEndpoint.HostInfoData(opaqueStorageValuexx).InternalConnectAddress = net.IPv4(1, 1, 1, 1)
 				return opaqueStorageValuexx
 			}()
-			ring.InternalAddHostIfMissing(host)
+			ring.addHostIfMissing(host)
 
 			h2 := func() *endpoint.HostInfo {
 				opaqueStorageValuexxx := new(endpoint.HostInfo)
@@ -68,7 +68,7 @@ func TestHostDiscovery(t *testing.T) {
 				return opaqueStorageValuexxx
 			}()
 
-			h1, ok := ring.InternalAddHostIfMissing(h2)
+			h1, ok := ring.addHostIfMissing(h2)
 			if !ok {
 				t.Fatal("host was not reported as already existing")
 			} else if !h1.Equal(host) {
@@ -89,7 +89,7 @@ func TestHostDiscovery(t *testing.T) {
 				implEndpoint.HostInfoData(opaqueStorageValuex).InternalConnectAddress = net.IPv4(1, 1, 1, 1)
 				return opaqueStorageValuex
 			}()
-			h1, ok := ring.InternalAddHostIfMissing(host)
+			h1, ok := ring.addHostIfMissing(host)
 			if ok {
 				t.Fatal("host was reported as already existing")
 			} else if !h1.Equal(host) {
@@ -104,7 +104,7 @@ func TestHostDiscovery(t *testing.T) {
 		t.Parallel()
 
 		t.Run("NilIterReturnsNoControl", func(t *testing.T) {
-			ok, err := InternalCheckSystemSchema(&systemSchemaTestControl{})
+			ok, err := checkSystemSchema(&systemSchemaTestControl{})
 			if err != metadata.InternalErrNoControl {
 				t.Fatalf("expected errNoControl, got %v", err)
 			}
@@ -115,7 +115,7 @@ func TestHostDiscovery(t *testing.T) {
 
 		t.Run("Success", func(t *testing.T) {
 			framer := &trackingMockFramer{}
-			ok, err := InternalCheckSystemSchema(&systemSchemaTestControl{
+			ok, err := checkSystemSchema(&systemSchemaTestControl{
 				iter: &nativeResultFixture{framer: framer},
 			})
 			if err != nil {
@@ -131,7 +131,7 @@ func TestHostDiscovery(t *testing.T) {
 
 		t.Run("SyntaxError", func(t *testing.T) {
 			framer := &trackingMockFramer{}
-			ok, err := InternalCheckSystemSchema(&systemSchemaTestControl{
+			ok, err := checkSystemSchema(&systemSchemaTestControl{
 				iter: &nativeResultFixture{
 					err:    &frm.ErrorFrame{Code: protocol.ErrCodeSyntax},
 					framer: framer,
@@ -171,7 +171,7 @@ func TestHostDiscovery(t *testing.T) {
 			}
 			r := &InternalRingDescriber{InternalCfg: &InternalClusterSettings{Port: 9042}}
 
-			peers, err := r.InternalGetClusterPeerInfo(context.Background(), &trackingRingConnection{
+			peers, err := r.getClusterPeerInfo(context.Background(), &trackingRingConnection{
 				iter: &nativeResultFixture{
 					meta:    systemPeersResultMetadata,
 					framer:  framer,
@@ -211,7 +211,7 @@ func TestHostDiscovery(t *testing.T) {
 					}
 					r := &InternalRingDescriber{InternalCfg: &InternalClusterSettings{Port: 9042}}
 					// iter is nil so getClusterPeerInfo returns errNoControl, but the query is still recorded
-					_, _ = r.InternalGetClusterPeerInfo(context.Background(), conn)
+					_, _ = r.getClusterPeerInfo(context.Background(), conn)
 					if conn.lastQuery != tt.wantQuery {
 						t.Errorf("got query %q, want %q", conn.lastQuery, tt.wantQuery)
 					}
@@ -262,7 +262,7 @@ func TestHostDiscovery(t *testing.T) {
 
 			var logger logging.StdLogger
 			t.Run("OmitOneZeroTokenNode", func(t *testing.T) {
-				peers, err := InternalGetPeersFromQuerySystemPeers(
+				peers, err := getPeersFromQuerySystemPeers(
 					peersRows,
 					9042,
 					logger,
@@ -276,7 +276,7 @@ func TestHostDiscovery(t *testing.T) {
 
 			t.Run("NoZeroTokenNodes", func(t *testing.T) {
 				peersRows[2]["tokens"] = []string{"-1129762924682054333"}
-				peers, err := InternalGetPeersFromQuerySystemPeers(
+				peers, err := getPeersFromQuerySystemPeers(
 					peersRows,
 					9042,
 					logger,
@@ -293,7 +293,7 @@ func TestHostDiscovery(t *testing.T) {
 	t.Run("GetHostsFromSystem", func(t *testing.T) {
 		t.Parallel()
 
-		r := &InternalRingDescriber{InternalControl: &mockControlConn{}, InternalCfg: &InternalClusterSettings{Port: 9042}}
+		r := &InternalRingDescriber{control: &mockControlConn{}, InternalCfg: &InternalClusterSettings{Port: 9042}}
 
 		hosts, _, err := r.GetHostsFromSystem()
 		if err != nil {
@@ -318,11 +318,11 @@ func TestHostDiscovery(t *testing.T) {
 			return opaqueStorageValue
 		}()
 
-		if !InternalIsValidPeer(host) {
+		if !isValidPeer(host) {
 			t.Errorf("expected %+v to be a valid peer", host)
 		}
 		implEndpoint.HostInfoData(host).InternalRack = ""
-		if InternalIsValidPeer(host) {
+		if isValidPeer(host) {
 			t.Errorf("expected %+v to NOT be a valid peer", host)
 		}
 	})
@@ -340,11 +340,11 @@ func TestHostDiscovery(t *testing.T) {
 			return opaqueStorageValuex
 		}()
 
-		if InternalIsZeroToken(host) {
+		if isZeroToken(host) {
 			t.Errorf("expected %+v to NOT be a zero-token host", host)
 		}
 		implEndpoint.HostInfoData(host).InternalTokens = []string{}
-		if !InternalIsZeroToken(host) {
+		if !isZeroToken(host) {
 			t.Errorf("expected %+v to be a zero-token host", host)
 		}
 	})

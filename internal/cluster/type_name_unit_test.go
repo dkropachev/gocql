@@ -53,7 +53,7 @@ var typeLookupTest = []struct {
 }
 
 func testType(t *testing.T, cassType string, expectedType cqltype.Type) {
-	if computedType := InternalGetApacheCassandraType(cqltype.ApacheCassandraTypePrefix + cassType); computedType != expectedType {
+	if computedType := getApacheCassandraType(cqltype.ApacheCassandraTypePrefix + cassType); computedType != expectedType {
 		t.Errorf("Cassandra custom type lookup for %s failed. Expected %s, got %s.", cassType, expectedType.String(), computedType.String())
 	}
 }

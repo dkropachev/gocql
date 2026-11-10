@@ -51,13 +51,13 @@ func TestTokenRing(t *testing.T) {
 
 			tests := []struct {
 				name                   string
-				strat                  *InternalNetworkTopology
+				strat                  *networkTopology
 				expectedReplicaMapSize int
 			}{
 				{
 					name: "full",
-					strat: &InternalNetworkTopology{
-						InternalDcs: map[string]int{
+					strat: &networkTopology{
+						dcs: map[string]int{
 							"dc1": 1,
 							"dc2": 2,
 							"dc3": 3,
@@ -67,8 +67,8 @@ func TestTokenRing(t *testing.T) {
 				},
 				{
 					name: "missing",
-					strat: &InternalNetworkTopology{
-						InternalDcs: map[string]int{
+					strat: &networkTopology{
+						dcs: map[string]int{
 							"dc2": 2,
 							"dc3": 3,
 						},
@@ -77,8 +77,8 @@ func TestTokenRing(t *testing.T) {
 				},
 				{
 					name: "zero",
-					strat: &InternalNetworkTopology{
-						InternalDcs: map[string]int{
+					strat: &networkTopology{
+						dcs: map[string]int{
 							"dc1": 0,
 							"dc2": 2,
 							"dc3": 3,
@@ -135,7 +135,7 @@ func TestTokenRing(t *testing.T) {
 					sort.Sort(&endpoint.InternalTokenRing{InternalTokens: tokens})
 
 					var expReplicas int
-					for _, rf := range test.strat.InternalDcs {
+					for _, rf := range test.strat.dcs {
 						expReplicas += rf
 					}
 
@@ -149,25 +149,25 @@ func TestTokenRing(t *testing.T) {
 					}
 
 					for token, replicas := range tokenReplicas {
-						if len(replicas.InternalHosts) != expReplicas {
-							t.Fatalf("expected to have %d replicas got %d for token=%v", expReplicas, len(replicas.InternalHosts), token)
+						if len(replicas.hosts) != expReplicas {
+							t.Fatalf("expected to have %d replicas got %d for token=%v", expReplicas, len(replicas.hosts), token)
 						}
 					}
 
-					for dc, rf := range test.strat.InternalDcs {
+					for dc, rf := range test.strat.dcs {
 						if rf == 0 {
 							continue
 						}
 						dcTokens := dcRing[dc]
 						for i, th := range dcTokens {
 							token := th.InternalToken
-							allReplicas := tokenReplicas.InternalReplicasFor(token)
-							if allReplicas.InternalToken != token {
+							allReplicas := tokenReplicas.replicasFor(token)
+							if allReplicas.token != token {
 								t.Fatalf("token %v not in replica map", token)
 							}
 
 							var replicas []*endpoint.HostInfo
-							for _, replica := range allReplicas.InternalHosts {
+							for _, replica := range allReplicas.hosts {
 								if implEndpoint.HostInfoData(replica).InternalDataCenter == dc {
 									replicas = append(replicas, replica)
 								}
@@ -240,25 +240,25 @@ func TestTokenRing(t *testing.T) {
 
 			hosts := []*endpoint.HostInfo{host0, host25, host50, host75}
 
-			strat := &InternalSimpleStrategy{InternalRf: 2}
+			strat := &simpleStrategy{rf: 2}
 			tokenReplicas := strat.InternalReplicaMap(&endpoint.InternalTokenRing{InternalHosts: hosts, InternalTokens: tokens})
 			if len(tokenReplicas) != len(tokens) {
 				t.Fatalf("expected replica map to have %d items but has %d", len(tokens), len(tokenReplicas))
 			}
 
 			for _, replicas := range tokenReplicas {
-				if len(replicas.InternalHosts) != strat.InternalRf {
-					t.Errorf("expected to have %d replicas got %d for token=%v", strat.InternalRf, len(replicas.InternalHosts), replicas.InternalToken)
+				if len(replicas.hosts) != strat.rf {
+					t.Errorf("expected to have %d replicas got %d for token=%v", strat.rf, len(replicas.hosts), replicas.token)
 				}
 			}
 
 			for i, token := range tokens {
-				ht := tokenReplicas.InternalReplicasFor(token.InternalToken)
-				if ht.InternalToken != token.InternalToken {
-					t.Errorf("token %v not in replica map: %v", token, ht.InternalHosts)
+				ht := tokenReplicas.replicasFor(token.InternalToken)
+				if ht.token != token.InternalToken {
+					t.Errorf("token %v not in replica map: %v", token, ht.hosts)
 				}
 
-				for j, replica := range ht.InternalHosts {
+				for j, replica := range ht.hosts {
 					exp := tokens[(i+j)%len(tokens)].InternalHost
 					if exp != replica {
 						t.Errorf("expected host %v to be a replica of %v got %v", implEndpoint.HostInfoData(exp).InternalHostId, token, implEndpoint.HostInfoData(replica).InternalHostId)
@@ -274,8 +274,8 @@ func TestTokenRing(t *testing.T) {
 		t.Run("EmptyRing", func(t *testing.T) {
 			t.Parallel()
 
-			var replicas InternalTokenRingReplicas
-			if got := replicas.InternalReplicasForInt64(42); got != nil {
+			var replicas tokenRingReplicas
+			if got := replicas.replicasForInt64(42); got != nil {
 				t.Fatalf("expected nil for an empty ring, got %v", got)
 			}
 		})
@@ -301,10 +301,10 @@ func TestTokenRing(t *testing.T) {
 				return opaqueStorageValuexxxxxxx
 			}()
 
-			replicas := InternalTokenRingReplicas{
-				{InternalToken: endpoint.InternalInt64Token(-100), InternalHosts: []*endpoint.HostInfo{host0}},
-				{InternalToken: endpoint.InternalInt64Token(0), InternalHosts: []*endpoint.HostInfo{host1}},
-				{InternalToken: endpoint.InternalInt64Token(100), InternalHosts: []*endpoint.HostInfo{host2}},
+			replicas := tokenRingReplicas{
+				{token: endpoint.InternalInt64Token(-100), hosts: []*endpoint.HostInfo{host0}},
+				{token: endpoint.InternalInt64Token(0), hosts: []*endpoint.HostInfo{host1}},
+				{token: endpoint.InternalInt64Token(100), hosts: []*endpoint.HostInfo{host2}},
 			}
 
 			queries := []endpoint.InternalInt64Token{
@@ -312,8 +312,8 @@ func TestTokenRing(t *testing.T) {
 				0, 1, 50, 99, 100, 101, 1000, math.MaxInt64,
 			}
 			for _, q := range queries {
-				want := replicas.InternalReplicasFor(q)
-				got := replicas.InternalReplicasForInt64(q)
+				want := replicas.replicasFor(q)
+				got := replicas.replicasForInt64(q)
 				if want != got {
 					t.Errorf("token %d: replicasFor=%p (ring token %v) replicasForInt64=%p (ring token %v) diverge",
 						q, want, tokensOf(want), got, tokensOf(got))
@@ -331,8 +331,8 @@ func TestTokenRing(t *testing.T) {
 				implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxx).InternalHostId = tUUID(0)
 				return opaqueStorageValuexxxxxxxx
 			}()
-			replicas := InternalTokenRingReplicas{
-				{InternalToken: intToken(0), InternalHosts: []*endpoint.HostInfo{host0}},
+			replicas := tokenRingReplicas{
+				{token: intToken(0), hosts: []*endpoint.HostInfo{host0}},
 			}
 
 			mustPanic := func(t *testing.T, name string, fn func()) {
@@ -344,8 +344,8 @@ func TestTokenRing(t *testing.T) {
 				fn()
 			}
 
-			mustPanic(t, "replicasFor", func() { replicas.InternalReplicasFor(endpoint.InternalInt64Token(50)) })
-			mustPanic(t, "replicasForInt64", func() { replicas.InternalReplicasForInt64(endpoint.InternalInt64Token(50)) })
+			mustPanic(t, "replicasFor", func() { replicas.replicasFor(endpoint.InternalInt64Token(50)) })
+			mustPanic(t, "replicasForInt64", func() { replicas.replicasForInt64(endpoint.InternalInt64Token(50)) })
 		})
 	})
 }

@@ -22,41 +22,41 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
-type InternalV2RouteRow struct {
+type v2RouteRow struct {
 	connection, host, address string
 	port, tlsPort             int
 }
-type InternalV2RouteID struct{}
+type v2RouteID struct{}
 
-func (InternalV2RouteID) CheckType(t cqltype.DataType) error {
+func (v2RouteID) CheckType(t cqltype.DataType) error {
 	if t.Kind() == cqltype.TypeUUID {
 		return codec.UUIDCodec.CheckType(t)
 	}
 	return (metadata.InternalV2MetadataText{}).CheckType(t)
 }
-func (InternalV2RouteID) Decode(r codec.ValueReader) (string, error) {
+func (v2RouteID) Decode(r codec.ValueReader) (string, error) {
 	if r.Type().Kind() == cqltype.TypeUUID {
 		return (metadata.InternalV2MetadataUUIDString{}).Decode(r)
 	}
 	return (metadata.InternalV2MetadataText{}).Decode(r)
 }
-func (InternalV2RouteID) Clone(v string) string { return v }
-func InternalV2DecodeRoutes() codec.RowDecoder[InternalV2RouteRow] {
-	return metadata.InternalV2SchemaRows[InternalV2RouteRow]{InternalFields: []metadata.InternalV2SchemaField[InternalV2RouteRow]{
-		metadata.InternalV2RequiredSchemaColumn("connection_id", InternalV2RouteID{}, func(r *InternalV2RouteRow) *string { return &r.connection }),
-		metadata.InternalV2RequiredSchemaColumn("host_id", InternalV2RouteID{}, func(r *InternalV2RouteRow) *string { return &r.host }),
-		metadata.InternalV2RequiredSchemaColumn("address", metadata.InternalV2MetadataText{}, func(r *InternalV2RouteRow) *string { return &r.address }),
-		metadata.InternalV2SchemaColumn("port", metadata.InternalV2MetadataInt{}, func(r *InternalV2RouteRow) *int { return &r.port }),
-		metadata.InternalV2SchemaColumn("tls_port", metadata.InternalV2MetadataInt{}, func(r *InternalV2RouteRow) *int { return &r.tlsPort }),
+func (v2RouteID) Clone(v string) string { return v }
+func v2DecodeRoutes() codec.RowDecoder[v2RouteRow] {
+	return metadata.InternalV2SchemaRows[v2RouteRow]{InternalFields: []metadata.InternalV2SchemaField[v2RouteRow]{
+		metadata.InternalV2RequiredSchemaColumn("connection_id", v2RouteID{}, func(r *v2RouteRow) *string { return &r.connection }),
+		metadata.InternalV2RequiredSchemaColumn("host_id", v2RouteID{}, func(r *v2RouteRow) *string { return &r.host }),
+		metadata.InternalV2RequiredSchemaColumn("address", metadata.InternalV2MetadataText{}, func(r *v2RouteRow) *string { return &r.address }),
+		metadata.InternalV2SchemaColumn("port", metadata.InternalV2MetadataInt{}, func(r *v2RouteRow) *int { return &r.port }),
+		metadata.InternalV2SchemaColumn("tls_port", metadata.InternalV2MetadataInt{}, func(r *v2RouteRow) *int { return &r.tlsPort }),
 	}}
 }
 
-type InternalV2RouteParams struct{ columns cqltype.Columns }
+type v2RouteParams struct{ columns cqltype.Columns }
 
-func (InternalV2RouteParams) Compile(c cqltype.Columns) (codec.ParamPlan[[][]string], error) {
-	return InternalV2RouteParams{c}, nil
+func (v2RouteParams) Compile(c cqltype.Columns) (codec.ParamPlan[[][]string], error) {
+	return v2RouteParams{c}, nil
 }
-func (p InternalV2RouteParams) Encode(w *codec.ParamWriter, values [][]string) error {
+func (p v2RouteParams) Encode(w *codec.ParamWriter, values [][]string) error {
 	if len(values) != p.columns.Len() {
 		return cqltype.TypeValidation("route query", "wrong argument count")
 	}
@@ -81,11 +81,11 @@ func (p InternalV2RouteParams) Encode(w *codec.ParamWriter, values [][]string) e
 	}
 	return nil
 }
-func InternalReadV2ClientRoutes(ctx context.Context, c InternalControlConnection, table, stmt string, bounds [][]string, tls bool) ([]InternalClientRoute, error) {
+func readV2ClientRoutes(ctx context.Context, c InternalControlConnection, table, stmt string, bounds [][]string, tls bool) ([]InternalClientRoute, error) {
 	if c == nil {
 		return nil, metadata.InternalErrNoControl
 	}
-	backend, ok := c.(InternalV2SystemQueryer)
+	backend, ok := c.(v2SystemQueryer)
 	if !ok {
 		return nil, cqltype.TypeValidation("client routes", "control does not support typed queries")
 	}
@@ -106,7 +106,7 @@ func InternalReadV2ClientRoutes(ctx context.Context, c InternalControlConnection
 	if s := c.InternalGetSession(); s != nil && s.privateStorage.InternalCfg.MetadataSchemaRequestTimeout > 0 {
 		timeout = s.privateStorage.InternalCfg.MetadataSchemaRequestTimeout
 	}
-	rows, err := InternalReadV2SystemRowsVia(ctx, 4, timeout, backend.InternalQueryV2System, binding.Statement[[][]string, InternalV2RouteRow]{CQL: stmt, Params: InternalV2RouteParams{}, Rows: InternalV2DecodeRoutes()}, cqltype.NewColumns(columns...), bounds)
+	rows, err := readV2SystemRowsVia(ctx, 4, timeout, backend.InternalQueryV2System, binding.Statement[[][]string, v2RouteRow]{CQL: stmt, Params: v2RouteParams{}, Rows: v2DecodeRoutes()}, cqltype.NewColumns(columns...), bounds)
 	if err != nil {
 		return nil, fmt.Errorf("error reading %s table: %w", table, err)
 	}
@@ -130,24 +130,24 @@ func InternalReadV2ClientRoutes(ctx context.Context, c InternalControlConnection
 	return result, nil
 }
 func (p *ClientRoutesHandler) refreshContext(ctx context.Context) error {
-	return p.updateHostPortMappingContext(ctx, InternalUpdateTask{InternalConnectionIDs: p.privateStorage.InternalCfg.Endpoints.GetAllConnectionIDs()})
+	return p.updateHostPortMappingContext(ctx, InternalUpdateTask{InternalConnectionIDs: p.privateStorage.cfg.Endpoints.GetAllConnectionIDs()})
 }
 func InternalClientRoutesHandlerOrderedRoutes(p *ClientRoutesHandler, hostID string) []InternalClientRoute {
 	p.privateStorage.InternalRouteCache.mu.Lock()
 	defer p.privateStorage.InternalRouteCache.mu.Unlock()
-	entry, ok := p.privateStorage.InternalRouteCache.InternalRoutes[hostID]
+	entry, ok := p.privateStorage.InternalRouteCache.routes[hostID]
 	if !ok {
 		return nil
 	}
-	out := make([]InternalClientRoute, 0, len(entry.InternalAllRoutes))
+	out := make([]InternalClientRoute, 0, len(entry.allRoutes))
 	if entry.current != nil {
 		if index := entry.routeIndex(entry.current.InternalConnectionID); index >= 0 {
-			out = append(out, entry.InternalAllRoutes[index])
+			out = append(out, entry.allRoutes[index])
 		}
 	}
-	ids := p.privateStorage.InternalCfg.Endpoints.GetAllConnectionIDs()
+	ids := p.privateStorage.cfg.Endpoints.GetAllConnectionIDs()
 	if len(ids) == 0 {
-		for _, r := range entry.InternalAllRoutes {
+		for _, r := range entry.allRoutes {
 			ids = append(ids, r.InternalConnectionID)
 		}
 	}
@@ -156,7 +156,7 @@ func InternalClientRoutesHandlerOrderedRoutes(p *ClientRoutesHandler, hostID str
 			continue
 		}
 		if index := entry.routeIndex(id); index >= 0 {
-			out = append(out, entry.InternalAllRoutes[index])
+			out = append(out, entry.allRoutes[index])
 		}
 	}
 	return out
@@ -164,16 +164,16 @@ func InternalClientRoutesHandlerOrderedRoutes(p *ClientRoutesHandler, hostID str
 func InternalClientRoutesHandlerBindRoute(p *ClientRoutesHandler, route InternalClientRoute) bool {
 	p.privateStorage.InternalRouteCache.mu.Lock()
 	defer p.privateStorage.InternalRouteCache.mu.Unlock()
-	entry, ok := p.privateStorage.InternalRouteCache.InternalRoutes[route.InternalHostID]
+	entry, ok := p.privateStorage.InternalRouteCache.routes[route.InternalHostID]
 	if !ok {
 		return false
 	}
 	i := entry.routeIndex(route.InternalConnectionID)
-	if i < 0 || entry.InternalAllRoutes[i] != route {
+	if i < 0 || entry.allRoutes[i] != route {
 		return false
 	}
 	entry.BindCurrent(route.InternalConnectionID)
-	p.privateStorage.InternalRouteCache.InternalRoutes[route.InternalHostID] = entry
+	p.privateStorage.InternalRouteCache.routes[route.InternalHostID] = entry
 	return true
 }
 func (p *ClientRoutesHandler) resolveRoute(ctx context.Context, route InternalClientRoute) ([]implEndpoint.AddressPort, error) {
@@ -181,17 +181,17 @@ func (p *ClientRoutesHandler) resolveRoute(ctx context.Context, route InternalCl
 		return nil, cqltype.TypeValidation("client route", "missing required port")
 	}
 	name := route.InternalAddress
-	if override := p.privateStorage.InternalAddrOverrides[route.InternalConnectionID]; override != "" {
+	if override := p.privateStorage.addrOverrides[route.InternalConnectionID]; override != "" {
 		name = override
 	}
 	var ips []net.IP
 	var err error
-	if resolver, ok := p.privateStorage.InternalResolver.(interface {
+	if resolver, ok := p.privateStorage.resolver.(interface {
 		LookupIPContext(context.Context, string) ([]net.IP, error)
 	}); ok {
 		ips, err = resolver.LookupIPContext(ctx, name)
 	} else {
-		ips, err = p.privateStorage.InternalResolver.LookupIP(name)
+		ips, err = p.privateStorage.resolver.LookupIP(name)
 	}
 	if err != nil {
 		return nil, err
@@ -210,15 +210,15 @@ func (p *ClientRoutesHandler) resolveRoute(ctx context.Context, route InternalCl
 
 // Route read publication compares both the connection scope and exact pair
 // epochs. Full reads preserve a pair invalidated by an event after read start.
-type InternalV2RouteEpochs struct {
+type v2RouteEpochs struct {
 	connections map[string]uint64
 	pairs       map[InternalPair]uint64
 }
 
-func InternalClientRoutesHandlerCaptureRouteEpochs(p *ClientRoutesHandler) InternalV2RouteEpochs {
+func InternalClientRoutesHandlerCaptureRouteEpochs(p *ClientRoutesHandler) v2RouteEpochs {
 	p.privateStorage.InternalRouteCache.mu.Lock()
 	defer p.privateStorage.InternalRouteCache.mu.Unlock()
-	return InternalV2RouteEpochs{maps.Clone(p.privateStorage.connectionEpoch), maps.Clone(p.privateStorage.pairEpoch)}
+	return v2RouteEpochs{maps.Clone(p.privateStorage.connectionEpoch), maps.Clone(p.privateStorage.pairEpoch)}
 }
 func InternalClientRoutesHandlerInvalidateRouteTask(p *ClientRoutesHandler, task InternalUpdateTask) {
 	p.privateStorage.InternalRouteCache.mu.Lock()
@@ -244,8 +244,8 @@ func InternalClientRoutesHandlerInvalidateRouteTask(p *ClientRoutesHandler, task
 			touched[key.InternalHostID] = true
 		}
 	} else {
-		for host, entry := range p.privateStorage.InternalRouteCache.InternalRoutes {
-			for _, route := range entry.InternalAllRoutes {
+		for host, entry := range p.privateStorage.InternalRouteCache.routes {
+			for _, route := range entry.allRoutes {
 				if slices.Contains(task.InternalConnectionIDs, route.InternalConnectionID) {
 					touched[host] = true
 					break
@@ -256,7 +256,7 @@ func InternalClientRoutesHandlerInvalidateRouteTask(p *ClientRoutesHandler, task
 	p.advanceRouteHostEpochsLocked(touched)
 
 }
-func InternalClientRoutesHandlerApplyRouteRead(p *ClientRoutesHandler, task InternalUpdateTask, epochs InternalV2RouteEpochs, incoming []InternalClientRoute) bool {
+func InternalClientRoutesHandlerApplyRouteRead(p *ClientRoutesHandler, task InternalUpdateTask, epochs v2RouteEpochs, incoming []InternalClientRoute) bool {
 	p.privateStorage.InternalRouteCache.mu.Lock()
 	defer p.privateStorage.InternalRouteCache.mu.Unlock()
 	valid := func(key InternalPair) bool {
@@ -265,8 +265,8 @@ func InternalClientRoutesHandlerApplyRouteRead(p *ClientRoutesHandler, task Inte
 	current := p.privateStorage.InternalRouteCache.snapshotCurrentConnectionIDsLocked()
 	keys := slices.Clone(task.InternalPairs)
 	if task.InternalPairs == nil {
-		for host, entry := range p.privateStorage.InternalRouteCache.InternalRoutes {
-			for _, r := range entry.InternalAllRoutes {
+		for host, entry := range p.privateStorage.InternalRouteCache.routes {
+			for _, r := range entry.allRoutes {
 				if slices.Contains(task.InternalConnectionIDs, r.InternalConnectionID) {
 					keys = append(keys, InternalPair{r.InternalConnectionID, host})
 				}
@@ -328,9 +328,9 @@ func (p *ClientRoutesHandler) updateHostPortMappingContext(ctx context.Context, 
 	var err error
 	switch {
 	case task.InternalPairs != nil:
-		rows, err = InternalGetV2RoutesPairs(ctx, p.privateStorage.InternalC, p.privateStorage.InternalCfg.TableName, task.InternalPairs, p.privateStorage.InternalPickTLSPorts)
+		rows, err = getV2RoutesPairs(ctx, p.privateStorage.c, p.privateStorage.cfg.TableName, task.InternalPairs, p.privateStorage.pickTLSPorts)
 	case task.InternalConnectionIDs != nil:
-		rows, err = InternalGetV2RoutesConnections(ctx, p.privateStorage.InternalC, p.privateStorage.InternalCfg.TableName, task.InternalConnectionIDs, p.privateStorage.InternalPickTLSPorts)
+		rows, err = getV2RoutesConnections(ctx, p.privateStorage.c, p.privateStorage.cfg.TableName, task.InternalConnectionIDs, p.privateStorage.pickTLSPorts)
 	default:
 		return fmt.Errorf("updateTask has neither pairs nor connectionIDs")
 	}
@@ -365,27 +365,27 @@ func (p *ClientRoutesHandler) routeGeneration() uint64 {
 	}
 	return 0
 }
-func InternalGetV2RoutesConnections(ctx context.Context, c InternalControlConnection, table string, ids []string, tls bool) ([]InternalClientRoute, error) {
+func getV2RoutesConnections(ctx context.Context, c InternalControlConnection, table string, ids []string, tls bool) ([]InternalClientRoute, error) {
 	if len(ids) == 0 {
 		return nil, cqltype.TypeValidation("routes", "connection IDs cannot be empty")
 	}
 	if table == "" {
 		table = "system.client_routes"
 	}
-	if !InternalValidV2RouteTable(table) {
+	if !validV2RouteTable(table) {
 		return nil, cqltype.TypeValidation("routes table", "invalid qualified identifier")
 	}
 	stmt := fmt.Sprintf("select connection_id, host_id, address, port, tls_port from %s where connection_id in ?", table)
-	return InternalReadV2ClientRoutes(ctx, c, table, stmt, [][]string{ids}, tls)
+	return readV2ClientRoutes(ctx, c, table, stmt, [][]string{ids}, tls)
 }
-func InternalGetV2RoutesPairs(ctx context.Context, c InternalControlConnection, table string, pairs []InternalPair, tls bool) ([]InternalClientRoute, error) {
+func getV2RoutesPairs(ctx context.Context, c InternalControlConnection, table string, pairs []InternalPair, tls bool) ([]InternalClientRoute, error) {
 	if len(pairs) == 0 {
 		return nil, cqltype.TypeValidation("routes", "pairs cannot be empty")
 	}
 	if table == "" {
 		table = "system.client_routes"
 	}
-	if !InternalValidV2RouteTable(table) {
+	if !validV2RouteTable(table) {
 		return nil, cqltype.TypeValidation("routes table", "invalid qualified identifier")
 	}
 	ids, hosts := make([]string, len(pairs)), make([]string, len(pairs))
@@ -393,7 +393,7 @@ func InternalGetV2RoutesPairs(ctx context.Context, c InternalControlConnection, 
 		ids[i], hosts[i] = p.InternalConnectionID, p.InternalHostID
 	}
 	stmt := fmt.Sprintf("select connection_id, host_id, address, port, tls_port from %s where connection_id in ? and host_id in ?", table)
-	rows, err := InternalReadV2ClientRoutes(ctx, c, table, stmt, [][]string{ids, hosts}, tls)
+	rows, err := readV2ClientRoutes(ctx, c, table, stmt, [][]string{ids, hosts}, tls)
 	if err != nil {
 		return nil, err
 	}
@@ -401,7 +401,7 @@ func InternalGetV2RoutesPairs(ctx context.Context, c InternalControlConnection, 
 		return !slices.Contains(pairs, InternalPair{r.InternalConnectionID, r.InternalHostID})
 	}), nil
 }
-func InternalValidV2RouteTable(table string) bool {
+func validV2RouteTable(table string) bool {
 	parts := strings.Split(table, ".")
 	if len(parts) != 2 {
 		return false
@@ -426,14 +426,14 @@ func (p *ClientRoutesHandler) handleRouteEvent(event events.Event) {
 func InternalClientRoutesHandlerHandleRouteEventOwned(p *ClientRoutesHandler, event events.Event, release func()) bool {
 	switch e := event.(type) {
 	case *events.ControlConnectionRecreatedEvent:
-		return InternalClientRoutesHandlerUpdateHostPortMappingAsync(p, InternalUpdateTask{InternalConnectionIDs: p.privateStorage.InternalCfg.Endpoints.GetAllConnectionIDs(), InternalRelease: release})
+		return InternalClientRoutesHandlerUpdateHostPortMappingAsync(p, InternalUpdateTask{InternalConnectionIDs: p.privateStorage.cfg.Endpoints.GetAllConnectionIDs(), InternalRelease: release})
 	case *events.ClientRoutesChangedEvent:
-		ids := InternalFilterAllowedConnectionIDs(e.ConnectionIDs, p.privateStorage.InternalCfg.Endpoints.GetAllConnectionIDs())
+		ids := filterAllowedConnectionIDs(e.ConnectionIDs, p.privateStorage.cfg.Endpoints.GetAllConnectionIDs())
 		if len(ids) == 0 {
 			return false
 		}
 		task := InternalUpdateTask{InternalConnectionIDs: ids}
-		if pairs := InternalGetPairsFromEvent(ids, e.HostIDs); len(pairs) > 0 {
+		if pairs := getPairsFromEvent(ids, e.HostIDs); len(pairs) > 0 {
 			task = InternalUpdateTask{InternalPairs: pairs}
 		}
 		if e.ChangeType == "DELETED" || e.ChangeType == "DROPPED" {
@@ -459,18 +459,18 @@ func InternalClientRoutesHandlerHandleRouteEventOwned(p *ClientRoutesHandler, ev
 
 }
 
-func (p *ClientRoutesHandler) routeMatches(route InternalClientRoute, epochs InternalV2RouteEpochs) bool {
+func (p *ClientRoutesHandler) routeMatches(route InternalClientRoute, epochs v2RouteEpochs) bool {
 	p.privateStorage.InternalRouteCache.mu.Lock()
 	defer p.privateStorage.InternalRouteCache.mu.Unlock()
 	if p.privateStorage.connectionEpoch[route.InternalConnectionID] != epochs.connections[route.InternalConnectionID] || p.privateStorage.pairEpoch[InternalPair{route.InternalConnectionID, route.InternalHostID}] != epochs.pairs[InternalPair{route.InternalConnectionID, route.InternalHostID}] {
 		return false
 	}
-	entry, ok := p.privateStorage.InternalRouteCache.InternalRoutes[route.InternalHostID]
+	entry, ok := p.privateStorage.InternalRouteCache.routes[route.InternalHostID]
 	if !ok {
 		return false
 	}
 	i := entry.routeIndex(route.InternalConnectionID)
-	return i >= 0 && entry.InternalAllRoutes[i] == route
+	return i >= 0 && entry.allRoutes[i] == route
 }
 func (s *Core) dialV2Routes(ctx context.Context, host *implEndpoint.HostInfo, cfg *transport.ConnConfig, handler transport.ConnErrorHandler) (*transport.Conn, error) {
 	p := s.privateStorage.InternalClientRoutesHandler
@@ -490,7 +490,7 @@ func (s *Core) dialV2Routes(ctx context.Context, host *implEndpoint.HostInfo, cf
 				return nil, cqltype.TypeValidation("route generation", "route changed while opening")
 			}
 			implEndpoint.InternalHostInfoSetTranslatedConnectionInfo(host, implEndpoint.InternalTranslatedAddresses{CQL: endpoint})
-			conn, err := InternalSessionDialWithoutObserver(s, ctx, host, cfg, handler, 0, 0)
+			conn, err := sessionDialWithoutObserver(s, ctx, host, cfg, handler, 0, 0)
 			if err != nil {
 				causes = append(causes, err)
 				continue
@@ -516,11 +516,11 @@ func (s *Core) dialV2Routes(ctx context.Context, host *implEndpoint.HostInfo, cf
 	return nil, fmt.Errorf("no usable client route for host %s: %w", host.HostID(), errors.Join(causes...))
 }
 
-func (p *ClientRoutesHandler) captureHostRouteEpochs(hostID string) InternalV2RouteEpochs {
+func (p *ClientRoutesHandler) captureHostRouteEpochs(hostID string) v2RouteEpochs {
 	p.privateStorage.InternalRouteCache.mu.Lock()
 	defer p.privateStorage.InternalRouteCache.mu.Unlock()
-	out := InternalV2RouteEpochs{connections: make(map[string]uint64), pairs: make(map[InternalPair]uint64)}
-	for _, route := range p.privateStorage.InternalRouteCache.InternalRoutes[hostID].InternalAllRoutes {
+	out := v2RouteEpochs{connections: make(map[string]uint64), pairs: make(map[InternalPair]uint64)}
+	for _, route := range p.privateStorage.InternalRouteCache.routes[hostID].allRoutes {
 		out.connections[route.InternalConnectionID] = p.privateStorage.connectionEpoch[route.InternalConnectionID]
 		key := InternalPair{route.InternalConnectionID, hostID}
 		out.pairs[key] = p.privateStorage.pairEpoch[key]

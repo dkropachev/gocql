@@ -122,7 +122,7 @@ func (t *TracerEnhanced) AllTraceIDs() [][]byte {
 }
 
 func (t *TracerEnhanced) IsReady(traceId []byte) (bool, error) {
-	rows, err := InternalReadV2TraceRows(t.privateStorage.session, traceId, "SELECT duration FROM system_traces.sessions WHERE session_id = ?", codec.OneColumn(codec.NullableCodec(codec.Int32)))
+	rows, err := readV2TraceRows(t.privateStorage.session, traceId, "SELECT duration FROM system_traces.sessions WHERE session_id = ?", codec.OneColumn(codec.NullableCodec(codec.Int32)))
 	if err != nil {
 		return false, err
 	}
@@ -135,7 +135,7 @@ func (t *TracerEnhanced) GetCoordinatorTime(traceId []byte) (string, time.Durati
 		duration    cqltype.Nullable[int32]
 	}
 	decoder := codec.Row(codec.Column("coordinator", codec.InetCodec, func(r *row) *netip.Addr { return &r.coordinator }), codec.Column("duration", codec.NullableCodec(codec.Int32), func(r *row) *cqltype.Nullable[int32] { return &r.duration }))
-	rows, err := InternalReadV2TraceRows(t.privateStorage.session, traceId, "SELECT coordinator, duration FROM system_traces.sessions WHERE session_id = ?", decoder)
+	rows, err := readV2TraceRows(t.privateStorage.session, traceId, "SELECT coordinator, duration FROM system_traces.sessions WHERE session_id = ?", decoder)
 	if err != nil {
 		return "", 0, err
 	}
@@ -155,7 +155,7 @@ type TraceEntry struct {
 
 func (t *TracerEnhanced) GetActivities(traceId []byte) ([]TraceEntry, error) {
 	decoder := codec.Row(codec.Column("event_id", codec.TimeUUIDCodec, func(r *model.TraceActivityRow) *codec.TimeUUID { return &r.InternalId }), codec.Column("activity", codec.TextCodec, func(r *model.TraceActivityRow) *cqltype.Text { return &r.InternalActivity }), codec.Column("source", codec.InetCodec, func(r *model.TraceActivityRow) *netip.Addr { return &r.InternalSource }), codec.Column("source_elapsed", codec.NullableCodec(codec.Int32), func(r *model.TraceActivityRow) *cqltype.Nullable[int32] { return &r.InternalElapsed }), codec.Column("thread", codec.TextCodec, func(r *model.TraceActivityRow) *cqltype.Text { return &r.InternalThread }))
-	rows, err := InternalReadV2TraceRows(t.privateStorage.session, traceId, "SELECT event_id, activity, source, source_elapsed, thread FROM system_traces.events WHERE session_id = ?", decoder)
+	rows, err := readV2TraceRows(t.privateStorage.session, traceId, "SELECT event_id, activity, source, source_elapsed, thread FROM system_traces.events WHERE session_id = ?", decoder)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func (t *TracerEnhanced) GetActivities(traceId []byte) ([]TraceEntry, error) {
 	return out, nil
 }
 
-func InternalReadV2TraceRows[R any](s *Core, traceID []byte, cql string, decoder codec.RowDecoder[R]) ([]R, error) {
+func readV2TraceRows[R any](s *Core, traceID []byte, cql string, decoder codec.RowDecoder[R]) ([]R, error) {
 	if s == nil || s.Closed() {
 		return nil, runtimeerrors.ErrClosed
 	}
@@ -176,7 +176,7 @@ func InternalReadV2TraceRows[R any](s *Core, traceID []byte, cql string, decoder
 	if s.privateStorage.InternalControl == nil {
 		return nil, metadata.InternalErrNoControl
 	}
-	backend, ok := s.privateStorage.InternalControl.(InternalV2SystemQueryer)
+	backend, ok := s.privateStorage.InternalControl.(v2SystemQueryer)
 	if !ok {
 		return nil, cqltype.TypeValidation("tracing", "control connection does not support typed requests")
 	}
@@ -190,5 +190,5 @@ func InternalReadV2TraceRows[R any](s *Core, traceID []byte, cql string, decoder
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	return InternalReadV2SystemRowsVia(ctx, 4, timeout, backend.InternalQueryV2System, binding.Statement[cqltype.UUID, R]{CQL: cql, Params: codec.OneParam(codec.UUIDCodec), Rows: decoder}, cqltype.NewColumns(cqltype.ColumnSpec{Name: "session_id", Type: typ}), id)
+	return readV2SystemRowsVia(ctx, 4, timeout, backend.InternalQueryV2System, binding.Statement[cqltype.UUID, R]{CQL: cql, Params: codec.OneParam(codec.UUIDCodec), Rows: decoder}, cqltype.NewColumns(cqltype.ColumnSpec{Name: "session_id", Type: typ}), id)
 }

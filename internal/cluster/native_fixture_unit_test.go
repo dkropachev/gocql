@@ -119,7 +119,7 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 
 // hostInfoFromFixture exercises the same typed topology decoder as control I/O.
 func hostInfoFromFixture(f *nativeResultFixture, port int) (*endpoint.HostInfo, error) {
-	rows, err := InternalReadV2SystemRowsVia(context.Background(), 4, 0, func(_ context.Context, _ *model.AttemptRequest) (*transport.InternalResponsePage, error) {
+	rows, err := readV2SystemRowsVia(context.Background(), 4, 0, func(_ context.Context, _ *model.AttemptRequest) (*transport.InternalResponsePage, error) {
 		return v2SchemaMockResponse(transport.InternalQrySystemLocal, f)
 	}, binding.Statement[implCodec.EmptyRecord, metadata.InternalV2TopologyRow]{CQL: transport.InternalQrySystemLocal, Params: implCodec.EmptyParamsEncoder, Rows: metadata.InternalV2DecodeTopology()}, cqltype.NewColumns(), implCodec.EmptyRecord{})
 	if err != nil {

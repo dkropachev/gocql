@@ -9,7 +9,7 @@ func (l hostLocation) String() string { return l.dc + "/" + l.rack }
 // report with no preference covers everything, since it constrains nothing.
 func preferenceCovers(preference any, loc hostLocation) bool {
 	switch p := preference.(type) {
-	case InternalNodeLocationDCReport:
+	case nodeLocationDCReport:
 		return loc.dc == p.LocalDC
 	case InternalNodeLocationRackReport:
 		return loc.dc == p.LocalDC && loc.rack == p.LocalRack

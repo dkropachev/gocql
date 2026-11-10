@@ -35,10 +35,10 @@ import (
 	"github.com/scylladb/gocql/v2/internal/metadata"
 )
 
-type InternalHostTokens struct {
+type hostTokens struct {
 	// token is end (inclusive) of token range these hosts belong to
-	InternalToken endpoint.Token
-	InternalHosts []*endpoint.HostInfo
+	token endpoint.Token
+	hosts []*endpoint.HostInfo
 }
 
 // tokenRingReplicas maps token ranges to list of replicas.
@@ -46,21 +46,21 @@ type InternalHostTokens struct {
 // The range for a given item in tokenRingReplicas starts after preceding range and ends with the token specified in
 // token. The end token is part of the range.
 // The lowest (i.e. index 0) range wraps around the ring (its preceding range is the one with largest index).
-type InternalTokenRingReplicas []InternalHostTokens
+type tokenRingReplicas []hostTokens
 
-func (h InternalTokenRingReplicas) Less(i, j int) bool {
-	return h[i].InternalToken.Less(h[j].InternalToken)
+func (h tokenRingReplicas) Less(i, j int) bool {
+	return h[i].token.Less(h[j].token)
 }
-func (h InternalTokenRingReplicas) Len() int      { return len(h) }
-func (h InternalTokenRingReplicas) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
+func (h tokenRingReplicas) Len() int      { return len(h) }
+func (h tokenRingReplicas) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 
-func (h InternalTokenRingReplicas) InternalReplicasFor(t endpoint.Token) *InternalHostTokens {
+func (h tokenRingReplicas) replicasFor(t endpoint.Token) *hostTokens {
 	if len(h) == 0 {
 		return nil
 	}
 
 	p := sort.Search(len(h), func(i int) bool {
-		return !h[i].InternalToken.Less(t)
+		return !h[i].token.Less(t)
 	})
 
 	if p >= len(h) {
@@ -73,18 +73,18 @@ func (h InternalTokenRingReplicas) InternalReplicasFor(t endpoint.Token) *Intern
 
 // replicasForInt64 is replicasFor specialized for an already-unboxed int64Token,
 // avoiding a Token-interface comparison on every token-aware routing decision.
-func (h InternalTokenRingReplicas) InternalReplicasForInt64(t endpoint.InternalInt64Token) *InternalHostTokens {
+func (h tokenRingReplicas) replicasForInt64(t endpoint.InternalInt64Token) *hostTokens {
 	if len(h) == 0 {
 		return nil
 	}
 
 	p := sort.Search(len(h), func(i int) bool {
-		if ht, ok := h[i].InternalToken.(endpoint.InternalInt64Token); ok {
+		if ht, ok := h[i].token.(endpoint.InternalInt64Token); ok {
 			return ht >= t
 		}
 		// Ring token type differs from int64Token (mismatched partitioner) —
 		// fall back to the boxed comparison, matching replicasFor's panic-or-not parity.
-		return !h[i].InternalToken.Less(t)
+		return !h[i].token.Less(t)
 	})
 
 	if p >= len(h) {
@@ -95,12 +95,12 @@ func (h InternalTokenRingReplicas) InternalReplicasForInt64(t endpoint.InternalI
 	return &h[p]
 }
 
-type InternalPlacementStrategy interface {
-	InternalReplicaMap(tokenRing *endpoint.InternalTokenRing) InternalTokenRingReplicas
+type placementStrategy interface {
+	InternalReplicaMap(tokenRing *endpoint.InternalTokenRing) tokenRingReplicas
 	InternalReplicationFactor(dc string) int
 }
 
-func InternalGetReplicationFactorFromOpts(val string) (int, error) {
+func getReplicationFactorFromOpts(val string) (int, error) {
 	n, err := strconv.Atoi(val)
 	if err != nil {
 		return 0, fmt.Errorf("invalid replication_factor %q: %w", val, err)
@@ -111,15 +111,15 @@ func InternalGetReplicationFactorFromOpts(val string) (int, error) {
 	return n, nil
 }
 
-func InternalGetStrategy(ks *metadata.KeyspaceMetadata, logger logging.StdLogger) InternalPlacementStrategy {
+func getStrategy(ks *metadata.KeyspaceMetadata, logger logging.StdLogger) placementStrategy {
 	switch {
 	case strings.Contains(ks.StrategyClass, "SimpleStrategy"):
-		rf, err := InternalGetReplicationFactorFromOpts(ks.StrategyOptions["replication_factor"])
+		rf, err := getReplicationFactorFromOpts(ks.StrategyOptions["replication_factor"])
 		if err != nil {
 			logger.Printf("parse rf for keyspace %q: %v", ks.Name, err)
 			return nil
 		}
-		return &InternalSimpleStrategy{InternalRf: rf}
+		return &simpleStrategy{rf: rf}
 	case strings.Contains(ks.StrategyClass, "NetworkTopologyStrategy"):
 		dcs := make(map[string]int)
 		for dc, rf := range ks.StrategyOptions {
@@ -127,7 +127,7 @@ func InternalGetStrategy(ks *metadata.KeyspaceMetadata, logger logging.StdLogger
 				continue
 			}
 
-			rf, err := InternalGetReplicationFactorFromOpts(rf)
+			rf, err := getReplicationFactorFromOpts(rf)
 			if err != nil {
 				logger.Printf("parse rf for keyspace %q, dc %q: %v", ks.Name, dc, err)
 				// skip DC if the rf is invalid/unsupported, so that we can at least work with other working DCs.
@@ -136,7 +136,7 @@ func InternalGetStrategy(ks *metadata.KeyspaceMetadata, logger logging.StdLogger
 
 			dcs[dc] = rf
 		}
-		return &InternalNetworkTopology{InternalDcs: dcs}
+		return &networkTopology{dcs: dcs}
 	case strings.Contains(ks.StrategyClass, "LocalStrategy"):
 		return nil
 	default:
@@ -145,23 +145,23 @@ func InternalGetStrategy(ks *metadata.KeyspaceMetadata, logger logging.StdLogger
 	}
 }
 
-type InternalSimpleStrategy struct {
-	InternalRf int
+type simpleStrategy struct {
+	rf int
 }
 
-func (s *InternalSimpleStrategy) InternalReplicationFactor(dc string) int {
-	return s.InternalRf
+func (s *simpleStrategy) InternalReplicationFactor(dc string) int {
+	return s.rf
 }
 
-func (s *InternalSimpleStrategy) InternalReplicaMap(tokenRing *endpoint.InternalTokenRing) InternalTokenRingReplicas {
+func (s *simpleStrategy) InternalReplicaMap(tokenRing *endpoint.InternalTokenRing) tokenRingReplicas {
 	tokens := tokenRing.InternalTokens
-	ring := make(InternalTokenRingReplicas, len(tokens))
+	ring := make(tokenRingReplicas, len(tokens))
 
 	for i, th := range tokens {
-		replicas := make([]*endpoint.HostInfo, 0, s.InternalRf)
+		replicas := make([]*endpoint.HostInfo, 0, s.rf)
 		seen := make(map[*endpoint.HostInfo]bool)
 
-		for j := 0; j < len(tokens) && len(replicas) < s.InternalRf; j++ {
+		for j := 0; j < len(tokens) && len(replicas) < s.rf; j++ {
 			h := tokens[(i+j)%len(tokens)]
 			if !seen[h.InternalHost] {
 				replicas = append(replicas, h.InternalHost)
@@ -169,7 +169,7 @@ func (s *InternalSimpleStrategy) InternalReplicaMap(tokenRing *endpoint.Internal
 			}
 		}
 
-		ring[i] = InternalHostTokens{InternalToken: th.InternalToken, InternalHosts: replicas}
+		ring[i] = hostTokens{token: th.InternalToken, hosts: replicas}
 	}
 
 	sort.Sort(ring)
@@ -177,20 +177,20 @@ func (s *InternalSimpleStrategy) InternalReplicaMap(tokenRing *endpoint.Internal
 	return ring
 }
 
-type InternalNetworkTopology struct {
-	InternalDcs map[string]int
+type networkTopology struct {
+	dcs map[string]int
 }
 
-func (n *InternalNetworkTopology) InternalReplicationFactor(dc string) int {
-	return n.InternalDcs[dc]
+func (n *networkTopology) InternalReplicationFactor(dc string) int {
+	return n.dcs[dc]
 }
 
-func (n *InternalNetworkTopology) haveRF(replicaCounts map[string]int) bool {
-	if len(replicaCounts) != len(n.InternalDcs) {
+func (n *networkTopology) haveRF(replicaCounts map[string]int) bool {
+	if len(replicaCounts) != len(n.dcs) {
 		return false
 	}
 
-	for dc, rf := range n.InternalDcs {
+	for dc, rf := range n.dcs {
 		if rf != replicaCounts[dc] {
 			return false
 		}
@@ -199,14 +199,14 @@ func (n *InternalNetworkTopology) haveRF(replicaCounts map[string]int) bool {
 	return true
 }
 
-func (n *InternalNetworkTopology) InternalReplicaMap(tokenRing *endpoint.InternalTokenRing) InternalTokenRingReplicas {
-	dcRacks := make(map[string]map[string]struct{}, len(n.InternalDcs))
+func (n *networkTopology) InternalReplicaMap(tokenRing *endpoint.InternalTokenRing) tokenRingReplicas {
+	dcRacks := make(map[string]map[string]struct{}, len(n.dcs))
 	// skipped hosts in a dc
-	skipped := make(map[string][]*endpoint.HostInfo, len(n.InternalDcs))
+	skipped := make(map[string][]*endpoint.HostInfo, len(n.dcs))
 	// number of replicas per dc
-	replicasInDC := make(map[string]int, len(n.InternalDcs))
+	replicasInDC := make(map[string]int, len(n.dcs))
 	// dc -> racks
-	seenDCRacks := make(map[string]map[string]struct{}, len(n.InternalDcs))
+	seenDCRacks := make(map[string]map[string]struct{}, len(n.dcs))
 
 	for _, h := range tokenRing.InternalHosts {
 		dc := h.DataCenter()
@@ -226,15 +226,15 @@ func (n *InternalNetworkTopology) InternalReplicaMap(tokenRing *endpoint.Interna
 	}
 
 	tokens := tokenRing.InternalTokens
-	replicaRing := make(InternalTokenRingReplicas, 0, len(tokens))
+	replicaRing := make(tokenRingReplicas, 0, len(tokens))
 
 	var totalRF int
-	for _, rf := range n.InternalDcs {
+	for _, rf := range n.dcs {
 		totalRF += rf
 	}
 
 	for i, th := range tokenRing.InternalTokens {
-		if rf := n.InternalDcs[th.InternalHost.DataCenter()]; rf == 0 {
+		if rf := n.dcs[th.InternalHost.DataCenter()]; rf == 0 {
 			// skip this token since no replica in this datacenter.
 			continue
 		}
@@ -243,7 +243,7 @@ func (n *InternalNetworkTopology) InternalReplicaMap(tokenRing *endpoint.Interna
 			skipped[k] = v[:0]
 		}
 
-		for dc := range n.InternalDcs {
+		for dc := range n.dcs {
 			replicasInDC[dc] = 0
 			for rack := range seenDCRacks[dc] {
 				delete(seenDCRacks[dc], rack)
@@ -262,7 +262,7 @@ func (n *InternalNetworkTopology) InternalReplicaMap(tokenRing *endpoint.Interna
 			dc := h.DataCenter()
 			rack := h.Rack()
 
-			rf := n.InternalDcs[dc]
+			rf := n.dcs[dc]
 			if rf == 0 {
 				// skip this DC, dont know about it or replication factor is zero
 				continue
@@ -321,11 +321,11 @@ func (n *InternalNetworkTopology) InternalReplicaMap(tokenRing *endpoint.Interna
 			panic(fmt.Sprintf("first replica is not the primary replica for the token: expected %v got %v", replicas[0].ConnectAddress(), th.InternalHost.ConnectAddress()))
 		}
 
-		replicaRing = append(replicaRing, InternalHostTokens{InternalToken: th.InternalToken, InternalHosts: replicas})
+		replicaRing = append(replicaRing, hostTokens{token: th.InternalToken, hosts: replicas})
 	}
 
 	dcsWithReplicas := 0
-	for _, dc := range n.InternalDcs {
+	for _, dc := range n.dcs {
 		if dc > 0 {
 			dcsWithReplicas++
 		}

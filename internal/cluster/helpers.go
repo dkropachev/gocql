@@ -26,15 +26,15 @@ package cluster
 
 import "github.com/scylladb/gocql/v2/internal/cqltype"
 
-func InternalCopyBytes(p []byte) []byte {
+func copyBytes(p []byte) []byte {
 	b := make([]byte, len(p))
 	copy(b, p)
 	return b
 }
 
-var InternalAsVectorType = cqltype.AsVectorType
-var InternalGetCassandraLongType = cqltype.GetCassandraLongType
-var InternalSplitJavaCompositeTypes = cqltype.SplitJavaCompositeTypes
-var InternalUnwrapCompositeTypeDefinition = cqltype.UnwrapCompositeTypeDefinition
-var InternalSplitCompositeTypes = cqltype.SplitCompositeTypes
-var InternalGetApacheCassandraType = cqltype.GetApacheCassandraType
+var asVectorType = cqltype.AsVectorType
+var getCassandraLongType = cqltype.GetCassandraLongType
+var splitJavaCompositeTypes = cqltype.SplitJavaCompositeTypes
+var unwrapCompositeTypeDefinition = cqltype.UnwrapCompositeTypeDefinition
+var splitCompositeTypes = cqltype.SplitCompositeTypes
+var getApacheCassandraType = cqltype.GetApacheCassandraType

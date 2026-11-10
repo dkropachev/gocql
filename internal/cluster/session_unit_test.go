@@ -35,7 +35,7 @@ import (
 
 func newTestSessionForTableMetadata(ctrl *schemaDataMock) *Core {
 	s := newSchemaEventTestSessionWithMock(ctrl)
-	SessionData(s).InternalIsInitialized = true
+	SessionData(s).isInitialized = true
 	return s
 }
 

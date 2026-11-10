@@ -32,23 +32,23 @@ import (
 	"github.com/scylladb/gocql/v2/internal/metadata"
 )
 
-type InternalTokenAwareHostPolicyStorage struct {
-	InternalFallback HostSelectionPolicy
+type tokenAwareHostPolicyStorage struct {
+	fallback HostSelectionPolicy
 	// atomic store for *clusterMeta
-	metadata                    atomic.Pointer[InternalClusterMeta]
-	InternalLogger              logging.StdLogger
-	InternalGetKeyspaceMetadata func(keyspace string) (*metadata.KeyspaceMetadata, error)
-	InternalGetKeyspaceName     func() string
-	hosts                       InternalCowHostList
-	partitioner                 string
+	metadata            atomic.Pointer[clusterMeta]
+	logger              logging.StdLogger
+	getKeyspaceMetadata func(keyspace string) (*metadata.KeyspaceMetadata, error)
+	getKeyspaceName     func() string
+	hosts               cowHostList
+	partitioner         string
 	// mu protects writes to hosts, partitioner, metadata.
 	// reads can be unlocked as long as they are not used for updating state later.
-	mu                               sync.Mutex
-	InternalShuffleReplicas          bool
-	InternalNonLocalReplicasFallback bool
-	avoidSlowReplicas                bool
+	mu                       sync.Mutex
+	shuffleReplicas          bool
+	nonLocalReplicasFallback bool
+	avoidSlowReplicas        bool
 }
 
-func InternalTokenAwareHostPolicyData(v *InternalTokenAwareHostPolicy) *InternalTokenAwareHostPolicyStorage {
+func tokenAwareHostPolicyData(v *tokenAwareHostPolicy) *tokenAwareHostPolicyStorage {
 	return &v.privateStorage
 }

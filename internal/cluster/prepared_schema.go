@@ -97,15 +97,15 @@ func InternalSessionUpdatePreparedSchemaSnapshot(s *Core, old, next *routing.Met
 		}
 		// Function dependencies are not exposed by PREPARED, so use their keyspace
 		// scope conservatively; unrelated table/type publications stay isolated.
-		if !InternalEqualPreparedFunctions(a.Functions, b.Functions) || !InternalEqualPreparedAggregates(a.Aggregates, b.Aggregates) {
+		if !equalPreparedFunctions(a.Functions, b.Functions) || !equalPreparedAggregates(a.Aggregates, b.Aggregates) {
 			InternalSessionInvalidatePreparedSchema(s, Event{Keyspace: n, Target: "FUNCTION"})
 		}
 	}
 }
-func InternalEqualPreparedFunction(a, b implMetadata.FunctionMetadata) bool {
+func equalPreparedFunction(a, b implMetadata.FunctionMetadata) bool {
 	return a.Keyspace == b.Keyspace && a.Name == b.Name && a.Body == b.Body && a.Language == b.Language && a.ReturnType == b.ReturnType && a.CalledOnNullInput == b.CalledOnNullInput && slices.Equal(a.ArgumentTypes, b.ArgumentTypes) && slices.Equal(a.ArgumentNames, b.ArgumentNames)
 }
-func InternalEqualPreparedFunctions(a, b map[string]*implMetadata.FunctionMetadata) bool {
+func equalPreparedFunctions(a, b map[string]*implMetadata.FunctionMetadata) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -117,13 +117,13 @@ func InternalEqualPreparedFunctions(a, b map[string]*implMetadata.FunctionMetada
 			}
 			continue
 		}
-		if !InternalEqualPreparedFunction(*x, *y) {
+		if !equalPreparedFunction(*x, *y) {
 			return false
 		}
 	}
 	return true
 }
-func InternalEqualPreparedAggregates(a, b map[string]*implMetadata.AggregateMetadata) bool {
+func equalPreparedAggregates(a, b map[string]*implMetadata.AggregateMetadata) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -135,7 +135,7 @@ func InternalEqualPreparedAggregates(a, b map[string]*implMetadata.AggregateMeta
 			}
 			continue
 		}
-		if x.Keyspace != y.Keyspace || x.Name != y.Name || x.InitCond != y.InitCond || x.ReturnType != y.ReturnType || x.StateType != y.StateType || implMetadata.AggregateMetadataData(x).InternalStateFunc != implMetadata.AggregateMetadataData(y).InternalStateFunc || implMetadata.AggregateMetadataData(x).InternalFinalFunc != implMetadata.AggregateMetadataData(y).InternalFinalFunc || !slices.Equal(x.ArgumentTypes, y.ArgumentTypes) || !InternalEqualPreparedFunction(x.FinalFunc, y.FinalFunc) || !InternalEqualPreparedFunction(x.StateFunc, y.StateFunc) {
+		if x.Keyspace != y.Keyspace || x.Name != y.Name || x.InitCond != y.InitCond || x.ReturnType != y.ReturnType || x.StateType != y.StateType || implMetadata.AggregateMetadataData(x).InternalStateFunc != implMetadata.AggregateMetadataData(y).InternalStateFunc || implMetadata.AggregateMetadataData(x).InternalFinalFunc != implMetadata.AggregateMetadataData(y).InternalFinalFunc || !slices.Equal(x.ArgumentTypes, y.ArgumentTypes) || !equalPreparedFunction(x.FinalFunc, y.FinalFunc) || !equalPreparedFunction(x.StateFunc, y.StateFunc) {
 			return false
 		}
 	}

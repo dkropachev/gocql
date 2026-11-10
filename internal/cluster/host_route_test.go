@@ -87,7 +87,7 @@ func hostRoutingSession(b testing.TB, tablets bool) *Core {
 		SessionData(s).InternalPool.InternalHostConnPools[snapshot.ID] = pool
 	}
 	// As a published snapshot does, index the hosts with the session's routes.
-	routing.SnapshotData(m).InternalHostIndex = InternalSessionRoutingHostIndex(s, routing.SnapshotData(m).InternalHosts)
+	routing.SnapshotData(m).InternalHostIndex = sessionRoutingHostIndex(s, routing.SnapshotData(m).InternalHosts)
 	return s
 }
 
@@ -101,14 +101,14 @@ func TestHostRoute(t *testing.T) {
 			pools := SessionData(s).InternalPool
 			id := routing.SnapshotData(s.Metadata()).InternalHosts[0].ID
 			route := routing.InternalNewRoute(pools.InternalRoute(id), 2)
-			conn := InternalSessionPickRoute(s, route, model.RoutingInfo{})
+			conn := sessionPickRoute(s, route, model.RoutingInfo{})
 			if conn == nil || implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard != 2 {
 				t.Fatal("picked another shard", conn)
 			}
-			if InternalSessionPickRoute(s, route.WithShard(hostRoutingShards), model.RoutingInfo{}) != nil {
+			if sessionPickRoute(s, route.WithShard(hostRoutingShards), model.RoutingInfo{}) != nil {
 				t.Fatal("picked a shard the host lacks")
 			}
-			if InternalSessionPickRoute(s, route.WithShard(implRouting.AnyShard), model.RoutingInfo{}) == nil {
+			if sessionPickRoute(s, route.WithShard(implRouting.AnyShard), model.RoutingInfo{}) == nil {
 				t.Fatal("no connection for any shard")
 			}
 			old := route.InternalHost().Pool()
@@ -117,7 +117,7 @@ func TestHostRoute(t *testing.T) {
 			pools.InternalHostConnPools[id] = &implPool.InternalHostConnPool{InternalHost: old.InternalHost, InternalConnPicker: implPool.InternalNopConnPicker{}}
 			pools.InternalMu.Unlock()
 			pools.InternalRemoveHost(id)
-			if route.InternalHost().Pool() != nil || InternalSessionPickRoute(s, route, model.RoutingInfo{}) != nil {
+			if route.InternalHost().Pool() != nil || sessionPickRoute(s, route, model.RoutingInfo{}) != nil {
 				t.Fatal("route kept a removed pool")
 			}
 			pools.InternalMu.Lock()
@@ -152,7 +152,7 @@ func TestHostRoute(t *testing.T) {
 				if r.Shard%2 == 0 {
 					r = r.WithShard(implRouting.AnyShard)
 				}
-				_ = InternalSessionPickRoute(s, r, model.RoutingInfo{})
+				_ = sessionPickRoute(s, r, model.RoutingInfo{})
 			}
 			cancel()
 			wg.Wait()

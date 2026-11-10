@@ -174,9 +174,9 @@ func InternalSessionCloseV2Peripheral(s *Core) {
 	for _, sub := range subs {
 		sub.Close()
 	}
-	InternalSessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "session", Stage: "closed", At: time.Now()})
+	sessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "session", Stage: "closed", At: time.Now()})
 }
-func InternalEventV2Address(host net.IP, port int) netip.AddrPort {
+func eventV2Address(host net.IP, port int) netip.AddrPort {
 	ip, ok := netip.AddrFromSlice(host)
 	if !ok || port < 0 || port > 65535 {
 		return netip.AddrPort{}
@@ -198,11 +198,11 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 	case *oldevents.TopologyChangeEvent:
 		e.Kind = TopologyEvent
 		e.Change = v.Change
-		e.Address = InternalEventV2Address(v.Host, v.Port)
+		e.Address = eventV2Address(v.Host, v.Port)
 	case *oldevents.StatusChangeEvent:
 		e.Kind = StatusEvent
 		e.Change = v.Change
-		e.Address = InternalEventV2Address(v.Host, v.Port)
+		e.Address = eventV2Address(v.Host, v.Port)
 	case *oldevents.SchemaChangeKeyspaceEvent:
 		e.Kind = SchemaEvent
 		e.Target = "KEYSPACE"
@@ -241,7 +241,7 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 	case *oldevents.ControlConnectionRecreatedEvent:
 		e.Kind = ControlEvent
 		e.Change = "RECONNECTED"
-		e.Address = InternalEventV2Address(v.NewHost.Host, v.NewHost.Port)
+		e.Address = eventV2Address(v.NewHost.Host, v.NewHost.Port)
 		e.HostID, _ = cqltype.ParseUUID(v.NewHost.HostID)
 	default:
 		return
@@ -250,7 +250,7 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 		InternalSessionInvalidatePreparedSchema(s, e)
 		p.InternalMu.Lock()
 		p.InternalPublicationRevision++
-		p.InternalBumpSchemaEpochLocked(e.Keyspace)
+		p.bumpSchemaEpochLocked(e.Keyspace)
 		p.schemaGeneration.Add(1)
 		if e.Target == "KEYSPACE" {
 			if e.Change == "DROPPED" {

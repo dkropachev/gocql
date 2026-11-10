@@ -56,7 +56,7 @@ func TestNodeEvents(t *testing.T) {
 				// handleNodeConnected never called setState. Start from NodeDown so the
 				// transition is what is being observed.
 				InternalHostInfoSetState(host, endpoint.NodeDown)
-			InternalSessionHandleNodeConnected(f.session, host)
+			sessionHandleNodeConnected(f.session, host)
 
 			if state := host.State(); state != endpoint.NodeUp {
 				t.Errorf("host state: got %v, want %v", state, endpoint.NodeUp)
@@ -72,7 +72,7 @@ func TestNodeEvents(t *testing.T) {
 			})
 			host := f.addHost(t, "127.0.10.1")
 			implEndpoint.InternalHostInfoSetState(host, endpoint.NodeDown)
-			InternalSessionHandleNodeConnected(f.session, host)
+			sessionHandleNodeConnected(f.session, host)
 
 			if state := host.State(); state != endpoint.NodeUp {
 				t.Errorf("host state: got %v, want %v", state, endpoint.NodeUp)
@@ -378,7 +378,7 @@ func TestNodeEvents(t *testing.T) {
 			// An UP for a host the driver has never seen means the ring is stale,
 			// so the driver re-reads it rather than guessing.
 			f := newNodeEventFixture(t)
-			InternalSessionHandleNodeUp(f.session, net.ParseIP("127.0.10.9"), 9042)
+			sessionHandleNodeUp(f.session, net.ParseIP("127.0.10.9"), 9042)
 
 			f.awaitRefresh(t)
 			assertStrings(t, "AddHost", f.policy.addHostCalls(), nil)
@@ -391,7 +391,7 @@ func TestNodeEvents(t *testing.T) {
 				cfg.HostFilter = HostFilterFunc(func(*endpoint.HostInfo) bool { return false })
 			})
 			f.addHost(t, "127.0.10.1")
-			InternalSessionHandleNodeUp(f.session, net.ParseIP("127.0.10.1"), 9042)
+			sessionHandleNodeUp(f.session, net.ParseIP("127.0.10.1"), 9042)
 
 			// The host is known, so this is not the unknown-host path: a filtered
 			// host must be dropped outright, with no refresh and no pool fill.
@@ -427,13 +427,13 @@ func TestNodeEvents(t *testing.T) {
 		otherPool, otherPicker := newSignallingHostPool(f.session, other)
 		SessionData(f.session).InternalPool.InternalHostConnPools = map[cqltype.UUID]*implPool.InternalHostConnPool{implEndpoint.InternalHostInfoHostUUID(host): hostPool, implEndpoint.InternalHostInfoHostUUID(other): otherPool}
 
-		if _, ok := SessionData(f.session).InternalHostSource.InternalGetHostByIP("127.0.20.1"); !ok {
+		if _, ok := SessionData(f.session).InternalHostSource.getHostByIP("127.0.20.1"); !ok {
 			t.Fatal("precondition: host is not in the host source")
 		}
 		if _, ok := SessionData(f.session).InternalPool.InternalGetPoolByHostID(host.HostID()); !ok {
 			t.Fatal("precondition: host has no connection pool")
 		}
-		InternalSessionRemoveHost(f.session, host)
+		sessionRemoveHost(f.session, host)
 
 		assertStrings(t, "RemoveHost", f.policy.removeHostCalls(), []string{"127.0.20.1"})
 
@@ -455,7 +455,7 @@ func TestNodeEvents(t *testing.T) {
 		// have closed anything.
 		assertPoolNotClosed(t, otherPicker, "unrelated host")
 
-		if _, ok := SessionData(f.session).InternalHostSource.InternalGetHostByIP("127.0.20.1"); ok {
+		if _, ok := SessionData(f.session).InternalHostSource.getHostByIP("127.0.20.1"); ok {
 			t.Error("removed host is still resolvable in the host source")
 		}
 		// ringDescriber keeps two indexes, and getHostByIP only proves one of them.
@@ -467,7 +467,7 @@ func TestNodeEvents(t *testing.T) {
 			t.Error("removed host is still in the host source by ID")
 		}
 
-		if _, ok := SessionData(f.session).InternalHostSource.InternalGetHostByIP("127.0.20.2"); !ok {
+		if _, ok := SessionData(f.session).InternalHostSource.getHostByIP("127.0.20.2"); !ok {
 			t.Error("removeHost also dropped an unrelated host")
 		}
 		if got := SessionData(f.session).InternalHostSource.InternalGetHost(other.HostID()); got == nil {

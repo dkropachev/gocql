@@ -26,9 +26,9 @@ package cluster
 
 // tokensOf is a small test helper to render a *hostTokens' token for
 // error messages without panicking on nil.
-func tokensOf(h *InternalHostTokens) any {
+func tokensOf(h *hostTokens) any {
 	if h == nil {
 		return nil
 	}
-	return h.InternalToken
+	return h.token
 }

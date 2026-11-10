@@ -41,7 +41,7 @@ const InternalDriverConfigVersion = 1
 // from being established" a property of this code rather than of the user's
 // configuration. 32KiB is generous for a configuration report and matches the
 // limit csharp-driver and java-driver use for the same report.
-const InternalMaxDriverConfigSize = 32 * 1024
+const maxDriverConfigSize = 32 * 1024
 
 // driverConfigReport is the value sent under driverConfigStartupKey, conforming
 // to docs/driver-config-schema.json. It groups the effective configuration the
@@ -53,14 +53,14 @@ const InternalMaxDriverConfigSize = 32 * 1024
 // produces is not the schema's order, which is fine -- object key order is
 // not significant in JSON.
 type InternalDriverConfigReport struct {
-	Connection   InternalConnectionReport   `json:"connection"`
-	ControlPlane InternalControlPlaneReport `json:"control-plane"`
-	Query        InternalQueryReport        `json:"query"`
-	Version      int                        `json:"version"`
+	Connection   connectionReport   `json:"connection"`
+	ControlPlane controlPlaneReport `json:"control-plane"`
+	Query        queryReport        `json:"query"`
+	Version      int                `json:"version"`
 }
 
 // connectionReport is the top-level "connection" group in the schema.
-type InternalConnectionReport struct {
+type connectionReport struct {
 	// NodePreference is which nodes the driver opens connections to at all, a
 	// different claim from query.load-balancing.node-preference (which of those
 	// a query may be routed to). Omitted when nothing narrows pool membership;
@@ -74,27 +74,27 @@ type InternalConnectionReport struct {
 	// for a future schema version, so there is nothing a v1 report could put
 	// there even though gocql does have both features (WriteCoalesceWaitTime,
 	// the control connection's heartBeat()).
-	Read  *InternalReadWriteTimeoutReport `json:"read,omitempty"`
-	Write *InternalReadWriteTimeoutReport `json:"write,omitempty"`
+	Read  *readWriteTimeoutReport `json:"read,omitempty"`
+	Write *readWriteTimeoutReport `json:"write,omitempty"`
 	// TLS is omitted when TLS is not configured, or when a HostDialer is set:
 	// HostDialer takes over the entire connection setup and SslOpts is ignored
 	// (see clusterSettings.SslOpts), so the effective TLS state is unknown.
-	TLS          *InternalTlsReport              `json:"tls,omitempty"`
-	Reconnection InternalReconnectionGroupReport `json:"reconnection"`
-	Connect      InternalConnectReport           `json:"connect"`
-	Requests     InternalRequestsReport          `json:"requests"`
-	Pool         InternalConnectionPoolReport    `json:"pool"`
-	Socket       InternalSocketReport            `json:"socket"`
+	TLS          *tlsReport              `json:"tls,omitempty"`
+	Reconnection reconnectionGroupReport `json:"reconnection"`
+	Connect      connectReport           `json:"connect"`
+	Requests     requestsReport          `json:"requests"`
+	Pool         connectionPoolReport    `json:"pool"`
+	Socket       socketReport            `json:"socket"`
 }
 
 // connectReport carries an optional timeout-ms: the schema does not list it
 // under connect.required, so an empty "connect": {} is how a disabled connect
 // timeout is reported. See positiveMillis.
-type InternalConnectReport struct {
+type connectReport struct {
 	TimeoutMs *int64 `json:"timeout-ms,omitempty"`
 }
 
-type InternalReadWriteTimeoutReport struct {
+type readWriteTimeoutReport struct {
 	TimeoutMs int64 `json:"timeout-ms"`
 }
 
@@ -115,29 +115,29 @@ type InternalReadWriteTimeoutReport struct {
 // validating against the schema accepts. See
 // TestDriverConfigReport/Schema/PermitsAbsentOrphanBound, which fails if that
 // ever changes.
-type InternalRequestsReport struct {
-	InFlight InternalInFlightReport `json:"in-flight"`
+type requestsReport struct {
+	InFlight inFlightReport `json:"in-flight"`
 }
 
-type InternalInFlightReport struct {
+type inFlightReport struct {
 	Max int `json:"max"`
 }
 
-type InternalConnectionPoolReport struct {
-	ShardAware InternalShardAwareReport `json:"shard-aware"`
+type connectionPoolReport struct {
+	ShardAware shardAwareReport `json:"shard-aware"`
 }
 
-type InternalShardAwareReport struct {
+type shardAwareReport struct {
 	Enabled bool `json:"enabled"`
 }
 
-type InternalSocketReport struct {
+type socketReport struct {
 	TCPNoDelay   bool `json:"tcp-no-delay"`
 	KeepAlive    bool `json:"keep-alive"`
 	ReuseAddress bool `json:"reuse-address"`
 }
 
-type InternalReconnectionGroupReport struct {
+type reconnectionGroupReport struct {
 	// Policy is one of reconnectionExponentialReport, reconnectionConstantReport,
 	// reconnectionCustomReport, or nil (marshals to JSON null, the schema's "no
 	// reconnection attempts will be made" branch).
@@ -149,52 +149,52 @@ type InternalReconnectionGroupReport struct {
 // never reaches these. The schema's "absent when attempts are unlimited" has
 // no counterpart here -- GetMaxRetries returns a plain count, with no value
 // standing for unlimited.
-type InternalReconnectionExponentialReport struct {
+type reconnectionExponentialReport struct {
 	Type        string `json:"type"`
 	BaseMs      int64  `json:"base-ms"`
 	MaxMs       int64  `json:"max-ms"`
 	MaxAttempts int    `json:"max-attempts"`
 }
 
-type InternalReconnectionConstantReport struct {
+type reconnectionConstantReport struct {
 	Type        string `json:"type"`
 	DelayMs     int64  `json:"delay-ms"`
 	MaxAttempts int    `json:"max-attempts"`
 }
 
-type InternalReconnectionCustomReport struct {
+type reconnectionCustomReport struct {
 	Type string `json:"type"`
 	Name string `json:"name"`
 }
 
-type InternalTlsReport struct {
+type tlsReport struct {
 	HostnameVerification bool `json:"hostname-verification"`
 }
 
 // controlPlaneReport is the top-level "control-plane" group in the schema.
-type InternalControlPlaneReport struct {
-	Queries InternalControlPlaneQueriesReport `json:"queries"`
-	Schema  InternalControlPlaneSchemaReport  `json:"schema"`
+type controlPlaneReport struct {
+	Queries controlPlaneQueriesReport `json:"queries"`
+	Schema  controlPlaneSchemaReport  `json:"schema"`
 }
 
-type InternalControlPlaneQueriesReport struct {
-	System InternalSystemQueriesReport `json:"system"`
+type controlPlaneQueriesReport struct {
+	System systemQueriesReport `json:"system"`
 }
 
-type InternalSystemQueriesReport struct {
-	Timeout InternalSystemQueriesTimeoutReport `json:"timeout"`
+type systemQueriesReport struct {
+	Timeout systemQueriesTimeoutReport `json:"timeout"`
 }
 
-type InternalSystemQueriesTimeoutReport struct {
+type systemQueriesTimeoutReport struct {
 	ClientSideMs *int64 `json:"client-side-ms,omitempty"`
 	ServerSideMs *int64 `json:"server-side-ms,omitempty"`
 }
 
-type InternalControlPlaneSchemaReport struct {
-	Agreement InternalSchemaAgreementReport `json:"agreement"`
+type controlPlaneSchemaReport struct {
+	Agreement schemaAgreementReport `json:"agreement"`
 }
 
-type InternalSchemaAgreementReport struct {
+type schemaAgreementReport struct {
 	TimeoutMs int64 `json:"timeout-ms"`
 }
 
@@ -206,18 +206,18 @@ type InternalSchemaAgreementReport struct {
 // NonSpeculativeExecution (disabled), and the schema says to omit the group
 // entirely when speculative execution is disabled -- which is always true of
 // the session-wide default this report describes.
-type InternalQueryReport struct {
-	Retry         InternalQueryRetryReport         `json:"retry"`
-	LoadBalancing InternalQueryLoadBalancingReport `json:"load-balancing"`
-	Defaults      InternalQueryDefaultsReport      `json:"defaults"`
+type queryReport struct {
+	Retry         queryRetryReport         `json:"retry"`
+	LoadBalancing queryLoadBalancingReport `json:"load-balancing"`
+	Defaults      queryDefaultsReport      `json:"defaults"`
 }
 
-type InternalQueryDefaultsReport struct {
-	Page *InternalPageReport `json:"page,omitempty"`
+type queryDefaultsReport struct {
+	Page *pageReport `json:"page,omitempty"`
 	// Request is omitted entirely when Timeout is 0: the schema no longer
 	// requires this group (only its inner timeout-ms was ever optional), so
 	// there is no reason to send an empty {} object.
-	Request *InternalRequestDefaultReport `json:"request,omitempty"`
+	Request *requestDefaultReport `json:"request,omitempty"`
 	// Consistency carries one of the schema's nine non-serial levels, or is
 	// omitted. Consistency's zero value (Any) is itself a real level, not a
 	// sentinel for "unset", so absence here means only one thing: the
@@ -235,15 +235,15 @@ type InternalQueryDefaultsReport struct {
 	ClientTimestamps bool `json:"client-timestamps"`
 }
 
-type InternalPageReport struct {
+type pageReport struct {
 	Size int `json:"size"`
 }
 
-type InternalRequestDefaultReport struct {
+type requestDefaultReport struct {
 	TimeoutMs int64 `json:"timeout-ms"`
 }
 
-type InternalQueryRetryReport struct {
+type queryRetryReport struct {
 	// Policy is one of retryPolicySimpleReport, retryPolicyDowngradingReport, or
 	// retryPolicyCustomReport.
 	Policy any `json:"policy"`
@@ -261,7 +261,7 @@ type InternalRetryPolicySimpleReport struct {
 	MaxRetries int    `json:"max-retries"`
 }
 
-type InternalRetryPolicyDowngradingReport struct {
+type retryPolicyDowngradingReport struct {
 	Type string `json:"type"`
 	// MaxRetries is DowngradingConsistencyRetryPolicy's own retry limit: its
 	// Attempt method stops retrying once it has stepped through every entry of
@@ -281,13 +281,13 @@ type InternalRetryPolicyCustomReport struct {
 	Name       string `json:"name"`
 }
 
-type InternalRetryBackoffExponentialReport struct {
+type retryBackoffExponentialReport struct {
 	Type   string `json:"type"`
 	BaseMs int64  `json:"base-ms"`
 	MaxMs  int64  `json:"max-ms"`
 }
 
-type InternalQueryLoadBalancingReport struct {
+type queryLoadBalancingReport struct {
 	// Policy is one of loadBalancingTokenAwareReport or loadBalancingCustomReport.
 	Policy any `json:"policy"`
 	// NodePreference is one of nodeLocationDCReport, nodeLocationRackReport, or
@@ -300,9 +300,9 @@ type InternalLoadBalancingTokenAwareReport struct {
 	// AdaptiveOrdering is omitted when the policy orders candidates only by
 	// the static rules above, which the schema spells "absent when adaptive
 	// ordering is disabled".
-	AdaptiveOrdering *InternalAdaptiveOrderingReport `json:"adaptive-ordering,omitempty"`
-	Type             string                          `json:"type"`
-	LoadDistribution string                          `json:"load-distribution"`
+	AdaptiveOrdering *adaptiveOrderingReport `json:"adaptive-ordering,omitempty"`
+	Type             string                  `json:"type"`
+	LoadDistribution string                  `json:"load-distribution"`
 	// FallbackToNonPreferredNodes reports whether requests may fail over to
 	// nodes outside of query.load-balancing.node-preference (DC or rack).
 	FallbackToNonPreferredNodes bool `json:"fallback-to-non-preferred-nodes"`
@@ -313,16 +313,16 @@ type InternalLoadBalancingTokenAwareReport struct {
 // records which signals feed the decision, not the algorithm or its
 // thresholds, so AvoidSlowReplicas' MAX_IN_FLIGHT_THRESHOLD has nowhere to go
 // and is not reported.
-type InternalAdaptiveOrderingReport struct {
+type adaptiveOrderingReport struct {
 	Signals []string `json:"signals"`
 }
 
-type InternalLoadBalancingCustomReport struct {
+type loadBalancingCustomReport struct {
 	Type string `json:"type"`
 	Name string `json:"name"`
 }
 
-type InternalNodeLocationDCReport struct {
+type nodeLocationDCReport struct {
 	Type    string `json:"type"`
 	LocalDC string `json:"local-dc"`
 }
@@ -350,12 +350,12 @@ type InternalNodeLocationRackReport struct {
 // same reason, the host selection policy is read off s.policy, not
 // s.cfg.PoolConfig.HostSelectionPolicy: the latter is never assigned the
 // default policy that newSessionCommon applies.
-type InternalDriverConfigReporter struct {
+type driverConfigReporter struct {
 	session *Core
 }
 
-func InternalNewDriverConfigReporter(s *Core) *InternalDriverConfigReporter {
-	return &InternalDriverConfigReporter{session: s}
+func newDriverConfigReporter(s *Core) *driverConfigReporter {
+	return &driverConfigReporter{session: s}
 }
 
 // updateStartupOptions adds the DRIVER_CONFIG STARTUP option.
@@ -369,14 +369,14 @@ func InternalNewDriverConfigReporter(s *Core) *InternalDriverConfigReporter {
 //
 // Reporting is best effort: it must never prevent a connection from being
 // established, so a report that cannot be built is logged and left out.
-func (r *InternalDriverConfigReporter) InternalUpdateStartupOptions(opts map[string]string, isScyllaConn bool) {
-	report, err := r.InternalBuildReport(isScyllaConn)
+func (r *driverConfigReporter) InternalUpdateStartupOptions(opts map[string]string, isScyllaConn bool) {
+	report, err := r.buildReport(isScyllaConn)
 	if err != nil {
 		r.session.privateStorage.InternalLogger.Printf("gocql: unable to report driver configuration: %v", err)
 		return
 	}
-	if len(report) > InternalMaxDriverConfigSize {
-		r.session.privateStorage.InternalLogger.Printf("gocql: driver configuration report is %d bytes, exceeding the %d byte limit; omitting it", len(report), InternalMaxDriverConfigSize)
+	if len(report) > maxDriverConfigSize {
+		r.session.privateStorage.InternalLogger.Printf("gocql: driver configuration report is %d bytes, exceeding the %d byte limit; omitting it", len(report), maxDriverConfigSize)
 		return
 	}
 	opts[InternalDriverConfigStartupKey] = report
@@ -385,34 +385,34 @@ func (r *InternalDriverConfigReporter) InternalUpdateStartupOptions(opts map[str
 // buildReport returns the JSON configuration report of the session, marshalled
 // fresh on every call so that it reflects the session's current state rather
 // than a snapshot from whenever it was first requested.
-func (r *InternalDriverConfigReporter) InternalBuildReport(isScyllaConn bool) (string, error) {
+func (r *driverConfigReporter) buildReport(isScyllaConn bool) (string, error) {
 	cfg := &r.session.privateStorage.InternalCfg
 	report := InternalDriverConfigReport{
 		Version:      InternalDriverConfigVersion,
-		Connection:   InternalBuildConnectionReport(cfg),
-		ControlPlane: InternalBuildControlPlaneReport(cfg, isScyllaConn),
+		Connection:   buildConnectionReport(cfg),
+		ControlPlane: buildControlPlaneReport(cfg, isScyllaConn),
 		Query:        InternalBuildQueryReport(r.session),
 	}
 	data, err := json.Marshal(report)
 	return string(data), err
 }
 
-func InternalBuildConnectionReport(cfg *InternalClusterSettings) InternalConnectionReport {
-	report := InternalConnectionReport{
-		Connect:      InternalConnectReport{TimeoutMs: InternalPositiveMillis(cfg.ConnectTimeout)},
-		Requests:     InternalBuildRequestsReport(cfg),
-		Pool:         InternalConnectionPoolReport{ShardAware: InternalShardAwareReport{Enabled: InternalShardAwareEnabled(cfg)}},
-		Socket:       InternalBuildSocketReport(),
-		Reconnection: InternalReconnectionGroupReport{Policy: InternalBuildReconnectionPolicyReport(cfg.ReconnectionPolicy)},
+func buildConnectionReport(cfg *InternalClusterSettings) connectionReport {
+	report := connectionReport{
+		Connect:      connectReport{TimeoutMs: positiveMillis(cfg.ConnectTimeout)},
+		Requests:     buildRequestsReport(cfg),
+		Pool:         connectionPoolReport{ShardAware: shardAwareReport{Enabled: shardAwareEnabled(cfg)}},
+		Socket:       buildSocketReport(),
+		Reconnection: reconnectionGroupReport{Policy: buildReconnectionPolicyReport(cfg.ReconnectionPolicy)},
 	}
-	if ms := InternalPositiveMillis(cfg.ReadTimeout); ms != nil {
-		report.Read = &InternalReadWriteTimeoutReport{TimeoutMs: *ms}
+	if ms := positiveMillis(cfg.ReadTimeout); ms != nil {
+		report.Read = &readWriteTimeoutReport{TimeoutMs: *ms}
 	}
-	if ms := InternalPositiveMillis(cfg.WriteTimeout); ms != nil {
-		report.Write = &InternalReadWriteTimeoutReport{TimeoutMs: *ms}
+	if ms := positiveMillis(cfg.WriteTimeout); ms != nil {
+		report.Write = &readWriteTimeoutReport{TimeoutMs: *ms}
 	}
-	report.TLS = InternalBuildTLSReport(cfg)
-	report.NodePreference = InternalBuildConnectionNodePreferenceReport(cfg)
+	report.TLS = buildTLSReport(cfg)
+	report.NodePreference = buildConnectionNodePreferenceReport(cfg)
 	return report
 }
 
@@ -429,12 +429,12 @@ func InternalBuildConnectionReport(cfg *InternalClusterSettings) InternalConnect
 // AcceptAllFilter and DenyAllFilter state no location; and a caller-supplied
 // HostFilterFunc is a closure this cannot see into. All of those report no
 // preference.
-func InternalBuildConnectionNodePreferenceReport(cfg *InternalClusterSettings) any {
-	filter, ok := cfg.HostFilter.(InternalDataCenterHostFilter)
+func buildConnectionNodePreferenceReport(cfg *InternalClusterSettings) any {
+	filter, ok := cfg.HostFilter.(dataCenterHostFilter)
 	if !ok || filter.dataCenter == "" {
 		return nil
 	}
-	return InternalNodeLocationDCReport{Type: "dc", LocalDC: filter.dataCenter}
+	return nodeLocationDCReport{Type: "dc", LocalDC: filter.dataCenter}
 }
 
 // buildTLSReport describes the TLS transport, or returns nil when there is
@@ -450,21 +450,21 @@ func InternalBuildConnectionNodePreferenceReport(cfg *InternalClusterSettings) a
 // tls.Config with InsecureSkipVerify left false verifies the hostname even
 // though EnableHostVerification is false, and reporting that flag alone
 // inverts the truth for the most ordinary way of configuring TLS.
-func InternalBuildTLSReport(cfg *InternalClusterSettings) *InternalTlsReport {
+func buildTLSReport(cfg *InternalClusterSettings) *tlsReport {
 	if cfg.SslOpts == nil || cfg.HostDialer != nil {
 		return nil
 	}
 	// The config setupTLSConfig actually produced, once ValidateAndInitSSL has
 	// run -- which is every session, but not a Session assembled by hand in a
 	// test.
-	if actual := InternalClusterSettingsGetActualTLSConfig(cfg); actual != nil {
-		return &InternalTlsReport{HostnameVerification: !actual.InsecureSkipVerify}
+	if actual := clusterSettingsGetActualTLSConfig(cfg); actual != nil {
+		return &tlsReport{HostnameVerification: !actual.InsecureSkipVerify}
 	}
 	verify := cfg.SslOpts.EnableHostVerification
 	if cfg.SslOpts.Config != nil {
 		verify = !cfg.SslOpts.Config.InsecureSkipVerify || cfg.SslOpts.EnableHostVerification
 	}
-	return &InternalTlsReport{HostnameVerification: verify}
+	return &tlsReport{HostnameVerification: verify}
 }
 
 // positiveMillis renders d for a schema field declared positiveInteger
@@ -479,7 +479,7 @@ func InternalBuildTLSReport(cfg *InternalClusterSettings) *InternalTlsReport {
 // Fields where 0 is itself meaningful (schema.agreement.timeout-ms, the
 // constant reconnection policy's delay-ms) are nonNegativeInteger in the schema
 // and must not go through here: they report their zero verbatim.
-func InternalPositiveMillis(d time.Duration) *int64 {
+func positiveMillis(d time.Duration) *int64 {
 	if d <= 0 {
 		return nil
 	}
@@ -495,7 +495,7 @@ func InternalPositiveMillis(d time.Duration) *int64 {
 // field it reads. Reporting runs on the goroutine that establishes a
 // connection and must never do that to it, so every switch over a
 // caller-supplied policy checks this first.
-func InternalIsNilPolicy(v any) bool {
+func isNilPolicy(v any) bool {
 	if v == nil {
 		return true
 	}
@@ -512,29 +512,29 @@ func InternalIsNilPolicy(v any) bool {
 // A negative duration is normalized to 0 rather than reported: time.Sleep
 // returns immediately on one, so an immediate retry is what it means, and the
 // schema has no encoding for a negative delay.
-func InternalNonNegativeMillis(d time.Duration) int64 {
+func nonNegativeMillis(d time.Duration) int64 {
 	return max(d.Milliseconds(), 0)
 }
 
-func InternalBuildRequestsReport(cfg *InternalClusterSettings) InternalRequestsReport {
-	return InternalRequestsReport{InFlight: InternalInFlightReport{Max: InternalEffectiveInFlightMax(cfg.MaxRequestsPerConn)}}
+func buildRequestsReport(cfg *InternalClusterSettings) requestsReport {
+	return requestsReport{InFlight: inFlightReport{Max: effectiveInFlightMax(cfg.MaxRequestsPerConn)}}
 }
 
 // defaultMaxStreams mirrors streams.New(), the generator Session.streamIDGenerator
 // uses when MaxRequestsPerConn is left unset.
-const InternalDefaultMaxStreams = 32768
+const defaultMaxStreams = 32768
 
 // Native nonnegative signed-short stream IDs 0..32767 give 32768 slots. The
 // reporting schema accepts any positive integer and can represent this exactly.
-const InternalMaxReportableInFlight = 32768
+const maxReportableInFlight = 32768
 
 // effectiveInFlightMax reports the exact configured runtime capacity.
-func InternalEffectiveInFlightMax(configured int) int {
+func effectiveInFlightMax(configured int) int {
 	if configured <= 0 {
-		configured = InternalDefaultMaxStreams
+		configured = defaultMaxStreams
 	}
 	// Invalid legacy inputs above the native range cannot increase capacity.
-	return min(configured, InternalMaxReportableInFlight)
+	return min(configured, maxReportableInFlight)
 }
 
 // shardAwareEnabled reports whether the client can reach ScyllaDB's
@@ -550,7 +550,7 @@ func InternalEffectiveInFlightMax(configured int) int {
 // DialShard can never reach the shard-aware port however the flag is set.
 // A nil HostDialer is capable: connConfig substitutes a *scyllaDialer, which
 // implements ShardDialer.
-func InternalShardAwareEnabled(cfg *InternalClusterSettings) bool {
+func shardAwareEnabled(cfg *InternalClusterSettings) bool {
 	if cfg.DisableShardAwarePort {
 		return false
 	}
@@ -566,8 +566,8 @@ func InternalShardAwareEnabled(cfg *InternalClusterSettings) bool {
 // the driver has no way to observe that, so the report always describes the
 // built-in dialer's behavior, per the schema's own framing of these fields as
 // "the effective value ... the OS/platform default".
-func InternalBuildSocketReport() InternalSocketReport {
-	return InternalSocketReport{
+func buildSocketReport() socketReport {
+	return socketReport{
 		// Go's net package unconditionally disables Nagle's algorithm for every
 		// TCP connection it creates (net.newTCPConn calls setNoDelay(fd, true));
 		// gocql never overrides that.
@@ -591,8 +591,8 @@ func InternalBuildSocketReport() InternalSocketReport {
 // no attempt at all. Reporting it as a policy with max-attempts omitted would
 // state the opposite, since the schema reads an absent max-attempts as
 // unlimited attempts.
-func InternalBuildReconnectionPolicyReport(rp pool.ReconnectionPolicy) any {
-	if InternalIsNilPolicy(rp) {
+func buildReconnectionPolicyReport(rp pool.ReconnectionPolicy) any {
+	if isNilPolicy(rp) {
 		return nil
 	}
 	switch p := rp.(type) {
@@ -602,9 +602,9 @@ func InternalBuildReconnectionPolicyReport(rp pool.ReconnectionPolicy) any {
 		if p.MaxRetries <= 0 {
 			return nil
 		}
-		return InternalReconnectionConstantReport{
+		return reconnectionConstantReport{
 			Type:        "constant",
-			DelayMs:     InternalNonNegativeMillis(p.Interval),
+			DelayMs:     nonNegativeMillis(p.Interval),
 			MaxAttempts: p.MaxRetries,
 		}
 	case *pool.ExponentialReconnectionPolicy:
@@ -620,21 +620,21 @@ func InternalBuildReconnectionPolicyReport(rp pool.ReconnectionPolicy) any {
 		// defaults for a non-positive bound, so report the window retries
 		// actually use rather than a zero the schema rejects (both fields are
 		// positiveInteger).
-		base, maxDelay := InternalExponentialDelayWindow(p.InitialInterval, maxInterval)
-		return InternalReconnectionExponentialReport{
+		base, maxDelay := exponentialDelayWindow(p.InitialInterval, maxInterval)
+		return reconnectionExponentialReport{
 			Type:        "exponential",
 			BaseMs:      base,
 			MaxMs:       maxDelay,
 			MaxAttempts: p.MaxRetries,
 		}
 	default:
-		return InternalReconnectionCustomReport{Type: "custom", Name: InternalCustomPolicyName(rp)}
+		return reconnectionCustomReport{Type: "custom", Name: customPolicyName(rp)}
 	}
 }
 
-func InternalBuildControlPlaneReport(cfg *InternalClusterSettings, isScyllaConn bool) InternalControlPlaneReport {
-	var timeout InternalSystemQueriesTimeoutReport
-	if clientMs := InternalPositiveMillis(cfg.MetadataSchemaRequestTimeout); clientMs != nil {
+func buildControlPlaneReport(cfg *InternalClusterSettings, isScyllaConn bool) controlPlaneReport {
+	var timeout systemQueriesTimeoutReport
+	if clientMs := positiveMillis(cfg.MetadataSchemaRequestTimeout); clientMs != nil {
 		timeout.ClientSideMs = clientMs
 		if isScyllaConn {
 			// The USING TIMEOUT clause is ScyllaDB-only, so this key only ever
@@ -654,23 +654,23 @@ func InternalBuildControlPlaneReport(cfg *InternalClusterSettings, isScyllaConn 
 			}
 		}
 	}
-	return InternalControlPlaneReport{
-		Queries: InternalControlPlaneQueriesReport{System: InternalSystemQueriesReport{Timeout: timeout}},
-		Schema: InternalControlPlaneSchemaReport{
+	return controlPlaneReport{
+		Queries: controlPlaneQueriesReport{System: systemQueriesReport{Timeout: timeout}},
+		Schema: controlPlaneSchemaReport{
 			// Always emitted, including 0: the schema documents 0 as meaningful
 			// ("do not wait for agreement"), not as "unset".
-			Agreement: InternalSchemaAgreementReport{TimeoutMs: cfg.MaxWaitSchemaAgreement.Milliseconds()},
+			Agreement: schemaAgreementReport{TimeoutMs: cfg.MaxWaitSchemaAgreement.Milliseconds()},
 		},
 	}
 }
 
-func InternalBuildQueryReport(s *Core) InternalQueryReport {
+func InternalBuildQueryReport(s *Core) queryReport {
 	cfg := s.privateStorage.InternalCfg
-	loadBalancing := InternalBuildLoadBalancingReport(s.privateStorage.InternalPolicy)
+	loadBalancing := buildLoadBalancingReport(s.privateStorage.InternalPolicy)
 	runtime := InternalCurrentExecution(s)
 	if runtime != nil && runtime.Profile() != nil {
 		profile := *runtime.Profile()
-		cfg.privateStorage.InternalDefaultProfile = profile
+		cfg.privateStorage.defaultProfile = profile
 		cfg.Consistency = profile.Consistency
 		cfg.Timeout = profile.Timeout
 		cfg.PageSize = int(profile.PageSize)
@@ -680,26 +680,26 @@ func InternalBuildQueryReport(s *Core) InternalQueryReport {
 		}
 		cfg.DefaultIdempotence = false
 		cfg.DefaultTimestamp = runtime.ConfigSnapshot().TimestampGenerator != nil
-		loadBalancing = InternalBuildTypedLoadBalancingReport(profile.Routing)
+		loadBalancing = buildTypedLoadBalancingReport(profile.Routing)
 	}
-	return InternalQueryReport{Defaults: InternalBuildQueryDefaultsReport(&cfg), Retry: InternalBuildQueryRetryReport(&cfg), LoadBalancing: loadBalancing}
+	return queryReport{Defaults: buildQueryDefaultsReport(&cfg), Retry: buildQueryRetryReport(&cfg), LoadBalancing: loadBalancing}
 }
-func InternalBuildTypedLoadBalancingReport(policy routing.RoutingPolicy) InternalQueryLoadBalancingReport {
+func buildTypedLoadBalancingReport(policy routing.RoutingPolicy) queryLoadBalancingReport {
 	builtin, ok := policy.(*routing.InternalRoutingPolicy)
 	if !ok || builtin == nil {
-		return InternalQueryLoadBalancingReport{Policy: InternalLoadBalancingCustomReport{Type: "custom", Name: InternalCustomPolicyName(policy)}}
+		return queryLoadBalancingReport{Policy: loadBalancingCustomReport{Type: "custom", Name: customPolicyName(policy)}}
 	}
 	options := builtin.InternalOptions
-	result := InternalQueryLoadBalancingReport{}
+	result := queryLoadBalancingReport{}
 	if options.Datacenter != "" {
 		if options.Rack != "" {
 			result.NodePreference = InternalNodeLocationRackReport{Type: "rack", LocalDC: options.Datacenter, LocalRack: options.Rack}
 		} else {
-			result.NodePreference = InternalNodeLocationDCReport{Type: "dc", LocalDC: options.Datacenter}
+			result.NodePreference = nodeLocationDCReport{Type: "dc", LocalDC: options.Datacenter}
 		}
 	}
 	if !options.TokenAware {
-		result.Policy = InternalLoadBalancingCustomReport{Type: "custom", Name: "routingPolicy"}
+		result.Policy = loadBalancingCustomReport{Type: "custom", Name: "routingPolicy"}
 		return result
 	}
 	distribution := "replica-set"
@@ -708,26 +708,26 @@ func InternalBuildTypedLoadBalancingReport(policy routing.RoutingPolicy) Interna
 	}
 	report := InternalLoadBalancingTokenAwareReport{Type: "token-aware", LoadDistribution: distribution, FallbackToNonPreferredNodes: options.AllowRemote}
 	if options.Latency.Enabled {
-		report.AdaptiveOrdering = &InternalAdaptiveOrderingReport{Signals: []string{"latency"}}
+		report.AdaptiveOrdering = &adaptiveOrderingReport{Signals: []string{"latency"}}
 	}
 	result.Policy = report
 	return result
 }
 
-func InternalBuildQueryDefaultsReport(cfg *InternalClusterSettings) InternalQueryDefaultsReport {
-	report := InternalQueryDefaultsReport{
-		Consistency:      InternalConsistencyName(cfg.Consistency),
+func buildQueryDefaultsReport(cfg *InternalClusterSettings) queryDefaultsReport {
+	report := queryDefaultsReport{
+		Consistency:      consistencyName(cfg.Consistency),
 		Idempotence:      cfg.DefaultIdempotence,
 		ClientTimestamps: cfg.DefaultTimestamp,
 	}
 	if cfg.PageSize > 0 {
-		report.Page = &InternalPageReport{Size: cfg.PageSize}
+		report.Page = &pageReport{Size: cfg.PageSize}
 	}
 	if cfg.SerialConsistency.IsSerial() {
 		report.SerialConsistency = cfg.SerialConsistency.String()
 	}
-	if ms := InternalPositiveMillis(cfg.Timeout); ms != nil {
-		report.Request = &InternalRequestDefaultReport{TimeoutMs: *ms}
+	if ms := positiveMillis(cfg.Timeout); ms != nil {
+		report.Request = &requestDefaultReport{TimeoutMs: *ms}
 	}
 	return report
 }
@@ -740,7 +740,7 @@ func InternalBuildQueryDefaultsReport(cfg *InternalClusterSettings) InternalQuer
 // renders those as "UNKNOWN_CONS_0x..", which no consumer can interpret.
 // Nothing rejects such a value today; the fix belongs in clusterSettings.Validate
 // and is left to a follow-up.
-func InternalConsistencyName(c cqltype.Consistency) string {
+func consistencyName(c cqltype.Consistency) string {
 	switch c {
 	case cqltype.Any, cqltype.One, cqltype.Two, cqltype.Three, cqltype.Quorum, cqltype.All, cqltype.LocalQuorum, cqltype.EachQuorum, cqltype.LocalOne, cqltype.Serial, cqltype.LocalSerial:
 		return c.String()
@@ -749,12 +749,12 @@ func InternalConsistencyName(c cqltype.Consistency) string {
 	}
 }
 
-func InternalBuildQueryRetryReport(cfg *InternalClusterSettings) InternalQueryRetryReport {
-	policy := cfg.privateStorage.InternalDefaultProfile.Retry
+func buildQueryRetryReport(cfg *InternalClusterSettings) queryRetryReport {
+	policy := cfg.privateStorage.defaultProfile.Retry
 	if policy == nil {
 		policy = settings.InternalDefaultProfile().Retry
 	}
-	return InternalQueryRetryReport{Policy: InternalBuildRetryPolicyReport(policy)}
+	return queryRetryReport{Policy: InternalBuildRetryPolicyReport(policy)}
 }
 func InternalBuildRetryPolicyReport(policy retry.Policy) any {
 	switch p := policy.(type) {
@@ -765,7 +765,7 @@ func InternalBuildRetryPolicyReport(policy retry.Policy) any {
 		}
 		return InternalRetryPolicySimpleReport{Type: "simple", MaxRetries: attempts - 1}
 	default:
-		return InternalRetryPolicyCustomReport{Type: "custom", Name: InternalCustomPolicyName(policy)}
+		return InternalRetryPolicyCustomReport{Type: "custom", Name: customPolicyName(policy)}
 	}
 }
 
@@ -786,48 +786,48 @@ func InternalBuildRetryPolicyReport(policy retry.Policy) any {
 //     the policy and break max-ms >= base-ms.
 //   - a sub-millisecond bound truncates to 0, so both are floored the same way
 //     positiveMillis floors the report's other positiveInteger durations.
-func InternalExponentialDelayWindow(configuredMin, configuredMax time.Duration) (baseMs, maxMs int64) {
-	base := InternalEffectiveExpBackoff(configuredMin, 100*time.Millisecond)
-	maxDelay := InternalEffectiveExpBackoff(configuredMax, 10*time.Second)
+func exponentialDelayWindow(configuredMin, configuredMax time.Duration) (baseMs, maxMs int64) {
+	base := effectiveExpBackoff(configuredMin, 100*time.Millisecond)
+	maxDelay := effectiveExpBackoff(configuredMax, 10*time.Second)
 	if maxDelay < base {
 		base = maxDelay
 	}
 	return max(base.Milliseconds(), 1), max(maxDelay.Milliseconds(), 1)
 }
 
-func InternalEffectiveExpBackoff(configured, fallback time.Duration) time.Duration {
+func effectiveExpBackoff(configured, fallback time.Duration) time.Duration {
 	if configured <= 0 {
 		return fallback
 	}
 	return configured
 }
 
-func InternalBuildLoadBalancingReport(policy HostSelectionPolicy) InternalQueryLoadBalancingReport {
-	policy = InternalUnwrapHostSelectionPolicy(policy)
-	return InternalQueryLoadBalancingReport{
-		Policy:         InternalBuildLoadBalancingPolicyReport(policy),
-		NodePreference: InternalBuildNodeLocationPreferenceReport(policy),
+func buildLoadBalancingReport(policy HostSelectionPolicy) queryLoadBalancingReport {
+	policy = unwrapHostSelectionPolicy(policy)
+	return queryLoadBalancingReport{
+		Policy:         buildLoadBalancingPolicyReport(policy),
+		NodePreference: buildNodeLocationPreferenceReport(policy),
 	}
 }
 
-func InternalBuildLoadBalancingPolicyReport(policy HostSelectionPolicy) any {
-	tap, ok := policy.(*InternalTokenAwareHostPolicy)
-	if !ok || InternalIsNilPolicy(policy) {
+func buildLoadBalancingPolicyReport(policy HostSelectionPolicy) any {
+	tap, ok := policy.(*tokenAwareHostPolicy)
+	if !ok || isNilPolicy(policy) {
 		// The schema's built-in load-balancing type only ever admits
 		// "token-aware" (matching csharp-driver/java-driver's own narrowing);
 		// any other policy -- including gocql's plain RoundRobinHostPolicy or
 		// DCAwareRoundRobinPolicy used without token-awareness -- is reported as
 		// custom.
-		return InternalLoadBalancingCustomReport{Type: "custom", Name: InternalCustomPolicyName(policy)}
+		return loadBalancingCustomReport{Type: "custom", Name: customPolicyName(policy)}
 	}
 	distribution := "replica-set"
-	if tap.privateStorage.InternalShuffleReplicas {
+	if tap.privateStorage.shuffleReplicas {
 		distribution = "shuffle"
 	}
 	report := InternalLoadBalancingTokenAwareReport{
 		Type:                        "token-aware",
 		LoadDistribution:            distribution,
-		FallbackToNonPreferredNodes: InternalFallbackToNonPreferredNodesAllowed(tap),
+		FallbackToNonPreferredNodes: fallbackToNonPreferredNodesAllowed(tap),
 	}
 	if tap.privateStorage.avoidSlowReplicas {
 		// AvoidSlowReplicas makes Pick partition the replica set so hosts at or
@@ -835,7 +835,7 @@ func InternalBuildLoadBalancingPolicyReport(policy HostSelectionPolicy) any {
 		// partitionHealthy, which orders by HostInfo.IsBusy. That is adaptive
 		// ordering, and the count of outstanding requests is the one signal it
 		// reads.
-		report.AdaptiveOrdering = &InternalAdaptiveOrderingReport{Signals: []string{"in-flight-requests"}}
+		report.AdaptiveOrdering = &adaptiveOrderingReport{Signals: []string{"in-flight-requests"}}
 	}
 	return report
 }
@@ -843,7 +843,7 @@ func InternalBuildLoadBalancingPolicyReport(policy HostSelectionPolicy) any {
 // maxPolicyUnwrapDepth bounds the walk below. A wrapper cycle is not
 // reachable through the constructors, but the report must never hang a
 // connection over a policy someone assembled by hand.
-const InternalMaxPolicyUnwrapDepth = 16
+const maxPolicyUnwrapDepth = 16
 
 // unwrapHostSelectionPolicy peels driver-supplied wrappers off a host
 // selection policy so the report describes the policy the caller actually
@@ -854,10 +854,10 @@ const InternalMaxPolicyUnwrapDepth = 16
 // adds only a readiness signal. Left wrapped, both the load-balancing
 // discriminant and the DC/rack preference behind it would be lost, which is
 // everything the group exists to report.
-func InternalUnwrapHostSelectionPolicy(p HostSelectionPolicy) HostSelectionPolicy {
-	for range InternalMaxPolicyUnwrapDepth {
-		wrapper, ok := p.(*InternalSingleHostReadyPolicy)
-		if !ok || InternalIsNilPolicy(p) {
+func unwrapHostSelectionPolicy(p HostSelectionPolicy) HostSelectionPolicy {
+	for range maxPolicyUnwrapDepth {
+		wrapper, ok := p.(*singleHostReadyPolicy)
+		if !ok || isNilPolicy(p) {
 			return p
 		}
 		p = wrapper.HostSelectionPolicy
@@ -875,19 +875,19 @@ func InternalUnwrapHostSelectionPolicy(p HostSelectionPolicy) HostSelectionPolic
 // the fallback: only dcAwareRR and rackAwareRR confine requests at all, and
 // only when DC failover is disabled. Any other fallback has no DC/rack notion,
 // so nothing is confined.
-func InternalFallbackToNonPreferredNodesAllowed(tap *InternalTokenAwareHostPolicy) bool {
-	if tap.privateStorage.InternalNonLocalReplicasFallback {
+func fallbackToNonPreferredNodesAllowed(tap *tokenAwareHostPolicy) bool {
+	if tap.privateStorage.nonLocalReplicasFallback {
 		return true
 	}
-	if InternalIsNilPolicy(tap.privateStorage.InternalFallback) {
+	if isNilPolicy(tap.privateStorage.fallback) {
 		return true
 	}
-	switch p := tap.privateStorage.InternalFallback.(type) {
-	case *InternalDcAwareRR:
+	switch p := tap.privateStorage.fallback.(type) {
+	case *dcAwareRR:
 		// The preference is the whole local DC, and disabling failover confines
 		// requests to exactly that.
 		return !p.dcFailoverDisabled()
-	case *InternalRackAwareRR:
+	case *rackAwareRR:
 		// The preference reported for this fallback names a rack as well as a
 		// DC, but Pick always serves tier 1 -- the local DC's other racks --
 		// before giving up, whether or not DC failover is disabled. Requests
@@ -912,24 +912,24 @@ func InternalFallbackToNonPreferredNodesAllowed(tap *InternalTokenAwareHostPolic
 // declares both local-dc and local-rack nonEmptyString and requires them on
 // the branch that names them, so an empty one cannot be reported -- and a
 // policy constructed with an empty name expresses no preference anyway.
-func InternalBuildNodeLocationPreferenceReport(policy HostSelectionPolicy) any {
-	if InternalIsNilPolicy(policy) {
+func buildNodeLocationPreferenceReport(policy HostSelectionPolicy) any {
+	if isNilPolicy(policy) {
 		return nil
 	}
 	target := policy
-	if tap, ok := policy.(*InternalTokenAwareHostPolicy); ok {
-		target = tap.privateStorage.InternalFallback
+	if tap, ok := policy.(*tokenAwareHostPolicy); ok {
+		target = tap.privateStorage.fallback
 	}
-	if InternalIsNilPolicy(target) {
+	if isNilPolicy(target) {
 		return nil
 	}
 	switch p := target.(type) {
-	case *InternalDcAwareRR:
+	case *dcAwareRR:
 		if p.localDatacenter() == "" {
 			return nil
 		}
-		return InternalNodeLocationDCReport{Type: "dc", LocalDC: p.localDatacenter()}
-	case *InternalRackAwareRR:
+		return nodeLocationDCReport{Type: "dc", LocalDC: p.localDatacenter()}
+	case *rackAwareRR:
 		if p.localDatacenter() == "" || p.localRackName() == "" {
 			return nil
 		}
@@ -943,7 +943,7 @@ func InternalBuildNodeLocationPreferenceReport(policy HostSelectionPolicy) any {
 // user-supplied policy value -- e.g. *mypkg.MyPolicy becomes "MyPolicy" --
 // mirroring how java-driver/csharp-driver report a policy's simple class name
 // rather than its fully qualified one.
-func InternalCustomPolicyName(v any) string {
+func customPolicyName(v any) string {
 	t := reflect.TypeOf(v)
 	if t == nil {
 		// A nil policy: reflect.TypeOf returns a nil Type, which would panic

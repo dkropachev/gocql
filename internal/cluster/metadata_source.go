@@ -13,17 +13,17 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
-type InternalSchemaSource struct{ session *Core }
+type schemaSource struct{ session *Core }
 
-func InternalNewSchemaSource(s *Core) implMetadata.Source { return InternalSchemaSource{s} }
-func (source InternalSchemaSource) InternalSchemaContext() context.Context {
+func InternalNewSchemaSource(s *Core) implMetadata.Source { return schemaSource{s} }
+func (source schemaSource) InternalSchemaContext() context.Context {
 	s := source.session
 	if s != nil && s.privateStorage.InternalCtx != nil {
 		return s.privateStorage.InternalCtx
 	}
 	return context.Background()
 }
-func (source InternalSchemaSource) InternalSchemaSettings() implMetadata.QuerySettings {
+func (source schemaSource) InternalSchemaSettings() implMetadata.QuerySettings {
 	s := source.session
 	v := implMetadata.QuerySettings{SystemSchema: s.privateStorage.InternalUseSystemSchema, Available: s.privateStorage.InternalControl != nil, Aggregates: s.privateStorage.InternalHasAggregatesAndFunctions, Timeout: s.privateStorage.InternalCfg.MetadataSchemaRequestTimeout, Depth: s.v2MetadataDepthLimit()}
 	if s.privateStorage.InternalHostSource != nil && s.privateStorage.InternalPool != nil {
@@ -34,14 +34,14 @@ func (source InternalSchemaSource) InternalSchemaSettings() implMetadata.QuerySe
 	}
 	return v
 }
-func (source InternalSchemaSource) InternalQuerySystem(ctx context.Context, request *model.AttemptRequest) (*model.ResponseData, error) {
+func (source schemaSource) InternalQuerySystem(ctx context.Context, request *model.AttemptRequest) (*model.ResponseData, error) {
 	s := source.session
 	if s.privateStorage.InternalControl == nil {
 		return nil, implMetadata.InternalErrNoControl
 	}
 	var response *transport.InternalResponsePage
 	var err error
-	if backend, ok := s.privateStorage.InternalControl.(InternalV2SystemQueryer); ok {
+	if backend, ok := s.privateStorage.InternalControl.(v2SystemQueryer); ok {
 		response, err = backend.InternalQueryV2System(ctx, request)
 	} else {
 		h := s.privateStorage.InternalControl.InternalGetConn()

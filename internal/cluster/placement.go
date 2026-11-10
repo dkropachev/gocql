@@ -34,7 +34,7 @@ func InternalSessionCaptureTabletFeedback(s *Core, info model.RoutingInfo, m *ro
 // InternalSessionResolveTabletFeedback completes a stamp captured for table k
 // with the values it deferred, as they were at capture: the stamp is valid
 // only if the schema source identity matched the snapshot's.
-func InternalSessionResolveTabletFeedback(stamp *routing.InternalTabletFeedbackStamp, k routing.InternalMetadataTable) {
+func sessionResolveTabletFeedback(stamp *routing.InternalTabletFeedbackStamp, k routing.InternalMetadataTable) {
 	if stamp.InternalSchemaEpochs == nil {
 		return
 	}
@@ -51,14 +51,14 @@ type InternalV2TabletFeedbackKey struct {
 	InternalEnd                     int64
 }
 type InternalV2PendingTabletFeedback struct {
-	InternalStamp       routing.InternalTabletFeedbackStamp
-	InternalHint        tablets.TabletInfo
-	InternalObservation routing.InternalTabletRangeObservation
+	InternalStamp routing.InternalTabletFeedbackStamp
+	InternalHint  tablets.TabletInfo
+	observation   routing.InternalTabletRangeObservation
 }
 
 // applyV2TabletHint is retained for internal legacy callers/tests. Actual EXECUTE
 // responses supply the stamp captured before sending, never a receipt-time stamp.
-func InternalSessionApplyV2TabletHint(s *Core, h tablets.TabletInfo) {
+func sessionApplyV2TabletHint(s *Core, h tablets.TabletInfo) {
 	info := model.RoutingInfo{Keyspace: h.KeyspaceName(), Table: h.TableName()}
 	InternalSessionQueueTabletFeedback(s, h, InternalSessionCaptureTabletFeedback(s, info, s.Metadata()))
 }
@@ -68,7 +68,7 @@ func InternalSessionQueueTabletFeedback(s *Core, h tablets.TabletInfo, stamp rou
 		return
 	}
 	k := routing.InternalMetadataTable{InternalKeyspace: h.KeyspaceName(), InternalTable: h.TableName()}
-	if InternalSessionResolveTabletFeedback(&stamp, k); !stamp.InternalValid {
+	if sessionResolveTabletFeedback(&stamp, k); !stamp.InternalValid {
 		return
 	}
 	if _, _, err := routing.InternalMetadataSnapshotLookupRanges(stamp.InternalSnapshot, k.InternalKeyspace, k.InternalTable); err != nil {
@@ -96,10 +96,10 @@ func InternalSessionQueueTabletFeedback(s *Core, h tablets.TabletInfo, stamp rou
 	// Keep the earliest pending observation for an overlapping identity/range.
 	// Later requests can relearn after it publishes; receipt order is not freshness.
 	if !ok || prior.InternalStamp.InternalEpoch != stamp.InternalEpoch || prior.InternalStamp.InternalSchema != stamp.InternalSchema || prior.InternalStamp.InternalTable != stamp.InternalTable || prior.InternalStamp.InternalIdentity != stamp.InternalIdentity {
-		p.InternalFeedback[key] = InternalV2PendingTabletFeedback{InternalHint: h, InternalStamp: stamp, InternalObservation: observation}
+		p.InternalFeedback[key] = InternalV2PendingTabletFeedback{InternalHint: h, InternalStamp: stamp, observation: observation}
 	}
 	p.InternalFeedbackMu.Unlock()
-	p.InternalFeedbackOnce.Do(func() { p.InternalStartWorker(func() { InternalSessionRunV2TabletFeedback(s, p) }) })
+	p.InternalFeedbackOnce.Do(func() { p.InternalStartWorker(func() { sessionRunV2TabletFeedback(s, p) }) })
 	select {
 	case p.feedbackWake <- struct{}{}:
 	default:
@@ -160,10 +160,10 @@ func InternalSessionPublishTabletFeedback(s *Core, p *InternalV2PeripheralState,
 	for _, u := range updates {
 		h, stamp := u.InternalHint, u.InternalStamp
 		k := routing.InternalMetadataTable{InternalKeyspace: h.KeyspaceName(), InternalTable: h.TableName()}
-		if InternalSessionResolveTabletFeedback(&stamp, k); !stamp.InternalValid {
+		if sessionResolveTabletFeedback(&stamp, k); !stamp.InternalValid {
 			continue
 		}
-		if !s.tabletSchemaCurrent(k, stamp.InternalIdentity) || stamp.InternalEpoch != epoch || stamp.InternalSchema != p.InternalSchemaEpoch[k.InternalKeyspace] || stamp.InternalTable != p.InternalTableRevision[k] || p.schemaDropped[k.InternalKeyspace] || stamp.InternalIdentity != routing.InternalMetadataSnapshotTableIdentity(old, k) {
+		if !s.tabletSchemaCurrent(k, stamp.InternalIdentity) || stamp.InternalEpoch != epoch || stamp.InternalSchema != p.schemaEpoch[k.InternalKeyspace] || stamp.InternalTable != p.tableRevision[k] || p.schemaDropped[k.InternalKeyspace] || stamp.InternalIdentity != routing.InternalMetadataSnapshotTableIdentity(old, k) {
 			continue
 		}
 		if _, _, err := routing.InternalMetadataSnapshotLookupRanges(old, k.InternalKeyspace, k.InternalTable); err != nil {
@@ -180,7 +180,7 @@ func InternalSessionPublishTabletFeedback(s *Core, p *InternalV2PeripheralState,
 		if n != nil && routing.InternalSameTabletObservation(n.InternalValue, h) {
 			continue
 		}
-		if u.InternalObservation != routing.InternalObserveTabletRanges(current, h.FirstToken(), h.LastToken()) {
+		if u.observation != routing.InternalObserveTabletRanges(current, h.FirstToken(), h.LastToken()) {
 			continue
 		}
 		var changed bool
@@ -200,7 +200,7 @@ func InternalSessionPublishTabletFeedback(s *Core, p *InternalV2PeripheralState,
 		InternalSessionPublishV2LocalEvent(s, Event{Kind: OverflowEvent, Generation: routing.SnapshotData(next).InternalGeneration, Change: "TABLET_RESYNC"})
 	}
 }
-func InternalSessionRunV2TabletFeedback(s *Core, p *InternalV2PeripheralState) {
+func sessionRunV2TabletFeedback(s *Core, p *InternalV2PeripheralState) {
 	for {
 		select {
 		case <-p.InternalDone:

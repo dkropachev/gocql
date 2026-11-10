@@ -192,7 +192,7 @@ func TestSchemaMetadata(t *testing.T) {
 				s := newSchemaEventTestSessionWithMock(ctrl)
 				defer s.Close()
 				populateKeyspace(s, "test_ks", "tbl_a")
-				SessionData(s).InternalMetadataDescriber.InternalInvalidateTableSchema("test_ks", "tbl_a")
+				SessionData(s).InternalMetadataDescriber.invalidateTableSchema("test_ks", "tbl_a")
 
 				var wg sync.WaitGroup
 				results := make([]*metadata.TableMetadata, concurrency)
@@ -229,7 +229,7 @@ func TestSchemaMetadata(t *testing.T) {
 				s := newSchemaEventTestSessionWithMock(ctrl)
 				defer s.Close()
 				populateKeyspace(s, "test_ks", "tbl_a")
-				SessionData(s).InternalMetadataDescriber.InternalInvalidateTableSchema("test_ks", "tbl_a")
+				SessionData(s).InternalMetadataDescriber.invalidateTableSchema("test_ks", "tbl_a")
 
 				var wg sync.WaitGroup
 				errs := make([]error, concurrency)
@@ -260,7 +260,7 @@ func TestSchemaMetadata(t *testing.T) {
 				s := newSchemaEventTestSessionWithMock(ctrl)
 				defer s.Close()
 				populateKeyspace(s, "test_ks", "tbl_a")
-				SessionData(s).InternalMetadataDescriber.InternalInvalidateTableSchema("test_ks", "tbl_a")
+				SessionData(s).InternalMetadataDescriber.invalidateTableSchema("test_ks", "tbl_a")
 
 				// Wave 1: all fail.
 				var wg sync.WaitGroup
@@ -277,7 +277,7 @@ func TestSchemaMetadata(t *testing.T) {
 				// tablesInvalidated in an inconsistent state), and retry.
 				ctrl.setQueryError(nil)
 				ctrl.resetQueries()
-				SessionData(s).InternalMetadataDescriber.InternalInvalidateTableSchema("test_ks", "tbl_a")
+				SessionData(s).InternalMetadataDescriber.invalidateTableSchema("test_ks", "tbl_a")
 
 				tbl, err := SessionData(s).InternalMetadataDescriber.GetTable("test_ks", "tbl_a")
 				if err != nil {
@@ -364,8 +364,8 @@ func TestSchemaMetadata(t *testing.T) {
 				s := newSchemaEventTestSessionWithMock(ctrl)
 				defer s.Close()
 				populateKeyspace(s, "test_ks", "tbl_a", "tbl_b")
-				SessionData(s).InternalMetadataDescriber.InternalInvalidateTableSchema("test_ks", "tbl_a")
-				SessionData(s).InternalMetadataDescriber.InternalInvalidateTableSchema("test_ks", "tbl_b")
+				SessionData(s).InternalMetadataDescriber.invalidateTableSchema("test_ks", "tbl_a")
+				SessionData(s).InternalMetadataDescriber.invalidateTableSchema("test_ks", "tbl_b")
 
 				var wg sync.WaitGroup
 				aErrs := make([]error, concurrency)
@@ -414,8 +414,8 @@ func TestSchemaMetadata(t *testing.T) {
 				s := newSchemaEventTestSessionWithMock(ctrl)
 				defer s.Close()
 				populateKeyspace(s, "test_ks", "tbl_a", "tbl_x")
-				SessionData(s).InternalMetadataDescriber.InternalInvalidateTableSchema("test_ks", "tbl_a")
-				SessionData(s).InternalMetadataDescriber.InternalInvalidateTableSchema("test_ks", "tbl_x")
+				SessionData(s).InternalMetadataDescriber.invalidateTableSchema("test_ks", "tbl_a")
+				SessionData(s).InternalMetadataDescriber.invalidateTableSchema("test_ks", "tbl_x")
 
 				var wg sync.WaitGroup
 				aErrs := make([]error, concurrency)
@@ -494,7 +494,7 @@ func TestSchemaMetadata(t *testing.T) {
 				s := newSchemaEventTestSessionWithMock(ctrl)
 				defer s.Close()
 				populateKeyspace(s, "test_ks", "tbl_a")
-				InternalSessionHandleSchemaEvent(s, []protocol.Frame{
+				sessionHandleSchemaEvent(s, []protocol.Frame{
 					&frm.SchemaChangeKeyspace{Change: "UPDATED", Keyspace: "test_ks"},
 				})
 
@@ -524,7 +524,7 @@ func TestSchemaMetadata(t *testing.T) {
 				s := newSchemaEventTestSessionWithMock(ctrl)
 				defer s.Close()
 				populateKeyspace(s, "test_ks", "tbl_a")
-				InternalSessionHandleSchemaEvent(s, []protocol.Frame{
+				sessionHandleSchemaEvent(s, []protocol.Frame{
 					&frm.SchemaChangeTable{Change: "UPDATED", Keyspace: "test_ks", Object: "tbl_a"},
 				})
 
@@ -553,11 +553,11 @@ func TestSchemaMetadata(t *testing.T) {
 				s := newSchemaEventTestSessionWithMock(ctrl)
 				defer s.Close()
 				populateKeyspace(s, "test_ks", "tbl_a")
-				InternalSessionHandleSchemaEvent(s, []protocol.Frame{
+				sessionHandleSchemaEvent(s, []protocol.Frame{
 					&frm.SchemaChangeTable{Change: "UPDATED", Keyspace: "test_ks", Object: "tbl_a"},
 				})
 
-				staleKeyspace, wasReloaded, err := SessionData(s).InternalMetadataDescriber.InternalGetKeyspaceInternal("test_ks")
+				staleKeyspace, wasReloaded, err := SessionData(s).InternalMetadataDescriber.getKeyspaceInternal("test_ks")
 				if err != nil {
 					t.Fatalf("getKeyspaceInternal returned unexpected error: %v", err)
 				}
@@ -565,13 +565,13 @@ func TestSchemaMetadata(t *testing.T) {
 					t.Fatal("expected stale keyspace snapshot to have invalidated table removed")
 				}
 
-				if err := SessionData(s).InternalMetadataDescriber.InternalDeduplicatedRefreshTable("test_ks", "tbl_a"); err != nil {
+				if err := SessionData(s).InternalMetadataDescriber.deduplicatedRefreshTable("test_ks", "tbl_a"); err != nil {
 					t.Fatalf("deduplicatedRefreshTable returned unexpected error: %v", err)
 				}
 
 				ctrl.resetQueries()
 
-				tbl, refreshNeeded, err := SessionData(s).InternalMetadataDescriber.InternalGetTableFromSnapshot("test_ks", "tbl_a", staleKeyspace, wasReloaded)
+				tbl, refreshNeeded, err := SessionData(s).InternalMetadataDescriber.getTableFromSnapshot("test_ks", "tbl_a", staleKeyspace, wasReloaded)
 				if err != nil {
 					t.Fatalf("getTableFromSnapshot returned unexpected error: %v", err)
 				}
@@ -763,7 +763,7 @@ func TestSchemaMetadata(t *testing.T) {
 					for _, tb := range tt.tablets {
 						addTestTablets(t, s, tb[0], tb[1])
 					}
-					InternalSessionHandleSchemaEvent(s, []protocol.Frame{tt.event})
+					sessionHandleSchemaEvent(s, []protocol.Frame{tt.event})
 					MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalTabletsMetadata.Flush()
 
 					for _, ks := range tt.wantKsGone {
@@ -801,7 +801,7 @@ func TestSchemaMetadata(t *testing.T) {
 						}
 					}
 					if tt.wantTablets >= 0 {
-						if n := len(SessionData(s).InternalMetadataDescriber.InternalGetTablets()); n != tt.wantTablets {
+						if n := len(SessionData(s).InternalMetadataDescriber.getTablets()); n != tt.wantTablets {
 							t.Errorf("expected %d tablets, got %d", tt.wantTablets, n)
 						}
 					}
@@ -846,7 +846,7 @@ func TestSchemaMetadata(t *testing.T) {
 					defer s.Close()
 					SessionData(s).InternalUseSystemSchema = true
 					populateKeyspace(s, "test_ks", tt.populateTables...)
-					InternalSessionHandleSchemaEvent(s, []protocol.Frame{tt.event})
+					sessionHandleSchemaEvent(s, []protocol.Frame{tt.event})
 
 					if got := ctrl.getAwaitSchemaAgreementCalls(); got != tt.wantSchemaAgreement {
 						t.Fatalf("awaitSchemaAgreement: got %d, want %d", got, tt.wantSchemaAgreement)
@@ -996,7 +996,7 @@ func TestSchemaMetadata(t *testing.T) {
 						populateKeyspace(s, ks, tables...)
 					}
 					if tt.event != nil {
-						InternalSessionHandleSchemaEvent(s, []protocol.Frame{tt.event})
+						sessionHandleSchemaEvent(s, []protocol.Frame{tt.event})
 					}
 
 					ctrl.resetQueries()
@@ -1113,7 +1113,7 @@ func TestSchemaMetadata(t *testing.T) {
 						populateKeyspace(s, ks, tables...)
 					}
 					if tt.event != nil {
-						InternalSessionHandleSchemaEvent(s, []protocol.Frame{tt.event})
+						sessionHandleSchemaEvent(s, []protocol.Frame{tt.event})
 					}
 
 					ctrl.resetQueries()
@@ -1160,7 +1160,7 @@ func TestSchemaMetadata(t *testing.T) {
 			s := newSchemaEventTestSessionWithMock(ctrl)
 			defer s.Close()
 			populateKeyspace(s, "test_ks", "tbl_a", "tbl_b", "tbl_c")
-			InternalSessionHandleSchemaEvent(s, []protocol.Frame{
+			sessionHandleSchemaEvent(s, []protocol.Frame{
 				&frm.SchemaChangeTable{Change: "UPDATED", Keyspace: "test_ks", Object: "tbl_a"},
 				&frm.SchemaChangeTable{Change: "UPDATED", Keyspace: "test_ks", Object: "tbl_b"},
 			})
@@ -1222,7 +1222,7 @@ func TestSchemaMetadata(t *testing.T) {
 			SessionData(s).InternalUseSystemSchema = true
 			SessionData(s).InternalHasAggregatesAndFunctions = false
 			populateKeyspace(s, "test_ks", "tbl_a")
-			InternalSessionHandleSchemaEvent(s, []protocol.Frame{
+			sessionHandleSchemaEvent(s, []protocol.Frame{
 				&frm.SchemaChangeTable{Change: "CREATED", Keyspace: "test_ks", Object: "tbl_a"},
 				&frm.SchemaChangeKeyspace{Change: "UPDATED", Keyspace: "test_ks"},
 			})
@@ -1254,29 +1254,29 @@ func TestSchemaMetadata(t *testing.T) {
 		s := newSchemaEventTestSessionWithMock(ctrl)
 		defer s.Close()
 		populateKeyspace(s, "test_ks", "tbl_a")
-		SessionData(s).InternalMetadataDescriber.InternalInvalidateTableSchema("test_ks", "tbl_a")
-		snapshot, reloaded, err := SessionData(s).InternalMetadataDescriber.InternalGetKeyspaceInternal("test_ks")
+		SessionData(s).InternalMetadataDescriber.invalidateTableSchema("test_ks", "tbl_a")
+		snapshot, reloaded, err := SessionData(s).InternalMetadataDescriber.getKeyspaceInternal("test_ks")
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, needed, err := SessionData(s).InternalMetadataDescriber.InternalGetTableFromSnapshot("test_ks", "tbl_a", snapshot, reloaded)
+		_, needed, err := SessionData(s).InternalMetadataDescriber.getTableFromSnapshot("test_ks", "tbl_a", snapshot, reloaded)
 		if err != nil || !needed {
 			t.Fatal(needed, err)
 		}
 		// Caller A is now paused after deciding refreshNeeded. Caller B completes
 		// its entire flight before A can enter the singleflight group.
-		if err := SessionData(s).InternalMetadataDescriber.InternalDeduplicatedRefreshTable("test_ks", "tbl_a"); err != nil {
+		if err := SessionData(s).InternalMetadataDescriber.deduplicatedRefreshTable("test_ks", "tbl_a"); err != nil {
 			t.Fatal(err)
 		}
 		ctrl.resetQueries()
-		if err := SessionData(s).InternalMetadataDescriber.InternalDeduplicatedRefreshTable("test_ks", "tbl_a"); err != nil {
+		if err := SessionData(s).InternalMetadataDescriber.deduplicatedRefreshTable("test_ks", "tbl_a"); err != nil {
 			t.Fatal(err)
 		}
 		if got := ctrl.getQueryCount(); got != 0 {
 			t.Fatalf("stale entrant after completed flight reissued %d schema queries", got)
 		}
-		SessionData(s).InternalMetadataDescriber.InternalInvalidateTableSchema("test_ks", "tbl_a")
-		if err := SessionData(s).InternalMetadataDescriber.InternalDeduplicatedRefreshTable("test_ks", "tbl_a"); err != nil {
+		SessionData(s).InternalMetadataDescriber.invalidateTableSchema("test_ks", "tbl_a")
+		if err := SessionData(s).InternalMetadataDescriber.deduplicatedRefreshTable("test_ks", "tbl_a"); err != nil {
 			t.Fatal(err)
 		}
 		if got := ctrl.getQueryCount(); got != 4 {
@@ -1292,7 +1292,7 @@ func TestSchemaMetadata(t *testing.T) {
 		defer s.Close()
 		ctrl.setQueryError(errors.New("schema unavailable"))
 
-		_, err := InternalGetKeyspaceMetadata(s, "ks1")
+		_, err := getKeyspaceMetadata(s, "ks1")
 		if err == nil || errors.Is(err, runtimeerrors.ErrKeyspaceDoesNotExist) || !strings.Contains(err.Error(), "schema unavailable") {
 			t.Fatalf("getKeyspaceMetadata error = %v, want the query error", err)
 		}
@@ -1307,7 +1307,7 @@ func TestSchemaMetadata(t *testing.T) {
 			s, ctrl := refreshAllSchemaSession(t)
 			ctrl.setQueryError(errors.New("schema unavailable"))
 
-			err := SessionData(s).InternalMetadataDescriber.InternalRefreshAllSchema()
+			err := SessionData(s).InternalMetadataDescriber.refreshAllSchema()
 			if err == nil || !strings.Contains(err.Error(), "schema unavailable") {
 				t.Fatalf("refreshAllSchema error = %v, want the query error", err)
 			}
@@ -1328,7 +1328,7 @@ func TestSchemaMetadata(t *testing.T) {
 				errSchema := errors.New("schema unavailable")
 				ctrl.setQueryError(errSchema)
 
-				if err := SessionData(s).InternalMetadataDescriber.InternalRefreshAllSchema(); !errors.Is(err, errSchema) {
+				if err := SessionData(s).InternalMetadataDescriber.refreshAllSchema(); !errors.Is(err, errSchema) {
 					t.Fatalf("run %d: refreshAllSchema error = %v, which does not wrap the query error", i, err)
 				}
 			}
@@ -1498,14 +1498,14 @@ func TestSchemaMetadata(t *testing.T) {
 			defer s.Close()
 			populateKeyspace(s, "test_ks", "tbl_scylla_cdc_log")
 
-			_, err := InternalScyllaIsCdcTable(s, "test_ks", "tbl_scylla_cdc_log")
+			_, err := scyllaIsCdcTable(s, "test_ks", "tbl_scylla_cdc_log")
 			if err != nil {
 				t.Fatalf("initial scyllaIsCdcTable failed: %v", err)
 			}
-			SessionData(s).InternalMetadataDescriber.InternalInvalidateTableSchema("test_ks", "tbl_scylla_cdc_log")
+			SessionData(s).InternalMetadataDescriber.invalidateTableSchema("test_ks", "tbl_scylla_cdc_log")
 			ctrl.resetQueries()
 
-			_, err = InternalScyllaIsCdcTable(s, "test_ks", "tbl_scylla_cdc_log")
+			_, err = scyllaIsCdcTable(s, "test_ks", "tbl_scylla_cdc_log")
 			if err != nil {
 				t.Fatalf("scyllaIsCdcTable after invalidation failed: %v", err)
 			}
@@ -1528,7 +1528,7 @@ func TestSchemaMetadata(t *testing.T) {
 			defer s.Close()
 			populateKeyspace(s, "test_ks", "regular_table")
 
-			isCdc, err := InternalScyllaIsCdcTable(s, "test_ks", "regular_table")
+			isCdc, err := scyllaIsCdcTable(s, "test_ks", "regular_table")
 			if err != nil {
 				t.Fatalf("scyllaIsCdcTable failed: %v", err)
 			}
@@ -1577,18 +1577,18 @@ func TestSchemaMetadata(t *testing.T) {
 			}
 			s := newSchemaEventTestSessionWithMock(ctrl)
 			defer s.Close()
-			SessionData(s).InternalIsInitialized = true
+			SessionData(s).isInitialized = true
 			populateKeyspace(s, "test_ks", "tbl_a")
 
-			_, err := InternalSessionTableMetadata(s, "test_ks", "tbl_a")
+			_, err := sessionTableMetadata(s, "test_ks", "tbl_a")
 			if err != nil {
 				t.Fatalf("initial TableMetadata failed: %v", err)
 			}
-			SessionData(s).InternalMetadataDescriber.InternalInvalidateKeyspaceSchema("test_ks")
+			SessionData(s).InternalMetadataDescriber.invalidateKeyspaceSchema("test_ks")
 
 			ctrl.resetQueries()
 
-			tbl, err := InternalSessionTableMetadata(s, "test_ks", "tbl_a")
+			tbl, err := sessionTableMetadata(s, "test_ks", "tbl_a")
 			if err != nil {
 				t.Fatalf("TableMetadata after keyspace invalidation failed: %v", err)
 			}
@@ -1612,21 +1612,21 @@ func TestSchemaMetadata(t *testing.T) {
 			}
 			s := newSchemaEventTestSessionWithMock(ctrl)
 			defer s.Close()
-			SessionData(s).InternalIsInitialized = true
+			SessionData(s).isInitialized = true
 			populateKeyspace(s, "test_ks", "tbl_a")
 
-			tbl, err := InternalSessionTableMetadata(s, "test_ks", "tbl_a")
+			tbl, err := sessionTableMetadata(s, "test_ks", "tbl_a")
 			if err != nil {
 				t.Fatalf("initial TableMetadata failed: %v", err)
 			}
 			if tbl.Name != "tbl_a" {
 				t.Fatalf("expected table name tbl_a, got %s", tbl.Name)
 			}
-			SessionData(s).InternalMetadataDescriber.InternalInvalidateTableSchema("test_ks", "tbl_a")
+			SessionData(s).InternalMetadataDescriber.invalidateTableSchema("test_ks", "tbl_a")
 
 			ctrl.resetQueries()
 
-			tbl, err = InternalSessionTableMetadata(s, "test_ks", "tbl_a")
+			tbl, err = sessionTableMetadata(s, "test_ks", "tbl_a")
 			if err != nil {
 				t.Fatalf("TableMetadata after invalidation failed: %v", err)
 			}
@@ -1647,9 +1647,9 @@ func TestSchemaMetadata(t *testing.T) {
 				ctrl := &schemaDataMock{knownKeyspaces: map[string][]tableInfo{}}
 				s := newSchemaEventTestSessionWithMock(ctrl)
 				defer s.Close()
-				SessionData(s).InternalIsInitialized = true
+				SessionData(s).isInitialized = true
 
-				_, err := InternalSessionTableMetadata(s, "ks", "")
+				_, err := sessionTableMetadata(s, "ks", "")
 				if !errors.Is(err, runtimeerrors.ErrNoTable) {
 					t.Fatalf("TableMetadata: expected ErrNoTable, got %v", err)
 				}

@@ -58,7 +58,7 @@ func TestClusterSettings(t *testing.T) {
 			tests.AssertEqual(t, "cluster config port", 0, cfg.Port)
 			tests.AssertEqual(t, "cluster config num-conns", 2, cfg.NumConns)
 			tests.AssertEqual(t, "cluster config consistency", cqltype.Quorum, cfg.Consistency)
-			tests.AssertEqual(t, "cluster config max prepared statements", InternalDefaultMaxPreparedStmts, cfg.MaxPreparedStmts)
+			tests.AssertEqual(t, "cluster config max prepared statements", defaultMaxPreparedStmts, cfg.MaxPreparedStmts)
 			tests.AssertEqual(t, "cluster config max routing key info", 1000, cfg.MaxRoutingKeyInfo)
 			tests.AssertEqual(t, "cluster config page-size", 5000, cfg.PageSize)
 			tests.AssertEqual(t, "cluster config default timestamp", true, cfg.DefaultTimestamp)
@@ -158,8 +158,8 @@ func TestClusterSettings(t *testing.T) {
 			if err := cfg.Validate(); err != nil {
 				t.Fatal(err)
 			}
-			if cfg.Port != InternalDefaultCQLPort {
-				t.Fatalf("Port = %d, want %d", cfg.Port, InternalDefaultCQLPort)
+			if cfg.Port != defaultCQLPort {
+				t.Fatalf("Port = %d, want %d", cfg.Port, defaultCQLPort)
 			}
 
 			cfg = InternalNewClusterSettings("10.0.0.1:19042", "10.0.0.2")
@@ -171,8 +171,8 @@ func TestClusterSettings(t *testing.T) {
 			if err == nil || strings.Contains(err.Error(), "all include a port") {
 				t.Fatalf("Validate() = %v, want the client routes error, not a host port error", err)
 			}
-			if cfg.Port != InternalDefaultCQLPort {
-				t.Fatalf("Port = %d, want %d with client routes", cfg.Port, InternalDefaultCQLPort)
+			if cfg.Port != defaultCQLPort {
+				t.Fatalf("Port = %d, want %d with client routes", cfg.Port, defaultCQLPort)
 			}
 		})
 
@@ -493,10 +493,10 @@ func TestClusterSettings(t *testing.T) {
 		if err := tlsCfg.ValidateAndInitSSL(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if InternalClusterSettingsGetActualTLSConfig(&tlsCfg) == nil {
+		if clusterSettingsGetActualTLSConfig(&tlsCfg) == nil {
 			t.Fatal("expected copied TLS config to initialize TLS")
 		}
-		if InternalClusterSettingsGetActualTLSConfig(cfg) != nil {
+		if clusterSettingsGetActualTLSConfig(cfg) != nil {
 			t.Fatal("expected original config not to retain copied TLS state")
 		}
 
@@ -505,7 +505,7 @@ func TestClusterSettings(t *testing.T) {
 		if err := noTLSCfg.ValidateAndInitSSL(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if InternalClusterSettingsGetActualTLSConfig(&noTLSCfg) != nil {
+		if clusterSettingsGetActualTLSConfig(&noTLSCfg) != nil {
 			t.Fatal("expected copied config with nil SslOpts not to use TLS")
 		}
 	})

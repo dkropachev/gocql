@@ -47,12 +47,12 @@ func TestHostSelectionPolicy(t *testing.T) {
 		t.Run("Add", func(t *testing.T) {
 			t.Parallel()
 
-			var cow InternalCowHostList
+			var cow cowHostList
 
 			toAdd := [...]net.IP{net.IPv4(10, 0, 0, 1), net.IPv4(10, 0, 0, 2), net.IPv4(10, 0, 0, 3)}
 
 			for _, addr := range toAdd {
-				if !cow.InternalAdd(func() *endpoint.HostInfo {
+				if !cow.add(func() *endpoint.HostInfo {
 					opaqueStorageValue := new(endpoint.HostInfo)
 					implEndpoint.HostInfoData(opaqueStorageValue).InternalConnectAddress = addr
 					return opaqueStorageValue
@@ -61,7 +61,7 @@ func TestHostSelectionPolicy(t *testing.T) {
 				}
 			}
 
-			hosts := cow.InternalGet().InternalAllHosts()
+			hosts := cow.get().allHosts()
 			if len(hosts) != len(toAdd) {
 				t.Fatalf("expected to have %d hosts got %d", len(toAdd), len(hosts))
 			}
@@ -81,24 +81,24 @@ func TestHostSelectionPolicy(t *testing.T) {
 		t.Run("AddAll", func(t *testing.T) {
 			t.Parallel()
 
-			var cow InternalCowHostList
-			hosts := makeHostInfoListTestHosts(InternalHostInfoListMapThreshold)
+			var cow cowHostList
+			hosts := makeHostInfoListTestHosts(hostInfoListMapThreshold)
 
-			if !cow.InternalAddAll(hosts) {
+			if !cow.addAll(hosts) {
 				t.Fatal("did not add hosts which were not in the set")
 			}
-			if got := cow.InternalGet().InternalLen(); got != len(hosts) {
+			if got := cow.get().InternalLen(); got != len(hosts) {
 				t.Fatalf("len() = %d, want %d", got, len(hosts))
 			}
-			if cow.InternalGet().InternalHostsByID == nil {
+			if cow.get().hostsByID == nil {
 				t.Fatal("expected host ID map at threshold")
 			}
 			for _, host := range hosts {
-				if got := cow.InternalGet().InternalHostByID(implEndpoint.InternalHostInfoHostUUID(host)); got != host {
+				if got := cow.get().hostByID(implEndpoint.InternalHostInfoHostUUID(host)); got != host {
 					t.Fatalf("hostByID(%s) = %v, want %v", host.HostID(), got, host)
 				}
 			}
-			if cow.InternalAddAll(hosts) {
+			if cow.addAll(hosts) {
 				t.Fatal("added duplicate hosts")
 			}
 		})
@@ -114,8 +114,8 @@ func TestHostSelectionPolicy(t *testing.T) {
 			withSpareCapacity := make([]*endpoint.HostInfo, len(original), len(original)+1)
 			copy(withSpareCapacity, original)
 
-			hosts := InternalNewHostInfoList(withSpareCapacity)
-			snapshot := hosts.InternalAllHosts()
+			hosts := newHostInfoList(withSpareCapacity)
+			snapshot := hosts.allHosts()
 			appended := append(snapshot, func() *endpoint.HostInfo {
 				opaqueStorageValuex := new(endpoint.HostInfo)
 				implEndpoint.HostInfoData(opaqueStorageValuex).InternalHostId = tUUID(100)
@@ -143,12 +143,12 @@ func TestHostSelectionPolicy(t *testing.T) {
 			}{
 				{
 					name:    "linear below threshold",
-					hosts:   makeHostInfoListTestHosts(InternalHostInfoListMapThreshold - 1),
+					hosts:   makeHostInfoListTestHosts(hostInfoListMapThreshold - 1),
 					wantMap: false,
 				},
 				{
 					name:    "map at threshold",
-					hosts:   makeHostInfoListTestHosts(InternalHostInfoListMapThreshold),
+					hosts:   makeHostInfoListTestHosts(hostInfoListMapThreshold),
 					wantMap: true,
 				},
 			}
@@ -157,28 +157,28 @@ func TestHostSelectionPolicy(t *testing.T) {
 				t.Run(tt.name, func(t *testing.T) {
 					t.Parallel()
 
-					hosts := InternalNewHostInfoList(tt.hosts)
-					if (hosts.InternalHostsByID != nil) != tt.wantMap {
-						t.Fatalf("hostsByID presence = %v, want %v", hosts.InternalHostsByID != nil, tt.wantMap)
+					hosts := newHostInfoList(tt.hosts)
+					if (hosts.hostsByID != nil) != tt.wantMap {
+						t.Fatalf("hostsByID presence = %v, want %v", hosts.hostsByID != nil, tt.wantMap)
 					}
 					if tt.wantMap {
-						if hosts.InternalHostIDs != nil {
-							t.Fatalf("hostIDs = %v, want nil when hostsByID is used", hosts.InternalHostIDs)
+						if hosts.hostIDs != nil {
+							t.Fatalf("hostIDs = %v, want nil when hostsByID is used", hosts.hostIDs)
 						}
-					} else if len(hosts.InternalHostIDs) != len(tt.hosts) {
-						t.Fatalf("len(hostIDs) = %d, want %d", len(hosts.InternalHostIDs), len(tt.hosts))
+					} else if len(hosts.hostIDs) != len(tt.hosts) {
+						t.Fatalf("len(hostIDs) = %d, want %d", len(hosts.hostIDs), len(tt.hosts))
 					}
 
 					for _, host := range tt.hosts {
-						if got := hosts.InternalHostByID(implEndpoint.InternalHostInfoHostUUID(host)); got != host {
+						if got := hosts.hostByID(implEndpoint.InternalHostInfoHostUUID(host)); got != host {
 							t.Fatalf("hostByID(%s) = %v, want %v", host.HostID(), got, host)
 						}
 					}
 
-					if got := hosts.InternalHostByID(tUUID(9999)); got != nil {
+					if got := hosts.hostByID(tUUID(9999)); got != nil {
 						t.Fatalf("hostByID(missing) = %v, want nil", got)
 					}
-					if got := hosts.InternalHostByID(cqltype.UUID{}); got != nil {
+					if got := hosts.hostByID(cqltype.UUID{}); got != nil {
 						t.Fatalf("hostByID(zero) = %v, want nil", got)
 					}
 				})
@@ -188,7 +188,7 @@ func TestHostSelectionPolicy(t *testing.T) {
 
 	t.Run("HostSet", func(t *testing.T) {
 		t.Run("Inline", func(t *testing.T) {
-			var s InternalHostSet
+			var s hostSet
 			hosts := make([]*endpoint.HostInfo, 9)
 			for i := range hosts {
 				hosts[i] = func() *endpoint.HostInfo {
@@ -196,19 +196,19 @@ func TestHostSelectionPolicy(t *testing.T) {
 					return opaqueStorageValuexxxxxx
 				}()
 
-				s.InternalAdd(hosts[i])
+				s.add(hosts[i])
 			}
 			// All 9 should be tracked inline (no overflow map).
-			if s.InternalOverflow != nil {
+			if s.overflow != nil {
 				t.Fatal("expected inline-only storage for 9 hosts")
 			}
 			for i, h := range hosts {
-				if !s.InternalContains(h) {
+				if !s.contains(h) {
 					t.Fatalf("host %d not found in inline set", i)
 				}
 			}
 			// Unknown host should not be found.
-			if s.InternalContains(func() *endpoint.HostInfo {
+			if s.contains(func() *endpoint.HostInfo {
 				opaqueStorageValuexxxxxxx := new(endpoint.HostInfo)
 				return opaqueStorageValuexxxxxxx
 			}(),
@@ -218,7 +218,7 @@ func TestHostSelectionPolicy(t *testing.T) {
 		})
 
 		t.Run("Overflow", func(t *testing.T) {
-			var s InternalHostSet
+			var s hostSet
 			hosts := make([]*endpoint.HostInfo, 15) // exceeds inline capacity of 9
 			for i := range hosts {
 				hosts[i] = func() *endpoint.HostInfo {
@@ -226,20 +226,20 @@ func TestHostSelectionPolicy(t *testing.T) {
 					return opaqueStorageValuexxxxxxxx
 				}()
 
-				s.InternalAdd(hosts[i])
+				s.add(hosts[i])
 			}
 			// Should have spilled to map.
-			if s.InternalOverflow == nil {
+			if s.overflow == nil {
 				t.Fatal("expected overflow map for 15 hosts")
 			}
 			// Every host must be found, including those added before and after spill.
 			for i, h := range hosts {
-				if !s.InternalContains(h) {
+				if !s.contains(h) {
 					t.Fatalf("host %d not found after overflow", i)
 				}
 			}
 			// Unknown host should not be found.
-			if s.InternalContains(func() *endpoint.HostInfo {
+			if s.contains(func() *endpoint.HostInfo {
 				opaqueStorageValuexxxxxxxxx := new(endpoint.HostInfo)
 				return opaqueStorageValuexxxxxxxxx
 			}(),
@@ -249,7 +249,7 @@ func TestHostSelectionPolicy(t *testing.T) {
 		})
 
 		t.Run("OverflowPreservesInline", func(t *testing.T) {
-			var s InternalHostSet
+			var s hostSet
 			// Fill inline storage exactly.
 			inline := make([]*endpoint.HostInfo, 9)
 			for i := range inline {
@@ -258,7 +258,7 @@ func TestHostSelectionPolicy(t *testing.T) {
 					return opaqueStorageValuexxxxxxxxxx
 				}()
 
-				s.InternalAdd(inline[i])
+				s.add(inline[i])
 			}
 			// Add one more to trigger spill.
 			extra := func() *endpoint.HostInfo {
@@ -266,18 +266,18 @@ func TestHostSelectionPolicy(t *testing.T) {
 				return opaqueStorageValuexxxxxxxxxxx
 			}()
 
-			s.InternalAdd(extra)
+			s.add(extra)
 
-			if s.InternalOverflow == nil {
+			if s.overflow == nil {
 				t.Fatal("expected overflow map after 10th add")
 			}
 			// Inline entries must be findable via the map path.
 			for i, h := range inline {
-				if !s.InternalContains(h) {
+				if !s.contains(h) {
 					t.Fatalf("inline host %d lost after spill", i)
 				}
 			}
-			if !s.InternalContains(extra) {
+			if !s.contains(extra) {
 				t.Fatal("extra host not found after spill")
 			}
 		})
@@ -304,7 +304,7 @@ func TestHostSelectionPolicy(t *testing.T) {
 					}
 
 					replicas, session, labels := busyHosts(t, busy)
-					InternalPartitionHealthy(replicas, session)
+					partitionHealthy(replicas, session)
 
 					var want []string
 					for i := range busy { // healthy, in input order
@@ -372,7 +372,7 @@ func TestHostSelectionPolicy(t *testing.T) {
 					t.Parallel()
 
 					replicas, session, labels := hostsWithInFlight(t, tt.inFlight)
-					InternalPartitionHealthy(replicas, session)
+					partitionHealthy(replicas, session)
 
 					if got := labels.names(replicas); !equalNames(got, tt.want) {
 						t.Errorf("partitionHealthy() with in-flight %v order = %v, want %v",
@@ -396,7 +396,7 @@ func TestHostSelectionPolicy(t *testing.T) {
 				return opaqueStorageValuex
 			}()
 
-			InternalPartitionHealthy(replicas, session)
+			partitionHealthy(replicas, session)
 
 			want := []string{"h0", "h1", "h2", "h3"}
 			if got := labels.names(replicas); !equalNames(got, want) {
@@ -476,7 +476,7 @@ func TestHostSelectionPolicy(t *testing.T) {
 					t.Parallel()
 
 					replicas, session, labels := busyHosts(t, tt.busy)
-					InternalPartitionHealthy(replicas, session)
+					partitionHealthy(replicas, session)
 
 					if got := labels.names(replicas); !equalNames(got, tt.want) {
 						t.Errorf("partitionHealthy() order = %v, want %v", got, tt.want)
@@ -501,7 +501,7 @@ func TestHostSelectionPolicy(t *testing.T) {
 				before[labels[h]]++
 			}
 
-			InternalPartitionHealthy(replicas, session)
+			partitionHealthy(replicas, session)
 
 			after := make(map[string]int, len(replicas))
 			for i, h := range replicas {
@@ -542,7 +542,7 @@ func TestHostSelectionPolicy(t *testing.T) {
 				&stubConnPicker{inFlight: 0}, // h2, healthy throughout
 			})
 
-			InternalPartitionHealthy(replicas, session)
+			partitionHealthy(replicas, session)
 
 			// The snapshot counted h1 as healthy, so it stays in the healthy group and
 			// keeps its position ahead of h2. Only h0 moves.
@@ -568,10 +568,10 @@ func TestHostSelectionPolicy(t *testing.T) {
 	t.Run("SelectedHostTokenInt64", func(t *testing.T) {
 		t.Parallel()
 
-		sh := InternalInt64SelectedHost{InternalInfo: func() *endpoint.HostInfo {
+		sh := int64SelectedHost{info: func() *endpoint.HostInfo {
 			opaqueStorageValuexxxx := new(endpoint.HostInfo)
 			return opaqueStorageValuexxxx
-		}(), InternalTokenCasted: endpoint.InternalInt64Token(42)}
+		}(), tokenCasted: endpoint.InternalInt64Token(42)}
 		tok, ok := sh.TokenInt64()
 		if !ok || tok != endpoint.InternalInt64Token(42) {
 			t.Fatalf("TokenInt64() = %d, %v; want 42, true", tok, ok)
@@ -583,10 +583,10 @@ func TestHostSelectionPolicy(t *testing.T) {
 			t.Fatalf("Token() (again) = %v; want boxed int64Token(42)", got)
 		}
 
-		shBoxed := InternalSelectedHost{InternalInfo: func() *endpoint.HostInfo {
+		shBoxed := selectedHost{info: func() *endpoint.HostInfo {
 			opaqueStorageValuexxxxx := new(endpoint.HostInfo)
 			return opaqueStorageValuexxxxx
-		}(), InternalToken: endpoint.InternalInt64Token(7)}
+		}(), token: endpoint.InternalInt64Token(7)}
 		if tok, ok := shBoxed.TokenInt64(); ok || tok != 0 {
 			t.Fatalf("TokenInt64() = %d, %v; want 0, false for a boxed-only host", tok, ok)
 		}
@@ -602,12 +602,12 @@ func TestHostSelectionPolicy(t *testing.T) {
 			RackAwareRoundRobinPolicy("local", "b"),
 			NonLocalReplicasFallback(),
 		)
-		policyInternal := policy.(*InternalTokenAwareHostPolicy)
+		policyInternal := policy.(*tokenAwareHostPolicy)
 
-		if InternalTokenAwareHostPolicyData(policyInternal).InternalFallback == nil {
+		if tokenAwareHostPolicyData(policyInternal).fallback == nil {
 			t.Fatal("fallback is nil")
 		}
-		if !InternalTokenAwareHostPolicyData(policyInternal).InternalNonLocalReplicasFallback {
+		if !tokenAwareHostPolicyData(policyInternal).nonLocalReplicasFallback {
 			t.Fatal("nonLocalReplicasFallback is false")
 		}
 
@@ -616,32 +616,32 @@ func TestHostSelectionPolicy(t *testing.T) {
 			SessionData(opaqueStorageValuexxx).InternalLogger = &logging.InternalDefaultLogger{}
 			return opaqueStorageValuexxx
 		}())
-		if InternalTokenAwareHostPolicyData(policyInternal).InternalGetKeyspaceMetadata == nil {
+		if tokenAwareHostPolicyData(policyInternal).getKeyspaceMetadata == nil {
 			t.Fatal("keyspace metatadata fn is nil")
 		}
-		if InternalTokenAwareHostPolicyData(policyInternal).InternalGetKeyspaceName == nil {
+		if tokenAwareHostPolicyData(policyInternal).getKeyspaceName == nil {
 			t.Fatal("keyspace name fn is nil")
 		}
-		if InternalTokenAwareHostPolicyData(policyInternal).InternalLogger == nil {
+		if tokenAwareHostPolicyData(policyInternal).logger == nil {
 			t.Fatal("logger is nil")
 		}
 
 		// Reset - should reset fields that were set in Init
 		policy.Reset()
 
-		if InternalTokenAwareHostPolicyData(policyInternal).InternalFallback == nil { // we don't touch fallback
+		if tokenAwareHostPolicyData(policyInternal).fallback == nil { // we don't touch fallback
 			t.Fatal("fallback is nil")
 		}
-		if !InternalTokenAwareHostPolicyData(policyInternal).InternalNonLocalReplicasFallback { // we don't touch nonLocalReplicasFallback
+		if !tokenAwareHostPolicyData(policyInternal).nonLocalReplicasFallback { // we don't touch nonLocalReplicasFallback
 			t.Fatal("nonLocalReplicasFallback is false")
 		}
-		if InternalTokenAwareHostPolicyData(policyInternal).InternalGetKeyspaceMetadata != nil {
+		if tokenAwareHostPolicyData(policyInternal).getKeyspaceMetadata != nil {
 			t.Fatal("keyspace metatadata fn is not nil")
 		}
-		if InternalTokenAwareHostPolicyData(policyInternal).InternalGetKeyspaceName != nil {
+		if tokenAwareHostPolicyData(policyInternal).getKeyspaceName != nil {
 			t.Fatal("keyspace name fn is not nil")
 		}
-		if InternalTokenAwareHostPolicyData(policyInternal).InternalLogger != nil {
+		if tokenAwareHostPolicyData(policyInternal).logger != nil {
 			t.Fatal("logger is nil")
 		}
 	})

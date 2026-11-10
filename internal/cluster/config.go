@@ -39,7 +39,7 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 	}
 	legacy := InternalNewClusterSettings(contacts...)
 	profile := *config.DefaultProfile
-	legacy.privateStorage.InternalDefaultProfile = profile
+	legacy.privateStorage.defaultProfile = profile
 	legacy.Port = int(config.Port)
 	legacy.ProtoVersion = config.Protocol
 	legacy.Keyspace = config.Keyspace
@@ -98,7 +98,7 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 	}
 	if config.HostFilter != nil {
 		legacy.HostFilter = HostFilterFunc(func(host *implEndpoint.HostInfo) bool {
-			snapshot, err := InternalSnapshotV2Host(nil, host)
+			snapshot, err := snapshotV2Host(nil, host)
 			return err == nil && config.HostFilter(snapshot)
 		})
 	}

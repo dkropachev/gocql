@@ -38,11 +38,11 @@ import (
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
-func InternalCheckSystemSchema(control InternalControlConnection) (bool, error) {
+func checkSystemSchema(control InternalControlConnection) (bool, error) {
 	if control == nil {
 		return false, metadata.InternalErrNoControl
 	}
-	backend, ok := control.(InternalV2SystemQueryer)
+	backend, ok := control.(v2SystemQueryer)
 	if !ok {
 		return false, cqltype.TypeValidation("schema discovery", "control connection does not support typed queries")
 	}
@@ -74,7 +74,7 @@ func InternalCheckSystemSchema(control InternalControlConnection) (bool, error) 
 
 // Given a map that represents a row from either system.local or system.peers
 // return as much information as we can in *HostInfo
-func InternalHostInfoFromMap(row map[string]any, defaultPort int) (*implEndpoint.HostInfo, error) {
+func hostInfoFromMap(row map[string]any, defaultPort int) (*implEndpoint.HostInfo, error) {
 	const assertErrorMsg = "Assertion failed for %s"
 	var ok bool
 
