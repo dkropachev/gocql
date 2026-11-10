@@ -133,7 +133,7 @@ func (p *Page[R]) advance(dst *R) bool {
 	if p.privateStorage.index >= p.privateStorage.response.RowCount {
 		p.privateStorage.exhausted = true
 		p.privateStorage.reader = codec.RowReader{}
-		if err := (&p.privateStorage.InternalCursor).RequireEnd(); err != nil {
+		if err := p.privateStorage.InternalCursor.RequireEnd(); err != nil {
 			p.privateStorage.err = &cqltype.ProtocolError{Stage: "rows", Err: err}
 		}
 		return false

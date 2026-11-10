@@ -220,7 +220,7 @@ func (s *Core) refreshRing() error {
 	}
 	enabled := make(map[string]bool, len(hosts))
 	for _, h := range hosts {
-		enabled[h.HostID()] = !(&s.privateStorage.InternalCfg).FilterHost(h)
+		enabled[h.HostID()] = !s.privateStorage.InternalCfg.FilterHost(h)
 	}
 	r.mu.Lock()
 	if r.eventEpoch != epoch || r.refreshSequence != sequence {

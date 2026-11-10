@@ -381,7 +381,7 @@ func (s *Core) init() error {
 	atomic.AddInt64(&left, 1)
 	for _, host := range hostMap {
 		host := s.privateStorage.InternalHostSource.InternalAddOrUpdate(host)
-		if (&s.privateStorage.InternalCfg).FilterHost(host) {
+		if s.privateStorage.InternalCfg.FilterHost(host) {
 			continue
 		}
 

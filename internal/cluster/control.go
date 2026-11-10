@@ -318,7 +318,7 @@ func (c *InternalControlConn) setupConn(conn *transport.Conn) error {
 		return err
 	}
 
-	if (&c.InternalSession.privateStorage.InternalCfg).FilterHost(host) {
+	if c.InternalSession.privateStorage.InternalCfg.FilterHost(host) {
 		return fmt.Errorf("host was filtered: %v", host.ConnectAddress())
 	}
 

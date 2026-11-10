@@ -411,7 +411,7 @@ func sessionHandleNodeUp(s *Core, eventIp net.IP, eventPort int) {
 		return
 	}
 
-	if (&s.privateStorage.InternalCfg).FilterHost(host) {
+	if s.privateStorage.InternalCfg.FilterHost(host) {
 		return
 	}
 
@@ -469,7 +469,7 @@ func sessionHandleNodeConnected(s *Core, host *implEndpoint.HostInfo) {
 	implEndpoint.InternalHostInfoSetState(host, implEndpoint.NodeUp)
 	sessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "host", Stage: "connected", HostID: implEndpoint.InternalHostInfoHostUUID(host), At: time.Now()})
 
-	if !(&s.privateStorage.InternalCfg).FilterHost(host) {
+	if !s.privateStorage.InternalCfg.FilterHost(host) {
 		s.privateStorage.InternalPolicy.HostUp(host)
 	}
 }
@@ -482,7 +482,7 @@ func (s *Core) HandleNodeDown(ip net.IP, port int) {
 
 	host, ok := s.privateStorage.InternalHostSource.getHostByIP(ip.String())
 	if ok {
-		filtered := (&s.privateStorage.InternalCfg).FilterHost(host)
+		filtered := s.privateStorage.InternalCfg.FilterHost(host)
 		p := s.Peripheral()
 		p.hostMu.Lock()
 		implEndpoint.InternalHostInfoSetState(host, implEndpoint.NodeDown)
@@ -551,7 +551,7 @@ func (s *Core) fenceV2Down(ip net.IP, port int) {
 	if !ok {
 		return
 	}
-	filtered := (&s.privateStorage.InternalCfg).FilterHost(host)
+	filtered := s.privateStorage.InternalCfg.FilterHost(host)
 	p := s.Peripheral()
 	p.hostMu.Lock()
 	implEndpoint.InternalHostInfoSetState(host, implEndpoint.NodeDown)
@@ -593,7 +593,7 @@ func (s *Core) synchronizeV2HostPolicy(fallback *implEndpoint.HostInfo) {
 		before := capture()
 		if before.host == nil {
 			s.privateStorage.InternalPolicy.RemoveHost(fallback)
-		} else if before.state == implEndpoint.NodeUp && before.pool != nil && before.pool.Size() > 0 && !(&s.privateStorage.InternalCfg).FilterHost(before.host) {
+		} else if before.state == implEndpoint.NodeUp && before.pool != nil && before.pool.Size() > 0 && !s.privateStorage.InternalCfg.FilterHost(before.host) {
 			s.privateStorage.InternalPolicy.HostUp(before.host)
 		} else {
 			s.privateStorage.InternalPolicy.HostDown(before.host)

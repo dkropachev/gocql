@@ -428,7 +428,7 @@ func snapshotV2Host(s *Core, h *implEndpoint.HostInfo) (model.HostSnapshot, erro
 		}
 	}
 	if s != nil {
-		out.Enabled = !(&s.privateStorage.InternalCfg).FilterHost(h)
+		out.Enabled = !s.privateStorage.InternalCfg.FilterHost(h)
 		if s.privateStorage.InternalPool != nil {
 			pool, ok := s.privateStorage.InternalPool.InternalGetPool(h)
 			out.Connected = ok && pool.Size() > 0

@@ -79,7 +79,7 @@ func sessionPickRoute(s *Core, r implRouting.Route, routing model.RoutingInfo) *
 	if pool == nil && !host.Bound() {
 		pool = s.privateStorage.InternalPool.InternalRoute(host.ID()).Pool()
 	}
-	if pool == nil || pool.InternalHost == nil || (&s.privateStorage.InternalCfg).FilterHost(pool.InternalHost) {
+	if pool == nil || pool.InternalHost == nil || s.privateStorage.InternalCfg.FilterHost(pool.InternalHost) {
 		return nil
 	}
 	if conn, ok := pool.PickRoute(r.Shard); ok {
