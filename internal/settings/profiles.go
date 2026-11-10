@@ -26,7 +26,7 @@ type Profile struct {
 func InternalDefaultProfile() Profile {
 	return Profile{Consistency: cqltype.LocalQuorum, SerialConsistency: cqltype.Option[cqltype.Consistency]{Value: cqltype.LocalSerial, Set: true}, Timeout: 30 * time.Second, PageSize: 5000, Prefetch: 1, Retry: retry.Safe{MaxAttempts: 3}}
 }
-func InternalValidateProfile(p Profile) error {
+func (p Profile) ValidateProfile() error {
 	if !InternalValidConsistency(p.Consistency) {
 		return cqltype.TypeValidation("consistency", "invalid consistency")
 	}

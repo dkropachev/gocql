@@ -58,7 +58,7 @@ func TestConfig(t *testing.T) {
 			for _, change := range []func(*settings.Config){func(c *settings.Config) { c.Pool.ConnectionsPerShard = 0 }, func(c *settings.Config) { c.Pool.MaxRequestsPerConnection = 0 }, func(c *settings.Config) { c.Pool.MaxOrphanedStreams = -1 }, func(c *settings.Config) { c.Pool.SourcePortStart = 0 }, func(c *settings.Config) { c.Pool.SourcePortStart = 65535; c.Pool.SourcePortEnd = 49152 }, func(c *settings.Config) { c.Linger = cqltype.Option[time.Duration]{Value: time.Millisecond, Set: true} }} {
 				invalid := settings.DefaultConfig("localhost")
 				change(&invalid)
-				if err := settings.InternalValidateConfig(invalid); err == nil {
+				if err := invalid.ValidateConfig(); err == nil {
 					t.Fatal("invalid transport setting accepted")
 				}
 			}
@@ -89,7 +89,7 @@ func TestConfig(t *testing.T) {
 			}} {
 				invalid := settings.DefaultConfig("localhost")
 				edit(&invalid)
-				if settings.InternalValidateConfig(invalid) == nil {
+				if invalid.ValidateConfig() == nil {
 					t.Fatal("invalid explicit setting accepted")
 				}
 			}
@@ -98,7 +98,7 @@ func TestConfig(t *testing.T) {
 			c.Metadata.PeriodicRefresh = 0
 			c.Metadata.RequestTimeout = 0
 			c.Metadata.ServerTimeout = implCql.Option[time.Duration]{Set: true, Value: 0}
-			if err := settings.InternalValidateConfig(c); err != nil {
+			if err := c.ValidateConfig(); err != nil {
 				t.Fatal(err)
 			}
 			s := func() *cluster.Core {
@@ -280,7 +280,7 @@ func TestConfig(t *testing.T) {
 		config := settings.DefaultConfig("localhost")
 		config.TLS = &tls.Config{ServerName: "original"}
 		config.Metadata.Keyspaces = []string{"ks"}
-		copy := settings.InternalSnapshotConfig(config)
+		copy := config.SnapshotConfig()
 		config.ContactPoints[0] = "changed"
 		config.Metadata.Keyspaces[0] = "changed"
 		config.TLS.ServerName = "changed"
@@ -291,7 +291,7 @@ func TestConfig(t *testing.T) {
 		for _, edit := range []func(*settings.Config){func(c *settings.Config) { c.Protocol = 6 }, func(c *settings.Config) { c.Metadata.AgreementPoll = -1 }, func(c *settings.Config) { c.Limits.MaxMetadataDepth = 129 }, func(c *settings.Config) { c.Pool.MaxRequestsPerConnection = 32769 }, func(c *settings.Config) { c.Metadata.Keyspaces = []string{"a", "a"} }} {
 			invalid := settings.DefaultConfig("localhost")
 			edit(&invalid)
-			err := settings.InternalValidateConfig(invalid)
+			err := invalid.ValidateConfig()
 			if _, ok := errors.AsType[*cqltype.ValidationError](err); !ok {
 				t.Fatalf("validation error %v", err)
 			}

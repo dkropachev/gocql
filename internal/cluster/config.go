@@ -26,15 +26,15 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := implSettings.InternalValidateConfig(config); err != nil {
+	if err := config.ValidateConfig(); err != nil {
 		return nil, err
 	}
-	config = implSettings.InternalSnapshotConfig(config)
+	config = config.SnapshotConfig()
 	if config.Logger != nil {
 		config.Logger = logging.InternalV2SafeLogger{InternalLogger: config.Logger}
 	}
 	contacts := config.ContactPoints
-	if path, _ := implSettings.InternalUnixContact(config); path != "" {
+	if path, _ := config.UnixContact(); path != "" {
 		contacts = []string{"127.0.0.1"}
 	}
 	legacy := InternalNewClusterSettings(contacts...)
@@ -102,10 +102,10 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 			return err == nil && config.HostFilter(snapshot)
 		})
 	}
-	hostDialer := &transport.InternalV2TLSHostDialer{InternalConfig: implSettings.InternalConnectivityConfig(config)}
+	hostDialer := &transport.InternalV2TLSHostDialer{InternalConfig: config.ConnectivityConfig()}
 	legacy.HostDialer = hostDialer
 	var typedSession *Core
-	if path, _ := implSettings.InternalUnixContact(config); path != "" {
+	if path, _ := config.UnixContact(); path != "" {
 		hostDialer.InternalUnixHostID = func() cqltype.UUID {
 			if typedSession != nil && typedSession.privateStorage.InternalControl != nil {
 				if current := typedSession.privateStorage.InternalControl.InternalGetConn(); current != nil && current.InternalHost != nil {

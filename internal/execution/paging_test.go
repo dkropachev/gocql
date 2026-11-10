@@ -154,12 +154,12 @@ func TestPaging(t *testing.T) {
 		t.Run("ConfigurationAndCompleteState", func(t *testing.T) {
 			c := settings.DefaultConfig("localhost")
 			c.Limits.MaxPagingStates = 0
-			if settings.InternalValidateConfig(c) == nil {
+			if c.ValidateConfig() == nil {
 				t.Fatal("zero state budget")
 			}
 			c = settings.DefaultConfig("localhost")
 			c.Limits.MaxPagingStateBytes = -1
-			if settings.InternalValidateConfig(c) == nil {
+			if c.ValidateConfig() == nil {
 				t.Fatal("negative byte budget")
 			}
 			if _, err := RunPage[codec.EmptyRecord](nil, nil, nil, implModel.CompletePageState(), CompiledOptions{}); !errors.Is(err, runtimeerrors.ErrPagingComplete) {

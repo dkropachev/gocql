@@ -589,7 +589,7 @@ func TestTypedConn(t *testing.T) {
 			c, server := typedTestConn(t, 4, nil)
 			cfg := settings.DefaultConfig("localhost")
 			cfg.Pool.MaxOrphanedStreams = 1024
-			c.InternalCfg = &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(cfg)}
+			c.InternalCfg = &transport.ConnConfig{TypedConfig: cfg.ConnectivityConfigPointer()}
 			c.InternalStreams = streams.NewLimited(capacity)
 			go c.InternalServe(c.InternalCtx)
 			received := make(chan struct{})
@@ -808,7 +808,7 @@ func TestTypedConn(t *testing.T) {
 					}
 					done <- nil
 				}()
-				cfg := &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config), ProtoVersion: 4, CQLVersion: "3.0.0", ConnectTimeout: time.Second, HostDialer: fixedHostDialer{client}, Compressor: compressor, Logger: logging.InternalNopLogger{}}
+				cfg := &transport.ConnConfig{TypedConfig: config.ConnectivityConfigPointer(), ProtoVersion: 4, CQLVersion: "3.0.0", ConnectTimeout: time.Second, HostDialer: fixedHostDialer{client}, Compressor: compressor, Logger: logging.InternalNopLogger{}}
 				conn, err := sessionDialWithoutObserver(session, ctx, host, cfg, transport.InternalConnErrorHandlerFn(func(*transport.Conn, error, bool) {}), 0, 0)
 				if _, ok := errors.AsType[*settings.UnsupportedSettingError](err); conn != nil || !ok {
 					t.Fatal("requested compression silently downgraded", err)
@@ -821,7 +821,7 @@ func TestTypedConn(t *testing.T) {
 		config := settings.DefaultConfig("localhost")
 		config.Protocol = 5
 		config.Compression = cqltype.SnappyCompression
-		err := settings.InternalValidateConfig(config)
+		err := config.ValidateConfig()
 		if _, ok := errors.AsType[*settings.UnsupportedSettingError](err); !ok {
 			t.Fatal("known protocol/compressor incompatibility not explicit", err)
 		}

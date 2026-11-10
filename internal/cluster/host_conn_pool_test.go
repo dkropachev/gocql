@@ -210,7 +210,7 @@ func TestHostConnPool(t *testing.T) {
 			opaqueStorageValuexxxxxx := new(Core)
 			SessionData(opaqueStorageValuexxxxxx).InternalCtx = ctx
 			SessionData(opaqueStorageValuexxxxxx).InternalLogger = logging.InternalNopLogger{}
-			SessionData(opaqueStorageValuexxxxxx).InternalConnCfg = &transport.ConnConfig{TypedConfig: settings.InternalConnectivityConfigPointer(config), ProtoVersion: 4, HostDialer: dialer, Logger: logging.InternalNopLogger{}}
+			SessionData(opaqueStorageValuexxxxxx).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityConfigPointer(), ProtoVersion: 4, HostDialer: dialer, Logger: logging.InternalNopLogger{}}
 			return opaqueStorageValuexxxxxx
 		}()
 		SessionData(s).InternalCfg.ReconnectionPolicy = &implPool.NoReconnectionPolicy{}

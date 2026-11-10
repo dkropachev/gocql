@@ -34,10 +34,10 @@ func TestClientRoutes(t *testing.T) {
 			cfg := settings.DefaultConfig("localhost")
 			cfg.Pool.ShardAwarePort = false
 			cfg.ClientRoutes = &settings.ClientRoutesOptions{ConnectionIDs: []string{"one", "two"}, HostnameOverrides: map[string]string{"one": "proxy.example"}}
-			if err := settings.InternalValidateConfig(cfg); err != nil {
+			if err := cfg.ValidateConfig(); err != nil {
 				t.Fatal(err)
 			}
-			snapshot := settings.InternalSnapshotConfig(cfg)
+			snapshot := cfg.SnapshotConfig()
 			cfg.ClientRoutes.ConnectionIDs[0] = "changed"
 			cfg.ClientRoutes.HostnameOverrides["one"] = "changed"
 			if snapshot.ClientRoutes.ConnectionIDs[0] != "one" || snapshot.ClientRoutes.HostnameOverrides["one"] != "proxy.example" {
@@ -45,9 +45,9 @@ func TestClientRoutes(t *testing.T) {
 			}
 			edits := []func(*settings.Config){func(c *settings.Config) { c.Pool.ShardAwarePort = true }, func(c *settings.Config) { c.ClientRoutes.ConnectionIDs = []string{"one", "one"} }, func(c *settings.Config) { c.ClientRoutes.HostnameOverrides["unknown"] = "host" }, func(c *settings.Config) { c.ClientRoutes.HostnameOverrides["one"] = "" }, func(c *settings.Config) { c.ClientRoutes.TLS = true }, func(c *settings.Config) { c.ClientRoutes.TLS = true; c.TLS = &tls.Config{InsecureSkipVerify: true} }}
 			for _, edit := range edits {
-				c := settings.InternalSnapshotConfig(snapshot)
+				c := snapshot.SnapshotConfig()
 				edit(&c)
-				if err := settings.InternalValidateConfig(c); err == nil {
+				if err := c.ValidateConfig(); err == nil {
 					t.Fatal("incompatible route setting accepted")
 				}
 			}

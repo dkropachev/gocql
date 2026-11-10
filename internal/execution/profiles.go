@@ -64,7 +64,7 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 		p = *base
 	}
 	if options.Profile != nil {
-		if err := settings.InternalValidateProfile(*options.Profile); err != nil {
+		if err := (*options.Profile).ValidateProfile(); err != nil {
 			return InternalResolvedOptions{}, err
 		}
 		p = *options.Profile

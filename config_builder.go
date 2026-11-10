@@ -105,10 +105,10 @@ func (b *ConfigBuilder) Build() (Config, error) {
 			return Config{}, &cqlerr.ValidationError{Field: "ignored events", Err: fmt.Errorf("%d is not a server event", kind)}
 		}
 	}
-	if err := implSettings.InternalValidateConfig(settings); err != nil {
+	if err := settings.ValidateConfig(); err != nil {
 		return Config{}, err
 	}
-	resolved := implSettings.InternalSnapshotConfig(settings)
+	resolved := settings.SnapshotConfig()
 	return Config{settings: &resolved}, nil
 }
 
@@ -626,7 +626,7 @@ func NewProfile() *ProfileBuilder {
 
 // Build validates the profile, for use as Options.Profile.
 func (p *ProfileBuilder) Build() (Profile, error) {
-	if err := implSettings.InternalValidateProfile(p.profile); err != nil {
+	if err := p.profile.ValidateProfile(); err != nil {
 		return Profile{}, err
 	}
 	return publicProfile(p.profile), nil

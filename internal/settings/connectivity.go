@@ -7,7 +7,7 @@ import "github.com/scylladb/gocql/v2/internal/connectivity"
 
 // InternalConnectivityConfig projects the validated immutable configuration.
 // It transfers only settings/descriptors; request/result payloads are absent.
-func InternalConnectivityConfig(c Config) connectivity.Config {
+func (c Config) ConnectivityConfig() connectivity.Config {
 	return connectivity.Config{
 		ContactPoints:     c.ContactPoints,
 		Protocol:          c.Protocol,
@@ -36,7 +36,7 @@ func InternalConnectivityConfig(c Config) connectivity.Config {
 		Reconnect: c.Reconnect,
 	}
 }
-func InternalConnectivityConfigPointer(c Config) *connectivity.Config {
-	v := InternalConnectivityConfig(c)
+func (c Config) ConnectivityConfigPointer() *connectivity.Config {
+	v := c.ConnectivityConfig()
 	return &v
 }

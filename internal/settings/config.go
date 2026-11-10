@@ -112,8 +112,8 @@ func InternalNewTimestampGenerator() func() int64 {
 		}
 	}
 }
-func InternalValidateConfig(config Config) error {
-	if _, err := InternalUnixContact(config); err != nil {
+func (config Config) ValidateConfig() error {
+	if _, err := config.UnixContact(); err != nil {
 		return err
 	}
 	if len(config.ContactPoints) == 0 {
@@ -143,7 +143,7 @@ func InternalValidateConfig(config Config) error {
 	if config.DefaultProfile == nil {
 		return cqltype.TypeValidation("profile", "default profile is required; use DefaultConfig")
 	}
-	if err := InternalValidateProfile(*config.DefaultProfile); err != nil {
+	if err := (*config.DefaultProfile).ValidateProfile(); err != nil {
 		return err
 	}
 	if config.Limits.MaxFrameBytes <= 0 || config.Limits.MaxDecompressedBytes <= 0 || config.Limits.MaxMetadataDepth <= 0 {
@@ -222,7 +222,7 @@ func InternalValidateConfig(config Config) error {
 	}
 	return nil
 }
-func InternalSnapshotConfig(config Config) Config {
+func (config Config) SnapshotConfig() Config {
 	if config.DefaultProfile != nil {
 		profile := *config.DefaultProfile
 		config.DefaultProfile = &profile

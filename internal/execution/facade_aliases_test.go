@@ -10,7 +10,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/settings"
-	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 )
 
@@ -19,5 +18,5 @@ func resolveOptions(a0 *cluster.Core, a1 CompiledOptions) (InternalResolvedOptio
 }
 
 func applyV2SocketOptions(a0 net.Conn, a1 settings.Config, a2 string) error {
-	return implTransport.InternalApplyV2SocketOptions(a0, implSettings.InternalConnectivityConfig(a1), a2)
+	return implTransport.InternalApplyV2SocketOptions(a0, a1.ConnectivityConfig(), a2)
 }
