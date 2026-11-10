@@ -2420,7 +2420,7 @@ func TestConn(t *testing.T) {
 			c, server := typedTestConn(t, 4, nil)
 			config := settings.DefaultConfig("localhost")
 			config.KeepaliveInterval = 0
-			c.InternalCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityConfigPointer()}
+			c.InternalCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityPointer()}
 			done := make(chan struct{})
 			go func() { c.InternalHeartBeat(c.InternalCtx); close(done) }()
 			select {
@@ -2432,7 +2432,7 @@ func TestConn(t *testing.T) {
 			c, _ = typedTestConn(t, 4, nil)
 			config.KeepaliveInterval = time.Millisecond
 			config.KeepaliveTimeout = 10 * time.Millisecond
-			c.InternalCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityConfigPointer()}
+			c.InternalCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityPointer()}
 			done = make(chan struct{})
 			go func() { c.InternalHeartBeat(c.InternalCtx); close(done) }()
 			select {

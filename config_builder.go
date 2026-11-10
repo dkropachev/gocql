@@ -105,10 +105,10 @@ func (b *ConfigBuilder) Build() (Config, error) {
 			return Config{}, &cqlerr.ValidationError{Field: "ignored events", Err: fmt.Errorf("%d is not a server event", kind)}
 		}
 	}
-	if err := settings.ValidateConfig(); err != nil {
+	if err := settings.Validate(); err != nil {
 		return Config{}, err
 	}
-	resolved := settings.SnapshotConfig()
+	resolved := settings.Snapshot()
 	return Config{settings: &resolved}, nil
 }
 

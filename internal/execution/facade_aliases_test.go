@@ -18,5 +18,5 @@ func resolveOptions(a0 *cluster.Core, a1 CompiledOptions) (InternalResolvedOptio
 }
 
 func applyV2SocketOptions(a0 net.Conn, a1 settings.Config, a2 string) error {
-	return implTransport.InternalApplyV2SocketOptions(a0, a1.ConnectivityConfig(), a2)
+	return implTransport.InternalApplyV2SocketOptions(a0, a1.Connectivity(), a2)
 }

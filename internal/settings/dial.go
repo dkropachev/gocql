@@ -41,5 +41,5 @@ func InternalUnixSocketPath(contactPoints []string) (string, error) {
 }
 
 func (c Config) UnixContact() (string, error) {
-	return connectivity.UnixContact(c.ConnectivityConfig())
+	return connectivity.UnixContact(c.Connectivity())
 }

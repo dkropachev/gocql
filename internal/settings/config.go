@@ -112,7 +112,7 @@ func InternalNewTimestampGenerator() func() int64 {
 		}
 	}
 }
-func (config Config) ValidateConfig() error {
+func (config Config) Validate() error {
 	if _, err := config.UnixContact(); err != nil {
 		return err
 	}
@@ -222,7 +222,7 @@ func (config Config) ValidateConfig() error {
 	}
 	return nil
 }
-func (config Config) SnapshotConfig() Config {
+func (config Config) Snapshot() Config {
 	if config.DefaultProfile != nil {
 		profile := *config.DefaultProfile
 		config.DefaultProfile = &profile

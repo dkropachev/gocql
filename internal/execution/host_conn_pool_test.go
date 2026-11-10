@@ -129,7 +129,7 @@ func TestHostConnPool(t *testing.T) {
 						return opaqueStorageValuexxxxxxxxxxxxxx
 					}()
 					implCluster.SessionData(s).InternalCfg.ReconnectionPolicy = &implPool.NoReconnectionPolicy{}
-					implCluster.SessionData(s).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityConfigPointer(), ProtoVersion: 4, CQLVersion: "3.0.0", ConnectTimeout: time.Second, HostDialer: &transport.InternalV2TLSHostDialer{InternalConfig: config.ConnectivityConfig()}, Logger: logging.InternalNopLogger{}}
+					implCluster.SessionData(s).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityPointer(), ProtoVersion: 4, CQLVersion: "3.0.0", ConnectTimeout: time.Second, HostDialer: &transport.InternalV2TLSHostDialer{InternalConfig: config.Connectivity()}, Logger: logging.InternalNopLogger{}}
 					pool := s.NewHostConnPool(host, 1, "")
 					defer pool.Close()
 					serverDone := make(chan struct{})
@@ -198,7 +198,7 @@ func TestHostConnPool(t *testing.T) {
 				opaqueStorageValuexxxxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxx).InternalCtx = ctx
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxx).InternalLogger = logging.InternalNopLogger{}
-				implCluster.SessionData(opaqueStorageValuexxxxxxxxx).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityConfigPointer()}
+				implCluster.SessionData(opaqueStorageValuexxxxxxxxx).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityPointer()}
 				return opaqueStorageValuexxxxxxxxx
 			}()
 			pool := s.NewHostConnPool(func() *endpoint.HostInfo {
@@ -260,7 +260,7 @@ func TestHostConnPool(t *testing.T) {
 						opaqueStorageValuexxxxxxxxxxx := new(cluster.Core)
 						implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalCtx = ctx
 						implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalLogger = logging.InternalNopLogger{}
-						implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityConfigPointer(), HostDialer: countingHostDialer{&dials}}
+						implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityPointer(), HostDialer: countingHostDialer{&dials}}
 						return opaqueStorageValuexxxxxxxxxxx
 					}()
 					implCluster.SessionData(s).InternalCfg.ReconnectionPolicy = &implPool.NoReconnectionPolicy{}
@@ -380,7 +380,7 @@ func TestHostConnPool(t *testing.T) {
 			pool := implCluster.SessionData(s).InternalPool.InternalHostConnPools[implEndpoint.InternalHostInfoHostUUID(c.InternalHost)]
 			config := settings.DefaultConfig("localhost")
 			config.Pool.ConnectionsPerHost = 1
-			implCluster.SessionData(s).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityConfigPointer()}
+			implCluster.SessionData(s).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityPointer()}
 			c.InternalCfg = implCluster.SessionData(s).InternalConnCfg
 			pool.InternalServices = s.NewPoolServices()
 			pool.InternalRepairCtx, pool.InternalRepairCancel = context.WithCancel(c.InternalCtx)
@@ -437,8 +437,8 @@ func TestHostConnPool(t *testing.T) {
 			pool := implCluster.SessionData(s).InternalPool.InternalHostConnPools[implEndpoint.InternalHostInfoHostUUID(c.InternalHost)]
 			config := settings.DefaultConfig("localhost")
 			config.Pool.ConnectionsPerHost = 1
-			implCluster.SessionData(s).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityConfigPointer()}
-			c.InternalCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityConfigPointer()}
+			implCluster.SessionData(s).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityPointer()}
+			c.InternalCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityPointer()}
 			pool.InternalServices = s.NewPoolServices()
 			pool.InternalRepairCtx, pool.InternalRepairCancel = context.WithCancel(c.InternalCtx)
 			defer pool.InternalRepairCancel()

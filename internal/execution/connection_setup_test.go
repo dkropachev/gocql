@@ -105,7 +105,7 @@ func TestConnectionSetup(t *testing.T) {
 				implEndpoint.HostInfoData(opaqueStorageValue).InternalDataCenter = "dc"
 				return opaqueStorageValue
 			}()
-			dialer := transport.InternalV2TLSHostDialer{InternalConfig: config.ConnectivityConfig()}
+			dialer := transport.InternalV2TLSHostDialer{InternalConfig: config.Connectivity()}
 			connection, err := dialer.DialHost(context.Background(), host)
 			if err != nil {
 				t.Fatal(err)
@@ -148,7 +148,7 @@ func TestConnectionSetup(t *testing.T) {
 				return opaqueStorageValuexxxxxxxx
 			}()
 			implCluster.SessionData(session).InternalCfg.DNSResolver = resolver
-			cfg := &transport.ConnConfig{ProtoVersion: 4, ConnectTimeout: config.ConnectTimeout, HostDialer: &transport.InternalV2TLSHostDialer{InternalConfig: config.ConnectivityConfig()}, TypedConfig: config.ConnectivityConfigPointer()}
+			cfg := &transport.ConnConfig{ProtoVersion: 4, ConnectTimeout: config.ConnectTimeout, HostDialer: &transport.InternalV2TLSHostDialer{InternalConfig: config.Connectivity()}, TypedConfig: config.ConnectivityPointer()}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			done := make(chan error, 1)
@@ -265,7 +265,7 @@ func TestConnectionSetup(t *testing.T) {
 				b.Close()
 				return a, nil
 			}
-			result, err := (&transport.InternalV2TLSHostDialer{InternalConfig: config.ConnectivityConfig()}).DialShard(context.Background(), host, 1, 2)
+			result, err := (&transport.InternalV2TLSHostDialer{InternalConfig: config.Connectivity()}).DialShard(context.Background(), host, 1, 2)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -334,7 +334,7 @@ func TestConnectionSetup(t *testing.T) {
 			config.TLS = configTLS
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			conn, err := (&transport.InternalV2TLSHostDialer{InternalConfig: config.ConnectivityConfig()}).DialHost(ctx, host)
+			conn, err := (&transport.InternalV2TLSHostDialer{InternalConfig: config.Connectivity()}).DialHost(ctx, host)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -380,7 +380,7 @@ func TestConnectionSetup(t *testing.T) {
 			config.TLS = first
 			config.TLSSource = live
 			config.Pool.ShardAwarePort = false
-			dialer := &transport.InternalV2TLSHostDialer{InternalConfig: config.ConnectivityConfig()}
+			dialer := &transport.InternalV2TLSHostDialer{InternalConfig: config.Connectivity()}
 			host := testHost(t, listener.Addr())
 			dial := func() error {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -458,7 +458,7 @@ func TestConnectionSetup(t *testing.T) {
 				selected = target
 				return (endpoint.DefaultDialer{}).DialContext(ctx, target)
 			}
-			d := transport.InternalV2TLSHostDialer{InternalConfig: config.ConnectivityConfig()}
+			d := transport.InternalV2TLSHostDialer{InternalConfig: config.Connectivity()}
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			conn, err := d.DialShard(ctx, host, 1, 2)
@@ -496,7 +496,7 @@ func TestConnectionSetup(t *testing.T) {
 				implEndpoint.HostInfoData(opaqueStorageValuexxxxxx).InternalPort = 9042
 				return opaqueStorageValuexxxxxx
 			}()
-			c, err := (&transport.InternalV2TLSHostDialer{InternalConfig: config.ConnectivityConfig()}).DialHost(context.Background(), h)
+			c, err := (&transport.InternalV2TLSHostDialer{InternalConfig: config.Connectivity()}).DialHost(context.Background(), h)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -507,7 +507,7 @@ func TestConnectionSetup(t *testing.T) {
 			for _, change := range []func(*settings.Config){func(c *settings.Config) { c.Protocol = 4 }, func(c *settings.Config) { c.TLS = &tls.Config{} }, func(c *settings.Config) { c.LocalAddress = netip.MustParseAddr("127.0.0.1") }} {
 				invalid := config
 				change(&invalid)
-				err := invalid.ValidateConfig()
+				err := invalid.Validate()
 				if _, ok := errors.AsType[*settings.UnsupportedSettingError](err); !ok {
 					t.Fatal("Unix unsupported", err)
 				}

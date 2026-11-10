@@ -26,10 +26,10 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := config.ValidateConfig(); err != nil {
+	if err := config.Validate(); err != nil {
 		return nil, err
 	}
-	config = config.SnapshotConfig()
+	config = config.Snapshot()
 	if config.Logger != nil {
 		config.Logger = logging.InternalV2SafeLogger{InternalLogger: config.Logger}
 	}
@@ -102,7 +102,7 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 			return err == nil && config.HostFilter(snapshot)
 		})
 	}
-	hostDialer := &transport.InternalV2TLSHostDialer{InternalConfig: config.ConnectivityConfig()}
+	hostDialer := &transport.InternalV2TLSHostDialer{InternalConfig: config.Connectivity()}
 	legacy.HostDialer = hostDialer
 	var typedSession *Core
 	if path, _ := config.UnixContact(); path != "" {

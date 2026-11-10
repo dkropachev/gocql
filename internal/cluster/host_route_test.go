@@ -53,7 +53,7 @@ func hostRoutingSession(b testing.TB, tablets bool) *Core {
 	SessionData(s).InternalHostSource = &InternalRingDescriber{InternalHosts: map[string]*endpoint.HostInfo{}}
 	SessionData(s).InternalPool = &implPool.InternalPolicyConnPool{InternalHostConnPools: map[cqltype.UUID]*implPool.InternalHostConnPool{}}
 	config := settings.DefaultConfig("localhost")
-	SessionData(s).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityConfigPointer()}
+	SessionData(s).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityPointer()}
 	for _, snapshot := range routing.SnapshotData(m).InternalHosts {
 		host := new(endpoint.HostInfo)
 		implEndpoint.HostInfoData(host).InternalHostId = snapshot.ID
