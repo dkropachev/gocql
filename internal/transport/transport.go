@@ -4,6 +4,8 @@
 package transport
 
 import (
+	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/model"
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/syncx"
 
@@ -27,7 +29,7 @@ import (
 // executeTyped issues one attempt with the connection's negotiated protocol.
 // Canonical values are borrowed unchanged; retries and metadata repair belong to
 // the execution layer. A received page owns its storage independently of Conn.
-func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*InternalResponsePage, error) {
+func (c *Conn) InternalExecuteTyped(ctx context.Context, req *model.AttemptRequest) (*InternalResponsePage, error) {
 	return c.InternalExecuteTypedInto(ctx, req, nil)
 }
 
@@ -35,7 +37,7 @@ func (c *Conn) InternalExecuteTyped(ctx context.Context, req *attemptRequest) (*
 // response in dest when dest is not nil. dest must stay unused by anyone else
 // until the response is released; a response that arrives after the caller
 // stopped waiting is built elsewhere.
-func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *attemptRequest, dest *InternalResponsePage) (*InternalResponsePage, error) {
+func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *model.AttemptRequest, dest *InternalResponsePage) (*InternalResponsePage, error) {
 	// One deferred cleanup with one return keeps the defer open-coded.
 	// req stays out of x: x's payload owners move to the heap with the
 	// writer's lease, and req would move with them.
@@ -63,7 +65,7 @@ type typedExec struct {
 }
 
 // cleanup releases what the attempt holds, in the reverse order of taking it.
-func (x *typedExec) cleanup(req *attemptRequest) {
+func (x *typedExec) cleanup(req *model.AttemptRequest) {
 	c := x.conn
 	if x.ticket != nil {
 		x.ticket.release()
@@ -103,7 +105,7 @@ func (x *typedExec) cleanup(req *attemptRequest) {
 	}
 }
 
-func (x *typedExec) run(ctx context.Context, req *attemptRequest, dest *InternalResponsePage) (*InternalResponsePage, error) {
+func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *InternalResponsePage) (*InternalResponsePage, error) {
 	c := x.conn
 	if err := ctx.Err(); err != nil {
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err})
@@ -113,7 +115,7 @@ func (x *typedExec) run(ctx context.Context, req *attemptRequest, dest *Internal
 	}
 	if req.Lease != nil {
 		if !req.Lease.Retain() {
-			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrReleased})
+			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cqltype.ErrReleased})
 		}
 		// The writer's completion is an explicit input lifetime boundary.
 		x.inputHeld = true
@@ -121,7 +123,7 @@ func (x *typedExec) run(ctx context.Context, req *attemptRequest, dest *Internal
 	for _, entry := range req.Payload {
 		if owner := cqltype.BytesLease(entry.Value.Value); entry.Value.Valid && !owner.IsZero() {
 			if !owner.Retain() {
-				return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrReleased})
+				return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cqltype.ErrReleased})
 			}
 			x.payloadOwners = append(x.payloadOwners, owner.Lease())
 		}
@@ -166,7 +168,7 @@ func (x *typedExec) run(ctx context.Context, req *attemptRequest, dest *Internal
 	if err != nil {
 		return failBeforeWrite(err)
 	}
-	writer, ok := c.InternalW.(spanContextWriter)
+	writer, ok := c.InternalW.(InternalSpanContextWriter)
 	if !ok {
 		putFrameScratch(scratch)
 		return failBeforeWrite(fmt.Errorf("gocql: connection writer does not support immutable spans"))
@@ -295,24 +297,24 @@ func (x *typedExec) run(ctx context.Context, req *attemptRequest, dest *Internal
 				x.releaseStream = true
 				x.recycleCall = true
 			}
-			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrTimeoutNoResponse, InternalTimeout: req.Timeout})
+			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: runtimeerrors.ErrTimeoutNoResponse, InternalTimeout: req.Timeout})
 		}
 		if c.markOrphan(call) {
 			x.closeErr = InternalErrOrphanBudget
 		}
-		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrTimeoutNoResponse, InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
+		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: runtimeerrors.ErrTimeoutNoResponse, InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
 	case <-attemptDone(ctx):
 		return abandon()
 	case <-parentDone:
 		return abandon()
 	case <-connDone:
 		x.stopWaiting = true
-		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ErrConnectionClosed, InternalPotentiallyExecuted: potentiallyExecuted()})
+		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: runtimeerrors.ErrConnectionClosed, InternalPotentiallyExecuted: potentiallyExecuted()})
 	}
 }
 
-func (c *Conn) typedProtocolLimits() ProtocolLimits {
-	limits := ProtocolLimits{MaxFrameBytes: frm.MaxFrameSize, MaxDecompressedBytes: frm.MaxFrameSize, MaxMetadataDepth: 64}
+func (c *Conn) typedProtocolLimits() connectivity.ProtocolLimits {
+	limits := connectivity.ProtocolLimits{MaxFrameBytes: frm.MaxFrameSize, MaxDecompressedBytes: frm.MaxFrameSize, MaxMetadataDepth: 64}
 	if c.InternalCfg != nil {
 		configured := c.InternalCfg.TypedLimits
 		if configured.MaxFrameBytes > 0 {
@@ -365,10 +367,10 @@ func putFrameScratch(s *wire.BuilderScratch) {
 	frameScratchPool.Put(s)
 }
 
-func (c *Conn) InternalBuildTypedRequest(req *attemptRequest, stream int) (wire.Chain, error) {
+func (c *Conn) InternalBuildTypedRequest(req *model.AttemptRequest, stream int) (wire.Chain, error) {
 	return c.nativeProtocol().BuildTypedRequest(req, stream)
 }
-func (c *Conn) writeTypedParams(e *typedEnvelope, req *attemptRequest, batch bool) {
+func (c *Conn) writeTypedParams(e *protocol.TypedEnvelope, req *model.AttemptRequest, batch bool) {
 	c.nativeProtocol().WriteTypedParams(e, req, batch)
 }
 
@@ -392,7 +394,7 @@ func (c *Conn) InternalKeepOnCancel() {
 // InternalHostID returns the ID of the connection's host without taking the
 // host lock once it is known. A host ID is filled in at most once and never
 // changes afterwards, so the first non-empty value is cached.
-func (c *Conn) InternalHostID() UUID {
+func (c *Conn) InternalHostID() cqltype.UUID {
 	if id := c.hostID.Load(); id != nil {
 		return *id
 	}

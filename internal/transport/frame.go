@@ -31,6 +31,7 @@ import (
 
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
@@ -49,7 +50,7 @@ type ObservedFrameHeader struct {
 	// cover the rest of a frame spanning further segments.
 	End time.Time
 	// Host is Host of the connection the frame header was read from.
-	Host    *HostInfo
+	Host    *endpoint.HostInfo
 	Length  int32
 	Stream  int16
 	Version frm.ProtoVersion

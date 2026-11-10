@@ -14,6 +14,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/debug"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/logging"
 )
 
 // isScyllaConn checks if conn is connected to a ScyllaDB node.
@@ -23,16 +24,16 @@ func (c *Conn) InternalIsScyllaConn() bool {
 }
 
 type InternalScyllaDialer struct {
-	InternalDialer    legacyDialer
-	InternalLogger    StdLogger
+	InternalDialer    implEndpoint.InternalLegacyDialer
+	InternalLogger    logging.StdLogger
 	InternalTlsConfig *tls.Config
 }
 
-func (sd *InternalScyllaDialer) DialHost(ctx context.Context, host *HostInfo) (*DialedHost, error) {
+func (sd *InternalScyllaDialer) DialHost(ctx context.Context, host *implEndpoint.HostInfo) (*implEndpoint.DialedHost, error) {
 	ip := host.ConnectAddress()
 	port := host.Port()
 
-	if !validIpAddr(ip) {
+	if !implEndpoint.InternalValidIpAddr(ip) {
 		return nil, fmt.Errorf("host missing connect ip address: %v", ip)
 	} else if port == 0 {
 		return nil, fmt.Errorf("host missing port: %v", port)
@@ -51,11 +52,11 @@ func (sd *InternalScyllaDialer) DialHost(ctx context.Context, host *HostInfo) (*
 	return WrapTLS(ctx, conn, addr, sd.InternalTlsConfig)
 }
 
-func (sd *InternalScyllaDialer) DialShard(ctx context.Context, host *HostInfo, shardID, nrShards int) (*DialedHost, error) {
+func (sd *InternalScyllaDialer) DialShard(ctx context.Context, host *implEndpoint.HostInfo, shardID, nrShards int) (*implEndpoint.DialedHost, error) {
 	ip := host.ConnectAddress()
 	port := host.Port()
 
-	if !validIpAddr(ip) {
+	if !implEndpoint.InternalValidIpAddr(ip) {
 		return nil, fmt.Errorf("host missing connect ip address: %v", ip)
 	} else if port == 0 {
 		return nil, fmt.Errorf("host missing port: %v", port)
@@ -96,7 +97,7 @@ func (sd *InternalScyllaDialer) dialShardAware(ctx context.Context, addr, shardA
 			return sd.InternalDialer.DialContext(ctx, "tcp", addr)
 		}
 
-		ctxWithPort := context.WithValue(ctx, scyllaSourcePortCtx{}, port)
+		ctxWithPort := context.WithValue(ctx, implEndpoint.InternalScyllaSourcePortCtx{}, port)
 		conn, err := sd.InternalDialer.DialContext(ctxWithPort, "tcp", shardAwareAddr)
 
 		if InternalIsLocalAddrInUseErr(err) {

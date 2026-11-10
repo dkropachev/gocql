@@ -7,33 +7,37 @@ import (
 	"context"
 
 	"sync"
+
+	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
 )
 
 // The bridge only adapts the handshake's state machine; no value marshaler is
 // involved. One bridge is created for each connection and closed on every exit.
 type InternalV2Authenticator struct {
 	ctx      context.Context
-	provider AuthProvider
-	exchange AuthExchange
-	host     HostSnapshot
+	provider connectivity.AuthProvider
+	exchange connectivity.AuthExchange
+	host     model.HostSnapshot
 	once     sync.Once
 	started  bool
 }
 
-func InternalNewV2Authenticator(ctx context.Context, host HostSnapshot, provider AuthProvider) *InternalV2Authenticator {
+func InternalNewV2Authenticator(ctx context.Context, host model.HostSnapshot, provider connectivity.AuthProvider) *InternalV2Authenticator {
 	return &InternalV2Authenticator{ctx: ctx, host: host, provider: provider}
 }
 func (a *InternalV2Authenticator) Challenge(req []byte) ([]byte, Authenticator, error) {
 	if err := a.ctx.Err(); err != nil {
 		return nil, nil, err
 	}
-	var response Nullable[[]byte]
+	var response cqltype.Nullable[[]byte]
 	var err error
 	if !a.started {
 		a.started = true
 		a.exchange, response, err = a.provider.Start(a.ctx, a.host, string(req))
 		if err == nil && a.exchange == nil {
-			err = typeValidation("authentication", "provider returned a nil exchange")
+			err = cqltype.TypeValidation("authentication", "provider returned a nil exchange")
 		}
 	} else {
 		response, err = a.exchange.Challenge(a.ctx, InternalNullableAuthBytes(req))
@@ -54,7 +58,7 @@ func (a *InternalV2Authenticator) Success(data []byte) error {
 		return err
 	}
 	if a.exchange == nil {
-		return typeValidation("authentication", "success before exchange")
+		return cqltype.TypeValidation("authentication", "success before exchange")
 	}
 	return a.exchange.Success(a.ctx, InternalNullableAuthBytes(data))
 }
@@ -65,9 +69,9 @@ func (a *InternalV2Authenticator) Close() {
 		}
 	})
 }
-func InternalNullableAuthBytes(data []byte) Nullable[Bytes] {
+func InternalNullableAuthBytes(data []byte) cqltype.Nullable[cqltype.Bytes] {
 	if data == nil {
-		return Nullable[Bytes]{}
+		return cqltype.Nullable[cqltype.Bytes]{}
 	}
-	return Nullable[Bytes]{Value: BorrowBytes(data), Valid: true}
+	return cqltype.Nullable[cqltype.Bytes]{Value: cqltype.BorrowBytes(data), Valid: true}
 }

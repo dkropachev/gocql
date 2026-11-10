@@ -24,21 +24,25 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
 )
 
 // All typed internal queries share negotiated server timeout selection, including
 // topology/bootstrap, scoped schema refresh, agreement and client routes.
-func (c *Conn) InternalExecuteV2System(ctx context.Context, request *attemptRequest) (*InternalResponsePage, error) {
+func (c *Conn) InternalExecuteV2System(ctx context.Context, request *model.AttemptRequest) (*InternalResponsePage, error) {
 	if c.InternalCfg == nil || c.InternalCfg.TypedConfig == nil {
 		return c.InternalExecuteTyped(ctx, request)
 	}
 	server := c.InternalCfg.TypedConfig.Metadata.ServerTimeout
 	if !server.Set && c.InternalIsScyllaConn() {
-		server = Option[time.Duration]{Set: true, Value: 30 * time.Second}
+		server = cqltype.Option[time.Duration]{Set: true, Value: 30 * time.Second}
 	}
 	if server.Set && server.Value > 0 {
 		if !c.InternalIsScyllaConn() {
-			return nil, &UnsupportedSettingError{Setting: "metadata server timeout", Reason: "server does not support USING TIMEOUT"}
+			return nil, &connectivity.UnsupportedSettingError{Setting: "metadata server timeout", Reason: "server does not support USING TIMEOUT"}
 		}
 		if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(request.Statement)), "SELECT") {
 			copyRequest := *request

@@ -26,6 +26,8 @@
 
 package transport
 
+import "github.com/scylladb/gocql/v2/internal/protocol"
+
 // resolveSegmentCompressor narrows the negotiated compressor once, into
 // c.segCompressor, so the receive path does not repeat the assertion for every
 // segment it reads.
@@ -50,11 +52,11 @@ package transport
 // connection should die — not mid-stream, on a path whose callers can only turn it
 // into a per-request error.
 func (c *Conn) InternalResolveSegmentCompressor() error {
-	if c.InternalVersion <= protoVersion4 {
+	if c.InternalVersion <= protocol.ProtoVersion4 {
 		return nil
 	}
 
-	segComp, err := asSegmentCompressor(c.InternalCompressor)
+	segComp, err := protocol.AsSegmentCompressor(c.InternalCompressor)
 	if err != nil {
 		return err
 	}

@@ -10,20 +10,22 @@ import (
 	"io"
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
 )
 
-func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src frameSource, head frm.FrameHeader) error {
+func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src InternalFrameSource, head frm.FrameHeader) error {
 	var owner *wire.Lease
 	var body wire.Chain
 	var err error
 	fatal := false
 	limits := c.typedProtocolLimits()
 	if int64(head.Length) > limits.MaxFrameBytes {
-		err = ErrFrameTooBig
+		err = protocol.ErrFrameTooBig
 		if src.InternalOwner == nil {
 			if discardErr := c.discardFrame(src.InternalR, head); discardErr != nil {
 				err = discardErr
@@ -32,7 +34,7 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 		}
 	} else if src.InternalOwner != nil {
 		if !src.InternalOwner.Retain() {
-			err = ErrReleased
+			err = cqltype.ErrReleased
 		} else {
 			owner = src.InternalOwner
 			body = src.InternalChain
@@ -87,7 +89,7 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 						err = fmt.Errorf("gocql: unsupported typed compressor %q", c.InternalCompressor.Name())
 					}
 					if err == nil && size > uint64(limits.MaxDecompressedBytes) {
-						err = ErrFrameTooBig
+						err = protocol.ErrFrameTooBig
 					}
 					if err == nil {
 						if pooledDecode {
@@ -113,7 +115,7 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 				}
 			}
 			if err == nil && int64(len(data)) > limits.MaxDecompressedBytes {
-				err = ErrFrameTooBig
+				err = protocol.ErrFrameTooBig
 			}
 			if err == nil {
 				body, _ = wire.NewChain(wire.Borrow(data))
@@ -175,11 +177,11 @@ func (c *Conn) InternalRecvLeasedSegment(ctx context.Context) error {
 		defer first.Release()
 		cursor := wire.NewCursor(first.Chain())
 		for cursor.Remaining() > 0 {
-			frameHeader, err := cursor.Take(headSize)
+			frameHeader, err := cursor.Take(protocol.HeadSize)
 			if err != nil {
 				return fmt.Errorf("gocql: incomplete frame header in self-contained segment: %w", err)
 			}
-			head, err := readHeader(newChainReader(frameHeader), c.headerBuf[:])
+			head, err := protocol.ReadHeader(InternalNewChainReader(frameHeader), c.headerBuf[:])
 			if err != nil {
 				return err
 			}
@@ -223,15 +225,15 @@ func (c *Conn) InternalRecvLeasedSegment(ctx context.Context) error {
 		total += next.Chain().Len()
 		return nil
 	}
-	for total < headSize {
+	for total < protocol.HeadSize {
 		if err := readNext(); err != nil {
 			return err
 		}
 		end = c.observedNow()
 	}
 	chain, _ := wire.NewChain(spans...)
-	header, _ := chain.Slice(0, headSize)
-	head, err := readHeader(newChainReader(header), c.headerBuf[:])
+	header, _ := chain.Slice(0, protocol.HeadSize)
+	head, err := protocol.ReadHeader(InternalNewChainReader(header), c.headerBuf[:])
 	if err != nil {
 		return err
 	}
@@ -239,7 +241,7 @@ func (c *Conn) InternalRecvLeasedSegment(ctx context.Context) error {
 	if int64(head.Length) > min(limits.MaxFrameBytes, limits.MaxDecompressedBytes) {
 		return fmt.Errorf("gocql: invalid frame body length in segmented frame: %d", head.Length)
 	}
-	expected := int64(head.Length) + headSize
+	expected := int64(head.Length) + protocol.HeadSize
 	for total < expected {
 		if err := readNext(); err != nil {
 			return err
@@ -249,7 +251,7 @@ func (c *Conn) InternalRecvLeasedSegment(ctx context.Context) error {
 		return fmt.Errorf("gocql: segmented frame exceeds its declared length %d", expected)
 	}
 	chain, _ = wire.NewChain(spans...)
-	body, _ := chain.Slice(headSize, int64(head.Length))
+	body, _ := chain.Slice(protocol.HeadSize, int64(head.Length))
 
 	retained := append([]*wire.Lease(nil), owners...)
 	for _, owner := range retained {
@@ -269,12 +271,12 @@ func (c *Conn) processOwnedFrame(ctx context.Context, header, body wire.Chain, o
 	_ = header.Each(func(s wire.Span) error { spans = append(spans, s); return nil })
 	_ = body.Each(func(s wire.Span) error { spans = append(spans, s); return nil })
 	chain, _ := wire.NewChain(spans...)
-	return c.InternalProcessFrameSource(ctx, frameSource{InternalR: newChainReader(chain), InternalOwner: owner, InternalChain: body, InternalNetStart: start, InternalNetEnd: end})
+	return c.InternalProcessFrameSource(ctx, InternalFrameSource{InternalR: InternalNewChainReader(chain), InternalOwner: owner, InternalChain: body, InternalNetStart: start, InternalNetEnd: end})
 }
 
 func (c *Conn) InternalReadTypedSegmentPayload(hdr segment.Header) (*wire.Lease, error) {
 	if int64(hdr.UncompressedLen) > c.typedProtocolLimits().MaxDecompressedBytes {
-		return nil, ErrFrameTooBig
+		return nil, protocol.ErrFrameTooBig
 	}
 	return segment.ReadOwnedPayload(c.InternalR, hdr, c.InternalSegCompressor)
 }

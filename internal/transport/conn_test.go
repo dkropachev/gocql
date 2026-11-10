@@ -32,6 +32,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
@@ -86,12 +87,12 @@ func TestConn(t *testing.T) {
 	// so the ID filled in later is observed, and that the cached ID is returned
 	// afterwards without reading the host.
 	t.Run("HostID", func(t *testing.T) {
-		host := new(HostInfo)
+		host := new(implEndpoint.HostInfo)
 		c := &Conn{InternalHost: host}
 		if id := c.InternalHostID(); !id.IsEmpty() {
 			t.Fatalf("got %v for a host without an ID", id)
 		}
-		want := UUID{15: 7}
+		want := cqltype.UUID{15: 7}
 		data := implEndpoint.HostInfoData(host)
 		data.InternalMu.Lock()
 		data.InternalHostId = want
@@ -100,7 +101,7 @@ func TestConn(t *testing.T) {
 			t.Fatalf("got %v, want %v", id, want)
 		}
 		data.InternalMu.Lock()
-		data.InternalHostId = UUID{}
+		data.InternalHostId = cqltype.UUID{}
 		data.InternalMu.Unlock()
 		if id := c.InternalHostID(); id != want {
 			t.Fatalf("cached ID not used: got %v", id)
@@ -159,7 +160,7 @@ func TestConn(t *testing.T) {
 	})
 	t.Run("HandshakeFramers", func(t *testing.T) {
 		c := &Conn{InternalVersion: 4, InternalCfg: &ConnConfig{TypedLimits: connectivity.ProtocolLimits{MaxFrameBytes: 512 << 20, MaxDecompressedBytes: 511 << 20}}}
-		for _, f := range []*framer{c.InternalGetReadFramer(), c.InternalGetWriteFramer()} {
+		for _, f := range []*protocol.Framer{c.InternalGetReadFramer(), c.InternalGetWriteFramer()} {
 			if f.MaxFrameBytes != 512<<20 || f.MaxDecompressedBytes != 511<<20 {
 				t.Fatal("handshake framer lost limits", f.MaxFrameBytes, f.MaxDecompressedBytes)
 			}

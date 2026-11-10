@@ -15,11 +15,11 @@ import (
 
 // parseTypedTabletHint consumes the tuple<bigint,bigint,list<tuple<uuid,int>>>
 // custom payload without materializing a potentially fragmented payload.
-func InternalParseTypedTabletHint(value Bytes, keyspace, table string) (tablets.TabletInfo, error) {
+func InternalParseTypedTabletHint(value cqltype.Bytes, keyspace, table string) (tablets.TabletInfo, error) {
 	return InternalParseTypedTabletPayload(value, keyspace, table, false)
 }
 
-func InternalParseTypedTabletPayload(value Bytes, keyspace, table string, v2 bool) (tablets.TabletInfo, error) {
+func InternalParseTypedTabletPayload(value cqltype.Bytes, keyspace, table string, v2 bool) (tablets.TabletInfo, error) {
 	if err := cqltype.CheckBytesAlive(value); err != nil {
 		return tablets.TabletInfo{}, err
 	}

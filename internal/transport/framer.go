@@ -19,6 +19,10 @@ package transport
 import (
 	"sync"
 	"sync/atomic"
+
+	"github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
 // framerPool owns one sync.Pool plus the adaptive buffer-sizing state for one
@@ -39,7 +43,7 @@ type InternalConnFramers struct {
 // framerConfig holds precomputed default framer parameters for the connection.
 // Populated once during connection setup and used to initialize framers from the pool.
 type InternalFramerConfig struct {
-	compressor                  Compressor
+	compressor                  protocol.Compressor
 	InternalFlagLWT             int
 	rateLimitingErrorCode       int
 	InternalProto               byte
@@ -79,38 +83,38 @@ func (c *Conn) InternalInitFramerCache() {
 func (cf *InternalConnFramers) initCache(c *Conn) {
 	cfg := InternalFramerConfig{
 		compressor:    c.InternalCompressor,
-		InternalProto: c.InternalVersion & protoVersionMask,
-		InternalFlags: defaultFramerFlags(c.InternalCompressor, c.InternalVersion),
+		InternalProto: c.InternalVersion & protocol.ProtoVersionMask,
+		InternalFlags: protocol.DefaultFramerFlags(c.InternalCompressor, c.InternalVersion),
 	}
-	if lwtExt := findCQLProtoExtByName(c.InternalCqlProtoExts, lwtAddMetadataMarkKey); lwtExt != nil {
-		if castedExt, ok := lwtExt.(*lwtAddMetadataMarkExt); ok {
+	if lwtExt := endpoint.InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, endpoint.InternalLwtAddMetadataMarkKey); lwtExt != nil {
+		if castedExt, ok := lwtExt.(*endpoint.InternalLwtAddMetadataMarkExt); ok {
 			cfg.InternalFlagLWT = castedExt.InternalLwtOptMetaBitMask
 		} else {
-			c.InternalLogger.Printf("gocql: failed to cast CQL protocol extension %s to %T", lwtAddMetadataMarkKey, lwtAddMetadataMarkExt{})
+			c.InternalLogger.Printf("gocql: failed to cast CQL protocol extension %s to %T", endpoint.InternalLwtAddMetadataMarkKey, endpoint.InternalLwtAddMetadataMarkExt{})
 		}
 	}
-	if rateLimitErrorExt := findCQLProtoExtByName(c.InternalCqlProtoExts, rateLimitError); rateLimitErrorExt != nil {
-		if castedExt, ok := rateLimitErrorExt.(*rateLimitExt); ok {
+	if rateLimitErrorExt := endpoint.InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, endpoint.InternalRateLimitError); rateLimitErrorExt != nil {
+		if castedExt, ok := rateLimitErrorExt.(*endpoint.InternalRateLimitExt); ok {
 			cfg.rateLimitingErrorCode = castedExt.InternalRateLimitErrorCode
 		} else {
-			c.InternalLogger.Printf("gocql: failed to cast CQL protocol extension %s to %T", rateLimitError, rateLimitExt{})
+			c.InternalLogger.Printf("gocql: failed to cast CQL protocol extension %s to %T", endpoint.InternalRateLimitError, endpoint.InternalRateLimitExt{})
 		}
 	}
-	if tabletsExt := findCQLProtoExtByName(c.InternalCqlProtoExts, tabletsRoutingV1); tabletsExt != nil {
-		if _, ok := tabletsExt.(*tabletsRoutingV1Ext); ok {
+	if tabletsExt := endpoint.InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, endpoint.InternalTabletsRoutingV1); tabletsExt != nil {
+		if _, ok := tabletsExt.(*endpoint.InternalTabletsRoutingV1Ext); ok {
 			cfg.InternalTabletsRoutingV1 = true
 		} else {
-			c.InternalLogger.Printf("gocql: failed to cast CQL protocol extension %s to %T", tabletsRoutingV1, tabletsRoutingV1Ext{})
+			c.InternalLogger.Printf("gocql: failed to cast CQL protocol extension %s to %T", endpoint.InternalTabletsRoutingV1, endpoint.InternalTabletsRoutingV1Ext{})
 		}
 	}
-	if metadataIDExt := findCQLProtoExtByName(c.InternalCqlProtoExts, scyllaUseMetadataID); metadataIDExt != nil {
-		if _, ok := metadataIDExt.(*scyllaUseMetadataIDExt); ok {
+	if metadataIDExt := endpoint.InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, endpoint.InternalScyllaUseMetadataID); metadataIDExt != nil {
+		if _, ok := metadataIDExt.(*endpoint.InternalScyllaUseMetadataIDExt); ok {
 			cfg.InternalScyllaUseMetadataID = true
 		} else {
-			c.InternalLogger.Printf("gocql: failed to cast CQL protocol extension %s to %T", scyllaUseMetadataID, scyllaUseMetadataIDExt{})
+			c.InternalLogger.Printf("gocql: failed to cast CQL protocol extension %s to %T", endpoint.InternalScyllaUseMetadataID, endpoint.InternalScyllaUseMetadataIDExt{})
 		}
 	}
-	cfg.InternalTabletsRoutingV2 = findCQLProtoExtByName(c.InternalCqlProtoExts, tabletsRoutingV2) != nil
+	cfg.InternalTabletsRoutingV2 = endpoint.InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, endpoint.InternalTabletsRoutingV2) != nil
 	cf.InternalDefaults = cfg
 	c.typedSettings.Store(c.buildNativeProtocol())
 	c.setTabletSupported(cfg.InternalTabletsRoutingV1 || cfg.InternalTabletsRoutingV2)
@@ -119,27 +123,27 @@ func (cf *InternalConnFramers) initCache(c *Conn) {
 
 func (cf *InternalConnFramers) InternalInitPool(c *Conn) {
 	defaults := cf.InternalDefaults
-	cf.InternalReadPool.init(defaults, func(f *framer) { c.InternalReleaseReadFramer(f) })
-	cf.InternalWritePool.init(defaults, func(f *framer) { c.InternalReleaseWriteFramer(f) })
+	cf.InternalReadPool.init(defaults, func(f *protocol.Framer) { c.InternalReleaseReadFramer(f) })
+	cf.InternalWritePool.init(defaults, func(f *protocol.Framer) { c.InternalReleaseWriteFramer(f) })
 }
 
 // getReadFramer returns a pooled framer for reading responses and events.
-func (c *Conn) InternalGetReadFramer() *framer {
+func (c *Conn) InternalGetReadFramer() *protocol.Framer {
 	return c.InternalFramers.getRead(c)
 }
 
-func (cf *InternalConnFramers) getRead(c *Conn) *framer {
+func (cf *InternalConnFramers) getRead(c *Conn) *protocol.Framer {
 	f := cf.InternalReadPool.get(c)
 	f.Released.Store(false)
 	return f
 }
 
 // getWriteFramer returns a pooled framer for building outgoing requests.
-func (c *Conn) InternalGetWriteFramer() *framer {
+func (c *Conn) InternalGetWriteFramer() *protocol.Framer {
 	return c.InternalFramers.getWrite(c)
 }
 
-func (cf *InternalConnFramers) getWrite(c *Conn) *framer {
+func (cf *InternalConnFramers) getWrite(c *Conn) *protocol.Framer {
 	f := cf.InternalWritePool.get(c)
 	f.Released.Store(false)
 	// Before initCache runs, cf.defaults is still zero, so handshake framers get
@@ -151,11 +155,11 @@ func (cf *InternalConnFramers) getWrite(c *Conn) *framer {
 }
 
 // releaseReadFramer returns a response/event framer to the reader pool.
-func (c *Conn) InternalReleaseReadFramer(f *framer) {
+func (c *Conn) InternalReleaseReadFramer(f *protocol.Framer) {
 	c.InternalFramers.releaseRead(c, f)
 }
 
-func (cf *InternalConnFramers) releaseRead(c *Conn, f *framer) {
+func (cf *InternalConnFramers) releaseRead(c *Conn, f *protocol.Framer) {
 	if f == nil {
 		return
 	}
@@ -179,11 +183,11 @@ func (cf *InternalConnFramers) releaseRead(c *Conn, f *framer) {
 }
 
 // releaseWriteFramer returns a request-builder framer to the writer pool.
-func (c *Conn) InternalReleaseWriteFramer(f *framer) {
+func (c *Conn) InternalReleaseWriteFramer(f *protocol.Framer) {
 	c.InternalFramers.releaseWrite(f)
 }
 
-func (cf *InternalConnFramers) releaseWrite(f *framer) {
+func (cf *InternalConnFramers) releaseWrite(f *protocol.Framer) {
 	if f == nil {
 		return
 	}
@@ -211,13 +215,13 @@ func (cf *InternalConnFramers) close() {
 	cf.InternalWritePool.close()
 }
 
-func (fp *InternalFramerPool) init(defaults InternalFramerConfig, release func(*framer)) {
-	fp.InternalBufAvgSize.Store(int64(defaultBufSize))
+func (fp *InternalFramerPool) init(defaults InternalFramerConfig, release func(*protocol.Framer)) {
+	fp.InternalBufAvgSize.Store(int64(protocol.DefaultBufSize))
 	fp.enabled.Store(true)
 	fp.pool = sync.Pool{
 		New: func() any {
-			buf := make([]byte, defaultBufSize)
-			f := &framer{
+			buf := make([]byte, protocol.DefaultBufSize)
+			f := &protocol.Framer{
 				Buf:                   buf[:0],
 				ReadBuffer:            buf,
 				Compressor:            defaults.compressor,
@@ -234,12 +238,12 @@ func (fp *InternalFramerPool) init(defaults InternalFramerConfig, release func(*
 	}
 }
 
-func (fp *InternalFramerPool) get(c *Conn) *framer {
-	var f *framer
+func (fp *InternalFramerPool) get(c *Conn) *protocol.Framer {
+	var f *protocol.Framer
 	if !fp.enabled.Load() {
-		f = newFramer(c.InternalCompressor, c.InternalVersion)
+		f = protocol.NewFramer(c.InternalCompressor, c.InternalVersion)
 	} else {
-		f = fp.pool.Get().(*framer)
+		f = fp.pool.Get().(*protocol.Framer)
 	}
 	limits := c.typedProtocolLimits()
 	f.MaxFrameBytes = limits.MaxFrameBytes
@@ -247,7 +251,7 @@ func (fp *InternalFramerPool) get(c *Conn) *framer {
 	return f
 }
 
-func (fp *InternalFramerPool) put(f *framer) {
+func (fp *InternalFramerPool) put(f *protocol.Framer) {
 	if !fp.enabled.Load() {
 		return
 	}
@@ -258,12 +262,12 @@ func (fp *InternalFramerPool) close() {
 	fp.enabled.Store(false)
 }
 
-func (fp *InternalFramerPool) updateAvg(logger StdLogger, bufCap int64) (int64, bool) {
+func (fp *InternalFramerPool) updateAvg(logger logging.StdLogger, bufCap int64) (int64, bool) {
 	if bufCap > InternalMaxReasonableBufferSize {
 		bufCap = InternalMaxReasonableBufferSize
 	}
 	if bufCap < 0 {
-		bufCap = defaultBufSize
+		bufCap = protocol.DefaultBufSize
 	}
 
 	for i := 0; i < InternalMaxCASRetries; i++ {
@@ -295,13 +299,13 @@ func InternalFpShrinkSize(bufCap, newAvg int64) int64 {
 	if bufCap <= newAvg*InternalFramerBufShrinkThreshold {
 		return 0
 	}
-	if newAvg < defaultBufSize {
-		return defaultBufSize
+	if newAvg < protocol.DefaultBufSize {
+		return protocol.DefaultBufSize
 	}
 	return newAvg
 }
 
-func (fp *InternalFramerPool) resetAndPut(f *framer, alignBufWithReadBuffer bool, shrinkSize int64) {
+func (fp *InternalFramerPool) resetAndPut(f *protocol.Framer, alignBufWithReadBuffer bool, shrinkSize int64) {
 	if shrinkSize > 0 {
 		buf := make([]byte, shrinkSize)
 		f.ReadBuffer = buf

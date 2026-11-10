@@ -30,6 +30,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/testkit"
 	lz4 "github.com/scylladb/gocql/v2/internal/wirecompress"
 )
@@ -54,7 +55,7 @@ func TestStreamTransport(t *testing.T) {
 				cancel()
 				want := cause
 				if want == nil {
-					want = ErrClosed
+					want = runtimeerrors.ErrClosed
 				}
 				if called || err != want {
 					t.Fatalf("%s cause=%v: called=%v err=%v, want %v", gate, cause, called, err, want)
@@ -67,7 +68,7 @@ func TestStreamTransport(t *testing.T) {
 		cancel()
 		r := &InternalExclusiveConn{}
 		r.InternalClosing.Store(true)
-		if err := r.InternalWithIO(ctx, func() error { return nil }); err != ErrClosed {
+		if err := r.InternalWithIO(ctx, func() error { return nil }); err != runtimeerrors.ErrClosed {
 			t.Fatal("manual close precedence changed", err)
 		}
 	})

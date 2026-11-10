@@ -20,6 +20,8 @@
 package transport
 
 import (
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/protocol"
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
@@ -44,7 +46,7 @@ type StreamLimits struct {
 
 func InternalCheckedStreamLimits(l StreamLimits) (StreamLimits, error) {
 	if l.MaxMetadataBytes < 0 || l.ReadAheadBytes < 0 || l.DiscardBytes < 0 || l.MaxTransformBytes < 0 {
-		return l, typeValidation("stream limits", "negative budget")
+		return l, cqltype.TypeValidation("stream limits", "negative budget")
 	}
 	if l.MaxMetadataBytes == 0 {
 		l.MaxMetadataBytes = 1 << 20
@@ -59,7 +61,7 @@ func InternalCheckedStreamLimits(l StreamLimits) (StreamLimits, error) {
 		l.MaxTransformBytes = segment.DefaultUnitStorageBytes
 	}
 	if l.MaxTransformBytes < 16 {
-		return l, typeValidation("stream limits", "transform budget below framing size")
+		return l, cqltype.TypeValidation("stream limits", "transform budget below framing size")
 	}
 	return l, nil
 }
@@ -121,11 +123,11 @@ type InternalStreamResponse struct {
 	InternalCtx                     context.Context
 	reservation                     *InternalExclusiveConn
 	InternalBody                    *wire.Stream
-	InternalBudget                  *streamMetadataCursor
-	InternalReader                  *StreamRowReader
-	InternalColumns                 Columns
-	InternalMetadata                parsedMetadata
-	InternalInfo                    Result
+	InternalBudget                  *protocol.StreamMetadataCursor
+	InternalReader                  *codec.StreamRowReader
+	InternalColumns                 cqltype.Columns
+	InternalMetadata                protocol.ParsedMetadata
+	InternalInfo                    model.Result
 	InternalColumnCount             int
 	InternalKind                    int
 	InternalRowCount, InternalIndex int32
@@ -167,10 +169,10 @@ func (r *InternalStreamResponse) InternalReleaseMetadata() {
 	}
 	r.InternalBody = nil
 	r.InternalTerminal = true
-	r.InternalColumns = Columns{}
-	r.InternalMetadata = parsedMetadata{}
+	r.InternalColumns = cqltype.Columns{}
+	r.InternalMetadata = protocol.ParsedMetadata{}
 	r.InternalReader = nil
-	r.InternalInfo = Result{}
+	r.InternalInfo = model.Result{}
 }
 func (r *InternalExclusiveConn) InternalInitStream(limits StreamLimits) error {
 	l, err := InternalCheckedStreamLimits(limits)
@@ -180,7 +182,7 @@ func (r *InternalExclusiveConn) InternalInitStream(limits StreamLimits) error {
 	r.InternalLimits = l
 	r.InternalConn.InternalMu.Lock()
 	if r.InternalConn.InternalStreamBudget == nil {
-		r.InternalConn.InternalStreamBudget = &streamMetadataBudget{Limit: l.MaxMetadataBytes}
+		r.InternalConn.InternalStreamBudget = &protocol.StreamMetadataBudget{Limit: l.MaxMetadataBytes}
 	}
 	r.InternalMetadataBudget = r.InternalConn.InternalStreamBudget
 	r.InternalConn.InternalMu.Unlock()
@@ -215,13 +217,13 @@ func (r *InternalExclusiveConn) InternalFinishResponse() error {
 }
 func (r *InternalExclusiveConn) InternalWithIO(ctx context.Context, fn func() error) error {
 	if ctx == nil {
-		return typeValidation("stream context", "nil context")
+		return cqltype.TypeValidation("stream context", "nil context")
 	}
 	if r.InternalClosing.Load() {
 		if cause := r.cancellationCause(); cause != nil {
 			return cause
 		}
-		return ErrClosed
+		return runtimeerrors.ErrClosed
 	}
 	r.active.Lock()
 	defer r.active.Unlock()
@@ -229,7 +231,7 @@ func (r *InternalExclusiveConn) InternalWithIO(ctx context.Context, fn func() er
 		if cause := r.cancellationCause(); cause != nil {
 			return cause
 		}
-		return ErrClosed
+		return runtimeerrors.ErrClosed
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -253,19 +255,19 @@ func (r *InternalExclusiveConn) InternalWithIO(ctx context.Context, fn func() er
 // after checked extensions/metadata and row count, without consuming row data.
 // Runtime owns metadata selection/reprepare/paging and calls decodeStreamRow.
 // Every row read uses the page context supplied here plus reservation lifetime.
-func (r *InternalExclusiveConn) InternalExchange(ctx context.Context, request *attemptRequest) (response *InternalStreamResponse, err error) {
+func (r *InternalExclusiveConn) InternalExchange(ctx context.Context, request *model.AttemptRequest) (response *InternalStreamResponse, err error) {
 	err = r.InternalWithIO(ctx, func() error {
-		var pending *streamMetadataCursor
+		var pending *protocol.StreamMetadataCursor
 		defer func() {
 			if pending != nil {
 				pending.Release()
 			}
 		}()
 		if request == nil {
-			return typeValidation("stream request", "nil attempt")
+			return cqltype.TypeValidation("stream request", "nil attempt")
 		}
 		if !r.InternalComplete {
-			return &ProtocolError{Stage: "stream exchange", Err: errors.New("prior response incomplete")}
+			return &cqltype.ProtocolError{Stage: "stream exchange", Err: errors.New("prior response incomplete")}
 		}
 		if r.InternalLimits.MaxMetadataBytes == 0 {
 			if err := r.InternalInitStream(StreamLimits{}); err != nil {
@@ -274,7 +276,7 @@ func (r *InternalExclusiveConn) InternalExchange(ctx context.Context, request *a
 		}
 		if request.Lease != nil {
 			if !request.Lease.Retain() {
-				return ErrReleased
+				return cqltype.ErrReleased
 			}
 			defer request.Lease.Release()
 		}
@@ -287,7 +289,7 @@ func (r *InternalExclusiveConn) InternalExchange(ctx context.Context, request *a
 		for _, e := range request.Payload {
 			if owner := cqltype.BytesLease(e.Value.Value); e.Value.Valid && !owner.IsZero() {
 				if !owner.Retain() {
-					return ErrReleased
+					return cqltype.ErrReleased
 				}
 				owners = append(owners, owner.Lease())
 			}
@@ -296,9 +298,9 @@ func (r *InternalExclusiveConn) InternalExchange(ctx context.Context, request *a
 		if err != nil {
 			return err
 		}
-		writer, ok := r.InternalConn.InternalW.(spanContextWriter)
+		writer, ok := r.InternalConn.InternalW.(InternalSpanContextWriter)
 		if !ok {
-			return &StreamCapabilityError{Protocol: int(r.InternalConn.InternalVersion), Reason: "writer lacks span support"}
+			return &codec.StreamCapabilityError{Protocol: int(r.InternalConn.InternalVersion), Reason: "writer lacks span support"}
 		}
 		if err := r.watchIOContext(ctx); err != nil {
 			return err
@@ -317,9 +319,9 @@ func (r *InternalExclusiveConn) InternalExchange(ctx context.Context, request *a
 			if err != nil {
 				return err
 			}
-			cursor := &streamMetadataCursor{Scope: body, Budget: r.InternalMetadataBudget}
+			cursor := &protocol.StreamMetadataCursor{Scope: body, Budget: r.InternalMetadataBudget}
 			pending = cursor
-			p := &typedParser{Cursor: cursor, Proto: r.InternalConn.InternalVersion, MetadataID: r.InternalConn.InternalTracksResultMetadataID(), MaxDepth: limits.MaxMetadataDepth}
+			p := &protocol.TypedParser{Cursor: cursor, Proto: r.InternalConn.InternalVersion, MetadataID: r.InternalConn.InternalTracksResultMetadataID(), MaxDepth: limits.MaxMetadataDepth}
 			info := p.StreamExtensions(header)
 			if p.Err != nil {
 				return p.Err
@@ -347,7 +349,7 @@ func (r *InternalExclusiveConn) InternalExchange(ctx context.Context, request *a
 				continue
 			}
 			if header.Stream != r.InternalStream {
-				return &ProtocolError{Stage: "stream response", Err: fmt.Errorf("unexpected stream %d", header.Stream)}
+				return &cqltype.ProtocolError{Stage: "stream response", Err: fmt.Errorf("unexpected stream %d", header.Stream)}
 			}
 			if header.Op == frm.OpError {
 				serverErr := p.ServerError(header, r.InternalConn.InternalFramers.InternalDefaults.rateLimitingErrorCode)
@@ -365,7 +367,7 @@ func (r *InternalExclusiveConn) InternalExchange(ctx context.Context, request *a
 				return serverErr
 			}
 			if header.Op != frm.OpResult {
-				return &ProtocolError{Stage: "stream response", Err: fmt.Errorf("unexpected opcode %d", header.Op)}
+				return &cqltype.ProtocolError{Stage: "stream response", Err: fmt.Errorf("unexpected opcode %d", header.Op)}
 			}
 			result := &InternalStreamResponse{InternalCtx: ctx, reservation: r, InternalBody: body, InternalBudget: cursor, InternalInfo: info, InternalKind: p.I32()}
 			switch result.InternalKind {
@@ -373,7 +375,7 @@ func (r *InternalExclusiveConn) InternalExchange(ctx context.Context, request *a
 				result.InternalColumns, result.InternalColumnCount = p.MetadataFields(&result.InternalMetadata, false, 0)
 				result.InternalRowCount = int32(p.I32())
 				if result.InternalRowCount < 0 {
-					return &ProtocolError{Stage: "stream rows", Err: wire.ErrLength}
+					return &cqltype.ProtocolError{Stage: "stream rows", Err: wire.ErrLength}
 				}
 				if _, err := wire.CheckProduct(int64(result.InternalRowCount), int64(result.InternalColumnCount), body.Remaining()/4); err != nil {
 					return err
@@ -387,7 +389,7 @@ func (r *InternalExclusiveConn) InternalExchange(ctx context.Context, request *a
 				}
 				result.InternalTerminal = true
 			default:
-				return &StreamCapabilityError{Protocol: int(r.InternalConn.InternalVersion), Reason: "streaming execution requires ROWS or VOID result"}
+				return &codec.StreamCapabilityError{Protocol: int(r.InternalConn.InternalVersion), Reason: "streaming execution requires ROWS or VOID result"}
 			}
 			if p.Err != nil {
 				return p.Err
@@ -405,11 +407,11 @@ func (r *InternalExclusiveConn) InternalExchange(ctx context.Context, request *a
 
 // Settle columns using the attempt's exact immutable metadata before exposing
 // a row reader. Full response metadata is never replaced by a newer cache view.
-func (r *InternalStreamResponse) InternalInstallColumns(columns Columns) error {
+func (r *InternalStreamResponse) InternalInstallColumns(columns cqltype.Columns) error {
 	if columns.Len() != r.InternalColumnCount {
-		return typeValidation("stream columns", "metadata count differs")
+		return cqltype.TypeValidation("stream columns", "metadata count differs")
 	}
-	reader, err := newStreamRowReader(columns, r.InternalBody)
+	reader, err := codec.NewStreamRowReader(columns, r.InternalBody)
 	if err != nil {
 		return err
 	}
@@ -420,11 +422,11 @@ func (r *InternalStreamResponse) InternalInstallColumns(columns Columns) error {
 
 // Continuation pages may share internal immutable validation plans. The codec
 // requires exact metadata ownership identity and allocates fresh page state.
-func (r *InternalStreamResponse) InternalInstallColumnsReusing(columns Columns, prior *InternalStreamResponse) error {
+func (r *InternalStreamResponse) InternalInstallColumnsReusing(columns cqltype.Columns, prior *InternalStreamResponse) error {
 	if columns.Len() != r.InternalColumnCount {
-		return typeValidation("stream columns", "metadata count differs")
+		return cqltype.TypeValidation("stream columns", "metadata count differs")
 	}
-	var previous *StreamRowReader
+	var previous *codec.StreamRowReader
 	if prior != nil {
 		previous = prior.InternalReader
 	}
@@ -436,13 +438,13 @@ func (r *InternalStreamResponse) InternalInstallColumnsReusing(columns Columns, 
 	r.InternalReader = reader
 	return nil
 }
-func InternalDecodeStreamRow[R any](response *InternalStreamResponse, plan StreamRowPlan[R], dst *R) (ok bool, err error) {
+func InternalDecodeStreamRow[R any](response *InternalStreamResponse, plan codec.StreamRowPlan[R], dst *R) (ok bool, err error) {
 	if response == nil {
-		return false, typeValidation("stream response", "nil response")
+		return false, cqltype.TypeValidation("stream response", "nil response")
 	}
 	pageCtx := response.InternalCtx
 	if pageCtx == nil {
-		return false, typeValidation("stream context", "response has no page context")
+		return false, cqltype.TypeValidation("stream context", "response has no page context")
 	}
 	err = response.reservation.InternalWithIO(pageCtx, func() error {
 		if response.InternalTerminal {
@@ -453,10 +455,10 @@ func InternalDecodeStreamRow[R any](response *InternalStreamResponse, plan Strea
 			return nil
 		}
 		if dst == nil {
-			return typeValidation("destination", "nil stream destination")
+			return cqltype.TypeValidation("destination", "nil stream destination")
 		}
 		if response.InternalReader == nil || plan == nil {
-			return typeValidation("stream plan", "metadata/plan not installed")
+			return cqltype.TypeValidation("stream plan", "metadata/plan not installed")
 		}
 		if response.InternalIndex == response.InternalRowCount {
 			if err := response.InternalBody.RequireEnd(); err != nil {
@@ -500,12 +502,14 @@ func InternalDecodeStreamRow[R any](response *InternalStreamResponse, plan Strea
 // One bounded event worker per connection replaces unbounded goroutine-per-event
 // dispatch. Ownership charges transfer with the queued event until consumption.
 type InternalConnEvent struct {
-	value   frame
+	value   protocol.Frame
 	release func()
 }
 
-func (c *Conn) dispatchEvent(event frame) error { return c.InternalDispatchEventOwned(event, nil) }
-func (c *Conn) InternalDispatchEventOwned(event frame, release func()) error {
+func (c *Conn) dispatchEvent(event protocol.Frame) error {
+	return c.InternalDispatchEventOwned(event, nil)
+}
+func (c *Conn) InternalDispatchEventOwned(event protocol.Frame, release func()) error {
 	c.eventMu.Lock()
 	defer c.eventMu.Unlock()
 	reject := func(err error) error {
@@ -518,7 +522,7 @@ func (c *Conn) InternalDispatchEventOwned(event frame, release func()) error {
 		return reject(nil)
 	}
 	if c.eventsClosed || c.InternalCtx.Err() != nil {
-		return reject(ErrClosed)
+		return reject(runtimeerrors.ErrClosed)
 	}
 	c.eventOnce.Do(func() {
 		c.eventQueue = make(chan InternalConnEvent, 32)
@@ -563,13 +567,13 @@ func (c *Conn) InternalDispatchEventOwned(event frame, release func()) error {
 		}
 	})
 	if c.eventsClosed {
-		return reject(ErrClosed)
+		return reject(runtimeerrors.ErrClosed)
 	}
 	select {
 	case c.eventQueue <- InternalConnEvent{event, release}:
 		return nil
 	default:
-		return reject(&ProtocolError{Stage: "event queue", Err: errors.New("bounded event dispatch overflow")})
+		return reject(&cqltype.ProtocolError{Stage: "event queue", Err: errors.New("bounded event dispatch overflow")})
 	}
 }
 
@@ -589,7 +593,7 @@ func (c *Conn) InternalWaitEventDispatch() {
 func (r *InternalExclusiveConn) drainVerifiedControl() error {
 	for r.InternalUnits != nil && r.InternalUnits.InternalOffset < len(r.InternalUnits.InternalData) {
 		if !r.InternalUnits.self {
-			return &ProtocolError{Stage: "stream trailing unit", Err: wire.ErrTrailingBytes}
+			return &cqltype.ProtocolError{Stage: "stream trailing unit", Err: wire.ErrTrailingBytes}
 		}
 		r.InternalUnits.beginFrame()
 		limits := r.InternalConn.typedProtocolLimits()
@@ -597,12 +601,12 @@ func (r *InternalExclusiveConn) drainVerifiedControl() error {
 		if err != nil {
 			return err
 		}
-		cursor := &streamMetadataCursor{Scope: body, Budget: r.InternalMetadataBudget}
-		p := &typedParser{Cursor: cursor, Proto: r.InternalConn.InternalVersion, MaxDepth: limits.MaxMetadataDepth}
+		cursor := &protocol.StreamMetadataCursor{Scope: body, Budget: r.InternalMetadataBudget}
+		p := &protocol.TypedParser{Cursor: cursor, Proto: r.InternalConn.InternalVersion, MaxDepth: limits.MaxMetadataDepth}
 		p.StreamExtensions(h)
 		if h.Op != frm.OpEvent || h.Stream != -1 {
 			cursor.Release()
-			return &ProtocolError{Stage: "stream trailing frame", Err: fmt.Errorf("unexpected opcode %d/stream %d", h.Op, h.Stream)}
+			return &cqltype.ProtocolError{Stage: "stream trailing frame", Err: fmt.Errorf("unexpected opcode %d/stream %d", h.Op, h.Stream)}
 		}
 		event := p.StreamEvent(h)
 		if p.Err != nil {

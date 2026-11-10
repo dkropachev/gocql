@@ -23,7 +23,10 @@ import (
 	"context"
 	"crypto/tls"
 
+	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/model"
 
 	"net"
 	"net/netip"
@@ -35,26 +38,26 @@ import (
 )
 
 type InternalV2TLSHostDialer struct {
-	InternalUnixHostID func() UUID
-	InternalConfig     Config
+	InternalUnixHostID func() cqltype.UUID
+	InternalConfig     connectivity.Config
 }
 
-func (d *InternalV2TLSHostDialer) InternalSelectedTLS(ctx context.Context, host HostSnapshot) (*tls.Config, error) {
+func (d *InternalV2TLSHostDialer) InternalSelectedTLS(ctx context.Context, host model.HostSnapshot) (*tls.Config, error) {
 	c := d.InternalConfig.TLS
 	if source := d.InternalConfig.TLSSource; source != nil {
 		if c = source.TLSConfig(); c == nil {
-			return nil, typeValidation("TLS source", "returned no config")
+			return nil, cqltype.TypeValidation("TLS source", "returned no config")
 		}
 	}
 	if c != nil {
-		c = cloneV2TLSConfig(c)
+		c = connectivity.CloneTLSConfig(c)
 	}
 	if d.InternalConfig.ClientRoutes != nil && d.InternalConfig.ClientRoutes.TLS && (c == nil || c.InsecureSkipVerify && c.VerifyConnection == nil && c.VerifyPeerCertificate == nil) {
-		return nil, typeValidation("client routes TLS", "usable verified TLS required")
+		return nil, cqltype.TypeValidation("client routes TLS", "usable verified TLS required")
 	}
 	return c, nil
 }
-func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target DialTarget) (net.Conn, error) {
+func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target implEndpoint.DialTarget) (net.Conn, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -65,7 +68,7 @@ func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target DialTarget) (n
 	} else if d.InternalConfig.Dialer != nil {
 		c, err = d.InternalConfig.Dialer.DialContext(ctx, InternalCloneV2DialTarget(target))
 	} else {
-		c, err = (DefaultDialer{ConnectTimeout: d.InternalConfig.ConnectTimeout, SocketKeepalive: d.InternalConfig.SocketKeepalive}).DialContext(ctx, target)
+		c, err = (implEndpoint.DefaultDialer{ConnectTimeout: d.InternalConfig.ConnectTimeout, SocketKeepalive: d.InternalConfig.SocketKeepalive}).DialContext(ctx, target)
 	}
 	if err != nil {
 		if c != nil {
@@ -74,17 +77,17 @@ func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target DialTarget) (n
 		return nil, err
 	}
 	if c == nil {
-		return nil, typeValidation("dial", "hook returned nil connection")
+		return nil, cqltype.TypeValidation("dial", "hook returned nil connection")
 	}
 	if _, ok := c.(*tls.Conn); ok {
 		c.Close()
-		return nil, typeValidation("dial", "hook must return a raw connection")
+		return nil, cqltype.TypeValidation("dial", "hook must return a raw connection")
 	}
 	if target.LocalAddress.IsValid() {
 		a, ok := c.LocalAddr().(*net.TCPAddr)
 		if !ok || (target.LocalAddress.Port() != 0 && a.Port != int(target.LocalAddress.Port())) || (!target.LocalAddress.Addr().IsUnspecified() && a.AddrPort().Addr().Unmap() != target.LocalAddress.Addr().Unmap()) {
 			c.Close()
-			return nil, &UnsupportedSettingError{Setting: "dial source", Reason: "hook did not honor selected source " + target.LocalAddress.String()}
+			return nil, &connectivity.UnsupportedSettingError{Setting: "dial source", Reason: "hook did not honor selected source " + target.LocalAddress.String()}
 		}
 	}
 	if err = InternalApplyV2SocketOptions(c, d.InternalConfig, target.Network); err != nil {
@@ -97,13 +100,13 @@ func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target DialTarget) (n
 	}
 	return c, nil
 }
-func InternalApplyV2SocketOptions(c net.Conn, config Config, network string) error {
+func InternalApplyV2SocketOptions(c net.Conn, config connectivity.Config, network string) error {
 	if network == "unix" || network == "unixpacket" {
 		return nil
 	}
 	_, realTCP := c.LocalAddr().(*net.TCPAddr)
 	unsupported := func(setting string) error {
-		return &UnsupportedSettingError{Setting: setting, Reason: "raw TCP connection wrapper does not expose requested socket controls"}
+		return &connectivity.UnsupportedSettingError{Setting: setting, Reason: "raw TCP connection wrapper does not expose requested socket controls"}
 	}
 	if realTCP {
 		noDelay, ok := c.(interface{ SetNoDelay(bool) error })
@@ -163,34 +166,34 @@ func InternalApplyV2SocketOptions(c net.Conn, config Config, network string) err
 	return nil
 }
 
-func (d *InternalV2TLSHostDialer) DialHost(ctx context.Context, host *HostInfo) (*DialedHost, error) {
+func (d *InternalV2TLSHostDialer) DialHost(ctx context.Context, host *implEndpoint.HostInfo) (*implEndpoint.DialedHost, error) {
 	return d.dial(ctx, host, -1, 0)
 }
-func (d *InternalV2TLSHostDialer) DialShard(ctx context.Context, host *HostInfo, shard, shards int) (*DialedHost, error) {
+func (d *InternalV2TLSHostDialer) DialShard(ctx context.Context, host *implEndpoint.HostInfo, shard, shards int) (*implEndpoint.DialedHost, error) {
 	return d.dial(ctx, host, shard, shards)
 }
-func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *HostInfo, shard, shards int) (*DialedHost, error) {
+func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.HostInfo, shard, shards int) (*implEndpoint.DialedHost, error) {
 	epoch := implEndpoint.InternalHostInfoTransportEpoch(host)
 	sharderEpoch := implEndpoint.InternalHostInfoSharderEpoch(host)
 	snapshot, err := implEndpoint.SnapshotHost(host)
 	if err != nil {
 		return nil, err
 	}
-	if path, e := unixContact(d.InternalConfig); e != nil {
+	if path, e := connectivity.UnixContact(d.InternalConfig); e != nil {
 		return nil, e
 	} else if path != "" {
 		snapshot.Address = netip.AddrPort{}
 		if d.InternalUnixHostID != nil {
 			if local := d.InternalUnixHostID(); !local.IsEmpty() && !snapshot.ID.IsEmpty() && local != snapshot.ID {
-				return nil, &UnsupportedSettingError{Setting: "Unix remote host", Reason: "one local socket cannot represent a remote node"}
+				return nil, &connectivity.UnsupportedSettingError{Setting: "Unix remote host", Reason: "one local socket cannot represent a remote node"}
 			}
 		}
-		c, e := d.raw(ctx, DialTarget{Host: snapshot, Network: "unix", Address: path})
+		c, e := d.raw(ctx, implEndpoint.DialTarget{Host: snapshot, Network: "unix", Address: path})
 		if e != nil {
 			return nil, e
 		}
-		return func() *DialedHost {
-			opaqueStorageValue := new(DialedHost)
+		return func() *implEndpoint.DialedHost {
+			opaqueStorageValue := new(implEndpoint.DialedHost)
 			opaqueStorageValue.Conn = c
 			implEndpoint.DialedHostData(opaqueStorageValue).InternalTargetEpoch = epoch
 			implEndpoint.DialedHostData(opaqueStorageValue).InternalSharderEpoch = sharderEpoch
@@ -207,15 +210,15 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *HostInfo, shar
 	if translated != nil && translated.CQL.IsValid() {
 		address = translated.CQL.ToNetAddr()
 	}
-	target := DialTarget{Host: snapshot, Network: "tcp", Address: address}
+	target := implEndpoint.DialTarget{Host: snapshot, Network: "tcp", Address: address}
 	if d.InternalConfig.LocalAddress.IsValid() {
 		target.LocalAddress = netip.AddrPortFrom(d.InternalConfig.LocalAddress, 0)
 	}
 	var c net.Conn
-	var selectedShard Option[uint32]
+	var selectedShard cqltype.Option[uint32]
 	if shards > 0 && d.InternalConfig.Pool.ShardAwarePort && d.InternalConfig.Pool.ConnectionsPerHost == 0 {
 		if shard < 0 || shard >= shards {
-			return nil, typeValidation("shard", "target out of range")
+			return nil, cqltype.TypeValidation("shard", "target out of range")
 		}
 		endpoint := ""
 		if translated != nil {
@@ -232,7 +235,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *HostInfo, shar
 				}
 				attempt := target
 				attempt.Address = endpoint
-				attempt.ShardID = Option[uint32]{Value: uint32(shard), Set: true}
+				attempt.ShardID = cqltype.Option[uint32]{Value: uint32(shard), Set: true}
 				ip := d.InternalConfig.LocalAddress
 				if !ip.IsValid() {
 					ip = netip.IPv4Unspecified()
@@ -263,7 +266,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *HostInfo, shar
 	}
 	if tlsConfig != nil && tlsConfig.ServerName == "" && !snapshot.Address.IsValid() {
 		c.Close()
-		return nil, typeValidation("TLS identity", "missing logical host name")
+		return nil, cqltype.TypeValidation("TLS identity", "missing logical host name")
 	}
 	result, err := WrapTLS(ctx, c, logicalAddress, tlsConfig)
 	if err != nil {
@@ -278,33 +281,33 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *HostInfo, shar
 			return err
 		}
 		if current.ID != snapshot.ID || current.Address != snapshot.Address || current.Datacenter != snapshot.Datacenter || current.Rack != snapshot.Rack || InternalLogicalV2TLSAddress(host) != logicalAddress {
-			return typeValidation("dial target generation", "host identity/endpoint changed during opening")
+			return cqltype.TypeValidation("dial target generation", "host identity/endpoint changed during opening")
 		}
 		return nil
 	}
 	return result, nil
 }
 
-func InternalCloneV2HostSnapshot(v HostSnapshot) HostSnapshot {
+func InternalCloneV2HostSnapshot(v model.HostSnapshot) model.HostSnapshot {
 	v.Tokens = slices.Clone(v.Tokens)
 	return v
 }
-func InternalCloneV2DialTarget(v DialTarget) DialTarget {
+func InternalCloneV2DialTarget(v implEndpoint.DialTarget) implEndpoint.DialTarget {
 	v.Host = InternalCloneV2HostSnapshot(v.Host)
 	return v
 }
 
-func InternalLogicalV2TLSAddress(host *HostInfo) string {
+func InternalLogicalV2TLSAddress(host *implEndpoint.HostInfo) string {
 	implEndpoint.HostInfoData(host).InternalMu.RLock()
 	defer implEndpoint.HostInfoData(host).InternalMu.RUnlock()
 	name := implEndpoint.HostInfoData(host).InternalHostname
 	if name == "" {
 		switch {
-		case validIpAddr(implEndpoint.HostInfoData(host).InternalConnectAddress):
+		case implEndpoint.InternalValidIpAddr(implEndpoint.HostInfoData(host).InternalConnectAddress):
 			name = implEndpoint.HostInfoData(host).InternalConnectAddress.String()
-		case validIpAddr(implEndpoint.HostInfoData(host).InternalRpcAddress):
+		case implEndpoint.InternalValidIpAddr(implEndpoint.HostInfoData(host).InternalRpcAddress):
 			name = implEndpoint.HostInfoData(host).InternalRpcAddress.String()
-		case validIpAddr(implEndpoint.HostInfoData(host).InternalPeer):
+		case implEndpoint.InternalValidIpAddr(implEndpoint.HostInfoData(host).InternalPeer):
 			name = implEndpoint.HostInfoData(host).InternalPeer.String()
 		default:
 			name = implEndpoint.HostInfoData(host).InternalBroadcastAddress.String()

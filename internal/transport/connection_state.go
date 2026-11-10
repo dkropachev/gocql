@@ -29,7 +29,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/protocol"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 var InternalErrOrphanBudget = errors.New("gocql: abandoned stream budget exceeded")
@@ -61,7 +65,7 @@ func (c *Conn) beginShared(ctx context.Context) error {
 		c.InternalMu.Lock()
 		if c.InternalClosed {
 			c.InternalMu.Unlock()
-			return ErrConnectionClosed
+			return runtimeerrors.ErrConnectionClosed
 		}
 		if !c.InternalExclusiveFlag.Load() {
 			c.InternalSharedOps++
@@ -139,7 +143,7 @@ type InternalExclusiveConn struct {
 	InternalConn           *Conn
 	stop                   func() bool
 	InternalDone           chan struct{}
-	InternalMetadataBudget *streamMetadataBudget
+	InternalMetadataBudget *protocol.StreamMetadataBudget
 	InternalUnits          *InternalVerifiedStreamUnits
 	readAhead              nativeStreamReadAhead
 	InternalLimits         StreamLimits
@@ -163,30 +167,30 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 		return nil, err
 	}
 	if ctx == nil {
-		return nil, typeValidation("stream context", "nil context")
+		return nil, cqltype.TypeValidation("stream context", "nil context")
 	}
-	reader, ok := c.InternalR.(*connReader)
+	reader, ok := c.InternalR.(*InternalConnReader)
 	if !ok || reader.InternalConn == nil || reader.InternalR != nil && !reader.transferable {
-		return nil, &StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "connection has no transferable reader"}
+		return nil, &codec.StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "connection has no transferable reader"}
 	}
 	if c.InternalVersion < 3 || c.InternalVersion > 5 || c.InternalVersion < 5 && c.InternalCompressor != nil {
-		return nil, &StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "frame compression has no incremental receive transform"}
+		return nil, &codec.StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "frame compression has no incremental receive transform"}
 	}
 	if c.InternalVersion == 5 && c.InternalCompressor != nil && c.InternalCompressor.Name() != "lz4" {
-		return nil, &StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "v5 streaming requires raw or LZ4 segments"}
+		return nil, &codec.StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "v5 streaming requires raw or LZ4 segments"}
 	}
 	c.InternalMu.Lock()
 	if c.InternalClosed {
 		c.InternalMu.Unlock()
-		return nil, ErrConnectionClosed
+		return nil, runtimeerrors.ErrConnectionClosed
 	}
 	if c.InternalCfg != nil && c.InternalCfg.InternalIsControlConn {
 		c.InternalMu.Unlock()
-		return nil, &StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "control connection cannot be reserved"}
+		return nil, &codec.StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "control connection cannot be reserved"}
 	}
 	if c.InternalExclusiveFlag.Load() {
 		c.InternalMu.Unlock()
-		return nil, ErrNoStreams
+		return nil, runtimeerrors.ErrNoStreams
 	}
 	if c.InternalCfg != nil {
 		c.InternalCfg.InternalReceiveCache.Clear()
@@ -204,7 +208,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 		c.InternalMu.Lock()
 		if c.InternalClosed {
 			c.InternalMu.Unlock()
-			return nil, ErrConnectionClosed
+			return nil, runtimeerrors.ErrConnectionClosed
 		}
 		if c.InternalSharedOps == 0 && c.InternalCalls.Len() == 0 && c.InternalStreams.InUse() == 0 {
 			c.pauseWanted = true
@@ -222,7 +226,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			case <-c.InternalCtx.Done():
-				return nil, ErrConnectionClosed
+				return nil, runtimeerrors.ErrConnectionClosed
 			}
 			break
 		}
@@ -233,7 +237,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-c.InternalCtx.Done():
-			return nil, ErrConnectionClosed
+			return nil, runtimeerrors.ErrConnectionClosed
 		}
 	}
 	if err = ctx.Err(); err != nil {
@@ -243,7 +247,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 	stream, ok := c.InternalStreams.GetStream()
 	c.InternalMu.Unlock()
 	if !ok {
-		return nil, ErrNoStreams
+		return nil, runtimeerrors.ErrNoStreams
 	}
 	r := &InternalExclusiveConn{InternalConn: c, InternalCtx: ctx, InternalStream: stream, InternalDone: make(chan struct{}), InternalComplete: true}
 	// The shared reader acknowledged a native-frame/v5-unit boundary. Move its
@@ -267,7 +271,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 	return r, nil
 }
 
-func (c *Conn) restoreSharedReader(reader *connReader) {
+func (c *Conn) restoreSharedReader(reader *InternalConnReader) {
 	c.InternalMu.Lock()
 	paused, resume, resumed := c.readerPaused, c.readerResume, c.readerResumed
 	if c.pauseWanted {
@@ -318,7 +322,7 @@ func (r *InternalExclusiveConn) closeOwned(reusable bool) error {
 	}
 
 	if !reusable {
-		r.InternalConn.InternalCloseWithError(ErrConnectionClosed)
+		r.InternalConn.InternalCloseWithError(runtimeerrors.ErrConnectionClosed)
 	}
 	r.active.Lock()
 	defer r.active.Unlock()
@@ -340,7 +344,7 @@ func (r *InternalExclusiveConn) closeOwned(reusable bool) error {
 	r.InternalConn.InternalMu.Lock()
 	r.InternalConn.InternalStreams.Clear(r.InternalStream)
 	r.InternalConn.InternalMu.Unlock()
-	reader := r.InternalConn.InternalR.(*connReader)
+	reader := r.InternalConn.InternalR.(*InternalConnReader)
 	if reusable && (!r.InternalComplete || r.InternalUnits != nil && !r.InternalUnits.boundary()) {
 		r.closeErr = fmt.Errorf("gocql: incomplete streaming response")
 		r.InternalConn.InternalCloseWithError(r.closeErr)
@@ -364,7 +368,7 @@ func (r *InternalExclusiveConn) closeOwned(reusable bool) error {
 // exclusiveReadSource consumes transferred bytes first. Once empty it reads
 // directly from the socket; incremental read-ahead remains separately bounded.
 type exclusiveReadSource struct {
-	raw      *connReader
+	raw      *InternalConnReader
 	buffered *bufio.Reader
 }
 
@@ -412,14 +416,14 @@ func (c *Conn) typedHeartbeat(ctx context.Context) {
 		}
 		done := make(chan struct{})
 		stop := context.AfterFunc(callCtx, func() { c.InternalCloseWithError(callCtx.Err()); close(done) })
-		f, err := c.execAdmitted(callCtx, &writeOptionsFrame{}, nil, 0, true)
+		f, err := c.execAdmitted(callCtx, &protocol.WriteOptionsFrame{}, nil, 0, true)
 		if !stop() {
 			<-done
 		}
 		cancel()
 		c.endShared()
 		if err == nil {
-			var result frame
+			var result protocol.Frame
 			result, err = f.ParseFrame()
 			f.Release()
 			if err == nil {
@@ -517,7 +521,7 @@ func (r *InternalExclusiveConn) watchIOContext(ctx context.Context) error {
 	}
 	r.cancelMu.Unlock()
 	if r.InternalClosing.Load() {
-		return ErrClosed
+		return runtimeerrors.ErrClosed
 	}
 	return ctx.Err()
 }
