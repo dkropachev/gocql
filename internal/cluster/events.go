@@ -201,7 +201,7 @@ func (s *Core) handleEventOwned(frame frame, release func()) bool {
 }
 func (s *Core) handleEventOwnedContext(ctx context.Context, frame frame, release func()) bool {
 	switch frame.(type) {
-	case *frm.SchemaChangeKeyspace, *frm.SchemaChangeFunction, *frm.SchemaChangeTable, *frm.SchemaChangeAggregate, *frm.SchemaChangeType:
+	case frm.SchemaChange:
 		if s.privateStorage.InternalCfg.Events.DisableSchemaEvents {
 			return false
 		}
@@ -235,9 +235,7 @@ func (s *Core) handleEventOwnedContext(ctx context.Context, frame frame, release
 		}
 	}
 	switch f := frame.(type) {
-	case *frm.SchemaChangeKeyspace, *frm.SchemaChangeFunction,
-		*frm.SchemaChangeTable, *frm.SchemaChangeAggregate, *frm.SchemaChangeType:
-
+	case frm.SchemaChange:
 		return s.privateStorage.InternalSchemaEvents.debounceOwnedContext(ctx, frame, release)
 	case *frm.TopologyChangeEventFrame, *frm.StatusChangeEventFrame:
 		return s.privateStorage.InternalNodeEvents.debounceOwnedContext(ctx, frame, release)
@@ -285,17 +283,8 @@ func (s *Core) handleSchemaEventAndPublish(frames []frame) {
 		s, frames)
 	scopes := make(map[string]bool)
 	for _, f := range frames {
-		switch v := f.(type) {
-		case *frm.SchemaChangeKeyspace:
-			scopes[v.Keyspace] = true
-		case *frm.SchemaChangeTable:
-			scopes[v.Keyspace] = true
-		case *frm.SchemaChangeType:
-			scopes[v.Keyspace] = true
-		case *frm.SchemaChangeFunction:
-			scopes[v.Keyspace] = true
-		case *frm.SchemaChangeAggregate:
-			scopes[v.Keyspace] = true
+		if v, ok := f.(frm.SchemaChange); ok {
+			scopes[v.SchemaKeyspace()] = true
 		}
 	}
 	for scope := range scopes {

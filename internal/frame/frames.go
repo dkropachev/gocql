@@ -196,6 +196,18 @@ type SupportedFrame struct {
 	FrameHeader
 }
 
+// SchemaChange is a SCHEMA_CHANGE event frame.
+type SchemaChange interface {
+	// SchemaKeyspace returns the keyspace the change belongs to.
+	SchemaKeyspace() string
+}
+
+func (f SchemaChangeKeyspace) SchemaKeyspace() string  { return f.Keyspace }
+func (f SchemaChangeTable) SchemaKeyspace() string     { return f.Keyspace }
+func (f SchemaChangeType) SchemaKeyspace() string      { return f.Keyspace }
+func (f SchemaChangeFunction) SchemaKeyspace() string  { return f.Keyspace }
+func (f SchemaChangeAggregate) SchemaKeyspace() string { return f.Keyspace }
+
 type SchemaChangeKeyspace struct {
 	Change   string
 	Keyspace string
