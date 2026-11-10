@@ -39,11 +39,24 @@ drivers, µs p90 / p95 / p99, median of 2 rounds:
 | F | 29,555 | 70 % | 982 / 1,946 / 10,336 | 934 / 1,747 / 13,220 | 920 / 1,554 / 8,895 |
 | G | 49,327 | 70 % | 79 / 366 / 1,499 | 78 / 155 / 1,604 | 100 / 106 / 758 |
 
-For reference, E1 and E2 at 70 % (first attempt, not sustained): E1
-22,628/s gave p99 2.8 / 3.6 / 2.8 s (master / v2 / rust) with 0.8-6.1 %
-rejected; E2 13,459/s gave p99 5.1 s / 407 ms / 1.2 s, master losing
-64.7 % of one round to a stall. Those rows measure cluster stalls, not
-drivers.
+The same pass at strict 70 % of the lowest maximum for every family (first
+attempt after reset and conditioning; identical to the table above except
+E1 and E2), µs p90 / p95 / p99:
+
+| family | rate/s | master | v2 | rust |
+|---|---:|---|---|---|
+| A | 49,322 | 72 / 78 / 1,122 | 72 / 76 / 846 | 95 / 99 / 107 |
+| B | 1,040 | 692 / 707 / 747 | 690 / 705 / 731 | 748 / 758 / 775 |
+| C | 5,408 | 187 / 192 / 291 | 188 / 194 / 323 | 230 / 236 / 243 |
+| D | 51,769 | 113 / 688 / 1,656 | 80 / 444 / 1,745 | 97 / 101 / 1,465 |
+| E1 | 22,628 | 1,101,823 / 2,461,695 / 2,801,663 | 1,743,871 / 3,080,191 / 3,623,935 | 1,151,231 / 2,332,671 / 2,833,407 |
+| E2 | 13,459 | 3,970,175 / 4,517,375 / 5,102,335 | 95,519 / 217,439 / 406,911 | 389,887 / 840,447 / 1,205,503 |
+| F | 29,555 | 982 / 1,946 / 10,336 | 934 / 1,747 / 13,220 | 920 / 1,554 / 8,895 |
+| G | 49,327 | 79 / 366 / 1,499 | 78 / 155 / 1,604 | 100 / 106 / 758 |
+
+At 70 % E1 rejected 0.8-6.1 % of arrivals per round and E2 master lost
+64.7 % of one round to a stall; those two rows measure cluster stalls,
+not drivers.
 
 Rate attempts (worst rejected share, worst p99 over all runs of all drivers):
 
