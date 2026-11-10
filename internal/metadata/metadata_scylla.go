@@ -473,7 +473,7 @@ func (c ColumnKind) String() string {
 	}
 }
 
-func InternalColumnKindFromSchema(kind string) (ColumnKind, error) {
+func columnKindFromSchema(kind string) (ColumnKind, error) {
 	switch kind {
 	case "partition_key":
 		return ColumnPartitionKey, nil
@@ -494,7 +494,7 @@ type KeyspaceState struct {
 	InternalTablesInvalidated map[string]struct{}
 }
 
-func InternalCompileMetadata(
+func compileMetadata(
 	keyspace *KeyspaceMetadata,
 	tables []TableMetadata,
 	columns []ColumnMetadata,
@@ -518,7 +518,7 @@ func InternalCompileMetadata(
 	for i := range functions {
 		key := functions[i].Name
 		if functionNames[key] > 1 {
-			key = InternalV2FunctionIdentity(key, functions[i].ArgumentTypes)
+			key = v2FunctionIdentity(key, functions[i].ArgumentTypes)
 		}
 		keyspace.Functions[key] = &functions[i]
 	}
@@ -528,19 +528,19 @@ func InternalCompileMetadata(
 		aggregateNames[aggregate.Name]++
 	}
 	for _, aggregate := range aggregates {
-		if f := InternalResolveV2Function(functions, aggregate.privateStorage.InternalFinalFunc, []string{aggregate.StateType}); f != nil {
+		if f := resolveV2Function(functions, aggregate.privateStorage.InternalFinalFunc, []string{aggregate.StateType}); f != nil {
 			aggregate.FinalFunc = *f
 		} else if f := keyspace.Functions[aggregate.privateStorage.InternalFinalFunc]; f != nil {
 			aggregate.FinalFunc = *f
 		}
-		if f := InternalResolveV2Function(functions, aggregate.privateStorage.InternalStateFunc, append([]string{aggregate.StateType}, aggregate.ArgumentTypes...)); f != nil {
+		if f := resolveV2Function(functions, aggregate.privateStorage.InternalStateFunc, append([]string{aggregate.StateType}, aggregate.ArgumentTypes...)); f != nil {
 			aggregate.StateFunc = *f
 		} else if f := keyspace.Functions[aggregate.privateStorage.InternalStateFunc]; f != nil {
 			aggregate.StateFunc = *f
 		}
 		key := aggregate.Name
 		if aggregateNames[key] > 1 {
-			key = InternalV2FunctionIdentity(key, aggregate.ArgumentTypes)
+			key = v2FunctionIdentity(key, aggregate.ArgumentTypes)
 		}
 		keyspace.Aggregates[key] = &aggregate
 	}
@@ -601,15 +601,15 @@ func InternalCompileMetadata(
 
 	for i := range tables {
 		t := &tables[i]
-		t.PartitionKey, t.ClusteringColumns, t.OrderedColumns = InternalCompileColumns(t.Columns, t.OrderedColumns)
+		t.PartitionKey, t.ClusteringColumns, t.OrderedColumns = compileColumns(t.Columns, t.OrderedColumns)
 	}
 	for i := range views {
 		v := &views[i]
-		v.PartitionKey, v.ClusteringColumns, v.OrderedColumns = InternalCompileColumns(v.Columns, v.OrderedColumns)
+		v.PartitionKey, v.ClusteringColumns, v.OrderedColumns = compileColumns(v.Columns, v.OrderedColumns)
 	}
 	for i := range indexes {
 		ix := &indexes[i]
-		ix.PartitionKey, ix.ClusteringColumns, ix.OrderedColumns = InternalCompileColumns(ix.Columns, ix.OrderedColumns)
+		ix.PartitionKey, ix.ClusteringColumns, ix.OrderedColumns = compileColumns(ix.Columns, ix.OrderedColumns)
 	}
 
 	keyspace.CreateStmts = string(createStmts)
@@ -698,24 +698,24 @@ func InternalCompileTableMetadata(
 
 	for i := range tables {
 		t := &tables[i]
-		t.PartitionKey, t.ClusteringColumns, t.OrderedColumns = InternalCompileColumns(t.Columns, t.OrderedColumns)
+		t.PartitionKey, t.ClusteringColumns, t.OrderedColumns = compileColumns(t.Columns, t.OrderedColumns)
 	}
 	for i := range views {
 		v := &views[i]
-		v.PartitionKey, v.ClusteringColumns, v.OrderedColumns = InternalCompileColumns(v.Columns, v.OrderedColumns)
+		v.PartitionKey, v.ClusteringColumns, v.OrderedColumns = compileColumns(v.Columns, v.OrderedColumns)
 	}
 	for i := range indexes {
 		ix := &indexes[i]
-		ix.PartitionKey, ix.ClusteringColumns, ix.OrderedColumns = InternalCompileColumns(ix.Columns, ix.OrderedColumns)
+		ix.PartitionKey, ix.ClusteringColumns, ix.OrderedColumns = compileColumns(ix.Columns, ix.OrderedColumns)
 	}
 }
 
-func InternalCompileColumns(columns map[string]*ColumnMetadata, orderedColumns []string) (
+func compileColumns(columns map[string]*ColumnMetadata, orderedColumns []string) (
 	partitionKey, clusteringColumns []*ColumnMetadata, sortedColumns []string) {
-	clusteringColumnCount := InternalComponentColumnCountOfType(columns, ColumnClusteringKey)
+	clusteringColumnCount := componentColumnCountOfType(columns, ColumnClusteringKey)
 	clusteringColumns = make([]*ColumnMetadata, clusteringColumnCount)
 
-	partitionKeyCount := InternalComponentColumnCountOfType(columns, ColumnPartitionKey)
+	partitionKeyCount := componentColumnCountOfType(columns, ColumnPartitionKey)
 	partitionKey = make([]*ColumnMetadata, partitionKeyCount)
 
 	var otherColumns []string
@@ -744,7 +744,7 @@ func InternalCompileColumns(columns map[string]*ColumnMetadata, orderedColumns [
 	return
 }
 
-func InternalComponentColumnCountOfType(columns map[string]*ColumnMetadata, kind ColumnKind) int {
+func componentColumnCountOfType(columns map[string]*ColumnMetadata, kind ColumnKind) int {
 	maxComponentIndex := -1
 	for _, column := range columns {
 		if column.Kind == kind && column.ComponentIndex > maxComponentIndex {

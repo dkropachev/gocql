@@ -42,7 +42,7 @@ func InternalV2DecodeTopology() codec.RowDecoder[InternalV2TopologyRow] {
 		InternalV2SchemaColumn("listen_address", codec.InetCodec, func(r *InternalV2TopologyRow) *netip.Addr { return &r.listen }),
 		InternalV2SchemaColumn("preferred_ip", codec.InetCodec, func(r *InternalV2TopologyRow) *netip.Addr { return &r.preferred }),
 		InternalV2SchemaColumn("native_port", InternalV2MetadataInt{}, func(r *InternalV2TopologyRow) *int { return &r.InternalPort }),
-		InternalV2SchemaColumn("tokens", InternalV2MetadataStrings{}, func(r *InternalV2TopologyRow) *[]string { return &r.InternalTokens }),
+		InternalV2SchemaColumn("tokens", v2MetadataStrings{}, func(r *InternalV2TopologyRow) *[]string { return &r.InternalTokens }),
 	}}
 }
 func (r InternalV2TopologyRow) InternalHost(defaultPort int) (*implEndpoint.HostInfo, error) {

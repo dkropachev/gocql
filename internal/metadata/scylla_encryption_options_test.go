@@ -51,11 +51,11 @@ func TestScyllaEncryptionOptions(t *testing.T) {
 				blob = append(blob, kv[1]...)
 			}
 
-			got := &InternalScyllaEncryptionOptions{}
+			got := &scyllaEncryptionOptions{}
 			if err := got.UnmarshalBinary(blob); err != nil {
 				t.Fatalf("UnmarshalBinary: %v", err)
 			}
-			want := &InternalScyllaEncryptionOptions{CipherAlgorithm: "AES/ECB/PKCS5Padding", SecretKeyStrength: 128}
+			want := &scyllaEncryptionOptions{CipherAlgorithm: "AES/ECB/PKCS5Padding", SecretKeyStrength: 128}
 			if diff := cmp.Diff(want, got); diff != "" {
 				t.Errorf("decoded blob differs (-want +got):\n%s", diff)
 			}
@@ -72,12 +72,12 @@ func TestScyllaEncryptionOptions(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			want := &InternalScyllaEncryptionOptions{}
+			want := &scyllaEncryptionOptions{}
 			if err := json.Unmarshal(goldenBuf, want); err != nil {
 				t.Fatal(err)
 			}
 
-			got := &InternalScyllaEncryptionOptions{}
+			got := &scyllaEncryptionOptions{}
 			if err := got.UnmarshalBinary(blob); err != nil {
 				t.Fatalf("UnmarshalBinary: %v", err)
 			}
@@ -135,7 +135,7 @@ func TestScyllaEncryptionOptions(t *testing.T) {
 				t.Run(tc.name, func(t *testing.T) {
 					t.Parallel()
 
-					enc := &InternalScyllaEncryptionOptions{}
+					enc := &scyllaEncryptionOptions{}
 					err := enc.UnmarshalBinary(tc.blob)
 					if err == nil {
 						t.Fatalf("UnmarshalBinary(%v) = nil, want an error", tc.blob)

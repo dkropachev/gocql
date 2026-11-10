@@ -50,25 +50,25 @@ func (InternalV2MetadataInt) Decode(r codec.ValueReader) (int, error) {
 }
 func (InternalV2MetadataInt) Clone(v int) int { return v }
 
-func (InternalV2MetadataKind) CheckType(t cqltype.DataType) error {
+func (v2MetadataKind) CheckType(t cqltype.DataType) error {
 	return (InternalV2MetadataText{}).CheckType(t)
 }
-func (InternalV2MetadataKind) Decode(r codec.ValueReader) (ColumnKind, error) {
+func (v2MetadataKind) Decode(r codec.ValueReader) (ColumnKind, error) {
 	v, e := (InternalV2MetadataText{}).Decode(r)
 	if e != nil {
 		return 0, e
 	}
-	return InternalColumnKindFromSchema(v)
+	return columnKindFromSchema(v)
 }
-func (InternalV2MetadataKind) Clone(v ColumnKind) ColumnKind { return v }
+func (v2MetadataKind) Clone(v ColumnKind) ColumnKind { return v }
 
-func (InternalV2MetadataStrings) CheckType(t cqltype.DataType) error {
+func (v2MetadataStrings) CheckType(t cqltype.DataType) error {
 	if t.Kind() == cqltype.TypeSet {
 		return codec.SetDecoder[cqltype.Text](codec.TextCodec).CheckType(t)
 	}
 	return codec.ListDecoder[cqltype.Text](codec.TextCodec).CheckType(t)
 }
-func (InternalV2MetadataStrings) Decode(r codec.ValueReader) ([]string, error) {
+func (v2MetadataStrings) Decode(r codec.ValueReader) ([]string, error) {
 	decoder := codec.ListDecoder[cqltype.Text](codec.TextCodec)
 	if r.Type().Kind() == cqltype.TypeSet {
 		decoder = codec.SetDecoder[cqltype.Text](codec.TextCodec)
@@ -83,12 +83,12 @@ func (InternalV2MetadataStrings) Decode(r codec.ValueReader) ([]string, error) {
 	}
 	return out, nil
 }
-func (InternalV2MetadataStrings) Clone(v []string) []string { return append([]string(nil), v...) }
+func (v2MetadataStrings) Clone(v []string) []string { return append([]string(nil), v...) }
 
-func (InternalV2MetadataStringMap) CheckType(t cqltype.DataType) error {
+func (v2MetadataStringMap) CheckType(t cqltype.DataType) error {
 	return codec.MapDecoder[cqltype.Text, cqltype.Text](codec.TextCodec, codec.TextCodec).CheckType(t)
 }
-func (InternalV2MetadataStringMap) Decode(r codec.ValueReader) (map[string]string, error) {
+func (v2MetadataStringMap) Decode(r codec.ValueReader) (map[string]string, error) {
 	v, err := codec.MapDecoder[cqltype.Text, cqltype.Text](codec.TextCodec, codec.TextCodec).Decode(r)
 	if err != nil {
 		return nil, err
@@ -103,12 +103,12 @@ func (InternalV2MetadataStringMap) Decode(r codec.ValueReader) (map[string]strin
 	}
 	return out, nil
 }
-func (InternalV2MetadataStringMap) Clone(v map[string]string) map[string]string { return maps.Clone(v) }
+func (v2MetadataStringMap) Clone(v map[string]string) map[string]string { return maps.Clone(v) }
 
-func (InternalV2MetadataExtensions) CheckType(t cqltype.DataType) error {
+func (v2MetadataExtensions) CheckType(t cqltype.DataType) error {
 	return codec.MapDecoder[cqltype.Text, cqltype.Bytes](codec.TextCodec, codec.BlobCodec).CheckType(t)
 }
-func (InternalV2MetadataExtensions) Decode(r codec.ValueReader) (map[string][]byte, error) {
+func (v2MetadataExtensions) Decode(r codec.ValueReader) (map[string][]byte, error) {
 	v, err := codec.MapDecoder[cqltype.Text, cqltype.Bytes](codec.TextCodec, codec.BlobCodec).Decode(r)
 	if err != nil {
 		return nil, err
@@ -123,6 +123,6 @@ func (InternalV2MetadataExtensions) Decode(r codec.ValueReader) (map[string][]by
 	}
 	return out, nil
 }
-func (InternalV2MetadataExtensions) Clone(v map[string][]byte) map[string][]byte {
+func (v2MetadataExtensions) Clone(v map[string][]byte) map[string][]byte {
 	return cloneV2Extensions(v)
 }

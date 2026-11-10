@@ -47,7 +47,7 @@ func TestToCQLHelpers(t *testing.T) {
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
-				if got := InternalCqlHelpers.InternalBodyLiteral(tc.body); got != tc.want {
+				if got := cqlHelpers.bodyLiteral(tc.body); got != tc.want {
 					t.Errorf("bodyLiteral(%q) = %q, want %q", tc.body, got, tc.want)
 				}
 			})
@@ -112,7 +112,7 @@ func TestToCQLHelpers(t *testing.T) {
 			// Empty is not a legal bare identifier.
 			{"", `""`},
 		} {
-			if got := InternalCqlHelpers.InternalIdent(tc.in); got != tc.want {
+			if got := cqlHelpers.ident(tc.in); got != tc.want {
 				t.Errorf("ident(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		}
@@ -165,7 +165,7 @@ func TestToCQLHelpers(t *testing.T) {
 				{in: nil, wantErr: true},
 				{in: []string{"a"}, wantErr: true},
 			} {
-				got, err := InternalCqlHelpers.InternalEscape(tc.in)
+				got, err := cqlHelpers.escape(tc.in)
 				if tc.wantErr {
 					if err == nil {
 						t.Errorf("escape(%#v) = %q, nil; want an error", tc.in, got)
@@ -191,7 +191,7 @@ func TestToCQLHelpers(t *testing.T) {
 				{`a "b" c`, `'a "b" c'`},
 				{"", "''"},
 			} {
-				if got := InternalCqlHelpers.InternalEscapeString(tc.in); got != tc.want {
+				if got := cqlHelpers.escapeString(tc.in); got != tc.want {
 					t.Errorf("escapeString(%q) = %q, want %q", tc.in, got, tc.want)
 				}
 			}
@@ -200,7 +200,7 @@ func TestToCQLHelpers(t *testing.T) {
 		t.Run("fixStrategy", func(t *testing.T) {
 			t.Parallel()
 
-			if got := InternalCqlHelpers.InternalFixStrategy("org.apache.cassandra.locator.SimpleStrategy"); got != "SimpleStrategy" {
+			if got := cqlHelpers.fixStrategy("org.apache.cassandra.locator.SimpleStrategy"); got != "SimpleStrategy" {
 				t.Errorf("fixStrategy = %q", got)
 			}
 		})
@@ -224,7 +224,7 @@ func TestToCQLHelpers(t *testing.T) {
 				{"frozen<unterminated", "frozen<unterminated"},
 				{"", ""},
 			} {
-				if got := InternalCqlHelpers.InternalStripFrozen(tc.in); got != tc.want {
+				if got := cqlHelpers.stripFrozen(tc.in); got != tc.want {
 					t.Errorf("stripFrozen(%q) = %q, want %q", tc.in, got, tc.want)
 				}
 			}
@@ -233,7 +233,7 @@ func TestToCQLHelpers(t *testing.T) {
 		t.Run("zip", func(t *testing.T) {
 			t.Parallel()
 
-			got := InternalCqlHelpers.InternalZip([]string{"a", "b"}, []string{"int", "text"})
+			got := cqlHelpers.zip([]string{"a", "b"}, []string{"int", "text"})
 			if len(got) != 2 || got[0][0] != "a" || got[0][1] != "int" || got[1][1] != "text" {
 				t.Errorf("zip = %v", got)
 			}
@@ -313,7 +313,7 @@ func TestToCQLHelpers(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
 
-				got := InternalCqlHelpers.InternalTableColumnToCQL(tc.tm)
+				got := cqlHelpers.tableColumnToCQL(tc.tm)
 				if !strings.Contains(got, tc.want) {
 					t.Errorf("column clause is missing %q\n--- got ---\n%s", tc.want, got)
 				}
@@ -334,7 +334,7 @@ func TestToCQLHelpers(t *testing.T) {
 			t.Run("encryption options are decoded and rendered as CQL", func(t *testing.T) {
 				t.Parallel()
 
-				got, err := InternalCqlHelpers.InternalTableExtensionsToCQL(map[string][]byte{"scylla_encryption_options": blob})
+				got, err := cqlHelpers.tableExtensionsToCQL(map[string][]byte{"scylla_encryption_options": blob})
 				if err != nil {
 					t.Fatalf("tableExtensionsToCQL: %v", err)
 				}
@@ -372,7 +372,7 @@ func TestToCQLHelpers(t *testing.T) {
 					t.Run(tc.name, func(t *testing.T) {
 						t.Parallel()
 
-						got := InternalCqlHelpers.InternalEncryptionOptionsToCQL(&InternalScyllaEncryptionOptions{CipherAlgorithm: tc.cipher})
+						got := cqlHelpers.encryptionOptionsToCQL(&scyllaEncryptionOptions{CipherAlgorithm: tc.cipher})
 						if !strings.Contains(got, tc.want) {
 							t.Errorf("encryptionOptionsToCQL = %s, want it to contain %s", got, tc.want)
 						}
@@ -386,7 +386,7 @@ func TestToCQLHelpers(t *testing.T) {
 			t.Run("secret_key_strength stays a bare number", func(t *testing.T) {
 				t.Parallel()
 
-				got := InternalCqlHelpers.InternalEncryptionOptionsToCQL(&InternalScyllaEncryptionOptions{SecretKeyStrength: 128})
+				got := cqlHelpers.encryptionOptionsToCQL(&scyllaEncryptionOptions{SecretKeyStrength: 128})
 				if !strings.Contains(got, `'secret_key_strength': 128`) {
 					t.Errorf("encryptionOptionsToCQL = %s, want an unquoted strength", got)
 				}
@@ -395,7 +395,7 @@ func TestToCQLHelpers(t *testing.T) {
 			t.Run("unknown extensions are dropped", func(t *testing.T) {
 				t.Parallel()
 
-				got, err := InternalCqlHelpers.InternalTableExtensionsToCQL(map[string][]byte{"something_else": []byte("x")})
+				got, err := cqlHelpers.tableExtensionsToCQL(map[string][]byte{"something_else": []byte("x")})
 				if err != nil {
 					t.Fatalf("tableExtensionsToCQL: %v", err)
 				}
@@ -407,7 +407,7 @@ func TestToCQLHelpers(t *testing.T) {
 			t.Run("no extensions yields no properties", func(t *testing.T) {
 				t.Parallel()
 
-				got, err := InternalCqlHelpers.InternalTableExtensionsToCQL(nil)
+				got, err := cqlHelpers.tableExtensionsToCQL(nil)
 				if err != nil {
 					t.Fatalf("tableExtensionsToCQL: %v", err)
 				}
@@ -471,7 +471,7 @@ func TestToCQLHelpers(t *testing.T) {
 				t.Run(tc.name, func(t *testing.T) {
 					t.Parallel()
 
-					got := InternalCqlHelpers.InternalTableOptionsToCQL(tc.ops)
+					got := cqlHelpers.tableOptionsToCQL(tc.ops)
 					if !slices.Contains(got, tc.want) {
 						t.Errorf("missing option %q\n--- got ---\n%s", tc.want, strings.Join(got, "\n"))
 					}
@@ -494,7 +494,7 @@ func TestToCQLHelpers(t *testing.T) {
 			t.Run("cdc is emitted when set", func(t *testing.T) {
 				t.Parallel()
 
-				got := InternalCqlHelpers.InternalTableOptionsToCQL(TableMetadataOptions{CDC: map[string]string{"enabled": "true"}})
+				got := cqlHelpers.tableOptionsToCQL(TableMetadataOptions{CDC: map[string]string{"enabled": "true"}})
 				if !hasOption(got, "cdc = ") {
 					t.Errorf("cdc missing from %q", got)
 				}
@@ -503,7 +503,7 @@ func TestToCQLHelpers(t *testing.T) {
 			t.Run("cdc is omitted when unset", func(t *testing.T) {
 				t.Parallel()
 
-				got := InternalCqlHelpers.InternalTableOptionsToCQL(TableMetadataOptions{})
+				got := cqlHelpers.tableOptionsToCQL(TableMetadataOptions{})
 				if hasOption(got, "cdc = ") {
 					t.Errorf("cdc emitted for a table that has none: %q", got)
 				}
@@ -512,12 +512,12 @@ func TestToCQLHelpers(t *testing.T) {
 			t.Run("in_memory is emitted only when true", func(t *testing.T) {
 				t.Parallel()
 
-				on := InternalCqlHelpers.InternalTableOptionsToCQL(TableMetadataOptions{InMemory: true})
+				on := cqlHelpers.tableOptionsToCQL(TableMetadataOptions{InMemory: true})
 				if !hasOption(on, "in_memory = ") {
 					t.Errorf("in_memory missing from %q", on)
 				}
 
-				off := InternalCqlHelpers.InternalTableOptionsToCQL(TableMetadataOptions{})
+				off := cqlHelpers.tableOptionsToCQL(TableMetadataOptions{})
 				if hasOption(off, "in_memory = ") {
 					t.Errorf("in_memory emitted for a non in-memory table: %q", off)
 				}
@@ -539,7 +539,7 @@ func TestToCQLHelpers(t *testing.T) {
 			t.Parallel()
 
 			cks := []*ColumnMetadata{{Name: "c", ClusteringOrder: "DESC"}}
-			got, err := InternalCqlHelpers.InternalTablePropertiesToCQL(cks, opts, nil)
+			got, err := cqlHelpers.tablePropertiesToCQL(cks, opts, nil)
 			if err != nil {
 				t.Fatalf("tablePropertiesToCQL: %v", err)
 			}
@@ -556,7 +556,7 @@ func TestToCQLHelpers(t *testing.T) {
 		t.Run("no clustering columns means no order clause", func(t *testing.T) {
 			t.Parallel()
 
-			got, err := InternalCqlHelpers.InternalTablePropertiesToCQL(nil, opts, nil)
+			got, err := cqlHelpers.tablePropertiesToCQL(nil, opts, nil)
 			if err != nil {
 				t.Fatalf("tablePropertiesToCQL: %v", err)
 			}

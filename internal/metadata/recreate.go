@@ -42,11 +42,11 @@ func (ks *KeyspaceMetadata) ToCQL() (string, error) {
 
 	var sb strings.Builder
 
-	if err := InternalKeyspaceMetadataKeyspaceToCQL(ks, &sb); err != nil {
+	if err := keyspaceMetadataKeyspaceToCQL(ks, &sb); err != nil {
 		return "", err
 	}
 
-	sortedTypes := InternalKeyspaceMetadataTypesSortedTopologically(ks)
+	sortedTypes := keyspaceMetadataTypesSortedTopologically(ks)
 	for _, tm := range sortedTypes {
 		if err := ks.userTypeToCQL(&sb, tm); err != nil {
 			return "", err
@@ -60,25 +60,25 @@ func (ks *KeyspaceMetadata) ToCQL() (string, error) {
 	}
 
 	for _, im := range sortedByName(ks.Indexes) {
-		if err := InternalKeyspaceMetadataIndexToCQL(ks, &sb, im); err != nil {
+		if err := keyspaceMetadataIndexToCQL(ks, &sb, im); err != nil {
 			return "", err
 		}
 	}
 
 	for _, fm := range sortedByName(ks.Functions) {
-		if err := InternalKeyspaceMetadataFunctionToCQL(ks, &sb, ks.Name, fm); err != nil {
+		if err := keyspaceMetadataFunctionToCQL(ks, &sb, ks.Name, fm); err != nil {
 			return "", err
 		}
 	}
 
 	for _, am := range sortedByName(ks.Aggregates) {
-		if err := InternalKeyspaceMetadataAggregateToCQL(ks, &sb, am); err != nil {
+		if err := keyspaceMetadataAggregateToCQL(ks, &sb, am); err != nil {
 			return "", err
 		}
 	}
 
 	for _, vm := range sortedByName(ks.Views) {
-		if err := InternalKeyspaceMetadataViewToCQL(ks, &sb, vm); err != nil {
+		if err := keyspaceMetadataViewToCQL(ks, &sb, vm); err != nil {
 			return "", err
 		}
 	}
@@ -89,23 +89,23 @@ func (ks *KeyspaceMetadata) ToCQL() (string, error) {
 
 // cqlTypeRef is one type name appearing in a rendered CQL type, with the three
 // facts needed to tell a user type from a built-in.
-type InternalCqlTypeRef struct {
-	InternalName string
+type cqlTypeRef struct {
+	name string
 	// quoted: the name was written in double quotes, so it is a user type --
 	// built-ins are never quoted in what the server stores.
-	InternalQuoted bool
+	quoted bool
 	// parameterised: the name is immediately followed by '<', so it is being
 	// applied to type arguments. That is what separates the collection in
 	// frozen<map<text,int>> from a reference to a user type named map, which
 	// the server stores unquoted as frozen<map>.
-	InternalParameterised bool
+	parameterised bool
 	// frozenOperand: the name is the direct operand of frozen<...>. frozen
 	// applies to collections, tuples and user types, never to a scalar
 	// built-in, and a user type used as a field of another must be frozen. So
 	// this is what separates the built-in text in a field declared "text" from
 	// the user type text in one declared frozen<text> -- which is exactly how
 	// system_schema.types stores the two.
-	InternalFrozenOperand bool
+	frozenOperand bool
 }
 
 // cqlTypeIdentifiers splits a rendered CQL type into the names it mentions:
@@ -117,8 +117,8 @@ type InternalCqlTypeRef struct {
 // UDT "z-type" is keyed z-type and referenced as frozen<"z-type">. Splitting on
 // punctuation would yield "z" and "type" and lose the dependency entirely.
 // A doubled quote inside the quotes is one literal quote, as in CQL.
-func InternalCqlTypeIdentifiers(cqlType string) []InternalCqlTypeRef {
-	var out []InternalCqlTypeRef
+func cqlTypeIdentifiers(cqlType string) []cqlTypeRef {
+	var out []cqlTypeRef
 	rs := []rune(cqlType)
 	pendingFrozen := false
 
@@ -143,9 +143,9 @@ func InternalCqlTypeIdentifiers(cqlType string) []InternalCqlTypeRef {
 		if name == "" || (!quoted && !isCQLIdentifierStart([]rune(name)[0])) {
 			return
 		}
-		out = append(out, InternalCqlTypeRef{
-			InternalName: name, InternalQuoted: quoted,
-			InternalParameterised: parameterised, InternalFrozenOperand: frozenOperand,
+		out = append(out, cqlTypeRef{
+			name: name, quoted: quoted,
+			parameterised: parameterised, frozenOperand: frozenOperand,
 		})
 		// Only an applied frozen opens an operand slot. A bare frozen is not
 		// valid CQL, but arming on it would hand the slot to whatever token
@@ -235,7 +235,7 @@ var cqlTypeConstructors = map[string]struct{}{
 // type with one of these names -- it has to be quoted at creation -- which is
 // why a bare occurrence is only assumed to be the built-in when it is not the
 // operand of frozen.
-var InternalCqlNativeTypes = map[string]struct{}{
+var cqlNativeTypes = map[string]struct{}{
 	"ascii": {}, "bigint": {}, "blob": {}, "boolean": {}, "counter": {},
 	"date": {}, "decimal": {}, "double": {}, "duration": {}, "float": {},
 	"inet": {}, "int": {}, "smallint": {}, "text": {}, "time": {},
@@ -245,21 +245,21 @@ var InternalCqlNativeTypes = map[string]struct{}{
 
 // namesUserType reports whether ref can denote a user-defined type, as opposed
 // to a built-in that happens to share its name.
-func (ref InternalCqlTypeRef) InternalNamesUserType() bool {
+func (ref cqlTypeRef) namesUserType() bool {
 	// A quoted name is always a user type; the server only keeps quotes where
 	// the name needs them, and never quotes a built-in.
-	if ref.InternalQuoted {
+	if ref.quoted {
 		return true
 	}
 	// Checked before frozenOperand: the operand of frozen is a user type
 	// unless it is itself a constructor being applied to arguments.
-	if _, ctor := cqlTypeConstructors[ref.InternalName]; ctor && ref.InternalParameterised {
+	if _, ctor := cqlTypeConstructors[ref.name]; ctor && ref.parameterised {
 		return false
 	}
-	if ref.InternalFrozenOperand {
+	if ref.frozenOperand {
 		return true
 	}
-	_, native := InternalCqlNativeTypes[ref.InternalName]
+	_, native := cqlNativeTypes[ref.name]
 	return !native
 }
 
@@ -279,7 +279,7 @@ func (ref InternalCqlTypeRef) InternalNamesUserType() bool {
 // a -> var edge, which closes a cycle with the real var -> a edge if a type
 // "var" embeds "a", and the cycle guard then resolves it the wrong way round --
 // emitting var before the a it embeds.
-func InternalKeyspaceMetadataTypesSortedTopologically(ks *KeyspaceMetadata) []*TypeMetadata {
+func keyspaceMetadataTypesSortedTopologically(ks *KeyspaceMetadata) []*TypeMetadata {
 	sorted := make([]*TypeMetadata, 0, len(ks.Types))
 	visited := make(map[string]bool, len(ks.Types))
 
@@ -295,13 +295,13 @@ func InternalKeyspaceMetadataTypesSortedTopologically(ks *KeyspaceMetadata) []*T
 		visited[name] = true
 
 		for _, ft := range tm.FieldTypes {
-			for _, ref := range InternalCqlTypeIdentifiers(ft) {
+			for _, ref := range cqlTypeIdentifiers(ft) {
 				// A bare built-in is skipped rather than followed. Following it
 				// would be harmless were there no user type of that name, but a
 				// keyspace may define one: the false edge then closes a cycle
 				// with the real one and the walk emits the dependent first.
-				if ref.InternalName != name && ref.InternalNamesUserType() {
-					visit(ref.InternalName)
+				if ref.name != name && ref.namesUserType() {
+					visit(ref.name)
 				}
 			}
 		}
@@ -317,9 +317,9 @@ func InternalKeyspaceMetadataTypesSortedTopologically(ks *KeyspaceMetadata) []*T
 
 var tableCQLTemplate = template.Must(template.New("table").
 	Funcs(map[string]any{
-		"ident":                InternalCqlHelpers.InternalIdent,
-		"tableColumnToCQL":     InternalCqlHelpers.InternalTableColumnToCQL,
-		"tablePropertiesToCQL": InternalCqlHelpers.InternalTablePropertiesToCQL,
+		"ident":                cqlHelpers.ident,
+		"tableColumnToCQL":     cqlHelpers.tableColumnToCQL,
+		"tablePropertiesToCQL": cqlHelpers.tablePropertiesToCQL,
 	}).
 	Parse(`
 CREATE TABLE {{ ident .KeyspaceName }}.{{ ident .Tm.Name }} (
@@ -339,10 +339,10 @@ func (ks *KeyspaceMetadata) tableToCQL(w io.Writer, kn string, tm *TableMetadata
 
 var functionTemplate = template.Must(template.New("functions").
 	Funcs(map[string]any{
-		"ident":       InternalCqlHelpers.InternalIdent,
-		"zip":         InternalCqlHelpers.InternalZip,
-		"stripFrozen": InternalCqlHelpers.InternalStripFrozen,
-		"bodyLiteral": InternalCqlHelpers.InternalBodyLiteral,
+		"ident":       cqlHelpers.ident,
+		"zip":         cqlHelpers.zip,
+		"stripFrozen": cqlHelpers.stripFrozen,
+		"bodyLiteral": cqlHelpers.bodyLiteral,
 	}).
 	Parse(`
 CREATE FUNCTION {{ ident .keyspaceName }}.{{ ident .fm.Name }} ( 
@@ -357,7 +357,7 @@ CREATE FUNCTION {{ ident .keyspaceName }}.{{ ident .fm.Name }} (
     AS {{ bodyLiteral .fm.Body }};
 `))
 
-func InternalKeyspaceMetadataFunctionToCQL(ks *KeyspaceMetadata, w io.Writer, keyspaceName string, fm *FunctionMetadata) error {
+func keyspaceMetadataFunctionToCQL(ks *KeyspaceMetadata, w io.Writer, keyspaceName string, fm *FunctionMetadata) error {
 	if err := functionTemplate.Execute(w, map[string]any{
 		"fm":           fm,
 		"keyspaceName": keyspaceName,
@@ -369,10 +369,10 @@ func InternalKeyspaceMetadataFunctionToCQL(ks *KeyspaceMetadata, w io.Writer, ke
 
 var viewTemplate = template.Must(template.New("views").
 	Funcs(map[string]any{
-		"ident":                InternalCqlHelpers.InternalIdent,
-		"zip":                  InternalCqlHelpers.InternalZip,
-		"partitionKeyString":   InternalCqlHelpers.partitionKeyString,
-		"tablePropertiesToCQL": InternalCqlHelpers.InternalTablePropertiesToCQL,
+		"ident":                cqlHelpers.ident,
+		"zip":                  cqlHelpers.zip,
+		"partitionKeyString":   cqlHelpers.partitionKeyString,
+		"tablePropertiesToCQL": cqlHelpers.tablePropertiesToCQL,
 	}).
 	Parse(`
 CREATE MATERIALIZED VIEW {{ ident .vm.KeyspaceName }}.{{ ident .vm.ViewName }} AS
@@ -388,7 +388,7 @@ CREATE MATERIALIZED VIEW {{ ident .vm.KeyspaceName }}.{{ ident .vm.ViewName }} A
     WITH {{ tablePropertiesToCQL .vm.ClusteringColumns .vm.Options .vm.Extensions }};
 `))
 
-func InternalKeyspaceMetadataViewToCQL(ks *KeyspaceMetadata, w io.Writer, vm *ViewMetadata) error {
+func keyspaceMetadataViewToCQL(ks *KeyspaceMetadata, w io.Writer, vm *ViewMetadata) error {
 	if err := viewTemplate.Execute(w, map[string]any{
 		"vm": vm,
 	}); err != nil {
@@ -399,8 +399,8 @@ func InternalKeyspaceMetadataViewToCQL(ks *KeyspaceMetadata, w io.Writer, vm *Vi
 
 var aggregatesTemplate = template.Must(template.New("aggregate").
 	Funcs(map[string]any{
-		"ident":       InternalCqlHelpers.InternalIdent,
-		"stripFrozen": InternalCqlHelpers.InternalStripFrozen,
+		"ident":       cqlHelpers.ident,
+		"stripFrozen": cqlHelpers.stripFrozen,
 	}).
 	Parse(`
 CREATE AGGREGATE {{ ident .Keyspace }}.{{ ident .Name }}( 
@@ -419,7 +419,7 @@ CREATE AGGREGATE {{ ident .Keyspace }}.{{ ident .Name }}(
 ;
 `))
 
-func InternalKeyspaceMetadataAggregateToCQL(ks *KeyspaceMetadata, w io.Writer, am *AggregateMetadata) error {
+func keyspaceMetadataAggregateToCQL(ks *KeyspaceMetadata, w io.Writer, am *AggregateMetadata) error {
 	if err := aggregatesTemplate.Execute(w, am); err != nil {
 		return err
 	}
@@ -428,8 +428,8 @@ func InternalKeyspaceMetadataAggregateToCQL(ks *KeyspaceMetadata, w io.Writer, a
 
 var typeCQLTemplate = template.Must(template.New("types").
 	Funcs(map[string]any{
-		"ident": InternalCqlHelpers.InternalIdent,
-		"zip":   InternalCqlHelpers.InternalZip,
+		"ident": cqlHelpers.ident,
+		"zip":   cqlHelpers.zip,
 	}).
 	Parse(`
 CREATE TYPE {{ ident .Keyspace }}.{{ ident .Name }} ( 
@@ -446,7 +446,7 @@ func (ks *KeyspaceMetadata) userTypeToCQL(w io.Writer, tm *TypeMetadata) error {
 	return nil
 }
 
-func InternalKeyspaceMetadataIndexToCQL(ks *KeyspaceMetadata, w io.Writer, im *IndexMetadata) error {
+func keyspaceMetadataIndexToCQL(ks *KeyspaceMetadata, w io.Writer, im *IndexMetadata) error {
 	// Scylla doesn't support any custom indexes
 	if im.Kind == IndexKindCustom {
 		return nil
@@ -465,8 +465,8 @@ func InternalKeyspaceMetadataIndexToCQL(ks *KeyspaceMetadata, w io.Writer, im *I
 		// The JSON form names columns, so each one is quoted on its own;
 		// the plain form is a target the server already rendered.
 		indexTarget = fmt.Sprintf("(%s), %s",
-			strings.Join(InternalCqlHelpers.identAll(si.PartitionKeys), ","),
-			strings.Join(InternalCqlHelpers.identAll(si.ClusteringKeys), ","),
+			strings.Join(cqlHelpers.identAll(si.PartitionKeys), ","),
+			strings.Join(cqlHelpers.identAll(si.ClusteringKeys), ","),
 		)
 	}
 
@@ -474,13 +474,13 @@ func InternalKeyspaceMetadataIndexToCQL(ks *KeyspaceMetadata, w io.Writer, im *I
 	// as "", which is a syntax error.
 	indexName := ""
 	if im.Name != "" {
-		indexName = InternalCqlHelpers.InternalIdent(im.Name)
+		indexName = cqlHelpers.ident(im.Name)
 	}
 
 	_, err := fmt.Fprintf(w, "\nCREATE INDEX %s ON %s.%s (%s);\n",
 		indexName,
-		InternalCqlHelpers.InternalIdent(im.KeyspaceName),
-		InternalCqlHelpers.InternalIdent(im.TableName),
+		cqlHelpers.ident(im.KeyspaceName),
+		cqlHelpers.ident(im.TableName),
 		indexTarget,
 	)
 	if err != nil {
@@ -492,9 +492,9 @@ func InternalKeyspaceMetadataIndexToCQL(ks *KeyspaceMetadata, w io.Writer, im *I
 
 var keyspaceCQLTemplate = template.Must(template.New("keyspace").
 	Funcs(map[string]any{
-		"escape":      InternalCqlHelpers.InternalEscape,
-		"fixStrategy": InternalCqlHelpers.InternalFixStrategy,
-		"ident":       InternalCqlHelpers.InternalIdent,
+		"escape":      cqlHelpers.escape,
+		"fixStrategy": cqlHelpers.fixStrategy,
+		"ident":       cqlHelpers.ident,
 	}).
 	// Single-line, always-explicit durable_writes to match what DESCRIBE KEYSPACE
 	// returns from Cassandra/Scylla, so this fallback stays consistent with the
@@ -502,7 +502,7 @@ var keyspaceCQLTemplate = template.Must(template.New("keyspace").
 	Parse(`CREATE KEYSPACE {{ ident .Name }} WITH replication = {'class': {{ escape ( fixStrategy .StrategyClass) }}{{ range $key, $value := .StrategyOptions }}, {{ escape $key }}: {{ escape $value }}{{ end }}} AND durable_writes = {{ .DurableWrites }};
 `))
 
-func InternalKeyspaceMetadataKeyspaceToCQL(ks *KeyspaceMetadata, w io.Writer) error {
+func keyspaceMetadataKeyspaceToCQL(ks *KeyspaceMetadata, w io.Writer) error {
 	if err := keyspaceCQLTemplate.Execute(w, ks); err != nil {
 		return err
 	}
@@ -511,9 +511,9 @@ func InternalKeyspaceMetadataKeyspaceToCQL(ks *KeyspaceMetadata, w io.Writer) er
 
 type toCQLHelpers struct{}
 
-var InternalCqlHelpers = toCQLHelpers{}
+var cqlHelpers = toCQLHelpers{}
 
-func (h toCQLHelpers) InternalZip(a []string, b []string) [][]string {
+func (h toCQLHelpers) zip(a []string, b []string) [][]string {
 	m := make([][]string, len(a))
 	for i := range a {
 		m[i] = []string{a[i], b[i]}
@@ -523,7 +523,7 @@ func (h toCQLHelpers) InternalZip(a []string, b []string) [][]string {
 
 // escapeString renders a CQL string literal, doubling the quotes inside it so
 // the value cannot close its own string.
-func (h toCQLHelpers) InternalEscapeString(v string) string {
+func (h toCQLHelpers) escapeString(v string) string {
 	return "'" + strings.ReplaceAll(v, "'", "''") + "'"
 }
 
@@ -531,9 +531,9 @@ func (h toCQLHelpers) InternalEscapeString(v string) string {
 // body is server data and the literal has no escape: one containing $$ ends it
 // early and the rest is parsed as CQL, and one ending in $ lets the terminator
 // start a character early. Quote those instead.
-func (h toCQLHelpers) InternalBodyLiteral(body string) string {
+func (h toCQLHelpers) bodyLiteral(body string) string {
 	if strings.Contains(body+"$", "$$") {
-		return h.InternalEscapeString(body)
+		return h.escapeString(body)
 	}
 	return "$$" + body + "$$"
 }
@@ -550,10 +550,10 @@ func (h toCQLHelpers) InternalBodyLiteral(body string) string {
 // needed the result inserted as-is; those render as CQL directly now, and the
 // only caller left is the replication map, where inserting bytes unquoted
 // lets a value close the map and add options of its own.
-func (h toCQLHelpers) InternalEscape(e any) (string, error) {
+func (h toCQLHelpers) escape(e any) (string, error) {
 	switch v := e.(type) {
 	case string:
-		return h.InternalEscapeString(v), nil
+		return h.escapeString(v), nil
 	case bool:
 		return strconv.FormatBool(v), nil
 	case float32:
@@ -595,7 +595,7 @@ func cqlInfinity(f float64) (string, bool) {
 // stripFrozen unwraps frozen<...> and leaves anything else alone. The two
 // trims used to be independent, so the suffix came off even when the prefix
 // had not matched: map<text, int> was returned as map<text, int.
-func (h toCQLHelpers) InternalStripFrozen(v string) string {
+func (h toCQLHelpers) stripFrozen(v string) string {
 	if inner, ok := strings.CutPrefix(v, "frozen<"); ok {
 		if inner, ok := strings.CutSuffix(inner, ">"); ok {
 			return inner
@@ -603,7 +603,7 @@ func (h toCQLHelpers) InternalStripFrozen(v string) string {
 	}
 	return v
 }
-func (h toCQLHelpers) InternalFixStrategy(v string) string {
+func (h toCQLHelpers) fixStrategy(v string) string {
 	return strings.TrimPrefix(v, "org.apache.cassandra.locator.")
 }
 
@@ -665,7 +665,7 @@ func cqlIdentifierNeedsQuotes(name string) bool {
 func (h toCQLHelpers) identAll(names []string) []string {
 	out := make([]string, len(names))
 	for i, n := range names {
-		out[i] = h.InternalIdent(n)
+		out[i] = h.ident(n)
 	}
 	return out
 }
@@ -673,7 +673,7 @@ func (h toCQLHelpers) identAll(names []string) []string {
 // ident renders name as a CQL identifier, quoting it only when it has to be
 // quoted so an ordinary schema keeps producing the output it always has. A
 // quote inside the name doubles, as in CQL.
-func (h toCQLHelpers) InternalIdent(name string) string {
+func (h toCQLHelpers) ident(name string) string {
 	if !cqlIdentifierNeedsQuotes(name) {
 		return name
 	}
@@ -687,7 +687,7 @@ func (h toCQLHelpers) InternalIdent(name string) string {
 func (h toCQLHelpers) cqlMapLiteral(m map[string]string) string {
 	pairs := make([]string, 0, len(m))
 	for _, k := range slices.Sorted(maps.Keys(m)) {
-		pairs = append(pairs, h.InternalEscapeString(k)+": "+h.InternalEscapeString(m[k]))
+		pairs = append(pairs, h.escapeString(k)+": "+h.escapeString(m[k]))
 	}
 	return "{" + strings.Join(pairs, ", ") + "}"
 }
@@ -701,11 +701,11 @@ func (h toCQLHelpers) cqlMapLiteral(m map[string]string) string {
 // cannot be made correct: JSON writes an embedded double quote as \" and
 // leaves a single quote alone, so one reaches CQL as a backslash escape the
 // grammar does not have and the other closes the string it sits in.
-func (h toCQLHelpers) InternalEncryptionOptionsToCQL(e *InternalScyllaEncryptionOptions) string {
+func (h toCQLHelpers) encryptionOptionsToCQL(e *scyllaEncryptionOptions) string {
 	return "{" + strings.Join([]string{
-		"'cipher_algorithm': " + h.InternalEscapeString(e.CipherAlgorithm),
-		"'key_provider': " + h.InternalEscapeString(e.KeyProvider),
-		"'secret_key_file': " + h.InternalEscapeString(e.SecretKeyFile),
+		"'cipher_algorithm': " + h.escapeString(e.CipherAlgorithm),
+		"'key_provider': " + h.escapeString(e.KeyProvider),
+		"'secret_key_file': " + h.escapeString(e.SecretKeyFile),
 		"'secret_key_strength': " + strconv.Itoa(e.SecretKeyStrength),
 	}, ", ") + "}"
 }
@@ -716,17 +716,17 @@ func (h toCQLHelpers) InternalEncryptionOptionsToCQL(e *InternalScyllaEncryption
 // it. Rewriting every double quote to a single one, which is what this used to
 // do to re-quote JSON, let a comment of `x" AND gc_grace_seconds = 0 AND
 // comment = "y` leave here as three properties instead of one.
-func (h toCQLHelpers) InternalTableOptionsToCQL(ops TableMetadataOptions) []string {
+func (h toCQLHelpers) tableOptionsToCQL(ops TableMetadataOptions) []string {
 	opts := map[string]string{
 		"bloom_filter_fp_chance":      fmt.Sprint(ops.BloomFilterFpChance),
-		"comment":                     h.InternalEscapeString(ops.Comment),
+		"comment":                     h.escapeString(ops.Comment),
 		"crc_check_chance":            fmt.Sprint(ops.CrcCheckChance),
 		"default_time_to_live":        fmt.Sprint(ops.DefaultTimeToLive),
 		"gc_grace_seconds":            fmt.Sprint(ops.GcGraceSeconds),
 		"max_index_interval":          fmt.Sprint(ops.MaxIndexInterval),
 		"memtable_flush_period_in_ms": fmt.Sprint(ops.MemtableFlushPeriodInMs),
 		"min_index_interval":          fmt.Sprint(ops.MinIndexInterval),
-		"speculative_retry":           h.InternalEscapeString(ops.SpeculativeRetry),
+		"speculative_retry":           h.escapeString(ops.SpeculativeRetry),
 		"caching":                     h.cqlMapLiteral(ops.Caching),
 		"compaction":                  h.cqlMapLiteral(ops.Compaction),
 		"compression":                 h.cqlMapLiteral(ops.Compression),
@@ -750,17 +750,17 @@ func (h toCQLHelpers) InternalTableOptionsToCQL(ops TableMetadataOptions) []stri
 	return out
 }
 
-func (h toCQLHelpers) InternalTableExtensionsToCQL(extensions map[string][]byte) ([]string, error) {
+func (h toCQLHelpers) tableExtensionsToCQL(extensions map[string][]byte) ([]string, error) {
 	// Values are rendered CQL, not Go values.
 	exts := map[string]string{}
 
 	if raw, ok := extensions["scylla_encryption_options"]; ok {
-		encOpts := &InternalScyllaEncryptionOptions{}
+		encOpts := &scyllaEncryptionOptions{}
 		if err := encOpts.UnmarshalBinary(raw); err != nil {
 			return nil, err
 		}
 
-		exts["scylla_encryption_options"] = h.InternalEncryptionOptionsToCQL(encOpts)
+		exts["scylla_encryption_options"] = h.encryptionOptionsToCQL(encOpts)
 	}
 
 	out := make([]string, 0, len(exts))
@@ -772,7 +772,7 @@ func (h toCQLHelpers) InternalTableExtensionsToCQL(extensions map[string][]byte)
 	return out, nil
 }
 
-func (h toCQLHelpers) InternalTablePropertiesToCQL(cks []*ColumnMetadata, opts TableMetadataOptions,
+func (h toCQLHelpers) tablePropertiesToCQL(cks []*ColumnMetadata, opts TableMetadataOptions,
 	extensions map[string][]byte) (string, error) {
 	var sb strings.Builder
 
@@ -781,14 +781,14 @@ func (h toCQLHelpers) InternalTablePropertiesToCQL(cks []*ColumnMetadata, opts T
 	if len(cks) > 0 {
 		var inner []string
 		for _, col := range cks {
-			inner = append(inner, fmt.Sprintf("%s %s", h.InternalIdent(col.Name), col.ClusteringOrder))
+			inner = append(inner, fmt.Sprintf("%s %s", h.ident(col.Name), col.ClusteringOrder))
 		}
 		properties = append(properties, fmt.Sprintf("CLUSTERING ORDER BY (%s)", strings.Join(inner, ", ")))
 	}
 
-	properties = append(properties, h.InternalTableOptionsToCQL(opts)...)
+	properties = append(properties, h.tableOptionsToCQL(opts)...)
 
-	exts, err := h.InternalTableExtensionsToCQL(extensions)
+	exts, err := h.tableExtensionsToCQL(extensions)
 	if err != nil {
 		return "", err
 	}
@@ -798,13 +798,13 @@ func (h toCQLHelpers) InternalTablePropertiesToCQL(cks []*ColumnMetadata, opts T
 	return sb.String(), nil
 }
 
-func (h toCQLHelpers) InternalTableColumnToCQL(tm *TableMetadata) string {
+func (h toCQLHelpers) tableColumnToCQL(tm *TableMetadata) string {
 	var sb strings.Builder
 
 	var columns []string
 	for _, cn := range tm.OrderedColumns {
 		cm := tm.Columns[cn]
-		column := fmt.Sprintf("%s %s", h.InternalIdent(cn), cm.Type)
+		column := fmt.Sprintf("%s %s", h.ident(cn), cm.Type)
 		if cm.Kind == ColumnStatic {
 			column += " static"
 		}
@@ -834,11 +834,11 @@ func (h toCQLHelpers) partitionKeyString(pks, cks []*ColumnMetadata) string {
 			if i != 0 {
 				sb.WriteString(", ")
 			}
-			sb.WriteString(h.InternalIdent(pk.Name))
+			sb.WriteString(h.ident(pk.Name))
 		}
 		sb.WriteRune(')')
 	} else {
-		sb.WriteString(h.InternalIdent(pks[0].Name))
+		sb.WriteString(h.ident(pks[0].Name))
 	}
 
 	if len(cks) > 0 {
@@ -847,14 +847,14 @@ func (h toCQLHelpers) partitionKeyString(pks, cks []*ColumnMetadata) string {
 			if i != 0 {
 				sb.WriteString(", ")
 			}
-			sb.WriteString(h.InternalIdent(ck.Name))
+			sb.WriteString(h.ident(ck.Name))
 		}
 	}
 
 	return sb.String()
 }
 
-type InternalScyllaEncryptionOptions struct {
+type scyllaEncryptionOptions struct {
 	CipherAlgorithm   string `json:"cipher_algorithm"`
 	KeyProvider       string `json:"key_provider"`
 	SecretKeyFile     string `json:"secret_key_file"`
@@ -875,7 +875,7 @@ type InternalScyllaEncryptionOptions struct {
 // caller is a template func, so it surfaced as an opaque render error, not a
 // crash. The entry count is checked too -- an oversized one asks make() for an
 // allocation no recover can absorb.
-func (enc *InternalScyllaEncryptionOptions) UnmarshalBinary(data []byte) error {
+func (enc *scyllaEncryptionOptions) UnmarshalBinary(data []byte) error {
 	off := 0
 
 	take := func(n int) ([]byte, error) {

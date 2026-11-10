@@ -152,7 +152,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 				ViewName:     "buckets_by_owner_index",
 			},
 		}
-		InternalCompileMetadata(keyspace, tables, columns, nil, nil, nil, indexes, views, nil)
+		compileMetadata(keyspace, tables, columns, nil, nil, nil, indexes, views, nil)
 		assertKeyspaceMetadata(
 			t,
 			keyspace,
@@ -320,7 +320,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 			t.Parallel()
 
 			var sb strings.Builder
-			if err := InternalKeyspaceMetadataFunctionToCQL(ks, &sb, "ks", fn); err != nil {
+			if err := keyspaceMetadataFunctionToCQL(ks, &sb, "ks", fn); err != nil {
 				t.Fatalf("functionToCQL: %v", err)
 			}
 			got := sb.String()
@@ -346,7 +346,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 			strict := *fn
 			strict.CalledOnNullInput = false
 			var sb strings.Builder
-			if err := InternalKeyspaceMetadataFunctionToCQL(ks, &sb, "ks", &strict); err != nil {
+			if err := keyspaceMetadataFunctionToCQL(ks, &sb, "ks", &strict); err != nil {
 				t.Fatalf("functionToCQL: %v", err)
 			}
 			if got := sb.String(); !strings.Contains(got, "RETURNS NULL ON NULL INPUT") {
@@ -382,7 +382,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 					poisoned := *fn
 					poisoned.Body = tc.body
 					var sb strings.Builder
-					if err := InternalKeyspaceMetadataFunctionToCQL(ks, &sb, "ks", &poisoned); err != nil {
+					if err := keyspaceMetadataFunctionToCQL(ks, &sb, "ks", &poisoned); err != nil {
 						t.Fatalf("functionToCQL: %v", err)
 					}
 					got := sb.String()
@@ -411,7 +411,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 				FinalFunc:     FunctionMetadata{Name: "avgfinal"},
 			}
 			var sb strings.Builder
-			if err := InternalKeyspaceMetadataAggregateToCQL(ks, &sb, am); err != nil {
+			if err := keyspaceMetadataAggregateToCQL(ks, &sb, am); err != nil {
 				t.Fatalf("aggregateToCQL: %v", err)
 			}
 			got := sb.String()
@@ -487,7 +487,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 
 				var sb strings.Builder
 				ks := &KeyspaceMetadata{Name: "ks"}
-				if err := InternalKeyspaceMetadataIndexToCQL(ks, &sb, tc.im); err != nil {
+				if err := keyspaceMetadataIndexToCQL(ks, &sb, tc.im); err != nil {
 					t.Fatalf("indexToCQL: %v", err)
 				}
 				got := sb.String()
@@ -516,7 +516,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 			}
 
 			var sb strings.Builder
-			if err := InternalKeyspaceMetadataKeyspaceToCQL(ks, &sb); err != nil {
+			if err := keyspaceMetadataKeyspaceToCQL(ks, &sb); err != nil {
 				t.Fatalf("keyspaceToCQL: %v", err)
 			}
 			if want := `'replication_factor': '''1'', ''dc_evil'': ''9'`; !strings.Contains(sb.String(), want) {
@@ -581,7 +581,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 				DurableWrites:   true,
 			}
 			var sb strings.Builder
-			if err := InternalKeyspaceMetadataKeyspaceToCQL(ks, &sb); err != nil {
+			if err := keyspaceMetadataKeyspaceToCQL(ks, &sb); err != nil {
 				t.Fatal(err)
 			}
 			if strings.Contains(sb.String(), "tablets") {
@@ -1048,7 +1048,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 						ks.Types[tm.Name] = tm
 					}
 
-					sorted := InternalKeyspaceMetadataTypesSortedTopologically(ks)
+					sorted := keyspaceMetadataTypesSortedTopologically(ks)
 					if len(sorted) != len(tc.types) {
 						t.Fatalf("round %d: got %d types, want %d", i, len(sorted), len(tc.types))
 					}
@@ -1067,14 +1067,14 @@ func TestKeyspaceMetadata(t *testing.T) {
 					// collision cases below check that matching independently.
 					for _, tm := range sorted {
 						for _, ft := range tm.FieldTypes {
-							for _, ref := range InternalCqlTypeIdentifiers(ft) {
-								if !ref.InternalNamesUserType() {
+							for _, ref := range cqlTypeIdentifiers(ft) {
+								if !ref.namesUserType() {
 									continue
 								}
-								at, isType := pos[ref.InternalName]
-								if isType && ref.InternalName != tm.Name && at > pos[tm.Name] {
+								at, isType := pos[ref.name]
+								if isType && ref.name != tm.Name && at > pos[tm.Name] {
 									t.Fatalf("round %d: %s embeds %s but is declared first: %v",
-										i, tm.Name, ref.InternalName, order)
+										i, tm.Name, ref.name, order)
 								}
 							}
 						}
@@ -1111,7 +1111,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 				PartitionKey:   []*ColumnMetadata{col("id", "int", ColumnPartitionKey)},
 			}
 			var sb strings.Builder
-			if err := InternalKeyspaceMetadataViewToCQL(base, &sb, vm); err != nil {
+			if err := keyspaceMetadataViewToCQL(base, &sb, vm); err != nil {
 				t.Fatalf("viewToCQL: %v", err)
 			}
 			got := sb.String()
@@ -1137,7 +1137,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 				PartitionKey:   []*ColumnMetadata{col("id", "int", ColumnPartitionKey)},
 			}
 			var sb strings.Builder
-			if err := InternalKeyspaceMetadataViewToCQL(base, &sb, vm); err != nil {
+			if err := keyspaceMetadataViewToCQL(base, &sb, vm); err != nil {
 				t.Fatalf("viewToCQL: %v", err)
 			}
 			if got := sb.String(); !strings.Contains(got, "SELECT *") {

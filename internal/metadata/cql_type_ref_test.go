@@ -68,12 +68,12 @@ func TestCQLTypeRef(t *testing.T) {
 					t.Parallel()
 
 					found := false
-					for _, ref := range InternalCqlTypeIdentifiers(tc.in) {
-						if ref.InternalName != tc.name {
+					for _, ref := range cqlTypeIdentifiers(tc.in) {
+						if ref.name != tc.name {
 							continue
 						}
 						found = true
-						if got := ref.InternalNamesUserType(); got != tc.want {
+						if got := ref.namesUserType(); got != tc.want {
 							t.Errorf("namesUserType(%s) in %q = %v, want %v", tc.name, tc.in, got, tc.want)
 						}
 					}
@@ -130,8 +130,8 @@ func TestCQLTypeRef(t *testing.T) {
 					t.Parallel()
 
 					var got []string
-					for _, ref := range InternalCqlTypeIdentifiers(tc.in) {
-						got = append(got, ref.InternalName)
+					for _, ref := range cqlTypeIdentifiers(tc.in) {
+						got = append(got, ref.name)
 					}
 					if !slices.Equal(got, tc.want) {
 						t.Errorf("cqlTypeIdentifiers(%q) = %q, want %q", tc.in, got, tc.want)
@@ -145,34 +145,34 @@ func TestCQLTypeRef(t *testing.T) {
 
 		for _, tc := range []struct {
 			name string
-			ref  InternalCqlTypeRef
+			ref  cqlTypeRef
 			want bool
 		}{
-			{"bare built-in is not a user type", InternalCqlTypeRef{InternalName: "text"}, false},
+			{"bare built-in is not a user type", cqlTypeRef{name: "text"}, false},
 			// A constructor name is only decisive when applied to arguments. Bare,
 			// it is available to a user type of that name -- which is what lets
 			// frozen<map> mean the user type map rather than a collection.
-			{"bare constructor name is available to a user type", InternalCqlTypeRef{InternalName: "frozen"}, true},
-			{"bare unknown name is a user type", InternalCqlTypeRef{InternalName: "addr"}, true},
+			{"bare constructor name is available to a user type", cqlTypeRef{name: "frozen"}, true},
+			{"bare unknown name is a user type", cqlTypeRef{name: "addr"}, true},
 			// frozen never wraps a scalar built-in, so its operand is a user type
 			// even when the name collides with one.
-			{"frozen operand is a user type", InternalCqlTypeRef{InternalName: "text", InternalFrozenOperand: true}, true},
+			{"frozen operand is a user type", cqlTypeRef{name: "text", frozenOperand: true}, true},
 			// The server only keeps quotes for names that need them, and never
 			// quotes a built-in.
-			{"quoted name is a user type", InternalCqlTypeRef{InternalName: "text", InternalQuoted: true}, true},
+			{"quoted name is a user type", cqlTypeRef{name: "text", quoted: true}, true},
 			// A constructor applied to arguments is never a user type, even as the
 			// operand of frozen -- frozen<map<...>> is a frozen collection.
 			{"parameterised constructor is not a user type",
-				InternalCqlTypeRef{InternalName: "map", InternalParameterised: true, InternalFrozenOperand: true}, false},
+				cqlTypeRef{name: "map", parameterised: true, frozenOperand: true}, false},
 			// Written without arguments the name is available to a user type.
 			{"bare constructor name as a frozen operand is a user type",
-				InternalCqlTypeRef{InternalName: "map", InternalFrozenOperand: true}, true},
-			{"vector is a constructor", InternalCqlTypeRef{InternalName: "vector", InternalParameterised: true}, false},
+				cqlTypeRef{name: "map", frozenOperand: true}, true},
+			{"vector is a constructor", cqlTypeRef{name: "vector", parameterised: true}, false},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
 
-				if got := tc.ref.InternalNamesUserType(); got != tc.want {
+				if got := tc.ref.namesUserType(); got != tc.want {
 					t.Errorf("namesUserType(%+v) = %v, want %v", tc.ref, got, tc.want)
 				}
 			})

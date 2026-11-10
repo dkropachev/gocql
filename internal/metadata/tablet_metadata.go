@@ -12,7 +12,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
-type InternalV2ScyllaKeyspaceRow struct {
+type v2ScyllaKeyspaceRow struct {
 	name, consistency string
 	initial           int32
 }
@@ -24,10 +24,10 @@ func InternalReadV2ScyllaKeyspaces(ctx context.Context, s Source, keyspaces map[
 	if !settings.Scylla {
 		return nil
 	}
-	decoder := InternalV2SchemaRows[InternalV2ScyllaKeyspaceRow]{initialize: func() *InternalV2ScyllaKeyspaceRow { return &InternalV2ScyllaKeyspaceRow{initial: -1} }, InternalFields: []InternalV2SchemaField[InternalV2ScyllaKeyspaceRow]{
-		InternalV2RequiredSchemaColumn("keyspace_name", InternalV2MetadataText{}, func(r *InternalV2ScyllaKeyspaceRow) *string { return &r.name }),
-		InternalV2SchemaColumn("initial_tablets", codec.Int32, func(r *InternalV2ScyllaKeyspaceRow) *int32 { return &r.initial }),
-		InternalV2SchemaColumn("consistency", InternalV2MetadataText{}, func(r *InternalV2ScyllaKeyspaceRow) *string { return &r.consistency }),
+	decoder := InternalV2SchemaRows[v2ScyllaKeyspaceRow]{initialize: func() *v2ScyllaKeyspaceRow { return &v2ScyllaKeyspaceRow{initial: -1} }, InternalFields: []InternalV2SchemaField[v2ScyllaKeyspaceRow]{
+		InternalV2RequiredSchemaColumn("keyspace_name", InternalV2MetadataText{}, func(r *v2ScyllaKeyspaceRow) *string { return &r.name }),
+		InternalV2SchemaColumn("initial_tablets", codec.Int32, func(r *v2ScyllaKeyspaceRow) *int32 { return &r.initial }),
+		InternalV2SchemaColumn("consistency", InternalV2MetadataText{}, func(r *v2ScyllaKeyspaceRow) *string { return &r.consistency }),
 	}}
 	stmt := `SELECT * FROM system_schema.scylla_keyspaces`
 	var args []string

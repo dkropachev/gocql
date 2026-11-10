@@ -24,7 +24,7 @@ import (
 func cloneV2Any(v any) any {
 	switch x := v.(type) {
 	case map[string]any:
-		return InternalCloneV2AnyMap(x)
+		return cloneV2AnyMap(x)
 	case map[string]string:
 		return maps.Clone(x)
 	case []byte:
@@ -53,7 +53,7 @@ func cloneV2Extensions(m map[string][]byte) map[string][]byte {
 	}
 	return r
 }
-func InternalCloneV2AnyMap(m map[string]any) map[string]any {
+func cloneV2AnyMap(m map[string]any) map[string]any {
 	if m == nil {
 		return nil
 	}
@@ -68,7 +68,7 @@ func cloneV2Column(c *ColumnMetadata) *ColumnMetadata {
 		return nil
 	}
 	r := *c
-	r.Index.Options = InternalCloneV2AnyMap(c.Index.Options)
+	r.Index.Options = cloneV2AnyMap(c.Index.Options)
 	return &r
 }
 func cloneV2Columns(c map[string]*ColumnMetadata) map[string]*ColumnMetadata {
@@ -290,7 +290,7 @@ type InternalV2SchemaRows[R any] struct {
 	initialize     func() *R
 	InternalFields []InternalV2SchemaField[R]
 }
-type InternalV2SchemaRowPlan[R any] struct {
+type v2SchemaRowPlan[R any] struct {
 	initialize func() *R
 	steps      []func(*R, *codec.RowReader) error
 }
@@ -326,10 +326,10 @@ func (d InternalV2SchemaRows[R]) Compile(columns cqltype.Columns) (codec.RowPlan
 			return nil, cqltype.TypeValidation("schema row", "missing column %q", f.name)
 		}
 	}
-	return InternalV2SchemaRowPlan[R]{steps: steps, initialize: d.initialize}, nil
+	return v2SchemaRowPlan[R]{steps: steps, initialize: d.initialize}, nil
 }
 func (d InternalV2SchemaRows[R]) Clone(v R) R { return v }
-func (p InternalV2SchemaRowPlan[R]) Decode(reader *codec.RowReader) (R, error) {
+func (p v2SchemaRowPlan[R]) Decode(reader *codec.RowReader) (R, error) {
 	var result R
 	err := p.DecodeInto(reader, &result)
 	if err != nil {
@@ -337,7 +337,7 @@ func (p InternalV2SchemaRowPlan[R]) Decode(reader *codec.RowReader) (R, error) {
 	}
 	return result, nil
 }
-func (p InternalV2SchemaRowPlan[R]) DecodeInto(reader *codec.RowReader, dst *R) error {
+func (p v2SchemaRowPlan[R]) DecodeInto(reader *codec.RowReader, dst *R) error {
 	if dst == nil {
 		return cqltype.TypeValidation("destination", "nil schema row destination")
 	}
@@ -353,7 +353,7 @@ func (p InternalV2SchemaRowPlan[R]) DecodeInto(reader *codec.RowReader, dst *R) 
 	}
 	return nil
 }
-func (p InternalV2SchemaRowPlan[R]) Clone(v R) R { return v }
+func (p v2SchemaRowPlan[R]) Clone(v R) R { return v }
 
 type InternalV2MetadataText struct{}
 
@@ -361,26 +361,26 @@ type InternalV2MetadataUUIDString struct{}
 
 type InternalV2MetadataInt struct{}
 
-type InternalV2MetadataKind struct{}
+type v2MetadataKind struct{}
 
-type InternalV2MetadataStrings struct{}
+type v2MetadataStrings struct{}
 
-type InternalV2MetadataStringMap struct{}
+type v2MetadataStringMap struct{}
 
-type InternalV2MetadataExtensions struct{}
+type v2MetadataExtensions struct{}
 
-type InternalV2SchemaParams struct{ count int }
+type v2SchemaParams struct{ count int }
 
-func (InternalV2SchemaParams) Compile(columns cqltype.Columns) (codec.ParamPlan[[]string], error) {
+func (v2SchemaParams) Compile(columns cqltype.Columns) (codec.ParamPlan[[]string], error) {
 	for i := 0; i < columns.Len(); i++ {
 		c, _ := columns.At(i)
 		if err := codec.StringEncoder.CheckType(c.Type); err != nil {
 			return nil, err
 		}
 	}
-	return InternalV2SchemaParams{count: columns.Len()}, nil
+	return v2SchemaParams{count: columns.Len()}, nil
 }
-func (p InternalV2SchemaParams) Encode(w *codec.ParamWriter, values []string) error {
+func (p v2SchemaParams) Encode(w *codec.ParamWriter, values []string) error {
 	if len(values) != p.count {
 		return cqltype.TypeValidation("schema parameters", "wrong count")
 	}
@@ -408,8 +408,8 @@ func InternalQueryV2SchemaRows[R any](ctx context.Context, s Source, stmt string
 	for i := range columns {
 		columns[i] = cqltype.ColumnSpec{Type: typ}
 	}
-	rows, err := ReadRows(ctx, 4, settings.Timeout, s.InternalQuerySystem, Query[[]string, R]{CQL: stmt, Params: InternalV2SchemaParams{}, Rows: decoder}, cqltype.NewColumns(columns...), args)
-	return rows, InternalWrapV2SchemaQueryError(stmt, err)
+	rows, err := ReadRows(ctx, 4, settings.Timeout, s.InternalQuerySystem, Query[[]string, R]{CQL: stmt, Params: v2SchemaParams{}, Rows: decoder}, cqltype.NewColumns(columns...), args)
+	return rows, wrapV2SchemaQueryError(stmt, err)
 }
 
 func InternalV2SchemaContext(s Source) context.Context {
@@ -419,17 +419,17 @@ func InternalV2SchemaContext(s Source) context.Context {
 	return context.Background()
 }
 
-func InternalV2DecodeTableMetadata(keyspace string) codec.RowDecoder[TableMetadata] {
+func v2DecodeTableMetadata(keyspace string) codec.RowDecoder[TableMetadata] {
 	return InternalV2SchemaRows[TableMetadata]{initialize: func() *TableMetadata { return &TableMetadata{Keyspace: keyspace} }, InternalFields: []InternalV2SchemaField[TableMetadata]{
 		InternalV2RequiredSchemaColumn("id", InternalV2MetadataUUIDString{}, func(r *TableMetadata) *string { return &r.ID }),
 		InternalV2RequiredSchemaColumn("table_name", InternalV2MetadataText{}, func(r *TableMetadata) *string { return &r.Name }),
-		InternalV2SchemaColumn("flags", InternalV2MetadataStrings{}, func(r *TableMetadata) *[]string { return &r.Flags }),
-		InternalV2SchemaColumn("extensions", InternalV2MetadataExtensions{}, func(r *TableMetadata) *map[string][]byte { return &r.Extensions }),
+		InternalV2SchemaColumn("flags", v2MetadataStrings{}, func(r *TableMetadata) *[]string { return &r.Flags }),
+		InternalV2SchemaColumn("extensions", v2MetadataExtensions{}, func(r *TableMetadata) *map[string][]byte { return &r.Extensions }),
 		InternalV2SchemaColumn("bloom_filter_fp_chance", codec.Float64, func(r *TableMetadata) *float64 { return &r.Options.BloomFilterFpChance }),
-		InternalV2SchemaColumn("caching", InternalV2MetadataStringMap{}, func(r *TableMetadata) *map[string]string { return &r.Options.Caching }),
+		InternalV2SchemaColumn("caching", v2MetadataStringMap{}, func(r *TableMetadata) *map[string]string { return &r.Options.Caching }),
 		InternalV2SchemaColumn("comment", InternalV2MetadataText{}, func(r *TableMetadata) *string { return &r.Options.Comment }),
-		InternalV2SchemaColumn("compaction", InternalV2MetadataStringMap{}, func(r *TableMetadata) *map[string]string { return &r.Options.Compaction }),
-		InternalV2SchemaColumn("compression", InternalV2MetadataStringMap{}, func(r *TableMetadata) *map[string]string { return &r.Options.Compression }),
+		InternalV2SchemaColumn("compaction", v2MetadataStringMap{}, func(r *TableMetadata) *map[string]string { return &r.Options.Compaction }),
+		InternalV2SchemaColumn("compression", v2MetadataStringMap{}, func(r *TableMetadata) *map[string]string { return &r.Options.Compression }),
 		InternalV2SchemaColumn("crc_check_chance", codec.Float64, func(r *TableMetadata) *float64 { return &r.Options.CrcCheckChance }),
 		InternalV2SchemaColumn("default_time_to_live", InternalV2MetadataInt{}, func(r *TableMetadata) *int { return &r.Options.DefaultTimeToLive }),
 		InternalV2SchemaColumn("gc_grace_seconds", InternalV2MetadataInt{}, func(r *TableMetadata) *int { return &r.Options.GcGraceSeconds }),
@@ -440,13 +440,13 @@ func InternalV2DecodeTableMetadata(keyspace string) codec.RowDecoder[TableMetada
 	}}
 }
 
-func InternalV2DecodeColumnMetadata(keyspace string) codec.RowDecoder[ColumnMetadata] {
+func v2DecodeColumnMetadata(keyspace string) codec.RowDecoder[ColumnMetadata] {
 	return InternalV2SchemaRows[ColumnMetadata]{initialize: func() *ColumnMetadata { return &ColumnMetadata{Keyspace: keyspace} }, InternalFields: []InternalV2SchemaField[ColumnMetadata]{
 		InternalV2RequiredSchemaColumn("table_name", InternalV2MetadataText{}, func(r *ColumnMetadata) *string { return &r.Table }),
 		InternalV2RequiredSchemaColumn("column_name", InternalV2MetadataText{}, func(r *ColumnMetadata) *string { return &r.Name }),
 		InternalV2SchemaColumn("clustering_order", InternalV2MetadataText{}, func(r *ColumnMetadata) *string { return &r.ClusteringOrder }),
 		InternalV2RequiredSchemaColumn("type", InternalV2MetadataText{}, func(r *ColumnMetadata) *string { return &r.Type }),
-		InternalV2RequiredSchemaColumn("kind", InternalV2MetadataKind{}, func(r *ColumnMetadata) *ColumnKind { return &r.Kind }),
+		InternalV2RequiredSchemaColumn("kind", v2MetadataKind{}, func(r *ColumnMetadata) *ColumnKind { return &r.Kind }),
 		InternalV2RequiredSchemaColumn("position", InternalV2MetadataInt{}, func(r *ColumnMetadata) *int { return &r.ComponentIndex }),
 	}}
 }
@@ -454,16 +454,16 @@ func InternalV2DecodeColumnMetadata(keyspace string) codec.RowDecoder[ColumnMeta
 func InternalV2DecodeTypeMetadata(keyspace string) codec.RowDecoder[TypeMetadata] {
 	return InternalV2SchemaRows[TypeMetadata]{initialize: func() *TypeMetadata { return &TypeMetadata{Keyspace: keyspace} }, InternalFields: []InternalV2SchemaField[TypeMetadata]{
 		InternalV2RequiredSchemaColumn("type_name", InternalV2MetadataText{}, func(r *TypeMetadata) *string { return &r.Name }),
-		InternalV2RequiredSchemaColumn("field_names", InternalV2MetadataStrings{}, func(r *TypeMetadata) *[]string { return &r.FieldNames }),
-		InternalV2RequiredSchemaColumn("field_types", InternalV2MetadataStrings{}, func(r *TypeMetadata) *[]string { return &r.FieldTypes }),
+		InternalV2RequiredSchemaColumn("field_names", v2MetadataStrings{}, func(r *TypeMetadata) *[]string { return &r.FieldNames }),
+		InternalV2RequiredSchemaColumn("field_types", v2MetadataStrings{}, func(r *TypeMetadata) *[]string { return &r.FieldTypes }),
 	}}
 }
 
 func InternalV2DecodeFunctionMetadata(keyspace string) codec.RowDecoder[FunctionMetadata] {
 	return InternalV2SchemaRows[FunctionMetadata]{initialize: func() *FunctionMetadata { return &FunctionMetadata{Keyspace: keyspace} }, InternalFields: []InternalV2SchemaField[FunctionMetadata]{
 		InternalV2RequiredSchemaColumn("function_name", InternalV2MetadataText{}, func(r *FunctionMetadata) *string { return &r.Name }),
-		InternalV2RequiredSchemaColumn("argument_types", InternalV2MetadataStrings{}, func(r *FunctionMetadata) *[]string { return &r.ArgumentTypes }),
-		InternalV2RequiredSchemaColumn("argument_names", InternalV2MetadataStrings{}, func(r *FunctionMetadata) *[]string { return &r.ArgumentNames }),
+		InternalV2RequiredSchemaColumn("argument_types", v2MetadataStrings{}, func(r *FunctionMetadata) *[]string { return &r.ArgumentTypes }),
+		InternalV2RequiredSchemaColumn("argument_names", v2MetadataStrings{}, func(r *FunctionMetadata) *[]string { return &r.ArgumentNames }),
 		InternalV2RequiredSchemaColumn("body", InternalV2MetadataText{}, func(r *FunctionMetadata) *string { return &r.Body }),
 		InternalV2RequiredSchemaColumn("called_on_null_input", codec.Bool, func(r *FunctionMetadata) *bool { return &r.CalledOnNullInput }),
 		InternalV2RequiredSchemaColumn("language", InternalV2MetadataText{}, func(r *FunctionMetadata) *string { return &r.Language }),
@@ -474,7 +474,7 @@ func InternalV2DecodeFunctionMetadata(keyspace string) codec.RowDecoder[Function
 func InternalV2DecodeAggregateMetadata(keyspace string) codec.RowDecoder[AggregateMetadata] {
 	return InternalV2SchemaRows[AggregateMetadata]{initialize: func() *AggregateMetadata { return &AggregateMetadata{Keyspace: keyspace} }, InternalFields: []InternalV2SchemaField[AggregateMetadata]{
 		InternalV2RequiredSchemaColumn("aggregate_name", InternalV2MetadataText{}, func(r *AggregateMetadata) *string { return &r.Name }),
-		InternalV2RequiredSchemaColumn("argument_types", InternalV2MetadataStrings{}, func(r *AggregateMetadata) *[]string { return &r.ArgumentTypes }),
+		InternalV2RequiredSchemaColumn("argument_types", v2MetadataStrings{}, func(r *AggregateMetadata) *[]string { return &r.ArgumentTypes }),
 		InternalV2SchemaColumn("final_func", InternalV2MetadataText{}, func(r *AggregateMetadata) *string { return &r.privateStorage.InternalFinalFunc }),
 		InternalV2SchemaColumn("initcond", InternalV2MetadataText{}, func(r *AggregateMetadata) *string { return &r.InitCond }),
 		InternalV2RequiredSchemaColumn("return_type", InternalV2MetadataText{}, func(r *AggregateMetadata) *string { return &r.ReturnType }),
@@ -483,17 +483,17 @@ func InternalV2DecodeAggregateMetadata(keyspace string) codec.RowDecoder[Aggrega
 	}}
 }
 
-func InternalV2DecodeIndexMetadata(keyspace string) codec.RowDecoder[IndexMetadata] {
+func v2DecodeIndexMetadata(keyspace string) codec.RowDecoder[IndexMetadata] {
 	return InternalV2SchemaRows[IndexMetadata]{initialize: func() *IndexMetadata { return &IndexMetadata{KeyspaceName: keyspace} }, InternalFields: []InternalV2SchemaField[IndexMetadata]{
 		InternalV2RequiredSchemaColumn("index_name", InternalV2MetadataText{}, func(r *IndexMetadata) *string { return &r.Name }),
 		InternalV2RequiredSchemaColumn("keyspace_name", InternalV2MetadataText{}, func(r *IndexMetadata) *string { return &r.KeyspaceName }),
 		InternalV2RequiredSchemaColumn("table_name", InternalV2MetadataText{}, func(r *IndexMetadata) *string { return &r.TableName }),
 		InternalV2RequiredSchemaColumn("kind", InternalV2MetadataText{}, func(r *IndexMetadata) *string { return &r.Kind }),
-		InternalV2RequiredSchemaColumn("options", InternalV2MetadataStringMap{}, func(r *IndexMetadata) *map[string]string { return &r.Options }),
+		InternalV2RequiredSchemaColumn("options", v2MetadataStringMap{}, func(r *IndexMetadata) *map[string]string { return &r.Options }),
 	}}
 }
 
-func InternalV2DecodeViewMetadata(keyspace string) codec.RowDecoder[ViewMetadata] {
+func v2DecodeViewMetadata(keyspace string) codec.RowDecoder[ViewMetadata] {
 	return InternalV2SchemaRows[ViewMetadata]{initialize: func() *ViewMetadata { return &ViewMetadata{KeyspaceName: keyspace} }, InternalFields: []InternalV2SchemaField[ViewMetadata]{
 		InternalV2RequiredSchemaColumn("id", InternalV2MetadataUUIDString{}, func(r *ViewMetadata) *string { return &r.ID }),
 		InternalV2RequiredSchemaColumn("view_name", InternalV2MetadataText{}, func(r *ViewMetadata) *string { return &r.ViewName }),
@@ -501,14 +501,14 @@ func InternalV2DecodeViewMetadata(keyspace string) codec.RowDecoder[ViewMetadata
 		InternalV2RequiredSchemaColumn("base_table_name", InternalV2MetadataText{}, func(r *ViewMetadata) *string { return &r.BaseTableName }),
 		InternalV2RequiredSchemaColumn("include_all_columns", codec.Bool, func(r *ViewMetadata) *bool { return &r.IncludeAllColumns }),
 		InternalV2RequiredSchemaColumn("where_clause", InternalV2MetadataText{}, func(r *ViewMetadata) *string { return &r.WhereClause }),
-		InternalV2SchemaColumn("extensions", InternalV2MetadataExtensions{}, func(r *ViewMetadata) *map[string][]byte { return &r.Extensions }),
+		InternalV2SchemaColumn("extensions", v2MetadataExtensions{}, func(r *ViewMetadata) *map[string][]byte { return &r.Extensions }),
 		InternalV2SchemaColumn("dclocal_read_repair_chance", codec.Float64, func(r *ViewMetadata) *float64 { return &r.DcLocalReadRepairChance }),
 		InternalV2SchemaColumn("read_repair_chance", codec.Float64, func(r *ViewMetadata) *float64 { return &r.ReadRepairChance }),
 		InternalV2SchemaColumn("bloom_filter_fp_chance", codec.Float64, func(r *ViewMetadata) *float64 { return &r.Options.BloomFilterFpChance }),
-		InternalV2SchemaColumn("caching", InternalV2MetadataStringMap{}, func(r *ViewMetadata) *map[string]string { return &r.Options.Caching }),
+		InternalV2SchemaColumn("caching", v2MetadataStringMap{}, func(r *ViewMetadata) *map[string]string { return &r.Options.Caching }),
 		InternalV2SchemaColumn("comment", InternalV2MetadataText{}, func(r *ViewMetadata) *string { return &r.Options.Comment }),
-		InternalV2SchemaColumn("compaction", InternalV2MetadataStringMap{}, func(r *ViewMetadata) *map[string]string { return &r.Options.Compaction }),
-		InternalV2SchemaColumn("compression", InternalV2MetadataStringMap{}, func(r *ViewMetadata) *map[string]string { return &r.Options.Compression }),
+		InternalV2SchemaColumn("compaction", v2MetadataStringMap{}, func(r *ViewMetadata) *map[string]string { return &r.Options.Compaction }),
+		InternalV2SchemaColumn("compression", v2MetadataStringMap{}, func(r *ViewMetadata) *map[string]string { return &r.Options.Compression }),
 		InternalV2SchemaColumn("crc_check_chance", codec.Float64, func(r *ViewMetadata) *float64 { return &r.Options.CrcCheckChance }),
 		InternalV2SchemaColumn("default_time_to_live", InternalV2MetadataInt{}, func(r *ViewMetadata) *int { return &r.Options.DefaultTimeToLive }),
 		InternalV2SchemaColumn("gc_grace_seconds", InternalV2MetadataInt{}, func(r *ViewMetadata) *int { return &r.Options.GcGraceSeconds }),
@@ -519,30 +519,30 @@ func InternalV2DecodeViewMetadata(keyspace string) codec.RowDecoder[ViewMetadata
 	}}
 }
 
-type InternalV2ScyllaTableRow struct {
+type v2ScyllaTableRow struct {
 	Name    string
 	Options TableMetadataOptions
 }
 
-func InternalV2DecodeScyllaTable() codec.RowDecoder[InternalV2ScyllaTableRow] {
-	return InternalV2SchemaRows[InternalV2ScyllaTableRow]{InternalFields: []InternalV2SchemaField[InternalV2ScyllaTableRow]{InternalV2RequiredSchemaColumn("table_name", InternalV2MetadataText{}, func(r *InternalV2ScyllaTableRow) *string { return &r.Name }),
-		InternalV2SchemaColumn("cdc", InternalV2MetadataStringMap{}, func(r *InternalV2ScyllaTableRow) *map[string]string { return &r.Options.CDC }),
-		InternalV2SchemaColumn("in_memory", codec.Bool, func(r *InternalV2ScyllaTableRow) *bool { return &r.Options.InMemory }),
-		InternalV2SchemaColumn("partitioner", InternalV2MetadataText{}, func(r *InternalV2ScyllaTableRow) *string { return &r.Options.Partitioner }),
-		InternalV2SchemaColumn("version", InternalV2MetadataUUIDString{}, func(r *InternalV2ScyllaTableRow) *string { return &r.Options.Version }),
+func v2DecodeScyllaTable() codec.RowDecoder[v2ScyllaTableRow] {
+	return InternalV2SchemaRows[v2ScyllaTableRow]{InternalFields: []InternalV2SchemaField[v2ScyllaTableRow]{InternalV2RequiredSchemaColumn("table_name", InternalV2MetadataText{}, func(r *v2ScyllaTableRow) *string { return &r.Name }),
+		InternalV2SchemaColumn("cdc", v2MetadataStringMap{}, func(r *v2ScyllaTableRow) *map[string]string { return &r.Options.CDC }),
+		InternalV2SchemaColumn("in_memory", codec.Bool, func(r *v2ScyllaTableRow) *bool { return &r.Options.InMemory }),
+		InternalV2SchemaColumn("partitioner", InternalV2MetadataText{}, func(r *v2ScyllaTableRow) *string { return &r.Options.Partitioner }),
+		InternalV2SchemaColumn("version", InternalV2MetadataUUIDString{}, func(r *v2ScyllaTableRow) *string { return &r.Options.Version }),
 	}}
 }
 
-type InternalV2KeyspaceRow struct {
+type v2KeyspaceRow struct {
 	replication  map[string]string
 	InternalName string
 	durable      bool
 }
 
-func InternalV2DecodeKeyspace() codec.RowDecoder[InternalV2KeyspaceRow] {
-	return InternalV2SchemaRows[InternalV2KeyspaceRow]{InternalFields: []InternalV2SchemaField[InternalV2KeyspaceRow]{InternalV2SchemaColumn("keyspace_name", InternalV2MetadataText{}, func(r *InternalV2KeyspaceRow) *string { return &r.InternalName }), InternalV2RequiredSchemaColumn("durable_writes", codec.Bool, func(r *InternalV2KeyspaceRow) *bool { return &r.durable }), InternalV2RequiredSchemaColumn("replication", InternalV2MetadataStringMap{}, func(r *InternalV2KeyspaceRow) *map[string]string { return &r.replication })}}
+func InternalV2DecodeKeyspace() codec.RowDecoder[v2KeyspaceRow] {
+	return InternalV2SchemaRows[v2KeyspaceRow]{InternalFields: []InternalV2SchemaField[v2KeyspaceRow]{InternalV2SchemaColumn("keyspace_name", InternalV2MetadataText{}, func(r *v2KeyspaceRow) *string { return &r.InternalName }), InternalV2RequiredSchemaColumn("durable_writes", codec.Bool, func(r *v2KeyspaceRow) *bool { return &r.durable }), InternalV2RequiredSchemaColumn("replication", v2MetadataStringMap{}, func(r *v2KeyspaceRow) *map[string]string { return &r.replication })}}
 }
-func InternalV2KeyspaceFromRow(name string, row InternalV2KeyspaceRow) *KeyspaceMetadata {
+func InternalV2KeyspaceFromRow(name string, row v2KeyspaceRow) *KeyspaceMetadata {
 	ks := &KeyspaceMetadata{Name: name, DurableWrites: row.durable, StrategyClass: row.replication["class"], StrategyOptions: make(map[string]string, len(row.replication))}
 	for k, v := range row.replication {
 		if k != "class" {
@@ -575,14 +575,14 @@ func InternalGetV2TableMetadata(ctx context.Context, s Source, keyspace, table s
 		where += ` AND table_name = ?`
 		args = append(args, table)
 	}
-	rows, err := InternalQueryV2SchemaRows(ctx, s, `SELECT * FROM system_schema.tables`+where, args, InternalV2DecodeTableMetadata(keyspace))
+	rows, err := InternalQueryV2SchemaRows(ctx, s, `SELECT * FROM system_schema.tables`+where, args, v2DecodeTableMetadata(keyspace))
 	if err != nil {
 		return nil, err
 	}
 	if !s.InternalSchemaSettings().Scylla {
 		return rows, nil
 	}
-	extra, err := InternalQueryV2SchemaRows(ctx, s, `SELECT * FROM system_schema.scylla_tables`+where, args, InternalV2DecodeScyllaTable())
+	extra, err := InternalQueryV2SchemaRows(ctx, s, `SELECT * FROM system_schema.scylla_tables`+where, args, v2DecodeScyllaTable())
 	if err != nil {
 		return nil, err
 	}
@@ -610,7 +610,7 @@ func InternalGetV2ColumnMetadata(ctx context.Context, s Source, keyspace, table 
 		where += ` AND table_name = ?`
 		args = append(args, table)
 	}
-	return InternalQueryV2SchemaRows(ctx, s, `SELECT `+InternalColumnMetadataColumns+` FROM system_schema.columns`+where, args, InternalV2DecodeColumnMetadata(keyspace))
+	return InternalQueryV2SchemaRows(ctx, s, `SELECT `+InternalColumnMetadataColumns+` FROM system_schema.columns`+where, args, v2DecodeColumnMetadata(keyspace))
 }
 func InternalGetV2IndexMetadata(ctx context.Context, s Source, keyspace, table string) ([]IndexMetadata, error) {
 	where := ` WHERE keyspace_name = ?`
@@ -619,7 +619,7 @@ func InternalGetV2IndexMetadata(ctx context.Context, s Source, keyspace, table s
 		where += ` AND table_name = ?`
 		args = append(args, table)
 	}
-	return InternalQueryV2SchemaRows(ctx, s, `SELECT * FROM system_schema.indexes`+where, args, InternalV2DecodeIndexMetadata(keyspace))
+	return InternalQueryV2SchemaRows(ctx, s, `SELECT * FROM system_schema.indexes`+where, args, v2DecodeIndexMetadata(keyspace))
 }
 func InternalGetV2ViewMetadata(ctx context.Context, s Source, keyspace, table string) ([]ViewMetadata, error) {
 	where := ` WHERE keyspace_name = ?`
@@ -628,7 +628,7 @@ func InternalGetV2ViewMetadata(ctx context.Context, s Source, keyspace, table st
 		where += ` AND base_table_name = ? ALLOW FILTERING`
 		args = append(args, table)
 	}
-	return InternalQueryV2SchemaRows(ctx, s, `SELECT * FROM system_schema.views`+where, args, InternalV2DecodeViewMetadata(keyspace))
+	return InternalQueryV2SchemaRows(ctx, s, `SELECT * FROM system_schema.views`+where, args, v2DecodeViewMetadata(keyspace))
 }
 func InternalGetV2CreateStatements(ctx context.Context, s Source, keyspace string) ([]byte, error) {
 	decoder := InternalV2SchemaRows[string]{InternalFields: []InternalV2SchemaField[string]{InternalV2RequiredSchemaColumn("create_statement", InternalV2MetadataText{}, func(s *string) *string { return s })}}
@@ -682,7 +682,7 @@ func InternalFetchV2Keyspace(ctx context.Context, s Source, base *KeyspaceMetada
 	if err := InternalValidateV2SchemaParts(base, tables, columns, types, functions, aggregates, indexes, views, s.InternalSchemaSettings().Depth); err != nil {
 		return nil, err
 	}
-	InternalCompileMetadata(base, tables, columns, functions, aggregates, types, indexes, views, create)
+	compileMetadata(base, tables, columns, functions, aggregates, types, indexes, views, create)
 	return base, nil
 }
 
@@ -750,7 +750,7 @@ func InternalValidateV2SchemaParts(ks *KeyspaceMetadata, tables []TableMetadata,
 			return err
 		}
 		for _, typ := range v.FieldTypes {
-			refs, err := InternalValidateV2CQLTypeLimit(ks.Name, typ, udts, maxDepth)
+			refs, err := validateV2CQLTypeLimit(ks.Name, typ, udts, maxDepth)
 			if err != nil {
 				return err
 			}
@@ -791,7 +791,7 @@ func InternalValidateV2SchemaParts(ks *KeyspaceMetadata, tables []TableMetadata,
 			return cqltype.TypeValidation("schema column", "duplicate or empty identity %q.%q", v.Table, v.Name)
 		}
 		identities[identity] = true
-		if _, err := InternalValidateV2CQLTypeLimit(ks.Name, v.Type, udts, maxDepth); err != nil {
+		if _, err := validateV2CQLTypeLimit(ks.Name, v.Type, udts, maxDepth); err != nil {
 			return err
 		}
 		if v.Kind == ColumnPartitionKey || v.Kind == ColumnClusteringKey {
@@ -826,12 +826,12 @@ func InternalValidateV2SchemaParts(ks *KeyspaceMetadata, tables []TableMetadata,
 	}
 	names = nil
 	for _, v := range functions {
-		names = append(names, InternalV2FunctionIdentity(v.Name, v.ArgumentTypes))
+		names = append(names, v2FunctionIdentity(v.Name, v.ArgumentTypes))
 		if len(v.ArgumentNames) != len(v.ArgumentTypes) {
 			return cqltype.TypeValidation("schema function", "argument count mismatch for %q", v.Name)
 		}
 		for _, typ := range append(append([]string(nil), v.ArgumentTypes...), v.ReturnType) {
-			if _, err := InternalValidateV2CQLTypeLimit(ks.Name, typ, udts, maxDepth); err != nil {
+			if _, err := validateV2CQLTypeLimit(ks.Name, typ, udts, maxDepth); err != nil {
 				return err
 			}
 		}
@@ -841,25 +841,25 @@ func InternalValidateV2SchemaParts(ks *KeyspaceMetadata, tables []TableMetadata,
 	}
 	names = nil
 	for _, v := range aggregates {
-		names = append(names, InternalV2FunctionIdentity(v.Name, v.ArgumentTypes))
-		if InternalResolveV2Function(functions, v.privateStorage.InternalStateFunc, append([]string{v.StateType}, v.ArgumentTypes...)) == nil {
+		names = append(names, v2FunctionIdentity(v.Name, v.ArgumentTypes))
+		if resolveV2Function(functions, v.privateStorage.InternalStateFunc, append([]string{v.StateType}, v.ArgumentTypes...)) == nil {
 			return cqltype.TypeValidation("schema aggregate", "unknown state function %q", v.privateStorage.InternalStateFunc)
 		}
-		if v.privateStorage.InternalFinalFunc != "" && InternalResolveV2Function(functions, v.privateStorage.InternalFinalFunc, []string{v.StateType}) == nil {
+		if v.privateStorage.InternalFinalFunc != "" && resolveV2Function(functions, v.privateStorage.InternalFinalFunc, []string{v.StateType}) == nil {
 			return cqltype.TypeValidation("schema aggregate", "unknown final function %q", v.privateStorage.InternalFinalFunc)
 		}
 		for _, typ := range append(append([]string(nil), v.ArgumentTypes...), v.StateType, v.ReturnType) {
-			if _, err := InternalValidateV2CQLTypeLimit(ks.Name, typ, udts, maxDepth); err != nil {
+			if _, err := validateV2CQLTypeLimit(ks.Name, typ, udts, maxDepth); err != nil {
 				return err
 			}
 		}
 	}
 	return unique("aggregate", names)
 }
-func InternalV2FunctionIdentity(name string, args []string) string {
+func v2FunctionIdentity(name string, args []string) string {
 	return name + "(" + strings.Join(args, ",") + ")"
 }
-func InternalResolveV2Function(functions []FunctionMetadata, name string, args []string) *FunctionMetadata {
+func resolveV2Function(functions []FunctionMetadata, name string, args []string) *FunctionMetadata {
 	for i := range functions {
 		f := &functions[i]
 		if f.Name != name || len(f.ArgumentTypes) != len(args) {
@@ -879,7 +879,7 @@ func InternalResolveV2Function(functions []FunctionMetadata, name string, args [
 	return nil
 }
 
-type InternalV2CQLTypeParser struct {
+type v2CQLTypeParser struct {
 	udts             map[string]bool
 	source, keyspace string
 	refs             []string
@@ -888,11 +888,11 @@ type InternalV2CQLTypeParser struct {
 }
 
 func InternalValidateV2CQLType(keyspace, source string, udts map[string]bool) ([]string, error) {
-	return InternalValidateV2CQLTypeLimit(keyspace, source, udts, 64)
+	return validateV2CQLTypeLimit(keyspace, source, udts, 64)
 }
-func InternalValidateV2CQLTypeLimit(keyspace, source string, udts map[string]bool, maxDepth int) ([]string, error) {
+func validateV2CQLTypeLimit(keyspace, source string, udts map[string]bool, maxDepth int) ([]string, error) {
 
-	p := InternalV2CQLTypeParser{source: source, keyspace: keyspace, udts: udts, maxDepth: maxDepth}
+	p := v2CQLTypeParser{source: source, keyspace: keyspace, udts: udts, maxDepth: maxDepth}
 	if err := p.parse(0, false); err != nil {
 		return nil, err
 	}
@@ -902,7 +902,7 @@ func InternalValidateV2CQLTypeLimit(keyspace, source string, udts map[string]boo
 	}
 	return p.refs, nil
 }
-func (p *InternalV2CQLTypeParser) space() {
+func (p *v2CQLTypeParser) space() {
 	for p.offset < len(p.source) {
 		switch p.source[p.offset] {
 		case ' ', '\t', '\r', '\n':
@@ -912,7 +912,7 @@ func (p *InternalV2CQLTypeParser) space() {
 		}
 	}
 }
-func (p *InternalV2CQLTypeParser) identifier() (string, bool, error) {
+func (p *v2CQLTypeParser) identifier() (string, bool, error) {
 	p.space()
 	start := p.offset
 	if start >= len(p.source) {
@@ -952,7 +952,7 @@ func (p *InternalV2CQLTypeParser) identifier() (string, bool, error) {
 	}
 	return strings.ToLower(p.source[start:p.offset]), false, nil
 }
-func (p *InternalV2CQLTypeParser) parse(depth int, frozen bool) error {
+func (p *v2CQLTypeParser) parse(depth int, frozen bool) error {
 	if depth >= p.maxDepth {
 		return cqltype.TypeValidation("schema type", "maximum nesting depth exceeded")
 	}
@@ -1040,7 +1040,7 @@ func (p *InternalV2CQLTypeParser) parse(depth int, frozen bool) error {
 		return nil
 	}
 	if !quoted && !frozen {
-		if _, ok := InternalCqlNativeTypes[name]; ok || name == "empty" {
+		if _, ok := cqlNativeTypes[name]; ok || name == "empty" {
 			return nil
 		}
 	}
@@ -1051,7 +1051,7 @@ func (p *InternalV2CQLTypeParser) parse(depth int, frozen bool) error {
 	return nil
 }
 
-func InternalWrapV2SchemaQueryError(statement string, err error) error {
+func wrapV2SchemaQueryError(statement string, err error) error {
 	if err == nil {
 		return nil
 	}
