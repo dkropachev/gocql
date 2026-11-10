@@ -30,8 +30,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/scylladb/gocql/v2/debounce"
 	"github.com/scylladb/gocql/v2/events"
+	"github.com/scylladb/gocql/v2/internal/debounce"
 
 	"github.com/scylladb/gocql/v2/internal/eventbus"
 )

@@ -37,7 +37,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/debug"
 	"github.com/scylladb/gocql/v2/tablets"
 
-	"github.com/scylladb/gocql/v2/debounce"
+	"github.com/scylladb/gocql/v2/internal/debounce"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	// interface to implement to receive the host information
 )
