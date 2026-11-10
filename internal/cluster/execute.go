@@ -15,6 +15,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
+// TypedGeneration returns the session's prepared-schema generation.
 func (s *Core) TypedGeneration() uint64 {
 	return sessionTypedSchemaGeneration(s)
 }

@@ -1095,6 +1095,11 @@ func (s *Core) StartV2SchemaRetry() {
 
 // typedSchemaGeneration deliberately excludes topology and tablet-cache updates.
 // Those changes must not invalidate every prepared statement.
+//
+// It stays out of line so that TypedGeneration, which every execution calls,
+// inlines into its callers.
+//
+//go:noinline
 func sessionTypedSchemaGeneration(s *Core) uint64 {
 	p := s.Peripheral()
 	if p == nil {
