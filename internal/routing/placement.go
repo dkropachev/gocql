@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	// Immutable AVL indices share every unaffected subtree. Neither an observation
 	// nor a routing plan may mutate a published node or replica slice.
@@ -143,7 +145,7 @@ var tabletObservationID atomic.Uint64
 
 type InternalTabletRange struct {
 	InternalSpan    TokenRange
-	InternalVersion Option[uint64]
+	InternalVersion cqltype.Option[uint64]
 	observation     uint64
 }
 type InternalTabletRangeTree = InternalPlacementTree[int64, *InternalTabletRange]
@@ -193,7 +195,7 @@ func InternalSameTabletObservation(a *InternalTabletRange, h tablets.TabletInfo)
 		return false
 	}
 	for i, t := range a.InternalSpan.Replicas {
-		if t.HostID != UUID(r[i].HostUUIDValue()) || !t.ShardID.Set || t.ShardID.Value != uint32(r[i].ShardID()) {
+		if t.HostID != cqltype.UUID(r[i].HostUUIDValue()) || !t.ShardID.Set || t.ShardID.Value != uint32(r[i].ShardID()) {
 			return false
 		}
 	}
@@ -211,7 +213,7 @@ func InternalUpdateTabletRange(root *InternalTabletRangeTree, h tablets.TabletIn
 	}
 	r := &InternalTabletRange{observation: tabletObservationID.Add(1), InternalSpan: TokenRange{Start: first, End: last, Replicas: make([]Target, len(h.ReplicasUnsafe()))}}
 	for i, replica := range h.ReplicasUnsafe() {
-		r.InternalSpan.Replicas[i] = Target{HostID: UUID(replica.HostUUIDValue()), ShardID: Option[uint32]{Value: uint32(replica.ShardID()), Set: true}}
+		r.InternalSpan.Replicas[i] = Target{HostID: cqltype.UUID(replica.HostUUIDValue()), ShardID: cqltype.Option[uint32]{Value: uint32(replica.ShardID()), Set: true}}
 	}
 	r.InternalVersion.Value, r.InternalVersion.Set = h.Version()
 	return InternalPlacementPut(root, last, r, InternalComparePlacementToken), true
@@ -260,7 +262,7 @@ type InternalTabletLookup struct {
 }
 
 // InternalLookupTablet finds the tablet holding info's token in m.
-func InternalLookupTablet(m *MetadataSnapshot, info RoutingInfo) InternalTabletLookup {
+func InternalLookupTablet(m *MetadataSnapshot, info model.RoutingInfo) InternalTabletLookup {
 	l := InternalTabletLookup{done: true}
 	if m == nil || info.Table == "" || info.Keyspace == "" || !info.Token.Set {
 		return l
@@ -292,7 +294,7 @@ type placementCacheEntry struct {
 
 // InternalLookupTabletCached is InternalLookupTablet for a statement whose
 // keyspace and table are fixed, finding their placement through c.
-func InternalLookupTabletCached(m *MetadataSnapshot, info RoutingInfo, c *InternalPlacementCache) InternalTabletLookup {
+func InternalLookupTabletCached(m *MetadataSnapshot, info model.RoutingInfo, c *InternalPlacementCache) InternalTabletLookup {
 	l := InternalTabletLookup{done: true}
 	if m == nil || info.Table == "" || info.Keyspace == "" || !info.Token.Set {
 		return l
@@ -320,7 +322,7 @@ func InternalLookupTabletCached(m *MetadataSnapshot, info RoutingInfo, c *Intern
 // VersionBlock returns the tablet version block a request with lookup l
 // sends: a random nibble of the tablet's version and its index, or a random
 // byte when the tablet or its version is unknown.
-func (l *InternalTabletLookup) VersionBlock(info RoutingInfo) byte {
+func (l *InternalTabletLookup) VersionBlock(info model.RoutingInfo) byte {
 	if info.Table == "" || info.Keyspace == "" || !info.Token.Set {
 		return 0
 	}
@@ -331,14 +333,14 @@ func (l *InternalTabletLookup) VersionBlock(info RoutingInfo) byte {
 	return byte(rand.Uint32())
 }
 
-func InternalMetadataSnapshotTabletVersionBlock(m *MetadataSnapshot, info RoutingInfo) byte {
+func InternalMetadataSnapshotTabletVersionBlock(m *MetadataSnapshot, info model.RoutingInfo) byte {
 	l := InternalLookupTablet(m, info)
 	return l.VersionBlock(info)
 }
 
 // placementReplicas is a private borrowed view; public accessors detach it.
 func (m *MetadataSnapshot) placementReplicas(keyspace, table string, token int64) ([]Target, *InternalTabletRange) {
-	l := InternalLookupTablet(m, RoutingInfo{Keyspace: keyspace, Table: table, Token: Option[int64]{Value: token, Set: true}})
+	l := InternalLookupTablet(m, model.RoutingInfo{Keyspace: keyspace, Table: table, Token: cqltype.Option[int64]{Value: token, Set: true}})
 	return m.lookupReplicas(&l, keyspace, table, token)
 }
 
@@ -409,7 +411,7 @@ func InternalReconcileTabletPlacement(old, current *MetadataSnapshot) *InternalT
 	if old != nil {
 		root = SnapshotData(old).InternalPlacements
 	}
-	known := make(map[UUID]bool, len(SnapshotData(current).InternalHosts))
+	known := make(map[cqltype.UUID]bool, len(SnapshotData(current).InternalHosts))
 	for _, h := range SnapshotData(current).InternalHosts {
 		known[h.ID] = true
 	}

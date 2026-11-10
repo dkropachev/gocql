@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 func BenchmarkLatency(b *testing.B) {
@@ -56,11 +58,11 @@ func BenchmarkLatency(b *testing.B) {
 	b.Run("ProbeDeadline", func(b *testing.B) {
 		for _, test := range deadlineCases() {
 			b.Run(fmt.Sprintf("%s/claim-and-reset", test.name), func(b *testing.B) {
-				host := UUID{15: 1}
+				host := cqltype.UUID{15: 1}
 				sample := &InternalRoutingLatency{}
 				policy := &InternalRoutingPolicy{InternalOptions: RoutingOptions{Latency: LatencyOptions{RetryPeriod: test.period}}}
 				policy.InternalLatencies.Store(host, sample)
-				plan := &InternalLazyRoutingPlan{policy: policy, InternalSlow: &InternalRoutingDecisions{InternalSlow: map[UUID]time.Time{host: test.now.Add(-time.Second)}}, InternalNow: test.now}
+				plan := &InternalLazyRoutingPlan{policy: policy, InternalSlow: &InternalRoutingDecisions{InternalSlow: map[cqltype.UUID]time.Time{host: test.now.Add(-time.Second)}}, InternalNow: test.now}
 				b.ReportAllocs()
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {

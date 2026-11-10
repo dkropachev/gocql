@@ -62,6 +62,6 @@ type RequestEvent struct {
 	BatchStatements []string
 	Parameters      cqltype.Columns
 	Result          model.Result
-	Routing         routing.RoutingInfo
+	Routing         model.RoutingInfo
 	ID              uint64
 }

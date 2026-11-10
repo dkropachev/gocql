@@ -35,7 +35,7 @@ func BenchmarkRouting(b *testing.B) {
 						h := testHint(b, 0, 100, cqltype.Option[uint64]{}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0))
 						root, _ := implRouting.InternalUpdateTabletRange(nil, h)
 						routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, implRouting.InternalTabletPlacement{InternalRanges: root}, implRouting.InternalComparePlacementTable)
-						info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: 1, Set: true}, Consistency: cqltype.Quorum, Kind: routing.OrdinaryStatement}
+						info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: 1, Set: true}, Consistency: cqltype.Quorum, Kind: cqltype.OrdinaryStatement}
 						p := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true, Datacenter: "a", Rack: rack, ShuffleReplicas: shuffle})).(*implRouting.InternalRoutingPolicy)
 						var storage routing.InternalLazyRoutingPlan
 						b.ReportAllocs()

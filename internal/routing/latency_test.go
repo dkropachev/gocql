@@ -19,10 +19,10 @@ func TestLatency(t *testing.T) {
 			for _, test := range deadlineCases() {
 				t.Run(test.name, func(t *testing.T) {
 					policy := &InternalRoutingPolicy{InternalOptions: RoutingOptions{Latency: LatencyOptions{Enabled: true, MinimumSamples: 1, Scale: time.Millisecond, RetryPeriod: test.period, UpdateInterval: time.Hour}}}
-					host := UUID{15: 1}
+					host := cqltype.UUID{15: 1}
 					sample := &InternalRoutingLatency{nextProbe: test.now.Add(-time.Nanosecond)}
 					policy.InternalLatencies.Store(host, sample)
-					decisions := &InternalRoutingDecisions{InternalSlow: map[UUID]time.Time{host: test.now.Add(-time.Nanosecond)}}
+					decisions := &InternalRoutingDecisions{InternalSlow: map[cqltype.UUID]time.Time{host: test.now.Add(-time.Nanosecond)}}
 					start := make(chan struct{})
 					var group sync.WaitGroup
 					var probes atomic.Int32
@@ -136,10 +136,10 @@ func TestLatency(t *testing.T) {
 			}); got != 0 {
 				t.Fatal("warm publication allocated", got)
 			}
-			host := UUID{15: 1}
+			host := cqltype.UUID{15: 1}
 			sample := &InternalRoutingLatency{nextProbe: now.Add(time.Minute)}
 			policy.InternalLatencies.Store(host, sample)
-			plan := &InternalLazyRoutingPlan{policy: policy, InternalSlow: &InternalRoutingDecisions{InternalSlow: map[UUID]time.Time{host: now.Add(-time.Second)}}, InternalNow: now}
+			plan := &InternalLazyRoutingPlan{policy: policy, InternalSlow: &InternalRoutingDecisions{InternalSlow: map[cqltype.UUID]time.Time{host: now.Add(-time.Second)}}, InternalNow: now}
 			if got := testing.AllocsPerRun(1000, func() {
 				if !plan.InternalPenalty(Target{HostID: host}) {
 					t.Fatal("held probe claim lost")

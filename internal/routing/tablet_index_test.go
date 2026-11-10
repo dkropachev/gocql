@@ -9,6 +9,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
@@ -165,7 +167,7 @@ func TestTabletIndex(t *testing.T) {
 		for _, i := range order {
 			m := NewMetadataSnapshot(SnapshotState{InternalPlacements: roots[i]})
 			for _, token := range []int64{-1, 0, 1, 50, 100, 150, 250, 399, 400, 401} {
-				info := RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Value: token, Set: true}}
+				info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: token, Set: true}}
 				if got, want := InternalLookupTabletCached(m, info, &c), InternalLookupTablet(m, info); got != want {
 					t.Fatalf("tree %d token %d: cached lookup %+v, uncached %+v", i, token, got, want)
 				}

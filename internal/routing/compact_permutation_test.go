@@ -17,9 +17,10 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/model"
 )
 
-func compactFixture(n int) (*MetadataSnapshot, RoutingInfo) {
+func compactFixture(n int) (*MetadataSnapshot, model.RoutingInfo) {
 	hosts := make([]HostSnapshot, n+320)
 	for i := range hosts {
 		binary.BigEndian.PutUint64(hosts[i].ID[8:], uint64(i+1000))
@@ -29,14 +30,14 @@ func compactFixture(n int) (*MetadataSnapshot, RoutingInfo) {
 	replicas := make([]Target, n)
 	for i := range replicas {
 		// Even small replica sets refer to global host positions above 255.
-		replicas[i] = Target{HostID: hosts[len(hosts)-1-i].ID, ShardID: Option[uint32]{Value: uint32(i % 4), Set: true}}
+		replicas[i] = Target{HostID: hosts[len(hosts)-1-i].ID, ShardID: cqltype.Option[uint32]{Value: uint32(i % 4), Set: true}}
 	}
 	m := NewMetadataSnapshot(SnapshotState{
 		InternalHosts: hosts, InternalHostIndex: InternalBuildRoutingHostIndex(hosts),
 		InternalKeyspaces: map[string]*metadata.KeyspaceMetadata{"ks": {Tables: map[string]*metadata.TableMetadata{"table": {Name: "table"}}}},
 		InternalRanges:    map[string][]TokenRange{"ks": {{Replicas: replicas}}},
 	})
-	return m, RoutingInfo{Keyspace: "ks", Table: "table", Token: Option[int64]{Set: true}, Consistency: cqltype.Quorum, Kind: OrdinaryStatement}
+	return m, model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Set: true}, Consistency: cqltype.Quorum, Kind: cqltype.OrdinaryStatement}
 }
 
 func compactDrain(t *testing.T, plan QueryPlan, limit int) []Target {
@@ -89,7 +90,7 @@ func TestCompactPermutation(t *testing.T) {
 		t.Run("BoundariesAndOrder", func(t *testing.T) {
 			for _, n := range []int{0, 1, 2, 3, 15, 16, 17, 255, 256, 257, 300} {
 				for _, seed := range []uint64{0, 1, ^uint64(0)} {
-					for _, consistency := range []Consistency{cqltype.Quorum, Serial, LocalSerial} {
+					for _, consistency := range []cqltype.Consistency{cqltype.Quorum, cqltype.Serial, cqltype.LocalSerial} {
 						t.Run(fmt.Sprintf("replicas%d/seed%d/consistency%d", n, seed, consistency), func(t *testing.T) {
 							m, info := compactFixture(n)
 							info.Consistency = consistency
@@ -103,13 +104,13 @@ func TestCompactPermutation(t *testing.T) {
 							if len(got) != len(SnapshotData(m).InternalHosts) {
 								t.Fatal("host traversal incomplete", len(got))
 							}
-							wantOrder := originalPermutation(n, seed, consistency == Serial || consistency == LocalSerial)
+							wantOrder := originalPermutation(n, seed, consistency == cqltype.Serial || consistency == cqltype.LocalSerial)
 							for i, index := range wantOrder {
 								if got[i] != replicas[index] {
 									t.Fatalf("replica %d: got %+v want %+v", i, got[i], replicas[index])
 								}
 							}
-							seen := make(map[UUID]bool)
+							seen := make(map[cqltype.UUID]bool)
 							for _, target := range got {
 								if seen[target.HostID] {
 									t.Fatal("duplicate host", target)
@@ -142,18 +143,18 @@ func TestCompactPermutation(t *testing.T) {
 								SnapshotData(m).InternalHosts = hosts
 								SnapshotData(m).InternalHostIndex = InternalBuildRoutingHostIndex(hosts)
 								target := func(i int, shard uint32) Target {
-									return Target{HostID: hosts[i].ID, ShardID: Option[uint32]{Value: shard, Set: true}}
+									return Target{HostID: hosts[i].ID, ShardID: cqltype.Option[uint32]{Value: shard, Set: true}}
 								}
 								replicas := []Target{target(2, 0), target(1, 1), target(0, 0), target(0, 1), target(6, 0), target(4, 0), target(7, 0)}
 								for len(replicas) < n {
-									replicas = append(replicas, Target{HostID: UUID{0: 255, 15: byte(len(replicas))}})
+									replicas = append(replicas, Target{HostID: cqltype.UUID{0: 255, 15: byte(len(replicas))}})
 								}
 								SnapshotData(m).InternalKeyspaces["ks"].ConsistencyMode = "global"
-								root := placementNode(int64(1), &InternalTabletRange{InternalSpan: TokenRange{Start: -1, End: 1, Replicas: replicas}, InternalVersion: Option[uint64]{Set: true}}, nil, nil)
+								root := placementNode(int64(1), &InternalTabletRange{InternalSpan: TokenRange{Start: -1, End: 1, Replicas: replicas}, InternalVersion: cqltype.Option[uint64]{Set: true}}, nil, nil)
 								SnapshotData(m).InternalPlacements = InternalPlacementPut(nil, InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, InternalTabletPlacement{InternalRanges: root}, InternalComparePlacementTable)
 								policy := &InternalRoutingPolicy{InternalOptions: RoutingOptions{TokenAware: true, LeaderAware: leader, Datacenter: "local", Rack: "rack", AllowRemote: remote}}
 								if slow {
-									policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[UUID]time.Time{hosts[2].ID: time.Now().Add(time.Hour)}})
+									policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[cqltype.UUID]time.Time{hosts[2].ID: time.Now().Add(time.Hour)}})
 								}
 								info.Conditional = true
 								got := compactDrain(t, NewPlan(policy, info, m), len(hosts)+n)
@@ -200,9 +201,9 @@ func TestCompactPermutation(t *testing.T) {
 						SnapshotData(m).InternalPlacementSignal = signal
 						policy := &InternalRoutingPolicy{InternalOptions: RoutingOptions{TokenAware: true}}
 						// A second pass must also remain clear of stale inline and int indexes.
-						policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[UUID]time.Time{SnapshotData(m).InternalHosts[0].ID: time.Now().Add(time.Hour)}})
+						policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[cqltype.UUID]time.Time{SnapshotData(m).InternalHosts[0].ID: time.Now().Add(time.Hour)}})
 						plan := NewPlan(policy, info, m).(*InternalLazyRoutingPlan)
-						seen := make(map[UUID]bool)
+						seen := make(map[cqltype.UUID]bool)
 						if consumed != 0 {
 							target, ok := InternalNextTarget(plan)
 							if !ok || !target.ShardID.Set {
@@ -242,7 +243,7 @@ func TestCompactPermutation(t *testing.T) {
 						defer wg.Done()
 						for range 4 {
 							plan := NewPlan(policy, info, m)
-							seen := make(map[UUID]bool)
+							seen := make(map[cqltype.UUID]bool)
 							for _, target := range compactDrain(t, plan, len(SnapshotData(m).InternalHosts)) {
 								if seen[target.HostID] {
 									t.Error("plans shared mutable permutation")

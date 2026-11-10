@@ -29,8 +29,8 @@ type QueryPlan interface{ Next() (Route, bool) }
 // Fallback into the plan a request follows.
 type RoutingPolicy interface {
 	Validate(*MetadataSnapshot) error
-	Pick(RoutingInfo, *MetadataSnapshot) (Route, bool)
-	Fallback(RoutingInfo, *MetadataSnapshot) QueryPlan
+	Pick(model.RoutingInfo, *MetadataSnapshot) (Route, bool)
+	Fallback(model.RoutingInfo, *MetadataSnapshot) QueryPlan
 	Observe(AttemptEvent)
 }
 type AttemptEvent struct {

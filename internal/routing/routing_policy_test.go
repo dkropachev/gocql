@@ -113,7 +113,7 @@ func TestRoutingPolicy(t *testing.T) {
 	t.Run("Pick", func(t *testing.T) {
 		t.Run("FirstRoute", func(t *testing.T) {
 			m := v2TestMetadata()
-			info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: 1, Set: true}, Consistency: cqltype.Quorum, Kind: OrdinaryStatement}
+			info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: 1, Set: true}, Consistency: cqltype.Quorum, Kind: cqltype.OrdinaryStatement}
 			t.Run("rack replica first", func(t *testing.T) {
 				p := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, Datacenter: "a", Rack: "r1", AllowRemote: true, ShuffleReplicas: true})).(*InternalRoutingPolicy)
 				var storage InternalLazyRoutingPlan
@@ -192,7 +192,7 @@ func TestRoutingPolicy(t *testing.T) {
 
 		t.Run("BuiltinFallback", func(t *testing.T) {
 			m := v2TestMetadata()
-			info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: 1, Set: true}, Consistency: cqltype.Quorum, Kind: OrdinaryStatement}
+			info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: 1, Set: true}, Consistency: cqltype.Quorum, Kind: cqltype.OrdinaryStatement}
 			p := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, Datacenter: "a", Rack: "r1", ShuffleReplicas: true}))
 			picked := 0
 			for range 200 {
