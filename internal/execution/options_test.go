@@ -5,18 +5,18 @@ package execution
 
 import (
 	"context"
-	"github.com/scylladb/gocql/v2/cqlerr"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/retry"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/retry"
 )
 
 func TestOptions(t *testing.T) {

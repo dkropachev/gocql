@@ -5,6 +5,7 @@ package gocql
 
 import (
 	"context"
+
 	"github.com/scylladb/gocql/v2/internal/model"
 
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
