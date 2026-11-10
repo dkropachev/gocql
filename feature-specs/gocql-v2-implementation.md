@@ -371,7 +371,7 @@ DDL coordinator.
 Profiles are plain values copied at Connect and when options are bound, which
 validates and freezes them once: by a query constructor, which keeps them
 resolved for the query, or by Session.BindOptions for one-shot executions.
-BoundOptions executed on a session other than the binding one are resolved
+CompiledOptions executed on a session other than the binding one are resolved
 again for that session on each execution.
 Admission stores the resolved options
 for the logical request; retries/pages reuse it without whole-profile copies,
@@ -656,7 +656,7 @@ history uses hash-indexed
 lookup with exact token comparison on collisions, not a linear list of all
 previous states. Hashing consumes each incoming token once; share its immutable
 owned representation across history and continuation envelopes. Public
-PageState.Bytes and RestorePageState remain explicit copy boundaries. Allocate
+PageState.Token and PageStateFromToken remain explicit copy boundaries. Allocate
 history incrementally, not at the maximum 65,536-entry default for every pager;
 release it on terminal completion/Close. Count/index overhead is bounded by
 MaxPagingStates in addition to the MaxPagingStateBytes token budget.
@@ -1221,7 +1221,7 @@ Migration translations are mandatory:
 | Independently grow cells N and fragments S; nested containers/vectors at several depths | O(N + S) nonoverlapping sequential traversal; nested/random jumps J add at most O(J log S) lookup over one shared O(S) offset index. Immediate-level validation, no recursive compilation/per-cell descriptor arrays. Count visits, jumps and compilations separately. |
 | Repeated pages with stable and changed result entries | Zero warm Compile/CheckType/name-map rebuilds; changed shape validates once per published candidate; old pages retain the correct plan. |
 | Host counts 3, 30, 300 with fixed replica count; pinned and fallback cases | Successful first replica/pinned lookup performs no full-host scan/copy/sort; fallback work occurs only when advanced. Include latency on/off and conditional/leader cases. |
-| Paging histories 1, 1,000, 10,000; empty and colliding/nonconsecutive tokens | Expected hash-indexed lookup/insertion proportional to incoming token bytes, exact equality on collisions, incremental bounded history memory, no internal PageState.Bytes copies. |
+| Paging histories 1, 1,000, 10,000; empty and colliding/nonconsecutive tokens | Expected hash-indexed lookup/insertion proportional to incoming token bytes, exact equality on collisions, incremental bounded history memory, no internal PageState.Token copies. |
 | Concurrent warm bindings vs unrelated schema/placement changes | No global LRU touch per attempt/page, unrelated reprepare storm or policy-wide completion lock; retain generation/cancellation race checks. |
 | Observation/speculation/prefetch disabled vs enabled; default Options | Disabled features create no unused events/workers/timers/metrics snapshots; counters and configured callbacks remain exact. Record scheduler allocations and mutex/block profiles. |
 | Identical vs changed tablet feedback with many tables/ranges | Identical validated feedback causes no publication; changed feedback shares unaffected state, queue memory stays bounded and receive pages are not pinned. |

@@ -229,7 +229,7 @@ func (p *queryPool[P, R]) begin(ctx context.Context) (*Query[P, R], error) {
 
 // exec executes value with options, which are frozen, so the execution can
 // outlive a cancelled call without copying them.
-func (p *queryPool[P, R]) exec(ctx context.Context, value P, options BoundOptions) (model.Result, error) {
+func (p *queryPool[P, R]) exec(ctx context.Context, value P, options CompiledOptions) (model.Result, error) {
 	q, err := p.capture(ctx, value)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
@@ -239,7 +239,7 @@ func (p *queryPool[P, R]) exec(ctx context.Context, value P, options BoundOption
 	return result, err
 }
 
-func (p *queryPool[P, R]) each(ctx context.Context, value P, dst *R, fn func(*R) error, options BoundOptions) (bool, model.Result, error) {
+func (p *queryPool[P, R]) each(ctx context.Context, value P, dst *R, fn func(*R) error, options CompiledOptions) (bool, model.Result, error) {
 	q, err := p.capture(ctx, value)
 	if err != nil {
 		return false, InternalExecutionErrorResult(err), err
@@ -257,7 +257,7 @@ func (p *Prepared[P, R]) pool() (*queryPool[P, R], error) {
 	s := &p.privateStorage
 	s.poolOnce.Do(func() {
 		s.pool, s.poolErr = newQueryPool(s.InternalState.InternalSession, func(base *queryPoolBase) (*Query[P, R], error) {
-			return newPreparedQuery(p, BoundOptions{}, base)
+			return newPreparedQuery(p, CompiledOptions{}, base)
 		})
 	})
 	return s.pool, s.poolErr
@@ -282,23 +282,23 @@ func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
 }
 
 // oneShotOptions returns the options of a one-shot call: none gives the zero
-// BoundOptions.
-func oneShotOptions(options []BoundOptions) (BoundOptions, error) {
+// CompiledOptions.
+func oneShotOptions(options []CompiledOptions) (CompiledOptions, error) {
 	switch len(options) {
 	case 0:
-		return BoundOptions{}, nil
+		return CompiledOptions{}, nil
 	case 1:
 		return options[0], nil
 	}
-	return BoundOptions{}, cqltype.TypeValidation("options", "at most one BoundOptions")
+	return CompiledOptions{}, cqltype.TypeValidation("options", "at most one CompiledOptions")
 }
 
 // Exec binds value and executes the statement once. The statement must not
-// return rows. At most one BoundOptions may be given, for this call only;
+// return rows. At most one CompiledOptions may be given, for this call only;
 // none uses the session's default profile. Exec is safe for concurrent use:
 // it runs on a query the statement keeps for one-shot calls, so it allocates
 // no per-call execution state.
-func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...BoundOptions) (model.Result, error) {
+func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...CompiledOptions) (model.Result, error) {
 	o, err := oneShotOptions(options)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
@@ -314,7 +314,7 @@ func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...BoundOpti
 // into dst, reporting whether a row existed; without one, dst is cleared.
 // Borrowed fields are detached before response storage is released. Options
 // are as for Exec. One is safe for concurrent use.
-func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...BoundOptions) (bool, model.Result, error) {
+func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...CompiledOptions) (bool, model.Result, error) {
 	o, err := oneShotOptions(options)
 	if err != nil {
 		return false, InternalExecutionErrorResult(err), err
@@ -335,7 +335,7 @@ func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...Bo
 // response storage are valid only until fn returns. A non-nil error from fn
 // stops the iteration and is returned. Options are as for Exec. Each is safe
 // for concurrent use.
-func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...BoundOptions) (model.Result, error) {
+func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...CompiledOptions) (model.Result, error) {
 	if fn == nil {
 		return nilEachCallback()
 	}

@@ -85,7 +85,7 @@ func TestWorkCountsPerf(t *testing.T) {
 		for _, count := range []int{1, 1000, 10000} {
 			t.Run(fmt.Sprint(count), func(t *testing.T) {
 				h := pagingHistory{InternalMaxCount: count + 4, InternalMaxBytes: 1 << 20}
-				tokens := make([]PageState, count)
+				tokens := make([]model.PageState, count)
 				for i := range tokens {
 					tokens[i] = model.PageStateOwned(binary.BigEndian.AppendUint64(nil, uint64(i)), 1)
 					if e := h.InternalAdd(tokens[i]); e != nil {

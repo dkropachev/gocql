@@ -61,12 +61,12 @@ func ExampleSession_RunBatch_conditional() {
 			cql.Param("value", cql.StringCodec, func(v update) string { return v.Value }),
 			cql.Param("pk", cql.StringCodec, func(v update) string { return v.PK }),
 			cql.Param("ck", cql.StringCodec, func(v update) string { return v.CK }),
-			cql.Param("version", cql.Int32, func(v update) int32 { return v.Version }),
+			cql.Param("version", cql.Int32Codec, func(v update) int32 { return v.Version }),
 		),
 		Rows: cql.CASRows(cql.Row(
 			cql.Column("pk", cql.StringCodec, func(v *previous) *string { return &v.PK }),
 			cql.Column("ck", cql.StringCodec, func(v *previous) *string { return &v.CK }),
-			cql.Column("version", cql.Int32, func(v *previous) *int32 { return &v.Version }),
+			cql.Column("version", cql.Int32Codec, func(v *previous) *int32 { return &v.Version }),
 		)),
 	}
 	queryPrepared, err := session.Prepare(ctx, statement)

@@ -14,10 +14,11 @@ import (
 
 // StreamStatement pairs CQL and its parameters with a streaming result decoder.
 type StreamStatement[P, R any] struct {
-	CQL    string
-	Params codec.ParamEncoder[P]
-	Rows   codec.StreamRowDecoder[R]
-	Kind   cqltype.StatementKind
+	CQL         string
+	Params      codec.ParamEncoder[P]
+	Rows        codec.StreamRowDecoder[R]
+	BindMarkers cqltype.Columns
+	Kind        cqltype.StatementKind
 }
 
 // PreparedStream is immutable and shareable. Each worker creates its own Query.

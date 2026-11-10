@@ -294,10 +294,10 @@ type User struct { ID int32; Name gocql.Text }
 statement := gocql.Statement[Key, User]{
     CQL: "SELECT id, name FROM app.users WHERE id = ?",
     Params: gocql.Params(
-        gocql.Param("id", gocql.Int32, func(k Key) int32 { return k.ID }),
+        gocql.Param("id", gocql.Int32Codec, func(k Key) int32 { return k.ID }),
     ),
     Rows: gocql.Row(
-        gocql.Column("id", gocql.Int32, func(u *User) *int32 { return &u.ID }),
+        gocql.Column("id", gocql.Int32Codec, func(u *User) *int32 { return &u.ID }),
         gocql.Column("name", gocql.TextCodec, func(u *User) *gocql.Text { return &u.Name }),
     ),
 }

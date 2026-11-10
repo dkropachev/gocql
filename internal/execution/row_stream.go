@@ -43,7 +43,7 @@ import (
 )
 
 // StreamOptions configures a stream query; streaming is pull-driven. The
-// query validates and resolves BoundOptions for its session once, when it is
+// query validates and resolves CompiledOptions for its session once, when it is
 // created.
 type StreamOptions struct {
 	Options Options
@@ -72,7 +72,7 @@ func RunStream[B, R any](ctx context.Context, session *implCluster.Core, bound *
 	}
 	return runStreamWithCache(ctx, session, bound, decoder, frozen, options.Limits, options.Incremental, nil)
 }
-func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core, bound *Bound[B], decoder codec.StreamRowDecoder[R], options BoundOptions, streamLimits transport.StreamLimits, incremental bool, plans *streamPlanCache[R]) (*RowStream[R], error) {
+func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core, bound *Bound[B], decoder codec.StreamRowDecoder[R], options CompiledOptions, streamLimits transport.StreamLimits, incremental bool, plans *streamPlanCache[R]) (*RowStream[R], error) {
 	if decoder == nil {
 		return nil, cqltype.TypeValidation("stream decoder", "nil decoder")
 	}
@@ -399,7 +399,7 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 		}
 		next := model.CompletePageState()
 		if s.privateStorage.response.InternalMetadata.PagingState != nil {
-			next = model.RestorePageState(s.privateStorage.response.InternalMetadata.PagingState)
+			next = model.PageStateFromToken(s.privateStorage.response.InternalMetadata.PagingState)
 		}
 		if !next.More() {
 			s.privateStorage.mu.Lock()

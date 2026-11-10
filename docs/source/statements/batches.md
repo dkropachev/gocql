@@ -20,7 +20,7 @@ batch.Reset()
 
 `AddToBatch` encodes the parameters into storage the batch owns, so later input
 mutation cannot change the batch. `ExecBatch` and `RunBatch` take at most one
-`BoundOptions` from `session.BindOptions`. A batch
+`CompiledOptions` from `session.BindOptions`. A batch
 may be sent again unchanged. `Reset` empties it and keeps its storage, so a
 reused batch appends without allocating; if a cancelled execution may still be
 writing the batch, `Reset` leaves that storage to it. A `Batch` is not safe for

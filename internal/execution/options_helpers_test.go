@@ -6,8 +6,8 @@ package execution
 import "errors"
 
 // testOptions freezes v, failing loudly on values a test meant to be valid.
-func testOptions(v Options) BoundOptions {
-	o, err := NewBoundOptions(nil, v)
+func testOptions(v Options) CompiledOptions {
+	o, err := NewCompiledOptions(nil, v)
 	if err != nil {
 		panic(err)
 	}

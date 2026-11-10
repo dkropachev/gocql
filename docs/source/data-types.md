@@ -8,7 +8,7 @@ predeclared scalars such as `TextType` and `IntType` need no error check.
 `RowDecoder[R]` compose statement plans. `Params(Param(...))` and
 `Row(Column(...))` map struct fields explicitly.
 
-Native scalars have explicit codecs such as Int32, Int64, Bool, UUIDCodec,
+Native scalars have explicit codecs such as Int32Codec, Int64Codec, BoolCodec, UUIDCodec,
 TimestampCodec and DurationCodec. `StringEncoder` encodes a Go string;
 TextCodec decodes a borrowed Text. BytesEncoder accepts []byte and BlobCodec
 uses borrowed Bytes. Collection decoders eagerly produce slices whose payload elements may borrow pages;

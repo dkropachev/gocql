@@ -236,7 +236,7 @@ func TestAuthHandshake(t *testing.T) {
 			t.Fatalf("open: %v", err)
 		}
 		defer s.Close()
-		if err := execTestStatement(context.Background(), s, "void", BoundOptions{}); err != nil {
+		if err := execTestStatement(context.Background(), s, "void", CompiledOptions{}); err != nil {
 			t.Fatalf("query after authenticating: %v", err)
 		}
 		if got := srv.received(); len(got) == 0 || got[0] != want {

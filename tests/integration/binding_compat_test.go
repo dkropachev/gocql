@@ -10,6 +10,7 @@ package integration
 import (
 	"context"
 	"errors"
+	"github.com/scylladb/gocql/v2/internal/model"
 
 	gocql "github.com/scylladb/gocql/v2"
 
@@ -44,20 +45,20 @@ func buildBatch(s *gocql.Session, items []batchItem) (*gocql.Batch, error) {
 	return batch, nil
 }
 
-func execBatch(ctx context.Context, s *gocql.Session, kind cql.BatchKind, items []batchItem, options gocql.BoundOptions) (gocql.Result, error) {
+func execBatch(ctx context.Context, s *gocql.Session, kind cql.BatchKind, items []batchItem, options gocql.CompiledOptions) (gocql.Result, error) {
 	batch, err := buildBatch(s, items)
 	if err != nil {
 		return gocql.Result{}, err
 	}
-	return implExecution.InternalExecBatch(ctx, implExecution.InternalCore((*implExecution.Session)(s)), kind, (*implExecution.Batch)(batch), implExecution.BoundOptions(options))
+	return implExecution.InternalExecBatch(ctx, implExecution.InternalCore((*implExecution.Session)(s)), kind, (*implExecution.Batch)(batch), implExecution.CompiledOptions(options))
 }
 
-func runBatch[R any](ctx context.Context, s *gocql.Session, kind cql.BatchKind, items []batchItem, decoder cql.RowDecoder[R], options gocql.BoundOptions) (*gocql.Page[R], error) {
+func runBatch[R any](ctx context.Context, s *gocql.Session, kind cql.BatchKind, items []batchItem, decoder cql.RowDecoder[R], options gocql.CompiledOptions) (*gocql.Page[R], error) {
 	batch, err := buildBatch(s, items)
 	if err != nil {
 		return nil, err
 	}
-	result, err := implExecution.InternalRunBatch(ctx, implExecution.InternalCore((*implExecution.Session)(s)), kind, (*implExecution.Batch)(batch), decoder, implExecution.BoundOptions(options))
+	result, err := implExecution.InternalRunBatch(ctx, implExecution.InternalCore((*implExecution.Session)(s)), kind, (*implExecution.Batch)(batch), decoder, implExecution.CompiledOptions(options))
 	return (*gocql.Page[R])(result), err
 }
 
@@ -73,27 +74,27 @@ func BindUnpreparedOwned[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a
 	return implExecution.BindUnpreparedOwned[P, R](fixtureStatement(a0), a1, a2)
 }
 
-func Exec[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.BoundOptions) (gocql.Result, error) {
-	return implExecution.Exec[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, implExecution.BoundOptions(a3))
+func Exec[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.CompiledOptions) (gocql.Result, error) {
+	return implExecution.Exec[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, implExecution.CompiledOptions(a3))
 }
 
-func Run[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.BoundOptions) (gocql.Rows[R], error) {
-	result, err := implExecution.Run[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, implExecution.BoundOptions(a3))
+func Run[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.CompiledOptions) (gocql.Rows[R], error) {
+	result, err := implExecution.Run[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, implExecution.CompiledOptions(a3))
 	return gocql.Rows[R](result), err
 }
 
-func RunPage[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.PageState, a4 gocql.BoundOptions) (*gocql.Page[R], error) {
-	result, err := implExecution.RunPage[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, a3, implExecution.BoundOptions(a4))
+func RunPage[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.PageState, a4 gocql.CompiledOptions) (*gocql.Page[R], error) {
+	result, err := implExecution.RunPage[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, model.PageState(a3), implExecution.CompiledOptions(a4))
 	return (*gocql.Page[R])(result), err
 }
 
 func RunStream[B any, R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[B], a3 cql.StreamRowDecoder[R], a4 gocql.StreamOptions) (*gocql.RowStream[R], error) {
-	result, err := implExecution.RunStream[B, R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, a3, implExecution.StreamOptions{Options: implExecution.BoundOptions(bindOptions(a1, a4.Options)).Values(), Limits: a4.Limits, Incremental: a4.Incremental})
+	result, err := implExecution.RunStream[B, R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, a3, implExecution.StreamOptions{Options: implExecution.CompiledOptions(bindOptions(a1, a4.Options)).Values(), Limits: a4.Limits, Incremental: a4.Incremental})
 	return (*gocql.RowStream[R])(result), err
 }
 
-func RunUnpaged[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.BoundOptions) (*gocql.Page[R], error) {
-	result, err := implExecution.RunUnpaged[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, implExecution.BoundOptions(a3))
+func RunUnpaged[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.CompiledOptions) (*gocql.Page[R], error) {
+	result, err := implExecution.RunUnpaged[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, implExecution.CompiledOptions(a3))
 	return (*gocql.Page[R])(result), err
 }
 

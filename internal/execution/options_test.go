@@ -4,6 +4,11 @@
 package execution
 
 import (
+	"context"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/retry"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,12 +20,53 @@ import (
 )
 
 func TestOptions(t *testing.T) {
+	t.Run("RetryOverride", func(t *testing.T) {
+		for _, tc := range []struct {
+			name     string
+			policy   retry.Policy
+			attempts int32
+		}{
+			{"Inherit", nil, 2},
+			{"Never", retry.Never{}, 1},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				s, _, peers := runtimeTestSession(t, 2)
+				profile := settings.InternalDefaultProfile()
+				profile.Retry = retry.Safe{MaxAttempts: 2}
+				InternalRuntimeFor(s).InternalSetProfile(&profile)
+				var attempts atomic.Int32
+				var serve pinServe
+				serve.start(t, peers, func(_ int, _ string, stream int) []byte {
+					if attempts.Add(1) == 1 {
+						return errorResponse(t, stream, cqlerr.ErrCodeOverloaded, nil)
+					}
+					return typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "value"))
+				})
+				q := pinTestQuery(t, s, testOptions(Options{Retry: tc.policy}))
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				var dst []byte
+				found, _, err := q.One(ctx, codec.EmptyRecord{}, &dst)
+				if tc.attempts == 1 {
+					if err == nil || cqlerr.KindOf(err) != cqlerr.KindOverloaded {
+						t.Fatalf("Never lost the original failure: %v", err)
+					}
+				} else if err != nil || !found || string(dst) != "value" {
+					t.Fatalf("inherited retry failed: found %t, row %q, error %v", found, dst, err)
+				}
+				if got := attempts.Load(); got != tc.attempts {
+					t.Fatalf("attempts = %d, want %d", got, tc.attempts)
+				}
+			})
+		}
+	})
+
 	t.Run("BindOptions", func(t *testing.T) {
 		t.Run("KeepsEmptyOnSessionDefault", func(t *testing.T) {
 			s, _ := attachmentSession()
 			zero, err := InternalBindOptions(s, Options{})
 			if err != nil || zero.p != nil {
-				t.Fatalf("empty values bound to %+v, %v; want the zero BoundOptions", zero.p, err)
+				t.Fatalf("empty values bound to %+v, %v; want the zero CompiledOptions", zero.p, err)
 			}
 			set, err := InternalBindOptions(s, Options{Idempotent: true})
 			if err != nil || set.p == nil || !set.p.bound {
@@ -38,7 +84,7 @@ func TestOptions(t *testing.T) {
 			profile := settings.InternalDefaultProfile()
 			profile.PageSize = 10
 			values := Options{Profile: &profile, CustomPayload: []model.PayloadEntry{{Key: "k", Value: cqltype.Nullable[cqltype.Bytes]{Valid: true, Value: cqltype.BorrowBytes(payload)}}}}
-			o, err := NewBoundOptions(nil, values)
+			o, err := NewCompiledOptions(nil, values)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -70,7 +116,7 @@ func TestOptions(t *testing.T) {
 				"serial both":  {SerialConsistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.LocalSerial}, NoSerialConsistency: true},
 			}
 			for name, values := range invalid {
-				if _, err := NewBoundOptions(nil, values); err == nil {
+				if _, err := NewCompiledOptions(nil, values); err == nil {
 					t.Errorf("%s: invalid values accepted", name)
 				}
 			}
@@ -109,7 +155,7 @@ func TestOptions(t *testing.T) {
 			rt.InternalSetProfile(&sessionProfile)
 			var scratch InternalResolvedOptions
 
-			var zero BoundOptions
+			var zero CompiledOptions
 			if r := zero.resolve(rt, &scratch); r != &rt.defaultOptions || r.InternalProfile.PageSize != 7 {
 				t.Fatal("zero options do not use the session default", r.InternalProfile.PageSize)
 			}
@@ -122,7 +168,7 @@ func TestOptions(t *testing.T) {
 			}
 
 			overrides := Options{Consistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.One}}
-			bound, err := NewBoundOptions(s, overrides)
+			bound, err := NewCompiledOptions(s, overrides)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -229,7 +275,7 @@ func TestOptions(t *testing.T) {
 			}
 		})
 
-		// BoundOptions with a timestamp send one with every request, so they encode no
+		// CompiledOptions with a timestamp send one with every request, so they encode no
 		// template without it.
 		t.Run("WithTimestamp", func(t *testing.T) {
 			profile := settings.InternalDefaultProfile()

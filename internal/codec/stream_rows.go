@@ -224,7 +224,7 @@ type streamRecordPlan[R any] struct {
 func StreamTuple[R any](decoder StreamRowDecoder[R]) StreamDecoder[R] {
 	return streamRecordCodec[R]{kind: cqltype.TypeTuple, decoder: decoder}
 }
-func StreamUDT[R any](options UDTOptions, decoder StreamRowDecoder[R]) StreamDecoder[R] {
+func StreamUDT[R any](decoder StreamRowDecoder[R], options UDTOptions) StreamDecoder[R] {
 	return streamRecordCodec[R]{kind: cqltype.TypeUDT, options: options, decoder: decoder}
 }
 func (c streamRecordCodec[R]) Compile(t cqltype.DataType) (StreamValuePlan[R], error) {

@@ -81,7 +81,7 @@ func TestFixture(t *testing.T) {
 	// server, including the second page after the helper closes its bound handle.
 	t.Run("Helpers", func(t *testing.T) {
 		session := createV2Session(t, func(config *gocql.ConfigBuilder) {
-			config.WithDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithPageSize(1) })
+			config.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithPageSize(1) })
 		})
 		defer session.Close()
 		ctx := context.Background()

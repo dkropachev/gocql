@@ -8,12 +8,13 @@ returns an immutable `Config` or the first validation error. A later setting
 replaces an earlier one even if it was invalid:
 
 ```go
+profile, err := gocql.NewProfile().
+    WithConsistency(cql.LocalQuorum).WithTimeout(5 * time.Second).Build()
+if err != nil { return err }
 config, err := gocql.NewConfig("10.0.0.1", "10.0.0.2").
     WithKeyspace("app").
     WithConnectionsPerShard(2).
-    WithDefaultProfile(func(p *gocql.ProfileBuilder) {
-        p.WithConsistency(cql.LocalQuorum).WithTimeout(5 * time.Second)
-    }).
+    WithDefaultProfile(profile).
     Build()
 ```
 
@@ -29,7 +30,11 @@ restore them. `WithDiscovery`, `WithConfigReport`, `WithAutomaticSchemaAgreement
 and `WithRefreshAfterAgreement` restore those defaults after their off switches.
 `ProfileBuilder.WithPrefetch(0)` disables prefetch and `WithPrefetch(1)` restores it.
 Zero optional timeouts disable their budget; nil optional providers clear the
-override, including `WithTLS(nil)` for plaintext. `WithDefaultProfile(nil)` resets
+override, including `WithTLS(nil)` for plaintext. `WithDefaultProfile(profile)`
+copies and replaces the complete profile. Build profiles with `NewProfile` to
+start from driver defaults; later edits to a supplied profile do not affect the
+configuration. Use `ConfigureDefaultProfile(callback)` to compose changes to
+the current profile; `ConfigureDefaultProfile(nil)` resets
 all profile settings. `WithIgnoreEvents` replaces the complete ignored-event
 list; calling it without arguments restores all events.
 

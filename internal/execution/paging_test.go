@@ -40,7 +40,7 @@ func TestPaging(t *testing.T) {
 	t.Run("History", func(t *testing.T) {
 		t.Run("CyclesLimitsAndTokenIdentity", func(t *testing.T) {
 			h := implPaging.InternalPagingHistory{InternalMaxCount: 4, InternalMaxBytes: 4}
-			a, b := implModel.RestorePageState([]byte("a")), implModel.RestorePageState([]byte("b"))
+			a, b := implModel.PageStateFromToken([]byte("a")), implModel.PageStateFromToken([]byte("b"))
 			if h.InternalAdd(a) != nil || h.InternalAdd(b) != nil || !errors.Is(h.InternalAdd(a), runtimeerrors.ErrPagingNoProgress) {
 				t.Fatal("nonconsecutive cycle")
 			}
@@ -57,10 +57,10 @@ func TestPaging(t *testing.T) {
 			if !found {
 				t.Fatal("history copied payload")
 			}
-			if h.InternalAdd(implModel.RestorePageState(nil)) != nil || !errors.Is(h.InternalAdd(implModel.RestorePageState([]byte{})), runtimeerrors.ErrPagingNoProgress) {
+			if h.InternalAdd(implModel.PageStateFromToken(nil)) != nil || !errors.Is(h.InternalAdd(implModel.PageStateFromToken([]byte{})), runtimeerrors.ErrPagingNoProgress) {
 				t.Fatal("empty cycle")
 			}
-			if !errors.Is(h.InternalAdd(implModel.RestorePageState([]byte("long"))), runtimeerrors.ErrPagingStateLimit) || h.InternalCount != 3 {
+			if !errors.Is(h.InternalAdd(implModel.PageStateFromToken([]byte("long"))), runtimeerrors.ErrPagingStateLimit) || h.InternalCount != 3 {
 				t.Fatal("byte limit")
 			}
 			h = implPaging.InternalPagingHistory{InternalMaxCount: 1, InternalMaxBytes: 100}
@@ -70,7 +70,7 @@ func TestPaging(t *testing.T) {
 		})
 
 		t.Run("HashCollisionComparesFullBytes", func(t *testing.T) {
-			a, b := implModel.RestorePageState([]byte("a")), implModel.RestorePageState([]byte("b"))
+			a, b := implModel.PageStateFromToken([]byte("a")), implModel.PageStateFromToken([]byte("b"))
 			h := implPaging.InternalPagingHistory{InternalMaxCount: 4, InternalMaxBytes: 8}
 			_ = h.InternalAdd(b)
 			h.InternalSpill()
@@ -92,7 +92,7 @@ func TestPaging(t *testing.T) {
 		// The inline history and its spill into the hashed map detect the same
 		// repeats and enforce the same limits on either side of the spill.
 		t.Run("InlineSpill", func(t *testing.T) {
-			token := func(i int) implModel.PageState { return implModel.RestorePageState([]byte{byte(i), 0xff}) }
+			token := func(i int) implModel.PageState { return implModel.PageStateFromToken([]byte{byte(i), 0xff}) }
 			inline := new([paging.InternalInlineHistory]implModel.PageState)
 			h := implPaging.InternalPagingHistory{InternalMaxCount: 100, InternalMaxBytes: 1000, InternalInline: inline}
 			for i := 0; i < 12; i++ {
@@ -162,7 +162,7 @@ func TestPaging(t *testing.T) {
 			if settings.InternalValidateConfig(c) == nil {
 				t.Fatal("negative byte budget")
 			}
-			if _, err := RunPage[codec.EmptyRecord](nil, nil, nil, implModel.CompletePageState(), BoundOptions{}); !errors.Is(err, runtimeerrors.ErrPagingComplete) {
+			if _, err := RunPage[codec.EmptyRecord](nil, nil, nil, implModel.CompletePageState(), CompiledOptions{}); !errors.Is(err, runtimeerrors.ErrPagingComplete) {
 				t.Fatal("complete admitted", err)
 			}
 		})
@@ -177,7 +177,7 @@ func TestPaging(t *testing.T) {
 			}()
 			b := runtimeQuery(t)
 			defer b.Close()
-			rows := codecTestMust(Run(context.Background(), s, b, BoundOptions{}))
+			rows := codecTestMust(Run(context.Background(), s, b, CompiledOptions{}))
 			defer rows.Close()
 			if rows.NextInto(nil) {
 				t.Fatal("nil accepted")
@@ -257,7 +257,7 @@ func TestPaging(t *testing.T) {
 			}()
 			b := runtimeQuery(t)
 			defer b.Close()
-			rows := codecTestMust(Run(context.Background(), s, b, BoundOptions{}))
+			rows := codecTestMust(Run(context.Background(), s, b, CompiledOptions{}))
 			defer rows.Close()
 			var dst implCqltype.Bytes
 			if !rows.NextInto(&dst) || string(dst.OwnedBytes()) != "one" {
@@ -392,7 +392,7 @@ func TestPaging(t *testing.T) {
 			defer bound.Close()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			rows, err := Run(ctx, s, bound, BoundOptions{})
+			rows, err := Run(ctx, s, bound, CompiledOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}

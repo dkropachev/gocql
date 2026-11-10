@@ -28,8 +28,8 @@ type v2Adapter struct {
 	writes        [2]*g.Prepared[row, cql.EmptyRow]
 	lwt           *g.Prepared[lwtArgs, cql.CASResult[int32]]
 	lwtRead       *g.Prepared[int32, int32]
-	metadata      g.Options      // includes result metadata, as master's writes request
-	boundMetadata g.BoundOptions // metadata bound to the session, for one-shot executions
+	metadata      g.Options         // includes result metadata, as master's writes request
+	boundMetadata g.CompiledOptions // metadata bound to the session, for one-shot executions
 }
 type v2Worker struct {
 	a           *v2Adapter
@@ -41,7 +41,7 @@ type v2Worker struct {
 }
 
 var streamDecoder = cql.StreamRow(func(*row) {}, cql.StreamColumn("k", cql.StreamInt32, func(r *row) *int32 { return &r.K }), cql.StreamColumn("r", cql.StreamInt32, func(r *row) *int32 { return &r.R }), cql.StreamColumn("p", cql.StreamBlob, func(r *row) *[]byte { return &r.P }))
-var bufferedDecoder = cql.RowInto(func(*row) {}, cql.Column("k", cql.Int32, func(r *row) *int32 { return &r.K }), cql.Column("r", cql.Int32, func(r *row) *int32 { return &r.R }), cql.Column("p", cql.OwnedBlobCodec, func(r *row) *[]byte { return &r.P }))
+var bufferedDecoder = cql.RowInto(func(*row) {}, cql.Column("k", cql.Int32Codec, func(r *row) *int32 { return &r.K }), cql.Column("r", cql.Int32Codec, func(r *row) *int32 { return &r.R }), cql.Column("p", cql.OwnedBlobCodec, func(r *row) *[]byte { return &r.P }))
 
 func connect(hosts []string) (adapter, error) {
 	policy, _ := routing.NewPolicy(routing.Options{TokenAware: true, Datacenter: "datacenter1"})
@@ -49,7 +49,7 @@ func connect(hosts []string) (adapter, error) {
 		WithProtocolVersion(g.Protocol4).
 		WithConnectionsPerShard(1).
 		WithMaxExcessPerShard(0).
-		WithDefaultProfile(func(p *g.ProfileBuilder) {
+		ConfigureDefaultProfile(func(p *g.ProfileBuilder) {
 			p.WithConsistency(cql.LocalQuorum).
 				NoSerialConsistency().
 				WithTimeout(10 * time.Second).
@@ -115,8 +115,8 @@ func (a *v2Adapter) Evidence() any {
 	return map[string]any{"keyspace_strategy": keyspace.StrategyOptions, "keyspace_strategy_class": keyspace.StrategyClass, "metrics": a.s.Metrics(), "routing_samples": routing, "hosts": a.s.Metadata().Hosts(), "protocol": 4, "consistency": "LOCAL_QUORUM", "page_size": 32, "prefetch": 0, "retries": 0, "compression": "none", "tls": false, "coalesce_wait_ns": 0, "incremental_receive": *incremental, "metadata_refresh_ns": int64(*metadataRefresh)}
 }
 
-var keyParams = cql.Params(cql.Param("k", cql.Int32, func(k int32) int32 { return k }))
-var rowParams = cql.Params(cql.Param("k", cql.Int32, func(r row) int32 { return r.K }), cql.Param("r", cql.Int32, func(r row) int32 { return r.R }), cql.Param("p", cql.BytesEncoder, func(r row) []byte { return r.P }))
+var keyParams = cql.Params(cql.Param("k", cql.Int32Codec, func(k int32) int32 { return k }))
+var rowParams = cql.Params(cql.Param("k", cql.Int32Codec, func(r row) int32 { return r.K }), cql.Param("r", cql.Int32Codec, func(r row) int32 { return r.R }), cql.Param("p", cql.BytesEncoder, func(r row) []byte { return r.P }))
 
 // prepared prepares, once, the read and write statements of the point or
 // paged table and checks that the read is token routed.

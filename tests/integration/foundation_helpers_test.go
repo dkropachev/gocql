@@ -27,12 +27,12 @@ func codecTestMust[T any](v T, err error) T {
 
 // bindOptions binds v to session, failing loudly on values a test meant to
 // be valid.
-func bindOptions[O fixtureOptions](session *gocql.Session, v O) gocql.BoundOptions {
+func bindOptions[O fixtureOptions](session *gocql.Session, v O) gocql.CompiledOptions {
 	switch o := any(v).(type) {
 	case gocql.Options:
 		return codecTestMust(session.BindOptions(o))
 	case implExecution.Options:
-		return gocql.BoundOptions(codecTestMust(implExecution.InternalBindOptions(implExecution.InternalCore((*implExecution.Session)(session)), o)))
+		return gocql.CompiledOptions(codecTestMust(implExecution.InternalBindOptions(implExecution.InternalCore((*implExecution.Session)(session)), o)))
 	}
 	panic("unreachable fixture options type")
 }

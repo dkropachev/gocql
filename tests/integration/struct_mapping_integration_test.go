@@ -44,7 +44,7 @@ type smRecord struct {
 	Maybe  cql.Nullable[int32]
 	Tags   []string
 	Scores []int32                    `cql:"scores,codec=SetCodec"`
-	Attrs  []cql.Entry[string, int64] `cql:"attrs,codec=cql.MapCodec(cql.StringCodec, cql.Int64)"`
+	Attrs  []cql.Entry[string, int64] `cql:"attrs,codec=cql.MapCodec(cql.StringCodec, cql.Int64Codec)"`
 	smAudit
 	Note string `cql:"-"`
 }
@@ -57,7 +57,7 @@ type smKey struct {
 
 const smColumns = "bucket, id, name, ascii_name, flag, tiny, small, big, float, double, blob, addr, timeid, day, clock, span, maybe, tags, scores, attrs, createdat, updatedat"
 
-var smAttrs = cql.WithCodec[smRecord](cql.MapCodec(cql.StringCodec, cql.Int64))
+var smAttrs = cql.WithCodec[smRecord](cql.MapCodec(cql.StringCodec, cql.Int64Codec))
 
 type smFixture struct {
 	session *gocql.Session
@@ -138,7 +138,7 @@ func (f smFixture) selectBucket(t *testing.T, ctx context.Context, rows cql.RowD
 	read, err := f.session.Prepare(ctx, cql.Statement[int32, smRecord]{
 		Kind:   cql.OrdinaryStatement,
 		CQL:    "SELECT " + smColumns + " FROM " + f.table + " WHERE bucket = ?",
-		Params: cql.OneParam(cql.Int32),
+		Params: cql.OneParam(cql.Int32Codec),
 		Rows:   rows,
 	})
 	if err != nil {

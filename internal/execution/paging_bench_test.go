@@ -80,7 +80,7 @@ func BenchmarkPaging(b *testing.B) {
 				h := paging.InternalPagingHistory{InternalMaxCount: count, InternalMaxBytes: 16 << 20}
 				var state model.PageState
 				for i := 0; i < count; i++ {
-					state = model.RestorePageState(binary.LittleEndian.AppendUint64(nil, uint64(i)))
+					state = model.PageStateFromToken(binary.LittleEndian.AppendUint64(nil, uint64(i)))
 					if err := h.InternalAdd(state); err != nil {
 						b.Fatal(err)
 					}

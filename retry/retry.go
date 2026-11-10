@@ -59,6 +59,13 @@ type Policy interface {
 	Decide(Attempt) Decision
 }
 
+// Never stops after the first failed attempt. Set Options.Retry to Never{}
+// to disable retries for an execution while nil inherits the profile's policy.
+type Never struct{}
+
+// Decide always returns Stop.
+func (Never) Decide(Attempt) Decision { return Decision{Action: Stop} }
+
 // PolicyFunc adapts a function to Policy.
 type PolicyFunc func(Attempt) Decision
 

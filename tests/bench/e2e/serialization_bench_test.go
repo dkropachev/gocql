@@ -26,7 +26,7 @@ import (
 
 func BenchmarkSerialization(b *testing.B) {
 	b.Run("Values", func(b *testing.B) {
-		b.Run("Int", func(b *testing.B) { benchmarkValue(b, scalar(cql.TypeInt), cql.Int32, cql.Int32, int32(42)) })
+		b.Run("Int", func(b *testing.B) { benchmarkValue(b, scalar(cql.TypeInt), cql.Int32Codec, cql.Int32Codec, int32(42)) })
 		for _, size := range []int{100, 1024, 1024 * 1024} {
 			body := bytes.Repeat([]byte("x"), size)
 			b.Run(fmt.Sprintf("Blob/%d", size), func(b *testing.B) {
@@ -56,7 +56,7 @@ func BenchmarkSerialization(b *testing.B) {
 			benchmarkValue(b, set, cql.SetEncoder(cql.StringEncoder), cql.SetDecoder(cql.TextCodec), []string{"foo", "bar", "baz"})
 		})
 		b.Run("Map", func(b *testing.B) {
-			benchmarkValue(b, mapping, cql.MapEncoder(cql.StringEncoder, cql.Int32), cql.MapDecoder(cql.TextCodec, cql.Int32), []cql.Entry[string, int32]{{Key: "a", Value: 1}, {Key: "b", Value: 2}})
+			benchmarkValue(b, mapping, cql.MapEncoder(cql.StringEncoder, cql.Int32Codec), cql.MapDecoder(cql.TextCodec, cql.Int32Codec), []cql.Entry[string, int32]{{Key: "a", Value: 1}, {Key: "b", Value: 2}})
 		})
 		type record struct {
 			ID    cql.UUID
@@ -68,8 +68,8 @@ func BenchmarkSerialization(b *testing.B) {
 			Name  cql.Text
 			Value int32
 		}
-		params := cql.Params(cql.ParamAt(0, cql.UUIDCodec, func(v record) cql.UUID { return v.ID }), cql.ParamAt(1, cql.StringEncoder, func(v record) string { return v.Name }), cql.ParamAt(2, cql.Int32, func(v record) int32 { return v.Value }))
-		rows := cql.Row(cql.ColumnAt(0, cql.UUIDCodec, func(v *view) *cql.UUID { return &v.ID }), cql.ColumnAt(1, cql.TextCodec, func(v *view) *cql.Text { return &v.Name }), cql.ColumnAt(2, cql.Int32, func(v *view) *int32 { return &v.Value }))
+		params := cql.Params(cql.ParamAt(0, cql.UUIDCodec, func(v record) cql.UUID { return v.ID }), cql.ParamAt(1, cql.StringEncoder, func(v record) string { return v.Name }), cql.ParamAt(2, cql.Int32Codec, func(v record) int32 { return v.Value }))
+		rows := cql.Row(cql.ColumnAt(0, cql.UUIDCodec, func(v *view) *cql.UUID { return &v.ID }), cql.ColumnAt(1, cql.TextCodec, func(v *view) *cql.Text { return &v.Name }), cql.ColumnAt(2, cql.Int32Codec, func(v *view) *int32 { return &v.Value }))
 		tuple, _ := cql.TupleType(scalar(cql.TypeUUID), text, integer)
 		b.Run("Tuple", func(b *testing.B) {
 			benchmarkValue(b, tuple, cql.TupleEncoder(params), cql.TupleDecoder(rows), record{Name: "test tuple", Value: 123})
@@ -98,7 +98,7 @@ func BenchmarkSerialization(b *testing.B) {
 				for i := range vector {
 					vector[i] = float32(i) * 0.1
 				}
-				benchmarkValue(b, typ, cql.VectorEncoder(cql.Float32), cql.VectorDecoder(cql.Float32), vector)
+				benchmarkValue(b, typ, cql.VectorEncoder(cql.Float32Codec), cql.VectorDecoder(cql.Float32Codec), vector)
 			})
 		}
 	})

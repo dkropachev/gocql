@@ -99,13 +99,13 @@ func builtinFields[P any]() []builtinField[P] {
 	// WithCodec or a codec= tag) because key and value pairs multiply.
 	var fields []builtinField[P]
 	add := func(entries ...builtinField[P]) { fields = append(fields, entries...) }
-	add(builtin[P](Bool, Bool, Bool, "bool", "Bool", "Bool", "Bool", true)...)
-	add(builtin[P](Int8, Int8, Int8, "int8", "Int8", "Int8", "Int8", true)...)
-	add(builtin[P](Int16, Int16, Int16, "int16", "Int16", "Int16", "Int16", true)...)
-	add(builtin[P](Int32, Int32, Int32, "int32", "Int32", "Int32", "Int32", true)...)
-	add(builtin[P](Int64, Int64, Int64, "int64", "Int64", "Int64", "Int64", true)...)
-	add(builtin[P](Float32, Float32, Float32, "float32", "Float32", "Float32", "Float32", true)...)
-	add(builtin[P](Float64, Float64, Float64, "float64", "Float64", "Float64", "Float64", true)...)
+	add(builtin[P](Bool, Bool, Bool, "bool", "BoolCodec", "BoolCodec", "BoolCodec", true)...)
+	add(builtin[P](Int8, Int8, Int8, "int8", "Int8Codec", "Int8Codec", "Int8Codec", true)...)
+	add(builtin[P](Int16, Int16, Int16, "int16", "Int16Codec", "Int16Codec", "Int16Codec", true)...)
+	add(builtin[P](Int32, Int32, Int32, "int32", "Int32Codec", "Int32Codec", "Int32Codec", true)...)
+	add(builtin[P](Int64, Int64, Int64, "int64", "Int64Codec", "Int64Codec", "Int64Codec", true)...)
+	add(builtin[P](Float32, Float32, Float32, "float32", "Float32Codec", "Float32Codec", "Float32Codec", true)...)
+	add(builtin[P](Float64, Float64, Float64, "float64", "Float64Codec", "Float64Codec", "Float64Codec", true)...)
 	add(builtin[P](StringCodec, StringCodec, StringCodec, "string", "StringCodec", "StringCodec", "StringCodec", true)...)
 	add(builtin[P](ASCIIStringCodec, ASCIIStringCodec, ASCIIStringCodec, "string", "ASCIIStringCodec", "ASCIIStringCodec", "ASCIIStringCodec", false)...)
 	add(builtin[P](BytesEncoder, OwnedBlobCodec, OwnedBlobCodec, "[]byte", "BytesEncoder", "OwnedBlobCodec", "OwnedBlobCodec", true)...)

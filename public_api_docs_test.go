@@ -16,7 +16,7 @@ import (
 func TestPublicMethodDocumentation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	for _, symbol := range []string{"Session.Prepare", "Session.PrepareStream", "PreparedStream.Query", "Prepared.One", "Query.Close", "StreamQuery.Run", "Rows.NextInto", "Page.Retain", "RowStream.Close", "Batch.Reset", "BoundOptions.Values"} {
+	for _, symbol := range []string{"Session.Prepare", "Session.PrepareStream", "Session.UnpreparedStreamQuery", "PreparedStream.Query", "Prepared.One", "Query.Close", "StreamQuery.Run", "Rows.NextInto", "Page.Retain", "PageState.Token", "RowStream.Close", "Batch.Reset", "CompiledOptions.Values", "ConfigBuilder.WithDefaultProfile", "ConfigBuilder.ConfigureDefaultProfile"} {
 		t.Run(symbol, func(t *testing.T) {
 			out, err := exec.CommandContext(ctx, "go", "doc", "github.com/scylladb/gocql/v2."+symbol).CombinedOutput()
 			if err != nil {
@@ -39,6 +39,7 @@ func TestPublicMethodDocumentation(t *testing.T) {
 		{"github.com/scylladb/gocql/v2.Observer", "ObserveRequest"},
 		{"github.com/scylladb/gocql/v2/cql.Statement.Rows", "Rows"},
 		{"github.com/scylladb/gocql/v2/cql.StreamStatement.Rows", "Rows"},
+		{"github.com/scylladb/gocql/v2/cql.StreamStatement.BindMarkers", "BindMarkers"},
 		{"github.com/scylladb/gocql/v2/cql.StructFields.StreamColumns", "StreamColumns"},
 		{"github.com/scylladb/gocql/v2/cql.Encoder", "CheckType"},
 		{"github.com/scylladb/gocql/v2/cql.Decoder", "Clone"},

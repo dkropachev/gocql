@@ -54,7 +54,7 @@ a state ends the partition, and the worker moves to its next partition.
 
 | v2 | pseudocode | master | pseudocode |
 |---|---|---|---|
-| C1 | `page := w.q.RunPage(ctx, k, RestorePageState(st)); NextInto loop; st = page.State().Bytes(); page.Close()` | MC1 | `it := w.q.Bind(k).PageState(st).WithContext(ctx).Iter(); st = it.PageState(); scan loop; it.Close()` |
+| C1 | `page := w.q.RunPage(ctx, k, PageStateFromToken(st)); NextInto loop; st = page.State().Token(); page.Close()` | MC1 | `it := w.q.Bind(k).PageState(st).WithContext(ctx).Iter(); st = it.PageState(); scan loop; it.Close()` |
 
 ## D. Single-statement write (`point`), 64 workers
 

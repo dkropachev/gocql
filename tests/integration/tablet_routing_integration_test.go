@@ -33,7 +33,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table 
 	}
 	statement := cql.Statement[parameters, cql.DynamicRow]{
 		CQL:    "SELECT last_token,replicas,new_replicas,stage FROM system.tablets WHERE table_id=? AND last_token>=? LIMIT 1",
-		Params: cql.Params(cql.Param("id", cql.UUIDCodec, func(p parameters) cql.UUID { return p.Table }), cql.Param("token", cql.Int64, func(p parameters) int64 { return p.Token })),
+		Params: cql.Params(cql.Param("id", cql.UUIDCodec, func(p parameters) cql.UUID { return p.Table }), cql.Param("token", cql.Int64Codec, func(p parameters) int64 { return p.Token })),
 		Rows:   cql.DynamicRows,
 	}
 	columns := cql.NewColumns(cql.ColumnSpec{Name: "id", Type: cql.UUIDType}, cql.ColumnSpec{Name: "token", Type: cql.BigIntType})

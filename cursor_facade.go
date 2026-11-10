@@ -48,8 +48,8 @@ func (r Rows[R]) Clone() (R, error) { return (implExecution.Rows[R])(r).Clone() 
 func (r Rows[R]) Info() Result { return (implExecution.Rows[R])(r).Info() }
 
 // Page iterates exactly one response page. Borrowed fields expire on
-// advancement or Close unless Retain pins the page. Save State before Close to
-// resume explicit paging. A Page must not be copied or used concurrently.
+// advancement or Close unless Retain pins the page. State remains available
+// after Close to resume explicit paging. A Page must not be copied or used concurrently.
 type Page[R any] implExecution.Page[R]
 
 // Retain keeps the current row's physical page alive until the lease closes.
@@ -76,8 +76,8 @@ func (r *Page[R]) Clone() (R, error) { return (*implExecution.Page[R])(r).Clone(
 // Info returns execution information accumulated so far.
 func (r *Page[R]) Info() Result { return (*implExecution.Page[R])(r).Info() }
 
-// State returns the continuation state; save it before closing the page.
-func (r *Page[R]) State() PageState { return (*implExecution.Page[R])(r).State() }
+// State returns the paging state, which remains available after Close.
+func (r *Page[R]) State() PageState { return PageState((*implExecution.Page[R])(r).State()) }
 
 // RowStream decodes into seeded caller-owned storage. Only a true NextInto
 // publishes a complete row; errors can leave partial destination contents. Buffer

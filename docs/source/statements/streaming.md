@@ -5,6 +5,9 @@ Rows: decoder})` prepares directly for caller-storage decoding. Its immutable
 `PreparedStream` handle can be shared; `prepared.Query(StreamOptions{})` creates
 a query for one worker. A buffered `Prepared` also offers
 `StreamQuery(decoder, StreamOptions{})` when both decoding modes are useful.
+`session.UnpreparedStreamQuery(statement, StreamOptions{})` accepts the same
+`cql.StreamStatement[P,R]`. For unprepared execution, supply parameter metadata
+in `BindMarkers`; `Rows` supplies the streaming decoder in both paths.
 Its `Run(ctx, parameters)` method returns a cursor; `NextInto(&row)` decodes
 into seeded caller storage. By default it buffers a complete response page on
 normal multiplexed connections. `StreamOptions{Incremental: true}` selects

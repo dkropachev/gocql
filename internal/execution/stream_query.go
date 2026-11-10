@@ -68,12 +68,13 @@ func (prepared *Prepared[P, B]) StreamQuery[R any](decoder codec.StreamRowDecode
 }
 
 // NewUnpreparedStreamQuery uses the same owned input and receive-mode contract
-// for a statement executed without server preparation. Rows are decoded by
-// decoder, so the statement declares none.
-func NewUnpreparedStreamQuery[P, R any](session *implCluster.Core, statement binding.Statement[P, codec.EmptyRecord], decoder codec.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
-	if err := binding.ValidateStatement(&statement); err != nil {
+// for a streaming statement executed without server preparation.
+func NewUnpreparedStreamQuery[P, R any](session *implCluster.Core, statement StreamStatement[P, R], options StreamOptions) (*StreamQuery[P, R], error) {
+	base := binding.Statement[P, codec.EmptyRecord]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: execRowsDecoder{}, BindMarkers: statement.BindMarkers}
+	if err := binding.ValidateStatement(&base); err != nil {
 		return nil, err
 	}
+	decoder := statement.Rows
 	if decoder == nil {
 		return nil, cqltype.TypeValidation("stream decoder", "nil decoder")
 	}
@@ -83,7 +84,7 @@ func NewUnpreparedStreamQuery[P, R any](session *implCluster.Core, statement bin
 	if v := options.Options; v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, cqltype.TypeValidation("stream prefetch", "must be zero")
 	}
-	q, err := NewUnpreparedQuery(session, binding.Statement[P, codec.EmptyRecord]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: execRowsDecoder{}, BindMarkers: statement.BindMarkers}, options.Options)
+	q, err := NewUnpreparedQuery(session, base, options.Options)
 	if err != nil {
 		return nil, err
 	}

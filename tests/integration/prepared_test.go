@@ -120,7 +120,7 @@ func TestPrepared(t *testing.T) {
 				cassandraBatch(t, session, cql.LoggedBatch, []batchItem{cassandraItem(t, bound)}, gocql.Options{Keyspace: keyspace})
 			}
 			for i, keyspace := range []string{fixtureKeyspace(""), ks} {
-				prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, int32]{CQL: "SELECT * FROM " + table, Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.Int32)}, gocql.PrepareOptions{Keyspace: keyspace})
+				prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, int32]{CQL: "SELECT * FROM " + table, Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.Int32Codec)}, gocql.PrepareOptions{Keyspace: keyspace})
 				require.Equal(t, keyspace, prepared.Info().Keyspace)
 				require.Equal(t, int32(i+1), cassandraReadBound(t, session, cassandraBound(t, prepared, cql.EmptyParams{}), gocql.Options{Keyspace: keyspace}))
 			}
@@ -204,7 +204,7 @@ func TestPrepared(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			conn := getRandomConn(t, session)
-			statement := cql.Statement[int32, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(val) VALUES(?)", table), Params: cql.OneParam(cql.Int32), Rows: cql.EmptyRowDecoder}
+			statement := cql.Statement[int32, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(val) VALUES(?)", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.EmptyRowDecoder}
 			options := gocql.PrepareOptions{HostID: cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}}
 			_, err := session.Prepare(context.Background(), statement, options)
 			require.Error(t, err)

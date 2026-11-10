@@ -53,7 +53,7 @@ func TestPaging(t *testing.T) {
 		// leave a replica that a ONE read can reach before it has every row
 		// (W+R must exceed RF), so the fixture is written at ALL.
 		session := createV2SessionFromConfig(createV2ClusterWithout(fixtureConsistency, func(c *gocql.ConfigBuilder) {
-			c.WithDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithConsistency(cql.All) })
+			c.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithConsistency(cql.All) })
 		}), t, false)
 		defer session.Close()
 		table := testTableName(t)
@@ -117,8 +117,8 @@ func TestPaging(t *testing.T) {
 						if next.Complete() {
 							break
 						}
-						require.NotEqual(t, state.Bytes(), next.Bytes())
-						state = gocql.RestorePageState(next.Bytes())
+						require.NotEqual(t, state.Token(), next.Token())
+						state = gocql.PageStateFromToken(next.Token())
 					}
 					validate(t, result)
 				})
@@ -190,7 +190,7 @@ func TestPaging(t *testing.T) {
 			if state.Complete() {
 				break
 			}
-			state = gocql.RestorePageState(state.Bytes())
+			state = gocql.PageStateFromToken(state.Token())
 		}
 		require.Equal(t, count, fetched)
 	})
@@ -215,8 +215,8 @@ func TestPaging(t *testing.T) {
 			cassandraWrite(t, session, "INSERT INTO "+table+"(id,val,payload) VALUES(?,?,?)", cql.IntValue(1), cql.IntValue(i), cql.BlobValue(payload))
 		}
 		var calls atomic.Int32
-		decoder := liveDecoder{calls: &calls, base: cql.Row(cql.Column("val", cql.Int32, func(r *liveDestination) *int32 { return &r.Value }), cql.Column("payload", cql.BlobCodec, func(r *liveDestination) *cql.Bytes { return &r.Payload }))}
-		prepared := codecTestMust(session.Prepare(ctx, cql.Statement[int32, liveDestination]{CQL: "SELECT val,payload FROM " + table + " WHERE id=?", Params: cql.OneParam(cql.Int32), Rows: decoder}, gocql.PrepareOptions{}))
+		decoder := liveDecoder{calls: &calls, base: cql.Row(cql.Column("val", cql.Int32Codec, func(r *liveDestination) *int32 { return &r.Value }), cql.Column("payload", cql.BlobCodec, func(r *liveDestination) *cql.Bytes { return &r.Payload }))}
+		prepared := codecTestMust(session.Prepare(ctx, cql.Statement[int32, liveDestination]{CQL: "SELECT val,payload FROM " + table + " WHERE id=?", Params: cql.OneParam(cql.Int32Codec), Rows: decoder}, gocql.PrepareOptions{}))
 		bound := codecTestMust(BindBorrowed(prepared, int32(1)))
 		defer bound.Close()
 		churn := make(chan error, 1)
@@ -290,7 +290,7 @@ func TestPaging(t *testing.T) {
 			t.Helper()
 			b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{}))
 			defer b.Close()
-			if _, err := Exec(ctx, s, b, gocql.BoundOptions{}); err != nil {
+			if _, err := Exec(ctx, s, b, gocql.CompiledOptions{}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -301,7 +301,7 @@ func TestPaging(t *testing.T) {
 			b, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + keyspace, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{})
 			if err == nil {
 				defer b.Close()
-				_, err = Exec(cleanup, s, b, gocql.BoundOptions{})
+				_, err = Exec(cleanup, s, b, gocql.CompiledOptions{})
 			}
 			if err != nil {
 				t.Error("unique keyspace cleanup", err)
@@ -314,13 +314,13 @@ func TestPaging(t *testing.T) {
 			Pieces [][]byte
 			Text   string
 		}
-		params := cql.Params(cql.Param("id", cql.Int32, func(v input) int32 { return v.ID }), cql.Param("value", cql.BytesEncoder, func(v input) []byte { return v.Value }), cql.Param("pieces", cql.ListEncoder(cql.BytesEncoder), func(v input) [][]byte { return v.Pieces }), cql.Param("txt", cql.StringEncoder, func(v input) string { return v.Text }))
+		params := cql.Params(cql.Param("id", cql.Int32Codec, func(v input) int32 { return v.ID }), cql.Param("value", cql.BytesEncoder, func(v input) []byte { return v.Value }), cql.Param("pieces", cql.ListEncoder(cql.BytesEncoder), func(v input) [][]byte { return v.Pieces }), cql.Param("txt", cql.StringEncoder, func(v input) string { return v.Text }))
 		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".records(id,value,pieces,txt)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: params, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
 		payload := bytes.Repeat([]byte("segment-crossing"), 30000)
 		textPayload := strings.Repeat("stream-🙂-", 24000)
 		for i := 0; i < 5; i++ {
 			b := codecTestMust(BindOwned(prepared, input{int32(i), payload, [][]byte{[]byte("nested"), []byte("storage")}, textPayload}))
-			_, err := Exec(ctx, s, b, gocql.BoundOptions{})
+			_, err := Exec(ctx, s, b, gocql.CompiledOptions{})
 			b.Close()
 			if err != nil {
 				t.Fatal(err)

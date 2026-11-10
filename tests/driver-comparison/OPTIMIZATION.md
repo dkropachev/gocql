@@ -1565,7 +1565,7 @@ success and a real fragmented int32 decoder with retained/finally released
 borrowed storage. Compiled helper copies fell from five to three, its stack
 frame from 344 to 192 bytes, and isolated CPU8/GOMAXPROCS1 benchmarks remained
 at zero bytes/allocations. Three sequential one-second observations per source
-measured approximately 13–15 → 3.4–3.6 ns per helper call. Real Int64 and Blob
+measured approximately 13–15 → 3.4–3.6 ns per helper call. Real Int64Codec and Blob
 scalar benchmarks also improved. The actual paged profile removed the sampled
 `CheckBytesAlive` copy caller. These proofs justified live profiling; they did
 not establish a worked optimization.

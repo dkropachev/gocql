@@ -53,7 +53,7 @@ func TestGeneratedMappingCodecOptions(t *testing.T) {
 		t.Fatal("mapping options leaked into shared registration")
 	}
 	// Compare against reflection with the custom-expression types supplied explicitly.
-	reflected, err := codec.ReflectParams(first, cql.WithCodec[Fixture](PointCodec), cql.WithCodec[Fixture](cql.MapCodec(cql.StringCodec, cql.Int64)))
+	reflected, err := codec.ReflectParams(first, cql.WithCodec[Fixture](PointCodec), cql.WithCodec[Fixture](cql.MapCodec(cql.StringCodec, cql.Int64Codec)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,9 +116,9 @@ func TestGeneratedStreamMappingOptions(t *testing.T) {
 	}
 	cols := cql.NewColumns(cql.ColumnSpec{Name: "id", Type: cql.IntType}, cql.ColumnSpec{Name: "tags", Type: set}, cql.ColumnSpec{Name: "maybe", Type: cql.BigIntType})
 	params := cql.Params(
-		cql.Param("id", cql.Int32, func(v StreamFixture) int32 { return v.ID }),
-		cql.Param("tags", cql.SetEncoder(cql.Int32), func(v StreamFixture) []int32 { return v.Tags }),
-		cql.Param("maybe", cql.NullableEncoder(cql.Int64), func(v StreamFixture) cql.Nullable[int64] { return v.Maybe }),
+		cql.Param("id", cql.Int32Codec, func(v StreamFixture) int32 { return v.ID }),
+		cql.Param("tags", cql.SetEncoder(cql.Int32Codec), func(v StreamFixture) []int32 { return v.Tags }),
+		cql.Param("maybe", cql.NullableEncoder(cql.Int64Codec), func(v StreamFixture) cql.Nullable[int64] { return v.Maybe }),
 	)
 	plan, err := params.Compile(cols)
 	if err != nil {

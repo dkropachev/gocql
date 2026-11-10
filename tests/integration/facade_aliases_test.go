@@ -34,8 +34,8 @@ import (
 	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
-func admitExecution[R any](a0 context.Context, a1 *gocql.Session, a2 *implExecution.Bound[R], a3 gocql.BoundOptions) (context.Context, context.CancelFunc, *executionRequest, error) {
-	return implExecution.InternalAdmitExecution[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, implExecution.BoundOptions(a3))
+func admitExecution[R any](a0 context.Context, a1 *gocql.Session, a2 *implExecution.Bound[R], a3 gocql.CompiledOptions) (context.Context, context.CancelFunc, *executionRequest, error) {
+	return implExecution.InternalAdmitExecution[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, implExecution.CompiledOptions(a3))
 }
 
 type clientRoute = implCluster.InternalClientRoute
@@ -80,7 +80,7 @@ func resolveOptions(a0 *gocql.Session, a1 gocql.Options) (resolvedOptions, error
 	if err != nil {
 		return resolvedOptions{}, err
 	}
-	return implExecution.InternalResolveFor(implExecution.InternalCore((*implExecution.Session)(a0)), implExecution.BoundOptions(o)), nil
+	return implExecution.InternalResolveFor(implExecution.InternalCore((*implExecution.Session)(a0)), implExecution.CompiledOptions(o)), nil
 }
 
 type resolvedOptions = implExecution.InternalResolvedOptions

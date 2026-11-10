@@ -55,7 +55,7 @@ func BenchmarkReusableQuery(b *testing.B) {
 			if err := q.capture(ctx, value); err != nil {
 				b.Fatal(err)
 			}
-			_, cancel, request, err := InternalAdmitExecution(ctx, q.state.runtime.Core, &q.bound, BoundOptions{})
+			_, cancel, request, err := InternalAdmitExecution(ctx, q.state.runtime.Core, &q.bound, CompiledOptions{})
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -126,7 +126,7 @@ func BenchmarkReusableQuery(b *testing.B) {
 					var query *Query[codec.EmptyRecord, []byte]
 					var streaming *StreamQuery[codec.EmptyRecord, []byte]
 					if stream {
-						streaming = codecTestMust(NewUnpreparedStreamQuery(s, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params}, codec.StreamOneColumn(codec.StreamBlob), StreamOptions{Options: options.Values()}))
+						streaming = codecTestMust(NewUnpreparedStreamQuery(s, StreamStatement[codec.EmptyRecord, []byte]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: codec.StreamOneColumn(codec.StreamBlob)}, StreamOptions{Options: options.Values()}))
 						defer func() { _ = streaming.Close(context.Background()) }()
 					} else {
 						query = codecTestMust(NewUnpreparedQuery(s, statement, options.Values()))

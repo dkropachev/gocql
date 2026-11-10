@@ -1315,7 +1315,7 @@ Allocations and bytes did not change.
   parameter is called through the dictionary on Go 1.25 and 1.27. Version
   markers specialize only branches on their shape and would remove a few
   predictable branches per request.
-- Bool, float, UUID, inet and text-view fields keep their interfaces.
+- BoolCodec, float, UUID, inet and text-view fields keep their interfaces.
 - `golangci-lint` 2.5.0 (and 2.10.1 rebuilt locally) cannot load Go 1.27
   export data, so `make check` needs a newer linter release.
 

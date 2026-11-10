@@ -7,7 +7,7 @@ once from any goroutine, call `prepared.Exec(ctx, input)`,
 `prepared.One(ctx, input, &dst)` or `prepared.Each(ctx, input, &dst, fn)`.
 `Exec` and `Each` return `(Result, error)`, `One` returns
 `(bool, Result, error)`. They run on queries the statement keeps, and take at
-most one `BoundOptions` for that call: bind `Options` to the session once with
+most one `CompiledOptions` for that call: bind `Options` to the session once with
 `session.BindOptions(options)` and reuse the result, or pass none for the
 session default. They return once the execution has finished. `One` detaches borrowed fields
 before returning, so the row remains usable. `Each` lends borrowed fields only

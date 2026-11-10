@@ -287,7 +287,7 @@ func TestQuery(t *testing.T) {
 			// The execution returns after cancellation while the transport
 			// still holds an accepted write of its input.
 			writer := q.state.owner.InternalWriterLease(q.bound.privateStorage.InternalRequest.InternalValues.Framed)
-			_, cancelExec, request, err := InternalAdmitExecution(context.Background(), q.state.runtime.Core, &q.bound, BoundOptions{})
+			_, cancelExec, request, err := InternalAdmitExecution(context.Background(), q.state.runtime.Core, &q.bound, CompiledOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -334,7 +334,7 @@ func TestQuery(t *testing.T) {
 			if err := q.capture(context.Background(), []byte("owned")); err != nil {
 				t.Fatal(err)
 			}
-			_, cancel, request, err := InternalAdmitExecution(context.Background(), q.state.runtime.Core, &q.bound, BoundOptions{})
+			_, cancel, request, err := InternalAdmitExecution(context.Background(), q.state.runtime.Core, &q.bound, CompiledOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -894,7 +894,7 @@ func TestQuery(t *testing.T) {
 			s, _, peers := runtimeTestSession(t, 2)
 			var serve pinServe
 			serve.start(t, peers, func(_ int, token string, stream int) []byte { return pinPages(t, stream, token) })
-			q := pinTestQuery(t, s, BoundOptions{})
+			q := pinTestQuery(t, s, CompiledOptions{})
 			firsts := map[byte]bool{}
 			for range 8 {
 				pinEach(t, q)
@@ -920,7 +920,7 @@ func TestQuery(t *testing.T) {
 				}
 				return pinPages(t, stream, token)
 			})
-			q := pinTestQuery(t, s, BoundOptions{})
+			q := pinTestQuery(t, s, CompiledOptions{})
 			pinEach(t, q)
 			seen := serve.take()
 			if len(seen) != 3 || seen[1][0] != seen[0][0] || seen[2][0] == seen[1][0] {
@@ -1088,7 +1088,7 @@ func TestQuery(t *testing.T) {
 			for _, mode := range modes {
 				t.Run(mode.name, func(t *testing.T) {
 					s, c, peer := fixtureStreamSession(t, mode)
-					query := codecTestMust(NewUnpreparedStreamQuery(s, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder}, codec.StreamOneColumn(codec.StreamBlob), StreamOptions{}))
+					query := codecTestMust(NewUnpreparedStreamQuery(s, StreamStatement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.StreamOneColumn(codec.StreamBlob)}, StreamOptions{}))
 					defer func() { _ = query.Close(context.Background()) }()
 					served := make(chan struct{})
 					go func() {
@@ -1127,9 +1127,9 @@ func TestQuery(t *testing.T) {
 
 		t.Run("MultiplexAndReuseSeededStorage", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
-			statement := binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder}
-			q := codecTestMust(NewUnpreparedStreamQuery(s, statement, codec.StreamOneColumn(codec.StreamBlob), StreamOptions{}))
-			other := codecTestMust(NewUnpreparedStreamQuery(s, statement, codec.StreamOneColumn(codec.StreamBlob), StreamOptions{}))
+			statement := StreamStatement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.StreamOneColumn(codec.StreamBlob)}
+			q := codecTestMust(NewUnpreparedStreamQuery(s, statement, StreamOptions{}))
+			other := codecTestMust(NewUnpreparedStreamQuery(s, statement, StreamOptions{}))
 			defer func() { _ = q.Close(context.Background()) }()
 			defer func() { _ = other.Close(context.Background()) }()
 			served := make(chan struct{})

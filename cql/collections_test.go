@@ -31,9 +31,9 @@ func TestCollectionDecoders(t *testing.T) {
 		decoder cql.Decoder[[]int32]
 		stream  cql.StreamDecoder[[]int32]
 	}{
-		{"list", list, cql.ListCodec(cql.Int32), cql.ListDecoder(cql.Int32), cql.StreamList(cql.StreamInt32)},
-		{"set", set, cql.SetCodec(cql.Int32), cql.SetDecoder(cql.Int32), cql.StreamSet(cql.StreamInt32)},
-		{"vector", vector, cql.VectorCodec(cql.Int32), cql.VectorDecoder(cql.Int32), cql.StreamVector(cql.StreamInt32)},
+		{"list", list, cql.ListCodec(cql.Int32Codec), cql.ListDecoder(cql.Int32Codec), cql.StreamList(cql.StreamInt32)},
+		{"set", set, cql.SetCodec(cql.Int32Codec), cql.SetDecoder(cql.Int32Codec), cql.StreamSet(cql.StreamInt32)},
+		{"vector", vector, cql.VectorCodec(cql.Int32Codec), cql.VectorDecoder(cql.Int32Codec), cql.StreamVector(cql.StreamInt32)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			want := []int32{7, -3}
@@ -64,13 +64,13 @@ func TestMapDecoders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	codec := cql.MapCodec(cql.OwnedBlobCodec, cql.Int32)
+	codec := cql.MapCodec(cql.OwnedBlobCodec, cql.Int32Codec)
 	want := []cql.Entry[[]byte, int32]{{Key: []byte("z"), Value: 7}, {Key: []byte("a"), Value: 3}}
 	encoded, err := cql.EncodeValue(typ, codec, want)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, decoder := range []cql.Decoder[[]cql.Entry[[]byte, int32]]{codec, cql.MapDecoder(cql.OwnedBlobCodec, cql.Int32)} {
+	for _, decoder := range []cql.Decoder[[]cql.Entry[[]byte, int32]]{codec, cql.MapDecoder(cql.OwnedBlobCodec, cql.Int32Codec)} {
 		got, err := cql.DecodeValue(decoder, encoded)
 		if err != nil || !reflect.DeepEqual(got, want) {
 			t.Fatalf("decode = %v, %v; want ordered non-comparable keys %v", got, err, want)
@@ -95,7 +95,7 @@ func TestMapDecoders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, err := cql.DecodeValue(cql.MapDecoder(cql.OwnedBlobCodec, cql.Int32), malformed); err == nil || got != nil {
+	if got, err := cql.DecodeValue(cql.MapDecoder(cql.OwnedBlobCodec, cql.Int32Codec), malformed); err == nil || got != nil {
 		t.Fatalf("malformed map exposed partial values: %v, %v", got, err)
 	}
 }

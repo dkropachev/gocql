@@ -80,7 +80,7 @@ func (c queryCursor) current() bool {
 // Prepared statements remain shareable; a Query must not be copied.
 type Query[P, R any] struct {
 	params  codec.ParamPlan[P]
-	options BoundOptions
+	options CompiledOptions
 	columns cqltype.Columns
 	scratch eachScratch   // Each and One decoding state
 	rows    rowsHolder[R] // Run's iterator storage, reused each execution
@@ -142,24 +142,24 @@ func NewQuery[P, R any](p *Prepared[P, R], values Options) (*Query[P, R], error)
 }
 
 // InternalBindOptions freezes values for session s. Empty values become the
-// zero BoundOptions, which use the session's shared default resolution.
-func InternalBindOptions(s *implCluster.Core, values Options) (BoundOptions, error) {
+// zero CompiledOptions, which use the session's shared default resolution.
+func InternalBindOptions(s *implCluster.Core, values Options) (CompiledOptions, error) {
 	return queryOptions(s, values)
 }
 
 // queryOptions freezes a query's values for its session. Empty values use
 // the session's shared default resolution.
-func queryOptions(s *implCluster.Core, values Options) (BoundOptions, error) {
+func queryOptions(s *implCluster.Core, values Options) (CompiledOptions, error) {
 	if reflect.ValueOf(&values).Elem().IsZero() {
-		return BoundOptions{}, nil
+		return CompiledOptions{}, nil
 	}
 	if s == nil {
-		return BoundOptions{}, cqltype.TypeValidation("query", "nil session")
+		return CompiledOptions{}, cqltype.TypeValidation("query", "nil session")
 	}
-	return NewBoundOptions(s, values)
+	return NewCompiledOptions(s, values)
 }
 
-func newPreparedQuery[P, R any](p *Prepared[P, R], options BoundOptions, pool *queryPoolBase) (*Query[P, R], error) {
+func newPreparedQuery[P, R any](p *Prepared[P, R], options CompiledOptions, pool *queryPoolBase) (*Query[P, R], error) {
 	if p == nil || p.privateStorage.InternalState == nil {
 		return nil, cqltype.TypeValidation("prepared", "nil handle")
 	}
@@ -192,7 +192,7 @@ func NewUnpreparedQuery[P, R any](s *implCluster.Core, statement binding.Stateme
 	return newUnpreparedQuery(s, statement, options)
 }
 
-func newUnpreparedQuery[P, R any](s *implCluster.Core, statement binding.Statement[P, R], options BoundOptions) (*Query[P, R], error) {
+func newUnpreparedQuery[P, R any](s *implCluster.Core, statement binding.Statement[P, R], options CompiledOptions) (*Query[P, R], error) {
 	if err := binding.ValidateStatement(&statement); err != nil {
 		return nil, err
 	}

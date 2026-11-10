@@ -5,6 +5,7 @@ package gocql
 
 import (
 	"context"
+	"github.com/scylladb/gocql/v2/internal/model"
 
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 	"github.com/scylladb/gocql/v2/routing"
@@ -48,9 +49,9 @@ func (q *Query[P, R]) Run(ctx context.Context, value P) (Rows[R], error) {
 }
 
 // RunPage executes one page, resuming from state. StartPage begins the first
-// page. Save Page.State before closing the page and close it before reusing q.
+// page. Page.State remains available after Close; close the page before reusing q.
 func (q *Query[P, R]) RunPage(ctx context.Context, value P, state PageState) (*Page[R], error) {
-	page, err := q.internal().RunPage(ctx, value, state)
+	page, err := q.internal().RunPage(ctx, value, model.PageState(state))
 	return (*Page[R])(page), err
 }
 

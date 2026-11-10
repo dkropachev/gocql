@@ -189,7 +189,7 @@ func run() (resultErr error) {
 		return err
 	}
 	insert, err := s.Prepare(ctx, cql.Statement[record, cql.EmptyRow]{CQL: "INSERT INTO " + table + " (id,payload,pieces) VALUES (?,?,?)", Params: cql.Params(
-		cql.Param("id", cql.Int32, func(v record) int32 { return v.ID }),
+		cql.Param("id", cql.Int32Codec, func(v record) int32 { return v.ID }),
 		cql.Param("payload", cql.BytesEncoder, func(v record) []byte { return v.Payload }),
 		cql.Param("pieces", cql.ListEncoder(cql.BytesEncoder), func(v record) [][]byte { return v.Pieces }),
 	), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})

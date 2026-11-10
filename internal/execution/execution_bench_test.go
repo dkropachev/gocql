@@ -55,7 +55,7 @@ func BenchmarkExecution(b *testing.B) {
 	})
 
 	// BenchmarkExecution/NewOptionTemplates encodes the templates of resolved options, as
-	// NewBoundOptions and a query created with options for another session do.
+	// NewCompiledOptions and a query created with options for another session do.
 	b.Run("NewOptionTemplates", func(b *testing.B) {
 		profile := settings.InternalDefaultProfile()
 		profile.PageSize = 5000
@@ -236,7 +236,7 @@ func BenchmarkExecution(b *testing.B) {
 				b.ResetTimer()
 				b.RunParallel(func(pb *testing.PB) {
 					for pb.Next() {
-						ctx, cancel, request, err := InternalAdmitExecution(context.Background(), s, bound, BoundOptions{})
+						ctx, cancel, request, err := InternalAdmitExecution(context.Background(), s, bound, CompiledOptions{})
 						if err != nil {
 							b.Error(err)
 							return
@@ -272,7 +272,7 @@ func BenchmarkExecution(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				err := execTestStatement(context.Background(), db, "void", BoundOptions{})
+				err := execTestStatement(context.Background(), db, "void", CompiledOptions{})
 				if err != nil {
 					b.Error(err)
 					return

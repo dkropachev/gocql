@@ -121,18 +121,31 @@ func MergeResult(dst *Result, src Result) {
 	dst.AchievedConsistency = src.AchievedConsistency
 }
 
+// PageState distinguishes the initial page, a continuation (whose token may be
+// empty), and completion. Its zero value starts paging.
 type PageState struct {
 	token []byte
 	kind  uint8
 }
 
 func StartPage() PageState { return PageState{} }
-func RestorePageState(token []byte) PageState {
+
+// PageStateFromToken copies token into a continuation state. Nil and empty
+// tokens both represent an empty continuation, never initial or complete states.
+func PageStateFromToken(token []byte) PageState {
 	return PageState{token: append([]byte{}, token...), kind: 1}
 }
-func (p PageState) More() bool     { return p.kind == 1 }
+
+// More reports whether this state contains a continuation token.
+func (p PageState) More() bool { return p.kind == 1 }
+
+// Complete reports whether the server has finished paging.
 func (p PageState) Complete() bool { return p.kind == 2 }
-func (p PageState) Bytes() []byte {
+
+// Token returns an owned copy of a continuation token, including a non-nil
+// empty slice for an empty continuation. Initial and complete states return nil;
+// use More and Complete to distinguish them. This is not full-state serialization.
+func (p PageState) Token() []byte {
 	if p.kind != 1 {
 		return nil
 	}

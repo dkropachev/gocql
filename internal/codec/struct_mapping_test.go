@@ -254,14 +254,14 @@ func TestStructMapping(t *testing.T) {
 				A int32 `cql:"a,omitempty"`
 			}
 			type badCodec struct {
-				A string `cql:"a,codec=Int32"`
+				A string `cql:"a,codec=Int32Codec"`
 			}
 			for name, err := range map[string]error{
 				"not a struct":     func() error { _, err := ReflectParams[int](); return err }(),
 				"embedded pointer": func() error { _, err := ReflectParams[embedded](); return err }(),
 				"both map":         func() error { _, err := ReflectParams[duplicate](); return err }(),
 				"omitempty":        func() error { _, err := ReflectRow[badOption](); return err }(),
-				"\"Int32\"":        func() error { _, err := ReflectRow[badCodec](); return err }(),
+				"\"Int32Codec\"":   func() error { _, err := ReflectRow[badCodec](); return err }(),
 			} {
 				if err == nil || !strings.Contains(err.Error(), name) {
 					t.Errorf("%s: got %v", name, err)

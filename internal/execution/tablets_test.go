@@ -171,7 +171,7 @@ func TestTablets(t *testing.T) {
 						}
 						if !streaming {
 							var page *Page[cqltype.Bytes]
-							page, err = RunPage(ctx, s, b, model.StartPage(), BoundOptions{})
+							page, err = RunPage(ctx, s, b, model.StartPage(), CompiledOptions{})
 							if err == nil {
 								var row cqltype.Bytes
 								if !page.NextInto(&row) || string(row.OwnedBytes()) != "value" {

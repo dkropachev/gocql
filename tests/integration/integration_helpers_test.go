@@ -57,7 +57,7 @@ func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*gocql.Con
 	if skip&fixtureAgreement == 0 {
 		b.WithSchemaAgreement(2*time.Minute, 200*time.Millisecond)
 	}
-	b.WithDefaultProfile(func(p *gocql.ProfileBuilder) { fixtureProfileExcept(p, skip) })
+	b.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { fixtureProfileExcept(p, skip) })
 	if *flagRunAuthTest && skip&fixtureAuth == 0 {
 		b.WithAuth(auth.Password("cassandra", "cassandra"))
 	}
@@ -210,7 +210,7 @@ func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisa
 		// Keyspace creation uses a fresh fixture config: the test's own
 		// choices may not reach a working cluster.
 		bootstrap := mustBuild(t, createV2ClusterWithout(fixtureTimeout).WithKeyspace("system").
-			WithDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithTimeout(30 * time.Second) }))
+			ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithTimeout(30 * time.Second) }))
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 		session, err := gocql.Connect(ctx, bootstrap)
@@ -300,7 +300,7 @@ func v2Exec(ctx context.Context, session *gocql.Session, stmt string, values ...
 		return gocql.Result{}, err
 	}
 	defer bound.Close()
-	return Exec(ctx, session, bound, gocql.BoundOptions{})
+	return Exec(ctx, session, bound, gocql.CompiledOptions{})
 }
 
 func v2Query(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (gocql.Rows[cql.DynamicRow], error) {
@@ -322,7 +322,7 @@ func v2Query(ctx context.Context, session *gocql.Session, stmt string, values ..
 	// Run admits the request before returning. Rows owns the execution reference
 	// until it is exhausted or closed, even after closing the binding here.
 	defer bound.Close()
-	return Run(ctx, session, bound, gocql.BoundOptions{})
+	return Run(ctx, session, bound, gocql.CompiledOptions{})
 }
 
 func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (cql.DynamicRow, error) {

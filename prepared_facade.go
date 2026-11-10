@@ -12,7 +12,7 @@ import (
 
 // Prepared is an immutable typed statement prepared on a session. Share it
 // between goroutines and call Exec, One or Each for ordinary executions. Each
-// call may take one BoundOptions, built once by Session.BindOptions, or omit
+// call may take one CompiledOptions, built once by Session.BindOptions, or omit
 // options for the session defaults. A Prepared has no Close obligation.
 type Prepared[P, R any] implExecution.Prepared[P, R]
 
@@ -21,9 +21,9 @@ func (p *Prepared[P, R]) internal() *implExecution.Prepared[P, R] {
 }
 
 // Exec executes a statement with no result columns. It is safe for concurrent
-// use. At most one BoundOptions may be passed.
-func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...BoundOptions) (Result, error) {
-	o, err := internalBoundOptions(options)
+// use. At most one CompiledOptions may be passed.
+func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...CompiledOptions) (Result, error) {
+	o, err := internalCompiledOptions(options)
 	if err != nil {
 		return implExecution.InternalExecutionErrorResult(err), err
 	}
@@ -34,9 +34,9 @@ func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...BoundOpti
 // rows are ignored; if none exists dst is cleared. Borrowed fields are detached
 // before return, while built-in owning fields retain reusable destination
 // buffers. The result stays valid after the call. One is safe for concurrent
-// use with independent destinations. At most one BoundOptions may be passed.
-func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...BoundOptions) (bool, Result, error) {
-	o, err := internalBoundOptions(options)
+// use with independent destinations. At most one CompiledOptions may be passed.
+func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...CompiledOptions) (bool, Result, error) {
+	o, err := internalCompiledOptions(options)
 	if err != nil {
 		return false, implExecution.InternalExecutionErrorResult(err), err
 	}
@@ -46,9 +46,9 @@ func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...Bo
 // Each decodes every row across all pages into dst and calls fn. Borrowed
 // fields are valid only until fn returns; clone any values kept beyond that
 // point. Returning StopIteration stops successfully; other callback errors stop iteration and are returned. Each is safe for concurrent
-// use with independent destinations. At most one BoundOptions may be passed.
-func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...BoundOptions) (Result, error) {
-	o, err := internalBoundOptions(options)
+// use with independent destinations. At most one CompiledOptions may be passed.
+func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...CompiledOptions) (Result, error) {
+	o, err := internalCompiledOptions(options)
 	if err != nil {
 		return implExecution.InternalExecutionErrorResult(err), err
 	}

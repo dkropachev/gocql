@@ -134,7 +134,7 @@ func (b *Batch) requestRouting() model.RoutingInfo {
 }
 
 // validate checks that batch can be sent as kind with options on s.
-func validateBatch(s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, options BoundOptions) error {
+func validateBatch(s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, options CompiledOptions) error {
 	if batch == nil {
 		return cqltype.TypeValidation("batch", "nil batch")
 	}
@@ -231,7 +231,7 @@ func InternalAddBound[R any](batch *Batch, s *implCluster.Core, bound *Bound[R])
 
 // runBatch sends batch on s without a query and returns its first and
 // only page.
-func runBatch[R any](ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, decoder codec.RowDecoder[R], options BoundOptions) (*Page[R], error) {
+func runBatch[R any](ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, decoder codec.RowDecoder[R], options CompiledOptions) (*Page[R], error) {
 	if err := validateBatch(s, kind, batch, options); err != nil {
 		return nil, err
 	}
@@ -260,7 +260,7 @@ func (b *Batch) queryExec(dst *InternalExecutionRequest, q *queryState, kind cql
 
 // execBatch sends batch on s and drains its result, which must have no
 // columns.
-func execBatch(ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, options BoundOptions) (model.Result, error) {
+func execBatch(ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, options CompiledOptions) (model.Result, error) {
 	page, err := runBatch(ctx, s, kind, batch, execRowsDecoder{}, options)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
@@ -287,7 +287,7 @@ func (rt *InternalSessionRuntime) batchQueries() (*queryPool[codec.EmptyRecord, 
 			if err := newQueryState(s, &q.state, q.retire, base); err != nil {
 				return nil, err
 			}
-			q.state.resolved = BoundOptions{}.resolveFixed(q.state.runtime)
+			q.state.resolved = CompiledOptions{}.resolveFixed(q.state.runtime)
 			q.state.execCtx = newExecutionContext()
 			return q, nil
 		})
@@ -298,7 +298,7 @@ func (rt *InternalSessionRuntime) batchQueries() (*queryPool[codec.EmptyRecord, 
 // beginBatch validates a batch call on s and takes a pooled query that has
 // begun an execution for it. The caller releases the query's owner when the
 // execution no longer needs it.
-func beginBatch(ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, options []BoundOptions) (*Query[codec.EmptyRecord, codec.EmptyRecord], BoundOptions, error) {
+func beginBatch(ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, options []CompiledOptions) (*Query[codec.EmptyRecord, codec.EmptyRecord], CompiledOptions, error) {
 	o, err := oneShotOptions(options)
 	if err != nil {
 		return nil, o, err
@@ -316,12 +316,12 @@ func beginBatch(ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind
 
 // InternalRunBatch sends batch on s; tests use it to run batches built from
 // bindings.
-func InternalRunBatch[R any](ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, decoder codec.RowDecoder[R], options BoundOptions) (*Page[R], error) {
+func InternalRunBatch[R any](ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, decoder codec.RowDecoder[R], options CompiledOptions) (*Page[R], error) {
 	return runBatch(ctx, s, kind, batch, decoder, options)
 }
 
 // InternalExecBatch sends batch on s and drains its result.
-func InternalExecBatch(ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, options BoundOptions) (model.Result, error) {
+func InternalExecBatch(ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, options CompiledOptions) (model.Result, error) {
 	return execBatch(ctx, s, kind, batch, options)
 }
 

@@ -44,7 +44,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 		t.Helper()
 		b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{}))
 		defer b.Close()
-		if _, err := Exec(ctx, s, b, gocql.BoundOptions{}); err != nil {
+		if _, err := Exec(ctx, s, b, gocql.CompiledOptions{}); err != nil {
 			t.Fatal(stmt, err)
 		}
 	}

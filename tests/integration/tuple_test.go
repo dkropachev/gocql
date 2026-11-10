@@ -38,14 +38,14 @@ import (
 type serializationCoord struct{ X, Y int32 }
 
 var serializationCoordCodec = serializationTuple(
-	cql.Params(cql.ParamAt(0, cql.Int32, func(v serializationCoord) int32 { return v.X }), cql.ParamAt(1, cql.Int32, func(v serializationCoord) int32 { return v.Y })),
-	cql.Row(cql.ColumnAt(0, cql.Int32, func(v *serializationCoord) *int32 { return &v.X }), cql.ColumnAt(1, cql.Int32, func(v *serializationCoord) *int32 { return &v.Y })))
+	cql.Params(cql.ParamAt(0, cql.Int32Codec, func(v serializationCoord) int32 { return v.X }), cql.ParamAt(1, cql.Int32Codec, func(v serializationCoord) int32 { return v.Y })),
+	cql.Row(cql.ColumnAt(0, cql.Int32Codec, func(v *serializationCoord) *int32 { return &v.X }), cql.ColumnAt(1, cql.Int32Codec, func(v *serializationCoord) *int32 { return &v.Y })))
 
 type serializationNullableCoord struct{ X, Y cql.Nullable[int32] }
 
 var serializationNullableCoordCodec = serializationTuple(
-	cql.Params(cql.ParamAt(0, cql.NullableCodec(cql.Int32), func(v serializationNullableCoord) cql.Nullable[int32] { return v.X }), cql.ParamAt(1, cql.NullableCodec(cql.Int32), func(v serializationNullableCoord) cql.Nullable[int32] { return v.Y })),
-	cql.Row(cql.ColumnAt(0, cql.NullableCodec(cql.Int32), func(v *serializationNullableCoord) *cql.Nullable[int32] { return &v.X }), cql.ColumnAt(1, cql.NullableCodec(cql.Int32), func(v *serializationNullableCoord) *cql.Nullable[int32] { return &v.Y })))
+	cql.Params(cql.ParamAt(0, cql.NullableCodec(cql.Int32Codec), func(v serializationNullableCoord) cql.Nullable[int32] { return v.X }), cql.ParamAt(1, cql.NullableCodec(cql.Int32Codec), func(v serializationNullableCoord) cql.Nullable[int32] { return v.Y })),
+	cql.Row(cql.ColumnAt(0, cql.NullableCodec(cql.Int32Codec), func(v *serializationNullableCoord) *cql.Nullable[int32] { return &v.X }), cql.ColumnAt(1, cql.NullableCodec(cql.Int32Codec), func(v *serializationNullableCoord) *cql.Nullable[int32] { return &v.Y })))
 
 func tupleTable(t *testing.T, s *gocql.Session, typ string) string {
 	t.Helper()
@@ -121,8 +121,8 @@ type serializationMixedTuple struct {
 }
 
 var serializationMixedTupleCodec = serializationTuple(
-	cql.Params(cql.ParamAt(0, cql.Int32, func(v serializationMixedTuple) int32 { return v.A }), cql.ParamAt(1, serializationString, func(v serializationMixedTuple) string { return v.B })),
-	cql.Row(cql.ColumnAt(0, cql.Int32, func(v *serializationMixedTuple) *int32 { return &v.A }), cql.ColumnAt(1, serializationString, func(v *serializationMixedTuple) *string { return &v.B })))
+	cql.Params(cql.ParamAt(0, cql.Int32Codec, func(v serializationMixedTuple) int32 { return v.A }), cql.ParamAt(1, serializationString, func(v serializationMixedTuple) string { return v.B })),
+	cql.Row(cql.ColumnAt(0, cql.Int32Codec, func(v *serializationMixedTuple) *int32 { return &v.A }), cql.ColumnAt(1, serializationString, func(v *serializationMixedTuple) *string { return &v.B })))
 
 func TestTuple(t *testing.T) {
 	t.Parallel()
@@ -282,7 +282,7 @@ func TestTuple(t *testing.T) {
 				ID    int32
 				Coord serializationCoord
 			}
-			decoder := cql.Row(cql.Column("id", cql.Int32, func(r *result) *int32 { return &r.ID }), cql.Column("val", serializationCoordCodec, func(r *result) *serializationCoord { return &r.Coord }))
+			decoder := cql.Row(cql.Column("id", cql.Int32Codec, func(r *result) *int32 { return &r.ID }), cql.Column("val", serializationCoordCodec, func(r *result) *serializationCoord { return &r.Coord }))
 			row, err := serializationOne(s, fmt.Sprintf("SELECT id,val FROM %s WHERE id=?", table), decoder, cql.IntValue(1))
 			if err != nil {
 				t.Fatal(err)

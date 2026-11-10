@@ -492,10 +492,18 @@ func (b *ConfigBuilder) WithRefreshAfterAgreement() *ConfigBuilder {
 	return b
 }
 
-// WithDefaultProfile chooses execution defaults for statements that pass no
+// WithDefaultProfile replaces the complete execution defaults for statements
+// that pass no Profile. The profile is copied now; policy objects stay shared.
+// Build validates the final settings. Use NewProfile to start from driver defaults.
+func (b *ConfigBuilder) WithDefaultProfile(profile Profile) *ConfigBuilder {
+	b.profile = &ProfileBuilder{profile: internalProfile(profile)}
+	return b
+}
+
+// ConfigureDefaultProfile chooses execution defaults for statements that pass no
 // Profile. choose receives the builder's default profile, so several calls
 // add to the same profile. A nil choose resets the entire default profile.
-func (b *ConfigBuilder) WithDefaultProfile(choose func(*ProfileBuilder)) *ConfigBuilder {
+func (b *ConfigBuilder) ConfigureDefaultProfile(choose func(*ProfileBuilder)) *ConfigBuilder {
 	if choose == nil {
 		b.profile = NewProfile()
 	} else {

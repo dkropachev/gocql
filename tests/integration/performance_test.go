@@ -58,7 +58,7 @@ func TestPerformance(t *testing.T) {
 			t.Helper()
 			b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{}))
 			defer b.Close()
-			if _, e := Exec(ctx, s, b, gocql.BoundOptions{}); e != nil {
+			if _, e := Exec(ctx, s, b, gocql.CompiledOptions{}); e != nil {
 				t.Fatal(e)
 			}
 		}
@@ -69,21 +69,21 @@ func TestPerformance(t *testing.T) {
 			b, e := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + ks, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{})
 			if e == nil {
 				defer b.Close()
-				_, e = Exec(cleanup, s, b, gocql.BoundOptions{})
+				_, e = Exec(cleanup, s, b, gocql.CompiledOptions{})
 			}
 			if e != nil {
 				t.Error(e)
 			}
 		}()
 		exec("CREATE TABLE " + ks + ".records(cell int,id int,payload blob,pieces list<blob>,PRIMARY KEY(cell,id))")
-		insert := codecTestMust(s.Prepare(ctx, cql.Statement[testInput, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(cell,id,payload,pieces)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32, func(v testInput) int32 { return v.Cell }), cql.Param("id", cql.Int32, func(v testInput) int32 { return v.ID }), cql.Param("payload", cql.BytesEncoder, func(v testInput) []byte { return v.Payload }), cql.Param("pieces", cql.ListEncoder(cql.BytesEncoder), func(v testInput) [][]byte { return v.Pieces })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
+		insert := codecTestMust(s.Prepare(ctx, cql.Statement[testInput, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(cell,id,payload,pieces)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testInput) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testInput) int32 { return v.ID }), cql.Param("payload", cql.BytesEncoder, func(v testInput) []byte { return v.Payload }), cql.Param("pieces", cql.ListEncoder(cql.BytesEncoder), func(v testInput) [][]byte { return v.Pieces })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
 		// Only one 4KiB source exists locally. All source bindings drain before the
 		// fixed-session baseline, and source payload/nested buffers are then released.
 		func() {
 			payload := bytes.Repeat([]byte{0x71}, 4096)
 			for id := int32(0); id < 128; id++ {
 				b := codecTestMust(BindBorrowed(insert, testInput{4096, id, payload, [][]byte{[]byte("first"), []byte("second")}}))
-				_, e := Exec(ctx, s, b, gocql.BoundOptions{})
+				_, e := Exec(ctx, s, b, gocql.CompiledOptions{})
 				b.Close()
 				if e != nil {
 					t.Fatal(e)
@@ -93,7 +93,7 @@ func TestPerformance(t *testing.T) {
 				}
 			}
 		}()
-		decoder := cql.Row(cql.Column("id", cql.Int32, func(v *testBorrowed) *int32 { return &v.ID }), cql.Column("payload", cql.BlobCodec, func(v *testBorrowed) *cql.Bytes { return &v.Payload }), cql.Column("pieces", cql.ListDecoder(cql.BlobCodec), func(v *testBorrowed) *[]cql.Bytes { return &v.Pieces }))
+		decoder := cql.Row(cql.Column("id", cql.Int32Codec, func(v *testBorrowed) *int32 { return &v.ID }), cql.Column("payload", cql.BlobCodec, func(v *testBorrowed) *cql.Bytes { return &v.Payload }), cql.Column("pieces", cql.ListDecoder(cql.BlobCodec), func(v *testBorrowed) *[]cql.Bytes { return &v.Pieces }))
 		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, testBorrowed]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=4096 AND id<128", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: decoder}, gocql.PrepareOptions{}))
 		bound := codecTestMust(BindOwned(prepared, cql.EmptyParams{}))
 		defer bound.Close()
@@ -361,7 +361,7 @@ func TestPerformance(t *testing.T) {
 			t.Helper()
 			b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{}))
 			defer b.Close()
-			if _, e := Exec(ctx, s, b, gocql.BoundOptions{}); e != nil {
+			if _, e := Exec(ctx, s, b, gocql.CompiledOptions{}); e != nil {
 				t.Fatal(e)
 			}
 		}
@@ -372,14 +372,14 @@ func TestPerformance(t *testing.T) {
 			b, e := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + ks, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{})
 			if e == nil {
 				defer b.Close()
-				_, e = Exec(cleanup, s, b, gocql.BoundOptions{})
+				_, e = Exec(cleanup, s, b, gocql.CompiledOptions{})
 			}
 			if e != nil {
 				t.Error("owned cleanup", e)
 			}
 		}()
 		exec("CREATE TABLE " + ks + ".records(cell int,id int,payload blob,pieces list<blob>,PRIMARY KEY(cell,id))")
-		insert := codecTestMust(s.Prepare(ctx, cql.Statement[testInput, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(cell,id,payload,pieces)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32, func(v testInput) int32 { return v.Cell }), cql.Param("id", cql.Int32, func(v testInput) int32 { return v.ID }), cql.Param("payload", cql.BytesEncoder, func(v testInput) []byte { return v.Payload }), cql.Param("pieces", cql.ListEncoder(cql.BytesEncoder), func(v testInput) [][]byte { return v.Pieces })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
+		insert := codecTestMust(s.Prepare(ctx, cql.Statement[testInput, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(cell,id,payload,pieces)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testInput) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testInput) int32 { return v.ID }), cql.Param("payload", cql.BytesEncoder, func(v testInput) []byte { return v.Payload }), cql.Param("pieces", cql.ListEncoder(cql.BytesEncoder), func(v testInput) [][]byte { return v.Pieces })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
 		for _, size := range []int{32, 4096, 256 << 10, 8 << 20} {
 			count := 128
 			if size >= 256<<10 {
@@ -388,7 +388,7 @@ func TestPerformance(t *testing.T) {
 			payload := bytes.Repeat([]byte{0x71}, size)
 			for i := 0; i < count; i++ {
 				b := codecTestMust(BindBorrowed(insert, testInput{int32(size), int32(i), payload, [][]byte{[]byte("first"), []byte("second")}}))
-				_, e := Exec(ctx, s, b, gocql.BoundOptions{})
+				_, e := Exec(ctx, s, b, gocql.CompiledOptions{})
 				b.Close()
 				if e != nil {
 					t.Fatal(e)
@@ -398,8 +398,8 @@ func TestPerformance(t *testing.T) {
 				}
 			}
 		}
-		borrowedDecoder := cql.Row(cql.Column("id", cql.Int32, func(v *testBorrowed) *int32 { return &v.ID }), cql.Column("payload", cql.BlobCodec, func(v *testBorrowed) *cql.Bytes { return &v.Payload }), cql.Column("pieces", cql.ListDecoder(cql.BlobCodec), func(v *testBorrowed) *[]cql.Bytes { return &v.Pieces }))
-		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[testQuery, testBorrowed]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=? AND id<?", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32, func(v testQuery) int32 { return v.Cell }), cql.Param("id", cql.Int32, func(v testQuery) int32 { return v.Rows })), Rows: borrowedDecoder}, gocql.PrepareOptions{}))
+		borrowedDecoder := cql.Row(cql.Column("id", cql.Int32Codec, func(v *testBorrowed) *int32 { return &v.ID }), cql.Column("payload", cql.BlobCodec, func(v *testBorrowed) *cql.Bytes { return &v.Payload }), cql.Column("pieces", cql.ListDecoder(cql.BlobCodec), func(v *testBorrowed) *[]cql.Bytes { return &v.Pieces }))
+		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[testQuery, testBorrowed]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=? AND id<?", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testQuery) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testQuery) int32 { return v.Rows })), Rows: borrowedDecoder}, gocql.PrepareOptions{}))
 		streamDecoder := cql.StreamRow(func(*testOutput) {}, cql.StreamColumn("id", cql.StreamInt32, func(v *testOutput) *int32 { return &v.ID }), cql.StreamColumn("payload", cql.StreamBlob, func(v *testOutput) *[]byte { return &v.Payload }), cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(v *testOutput) *[][]byte { return &v.Pieces }))
 		shapes := []testShape{{"small", 1, 32, 1, 1, false}, {"page1", 128, 4096, 1, 1, false}, {"page32", 128, 4096, 32, 1, false}, {"rows1", 1, 4096, 128, 1, false}, {"rows128", 128, 4096, 128, 1, false}, {"cell256K", 1, 256 << 10, 1, 1, false}, {"cell8M", 1, 8 << 20, 1, 1, false}, {"concurrent", 128, 4096, 32, 4, false}, {"slow", 128, 4096, 32, 1, true}}
 		runtime.GC()

@@ -206,7 +206,7 @@ func TestPage(t *testing.T) {
 					defer b.Close()
 					var dst implCqltype.Bytes
 					if manual {
-						p := codecTestMust(RunPage(context.Background(), s, b, implModel.StartPage(), BoundOptions{}))
+						p := codecTestMust(RunPage(context.Background(), s, b, implModel.StartPage(), CompiledOptions{}))
 						defer p.Close()
 						if !p.NextInto(&dst) {
 							t.Fatal(p.Err())
@@ -220,7 +220,7 @@ func TestPage(t *testing.T) {
 							t.Fatal("closed page advance", p.Err())
 						}
 					} else {
-						r := codecTestMust(Run(context.Background(), s, b, BoundOptions{}))
+						r := codecTestMust(Run(context.Background(), s, b, CompiledOptions{}))
 						defer r.Close()
 						if !r.NextInto(&dst) {
 							t.Fatal(r.Err())
@@ -254,7 +254,7 @@ func TestPage(t *testing.T) {
 					var closeRows func() error
 					var retain func() (*PageLease, error)
 					if automatic {
-						r, err := Run(context.Background(), s, b, BoundOptions{})
+						r, err := Run(context.Background(), s, b, CompiledOptions{})
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -265,7 +265,7 @@ func TestPage(t *testing.T) {
 						closeRows = r.Close
 						retain = r.Retain
 					} else {
-						p, err := RunPage(context.Background(), s, b, model.StartPage(), BoundOptions{})
+						p, err := RunPage(context.Background(), s, b, model.StartPage(), CompiledOptions{})
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -303,7 +303,7 @@ func TestPage(t *testing.T) {
 					if string(view.OwnedBytes()) != "retained" {
 						t.Fatal("retained lease lost")
 					}
-					if _, err := Run(context.Background(), s, b, BoundOptions{}); !errors.Is(err, implRuntimeerrors.ErrClosed) {
+					if _, err := Run(context.Background(), s, b, CompiledOptions{}); !errors.Is(err, implRuntimeerrors.ErrClosed) {
 						t.Fatal(err)
 					}
 				})
@@ -314,10 +314,10 @@ func TestPage(t *testing.T) {
 	t.Run("State", func(t *testing.T) {
 		t.Run("EmptyContinuationSurvivesClose", func(t *testing.T) {
 			p := testPage(t)
-			PageData(p).response.State = implModel.RestorePageState(nil)
+			PageData(p).response.State = implModel.PageStateFromToken(nil)
 			state := p.State()
 			p.Close()
-			if !state.More() || state.Complete() || state.Bytes() == nil || len(state.Bytes()) != 0 {
+			if !state.More() || state.Complete() || state.Token() == nil || len(state.Token()) != 0 {
 				t.Fatal("empty continuation collapsed")
 			}
 			if !p.State().More() {

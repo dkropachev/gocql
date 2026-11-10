@@ -88,7 +88,7 @@ func TestStructMapping(t *testing.T) {
 		}
 		readPrepared, err := f.session.Prepare(ctx, cql.Statement[int32, hit]{
 			Kind: cql.OrdinaryStatement, CQL: "SELECT k, hits FROM " + counters + " WHERE k = ?",
-			Params: cql.OneParam(cql.Int32), Rows: cql.MustRowOf[hit](),
+			Params: cql.OneParam(cql.Int32Codec), Rows: cql.MustRowOf[hit](),
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -215,7 +215,7 @@ func TestStructMapping(t *testing.T) {
 		}
 		for _, rows := range []cql.RowDecoder[mapped.Event]{cql.MustRowOf[mapped.Event](), reflectedRows} {
 			readPrepared, err := f.session.Prepare(ctx, cql.Statement[int32, mapped.Event]{
-				Kind: cql.OrdinaryStatement, CQL: "SELECT " + columns + " FROM " + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32), Rows: rows,
+				Kind: cql.OrdinaryStatement, CQL: "SELECT " + columns + " FROM " + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32Codec), Rows: rows,
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -241,7 +241,7 @@ func TestStructMapping(t *testing.T) {
 		}
 		prepared, err := f.session.Prepare(ctx, cql.Statement[int32, cql.DynamicRow]{
 			Kind: cql.OrdinaryStatement, CQL: "SELECT bucket, id, name, blob, big, maybe, scores, createdat, updatedat FROM " + f.table + " WHERE bucket = ?",
-			Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows,
+			Params: cql.OneParam(cql.Int32Codec), Rows: cql.DynamicRows,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -321,7 +321,7 @@ func TestStructMapping(t *testing.T) {
 			t.Fatal(err)
 		}
 		readPrepared, err := f.session.Prepare(ctx, cql.Statement[int32, numeric]{
-			Kind: cql.OrdinaryStatement, CQL: "SELECT k, v, d FROM " + table + " WHERE k = ?", Params: cql.OneParam(cql.Int32), Rows: cql.MustRowOf[numeric](),
+			Kind: cql.OrdinaryStatement, CQL: "SELECT k, v, d FROM " + table + " WHERE k = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.MustRowOf[numeric](),
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -477,7 +477,7 @@ func TestStructMapping(t *testing.T) {
 					break
 				}
 				// Resume from a page state saved as bytes, as a client would.
-				state = gocql.RestorePageState(next.Bytes())
+				state = gocql.PageStateFromToken(next.Token())
 				if pages > len(want) {
 					t.Fatal("paging does not end")
 				}
@@ -587,7 +587,7 @@ func TestStructMapping(t *testing.T) {
 		}
 		const query = "SELECT bucket, id, name, blob, big, maybe, scores, span, createdat, updatedat FROM "
 		read, err := f.session.Prepare(ctx, cql.Statement[int32, cql.DynamicRow]{
-			Kind: cql.OrdinaryStatement, CQL: query + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows,
+			Kind: cql.OrdinaryStatement, CQL: query + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.DynamicRows,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -636,10 +636,10 @@ func TestStructMapping(t *testing.T) {
 			if err := q.Close(ctx); err != nil {
 				t.Fatal(err)
 			}
-			u, err := f.session.UnpreparedStreamQuery(cql.Statement[int32, cql.EmptyRow]{
-				Kind: cql.OrdinaryStatement, CQL: query + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32),
-				BindMarkers: read.Parameters(),
-			}, cql.MustStreamRowOf[smStream](), options)
+			u, err := f.session.UnpreparedStreamQuery(cql.StreamStatement[int32, smStream]{
+				Kind: cql.OrdinaryStatement, CQL: query + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32Codec),
+				BindMarkers: read.Parameters(), Rows: cql.MustStreamRowOf[smStream](),
+			}, options)
 			if err != nil {
 				t.Fatal(err)
 			}

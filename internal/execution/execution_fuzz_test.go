@@ -57,7 +57,7 @@ func FuzzStreamExecutionBoundary(f *testing.F) {
 		reservation.InternalConn.InternalHooks = cluster.InternalNewConnectionHooks(s)
 		bound := runtimeQuery(t)
 		defer bound.Close()
-		ctx, cancel, request, err := InternalAdmitExecution(context.Background(), s, bound, BoundOptions{})
+		ctx, cancel, request, err := InternalAdmitExecution(context.Background(), s, bound, CompiledOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}

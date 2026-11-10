@@ -30,7 +30,7 @@ defer session.Close()
 
 statement := cql.Statement[int32, string]{
     CQL: "SELECT name FROM app.users WHERE id = ?",
-    Params: cql.OneParam(cql.Int32),
+    Params: cql.OneParam(cql.Int32Codec),
     Rows: cql.OneColumn(cql.StringCodec),
 }
 prepared, err := session.Prepare(ctx, statement)
@@ -61,7 +61,7 @@ from arbitrary Go values. See [custom codec contracts](docs/source/custom-codecs
 `prepared.Exec(ctx, input)`, `prepared.One(ctx, input, &dst)` and
 `prepared.Each(ctx, input, &dst, fn)` run the statement once. They are safe for
 concurrent use and run on queries the statement keeps for them, so they
-allocate no per-call execution state. Each takes at most one `BoundOptions`
+allocate no per-call execution state. Each takes at most one `CompiledOptions`
 from `session.BindOptions(options)`; none uses the session default. They return
 only when the execution has finished. `One` detaches borrowed fields before
 returning, so its result remains valid.
@@ -145,7 +145,7 @@ Per-execution settings are plain `gocql.Options` values, for example
 session default. Query constructors validate, resolve and encode them for their
 session once, so query executions do no per-call work. One-shot executions
 (`prepared.Exec/One/Each`, `session.ExecBatch`, `session.RunBatch`) take
-`BoundOptions` from `session.BindOptions(options)`, which does the same work up
+`CompiledOptions` from `session.BindOptions(options)`, which does the same work up
 front. Bound options carry their session's default profile and keyspace; on
 another session they are resolved again for that session on each execution.
 `endpoint.Dialer`, `endpoint.DNSResolver`,

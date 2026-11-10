@@ -38,8 +38,8 @@ func TestGenerator(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, want := range []string{
-				`cql.Param("values", cql.VectorCodec(cql.Int32),`,
-				`cql.Column("values", cql.VectorCodec(cql.Int32),`,
+				`cql.Param("values", cql.VectorCodec(cql.Int32Codec),`,
+				`cql.Column("values", cql.VectorCodec(cql.Int32Codec),`,
 				`cql.StreamColumn("values", cql.StreamVector(cql.StreamInt32),`,
 			} {
 				if !strings.Contains(out, want) {
@@ -98,9 +98,9 @@ type T struct {
 				t.Fatal(err)
 			}
 			for _, want := range []string{
-				`cql.Param("id", cql.Int64, func(v T) int64 { return v.ID })`,
+				`cql.Param("id", cql.Int64Codec, func(v T) int64 { return v.ID })`,
 				`cql.Column("createdat", cql.TimestampCodec, func(v *T) *cql.Timestamp { return &v.audit.CreatedAt })`,
-				`cql.Column("months", cql.Int32, func(v *T) *int32 { return &v.Duration.Months })`,
+				`cql.Column("months", cql.Int32Codec, func(v *T) *int32 { return &v.Duration.Months })`,
 				`cql.StreamColumn("nanoseconds", cql.StreamInt64, func(v *T) *int64 { return &v.Duration.Nanoseconds })`,
 			} {
 				if !strings.Contains(out, want) {
@@ -115,7 +115,7 @@ type T struct {
 		t.Run("Errors", func(t *testing.T) {
 			for want, src := range map[string]string{
 				"no codec for type int":        "type T struct{ A int }",
-				"is not a built-in for string": "type T struct{ A string `cql:\"a,codec=Int32\"` }",
+				"is not a built-in for string": "type T struct{ A string `cql:\"a,codec=Int32Codec\"` }",
 				"no codec for type Defined":    "import \"github.com/scylladb/gocql/v2/cql\"\ntype Defined cql.UUID\ntype T struct{ A Defined }",
 				"embedded pointer field E":     "type E struct{ A int32 }\ntype T struct{ *E }",
 				"only the tag":                 "type E struct{ A int32 }\ntype T struct{ E `cql:\"e\"` }",

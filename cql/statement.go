@@ -28,14 +28,18 @@ type Statement[P, R any] struct {
 }
 
 // StreamStatement pairs CQL and typed parameters with a decoder that writes
-// rows into caller-owned storage. Use Session.PrepareStream to prepare it;
-// no buffered row decoder is required.
+// rows into caller-owned storage. Use Session.PrepareStream to prepare it or
+// Session.UnpreparedStreamQuery to execute it as CQL text. No buffered row
+// decoder is required.
 type StreamStatement[P, R any] struct {
 	CQL string
 	// Params encodes P. It may be nil when P is EmptyParams.
 	Params ParamEncoder[P]
 	// Rows decodes into seeded caller storage and must not be nil.
 	Rows StreamRowDecoder[R]
+	// BindMarkers supplies parameter metadata for unprepared execution.
+	// Preparation obtains this metadata from the server instead.
+	BindMarkers Columns
 	// Kind classifies ordinary and conditional statements for safe execution.
 	Kind StatementKind
 }

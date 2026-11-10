@@ -17,8 +17,8 @@ import (
 
 type lwtArgs struct{ V, K, Cur int32 }
 
-var lwtParams = cql.Params(cql.ParamAt(0, cql.Int32, func(a lwtArgs) int32 { return a.V }), cql.ParamAt(1, cql.Int32, func(a lwtArgs) int32 { return a.K }), cql.ParamAt(2, cql.Int32, func(a lwtArgs) int32 { return a.Cur }))
-var lwtValue = cql.RowInto(func(*int32) {}, cql.Column("v", cql.Int32, func(v *int32) *int32 { return v }))
+var lwtParams = cql.Params(cql.ParamAt(0, cql.Int32Codec, func(a lwtArgs) int32 { return a.V }), cql.ParamAt(1, cql.Int32Codec, func(a lwtArgs) int32 { return a.K }), cql.ParamAt(2, cql.Int32Codec, func(a lwtArgs) int32 { return a.Cur }))
+var lwtValue = cql.RowInto(func(*int32) {}, cql.Column("v", cql.Int32Codec, func(v *int32) *int32 { return v }))
 var lwtRows = cql.CASRows(lwtValue)
 
 // v2Case is the per-worker state of a case: an owned output row and a row
@@ -63,7 +63,7 @@ func (a *v2Adapter) lwtPrepared() (*g.Prepared[lwtArgs, cql.CASResult[int32]], *
 	return a.lwt, a.lwtRead, nil
 }
 
-func (a *v2Adapter) options(v g.Options) (g.BoundOptions, error) { return a.s.BindOptions(v) }
+func (a *v2Adapter) options(v g.Options) (g.CompiledOptions, error) { return a.s.BindOptions(v) }
 
 func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 	if len(name) == 0 {
@@ -206,14 +206,14 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			want := cursor.expect()
 			state := g.StartPage
 			if len(cursor.state) > 0 {
-				state = g.RestorePageState(cursor.state)
+				state = g.PageStateFromToken(cursor.state)
 			}
 			page, err := q.RunPage(ctx, cursor.k, state)
 			if err != nil {
 				return err
 			}
 			err = c.drain(page, allRows)
-			next := page.State().Bytes()
+			next := page.State().Token()
 			if err = errors.Join(err, page.Err(), page.Close()); err != nil {
 				return err
 			}
@@ -351,7 +351,7 @@ func execOp(q *g.Query[row, cql.EmptyRow]) op {
 	}
 }
 
-func preparedExec(p *g.Prepared[row, cql.EmptyRow], opts g.BoundOptions) op {
+func preparedExec(p *g.Prepared[row, cql.EmptyRow], opts g.CompiledOptions) op {
 	return func(ctx context.Context, seq uint64) error {
 		k := pointKey(seq)
 		_, err := p.Exec(ctx, row{K: k, P: payload(false, k, 0)}, opts)

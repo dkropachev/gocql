@@ -42,22 +42,24 @@ type Options struct {
 	NoSerialConsistency bool
 }
 
-// BoundOptions is an immutable snapshot made by Session.BindOptions. Reuse it
+// CompiledOptions is an immutable snapshot made by Session.BindOptions. Reuse it
 // for recurring one-shot execution settings; the zero value uses session
 // defaults. Binding validates overrides, copies payloads and precomputes request
 // settings. Reuse on another session resolves the original overrides against
 // that session's defaults instead.
-type BoundOptions implExecution.BoundOptions
+// CompiledOptions controls execution; PrepareOptions controls statement preparation.
+type CompiledOptions implExecution.CompiledOptions
 
 // Values returns an independent copy of the original overrides for deriving
 // another set. It does not include inherited session defaults. Policy and
 // observer objects remain shared and must support concurrent use.
-func (o BoundOptions) Values() Options {
-	return publicOptions(implExecution.BoundOptions(o).Values())
+func (o CompiledOptions) Values() Options {
+	return publicOptions(implExecution.CompiledOptions(o).Values())
 }
 
 // PrepareOptions selects the keyspace, host and tracing of preparation.
 // The zero value uses the session's keyspace and any eligible host.
+// Use CompiledOptions for execution settings.
 type PrepareOptions struct {
 	Keyspace string
 	HostID   cql.Option[cql.UUID]
@@ -123,16 +125,20 @@ func internalPrepareOptions(options []PrepareOptions) (implExecution.PrepareOpti
 	return implExecution.PrepareOptions{Keyspace: o.Keyspace, HostID: o.HostID, Trace: o.Trace}, nil
 }
 
-func internalBoundOptions(options []BoundOptions) (implExecution.BoundOptions, error) {
+func internalCompiledOptions(options []CompiledOptions) (implExecution.CompiledOptions, error) {
 	if len(options) > 1 {
-		return implExecution.BoundOptions{}, &cqlerr.ValidationError{Field: "options", Err: errors.New("at most one BoundOptions")}
+		return implExecution.CompiledOptions{}, &cqlerr.ValidationError{Field: "options", Err: errors.New("at most one CompiledOptions")}
 	}
 	if len(options) == 0 {
-		return implExecution.BoundOptions{}, nil
+		return implExecution.CompiledOptions{}, nil
 	}
-	return implExecution.BoundOptions(options[0]), nil
+	return implExecution.CompiledOptions(options[0]), nil
 }
 
 func internalStatement[P, R any](s cql.Statement[P, R]) implBinding.Statement[P, R] {
 	return implBinding.Statement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, BindMarkers: s.BindMarkers, Kind: s.Kind}
+}
+
+func internalStreamStatement[P, R any](s cql.StreamStatement[P, R]) implExecution.StreamStatement[P, R] {
+	return implExecution.StreamStatement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, BindMarkers: s.BindMarkers, Kind: s.Kind}
 }

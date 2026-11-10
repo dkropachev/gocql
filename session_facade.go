@@ -41,19 +41,19 @@ func (s *Session) PrepareStream[P, R any](ctx context.Context, statement cql.Str
 	if err != nil {
 		return nil, err
 	}
-	p, err := s.internal().PrepareStream(ctx, implExecution.StreamStatement[P, R]{CQL: statement.CQL, Params: statement.Params, Rows: statement.Rows, Kind: statement.Kind}, o)
+	p, err := s.internal().PrepareStream(ctx, internalStreamStatement(statement), o)
 	return (*PreparedStream[P, R])(p), err
 }
 
 // BindOptions validates and snapshots overrides for reuse by one-shot calls.
-// Omit options on those calls to use the session defaults. A BoundOptions used
+// Omit options on those calls to use the session defaults. A CompiledOptions used
 // on another session applies its original overrides to that session's defaults
 // and is resolved again on each call. Use context deadlines for per-request
 // time limits. Policy and observer objects remain shared and must be safe for
 // concurrent use.
-func (s *Session) BindOptions(options Options) (BoundOptions, error) {
+func (s *Session) BindOptions(options Options) (CompiledOptions, error) {
 	o, err := s.internal().BindOptions(internalOptions(options))
-	return BoundOptions(o), err
+	return CompiledOptions(o), err
 }
 
 // UnpreparedQuery creates a reusable query that sends CQL text on every call.
@@ -66,20 +66,20 @@ func (s *Session) UnpreparedQuery[P, R any](statement cql.Statement[P, R], optio
 }
 
 // UnpreparedStreamQuery creates a reusable query decoding into seeded caller
-// storage. The statement has no buffered row decoder; decoder describes its
-// streamed rows. Page buffering is the default. Set options.Incremental to
+// storage. statement.BindMarkers describes its parameters and statement.Rows
+// describes its streamed rows. Page buffering is the default. Set options.Incremental to
 // reserve a connection for bounded incremental receive. Close both the returned
 // query and each cursor. Prefer Prepare for frequently repeated statements.
-func (s *Session) UnpreparedStreamQuery[P, R any](statement cql.Statement[P, cql.EmptyRow], decoder cql.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
-	q, err := s.internal().UnpreparedStreamQuery(internalStatement(statement), decoder, internalStreamOptions(options))
+func (s *Session) UnpreparedStreamQuery[P, R any](statement cql.StreamStatement[P, R], options StreamOptions) (*StreamQuery[P, R], error) {
+	q, err := s.internal().UnpreparedStreamQuery(internalStreamStatement(statement), internalStreamOptions(options))
 	return (*StreamQuery[P, R])(q), err
 }
 
 // UnpreparedExec executes an occasional statement without preparing it or
 // leaving a query to close. It must return no result columns. Parameters are
-// described by statement.BindMarkers. At most one BoundOptions may be passed.
-func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...BoundOptions) (Result, error) {
-	o, err := internalBoundOptions(options)
+// described by statement.BindMarkers. At most one CompiledOptions may be passed.
+func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...CompiledOptions) (Result, error) {
+	o, err := internalCompiledOptions(options)
 	if err != nil {
 		return implExecution.InternalExecutionErrorResult(err), err
 	}
@@ -89,9 +89,9 @@ func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.State
 // UnpreparedOne executes an occasional statement and decodes its first row.
 // It reports whether a row exists, clearing dst if none exists. Borrowed fields
 // are detached before return; there is no query or cursor to close. Parameters
-// are described by statement.BindMarkers. At most one BoundOptions may be passed.
-func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...BoundOptions) (bool, Result, error) {
-	o, err := internalBoundOptions(options)
+// are described by statement.BindMarkers. At most one CompiledOptions may be passed.
+func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...CompiledOptions) (bool, Result, error) {
+	o, err := internalCompiledOptions(options)
 	if err != nil {
 		return false, implExecution.InternalExecutionErrorResult(err), err
 	}
@@ -101,9 +101,9 @@ func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Sta
 // UnpreparedEach executes an occasional statement, calling fn for every row
 // across all pages. Borrowed fields are valid only during fn. Returning StopIteration
 // from fn stops successfully; other callback errors are returned. There is no query or cursor to close. Parameters are
-// described by statement.BindMarkers. At most one BoundOptions may be passed.
-func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...BoundOptions) (Result, error) {
-	o, err := internalBoundOptions(options)
+// described by statement.BindMarkers. At most one CompiledOptions may be passed.
+func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...CompiledOptions) (Result, error) {
+	o, err := internalCompiledOptions(options)
 	if err != nil {
 		return implExecution.InternalExecutionErrorResult(err), err
 	}
@@ -111,10 +111,10 @@ func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.St
 }
 
 // ExecBatch sends batch as one CQL BATCH request. Its statements must return no
-// columns; use RunBatch for conditional results. At most one BoundOptions may be
+// columns; use RunBatch for conditional results. At most one CompiledOptions may be
 // passed. Do not modify batch until the call returns.
-func (s *Session) ExecBatch(ctx context.Context, kind cql.BatchKind, batch *Batch, options ...BoundOptions) (Result, error) {
-	o, err := internalBoundOptions(options)
+func (s *Session) ExecBatch(ctx context.Context, kind cql.BatchKind, batch *Batch, options ...CompiledOptions) (Result, error) {
+	o, err := internalCompiledOptions(options)
 	if err != nil {
 		return implExecution.InternalExecutionErrorResult(err), err
 	}
@@ -124,8 +124,8 @@ func (s *Session) ExecBatch(ctx context.Context, kind cql.BatchKind, batch *Batc
 // RunBatch executes a conditional batch and returns its result page, decoded
 // with decoder. Close the page when done. Options and batch ownership are as for
 // ExecBatch.
-func (s *Session) RunBatch[R any](ctx context.Context, kind cql.BatchKind, batch *Batch, decoder cql.RowDecoder[R], options ...BoundOptions) (*Page[R], error) {
-	o, err := internalBoundOptions(options)
+func (s *Session) RunBatch[R any](ctx context.Context, kind cql.BatchKind, batch *Batch, decoder cql.RowDecoder[R], options ...CompiledOptions) (*Page[R], error) {
+	o, err := internalCompiledOptions(options)
 	if err != nil {
 		return nil, err
 	}

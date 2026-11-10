@@ -18,7 +18,7 @@ import (
 type optionTemplates [3][2]model.ParamsTemplate
 
 // newOptionTemplates encodes the parameters blocks of options resolved to
-// profile and values, for requests in keyspace. BoundOptions with a timestamp
+// profile and values, for requests in keyspace. CompiledOptions with a timestamp
 // encode only the templates that send one.
 func newOptionTemplates(profile *settings.Profile, values *Options, keyspace string) *optionTemplates {
 	t := new(optionTemplates)

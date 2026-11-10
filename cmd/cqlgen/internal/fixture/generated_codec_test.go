@@ -23,7 +23,7 @@ func TestGeneratedCodec(t *testing.T) {
 		cols := columns(t)
 		v := value()
 		withPoint := cql.WithCodec[Fixture](PointCodec)
-		withAttrs := cql.WithCodec[Fixture](cql.MapCodec(cql.StringCodec, cql.Int64))
+		withAttrs := cql.WithCodec[Fixture](cql.MapCodec(cql.StringCodec, cql.Int64Codec))
 		reflectedParams, err := codec.ReflectParams(withPoint, withAttrs)
 		if err != nil {
 			t.Fatal(err)
@@ -75,13 +75,13 @@ func TestGeneratedCodec(t *testing.T) {
 			Addr    netip.Addr
 		}
 		params := cql.Params(
-			cql.Param("id", cql.Int32, func(v source) int32 { return v.ID }),
+			cql.Param("id", cql.Int32Codec, func(v source) int32 { return v.ID }),
 			cql.Param("key", cql.UUIDCodec, func(v source) cql.UUID { return v.Key }),
 			cql.Param("payload", cql.BytesEncoder, func(v source) []byte { return v.Payload }),
 			cql.Param("name", cql.StringCodec, func(v source) string { return v.Name }),
 			cql.Param("pieces", cql.ListEncoder(cql.BytesEncoder), func(v source) [][]byte { return v.Pieces }),
-			cql.Param("tags", cql.SetEncoder(cql.Int32), func(v source) []int32 { return v.Tags }),
-			cql.Param("maybe", cql.NullableEncoder(cql.Int64), func(v source) cql.Nullable[int64] { return v.Maybe }),
+			cql.Param("tags", cql.SetEncoder(cql.Int32Codec), func(v source) []int32 { return v.Tags }),
+			cql.Param("maybe", cql.NullableEncoder(cql.Int64Codec), func(v source) cql.Nullable[int64] { return v.Maybe }),
 			cql.Param("at", cql.TimestampCodec, func(v source) cql.Timestamp { return v.At }),
 			cql.Param("addr", cql.InetCodec, func(v source) netip.Addr { return v.Addr }),
 		)

@@ -46,7 +46,7 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id cqltype.UUID) (im
 		return result, err
 	}
 	defer func() { bound.Close(); _ = bound.Wait(ctx) }()
-	options, err := NewBoundOptions(s.Core, traceValues)
+	options, err := NewCompiledOptions(s.Core, traceValues)
 	if err != nil {
 		return result, err
 	}

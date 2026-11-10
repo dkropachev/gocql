@@ -89,7 +89,7 @@ func TestScan(t *testing.T) {
 			type nested = []cql.Entry[string, string]
 			want := []nested{{{Key: "key1", Value: "val1"}}, {{Key: "key2", Value: "val2"}}}
 			prepared := cassandraPrepared(t, session, cql.Statement[[]nested, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,val) VALUES('key',?)", table), Params: cql.OneParam(cql.ListEncoder(cql.MapEncoder(cql.StringEncoder, cql.StringEncoder))), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
-			_, err := Exec(context.Background(), session, cassandraBound(t, prepared, want), gocql.BoundOptions{})
+			_, err := Exec(context.Background(), session, cassandraBound(t, prepared, want), gocql.CompiledOptions{})
 			require.NoError(t, err)
 			row := cassandraReadBound(t, session, cassandraUnprepared(t, fmt.Sprintf("SELECT val FROM %s WHERE id='key'", table), cql.OneColumn(cql.ListDecoder(cql.MapDecoder(cql.TextCodec, cql.TextCodec)))), gocql.Options{})
 			var got []nested
@@ -175,22 +175,22 @@ func TestScan(t *testing.T) {
 				Name   FullName
 				Number int32
 			}
-			params := cql.Params(cql.Param("testtext", cql.StringEncoder, func(v input) string { return v.Text }), cql.Param("testfullname", fullNameCodec{}, func(v input) FullName { return v.Name }), cql.Param("testint", cql.Int32, func(v input) int32 { return v.Number }))
+			params := cql.Params(cql.Param("testtext", cql.StringEncoder, func(v input) string { return v.Text }), cql.Param("testfullname", fullNameCodec{}, func(v input) FullName { return v.Name }), cql.Param("testint", cql.Int32Codec, func(v input) int32 { return v.Number }))
 			prepared := cassandraPrepared(t, session, cql.Statement[input, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(testtext,testfullname,testint) VALUES(?,?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
-			_, err := Exec(context.Background(), session, cassandraBound(t, prepared, input{"testtext", FullName{"John", "Doe"}, 100}), gocql.BoundOptions{})
+			_, err := Exec(context.Background(), session, cassandraBound(t, prepared, input{"testtext", FullName{"John", "Doe"}, 100}), gocql.CompiledOptions{})
 			require.NoError(t, err)
 			type output struct {
 				Text   cql.Text
 				Name   FullName
 				Number int32
 			}
-			decoder := cql.Row(cql.Column("testtext", cql.TextCodec, func(v *output) *cql.Text { return &v.Text }), cql.Column("testfullname", fullNameCodec{}, func(v *output) *FullName { return &v.Name }), cql.Column("testint", cql.Int32, func(v *output) *int32 { return &v.Number }))
+			decoder := cql.Row(cql.Column("testtext", cql.TextCodec, func(v *output) *cql.Text { return &v.Text }), cql.Column("testfullname", fullNameCodec{}, func(v *output) *FullName { return &v.Name }), cql.Column("testint", cql.Int32Codec, func(v *output) *int32 { return &v.Number }))
 			got := cassandraReadBound(t, session, cassandraUnprepared(t, "SELECT * FROM "+table, decoder), gocql.Options{})
 			require.Equal(t, "testtext", got.Text.String())
 			require.Equal(t, FullName{"John", "Doe"}, got.Name)
 			require.Equal(t, int32(100), got.Number)
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(testtext,testint) VALUES(?,?)", table), codecTestMust(cql.TextValue("null-int")), cql.NullValue(cql.IntValue(0).Type()))
-			nullable := cassandraPrepared(t, session, cql.Statement[string, cql.Nullable[int32]]{CQL: fmt.Sprintf("SELECT testint FROM %s WHERE testtext=?", table), Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.NullableCodec(cql.Int32))}, gocql.PrepareOptions{})
+			nullable := cassandraPrepared(t, session, cql.Statement[string, cql.Nullable[int32]]{CQL: fmt.Sprintf("SELECT testint FROM %s WHERE testtext=?", table), Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.NullableCodec(cql.Int32Codec))}, gocql.PrepareOptions{})
 			require.False(t, cassandraReadBound(t, session, cassandraBound(t, nullable, "null-int"), gocql.Options{}).Valid)
 		})
 		t.Run("Rows", func(t *testing.T) {
@@ -237,7 +237,7 @@ func TestScan(t *testing.T) {
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,time timestamp,num int)", table))
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,num) VALUES(?,?)", table), cql.IntValue(1), cql.IntValue(561))
-			read := cassandraPrepared(t, session, cql.Statement[int32, cql.Nullable[cql.Timestamp]]{CQL: fmt.Sprintf("SELECT time FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32), Rows: cql.OneColumn(cql.NullableCodec(cql.TimestampCodec))}, gocql.PrepareOptions{})
+			read := cassandraPrepared(t, session, cql.Statement[int32, cql.Nullable[cql.Timestamp]]{CQL: fmt.Sprintf("SELECT time FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.NullableCodec(cql.TimestampCodec))}, gocql.PrepareOptions{})
 			value := cassandraReadBound(t, session, cassandraBound(t, read, int32(1)), gocql.Options{})
 			require.False(t, value.Valid)
 			require.Zero(t, value.Value)
@@ -252,9 +252,9 @@ func TestScan(t *testing.T) {
 				cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,?)", table), codecTestMust(cql.TextValue("squares")), cql.IntValue(i*i))
 			}
 			type result struct{ N int32 }
-			decoder := cql.Row(cql.IgnoreColumn[result]("foo"), cql.Column("bar", cql.Int32, func(r *result) *int32 { return &r.N }))
+			decoder := cql.Row(cql.IgnoreColumn[result]("foo"), cql.Column("bar", cql.Int32Codec, func(r *result) *int32 { return &r.N }))
 			prepared := cassandraPrepared(t, session, cql.Statement[string, result]{CQL: fmt.Sprintf("SELECT * FROM %s WHERE foo=?", table), Params: cql.OneParam(cql.StringEncoder), Rows: decoder}, gocql.PrepareOptions{})
-			rows, err := Run(context.Background(), session, cassandraBound(t, prepared, "squares"), gocql.BoundOptions{})
+			rows, err := Run(context.Background(), session, cassandraBound(t, prepared, "squares"), gocql.CompiledOptions{})
 			require.NoError(t, err)
 			defer rows.Close()
 			var sum int32
@@ -309,7 +309,7 @@ func TestScan(t *testing.T) {
 		rows := cassandraRows(t, session, bound, gocql.Options{})
 		require.Len(t, rows, 1)
 		check(rows[0])
-		cursor, err := Run(context.Background(), session, bound, gocql.BoundOptions{})
+		cursor, err := Run(context.Background(), session, bound, gocql.CompiledOptions{})
 		require.NoError(t, err)
 		defer cursor.Close()
 		var row cql.DynamicRow

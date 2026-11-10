@@ -35,12 +35,12 @@ import (
 type temperature int32
 type temperatureCodec struct{}
 
-func (temperatureCodec) CheckType(t cql.DataType) error { return cql.Int32.CheckType(t) }
+func (temperatureCodec) CheckType(t cql.DataType) error { return cql.Int32Codec.CheckType(t) }
 func (temperatureCodec) Encode(w *cql.ValueWriter, v temperature) error {
-	return cql.Int32.Encode(w, int32(v))
+	return cql.Int32Codec.Encode(w, int32(v))
 }
 func (temperatureCodec) Decode(r cql.ValueReader) (temperature, error) {
-	v, e := cql.Int32.Decode(r)
+	v, e := cql.Int32Codec.Decode(r)
 	return temperature(v), e
 }
 func (temperatureCodec) Clone(v temperature) temperature { return v }

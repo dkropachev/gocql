@@ -7,6 +7,11 @@ and `ExecutionStatus`, which reports whether the attempt may have changed data
 `retry.Next` or `retry.IgnoreWrite`, with optional consistency and delay;
 achieved consistency is reported.
 
+`Options.Retry == nil` inherits the selected profile's retry policy. Use
+`Options{Retry: retry.Never{}}` to stop after the first failed attempt without
+replacing other profile settings. `Profile.Retry == nil` disables retries in a
+complete profile; `retry.Never{}` can express that choice there too.
+
 `retry.Safe` bounds attempts and retries only when replay is safe: it moves to
 the next host when the server rejected the request before applying it
 (Unavailable, Overloaded, Bootstrapping), retries a read timeout that had

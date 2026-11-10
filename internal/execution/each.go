@@ -61,13 +61,13 @@ func isStopIteration(err error) bool {
 // response storage released before Each returns, so there is no iterator to
 // close or wait for. Values that borrow response storage are valid only until
 // fn returns. A non-nil error from fn stops the iteration and is returned.
-func RunEach[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions, dst *R, fn func(*R) error) (model.Result, error) {
+func RunEach[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions, dst *R, fn func(*R) error) (model.Result, error) {
 	_, result, err := each(ctx, s, b, options, dst, fn, new(eachScratch))
 	return result, err
 }
 
 // each runs RunEach, or RunOne when fn is nil.
-func each[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions, dst *R, fn func(*R) error, scratch *eachScratch) (bool, model.Result, error) {
+func each[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions, dst *R, fn func(*R) error, scratch *eachScratch) (bool, model.Result, error) {
 	if b == nil {
 		return false, model.Result{}, cqltype.TypeValidation("binding", "nil binding")
 	}
@@ -188,7 +188,7 @@ func decodeEach[R any](ctx context.Context, s *implCluster.Core, response *trans
 // reporting whether a row existed. Further rows are ignored, as with
 // database/sql's QueryRow. Borrowed fields are detached before response storage
 // is released; built-in owning fields keep their destination storage.
-func RunOne[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions, dst *R) (bool, model.Result, error) {
+func RunOne[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions, dst *R) (bool, model.Result, error) {
 	found, result, err := each(ctx, s, b, options, dst, nil, new(eachScratch))
 	if !found && err == nil {
 		clearDestination(dst)

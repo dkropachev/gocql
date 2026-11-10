@@ -387,7 +387,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 				if err != nil {
 					t.Fatalf("same connection unusable after rejection: %v", err)
 				}
-				typed, err := newPage(page, cql.OneColumn(cql.Int32), nil)
+				typed, err := newPage(page, cql.OneColumn(cql.Int32Codec), nil)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -442,7 +442,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 				if b.Routing().Token.Set {
 					t.Fatal("no-FROM SELECT invented a partition token")
 				}
-				rows, err := Run(context.Background(), session, b, gocql.BoundOptions{})
+				rows, err := Run(context.Background(), session, b, gocql.CompiledOptions{})
 				if err != nil {
 					t.Fatal(err)
 				}

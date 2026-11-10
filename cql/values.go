@@ -36,7 +36,7 @@ var BlobCodec = codec.BlobCodec
 // BlobValue constructs a dynamic CQL Blob value. It borrows b until parameter capture; keep b immutable until then.
 func BlobValue(b []byte) Value { return codec.BlobValue(b) }
 
-var Bool = codec.Bool
+var BoolCodec = codec.Bool
 
 // BoolValue constructs a dynamic CQL Bool value.
 func BoolValue(b bool) Value { return codec.BoolValue(b) }
@@ -178,8 +178,8 @@ type Encoder[T any] interface {
 }
 type Entry[K any, V any] = codec.Entry[K, V]
 
-var Float32 = codec.Float32
-var Float64 = codec.Float64
+var Float32Codec = codec.Float32
+var Float64Codec = codec.Float64
 
 // FloatValue constructs a dynamic CQL Float value.
 func FloatValue(n float32) Value { return codec.FloatValue(n) }
@@ -194,10 +194,10 @@ func InetValue(a netip.Addr) (Value, error) { return codec.InetValue(a) }
 
 type InputField[P any] = codec.InputField[P]
 
-var Int16 = codec.Int16
-var Int32 = codec.Int32
-var Int64 = codec.Int64
-var Int8 = codec.Int8
+var Int16Codec = codec.Int16
+var Int32Codec = codec.Int32
+var Int64Codec = codec.Int64
+var Int8Codec = codec.Int8
 
 // IntValue constructs a dynamic CQL Int value.
 func IntValue(n int32) Value { return codec.IntValue(n) }
@@ -542,8 +542,8 @@ func StreamTuple[R any](decoder StreamRowDecoder[R]) StreamDecoder[R] {
 }
 
 // StreamUDT decodes UDT fields into caller storage with decoder and explicit matching options.
-func StreamUDT[R any](options UDTOptions, decoder StreamRowDecoder[R]) StreamDecoder[R] {
-	return codec.StreamUDT[R](options, decoder)
+func StreamUDT[R any](decoder StreamRowDecoder[R], options UDTOptions) StreamDecoder[R] {
+	return codec.StreamUDT[R](decoder, options)
 }
 
 var StreamUUID = codec.StreamUUID

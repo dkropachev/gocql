@@ -51,7 +51,7 @@ type InternalSessionRuntime struct {
 	InternalPrepared                                             map[prepareCacheKey]*InternalPreparedState
 	pools                                                        map[*queryPoolEntry]struct{}
 	InternalPrepareOrder                                         []prepareCacheKey
-	defaultOptions                                               InternalResolvedOptions // the zero BoundOptions resolved for this session
+	defaultOptions                                               InternalResolvedOptions // the zero CompiledOptions resolved for this session
 	config                                                       settings.Config
 	prepareWorkers                                               sync.WaitGroup
 	requestID                                                    atomic.Uint64
@@ -523,7 +523,7 @@ func (l *logicalExecution) InternalFinish(result model.Result, err error) {
 	}
 }
 
-func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions) (context.Context, context.CancelFunc, *InternalExecutionRequest, error) {
+func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions) (context.Context, context.CancelFunc, *InternalExecutionRequest, error) {
 	if ctx == nil || s == nil || b == nil || b.privateStorage.InternalRequest.InternalOwner == nil {
 		return nil, nil, nil, cqltype.TypeValidation("execution", "nil context, session or binding")
 	}
@@ -543,7 +543,7 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Core, b *
 	}
 	*request = b.privateStorage.InternalRequest
 	// A query resolved its own options when it was created; a pooled
-	// query's come with each call. BoundOptions that need resolving for this
+	// query's come with each call. CompiledOptions that need resolving for this
 	// session resolve straight into the request.
 	var resolved *InternalResolvedOptions
 	if query != nil && !query.perCall && request.batch == nil {
@@ -638,7 +638,7 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Core, b *
 	}
 	return runctx, cancel, request, nil
 }
-func Run[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions) (Rows[R], error) {
+func Run[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions) (Rows[R], error) {
 	runctx, cancel, request, err := InternalAdmitExecution(ctx, s, b, options)
 	if err != nil {
 		return Rows[R]{}, err
@@ -698,13 +698,13 @@ func newRowsFromResponse[R any](runctx context.Context, cancel context.CancelFun
 	request.InternalLogical.installStop(rows)
 	return newRowsHandle(rows), nil
 }
-func RunPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state model.PageState, options BoundOptions) (*Page[R], error) {
+func RunPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state model.PageState, options CompiledOptions) (*Page[R], error) {
 	return runSinglePage(ctx, s, b, state, options, false)
 }
-func RunUnpaged[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions) (*Page[R], error) {
+func RunUnpaged[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions) (*Page[R], error) {
 	return runSinglePage(ctx, s, b, model.StartPage(), options, true)
 }
-func runSinglePage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state model.PageState, options BoundOptions, unpaged bool) (*Page[R], error) {
+func runSinglePage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state model.PageState, options CompiledOptions, unpaged bool) (*Page[R], error) {
 	if state.Complete() {
 		return nil, runtimeerrors.ErrPagingComplete
 	}
@@ -765,7 +765,7 @@ func runSinglePage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R],
 	}))
 	return page, nil
 }
-func Exec[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions) (model.Result, error) {
+func Exec[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions) (model.Result, error) {
 	if b == nil {
 		return model.Result{}, cqltype.TypeValidation("binding", "nil binding")
 	}

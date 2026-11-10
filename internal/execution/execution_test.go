@@ -294,7 +294,7 @@ func TestExecution(t *testing.T) {
 					defer cancel()
 					done := make(chan error, 1)
 					go func() {
-						_, err := Exec(ctx, s, b, BoundOptions{})
+						_, err := Exec(ctx, s, b, CompiledOptions{})
 						done <- err
 					}()
 					<-accepted
@@ -366,7 +366,7 @@ func TestExecution(t *testing.T) {
 					b := runtimeQuery(t)
 					ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 					defer cancel()
-					result, err := Exec(ctx, s, b, BoundOptions{})
+					result, err := Exec(ctx, s, b, CompiledOptions{})
 					if err == nil || result.Rows != tc.rows {
 						t.Fatalf("result = %+v, %v", result, err)
 					}

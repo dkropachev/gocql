@@ -67,30 +67,30 @@ func (s *Session) UnpreparedQuery[P, R any](statement binding.Statement[P, R], o
 }
 
 // UnpreparedStreamQuery returns a reusable query that sends statement's CQL
-// text to s on every execution, without server preparation, and streams each
-// row into decoder. The statement declares no row decoder of its own.
-func (s *Session) UnpreparedStreamQuery[P, R any](statement binding.Statement[P, codec.EmptyRecord], decoder codec.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
-	return NewUnpreparedStreamQuery(InternalCore(s), statement, decoder, options)
+// text to s on every execution, without server preparation. BindMarkers supplies
+// its parameter metadata and Rows decodes into caller-owned storage.
+func (s *Session) UnpreparedStreamQuery[P, R any](statement StreamStatement[P, R], options StreamOptions) (*StreamQuery[P, R], error) {
+	return NewUnpreparedStreamQuery(InternalCore(s), statement, options)
 }
 
-// BindOptions validates options and resolves them for s into BoundOptions,
-// for one-shot executions; the zero Options gives the zero BoundOptions. The
+// BindOptions validates options and resolves them for s into CompiledOptions,
+// for one-shot executions; the zero Options gives the zero CompiledOptions. The
 // custom payload and the profile are copied, so later changes to options do
-// not reach the result. BoundOptions executed on another session are resolved
+// not reach the result. CompiledOptions executed on another session are resolved
 // again for it on each execution.
-func (s *Session) BindOptions(options Options) (BoundOptions, error) {
+func (s *Session) BindOptions(options Options) (CompiledOptions, error) {
 	if s == nil {
-		return BoundOptions{}, cqltype.TypeValidation("session", "nil session")
+		return CompiledOptions{}, cqltype.TypeValidation("session", "nil session")
 	}
 	return InternalBindOptions(InternalCore(s), options)
 }
 
 // ExecBatch sends batch as one CQL BATCH of kind on s. The batch's
 // statements must produce no result columns; RunBatch reads the rows of a
-// conditional batch. At most one BoundOptions may be given; none uses the
+// conditional batch. At most one CompiledOptions may be given; none uses the
 // session's default profile. ExecBatch is safe for concurrent use with other
 // session calls, but a Batch must not be changed while it is sent.
-func (s *Session) ExecBatch(ctx context.Context, kind cqltype.BatchKind, batch *Batch, options ...BoundOptions) (model.Result, error) {
+func (s *Session) ExecBatch(ctx context.Context, kind cqltype.BatchKind, batch *Batch, options ...CompiledOptions) (model.Result, error) {
 	if s == nil {
 		err := cqltype.TypeValidation("session", "nil session")
 		return InternalExecutionErrorResult(err), err
@@ -110,7 +110,7 @@ func (s *Session) ExecBatch(ctx context.Context, kind cqltype.BatchKind, batch *
 // decoded with decoder. A conditional batch returns one row per conditional
 // statement, or one row reporting that it was not applied. Options are as for
 // ExecBatch. Close the page when done with it.
-func (s *Session) RunBatch[R any](ctx context.Context, kind cqltype.BatchKind, batch *Batch, decoder codec.RowDecoder[R], options ...BoundOptions) (*Page[R], error) {
+func (s *Session) RunBatch[R any](ctx context.Context, kind cqltype.BatchKind, batch *Batch, decoder codec.RowDecoder[R], options ...CompiledOptions) (*Page[R], error) {
 	if s == nil {
 		return nil, cqltype.TypeValidation("session", "nil session")
 	}

@@ -12,6 +12,7 @@ import (
 	. "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -42,7 +43,7 @@ func TestPageAPI(t *testing.T) {
 			chain, _ := wire.NewChain(wire.Borrow(body))
 			released := false
 			owner := wire.NewLease(chain, func() { released = true })
-			response := &responsePage{ResponseData: responseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner, State: RestorePageState([]byte{1})}}
+			response := &responsePage{ResponseData: responseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner, State: model.PageState(PageStateFromToken([]byte{1}))}}
 			page, err := newPage(response, cql.OneColumn(cql.BlobCodec), nil)
 			if err != nil {
 				t.Fatal(err)
@@ -76,7 +77,7 @@ func TestPageAPI(t *testing.T) {
 			if string(clone.OwnedBytes()) != "value" {
 				t.Fatal("clone changed")
 			}
-			if page.State().Bytes()[0] != 1 {
+			if page.State().Token()[0] != 1 {
 				t.Fatal("page state lost")
 			}
 		})
@@ -86,7 +87,7 @@ func TestPageAPI(t *testing.T) {
 		t.Run("CASMetadataAndEmptyPage", func(t *testing.T) {
 			boolean := cql.BooleanType
 			integer := cql.IntType
-			codec := cql.CASRows(cql.OneColumn(cql.Int32))
+			codec := cql.CASRows(cql.OneColumn(cql.Int32Codec))
 			columns := cql.NewColumns(cql.ColumnSpec{Name: "[applied]", Type: boolean})
 			plan, err := codec.Compile(columns)
 			if err != nil {
@@ -110,7 +111,7 @@ func TestPageAPI(t *testing.T) {
 			}
 			bad := cql.BlobType
 			response := &responsePage{ResponseData: responseData{Columns: cql.NewColumns(cql.ColumnSpec{Name: "bad", Type: bad}), Owner: wire.NewLease(wire.Chain{}, nil)}}
-			if _, err := newPage(response, cql.OneColumn(cql.Int32), nil); err == nil {
+			if _, err := newPage(response, cql.OneColumn(cql.Int32Codec), nil); err == nil {
 				t.Fatal("empty page skipped metadata validation")
 			}
 		})

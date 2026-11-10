@@ -127,7 +127,7 @@ func TestVector(t *testing.T) {
 			table := serializationTableName(t)
 			serializationDDL(t, s, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,vec vector<float,3>)", table))
 			for _, v := range [][]float32{{8, -5}, {8, -5, 1, 3}} {
-				err := serializationExec(s, fmt.Sprintf("INSERT INTO %s(id,vec) VALUES(1,?)", table), cql.OneParam(cql.VectorEncoder(cql.Float32)), v)
+				err := serializationExec(s, fmt.Sprintf("INSERT INTO %s(id,vec) VALUES(1,?)", table), cql.OneParam(cql.VectorEncoder(cql.Float32Codec)), v)
 				require.Error(t, err, "expected vector with 3 dimensions, received %d", len(v))
 			}
 		})
@@ -248,7 +248,7 @@ func TestVector(t *testing.T) {
 			serializationDDL(t, s, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,vec vector<text,4>)", variable))
 			serializationWrite(t, s, fmt.Sprintf("INSERT INTO %s(id) VALUES(1)", fixed))
 			serializationWrite(t, s, fmt.Sprintf("INSERT INTO %s(id) VALUES(1)", variable))
-			fl, e := serializationOne(s, fmt.Sprintf("SELECT vec FROM %s WHERE id=1", fixed), cql.OneColumn(cql.NullableDecoder(serializationVector(cql.Float32))))
+			fl, e := serializationOne(s, fmt.Sprintf("SELECT vec FROM %s WHERE id=1", fixed), cql.OneColumn(cql.NullableDecoder(serializationVector(cql.Float32Codec))))
 			require.NoError(t, e)
 			require.False(t, fl.Valid)
 			require.Nil(t, fl.Value)
@@ -266,7 +266,7 @@ func TestVector(t *testing.T) {
 			serializationDDL(t, s, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,vec vector<float,3>)", fixed))
 			serializationDDL(t, s, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,vec vector<text,4>)", variable))
 			floats := []float32{8, 2.5, -5}
-			require.Equal(t, floats, serializationRoundTrip(t, s, fixed, "vec", 1, serializationVector(cql.Float32), floats))
+			require.Equal(t, floats, serializationRoundTrip(t, s, fixed, "vec", 1, serializationVector(cql.Float32Codec), floats))
 			texts := []string{"apache", "cassandra", tests.RandomText(500), "gocql"}
 			require.Equal(t, texts, serializationRoundTrip(t, s, variable, "vec", 1, serializationVector(serializationString), texts))
 		})
@@ -294,7 +294,7 @@ func TestVector(t *testing.T) {
 				Int   int32
 				Float float32
 			}
-			tripleCodec := serializationTuple(cql.Params(cql.ParamAt(0, serializationString, func(v triple) string { return v.Text }), cql.ParamAt(1, cql.Int32, func(v triple) int32 { return v.Int }), cql.ParamAt(2, cql.Float32, func(v triple) float32 { return v.Float })), cql.Row(cql.ColumnAt(0, serializationString, func(v *triple) *string { return &v.Text }), cql.ColumnAt(1, cql.Int32, func(v *triple) *int32 { return &v.Int }), cql.ColumnAt(2, cql.Float32, func(v *triple) *float32 { return &v.Float })))
+			tripleCodec := serializationTuple(cql.Params(cql.ParamAt(0, serializationString, func(v triple) string { return v.Text }), cql.ParamAt(1, cql.Int32Codec, func(v triple) int32 { return v.Int }), cql.ParamAt(2, cql.Float32Codec, func(v triple) float32 { return v.Float })), cql.Row(cql.ColumnAt(0, serializationString, func(v *triple) *string { return &v.Text }), cql.ColumnAt(1, cql.Int32Codec, func(v *triple) *int32 { return &v.Int }), cql.ColumnAt(2, cql.Float32Codec, func(v *triple) *float32 { return &v.Float })))
 			type textList struct {
 				Text string
 				List []string
@@ -302,14 +302,14 @@ func TestVector(t *testing.T) {
 			textListCodec := serializationTuple(cql.Params(cql.ParamAt(0, serializationString, func(v textList) string { return v.Text }), cql.ParamAt(1, serializationList(serializationString), func(v textList) []string { return v.List })), cql.Row(cql.ColumnAt(0, serializationString, func(v *textList) *string { return &v.Text }), cql.ColumnAt(1, serializationList(serializationString), func(v *textList) *[]string { return &v.List })))
 			cases := []serializationVectorCase{
 				vectorCase("ascii", "ascii", ascii, []string{"a", "1", "Z"}, nil),
-				vectorCase("bigint", "bigint", cql.Int64, []int64{1, 2, 3}, nil),
+				vectorCase("bigint", "bigint", cql.Int64Codec, []int64{1, 2, 3}, nil),
 				vectorCase("blob", "blob", serializationBlob, [][]byte{{1, 2, 3}, {4, 5, 6, 7}, {8, 9}}, nil),
-				vectorCase("boolean", "boolean", cql.Bool, []bool{true, false, true}, nil),
+				vectorCase("boolean", "boolean", cql.BoolCodec, []bool{true, false, true}, nil),
 				vectorCase("counter", "counter", cql.CounterCodec, []cql.Counter{5, 6, 7}, nil),
 				vectorCase("decimal", "decimal", serializationDecimal, []inf.Dec{*inf.NewDec(1, 0), *inf.NewDec(2, 1), *inf.NewDec(-3, 2)}, nil),
-				vectorCase("double", "double", cql.Float64, []float64{0.1, -1.2, 3}, nil),
-				vectorCase("float", "float", cql.Float32, []float32{0.1, -1.2, 3}, nil),
-				vectorCase("int", "int", cql.Int32, []int32{1, 2, 3}, nil),
+				vectorCase("double", "double", cql.Float64Codec, []float64{0.1, -1.2, 3}, nil),
+				vectorCase("float", "float", cql.Float32Codec, []float32{0.1, -1.2, 3}, nil),
+				vectorCase("int", "int", cql.Int32Codec, []int32{1, 2, 3}, nil),
 				vectorCase("text", "text", serializationString, []string{"a", "b", "c"}, nil),
 				vectorCase("timestamp", "timestamp", serializationTimestamp, timestamps, nil),
 				vectorCase("uuid", "uuid", cql.UUIDCodec, []cql.UUID{cql.MustRandomUUID(), cql.MustRandomUUID(), cql.MustRandomUUID()}, nil),
@@ -319,11 +319,11 @@ func TestVector(t *testing.T) {
 				vectorCase("inet", "inet", cql.InetCodec, []netip.Addr{netip.MustParseAddr("127.0.0.1"), netip.MustParseAddr("192.168.1.1"), netip.MustParseAddr("8.8.8.8")}, nil),
 				vectorCase("date", "date", serializationDate, dates, nil),
 				vectorCase("time", "timestamp", serializationTimestamp, times, nil),
-				vectorCase("smallint", "smallint", cql.Int16, []int16{127, 256, -1234}, nil),
-				vectorCase("tinyint", "tinyint", cql.Int8, []int8{127, 9, -123}, nil),
+				vectorCase("smallint", "smallint", cql.Int16Codec, []int16{127, 256, -1234}, nil),
+				vectorCase("tinyint", "tinyint", cql.Int8Codec, []int8{127, 9, -123}, nil),
 				vectorCase("duration", "duration", cql.DurationCodec, []cql.Duration{{Months: 0, Days: 1, Nanoseconds: 1920000000000}, {Months: 1, Days: 1, Nanoseconds: 1920000000000}, {Months: 31, Days: 0, Nanoseconds: 60000000000}}, nil),
-				vectorCase("vector_vector_float", "vector<float,5>", serializationVector(cql.Float32), [][]float32{{0.1, -1.2, 3, 5, 5}, {10.1, -122222.0002, 35, 1, 1}, {0, 0, 0, 0, 0}}, nil),
-				vectorCase("vector_vector_set_float", "vector<set<float>,5>", serializationVector(serializationSet(cql.Float32)), [][][]float32{{{1, 2}, {2, -1}, {3}, {0}, {-1.3}}, {{2, 3}, {2, -1}, {3}, {0}, {-1.3}}, {{1, 1000}, {0}, {}, {12, 14, 15, 16}, {-1.3}}}, func(t *testing.T, want, got [][][]float32) {
+				vectorCase("vector_vector_float", "vector<float,5>", serializationVector(cql.Float32Codec), [][]float32{{0.1, -1.2, 3, 5, 5}, {10.1, -122222.0002, 35, 1, 1}, {0, 0, 0, 0, 0}}, nil),
+				vectorCase("vector_vector_set_float", "vector<set<float>,5>", serializationVector(serializationSet(cql.Float32Codec)), [][][]float32{{{1, 2}, {2, -1}, {3}, {0}, {-1.3}}, {{2, 3}, {2, -1}, {3}, {0}, {-1.3}}, {{1, 1000}, {0}, {}, {12, 14, 15, 16}, {-1.3}}}, func(t *testing.T, want, got [][][]float32) {
 					require.Len(t, got, len(want))
 					for i := range want {
 						require.Len(t, got[i], len(want[i]))
@@ -346,8 +346,8 @@ func TestVector(t *testing.T) {
 						require.Equal(t, a, b)
 					}
 				}),
-				vectorCase("vector_list_int", "list<int>", serializationList(cql.Int32), [][]int32{{1, 2, 3}, {-1, -2, -3}, {0, 0, 0}}, nil),
-				vectorCase("vector_map_text_int", "map<text,int>", serializationMap(serializationString, cql.Int32), []map[string]int32{{"a": 1, "b": 2, "c": 3}, {"abc": 123}, {}}, nil),
+				vectorCase("vector_list_int", "list<int>", serializationList(cql.Int32Codec), [][]int32{{1, 2, 3}, {-1, -2, -3}, {0, 0, 0}}, nil),
+				vectorCase("vector_map_text_int", "map<text,int>", serializationMap(serializationString, cql.Int32Codec), []map[string]int32{{"a": 1, "b": 2, "c": 3}, {"abc": 123}, {}}, nil),
 			}
 			table := serializationTableName(t, "all_types")
 			cols := ""
@@ -367,7 +367,7 @@ func TestVector(t *testing.T) {
 			table, typ := serializationTableName(t), serializationTypeName(t)
 			serializationDDL(t, s, fmt.Sprintf("CREATE TYPE %s(first_name text,last_name text,age int)", typ))
 			serializationDDL(t, s, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,couple vector<%s,2>)", table, typ))
-			codec := serializationUDT(cql.Params(cql.Param("first_name", serializationString, func(v person) string { return v.FirstName }), cql.Param("last_name", serializationString, func(v person) string { return v.LastName }), cql.Param("age", cql.Int32, func(v person) int32 { return v.Age })), cql.Row(cql.Column("first_name", serializationString, func(v *person) *string { return &v.FirstName }), cql.Column("last_name", serializationString, func(v *person) *string { return &v.LastName }), cql.Column("age", cql.Int32, func(v *person) *int32 { return &v.Age })), serializationUDTOptions(typ))
+			codec := serializationUDT(cql.Params(cql.Param("first_name", serializationString, func(v person) string { return v.FirstName }), cql.Param("last_name", serializationString, func(v person) string { return v.LastName }), cql.Param("age", cql.Int32Codec, func(v person) int32 { return v.Age })), cql.Row(cql.Column("first_name", serializationString, func(v *person) *string { return &v.FirstName }), cql.Column("last_name", serializationString, func(v *person) *string { return &v.LastName }), cql.Column("age", cql.Int32Codec, func(v *person) *int32 { return &v.Age })), serializationUDTOptions(typ))
 			want := []person{{"Johny", "Bravo", 25}, {"Capitan", "Planet", 5}}
 			require.Equal(t, want, serializationRoundTrip(t, s, table, "couple", 1, serializationVector(codec), want))
 		})

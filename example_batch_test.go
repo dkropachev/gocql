@@ -53,8 +53,8 @@ func ExampleSession_ExecBatch() {
 	queryPrepared, err := session.Prepare(ctx, cql.Statement[item, cql.EmptyRow]{
 		CQL: "INSERT INTO example.batches (pk, ck, description) VALUES (?, ?, ?)",
 		Params: cql.Params(
-			cql.Param("pk", cql.Int32, func(v item) int32 { return v.PK }),
-			cql.Param("ck", cql.Int32, func(v item) int32 { return v.CK }),
+			cql.Param("pk", cql.Int32Codec, func(v item) int32 { return v.PK }),
+			cql.Param("ck", cql.Int32Codec, func(v item) int32 { return v.CK }),
 			cql.Param("description", cql.StringCodec, func(v item) string { return v.Description }),
 		),
 	})
@@ -82,8 +82,8 @@ func ExampleSession_ExecBatch() {
 	selectAll, err := session.UnpreparedQuery(cql.Statement[cql.EmptyParams, item]{
 		CQL: "SELECT pk, ck, description FROM example.batches",
 		Rows: cql.Row(
-			cql.Column("pk", cql.Int32, func(v *item) *int32 { return &v.PK }),
-			cql.Column("ck", cql.Int32, func(v *item) *int32 { return &v.CK }),
+			cql.Column("pk", cql.Int32Codec, func(v *item) *int32 { return &v.PK }),
+			cql.Column("ck", cql.Int32Codec, func(v *item) *int32 { return &v.CK }),
 			cql.Column("description", cql.StringCodec, func(v *item) *string { return &v.Description }),
 		),
 	}, gocql.Options{})

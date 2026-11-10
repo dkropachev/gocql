@@ -658,7 +658,7 @@ func TestPrepared(t *testing.T) {
 						}
 						bound := codecTestMust(BindOwned(prepared, codec.EmptyRecord{}))
 						defer bound.Close()
-						rows, err := Run(ctx, s, bound, BoundOptions{})
+						rows, err := Run(ctx, s, bound, CompiledOptions{})
 						if tc.badResult {
 							if !hasErrorType[*implCqltype.ValidationError](err) {
 								t.Fatalf("actual metadata was not validated before output: %v", err)

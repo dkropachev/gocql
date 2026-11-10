@@ -2478,7 +2478,7 @@ func TestConn(t *testing.T) {
 				t.Fatal("heartBeat never logged the unexpected OPTIONS reply")
 			}
 
-			if err := execTestStatement(context.Background(), db, "void", BoundOptions{}); err != nil {
+			if err := execTestStatement(context.Background(), db, "void", CompiledOptions{}); err != nil {
 				t.Fatalf("the session did not survive an unexpected heartbeat reply: %v", err)
 			}
 		})

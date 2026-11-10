@@ -18,6 +18,39 @@ import (
 )
 
 func TestPreparedStream(t *testing.T) {
+	t.Run("UnpreparedStatementBindMarkers", func(t *testing.T) {
+		s, conns, peers := runtimeTestSession(t, 1)
+		session := InternalWrapSession(s)
+		statement := StreamStatement[int32, []byte]{
+			CQL:    "SELECT value FROM ks.tbl WHERE k = ?",
+			Params: codec.OneParam(codec.Int32),
+			Rows:   codec.StreamOneColumn(codec.StreamBlob),
+		}
+		if _, err := session.UnpreparedStreamQuery(statement, StreamOptions{}); err == nil {
+			t.Fatal("missing bind metadata accepted")
+		}
+		statement.BindMarkers = cqltype.NewColumns(cqltype.ColumnSpec{Name: "k", Type: cqltype.IntType})
+		q := codecTestMust(session.UnpreparedStreamQuery(statement, StreamOptions{}))
+		defer func() { _ = q.Close(context.Background()) }()
+		served := make(chan struct{})
+		go func() {
+			defer close(served)
+			stream := typedTestReadRequest(t, conns[0], peers[0])
+			if _, err := peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "value"))); err != nil {
+				t.Error(err)
+			}
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		cursor := codecTestMust(q.Run(ctx, int32(7)))
+		defer cursor.Close()
+		dst := make([]byte, 0, 8)
+		if !cursor.NextInto(&dst) || string(dst) != "value" || cursor.NextInto(&dst) || cursor.Err() != nil {
+			t.Fatalf("unprepared stream: row %q, error %v", dst, cursor.Err())
+		}
+		<-served
+	})
+
 	t.Run("ConditionalMetadataDeferred", func(t *testing.T) {
 		for _, incremental := range []bool{false, true} {
 			t.Run(fmt.Sprintf("incremental=%t", incremental), func(t *testing.T) {

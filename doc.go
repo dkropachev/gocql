@@ -28,7 +28,7 @@
 //
 // Prepared.Exec, One and Each execute a prepared statement once. They are safe
 // for concurrent use and run on queries the statement keeps for them, so they
-// allocate no per-call execution state. Each takes at most one BoundOptions,
+// allocate no per-call execution state. Each takes at most one CompiledOptions,
 // made once by Session.BindOptions; none uses the session's default profile.
 // Exec and Each return (Result, error) and One returns (bool, Result, error),
 // on Prepared and Query alike. One detaches borrowed fields before returning;

@@ -223,12 +223,12 @@ func BindUnpreparedOwned[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a
 	return implExecution.BindUnpreparedOwned[P, R](binding.Statement[P, R]{CQL: a0.CQL, Params: a0.Params, Rows: a0.Rows, Kind: a0.Kind, BindMarkers: a0.BindMarkers}, a1, a2)
 }
 
-func Exec[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.BoundOptions) (gocql.Result, error) {
-	return implExecution.Exec[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, implExecution.BoundOptions(a3))
+func Exec[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.CompiledOptions) (gocql.Result, error) {
+	return implExecution.Exec[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, implExecution.CompiledOptions(a3))
 }
 
-func Run[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.BoundOptions) (gocql.Rows[R], error) {
-	result, err := implExecution.Run[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, implExecution.BoundOptions(a3))
+func Run[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.CompiledOptions) (gocql.Rows[R], error) {
+	result, err := implExecution.Run[R](a0, implExecution.InternalCore((*implExecution.Session)(a1)), a2, implExecution.CompiledOptions(a3))
 	return gocql.Rows[R](result), err
 }
 
@@ -403,7 +403,7 @@ func codecTestMust[T any](v T, err error) T {
 
 // bindOptions binds v to session, failing loudly on values a test meant to
 // be valid.
-func bindOptions(session *gocql.Session, v gocql.Options) gocql.BoundOptions {
+func bindOptions(session *gocql.Session, v gocql.Options) gocql.CompiledOptions {
 	o, err := session.BindOptions(v)
 	if err != nil {
 		panic(err)
@@ -448,7 +448,7 @@ func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*gocql.Con
 	if skip&fixtureAgreement == 0 {
 		b.WithSchemaAgreement(2*time.Minute, 200*time.Millisecond)
 	}
-	b.WithDefaultProfile(func(p *gocql.ProfileBuilder) { fixtureProfileExcept(p, skip) })
+	b.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { fixtureProfileExcept(p, skip) })
 	if *flagRunAuthTest && skip&fixtureAuth == 0 {
 		b.WithAuth(auth.Password("cassandra", "cassandra"))
 	}
@@ -594,7 +594,7 @@ func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisa
 		// Keyspace creation uses a fresh fixture config: the test's own
 		// choices may not reach a working cluster.
 		bootstrap := mustBuild(t, createV2ClusterWithout(fixtureTimeout).WithKeyspace("system").
-			WithDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithTimeout(30 * time.Second) }))
+			ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithTimeout(30 * time.Second) }))
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 		session, err := gocql.Connect(ctx, bootstrap)
@@ -684,7 +684,7 @@ func v2Query(ctx context.Context, session *gocql.Session, stmt string, values ..
 	// Run admits the request before returning. Rows owns the execution reference
 	// until it is exhausted or closed, even after closing the binding here.
 	defer bound.Close()
-	return Run(ctx, session, bound, gocql.BoundOptions{})
+	return Run(ctx, session, bound, gocql.CompiledOptions{})
 }
 
 func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (cql.DynamicRow, error) {
@@ -1247,7 +1247,7 @@ func serializationExec[P any](s *gocql.Session, stmt string, encoder cql.ParamEn
 		return err
 	}
 	defer b.Close()
-	_, err = Exec(ctx, s, b, gocql.BoundOptions{})
+	_, err = Exec(ctx, s, b, gocql.CompiledOptions{})
 	return err
 }
 
@@ -1262,7 +1262,7 @@ func serializationRows[R any](s *gocql.Session, stmt string, decoder cql.RowDeco
 		return gocql.Rows[R]{}, err
 	}
 	defer b.Close()
-	return Run(ctx, s, b, gocql.BoundOptions{})
+	return Run(ctx, s, b, gocql.CompiledOptions{})
 }
 
 func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (R, error) {

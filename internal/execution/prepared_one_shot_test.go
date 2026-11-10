@@ -138,8 +138,8 @@ func TestPreparedOneShot(t *testing.T) {
 		}
 	})
 
-	t.Run("BoundOptions", func(t *testing.T) {
-		// TestPreparedOneShot/BoundOptions/PerCall checks that each call's options reach the
+	t.Run("CompiledOptions", func(t *testing.T) {
+		// TestPreparedOneShot/CompiledOptions/PerCall checks that each call's options reach the
 		// wire while calls reuse one pooled query.
 		t.Run("PerCall", func(t *testing.T) {
 			s, _, peers := runtimeTestSession(t, 1)
@@ -151,13 +151,13 @@ func TestPreparedOneShot(t *testing.T) {
 			two := testOptions(Options{Consistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.Two}})
 			defaults := settings.InternalDefaultProfile()
 			for i, tc := range []struct {
-				options     BoundOptions
+				options     CompiledOptions
 				consistency cqltype.Consistency
 				pageSize    int32
 			}{
 				{quorum, cqltype.Quorum, 7},
 				{two, cqltype.Two, defaults.PageSize},
-				{BoundOptions{}, defaults.Consistency, defaults.PageSize},
+				{CompiledOptions{}, defaults.Consistency, defaults.PageSize},
 				{quorum, cqltype.Quorum, 7},
 			} {
 				errs := make(chan error, 1)

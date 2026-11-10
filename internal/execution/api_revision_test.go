@@ -121,13 +121,13 @@ func TestQueryDrainAdmission(t *testing.T) {
 
 func TestOneShotOptions(t *testing.T) {
 	if o, err := oneShotOptions(nil); err != nil || o.p != nil {
-		t.Fatal("no options must give the zero BoundOptions", err)
+		t.Fatal("no options must give the zero CompiledOptions", err)
 	}
 	bound := testOptions(Options{Idempotent: true})
-	if o, err := oneShotOptions([]BoundOptions{bound}); err != nil || o != bound {
+	if o, err := oneShotOptions([]CompiledOptions{bound}); err != nil || o != bound {
 		t.Fatal("one option must be used as given", err)
 	}
-	if _, err := oneShotOptions([]BoundOptions{bound, bound}); err == nil {
+	if _, err := oneShotOptions([]CompiledOptions{bound, bound}); err == nil {
 		t.Fatal("two options accepted")
 	}
 }

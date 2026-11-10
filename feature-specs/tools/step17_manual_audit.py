@@ -186,7 +186,7 @@ EXTRA_GUARDS={
  'native-counts':[('internal/codec/value_io.go',{'FinishValueWriter','readFramedValue'}),('internal/codec/collections.go',{'collectionCount'})],
  'shape-arithmetic':[('internal/codec/collections.go',{'vectorFixedWidth','validateSequenceLayout'}),('internal/wire/stream.go',{'CheckProduct','Count32'}),('internal/settings/v2_profiles.go',{'InternalValidateProfile'}),('internal/execution/v2_profiles.go',{'InternalResolveOptions'})],
  'sentinels-opcodes':[('internal/wire/stream.go',{'Cell','Count32','RequireEnd'}),('internal/codec/value_io.go',{'readFramedValue'})],
- 'paging':[('internal/model/result.go',{'Bytes','RestorePageState'}),('internal/model/access.go',{'PageStateOwned'})],
+ 'paging':[('internal/model/result.go',{'Token','PageStateFromToken'}),('internal/model/access.go',{'PageStateOwned'})],
 }
 
 REFERENCE_SCOPES={

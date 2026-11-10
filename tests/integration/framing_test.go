@@ -234,7 +234,7 @@ func TestFraming(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,val int)", table))
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES(?,?)", table), cql.IntValue(1), cql.IntValue(7))
 			host := cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
-			prepared := cassandraPrepared(t, session, cql.Statement[int32, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id,val FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows}, *func() *implExecution.PrepareOptions {
+			prepared := cassandraPrepared(t, session, cql.Statement[int32, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id,val FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.DynamicRows}, *func() *implExecution.PrepareOptions {
 				opaqueStorageValuexxxxxx := new(implExecution.PrepareOptions)
 				opaqueStorageValuexxxxxx.HostID = host
 				implExecution.PrepareOptionsData(opaqueStorageValuexxxxxx).InternalConnection = conn

@@ -43,8 +43,8 @@ type position struct {
 
 func positionFields(options cql.UDTOptions) cql.Codec[position] {
 	return serializationUDT(
-		cql.Params(cql.Param("lat", cql.Int32, func(p position) int32 { return p.Lat }), cql.Param("lon", cql.Int32, func(p position) int32 { return p.Lon }), cql.Param("padding", serializationString, func(p position) string { return p.Padding })),
-		cql.Row(cql.Column("lat", cql.Int32, func(p *position) *int32 { return &p.Lat }), cql.Column("lon", cql.Int32, func(p *position) *int32 { return &p.Lon }), cql.Column("padding", serializationString, func(p *position) *string { return &p.Padding })), options)
+		cql.Params(cql.Param("lat", cql.Int32Codec, func(p position) int32 { return p.Lat }), cql.Param("lon", cql.Int32Codec, func(p position) int32 { return p.Lon }), cql.Param("padding", serializationString, func(p position) string { return p.Padding })),
+		cql.Row(cql.Column("lat", cql.Int32Codec, func(p *position) *int32 { return &p.Lat }), cql.Column("lon", cql.Int32Codec, func(p *position) *int32 { return &p.Lon }), cql.Column("padding", serializationString, func(p *position) *string { return &p.Padding })), options)
 }
 
 // The original per-member hooks become an application-owned typed Codec.

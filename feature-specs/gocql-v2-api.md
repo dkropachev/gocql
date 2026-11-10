@@ -287,13 +287,13 @@ type TimeUUID UUID
 type Varint struct { /* canonical/sign-preserving segmented two's complement */ }
 type Decimal struct { Scale int32; Unscaled Varint }
 
-var Bool Codec[bool]
-var Int8 Codec[int8]
-var Int16 Codec[int16]
-var Int32 Codec[int32]
-var Int64 Codec[int64]
-var Float32 Codec[float32]
-var Float64 Codec[float64]
+var BoolCodec Codec[bool]
+var Int8Codec Codec[int8]
+var Int16Codec Codec[int16]
+var Int32Codec Codec[int32]
+var Int64Codec Codec[int64]
+var Float32Codec Codec[float32]
+var Float64Codec Codec[float64]
 var CounterCodec Codec[Counter]
 var DateCodec Codec[Date]
 var TimeCodec Codec[TimeOfDay]
@@ -490,7 +490,7 @@ type ValueEntry struct { Key, Value Value }
 func (v Value) Type() DataType
 func (v Value) State() CellState
 func (v Value) Clone() Value
-func (v Value) Bool() (bool, error)
+func (v Value) BoolCodec() (bool, error)
 func (v Value) Signed() (int64, error)
 func (v Value) Float() (float64, error)
 func (v Value) Text() (Text, error)
@@ -570,7 +570,7 @@ method on the type that owns it.
 | `NewStreamQuery` | removed | `Prepared.StreamQuery[R]` declares the decoder's row type itself |
 | `BindOptions` | moved to `Session.BindOptions` | |
 | `Query.ExecBatch`, `Query.RunBatch` | moved to `Session.ExecBatch`, `Session.RunBatch[R]` | a batch is a session operation and need not include the query's statement |
-| `RestorePageState` | keep | `PageState` fields are private |
+| `PageStateFromToken` | keep | `PageState` fields are private |
 | `NewQuery` | moved to `Prepared.Query` | `Prepared[P, R]` already carries the type parameters |
 | `PrepareQuery` | removed | `Prepare` then `Prepared.Query`; it saved one call |
 | `StartPage()` | replaced by `var StartPage` | it only returned the zero `PageState` |
@@ -586,18 +586,18 @@ captured parameters through retries, pages, accepted writes and callbacks.
 func Prepare[P, R any](context.Context, *Session, Statement[P, R], ...PrepareOptions) (*Prepared[P, R], error) // at most one
 func (s *Session) Prepare[P, R any](context.Context, Statement[P, R], ...PrepareOptions) (*Prepared[P, R], error)
 
-// One-shot calls, safe for concurrent use; at most one BoundOptions.
-func (p *Prepared[P, R]) Exec(context.Context, P, ...BoundOptions) (Result, error)
-func (p *Prepared[P, R]) One(context.Context, P, *R, ...BoundOptions) (bool, Result, error)
-func (p *Prepared[P, R]) Each(context.Context, P, *R, func(*R) error, ...BoundOptions) (Result, error)
+// One-shot calls, safe for concurrent use; at most one CompiledOptions.
+func (p *Prepared[P, R]) Exec(context.Context, P, ...CompiledOptions) (Result, error)
+func (p *Prepared[P, R]) One(context.Context, P, *R, ...CompiledOptions) (bool, Result, error)
+func (p *Prepared[P, R]) Each(context.Context, P, *R, func(*R) error, ...CompiledOptions) (Result, error)
 func (p *Prepared[P, R]) AddToBatch(*Batch, P) error
 
 // Worker-owned reusable queries.
 func (p *Prepared[P, R]) Query(Options) (*Query[P, R], error)
 func (s *Session) UnpreparedQuery[P, R any](Statement[P, R], Options) (*Query[P, R], error)
-func (s *Session) UnpreparedExec[P any](context.Context, Statement[P, EmptyRow], P, ...BoundOptions) (Result, error)
-func (s *Session) UnpreparedOne[P, R any](context.Context, Statement[P, R], P, *R, ...BoundOptions) (bool, Result, error)
-func (s *Session) UnpreparedEach[P, R any](context.Context, Statement[P, R], P, *R, func(*R) error, ...BoundOptions) (Result, error)
+func (s *Session) UnpreparedExec[P any](context.Context, Statement[P, EmptyRow], P, ...CompiledOptions) (Result, error)
+func (s *Session) UnpreparedOne[P, R any](context.Context, Statement[P, R], P, *R, ...CompiledOptions) (bool, Result, error)
+func (s *Session) UnpreparedEach[P, R any](context.Context, Statement[P, R], P, *R, func(*R) error, ...CompiledOptions) (Result, error)
 func (q *Query[P, R]) Exec(context.Context, P) (Result, error)
 func (q *Query[P, R]) Each(context.Context, P, *R, func(*R) error) (Result, error)
 func (q *Query[P, R]) One(context.Context, P, *R) (bool, Result, error)
@@ -608,8 +608,8 @@ func (q *Query[P, R]) Routing(P) (RoutingInfo, error)
 func (q *Query[P, R]) AddToBatch(*Batch, P) error
 func (q *Query[P, R]) Close(context.Context) error // stop, then join the drain
 
-func (s *Session) ExecBatch(context.Context, BatchKind, *Batch, ...BoundOptions) (Result, error)
-func (s *Session) RunBatch[R any](context.Context, BatchKind, *Batch, RowDecoder[R], ...BoundOptions) (*Page[R], error)
+func (s *Session) ExecBatch(context.Context, BatchKind, *Batch, ...CompiledOptions) (Result, error)
+func (s *Session) RunBatch[R any](context.Context, BatchKind, *Batch, RowDecoder[R], ...CompiledOptions) (*Page[R], error)
 ```
 
 Prepared.Exec, One and Each run on queries the prepared statement keeps in a
@@ -725,10 +725,10 @@ type PageLease struct { /* stable shared reference to receive storage */ }
 func (l *PageLease) Close()
 type PageState struct { /* start / more / complete, opaque owned token */ }
 var StartPage PageState // the zero PageState
-func RestorePageState([]byte) PageState
+func PageStateFromToken([]byte) PageState
 func (p PageState) More() bool
 func (p PageState) Complete() bool
-func (p PageState) Bytes() []byte
+func (p PageState) Token() []byte
 
 type CASResult[R any] struct { Applied bool; Previous Option[R] }
 func CASRows[R any](RowDecoder[R]) RowDecoder[CASResult[R]]
@@ -824,23 +824,23 @@ a hash alone is insufficient. Use a hash-indexed history with full-byte collisio
 checks, giving expected O(token bytes) insertion/lookup rather than scanning all
 prior states on every page. Retain one immutable owned token representation for
 history, next-page sending and PageState; internal use never calls the public
-copying Bytes() accessor. Count the history entry/index storage under the count
-budget and token bytes under the byte budget. Explicit Bytes() calls still copy.
+copying Token() accessor. Count the history entry/index storage under the count
+budget and token bytes under the byte budget. Explicit Token() calls still copy.
 Retained history is bounded by Config.Limits
 MaxPagingStates (default 65,536) and MaxPagingStateBytes (default 16 MiB);
 exhausting either returns terminal ErrPagingStateLimit before storing/fetching
 the next state. Both budgets must be positive. Manual RunPage keeps no
 cross-call history. RunPage returns an empty page and its continuation as-is.
 PageState distinguishes an absent start token, present empty continuation, and
-completion. Tokens returned by State/Bytes remain available after page closure;
-Bytes returns an explicit owned copy of the server token, not a serialized state
-tag. The zero PageState and StartPage mean start. RestorePageState always
+completion. Tokens returned by State/Token remain available after page closure;
+Token returns an explicit owned copy of the server token, not a serialized state
+tag. The zero PageState and StartPage mean start. PageStateFromToken always
 constructs a continuation, including for nil and empty input, and copies its
-argument. Bytes is nil for start and complete; use More/Complete to distinguish
+argument. Token is nil for start and complete; use More/Complete to distinguish
 them. A continuation with zero token bytes still has More()==true. Complete is
 output-only: passing it to RunPage returns ErrPagingComplete before
 admission/I/O. This continuation-only import API does not round-trip start or
-complete through Bytes. RunUnpaged rejects a continuation. Exec drains and
+complete through Token. RunUnpaged rejects a continuation. Exec drains and
 closes all rows and fails if result columns exist; conditional writes use
 CASRows and consume every row, including multi-row conditional batches. CASRows
 handles an applied-only response and checked previous-value metadata; Previous
@@ -870,8 +870,8 @@ ownership and acceptance rules are in
 ```go
 // B is the prepared buffered result type; R is the streaming destination type.
 func (p *Prepared[P, B]) StreamQuery[R any](StreamRowDecoder[R], StreamOptions) (*StreamQuery[P, R], error)
-// The statement declares no row decoder; decoder decodes every row.
-func (s *Session) UnpreparedStreamQuery[P, R any](Statement[P, EmptyRow], StreamRowDecoder[R], StreamOptions) (*StreamQuery[P, R], error)
+// The streaming statement supplies Rows and unprepared BindMarkers.
+func (s *Session) UnpreparedStreamQuery[P, R any](StreamStatement[P, R], StreamOptions) (*StreamQuery[P, R], error)
 func (q *StreamQuery[P, R]) Run(context.Context, P) (*RowStream[R], error)
 func (q *StreamQuery[P, R]) Close(context.Context) error
 type RowStream[R any] struct { /* exclusive pull receiver, automatic paging */ }
@@ -971,7 +971,7 @@ func StreamSet[T any](StreamDecoder[T]) StreamDecoder[[]T]
 func StreamMap[K, V any](StreamDecoder[K], StreamDecoder[V]) StreamDecoder[[]Entry[K, V]]
 func StreamVector[T any](StreamDecoder[T]) StreamDecoder[[]T]
 func StreamTuple[R any](StreamRowDecoder[R]) StreamDecoder[R]
-func StreamUDT[R any](UDTOptions, StreamRowDecoder[R]) StreamDecoder[R]
+func StreamUDT[R any](StreamRowDecoder[R], UDTOptions) StreamDecoder[R]
 // Explicit final encoded storage for dynamic/custom representations.
 type StreamEncodedValue struct { Type DataType; State CellState; Bytes []byte }
 var StreamEncoded StreamDecoder[StreamEncodedValue]
@@ -1005,7 +1005,7 @@ NoRows still cannot be used to describe nonzero physical result columns.
 Applications using both modes can use an ordinary typed decoder at preparation
 and a separate StreamRow decoder for streaming storage. Stream-only applications
 use Session.PrepareStream with cql.StreamStatement[P,R] (CQL, Params, Rows as a
-StreamRowDecoder, Kind), returning an immutable PreparedStream[P,R]. Its
+StreamRowDecoder, BindMarkers for unprepared execution, Kind), returning an immutable PreparedStream[P,R]. Its
 Query(StreamOptions) creates a worker-owned StreamQuery. Preparation validates
 the streaming plan against available metadata, deferring only absent conditional
 result metadata. No buffered decoder is needed. Query-local caches revalidate
@@ -1147,13 +1147,13 @@ also interrupts active streams; already written caller output remains valid.
 // Options are plain values; the zero Options uses the session default
 // profile. Query constructors take Options and validate, resolve and encode
 // them for their session once. One-shot executions (Prepared.Exec/One/Each,
-// Session.ExecBatch, Session.RunBatch) take BoundOptions: Options bound by
+// Session.ExecBatch, Session.RunBatch) take CompiledOptions: Options bound by
 // Session.BindOptions to one session's default profile and keyspace. On
-// another session, BoundOptions are resolved again for that session on each
-// execution. The zero BoundOptions uses the executing session's default profile.
-type BoundOptions struct { /* frozen, resolved options */ }
-func (s *Session) BindOptions(Options) (BoundOptions, error)
-func (BoundOptions) Values() Options          // a copy, to derive other options
+// another session, CompiledOptions are resolved again for that session on each
+// execution. The zero CompiledOptions uses the executing session's default profile.
+type CompiledOptions struct { /* frozen, resolved options */ }
+func (s *Session) BindOptions(Options) (CompiledOptions, error)
+func (CompiledOptions) Values() Options          // a copy, to derive other options
 
 type Options struct {
     Profile *Profile                              // copied when resolved
@@ -1516,21 +1516,24 @@ admissions made by this session without closing unadmitted bindings.
 Configuration retains useful existing setup capabilities. A `Config` is an
 opaque, immutable value made only by `ConfigBuilder.Build`; users never write a
 `Config` literal or assign its fields. Each builder method sets one setting
-and is named `With*` (`WithPort`, `WithTLS`, `WithTimeout`), except `Build`
-and the `No*` off switches; settings not chosen keep the driver's behavior, and when a setting is chosen
+and is named `With*` (`WithPort`, `WithTLS`, `WithTimeout`), except `Build`,
+`ConfigureDefaultProfile` and the `No*` off switches; settings not chosen keep the driver's behavior, and when a setting is chosen
 again the last call wins. Setters store the latest value without validation or
 call history.
 `Build` validates only the final configuration and returns its first typed error.
 Correcting a setting clears the error on the next Build. Optional zero durations
 disable their budget, and nil optional providers remove overrides. With* methods
 restore features after No* switches. `WithIgnoreEvents` replaces its complete
-list; `WithDefaultProfile(nil)` resets the profile. Slice inputs are copied; Build snapshots
+list. `WithDefaultProfile(Profile)` replaces the complete execution profile;
+`ConfigureDefaultProfile` composes callbacks, and a nil callback resets the profile. Slice inputs are copied; Build snapshots
 configuration values while callback/provider objects remain shared and concurrency-safe.
 These functions are the entry points:
 
 ```go
 func NewConfig(contactPoints ...string) *ConfigBuilder
 func (*ConfigBuilder) Build() (Config, error)
+func (*ConfigBuilder) WithDefaultProfile(Profile) *ConfigBuilder
+func (*ConfigBuilder) ConfigureDefaultProfile(func(*ProfileBuilder)) *ConfigBuilder
 func NewProfile() *ProfileBuilder
 func NewClientRoutes(connectionIDs ...string) *ClientRoutesBuilder
 func Connect(context.Context, Config) (*Session, error)
@@ -1617,7 +1620,7 @@ the historical design review results or establish full release verification.
 
 Public Statement, StreamStatement, Options, PrepareOptions, StreamOptions and
 Profile records expose their fields directly in package documentation.
-BoundOptions.Values returns public Options. The high-level codec and observer
+CompiledOptions.Values returns public Options. The high-level codec and observer
 interfaces expose their methods; lower-level plan contracts are documented in
 docs/source/custom-codecs.md. Facade adapters copy settings only, never payloads
 or codec plans, and introduce no serializer.
@@ -1636,6 +1639,6 @@ before request metrics and observers. No later row callbacks or continuation
 pages run. Ordinary callback errors remain failures. Result.Rows continues
 counting fetched response rows, rather than callback invocations.
 
-Options and BoundOptions remain separate. Bind recurring settings once;
+Options and CompiledOptions remain separate. Bind recurring settings once;
 request-specific options may be bound for one-shot calls. Query settings remain
 immutable and request context deadlines need no new options binding.

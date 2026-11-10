@@ -33,8 +33,8 @@ func TestPublicOptionsSnapshot(t *testing.T) {
 	if got := publicOptions(internalOptions(Options{NoSerialConsistency: true})); !got.NoSerialConsistency {
 		t.Fatal("explicitly disabled serial consistency was lost")
 	}
-	raw := codecTestMust(implExecution.NewBoundOptions(nil, internalOptions(want)))
-	bound := BoundOptions(raw)
+	raw := codecTestMust(implExecution.NewCompiledOptions(nil, internalOptions(want)))
+	bound := CompiledOptions(raw)
 	profile.PageSize = 99
 	payload[0] = 'X'
 	got := bound.Values()
@@ -46,7 +46,7 @@ func TestPublicOptionsSnapshot(t *testing.T) {
 	if again := bound.Values(); again.Profile.PageSize != 11 || again.CustomPayload[0].Key != "key" {
 		t.Fatal("Values exposed mutable bound storage")
 	}
-	if zero := (BoundOptions{}).Values(); !reflect.DeepEqual(zero, Options{}) {
+	if zero := (CompiledOptions{}).Values(); !reflect.DeepEqual(zero, Options{}) {
 		t.Fatalf("zero bound options do not return zero overrides: %+v", zero)
 	}
 }

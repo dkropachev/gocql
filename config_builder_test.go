@@ -83,8 +83,8 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("LastCallWins", func(t *testing.T) {
 		c := mustBuildConfig(t, NewConfig("h").WithConnectionsPerShard(3).WithConnectionsPerShard(4).
-			WithDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.One) }).
-			WithDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.All) }).
+			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.One) }).
+			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.All) }).
 			WithClientRoutes(NewClientRoutes("c1").WithHostnameOverride("c1", "a").WithHostnameOverride("c1", "b")).
 			NoAdvancedShardAwareness()).settings
 		if c.Pool.ConnectionsPerShard != 4 || c.DefaultProfile.Consistency != cql.All || c.ClientRoutes.HostnameOverrides["c1"] != "b" {
@@ -133,7 +133,7 @@ func TestConfigBuilder(t *testing.T) {
 			NoConfigReport().WithConfigReport().
 			WithManualSchemaAgreement().WithAutomaticSchemaAgreement().
 			NoRefreshAfterAgreement().WithRefreshAfterAgreement().
-			WithDefaultProfile(func(p *ProfileBuilder) {
+			ConfigureDefaultProfile(func(p *ProfileBuilder) {
 				p.WithPageSize(0).WithPageSize(42).NoPrefetch().WithPrefetch(1)
 			})
 		c := mustBuildConfig(t, b).settings
@@ -142,7 +142,7 @@ func TestConfigBuilder(t *testing.T) {
 			!c.Metadata.SchemaEvents || c.Metadata.StatusEvents || c.DefaultProfile.PageSize != 42 || c.DefaultProfile.Prefetch != 1 {
 			t.Fatalf("later settings did not replace previous choices: %+v", c)
 		}
-		b.WithIgnoreEvents().WithDefaultProfile(nil)
+		b.WithIgnoreEvents().ConfigureDefaultProfile(nil)
 		reset := mustBuildConfig(t, b).settings
 		if !reset.Metadata.StatusEvents || reset.DefaultProfile.PageSize != 5000 {
 			t.Fatal("reset did not restore defaults")
@@ -220,14 +220,43 @@ func TestConfigBuilder(t *testing.T) {
 		}
 	})
 
+	t.Run("DefaultProfileSnapshotsAndReplaces", func(t *testing.T) {
+		profile := codecTestMust(NewProfile().WithConsistency(cql.Quorum).WithPageSize(7).NoTimeout().Build())
+		b := NewConfig("h").WithDefaultProfile(profile)
+		other := NewConfig("h").WithDefaultProfile(profile)
+		profile.PageSize = 99
+		first := mustBuildConfig(t, b).settings
+		if first.DefaultProfile.PageSize != 7 || first.DefaultProfile.Timeout != 0 {
+			t.Fatal("WithDefaultProfile did not snapshot the complete profile")
+		}
+		b.ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithPageSize(11) })
+		if got := mustBuildConfig(t, other).settings.DefaultProfile.PageSize; got != 7 {
+			t.Fatalf("configuring another builder changed the shared profile: %d", got)
+		}
+		replacement := codecTestMust(NewProfile().WithConsistency(cql.One).Build())
+		replaced := mustBuildConfig(t, b.WithDefaultProfile(replacement)).settings.DefaultProfile
+		if replaced.Consistency != cql.One || replaced.PageSize != 5000 || replaced.Timeout == 0 {
+			t.Fatalf("WithDefaultProfile merged instead of replacing: %+v", replaced)
+		}
+		invalid := replacement
+		invalid.PageSize = 0
+		if _, err := b.WithDefaultProfile(invalid).Build(); err == nil {
+			t.Fatal("invalid profile accepted")
+		}
+		mustBuildConfig(t, b.WithDefaultProfile(replacement))
+		if first.DefaultProfile.PageSize != 7 {
+			t.Fatal("later changes reached the built configuration")
+		}
+	})
+
 	t.Run("DefaultProfileChoicesAccumulate", func(t *testing.T) {
 		c := mustBuildConfig(t, NewConfig("h").
-			WithDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.Quorum) }).
-			WithDefaultProfile(func(p *ProfileBuilder) { p.WithPageSize(7) })).settings
+			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.Quorum) }).
+			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithPageSize(7) })).settings
 		if c.DefaultProfile.Consistency != cql.Quorum || c.DefaultProfile.PageSize != 7 {
 			t.Fatalf("profile = %+v", *c.DefaultProfile)
 		}
-		_, err := NewConfig("h").WithDefaultProfile(func(p *ProfileBuilder) { p.WithPageSize(0) }).Build()
+		_, err := NewConfig("h").ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithPageSize(0) }).Build()
 		if err == nil || !strings.Contains(err.Error(), "page size") {
 			t.Fatalf("invalid profile error = %v", err)
 		}

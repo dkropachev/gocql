@@ -147,8 +147,8 @@ var wikiParams = cql.Params(
 	cql.Param("title", serializationString, func(v WikiPage) string { return v.Title }),
 	cql.Param("revid", wikiRevisionCodec, func(v WikiPage) cql.UUID { return v.RevId }),
 	cql.Param("body", serializationString, func(v WikiPage) string { return v.Body }),
-	cql.Param("views", cql.Int64, func(v WikiPage) int64 { return v.Views }),
-	cql.Param("protected", cql.Bool, func(v WikiPage) bool { return v.Protected }),
+	cql.Param("views", cql.Int64Codec, func(v WikiPage) int64 { return v.Views }),
+	cql.Param("protected", cql.BoolCodec, func(v WikiPage) bool { return v.Protected }),
 	cql.Param("modified", serializationTimestamp, func(v WikiPage) time.Time { return v.Modified }),
 	cql.Param("rating", wikiRatingCodec, func(v WikiPage) *inf.Dec { return v.Rating }),
 	cql.Param("tags", wikiTagsCodec, func(v WikiPage) []string { return v.Tags }),
@@ -157,8 +157,8 @@ var wikiRows = cql.Row(
 	cql.Column("title", serializationString, func(v *WikiPage) *string { return &v.Title }),
 	cql.Column("revid", wikiRevisionCodec, func(v *WikiPage) *cql.UUID { return &v.RevId }),
 	cql.Column("body", serializationString, func(v *WikiPage) *string { return &v.Body }),
-	cql.Column("views", cql.Int64, func(v *WikiPage) *int64 { return &v.Views }),
-	cql.Column("protected", cql.Bool, func(v *WikiPage) *bool { return &v.Protected }),
+	cql.Column("views", cql.Int64Codec, func(v *WikiPage) *int64 { return &v.Views }),
+	cql.Column("protected", cql.BoolCodec, func(v *WikiPage) *bool { return &v.Protected }),
 	cql.Column("modified", serializationTimestamp, func(v *WikiPage) *time.Time { return &v.Modified }),
 	cql.Column("rating", wikiRatingCodec, func(v *WikiPage) **inf.Dec { return &v.Rating }),
 	cql.Column("tags", wikiTagsCodec, func(v *WikiPage) *[]string { return &v.Tags }),
@@ -179,7 +179,7 @@ func (w *WikiTest) SelectPage(page *WikiPage, title string, revid cql.UUID) erro
 	return err
 }
 func (w *WikiTest) GetPageCount() int {
-	count, err := serializationOne(w.session, fmt.Sprintf("SELECT COUNT(*) FROM %s", w.table), cql.OneColumn(cql.Int64))
+	count, err := serializationOne(w.session, fmt.Sprintf("SELECT COUNT(*) FROM %s", w.table), cql.OneColumn(cql.Int64Codec))
 	if err != nil {
 		w.tb.Error("GetPageCount", err)
 	}

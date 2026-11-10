@@ -59,7 +59,7 @@ func TestClusterSettings(t *testing.T) {
 
 			session.Close()
 
-			if err := execTestStatement(context.Background(), session, "void", BoundOptions{}); err != runtimeerrors.ErrSessionClosed {
+			if err := execTestStatement(context.Background(), session, "void", CompiledOptions{}); err != runtimeerrors.ErrSessionClosed {
 				t.Fatalf("0x%x: expected %#v, got %#v", defaultProto, runtimeerrors.ErrSessionClosed, err)
 			}
 		})
@@ -97,7 +97,7 @@ func TestClusterSettings(t *testing.T) {
 			ctx, cancel = context.WithCancel(ctx)
 			cancel()
 
-			err = execTestStatement(ctx, db, "timeout", BoundOptions{})
+			err = execTestStatement(ctx, db, "timeout", CompiledOptions{})
 			if !errors.Is(err, context.Canceled) {
 				t.Fatalf("expected to get context cancel error: %v got %v", context.Canceled, err)
 			}
@@ -131,7 +131,7 @@ func TestClusterSettings(t *testing.T) {
 			ctx, cancel = context.WithCancel(ctx)
 			cancel()
 
-			err = execTestStatement(ctx, db, "timeout", BoundOptions{})
+			err = execTestStatement(ctx, db, "timeout", CompiledOptions{})
 			if !errors.Is(err, context.Canceled) {
 				t.Fatalf("expected to get context cancel error: %v got %v", context.Canceled, err)
 			}
@@ -151,7 +151,7 @@ func TestClusterSettings(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := execTestStatement(context.Background(), db, "void", BoundOptions{}); err != nil {
+			if err := execTestStatement(context.Background(), db, "void", CompiledOptions{}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -190,7 +190,7 @@ func TestClusterSettings(t *testing.T) {
 			ch := make(chan error, 1)
 
 			go func() {
-				err := execTestStatement(context.Background(), db, "timeout", BoundOptions{})
+				err := execTestStatement(context.Background(), db, "timeout", CompiledOptions{})
 				if err != nil {
 					ch <- err
 					return
@@ -226,7 +226,7 @@ func TestClusterSettings(t *testing.T) {
 
 			ch := make(chan error)
 			go func() {
-				err := execTestStatement(context.Background(), db, "timeout", BoundOptions{})
+				err := execTestStatement(context.Background(), db, "timeout", CompiledOptions{})
 				ch <- err
 			}()
 			// ensure that the above goroutine gets sheduled
@@ -264,9 +264,9 @@ func TestClusterSettings(t *testing.T) {
 			}
 			defer db.Close()
 
-			execTestStatement(context.Background(), db, "slow", BoundOptions{})
+			execTestStatement(context.Background(), db, "slow", CompiledOptions{})
 
-			err = execTestStatement(context.Background(), db, "void", BoundOptions{})
+			err = execTestStatement(context.Background(), db, "void", CompiledOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -288,11 +288,11 @@ func TestClusterSettings(t *testing.T) {
 			}
 			defer db.Close()
 
-			if err := execTestStatement(context.Background(), db, "select nometadata", BoundOptions{}); err != nil {
+			if err := execTestStatement(context.Background(), db, "select nometadata", CompiledOptions{}); err != nil {
 				t.Fatalf("expected no error got: %v", err)
 			}
 
-			if err := execTestStatement(context.Background(), db, "select metadata", BoundOptions{}); err != nil {
+			if err := execTestStatement(context.Background(), db, "select metadata", CompiledOptions{}); err != nil {
 				t.Fatalf("expected no error got: %v", err)
 			}
 		})
@@ -322,7 +322,7 @@ func TestClusterSettings(t *testing.T) {
 				}
 			}()
 
-			if err := execTestStatement(ctx, db, "kill", BoundOptions{}); err == nil {
+			if err := execTestStatement(ctx, db, "kill", CompiledOptions{}); err == nil {
 				t.Fatal("expected error got nil")
 			}
 			cancel()
@@ -472,7 +472,7 @@ func TestClusterSettings(t *testing.T) {
 				t.Fatalf("0x%x: newClusterSettings: %v", defaultProto, err)
 			}
 
-			if err := execTestStatement(context.Background(), db, "void", BoundOptions{}); err != nil {
+			if err := execTestStatement(context.Background(), db, "void", CompiledOptions{}); err != nil {
 				t.Fatalf("0x%x: %v", defaultProto, err)
 			}
 		})
@@ -486,7 +486,7 @@ func TestClusterSettings(t *testing.T) {
 				t.Fatalf("0x%x: newClusterSettings: %v", defaultProto, err)
 			}
 
-			if err := execTestStatement(context.Background(), db, "void", BoundOptions{}); err != nil {
+			if err := execTestStatement(context.Background(), db, "void", CompiledOptions{}); err != nil {
 				t.Fatalf("0x%x: %v", defaultProto, err)
 			}
 		})
@@ -503,7 +503,7 @@ func TestClusterSettings(t *testing.T) {
 				t.Fatalf("failed to create new session: %v", err)
 			}
 
-			if err := execTestStatement(context.Background(), db, "void", BoundOptions{}); err != nil {
+			if err := execTestStatement(context.Background(), db, "void", CompiledOptions{}); err != nil {
 				t.Fatalf("query failed due to error: %v", err)
 			}
 			db.Close()
@@ -526,7 +526,7 @@ func TestClusterSettings(t *testing.T) {
 				t.Fatalf("0x%x: newClusterSettings: %v", defaultProto, err)
 			}
 
-			if err := execTestStatement(context.Background(), db, "void", BoundOptions{}); err != nil {
+			if err := execTestStatement(context.Background(), db, "void", CompiledOptions{}); err != nil {
 				t.Fatalf("0x%x: %v", defaultProto, err)
 			}
 		})

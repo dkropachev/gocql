@@ -45,7 +45,7 @@ func Example_userDefinedTypes() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	encoder := cql.UDTEncoder(cql.Params(cql.Param("street", cql.StringEncoder, func(v address) string { return v.Street }), cql.Param("number", cql.Int32, func(v address) int32 { return v.Number })), opts)
+	encoder := cql.UDTEncoder(cql.Params(cql.Param("street", cql.StringEncoder, func(v address) string { return v.Street }), cql.Param("number", cql.Int32Codec, func(v address) int32 { return v.Number })), opts)
 	encoded, err := cql.EncodeValue(typ, encoder, address{"Main Street", 42})
 	if err != nil {
 		log.Fatal(err)
@@ -54,7 +54,7 @@ func Example_userDefinedTypes() {
 		Street cql.Text
 		Number int32
 	}
-	decoder := cql.UDTDecoder(cql.Row(cql.Column("street", cql.TextCodec, func(v *view) *cql.Text { return &v.Street }), cql.Column("number", cql.Int32, func(v *view) *int32 { return &v.Number })), opts)
+	decoder := cql.UDTDecoder(cql.Row(cql.Column("street", cql.TextCodec, func(v *view) *cql.Text { return &v.Street }), cql.Column("number", cql.Int32Codec, func(v *view) *int32 { return &v.Number })), opts)
 	value, err := cql.DecodeValue(decoder, encoded)
 	if err != nil {
 		log.Fatal(err)

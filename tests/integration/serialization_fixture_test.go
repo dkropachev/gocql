@@ -40,7 +40,7 @@ func serializationExec[P any](s *gocql.Session, stmt string, encoder cql.ParamEn
 		return err
 	}
 	defer b.Close()
-	_, err = Exec(ctx, s, b, gocql.BoundOptions{})
+	_, err = Exec(ctx, s, b, gocql.CompiledOptions{})
 	return err
 }
 
@@ -55,7 +55,7 @@ func serializationRows[R any](s *gocql.Session, stmt string, decoder cql.RowDeco
 		return gocql.Rows[R]{}, err
 	}
 	defer b.Close()
-	return Run(ctx, s, b, gocql.BoundOptions{})
+	return Run(ctx, s, b, gocql.CompiledOptions{})
 }
 
 func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (R, error) {
@@ -159,7 +159,7 @@ func serializationUDT[T any](p cql.ParamEncoder[T], r cql.RowDecoder[T], opts cq
 
 func serializationRoundTrip[T any](t testing.TB, s *gocql.Session, table, column string, id int32, codec cql.Codec[T], input T) T {
 	t.Helper()
-	params := cql.PairParams(1, cql.OneParam(cql.Int32), cql.OneParam(codec))
+	params := cql.PairParams(1, cql.OneParam(cql.Int32Codec), cql.OneParam(codec))
 	if err := serializationExec(s, fmt.Sprintf("INSERT INTO %s (id,%s) VALUES (?,?)", table, column), params, cql.Pair[int32, T]{First: id, Second: input}); err != nil {
 		t.Fatal(err)
 	}

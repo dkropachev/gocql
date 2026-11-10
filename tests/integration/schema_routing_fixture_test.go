@@ -24,7 +24,7 @@ func v2ConfigureRouting(t testing.TB, config *gocql.ConfigBuilder, options routi
 	if err != nil {
 		t.Fatal(err)
 	}
-	config.WithDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithRouting(policy) })
+	config.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithRouting(policy) })
 	return policy
 }
 

@@ -283,7 +283,7 @@ func TestRouting(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cluster.WithDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithRouting(rr) })
+			cluster.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithRouting(rr) })
 			// we'll filter out the second host
 			filtered := clusterHosts[1]
 			cluster.WithHostFilter(func(host routing.HostSnapshot) bool { return host.Address.Addr().String() != filtered })
@@ -319,7 +319,7 @@ func TestRouting(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cluster.WithDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithRouting(rr) })
+			cluster.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithRouting(rr) })
 			// we'll filter out the second host
 			filtered := clusterHosts[1]
 			cluster.WithHostFilter(func(host routing.HostSnapshot) bool { return host.Address.Addr().String() != filtered })
@@ -355,13 +355,13 @@ func TestRouting(t *testing.T) {
 				Key   string
 				Value int32
 			}
-			params := cql.Params(cql.Param("key", cql.StringEncoder, func(v input) string { return v.Key }), cql.Param("value", cql.Int32, func(v input) int32 { return v.Value }))
+			params := cql.Params(cql.Param("key", cql.StringEncoder, func(v input) string { return v.Key }), cql.Param("value", cql.Int32Codec, func(v input) int32 { return v.Value }))
 			prepared := cassandraPrepared(t, session, cql.Statement[input, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(key,value) VALUES(?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 			require.Equal(t, []int{0}, prepared.Info().PartitionKeyIndexes)
 			bound := cassandraBound(t, prepared, input{"routing-key", 5})
 			require.True(t, bound.Routing().Token.Set)
 			require.Equal(t, murmur.Murmur3H1([]byte("routing-key")), bound.Routing().Token.Value)
-			_, err := Exec(context.Background(), session, bound, gocql.BoundOptions{})
+			_, err := Exec(context.Background(), session, bound, gocql.CompiledOptions{})
 			require.NoError(t, err)
 		})
 		// Integration test of the routing key calculation
@@ -454,7 +454,7 @@ func TestRouting(t *testing.T) {
 			v2ConfigureRouting(t, cluster, routing.Options{TokenAware: true})
 			// The rows are read back at ONE from whichever replica the tablet
 			// routes to: write them at ALL so a lagging replica cannot miss one.
-			cluster.WithDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithConsistency(cql.All) })
+			cluster.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithConsistency(cql.All) })
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
 			supported, err := v2TabletsSupported(ctx, session)
@@ -647,7 +647,7 @@ func TestRouting(t *testing.T) {
 			if _, err := v2Exec(ctx, s, "INSERT INTO "+ks+".records(pk,v) VALUES(1,7)"); err != nil {
 				t.Fatal(err)
 			}
-			p := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.DynamicRow]{CQL: "SELECT v FROM " + ks + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows}, gocql.PrepareOptions{}))
+			p := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.DynamicRow]{CQL: "SELECT v FROM " + ks + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.DynamicRows}, gocql.PrepareOptions{}))
 			b := codecTestMust(BindBorrowed(p, int32(1)))
 			defer b.Close()
 			var leader cql.UUID
@@ -739,12 +739,12 @@ func TestRouting(t *testing.T) {
 			if !ks.TabletBased || ks.Tables["records"].ID == "" {
 				t.Fatal("server tablet/table UUID metadata absent", ks)
 			}
-			insert := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".records(pk,v) VALUES(?,7)", Params: cql.OneParam(cql.Int32), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
-			read := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.DynamicRow]{CQL: "SELECT pk,v FROM " + keyspace + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32), Rows: cql.DynamicRows}, gocql.PrepareOptions{}))
+			insert := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".records(pk,v) VALUES(?,7)", Params: cql.OneParam(cql.Int32Codec), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
+			read := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.DynamicRow]{CQL: "SELECT pk,v FROM " + keyspace + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.DynamicRows}, gocql.PrepareOptions{}))
 			feedback := 0
 			for key := int32(0); key < 8; key++ {
 				bound := codecTestMust(BindBorrowed(insert, key))
-				result, err := Exec(ctx, s, bound, gocql.BoundOptions{})
+				result, err := Exec(ctx, s, bound, gocql.CompiledOptions{})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -905,7 +905,7 @@ func TestRouting(t *testing.T) {
 			session := createV2SessionFromConfig(createV2ClusterWithout(fixtureConsistency, func(c *gocql.ConfigBuilder) {
 				c.WithConnectionsPerHost(1)
 				// The row is read back at ONE: write it at ALL so any replica has it.
-				c.WithDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithPageSize(1).WithConsistency(cql.All) })
+				c.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithPageSize(1).WithConsistency(cql.All) })
 			}), t, false)
 			defer session.Close()
 			conns := waitForHostConns(t, session)
