@@ -1357,7 +1357,7 @@ func TestSchemaMetadata(t *testing.T) {
 			s, _ := refreshAllSchemaSession(t)
 			cached, _ := MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalGetKeyspace("ks1")
 			stale := cached.Clone()
-			stale.StrategyOptions = map[string]any{"replication_factor": "3"}
+			stale.StrategyOptions = map[string]string{"replication_factor": "3"}
 			MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks1", stale)
 
 			refreshAllSchemaNow(t, s)
@@ -1540,12 +1540,12 @@ func TestSchemaMetadata(t *testing.T) {
 
 	t.Run("Snapshot", func(t *testing.T) {
 		column := &metadata.ColumnMetadata{Name: "id", Type: "int", Index: metadata.ColumnIndexMetadata{Options: map[string]any{"nested": map[string]any{"bytes": []byte{1}}}}}
-		ks := &metadata.KeyspaceMetadata{Name: "ks", StrategyOptions: map[string]any{"replication_factor": "1"}, Tables: map[string]*metadata.TableMetadata{"t": {Columns: map[string]*metadata.ColumnMetadata{"id": column}, PartitionKey: []*metadata.ColumnMetadata{column}, Extensions: map[string]any{"bytes": []byte{2}}, Options: metadata.TableMetadataOptions{CDC: map[string]string{"enabled": "true"}}}}, Types: map[string]*metadata.TypeMetadata{"u": {FieldNames: []string{"a"}, FieldTypes: []string{"int"}}}, Functions: map[string]*metadata.FunctionMetadata{"f": {ArgumentNames: []string{"a"}, ArgumentTypes: []string{"int"}}}}
+		ks := &metadata.KeyspaceMetadata{Name: "ks", StrategyOptions: map[string]string{"replication_factor": "1"}, Tables: map[string]*metadata.TableMetadata{"t": {Columns: map[string]*metadata.ColumnMetadata{"id": column}, PartitionKey: []*metadata.ColumnMetadata{column}, Extensions: map[string][]byte{"bytes": {2}}, Options: metadata.TableMetadataOptions{CDC: map[string]string{"enabled": "true"}}}}, Types: map[string]*metadata.TypeMetadata{"u": {FieldNames: []string{"a"}, FieldTypes: []string{"int"}}}, Functions: map[string]*metadata.FunctionMetadata{"f": {ArgumentNames: []string{"a"}, ArgumentTypes: []string{"int"}}}}
 		m := routing.NewMetadataSnapshot(routing.SnapshotState{InternalGeneration: 8, InternalKeyspaces: map[string]*metadata.KeyspaceMetadata{"ks": metadata.InternalCloneV2Keyspace(ks)}, InternalHosts: []model.HostSnapshot{{Tokens: []int64{1}}}})
 		ks.Tables["t"].Columns["id"].Name = "mutated"
-		ks.Tables["t"].Extensions["bytes"].([]byte)[0] = 9
+		ks.Tables["t"].Extensions["bytes"][0] = 9
 		first, _ := m.Keyspace("ks")
-		if first.Tables["t"].Columns["id"].Name != "id" || first.Tables["t"].Extensions["bytes"].([]byte)[0] != 2 {
+		if first.Tables["t"].Columns["id"].Name != "id" || first.Tables["t"].Extensions["bytes"][0] != 2 {
 			t.Fatal("snapshot retained mutable schema")
 		}
 		first.Types["u"].FieldNames[0] = "changed"

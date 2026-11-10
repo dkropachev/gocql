@@ -141,8 +141,7 @@ func TestToCQLHelpers(t *testing.T) {
 				// left is the replication map, where raw bytes let a value
 				// close the map and forge further options.
 				{in: []byte("raw"), wantErr: true},
-				// Widths other than int and float64 reach escape through
-				// StrategyOptions, which the metadata carries as any.
+				// escape renders every integer width and float32.
 				{in: int64(42), want: "42"},
 				{in: int32(42), want: "42"},
 				{in: uint(42), want: "42"},
@@ -324,33 +323,6 @@ func TestToCQLHelpers(t *testing.T) {
 	t.Run("TableExtensionsToCQL", func(t *testing.T) {
 		t.Parallel()
 
-		// Covers the one value in the exported
-		// Extensions map that ToCQL decodes. It used to be type-asserted, so a caller
-		// who put anything but a []byte there panicked the render.
-		t.Run("RejectsNonBlob", func(t *testing.T) {
-			t.Parallel()
-
-			for _, tc := range []struct {
-				name string
-				ext  any
-			}{
-				{"a string", "oops"},
-				{"an int", 7},
-				{"nil", nil},
-			} {
-				t.Run(tc.name, func(t *testing.T) {
-					t.Parallel()
-
-					got, err := InternalCqlHelpers.InternalTableExtensionsToCQL(map[string]any{"scylla_encryption_options": tc.ext})
-					if err == nil {
-						t.Fatalf("tableExtensionsToCQL(%v) = %q, nil; want an error", tc.ext, got)
-					}
-					if !strings.Contains(err.Error(), "want []byte") {
-						t.Errorf("tableExtensionsToCQL(%v) error = %q, want it to name the expected type", tc.ext, err)
-					}
-				})
-			}
-		})
 		t.Run("Renders", func(t *testing.T) {
 			t.Parallel()
 
@@ -362,7 +334,7 @@ func TestToCQLHelpers(t *testing.T) {
 			t.Run("encryption options are decoded and rendered as CQL", func(t *testing.T) {
 				t.Parallel()
 
-				got, err := InternalCqlHelpers.InternalTableExtensionsToCQL(map[string]any{"scylla_encryption_options": blob})
+				got, err := InternalCqlHelpers.InternalTableExtensionsToCQL(map[string][]byte{"scylla_encryption_options": blob})
 				if err != nil {
 					t.Fatalf("tableExtensionsToCQL: %v", err)
 				}
@@ -423,7 +395,7 @@ func TestToCQLHelpers(t *testing.T) {
 			t.Run("unknown extensions are dropped", func(t *testing.T) {
 				t.Parallel()
 
-				got, err := InternalCqlHelpers.InternalTableExtensionsToCQL(map[string]any{"something_else": []byte("x")})
+				got, err := InternalCqlHelpers.InternalTableExtensionsToCQL(map[string][]byte{"something_else": []byte("x")})
 				if err != nil {
 					t.Fatalf("tableExtensionsToCQL: %v", err)
 				}

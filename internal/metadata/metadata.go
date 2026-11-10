@@ -4,6 +4,7 @@
 package metadata
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -34,6 +35,18 @@ func cloneV2Any(v any) any {
 	default:
 		return v
 	}
+}
+
+// cloneV2Extensions deep-copies schema extensions.
+func cloneV2Extensions(m map[string][]byte) map[string][]byte {
+	if m == nil {
+		return nil
+	}
+	r := make(map[string][]byte, len(m))
+	for k, v := range m {
+		r[k] = bytes.Clone(v)
+	}
+	return r
 }
 func InternalCloneV2AnyMap(m map[string]any) map[string]any {
 	if m == nil {
@@ -90,7 +103,7 @@ func InternalCloneV2Keyspace(k *KeyspaceMetadata) *KeyspaceMetadata {
 		return nil
 	}
 	r := *k
-	r.StrategyOptions = InternalCloneV2AnyMap(k.StrategyOptions)
+	r.StrategyOptions = maps.Clone(k.StrategyOptions)
 	KeyspaceData(&r).InternalTablesInvalidated = maps.Clone(KeyspaceData(k).InternalTablesInvalidated)
 	r.Tables = make(map[string]*TableMetadata, len(k.Tables))
 	for n, t := range k.Tables {
@@ -100,7 +113,7 @@ func InternalCloneV2Keyspace(k *KeyspaceMetadata) *KeyspaceMetadata {
 		}
 		v := *t
 		v.Columns = cloneV2Columns(t.Columns)
-		v.Extensions = InternalCloneV2AnyMap(t.Extensions)
+		v.Extensions = cloneV2Extensions(t.Extensions)
 		v.PartitionKey = cloneV2ColumnList(t.PartitionKey)
 		v.ClusteringColumns = cloneV2ColumnList(t.ClusteringColumns)
 		v.OrderedColumns = append([]string(nil), t.OrderedColumns...)
@@ -148,7 +161,7 @@ func InternalCloneV2Keyspace(k *KeyspaceMetadata) *KeyspaceMetadata {
 		}
 		v := *t
 		v.Columns = cloneV2Columns(t.Columns)
-		v.Extensions = InternalCloneV2AnyMap(t.Extensions)
+		v.Extensions = cloneV2Extensions(t.Extensions)
 		v.PartitionKey = cloneV2ColumnList(t.PartitionKey)
 		v.ClusteringColumns = cloneV2ColumnList(t.ClusteringColumns)
 		v.OrderedColumns = append([]string(nil), t.OrderedColumns...)
@@ -406,7 +419,7 @@ func InternalV2DecodeTableMetadata(keyspace string) RowDecoder[TableMetadata] {
 		InternalV2RequiredSchemaColumn("id", InternalV2MetadataUUIDString{}, func(r *TableMetadata) *string { return &r.ID }),
 		InternalV2RequiredSchemaColumn("table_name", InternalV2MetadataText{}, func(r *TableMetadata) *string { return &r.Name }),
 		InternalV2SchemaColumn("flags", InternalV2MetadataStrings{}, func(r *TableMetadata) *[]string { return &r.Flags }),
-		InternalV2SchemaColumn("extensions", InternalV2MetadataExtensions{}, func(r *TableMetadata) *map[string]any { return &r.Extensions }),
+		InternalV2SchemaColumn("extensions", InternalV2MetadataExtensions{}, func(r *TableMetadata) *map[string][]byte { return &r.Extensions }),
 		InternalV2SchemaColumn("bloom_filter_fp_chance", Float64, func(r *TableMetadata) *float64 { return &r.Options.BloomFilterFpChance }),
 		InternalV2SchemaColumn("caching", InternalV2MetadataStringMap{}, func(r *TableMetadata) *map[string]string { return &r.Options.Caching }),
 		InternalV2SchemaColumn("comment", InternalV2MetadataText{}, func(r *TableMetadata) *string { return &r.Options.Comment }),
@@ -483,7 +496,7 @@ func InternalV2DecodeViewMetadata(keyspace string) RowDecoder[ViewMetadata] {
 		InternalV2RequiredSchemaColumn("base_table_name", InternalV2MetadataText{}, func(r *ViewMetadata) *string { return &r.BaseTableName }),
 		InternalV2RequiredSchemaColumn("include_all_columns", Bool, func(r *ViewMetadata) *bool { return &r.IncludeAllColumns }),
 		InternalV2RequiredSchemaColumn("where_clause", InternalV2MetadataText{}, func(r *ViewMetadata) *string { return &r.WhereClause }),
-		InternalV2SchemaColumn("extensions", InternalV2MetadataExtensions{}, func(r *ViewMetadata) *map[string]any { return &r.Extensions }),
+		InternalV2SchemaColumn("extensions", InternalV2MetadataExtensions{}, func(r *ViewMetadata) *map[string][]byte { return &r.Extensions }),
 		InternalV2SchemaColumn("dclocal_read_repair_chance", Float64, func(r *ViewMetadata) *float64 { return &r.DcLocalReadRepairChance }),
 		InternalV2SchemaColumn("read_repair_chance", Float64, func(r *ViewMetadata) *float64 { return &r.ReadRepairChance }),
 		InternalV2SchemaColumn("bloom_filter_fp_chance", Float64, func(r *ViewMetadata) *float64 { return &r.Options.BloomFilterFpChance }),
@@ -525,7 +538,7 @@ func InternalV2DecodeKeyspace() RowDecoder[InternalV2KeyspaceRow] {
 	return InternalV2SchemaRows[InternalV2KeyspaceRow]{InternalFields: []InternalV2SchemaField[InternalV2KeyspaceRow]{InternalV2SchemaColumn("keyspace_name", InternalV2MetadataText{}, func(r *InternalV2KeyspaceRow) *string { return &r.InternalName }), InternalV2RequiredSchemaColumn("durable_writes", Bool, func(r *InternalV2KeyspaceRow) *bool { return &r.durable }), InternalV2RequiredSchemaColumn("replication", InternalV2MetadataStringMap{}, func(r *InternalV2KeyspaceRow) *map[string]string { return &r.replication })}}
 }
 func InternalV2KeyspaceFromRow(name string, row InternalV2KeyspaceRow) *KeyspaceMetadata {
-	ks := &KeyspaceMetadata{Name: name, DurableWrites: row.durable, StrategyClass: row.replication["class"], StrategyOptions: make(map[string]any, len(row.replication))}
+	ks := &KeyspaceMetadata{Name: name, DurableWrites: row.durable, StrategyClass: row.replication["class"], StrategyOptions: make(map[string]string, len(row.replication))}
 	for k, v := range row.replication {
 		if k != "class" {
 			ks.StrategyOptions[k] = v

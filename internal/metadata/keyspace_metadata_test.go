@@ -501,49 +501,26 @@ func TestKeyspaceMetadata(t *testing.T) {
 		}
 	})
 	t.Run("KeyspaceToCQL", func(t *testing.T) {
-		// Pins that a []byte strategy option cannot
-		// reach the output unquoted. It used to be inserted verbatim, so a value of
-		// `'1', 'dc_evil': '9` closed the replication map and added an option to it.
-		t.Run("RejectsRawBytes", func(t *testing.T) {
+		// Pins that a strategy option cannot close the replication map: a value
+		// of `'1', 'dc_evil': '9` renders as one quoted string, not as a second
+		// option.
+		t.Run("QuotesOptionValues", func(t *testing.T) {
 			t.Parallel()
 
 			ks := &KeyspaceMetadata{
 				Name:          "ks",
 				StrategyClass: "SimpleStrategy",
-				StrategyOptions: map[string]any{
-					"replication_factor": []byte(`'1', 'dc_evil': '9`),
+				StrategyOptions: map[string]string{
+					"replication_factor": `'1', 'dc_evil': '9`,
 				},
 			}
 
 			var sb strings.Builder
-			err := InternalKeyspaceMetadataKeyspaceToCQL(ks, &sb)
-			if err == nil {
-				t.Fatalf("keyspaceToCQL = %q, nil; want an error", sb.String())
+			if err := InternalKeyspaceMetadataKeyspaceToCQL(ks, &sb); err != nil {
+				t.Fatalf("keyspaceToCQL: %v", err)
 			}
-			if strings.Contains(sb.String(), "dc_evil") {
-				t.Errorf("a strategy option forged another one: %s", sb.String())
-			}
-		})
-		// Covers the one path where a value
-		// of arbitrary type reaches escape: StrategyOptions is map[string]any, so the
-		// template is where an unhandled type has to surface. It used to render as
-		// nothing, leaving `'key': ` in the middle of a dump.
-		t.Run("RejectsUnrenderableOption", func(t *testing.T) {
-			t.Parallel()
-
-			ks := &KeyspaceMetadata{
-				Name:            "ks",
-				StrategyClass:   "SimpleStrategy",
-				StrategyOptions: map[string]any{"replication_factor": []string{"nope"}},
-			}
-
-			var sb strings.Builder
-			err := InternalKeyspaceMetadataKeyspaceToCQL(ks, &sb)
-			if err == nil {
-				t.Fatalf("keyspaceToCQL = %q, nil; want an error", sb.String())
-			}
-			if !strings.Contains(err.Error(), "cannot render") {
-				t.Errorf("keyspaceToCQL error = %q, want it to say what could not be rendered", err)
+			if want := `'replication_factor': '''1'', ''dc_evil'': ''9'`; !strings.Contains(sb.String(), want) {
+				t.Errorf("keyspaceToCQL = %s, want it to contain %s", sb.String(), want)
 			}
 		})
 		t.Run("Renders", func(t *testing.T) {
@@ -560,7 +537,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 						Name:            "ks",
 						DurableWrites:   true,
 						StrategyClass:   "org.apache.cassandra.locator.NetworkTopologyStrategy",
-						StrategyOptions: map[string]any{"dc1": "3"},
+						StrategyOptions: map[string]string{"dc1": "3"},
 					},
 					// fixStrategy drops the org.apache.cassandra.locator. prefix.
 					wants: []string{
@@ -576,7 +553,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 						Name:            "ks",
 						DurableWrites:   false,
 						StrategyClass:   "SimpleStrategy",
-						StrategyOptions: map[string]any{"replication_factor": "1"},
+						StrategyOptions: map[string]string{"replication_factor": "1"},
 					},
 					wants: []string{"'class': 'SimpleStrategy'", "durable_writes = false"},
 				},
@@ -600,7 +577,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 			ks := &KeyspaceMetadata{
 				Name:            "ks1",
 				StrategyClass:   "org.apache.cassandra.locator.NetworkTopologyStrategy",
-				StrategyOptions: map[string]any{"datacenter1": "2"},
+				StrategyOptions: map[string]string{"datacenter1": "2"},
 				DurableWrites:   true,
 			}
 			var sb strings.Builder
@@ -628,7 +605,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 				Name:            "ks",
 				DurableWrites:   true,
 				StrategyClass:   "SimpleStrategy",
-				StrategyOptions: map[string]any{"replication_factor": "1"},
+				StrategyOptions: map[string]string{"replication_factor": "1"},
 				Types: map[string]*TypeMetadata{
 					"addr": {Keyspace: "ks", Name: "addr", FieldNames: []string{"street", "zip"}, FieldTypes: []string{"text", "int"}},
 				},
@@ -742,7 +719,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 					Name:            "ks",
 					DurableWrites:   true,
 					StrategyClass:   "SimpleStrategy",
-					StrategyOptions: map[string]any{"replication_factor": "1"},
+					StrategyOptions: map[string]string{"replication_factor": "1"},
 					Types:           map[string]*TypeMetadata{},
 					Tables:          map[string]*TableMetadata{},
 					Indexes:         map[string]*IndexMetadata{},
@@ -807,7 +784,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 			ks := &KeyspaceMetadata{
 				Name:            "my-ks",
 				StrategyClass:   "SimpleStrategy",
-				StrategyOptions: map[string]any{"replication_factor": "1"},
+				StrategyOptions: map[string]string{"replication_factor": "1"},
 				Types: map[string]*TypeMetadata{
 					"z-type": {Keyspace: "my-ks", Name: "z-type", FieldNames: []string{"order"}, FieldTypes: []string{"int"}},
 				},

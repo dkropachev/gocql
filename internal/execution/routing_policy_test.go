@@ -235,13 +235,13 @@ func TestRoutingPolicy(t *testing.T) {
 			ring := codecTestMust(endpoint.InternalNewTokenRing("Murmur3Partitioner", hosts))
 			for _, test := range []struct {
 				strategy string
-				options  map[string]any
+				options  map[string]string
 				want     []byte
 			}{
-				{"NetworkTopologyStrategy", map[string]any{"a": "4", "b": "1"}, []byte{1, 2, 3, 4, 5}},
-				{"NetworkTopologyStrategy", map[string]any{"a": "3"}, []byte{1, 3, 4}},
-				{"SimpleStrategy", map[string]any{"replication_factor": "999999999999999999"}, []byte{1, 2, 3, 4, 5}},
-				{"SimpleStrategy", map[string]any{"replication_factor": "0"}, nil},
+				{"NetworkTopologyStrategy", map[string]string{"a": "4", "b": "1"}, []byte{1, 2, 3, 4, 5}},
+				{"NetworkTopologyStrategy", map[string]string{"a": "3"}, []byte{1, 3, 4}},
+				{"SimpleStrategy", map[string]string{"replication_factor": "999999999999999999"}, []byte{1, 2, 3, 4, 5}},
+				{"SimpleStrategy", map[string]string{"replication_factor": "0"}, nil},
 				{"UnknownStrategy", nil, []byte{1}},
 			} {
 				ranges, err := cluster.InternalBuildV2VnodeRanges(ring, &metadata.KeyspaceMetadata{StrategyClass: test.strategy, StrategyOptions: test.options})

@@ -750,19 +750,11 @@ func (h toCQLHelpers) InternalTableOptionsToCQL(ops TableMetadataOptions) []stri
 	return out
 }
 
-func (h toCQLHelpers) InternalTableExtensionsToCQL(extensions map[string]any) ([]string, error) {
+func (h toCQLHelpers) InternalTableExtensionsToCQL(extensions map[string][]byte) ([]string, error) {
 	// Values are rendered CQL, not Go values.
 	exts := map[string]string{}
 
-	if blob, ok := extensions["scylla_encryption_options"]; ok {
-		// Extensions is exported and a caller can put anything in it, so the
-		// blob is checked rather than asserted: rendering a schema must not
-		// panic on a value someone else supplied.
-		raw, isBlob := blob.([]byte)
-		if !isBlob {
-			return nil, fmt.Errorf("gocql: scylla_encryption_options extension is %T, want []byte", blob)
-		}
-
+	if raw, ok := extensions["scylla_encryption_options"]; ok {
 		encOpts := &InternalScyllaEncryptionOptions{}
 		if err := encOpts.UnmarshalBinary(raw); err != nil {
 			return nil, err
@@ -781,7 +773,7 @@ func (h toCQLHelpers) InternalTableExtensionsToCQL(extensions map[string]any) ([
 }
 
 func (h toCQLHelpers) InternalTablePropertiesToCQL(cks []*ColumnMetadata, opts TableMetadataOptions,
-	extensions map[string]any) (string, error) {
+	extensions map[string][]byte) (string, error) {
 	var sb strings.Builder
 
 	var properties []string

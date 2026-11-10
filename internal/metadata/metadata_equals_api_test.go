@@ -144,74 +144,6 @@ func TestMetadataEqualsAPI(t *testing.T) {
 			}
 		})
 	})
-	// Exercises compareInterfaceMaps on its own,
-	// because its two callers reach it differently. TableMetadata.Equals checks the
-	// lengths before calling, so the helper's own length check is redundant on that
-	// path. refreshAllSchema does not: it compares a keyspace's StrategyOptions
-	// through this helper with no guard of its own, which makes that length check
-	// live logic -- it is what notices a replication option being added or removed,
-	// and that decides whether the keyspace's tablets are dropped.
-	t.Run("CompareInterfaceMaps", func(t *testing.T) {
-		t.Parallel()
-
-		tests := []struct {
-			name string
-			a, b map[string]any
-			want bool
-		}{
-			{name: "both nil", a: nil, b: nil, want: true},
-			{name: "nil versus empty", a: nil, b: map[string]any{}, want: true},
-			{
-				name: "identical",
-				a:    map[string]any{"k": []byte("v")},
-				b:    map[string]any{"k": []byte("v")},
-				want: true,
-			},
-			{
-				name: "different lengths",
-				a:    map[string]any{"k": "v"},
-				b:    map[string]any{"k": "v", "extra": "x"},
-			},
-			{
-				name: "shorter receiver",
-				a:    map[string]any{},
-				b:    map[string]any{"k": "v"},
-			},
-			{
-				name: "same length disjoint keys",
-				a:    map[string]any{"k": "v"},
-				b:    map[string]any{"other": "v"},
-			},
-			{
-				name: "same key different value",
-				a:    map[string]any{"k": "v"},
-				b:    map[string]any{"k": "w"},
-			},
-			{
-				// DeepEqual rather than ==, so composite values compare by content
-				// and a byte slice that merely looks alike is still equal.
-				name: "composite values compared by content",
-				a:    map[string]any{"k": map[string]int{"n": 1}},
-				b:    map[string]any{"k": map[string]int{"n": 1}},
-				want: true,
-			},
-			{
-				name: "composite values differing",
-				a:    map[string]any{"k": map[string]int{"n": 1}},
-				b:    map[string]any{"k": map[string]int{"n": 2}},
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				t.Parallel()
-
-				if got := compareInterfaceMaps(tt.a, tt.b); got != tt.want {
-					t.Errorf("compareInterfaceMaps() = %v, want %v", got, tt.want)
-				}
-			})
-		}
-	})
 	// Pins the shared nil contract: two nils are
 	// equal, a nil and a non-nil are not, and neither dereferences.
 	t.Run("NilHandling", func(t *testing.T) {
@@ -336,7 +268,7 @@ func TestMetadataEqualsAPI(t *testing.T) {
 				Keyspace:   "ks",
 				Name:       "tbl",
 				Columns:    map[string]*metadata.Column{},
-				Extensions: map[string]any{},
+				Extensions: map[string][]byte{},
 			}
 
 			// A nil map and an empty map are both "no entries", and the length-based
@@ -358,10 +290,9 @@ func TestMetadataEqualsAPI(t *testing.T) {
 		// The two map-backed cases are weaker, and are here for correctness rather than
 		// for safety. compareColumnsMap cannot index past an end, so dropping the
 		// columns guard is caught only because the shorter-receiver direction then
-		// returns a wrong true. compareInterfaceMaps repeats the length check itself,
-		// which makes the extensions guard redundant: dropping it changes no behaviour
-		// and this test stays green. That case is kept because differing extension
-		// counts must still compare unequal, not because it pins the guard.
+		// returns a wrong true. The extensions comparison is maps.EqualFunc, which checks
+		// lengths itself; that case is kept because differing extension counts must
+		// still compare unequal.
 		t.Run("LengthMismatch", func(t *testing.T) {
 			t.Parallel()
 

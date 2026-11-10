@@ -74,9 +74,9 @@ func createPolicy(keyspace string, shuffle bool) HostSelectionPolicy {
 		return &metadata.KeyspaceMetadata{
 			Name:          keyspace,
 			StrategyClass: "SimpleStrategy",
-			StrategyOptions: map[string]any{
+			StrategyOptions: map[string]string{
 				"class":              "SimpleStrategy",
-				"replication_factor": 2,
+				"replication_factor": "2",
 			},
 		}, nil
 	}

@@ -96,24 +96,15 @@ type InternalPlacementStrategy interface {
 	InternalReplicationFactor(dc string) int
 }
 
-func InternalGetReplicationFactorFromOpts(val any) (int, error) {
-	switch v := val.(type) {
-	case int:
-		if v < 0 {
-			return 0, fmt.Errorf("invalid replication_factor %d", v)
-		}
-		return v, nil
-	case string:
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return 0, fmt.Errorf("invalid replication_factor %q: %w", v, err)
-		} else if n < 0 {
-			return 0, fmt.Errorf("invalid replication_factor %d", n)
-		}
-		return n, nil
-	default:
-		return 0, fmt.Errorf("unknown replication_factor type %T", v)
+func InternalGetReplicationFactorFromOpts(val string) (int, error) {
+	n, err := strconv.Atoi(val)
+	if err != nil {
+		return 0, fmt.Errorf("invalid replication_factor %q: %w", val, err)
 	}
+	if n < 0 {
+		return 0, fmt.Errorf("invalid replication_factor %d", n)
+	}
+	return n, nil
 }
 
 func InternalGetStrategy(ks *KeyspaceMetadata, logger StdLogger) InternalPlacementStrategy {

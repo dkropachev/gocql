@@ -67,9 +67,6 @@ func cloneV2Keyspace(a0 *KeyspaceMetadata) *KeyspaceMetadata {
 	return implMetadata.InternalCloneV2Keyspace(a0)
 }
 
-func compareInterfaceMaps(a0 map[string]any, a1 map[string]any) bool {
-	return implMetadata.InternalCompareInterfaceMaps(a0, a1)
-}
 func comparePlacementTable(a0 metadataTable, a1 metadataTable) int {
 	return routing.InternalComparePlacementTable(a0, a1)
 }

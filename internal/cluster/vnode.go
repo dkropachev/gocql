@@ -4,7 +4,6 @@
 package cluster
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -31,10 +30,10 @@ func InternalBuildV2VnodeRanges(ring *tokenRing, ks *KeyspaceMetadata) ([]TokenR
 		}
 		dcRacks[dc][h.Rack()] = true
 	}
-	factor := func(value any, cap int) (int, error) {
-		n, err := strconv.ParseUint(fmt.Sprint(value), 10, 64)
+	factor := func(value string, cap int) (int, error) {
+		n, err := strconv.ParseUint(value, 10, 64)
 		if err != nil {
-			return 0, typeValidation("replication factor", "invalid value %v", value)
+			return 0, typeValidation("replication factor", "invalid value %q", value)
 		}
 		if n > uint64(cap) {
 			return cap, nil

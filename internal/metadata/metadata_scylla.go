@@ -5,6 +5,7 @@
 package metadata
 
 import (
+	"bytes"
 	"fmt"
 	"maps"
 	"reflect"
@@ -15,7 +16,7 @@ import (
 
 // schema metadata for a keyspace
 type KeyspaceMetadata struct {
-	StrategyOptions map[string]any
+	StrategyOptions map[string]string
 	Tables          map[string]*TableMetadata
 	Functions       map[string]*FunctionMetadata
 	Aggregates      map[string]*AggregateMetadata
@@ -90,7 +91,7 @@ func InternalKeyspaceMetadataRemoveTable(ks *KeyspaceMetadata, tableName string)
 type TableMetadata struct {
 	ID                string
 	Columns           map[string]*ColumnMetadata
-	Extensions        map[string]any
+	Extensions        map[string][]byte
 	Keyspace          string
 	Name              string
 	PartitionKey      []*ColumnMetadata
@@ -155,7 +156,7 @@ func (t *TableMetadataOptions) Equals(other *TableMetadataOptions) bool {
 
 type ViewMetadata struct {
 	Columns                 map[string]*ColumnMetadata
-	Extensions              map[string]any
+	Extensions              map[string][]byte
 	WhereClause             string
 	BaseTableName           string
 	ID                      string
@@ -277,7 +278,7 @@ func (t *TableMetadata) Equals(other *TableMetadata) bool {
 		return false
 	}
 
-	if len(t.Extensions) != len(other.Extensions) || !InternalCompareInterfaceMaps(t.Extensions, other.Extensions) {
+	if !maps.EqualFunc(t.Extensions, other.Extensions, bytes.Equal) {
 		return false
 	}
 
@@ -318,19 +319,6 @@ func compareStringMaps(a, b map[string]string) bool {
 	}
 	for k, v := range a {
 		if otherValue, exists := b[k]; !exists || v != otherValue {
-			return false
-		}
-	}
-	return true
-}
-
-func InternalCompareInterfaceMaps(a, b map[string]any) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k, v := range a {
-		otherValue, exists := b[k]
-		if !exists || !reflect.DeepEqual(v, otherValue) {
 			return false
 		}
 	}

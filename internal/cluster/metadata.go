@@ -855,7 +855,7 @@ func InternalSessionRefreshV2AllSchema(s *Core, ctx context.Context) error {
 					failures[name] = checkErr
 					break
 				}
-				if current.StrategyClass != base.StrategyClass || !compareInterfaceMaps(current.StrategyOptions, base.StrategyOptions) {
+				if current.StrategyClass != base.StrategyClass || !maps.Equal(current.StrategyOptions, base.StrategyOptions) {
 					failures[name] = typeValidation("schema refresh", "replication changed during refresh")
 					continue
 				}
@@ -1148,7 +1148,7 @@ func (s *Core) invalidateV2ChangedTablets(keyspace string, current *KeyspaceMeta
 	if previous == nil {
 		return
 	}
-	if !compareInterfaceMaps(previous.StrategyOptions, current.StrategyOptions) || previous.StrategyClass != current.StrategyClass {
+	if !maps.Equal(previous.StrategyOptions, current.StrategyOptions) || previous.StrategyClass != current.StrategyClass {
 		s.privateStorage.InternalMetadataDescriber.RemoveTabletsWithKeyspace(keyspace)
 		return
 	}

@@ -4,11 +4,11 @@
 package routing
 
 import (
+	"maps"
 	"math/rand/v2"
 	"strings"
 	"sync/atomic"
 
-	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	// Immutable AVL indices share every unaffected subtree. Neither an observation
 	// nor a routing plan may mutate a published node or replica slice.
@@ -422,7 +422,7 @@ func InternalReconcileTabletPlacement(old, current *MetadataSnapshot) *InternalT
 		previousKS := SnapshotData(old).InternalKeyspaces[k.InternalKeyspace]
 		currentKS := SnapshotData(current).InternalKeyspaces[k.InternalKeyspace]
 		if previousKS != nil && currentKS != nil {
-			if previousKS.StrategyClass != currentKS.StrategyClass || !implMetadata.InternalCompareInterfaceMaps(previousKS.StrategyOptions, currentKS.StrategyOptions) || previousKS.ConsistencyMode != currentKS.ConsistencyMode {
+			if previousKS.StrategyClass != currentKS.StrategyClass || !maps.Equal(previousKS.StrategyOptions, currentKS.StrategyOptions) || previousKS.ConsistencyMode != currentKS.ConsistencyMode {
 				ranges = nil
 			}
 			if a, b := previousKS.Tables[k.InternalTable], currentKS.Tables[k.InternalTable]; a != nil && b != nil && !a.Equals(b) {

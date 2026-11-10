@@ -103,12 +103,12 @@ func (InternalV2MetadataStringMap) Clone(v map[string]string) map[string]string 
 func (InternalV2MetadataExtensions) CheckType(t DataType) error {
 	return MapDecoder[Text, Bytes](TextCodec, BlobCodec).CheckType(t)
 }
-func (InternalV2MetadataExtensions) Decode(r ValueReader) (map[string]any, error) {
+func (InternalV2MetadataExtensions) Decode(r ValueReader) (map[string][]byte, error) {
 	v, err := MapDecoder[Text, Bytes](TextCodec, BlobCodec).Decode(r)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]any, len(v))
+	out := make(map[string][]byte, len(v))
 	for _, entry := range v {
 		key := entry.Key.String()
 		if _, ok := out[key]; ok {
@@ -118,6 +118,6 @@ func (InternalV2MetadataExtensions) Decode(r ValueReader) (map[string]any, error
 	}
 	return out, nil
 }
-func (InternalV2MetadataExtensions) Clone(v map[string]any) map[string]any {
-	return InternalCloneV2AnyMap(v)
+func (InternalV2MetadataExtensions) Clone(v map[string][]byte) map[string][]byte {
+	return cloneV2Extensions(v)
 }

@@ -350,7 +350,7 @@ func TestMetadata(t *testing.T) {
 			if !ok {
 				t.Fatalf("Expected strategy option 'datacenter1' but was not found in %v", keyspaceMetadata.StrategyOptions)
 			}
-			rfInt, err := strconv.Atoi(rfStr.(string))
+			rfInt, err := strconv.Atoi(rfStr)
 			if err != nil {
 				t.Fatalf("Error converting string to int with err: %v", err)
 			}
