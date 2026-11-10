@@ -5,6 +5,8 @@ package runtimeerrors
 
 import (
 	"errors"
+
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 var (
@@ -19,7 +21,7 @@ var (
 // SchemaChangedError requires preparing and binding again after incompatible metadata.
 type SchemaChangedError struct {
 	Statement         string
-	Previous, Current Columns
+	Previous, Current cqltype.Columns
 }
 
 func (e *SchemaChangedError) Error() string {
