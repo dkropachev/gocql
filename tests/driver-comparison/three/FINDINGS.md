@@ -23,44 +23,54 @@ Max throughput, closed loop, ops/s, median of 2 rounds:
 
 Client CPU per operation (A, D, G): master ~7.0 µs, v2 ~5.2 µs, rust ~3.2 µs.
 
-Latency, open loop, at the highest stall-free rate (see below), µs
-p90 / p95 / p99. A-D and G are at 70 % of the lowest maximum; E1, E2 and F
-had to step down:
+Latency, open loop, at the highest sustained rate (rule below), µs
+p90 / p95 / p99, median of 2 rounds. A-D, F and G held 70 % of the lowest
+maximum; E1 and E2 stepped down (attempts in the next table):
 
-| family | rate/s | master | v2 | rust |
-|---|---:|---|---|---|
-| A | 49,322 | 72 / 78 / 1,092 | 72 / 76 / 859 | 95 / 98 / 107 |
-| B | 1,040 | 686 / 703 / 744 | 683 / 698 / 724 | 752 / 762 / 779 |
-| C | 5,408 | 186 / 192 / 261 | 188 / 193 / 306 | 230 / 235 / 243 |
-| D | 51,769 | 110 / 680 / 1,683 | 80 / 457 / 1,799 | 96 / 100 / 1,458 |
-| E1 | 3,803 | 81 / 86 / 126 | 82 / 86 / 119 | 124 / 132 / 164 |
-| E2 | 9,421 | 167 / 2,234 / 3,451 | 140 / 2,183 / 3,456 | 626 / 2,429 / 3,676 |
-| F | 10,137 | 250 / 276 / 2,327 | 245 / 266 / 482 | 291 / 310 / 463 |
-| G | 49,327 | 79 / 354 / 1,494 | 78 / 156 / 1,582 | 99 / 106 / 756 |
+| family | rate/s | % of lowest max | master | v2 | rust |
+|---|---:|---:|---|---|---|
+| A | 49,322 | 70 % | 72 / 78 / 1,122 | 72 / 76 / 846 | 95 / 99 / 107 |
+| B | 1,040 | 70 % | 692 / 707 / 747 | 690 / 705 / 731 | 748 / 758 / 775 |
+| C | 5,408 | 70 % | 187 / 192 / 291 | 188 / 194 / 323 | 230 / 236 / 243 |
+| D | 51,769 | 70 % | 113 / 688 / 1,656 | 80 / 444 / 1,745 | 97 / 101 / 1,465 |
+| E1 | 3,803 | 12 % | 83 / 92 / 822 | 82 / 86 / 117 | 126 / 133 / 161 |
+| E2 | 6,595 | 34 % | 126 / 541 / 3,413 | 132 / 880 / 3,662 | 170 / 601 / 3,558 |
+| F | 29,555 | 70 % | 982 / 1,946 / 10,336 | 934 / 1,747 / 13,220 | 920 / 1,554 / 8,895 |
+| G | 49,327 | 70 % | 79 / 366 / 1,499 | 78 / 155 / 1,604 | 100 / 106 / 758 |
 
-These latency rows come from a pass where the 50 ms p99 rule was applied to
-existing results; a fresh pass under the final rule was started 2026-11-09
-(`results/final3-fresh.log`) and replaces them when it finishes.
+Rate attempts (worst rejected share, worst p99 over all runs of all drivers):
+
+| family | attempts |
+|---|---|
+| E1 | 22,628: 6.1 %, 3.7 s; 15,840: 30.1 %, 6.0 s; 11,088: 0 %, 1.6 s; 7,762: 0 %, 516 ms; 5,433: 0 %, 76 ms; 3,803: 0 %, 1.5 ms |
+| E2 | 13,459: 64.7 %, 9.6 s; 9,421: 0 %, 80 ms; 6,595: 0 %, 3.7 ms |
+
+All rates were found in one pass under the final rule (2026-11-09,
+`results/final3-fresh.log`); every run was valid. Data from unsustained
+attempts is under `unsustained/`.
 
 - Client-bound families (A, D, G): v2 is 1.31-1.33x master, rust ~2x; the
   ratio follows CPU per operation under the 0.5 CPU budget.
-- At equal offered load the Go drivers have lower p90 than rust everywhere;
-  rust has the tightest tail on A, D and G. v2 is equal to or better than master at
-  p90/p95 in every family.
+- At equal offered load the Go drivers have lower p90 than rust in every
+  family except F (LWT, where rust is lowest at every percentile); rust has
+  the tightest tail on A, D and G. v2 matches or beats master at p90/p95
+  everywhere except E2, where p95 (880 vs 541 µs) falls in a cluster-bound
+  tail (service p99 3.4-3.7 ms for all three drivers).
 - B, C, E2, F are cluster-bound: throughput within +/-10 % across drivers.
 
 ## Methodology findings
 
-- **Closed-loop maximum hides cluster stalls.** Write families (E1, E2, F)
-  have Scylla-side stalls where individual requests wait 1-2 s at the
+- **Closed-loop maximum hides cluster stalls.** Write families (E1, E2,
+  at times F) have Scylla-side stalls where individual requests wait 1-2 s at the
   server (failure-detector pings time out, `Too long queue accumulated`).
   In a closed loop a stall is a handful of slow operations out of ~10^6 and
   vanishes below p99. In an open loop every worker blocks and 10-30 k
   arrivals queue behind it, so p99 becomes the stall and lands on whichever
   driver happens to run. 70 % of the closed-loop maximum is therefore not
-  stall-free for these families; stall-free rates were E1 3,803/s,
-  E2 9,421/s, F 10,137/s. Data at strict 70 % is kept under
-  `unsustained/` for reference.
+  stall-free for these families; stall-free rates were E1 3,803/s and
+  E2 6,595/s; F held 70 % (29,555/s) in the final pass, though its p99
+  (9-13 ms) is the highest of all families. Data at strict 70 % is kept
+  under `unsustained/` for reference.
 - **Sustained-rate rule.** A latency rate counts as sustained when no run of
   any driver rejects > 0.5 % of arrivals and no run has p99 > 50 ms;
   otherwise the whole phase repeats from a reset at 0.7x the rate. All
