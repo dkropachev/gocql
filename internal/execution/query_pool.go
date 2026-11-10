@@ -234,7 +234,7 @@ func (p *queryPool[P, R]) exec(ctx context.Context, value P, options CompiledOpt
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
-	result, err := Exec(ctx, q.state.runtime.Core, &q.bound, options)
+	result, err := q.state.runtime.exec(ctx, &q.bound, options)
 	q.state.owner.InternalRelease()
 	return result, err
 }
@@ -244,7 +244,7 @@ func (p *queryPool[P, R]) each(ctx context.Context, value P, dst *R, fn func(*R)
 	if err != nil {
 		return false, InternalExecutionErrorResult(err), err
 	}
-	found, result, err := each(ctx, q.state.runtime.Core, &q.bound, options, dst, fn, &q.scratch)
+	found, result, err := q.state.runtime.each(ctx, &q.bound, options, dst, fn, &q.scratch)
 	q.state.owner.InternalRelease()
 	return found, result, err
 }

@@ -102,7 +102,7 @@ func (q *StreamQuery[P, R]) Run(ctx context.Context, value P) (*RowStream[R], er
 		return nil, err
 	}
 	defer q.query.state.owner.InternalRelease()
-	return runStreamWithCache(ctx, q.query.state.runtime.Core, &q.query.bound, q.decoder, q.query.options, q.options.Limits, q.options.Incremental, &q.plans)
+	return q.query.state.runtime.runStream(ctx, &q.query.bound, q.decoder, q.query.options, q.options.Limits, q.options.Incremental, &q.plans)
 }
 
 // Close stops the query permanently and waits until its last execution has

@@ -101,7 +101,7 @@ func (s *Session) ExecBatch(ctx context.Context, kind cqltype.BatchKind, batch *
 		return InternalExecutionErrorResult(err), err
 	}
 	batch.queryExec(&batch.exec.privateStorage.InternalRequest, &q.state, kind)
-	result, err := Exec(ctx, core, &batch.exec, o)
+	result, err := q.state.runtime.exec(ctx, &batch.exec, o)
 	q.state.owner.InternalRelease()
 	return result, err
 }
@@ -124,7 +124,7 @@ func (s *Session) RunBatch[R any](ctx context.Context, kind cqltype.BatchKind, b
 	}
 	bound := &Bound[R]{privateStorage: BoundStorage[R]{InternalRows: decoder}}
 	batch.queryExec(&bound.privateStorage.InternalRequest, &q.state, kind)
-	page, err := RunPage(ctx, core, bound, model.StartPage(), o)
+	page, err := q.state.runtime.runSinglePage(ctx, bound, model.StartPage(), o, false)
 	q.state.owner.InternalRelease()
 	return page, err
 }

@@ -56,29 +56,20 @@ func isStopIteration(err error) bool {
 	return false
 }
 
-// RunEach executes the bound statement and decodes every row, across all pages,
-// into dst, calling fn after each row. The execution is finished and all
-// response storage released before Each returns, so there is no iterator to
-// close or wait for. Values that borrow response storage are valid only until
-// fn returns. A non-nil error from fn stops the iteration and is returned.
-func RunEach[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions, dst *R, fn func(*R) error) (model.Result, error) {
-	_, result, err := each(ctx, s, b, options, dst, fn, new(eachScratch))
-	return result, err
-}
-
-// each runs RunEach, or RunOne when fn is nil.
-func each[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions, dst *R, fn func(*R) error, scratch *eachScratch) (bool, model.Result, error) {
+// each decodes every row into dst, calling fn after each, or stops after the
+// first row when fn is nil.
+func (rt *InternalSessionRuntime) each[R any](ctx context.Context, b *Bound[R], options CompiledOptions, dst *R, fn func(*R) error, scratch *eachScratch) (bool, model.Result, error) {
 	if b == nil {
 		return false, model.Result{}, cqltype.TypeValidation("binding", "nil binding")
 	}
 	if dst == nil {
 		return false, model.Result{}, cqltype.TypeValidation("destination", "nil row destination")
 	}
-	runctx, cancel, request, err := InternalAdmitExecution(ctx, s, b, options)
+	runctx, cancel, request, err := rt.admit(ctx, b, options)
 	if err != nil {
 		return false, InternalExecutionErrorResult(err), err
 	}
-	found, result, err := eachPage(runctx, s, b, request, dst, fn, scratch)
+	found, result, err := rt.eachPage(runctx, b, request, dst, fn, scratch)
 	*scratch = eachScratch{} // drop response references
 	cancel()
 	request.InternalLogical.InternalFinish(result, err)
@@ -86,8 +77,7 @@ func each[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options 
 	return found, result, err
 }
 
-func eachPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], request *InternalExecutionRequest, dst *R, fn func(*R) error, scratch *eachScratch) (bool, model.Result, error) {
-	rt := InternalRuntimeFor(s)
+func (rt *InternalSessionRuntime) eachPage[R any](ctx context.Context, b *Bound[R], request *InternalExecutionRequest, dst *R, fn func(*R) error, scratch *eachScratch) (bool, model.Result, error) {
 	plans := b.privateStorage.plans
 	if plans == nil {
 		plans = &InternalResultPlanCache[R]{}
@@ -117,7 +107,7 @@ func eachPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], requ
 			model.MergeResult(&result, response.Result)
 		}
 		state = response.State
-		err = decodeEach(ctx, s, response, b.privateStorage.InternalRows, plans, dst, fn, scratch)
+		err = rt.decodeEach(ctx, response, b.privateStorage.InternalRows, plans, dst, fn, scratch)
 		response.Owner.Release()
 		if errors.Is(err, errStopEach) {
 			return true, result, nil
@@ -139,7 +129,7 @@ func eachPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], requ
 
 // decodeEach decodes one page, calling fn after each row; a nil fn stops after
 // the first row with errStopEach. The caller releases the response.
-func decodeEach[R any](ctx context.Context, s *implCluster.Core, response *transport.InternalResponsePage, decoder codec.RowDecoder[R], plans *InternalResultPlanCache[R], dst *R, fn func(*R) error, scratch *eachScratch) error {
+func (rt *InternalSessionRuntime) decodeEach[R any](ctx context.Context, response *transport.InternalResponsePage, decoder codec.RowDecoder[R], plans *InternalResultPlanCache[R], dst *R, fn func(*R) error, scratch *eachScratch) error {
 	plan, err := plans.InternalSelectPlan(response, decoder)
 	if err != nil {
 		return err
@@ -164,7 +154,7 @@ func decodeEach[R any](ctx context.Context, s *implCluster.Core, response *trans
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if s.Closed() {
+		if rt.Closed() {
 			return runtimeerrors.ErrClosed
 		}
 		if fn == nil {
@@ -189,7 +179,7 @@ func decodeEach[R any](ctx context.Context, s *implCluster.Core, response *trans
 // database/sql's QueryRow. Borrowed fields are detached before response storage
 // is released; built-in owning fields keep their destination storage.
 func RunOne[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions, dst *R) (bool, model.Result, error) {
-	found, result, err := each(ctx, s, b, options, dst, nil, new(eachScratch))
+	found, result, err := runtimeOf(s).each(ctx, b, options, dst, nil, new(eachScratch))
 	if !found && err == nil {
 		clearDestination(dst)
 	}
@@ -210,7 +200,7 @@ func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) err
 		return InternalExecutionErrorResult(err), err
 	}
 	defer q.state.owner.InternalRelease()
-	_, result, err := each(ctx, q.state.runtime.Core, &q.bound, q.options, dst, fn, &q.scratch)
+	_, result, err := q.state.runtime.each(ctx, &q.bound, q.options, dst, fn, &q.scratch)
 	return result, err
 }
 
@@ -223,7 +213,7 @@ func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, model.Res
 		return false, InternalExecutionErrorResult(err), err
 	}
 	defer q.state.owner.InternalRelease()
-	found, result, err := each(ctx, q.state.runtime.Core, &q.bound, q.options, dst, nil, &q.scratch)
+	found, result, err := q.state.runtime.each(ctx, &q.bound, q.options, dst, nil, &q.scratch)
 	if !found && err == nil {
 		clearDestination(dst)
 	}

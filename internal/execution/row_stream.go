@@ -70,9 +70,9 @@ func RunStream[B, R any](ctx context.Context, session *implCluster.Core, bound *
 	if err != nil {
 		return nil, err
 	}
-	return runStreamWithCache(ctx, session, bound, decoder, frozen, options.Limits, options.Incremental, nil)
+	return runtimeOf(session).runStream(ctx, bound, decoder, frozen, options.Limits, options.Incremental, nil)
 }
-func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core, bound *Bound[B], decoder codec.StreamRowDecoder[R], options CompiledOptions, streamLimits transport.StreamLimits, incremental bool, plans *streamPlanCache[R]) (*RowStream[R], error) {
+func (rt *InternalSessionRuntime) runStream[B, R any](ctx context.Context, bound *Bound[B], decoder codec.StreamRowDecoder[R], options CompiledOptions, streamLimits transport.StreamLimits, incremental bool, plans *streamPlanCache[R]) (*RowStream[R], error) {
 	if decoder == nil {
 		return nil, cqltype.TypeValidation("stream decoder", "nil decoder")
 	}
@@ -83,10 +83,11 @@ func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core
 	if v := options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, cqltype.TypeValidation("stream prefetch", "must be zero")
 	}
-	runctx, cancel, request, err := InternalAdmitExecution(ctx, session, bound, options)
+	runctx, cancel, request, err := rt.admit(ctx, bound, options)
 	if err != nil {
 		return nil, err
 	}
+	session := rt.Core
 	// A stream never prefetches or speculates, whatever its profile says.
 	request.InternalOptions.InternalProfile.Prefetch = 0
 	request.InternalOptions.InternalOptions.Prefetch = cqltype.Option[int]{Set: true, Value: 0}
@@ -102,7 +103,7 @@ func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core
 		opaqueStorageValue.privateStorage.limits = limits
 		opaqueStorageValue.privateStorage.decoder = decoder
 		opaqueStorageValue.state = model.StartPage()
-		opaqueStorageValue.privateStorage.history = paging.InternalPagingHistory{InternalMaxCount: InternalRuntimeFor(session).config.Limits.MaxPagingStates, InternalMaxBytes: InternalRuntimeFor(session).config.Limits.MaxPagingStateBytes}
+		opaqueStorageValue.privateStorage.history = paging.InternalPagingHistory{InternalMaxCount: rt.config.Limits.MaxPagingStates, InternalMaxBytes: rt.config.Limits.MaxPagingStateBytes}
 		opaqueStorageValue.privateStorage.pageBuffered = !incremental
 		opaqueStorageValue.privateStorage.bufferedPlans = plans
 		if plans != nil {

@@ -54,7 +54,7 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id cqltype.UUID) (im
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		rows, err := Run(ctx, s.Core, bound, options)
+		rows, err := s.run(ctx, bound, options)
 		if err != nil {
 			return result, err
 		}
@@ -100,7 +100,7 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id cqltype.UUID) (im
 		return result, err
 	}
 	defer func() { eventsBound.Close(); _ = eventsBound.Wait(ctx) }()
-	rows, err := Run(ctx, s.Core, eventsBound, options)
+	rows, err := s.run(ctx, eventsBound, options)
 	if err != nil {
 		return result, err
 	}

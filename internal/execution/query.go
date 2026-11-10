@@ -356,7 +356,7 @@ func (q *Query[P, R]) Exec(ctx context.Context, value P) (model.Result, error) {
 		return InternalExecutionErrorResult(err), err
 	}
 	defer q.state.owner.InternalRelease()
-	return Exec(ctx, q.state.runtime.Core, &q.bound, q.options)
+	return q.state.runtime.exec(ctx, &q.bound, q.options)
 }
 
 // Run executes the query and returns an iterator over its rows. The query
@@ -366,21 +366,21 @@ func (q *Query[P, R]) Run(ctx context.Context, value P) (Rows[R], error) {
 		return Rows[R]{}, err
 	}
 	defer q.state.owner.InternalRelease()
-	return Run(ctx, q.state.runtime.Core, &q.bound, q.options)
+	return q.state.runtime.run(ctx, &q.bound, q.options)
 }
 func (q *Query[P, R]) RunPage(ctx context.Context, value P, state model.PageState) (*Page[R], error) {
 	if err := q.capture(ctx, value); err != nil {
 		return nil, err
 	}
 	defer q.state.owner.InternalRelease()
-	return RunPage(ctx, q.state.runtime.Core, &q.bound, state, q.options)
+	return q.state.runtime.runSinglePage(ctx, &q.bound, state, q.options, false)
 }
 func (q *Query[P, R]) RunUnpaged(ctx context.Context, value P) (*Page[R], error) {
 	if err := q.capture(ctx, value); err != nil {
 		return nil, err
 	}
 	defer q.state.owner.InternalRelease()
-	return RunUnpaged(ctx, q.state.runtime.Core, &q.bound, q.options)
+	return q.state.runtime.runSinglePage(ctx, &q.bound, model.StartPage(), q.options, true)
 }
 
 // Routing captures parameters and returns their routing information without

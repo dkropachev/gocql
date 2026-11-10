@@ -481,7 +481,7 @@ type logicalExecution struct {
 	started        time.Time
 	observer       settings.Observer
 	ddlCoordinator atomic.Pointer[cqltype.UUID]
-	session        *implCluster.Core
+	rt             *InternalSessionRuntime
 	request        *InternalExecutionRequest
 	lifetime       executionLifetime
 	id             uint64
@@ -499,9 +499,9 @@ func (l *logicalExecution) InternalFinish(result model.Result, err error) {
 	if !l.finished.CompareAndSwap(false, true) {
 		return
 	}
-	rt := InternalRuntimeFor(l.session)
+	rt := l.rt
 	rt.inflight.Add(-1)
-	l.session.RecordV2Latency(time.Since(l.started))
+	rt.RecordV2Latency(time.Since(l.started))
 	if err != nil {
 		rt.errors.Add(1)
 	}
@@ -519,21 +519,36 @@ func (l *logicalExecution) InternalFinish(result model.Result, err error) {
 				event.BatchStatements = append(event.BatchStatements, entry.statement)
 			}
 		}
-		l.session.ObserveSafely(func() { l.observer.ObserveRequest(event) })
+		rt.ObserveSafely(func() { l.observer.ObserveRequest(event) })
 	}
 }
 
+// runtimeOf returns s's runtime, or nil for a nil session so that the
+// runtime's methods report the nil session as their callers did.
+func runtimeOf(s *implCluster.Core) *InternalSessionRuntime {
+	if s == nil {
+		return nil
+	}
+	return InternalRuntimeFor(s)
+}
+
+// InternalAdmitExecution admits b for execution on s; tests use it to drive
+// admission without executing.
 func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions) (context.Context, context.CancelFunc, *InternalExecutionRequest, error) {
-	if ctx == nil || s == nil || b == nil || b.privateStorage.InternalRequest.InternalOwner == nil {
+	return runtimeOf(s).admit(ctx, b, options)
+}
+
+func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R], options CompiledOptions) (context.Context, context.CancelFunc, *InternalExecutionRequest, error) {
+	if ctx == nil || rt == nil || b == nil || b.privateStorage.InternalRequest.InternalOwner == nil {
 		return nil, nil, nil, cqltype.TypeValidation("execution", "nil context, session or binding")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, nil, nil, err
 	}
+	s := rt.Core
 	if s.Closed() {
 		return nil, nil, nil, runtimeerrors.ErrClosed
 	}
-	rt := InternalRuntimeFor(s)
 	var request *InternalExecutionRequest
 	query := b.privateStorage.InternalRequest.query
 	if query != nil {
@@ -624,9 +639,9 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Core, b *
 	if request.query == nil {
 		done = make(chan struct{})
 	}
-	*logical = logicalExecution{lifetime: executionLifetime{cancel: stop, done: done}, id: rt.requestID.Add(1), started: started, observer: observer, session: s, request: request}
+	*logical = logicalExecution{lifetime: executionLifetime{cancel: stop, done: done}, id: rt.requestID.Add(1), started: started, observer: observer, rt: rt, request: request}
 	request.InternalLogical = logical
-	if err := InternalRuntimeFor(s).registerExecution(request.InternalLogical, request.InternalOwner); err != nil {
+	if err := rt.registerExecution(request.InternalLogical, request.InternalOwner); err != nil {
 		cancel()
 		request.InternalLogical.releaseInput()
 		return nil, nil, nil, err
@@ -638,21 +653,28 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Core, b *
 	}
 	return runctx, cancel, request, nil
 }
+
+// Run executes b on s and returns an iterator over its rows.
 func Run[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions) (Rows[R], error) {
-	runctx, cancel, request, err := InternalAdmitExecution(ctx, s, b, options)
+	return runtimeOf(s).run(ctx, b, options)
+}
+
+func (rt *InternalSessionRuntime) run[R any](ctx context.Context, b *Bound[R], options CompiledOptions) (Rows[R], error) {
+	runctx, cancel, request, err := rt.admit(ctx, b, options)
 	if err != nil {
 		return Rows[R]{}, err
 	}
-	response, err := InternalRuntimeFor(s).executePage(runctx, request, model.StartPage())
+	response, err := rt.executePage(runctx, request, model.StartPage())
 	if err != nil {
 		cancel()
 		request.InternalLogical.InternalFinish(InternalExecutionErrorResult(err), err)
 		request.InternalLogical.releaseInput()
 		return Rows[R]{}, err
 	}
-	return newRowsFromResponse(runctx, cancel, s, b, request, response)
+	return rt.newRowsFromResponse(runctx, cancel, b, request, response)
 }
-func newRowsFromResponse[R any](runctx context.Context, cancel context.CancelFunc, s *implCluster.Core, b *Bound[R], request *InternalExecutionRequest, response *transport.InternalResponsePage) (Rows[R], error) {
+
+func (rt *InternalSessionRuntime) newRowsFromResponse[R any](runctx context.Context, cancel context.CancelFunc, b *Bound[R], request *InternalExecutionRequest, response *transport.InternalResponsePage) (Rows[R], error) {
 	plans := b.privateStorage.plans
 	if plans == nil {
 		plans = &InternalResultPlanCache[R]{}
@@ -677,11 +699,10 @@ func newRowsFromResponse[R any](runctx context.Context, cancel context.CancelFun
 	}
 	rows := &holder.rows
 	rows.gen.Store(gen)
-	rt := InternalRuntimeFor(s)
 	rows.privateStorage.cursor = executionCursor(request)
 	rows.privateStorage.ctx = runctx
 	rows.privateStorage.cancel = cancel
-	rows.privateStorage.session = s
+	rows.privateStorage.session = rt.Core
 	rows.privateStorage.request = request
 	rows.privateStorage.decoder = b.privateStorage.InternalRows
 	rows.privateStorage.page = &holder.page
@@ -698,13 +719,18 @@ func newRowsFromResponse[R any](runctx context.Context, cancel context.CancelFun
 	request.InternalLogical.installStop(rows)
 	return newRowsHandle(rows), nil
 }
+
+// RunPage executes one page of b on s, starting at state.
 func RunPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state model.PageState, options CompiledOptions) (*Page[R], error) {
-	return runSinglePage(ctx, s, b, state, options, false)
+	return runtimeOf(s).runSinglePage(ctx, b, state, options, false)
 }
+
+// RunUnpaged executes b on s as one unpaged request.
 func RunUnpaged[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions) (*Page[R], error) {
-	return runSinglePage(ctx, s, b, model.StartPage(), options, true)
+	return runtimeOf(s).runSinglePage(ctx, b, model.StartPage(), options, true)
 }
-func runSinglePage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state model.PageState, options CompiledOptions, unpaged bool) (*Page[R], error) {
+
+func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *Bound[R], state model.PageState, options CompiledOptions, unpaged bool) (*Page[R], error) {
 	if state.Complete() {
 		return nil, runtimeerrors.ErrPagingComplete
 	}
@@ -714,7 +740,7 @@ func runSinglePage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R],
 	if unpaged && options.values().PageSize.Set {
 		return nil, &settings.UnsupportedSettingError{Setting: "page size", Reason: "unpaged execution has no page size"}
 	}
-	runctx, cancel, request, err := InternalAdmitExecution(ctx, s, b, options)
+	runctx, cancel, request, err := rt.admit(ctx, b, options)
 	if err != nil {
 		return nil, err
 	}
@@ -724,7 +750,7 @@ func runSinglePage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R],
 	if unpaged {
 		request.InternalOptions.InternalProfile.PageSize = 0
 	}
-	response, err := InternalRuntimeFor(s).executePage(runctx, request, state)
+	response, err := rt.executePage(runctx, request, state)
 	if err != nil {
 		cancel()
 		request.InternalLogical.InternalFinish(InternalExecutionErrorResult(err), err)
@@ -753,7 +779,7 @@ func runSinglePage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R],
 	page.privateStorage.ctx = runctx
 	page.privateStorage.cursor = executionCursor(request)
 	page.privateStorage.cancel = cancel
-	page.privateStorage.session = s
+	page.privateStorage.session = rt.Core
 	page.privateStorage.release = func() {
 		cancel()
 		request.InternalLogical.InternalFinish(response.Result, page.privateStorage.err)
@@ -765,15 +791,21 @@ func runSinglePage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R],
 	}))
 	return page, nil
 }
+
+// Exec executes b on s; the statement must not return rows.
 func Exec[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions) (model.Result, error) {
+	return runtimeOf(s).exec(ctx, b, options)
+}
+
+func (rt *InternalSessionRuntime) exec[R any](ctx context.Context, b *Bound[R], options CompiledOptions) (model.Result, error) {
 	if b == nil {
 		return model.Result{}, cqltype.TypeValidation("binding", "nil binding")
 	}
-	runctx, cancel, request, err := InternalAdmitExecution(ctx, s, b, options)
+	runctx, cancel, request, err := rt.admit(ctx, b, options)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
-	response, err := InternalRuntimeFor(s).executePage(runctx, request, model.StartPage())
+	response, err := rt.executePage(runctx, request, model.StartPage())
 	if err != nil {
 		cancel()
 		result := InternalExecutionErrorResult(err)
@@ -794,7 +826,7 @@ func Exec[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options 
 	// Unexpected row results retain full draining, framing validation and the
 	// established result-columns error, including all continuation pages.
 	execution := &Bound[codec.EmptyRecord]{privateStorage: BoundStorage[codec.EmptyRecord]{InternalRows: execRowsDecoder{}}}
-	rows, err := newRowsFromResponse(runctx, cancel, s, execution, request, response)
+	rows, err := rt.newRowsFromResponse(runctx, cancel, execution, request, response)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
