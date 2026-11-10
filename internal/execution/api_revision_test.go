@@ -15,6 +15,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 func TestQueryDrainAdmission(t *testing.T) {
@@ -112,7 +113,7 @@ func TestQueryDrainAdmission(t *testing.T) {
 		if err := query.Close(joined); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := query.Exec(joined, codec.EmptyRecord{}); !errors.Is(err, ErrClosed) {
+		if _, err := query.Exec(joined, codec.EmptyRecord{}); !errors.Is(err, runtimeerrors.ErrClosed) {
 			t.Fatal("Exec after Close:", err)
 		}
 	})

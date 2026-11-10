@@ -26,6 +26,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/binding"
+	"github.com/scylladb/gocql/v2/internal/model"
 	implRuntimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -35,10 +37,10 @@ import (
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
-func batchTestQuery(t testing.TB, s *implCluster.Core) *Query[[]byte, EmptyRecord] {
+func batchTestQuery(t testing.TB, s *implCluster.Core) *Query[[]byte, codec.EmptyRecord] {
 	t.Helper()
 	typ := cqltype.BlobType
-	q, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, Options{})
+	q, err := NewUnpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +151,7 @@ func TestBatch(t *testing.T) {
 			if err := q.AddToBatch(&batch, []byte("v")); err != nil {
 				t.Fatal(err)
 			}
-			state := batch.begin(LoggedBatch)
+			state := batch.begin(cqltype.LoggedBatch)
 			rt := InternalRuntimeFor(s)
 			ctx := context.Background()
 			first, err := rt.prepareBatchAttempt(ctx, conns[0], state, nil)
@@ -183,17 +185,17 @@ func TestBatch(t *testing.T) {
 			implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
 			typ := cqltype.BlobType
 			columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: typ})
-			query := func(id string) *Query[[]byte, EmptyRecord] {
+			query := func(id string) *Query[[]byte, codec.EmptyRecord] {
 				state, hp := preparedState(t, s, cqltype.NewColumns())
 				hp.InternalId = []byte(id)
 				state.InternalStatement = "INSERT INTO ks.tbl(value) VALUES(?) -- " + id
 				state.InternalParameters = columns
 				state.InternalInfo.PartitionKeyIndexes = []int{0}
-				handle := new(Prepared[[]byte, EmptyRecord])
+				handle := new(Prepared[[]byte, codec.EmptyRecord])
 				PreparedData(handle).InternalState = state
 				PreparedData(handle).InternalParams = codecTestMust(codec.OneParam(codec.BytesEncoder).Compile(columns))
 				PreparedData(handle).InternalRows = codec.EmptyRowDecoder
-				PreparedData(handle).InternalPlans = &InternalResultPlanCache[EmptyRecord]{}
+				PreparedData(handle).InternalPlans = &InternalResultPlanCache[codec.EmptyRecord]{}
 				q := codecTestMust(NewQuery(handle, Options{}))
 				t.Cleanup(func() { _ = q.Close(context.Background()) })
 				return q
@@ -236,7 +238,7 @@ func TestBatch(t *testing.T) {
 			}()
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			if _, err := InternalWrapSession(s).ExecBatch(ctx, LoggedBatch, &batch); err != nil {
+			if _, err := InternalWrapSession(s).ExecBatch(ctx, cqltype.LoggedBatch, &batch); err != nil {
 				t.Fatal(err)
 			}
 			if err := <-serverDone; err != nil {
@@ -271,7 +273,7 @@ func TestBatch(t *testing.T) {
 			}
 			// A batch may be sent again unchanged.
 			for i := 0; i < 2; i++ {
-				if _, err := InternalWrapSession(s).ExecBatch(ctx, LoggedBatch, &batch); err != nil {
+				if _, err := InternalWrapSession(s).ExecBatch(ctx, cqltype.LoggedBatch, &batch); err != nil {
 					t.Fatal(err)
 				}
 				r := <-requests
@@ -293,7 +295,7 @@ func TestBatch(t *testing.T) {
 			if &batch.values[0] != values {
 				t.Fatal("Reset did not keep the storage")
 			}
-			if _, err := InternalWrapSession(s).ExecBatch(ctx, UnloggedBatch, &batch); err != nil {
+			if _, err := InternalWrapSession(s).ExecBatch(ctx, cqltype.UnloggedBatch, &batch); err != nil {
 				t.Fatal(err)
 			}
 			r := <-requests
@@ -318,16 +320,16 @@ func TestBatch(t *testing.T) {
 						t.Fatal(err)
 					}
 					var request InternalExecutionRequest
-					batch.queryExec(&request, &sender.state, LoggedBatch)
+					batch.queryExec(&request, &sender.state, cqltype.LoggedBatch)
 					return sender.state.owner.InternalRelease
 				}},
 				{"session", func(batch *Batch) func() {
-					owner := newInputOwner()
+					owner := InternalNewInputOwner()
 					if err := owner.InternalAdmit(); err != nil {
 						t.Fatal(err)
 					}
 					owner.InternalClose()
-					batch.begin(LoggedBatch)
+					batch.begin(cqltype.LoggedBatch)
 					batch.lastOwner, batch.lastQuery = owner, nil
 					return owner.InternalRelease
 				}},
@@ -368,17 +370,17 @@ func TestBatch(t *testing.T) {
 	t.Run("StatementKind", func(t *testing.T) {
 		s, _, _ := runtimeTestSession(t, 0)
 		for _, tc := range []struct {
-			kinds []StatementKind
-			want  StatementKind
+			kinds []cqltype.StatementKind
+			want  cqltype.StatementKind
 		}{
-			{[]StatementKind{OrdinaryStatement, OrdinaryStatement}, OrdinaryStatement},
-			{[]StatementKind{UnknownStatement}, UnknownStatement},
-			{[]StatementKind{OrdinaryStatement, UnknownStatement}, UnknownStatement},
-			{[]StatementKind{UnknownStatement, ConditionalStatement, OrdinaryStatement}, ConditionalStatement},
+			{[]cqltype.StatementKind{cqltype.OrdinaryStatement, cqltype.OrdinaryStatement}, cqltype.OrdinaryStatement},
+			{[]cqltype.StatementKind{cqltype.UnknownStatement}, cqltype.UnknownStatement},
+			{[]cqltype.StatementKind{cqltype.OrdinaryStatement, cqltype.UnknownStatement}, cqltype.UnknownStatement},
+			{[]cqltype.StatementKind{cqltype.UnknownStatement, cqltype.ConditionalStatement, cqltype.OrdinaryStatement}, cqltype.ConditionalStatement},
 		} {
 			var batch Batch
 			for _, kind := range tc.kinds {
-				if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &RoutingInfo{Kind: kind}, encodedValues{}); err != nil {
+				if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &model.RoutingInfo{Kind: kind}, model.EncodedValues{}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -396,7 +398,7 @@ func TestBatch(t *testing.T) {
 		otherSession := InternalWrapSession(other.state.runtime.Core)
 		ctx := context.Background()
 		var batch Batch
-		if _, err := session.ExecBatch(ctx, LoggedBatch, &batch); err == nil {
+		if _, err := session.ExecBatch(ctx, cqltype.LoggedBatch, &batch); err == nil {
 			t.Fatal("empty batch sent")
 		}
 		if err := q.AddToBatch(nil, []byte("v")); err == nil {
@@ -408,10 +410,10 @@ func TestBatch(t *testing.T) {
 		if err := other.AddToBatch(&batch, []byte("v")); err == nil || batch.Len() != 1 {
 			t.Fatal("statement of another session added", err)
 		}
-		if _, err := otherSession.ExecBatch(ctx, LoggedBatch, &batch); err == nil {
+		if _, err := otherSession.ExecBatch(ctx, cqltype.LoggedBatch, &batch); err == nil {
 			t.Fatal("batch sent on another session")
 		}
-		if _, err := session.ExecBatch(ctx, BatchKind(42), &batch); err == nil {
+		if _, err := session.ExecBatch(ctx, cqltype.BatchKind(42), &batch); err == nil {
 			t.Fatal("unknown batch kind sent")
 		}
 		if err := q.state.begin(ctx); err != nil {
@@ -426,7 +428,7 @@ func TestBatch(t *testing.T) {
 		if err := q.Close(closeCtx); err != nil {
 			t.Fatal(err)
 		}
-		if err := q.AddToBatch(&batch, []byte("v")); !errors.Is(err, ErrClosed) {
+		if err := q.AddToBatch(&batch, []byte("v")); !errors.Is(err, implRuntimeerrors.ErrClosed) {
 			t.Fatal("closed query appended", err)
 		}
 		if batch.Len() != 1 {

@@ -9,8 +9,12 @@ import (
 	"time"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/retry"
 )
 
@@ -27,7 +31,7 @@ func canExecuteDirect(s *InternalSessionRuntime, request *InternalExecutionReque
 	}
 	return canUseDirectProfile(request.InternalOptions.InternalProfile) && s.InternalConfig.CoalesceWait == 0
 }
-func canUseDirectProfile(profile Profile) bool {
+func canUseDirectProfile(profile settings.Profile) bool {
 	if profile.Speculation != nil {
 		return false
 	}
@@ -45,12 +49,12 @@ func canUseDirectProfile(profile Profile) bool {
 // The calling goroutine coordinates ordinary attempts directly, without an
 // outcome channel or per-attempt goroutine. Optional callbacks/speculation keep
 // their general execution path.
-func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request *InternalExecutionRequest, state PageState, plan QueryPlan) (*responsePage, error) {
+func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request *InternalExecutionRequest, state model.PageState, plan routing.QueryPlan) (*transport.InternalResponsePage, error) {
 	consistency := request.InternalOptions.InternalProfile.Consistency
-	aggregate := Result{AchievedConsistency: consistency}
+	aggregate := model.Result{AchievedConsistency: consistency}
 	var log *attemptLog // allocated on the first failed attempt
-	failure := func(err error) (*responsePage, error) { return nil, log.error(err, aggregate) }
-	var conn *Conn
+	failure := func(err error) (*transport.InternalResponsePage, error) { return nil, log.error(err, aggregate) }
+	var conn *transport.Conn
 	pinned := false // the first attempt went to request.pinned
 	for attempt := 1; ; attempt++ {
 		if err := ctx.Err(); err != nil {
@@ -117,7 +121,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 			if response.PagingState != nil {
 				response.State = model.PageStateOwned(response.PagingState, 1)
 			} else {
-				response.State = completePageState()
+				response.State = model.CompletePageState()
 			}
 			return response, nil
 		}
@@ -129,7 +133,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 					log = new(attemptLog)
 				}
 				log.fail(err, conn, attempt, consistency)
-				log.raise(PartiallyExecuted)
+				log.raise(cqltype.PartiallyExecuted)
 				return failure(fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", err))
 			}
 		}
@@ -139,25 +143,25 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		attemptStatus := log.fail(err, conn, attempt, consistency)
 		decision := retry.Decision{}
 		if policy := request.InternalOptions.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.InternalRouting.Conditional, BytesWritten: attemptStatus != NotExecuted, ExecutionStatus: attemptStatus})
+			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.InternalRouting.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
 		}
 		switch decision.Action {
 		case retry.IgnoreWrite:
-			return &responsePage{InternalResponseData: responseData{State: completePageState(), Result: aggregate}}, nil
+			return &transport.InternalResponsePage{InternalResponseData: model.ResponseData{State: model.CompletePageState(), Result: aggregate}}, nil
 		case retry.Stop:
 			return failure(err)
 		case retry.Same, retry.Next:
 		default:
-			return failure(typeValidation("retry", "unknown retry action"))
+			return failure(cqltype.TypeValidation("retry", "unknown retry action"))
 		}
 		if decision.Consistency.Set {
-			if !validConsistency(decision.Consistency.Value) {
-				return failure(typeValidation("retry consistency", "invalid consistency"))
+			if !settings.InternalValidConsistency(decision.Consistency.Value) {
+				return failure(cqltype.TypeValidation("retry consistency", "invalid consistency"))
 			}
 			consistency = decision.Consistency.Value
 		}
 		if decision.Delay < 0 {
-			return failure(typeValidation("retry delay", "negative delay"))
+			return failure(cqltype.TypeValidation("retry delay", "negative delay"))
 		}
 		if decision.Delay > 0 {
 			timer := time.NewTimer(decision.Delay)
@@ -169,7 +173,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 				// No attempt is in flight during the delay, so a closing
 				// session ends the execution here.
 				timer.Stop()
-				return failure(ErrClosed)
+				return failure(runtimeerrors.ErrClosed)
 			case <-timer.C:
 			}
 		}
@@ -183,11 +187,11 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 // skipHostPlan is a retry plan for a page whose first attempt went to a
 // pinned connection: it omits that connection's host.
 type skipHostPlan struct {
-	plan QueryPlan
-	host UUID
+	plan routing.QueryPlan
+	host cqltype.UUID
 }
 
-func (p *skipHostPlan) Next() (Route, bool) {
+func (p *skipHostPlan) Next() (routing.Route, bool) {
 	for {
 		r, ok := p.plan.Next()
 		if !ok || r.HostID() != p.host {
@@ -196,14 +200,14 @@ func (p *skipHostPlan) Next() (Route, bool) {
 	}
 }
 
-func mergeResponseResult(result *Result, response *responsePage) {
+func mergeResponseResult(result *model.Result, response *transport.InternalResponsePage) {
 	// Warnings, trace IDs and custom payload all live in the rare extras.
 	if response == nil || response.Extras == nil {
 		return
 	}
 	result.AddWarnings(response.Warnings()...)
 	if len(response.TraceID()) == 16 {
-		var id UUID
+		var id cqltype.UUID
 		copy(id[:], response.TraceID())
 		result.AddTraceIDs(id)
 	}

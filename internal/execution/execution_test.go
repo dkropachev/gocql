@@ -165,7 +165,7 @@ func TestExecution(t *testing.T) {
 	t.Run("CanExecuteDirect", func(t *testing.T) {
 		rt := &InternalSessionRuntime{}
 		request := func() *InternalExecutionRequest {
-			return &InternalExecutionRequest{InternalLogical: &InternalLogicalExecution{}, InternalOptions: InternalResolvedOptions{InternalProfile: defaultProfile()}}
+			return &InternalExecutionRequest{InternalLogical: &InternalLogicalExecution{}, InternalOptions: InternalResolvedOptions{InternalProfile: settings.InternalDefaultProfile()}}
 		}
 		if !canExecuteDirect(rt, request()) {
 			t.Fatal("one-shot execution should run direct")
@@ -181,7 +181,7 @@ func TestExecution(t *testing.T) {
 			t.Fatal("an observer needs the general path")
 		}
 		r = request()
-		r.connection = &Conn{InternalStreamObserver: directTestStreamObserver{}}
+		r.connection = &transport.Conn{InternalStreamObserver: directTestStreamObserver{}}
 		if canExecuteDirect(rt, r) {
 			t.Fatal("a stream-observed connection needs the general path")
 		}

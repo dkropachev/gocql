@@ -11,16 +11,19 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 var ErrBusy = runtimeerrors.ErrBusy
 
 type queryState struct {
-	owner        *inputOwner
+	owner        *InternalInputOwner
 	execCtx      *executionContext // reusable direct-path context; nil keeps context.WithTimeout
 	pageCtx      *executionContext // reusable direct-path page timeout, created on first use
 	releaseOwner func()            // bound owner.InternalRelease, the execution drain
@@ -34,13 +37,13 @@ type queryState struct {
 	_ [8]byte
 	// historyInline is the inline paging history storage the query's
 	// iterator lends its history.
-	historyInline [paging.InternalInlineHistory]PageState
+	historyInline [paging.InternalInlineHistory]model.PageState
 	inlineLogical InternalLogicalExecution
 	request       InternalExecutionRequest
 	execOwner     InternalInputOwner // per-execution owner, reset each generation
 	// response holds an execution's first response page. The next execution
 	// can begin only after this one released it.
-	response     responsePage
+	response     transport.InternalResponsePage
 	routing      routing.InternalLazyRoutingPlan
 	generation   atomic.Uint64 // advanced in begin under mu; read without it by cursors
 	mu           sync.Mutex
@@ -76,9 +79,9 @@ func (c queryCursor) current() bool {
 // Query owns reusable parameter storage and allows one active execution.
 // Prepared statements remain shareable; a Query must not be copied.
 type Query[P, R any] struct {
-	params  ParamPlan[P]
+	params  codec.ParamPlan[P]
 	options BoundOptions
-	columns Columns
+	columns cqltype.Columns
 	scratch eachScratch   // Each and One decoding state
 	rows    rowsHolder[R] // Run's iterator storage, reused each execution
 	buffer  binding.ParameterBuffer
@@ -94,16 +97,16 @@ type Query[P, R any] struct {
 // and the pool hands its idle ones to Close.
 func newQueryState(s *implCluster.Core, state *queryState, retire func(), pool *queryPoolBase) error {
 	if s == nil {
-		return typeValidation("query", "nil session")
+		return cqltype.TypeValidation("query", "nil session")
 	}
 	data := implCluster.SessionData(s)
 	data.InternalSessionStateMu.RLock()
 	defer data.InternalSessionStateMu.RUnlock()
 	if data.InternalIsClosing || data.InternalIsClosed {
-		return ErrClosed
+		return runtimeerrors.ErrClosed
 	}
 	state.runtime = InternalRuntimeFor(s)
-	state.owner = newInputOwner()
+	state.owner = InternalNewInputOwner()
 	state.releaseOwner = state.owner.InternalRelease
 	state.retire = retire
 	state.owner.onIdle = state.idle
@@ -129,7 +132,7 @@ func (p *Prepared[P, R]) Query(options Options) (*Query[P, R], error) {
 // are validated and resolved for the statement's session once, here.
 func NewQuery[P, R any](p *Prepared[P, R], values Options) (*Query[P, R], error) {
 	if p == nil || p.privateStorage.InternalState == nil {
-		return nil, typeValidation("prepared", "nil handle")
+		return nil, cqltype.TypeValidation("prepared", "nil handle")
 	}
 	options, err := queryOptions(p.privateStorage.InternalState.InternalSession, values)
 	if err != nil {
@@ -151,14 +154,14 @@ func queryOptions(s *implCluster.Core, values Options) (BoundOptions, error) {
 		return BoundOptions{}, nil
 	}
 	if s == nil {
-		return BoundOptions{}, typeValidation("query", "nil session")
+		return BoundOptions{}, cqltype.TypeValidation("query", "nil session")
 	}
 	return NewBoundOptions(s, values)
 }
 
 func newPreparedQuery[P, R any](p *Prepared[P, R], options BoundOptions, pool *queryPoolBase) (*Query[P, R], error) {
 	if p == nil || p.privateStorage.InternalState == nil {
-		return nil, typeValidation("prepared", "nil handle")
+		return nil, cqltype.TypeValidation("prepared", "nil handle")
 	}
 	state := p.privateStorage.InternalState
 	// Statement, keyspace, parameters and info are fixed when the prepared
@@ -169,7 +172,7 @@ func newPreparedQuery[P, R any](p *Prepared[P, R], options BoundOptions, pool *q
 	q.bound.privateStorage.rows = &q.rows
 	info := &state.InternalInfo
 	kind := p.privateStorage.InternalKind
-	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, InternalRouting: RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Kind: kind, Conditional: kind != OrdinaryStatement}}
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, InternalRouting: model.RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Kind: kind, Conditional: kind != cqltype.OrdinaryStatement}}
 	if err := newQueryState(p.privateStorage.InternalState.InternalSession, &q.state, q.retire, pool); err != nil {
 		return nil, err
 	}
@@ -181,7 +184,7 @@ func newPreparedQuery[P, R any](p *Prepared[P, R], options BoundOptions, pool *q
 // NewUnpreparedQuery compiles parameters once against statement.BindMarkers
 // and captures each execution's input in query-owned storage, including
 // values passed to custom codecs.
-func NewUnpreparedQuery[P, R any](s *implCluster.Core, statement Statement[P, R], values Options) (*Query[P, R], error) {
+func NewUnpreparedQuery[P, R any](s *implCluster.Core, statement binding.Statement[P, R], values Options) (*Query[P, R], error) {
 	options, err := queryOptions(s, values)
 	if err != nil {
 		return nil, err
@@ -189,12 +192,12 @@ func NewUnpreparedQuery[P, R any](s *implCluster.Core, statement Statement[P, R]
 	return newUnpreparedQuery(s, statement, options)
 }
 
-func newUnpreparedQuery[P, R any](s *implCluster.Core, statement Statement[P, R], options BoundOptions) (*Query[P, R], error) {
+func newUnpreparedQuery[P, R any](s *implCluster.Core, statement binding.Statement[P, R], options BoundOptions) (*Query[P, R], error) {
 	if err := validateStatement(&statement); err != nil {
 		return nil, err
 	}
 	columns := statement.BindMarkers
-	plan, err := compileParamPlan(statement.Params, columns)
+	plan, err := codec.CompileParamPlan(statement.Params, columns)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +205,7 @@ func newUnpreparedQuery[P, R any](s *implCluster.Core, statement Statement[P, R]
 	q.bound.privateStorage.InternalRows = statement.Rows
 	q.bound.privateStorage.plans = &InternalResultPlanCache[R]{}
 	q.bound.privateStorage.rows = &q.rows
-	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: statement.CQL, InternalSource: cqlText{}, InternalRouting: RoutingInfo{Kind: statement.Kind, Conditional: statement.Kind != OrdinaryStatement}}
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalStatement: statement.CQL, InternalSource: cqlText{}, InternalRouting: model.RoutingInfo{Kind: statement.Kind, Conditional: statement.Kind != cqltype.OrdinaryStatement}}
 	if err := newQueryState(s, &q.state, q.retire, nil); err != nil {
 		return nil, err
 	}
@@ -247,10 +250,10 @@ func (s *queryState) begin(ctx context.Context) error { return s.admit(ctx, true
 // wait.
 func (s *queryState) admit(ctx context.Context, wait bool) error {
 	if s.owner == nil || s.runtime == nil {
-		return typeValidation("query", "uninitialized query")
+		return cqltype.TypeValidation("query", "uninitialized query")
 	}
 	if ctx == nil {
-		return typeValidation("context", "nil context")
+		return cqltype.TypeValidation("context", "nil context")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -280,7 +283,7 @@ func (s *queryState) admit(ctx context.Context, wait bool) error {
 	}
 	if s.closed {
 		s.mu.Unlock()
-		return ErrClosed
+		return runtimeerrors.ErrClosed
 	}
 	s.busy = true
 	s.generation.Add(1)
@@ -291,7 +294,7 @@ func (s *queryState) admit(ctx context.Context, wait bool) error {
 		s.runtime.pooledBusy.Add(1)
 		if s.runtime.Core.Closed() {
 			s.idle()
-			return ErrClosed
+			return runtimeerrors.ErrClosed
 		}
 	}
 	// Never acquire owner.mu while holding state.mu: the final release calls idle.
@@ -310,7 +313,7 @@ func (q *Query[P, R]) capture(ctx context.Context, value P) error {
 // generation; wait is as for queryState.admit.
 func (q *Query[P, R]) captureWith(ctx context.Context, value P, wait bool) error {
 	if q == nil {
-		return typeValidation("query", "nil query")
+		return cqltype.TypeValidation("query", "nil query")
 	}
 	if err := q.state.admit(ctx, wait); err != nil {
 		return err
@@ -333,7 +336,7 @@ func (q *Query[P, R]) captureWith(ctx context.Context, value P, wait bool) error
 }
 
 func (q *Query[P, R]) retire() {
-	q.bound.privateStorage.InternalRequest.InternalValues = encodedValues{}
+	q.bound.privateStorage.InternalRequest.InternalValues = model.EncodedValues{}
 	if q.state.request.InternalLogical == &q.state.inlineLogical {
 		lifetime := &q.state.inlineLogical.lifetime
 		lifetime.mu.Lock()
@@ -348,7 +351,7 @@ func (q *Query[P, R]) retire() {
 
 // Exec executes the query with value. The statement must not return rows.
 // The query is ready for its next execution when Exec returns.
-func (q *Query[P, R]) Exec(ctx context.Context, value P) (Result, error) {
+func (q *Query[P, R]) Exec(ctx context.Context, value P) (model.Result, error) {
 	if err := q.capture(ctx, value); err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
@@ -365,7 +368,7 @@ func (q *Query[P, R]) Run(ctx context.Context, value P) (Rows[R], error) {
 	defer q.state.owner.InternalRelease()
 	return Run(ctx, q.state.runtime.Core, &q.bound, q.options)
 }
-func (q *Query[P, R]) RunPage(ctx context.Context, value P, state PageState) (*Page[R], error) {
+func (q *Query[P, R]) RunPage(ctx context.Context, value P, state model.PageState) (*Page[R], error) {
 	if err := q.capture(ctx, value); err != nil {
 		return nil, err
 	}
@@ -383,9 +386,9 @@ func (q *Query[P, R]) RunUnpaged(ctx context.Context, value P) (*Page[R], error)
 // Routing captures parameters and returns their routing information without
 // sending a request. It takes no context, so unlike the executions it returns
 // ErrBusy while the previous execution still drains.
-func (q *Query[P, R]) Routing(value P) (RoutingInfo, error) {
+func (q *Query[P, R]) Routing(value P) (model.RoutingInfo, error) {
 	if err := q.captureWith(context.Background(), value, false); err != nil {
-		return RoutingInfo{}, err
+		return model.RoutingInfo{}, err
 	}
 	defer q.state.owner.InternalRelease()
 	return q.bound.privateStorage.InternalRequest.InternalRouting, nil
@@ -398,10 +401,10 @@ func (q *Query[P, R]) Routing(value P) (RoutingInfo, error) {
 // busy, including while its previous execution still drains.
 func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
 	if batch == nil {
-		return typeValidation("batch", "nil batch")
+		return cqltype.TypeValidation("batch", "nil batch")
 	}
 	if q == nil || q.state.owner == nil || q.state.runtime == nil {
-		return typeValidation("query", "uninitialized query")
+		return cqltype.TypeValidation("query", "uninitialized query")
 	}
 	// Encoding into the query's buffer needs only an idle query: nothing
 	// outlives the call, so it starts no execution generation.
@@ -409,7 +412,7 @@ func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
 	closed, busy := q.state.closed, q.state.busy
 	q.state.mu.Unlock()
 	if closed {
-		return ErrClosed
+		return runtimeerrors.ErrClosed
 	}
 	if busy {
 		return ErrBusy
@@ -462,10 +465,10 @@ func (s *queryState) stop() *InternalLogicalExecution {
 }
 func (s *queryState) wait(ctx context.Context) error {
 	if ctx == nil {
-		return typeValidation("context", "nil context")
+		return cqltype.TypeValidation("context", "nil context")
 	}
 	if s.owner == nil {
-		return typeValidation("query", "uninitialized query")
+		return cqltype.TypeValidation("query", "uninitialized query")
 	}
 	s.mu.Lock()
 	if !s.busy {
@@ -498,14 +501,14 @@ func (s *queryState) wait(ctx context.Context) error {
 // the query is closed regardless, and Session.Close waits for its drain.
 func (q *Query[P, R]) Close(ctx context.Context) error {
 	if q == nil {
-		return typeValidation("query", "nil query")
+		return cqltype.TypeValidation("query", "nil query")
 	}
 	q.state.close()
 	return q.state.wait(ctx)
 }
 
 func cloneQueryOptions(options Options) (Options, error) {
-	options.CustomPayload = append([]PayloadEntry(nil), options.CustomPayload...)
+	options.CustomPayload = append([]model.PayloadEntry(nil), options.CustomPayload...)
 	for i := range options.CustomPayload {
 		entry := &options.CustomPayload[i]
 		if entry.Value.Valid {

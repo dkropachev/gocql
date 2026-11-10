@@ -40,6 +40,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
+	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
 func BenchmarkExecution(b *testing.B) {
@@ -56,12 +57,12 @@ func BenchmarkExecution(b *testing.B) {
 	// BenchmarkExecution/NewOptionTemplates encodes the templates of resolved options, as
 	// NewBoundOptions and a query created with options for another session do.
 	b.Run("NewOptionTemplates", func(b *testing.B) {
-		profile := defaultProfile()
+		profile := settings.InternalDefaultProfile()
 		profile.PageSize = 5000
 		for _, c := range []struct {
 			name   string
 			values Options
-		}{{"plain", Options{}}, {"timestamp", Options{Timestamp: Option[int64]{Value: 1, Set: true}}}} {
+		}{{"plain", Options{}}, {"timestamp", Options{Timestamp: cqltype.Option[int64]{Value: 1, Set: true}}}} {
 			b.Run(c.name, func(b *testing.B) {
 				b.ReportAllocs()
 				for i := 0; i < b.N; i++ {
@@ -107,7 +108,7 @@ func BenchmarkExecution(b *testing.B) {
 							input := loopbackRow{k: int32(i), value: []byte(loopbackValue)}
 							key := int32(i)
 							dst := make([]byte, 0, len(loopbackValue))
-							check := func(found bool, _ Result, err error) error {
+							check := func(found bool, _ model.Result, err error) error {
 								if err != nil {
 									return err
 								}

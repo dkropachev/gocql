@@ -12,6 +12,9 @@ import (
 	"weak"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 // queryPoolBase is what the session runtime sees of a query pool: its idle
@@ -47,7 +50,7 @@ func (rt *InternalSessionRuntime) registerPool(s *implCluster.Core, base *queryP
 	data.InternalSessionStateMu.RLock()
 	defer data.InternalSessionStateMu.RUnlock()
 	if data.InternalIsClosing || data.InternalIsClosed {
-		return ErrClosed
+		return runtimeerrors.ErrClosed
 	}
 	entry := &queryPoolEntry{ref: weak.Make(base)}
 	rt.InternalMu.Lock()
@@ -115,7 +118,7 @@ func newQueryPool[P, R any](s *implCluster.Core, newQuery func(*queryPoolBase) (
 
 func (p *queryPool[P, R]) get() (*Query[P, R], error) {
 	if p.base.closed.Load() {
-		return nil, ErrClosed
+		return nil, runtimeerrors.ErrClosed
 	}
 	n := len(p.slots)
 	for i, start := 0, int(rand.Uint32N(uint32(n))); i < n; i++ {
@@ -176,7 +179,7 @@ func (p *queryPool[P, R]) takeIdle() []*queryState {
 // query may already serve another call.
 func (p *queryPool[P, R]) capture(ctx context.Context, value P) (*Query[P, R], error) {
 	if ctx == nil {
-		return nil, typeValidation("context", "nil context")
+		return nil, cqltype.TypeValidation("context", "nil context")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -204,7 +207,7 @@ func (p *queryPool[P, R]) capture(ctx context.Context, value P) (*Query[P, R], e
 // query's owner.
 func (p *queryPool[P, R]) begin(ctx context.Context) (*Query[P, R], error) {
 	if ctx == nil {
-		return nil, typeValidation("context", "nil context")
+		return nil, cqltype.TypeValidation("context", "nil context")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -226,7 +229,7 @@ func (p *queryPool[P, R]) begin(ctx context.Context) (*Query[P, R], error) {
 
 // exec executes value with options, which are frozen, so the execution can
 // outlive a cancelled call without copying them.
-func (p *queryPool[P, R]) exec(ctx context.Context, value P, options BoundOptions) (Result, error) {
+func (p *queryPool[P, R]) exec(ctx context.Context, value P, options BoundOptions) (model.Result, error) {
 	q, err := p.capture(ctx, value)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
@@ -236,7 +239,7 @@ func (p *queryPool[P, R]) exec(ctx context.Context, value P, options BoundOption
 	return result, err
 }
 
-func (p *queryPool[P, R]) each(ctx context.Context, value P, dst *R, fn func(*R) error, options BoundOptions) (bool, Result, error) {
+func (p *queryPool[P, R]) each(ctx context.Context, value P, dst *R, fn func(*R) error, options BoundOptions) (bool, model.Result, error) {
 	q, err := p.capture(ctx, value)
 	if err != nil {
 		return false, InternalExecutionErrorResult(err), err
@@ -249,7 +252,7 @@ func (p *queryPool[P, R]) each(ctx context.Context, value P, dst *R, fn func(*R)
 // pool returns p's query pool, created on first use.
 func (p *Prepared[P, R]) pool() (*queryPool[P, R], error) {
 	if p == nil || p.privateStorage.InternalState == nil {
-		return nil, typeValidation("prepared", "nil handle")
+		return nil, cqltype.TypeValidation("prepared", "nil handle")
 	}
 	s := &p.privateStorage
 	s.poolOnce.Do(func() {
@@ -287,7 +290,7 @@ func oneShotOptions(options []BoundOptions) (BoundOptions, error) {
 	case 1:
 		return options[0], nil
 	}
-	return BoundOptions{}, typeValidation("options", "at most one BoundOptions")
+	return BoundOptions{}, cqltype.TypeValidation("options", "at most one BoundOptions")
 }
 
 // Exec binds value and executes the statement once. The statement must not
@@ -295,7 +298,7 @@ func oneShotOptions(options []BoundOptions) (BoundOptions, error) {
 // none uses the session's default profile. Exec is safe for concurrent use:
 // it runs on a query the statement keeps for one-shot calls, so it allocates
 // no per-call execution state.
-func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...BoundOptions) (Result, error) {
+func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...BoundOptions) (model.Result, error) {
 	o, err := oneShotOptions(options)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
@@ -311,7 +314,7 @@ func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...BoundOpti
 // into dst, reporting whether a row existed; without one, dst is cleared.
 // Borrowed fields are detached before response storage is released. Options
 // are as for Exec. One is safe for concurrent use.
-func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...BoundOptions) (bool, Result, error) {
+func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...BoundOptions) (bool, model.Result, error) {
 	o, err := oneShotOptions(options)
 	if err != nil {
 		return false, InternalExecutionErrorResult(err), err
@@ -332,7 +335,7 @@ func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...Bo
 // response storage are valid only until fn returns. A non-nil error from fn
 // stops the iteration and is returned. Options are as for Exec. Each is safe
 // for concurrent use.
-func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...BoundOptions) (Result, error) {
+func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...BoundOptions) (model.Result, error) {
 	if fn == nil {
 		return nilEachCallback()
 	}

@@ -3,8 +3,10 @@
 
 package execution
 
+import "github.com/scylladb/gocql/v2/internal/transport"
+
 type OptionsStorage struct {
-	InternalConnection *Conn
+	InternalConnection *transport.Conn
 }
 
 func OptionsData(v *Options) *OptionsStorage { return &v.privateStorage }

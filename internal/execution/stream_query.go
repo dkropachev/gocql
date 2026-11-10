@@ -7,21 +7,24 @@ import (
 	"context"
 	"sync"
 
+	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/transport"
 
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 type streamPlanCache[R any] struct {
-	plan    StreamRowPlan[R]
-	columns Columns
+	plan    codec.StreamRowPlan[R]
+	columns cqltype.Columns
 	mu      sync.Mutex
 }
 
 // rememberPlan carries an incremental cursor's checked plan back to its query.
 // Buffered cursors update the same cache while selecting their page plan.
-func (s *RowStream[R]) rememberPlan(columns Columns, plan StreamRowPlan[R]) {
+func (s *RowStream[R]) rememberPlan(columns cqltype.Columns, plan codec.StreamRowPlan[R]) {
 	if cache := s.privateStorage.bufferedPlans; cache != nil {
 		cache.mu.Lock()
 		cache.columns, cache.plan = columns, plan
@@ -33,27 +36,27 @@ func (s *RowStream[R]) rememberPlan(columns Columns, plan StreamRowPlan[R]) {
 // Page buffering is the default; Incremental explicitly bounds receive storage.
 type StreamQuery[P, R any] struct {
 	plans   streamPlanCache[R]
-	decoder StreamRowDecoder[R]
-	query   *Query[P, EmptyRecord]
+	decoder codec.StreamRowDecoder[R]
+	query   *Query[P, codec.EmptyRecord]
 	options StreamOptions
 }
 
 // StreamQuery returns a reusable query that runs prepared and streams each row
 // into decoder instead of prepared's buffered row decoder.
-func (prepared *Prepared[P, B]) StreamQuery[R any](decoder StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
+func (prepared *Prepared[P, B]) StreamQuery[R any](decoder codec.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
 	if prepared == nil || prepared.privateStorage.InternalState == nil {
-		return nil, typeValidation("prepared", "nil handle")
+		return nil, cqltype.TypeValidation("prepared", "nil handle")
 	}
 	if decoder == nil {
-		return nil, typeValidation("stream decoder", "nil decoder")
+		return nil, cqltype.TypeValidation("stream decoder", "nil decoder")
 	}
-	if _, err := checkedStreamLimits(options.Limits); err != nil {
+	if _, err := transport.InternalCheckedStreamLimits(options.Limits); err != nil {
 		return nil, err
 	}
 	if v := options.Options; v.Prefetch.Set && v.Prefetch.Value != 0 {
-		return nil, typeValidation("stream prefetch", "must be zero")
+		return nil, cqltype.TypeValidation("stream prefetch", "must be zero")
 	}
-	p := &Prepared[P, EmptyRecord]{privateStorage: PreparedStorage[P, EmptyRecord]{InternalState: prepared.privateStorage.InternalState, InternalKind: prepared.privateStorage.InternalKind, InternalParams: prepared.privateStorage.InternalParams, InternalRows: InternalExecRowsDecoder{}}}
+	p := &Prepared[P, codec.EmptyRecord]{privateStorage: PreparedStorage[P, codec.EmptyRecord]{InternalState: prepared.privateStorage.InternalState, InternalKind: prepared.privateStorage.InternalKind, InternalParams: prepared.privateStorage.InternalParams, InternalRows: InternalExecRowsDecoder{}}}
 	q, err := NewQuery(p, options.Options)
 	if err != nil {
 		return nil, err
@@ -67,20 +70,20 @@ func (prepared *Prepared[P, B]) StreamQuery[R any](decoder StreamRowDecoder[R], 
 // NewUnpreparedStreamQuery uses the same owned input and receive-mode contract
 // for a statement executed without server preparation. Rows are decoded by
 // decoder, so the statement declares none.
-func NewUnpreparedStreamQuery[P, R any](session *implCluster.Core, statement Statement[P, EmptyRecord], decoder StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
+func NewUnpreparedStreamQuery[P, R any](session *implCluster.Core, statement binding.Statement[P, codec.EmptyRecord], decoder codec.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
 	if err := validateStatement(&statement); err != nil {
 		return nil, err
 	}
 	if decoder == nil {
-		return nil, typeValidation("stream decoder", "nil decoder")
+		return nil, cqltype.TypeValidation("stream decoder", "nil decoder")
 	}
-	if _, err := checkedStreamLimits(options.Limits); err != nil {
+	if _, err := transport.InternalCheckedStreamLimits(options.Limits); err != nil {
 		return nil, err
 	}
 	if v := options.Options; v.Prefetch.Set && v.Prefetch.Value != 0 {
-		return nil, typeValidation("stream prefetch", "must be zero")
+		return nil, cqltype.TypeValidation("stream prefetch", "must be zero")
 	}
-	q, err := NewUnpreparedQuery(session, Statement[P, EmptyRecord]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: InternalExecRowsDecoder{}, BindMarkers: statement.BindMarkers}, options.Options)
+	q, err := NewUnpreparedQuery(session, binding.Statement[P, codec.EmptyRecord]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: InternalExecRowsDecoder{}, BindMarkers: statement.BindMarkers}, options.Options)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +95,7 @@ func NewUnpreparedStreamQuery[P, R any](session *implCluster.Core, statement Sta
 
 func (q *StreamQuery[P, R]) Run(ctx context.Context, value P) (*RowStream[R], error) {
 	if q == nil {
-		return nil, typeValidation("query", "nil query")
+		return nil, cqltype.TypeValidation("query", "nil query")
 	}
 	if err := q.query.capture(ctx, value); err != nil {
 		return nil, err
@@ -106,7 +109,7 @@ func (q *StreamQuery[P, R]) Run(ctx context.Context, value P) (*RowStream[R], er
 // reports ErrClosed.
 func (q *StreamQuery[P, R]) Close(ctx context.Context) error {
 	if q == nil {
-		return typeValidation("query", "nil query")
+		return cqltype.TypeValidation("query", "nil query")
 	}
 	return q.query.Close(ctx)
 }
@@ -149,7 +152,7 @@ func (s *RowStream[R]) loadBufferedPage() error {
 		cache.mu.Lock()
 		defer cache.mu.Unlock()
 	}
-	var plan StreamRowPlan[R]
+	var plan codec.StreamRowPlan[R]
 	if cache != nil && cache.plan != nil && cache.columns.Equal(response.Columns) {
 		plan = cache.plan
 	} else if p.plan != nil && p.columns.Equal(response.Columns) {
@@ -160,7 +163,7 @@ func (s *RowStream[R]) loadBufferedPage() error {
 			return err
 		}
 		if plan == nil {
-			return typeValidation("stream plan", "decoder returned nil plan")
+			return cqltype.TypeValidation("stream plan", "decoder returned nil plan")
 		}
 		if cache != nil {
 			cache.columns, cache.plan = response.Columns, plan

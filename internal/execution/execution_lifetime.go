@@ -26,6 +26,7 @@ import (
 	"time"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 // Each logical operation has a closed input owner of its own. Its final drain
@@ -86,7 +87,7 @@ func (l *InternalLogicalExecution) cancelExecution() {
 	l.lifetime.mu.Unlock()
 	cancel()
 }
-func (s *InternalSessionRuntime) registerExecution(l *InternalLogicalExecution, parent *inputOwner) error {
+func (s *InternalSessionRuntime) registerExecution(l *InternalLogicalExecution, parent *InternalInputOwner) error {
 	if query := l.request.query; query != nil {
 		// Session.Close marks the session closing before StopActive, which
 		// finds the execution through query.logical under query.mu. Checking
@@ -96,7 +97,7 @@ func (s *InternalSessionRuntime) registerExecution(l *InternalLogicalExecution, 
 		query.mu.Lock()
 		if query.closed || s.Core.Closed() {
 			query.mu.Unlock()
-			return ErrClosed
+			return runtimeerrors.ErrClosed
 		}
 		query.logical = l
 		query.mu.Unlock()
@@ -110,7 +111,7 @@ func (s *InternalSessionRuntime) registerExecution(l *InternalLogicalExecution, 
 	implCluster.SessionData(s.Core).InternalSessionStateMu.RLock()
 	defer implCluster.SessionData(s.Core).InternalSessionStateMu.RUnlock()
 	if implCluster.SessionData(s.Core).InternalIsClosing || implCluster.SessionData(s.Core).InternalIsClosed {
-		return ErrClosed
+		return runtimeerrors.ErrClosed
 	}
 	rt := s
 	rt.InternalMu.Lock()

@@ -6,6 +6,7 @@ package execution
 import (
 	model "github.com/scylladb/gocql/v2/internal/model"
 	protocol "github.com/scylladb/gocql/v2/internal/protocol"
+	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
 // optionTemplates are the parameters blocks of resolved options, encoded
@@ -19,7 +20,7 @@ type optionTemplates [3][2]model.ParamsTemplate
 // newOptionTemplates encodes the parameters blocks of options resolved to
 // profile and values, for requests in keyspace. BoundOptions with a timestamp
 // encode only the templates that send one.
-func newOptionTemplates(profile *Profile, values *Options, keyspace string) *optionTemplates {
+func newOptionTemplates(profile *settings.Profile, values *Options, keyspace string) *optionTemplates {
 	t := new(optionTemplates)
 	// One buffer holds every tail: a page size, a serial consistency, a
 	// timestamp and now_in_seconds, and the keyspace in two of the shapes.
@@ -33,7 +34,7 @@ func newOptionTemplates(profile *Profile, values *Options, keyspace string) *opt
 			if ts == 0 && values.Timestamp.Set {
 				continue
 			}
-			w := attemptRequest{PageSize: int(profile.PageSize), DefaultTimestamp: ts == 1}
+			w := model.AttemptRequest{PageSize: int(profile.PageSize), DefaultTimestamp: ts == 1}
 			if shape == 1 {
 				w.Keyspace = keyspace
 			}
@@ -55,7 +56,7 @@ func newOptionTemplates(profile *Profile, values *Options, keyspace string) *opt
 }
 
 // find returns the template for w on a connection of version, or nil.
-func (t *optionTemplates) find(w *attemptRequest, version byte) *model.ParamsTemplate {
+func (t *optionTemplates) find(w *model.AttemptRequest, version byte) *model.ParamsTemplate {
 	if t == nil || version < 4 || version > 5 {
 		return nil
 	}
@@ -81,7 +82,7 @@ func (t *optionTemplates) find(w *attemptRequest, version byte) *model.ParamsTem
 // connection of version, or nil to encode w field by field: for a batch, on
 // protocol 3, for a QUERY outside the options' keyspace, and for options
 // resolved for one execution, which encode no templates.
-func paramsTemplate(resolved *InternalResolvedOptions, w *attemptRequest, version byte) *model.ParamsTemplate {
+func paramsTemplate(resolved *InternalResolvedOptions, w *model.AttemptRequest, version byte) *model.ParamsTemplate {
 	if w.Batch != nil {
 		return nil
 	}

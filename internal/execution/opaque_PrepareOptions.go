@@ -3,8 +3,10 @@
 
 package execution
 
+import "github.com/scylladb/gocql/v2/internal/transport"
+
 type PrepareOptionsStorage struct {
-	InternalConnection *Conn
+	InternalConnection *transport.Conn
 }
 
 func PrepareOptionsData(v *PrepareOptions) *PrepareOptionsStorage { return &v.privateStorage }

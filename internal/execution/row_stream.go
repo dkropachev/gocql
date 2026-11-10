@@ -20,8 +20,15 @@
 package execution
 
 import (
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/paging"
+	"github.com/scylladb/gocql/v2/internal/protocol"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/retry"
 
 	"context"
@@ -40,13 +47,13 @@ import (
 // created.
 type StreamOptions struct {
 	Options Options
-	Limits  StreamLimits
+	Limits  transport.StreamLimits
 	// Incremental reserves an exclusive connection and bounds receive scratch.
 	// The default buffers a complete page on normal multiplexed connections.
 	Incremental bool
 }
 type StreamInfo struct {
-	Result               Result
+	Result               model.Result
 	DeliveredRows, Pages int64
 	OutputStarted        bool
 }
@@ -54,27 +61,27 @@ type StreamInfo struct {
 // RowStream writes only during NextInto. Incremental mode owns a pool slot.
 // Output belongs to the caller and remains valid after Close.
 type RowStream[R any] struct {
-	state          PageState
+	state          model.PageState
 	privateStorage RowStreamStorage[R]
 }
 
-func RunStream[B, R any](ctx context.Context, session *implCluster.Core, bound *Bound[B], decoder StreamRowDecoder[R], options StreamOptions) (*RowStream[R], error) {
+func RunStream[B, R any](ctx context.Context, session *implCluster.Core, bound *Bound[B], decoder codec.StreamRowDecoder[R], options StreamOptions) (*RowStream[R], error) {
 	frozen, err := queryOptions(session, options.Options)
 	if err != nil {
 		return nil, err
 	}
 	return runStreamWithCache(ctx, session, bound, decoder, frozen, options.Limits, options.Incremental, nil)
 }
-func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core, bound *Bound[B], decoder StreamRowDecoder[R], options BoundOptions, streamLimits StreamLimits, incremental bool, plans *streamPlanCache[R]) (*RowStream[R], error) {
+func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core, bound *Bound[B], decoder codec.StreamRowDecoder[R], options BoundOptions, streamLimits transport.StreamLimits, incremental bool, plans *streamPlanCache[R]) (*RowStream[R], error) {
 	if decoder == nil {
-		return nil, typeValidation("stream decoder", "nil decoder")
+		return nil, cqltype.TypeValidation("stream decoder", "nil decoder")
 	}
-	limits, err := checkedStreamLimits(streamLimits)
+	limits, err := transport.InternalCheckedStreamLimits(streamLimits)
 	if err != nil {
 		return nil, err
 	}
 	if v := options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
-		return nil, typeValidation("stream prefetch", "must be zero")
+		return nil, cqltype.TypeValidation("stream prefetch", "must be zero")
 	}
 	runctx, cancel, request, err := InternalAdmitExecution(ctx, session, bound, options)
 	if err != nil {
@@ -82,7 +89,7 @@ func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core
 	}
 	// A stream never prefetches or speculates, whatever its profile says.
 	request.InternalOptions.InternalProfile.Prefetch = 0
-	request.InternalOptions.InternalOptions.Prefetch = Option[int]{Set: true, Value: 0}
+	request.InternalOptions.InternalOptions.Prefetch = cqltype.Option[int]{Set: true, Value: 0}
 	request.InternalOptions.InternalProfile.Speculation = nil
 	request.responseDest = nil // a stream handle keeps its pages beyond the query's generation
 	cursor := func() *RowStream[R] {
@@ -94,8 +101,8 @@ func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core
 		opaqueStorageValue.privateStorage.InternalRequest = request
 		opaqueStorageValue.privateStorage.limits = limits
 		opaqueStorageValue.privateStorage.InternalDecoder = decoder
-		opaqueStorageValue.state = StartPage()
-		opaqueStorageValue.privateStorage.InternalHistory = pagingHistory{InternalMaxCount: InternalRuntimeFor(session).InternalConfig.Limits.MaxPagingStates, InternalMaxBytes: InternalRuntimeFor(session).InternalConfig.Limits.MaxPagingStateBytes}
+		opaqueStorageValue.state = model.StartPage()
+		opaqueStorageValue.privateStorage.InternalHistory = paging.InternalPagingHistory{InternalMaxCount: InternalRuntimeFor(session).InternalConfig.Limits.MaxPagingStates, InternalMaxBytes: InternalRuntimeFor(session).InternalConfig.Limits.MaxPagingStateBytes}
 		opaqueStorageValue.privateStorage.pageBuffered = !incremental
 		opaqueStorageValue.privateStorage.bufferedPlans = plans
 		if plans != nil {
@@ -113,7 +120,7 @@ func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core
 		cursor.privateStorage.stop = context.AfterFunc(runctx, func() {
 			cause := runctx.Err()
 			if session.Closed() {
-				cause = ErrClosed
+				cause = runtimeerrors.ErrClosed
 			}
 			InternalRowStreamCloseWithError(cursor, cause)
 		})
@@ -130,7 +137,7 @@ func runStreamWithCache[B, R any](ctx context.Context, session *implCluster.Core
 		}
 		return nil, newExecutionError(err, cursor.Info().Result, runtimeerrors.ExecutionStatusOf(err), nil)
 	}
-	request.InternalLogical.installStop(stopFunc(func() { InternalRowStreamCloseWithError(cursor, ErrClosed) }))
+	request.InternalLogical.installStop(stopFunc(func() { InternalRowStreamCloseWithError(cursor, runtimeerrors.ErrClosed) }))
 	return cursor, nil
 }
 
@@ -139,7 +146,7 @@ func (s *RowStream[R]) setError(err error) {
 		return
 	}
 	if errors.Is(err, context.Canceled) && s.privateStorage.InternalSession.Closed() {
-		err = ErrClosed
+		err = runtimeerrors.ErrClosed
 	}
 	s.privateStorage.mu.Lock()
 	if s.privateStorage.err == nil {
@@ -149,7 +156,7 @@ func (s *RowStream[R]) setError(err error) {
 }
 func InternalRowStreamFail[R any](s *RowStream[R], err error) {
 	if errors.Is(err, context.Canceled) && s.privateStorage.InternalSession.Closed() {
-		err = ErrClosed
+		err = runtimeerrors.ErrClosed
 	}
 	s.privateStorage.mu.Lock()
 	if !s.privateStorage.terminal && s.privateStorage.err == nil {
@@ -174,12 +181,12 @@ func (s *RowStream[R]) Info() StreamInfo {
 	s.privateStorage.mu.Lock()
 	defer s.privateStorage.mu.Unlock()
 	info := s.privateStorage.info
-	info.Result = cloneResult(info.Result)
+	info.Result = model.CloneResult(info.Result)
 	return info
 }
-func (s *RowStream[R]) Columns() Columns {
+func (s *RowStream[R]) Columns() cqltype.Columns {
 	if s == nil {
-		return Columns{}
+		return cqltype.Columns{}
 	}
 	s.privateStorage.mu.Lock()
 	defer s.privateStorage.mu.Unlock()
@@ -327,7 +334,7 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 		s.privateStorage.mu.Lock()
 		active := !s.privateStorage.terminal
 		if active && s.privateStorage.err == nil {
-			s.privateStorage.err = typeValidation("stream advance", "concurrent NextInto")
+			s.privateStorage.err = cqltype.TypeValidation("stream advance", "concurrent NextInto")
 		}
 		s.privateStorage.mu.Unlock()
 		if active {
@@ -350,7 +357,7 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 		return false
 	}
 	if dst == nil {
-		InternalRowStreamFail(s, typeValidation("stream destination", "nil destination"))
+		InternalRowStreamFail(s, cqltype.TypeValidation("stream destination", "nil destination"))
 		InternalRowStreamCleanup(s, false)
 		return false
 	}
@@ -362,7 +369,7 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 			s.privateStorage.mu.Lock()
 			s.privateStorage.info.OutputStarted = true
 			s.privateStorage.mu.Unlock()
-			ok, err := decodeStreamRow(s.privateStorage.response, s.privateStorage.plan, dst)
+			ok, err := transport.InternalDecodeStreamRow(s.privateStorage.response, s.privateStorage.plan, dst)
 			if err != nil {
 				InternalRowStreamFail(s, err)
 				InternalRowStreamCleanup(s, false)
@@ -390,9 +397,9 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 				return false
 			}
 		}
-		next := completePageState()
+		next := model.CompletePageState()
 		if s.privateStorage.response.InternalMetadata.PagingState != nil {
-			next = RestorePageState(s.privateStorage.response.InternalMetadata.PagingState)
+			next = model.RestorePageState(s.privateStorage.response.InternalMetadata.PagingState)
 		}
 		if !next.More() {
 			s.privateStorage.mu.Lock()
@@ -419,24 +426,24 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 	}
 }
 
-func (s *RowStream[R]) acquire(plan QueryPlan) error {
+func (s *RowStream[R]) acquire(plan implRouting.QueryPlan) error {
 	request := s.privateStorage.InternalRequest
-	var target Target
+	var target model.Target
 	var routed *implPool.InternalHostConnPool // the pool of the plan's route
 	if s.privateStorage.retryTarget != nil {
 		target = *s.privateStorage.retryTarget
 		s.privateStorage.retryTarget = nil
 	} else if request.connection != nil {
-		target = Target{HostID: implEndpoint.InternalHostInfoHostUUID(request.connection.InternalHost)}
+		target = model.Target{HostID: implEndpoint.InternalHostInfoHostUUID(request.connection.InternalHost)}
 	} else if plan != nil {
 		r, ok := plan.Next()
 		if !ok {
-			return ErrNoConnections
+			return runtimeerrors.ErrNoConnections
 		}
 		target = r.Target()
 		routed = r.InternalHost().Pool()
 	} else if request.InternalRouting.HostID.Set {
-		target = Target{HostID: request.InternalRouting.HostID.Value, ShardID: request.InternalRouting.ShardID, StrictShard: request.InternalRouting.ShardID.Set}
+		target = model.Target{HostID: request.InternalRouting.HostID.Value, ShardID: request.InternalRouting.ShardID, StrictShard: request.InternalRouting.ShardID.Set}
 	} else {
 		hosts := implCluster.SessionData(s.privateStorage.InternalSession).InternalHostSource.InternalGetHostsList()
 		for _, host := range hosts {
@@ -446,7 +453,7 @@ func (s *RowStream[R]) acquire(plan QueryPlan) error {
 			}
 		}
 		if target.HostID.IsEmpty() {
-			return ErrNoConnections
+			return runtimeerrors.ErrNoConnections
 		}
 	}
 	pool := routed
@@ -456,10 +463,10 @@ func (s *RowStream[R]) acquire(plan QueryPlan) error {
 		implCluster.SessionData(s.privateStorage.InternalSession).InternalPool.InternalMu.RUnlock()
 	}
 	if pool == nil || pool.InternalHost == nil || !pool.InternalHost.IsUp() || implCluster.InternalClusterSettingsFilterHost(&implCluster.SessionData(s.privateStorage.InternalSession).InternalCfg, pool.InternalHost) {
-		return ErrNoConnections
+		return runtimeerrors.ErrNoConnections
 	}
 	for {
-		var reservation *exclusiveConn
+		var reservation *transport.InternalExclusiveConn
 		var err error
 		if request.connection != nil {
 			reservation, err = request.connection.InternalReserveExclusiveWithLimits(s.privateStorage.InternalCtx, s.privateStorage.limits)
@@ -481,14 +488,14 @@ func (s *RowStream[R]) acquire(plan QueryPlan) error {
 			s.privateStorage.prepared = prepared
 			// Conditional PREPARE responses may omit result columns. The actual
 			// response supplies and validates their shape before decoding output.
-			knownColumns := prepared.InternalColumns.Len() != 0 || request.InternalRouting.Kind == OrdinaryStatement
+			knownColumns := prepared.InternalColumns.Len() != 0 || request.InternalRouting.Kind == cqltype.OrdinaryStatement
 			if knownColumns && (s.privateStorage.plan == nil || !s.privateStorage.columns.Equal(prepared.InternalColumns)) {
 				plan, err := s.privateStorage.InternalDecoder.Compile(prepared.InternalColumns)
 				if err != nil {
 					return err
 				}
 				if plan == nil {
-					return typeValidation("stream plan", "decoder returned nil plan")
+					return cqltype.TypeValidation("stream plan", "decoder returned nil plan")
 				}
 				s.privateStorage.plan = plan
 				s.rememberPlan(prepared.InternalColumns, plan)
@@ -511,11 +518,11 @@ func (s *RowStream[R]) acquire(plan QueryPlan) error {
 		}
 	}
 }
-func (s *RowStream[R]) wireRequest(consistency Consistency) (*attemptRequest, error) {
+func (s *RowStream[R]) wireRequest(consistency cqltype.Consistency) (*model.AttemptRequest, error) {
 	r := s.privateStorage.InternalRequest
 	conn := s.privateStorage.InternalReservation.InternalConn
 	rt := InternalRuntimeFor(s.privateStorage.InternalSession)
-	w := new(attemptRequest)
+	w := new(model.AttemptRequest)
 	if err := rt.newAttempt(w, conn, r, s.state, consistency); err != nil {
 		return nil, err
 	}
@@ -532,7 +539,7 @@ func InternalRowStreamLoadPage[R any](s *RowStream[R]) error {
 	if err == nil || log.empty() {
 		return err
 	}
-	return log.error(err, Result{})
+	return log.error(err, model.Result{})
 }
 
 // rowStreamLoadPage loads the next page, recording its failed attempts in log.
@@ -542,7 +549,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 	request.tabletFeedback = implCluster.InternalSessionCaptureTabletFeedback(s.privateStorage.InternalSession, request.InternalRouting, metadata)
 	tablet := lookupRequestTablet(metadata, request)
 	request.tabletVersionBlock = tablet.VersionBlock(request.InternalRouting)
-	var plan QueryPlan
+	var plan implRouting.QueryPlan
 	if policy := request.InternalOptions.InternalProfile.Routing; policy != nil {
 		if err := policy.Validate(metadata); err != nil {
 			return err
@@ -572,7 +579,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			// and validates the same canonical input, then sends the next page
 			// state; it never replays a page that has exposed caller output.
 			if s.Info().OutputStarted && !s.state.More() {
-				return &SchemaChangedError{Statement: request.InternalStatement, Previous: request.InternalValues.Columns, Current: request.InternalPrepared().InternalParameters}
+				return &runtimeerrors.SchemaChangedError{Statement: request.InternalStatement, Previous: request.InternalValues.Columns, Current: request.InternalPrepared().InternalParameters}
 			}
 			conn := s.privateStorage.InternalReservation.InternalConn
 			if err := s.privateStorage.InternalReservation.InternalClose(true); err != nil {
@@ -584,7 +591,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 				return err
 			}
 			s.privateStorage.prepared = prepared
-			s.privateStorage.retryTarget = &Target{HostID: conn.InternalHostID(), ShardID: Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
+			s.privateStorage.retryTarget = &model.Target{HostID: conn.InternalHostID(), ShardID: cqltype.Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
 			if err := s.acquire(plan); err != nil {
 				return err
 			}
@@ -599,9 +606,9 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		response, err := s.privateStorage.InternalReservation.InternalExchange(pagectx, wireRequest)
 		wireRequest.Lease.Release()
 		conn := s.privateStorage.InternalReservation.InternalConn
-		event := AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: Target{HostID: conn.InternalHostID()}, Started: started, Latency: time.Since(started), Err: err, Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
+		event := implRouting.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: model.Target{HostID: conn.InternalHostID()}, Started: started, Latency: time.Since(started), Err: err, Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
 		if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0 {
-			event.Target.ShardID = Option[uint32]{Set: true, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}
+			event.Target.ShardID = cqltype.Option[uint32]{Set: true, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}
 		}
 		rt := InternalRuntimeFor(s.privateStorage.InternalSession)
 		rt.attempts.Add(1)
@@ -638,7 +645,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 				if s.privateStorage.plan == nil || !s.privateStorage.columns.Equal(page.columns) {
 					s.privateStorage.plan, err = s.privateStorage.InternalDecoder.Compile(page.columns)
 					if err == nil && s.privateStorage.plan == nil {
-						err = typeValidation("stream plan", "decoder returned nil plan")
+						err = cqltype.TypeValidation("stream plan", "decoder returned nil plan")
 					}
 					if err == nil {
 						s.rememberPlan(page.columns, s.privateStorage.plan)
@@ -673,12 +680,12 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		if s.Info().OutputStarted {
 			return err
 		}
-		if unprepared, ok := errors.AsType[*RequestErrUnprepared](err); attempt == 1 && ok && request.source().rejected(unprepared.StatementId, wireRequest.PreparedID) {
+		if unprepared, ok := errors.AsType[*protocol.RequestErrUnprepared](err); attempt == 1 && ok && request.source().rejected(unprepared.StatementId, wireRequest.PreparedID) {
 			if closeErr := s.privateStorage.InternalReservation.InternalClose(true); closeErr != nil {
 				return closeErr
 			}
 			s.privateStorage.InternalReservation = nil
-			s.privateStorage.retryTarget = &Target{HostID: conn.InternalHostID(), ShardID: Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
+			s.privateStorage.retryTarget = &model.Target{HostID: conn.InternalHostID(), ShardID: cqltype.Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
 			s.privateStorage.prepared, err = request.source().onConn(pagectx, InternalRuntimeFor(s.privateStorage.InternalSession), conn, request.InternalValues, true, s.privateStorage.prepared)
 			if err != nil {
 				return err
@@ -688,25 +695,25 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		}
 		decision := retry.Decision{}
 		if policy := request.InternalOptions.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.InternalRouting.Conditional, BytesWritten: attemptStatus != NotExecuted, ExecutionStatus: attemptStatus})
+			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.InternalRouting.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
 		}
 		if decision.Action == retry.Stop {
 			return err
 		}
 		if decision.Action != retry.Same && decision.Action != retry.Next {
-			return typeValidation("stream retry", "requires retry same, next or stop")
+			return cqltype.TypeValidation("stream retry", "requires retry same, next or stop")
 		}
 		if decision.Delay < 0 {
-			return typeValidation("retry delay", "negative delay")
+			return cqltype.TypeValidation("retry delay", "negative delay")
 		}
 		if decision.Consistency.Set {
-			if !validConsistency(decision.Consistency.Value) {
-				return typeValidation("retry consistency", "invalid consistency")
+			if !settings.InternalValidConsistency(decision.Consistency.Value) {
+				return cqltype.TypeValidation("retry consistency", "invalid consistency")
 			}
 			consistency = decision.Consistency.Value
 		}
 		if decision.Action == retry.Same && s.privateStorage.InternalReservation.InternalClosing.Load() {
-			s.privateStorage.retryTarget = &Target{HostID: conn.InternalHostID(), ShardID: Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
+			s.privateStorage.retryTarget = &model.Target{HostID: conn.InternalHostID(), ShardID: cqltype.Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
 		}
 		if decision.Action == retry.Next || s.privateStorage.InternalReservation.InternalClosing.Load() {
 			s.privateStorage.InternalReservation.InternalClose(false)

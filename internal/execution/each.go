@@ -9,14 +9,18 @@ import (
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 // eachScratch holds the row cursor and reader that a decoder receives by
 // pointer. A Query embeds one, so its executions allocate neither.
 type eachScratch struct {
-	reader RowReader
+	reader codec.RowReader
 	cursor wire.Cursor
 }
 
@@ -24,8 +28,8 @@ type eachScratch struct {
 // the error inside Query.Each slows its row loop by about 1.4%.
 //
 //go:noinline
-func nilEachCallback() (Result, error) {
-	err := typeValidation("row callback", "nil callback")
+func nilEachCallback() (model.Result, error) {
+	err := cqltype.TypeValidation("row callback", "nil callback")
 	return InternalExecutionErrorResult(err), err
 }
 
@@ -57,18 +61,18 @@ func isStopIteration(err error) bool {
 // response storage released before Each returns, so there is no iterator to
 // close or wait for. Values that borrow response storage are valid only until
 // fn returns. A non-nil error from fn stops the iteration and is returned.
-func RunEach[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions, dst *R, fn func(*R) error) (Result, error) {
+func RunEach[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions, dst *R, fn func(*R) error) (model.Result, error) {
 	_, result, err := each(ctx, s, b, options, dst, fn, new(eachScratch))
 	return result, err
 }
 
 // each runs RunEach, or RunOne when fn is nil.
-func each[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions, dst *R, fn func(*R) error, scratch *eachScratch) (bool, Result, error) {
+func each[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions, dst *R, fn func(*R) error, scratch *eachScratch) (bool, model.Result, error) {
 	if b == nil {
-		return false, Result{}, typeValidation("binding", "nil binding")
+		return false, model.Result{}, cqltype.TypeValidation("binding", "nil binding")
 	}
 	if dst == nil {
-		return false, Result{}, typeValidation("destination", "nil row destination")
+		return false, model.Result{}, cqltype.TypeValidation("destination", "nil row destination")
 	}
 	runctx, cancel, request, err := InternalAdmitExecution(ctx, s, b, options)
 	if err != nil {
@@ -82,16 +86,16 @@ func each[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options 
 	return found, result, err
 }
 
-func eachPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], request *InternalExecutionRequest, dst *R, fn func(*R) error, scratch *eachScratch) (bool, Result, error) {
+func eachPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], request *InternalExecutionRequest, dst *R, fn func(*R) error, scratch *eachScratch) (bool, model.Result, error) {
 	rt := InternalRuntimeFor(s)
 	plans := b.privateStorage.plans
 	if plans == nil {
 		plans = &InternalResultPlanCache[R]{}
 	}
-	var result Result
-	var history pagingHistory
-	var inline [paging.InternalInlineHistory]PageState // the history's first tokens
-	state := StartPage()
+	var result model.Result
+	var history paging.InternalPagingHistory
+	var inline [paging.InternalInlineHistory]model.PageState // the history's first tokens
+	state := model.StartPage()
 	for first := true; ; first = false {
 		if !first && request.query != nil {
 			// The previous page was released before this request, so the
@@ -104,13 +108,13 @@ func eachPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], requ
 			if first {
 				return false, InternalExecutionErrorResult(err), err
 			}
-			mergeResult(&result, InternalExecutionErrorResult(err))
+			model.MergeResult(&result, InternalExecutionErrorResult(err))
 			return false, result, err
 		}
 		if first {
 			result = response.Result
 		} else {
-			mergeResult(&result, response.Result)
+			model.MergeResult(&result, response.Result)
 		}
 		state = response.State
 		err = decodeEach(ctx, s, response, b.privateStorage.InternalRows, plans, dst, fn, scratch)
@@ -125,7 +129,7 @@ func eachPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], requ
 			return fn != nil, result, nil
 		}
 		if first {
-			history = pagingHistory{InternalMaxCount: rt.InternalConfig.Limits.MaxPagingStates, InternalMaxBytes: rt.InternalConfig.Limits.MaxPagingStateBytes, InternalInline: &inline}
+			history = paging.InternalPagingHistory{InternalMaxCount: rt.InternalConfig.Limits.MaxPagingStates, InternalMaxBytes: rt.InternalConfig.Limits.MaxPagingStateBytes, InternalInline: &inline}
 		}
 		if err := history.InternalAdd(state); err != nil {
 			return false, result, err
@@ -135,13 +139,13 @@ func eachPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], requ
 
 // decodeEach decodes one page, calling fn after each row; a nil fn stops after
 // the first row with errStopEach. The caller releases the response.
-func decodeEach[R any](ctx context.Context, s *implCluster.Core, response *responsePage, decoder RowDecoder[R], plans *InternalResultPlanCache[R], dst *R, fn func(*R) error, scratch *eachScratch) error {
+func decodeEach[R any](ctx context.Context, s *implCluster.Core, response *transport.InternalResponsePage, decoder codec.RowDecoder[R], plans *InternalResultPlanCache[R], dst *R, fn func(*R) error, scratch *eachScratch) error {
 	plan, err := plans.InternalSelectPlan(response, decoder)
 	if err != nil {
 		return err
 	}
 	if response.RowCount < 0 {
-		return &ProtocolError{Stage: "rows", Err: errors.New("negative row count")}
+		return &cqltype.ProtocolError{Stage: "rows", Err: errors.New("negative row count")}
 	}
 	preserves := codec.PreservesRowDestination(plan)
 	scratch.cursor = wire.CursorOver(response.Rows)
@@ -154,14 +158,14 @@ func decodeEach[R any](ctx context.Context, s *implCluster.Core, response *respo
 		if err := plan.DecodeInto(reader, dst); err != nil {
 			return err
 		}
-		if err := finishRowReader(reader); err != nil {
+		if err := codec.FinishRowReader(reader); err != nil {
 			return err
 		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if s.Closed() {
-			return ErrClosed
+			return runtimeerrors.ErrClosed
 		}
 		if fn == nil {
 			codec.DetachRow(plan, dst)
@@ -175,7 +179,7 @@ func decodeEach[R any](ctx context.Context, s *implCluster.Core, response *respo
 		}
 	}
 	if err := scratch.cursor.RequireEnd(); err != nil {
-		return &ProtocolError{Stage: "rows", Err: err}
+		return &cqltype.ProtocolError{Stage: "rows", Err: err}
 	}
 	return nil
 }
@@ -184,7 +188,7 @@ func decodeEach[R any](ctx context.Context, s *implCluster.Core, response *respo
 // reporting whether a row existed. Further rows are ignored, as with
 // database/sql's QueryRow. Borrowed fields are detached before response storage
 // is released; built-in owning fields keep their destination storage.
-func RunOne[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions, dst *R) (bool, Result, error) {
+func RunOne[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options BoundOptions, dst *R) (bool, model.Result, error) {
 	found, result, err := each(ctx, s, b, options, dst, nil, new(eachScratch))
 	if !found && err == nil {
 		InternalClearDestination(dst)
@@ -198,7 +202,7 @@ func RunOne[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], option
 // iteration and is returned. The query is ready for its next execution when
 // Each returns. The Result reports the coordinator, attempts, latency, row
 // count and any warnings, trace IDs or custom payload.
-func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error) (Result, error) {
+func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error) (model.Result, error) {
 	if fn == nil {
 		return nilEachCallback()
 	}
@@ -214,7 +218,7 @@ func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) err
 // reporting whether a row existed; without one, dst is cleared. Borrowed fields
 // are detached, so the result stays valid after One returns. The query is ready
 // for its next execution when One returns.
-func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, Result, error) {
+func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, model.Result, error) {
 	if err := q.capture(ctx, value); err != nil {
 		return false, InternalExecutionErrorResult(err), err
 	}

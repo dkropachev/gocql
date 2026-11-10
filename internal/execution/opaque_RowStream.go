@@ -27,34 +27,38 @@ import (
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/paging"
+	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 type RowStreamStorage[R any] struct {
 	InternalCtx         context.Context
-	InternalDecoder     StreamRowDecoder[R]
-	plan                StreamRowPlan[R]
+	InternalDecoder     codec.StreamRowDecoder[R]
+	plan                codec.StreamRowPlan[R]
 	err                 error
-	bufferedPage        *responsePage
+	bufferedPage        *transport.InternalResponsePage
 	bufferedBody        *wire.Stream
 	bufferedReader      *codec.StreamRowReader
 	bufferedPlans       *streamPlanCache[R]
-	attemptMetadata     *streamResponse
+	attemptMetadata     *transport.InternalStreamResponse
 	closeDone           chan struct{}
-	retryTarget         *Target
+	retryTarget         *model.Target
 	InternalCancel      context.CancelFunc
 	stop                func() bool
 	InternalSession     *implCluster.Core
 	InternalRequest     *InternalExecutionRequest
-	response            *streamResponse
-	InternalReservation *exclusiveConn
+	response            *transport.InternalStreamResponse
+	InternalReservation *transport.InternalExclusiveConn
 	prepared            *InternalHostPrepared
 	pageCancel          context.CancelFunc
 	cursor              queryCursor
-	columns             Columns
-	InternalHistory     pagingHistory
+	columns             cqltype.Columns
+	InternalHistory     paging.InternalPagingHistory
 	info                StreamInfo
-	limits              StreamLimits
+	limits              transport.StreamLimits
 	InternalActive      sync.Mutex
 	mu                  sync.Mutex
 	bufferedIndex       int32

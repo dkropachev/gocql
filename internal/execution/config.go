@@ -7,19 +7,22 @@ import (
 	"context"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
-func OpenSingleHost(ctx context.Context, config Config, hostID UUID) (*Session, error) {
+func OpenSingleHost(ctx context.Context, config settings.Config, hostID cqltype.UUID) (*Session, error) {
 	if hostID.IsEmpty() {
-		return nil, typeValidation("host ID", "empty UUID")
+		return nil, cqltype.TypeValidation("host ID", "empty UUID")
 	}
 	previous := config.HostFilter
-	config.HostFilter = func(host HostSnapshot) bool { return host.ID == hostID && (previous == nil || previous(host)) }
+	config.HostFilter = func(host model.HostSnapshot) bool { return host.ID == hostID && (previous == nil || previous(host)) }
 	return Connect(ctx, config)
 }
 
-func Connect(ctx context.Context, config Config) (*Session, error) {
-	core, err := implCluster.InternalConnectCluster(ctx, config, func(s *implCluster.Core, c Config) *Config {
+func Connect(ctx context.Context, config settings.Config) (*Session, error) {
+	core, err := implCluster.InternalConnectCluster(ctx, config, func(s *implCluster.Core, c settings.Config) *settings.Config {
 		rt := InternalRuntimeFor(s)
 		rt.InternalConfig = c
 		rt.InternalSetProfile(c.DefaultProfile)

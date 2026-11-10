@@ -3,8 +3,10 @@
 
 package execution
 
+import "github.com/scylladb/gocql/v2/internal/codec"
+
 type BoundStorage[R any] struct {
-	InternalRows    RowDecoder[R]
+	InternalRows    codec.RowDecoder[R]
 	plans           *InternalResultPlanCache[R]
 	rows            *rowsHolder[R] // a reusable query's iterator storage
 	InternalRequest InternalExecutionRequest

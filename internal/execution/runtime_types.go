@@ -7,7 +7,11 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -83,7 +87,7 @@ func (o *InternalInputOwner) InternalAdmit() error {
 	for {
 		v := o.state.Load()
 		if v&ownerClosed != 0 {
-			return ErrClosed
+			return runtimeerrors.ErrClosed
 		}
 		if o.state.CompareAndSwap(v, v+1) {
 			return nil
@@ -146,7 +150,7 @@ func (o *InternalInputOwner) InternalClose() {
 func (o *InternalInputOwner) InternalWait(ctx context.Context) error {
 	done := o.done
 	if !o.InternalClosed() {
-		return typeValidation("binding", "Wait requires Close first")
+		return cqltype.TypeValidation("binding", "Wait requires Close first")
 	}
 	select {
 	case <-done:
@@ -182,25 +186,25 @@ type InternalExecutionRequest struct {
 	// the direct path. It is cleared once that page succeeded, so that
 	// continuation and prefetched pages get storage of their own; Each, which
 	// releases every page before requesting the next, lends it again.
-	responseDest *responsePage
+	responseDest *transport.InternalResponsePage
 	// served is the connection whose attempt produced the last direct page;
 	// pinned, when set, is where the next page's first attempt goes.
-	served, pinned     *Conn
-	connection         *Conn
-	InternalOwner      *inputOwner
+	served, pinned     *transport.Conn
+	connection         *transport.Conn
+	InternalOwner      *InternalInputOwner
 	batch              *InternalBatchState
 	InternalLogical    *InternalLogicalExecution
 	InternalStatement  string
 	keyspace           string
-	InternalValues     encodedValues
-	tabletFeedback     tabletFeedbackStamp
-	InternalRouting    RoutingInfo
+	InternalValues     model.EncodedValues
+	tabletFeedback     routing.InternalTabletFeedbackStamp
+	InternalRouting    model.RoutingInfo
 	InternalOptions    InternalResolvedOptions
 	tabletVersionBlock byte
 }
 
 type ExecutionError = runtimeerrors.ExecutionError
 
-func newExecutionError(err error, result Result, status ExecutionStatus, attempts []AttemptFailure) *ExecutionError {
+func newExecutionError(err error, result model.Result, status cqltype.ExecutionStatus, attempts []AttemptFailure) *ExecutionError {
 	return runtimeerrors.NewExecutionError(err, result, status, attempts)
 }

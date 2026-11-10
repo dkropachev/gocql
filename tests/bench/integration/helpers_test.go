@@ -55,6 +55,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
+	"github.com/scylladb/gocql/v2/internal/binding"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -219,7 +220,7 @@ func BindOwned[P any, R any](a0 *gocql.Prepared[P, R], a1 P) (*Bound[R], error) 
 }
 
 func BindUnpreparedOwned[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a2 P) (*Bound[R], error) {
-	return implExecution.BindUnpreparedOwned[P, R](implExecution.Statement[P, R]{CQL: a0.CQL, Params: a0.Params, Rows: a0.Rows, Kind: a0.Kind, BindMarkers: a0.BindMarkers}, a1, a2)
+	return implExecution.BindUnpreparedOwned[P, R](binding.Statement[P, R]{CQL: a0.CQL, Params: a0.Params, Rows: a0.Rows, Kind: a0.Kind, BindMarkers: a0.BindMarkers}, a1, a2)
 }
 
 func Exec[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.BoundOptions) (gocql.Result, error) {

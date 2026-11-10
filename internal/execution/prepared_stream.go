@@ -6,30 +6,33 @@ package execution
 import (
 	"context"
 
+	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 // StreamStatement pairs CQL and its parameters with a streaming result decoder.
 type StreamStatement[P, R any] struct {
 	CQL    string
-	Params ParamEncoder[P]
-	Rows   StreamRowDecoder[R]
-	Kind   StatementKind
+	Params codec.ParamEncoder[P]
+	Rows   codec.StreamRowDecoder[R]
+	Kind   cqltype.StatementKind
 }
 
 // PreparedStream is immutable and shareable. Each worker creates its own Query.
 // Its initial plan is immutable; each query revalidates changed result metadata.
 type PreparedStream[P, R any] struct {
-	prepared *Prepared[P, EmptyRecord]
-	decoder  StreamRowDecoder[R]
-	columns  Columns
-	plan     StreamRowPlan[R]
+	prepared *Prepared[P, codec.EmptyRecord]
+	decoder  codec.StreamRowDecoder[R]
+	columns  cqltype.Columns
+	plan     codec.StreamRowPlan[R]
 }
 
 func (s *Session) PrepareStream[P, R any](ctx context.Context, statement StreamStatement[P, R], options ...PrepareOptions) (*PreparedStream[P, R], error) {
 	var o PrepareOptions
 	if len(options) > 1 {
-		return nil, typeValidation("prepare options", "at most one PrepareOptions")
+		return nil, cqltype.TypeValidation("prepare options", "at most one PrepareOptions")
 	}
 	if len(options) == 1 {
 		o = options[0]
@@ -39,33 +42,33 @@ func (s *Session) PrepareStream[P, R any](ctx context.Context, statement StreamS
 
 func PrepareStream[P, R any](ctx context.Context, session *implCluster.Core, statement StreamStatement[P, R], options PrepareOptions) (*PreparedStream[P, R], error) {
 	if statement.Rows == nil {
-		return nil, typeValidation("stream decoder", "nil decoder")
+		return nil, cqltype.TypeValidation("stream decoder", "nil decoder")
 	}
-	base := Statement[P, EmptyRecord]{CQL: statement.CQL, Params: statement.Params, Kind: statement.Kind, Rows: InternalExecRowsDecoder{}}
+	base := binding.Statement[P, codec.EmptyRecord]{CQL: statement.CQL, Params: statement.Params, Kind: statement.Kind, Rows: InternalExecRowsDecoder{}}
 	prepared, err := prepareStatement(ctx, session, &base, options)
 	if err != nil {
 		return nil, err
 	}
-	var plan StreamRowPlan[R]
+	var plan codec.StreamRowPlan[R]
 	// Conditional PREPARE responses can omit result metadata. In that case
 	// the first actual response validates the stream decoder before any output.
-	if prepared.columns.Len() != 0 || prepared.kind == OrdinaryStatement {
+	if prepared.columns.Len() != 0 || prepared.kind == cqltype.OrdinaryStatement {
 		plan, err = statement.Rows.Compile(prepared.columns)
 		if err != nil {
 			return nil, err
 		}
 		if plan == nil {
-			return nil, typeValidation("stream plan", "decoder returned nil plan")
+			return nil, cqltype.TypeValidation("stream plan", "decoder returned nil plan")
 		}
 	}
-	p := &Prepared[P, EmptyRecord]{privateStorage: PreparedStorage[P, EmptyRecord]{InternalState: prepared.state, InternalKind: prepared.kind, InternalParams: prepared.params, InternalRows: InternalExecRowsDecoder{}}}
+	p := &Prepared[P, codec.EmptyRecord]{privateStorage: PreparedStorage[P, codec.EmptyRecord]{InternalState: prepared.state, InternalKind: prepared.kind, InternalParams: prepared.params, InternalRows: InternalExecRowsDecoder{}}}
 	return &PreparedStream[P, R]{prepared: p, decoder: statement.Rows, columns: prepared.columns, plan: plan}, nil
 }
 
 // Query creates independent worker-owned execution state with fixed options.
 func (p *PreparedStream[P, R]) Query(options StreamOptions) (*StreamQuery[P, R], error) {
 	if p == nil || p.prepared == nil {
-		return nil, typeValidation("prepared stream", "nil handle")
+		return nil, cqltype.TypeValidation("prepared stream", "nil handle")
 	}
 	q, err := p.prepared.StreamQuery(p.decoder, options)
 	if err != nil {
@@ -75,15 +78,15 @@ func (p *PreparedStream[P, R]) Query(options StreamOptions) (*StreamQuery[P, R],
 	return q, nil
 }
 
-func (p *PreparedStream[P, R]) Parameters() Columns {
+func (p *PreparedStream[P, R]) Parameters() cqltype.Columns {
 	if p == nil {
-		return Columns{}
+		return cqltype.Columns{}
 	}
 	return p.prepared.Parameters()
 }
-func (p *PreparedStream[P, R]) Columns() Columns {
+func (p *PreparedStream[P, R]) Columns() cqltype.Columns {
 	if p == nil {
-		return Columns{}
+		return cqltype.Columns{}
 	}
 	return p.prepared.Columns()
 }

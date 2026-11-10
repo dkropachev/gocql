@@ -7,7 +7,12 @@ import (
 	"context"
 	"errors"
 
+	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/routing"
 )
 
 // Session owns cluster metadata, pooled connections and typed executions.
@@ -39,7 +44,7 @@ func InternalSessionData(s *Session) *implCluster.SessionStorage {
 
 // Prepare prepares statement on s. At most one PrepareOptions may be given;
 // none prepares with the session's keyspace on any host.
-func (s *Session) Prepare[P, R any](ctx context.Context, statement Statement[P, R], options ...PrepareOptions) (*Prepared[P, R], error) {
+func (s *Session) Prepare[P, R any](ctx context.Context, statement binding.Statement[P, R], options ...PrepareOptions) (*Prepared[P, R], error) {
 	var o PrepareOptions
 	switch len(options) {
 	case 0:
@@ -57,14 +62,14 @@ func (s *Session) Prepare[P, R any](ctx context.Context, statement Statement[P, 
 // execution's input in query-owned storage, including values passed to
 // custom codecs. Prefer Prepare for statements that run often: a prepared
 // statement sends only its id and decodes rows with cached metadata.
-func (s *Session) UnpreparedQuery[P, R any](statement Statement[P, R], options Options) (*Query[P, R], error) {
+func (s *Session) UnpreparedQuery[P, R any](statement binding.Statement[P, R], options Options) (*Query[P, R], error) {
 	return NewUnpreparedQuery(InternalCore(s), statement, options)
 }
 
 // UnpreparedStreamQuery returns a reusable query that sends statement's CQL
 // text to s on every execution, without server preparation, and streams each
 // row into decoder. The statement declares no row decoder of its own.
-func (s *Session) UnpreparedStreamQuery[P, R any](statement Statement[P, EmptyRecord], decoder StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
+func (s *Session) UnpreparedStreamQuery[P, R any](statement binding.Statement[P, codec.EmptyRecord], decoder codec.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
 	return NewUnpreparedStreamQuery(InternalCore(s), statement, decoder, options)
 }
 
@@ -75,7 +80,7 @@ func (s *Session) UnpreparedStreamQuery[P, R any](statement Statement[P, EmptyRe
 // again for it on each execution.
 func (s *Session) BindOptions(options Options) (BoundOptions, error) {
 	if s == nil {
-		return BoundOptions{}, typeValidation("session", "nil session")
+		return BoundOptions{}, cqltype.TypeValidation("session", "nil session")
 	}
 	return InternalBindOptions(InternalCore(s), options)
 }
@@ -85,9 +90,9 @@ func (s *Session) BindOptions(options Options) (BoundOptions, error) {
 // conditional batch. At most one BoundOptions may be given; none uses the
 // session's default profile. ExecBatch is safe for concurrent use with other
 // session calls, but a Batch must not be changed while it is sent.
-func (s *Session) ExecBatch(ctx context.Context, kind BatchKind, batch *Batch, options ...BoundOptions) (Result, error) {
+func (s *Session) ExecBatch(ctx context.Context, kind cqltype.BatchKind, batch *Batch, options ...BoundOptions) (model.Result, error) {
 	if s == nil {
-		err := typeValidation("session", "nil session")
+		err := cqltype.TypeValidation("session", "nil session")
 		return InternalExecutionErrorResult(err), err
 	}
 	core := InternalCore(s)
@@ -105,12 +110,12 @@ func (s *Session) ExecBatch(ctx context.Context, kind BatchKind, batch *Batch, o
 // decoded with decoder. A conditional batch returns one row per conditional
 // statement, or one row reporting that it was not applied. Options are as for
 // ExecBatch. Close the page when done with it.
-func (s *Session) RunBatch[R any](ctx context.Context, kind BatchKind, batch *Batch, decoder RowDecoder[R], options ...BoundOptions) (*Page[R], error) {
+func (s *Session) RunBatch[R any](ctx context.Context, kind cqltype.BatchKind, batch *Batch, decoder codec.RowDecoder[R], options ...BoundOptions) (*Page[R], error) {
 	if s == nil {
-		return nil, typeValidation("session", "nil session")
+		return nil, cqltype.TypeValidation("session", "nil session")
 	}
 	if decoder == nil {
-		return nil, typeValidation("batch rows", "nil decoder")
+		return nil, cqltype.TypeValidation("batch rows", "nil decoder")
 	}
 	core := InternalCore(s)
 	q, o, err := beginBatch(ctx, core, kind, batch, options)
@@ -119,7 +124,7 @@ func (s *Session) RunBatch[R any](ctx context.Context, kind BatchKind, batch *Ba
 	}
 	bound := &Bound[R]{privateStorage: BoundStorage[R]{InternalRows: decoder}}
 	batch.queryExec(&bound.privateStorage.InternalRequest, &q.state, kind)
-	page, err := RunPage(ctx, core, bound, StartPage(), o)
+	page, err := RunPage(ctx, core, bound, model.StartPage(), o)
 	q.state.owner.InternalRelease()
 	return page, err
 }
@@ -154,7 +159,7 @@ func (s *Session) Closed() bool { return s.core.Closed() }
 func (s *Session) Metadata() *implCluster.MetadataSnapshot { return s.core.Metadata() }
 
 // Metrics returns a snapshot of the session's metrics.
-func (s *Session) Metrics() MetricsSnapshot { return InternalCore(s).Metrics() }
+func (s *Session) Metrics() routing.MetricsSnapshot { return InternalCore(s).Metrics() }
 
 // RefreshMetadata waits for the shared topology refresh under the caller's
 // context. Metadata queries themselves use the session metadata timeout.
@@ -162,7 +167,7 @@ func (s *Session) RefreshMetadata(ctx context.Context) error { return s.core.Ref
 
 // Trace reads tracing tables through the same typed QUERY/codec path as user
 // requests. Readiness polling is governed by one context across every round.
-func (s *Session) Trace(ctx context.Context, id UUID) (implCluster.TraceInfo, error) {
+func (s *Session) Trace(ctx context.Context, id cqltype.UUID) (implCluster.TraceInfo, error) {
 	return s.core.Trace(ctx, id)
 }
 

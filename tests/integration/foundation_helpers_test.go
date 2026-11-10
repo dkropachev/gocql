@@ -7,6 +7,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/binding"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 )
 
@@ -50,6 +51,6 @@ func prepareFixture[P, R any, O fixturePrepareOptions](ctx context.Context, sess
 	return (*gocql.Prepared[P, R])(p), err
 }
 
-func fixtureStatement[P, R any](s cql.Statement[P, R]) implExecution.Statement[P, R] {
-	return implExecution.Statement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, Kind: s.Kind, BindMarkers: s.BindMarkers}
+func fixtureStatement[P, R any](s cql.Statement[P, R]) binding.Statement[P, R] {
+	return binding.Statement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, Kind: s.Kind, BindMarkers: s.BindMarkers}
 }

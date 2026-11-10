@@ -6,13 +6,15 @@ package execution
 import (
 	"context"
 
+	"github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/settings"
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 )
 
 type directTestObserver struct{}
 
-func (directTestObserver) ObserveRequest(RequestEvent) {}
-func (directTestObserver) ObserveAttempt(AttemptEvent) {}
+func (directTestObserver) ObserveRequest(settings.RequestEvent) {}
+func (directTestObserver) ObserveAttempt(routing.AttemptEvent)  {}
 
 type directTestStreamObserver struct{}
 

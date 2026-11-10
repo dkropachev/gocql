@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 func TestEachStopIteration(t *testing.T) {
@@ -99,10 +100,10 @@ func TestEachStopIteration(t *testing.T) {
 // happens to be the same sentinel.
 type stopDecodeRows struct{}
 
-func (d stopDecodeRows) Compile(Columns) (RowPlan[[]byte], error) { return d, nil }
-func (d stopDecodeRows) Clone(v []byte) []byte                    { return append([]byte(nil), v...) }
-func (stopDecodeRows) Decode(*RowReader) ([]byte, error)          { return nil, StopIteration }
-func (stopDecodeRows) DecodeInto(*RowReader, *[]byte) error       { return StopIteration }
+func (d stopDecodeRows) Compile(cqltype.Columns) (codec.RowPlan[[]byte], error) { return d, nil }
+func (d stopDecodeRows) Clone(v []byte) []byte                                  { return append([]byte(nil), v...) }
+func (stopDecodeRows) Decode(*codec.RowReader) ([]byte, error)                  { return nil, StopIteration }
+func (stopDecodeRows) DecodeInto(*codec.RowReader, *[]byte) error               { return StopIteration }
 
 func TestEachStopIterationOnlyFromCallback(t *testing.T) {
 	q, serve := eachTestQuery(t)

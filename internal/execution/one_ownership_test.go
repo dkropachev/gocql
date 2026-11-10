@@ -10,6 +10,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
 )
 
 func TestOneOwnsBorrowedResult(t *testing.T) {
@@ -21,7 +22,7 @@ func TestOneOwnsBorrowedResult(t *testing.T) {
 			p := codecTestMust(Prepare(context.Background(), s, statement, PrepareOptions{}))
 			q := codecTestMust(p.Query(Options{}))
 			defer q.Close(context.Background())
-			read := func(dst *cqltype.Bytes) (bool, Result, error) {
+			read := func(dst *cqltype.Bytes) (bool, model.Result, error) {
 				switch mode {
 				case "prepared":
 					return p.One(context.Background(), int32(1), dst)

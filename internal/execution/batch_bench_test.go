@@ -7,6 +7,8 @@ import (
 	"context"
 	"fmt"
 	"testing"
+
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 func BenchmarkBatch(b *testing.B) {
@@ -42,7 +44,7 @@ func BenchmarkBatch(b *testing.B) {
 							b.Fatal(err)
 						}
 					}
-					if _, err := session.ExecBatch(ctx, UnloggedBatch, &batch); err != nil {
+					if _, err := session.ExecBatch(ctx, cqltype.UnloggedBatch, &batch); err != nil {
 						b.Fatal(err)
 					}
 				}

@@ -47,7 +47,7 @@ func TestPreparedStream(t *testing.T) {
 					served <- err
 				}()
 				decoder := new(countStreamDecoder)
-				p, err := PrepareStream(ctx, s, StreamStatement[codec.EmptyRecord, []byte]{CQL: "UPDATE ks.tbl SET value='x' WHERE k=1 IF EXISTS", Kind: ConditionalStatement, Rows: decoder}, PrepareOptions{})
+				p, err := PrepareStream(ctx, s, StreamStatement[codec.EmptyRecord, []byte]{CQL: "UPDATE ks.tbl SET value='x' WHERE k=1 IF EXISTS", Kind: cqltype.ConditionalStatement, Rows: decoder}, PrepareOptions{})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -288,4 +288,6 @@ func TestPreparedStream(t *testing.T) {
 
 type nilPreparedStreamPlan struct{}
 
-func (nilPreparedStreamPlan) Compile(Columns) (StreamRowPlan[[]byte], error) { return nil, nil }
+func (nilPreparedStreamPlan) Compile(cqltype.Columns) (codec.StreamRowPlan[[]byte], error) {
+	return nil, nil
+}

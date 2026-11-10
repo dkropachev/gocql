@@ -29,6 +29,7 @@ import (
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/routing"
@@ -40,11 +41,11 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
 )
 
-func testOwnedQuery(t testing.TB) *Query[[]byte, EmptyRecord] {
+func testOwnedQuery(t testing.TB) *Query[[]byte, codec.EmptyRecord] {
 	t.Helper()
 	s, _ := attachmentSession()
 	typ := cqltype.BlobType
-	q, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, Options{})
+	q, err := NewUnpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,11 +53,11 @@ func testOwnedQuery(t testing.TB) *Query[[]byte, EmptyRecord] {
 	return q
 }
 
-type slicePlan []Target
+type slicePlan []model.Target
 
-func (p *slicePlan) Next() (Route, bool) {
+func (p *slicePlan) Next() (routing.Route, bool) {
 	if len(*p) == 0 {
-		return Route{}, false
+		return routing.Route{}, false
 	}
 	t := (*p)[0]
 	*p = (*p)[1:]
@@ -291,7 +292,7 @@ func TestQuery(t *testing.T) {
 				t.Fatal(err)
 			}
 			cancelExec()
-			request.InternalLogical.InternalFinish(Result{}, context.Canceled)
+			request.InternalLogical.InternalFinish(model.Result{}, context.Canceled)
 			request.InternalLogical.InternalReleaseInput()
 			q.state.owner.InternalRelease()
 			// The next execution waits for the drain within its context; calls
@@ -323,7 +324,7 @@ func TestQuery(t *testing.T) {
 			if err := q.Close(context.Background()); err != nil {
 				t.Fatal(err)
 			}
-			if err := q.capture(context.Background(), input); !errors.Is(err, ErrClosed) {
+			if err := q.capture(context.Background(), input); !errors.Is(err, runtimeerrors.ErrClosed) {
 				t.Fatal(err)
 			}
 		})
@@ -342,7 +343,7 @@ func TestQuery(t *testing.T) {
 			}
 			request.InternalLogical.installStop(stopFunc(func() { t.Error("retired stop callback invoked") }))
 			cancel()
-			request.InternalLogical.InternalFinish(Result{}, nil)
+			request.InternalLogical.InternalFinish(model.Result{}, nil)
 			request.InternalLogical.InternalReleaseInput()
 			q.state.owner.InternalRelease()
 			if q.state.inlineLogical.lifetime.stop != nil || q.state.request.InternalValues.Framed.Len() != 0 || q.state.request.InternalLogical != nil {
@@ -844,14 +845,14 @@ func TestQuery(t *testing.T) {
 	t.Run("NewUnpreparedQuery", func(t *testing.T) {
 		t.Run("DefaultsEmptyCodecs", func(t *testing.T) {
 			s, _ := attachmentSession()
-			q, err := NewUnpreparedQuery(s, Statement[EmptyRecord, EmptyRecord]{Kind: OrdinaryStatement, CQL: "TRUNCATE ks.t"}, Options{})
+			q, err := NewUnpreparedQuery(s, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "TRUNCATE ks.t"}, Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if err := q.Close(context.Background()); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := NewUnpreparedQuery(s, Statement[[]byte, EmptyRecord]{Kind: OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)"}, Options{}); err == nil {
+			if _, err := NewUnpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)"}, Options{}); err == nil {
 				t.Fatal("typed parameters without an encoder accepted")
 			}
 		})
@@ -965,9 +966,9 @@ func TestQuery(t *testing.T) {
 		})
 
 		t.Run("SkipHostPlanOmitsPinnedHost", func(t *testing.T) {
-			a, b, c := UUID{15: 1}, UUID{15: 2}, UUID{15: 3}
+			a, b, c := cqltype.UUID{15: 1}, cqltype.UUID{15: 2}, cqltype.UUID{15: 3}
 			plan := &skipHostPlan{plan: &slicePlan{{HostID: b}, {HostID: a}, {HostID: b}, {HostID: c}}, host: b}
-			var got []UUID
+			var got []cqltype.UUID
 			for {
 				target, ok := plan.Next()
 				if !ok {
@@ -1191,8 +1192,8 @@ func TestQuery(t *testing.T) {
 
 	t.Run("Validation", func(t *testing.T) {
 		t.Run("Uninitialized", func(t *testing.T) {
-			var q Query[EmptyRecord, EmptyRecord]
-			if _, err := q.Exec(context.Background(), EmptyRecord{}); err == nil {
+			var q Query[codec.EmptyRecord, codec.EmptyRecord]
+			if _, err := q.Exec(context.Background(), codec.EmptyRecord{}); err == nil {
 				t.Fatal("zero query executed")
 			}
 			if err := q.Close(context.Background()); err == nil {

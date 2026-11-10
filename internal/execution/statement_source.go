@@ -8,6 +8,10 @@ import (
 	"context"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 // statementSource is what a request executes: a statement prepared on the
@@ -18,11 +22,11 @@ type statementSource interface {
 	// prepared returns the shared prepared state, or nil for CQL text.
 	prepared() *InternalPreparedState
 	// token computes the routing token of the bound values.
-	token(cells []encodedCell) (Option[int64], error)
+	token(cells []model.EncodedCell) (cqltype.Option[int64], error)
 	// onConn returns the statement's prepared entry on conn, preparing it
 	// first when needed or when force is set; failed names the entry an
 	// UNPREPARED answer rejected. CQL text has no entry and returns nil.
-	onConn(ctx context.Context, rt *InternalSessionRuntime, conn *Conn, values encodedValues, force bool, failed *InternalHostPrepared) (*InternalHostPrepared, error)
+	onConn(ctx context.Context, rt *InternalSessionRuntime, conn *transport.Conn, values model.EncodedValues, force bool, failed *InternalHostPrepared) (*InternalHostPrepared, error)
 	// rejected reports whether an UNPREPARED answer naming id rejected the
 	// statement sent with the prepared ID sent, so that re-preparing it can
 	// repair the attempt. It takes the ID, not the request: an interface
@@ -36,10 +40,10 @@ type statementSource interface {
 type cqlText struct{}
 
 func (cqlText) prepared() *InternalPreparedState { return nil }
-func (cqlText) token([]encodedCell) (Option[int64], error) {
-	return Option[int64]{}, nil
+func (cqlText) token([]model.EncodedCell) (cqltype.Option[int64], error) {
+	return cqltype.Option[int64]{}, nil
 }
-func (cqlText) onConn(context.Context, *InternalSessionRuntime, *Conn, encodedValues, bool, *InternalHostPrepared) (*InternalHostPrepared, error) {
+func (cqlText) onConn(context.Context, *InternalSessionRuntime, *transport.Conn, model.EncodedValues, bool, *InternalHostPrepared) (*InternalHostPrepared, error) {
 	return nil, nil
 }
 func (cqlText) rejected(_, _ []byte) bool { return false }
@@ -61,11 +65,11 @@ func (p preparedSource) prepared() *InternalPreparedState { return p.state }
 
 // token reads the statement's partition key indexes and partitioner, which
 // are fixed when the prepared state is built.
-func (p preparedSource) token(cells []encodedCell) (Option[int64], error) {
+func (p preparedSource) token(cells []model.EncodedCell) (cqltype.Option[int64], error) {
 	state := p.state
-	return computeRoutingToken(cells, state.InternalInfo.PartitionKeyIndexes, implCluster.InternalSessionCapturedRoutingPartitioner(state.InternalSession, state.InternalPartitioner))
+	return routing.InternalComputeRoutingToken(cells, state.InternalInfo.PartitionKeyIndexes, implCluster.InternalSessionCapturedRoutingPartitioner(state.InternalSession, state.InternalPartitioner))
 }
-func (p preparedSource) onConn(ctx context.Context, rt *InternalSessionRuntime, conn *Conn, values encodedValues, force bool, failed *InternalHostPrepared) (*InternalHostPrepared, error) {
+func (p preparedSource) onConn(ctx context.Context, rt *InternalSessionRuntime, conn *transport.Conn, values model.EncodedValues, force bool, failed *InternalHostPrepared) (*InternalHostPrepared, error) {
 	return rt.InternalPrepareOnConnExpected(ctx, conn, p.state, values, force, failed)
 }
 func (preparedSource) rejected(id, sent []byte) bool {
@@ -92,12 +96,12 @@ func (r *InternalExecutionRequest) InternalPrepared() *InternalPreparedState {
 // setPrepared fills w's statement ID fields from the host's prepared entry.
 // An EXECUTE sends no keyspace: the statement was prepared in its keyspace,
 // and the ID names it.
-func setPrepared(w *attemptRequest, prepared *InternalHostPrepared, conn *Conn, includeMetadata bool) {
+func setPrepared(w *model.AttemptRequest, prepared *InternalHostPrepared, conn *transport.Conn, includeMetadata bool) {
 	if prepared == nil {
 		return
 	}
 	w.Keyspace = ""
 	w.PreparedID = prepared.InternalId
 	w.ResultMetadataID = prepared.InternalMetadataID
-	w.SkipMetadata = !includeMetadata && metadataIDTracked(conn.InternalTracksResultMetadataID(), prepared.InternalMetadataID)
+	w.SkipMetadata = !includeMetadata && transport.InternalMetadataIDTracked(conn.InternalTracksResultMetadataID(), prepared.InternalMetadataID)
 }

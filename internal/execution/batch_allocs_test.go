@@ -8,6 +8,8 @@ package execution
 import (
 	"context"
 	"testing"
+
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 func TestBatchAllocs(t *testing.T) {
@@ -28,7 +30,7 @@ func TestBatchAllocs(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if _, err := session.ExecBatch(ctx, UnloggedBatch, &batch); err != nil {
+			if _, err := session.ExecBatch(ctx, cqltype.UnloggedBatch, &batch); err != nil {
 				t.Fatal(err)
 			}
 		}

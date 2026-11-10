@@ -39,6 +39,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
 )
 
 func BenchmarkReusableQuery(b *testing.B) {
@@ -59,7 +60,7 @@ func BenchmarkReusableQuery(b *testing.B) {
 				b.Fatal(err)
 			}
 			cancel()
-			request.InternalLogical.InternalFinish(Result{}, nil)
+			request.InternalLogical.InternalFinish(model.Result{}, nil)
 			request.InternalLogical.InternalReleaseInput()
 			q.state.owner.InternalRelease()
 		}

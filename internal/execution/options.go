@@ -5,6 +5,8 @@ package execution
 
 import (
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
 // BoundOptions is a frozen set of execution options, validated, resolved and
@@ -54,7 +56,7 @@ func NewBoundOptions(session *implCluster.Core, values Options) (BoundOptions, e
 	}
 	// Without its own profile, o resolves against the session's.
 	sessionProfile := owner != nil && values.Profile == nil
-	var base *Profile
+	var base *settings.Profile
 	if sessionProfile {
 		base = owner.InternalProfile
 	}
@@ -75,7 +77,7 @@ func NewBoundOptions(session *implCluster.Core, values Options) (BoundOptions, e
 // BoundOptions.
 func (o BoundOptions) Values() Options {
 	v := *o.values()
-	v.CustomPayload = append([]PayloadEntry(nil), v.CustomPayload...)
+	v.CustomPayload = append([]model.PayloadEntry(nil), v.CustomPayload...)
 	if v.Profile != nil {
 		profile := *v.Profile
 		v.Profile = &profile
@@ -137,7 +139,7 @@ func InternalResolveFor(s *implCluster.Core, o BoundOptions) InternalResolvedOpt
 // InternalSetProfile sets the session's default profile and the resolution
 // of the zero BoundOptions, with templates for the session's keyspace: set the
 // configuration first.
-func (rt *InternalSessionRuntime) InternalSetProfile(profile *Profile) {
+func (rt *InternalSessionRuntime) InternalSetProfile(profile *settings.Profile) {
 	rt.InternalProfile = profile
 	rt.defaultOptions, _ = resolveOptionValues(profile, Options{})
 	rt.defaultOptions.templates = newOptionTemplates(&rt.defaultOptions.InternalProfile, &rt.defaultOptions.InternalOptions, rt.InternalConfig.Keyspace)

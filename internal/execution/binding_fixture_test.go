@@ -5,6 +5,7 @@ package execution_test
 
 import (
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/binding"
 	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 )
 
@@ -12,9 +13,9 @@ import (
 type Bound[R any] = implExecution.Bound[R]
 
 func BindUnpreparedBorrowed[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a2 P) (*Bound[R], error) {
-	return implExecution.BindUnpreparedBorrowed[P, R](implExecution.Statement[P, R]{CQL: a0.CQL, Params: a0.Params, Rows: a0.Rows, Kind: a0.Kind, BindMarkers: a0.BindMarkers}, a1, a2)
+	return implExecution.BindUnpreparedBorrowed[P, R](binding.Statement[P, R]{CQL: a0.CQL, Params: a0.Params, Rows: a0.Rows, Kind: a0.Kind, BindMarkers: a0.BindMarkers}, a1, a2)
 }
 
 func BindUnpreparedOwned[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a2 P) (*Bound[R], error) {
-	return implExecution.BindUnpreparedOwned[P, R](implExecution.Statement[P, R]{CQL: a0.CQL, Params: a0.Params, Rows: a0.Rows, Kind: a0.Kind, BindMarkers: a0.BindMarkers}, a1, a2)
+	return implExecution.BindUnpreparedOwned[P, R](binding.Statement[P, R]{CQL: a0.CQL, Params: a0.Params, Rows: a0.Rows, Kind: a0.Kind, BindMarkers: a0.BindMarkers}, a1, a2)
 }

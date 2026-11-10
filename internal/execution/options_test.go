@@ -10,6 +10,8 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 func TestOptions(t *testing.T) {
@@ -33,9 +35,9 @@ func TestOptions(t *testing.T) {
 	t.Run("NewOptions", func(t *testing.T) {
 		t.Run("FreezesValues", func(t *testing.T) {
 			payload := []byte("value")
-			profile := defaultProfile()
+			profile := settings.InternalDefaultProfile()
 			profile.PageSize = 10
-			values := Options{Profile: &profile, CustomPayload: []PayloadEntry{{Key: "k", Value: cqltype.Nullable[cqltype.Bytes]{Valid: true, Value: cqltype.BorrowBytes(payload)}}}}
+			values := Options{Profile: &profile, CustomPayload: []model.PayloadEntry{{Key: "k", Value: cqltype.Nullable[cqltype.Bytes]{Valid: true, Value: cqltype.BorrowBytes(payload)}}}}
 			o, err := NewBoundOptions(nil, values)
 			if err != nil {
 				t.Fatal(err)
@@ -56,16 +58,16 @@ func TestOptions(t *testing.T) {
 
 		t.Run("RejectsInvalidValues", func(t *testing.T) {
 			invalid := map[string]Options{
-				"consistency":  {Consistency: Option[Consistency]{Set: true, Value: Consistency(0xff)}},
-				"serial":       {SerialConsistency: Option[Consistency]{Set: true, Value: One}},
-				"timeout":      {Timeout: Option[time.Duration]{Set: true, Value: -1}},
-				"page size":    {PageSize: Option[int32]{Set: true}},
-				"prefetch":     {Prefetch: Option[int]{Set: true, Value: 2}},
-				"host":         {HostID: Option[UUID]{Set: true}},
-				"shard":        {ShardID: Option[uint32]{Set: true}},
-				"payload keys": {CustomPayload: []PayloadEntry{{Key: "k"}, {Key: "k"}}},
-				"profile":      {Profile: &Profile{}},
-				"serial both":  {SerialConsistency: Option[Consistency]{Set: true, Value: LocalSerial}, NoSerialConsistency: true},
+				"consistency":  {Consistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.Consistency(0xff)}},
+				"serial":       {SerialConsistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.One}},
+				"timeout":      {Timeout: cqltype.Option[time.Duration]{Set: true, Value: -1}},
+				"page size":    {PageSize: cqltype.Option[int32]{Set: true}},
+				"prefetch":     {Prefetch: cqltype.Option[int]{Set: true, Value: 2}},
+				"host":         {HostID: cqltype.Option[cqltype.UUID]{Set: true}},
+				"shard":        {ShardID: cqltype.Option[uint32]{Set: true}},
+				"payload keys": {CustomPayload: []model.PayloadEntry{{Key: "k"}, {Key: "k"}}},
+				"profile":      {Profile: &settings.Profile{}},
+				"serial both":  {SerialConsistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.LocalSerial}, NoSerialConsistency: true},
 			}
 			for name, values := range invalid {
 				if _, err := NewBoundOptions(nil, values); err == nil {
@@ -75,11 +77,11 @@ func TestOptions(t *testing.T) {
 		})
 
 		t.Run("SerialConsistencyOverrides", func(t *testing.T) {
-			set, err := resolveOptionValues(nil, Options{SerialConsistency: cqltype.Some(Serial)})
+			set, err := resolveOptionValues(nil, Options{SerialConsistency: cqltype.Some(cqltype.Serial)})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !set.InternalProfile.SerialConsistency.Set || set.InternalProfile.SerialConsistency.Value != Serial {
+			if !set.InternalProfile.SerialConsistency.Set || set.InternalProfile.SerialConsistency.Value != cqltype.Serial {
 				t.Fatalf("SerialConsistency = %+v, want SERIAL", set.InternalProfile.SerialConsistency)
 			}
 			none, err := resolveOptionValues(nil, Options{NoSerialConsistency: true})
@@ -93,7 +95,7 @@ func TestOptions(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if inherited.InternalProfile.SerialConsistency != defaultProfile().SerialConsistency {
+			if inherited.InternalProfile.SerialConsistency != settings.InternalDefaultProfile().SerialConsistency {
 				t.Fatalf("SerialConsistency = %+v, want the profile's", inherited.InternalProfile.SerialConsistency)
 			}
 		})
@@ -102,7 +104,7 @@ func TestOptions(t *testing.T) {
 	t.Run("Resolve", func(t *testing.T) {
 		t.Run("BoundSession", func(t *testing.T) {
 			s, rt := attachmentSession()
-			sessionProfile := defaultProfile()
+			sessionProfile := settings.InternalDefaultProfile()
 			sessionProfile.PageSize = 7
 			rt.InternalSetProfile(&sessionProfile)
 			var scratch InternalResolvedOptions
@@ -112,31 +114,31 @@ func TestOptions(t *testing.T) {
 				t.Fatal("zero options do not use the session default", r.InternalProfile.PageSize)
 			}
 
-			own := defaultProfile()
+			own := settings.InternalDefaultProfile()
 			own.PageSize = 9
 			fixed := testOptions(Options{Profile: &own})
 			if r := fixed.resolve(rt, &scratch); r != &fixed.p.resolved || r.InternalProfile.PageSize != 9 {
 				t.Fatal("options with a profile not resolved at creation")
 			}
 
-			overrides := Options{Consistency: Option[Consistency]{Set: true, Value: One}}
+			overrides := Options{Consistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.One}}
 			bound, err := NewBoundOptions(s, overrides)
 			if err != nil {
 				t.Fatal(err)
 			}
 			r := bound.resolve(rt, &scratch)
-			if r != &bound.p.resolved || r.InternalProfile.PageSize != 7 || r.InternalProfile.Consistency != One {
+			if r != &bound.p.resolved || r.InternalProfile.PageSize != 7 || r.InternalProfile.Consistency != cqltype.One {
 				t.Fatal("options not resolved for their session at creation", r.InternalProfile)
 			}
 
 			// On another session, bound options are resolved again for that
 			// session: its defaults apply, not those of the binding session.
 			_, other := attachmentSession()
-			otherProfile := defaultProfile()
+			otherProfile := settings.InternalDefaultProfile()
 			otherProfile.PageSize = 11
 			other.InternalSetProfile(&otherProfile)
 			scratch = InternalResolvedOptions{}
-			if r := bound.resolve(other, &scratch); r != &scratch || r.InternalProfile.PageSize != 11 || r.InternalProfile.Consistency != One {
+			if r := bound.resolve(other, &scratch); r != &scratch || r.InternalProfile.PageSize != 11 || r.InternalProfile.Consistency != cqltype.One {
 				t.Fatal("bound options not resolved for another session", r.InternalProfile)
 			}
 			if r := bound.resolveFixed(other); r == &bound.p.resolved || r.InternalProfile.PageSize != 11 || r.templates == nil {
@@ -157,7 +159,7 @@ func TestOptions(t *testing.T) {
 
 	t.Run("Templates", func(t *testing.T) {
 		t.Run("EncodedAtResolution", func(t *testing.T) {
-			own := defaultProfile()
+			own := settings.InternalDefaultProfile()
 			own.PageSize = 10
 			o := testOptions(Options{Profile: &own, Keyspace: "ks"})
 			resolved := o.p.resolved
@@ -166,7 +168,7 @@ func TestOptions(t *testing.T) {
 			}
 			for version := byte(4); version <= 5; version++ {
 				for _, ts := range []bool{false, true} {
-					w := &attemptRequest{PageSize: 10, DefaultTimestamp: ts, SerialConsistency: own.SerialConsistency.Value}
+					w := &model.AttemptRequest{PageSize: 10, DefaultTimestamp: ts, SerialConsistency: own.SerialConsistency.Value}
 					if version == 5 {
 						w.Keyspace = "ks"
 					}
@@ -182,8 +184,8 @@ func TestOptions(t *testing.T) {
 			// A v5 EXECUTE sends no keyspace, so it takes the keyspace-less template
 			// whatever keyspace its statement was prepared in.
 			for _, ts := range []bool{false, true} {
-				w := &attemptRequest{PageSize: 10, DefaultTimestamp: ts, SerialConsistency: own.SerialConsistency.Value, Keyspace: "prepared_ks"}
-				setPrepared(w, &InternalHostPrepared{InternalId: []byte{1}}, &Conn{}, true)
+				w := &model.AttemptRequest{PageSize: 10, DefaultTimestamp: ts, SerialConsistency: own.SerialConsistency.Value, Keyspace: "prepared_ks"}
+				setPrepared(w, &InternalHostPrepared{InternalId: []byte{1}}, &transport.Conn{}, true)
 				if w.Keyspace != "" {
 					t.Fatal("EXECUTE kept the keyspace")
 				}
@@ -197,13 +199,13 @@ func TestOptions(t *testing.T) {
 				}
 			}
 			// Another keyspace, an unpaged request and protocol v3 fall back.
-			if got := paramsTemplate(&resolved, &attemptRequest{PageSize: 10, SerialConsistency: own.SerialConsistency.Value, Keyspace: "other"}, 5); got == &resolved.templates[1][0] {
+			if got := paramsTemplate(&resolved, &model.AttemptRequest{PageSize: 10, SerialConsistency: own.SerialConsistency.Value, Keyspace: "other"}, 5); got == &resolved.templates[1][0] {
 				t.Fatal("template used for another keyspace")
 			}
-			if got := paramsTemplate(&resolved, &attemptRequest{}, 4); got == &resolved.templates[0][0] {
+			if got := paramsTemplate(&resolved, &model.AttemptRequest{}, 4); got == &resolved.templates[0][0] {
 				t.Fatal("template used for an unpaged request")
 			}
-			if resolved.templates.find(&attemptRequest{PageSize: 10, SerialConsistency: own.SerialConsistency.Value}, 3) != nil {
+			if resolved.templates.find(&model.AttemptRequest{PageSize: 10, SerialConsistency: own.SerialConsistency.Value}, 3) != nil {
 				t.Fatal("template found for protocol v3")
 			}
 		})
@@ -213,7 +215,7 @@ func TestOptions(t *testing.T) {
 		t.Run("ParamsFallbacks", func(t *testing.T) {
 			_, rt := attachmentSession()
 			profile := &rt.defaultOptions.InternalProfile
-			w := &attemptRequest{PageSize: int(profile.PageSize), SerialConsistency: profile.SerialConsistency.Value}
+			w := &model.AttemptRequest{PageSize: int(profile.PageSize), SerialConsistency: profile.SerialConsistency.Value}
 			if paramsTemplate(&rt.defaultOptions, w, 4) == nil {
 				t.Fatal("no template for the session's default options")
 			}
@@ -222,7 +224,7 @@ func TestOptions(t *testing.T) {
 				t.Fatal("a batch took a template")
 			}
 			var scratch InternalResolvedOptions
-			if paramsTemplate(&scratch, &attemptRequest{}, 4) != nil {
+			if paramsTemplate(&scratch, &model.AttemptRequest{}, 4) != nil {
 				t.Fatal("options resolved for one execution took a template")
 			}
 		})
@@ -230,14 +232,14 @@ func TestOptions(t *testing.T) {
 		// BoundOptions with a timestamp send one with every request, so they encode no
 		// template without it.
 		t.Run("WithTimestamp", func(t *testing.T) {
-			profile := defaultProfile()
-			templates := newOptionTemplates(&profile, &Options{Timestamp: Option[int64]{Value: 1, Set: true}}, "ks")
+			profile := settings.InternalDefaultProfile()
+			templates := newOptionTemplates(&profile, &Options{Timestamp: cqltype.Option[int64]{Value: 1, Set: true}}, "ks")
 			for shape := range templates {
 				if templates[shape][0].Protocol != 0 || templates[shape][1].Protocol == 0 {
 					t.Fatalf("shape %d: want only the timestamp template", shape)
 				}
 			}
-			if templates.find(&attemptRequest{PageSize: int(profile.PageSize), SerialConsistency: profile.SerialConsistency.Value}, 4) != nil {
+			if templates.find(&model.AttemptRequest{PageSize: int(profile.PageSize), SerialConsistency: profile.SerialConsistency.Value}, 4) != nil {
 				t.Fatal("an empty slot matched a request")
 			}
 		})

@@ -23,13 +23,15 @@ import (
 	"sync/atomic"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/schemafence"
 )
 
-func (rt *InternalSessionRuntime) InternalSchemaTracker() *preparedSchemaTracker {
+func (rt *InternalSessionRuntime) InternalSchemaTracker() *schemafence.InternalPreparedSchemaTracker {
 	rt.InternalMu.Lock()
 	defer rt.InternalMu.Unlock()
 	if rt.schema == nil {
-		rt.schema = &preparedSchemaTracker{InternalEpochs: make(map[preparedDependencyKey]*atomic.Uint64)}
+		rt.schema = &schemafence.InternalPreparedSchemaTracker{InternalEpochs: make(map[schemafence.InternalPreparedDependencyKey]*atomic.Uint64)}
 	}
 	return rt.schema
 }
@@ -56,7 +58,7 @@ func (s *InternalPreparedState) InternalNoteMetadataConflict() error {
 		return nil
 	}
 	if s.InternalSession.Closed() {
-		return ErrClosed
+		return runtimeerrors.ErrClosed
 	}
 	s.conflictMu.Lock()
 	defer s.conflictMu.Unlock()

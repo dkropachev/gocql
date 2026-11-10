@@ -13,6 +13,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -22,7 +23,7 @@ func TestInputOwner(t *testing.T) {
 		t.Run("AdmissionCloseRace", func(t *testing.T) {
 			for i := 0; i < 30; i++ {
 				s, rt := attachmentSession()
-				parent := newInputOwner()
+				parent := InternalNewInputOwner()
 				if err := parent.InternalAdmit(); err != nil {
 					t.Fatal(err)
 				}
@@ -36,7 +37,7 @@ func TestInputOwner(t *testing.T) {
 				close(start)
 				err := <-admitted
 				if err != nil {
-					if !errors.Is(err, ErrClosed) {
+					if !errors.Is(err, runtimeerrors.ErrClosed) {
 						t.Fatal(err)
 					}
 					parent.InternalRelease()
@@ -70,7 +71,7 @@ func TestInputOwner(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			session, err := cluster.InternalConnectCluster(ctx, config, func(s *cluster.Core, c Config) *Config {
+			session, err := cluster.InternalConnectCluster(ctx, config, func(s *cluster.Core, c settings.Config) *settings.Config {
 				rt = InternalRuntimeFor(s)
 				if InternalRuntimeFor(s) != rt {
 					t.Error("execution attachment replaced")
@@ -104,7 +105,7 @@ func TestInputOwner(t *testing.T) {
 
 		t.Run("StopsAllBeforeJoiningWriter", func(t *testing.T) {
 			s, rt := attachmentSession()
-			parent := newInputOwner()
+			parent := InternalNewInputOwner()
 			if err := parent.InternalAdmit(); err != nil {
 				t.Fatal(err)
 			}

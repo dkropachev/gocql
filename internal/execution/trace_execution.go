@@ -9,18 +9,23 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
-func (s *InternalSessionRuntime) Trace(ctx context.Context, id UUID) (implCluster.TraceInfo, error) {
+func (s *InternalSessionRuntime) Trace(ctx context.Context, id cqltype.UUID) (implCluster.TraceInfo, error) {
 	result := implCluster.TraceInfo{ID: id}
 	if ctx == nil {
-		return result, typeValidation("trace context", "nil context")
+		return result, cqltype.TypeValidation("trace context", "nil context")
 	}
 	if s == nil || s.Closed() {
-		return result, ErrClosed
+		return result, runtimeerrors.ErrClosed
 	}
-	profile := defaultProfile()
+	profile := settings.InternalDefaultProfile()
 	if s.InternalProfile != nil {
 		profile = *s.InternalProfile
 	}
@@ -29,12 +34,12 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id UUID) (implCluste
 		ctx, cancel = context.WithTimeout(ctx, profile.Timeout)
 		defer cancel()
 	}
-	uuidType := UUIDType
-	params := NewColumns(ColumnSpec{Name: "session_id", Type: uuidType})
-	sessionStatement := Statement[UUID, InternalTraceSessionRow]{CQL: "SELECT coordinator, started_at, duration FROM system_traces.sessions WHERE session_id = ?", Params: OneParam(UUIDCodec), Rows: Row(
-		Column("coordinator", NullableCodec(InetCodec), func(r *InternalTraceSessionRow) *Nullable[netip.Addr] { return &r.InternalCoordinator }),
-		Column("started_at", NullableCodec(TimestampCodec), func(r *InternalTraceSessionRow) *Nullable[Timestamp] { return &r.InternalStarted }),
-		Column("duration", NullableCodec(Int32), func(r *InternalTraceSessionRow) *Nullable[int32] { return &r.InternalDuration }),
+	uuidType := cqltype.UUIDType
+	params := cqltype.NewColumns(cqltype.ColumnSpec{Name: "session_id", Type: uuidType})
+	sessionStatement := binding.Statement[cqltype.UUID, InternalTraceSessionRow]{CQL: "SELECT coordinator, started_at, duration FROM system_traces.sessions WHERE session_id = ?", Params: codec.OneParam(codec.UUIDCodec), Rows: codec.Row(
+		codec.Column("coordinator", codec.NullableCodec(codec.InetCodec), func(r *InternalTraceSessionRow) *cqltype.Nullable[netip.Addr] { return &r.InternalCoordinator }),
+		codec.Column("started_at", codec.NullableCodec(codec.TimestampCodec), func(r *InternalTraceSessionRow) *cqltype.Nullable[codec.Timestamp] { return &r.InternalStarted }),
+		codec.Column("duration", codec.NullableCodec(codec.Int32), func(r *InternalTraceSessionRow) *cqltype.Nullable[int32] { return &r.InternalDuration }),
 	)}
 	bound, err := BindUnpreparedOwned(sessionStatement, params, id)
 	if err != nil {
@@ -64,7 +69,7 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id UUID) (implCluste
 			}
 			if rows.NextInto(&row) {
 				_ = rows.Close()
-				return result, &ProtocolError{Stage: "trace", Err: fmt.Errorf("duplicate tracing session")}
+				return result, &cqltype.ProtocolError{Stage: "trace", Err: fmt.Errorf("duplicate tracing session")}
 			}
 		}
 		err = rows.Err()
@@ -83,12 +88,12 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id UUID) (implCluste
 		case <-timer.C:
 		}
 	}
-	eventsStatement := Statement[UUID, InternalTraceActivityRow]{CQL: "SELECT event_id, activity, source, source_elapsed, thread FROM system_traces.events WHERE session_id = ?", Params: OneParam(UUIDCodec), Rows: Row(
-		Column("event_id", TimeUUIDCodec, func(r *InternalTraceActivityRow) *TimeUUID { return &r.InternalId }),
-		Column("activity", TextCodec, func(r *InternalTraceActivityRow) *Text { return &r.InternalActivity }),
-		Column("source", InetCodec, func(r *InternalTraceActivityRow) *netip.Addr { return &r.InternalSource }),
-		Column("source_elapsed", NullableCodec(Int32), func(r *InternalTraceActivityRow) *Nullable[int32] { return &r.InternalElapsed }),
-		Column("thread", TextCodec, func(r *InternalTraceActivityRow) *Text { return &r.InternalThread }),
+	eventsStatement := binding.Statement[cqltype.UUID, InternalTraceActivityRow]{CQL: "SELECT event_id, activity, source, source_elapsed, thread FROM system_traces.events WHERE session_id = ?", Params: codec.OneParam(codec.UUIDCodec), Rows: codec.Row(
+		codec.Column("event_id", codec.TimeUUIDCodec, func(r *InternalTraceActivityRow) *codec.TimeUUID { return &r.InternalId }),
+		codec.Column("activity", codec.TextCodec, func(r *InternalTraceActivityRow) *cqltype.Text { return &r.InternalActivity }),
+		codec.Column("source", codec.InetCodec, func(r *InternalTraceActivityRow) *netip.Addr { return &r.InternalSource }),
+		codec.Column("source_elapsed", codec.NullableCodec(codec.Int32), func(r *InternalTraceActivityRow) *cqltype.Nullable[int32] { return &r.InternalElapsed }),
+		codec.Column("thread", codec.TextCodec, func(r *InternalTraceActivityRow) *cqltype.Text { return &r.InternalThread }),
 	)}
 	eventsBound, err := BindUnpreparedOwned(eventsStatement, params, id)
 	if err != nil {
@@ -102,7 +107,7 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id UUID) (implCluste
 	defer rows.Close()
 	var r InternalTraceActivityRow
 	for rows.NextInto(&r) {
-		e := implCluster.TraceEvent{ID: UUID(r.InternalId), Activity: r.InternalActivity.String(), Source: r.InternalSource, Thread: r.InternalThread.String()}
+		e := implCluster.TraceEvent{ID: cqltype.UUID(r.InternalId), Activity: r.InternalActivity.String(), Source: r.InternalSource, Thread: r.InternalThread.String()}
 		if r.InternalElapsed.Valid {
 			e.Elapsed = time.Duration(r.InternalElapsed.Value) * time.Microsecond
 		}
@@ -113,4 +118,4 @@ func (s *InternalSessionRuntime) Trace(ctx context.Context, id UUID) (implCluste
 
 // traceValues read trace events at ONE, idempotently, under the caller's
 // context deadline only.
-var traceValues = Options{Consistency: Option[Consistency]{Value: One, Set: true}, Idempotent: true, Timeout: Option[time.Duration]{Set: true}}
+var traceValues = Options{Consistency: cqltype.Option[cqltype.Consistency]{Value: cqltype.One, Set: true}, Idempotent: true, Timeout: cqltype.Option[time.Duration]{Set: true}}

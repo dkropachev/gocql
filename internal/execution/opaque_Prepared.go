@@ -3,17 +3,22 @@
 
 package execution
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+)
 
 type PreparedStorage[P, R any] struct {
-	InternalParams ParamPlan[P]
-	InternalRows   RowDecoder[R]
+	InternalParams codec.ParamPlan[P]
+	InternalRows   codec.RowDecoder[R]
 	poolErr        error
 	InternalState  *InternalPreparedState
 	InternalPlans  *InternalResultPlanCache[R]
 	pool           *queryPool[P, R]
 	poolOnce       sync.Once
-	InternalKind   StatementKind
+	InternalKind   cqltype.StatementKind
 }
 
 func PreparedData[P any, R any](v *Prepared[P, R]) *PreparedStorage[P, R] { return &v.privateStorage }

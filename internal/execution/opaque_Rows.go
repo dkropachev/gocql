@@ -7,6 +7,9 @@ import (
 	"context"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/paging"
 
 	"sync"
 )
@@ -15,7 +18,7 @@ type RowsStorage[R any] struct {
 	nextErr         error
 	terminalErr     error
 	InternalCtx     context.Context
-	decoder         RowDecoder[R]
+	decoder         codec.RowDecoder[R]
 	err             error
 	prefetchJobs    chan InternalPrefetchJob
 	pendingRelease  func()
@@ -30,8 +33,8 @@ type RowsStorage[R any] struct {
 	// carries that release past the unlock, like pendingRelease.
 	execution, pendingExecution *InternalLogicalExecution
 	cursor                      queryCursor
-	InternalHistory             pagingHistory
-	info                        Result
+	InternalHistory             paging.InternalPagingHistory
+	info                        model.Result
 	mu                          sync.Mutex
 	rejectColumns               bool
 	closed                      bool
