@@ -197,7 +197,7 @@ func TestTablets(t *testing.T) {
 				for split := 0; split <= len(raw); split++ {
 					chain := typedTestChain(t, raw[:split], raw[split:])
 					parsed, err := transport.InternalParseTypedTabletPayload(cqltype.BytesView(chain, wire.Ref{}), "ks", "table", v2)
-					if err != nil || !implRouting.InternalSameTabletObservation(&implRouting.InternalTabletRange{InternalSpan: implRouting.TokenRange{Start: h.FirstToken(), End: h.LastToken(), Replicas: []implModel.Target{target}}, InternalVersion: implCqltype.Option[uint64]{Value: 0xfedcba9876543210, Set: v2}}, parsed) {
+					if err != nil || !(&implRouting.InternalTabletRange{InternalSpan: implRouting.TokenRange{Start: h.FirstToken(), End: h.LastToken(), Replicas: []implModel.Target{target}}, InternalVersion: implCqltype.Option[uint64]{Value: 0xfedcba9876543210, Set: v2}}).SameTabletObservation(parsed) {
 						t.Fatalf("v2=%t split=%d: %v", v2, split, err)
 					}
 				}

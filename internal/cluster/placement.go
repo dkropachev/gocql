@@ -177,7 +177,7 @@ func (s *Core) PublishTabletFeedback(p *InternalV2PeripheralState, updates map[I
 		}
 		// Exact duplicates do not replace nodes, generations, or events.
 		n := routing.InternalTabletRangeAfter(current, h.FirstToken())
-		if n != nil && routing.InternalSameTabletObservation(n.InternalValue, h) {
+		if n != nil && n.InternalValue.SameTabletObservation(h) {
 			continue
 		}
 		if u.observation != routing.InternalObserveTabletRanges(current, h.FirstToken(), h.LastToken()) {

@@ -185,7 +185,7 @@ func InternalTabletRangeFor(n *InternalTabletRangeTree, token int64) *InternalTa
 	}
 	return nil
 }
-func InternalSameTabletObservation(a *InternalTabletRange, h tablets.TabletInfo) bool {
+func (a *InternalTabletRange) SameTabletObservation(h tablets.TabletInfo) bool {
 	v, ok := h.Version()
 	if a.InternalVersion.Set != ok || ok && a.InternalVersion.Value != v || a.InternalSpan.Start != h.FirstToken() || a.InternalSpan.End != h.LastToken() {
 		return false
@@ -204,7 +204,7 @@ func InternalSameTabletObservation(a *InternalTabletRange, h tablets.TabletInfo)
 func InternalUpdateTabletRange(root *InternalTabletRangeTree, h tablets.TabletInfo) (*InternalTabletRangeTree, bool) {
 	first, last := h.FirstToken(), h.LastToken()
 	n := InternalTabletRangeAfter(root, first)
-	if n != nil && InternalSameTabletObservation(n.InternalValue, h) {
+	if n != nil && n.InternalValue.SameTabletObservation(h) {
 		return root, false
 	}
 	for n != nil && n.InternalValue.InternalSpan.Start < last {
