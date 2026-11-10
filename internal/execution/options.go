@@ -48,26 +48,26 @@ func NewBoundOptions(session *implCluster.Core, values Options) (BoundOptions, e
 		profile := *values.Profile
 		values.Profile = &profile
 	}
-	var rt *InternalSessionRuntime
+	var owner *InternalSessionRuntime
+	if session != nil {
+		owner = InternalRuntimeFor(session)
+	}
+	// Without its own profile, o resolves against the session's.
+	sessionProfile := owner != nil && values.Profile == nil
 	var base *Profile
-	if session != nil && values.Profile == nil {
-		rt = InternalRuntimeFor(session)
-		base = rt.InternalProfile
+	if sessionProfile {
+		base = owner.InternalProfile
 	}
 	resolved, err := resolveOptionValues(base, values)
 	if err != nil {
 		return BoundOptions{}, err
 	}
 	keyspace := values.Keyspace
-	if keyspace == "" && session != nil {
-		keyspace = InternalRuntimeFor(session).InternalConfig.Keyspace
+	if keyspace == "" && owner != nil {
+		keyspace = owner.InternalConfig.Keyspace
 	}
 	resolved.templates = newOptionTemplates(&resolved.InternalProfile, &resolved.InternalOptions, keyspace)
-	var owner *InternalSessionRuntime
-	if session != nil {
-		owner = InternalRuntimeFor(session)
-	}
-	bound := values.Profile != nil || rt != nil
+	bound := values.Profile != nil || sessionProfile
 	return BoundOptions{p: &frozenOptions{rt: owner, bound: bound, resolved: resolved}}, nil
 }
 
