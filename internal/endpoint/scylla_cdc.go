@@ -8,6 +8,7 @@ import (
 	"math"
 
 	"github.com/scylladb/gocql/v2/internal/debug"
+	"github.com/scylladb/gocql/v2/internal/logging"
 )
 
 // cdc partitioner
@@ -27,7 +28,7 @@ const (
 )
 
 type InternalScyllaCDCPartitioner struct {
-	InternalLogger StdLogger
+	InternalLogger logging.StdLogger
 }
 
 func (p InternalScyllaCDCPartitioner) Name() string {

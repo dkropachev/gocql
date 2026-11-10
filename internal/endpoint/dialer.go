@@ -26,6 +26,9 @@ import (
 	"net/netip"
 
 	"time"
+
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
 )
 
 // DialTarget is a resolved raw connection target. Hooks must honor the selected
@@ -33,8 +36,8 @@ import (
 type DialTarget struct {
 	LocalAddress     netip.AddrPort
 	Network, Address string
-	Host             HostSnapshot
-	ShardID          Option[uint32]
+	Host             model.HostSnapshot
+	ShardID          cqltype.Option[uint32]
 }
 
 type Dialer interface {
@@ -60,7 +63,7 @@ func (d DefaultDialer) DialContext(ctx context.Context, target DialTarget) (net.
 	n := net.Dialer{Timeout: d.ConnectTimeout, KeepAlive: keepalive}
 	if target.LocalAddress.IsValid() {
 		if target.Network != "tcp" && target.Network != "tcp4" && target.Network != "tcp6" {
-			return nil, typeValidation("local address", "source selection requires TCP")
+			return nil, cqltype.TypeValidation("local address", "source selection requires TCP")
 		}
 		n.LocalAddr = net.TCPAddrFromAddrPort(target.LocalAddress)
 	}

@@ -6,6 +6,8 @@ package endpoint
 import (
 	"net"
 	"testing"
+
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 func TestHostInfo(t *testing.T) {
@@ -22,9 +24,9 @@ func TestHostInfo(t *testing.T) {
 			t.Fatal("empty host reported an ID", id)
 		}
 		from := newHost()
-		from.privateStorage.InternalHostId = UUID{15: 3}
+		from.privateStorage.InternalHostId = cqltype.UUID{15: 3}
 		InternalHostInfoUpdate(h, from)
-		if id := InternalHostInfoHostUUID(h); id != (UUID{15: 3}) {
+		if id := InternalHostInfoHostUUID(h); id != (cqltype.UUID{15: 3}) {
 			t.Fatal("filled-in host ID not observed", id)
 		}
 	})

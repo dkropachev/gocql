@@ -30,12 +30,14 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 type HostInfoStorage struct {
 	InternalInitialSetupDeadline time.Time
 	InternalTranslatedAddresses  *InternalTranslatedAddresses
-	hostID                       atomic.Pointer[UUID] // InternalHostId once known; it never changes after
+	hostID                       atomic.Pointer[cqltype.UUID] // InternalHostId once known; it never changes after
 	InternalWorkload             string
 	InternalDseVersion           string
 	InternalDataCenter           string
@@ -61,7 +63,7 @@ type HostInfoStorage struct {
 	// that we are thread safe use a mutex to access all fields.
 	InternalMu     sync.RWMutex
 	InternalState  NodeStateCell // read without InternalMu; written under it
-	InternalHostId UUID
+	InternalHostId cqltype.UUID
 	graph          bool
 }
 

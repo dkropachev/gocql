@@ -7,16 +7,19 @@ import (
 	"fmt"
 	"net/netip"
 	"strconv"
+
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
 )
 
-func SnapshotHost(h *HostInfo) (HostSnapshot, error) {
+func SnapshotHost(h *HostInfo) (model.HostSnapshot, error) {
 	if h == nil {
-		return HostSnapshot{}, typeValidation("host", "nil host")
+		return model.HostSnapshot{}, cqltype.TypeValidation("host", "nil host")
 	}
 	h.privateStorage.InternalMu.RLock()
 	address, _ := InternalHostInfoConnectAddressLocked(h)
 	addr, _ := netip.AddrFromSlice(address)
-	out := HostSnapshot{ID: h.privateStorage.InternalHostId, Address: netip.AddrPortFrom(addr.Unmap(), uint16(h.privateStorage.InternalPort)), Datacenter: h.privateStorage.InternalDataCenter, Rack: h.privateStorage.InternalRack, Up: h.privateStorage.InternalState.Load() == NodeUp, Enabled: true}
+	out := model.HostSnapshot{ID: h.privateStorage.InternalHostId, Address: netip.AddrPortFrom(addr.Unmap(), uint16(h.privateStorage.InternalPort)), Datacenter: h.privateStorage.InternalDataCenter, Rack: h.privateStorage.InternalRack, Up: h.privateStorage.InternalState.Load() == NodeUp, Enabled: true}
 	var tokenErr error
 	for _, token := range h.privateStorage.InternalTokens {
 		n, err := strconv.ParseInt(token, 10, 64)

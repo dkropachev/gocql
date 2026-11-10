@@ -35,7 +35,7 @@ import (
 
 // InternalTranslateAddressPort applies addressTranslator to addr of host. A nil
 // translator or an invalid addr returns addr unchanged.
-func InternalTranslateAddressPort(addressTranslator AddressTranslator, host *HostInfo, addr AddressPort, logger StdLogger) (AddressPort, error) {
+func InternalTranslateAddressPort(addressTranslator AddressTranslator, host *HostInfo, addr AddressPort, logger logging.StdLogger) (AddressPort, error) {
 	if addressTranslator == nil || !addr.IsValid() {
 		return addr, nil
 	}

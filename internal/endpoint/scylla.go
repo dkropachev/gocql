@@ -12,24 +12,25 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/debug"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
 // V2's version block follows the pinned extension, independent of protocol v3/4/5.
 type InternalTabletsRoutingV2Ext struct{}
 
-func (InternalTabletsRoutingV2Ext) InternalName() string { return tabletsRoutingV2 }
+func (InternalTabletsRoutingV2Ext) InternalName() string { return InternalTabletsRoutingV2 }
 
 func (InternalTabletsRoutingV2Ext) InternalSerialize() map[string]string {
-	return map[string]string{tabletsRoutingV2: ""}
+	return map[string]string{InternalTabletsRoutingV2: ""}
 }
 
-func InternalTypedTabletExtensions(exts []cqlProtocolExtension, supported map[string][]string) []cqlProtocolExtension {
-	if _, ok := supported[tabletsRoutingV2]; !ok {
+func InternalTypedTabletExtensions(exts []InternalCqlProtocolExtension, supported map[string][]string) []InternalCqlProtocolExtension {
+	if _, ok := supported[InternalTabletsRoutingV2]; !ok {
 		return exts
 	}
 	filtered := exts[:0]
 	for _, ext := range exts {
-		if ext.InternalName() != tabletsRoutingV1 {
+		if ext.InternalName() != InternalTabletsRoutingV1 {
 			filtered = append(filtered, ext)
 		}
 	}
@@ -294,7 +295,7 @@ type InternalScyllaUseMetadataIDExt struct {
 // discoverProtocol). On v5 the field is already mandatory and Conn.tracksResultMetadataID
 // is true without the extension, so asking for it again would be redundant.
 func InternalNewScyllaUseMetadataIDExt(supported map[string][]string, version byte) *InternalScyllaUseMetadataIDExt {
-	if version&protoVersionMask != protoVersion4 {
+	if version&protocol.ProtoVersionMask != protocol.ProtoVersion4 {
 		return nil
 	}
 	if _, found := supported[InternalScyllaUseMetadataID]; found {
