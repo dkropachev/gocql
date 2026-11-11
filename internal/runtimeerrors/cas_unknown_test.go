@@ -19,11 +19,11 @@ func TestIsCASWriteUnknown(t *testing.T) {
 		err  error
 		want bool
 	}{
-		{&protocol.RequestErrCASWriteUnknown{}, true},
-		{fmt.Errorf("wrapped: %w", &protocol.RequestErrCASWriteUnknown{}), true},
-		{&protocol.RequestErrWriteTimeout{WriteType: "CAS"}, true},
-		{&protocol.RequestErrWriteTimeout{WriteType: "SIMPLE"}, false},
-		{&protocol.RequestErrReadTimeout{}, false},
+		{&protocol.CASWriteUnknownError{}, true},
+		{fmt.Errorf("wrapped: %w", &protocol.CASWriteUnknownError{}), true},
+		{&protocol.WriteTimeoutError{WriteType: "CAS"}, true},
+		{&protocol.WriteTimeoutError{WriteType: "SIMPLE"}, false},
+		{&protocol.ReadTimeoutError{}, false},
 		{nil, false},
 	} {
 		if got := IsCASWriteUnknown(tc.err); got != tc.want {

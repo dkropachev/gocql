@@ -1591,12 +1591,15 @@ for frame violations, which have stage "frame" and offset -1, and for data
 that does not decode),
 SchemaChangedError, ExecutionError, PartialRefreshError and NoHostsError.
 `cqlerr` exports only sentinels the driver returns: no deprecated ones, none
-kept for v1 callers. The
-existing RequestError server interface and concrete request error details stay
-available through errors.As; ExecutionError unwraps the server/context error.
-RequestError exposes `GetCode() int` and `GetMessage() string`, matching the
-concrete native-protocol errors; wrappers must preserve both through errors.As.
-Unrecognized future server errors retain code and opaque details. Invalid
+kept for v1 callers. Every server error implements `ServerError` (`Code()
+ErrorCode`, `Message() string`, `Warnings() []string`) and is a concrete
+`XxxError` type per code with its details (`WriteTimeoutError`,
+`UnavailableError`, ...); codes without details are `OtherServerError`.
+`ErrorCode` is a typed `uint16` with one `CodeXxx` constant per native protocol
+code; it implements `error`, and each server error matches its own code, so
+`errors.Is(err, cqlerr.CodeOverloaded)` works through any wrapper.
+ExecutionError unwraps the server/context error. Unrecognized future server
+errors are `OtherServerError` and retain their code and message. Invalid
 lengths and metadata never panic or allocate based on unbounded advertised
 counts.
 

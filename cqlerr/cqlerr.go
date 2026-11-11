@@ -18,9 +18,9 @@
 // trying again can help. ExecutionError.Attempts lists every failed attempt
 // with the host it went to.
 //
-// Server errors are typed by their CQL error code (RequestErrWriteTimeout,
-// RequestErrUnavailable, ...) and all implement RequestError; find them with
-// errors.As, or match a code with errors.Is(err, ErrServerOverloaded).
+// Server errors are typed by their CQL error code (WriteTimeoutError,
+// UnavailableError, ...) and all implement ServerError; find them with
+// errors.As, or match a code with errors.Is(err, CodeOverloaded).
 // Driver conditions are sentinels (ErrNoRows, ErrNoConnections, ...); test
 // them with errors.Is.
 package cqlerr
@@ -55,12 +55,6 @@ const (
 // done on the cluster, across all of its attempts. It returns NotExecuted for
 // a nil error and MaybeExecuted for an error the driver cannot attribute.
 func ExecutionStatusOf(err error) ExecutionStatus { return runtimeerrors.ExecutionStatusOf(err) }
-
-// ServerErrorExecutionStatus classifies a server error by what the failed
-// request may have done.
-func ServerErrorExecutionStatus(err RequestError) ExecutionStatus {
-	return protocol.ServerErrorExecutionStatus(err)
-}
 
 // Classification.
 
@@ -113,82 +107,68 @@ type SchemaChangedError = runtimeerrors.SchemaChangedError
 
 // Server errors.
 
-// RequestError is implemented by every error returned by a server.
-type RequestError = protocol.RequestError
+// ServerError is implemented by every error a server returns. Find one with
+// errors.As, or a specific kind with its concrete type:
+//
+//	var timeout *cqlerr.WriteTimeoutError
+//	if errors.As(err, &timeout) { ... }
+type ServerError = protocol.ServerError
 
-// ErrorCode is a CQL server error code. Each ErrServer sentinel is one; as an
-// error it matches, through errors.Is, every server error with that code.
+// ErrorCode is the code of a server error. As an error it is the code's
+// name, and every ServerError matches its own code through errors.Is:
+//
+//	if errors.Is(err, cqlerr.CodeOverloaded) { ... }
 type ErrorCode = protocol.ErrorCode
 
-// Server error code sentinels, matched with errors.Is.
-var (
-	ErrServerError           error = ErrorCode(ErrCodeServer)
-	ErrServerProtocol        error = ErrorCode(ErrCodeProtocol)
-	ErrServerCredentials     error = ErrorCode(ErrCodeCredentials)
-	ErrServerUnavailable     error = ErrorCode(ErrCodeUnavailable)
-	ErrServerOverloaded      error = ErrorCode(ErrCodeOverloaded)
-	ErrServerBootstrapping   error = ErrorCode(ErrCodeBootstrapping)
-	ErrServerTruncate        error = ErrorCode(ErrCodeTruncate)
-	ErrServerWriteTimeout    error = ErrorCode(ErrCodeWriteTimeout)
-	ErrServerReadTimeout     error = ErrorCode(ErrCodeReadTimeout)
-	ErrServerReadFailure     error = ErrorCode(ErrCodeReadFailure)
-	ErrServerFunctionFailure error = ErrorCode(ErrCodeFunctionFailure)
-	ErrServerWriteFailure    error = ErrorCode(ErrCodeWriteFailure)
-	ErrServerCDCWriteFailure error = ErrorCode(ErrCodeCDCWriteFailure)
-	ErrServerCASWriteUnknown error = ErrorCode(ErrCodeCASWriteUnknown)
-	ErrServerSyntax          error = ErrorCode(ErrCodeSyntax)
-	ErrServerUnauthorized    error = ErrorCode(ErrCodeUnauthorized)
-	ErrServerInvalid         error = ErrorCode(ErrCodeInvalid)
-	ErrServerConfig          error = ErrorCode(ErrCodeConfig)
-	ErrServerAlreadyExists   error = ErrorCode(ErrCodeAlreadyExists)
-	ErrServerUnprepared      error = ErrorCode(ErrCodeUnprepared)
+// Server error codes, with their native protocol values.
+const (
+	CodeServer          = protocol.CodeServer
+	CodeProtocol        = protocol.CodeProtocol
+	CodeBadCredentials  = protocol.CodeBadCredentials
+	CodeUnavailable     = protocol.CodeUnavailable
+	CodeOverloaded      = protocol.CodeOverloaded
+	CodeBootstrapping   = protocol.CodeBootstrapping
+	CodeTruncate        = protocol.CodeTruncate
+	CodeWriteTimeout    = protocol.CodeWriteTimeout
+	CodeReadTimeout     = protocol.CodeReadTimeout
+	CodeReadFailure     = protocol.CodeReadFailure
+	CodeFunctionFailure = protocol.CodeFunctionFailure
+	CodeWriteFailure    = protocol.CodeWriteFailure
+	CodeCDCWriteFailure = protocol.CodeCDCWriteFailure
+	CodeCASWriteUnknown = protocol.CodeCASWriteUnknown
+	CodeSyntax          = protocol.CodeSyntax
+	CodeUnauthorized    = protocol.CodeUnauthorized
+	CodeInvalid         = protocol.CodeInvalid
+	CodeConfig          = protocol.CodeConfig
+	CodeAlreadyExists   = protocol.CodeAlreadyExists
+	CodeUnprepared      = protocol.CodeUnprepared
+	// CodeRateLimitReached is ScyllaDB's rate limit error. Its wire value is
+	// negotiated per connection; the driver reports it with this code.
+	CodeRateLimitReached = protocol.CodeRateLimitReached
 )
 
+// Server error types. Codes without fields of their own are reported as
+// OtherServerError.
 type (
-	RequestErrAlreadyExists    = protocol.RequestErrAlreadyExists
-	RequestErrCASWriteUnknown  = protocol.RequestErrCASWriteUnknown
-	RequestErrCDCWriteFailure  = protocol.RequestErrCDCWriteFailure
-	RequestErrFunctionFailure  = protocol.RequestErrFunctionFailure
-	RequestErrRateLimitReached = protocol.RequestErrRateLimitReached
-	RequestErrServer           = protocol.RequestErrServer
-	RequestErrReadFailure      = protocol.RequestErrReadFailure
-	RequestErrReadTimeout      = protocol.RequestErrReadTimeout
-	RequestErrUnavailable      = protocol.RequestErrUnavailable
-	RequestErrUnprepared       = protocol.RequestErrUnprepared
-	RequestErrWriteFailure     = protocol.RequestErrWriteFailure
-	RequestErrWriteTimeout     = protocol.RequestErrWriteTimeout
-	UnknownServerError         = protocol.UnknownServerError
-	ErrorMap                   = protocol.ErrorMap
-	OpType                     = protocol.OpType
+	AlreadyExistsError    = protocol.AlreadyExistsError
+	CASWriteUnknownError  = protocol.CASWriteUnknownError
+	CDCWriteFailureError  = protocol.CDCWriteFailureError
+	FunctionFailureError  = protocol.FunctionFailureError
+	OtherServerError      = protocol.OtherServerError
+	RateLimitReachedError = protocol.RateLimitReachedError
+	ReadFailureError      = protocol.ReadFailureError
+	ReadTimeoutError      = protocol.ReadTimeoutError
+	UnavailableError      = protocol.UnavailableError
+	UnpreparedError       = protocol.UnpreparedError
+	WriteFailureError     = protocol.WriteFailureError
+	WriteTimeoutError     = protocol.WriteTimeoutError
+	ErrorMap              = protocol.ErrorMap
+	OpType                = protocol.OpType
 )
 
 const (
 	OpTypeRead  = protocol.OpTypeRead
 	OpTypeWrite = protocol.OpTypeWrite
-)
-
-// CQL error codes, as reported by RequestError.GetCode.
-const (
-	ErrCodeServer          = protocol.ErrCodeServer
-	ErrCodeProtocol        = protocol.ErrCodeProtocol
-	ErrCodeCredentials     = protocol.ErrCodeCredentials
-	ErrCodeUnavailable     = protocol.ErrCodeUnavailable
-	ErrCodeOverloaded      = protocol.ErrCodeOverloaded
-	ErrCodeBootstrapping   = protocol.ErrCodeBootstrapping
-	ErrCodeTruncate        = protocol.ErrCodeTruncate
-	ErrCodeWriteTimeout    = protocol.ErrCodeWriteTimeout
-	ErrCodeReadTimeout     = protocol.ErrCodeReadTimeout
-	ErrCodeReadFailure     = protocol.ErrCodeReadFailure
-	ErrCodeFunctionFailure = protocol.ErrCodeFunctionFailure
-	ErrCodeWriteFailure    = protocol.ErrCodeWriteFailure
-	ErrCodeCDCWriteFailure = protocol.ErrCodeCDCWriteFailure
-	ErrCodeCASWriteUnknown = protocol.ErrCodeCASWriteUnknown
-	ErrCodeSyntax          = protocol.ErrCodeSyntax
-	ErrCodeUnauthorized    = protocol.ErrCodeUnauthorized
-	ErrCodeInvalid         = protocol.ErrCodeInvalid
-	ErrCodeConfig          = protocol.ErrCodeConfig
-	ErrCodeAlreadyExists   = protocol.ErrCodeAlreadyExists
-	ErrCodeUnprepared      = protocol.ErrCodeUnprepared
 )
 
 // Driver errors.

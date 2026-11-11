@@ -387,7 +387,7 @@ func TestTypedConn(t *testing.T) {
 				body = append(body, "key"...)
 				body = binary.BigEndian.AppendUint32(body, 3)
 				body = append(body, "val"...)
-				body = binary.BigEndian.AppendUint32(body, protocol.ErrCodeUnprepared)
+				body = binary.BigEndian.AppendUint32(body, uint32(protocol.CodeUnprepared))
 				body = binary.BigEndian.AppendUint16(body, 7)
 				body = append(body, "missing"...)
 				body = binary.BigEndian.AppendUint16(body, 2)
@@ -400,7 +400,7 @@ func TestTypedConn(t *testing.T) {
 				}
 			}()
 			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value FROM ks.tbl", Consistency: implCqltype.One, Timeout: time.Second})
-			if unprepared, ok := errors.AsType[*protocol.RequestErrUnprepared](err); !ok || !bytes.Equal(unprepared.StatementId, []byte{1, 2}) {
+			if unprepared, ok := errors.AsType[*protocol.UnpreparedError](err); !ok || !bytes.Equal(unprepared.StatementID, []byte{1, 2}) {
 				t.Fatalf("wrong error %v", err)
 			}
 			if page == nil || len(page.Warnings()) != 1 || len(page.TraceID()) != 16 || len(page.Payload()) != 1 {

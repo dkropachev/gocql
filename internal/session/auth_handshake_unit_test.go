@@ -22,7 +22,7 @@ const testAuthClass = "org.apache.cassandra.auth.PasswordAuthenticator"
 type authReply struct {
 	op      frm.Op // OpAuthChallenge, OpAuthSuccess, OpError or anything else
 	data    []byte
-	errCode int
+	errCode protocol.ErrorCode
 	errMsg  string
 }
 
@@ -155,5 +155,5 @@ func multiStepReply(token []byte) authReply {
 	case "r1":
 		return authReply{op: frm.OpAuthSuccess, data: []byte("done")}
 	}
-	return authReply{op: frm.OpError, errCode: protocol.ErrCodeCredentials, errMsg: "unexpected token " + string(token)}
+	return authReply{op: frm.OpError, errCode: protocol.CodeBadCredentials, errMsg: "unexpected token " + string(token)}
 }

@@ -61,7 +61,7 @@ func checkSystemSchema(control InternalControlConnection) (bool, error) {
 		defer page.Owner.Release()
 	}
 	if err != nil {
-		if server, ok := errors.AsType[protocol.RequestError](err); ok && server.GetCode() == protocol.ErrCodeSyntax {
+		if server, ok := errors.AsType[protocol.ServerError](err); ok && server.Code() == protocol.CodeSyntax {
 			return false, nil
 		}
 		return false, err

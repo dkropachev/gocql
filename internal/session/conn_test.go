@@ -998,7 +998,7 @@ func (srv *TestServer) process(conn net.Conn, reqFrame *implProtocol.Framer, ext
 			}
 		default:
 			respFrame.WriteHeader(0, frm.OpError, head.Stream)
-			respFrame.WriteInt(implProtocol.ErrCodeUnprepared)
+			respFrame.WriteInt(int32(implProtocol.CodeUnprepared))
 			respFrame.WriteString("unprepared")
 			respFrame.WriteShortBytes(binary.BigEndian.AppendUint64(nil, id))
 		}

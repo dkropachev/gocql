@@ -698,12 +698,12 @@ func terminalV2AgreementError(err error) bool {
 	if _, ok := errors.AsType[*cqltype.ValidationError](err); ok {
 		return true
 	}
-	if server, ok := errors.AsType[protocol.RequestError](err); ok {
+	if server, ok := errors.AsType[protocol.ServerError](err); ok {
 		switch runtimeerrors.KindOf(server) {
 		case runtimeerrors.KindOverloaded, runtimeerrors.KindTimeout:
 			return false
 		}
-		return server.GetCode() != protocol.ErrCodeUnprepared
+		return server.Code() != protocol.CodeUnprepared
 	}
 	return false
 }

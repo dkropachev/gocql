@@ -11,47 +11,45 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
 func TestServerErrorExecutionStatus(t *testing.T) {
 	t.Parallel()
-	frame := func(code int) frm.ErrorFrame { return frm.ErrorFrame{Code: code, Message: "m"} }
 	for _, test := range []struct {
 		name string
-		err  protocol.RequestError
+		err  protocol.ServerError
 		want cqltype.ExecutionStatus
 	}{
-		{"unavailable", &protocol.RequestErrUnavailable{ErrorFrame: frame(protocol.ErrCodeUnavailable)}, cqltype.NotExecuted},
-		{"overloaded", &protocol.RequestErrServer{ErrorFrame: frame(protocol.ErrCodeOverloaded)}, cqltype.NotExecuted},
-		{"bootstrapping", &protocol.RequestErrServer{ErrorFrame: frame(protocol.ErrCodeBootstrapping)}, cqltype.NotExecuted},
-		{"syntax", &protocol.RequestErrServer{ErrorFrame: frame(protocol.ErrCodeSyntax)}, cqltype.NotExecuted},
-		{"invalid", &protocol.RequestErrServer{ErrorFrame: frame(protocol.ErrCodeInvalid)}, cqltype.NotExecuted},
-		{"unauthorized", &protocol.RequestErrServer{ErrorFrame: frame(protocol.ErrCodeUnauthorized)}, cqltype.NotExecuted},
-		{"credentials", &protocol.RequestErrServer{ErrorFrame: frame(protocol.ErrCodeCredentials)}, cqltype.NotExecuted},
-		{"config", &protocol.RequestErrServer{ErrorFrame: frame(protocol.ErrCodeConfig)}, cqltype.NotExecuted},
-		{"protocol", &protocol.RequestErrServer{ErrorFrame: frame(protocol.ErrCodeProtocol)}, cqltype.NotExecuted},
-		{"already exists", &protocol.RequestErrAlreadyExists{ErrorFrame: frame(protocol.ErrCodeAlreadyExists)}, cqltype.NotExecuted},
-		{"unprepared", &protocol.RequestErrUnprepared{ErrorFrame: frame(protocol.ErrCodeUnprepared)}, cqltype.NotExecuted},
-		{"function failure", &protocol.RequestErrFunctionFailure{ErrorFrame: frame(protocol.ErrCodeFunctionFailure)}, cqltype.NotExecuted},
-		{"rate limit coordinator", &protocol.RequestErrRateLimitReached{RejectedByCoordinator: true}, cqltype.NotExecuted},
-		{"rate limit replica", &protocol.RequestErrRateLimitReached{}, cqltype.MaybeExecuted},
-		{"server", &protocol.RequestErrServer{ErrorFrame: frame(protocol.ErrCodeServer)}, cqltype.MaybeExecuted},
-		{"truncate", &protocol.RequestErrServer{ErrorFrame: frame(protocol.ErrCodeTruncate)}, cqltype.MaybeExecuted},
-		{"read timeout", &protocol.RequestErrReadTimeout{ErrorFrame: frame(protocol.ErrCodeReadTimeout)}, cqltype.MaybeExecuted},
-		{"read failure", &protocol.RequestErrReadFailure{ErrorFrame: frame(protocol.ErrCodeReadFailure)}, cqltype.MaybeExecuted},
-		{"cas write unknown", &protocol.RequestErrCASWriteUnknown{ErrorFrame: frame(protocol.ErrCodeCASWriteUnknown), Received: 1}, cqltype.MaybeExecuted},
-		{"cdc write failure", &protocol.RequestErrCDCWriteFailure{ErrorFrame: frame(protocol.ErrCodeCDCWriteFailure)}, cqltype.MaybeExecuted},
-		{"unknown", &protocol.UnknownServerError{ErrorFrame: frame(0x7777)}, cqltype.MaybeExecuted},
-		{"write timeout no acks", &protocol.RequestErrWriteTimeout{WriteType: "SIMPLE"}, cqltype.MaybeExecuted},
-		{"write timeout simple acked", &protocol.RequestErrWriteTimeout{WriteType: "SIMPLE", Received: 1}, cqltype.PartiallyExecuted},
-		{"write timeout counter acked", &protocol.RequestErrWriteTimeout{WriteType: "COUNTER", Received: 1}, cqltype.PartiallyExecuted},
-		{"write timeout batch log", &protocol.RequestErrWriteTimeout{WriteType: "BATCH_LOG", Received: 1}, cqltype.MaybeExecuted},
-		{"write timeout cas", &protocol.RequestErrWriteTimeout{WriteType: "CAS", Received: 1}, cqltype.MaybeExecuted},
-		{"write failure batch acked", &protocol.RequestErrWriteFailure{WriteType: "BATCH", Received: 2}, cqltype.PartiallyExecuted},
-		{"write failure no acks", &protocol.RequestErrWriteFailure{WriteType: "BATCH"}, cqltype.MaybeExecuted},
+		{"unavailable", &protocol.UnavailableError{}, cqltype.NotExecuted},
+		{"overloaded", protocol.NewOtherServerError(protocol.CodeOverloaded, "m"), cqltype.NotExecuted},
+		{"bootstrapping", protocol.NewOtherServerError(protocol.CodeBootstrapping, "m"), cqltype.NotExecuted},
+		{"syntax", protocol.NewOtherServerError(protocol.CodeSyntax, "m"), cqltype.NotExecuted},
+		{"invalid", protocol.NewOtherServerError(protocol.CodeInvalid, "m"), cqltype.NotExecuted},
+		{"unauthorized", protocol.NewOtherServerError(protocol.CodeUnauthorized, "m"), cqltype.NotExecuted},
+		{"credentials", protocol.NewOtherServerError(protocol.CodeBadCredentials, "m"), cqltype.NotExecuted},
+		{"config", protocol.NewOtherServerError(protocol.CodeConfig, "m"), cqltype.NotExecuted},
+		{"protocol", protocol.NewOtherServerError(protocol.CodeProtocol, "m"), cqltype.NotExecuted},
+		{"already exists", &protocol.AlreadyExistsError{}, cqltype.NotExecuted},
+		{"unprepared", &protocol.UnpreparedError{}, cqltype.NotExecuted},
+		{"function failure", &protocol.FunctionFailureError{}, cqltype.NotExecuted},
+		{"rate limit coordinator", &protocol.RateLimitReachedError{RejectedByCoordinator: true}, cqltype.NotExecuted},
+		{"rate limit replica", &protocol.RateLimitReachedError{}, cqltype.MaybeExecuted},
+		{"server", protocol.NewOtherServerError(protocol.CodeServer, "m"), cqltype.MaybeExecuted},
+		{"truncate", protocol.NewOtherServerError(protocol.CodeTruncate, "m"), cqltype.MaybeExecuted},
+		{"read timeout", &protocol.ReadTimeoutError{}, cqltype.MaybeExecuted},
+		{"read failure", &protocol.ReadFailureError{}, cqltype.MaybeExecuted},
+		{"cas write unknown", &protocol.CASWriteUnknownError{Received: 1}, cqltype.MaybeExecuted},
+		{"cdc write failure", &protocol.CDCWriteFailureError{}, cqltype.MaybeExecuted},
+		{"unknown", protocol.NewOtherServerError(0x7777, "m"), cqltype.MaybeExecuted},
+		{"write timeout no acks", &protocol.WriteTimeoutError{WriteType: "SIMPLE"}, cqltype.MaybeExecuted},
+		{"write timeout simple acked", &protocol.WriteTimeoutError{WriteType: "SIMPLE", Received: 1}, cqltype.PartiallyExecuted},
+		{"write timeout counter acked", &protocol.WriteTimeoutError{WriteType: "COUNTER", Received: 1}, cqltype.PartiallyExecuted},
+		{"write timeout batch log", &protocol.WriteTimeoutError{WriteType: "BATCH_LOG", Received: 1}, cqltype.MaybeExecuted},
+		{"write timeout cas", &protocol.WriteTimeoutError{WriteType: "CAS", Received: 1}, cqltype.MaybeExecuted},
+		{"write failure batch acked", &protocol.WriteFailureError{WriteType: "BATCH", Received: 2}, cqltype.PartiallyExecuted},
+		{"write failure no acks", &protocol.WriteFailureError{WriteType: "BATCH"}, cqltype.MaybeExecuted},
 	} {
 		if got := protocol.ServerErrorExecutionStatus(test.err); got != test.want {
 			t.Errorf("%s: got %v want %v", test.name, got, test.want)
@@ -82,8 +80,8 @@ func TestExecutionStatus(t *testing.T) {
 	})
 
 	t.Run("QueryError", func(t *testing.T) {
-		syntax := &protocol.RequestErrServer{ErrorFrame: frm.ErrorFrame{Code: protocol.ErrCodeSyntax, Message: "bad"}}
-		acked := &protocol.RequestErrWriteTimeout{WriteType: "SIMPLE", Received: 1}
+		syntax := protocol.NewOtherServerError(protocol.CodeSyntax, "bad")
+		acked := &protocol.WriteTimeoutError{WriteType: "SIMPLE", Received: 1}
 		for _, test := range []struct {
 			name    string
 			state   QueryErrorState
@@ -116,7 +114,7 @@ func TestExecutionStatus(t *testing.T) {
 			{"nil", nil, cqltype.NotExecuted},
 			{"request wins over attempt", fmt.Errorf("wrapped: %w", request), cqltype.PartiallyExecuted},
 			{"attempt", fmt.Errorf("wrapped: %w", attempt), cqltype.MaybeExecuted},
-			{"bare server error", &protocol.RequestErrServer{ErrorFrame: frm.ErrorFrame{Code: protocol.ErrCodeOverloaded}}, cqltype.NotExecuted},
+			{"bare server error", protocol.NewOtherServerError(protocol.CodeOverloaded, ""), cqltype.NotExecuted},
 			{"validation", &cqltype.ValidationError{Field: "x", Err: errors.New("bad")}, cqltype.MaybeExecuted},
 			{"codec", &cqltype.CodecError{Stage: "decode", Err: errors.New("bad")}, cqltype.MaybeExecuted},
 			{"schema changed", &SchemaChangedError{Statement: "s"}, cqltype.NotExecuted},
@@ -149,7 +147,7 @@ func TestExecutionStatus(t *testing.T) {
 
 func TestExecutionErrorAttempts(t *testing.T) {
 	t.Parallel()
-	overloaded := NewQueryError(QueryErrorState{InternalErr: &frm.ErrorFrame{Code: protocol.ErrCodeOverloaded, Message: "overloaded"}, InternalPotentiallyExecuted: true})
+	overloaded := NewQueryError(QueryErrorState{InternalErr: protocol.NewOtherServerError(protocol.CodeOverloaded, "overloaded"), InternalPotentiallyExecuted: true})
 	timeout := NewQueryError(QueryErrorState{InternalErr: ErrTimeoutNoResponse, InternalPotentiallyExecuted: true})
 	attempts := []AttemptFailure{
 		{Err: overloaded, Address: "10.0.0.1:9042", Number: 1, Status: cqltype.NotExecuted},
@@ -173,7 +171,7 @@ func TestExecutionErrorAttempts(t *testing.T) {
 		if !errors.Is(err, context.Canceled) || !errors.Is(err, ErrTimeoutNoResponse) {
 			t.Fatal("cause not reachable")
 		}
-		if server, ok := errors.AsType[protocol.RequestError](err); !ok || server.GetCode() != protocol.ErrCodeOverloaded {
+		if server, ok := errors.AsType[protocol.ServerError](err); !ok || server.Code() != protocol.CodeOverloaded {
 			t.Fatal("earlier server error not reachable")
 		}
 	})

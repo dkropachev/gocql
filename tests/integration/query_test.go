@@ -362,12 +362,12 @@ func TestQuery(t *testing.T) {
 			if err := v2CreateTable(context.Background(), session, fmt.Sprintf((`CREATE TABLE `+fixtureKeyspace("")+`.%s (id int primary key)`), table)); err == nil {
 				t.Fatal("Should have gotten already exists error from cassandra server.")
 			} else {
-				if e, ok := errors.AsType[*cqlerr.RequestErrAlreadyExists](err); ok {
+				if e, ok := errors.AsType[*cqlerr.AlreadyExistsError](err); ok {
 					if e.Table != table {
 						t.Fatalf("expected error table to be %q but was %q", table, e.Table)
 					}
 				} else {
-					t.Fatalf("expected to get RequestErrAlreadyExists instead got %T", e)
+					t.Fatalf("expected to get AlreadyExistsError instead got %T", e)
 				}
 			}
 		})
@@ -391,7 +391,7 @@ func TestQuery(t *testing.T) {
 				t.Fatalf("failed to create table with error '%v'", err)
 			}
 			if _, err := v2Exec(context.Background(), session, fmt.Sprintf(`INSERT INTO %s.%s (id, value) VALUES (1, 1)`, fixtureKeyspace("_fail"), table)); err != nil {
-				if errWrite, ok := errors.AsType[*cqlerr.RequestErrWriteFailure](err); ok {
+				if errWrite, ok := errors.AsType[*cqlerr.WriteFailureError](err); ok {
 					if (*implSession.Session)(session).Data().InternalCfg.ProtoVersion >= protoVersion5 {
 						// ErrorMap should be filled with some hosts that should've errored
 						if len(errWrite.ErrorMap) == 0 {
@@ -404,7 +404,7 @@ func TestQuery(t *testing.T) {
 						}
 					}
 				} else {
-					t.Fatalf("error (%s) should be RequestErrWriteFailure, it's: %T", err, err)
+					t.Fatalf("error (%s) should be WriteFailureError, it's: %T", err, err)
 				}
 			} else {
 				t.Fatal("a write fail error should have happened when querying test keyspace")
@@ -664,7 +664,7 @@ func TestQuery(t *testing.T) {
 						retryPolicy := sessionTestRetry{action: retry.Stop, maxAttempts: retries + 1}
 						_, err := Exec(ctx, session, bound, bindOptions(session, gocql.Options{Idempotent: true, Retry: retryPolicy, Observer: observer}))
 						require.Error(t, err)
-						var server cqlerr.RequestError
+						var server cqlerr.ServerError
 						require.ErrorAs(t, err, &server)
 						requests, attempts := observer.snapshot()
 						require.Len(t, requests, 1)

@@ -71,7 +71,8 @@ instead of matching a specific error, so the check works on both servers.
 ## Server-specific errors
 
 ScyllaDB can reject a request with a rate-limit error
-(`cqlerr.KindOf(err)` reports rate limited). Cassandra never sends one.
+(`*cqlerr.RateLimitReachedError`, matching `cqlerr.CodeRateLimitReached`;
+`cqlerr.KindOf(err)` reports rate limited). Cassandra never sends one.
 Error message text differs between the servers, so match errors with
 `errors.Is`, `errors.As` and `cqlerr`, never with their messages. See
 [errors](errors.md).

@@ -105,11 +105,11 @@ func readRequest(server net.Conn) (byte, int, []byte, error) {
 	_, e := io.ReadFull(server, b)
 	return h[4], int(binary.BigEndian.Uint16(h[2:4])), b, e
 }
-func errorResponse(t *testing.T, stream, code int, id []byte) []byte {
+func errorResponse(t *testing.T, stream int, code protocol.ErrorCode, id []byte) []byte {
 	body := binary.BigEndian.AppendUint32(nil, uint32(code))
 	body = binary.BigEndian.AppendUint16(body, 4)
 	body = append(body, "test"...)
-	if code == protocol.ErrCodeUnprepared {
+	if code == protocol.CodeUnprepared {
 		body = binary.BigEndian.AppendUint16(body, uint16(len(id)))
 		body = append(body, id...)
 	}

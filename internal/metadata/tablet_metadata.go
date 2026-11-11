@@ -37,7 +37,7 @@ func InternalReadV2ScyllaKeyspaces(ctx context.Context, s Source, keyspaces map[
 	}
 	rows, err := InternalQueryV2SchemaRows(ctx, s, stmt, args, decoder)
 	if err != nil {
-		if invalid, ok := errors.AsType[protocol.RequestError](err); ok && invalid.GetCode() == protocol.ErrCodeInvalid {
+		if invalid, ok := errors.AsType[protocol.ServerError](err); ok && invalid.Code() == protocol.CodeInvalid {
 			return nil
 		}
 		return err

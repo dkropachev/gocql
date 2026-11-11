@@ -59,7 +59,7 @@ func newRingTestServer(t *testing.T, peers ...testPeer) *ringTestServer {
 			peersErr := rs.peersErr
 			rs.mu.Unlock()
 			if peersErr != "" {
-				writeErrorResult(resp, stream, protocol.ErrCodeServer, peersErr)
+				writeErrorResult(resp, stream, protocol.CodeServer, peersErr)
 				return true
 			}
 			var rows [][][]byte

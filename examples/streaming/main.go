@@ -181,7 +181,7 @@ func stream[D gocql.Dialect](ctx context.Context, cfg gocql.Config, incremental,
 		}
 	}()
 	if err := exec("CREATE KEYSPACE " + namespace + " WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':1}"); err != nil {
-		if _, ok := errors.AsType[*cqlerr.RequestErrAlreadyExists](err); ok {
+		if _, ok := errors.AsType[*cqlerr.AlreadyExistsError](err); ok {
 			owned = false
 		}
 		return err

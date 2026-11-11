@@ -372,7 +372,8 @@ func (f *Framer) ParseFrame() (frame Frame, err error) {
 }
 
 func (f *Framer) parseErrorFrame() Frame {
-	return decodeServerError(framerErrorBody{f}, *f.Header, f.Proto, f.RateLimitingErrorCode).(Frame)
+	err := decodeServerError(framerErrorBody{f}, f.Header.Warnings, f.Proto, f.RateLimitingErrorCode)
+	return &ErrorResponseFrame{Err: err, FrameHeader: *f.Header}
 }
 
 // framerErrorBody reads an ERROR body with a Framer, which panics on short

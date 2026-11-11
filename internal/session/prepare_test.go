@@ -66,7 +66,7 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 						return
 					}
 					if failContinuation {
-						_, err = peer.Write(errorResponse(t, id, protocol.ErrCodeServer, nil))
+						_, err = peer.Write(errorResponse(t, id, protocol.CodeServer, nil))
 						done <- err
 						return
 					}
@@ -121,7 +121,7 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 		if cursor.NextInto(&dst) {
 			t.Fatal("failed continuation delivered output")
 		}
-		if server, ok := errors.AsType[protocol.RequestError](cursor.Err()); !ok || server.GetCode() != protocol.ErrCodeServer {
+		if server, ok := errors.AsType[protocol.ServerError](cursor.Err()); !ok || server.Code() != protocol.CodeServer {
 			t.Fatal(cursor.Err())
 		}
 		info := cursor.Info()

@@ -35,7 +35,6 @@ import (
 	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/tests"
@@ -134,7 +133,7 @@ func TestHostDiscovery(t *testing.T) {
 			framer := &trackingMockFramer{}
 			ok, err := checkSystemSchema(&systemSchemaTestControl{
 				iter: &nativeResultFixture{
-					err:    &frm.ErrorFrame{Code: protocol.ErrCodeSyntax},
+					err:    protocol.NewOtherServerError(protocol.CodeSyntax, ""),
 					framer: framer,
 				},
 			})

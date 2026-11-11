@@ -544,7 +544,7 @@ func (p *TypedParser) ServerError(head frm.FrameHeader, rateLimitCode int) error
 	// to the heap; only an error response pays for a heap copy.
 	q := new(TypedParser)
 	*q = *p
-	err := decodeServerError(q, head, p.Proto, rateLimitCode)
+	err := decodeServerError(q, head.Warnings, p.Proto, rateLimitCode)
 	*p = *q
 	return err
 }

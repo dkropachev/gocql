@@ -131,7 +131,7 @@ func execTestStatement(ctx context.Context, s *cluster.Core, cql string, opts Co
 	return err
 }
 
-func writeErrorResult(resp *protocol.Framer, stream int, code int, msg string) {
+func writeErrorResult(resp *protocol.Framer, stream int, code protocol.ErrorCode, msg string) {
 	resp.WriteHeader(0, frm.OpError, stream)
 	resp.WriteInt(int32(code))
 	resp.WriteString(msg)

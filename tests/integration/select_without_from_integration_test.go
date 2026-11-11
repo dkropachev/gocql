@@ -65,19 +65,12 @@ func probeSelectWithoutFrom() {
 		selectWithoutFromSupported = true
 		return
 	}
-	if serverErrorCode(err) != cqlerr.ErrCodeSyntax {
+	if !errors.Is(err, cqlerr.CodeSyntax) {
 		selectWithoutFromProbeErr = err
 	}
 }
-func serverErrorCode(err error) int {
-	if server, ok := errors.AsType[cqlerr.RequestError](err); ok {
-		return server.GetCode()
-	}
-	return 0
-}
 func isRejectedByServer(err error) bool {
-	code := serverErrorCode(err)
-	return code == cqlerr.ErrCodeSyntax || code == cqlerr.ErrCodeInvalid
+	return errors.Is(err, cqlerr.CodeSyntax) || errors.Is(err, cqlerr.CodeInvalid)
 }
 func createSessionWithoutKeyspace(t testing.TB) *gocql.Session[testDialect] {
 	t.Helper()

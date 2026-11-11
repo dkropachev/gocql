@@ -70,7 +70,7 @@ func TestAuthHandshake(t *testing.T) {
 		want := passwordToken("per-host", "pw")
 		srv := newAuthTestServer(t, func(token []byte) authReply {
 			if string(token) != want {
-				return authReply{op: frm.OpError, errCode: protocol.ErrCodeCredentials, errMsg: "bad credentials"}
+				return authReply{op: frm.OpError, errCode: protocol.CodeBadCredentials, errMsg: "bad credentials"}
 			}
 			return authReply{op: frm.OpAuthSuccess}
 		})
@@ -167,7 +167,7 @@ func TestAuthHandshake(t *testing.T) {
 					name: "BadCredentials",
 					auth: transport.PasswordAuthenticator{Username: "u", Password: "wrong"},
 					reply: func([]byte) authReply {
-						return authReply{op: frm.OpError, errCode: protocol.ErrCodeCredentials, errMsg: "Provided username u and/or password are incorrect"}
+						return authReply{op: frm.OpError, errCode: protocol.CodeBadCredentials, errMsg: "Provided username u and/or password are incorrect"}
 					},
 					wantErr: "password are incorrect",
 				},
@@ -224,7 +224,7 @@ func TestAuthHandshake(t *testing.T) {
 		want := passwordToken("cassandra", "secret")
 		srv := newAuthTestServer(t, func(token []byte) authReply {
 			if string(token) != want {
-				return authReply{op: frm.OpError, errCode: protocol.ErrCodeCredentials, errMsg: "bad credentials"}
+				return authReply{op: frm.OpError, errCode: protocol.CodeBadCredentials, errMsg: "bad credentials"}
 			}
 			return authReply{op: frm.OpAuthSuccess}
 		})

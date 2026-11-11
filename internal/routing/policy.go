@@ -1033,13 +1033,13 @@ func InternalRoutingLatencySample(err error) bool {
 	if err == nil {
 		return true
 	}
-	if server, ok := errors.AsType[protocol.RequestError](err); ok {
+	if server, ok := errors.AsType[protocol.ServerError](err); ok {
 		// Fast rejections say nothing about how long the replica takes.
 		switch runtimeerrors.KindOf(server) {
 		case runtimeerrors.KindUnavailable, runtimeerrors.KindOverloaded, runtimeerrors.KindRateLimited:
 			return false
 		}
-		return server.GetCode() != protocol.ErrCodeUnprepared
+		return server.Code() != protocol.CodeUnprepared
 	}
 	// Local validation/serialization and broken transport are not response latency.
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, runtimeerrors.ErrNoConnections) || errors.Is(err, runtimeerrors.ErrConnectionClosed) {

@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"net"
-	"reflect"
 	"strings"
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
@@ -11,7 +10,7 @@ import (
 
 // errBody builds an ERROR frame body: <code><message> followed by whatever the
 // code adds.
-func errBody(proto byte, code int, msg string, rest func(f *Framer)) []byte {
+func errBody(proto byte, code ErrorCode, msg string, rest func(f *Framer)) []byte {
 	f := NewFramer(nil, proto)
 	f.WriteInt(int32(code))
 	f.WriteString(msg)
@@ -70,162 +69,163 @@ func errorFrameCases() []errorFrameCase {
 	hdr := func(proto byte) frm.FrameHeader {
 		return frm.FrameHeader{Version: frm.ProtoVersion(proto) | ProtoDirectionMask, Op: frm.OpError, Stream: 7}
 	}
-	base := func(proto byte, code int, msg string) frm.ErrorFrame {
-		return frm.NewErrorFrame(hdr(proto), code, msg)
+	base := func(msg string) serverError { return serverError{message: msg} }
+	response := func(proto byte, err ServerError) Frame {
+		return &ErrorResponseFrame{Err: err, FrameHeader: hdr(proto)}
 	}
 
 	var cases []errorFrameCase
 
-	for _, code := range []int{
-		ErrCodeServer, ErrCodeProtocol, ErrCodeCredentials, ErrCodeOverloaded, ErrCodeBootstrapping,
-		ErrCodeTruncate, ErrCodeSyntax, ErrCodeUnauthorized, ErrCodeInvalid, ErrCodeConfig,
+	for _, code := range []ErrorCode{
+		CodeServer, CodeProtocol, CodeBadCredentials, CodeOverloaded, CodeBootstrapping,
+		CodeTruncate, CodeSyntax, CodeUnauthorized, CodeInvalid, CodeConfig,
 	} {
 		cases = append(cases, errorFrameCase{
 			name:  "Plain" + strings.ToUpper(errCodeName(code)),
 			proto: ProtoVersion4,
 			body:  errBody(ProtoVersion4, code, "boom", nil),
-			want:  &RequestErrServer{ErrorFrame: base(ProtoVersion4, code, "boom")},
+			want:  response(ProtoVersion4, &OtherServerError{serverError: base("boom"), code: code}),
 		})
 	}
 
 	cases = append(cases,
 		errorFrameCase{
 			name: "Unavailable", proto: ProtoVersion4,
-			body: errBody(ProtoVersion4, ErrCodeUnavailable, "unavail", func(f *Framer) {
+			body: errBody(ProtoVersion4, CodeUnavailable, "unavail", func(f *Framer) {
 				f.WriteConsistency(cqltype.LocalQuorum)
 				f.WriteInt(3)
 				f.WriteInt(1)
 			}),
-			want: &RequestErrUnavailable{ErrorFrame: base(ProtoVersion4, ErrCodeUnavailable, "unavail"),
-				Consistency: cqltype.LocalQuorum, Required: 3, Alive: 1},
+			want: response(ProtoVersion4, &UnavailableError{serverError: base("unavail"),
+				Consistency: cqltype.LocalQuorum, Required: 3, Alive: 1}),
 		},
 		errorFrameCase{
 			name: "WriteTimeout", proto: ProtoVersion4,
-			body: errBody(ProtoVersion4, ErrCodeWriteTimeout, "wt", func(f *Framer) {
+			body: errBody(ProtoVersion4, CodeWriteTimeout, "wt", func(f *Framer) {
 				f.WriteConsistency(cqltype.Quorum)
 				f.WriteInt(1)
 				f.WriteInt(2)
 				f.WriteString("BATCH_LOG")
 			}),
-			want: &RequestErrWriteTimeout{ErrorFrame: base(ProtoVersion4, ErrCodeWriteTimeout, "wt"),
-				Consistency: cqltype.Quorum, Received: 1, BlockFor: 2, WriteType: "BATCH_LOG"},
+			want: response(ProtoVersion4, &WriteTimeoutError{serverError: base("wt"),
+				Consistency: cqltype.Quorum, Received: 1, BlockFor: 2, WriteType: "BATCH_LOG"}),
 		},
 		errorFrameCase{
 			name: "ReadTimeout", proto: ProtoVersion4,
-			body: errBody(ProtoVersion4, ErrCodeReadTimeout, "rt", func(f *Framer) {
+			body: errBody(ProtoVersion4, CodeReadTimeout, "rt", func(f *Framer) {
 				f.WriteConsistency(cqltype.One)
 				f.WriteInt(0)
 				f.WriteInt(1)
 				f.WriteByteValue(1)
 			}),
-			want: &RequestErrReadTimeout{ErrorFrame: base(ProtoVersion4, ErrCodeReadTimeout, "rt"),
-				Consistency: cqltype.One, Received: 0, BlockFor: 1, DataPresent: 1},
+			want: response(ProtoVersion4, &ReadTimeoutError{serverError: base("rt"),
+				Consistency: cqltype.One, Received: 0, BlockFor: 1, DataPresent: true}),
 		},
 		errorFrameCase{
 			name: "AlreadyExists", proto: ProtoVersion4,
-			body: errBody(ProtoVersion4, ErrCodeAlreadyExists, "exists", func(f *Framer) {
+			body: errBody(ProtoVersion4, CodeAlreadyExists, "exists", func(f *Framer) {
 				f.WriteString("ks")
 				f.WriteString("tbl")
 			}),
-			want: &RequestErrAlreadyExists{ErrorFrame: base(ProtoVersion4, ErrCodeAlreadyExists, "exists"),
-				Keyspace: "ks", Table: "tbl"},
+			want: response(ProtoVersion4, &AlreadyExistsError{serverError: base("exists"),
+				Keyspace: "ks", Table: "tbl"}),
 		},
 		errorFrameCase{
 			name: "Unprepared", proto: ProtoVersion4,
-			body: errBody(ProtoVersion4, ErrCodeUnprepared, "unprep", func(f *Framer) {
+			body: errBody(ProtoVersion4, CodeUnprepared, "unprep", func(f *Framer) {
 				f.WriteShortBytes([]byte{0xca, 0xfe})
 			}),
-			want: &RequestErrUnprepared{ErrorFrame: base(ProtoVersion4, ErrCodeUnprepared, "unprep"),
-				StatementId: []byte{0xca, 0xfe}},
+			want: response(ProtoVersion4, &UnpreparedError{serverError: base("unprep"),
+				StatementID: []byte{0xca, 0xfe}}),
 		},
 		// v4 carries only a failure count; v5 replaces it with a per-replica
 		// reason map and derives the count from it.
 		errorFrameCase{
 			name: "ReadFailureV4", proto: ProtoVersion4,
-			body: errBody(ProtoVersion4, ErrCodeReadFailure, "rf", func(f *Framer) {
+			body: errBody(ProtoVersion4, CodeReadFailure, "rf", func(f *Framer) {
 				f.WriteConsistency(cqltype.All)
 				f.WriteInt(1)
 				f.WriteInt(3)
 				f.WriteInt(2)
 				f.WriteByteValue(0)
 			}),
-			want: &RequestErrReadFailure{ErrorFrame: base(ProtoVersion4, ErrCodeReadFailure, "rf"),
-				Consistency: cqltype.All, Received: 1, BlockFor: 3, NumFailures: 2, DataPresent: false},
+			want: response(ProtoVersion4, &ReadFailureError{serverError: base("rf"),
+				Consistency: cqltype.All, Received: 1, BlockFor: 3, NumFailures: 2, DataPresent: false}),
 		},
 		errorFrameCase{
 			name: "ReadFailureV5", proto: ProtoVersion5,
-			body: errBody(ProtoVersion5, ErrCodeReadFailure, "rf", func(f *Framer) {
+			body: errBody(ProtoVersion5, CodeReadFailure, "rf", func(f *Framer) {
 				f.WriteConsistency(cqltype.All)
 				f.WriteInt(1)
 				f.WriteInt(3)
 				writeErrMap(f, errMapEntry{"10.0.0.1", 1}, errMapEntry{"2001:db8::1", 2})
 				f.WriteByteValue(1)
 			}),
-			want: &RequestErrReadFailure{ErrorFrame: base(ProtoVersion5, ErrCodeReadFailure, "rf"),
+			want: response(ProtoVersion5, &ReadFailureError{serverError: base("rf"),
 				Consistency: cqltype.All, Received: 1, BlockFor: 3, NumFailures: 2, DataPresent: true,
-				ErrorMap: ErrorMap{"10.0.0.1": 1, "2001:db8::1": 2}},
+				ErrorMap: ErrorMap{"10.0.0.1": 1, "2001:db8::1": 2}}),
 		},
 		errorFrameCase{
 			name: "WriteFailureV4", proto: ProtoVersion4,
-			body: errBody(ProtoVersion4, ErrCodeWriteFailure, "wf", func(f *Framer) {
+			body: errBody(ProtoVersion4, CodeWriteFailure, "wf", func(f *Framer) {
 				f.WriteConsistency(cqltype.Two)
 				f.WriteInt(0)
 				f.WriteInt(2)
 				f.WriteInt(1)
 				f.WriteString("SIMPLE")
 			}),
-			want: &RequestErrWriteFailure{ErrorFrame: base(ProtoVersion4, ErrCodeWriteFailure, "wf"),
-				Consistency: cqltype.Two, Received: 0, BlockFor: 2, NumFailures: 1, WriteType: "SIMPLE"},
+			want: response(ProtoVersion4, &WriteFailureError{serverError: base("wf"),
+				Consistency: cqltype.Two, Received: 0, BlockFor: 2, NumFailures: 1, WriteType: "SIMPLE"}),
 		},
 		errorFrameCase{
 			name: "WriteFailureV5", proto: ProtoVersion5,
-			body: errBody(ProtoVersion5, ErrCodeWriteFailure, "wf", func(f *Framer) {
+			body: errBody(ProtoVersion5, CodeWriteFailure, "wf", func(f *Framer) {
 				f.WriteConsistency(cqltype.Two)
 				f.WriteInt(0)
 				f.WriteInt(2)
 				writeErrMap(f, errMapEntry{"10.0.0.2", 3})
 				f.WriteString("SIMPLE")
 			}),
-			want: &RequestErrWriteFailure{ErrorFrame: base(ProtoVersion5, ErrCodeWriteFailure, "wf"),
+			want: response(ProtoVersion5, &WriteFailureError{serverError: base("wf"),
 				Consistency: cqltype.Two, Received: 0, BlockFor: 2, NumFailures: 1, WriteType: "SIMPLE",
-				ErrorMap: ErrorMap{"10.0.0.2": 3}},
+				ErrorMap: ErrorMap{"10.0.0.2": 3}}),
 		},
 		errorFrameCase{
 			name: "WriteFailureV5EmptyMap", proto: ProtoVersion5,
-			body: errBody(ProtoVersion5, ErrCodeWriteFailure, "wf", func(f *Framer) {
+			body: errBody(ProtoVersion5, CodeWriteFailure, "wf", func(f *Framer) {
 				f.WriteConsistency(cqltype.Two)
 				f.WriteInt(0)
 				f.WriteInt(2)
 				writeErrMap(f)
 				f.WriteString("SIMPLE")
 			}),
-			want: &RequestErrWriteFailure{ErrorFrame: base(ProtoVersion5, ErrCodeWriteFailure, "wf"),
-				Consistency: cqltype.Two, BlockFor: 2, WriteType: "SIMPLE", ErrorMap: ErrorMap{}},
+			want: response(ProtoVersion5, &WriteFailureError{serverError: base("wf"),
+				Consistency: cqltype.Two, BlockFor: 2, WriteType: "SIMPLE", ErrorMap: ErrorMap{}}),
 		},
 		errorFrameCase{
 			name: "FunctionFailure", proto: ProtoVersion4,
-			body: errBody(ProtoVersion4, ErrCodeFunctionFailure, "ff", func(f *Framer) {
+			body: errBody(ProtoVersion4, CodeFunctionFailure, "ff", func(f *Framer) {
 				f.WriteString("ks")
 				f.WriteString("fn")
 				f.WriteStringList([]string{"int", "text"})
 			}),
-			want: &RequestErrFunctionFailure{ErrorFrame: base(ProtoVersion4, ErrCodeFunctionFailure, "ff"),
-				Keyspace: "ks", Function: "fn", ArgTypes: []string{"int", "text"}},
+			want: response(ProtoVersion4, &FunctionFailureError{serverError: base("ff"),
+				Keyspace: "ks", Function: "fn", ArgTypes: []string{"int", "text"}}),
 		},
 		errorFrameCase{
 			name: "CDCWriteFailure", proto: ProtoVersion4,
-			body: errBody(ProtoVersion4, ErrCodeCDCWriteFailure, "cdc", nil),
-			want: &RequestErrCDCWriteFailure{ErrorFrame: base(ProtoVersion4, ErrCodeCDCWriteFailure, "cdc")},
+			body: errBody(ProtoVersion4, CodeCDCWriteFailure, "cdc", nil),
+			want: response(ProtoVersion4, &CDCWriteFailureError{serverError: base("cdc")}),
 		},
 		errorFrameCase{
 			name: "CASWriteUnknown", proto: ProtoVersion4,
-			body: errBody(ProtoVersion4, ErrCodeCASWriteUnknown, "cas", func(f *Framer) {
+			body: errBody(ProtoVersion4, CodeCASWriteUnknown, "cas", func(f *Framer) {
 				f.WriteConsistency(cqltype.Serial)
 				f.WriteInt(1)
 				f.WriteInt(2)
 			}),
-			want: &RequestErrCASWriteUnknown{ErrorFrame: base(ProtoVersion4, ErrCodeCASWriteUnknown, "cas"),
-				Consistency: cqltype.Serial, Received: 1, BlockFor: 2},
+			want: response(ProtoVersion4, &CASWriteUnknownError{serverError: base("cas"),
+				Consistency: cqltype.Serial, Received: 1, BlockFor: 2}),
 		},
 		errorFrameCase{
 			name: "RateLimitReached", proto: ProtoVersion4, rateLimitCode: scyllaRateLimitCode,
@@ -233,8 +233,8 @@ func errorFrameCases() []errorFrameCase {
 				f.WriteByteValue(byte(OpTypeWrite))
 				f.WriteByteValue(1)
 			}),
-			want: &RequestErrRateLimitReached{ErrorFrame: base(ProtoVersion4, scyllaRateLimitCode, "slow down"),
-				OpType: OpTypeWrite, RejectedByCoordinator: true},
+			want: response(ProtoVersion4, &RateLimitReachedError{serverError: base("slow down"),
+				OpType: OpTypeWrite, RejectedByCoordinator: true}),
 		},
 		// Without the extension the same code is just unknown, and its extra
 		// bytes are not read.
@@ -244,45 +244,44 @@ func errorFrameCases() []errorFrameCase {
 				f.WriteByteValue(byte(OpTypeWrite))
 				f.WriteByteValue(1)
 			}),
-			want: &UnknownServerError{ErrorFrame: base(ProtoVersion4, scyllaRateLimitCode, "slow down")},
+			want: response(ProtoVersion4, &OtherServerError{serverError: base("slow down"), code: scyllaRateLimitCode}),
 		},
 		errorFrameCase{
 			name: "Unknown", proto: ProtoVersion4,
 			body: errBody(ProtoVersion4, 0x7777, "what", nil),
-			want: &UnknownServerError{ErrorFrame: base(ProtoVersion4, 0x7777, "what")},
+			want: response(ProtoVersion4, &OtherServerError{serverError: base("what"), code: 0x7777}),
 		},
 	)
 	return cases
 }
 
-func errCodeName(code int) string {
+func errCodeName(code ErrorCode) string {
 	switch code {
-	case ErrCodeServer:
+	case CodeServer:
 		return "server"
-	case ErrCodeProtocol:
+	case CodeProtocol:
 		return "protocol"
-	case ErrCodeCredentials:
+	case CodeBadCredentials:
 		return "credentials"
-	case ErrCodeOverloaded:
+	case CodeOverloaded:
 		return "overloaded"
-	case ErrCodeBootstrapping:
+	case CodeBootstrapping:
 		return "bootstrapping"
-	case ErrCodeTruncate:
+	case CodeTruncate:
 		return "truncate"
-	case ErrCodeSyntax:
+	case CodeSyntax:
 		return "syntax"
-	case ErrCodeUnauthorized:
+	case CodeUnauthorized:
 		return "unauthorized"
-	case ErrCodeInvalid:
+	case CodeInvalid:
 		return "invalid"
-	case ErrCodeConfig:
+	case CodeConfig:
 		return "config"
 	}
 	return "other"
 }
 
-// messageOf reads the server message off any parsed error, through the
-// ErrorFrame each one embeds.
+// messageOf reads the server message off a parsed ERROR response.
 func messageOf(f Frame) string {
-	return reflect.Indirect(reflect.ValueOf(f)).FieldByName("Message").String()
+	return f.(*ErrorResponseFrame).Err.Message()
 }

@@ -554,7 +554,7 @@ func TestQuery(t *testing.T) {
 			go func() {
 				_, stream, _, err := readRequest(peers[0])
 				if err == nil {
-					_, err = peers[0].Write(errorResponse(t, stream, protocol.ErrCodeServer, nil))
+					_, err = peers[0].Write(errorResponse(t, stream, protocol.CodeServer, nil))
 				}
 				if err != nil {
 					t.Error(err)
@@ -688,7 +688,7 @@ func TestQuery(t *testing.T) {
 					case step == 0:
 						_, err = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody([]byte("a"), "one", "uno")))
 					case step == 1:
-						_, err = peers[0].Write(errorResponse(t, stream, protocol.ErrCodeUnprepared, old.InternalId))
+						_, err = peers[0].Write(errorResponse(t, stream, protocol.CodeUnprepared, old.InternalId))
 					default:
 						_, err = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "two")))
 					}
@@ -955,7 +955,7 @@ func TestQuery(t *testing.T) {
 				}
 				mu.Unlock()
 				if fail {
-					return errorResponse(t, stream, protocol.ErrCodeServer, nil)
+					return errorResponse(t, stream, protocol.CodeServer, nil)
 				}
 				return pinPages(t, stream, token)
 			})

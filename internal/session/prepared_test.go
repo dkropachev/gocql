@@ -302,7 +302,7 @@ func TestPrepared(t *testing.T) {
 					}
 					var response []byte
 					if i == 0 {
-						response = errorResponse(t, stream, protocol.ErrCodeServer, nil)
+						response = errorResponse(t, stream, protocol.CodeServer, nil)
 					} else {
 						response = typedTestResponse(t, 4, stream, preparedBody([]byte{byte(i)}, implCqltype.NewColumns(), cols))
 					}
@@ -983,9 +983,9 @@ func TestPrepared(t *testing.T) {
 						}
 						switch step {
 						case 0:
-							_, err = peers[0].Write(errorResponse(t, stream, protocol.ErrCodeServer, nil))
+							_, err = peers[0].Write(errorResponse(t, stream, protocol.CodeServer, nil))
 						case 1:
-							_, err = peers[0].Write(errorResponse(t, stream, protocol.ErrCodeUnprepared, old.InternalId))
+							_, err = peers[0].Write(errorResponse(t, stream, protocol.CodeUnprepared, old.InternalId))
 						case 3:
 							_, err = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody([]byte("a"), "one")))
 						case 4:

@@ -516,7 +516,7 @@ func TestExecution(t *testing.T) {
 				defer close(done)
 				for attempt := 0; attempt < 3; attempt++ {
 					stream := typedTestReadRequest(t, conns[0], peers[0])
-					response := errorResponse(t, stream, protocol.ErrCodeOverloaded, nil)
+					response := errorResponse(t, stream, protocol.CodeOverloaded, nil)
 					if attempt == 2 {
 						response = typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "retried"))
 					}
@@ -556,7 +556,7 @@ func TestExecution(t *testing.T) {
 			handle := new(profile)
 			go func() {
 				stream := typedTestReadRequest(t, conns[0], peers[0])
-				_, _ = peers[0].Write(errorResponse(t, stream, protocol.ErrCodeOverloaded, nil))
+				_, _ = peers[0].Write(errorResponse(t, stream, protocol.CodeOverloaded, nil))
 			}()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

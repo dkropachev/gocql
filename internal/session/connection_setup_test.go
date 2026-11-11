@@ -34,7 +34,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
@@ -55,7 +54,7 @@ func TestConnectionSetup(t *testing.T) {
 		})
 
 		t.Run("PreservesCause", func(t *testing.T) {
-			for _, cause := range []error{errors.New("fixture dial rejected"), &frm.ErrorFrame{Code: protocol.ErrCodeCredentials, Message: "rejected"}} {
+			for _, cause := range []error{errors.New("fixture dial rejected"), protocol.NewOtherServerError(protocol.CodeBadCredentials, "rejected")} {
 				config := settings.DefaultConfig("127.0.20.1")
 				config.Protocol = 4
 				config.Logger = logging.Nop()
@@ -67,8 +66,8 @@ func TestConnectionSetup(t *testing.T) {
 				if !errors.Is(err, cause) {
 					t.Fatalf("bootstrap discarded dial cause: %v", err)
 				}
-				if request, ok := cause.(protocol.RequestError); ok {
-					if got, ok := errors.AsType[protocol.RequestError](err); !ok || got.GetCode() != request.GetCode() {
+				if request, ok := cause.(protocol.ServerError); ok {
+					if got, ok := errors.AsType[protocol.ServerError](err); !ok || got.Code() != request.Code() {
 						t.Fatal("bootstrap discarded server error", err)
 					}
 				}

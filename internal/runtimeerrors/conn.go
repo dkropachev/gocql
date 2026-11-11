@@ -53,7 +53,7 @@ func (e *QueryError) ExecutionStatus() cqltype.ExecutionStatus {
 	if !d.InternalPotentiallyExecuted {
 		return cqltype.NotExecuted
 	}
-	if server, ok := errors.AsType[protocol.RequestError](d.InternalErr); ok {
+	if server, ok := errors.AsType[protocol.ServerError](d.InternalErr); ok {
 		return protocol.ServerErrorExecutionStatus(server)
 	}
 	return cqltype.MaybeExecuted

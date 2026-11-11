@@ -89,7 +89,7 @@ func newTraceServer(t *testing.T, cfg traceConfig) *traceServer {
 			return false
 		}
 		if cfg.fail {
-			writeErrorResult(resp, stream, protocol.ErrCodeServer, "traces unavailable")
+			writeErrorResult(resp, stream, protocol.CodeServer, "traces unavailable")
 			return true
 		}
 		switch id {

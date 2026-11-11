@@ -125,11 +125,11 @@ func TestSchemaAgreement(t *testing.T) {
 
 		t.Run("TerminalAuthorization", func(t *testing.T) {
 			s, id, _ := agreementSession(t)
-			c, count := agreementConn(t, s, id, cqltype.MustRandomUUID(), protocol.ErrCodeUnauthorized)
+			c, count := agreementConn(t, s, id, cqltype.MustRandomUUID(), protocol.CodeUnauthorized)
 			agreementPool(s, c)
 			s.Peripheral().InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: []model.HostSnapshot{{ID: id, Enabled: true}}}))
 			err := s.AwaitSchemaAgreement(context.Background())
-			if request, ok := errors.AsType[protocol.RequestError](err); !ok || request.GetCode() != protocol.ErrCodeUnauthorized {
+			if request, ok := errors.AsType[protocol.ServerError](err); !ok || request.Code() != protocol.CodeUnauthorized {
 				t.Fatal(err)
 			}
 			if count.Load() != 1 {
@@ -188,7 +188,7 @@ func TestSchemaAgreement(t *testing.T) {
 							return
 						}
 					} else {
-						if _, err := peers[0].Write(errorResponse(t, stream, protocol.ErrCodeUnauthorized, nil)); err != nil {
+						if _, err := peers[0].Write(errorResponse(t, stream, protocol.CodeUnauthorized, nil)); err != nil {
 							return
 						}
 					}

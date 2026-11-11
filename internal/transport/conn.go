@@ -691,8 +691,8 @@ func (s *startupCoordinator) startup(ctx context.Context, startupCompleted *atom
 	}
 
 	switch v := frame.(type) {
-	case error:
-		return v
+	case *protocol.ErrorResponseFrame:
+		return v.Err
 	case *frm.ReadyFrame:
 
 		startupCompleted.Store(true)
@@ -731,8 +731,8 @@ func (s *startupCoordinator) authenticateHandshake(ctx context.Context, authFram
 		}
 
 		switch v := frame.(type) {
-		case error:
-			return v
+		case *protocol.ErrorResponseFrame:
+			return v.Err
 		case *frm.AuthSuccessFrame:
 			if challenger != nil {
 				return challenger.Success(v.Data)
@@ -928,16 +928,18 @@ type InternalProtocolError struct {
 }
 
 func (p *InternalProtocolError) Error() string {
-	if err, ok := p.InternalFrame.(error); ok {
+	if err := p.Unwrap(); err != nil {
 		return err.Error()
 	}
 	return fmt.Sprintf("gocql: received unexpected frame on stream %d: %v", p.InternalFrame.Header().Stream, p.InternalFrame)
 }
 
-// Unwrap returns the frame when it is a server error.
+// Unwrap returns the server error when the frame is an ERROR response.
 func (p *InternalProtocolError) Unwrap() error {
-	err, _ := p.InternalFrame.(error)
-	return err
+	if response, ok := p.InternalFrame.(*protocol.ErrorResponseFrame); ok {
+		return response.Err
+	}
+	return nil
 }
 
 func (c *Conn) InternalHeartBeat(ctx context.Context) {
@@ -1916,8 +1918,8 @@ func (c *Conn) InternalUseKeyspaceContext(ctx context.Context, keyspace string) 
 
 	switch x := resp.(type) {
 	case *protocol.ResultKeyspaceFrame:
-	case error:
-		return x
+	case *protocol.ErrorResponseFrame:
+		return x.Err
 	default:
 		return cqltype.NewFrameError("unknown frame in response to USE: %v", x)
 	}

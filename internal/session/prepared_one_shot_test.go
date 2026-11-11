@@ -320,7 +320,7 @@ func TestPreparedOneShot(t *testing.T) {
 					call <- err
 				}()
 				r := <-requests
-				if _, err := peers[0].Write(serverError(t, r.stream, protocol.ErrCodeUnavailable, unavailableBody())); err != nil {
+				if _, err := peers[0].Write(serverError(t, r.stream, protocol.CodeUnavailable, unavailableBody())); err != nil {
 					t.Fatal(err)
 				}
 				<-decided

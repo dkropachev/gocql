@@ -146,7 +146,7 @@ page as it is, and the user docs tell them to check `More()`.
 
 | Case | Cassandra | ScyllaDB | Driver |
 |---|---|---|---|
-| LWT outcome unknown | `CAS_WRITE_UNKNOWN` (0x1700) on protocol v5. On v4, `WriteTimeout` with write type `CAS` | `WriteTimeout` with write type `CAS`. ScyllaDB speaks v4 at most | Both map to `MaybeExecuted` (`internal/protocol/errors.go:256`, `writeExecution`), and `cqlerr.IsCASWriteUnknown` matches both |
+| LWT outcome unknown | `CAS_WRITE_UNKNOWN` (0x1700) on protocol v5. On v4, `WriteTimeout` with write type `CAS` | `WriteTimeout` with write type `CAS`. ScyllaDB speaks v4 at most | Both map to `MaybeExecuted` (`internal/protocol/errors.go:393`, `writeExecution`), and `cqlerr.IsCASWriteUnknown` matches both |
 | CDC write failure | `CDC_WRITE_FAILURE` (0x1600) | Not sent | Parsed |
 | Rate limit | Not sent | `RATE_LIMIT_ERROR` via `SCYLLA_RATE_LIMIT_ERROR`, otherwise `Config_error` | `RejectedByCoordinator` maps to `NotExecuted`, otherwise `MaybeExecuted` |
 | Failure reason map | v5 `Read_failure` / `Write_failure` | Added to v4 via `SCYLLA_FAILURE_REASON_MAP` | Parsed |

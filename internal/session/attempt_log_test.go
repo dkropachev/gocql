@@ -9,7 +9,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -17,7 +16,7 @@ import (
 
 func TestAttemptLog(t *testing.T) {
 	timeout := runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: runtimeerrors.ErrTimeoutNoResponse, InternalPotentiallyExecuted: true})
-	overloaded := runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: &frm.ErrorFrame{Code: protocol.ErrCodeOverloaded}, InternalPotentiallyExecuted: true})
+	overloaded := runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: protocol.NewOtherServerError(protocol.CodeOverloaded, ""), InternalPotentiallyExecuted: true})
 
 	t.Run("Empty", func(t *testing.T) {
 		var log attemptLog

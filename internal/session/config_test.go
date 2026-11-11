@@ -430,7 +430,7 @@ func TestConfig(t *testing.T) {
 					}
 					var response []byte
 					if step == 0 {
-						response = errorResponse(t, stream, protocol.ErrCodeServer, nil)
+						response = errorResponse(t, stream, protocol.CodeServer, nil)
 					} else if step == 1 {
 						response = typedTestResponse(t, 4, stream, runtimeRowsBody([]byte("page"), "a"))
 					} else {

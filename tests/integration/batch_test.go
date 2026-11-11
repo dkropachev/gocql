@@ -212,7 +212,7 @@ func TestBatch(t *testing.T) {
 			require.NoError(t, err)
 			_, err = execBatch(ctx, session, cql.LoggedBatch, []batchItem{item}, gocql.CompiledOptions{})
 			require.Error(t, err, "expected to get error for invalid query in batch")
-			var server cqlerr.RequestError
+			var server cqlerr.ServerError
 			require.ErrorAs(t, err, &server)
 		})
 		// Tests gocql to make sure batch operations larger than the maximum

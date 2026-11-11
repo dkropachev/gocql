@@ -258,7 +258,7 @@ func TestEventConverterAPI(t *testing.T) {
 
 		t.Run("NonEventFrame", func(t *testing.T) {
 			// Test with a non-event frame type
-			frame := &frm.ErrorFrame{}
+			frame := &frm.ReadyFrame{}
 			event := events.FrameToEvent(frame)
 			if event != nil {
 				t.Errorf("FrameToEvent(non-event) = %v, want nil", event)

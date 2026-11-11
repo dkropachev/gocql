@@ -9,7 +9,6 @@ import (
 	"net"
 	"testing"
 
-	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
@@ -24,7 +23,7 @@ var benchKindSink Kind
 
 // BenchmarkKindOf measures classifying the errors a failed attempt carries.
 func BenchmarkKindOf(b *testing.B) {
-	unavailable := &protocol.RequestErrUnavailable{ErrorFrame: frm.ErrorFrame{Code: protocol.ErrCodeUnavailable}}
+	unavailable := &protocol.UnavailableError{}
 	for _, bench := range []struct {
 		name string
 		err  error

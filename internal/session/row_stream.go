@@ -676,7 +676,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		if s.Info().OutputStarted {
 			return err
 		}
-		if unprepared, ok := errors.AsType[*protocol.RequestErrUnprepared](err); attempt == 1 && ok && request.source().rejected(unprepared.StatementId, wireRequest.PreparedID) {
+		if unprepared, ok := errors.AsType[*protocol.UnpreparedError](err); attempt == 1 && ok && request.source().rejected(unprepared.StatementID, wireRequest.PreparedID) {
 			if closeErr := s.privateStorage.reservation.InternalClose(true); closeErr != nil {
 				return closeErr
 			}

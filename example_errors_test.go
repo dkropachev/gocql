@@ -50,10 +50,10 @@ func Example_errors() {
 	}
 
 	// Server errors keep their code and details.
-	if errors.Is(err, cqlerr.ErrServerOverloaded) {
+	if errors.Is(err, cqlerr.CodeOverloaded) {
 		log.Print("coordinator overloaded")
 	}
-	if timeout, ok := errors.AsType[*cqlerr.RequestErrWriteTimeout](err); ok {
+	if timeout, ok := errors.AsType[*cqlerr.WriteTimeoutError](err); ok {
 		log.Printf("write timeout: %d of %d replicas acknowledged", timeout.Received, timeout.BlockFor)
 	}
 

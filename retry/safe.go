@@ -22,19 +22,19 @@ func (p Safe) Decide(a Attempt) Decision {
 	if a.Number >= limit || errors.Is(a.Err, context.Canceled) || errors.Is(a.Err, context.DeadlineExceeded) {
 		return Decision{}
 	}
-	if _, ok := errors.AsType[*cqlerr.RequestErrUnavailable](a.Err); ok {
+	if _, ok := errors.AsType[*cqlerr.UnavailableError](a.Err); ok {
 		return Decision{Action: Next}
 	}
-	if read, ok := errors.AsType[*cqlerr.RequestErrReadTimeout](a.Err); ok && read.Received >= read.BlockFor && read.DataPresent == 0 {
+	if read, ok := errors.AsType[*cqlerr.ReadTimeoutError](a.Err); ok && read.Received >= read.BlockFor && !read.DataPresent {
 		return Decision{Action: Same}
 	}
-	if server, ok := errors.AsType[cqlerr.RequestError](a.Err); ok {
+	if server, ok := errors.AsType[cqlerr.ServerError](a.Err); ok {
 		if cqlerr.KindOf(server) == cqlerr.KindOverloaded {
 			// Rejected before execution: another host may serve even a
 			// non-idempotent request.
 			return Decision{Action: Next}
 		}
-		if a.Idempotent && server.GetCode() == cqlerr.ErrCodeServer {
+		if a.Idempotent && server.Code() == cqlerr.CodeServer {
 			return Decision{Action: Next}
 		}
 		return Decision{}

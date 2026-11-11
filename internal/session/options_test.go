@@ -38,7 +38,7 @@ func TestOptions(t *testing.T) {
 				var serve pinServe
 				serve.start(t, peers, func(_ int, _ string, stream int) []byte {
 					if attempts.Add(1) == 1 {
-						return errorResponse(t, stream, cqlerr.ErrCodeOverloaded, nil)
+						return errorResponse(t, stream, cqlerr.CodeOverloaded, nil)
 					}
 					return typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "value"))
 				})

@@ -100,7 +100,7 @@ func KindOf(err error) Kind {
 	case errors.Is(err, context.DeadlineExceeded):
 		return KindTimeout
 	}
-	if server, ok := errors.AsType[protocol.RequestError](err); ok {
+	if server, ok := errors.AsType[protocol.ServerError](err); ok {
 		return serverKind(server)
 	}
 	switch {
@@ -136,23 +136,23 @@ func isNetTimeout(err error) bool {
 	return ok && network.Timeout()
 }
 
-func serverKind(err protocol.RequestError) Kind {
-	if _, ok := err.(*protocol.RequestErrRateLimitReached); ok {
+func serverKind(err protocol.ServerError) Kind {
+	if _, ok := err.(*protocol.RateLimitReachedError); ok {
 		return KindRateLimited
 	}
-	switch err.GetCode() {
-	case protocol.ErrCodeReadTimeout, protocol.ErrCodeWriteTimeout:
+	switch err.Code() {
+	case protocol.CodeReadTimeout, protocol.CodeWriteTimeout:
 		return KindTimeout
-	case protocol.ErrCodeUnavailable:
+	case protocol.CodeUnavailable:
 		return KindUnavailable
-	case protocol.ErrCodeOverloaded, protocol.ErrCodeBootstrapping:
+	case protocol.CodeOverloaded, protocol.CodeBootstrapping:
 		return KindOverloaded
-	case protocol.ErrCodeSyntax, protocol.ErrCodeInvalid, protocol.ErrCodeAlreadyExists, protocol.ErrCodeConfig,
-		protocol.ErrCodeFunctionFailure, protocol.ErrCodeUnprepared:
+	case protocol.CodeSyntax, protocol.CodeInvalid, protocol.CodeAlreadyExists, protocol.CodeConfig,
+		protocol.CodeFunctionFailure, protocol.CodeUnprepared:
 		return KindInvalid
-	case protocol.ErrCodeUnauthorized, protocol.ErrCodeCredentials:
+	case protocol.CodeUnauthorized, protocol.CodeBadCredentials:
 		return KindUnauthorized
-	case protocol.ErrCodeProtocol:
+	case protocol.CodeProtocol:
 		return KindProtocol
 	default:
 		return KindServer

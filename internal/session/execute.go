@@ -1226,12 +1226,12 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		if len(wireRequest.PreparedID) > 0 && wireRequest.Batch == nil {
 			s.Core.ApplyTypedFeedbackStamped(response, request.routing, request.tabletFeedback, conn.InternalFramers.InternalDefaults)
 		}
-		if unprepared, ok := errors.AsType[*protocol.RequestErrUnprepared](executeErr); ok && repair < repairs && !bytes.Equal(unprepared.StatementId, repaired) {
-			repaired = unprepared.StatementId
+		if unprepared, ok := errors.AsType[*protocol.UnpreparedError](executeErr); ok && repair < repairs && !bytes.Equal(unprepared.StatementID, repaired) {
+			repaired = unprepared.StatementID
 			if response != nil {
 				response.Owner.Release()
 			}
-			if source.rejected(unprepared.StatementId, wireRequest.PreparedID) {
+			if source.rejected(unprepared.StatementID, wireRequest.PreparedID) {
 				prepared, err = source.onConn(ctx, s, conn, request.InternalValues, true, prepared)
 				if err != nil {
 					return nil, err
@@ -1240,7 +1240,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 				continue
 			}
 			if request.batch != nil {
-				if err = s.repairBatch(ctx, conn, request.batch, unprepared.StatementId); err != nil {
+				if err = s.repairBatch(ctx, conn, request.batch, unprepared.StatementID); err != nil {
 					return nil, err
 				}
 				wireRequest.Batch, err = s.prepareBatchAttempt(ctx, conn, request.batch, wireRequest.Batch)

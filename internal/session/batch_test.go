@@ -323,11 +323,11 @@ func TestBatch(t *testing.T) {
 			go func() {
 				// BATCH -> UNPREPARED id1, PREPARE, BATCH -> UNPREPARED id2, PREPARE, BATCH -> void.
 				responses := []func(stream int) []byte{
-					func(stream int) []byte { return errorResponse(t, stream, protocol.ErrCodeUnprepared, []byte("id1")) },
+					func(stream int) []byte { return errorResponse(t, stream, protocol.CodeUnprepared, []byte("id1")) },
 					func(stream int) []byte {
 						return typedTestResponse(t, 4, stream, preparedBody([]byte("id1"), columns, cqltype.NewColumns(), 0))
 					},
-					func(stream int) []byte { return errorResponse(t, stream, protocol.ErrCodeUnprepared, []byte("id2")) },
+					func(stream int) []byte { return errorResponse(t, stream, protocol.CodeUnprepared, []byte("id2")) },
 					func(stream int) []byte {
 						return typedTestResponse(t, 4, stream, preparedBody([]byte("id2"), columns, cqltype.NewColumns(), 0))
 					},

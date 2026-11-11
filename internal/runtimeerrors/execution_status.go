@@ -31,7 +31,7 @@ func ExecutionStatusOf(err error) cqltype.ExecutionStatus {
 	if reporter, ok := errors.AsType[executionStatusReporter](err); ok {
 		return reporter.ExecutionStatus()
 	}
-	if server, ok := errors.AsType[protocol.RequestError](err); ok {
+	if server, ok := errors.AsType[protocol.ServerError](err); ok {
 		return protocol.ServerErrorExecutionStatus(server)
 	}
 	// Only conditions raised before anything is sent prove the request had
@@ -141,9 +141,9 @@ func (e *ExecutionError) ExecutionStatus() cqltype.ExecutionStatus { return e.st
 // 5, or a write timeout of write type CAS on ScyllaDB and on Cassandra over
 // protocol 4. The write may or may not have applied.
 func IsCASWriteUnknown(err error) bool {
-	if _, ok := errors.AsType[*protocol.RequestErrCASWriteUnknown](err); ok {
+	if _, ok := errors.AsType[*protocol.CASWriteUnknownError](err); ok {
 		return true
 	}
-	timeout, ok := errors.AsType[*protocol.RequestErrWriteTimeout](err)
+	timeout, ok := errors.AsType[*protocol.WriteTimeoutError](err)
 	return ok && timeout.WriteType == "CAS"
 }

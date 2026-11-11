@@ -1006,11 +1006,11 @@ func TestStream(t *testing.T) {
 						}
 						switch step {
 						case 0:
-							_, err = peer.Write(errorResponse(t, id, implProtocol.ErrCodeUnprepared, old.InternalId))
+							_, err = peer.Write(errorResponse(t, id, implProtocol.CodeUnprepared, old.InternalId))
 						case 2:
 							_, err = peer.Write(typedTestResponse(t, 4, id, runtimeRowsBody([]byte("next"), "first")))
 						case 3:
-							_, err = peer.Write(errorExtensions(errorResponse(t, id, implProtocol.ErrCodeUnprepared, []byte("new"))))
+							_, err = peer.Write(errorExtensions(errorResponse(t, id, implProtocol.CodeUnprepared, []byte("new"))))
 						}
 					}
 					if err != nil {
@@ -1033,7 +1033,7 @@ func TestStream(t *testing.T) {
 			if cursor.NextInto(&dst) {
 				t.Fatal("unprepared replay after output")
 			}
-			if _, ok := errors.AsType[*implProtocol.RequestErrUnprepared](cursor.Err()); !ok {
+			if _, ok := errors.AsType[*implProtocol.UnpreparedError](cursor.Err()); !ok {
 				t.Fatal(cursor.Err())
 			}
 			if count != 1 || cursor.Info().DeliveredRows != 1 || cursor.Info().Result.Attempts != 3 {
@@ -1217,7 +1217,7 @@ func TestStream(t *testing.T) {
 					return
 				}
 				id = typedTestReadRequest(t, c, peer)
-				if _, err := peer.Write(withPayload(errorResponse(t, id, implProtocol.ErrCodeServer, nil))); err != nil {
+				if _, err := peer.Write(withPayload(errorResponse(t, id, implProtocol.CodeServer, nil))); err != nil {
 					return
 				}
 				id = typedTestReadRequest(t, c, peer)

@@ -27,11 +27,21 @@ not say whether a retry is safe; combine it with the execution status.
 
 ## Server errors
 
-Every server error implements `cqlerr.RequestError` and is a pointer to a type
-named after its code: `*RequestErrWriteTimeout`, `*RequestErrUnavailable`, and
-`*RequestErrServer` for codes without fields of their own. Match a code with
-`errors.Is(err, cqlerr.ErrServerOverloaded)`, or read the fields with
-`errors.As`. Messages start with the code's name, e.g.
+Every server error implements `cqlerr.ServerError`, whose `Code`, `Message`
+and `Warnings` report the error code, the server's message and the warnings
+sent with it. Each is a pointer to a type named after its code:
+`*WriteTimeoutError`, `*UnavailableError`, `*RateLimitReachedError`, ..., and
+`*OtherServerError` for codes without fields of their own (Overloaded, Syntax,
+Invalid, ...). Match a code with `errors.Is(err, cqlerr.CodeOverloaded)`, or
+read the fields with `errors.As`:
+
+```go
+if timeout, ok := errors.AsType[*cqlerr.WriteTimeoutError](err); ok {
+	log.Printf("%d of %d replicas acknowledged", timeout.Received, timeout.BlockFor)
+}
+```
+
+Messages start with the code's name, e.g.
 `write timeout: Operation timed out ...`.
 
 ## Attempts

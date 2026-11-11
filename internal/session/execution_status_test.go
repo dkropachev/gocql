@@ -20,7 +20,7 @@ import (
 )
 
 // serverError is a server ERROR response with a code-specific body.
-func serverError(t *testing.T, stream, code int, body []byte) []byte {
+func serverError(t *testing.T, stream int, code protocol.ErrorCode, body []byte) []byte {
 	t.Helper()
 	b := binary.BigEndian.AppendUint32(nil, uint32(code))
 	b = binary.BigEndian.AppendUint16(b, 4)
@@ -122,7 +122,7 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		err := run(t, ctx, policy, func(_, stream int) []byte {
-			return serverError(t, stream, protocol.ErrCodeUnavailable, unavailableBody())
+			return serverError(t, stream, protocol.CodeUnavailable, unavailableBody())
 		}, 3)
 		if got := requestError(t, err).ExecutionStatus(); got != cqlerr.NotExecuted {
 			t.Fatalf("status %v: %v", got, err)
@@ -139,14 +139,14 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 		defer cancel()
 		err := run(t, ctx, &recordingRetry{limit: 2}, func(attempt, stream int) []byte {
 			if attempt == 0 {
-				return serverError(t, stream, protocol.ErrCodeWriteTimeout, writeTimeoutBody(0, "SIMPLE"))
+				return serverError(t, stream, protocol.CodeWriteTimeout, writeTimeoutBody(0, "SIMPLE"))
 			}
-			return serverError(t, stream, protocol.ErrCodeUnavailable, unavailableBody())
+			return serverError(t, stream, protocol.CodeUnavailable, unavailableBody())
 		}, 2)
 		if got := requestError(t, err).ExecutionStatus(); got != cqlerr.MaybeExecuted {
 			t.Fatalf("status %v: %v", got, err)
 		}
-		if _, ok := errors.AsType[*cqlerr.RequestErrUnavailable](err); !ok {
+		if _, ok := errors.AsType[*cqlerr.UnavailableError](err); !ok {
 			t.Fatalf("last server error lost: %v", err)
 		}
 		failure := requestError(t, err)
@@ -159,7 +159,7 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		err := run(t, ctx, &recordingRetry{limit: 1}, func(_, stream int) []byte {
-			return serverError(t, stream, protocol.ErrCodeWriteTimeout, writeTimeoutBody(1, "SIMPLE"))
+			return serverError(t, stream, protocol.CodeWriteTimeout, writeTimeoutBody(1, "SIMPLE"))
 		}, 1)
 		if got := requestError(t, err).ExecutionStatus(); got != cqlerr.PartiallyExecuted {
 			t.Fatalf("status %v: %v", got, err)
@@ -172,7 +172,7 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 		sent := make(chan struct{})
 		err := run(t, ctx, &recordingRetry{limit: 3}, func(attempt, stream int) []byte {
 			if attempt == 0 {
-				return serverError(t, stream, protocol.ErrCodeOverloaded, nil)
+				return serverError(t, stream, protocol.CodeOverloaded, nil)
 			}
 			close(sent)
 			go cancel()
@@ -185,7 +185,7 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("cancellation lost: %v", err)
 		}
-		if server, ok := errors.AsType[cqlerr.RequestError](err); !ok || server.GetCode() != cqlerr.ErrCodeOverloaded {
+		if server, ok := errors.AsType[cqlerr.ServerError](err); !ok || server.Code() != cqlerr.CodeOverloaded {
 			t.Fatalf("earlier server error lost: %v", err)
 		}
 	})

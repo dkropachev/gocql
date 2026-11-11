@@ -609,7 +609,7 @@ func TestResponse(t *testing.T) {
 		t.Run("NegativeCountIsEmpty", func(t *testing.T) {
 			t.Parallel()
 
-			body := errBody(ProtoVersion5, ErrCodeReadFailure, "rf", func(f *Framer) {
+			body := errBody(ProtoVersion5, CodeReadFailure, "rf", func(f *Framer) {
 				f.WriteConsistency(cqltype.One)
 				f.WriteInt(0)
 				f.WriteInt(1)
@@ -620,7 +620,7 @@ func TestResponse(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			rf := got.(*RequestErrReadFailure)
+			rf := got.(*ErrorResponseFrame).Err.(*ReadFailureError)
 			if len(rf.ErrorMap) != 0 || rf.NumFailures != 0 {
 				t.Fatalf("ErrorMap = %v, NumFailures = %d; want empty", rf.ErrorMap, rf.NumFailures)
 			}
@@ -660,7 +660,7 @@ func TestResponse(t *testing.T) {
 			for _, tc := range tests {
 				t.Run(tc.name, func(t *testing.T) {
 					t.Parallel()
-					body := errBody(ProtoVersion5, ErrCodeReadFailure, "rf", func(f *Framer) {
+					body := errBody(ProtoVersion5, CodeReadFailure, "rf", func(f *Framer) {
 						f.WriteConsistency(cqltype.One)
 						f.WriteInt(0)
 						f.WriteInt(1)
@@ -738,16 +738,16 @@ func TestResponse(t *testing.T) {
 	})
 	t.Run("ServerErrorCode", func(t *testing.T) {
 		for _, err := range []error{
-			&RequestErrServer{ErrorFrame: frm.ErrorFrame{Code: ErrCodeSyntax, Message: "syntax"}},
-			&RequestErrUnavailable{ErrorFrame: frm.ErrorFrame{Code: ErrCodeUnavailable, Message: "unavailable"}},
-			&RequestErrWriteTimeout{ErrorFrame: frm.ErrorFrame{Code: ErrCodeWriteTimeout, Message: "write timeout"}},
-			&RequestErrUnprepared{ErrorFrame: frm.ErrorFrame{Code: ErrCodeUnprepared, Message: "unprepared"}},
+			NewOtherServerError(CodeSyntax, "syntax"),
+			&UnavailableError{serverError: serverError{message: "unavailable"}},
+			&WriteTimeoutError{serverError: serverError{message: "write timeout"}},
+			&UnpreparedError{serverError: serverError{message: "unprepared"}},
 		} {
-			direct, ok := errors.AsType[RequestError](err)
+			direct, ok := errors.AsType[ServerError](err)
 			if !ok {
 				t.Fatalf("%T does not satisfy server error contract", err)
 			}
-			if wrapped, ok := errors.AsType[RequestError](fmt.Errorf("outer: %w", err)); !ok || wrapped.GetCode() != direct.GetCode() || wrapped.GetMessage() != direct.GetMessage() {
+			if wrapped, ok := errors.AsType[ServerError](fmt.Errorf("outer: %w", err)); !ok || wrapped.Code() != direct.Code() || wrapped.Message() != direct.Message() {
 				t.Fatalf("wrapped %T lost server details", err)
 			}
 		}
