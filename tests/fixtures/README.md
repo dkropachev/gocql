@@ -63,8 +63,7 @@ cleanup; recover only the exact retained owned root and PIDs after inspecting th
 receipt. Other lanes and historical data must remain untouched.
 
 Integration CQL call sites and codec identities use the run namespace explicitly;
-there is no CQL rewrite at a driver boundary. The complete original identity and
-assertion mapping is retained in the feature-specs evidence test mapping.
+there is no CQL rewrite at a driver boundary.
 Two-shard lanes set `smp: 2`; plaintext and TLS shard endpoints are explicitly
 19042 and 19142, respectively, alongside native 9042 and 9142.
 
@@ -103,7 +102,7 @@ materialized-view inputs preserve the same resulting table/view schema.
 `internal/testkit` also provides independent ROWS frames and CRC-protected v5
 units. Literal-only LZ4 blocks test receiver correctness independently of the
 production compressor; actual Cassandra lanes provide compression interoperability.
-Public `RunStream` fixture tests cover every split/truncated prefix, every checksum
+Public `StreamQuery.Run` fixture tests cover every split/truncated prefix, every checksum
 byte, first-row gates, request-write interruption, direct final ranges and
 close/cancel/session shutdown during the last caller write, across v3/v4/TLS and
 v5 raw/LZ4. Successful TLS net.Pipe fixtures keep the peer alive until consumption

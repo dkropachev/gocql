@@ -199,10 +199,7 @@ go test -run '^$' -bench SingleConnection -benchtime=1x ./tests/bench/e2e
 
 Replay benchmarks execute ten actual SELECT/INSERT cases using typed-control
 recordings; [their recipe](tests/bench/e2e/README.md) explains regeneration. Native
-integration requires [owned fixtures](tests/fixtures/README.md). Full native
-acceptance and comprehensive performance gates are tracked in
-[plan.md](plan.md) and the [execution ledger](feature-specs/execution/STATUS.md).
-Earlier source-bound passes do not establish final release verification.
+integration requires [owned fixtures](tests/fixtures/README.md).
 
 See the [documentation](docs/source/index.md),
 [API contract](feature-specs/gocql-v2-api.md), [contribution guide](CONTRIBUTING.md)

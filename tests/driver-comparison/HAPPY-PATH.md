@@ -532,8 +532,7 @@ holds the writer after its bytes are sent and fails without the wait.
 
 F1 encoded small requests, values included, into one pooled contiguous
 buffer. It saved as much as F1b below, but it copied borrowed values, which
-`feature-specs/gocql-v2-implementation.md` forbids for borrowed text and
-blob of every size, and it failed
+the driver must not do for borrowed text and blob of any size, and it failed
 `TestPrepared/Reprepare/PagingNeverReencodes`. F1b keeps the borrowed
 spans and pools only what the envelope owns: `wire.BuilderScratch` holds
 the scalar slab, span descriptors and the frozen chain's index, and the

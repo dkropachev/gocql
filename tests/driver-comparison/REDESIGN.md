@@ -34,10 +34,10 @@ parameter-taking Exec, Run and RunPage methods. Prepared plans stay
 shareable. Admission copies input, captures cell boundaries during encoding,
 and computes routing from those bytes. Concurrent use returns ErrBusy. Close
 stops admission and cancels execution; Wait joins accepted writers and callbacks.
-Generation checks prevent stale cursors from affecting reuse. BatchEntry captures
+Generation checks prevent stale cursors from affecting reuse. AddToBatch captures
 an owned immutable member immediately; public batches also own option payloads.
-The public Bound/binding execution API is removed. Historical protocol fixtures
-retain test-only internal seams, which are absent from the normal public build.
+Protocol fixtures use test-only internal seams, which are absent from the
+normal public build.
 
 Queries register with the session once. The ordinary path embeds request,
 logical execution and routing cursor state. It executes attempts directly when

@@ -75,5 +75,4 @@ consumer package build and use typed codecs.
 Use the owned native fixture runner described in tests/fixtures/README.md for
 actual database tests. Select Cassandra protocol 5 explicitly for v5 segments;
 Scylla fixture protocol rejection is not a v5 pass. Replay regeneration and
-operation checks are documented in tests/bench/e2e/README.md. Comprehensive native
-acceptance and performance remain separate source-bound gates in plan.md.
+operation checks are documented in tests/bench/e2e/README.md.

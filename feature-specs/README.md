@@ -36,16 +36,11 @@ all production Rust modules to these sections to check breadth.
 
 - [Source catalog](source-catalog.md), with machine-readable assignments in
   [rust-source-catalog.json](rust-source-catalog.json).
-- [Pinned integration test inventory](integration-baseline.json): 174 top-level
-  tests across 29 integration/CCM-tagged Go files, including helper-only files.
-- [Progress and completion gates](WORK-LOG.md).
 
-## Go v2 feature proposals
+## Go v2 API
 
-- [Streaming receive decoding into caller storage](gocql-v2-streaming-receive.md):
-  draft incremental socket-to-destination decoding without complete response/page
-  buffering; includes transform limits, ownership, backpressure and acceptance
-  criteria. Public signature reconciliation and implementation remain pending.
+- [API contract](gocql-v2-api.md): the public API of the driver, including
+  streaming receive into caller storage.
 
 ## Review contract
 

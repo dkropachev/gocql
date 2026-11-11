@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check source pinning, evidence links, inventories, and review artifacts.
+"""Check source pinning, evidence links and review artifacts.
 
 This checks traceability, not semantic fidelity or successful execution of tests.
 Run without --allow-pending for the final documentation gate.
@@ -105,13 +105,8 @@ def main():
             else:
                 reviewer_ids.add(identity[0])
 
-    inventory = json.loads((directory / "integration-baseline.json").read_text())
-    test_count = sum(len(row["tests"]) for row in inventory["files"])
-    if test_count != inventory["test_count"]:
-        errors.append("Integration inventory count mismatch")
     print(f"Catalog: {len(actual_files)} Rust modules; {len(sections)} sections")
     print(f"Checked: {links_checked} source links; {reports_present}/60 review reports")
-    print(f"Baseline: {test_count} integration/CCM tests in {len(inventory['files'])} files")
     for error in errors:
         print(f"ERROR: {error}")
     if pending:

@@ -1,22 +1,30 @@
 # gocql v2 API contract
 
-The reusable-query amendment dated 2026-11-02 supersedes the immutable binding
-API and makes streaming decoders page-buffered by default. Performance
-acceptance is incomplete; see [redesign status](../tests/driver-comparison/REDESIGN.md).
-
 Status: implementation contract, distinct from the six reviewed Rust reference
-specifications. Module: `github.com/scylladb/gocql/v2`; package: `gocql`. The
-implementation uses the internal packages and public facade required by
-plan.md section 5. Final release evidence is tracked in execution step 17;
-the contract below does not substitute for that evidence. Integration tests
-exercise typed behavior with focused testkit hooks. This does not retain the v1
-public API. `Query`, `Iter`, mutable reflection-based `Batch`, `Marshal`,
-`Unmarshal`, `Scan`, `MapScan`, `SliceMap`, `RowData`, `NamedValue`, and
-`...any` binding are removed as public execution/serialization interfaces.
-Correct existing networking, policies, metadata and error types may be retained;
-typed calls must never enter those old serialization paths. Rename/remove old
-internal implementations after migrating callers. No compatibility facade or
-tests running through one satisfy completion.
+specifications. Performance acceptance is incomplete; see
+[redesign status](../tests/driver-comparison/REDESIGN.md). Integration tests
+exercise typed behavior with focused testkit hooks.
+
+Module: `github.com/scylladb/gocql/v2`. The public packages are:
+
+| Package | Contents |
+|---|---|
+| `gocql` (module root) | dialects, `Connect`, `Session[D]`, configuration and profile builders, `Prepared`, `Query`, `Batch`, cursors, `Options`, observers |
+| `cql` | statements, data types, values, buffered codecs, parameter and row mappings, consistency |
+| `cql/stream` | decoders that write streamed rows into caller storage |
+| `cql/dynamic` | values whose types are known only from metadata at run time |
+| `cqlerr` | errors and sentinels the driver returns |
+| `routing` | routing policies, plans, targets and token partitioners |
+| `metadata` | cluster topology and schema snapshots |
+| `metrics` | session-wide counter snapshot |
+| `retry` | retry policies |
+| `endpoint` | address translation, DNS resolution and dialers |
+| `auth` | authentication providers |
+| `scylla` | API only ScyllaDB supports |
+
+Everything else lives under `internal/`. In the code blocks below, unqualified
+names belong to the package the block names, or to `gocql` when it names none;
+`cql` names are unqualified inside the `cql`, `stream` and `dynamic` blocks.
 
 ## Type metadata and codec contracts
 
@@ -33,6 +41,7 @@ separately compare annotations when both are known. Fingerprints include all
 compared structure and names; equality never relies solely on a hash.
 
 ```go
+// package cql
 type DataType struct { /* immutable private descriptor */ }
 type ColumnSpec struct { Keyspace, Table, Name string; Type DataType }
 type Columns struct { /* immutable private ordered column specs */ }
@@ -61,6 +70,7 @@ func (t DataType) Dimension() (uint16, bool)
 func (c Columns) Len() int
 func (c Columns) At(index int) (ColumnSpec, bool)
 func (c Columns) Equal(other Columns) bool
+func (c Columns) Same(other Columns) bool
 
 type Encoder[T any] interface {
     CheckType(DataType) error
@@ -130,6 +140,7 @@ Caching the first successful plan to implement Clone or panicking because no
 plan was previously compiled is not permitted.
 
 ```go
+// package cql
 type ValueWriter struct { /* current checked type, framed sink */ }
 func (w *ValueWriter) Type() DataType
 func (w *ValueWriter) Null() error
@@ -167,7 +178,7 @@ func (r *RowReader) SkipColumn() error
 ```
 
 Native cells have three framing states: present, null (-1), and unset (-2).
-CellState.Empty is a logical supported-type state over present zero-length wire
+EmptyCell is a logical supported-type state over present zero-length wire
 bytes, never a fourth negative sentinel. Empty() checks type support, writes no
 body, and cannot coexist with payload/Null/Unset writes. Unknown CellState
 values fail validation. Null/Unset cannot follow or precede payload writes in a
@@ -176,7 +187,7 @@ Child writes a length-framed nested cell; raw scalar methods write network byte
 order. Decode readers are value snapshots; independent cursors do not advance
 other readers. Invalid custom framing or a failed encoder rolls back the entire
 cell and causes binding to fail before network submission. A failed complete
-parameter encoding never produces an executable bound object.
+parameter encoding never sends a request.
 
 ## Standalone serialization
 
@@ -195,6 +206,7 @@ its explicitly supported empty kinds. Outbound unset is permitted only in this
 standalone representation or a top-level binding, never in a result decode.
 
 ```go
+// package cql
 type EncodedValue struct { /* private type, state and Bytes */ }
 func NewEncodedValue(DataType, CellState, Bytes) (EncodedValue, error)
 func (v EncodedValue) Type() DataType
@@ -219,8 +231,10 @@ serialization implementation is permitted.
 
 ## Typed parameter and result composition
 
-No field discovery uses reflection or struct tags. Applications compose typed
-accessors, or generate equivalent Go implementations. Named parameters are
+Applications compose typed accessors (`Params`, `Row`, `RowInto`), generate
+them with cmd/cqlgen, or map a struct with `ParamsOf`/`RowOf`, which reflect
+the struct once at construction; encoding and decoding never reflect. Named
+parameters are
 mapped to server order once. Named result plans likewise resolve names once and
 decode in physical wire order, assigning each value through its compiled field
 accessor. Fragmented cells remain immutable range views; sequential traversal
@@ -232,7 +246,20 @@ mapping. All selected columns must be accounted for, including explicit ignored
 fields.
 
 ```go
-type Unit struct{}
+// package cql
+type Statement[P, R any] struct {
+    CQL string
+    Params ParamEncoder[P]   // nil when P is EmptyParams
+    Rows RowDecoder[R]       // nil when R is EmptyRow
+    BindMarkers Columns      // parameter metadata for unprepared execution
+    Kind StatementKind
+}
+type StatementKind uint8
+const (UnknownStatement StatementKind = iota; OrdinaryStatement; ConditionalStatement)
+func Command(text string) Statement[EmptyParams, EmptyRow]
+
+type EmptyParams = EmptyRecord   // EmptyRecord is struct{}
+type EmptyRow = EmptyRecord
 type Pair[A, B any] struct { First A; Second B }
 type InputField[P any] interface { /* sealed descriptor */ }
 type OutputField[R any] interface { /* sealed descriptor */ }
@@ -243,15 +270,33 @@ func Column[R, V any](name string, codec Decoder[V], field func(*R) *V) OutputFi
 func ColumnAt[R, V any](index int, codec Decoder[V], field func(*R) *V) OutputField[R]
 func IgnoreColumn[R any](name string) OutputField[R]
 func Row[R any](fields ...OutputField[R]) RowDecoder[R]
+func RowInto[R any](reset func(*R), fields ...OutputField[R]) RowDecoder[R]
 func OneParam[T any](Encoder[T]) ParamEncoder[T]
 func OneColumn[T any](Decoder[T]) RowDecoder[T]
 func PairParams[A, B any](a ParamEncoder[A], b ParamEncoder[B]) ParamEncoder[Pair[A, B]]
 func PairRows[A, B any](a RowDecoder[A], b RowDecoder[B]) RowDecoder[Pair[A, B]]
 func ConvertParams[A, B any](ParamEncoder[B], func(A) B) ParamEncoder[A]
 func ConvertRows[A, B any](RowDecoder[A], func(A) B, func(B) B) RowDecoder[B]
-var NoParams ParamEncoder[Unit]
-var NoRows RowDecoder[Unit]
+var EmptyParamsEncoder ParamEncoder[EmptyParams]
+var EmptyRowDecoder RowDecoder[EmptyRow]
+
+// Struct mapping.
+type StructFields[P any] struct { Params []InputField[P]; Columns []OutputField[P] }
+type StructOption[P any] /* opaque */
+func ParamsOf[P any](...StructOption[P]) (ParamEncoder[P], error)
+func MustParamsOf[P any](...StructOption[P]) ParamEncoder[P]
+func RowOf[R any](...StructOption[R]) (RowDecoder[R], error)
+func MustRowOf[R any](...StructOption[R]) RowDecoder[R]
+func WithCodec[P, V any](Codec[V]) StructOption[P]
+func ReuseBuffers[P any]() StructOption[P]
 ```
+
+`RowInto` calls its reset callback before decoding each row; the callback
+clears application state and may keep owned slices for reuse. `ParamsOf` and
+`RowOf` map exported fields by column name: the `cql:"name"` tag or the
+lowercased field name, `cql:"-"` to skip, `cql:"name,codec=..."` to pick a
+built-in codec. `ParamsOf` skips fields without a matching marker but requires
+a field for every marker; `RowOf` leaves fields of unselected columns zero.
 
 `Column`/`ColumnAt` use a typed field-address accessor so decoding and recursive
 cloning both reach the same field without reflection. Accessors must return a
@@ -263,15 +308,18 @@ Compile, and concatenate positional plans. Compile rejects any other left side
 with "left side has no fixed arity"; named composition
 uses `Params`/`Row` with accessors. `ConvertRows`' final function is its
 ownership-detaching clone; omitting correct clone semantics is a custom codec
-contract violation. `NoRows` accepts only results with zero physical columns;
+contract violation. `EmptyRowDecoder` accepts only results with zero physical columns;
 use a real decoder for conditional writes. Ignored result fields still have
 validated framing.
 
 ## Scalar values, null, unset and empty
 
 ```go
+// package cql
 type CellState uint8
-const (Present CellState = iota; Null; Unset; Empty)
+const (Present CellState = iota; Null; Unset; EmptyCell)
+type Option[T any] struct { Value T; Set bool }
+func Some[T any](T) Option[T]
 type Nullable[T any] struct { Value T; Valid bool }
 type BindValue[T any] struct { Value T; State CellState }
 func NullableCodec[T any](Codec[T]) Codec[Nullable[T]]
@@ -281,7 +329,8 @@ func BindEncoder[T any](Encoder[T]) Encoder[BindValue[T]]
 type EmptyValueOf[T any] struct { Value T; Empty bool }
 func EmptyCodec[T any](Codec[T]) Codec[EmptyValueOf[T]]
 
-// Existing UUID and Duration (months, days, nanoseconds) value types remain.
+type UUID [16]byte
+type Duration struct { Months, Days int32; Nanoseconds int64 }
 type Counter int64
 type Date int32                  // days relative to Unix epoch
 type TimeOfDay int64             // nanoseconds since midnight
@@ -321,12 +370,24 @@ func DateFromTime(time.Time) (Date, error)
 func (d Date) Time() (time.Time, error)
 func TimestampFromTime(time.Time) (Timestamp, error)
 func (t Timestamp) Time() (time.Time, error)
+func ParseUUID(string) (UUID, error)
+func MustParseUUID(string) UUID
+func UUIDFromBytes([]byte) (UUID, error)
+func RandomUUID() UUID
+func NewTimeUUID() TimeUUID
+func TimeUUIDFromTime(time.Time) TimeUUID
+func TimeUUIDWith(t time.Time, clock uint16, node [6]byte) TimeUUID
+func MinTimeUUID(time.Time) TimeUUID
+func MaxTimeUUID(time.Time) TimeUUID
+func ParseTimeUUID(string) (TimeUUID, error)
+func MustParseTimeUUID(string) TimeUUID
+func TimeUUIDFromUUID(UUID) (TimeUUID, error)
 ```
 
-`TimeUUID` remains distinct from `UUID`. `NewTimeUUID`, `TimeUUIDFromTime`,
-`MinTimeUUID`, `MaxTimeUUID` and `TimeUUIDWith(time.Time, clock uint16, node
-[6]byte)` return `TimeUUID`; `RandomUUID()` returns a version 4 `UUID` and no
-error, since crypto/rand does not fail. TimeUUID provides canonical string/JSON/text and
+`TimeUUID` is distinct from `UUID`. `NewTimeUUID`, `TimeUUIDFromTime`,
+`MinTimeUUID`, `MaxTimeUUID` and `TimeUUIDWith` return `TimeUUID`;
+`RandomUUID()` returns a version 4 `UUID` and no error, since crypto/rand does
+not fail. TimeUUID provides canonical string/JSON/text and
 UUID timestamp/time/byte helpers. ParseTimeUUID and TimeUUIDFromUUID validate
 version 1; codecs and checked unmarshaling do likewise. The zero value is not
 an encodable timeuuid; Nullable represents NULL.
@@ -354,8 +415,8 @@ calendar and owned-string conversions are allocation/representation operations,
 not implicit work in typed execution. No numeric coercion silently narrows
 values.
 
-Public type descriptions use DataType and ColumnSpec only. Legacy protocol
-metadata descriptors remain internal and are not part of the v2 API.
+Public type descriptions use DataType and ColumnSpec only; protocol metadata
+descriptors are internal.
 ParseConsistency and ParseUUID return errors; MustParseConsistency and
 MustParseUUID panic on invalid input. EncodeValue owns its output payloads;
 EncodeValueBorrowed preserves borrowed inputs.
@@ -371,6 +432,7 @@ accept EmptyCell; wrap its underlying encoder with EmptyCodec when needed.
 ## Borrowed bytes, text and container values
 
 ```go
+// package cql
 type Bytes struct { /* chain range + stable page-owner generation */ }
 type Text struct { /* validated UTF-8/ASCII Bytes */ }
 func BorrowBytes([]byte) Bytes
@@ -380,17 +442,15 @@ func (b Bytes) At(int64) (byte, error)
 func (b Bytes) Slice(offset, length int64) (Bytes, error)
 func (b Bytes) WriteTo(io.Writer) (int64, error)
 func (b Bytes) CopyTo([]byte) (int, error)
-func (b Bytes) Clone() Bytes
-func (b Bytes) OwnedBytes() []byte
+func (b Bytes) Clone() Bytes          // panics with cqlerr.ErrReleased on an expired view
+func (b Bytes) OwnedBytes() []byte    // panics likewise
+func (b Bytes) Copy() ([]byte, error) // checked form: returns cqlerr.ErrReleased
 func (t Text) Bytes() Bytes
 func (t Text) Clone() Text
 func (t Text) String() string
+func (t Text) Copy() (string, error)
 
 type Entry[K, V any] struct { Key K; Value V }
-type dynamic.Iterator[T any] struct { /* bounded cursor for dynamic Value traversal */ }
-func (i *dynamic.Iterator[T]) Next() bool
-func (i *dynamic.Iterator[T]) Value() T
-func (i *dynamic.Iterator[T]) Err() error
 func ListCodec[T any](Codec[T]) Codec[[]T]
 func SetCodec[T any](Codec[T]) Codec[[]T]
 func MapCodec[K, V any](Codec[K], Codec[V]) Codec[[]Entry[K, V]]
@@ -413,7 +473,6 @@ type UDTOptions struct {
 func UDTOptionsFor(DataType) (UDTOptions, error) // identity from a UDT DataType
 func UDTEncoder[T any](ParamEncoder[T], UDTOptions) Encoder[T]
 func UDTDecoder[T any](RowDecoder[T], UDTOptions) Decoder[T]
-func (i *dynamic.Iterator[T]) Collect() ([]T, error)
 ```
 
 GoMapCodec decodes into a Go map: a repeated key fails decoding, NULL is an
@@ -493,7 +552,7 @@ hold explicitly supplied `[]Value` descriptors on input or encoded bytes on
 output, but neither form causes eager payload flattening.
 
 ```go
-// package dynamic; DataType and the other unqualified types are cql's
+// package dynamic
 type Value struct { /* explicit discriminant; no any field */ }
 type Field struct { Name string; Value Value }
 type Entry struct { Key, Value Value }
@@ -513,6 +572,11 @@ func (v Value) Decimal() (Decimal, error)
 func (v Value) Elements() (*Iterator[Value], error)
 func (v Value) Entries() (*Iterator[Entry], error)
 func (v Value) Fields() (*Iterator[Field], error)
+type Iterator[T any] struct { /* bounded cursor for Value traversal */ }
+func (i *Iterator[T]) Next() bool
+func (i *Iterator[T]) Value() T
+func (i *Iterator[T]) Err() error
+func (i *Iterator[T]) Collect() ([]T, error)
 func Null(DataType) Value
 func Unset(DataType) Value
 func Empty(DataType) (Value, error)
@@ -542,9 +606,10 @@ func Map(DataType, []Entry) (Value, error)
 func Tuple(DataType, []Value) (Value, error)
 func UDT(DataType, []Field) (Value, error)
 func Vector(DataType, []Value) (Value, error)
-var Codec Codec[Value]
-var Params ParamEncoder[[]Value]
-var Rows RowDecoder[Row]
+var Codec cql.Codec[Value]
+var Params cql.ParamEncoder[[]Value]
+var NamedParams cql.ParamEncoder[[]Field]
+var Rows cql.RowDecoder[Row]
 type Row struct { /* ordered Columns and lazy Values */ }
 func (r Row) Columns() Columns
 func (r Row) At(int) (Value, error)
@@ -552,8 +617,10 @@ func (r Row) Get(string) (Value, error)
 func (r Row) Clone() Row
 ```
 
-Named dynamic binding uses `Params[[]dynamic.Field]` accessors or the dedicated
-`dynamic.NamedParams ParamEncoder[[]dynamic.Field]`. Duplicate names are rejected.
+Named dynamic binding uses `cql.Params[[]dynamic.Field]` accessors or
+`dynamic.NamedParams`, which maps unique input names to server marker order;
+repeated server markers reuse one input field, and duplicate or unused input
+names are rejected.
 dynamic.Rows compiles column name lookup once per result shape. At/Get use a
 single lazily built physical-cell offset index per current row for repeated
 random access, without eagerly decoding values; there is no whole-row rescan
@@ -564,36 +631,70 @@ Dynamic malformed scalars are
 rejected with the same rules as typed codecs; no implicit universal Empty
 fallback.
 
-## Standalone functions
+## Package-level functions of gocql
 
-Package-level functions are kept only where a method cannot express them.
-Go 1.27 methods may declare their own type parameters, so the generic
-constructors are methods on `Session` and `Prepared`; every operation is a
-method on the type that owns it.
+Package-level functions exist only where a method cannot express them. Go 1.27
+methods may declare their own type parameters, so the generic operations are
+methods on the type that owns them (`Session.Prepare`, `Session.PrepareStream`,
+`Session.RunBatch`, `Session.Unprepared*`, `Prepared.Query`,
+`PreparedStream.Query`). The root package's functions construct a value from
+nothing:
 
-| Function | Decision | Reason |
-|---|---|---|
-| `NewConfig`, `NewProfile`, `NewClientRoutes`, `Connect` | keep | construct a value from nothing |
-| `OpenSingleHost` | replaced by `ConfigBuilder.WithOnlyHost` | a single-host session is a host filter, so it is a configuration setting that composes with `WithHostFilter`, not a second way to connect |
-| `Prepare` | moved to `Session.Prepare` | Go 1.27 methods take type parameters, so the free function only duplicated the method |
-| `NewUnpreparedQuery`, `NewUnpreparedStreamQuery` | removed | `Session.UnpreparedExec`, `UnpreparedOne` and `UnpreparedEach` run throwaway statements; repeated statements are prepared, and streaming is always prepared |
-| `NewStreamQuery` | removed | `Session.PrepareStream` then `PreparedStream.Query`; the stream statement declares the decoder's row type |
-| `CompileOptions` | moved to `Session.CompileOptions` | |
-| `Query.ExecBatch`, `Query.RunBatch` | moved to `Session.ExecBatch`, `Session.RunBatch[R]` | a batch is a session operation and need not include the query's statement |
-| `PageStateFromToken` | keep | `PageState` fields are private |
-| `NewQuery` | moved to `Prepared.Query` | `Prepared[P, R]` already carries the type parameters |
-| `PrepareQuery` | removed | `Session.Prepare` then `Prepared.Query`; it saved one call |
-| `StartPage()` | replaced by `var StartPage` | it only returned the zero `PageState` |
-| `NewErrProtocol` | removed | builds an internal error callers have no use for |
+| Function | Purpose |
+|---|---|
+| `Connect[D Dialect](context.Context, Config) (*Session[D], error)` | opens a session of dialect D |
+| `NewConfig(contactPoints ...string) *ConfigBuilder` | starts a configuration |
+| `NewProfile() *ProfileBuilder` | starts an execution profile |
+| `NewClientRoutes(connectionIDs ...string) *ClientRoutesBuilder` | starts ScyllaDB client-route settings |
+| `PerShard(n int) PoolSize`, `PerHost(n int) PoolSize` | pool sizes for `ConfigBuilder.WithPoolSize` |
+| `StaticTLS(*tls.Config) TLSSource` | a fixed TLS configuration |
+| `NewTLSFiles(*tls.Config, TLSFiles) (*TLSFileSource, error)` | a TLS configuration reloaded from files |
+| `PageStateFromToken([]byte) PageState` | a continuation from a saved token; `PageState` fields are private |
+
+The root package also exports `var StartPage PageState` (the zero `PageState`)
+and `var StopIteration` (see below).
 
 ## Statements, preparation, queries and execution
 
-Prepared statements and compiled plans remain immutable and shareable. Each
+A session is generic over its dialect, the database and native protocol
+version it speaks. The caller chooses it; the driver negotiates no protocol
+version. Connect fails with `cqlerr.ServerMismatchError` when the cluster does
+not speak that version or is not that database. API only one dialect supports
+takes a session of that dialect (package `scylla` takes
+`*Session[ScyllaV4]`). Prepared statements, queries and batches do not carry
+the dialect. See docs/source/server-differences.md.
+
+```go
+type Dialect interface { /* sealed */ }
+type ScyllaV4 struct{}    // ScyllaDB, native protocol 4
+type CassandraV4 struct{} // Apache Cassandra, native protocol 4
+type CassandraV5 struct{} // Apache Cassandra 4.0+, native protocol 5
+type Session[D Dialect] struct { /* opaque */ }
+func Connect[D Dialect](context.Context, Config) (*Session[D], error)
+func (s *Session[D]) ID() string
+```
+
+Prepared statements and compiled plans are immutable and shareable. Each
 worker creates a reusable query; it permits one active execution and owns all
 captured parameters through retries, pages, accepted writes and callbacks.
 
 ```go
-func (s *Session) Prepare[P, R any](context.Context, Statement[P, R], ...PrepareOptions) (*Prepared[P, R], error) // at most one
+type PrepareOptions struct {
+    Keyspace string
+    HostID cql.Option[cql.UUID]
+    Trace bool
+}
+func (s *Session[D]) Prepare[P, R any](context.Context, cql.Statement[P, R], ...PrepareOptions) (*Prepared[P, R], error) // at most one
+func (p *Prepared[P, R]) Parameters() cql.Columns
+func (p *Prepared[P, R]) Columns() cql.Columns
+func (p *Prepared[P, R]) Info() PreparedInfo
+type PreparedInfo struct {
+    Keyspace, Table string
+    PartitionKeyIndexes []int
+    Kind cql.StatementKind
+    Conditional bool
+    Generation uint64
+}
 
 // One-shot calls, safe for concurrent use; at most one CompiledOptions.
 func (p *Prepared[P, R]) Exec(context.Context, P, ...CompiledOptions) (Result, error)
@@ -606,23 +707,24 @@ func (p *Prepared[P, R]) AddToBatch(*Batch, P) error
 
 // Worker-owned reusable queries.
 func (p *Prepared[P, R]) Query(Options) (*Query[P, R], error)
-func (s *Session) UnpreparedExec[P any](context.Context, Statement[P, EmptyRow], P, ...Options) (Result, error)
-func (s *Session) UnpreparedOne[P, R any](context.Context, Statement[P, R], P, *R, ...Options) (bool, Result, error)
-func (s *Session) UnpreparedEach[P, R any](context.Context, Statement[P, R], P, *R, func(*R) error, ...Options) (Result, error)
-func (s *Session) UnpreparedAll[P, R any](context.Context, Statement[P, R], P, *R, ...Options) iter.Seq2[*R, error]
+func (s *Session[D]) UnpreparedExec[P any](context.Context, cql.Statement[P, cql.EmptyRow], P, ...Options) (Result, error)
+func (s *Session[D]) UnpreparedOne[P, R any](context.Context, cql.Statement[P, R], P, *R, ...Options) (bool, Result, error)
+func (s *Session[D]) UnpreparedEach[P, R any](context.Context, cql.Statement[P, R], P, *R, func(*R) error, ...Options) (Result, error)
+func (s *Session[D]) UnpreparedAll[P, R any](context.Context, cql.Statement[P, R], P, *R, ...Options) iter.Seq2[*R, error]
+func (s *Session[D]) UnpreparedAddToBatch[P, R any](*Batch, cql.Statement[P, R], P) error
 func (q *Query[P, R]) Exec(context.Context, P) (Result, error)
 func (q *Query[P, R]) Each(context.Context, P, *R, func(*R) error) (Result, error)
 func (q *Query[P, R]) One(context.Context, P, *R) (bool, Result, error)
 func (q *Query[P, R]) All(context.Context, P, *R) iter.Seq2[*R, error]
 func (q *Query[P, R]) Run(context.Context, P) (Rows[R], error)
 func (q *Query[P, R]) RunPage(context.Context, P, PageState, int32) (*Page[R], error) // page size: 0 resolved, cql.Unpaged
-func (q *Query[P, R]) Routing(P) (RoutingInfo, error)
+func (q *Query[P, R]) Routing(P) (routing.Info, error)
 func (q *Query[P, R]) AddToBatch(*Batch, P) error
 func (q *Query[P, R]) Close()                       // stop at once
 func (q *Query[P, R]) Wait(context.Context) error   // join the drain
 
-func (s *Session) ExecBatch(context.Context, *Batch, ...CompiledOptions) (Result, error)          // sends batch.Kind
-func (s *Session) RunBatch[R any](context.Context, *Batch, RowDecoder[R], ...CompiledOptions) (Rows[R], error)
+func (s *Session[D]) ExecBatch(context.Context, *Batch, ...CompiledOptions) (Result, error)          // sends batch.Kind
+func (s *Session[D]) RunBatch[R any](context.Context, *Batch, cql.RowDecoder[R], ...CompiledOptions) (Rows[R], error)
 ```
 
 Prepared.Exec, One, Each and All run on queries the prepared statement keeps in
@@ -645,12 +747,12 @@ releasing the response, preserving already-owned built-in destination buffers.
 Each lends borrowed fields only during its callback. Custom row/value decoders
 fall back to their recursive Clone contract when One detaches results.
 Session.UnpreparedExec, UnpreparedOne, UnpreparedEach and UnpreparedAll provide occasional typed
-CQL text execution without a caller-owned query. They take at most one plain
+CQL text execution without a caller-owned query, and UnpreparedAddToBatch
+appends an unprepared statement to a batch. They take at most one plain
 Options and validate it during the call. Their cleanup stops admission
 on every return and keeps any remaining drain registered with the session.
 
-The public immutable binding API and standalone binding-based execution
-functions have been removed. Input is copied during execution admission,
+Input is copied during execution admission,
 including custom codec borrowed spans. Encoding records cell boundaries and
 computes routing from the same owned bytes; encoders are not called again for
 routing, retries, reprepare or paging. The Unprepared calls take parameter
@@ -659,25 +761,25 @@ custom payload bytes; the selected profile is loaded per execution. Profile
 replacement never changes an active execution's retry or continuation options.
 
 A call while a Rows, Page or RowStream of the query is open, or while another
-goroutine's call runs, returns ErrBusy. Cancellation may return while accepted
+goroutine's call runs, returns cqlerr.ErrBusy. Cancellation may return while accepted
 transport writes or callbacks still drain; the query's next execution waits for
 that drain within its own context instead of returning ErrBusy. Routing and
 AddToBatch use storage of their own and work during the drain. Close() stops
 the query, cancels a running call (which returns an error matching
-context.Canceled), stops an open handle with ErrClosed, and returns at once; Wait(ctx) joins the drain, returning ctx.Err() when ctx ends
+context.Canceled), stops an open handle with cqlerr.ErrClosed, and returns at once; Wait(ctx) joins the drain, returning ctx.Err() when ctx ends
 first, and Session.Close joins the rest. The session refers to an open query
 weakly: a query dropped without Close is closed by a garbage-collector cleanup,
 and a session logging at Debug logs where it was created. Cursor handles capture their execution
 generation; stale handles cannot advance, close or modify another execution.
 Rows is a value handle over iterator storage that a reusable query keeps and
 reuses for its next execution. A stale Rows reports no rows, Err returns
-ErrStaleRows and Close does nothing; the zero Rows has no rows. Rows is not
+cqlerr.ErrStaleRows and Close does nothing; the zero Rows has no rows. Rows is not
 safe for concurrent use.
 Close is idempotent. Close a cursor on early termination before reusing its
 query. Session
 shutdown stops all queries before joining their transport/callback drains.
 
-Prepare retains its existing schema-scoped dependency validation, per-host IDs,
+Prepare performs schema-scoped dependency validation and keeps per-host IDs,
 LRU eviction independence, codec validation, conditional classification and
 routing contracts. Statement.Kind is a caller classification; server-confirmed
 conditional metadata takes precedence. Unknown statements disable speculation.
@@ -686,7 +788,7 @@ and the currently selected metadata snapshot, preserving token distribution,
 strict shard targeting and tablet feedback.
 
 On reprepare, validate bind metadata against the encoded schema, not merely
-marker count. Incompatible type/order/identity yields `SchemaChangedError`
+marker count. Incompatible type/order/identity yields `cqlerr.SchemaChangedError`
 before resend; the application explicitly prepares and binds again. Routing
 schema compatibility includes partition-key index order, effective table
 identity, selected partitioner and conditional classification, in addition to
@@ -712,9 +814,8 @@ loaded entry. A losing response still decodes with its matching retained or
 response-supplied metadata. Prepared IDs and result metadata IDs are opaque
 equality tokens, not ordered server schema versions. These fences prevent local
 stale-update races; conflicting remote observations require a typed metadata
-refresh and cannot be represented as proven global schema chronology. Step 03 specifies
-bounded conflict reconciliation outside the historical design-review cycles:
-coalesce at most 64 distinct pending keyspaces and query a known statement's
+refresh and cannot be represented as proven global schema chronology. Conflict
+reconciliation is bounded: it coalesces at most 64 distinct pending keyspaces and queries a known statement's
 relevant keyspace through the typed schema path. Required internal validation
 can run when optional schema metadata is disabled or filtered, but publication
 continues to honor that mode/filter; it does not expose unrelated schema.
@@ -735,7 +836,7 @@ func (r Rows[R]) Close() error
 func (r Rows[R]) Retain() (*PageLease, error)
 func (r Rows[R]) Clone() (R, error)
 func (r Rows[R]) Info() Result
-func (r Rows[R]) Columns() Columns
+func (r Rows[R]) Columns() cql.Columns
 
 type Page[R any] struct { /* exactly one response page */ }
 func (p *Page[R]) NextInto(dst *R) bool
@@ -745,7 +846,7 @@ func (p *Page[R]) Retain() (*PageLease, error)
 func (p *Page[R]) Clone() (R, error)
 func (p *Page[R]) State() PageState
 func (p *Page[R]) Info() Result
-func (p *Page[R]) Columns() Columns
+func (p *Page[R]) Columns() cql.Columns
 
 type PageLease struct { /* stable shared reference to receive storage */ }
 func (l *PageLease) Close()
@@ -756,6 +857,7 @@ func (p PageState) More() bool
 func (p PageState) Complete() bool
 func (p PageState) Token() []byte
 
+// package cql
 type CASResult[R any] struct { Applied bool; Previous Option[R] }
 func CASRows[R any](RowDecoder[R]) RowDecoder[CASResult[R]]
 ```
@@ -766,28 +868,25 @@ current physical page before advancing; its owner has stable identity independen
 of pooled parsers.
 All views from that page remain valid until that lease closes. Clone detaches
 the row the last NextInto decoded, using RowPlan.Clone. Copying a Go row struct does not detach it.
-Access through a released view reports ErrReleased where a method returns error;
-methods without error results panic with ErrReleased rather than reading
+Access through a released view reports cqlerr.ErrReleased where a method returns error;
+methods without error results panic with cqlerr.ErrReleased rather than reading
 recycled storage. Len/type metadata remain inspectable. Do not concurrently use
 a view while closing its last lease. Retained leases are independent of
 Session.Close.
 
 ### Caller-supplied result destinations
 
-This section decodes from received page storage. The separate
-[streaming receive contract](gocql-v2-streaming-receive.md) specifies
-incremental receive decoding into final caller storage through the separate
-streaming-query API below; this NextInto contract remains the buffered path.
-
-Implementation: DecodeInto is supplied by step 02 and NextInto by step 03;
-final-tree release verification remains a later gate. Applications define the row representation
-and may provide a reusable instance for decoding:
+This section decodes from received page storage. Decoding into final caller
+storage as rows arrive uses the separate streaming API described under
+"Streaming receive into final caller storage"; this NextInto contract is the
+buffered path. Applications define the row representation and may provide a
+reusable instance for decoding:
 
 ```go
 type UserView struct {
     ID int32
-    Name Text
-    Payload Bytes
+    Name cql.Text
+    Payload cql.Bytes
 }
 
 var user UserView
@@ -799,8 +898,8 @@ if err := rows.Err(); err != nil {
 }
 ```
 
-NextInto advances exactly one logical row, using the same framing, plan
-selection, metadata validation and automatic/explicit paging rules as Next.
+NextInto advances exactly one logical row, applying framing, plan selection,
+metadata validation and automatic (Rows) or explicit (Page) paging rules.
 The compiled RowPlan.DecodeInto fills dst directly. The driver does not first
 decode a complete temporary row, copy payloads, flatten split cells, or discover
 fields through reflection. Text, Bytes and borrowed collection elements preserve
@@ -818,20 +917,18 @@ On an active iterator, nil dst produces terminal ValidationError before consumin
 a row or performing paging I/O. A terminal iterator stays terminal and preserves
 its existing error. A failed call does not promise rollback of cursor progress.
 
-Next and NextInto may be interleaved; every call advances, so NextInto after Next
-reads the following row. After successful NextInto, Row returns the current
-contents of *dst and Clone detaches those contents with the selected RowPlan.
+Every NextInto call advances. After successful NextInto, Clone detaches the
+current contents of *dst with the selected RowPlan.
 The iterator may retain that destination pointer only until the next advance or
 Close; no shared plan, prefetch worker or other background task may retain or
-write it. Caller changes to the current destination are reflected by Row/Clone.
+write it. Caller changes to the current destination are reflected by Clone.
 Advancing with a different destination or closing the iterator must not modify
 the earlier destination, although its borrowed views still expire under the
 advance/Close rule. Iteration and access/mutation of its current destination
 are not concurrent operations; independent iterators may share compiled plans,
 but require separate destination storage.
 
-Retain after successful NextInto pins the current page just as after Next; it
-does not pin the Go destination or preserve fields overwritten on reuse. To keep
+Retain after successful NextInto pins the current page; it does not pin the Go destination or preserve fields overwritten on reuse. To keep
 a borrowed row while reusing dst, copy its view descriptors into another value
 and retain the page before advancing, then close that lease after use. Use Clone
 instead for fully detached data. Simply storing dst or copying its Go struct
@@ -839,22 +936,22 @@ without a page lease does not extend buffer lifetime.
 
 ### Paging and conditional results
 
-Rows owns one current page and at most the configured bounded prefetch. Next
+Rows owns one current page and at most the configured bounded prefetch. NextInto
 consumes empty pages with continuations, propagates the first error terminally,
 and never loses an error behind partial results. Context governs the entire
 pager lifetime; a separate configured per-page timeout may shorten it. Repeated
 continuation states are compared against every previously returned continuation
 in that automatic pager, including empty tokens: A → B → A therefore returns
-ErrPagingNoProgress before another fetch of A. Token equality checks full bytes;
+cqlerr.ErrPagingNoProgress before another fetch of A. Token equality checks full bytes;
 a hash alone is insufficient. Use a hash-indexed history with full-byte collision
 checks, giving expected O(token bytes) insertion/lookup rather than scanning all
 prior states on every page. Retain one immutable owned token representation for
 history, next-page sending and PageState; internal use never calls the public
 copying Token() accessor. Count the history entry/index storage under the count
 budget and token bytes under the byte budget. Explicit Token() calls still copy.
-Retained history is bounded by Config.Limits
-MaxPagingStates (default 65,536) and MaxPagingStateBytes (default 16 MiB);
-exhausting either returns terminal ErrPagingStateLimit before storing/fetching
+Retained history is bounded by ConfigBuilder.WithMaxPagingStates (default
+65,536) and WithMaxPagingStateSize (default 16 MiB);
+exhausting either returns terminal cqlerr.ErrPagingStateLimit before storing/fetching
 the next state. Both budgets must be positive. Manual RunPage keeps no
 cross-call history. RunPage returns an empty page and its continuation as-is.
 PageState distinguishes an absent start token, present empty continuation, and
@@ -864,7 +961,7 @@ tag. The zero PageState and StartPage mean start. PageStateFromToken always
 constructs a continuation, including for nil and empty input, and copies its
 argument. Token is nil for start and complete; use More/Complete to distinguish
 them. A continuation with zero token bytes still has More()==true. Complete is
-output-only: passing it to RunPage returns ErrPagingComplete before
+output-only: passing it to RunPage returns cqlerr.ErrPagingComplete before
 admission/I/O. This continuation-only import API does not round-trip start or
 complete through Token. The page size cql.Unpaged (math.MaxInt32) resolves to
 a request without a page size and rejects an explicit nonzero prefetch. Exec drains and
@@ -885,17 +982,14 @@ All framing, malformed-value, cancellation and decoder checks remain mandatory
 in both modes. Incremental native read-ahead is bounded by its configured limit
 and 4 KiB. Shared connections retain an 8 KiB reader, transferred without losing
 unread bytes at a checked frame/unit boundary and restored before shared reads.
-
-
-Status: normative implementation contract, settled during execution preparation on
-2026-10-29. The implementation is present; final acceptance is tracked separately
-in execution step 17. This addition
-was not part of the preceding ten design review cycles. The detailed framing,
-ownership and acceptance rules are in
-[gocql-v2-streaming-receive.md](gocql-v2-streaming-receive.md).
+The user-facing description is docs/source/statements/streaming.md.
 
 ```go
 // Streaming is always prepared: Session.PrepareStream, then PreparedStream.Query.
+func (s *Session[D]) PrepareStream[P, R any](context.Context, stream.Statement[P, R], ...PrepareOptions) (*PreparedStream[P, R], error)
+func (p *PreparedStream[P, R]) Parameters() cql.Columns
+func (p *PreparedStream[P, R]) Columns() cql.Columns
+func (p *PreparedStream[P, R]) Info() PreparedInfo
 func (p *PreparedStream[P, R]) Query(StreamOptions) (*StreamQuery[P, R], error)
 func (q *StreamQuery[P, R]) Run(context.Context, P) (*RowStream[R], error)
 func (q *StreamQuery[P, R]) Close()
@@ -904,7 +998,7 @@ type RowStream[R any] struct { /* exclusive pull receiver, automatic paging */ }
 func (s *RowStream[R]) NextInto(*R) bool
 func (s *RowStream[R]) Err() error
 func (s *RowStream[R]) Close() error
-func (s *RowStream[R]) Columns() Columns
+func (s *RowStream[R]) Columns() cql.Columns
 func (s *RowStream[R]) Info() StreamInfo
 
 type StreamOptions struct {
@@ -925,7 +1019,13 @@ type StreamInfo struct {
     OutputStarted bool
 }
 
-// package stream; DataType and the other unqualified types are cql's
+// package stream
+type Statement[P, R any] struct {
+    CQL string
+    Params cql.ParamEncoder[P] // nil when P is cql.EmptyParams
+    Rows RowDecoder[R]         // must not be nil
+    Kind cql.StatementKind
+}
 type RowDecoder[R any] interface {
     Compile(Columns) (RowPlan[R], error)
 }
@@ -947,6 +1047,9 @@ func Column[R, V any](string, Decoder[V], func(*R) *V) OutputField[R]
 func ColumnAt[R, V any](int, Decoder[V], func(*R) *V) OutputField[R]
 func RowInto[R any](reset func(*R), fields ...OutputField[R]) RowDecoder[R]
 func OneColumn[T any](Decoder[T]) RowDecoder[T]
+func RowOf[R any](...cql.StructOption[R]) (RowDecoder[R], error)
+func MustRowOf[R any](...cql.StructOption[R]) RowDecoder[R]
+func WithCodec[P, V any](Decoder[V]) cql.StructOption[P]
 
 // Readers are scoped mutable limited readers, never retained-byte views.
 type RowReader struct { /* checked count and column cursor */ }
@@ -1003,7 +1106,8 @@ func UDT[R any](RowDecoder[R], UDTOptions) Decoder[R]
 type EncodedValue struct { Type DataType; State CellState; Bytes []byte }
 var Encoded Decoder[EncodedValue]
 
-type StreamCapabilityError struct { Protocol int; Compression Compression; Reason string }
+// package cqlerr
+type StreamCapabilityError struct { Protocol int; Compression gocql.Compression; Reason string }
 type StreamCapacityError struct { Path string; Required, Available int64 }
 func (e *StreamCapabilityError) Error() string
 func (e *StreamCapacityError) Error() string
@@ -1022,14 +1126,10 @@ stream.Encoded explicitly writes the entire encoded body into caller storage,
 then exposes that caller-owned representation; nested framing/type validation
 runs incrementally and does not allocate a complete cell in driver storage.
 
-A streaming execution reuses a prepared or unprepared binding's encoded input,
-routing, host IDs, metadata revisions and Close/Wait admission. B and R may
-differ. The original Statement.Rows remains relevant to ordinary execution and
-Prepare validation, but is never invoked to decode a streaming response. Actual
-streaming response metadata selects this call's stream.RowPlan independently of
-the buffered plan; cache reuse is scoped to this decoder and exact metadata.
-NoRows still cannot be used to describe nonzero physical result columns.
-Applications using both modes prepare the statement twice: Session.Prepare with
+A streaming execution uses the same parameter encoding, routing, per-host
+prepared IDs, metadata revisions and Close/Wait admission as a buffered query.
+Actual streaming response metadata selects this query's stream.RowPlan; cache
+reuse is scoped to this decoder and exact metadata. Applications using both modes prepare the statement twice: Session.Prepare with
 an ordinary typed decoder, and Session.PrepareStream with a stream.RowInto decoder.
 Session.PrepareStream takes stream.Statement[P,R] (CQL, Params, Rows as a
 stream.RowDecoder, Kind) and returns an immutable PreparedStream[P,R]. Its
@@ -1042,7 +1142,7 @@ Streaming query execution installs the stream receiver before sending and return
 response headers/metadata and bounded integrity staging, without waiting for the
 complete page. It does not consume row payload waiting for an application
 destination. NextInto reads one row into that destination and performs automatic
-paging on demand, including empty-page progress checks. There is no Next, Row,
+paging on demand, including empty-page progress checks. RowStream has no
 Clone or Retain: output already belongs to the caller and no PageLease is needed.
 Columns returns current-page checked metadata. Info counters are cumulative;
 its Result warnings, trace IDs and custom payload describe only the latest
@@ -1061,9 +1161,8 @@ storage. stream.RowInto requires a non-nil application reset callback for unmapp
 Go state, then resets mapped fields through child plans. The callback must
 preserve mapped storage. A custom plan has the same explicit responsibility;
 there is no promise to zero an arbitrary R while preserving its unknown storage.
-Step 02 discovered and corrected a declaration-capability gap outside the
-historical design reviews: an application UDT field absent from database
-metadata has no DataType with which to compile its value plan. stream.Resetter[T]
+An application UDT field absent from database metadata has no DataType with
+which to compile its value plan. stream.Resetter[T]
 is an optional capability on decoder declarations (including row declarations),
 providing metadata-independent Reset while preserving caller-seeded byte and
 nested storage. Built-in scalar, text/blob/numeric payload, nullable/empty,
@@ -1118,7 +1217,7 @@ defaults. Explicit nonzero Options.Prefetch fails validation before submission;
 zero or inherited Prefetch is accepted. Retry and reprepare are permitted only
 before OutputStarted and any delivered row, under the ordinary safe-request
 rules. A row decoder/reset error or later I/O failure is terminal, with no
-transparent replay. Query.Close() stops the cursor and Query.Wait(ctx) covers final transport and callback drain;
+transparent replay. StreamQuery.Close() stops the cursor and StreamQuery.Wait(ctx) covers final transport and callback drain;
 streamed output remains caller-owned.
 
 StreamLimits zero fields select defaults: 1 MiB simultaneously retained
@@ -1126,14 +1225,15 @@ metadata/control bytes,
 32 KiB connection read-ahead, 32 KiB discard scratch, and 262,158 transform bytes
 (two maximum 131,071-byte v5 units plus 16 bytes of framing). Negative/overflowing
 values fail validation. Positive values are upper bounds, never a reason to
-grow with a response. Limits are copied at admission; lower ProtocolLimits still
-apply to total frame/decompressed work, nesting, counts and paging history.
+grow with a response. Limits are copied at admission; lower configured protocol limits
+(WithMaxFrameSize, WithMaxDecompressedSize, WithMaxMetadataDepth and the paging
+state limits) still apply to total frame/decompressed work, nesting, counts and paging history.
 MaxMetadataBytes bounds simultaneously retained current-page metadata/control,
 including old data still live while replacement metadata is allocated or
 installed. Declared lengths accumulate within an envelope and are checked before
 allocation; accounting resets only after the corresponding storage is released.
 It is not a lifetime/page-total limit. Paging tokens and retained continuation
-history use their separate ProtocolLimits budgets rather than this counter.
+history use their separate paging state budgets rather than this counter.
 MaxTransformBytes covers simultaneous compressed input and plaintext output plus
 unit framing; oversized units fail before allocation. No list of consumed units
 is retained. Raw v3/v4 does not allocate transform units. Metadata compilation
@@ -1179,62 +1279,77 @@ also interrupts active streams; already written caller output remains valid.
 // another session, CompiledOptions are resolved again for that session on each
 // execution. The zero CompiledOptions uses the executing session's default profile.
 type CompiledOptions struct { /* frozen, resolved options */ }
-func (s *Session) CompileOptions(Options) (CompiledOptions, error)
+func (s *Session[D]) CompileOptions(Options) (CompiledOptions, error)
 func (CompiledOptions) Values() Options          // a copy, to derive other options
 
 type Options struct {
     Profile *Profile                              // copied when resolved
-    Consistency Option[Consistency]
+    Consistency cql.Option[cql.Consistency]
     SerialConsistency SerialOverride              // SerialInherit (zero), SerialSerial, SerialLocal, SerialOmit
-    Timeout Option[time.Duration]                 // 0 disables profile timeout
-    PageTimeout Option[time.Duration]
-    PageSize Option[int32]
-    Prefetch Option[int]                          // 0 or 1 page
+    Timeout cql.Option[time.Duration]             // 0 disables profile timeout
+    PageTimeout cql.Option[time.Duration]
+    PageSize cql.Option[int32]                    // cql.Unpaged: whole result
+    Prefetch cql.Option[int]                      // 0 or 1 page
     Idempotent bool
-    Timestamp Option[int64]                       // microseconds
-    NowInSeconds Option[int32]
+    Timestamp cql.Option[int64]                   // microseconds
+    NowInSeconds cql.Option[int32]
     Keyspace string
     Trace bool
-    CustomPayload []PayloadEntry
+    CustomPayload []cql.PayloadEntry
     IncludeMetadata bool                          // request full result metadata
-    HostID Option[UUID]
-    ShardID Option[uint32]
-    Retry retry.Policy
+    HostID cql.Option[cql.UUID]
+    ShardID cql.Option[uint32]
+    Retry retry.Policy                            // nil inherits; retry.Never{} disables
     Observer Observer
 }
+// package cql
 type PayloadEntry struct { Key string; Value Nullable[Bytes] }
+
+// package gocql
 type SerialOverride uint8                         // one field, so no invalid combination exists
 const (SerialInherit SerialOverride = iota; SerialSerial; SerialLocal; SerialOmit)
 type Profile struct {
-    Consistency Consistency
-    SerialConsistency Option[Consistency]
+    Consistency cql.Consistency
+    SerialConsistency cql.Option[cql.Consistency]
     Timeout, PageTimeout time.Duration
     PageSize int32
     Prefetch int
     Retry retry.Policy
-    Routing RoutingPolicy
+    Routing routing.Policy
     Speculation SpeculationPolicy
+    /* unexported built mark */
 }
+func NewProfile() *ProfileBuilder
+func (*ProfileBuilder) Build() (Profile, error)
+// With* setters: WithConsistency, WithSerialConsistency, WithTimeout,
+// WithPageTimeout, WithPageSize, WithPrefetch, WithRetry, WithRouting,
+// WithSpeculation; NoTimeout, NoPrefetch and NoSerialConsistency clear
+// the corresponding setting.
 
-type BatchKind uint8
-const (LoggedBatch BatchKind = iota; UnloggedBatch; CounterBatch)
+// package cql
+type BatchKind byte
+const (LoggedBatch BatchKind = 0; UnloggedBatch BatchKind = 1; CounterBatch BatchKind = 2)
+
+// package gocql
+const MaxBatchStatements                          // 65,535
 type Batch struct {
-    Kind BatchKind // zero: LoggedBatch; set while building, sent with every execution
+    Kind cql.BatchKind // zero: cql.LoggedBatch; set while building, sent with every execution
     /* reusable owned members appended by AddToBatch */
 }
 func (b *Batch) Len() int
 func (b *Batch) Reset() // keeps storage and Kind
 
 type Result struct {
-    HostID UUID
+    HostID cql.UUID
     Attempts int
     Latency time.Duration
     Rows int64
-    Warnings []string
-    TraceIDs []UUID
-    CustomPayload []PayloadEntry
-    AchievedConsistency Consistency
+    AchievedConsistency cql.Consistency
+    /* unexported diagnostics */
 }
+func (r Result) Warnings() []string
+func (r Result) TraceIDs() []cql.UUID
+func (r Result) CustomPayload() []cql.PayloadEntry
 ```
 
 Invalid values fail in the query constructor or Session.CompileOptions, before any
@@ -1245,8 +1360,8 @@ errors, not panics. A profile is a plain value, made by `ProfileBuilder.Build`:
 it carries an unexported built mark, so a `Profile{...}` literal, whose unset
 fields would be zero rather than the defaults, fails `WithDefaultProfile` at
 Build and `Options.Profile` at compile time. A copy of a built profile stays
-built. Connect copies
-Config.DefaultProfile and compiling copies Options.Profile, so changing a
+built. Build copies
+the default profile and compiling copies Options.Profile, so changing a
 Profile after it was handed over has no effect. Admission validates nothing and
 shares the resolved options across attempts/pages; CustomPayload is copied once,
 when the options are compiled.
@@ -1258,8 +1373,7 @@ queueing and cleanup waits. Cleanup continues independently where required to
 release an orphan stream; returning a context error never authorizes reuse of
 still-borrowed input before Wait. Query construction copies custom payload bytes and checks source views while
 capturing options. Public batch execution also owns its options payload; batch
-parameters are copied into the batch when query.AddToBatch appends them. There is no public
-binding drain obligation. Returned Result
+parameters are copied into the batch when AddToBatch appends them. Returned Result
 payloads use owned storage, because Result outlives pages; this explicit escape
 is an ownership conversion, not a per-cell receive copy.
 
@@ -1267,11 +1381,11 @@ Keyspace affects prepare/cache identity and v5 QUERY/BATCH flags; an
 incompatible post-bind override is rejected. v3/v4 nondefault keyspace requires
 a qualified CQL statement or a session established in that keyspace. No
 concurrently mutable session-wide USE operation exists. Host pinning still
-validates host eligibility; a shard ID is a hint unless Target.StrictShard is
+validates host eligibility; a shard ID is a hint unless routing.Target.StrictShard is
 set by the routing policy. StrictShard requires a present shard ID; absent,
 out-of-range or unavailable strict shards return a typed target error without
 same-host shard fallback. HostID pinning never falls back to a different host.
-Target strictness survives plan, attempt and pool seams; SingleTargetRouting
+Target strictness survives plan, attempt and pool seams; routing.SingleTarget
 propagates its strictShard argument unchanged. Unsupported version options fail
 before send. Timestamps use one value per logical execution reused across
 retries; generated timestamps are concurrency-safe.
@@ -1280,10 +1394,10 @@ A Batch owns its members' encoded parameters in storage it reuses after Reset:
 appending to a batch at its working size does not allocate. AddToBatch validates
 the session and keyspace of each member as it is appended. An execution that
 returns before its writer finished, after cancellation, keeps the storage it
-reads: a later Reset gives the batch fresh storage instead. At most 65,535
-entries and 65,535 parameters/member; reject size violations before
-preparation/I/O. Mixed prepared and QUERY members are legal. Binding spans are
-reused unchanged; UNPREPARED repairs only the matching host statement and
+reads: a later Reset gives the batch fresh storage instead. At most
+MaxBatchStatements (65,535) entries and 65,535 parameters/member; reject size violations before
+preparation/I/O. Mixed prepared and QUERY members are legal. Encoded member
+parameters are reused unchanged; UNPREPARED repairs only the matching host statement and
 validates its new schema. All member statements must have compatible effective
 keyspace. Routing chooses the first member with a complete valid partition key,
 records this choice, and never claims a cross-partition batch has only one
@@ -1295,37 +1409,37 @@ conditional batches are never speculated.
 
 ## Policies, metadata, events, configuration and observation
 
-Existing value-only metadata/error structures may be retained after removing
-reflection hooks. The following stable seams make policy and lifecycle behavior
-available without exposing old Query/Iter objects.
+The following seams make policy and lifecycle behavior available to
+applications.
 
 ```go
-type RoutingInfo struct {
+// package routing
+type Info struct {
     Keyspace, Table string
-    Token Option[int64]
-    Kind StatementKind
-    Consistency Consistency
-    HostID Option[UUID]
-    ShardID Option[uint32]
+    Token cql.Option[int64]
+    Kind cql.StatementKind
+    Conditional bool
+    Consistency cql.Consistency
+    HostID cql.Option[cql.UUID]
+    ShardID cql.Option[uint32]
 }
-type Target struct { HostID UUID; ShardID Option[uint32]; StrictShard bool }
-type QueryPlan interface { Next() (Target, bool) }
-type RoutingPolicy interface {
-    Validate(*MetadataSnapshot) error
-    Plan(RoutingInfo, *MetadataSnapshot) QueryPlan
-    Observe(AttemptEvent)
+type Target struct { HostID cql.UUID; ShardID cql.Option[uint32]; StrictShard bool }
+type Route struct { Shard int32; /* unexported host route */ }
+func (r Route) HostID() cql.UUID
+func (r Route) Target() Target
+func (r Route) Usable() bool
+func (r Route) ShardOf(token int64) int32
+func (r Route) WithShard(shard int32) Route
+type Plan interface { Next() (Route, bool) }
+type Policy interface {
+    Validate(*metadata.Snapshot) error
+    Pick(Info, *metadata.Snapshot) (Route, bool)     // cheap first route; false: start with Fallback
+    Fallback(Info, *metadata.Snapshot) Plan          // every route, in order
+    Observe(gocql.AttemptEvent)
 }
-type SpeculationPolicy interface { Delay(attempt int, metrics metrics.Snapshot) (time.Duration, bool) }
-type Observer interface { ObserveRequest(RequestEvent); ObserveAttempt(AttemptEvent) }
-type RequestEvent struct {
-    ID uint64
-    Statement string
-    BatchStatements []string
-    Parameters Columns
-    Routing RoutingInfo
-    Result Result
-    Err error
-}
+func NewPlan(Policy, Info, *metadata.Snapshot) Plan  // combines Pick and Fallback
+
+// package gocql
 type AttemptEvent struct {
     RequestID uint64
     Attempt int
@@ -1335,12 +1449,30 @@ type AttemptEvent struct {
     Err error
     Cancelled, Speculative bool
 }
+type SpeculationPolicy interface { Delay(attempt int, metrics metrics.Snapshot) (time.Duration, bool) }
+type Observer interface { ObserveRequest(RequestEvent); ObserveAttempt(AttemptEvent) }
+type RequestEvent struct {
+    ID uint64
+    Statement string
+    BatchStatements []string
+    Parameters cql.Columns
+    Routing routing.Info
+    Result Result
+    Err error
+}
+type LifecycleObserver interface { ObserveLifecycle(LifecycleEvent) }
+type LifecycleEvent struct {
+    At time.Time
+    Err error
+    Kind, Stage string
+    Stream int16
+    HostID cql.UUID
+}
 ```
 
-Retry types live in the public package `github.com/scylladb/gocql/v2/retry`,
-and the consistency vocabulary they use lives in
-`github.com/scylladb/gocql/v2/cql`. A retry policy depends on those two
-packages only, not on the root package:
+Retry types live in the public package `github.com/scylladb/gocql/v2/retry`.
+A retry policy depends on packages `cql` and `cqlerr` only, not on the root
+package:
 
 ```go
 package retry
@@ -1353,7 +1485,8 @@ type Attempt struct {
     Idempotent bool
     Consistency cql.Consistency
     Conditional bool
-    BytesWritten bool
+    BytesWritten bool                        // Deprecated: use ExecutionStatus
+    ExecutionStatus cqlerr.ExecutionStatus
 }
 type Decision struct {
     Action Action
@@ -1363,6 +1496,7 @@ type Decision struct {
 type Policy interface { Decide(Attempt) Decision }
 type PolicyFunc func(Attempt) Decision
 type Safe struct { MaxAttempts int }
+type Never struct{}                          // stops after the first failed attempt
 ```
 
 Built-in routing has a concrete configuration surface. The default profile selects a
@@ -1370,17 +1504,18 @@ token-aware policy with local preference when configured, replica shuffling for
 ordinary requests, deterministic conditional ordering and no remote fallback
 unless allowed. Validate runs at session startup and on eligible-topology
 changes; missing preferred DC/rack returns a configuration error rather than an
-empty plan. Plan itself never does I/O or reports a hidden failure through a
+empty plan. Pick and Fallback never do I/O or report a hidden failure through a
 panic. The built-in policy reads private immutable host/replica indices and
 produces its first eligible replica without enumerating/copying the full host
 list or constructing all fallback targets. It advances fallback lazily only
 when needed. Public defensive metadata accessors are inspection APIs, not the
 built-in routing path. A plan captures a placement/topology snapshot; pool
 acquisition still rechecks current availability and target strictness. Custom
-policies retain their public Plan seam and account for their own work.
+policies implement Pick and Fallback themselves and account for their own work.
 
 ```go
-type RoutingOptions struct {
+// package routing
+type Options struct {
     TokenAware bool
     Datacenter, Rack string
     AllowRemote bool
@@ -1394,11 +1529,12 @@ type LatencyOptions struct {
     MinimumSamples int
     Scale, RetryPeriod, UpdateInterval time.Duration
 }
-func NewRoutingPolicy(RoutingOptions) (RoutingPolicy, error)
-func SingleTargetRouting(Target, strictShard bool) RoutingPolicy
+func NewPolicy(Options) (Policy, error)
+func SingleTarget(Target, strictShard bool) Policy
+const AnyShard
 type PartitionKey struct { /* logical canonical encoded component stream */ }
 func (k PartitionKey) Len() int64
-func (k PartitionKey) ForEach(func(Bytes) error) error
+func (k PartitionKey) ForEach(func(cql.Bytes) error) error
 type TokenPartitioner interface { Token(PartitionKey) (int64, error) }
 var Murmur3TokenPartitioner TokenPartitioner
 var CDCTokenPartitioner TokenPartitioner
@@ -1426,11 +1562,12 @@ first original v2 replica as leader only when connected, enabled and
 locality-eligible. An unresolved original leader never promotes the first
 resolved follower. Unknown/ineligible leaders use ordinary replica/nonreplica
 fallback. LWT replica ordering remains deterministic; ordinary replica shuffling
-and configured latency ordering apply without admitting excluded hosts. This
-required leader path must be implemented.
+and configured latency ordering apply without admitting excluded hosts.
+routing.Options.LeaderAware enables this leader path.
 
-Config.Partitioners maps server partitioner names to TokenPartitioner instances.
-Built-in Murmur3 and CDC implementations are installed by default. Unknown
+ConfigBuilder.WithPartitioner(name, routing.TokenPartitioner) maps a server
+partitioner class name to a TokenPartitioner. Built-in Murmur3 and CDC
+implementations are installed by default. Unknown
 partitioners disable token routing and expose a diagnostic; they do not use the
 wrong hash. PartitionKey includes composite length/terminator framing as needed;
 ForEach streams it in canonical order without materialization. Custom
@@ -1475,24 +1612,73 @@ successful response due solely to saturation. Invalidation takes effect through
 a bounded atomic signal even when the normal queue is full.
 
 ```go
-func (s *Session) Metadata() *MetadataSnapshot
-func (s *Session) RefreshMetadata(context.Context) error
-func (s *Session) AwaitSchemaAgreement(context.Context) error
-func (s *Session) Subscribe(EventFilter) (*Subscription, error)
-func (s *Session) Metrics() metrics.Snapshot // package metrics: session-wide counters
-func (s *Session) Trace(context.Context, UUID) (TraceInfo, error)
-func (s *Session) Close() error
-func (s *Session) Closed() bool
-func (m *MetadataSnapshot) Hosts() []HostSnapshot
-func (m *MetadataSnapshot) Keyspace(string) (*KeyspaceMetadata, bool)
-func (m *MetadataSnapshot) Replicas(keyspace, table string, token int64) ([]Target, error)
-func (m *MetadataSnapshot) TokenRanges(keyspace, table string) ([]TokenRange, error)
-func (m *MetadataSnapshot) Generation() uint64
+func (s *Session[D]) Metadata() *metadata.Snapshot
+func (s *Session[D]) RefreshMetadata(context.Context) error
+func (s *Session[D]) AwaitSchemaAgreement(context.Context) error
+func (s *Session[D]) Subscribe(EventFilter) (*Subscription, error)
+func (s *Session[D]) Metrics() metrics.Snapshot // session-wide counters
+func (s *Session[D]) Trace(context.Context, cql.UUID) (TraceInfo, error)
+func (s *Session[D]) Close() error
+func (s *Session[D]) Closed() bool
+type EventKind uint8
+const (TopologyEvent EventKind = iota; StatusEvent; SchemaEvent; ControlEvent; ClientRouteEvent; OverflowEvent)
+type EventFilter struct { Keyspace string; Kinds []EventKind; Capacity int }
+type Event struct {
+    Kind EventKind
+    Generation uint64
+    Address netip.AddrPort
+    HostID cql.UUID
+    Change, Target, Keyspace, Object string
+    ArgumentTypes []string
+}
 func (s *Subscription) Events() <-chan Event
 func (s *Subscription) Close()
+
+// package metadata
+type Snapshot struct { /* immutable */ }
+func (m *Snapshot) Hosts() []routing.HostSnapshot
+func (m *Snapshot) Keyspace(string) (*Keyspace, bool)
+func (m *Snapshot) Replicas(keyspace, table string, token int64) ([]routing.Target, error)
+func (m *Snapshot) TokenRanges(keyspace, table string) ([]routing.TokenRange, error)
+func (m *Snapshot) Token(keyspace, table string, key ...dynamic.Value) (int64, error)
+func (m *Snapshot) HostRoutes() []routing.Route
+func (m *Snapshot) ReplicaRoutes(routing.Info) []routing.Route
+func (m *Snapshot) Diagnostics() []error
+func (m *Snapshot) Generation() uint64
+// Schema types: Keyspace, Table, TableOptions, Column, ColumnKind, ColumnOrder
+// (ASC, DESC), ColumnIndex, Index, IndexKind, View, Type, Function, Aggregate.
+type Mode /* SchemaNone, SchemaKeyspaces, SchemaFull (default) */
+
+// package metrics
+type Snapshot struct {
+    ReceiveCacheHits, ReceiveCacheMisses uint64
+    ReceiveCacheBytes, ReceiveCacheObjects int
+    Requests, Attempts uint64
+    Errors, Cancelled uint64
+    Retries, Speculations uint64
+    Orphans uint64
+    InFlight int64
+    LatencyP50, LatencyP95, LatencyP99 time.Duration
+}
+
+// package routing
+type HostSnapshot struct {
+    Address netip.AddrPort
+    Datacenter, Rack string
+    Tokens []int64
+    Shards uint32
+    ShardingIgnoreMSB uint8
+    ID cql.UUID
+    Enabled, Connected, Up bool
+}
+type TokenRange struct { Start, End int64; Replicas []Target }
 ```
 
-MetadataSnapshot exposes immutable snapshots, with full existing schema
+ConfigBuilder.WithMetadataMode selects how much schema a session loads
+(SchemaFull by default); topology always loads. WithMetadataKeyspaces limits
+schema to the named keyspaces.
+
+metadata.Snapshot exposes immutable snapshots, with full existing schema
 features: keyspaces, replication, tables, columns, ordered keys, UDTs, views,
 indexes, functions/aggregates, recreation CQL, node addresses/tokens and
 tablets. Retained snapshots survive refresh. Accessors returning existing
@@ -1540,18 +1726,17 @@ to interrupt blocked I/O. It waits for accepted writers and driver workers to
 finish and releases only undelivered/prefetched pages. A delivered current page
 keeps its independent output owner until the application's next NextInto or
 Rows/Page Close, so Session.Close cannot recycle a still-valid current row.
-Shutdown and binding input drains do not wait for that output owner or
-independently retained PageLease objects. A subsequent Next releases the current
-page and reports ErrClosed unless an earlier terminal error already won;
+Shutdown and query input drains do not wait for that output owner or
+independently retained PageLease objects. A subsequent NextInto releases the current
+page and reports cqlerr.ErrClosed unless an earlier terminal error already won;
 Rows/Page Close remains idempotent. Concurrent/repeated Session.Close calls wait
-for the same shutdown completion and return the same shutdown result. Bindings
-still require their own Close/Wait before input reuse; shutdown drains all
-admissions made by this session without closing unadmitted bindings.
+for the same shutdown completion and return the same shutdown result. Shutdown
+drains all admissions made by this session.
 
-Configuration retains useful existing setup capabilities. A `Config` is an
+A `Config` is an
 opaque, immutable value made only by `ConfigBuilder.Build`; users never write a
 `Config` literal or assign its fields. Each builder method sets one setting
-and is named `With*` (`WithPort`, `WithTLS`, `WithTimeout`), except `Build`,
+and is named `With*` (`WithPort`, `WithTLS`, `WithConnectTimeout`), except `Build`,
 `ConfigureDefaultProfile` and `NoAdvancedShardAwareness`. An on/off setting
 takes a bool (`WithDiscovery(false)`), and a size or interval whose zero has no
 other meaning turns its feature off at zero (`WithHeartbeat(0, 0)`,
@@ -1572,19 +1757,30 @@ func NewConfig(contactPoints ...string) *ConfigBuilder
 func (*ConfigBuilder) Build() (Config, error)
 func (*ConfigBuilder) WithDefaultProfile(Profile) *ConfigBuilder
 func (*ConfigBuilder) ConfigureDefaultProfile(func(*ProfileBuilder)) *ConfigBuilder
+func (*ConfigBuilder) WithOnlyHost(id cql.UUID) *ConfigBuilder
+func (*ConfigBuilder) WithHostFilter(keep func(routing.HostSnapshot) bool) *ConfigBuilder
+func (*ConfigBuilder) WithPoolSize(PoolSize) *ConfigBuilder
+func (*ConfigBuilder) WithTLS(TLSSource) *ConfigBuilder
+func (*ConfigBuilder) WithAuth(auth.Provider) *ConfigBuilder
+func (*ConfigBuilder) WithResolver(endpoint.Resolver) *ConfigBuilder
+func (*ConfigBuilder) WithAddressTranslator(endpoint.Translator) *ConfigBuilder
+func (*ConfigBuilder) WithDialer(endpoint.Dialer) *ConfigBuilder
+func (*ConfigBuilder) WithPartitioner(name string, routing.TokenPartitioner) *ConfigBuilder
+func (*ConfigBuilder) WithMetadataMode(metadata.Mode) *ConfigBuilder
 func NewProfile() *ProfileBuilder
 func NewClientRoutes(connectionIDs ...string) *ClientRoutesBuilder
-func Connect(context.Context, Config) (*Session, error)
+func Connect[D Dialect](context.Context, Config) (*Session[D], error)
 ```
 
-`Connect` rejects the zero `Config`.
+`Connect` rejects the zero `Config`. `WithOnlyHost` connects only to the node
+with that host ID; it is a host filter and composes with `WithHostFilter`.
 
-Configuration covers protocol 3/4/5 and autodiscovery, timeouts,
-pools/shards/source ports, DNS/dial hooks, TLS and ticket cache, auth-provider
-exchanges, LZ4/Snappy, coalescing/socket options, address
-translation/filtering/client routes, startup identity and configuration
-reporting, metadata scope/events/agreement, profiles/retry/speculation,
-metrics/history/logger and timestamp generation. TLS uses Go crypto/tls,
+Configuration covers autodiscovery, timeouts, pools/shards/source ports,
+DNS/dial hooks, TLS, auth-provider exchanges, LZ4/Snappy, coalescing/socket
+options, address translation/filtering/client routes, startup identity and
+configuration reporting, metadata scope/events/agreement,
+profiles/retry/speculation, observers/logger and timestamp generation. The
+native protocol version is not a setting: it comes from the session's dialect. TLS uses Go crypto/tls,
 validates host/CA by default, and never downgrades after a TLS failure. Each
 auth exchange is per connection; providers are concurrency-safe. One TLS
 configuration serves every node; without an explicit ServerName each
@@ -1595,8 +1791,7 @@ fails the dial. Build validates the source's config at that time. `TLSFileSource
 certificate/key and CA from files over base, fails if they cannot be loaded,
 and rechecks them during a dial once `Interval` has passed, keeping the current
 files when a check fails. Context-taking hooks honor cancellation; synchronous callbacks are
-prompt/nonblocking and cannot reenter blocking Close/Wait. The implementation
-contract defines route selection, snapshots and duration defaults. Client
+prompt/nonblocking and cannot reenter blocking Close/Wait. Client
 routes supply per-connection-ID endpoint overrides and disable advanced shard
 awareness (shard selection by source port through the shard-aware port), which
 their proxy breaks. `WithPoolSize` takes `PerShard(n)` (default `PerShard(1)`)
@@ -1605,48 +1800,97 @@ excess, so Build rejects it with `WithAdvancedShardAwareness` or
 `WithMaxExcessPerShard`. Keepalive, orphan-stream budget, connection repair and
 graceful close remain separate from user-request timeout.
 
-Errors preserve `errors.Is`/`errors.As` and server error codes/details. Define
-ErrClosed, ErrReleased, ErrNotFound, ErrNoKeyspace, ErrNoTable,
-ErrPagingNoProgress, ErrPagingComplete, ErrPagingStateLimit and ErrNoRows,
-plus ValidationError, UnsupportedSettingError, CodecError
-(column/index/nested path and stage), ProtocolError (offset/stage; one type
-for frame violations, which have stage "frame" and offset -1, and for data
-that does not decode),
-SchemaChangedError, ExecutionError, PartialRefreshError and NoHostsError.
-`cqlerr` exports only sentinels the driver returns: no deprecated ones, none
-kept for v1 callers. Every server error implements `ServerError` (`Code()
-ErrorCode`, `Message() string`, `Warnings() []string`) and is a concrete
-`XxxError` type per code with its details (`WriteTimeoutError`,
-`UnavailableError`, ...); codes without details are `OtherServerError`.
-`ErrorCode` is a typed `uint16` with one `CodeXxx` constant per native protocol
-code; it implements `error`, and each server error matches its own code, so
+Errors live in package `cqlerr` and preserve `errors.Is`/`errors.As` and
+server error codes/details. A failed request returns an `*ExecutionError`,
+which unwraps the server/context error, lists every failed attempt
+(`AttemptFailure`) and reports an `ExecutionStatus` (`NotExecuted`,
+`MaybeExecuted`, `PartiallyExecuted`; `ExecutionStatusOf(err)`). `KindOf(err)`
+groups any error by `Kind` (`KindTimeout`, `KindUnavailable`, `KindOverloaded`,
+...), and `Kind.Transient` reports whether trying again can help. Driver
+conditions are sentinels tested with `errors.Is`: among them `ErrBusy`,
+`ErrClosed`, `ErrReleased`, `ErrStaleRows`, `ErrNotFound`, `ErrNoKeyspace`,
+`ErrNoTable`, `ErrNoRows`, `ErrNoHosts`, `ErrNoConnections`,
+`ErrConditionalExec`, `ErrPagingNoProgress`, `ErrPagingComplete` and
+`ErrPagingStateLimit`. Typed driver errors include `ValidationError`,
+`UnsupportedSettingError`, `CodecError` (column/index/nested path and stage),
+`ProtocolError` (offset/stage; one type for frame violations, which have stage
+"frame" and offset -1, and for data that does not decode),
+`SchemaChangedError`, `ServerMismatchError`, `ConnectError`, `HostError`,
+`PartialRefreshError`, `NoHostsError`, `StreamCapabilityError` and
+`StreamCapacityError`. `cqlerr` exports only sentinels the driver returns.
+
+Every server error implements `ServerError` (`Code() ErrorCode`,
+`Message() string`, `Warnings() []string`) and is a concrete `XxxError` type
+per code with its details (`WriteTimeoutError`, `UnavailableError`, ...);
+codes without details are `OtherServerError`. `ErrorCode` is a typed `uint16`
+with one `CodeXxx` constant per native protocol code; it implements `error`,
+and each server error matches its own code, so
 `errors.Is(err, cqlerr.CodeOverloaded)` works through any wrapper.
-ExecutionError unwraps the server/context error. Unrecognized future server
-errors are `OtherServerError` and retain their code and message. Invalid
-lengths and metadata never panic or allocate based on unbounded advertised
-counts.
+Unrecognized future server errors are `OtherServerError` and retain their code
+and message. Invalid lengths and metadata never panic or allocate based on
+unbounded advertised counts.
 
+### Transport setup details
 
-### Transport setup details settled during step 04
-
-A Unix maintenance target is one `ContactPoints` entry `unix:/absolute/path`;
-a bare absolute path is accepted as a convenience. `Build` fills in protocol 3
-and no host discovery unless set explicitly; an explicit other protocol version
-or discovery, mixed Unix/TCP contacts, TLS, and explicit
-LocalAddress on this transport fail with UnsupportedSettingError. Default shard settings do not target a Unix socket.
-Dialer receives Network `unix` and the exact path as Address; an unknown
-bootstrap Host.Address is invalid rather than a fabricated TCP endpoint. A
+A Unix maintenance target is the single contact point `unix:/absolute/path`;
+a bare absolute path is accepted as a convenience. `Build` turns host discovery
+off unless `WithDiscovery` is set explicitly; explicit discovery, TLS, and an
+explicit `WithLocalAddress` on this transport fail with
+cqlerr.UnsupportedSettingError, and mixing Unix and TCP contact points fails
+validation. Default shard settings do not target a Unix socket. An
+endpoint.Dialer receives an endpoint.DialTarget with Network `unix` and the
+exact path as Address; an unknown bootstrap host address is invalid rather
+than a fabricated TCP endpoint. A
 socket represents only its reconciled local host, so remote strict targets fail.
 For example:
 
 ```go
-config, err := NewConfig("unix:/run/scylla/cql.m").Build()
-session, err := Connect(ctx, config)
+config, err := gocql.NewConfig("unix:/run/scylla/cql.m").Build()
+session, err := gocql.Connect[gocql.ScyllaV4](ctx, config)
 ```
 
-The context-aware Dialer contract above applies to all
-new connections. DefaultDialer implements the raw target contract; DialerFunc
-adapts a function. TCP endpoints and source ranges are selected before hooks;
+```go
+// package endpoint
+type DialTarget struct {
+    Network, Address string
+    LocalAddress netip.AddrPort
+    Host routing.HostSnapshot
+    ShardID cql.Option[uint32]
+}
+type Dialer interface { DialContext(context.Context, DialTarget) (net.Conn, error) }
+type DialerFunc func(context.Context, DialTarget) (net.Conn, error)
+type DefaultDialer struct { ConnectTimeout, SocketKeepalive time.Duration }
+type Resolver interface {
+    LookupNetIP(ctx context.Context, network, host string) ([]netip.Addr, error)
+}
+type Peer struct {
+    RPCAddress, BroadcastAddress, ListenAddress, PreferredIP netip.Addr
+    Datacenter, Rack string
+    HostID cql.UUID
+    Port, ShardAwarePort, ShardAwarePortTLS uint16
+}
+type Translator interface {
+    Translate(ctx context.Context, peer Peer, addr netip.AddrPort) (netip.AddrPort, error)
+}
+type TranslatorFunc func(ctx context.Context, peer Peer, addr netip.AddrPort) (netip.AddrPort, error)
+func IdentityTranslator() Translator
+
+// package auth
+type Provider interface {
+    Start(context.Context, routing.HostSnapshot, string) (Exchange, cql.Nullable[[]byte], error)
+}
+type Exchange interface {
+    Challenge(context.Context, cql.Nullable[cql.Bytes]) (cql.Nullable[[]byte], error)
+    Success(context.Context, cql.Nullable[cql.Bytes]) error
+    Close()
+}
+func Password(username, password string) Provider
+```
+
+The context-aware endpoint.Dialer contract applies to all new connections.
+DefaultDialer implements the raw target contract; DialerFunc adapts a
+function. A Translator returns addr unchanged when no translation applies;
+an error fails that connection attempt like a dial error. TCP endpoints and source ranges are selected before hooks;
 TLS containers,
 trust-pool containers and certificate byte arrays are snapshotted. Private keys,
 callbacks, parsed trust-certificate objects and session caches/providers retain
@@ -1659,11 +1903,7 @@ Each resolved contact/opening owns its deadline, even when aliases or ports
 share an IP. A failed physical opening can be retried under a new attempt budget
 and reconnect policy; it never extends the spent attempt or caller deadline.
 
-This clarification records implemented transport seams; public streaming queries and
-its execution/paging composition remain later step 07 work. It does not extend
-the historical design review results or establish full release verification.
-
-## Public API consistency amendment
+## Struct mapping, documentation and stopping iteration
 
 Public Statement, stream.Statement, Options, PrepareOptions, StreamOptions and
 Profile records expose their fields directly in package documentation.

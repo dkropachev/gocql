@@ -34,8 +34,8 @@ The shared Go core validates IDs, exact row counts and SHA-256 of every returned
 payload inside each operation. Old gocql reuses per-worker query templates,
 argument and scan slices, with a public blob unmarshaler copying to reusable
 owned storage. Its public WithContext call supplies each operation's deadline.
-V2 loads full table metadata with RefreshMetadata before preparing typed statements, asserts token routing, binds immutable input with BindBorrowed, and
-closes/waits for every binding. Buffered NextInto copies borrowed Bytes to the
+V2 loads full table metadata with RefreshMetadata before preparing typed statements, asserts token routing, runs each worker's reusable Query, and
+closes every query. Buffered NextInto copies borrowed Bytes to the
 same owned row shape; streaming uses seeded destinations. No row mapping or
 unsafe borrowing is used. Reads consume all rows before returning; writes await
 acknowledgement. Page size is 32 with prefetch disabled. Write coalescing is zero in both drivers; serial consistency is unset for these ordinary statements. Wire probes verify identical representative parameters, including metadata flags. A 128-row read uses five requests: four data pages and a terminal empty page.

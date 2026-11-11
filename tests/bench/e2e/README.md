@@ -55,11 +55,6 @@ IDs. Different requests with one hash or conflicting repeated results are
 errors. Unmatched operational requests still panic; there is no CQL rewrite,
 request fallback or old-control compatibility path.
 
-Generation source/config/server/capture hashes, actual operation results and
-cleanup receipts are recorded in
-[the verification report](../../feature-specs/evidence/step13-verification.json).
-The old page-5000/timestamp captures and their failed operational replay remain
-historical evidence in the accepted predecessor reports; they do
-not count as successful current replay. These are benchmark smoke checks.
+These are benchmark smoke checks.
 Comprehensive native throughput, scaling and retained-memory measurements
 live in the native performance integration tests.

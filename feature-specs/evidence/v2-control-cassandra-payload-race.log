@@ -1,9 +1,0 @@
-=== RUN   TestQuery/CustomPayload/Messages
-=== PAUSE TestQuery/CustomPayload/Messages
-=== RUN   TestQuery/CustomPayload/Values
-=== PAUSE TestQuery/CustomPayload/Values
-=== CONT  TestQuery/CustomPayload/Values
-=== CONT  TestQuery/CustomPayload/Messages
---- PASS: TestQuery/CustomPayload/Messages (1.50s)
---- PASS: TestQuery/CustomPayload/Values (1.51s)
-PASS
