@@ -27,9 +27,9 @@ import (
 //
 // Appending copies the encoded values into storage the batch owns and reuses:
 // once a batch has grown to its working size, appending and Reset allocate
-// nothing. The zero Batch is empty and ready to use. A Batch is not safe for
-// concurrent use and must not be copied. It may be sent any number of times;
-// Reset empties it for the next batch.
+// nothing. The zero Batch is empty, logged and ready to use. A Batch is not
+// safe for concurrent use and must not be copied. It may be sent any number of
+// times; Reset empties it for the next batch and keeps its Kind.
 type Batch struct {
 	entries []batchEntry
 	// values holds the encoded values of every entry back to back.
@@ -54,6 +54,9 @@ type Batch struct {
 	// shared reports that an execution no longer tracked may still read
 	// entries or values: Reset must abandon them instead of reusing them.
 	shared bool
+	// Kind is the batch's kind, sent with every execution of the batch. The
+	// zero value is LoggedBatch.
+	Kind cqltype.BatchKind
 }
 
 // batchEntry is one statement of a batch. Its encoded values are
@@ -88,7 +91,8 @@ func (b *Batch) Len() int {
 	return len(b.entries)
 }
 
-// Reset empties the batch, keeping its storage for the next statements. If
+// Reset empties the batch, keeping its storage and Kind for the next
+// statements. If
 // an execution of the batch may still be writing it, which happens after its
 // context was cancelled, Reset leaves the storage to that execution instead.
 func (b *Batch) Reset() {
@@ -116,17 +120,17 @@ func (b *Batch) drained() bool {
 	return true
 }
 
-// begin returns the state for an execution of kind. While an earlier
+// begin returns the state for an execution of the batch. While an earlier
 // execution may still read the batch's state, this one gets its own, and
 // the batch's storage is left to the earlier one at the next Reset.
-func (b *Batch) begin(kind cqltype.BatchKind) *batchState {
+func (b *Batch) begin() *batchState {
 	state := &b.state
 	if !b.drained() {
 		state = new(batchState)
 		b.shared = true
 	}
 	// The wire batch's item storage is kept for the next execution.
-	state.kind, state.entries, state.values = kind, b.entries, b.values
+	state.kind, state.entries, state.values = b.Kind, b.entries, b.values
 	return state
 }
 
@@ -137,17 +141,17 @@ func (b *Batch) requestRouting() model.RoutingInfo {
 	return routing
 }
 
-// validate checks that batch can be sent as kind on s. A BATCH response is
-// one page with no continuation, so paging options do not apply to it and
-// are ignored: the options compiled for statements serve batches too.
-func validateBatch(s *implCluster.Core, kind cqltype.BatchKind, batch *Batch) error {
+// validate checks that batch can be sent on s. A BATCH response is one page
+// with no continuation, so paging options do not apply to it and are
+// ignored: the options compiled for statements serve batches too.
+func validateBatch(s *implCluster.Core, batch *Batch) error {
 	if batch == nil {
 		return cqltype.TypeValidation("batch", "nil batch")
 	}
 	if len(batch.entries) == 0 {
 		return cqltype.TypeValidation("batch", "requires 1 to 65535 entries")
 	}
-	if kind != cqltype.LoggedBatch && kind != cqltype.UnloggedBatch && kind != cqltype.CounterBatch {
+	if kind := batch.Kind; kind != cqltype.LoggedBatch && kind != cqltype.UnloggedBatch && kind != cqltype.CounterBatch {
 		return cqltype.TypeValidation("batch kind", "unknown kind")
 	}
 	if batch.session != s {
@@ -282,14 +286,14 @@ func InternalAddBound[R any](batch *Batch, s *implCluster.Core, bound *Bound[R])
 
 // runBatch sends batch on s without a query and returns its first and
 // only page.
-func runBatch[R any](ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, decoder codec.RowDecoder[R], options CompiledOptions) (*Page[R], error) {
-	if err := validateBatch(s, kind, batch); err != nil {
+func runBatch[R any](ctx context.Context, s *implCluster.Core, batch *Batch, decoder codec.RowDecoder[R], options CompiledOptions) (*Page[R], error) {
+	if err := validateBatch(s, batch); err != nil {
 		return nil, err
 	}
 	if decoder == nil {
 		return nil, cqltype.TypeValidation("batch rows", "nil decoder")
 	}
-	state := batch.begin(kind)
+	state := batch.begin()
 	owner := InternalNewInputOwner()
 	batch.lastOwner, batch.lastQuery = owner, nil
 	bound := new(Bound[R])
@@ -303,19 +307,19 @@ func runBatch[R any](ctx context.Context, s *implCluster.Core, kind cqltype.Batc
 // queryExec prepares the batch's request for an execution on query q,
 // which began its own execution generation for it. Admission copies the
 // request into the query's inline request.
-func (b *Batch) queryExec(dst *InternalExecutionRequest, q *queryState, kind cqltype.BatchKind) {
-	state := b.begin(kind)
+func (b *Batch) queryExec(dst *InternalExecutionRequest, q *queryState) {
+	state := b.begin()
 	b.lastQuery, b.lastGen, b.lastOwner = q, q.generation.Load(), nil
 	*dst = InternalExecutionRequest{InternalOwner: q.owner, query: q, routing: b.requestRouting(), batch: state}
 }
 
 // execBatch sends batch on s and drains its result, which must have no
 // columns.
-func execBatch(ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, options CompiledOptions) (model.Result, error) {
+func execBatch(ctx context.Context, s *implCluster.Core, batch *Batch, options CompiledOptions) (model.Result, error) {
 	if batch != nil && batch.routing.Kind == cqltype.ConditionalStatement {
 		return conditionalExec()
 	}
-	page, err := runBatch(ctx, s, kind, batch, execRowsDecoder{}, options)
+	page, err := runBatch(ctx, s, batch, execRowsDecoder{}, options)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
@@ -352,12 +356,12 @@ func (rt *InternalSessionRuntime) batchQueries() (*queryPool[codec.EmptyRecord, 
 // beginBatch validates a batch call on s and takes a pooled query that has
 // begun an execution for it. The caller releases the query's owner when the
 // execution no longer needs it.
-func beginBatch(ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, options []CompiledOptions) (*Query[codec.EmptyRecord, codec.EmptyRecord], CompiledOptions, error) {
+func beginBatch(ctx context.Context, s *implCluster.Core, batch *Batch, options []CompiledOptions) (*Query[codec.EmptyRecord, codec.EmptyRecord], CompiledOptions, error) {
 	o, err := oneShotOptions(options)
 	if err != nil {
 		return nil, o, err
 	}
-	if err := validateBatch(s, kind, batch); err != nil {
+	if err := validateBatch(s, batch); err != nil {
 		return nil, o, err
 	}
 	pool, err := InternalRuntimeFor(s).batchQueries()
@@ -370,13 +374,13 @@ func beginBatch(ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind
 
 // InternalRunBatch sends batch on s; tests use it to run batches built from
 // bindings.
-func InternalRunBatch[R any](ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, decoder codec.RowDecoder[R], options CompiledOptions) (*Page[R], error) {
-	return runBatch(ctx, s, kind, batch, decoder, options)
+func InternalRunBatch[R any](ctx context.Context, s *implCluster.Core, batch *Batch, decoder codec.RowDecoder[R], options CompiledOptions) (*Page[R], error) {
+	return runBatch(ctx, s, batch, decoder, options)
 }
 
 // InternalExecBatch sends batch on s and drains its result.
-func InternalExecBatch(ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, options CompiledOptions) (model.Result, error) {
-	return execBatch(ctx, s, kind, batch, options)
+func InternalExecBatch(ctx context.Context, s *implCluster.Core, batch *Batch, options CompiledOptions) (model.Result, error) {
+	return execBatch(ctx, s, batch, options)
 }
 
 // batchRows is the storage of one RunBatch execution with row type R: its

@@ -128,9 +128,13 @@ and no options.
   statement, which compiles its parameters on every call like the other
   throwaway methods. `AddToBatch` encodes the value straight into storage
   the `Batch` owns and touches no execution state. The zero `Batch` is ready,
-  and `Reset` keeps the storage for the next batch.
-- **Sending.** The session sends a batch, and the batch kind is a call
-  argument, not batch state:
+  and `Reset` keeps the storage and the kind for the next batch.
+- **Kind.** The batch kind is batch state: the exported field `Batch.Kind`
+  (`cql.LoggedBatch`, the zero value, `UnloggedBatch` or `CounterBatch`), set
+  once while building. The batch's contents decide the kind (a counter batch
+  holds only counter updates; unlogged is chosen because the members share a
+  partition), so it is not repeated as an argument on each send.
+- **Sending.** The session sends a batch with the batch's own kind:
   - None: `Session.ExecBatch`. A batch whose members the driver knows to be
     conditional is rejected before it is sent, because the result of an
     applied-or-not write cannot be returned as success or error alone.

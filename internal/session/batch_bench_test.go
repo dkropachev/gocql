@@ -53,7 +53,7 @@ func BenchmarkBatch(b *testing.B) {
 				session := InternalWrapSession(s)
 				ctx := context.Background()
 				value := []byte("0123456789abcdef0123456789abcdef")
-				var batch Batch
+				batch := Batch{Kind: cqltype.UnloggedBatch}
 				b.ReportAllocs()
 				for b.Loop() {
 					batch.Reset()
@@ -62,7 +62,7 @@ func BenchmarkBatch(b *testing.B) {
 							b.Fatal(err)
 						}
 					}
-					if _, err := session.ExecBatch(ctx, cqltype.UnloggedBatch, &batch); err != nil {
+					if _, err := session.ExecBatch(ctx, &batch); err != nil {
 						b.Fatal(err)
 					}
 				}
@@ -85,7 +85,7 @@ func BenchmarkBatch(b *testing.B) {
 		var dst row
 		b.ReportAllocs()
 		for b.Loop() {
-			rows, err := session.RunBatch(ctx, cqltype.LoggedBatch, &batch, decoder)
+			rows, err := session.RunBatch(ctx, &batch, decoder)
 			if err != nil {
 				b.Fatal(err)
 			}

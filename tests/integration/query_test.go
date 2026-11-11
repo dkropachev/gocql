@@ -865,14 +865,14 @@ func TestQuery(t *testing.T) {
 			}
 			t.Logf("stream receive incremental=%t passed", incremental)
 		}
-		var batch gocql.Batch
+		batch := gocql.Batch{Kind: cql.UnloggedBatch}
 		for i := int32(0); i < 3; i++ {
 			if err := w.AddToBatch(&batch, record{K: 2, C: i, P: payload}); err != nil {
 				t.Fatal(err)
 			}
 		}
 		payload[0] = 99
-		if _, err := session.ExecBatch(ctx, cql.UnloggedBatch, &batch); err != nil {
+		if _, err := session.ExecBatch(ctx, &batch); err != nil {
 			t.Fatal(err)
 		}
 		rows := codecTestMust(q.Run(ctx, int32(2)))

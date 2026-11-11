@@ -98,33 +98,33 @@ func (s *Session[D]) UnpreparedAll[P, R any](ctx context.Context, statement cql.
 	return s.internal().UnpreparedAll(ctx, internalStatement(statement), value, dst, internalOptionList(options)...)
 }
 
-// ExecBatch sends batch as one CQL BATCH request. A batch known to be
+// ExecBatch sends batch as one CQL BATCH request of batch.Kind. A batch known to be
 // conditional is rejected with cqlerr.ErrConditionalExec before it is sent;
 // read its result with RunBatch. At most one CompiledOptions may be passed;
 // paging options are ignored, because a BATCH response is a single page. Do
 // not modify batch until the call returns. A reused batch sends without
 // allocating.
-func (s *Session[D]) ExecBatch(ctx context.Context, kind cql.BatchKind, batch *Batch, options ...CompiledOptions) (Result, error) {
+func (s *Session[D]) ExecBatch(ctx context.Context, batch *Batch, options ...CompiledOptions) (Result, error) {
 	o, err := internalCompiledOptions(options)
 	if err != nil {
 		return implSession.InternalExecutionErrorResult(err), err
 	}
-	return s.internal().ExecBatch(ctx, kind, (*implSession.Batch)(batch), o)
+	return s.internal().ExecBatch(ctx, (*implSession.Batch)(batch), o)
 }
 
-// RunBatch sends batch as one CQL BATCH request and returns its rows, decoded
+// RunBatch sends batch as one CQL BATCH request of batch.Kind and returns its rows, decoded
 // with decoder: the rows of a conditional batch report whether it applied.
 // Which rows the server returns differs between Cassandra and ScyllaDB; the
 // batch applied if and only if every row reports it. The rows hold a pooled
 // query until they are closed, as Prepared.Run's do. Options and batch
 // ownership are as for ExecBatch. Once its rows are closed, a batch sent again
 // with the same R and decoder reuses their storage and allocates nothing.
-func (s *Session[D]) RunBatch[R any](ctx context.Context, kind cql.BatchKind, batch *Batch, decoder cql.RowDecoder[R], options ...CompiledOptions) (Rows[R], error) {
+func (s *Session[D]) RunBatch[R any](ctx context.Context, batch *Batch, decoder cql.RowDecoder[R], options ...CompiledOptions) (Rows[R], error) {
 	o, err := internalCompiledOptions(options)
 	if err != nil {
 		return Rows[R]{}, err
 	}
-	rows, err := s.internal().RunBatch(ctx, kind, (*implSession.Batch)(batch), decoder, o)
+	rows, err := s.internal().RunBatch(ctx, (*implSession.Batch)(batch), decoder, o)
 	return Rows[R](rows), err
 }
 

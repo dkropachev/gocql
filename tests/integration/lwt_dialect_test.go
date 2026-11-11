@@ -104,9 +104,9 @@ func TestLWTDialect(t *testing.T) {
 			}
 			// An ordinary member contributes no row on ScyllaDB.
 			require.NoError(t, insert.AddToBatch(&batch, row{K: 1, C: 3, V: 30}))
-			_, err := session.ExecBatch(ctx, cql.LoggedBatch, &batch)
+			_, err := session.ExecBatch(ctx, &batch)
 			require.True(t, errors.Is(err, cqlerr.ErrConditionalExec), "%v", err)
-			rows, err := session.RunBatch(ctx, cql.LoggedBatch, &batch, decoder)
+			rows, err := session.RunBatch(ctx, &batch, decoder)
 			require.NoError(t, err)
 			defer rows.Close()
 			var out []cql.CASResult[row]

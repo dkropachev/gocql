@@ -13,10 +13,19 @@ import (
 // Batch collects statements, each with its values, to send as one CQL
 // BATCH request: Prepared.AddToBatch and Query.AddToBatch append a statement,
 // Session.ExecBatch and Session.RunBatch send the batch, and Reset empties it
-// for reuse. Once a
-// batch has grown to its working size, appending allocates nothing. The
-// zero Batch is ready to use; a Batch is not safe for concurrent use and
-// must not be copied.
+// for reuse. Once a batch has grown to its working size, appending allocates
+// nothing. A Batch is not safe for concurrent use and must not be copied.
+//
+// The exported field Kind cql.BatchKind selects the batch's kind and is sent
+// with every execution: cql.LoggedBatch (the zero value),
+// cql.UnloggedBatch or cql.CounterBatch. It belongs to the batch rather than
+// to each send because the contents decide it: a counter batch holds only
+// counter updates, and an unlogged batch is chosen because its members share
+// a partition. Set it once when building:
+//
+//	batch := gocql.Batch{Kind: cql.UnloggedBatch}
+//
+// The zero Batch is a logged batch, ready to use.
 type Batch implSession.Batch
 
 // StopIteration may be returned by an Each callback to stop successfully.
@@ -29,7 +38,8 @@ var StopIteration = implSession.StopIteration
 // Len returns the number of statements in the batch.
 func (b *Batch) Len() int { return (*implSession.Batch)(b).Len() }
 
-// Reset clears statements while preserving the batch's reusable capacity.
+// Reset clears statements while preserving the batch's reusable capacity and
+// its Kind.
 func (b *Batch) Reset() { (*implSession.Batch)(b).Reset() }
 
 // MaxBatchStatements is the most statements one Batch can hold: the native

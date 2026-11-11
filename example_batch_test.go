@@ -61,7 +61,8 @@ func ExampleSession_ExecBatch() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var batch gocql.Batch
+	// The members share partition 1, so the batch needs no batch log.
+	batch := gocql.Batch{Kind: cql.UnloggedBatch}
 	for _, value := range []item{
 		{PK: 1, CK: 2, Description: "1.2"},
 		{PK: 1, CK: 3, Description: "1.3"},
@@ -76,7 +77,7 @@ func ExampleSession_ExecBatch() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if _, err := session.ExecBatch(ctx, cql.UnloggedBatch, &batch, idempotent); err != nil {
+	if _, err := session.ExecBatch(ctx, &batch, idempotent); err != nil {
 		log.Fatal(err)
 	}
 	var row item

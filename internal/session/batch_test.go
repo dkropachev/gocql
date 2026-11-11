@@ -262,7 +262,7 @@ func TestBatch(t *testing.T) {
 			if err := q.AddToBatch(&batch, []byte("v")); err != nil {
 				t.Fatal(err)
 			}
-			state := batch.begin(cqltype.LoggedBatch)
+			state := batch.begin()
 			rt := InternalRuntimeFor(s)
 			ctx := context.Background()
 			first, err := rt.prepareBatchAttempt(ctx, conns[0], state, nil)
@@ -349,7 +349,7 @@ func TestBatch(t *testing.T) {
 			}()
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			if _, err := InternalWrapSession(s).ExecBatch(ctx, cqltype.LoggedBatch, &batch); err != nil {
+			if _, err := InternalWrapSession(s).ExecBatch(ctx, &batch); err != nil {
 				t.Fatal(err)
 			}
 			if err := <-serverDone; err != nil {
@@ -384,11 +384,11 @@ func TestBatch(t *testing.T) {
 			}
 			// A batch may be sent again unchanged.
 			for i := 0; i < 2; i++ {
-				if _, err := InternalWrapSession(s).ExecBatch(ctx, cqltype.LoggedBatch, &batch); err != nil {
+				if _, err := InternalWrapSession(s).ExecBatch(ctx, &batch); err != nil {
 					t.Fatal(err)
 				}
 				r := <-requests
-				if r.op != byte(frm.OpBatch) || !bytes.Contains(r.body, []byte("first")) || !bytes.Contains(r.body, []byte("second")) {
+				if r.op != byte(frm.OpBatch) || r.body[0] != byte(cqltype.LoggedBatch) || !bytes.Contains(r.body, []byte("first")) || !bytes.Contains(r.body, []byte("second")) {
 					t.Fatalf("request %d: op %#x body %q", i, r.op, r.body)
 				}
 			}
@@ -396,9 +396,10 @@ func TestBatch(t *testing.T) {
 				t.Fatal("a completed execution did not drain")
 			}
 			values := &batch.values[0]
+			batch.Kind = cqltype.UnloggedBatch
 			batch.Reset()
-			if batch.Len() != 0 {
-				t.Fatal(batch.Len())
+			if batch.Len() != 0 || batch.Kind != cqltype.UnloggedBatch {
+				t.Fatal(batch.Len(), batch.Kind)
 			}
 			if err := q.AddToBatch(&batch, []byte("third")); err != nil {
 				t.Fatal(err)
@@ -406,11 +407,11 @@ func TestBatch(t *testing.T) {
 			if &batch.values[0] != values {
 				t.Fatal("Reset did not keep the storage")
 			}
-			if _, err := InternalWrapSession(s).ExecBatch(ctx, cqltype.UnloggedBatch, &batch); err != nil {
+			if _, err := InternalWrapSession(s).ExecBatch(ctx, &batch); err != nil {
 				t.Fatal(err)
 			}
 			r := <-requests
-			if !bytes.Contains(r.body, []byte("third")) || bytes.Contains(r.body, []byte("first")) {
+			if r.body[0] != byte(cqltype.UnloggedBatch) || !bytes.Contains(r.body, []byte("third")) || bytes.Contains(r.body, []byte("first")) {
 				t.Fatalf("body %q", r.body)
 			}
 		})
@@ -431,7 +432,7 @@ func TestBatch(t *testing.T) {
 						t.Fatal(err)
 					}
 					var request InternalExecutionRequest
-					batch.queryExec(&request, &sender.state, cqltype.LoggedBatch)
+					batch.queryExec(&request, &sender.state)
 					return sender.state.owner.InternalRelease
 				}},
 				{"session", func(batch *Batch) func() {
@@ -440,7 +441,7 @@ func TestBatch(t *testing.T) {
 						t.Fatal(err)
 					}
 					owner.InternalClose()
-					batch.begin(cqltype.LoggedBatch)
+					batch.begin()
 					batch.lastOwner, batch.lastQuery = owner, nil
 					return owner.InternalRelease
 				}},
@@ -509,7 +510,7 @@ func TestBatch(t *testing.T) {
 		otherSession := InternalWrapSession(other.state.runtime.Core)
 		ctx := context.Background()
 		var batch Batch
-		if _, err := session.ExecBatch(ctx, cqltype.LoggedBatch, &batch); err == nil {
+		if _, err := session.ExecBatch(ctx, &batch); err == nil {
 			t.Fatal("empty batch sent")
 		}
 		if err := q.AddToBatch(nil, []byte("v")); err == nil {
@@ -521,12 +522,14 @@ func TestBatch(t *testing.T) {
 		if err := other.AddToBatch(&batch, []byte("v")); err == nil || batch.Len() != 1 {
 			t.Fatal("statement of another session added", err)
 		}
-		if _, err := otherSession.ExecBatch(ctx, cqltype.LoggedBatch, &batch); err == nil {
+		if _, err := otherSession.ExecBatch(ctx, &batch); err == nil {
 			t.Fatal("batch sent on another session")
 		}
-		if _, err := session.ExecBatch(ctx, cqltype.BatchKind(42), &batch); err == nil {
+		batch.Kind = cqltype.BatchKind(42)
+		if _, err := session.ExecBatch(ctx, &batch); err == nil {
 			t.Fatal("unknown batch kind sent")
 		}
+		batch.Kind = cqltype.LoggedBatch
 		if err := q.state.begin(ctx); err != nil {
 			t.Fatal(err)
 		}

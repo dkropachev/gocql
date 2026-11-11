@@ -69,28 +69,28 @@ func (s *Session) CompileOptions(options Options) (CompiledOptions, error) {
 	return InternalCompileOptions(s.Core(), options)
 }
 
-// ExecBatch sends batch as one CQL BATCH of kind on s. The batch's
+// ExecBatch sends batch as one CQL BATCH of batch.Kind on s. The batch's
 // statements must produce no result columns; RunBatch reads the rows of a
 // conditional batch. At most one CompiledOptions may be given; none uses the
 // session's default profile. ExecBatch is safe for concurrent use with other
 // session calls, but a Batch must not be changed while it is sent.
-func (s *Session) ExecBatch(ctx context.Context, kind cqltype.BatchKind, batch *Batch, options ...CompiledOptions) (model.Result, error) {
+func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options ...CompiledOptions) (model.Result, error) {
 	if s == nil {
 		err := cqltype.TypeValidation("session", "nil session")
 		return InternalExecutionErrorResult(err), err
 	}
 	core := s.Core()
-	q, o, err := beginBatch(ctx, core, kind, batch, options)
+	q, o, err := beginBatch(ctx, core, batch, options)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
-	batch.queryExec(&batch.exec.privateStorage.InternalRequest, &q.state, kind)
+	batch.queryExec(&batch.exec.privateStorage.InternalRequest, &q.state)
 	result, err := q.state.runtime.exec(ctx, &batch.exec, o)
 	q.state.owner.InternalRelease()
 	return result, err
 }
 
-// RunBatch sends batch as one CQL BATCH of kind on s and returns its rows,
+// RunBatch sends batch as one CQL BATCH of batch.Kind on s and returns its rows,
 // decoded with decoder. A conditional batch returns rows reporting whether it
 // applied; which rows depends on the server (docs/server-differences.md). A
 // BATCH response is a single page, so paging options are ignored. Options are
@@ -98,7 +98,7 @@ func (s *Session) ExecBatch(ctx context.Context, kind cqltype.BatchKind, batch *
 // closed, as Prepared.Run's do. A batch sent again once its rows are closed
 // reuses their storage, and allocates nothing while R and decoder stay the
 // same.
-func (s *Session) RunBatch[R any](ctx context.Context, kind cqltype.BatchKind, batch *Batch, decoder codec.RowDecoder[R], options ...CompiledOptions) (Rows[R], error) {
+func (s *Session) RunBatch[R any](ctx context.Context, batch *Batch, decoder codec.RowDecoder[R], options ...CompiledOptions) (Rows[R], error) {
 	if s == nil {
 		return Rows[R]{}, cqltype.TypeValidation("session", "nil session")
 	}
@@ -106,12 +106,12 @@ func (s *Session) RunBatch[R any](ctx context.Context, kind cqltype.BatchKind, b
 		return Rows[R]{}, cqltype.TypeValidation("batch rows", "nil decoder")
 	}
 	core := s.Core()
-	q, o, err := beginBatch(ctx, core, kind, batch, options)
+	q, o, err := beginBatch(ctx, core, batch, options)
 	if err != nil {
 		return Rows[R]{}, err
 	}
 	r := batch.rowsFor(decoder)
-	batch.queryExec(&r.bound.privateStorage.InternalRequest, &q.state, kind)
+	batch.queryExec(&r.bound.privateStorage.InternalRequest, &q.state)
 	q.hold()
 	rows, err := q.state.runtime.run(ctx, &r.bound, o)
 	q.state.owner.InternalRelease()

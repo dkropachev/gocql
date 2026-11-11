@@ -58,9 +58,9 @@ func TestConditionalExecRejected(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			_, err := InternalExecBatch(context.Background(), s, cqltype.LoggedBatch, &batch, CompiledOptions{})
+			_, err := InternalExecBatch(context.Background(), s, &batch, CompiledOptions{})
 			check(t, err)
-			_, err = InternalWrapSession(s).ExecBatch(context.Background(), cqltype.LoggedBatch, &batch)
+			_, err = InternalWrapSession(s).ExecBatch(context.Background(), &batch)
 			check(t, err)
 		}
 	})

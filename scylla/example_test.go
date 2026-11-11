@@ -48,7 +48,7 @@ func ExampleBatchStatement() {
 			log.Fatal(err)
 		}
 	}
-	rows, err := session.RunBatch(ctx, cql.LoggedBatch, &batch, statement.Rows)
+	rows, err := session.RunBatch(ctx, &batch, statement.Rows)
 	if err != nil {
 		log.Fatal(err)
 	}

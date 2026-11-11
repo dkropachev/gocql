@@ -271,7 +271,8 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 					}
 				}
 			}
-			_, err := a.s.ExecBatch(ctx, kind, &batch)
+			batch.Kind = kind
+			_, err := a.s.ExecBatch(ctx, &batch)
 			return err
 		}, nil
 	case "F1":

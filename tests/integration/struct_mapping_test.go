@@ -40,7 +40,7 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if _, err := f.session.ExecBatch(ctx, cql.LoggedBatch, &batch); err != nil {
+		if _, err := f.session.ExecBatch(ctx, &batch); err != nil {
 			t.Fatal(err)
 		}
 		var got smRecord
@@ -78,12 +78,13 @@ func TestStructMapping(t *testing.T) {
 			t.Fatal(err)
 		}
 		batch.Reset()
+		batch.Kind = cql.CounterBatch
 		for _, h := range []hit{{K: 1, Hits: 2}, {K: 1, Hits: 3}} {
 			if err := add.AddToBatch(&batch, h); err != nil {
 				t.Fatal(err)
 			}
 		}
-		if _, err := f.session.ExecBatch(ctx, cql.CounterBatch, &batch); err != nil {
+		if _, err := f.session.ExecBatch(ctx, &batch); err != nil {
 			t.Fatal(err)
 		}
 		readPrepared, err := f.session.Prepare(ctx, cql.Statement[int32, hit]{
@@ -159,7 +160,7 @@ func TestStructMapping(t *testing.T) {
 		if err := update.AddToBatch(&batch, guard{Bucket: 7, ID: r.ID, Name: "batched", Big: r.Big}); err != nil {
 			t.Fatal(err)
 		}
-		rows, err := f.session.RunBatch(ctx, cql.LoggedBatch, &batch, updateRows)
+		rows, err := f.session.RunBatch(ctx, &batch, updateRows)
 		if err != nil {
 			t.Fatal(err)
 		}

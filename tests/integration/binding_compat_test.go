@@ -36,8 +36,8 @@ func BatchEntry[R any](bound *Bound[R]) (batchItem, error) {
 	}}, nil
 }
 
-func buildBatch(s *gocql.Session[testDialect], items []batchItem) (*gocql.Batch, error) {
-	batch := new(gocql.Batch)
+func buildBatch(s *gocql.Session[testDialect], kind cql.BatchKind, items []batchItem) (*gocql.Batch, error) {
+	batch := &gocql.Batch{Kind: kind}
 	for _, item := range items {
 		if err := item.add(batch, s); err != nil {
 			return nil, err
@@ -47,19 +47,19 @@ func buildBatch(s *gocql.Session[testDialect], items []batchItem) (*gocql.Batch,
 }
 
 func execBatch(ctx context.Context, s *gocql.Session[testDialect], kind cql.BatchKind, items []batchItem, options gocql.CompiledOptions) (gocql.Result, error) {
-	batch, err := buildBatch(s, items)
+	batch, err := buildBatch(s, kind, items)
 	if err != nil {
 		return gocql.Result{}, err
 	}
-	return implSession.InternalExecBatch(ctx, (*implSession.Session)(s).Core(), kind, (*implSession.Batch)(batch), implSession.CompiledOptions(options))
+	return implSession.InternalExecBatch(ctx, (*implSession.Session)(s).Core(), (*implSession.Batch)(batch), implSession.CompiledOptions(options))
 }
 
 func runBatch[R any](ctx context.Context, s *gocql.Session[testDialect], kind cql.BatchKind, items []batchItem, decoder cql.RowDecoder[R], options gocql.CompiledOptions) (*gocql.Page[R], error) {
-	batch, err := buildBatch(s, items)
+	batch, err := buildBatch(s, kind, items)
 	if err != nil {
 		return nil, err
 	}
-	result, err := implSession.InternalRunBatch(ctx, (*implSession.Session)(s).Core(), kind, (*implSession.Batch)(batch), decoder, implSession.CompiledOptions(options))
+	result, err := implSession.InternalRunBatch(ctx, (*implSession.Session)(s).Core(), (*implSession.Batch)(batch), decoder, implSession.CompiledOptions(options))
 	return (*gocql.Page[R])(result), err
 }
 

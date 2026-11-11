@@ -22,7 +22,7 @@ func TestBatchAllocs(t *testing.T) {
 		session := InternalWrapSession(s)
 		ctx := context.Background()
 		value := []byte("0123456789abcdef0123456789abcdef")
-		var batch Batch
+		batch := Batch{Kind: cqltype.UnloggedBatch}
 		send := func() {
 			batch.Reset()
 			for i := 0; i < 8; i++ {
@@ -30,7 +30,7 @@ func TestBatchAllocs(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if _, err := session.ExecBatch(ctx, cqltype.UnloggedBatch, &batch); err != nil {
+			if _, err := session.ExecBatch(ctx, &batch); err != nil {
 				t.Fatal(err)
 			}
 		}

@@ -222,7 +222,7 @@ func TestConfig(t *testing.T) {
 			}
 			// A BATCH response is a single page: paging options compiled for
 			// statements are ignored, so the batch fails only for lack of hosts.
-			_, err = InternalRunBatch(context.Background(), s, cqltype.LoggedBatch, &batch, codec.EmptyRowDecoder, testOptions(Options{PageSize: implCql.Option[int32]{Set: true, Value: 1}}))
+			_, err = InternalRunBatch(context.Background(), s, &batch, codec.EmptyRowDecoder, testOptions(Options{PageSize: implCql.Option[int32]{Set: true, Value: 1}}))
 			if err == nil || hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal("batch with a page size:", err)
 			}

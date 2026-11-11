@@ -611,8 +611,8 @@ func (q *Query[P, R]) AddToBatch(*Batch, P) error
 func (q *Query[P, R]) Close()                       // stop at once
 func (q *Query[P, R]) Wait(context.Context) error   // join the drain
 
-func (s *Session) ExecBatch(context.Context, BatchKind, *Batch, ...CompiledOptions) (Result, error)
-func (s *Session) RunBatch[R any](context.Context, BatchKind, *Batch, RowDecoder[R], ...CompiledOptions) (*Page[R], error)
+func (s *Session) ExecBatch(context.Context, *Batch, ...CompiledOptions) (Result, error)          // sends batch.Kind
+func (s *Session) RunBatch[R any](context.Context, *Batch, RowDecoder[R], ...CompiledOptions) (Rows[R], error)
 ```
 
 Prepared.Exec, One, Each and All run on queries the prepared statement keeps in
@@ -1207,9 +1207,12 @@ type Profile struct {
 
 type BatchKind uint8
 const (LoggedBatch BatchKind = iota; UnloggedBatch; CounterBatch)
-type Batch struct { /* reusable owned members appended by AddToBatch */ }
+type Batch struct {
+    Kind BatchKind // zero: LoggedBatch; set while building, sent with every execution
+    /* reusable owned members appended by AddToBatch */
+}
 func (b *Batch) Len() int
-func (b *Batch) Reset()
+func (b *Batch) Reset() // keeps storage and Kind
 
 type Result struct {
     HostID UUID
