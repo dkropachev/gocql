@@ -7,13 +7,13 @@ MA2	A7	64	point read, unprepared with bound values (master prepares implicitly)
 MA3	A3	64	point read, reused query, Each / Iter loop
 MA3	A4	64	point read, Run + Rows.NextInto / Iter loop
 MA3	A5	64	point read, StreamQuery / Iter loop
-MA4	A6	64	point read, unpaged (RunUnpaged / PageSize 0)
+MA4	A6	64	point read, unpaged (PageSize cql.Unpaged / PageSize 0)
 MB1	B1	4	partition read 128x4KiB, page 32, Each / Iter
 MB1	B2	4	partition read, Run + Rows.NextInto / Iter
 MB1	B3	4	partition read, StreamQuery buffered / Iter
 MB1	B4	4	partition read, StreamQuery incremental / Iter
 MB2	B5	4	partition read with prefetch (1 page / 0.25)
-MB3	B6	4	partition read unpaged (RunUnpaged / PageSize 0)
+MB3	B6	4	partition read unpaged (PageSize cql.Unpaged / PageSize 0)
 MB4	B7	4	partition read, page size 5000 (one page)
 MB5	B8	4	partition read, first 16 rows then abandon
 MB5	B9	4	partition read, incremental StreamQuery, first 16 rows then abandon
