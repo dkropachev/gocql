@@ -19,7 +19,7 @@ import (
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
@@ -34,8 +34,8 @@ import (
 	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
-func admitExecution[R any](a0 context.Context, a1 *gocql.Session, a2 *implExecution.Bound[R], a3 gocql.CompiledOptions) (context.Context, context.CancelFunc, *executionRequest, error) {
-	return implExecution.InternalAdmitExecution[R](a0, (*implExecution.Session)(a1).Core(), a2, implExecution.CompiledOptions(a3))
+func admitExecution[R any](a0 context.Context, a1 *gocql.Session, a2 *implSession.Bound[R], a3 gocql.CompiledOptions) (context.Context, context.CancelFunc, *executionRequest, error) {
+	return implSession.InternalAdmitExecution[R](a0, (*implSession.Session)(a1).Core(), a2, implSession.CompiledOptions(a3))
 }
 
 type clientRoute = implCluster.InternalClientRoute
@@ -48,7 +48,7 @@ const driverConfigStartupKey = implCluster.InternalDriverConfigStartupKey
 
 const driverConfigVersion = implCluster.InternalDriverConfigVersion
 
-type executionRequest = implExecution.InternalExecutionRequest
+type executionRequest = implSession.InternalExecutionRequest
 
 func getHostPortMappingForConnectionIDs(a0 controlConnection, a1 string, a2 []string, a3 bool) ([]clientRoute, error) {
 	return implCluster.InternalGetHostPortMappingForConnectionIDs(a0, a1, a2, a3)
@@ -58,15 +58,15 @@ func getHostPortMappingForPairs(a0 controlConnection, a1 string, a2 []pair, a3 b
 	return implCluster.InternalGetHostPortMappingForPairs(a0, a1, a2, a3)
 }
 
-type hostPrepared = implExecution.InternalHostPrepared
+type hostPrepared = implSession.InternalHostPrepared
 
 func newPage[R any](a0 *responsePage, a1 cql.RowDecoder[R], a2 func()) (*gocql.Page[R], error) {
-	result, err := implExecution.InternalNewPage[R](a0, a1, a2)
+	result, err := implSession.InternalNewPage[R](a0, a1, a2)
 	return (*gocql.Page[R])(result), err
 }
 
 func newSchemaSource(a0 *gocql.Session) implMetadata.Source {
-	return (*implExecution.Session)(a0).Core().NewSchemaSource()
+	return (*implSession.Session)(a0).Core().NewSchemaSource()
 }
 
 type pair = implCluster.InternalPair
@@ -80,16 +80,16 @@ func resolveOptions(a0 *gocql.Session, a1 gocql.Options) (resolvedOptions, error
 	if err != nil {
 		return resolvedOptions{}, err
 	}
-	return implExecution.InternalResolveFor((*implExecution.Session)(a0).Core(), implExecution.CompiledOptions(o)), nil
+	return implSession.InternalResolveFor((*implSession.Session)(a0).Core(), implSession.CompiledOptions(o)), nil
 }
 
-type resolvedOptions = implExecution.InternalResolvedOptions
+type resolvedOptions = implSession.InternalResolvedOptions
 
 func runtimeFor(a0 *gocql.Session) *sessionRuntime {
-	return implExecution.InternalRuntimeFor((*implExecution.Session)(a0).Core())
+	return implSession.InternalRuntimeFor((*implSession.Session)(a0).Core())
 }
 
-type sessionRuntime = implExecution.InternalSessionRuntime
+type sessionRuntime = implSession.InternalSessionRuntime
 
 var errNoControl = implMetadata.InternalErrNoControl
 
@@ -178,5 +178,3 @@ type scyllaSourcePortCtx = implEndpoint.InternalScyllaSourcePortCtx
 func newPartitionKey(a0 []encodedCell, a1 []int) (routing.PartitionKey, bool, error) {
 	return implRouting.InternalNewPartitionKey(a0, a1)
 }
-
-func comparePlacementToken(a, b int64) int { return implRouting.InternalComparePlacementToken(a, b) }

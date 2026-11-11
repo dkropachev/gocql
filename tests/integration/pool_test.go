@@ -42,7 +42,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/routing"
 )
 
@@ -134,20 +134,20 @@ func TestPool(t *testing.T) {
 		defer s.Close()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		conn := codecTestMust((*implExecution.Session)(s).Core().SelectTypedConn(ctx, routing.Info{}, nil))
+		conn := codecTestMust((*implSession.Session)(s).Core().SelectTypedConn(ctx, routing.Info{}, nil))
 		table := fmt.Sprintf("pool_stream_%x", time.Now().UnixNano())
 		qualified := (fixtureKeyspace("") + ".") + table
 		ddl := func(stmt string) {
 			b := codecTestMust(BindUnpreparedOwned(cql.Command(stmt), cql.NewColumns(), cql.EmptyParams{}))
 			defer b.Close()
-			if _, err := Exec(ctx, s, b, bindOptions(s, *func() *implExecution.Options {
-				opaqueStorageValue := new(implExecution.Options)
-				implExecution.OptionsData(opaqueStorageValue).InternalConnection = conn
+			if _, err := Exec(ctx, s, b, bindOptions(s, *func() *implSession.Options {
+				opaqueStorageValue := new(implSession.Options)
+				implSession.OptionsData(opaqueStorageValue).InternalConnection = conn
 				return opaqueStorageValue
 			}())); err != nil {
 				t.Fatal(err)
 			}
-			if err := (*implExecution.Session)(s).Core().AwaitV2SchemaAgreementOn(ctx, conn); err != nil {
+			if err := (*implSession.Session)(s).Core().AwaitV2SchemaAgreementOn(ctx, conn); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -175,7 +175,7 @@ func TestPool(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		pool, ok := (*implExecution.Session)(s).Data().InternalPool.InternalGetPool(conn.InternalHost)
+		pool, ok := (*implSession.Session)(s).Data().InternalPool.InternalGetPool(conn.InternalHost)
 		if !ok {
 			t.Fatal("pool missing")
 		}
@@ -324,8 +324,8 @@ func TestPool(t *testing.T) {
 				defer s.Close()
 				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()
-				for _, host := range (*implExecution.Session)(s).Data().InternalHostSource.InternalGetHostsList() {
-					pool, ok := (*implExecution.Session)(s).Data().InternalPool.InternalGetPool(host)
+				for _, host := range (*implSession.Session)(s).Data().InternalHostSource.InternalGetHostsList() {
+					pool, ok := (*implSession.Session)(s).Data().InternalPool.InternalGetPool(host)
 					if !ok {
 						t.Fatal("missing host pool")
 					}

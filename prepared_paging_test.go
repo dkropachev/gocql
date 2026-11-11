@@ -20,7 +20,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 
 	"github.com/scylladb/gocql/v2/cql"
 )
@@ -46,6 +46,6 @@ func testPreparedState(t *testing.T, s *Session, columns cql.Columns) (*prepared
 	epoch := dependencies.InternalSnapshot()
 	result := &typedResultMetadata{InternalColumns: columns, InternalEpoch: epoch, InternalTracker: tracker}
 	hp := &hostPrepared{InternalId: []byte("id"), InternalMetadataID: []byte("meta"), InternalColumns: columns, InternalResult: result, InternalEpoch: epoch, InternalRevision: 1}
-	state := &preparedState{InternalSession: (*implExecution.Session)(s).Core(), InternalProtocol: 4, InternalStatement: "SELECT value FROM ks.tbl", InternalKeyspace: "ks", InternalParameters: cql.NewColumns(), InternalColumns: columns, InternalResult: result, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalResultHost: cql.UUID{15: 1}, InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl"}, InternalHosts: map[cql.UUID]*hostPrepared{{15: 1}: hp}}
+	state := &preparedState{InternalSession: (*implSession.Session)(s).Core(), InternalProtocol: 4, InternalStatement: "SELECT value FROM ks.tbl", InternalKeyspace: "ks", InternalParameters: cql.NewColumns(), InternalColumns: columns, InternalResult: result, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalResultHost: cql.UUID{15: 1}, InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl"}, InternalHosts: map[cql.UUID]*hostPrepared{{15: 1}: hp}}
 	return state, hp
 }

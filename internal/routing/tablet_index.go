@@ -49,10 +49,10 @@ func InternalIndexTabletPlacement(t InternalTabletPlacement) InternalTabletPlace
 	}
 	var ends []int64
 	var ranges []*InternalTabletRange
-	InternalPlacementEach(t.InternalRanges, func(end int64, r *InternalTabletRange) {
+	for end, r := range t.InternalRanges.All() {
 		ends = append(ends, end)
 		ranges = append(ranges, r)
-	})
+	}
 	x := &tabletRangeIndex{root: t.InternalRanges}
 	x.appendChunks(ends, ranges)
 	x.lastScale = evenScale(x.last)
@@ -86,7 +86,7 @@ func InternalUpdateTabletPlacement(t InternalTabletPlacement, h tablets.TabletIn
 		return InternalIndexTabletPlacement(t), true
 	}
 	first, last := h.FirstToken(), h.LastToken()
-	r := InternalPlacementGet(root, last, InternalComparePlacementToken).InternalValue
+	r := root.Get(last).InternalValue
 	t.index = old.replace(root, first, last, r)
 	return t, true
 }

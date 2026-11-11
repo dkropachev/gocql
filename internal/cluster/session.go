@@ -55,7 +55,7 @@ import (
 )
 
 // Core owns cluster metadata, pooled connections and typed executions. It
-// is safe for concurrent use. The public Session in internal/execution wraps
+// is safe for concurrent use. The public Session in internal/session wraps
 // it; Connect constructs validated sessions.
 type Core struct {
 	privateStorage SessionStorage

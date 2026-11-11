@@ -9,16 +9,16 @@ import (
 	"context"
 
 	"github.com/scylladb/gocql/v2/cql"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
-type Bound[R any] = implExecution.Bound[R]
+type Bound[R any] = implSession.Bound[R]
 
 func BindUnpreparedBorrowed[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a2 P) (*Bound[R], error) {
-	return implExecution.BindUnpreparedBorrowed[P, R](internalStatement(a0), a1, a2)
+	return implSession.BindUnpreparedBorrowed[P, R](internalStatement(a0), a1, a2)
 }
 
 func Run[R any](a0 context.Context, a1 *Session, a2 *Bound[R], a3 CompiledOptions) (Rows[R], error) {
-	result, err := implExecution.Run[R](a0, (*implExecution.Session)(a1).Core(), a2, implExecution.CompiledOptions(a3))
+	result, err := implSession.Run[R](a0, (*implSession.Session)(a1).Core(), a2, implSession.CompiledOptions(a3))
 	return Rows[R](result), err
 }

@@ -36,7 +36,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
 func TestConditional(t *testing.T) {
@@ -137,8 +137,8 @@ func TestConditional(t *testing.T) {
 			} else {
 				bad := func() *Bound[cql.CASResult[bool]] {
 					opaqueStorageValue := new(Bound[cql.CASResult[bool]])
-					implExecution.BoundData(opaqueStorageValue).InternalRequest = implExecution.BoundData(bound).InternalRequest
-					implExecution.BoundData(opaqueStorageValue).InternalRows = badDecoder
+					implSession.BoundData(opaqueStorageValue).InternalRequest = implSession.BoundData(bound).InternalRequest
+					implSession.BoundData(opaqueStorageValue).InternalRows = badDecoder
 					return opaqueStorageValue
 				}()
 				rows, e := Run(context.Background(), session, bad, gocql.CompiledOptions{})

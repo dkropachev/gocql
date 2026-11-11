@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
@@ -165,7 +165,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 			skipUnlessSelectWithoutFrom(t)
 			session := createSessionWithoutKeyspace(t)
 			defer session.Close()
-			if (*implExecution.Session)(session).Data().InternalCfg.ProtoVersion < protoVersion4 {
+			if (*implSession.Session)(session).Data().InternalCfg.ProtoVersion < protoVersion4 {
 				t.Skip("JSON requires protocol4")
 			}
 			got := noFromText(t, noFromOne(t, session, "SELECT JSON 1"), 0)
@@ -255,7 +255,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 			skipUnlessSelectWithoutFrom(t)
 			session := createV2Session(t)
 			defer session.Close()
-			if (*implExecution.Session)(session).Data().InternalCfg.Keyspace == "" {
+			if (*implSession.Session)(session).Data().InternalCfg.Keyspace == "" {
 				t.Fatal("expected configured keyspace")
 			}
 			if got := noFromInt(t, noFromOne(t, session, "SELECT 1"), 0); got != 1 {
@@ -369,7 +369,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 		defer session.Close()
 		// Exercise the typed transport on the identical connection after every error;
 		// host pinning alone would allow a different pooled socket to hide corruption.
-		conn, err := (*implExecution.Session)(session).Core().SelectTypedConn(context.Background(), routing.Info{}, nil)
+		conn, err := (*implSession.Session)(session).Core().SelectTypedConn(context.Background(), routing.Info{}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -491,7 +491,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 		keyspaced := createV2Session(t)
 		defer keyspaced.Close()
 		const fn = "select_without_from_plus_one"
-		stmt := fmt.Sprintf(`CREATE OR REPLACE FUNCTION %s.%s(x int) RETURNS NULL ON NULL INPUT RETURNS int LANGUAGE lua AS 'return x + 1'`, (*implExecution.Session)(keyspaced).Data().InternalCfg.Keyspace, fn)
+		stmt := fmt.Sprintf(`CREATE OR REPLACE FUNCTION %s.%s(x int) RETURNS NULL ON NULL INPUT RETURNS int LANGUAGE lua AS 'return x + 1'`, (*implSession.Session)(keyspaced).Data().InternalCfg.Keyspace, fn)
 		if err := v2CreateTable(context.Background(), keyspaced, stmt); err != nil {
 			if isRejectedByServer(err) {
 				t.Skipf("server refuses UDF creation: %v", err)
@@ -509,7 +509,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 		t.Run("qualified without a session keyspace", func(t *testing.T) {
 			s := createSessionWithoutKeyspace(t)
 			defer s.Close()
-			if noFromInt(t, noFromOne(t, s, "SELECT "+(*implExecution.Session)(keyspaced).Data().InternalCfg.Keyspace+"."+fn+"(1)"), 0) != 2 {
+			if noFromInt(t, noFromOne(t, s, "SELECT "+(*implSession.Session)(keyspaced).Data().InternalCfg.Keyspace+"."+fn+"(1)"), 0) != 2 {
 				t.Fatal("wrong qualified result")
 			}
 		})

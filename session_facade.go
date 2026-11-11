@@ -7,7 +7,7 @@ import (
 	"context"
 
 	"github.com/scylladb/gocql/v2/cql"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -15,9 +15,9 @@ import (
 // Session owns cluster metadata, pooled connections and typed executions.
 // Connect constructs a session. Sessions and their prepared statements are safe
 // for concurrent use. Close the session when the application stops using it.
-type Session implExecution.Session
+type Session implSession.Session
 
-func (s *Session) internal() *implExecution.Session { return (*implExecution.Session)(s) }
+func (s *Session) internal() *implSession.Session { return (*implSession.Session)(s) }
 
 // Prepare prepares statement for repeated execution. The returned handle is
 // immutable and safe to share between goroutines. At most one PrepareOptions
@@ -81,7 +81,7 @@ func (s *Session) UnpreparedStreamQuery[P, R any](statement cql.StreamStatement[
 func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...CompiledOptions) (Result, error) {
 	o, err := internalCompiledOptions(options)
 	if err != nil {
-		return implExecution.InternalExecutionErrorResult(err), err
+		return implSession.InternalExecutionErrorResult(err), err
 	}
 	return s.internal().UnpreparedExec(ctx, internalStatement(statement), value, o)
 }
@@ -93,7 +93,7 @@ func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.State
 func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...CompiledOptions) (bool, Result, error) {
 	o, err := internalCompiledOptions(options)
 	if err != nil {
-		return false, implExecution.InternalExecutionErrorResult(err), err
+		return false, implSession.InternalExecutionErrorResult(err), err
 	}
 	return s.internal().UnpreparedOne(ctx, internalStatement(statement), value, dst, o)
 }
@@ -105,7 +105,7 @@ func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Sta
 func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...CompiledOptions) (Result, error) {
 	o, err := internalCompiledOptions(options)
 	if err != nil {
-		return implExecution.InternalExecutionErrorResult(err), err
+		return implSession.InternalExecutionErrorResult(err), err
 	}
 	return s.internal().UnpreparedEach(ctx, internalStatement(statement), value, dst, fn, o)
 }
@@ -116,9 +116,9 @@ func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.St
 func (s *Session) ExecBatch(ctx context.Context, kind cql.BatchKind, batch *Batch, options ...CompiledOptions) (Result, error) {
 	o, err := internalCompiledOptions(options)
 	if err != nil {
-		return implExecution.InternalExecutionErrorResult(err), err
+		return implSession.InternalExecutionErrorResult(err), err
 	}
-	return s.internal().ExecBatch(ctx, kind, (*implExecution.Batch)(batch), o)
+	return s.internal().ExecBatch(ctx, kind, (*implSession.Batch)(batch), o)
 }
 
 // RunBatch executes a conditional batch and returns its result page, decoded
@@ -129,7 +129,7 @@ func (s *Session) RunBatch[R any](ctx context.Context, kind cql.BatchKind, batch
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.internal().RunBatch(ctx, kind, (*implExecution.Batch)(batch), decoder, o)
+	page, err := s.internal().RunBatch(ctx, kind, (*implSession.Batch)(batch), decoder, o)
 	return (*Page[R])(page), err
 }
 

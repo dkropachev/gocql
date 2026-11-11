@@ -7,17 +7,17 @@ import (
 	"context"
 
 	"github.com/scylladb/gocql/v2/cql"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
 // Prepared is an immutable typed statement prepared on a session. Share it
 // between goroutines and call Exec, One or Each for ordinary executions. Each
 // call may take one CompiledOptions, built once by Session.BindOptions, or omit
 // options for the session defaults. A Prepared has no Close obligation.
-type Prepared[P, R any] implExecution.Prepared[P, R]
+type Prepared[P, R any] implSession.Prepared[P, R]
 
-func (p *Prepared[P, R]) internal() *implExecution.Prepared[P, R] {
-	return (*implExecution.Prepared[P, R])(p)
+func (p *Prepared[P, R]) internal() *implSession.Prepared[P, R] {
+	return (*implSession.Prepared[P, R])(p)
 }
 
 // Exec executes a statement with no result columns. It is safe for concurrent
@@ -25,7 +25,7 @@ func (p *Prepared[P, R]) internal() *implExecution.Prepared[P, R] {
 func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...CompiledOptions) (Result, error) {
 	o, err := internalCompiledOptions(options)
 	if err != nil {
-		return implExecution.InternalExecutionErrorResult(err), err
+		return implSession.InternalExecutionErrorResult(err), err
 	}
 	return p.internal().Exec(ctx, value, o)
 }
@@ -38,7 +38,7 @@ func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...CompiledO
 func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...CompiledOptions) (bool, Result, error) {
 	o, err := internalCompiledOptions(options)
 	if err != nil {
-		return false, implExecution.InternalExecutionErrorResult(err), err
+		return false, implSession.InternalExecutionErrorResult(err), err
 	}
 	return p.internal().One(ctx, value, dst, o)
 }
@@ -50,7 +50,7 @@ func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...Co
 func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...CompiledOptions) (Result, error) {
 	o, err := internalCompiledOptions(options)
 	if err != nil {
-		return implExecution.InternalExecutionErrorResult(err), err
+		return implSession.InternalExecutionErrorResult(err), err
 	}
 	return p.internal().Each(ctx, value, dst, fn, o)
 }
@@ -75,7 +75,7 @@ func (p *Prepared[P, B]) StreamQuery[R any](decoder cql.StreamRowDecoder[R], opt
 // AddToBatch copies an encoded parameter snapshot into batch. Calls on p are
 // concurrency-safe, but appending to one batch requires exclusive ownership.
 func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
-	return p.internal().AddToBatch((*implExecution.Batch)(batch), value)
+	return p.internal().AddToBatch((*implSession.Batch)(batch), value)
 }
 
 // Parameters returns the statement's immutable bind-marker metadata.

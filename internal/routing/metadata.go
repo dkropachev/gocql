@@ -63,11 +63,11 @@ func (m *MetadataSnapshot) TokenRanges(keyspace, table string) ([]TokenRange, er
 			return nil, err
 		}
 		var out []TokenRange
-		InternalPlacementEach(root, func(_ int64, r *InternalTabletRange) {
+		for _, r := range root.All() {
 			v := r.InternalSpan
 			v.Replicas = append([]Target(nil), v.Replicas...)
 			out = append(out, v)
-		})
+		}
 		return out, nil
 	}
 	r, _, e := InternalMetadataSnapshotLookupRanges(m, keyspace, table)

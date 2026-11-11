@@ -85,10 +85,10 @@ func BenchmarkTablets(b *testing.B) {
 						root, _ = implRouting.InternalUpdateTabletRange(root, testHint(b, first, first+int64(step), cqltype.Option[uint64]{Value: uint64(i), Set: true}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0)))
 					}
 					k := implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}
-					routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, k, routing.InternalIndexTabletPlacement(implRouting.InternalTabletPlacement{InternalIdentity: "identity-1", InternalRanges: root}), implRouting.InternalComparePlacementTable)
+					routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(k, routing.InternalIndexTabletPlacement(implRouting.InternalTabletPlacement{InternalIdentity: "identity-1", InternalRanges: root}))
 					for i := 1; i < tables; i++ {
 						other := implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: fmt.Sprintf("other%d", i)}
-						routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, other, routing.InternalIndexTabletPlacement(implRouting.InternalTabletPlacement{InternalRanges: root}), implRouting.InternalComparePlacementTable)
+						routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(other, routing.InternalIndexTabletPlacement(implRouting.InternalTabletPlacement{InternalRanges: root}))
 					}
 					p := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true})).(*routing.InternalRoutingPolicy)
 					var plan routing.InternalLazyRoutingPlan
@@ -130,10 +130,10 @@ func BenchmarkTablets(b *testing.B) {
 							root, _ = implRouting.InternalUpdateTabletRange(root, testHint(b, int64(i*2), int64(i*2+1), cqltype.Option[uint64]{Value: uint64(i), Set: true}, hTarget(1, 0)))
 						}
 						k := implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}
-						routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, k, implRouting.InternalTabletPlacement{InternalIdentity: "identity-1", InternalRanges: root}, implRouting.InternalComparePlacementTable)
+						routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(k, implRouting.InternalTabletPlacement{InternalIdentity: "identity-1", InternalRanges: root})
 						for i := 1; i < tables; i++ {
 							other := implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: fmt.Sprintf("other%d", i)}
-							routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, other, implRouting.InternalTabletPlacement{InternalRanges: root}, implRouting.InternalComparePlacementTable)
+							routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(other, implRouting.InternalTabletPlacement{InternalRanges: root})
 						}
 						info := model.RoutingInfo{Keyspace: "ks", Table: "table"}
 						h := testHint(b, 0, 1, cqltype.Option[uint64]{Value: 0, Set: true}, hTarget(1, 0))

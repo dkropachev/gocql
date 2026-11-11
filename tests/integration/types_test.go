@@ -36,7 +36,7 @@ import (
 	"net/netip"
 	"testing"
 
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 
 	"github.com/stretchr/testify/require"
 
@@ -55,7 +55,7 @@ func TestTypes(t *testing.T) {
 			t.Parallel()
 			session := createV2Session(t)
 			defer session.Close()
-			if (*implExecution.Session)(session).Data().InternalCfg.ProtoVersion < 5 {
+			if (*implSession.Session)(session).Data().InternalCfg.ProtoVersion < 5 {
 				t.Skip("skipped below protocol 5 by this test's own guard, not by a limit of the duration type")
 			}
 			table := testTableName(t)

@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
@@ -63,7 +63,7 @@ func TestFixture(t *testing.T) {
 		s := createV2Session(t)
 		defer s.Close()
 		if marker := os.Getenv("GOCQL_FIXTURE_MARKER"); marker != "" {
-			if err := os.WriteFile(marker, []byte((*implExecution.Session)(s).Data().InternalCfg.Keyspace), 0600); err != nil {
+			if err := os.WriteFile(marker, []byte((*implSession.Session)(s).Data().InternalCfg.Keyspace), 0600); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -161,7 +161,7 @@ func TestFixture(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Log("ACTUAL_SERVER_VERSION", version.String(), "PROTOCOL", (*implExecution.Session)(s).Data().InternalCfg.ProtoVersion)
+		t.Log("ACTUAL_SERVER_VERSION", version.String(), "PROTOCOL", (*implSession.Session)(s).Data().InternalCfg.ProtoVersion)
 		if !strings.HasPrefix(version.String(), strings.TrimPrefix(flagCassVersion.String(), "v")) {
 			t.Fatalf("unexpected server version %q", version.String())
 		}

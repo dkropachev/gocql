@@ -40,7 +40,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/internal/tests"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -78,7 +78,7 @@ func TestMetadata(t *testing.T) {
 		}
 		defer sub.Close()
 		before := s.Metadata() // subscribe-before-snapshot, then discard <= generation
-		conn, err := (*implExecution.Session)(s).Core().SelectTypedConn(ctx, routing.Info{}, nil)
+		conn, err := (*implSession.Session)(s).Core().SelectTypedConn(ctx, routing.Info{}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -89,9 +89,9 @@ func TestMetadata(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer b.Close()
-			if _, err := Exec(ctx, s, b, bindOptions(s, *func() *implExecution.Options {
-				opaqueStorageValue := new(implExecution.Options)
-				implExecution.OptionsData(opaqueStorageValue).InternalConnection = conn
+			if _, err := Exec(ctx, s, b, bindOptions(s, *func() *implSession.Options {
+				opaqueStorageValue := new(implSession.Options)
+				implSession.OptionsData(opaqueStorageValue).InternalConnection = conn
 				return opaqueStorageValue
 			}())); err != nil {
 				t.Fatal(err)
@@ -104,9 +104,9 @@ func TestMetadata(t *testing.T) {
 			b, err := BindUnpreparedOwned(cql.Command("DROP KEYSPACE IF EXISTS "+keyspace), cql.NewColumns(), cql.EmptyParams{})
 			if err == nil {
 				defer b.Close()
-				_, err = Exec(cleanup, s, b, bindOptions(s, *func() *implExecution.Options {
-					opaqueStorageValuex := new(implExecution.Options)
-					implExecution.OptionsData(opaqueStorageValuex).InternalConnection = conn
+				_, err = Exec(cleanup, s, b, bindOptions(s, *func() *implSession.Options {
+					opaqueStorageValuex := new(implSession.Options)
+					implSession.OptionsData(opaqueStorageValuex).InternalConnection = conn
 					return opaqueStorageValuex
 				}()))
 			}
@@ -180,7 +180,7 @@ func TestMetadata(t *testing.T) {
 			}
 			defer sub.Close()
 
-			if err := (*implExecution.Session)(sess).Data().InternalControl.InternalReconnect(); err != nil {
+			if err := (*implSession.Session)(sess).Data().InternalControl.InternalReconnect(); err != nil {
 				t.Fatalf("control reconnect: %v", err)
 			}
 
@@ -305,12 +305,12 @@ func TestMetadata(t *testing.T) {
 				// wait for autodiscovery to update the pool with the list of known hosts
 				time.Sleep(*flagAutoWait)
 			}
-			(*implExecution.Session)(session).Data().InternalPool.InternalMu.RLock()
-			defer (*implExecution.Session)(session).Data().InternalPool.InternalMu.RUnlock()
-			size := len((*implExecution.Session)(session).Data().InternalPool.InternalHostConnPools)
+			(*implSession.Session)(session).Data().InternalPool.InternalMu.RLock()
+			defer (*implSession.Session)(session).Data().InternalPool.InternalMu.RUnlock()
+			size := len((*implSession.Session)(session).Data().InternalPool.InternalHostConnPools)
 
 			if *clusterSize != size {
-				for p, pool := range (*implExecution.Session)(session).Data().InternalPool.InternalHostConnPools {
+				for p, pool := range (*implSession.Session)(session).Data().InternalPool.InternalHostConnPools {
 					t.Logf("p=%q host=%v ips=%s", p, pool.InternalHost, pool.InternalHost.ConnectAddress().String())
 
 				}

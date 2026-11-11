@@ -20,11 +20,11 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implCodec "github.com/scylladb/gocql/v2/internal/codec"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/segment"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
 	routing "github.com/scylladb/gocql/v2/routing"
@@ -168,7 +168,7 @@ func TestWorkCountsPerf(t *testing.T) {
 							peers[0].Write(typedTestResponse(t, 4, id, runtimeRowsBody(state, "value")))
 						}
 					}()
-					implExecution.ResetPerfCounters()
+					implSession.ResetPerfCounters()
 					wire.ResetPerfCounters()
 					rows := codecTestMust(Run(context.Background(), s, bound, bindOptions(s, options)))
 					var row cql.Bytes
@@ -179,7 +179,7 @@ func TestWorkCountsPerf(t *testing.T) {
 					}
 					rows.Close()
 					<-done
-					c := implExecution.ReadPerfCounters()
+					c := implSession.ReadPerfCounters()
 					if !enabled && (c.RequestEvents != 0 || c.AttemptCallbacks != 0 || c.SpeculationSnapshots != 0 || c.SpeculationTimers != 0 || mode != "default" && c.PrefetchWorkers != 0) {
 						t.Fatal(c)
 					}
@@ -194,12 +194,12 @@ func TestWorkCountsPerf(t *testing.T) {
 			}
 			// Warm prepared lookup remains usable while the discovery LRU lock is held;
 			// unrelated schema events leave the captured table generation current.
-			s := (*Session)(implExecution.InternalWrapSession(new(implCluster.Core)))
-			(*implExecution.Session)(s).Data().InternalLogger = nopLogger{}
+			s := (*Session)(implSession.InternalWrapSession(new(implCluster.Core)))
+			(*implSession.Session)(s).Data().InternalLogger = nopLogger{}
 			cols := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "v", Type: cql.BlobType})
 			_, hp := testPreparedState(t, s, cols)
 			for i := 0; i < 1000; i++ {
-				(*implExecution.Session)(s).Core().InvalidatePreparedSchema(Event{Keyspace: "unrelated", Object: fmt.Sprint(i), Target: "TABLE"})
+				(*implSession.Session)(s).Core().InvalidatePreparedSchema(Event{Keyspace: "unrelated", Object: fmt.Sprint(i), Target: "TABLE"})
 			}
 			if !hp.InternalEpoch.InternalCurrent() {
 				t.Fatal("unrelated invalidation")
@@ -261,7 +261,7 @@ func TestWorkCountsPerf(t *testing.T) {
 						storage.InternalHostIndex = buildRoutingHostIndex(storage.InternalHosts)
 						hint := testHint(t, 0, 100, cql.Option[uint64]{Set: true, Value: 1}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0))
 						root, _ := updateTabletRange(nil, hint)
-						storage.InternalPlacements = placementPut(storage.InternalPlacements, metadataTable{InternalKeyspace: "ks", InternalTable: "table"}, tabletPlacement{InternalRanges: root}, comparePlacementTable)
+						storage.InternalPlacements = storage.InternalPlacements.Put(metadataTable{InternalKeyspace: "ks", InternalTable: "table"}, tabletPlacement{InternalRanges: root})
 						info := routing.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true, Value: 1}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
 						opts := routing.Options{TokenAware: true, Datacenter: "a", Rack: "r1", LeaderAware: kind == "leader"}
 						if kind == "pinned" {
@@ -312,7 +312,7 @@ func TestWorkCountsPerf(t *testing.T) {
 						t.Run(fmt.Sprintf("workers%d/prefetch%d/cells%d", workers, prefetch, cells), func(t *testing.T) {
 							wire.ResetPerfCounters()
 							wire.ResetPerfMemoryCounters()
-							implExecution.ResetPerfCounters()
+							implSession.ResetPerfCounters()
 							errors := make(chan error, workers)
 							done := make(chan struct{})
 							var finished atomic.Int32
@@ -385,7 +385,7 @@ func TestWorkCountsPerf(t *testing.T) {
 							<-done
 							live, peak, slab := wire.ReadPerfMemoryCounters()
 							c := wire.ReadPerfCounters()
-							scheduler := implExecution.ReadPerfCounters()
+							scheduler := implSession.ReadPerfCounters()
 							if live != 0 || c.Retains != int64(4*workers) {
 								t.Fatal("per-cell owner churn or leak", live, c)
 							}

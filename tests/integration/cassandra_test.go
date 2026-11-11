@@ -29,7 +29,7 @@ package integration
 import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/metadata"
 
 	"context"
@@ -94,7 +94,7 @@ func waitForHostConns(t *testing.T, session *gocql.Session) map[string]*driverCo
 		pending = pending[:0]
 		down = down[:0]
 
-		for _, host := range (*implExecution.Session)(session).Data().InternalHostSource.InternalGetHostsList() {
+		for _, host := range (*implSession.Session)(session).Data().InternalHostSource.InternalGetHostsList() {
 			// Collected rather than merely skipped: a host that stays down keeps the
 			// count below *clusterSize while contributing nothing to pending, so the
 			// failure below would otherwise report "2 of 3 connected, 0 still without
@@ -105,7 +105,7 @@ func waitForHostConns(t *testing.T, session *gocql.Session) map[string]*driverCo
 			}
 
 			addr := host.ConnectAddressAndPort()
-			pool, found := (*implExecution.Session)(session).Data().InternalPool.InternalGetPool(host)
+			pool, found := (*implSession.Session)(session).Data().InternalPool.InternalGetPool(host)
 			if !found {
 				pending = append(pending, addr)
 				continue
@@ -145,7 +145,7 @@ func getRandomConn(t *testing.T, session *gocql.Session) *driverConn {
 
 	var conn *driverConn
 	if !pollUntil(hostConnWaitTimeout, func() bool {
-		conn = (*implExecution.Session)(session).Core().GetConn()
+		conn = (*implSession.Session)(session).Core().GetConn()
 		return conn != nil
 	}) {
 		t.Fatal("unable to get a connection")
@@ -157,10 +157,10 @@ func injectInvalidPreparedStatement(t *testing.T, session *gocql.Session, table 
 	t.Helper()
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(foo varchar,bar int,PRIMARY KEY(foo,bar))", table))
 	conn := getRandomConn(t, session)
-	prepared := cassandraPrepared(t, session, cql.Statement[string, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,7)", table), Params: cql.OneParam(cql.StringEncoder), Rows: cql.EmptyRowDecoder}, *func() *implExecution.PrepareOptions {
-		opaqueStorageValuex := new(implExecution.PrepareOptions)
+	prepared := cassandraPrepared(t, session, cql.Statement[string, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,7)", table), Params: cql.OneParam(cql.StringEncoder), Rows: cql.EmptyRowDecoder}, *func() *implSession.PrepareOptions {
+		opaqueStorageValuex := new(implSession.PrepareOptions)
 		opaqueStorageValuex.HostID = cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
-		implExecution.PrepareOptionsData(opaqueStorageValuex).InternalConnection = conn
+		implSession.PrepareOptionsData(opaqueStorageValuex).InternalConnection = conn
 		return opaqueStorageValuex
 	}())
 	preparedData(prepared).InternalState.InternalMu.Lock()
@@ -196,22 +196,22 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	host := cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
-	options := *func() *implExecution.Options {
-		opaqueStorageValuexxxx := new(implExecution.Options)
+	options := *func() *implSession.Options {
+		opaqueStorageValuexxxx := new(implSession.Options)
 		opaqueStorageValuexxxx.HostID = host
-		implExecution.OptionsData(opaqueStorageValuexxxx).InternalConnection = conn
+		implSession.OptionsData(opaqueStorageValuexxxx).InternalConnection = conn
 		return opaqueStorageValuexxxx
 	}()
-	prepareOptions := *func() *implExecution.PrepareOptions {
-		opaqueStorageValuexxxxx := new(implExecution.PrepareOptions)
+	prepareOptions := *func() *implSession.PrepareOptions {
+		opaqueStorageValuexxxxx := new(implSession.PrepareOptions)
 		opaqueStorageValuexxxxx.HostID = host
-		implExecution.PrepareOptionsData(opaqueStorageValuexxxxx).InternalConnection = conn
+		implSession.PrepareOptionsData(opaqueStorageValuexxxxx).InternalConnection = conn
 		return opaqueStorageValuexxxxx
 	}()
 	create := cassandraUnprepared(t, "CREATE TABLE "+qualified+"(id int PRIMARY KEY)", cql.EmptyRowDecoder)
 	_, err := Exec(ctx, session, create, bindOptions(session, options))
 	require.NoError(t, err)
-	require.NoError(t, (*implExecution.Session)(session).Core().AwaitV2SchemaAgreementOn(ctx, conn))
+	require.NoError(t, (*implSession.Session)(session).Core().AwaitV2SchemaAgreementOn(ctx, conn))
 	write := cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id) VALUES(?)", []cql.Value{cql.IntValue(1)}, prepareOptions)
 	_, err = Exec(ctx, session, write, bindOptions(session, options))
 	require.NoError(t, err)
@@ -238,7 +238,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 	require.NoError(t, err)
 	// Include the exact host that applied ALTER; checking another host can
 	// falsely agree on the old version before schema propagation starts.
-	require.NoError(t, (*implExecution.Session)(session).Core().AwaitV2SchemaAgreementOn(ctx, conn))
+	require.NoError(t, (*implSession.Session)(session).Core().AwaitV2SchemaAgreementOn(ctx, conn))
 	write = cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id,new_col) VALUES(?,?)", []cql.Value{cql.IntValue(2), cql.IntValue(10)}, prepareOptions)
 	_, err = Exec(ctx, session, write, bindOptions(session, options))
 	require.NoError(t, err)
@@ -260,7 +260,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 		require.NoError(t, err)
 		require.Equal(t, int64(10), value)
 	}
-	require.Equal(t, before.InternalGeneration, (*implExecution.Session)(session).Core().TypedGeneration(), "metadata-ID coverage must not be replaced by generation-triggered reprepare")
+	require.Equal(t, before.InternalGeneration, (*implSession.Session)(session).Core().TypedGeneration(), "metadata-ID coverage must not be replaced by generation-triggered reprepare")
 	checkRows()
 	after := cached()
 	require.NotEqual(t, before.InternalMetadataID, after.InternalMetadataID)

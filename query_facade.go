@@ -8,7 +8,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/model"
 
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/routing"
 )
 
@@ -17,9 +17,9 @@ import (
 // Close the query when done, including when execution fails: the session keeps
 // it registered until Close. Prepared.Exec, One and Each manage their own state
 // and are convenient for concurrent request handlers.
-type Query[P, R any] implExecution.Query[P, R]
+type Query[P, R any] implSession.Query[P, R]
 
-func (q *Query[P, R]) internal() *implExecution.Query[P, R] { return (*implExecution.Query[P, R])(q) }
+func (q *Query[P, R]) internal() *implSession.Query[P, R] { return (*implSession.Query[P, R])(q) }
 
 // Exec executes a statement with no result columns, capturing value once for
 // routing, retries and paging. Overlapping calls return cqlerr.ErrBusy.
@@ -70,7 +70,7 @@ func (q *Query[P, R]) Routing(value P) (routing.Info, error) { return q.internal
 // AddToBatch encodes and copies value into batch. It requires an idle query;
 // neither the query nor batch may be used concurrently with this call.
 func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
-	return q.internal().AddToBatch((*implExecution.Batch)(batch), value)
+	return q.internal().AddToBatch((*implSession.Batch)(batch), value)
 }
 
 // Close permanently stops the query and any active cursor, then waits for
@@ -83,18 +83,18 @@ func (q *Query[P, R]) Close(ctx context.Context) error { return q.internal().Clo
 // Close it when done and close each Run cursor before starting another run.
 // Page buffering is the default; StreamOptions.Incremental reserves a connection
 // for bounded incremental receive. It must not be copied or used concurrently.
-type StreamQuery[P, R any] implExecution.StreamQuery[P, R]
+type StreamQuery[P, R any] implSession.StreamQuery[P, R]
 
 // Run starts a stream. Only successful NextInto calls publish complete rows.
 // Output belongs to the caller and survives cursor Close; reusing a destination
 // overwrites its contents. Close the returned cursor on early termination.
 func (q *StreamQuery[P, R]) Run(ctx context.Context, value P) (*RowStream[R], error) {
-	stream, err := (*implExecution.StreamQuery[P, R])(q).Run(ctx, value)
+	stream, err := (*implSession.StreamQuery[P, R])(q).Run(ctx, value)
 	return (*RowStream[R])(stream), err
 }
 
 // Close stops admission, cancels any active cursor and waits for drain, as
 // Query.Close does.
 func (q *StreamQuery[P, R]) Close(ctx context.Context) error {
-	return (*implExecution.StreamQuery[P, R])(q).Close(ctx)
+	return (*implSession.StreamQuery[P, R])(q).Close(ctx)
 }

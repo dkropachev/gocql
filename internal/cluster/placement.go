@@ -136,10 +136,10 @@ func (s *Core) PublishTabletFeedback(p *InternalV2PeripheralState, updates map[I
 		routing.SnapshotData(next).InternalPlacementEpoch = epoch
 		// Invalidated mappings remain explicitly tablet-based, including tables
 		// learned by feedback before metadata advertised tablets.
-		routing.InternalPlacementEach(routing.SnapshotData(old).InternalPlacements, func(k routing.InternalMetadataTable, t routing.InternalTabletPlacement) {
+		for k, t := range routing.SnapshotData(old).InternalPlacements.All() {
 			t.InternalRanges = nil
-			routing.SnapshotData(next).InternalPlacements = routing.InternalPlacementPut(routing.SnapshotData(next).InternalPlacements, k, t, routing.InternalComparePlacementTable)
-		})
+			routing.SnapshotData(next).InternalPlacements = routing.SnapshotData(next).InternalPlacements.Put(k, t)
+		}
 	}
 	if resync {
 		ensureNext()
@@ -152,8 +152,8 @@ func (s *Core) PublishTabletFeedback(p *InternalV2PeripheralState, updates map[I
 		}
 		routing.SnapshotData(next).InternalDiagnostics = append(routing.SnapshotData(next).InternalDiagnostics, cqltype.TypeValidation("tablet placement", "feedback queue saturated; mappings invalidated"))
 		for _, k := range known {
-			if _, _, err := routing.InternalMetadataSnapshotLookupRanges(old, k.InternalKeyspace, k.InternalTable); err == nil && routing.InternalPlacementGet(routing.SnapshotData(next).InternalPlacements, k, routing.InternalComparePlacementTable) == nil {
-				routing.SnapshotData(next).InternalPlacements = routing.InternalPlacementPut(routing.SnapshotData(next).InternalPlacements, k, routing.InternalTabletPlacement{InternalIdentity: routing.InternalMetadataSnapshotTableIdentity(old, k)}, routing.InternalComparePlacementTable)
+			if _, _, err := routing.InternalMetadataSnapshotLookupRanges(old, k.InternalKeyspace, k.InternalTable); err == nil && routing.SnapshotData(next).InternalPlacements.Get(k) == nil {
+				routing.SnapshotData(next).InternalPlacements = routing.SnapshotData(next).InternalPlacements.Put(k, routing.InternalTabletPlacement{InternalIdentity: routing.InternalMetadataSnapshotTableIdentity(old, k)})
 			}
 		}
 	}
@@ -171,7 +171,7 @@ func (s *Core) PublishTabletFeedback(p *InternalV2PeripheralState, updates map[I
 		}
 		var current *routing.InternalTabletRangeTree
 		t := routing.InternalTabletPlacement{InternalIdentity: stamp.InternalIdentity}
-		if n := routing.InternalPlacementGet(routing.SnapshotData(next).InternalPlacements, k, routing.InternalComparePlacementTable); n != nil {
+		if n := routing.SnapshotData(next).InternalPlacements.Get(k); n != nil {
 			t = n.InternalValue
 			current = t.InternalRanges
 		}
@@ -187,7 +187,7 @@ func (s *Core) PublishTabletFeedback(p *InternalV2PeripheralState, updates map[I
 		t, changed = routing.InternalUpdateTabletPlacement(t, h)
 		if changed {
 			ensureNext()
-			routing.SnapshotData(next).InternalPlacements = routing.InternalPlacementPut(routing.SnapshotData(next).InternalPlacements, k, t, routing.InternalComparePlacementTable)
+			routing.SnapshotData(next).InternalPlacements = routing.SnapshotData(next).InternalPlacements.Put(k, t)
 		}
 	}
 	changed := next != old

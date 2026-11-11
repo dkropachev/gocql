@@ -27,6 +27,7 @@
 package integration
 
 import (
+	stdcmp "cmp"
 	"context"
 	"fmt"
 	"math"
@@ -41,9 +42,9 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 	"github.com/scylladb/gocql/v2/internal/murmur"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/internal/tests"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -61,7 +62,7 @@ func TestRouting(t *testing.T) {
 		}
 		// Match the original fault injection at the actual connection picker too:
 		// routing intentionally includes disconnected fallback candidates.
-		for _, host := range (*implExecution.Session)(session).Data().InternalHostSource.InternalGetHostsList() {
+		for _, host := range (*implSession.Session)(session).Data().InternalHostSource.InternalGetHostsList() {
 			implEndpoint.InternalHostInfoSetState(host, NodeDown)
 			defer implEndpoint.InternalHostInfoSetState(host, NodeUp)
 		}
@@ -206,28 +207,28 @@ func TestRouting(t *testing.T) {
 			{
 				name: "get-for-connection-ids",
 				method: func(controlConnection) ([]clientRoute, error) {
-					return getHostPortMappingForConnectionIDs((*implExecution.Session)(session).Data().InternalControl, qualifiedTable, connectionIDs, false)
+					return getHostPortMappingForConnectionIDs((*implSession.Session)(session).Data().InternalControl, qualifiedTable, connectionIDs, false)
 				},
 				expected: expected,
 			},
 			{
 				name: "get-for-pairs",
 				method: func(controlConnection) ([]clientRoute, error) {
-					return getHostPortMappingForPairs((*implExecution.Session)(session).Data().InternalControl, qualifiedTable, makeClientRoutePairs(connectionIDs, hostIDs), false)
+					return getHostPortMappingForPairs((*implSession.Session)(session).Data().InternalControl, qualifiedTable, makeClientRoutePairs(connectionIDs, hostIDs), false)
 				},
 				expected: expected,
 			},
 			{
 				name: "get-for-single-host-pairs",
 				method: func(controlConnection) ([]clientRoute, error) {
-					return getHostPortMappingForPairs((*implExecution.Session)(session).Data().InternalControl, qualifiedTable, makeClientRoutePairs(connectionIDs, hostIDs[:1]), false)
+					return getHostPortMappingForPairs((*implSession.Session)(session).Data().InternalControl, qualifiedTable, makeClientRoutePairs(connectionIDs, hostIDs[:1]), false)
 				},
 				expected: expectedFirstHost,
 			},
 			{
 				name: "get-for-connection-ids-tls",
 				method: func(controlConnection) ([]clientRoute, error) {
-					return getHostPortMappingForConnectionIDs((*implExecution.Session)(session).Data().InternalControl, qualifiedTable, connectionIDs, true)
+					return getHostPortMappingForConnectionIDs((*implSession.Session)(session).Data().InternalControl, qualifiedTable, connectionIDs, true)
 				},
 				expected: expectedTLS,
 			},
@@ -235,7 +236,7 @@ func TestRouting(t *testing.T) {
 
 		for _, tc := range tcases {
 			t.Run(tc.name, func(t *testing.T) {
-				got, err := tc.method((*implExecution.Session)(session).Data().InternalControl)
+				got, err := tc.method((*implSession.Session)(session).Data().InternalControl)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -300,7 +301,7 @@ func TestRouting(t *testing.T) {
 					t.Fatalf("filtered host remains eligible: %+v", host)
 				}
 			}
-			if ch := (*implExecution.Session)(session).Data().InternalControl.InternalGetConn(); ch != nil && ch.InternalHost.ConnectAddress().String() == filtered {
+			if ch := (*implSession.Session)(session).Data().InternalControl.InternalGetConn(); ch != nil && ch.InternalHost.ConnectAddress().String() == filtered {
 				t.Fatal("control connection selected a filtered host")
 			}
 		})
@@ -336,7 +337,7 @@ func TestRouting(t *testing.T) {
 					t.Fatalf("filtered host remains eligible: %+v", host)
 				}
 			}
-			if ch := (*implExecution.Session)(session).Data().InternalControl.InternalGetConn(); ch != nil && ch.InternalHost.ConnectAddress().String() == filtered {
+			if ch := (*implSession.Session)(session).Data().InternalControl.InternalGetConn(); ch != nil && ch.InternalHost.ConnectAddress().String() == filtered {
 				t.Fatal("control connection selected a filtered host")
 			}
 		})
@@ -391,7 +392,7 @@ func TestRouting(t *testing.T) {
 				again := cassandraPrepared(t, session, statement, gocql.PrepareOptions{})
 				require.Same(t, preparedData(prepared).InternalState, preparedData(again).InternalState, "preparing again must hit typed cache")
 				bound := cassandraBound(t, prepared, []cql.Value{cql.IntValue(1), cql.IntValue(2)})
-				key, present, err := newPartitionKey(implExecution.BoundData(bound).InternalRequest.InternalValues.Cells, prepared.Info().PartitionKeyIndexes)
+				key, present, err := newPartitionKey(implSession.BoundData(bound).InternalRequest.InternalValues.Cells, prepared.Info().PartitionKeyIndexes)
 				require.NoError(t, err)
 				require.True(t, present)
 				var keyBytes []byte
@@ -408,7 +409,7 @@ func TestRouting(t *testing.T) {
 		t.Run("OverriddenKeyspace", func(t *testing.T) {
 			session := createV2Session(t)
 			defer session.Close()
-			if (*implExecution.Session)(session).Data().InternalCfg.ProtoVersion < 5 {
+			if (*implSession.Session)(session).Data().InternalCfg.ProtoVersion < 5 {
 				t.Skip("This tests only runs on proto > 4 due SetKeyspace availability")
 			}
 			ks := testKeyspaceName(t)
@@ -622,7 +623,7 @@ func TestRouting(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer s.Close()
-			if !(*implExecution.Session)(s).Core().GetConn().InternalFramers.InternalDefaults.InternalTabletsRoutingV2 {
+			if !(*implSession.Session)(s).Core().GetConn().InternalFramers.InternalDefaults.InternalTabletsRoutingV2 {
 				t.Skip("server did not advertise TABLETS_ROUTING_V2_EXPERIMENTAL; source-accurate wire fixtures cover V2 separately")
 			}
 			ks := testKeyspaceName(t, fmt.Sprintf("tablet_leader_%x", time.Now().UnixNano()))
@@ -791,14 +792,14 @@ func TestRouting(t *testing.T) {
 			if len(authoritative) == 0 {
 				t.Fatal("no authoritative tablet records")
 			}
-			slices.SortFunc(authoritative, func(a, b routing.TokenRange) int { return comparePlacementToken(a.End, b.End) })
+			slices.SortFunc(authoritative, func(a, b routing.TokenRange) int { return stdcmp.Compare(a.End, b.End) })
 			for i := range authoritative {
 				authoritative[i].Start = math.MinInt64
 				if i > 0 {
 					authoritative[i].Start = authoritative[i-1].End
 				}
 			}
-			v2 := (*implExecution.Session)(s).Core().GetConn().InternalFramers.InternalDefaults.InternalTabletsRoutingV2
+			v2 := (*implSession.Session)(s).Core().GetConn().InternalFramers.InternalDefaults.InternalTabletsRoutingV2
 			t.Logf("tablet v2 negotiated=%t, server table ID=%s, authoritative ranges=%d", v2, id, len(authoritative))
 			for key := int32(0); key < 8; key++ {
 				b := codecTestMust(BindBorrowed(read, key))

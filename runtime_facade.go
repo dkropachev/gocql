@@ -8,7 +8,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
 // Batch collects statements, each with its values, to send as one CQL
@@ -17,20 +17,20 @@ import (
 // batch has grown to its working size, appending allocates nothing. The
 // zero Batch is ready to use; a Batch is not safe for concurrent use and
 // must not be copied.
-type Batch implExecution.Batch
+type Batch implSession.Batch
 
 // StopIteration may be returned by an Each callback to stop successfully.
 // A single-error wrapper has the same effect; joined errors remain failures.
 // The execution is recorded as successful and all response storage is released.
 // Other callback errors are returned unchanged. Borrowed callback fields still
 // expire when the callback returns.
-var StopIteration = implExecution.StopIteration
+var StopIteration = implSession.StopIteration
 
 // Len returns the number of statements in the batch.
-func (b *Batch) Len() int { return (*implExecution.Batch)(b).Len() }
+func (b *Batch) Len() int { return (*implSession.Batch)(b).Len() }
 
 // Reset clears statements while preserving the batch's reusable capacity.
-func (b *Batch) Reset() { (*implExecution.Batch)(b).Reset() }
+func (b *Batch) Reset() { (*implSession.Batch)(b).Reset() }
 
 const BatchSizeMaximum = implCluster.BatchSizeMaximum
 
@@ -43,7 +43,7 @@ func Connect(ctx context.Context, config Config) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	session, err := implExecution.Connect(ctx, settings)
+	session, err := implSession.Connect(ctx, settings)
 	return (*Session)(session), err
 }
 
@@ -59,7 +59,7 @@ func OpenSingleHost(ctx context.Context, config Config, hostID cql.UUID) (*Sessi
 	if err != nil {
 		return nil, err
 	}
-	session, err := implExecution.OpenSingleHost(ctx, settings, hostID)
+	session, err := implSession.OpenSingleHost(ctx, settings, hostID)
 	return (*Session)(session), err
 }
 
@@ -73,14 +73,14 @@ func Prepare[P any, R any](ctx context.Context, session *Session, statement cql.
 	return session.Prepare(ctx, statement, options...)
 }
 
-type PreparedInfo = implExecution.PreparedInfo
+type PreparedInfo = implSession.PreparedInfo
 
 const SchemaEvent = implCluster.SchemaEvent
 
 const StatusEvent = implCluster.StatusEvent
 
 // StreamInfo reports delivered rows, pages and execution progress.
-type StreamInfo = implExecution.StreamInfo
+type StreamInfo = implSession.StreamInfo
 
 type Subscription = implCluster.Subscription
 

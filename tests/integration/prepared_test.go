@@ -36,7 +36,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/internal/tests"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -103,7 +103,7 @@ func TestPrepared(t *testing.T) {
 		t.Run("OverriddenKeyspace", func(t *testing.T) {
 			session := createV2Session(t)
 			defer session.Close()
-			if (*implExecution.Session)(session).Data().InternalCfg.ProtoVersion < 5 {
+			if (*implSession.Session)(session).Data().InternalCfg.ProtoVersion < 5 {
 				t.Skip("This tests only runs on proto > 4 due SetKeyspace availability")
 			}
 			ks := testKeyspaceName(t)
@@ -243,15 +243,15 @@ func TestPrepared(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			bound, conn := injectInvalidPreparedStatement(t, session, table)
-			cassandraBatch(t, session, cql.UnloggedBatch, []batchItem{cassandraItem(t, bound)}, *func() *implExecution.Options {
-				opaqueStorageValuexxx := new(implExecution.Options)
+			cassandraBatch(t, session, cql.UnloggedBatch, []batchItem{cassandraItem(t, bound)}, *func() *implSession.Options {
+				opaqueStorageValuexxx := new(implSession.Options)
 				opaqueStorageValuexxx.HostID = cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
-				implExecution.OptionsData(opaqueStorageValuexxx).InternalConnection = conn
+				implSession.OptionsData(opaqueStorageValuexxx).InternalConnection = conn
 				return opaqueStorageValuexxx
 			}())
-			implExecution.BoundData(bound).InternalRequest.InternalPrepared().InternalMu.RLock()
-			id := append([]byte(nil), implExecution.BoundData(bound).InternalRequest.InternalPrepared().InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)].InternalId...)
-			implExecution.BoundData(bound).InternalRequest.InternalPrepared().InternalMu.RUnlock()
+			implSession.BoundData(bound).InternalRequest.InternalPrepared().InternalMu.RLock()
+			id := append([]byte(nil), implSession.BoundData(bound).InternalRequest.InternalPrepared().InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)].InternalId...)
+			implSession.BoundData(bound).InternalRequest.InternalPrepared().InternalMu.RUnlock()
 			require.NotEqual(t, []byte("foobar"), id)
 			require.Equal(t, int64(7), cassandraInt(t, cassandraRead(t, session, "SELECT bar FROM "+table+" WHERE foo=?", codecTestMust(cql.TextValue("bar"))), "bar"))
 		})
@@ -261,16 +261,16 @@ func TestPrepared(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			bound, conn := injectInvalidPreparedStatement(t, session, table)
-			_, err := Exec(context.Background(), session, bound, bindOptions(session, *func() *implExecution.Options {
-				opaqueStorageValuexx := new(implExecution.Options)
+			_, err := Exec(context.Background(), session, bound, bindOptions(session, *func() *implSession.Options {
+				opaqueStorageValuexx := new(implSession.Options)
 				opaqueStorageValuexx.HostID = cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
-				implExecution.OptionsData(opaqueStorageValuexx).InternalConnection = conn
+				implSession.OptionsData(opaqueStorageValuexx).InternalConnection = conn
 				return opaqueStorageValuexx
 			}()))
 			require.NoError(t, err)
-			implExecution.BoundData(bound).InternalRequest.InternalPrepared().InternalMu.RLock()
-			id := append([]byte(nil), implExecution.BoundData(bound).InternalRequest.InternalPrepared().InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)].InternalId...)
-			implExecution.BoundData(bound).InternalRequest.InternalPrepared().InternalMu.RUnlock()
+			implSession.BoundData(bound).InternalRequest.InternalPrepared().InternalMu.RLock()
+			id := append([]byte(nil), implSession.BoundData(bound).InternalRequest.InternalPrepared().InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)].InternalId...)
+			implSession.BoundData(bound).InternalRequest.InternalPrepared().InternalMu.RUnlock()
 			require.NotEqual(t, []byte("foobar"), id)
 			require.Equal(t, int64(7), cassandraInt(t, cassandraRead(t, session, "SELECT bar FROM "+table+" WHERE foo=?", codecTestMust(cql.TextValue("bar"))), "bar"))
 		})

@@ -45,7 +45,7 @@ func testSession(t testing.TB) *Core {
 	p := s.Peripheral()
 	p.InternalFeedbackOnce.Do(func() {})
 	routing.SnapshotData(m).InternalPlacementSignal = &p.InternalPlacementEpoch
-	routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, implRouting.InternalTabletPlacement{InternalIdentity: "identity-1"}, implRouting.InternalComparePlacementTable)
+	routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, implRouting.InternalTabletPlacement{InternalIdentity: "identity-1"})
 	p.InternalSnapshot.Store(m)
 	t.Cleanup(func() {
 		s.CloseV2Peripheral()

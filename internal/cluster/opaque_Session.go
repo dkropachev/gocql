@@ -43,7 +43,7 @@ import (
 
 type SessionStorage struct {
 	InternalTypedState          executionLifecycle
-	InternalTypedReady          atomic.Value // InternalTypedState once fully initialized; never replaced
+	InternalTypedReady          atomic.Value // the *session.InternalSessionRuntime in InternalTypedState, once fully initialized; never replaced
 	InternalControl             InternalControlConnection
 	InternalCtx                 context.Context
 	InternalLogger              logging.StdLogger

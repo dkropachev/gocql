@@ -150,8 +150,10 @@ func TestCompactPermutation(t *testing.T) {
 									replicas = append(replicas, Target{HostID: cqltype.UUID{0: 255, 15: byte(len(replicas))}})
 								}
 								SnapshotData(m).InternalKeyspaces["ks"].ConsistencyMode = "global"
-								root := placementNode(int64(1), &InternalTabletRange{InternalSpan: TokenRange{Start: -1, End: 1, Replicas: replicas}, InternalVersion: cqltype.Option[uint64]{Set: true}}, nil, nil)
-								SnapshotData(m).InternalPlacements = InternalPlacementPut(nil, InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, InternalTabletPlacement{InternalRanges: root}, InternalComparePlacementTable)
+								var root *InternalTabletRangeTree
+								root = root.Put(1, &InternalTabletRange{InternalSpan: TokenRange{Start: -1, End: 1, Replicas: replicas}, InternalVersion: cqltype.Option[uint64]{Set: true}})
+								var placements *tabletPlacementTree
+								SnapshotData(m).InternalPlacements = placements.Put(InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, InternalTabletPlacement{InternalRanges: root})
 								policy := &InternalRoutingPolicy{InternalOptions: RoutingOptions{TokenAware: true, LeaderAware: leader, Datacenter: "local", Rack: "rack", AllowRemote: remote}}
 								if slow {
 									policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[cqltype.UUID]time.Time{hosts[2].ID: time.Now().Add(time.Hour)}})

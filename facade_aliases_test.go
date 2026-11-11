@@ -12,7 +12,7 @@ import (
 	routing "github.com/scylladb/gocql/v2/routing"
 
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 
@@ -30,23 +30,23 @@ import (
 	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
-type hostPrepared = implExecution.InternalHostPrepared
+type hostPrepared = implSession.InternalHostPrepared
 
 func newConnectionHooks(a0 *Session) implTransport.InternalConnectionHooks {
-	return (*implExecution.Session)(a0).Core().NewConnectionHooks()
+	return (*implSession.Session)(a0).Core().NewConnectionHooks()
 }
 
-type preparedState = implExecution.InternalPreparedState
+type preparedState = implSession.InternalPreparedState
 
-type resultPlanCache[R any] = implExecution.InternalResultPlanCache[R]
+type resultPlanCache[R any] = implSession.InternalResultPlanCache[R]
 
 type ringDescriber = implCluster.InternalRingDescriber
 
 func runtimeFor(a0 *Session) *sessionRuntime {
-	return implExecution.InternalRuntimeFor((*implExecution.Session)(a0).Core())
+	return implSession.InternalRuntimeFor((*implSession.Session)(a0).Core())
 }
 
-type sessionRuntime = implExecution.InternalSessionRuntime
+type sessionRuntime = implSession.InternalSessionRuntime
 
 type driverConn = implTransport.Conn
 
@@ -108,15 +108,7 @@ func buildRoutingHostIndex(a0 []routing.HostSnapshot) *routingHostIndex {
 	return implRouting.InternalBuildRoutingHostIndex(a0)
 }
 
-func comparePlacementTable(a0 metadataTable, a1 metadataTable) int {
-	return implRouting.InternalComparePlacementTable(a0, a1)
-}
-
 type metadataTable = implRouting.InternalMetadataTable
-
-func placementPut[K any, V any](a0 *placementTree[K, V], a1 K, a2 V, a3 func(K, K) int) *placementTree[K, V] {
-	return implRouting.InternalPlacementPut[K, V](a0, a1, a2, a3)
-}
 
 type routingDecisions = implRouting.InternalRoutingDecisions
 
@@ -131,5 +123,3 @@ func updateTabletRange(a0 *tabletRangeTree, a1 tablets.TabletInfo) (*tabletRange
 }
 
 type routingHostIndex = implRouting.InternalRoutingHostIndex
-
-type placementTree[K, V any] = implRouting.InternalPlacementTree[K, V]

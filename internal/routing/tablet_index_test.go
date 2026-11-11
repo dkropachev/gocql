@@ -17,7 +17,9 @@ import (
 func checkTabletRangeIndex(t *testing.T, p InternalTabletPlacement, rng *rand.Rand, span int64) {
 	t.Helper()
 	var want []*InternalTabletRange
-	InternalPlacementEach(p.InternalRanges, func(_ int64, r *InternalTabletRange) { want = append(want, r) })
+	for _, r := range p.InternalRanges.All() {
+		want = append(want, r)
+	}
 	var got []*InternalTabletRange
 	if x := p.index; x != nil {
 		if len(x.last) != len(x.chunks) {
@@ -158,10 +160,10 @@ func TestTabletIndex(t *testing.T) {
 		roots = append(roots, nil)
 		for i := int64(0); i < 4; i++ {
 			p, _ = InternalUpdateTabletPlacement(p, hint(i*100, i*100+100, byte(i)))
-			roots = append(roots, InternalPlacementPut(roots[len(roots)-1], table, p, InternalComparePlacementTable))
+			roots = append(roots, roots[len(roots)-1].Put(table, p))
 		}
-		roots = append(roots, InternalPlacementPut(roots[len(roots)-1], other, InternalTabletPlacement{}, InternalComparePlacementTable))
-		roots = append(roots, placementDelete(roots[len(roots)-1], table, InternalComparePlacementTable))
+		roots = append(roots, roots[len(roots)-1].Put(other, InternalTabletPlacement{}))
+		roots = append(roots, roots[len(roots)-1].Delete(table))
 		// Revisit earlier trees as well, as snapshots taken before an update do.
 		order := []int{0, 1, 1, 2, 4, 3, 5, 6, 2, 6}
 		for _, i := range order {

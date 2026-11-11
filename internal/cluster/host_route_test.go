@@ -44,7 +44,7 @@ func hostRoutingSession(b testing.TB, tablets bool) *Core {
 	k := implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}
 	if tablets {
 		root, _ := implRouting.InternalUpdateTabletRange(nil, testHint(b, -1<<63+1, 1<<63-1, cqltype.Option[uint64]{Value: 1, Set: true}, hTarget(1, 1), hTarget(2, 2), hTarget(3, 3)))
-		routing.SnapshotData(m).InternalPlacements = implRouting.InternalPlacementPut(routing.SnapshotData(m).InternalPlacements, k, routing.InternalIndexTabletPlacement(implRouting.InternalTabletPlacement{InternalIdentity: "identity-1", InternalRanges: root}), implRouting.InternalComparePlacementTable)
+		routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(k, routing.InternalIndexTabletPlacement(implRouting.InternalTabletPlacement{InternalIdentity: "identity-1", InternalRanges: root}))
 	} else {
 		routing.SnapshotData(m).InternalKeyspaces["ks"].TabletBased = false
 		routing.SnapshotData(m).InternalPlacements = nil

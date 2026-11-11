@@ -4,6 +4,8 @@
 package routing
 
 import (
+	"cmp"
+	"iter"
 	"maps"
 	"math/rand/v2"
 	"strings"
@@ -16,34 +18,62 @@ import (
 	// nor a routing plan may mutate a published node or replica slice.
 )
 
-type InternalPlacementTree[K any, V any] struct {
+// placementOrder orders the keys of a placement tree. Implementations are
+// empty structs, so a tree carries its order in its type, not in each call.
+type placementOrder[K any] interface {
+	compare(a, b K) int
+}
+
+// tokenOrder orders tablet ranges by their last token.
+type tokenOrder struct{}
+
+func (tokenOrder) compare(a, b int64) int { return cmp.Compare(a, b) }
+
+// tableOrder orders placements by keyspace, then table.
+type tableOrder struct{}
+
+func (tableOrder) compare(a, b InternalMetadataTable) int {
+	// Names are ordered by length first: a lookup mostly meets names of
+	// other lengths, or its own keyspace, and decides those without
+	// comparing bytes in order.
+	if c := comparePlacementName(a.InternalKeyspace, b.InternalKeyspace); c != 0 {
+		return c
+	}
+	return comparePlacementName(a.InternalTable, b.InternalTable)
+}
+
+// InternalPlacementTree is an immutable AVL tree ordered by O. A nil tree is
+// empty; Put and Delete return a new root sharing unchanged subtrees.
+type InternalPlacementTree[K, V any, O placementOrder[K]] struct {
 	key           K
 	InternalValue V
-	left, right   *InternalPlacementTree[K, V]
+	left, right   *InternalPlacementTree[K, V, O]
 	height        int
 }
 
-func placementHeight[K, V any](n *InternalPlacementTree[K, V]) int {
+func (n *InternalPlacementTree[K, V, O]) treeHeight() int {
 	if n == nil {
 		return 0
 	}
 	return n.height
 }
-func placementNode[K, V any](key K, value V, l, r *InternalPlacementTree[K, V]) *InternalPlacementTree[K, V] {
-	return &InternalPlacementTree[K, V]{key: key, InternalValue: value, left: l, right: r, height: 1 + max(placementHeight(l), placementHeight(r))}
+
+func placementNode[K, V any, O placementOrder[K]](key K, value V, l, r *InternalPlacementTree[K, V, O]) *InternalPlacementTree[K, V, O] {
+	return &InternalPlacementTree[K, V, O]{key: key, InternalValue: value, left: l, right: r, height: 1 + max(l.treeHeight(), r.treeHeight())}
 }
-func placementBalance[K, V any](n *InternalPlacementTree[K, V]) *InternalPlacementTree[K, V] {
-	if placementHeight(n.left) > placementHeight(n.right)+1 {
+
+func (n *InternalPlacementTree[K, V, O]) balance() *InternalPlacementTree[K, V, O] {
+	if n.left.treeHeight() > n.right.treeHeight()+1 {
 		l := n.left
-		if placementHeight(l.right) > placementHeight(l.left) {
+		if l.right.treeHeight() > l.left.treeHeight() {
 			r := l.right
 			l = placementNode(r.key, r.InternalValue, placementNode(l.key, l.InternalValue, l.left, r.left), r.right)
 		}
 		return placementNode(l.key, l.InternalValue, l.left, placementNode(n.key, n.InternalValue, l.right, n.right))
 	}
-	if placementHeight(n.right) > placementHeight(n.left)+1 {
+	if n.right.treeHeight() > n.left.treeHeight()+1 {
 		r := n.right
-		if placementHeight(r.left) > placementHeight(r.right) {
+		if r.left.treeHeight() > r.right.treeHeight() {
 			l := r.left
 			r = placementNode(l.key, l.InternalValue, l.left, placementNode(r.key, r.InternalValue, l.right, r.right))
 		}
@@ -51,9 +81,12 @@ func placementBalance[K, V any](n *InternalPlacementTree[K, V]) *InternalPlaceme
 	}
 	return n
 }
-func InternalPlacementGet[K, V any](n *InternalPlacementTree[K, V], key K, cmp func(K, K) int) *InternalPlacementTree[K, V] {
+
+// Get returns the node holding key, or nil.
+func (n *InternalPlacementTree[K, V, O]) Get(key K) *InternalPlacementTree[K, V, O] {
+	var order O
 	for n != nil {
-		c := cmp(key, n.key)
+		c := order.compare(key, n.key)
 		if c == 0 {
 			return n
 		}
@@ -65,29 +98,35 @@ func InternalPlacementGet[K, V any](n *InternalPlacementTree[K, V], key K, cmp f
 	}
 	return nil
 }
-func InternalPlacementPut[K, V any](n *InternalPlacementTree[K, V], key K, value V, cmp func(K, K) int) *InternalPlacementTree[K, V] {
+
+// Put returns a tree that maps key to value.
+func (n *InternalPlacementTree[K, V, O]) Put(key K, value V) *InternalPlacementTree[K, V, O] {
 	if n == nil {
-		return placementNode(key, value, nil, nil)
+		return placementNode[K, V, O](key, value, nil, nil)
 	}
-	c := cmp(key, n.key)
+	var order O
+	c := order.compare(key, n.key)
 	if c == 0 {
 		return placementNode(key, value, n.left, n.right)
 	}
 	if c < 0 {
-		return placementBalance(placementNode(n.key, n.InternalValue, InternalPlacementPut(n.left, key, value, cmp), n.right))
+		return placementNode(n.key, n.InternalValue, n.left.Put(key, value), n.right).balance()
 	}
-	return placementBalance(placementNode(n.key, n.InternalValue, n.left, InternalPlacementPut(n.right, key, value, cmp)))
+	return placementNode(n.key, n.InternalValue, n.left, n.right.Put(key, value)).balance()
 }
-func placementDelete[K, V any](n *InternalPlacementTree[K, V], key K, cmp func(K, K) int) *InternalPlacementTree[K, V] {
+
+// Delete returns a tree without key.
+func (n *InternalPlacementTree[K, V, O]) Delete(key K) *InternalPlacementTree[K, V, O] {
 	if n == nil {
 		return nil
 	}
-	c := cmp(key, n.key)
+	var order O
+	c := order.compare(key, n.key)
 	if c < 0 {
-		return placementBalance(placementNode(n.key, n.InternalValue, placementDelete(n.left, key, cmp), n.right))
+		return placementNode(n.key, n.InternalValue, n.left.Delete(key), n.right).balance()
 	}
 	if c > 0 {
-		return placementBalance(placementNode(n.key, n.InternalValue, n.left, placementDelete(n.right, key, cmp)))
+		return placementNode(n.key, n.InternalValue, n.left, n.right.Delete(key)).balance()
 	}
 	if n.left == nil {
 		return n.right
@@ -99,33 +138,16 @@ func placementDelete[K, V any](n *InternalPlacementTree[K, V], key K, cmp func(K
 	for next.left != nil {
 		next = next.left
 	}
-	return placementBalance(placementNode(next.key, next.InternalValue, n.left, placementDelete(n.right, next.key, cmp)))
+	return placementNode(next.key, next.InternalValue, n.left, n.right.Delete(next.key)).balance()
 }
-func InternalPlacementEach[K, V any](n *InternalPlacementTree[K, V], fn func(K, V)) {
-	if n == nil {
-		return
-	}
-	InternalPlacementEach(n.left, fn)
-	fn(n.key, n.InternalValue)
-	InternalPlacementEach(n.right, fn)
+
+// All yields the tree's entries in key order.
+func (n *InternalPlacementTree[K, V, O]) All() iter.Seq2[K, V] {
+	return func(yield func(K, V) bool) { n.walk(yield) }
 }
-func InternalComparePlacementToken(a, b int64) int {
-	if a < b {
-		return -1
-	}
-	if a > b {
-		return 1
-	}
-	return 0
-}
-func InternalComparePlacementTable(a, b InternalMetadataTable) int {
-	// Names are ordered by length first: a lookup mostly meets names of
-	// other lengths, or its own keyspace, and decides those without
-	// comparing bytes in order.
-	if c := comparePlacementName(a.InternalKeyspace, b.InternalKeyspace); c != 0 {
-		return c
-	}
-	return comparePlacementName(a.InternalTable, b.InternalTable)
+
+func (n *InternalPlacementTree[K, V, O]) walk(yield func(K, V) bool) bool {
+	return n == nil || n.left.walk(yield) && yield(n.key, n.InternalValue) && n.right.walk(yield)
 }
 
 func comparePlacementName(a, b string) int {
@@ -148,7 +170,7 @@ type InternalTabletRange struct {
 	InternalVersion cqltype.Option[uint64]
 	observation     uint64
 }
-type InternalTabletRangeTree = InternalPlacementTree[int64, *InternalTabletRange]
+type InternalTabletRangeTree = InternalPlacementTree[int64, *InternalTabletRange, tokenOrder]
 type InternalTabletPlacement struct {
 	InternalRanges   *InternalTabletRangeTree
 	InternalIdentity string
@@ -156,7 +178,7 @@ type InternalTabletPlacement struct {
 	// while its root is still InternalRanges.
 	index *tabletRangeIndex
 }
-type tabletPlacementTree = InternalPlacementTree[InternalMetadataTable, InternalTabletPlacement]
+type tabletPlacementTree = InternalPlacementTree[InternalMetadataTable, InternalTabletPlacement, tableOrder]
 
 func InternalTabletRangeAfter(n *InternalTabletRangeTree, token int64) *InternalTabletRangeTree {
 	var result *InternalTabletRangeTree
@@ -208,7 +230,7 @@ func InternalUpdateTabletRange(root *InternalTabletRangeTree, h tablets.TabletIn
 		return root, false
 	}
 	for n != nil && n.InternalValue.InternalSpan.Start < last {
-		root = placementDelete(root, n.key, InternalComparePlacementToken)
+		root = root.Delete(n.key)
 		n = InternalTabletRangeAfter(root, first)
 	}
 	r := &InternalTabletRange{observation: tabletObservationID.Add(1), InternalSpan: TokenRange{Start: first, End: last, Replicas: make([]Target, len(h.ReplicasUnsafe()))}}
@@ -216,7 +238,7 @@ func InternalUpdateTabletRange(root *InternalTabletRangeTree, h tablets.TabletIn
 		r.InternalSpan.Replicas[i] = Target{HostID: cqltype.UUID(replica.HostUUIDValue()), ShardID: cqltype.Option[uint32]{Value: uint32(replica.ShardID()), Set: true}}
 	}
 	r.InternalVersion.Value, r.InternalVersion.Set = h.Version()
-	return InternalPlacementPut(root, last, r, InternalComparePlacementToken), true
+	return root.Put(last, r), true
 }
 
 func InternalMetadataSnapshotTableIdentity(m *MetadataSnapshot, k InternalMetadataTable) string {
@@ -239,7 +261,7 @@ func InternalMetadataSnapshotTabletRoot(m *MetadataSnapshot, k InternalMetadataT
 	if m == nil {
 		return nil, false
 	}
-	if n := InternalPlacementGet(SnapshotData(m).InternalPlacements, k, InternalComparePlacementTable); n != nil {
+	if n := SnapshotData(m).InternalPlacements.Get(k); n != nil {
 		if SnapshotData(m).InternalPlacementSignal != nil && SnapshotData(m).InternalPlacementEpoch != SnapshotData(m).InternalPlacementSignal.Load() {
 			return nil, true
 		}
@@ -272,7 +294,7 @@ func InternalLookupTablet(m *MetadataSnapshot, info model.RoutingInfo) InternalT
 		l.tracked = true
 		return l
 	}
-	if n := InternalPlacementGet(SnapshotData(m).InternalPlacements, InternalMetadataTable{InternalKeyspace: info.Keyspace, InternalTable: info.Table}, InternalComparePlacementTable); n != nil {
+	if n := SnapshotData(m).InternalPlacements.Get(InternalMetadataTable{InternalKeyspace: info.Keyspace, InternalTable: info.Table}); n != nil {
 		l.tracked = true
 		l.node = n.InternalValue.tabletRangeFor(info.Token.Value)
 	}
@@ -307,7 +329,7 @@ func InternalLookupTabletCached(m *MetadataSnapshot, info model.RoutingInfo, c *
 	e := c.entry.Load()
 	if e == nil || e.root != root {
 		e = &placementCacheEntry{root: root}
-		if n := InternalPlacementGet(root, InternalMetadataTable{InternalKeyspace: info.Keyspace, InternalTable: info.Table}, InternalComparePlacementTable); n != nil {
+		if n := root.Get(InternalMetadataTable{InternalKeyspace: info.Keyspace, InternalTable: info.Table}); n != nil {
 			e.placement = &n.InternalValue
 		}
 		c.entry.Store(e)
@@ -415,10 +437,10 @@ func InternalReconcileTabletPlacement(old, current *MetadataSnapshot) *tabletPla
 	for _, h := range SnapshotData(current).InternalHosts {
 		known[h.ID] = true
 	}
-	InternalPlacementEach(root, func(k InternalMetadataTable, t InternalTabletPlacement) {
+	for k, t := range root.All() {
 		if _, _, err := InternalMetadataSnapshotLookupRanges(current, k.InternalKeyspace, k.InternalTable); err != nil || InternalMetadataSnapshotTableIdentity(current, k) != t.InternalIdentity {
-			root = placementDelete(root, k, InternalComparePlacementTable)
-			return
+			root = root.Delete(k)
+			continue
 		}
 		ranges := t.InternalRanges
 		previousKS := SnapshotData(old).InternalKeyspaces[k.InternalKeyspace]
@@ -434,22 +456,22 @@ func InternalReconcileTabletPlacement(old, current *MetadataSnapshot) *tabletPla
 		if SnapshotData(old).InternalPlacementEpoch != SnapshotData(current).InternalPlacementEpoch {
 			ranges = nil
 		} else {
-			InternalPlacementEach(ranges, func(end int64, r *InternalTabletRange) {
+			for end, r := range ranges.All() {
 				for _, target := range r.InternalSpan.Replicas {
 					if !known[target.HostID] {
-						ranges = placementDelete(ranges, end, InternalComparePlacementToken)
+						ranges = ranges.Delete(end)
 						break
 					}
 				}
-			})
+			}
 		}
 		if ranges != t.InternalRanges {
 			t.InternalRanges = ranges
-			root = InternalPlacementPut(root, k, InternalIndexTabletPlacement(t), InternalComparePlacementTable)
+			root = root.Put(k, InternalIndexTabletPlacement(t))
 		}
-	})
+	}
 	for k, ranges := range SnapshotData(current).InternalTablets {
-		if InternalPlacementGet(root, k, InternalComparePlacementTable) != nil {
+		if root.Get(k) != nil {
 			continue
 		}
 		if _, _, err := InternalMetadataSnapshotLookupRanges(current, k.InternalKeyspace, k.InternalTable); err != nil {
@@ -459,23 +481,23 @@ func InternalReconcileTabletPlacement(old, current *MetadataSnapshot) *tabletPla
 		for _, r := range ranges {
 			if r.Start < r.End {
 				v := &InternalTabletRange{observation: tabletObservationID.Add(1), InternalSpan: r}
-				t.InternalRanges = InternalPlacementPut(t.InternalRanges, r.End, v, InternalComparePlacementToken)
+				t.InternalRanges = t.InternalRanges.Put(r.End, v)
 			}
 		}
-		root = InternalPlacementPut(root, k, t, InternalComparePlacementTable)
+		root = root.Put(k, t)
 	}
 	for name, ks := range SnapshotData(current).InternalKeyspaces {
 		if ks.TabletBased {
 			for table := range ks.Tables {
 				k := InternalMetadataTable{InternalKeyspace: name, InternalTable: table}
-				if InternalPlacementGet(root, k, InternalComparePlacementTable) == nil {
-					root = InternalPlacementPut(root, k, InternalTabletPlacement{InternalIdentity: InternalMetadataSnapshotTableIdentity(current, k)}, InternalComparePlacementTable)
+				if root.Get(k) == nil {
+					root = root.Put(k, InternalTabletPlacement{InternalIdentity: InternalMetadataSnapshotTableIdentity(current, k)})
 				}
 			}
 			for table := range ks.Views {
 				k := InternalMetadataTable{InternalKeyspace: name, InternalTable: table}
-				if InternalPlacementGet(root, k, InternalComparePlacementTable) == nil {
-					root = InternalPlacementPut(root, k, InternalTabletPlacement{InternalIdentity: InternalMetadataSnapshotTableIdentity(current, k)}, InternalComparePlacementTable)
+				if root.Get(k) == nil {
+					root = root.Put(k, InternalTabletPlacement{InternalIdentity: InternalMetadataSnapshotTableIdentity(current, k)})
 				}
 			}
 		}

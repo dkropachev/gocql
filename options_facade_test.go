@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/retry"
 )
@@ -33,7 +33,7 @@ func TestPublicOptionsSnapshot(t *testing.T) {
 	if got := publicOptions(internalOptions(Options{NoSerialConsistency: true})); !got.NoSerialConsistency {
 		t.Fatal("explicitly disabled serial consistency was lost")
 	}
-	raw := codecTestMust(implExecution.NewCompiledOptions(nil, internalOptions(want)))
+	raw := codecTestMust(implSession.NewCompiledOptions(nil, internalOptions(want)))
 	bound := CompiledOptions(raw)
 	profile.PageSize = 99
 	payload[0] = 'X'
@@ -56,9 +56,9 @@ func TestPublicOptionsSnapshot(t *testing.T) {
 func TestPublicOptionFields(t *testing.T) {
 	for _, pair := range [][2]reflect.Type{
 		{reflect.TypeFor[Profile](), reflect.TypeFor[implSettings.Profile]()},
-		{reflect.TypeFor[Options](), reflect.TypeFor[implExecution.Options]()},
-		{reflect.TypeFor[PrepareOptions](), reflect.TypeFor[implExecution.PrepareOptions]()},
-		{reflect.TypeFor[StreamOptions](), reflect.TypeFor[implExecution.StreamOptions]()},
+		{reflect.TypeFor[Options](), reflect.TypeFor[implSession.Options]()},
+		{reflect.TypeFor[PrepareOptions](), reflect.TypeFor[implSession.PrepareOptions]()},
+		{reflect.TypeFor[StreamOptions](), reflect.TypeFor[implSession.StreamOptions]()},
 	} {
 		public, internal := pair[0], pair[1]
 		for i := range internal.NumField() {

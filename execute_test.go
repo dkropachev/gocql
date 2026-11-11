@@ -3,7 +3,7 @@ package gocql
 import (
 	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 
 	"encoding/binary"
 	"net"
@@ -15,12 +15,12 @@ import (
 func runtimeTestSession(t testing.TB, n int) (*Session, []*driverConn, []net.Conn) {
 	t.Helper()
 	s := func() *Session {
-		opaqueStorageValue := (*Session)(implExecution.InternalWrapSession(new(implCluster.Core)))
-		(*implExecution.Session)(opaqueStorageValue).Data().InternalLogger = nopLogger{}
+		opaqueStorageValue := (*Session)(implSession.InternalWrapSession(new(implCluster.Core)))
+		(*implSession.Session)(opaqueStorageValue).Data().InternalLogger = nopLogger{}
 		return opaqueStorageValue
 	}()
-	(*implExecution.Session)(s).Data().InternalHostSource = &ringDescriber{InternalHosts: map[string]*HostInfo{}}
-	(*implExecution.Session)(s).Data().InternalPool = &policyConnPool{InternalHostConnPools: map[cql.UUID]*hostConnPool{}}
+	(*implSession.Session)(s).Data().InternalHostSource = &ringDescriber{InternalHosts: map[string]*HostInfo{}}
+	(*implSession.Session)(s).Data().InternalPool = &policyConnPool{InternalHostConnPools: map[cql.UUID]*hostConnPool{}}
 	var conns []*driverConn
 	var peers []net.Conn
 	for i := 0; i < n; i++ {
@@ -34,10 +34,10 @@ func runtimeTestSession(t testing.TB, n int) (*Session, []*driverConn, []net.Con
 		}()
 		conn.InternalHost = host
 		conn.InternalHooks = newConnectionHooks(s)
-		(*implExecution.Session)(s).Data().InternalHostSource.InternalHosts[id.String()] = host
+		(*implSession.Session)(s).Data().InternalHostSource.InternalHosts[id.String()] = host
 		picker := newDefaultConnPicker(1)
 		picker.Put(conn)
-		(*implExecution.Session)(s).Data().InternalPool.InternalHostConnPools[id] = &hostConnPool{InternalHost: host, InternalConnPicker: picker}
+		(*implSession.Session)(s).Data().InternalPool.InternalHostConnPools[id] = &hostConnPool{InternalHost: host, InternalConnPicker: picker}
 		conns = append(conns, conn)
 		peers = append(peers, peer)
 		go conn.InternalServe(conn.InternalCtx)

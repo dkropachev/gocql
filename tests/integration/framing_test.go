@@ -38,8 +38,8 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	implExecution "github.com/scylladb/gocql/v2/internal/execution"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
 func TestFraming(t *testing.T) {
@@ -98,7 +98,7 @@ func TestFraming(t *testing.T) {
 		t.Run("NotWorthIt", func(t *testing.T) {
 			session := createV2Session(t)
 			defer session.Close()
-			if (*implExecution.Session)(session).Data().InternalCfg.ProtoVersion < 5 {
+			if (*implSession.Session)(session).Data().InternalCfg.ProtoVersion < 5 {
 				t.Skip("compressed segments are only produced on protocol >= 5")
 			}
 			if getRandomConn(t, session).InternalCompressor == nil {
@@ -151,7 +151,7 @@ func TestFraming(t *testing.T) {
 					name:  "native protocol v5",
 					table: "metadata_changed",
 					gate: func(t *testing.T, session *gocql.Session, conn *driverConn) string {
-						if (*implExecution.Session)(session).Data().InternalCfg.ProtoVersion < protoVersion5 {
+						if (*implSession.Session)(session).Data().InternalCfg.ProtoVersion < protoVersion5 {
 							return "Metadata_changed mechanism is only available in proto > 4"
 						}
 						if *flagDistribution == "scylla" && flagCassVersion.Before(2025, 3, 0) {
@@ -234,17 +234,17 @@ func TestFraming(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,val int)", table))
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES(?,?)", table), cql.IntValue(1), cql.IntValue(7))
 			host := cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
-			prepared := cassandraPrepared(t, session, cql.Statement[int32, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id,val FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.DynamicRows}, *func() *implExecution.PrepareOptions {
-				opaqueStorageValuexxxxxx := new(implExecution.PrepareOptions)
+			prepared := cassandraPrepared(t, session, cql.Statement[int32, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id,val FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.DynamicRows}, *func() *implSession.PrepareOptions {
+				opaqueStorageValuexxxxxx := new(implSession.PrepareOptions)
 				opaqueStorageValuexxxxxx.HostID = host
-				implExecution.PrepareOptionsData(opaqueStorageValuexxxxxx).InternalConnection = conn
+				implSession.PrepareOptionsData(opaqueStorageValuexxxxxx).InternalConnection = conn
 				return opaqueStorageValuexxxxxx
 			}())
 			bound := cassandraBound(t, prepared, int32(1))
-			cassandraReadBound(t, session, bound, *func() *implExecution.Options {
-				opaqueStorageValuexxxxxxx := new(implExecution.Options)
+			cassandraReadBound(t, session, bound, *func() *implSession.Options {
+				opaqueStorageValuexxxxxxx := new(implSession.Options)
 				opaqueStorageValuexxxxxxx.HostID = host
-				implExecution.OptionsData(opaqueStorageValuexxxxxxx).InternalConnection = conn
+				implSession.OptionsData(opaqueStorageValuexxxxxxx).InternalConnection = conn
 				return opaqueStorageValuexxxxxxx
 			}())
 			preparedData(prepared).InternalState.InternalMu.Lock()
@@ -256,10 +256,10 @@ func TestFraming(t *testing.T) {
 			cached.InternalRevision++
 			preparedData(prepared).InternalState.InternalHosts[host.Value] = &cached
 			preparedData(prepared).InternalState.InternalMu.Unlock()
-			row := cassandraReadBound(t, session, bound, *func() *implExecution.Options {
-				opaqueStorageValuexxxxxxxx := new(implExecution.Options)
+			row := cassandraReadBound(t, session, bound, *func() *implSession.Options {
+				opaqueStorageValuexxxxxxxx := new(implSession.Options)
 				opaqueStorageValuexxxxxxxx.HostID = host
-				implExecution.OptionsData(opaqueStorageValuexxxxxxxx).InternalConnection = conn
+				implSession.OptionsData(opaqueStorageValuexxxxxxxx).InternalConnection = conn
 				return opaqueStorageValuexxxxxxxx
 			}())
 			require.Equal(t, int64(1), cassandraInt(t, row, "id"))
@@ -278,7 +278,7 @@ func TestFraming(t *testing.T) {
 	t.Run("Segment", func(t *testing.T) {
 		session := createV2Session(t)
 		defer session.Close()
-		if (*implExecution.Session)(session).Data().InternalCfg.ProtoVersion < 5 {
+		if (*implSession.Session)(session).Data().InternalCfg.ProtoVersion < 5 {
 			t.Skip("segmented frames are only produced on protocol >= 5")
 		}
 		table := testTableName(t)
