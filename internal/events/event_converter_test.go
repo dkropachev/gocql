@@ -22,7 +22,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/events"
+	"github.com/scylladb/gocql/v2/internal/events"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 

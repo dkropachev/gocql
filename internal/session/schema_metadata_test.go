@@ -11,9 +11,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	oldevents "github.com/scylladb/gocql/v2/events"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	oldevents "github.com/scylladb/gocql/v2/internal/events"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"

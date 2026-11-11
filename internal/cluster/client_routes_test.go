@@ -29,10 +29,10 @@ import (
 
 	"log/slog"
 
-	"github.com/scylladb/gocql/v2/events"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
+	"github.com/scylladb/gocql/v2/internal/events"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/tests"

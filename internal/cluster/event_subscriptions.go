@@ -16,7 +16,7 @@ import (
 
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 
-	oldevents "github.com/scylladb/gocql/v2/events"
+	oldevents "github.com/scylladb/gocql/v2/internal/events"
 )
 
 type EventKind uint8

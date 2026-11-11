@@ -9,7 +9,7 @@ import (
 
 	"log/slog"
 
-	"github.com/scylladb/gocql/v2/events"
+	"github.com/scylladb/gocql/v2/internal/events"
 
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"

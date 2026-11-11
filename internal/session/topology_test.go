@@ -10,9 +10,9 @@ import (
 	"reflect"
 	"testing"
 
-	oldevents "github.com/scylladb/gocql/v2/events"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	oldevents "github.com/scylladb/gocql/v2/internal/events"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/protocol"

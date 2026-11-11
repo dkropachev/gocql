@@ -4,9 +4,9 @@ import (
 	"net"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/events"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
+	"github.com/scylladb/gocql/v2/internal/events"
 )
 
 // dnsResolverFunc adapts a function to the DNSResolver interface.

@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	. "github.com/scylladb/gocql/v2"
-	oldevents "github.com/scylladb/gocql/v2/events"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	oldevents "github.com/scylladb/gocql/v2/internal/events"
 )
 
 func TestSessionAPI(t *testing.T) {

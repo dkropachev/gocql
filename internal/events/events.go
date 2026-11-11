@@ -16,9 +16,10 @@
  * limitations under the License.
  */
 
-// Package events provides public event types for Cassandra/ScyllaDB server events.
-// These events are sent by the server to notify clients of topology changes, status changes,
-// and schema changes.
+// Package events holds the driver's internal event types: the server's
+// topology, status, schema and client-routes events, decoded from frames by
+// FrameToEvent, and the session's control-connection events. They travel on
+// the session's internal event bus; the public model is gocql.Event.
 package events
 
 import (
