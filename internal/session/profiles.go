@@ -10,6 +10,7 @@ import (
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/retry"
 	// IncludeMetadata requests full result metadata even when a validated cache exists.
 )
@@ -151,4 +152,8 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	// The payload is not copied: NewCompiledOptions copied it already, and
 	// a resolution for one execution reads the compiled options' copy.
 	return InternalResolvedOptions{InternalProfile: p, InternalOptions: options}, nil
+}
+
+type OptionsStorage struct {
+	InternalConnection *transport.Conn
 }

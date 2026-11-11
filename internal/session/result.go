@@ -7,9 +7,11 @@ import (
 	"context"
 	"fmt"
 
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/transport"
 
@@ -20,7 +22,7 @@ import (
 )
 
 type PageLease struct {
-	privateStorage PageLeaseStorage
+	privateStorage pageLeaseStorage
 }
 
 func (l *PageLease) Close() {
@@ -32,7 +34,7 @@ func (l *PageLease) Close() {
 // Page holds exactly one response page. It is not safe for concurrent use;
 // within Rows it is used only under the rows' own lock.
 type Page[R any] struct {
-	privateStorage PageStorage[R]
+	privateStorage pageStorage[R]
 }
 
 func InternalNewPage[R any](response *transport.InternalResponsePage, decoder codec.RowDecoder[R], release func()) (*Page[R], error) {
@@ -245,7 +247,7 @@ type prefetchJob struct {
 // embeds one and reinitialises it for each execution; other executions
 // allocate their own.
 type rowsImpl[R any] struct {
-	privateStorage RowsStorage[R]
+	privateStorage rowsStorage[R]
 	gen            atomic.Uint64 // the generation handles must carry to use it
 }
 
@@ -690,4 +692,55 @@ func (r *rowsImpl[R]) stopExecution(l *logicalExecution) {
 	r.privateStorage.mu.Unlock()
 	l.InternalFinish(r.Info(), runtimeerrors.ErrClosed)
 	l.releaseInput()
+}
+
+type pageLeaseStorage struct {
+	owner *wire.Lease
+	once  sync.Once
+}
+
+type pageStorage[R any] struct {
+	ctx            context.Context
+	plan           codec.RowPlan[R]
+	err            error
+	pendingRelease func()
+	destination    *R
+	cancel         context.CancelFunc
+	session        *implCluster.Core
+	response       *transport.InternalResponsePage
+	release        func()
+	cursor         queryCursor
+	reader         codec.RowReader
+	InternalCursor wire.Cursor
+	index          int32
+	valid          bool
+	closed         bool
+	exhausted      bool
+}
+
+type rowsStorage[R any] struct {
+	nextErr        error
+	terminalErr    error
+	ctx            context.Context
+	decoder        codec.RowDecoder[R]
+	err            error
+	prefetchJobs   chan prefetchJob
+	pendingRelease func()
+	plans          *InternalResultPlanCache[R]
+	future         *InternalPageFuture
+	cancel         context.CancelFunc
+	session        *implCluster.Core
+	request        *InternalExecutionRequest
+	page           *Page[R]
+	release        func()
+	// execution is finished and released when the rows close; pendingExecution
+	// carries that release past the unlock, like pendingRelease.
+	execution, pendingExecution *logicalExecution
+	cursor                      queryCursor
+	history                     paging.InternalPagingHistory
+	info                        model.Result
+	mu                          sync.Mutex
+	rejectColumns               bool
+	closed                      bool
+	valid                       bool
 }

@@ -31,8 +31,8 @@ func RunOne[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], option
 	return found, result, err
 }
 
-func RowsData[R any](v Rows[R]) *RowsStorage[R] { return &v.impl.privateStorage }
+func RowsData[R any](v Rows[R]) *rowsStorage[R] { return &v.impl.privateStorage }
 
-func RowStreamData[R any](v *RowStream[R]) *RowStreamStorage[R] { return &v.privateStorage }
+func RowStreamData[R any](v *RowStream[R]) *rowStreamStorage[R] { return &v.privateStorage }
 
-func PageData[R any](v *Page[R]) *PageStorage[R] { return &v.privateStorage }
+func PageData[R any](v *Page[R]) *pageStorage[R] { return &v.privateStorage }

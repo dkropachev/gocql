@@ -16,6 +16,7 @@ import (
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/schemafence"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 type PrepareOptions struct {
@@ -263,4 +264,26 @@ func (b *Bound[R]) Routing() model.RoutingInfo {
 		return model.RoutingInfo{}
 	}
 	return b.privateStorage.InternalRequest.routing
+}
+
+type PrepareOptionsStorage struct {
+	InternalConnection *transport.Conn
+}
+
+type PreparedStorage[P, R any] struct {
+	params        codec.ParamPlan[P]
+	rows          codec.RowDecoder[R]
+	poolErr       error
+	InternalState *InternalPreparedState
+	plans         *InternalResultPlanCache[R]
+	pool          *queryPool[P, R]
+	poolOnce      sync.Once
+	kind          cqltype.StatementKind
+}
+
+type BoundStorage[R any] struct {
+	InternalRows    codec.RowDecoder[R]
+	plans           *InternalResultPlanCache[R]
+	rows            *rowsHolder[R] // a reusable query's iterator storage
+	InternalRequest InternalExecutionRequest
 }
