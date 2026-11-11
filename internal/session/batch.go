@@ -41,15 +41,15 @@ type Batch struct {
 	// query's generation, one sent without by its owner.
 	lastQuery *queryState
 	lastOwner *inputOwner
+	// rows is the *batchRows[R] of the latest RunBatch, reused by the next
+	// RunBatch with the same R once its rows are closed.
+	rows any
 	// state is the execution state lent to an execution while no earlier
 	// one may still read it.
 	state   batchState
 	routing model.RoutingInfo
 	// exec is the request Session.ExecBatch admits; admission copies it.
-	exec Bound[codec.EmptyRecord]
-	// rows is the *batchRows[R] of the latest RunBatch, reused by the next
-	// RunBatch with the same R once its rows are closed.
-	rows    any
+	exec    Bound[codec.EmptyRecord]
 	lastGen uint64
 	// shared reports that an execution no longer tracked may still read
 	// entries or values: Reset must abandon them instead of reusing them.
@@ -357,9 +357,9 @@ func InternalExecBatch(ctx context.Context, s *implCluster.Core, kind cqltype.Ba
 // request, its result plans and its iterator. A Batch keeps it, so that a
 // reused batch sent again with RunBatch allocates nothing.
 type batchRows[R any] struct {
-	bound  Bound[R]
-	plans  InternalResultPlanCache[R]
 	holder rowsHolder[R]
+	plans  InternalResultPlanCache[R]
+	bound  Bound[R]
 	// gen numbers the executions that used holder, so that a handle kept
 	// from an earlier one is stale. The pooled query each execution runs
 	// on has a generation of its own, which another query can repeat.
