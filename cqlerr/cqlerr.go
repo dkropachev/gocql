@@ -202,7 +202,6 @@ type (
 	UnsupportedSettingError = runtimeerrors.UnsupportedSettingError
 	NoHostsError            = metadata.NoHostsError
 	PartialRefreshError     = metadata.PartialRefreshError
-	ErrProtocol             = protocol.ErrProtocol
 	// ConnectError reports that no host was reachable while a session was
 	// connecting; it matches ErrNoConnectionsStarted.
 	ConnectError = runtimeerrors.ConnectError

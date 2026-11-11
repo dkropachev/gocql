@@ -1586,7 +1586,9 @@ Errors preserve `errors.Is`/`errors.As` and server error codes/details. Define
 ErrClosed, ErrReleased, ErrNotFound, ErrNoKeyspace, ErrNoTable,
 ErrPagingNoProgress, ErrPagingComplete, ErrPagingStateLimit and ErrNoRows,
 plus ValidationError, UnsupportedSettingError, CodecError
-(column/index/nested path and stage), ProtocolError (offset/stage),
+(column/index/nested path and stage), ProtocolError (offset/stage; one type
+for frame violations, which have stage "frame" and offset -1, and for data
+that does not decode),
 SchemaChangedError, ExecutionError, PartialRefreshError and NoHostsError.
 `cqlerr` exports only sentinels the driver returns: no deprecated ones, none
 kept for v1 callers. The

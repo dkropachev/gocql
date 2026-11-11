@@ -44,6 +44,7 @@ func TestKindOf(t *testing.T) {
 		{"credentials", server(protocol.ErrCodeCredentials), KindUnauthorized},
 		{"server protocol", server(protocol.ErrCodeProtocol), KindProtocol},
 		{"client protocol", &cqltype.ProtocolError{Stage: "s", Err: errors.New("bad")}, KindProtocol},
+		{"frame violation", cqltype.NewFrameError("unknown opcode %d", 0x42), KindProtocol},
 		{"server failure", server(protocol.ErrCodeServer), KindServer},
 		{"write failure", &protocol.RequestErrWriteFailure{ErrorFrame: frm.ErrorFrame{Code: protocol.ErrCodeWriteFailure}}, KindServer},
 		{"closed", ErrSessionClosed, KindClosed},

@@ -20,7 +20,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
 	implModel "github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 )
@@ -165,7 +164,7 @@ func TestRoutingPolicy(t *testing.T) {
 			if plan.InternalPenalty(implModel.Target{HostID: implCqltype.UUID{15: 3}}) {
 				t.Fatal("penalty did not expire")
 			}
-			if !implRouting.InternalRoutingLatencySample(protocol.NewErrProtocol("bad response")) || implRouting.InternalRoutingLatencySample(context.Canceled) {
+			if !implRouting.InternalRoutingLatencySample(cqltype.NewFrameError("bad response")) || implRouting.InternalRoutingLatencySample(context.Canceled) {
 				t.Fatal("latency error classification")
 			}
 		})

@@ -111,7 +111,7 @@ func KindOf(err error) Kind {
 		errors.Is(err, ErrNoKeyspace), errors.Is(err, ErrNoTable), errors.Is(err, ErrKeyspaceDoesNotExist),
 		errors.Is(err, ErrBusy), errors.Is(err, ErrConditionalExec), errors.Is(err, ErrPagingComplete):
 		return KindInvalid
-	case hasType[*cqltype.ProtocolError](err), hasType[protocol.ErrProtocol](err), hasType[*protocol.MalformedFrameError](err), errors.Is(err, protocol.ErrFrameTooBig):
+	case hasType[*cqltype.ProtocolError](err), hasType[*protocol.MalformedFrameError](err), errors.Is(err, protocol.ErrFrameTooBig):
 		return KindProtocol
 	case errors.Is(err, ErrTimeoutNoResponse), errors.Is(err, protocol.ErrReadHeaderTimeout):
 		return KindTimeout

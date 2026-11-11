@@ -577,7 +577,7 @@ func (s *startupCoordinator) options(ctx context.Context, startupCompleted *atom
 
 	v, ok := frame.(*frm.SupportedFrame)
 	if !ok {
-		return protocol.NewErrProtocol("Unknown type of response to startup frame: %T", frame)
+		return cqltype.NewFrameError("Unknown type of response to startup frame: %T", frame)
 	}
 
 	if config := s.conn.InternalCfg.TypedConfig; config != nil {
@@ -702,7 +702,7 @@ func (s *startupCoordinator) startup(ctx context.Context, startupCompleted *atom
 		startupCompleted.Store(true)
 		return s.authenticateHandshake(ctx, v, startupCompleted)
 	default:
-		return protocol.NewErrProtocol("Unknown type of response to startup frame: %s", v)
+		return cqltype.NewFrameError("Unknown type of response to startup frame: %s", v)
 	}
 }
 
@@ -1803,7 +1803,7 @@ func (c *Conn) execAdmitted(ctx context.Context, req protocol.FrameBuilder, trac
 
 		if v := resp.InternalFramer.Header.Version.Version(); v != c.InternalVersion {
 			c.InternalReleaseReadFramer(resp.InternalFramer)
-			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: protocol.NewErrProtocol("unexpected protocol version in response: got %d expected %d", v, c.InternalVersion), InternalPotentiallyExecuted: true})
+			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cqltype.NewFrameError("unexpected protocol version in response: got %d expected %d", v, c.InternalVersion), InternalPotentiallyExecuted: true})
 		}
 
 		return resp.InternalFramer, nil
@@ -1919,7 +1919,7 @@ func (c *Conn) InternalUseKeyspaceContext(ctx context.Context, keyspace string) 
 	case error:
 		return x
 	default:
-		return protocol.NewErrProtocol("unknown frame in response to USE: %v", x)
+		return cqltype.NewFrameError("unknown frame in response to USE: %v", x)
 	}
 
 	c.setCurrentKeyspace(keyspace)

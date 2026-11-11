@@ -33,14 +33,28 @@ func (e *CodecError) Error() string {
 }
 func (e *CodecError) Unwrap() error { return e.Err }
 
-// ProtocolError records the stage and byte offset of invalid protocol data.
+// ProtocolError reports that a peer violated the CQL protocol: a frame the
+// driver cannot accept, or data that does not decode.
 type ProtocolError struct {
-	Err    error
-	Stage  string
+	Err error
+	// Stage names where the violation was found. A violation of the frame
+	// itself, such as an unknown opcode or an unexpected response, has
+	// Stage "frame".
+	Stage string
+	// Offset is the byte offset of the invalid data, or -1 when the
+	// violation has no position, as for a frame violation.
 	Offset int64
 }
 
+// NewFrameError returns the ProtocolError of a frame violation.
+func NewFrameError(format string, args ...any) *ProtocolError {
+	return &ProtocolError{Stage: "frame", Offset: -1, Err: fmt.Errorf(format, args...)}
+}
+
 func (e *ProtocolError) Error() string {
+	if e.Offset < 0 {
+		return fmt.Sprintf("gocql: %s: %v", e.Stage, e.Err)
+	}
 	return fmt.Sprintf("gocql: %s at byte %d: %v", e.Stage, e.Offset, e.Err)
 }
 func (e *ProtocolError) Unwrap() error { return e.Err }

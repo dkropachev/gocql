@@ -633,6 +633,11 @@ func TestFramer(t *testing.T) {
 			err = rf.ReadFrame(r, &head)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "no compressor available with compressed frame body")
+			var violation *ProtocolError
+			require.ErrorAs(t, err, &violation)
+			require.Equal(t, "frame", violation.Stage)
+			require.Equal(t, int64(-1), violation.Offset)
+			require.Equal(t, "gocql: frame: no compressor available with compressed frame body", err.Error())
 		})
 		// This is the same pin for the oversized-frame
 		// path: an over-long frame is normally recovered from by discarding its body, but
