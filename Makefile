@@ -345,8 +345,7 @@ scylla-stop: .prepare-scylla-ccm
 
 # The package pattern below is ./tests/integration only, not "./...". All
 # integration-tagged test files live in that package; the handful of
-# unconditional (untagged) test files in other packages -- dialer,
-# hostpolicy, several serialization/* packages, etc. -- would also get
+# unconditional (untagged) test files in other packages would also get
 # built and would fail to parse -distribution/-cluster/etc, which only that
 # package's test files register. Cross-package coverage attribution still
 # works without testing those packages directly: -coverpkg=./... controls

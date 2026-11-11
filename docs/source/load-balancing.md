@@ -63,5 +63,39 @@ Each stage of a request has its own answer:
   including speculative and cancelled ones, implement
   `gocql.Observer.ObserveAttempt`.
 
-The optional hostpolicy subpackage adapts go-hostpool to the typed `routing.Policy`
-and attempt observation seams.
+## Writing your own policy
+
+`routing.Policy` is a public interface, so a health-weighted or pool-based
+policy, such as an adapter for a host-pool library, can live outside the
+driver. Embed the built-in policy to keep token awareness and override what
+you need; `Observe` sees each attempt's outcome:
+
+```go
+// skipFailed avoids, for its first route, a host whose last attempt failed.
+type skipFailed struct {
+	routing.Policy // from routing.NewPolicy
+	failed         sync.Map // host ID -> struct{}
+}
+
+func (p *skipFailed) Pick(info routing.Info, m *metadata.Snapshot) (routing.Route, bool) {
+	r, ok := p.Policy.Pick(info, m)
+	if _, bad := p.failed.Load(r.HostID()); ok && bad {
+		return routing.Route{}, false // the driver asks Fallback instead
+	}
+	return r, ok
+}
+
+func (p *skipFailed) Observe(e gocql.AttemptEvent) {
+	switch {
+	case e.Cancelled:
+	case e.Err != nil:
+		p.failed.Store(e.Target.HostID, struct{}{})
+	default:
+		p.failed.Delete(e.Target.HostID)
+	}
+	p.Policy.Observe(e)
+}
+```
+
+Pick, Fallback, `Plan.Next` and Observe run concurrently for many requests,
+so a policy's own state must be safe for concurrent use.
