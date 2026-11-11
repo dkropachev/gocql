@@ -227,7 +227,7 @@ func (p *InternalTypedConnPicker) choose(cs []*transport.Conn) *transport.Conn {
 		c := cs[(start+i)%len(cs)]
 		if n := c.AvailableStreams(); n > available {
 			best, available = c, n
-		} else if waiting == nil && c.InternalExclusiveFlag.Load() && c.InternalStreams.Available() > 0 {
+		} else if waiting == nil && c.InternalExclusive() && c.InternalStreams.Available() > 0 {
 			waiting = c
 		}
 	}

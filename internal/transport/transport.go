@@ -330,9 +330,10 @@ func (c *Conn) typedProtocolLimits() connectivity.ProtocolLimits {
 	return limits
 }
 
-// typedRequestLease owns a submitted request until its writer finishes: the
-// shared-connection admission, the input and payload references, and the
-// frame buffer. It is embedded in the request's write ticket.
+// typedRequestLease owns a submitted request's input and payload references
+// and frame buffer until its writer finishes. It is embedded in the request's
+// write ticket, which ends the shared-connection admission when its last owner
+// releases it (see writeTicket.release).
 type typedRequestLease struct {
 	conn     *Conn
 	input    *wire.Lease
@@ -350,7 +351,6 @@ func (r *typedRequestLease) ReleaseLease() {
 	}
 	// The writer is done with the frame: its envelope storage can be reused.
 	putFrameScratch(r.scratch)
-	r.conn.endShared()
 }
 
 // Frame scratch holds a request envelope's scalar bytes and span descriptors.

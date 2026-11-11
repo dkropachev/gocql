@@ -292,7 +292,7 @@ type Conn struct {
 	InternalScyllaSupported     implEndpoint.ScyllaConnectionFeatures
 	InternalOpeningSharderEpoch uint64
 	InternalTargetEpoch         uint64
-	InternalSharedOps, orphans  int
+	orphans                     int
 	InternalMetadataTimeout     time.Duration
 	coalesceWait                time.Duration
 	InternalWriteTimeout        atomic.Int64
@@ -302,10 +302,12 @@ type Conn struct {
 	InternalPoolPolicy          InternalConnectionPoolPolicy
 	InternalMu                  sync.Mutex
 	InternalRequestedShard      cqltype.Option[uint32]
-	InternalExclusiveFlag       atomic.Bool
-	pauseRequested              atomic.Bool // mirrors pauseWanted for the reader's lock-free check
-	tabletsRoutingV1            int32
-	headerBuf                   [protocol.HeadSize]byte
+	// admission packs the shared-operation count with the closed and
+	// exclusive flags; see connection_state.go.
+	admission        atomic.Uint64
+	pauseRequested   atomic.Bool // mirrors pauseWanted for the reader's lock-free check
+	tabletsRoutingV1 int32
+	headerBuf        [protocol.HeadSize]byte
 	// closesOnCancel reports that cancelling InternalCtx closes the connection,
 	// so every waiting typed call receives the closure through its response.
 	closesOnCancel       bool
@@ -487,7 +489,7 @@ func (c *Conn) Write(p []byte) (n int, err error) {
 // read-deadline handling); Read is retained so that *Conn keeps satisfying
 // io.Reader for external callers, as it does io.Writer via Write.
 func (c *Conn) Read(p []byte) (n int, err error) {
-	if c.InternalExclusiveFlag.Load() {
+	if c.InternalExclusive() {
 		return 0, &connectivity.UnsupportedSettingError{Setting: "raw connection read", Reason: "reader is reserved for streaming"}
 	}
 	return c.InternalR.Read(p)
@@ -771,6 +773,7 @@ func (c *Conn) InternalCloseWithError(err error) {
 		return
 	}
 	c.InternalClosed = true
+	c.admission.Or(admissionClosed)
 	c.changeLocked()
 	callsToClose := c.InternalCalls
 
@@ -1128,6 +1131,15 @@ func (c *Conn) InternalProcessFrameSource(ctx context.Context, src InternalFrame
 
 			return fmt.Errorf("gocql: response for stream %d dispatched to a call on stream %d", head.Stream, streamID)
 		}
+		// The server answered: no later frame can arrive on this stream, and
+		// the call is unregistered below, so the stream is free again. A live
+		// caller's cleanup then skips the connection lock (see releaseStream);
+		// an orphan keeps its stream until releaseStream settles its count.
+		if !call.orphaned {
+			c.InternalStreams.Clear(head.Stream)
+			call.streamFreed = true
+			c.changeLocked()
+		}
 	}
 	c.InternalCalls.Delete(head.Stream)
 	c.InternalMu.Unlock()
@@ -1207,15 +1219,21 @@ func (c *Conn) InternalAbandonRecvCall(call *InternalCallReq, framer *protocol.F
 	putCallReq(call)
 }
 
+// releaseStream frees call's stream unless the reader already did, settles an
+// orphan, and ends the stream for the observer. Its caller owns call's cleanup:
+// either it received the reader's response, whose delivery orders the reader's
+// streamFreed write before this read, or call never reached the reader.
 func (c *Conn) releaseStream(call *InternalCallReq) {
-	c.InternalMu.Lock()
-	if call.orphaned {
-		c.orphans--
-		call.orphaned = false
+	if call.orphaned || !call.streamFreed {
+		c.InternalMu.Lock()
+		if call.orphaned {
+			c.orphans--
+			call.orphaned = false
+		}
+		c.InternalStreams.Clear(call.InternalStreamID)
+		c.changeLocked()
+		c.InternalMu.Unlock()
 	}
-	c.InternalStreams.Clear(call.InternalStreamID)
-	c.changeLocked()
-	c.InternalMu.Unlock()
 
 	if call.streamObserverContext != nil {
 		call.streamObserverEndOnce.Do(func() {
@@ -1415,6 +1433,9 @@ type InternalCallReq struct {
 	state                 atomic.Uint32 // callWaiting, callClaimed, callDelivered or callStopped
 	orphaned              bool
 	typed                 bool
+	// streamFreed is set under InternalMu by the reader that freed the stream
+	// when it unregistered the call; releaseStream then leaves the stream alone.
+	streamFreed bool
 }
 
 var callReqPool = syncx.NewPool(func() *InternalCallReq {
@@ -1427,6 +1448,7 @@ func getCallReq(streamID int) *InternalCallReq {
 	call.state.Store(callWaiting)
 	call.typed = false
 	call.orphaned = false
+	call.streamFreed = false
 	call.InternalStreamID = streamID
 	call.dest = nil
 	call.streamObserverContext = nil
@@ -1577,20 +1599,10 @@ func (c *Conn) allocCall(call *InternalCallReq) error {
 	return c.allocCallLocked(call)
 }
 
-// allocSharedCall is beginShared followed by allocCall, in one critical section
-// unless the connection is reserved and admission has to wait. On success the
-// caller owns a shared admission it must end with endShared.
+// allocSharedCall is beginShared followed by allocCall. Admission takes the
+// connection lock only while the connection is reserved. On success the caller
+// owns a shared admission it must end with endShared.
 func (c *Conn) allocSharedCall(ctx context.Context, call *InternalCallReq) error {
-	c.InternalMu.Lock()
-	if !c.InternalClosed && !c.InternalExclusiveFlag.Load() {
-		err := c.allocCallLocked(call)
-		if err == nil {
-			c.InternalSharedOps++
-		}
-		c.InternalMu.Unlock()
-		return err
-	}
-	c.InternalMu.Unlock()
 	if err := c.beginShared(ctx); err != nil {
 		return err
 	}
@@ -1867,7 +1879,7 @@ func (c *Conn) Address() string {
 }
 
 func (c *Conn) AvailableStreams() int {
-	if c.InternalExclusiveFlag.Load() {
+	if c.InternalExclusive() {
 		return 0
 	}
 	return c.InternalStreams.Available()

@@ -164,7 +164,7 @@ func TestNativeReadAhead(t *testing.T) {
 		raw := &InternalConnReader{InternalConn: conn}
 		c := &Conn{InternalCtx: context.Background(), InternalR: raw, InternalStreams: streams.New()}
 		stream, _ := c.InternalStreams.GetStream()
-		c.InternalExclusiveFlag.Store(true)
+		c.InternalSetExclusive(true)
 		r := &InternalExclusiveConn{InternalConn: c, InternalComplete: true, InternalStream: stream, InternalDone: make(chan struct{})}
 		r.readAhead.begin(raw, 4, 4096)
 		if got, err := io.ReadAll(&r.readAhead); err != nil || string(got) != "body" || cap(r.readAhead.buf) > 4 {
@@ -173,7 +173,7 @@ func TestNativeReadAhead(t *testing.T) {
 		if err := r.InternalClose(true); err != nil {
 			t.Fatal(err)
 		}
-		if r.readAhead.buf != nil || r.readAhead.source != nil || c.InternalExclusiveFlag.Load() || c.InternalStreams.InUse() != 0 {
+		if r.readAhead.buf != nil || r.readAhead.source != nil || c.InternalExclusive() || c.InternalStreams.InUse() != 0 {
 			t.Fatal("reservation retained scratch or exclusive ownership after close")
 		}
 	})

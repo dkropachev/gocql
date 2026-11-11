@@ -336,7 +336,7 @@ func TestHostConnPool(t *testing.T) {
 			p := codecTestMust(implPool.InternalNewTypedConnPicker(a, options))
 			_ = p.Put(a)
 			_ = p.Put(b)
-			a.InternalExclusiveFlag.Store(true)
+			a.InternalSetExclusive(true)
 			if got := p.InternalPickTarget(implModel.Target{ShardID: implCqltype.Option[uint32]{Value: 0, Set: true}}, implModel.RoutingInfo{}); got != b {
 				t.Fatal("advisory hint could not use free capacity")
 			}
@@ -365,7 +365,7 @@ func TestHostConnPool(t *testing.T) {
 			p := codecTestMust(implPool.InternalNewTypedConnPicker(first, settings.DefaultConfig("localhost").Pool))
 			p.Put(first)
 			p.Put(second)
-			first.InternalExclusiveFlag.Store(true)
+			first.InternalSetExclusive(true)
 			routing := model.RoutingInfo{Token: cqltype.Option[int64]{Value: math.MinInt64, Set: true}}
 			if got := p.InternalPickTarget(model.Target{}, routing); got != second {
 				t.Fatal("non-strict selection waited despite idle eligible connection")

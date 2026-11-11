@@ -25,9 +25,7 @@ import (
 
 // connSharedOps reads the connection's shared-operation count.
 func connSharedOps(c *Conn) int {
-	c.InternalMu.Lock()
-	defer c.InternalMu.Unlock()
-	return c.InternalSharedOps
+	return c.InternalSharedOps()
 }
 
 // connCounters reads streams in use, registered calls, orphans and shared ops.
@@ -51,7 +49,7 @@ func expectReservationBlocked(t *testing.T, c *Conn, what string) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("reservation while %s: %v, want deadline exceeded", what, err)
 	}
-	if c.InternalExclusiveFlag.Load() {
+	if c.InternalExclusive() {
 		t.Fatal("a failed reservation kept the connection exclusive")
 	}
 }
@@ -326,5 +324,33 @@ func TestStreamObserverOnceperStream(t *testing.T) {
 			t.Fatalf("%d of %d streams never ended", unfinished, len(contexts))
 		}
 		time.Sleep(time.Millisecond)
+	}
+}
+
+// The reader frees a live call's stream when it unregisters the call, before
+// the caller runs its cleanup.
+func TestReaderFreesDeliveredStream(t *testing.T) {
+	c, server := invPair(t, 4)
+	go c.InternalServe(c.InternalCtx)
+	go func() {
+		stream, err := invReadRequest(server)
+		if err != nil {
+			return
+		}
+		server.Write(invFrame(4, stream, typedTestRowsBody([]byte("v"))))
+	}()
+	req := &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One}
+	x := typedExec{conn: c}
+	page, err := x.run(context.Background(), req, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s, calls, _, _ := connCounters(c); s != 0 || calls != 0 {
+		t.Fatalf("before cleanup: streams %d, calls %d, want 0", s, calls)
+	}
+	x.cleanup(req)
+	page.Owner.Release()
+	if s, calls, o, shared := connCounters(c); s != 0 || calls != 0 || o != 0 || shared != 0 {
+		t.Fatalf("after cleanup: streams %d, calls %d, orphans %d, shared %d", s, calls, o, shared)
 	}
 }

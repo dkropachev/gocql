@@ -146,7 +146,7 @@ func memoryReservation(version byte, compressor protocol.Compressor, source net.
 	if !ok || stream != 0 {
 		panic("synthetic stream allocation failed")
 	}
-	c.InternalExclusiveFlag.Store(true)
+	c.InternalSetExclusive(true)
 	r := &transport.InternalExclusiveConn{InternalConn: c, InternalCtx: ctx, InternalComplete: true, InternalStream: stream, InternalDone: make(chan struct{})}
 	r.InternalInitStream(transport.StreamLimits{})
 	return r

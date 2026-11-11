@@ -38,8 +38,46 @@ import (
 
 var errOrphanBudget = errors.New("gocql: abandoned stream budget exceeded")
 
-// All admission state is protected by Conn.mu. Notifications allocate only
-// while an exclusive acquisition/shared waiter exists, never per ordinary call.
+// admission packs a connection's shared-operation count with two flags.
+// Shared operations enter with one CAS and leave with one Add. The flags change
+// only under InternalMu: closed once, by InternalCloseWithError; exclusive by a
+// reserver, which waits under InternalMu until the count, the calls (orphans
+// included) and the streams in use are all zero. A shared operation that finds
+// a flag set takes InternalMu and waits on the change channel, and one that
+// leaves an exclusive connection idle wakes the reserver the same way.
+const (
+	admissionClosed    = 1 << 63
+	admissionExclusive = 1 << 62
+	admissionCountMask = admissionExclusive - 1
+)
+
+// InternalExclusive reports whether an exclusive reservation holds or is
+// acquiring the connection.
+func (c *Conn) InternalExclusive() bool {
+	return c.admission.Load()&admissionExclusive != 0
+}
+
+// InternalSetExclusive sets or clears the exclusive flag without the
+// reservation protocol, for tests that stand in for a reservation.
+func (c *Conn) InternalSetExclusive(exclusive bool) {
+	c.InternalMu.Lock()
+	if exclusive {
+		c.admission.Or(admissionExclusive)
+	} else {
+		c.admission.And(^uint64(admissionExclusive))
+	}
+	c.changeLocked()
+	c.InternalMu.Unlock()
+}
+
+// InternalSharedOps returns the number of shared operations in flight.
+func (c *Conn) InternalSharedOps() int {
+	return int(c.admission.Load() & admissionCountMask)
+}
+
+// The change channel and the other admission state are protected by
+// InternalMu. Notifications allocate only while an exclusive acquisition or a
+// shared waiter exists, never per ordinary call.
 func (c *Conn) changeLocked() {
 	if c.sharedChanged != nil {
 		close(c.sharedChanged)
@@ -54,7 +92,24 @@ func (c *Conn) changedLocked() <-chan struct{} {
 	return c.sharedChanged
 }
 
+// beginShared admits a shared operation, waiting while the connection is
+// reserved. The caller ends a successful admission with endShared.
 func (c *Conn) beginShared(ctx context.Context) error {
+	for {
+		w := c.admission.Load()
+		if w&(admissionClosed|admissionExclusive) != 0 {
+			return c.beginSharedSlow(ctx)
+		}
+		if c.admission.CompareAndSwap(w, w+1) {
+			return nil
+		}
+	}
+}
+
+// beginSharedSlow is beginShared on a closed or reserved connection.
+//
+//go:noinline
+func (c *Conn) beginSharedSlow(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -63,14 +118,19 @@ func (c *Conn) beginShared(ctx context.Context) error {
 			return err
 		}
 		c.InternalMu.Lock()
-		if c.InternalClosed {
+		w := c.admission.Load()
+		if w&admissionClosed != 0 {
 			c.InternalMu.Unlock()
 			return runtimeerrors.ErrConnectionClosed
 		}
-		if !c.InternalExclusiveFlag.Load() {
-			c.InternalSharedOps++
+		if w&admissionExclusive == 0 {
+			// The flags cannot change while we hold InternalMu, only the count.
+			admitted := c.admission.CompareAndSwap(w, w+1)
 			c.InternalMu.Unlock()
-			return nil
+			if admitted {
+				return nil
+			}
+			continue
 		}
 		changed := c.changedLocked()
 		c.InternalMu.Unlock()
@@ -83,8 +143,18 @@ func (c *Conn) beginShared(ctx context.Context) error {
 }
 
 func (c *Conn) endShared() {
+	if w := c.admission.Add(^uint64(0)); w&admissionExclusive != 0 && w&admissionCountMask == 0 {
+		c.wakeReserver()
+	}
+}
+
+// wakeReserver tells a reserver waiting for shared operations to drain that
+// the last one ended. The reserver reads the count under InternalMu, so it
+// either sees zero or registers its change channel before this closes it.
+//
+//go:noinline
+func (c *Conn) wakeReserver() {
 	c.InternalMu.Lock()
-	c.InternalSharedOps--
 	c.changeLocked()
 	c.InternalMu.Unlock()
 }
@@ -193,14 +263,15 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 		c.InternalMu.Unlock()
 		return nil, &codec.StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "control connection cannot be reserved"}
 	}
-	if c.InternalExclusiveFlag.Load() {
+	if c.admission.Load()&admissionExclusive != 0 {
 		c.InternalMu.Unlock()
 		return nil, runtimeerrors.ErrNoStreams
 	}
 	if c.InternalCfg != nil {
 		c.InternalCfg.InternalReceiveCache.Clear()
 	}
-	c.InternalExclusiveFlag.Store(true)
+	// From here on beginShared fails its CAS and waits under InternalMu.
+	c.admission.Or(admissionExclusive)
 	c.changeLocked()
 	c.InternalMu.Unlock()
 	acquired := false
@@ -215,7 +286,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 			c.InternalMu.Unlock()
 			return nil, runtimeerrors.ErrConnectionClosed
 		}
-		if c.InternalSharedOps == 0 && c.InternalCalls.Len() == 0 && c.InternalStreams.InUse() == 0 {
+		if c.admission.Load()&admissionCountMask == 0 && c.InternalCalls.Len() == 0 && c.InternalStreams.InUse() == 0 {
 			c.pauseWanted = true
 			c.pauseRequested.Store(true)
 			c.readerPaused = make(chan struct{})
@@ -299,7 +370,7 @@ func (c *Conn) restoreSharedReader(reader *InternalConnReader) {
 		}
 	}
 	c.InternalMu.Lock()
-	c.InternalExclusiveFlag.Store(false)
+	c.admission.And(^uint64(admissionExclusive))
 	c.changeLocked()
 	c.InternalMu.Unlock()
 	if pool, ok := c.InternalErrorHandler.(poolOwner); ok {
