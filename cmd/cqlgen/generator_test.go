@@ -48,6 +48,26 @@ func TestGenerator(t *testing.T) {
 			}
 		})
 
+		t.Run("GoMap", func(t *testing.T) {
+			_, out, err := generateSource(t, "x.go", "package x\n\nimport \"github.com/scylladb/gocql/v2/cql\"\n\ntype T struct { Attrs map[string]int64; Blobs map[cql.UUID][]byte }\n", "T")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range []string{
+				`cql.Param("attrs", cql.GoMapCodec(cql.StringCodec, cql.Int64Codec), func(v T) map[string]int64 { return v.Attrs }),`,
+				`cql.Column("blobs", cql.GoMapCodec(cql.UUIDCodec, cql.ByteSliceCodec), func(v *T) *map[cql.UUID][]byte { return &v.Blobs }),`,
+			} {
+				if !strings.Contains(out, want) {
+					t.Errorf("missing %s in:\n%s", want, out)
+				}
+			}
+			// Go maps have no streaming decoder, so only the buffered
+			// mapping is generated.
+			if strings.Contains(out, "StreamColumns") {
+				t.Errorf("stream mapping generated for a map field:\n%s", out)
+			}
+		})
+
 		t.Run("AliasedImportTestFile", func(t *testing.T) {
 			name, out, err := generateSource(t, "model_test.go", `package model_test
 

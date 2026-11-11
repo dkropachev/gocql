@@ -94,8 +94,9 @@ type builtinField[P any] struct {
 // builtinFields returns the built-in field types, each with its Nullable form.
 func builtinFields[P any]() []builtinField[P] {
 	// Every entry instantiates field accessors for P, so the table grows the
-	// code of each mapped struct type; maps stay out of it (MapCodec with
-	// WithCodec or a codec= tag) because key and value pairs multiply.
+	// code of each mapped struct type. Go maps are the exception: their key and
+	// value pairs multiply, so goMapFields shares one accessor per struct type
+	// among all of them.
 	var fields []builtinField[P]
 	add := func(entries ...builtinField[P]) { fields = append(fields, entries...) }
 	add(builtin[P](Bool, "bool", "BoolCodec", true)...)
@@ -119,6 +120,7 @@ func builtinFields[P any]() []builtinField[P] {
 	add(builtin[P](TimeCodec, "cql.TimeOfDay", "TimeCodec", true)...)
 	add(builtin[P](TimestampCodec, "cql.Timestamp", "TimestampCodec", true)...)
 	add(builtin[P](DurationCodec, "cql.Duration", "DurationCodec", true)...)
+	add(goMapFields[P]()...)
 	return fields
 }
 

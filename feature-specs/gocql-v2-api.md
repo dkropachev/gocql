@@ -394,6 +394,7 @@ func (i *ValueIterator[T]) Err() error
 func ListCodec[T any](Codec[T]) Codec[[]T]
 func SetCodec[T any](Codec[T]) Codec[[]T]
 func MapCodec[K, V any](Codec[K], Codec[V]) Codec[[]Entry[K, V]]
+func GoMapCodec[K comparable, V any](Codec[K], Codec[V]) Codec[map[K]V]
 func VectorCodec[T any](Codec[T]) Codec[[]T]
 func ListEncoder[T any](Encoder[T]) Encoder[[]T]
 func SetEncoder[T any](Encoder[T]) Encoder[[]T]
@@ -414,6 +415,12 @@ func UDTEncoder[T any](ParamEncoder[T], UDTOptions) Encoder[T]
 func UDTDecoder[T any](RowDecoder[T], UDTOptions) Decoder[T]
 func (i *ValueIterator[T]) Collect() ([]T, error)
 ```
+
+GoMapCodec decodes into a Go map: a repeated key fails decoding, NULL is an
+empty map, and DecodeInto clears and reuses the destination map. Encoding
+follows Go's map iteration order. Struct mappings use it for map[K]V fields
+whose key and value types have owning built-in codecs; MapCodec keeps
+[]Entry[K, V] for non-comparable keys, server order and streaming slots.
 
 BorrowText validates UTF-8 and returns ValidationError for invalid input.
 TextValue likewise returns an error for invalid UTF-8. StringCodec and

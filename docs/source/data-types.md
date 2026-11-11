@@ -25,8 +25,11 @@ interfaces and preserve metadata validation and lifetime rules.
 Streaming has separate `StreamDecoder` and `StreamRowDecoder` plans; these
 incremental readers cannot call buffered decoders. See [streaming](statements/streaming.md).
 
-`ListCodec`, `SetCodec`, and `MapCodec`, and their streaming counterparts,
-accept NULL as an empty collection. Use `NullableCodec` or `StreamNullable` to
+`MapCodec` decodes a map into `[]Entry[K, V]` in server order and accepts keys
+that Go cannot compare; `GoMapCodec` decodes into a Go `map[K]V`, rejects a
+repeated key, and is what struct mappings use for `map[K]V` fields of built-in
+key and value types. `ListCodec`, `SetCodec`, `MapCodec` and `GoMapCodec`, and
+the streaming counterparts, accept NULL as an empty collection. Use `NullableCodec` or `StreamNullable` to
 preserve NULL independently of a present empty collection. Vectors retain their
 declared dimension and reject NULL without a nullable wrapper.
 

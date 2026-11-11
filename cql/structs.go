@@ -31,8 +31,11 @@ type StructFields[P any] struct {
 // struct embedded by value map as if declared in P, and an outer field hides
 // an embedded one with the same column; embedding by pointer is rejected.
 // Slice fields map lists by default (ListCodec; `codec=SetCodec` for sets,
-// `codec=VectorCodec` for vectors);
-// maps need MapCodec through WithCodec or a `codec=` tag.
+// `codec=VectorCodec` for vectors). A map[K]V field maps with GoMapCodec when
+// K and V have built-in codecs that decode into owned storage: the numeric
+// and boolean types, string, UUID, TimeUUID, netip.Addr, Date, TimeOfDay and
+// Timestamp, and as values also []byte and Duration. Other maps, and
+// []Entry[K, V] fields for MapCodec, need WithCodec or a `codec=` tag.
 //
 // When P or *P has a CQLFields method, as cmd/cqlgen generates, its mapping
 // is used; otherwise P is reflected once, here. Either way encoding is
@@ -117,10 +120,21 @@ func ListCodec[T any](element Codec[T]) Codec[[]T] { return codec.ListCodec[T](e
 func SetCodec[T any](element Codec[T]) Codec[[]T] { return codec.SetCodec[T](element) }
 
 // MapCodec encodes and decodes a map as a []Entry[K, V], in the order the
-// server sends; keys need not be comparable. Struct mappings take it through
-// WithCodec or a `codec=` tag, since the type tables have no map entries.
+// server sends; keys need not be comparable, and DecodeInto reuses the
+// slice's capacity. Struct mappings take it through WithCodec or a `codec=`
+// tag. GoMapCodec decodes into a Go map instead.
 func MapCodec[K, V any](key Codec[K], value Codec[V]) Codec[[]Entry[K, V]] {
 	return codec.MapCodec[K, V](key, value)
+}
+
+// GoMapCodec encodes and decodes a map as a Go map[K]V, the form struct
+// mappings use for map fields of built-in key and value types. Encoding
+// writes the entries in Go's map iteration order; the server keeps a map in
+// key order. A response that repeats a key fails to decode, and a null cell,
+// how CQL stores an empty map, decodes as an empty one. DecodeInto clears the
+// destination map and reuses it.
+func GoMapCodec[K comparable, V any](key Codec[K], value Codec[V]) Codec[map[K]V] {
+	return codec.GoMapCodec[K, V](key, value)
 }
 
 // VectorCodec encodes and decodes a vector as a []T of its declared dimension.
