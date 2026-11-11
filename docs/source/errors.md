@@ -11,7 +11,7 @@ safe:
 | Status | Meaning |
 | --- | --- |
 | `NotExecuted` | Nothing was applied: the request never left the driver, or the server rejected it first (Unavailable, Overloaded, Syntax, Invalid, Unauthorized, ...). Retrying cannot duplicate it. |
-| `MaybeExecuted` | Unknown: a timeout, a lost connection, or a response that failed to decode. Retry only idempotent requests. An LWT whose outcome is unknown reports this on both Cassandra and ScyllaDB. See [server differences](server-differences.md). |
+| `MaybeExecuted` | Unknown: a timeout, a lost connection, or a response that failed to decode. Retry only idempotent requests. An LWT whose outcome is unknown reports this on both Cassandra and ScyllaDB, and `cqlerr.IsCASWriteUnknown(err)` identifies it. See [server differences](server-differences.md). |
 | `PartiallyExecuted` | Some replicas applied a write without reaching the requested consistency, or a schema change succeeded but its follow-up failed. |
 
 A request that ran several attempts reports the most severe status of all of

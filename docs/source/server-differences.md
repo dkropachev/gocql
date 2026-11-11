@@ -43,8 +43,13 @@ Write portable code this way:
 | Not applied | One row per table row the conditions read, with `Applied` false | One row per conditional statement, in statement order |
 
 A batch is applied only when all its conditions hold. The portable test is: the
-batch was applied if and only if every row reports `Applied`. Matching rows to
-statements by position works on ScyllaDB only.
+batch was applied if and only if every row reports `Applied`.
+
+On ScyllaDB, `scylla.BatchStatement(session, &batch, i)` returns which member
+of the batch row `i` belongs to. It takes a `*gocql.Session[gocql.ScyllaV4]`, so
+it does not compile for a Cassandra session, whose rows belong to table rows,
+not statements. Declare `Statement.Kind` for unprepared members: ScyllaDB
+marks only prepared statements as conditional.
 
 ## Paging
 
@@ -58,10 +63,10 @@ streaming already handle this. With `RunPage`, decide whether to continue with
 When a conditional write times out, the server cannot say whether it was
 applied. Cassandra reports this as `CAS_WRITE_UNKNOWN` on protocol v5, and as a
 write timeout of type `CAS` on v4. ScyllaDB reports a write timeout of type
-`CAS`. In every case `cqlerr.ExecutionStatusOf(err)` returns `MaybeExecuted`.
-Read the row back before retrying a non-idempotent conditional write, and use
-`cqlerr.ExecutionStatusOf(err)` instead of matching a specific error, so the
-check works on both servers.
+`CAS`. `cqlerr.IsCASWriteUnknown(err)` matches all three, and
+`cqlerr.ExecutionStatusOf(err)` returns `MaybeExecuted` for them. Read the row
+back before retrying a non-idempotent conditional write, and use these checks
+instead of matching a specific error, so the check works on both servers.
 
 ## Server-specific errors
 

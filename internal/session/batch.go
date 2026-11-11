@@ -64,6 +64,8 @@ type batchEntry struct {
 	columns    cqltype.Columns
 	start, end int
 	count      int
+	// kind is the statement's classification when it joined the batch.
+	kind cqltype.StatementKind
 }
 
 // batchState is the batch an execution sends: a snapshot of the
@@ -219,6 +221,7 @@ func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, stateme
 		start:     start,
 		end:       len(b.values),
 		count:     len(values.Cells),
+		kind:      r.Kind,
 	})
 	if len(b.entries) == 1 {
 		b.routing.Kind = cqltype.OrdinaryStatement
@@ -236,6 +239,29 @@ func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, stateme
 	case r.Kind == cqltype.UnknownStatement && b.routing.Kind != cqltype.ConditionalStatement:
 		b.routing.Kind = cqltype.UnknownStatement
 	}
+}
+
+// InternalConditionalStatement returns the index of the statement whose
+// result is row i of the rows of a conditional batch on ScyllaDB, which
+// returns one row per conditional statement, in statement order. It reports
+// false when the batch has no i-th conditional statement, or when the kind of
+// a statement before it is unknown.
+func (b *Batch) InternalConditionalStatement(i int) (int, bool) {
+	if b == nil || i < 0 {
+		return 0, false
+	}
+	for index := range b.entries {
+		switch b.entries[index].kind {
+		case cqltype.UnknownStatement:
+			return 0, false
+		case cqltype.ConditionalStatement:
+			if i == 0 {
+				return index, true
+			}
+			i--
+		}
+	}
+	return 0, false
 }
 
 // InternalAddBound appends bound's statement and values to batch.

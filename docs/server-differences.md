@@ -100,14 +100,23 @@ statement, and the rule above holds either way.
 The rows map to statements only on ScyllaDB. On Cassandra they map to rows of
 the partition.
 
-Driver handling: the same `CASRows` path as a single statement, run through
-`Session.RunBatch`. `ExecBatch` rejects result columns after the response
-arrives (see the deviations in `docs/api-surface.md`).
+Driver handling:
 
-Open gaps: the integration test checks only that some row has applied
-(`tests/integration/struct_mapping_test.go:170`). Per-server assertions on the
-row count, `Previous.Set` on applied rows and the not-applied column set are
-missing.
+- The same `CASRows` path as a single statement, run through
+  `Session.RunBatch`, which returns `Rows`. `ExecBatch` rejects a batch known
+  to be conditional before sending it (`cqlerr.ErrConditionalExec`).
+- `scylla.BatchStatement` (package `scylla`) maps row i to the i-th
+  conditional member of the batch, from the kind each member had when it
+  joined (`batchEntry.kind`, `Batch.InternalConditionalStatement`). It takes a
+  `*Session[ScyllaV4]`, so it does not compile for Cassandra, whose rows map
+  to partition rows. A member of unknown kind stops the mapping, because it
+  may or may not have a row.
+
+`tests/integration/lwt_dialect_test.go` asserts the shapes per dialect: the
+row count of applied and not-applied batches, `Previous.Set` on applied
+single statements, the previous value of a not-applied one, and no previous
+row for a missing one. It has not run against a live cluster yet, so the
+**unverified** marks above stay until it does.
 
 ### Prepared metadata
 
@@ -137,7 +146,7 @@ page as it is, and the user docs tell them to check `More()`.
 
 | Case | Cassandra | ScyllaDB | Driver |
 |---|---|---|---|
-| LWT outcome unknown | `CAS_WRITE_UNKNOWN` (0x1700) on protocol v5. On v4, `WriteTimeout` with write type `CAS` | `WriteTimeout` with write type `CAS`. ScyllaDB speaks v4 at most | Both map to `MaybeExecuted` (`internal/protocol/errors.go:256`, `writeExecution`) |
+| LWT outcome unknown | `CAS_WRITE_UNKNOWN` (0x1700) on protocol v5. On v4, `WriteTimeout` with write type `CAS` | `WriteTimeout` with write type `CAS`. ScyllaDB speaks v4 at most | Both map to `MaybeExecuted` (`internal/protocol/errors.go:256`, `writeExecution`), and `cqlerr.IsCASWriteUnknown` matches both |
 | CDC write failure | `CDC_WRITE_FAILURE` (0x1600) | Not sent | Parsed |
 | Rate limit | Not sent | `RATE_LIMIT_ERROR` via `SCYLLA_RATE_LIMIT_ERROR`, otherwise `Config_error` | `RejectedByCoordinator` maps to `NotExecuted`, otherwise `MaybeExecuted` |
 | Failure reason map | v5 `Read_failure` / `Write_failure` | Added to v4 via `SCYLLA_FAILURE_REASON_MAP` | Parsed |

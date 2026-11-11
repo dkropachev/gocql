@@ -11,7 +11,8 @@ The root package `github.com/scylladb/gocql/v2` (`gocql`) connects and runs
 statements. The data vocabulary (statements, types, codecs, values,
 consistency levels and server errors) lives in `github.com/scylladb/gocql/v2/cql`.
 Schema metadata is in `metadata`, host selection in `routing`, authentication
-in `auth`, and addressing and dialing in `endpoint`. The repository has one Go
+in `auth`, addressing and dialing in `endpoint`, and API only ScyllaDB supports in
+`scylla`. The repository has one Go
 module; compression and benchmarks are included in it.
 
 ## Typed execution

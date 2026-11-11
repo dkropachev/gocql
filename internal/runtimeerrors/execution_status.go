@@ -136,3 +136,15 @@ func (e *ExecutionError) Unwrap() []error {
 
 // ExecutionStatus reports the most severe status among all attempts.
 func (e *ExecutionError) ExecutionStatus() cqltype.ExecutionStatus { return e.status }
+
+// IsCASWriteUnknown reports whether err says that a conditional write timed
+// out with an unknown outcome: CAS_WRITE_UNKNOWN on Cassandra over protocol
+// 5, or a write timeout of write type CAS on ScyllaDB and on Cassandra over
+// protocol 4. The write may or may not have applied.
+func IsCASWriteUnknown(err error) bool {
+	if _, ok := errors.AsType[*protocol.RequestErrCASWriteUnknown](err); ok {
+		return true
+	}
+	timeout, ok := errors.AsType[*protocol.RequestErrWriteTimeout](err)
+	return ok && timeout.WriteType == "CAS"
+}

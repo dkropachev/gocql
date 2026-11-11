@@ -13,7 +13,9 @@ dialect. No other execution type carries the dialect: `Prepared`, `Query`,
 `Batch`, `Rows` and `Page` stay dialect-free, so a dialect never adds a type
 parameter to them. A method that only one dialect supports is a function that
 takes a `*Session` of that dialect, not a method that fails at run time on the
-others. See `docs/server-differences.md`.
+others: `scylla.BatchStatement` in package `scylla`, for one. Dialect-only
+functions live in a package named after the database. See
+`docs/server-differences.md`.
 
 ## Statement kinds
 

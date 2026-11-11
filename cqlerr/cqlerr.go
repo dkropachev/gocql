@@ -87,6 +87,14 @@ const (
 // trying again can help; ExecutionStatusOf reports whether it is safe.
 func KindOf(err error) Kind { return runtimeerrors.KindOf(err) }
 
+// IsCASWriteUnknown reports whether err says that a conditional (LWT) write
+// timed out without knowing whether it applied. Cassandra reports this as
+// CAS_WRITE_UNKNOWN on protocol 5 and as a write timeout of write type CAS on
+// protocol 4; ScyllaDB reports the write timeout. ExecutionStatusOf reports
+// MaybeExecuted for all of them. Read the row back before retrying a write
+// that is not idempotent.
+func IsCASWriteUnknown(err error) bool { return runtimeerrors.IsCASWriteUnknown(err) }
+
 // Request errors.
 
 // ExecutionError is returned when a request fails after all its attempts.
