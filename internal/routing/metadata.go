@@ -6,6 +6,8 @@ package routing
 import (
 	"fmt"
 
+	codec "github.com/scylladb/gocql/v2/internal/codec"
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	model "github.com/scylladb/gocql/v2/internal/model"
 
 	"sync/atomic"
@@ -56,6 +58,73 @@ func (m *MetadataSnapshot) Replicas(keyspace, table string, token int64) ([]Targ
 	}
 	r, _ := m.placementReplicas(keyspace, table, token)
 	return append([]Target(nil), r...), nil
+}
+
+// Token returns the token of the partition whose partition-key columns hold
+// key, in column order, for keyspace.table (a table or a materialized view).
+// Each value is encoded as the column's schema type, exactly as a prepared
+// statement's routing key is, and hashed with the table's partitioner. It
+// needs loaded schema metadata; a key of the wrong arity or type, or a null
+// component, is a validation error.
+func (m *MetadataSnapshot) Token(keyspace, table string, key ...codec.Value) (int64, error) {
+	if m == nil {
+		return 0, runtimeerrors.ErrNoKeyspace
+	}
+	data := SnapshotData(m)
+	ks := data.InternalKeyspaces[keyspace]
+	if ks == nil {
+		return 0, fmt.Errorf("%s: %w", keyspace, runtimeerrors.ErrNoKeyspace)
+	}
+	var columns []*implMetadata.ColumnMetadata
+	partitioner := data.InternalPartitioner
+	if t := ks.Tables[table]; t != nil {
+		columns = t.PartitionKey
+		if t.Options.Partitioner != "" {
+			partitioner = t.Options.Partitioner
+		}
+	} else if v := ks.Views[table]; v != nil {
+		columns = v.PartitionKey
+		if v.Options.Partitioner != "" {
+			partitioner = v.Options.Partitioner
+		}
+	} else {
+		return 0, fmt.Errorf("%s.%s: %w", keyspace, table, runtimeerrors.ErrNoTable)
+	}
+	if len(columns) == 0 {
+		return 0, cqltype.TypeValidation("partition key", "%s.%s has no partition-key metadata", keyspace, table)
+	}
+	if len(key) != len(columns) {
+		return 0, cqltype.TypeValidation("partition key", "%s.%s takes %d components, got %d", keyspace, table, len(columns), len(key))
+	}
+	p := data.InternalPartitioners[partitioner]
+	if p == nil {
+		return 0, cqltype.TypeValidation("partitioner", "no configured partitioner for %q", partitioner)
+	}
+	cells := make([]model.EncodedCell, len(key))
+	indexes := make([]int, len(key))
+	for i, column := range columns {
+		typ, err := implMetadata.InternalSchemaDataType(ks, column.Type)
+		if err != nil {
+			return 0, fmt.Errorf("partition key column %q: %w", column.Name, err)
+		}
+		if key[i].State() != cqltype.Present {
+			return 0, cqltype.TypeValidation("partition key", "column %q must have a value", column.Name)
+		}
+		encoded, err := codec.EncodeValueBorrowed(typ, codec.DynamicCodec, key[i])
+		if err != nil {
+			return 0, fmt.Errorf("partition key column %q: %w", column.Name, err)
+		}
+		cells[i] = model.EncodedCell{Typ: typ, Body: cqltype.BytesChain(encoded.Bytes()), State: encoded.State()}
+		indexes[i] = i
+	}
+	token, err := InternalComputeRoutingToken(cells, indexes, p)
+	if err != nil {
+		return 0, err
+	}
+	if !token.Set {
+		return 0, cqltype.TypeValidation("partition key", "no token for %s.%s", keyspace, table)
+	}
+	return token.Value, nil
 }
 func (m *MetadataSnapshot) TokenRanges(keyspace, table string) ([]TokenRange, error) {
 	if root, ok := InternalMetadataSnapshotTabletRoot(m, InternalMetadataTable{InternalKeyspace: keyspace, InternalTable: table}); ok {
@@ -124,11 +193,14 @@ type SnapshotState struct {
 	InternalSchemaSources   map[string]*implMetadata.KeyspaceMetadata
 	InternalRanges          map[string][]TokenRange
 	InternalTablets         map[InternalMetadataTable][]TokenRange
-	InternalPartitioner     string
-	InternalHosts           []HostSnapshot
-	InternalDiagnostics     []error
-	InternalPlacementEpoch  uint64
-	InternalGeneration      uint64
+	// InternalPartitioners is the session's partitioner registry, by name,
+	// for Token. It is shared and never mutated.
+	InternalPartitioners   map[string]TokenPartitioner
+	InternalPartitioner    string
+	InternalHosts          []HostSnapshot
+	InternalDiagnostics    []error
+	InternalPlacementEpoch uint64
+	InternalGeneration     uint64
 }
 
 type HostSnapshot = model.HostSnapshot

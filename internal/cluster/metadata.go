@@ -225,6 +225,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 	p.InternalMu.Unlock()
 	m := routing.NewMetadataSnapshot(routing.SnapshotState{InternalGeneration: 1, InternalKeyspaces: make(map[string]*implMetadata.KeyspaceMetadata), InternalRanges: make(map[string][]routing.TokenRange), InternalTablets: make(map[routing.InternalMetadataTable][]routing.TokenRange)})
 	routing.SnapshotData(m).InternalDiagnostics = diagnostics
+	routing.SnapshotData(m).InternalPartitioners = config.Partitioners
 	if old != nil {
 		routing.SnapshotData(m).InternalGeneration = routing.SnapshotData(old).InternalGeneration + 1
 	}

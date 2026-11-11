@@ -423,7 +423,7 @@ type InternalTabletFeedbackStamp struct {
 }
 
 func InternalClonePlacementSnapshot(m *MetadataSnapshot) *MetadataSnapshot {
-	return NewMetadataSnapshot(SnapshotState{InternalGeneration: SnapshotData(m).InternalGeneration + 1, InternalHosts: SnapshotData(m).InternalHosts, InternalHostIndex: SnapshotData(m).InternalHostIndex, InternalKeyspaces: SnapshotData(m).InternalKeyspaces, InternalSchemaSources: SnapshotData(m).InternalSchemaSources, InternalRanges: SnapshotData(m).InternalRanges, InternalTablets: SnapshotData(m).InternalTablets, InternalPartitioner: SnapshotData(m).InternalPartitioner, InternalDiagnostics: SnapshotData(m).InternalDiagnostics, InternalPlacements: SnapshotData(m).InternalPlacements, InternalPlacementEpoch: SnapshotData(m).InternalPlacementEpoch, InternalPlacementSignal: SnapshotData(m).InternalPlacementSignal})
+	return NewMetadataSnapshot(SnapshotState{InternalGeneration: SnapshotData(m).InternalGeneration + 1, InternalHosts: SnapshotData(m).InternalHosts, InternalHostIndex: SnapshotData(m).InternalHostIndex, InternalKeyspaces: SnapshotData(m).InternalKeyspaces, InternalSchemaSources: SnapshotData(m).InternalSchemaSources, InternalRanges: SnapshotData(m).InternalRanges, InternalTablets: SnapshotData(m).InternalTablets, InternalPartitioner: SnapshotData(m).InternalPartitioner, InternalPartitioners: SnapshotData(m).InternalPartitioners, InternalDiagnostics: SnapshotData(m).InternalDiagnostics, InternalPlacements: SnapshotData(m).InternalPlacements, InternalPlacementEpoch: SnapshotData(m).InternalPlacementEpoch, InternalPlacementSignal: SnapshotData(m).InternalPlacementSignal})
 }
 
 // Schema/topology refresh is a cold path. It reconciles object identities and
