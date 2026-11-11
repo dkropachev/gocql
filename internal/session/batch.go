@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
@@ -37,6 +38,8 @@ type Batch struct {
 	// values holds the encoded values of every entry back to back.
 	values  []byte
 	session *implCluster.Core
+	// params encodes AddToBatch values straight into values.
+	params binding.ParameterBuffer
 	// The latest execution: one sent through a query is tracked by the
 	// query's generation, one sent without by its owner.
 	lastQuery *queryState
@@ -156,9 +159,47 @@ func validateBatch(s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, op
 	return nil
 }
 
-// add appends one statement whose encoded values are values. request carries
-// the statement, its source and its routing.
+// add appends one statement whose encoded values are values, copying them
+// into the batch. r is the statement's routing.
 func (b *Batch) add(s *implCluster.Core, source statementSource, statement string, r *model.RoutingInfo, values model.EncodedValues) error {
+	if err := b.admit(s, r); err != nil {
+		return err
+	}
+	start := len(b.values)
+	n := int(values.Framed.Len())
+	b.values = append(b.values, make([]byte, n)...)
+	if _, err := values.Framed.CopyTo(b.values[start:]); err != nil {
+		b.values = b.values[:start]
+		return err
+	}
+	b.appendEntry(s, source, statement, r, values, start)
+	return nil
+}
+
+// addValue encodes value with plan straight into the batch's storage and
+// appends the statement. template is the statement's routing; the token is
+// computed from the encoded values. b.params keeps viewing the entry's bytes
+// until the next add; nothing reads them through it.
+func (b *Batch) addValue[P any](s *implCluster.Core, source statementSource, statement string, template *model.RoutingInfo, plan codec.ParamPlan[P], columns cqltype.Columns, value P, allowUnset bool) error {
+	if err := b.admit(s, template); err != nil {
+		return err
+	}
+	start := len(b.values)
+	storage, values, err := b.params.EncodeAppend(plan, columns, value, allowUnset, b.values)
+	if err != nil {
+		return err
+	}
+	r := *template
+	r.Token, err = source.token(values.Cells)
+	if err == nil {
+		b.values = storage
+		b.appendEntry(s, source, statement, &r, values, start)
+	}
+	return err
+}
+
+// admit checks that a statement of session s with routing r may join b.
+func (b *Batch) admit(s *implCluster.Core, r *model.RoutingInfo) error {
 	if b == nil {
 		return cqltype.TypeValidation("batch", "nil batch")
 	}
@@ -171,13 +212,11 @@ func (b *Batch) add(s *implCluster.Core, source statementSource, statement strin
 	if r.Keyspace != "" && b.routing.Keyspace != "" && r.Keyspace != b.routing.Keyspace {
 		return cqltype.TypeValidation("batch keyspace", "members use different keyspaces")
 	}
-	start := len(b.values)
-	n := int(values.Framed.Len())
-	b.values = append(b.values, make([]byte, n)...)
-	if _, err := values.Framed.CopyTo(b.values[start:]); err != nil {
-		b.values = b.values[:start]
-		return err
-	}
+	return nil
+}
+
+// appendEntry records a statement whose values are b.values[start:].
+func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, statement string, r *model.RoutingInfo, values model.EncodedValues, start int) {
 	unset := false
 	for i := range values.Cells {
 		if values.Cells[i].State == cqltype.Unset {
@@ -190,7 +229,7 @@ func (b *Batch) add(s *implCluster.Core, source statementSource, statement strin
 		statement: statement,
 		columns:   values.Columns,
 		start:     start,
-		end:       start + n,
+		end:       len(b.values),
 		count:     len(values.Cells),
 		unset:     unset,
 	})
@@ -210,7 +249,6 @@ func (b *Batch) add(s *implCluster.Core, source statementSource, statement strin
 	case r.Kind == cqltype.UnknownStatement && b.routing.Kind != cqltype.ConditionalStatement:
 		b.routing.Kind = cqltype.UnknownStatement
 	}
-	return nil
 }
 
 // InternalAddBound appends bound's statement and values to batch.

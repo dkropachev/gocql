@@ -153,6 +153,13 @@ func queryOptions(s *implCluster.Core, values Options) (CompiledOptions, error) 
 	return NewCompiledOptions(s, values)
 }
 
+// preparedRouting returns the routing template of a prepared statement of
+// kind, as newPreparedQuery builds it; executions add the token.
+func preparedRouting(state *InternalPreparedState, kind cqltype.StatementKind) model.RoutingInfo {
+	info := &state.InternalInfo
+	return model.RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Kind: kind, Conditional: kind != cqltype.OrdinaryStatement}
+}
+
 func newPreparedQuery[P, R any](p *Prepared[P, R], options CompiledOptions, pool *queryPoolBase) (*Query[P, R], error) {
 	if p == nil || p.privateStorage.InternalState == nil {
 		return nil, cqltype.TypeValidation("prepared", "nil handle")
@@ -388,11 +395,11 @@ func (q *Query[P, R]) Routing(value P) (model.RoutingInfo, error) {
 	return q.bound.privateStorage.InternalRequest.routing, nil
 }
 
-// AddToBatch encodes value with the query's parameters and appends the statement
-// to batch. The values are copied into the batch, so the query is free for
-// its next use as soon as AddToBatch returns, and closing it does not affect the
-// batch. AddToBatch takes no context, so it returns ErrBusy while the query is
-// busy, including while its previous execution still drains.
+// AddToBatch encodes value with the query's parameters straight into batch's
+// storage and appends the statement. It uses none of the query's execution
+// state, so it works while the query runs, drains or has an open handle; only
+// a closed query or session rejects it. Closing the query later does not affect
+// the batch.
 func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
 	if batch == nil {
 		return cqltype.TypeValidation("batch", "nil batch")
@@ -400,31 +407,18 @@ func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
 	if q == nil || q.state.owner == nil || q.state.runtime == nil {
 		return cqltype.TypeValidation("query", "uninitialized query")
 	}
-	// Encoding into the query's buffer needs only an idle query: nothing
-	// outlives the call, so it starts no execution generation.
 	q.state.mu.Lock()
-	closed, busy := q.state.closed, q.state.busy
+	closed := q.state.closed
 	q.state.mu.Unlock()
 	if closed {
 		return runtimeerrors.ErrClosed
 	}
-	if busy {
-		return ErrBusy
-	}
-	values, err := q.buffer.Encode(q.params, q.columns, value, q.allowUnset)
-	if err != nil {
-		return err
+	s := q.state.runtime.Core
+	if s.Closed() {
+		return runtimeerrors.ErrClosed
 	}
 	request := &q.bound.privateStorage.InternalRequest
-	routing := request.routing
-	if routing.Token, err = request.InternalSource.token(values.Cells); err != nil {
-		return err
-	}
-	err = batch.add(q.state.runtime.Core, request.InternalSource, request.statement, &routing, values)
-	if q.buffer.RetainedBytes() > 64<<10 {
-		q.buffer.Retire()
-	}
-	return err
+	return batch.addValue(s, request.InternalSource, request.statement, &request.routing, q.params, q.columns, value, q.allowUnset)
 }
 
 func (s *queryState) close() {

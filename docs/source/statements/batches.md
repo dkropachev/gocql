@@ -18,8 +18,10 @@ if _, err := session.ExecBatch(ctx, cql.UnloggedBatch, &batch); err != nil {
 batch.Reset()
 ```
 
-`AddToBatch` encodes the parameters into storage the batch owns, so later input
-mutation cannot change the batch. `ExecBatch` and `RunBatch` take at most one
+`AddToBatch` encodes the parameters straight into storage the batch owns, so
+later input mutation cannot change the batch. It uses none of the query's
+execution state: `Query.AddToBatch` works while the query runs or has an open
+`Rows`, and `Prepared.AddToBatch` takes no pooled query. `ExecBatch` and `RunBatch` take at most one
 `CompiledOptions` from `session.CompileOptions`. A batch
 may be sent again unchanged. `Reset` empties it and keeps its storage, so a
 reused batch appends without allocating; if a cancelled execution may still be

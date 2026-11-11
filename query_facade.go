@@ -70,8 +70,10 @@ func (q *Query[P, R]) RunUnpaged(ctx context.Context, value P) (*Page[R], error)
 // query and does not execute the statement.
 func (q *Query[P, R]) Routing(value P) (routing.Info, error) { return q.internal().Routing(value) }
 
-// AddToBatch encodes and copies value into batch. It requires an idle query;
-// neither the query nor batch may be used concurrently with this call.
+// AddToBatch encodes value straight into storage batch owns. It uses none of
+// the query's execution state, so it works while the query runs, drains or has
+// an open handle; a closed query or session returns cqlerr.ErrClosed. Neither
+// the query nor batch may be used concurrently with this call.
 func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
 	return q.internal().AddToBatch((*implSession.Batch)(batch), value)
 }

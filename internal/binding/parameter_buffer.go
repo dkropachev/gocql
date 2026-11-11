@@ -71,6 +71,61 @@ func (b *ParameterBuffer) Encode[P any](plan codec.ParamPlan[P], columns cqltype
 	return model.EncodedValues{Columns: columns, Cells: b.cells, Framed: framed}, nil
 }
 
+// EncodeAppend is Encode into caller storage: it encodes value into the spare
+// capacity after storage's bytes, which stay in place, and returns storage
+// extended by the encoding. Only when the encoding outgrows that capacity is it
+// copied, as append would. The values view the encoding and stay valid until
+// the next call; b keeps its cell scratch but not storage. On error the caller
+// keeps its own storage. Encode keeps its own body so the execution path takes
+// no extra call.
+func (b *ParameterBuffer) EncodeAppend[P any](plan codec.ParamPlan[P], columns cqltype.Columns, value P, allowUnset bool, storage []byte) ([]byte, model.EncodedValues, error) {
+	if columns.Len() > 65535 {
+		return storage, model.EncodedValues{}, cqltype.TypeValidation("parameters", "maximum count is 65535")
+	}
+	n := columns.Len()
+	if cap(b.positions) < n {
+		b.positions = make([]codec.ParamCell, n)
+	} else {
+		b.positions = b.positions[:n]
+	}
+	if cap(b.cells) < n {
+		b.cells = make([]model.EncodedCell, n)
+	} else {
+		b.cells = b.cells[:n]
+	}
+	tail := storage[len(storage):]
+	b.builder.BeginOwned(tail)
+	writer := &b.writer
+	codec.ResetParamWriter(writer, &b.builder, columns, allowUnset)
+	codec.CaptureParamCells(writer, b.positions)
+	// The owned builder copies every borrowed span, including custom encoders.
+	err := plan.Encode(writer, value)
+	if err == nil {
+		err = codec.FinishParamWriter(writer)
+	}
+	encoded := b.builder.OwnedBytes()
+	framed, freezeErr := b.builder.Freeze()
+	if err != nil {
+		return storage, model.EncodedValues{}, err
+	}
+	if freezeErr != nil {
+		return storage, model.EncodedValues{}, freezeErr
+	}
+	if cap(tail) > 0 && unsafe.SliceData(encoded) == unsafe.SliceData(tail) {
+		storage = storage[:len(storage)+len(encoded)]
+	} else {
+		storage = append(storage, encoded...)
+	}
+	for i, position := range b.positions {
+		column, _ := columns.At(i)
+		if position.Start < 0 || position.End < position.Start || position.End > int64(len(encoded)) {
+			return storage[:len(storage)-len(encoded)], model.EncodedValues{}, wire.ErrBounds
+		}
+		b.cells[i] = model.EncodedCell{Typ: column.Type, State: position.State, Body: wire.ChainOf(encoded[position.Start:position.End])}
+	}
+	return storage, model.EncodedValues{Columns: columns, Cells: b.cells, Framed: framed}, nil
+}
+
 // Retire drops large buffers and all views only after transport and callbacks
 // have drained. Idle queries retain at most 64 KiB of request backing.
 func (b *ParameterBuffer) Retire() {

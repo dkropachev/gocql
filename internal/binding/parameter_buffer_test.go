@@ -13,6 +13,36 @@ import (
 )
 
 func TestParameterBuffer(t *testing.T) {
+	// TestParameterBuffer/EncodeAppend checks that an encoding appended to
+	// caller storage keeps the existing bytes, uses spare capacity in place,
+	// and copies only when it outgrows that capacity.
+	t.Run("EncodeAppend", func(t *testing.T) {
+		columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: cqltype.BlobType})
+		plan, err := codec.OneParam(codec.BytesEncoder).Compile(columns)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var b ParameterBuffer
+		for _, spare := range []int{64, 0} {
+			storage := make([]byte, 4, 4+spare)
+			copy(storage, "keep")
+			got, values, err := b.EncodeAppend(plan, columns, []byte("abc"), true, storage)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if want := "keep\x00\x00\x00\x03abc"; string(got) != want {
+				t.Fatalf("spare %d: storage %q, want %q", spare, got, want)
+			}
+			if inPlace := &got[0] == &storage[0]; inPlace != (spare > 0) {
+				t.Fatalf("spare %d: encoded in place %t", spare, inPlace)
+			}
+			cell, _ := values.Cells[0].Body.Contiguous()
+			if string(cell) != "abc" || values.Framed.Len() != 7 {
+				t.Fatalf("spare %d: cell %q, framed %d", spare, cell, values.Framed.Len())
+			}
+		}
+	})
+
 	t.Run("EncodeParameters", func(t *testing.T) {
 		t.Run("EmptyHasPresentWireState", func(t *testing.T) {
 			typ := cqltype.IntType

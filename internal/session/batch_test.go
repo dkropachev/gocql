@@ -141,6 +141,108 @@ func TestBatch(t *testing.T) {
 				t.Fatalf("AddToBatch and Reset allocate %v times per batch", n)
 			}
 		})
+
+		// TestBatch/AddToBatch/EncodesIntoBatchStorage checks that each entry's
+		// values are encoded into the batch's own storage, back to back, and
+		// that later input mutation leaves them alone.
+		t.Run("EncodesIntoBatchStorage", func(t *testing.T) {
+			q := testOwnedQuery(t)
+			var batch Batch
+			first, second := []byte("first"), []byte("second value")
+			for _, v := range [][]byte{first, second} {
+				if err := q.AddToBatch(&batch, v); err != nil {
+					t.Fatal(err)
+				}
+			}
+			first[0], second[0] = 'X', 'X'
+			var want []byte
+			for _, v := range []string{"first", "second value"} {
+				want = binary.BigEndian.AppendUint32(want, uint32(len(v)))
+				want = append(want, v...)
+			}
+			if !bytes.Equal(batch.values, want) {
+				t.Fatalf("batch values %q, want %q", batch.values, want)
+			}
+			if e := batch.entries[1]; e.start != 9 || e.end != len(want) || e.count != 1 {
+				t.Fatalf("second entry %+v", e)
+			}
+			if n := q.buffer.RetainedBytes(); n != 0 {
+				t.Fatalf("AddToBatch used the query's buffer: %d bytes retained", n)
+			}
+		})
+
+		// TestBatch/AddToBatch/FailedEncodingKeepsBatch checks that an encoding
+		// error leaves the batch as it was.
+		t.Run("FailedEncodingKeepsBatch", func(t *testing.T) {
+			s, _ := attachmentSession()
+			q, err := unpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam[[]byte](failingBlobEncoder{}), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: cqltype.BlobType})}, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = q.Close(context.Background()) }()
+			var batch Batch
+			if err := q.AddToBatch(&batch, []byte("kept")); err != nil {
+				t.Fatal(err)
+			}
+			values := bytes.Clone(batch.values)
+			// The encoder writes its value before failing.
+			if err := q.AddToBatch(&batch, []byte("fail")); !errors.Is(err, errFailingBlob) {
+				t.Fatal(err)
+			}
+			if batch.Len() != 1 || !bytes.Equal(batch.values, values) {
+				t.Fatalf("failed append changed the batch: %d entries, %q", batch.Len(), batch.values)
+			}
+		})
+
+		// TestBatch/AddToBatch/BusyQuery checks that a query that is executing,
+		// or holds an open handle, still appends.
+		t.Run("BusyQuery", func(t *testing.T) {
+			q := testOwnedQuery(t)
+			if err := q.state.begin(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			defer q.state.owner.InternalRelease()
+			var batch Batch
+			if err := q.AddToBatch(&batch, []byte("v")); err != nil {
+				t.Fatal(err)
+			}
+			if batch.Len() != 1 {
+				t.Fatal(batch.Len())
+			}
+		})
+
+		// TestBatch/AddToBatch/PreparedTakesNoPooledQuery checks that
+		// Prepared.AddToBatch encodes without creating the statement's pool.
+		t.Run("PreparedTakesNoPooledQuery", func(t *testing.T) {
+			s, _, peers := runtimeTestSession(t, 1)
+			defer s.Close()
+			defer peers[0].Close()
+			p := oneShotPrepare(t, s, peers[0], make(chan oneShotRequest, 1))
+			var batch Batch
+			for i := range int32(3) {
+				if err := p.AddToBatch(&batch, i); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if batch.Len() != 3 {
+				t.Fatal(batch.Len())
+			}
+			if p.privateStorage.pool != nil || queryPools(s) != 0 {
+				t.Fatal("AddToBatch created a query pool")
+			}
+			fill := func() {
+				batch.Reset()
+				for i := range int32(16) {
+					if err := p.AddToBatch(&batch, i); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			fill()
+			if n := testing.AllocsPerRun(100, fill); n != 0 {
+				t.Fatalf("Prepared.AddToBatch and Reset allocate %v times per batch", n)
+			}
+		})
 	})
 
 	t.Run("Exec", func(t *testing.T) {
@@ -419,8 +521,9 @@ func TestBatch(t *testing.T) {
 		if err := q.state.begin(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := q.AddToBatch(&batch, []byte("v")); !errors.Is(err, ErrBusy) {
-			t.Fatal("busy query appended", err)
+		// AddToBatch uses none of the query's execution state.
+		if err := q.AddToBatch(&batch, []byte("v")); err != nil {
+			t.Fatal("busy query did not append", err)
 		}
 		q.state.owner.InternalRelease()
 		closeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -431,7 +534,7 @@ func TestBatch(t *testing.T) {
 		if err := q.AddToBatch(&batch, []byte("v")); !errors.Is(err, implRuntimeerrors.ErrClosed) {
 			t.Fatal("closed query appended", err)
 		}
-		if batch.Len() != 1 {
+		if batch.Len() != 2 {
 			t.Fatal(batch.Len())
 		}
 	})

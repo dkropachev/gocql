@@ -263,22 +263,24 @@ func (p *Prepared[P, R]) pool() (*queryPool[P, R], error) {
 	return s.pool, s.poolErr
 }
 
-// AddToBatch encodes value with the statement's parameters and appends the
-// statement to batch, as Query.AddToBatch does. The values are copied into
-// the batch. AddToBatch is safe for concurrent use with other calls on p, but
-// a Batch is not: append to one batch from one goroutine at a time.
+// AddToBatch encodes value with the statement's parameters straight into
+// batch's storage and appends the statement, as Query.AddToBatch does. It
+// takes no pooled query. AddToBatch is safe for concurrent use with other calls
+// on p, but a Batch is not: append to one batch from one goroutine at a time.
 func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
-	pool, err := p.pool()
-	if err != nil {
-		return err
+	if batch == nil {
+		return cqltype.TypeValidation("batch", "nil batch")
 	}
-	q, err := pool.get()
-	if err != nil {
-		return err
+	if p == nil || p.privateStorage.InternalState == nil {
+		return cqltype.TypeValidation("prepared", "nil handle")
 	}
-	err = q.AddToBatch(batch, value)
-	pool.put(q)
-	return err
+	state := p.privateStorage.InternalState
+	s := state.InternalSession
+	if s.Closed() {
+		return runtimeerrors.ErrClosed
+	}
+	routing := preparedRouting(state, p.privateStorage.kind)
+	return batch.addValue(s, preparedSource{state: state}, state.InternalStatement, &routing, p.privateStorage.params, state.InternalParameters, value, state.InternalProtocol >= 4)
 }
 
 // oneShotOptions returns the options of a one-shot call: none gives the zero

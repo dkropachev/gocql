@@ -75,8 +75,9 @@ func (p *Prepared[P, B]) StreamQuery[R any](decoder cql.StreamRowDecoder[R], opt
 	return (*StreamQuery[P, R])(q), err
 }
 
-// AddToBatch copies an encoded parameter snapshot into batch. Calls on p are
-// concurrency-safe, but appending to one batch requires exclusive ownership.
+// AddToBatch encodes value straight into storage batch owns. Calls on p are
+// concurrency-safe and take no pooled query, but appending to one batch
+// requires exclusive ownership of it.
 func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
 	return p.internal().AddToBatch((*implSession.Batch)(batch), value)
 }

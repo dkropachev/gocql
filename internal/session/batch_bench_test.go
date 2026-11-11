@@ -27,6 +27,23 @@ func BenchmarkBatch(b *testing.B) {
 		}
 	})
 
+	b.Run("PreparedAddToBatch", func(b *testing.B) {
+		s, _, peers := runtimeTestSession(b, 1)
+		defer s.Close()
+		defer peers[0].Close()
+		p := oneShotPrepare(b, s, peers[0], make(chan oneShotRequest, 1))
+		var batch Batch
+		b.ReportAllocs()
+		for b.Loop() {
+			if err := p.AddToBatch(&batch, 42); err != nil {
+				b.Fatal(err)
+			}
+			if batch.Len() == 64 {
+				batch.Reset()
+			}
+		}
+	})
+
 	b.Run("Exec", func(b *testing.B) {
 		for _, n := range []int{1, 8} {
 			b.Run(fmt.Sprint(n), func(b *testing.B) {
