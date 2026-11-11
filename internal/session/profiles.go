@@ -6,7 +6,6 @@ package session
 import (
 	"time"
 
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/settings"
@@ -60,14 +59,6 @@ type InternalResolvedOptions struct {
 	templates       *optionTemplates
 	InternalProfile settings.Profile
 	InternalOptions Options
-}
-
-func InternalResolveOptions(s *implCluster.Core, options Options) (InternalResolvedOptions, error) {
-	var base *settings.Profile
-	if s != nil {
-		base = InternalRuntimeFor(s).InternalProfile
-	}
-	return resolveOptionValues(base, options)
 }
 
 // resolveOptionValues merges options over base, the session's default
