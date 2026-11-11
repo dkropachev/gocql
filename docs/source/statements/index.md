@@ -32,7 +32,7 @@ with `prepared.Query(options)`; it has the same `Exec`, `One`, `Each`, `All`,
 `Run` and `RunPage`.
 The `session.Unprepared*` calls run a statement without preparing it and take the
 parameter columns from `Statement.BindMarkers`. To decode into caller storage,
-use `session.PrepareStream` with a `cql.StreamStatement[P,R]` and call
+use `session.PrepareStream` with a `stream.Statement[P,R]` and call
 `prepared.Query(streamOptions)`; this checks the streaming decoder directly
 without requiring a buffered row mapping. It buffers pages by default; set
 `StreamOptions.Incremental` for bounded incremental receive.

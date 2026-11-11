@@ -34,7 +34,7 @@ var attrsCodec = WithCodec[collectionRow](MapCodec(StringCodec, Int64))
 
 func TestVectorStructMapping(t *testing.T) {
 	type row struct {
-		Values []int32 `cql:"values,codec=VectorCodec,stream=StreamVector"`
+		Values []int32 `cql:"values,codec=VectorCodec,stream=Vector"`
 	}
 	typ := CodecTestMust(cqltype.VectorDataType(cqltype.IntType, 3))
 	columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "values", Type: typ})

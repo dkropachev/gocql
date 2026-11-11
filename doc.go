@@ -60,7 +60,7 @@
 // append statements to a Batch; Session.ExecBatch sends it, and
 // Session.RunBatch sends it and returns the Rows of a conditional batch.
 //
-// Session.PrepareStream prepares a cql.StreamStatement directly for caller
+// Session.PrepareStream prepares a stream.Statement directly for caller
 // storage; its shareable PreparedStream creates a StreamQuery per worker. A
 // StreamQuery decodes into seeded caller storage and buffers one response page
 // on normal multiplexed connections by default. StreamOptions.Incremental opts into bounded

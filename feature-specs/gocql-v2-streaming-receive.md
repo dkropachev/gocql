@@ -50,7 +50,7 @@ never silently fall back to receiving a complete page.
 ## User-visible behavior and API shape
 
 Provide RunStream[B,R] using an existing Bound[B], a separate typed
-StreamRowDecoder[R] and StreamOptions; RowStream[R] exposes NextInto, Err,
+stream.RowDecoder[R] and StreamOptions; RowStream[R] exposes NextInto, Err,
 Close, Columns and Info. The normative interfaces/builders and defaults are in
 the API contract. The following example uses those settled signatures:
 
@@ -62,10 +62,10 @@ type DownloadRow struct {
     Name []byte
     Payload []byte
 }
-streamDecoder := StreamRowInto(func(*DownloadRow) {},
-    StreamColumn("id", StreamInt32, func(r *DownloadRow) *int32 { return &r.ID }),
-    StreamColumn("name", StreamText, func(r *DownloadRow) *[]byte { return &r.Name }),
-    StreamColumn("payload", StreamBlob, func(r *DownloadRow) *[]byte { return &r.Payload }),
+streamDecoder := stream.RowInto(func(*DownloadRow) {},
+    stream.Column("id", stream.Int32, func(r *DownloadRow) *int32 { return &r.ID }),
+    stream.Column("name", stream.Text, func(r *DownloadRow) *[]byte { return &r.Name }),
+    stream.Column("payload", stream.Blob, func(r *DownloadRow) *[]byte { return &r.Payload }),
 )
 stream, err := RunStream(ctx, session, bound, streamDecoder, StreamOptions{})
 if err != nil { return err }
@@ -97,19 +97,19 @@ final value once rather than growing/copying it chunk by chunk.
 Scalar fields are overwritten with decoded values. Nullable mappings explicitly
 distinguish null from an empty present value and reuse available payload
 capacity. Result unset remains invalid. Reset clears logical values while preserving mapped slice/nested capacity;
-StreamRowInto requires an explicit callback for unmapped application state. Custom
-StreamRowPlan.Reset has the same responsibility; do not inherit the
+stream.RowInto requires an explicit callback for unmapped application state. Custom
+stream.RowPlan.Reset has the same responsibility; do not inherit the
 buffered NextInto rule that zeroes an entire R and discards its supplied slices.
 
 Step 02 corrected an optional declaration-capability gap outside the historical
-review cycles. StreamResetter[T] { Reset(*T) } provides metadata-independent
+review cycles. stream.Resetter[T] { Reset(*T) } provides metadata-independent
 reset for a decoder declaration. All built-in scalar/payload, nullable/empty,
 collection/map/vector, tuple/UDT, encoded and row compositions preserve seeded
 storage through this reset, recursively requiring suitable capabilities from
 custom descendants when their application mapping is absent. An application
 UDT field missing from database metadata has no DataType to compile: with
 AllowMissingFields, its declaration must support this reset or Compile returns
-a clear ValidationError. A custom declaration can implement StreamResetter to
+a clear ValidationError. A custom declaration can implement stream.Resetter to
 allow the missing mapping. Actual mapped custom fields use compiled plan.Reset
 without being required to implement this optional declaration capability.
 Synthetic descriptors, reflection, arbitrary-value zeroing and whole-row
@@ -323,7 +323,7 @@ These are implementation seams, not evidence that the proposed behavior exists.
 
 Execution preparation settled the public API and task assignments without
 changing the buffered APIs. The API contract defines RunStream[B,R], RowStream,
-StreamRowDecoder/StreamDecoder compiled plans, limited readers, scalar/text/blob,
+stream.RowDecoder/stream.Decoder compiled plans, limited readers, scalar/text/blob,
 nullable/empty, collection/vector, tuple/UDT and explicit encoded-output builders.
 StreamCapacityError reports the path and required/available capacity;
 StreamCapabilityError identifies unsupported protocol/compression/mapping modes.

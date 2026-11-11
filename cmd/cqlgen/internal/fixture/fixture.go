@@ -63,9 +63,9 @@ type StreamFixture struct { //nolint:govet // field order mirrors the column lis
 	ID      int32
 	Key     Key
 	Payload []byte
-	Name    []byte `cql:"name,stream=StreamText"`
+	Name    []byte `cql:"name,stream=Text"`
 	Pieces  [][]byte
-	Tags    []int32 `cql:"tags,codec=SetCodec,stream=StreamSet"`
+	Tags    []int32 `cql:"tags,codec=SetCodec,stream=Set"`
 	Maybe   cql.Nullable[int64]
 	At      cql.Timestamp
 	Addr    netip.Addr

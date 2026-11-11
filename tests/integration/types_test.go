@@ -42,6 +42,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 	valcases "github.com/scylladb/gocql/v2/internal/tests/valuecases"
 )
 
@@ -61,7 +62,7 @@ func TestTypes(t *testing.T) {
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(k int PRIMARY KEY,v duration)", table))
 			for _, want := range []cql.Duration{{Months: 250, Days: 500, Nanoseconds: 300010001}, {Months: -250, Days: -500, Nanoseconds: -300010001}, {Days: 128, Nanoseconds: 127}, {Months: 0x7fffffff, Days: 0x7fffffff, Nanoseconds: 0x7fffffffffffffff}} {
-				cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(k,v) VALUES(1,?)", table), cassandraValue(cql.DurationValue(want)))
+				cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(k,v) VALUES(1,?)", table), cassandraValue(dynamic.Duration(want)))
 				row := cassandraRead(t, session, "SELECT k,v FROM "+table)
 				require.Equal(t, int64(1), cassandraInt(t, row, "k"))
 				got, e := cassandraField(t, row, "v").Duration()
@@ -95,7 +96,7 @@ func TestTypes(t *testing.T) {
 			ipFromNet, ok := netip.AddrFromSlice(net.ParseIP("222.43.54.65"))
 			require.True(t, ok)
 			for _, want := range []netip.Addr{netip.MustParseAddr("123.34.45.56"), ipFromNet.Unmap()} {
-				cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(ip,name) VALUES(?,?)", table), cassandraValue(cql.InetValue(want)), codecTestMust(cql.TextValue("Test IP")))
+				cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(ip,name) VALUES(?,?)", table), cassandraValue(dynamic.Inet(want)), codecTestMust(dynamic.Text("Test IP")))
 				for i := 0; i < 2; i++ {
 					row := cassandraRead(t, session, "SELECT ip FROM "+table)
 					got, err := cassandraField(t, row, "ip").Inet()
@@ -103,7 +104,7 @@ func TestTypes(t *testing.T) {
 					require.Equal(t, want.String(), got.String())
 					require.Equal(t, want, got)
 				}
-				cassandraWrite(t, session, fmt.Sprintf("DELETE FROM %s WHERE ip=?", table), cassandraValue(cql.InetValue(want)))
+				cassandraWrite(t, session, fmt.Sprintf("DELETE FROM %s WHERE ip=?", table), cassandraValue(dynamic.Inet(want)))
 			}
 		})
 		t.Run("SmallInt", func(t *testing.T) {
@@ -112,7 +113,7 @@ func TestTypes(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(testsmallint smallint PRIMARY KEY)", table))
-			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(testsmallint) VALUES(?)", table), cql.SmallIntValue(2))
+			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(testsmallint) VALUES(?)", table), dynamic.SmallInt(2))
 			require.Equal(t, int64(2), cassandraInt(t, cassandraRead(t, session, "SELECT * FROM "+table), "testsmallint"))
 		})
 		t.Run("Varint", func(t *testing.T) {
@@ -124,20 +125,20 @@ func TestTypes(t *testing.T) {
 			insert := fmt.Sprintf("INSERT INTO %s(id,test) VALUES(?,?)", table)
 			selectCQL := "SELECT test FROM " + table
 			for _, want := range []int64{0, -1, int64(math.MaxInt32) + 1} {
-				cassandraWrite(t, session, insert, codecTestMust(cql.TextValue("id")), cql.VarintValue(cql.VarintFromBigInt(big.NewInt(want))))
+				cassandraWrite(t, session, insert, codecTestMust(dynamic.Text("id")), dynamic.Varint(cql.VarintFromBigInt(big.NewInt(want))))
 				row := cassandraRead(t, session, selectCQL)
 				got, err := cassandraField(t, row, "test").Varint()
 				require.NoError(t, err)
 				require.Equal(t, want, got.BigInt().Int64())
 			}
-			cassandraWrite(t, session, insert, codecTestMust(cql.TextValue("id")), cql.NullValue(cql.VarintValue(cql.Varint{}).Type()))
+			cassandraWrite(t, session, insert, codecTestMust(dynamic.Text("id")), dynamic.Null(dynamic.Varint(cql.Varint{}).Type()))
 			nullable := cassandraUnprepared(t, selectCQL, cql.OneColumn(cql.NullableCodec(cql.VarintCodec)))
 			null := cassandraReadBound(t, session, nullable, gocql.Options{})
 			require.False(t, null.Valid)
 			require.Zero(t, null.Value.BigInt().Sign())
 			biggie, ok := new(big.Int).SetString("36893488147419103232", 10)
 			require.True(t, ok)
-			cassandraWrite(t, session, insert, codecTestMust(cql.TextValue("id")), cql.VarintValue(cql.VarintFromBigInt(biggie)))
+			cassandraWrite(t, session, insert, codecTestMust(dynamic.Text("id")), dynamic.Varint(cql.VarintFromBigInt(biggie)))
 			got, err := cassandraField(t, cassandraRead(t, session, selectCQL), "test").Varint()
 			require.NoError(t, err)
 			require.Equal(t, biggie.String(), got.BigInt().String())
@@ -174,9 +175,9 @@ func TestTypes(t *testing.T) {
 								for _, owned := range []bool{false, true} {
 									var encoded cql.EncodedValue
 									if owned {
-										encoded, err = cql.EncodeValue(typ, cql.DynamicCodec, value)
+										encoded, err = cql.EncodeValue(typ, dynamic.Codec, value)
 									} else {
-										encoded, err = cql.EncodeValueBorrowed(typ, cql.DynamicCodec, value)
+										encoded, err = cql.EncodeValueBorrowed(typ, dynamic.Codec, value)
 									}
 									if (err != nil) != lc.ErrInsert {
 										t.Fatalf("encode error: %v (expected error %t)", err, lc.ErrInsert)
@@ -215,7 +216,7 @@ func TestTypes(t *testing.T) {
 								if err != nil {
 									t.Fatal(err)
 								}
-								actual, err := cql.DecodeValue(cql.DynamicCodec, encoded)
+								actual, err := cql.DecodeValue(dynamic.Codec, encoded)
 								if (err != nil) != lc.ErrSelect {
 									t.Fatalf("decode error: %v (expected error %t)", err, lc.ErrSelect)
 								}
@@ -251,7 +252,7 @@ func TestTypes(t *testing.T) {
 									t.Fatal(err)
 								}
 								id := vc.Name + "/" + lc.LangType
-								_, err = v2Exec(t.Context(), s, fmt.Sprintf("INSERT INTO %s(test_id,test_col) VALUES(?,?)", tables[i]), codecTestMust(cql.TextValue(id)), input)
+								_, err = v2Exec(t.Context(), s, fmt.Sprintf("INSERT INTO %s(test_id,test_col) VALUES(?,?)", tables[i]), codecTestMust(dynamic.Text(id)), input)
 								if (err != nil) != lc.ErrInsert {
 									t.Fatalf("insert error: %v (expected error %t)", err, lc.ErrInsert)
 								}
@@ -259,9 +260,9 @@ func TestTypes(t *testing.T) {
 									return
 								}
 								stmt := fmt.Sprintf("SELECT test_col FROM %s WHERE test_id=?", tables[i])
-								got := serializationColumn(t, s, stmt, codecTestMust(cql.TextValue(id)))
+								got := serializationColumn(t, s, stmt, codecTestMust(dynamic.Text(id)))
 								assertSerializationValue(t, input, got)
-								raw, err := serializationOne(s, stmt, cql.OneColumn(serializationRawDecoder{}), codecTestMust(cql.TextValue(id)))
+								raw, err := serializationOne(s, stmt, cql.OneColumn(serializationRawDecoder{}), codecTestMust(dynamic.Text(id)))
 								if err != nil {
 									t.Fatal(err)
 								}

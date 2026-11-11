@@ -14,9 +14,9 @@ type streamFixture struct {
 	ID      int32
 	Key     cqltype.UUID `cql:"key"`
 	Payload []byte
-	Name    []byte `cql:"name,stream=StreamText"`
+	Name    []byte `cql:"name,stream=Text"`
 	Pieces  [][]byte
-	Tags    []int32 `cql:"tags,stream=StreamSet"`
+	Tags    []int32 `cql:"tags,stream=Set"`
 	Maybe   cqltype.Nullable[int64]
 	At      cqltype.Timestamp
 	Unused  float64 // in no statement below

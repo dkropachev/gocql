@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -70,7 +71,7 @@ func TestGeneratedCodec(t *testing.T) {
 
 	// The generated streaming mapping and the reflected one decode alike.
 	t.Run("StreamFixture", func(t *testing.T) {
-		if f := (StreamFixture{}).CQLFields(); f.StreamColumns == nil {
+		if (StreamFixture{}).CQLStreamColumns() == nil {
 			t.Fatal("expected a generated stream mapping for StreamFixture")
 		}
 		cols := streamColumns(t)
@@ -122,7 +123,7 @@ func TestGeneratedCodec(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		gen := streamDecode(t, cols, cql.MustStreamRowOf[StreamFixture](), data)
+		gen := streamDecode(t, cols, stream.MustRowOf[StreamFixture](), data)
 		ref := streamDecode(t, cols, reflected, data)
 		if !reflect.DeepEqual(gen, ref) || !reflect.DeepEqual(gen, want) {
 			t.Fatalf("stream rows differ:\ngenerated %+v\nreflected %+v\nwant      %+v", gen, ref, want)

@@ -19,6 +19,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -32,12 +33,12 @@ func TestSelectWithoutFrom(t *testing.T) {
 		session := createSessionWithoutKeyspace(t)
 		defer session.Close()
 		t.Run("value round trip", func(t *testing.T) {
-			if noFromInt(t, noFromOne(t, session, "SELECT blobAsInt(?)", cql.BlobValue([]byte{0, 0, 0, 42})), 0) != 42 {
+			if noFromInt(t, noFromOne(t, session, "SELECT blobAsInt(?)", dynamic.Blob([]byte{0, 0, 0, 42})), 0) != 42 {
 				t.Fatal("wrong bind result")
 			}
 		})
 		t.Run("marker types the column", func(t *testing.T) {
-			row := noFromOne(t, session, "SELECT intAsBlob(?)", cql.IntValue(42))
+			row := noFromOne(t, session, "SELECT intAsBlob(?)", dynamic.Int(42))
 			if noFromColumn(t, row.Columns(), 0).Type.Kind() != cql.TypeBlob {
 				t.Fatal("blob type expected")
 			}
@@ -47,13 +48,13 @@ func TestSelectWithoutFrom(t *testing.T) {
 			}
 		})
 		t.Run("marker in LIMIT", func(t *testing.T) {
-			if noFromInt(t, noFromOne(t, session, "SELECT 1 LIMIT ?", cql.IntValue(1)), 0) != 1 {
+			if noFromInt(t, noFromOne(t, session, "SELECT 1 LIMIT ?", dynamic.Int(1)), 0) != 1 {
 				t.Fatal("wrong LIMIT result")
 			}
 		})
 		t.Run("untyped markers rejected", func(t *testing.T) {
 			for _, stmt := range []string{"SELECT ?", "SELECT (int)?", "SELECT CAST(? AS int)"} {
-				rows, err := v2Query(context.Background(), session, stmt, cql.IntValue(42))
+				rows, err := v2Query(context.Background(), session, stmt, dynamic.Int(42))
 				_ = rows.Close()
 				if !isRejectedByServer(err) {
 					t.Fatalf("%q error=%v", stmt, err)
@@ -84,8 +85,8 @@ func TestSelectWithoutFrom(t *testing.T) {
 		})
 		t.Run("SliceMap", func(t *testing.T) {
 			rows := noFromRows(t, session, stmt)
-			var owned []cql.DynamicRow
-			var row cql.DynamicRow
+			var owned []dynamic.Row
+			var row dynamic.Row
 			for rows.NextInto(&row) {
 				owned = append(owned, row.Clone())
 			}
@@ -192,7 +193,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 			if rows.Info().Rows != 1 {
 				t.Fatalf("page rows=%d want1", rows.Info().Rows)
 			}
-			var row cql.DynamicRow
+			var row dynamic.Row
 			if !rows.NextInto(&row) {
 				t.Fatalf("missing row: %v", rows.Err())
 			}
@@ -279,7 +280,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 				if rows.Columns().Len() != 1 || rows.Info().Rows != 0 {
 					t.Fatal("empty result must retain one column and zero rows")
 				}
-				var row cql.DynamicRow
+				var row dynamic.Row
 				if rows.NextInto(&row) {
 					t.Fatal("filtered virtual row returned")
 				}
@@ -299,11 +300,11 @@ func TestSelectWithoutFrom(t *testing.T) {
 		session := createSessionWithoutKeyspace(t)
 		defer session.Close()
 		const stmt = "SELECT 1, 'a', true"
-		statement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: stmt, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}
+		statement := cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: stmt, Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}
 		var baseline cql.Columns
 		for _, mode := range []string{"prepared", "prepared with metadata", "not prepared"} {
 			t.Run(mode, func(t *testing.T) {
-				var bound *Bound[cql.DynamicRow]
+				var bound *Bound[dynamic.Row]
 				var err error
 				if mode == "not prepared" {
 					bound, err = BindUnpreparedOwned(statement, cql.NewColumns(), cql.EmptyParams{})
@@ -344,7 +345,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 				} else if !columns.Equal(baseline) {
 					t.Fatal("metadata differs across execution modes")
 				}
-				var row cql.DynamicRow
+				var row dynamic.Row
 				if !rows.NextInto(&row) {
 					t.Fatalf("missing row: %v", rows.Err())
 				}
@@ -411,12 +412,12 @@ func TestSelectWithoutFrom(t *testing.T) {
 		cases := []struct {
 			name, stmt string
 			keyspace   bool
-			values     []cql.Value
+			values     []dynamic.Value
 		}{
 			{name: "no bind markers", stmt: "SELECT 1"},
 			{name: "no bind markers, with keyspace", stmt: "SELECT 1", keyspace: true},
-			{name: "bind marker", stmt: "SELECT intAsBlob(?)", values: []cql.Value{cql.IntValue(42)}},
-			{name: "bind marker, with keyspace", stmt: "SELECT intAsBlob(?)", keyspace: true, values: []cql.Value{cql.IntValue(42)}},
+			{name: "bind marker", stmt: "SELECT intAsBlob(?)", values: []dynamic.Value{dynamic.Int(42)}},
+			{name: "bind marker, with keyspace", stmt: "SELECT intAsBlob(?)", keyspace: true, values: []dynamic.Value{dynamic.Int(42)}},
 		}
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
@@ -427,7 +428,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 					session = createSessionWithoutKeyspace(t)
 				}
 				defer session.Close()
-				p, err := session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: tc.stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}, gocql.PrepareOptions{})
+				p, err := session.Prepare(context.Background(), cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: tc.stmt, Params: dynamic.Params, Rows: dynamic.Rows}, gocql.PrepareOptions{})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -446,7 +447,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer rows.Close()
-				var row cql.DynamicRow
+				var row dynamic.Row
 				if !rows.NextInto(&row) {
 					t.Fatalf("query after routing failed: %v", rows.Err())
 				}
@@ -472,9 +473,9 @@ func TestSelectWithoutFrom(t *testing.T) {
 		defer session.Close()
 		for _, tc := range []struct {
 			name, stmt string
-			values     []cql.Value
+			values     []dynamic.Value
 			want       int64
-		}{{name: "nil routing key", stmt: "SELECT 1", want: 1}, {name: "routing lookup error", stmt: "SELECT blobAsInt(?)", values: []cql.Value{cql.BlobValue([]byte{0, 0, 0, 42})}, want: 42}} {
+		}{{name: "nil routing key", stmt: "SELECT 1", want: 1}, {name: "routing lookup error", stmt: "SELECT blobAsInt(?)", values: []dynamic.Value{dynamic.Blob([]byte{0, 0, 0, 42})}, want: 42}} {
 			t.Run(tc.name, func(t *testing.T) {
 				for i := 0; i < 3; i++ {
 					if got := noFromInt(t, noFromOne(t, session, tc.stmt, tc.values...), 0); got != tc.want {

@@ -4,10 +4,11 @@ package mapped
 
 import (
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/stream"
 )
 
 // CQLFields returns the generated mapping of Event's fields, which
-// cql.ParamsOf, cql.RowOf and cql.StreamRowOf use instead of reflection.
+// cql.ParamsOf and cql.RowOf use instead of reflection.
 func (Event) CQLFields() cql.StructFields[Event] {
 	return cql.StructFields[Event]{
 		Params: []cql.InputField[Event]{
@@ -38,7 +39,7 @@ func (Event) CQLFields() cql.StructFields[Event] {
 }
 
 // CQLFields returns the generated mapping of StreamEvent's fields, which
-// cql.ParamsOf, cql.RowOf and cql.StreamRowOf use instead of reflection.
+// cql.ParamsOf and cql.RowOf use instead of reflection.
 func (StreamEvent) CQLFields() cql.StructFields[StreamEvent] {
 	return cql.StructFields[StreamEvent]{
 		Params: []cql.InputField[StreamEvent]{
@@ -63,16 +64,21 @@ func (StreamEvent) CQLFields() cql.StructFields[StreamEvent] {
 			cql.Column("createdat", cql.TimestampCodec, func(v *StreamEvent) *cql.Timestamp { return &v.Audit.CreatedAt }),
 			cql.Column("updatedat", cql.TimestampCodec, func(v *StreamEvent) *cql.Timestamp { return &v.Audit.UpdatedAt }),
 		},
-		StreamColumns: []cql.StreamOutputField[StreamEvent]{
-			cql.StreamColumn("bucket", cql.StreamInt32, func(v *StreamEvent) *int32 { return &v.Bucket }),
-			cql.StreamColumn("id", cql.StreamUUID, func(v *StreamEvent) *cql.UUID { return &v.ID }),
-			cql.StreamColumn("name", cql.StreamText, func(v *StreamEvent) *[]byte { return &v.Name }),
-			cql.StreamColumn("blob", cql.StreamBlob, func(v *StreamEvent) *[]byte { return &v.Blob }),
-			cql.StreamColumn("big", cql.StreamInt64, func(v *StreamEvent) *int64 { return &v.Big }),
-			cql.StreamColumn("maybe", cql.StreamNullable(cql.StreamInt32), func(v *StreamEvent) *cql.Nullable[int32] { return &v.Maybe }),
-			cql.StreamColumn("scores", cql.StreamSet(cql.StreamInt32), func(v *StreamEvent) *[]int32 { return &v.Scores }),
-			cql.StreamColumn("createdat", cql.StreamTimestamp, func(v *StreamEvent) *cql.Timestamp { return &v.Audit.CreatedAt }),
-			cql.StreamColumn("updatedat", cql.StreamTimestamp, func(v *StreamEvent) *cql.Timestamp { return &v.Audit.UpdatedAt }),
-		},
+	}
+}
+
+// CQLStreamColumns returns the generated stream mapping of StreamEvent's
+// fields, which stream.RowOf uses instead of reflection.
+func (StreamEvent) CQLStreamColumns() []stream.OutputField[StreamEvent] {
+	return []stream.OutputField[StreamEvent]{
+		stream.Column("bucket", stream.Int32, func(v *StreamEvent) *int32 { return &v.Bucket }),
+		stream.Column("id", stream.UUID, func(v *StreamEvent) *cql.UUID { return &v.ID }),
+		stream.Column("name", stream.Text, func(v *StreamEvent) *[]byte { return &v.Name }),
+		stream.Column("blob", stream.Blob, func(v *StreamEvent) *[]byte { return &v.Blob }),
+		stream.Column("big", stream.Int64, func(v *StreamEvent) *int64 { return &v.Big }),
+		stream.Column("maybe", stream.Nullable(stream.Int32), func(v *StreamEvent) *cql.Nullable[int32] { return &v.Maybe }),
+		stream.Column("scores", stream.Set(stream.Int32), func(v *StreamEvent) *[]int32 { return &v.Scores }),
+		stream.Column("createdat", stream.Timestamp, func(v *StreamEvent) *cql.Timestamp { return &v.Audit.CreatedAt }),
+		stream.Column("updatedat", stream.Timestamp, func(v *StreamEvent) *cql.Timestamp { return &v.Audit.UpdatedAt }),
 	}
 }

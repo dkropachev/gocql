@@ -9,6 +9,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 
 	"math/big"
 	"strings"
@@ -95,7 +96,7 @@ func mustParseBigInt(s string) *big.Int {
 func mustCreateDuration(m, d int32, n time.Duration) cql.Duration {
 	return cql.Duration{Months: m, Days: d, Nanoseconds: int64(n)}
 }
-func serializationMustValue(v cql.Value, err error) cql.Value {
+func serializationMustValue(v dynamic.Value, err error) dynamic.Value {
 	if err != nil {
 		panic(err)
 	}
@@ -110,14 +111,14 @@ func serializationMustType(v cql.DataType, err error) cql.DataType {
 
 // Historical method subcase names identify the preserved coverage: collection
 // of cloned rows and single-row access with an explicitly retained page.
-func dynamicSerializationResult(t *testing.T, s *gocql.Session[testDialect], stmt, method string, args ...cql.Value) cql.Value {
+func dynamicSerializationResult(t *testing.T, s *gocql.Session[testDialect], stmt, method string, args ...dynamic.Value) dynamic.Value {
 	t.Helper()
 	rows, err := v2Query(t.Context(), s, stmt, args...)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	var row cql.DynamicRow
+	var row dynamic.Row
 	if !rows.NextInto(&row) {
 		t.Fatalf("expected one row: %v", rows.Err())
 	}
@@ -145,7 +146,7 @@ func dynamicSerializationResult(t *testing.T, s *gocql.Session[testDialect], stm
 		t.Fatal(err)
 	}
 	if method == "SliceMap" {
-		var extra cql.DynamicRow
+		var extra dynamic.Row
 		if rows.NextInto(&extra) {
 			t.Fatal("more than one row")
 		}
@@ -158,7 +159,7 @@ func dynamicSerializationResult(t *testing.T, s *gocql.Session[testDialect], stm
 
 type serializationDynamicCase struct {
 	name, stmt string
-	expected   cql.Value
+	expected   dynamic.Value
 }
 
 func checkDynamicSerializationCases(t *testing.T, s *gocql.Session[testDialect], table string, cases []serializationDynamicCase) {
@@ -170,17 +171,17 @@ func checkDynamicSerializationCases(t *testing.T, s *gocql.Session[testDialect],
 				expected := tc.expected
 				if !present {
 					name, literal = "Null", "NULL"
-					expected = cql.NullValue(tc.expected.Type())
+					expected = dynamic.Null(tc.expected.Type())
 				}
 				t.Run(name, func(t *testing.T) {
 					id := int32(i * 2)
 					if !present {
 						id++
 					}
-					serializationWrite(t, s, fmt.Sprintf("INSERT INTO %s(id,%s_col) VALUES(?,%s)", table, tc.name, literal), cql.IntValue(id))
+					serializationWrite(t, s, fmt.Sprintf("INSERT INTO %s(id,%s_col) VALUES(?,%s)", table, tc.name, literal), dynamic.Int(id))
 					for _, method := range []string{"SliceMap", "MapScan"} {
 						t.Run(method, func(t *testing.T) {
-							got := dynamicSerializationResult(t, s, fmt.Sprintf("SELECT %s_col FROM %s WHERE id=?", tc.name, table), method, cql.IntValue(id))
+							got := dynamicSerializationResult(t, s, fmt.Sprintf("SELECT %s_col FROM %s WHERE id=?", tc.name, table), method, dynamic.Int(id))
 							assertSerializationValue(t, expected, got)
 						})
 					}

@@ -17,6 +17,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/retry"
 )
@@ -287,14 +288,14 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session[testDialect]
 
 // v2Exec and v2Query accept only explicitly typed dynamic values. Owned binding
 // lets callers release or change their inputs as soon as these helpers return.
-func v2Exec(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...cql.Value) (gocql.Result, error) {
-	statement := cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}
+func v2Exec(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...dynamic.Value) (gocql.Result, error) {
+	statement := cql.Statement[[]dynamic.Value, cql.EmptyRow]{CQL: stmt, Params: dynamic.Params, Rows: cql.EmptyRowDecoder}
 	var bound *Bound[cql.EmptyRow]
 	var err error
 	if len(values) == 0 {
 		bound, err = BindUnpreparedOwned(statement, cql.NewColumns(), values)
 	} else {
-		var prepared *gocql.Prepared[[]cql.Value, cql.EmptyRow]
+		var prepared *gocql.Prepared[[]dynamic.Value, cql.EmptyRow]
 		prepared, err = session.Prepare(ctx, statement, gocql.PrepareOptions{})
 		if err == nil {
 			bound, err = BindOwned(prepared, values)
@@ -307,21 +308,21 @@ func v2Exec(ctx context.Context, session *gocql.Session[testDialect], stmt strin
 	return Exec(ctx, session, bound, gocql.CompiledOptions{})
 }
 
-func v2Query(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...cql.Value) (gocql.Rows[cql.DynamicRow], error) {
-	statement := cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}
-	var bound *Bound[cql.DynamicRow]
+func v2Query(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...dynamic.Value) (gocql.Rows[dynamic.Row], error) {
+	statement := cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: stmt, Params: dynamic.Params, Rows: dynamic.Rows}
+	var bound *Bound[dynamic.Row]
 	var err error
 	if len(values) == 0 {
 		bound, err = BindUnpreparedOwned(statement, cql.NewColumns(), values)
 	} else {
-		var prepared *gocql.Prepared[[]cql.Value, cql.DynamicRow]
+		var prepared *gocql.Prepared[[]dynamic.Value, dynamic.Row]
 		prepared, err = session.Prepare(ctx, statement, gocql.PrepareOptions{})
 		if err == nil {
 			bound, err = BindOwned(prepared, values)
 		}
 	}
 	if err != nil {
-		return gocql.Rows[cql.DynamicRow]{}, err
+		return gocql.Rows[dynamic.Row]{}, err
 	}
 	// Run admits the request before returning. Rows owns the execution reference
 	// until it is exhausted or closed, even after closing the binding here.
@@ -329,28 +330,28 @@ func v2Query(ctx context.Context, session *gocql.Session[testDialect], stmt stri
 	return Run(ctx, session, bound, gocql.CompiledOptions{})
 }
 
-func v2ReadOne(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...cql.Value) (cql.DynamicRow, error) {
+func v2ReadOne(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...dynamic.Value) (dynamic.Row, error) {
 	rows, err := v2Query(ctx, session, stmt, values...)
 	if err != nil {
-		return cql.DynamicRow{}, err
+		return dynamic.Row{}, err
 	}
 	defer rows.Close()
-	var cur cql.DynamicRow
+	var cur dynamic.Row
 	if !rows.NextInto(&cur) {
 		if err := rows.Err(); err != nil {
-			return cql.DynamicRow{}, err
+			return dynamic.Row{}, err
 		}
-		return cql.DynamicRow{}, cqlerr.ErrNoRows
+		return dynamic.Row{}, cqlerr.ErrNoRows
 	}
 	row, err := rows.Clone()
 	if err != nil {
-		return cql.DynamicRow{}, err
+		return dynamic.Row{}, err
 	}
 	if rows.NextInto(&cur) {
-		return cql.DynamicRow{}, errMultipleRows
+		return dynamic.Row{}, errMultipleRows
 	}
 	if err := rows.Err(); err != nil {
-		return cql.DynamicRow{}, err
+		return dynamic.Row{}, err
 	}
 	return row, rows.Close()
 }

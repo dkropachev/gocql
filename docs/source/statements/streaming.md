@@ -1,6 +1,6 @@
 # Streaming into caller storage
 
-`session.PrepareStream(ctx, cql.StreamStatement[P,R]{CQL: text, Params: params,
+`session.PrepareStream(ctx, stream.Statement[P,R]{CQL: text, Params: params,
 Rows: decoder})` prepares directly for caller-storage decoding. Its immutable
 `PreparedStream` handle can be shared; `prepared.Query(StreamOptions{})` creates
 a query for one worker. Streaming is always prepared; `Rows` supplies the
@@ -19,16 +19,16 @@ type Download struct {
     Pieces [][]byte
     ApplicationState string
 }
-decoder := cql.StreamRowInto(func(r *Download) { r.ApplicationState = "" },
-    cql.StreamColumn("id", cql.StreamInt32, func(r *Download) *int32 { return &r.ID }),
-    cql.StreamColumn("payload", cql.StreamBlob, func(r *Download) *[]byte { return &r.Payload }),
-    cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(r *Download) *[][]byte { return &r.Pieces }),
+decoder := stream.RowInto(func(r *Download) { r.ApplicationState = "" },
+    stream.Column("id", stream.Int32, func(r *Download) *int32 { return &r.ID }),
+    stream.Column("payload", stream.Blob, func(r *Download) *[]byte { return &r.Payload }),
+    stream.Column("pieces", stream.List(stream.Blob), func(r *Download) *[][]byte { return &r.Pieces }),
 )
 row := Download{
     Payload: make([]byte, 0, 1<<20),
     Pieces: [][]byte{make([]byte, 0, 1024), make([]byte, 0, 1024)},
 }
-prepared, err := session.PrepareStream(ctx, cql.StreamStatement[cql.EmptyParams, Download]{
+prepared, err := session.PrepareStream(ctx, stream.Statement[cql.EmptyParams, Download]{
     CQL: "SELECT id,payload,pieces FROM app.downloads",
     Rows: decoder,
 })
@@ -62,7 +62,7 @@ NextInto. Decoders reuse capacity without growing or reallocating payloads. A
 value exceeding available capacity returns StreamCapacityError before writing
 that value body; earlier fields may already have changed. Provision capacity
 from the application's bounds, not from untrusted remote lengths. Reset clears
-logical values recursively while preserving mapped capacity. StreamRowInto's
+logical values recursively while preserving mapped capacity. stream.RowInto's
 explicit callback clears unmapped application state; it must preserve mapped
 buffers. Custom plans/resetters have the same responsibility.
 
@@ -99,9 +99,9 @@ The configuration builder's `WithMaxFrameSize`, `WithMaxDecompressedSize`
 and `WithMaxMetadataDepth` bound response sizes and nesting. A limit error is terminal. StreamInfo reports delivered rows, pages and attempts.
 
 Lists, sets, and maps decode NULL as empty, matching buffered decoding, while
-preserving the destination's seeded capacity. `StreamNullable` preserves the
+preserving the destination's seeded capacity. `stream.Nullable` preserves the
 NULL/present distinction. Vectors remain strict about their dimension and need
-`StreamNullable` for NULL. This policy does not permit NULL collection elements.
+`stream.Nullable` for NULL. This policy does not permit NULL collection elements.
 Preparation validates the streaming decoder against available result metadata;
 conditional statements whose PREPARE response omits result metadata are checked
 on execution. Actual changed metadata always triggers plan revalidation.

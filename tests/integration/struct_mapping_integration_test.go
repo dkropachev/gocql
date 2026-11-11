@@ -159,11 +159,11 @@ func repeatMarkers(n int) string {
 type smStream struct {
 	Bucket int32
 	ID     cql.UUID `cql:"id"`
-	Name   []byte   `cql:"name,stream=StreamText"`
+	Name   []byte   `cql:"name,stream=Text"`
 	Blob   []byte
 	Big    int64
 	Maybe  cql.Nullable[int32]
-	Scores []int32 `cql:"scores,stream=StreamSet"`
+	Scores []int32 `cql:"scores,stream=Set"`
 	Span   cql.Duration
 	smAudit
 }

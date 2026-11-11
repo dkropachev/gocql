@@ -33,6 +33,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 )
 
 type serializationCoord struct{ X, Y int32 }
@@ -154,22 +155,22 @@ func TestTuple(t *testing.T) {
 			table := tupleTable(t, s, "list<frozen<tuple<int,text>>>")
 			// Each historical representation has an explicit typed adapter. Slice/array
 			// members use Value's discriminant instead of untyped heterogeneous elements.
-			sliceCodec := cql.NamedScalar(serializationMixedTupleCodec, func(v []cql.Value) serializationMixedTuple {
+			sliceCodec := cql.NamedScalar(serializationMixedTupleCodec, func(v []dynamic.Value) serializationMixedTuple {
 				n, _ := v[0].Signed()
 				x, _ := v[1].Text()
 				return serializationMixedTuple{int32(n), x.String()}
-			}, func(v serializationMixedTuple) []cql.Value {
-				return []cql.Value{cql.IntValue(v.A), codecTestMust(cql.TextValue(v.B))}
+			}, func(v serializationMixedTuple) []dynamic.Value {
+				return []dynamic.Value{dynamic.Int(v.A), codecTestMust(dynamic.Text(v.B))}
 			})
-			arrayCodec := cql.NamedScalar(serializationMixedTupleCodec, func(v [2]cql.Value) serializationMixedTuple {
+			arrayCodec := cql.NamedScalar(serializationMixedTupleCodec, func(v [2]dynamic.Value) serializationMixedTuple {
 				n, _ := v[0].Signed()
 				x, _ := v[1].Text()
 				return serializationMixedTuple{int32(n), x.String()}
-			}, func(v serializationMixedTuple) [2]cql.Value {
-				return [2]cql.Value{cql.IntValue(v.A), codecTestMust(cql.TextValue(v.B))}
+			}, func(v serializationMixedTuple) [2]dynamic.Value {
+				return [2]dynamic.Value{dynamic.Int(v.A), codecTestMust(dynamic.Text(v.B))}
 			})
 			t.Run("slice", func(t *testing.T) {
-				input := [][]cql.Value{{cql.IntValue(1), codecTestMust(cql.TextValue("2"))}, {cql.IntValue(3), codecTestMust(cql.TextValue("4"))}}
+				input := [][]dynamic.Value{{dynamic.Int(1), codecTestMust(dynamic.Text("2"))}, {dynamic.Int(3), codecTestMust(dynamic.Text("4"))}}
 				got := serializationRoundTrip(t, s, table, "val", 0, serializationList(sliceCodec), input)
 				for i := range got {
 					for j := range got[i] {
@@ -178,7 +179,7 @@ func TestTuple(t *testing.T) {
 				}
 			})
 			t.Run("array", func(t *testing.T) {
-				input := [][2]cql.Value{{cql.IntValue(1), codecTestMust(cql.TextValue("2"))}, {cql.IntValue(3), codecTestMust(cql.TextValue("4"))}}
+				input := [][2]dynamic.Value{{dynamic.Int(1), codecTestMust(dynamic.Text("2"))}, {dynamic.Int(3), codecTestMust(dynamic.Text("4"))}}
 				got := serializationRoundTrip(t, s, table, "val", 1, serializationList(arrayCodec), input)
 				for i := range got {
 					for j := range got[i] {
@@ -250,15 +251,15 @@ func TestTuple(t *testing.T) {
 			if got != want {
 				t.Fatalf("expected %+v, got %+v", want, got)
 			}
-			serializationWrite(t, s, fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), cql.IntValue(2))
-			nullable, err := serializationOne(s, fmt.Sprintf("SELECT val FROM %s WHERE id=?", table), cql.OneColumn(cql.NullableDecoder(serializationCoordCodec)), cql.IntValue(2))
+			serializationWrite(t, s, fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), dynamic.Int(2))
+			nullable, err := serializationOne(s, fmt.Sprintf("SELECT val FROM %s WHERE id=?", table), cql.OneColumn(cql.NullableDecoder(serializationCoordCodec)), dynamic.Int(2))
 			if err != nil {
 				t.Fatal(err)
 			}
 			if nullable.Valid || nullable.Value != (serializationCoord{}) {
 				t.Fatalf("unset tuple must be explicit null with zero destination: %+v", nullable)
 			}
-			if _, err := serializationOne(s, fmt.Sprintf("SELECT val FROM %s WHERE id=?", table), cql.OneColumn(serializationCoordCodec), cql.IntValue(2)); err == nil {
+			if _, err := serializationOne(s, fmt.Sprintf("SELECT val FROM %s WHERE id=?", table), cql.OneColumn(serializationCoordCodec), dynamic.Int(2)); err == nil {
 				t.Fatal("nonnullable tuple accepted null")
 			}
 		})
@@ -277,13 +278,13 @@ func TestTuple(t *testing.T) {
 			s := createV2Session(t)
 			defer s.Close()
 			table := tupleTable(t, s, "frozen<tuple<int,int>>")
-			serializationWrite(t, s, fmt.Sprintf("INSERT INTO %s(id,val) VALUES(?,(?,?))", table), cql.IntValue(1), cql.IntValue(100), cql.IntValue(-100))
+			serializationWrite(t, s, fmt.Sprintf("INSERT INTO %s(id,val) VALUES(?,(?,?))", table), dynamic.Int(1), dynamic.Int(100), dynamic.Int(-100))
 			type result struct {
 				ID    int32
 				Coord serializationCoord
 			}
 			decoder := cql.Row(cql.Column("id", cql.Int32Codec, func(r *result) *int32 { return &r.ID }), cql.Column("val", serializationCoordCodec, func(r *result) *serializationCoord { return &r.Coord }))
-			row, err := serializationOne(s, fmt.Sprintf("SELECT id,val FROM %s WHERE id=?", table), decoder, cql.IntValue(1))
+			row, err := serializationOne(s, fmt.Sprintf("SELECT id,val FROM %s WHERE id=?", table), decoder, dynamic.Int(1))
 			if err != nil {
 				t.Fatal(err)
 			}

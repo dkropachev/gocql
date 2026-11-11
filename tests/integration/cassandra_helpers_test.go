@@ -14,6 +14,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/retry"
@@ -21,13 +22,13 @@ import (
 
 // These helpers accept typed descriptors and explicit values. Retained results
 // are cloned before their page is closed.
-func cassandraValue(value cql.Value, err error) cql.Value {
+func cassandraValue(value dynamic.Value, err error) dynamic.Value {
 	if err != nil {
 		panic(err)
 	}
 	return value
 }
-func cassandraField(t testing.TB, row cql.DynamicRow, name string) cql.Value {
+func cassandraField(t testing.TB, row dynamic.Row, name string) dynamic.Value {
 	t.Helper()
 	v, err := row.Get(name)
 	if err != nil {
@@ -35,7 +36,7 @@ func cassandraField(t testing.TB, row cql.DynamicRow, name string) cql.Value {
 	}
 	return v
 }
-func cassandraInt(t testing.TB, row cql.DynamicRow, name string) int64 {
+func cassandraInt(t testing.TB, row dynamic.Row, name string) int64 {
 	t.Helper()
 	v, err := cassandraField(t, row, name).Signed()
 	if err != nil {
@@ -43,7 +44,7 @@ func cassandraInt(t testing.TB, row cql.DynamicRow, name string) int64 {
 	}
 	return v
 }
-func cassandraText(t testing.TB, row cql.DynamicRow, name string) string {
+func cassandraText(t testing.TB, row dynamic.Row, name string) string {
 	t.Helper()
 	v, err := cassandraField(t, row, name).Text()
 	if err != nil {
@@ -51,7 +52,7 @@ func cassandraText(t testing.TB, row cql.DynamicRow, name string) string {
 	}
 	return v.String()
 }
-func cassandraBool(t testing.TB, row cql.DynamicRow, name string) bool {
+func cassandraBool(t testing.TB, row dynamic.Row, name string) bool {
 	t.Helper()
 	v, err := cassandraField(t, row, name).Bool()
 	if err != nil {
@@ -59,7 +60,7 @@ func cassandraBool(t testing.TB, row cql.DynamicRow, name string) bool {
 	}
 	return v
 }
-func cassandraRead(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...cql.Value) cql.DynamicRow {
+func cassandraRead(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...dynamic.Value) dynamic.Row {
 	t.Helper()
 	row, err := v2ReadOne(context.Background(), s, stmt, values...)
 	if err != nil {
@@ -67,7 +68,7 @@ func cassandraRead(t testing.TB, s *gocql.Session[testDialect], stmt string, val
 	}
 	return row
 }
-func cassandraWrite(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...cql.Value) gocql.Result {
+func cassandraWrite(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...dynamic.Value) gocql.Result {
 	t.Helper()
 	result, err := v2Exec(context.Background(), s, stmt, values...)
 	if err != nil {
@@ -152,23 +153,23 @@ func cassandraItem[R any](t testing.TB, b *Bound[R]) batchItem {
 	}
 	return item
 }
-func cassandraDynamicBound[O fixturePrepareOptions](t testing.TB, s *gocql.Session[testDialect], stmt string, values []cql.Value, options O) *Bound[cql.DynamicRow] {
+func cassandraDynamicBound[O fixturePrepareOptions](t testing.TB, s *gocql.Session[testDialect], stmt string, values []dynamic.Value, options O) *Bound[dynamic.Row] {
 	t.Helper()
-	return cassandraBound(t, cassandraPrepared(t, s, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}, options), values)
+	return cassandraBound(t, cassandraPrepared(t, s, cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: stmt, Params: dynamic.Params, Rows: dynamic.Rows}, options), values)
 }
-func cassandraWriteBound[O fixturePrepareOptions](t testing.TB, s *gocql.Session[testDialect], stmt string, values []cql.Value, options O) *Bound[cql.EmptyRow] {
+func cassandraWriteBound[O fixturePrepareOptions](t testing.TB, s *gocql.Session[testDialect], stmt string, values []dynamic.Value, options O) *Bound[cql.EmptyRow] {
 	t.Helper()
-	return cassandraBound(t, cassandraPrepared(t, s, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}, options), values)
+	return cassandraBound(t, cassandraPrepared(t, s, cql.Statement[[]dynamic.Value, cql.EmptyRow]{CQL: stmt, Params: dynamic.Params, Rows: cql.EmptyRowDecoder}, options), values)
 }
-func cassandraRows[O fixtureOptions](t testing.TB, s *gocql.Session[testDialect], b *Bound[cql.DynamicRow], options O) []cql.DynamicRow {
+func cassandraRows[O fixtureOptions](t testing.TB, s *gocql.Session[testDialect], b *Bound[dynamic.Row], options O) []dynamic.Row {
 	t.Helper()
 	rows, err := Run(context.Background(), s, b, bindOptions(s, options))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	var result []cql.DynamicRow
-	var cur cql.DynamicRow
+	var result []dynamic.Row
+	var cur dynamic.Row
 	for rows.NextInto(&cur) {
 		row, err := rows.Clone()
 		if err != nil {
@@ -294,9 +295,9 @@ func (fullNameCodec) Decode(r cql.ValueReader) (FullName, error) {
 	return FullName{FirstName: names[0], LastName: names[1]}, nil
 }
 func (fullNameCodec) Clone(n FullName) FullName { return n }
-func cassandraCASBound[R any](t testing.TB, s *gocql.Session[testDialect], stmt string, values []cql.Value, decoder cql.RowDecoder[R]) *Bound[cql.CASResult[R]] {
+func cassandraCASBound[R any](t testing.TB, s *gocql.Session[testDialect], stmt string, values []dynamic.Value, decoder cql.RowDecoder[R]) *Bound[cql.CASResult[R]] {
 	t.Helper()
-	return cassandraBound(t, cassandraPrepared(t, s, cql.Statement[[]cql.Value, cql.CASResult[R]]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.CASRows(decoder)}, gocql.PrepareOptions{}), values)
+	return cassandraBound(t, cassandraPrepared(t, s, cql.Statement[[]dynamic.Value, cql.CASResult[R]]{CQL: stmt, Params: dynamic.Params, Rows: cql.CASRows(decoder)}, gocql.PrepareOptions{}), values)
 }
 
 func cassandraUUID(text string) cql.UUID {

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/stream"
 )
 
 func TestCollectionDecoders(t *testing.T) {
@@ -29,11 +30,11 @@ func TestCollectionDecoders(t *testing.T) {
 		typ     cql.DataType
 		codec   cql.Codec[[]int32]
 		decoder cql.Decoder[[]int32]
-		stream  cql.StreamDecoder[[]int32]
+		stream  stream.Decoder[[]int32]
 	}{
-		{"list", list, cql.ListCodec(cql.Int32Codec), cql.ListDecoder(cql.Int32Codec), cql.StreamList(cql.StreamInt32)},
-		{"set", set, cql.SetCodec(cql.Int32Codec), cql.SetDecoder(cql.Int32Codec), cql.StreamSet(cql.StreamInt32)},
-		{"vector", vector, cql.VectorCodec(cql.Int32Codec), cql.VectorDecoder(cql.Int32Codec), cql.StreamVector(cql.StreamInt32)},
+		{"list", list, cql.ListCodec(cql.Int32Codec), cql.ListDecoder(cql.Int32Codec), stream.List(stream.Int32)},
+		{"set", set, cql.SetCodec(cql.Int32Codec), cql.SetDecoder(cql.Int32Codec), stream.Set(stream.Int32)},
+		{"vector", vector, cql.VectorCodec(cql.Int32Codec), cql.VectorDecoder(cql.Int32Codec), stream.Vector(stream.Int32)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			want := []int32{7, -3}
@@ -81,7 +82,7 @@ func TestMapDecoders(t *testing.T) {
 			t.Fatal("Clone shares map key storage")
 		}
 	}
-	var stream cql.StreamDecoder[[]cql.Entry[[]byte, int32]] = cql.StreamMap(cql.StreamBlob, cql.StreamInt32)
+	var stream stream.Decoder[[]cql.Entry[[]byte, int32]] = stream.Map(stream.Blob, stream.Int32)
 	if _, err := stream.Compile(typ); err != nil {
 		t.Fatal(err)
 	}

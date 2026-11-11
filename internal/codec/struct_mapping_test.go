@@ -558,13 +558,13 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal("unmapped streaming column accepted")
 			}
 			type text struct{ Name string }
-			if _, err := ReflectStreamRow[text](); err == nil || !strings.Contains(err.Error(), "WithStreamCodec") {
+			if _, err := ReflectStreamRow[text](); err == nil || !strings.Contains(err.Error(), "stream.WithCodec") {
 				t.Fatalf("string field: %v", err)
 			}
 			type badTag struct {
-				Name []byte `cql:"name,stream=StreamInt32"`
+				Name []byte `cql:"name,stream=Int32"`
 			}
-			if _, err := ReflectStreamRow[badTag](); err == nil || !strings.Contains(err.Error(), "StreamInt32") {
+			if _, err := ReflectStreamRow[badTag](); err == nil || !strings.Contains(err.Error(), "Int32") {
 				t.Fatalf("wrong stream tag: %v", err)
 			}
 		})

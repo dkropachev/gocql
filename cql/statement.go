@@ -27,19 +27,6 @@ type Statement[P, R any] struct {
 	Kind StatementKind
 }
 
-// StreamStatement pairs CQL and typed parameters with a decoder that writes
-// rows into caller-owned storage. Session.PrepareStream prepares it; streaming
-// is always prepared. No buffered row decoder is required.
-type StreamStatement[P, R any] struct {
-	// Params encodes P. It may be nil when P is EmptyParams.
-	Params ParamEncoder[P]
-	// Rows decodes into seeded caller storage and must not be nil.
-	Rows StreamRowDecoder[R]
-	CQL  string
-	// Kind classifies ordinary and conditional statements for safe execution.
-	Kind StatementKind
-}
-
 // ByteSliceCodec encodes a []byte and decodes a blob into caller-owned
 // storage, the []byte counterpart of StringCodec. RowInto and ReuseBuffers
 // preserve a seeded slice when its capacity is sufficient. The decoded bytes

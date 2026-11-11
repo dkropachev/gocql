@@ -444,7 +444,7 @@ func reflectFields[P any](opts []StructOption[P]) ([]reflectedField[P], error) {
 	builtins := builtinFields[P]()
 	var fields []reflectedField[P]
 	err = eachStructField(t, func(sf reflect.StructField, tag FieldTag) error {
-		entry, err := resolveField(builtins, config.codecs, sf.Type, tag.Codec, "WithCodec")
+		entry, err := resolveField(builtins, config.codecs, sf.Type, tag.Codec, "cql.WithCodec")
 		if err == nil {
 			fields = append(fields, reflectedField[P]{entry: entry, column: tag.Column, offset: sf.Offset})
 		}
@@ -630,49 +630,49 @@ func (f streamBuiltinField[P]) meta() BuiltinFieldType { return f.BuiltinFieldTy
 func streamBuiltinFields[P any]() []streamBuiltinField[P] {
 	var fields []streamBuiltinField[P]
 	add := func(entries ...streamBuiltinField[P]) { fields = append(fields, entries...) }
-	add(streamBuiltin[P](StreamBool, "bool", "StreamBool", true)...)
-	add(streamBuiltin[P](StreamInt8, "int8", "StreamInt8", true)...)
-	add(streamBuiltin[P](StreamInt16, "int16", "StreamInt16", true)...)
-	add(streamBuiltin[P](StreamInt32, "int32", "StreamInt32", true)...)
-	add(streamBuiltin[P](StreamInt64, "int64", "StreamInt64", true)...)
-	add(streamBuiltin[P](StreamFloat32, "float32", "StreamFloat32", true)...)
-	add(streamBuiltin[P](StreamFloat64, "float64", "StreamFloat64", true)...)
-	add(streamBuiltin[P](StreamBlob, "[]byte", "StreamBlob", true)...)
-	add(streamBuiltin[P](StreamText, "[]byte", "StreamText", false)...)
-	add(streamBuiltin[P](StreamASCII, "[]byte", "StreamASCII", false)...)
-	add(streamBuiltin[P](StreamVarint, "[]byte", "StreamVarint", false)...)
-	add(streamBuiltin[P](StreamUUID, "cql.UUID", "StreamUUID", true)...)
-	add(streamBuiltin[P](StreamTimeUUID, "cql.TimeUUID", "StreamTimeUUID", true)...)
-	add(streamBuiltin[P](StreamInet, "netip.Addr", "StreamInet", true)...)
-	add(streamBuiltin[P](StreamCounter, "cql.Counter", "StreamCounter", true)...)
-	add(streamBuiltin[P](StreamDecimal, "cql.StreamDecimalValue", "StreamDecimal", true)...)
-	add(streamBuiltin[P](StreamDate, "cql.Date", "StreamDate", true)...)
-	add(streamBuiltin[P](StreamTime, "cql.TimeOfDay", "StreamTime", true)...)
-	add(streamBuiltin[P](StreamTimestamp, "cql.Timestamp", "StreamTimestamp", true)...)
-	add(streamBuiltin[P](StreamDuration, "cql.Duration", "StreamDuration", true)...)
+	add(streamBuiltin[P](StreamBool, "bool", "Bool", true)...)
+	add(streamBuiltin[P](StreamInt8, "int8", "Int8", true)...)
+	add(streamBuiltin[P](StreamInt16, "int16", "Int16", true)...)
+	add(streamBuiltin[P](StreamInt32, "int32", "Int32", true)...)
+	add(streamBuiltin[P](StreamInt64, "int64", "Int64", true)...)
+	add(streamBuiltin[P](StreamFloat32, "float32", "Float32", true)...)
+	add(streamBuiltin[P](StreamFloat64, "float64", "Float64", true)...)
+	add(streamBuiltin[P](StreamBlob, "[]byte", "Blob", true)...)
+	add(streamBuiltin[P](StreamText, "[]byte", "Text", false)...)
+	add(streamBuiltin[P](StreamASCII, "[]byte", "ASCII", false)...)
+	add(streamBuiltin[P](StreamVarint, "[]byte", "Varint", false)...)
+	add(streamBuiltin[P](StreamUUID, "cql.UUID", "UUID", true)...)
+	add(streamBuiltin[P](StreamTimeUUID, "cql.TimeUUID", "TimeUUID", true)...)
+	add(streamBuiltin[P](StreamInet, "netip.Addr", "Inet", true)...)
+	add(streamBuiltin[P](StreamCounter, "cql.Counter", "Counter", true)...)
+	add(streamBuiltin[P](StreamDecimal, "stream.DecimalValue", "Decimal", true)...)
+	add(streamBuiltin[P](StreamDate, "cql.Date", "Date", true)...)
+	add(streamBuiltin[P](StreamTime, "cql.TimeOfDay", "Time", true)...)
+	add(streamBuiltin[P](StreamTimestamp, "cql.Timestamp", "Timestamp", true)...)
+	add(streamBuiltin[P](StreamDuration, "cql.Duration", "Duration", true)...)
 	return fields
 }
 
 // streamBuiltin returns the entries for V, Nullable[V], and []V as a list
-// (the default), a set (`stream=StreamSet`), or a vector (`stream=StreamVector`).
+// (the default), a set (`stream=Set`), or a vector (`stream=Vector`).
 func streamBuiltin[P, V any](dec StreamDecoder[V], typeSrc, name string, def bool) []streamBuiltinField[P] {
 	entry := func(typ reflect.Type, typeSrc, decSrc string, names []string, def bool, column func(string, uintptr) StreamOutputField[P]) streamBuiltinField[P] {
 		return streamBuiltinField[P]{column: column, BuiltinFieldType: BuiltinFieldType{
 			Type: typ, TypeSrc: typeSrc, DecoderSrc: decSrc, Names: names, Default: def,
 		}}
 	}
-	src := "cql." + name
+	src := "stream." + name
 	return []streamBuiltinField[P]{
 		entry(reflect.TypeFor[V](), typeSrc, src, []string{name}, def, fieldStreamColumn[P](dec)),
-		entry(reflect.TypeFor[cqltype.Nullable[V]](), "cql.Nullable["+typeSrc+"]", "cql.StreamNullable("+src+")",
+		entry(reflect.TypeFor[cqltype.Nullable[V]](), "cql.Nullable["+typeSrc+"]", "stream.Nullable("+src+")",
 			[]string{name}, def, fieldStreamColumn[P](StreamNullable(dec))),
 		// A list or set takes its element's default decoder.
-		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamList("+src+")",
-			[]string{"StreamList"}, def, fieldStreamColumn[P](StreamList(dec))),
-		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamSet("+src+")",
-			[]string{"StreamSet"}, false, fieldStreamColumn[P](StreamSet(dec))),
-		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamVector("+src+")",
-			[]string{"StreamVector"}, false, fieldStreamColumn[P](StreamVector(dec))),
+		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "stream.List("+src+")",
+			[]string{"List"}, def, fieldStreamColumn[P](StreamList(dec))),
+		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "stream.Set("+src+")",
+			[]string{"Set"}, false, fieldStreamColumn[P](StreamSet(dec))),
+		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "stream.Vector("+src+")",
+			[]string{"Vector"}, false, fieldStreamColumn[P](StreamVector(dec))),
 	}
 }
 
@@ -707,9 +707,10 @@ func WithStreamCodec[P, V any](decoder StreamDecoder[V]) StructOption[P] {
 	return streamCodecOption[P, V]{decoder: decoder}
 }
 
-// GeneratedStreamRow decodes streamed rows with the generated mapping fields,
-// with opts applied to it, or reflects R when fields has no stream mapping.
-func GeneratedStreamRow[R any](fields StructFields[R], opts ...StructOption[R]) (StreamRowDecoder[R], error) {
+// GeneratedStreamRow decodes streamed rows with the generated stream
+// columns, with opts applied to them, or reflects R when columns is nil.
+func GeneratedStreamRow[R any](columns []StreamOutputField[R], opts ...StructOption[R]) (StreamRowDecoder[R], error) {
+	fields := StructFields[R]{StreamColumns: columns}
 	if fields.StreamColumns == nil {
 		return ReflectStreamRow(opts...)
 	}
@@ -737,7 +738,7 @@ func ReflectStreamRow[R any](opts ...StructOption[R]) (StreamRowDecoder[R], erro
 	builtins := streamBuiltinFields[R]()
 	var columns []StreamOutputField[R]
 	err = eachStructField(t, func(sf reflect.StructField, tag FieldTag) error {
-		entry, err := resolveField(builtins, config.streams, sf.Type, tag.Stream, "WithStreamCodec")
+		entry, err := resolveField(builtins, config.streams, sf.Type, tag.Stream, "stream.WithCodec")
 		if err == nil {
 			columns = append(columns, entry.column(tag.Column, sf.Offset))
 		}

@@ -11,8 +11,7 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
-
-	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 )
 
 // A nil allowlist cleans the whole owned run after its test process joins. A
@@ -49,7 +48,7 @@ func cleanupNamespaces(t *testing.T, allowed []string) {
 		t.Fatal(err)
 	}
 	var names []string
-	var row cql.DynamicRow
+	var row dynamic.Row
 	for rows.NextInto(&row) {
 		value, err := row.At(0)
 		if err != nil {
@@ -106,7 +105,7 @@ func checkAggregate(t *testing.T, s *gocql.Session[testDialect], keyspace string
 		t.Fatal(err)
 	}
 	for id, value := range []float64{2, 4, 9} {
-		if _, err := v2Exec(context.Background(), s, "INSERT INTO "+table+" (id,value) VALUES (?,?)", cql.IntValue(int32(id)), cql.DoubleValue(value)); err != nil {
+		if _, err := v2Exec(context.Background(), s, "INSERT INTO "+table+" (id,value) VALUES (?,?)", dynamic.Int(int32(id)), dynamic.Double(value)); err != nil {
 			t.Fatal(err)
 		}
 	}

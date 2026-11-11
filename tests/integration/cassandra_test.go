@@ -29,6 +29,7 @@ package integration
 import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/metadata"
 
@@ -212,10 +213,10 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session[testDialect], c
 	_, err := Exec(ctx, session, create, bindOptions(session, options))
 	require.NoError(t, err)
 	require.NoError(t, (*implSession.Session)(session).Core().AwaitV2SchemaAgreementOn(ctx, conn))
-	write := cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id) VALUES(?)", []cql.Value{cql.IntValue(1)}, prepareOptions)
+	write := cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id) VALUES(?)", []dynamic.Value{dynamic.Int(1)}, prepareOptions)
 	_, err = Exec(ctx, session, write, bindOptions(session, options))
 	require.NoError(t, err)
-	prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT * FROM " + qualified, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}, prepareOptions)
+	prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: "SELECT * FROM " + qualified, Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}, prepareOptions)
 	bound := cassandraBound(t, prepared, cql.EmptyParams{})
 	row := cassandraReadBound(t, session, bound, options)
 	require.Equal(t, 1, row.Columns().Len())
@@ -239,7 +240,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session[testDialect], c
 	// Include the exact host that applied ALTER; checking another host can
 	// falsely agree on the old version before schema propagation starts.
 	require.NoError(t, (*implSession.Session)(session).Core().AwaitV2SchemaAgreementOn(ctx, conn))
-	write = cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id,new_col) VALUES(?,?)", []cql.Value{cql.IntValue(2), cql.IntValue(10)}, prepareOptions)
+	write = cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id,new_col) VALUES(?,?)", []dynamic.Value{dynamic.Int(2), dynamic.Int(10)}, prepareOptions)
 	_, err = Exec(ctx, session, write, bindOptions(session, options))
 	require.NoError(t, err)
 	checkRows := func() {
@@ -247,8 +248,8 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session[testDialect], c
 		rows, err := Run(ctx, session, bound, bindOptions(session, options))
 		require.NoError(t, err)
 		defer rows.Close()
-		found := map[int64]cql.Value{}
-		var row cql.DynamicRow
+		found := map[int64]dynamic.Value{}
+		var row dynamic.Row
 		for rows.NextInto(&row) {
 			require.Equal(t, 2, row.Columns().Len())
 			found[cassandraInt(t, row, "id")] = cassandraField(t, row, "new_col").Clone()

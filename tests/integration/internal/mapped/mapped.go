@@ -33,10 +33,10 @@ type Event struct { //nolint:govet // field order mirrors the table, not memory 
 type StreamEvent struct { //nolint:govet // field order mirrors the table, not memory layout
 	Bucket int32
 	ID     cql.UUID `cql:"id"`
-	Name   []byte   `cql:"name,stream=StreamText"`
+	Name   []byte   `cql:"name,stream=Text"`
 	Blob   []byte
 	Big    int64
 	Maybe  cql.Nullable[int32]
-	Scores []int32 `cql:"scores,codec=SetCodec,stream=StreamSet"`
+	Scores []int32 `cql:"scores,codec=SetCodec,stream=Set"`
 	Audit
 }

@@ -52,6 +52,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -63,9 +64,9 @@ import (
 )
 
 // Typed request helpers keep parameter construction explicit and bind inputs once.
-func sessionTestBind(t testing.TB, session *gocql.Session[testDialect], stmt string, values ...cql.Value) *Bound[cql.EmptyRow] {
+func sessionTestBind(t testing.TB, session *gocql.Session[testDialect], stmt string, values ...dynamic.Value) *Bound[cql.EmptyRow] {
 	t.Helper()
-	prepared, err := session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
+	prepared, err := session.Prepare(context.Background(), cql.Statement[[]dynamic.Value, cql.EmptyRow]{CQL: stmt, Params: dynamic.Params, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +84,7 @@ func sessionTestItem[R any](t testing.TB, bound *Bound[R]) batchItem {
 	}
 	return item
 }
-func sessionTestInt(t testing.TB, row cql.DynamicRow, name string) int64 {
+func sessionTestInt(t testing.TB, row dynamic.Row, name string) int64 {
 	t.Helper()
 	value, err := row.Get(name)
 	if err != nil {
@@ -461,7 +462,7 @@ func TestSession(t *testing.T) {
 
 				rows, err := v2Query(context.Background(), s, "select * from system.peers")
 				if err == nil {
-					var row cql.DynamicRow
+					var row dynamic.Row
 					for rows.NextInto(&row) {
 					}
 					err = rows.Err()

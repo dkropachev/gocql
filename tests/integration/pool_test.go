@@ -40,6 +40,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
@@ -184,7 +185,7 @@ func TestPool(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer r.InternalClose(false)
-		decoder := cql.StreamRowInto(func(*cql.Pair[int32, []byte]) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *cql.Pair[int32, []byte]) *int32 { return &r.First }), cql.StreamColumn("value", cql.StreamBlob, func(r *cql.Pair[int32, []byte]) *[]byte { return &r.Second }))
+		decoder := stream.RowInto(func(*cql.Pair[int32, []byte]) {}, stream.Column("id", stream.Int32, func(r *cql.Pair[int32, []byte]) *int32 { return &r.First }), stream.Column("value", stream.Blob, func(r *cql.Pair[int32, []byte]) *[]byte { return &r.Second }))
 		request := &attemptRequest{Statement: "SELECT id,value FROM " + qualified, Consistency: cql.Quorum, PageSize: 2}
 		seen := map[int32]bool{}
 		pages := 0

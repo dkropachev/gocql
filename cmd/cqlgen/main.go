@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license.
 
 // Command cqlgen generates the mappings of Go structs, so cql.ParamsOf,
-// cql.RowOf and cql.StreamRowOf use generated code instead of reflecting the
+// cql.RowOf and stream.RowOf use generated code instead of reflecting the
 // struct at startup. The mappings match what reflection builds: the same
 // `cql:"name,codec=X,stream=Y"` tags, the same Go type to codec tables, and
 // the same type identity, so an alias maps like the type it names. A field
 // type with no built-in codec needs a tag naming a Go expression, such as
 // `cql:"location,codec=geo.PointCodec"`. The buffered mapping (ParamsOf,
-// RowOf) and the streaming one (StreamRowOf) are each generated when every
+// RowOf) and the streaming one (stream.RowOf) are each generated when every
 // field has a codec for it. Structs embedded by value are flattened as
 // reflection flattens them.
 //
@@ -17,9 +17,10 @@
 //	//go:generate go run github.com/scylladb/gocql/v2/cmd/cqlgen -type=Tweet
 //
 // The output lands next to that file, as <file>_cql.go (or <file>_cql_test.go
-// for a struct declared in a test file), as a CQLFields method of each type,
-// which cql.ParamsOf, cql.RowOf and cql.StreamRowOf find through the method
-// set. Nothing is registered, so a package-level variable such as
+// for a struct declared in a test file), as methods of each type: CQLFields
+// for the buffered mapping, which cql.ParamsOf and cql.RowOf find through the
+// method set, and CQLStreamColumns for the streaming one, which stream.RowOf
+// finds. Nothing is registered, so a package-level variable such as
 // `var rows = cql.MustRowOf[Tweet]()` uses the generated mapping too.
 // cqlgen type-checks the package against export data from go list, so the
 // package must compile.

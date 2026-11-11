@@ -5,31 +5,30 @@ package cql
 
 import codec "github.com/scylladb/gocql/v2/internal/codec"
 
-// StructOption configures ParamsOf, RowOf and StreamRowOf. Each option
+// StructOption configures ParamsOf, RowOf and stream.RowOf. Each option
 // affects only some of them, and the others ignore it:
 //
-//   - WithCodec: ParamsOf and RowOf. StreamRowOf decodes with stream
-//     decoders, so it ignores WithCodec; use WithStreamCodec.
-//   - WithStreamCodec: StreamRowOf only.
+//   - WithCodec: ParamsOf and RowOf. stream.RowOf decodes with stream
+//     decoders, so it ignores WithCodec; use stream.WithCodec.
+//   - stream.WithCodec: stream.RowOf only.
 //   - ReuseBuffers: RowOf only. ParamsOf has no destination, and
-//     StreamRowOf always reuses its slice storage.
+//     stream.RowOf always reuses its slice storage.
 //
 // Each call builds an independent mapping; options never change a generated
 // mapping in place.
 type StructOption[P any] = codec.StructOption[P]
 
-// StructFields is a struct's complete mapping. cmd/cqlgen generates it as a
+// StructFields is a struct's buffered mapping. cmd/cqlgen generates it as a
 // method of the struct,
 //
 //	func (T) CQLFields() cql.StructFields[T]
 //
-// which ParamsOf, RowOf and StreamRowOf call instead of reflecting T. A nil
-// slice means the generator found no codec for some field in that direction;
-// that direction then reflects and reports the field.
+// which ParamsOf and RowOf call instead of reflecting T. A nil slice means
+// that direction reflects T, and reports a field it cannot map. The
+// streaming mapping is a separate CQLStreamColumns method; see stream.RowOf.
 type StructFields[P any] struct {
-	Params        []InputField[P]
-	Columns       []OutputField[P]
-	StreamColumns []StreamOutputField[P]
+	Params  []InputField[P]
+	Columns []OutputField[P]
 }
 
 // ParamsOf binds a statement's parameters from the exported fields of struct
@@ -74,30 +73,15 @@ func MustRowOf[R any](opts ...StructOption[R]) RowDecoder[R] { return must(RowOf
 // with no built-in codec, such as a UDT, or a replacement for V's default.
 // Recognized built-in codec tags take precedence. The option also applies to
 // generated mappings; other generated custom-expression codecs remain defaults.
-// It affects ParamsOf and RowOf; StreamRowOf ignores it.
+// It affects ParamsOf and RowOf; stream.RowOf ignores it.
 func WithCodec[P, V any](c Codec[V]) StructOption[P] { return codec.WithCodec[P, V](c) }
-
-// StreamRowOf decodes streamed rows into struct P by column name, mapped like
-// RowOf but with the streaming decoders, which have their own Go types: text,
-// ascii, blob and varint columns decode into []byte (blob by default; pick
-// another with `cql:"name,stream=StreamText"`), and slices decode lists
-// (`stream=StreamSet` for sets, `stream=StreamVector` for vectors).
-// Storage of []byte and slice fields is reused
-// across rows. Every column needs a field.
-func StreamRowOf[R any](opts ...StructOption[R]) (StreamRowDecoder[R], error) {
-	return codec.GeneratedStreamRow(generatedFields[R](), opts...)
-}
-
-// MustStreamRowOf is StreamRowOf that panics on error.
-func MustStreamRowOf[R any](opts ...StructOption[R]) StreamRowDecoder[R] {
-	return must(StreamRowOf(opts...))
-}
 
 // generatedFields returns the mapping of P's CQLFields method, with a value
 // or pointer receiver, or the zero StructFields, which reflects P.
 func generatedFields[P any]() codec.StructFields[P] {
 	if g, ok := any(new(P)).(interface{ CQLFields() StructFields[P] }); ok {
-		return codec.StructFields[P](g.CQLFields())
+		f := g.CQLFields()
+		return codec.StructFields[P]{Params: f.Params, Columns: f.Columns}
 	}
 	return codec.StructFields[P]{}
 }
@@ -109,20 +93,12 @@ func must[T any](v T, err error) T {
 	return v
 }
 
-// WithStreamCodec maps P's fields of type V, Nullable[V] and []V (as a list)
-// with decoder in StreamRowOf. Recognized built-in stream tags take
-// precedence, including in generated mappings. It affects StreamRowOf only;
-// ParamsOf and RowOf ignore it.
-func WithStreamCodec[P, V any](decoder StreamDecoder[V]) StructOption[P] {
-	return codec.WithStreamCodec[P, V](decoder)
-}
-
 // ReuseBuffers makes RowOf keep the storage of P's slice fields, such as
 // []byte and lists, between rows decoded into the same destination, as
 // RowInto does. The next row overwrites that storage, so copy a field that
 // must outlive its row. Other fields, maps included, are zeroed as usual.
-// It affects RowOf only: ParamsOf has no destination, and StreamRowOf always
-// reuses slice storage.
+// It affects RowOf only: ParamsOf has no destination, and stream.RowOf
+// always reuses slice storage.
 func ReuseBuffers[P any]() StructOption[P] { return codec.ReuseBuffers[P]() }
 
 // ListCodec encodes and decodes a list as a []T, the form struct mappings

@@ -37,6 +37,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
@@ -107,8 +108,8 @@ func TestFraming(t *testing.T) {
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,text_col text)", table))
 			text := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()_+"
-			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,text_col) VALUES(?,?)", table), cql.IntValue(1), codecTestMust(cql.TextValue(text)))
-			require.Equal(t, text, cassandraText(t, cassandraRead(t, session, fmt.Sprintf("SELECT text_col FROM %s WHERE id=?", table), cql.IntValue(1)), "text_col"))
+			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,text_col) VALUES(?,?)", table), dynamic.Int(1), codecTestMust(dynamic.Text(text)))
+			require.Equal(t, text, cassandraText(t, cassandraRead(t, session, fmt.Sprintf("SELECT text_col FROM %s WHERE id=?", table), dynamic.Int(1)), "text_col"))
 		})
 	})
 
@@ -232,9 +233,9 @@ func TestFraming(t *testing.T) {
 			require.True(t, conn.InternalUsesMetadataID(), "server advertises metadata IDs but driver did not negotiate them")
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,val int)", table))
-			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES(?,?)", table), cql.IntValue(1), cql.IntValue(7))
+			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES(?,?)", table), dynamic.Int(1), dynamic.Int(7))
 			host := cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
-			prepared := cassandraPrepared(t, session, cql.Statement[int32, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id,val FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.DynamicRows}, *func() *implSession.PrepareOptions {
+			prepared := cassandraPrepared(t, session, cql.Statement[int32, dynamic.Row]{CQL: fmt.Sprintf("SELECT id,val FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32Codec), Rows: dynamic.Rows}, *func() *implSession.PrepareOptions {
 				opaqueStorageValuexxxxxx := new(implSession.PrepareOptions)
 				opaqueStorageValuexxxxxx.HostID = host
 				implSession.PrepareOptionsData(opaqueStorageValuexxxxxx).InternalConnection = conn
@@ -284,7 +285,7 @@ func TestFraming(t *testing.T) {
 		table := testTableName(t)
 		cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,text_col text)", table))
 		text := strings.Repeat("a", 500000)
-		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,text_col) VALUES(?,?)", table), cql.IntValue(1), codecTestMust(cql.TextValue(text)))
+		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,text_col) VALUES(?,?)", table), dynamic.Int(1), codecTestMust(dynamic.Text(text)))
 		require.Equal(t, text, cassandraText(t, cassandraRead(t, session, "SELECT text_col FROM "+table), "text_col"))
 	})
 }

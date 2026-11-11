@@ -33,14 +33,14 @@ func TestGenerator(t *testing.T) {
 
 	t.Run("GenerateSource", func(t *testing.T) {
 		t.Run("Vector", func(t *testing.T) {
-			_, out, err := generateSource(t, "x.go", "package x\n\ntype T struct { Values []int32 `cql:\"values,codec=VectorCodec,stream=StreamVector\"` }\n", "T")
+			_, out, err := generateSource(t, "x.go", "package x\n\ntype T struct { Values []int32 `cql:\"values,codec=VectorCodec,stream=Vector\"` }\n", "T")
 			if err != nil {
 				t.Fatal(err)
 			}
 			for _, want := range []string{
 				`cql.Param("values", cql.VectorCodec(cql.Int32Codec),`,
 				`cql.Column("values", cql.VectorCodec(cql.Int32Codec),`,
-				`cql.StreamColumn("values", cql.StreamVector(cql.StreamInt32),`,
+				`stream.Column("values", stream.Vector(stream.Int32),`,
 			} {
 				if !strings.Contains(out, want) {
 					t.Errorf("missing %s in:\n%s", want, out)
@@ -121,7 +121,7 @@ type T struct {
 				`cql.Param("id", cql.Int64Codec, func(v T) int64 { return v.ID })`,
 				`cql.Column("createdat", cql.TimestampCodec, func(v *T) *cql.Timestamp { return &v.audit.CreatedAt })`,
 				`cql.Column("months", cql.Int32Codec, func(v *T) *int32 { return &v.Duration.Months })`,
-				`cql.StreamColumn("nanoseconds", cql.StreamInt64, func(v *T) *int64 { return &v.Duration.Nanoseconds })`,
+				`stream.Column("nanoseconds", stream.Int64, func(v *T) *int64 { return &v.Duration.Nanoseconds })`,
 			} {
 				if !strings.Contains(out, want) {
 					t.Errorf("missing %s in:\n%s", want, out)
@@ -172,8 +172,8 @@ type T struct {
 				t.Fatal(err)
 			}
 			for _, want := range []string{
-				`cql.StreamColumn("a", cql.StreamUUID, func(v *T) *ID { return &v.A })`,
-				`cql.StreamColumn("b", cql.StreamList(cql.StreamBlob), func(v *T) *Blobs { return &v.B })`,
+				`stream.Column("a", stream.UUID, func(v *T) *ID { return &v.A })`,
+				`stream.Column("b", stream.List(stream.Blob), func(v *T) *Blobs { return &v.B })`,
 			} {
 				if !strings.Contains(out, want) {
 					t.Errorf("missing %s in:\n%s", want, out)
@@ -188,14 +188,14 @@ type T struct {
 		t.Run("StreamOnly", func(t *testing.T) {
 			_, out, err := generateSource(t, "x.go", `package x
 
-import "github.com/scylladb/gocql/v2/cql"
+import "github.com/scylladb/gocql/v2/cql/stream"
 
-type T struct{ D cql.StreamDecimalValue }
+type T struct{ D stream.DecimalValue }
 `, "T")
 			if err != nil {
 				t.Fatal(err)
 			}
-			if strings.Contains(out, "Params:") || !strings.Contains(out, "cql.StreamDecimal,") {
+			if strings.Contains(out, "CQLFields") || !strings.Contains(out, "stream.Decimal,") {
 				t.Errorf("expected only a stream mapping:\n%s", out)
 			}
 		})

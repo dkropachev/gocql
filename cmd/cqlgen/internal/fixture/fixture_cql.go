@@ -6,10 +6,11 @@ import (
 	"net/netip"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/stream"
 )
 
 // CQLFields returns the generated mapping of Fixture's fields, which
-// cql.ParamsOf, cql.RowOf and cql.StreamRowOf use instead of reflection.
+// cql.ParamsOf and cql.RowOf use instead of reflection.
 func (Fixture) CQLFields() cql.StructFields[Fixture] {
 	return cql.StructFields[Fixture]{
 		Params: []cql.InputField[Fixture]{
@@ -78,7 +79,7 @@ func (Fixture) CQLFields() cql.StructFields[Fixture] {
 }
 
 // CQLFields returns the generated mapping of Point's fields, which
-// cql.ParamsOf, cql.RowOf and cql.StreamRowOf use instead of reflection.
+// cql.ParamsOf and cql.RowOf use instead of reflection.
 func (Point) CQLFields() cql.StructFields[Point] {
 	return cql.StructFields[Point]{
 		Params: []cql.InputField[Point]{
@@ -89,15 +90,20 @@ func (Point) CQLFields() cql.StructFields[Point] {
 			cql.Column("x", cql.Int32Codec, func(v *Point) *int32 { return &v.X }),
 			cql.Column("y", cql.Int32Codec, func(v *Point) *int32 { return &v.Y }),
 		},
-		StreamColumns: []cql.StreamOutputField[Point]{
-			cql.StreamColumn("x", cql.StreamInt32, func(v *Point) *int32 { return &v.X }),
-			cql.StreamColumn("y", cql.StreamInt32, func(v *Point) *int32 { return &v.Y }),
-		},
+	}
+}
+
+// CQLStreamColumns returns the generated stream mapping of Point's
+// fields, which stream.RowOf uses instead of reflection.
+func (Point) CQLStreamColumns() []stream.OutputField[Point] {
+	return []stream.OutputField[Point]{
+		stream.Column("x", stream.Int32, func(v *Point) *int32 { return &v.X }),
+		stream.Column("y", stream.Int32, func(v *Point) *int32 { return &v.Y }),
 	}
 }
 
 // CQLFields returns the generated mapping of StreamFixture's fields, which
-// cql.ParamsOf, cql.RowOf and cql.StreamRowOf use instead of reflection.
+// cql.ParamsOf and cql.RowOf use instead of reflection.
 func (StreamFixture) CQLFields() cql.StructFields[StreamFixture] {
 	return cql.StructFields[StreamFixture]{
 		Params: []cql.InputField[StreamFixture]{
@@ -122,16 +128,21 @@ func (StreamFixture) CQLFields() cql.StructFields[StreamFixture] {
 			cql.Column("at", cql.TimestampCodec, func(v *StreamFixture) *cql.Timestamp { return &v.At }),
 			cql.Column("addr", cql.InetCodec, func(v *StreamFixture) *netip.Addr { return &v.Addr }),
 		},
-		StreamColumns: []cql.StreamOutputField[StreamFixture]{
-			cql.StreamColumn("id", cql.StreamInt32, func(v *StreamFixture) *int32 { return &v.ID }),
-			cql.StreamColumn("key", cql.StreamUUID, func(v *StreamFixture) *Key { return &v.Key }),
-			cql.StreamColumn("payload", cql.StreamBlob, func(v *StreamFixture) *[]byte { return &v.Payload }),
-			cql.StreamColumn("name", cql.StreamText, func(v *StreamFixture) *[]byte { return &v.Name }),
-			cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(v *StreamFixture) *[][]byte { return &v.Pieces }),
-			cql.StreamColumn("tags", cql.StreamSet(cql.StreamInt32), func(v *StreamFixture) *[]int32 { return &v.Tags }),
-			cql.StreamColumn("maybe", cql.StreamNullable(cql.StreamInt64), func(v *StreamFixture) *cql.Nullable[int64] { return &v.Maybe }),
-			cql.StreamColumn("at", cql.StreamTimestamp, func(v *StreamFixture) *cql.Timestamp { return &v.At }),
-			cql.StreamColumn("addr", cql.StreamInet, func(v *StreamFixture) *netip.Addr { return &v.Addr }),
-		},
+	}
+}
+
+// CQLStreamColumns returns the generated stream mapping of StreamFixture's
+// fields, which stream.RowOf uses instead of reflection.
+func (StreamFixture) CQLStreamColumns() []stream.OutputField[StreamFixture] {
+	return []stream.OutputField[StreamFixture]{
+		stream.Column("id", stream.Int32, func(v *StreamFixture) *int32 { return &v.ID }),
+		stream.Column("key", stream.UUID, func(v *StreamFixture) *Key { return &v.Key }),
+		stream.Column("payload", stream.Blob, func(v *StreamFixture) *[]byte { return &v.Payload }),
+		stream.Column("name", stream.Text, func(v *StreamFixture) *[]byte { return &v.Name }),
+		stream.Column("pieces", stream.List(stream.Blob), func(v *StreamFixture) *[][]byte { return &v.Pieces }),
+		stream.Column("tags", stream.Set(stream.Int32), func(v *StreamFixture) *[]int32 { return &v.Tags }),
+		stream.Column("maybe", stream.Nullable(stream.Int64), func(v *StreamFixture) *cql.Nullable[int64] { return &v.Maybe }),
+		stream.Column("at", stream.Timestamp, func(v *StreamFixture) *cql.Timestamp { return &v.At }),
+		stream.Column("addr", stream.Inet, func(v *StreamFixture) *netip.Addr { return &v.Addr }),
 	}
 }

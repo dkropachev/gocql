@@ -14,6 +14,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/tests/integration/internal/mapped"
@@ -183,7 +184,7 @@ func TestStructMapping(t *testing.T) {
 		if fields := (mapped.Event{}).CQLFields(); fields.Params == nil {
 			t.Fatal("no generated Event mapping")
 		}
-		if fields := (mapped.StreamEvent{}).CQLFields(); fields.StreamColumns == nil {
+		if (mapped.StreamEvent{}).CQLStreamColumns() == nil {
 			t.Fatal("no generated StreamEvent stream mapping")
 		}
 		const columns = "bucket, id, name, blob, big, maybe, tags, scores, createdat, updatedat"
@@ -242,8 +243,8 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		for _, decoder := range []cql.StreamRowDecoder[mapped.StreamEvent]{cql.MustStreamRowOf[mapped.StreamEvent](), codecTestMust(codec.ReflectStreamRow[mapped.StreamEvent]())} {
-			prepared, err := f.session.PrepareStream(ctx, cql.StreamStatement[int32, mapped.StreamEvent]{
+		for _, decoder := range []stream.RowDecoder[mapped.StreamEvent]{stream.MustRowOf[mapped.StreamEvent](), codecTestMust(codec.ReflectStreamRow[mapped.StreamEvent]())} {
+			prepared, err := f.session.PrepareStream(ctx, stream.Statement[int32, mapped.StreamEvent]{
 				Kind: cql.OrdinaryStatement, CQL: "SELECT bucket, id, name, blob, big, maybe, scores, createdat, updatedat FROM " + f.table + " WHERE bucket = ?",
 				Params: cql.OneParam(cql.Int32Codec), Rows: decoder,
 			})
@@ -576,7 +577,7 @@ func TestStructMapping(t *testing.T) {
 		}
 	})
 
-	// Row streams decode into a struct through StreamRowOf, buffered and
+	// Row streams decode into a struct through stream.RowOf, buffered and
 	// incremental.
 	t.Run("Stream", func(t *testing.T) {
 		ctx, f := newSMFixture(t)
@@ -590,8 +591,8 @@ func TestStructMapping(t *testing.T) {
 			}
 		}
 		const query = "SELECT bucket, id, name, blob, big, maybe, scores, span, createdat, updatedat FROM "
-		read, err := f.session.PrepareStream(ctx, cql.StreamStatement[int32, smStream]{
-			Kind: cql.OrdinaryStatement, CQL: query + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.MustStreamRowOf[smStream](),
+		read, err := f.session.PrepareStream(ctx, stream.Statement[int32, smStream]{
+			Kind: cql.OrdinaryStatement, CQL: query + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32Codec), Rows: stream.MustRowOf[smStream](),
 		})
 		if err != nil {
 			t.Fatal(err)

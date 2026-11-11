@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 )
 
 func TestTimeUUIDValueAPI(t *testing.T) {
@@ -27,7 +28,7 @@ func TestTimeUUIDValueAPI(t *testing.T) {
 				!bytes.Equal(id.Node(), uuid.Node()) || !bytes.Equal(id.Bytes(), uuid.Bytes()) {
 				t.Fatalf("value methods differ from UUID: %v", id)
 			}
-			if _, err := cql.TimeUUIDValue(id); err != nil {
+			if _, err := dynamic.TimeUUID(id); err != nil {
 				t.Fatal(err)
 			}
 			encoded, err := cql.EncodeValue(cql.TimeUUIDType, cql.TimeUUIDCodec, id)

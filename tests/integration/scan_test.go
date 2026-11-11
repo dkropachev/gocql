@@ -38,6 +38,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 )
 
 func TestScan(t *testing.T) {
@@ -58,9 +59,9 @@ func TestScan(t *testing.T) {
 			tx, in := cql.TextType, cql.IntType
 			list, set, mp := serializationMustType(cql.ListType(tx)), serializationMustType(cql.SetType(in)), serializationMustType(cql.MapType(tx, in))
 			checkDynamicSerializationCases(t, s, table, []serializationDynamicCase{
-				{"list", "['a','b','c']", serializationMustValue(cql.ListValue(list, []cql.Value{codecTestMust(cql.TextValue("a")), codecTestMust(cql.TextValue("b")), codecTestMust(cql.TextValue("c"))}))},
-				{"set", "{1,2,3}", serializationMustValue(cql.SetValue(set, []cql.Value{cql.IntValue(1), cql.IntValue(2), cql.IntValue(3)}))},
-				{"map", "{'key1':1,'key2':2}", serializationMustValue(cql.MapValue(mp, []cql.ValueEntry{{Key: codecTestMust(cql.TextValue("key1")), Value: cql.IntValue(1)}, {Key: codecTestMust(cql.TextValue("key2")), Value: cql.IntValue(2)}}))},
+				{"list", "['a','b','c']", serializationMustValue(dynamic.List(list, []dynamic.Value{codecTestMust(dynamic.Text("a")), codecTestMust(dynamic.Text("b")), codecTestMust(dynamic.Text("c"))}))},
+				{"set", "{1,2,3}", serializationMustValue(dynamic.Set(set, []dynamic.Value{dynamic.Int(1), dynamic.Int(2), dynamic.Int(3)}))},
+				{"map", "{'key1':1,'key2':2}", serializationMustValue(dynamic.Map(mp, []dynamic.Entry{{Key: codecTestMust(dynamic.Text("key1")), Value: dynamic.Int(1)}, {Key: codecTestMust(dynamic.Text("key2")), Value: dynamic.Int(2)}}))},
 			})
 		})
 		t.Run("Counter", func(t *testing.T) {
@@ -72,11 +73,11 @@ func TestScan(t *testing.T) {
 			if err := truncateTable(t, s, table); err != nil {
 				t.Fatal(err)
 			}
-			serializationWrite(t, s, fmt.Sprintf("UPDATE %s SET counter_col=counter_col+42 WHERE id=?", table), cql.IntValue(1))
+			serializationWrite(t, s, fmt.Sprintf("UPDATE %s SET counter_col=counter_col+42 WHERE id=?", table), dynamic.Int(1))
 			for _, method := range []string{"SliceMap", "MapScan"} {
 				t.Run(method, func(t *testing.T) {
-					got := dynamicSerializationResult(t, s, fmt.Sprintf("SELECT counter_col FROM %s WHERE id=?", table), method, cql.IntValue(1))
-					assertSerializationValue(t, cql.CounterValue(42), got)
+					got := dynamicSerializationResult(t, s, fmt.Sprintf("SELECT counter_col FROM %s WHERE id=?", table), method, dynamic.Int(1))
+					assertSerializationValue(t, dynamic.Counter(42), got)
 				})
 			}
 		})
@@ -112,16 +113,16 @@ func TestScan(t *testing.T) {
 				t.Fatal(err)
 			}
 			cases := []serializationDynamicCase{
-				{"tinyint", "42", cql.TinyIntValue(42)}, {"smallint", "1234", cql.SmallIntValue(1234)}, {"int", "123456", cql.IntValue(123456)}, {"bigint", "1234567890", cql.BigIntValue(1234567890)},
-				{"float", "3.14", cql.FloatValue(3.14)}, {"double", "2.718281828", cql.DoubleValue(2.718281828)}, {"boolean", "true", cql.BoolValue(true)},
-				{"text", "'hello world'", codecTestMust(cql.TextValue("hello world"))}, {"ascii", "'hello ascii'", serializationMustValue(cql.ASCIIValue("hello ascii"))}, {"varchar", "'hello varchar'", codecTestMust(cql.TextValue("hello varchar"))},
-				{"timestamp", "1388534400000", cql.TimestampValue(1388534400000)}, {"uuid", "550e8400-e29b-41d4-a716-446655440000", cql.UUIDValue(mustParseUUID("550e8400-e29b-41d4-a716-446655440000"))},
-				{"timeuuid", "60d79c23-5793-11f0-8afe-bcfce78b517a", serializationMustValue(cql.TimeUUIDValue(cql.TimeUUID(mustParseUUID("60d79c23-5793-11f0-8afe-bcfce78b517a"))))},
-				{"inet", "'127.0.0.1'", serializationMustValue(cql.InetValue(netip.MustParseAddr("127.0.0.1")))}, {"blob", "0x48656c6c6f", cql.BlobValue([]byte("Hello"))},
-				{"varint", "123456789012345678901234567890", cql.VarintValue(cql.VarintFromBigInt(mustParseBigInt("123456789012345678901234567890")))},
-				{"decimal", "123.45", cql.DecimalValue(cql.Decimal{Scale: 2, Unscaled: cql.VarintFromBigInt(big.NewInt(12345))})}, {"date", "'2015-05-03'", cql.DateValue(date)},
-				{"time", "'13:30:54.234'", serializationMustValue(cql.TimeValue(cql.TimeOfDay(13*time.Hour + 30*time.Minute + 54*time.Second + 234*time.Millisecond)))},
-				{"duration", "1y2mo3d4h5m6s789ms", serializationMustValue(cql.DurationValue(mustCreateDuration(14, 3, 4*time.Hour+5*time.Minute+6*time.Second+789*time.Millisecond)))},
+				{"tinyint", "42", dynamic.TinyInt(42)}, {"smallint", "1234", dynamic.SmallInt(1234)}, {"int", "123456", dynamic.Int(123456)}, {"bigint", "1234567890", dynamic.BigInt(1234567890)},
+				{"float", "3.14", dynamic.Float(3.14)}, {"double", "2.718281828", dynamic.Double(2.718281828)}, {"boolean", "true", dynamic.Bool(true)},
+				{"text", "'hello world'", codecTestMust(dynamic.Text("hello world"))}, {"ascii", "'hello ascii'", serializationMustValue(dynamic.ASCII("hello ascii"))}, {"varchar", "'hello varchar'", codecTestMust(dynamic.Text("hello varchar"))},
+				{"timestamp", "1388534400000", dynamic.Timestamp(1388534400000)}, {"uuid", "550e8400-e29b-41d4-a716-446655440000", dynamic.UUID(mustParseUUID("550e8400-e29b-41d4-a716-446655440000"))},
+				{"timeuuid", "60d79c23-5793-11f0-8afe-bcfce78b517a", serializationMustValue(dynamic.TimeUUID(cql.TimeUUID(mustParseUUID("60d79c23-5793-11f0-8afe-bcfce78b517a"))))},
+				{"inet", "'127.0.0.1'", serializationMustValue(dynamic.Inet(netip.MustParseAddr("127.0.0.1")))}, {"blob", "0x48656c6c6f", dynamic.Blob([]byte("Hello"))},
+				{"varint", "123456789012345678901234567890", dynamic.Varint(cql.VarintFromBigInt(mustParseBigInt("123456789012345678901234567890")))},
+				{"decimal", "123.45", dynamic.Decimal(cql.Decimal{Scale: 2, Unscaled: cql.VarintFromBigInt(big.NewInt(12345))})}, {"date", "'2015-05-03'", dynamic.Date(date)},
+				{"time", "'13:30:54.234'", serializationMustValue(dynamic.Time(cql.TimeOfDay(13*time.Hour + 30*time.Minute + 54*time.Second + 234*time.Millisecond)))},
+				{"duration", "1y2mo3d4h5m6s789ms", serializationMustValue(dynamic.Duration(mustCreateDuration(14, 3, 4*time.Hour+5*time.Minute+6*time.Second+789*time.Millisecond)))},
 			}
 			cols := ""
 			for _, tc := range cases {
@@ -143,7 +144,7 @@ func TestScan(t *testing.T) {
 				t.Fatal(err)
 			}
 			typ := serializationMustType(cql.TupleType(cql.IntType, cql.TextType))
-			checkDynamicSerializationCases(t, s, table, []serializationDynamicCase{{"tuple", "(42,'hello')", serializationMustValue(cql.TupleValue(typ, []cql.Value{cql.IntValue(42), codecTestMust(cql.TextValue("hello"))}))}})
+			checkDynamicSerializationCases(t, s, table, []serializationDynamicCase{{"tuple", "(42,'hello')", serializationMustValue(dynamic.Tuple(typ, []dynamic.Value{dynamic.Int(42), codecTestMust(dynamic.Text("hello"))}))}})
 		})
 		t.Run("Vector", func(t *testing.T) {
 			t.Parallel()
@@ -157,7 +158,7 @@ func TestScan(t *testing.T) {
 			}
 			fl := serializationMustType(cql.VectorType(cql.FloatType, 3))
 			tx := serializationMustType(cql.VectorType(cql.TextType, 2))
-			checkDynamicSerializationCases(t, s, table, []serializationDynamicCase{{"vector_float", "[1.0,2.5,-3.0]", serializationMustValue(cql.VectorValue(fl, []cql.Value{cql.FloatValue(1), cql.FloatValue(2.5), cql.FloatValue(-3)}))}, {"vector_text", "['hello','world']", serializationMustValue(cql.VectorValue(tx, []cql.Value{codecTestMust(cql.TextValue("hello")), codecTestMust(cql.TextValue("world"))}))}})
+			checkDynamicSerializationCases(t, s, table, []serializationDynamicCase{{"vector_float", "[1.0,2.5,-3.0]", serializationMustValue(dynamic.Vector(fl, []dynamic.Value{dynamic.Float(1), dynamic.Float(2.5), dynamic.Float(-3)}))}, {"vector_text", "['hello','world']", serializationMustValue(dynamic.Vector(tx, []dynamic.Value{codecTestMust(dynamic.Text("hello")), codecTestMust(dynamic.Text("world"))}))}})
 		})
 	})
 
@@ -189,7 +190,7 @@ func TestScan(t *testing.T) {
 			require.Equal(t, "testtext", got.Text.String())
 			require.Equal(t, FullName{"John", "Doe"}, got.Name)
 			require.Equal(t, int32(100), got.Number)
-			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(testtext,testint) VALUES(?,?)", table), codecTestMust(cql.TextValue("null-int")), cql.NullValue(cql.IntValue(0).Type()))
+			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(testtext,testint) VALUES(?,?)", table), codecTestMust(dynamic.Text("null-int")), dynamic.Null(dynamic.Int(0).Type()))
 			nullable := cassandraPrepared(t, session, cql.Statement[string, cql.Nullable[int32]]{CQL: fmt.Sprintf("SELECT testint FROM %s WHERE testtext=?", table), Params: cql.OneParam(cql.StringCodec), Rows: cql.OneColumn(cql.NullableCodec(cql.Int32Codec))}, gocql.PrepareOptions{})
 			require.False(t, cassandraReadBound(t, session, cassandraBound(t, nullable, "null-int"), gocql.Options{}).Valid)
 		})
@@ -199,9 +200,9 @@ func TestScan(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(fullname text PRIMARY KEY,age int,address inet,data blob)", table))
-			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(fullname,age,address) VALUES(?,?,?)", table), codecTestMust(cql.TextValue("Grace Hopper")), cql.IntValue(31), cassandraValue(cql.InetValue(netip.MustParseAddr("10.0.0.1"))))
-			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(fullname,age,address,data) VALUES(?,?,?,?)", table), codecTestMust(cql.TextValue("Ada Lovelace")), cql.IntValue(30), cassandraValue(cql.InetValue(netip.MustParseAddr("10.0.0.2"))), cql.BlobValue([]byte(`{"foo": "bar"}`)))
-			rows := cassandraRows(t, session, cassandraUnprepared(t, "SELECT * FROM "+table, cql.DynamicRows), gocql.Options{})
+			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(fullname,age,address) VALUES(?,?,?)", table), codecTestMust(dynamic.Text("Grace Hopper")), dynamic.Int(31), cassandraValue(dynamic.Inet(netip.MustParseAddr("10.0.0.1"))))
+			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(fullname,age,address,data) VALUES(?,?,?,?)", table), codecTestMust(dynamic.Text("Ada Lovelace")), dynamic.Int(30), cassandraValue(dynamic.Inet(netip.MustParseAddr("10.0.0.2"))), dynamic.Blob([]byte(`{"foo": "bar"}`)))
+			rows := cassandraRows(t, session, cassandraUnprepared(t, "SELECT * FROM "+table, dynamic.Rows), gocql.Options{})
 			require.Len(t, rows, 2)
 			for i, want := range []struct {
 				name    string
@@ -236,7 +237,7 @@ func TestScan(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,time timestamp,num int)", table))
-			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,num) VALUES(?,?)", table), cql.IntValue(1), cql.IntValue(561))
+			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,num) VALUES(?,?)", table), dynamic.Int(1), dynamic.Int(561))
 			read := cassandraPrepared(t, session, cql.Statement[int32, cql.Nullable[cql.Timestamp]]{CQL: fmt.Sprintf("SELECT time FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.NullableCodec(cql.TimestampCodec))}, gocql.PrepareOptions{})
 			value := cassandraReadBound(t, session, cassandraBound(t, read, int32(1)), gocql.Options{})
 			require.False(t, value.Valid)
@@ -249,7 +250,7 @@ func TestScan(t *testing.T) {
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(foo varchar,bar int,PRIMARY KEY(foo,bar))", table))
 			for i := int32(1); i <= 20; i++ {
-				cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,?)", table), codecTestMust(cql.TextValue("squares")), cql.IntValue(i*i))
+				cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,?)", table), codecTestMust(dynamic.Text("squares")), dynamic.Int(i*i))
 			}
 			type result struct{ N int32 }
 			decoder := cql.Row(cql.IgnoreColumn[result]("foo"), cql.Column("bar", cql.Int32Codec, func(r *result) *int32 { return &r.N }))
@@ -284,20 +285,20 @@ func TestScan(t *testing.T) {
 		require.NoError(t, err)
 		bigInt, ok := new(big.Int).SetString("830169365738487321165427203929228", 10)
 		require.True(t, ok)
-		expected := []cql.ValueField{{Name: "testuuid", Value: cassandraValue(cql.TimeUUIDValue(cql.TimeUUID(cql.NewTimeUUID())))}, {Name: "testtimestamp", Value: cql.TimestampValue(cql.Timestamp(time.Now().UnixMilli()))}, {Name: "testvarchar", Value: codecTestMust(cql.TextValue("Test VarChar"))}, {Name: "testbigint", Value: cql.BigIntValue(time.Now().Unix())}, {Name: "testblob", Value: cql.BlobValue([]byte("test blob"))}, {Name: "testbool", Value: cql.BoolValue(true)}, {Name: "testfloat", Value: cql.FloatValue(4.564)}, {Name: "testdouble", Value: cql.DoubleValue(4.815162342)}, {Name: "testint", Value: cql.IntValue(2343)}, {Name: "testdecimal", Value: cql.DecimalValue(cql.Decimal{Unscaled: cql.VarintFromBigInt(big.NewInt(100))})}, {Name: "testlist", Value: cassandraValue(cql.ListValue(listType, []cql.Value{codecTestMust(cql.TextValue("quux")), codecTestMust(cql.TextValue("foo")), codecTestMust(cql.TextValue("bar")), codecTestMust(cql.TextValue("baz")), codecTestMust(cql.TextValue("quux"))}))}, {Name: "testset", Value: cassandraValue(cql.SetValue(setType, []cql.Value{cql.IntValue(1), cql.IntValue(2), cql.IntValue(3), cql.IntValue(4), cql.IntValue(5), cql.IntValue(6), cql.IntValue(7), cql.IntValue(8), cql.IntValue(9)}))}, {Name: "testmap", Value: cassandraValue(cql.MapValue(mapType, []cql.ValueEntry{{Key: codecTestMust(cql.TextValue("field1")), Value: codecTestMust(cql.TextValue("val1"))}, {Key: codecTestMust(cql.TextValue("field2")), Value: codecTestMust(cql.TextValue("val2"))}, {Key: codecTestMust(cql.TextValue("field3")), Value: codecTestMust(cql.TextValue("val3"))}}))}, {Name: "testvarint", Value: cql.VarintValue(cql.VarintFromBigInt(bigInt))}, {Name: "testinet", Value: cassandraValue(cql.InetValue(netip.MustParseAddr("213.212.2.19")))}}
-		var values []cql.Value
+		expected := []dynamic.Field{{Name: "testuuid", Value: cassandraValue(dynamic.TimeUUID(cql.TimeUUID(cql.NewTimeUUID())))}, {Name: "testtimestamp", Value: dynamic.Timestamp(cql.Timestamp(time.Now().UnixMilli()))}, {Name: "testvarchar", Value: codecTestMust(dynamic.Text("Test VarChar"))}, {Name: "testbigint", Value: dynamic.BigInt(time.Now().Unix())}, {Name: "testblob", Value: dynamic.Blob([]byte("test blob"))}, {Name: "testbool", Value: dynamic.Bool(true)}, {Name: "testfloat", Value: dynamic.Float(4.564)}, {Name: "testdouble", Value: dynamic.Double(4.815162342)}, {Name: "testint", Value: dynamic.Int(2343)}, {Name: "testdecimal", Value: dynamic.Decimal(cql.Decimal{Unscaled: cql.VarintFromBigInt(big.NewInt(100))})}, {Name: "testlist", Value: cassandraValue(dynamic.List(listType, []dynamic.Value{codecTestMust(dynamic.Text("quux")), codecTestMust(dynamic.Text("foo")), codecTestMust(dynamic.Text("bar")), codecTestMust(dynamic.Text("baz")), codecTestMust(dynamic.Text("quux"))}))}, {Name: "testset", Value: cassandraValue(dynamic.Set(setType, []dynamic.Value{dynamic.Int(1), dynamic.Int(2), dynamic.Int(3), dynamic.Int(4), dynamic.Int(5), dynamic.Int(6), dynamic.Int(7), dynamic.Int(8), dynamic.Int(9)}))}, {Name: "testmap", Value: cassandraValue(dynamic.Map(mapType, []dynamic.Entry{{Key: codecTestMust(dynamic.Text("field1")), Value: codecTestMust(dynamic.Text("val1"))}, {Key: codecTestMust(dynamic.Text("field2")), Value: codecTestMust(dynamic.Text("val2"))}, {Key: codecTestMust(dynamic.Text("field3")), Value: codecTestMust(dynamic.Text("val3"))}}))}, {Name: "testvarint", Value: dynamic.Varint(cql.VarintFromBigInt(bigInt))}, {Name: "testinet", Value: cassandraValue(dynamic.Inet(netip.MustParseAddr("213.212.2.19")))}}
+		var values []dynamic.Value
 		for _, field := range expected {
 			values = append(values, field.Value)
 		}
 		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(testuuid,testtimestamp,testvarchar,testbigint,testblob,testbool,testfloat,testdouble,testint,testdecimal,testlist,testset,testmap,testvarint,testinet) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", table), values...)
-		check := func(row cql.DynamicRow) {
+		check := func(row dynamic.Row) {
 			t.Helper()
 			require.Equal(t, len(expected), row.Columns().Len())
 			for _, field := range expected {
 				actual := cassandraField(t, row, field.Name)
-				want, err := cql.EncodeValue(actual.Type(), cql.DynamicCodec, field.Value)
+				want, err := cql.EncodeValue(actual.Type(), dynamic.Codec, field.Value)
 				require.NoError(t, err, field.Name)
-				got, err := cql.EncodeValue(actual.Type(), cql.DynamicCodec, actual)
+				got, err := cql.EncodeValue(actual.Type(), dynamic.Codec, actual)
 				require.NoError(t, err, field.Name)
 				require.Equal(t, want.State(), got.State(), field.Name)
 				require.Equal(t, want.Bytes().OwnedBytes(), got.Bytes().OwnedBytes(), field.Name)
@@ -305,14 +306,14 @@ func TestScan(t *testing.T) {
 		}
 		// Preserve the three result-consumption forms as cloned slices, a cursor,
 		// and an exactly-one-row read, all with explicit dynamic values.
-		bound := cassandraUnprepared(t, "SELECT * FROM "+table, cql.DynamicRows)
+		bound := cassandraUnprepared(t, "SELECT * FROM "+table, dynamic.Rows)
 		rows := cassandraRows(t, session, bound, gocql.Options{})
 		require.Len(t, rows, 1)
 		check(rows[0])
 		cursor, err := Run(context.Background(), session, bound, gocql.CompiledOptions{})
 		require.NoError(t, err)
 		defer cursor.Close()
-		var row cql.DynamicRow
+		var row dynamic.Row
 		require.True(t, cursor.NextInto(&row))
 		check(row)
 		require.NoError(t, cursor.Close())

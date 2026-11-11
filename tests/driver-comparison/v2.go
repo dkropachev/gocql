@@ -11,6 +11,7 @@ import (
 
 	g "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/retry"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -41,7 +42,7 @@ type v2Worker struct {
 	out         row
 }
 
-var streamDecoder = cql.StreamRowInto(func(*row) {}, cql.StreamColumn("k", cql.StreamInt32, func(r *row) *int32 { return &r.K }), cql.StreamColumn("r", cql.StreamInt32, func(r *row) *int32 { return &r.R }), cql.StreamColumn("p", cql.StreamBlob, func(r *row) *[]byte { return &r.P }))
+var streamDecoder = stream.RowInto(func(*row) {}, stream.Column("k", stream.Int32, func(r *row) *int32 { return &r.K }), stream.Column("r", stream.Int32, func(r *row) *int32 { return &r.R }), stream.Column("p", stream.Blob, func(r *row) *[]byte { return &r.P }))
 var bufferedDecoder = cql.RowInto(func(*row) {}, cql.Column("k", cql.Int32Codec, func(r *row) *int32 { return &r.K }), cql.Column("r", cql.Int32Codec, func(r *row) *int32 { return &r.R }), cql.Column("p", cql.ByteSliceCodec, func(r *row) *[]byte { return &r.P }))
 
 func connect(hosts []string) (adapter, error) {
@@ -163,7 +164,7 @@ func (a *v2Adapter) preparedStream(paged bool) (*g.PreparedStream[int32, row], e
 		idx, rd = 1, pageRead
 	}
 	if a.streams[idx] == nil {
-		p, e := a.s.PrepareStream(context.Background(), cql.StreamStatement[int32, row]{Kind: cql.OrdinaryStatement, CQL: rd, Params: keyParams, Rows: streamDecoder}, g.PrepareOptions{})
+		p, e := a.s.PrepareStream(context.Background(), stream.Statement[int32, row]{Kind: cql.OrdinaryStatement, CQL: rd, Params: keyParams, Rows: streamDecoder}, g.PrepareOptions{})
 		if e != nil {
 			return nil, e
 		}

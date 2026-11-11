@@ -36,6 +36,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
@@ -51,10 +52,10 @@ func TestConditional(t *testing.T) {
 		title := "baz"
 		rev := cql.NewTimeUUID()
 		modified := cql.Timestamp(time.Now().UnixMilli())
-		revValue := cassandraValue(cql.TimeUUIDValue(cql.TimeUUID(rev)))
+		revValue := cassandraValue(dynamic.TimeUUID(cql.TimeUUID(rev)))
 		insertCQL := fmt.Sprintf("INSERT INTO %s(title,revid,last_modified) VALUES (?,?,?) IF NOT EXISTS", table)
-		values := []cql.Value{codecTestMust(cql.TextValue(title)), revValue, cql.TimestampValue(modified)}
-		insert := cassandraCASBound(t, session, insertCQL, values, cql.DynamicRows)
+		values := []dynamic.Value{codecTestMust(dynamic.Text(title)), revValue, dynamic.Timestamp(modified)}
+		insert := cassandraCASBound(t, session, insertCQL, values, dynamic.Rows)
 		first := cassandraReadBound(t, session, insert, gocql.Options{})
 		require.True(t, first.Applied)
 		second := cassandraReadBound(t, session, insert, gocql.Options{})
@@ -65,31 +66,31 @@ func TestConditional(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, cql.UUID(rev), gotRev)
 		deleteCQL := fmt.Sprintf("DELETE FROM %s WHERE title=? AND revid=? IF last_modified=?", table)
-		failedDelete := cassandraCASBound(t, session, deleteCQL, []cql.Value{codecTestMust(cql.TextValue(title)), revValue, cql.TimestampValue(modified + 10000)}, cql.DynamicRows)
+		failedDelete := cassandraCASBound(t, session, deleteCQL, []dynamic.Value{codecTestMust(dynamic.Text(title)), revValue, dynamic.Timestamp(modified + 10000)}, dynamic.Rows)
 		deleted := cassandraReadBound(t, session, failedDelete, gocql.Options{})
 		require.False(t, deleted.Applied)
 		require.Equal(t, int64(modified), cassandraInt(t, deleted.Previous.Value, "last_modified"))
 		// Missing or incompatible previous-value decoders fail explicitly.
-		invalid, err := session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.CASResult[cql.EmptyRow]]{CQL: deleteCQL, Params: cql.DynamicParams, Rows: cql.CASRows(cql.EmptyRowDecoder)}, gocql.PrepareOptions{})
+		invalid, err := session.Prepare(context.Background(), cql.Statement[[]dynamic.Value, cql.CASResult[cql.EmptyRow]]{CQL: deleteCQL, Params: dynamic.Params, Rows: cql.CASRows(cql.EmptyRowDecoder)}, gocql.PrepareOptions{})
 		if err == nil {
-			bound := cassandraBound(t, invalid, []cql.Value{codecTestMust(cql.TextValue(title)), revValue, cql.TimestampValue(modified + 10000)})
+			bound := cassandraBound(t, invalid, []dynamic.Value{codecTestMust(dynamic.Text(title)), revValue, dynamic.Timestamp(modified + 10000)})
 			rows, e := Run(context.Background(), session, bound, gocql.CompiledOptions{})
 			defer rows.Close()
 			err = e
 		}
 		require.Error(t, err)
-		successDelete := cassandraCASBound(t, session, deleteCQL, values, cql.DynamicRows)
+		successDelete := cassandraCASBound(t, session, deleteCQL, values, dynamic.Rows)
 		require.True(t, cassandraReadBound(t, session, successDelete, gocql.Options{}).Applied)
 		if err := truncateTable(t, session, table); err != nil {
 			t.Fatal(err)
 		}
 		runCASBatch := func(items []batchItem, wantApplied bool, wantRows int) {
 			t.Helper()
-			page, err := runBatch(context.Background(), session, cql.LoggedBatch, items, cql.CASRows(cql.DynamicRows), gocql.CompiledOptions{})
+			page, err := runBatch(context.Background(), session, cql.LoggedBatch, items, cql.CASRows(dynamic.Rows), gocql.CompiledOptions{})
 			require.NoError(t, err)
 			defer page.Close()
 			count := 0
-			var row cql.CASResult[cql.DynamicRow]
+			var row cql.CASResult[dynamic.Row]
 			for page.NextInto(&row) {
 				require.Equal(t, wantApplied, row.Applied)
 				if !wantApplied {
@@ -101,25 +102,25 @@ func TestConditional(t *testing.T) {
 			require.Equal(t, wantRows, count)
 		}
 		runCASBatch([]batchItem{cassandraItem(t, insert)}, true, 1)
-		other := cassandraCASBound(t, session, insertCQL, []cql.Value{codecTestMust(cql.TextValue(title + "_foo")), revValue, cql.TimestampValue(modified)}, cql.DynamicRows)
+		other := cassandraCASBound(t, session, insertCQL, []dynamic.Value{codecTestMust(dynamic.Text(title + "_foo")), revValue, dynamic.Timestamp(modified)}, dynamic.Rows)
 		runCASBatch([]batchItem{cassandraItem(t, other)}, true, 1)
 		runCASBatch([]batchItem{cassandraItem(t, other)}, false, 1)
 		var seed, conditional []batchItem
 		for _, id := range []string{"2c3af400-73a4-11e5-9381-29463d90c3f0", "3e4ad2f1-73a4-11e5-9381-29463d90c3f0"} {
 			r, e := cql.ParseUUID(id)
 			require.NoError(t, e)
-			rv := cassandraValue(cql.TimeUUIDValue(cql.TimeUUID(r)))
-			seed = append(seed, cassandraItem(t, cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(title,revid,last_modified) VALUES (?,?,?)", table), []cql.Value{codecTestMust(cql.TextValue("_foo")), rv, cql.TimestampValue(modified)}, gocql.PrepareOptions{})))
-			conditional = append(conditional, cassandraItem(t, cassandraCASBound(t, session, fmt.Sprintf("UPDATE %s SET last_modified=? WHERE title=? AND revid=? IF last_modified=?", table), []cql.Value{cql.TimestampValue(modified + 10000), codecTestMust(cql.TextValue("_foo")), rv, cql.TimestampValue(modified + 20000)}, cql.DynamicRows)))
+			rv := cassandraValue(dynamic.TimeUUID(cql.TimeUUID(r)))
+			seed = append(seed, cassandraItem(t, cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(title,revid,last_modified) VALUES (?,?,?)", table), []dynamic.Value{codecTestMust(dynamic.Text("_foo")), rv, dynamic.Timestamp(modified)}, gocql.PrepareOptions{})))
+			conditional = append(conditional, cassandraItem(t, cassandraCASBound(t, session, fmt.Sprintf("UPDATE %s SET last_modified=? WHERE title=? AND revid=? IF last_modified=?", table), []dynamic.Value{dynamic.Timestamp(modified + 10000), codecTestMust(dynamic.Text("_foo")), rv, dynamic.Timestamp(modified + 20000)}, dynamic.Rows)))
 		}
 		cassandraBatch(t, session, cql.LoggedBatch, seed, gocql.Options{})
 		runCASBatch(conditional, false, 2)
 		// CASRows rejects ordinary SELECTs and unconditional batches; the former
 		// MapScanCAS silent false result is replaced by validated result metadata.
-		_, err = session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.CASResult[cql.DynamicRow]]{CQL: fmt.Sprintf("SELECT revid FROM %s WHERE title=?", table), Params: cql.DynamicParams, Rows: cql.CASRows(cql.DynamicRows)}, gocql.PrepareOptions{})
+		_, err = session.Prepare(context.Background(), cql.Statement[[]dynamic.Value, cql.CASResult[dynamic.Row]]{CQL: fmt.Sprintf("SELECT revid FROM %s WHERE title=?", table), Params: dynamic.Params, Rows: cql.CASRows(dynamic.Rows)}, gocql.PrepareOptions{})
 		require.Error(t, err)
 		for i := 0; i < 2; i++ {
-			page, err := runBatch(context.Background(), session, cql.LoggedBatch, seed, cql.CASRows(cql.DynamicRows), gocql.CompiledOptions{})
+			page, err := runBatch(context.Background(), session, cql.LoggedBatch, seed, cql.CASRows(dynamic.Rows), gocql.CompiledOptions{})
 			if page != nil {
 				page.Close()
 			}
@@ -127,7 +128,7 @@ func TestConditional(t *testing.T) {
 		}
 		for _, batch := range []bool{false, true} {
 			badDecoder := cql.CASRows(cql.OneColumn(cql.BoolCodec))
-			bound := cassandraDynamicBound(t, session, fmt.Sprintf("UPDATE %s SET last_modified=? WHERE title=? AND revid=? IF last_modified=?", table), []cql.Value{cql.TimestampValue(modified + 10000), codecTestMust(cql.TextValue("_foo")), cassandraValue(cql.TimeUUIDValue(cql.TimeUUID(cassandraUUID("3e4ad2f1-73a4-11e5-9381-29463d90c3f0")))), cql.TimestampValue(modified + 20000)}, gocql.PrepareOptions{})
+			bound := cassandraDynamicBound(t, session, fmt.Sprintf("UPDATE %s SET last_modified=? WHERE title=? AND revid=? IF last_modified=?", table), []dynamic.Value{dynamic.Timestamp(modified + 10000), codecTestMust(dynamic.Text("_foo")), cassandraValue(dynamic.TimeUUID(cql.TimeUUID(cassandraUUID("3e4ad2f1-73a4-11e5-9381-29463d90c3f0")))), dynamic.Timestamp(modified + 20000)}, gocql.PrepareOptions{})
 			if batch {
 				page, e := runBatch(context.Background(), session, cql.LoggedBatch, []batchItem{cassandraItem(t, bound)}, badDecoder, gocql.CompiledOptions{})
 				if page != nil {
@@ -156,7 +157,7 @@ func TestConditional(t *testing.T) {
 		cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(title varchar,revid timeuuid,last_modified timestamp,deleted boolean,PRIMARY KEY(title,revid))", table))
 		rev := cql.NewTimeUUID()
 		modified := cql.Timestamp(time.Now().UnixMilli())
-		bound := cassandraCASBound(t, session, fmt.Sprintf("INSERT INTO %s(title,revid,last_modified,deleted) VALUES(?,?,?,?) IF NOT EXISTS", table), []cql.Value{codecTestMust(cql.TextValue("baz")), cassandraValue(cql.TimeUUIDValue(cql.TimeUUID(rev))), cql.TimestampValue(modified), cql.BoolValue(false)}, cql.DynamicRows)
+		bound := cassandraCASBound(t, session, fmt.Sprintf("INSERT INTO %s(title,revid,last_modified,deleted) VALUES(?,?,?,?) IF NOT EXISTS", table), []dynamic.Value{codecTestMust(dynamic.Text("baz")), cassandraValue(dynamic.TimeUUID(cql.TimeUUID(rev))), dynamic.Timestamp(modified), dynamic.Bool(false)}, dynamic.Rows)
 		require.True(t, cassandraReadBound(t, session, bound, gocql.Options{}).Applied)
 		result := cassandraReadBound(t, session, bound, gocql.Options{})
 		require.False(t, result.Applied)
@@ -177,7 +178,7 @@ func TestConditional(t *testing.T) {
 		table := testTableName(t)
 		cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(foo varchar,bar varchar,PRIMARY KEY(foo,bar))", table))
 		stmt := fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,?) IF NOT EXISTS", table)
-		values := []cql.Value{codecTestMust(cql.TextValue("baz")), codecTestMust(cql.TextValue("baz"))}
+		values := []dynamic.Value{codecTestMust(dynamic.Text("baz")), codecTestMust(dynamic.Text("baz"))}
 		ignored := cql.Row(cql.IgnoreColumn[cql.EmptyRow]("foo"), cql.IgnoreColumn[cql.EmptyRow]("bar"))
 		require.True(t, cassandraReadBound(t, session, cassandraCASBound(t, session, stmt, values, ignored), gocql.Options{}).Applied)
 		type result struct{ Text cql.Text }
@@ -205,7 +206,7 @@ func TestConditional(t *testing.T) {
 			override gocql.SerialOverride
 		}{{"Inherit", gocql.SerialInherit}, {"Serial", gocql.SerialSerial}, {"Local", gocql.SerialLocal}, {"Omit", gocql.SerialOmit}, {"Unknown", gocql.SerialOmit + 1}} {
 			t.Run(tc.name, func(t *testing.T) {
-				bound := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), []cql.Value{cql.IntValue(int32(i + 1))}, gocql.PrepareOptions{})
+				bound := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), []dynamic.Value{dynamic.Int(int32(i + 1))}, gocql.PrepareOptions{})
 				// Serial consistency is checked when the options are built.
 				options, err := session.CompileOptions(gocql.Options{SerialConsistency: tc.override})
 				if err == nil {
@@ -213,7 +214,7 @@ func TestConditional(t *testing.T) {
 				}
 				if tc.override <= gocql.SerialOmit {
 					require.NoError(t, err)
-					require.Equal(t, int64(i+1), cassandraInt(t, cassandraRead(t, session, fmt.Sprintf("SELECT id FROM %s WHERE id=?", table), cql.IntValue(int32(i+1))), "id"))
+					require.Equal(t, int64(i+1), cassandraInt(t, cassandraRead(t, session, fmt.Sprintf("SELECT id FROM %s WHERE id=?", table), dynamic.Int(int32(i+1))), "id"))
 				} else {
 					require.Error(t, err)
 					require.Contains(t, err.Error(), "serial consistency")

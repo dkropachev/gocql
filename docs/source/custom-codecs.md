@@ -1,9 +1,11 @@
 # Custom codec contracts
 
-Most applications compose `Params`, `Row`, `StreamRowInto`, or their struct-mapping
+Most applications compose `Params`, `Row`, `stream.RowInto`, or their struct-mapping
 counterparts. Custom implementations use the following public contracts from
-`github.com/scylladb/gocql/v2/cql`. Some low-level plan types share their
-implementation identity through aliases; their full contracts are listed here.
+`github.com/scylladb/gocql/v2/cql` and, for streaming,
+`github.com/scylladb/gocql/v2/cql/stream`. Some low-level plan types share
+their implementation identity through aliases; their full contracts are listed
+here.
 
 ```go
 type Encoder[T any] interface {
@@ -36,21 +38,22 @@ type RowPlan[R any] interface {
     Clone(R) R
 }
 
-type StreamDecoder[T any] interface {
-    Compile(DataType) (StreamValuePlan[T], error)
+// package stream
+type Decoder[T any] interface {
+    Compile(cql.DataType) (ValuePlan[T], error)
 }
-type StreamValuePlan[T any] interface {
+type ValuePlan[T any] interface {
     Reset(*T)
-    DecodeInto(*StreamValueReader, *T) error
+    DecodeInto(*ValueReader, *T) error
 }
-type StreamRowDecoder[R any] interface {
-    Compile(Columns) (StreamRowPlan[R], error)
+type RowDecoder[R any] interface {
+    Compile(cql.Columns) (RowPlan[R], error)
 }
-type StreamRowPlan[R any] interface {
+type RowPlan[R any] interface {
     Reset(*R)
-    DecodeInto(*StreamRowReader, *R) error
+    DecodeInto(*RowReader, *R) error
 }
-type StreamResetter[T any] interface {
+type Resetter[T any] interface {
     Reset(*T)
 }
 ```
@@ -86,10 +89,10 @@ Clone retained values explicitly.
 
 Streaming plans write into seeded caller storage. `Reset` clears logical
 values while preserving mapped buffers and nested capacity. It runs before
-decoding each row or value. An optional declaration-level `StreamResetter`
+decoding each row or value. An optional declaration-level `stream.Resetter`
 also resets fields absent from actual metadata without needing a compiled
 database type. Custom streaming declarations mapping such absent fields must
-provide it. Use `StreamRowReader.ReadColumn` with a checked child plan. Do not adapt a
+provide it. Use `stream.RowReader.ReadColumn` with a checked child plan. Do not adapt a
 buffered decoder by accumulating an entire streamed cell.
 
 Streaming decoders must report `cqlerr.StreamCapacityError` when caller

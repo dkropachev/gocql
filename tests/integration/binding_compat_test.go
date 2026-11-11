@@ -16,6 +16,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/stream"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
@@ -89,7 +90,7 @@ func RunPage[R any](a0 context.Context, a1 *gocql.Session[testDialect], a2 *Boun
 	return (*gocql.Page[R])(result), err
 }
 
-func RunStream[B any, R any](a0 context.Context, a1 *gocql.Session[testDialect], a2 *Bound[B], a3 cql.StreamRowDecoder[R], a4 gocql.StreamOptions) (*gocql.RowStream[R], error) {
+func RunStream[B any, R any](a0 context.Context, a1 *gocql.Session[testDialect], a2 *Bound[B], a3 stream.RowDecoder[R], a4 gocql.StreamOptions) (*gocql.RowStream[R], error) {
 	result, err := implSession.IntegrationRunStream[B, R](a0, (*implSession.Session)(a1).Core(), a2, a3, implSession.StreamOptions{Options: implSession.CompiledOptions(bindOptions(a1, a4.Options)).Values(), Limits: a4.Limits, Incremental: a4.Incremental})
 	return (*gocql.RowStream[R])(result), err
 }

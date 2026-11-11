@@ -8,6 +8,7 @@ package integration
 import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 	routing "github.com/scylladb/gocql/v2/routing"
 
 	"context"
@@ -31,10 +32,10 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session[testDia
 		Table cql.UUID
 		Token int64
 	}
-	statement := cql.Statement[parameters, cql.DynamicRow]{
+	statement := cql.Statement[parameters, dynamic.Row]{
 		CQL:    "SELECT last_token,replicas,new_replicas,stage FROM system.tablets WHERE table_id=? AND last_token>=? LIMIT 1",
 		Params: cql.Params(cql.Param("id", cql.UUIDCodec, func(p parameters) cql.UUID { return p.Table }), cql.Param("token", cql.Int64Codec, func(p parameters) int64 { return p.Token })),
-		Rows:   cql.DynamicRows,
+		Rows:   dynamic.Rows,
 	}
 	columns := cql.NewColumns(cql.ColumnSpec{Name: "id", Type: cql.UUIDType}, cql.ColumnSpec{Name: "token", Type: cql.BigIntType})
 	bound := codecTestMust(BindUnpreparedOwned(statement, columns, parameters{table, token}))
@@ -46,7 +47,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session[testDia
 			t.Fatal("authoritative read lost exact host pin", page.Info().HostID, host.ID)
 		}
 		observation.readNodes = append(observation.readNodes, page.Info().HostID)
-		var row cql.DynamicRow
+		var row dynamic.Row
 		if !page.NextInto(&row) {
 			t.Fatal("authoritative tablet absent", page.Err())
 		}

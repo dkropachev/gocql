@@ -16,6 +16,8 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
+	"github.com/scylladb/gocql/v2/cql/stream"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
@@ -68,7 +70,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	}
 	pinned := gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: target}}
 
-	statement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,value FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}
+	statement := cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: "SELECT id,value FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}
 	prepared := codecTestMust(s.Prepare(ctx, statement, gocql.PrepareOptions{}))
 	bound := codecTestMust(BindOwned(prepared, cql.EmptyParams{}))
 	defer bound.Close()
@@ -76,7 +78,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 		ID    int32
 		Value []byte
 	}
-	decoder := cql.StreamRowInto(func(*output) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *output) *int32 { return &r.ID }), cql.StreamColumn("value", cql.StreamBlob, func(r *output) *[]byte { return &r.Value }))
+	decoder := stream.RowInto(func(*output) {}, stream.Column("id", stream.Int32, func(r *output) *int32 { return &r.ID }), stream.Column("value", stream.Blob, func(r *output) *[]byte { return &r.Value }))
 	streamOptions := pinned
 	streamOptions.PageSize = cql.Option[int32]{Set: true, Value: 1}
 	interrupted, err := RunStream(ctx, s, bound, decoder, gocql.StreamOptions{Incremental: true, Options: streamOptions})
@@ -117,7 +119,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 		probe, probeErr := Run(ctx, s, bound, bindOptions(s, probeOptions))
 		if probeErr == nil {
 			n := 0
-			var row cql.DynamicRow
+			var row dynamic.Row
 			for probe.NextInto(&row) {
 				n++
 			}

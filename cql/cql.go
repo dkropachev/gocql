@@ -4,29 +4,25 @@
 // Package cql holds the CQL data vocabulary: statements, types, values,
 // codecs, consistency levels and server errors. It does no I/O.
 //
-// RowInto, RowOf, Column, OneColumn, TupleDecoder and UDTDecoder describe buffered
-// results. Their StreamRowInto, StreamRowOf, StreamColumn, StreamOneColumn,
-// StreamTuple and StreamUDT counterparts describe incremental decoding into
-// caller storage. Both paths share column matching and struct tags, but compile
-// separate plans because their storage and lifetime contracts differ.
+// A Statement pairs CQL text with a ParamEncoder and a RowDecoder. Params,
+// Param and ParamAt map parameters; Row, RowInto, Column, ColumnAt and
+// OneColumn map buffered result rows; ParamsOf and RowOf map the fields of a
+// struct. Two subpackages build on this one: package stream decodes rows
+// incrementally into caller storage (stream.Statement, stream.RowInto,
+// stream.RowOf), and package dynamic binds and reads values whose types are
+// known only at run time (dynamic.Value, dynamic.Params, dynamic.Rows).
 //
 // ListCodec, SetCodec and VectorCodec encode and eagerly decode []T. MapCodec
-// uses []Entry[K, V], preserving server order and supporting non-comparable keys.
-// The corresponding Encoder and Decoder constructors provide either direction
-// independently, with the same Go container types. StreamList, StreamSet,
-// StreamVector and StreamMap use those containers too, with streaming element
-// decoders. Buffered collection decoding accepts NULL as an empty collection;
-// use Nullable to preserve that distinction. Vectors require their declared
-// dimension and use Nullable for NULL.
+// uses []Entry[K, V], preserving server order and supporting non-comparable
+// keys; GoMapCodec uses a Go map[K]V. The corresponding Encoder and Decoder
+// constructors provide either direction independently, with the same Go
+// container types. Buffered collection decoding accepts NULL as an empty
+// collection; use Nullable to preserve that distinction. Vectors require
+// their declared dimension and use Nullable for NULL.
 //
 // Buffered Bytes and Text elements may borrow a page, including when held in
 // an eagerly decoded slice. Clone recursively detaches borrowed values before
-// their page is released. Stream decoders write payloads directly into supplied
-// storage and require enough capacity; they report StreamCapacityError instead
-// of growing buffers. Streaming text and blob values use []byte, so applications
-// choose separate row structs when buffered and streaming field types differ.
-// StreamNullable preserves NULL. Unwrapped list/set/map stream decoders accept
-// NULL as an empty collection, matching buffered decoding; vectors reject it.
+// their page is released. StringCodec and ByteSliceCodec decode owned copies.
 //
 // DataType and ColumnSpec describe public CQL types and columns. Option is for
 // inherited settings, Nullable for nullable application data and results,

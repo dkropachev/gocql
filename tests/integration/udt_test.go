@@ -34,6 +34,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 )
 
 type position struct {
@@ -99,7 +100,7 @@ func TestUDT(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		var retained cql.DynamicRow
+		var retained dynamic.Row
 		if !rows.NextInto(&retained) {
 			t.Fatalf("missing row: %v", rows.Err())
 		}
@@ -115,7 +116,7 @@ func TestUDT(t *testing.T) {
 		if err := rows.Close(); err != nil {
 			t.Fatal(err)
 		}
-		for _, r := range []cql.DynamicRow{retained, clone} {
+		for _, r := range []dynamic.Row{retained, clone} {
 			v, err := r.Get("log_entries")
 			if err != nil {
 				t.Fatal(err)

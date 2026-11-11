@@ -53,6 +53,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/binding"
@@ -648,21 +649,21 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session[testDialect]
 	return false, nil
 }
 
-func v2Query(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...cql.Value) (gocql.Rows[cql.DynamicRow], error) {
-	statement := cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}
-	var bound *Bound[cql.DynamicRow]
+func v2Query(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...dynamic.Value) (gocql.Rows[dynamic.Row], error) {
+	statement := cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: stmt, Params: dynamic.Params, Rows: dynamic.Rows}
+	var bound *Bound[dynamic.Row]
 	var err error
 	if len(values) == 0 {
 		bound, err = BindUnpreparedOwned(statement, cql.NewColumns(), values)
 	} else {
-		var prepared *gocql.Prepared[[]cql.Value, cql.DynamicRow]
+		var prepared *gocql.Prepared[[]dynamic.Value, dynamic.Row]
 		prepared, err = session.Prepare(ctx, statement, gocql.PrepareOptions{})
 		if err == nil {
 			bound, err = BindOwned(prepared, values)
 		}
 	}
 	if err != nil {
-		return gocql.Rows[cql.DynamicRow]{}, err
+		return gocql.Rows[dynamic.Row]{}, err
 	}
 	// Run admits the request before returning. Rows owns the execution reference
 	// until it is exhausted or closed, even after closing the binding here.
@@ -670,28 +671,28 @@ func v2Query(ctx context.Context, session *gocql.Session[testDialect], stmt stri
 	return Run(ctx, session, bound, gocql.CompiledOptions{})
 }
 
-func v2ReadOne(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...cql.Value) (cql.DynamicRow, error) {
+func v2ReadOne(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...dynamic.Value) (dynamic.Row, error) {
 	rows, err := v2Query(ctx, session, stmt, values...)
 	if err != nil {
-		return cql.DynamicRow{}, err
+		return dynamic.Row{}, err
 	}
 	defer rows.Close()
-	var current cql.DynamicRow
+	var current dynamic.Row
 	if !rows.NextInto(&current) {
 		if err := rows.Err(); err != nil {
-			return cql.DynamicRow{}, err
+			return dynamic.Row{}, err
 		}
-		return cql.DynamicRow{}, cqlerr.ErrNoRows
+		return dynamic.Row{}, cqlerr.ErrNoRows
 	}
 	row, err := rows.Clone()
 	if err != nil {
-		return cql.DynamicRow{}, err
+		return dynamic.Row{}, err
 	}
 	if rows.NextInto(&current) {
-		return cql.DynamicRow{}, errMultipleRows
+		return dynamic.Row{}, errMultipleRows
 	}
 	if err := rows.Err(); err != nil {
-		return cql.DynamicRow{}, err
+		return dynamic.Row{}, err
 	}
 	return row, rows.Close()
 }
@@ -1234,9 +1235,9 @@ func serializationExec[P any](s *gocql.Session[testDialect], stmt string, encode
 	return err
 }
 
-func serializationRows[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (gocql.Rows[R], error) {
+func serializationRows[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...dynamic.Value) (gocql.Rows[R], error) {
 	ctx := context.Background()
-	p, err := s.Prepare(ctx, cql.Statement[[]cql.Value, R]{CQL: stmt, Params: cql.DynamicParams, Rows: decoder}, gocql.PrepareOptions{})
+	p, err := s.Prepare(ctx, cql.Statement[[]dynamic.Value, R]{CQL: stmt, Params: dynamic.Params, Rows: decoder}, gocql.PrepareOptions{})
 	if err != nil {
 		return gocql.Rows[R]{}, err
 	}
@@ -1248,7 +1249,7 @@ func serializationRows[R any](s *gocql.Session[testDialect], stmt string, decode
 	return Run(ctx, s, b, gocql.CompiledOptions{})
 }
 
-func serializationOne[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (R, error) {
+func serializationOne[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...dynamic.Value) (R, error) {
 	var zero R
 	rows, err := serializationRows(s, stmt, decoder, values...)
 	if err != nil {
@@ -1355,7 +1356,7 @@ func serializationMap[K comparable, V any](k cql.Codec[K], v cql.Codec[V]) cql.C
 type serializationRawDecoder struct{}
 
 func (serializationRawDecoder) CheckType(t cql.DataType) error {
-	return cql.DynamicCodec.CheckType(t)
+	return dynamic.Codec.CheckType(t)
 }
 func (serializationRawDecoder) Decode(r cql.ValueReader) (cql.EncodedValue, error) {
 	return cql.NewEncodedValue(r.Type(), r.State(), r.Bytes())

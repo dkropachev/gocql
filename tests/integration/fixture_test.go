@@ -17,7 +17,7 @@ import (
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 
 	gocql "github.com/scylladb/gocql/v2"
-	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
@@ -96,11 +96,11 @@ func TestFixture(t *testing.T) {
 		}()
 		payload := []byte("owned helper result")
 		for id := int32(1); id <= 2; id++ {
-			if _, err := v2Exec(ctx, session, "INSERT INTO "+table+" (bucket, id, payload) VALUES (?, ?, ?)", cql.IntValue(1), cql.IntValue(id), cql.BlobValue(payload)); err != nil {
+			if _, err := v2Exec(ctx, session, "INSERT INTO "+table+" (bucket, id, payload) VALUES (?, ?, ?)", dynamic.Int(1), dynamic.Int(id), dynamic.Blob(payload)); err != nil {
 				t.Fatal(err)
 			}
 		}
-		row, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ? AND id = ?", cql.IntValue(1), cql.IntValue(1))
+		row, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ? AND id = ?", dynamic.Int(1), dynamic.Int(1))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -115,19 +115,19 @@ func TestFixture(t *testing.T) {
 		if !bytes.Equal(got.OwnedBytes(), payload) {
 			t.Fatal("single-row helper did not retain an owned payload")
 		}
-		if _, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ?", cql.IntValue(2)); !errors.Is(err, cqlerr.ErrNoRows) {
+		if _, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ?", dynamic.Int(2)); !errors.Is(err, cqlerr.ErrNoRows) {
 			t.Fatalf("empty result: got %v, want ErrNoRows", err)
 		}
-		if _, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ?", cql.IntValue(1)); !errors.Is(err, errMultipleRows) {
+		if _, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ?", dynamic.Int(1)); !errors.Is(err, errMultipleRows) {
 			t.Fatalf("multiple result pages: got %v, want errMultipleRows", err)
 		}
-		rows, err := v2Query(ctx, session, "SELECT id FROM "+table+" WHERE bucket = ?", cql.IntValue(1))
+		rows, err := v2Query(ctx, session, "SELECT id FROM "+table+" WHERE bucket = ?", dynamic.Int(1))
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer rows.Close()
 		count := 0
-		var cur cql.DynamicRow
+		var cur dynamic.Row
 		for rows.NextInto(&cur) {
 			count++
 		}

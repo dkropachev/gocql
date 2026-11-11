@@ -15,8 +15,7 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
-
-	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
@@ -65,7 +64,7 @@ func dropLeftoverKeyspaces() error {
 		return fmt.Errorf("list keyspaces: %w", err)
 	}
 	var names []string
-	var row cql.DynamicRow
+	var row dynamic.Row
 	for rows.NextInto(&row) {
 		value, err := row.At(0)
 		if err != nil {

@@ -9,7 +9,9 @@ go get github.com/scylladb/gocql/v2@v2.0.0
 
 The root package `github.com/scylladb/gocql/v2` (`gocql`) connects and runs
 statements. The data vocabulary (statements, types, codecs, values,
-consistency levels and server errors) lives in `github.com/scylladb/gocql/v2/cql`.
+consistency levels and server errors) lives in `github.com/scylladb/gocql/v2/cql`;
+its subpackages `cql/stream` (decoding into caller storage) and `cql/dynamic`
+(values typed by metadata at run time) build on it.
 Cluster metadata (topology and schema) is in `metadata`, host selection in `routing`, authentication
 in `auth`, addressing and dialing in `endpoint`, and API only ScyllaDB supports in
 `scylla`. The repository has one Go
@@ -54,8 +56,8 @@ warnings, trace IDs or custom payload. A nil `Params` or
 canonical string/JSON/text formatting and timestamp extraction. Use
 `cql.TimeUUIDFromUUID` or `cql.ParseTimeUUID` for checked external input.
 `cql.StringCodec` decodes text into an owned `string`; `cql.TextCodec` decodes
-a `cql.Text` view of the response without copying. `Params`/`Row` compose typed struct mappings, while `DynamicRows` and
-`DynamicParams` support metadata-driven applications. Custom codecs compile
+a `cql.Text` view of the response without copying. `Params`/`Row` compose typed struct mappings, while `dynamic.Rows` and
+`dynamic.Params` support metadata-driven applications. Custom codecs compile
 against immutable `DataType`/`Columns` metadata; execution does not infer codecs
 from arbitrary Go values. See [custom codec contracts](docs/source/custom-codecs.md).
 
@@ -126,7 +128,7 @@ Close unless a retained `PageLease` pins the page. `Clone` explicitly detaches
 values. `NextInto` writes typed fields into caller structs while payloads still
 borrow their pages.
 
-`session.PrepareStream(ctx, cql.StreamStatement[P, R]{CQL: text, Params: params, Rows: decoder})`
+`session.PrepareStream(ctx, stream.Statement[P, R]{CQL: text, Params: params, Rows: decoder})`
 prepares directly for caller-storage decoding. Share its immutable handle and
 create a query per worker with `prepared.Query(options)`. The query decodes into
 seeded caller storage. It buffers each page on

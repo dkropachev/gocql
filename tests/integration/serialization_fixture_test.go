@@ -12,6 +12,7 @@ import (
 	inf "gopkg.in/inf.v0"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	fixtureDuration "github.com/scylladb/gocql/v2/internal/tests/valuecases"
 
@@ -44,9 +45,9 @@ func serializationExec[P any](s *gocql.Session[testDialect], stmt string, encode
 	return err
 }
 
-func serializationRows[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (gocql.Rows[R], error) {
+func serializationRows[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...dynamic.Value) (gocql.Rows[R], error) {
 	ctx := context.Background()
-	p, err := s.Prepare(ctx, cql.Statement[[]cql.Value, R]{CQL: stmt, Params: cql.DynamicParams, Rows: decoder}, gocql.PrepareOptions{})
+	p, err := s.Prepare(ctx, cql.Statement[[]dynamic.Value, R]{CQL: stmt, Params: dynamic.Params, Rows: decoder}, gocql.PrepareOptions{})
 	if err != nil {
 		return gocql.Rows[R]{}, err
 	}
@@ -58,7 +59,7 @@ func serializationRows[R any](s *gocql.Session[testDialect], stmt string, decode
 	return Run(ctx, s, b, gocql.CompiledOptions{})
 }
 
-func serializationOne[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (R, error) {
+func serializationOne[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...dynamic.Value) (R, error) {
 	var zero R
 	rows, err := serializationRows(s, stmt, decoder, values...)
 	if err != nil {
@@ -91,13 +92,13 @@ func serializationDDL(t testing.TB, s *gocql.Session[testDialect], stmt string) 
 		t.Fatal(err)
 	}
 }
-func serializationWrite(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...cql.Value) {
+func serializationWrite(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...dynamic.Value) {
 	t.Helper()
 	if _, err := v2Exec(context.Background(), s, stmt, values...); err != nil {
 		t.Fatal(err)
 	}
 }
-func serializationColumn(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...cql.Value) cql.Value {
+func serializationColumn(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...dynamic.Value) dynamic.Value {
 	t.Helper()
 	r, err := v2ReadOne(context.Background(), s, stmt, values...)
 	if err != nil {
@@ -163,7 +164,7 @@ func serializationRoundTrip[T any](t testing.TB, s *gocql.Session[testDialect], 
 	if err := serializationExec(s, fmt.Sprintf("INSERT INTO %s (id,%s) VALUES (?,?)", table, column), params, cql.Pair[int32, T]{First: id, Second: input}); err != nil {
 		t.Fatal(err)
 	}
-	output, err := serializationOne(s, fmt.Sprintf("SELECT %s FROM %s WHERE id=?", column, table), cql.OneColumn(codec), cql.IntValue(id))
+	output, err := serializationOne(s, fmt.Sprintf("SELECT %s FROM %s WHERE id=?", column, table), cql.OneColumn(codec), dynamic.Int(id))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +216,7 @@ func serializationMap[K comparable, V any](k cql.Codec[K], v cql.Codec[V]) cql.C
 
 // assertSerializationValue compares public, decoded representations, including
 // exact float bits and null state. It does not use encoded output as its oracle.
-func assertSerializationValue(t testing.TB, want, got cql.Value) {
+func assertSerializationValue(t testing.TB, want, got dynamic.Value) {
 	t.Helper()
 	if want.State() != got.State() {
 		t.Fatalf("state: expected %v, got %v", want.State(), got.State())
@@ -281,14 +282,14 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 		if e != nil || f != nil || len(a) != len(b) {
 			t.Fatalf("map cardinality: %d %d %v %v", len(a), len(b), e, f)
 		}
-		key := func(v cql.Value) string {
-			encoded, e := cql.EncodeValue(v.Type(), cql.DynamicCodec, v)
+		key := func(v dynamic.Value) string {
+			encoded, e := cql.EncodeValue(v.Type(), dynamic.Codec, v)
 			if e != nil {
 				t.Fatal(e)
 			}
 			return string(encoded.Bytes().OwnedBytes())
 		}
-		values := make(map[string]cql.Value, len(b))
+		values := make(map[string]dynamic.Value, len(b))
 		for _, entry := range b {
 			values[key(entry.Key)] = entry.Value
 		}
@@ -330,8 +331,8 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 			t.Fatalf("elements: %d %d %v %v", len(a), len(b), e, f)
 		}
 		if wk == cql.TypeSet {
-			key := func(v cql.Value) string {
-				x, e := cql.EncodeValue(v.Type(), cql.DynamicCodec, v)
+			key := func(v dynamic.Value) string {
+				x, e := cql.EncodeValue(v.Type(), dynamic.Codec, v)
 				if e != nil {
 					t.Fatal(e)
 				}
@@ -352,12 +353,12 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 
 // serializationFixtureValue translates only the finite historical scalar corpus.
 // Conversions are explicit fixture setup, outside driver binding and decoding.
-func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
+func serializationFixtureValue(kind cql.Type, input any) (dynamic.Value, error) {
 	typ, err := cql.ScalarType(kind)
 	if err != nil {
-		return cql.Value{}, err
+		return dynamic.Value{}, err
 	}
-	null := func() (cql.Value, error) { return cql.NullValue(typ), nil }
+	null := func() (dynamic.Value, error) { return dynamic.Null(typ), nil }
 	switch v := input.(type) {
 	case *bool:
 		if v == nil {
@@ -428,41 +429,41 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 		if v == nil {
 			return null()
 		}
-		return cql.DurationValue(cql.Duration{Months: v.Months, Days: v.Days, Nanoseconds: v.Nanoseconds})
+		return dynamic.Duration(cql.Duration{Months: v.Months, Days: v.Days, Nanoseconds: v.Nanoseconds})
 	case fixtureDuration.Duration:
-		return cql.DurationValue(cql.Duration{Months: v.Months, Days: v.Days, Nanoseconds: v.Nanoseconds})
+		return dynamic.Duration(cql.Duration{Months: v.Months, Days: v.Days, Nanoseconds: v.Nanoseconds})
 	case *cql.Duration:
 		if v == nil {
 			return null()
 		}
-		return cql.DurationValue(*v)
+		return dynamic.Duration(*v)
 	case *big.Int:
 		if v == nil {
 			return null()
 		}
 		switch kind {
 		case cql.TypeVarint:
-			return cql.VarintValue(cql.VarintFromBigInt(v)), nil
+			return dynamic.Varint(cql.VarintFromBigInt(v)), nil
 		default:
 			if !v.IsInt64() {
-				return cql.Value{}, fmt.Errorf("fixture integer overflow")
+				return dynamic.Value{}, fmt.Errorf("fixture integer overflow")
 			}
 			return serializationFixtureValue(kind, v.Int64())
 		}
 	case bool:
-		return cql.BoolValue(v), nil
+		return dynamic.Bool(v), nil
 	case int8:
 		return serializationFixtureValue(kind, int64(v))
 	case int16:
 		return serializationFixtureValue(kind, int64(v))
 	case int32:
 		if kind == cql.TypeDate {
-			return cql.DateValue(cql.Date(int32(uint32(v) ^ uint32(1<<31)))), nil
+			return dynamic.Date(cql.Date(int32(uint32(v) ^ uint32(1<<31)))), nil
 		}
 		return serializationFixtureValue(kind, int64(v))
 	case uint32:
 		if kind == cql.TypeDate {
-			return cql.DateValue(cql.Date(int32(v ^ uint32(1<<31)))), nil
+			return dynamic.Date(cql.Date(int32(v ^ uint32(1<<31)))), nil
 		}
 	case int64:
 		switch kind {
@@ -470,74 +471,74 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 			if v < math.MinInt8 || v > math.MaxInt8 {
 				break
 			}
-			return cql.TinyIntValue(int8(v)), nil
+			return dynamic.TinyInt(int8(v)), nil
 		case cql.TypeSmallInt:
 			if v < math.MinInt16 || v > math.MaxInt16 {
 				break
 			}
-			return cql.SmallIntValue(int16(v)), nil
+			return dynamic.SmallInt(int16(v)), nil
 		case cql.TypeInt:
 			if v < math.MinInt32 || v > math.MaxInt32 {
 				break
 			}
-			return cql.IntValue(int32(v)), nil
+			return dynamic.Int(int32(v)), nil
 		case cql.TypeBigInt:
-			return cql.BigIntValue(v), nil
+			return dynamic.BigInt(v), nil
 		case cql.TypeVarint:
-			return cql.VarintValue(cql.VarintFromBigInt(big.NewInt(v))), nil
+			return dynamic.Varint(cql.VarintFromBigInt(big.NewInt(v))), nil
 		case cql.TypeTime:
-			return cql.TimeValue(cql.TimeOfDay(v))
+			return dynamic.Time(cql.TimeOfDay(v))
 		case cql.TypeTimestamp:
-			return cql.TimestampValue(cql.Timestamp(v)), nil
+			return dynamic.Timestamp(cql.Timestamp(v)), nil
 		case cql.TypeDuration:
 			const day = int64(24 * time.Hour)
-			return cql.DurationValue(cql.Duration{Days: int32(v / day), Nanoseconds: v % day})
+			return dynamic.Duration(cql.Duration{Days: int32(v / day), Nanoseconds: v % day})
 		}
 	case time.Duration:
 		return serializationFixtureValue(kind, int64(v))
 	case float32:
-		return cql.FloatValue(v), nil
+		return dynamic.Float(v), nil
 	case float64:
-		return cql.DoubleValue(v), nil
+		return dynamic.Double(v), nil
 	case inf.Dec:
-		return cql.DecimalValue(cql.Decimal{Scale: int32(v.Scale()), Unscaled: cql.VarintFromBigInt(v.UnscaledBig())}), nil
+		return dynamic.Decimal(cql.Decimal{Scale: int32(v.Scale()), Unscaled: cql.VarintFromBigInt(v.UnscaledBig())}), nil
 	case [16]byte:
 		if kind == cql.TypeTimeUUID {
-			return cql.TimeUUIDValue(cql.TimeUUID(v))
+			return dynamic.TimeUUID(cql.TimeUUID(v))
 		}
-		return cql.UUIDValue(cql.UUID(v)), nil
+		return dynamic.UUID(cql.UUID(v)), nil
 	case net.IP:
 		if v == nil {
 			return null()
 		}
 		a, ok := netip.AddrFromSlice(v)
 		if !ok {
-			return cql.Value{}, fmt.Errorf("invalid fixture IP")
+			return dynamic.Value{}, fmt.Errorf("invalid fixture IP")
 		}
-		return cql.InetValue(a.Unmap())
+		return dynamic.Inet(a.Unmap())
 	case time.Time:
 		if kind == cql.TypeDate {
 			d, e := cql.DateFromTime(v)
 			if e != nil {
-				return cql.Value{}, e
+				return dynamic.Value{}, e
 			}
-			return cql.DateValue(d), nil
+			return dynamic.Date(d), nil
 		}
 		n, e := cql.TimestampFromTime(v)
 		if e != nil {
-			return cql.Value{}, e
+			return dynamic.Value{}, e
 		}
-		return cql.TimestampValue(n), nil
+		return dynamic.Timestamp(n), nil
 	case cql.Duration:
-		return cql.DurationValue(v)
+		return dynamic.Duration(v)
 	case string:
 		switch kind {
 		case cql.TypeText, cql.TypeVarchar:
-			return cql.TextValue(v)
+			return dynamic.Text(v)
 		case cql.TypeAscii:
-			return cql.ASCIIValue(v)
+			return dynamic.ASCII(v)
 		case cql.TypeBlob:
-			return cql.BlobValue([]byte(v)), nil
+			return dynamic.Blob([]byte(v)), nil
 		}
 		if v == "" {
 			return null()
@@ -548,7 +549,7 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 			if !ok {
 				break
 			}
-			return cql.VarintValue(cql.VarintFromBigInt(n)), nil
+			return dynamic.Varint(cql.VarintFromBigInt(n)), nil
 		case cql.TypeDecimal:
 			parts := strings.Split(v, ";")
 			if len(parts) != 2 {
@@ -556,57 +557,57 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 			}
 			scale, e := strconv.ParseInt(parts[0], 10, 32)
 			if e != nil {
-				return cql.Value{}, e
+				return dynamic.Value{}, e
 			}
 			n, ok := new(big.Int).SetString(parts[1], 10)
 			if !ok {
 				break
 			}
-			return cql.DecimalValue(cql.Decimal{Scale: int32(scale), Unscaled: cql.VarintFromBigInt(n)}), nil
+			return dynamic.Decimal(cql.Decimal{Scale: int32(scale), Unscaled: cql.VarintFromBigInt(n)}), nil
 		case cql.TypeUUID, cql.TypeTimeUUID:
 			u, e := cql.ParseUUID(v)
 			if e != nil {
-				return cql.Value{}, e
+				return dynamic.Value{}, e
 			}
 			if kind == cql.TypeTimeUUID {
-				return cql.TimeUUIDValue(cql.TimeUUID(u))
+				return dynamic.TimeUUID(cql.TimeUUID(u))
 			}
-			return cql.UUIDValue(u), nil
+			return dynamic.UUID(u), nil
 		case cql.TypeInet:
 			a, e := netip.ParseAddr(v)
 			if e != nil {
-				return cql.Value{}, e
+				return dynamic.Value{}, e
 			}
-			return cql.InetValue(a)
+			return dynamic.Inet(a)
 		case cql.TypeDate:
 			dayPos := strings.LastIndex(v, "-")
 			monthPos := strings.LastIndex(v[:dayPos], "-")
 			y, e := strconv.Atoi(v[:monthPos])
 			if e != nil {
-				return cql.Value{}, e
+				return dynamic.Value{}, e
 			}
 			m, e := strconv.Atoi(v[monthPos+1 : dayPos])
 			if e != nil {
-				return cql.Value{}, e
+				return dynamic.Value{}, e
 			}
 			d, e := strconv.Atoi(v[dayPos+1:])
 			if e != nil {
-				return cql.Value{}, e
+				return dynamic.Value{}, e
 			}
 			date, e := cql.DateFromTime(time.Date(y, time.Month(m), d, 0, 0, 0, 0, time.UTC))
 			if e != nil {
-				return cql.Value{}, e
+				return dynamic.Value{}, e
 			}
-			return cql.DateValue(date), nil
+			return dynamic.Date(date), nil
 		case cql.TypeDuration:
 			d, e := serializationDurationLiteral(v)
 			if e != nil {
-				return cql.Value{}, e
+				return dynamic.Value{}, e
 			}
-			return cql.DurationValue(d)
+			return dynamic.Duration(d)
 		}
 	}
-	return cql.Value{}, fmt.Errorf("unsupported scalar fixture %s %T (%v)", kind, input, input)
+	return dynamic.Value{}, fmt.Errorf("unsupported scalar fixture %s %T (%v)", kind, input, input)
 }
 
 func serializationDurationLiteral(s string) (cql.Duration, error) {
@@ -663,7 +664,7 @@ func serializationDurationLiteral(s string) (cql.Duration, error) {
 type serializationRawDecoder struct{}
 
 func (serializationRawDecoder) CheckType(t cql.DataType) error {
-	return cql.DynamicCodec.CheckType(t)
+	return dynamic.Codec.CheckType(t)
 }
 func (serializationRawDecoder) Decode(r cql.ValueReader) (cql.EncodedValue, error) {
 	return cql.NewEncodedValue(r.Type(), r.State(), r.Bytes())
