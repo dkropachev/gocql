@@ -685,7 +685,10 @@ func (rt *InternalSessionRuntime) newRowsFromResponse[R any](runctx context.Cont
 	// closed or stopped. Stale handles carry the previous generation.
 	// Elsewhere the first page shares the iterator's allocation.
 	holder, gen := b.privateStorage.rows, uint64(0)
-	queryOwned := holder != nil && request.query != nil
+	// A pooled query serves other callers once these rows close, so its rows
+	// live in storage of their own: a closed handle another goroutine still
+	// holds then never reads storage a later execution reuses.
+	queryOwned := holder != nil && request.query != nil && !request.query.perCall
 	if queryOwned {
 		gen = request.query.generation.Load()
 		*holder = rowsHolder[R]{}

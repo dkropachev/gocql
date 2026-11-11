@@ -8,11 +8,13 @@ import (
 	"iter"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/model"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
 // Prepared is an immutable typed statement prepared on a session. Share it
-// between goroutines and call Exec, One, Each or All for ordinary executions. Each
+// between goroutines and call Exec, One, Each or All for ordinary executions,
+// Run or RunPage for a handle the caller closes. Each
 // call may take one CompiledOptions, built once by Session.CompileOptions, or omit
 // options for the session defaults. A Prepared has no Close obligation.
 type Prepared[P, R any] implSession.Prepared[P, R]
@@ -78,6 +80,37 @@ func preparedAll[P, R any](p *Prepared[P, R], ctx context.Context, value P, dst 
 		return
 	}
 	p.internal().All(ctx, value, dst, o)(yield)
+}
+
+// Run returns a cursor over every row across all pages, as Query.Run does,
+// for callers that pull rows or pick each row's destination. The rows hold
+// one of the statement's pooled queries until they are closed: close them,
+// including on early termination. Session.Close stops rows still open, and
+// rows dropped without Close release their query once the garbage collector
+// finds them. Run is safe for concurrent use; each Rows is not. At most one
+// CompiledOptions may be passed.
+func (p *Prepared[P, R]) Run(ctx context.Context, value P, options ...CompiledOptions) (Rows[R], error) {
+	o, err := internalCompiledOptions(options)
+	if err != nil {
+		return Rows[R]{}, err
+	}
+	rows, err := p.internal().Run(ctx, value, o)
+	return Rows[R](rows), err
+}
+
+// RunPage executes one page, resuming from state, as Query.RunPage does with
+// pageSize: zero uses the resolved page size and cql.Unpaged requests the
+// whole result. It serves stateless pagination from concurrent handlers: keep
+// Page.State, not the page. The page holds one of the statement's pooled
+// queries until it is closed, as Run's rows do. RunPage is safe for concurrent
+// use; each Page is not. At most one CompiledOptions may be passed.
+func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state PageState, pageSize int32, options ...CompiledOptions) (*Page[R], error) {
+	o, err := internalCompiledOptions(options)
+	if err != nil {
+		return nil, err
+	}
+	page, err := p.internal().RunPage(ctx, value, model.PageState(state), pageSize, o)
+	return (*Page[R])(page), err
 }
 
 // Query creates a worker-owned reusable query with fixed options. It also

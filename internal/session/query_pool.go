@@ -139,6 +139,11 @@ func (p *queryPool[P, R]) get() (*Query[P, R], error) {
 	// query reaches idle only from an execution, and one closed during it
 	// was closed with the pool, which put ignores.
 	q.state.owner.onIdle = func() {
+		if q.state.held {
+			// A handle held this execution; it no longer needs tracking.
+			q.state.held = false
+			q.state.runtime.unregisterQuery(&q.state)
+		}
 		q.state.idle()
 		p.put(q)
 	}
@@ -248,6 +253,41 @@ func (p *queryPool[P, R]) each(ctx context.Context, value P, dst *R, fn func(*R)
 	found, result, err := q.state.runtime.each(ctx, &q.bound, options, dst, fn, &q.scratch)
 	q.state.owner.InternalRelease()
 	return found, result, err
+}
+
+// hold marks a captured pooled query as held open by a handle its caller
+// will own, and registers it with the session: Session.Close then stops the
+// handle, and a handle dropped without Close is accounted for when its query
+// is collected. The query unregisters itself when it becomes idle.
+func (q *Query[P, R]) hold() {
+	q.state.held = true
+	q.state.runtime.registerHeld(&q.state)
+}
+
+// run executes value with options on a pooled query and returns rows that
+// hold the query until they are closed.
+func (p *queryPool[P, R]) run(ctx context.Context, value P, options CompiledOptions) (Rows[R], error) {
+	q, err := p.capture(ctx, value)
+	if err != nil {
+		return Rows[R]{}, err
+	}
+	q.hold()
+	rows, err := Run(ctx, q.state.runtime.Core, &q.bound, options)
+	q.state.owner.InternalRelease()
+	return rows, err
+}
+
+// runPage executes one page of value with options on a pooled query and
+// returns a page that holds the query until it is closed.
+func (p *queryPool[P, R]) runPage(ctx context.Context, value P, state model.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
+	q, err := p.capture(ctx, value)
+	if err != nil {
+		return nil, err
+	}
+	q.hold()
+	page, err := RunPage(ctx, q.state.runtime.Core, &q.bound, state, pageSize, options)
+	q.state.owner.InternalRelease()
+	return page, err
 }
 
 // pool returns p's query pool, created on first use.
@@ -381,6 +421,40 @@ func (p *Prepared[P, R]) all(ctx context.Context, value P, dst *R, options []Com
 	if _, _, err := pool.each(ctx, value, dst, yieldRow(yield), o); err != nil {
 		yield(nil, err)
 	}
+}
+
+// Run binds value, executes the statement once and returns a cursor over
+// its rows across all pages, as Query.Run does. The rows hold one of the
+// statement's pooled queries until they are closed; Session.Close stops rows
+// still open, and rows dropped without Close release their query when the
+// garbage collector finds them. Options are as for Exec. Run is safe for
+// concurrent use; each Rows is not.
+func (p *Prepared[P, R]) Run(ctx context.Context, value P, options ...CompiledOptions) (Rows[R], error) {
+	o, err := oneShotOptions(options)
+	if err != nil {
+		return Rows[R]{}, err
+	}
+	pool, err := p.pool()
+	if err != nil {
+		return Rows[R]{}, err
+	}
+	return pool.run(ctx, value, o)
+}
+
+// RunPage binds value and executes one page of the statement, resuming from
+// state, as Query.RunPage does with pageSize. The page holds one of the
+// statement's pooled queries until it is closed, as Run's rows do. Options are
+// as for Exec. RunPage is safe for concurrent use; each Page is not.
+func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state model.PageState, pageSize int32, options ...CompiledOptions) (*Page[R], error) {
+	o, err := oneShotOptions(options)
+	if err != nil {
+		return nil, err
+	}
+	pool, err := p.pool()
+	if err != nil {
+		return nil, err
+	}
+	return pool.runPage(ctx, value, state, pageSize, o)
 }
 
 // preparedPoolIdle reports how many idle queries p's pool holds.

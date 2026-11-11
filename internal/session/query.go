@@ -52,6 +52,11 @@ type queryState struct {
 	// perCall reports that each execution brings its own options instead of
 	// using resolved.
 	perCall bool
+	// held reports that a pooled query's execution is held open by a handle
+	// the pool's caller owns, so the session registry tracks the query until
+	// it becomes idle. It is set before that execution begins and cleared by
+	// the pool's idle hook, which runs after the execution drained.
+	held bool
 }
 
 // noopCancel is shared so that retiring an execution allocates no closure.

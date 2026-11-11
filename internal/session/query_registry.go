@@ -25,6 +25,9 @@ type queryEntry struct {
 	// to report a query collected without Close.
 	stack   []uintptr
 	cleanup runtime.Cleanup
+	// pooled reports a pooled query held open by a Rows or Page its caller
+	// owns. It counts as busy, so collecting it also ends that count.
+	pooled bool
 }
 
 // queryRef is the cleanup argument of a registered query. It must not
@@ -36,8 +39,19 @@ type queryRef struct {
 
 // registerQuery records state as open so that Session.Close stops it.
 func (rt *InternalSessionRuntime) registerQuery(state *queryState) {
+	rt.addQuery(state, false)
+}
+
+// registerHeld records a busy pooled query whose execution a handle holds
+// open, so that Session.Close stops the handle and a dropped handle's query
+// is accounted for when collected. idle unregisters it.
+func (rt *InternalSessionRuntime) registerHeld(state *queryState) {
+	rt.addQuery(state, true)
+}
+
+func (rt *InternalSessionRuntime) addQuery(state *queryState, pooled bool) {
 	key := weak.Make(state)
-	entry := &queryEntry{}
+	entry := &queryEntry{pooled: pooled}
 	if rt.debugLogger() != nil {
 		entry.stack = queryCreationStack()
 	}
@@ -75,18 +89,30 @@ func (rt *InternalSessionRuntime) openQueries() []*queryState {
 }
 
 // collectQuery removes the entry of a query collected without Close and,
-// when the session logs at Debug, reports where it was created.
+// when the session logs at Debug, reports where it was created. A collected pooled query
+// was busy, held by a handle dropped without Close; it will never become idle,
+// so its collection ends its busy count instead.
 func collectQuery(ref queryRef) {
 	rt := ref.runtime
 	rt.InternalMu.Lock()
 	entry := rt.queries[ref.key]
 	delete(rt.queries, ref.key)
 	rt.InternalMu.Unlock()
-	if entry == nil || entry.stack == nil {
+	if entry == nil {
 		return
 	}
+	if entry.pooled {
+		rt.pooledIdle()
+	}
+	if entry.stack == nil {
+		return
+	}
+	what := "query"
+	if entry.pooled {
+		what = "Rows or Page"
+	}
 	if logger := rt.debugLogger(); logger != nil {
-		logger.Debug("query collected without Close", slog.String("created_at", formatQueryStack(entry.stack)))
+		logger.Debug(what+" collected without Close", slog.String("created_at", formatQueryStack(entry.stack)))
 	}
 }
 
@@ -101,8 +127,10 @@ func (rt *InternalSessionRuntime) debugLogger() *slog.Logger {
 
 func queryCreationStack() []uintptr {
 	pcs := make([]uintptr, 32)
-	// Skip runtime.Callers, this function, registerQuery and newQueryState.
-	return pcs[:runtime.Callers(4, pcs)]
+	// Skip runtime.Callers, this function, addQuery and its caller
+	// (registerQuery or registerHeld), and the caller's caller (newQueryState
+	// or hold).
+	return pcs[:runtime.Callers(5, pcs)]
 }
 
 func formatQueryStack(pcs []uintptr) string {
