@@ -36,11 +36,11 @@ hp_build() { # LABEL
 		if [ -n "${HP_PATCH:-}" ]; then git -C "$src" apply "$HP_PATCH"; fi
 	fi
 	(cd "$src" && taskset -c 10-19 go test -tags unit -c -o "$HP_GATES/$1.root.test" . &&
-		taskset -c 10-19 go test -tags unit -c -o "$HP_GATES/$1.exec.test" ./internal/execution/)
+		taskset -c 10-19 go test -tags unit -c -o "$HP_GATES/$1.exec.test" ./internal/session/)
 	if [ -n "${HP_REF:-}" ]; then git -C "$HP_REPO" worktree remove --force "$src"; fi
 }
 # hp_bin LABEL prints the gate binary that holds the reusable-query benchmarks:
-# internal/execution now, the root package in commits from before the package split.
+# internal/session now, the root package in commits from before the package split.
 hp_bin() { # LABEL
 	for b in "$HP_GATES/$1.exec.test" "$HP_GATES/$1.root.test"; do
 		if "$b" -test.list '^BenchmarkReusableQuery(Decoding)?$' | grep -q .; then
