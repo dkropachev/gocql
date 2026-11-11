@@ -135,9 +135,9 @@ func (p *Prepared[P, R]) Query(values Options) (*Query[P, R], error) {
 	return newPreparedQuery(p, options, nil)
 }
 
-// InternalBindOptions freezes values for session s. Empty values become the
+// InternalCompileOptions freezes values for session s. Empty values become the
 // zero CompiledOptions, which use the session's shared default resolution.
-func InternalBindOptions(s *implCluster.Core, values Options) (CompiledOptions, error) {
+func InternalCompileOptions(s *implCluster.Core, values Options) (CompiledOptions, error) {
 	return queryOptions(s, values)
 }
 

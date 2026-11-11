@@ -30,9 +30,9 @@ func codecTestMust[T any](v T, err error) T {
 func bindOptions[O fixtureOptions](session *gocql.Session, v O) gocql.CompiledOptions {
 	switch o := any(v).(type) {
 	case gocql.Options:
-		return codecTestMust(session.BindOptions(o))
+		return codecTestMust(session.CompileOptions(o))
 	case implSession.Options:
-		return gocql.CompiledOptions(codecTestMust(implSession.InternalBindOptions((*implSession.Session)(session).Core(), o)))
+		return gocql.CompiledOptions(codecTestMust(implSession.InternalCompileOptions((*implSession.Session)(session).Core(), o)))
 	}
 	panic("unreachable fixture options type")
 }

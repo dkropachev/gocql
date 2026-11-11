@@ -10,7 +10,7 @@ func codecTestMust[T any](v T, err error) T {
 // bindOptions binds v to session, failing loudly on values a test meant to
 // be valid.
 func bindOptions(session *Session, v Options) CompiledOptions {
-	o, err := session.BindOptions(v)
+	o, err := session.CompileOptions(v)
 	if err != nil {
 		panic(err)
 	}

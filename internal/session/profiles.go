@@ -15,7 +15,7 @@ import (
 )
 
 // Options lists execution overrides. Query constructors resolve them once;
-// Session.BindOptions resolves recurring overrides for one-shot calls.
+// Session.CompileOptions resolves recurring overrides for one-shot calls.
 type Options struct {
 	Retry                retry.Policy
 	Observer             settings.Observer

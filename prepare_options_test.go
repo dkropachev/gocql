@@ -12,10 +12,10 @@ import (
 )
 
 func TestPrepareOptions(t *testing.T) {
-	t.Run("BindOptions", func(t *testing.T) {
+	t.Run("CompileOptions", func(t *testing.T) {
 		t.Run("RequiresSession", func(t *testing.T) {
 			var s *Session
-			if _, err := s.BindOptions(Options{}); err == nil {
+			if _, err := s.CompileOptions(Options{}); err == nil {
 				t.Fatal("options bound without a session")
 			}
 		})

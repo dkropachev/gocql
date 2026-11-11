@@ -73,16 +73,16 @@ func (s *Session) UnpreparedStreamQuery[P, R any](statement StreamStatement[P, R
 	return unpreparedStreamQuery(s.Core(), statement, options)
 }
 
-// BindOptions validates options and resolves them for s into CompiledOptions,
+// CompileOptions validates options and resolves them for s into CompiledOptions,
 // for one-shot executions; the zero Options gives the zero CompiledOptions. The
 // custom payload and the profile are copied, so later changes to options do
 // not reach the result. CompiledOptions executed on another session are resolved
 // again for it on each execution.
-func (s *Session) BindOptions(options Options) (CompiledOptions, error) {
+func (s *Session) CompileOptions(options Options) (CompiledOptions, error) {
 	if s == nil {
 		return CompiledOptions{}, cqltype.TypeValidation("session", "nil session")
 	}
-	return InternalBindOptions(s.Core(), options)
+	return InternalCompileOptions(s.Core(), options)
 }
 
 // ExecBatch sends batch as one CQL BATCH of kind on s. The batch's

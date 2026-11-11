@@ -207,7 +207,7 @@ func TestConditional(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				bound := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), []cql.Value{cql.IntValue(int32(i + 1))}, gocql.PrepareOptions{})
 				// Serial consistency is checked when the options are built.
-				options, err := session.BindOptions(gocql.Options{SerialConsistency: cql.Some(tc.consistency)})
+				options, err := session.CompileOptions(gocql.Options{SerialConsistency: cql.Some(tc.consistency)})
 				if err == nil {
 					_, err = Exec(context.Background(), session, bound, options)
 				}

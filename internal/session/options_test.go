@@ -61,18 +61,18 @@ func TestOptions(t *testing.T) {
 		}
 	})
 
-	t.Run("BindOptions", func(t *testing.T) {
+	t.Run("CompileOptions", func(t *testing.T) {
 		t.Run("KeepsEmptyOnSessionDefault", func(t *testing.T) {
 			s, _ := attachmentSession()
-			zero, err := InternalBindOptions(s, Options{})
+			zero, err := InternalCompileOptions(s, Options{})
 			if err != nil || zero.p != nil {
 				t.Fatalf("empty values bound to %+v, %v; want the zero CompiledOptions", zero.p, err)
 			}
-			set, err := InternalBindOptions(s, Options{Idempotent: true})
+			set, err := InternalCompileOptions(s, Options{Idempotent: true})
 			if err != nil || set.p == nil || !set.p.bound {
 				t.Fatalf("values not bound to the session: %+v, %v", set.p, err)
 			}
-			if _, err := InternalBindOptions(nil, Options{Idempotent: true}); err == nil {
+			if _, err := InternalCompileOptions(nil, Options{Idempotent: true}); err == nil {
 				t.Fatal("values bound without a session")
 			}
 		})

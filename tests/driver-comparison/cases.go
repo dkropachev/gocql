@@ -63,7 +63,7 @@ func (a *v2Adapter) lwtPrepared() (*g.Prepared[lwtArgs, cql.CASResult[int32]], *
 	return a.lwt, a.lwtRead, nil
 }
 
-func (a *v2Adapter) options(v g.Options) (g.CompiledOptions, error) { return a.s.BindOptions(v) }
+func (a *v2Adapter) options(v g.Options) (g.CompiledOptions, error) { return a.s.CompileOptions(v) }
 
 func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 	if len(name) == 0 {

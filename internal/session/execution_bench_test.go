@@ -89,9 +89,9 @@ func BenchmarkExecution(b *testing.B) {
 				for _, workers := range []int{1, 8, 64} {
 					b.Run(fmt.Sprintf("%s/%s/w%d", op, variant, workers), func(b *testing.B) {
 						s := loopbackTestSession(b, workload)
-						// One-shot calls take options bound to their session, as
+						// One-shot calls take options compiled for their session, as
 						// the public API requires.
-						bound := codecTestMust(InternalBindOptions(s, options.Values()))
+						bound := codecTestMust(InternalCompileOptions(s, options.Values()))
 						var wp *Prepared[loopbackRow, codec.EmptyRecord]
 						var rp *Prepared[int32, []byte]
 						var wpool, rpool sync.Pool

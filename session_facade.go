@@ -45,14 +45,14 @@ func (s *Session) PrepareStream[P, R any](ctx context.Context, statement cql.Str
 	return (*PreparedStream[P, R])(p), err
 }
 
-// BindOptions validates and snapshots overrides for reuse by one-shot calls.
+// CompileOptions validates and snapshots overrides for reuse by one-shot calls.
 // Omit options on those calls to use the session defaults. A CompiledOptions used
 // on another session applies its original overrides to that session's defaults
 // and is resolved again on each call. Use context deadlines for per-request
 // time limits. Policy and observer objects remain shared and must be safe for
 // concurrent use.
-func (s *Session) BindOptions(options Options) (CompiledOptions, error) {
-	o, err := s.internal().BindOptions(internalOptions(options))
+func (s *Session) CompileOptions(options Options) (CompiledOptions, error) {
+	o, err := s.internal().CompileOptions(internalOptions(options))
 	return CompiledOptions(o), err
 }
 

@@ -75,7 +75,7 @@ func readV2SystemRows[P any, R any](a0 context.Context, a1 *driverConn, a2 cql.S
 }
 
 func resolveOptions(a0 *gocql.Session, a1 gocql.Options) (resolvedOptions, error) {
-	o, err := a0.BindOptions(a1)
+	o, err := a0.CompileOptions(a1)
 	if err != nil {
 		return resolvedOptions{}, err
 	}

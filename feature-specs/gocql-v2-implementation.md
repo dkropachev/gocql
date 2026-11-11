@@ -368,9 +368,9 @@ DDL coordinator.
 
 ## Admission and optional work
 
-Profiles are plain values copied at Connect and when options are bound, which
+Profiles are plain values copied at Connect and when options are compiled, which
 validates and freezes them once: by a query constructor, which keeps them
-resolved for the query, or by Session.BindOptions for one-shot executions.
+resolved for the query, or by Session.CompileOptions for one-shot executions.
 CompiledOptions executed on a session other than the binding one are resolved
 again for that session on each execution.
 Admission stores the resolved options

@@ -568,7 +568,7 @@ method on the type that owns it.
 | `Prepare` | keep, also `Session.Prepare` | the method form is preferred |
 | `NewUnpreparedQuery`, `NewUnpreparedStreamQuery` | removed | `Session.UnpreparedQuery`, `Session.UnpreparedStreamQuery`; the `Unprepared` prefix keeps the slow path from being the obvious name |
 | `NewStreamQuery` | removed | `Prepared.StreamQuery[R]` declares the decoder's row type itself |
-| `BindOptions` | moved to `Session.BindOptions` | |
+| `CompileOptions` | moved to `Session.CompileOptions` | |
 | `Query.ExecBatch`, `Query.RunBatch` | moved to `Session.ExecBatch`, `Session.RunBatch[R]` | a batch is a session operation and need not include the query's statement |
 | `PageStateFromToken` | keep | `PageState` fields are private |
 | `NewQuery` | moved to `Prepared.Query` | `Prepared[P, R]` already carries the type parameters |
@@ -1147,12 +1147,12 @@ also interrupts active streams; already written caller output remains valid.
 // Options are plain values; the zero Options uses the session default
 // profile. Query constructors take Options and validate, resolve and encode
 // them for their session once. One-shot executions (Prepared.Exec/One/Each,
-// Session.ExecBatch, Session.RunBatch) take CompiledOptions: Options bound by
-// Session.BindOptions to one session's default profile and keyspace. On
+// Session.ExecBatch, Session.RunBatch) take CompiledOptions: Options compiled by
+// Session.CompileOptions for one session's default profile and keyspace. On
 // another session, CompiledOptions are resolved again for that session on each
 // execution. The zero CompiledOptions uses the executing session's default profile.
 type CompiledOptions struct { /* frozen, resolved options */ }
-func (s *Session) BindOptions(Options) (CompiledOptions, error)
+func (s *Session) CompileOptions(Options) (CompiledOptions, error)
 func (CompiledOptions) Values() Options          // a copy, to derive other options
 
 type Options struct {
@@ -1206,15 +1206,15 @@ type Result struct {
 }
 ```
 
-Invalid values fail in the query constructor or Session.BindOptions, before any
+Invalid values fail in the query constructor or Session.CompileOptions, before any
 execution. A query uses its options as resolved when it is created; options
-passed per call use the resolution BindOptions made. A zero Options inherits the selected session profile, is non-idempotent, and has
+passed per call use the resolution CompileOptions made. A zero Options inherits the selected session profile, is non-idempotent, and has
 no tracing/timestamp/keyspace override. Override validation returns typed
 errors, not panics. A profile is a plain value. Connect copies
-Config.DefaultProfile and binding copies Options.Profile, so changing a
+Config.DefaultProfile and compiling copies Options.Profile, so changing a
 Profile after it was handed over has no effect. Admission validates nothing and
 shares the resolved options across attempts/pages; CustomPayload is copied once,
-when the options are bound.
+when the options are compiled.
 Defaults:
 LOCAL_QUORUM, LOCAL_SERIAL, 30-second request timeout, 5,000-row pages, one-page
 prefetch, no speculation, and the safe retry policy. Caller context always
@@ -1639,6 +1639,6 @@ before request metrics and observers. No later row callbacks or continuation
 pages run. Ordinary callback errors remain failures. Result.Rows continues
 counting fetched response rows, rather than callback invocations.
 
-Options and CompiledOptions remain separate. Bind recurring settings once;
-request-specific options may be bound for one-shot calls. Query settings remain
-immutable and request context deadlines need no new options binding.
+Options and CompiledOptions remain separate. Compile recurring settings once;
+request-specific options may be compiled for one-shot calls. Query settings remain
+immutable and request context deadlines need no new options compilation.

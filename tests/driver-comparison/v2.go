@@ -80,7 +80,7 @@ func connect(hosts []string) (adapter, error) {
 		return nil, e
 	}
 	metadata := g.Options{IncludeMetadata: true}
-	boundMetadata, e := s.BindOptions(metadata)
+	boundMetadata, e := s.CompileOptions(metadata)
 	if e != nil {
 		s.Close()
 		return nil, e

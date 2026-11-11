@@ -15,8 +15,8 @@ import (
 )
 
 // Options overrides execution settings. Its zero value uses session defaults.
-// Query constructors validate and snapshot Options once. Bind recurring
-// overrides with Session.BindOptions for concurrent one-shot calls. Use context
+// Query constructors validate and snapshot Options once. Compile recurring
+// overrides with Session.CompileOptions for concurrent one-shot calls. Use context
 // deadlines for request time limits without rebuilding options.
 type Options struct {
 	Retry    retry.Policy
@@ -24,7 +24,7 @@ type Options struct {
 	// Profile replaces the session's default profile before other overrides.
 	Profile  *Profile
 	Keyspace string
-	// CustomPayload is copied, including borrowed payload bytes, when bound.
+	// CustomPayload is copied, including borrowed payload bytes, when compiled.
 	CustomPayload        []cql.PayloadEntry
 	Timeout, PageTimeout cql.Option[time.Duration]
 	Prefetch             cql.Option[int]
@@ -42,9 +42,9 @@ type Options struct {
 	NoSerialConsistency bool
 }
 
-// CompiledOptions is an immutable snapshot made by Session.BindOptions. Reuse it
+// CompiledOptions is an immutable snapshot made by Session.CompileOptions. Reuse it
 // for recurring one-shot execution settings; the zero value uses session
-// defaults. Binding validates overrides, copies payloads and precomputes request
+// defaults. Compiling validates overrides, copies payloads and precomputes request
 // settings. Reuse on another session resolves the original overrides against
 // that session's defaults instead.
 // CompiledOptions controls execution; PrepareOptions controls statement preparation.
