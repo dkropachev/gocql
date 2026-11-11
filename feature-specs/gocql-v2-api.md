@@ -594,9 +594,9 @@ func (p *Prepared[P, R]) AddToBatch(*Batch, P) error
 
 // Worker-owned reusable queries.
 func (p *Prepared[P, R]) Query(Options) (*Query[P, R], error)
-func (s *Session) UnpreparedExec[P any](context.Context, Statement[P, EmptyRow], P, ...CompiledOptions) (Result, error)
-func (s *Session) UnpreparedOne[P, R any](context.Context, Statement[P, R], P, *R, ...CompiledOptions) (bool, Result, error)
-func (s *Session) UnpreparedEach[P, R any](context.Context, Statement[P, R], P, *R, func(*R) error, ...CompiledOptions) (Result, error)
+func (s *Session) UnpreparedExec[P any](context.Context, Statement[P, EmptyRow], P, ...Options) (Result, error)
+func (s *Session) UnpreparedOne[P, R any](context.Context, Statement[P, R], P, *R, ...Options) (bool, Result, error)
+func (s *Session) UnpreparedEach[P, R any](context.Context, Statement[P, R], P, *R, func(*R) error, ...Options) (Result, error)
 func (q *Query[P, R]) Exec(context.Context, P) (Result, error)
 func (q *Query[P, R]) Each(context.Context, P, *R, func(*R) error) (Result, error)
 func (q *Query[P, R]) One(context.Context, P, *R) (bool, Result, error)
@@ -621,7 +621,8 @@ releasing the response, preserving already-owned built-in destination buffers.
 Each lends borrowed fields only during its callback. Custom row/value decoders
 fall back to their recursive Clone contract when One detaches results.
 Session.UnpreparedExec, UnpreparedOne and UnpreparedEach provide occasional typed
-CQL text execution without a caller-owned query. Their cleanup stops admission
+CQL text execution without a caller-owned query. They take at most one plain
+Options and validate it during the call. Their cleanup stops admission
 on every return and keeps any remaining drain registered with the session.
 
 The public immutable binding API and standalone binding-based execution

@@ -47,7 +47,7 @@ func TestUnpreparedCalls(t *testing.T) {
 		if _, err := s.UnpreparedEach(context.Background(), statement, int32(1), new(cqltype.Bytes), nil); err == nil {
 			t.Fatal("nil callback accepted")
 		}
-		if _, _, err := s.UnpreparedOne(context.Background(), statement, int32(1), new(cqltype.Bytes), CompiledOptions{}, CompiledOptions{}); err == nil {
+		if _, _, err := s.UnpreparedOne(context.Background(), statement, int32(1), new(cqltype.Bytes), Options{}, Options{}); err == nil {
 			t.Fatal("multiple options accepted")
 		}
 		deadline := time.Now().Add(5 * time.Second)
@@ -64,7 +64,7 @@ func TestUnpreparedCalls(t *testing.T) {
 		entered, release := make(chan struct{}), make(chan struct{})
 		defer close(release)
 		observer := &execVoidObserver{onAttempt: func(routing.AttemptEvent) { close(entered); <-release }}
-		options := codecTestMust(s.CompileOptions(Options{Observer: observer}))
+		options := Options{Observer: observer}
 		served := make(chan struct{})
 		go func() {
 			defer close(served)

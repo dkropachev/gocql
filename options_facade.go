@@ -127,6 +127,19 @@ func internalPrepareOptions(options []PrepareOptions) (implSession.PrepareOption
 	return implSession.PrepareOptions{Keyspace: o.Keyspace, HostID: o.HostID, Trace: o.Trace}, nil
 }
 
+// internalOptionList converts the optional Options of a throwaway call; the
+// internal call rejects more than one.
+func internalOptionList(options []Options) []implSession.Options {
+	if len(options) == 0 {
+		return nil
+	}
+	out := make([]implSession.Options, len(options))
+	for i, o := range options {
+		out[i] = internalOptions(o)
+	}
+	return out
+}
+
 func internalCompiledOptions(options []CompiledOptions) (implSession.CompiledOptions, error) {
 	if len(options) > 1 {
 		return implSession.CompiledOptions{}, &cqlerr.ValidationError{Field: "options", Err: errors.New("at most one CompiledOptions")}

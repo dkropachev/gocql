@@ -52,8 +52,10 @@ the statement repeatedly, so it prepares the statement.
   `CompiledOptions`, not `Options`, because the shared form is the hot path:
   validation, payload copying and default resolution happen once at setup,
   and each call passes a pointer to the frozen result.
-- Throwaway: each call takes a plain `Options`, validated inside the call; its
-  zero value uses the session defaults.
+- Throwaway: each call ends in `options ...Options`, the same optional
+  parameter with at most one value. The call validates and resolves it: a
+  throwaway statement has no setup step to compile options in, and its path
+  is not optimised.
 
 A new cell follows the options form of its row.
 
@@ -100,5 +102,4 @@ Update this list as each one is resolved.
 - `Query.All`, `Prepared.All` and `Session.UnpreparedAll` are missing from the
   many-rows range mode. They must benchmark as fast as `Each` before they ship.
 - `Prepared.Run` is missing from the shared pull mode.
-- Throwaway calls take `...CompiledOptions`; they should take `Options`.
 - `Prepared.RunPage` is missing from the shared pages cell.

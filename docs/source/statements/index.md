@@ -54,7 +54,8 @@ request-timeouts
 
 For occasional statements, `Session.UnpreparedExec`, `UnpreparedOne`, and
 `UnpreparedEach` execute typed CQL text and own their cleanup. Parameters must
-be described by `Statement.BindMarkers`. Frequent statements should be prepared
+be described by `Statement.BindMarkers`. They take at most one plain `Options`,
+validated during the call. Frequent statements should be prepared
 once and shared. Create reusable queries once per worker, rather than once per
 HTTP request, and close each one. A query dropped without `Close` is closed
 when the garbage collector finds it unreachable, which may take a while.

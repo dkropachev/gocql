@@ -58,40 +58,31 @@ func (s *Session) CompileOptions(options Options) (CompiledOptions, error) {
 
 // UnpreparedExec executes an occasional statement without preparing it or
 // leaving a query to close. It must return no result columns. Parameters are
-// described by statement.BindMarkers. At most one CompiledOptions may be passed.
-func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...CompiledOptions) (Result, error) {
-	o, err := internalCompiledOptions(options)
-	if err != nil {
-		return implSession.InternalExecutionErrorResult(err), err
-	}
-	return s.internal().UnpreparedExec(ctx, internalStatement(statement), value, o)
+// described by statement.BindMarkers. At most one Options may be passed; the
+// call validates and resolves it, and omitting it uses the session defaults.
+func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...Options) (Result, error) {
+	return s.internal().UnpreparedExec(ctx, internalStatement(statement), value, internalOptionList(options)...)
 }
 
 // UnpreparedOne executes an occasional statement and decodes its first row.
 // It reports whether a row exists, clearing dst if none exists. Borrowed fields
 // are detached before return; there is no query or cursor to close. Parameters
-// are described by statement.BindMarkers. At most one CompiledOptions may be passed.
-func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...CompiledOptions) (bool, Result, error) {
-	o, err := internalCompiledOptions(options)
-	if err != nil {
-		return false, implSession.InternalExecutionErrorResult(err), err
-	}
-	return s.internal().UnpreparedOne(ctx, internalStatement(statement), value, dst, o)
+// are described by statement.BindMarkers. At most one Options may be passed;
+// the call validates and resolves it, and omitting it uses the session defaults.
+func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...Options) (bool, Result, error) {
+	return s.internal().UnpreparedOne(ctx, internalStatement(statement), value, dst, internalOptionList(options)...)
 }
 
 // UnpreparedEach executes an occasional statement, calling fn for every row
 // across all pages. Borrowed fields are valid only during fn. Returning StopIteration
 // from fn stops successfully; other callback errors are returned. There is no query or cursor to close. Parameters are
-// described by statement.BindMarkers. At most one CompiledOptions may be passed.
+// described by statement.BindMarkers. At most one Options may be passed; the
+// call validates and resolves it, and omitting it uses the session defaults.
 // dst is decoded into for every row. With cql.ReuseBuffers, or a RowInto reset
 // that keeps slices, []byte fields reuse their capacity, so a slice kept from
 // one call of fn aliases the next row's data: keep bytes.Clone(row.Field).
-func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...CompiledOptions) (Result, error) {
-	o, err := internalCompiledOptions(options)
-	if err != nil {
-		return implSession.InternalExecutionErrorResult(err), err
-	}
-	return s.internal().UnpreparedEach(ctx, internalStatement(statement), value, dst, fn, o)
+func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...Options) (Result, error) {
+	return s.internal().UnpreparedEach(ctx, internalStatement(statement), value, dst, fn, internalOptionList(options)...)
 }
 
 // ExecBatch sends batch as one CQL BATCH request. Its statements must return no
