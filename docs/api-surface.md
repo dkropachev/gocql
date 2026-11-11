@@ -155,7 +155,7 @@ and no options.
   - `RunBatch` keeps its request, plans and iterator on the `Batch`
     (`batchRows`), reused once the previous rows are closed, while `R` and
     the decoder stay the same. A warm `RunBatch` allocates only the held-query
-    registration that `Prepared.Run` also pays (`TestRunBatch/Allocs`).
+    registration that `Prepared.Run` also pays (`TestRunBatchAllocs`).
   - The wire batch of an attempt reuses the batch's item storage. Only a
     concurrent speculative attempt builds its own.
   - Per-member work at send time is a lookup of the prepared ID on the

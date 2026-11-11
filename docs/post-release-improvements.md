@@ -24,7 +24,7 @@ functions. Reconsider if users ask for it.
 hold, so that `Session.Close` stops open rows and dropped rows release their
 query (`internal/session/query_registry.go`). The registration allocates a
 registry entry and a GC cleanup on every call: three allocations, the only
-ones a warm `RunBatch` makes (`TestRunBatch/Allocs`). Registering each pooled
+ones a warm `RunBatch` makes (`TestRunBatchAllocs`). Registering each pooled
 query once, when the pool creates it, and flipping a held flag per call would
 remove them for both.
 

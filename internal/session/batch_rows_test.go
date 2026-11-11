@@ -43,48 +43,26 @@ func runBatchRows(t testing.TB, session *Session, batch *Batch, decoder codec.Ro
 	return got
 }
 
+// newRunBatch returns a session answering every request with rows "a" and
+// "b", and a batch of one member.
+func newRunBatch(t *testing.T) (*Session, *Batch) {
+	s := batchServeSession(t, runtimeRowsBody(nil, "a", "b"))
+	q := batchTestQuery(t, s)
+	var batch Batch
+	if err := q.AddToBatch(&batch, []byte("v")); err != nil {
+		t.Fatal(err)
+	}
+	return InternalWrapSession(s), &batch
+}
+
 func TestRunBatch(t *testing.T) {
 	decoder := batchRowA
-	newBatch := func(t *testing.T) (*Session, *Batch) {
-		s := batchServeSession(t, runtimeRowsBody(nil, "a", "b"))
-		q := batchTestQuery(t, s)
-		var batch Batch
-		if err := q.AddToBatch(&batch, []byte("v")); err != nil {
-			t.Fatal(err)
-		}
-		return InternalWrapSession(s), &batch
-	}
+	newBatch := newRunBatch
 
 	t.Run("Rows", func(t *testing.T) {
 		session, batch := newBatch(t)
 		if got := runBatchRows(t, session, batch, decoder); len(got) != 2 || got[0] != "a" || got[1] != "b" {
 			t.Fatalf("rows = %q", got)
-		}
-	})
-
-	// A batch sent again once its rows are closed reuses their storage. What
-	// remains is registering the held pooled query, so that Session.Close
-	// stops open rows and dropped rows release their query: the three
-	// allocations Prepared.Run pays for the same reason.
-	t.Run("Allocs", func(t *testing.T) {
-		session, batch := newBatch(t)
-		type borrowed struct{ V cqltype.Bytes }
-		decoder := codec.Row(codec.Column("value", codec.BlobCodec, func(r *borrowed) *cqltype.Bytes { return &r.V }))
-		var row borrowed
-		send := func() {
-			rows, err := session.RunBatch(context.Background(), batch, decoder)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for rows.NextInto(&row) {
-			}
-			if err := rows.Close(); err != nil {
-				t.Fatal(err)
-			}
-		}
-		send()
-		if n := testing.AllocsPerRun(50, send); n > heldQueryAllocs {
-			t.Fatalf("RunBatch allocates %v times per send, want at most %d", n, heldQueryAllocs)
 		}
 	})
 
