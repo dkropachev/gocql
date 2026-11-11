@@ -259,9 +259,6 @@ func MaxTimeUUID(t time.Time) TimeUUID { return TimeUUID(cqltype.MaxTimeUUID(t))
 // in queries to select a time range of a Cassandra's TimeUUID column.
 func MinTimeUUID(t time.Time) TimeUUID { return TimeUUID(cqltype.MinTimeUUID(t)) }
 
-// MustRandomUUID returns RandomUUID or panics if the random source fails.
-func MustRandomUUID() UUID { return cqltype.MustRandomUUID() }
-
 var NamedDynamicParams = codec.NamedDynamicParams
 
 // NamedScalar adapts a named application type through explicitly typed conversions.
@@ -370,9 +367,9 @@ type PayloadEntry = model.PayloadEntry
 
 const Present = cqltype.Present
 
-// RandomUUID generates a totally random UUID (version 4) as described in
-// RFC 4122.
-func RandomUUID() (UUID, error) { return cqltype.RandomUUID() }
+// RandomUUID generates a random UUID (version 4) as described in RFC 4122,
+// from crypto/rand, which does not fail.
+func RandomUUID() UUID { return cqltype.MustRandomUUID() }
 
 // Row builds a row decoder from field mappings. Borrowed fields follow the execution lifetime;
 // One detaches them, Each lends them during its callback, and cursors lend them until advancement.
@@ -602,14 +599,22 @@ var TimeUUIDCodec = codec.TimeUUIDCodec
 // TimeUUIDValue constructs a dynamic CQL TimeUUID value.
 func TimeUUIDValue(u TimeUUID) (Value, error) { return codec.TimeUUIDValue(u) }
 
-// TimeUUIDWith generates a new time based UUID (version 1) as described in
-// RFC4122 with given parameters. t is the number of 100's of nanoseconds
-// since 15 Oct 1582 (60bits). clock is the number of clock sequence (14bits).
-// node is a slice to gurarantee the uniqueness of the UUID (up to 6bytes).
-// Note: calling this function does not increment the static clock sequence.
-func TimeUUIDWith(t int64, clock uint32, node []byte) TimeUUID {
-	return TimeUUID(cqltype.TimeUUIDWith(t, clock, node))
+// TimeUUIDWith builds a time based UUID (version 1) as described in RFC
+// 4122 from explicit parts. The UUID holds t in 100-nanosecond intervals
+// since 15 October 1582 in 60 bits, so t must lie between that date and the
+// year 5236. clock holds the clock sequence in its low 14 bits; the top two
+// bits carry the variant. It does not advance the process's clock sequence,
+// so uniqueness is up to the caller; NewTimeUUID and TimeUUIDFromTime
+// provide it.
+func TimeUUIDWith(t time.Time, clock uint16, node [6]byte) TimeUUID {
+	return cqltype.TimeUUIDWith(t, clock, node)
 }
+
+// TimeUUIDFromTime generates a new time based UUID (version 1) as described
+// in RFC 4122 with timestamp t. Like NewTimeUUID, it takes the next value of
+// this process's clock sequence and the node's MAC address, or a random
+// multicast node when it has none.
+func TimeUUIDFromTime(t time.Time) TimeUUID { return cqltype.TimeUUIDFromTime(t) }
 
 // TimeValue constructs a dynamic CQL Time value.
 func TimeValue(n TimeOfDay) (Value, error) { return codec.TimeValue(n) }
@@ -707,11 +712,6 @@ var UUIDCodec = codec.UUIDCodec
 
 // UUIDFromBytes converts a raw byte slice to an UUID.
 func UUIDFromBytes(input []byte) (UUID, error) { return cqltype.UUIDFromBytes(input) }
-
-// UUIDFromTime generates a new time based UUID (version 1) as described in
-// RFC 4122. This UUID contains the MAC address of the node that generated
-// the UUID, the given timestamp and a sequence number.
-func UUIDFromTime(t time.Time) UUID { return cqltype.UUIDFromTime(t) }
 
 // UUIDValue constructs a dynamic CQL UUID value.
 func UUIDValue(u UUID) Value { return codec.UUIDValue(u) }

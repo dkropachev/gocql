@@ -15,7 +15,7 @@ import (
 
 func v2SchemaRoutingName(t testing.TB) string {
 	t.Helper()
-	return testKeyspaceName(t, strings.ReplaceAll(cql.MustRandomUUID().String(), "-", ""))
+	return testKeyspaceName(t, strings.ReplaceAll(cql.RandomUUID().String(), "-", ""))
 }
 
 func v2ConfigureRouting(t testing.TB, config *gocql.ConfigBuilder, options routing.Options) routing.Policy {

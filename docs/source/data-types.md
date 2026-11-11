@@ -31,8 +31,9 @@ preserve NULL independently of a present empty collection. Vectors retain their
 declared dimension and reject NULL without a nullable wrapper.
 
 `TimeUUID` is distinct from `UUID`, so struct mappings choose the appropriate
-codec automatically. `NewTimeUUID`, `MinTimeUUID`, `MaxTimeUUID`, and
-`TimeUUIDWith` return `TimeUUID`. It supports canonical string, JSON and text
+codec automatically. `NewTimeUUID`, `TimeUUIDFromTime`, `MinTimeUUID`,
+`MaxTimeUUID`, and `TimeUUIDWith` return `TimeUUID`; `RandomUUID` returns a
+version 4 `UUID`. It supports canonical string, JSON and text
 formatting and timestamp extraction. `ParseTimeUUID` and `TimeUUIDFromUUID`
 validate version 1. Convert with `cql.UUID(id)` when storing an identifier in a
 regular UUID column. The zero value can be formatted with `String`, but checked JSON/text

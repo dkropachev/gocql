@@ -474,7 +474,7 @@ func TestMetadata(t *testing.T) {
 
 				// Generate a unique keyspace name to avoid collisions under parallel execution.
 				// Replace the fixed keyspace name in CQL input/golden files with the unique name.
-				ks := fixtureKeyspace("_agg_") + strings.ReplaceAll(cql.MustRandomUUID().String(), "-", "")[:12]
+				ks := fixtureKeyspace("_agg_") + strings.ReplaceAll(cql.RandomUUID().String(), "-", "")[:12]
 				cleanup(t, session, ks)
 				t.Cleanup(func() { cleanup(t, session, ks) })
 

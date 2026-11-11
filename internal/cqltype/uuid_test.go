@@ -176,11 +176,11 @@ func TestUUID(t *testing.T) {
 		})
 	})
 
-	t.Run("UUIDFromTime", func(t *testing.T) {
+	t.Run("TimeUUIDFromTime", func(t *testing.T) {
 		t.Parallel()
 
 		date := time.Date(1982, 5, 5, 12, 34, 56, 400, time.UTC)
-		uuid := UUIDFromTime(date)
+		uuid := TimeUUIDFromTime(date)
 
 		if uuid.Time() != date {
 			t.Errorf("embedded time incorrect. Expected %v got %v", date, uuid.Time())
@@ -192,9 +192,9 @@ func TestUUID(t *testing.T) {
 
 		utcTime := time.Date(1982, 5, 5, 12, 34, 56, 400, time.UTC)
 		ts := int64(utcTime.Unix()-timeBase)*10000000 + int64(utcTime.Nanosecond()/100)
-		clockSeq := uint32(0x3FFF)           // Max number of clock sequence.
-		node := [7]byte{0, 1, 2, 3, 4, 5, 6} // The last element should be ignored.
-		uuid := TimeUUIDWith(ts, clockSeq, node[:])
+		clockSeq := uint16(0x3FFF) // Max number of clock sequence.
+		node := [6]byte{0, 1, 2, 3, 4, 5}
+		uuid := TimeUUIDWith(utcTime, clockSeq, node)
 
 		if got := uuid.Variant(); got != VariantIETF {
 			t.Errorf("wrong variant. expected %d got %d", VariantIETF, got)
@@ -205,10 +205,10 @@ func TestUUID(t *testing.T) {
 		if got := uuid.Timestamp(); got != int64(ts) {
 			t.Errorf("wrong timestamp. Expected %v got %v", ts, got)
 		}
-		if got := uuid.Clock(); uint32(got) != clockSeq {
+		if got := uuid.Clock(); got != uint32(clockSeq) {
 			t.Errorf("wrong clock. expected %v got %v", clockSeq, got)
 		}
-		if got, want := uuid.Node(), node[:6]; !bytes.Equal(got, want) {
+		if got, want := uuid.Node(), node[:]; !bytes.Equal(got, want) {
 			t.Errorf("wrong node. expected %x, bot %x", want, got)
 		}
 	})
@@ -317,7 +317,7 @@ func TestUUID(t *testing.T) {
 		}
 
 		nodeFromUUID := minTimeUUID.Node()
-		if !bytes.Equal(minNode, nodeFromUUID) {
+		if !bytes.Equal(minNode[:], nodeFromUUID) {
 			t.Errorf("nodes are not equal: expected %08b, got %08b", minNode, nodeFromUUID)
 		}
 	})
@@ -340,7 +340,7 @@ func TestUUID(t *testing.T) {
 		}
 
 		nodeFromUUID := maxTimeUUID.Node()
-		if !bytes.Equal(maxNode, nodeFromUUID) {
+		if !bytes.Equal(maxNode[:], nodeFromUUID) {
 			t.Errorf("nodes are not equal:  expected %08b, got %08b", maxNode, nodeFromUUID)
 		}
 	})

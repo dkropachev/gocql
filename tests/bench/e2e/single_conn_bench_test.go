@@ -57,10 +57,7 @@ func freshNamespace() (string, error) {
 	if prefix == "" {
 		prefix = "gocql"
 	}
-	id, err := cql.RandomUUID()
-	if err != nil {
-		return "", err
-	}
+	id := cql.RandomUUID()
 	name := prefix + "_bench_" + strings.ReplaceAll(id.String(), "-", "")[:16]
 	if !identifier.MatchString(name) {
 		return "", fmt.Errorf("invalid owned benchmark namespace %q", name)

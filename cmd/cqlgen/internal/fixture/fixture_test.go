@@ -66,7 +66,7 @@ func value() Fixture {
 		Bool: true, Tiny: -8, Small: 1600, Int: -32000, Big: 1 << 40, Float: 1.5, Double: -2.25,
 		Text: "héllo", ASCII: "plain", Blob: []byte{1, 2, 3}, Bytes: cql.BorrowBytes([]byte{4, 5}),
 		ID:     cql.UUID{1, 2, 3, 4, 5, 6, 0x40, 8, 0x80, 10, 11, 12, 13, 14, 15, 16},
-		TimeID: cql.TimeUUID(cql.UUIDFromTime(now)), Addr: netip.MustParseAddr("10.0.0.1"), Hits: 7,
+		TimeID: cql.TimeUUIDFromTime(now), Addr: netip.MustParseAddr("10.0.0.1"), Hits: 7,
 		Varint:  cql.VarintFromBigInt(big.NewInt(-12345)),
 		Decimal: cql.Decimal{Unscaled: cql.VarintFromBigInt(big.NewInt(314)), Scale: 2},
 		Day:     12345, Clock: 3600e9, At: cql.Timestamp(now.UnixMilli()),

@@ -72,7 +72,7 @@ func structFixtureValue() structFixture {
 	return structFixture{
 		Bool: true, Tiny: -8, Small: 1600, Int: -32000, Big: 1 << 40,
 		Float: 1.5, Double: -2.25, Text: "héllo", ASCII: "plain", Blob: []byte{1, 2, 3},
-		ID: cqltype.UUID{1, 2, 3, 4, 5, 6, 0x40, 8, 0x80, 10, 11, 12, 13, 14, 15, 16}, TimeID: cqltype.TimeUUID(cqltype.UUIDFromTime(now)),
+		ID: cqltype.UUID{1, 2, 3, 4, 5, 6, 0x40, 8, 0x80, 10, 11, 12, 13, 14, 15, 16}, TimeID: cqltype.TimeUUIDFromTime(now),
 		Addr: netip.MustParseAddr("10.0.0.1"), Hits: 7, Day: 1<<31 - 5, Clock: 3600e9, At: cqltype.Timestamp(now.UnixMilli()),
 		Span:     cqltype.Duration{Months: 1, Days: 2, Nanoseconds: 3},
 		MaybeInt: cqltype.Nullable[int32]{Value: 9, Valid: true},

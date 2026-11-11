@@ -323,9 +323,10 @@ func TimestampFromTime(time.Time) (Timestamp, error)
 func (t Timestamp) Time() (time.Time, error)
 ```
 
-`TimeUUID` remains distinct from `UUID`. `NewTimeUUID`, `MinTimeUUID`,
-`MaxTimeUUID` and `TimeUUIDWith` return `TimeUUID`; ordinary `UUIDFromTime`
-continues returning `UUID`. TimeUUID provides canonical string/JSON/text and
+`TimeUUID` remains distinct from `UUID`. `NewTimeUUID`, `TimeUUIDFromTime`,
+`MinTimeUUID`, `MaxTimeUUID` and `TimeUUIDWith(time.Time, clock uint16, node
+[6]byte)` return `TimeUUID`; `RandomUUID()` returns a version 4 `UUID` and no
+error, since crypto/rand does not fail. TimeUUID provides canonical string/JSON/text and
 UUID timestamp/time/byte helpers. ParseTimeUUID and TimeUUIDFromUUID validate
 version 1; codecs and checked unmarshaling do likewise. The zero value is not
 an encodable timeuuid; Nullable represents NULL.

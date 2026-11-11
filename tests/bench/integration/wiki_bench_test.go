@@ -41,7 +41,7 @@ import (
 
 type WikiPage struct {
 	Title       string
-	RevId       cql.UUID
+	RevId       cql.TimeUUID
 	Body        string
 	Views       int64
 	Protected   bool
@@ -96,7 +96,7 @@ func (w *WikiTest) CreatePages(n int) {
 	for i := 0; i < n; i++ {
 		page.Title = fmt.Sprintf("generated_%d", (i&16)+1)
 		page.Modified = t0.Add(time.Duration(i-n) * time.Minute)
-		page.RevId = cql.UUIDFromTime(page.Modified)
+		page.RevId = cql.TimeUUIDFromTime(page.Modified)
 		page.Body = fmt.Sprintf("text %d", i)
 		if err := w.InsertPage(&page); err != nil {
 			w.tb.Error("CreatePages:", err)
@@ -104,7 +104,6 @@ func (w *WikiTest) CreatePages(n int) {
 	}
 }
 
-var wikiRevisionCodec = cql.NamedScalar(cql.TimeUUIDCodec, func(v cql.UUID) cql.TimeUUID { return cql.TimeUUID(v) }, func(v cql.TimeUUID) cql.UUID { return cql.UUID(v) })
 var wikiRatingCodec = cql.NamedScalar(cql.NullableCodec(serializationDecimal), func(v *inf.Dec) cql.Nullable[inf.Dec] {
 	if v == nil {
 		return cql.Nullable[inf.Dec]{}
@@ -123,7 +122,7 @@ var wikiAttachmentsCodec = cql.NamedScalar(cql.NullableCodec(serializationMap(se
 }, func(v cql.Nullable[map[string]WikiAttachment]) map[string]WikiAttachment { return v.Value })
 var wikiParams = cql.Params(
 	cql.Param("title", serializationString, func(v WikiPage) string { return v.Title }),
-	cql.Param("revid", wikiRevisionCodec, func(v WikiPage) cql.UUID { return v.RevId }),
+	cql.Param("revid", cql.TimeUUIDCodec, func(v WikiPage) cql.TimeUUID { return v.RevId }),
 	cql.Param("body", serializationString, func(v WikiPage) string { return v.Body }),
 	cql.Param("views", cql.Int64Codec, func(v WikiPage) int64 { return v.Views }),
 	cql.Param("protected", cql.BoolCodec, func(v WikiPage) bool { return v.Protected }),
@@ -133,7 +132,7 @@ var wikiParams = cql.Params(
 	cql.Param("attachments", wikiAttachmentsCodec, func(v WikiPage) map[string]WikiAttachment { return v.Attachments }))
 var wikiRows = cql.Row(
 	cql.Column("title", serializationString, func(v *WikiPage) *string { return &v.Title }),
-	cql.Column("revid", wikiRevisionCodec, func(v *WikiPage) *cql.UUID { return &v.RevId }),
+	cql.Column("revid", cql.TimeUUIDCodec, func(v *WikiPage) *cql.TimeUUID { return &v.RevId }),
 	cql.Column("body", serializationString, func(v *WikiPage) *string { return &v.Body }),
 	cql.Column("views", cql.Int64Codec, func(v *WikiPage) *int64 { return &v.Views }),
 	cql.Column("protected", cql.BoolCodec, func(v *WikiPage) *bool { return &v.Protected }),
@@ -145,8 +144,8 @@ var wikiRows = cql.Row(
 func (w *WikiTest) InsertPage(page *WikiPage) error {
 	return serializationExec(w.session, fmt.Sprintf("INSERT INTO %s (title,revid,body,views,protected,modified,rating,tags,attachments) VALUES(?,?,?,?,?,?,?,?,?)", w.table), wikiParams, *page)
 }
-func (w *WikiTest) SelectPage(page *WikiPage, title string, revid cql.UUID) error {
-	revision, err := cql.TimeUUIDValue(cql.TimeUUID(revid))
+func (w *WikiTest) SelectPage(page *WikiPage, title string, revid cql.TimeUUID) error {
+	revision, err := cql.TimeUUIDValue(revid)
 	if err != nil {
 		return err
 	}
@@ -252,7 +251,7 @@ func BenchmarkWiki(b *testing.B) {
 		w := CreateSchema(session, b, "bench_select_single")
 		pages := make([]WikiPage, 100)
 		w.CreatePages(len(pages))
-		decoder := cql.Row(cql.Column("title", serializationString, func(v *WikiPage) *string { return &v.Title }), cql.Column("revid", wikiRevisionCodec, func(v *WikiPage) *cql.UUID { return &v.RevId }))
+		decoder := cql.Row(cql.Column("title", serializationString, func(v *WikiPage) *string { return &v.Title }), cql.Column("revid", cql.TimeUUIDCodec, func(v *WikiPage) *cql.TimeUUID { return &v.RevId }))
 		rows, err := serializationRows(session, fmt.Sprintf("SELECT title,revid FROM %s", w.table), decoder)
 		if err != nil {
 			b.Fatal(err)

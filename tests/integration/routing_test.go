@@ -139,11 +139,11 @@ func TestRouting(t *testing.T) {
 
 		var hostIDs []string
 		for i := 0; i < 3; i++ {
-			hostIDs = append(hostIDs, cql.MustRandomUUID().String())
+			hostIDs = append(hostIDs, cql.RandomUUID().String())
 		}
 		var connectionIDs []string
 		for i := 0; i < 3; i++ {
-			connectionIDs = append(connectionIDs, cql.MustRandomUUID().String())
+			connectionIDs = append(connectionIDs, cql.RandomUUID().String())
 		}
 
 		// These rows are read back below through session.control, and controlConn.query

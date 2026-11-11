@@ -89,10 +89,10 @@ func newSMFixture(t *testing.T) (context.Context, smFixture) {
 func smRecordAt(bucket int32, i int) smRecord {
 	at := time.Date(2026, 11, 6, 12, 0, i, 0, time.UTC)
 	return smRecord{
-		Bucket: bucket, ID: cql.UUIDFromTime(at), Name: "héllo " + string(rune('a'+i)), ASCII: "plain",
+		Bucket: bucket, ID: cql.UUID(cql.TimeUUIDFromTime(at)), Name: "héllo " + string(rune('a'+i)), ASCII: "plain",
 		Flag: i%2 == 0, Tiny: int8(-i), Small: int16(1000 + i), Big: 1<<40 + int64(i),
 		Float: 1.5, Double: -2.25, Blob: []byte{byte(i), 1, 2, 3},
-		Addr: netip.MustParseAddr("10.0.0.1"), TimeID: cql.TimeUUID(cql.UUIDFromTime(at)),
+		Addr: netip.MustParseAddr("10.0.0.1"), TimeID: cql.TimeUUIDFromTime(at),
 		Day: cql.Date(20000 + i), Clock: cql.TimeOfDay(int64(i) * int64(time.Second)), Span: cql.Duration{Months: 1, Days: int32(i), Nanoseconds: 3},
 		Maybe: cql.Nullable[int32]{Value: int32(i), Valid: true}, Tags: []string{"a", "b"}, Scores: []int32{1, int32(10 + i)},
 		Attrs:   []cql.Entry[string, int64]{{Key: "k", Value: int64(i)}},

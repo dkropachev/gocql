@@ -155,10 +155,7 @@ func stream[D gocql.Dialect](ctx context.Context, cfg gocql.Config, incremental,
 	if prefix == "" {
 		prefix = "gocql"
 	}
-	id, err := cql.RandomUUID()
-	if err != nil {
-		return err
-	}
+	id := cql.RandomUUID()
 	namespace := prefix + "_stream_" + strings.ReplaceAll(id.String(), "-", "")[:16]
 	if !regexp.MustCompile(`^[a-z][a-z0-9_]{0,47}$`).MatchString(namespace) {
 		return fmt.Errorf("invalid owned namespace %q", namespace)

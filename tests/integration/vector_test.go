@@ -312,7 +312,7 @@ func TestVector(t *testing.T) {
 				vectorCase("int", "int", cql.Int32Codec, []int32{1, 2, 3}, nil),
 				vectorCase("text", "text", serializationString, []string{"a", "b", "c"}, nil),
 				vectorCase("timestamp", "timestamp", serializationTimestamp, timestamps, nil),
-				vectorCase("uuid", "uuid", cql.UUIDCodec, []cql.UUID{cql.MustRandomUUID(), cql.MustRandomUUID(), cql.MustRandomUUID()}, nil),
+				vectorCase("uuid", "uuid", cql.UUIDCodec, []cql.UUID{cql.RandomUUID(), cql.RandomUUID(), cql.RandomUUID()}, nil),
 				vectorCase("varchar", "varchar", serializationString, []string{"abc", "def", "ghi"}, nil),
 				vectorCase("varint", "varint", uintVarint, []uint64{1234, 123498765, 18446744073709551615}, nil),
 				vectorCase("timeuuid", "timeuuid", cql.TimeUUIDCodec, []cql.TimeUUID{cql.TimeUUID(cql.NewTimeUUID()), cql.TimeUUID(cql.NewTimeUUID()), cql.TimeUUID(cql.NewTimeUUID())}, nil),

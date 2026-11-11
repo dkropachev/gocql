@@ -18,7 +18,7 @@ func TestTimeUUIDValueAPI(t *testing.T) {
 		"new":      cql.NewTimeUUID(),
 		"minimum":  cql.MinTimeUUID(when),
 		"maximum":  cql.MaxTimeUUID(when),
-		"explicit": cql.TimeUUIDWith(cql.UUIDFromTime(when).Timestamp(), 42, []byte{1, 2, 3, 4, 5, 6}),
+		"explicit": cql.TimeUUIDWith(when, 42, [6]byte{1, 2, 3, 4, 5, 6}),
 	} {
 		t.Run(name, func(t *testing.T) {
 			uuid := cql.UUID(id)
@@ -80,7 +80,7 @@ func TestTimeUUIDCheckedInput(t *testing.T) {
 			t.Fatalf("JSON input changed receiver: %v, %v", dst, err)
 		}
 	}
-	if _, err := cql.TimeUUIDFromUUID(cql.MustRandomUUID()); err == nil {
+	if _, err := cql.TimeUUIDFromUUID(cql.RandomUUID()); err == nil {
 		t.Fatal("converted a random UUID to timeuuid")
 	}
 	// Match existing CQL codec policy: version 1 is checked independently of variant.
@@ -95,7 +95,7 @@ func TestTimeUUIDCheckedInput(t *testing.T) {
 	if zero.String() != "00000000-0000-0000-0000-000000000000" {
 		t.Fatal("zero diagnostic formatting changed")
 	}
-	for _, invalid := range []cql.TimeUUID{zero, cql.TimeUUID(cql.MustRandomUUID())} {
+	for _, invalid := range []cql.TimeUUID{zero, cql.TimeUUID(cql.RandomUUID())} {
 		if data, err := json.Marshal(invalid); err == nil {
 			t.Fatalf("serialized non-v1 timeuuid to JSON: %s", data)
 		}

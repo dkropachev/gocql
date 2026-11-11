@@ -96,7 +96,7 @@ func newTraceServer(t *testing.T, cfg traceConfig) *traceServer {
 		case eventsID:
 			var rows [][][]byte
 			for _, e := range cfg.events {
-				u := cqltype.UUIDFromTime(e.at)
+				u := cqltype.TimeUUIDFromTime(e.at)
 				rows = append(rows, [][]byte{u[:], []byte(e.activity), e.source.To4(), int32Bytes(e.elapsed), []byte(e.thread)})
 			}
 			writeRows(resp, stream, traceEventCols, rows)

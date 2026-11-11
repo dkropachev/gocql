@@ -545,7 +545,7 @@ func TestQuery(t *testing.T) {
 			_, err = session.CompileOptions(gocql.Options{HostID: cql.Option[cql.UUID]{Value: cql.UUID{}, Set: true}})
 			var invalidHost *cqlerr.ValidationError
 			require.ErrorAs(t, err, &invalidHost, "an empty host ID is rejected when options are built")
-			_, err = Run(context.Background(), session, bound, bindOptions(session, gocql.Options{HostID: cql.Option[cql.UUID]{Value: codecTestMust(cql.RandomUUID()), Set: true}}))
+			_, err = Run(context.Background(), session, bound, bindOptions(session, gocql.Options{HostID: cql.Option[cql.UUID]{Value: cql.RandomUUID(), Set: true}}))
 			require.ErrorIs(t, err, cqlerr.ErrNoConnections)
 			host := hosts[0]
 			pool, ok := (*implSession.Session)(session).Data().InternalPool.InternalGetPoolByHostID(host.ID.String())
