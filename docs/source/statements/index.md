@@ -32,8 +32,8 @@ stream-only statements, use `session.PrepareStream` with a
 the streaming decoder directly without requiring a buffered row mapping.
 Queries reject overlap (an open handle, or another goroutine's call) with
 `ErrBusy`, wait for an execution that already returned to drain, and own
-captured parameters through drain. `query.Close(ctx)` stops a query and waits
-for its drain.
+captured parameters through drain. `query.Close()` stops a query at once, and
+`query.Wait(ctx)` waits for its drain.
 
 `Options` overlays the selected profile using explicit `Option[T]` values for
 settings where zero is meaningful. It carries consistency, paging, tracing,
@@ -55,7 +55,8 @@ For occasional statements, `Session.UnpreparedExec`, `UnpreparedOne`, and
 `UnpreparedEach` execute typed CQL text and own their cleanup. Parameters must
 be described by `Statement.BindMarkers`. Frequent statements should be prepared
 once and shared. Create reusable queries once per worker, rather than once per
-HTTP request; each remains registered until `Close`, even after execution ends.
+HTTP request, and close each one. A query dropped without `Close` is closed
+when the garbage collector finds it unreachable, which may take a while.
 
 For execution options:
 

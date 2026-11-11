@@ -86,10 +86,13 @@ uses `session.UnpreparedQuery(statement, options)`, which creates the same kind
 of query for a statement sent as CQL text on every execution. Each call copies its parameters during admission. A call while
 a `Rows`, `Page` or stream of the query is open, or while another goroutine's
 call runs, returns `ErrBusy`; a call after an execution that already returned
-waits until that execution's accepted writes drain. `query.Close(ctx)`
-permanently stops the query, stops any open handle, and waits for the drain.
-Don't keep `Query` values in a `sync.Pool`: a query the pool drops stays open
-until it is closed.
+waits until that execution's accepted writes drain. `query.Close()`
+permanently stops the query and any open handle and returns at once; a call
+running in another goroutine is cancelled and returns an error matching
+`context.Canceled`. `query.Wait(ctx)`
+waits for the drain. A query dropped without `Close` is closed once the
+garbage collector finds it unreachable, but close queries explicitly: collection
+timing is unspecified.
 
 Buffered rows borrow receive pages. Views expire at the next advancement or
 Close unless a retained `PageLease` pins the page. `Clone` explicitly detaches

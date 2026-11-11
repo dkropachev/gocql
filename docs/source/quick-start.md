@@ -27,11 +27,10 @@ executions, and several queries can share one preparation. A query has the
 same `Exec`, `One` and `Each`, plus `query.Run`, which returns typed rows:
 check `Rows.Err()` after iteration and close the rows. A query call while a
 `Rows` of that query is open, or while another goroutine's call runs, returns
-`ErrBusy`. Close the query when the worker finishes with `query.Close(ctx)`,
-which also waits for transport writes and callbacks to drain; give it its own
-bounded context, such as
-`context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)`, so a
-cancelled request context does not skip that wait.
+`ErrBusy`. Close the query when the worker finishes with `defer query.Close()`.
+Close returns at once; transport writes and callbacks still in flight drain in
+the background, and `Session.Close` joins them. Call `query.Wait(ctx)` after
+Close only when the following code must not overlap those callbacks.
 
 The repository's external-package `Example` and other `example_*_test.go` files
 compile against the normal public API. The complete `examples/streaming` command

@@ -9,10 +9,11 @@ Cancellation keeps transmitted stream IDs reserved until their late response
 or connection close. Accepted writers finish or fail before borrowed input is
 released. Configure orphan budgets independently of request timeouts.
 
-`query.Close(ctx)` stops admission, cancels the active execution, and waits
-until its logical execution, page fetches, speculative losers, callbacks and
-accepted writers have finished. If ctx ends first, Close returns its error and
-the query drains in the background; Session.Close waits for it. After a
+`query.Close()` stops admission and cancels the active execution, which
+returns an error matching `context.Canceled`, and returns at once. `query.Wait(ctx)` waits until the
+logical execution, page fetches, speculative losers, callbacks and accepted
+writers have finished; if ctx ends first, Wait returns its error and the query
+keeps draining in the background. Session.Close waits for it. After a
 cancelled or timed-out execution, the query's next call waits for that drain
 within its own context. All parameter
 input is already owned; caller input can be reused after capture. Session.Close

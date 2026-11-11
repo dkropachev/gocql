@@ -14,9 +14,9 @@ import (
 
 // Query owns reusable parameters and execution state for one worker. It permits
 // one active execution and must not be copied. Options are fixed at creation.
-// Close the query when done, including when execution fails: the session keeps
-// it registered until Close. Prepared.Exec, One and Each manage their own state
-// and are convenient for concurrent request handlers.
+// Close the query when done, including when execution fails. Prepared.Exec, One
+// and Each manage their own state and are convenient for concurrent request
+// handlers.
 type Query[P, R any] implSession.Query[P, R]
 
 func (q *Query[P, R]) internal() *implSession.Query[P, R] { return (*implSession.Query[P, R])(q) }

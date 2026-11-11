@@ -39,11 +39,7 @@ prepared, err := session.PrepareStream(ctx, cql.StreamStatement[cql.EmptyParams,
 if err != nil { return err }
 query, err := prepared.Query(gocql.StreamOptions{})
 if err != nil { return err }
-defer func() {
-    cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-    defer cancel()
-    _ = query.Close(cleanup)
-}()
+defer query.Close()
 stream, err := query.Run(ctx, cql.EmptyParams{})
 if err != nil { return err }
 defer stream.Close()
@@ -83,8 +79,9 @@ caller storage stays valid after Close. Concurrent NextInto calls are rejected.
 One query permits one active execution; overlapping `Run` calls return `ErrBusy`.
 Parameters are copied on admission and retries/pages share that owned snapshot.
 Close the cursor on early termination; the query's next `Run` waits for the
-previous execution's accepted writes to drain. `query.Close(ctx)` permanently
-stops admission, cancels the active execution and waits for its drain. Session close cancels and joins
+previous execution's accepted writes to drain. `query.Close()` permanently
+stops admission and cancels the active execution; `query.Wait(ctx)` waits for
+its drain. Session close cancels and joins
 queries and writers. Output already decoded remains caller-owned.
 
 Page-buffered memory is proportional to concurrent response pages and remains

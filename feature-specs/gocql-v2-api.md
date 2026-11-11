@@ -639,9 +639,12 @@ A call while a Rows, Page or RowStream of the query is open, or while another
 goroutine's call runs, returns ErrBusy. Cancellation may return while accepted
 transport writes or callbacks still drain; the query's next execution waits for
 that drain within its own context instead of returning ErrBusy. Routing and
-AddToBatch, which take no context, return ErrBusy during the drain. Close(ctx)
-stops the query, stops an open handle with ErrClosed, and joins the drain; when
-ctx ends first it returns ctx.Err() and Session.Close joins the rest. Cursor handles capture their execution
+AddToBatch use storage of their own and work during the drain. Close() stops
+the query, cancels a running call (which returns an error matching
+context.Canceled), stops an open handle with ErrClosed, and returns at once; Wait(ctx) joins the drain, returning ctx.Err() when ctx ends
+first, and Session.Close joins the rest. The session refers to an open query
+weakly: a query dropped without Close is closed by a garbage-collector cleanup,
+and a session logging at Debug logs where it was created. Cursor handles capture their execution
 generation; stale handles cannot advance, close or modify another execution.
 Rows is a value handle over iterator storage that a reusable query keeps and
 reuses for its next execution. A stale Rows reports no rows, Err returns
@@ -1091,7 +1094,7 @@ defaults. Explicit nonzero Options.Prefetch fails validation before submission;
 zero or inherited Prefetch is accepted. Retry and reprepare are permitted only
 before OutputStarted and any delivered row, under the ordinary safe-request
 rules. A row decoder/reset error or later I/O failure is terminal, with no
-transparent replay. Query.Close(ctx) covers the cursor through final transport and callback drain;
+transparent replay. Query.Close() stops the cursor and Query.Wait(ctx) covers final transport and callback drain;
 streamed output remains caller-owned.
 
 StreamLimits zero fields select defaults: 1 MiB simultaneously retained
