@@ -162,7 +162,7 @@ func TestPaging(t *testing.T) {
 			if c.Validate() == nil {
 				t.Fatal("negative byte budget")
 			}
-			if _, err := RunPage[codec.EmptyRecord](nil, nil, nil, implModel.CompletePageState(), CompiledOptions{}); !errors.Is(err, runtimeerrors.ErrPagingComplete) {
+			if _, err := RunPage[codec.EmptyRecord](nil, nil, nil, implModel.CompletePageState(), 0, CompiledOptions{}); !errors.Is(err, runtimeerrors.ErrPagingComplete) {
 				t.Fatal("complete admitted", err)
 			}
 		})
@@ -304,7 +304,7 @@ func TestPaging(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			bound := runtimeQuery(t)
-			page, err := RunPage(ctx, s, bound, model.StartPage(), testOptions(Options{
+			page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{
 				PageTimeout: cqltype.Option[time.Duration]{Set: true, Value: 20 * time.Millisecond},
 			}))
 			if page != nil {

@@ -85,7 +85,7 @@ func Run[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.Co
 }
 
 func RunPage[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.PageState, a4 gocql.CompiledOptions) (*gocql.Page[R], error) {
-	result, err := implSession.RunPage[R](a0, (*implSession.Session)(a1).Core(), a2, model.PageState(a3), implSession.CompiledOptions(a4))
+	result, err := implSession.RunPage[R](a0, (*implSession.Session)(a1).Core(), a2, model.PageState(a3), 0, implSession.CompiledOptions(a4))
 	return (*gocql.Page[R])(result), err
 }
 

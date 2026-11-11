@@ -346,12 +346,15 @@ func (q *Query[P, R]) Run(ctx context.Context, value P) (Rows[R], error) {
 	defer q.state.owner.InternalRelease()
 	return q.state.runtime.run(ctx, &q.bound, q.options)
 }
-func (q *Query[P, R]) RunPage(ctx context.Context, value P, state model.PageState) (*Page[R], error) {
+
+// RunPage executes one page of the query with value, resuming from state, as
+// the package-level RunPage does with pageSize.
+func (q *Query[P, R]) RunPage(ctx context.Context, value P, state model.PageState, pageSize int32) (*Page[R], error) {
 	if err := q.capture(ctx, value); err != nil {
 		return nil, err
 	}
 	defer q.state.owner.InternalRelease()
-	return q.state.runtime.runSinglePage(ctx, &q.bound, state, q.options)
+	return q.state.runtime.runSinglePage(ctx, &q.bound, state, pageSize, q.options)
 }
 
 // Routing encodes value and returns its routing information without sending a

@@ -107,7 +107,7 @@ func (s *Session) RunBatch[R any](ctx context.Context, kind cqltype.BatchKind, b
 	}
 	bound := &Bound[R]{privateStorage: BoundStorage[R]{InternalRows: decoder}}
 	batch.queryExec(&bound.privateStorage.InternalRequest, &q.state, kind)
-	page, err := q.state.runtime.runSinglePage(ctx, bound, model.StartPage(), o)
+	page, err := q.state.runtime.runSinglePage(ctx, bound, model.StartPage(), 0, o)
 	q.state.owner.InternalRelease()
 	return page, err
 }

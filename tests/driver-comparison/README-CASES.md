@@ -30,7 +30,7 @@ Notation: `w.*` is per-worker state built before timing; `check` validates rows.
 | A3 | `w.q.Each(ctx, k, &out, check)` | MA3 | `it := w.q.Bind(k).WithContext(ctx).Iter(); for it.Scan(...) {check}; it.Close()` |
 | A4 | `rows := w.q.Run(ctx, k); for rows.NextInto(&out) {check}; rows.Close()` | MA3 | |
 | A5 | `rs := w.stream.Run(ctx, k); for rs.NextInto(&out) {check}; rs.Close(); w.stream.Wait(ctx)` | MA3 | |
-| A6 | `page := w.q.RunPage(ctx, k, StartPage)` on a query with `PageSize: cql.Unpaged`; `for page.NextInto(&out) {check}; page.Close()` | MA4 | MA3 with `PageSize(0)` |
+| A6 | `page := w.q.RunPage(ctx, k, StartPage, 0)` on a query with `PageSize: cql.Unpaged`; `for page.NextInto(&out) {check}; page.Close()` | MA4 | MA3 with `PageSize(0)` |
 
 ## B. Partition read (`paged`, 128 × 4 KiB), 4 workers
 
@@ -54,7 +54,7 @@ a state ends the partition, and the worker moves to its next partition.
 
 | v2 | pseudocode | master | pseudocode |
 |---|---|---|---|
-| C1 | `page := w.q.RunPage(ctx, k, PageStateFromToken(st)); NextInto loop; st = page.State().Token(); page.Close()` | MC1 | `it := w.q.Bind(k).PageState(st).WithContext(ctx).Iter(); st = it.PageState(); scan loop; it.Close()` |
+| C1 | `page := w.q.RunPage(ctx, k, PageStateFromToken(st), 0); NextInto loop; st = page.State().Token(); page.Close()` | MC1 | `it := w.q.Bind(k).PageState(st).WithContext(ctx).Iter(); st = it.PageState(); scan loop; it.Close()` |
 
 ## D. Single-statement write (`point`), 64 workers
 

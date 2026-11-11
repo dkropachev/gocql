@@ -460,7 +460,7 @@ func TestStructMapping(t *testing.T) {
 		t.Run("RunPage", func(t *testing.T) {
 			state, n := gocql.StartPage, 0
 			for pages := 0; ; pages++ {
-				page, err := read.RunPage(ctx, 2, state)
+				page, err := read.RunPage(ctx, 2, state, 0)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -496,7 +496,7 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer read.Close()
-			page, err := read.RunPage(ctx, 2, gocql.StartPage)
+			page, err := read.RunPage(ctx, 2, gocql.StartPage, 0)
 			if err != nil {
 				t.Fatal(err)
 			}

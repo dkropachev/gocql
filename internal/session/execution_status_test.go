@@ -96,7 +96,7 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 		}()
 		bound := runtimeQuery(t)
 		defer bound.Close()
-		page, err := RunPage(ctx, s, bound, model.StartPage(), testOptions(Options{Profile: new(profile)}))
+		page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: new(profile)}))
 		if page != nil {
 			page.Close()
 		}
@@ -201,7 +201,7 @@ func TestExecutionStatusBeforeAttempt(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		bound := runtimeQuery(t)
-		page, err := RunPage(ctx, s, bound, model.StartPage(), testOptions(Options{Profile: new(profile)}))
+		page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: new(profile)}))
 		if page != nil {
 			page.Close()
 		}

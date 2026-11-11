@@ -57,7 +57,7 @@ func Example_paging() {
 	var state gocql.PageState
 	var id int32
 	for {
-		page, err := b.RunPage(ctx, cql.EmptyParams{}, state)
+		page, err := b.RunPage(ctx, cql.EmptyParams{}, state, 0)
 		if err != nil {
 			log.Fatal(err)
 		}

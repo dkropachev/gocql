@@ -792,7 +792,7 @@ func TestQuery(t *testing.T) {
 		pageRows := 0
 		var stalePage *gocql.Page[record]
 		for {
-			page := codecTestMust(q.RunPage(ctx, int32(1), state))
+			page := codecTestMust(q.RunPage(ctx, int32(1), state, 0))
 			if stalePage != nil {
 				_ = stalePage.Close()
 			}
@@ -818,7 +818,7 @@ func TestQuery(t *testing.T) {
 		t.Log("query reuse, stale cursors, owned destinations and explicit paging passed")
 		unpaged := codecTestMust(read.Query(gocql.Options{PageSize: cql.Some(cql.Unpaged), Prefetch: cql.Option[int]{Set: true, Value: 0}}))
 		defer unpaged.Close()
-		page := codecTestMust(unpaged.RunPage(ctx, int32(1), gocql.StartPage))
+		page := codecTestMust(unpaged.RunPage(ctx, int32(1), gocql.StartPage, 0))
 		n := 0
 		var unpagedRow record
 		for page.NextInto(&unpagedRow) {

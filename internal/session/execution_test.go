@@ -529,7 +529,7 @@ func TestExecution(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			bound := runtimeQuery(t)
-			page, err := RunPage(ctx, s, bound, model.StartPage(), testOptions(Options{Profile: handle}))
+			page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: handle}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -563,7 +563,7 @@ func TestExecution(t *testing.T) {
 			bound := runtimeQuery(t)
 			finished := make(chan error, 1)
 			go func() {
-				page, err := RunPage(ctx, s, bound, model.StartPage(), testOptions(Options{Profile: handle}))
+				page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: handle}))
 				if page != nil {
 					page.Close()
 				}
@@ -642,7 +642,7 @@ func TestExecution(t *testing.T) {
 					BoundData(b).InternalRequest.routing.Conditional = kind != cqltype.OrdinaryStatement
 					result := make(chan error, 1)
 					go func() {
-						page, err := RunPage(context.Background(), s, b, model.StartPage(), testOptions(Options{Profile: handle, Idempotent: true}))
+						page, err := RunPage(context.Background(), s, b, model.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: true}))
 						if page != nil {
 							page.Close()
 						}

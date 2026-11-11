@@ -721,14 +721,19 @@ func (rt *InternalSessionRuntime) newRowsFromResponse[R any](runctx context.Cont
 	return newRowsHandle(rows), nil
 }
 
-// RunPage executes one page of b on s, starting at state.
-func RunPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state model.PageState, options CompiledOptions) (*Page[R], error) {
-	return runtimeOf(s).runSinglePage(ctx, b, state, options)
+// RunPage executes one page of b, resuming from state. A pageSize of zero uses
+// the page size options resolve to; cqltype.Unpaged requests the whole result
+// in one response; any other positive value is this page's size.
+func RunPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state model.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
+	return runtimeOf(s).runSinglePage(ctx, b, state, pageSize, options)
 }
 
-func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *Bound[R], state model.PageState, options CompiledOptions) (*Page[R], error) {
+func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *Bound[R], state model.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
 	if state.Complete() {
 		return nil, runtimeerrors.ErrPagingComplete
+	}
+	if pageSize < 0 {
+		return nil, cqltype.TypeValidation("page size", "must not be negative")
 	}
 	if v := options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, &settings.UnsupportedSettingError{Setting: "prefetch", Reason: "single-page execution has no automatic pager"}
@@ -736,6 +741,15 @@ func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *B
 	runctx, cancel, request, err := rt.admit(ctx, b, options)
 	if err != nil {
 		return nil, err
+	}
+	if pageSize != 0 {
+		// The request holds its own copy of the resolved options. Its
+		// parameters template, encoded for the resolved page size, then no
+		// longer matches, so the request encodes its parameters field by field.
+		if pageSize == cqltype.Unpaged {
+			pageSize = 0 // no page size on the wire
+		}
+		request.InternalOptions.InternalProfile.PageSize = pageSize
 	}
 	// A Page outlives its query's generation as a stale handle whose
 	// accessors still read its response, so it never uses query storage.
