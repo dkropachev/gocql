@@ -39,16 +39,14 @@ var noOptionValues Options
 // NewCompiledOptions validates values and freezes them, resolved for session, so
 // executions use them as they are. CompiledOptions built without a session are
 // resolved again on each execution, unless they name their own profile. The
-// custom payload and the profile are copied, so later changes to values do
-// not reach the CompiledOptions.
+// custom payload is copied, including borrowed bytes, so later changes to it
+// do not reach the CompiledOptions. values.Profile is kept, not copied: the
+// caller passes a profile it no longer changes, as the public facade does
+// when it converts the caller's Profile.
 func NewCompiledOptions(session *implCluster.Core, values Options) (CompiledOptions, error) {
 	values, err := cloneQueryOptions(values)
 	if err != nil {
 		return CompiledOptions{}, err
-	}
-	if values.Profile != nil {
-		profile := *values.Profile
-		values.Profile = &profile
 	}
 	var owner *InternalSessionRuntime
 	if session != nil {

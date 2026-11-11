@@ -148,6 +148,7 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 			}
 		}
 	}
-	options.CustomPayload = append([]model.PayloadEntry(nil), options.CustomPayload...)
+	// The payload is not copied: NewCompiledOptions copied it already, and
+	// a resolution for one execution reads the compiled options' copy.
 	return InternalResolvedOptions{InternalProfile: p, InternalOptions: options}, nil
 }

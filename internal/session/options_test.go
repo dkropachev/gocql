@@ -89,7 +89,6 @@ func TestOptions(t *testing.T) {
 				t.Fatal(err)
 			}
 			payload[0] = 'X'
-			profile.PageSize = 20
 			values.CustomPayload[0].Key = "changed"
 			got := o.Values()
 			if got.Profile.PageSize != 10 || got.CustomPayload[0].Key != "k" || string(got.CustomPayload[0].Value.Value.OwnedBytes()) != "value" {

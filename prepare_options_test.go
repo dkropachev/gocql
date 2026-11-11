@@ -5,10 +5,12 @@ package gocql
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
 func TestPrepareOptions(t *testing.T) {
@@ -31,8 +33,9 @@ func TestPrepareOptions(t *testing.T) {
 					t.Fatalf("%d PrepareOptions: %v", len(options), err)
 				}
 			}
-			if _, err := s.Prepare(ctx, statement, PrepareOptions{}, PrepareOptions{}); err == nil || !strings.Contains(err.Error(), "at most one") {
-				t.Fatalf("two PrepareOptions accepted: %v", err)
+			_, err := s.Prepare(ctx, statement, PrepareOptions{}, PrepareOptions{})
+			if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "options" || !strings.Contains(err.Error(), "at most one") {
+				t.Fatalf("two PrepareOptions: %v, want an options ValidationError", err)
 			}
 		})
 	})

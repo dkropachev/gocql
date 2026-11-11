@@ -29,7 +29,10 @@ type Options struct {
 	CustomPayload        []cql.PayloadEntry
 	Timeout, PageTimeout cql.Option[time.Duration]
 	Prefetch             cql.Option[int]
-	Timestamp            cql.Option[int64]
+	// Timestamp is the write timestamp in microseconds since the Unix epoch,
+	// the unit CQL's USING TIMESTAMP takes. Note that cql.Timestamp values
+	// are milliseconds: multiply one by 1000 to use it here.
+	Timestamp cql.Option[int64]
 	// PageSize is the rows per page; cql.Unpaged requests the whole result
 	// in one response.
 	PageSize     cql.Option[int32]
@@ -106,6 +109,7 @@ func internalOptions(o Options) implSession.Options {
 		Idempotent: o.Idempotent, Trace: o.Trace,
 	}
 	if o.Profile != nil {
+		// The only copy of the caller's profile: compiling keeps it.
 		profile := internalProfile(*o.Profile)
 		v.Profile = &profile
 	}
@@ -135,7 +139,7 @@ func internalStreamOptions(o StreamOptions) implSession.StreamOptions {
 
 func internalPrepareOptions(options []PrepareOptions) (implSession.PrepareOptions, error) {
 	if len(options) > 1 {
-		return implSession.PrepareOptions{}, errors.New("gocql: at most one PrepareOptions")
+		return implSession.PrepareOptions{}, &cqlerr.ValidationError{Field: "options", Err: errors.New("at most one PrepareOptions")}
 	}
 	if len(options) == 0 {
 		return implSession.PrepareOptions{}, nil
