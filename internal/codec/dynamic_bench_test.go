@@ -93,4 +93,32 @@ func BenchmarkDynamic(b *testing.B) {
 			}
 		}
 	})
+	// BenchmarkDynamic/BindText binds one text and one ascii Value, whose
+	// constructors already validated them.
+	b.Run("BindText", func(b *testing.B) {
+		for _, size := range []int{32, 4096} {
+			b.Run(fmt.Sprintf("bytes%d", size), func(b *testing.B) {
+				columns := cqltype.NewColumns(
+					cqltype.ColumnSpec{Name: "text", Type: cqltype.TextType},
+					cqltype.ColumnSpec{Name: "ascii", Type: cqltype.ASCIIType},
+				)
+				payload := string(bytes.Repeat([]byte{'x'}, size))
+				values := []Value{CodecTestMust(TextValue(payload)), CodecTestMust(ASCIIValue(payload))}
+				plan := CodecTestMust(DynamicParams.Compile(columns))
+				builder := wire.NewBuilder(256)
+				w := NewParamWriter(builder, columns, true)
+				var storage []byte
+				b.ReportAllocs()
+				b.SetBytes(int64(2 * size))
+				for b.Loop() {
+					builder.BeginOwned(storage)
+					ResetParamWriter(w, builder, columns, true)
+					if err := plan.Encode(w, values); err != nil {
+						b.Fatal(err)
+					}
+					storage = builder.OwnedBytes()[:0]
+				}
+			})
+		}
+	})
 }

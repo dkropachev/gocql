@@ -532,10 +532,11 @@ func encodeDynamicChecked(w *ValueWriter, v Value) error {
 		return encodeDynamicScalar(w, Float32, math.Float32frombits(uint32(v.bits)))
 	case cqltype.TypeDouble:
 		return encodeDynamicScalar(w, Float64, math.Float64frombits(v.bits))
-	case cqltype.TypeText, cqltype.TypeVarchar:
-		return encodeDynamicScalar(w, TextCodec, cqltype.TextView(v.bytes))
-	case cqltype.TypeAscii:
-		return encodeDynamicScalar(w, ASCIICodec, cqltype.TextView(v.bytes))
+	case cqltype.TypeText, cqltype.TypeVarchar, cqltype.TypeAscii:
+		// TextValue, ASCIIValue and decoding validated the payload for its
+		// kind, and checkDynamicValue matched that kind to the column, so
+		// it is written without validating it again.
+		return w.borrowView(v.bytes)
 	case cqltype.TypeBlob:
 		return encodeDynamicScalar(w, BlobCodec, v.bytes)
 	case cqltype.TypeUUID:

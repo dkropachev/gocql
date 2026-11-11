@@ -362,6 +362,10 @@ func TestDynamic(t *testing.T) {
 			if _, err := second.Text(); !errors.Is(err, cqltype.ErrReleased) {
 				t.Fatalf("text access after release: %v", err)
 			}
+			// Binding skips revalidating decoded text but still checks its page.
+			if _, err := EncodeValueBorrowed(second.Type(), DynamicCodec, second); !errors.Is(err, cqltype.ErrReleased) {
+				t.Fatalf("text bind after release: %v", err)
+			}
 			if iterator.Next() || !errors.Is(iterator.Err(), cqltype.ErrReleased) {
 				t.Fatalf("iterator after release: %v", iterator.Err())
 			}
