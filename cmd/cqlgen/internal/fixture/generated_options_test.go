@@ -81,7 +81,7 @@ func TestGeneratedMappingCodecOptions(t *testing.T) {
 		func() error { _, err := cql.StreamRowOf[StreamFixture](nil); return err },
 	} {
 		if err := check(); err == nil {
-			t.Fatal("registered mapping accepted a nil option")
+			t.Fatal("generated mapping accepted a nil option")
 		}
 	}
 }

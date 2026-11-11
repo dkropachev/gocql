@@ -8,8 +8,10 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 )
 
-func init() {
-	cql.RegisterStruct(cql.StructFields[Fixture]{
+// CQLFields returns the generated mapping of Fixture's fields, which
+// cql.ParamsOf, cql.RowOf and cql.StreamRowOf use instead of reflection.
+func (Fixture) CQLFields() cql.StructFields[Fixture] {
+	return cql.StructFields[Fixture]{
 		Params: []cql.InputField[Fixture]{
 			cql.Param("bool", cql.BoolCodec, func(v Fixture) bool { return v.Bool }),
 			cql.Param("tiny", cql.Int8Codec, func(v Fixture) int8 { return v.Tiny }),
@@ -72,8 +74,13 @@ func init() {
 			cql.Column("corner", cql.NullableCodec(PointCodec), func(v *Fixture) *cql.Nullable[Point] { return &v.Corner }),
 			cql.Column("createdat", cql.TimestampCodec, func(v *Fixture) *cql.Timestamp { return &v.Audit.CreatedAt }),
 		},
-	})
-	cql.RegisterStruct(cql.StructFields[Point]{
+	}
+}
+
+// CQLFields returns the generated mapping of Point's fields, which
+// cql.ParamsOf, cql.RowOf and cql.StreamRowOf use instead of reflection.
+func (Point) CQLFields() cql.StructFields[Point] {
+	return cql.StructFields[Point]{
 		Params: []cql.InputField[Point]{
 			cql.Param("x", cql.Int32Codec, func(v Point) int32 { return v.X }),
 			cql.Param("y", cql.Int32Codec, func(v Point) int32 { return v.Y }),
@@ -86,8 +93,13 @@ func init() {
 			cql.StreamColumn("x", cql.StreamInt32, func(v *Point) *int32 { return &v.X }),
 			cql.StreamColumn("y", cql.StreamInt32, func(v *Point) *int32 { return &v.Y }),
 		},
-	})
-	cql.RegisterStruct(cql.StructFields[StreamFixture]{
+	}
+}
+
+// CQLFields returns the generated mapping of StreamFixture's fields, which
+// cql.ParamsOf, cql.RowOf and cql.StreamRowOf use instead of reflection.
+func (StreamFixture) CQLFields() cql.StructFields[StreamFixture] {
+	return cql.StructFields[StreamFixture]{
 		Params: []cql.InputField[StreamFixture]{
 			cql.Param("id", cql.Int32Codec, func(v StreamFixture) int32 { return v.ID }),
 			cql.Param("key", cql.UUIDCodec, func(v StreamFixture) Key { return v.Key }),
@@ -121,5 +133,5 @@ func init() {
 			cql.StreamColumn("at", cql.StreamTimestamp, func(v *StreamFixture) *cql.Timestamp { return &v.At }),
 			cql.StreamColumn("addr", cql.StreamInet, func(v *StreamFixture) *netip.Addr { return &v.Addr }),
 		},
-	})
+	}
 }

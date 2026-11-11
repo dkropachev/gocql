@@ -14,11 +14,28 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
+// Package-level mappings are built during package initialization. Fixture's
+// codec=PointCodec tag has no reflected form, so these panic unless the
+// generated mapping is found then.
+var (
+	initParams = cql.MustParamsOf[Fixture]()
+	initRows   = cql.MustRowOf[Fixture]()
+)
+
 func TestGeneratedCodec(t *testing.T) {
+	// A mapping built before main still uses the generated fields.
+	t.Run("PackageVariables", func(t *testing.T) {
+		cols := columns(t)
+		chain, _ := encode(t, cols, initParams, value())
+		if row := decode(t, cols, initRows, chain); row.Origin != value().Origin {
+			t.Fatalf("origin %+v", row.Origin)
+		}
+	})
+
 	// The generated mapping and the reflected one must encode and decode alike.
 	t.Run("Fixture", func(t *testing.T) {
-		if _, ok := codec.RegisteredStruct[Fixture](); !ok {
-			t.Fatal("generated mapping is not registered")
+		if f := (Fixture{}).CQLFields(); f.Params == nil || f.Columns == nil {
+			t.Fatal("expected a generated buffered mapping for Fixture")
 		}
 		cols := columns(t)
 		v := value()
@@ -53,8 +70,7 @@ func TestGeneratedCodec(t *testing.T) {
 
 	// The generated streaming mapping and the reflected one decode alike.
 	t.Run("StreamFixture", func(t *testing.T) {
-		f, ok := codec.RegisteredStruct[StreamFixture]()
-		if !ok || f.StreamColumns == nil {
+		if f := (StreamFixture{}).CQLFields(); f.StreamColumns == nil {
 			t.Fatal("expected a generated stream mapping for StreamFixture")
 		}
 		cols := streamColumns(t)

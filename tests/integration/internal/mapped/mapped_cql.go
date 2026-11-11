@@ -6,8 +6,10 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 )
 
-func init() {
-	cql.RegisterStruct(cql.StructFields[Event]{
+// CQLFields returns the generated mapping of Event's fields, which
+// cql.ParamsOf, cql.RowOf and cql.StreamRowOf use instead of reflection.
+func (Event) CQLFields() cql.StructFields[Event] {
+	return cql.StructFields[Event]{
 		Params: []cql.InputField[Event]{
 			cql.Param("bucket", cql.Int32Codec, func(v Event) int32 { return v.Bucket }),
 			cql.Param("id", cql.UUIDCodec, func(v Event) cql.UUID { return v.ID }),
@@ -32,8 +34,13 @@ func init() {
 			cql.Column("createdat", cql.TimestampCodec, func(v *Event) *cql.Timestamp { return &v.Audit.CreatedAt }),
 			cql.Column("updatedat", cql.TimestampCodec, func(v *Event) *cql.Timestamp { return &v.Audit.UpdatedAt }),
 		},
-	})
-	cql.RegisterStruct(cql.StructFields[StreamEvent]{
+	}
+}
+
+// CQLFields returns the generated mapping of StreamEvent's fields, which
+// cql.ParamsOf, cql.RowOf and cql.StreamRowOf use instead of reflection.
+func (StreamEvent) CQLFields() cql.StructFields[StreamEvent] {
+	return cql.StructFields[StreamEvent]{
 		Params: []cql.InputField[StreamEvent]{
 			cql.Param("bucket", cql.Int32Codec, func(v StreamEvent) int32 { return v.Bucket }),
 			cql.Param("id", cql.UUIDCodec, func(v StreamEvent) cql.UUID { return v.ID }),
@@ -67,5 +74,5 @@ func init() {
 			cql.StreamColumn("createdat", cql.StreamTimestamp, func(v *StreamEvent) *cql.Timestamp { return &v.Audit.CreatedAt }),
 			cql.StreamColumn("updatedat", cql.StreamTimestamp, func(v *StreamEvent) *cql.Timestamp { return &v.Audit.UpdatedAt }),
 		},
-	})
+	}
 }

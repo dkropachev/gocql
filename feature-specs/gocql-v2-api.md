@@ -1659,11 +1659,14 @@ interfaces expose their methods; lower-level plan contracts are documented in
 docs/source/custom-codecs.md. Facade adapters copy settings only, never payloads
 or codec plans, and introduce no serializer.
 
-Generated struct mappings honor WithCodec/WithStreamCodec at construction.
+cmd/cqlgen generates a struct mapping as a `func (T) CQLFields()
+cql.StructFields[T]` method; ParamsOf, RowOf and StreamRowOf find it in the
+method set of T or *T, so there is no registry and no dependence on package
+initialization order. Generated struct mappings honor WithCodec/WithStreamCodec at construction.
 Recognized built-in tags take precedence over type overrides; overrides replace
 untagged and custom-expression defaults of the matching Go type. Unaffected
 custom-expression defaults retain their generated implementations. Each mapping
-is independent and registered defaults are never mutated. ReuseBuffers is an
+is independent and generated defaults are never mutated. ReuseBuffers is an
 independent mapping option. No per-row override resolution is permitted.
 
 All Each callbacks may return gocql.StopIteration or a chain of single-error

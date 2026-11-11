@@ -116,7 +116,7 @@ func generate(dir string, typeNames []string) (string, []byte, error) {
 		if err != nil {
 			return "", nil, err
 		}
-		writeRegistration(&body, s.name, g.cqlName, fields, buffered, stream)
+		writeFieldsMethod(&body, s.name, g.cqlName, fields, buffered, stream)
 	}
 
 	var out bytes.Buffer
@@ -145,9 +145,8 @@ func generate(dir string, typeNames []string) (string, []byte, error) {
 			fmt.Fprintf(&out, "\t%s %q\n", name, ref.path)
 		}
 	}
-	out.WriteString(")\n\nfunc init() {\n")
+	out.WriteString(")\n")
 	out.Write(body.Bytes())
-	out.WriteString("}\n")
 	src, err := format.Source(out.Bytes())
 	if err != nil {
 		return "", nil, fmt.Errorf("formatting output: %w\n%s", err, out.Bytes())
@@ -575,8 +574,15 @@ func (g *generator) qualify(src string) string {
 	return strings.ReplaceAll(src, "cql.", g.cqlName+".")
 }
 
-func writeRegistration(b *bytes.Buffer, typeName, cql string, fields []genField, buffered, stream bool) {
-	fmt.Fprintf(b, "\t%s.RegisterStruct(%s.StructFields[%s]{\n", cql, cql, typeName)
+// writeFieldsMethod writes typeName's CQLFields method, which cql.ParamsOf,
+// cql.RowOf and cql.StreamRowOf find through the type's method set. A method
+// needs no registration, so a package-level variable built from the mapping
+// sees it whatever the initialization order.
+func writeFieldsMethod(b *bytes.Buffer, typeName, cql string, fields []genField, buffered, stream bool) {
+	fmt.Fprintf(b, "\n// CQLFields returns the generated mapping of %s's fields, which\n", typeName)
+	fmt.Fprintf(b, "// %s.ParamsOf, %s.RowOf and %s.StreamRowOf use instead of reflection.\n", cql, cql, cql)
+	fmt.Fprintf(b, "func (%s) CQLFields() %s.StructFields[%s] {\n", typeName, cql, typeName)
+	fmt.Fprintf(b, "\treturn %s.StructFields[%s]{\n", cql, typeName)
 	if buffered {
 		fmt.Fprintf(b, "\t\tParams: []%s.InputField[%s]{\n", cql, typeName)
 		for _, f := range fields {
@@ -598,5 +604,5 @@ func writeRegistration(b *bytes.Buffer, typeName, cql string, fields []genField,
 		}
 		b.WriteString("\t\t},\n")
 	}
-	b.WriteString("\t})\n")
+	b.WriteString("\t}\n}\n")
 }

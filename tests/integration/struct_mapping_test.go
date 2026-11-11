@@ -180,11 +180,11 @@ func TestStructMapping(t *testing.T) {
 	// struct write and read each other's rows, buffered and streamed.
 	t.Run("Generated", func(t *testing.T) {
 		ctx, f := newSMFixture(t)
-		if fields, ok := codec.RegisteredStruct[mapped.Event](); !ok || fields.Params == nil {
-			t.Fatal("generated Event mapping is not registered")
+		if fields := (mapped.Event{}).CQLFields(); fields.Params == nil {
+			t.Fatal("no generated Event mapping")
 		}
-		if fields, ok := codec.RegisteredStruct[mapped.StreamEvent](); !ok || fields.StreamColumns == nil {
-			t.Fatal("generated StreamEvent stream mapping is not registered")
+		if fields := (mapped.StreamEvent{}).CQLFields(); fields.StreamColumns == nil {
+			t.Fatal("no generated StreamEvent stream mapping")
 		}
 		const columns = "bucket, id, name, blob, big, maybe, tags, scores, createdat, updatedat"
 		reflectedParams := codecTestMust(codec.ReflectParams[mapped.Event]())

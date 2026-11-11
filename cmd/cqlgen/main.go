@@ -17,7 +17,10 @@
 //	//go:generate go run github.com/scylladb/gocql/v2/cmd/cqlgen -type=Tweet
 //
 // The output lands next to that file, as <file>_cql.go (or <file>_cql_test.go
-// for a struct declared in a test file), and registers the mappings from init.
+// for a struct declared in a test file), as a CQLFields method of each type,
+// which cql.ParamsOf, cql.RowOf and cql.StreamRowOf find through the method
+// set. Nothing is registered, so a package-level variable such as
+// `var rows = cql.MustRowOf[Tweet]()` uses the generated mapping too.
 // cqlgen type-checks the package against export data from go list, so the
 // package must compile.
 package main

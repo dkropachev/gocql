@@ -457,33 +457,35 @@ func TestStructMapping(t *testing.T) {
 			}
 		})
 	})
-	t.Run("RegisterStruct", func(t *testing.T) {
-		type registered struct{ ID int64 }
-		// The registry is process-wide; forget the mapping so that -count>1
-		// registers it afresh instead of panicking on the second run.
-		t.Cleanup(func() { structRegistry.Delete(reflect.TypeFor[registered]()) })
+	t.Run("GeneratedFields", func(t *testing.T) {
+		type generated struct{ ID int64 }
 		called := false
-		RegisterStruct(StructFields[registered]{
-			Params: []InputField[registered]{Param("id", Int64, func(v registered) int64 { called = true; return v.ID })},
-		})
+		fields := StructFields[generated]{
+			Params: []InputField[generated]{Param("id", Int64, func(v generated) int64 { called = true; return v.ID })},
+		}
 		columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "id", Type: rowTestType(t, cqltype.TypeBigInt)})
-		params := MustParamsOf[registered]()
+		params, err := GeneratedParams(fields)
+		if err != nil {
+			t.Fatal(err)
+		}
 		plan, err := params.Compile(columns)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := plan.Encode(NewParamWriter(wire.NewBuilder(8), columns, false), registered{ID: 1}); err != nil {
+		if err := plan.Encode(NewParamWriter(wire.NewBuilder(8), columns, false), generated{ID: 1}); err != nil {
 			t.Fatal(err)
 		}
 		if !called {
-			t.Fatal("ParamsOf did not use the registered mapping")
+			t.Fatal("GeneratedParams did not use the generated mapping")
 		}
-		defer func() {
-			if recover() == nil {
-				t.Fatal("registering twice did not panic")
-			}
-		}()
-		RegisterStruct(StructFields[registered]{})
+		// Columns is nil, so the rows reflect the struct.
+		rows, err := GeneratedRow(fields)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := rows.Compile(columns); err != nil {
+			t.Fatal(err)
+		}
 	})
 	t.Run("StreamRowOf", func(t *testing.T) {
 		t.Run("MatchesHandWritten", func(t *testing.T) {
@@ -589,4 +591,18 @@ func TestStructMapping(t *testing.T) {
 			}
 		})
 	})
+}
+
+// MustParamsOf, MustRowOf and MustStreamRowOf reflect P, as the cql functions
+// of those names do for a struct without a generated mapping.
+func MustParamsOf[P any](opts ...StructOption[P]) ParamEncoder[P] {
+	return CodecTestMust(ReflectParams(opts...))
+}
+
+func MustRowOf[R any](opts ...StructOption[R]) RowDecoder[R] {
+	return CodecTestMust(ReflectRow(opts...))
+}
+
+func MustStreamRowOf[R any](opts ...StructOption[R]) StreamRowDecoder[R] {
+	return CodecTestMust(ReflectStreamRow(opts...))
 }

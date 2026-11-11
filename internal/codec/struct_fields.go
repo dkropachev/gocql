@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	"sync"
 	"unsafe"
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
@@ -18,7 +17,7 @@ import (
 // Reflection runs once, when the mapping is built; the field accessors read at
 // a fixed offset, so encoding and decoding stay reflection-free and keep the
 // built-in direct ops. cmd/cqlgen generates the same fields from source, using
-// the tag grammar and type table below, and registers them with RegisterStruct.
+// the tag grammar and type table below, as a CQLFields method of the struct.
 
 // FieldTag is a struct field's parsed `cql` tag.
 type FieldTag struct {
@@ -232,79 +231,57 @@ func WithCodec[P, V any](codec Codec[V]) StructOption[P] { return codecOption[P,
 
 // StructFields is a struct's mapping, as cqlgen generates it. Params and
 // Columns are nil when a field has no buffered codec, and StreamColumns when
-// one has no streaming decoder; ParamsOf, RowOf and StreamRowOf then reflect,
-// and report the field.
+// one has no streaming decoder; GeneratedParams, GeneratedRow and
+// GeneratedStreamRow then reflect, and report the field.
 type StructFields[P any] struct {
 	Params        []InputField[P]
 	Columns       []OutputField[P]
 	StreamColumns []StreamOutputField[P]
 }
 
-var structRegistry sync.Map // reflect.Type -> StructFields[P]
-
-// RegisterStruct installs a generated mapping, which ParamsOf and RowOf use
-// for P instead of reflection. It panics when P is already registered.
-func RegisterStruct[P any](fields StructFields[P]) {
-	if _, loaded := structRegistry.LoadOrStore(reflect.TypeFor[P](), fields); loaded {
-		panic(fmt.Sprintf("gocql: struct %s registered twice", reflect.TypeFor[P]()))
+// GeneratedParams binds parameters from the generated mapping fields, with
+// opts applied to it, or reflects P when fields has no buffered mapping.
+func GeneratedParams[P any](fields StructFields[P], opts ...StructOption[P]) (ParamEncoder[P], error) {
+	if fields.Params == nil {
+		return ReflectParams(opts...)
 	}
+	config, err := structOptions(reflect.TypeFor[P](), opts)
+	if err != nil {
+		return nil, err
+	}
+	fields, err = generatedStructOptions(fields, config)
+	if err != nil {
+		return nil, err
+	}
+	return structParams(fields.Params), nil
 }
 
-// RegisteredStruct returns the mapping RegisterStruct installed for P.
-func RegisteredStruct[P any]() (StructFields[P], bool) {
-	f, ok := structRegistry.Load(reflect.TypeFor[P]())
-	if !ok {
-		return StructFields[P]{}, false
+// GeneratedRow decodes rows with the generated mapping fields, with opts
+// applied to it, or reflects R when fields has no buffered mapping.
+func GeneratedRow[R any](fields StructFields[R], opts ...StructOption[R]) (RowDecoder[R], error) {
+	if fields.Columns == nil {
+		return ReflectRow(opts...)
 	}
-	return f.(StructFields[P]), true
+	config, err := structOptions(reflect.TypeFor[R](), opts)
+	if err != nil {
+		return nil, err
+	}
+	fields, err = generatedStructOptions(fields, config)
+	if err != nil {
+		return nil, err
+	}
+	reset, err := bufferReset[R](config.reuseBuffers)
+	if err != nil {
+		return nil, err
+	}
+	return structRow(fields.Columns, reset), nil
 }
 
-// ParamsOf binds a statement's parameters from the fields of struct P, by
-// column name. A field without a matching parameter is skipped, so one struct
-// serves statements that bind a subset of its columns; every parameter still
-// needs a field. A generated mapping is used when registered, otherwise P is
-// reflected once, here.
-func ParamsOf[P any](opts ...StructOption[P]) (ParamEncoder[P], error) {
-	if f, ok := RegisteredStruct[P](); ok && f.Params != nil {
-		config, err := structOptions(reflect.TypeFor[P](), opts)
-		if err != nil {
-			return nil, err
-		}
-		f, err = registeredStructOptions(f, config)
-		if err != nil {
-			return nil, err
-		}
-		return structParams(f.Params), nil
-	}
-	return ReflectParams(opts...)
-}
-
-// RowOf decodes rows into struct P by column name, like ParamsOf. A field
-// whose column is not selected stays zero.
-func RowOf[R any](opts ...StructOption[R]) (RowDecoder[R], error) {
-	if f, ok := RegisteredStruct[R](); ok && f.Columns != nil {
-		config, err := structOptions(reflect.TypeFor[R](), opts)
-		if err != nil {
-			return nil, err
-		}
-		f, err = registeredStructOptions(f, config)
-		if err != nil {
-			return nil, err
-		}
-		reset, err := bufferReset[R](config.reuseBuffers)
-		if err != nil {
-			return nil, err
-		}
-		return structRow(f.Columns, reset), nil
-	}
-	return ReflectRow(opts...)
-}
-
-// registeredStructOptions replaces only fields selected by type options. The
-// registered defaults may contain Go codec expressions that reflection cannot
+// generatedStructOptions replaces only fields selected by type options. The
+// generated defaults may contain Go codec expressions that reflection cannot
 // evaluate, so rebuilding the entire mapping reflectively would lose them.
 // Field discovery and option resolution happen here, never during execution.
-func registeredStructOptions[P any](fields StructFields[P], config structConfig[P]) (StructFields[P], error) {
+func generatedStructOptions[P any](fields StructFields[P], config structConfig[P]) (StructFields[P], error) {
 	if len(config.codecs) == 0 && len(config.streams) == 0 {
 		return fields, nil
 	}
@@ -371,23 +348,7 @@ func tagSelectsBuiltin[E interface{ meta() BuiltinFieldType }](builtins []E, typ
 	return false
 }
 
-func MustParamsOf[P any](opts ...StructOption[P]) ParamEncoder[P] {
-	p, err := ParamsOf(opts...)
-	if err != nil {
-		panic(err)
-	}
-	return p
-}
-
-func MustRowOf[R any](opts ...StructOption[R]) RowDecoder[R] {
-	r, err := RowOf(opts...)
-	if err != nil {
-		panic(err)
-	}
-	return r
-}
-
-// ReflectParams is ParamsOf without the generated-mapping lookup.
+// ReflectParams maps the fields of struct P by reflection, once, here.
 func ReflectParams[P any](opts ...StructOption[P]) (ParamEncoder[P], error) {
 	fields, err := reflectFields(opts)
 	if err != nil {
@@ -400,7 +361,7 @@ func ReflectParams[P any](opts ...StructOption[P]) (ParamEncoder[P], error) {
 	return structParams(params), nil
 }
 
-// ReflectRow is RowOf without the generated-mapping lookup.
+// ReflectRow maps the fields of struct R by reflection, once, here.
 func ReflectRow[R any](opts ...StructOption[R]) (RowDecoder[R], error) {
 	fields, err := reflectFields(opts)
 	if err != nil {
@@ -744,34 +705,27 @@ func WithStreamCodec[P, V any](decoder StreamDecoder[V]) StructOption[P] {
 	return streamCodecOption[P, V]{decoder: decoder}
 }
 
-// StreamRowOf decodes streamed rows into struct P by column name, mapped like
-// RowOf with the streaming decoders: every column needs a field, and a field
-// whose column is not selected is reset by its decoder and otherwise left
-// alone. Decoders reuse the storage of []byte and slice fields across rows.
-func StreamRowOf[R any](opts ...StructOption[R]) (StreamRowDecoder[R], error) {
-	if f, ok := RegisteredStruct[R](); ok && f.StreamColumns != nil {
-		config, err := structOptions(reflect.TypeFor[R](), opts)
-		if err != nil {
-			return nil, err
-		}
-		f, err = registeredStructOptions(f, config)
-		if err != nil {
-			return nil, err
-		}
-		return structStreamRow(f.StreamColumns), nil
+// GeneratedStreamRow decodes streamed rows with the generated mapping fields,
+// with opts applied to it, or reflects R when fields has no stream mapping.
+func GeneratedStreamRow[R any](fields StructFields[R], opts ...StructOption[R]) (StreamRowDecoder[R], error) {
+	if fields.StreamColumns == nil {
+		return ReflectStreamRow(opts...)
 	}
-	return ReflectStreamRow(opts...)
-}
-
-func MustStreamRowOf[R any](opts ...StructOption[R]) StreamRowDecoder[R] {
-	r, err := StreamRowOf(opts...)
+	config, err := structOptions(reflect.TypeFor[R](), opts)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return r
+	fields, err = generatedStructOptions(fields, config)
+	if err != nil {
+		return nil, err
+	}
+	return structStreamRow(fields.StreamColumns), nil
 }
 
-// ReflectStreamRow is StreamRowOf without the generated-mapping lookup.
+// ReflectStreamRow maps the fields of struct R by reflection with the
+// streaming decoders: every column needs a field, and a field whose column is
+// not selected is reset by its decoder and otherwise left alone. Decoders
+// reuse the storage of []byte and slice fields across rows.
 func ReflectStreamRow[R any](opts ...StructOption[R]) (StreamRowDecoder[R], error) {
 	t := reflect.TypeFor[R]()
 	config, err := structOptions(t, opts)
