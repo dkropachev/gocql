@@ -22,6 +22,7 @@ type Options struct {
 	Retry    retry.Policy
 	Observer Observer
 	// Profile replaces the session's default profile before other overrides.
+	// It must come from ProfileBuilder.Build; a Profile literal is rejected.
 	Profile  *Profile
 	Keyspace string
 	// CustomPayload is copied, including borrowed payload bytes, when compiled.

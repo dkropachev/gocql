@@ -21,12 +21,26 @@ type Profile struct {
 	PageSize             int32
 	SerialConsistency    cqltype.Option[cqltype.Consistency]
 	Consistency          cqltype.Consistency
+	// unbuilt marks a public Profile that ProfileBuilder.Build did not make,
+	// such as a struct literal: its unset fields are zero, not the driver's
+	// defaults, so validation rejects it.
+	unbuilt bool
 }
+
+// InternalMarkUnbuilt records that p comes from a public Profile that
+// ProfileBuilder.Build did not make.
+func (p *Profile) InternalMarkUnbuilt() { p.unbuilt = true }
+
+// InternalBuilt reports whether p was not marked by InternalMarkUnbuilt.
+func (p *Profile) InternalBuilt() bool { return !p.unbuilt }
 
 func InternalDefaultProfile() Profile {
 	return Profile{Consistency: cqltype.LocalQuorum, SerialConsistency: cqltype.Option[cqltype.Consistency]{Value: cqltype.LocalSerial, Set: true}, Timeout: 30 * time.Second, PageSize: 5000, Prefetch: 1, Retry: retry.Safe{MaxAttempts: 3}}
 }
 func (p Profile) ValidateProfile() error {
+	if p.unbuilt {
+		return cqltype.TypeValidation("profile", "not built: a Profile literal leaves unset fields zero instead of the driver's defaults; build it with gocql.NewProfile")
+	}
 	if !InternalValidConsistency(p.Consistency) {
 		return cqltype.TypeValidation("consistency", "invalid consistency")
 	}

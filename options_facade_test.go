@@ -4,11 +4,14 @@
 package gocql
 
 import (
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/retry"
@@ -51,6 +54,20 @@ func TestPublicOptionsSnapshot(t *testing.T) {
 	}
 }
 
+func TestOptionsProfileMustBeBuilt(t *testing.T) {
+	literal := Profile{PageSize: 1000}
+	_, err := implSession.NewCompiledOptions(nil, internalOptions(Options{Profile: &literal}))
+	if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "profile" || !strings.Contains(err.Error(), "NewProfile") {
+		t.Fatalf("compiling a Profile literal = %v, want a profile ValidationError naming NewProfile", err)
+	}
+	built := codecTestMust(NewProfile().Build())
+	built.PageSize = 1000
+	compiled := codecTestMust(implSession.NewCompiledOptions(nil, internalOptions(Options{Profile: &built})))
+	if got := CompiledOptions(compiled).Values().Profile; got == nil || got.PageSize != 1000 || !got.built {
+		t.Fatalf("edited built profile = %+v", got)
+	}
+}
+
 // Keep public records and their implementation counterparts synchronized as
 // settings are added. Private execution hooks deliberately stay internal.
 func TestPublicOptionFields(t *testing.T) {
@@ -71,6 +88,9 @@ func TestPublicOptionFields(t *testing.T) {
 		}
 		for i := range public.NumField() {
 			f := public.Field(i)
+			if !f.IsExported() {
+				continue
+			}
 			if _, ok := internal.FieldByName(f.Name); !ok {
 				t.Errorf("%s is missing %s", internal, f.Name)
 			}

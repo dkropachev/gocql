@@ -247,6 +247,26 @@ func TestConfigBuilder(t *testing.T) {
 		}
 	})
 
+	t.Run("DefaultProfileMustBeBuilt", func(t *testing.T) {
+		_, err := NewConfig("h").WithDefaultProfile(Profile{PageSize: 1000}).Build()
+		if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "profile" || !strings.Contains(err.Error(), "NewProfile") {
+			t.Fatalf("Build with a Profile literal = %v, want a profile ValidationError naming NewProfile", err)
+		}
+		_, err = NewConfig("h").WithDefaultProfile(Profile{PageSize: 1000}).
+			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.One) }).Build()
+		if err == nil {
+			t.Fatal("ConfigureDefaultProfile made a Profile literal acceptable")
+		}
+		built := codecTestMust(NewProfile().Build())
+		edited := built
+		edited.PageSize = 1000
+		c := mustBuildConfig(t, NewConfig("h").WithDefaultProfile(edited).
+			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.One) })).settings
+		if c.DefaultProfile.PageSize != 1000 || c.DefaultProfile.Consistency != cql.One || c.DefaultProfile.Retry == nil {
+			t.Fatalf("edited copy of a built profile: %+v", *c.DefaultProfile)
+		}
+	})
+
 	t.Run("DefaultProfileSnapshotsAndReplaces", func(t *testing.T) {
 		profile := codecTestMust(NewProfile().WithConsistency(cql.Quorum).WithPageSize(7).NoTimeout().Build())
 		b := NewConfig("h").WithDefaultProfile(profile)

@@ -61,9 +61,11 @@ and `WithRefreshAfterAgreement` restore those defaults after their off switches.
 Zero optional timeouts disable their budget; nil optional providers clear the
 override, including `WithTLS(nil)` for plaintext. `WithDefaultProfile(profile)`
 copies and replaces the complete profile. Build profiles with `NewProfile` to
-start from driver defaults; later edits to a supplied profile do not affect the
+start from driver defaults; a `gocql.Profile{...}` literal would leave every
+unset field zero, so `Build` rejects it. A built profile may be copied and its
+fields edited. Later edits to a supplied profile do not affect the
 configuration. Use `ConfigureDefaultProfile(callback)` to compose changes to
-the current profile; `ConfigureDefaultProfile(nil)` resets
+the current profile, including one set by `WithDefaultProfile`; `ConfigureDefaultProfile(nil)` resets
 all profile settings. `WithIgnoreEvents` replaces the complete ignored-event
 list; calling it without arguments restores all events.
 

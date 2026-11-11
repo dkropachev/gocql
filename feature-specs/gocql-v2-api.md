@@ -1227,7 +1227,11 @@ Invalid values fail in the query constructor or Session.CompileOptions, before a
 execution. A query uses its options as resolved when it is created; options
 passed per call use the resolution CompileOptions made. A zero Options inherits the selected session profile, is non-idempotent, and has
 no tracing/timestamp/keyspace override. Override validation returns typed
-errors, not panics. A profile is a plain value. Connect copies
+errors, not panics. A profile is a plain value, made by `ProfileBuilder.Build`:
+it carries an unexported built mark, so a `Profile{...}` literal, whose unset
+fields would be zero rather than the defaults, fails `WithDefaultProfile` at
+Build and `Options.Profile` at compile time. A copy of a built profile stays
+built. Connect copies
 Config.DefaultProfile and compiling copies Options.Profile, so changing a
 Profile after it was handed over has no effect. Admission validates nothing and
 shares the resolved options across attempts/pages; CustomPayload is copied once,

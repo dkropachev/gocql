@@ -171,7 +171,8 @@ providers remove overrides, and zero optional timeouts disable them.
 
 `Connect` snapshots validated configuration before starting workers. Configure
 TLS with `crypto/tls`, authentication with `auth.Password` or an `auth.Provider`, and
-routing/retry/speculation through `WithDefaultProfile` or a per-query `*Profile`.
+routing/retry/speculation through `WithDefaultProfile` or a per-query `*Profile`,
+built with `NewProfile` (a `Profile` literal is rejected).
 Per-execution settings are plain `gocql.Options` values, for example
 `gocql.Options{PageSize: cql.Some[int32](100)}`; the zero `Options{}` uses the
 session default. Query constructors validate, resolve and encode them for their

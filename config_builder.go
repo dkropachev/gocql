@@ -508,7 +508,8 @@ func (b *ConfigBuilder) WithRefreshAfterAgreement() *ConfigBuilder {
 
 // WithDefaultProfile replaces the complete execution defaults for statements
 // that pass no Profile. The profile is copied now; policy objects stay shared.
-// Build validates the final settings. Use NewProfile to start from driver defaults.
+// Build validates the final settings and rejects a profile that
+// ProfileBuilder.Build did not make; start one with NewProfile.
 func (b *ConfigBuilder) WithDefaultProfile(profile Profile) *ConfigBuilder {
 	b.profile = &ProfileBuilder{profile: internalProfile(profile)}
 	return b
@@ -516,7 +517,8 @@ func (b *ConfigBuilder) WithDefaultProfile(profile Profile) *ConfigBuilder {
 
 // ConfigureDefaultProfile chooses execution defaults for statements that pass no
 // Profile. choose receives the builder's default profile, so several calls
-// add to the same profile. A nil choose resets the entire default profile.
+// add to the same profile, and edits apply on top of the profile an earlier
+// WithDefaultProfile set. A nil choose resets the entire default profile.
 func (b *ConfigBuilder) ConfigureDefaultProfile(choose func(*ProfileBuilder)) *ConfigBuilder {
 	if choose == nil {
 		b.profile = NewProfile()

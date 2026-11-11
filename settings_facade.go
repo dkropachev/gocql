@@ -30,7 +30,13 @@ type Observer interface {
 
 type AttemptEvent = implRouting.AttemptEvent
 
-// Profile supplies reusable execution defaults. Build one with NewProfile.
+// Profile supplies reusable execution defaults. Build one with NewProfile and
+// ProfileBuilder.Build. A Profile written as a literal, such as
+// gocql.Profile{PageSize: 1000}, would leave every other field zero instead of
+// the driver's default (consistency ANY, no retries, no timeout, no prefetch,
+// no serial consistency), so ConfigBuilder.WithDefaultProfile, the query
+// constructors and Session.CompileOptions reject it with a validation error.
+// A built Profile may be copied and its fields changed: the copy stays built.
 // Config and query construction snapshot its fields; policy objects stay shared.
 type Profile struct {
 	Retry                retry.Policy
@@ -43,6 +49,8 @@ type Profile struct {
 	PageSize          int32
 	SerialConsistency cql.Option[cql.Consistency]
 	Consistency       cql.Consistency
+	// built reports that ProfileBuilder.Build made the profile.
+	built bool
 }
 type ReconnectPolicy = implSettings.ReconnectPolicy
 type RequestEvent = implSettings.RequestEvent
@@ -64,13 +72,18 @@ func NewPrintfLogger(l PrintfLogger, level slog.Leveler) *slog.Logger {
 }
 
 func internalProfile(p Profile) implSettings.Profile {
-	return implSettings.Profile{Retry: p.Retry, Routing: p.Routing, Speculation: p.Speculation,
+	v := implSettings.Profile{Retry: p.Retry, Routing: p.Routing, Speculation: p.Speculation,
 		Timeout: p.Timeout, PageTimeout: p.PageTimeout, Prefetch: p.Prefetch,
 		PageSize: p.PageSize, SerialConsistency: p.SerialConsistency, Consistency: p.Consistency}
+	if !p.built {
+		v.InternalMarkUnbuilt()
+	}
+	return v
 }
 
 func publicProfile(p implSettings.Profile) Profile {
 	return Profile{Retry: p.Retry, Routing: p.Routing, Speculation: p.Speculation,
 		Timeout: p.Timeout, PageTimeout: p.PageTimeout, Prefetch: p.Prefetch,
-		PageSize: p.PageSize, SerialConsistency: p.SerialConsistency, Consistency: p.Consistency}
+		PageSize: p.PageSize, SerialConsistency: p.SerialConsistency, Consistency: p.Consistency,
+		built: p.InternalBuilt()}
 }
