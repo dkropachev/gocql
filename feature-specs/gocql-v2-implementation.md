@@ -418,8 +418,8 @@ review result. Reuse the existing bounded retry scheduler with a coalesced set
 of at most 64 distinct pending keyspaces, counting in-flight scopes against that
 same bound. Fetch a known keyspace through typed WHERE queries and scoped
 DESCRIBE, validate its schema internally, and publish only the configured
-MetadataMode/keyspace-filter representation. Disabled/excluded metadata must
-remain unexposed; Minimal must not gain full table/type data. Only an unknown
+MetadataMode/keyspace-filter representation. SchemaNone/excluded metadata must
+remain unexposed; SchemaKeyspaces must not gain full table/type data. Only an unknown
 statement scope may enumerate all keyspaces internally, under existing limits.
 Do not perform synchronous schema I/O while holding prepared or pager locks.
 An overflow must propagate ProtocolError (stage "prepared schema
@@ -871,7 +871,7 @@ type MetadataOptions struct {
     TopologyEvents, StatusEvents, SchemaEvents, ClientRouteEvents bool
 }
 type MetadataMode uint8
-const (MetadataDisabled MetadataMode = iota; MetadataMinimal; MetadataFull)
+const (MetadataSchemaNone MetadataMode = iota; MetadataSchemaKeyspaces; MetadataSchemaFull)
 type IdentityOptions struct { DriverName, DriverVersion, ApplicationName, ApplicationVersion, ClientID string }
 type ClientRoutesOptions struct {
     ConnectionIDs []string

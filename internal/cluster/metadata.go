@@ -376,7 +376,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 	routing.SnapshotData(m).InternalPlacementSignal = &p.InternalPlacementEpoch
 	routing.SnapshotData(m).InternalPlacements = routing.InternalReconcileTabletPlacement(old, m)
 	routing.SnapshotData(m).InternalHostIndex = sessionRoutingHostIndex(s, routing.SnapshotData(m).InternalHosts)
-	if config.Metadata.Mode != settings.MetadataFull {
+	if config.Metadata.Mode != settings.MetadataSchemaFull {
 		routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cqltype.TypeValidation("partitioner", "table partitioners outside loaded metadata disable token routing"))
 	}
 	for keyspace, ks := range routing.SnapshotData(m).InternalKeyspaces {
@@ -774,7 +774,7 @@ func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 	epochs := maps.Clone(p.schemaEpoch)
 	revisions := maps.Clone(p.schemaRevision)
 	p.InternalMu.Unlock()
-	if config.DefaultProfile != nil && config.Metadata.Mode == settings.MetadataDisabled {
+	if config.DefaultProfile != nil && config.Metadata.Mode == settings.MetadataSchemaNone {
 		if !s.PublishV2Metadata() {
 			return s.v2MetadataPublicationError()
 		}
@@ -832,7 +832,7 @@ func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 				}
 			}
 			var ks *implMetadata.KeyspaceMetadata
-			if config.DefaultProfile != nil && config.Metadata.Mode == settings.MetadataMinimal {
+			if config.DefaultProfile != nil && config.Metadata.Mode == settings.MetadataSchemaKeyspaces {
 				ks = base
 				ks.Tables = make(map[string]*implMetadata.TableMetadata)
 			} else {
@@ -955,7 +955,7 @@ func (s *Core) refreshV2KeyspaceAttempt(ctx context.Context, name string, attemp
 	tables := p.captureTableRevisionsLocked(name)
 	config := p.InternalConfig
 	p.InternalMu.Unlock()
-	if config.DefaultProfile != nil && (config.Metadata.Mode == settings.MetadataDisabled || len(config.Metadata.Keyspaces) > 0 && !slices.Contains(config.Metadata.Keyspaces, name)) {
+	if config.DefaultProfile != nil && (config.Metadata.Mode == settings.MetadataSchemaNone || len(config.Metadata.Keyspaces) > 0 && !slices.Contains(config.Metadata.Keyspaces, name)) {
 		if !s.PublishV2Metadata() {
 			return s.v2MetadataPublicationError()
 		}
@@ -980,7 +980,7 @@ func (s *Core) refreshV2KeyspaceAttempt(ctx context.Context, name string, attemp
 		return s.v2SchemaRefreshFailure(name, err)
 	}
 	var ks *implMetadata.KeyspaceMetadata
-	if config.DefaultProfile != nil && config.Metadata.Mode == settings.MetadataMinimal {
+	if config.DefaultProfile != nil && config.Metadata.Mode == settings.MetadataSchemaKeyspaces {
 		ks = base
 		ks.Tables = make(map[string]*implMetadata.TableMetadata)
 	} else {

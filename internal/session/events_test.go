@@ -270,7 +270,7 @@ func TestEvents(t *testing.T) {
 					config.Protocol = 4
 					config.KeepaliveInterval = 0
 					config.Metadata.InitialDiscovery = false
-					config.Metadata.Mode = settings.MetadataDisabled
+					config.Metadata.Mode = settings.MetadataSchemaNone
 					config.Metadata.PeriodicRefresh = 0
 					config.ReportConfiguration = false
 					config.Pool.ConnectionsPerHost = 1

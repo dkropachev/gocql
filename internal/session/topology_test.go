@@ -37,7 +37,7 @@ func TestTopology(t *testing.T) {
 			}
 			config := settings.DefaultConfig(contacts...)
 			config.Protocol = 4
-			config.Metadata.Mode = settings.MetadataDisabled
+			config.Metadata.Mode = settings.MetadataSchemaNone
 			config.Metadata.InitialDiscovery = false
 			config.Metadata.AutomaticAgreement = false
 			config.Pool.ShardAwarePort = false

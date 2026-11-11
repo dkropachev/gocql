@@ -81,7 +81,7 @@ func TestClientRoutes(t *testing.T) {
 			})
 			config := settings.DefaultConfig(srv.Address)
 			config.Protocol = 4
-			config.Metadata.Mode = settings.MetadataDisabled
+			config.Metadata.Mode = settings.MetadataSchemaNone
 			config.Metadata.InitialDiscovery = false
 			config.Pool.ShardAwarePort = false
 			config.Pool.ConnectionsPerHost = 1

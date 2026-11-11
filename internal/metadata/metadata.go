@@ -489,7 +489,7 @@ func v2DecodeIndexMetadata(keyspace string) codec.RowDecoder[IndexMetadata] {
 		InternalV2RequiredSchemaColumn("index_name", InternalV2MetadataText{}, func(r *IndexMetadata) *string { return &r.Name }),
 		InternalV2RequiredSchemaColumn("keyspace_name", InternalV2MetadataText{}, func(r *IndexMetadata) *string { return &r.KeyspaceName }),
 		InternalV2RequiredSchemaColumn("table_name", InternalV2MetadataText{}, func(r *IndexMetadata) *string { return &r.TableName }),
-		InternalV2RequiredSchemaColumn("kind", InternalV2MetadataText{}, func(r *IndexMetadata) *string { return &r.Kind }),
+		InternalV2RequiredSchemaColumn("kind", InternalV2MetadataText{}, func(r *IndexMetadata) *string { return (*string)(&r.Kind) }),
 		InternalV2RequiredSchemaColumn("options", v2MetadataStringMap{}, func(r *IndexMetadata) *map[string]string { return &r.Options }),
 	}}
 }

@@ -89,7 +89,7 @@ func TestSchemaMetadata(t *testing.T) {
 				}
 			}
 			implCluster.SessionData(s).InternalUseSystemSchema = true
-			for _, mode := range []settings.MetadataMode{settings.MetadataDisabled, settings.MetadataMinimal, settings.MetadataFull} {
+			for _, mode := range []settings.MetadataMode{settings.MetadataSchemaNone, settings.MetadataSchemaKeyspaces, settings.MetadataSchemaFull} {
 				config := settings.DefaultConfig("localhost")
 				config.Metadata.Mode = mode
 				config.Metadata.Keyspaces = []string{"ks1"}
@@ -103,7 +103,7 @@ func TestSchemaMetadata(t *testing.T) {
 				mock.mu.Lock()
 				queries := append([]queryRecord(nil), mock.queries...)
 				mock.mu.Unlock()
-				if mode == settings.MetadataDisabled && len(queries) != 0 {
+				if mode == settings.MetadataSchemaNone && len(queries) != 0 {
 					t.Fatal("disabled schema issued optional queries", queries)
 				}
 				for _, q := range queries {
@@ -111,7 +111,7 @@ func TestSchemaMetadata(t *testing.T) {
 						t.Fatal("filtered keyspace queried", q)
 					}
 				}
-				if mode == settings.MetadataMinimal {
+				if mode == settings.MetadataSchemaKeyspaces {
 					ks, _ := s.Metadata().Keyspace("ks1")
 					if ks == nil || len(ks.Tables) != 0 {
 						t.Fatal("minimal metadata expanded schema")

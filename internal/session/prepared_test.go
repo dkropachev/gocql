@@ -116,7 +116,7 @@ func TestPrepared(t *testing.T) {
 			p := s.Peripheral()
 			p.InternalMu.Lock()
 			p.InternalConfig = settings.DefaultConfig("localhost")
-			p.InternalConfig.Metadata.Mode = settings.MetadataDisabled
+			p.InternalConfig.Metadata.Mode = settings.MetadataSchemaNone
 			p.InternalMu.Unlock()
 			state := &InternalPreparedState{InternalSession: s, InternalInfo: PreparedInfo{Keyspace: "ks1", Table: "t1"}}
 			if err := state.noteMetadataConflict(); err != nil {
@@ -169,11 +169,11 @@ func TestPrepared(t *testing.T) {
 					p.InternalMu.Lock()
 					p.InternalConfig = settings.DefaultConfig("localhost")
 					if mode == "disabled" {
-						p.InternalConfig.Metadata.Mode = settings.MetadataDisabled
+						p.InternalConfig.Metadata.Mode = settings.MetadataSchemaNone
 					} else if mode == "excluded" {
 						p.InternalConfig.Metadata.Keyspaces = []string{"ks2"}
 					} else {
-						p.InternalConfig.Metadata.Mode = settings.MetadataMinimal
+						p.InternalConfig.Metadata.Mode = settings.MetadataSchemaKeyspaces
 					}
 					p.InternalMu.Unlock()
 					before := s.Metadata()

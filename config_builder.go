@@ -380,7 +380,7 @@ func (b *ConfigBuilder) WithConviction(policy ConvictionPolicy) *ConfigBuilder {
 }
 
 // WithMetadataMode selects how much schema metadata is loaded. Default
-// metadata.Full.
+// metadata.SchemaFull.
 func (b *ConfigBuilder) WithMetadataMode(mode metadata.Mode) *ConfigBuilder {
 	b.settings.Metadata.Mode = mode
 	return b

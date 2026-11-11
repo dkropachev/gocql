@@ -237,7 +237,7 @@ type IndexMetadata struct {
 	Name              string
 	KeyspaceName      string
 	TableName         string // Name of corresponding view.
-	Kind              string
+	Kind              IndexKind
 	Options           map[string]string
 	Columns           map[string]*ColumnMetadata
 	OrderedColumns    []string
@@ -404,16 +404,23 @@ func (c *InternalCowKeyspaceMetadataMap) InternalUpdateKeyspace(keyspaceName str
 	return true
 }
 
+// IndexKind is the kind of a secondary index, as system_schema.indexes
+// stores it.
+type IndexKind string
+
 const (
-	IndexKindCustom = "CUSTOM"
+	IndexKindKeys       IndexKind = "KEYS"
+	IndexKindComposites IndexKind = "COMPOSITES"
+	IndexKindCustom     IndexKind = "CUSTOM"
 )
 
-// the ordering of the column with regard to its comparator
+// ColumnOrder is the ordering of a clustering column with regard to its
+// comparator.
 type ColumnOrder bool
 
 const (
 	ASC  ColumnOrder = false
-	DESC             = true
+	DESC ColumnOrder = true
 )
 
 type ColumnIndexMetadata struct {
@@ -448,7 +455,7 @@ func (c *ColumnIndexMetadata) Equals(other *ColumnIndexMetadata) bool {
 type ColumnKind int
 
 const (
-	ColumnUnkownKind ColumnKind = iota
+	ColumnKindUnknown ColumnKind = iota
 	ColumnPartitionKey
 	ColumnClusteringKey
 	ColumnRegular
