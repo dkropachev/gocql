@@ -11,7 +11,6 @@ import (
 	model "github.com/scylladb/gocql/v2/internal/model"
 
 	"sync/atomic"
-	"time"
 
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -178,13 +177,6 @@ func (m *MetadataSnapshot) Diagnostics() []error {
 	return append([]error(nil), SnapshotData(m).InternalDiagnostics...)
 }
 
-type MetricsSnapshot struct {
-	ReceiveCacheHits, ReceiveCacheMisses                                  uint64
-	ReceiveCacheBytes, ReceiveCacheObjects                                int
-	Requests, Attempts, Errors, Retries, Speculations, Cancelled, Orphans uint64
-	InFlight                                                              int64
-	LatencyP50, LatencyP95, LatencyP99                                    time.Duration
-}
 type SnapshotState struct {
 	InternalHostIndex       *InternalRoutingHostIndex
 	InternalPlacements      *tabletPlacementTree

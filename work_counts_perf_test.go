@@ -28,6 +28,7 @@ import (
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
+	"github.com/scylladb/gocql/v2/metrics"
 	routing "github.com/scylladb/gocql/v2/routing"
 )
 
@@ -415,6 +416,6 @@ func (o *testObserver) ObserveAttempt(AttemptEvent) { o.attempts.Add(1) }
 
 type speculation struct{}
 
-func (speculation) Delay(int, routing.MetricsSnapshot) (time.Duration, bool) {
+func (speculation) Delay(int, metrics.Snapshot) (time.Duration, bool) {
 	return time.Hour, true
 }

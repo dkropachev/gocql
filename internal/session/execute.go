@@ -11,6 +11,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/schemafence"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/metrics"
 	"github.com/scylladb/gocql/v2/retry"
 
 	routing "github.com/scylladb/gocql/v2/internal/routing"
@@ -105,9 +106,9 @@ func InternalRuntimeFor(s *implCluster.Core) *InternalSessionRuntime {
 // connections ends the others, so Close need not cancel each execution.
 func (rt *InternalSessionRuntime) sessionDone() <-chan struct{} { return rt.closing }
 
-func (rt *InternalSessionRuntime) metricsSnapshot() routing.MetricsSnapshot {
+func (rt *InternalSessionRuntime) metricsSnapshot() metrics.Snapshot {
 	cache := implCluster.SessionData(rt.Core).InternalConnCfg
-	result := routing.MetricsSnapshot{Requests: rt.requests.Load(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), Cancelled: rt.cancelled.Load(), InFlight: rt.inflight.Load()}
+	result := metrics.Snapshot{Requests: rt.requests.Load(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), Cancelled: rt.cancelled.Load(), InFlight: rt.inflight.Load()}
 	if cache != nil {
 		stats := cache.InternalReceiveCache.Stats()
 		result.ReceiveCacheHits, result.ReceiveCacheMisses = stats.Hits, stats.Misses

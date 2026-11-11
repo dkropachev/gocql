@@ -17,6 +17,7 @@ import (
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/metrics"
 
 	model "github.com/scylladb/gocql/v2/internal/model"
 
@@ -171,11 +172,11 @@ func (s *Core) Metadata() *routing.MetadataSnapshot {
 		}
 	}
 }
-func (s *Core) Metrics() routing.MetricsSnapshot {
+func (s *Core) Metrics() metrics.Snapshot {
 	if s == nil {
-		return routing.MetricsSnapshot{}
+		return metrics.Snapshot{}
 	}
-	var result routing.MetricsSnapshot
+	var result metrics.Snapshot
 	if owner := s.CurrentExecution(); owner != nil {
 		result = owner.MetricsSnapshot()
 	}

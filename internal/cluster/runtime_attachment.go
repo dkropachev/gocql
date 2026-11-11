@@ -8,9 +8,9 @@ import (
 	"sync/atomic"
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/schemafence"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/metrics"
 )
 
 type InternalExecutionWaiter interface{ Wait() }
@@ -18,7 +18,7 @@ type executionLifecycle interface {
 	Trace(context.Context, cqltype.UUID) (TraceInfo, error)
 	StopPrepared() InternalExecutionWaiter
 	StopActive() InternalExecutionWaiter
-	MetricsSnapshot() routing.MetricsSnapshot
+	MetricsSnapshot() metrics.Snapshot
 	Profile() *settings.Profile
 	ConfigSnapshot() settings.Config
 }

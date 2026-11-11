@@ -1,8 +1,9 @@
 # Speculative execution
 
 Configure `Profile.Speculation` with a `SpeculationPolicy` that returns a delay
-and whether another attempt is allowed from the attempt number and
-MetricsSnapshot. Explicitly idempotent ordinary requests are eligible;
+and whether another attempt is allowed from the attempt number and the
+session's `metrics.Snapshot` (package `github.com/scylladb/gocql/v2/metrics`),
+the counters `Session.Metrics` also returns. Explicitly idempotent ordinary requests are eligible;
 unknown/conditional statements, SERIAL/LOCAL_SERIAL requests and batches never
 speculate. Concurrent branches share serialized plan advancement and the same
 encoded input owner.

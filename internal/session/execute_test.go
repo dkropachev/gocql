@@ -13,6 +13,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/metrics"
 	"github.com/scylladb/gocql/v2/retry"
 
 	"context"
@@ -107,7 +108,7 @@ func (p *runtimePolicy) Observe(routing.AttemptEvent) { p.events.Add(1) }
 
 type runtimeSpeculation struct{}
 
-func (runtimeSpeculation) Delay(attempt int, _ routing.MetricsSnapshot) (time.Duration, bool) {
+func (runtimeSpeculation) Delay(attempt int, _ metrics.Snapshot) (time.Duration, bool) {
 	return time.Millisecond, attempt == 1
 }
 func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Duration) {

@@ -37,6 +37,7 @@ func TestPublicMethodDocumentation(t *testing.T) {
 		{"github.com/scylladb/gocql/v2.PrepareOptions.HostID", "HostID"},
 		{"github.com/scylladb/gocql/v2.StreamOptions.Incremental", "Incremental"},
 		{"github.com/scylladb/gocql/v2.Observer", "ObserveRequest"},
+		{"github.com/scylladb/gocql/v2/metrics.Snapshot", "Requests"},
 		{"github.com/scylladb/gocql/v2/cql.Statement.Rows", "Rows"},
 		{"github.com/scylladb/gocql/v2/cql.StreamStatement.Rows", "Rows"},
 		{"github.com/scylladb/gocql/v2/cql.Statement.BindMarkers", "BindMarkers"},

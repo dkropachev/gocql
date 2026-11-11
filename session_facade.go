@@ -10,7 +10,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/metadata"
-	"github.com/scylladb/gocql/v2/routing"
+	"github.com/scylladb/gocql/v2/metrics"
 )
 
 // Session owns cluster metadata, pooled connections and typed executions.
@@ -159,8 +159,8 @@ func (s *Session[D]) Closed() bool { return s.internal().Closed() }
 // Metadata returns the current immutable cluster metadata snapshot.
 func (s *Session[D]) Metadata() *metadata.Snapshot { return s.internal().Metadata() }
 
-// Metrics returns the session's current metrics snapshot.
-func (s *Session[D]) Metrics() routing.MetricsSnapshot { return s.internal().Metrics() }
+// Metrics returns a copy of the session's counters; see package metrics.
+func (s *Session[D]) Metrics() metrics.Snapshot { return s.internal().Metrics() }
 
 // RefreshMetadata waits for a shared topology refresh under ctx. The queries
 // performing that refresh use the configured metadata timeout.

@@ -9,6 +9,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/metrics"
 	"github.com/scylladb/gocql/v2/retry"
 )
 
@@ -63,7 +64,7 @@ func InternalValidConsistency(c cqltype.Consistency) bool {
 }
 
 type SpeculationPolicy interface {
-	Delay(attempt int, metrics routing.MetricsSnapshot) (time.Duration, bool)
+	Delay(attempt int, metrics metrics.Snapshot) (time.Duration, bool)
 }
 
 type Observer interface {

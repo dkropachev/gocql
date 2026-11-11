@@ -14,8 +14,8 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/metrics"
 	"github.com/scylladb/gocql/v2/retry"
 )
 
@@ -66,7 +66,7 @@ func (p *recordingRetry) Decide(a retry.Attempt) retry.Decision {
 // launching speculative attempts.
 type neverSpeculate struct{}
 
-func (neverSpeculate) Delay(int, routing.MetricsSnapshot) (time.Duration, bool) { return 0, false }
+func (neverSpeculate) Delay(int, metrics.Snapshot) (time.Duration, bool) { return 0, false }
 
 func TestExecutionStatusAggregation(t *testing.T) {
 	t.Run("Direct", func(t *testing.T) { testExecutionStatusAggregation(t, false) })

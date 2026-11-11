@@ -42,12 +42,13 @@ import (
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
+	"github.com/scylladb/gocql/v2/metrics"
 	"github.com/scylladb/gocql/v2/retry"
 )
 
 type countSpeculation struct{ calls atomic.Int32 }
 
-func (p *countSpeculation) Delay(int, routing.MetricsSnapshot) (time.Duration, bool) {
+func (p *countSpeculation) Delay(int, metrics.Snapshot) (time.Duration, bool) {
 	p.calls.Add(1)
 	return 0, false
 }

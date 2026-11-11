@@ -1304,7 +1304,7 @@ type RoutingPolicy interface {
     Plan(RoutingInfo, *MetadataSnapshot) QueryPlan
     Observe(AttemptEvent)
 }
-type SpeculationPolicy interface { Delay(attempt int, metrics MetricsSnapshot) (time.Duration, bool) }
+type SpeculationPolicy interface { Delay(attempt int, metrics metrics.Snapshot) (time.Duration, bool) }
 type Observer interface { ObserveRequest(RequestEvent); ObserveAttempt(AttemptEvent) }
 type RequestEvent struct {
     ID uint64
@@ -1433,7 +1433,7 @@ losers, for each configured observer. When no observer is configured, skip event
 construction, batch-statement arrays and diagnostic formatting. Required policy
 Observe feedback, metrics and Result accounting still run. Latency percentile
 snapshots are maintained outside individual request completion; disabled
-speculation does not fetch a MetricsSnapshot or create a scheduler/timer. Row
+speculation does not fetch a metrics.Snapshot or create a scheduler/timer. Row
 cardinality is separate from successful server execution. Trace
 IDs/warnings are preserved per response; Result aggregates across consumed
 pages. Tracing lookup uses typed internal queries and context-bounded readiness
@@ -1468,7 +1468,7 @@ func (s *Session) Metadata() *MetadataSnapshot
 func (s *Session) RefreshMetadata(context.Context) error
 func (s *Session) AwaitSchemaAgreement(context.Context) error
 func (s *Session) Subscribe(EventFilter) (*Subscription, error)
-func (s *Session) Metrics() MetricsSnapshot
+func (s *Session) Metrics() metrics.Snapshot // package metrics: session-wide counters
 func (s *Session) Trace(context.Context, UUID) (TraceInfo, error)
 func (s *Session) Close() error
 func (s *Session) Closed() bool

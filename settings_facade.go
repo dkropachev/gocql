@@ -9,6 +9,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/metrics"
 	"github.com/scylladb/gocql/v2/retry"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -55,8 +56,10 @@ type RequestEvent = implSettings.RequestEvent
 type SimpleConvictionPolicy = implSettings.SimpleConvictionPolicy
 
 // SpeculationPolicy schedules additional attempts of eligible executions.
+// Delay receives the attempt number and the session's counters, as
+// Session.Metrics returns them.
 type SpeculationPolicy interface {
-	Delay(attempt int, metrics routing.MetricsSnapshot) (time.Duration, bool)
+	Delay(attempt int, metrics metrics.Snapshot) (time.Duration, bool)
 }
 
 func internalProfile(p Profile) implSettings.Profile {

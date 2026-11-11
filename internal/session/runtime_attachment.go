@@ -7,8 +7,8 @@ import (
 	"context"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/metrics"
 )
 
 func (rt *InternalSessionRuntime) StopPrepared() implCluster.InternalExecutionWaiter {
@@ -65,7 +65,7 @@ func (d queryDrain) Wait() {
 	}
 	d.runtime.waitPooled()
 }
-func (rt *InternalSessionRuntime) MetricsSnapshot() routing.MetricsSnapshot {
+func (rt *InternalSessionRuntime) MetricsSnapshot() metrics.Snapshot {
 	return rt.metricsSnapshot()
 }
 func (rt *InternalSessionRuntime) Profile() *settings.Profile      { return rt.InternalProfile }

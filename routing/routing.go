@@ -22,7 +22,6 @@ type (
 	TokenPartitioner = implRouting.TokenPartitioner
 	TokenRange       = implRouting.TokenRange
 	HostSnapshot     = implModel.HostSnapshot
-	MetricsSnapshot  = implRouting.MetricsSnapshot
 )
 
 const AnyShard = implRouting.AnyShard
