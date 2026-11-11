@@ -81,9 +81,8 @@ the caller; `RunPage` resumes from a saved `PageState` for explicit paging, and
 `RunUnpaged` requests one unpaged response.
 
 `session.UnpreparedExec`, `session.UnpreparedOne`, and `session.UnpreparedEach`
-handle occasional CQL text executions without leaving a query to close. Repeated unprepared execution
-uses `session.UnpreparedQuery(statement, options)`, which creates the same kind
-of query for a statement sent as CQL text on every execution. Each call copies its parameters during admission. A call while
+handle occasional CQL text executions without leaving a query to close; prepare
+a statement that runs repeatedly. Each call copies its parameters during admission. A call while
 a `Rows`, `Page` or stream of the query is open, or while another goroutine's
 call runs, returns `ErrBusy`; a call after an execution that already returned
 waits until that execution's accepted writes drain. `query.Close()`
@@ -101,9 +100,8 @@ borrow their pages.
 
 `session.PrepareStream(ctx, cql.StreamStatement[P, R]{CQL: text, Params: params, Rows: decoder})`
 prepares directly for caller-storage decoding. Share its immutable handle and
-create a query per worker with `prepared.Query(options)`. An ordinary buffered
-preparation also supports `prepared.StreamQuery(decoder, options)` to use both
-decoding modes. Both decode into seeded caller storage. It buffers each page on
+create a query per worker with `prepared.Query(options)`. The query decodes into
+seeded caller storage. It buffers each page on
 normal multiplexed connections by default. `StreamOptions{Incremental: true}`
 selects bounded incremental receive with an exclusive connection reservation. Read the
 [streaming guide](docs/source/statements/streaming.md) and run the complete

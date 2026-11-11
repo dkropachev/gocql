@@ -92,12 +92,7 @@ func benchConfig(d endpoint.Dialer) gocql.Config {
 	return c
 }
 func benchExec(ctx context.Context, s *gocql.Session, text string) error {
-	b, e := s.UnpreparedQuery(cql.Command(text), gocql.Options{})
-	if e != nil {
-		return e
-	}
-	defer b.Close()
-	_, e = b.Exec(ctx, cql.EmptyParams{})
+	_, e := s.UnpreparedExec(ctx, cql.Command(text), cql.EmptyParams{})
 	return e
 }
 func InitializeCluster(ctx context.Context, s *gocql.Session) error {

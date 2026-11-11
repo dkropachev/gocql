@@ -241,15 +241,15 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		prepared, err := f.session.Prepare(ctx, cql.Statement[int32, cql.DynamicRow]{
-			Kind: cql.OrdinaryStatement, CQL: "SELECT bucket, id, name, blob, big, maybe, scores, createdat, updatedat FROM " + f.table + " WHERE bucket = ?",
-			Params: cql.OneParam(cql.Int32Codec), Rows: cql.DynamicRows,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
 		for _, decoder := range []cql.StreamRowDecoder[mapped.StreamEvent]{cql.MustStreamRowOf[mapped.StreamEvent](), codecTestMust(codec.ReflectStreamRow[mapped.StreamEvent]())} {
-			q, err := prepared.StreamQuery(decoder, gocql.StreamOptions{})
+			prepared, err := f.session.PrepareStream(ctx, cql.StreamStatement[int32, mapped.StreamEvent]{
+				Kind: cql.OrdinaryStatement, CQL: "SELECT bucket, id, name, blob, big, maybe, scores, createdat, updatedat FROM " + f.table + " WHERE bucket = ?",
+				Params: cql.OneParam(cql.Int32Codec), Rows: decoder,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			q, err := prepared.Query(gocql.StreamOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -576,7 +576,7 @@ func TestStructMapping(t *testing.T) {
 	})
 
 	// Row streams decode into a struct through StreamRowOf, buffered and
-	// incremental, prepared and unprepared.
+	// incremental.
 	t.Run("Stream", func(t *testing.T) {
 		ctx, f := newSMFixture(t)
 		insert := f.insert(t, ctx)
@@ -589,8 +589,8 @@ func TestStructMapping(t *testing.T) {
 			}
 		}
 		const query = "SELECT bucket, id, name, blob, big, maybe, scores, span, createdat, updatedat FROM "
-		read, err := f.session.Prepare(ctx, cql.Statement[int32, cql.DynamicRow]{
-			Kind: cql.OrdinaryStatement, CQL: query + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.DynamicRows,
+		read, err := f.session.PrepareStream(ctx, cql.StreamStatement[int32, smStream]{
+			Kind: cql.OrdinaryStatement, CQL: query + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.MustStreamRowOf[smStream](),
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -618,7 +618,7 @@ func TestStructMapping(t *testing.T) {
 		frameCompressed := *flagProto < 5 && fixtureCompressed()
 		for _, incremental := range []bool{false, true} {
 			options := gocql.StreamOptions{Incremental: incremental, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}
-			q, err := read.StreamQuery(cql.MustStreamRowOf[smStream](), options)
+			q, err := read.Query(options)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -639,22 +639,6 @@ func TestStructMapping(t *testing.T) {
 			check(t, stream)
 			q.Close()
 			if err := q.Wait(ctx); err != nil {
-				t.Fatal(err)
-			}
-			u, err := f.session.UnpreparedStreamQuery(cql.StreamStatement[int32, smStream]{
-				Kind: cql.OrdinaryStatement, CQL: query + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32Codec),
-				BindMarkers: read.Parameters(), Rows: cql.MustStreamRowOf[smStream](),
-			}, options)
-			if err != nil {
-				t.Fatal(err)
-			}
-			stream, err = u.Run(ctx, 9)
-			if err != nil {
-				t.Fatal(err)
-			}
-			check(t, stream)
-			u.Close()
-			if err := u.Wait(ctx); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -730,41 +714,31 @@ func TestStructMapping(t *testing.T) {
 		requireRecord(t, full, want)
 	})
 
-	// Unprepared queries bind struct fields by the bind marker names given.
+	// Unprepared calls bind struct fields by the bind marker names given.
 	t.Run("Unprepared", func(t *testing.T) {
 		ctx, f := newSMFixture(t)
 		prepared := f.insert(t, ctx) // for the bind marker metadata
-		insert, err := f.session.UnpreparedQuery(cql.Statement[smRecord, cql.EmptyRow]{
+		r := smRecordAt(8, 0)
+		if _, err := f.session.UnpreparedExec(ctx, cql.Statement[smRecord, cql.EmptyRow]{
 			Kind:        cql.OrdinaryStatement,
 			CQL:         "INSERT INTO " + f.table + " (" + smColumns + ") VALUES (?" + repeatMarkers(21) + ")",
 			Params:      cql.MustParamsOf(smAttrs),
 			BindMarkers: prepared.Parameters(),
-		}, gocql.Options{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer insert.Close()
-		r := smRecordAt(8, 0)
-		if _, err := insert.Exec(ctx, r); err != nil {
+		}, r); err != nil {
 			t.Fatal(err)
 		}
 		keyMarkers := cql.NewColumns(
 			cql.ColumnSpec{Name: "bucket", Type: cql.IntType},
 			cql.ColumnSpec{Name: "id", Type: cql.UUIDType},
 		)
-		read, err := f.session.UnpreparedQuery(cql.Statement[smKey, smRecord]{
+		var got smRecord
+		if ok, _, err := f.session.UnpreparedOne(ctx, cql.Statement[smKey, smRecord]{
 			Kind:        cql.OrdinaryStatement,
 			CQL:         "SELECT " + smColumns + " FROM " + f.table + " WHERE bucket = ? AND id = ?",
 			Params:      cql.MustParamsOf[smKey](),
 			Rows:        cql.MustRowOf(smAttrs),
 			BindMarkers: keyMarkers,
-		}, gocql.Options{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer read.Close()
-		var got smRecord
-		if ok, _, err := read.One(ctx, smKey{Bucket: 8, ID: r.ID}, &got); err != nil || !ok {
+		}, smKey{Bucket: 8, ID: r.ID}, &got); err != nil || !ok {
 			t.Fatal(ok, err)
 		}
 		requireRecord(t, got, r)

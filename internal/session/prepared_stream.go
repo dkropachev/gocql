@@ -71,7 +71,7 @@ func (p *PreparedStream[P, R]) Query(options StreamOptions) (*StreamQuery[P, R],
 	if p == nil || p.prepared == nil {
 		return nil, cqltype.TypeValidation("prepared stream", "nil handle")
 	}
-	q, err := p.prepared.StreamQuery(p.decoder, options)
+	q, err := newStreamQuery(p.prepared, p.decoder, options)
 	if err != nil {
 		return nil, err
 	}

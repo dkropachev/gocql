@@ -56,25 +56,6 @@ func (s *Session) CompileOptions(options Options) (CompiledOptions, error) {
 	return CompiledOptions(o), err
 }
 
-// UnpreparedQuery creates a reusable query that sends CQL text on every call.
-// statement.BindMarkers must describe its parameters. Close the query when its
-// worker is done; use UnpreparedExec, UnpreparedOne or UnpreparedEach for an
-// occasional statement whose execution does not need a cursor.
-func (s *Session) UnpreparedQuery[P, R any](statement cql.Statement[P, R], options Options) (*Query[P, R], error) {
-	q, err := s.internal().UnpreparedQuery(internalStatement(statement), internalOptions(options))
-	return (*Query[P, R])(q), err
-}
-
-// UnpreparedStreamQuery creates a reusable query decoding into seeded caller
-// storage. statement.BindMarkers describes its parameters and statement.Rows
-// describes its streamed rows. Page buffering is the default. Set options.Incremental to
-// reserve a connection for bounded incremental receive. Close both the returned
-// query and each cursor. Prefer Prepare for frequently repeated statements.
-func (s *Session) UnpreparedStreamQuery[P, R any](statement cql.StreamStatement[P, R], options StreamOptions) (*StreamQuery[P, R], error) {
-	q, err := s.internal().UnpreparedStreamQuery(internalStreamStatement(statement), internalStreamOptions(options))
-	return (*StreamQuery[P, R])(q), err
-}
-
 // UnpreparedExec executes an occasional statement without preparing it or
 // leaving a query to close. It must return no result columns. Parameters are
 // described by statement.BindMarkers. At most one CompiledOptions may be passed.

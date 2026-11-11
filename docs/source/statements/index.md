@@ -25,11 +25,12 @@ For manual cursor lifetimes, explicit paging, or a worker that runs one
 statement repeatedly and benefits from skipping the pool hand-off, create one query per worker
 with `prepared.Query(options)`; it has the same `Exec`, `One` and `Each` plus
 `Run`, `RunPage` and `RunUnpaged`.
-`session.UnpreparedQuery(statement, options)` runs a statement without preparing it and takes the parameter columns from `Statement.BindMarkers`. `prepared.StreamQuery(decoder, options)` uses a streaming decoder with page buffering by
-default; set `StreamOptions.Incremental` for bounded incremental receive. For
-stream-only statements, use `session.PrepareStream` with a
-`cql.StreamStatement[P,R]` and call `prepared.Query(streamOptions)`; this checks
-the streaming decoder directly without requiring a buffered row mapping.
+The `session.Unprepared*` calls run a statement without preparing it and take the
+parameter columns from `Statement.BindMarkers`. To decode into caller storage,
+use `session.PrepareStream` with a `cql.StreamStatement[P,R]` and call
+`prepared.Query(streamOptions)`; this checks the streaming decoder directly
+without requiring a buffered row mapping. It buffers pages by default; set
+`StreamOptions.Incremental` for bounded incremental receive.
 Queries reject overlap (an open handle, or another goroutine's call) with
 `ErrBusy`, wait for an execution that already returned to drain, and own
 captured parameters through drain. `query.Close()` stops a query at once, and

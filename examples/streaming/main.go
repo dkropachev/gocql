@@ -146,12 +146,7 @@ func run() (resultErr error) {
 		return fmt.Errorf("invalid owned namespace %q", namespace)
 	}
 	execContext := func(operation context.Context, text string) error {
-		b, err := s.UnpreparedQuery(cql.Command(text), gocql.Options{})
-		if err != nil {
-			return err
-		}
-		defer b.Close()
-		_, err = b.Exec(operation, cql.EmptyParams{})
+		_, err := s.UnpreparedExec(operation, cql.Command(text), cql.EmptyParams{})
 		return err
 	}
 	exec := func(text string) error { return execContext(ctx, text) }

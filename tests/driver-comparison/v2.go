@@ -26,6 +26,7 @@ type v2Adapter struct {
 	mu            sync.Mutex
 	reads         [2]*g.Prepared[int32, row]
 	writes        [2]*g.Prepared[row, cql.EmptyRow]
+	streams       [2]*g.PreparedStream[int32, row]
 	lwt           *g.Prepared[lwtArgs, cql.CASResult[int32]]
 	lwtRead       *g.Prepared[int32, int32]
 	metadata      g.Options         // includes result metadata, as master's writes request
@@ -89,12 +90,7 @@ func connect(hosts []string) (adapter, error) {
 }
 func (a *v2Adapter) Close() error { return a.s.Close() }
 func (a *v2Adapter) Exec(ctx context.Context, q string) error {
-	b, e := a.s.UnpreparedQuery(cql.Statement[cql.EmptyParams, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: q, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, g.Options{})
-	if e != nil {
-		return e
-	}
-	defer b.Close()
-	_, e = b.Exec(ctx, cql.EmptyParams{})
+	_, e := a.s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: q, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyParams{})
 	return e
 }
 func (a *v2Adapter) Evidence() any {
@@ -159,6 +155,24 @@ func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[r
 	return a.reads[idx], a.writes[idx], nil
 }
 
+// preparedStream prepares the read for caller-storage streaming once.
+func (a *v2Adapter) preparedStream(paged bool) (*g.PreparedStream[int32, row], error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	idx, rd := 0, pointRead
+	if paged {
+		idx, rd = 1, pageRead
+	}
+	if a.streams[idx] == nil {
+		p, e := a.s.PrepareStream(context.Background(), cql.StreamStatement[int32, row]{Kind: cql.OrdinaryStatement, CQL: rd, Params: keyParams, Rows: streamDecoder}, g.PrepareOptions{})
+		if e != nil {
+			return nil, e
+		}
+		a.streams[idx] = p
+	}
+	return a.streams[idx], nil
+}
+
 func (a *v2Adapter) Worker(paged, stream bool) (worker, error) {
 	read, write, e := a.prepared(paged)
 	if e != nil {
@@ -177,7 +191,13 @@ func (a *v2Adapter) Worker(paged, stream bool) (worker, error) {
 		readQuery.Close()
 		return nil, e
 	}
-	streamQuery, e := read.StreamQuery(streamDecoder, g.StreamOptions{Incremental: *incremental})
+	readStream, e := a.preparedStream(paged)
+	if e != nil {
+		readQuery.Close()
+		writeQuery.Close()
+		return nil, e
+	}
+	streamQuery, e := readStream.Query(g.StreamOptions{Incremental: *incremental})
 	if e != nil {
 		readQuery.Close()
 		writeQuery.Close()

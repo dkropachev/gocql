@@ -45,21 +45,17 @@ func Example_dynamicColumns() {
 		log.Fatal(err)
 	}
 	defer s.Close()
-	b, err := s.UnpreparedQuery(cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT * FROM example.table1", Rows: cql.DynamicRows}, gocql.Options{})
+	p, err := s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT * FROM example.table1", Rows: cql.DynamicRows})
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer b.Close()
-	rows, err := b.Run(ctx, cql.EmptyParams{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer rows.Close()
+	fmt.Println(p.Columns())
 	var row cql.DynamicRow
-	for rows.NextInto(&row) {
-		fmt.Println(rows.Columns(), row)
-	}
-	if err := rows.Err(); err != nil {
+	_, err = p.Each(ctx, cql.EmptyParams{}, &row, func(row *cql.DynamicRow) error {
+		fmt.Println(*row)
+		return nil
+	})
+	if err != nil {
 		log.Fatal(err)
 	}
 }

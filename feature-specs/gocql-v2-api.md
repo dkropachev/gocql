@@ -566,8 +566,8 @@ method on the type that owns it.
 | `NewConfig`, `NewProfile`, `NewClientRoutes`, `Connect` | keep | construct a value from nothing |
 | `OpenSingleHost` | keep | single-host sessions are a supported entry point |
 | `Prepare` | keep, also `Session.Prepare` | the method form is preferred |
-| `NewUnpreparedQuery`, `NewUnpreparedStreamQuery` | removed | `Session.UnpreparedQuery`, `Session.UnpreparedStreamQuery`; the `Unprepared` prefix keeps the slow path from being the obvious name |
-| `NewStreamQuery` | removed | `Prepared.StreamQuery[R]` declares the decoder's row type itself |
+| `NewUnpreparedQuery`, `NewUnpreparedStreamQuery` | removed | `Session.UnpreparedExec`, `UnpreparedOne` and `UnpreparedEach` run throwaway statements; repeated statements are prepared, and streaming is always prepared |
+| `NewStreamQuery` | removed | `Session.PrepareStream` then `PreparedStream.Query`; the stream statement declares the decoder's row type |
 | `CompileOptions` | moved to `Session.CompileOptions` | |
 | `Query.ExecBatch`, `Query.RunBatch` | moved to `Session.ExecBatch`, `Session.RunBatch[R]` | a batch is a session operation and need not include the query's statement |
 | `PageStateFromToken` | keep | `PageState` fields are private |
@@ -594,7 +594,6 @@ func (p *Prepared[P, R]) AddToBatch(*Batch, P) error
 
 // Worker-owned reusable queries.
 func (p *Prepared[P, R]) Query(Options) (*Query[P, R], error)
-func (s *Session) UnpreparedQuery[P, R any](Statement[P, R], Options) (*Query[P, R], error)
 func (s *Session) UnpreparedExec[P any](context.Context, Statement[P, EmptyRow], P, ...CompiledOptions) (Result, error)
 func (s *Session) UnpreparedOne[P, R any](context.Context, Statement[P, R], P, *R, ...CompiledOptions) (bool, Result, error)
 func (s *Session) UnpreparedEach[P, R any](context.Context, Statement[P, R], P, *R, func(*R) error, ...CompiledOptions) (Result, error)
@@ -606,7 +605,8 @@ func (q *Query[P, R]) RunPage(context.Context, P, PageState) (*Page[R], error)
 func (q *Query[P, R]) RunUnpaged(context.Context, P) (*Page[R], error)
 func (q *Query[P, R]) Routing(P) (RoutingInfo, error)
 func (q *Query[P, R]) AddToBatch(*Batch, P) error
-func (q *Query[P, R]) Close(context.Context) error // stop, then join the drain
+func (q *Query[P, R]) Close()                       // stop at once
+func (q *Query[P, R]) Wait(context.Context) error   // join the drain
 
 func (s *Session) ExecBatch(context.Context, BatchKind, *Batch, ...CompiledOptions) (Result, error)
 func (s *Session) RunBatch[R any](context.Context, BatchKind, *Batch, RowDecoder[R], ...CompiledOptions) (*Page[R], error)
@@ -616,9 +616,8 @@ Prepared.Exec, One and Each run on queries the prepared statement keeps in a
 lock-free pool, so they allocate no per-call execution state. A worker-owned
 Query skips that pool hand-off (about 2 to 4 percent of client CPU at 64
 workers on the loopback benchmark), resolves its Options once, and is the only
-form whose handles (Rows, Page) outlive the call. Session.UnpreparedQuery is
-the only reusable handle for statements that are not prepared, so Query keeps
-Exec, One and Each too. Both forms report results the same way. One detaches borrowed fields before
+form whose handles (Rows, Page) outlive the call; it keeps Exec, One and Each
+for workers that run one statement repeatedly. Both forms report results the same way. One detaches borrowed fields before
 releasing the response, preserving already-owned built-in destination buffers.
 Each lends borrowed fields only during its callback. Custom row/value decoders
 fall back to their recursive Clone contract when One detaches results.
@@ -630,7 +629,7 @@ The public immutable binding API and standalone binding-based execution
 functions have been removed. Input is copied during execution admission,
 including custom codec borrowed spans. Encoding records cell boundaries and
 computes routing from the same owned bytes; encoders are not called again for
-routing, retries, reprepare or paging. NewUnpreparedQuery takes parameter
+routing, retries, reprepare or paging. The Unprepared calls take parameter
 Columns from Statement.BindMarkers. Query options are captured at construction, including owned
 custom payload bytes; the selected profile is loaded per execution. Profile
 replacement never changes an active execution's retry or continuation options.
@@ -871,12 +870,11 @@ ownership and acceptance rules are in
 [gocql-v2-streaming-receive.md](gocql-v2-streaming-receive.md).
 
 ```go
-// B is the prepared buffered result type; R is the streaming destination type.
-func (p *Prepared[P, B]) StreamQuery[R any](StreamRowDecoder[R], StreamOptions) (*StreamQuery[P, R], error)
-// The streaming statement supplies Rows and unprepared BindMarkers.
-func (s *Session) UnpreparedStreamQuery[P, R any](StreamStatement[P, R], StreamOptions) (*StreamQuery[P, R], error)
+// Streaming is always prepared: Session.PrepareStream, then PreparedStream.Query.
+func (p *PreparedStream[P, R]) Query(StreamOptions) (*StreamQuery[P, R], error)
 func (q *StreamQuery[P, R]) Run(context.Context, P) (*RowStream[R], error)
-func (q *StreamQuery[P, R]) Close(context.Context) error
+func (q *StreamQuery[P, R]) Close()
+func (q *StreamQuery[P, R]) Wait(context.Context) error
 type RowStream[R any] struct { /* exclusive pull receiver, automatic paging */ }
 func (s *RowStream[R]) NextInto(*R) bool
 func (s *RowStream[R]) Err() error
@@ -1005,10 +1003,10 @@ Prepare validation, but is never invoked to decode a streaming response. Actual
 streaming response metadata selects this call's StreamRowPlan independently of
 the buffered plan; cache reuse is scoped to this decoder and exact metadata.
 NoRows still cannot be used to describe nonzero physical result columns.
-Applications using both modes can use an ordinary typed decoder at preparation
-and a separate StreamRow decoder for streaming storage. Stream-only applications
-use Session.PrepareStream with cql.StreamStatement[P,R] (CQL, Params, Rows as a
-StreamRowDecoder, BindMarkers for unprepared execution, Kind), returning an immutable PreparedStream[P,R]. Its
+Applications using both modes prepare the statement twice: Session.Prepare with
+an ordinary typed decoder, and Session.PrepareStream with a StreamRow decoder.
+Session.PrepareStream takes cql.StreamStatement[P,R] (CQL, Params, Rows as a
+StreamRowDecoder, Kind) and returns an immutable PreparedStream[P,R]. Its
 Query(StreamOptions) creates a worker-owned StreamQuery. Preparation validates
 the streaming plan against available metadata, deferring only absent conditional
 result metadata. No buffered decoder is needed. Query-local caches revalidate

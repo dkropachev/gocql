@@ -40,10 +40,9 @@
 // to 4 percent of client CPU at high concurrency), and it adds the executions
 // whose handles outlive the call: Run returns Rows to iterate with NextInto and
 // close, RunPage pages explicitly from a saved PageState, and RunUnpaged
-// requests one unpaged response. Session.UnpreparedQuery creates the same kind
-// of query for a statement sent as CQL text on every execution, without server
-// preparation. Session.UnpreparedExec, UnpreparedOne and UnpreparedEach run
-// occasional CQL text statements without a query to close. Parameters are
+// requests one unpaged response. Session.UnpreparedExec, UnpreparedOne and
+// UnpreparedEach run occasional CQL text statements without server preparation
+// and without a query to close; prepare a statement that runs repeatedly. Parameters are
 // copied during execution admission. A call while
 // a Rows, Page or RowStream of the query is open, or while another goroutine's
 // call runs, returns ErrBusy; a call after an execution that already returned
@@ -55,10 +54,9 @@
 // Session.ExecBatch and Session.RunBatch send it.
 //
 // Session.PrepareStream prepares a cql.StreamStatement directly for caller
-// storage; its shareable PreparedStream creates a StreamQuery per worker.
-// Prepared.StreamQuery and Session.UnpreparedStreamQuery also decode into seeded
-// caller storage and buffer one response page on normal multiplexed
-// connections by default. StreamOptions.Incremental opts into bounded
+// storage; its shareable PreparedStream creates a StreamQuery per worker. A
+// StreamQuery decodes into seeded caller storage and buffers one response page
+// on normal multiplexed connections by default. StreamOptions.Incremental opts into bounded
 // incremental receive through an exclusive connection reservation.
 // Page-buffered memory scales with concurrent response pages and is bounded by
 // configured frame and decompression limits. Borrowed result views expire on

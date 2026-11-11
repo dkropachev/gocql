@@ -65,16 +65,6 @@ func (p *Prepared[P, R]) Query(options Options) (*Query[P, R], error) {
 	return (*Query[P, R])(q), err
 }
 
-// StreamQuery creates a reusable query decoding into seeded caller storage.
-// Page buffering preserves normal connection multiplexing. Incremental receive
-// additionally bounds receive scratch and reserves one connection. Close both
-// the query and its execution cursor. Capacity failures may leave partial row
-// data; only a successful NextInto publishes a complete row.
-func (p *Prepared[P, B]) StreamQuery[R any](decoder cql.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
-	q, err := p.internal().StreamQuery(decoder, internalStreamOptions(options))
-	return (*StreamQuery[P, R])(q), err
-}
-
 // AddToBatch encodes value straight into storage batch owns. Calls on p are
 // concurrency-safe and take no pooled query, but appending to one batch
 // requires exclusive ownership of it.

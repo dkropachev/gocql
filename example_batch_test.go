@@ -79,20 +79,15 @@ func ExampleSession_ExecBatch() {
 	if _, err := session.ExecBatch(ctx, cql.UnloggedBatch, &batch, idempotent); err != nil {
 		log.Fatal(err)
 	}
-	selectAll, err := session.UnpreparedQuery(cql.Statement[cql.EmptyParams, item]{
+	var row item
+	_, err = session.UnpreparedEach(ctx, cql.Statement[cql.EmptyParams, item]{
 		CQL: "SELECT pk, ck, description FROM example.batches",
 		Rows: cql.Row(
 			cql.Column("pk", cql.Int32Codec, func(v *item) *int32 { return &v.PK }),
 			cql.Column("ck", cql.Int32Codec, func(v *item) *int32 { return &v.CK }),
 			cql.Column("description", cql.StringCodec, func(v *item) *string { return &v.Description }),
 		),
-	}, gocql.Options{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer selectAll.Close()
-	var row item
-	_, err = selectAll.Each(ctx, cql.EmptyParams{}, &row, func(v *item) error {
+	}, cql.EmptyParams{}, &row, func(v *item) error {
 		fmt.Println(v.PK, v.CK, v.Description)
 		return nil
 	})

@@ -26,7 +26,7 @@ Notation: `w.*` is per-worker state built before timing; `check` validates rows.
 |---|---|---|---|
 | A1 | `w.q.One(ctx, k, &out)` on a reused `Query` | MA1 | `w.q.Bind(k).WithContext(ctx).Scan(&k, &r, &p)` on a reused template |
 | A2 | `prepared.One(ctx, k, &out, opts)` | MA2 | `s.Query(pointRead, k).WithContext(ctx).Scan(...)`: a new query per operation |
-| A7 | `q := NewUnpreparedQuery(pointRead, k params); q.One(...); q.Close()` | MA2 | master always prepares DML |
+| A7 | `session.UnpreparedOne(ctx, pointRead, k, &dst)` | MA2 | master always prepares DML |
 | A3 | `w.q.Each(ctx, k, &out, check)` | MA3 | `it := w.q.Bind(k).WithContext(ctx).Iter(); for it.Scan(...) {check}; it.Close()` |
 | A4 | `rows := w.q.Run(ctx, k); for rows.NextInto(&out) {check}; rows.Close()` | MA3 | |
 | A5 | `rs := w.stream.Run(ctx, k); for rs.NextInto(&out) {check}; rs.Close(); w.stream.Wait(ctx)` | MA3 | |
@@ -62,7 +62,7 @@ a state ends the partition, and the worker moves to its next partition.
 |---|---|---|---|
 | D1 | `w.q.Exec(ctx, row)` on a reused `Query` | MD1 | `w.q.Bind(k, r, p).WithContext(ctx).Exec()` on a reused template |
 | D2 | `prepared.Exec(ctx, row, opts)` | MD2 | `s.Query(pointWrite, k, r, p).WithContext(ctx).Exec()` |
-| D4 | `q := NewUnpreparedQuery(pointWrite, row params); q.Exec(...); q.Close()` | MD2 | |
+| D4 | `session.UnpreparedExec(ctx, pointWrite, row, metadata)` | MD2 | |
 | D3 | `prepared.Exec(ctx, row, CompileOptions(session, {Idempotent, Timestamp: now}))`: a reused `Query` has fixed options, so per-operation timestamps need one-shot options | MD3 | MD1 with `Idempotent(true)` and `WithTimestamp(now)` |
 
 ## E. Batches, 64 workers (E1: 8; at 64, 32 KiB batches exceed Scylla's in-flight hint budget)

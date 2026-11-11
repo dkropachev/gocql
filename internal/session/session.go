@@ -56,23 +56,6 @@ func (s *Session) Prepare[P, R any](ctx context.Context, statement binding.State
 	return Prepare(ctx, s.Core(), statement, o)
 }
 
-// UnpreparedQuery returns a reusable query that sends statement's CQL text
-// to s on every execution, without server preparation. It compiles
-// parameters once against statement.BindMarkers and captures each
-// execution's input in query-owned storage, including values passed to
-// custom codecs. Prefer Prepare for statements that run often: a prepared
-// statement sends only its id and decodes rows with cached metadata.
-func (s *Session) UnpreparedQuery[P, R any](statement binding.Statement[P, R], options Options) (*Query[P, R], error) {
-	return unpreparedQuery(s.Core(), statement, options)
-}
-
-// UnpreparedStreamQuery returns a reusable query that sends statement's CQL
-// text to s on every execution, without server preparation. BindMarkers supplies
-// its parameter metadata and Rows decodes into caller-owned storage.
-func (s *Session) UnpreparedStreamQuery[P, R any](statement StreamStatement[P, R], options StreamOptions) (*StreamQuery[P, R], error) {
-	return unpreparedStreamQuery(s.Core(), statement, options)
-}
-
 // CompileOptions validates options and resolves them for s into CompiledOptions,
 // for one-shot executions; the zero Options gives the zero CompiledOptions. The
 // custom payload and the profile are copied, so later changes to options do

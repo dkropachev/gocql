@@ -689,12 +689,7 @@ func TestQuery(t *testing.T) {
 		defer session.Close()
 		namespace := fmt.Sprintf("gocql_query_%x", time.Now().UnixNano())
 		exec := func(ctx context.Context, stmt string) error {
-			q, err := session.UnpreparedQuery(cql.Command(stmt), gocql.Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 30 * time.Second}})
-			if err != nil {
-				return err
-			}
-			defer q.Close()
-			_, err = q.Exec(ctx, cql.EmptyParams{})
+			_, err := session.UnpreparedExec(ctx, cql.Command(stmt), cql.EmptyParams{})
 			return err
 		}
 		if err := exec(ctx, fmt.Sprintf("CREATE KEYSPACE %s WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':%d}", namespace, *flagRF)); err != nil {
@@ -713,24 +708,14 @@ func TestQuery(t *testing.T) {
 				return
 			}
 			typ := cql.TextType
-			query, err := session.UnpreparedQuery(cql.Statement[string, cql.Text]{Kind: cql.OrdinaryStatement, CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name=?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.TextCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "keyspace_name", Type: typ})}, gocql.Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
+			var keyspaceName string
+			found, _, err := session.UnpreparedOne(verify, cql.Statement[string, string]{Kind: cql.OrdinaryStatement, CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name=?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.StringCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "keyspace_name", Type: typ})}, namespace, &keyspaceName)
 			if err != nil {
 				t.Error(err)
 				return
 			}
-			defer query.Close()
-			rows, err := query.Run(verify, namespace)
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			defer rows.Close()
-			var keyspaceName cql.Text
-			if rows.NextInto(&keyspaceName) {
+			if found {
 				t.Error("owned namespace survived cleanup", namespace, dropErr)
-			}
-			if err := rows.Err(); err != nil {
-				t.Error(err)
 			}
 			if dropErr != nil {
 				t.Logf("drop verified after post-DDL error: %v", dropErr)
@@ -844,7 +829,8 @@ func TestQuery(t *testing.T) {
 		}
 		for _, incremental := range []bool{false, true} {
 			streamDecoder := cql.StreamRow(func(*record) {}, cql.StreamColumn("c", cql.StreamInt32, func(r *record) *int32 { return &r.C }), cql.StreamColumn("p", cql.StreamBlob, func(r *record) *[]byte { return &r.P }))
-			streamQuery := codecTestMust(read.StreamQuery(streamDecoder, gocql.StreamOptions{Incremental: incremental, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}))
+			readStream := codecTestMust(session.PrepareStream(ctx, cql.StreamStatement[int32, record]{Kind: cql.OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32Codec), Rows: streamDecoder}))
+			streamQuery := codecTestMust(readStream.Query(gocql.StreamOptions{Incremental: incremental, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}))
 			cursor, err := streamQuery.Run(ctx, int32(1))
 			if incremental && *flagProto < 5 && fixtureCompressed() {
 				if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {

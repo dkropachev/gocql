@@ -141,7 +141,11 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return c.check.done(want, errors.Join(err, rows.Err(), rows.Close()))
 		}, nil
 	case "A5", "B3", "B4", "B9":
-		sq, err := read.StreamQuery(streamDecoder, g.StreamOptions{Incremental: name == "B4" || name == "B9"})
+		readStream, err := a.preparedStream(paged)
+		if err != nil {
+			return nil, err
+		}
+		sq, err := readStream.Query(g.StreamOptions{Incremental: name == "B4" || name == "B9"})
 		if err != nil {
 			return nil, err
 		}
@@ -186,12 +190,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
 			c.check.reset(false, k, 0)
-			q, err := a.s.UnpreparedQuery(statement, g.Options{})
-			if err != nil {
-				return err
-			}
-			defer q.Close()
-			found, _, err := q.One(ctx, k, &c.out)
+			found, _, err := a.s.UnpreparedOne(ctx, statement, k, &c.out)
 			return c.found(found, err)
 		}, nil
 	case "C1":
@@ -244,12 +243,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		statement := cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: pointWrite, Params: rowParams, Rows: cql.EmptyRowDecoder, BindMarkers: rowColumns}
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
-			q, err := a.s.UnpreparedQuery(statement, a.metadata)
-			if err != nil {
-				return err
-			}
-			defer q.Close()
-			_, err = q.Exec(ctx, row{K: k, P: payload(false, k, 0)})
+			_, err := a.s.UnpreparedExec(ctx, statement, row{K: k, P: payload(false, k, 0)}, a.boundMetadata)
 			return err
 		}, nil
 	case "E1", "E2":

@@ -181,17 +181,6 @@ func newPreparedQuery[P, R any](p *Prepared[P, R], options CompiledOptions, pool
 	return q, nil
 }
 
-// unpreparedQuery compiles parameters once against statement.BindMarkers
-// and captures each execution's input in query-owned storage, including
-// values passed to custom codecs.
-func unpreparedQuery[P, R any](s *implCluster.Core, statement binding.Statement[P, R], values Options) (*Query[P, R], error) {
-	options, err := queryOptions(s, values)
-	if err != nil {
-		return nil, err
-	}
-	return newUnpreparedQuery(s, statement, options)
-}
-
 func newUnpreparedQuery[P, R any](s *implCluster.Core, statement binding.Statement[P, R], options CompiledOptions) (*Query[P, R], error) {
 	if err := binding.ValidateStatement(&statement); err != nil {
 		return nil, err

@@ -97,10 +97,6 @@ page state. Explicit paging is the pages column only.
 
 Update this list as each one is resolved.
 
-- `Session.UnpreparedQuery`: a reusable unprepared statement, outside the grid.
-  Remove it.
-- `Session.UnpreparedStreamQuery`: unprepared streaming. Remove it.
-- `Prepared.StreamQuery`: a second streaming entry point. Remove it.
 - `Query.All`, `Prepared.All` and `Session.UnpreparedAll` are missing from the
   many-rows range mode. They must benchmark as fast as `Each` before they ship.
 - `Prepared.Run` is missing from the shared pull mode.

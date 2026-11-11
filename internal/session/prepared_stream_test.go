@@ -26,11 +26,11 @@ func TestPreparedStream(t *testing.T) {
 			Params: codec.OneParam(codec.Int32),
 			Rows:   codec.StreamOneColumn(codec.StreamBlob),
 		}
-		if _, err := session.UnpreparedStreamQuery(statement, StreamOptions{}); err == nil {
+		if _, err := unpreparedStreamQuery(session.Core(), statement, StreamOptions{}); err == nil {
 			t.Fatal("missing bind metadata accepted")
 		}
 		statement.BindMarkers = cqltype.NewColumns(cqltype.ColumnSpec{Name: "k", Type: cqltype.IntType})
-		q := codecTestMust(session.UnpreparedStreamQuery(statement, StreamOptions{}))
+		q := codecTestMust(unpreparedStreamQuery(session.Core(), statement, StreamOptions{}))
 		defer q.Close()
 		served := make(chan struct{})
 		go func() {

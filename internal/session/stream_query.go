@@ -7,8 +7,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/scylladb/gocql/v2/internal/binding"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/transport"
 
@@ -41,9 +39,9 @@ type StreamQuery[P, R any] struct {
 	options StreamOptions
 }
 
-// StreamQuery returns a reusable query that runs prepared and streams each row
-// into decoder instead of prepared's buffered row decoder.
-func (prepared *Prepared[P, B]) StreamQuery[R any](decoder codec.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
+// newStreamQuery returns a reusable query that runs prepared and streams each
+// row into decoder instead of prepared's buffered row decoder.
+func newStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder codec.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
 	if prepared == nil || prepared.privateStorage.InternalState == nil {
 		return nil, cqltype.TypeValidation("prepared", "nil handle")
 	}
@@ -58,33 +56,6 @@ func (prepared *Prepared[P, B]) StreamQuery[R any](decoder codec.StreamRowDecode
 	}
 	p := &Prepared[P, codec.EmptyRecord]{privateStorage: PreparedStorage[P, codec.EmptyRecord]{InternalState: prepared.privateStorage.InternalState, kind: prepared.privateStorage.kind, params: prepared.privateStorage.params, rows: execRowsDecoder{}}}
 	q, err := p.Query(options.Options)
-	if err != nil {
-		return nil, err
-	}
-	// Streams hand their context to exclusive transport I/O; keep the
-	// standard per-execution context there.
-	q.state.execCtx = nil
-	return &StreamQuery[P, R]{query: q, decoder: decoder, options: options}, nil
-}
-
-// unpreparedStreamQuery uses the same owned input and receive-mode contract
-// for a streaming statement executed without server preparation.
-func unpreparedStreamQuery[P, R any](session *implCluster.Core, statement StreamStatement[P, R], options StreamOptions) (*StreamQuery[P, R], error) {
-	base := binding.Statement[P, codec.EmptyRecord]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: execRowsDecoder{}, BindMarkers: statement.BindMarkers}
-	if err := binding.ValidateStatement(&base); err != nil {
-		return nil, err
-	}
-	decoder := statement.Rows
-	if decoder == nil {
-		return nil, cqltype.TypeValidation("stream decoder", "nil decoder")
-	}
-	if _, err := transport.InternalCheckedStreamLimits(options.Limits); err != nil {
-		return nil, err
-	}
-	if v := options.Options; v.Prefetch.Set && v.Prefetch.Value != 0 {
-		return nil, cqltype.TypeValidation("stream prefetch", "must be zero")
-	}
-	q, err := unpreparedQuery(session, base, options.Options)
 	if err != nil {
 		return nil, err
 	}
