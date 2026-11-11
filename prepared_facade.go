@@ -14,9 +14,16 @@ import (
 
 // Prepared is an immutable typed statement prepared on a session. Share it
 // between goroutines and call Exec, One, Each or All for ordinary executions,
-// or Run or RunPage for a handle the caller closes. Each call may take one
-// CompiledOptions, built once by Session.CompileOptions, or omit options for
-// the session defaults. A Prepared has no Close obligation.
+// or Run or RunPage for a handle the caller closes. A Prepared has no Close
+// obligation.
+//
+// Each call ends in options ...CompiledOptions. The variadic is Go's form of
+// an optional parameter: omit it for the session defaults, as in
+// p.Exec(ctx, v), or pass exactly one value; a second fails the call with a
+// validation error. The options are CompiledOptions rather than Options
+// because these calls are the hot path: Session.CompileOptions validates,
+// copies and resolves the settings once at setup, and each call only passes
+// the frozen result.
 type Prepared[P, R any] implSession.Prepared[P, R]
 
 func (p *Prepared[P, R]) internal() *implSession.Prepared[P, R] {
