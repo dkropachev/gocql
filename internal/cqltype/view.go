@@ -97,32 +97,55 @@ func (b Bytes) CopyTo(dst []byte) (int, error) {
 	return b.chain.CopyTo(dst)
 }
 func (b Bytes) Clone() Bytes { return BorrowBytes(b.OwnedBytes()) }
+
+// OwnedBytes is Copy, panicking with Copy's error.
 func (b Bytes) OwnedBytes() []byte {
-	if err := b.checkAlive(); err != nil {
-		panic(err)
-	}
-	if b.Len() > int64(int(^uint(0)>>1)) {
-		panic(TypeValidation("bytes", "value exceeds maximum allocation size"))
-	}
-	dst := make([]byte, int(b.Len()))
-	if _, err := b.chain.CopyTo(dst); err != nil {
+	dst, err := b.Copy()
+	if err != nil {
 		panic(err)
 	}
 	return dst
 }
+
+// Copy returns an owned copy of the bytes, or ErrReleased once the view has
+// expired.
+func (b Bytes) Copy() ([]byte, error) {
+	if err := b.checkAlive(); err != nil {
+		return nil, err
+	}
+	if b.Len() > int64(int(^uint(0)>>1)) {
+		return nil, TypeValidation("bytes", "value exceeds maximum allocation size")
+	}
+	dst := make([]byte, int(b.Len()))
+	if _, err := b.chain.CopyTo(dst); err != nil {
+		return nil, err
+	}
+	return dst, nil
+}
 func (t Text) Bytes() Bytes { return t.bytes }
 func (t Text) Clone() Text  { return Text{bytes: t.bytes.Clone()} }
+
+// String is Copy, panicking with Copy's error.
 func (t Text) String() string {
-	if err := t.bytes.checkAlive(); err != nil {
+	s, err := t.Copy()
+	if err != nil {
 		panic(err)
 	}
+	return s
+}
+
+// Copy returns an owned string, or ErrReleased once the view has expired.
+func (t Text) Copy() (string, error) {
+	if err := t.bytes.checkAlive(); err != nil {
+		return "", err
+	}
 	if t.bytes.Len() > int64(int(^uint(0)>>1)) {
-		panic(TypeValidation("text", "value exceeds maximum allocation size"))
+		return "", TypeValidation("text", "value exceeds maximum allocation size")
 	}
 	var b strings.Builder
 	b.Grow(int(t.bytes.Len()))
 	if err := t.bytes.each(func(s wire.Span) error { _, err := b.Write(s.Bytes()); return err }); err != nil {
-		panic(err)
+		return "", err
 	}
-	return b.String()
+	return b.String(), nil
 }

@@ -50,6 +50,11 @@ func BorrowText(s string) (Text, error) { return cqltype.BorrowText(s) }
 
 // Bytes is an immutable view of response bytes. Cursor views expire on advancement or Close
 // unless a PageLease pins the page; One detaches them. Clone creates an owned copy.
+//
+// Clone and OwnedBytes panic with cqlerr.ErrReleased on an expired view; Copy is
+// the checked form and returns that error instead. Expiry detection is
+// best-effort: a release that races the check is not caught, so a view must
+// never be used after its page may have been released.
 type Bytes = cqltype.Bytes
 
 var BytesEncoder = codec.BytesEncoder
@@ -570,6 +575,11 @@ var ASCIIStringCodec = codec.ASCIIStringCodec
 
 // Text is a validated text view with the same lifetime as Bytes. String materializes
 // an owned string; cursor callers must do so before the view expires.
+//
+// String and Clone panic with cqlerr.ErrReleased on an expired view; Copy is the
+// checked form and returns that error instead. Detection is best-effort, as for
+// Bytes. fmt recovers panics from String, so printing an expired Text shows
+// %!v(PANIC=String method: ...) rather than failing.
 type Text = cqltype.Text
 
 var TextCodec = codec.TextCodec
