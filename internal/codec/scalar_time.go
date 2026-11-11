@@ -102,9 +102,6 @@ func encodeDuration(w *ValueWriter, v cqltype.Duration) error {
 	}
 	return nil
 }
-func writeSignedVInt(w *ValueWriter, v int64) error {
-	return scalarWriteUnsignedVInt(w, (uint64(v)<<1)^uint64(v>>63))
-}
 func scalarWriteUnsignedVInt(w *ValueWriter, v uint64) error {
 	if v < 128 {
 		return w.Uint8(uint8(v))

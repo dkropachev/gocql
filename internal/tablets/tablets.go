@@ -99,10 +99,6 @@ type TabletInfoBuilder struct {
 	LastToken    int64
 }
 
-func NewTabletInfoBuilder() TabletInfoBuilder {
-	return TabletInfoBuilder{}
-}
-
 type toString interface {
 	String() string
 }

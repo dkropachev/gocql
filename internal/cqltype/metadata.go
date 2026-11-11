@@ -107,13 +107,6 @@ func (t CollectionType) String() string {
 	}
 }
 
-func NewTupleType(n NativeType, elems ...TypeInfo) TupleTypeInfo {
-	return TupleTypeInfo{
-		NativeType: n,
-		Elems:      elems,
-	}
-}
-
 type TupleTypeInfo struct {
 	Elems []TypeInfo
 	NativeType

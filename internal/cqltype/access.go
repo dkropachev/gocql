@@ -22,7 +22,6 @@ func BytesLease(b Bytes) wire.Ref                      { return b.lease }
 func BytesView(c wire.Chain, l wire.Ref) Bytes         { return Bytes{chain: c, lease: l} }
 func TextView(b Bytes) Text                            { return Text{bytes: b} }
 func TextBytes(t Text) Bytes                           { return t.bytes }
-func NativeVersion(n NativeType) byte                  { return n.Version() }
 func NativeKind(n NativeType) Type                     { return n.Type() }
 func NativeCustom(n NativeType) string                 { return n.Custom() }
 func CheckBytesAlive(b Bytes) error                    { return b.checkAlive() }

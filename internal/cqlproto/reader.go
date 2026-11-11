@@ -89,25 +89,6 @@ func (r *Reader) ReadRawInt() int32 {
 	return int32(binary.BigEndian.Uint32(p))
 }
 
-// ReadRawBigInt reads a raw 8-byte big-endian int64 (no length prefix).
-func (r *Reader) ReadRawBigInt() int64 {
-	p := r.readN(8)
-	if p == nil {
-		return 0
-	}
-	return int64(binary.BigEndian.Uint64(p))
-}
-
-// ReadRawUUID reads a raw 16-byte UUID (no length prefix).
-func (r *Reader) ReadRawUUID() [16]byte {
-	var uuid [16]byte
-	p := r.readN(16)
-	if p != nil {
-		copy(uuid[:], p)
-	}
-	return uuid
-}
-
 // ReadBytes reads a [bytes] value: 4-byte length prefix followed by payload.
 // Returns nil for null values (length < 0).
 func (r *Reader) ReadBytes() []byte {

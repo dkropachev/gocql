@@ -337,14 +337,6 @@ func ValidateDataType(t DataType) error {
 	}
 	return nil
 }
-func validateColumns(c Columns) error {
-	for i, col := range c.columns {
-		if err := ValidateDataType(col.Type); err != nil {
-			return fmt.Errorf("column %d (%s): %w", i, col.Name, err)
-		}
-	}
-	return nil
-}
 func TypeValidation(field, format string, args ...any) error {
 	return &ValidationError{Field: field, Err: fmt.Errorf(format, args...)}
 }
