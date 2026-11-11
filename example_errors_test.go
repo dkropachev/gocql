@@ -25,22 +25,13 @@ func Example_errors() {
 		log.Fatal(err)
 	}
 	defer session.Close()
-	insertPrepared, err := session.Prepare(ctx, cql.Statement[string, cql.EmptyRow]{
+	insert, err := session.Prepare(ctx, cql.Statement[string, cql.EmptyRow]{
 		CQL:    "INSERT INTO example.log (line) VALUES (?)",
 		Params: cql.OneParam(cql.StringCodec),
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	insert, err := insertPrepared.Query(gocql.Options{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer func() {
-		if err := insert.Close(ctx); err != nil {
-			log.Print(err)
-		}
-	}()
 
 	_, err = insert.Exec(ctx, "hello")
 	switch cqlerr.ExecutionStatusOf(err) {

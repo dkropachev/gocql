@@ -47,6 +47,9 @@ func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...Co
 // fields are valid only until fn returns; clone any values kept beyond that
 // point. Returning StopIteration stops successfully; other callback errors stop iteration and are returned. Each is safe for concurrent
 // use with independent destinations. At most one CompiledOptions may be passed.
+// dst is decoded into for every row. With cql.ReuseBuffers, or a RowInto reset
+// that keeps slices, []byte fields reuse their capacity, so a slice kept from
+// one call of fn aliases the next row's data: keep bytes.Clone(row.Field).
 func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...CompiledOptions) (Result, error) {
 	o, err := internalCompiledOptions(options)
 	if err != nil {

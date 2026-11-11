@@ -11,7 +11,10 @@ most one `CompiledOptions` for that call: compile `Options` for the session once
 `session.CompileOptions(options)` and reuse the result, or pass none for the
 session default. They return once the execution has finished. `One` detaches borrowed fields
 before returning, so the row remains usable. `Each` lends borrowed fields only
-during the callback; copy or clone fields that escape it. Return
+during the callback; copy or clone fields that escape it. Every row is decoded
+into the same `dst`; with `cql.ReuseBuffers`, or a `RowInto` reset that keeps
+slices, `[]byte` fields reuse their capacity, so a slice kept from one row
+aliases the next row's data: keep `bytes.Clone(row.Field)`. Return
 `gocql.StopIteration` from the callback to finish successfully after enough rows.
 A single-error wrapper around StopIteration has the same effect; joined errors
 and other callback errors are returned and reported to observers as failures.

@@ -66,7 +66,10 @@ from `session.CompileOptions(options)`; none uses the session default. They retu
 only when the execution has finished. `One` detaches borrowed fields before
 returning, so its result remains valid.
 `Each` lends borrowed fields only until `fn` returns; clone any values retained
-by the callback. Return `gocql.StopIteration` to stop `Each` successfully; other
+by the callback. `Each` decodes every row into the same `dst`; with
+`cql.ReuseBuffers`, or a `RowInto` reset that keeps slices, `[]byte` fields
+reuse their capacity, so a slice kept from one row aliases the next row's data:
+keep `bytes.Clone(row.Field)`. Return `gocql.StopIteration` to stop `Each` successfully; other
 callback errors are returned and recorded as failures.
 
 `prepared.Query(options)` creates a reusable query owned by one worker; any

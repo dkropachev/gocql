@@ -102,6 +102,9 @@ func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Sta
 // across all pages. Borrowed fields are valid only during fn. Returning StopIteration
 // from fn stops successfully; other callback errors are returned. There is no query or cursor to close. Parameters are
 // described by statement.BindMarkers. At most one CompiledOptions may be passed.
+// dst is decoded into for every row. With cql.ReuseBuffers, or a RowInto reset
+// that keeps slices, []byte fields reuse their capacity, so a slice kept from
+// one call of fn aliases the next row's data: keep bytes.Clone(row.Field).
 func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...CompiledOptions) (Result, error) {
 	o, err := internalCompiledOptions(options)
 	if err != nil {

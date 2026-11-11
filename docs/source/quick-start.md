@@ -13,18 +13,25 @@ Import `github.com/scylladb/gocql/v2` (`gocql`) and
 
 Declare a `cql.Statement[P,R]` with `CQL`, `Params` and `Rows`.
 `session.Prepare(ctx, statement)` prepares it and validates its codecs
-against server metadata; `prepared.Query(options)` returns a worker-owned
-reusable query, and several queries can share one preparation. `query.One` reads one row, `query.Each` visits every row and
-`query.Run` returns typed rows: check `Rows.Err()` after iteration and close
-the rows. Use `query.Exec` for statements without results: their row type is
-`cql.EmptyRow`. A statement with no bind markers takes `cql.EmptyParams`. Leave
-`Params` or `Rows` nil for those empty types; `cql.Command(text)` builds a
-statement with neither, such as DDL. Parameters are copied on admission.
-`prepared.One`, `prepared.Each` and `prepared.Exec` run a prepared statement
-once from any goroutine without creating a query. A query call while a `Rows`
-of that query is open, or while another goroutine's call runs, returns
-`ErrBusy`. Close queries when finished with `query.Close(ctx)`, which also waits
-for transport writes and callbacks to drain.
+against server metadata. The prepared statement is safe to share between
+goroutines and needs no Close: `prepared.Exec` runs a statement without
+results, `prepared.One` reads one row and `prepared.Each` visits every row.
+A statement without results has the row type `cql.EmptyRow`; one with no bind
+markers takes `cql.EmptyParams`. Leave `Params` or `Rows` nil for those empty
+types; `cql.Command(text)` builds a statement with neither, such as DDL.
+Parameters are copied on admission.
+
+A worker that runs one statement many times can own a reusable query:
+`prepared.Query(options)` keeps parameter buffers and resolved options across
+executions, and several queries can share one preparation. A query has the
+same `Exec`, `One` and `Each`, plus `query.Run`, which returns typed rows:
+check `Rows.Err()` after iteration and close the rows. A query call while a
+`Rows` of that query is open, or while another goroutine's call runs, returns
+`ErrBusy`. Close the query when the worker finishes with `query.Close(ctx)`,
+which also waits for transport writes and callbacks to drain; give it its own
+bounded context, such as
+`context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)`, so a
+cancelled request context does not skip that wait.
 
 The repository's external-package `Example` and other `example_*_test.go` files
 compile against the normal public API. The complete `examples/streaming` command

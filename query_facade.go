@@ -37,6 +37,9 @@ func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, Result, e
 // Each visits every row across all pages, decoding into dst and calling fn.
 // Borrowed fields expire when fn returns. Return StopIteration to stop
 // successfully; any other callback error stops iteration and is returned. There is no execution cursor to close.
+// dst is decoded into for every row. With cql.ReuseBuffers, or a RowInto reset
+// that keeps slices, []byte fields reuse their capacity, so a slice kept from
+// one call of fn aliases the next row's data: keep bytes.Clone(row.Field).
 func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error) (Result, error) {
 	return q.internal().Each(ctx, value, dst, fn)
 }
