@@ -153,3 +153,25 @@ func TestPendingConflictKeepsDirty(t *testing.T) {
 		t.Fatal("dirty cleared while pending")
 	}
 }
+
+// Once the pending scope is cleared by the retry worker (delete, then
+// InternalSchemaReconciled.Add), the next attempt takes the locked path and
+// clears the dirty flag.
+func TestPendingConflictClearsDirtyAfterReconcile(t *testing.T) {
+	s := pendingConflictSession(t)
+	state := &InternalPreparedState{InternalSession: s, InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl"}}
+	if err := state.noteMetadataConflict(); err != nil {
+		t.Fatal(err)
+	}
+	p := s.Peripheral()
+	p.InternalMu.Lock()
+	delete(p.InternalPreparedRefreshScopes, "ks")
+	p.InternalMu.Unlock()
+	p.InternalSchemaReconciled.Add(1)
+	if err := state.reconcilePendingConflict(); err != nil {
+		t.Fatal(err)
+	}
+	if state.conflictDirty.Load() {
+		t.Fatal("dirty not cleared after the scope was reconciled")
+	}
+}

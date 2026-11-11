@@ -132,12 +132,12 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 		}
 	}
 	var page *InternalResponsePage
-	var dest *InternalResponsePage
 	if err == nil {
 		if headerErr := frm.CheckResponseHeader(head, c.InternalVersion, c.typedResponseExtensionFlags()); headerErr != nil {
 			err = headerErr
 		} else {
 			// The caller's storage may be used only while it still waits.
+			var dest *InternalResponsePage
 			if call.dest != nil && call.claim() {
 				dest = call.dest
 			}
@@ -147,7 +147,6 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 	if err != nil && owner != nil && page == nil {
 		owner.Release()
 		owner = nil
-		clearFailedDest(dest)
 	}
 	if !call.deliver(InternalCallResp{page: page, InternalErr: err, removedFromCalls: true}) {
 		if page != nil {
@@ -161,16 +160,6 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 		return err
 	}
 	return nil
-}
-
-// clearFailedDest empties the caller's claimed destination after a failed
-// parse, so it cannot keep pointing at the released lease.
-//
-//go:noinline
-func clearFailedDest(dest *InternalResponsePage) {
-	if dest != nil {
-		*dest = InternalResponsePage{}
-	}
 }
 
 func (c *Conn) InternalRecvLeasedSegment(ctx context.Context) error {
@@ -312,6 +301,7 @@ func (c *Conn) parseTypedResponseInto(head frm.FrameHeader, body wire.Chain, own
 	}
 	data, err := c.nativeProtocol().ParseTypedResponseInto(head, body, owner, &page.ResponseData)
 	if data == nil {
+		clearFailedDest(page)
 		return nil, err
 	}
 	return page, err
@@ -336,3 +326,9 @@ func (r *chainReader) Read(p []byte) (int, error) {
 	}
 	return part.CopyTo(p[:int(n)])
 }
+
+// clearFailedDest empties the page after a failed parse, so a caller's
+// destination cannot keep pointing at the lease the caller releases next.
+//
+//go:noinline
+func clearFailedDest(page *InternalResponsePage) { *page = InternalResponsePage{} }
