@@ -1539,18 +1539,24 @@ func (call *InternalCallReq) waitExecDone(where string) {
 	call.waitCallReqDone(where)
 }
 
-// removeCallIfOpen removes a call from c.calls only if exec() still owns its
-// cleanup. Once the connection has started closing, closeWithError() becomes
-// responsible for draining and recycling detached callReqs.
-func (c *Conn) InternalRemoveCallIfOpen(streamID int) bool {
+// InternalRemoveCallIfOpen removes call from c.calls only if exec() still owns
+// its cleanup and call is still the call registered for its stream. Removal is
+// by identity: the stream may already have been freed and reused by another
+// call, which must stay registered. Once the connection has started closing,
+// closeWithError() becomes responsible for draining and recycling detached
+// callReqs.
+func (c *Conn) InternalRemoveCallIfOpen(call *InternalCallReq) bool {
 	c.InternalMu.Lock()
 	defer c.InternalMu.Unlock()
 
 	if c.InternalClosed || c.InternalCalls == nil {
 		return false
 	}
+	if c.InternalCalls.Get(call.InternalStreamID) != call {
+		return false
+	}
 
-	return c.InternalCalls.Delete(streamID) != nil
+	return c.InternalCalls.Delete(call.InternalStreamID) != nil
 }
 
 type InternalCallResp struct {
@@ -1731,7 +1737,7 @@ func (c *Conn) execAdmitted(ctx context.Context, req protocol.FrameBuilder, trac
 		c.InternalReleaseWriteFramer(framer)
 
 		stopWaiting = true
-		if c.InternalRemoveCallIfOpen(call.InternalStreamID) {
+		if c.InternalRemoveCallIfOpen(call) {
 
 			releaseStream = true
 			recycleCall = true
@@ -1744,7 +1750,7 @@ func (c *Conn) execAdmitted(ctx context.Context, req protocol.FrameBuilder, trac
 			c.InternalReleaseWriteFramer(framer)
 
 			stopWaiting = true
-			if c.InternalRemoveCallIfOpen(call.InternalStreamID) {
+			if c.InternalRemoveCallIfOpen(call) {
 				releaseStream = true
 				recycleCall = true
 			}
@@ -1759,7 +1765,7 @@ func (c *Conn) execAdmitted(ctx context.Context, req protocol.FrameBuilder, trac
 		stopWaiting = true
 		if (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) && n == 0 {
 
-			if c.InternalRemoveCallIfOpen(call.InternalStreamID) {
+			if c.InternalRemoveCallIfOpen(call) {
 
 				releaseStream = true
 				recycleCall = true

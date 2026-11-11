@@ -149,3 +149,45 @@ func TestCall(t *testing.T) {
 		}
 	})
 }
+
+// A call whose stream was freed early and reused must not remove the new
+// call's registration when it cleans up by identity.
+func TestRemoveCallIfOpenIgnoresReusedStream(t *testing.T) {
+	c, _ := invPair(t, 4)
+	a := getCallReq(0)
+	a.typed = true
+	if err := c.allocCall(a); err != nil {
+		t.Fatal(err)
+	}
+	s := a.InternalStreamID
+	// Simulated early free: the reader deletes and frees the stream in one
+	// section (a spurious response for s).
+	c.InternalMu.Lock()
+	c.InternalCalls.Delete(s)
+	c.InternalStreams.Clear(s)
+	c.InternalMu.Unlock()
+	b := getCallReq(0)
+	b.typed = true
+	if err := c.allocCall(b); err != nil {
+		t.Fatal(err)
+	}
+	if b.InternalStreamID != s {
+		t.Fatalf("LIFO reuse expected, got %d vs %d", b.InternalStreamID, s)
+	}
+	if c.InternalRemoveCallIfOpen(a) {
+		t.Fatalf("removed a call that is no longer registered (stream %d)", s)
+	}
+	if c.InternalCalls.Get(s) != b {
+		t.Fatalf("stream %d: call B is no longer registered", s)
+	}
+	if got := c.InternalStreams.InUse(); got != 1 {
+		t.Fatalf("InUse = %d, want 1", got)
+	}
+	// Detach both calls so Close does not wait for an exec that never ran.
+	c.InternalMu.Lock()
+	c.InternalCalls.Delete(s)
+	c.InternalStreams.Clear(s)
+	c.InternalMu.Unlock()
+	putCallReq(a)
+	putCallReq(b)
+}
