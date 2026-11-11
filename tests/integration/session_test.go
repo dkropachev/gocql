@@ -35,6 +35,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"strings"
 	"sync"
@@ -512,34 +513,33 @@ func TestSession(t *testing.T) {
 			}
 
 			WithAddressTranslator := func(contactPoints []string) ([]string, func(*gocql.ConfigBuilder)) {
-				var toAddresses []net.IP
-				var fromAddresses []net.IP
+				// Advertise every node under a shifted address and translate it back.
+				toAddresses := map[netip.Addr]netip.Addr{}
+				knownAddresses := map[netip.Addr]bool{}
 				var clusterHosts []string
 				for _, host := range contactPoints {
-					ip := MustIP(host)
-
-					var fromAddress net.IP
-					if ip.To4().String() == ip.String() {
-						ip = ip.To4()
-						fromAddress = net.IPv4(ip[0], ip[1], ip[2]+1, ip[3])
+					ip := netip.MustParseAddr(host).Unmap()
+					var fromAddress netip.Addr
+					if ip.Is4() {
+						b := ip.As4()
+						b[2]++
+						fromAddress = netip.AddrFrom4(b)
 					} else {
-						fromAddress = net.IP{ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7], ip[8], ip[9], ip[10], ip[11], ip[12] + 1, ip[13], ip[14], ip[15]}
+						b := ip.As16()
+						b[12]++
+						fromAddress = netip.AddrFrom16(b)
 					}
-					toAddresses = append(toAddresses, ip)
-					fromAddresses = append(fromAddresses, fromAddress)
+					toAddresses[fromAddress] = ip
+					knownAddresses[ip] = true
 					clusterHosts = append(clusterHosts, fromAddress.String())
 				}
 
-				translator := endpoint.TranslatorFunc(func(_ endpoint.TranslatorHostInfo, addr endpoint.AddressPort) (endpoint.AddressPort, error) {
-					for id, host := range fromAddresses {
-						if host.Equal(addr.Address) {
-							return endpoint.AddressPort{Address: toAddresses[id], Port: addr.Port}, nil
-						}
+				translator := endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
+					if to, ok := toAddresses[addr.Addr()]; ok {
+						return netip.AddrPortFrom(to, addr.Port()), nil
 					}
-					for _, host := range toAddresses {
-						if host.Equal(addr.Address) {
-							return addr, nil
-						}
+					if knownAddresses[addr.Addr()] {
+						return addr, nil
 					}
 					panic("failed to translate address")
 				})

@@ -60,7 +60,7 @@ func testHost(t *testing.T, address net.Addr) *endpoint.HostInfo {
 		implEndpoint.HostInfoData(opaqueStorageValue).InternalHostId = cqltype.UUID{15: 1}
 		return opaqueStorageValue
 	}()
-	implEndpoint.InternalHostInfoSetTranslatedConnectionInfo(h, endpoint.InternalTranslatedAddresses{CQL: endpoint.AddressPort{Address: net.ParseIP(host), Port: uint16(addr.Port)}, ShardAware: endpoint.AddressPort{Address: net.ParseIP(host), Port: uint16(addr.Port)}, ShardAwareTLS: endpoint.AddressPort{Address: net.ParseIP(host), Port: uint16(addr.Port)}})
+	implEndpoint.InternalHostInfoSetTranslatedConnectionInfo(h, endpoint.InternalTranslatedAddresses{CQL: netip.AddrPortFrom(netip.MustParseAddr(host), uint16(addr.Port)), ShardAware: netip.AddrPortFrom(netip.MustParseAddr(host), uint16(addr.Port)), ShardAwareTLS: netip.AddrPortFrom(netip.MustParseAddr(host), uint16(addr.Port))})
 	return h
 }
 func codecTestMust2(a, b string, err error) (string, string) {

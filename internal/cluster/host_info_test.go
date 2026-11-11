@@ -26,6 +26,7 @@ package cluster
 
 import (
 	"net"
+	"net/netip"
 	"strings"
 	"testing"
 
@@ -38,210 +39,30 @@ import (
 func TestHostInfo(t *testing.T) {
 	t.Parallel()
 
-	t.Run("AddressPort", func(t *testing.T) {
+	t.Run("UsableAddrPort", func(t *testing.T) {
 		t.Parallel()
 
-		t.Run("IsValid", func(t *testing.T) {
-			t.Parallel()
+		tests := []struct {
+			name     string
+			addr     netip.AddrPort
+			expected bool
+		}{
+			{"valid IPv4 address with port", netip.MustParseAddrPort("127.0.0.1:9042"), true},
+			{"valid IPv6 address with port", netip.MustParseAddrPort("[::1]:9042"), true},
+			{"invalid address", netip.AddrPortFrom(netip.Addr{}, 9042), false},
+			{"unspecified IPv4 address", netip.MustParseAddrPort("0.0.0.0:9042"), false},
+			{"unspecified IPv6 address", netip.MustParseAddrPort("[::]:9042"), false},
+			{"zero port", netip.MustParseAddrPort("127.0.0.1:0"), false},
+			{"zero AddrPort", netip.AddrPort{}, false},
+		}
 
-			tests := []struct {
-				name     string
-				addr     endpoint.AddressPort
-				expected bool
-			}{
-				{
-					name:     "valid IPv4 address with port",
-					addr:     endpoint.AddressPort{Address: net.IPv4(127, 0, 0, 1), Port: 9042},
-					expected: true,
-				},
-				{
-					name:     "valid IPv6 address with port",
-					addr:     endpoint.AddressPort{Address: net.ParseIP("::1"), Port: 9042},
-					expected: true,
-				},
-				{
-					name:     "nil address",
-					addr:     endpoint.AddressPort{Address: nil, Port: 9042},
-					expected: false,
-				},
-				{
-					name:     "unspecified IPv4 address",
-					addr:     endpoint.AddressPort{Address: net.IPv4zero, Port: 9042},
-					expected: false,
-				},
-				{
-					name:     "unspecified IPv6 address",
-					addr:     endpoint.AddressPort{Address: net.IPv6unspecified, Port: 9042},
-					expected: false,
-				},
-				{
-					name:     "zero port",
-					addr:     endpoint.AddressPort{Address: net.IPv4(127, 0, 0, 1), Port: 0},
-					expected: false,
-				},
-				{
-					name:     "nil address and zero port",
-					addr:     endpoint.AddressPort{Address: nil, Port: 0},
-					expected: false,
-				},
-				{
-					name:     "empty AddressPort",
-					addr:     endpoint.AddressPort{},
-					expected: false,
-				},
-			}
-
-			for _, test := range tests {
-				t.Run(test.name, func(t *testing.T) {
-					result := test.addr.IsValid()
-					if result != test.expected {
-						t.Errorf("IsValid() = %v, expected %v for %+v", result, test.expected, test.addr)
-					}
-				})
-			}
-		})
-
-		t.Run("Equal", func(t *testing.T) {
-			t.Parallel()
-
-			addr1 := endpoint.AddressPort{Address: net.IPv4(127, 0, 0, 1), Port: 9042}
-			addr2 := endpoint.AddressPort{Address: net.IPv4(127, 0, 0, 1), Port: 9042}
-			addr3 := endpoint.AddressPort{Address: net.IPv4(192, 168, 1, 1), Port: 9042}
-			addr4 := endpoint.AddressPort{Address: net.IPv4(127, 0, 0, 1), Port: 9043}
-
-			tests := []struct {
-				name     string
-				a        endpoint.AddressPort
-				b        endpoint.AddressPort
-				expected bool
-			}{
-				{
-					name:     "equal addresses and ports",
-					a:        addr1,
-					b:        addr2,
-					expected: true,
-				},
-				{
-					name:     "different addresses, same port",
-					a:        addr1,
-					b:        addr3,
-					expected: false,
-				},
-				{
-					name:     "same address, different ports",
-					a:        addr1,
-					b:        addr4,
-					expected: false,
-				},
-				{
-					name:     "IPv6 addresses equal",
-					a:        endpoint.AddressPort{Address: net.ParseIP("::1"), Port: 9042},
-					b:        endpoint.AddressPort{Address: net.ParseIP("::1"), Port: 9042},
-					expected: true,
-				},
-				{
-					name:     "empty",
-					a:        endpoint.AddressPort{},
-					b:        endpoint.AddressPort{},
-					expected: true,
-				},
-				{
-					name:     "empty, non-empty",
-					a:        endpoint.AddressPort{},
-					b:        endpoint.AddressPort{Address: net.ParseIP("::1"), Port: 9042},
-					expected: false,
-				},
-			}
-
-			for _, test := range tests {
-				t.Run(test.name, func(t *testing.T) {
-					result := test.a.Equal(test.b)
-					if result != test.expected {
-						t.Errorf("Equal() = %v, expected %v for a=%+v, b=%+v", result, test.expected, test.a, test.b)
-					}
-				})
-			}
-		})
-
-		t.Run("String", func(t *testing.T) {
-			t.Parallel()
-
-			tests := []struct {
-				name     string
-				addr     endpoint.AddressPort
-				expected string
-			}{
-				{
-					name:     "IPv4 address",
-					addr:     endpoint.AddressPort{Address: net.IPv4(127, 0, 0, 1), Port: 9042},
-					expected: "127.0.0.1:9042",
-				},
-				{
-					name:     "IPv6 address",
-					addr:     endpoint.AddressPort{Address: net.ParseIP("::1"), Port: 9042},
-					expected: "::1:9042",
-				},
-				{
-					name:     "different port",
-					addr:     endpoint.AddressPort{Address: net.IPv4(192, 168, 1, 1), Port: 8080},
-					expected: "192.168.1.1:8080",
-				},
-				{
-					name:     "nil address",
-					addr:     endpoint.AddressPort{Address: nil, Port: 9042},
-					expected: "<nil>:9042",
-				},
-			}
-
-			for _, test := range tests {
-				t.Run(test.name, func(t *testing.T) {
-					result := test.addr.String()
-					if result != test.expected {
-						t.Errorf("String() = %q, expected %q", result, test.expected)
-					}
-				})
-			}
-		})
-
-		t.Run("ToNetAddr", func(t *testing.T) {
-			t.Parallel()
-
-			tests := []struct {
-				name     string
-				addr     endpoint.AddressPort
-				expected string
-			}{
-				{
-					name:     "IPv4 address",
-					addr:     endpoint.AddressPort{Address: net.IPv4(127, 0, 0, 1), Port: 9042},
-					expected: "127.0.0.1:9042",
-				},
-				{
-					name:     "IPv6 address",
-					addr:     endpoint.AddressPort{Address: net.ParseIP("::1"), Port: 9042},
-					expected: "[::1]:9042",
-				},
-				{
-					name:     "IPv6 address with zone",
-					addr:     endpoint.AddressPort{Address: net.ParseIP("fe80::1"), Port: 9043},
-					expected: "[fe80::1]:9043",
-				},
-				{
-					name:     "different port",
-					addr:     endpoint.AddressPort{Address: net.IPv4(192, 168, 1, 1), Port: 8080},
-					expected: "192.168.1.1:8080",
-				},
-			}
-
-			for _, test := range tests {
-				t.Run(test.name, func(t *testing.T) {
-					result := test.addr.ToNetAddr()
-					if result != test.expected {
-						t.Errorf("ToNetAddr() = %q, expected %q", result, test.expected)
-					}
-				})
-			}
-		})
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				if result := endpoint.InternalUsableAddrPort(test.addr); result != test.expected {
+					t.Errorf("InternalUsableAddrPort(%v) = %v, expected %v", test.addr, result, test.expected)
+				}
+			})
+		}
 	})
 
 	t.Run("Builder", func(t *testing.T) {
@@ -347,18 +168,9 @@ func TestHostInfo(t *testing.T) {
 				t.Parallel()
 
 				translatedAddrs := &endpoint.InternalTranslatedAddresses{
-					CQL: endpoint.AddressPort{
-						Address: net.IPv4(10, 0, 0, 1),
-						Port:    9042,
-					},
-					ShardAware: endpoint.AddressPort{
-						Address: net.IPv4(10, 0, 0, 2),
-						Port:    19042,
-					},
-					ShardAwareTLS: endpoint.AddressPort{
-						Address: net.IPv4(10, 0, 0, 3),
-						Port:    19043,
-					},
+					CQL:           netip.AddrPortFrom(netip.AddrFrom4([4]byte{10, 0, 0, 1}), 9042),
+					ShardAware:    netip.AddrPortFrom(netip.AddrFrom4([4]byte{10, 0, 0, 2}), 19042),
+					ShardAwareTLS: netip.AddrPortFrom(netip.AddrFrom4([4]byte{10, 0, 0, 3}), 19043),
 				}
 
 				builder := endpoint.HostInfoBuilder{
@@ -369,7 +181,7 @@ func TestHostInfo(t *testing.T) {
 				host := builder.Build()
 
 				// ConnectAddress should use translated CQL address
-				expectedAddr := translatedAddrs.CQL.Address
+				expectedAddr := net.IP(translatedAddrs.CQL.Addr().AsSlice())
 				if !host.ConnectAddress().Equal(expectedAddr) {
 					t.Errorf("ConnectAddress() = %v, expected %v", host.ConnectAddress(), expectedAddr)
 				}
@@ -430,10 +242,7 @@ func TestHostInfo(t *testing.T) {
 				t.Parallel()
 
 				translatedAddrs := &endpoint.InternalTranslatedAddresses{
-					CQL: endpoint.AddressPort{
-						Address: net.IPv4(10, 0, 0, 1),
-						Port:    9042,
-					},
+					CQL: netip.AddrPortFrom(netip.AddrFrom4([4]byte{10, 0, 0, 1}), 9042),
 				}
 
 				version := endpoint.InternalCassVersion{
@@ -517,8 +326,8 @@ func TestHostInfo(t *testing.T) {
 				}
 
 				// Verify ConnectAddress uses translated address
-				if !host.ConnectAddress().Equal(translatedAddrs.CQL.Address) {
-					t.Errorf("ConnectAddress() = %v, expected %v", host.ConnectAddress(), translatedAddrs.CQL.Address)
+				if !host.ConnectAddress().Equal(net.IP(translatedAddrs.CQL.Addr().AsSlice())) {
+					t.Errorf("ConnectAddress() = %v, expected %v", host.ConnectAddress(), net.IP(translatedAddrs.CQL.Addr().AsSlice()))
 				}
 			})
 

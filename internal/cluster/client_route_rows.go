@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net"
+	"net/netip"
 	"slices"
 	"strings"
 	"time"
@@ -176,7 +176,7 @@ func (p *ClientRoutesHandler) BindRoute(route InternalClientRoute) bool {
 	p.privateStorage.InternalRouteCache.routes[route.InternalHostID] = entry
 	return true
 }
-func (p *ClientRoutesHandler) resolveRoute(ctx context.Context, route InternalClientRoute) ([]implEndpoint.AddressPort, error) {
+func (p *ClientRoutesHandler) resolveRoute(ctx context.Context, route InternalClientRoute) ([]netip.AddrPort, error) {
 	if route.InternalPort == 0 {
 		return nil, cqltype.TypeValidation("client route", "missing required port")
 	}
@@ -188,10 +188,10 @@ func (p *ClientRoutesHandler) resolveRoute(ctx context.Context, route InternalCl
 	if err != nil {
 		return nil, err
 	}
-	var out []implEndpoint.AddressPort
+	var out []netip.AddrPort
 	for _, a := range addrs {
-		if ip := net.IP(a.Unmap().AsSlice()); implEndpoint.InternalValidIpAddr(ip) {
-			out = append(out, implEndpoint.AddressPort{Address: ip, Port: route.InternalPort})
+		if a = a.Unmap(); a.IsValid() && !a.IsUnspecified() {
+			out = append(out, netip.AddrPortFrom(a, route.InternalPort))
 		}
 	}
 	if len(out) == 0 {

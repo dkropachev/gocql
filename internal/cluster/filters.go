@@ -119,7 +119,7 @@ func WhiteListHostFilter(hosts ...string) (HostFilter, error) {
 		if implEndpoint.InternalValidIpAddr(implEndpoint.HostInfoData(host).InternalPreferredIP) && m[implEndpoint.HostInfoData(host).InternalPreferredIP.String()] {
 			return true
 		}
-		if implEndpoint.HostInfoData(host).InternalTranslatedAddresses != nil && implEndpoint.HostInfoData(host).InternalTranslatedAddresses.CQL.IsValid() && m[implEndpoint.HostInfoData(host).InternalTranslatedAddresses.CQL.Address.String()] {
+		if implEndpoint.HostInfoData(host).InternalTranslatedAddresses != nil && implEndpoint.InternalUsableAddrPort(implEndpoint.HostInfoData(host).InternalTranslatedAddresses.CQL) && m[implEndpoint.HostInfoData(host).InternalTranslatedAddresses.CQL.Addr().String()] {
 			return true
 		}
 		return false

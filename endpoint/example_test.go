@@ -10,6 +10,7 @@ import (
 	"net/netip"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/endpoint"
 )
 
 // preferIPv4 returns only the IPv4 addresses of a name when it has any, and
@@ -39,6 +40,29 @@ func (r preferIPv4) LookupNetIP(ctx context.Context, network, host string) ([]ne
 func ExampleResolver() {
 	config, err := gocql.NewConfig("db.example.com:9042").
 		WithResolver(preferIPv4{net.DefaultResolver}).
+		Build()
+	if err != nil {
+		log.Fatal(err)
+	}
+	_ = config
+}
+
+// ExampleTranslator dials nodes through their private addresses, kept in a
+// table keyed by the address each node advertises. Ports are preserved, so
+// CQL and shard-aware endpoints stay distinct.
+func ExampleTranslator() {
+	private := map[netip.Addr]netip.Addr{
+		netip.MustParseAddr("203.0.113.10"): netip.MustParseAddr("10.0.0.10"),
+		netip.MustParseAddr("203.0.113.11"): netip.MustParseAddr("10.0.0.11"),
+	}
+	translator := endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
+		if ip, ok := private[addr.Addr()]; ok {
+			return netip.AddrPortFrom(ip, addr.Port()), nil
+		}
+		return addr, nil
+	})
+	config, err := gocql.NewConfig("10.0.0.10:9042").
+		WithAddressTranslator(translator).
 		Build()
 	if err != nil {
 		log.Fatal(err)

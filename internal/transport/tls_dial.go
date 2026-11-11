@@ -207,8 +207,8 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 	address := net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(host.Port()))
 	logicalAddress := logicalV2TLSAddress(host)
 	translated := implEndpoint.InternalHostInfoGetTranslatedConnectionInfo(host)
-	if translated != nil && translated.CQL.IsValid() {
-		address = translated.CQL.ToNetAddr()
+	if translated != nil && implEndpoint.InternalUsableAddrPort(translated.CQL) {
+		address = translated.CQL.String()
 	}
 	target := implEndpoint.DialTarget{Host: snapshot, Network: "tcp", Address: address}
 	if d.InternalConfig.LocalAddress.IsValid() {
@@ -222,10 +222,10 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 		}
 		endpoint := ""
 		if translated != nil {
-			if tlsConfig != nil && translated.ShardAwareTLS.IsValid() {
-				endpoint = translated.ShardAwareTLS.ToNetAddr()
-			} else if tlsConfig == nil && translated.ShardAware.IsValid() {
-				endpoint = translated.ShardAware.ToNetAddr()
+			if tlsConfig != nil && implEndpoint.InternalUsableAddrPort(translated.ShardAwareTLS) {
+				endpoint = translated.ShardAwareTLS.String()
+			} else if tlsConfig == nil && implEndpoint.InternalUsableAddrPort(translated.ShardAware) {
+				endpoint = translated.ShardAware.String()
 			}
 		}
 		if endpoint != "" {

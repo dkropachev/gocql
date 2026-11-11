@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"slices"
 	"sync"
 
@@ -295,19 +296,19 @@ type ClientRoutesHandler struct {
 
 }
 
-// TranslateHost implements AddressTranslator.
+// Translate implements AddressTranslator.
 // It resolves DNS on every call rather than caching resolved addresses.
 // If the user provided a ConnectionAddr for the route's connectionID,
 // that address is used instead of the one from the system.client_routes table.
-func (p *ClientRoutesHandler) TranslateHost(host endpoint.AddressTranslatorHostInfo, addr endpoint.AddressPort) (endpoint.AddressPort, error) {
-	hostID := host.HostID()
-	if hostID == "" {
+func (p *ClientRoutesHandler) Translate(ctx context.Context, peer endpoint.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
+	if peer.HostID.IsEmpty() {
 		return addr, nil
 	}
+	hostID := peer.HostID.String()
 
 	var causes []error
 	for _, route := range p.OrderedRoutes(hostID) {
-		endpoints, err := p.resolveRoute(context.Background(), route)
+		endpoints, err := p.resolveRoute(ctx, route)
 		if err != nil {
 			causes = append(causes, err)
 			continue
@@ -316,7 +317,7 @@ func (p *ClientRoutesHandler) TranslateHost(host endpoint.AddressTranslatorHostI
 			return endpoints[0], nil
 		}
 	}
-	return endpoint.AddressPort{}, fmt.Errorf("no usable route for host %s: %w", hostID, errors.Join(causes...))
+	return netip.AddrPort{}, fmt.Errorf("no usable route for host %s: %w", hostID, errors.Join(causes...))
 }
 
 type InternalPair struct {

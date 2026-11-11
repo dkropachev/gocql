@@ -27,6 +27,7 @@ package endpoint
 import (
 	"fmt"
 	"net"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -140,35 +141,16 @@ func (c InternalCassVersion) String() string {
 	return fmt.Sprintf("v%d.%d.%d", c.Major, c.Minor, c.Patch)
 }
 
-type AddressPort struct {
-	Address net.IP
-	Port    uint16
-}
-
-func (a AddressPort) Equal(o AddressPort) bool {
-	return a.Address.Equal(o.Address) && a.Port == o.Port
-}
-
-func (a AddressPort) IsValid() bool {
-	return len(a.Address) != 0 && !a.Address.IsUnspecified() && a.Port != 0
-}
-
-func (a AddressPort) String() string {
-	return fmt.Sprintf("%s:%d", a.Address, a.Port)
-}
-
-func (a AddressPort) ToNetAddr() string {
-	return net.JoinHostPort(a.Address.String(), strconv.Itoa(int(a.Port)))
-}
-
+// InternalTranslatedAddresses holds a host's translated endpoints. A zero
+// field means the endpoint is not advertised.
 type InternalTranslatedAddresses struct {
-	CQL           AddressPort
-	ShardAware    AddressPort
-	ShardAwareTLS AddressPort
+	CQL           netip.AddrPort
+	ShardAware    netip.AddrPort
+	ShardAwareTLS netip.AddrPort
 }
 
 func (h InternalTranslatedAddresses) Equal(o *InternalTranslatedAddresses) bool {
-	return h.CQL.Equal(o.CQL) && h.ShardAware.Equal(o.ShardAware) && h.ShardAwareTLS.Equal(o.ShardAwareTLS)
+	return h == *o
 }
 
 type HostInfoBuilder struct {
@@ -264,8 +246,8 @@ func InternalValidIpAddr(addr net.IP) bool {
 }
 
 func hostInfoConnectAddressLocked(h *HostInfo) (net.IP, string) {
-	if h.privateStorage.InternalTranslatedAddresses != nil && h.privateStorage.InternalTranslatedAddresses.CQL.IsValid() {
-		return h.privateStorage.InternalTranslatedAddresses.CQL.Address, "connect_address"
+	if h.privateStorage.InternalTranslatedAddresses != nil && InternalUsableAddrPort(h.privateStorage.InternalTranslatedAddresses.CQL) {
+		return h.privateStorage.InternalTranslatedAddresses.CQL.Addr().AsSlice(), "connect_address"
 	} else if InternalValidIpAddr(h.privateStorage.InternalConnectAddress) {
 		return h.privateStorage.InternalConnectAddress, "connect_address"
 	} else if InternalValidIpAddr(h.privateStorage.InternalRpcAddress) {

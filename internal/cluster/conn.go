@@ -78,7 +78,7 @@ func (s *Core) DialShard(ctx context.Context, host *implEndpoint.HostInfo, connC
 	var obs ObservedConnect
 
 	current := implEndpoint.InternalHostInfoGetTranslatedConnectionInfo(host)
-	updated, err := implTransport.InternalTranslateHostAddresses(s.privateStorage.InternalAddressTranslator, host, s.privateStorage.InternalLogger)
+	updated, err := implTransport.InternalTranslateHostAddresses(ctx, s.privateStorage.InternalAddressTranslator, host, s.privateStorage.InternalLogger)
 	if err != nil {
 		return nil, err
 	}

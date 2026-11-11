@@ -43,7 +43,7 @@ func (sd *InternalScyllaDialer) DialHost(ctx context.Context, host *implEndpoint
 	addr := net.JoinHostPort(ip.String(), strconv.Itoa(port))
 	translatedInfo := implEndpoint.InternalHostInfoGetTranslatedConnectionInfo(host)
 	if translatedInfo != nil {
-		addr = translatedInfo.CQL.ToNetAddr()
+		addr = translatedInfo.CQL.String()
 	}
 
 	conn, err := sd.InternalDialer.DialContext(ctx, "tcp", addr)
@@ -68,13 +68,13 @@ func (sd *InternalScyllaDialer) DialShard(ctx context.Context, host *implEndpoin
 	shardAwareAddr := ""
 	translatedInfo := implEndpoint.InternalHostInfoGetTranslatedConnectionInfo(host)
 	if translatedInfo != nil {
-		addr = translatedInfo.CQL.ToNetAddr()
+		addr = translatedInfo.CQL.String()
 		if sd.InternalTlsConfig != nil {
-			if translatedInfo.ShardAwareTLS.IsValid() {
-				shardAwareAddr = translatedInfo.ShardAwareTLS.ToNetAddr()
+			if implEndpoint.InternalUsableAddrPort(translatedInfo.ShardAwareTLS) {
+				shardAwareAddr = translatedInfo.ShardAwareTLS.String()
 			}
-		} else if translatedInfo.ShardAware.IsValid() {
-			shardAwareAddr = translatedInfo.ShardAware.ToNetAddr()
+		} else if implEndpoint.InternalUsableAddrPort(translatedInfo.ShardAware) {
+			shardAwareAddr = translatedInfo.ShardAware.String()
 		}
 	}
 

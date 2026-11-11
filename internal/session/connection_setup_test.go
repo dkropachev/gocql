@@ -140,7 +140,7 @@ func TestConnectionSetup(t *testing.T) {
 			session := func() *cluster.Core {
 				opaqueStorageValuexxxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalLogger = logging.Nop()
-				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalAddressTranslator = endpoint.AddressTranslatorFunc(func(_ endpoint.AddressTranslatorHostInfo, addr endpoint.AddressPort) (endpoint.AddressPort, error) {
+				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalAddressTranslator = endpoint.AddressTranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
 					time.Sleep(20 * time.Millisecond)
 					return addr, nil
 				})
@@ -249,7 +249,7 @@ func TestConnectionSetup(t *testing.T) {
 				implEndpoint.HostInfoData(opaqueStorageValuex).InternalHostId = cqltype.UUID{15: 1}
 				return opaqueStorageValuex
 			}()
-			implEndpoint.InternalHostInfoSetTranslatedConnectionInfo(host, endpoint.InternalTranslatedAddresses{CQL: endpoint.AddressPort{Address: net.ParseIP("127.0.0.1"), Port: 9042}, ShardAware: endpoint.AddressPort{Address: net.ParseIP("127.0.0.1"), Port: 19042}})
+			implEndpoint.InternalHostInfoSetTranslatedConnectionInfo(host, endpoint.InternalTranslatedAddresses{CQL: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 9042), ShardAware: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 19042)})
 			config := settings.DefaultConfig("localhost")
 			config.Pool.SourcePortStart = 49152
 			config.Pool.SourcePortEnd = 49155

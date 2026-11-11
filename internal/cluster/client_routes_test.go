@@ -20,9 +20,11 @@
 package cluster
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"sync"
 	"testing"
 	"time"
@@ -30,7 +32,6 @@ import (
 	"log/slog"
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
 	"github.com/scylladb/gocql/v2/internal/events"
 	"github.com/scylladb/gocql/v2/internal/logging"
@@ -369,9 +370,9 @@ func TestClientRoutes(t *testing.T) {
 		wg.Wait()
 	})
 
-	t.Run("TranslateHost", func(t *testing.T) {
+	t.Run("Translate", func(t *testing.T) {
 		t.Run("ConnectionAddrOverride", func(t *testing.T) {
-			addr := endpoint.AddressPort{Address: net.ParseIP("1.1.1.1"), Port: 9042}
+			addr := netip.MustParseAddrPort("1.1.1.1:9042")
 
 			resolvedIPs := map[string]net.IP{
 				"route-addr":    net.ParseIP("10.0.0.1"),
@@ -384,7 +385,7 @@ func TestClientRoutes(t *testing.T) {
 				return nil, fmt.Errorf("unknown host %s", host)
 			})
 			newRoutes := func() clientRouteCache {
-				return newCache(map[string]clientRouteCacheEntry{"h1": newCacheEntry(InternalClientRoute{InternalConnectionID: "c1", InternalHostID: "h1", InternalAddress: "route-addr", InternalPort: 9042})})
+				return newCache(map[string]clientRouteCacheEntry{hostH1: newCacheEntry(InternalClientRoute{InternalConnectionID: "c1", InternalHostID: hostH1, InternalAddress: "route-addr", InternalPort: 9042})})
 			}
 
 			t.Run("no override uses route address", func(t *testing.T) {
@@ -396,12 +397,12 @@ func TestClientRoutes(t *testing.T) {
 					return opaqueStorageValuexxxxxxx
 				}()
 
-				res, err := handler.TranslateHost(testHostInfo{hostID: "h1"}, addr)
+				res, err := handler.Translate(context.Background(), routePeer(hostH1), addr)
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
-				if !res.Address.Equal(resolvedIPs["route-addr"]) {
-					t.Fatalf("expected route-addr IP %v, got %v", resolvedIPs["route-addr"], res.Address)
+				if !sameIP(res, resolvedIPs["route-addr"]) {
+					t.Fatalf("expected route-addr IP %v, got %v", resolvedIPs["route-addr"], res.Addr())
 				}
 			})
 
@@ -414,18 +415,18 @@ func TestClientRoutes(t *testing.T) {
 					return opaqueStorageValuexxxxxxxx
 				}()
 
-				res, err := handler.TranslateHost(testHostInfo{hostID: "h1"}, addr)
+				res, err := handler.Translate(context.Background(), routePeer(hostH1), addr)
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
-				if !res.Address.Equal(resolvedIPs["override-addr"]) {
-					t.Fatalf("expected override-addr IP %v, got %v", resolvedIPs["override-addr"], res.Address)
+				if !sameIP(res, resolvedIPs["override-addr"]) {
+					t.Fatalf("expected override-addr IP %v, got %v", resolvedIPs["override-addr"], res.Addr())
 				}
 			})
 		})
 
 		t.Run("CurrentRoute", func(t *testing.T) {
-			addr := endpoint.AddressPort{Address: net.ParseIP("1.1.1.1"), Port: 9042}
+			addr := netip.MustParseAddrPort("1.1.1.1:9042")
 			resolvedIPs := map[string]net.IP{
 				"addr-c1": net.ParseIP("10.0.0.1"),
 				"addr-c2": net.ParseIP("10.0.0.2"),
@@ -440,9 +441,9 @@ func TestClientRoutes(t *testing.T) {
 					return nil, fmt.Errorf("unknown host %s", host)
 				})
 				ClientRoutesHandlerData(opaqueStorageValuexxxx).InternalRouteCache = newCache(map[string]clientRouteCacheEntry{
-					"h1": newCacheEntry(
-						InternalClientRoute{InternalConnectionID: "c1", InternalHostID: "h1", InternalAddress: "addr-c1", InternalPort: 9042},
-						InternalClientRoute{InternalConnectionID: "c2", InternalHostID: "h1", InternalAddress: "addr-c2", InternalPort: 9042},
+					hostH1: newCacheEntry(
+						InternalClientRoute{InternalConnectionID: "c1", InternalHostID: hostH1, InternalAddress: "addr-c1", InternalPort: 9042},
+						InternalClientRoute{InternalConnectionID: "c2", InternalHostID: hostH1, InternalAddress: "addr-c2", InternalPort: 9042},
 					),
 				})
 				return opaqueStorageValuexxxx
@@ -450,28 +451,28 @@ func TestClientRoutes(t *testing.T) {
 				// First call picks the first route in the record.
 			}()
 
-			res1, err := handler.TranslateHost(testHostInfo{hostID: "h1"}, addr)
+			res1, err := handler.Translate(context.Background(), routePeer(hostH1), addr)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if !res1.Address.Equal(resolvedIPs["addr-c1"]) {
-				t.Fatalf("expected first route to resolve addr-c1, got %v", res1.Address)
+			if !sameIP(res1, resolvedIPs["addr-c1"]) {
+				t.Fatalf("expected first route to resolve addr-c1, got %v", res1.Addr())
 			}
 			ClientRoutesHandlerData(handler).InternalRouteCache.ReplaceByConnectionIDs([]string{"c1"}, []InternalClientRoute{
-				{InternalConnectionID: "c2", InternalHostID: "h1", InternalAddress: "addr-c2", InternalPort: 9042},
+				{InternalConnectionID: "c2", InternalHostID: hostH1, InternalAddress: "addr-c2", InternalPort: 9042},
 			})
 
-			res2, err := handler.TranslateHost(testHostInfo{hostID: "h1"}, addr)
+			res2, err := handler.Translate(context.Background(), routePeer(hostH1), addr)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if !res2.Address.Equal(resolvedIPs["addr-c2"]) {
-				t.Fatalf("expected fallback route to resolve addr-c2, got %v", res2.Address)
+			if !sameIP(res2, resolvedIPs["addr-c2"]) {
+				t.Fatalf("expected fallback route to resolve addr-c2, got %v", res2.Addr())
 			}
 		})
 
 		t.Run("PreservesCurrentAcrossRefresh", func(t *testing.T) {
-			addr := endpoint.AddressPort{Address: net.ParseIP("1.1.1.1"), Port: 9042}
+			addr := netip.MustParseAddrPort("1.1.1.1:9042")
 			resolvedIPs := map[string]net.IP{
 				"addr-c1-old": net.ParseIP("10.0.0.1"),
 				"addr-c1-new": net.ParseIP("10.0.0.2"),
@@ -489,10 +490,10 @@ func TestClientRoutes(t *testing.T) {
 					opaqueStorageValuexxxxx := new(ClientRoutesHandler)
 					ClientRoutesHandlerData(opaqueStorageValuexxxxx).resolver = resolver
 					ClientRoutesHandlerData(opaqueStorageValuexxxxx).InternalRouteCache = newCache(map[string]clientRouteCacheEntry{
-						"h1": newCacheEntryWithCurrent(
-							InternalClientRoute{InternalConnectionID: "c1", InternalHostID: "h1", InternalAddress: "addr-c1-old", InternalPort: 9042},
-							InternalClientRoute{InternalConnectionID: "c1", InternalHostID: "h1", InternalAddress: "addr-c1-old", InternalPort: 9042},
-							InternalClientRoute{InternalConnectionID: "c2", InternalHostID: "h1", InternalAddress: "addr-c2", InternalPort: 9042},
+						hostH1: newCacheEntryWithCurrent(
+							InternalClientRoute{InternalConnectionID: "c1", InternalHostID: hostH1, InternalAddress: "addr-c1-old", InternalPort: 9042},
+							InternalClientRoute{InternalConnectionID: "c1", InternalHostID: hostH1, InternalAddress: "addr-c1-old", InternalPort: 9042},
+							InternalClientRoute{InternalConnectionID: "c2", InternalHostID: hostH1, InternalAddress: "addr-c2", InternalPort: 9042},
 						),
 					})
 					return opaqueStorageValuexxxxx
@@ -508,15 +509,15 @@ func TestClientRoutes(t *testing.T) {
 					name: "connection-ids",
 					replace: func(c *clientRouteCache) {
 						c.ReplaceByConnectionIDs([]string{"c1"}, []InternalClientRoute{
-							{InternalConnectionID: "c1", InternalHostID: "h1", InternalAddress: "addr-c1-new", InternalPort: 9042},
+							{InternalConnectionID: "c1", InternalHostID: hostH1, InternalAddress: "addr-c1-new", InternalPort: 9042},
 						})
 					},
 				},
 				{
 					name: "pairs",
 					replace: func(c *clientRouteCache) {
-						c.ReplaceByPairs([]InternalPair{{InternalConnectionID: "c1", InternalHostID: "h1"}}, []InternalClientRoute{
-							{InternalConnectionID: "c1", InternalHostID: "h1", InternalAddress: "addr-c1-new", InternalPort: 9042},
+						c.ReplaceByPairs([]InternalPair{{InternalConnectionID: "c1", InternalHostID: hostH1}}, []InternalClientRoute{
+							{InternalConnectionID: "c1", InternalHostID: hostH1, InternalAddress: "addr-c1-new", InternalPort: 9042},
 						})
 					},
 				},
@@ -525,19 +526,19 @@ func TestClientRoutes(t *testing.T) {
 					handler := newHandler()
 					tc.replace(&ClientRoutesHandlerData(handler).InternalRouteCache)
 
-					res, err := handler.TranslateHost(testHostInfo{hostID: "h1"}, addr)
+					res, err := handler.Translate(context.Background(), routePeer(hostH1), addr)
 					if err != nil {
 						t.Fatalf("unexpected error: %v", err)
 					}
-					if !res.Address.Equal(resolvedIPs["addr-c1-new"]) {
-						t.Fatalf("expected preferred route to stay on c1 with updated address, got %v", res.Address)
+					if !sameIP(res, resolvedIPs["addr-c1-new"]) {
+						t.Fatalf("expected preferred route to stay on c1 with updated address, got %v", res.Addr())
 					}
 				})
 			}
 		})
 
 		t.Run("PrunesMissingHostAcrossRefresh", func(t *testing.T) {
-			addr := endpoint.AddressPort{Address: net.ParseIP("1.1.1.1"), Port: 9042}
+			addr := netip.MustParseAddrPort("1.1.1.1:9042")
 			resolvedIPs := map[string]net.IP{
 				"addr-h1": net.ParseIP("10.0.1.1"),
 				"addr-h2": net.ParseIP("10.0.1.2"),
@@ -552,33 +553,33 @@ func TestClientRoutes(t *testing.T) {
 					return nil, fmt.Errorf("unknown host %s", host)
 				})
 				ClientRoutesHandlerData(opaqueStorageValuexxxxxx).InternalRouteCache = newCache(map[string]clientRouteCacheEntry{
-					"h1": newCacheEntryWithCurrent(
-						InternalClientRoute{InternalConnectionID: "c1", InternalHostID: "h1", InternalAddress: "addr-h1", InternalPort: 9042},
-						InternalClientRoute{InternalConnectionID: "c1", InternalHostID: "h1", InternalAddress: "addr-h1", InternalPort: 9042},
+					hostH1: newCacheEntryWithCurrent(
+						InternalClientRoute{InternalConnectionID: "c1", InternalHostID: hostH1, InternalAddress: "addr-h1", InternalPort: 9042},
+						InternalClientRoute{InternalConnectionID: "c1", InternalHostID: hostH1, InternalAddress: "addr-h1", InternalPort: 9042},
 					),
-					"h2": newCacheEntry(InternalClientRoute{InternalConnectionID: "c1", InternalHostID: "h2", InternalAddress: "addr-h2", InternalPort: 9042}),
-					"h3": newCacheEntry(InternalClientRoute{InternalConnectionID: "c1", InternalHostID: "h3", InternalAddress: "addr-h3", InternalPort: 9042}),
+					hostH2: newCacheEntry(InternalClientRoute{InternalConnectionID: "c1", InternalHostID: hostH2, InternalAddress: "addr-h2", InternalPort: 9042}),
+					hostH3: newCacheEntry(InternalClientRoute{InternalConnectionID: "c1", InternalHostID: hostH3, InternalAddress: "addr-h3", InternalPort: 9042}),
 				})
 				return opaqueStorageValuexxxxxx
 			}()
 
-			if _, err := handler.TranslateHost(testHostInfo{hostID: "h3"}, addr); err != nil {
+			if _, err := handler.Translate(context.Background(), routePeer(hostH3), addr); err != nil {
 				t.Fatalf("unexpected error before refresh: %v", err)
 			}
 			ClientRoutesHandlerData(handler).InternalRouteCache.ReplaceByConnectionIDs([]string{"c1"}, []InternalClientRoute{
-				{InternalConnectionID: "c1", InternalHostID: "h1", InternalAddress: "addr-h1-new", InternalPort: 9042},
-				{InternalConnectionID: "c1", InternalHostID: "h2", InternalAddress: "addr-h2", InternalPort: 9042},
+				{InternalConnectionID: "c1", InternalHostID: hostH1, InternalAddress: "addr-h1-new", InternalPort: 9042},
+				{InternalConnectionID: "c1", InternalHostID: hostH2, InternalAddress: "addr-h2", InternalPort: 9042},
 			})
 
-			if _, err := handler.TranslateHost(testHostInfo{hostID: "h3"}, addr); err == nil {
+			if _, err := handler.Translate(context.Background(), routePeer(hostH3), addr); err == nil {
 				t.Fatal("expected h3 to be pruned after refresh")
 			}
 		})
 
 		t.Run("Resolves", func(t *testing.T) {
-			addr := endpoint.AddressPort{Address: net.ParseIP("1.1.1.1"), Port: 9042}
-			noHost := testHostInfo{hostID: ""}
-			missingHost := testHostInfo{hostID: "missing"}
+			addr := netip.MustParseAddrPort("1.1.1.1:9042")
+			noHost := routePeer("")
+			missingHost := routePeer(hostMissing)
 
 			resolver := dnsResolverFunc(func(host string) ([]net.IP, error) {
 				return []net.IP{net.ParseIP("10.0.0.1")}, nil
@@ -591,31 +592,31 @@ func TestClientRoutes(t *testing.T) {
 				return opaqueStorageValuex
 			}()
 
-			res, err := handler.TranslateHost(noHost, addr)
+			res, err := handler.Translate(context.Background(), noHost, addr)
 			if err != nil {
 				t.Fatalf("unexpected error for empty hostID: %v", err)
 			}
-			if !res.Equal(addr) {
+			if res != addr {
 				t.Fatalf("expected address to pass through when hostID is empty")
 			}
 
-			_, err = handler.TranslateHost(missingHost, addr)
+			_, err = handler.Translate(context.Background(), missingHost, addr)
 			if err == nil {
 				t.Fatalf("expected error for missing host entry")
 			}
 			ClientRoutesHandlerData(handler).InternalRouteCache = newCache(map[string]clientRouteCacheEntry{
-				"h1": newCacheEntry(InternalClientRoute{InternalConnectionID: "c1", InternalHostID: "h1", InternalPort: 9042}),
+				hostH1: newCacheEntry(InternalClientRoute{InternalConnectionID: "c1", InternalHostID: hostH1, InternalPort: 9042}),
 			})
 
-			res, err = handler.TranslateHost(testHostInfo{hostID: "h1"}, addr)
+			res, err = handler.Translate(context.Background(), routePeer(hostH1), addr)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if !res.Address.Equal(net.ParseIP("10.0.0.1")) {
-				t.Fatalf("expected resolved IP 10.0.0.1, got %v", res.Address)
+			if !sameIP(res, net.ParseIP("10.0.0.1")) {
+				t.Fatalf("expected resolved IP 10.0.0.1, got %v", res.Addr())
 			}
-			if res.Port != 9042 {
-				t.Fatalf("expected port 9042, got %d", res.Port)
+			if res.Port() != 9042 {
+				t.Fatalf("expected port 9042, got %d", res.Port())
 			}
 
 			errorHandler := func() *ClientRoutesHandler {
@@ -623,11 +624,11 @@ func TestClientRoutes(t *testing.T) {
 				ClientRoutesHandlerData(opaqueStorageValuexx).resolver = dnsResolverFunc(func(host string) ([]net.IP, error) {
 					return nil, errors.New("lookup failed")
 				})
-				ClientRoutesHandlerData(opaqueStorageValuexx).InternalRouteCache = newCache(map[string]clientRouteCacheEntry{"h2": newCacheEntry(InternalClientRoute{InternalConnectionID: "c2", InternalHostID: "h2", InternalAddress: "host", InternalPort: 9042})})
+				ClientRoutesHandlerData(opaqueStorageValuexx).InternalRouteCache = newCache(map[string]clientRouteCacheEntry{hostH2: newCacheEntry(InternalClientRoute{InternalConnectionID: "c2", InternalHostID: hostH2, InternalAddress: "host", InternalPort: 9042})})
 				return opaqueStorageValuexx
 			}()
 
-			_, err = errorHandler.TranslateHost(testHostInfo{hostID: "h2"}, addr)
+			_, err = errorHandler.Translate(context.Background(), routePeer(hostH2), addr)
 			if err == nil {
 				t.Fatalf("expected resolver error to bubble up")
 			}
@@ -639,18 +640,18 @@ func TestClientRoutes(t *testing.T) {
 					t.Fatal("DNS should not be called when port is 0")
 					return nil, nil
 				})
-				ClientRoutesHandlerData(opaqueStorageValuexxx).InternalRouteCache = newCache(map[string]clientRouteCacheEntry{"h3": newCacheEntry(InternalClientRoute{InternalConnectionID: "c3", InternalHostID: "h3", InternalAddress: "host", InternalPort: 0})})
+				ClientRoutesHandlerData(opaqueStorageValuexxx).InternalRouteCache = newCache(map[string]clientRouteCacheEntry{hostH3: newCacheEntry(InternalClientRoute{InternalConnectionID: "c3", InternalHostID: hostH3, InternalAddress: "host", InternalPort: 0})})
 				return opaqueStorageValuexxx
 			}()
 
-			_, err = zeroPortHandler.TranslateHost(testHostInfo{hostID: "h3"}, addr)
+			_, err = zeroPortHandler.Translate(context.Background(), routePeer(hostH3), addr)
 			if err == nil {
 				t.Fatalf("expected error for zero port")
 			}
 		})
 
 		t.Run("RetainsCurrentRouteAfterQueryError", func(t *testing.T) {
-			addr := endpoint.AddressPort{Address: net.ParseIP("1.1.1.1"), Port: 9042}
+			addr := netip.MustParseAddrPort("1.1.1.1:9042")
 			resolvedIPs := map[string]net.IP{
 				"a1": net.ParseIP("10.0.0.1"),
 			}
@@ -667,9 +668,9 @@ func TestClientRoutes(t *testing.T) {
 					return nil, fmt.Errorf("unknown host %s", host)
 				})
 				ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxxxxx).InternalRouteCache = newCache(map[string]clientRouteCacheEntry{
-					"h1": newCacheEntryWithCurrent(
-						InternalClientRoute{InternalConnectionID: "c1", InternalHostID: "h1", InternalAddress: "a1", InternalPort: 9042},
-						InternalClientRoute{InternalConnectionID: "c1", InternalHostID: "h1", InternalAddress: "a1", InternalPort: 9042},
+					hostH1: newCacheEntryWithCurrent(
+						InternalClientRoute{InternalConnectionID: "c1", InternalHostID: hostH1, InternalAddress: "a1", InternalPort: 9042},
+						InternalClientRoute{InternalConnectionID: "c1", InternalHostID: hostH1, InternalAddress: "a1", InternalPort: 9042},
 					),
 				})
 				ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxxxxx).cfg = ClientRoutesConfig{
@@ -682,7 +683,7 @@ func TestClientRoutes(t *testing.T) {
 			h.StartUpdateWorker()
 			defer h.Stop()
 
-			before, err := h.TranslateHost(testHostInfo{hostID: "h1"}, addr)
+			before, err := h.Translate(context.Background(), routePeer(hostH1), addr)
 			if err != nil {
 				t.Fatalf("unexpected error before query failure: %v", err)
 			}
@@ -692,11 +693,11 @@ func TestClientRoutes(t *testing.T) {
 				t.Fatal("expected query error")
 			}
 
-			after, err := h.TranslateHost(testHostInfo{hostID: "h1"}, addr)
+			after, err := h.Translate(context.Background(), routePeer(hostH1), addr)
 			if err != nil {
 				t.Fatalf("unexpected error after query failure: %v", err)
 			}
-			if !after.Equal(before) {
+			if after != before {
 				t.Fatalf("expected route to remain stable after query failure, got %v want %v", after, before)
 			}
 		})

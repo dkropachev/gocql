@@ -25,30 +25,36 @@
 package endpoint
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 
 	"log/slog"
 
 	"github.com/scylladb/gocql/v2/internal/logging"
 )
 
-// InternalTranslateAddressPort applies addressTranslator to addr of host. A nil
-// translator or an invalid addr returns addr unchanged.
-func InternalTranslateAddressPort(addressTranslator AddressTranslator, host *HostInfo, addr AddressPort, logger *slog.Logger) (AddressPort, error) {
+// InternalTranslateAddressPort applies addressTranslator to addr of peer. A nil
+// translator or an unusable addr returns addr unchanged.
+func InternalTranslateAddressPort(ctx context.Context, addressTranslator AddressTranslator, peer Peer, addr netip.AddrPort, logger *slog.Logger) (netip.AddrPort, error) {
 	logger = logging.Or(logger)
-	if addressTranslator == nil || !addr.IsValid() {
+	if addressTranslator == nil || !InternalUsableAddrPort(addr) {
 		return addr, nil
 	}
-	newAddr, err := addressTranslator.TranslateHost(host, addr)
+	newAddr, err := addressTranslator.Translate(ctx, peer, addr)
 	if err != nil {
 		logger.Debug("address translation failed", "addr", addr.String(), logging.Err(err))
 		return addr, err
 	}
-	if newAddr.Port == 0 {
+	if newAddr.Port() == 0 {
 		return addr, fmt.Errorf("invalid translated port 0 for %q: port must be between 1 and 65535", addr)
 	}
+	if !newAddr.Addr().IsValid() || newAddr.Addr().IsUnspecified() {
+		return addr, fmt.Errorf("invalid translated address %q for %q", newAddr.Addr(), addr)
+	}
+	newAddr = netip.AddrPortFrom(newAddr.Addr().Unmap(), newAddr.Port())
 	logger.Debug("translated address", "addr", addr.String(), "translated", newAddr.String())
 	return newAddr, nil
 }

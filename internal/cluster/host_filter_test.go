@@ -26,6 +26,7 @@ package cluster
 
 import (
 	"net"
+	"net/netip"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/internal/endpoint"
@@ -291,7 +292,7 @@ func TestHostFilter(t *testing.T) {
 				opaqueStorageValuexxxxxxxx := new(endpoint.HostInfo)
 				implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxx).InternalConnectAddress = net.ParseIP("10.0.0.1")
 				implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxx).InternalTranslatedAddresses = &endpoint.InternalTranslatedAddresses{
-					CQL: endpoint.AddressPort{Address: net.ParseIP("127.0.0.1"), Port: 9042},
+					CQL: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 9042),
 				}
 				return opaqueStorageValuexxxxxxxx
 			}()

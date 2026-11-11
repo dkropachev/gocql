@@ -25,10 +25,11 @@
 package cluster
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"net"
+	"net/netip"
 	"reflect"
 	"strings"
 	"testing"
@@ -83,53 +84,31 @@ func TestClusterSettings(t *testing.T) {
 	t.Run("TranslateAddressPort", func(t *testing.T) {
 		t.Parallel()
 
+		ctx := context.Background()
+		translated := netip.MustParseAddrPort("10.10.10.10:5432")
+
 		t.Run("EmptyAddr", func(t *testing.T) {
 			t.Parallel()
 
-			translator := staticAddressTranslator(net.ParseIP("10.10.10.10"), 5432)
-			hh := endpoint.HostInfoBuilder{
-				ConnectAddress: []byte{},
-				Port:           0,
-			}.Build()
-			newAddr, err := endpoint.InternalTranslateAddressPort(translator, &hh, endpoint.AddressPort{
-				Address: hh.UntranslatedConnectAddress(),
-				Port:    uint16(hh.Port()),
-			}, nil)
+			newAddr, err := endpoint.InternalTranslateAddressPort(ctx, staticAddressTranslator(translated), endpoint.Peer{}, netip.AddrPort{}, nil)
 			tests.AssertNil(t, "should return no error", err)
-			tests.AssertTrue(t, "translated address is still empty", len(newAddr.Address) == 0)
-			tests.AssertEqual(t, "translated port", uint16(0), newAddr.Port)
+			tests.AssertEqual(t, "translated address is still empty", netip.AddrPort{}, newAddr)
 		})
 
 		t.Run("NilTranslator", func(t *testing.T) {
 			t.Parallel()
-			hh := endpoint.HostInfoBuilder{
-				ConnectAddress: net.ParseIP("10.0.0.1"),
-				Port:           1234,
-			}.Build()
-			newAddr, err := endpoint.InternalTranslateAddressPort(nil, &hh, endpoint.AddressPort{
-				Address: hh.UntranslatedConnectAddress(),
-				Port:    uint16(hh.Port()),
-			}, nil)
+			addr := netip.MustParseAddrPort("10.0.0.1:1234")
+			newAddr, err := endpoint.InternalTranslateAddressPort(ctx, nil, endpoint.Peer{}, addr, nil)
 			tests.AssertNil(t, "should return no error", err)
-			tests.AssertTrue(t, "same address as provided", net.ParseIP("10.0.0.1").Equal(newAddr.Address))
-			tests.AssertEqual(t, "translated host and port", uint16(1234), newAddr.Port)
+			tests.AssertEqual(t, "same address as provided", addr, newAddr)
 		})
 
 		t.Run("Success", func(t *testing.T) {
 			t.Parallel()
 
-			translator := staticAddressTranslator(net.ParseIP("10.10.10.10"), 5432)
-			hh := endpoint.HostInfoBuilder{
-				ConnectAddress: net.ParseIP("10.0.0.1"),
-				Port:           2345,
-			}.Build()
-			newAddr, err := endpoint.InternalTranslateAddressPort(translator, &hh, endpoint.AddressPort{
-				Address: hh.UntranslatedConnectAddress(),
-				Port:    uint16(hh.Port()),
-			}, nil)
+			newAddr, err := endpoint.InternalTranslateAddressPort(ctx, staticAddressTranslator(translated), endpoint.Peer{}, netip.MustParseAddrPort("10.0.0.1:2345"), nil)
 			tests.AssertNil(t, "should return no error", err)
-			tests.AssertTrue(t, "translated address", net.ParseIP("10.10.10.10").Equal(newAddr.Address))
-			tests.AssertEqual(t, "translated port", uint16(5432), newAddr.Port)
+			tests.AssertEqual(t, "translated address", translated, newAddr)
 		})
 	})
 

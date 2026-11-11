@@ -25,43 +25,37 @@
 package transport
 
 import (
+	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/tests"
 )
 
 func TestAddressTranslation(t *testing.T) {
+	ctx := context.Background()
 	t.Run("IdentityTranslator", func(t *testing.T) {
-		t.Run("NilAddrAndZeroPort", func(t *testing.T) {
+		t.Run("ZeroAddr", func(t *testing.T) {
 			t.Parallel()
 
 			var tr endpoint.AddressTranslator = endpoint.IdentityTranslator()
-			got, err := tr.TranslateHost(nil, endpoint.AddressPort{})
+			got, err := tr.Translate(ctx, endpoint.Peer{}, netip.AddrPort{})
 			tests.AssertNil(t, "should return no error", err)
-			if got.Address != nil {
-				t.Errorf("expected translated host to be (nil) but was (%+v) instead", got.Address)
-			}
-			tests.AssertEqual(t, "translated port", uint16(0), got.Port)
+			tests.AssertEqual(t, "translated addr", netip.AddrPort{}, got)
 		})
 		t.Run("HostProvided", func(t *testing.T) {
 			t.Parallel()
 
 			var tr endpoint.AddressTranslator = endpoint.IdentityTranslator()
-			hostIP := net.ParseIP("10.1.2.3")
-			if hostIP == nil {
-				t.Error("expected host ip not to be (nil)")
-			}
-
-			got, err := tr.TranslateHost(nil, endpoint.AddressPort{Address: hostIP, Port: 9042})
+			addr := netip.MustParseAddrPort("10.1.2.3:9042")
+			got, err := tr.Translate(ctx, endpoint.Peer{}, addr)
 			tests.AssertNil(t, "should return no error", err)
-			if !hostIP.Equal(got.Address) {
-				t.Errorf("expected translated addr to be (%+v) but was (%+v) instead", hostIP, got.Address)
-			}
-			tests.AssertEqual(t, "translated port", uint16(9042), got.Port)
+			tests.AssertEqual(t, "translated addr", addr, got)
 		})
 	})
 
@@ -69,29 +63,26 @@ func TestAddressTranslation(t *testing.T) {
 		t.Run("NoScyllaPorts", func(t *testing.T) {
 			t.Parallel()
 
-			translator := endpoint.AddressTranslatorFunc(func(_ endpoint.AddressTranslatorHostInfo, _ endpoint.AddressPort) (endpoint.AddressPort, error) {
-				return endpoint.AddressPort{Address: net.ParseIP("10.10.10.10"), Port: 9142}, nil
+			translator := endpoint.AddressTranslatorFunc(func(context.Context, endpoint.Peer, netip.AddrPort) (netip.AddrPort, error) {
+				return netip.MustParseAddrPort("10.10.10.10:9142"), nil
 			})
 			host := endpoint.HostInfoBuilder{
 				ConnectAddress: net.ParseIP("10.0.0.1"),
 				Port:           9042,
 			}.Build()
 
-			translated, err := InternalTranslateHostAddresses(translator, &host, nil)
+			translated, err := InternalTranslateHostAddresses(ctx, translator, &host, nil)
 
 			tests.AssertNil(t, "should return no error", err)
-			tests.AssertTrue(t, "translated CQL address", net.ParseIP("10.10.10.10").Equal(translated.CQL.Address))
-			tests.AssertEqual(t, "translated CQL port", uint16(9142), translated.CQL.Port)
-			tests.AssertTrue(t, "shard aware empty address", len(translated.ShardAware.Address) == 0)
-			tests.AssertEqual(t, "shard aware empty port", uint16(0), translated.ShardAware.Port)
-			tests.AssertTrue(t, "shard aware tls empty address", len(translated.ShardAwareTLS.Address) == 0)
-			tests.AssertEqual(t, "shard aware tls empty port", uint16(0), translated.ShardAwareTLS.Port)
+			tests.AssertEqual(t, "translated CQL", netip.MustParseAddrPort("10.10.10.10:9142"), translated.CQL)
+			tests.AssertEqual(t, "shard aware empty", netip.AddrPort{}, translated.ShardAware)
+			tests.AssertEqual(t, "shard aware tls empty", netip.AddrPort{}, translated.ShardAwareTLS)
 		})
 		t.Run("InvalidPort", func(t *testing.T) {
 			for _, port := range []int{-1, 0, 65536} {
 				t.Run(fmt.Sprint(port), func(t *testing.T) {
 					host := endpoint.HostInfoBuilder{ConnectAddress: net.ParseIP("10.0.0.1"), Port: port}.Build()
-					if _, err := InternalTranslateHostAddresses(nil, &host, nil); err == nil {
+					if _, err := InternalTranslateHostAddresses(ctx, nil, &host, nil); err == nil {
 						t.Fatalf("expected invalid port %d to be rejected", port)
 					}
 				})
@@ -100,20 +91,34 @@ func TestAddressTranslation(t *testing.T) {
 		t.Run("WithScyllaPorts", func(t *testing.T) {
 			t.Parallel()
 
-			translatedIP := net.ParseIP("192.0.2.10")
-			translator := endpoint.AddressTranslatorFunc(func(host endpoint.AddressTranslatorHostInfo, addr endpoint.AddressPort) (endpoint.AddressPort, error) {
-				if hostID := host.HostID(); hostID != "a0000000-0000-0000-0000-000000000001" {
-					t.Errorf("expected host id %q, got %q", "a0000000-0000-0000-0000-000000000001", hostID)
+			translatedIP := netip.MustParseAddr("192.0.2.10")
+			wantPeer := endpoint.Peer{
+				HostID:            cqltype.MustParseUUID("a0000000-0000-0000-0000-000000000001"),
+				Datacenter:        "dc1",
+				Rack:              "r1",
+				RPCAddress:        netip.MustParseAddr("10.0.1.1"),
+				BroadcastAddress:  netip.MustParseAddr("10.0.2.1"),
+				Port:              9042,
+				ShardAwarePort:    19042,
+				ShardAwarePortTLS: 19043,
+			}
+			translator := endpoint.AddressTranslatorFunc(func(_ context.Context, peer endpoint.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
+				if peer != wantPeer {
+					t.Errorf("peer %+v, want %+v", peer, wantPeer)
 				}
-				return endpoint.AddressPort{
-					Address: translatedIP,
-					Port:    addr.Port + 1,
-				}, nil
+				if addr.Addr() != netip.MustParseAddr("10.0.0.1") {
+					t.Errorf("untranslated addr %v", addr)
+				}
+				return netip.AddrPortFrom(translatedIP, addr.Port()+1), nil
 			})
 			host := endpoint.HostInfoBuilder{
-				ConnectAddress: net.ParseIP("10.0.0.1"),
-				Port:           9042,
-				HostId:         "a0000000-0000-0000-0000-000000000001",
+				ConnectAddress:   net.ParseIP("10.0.0.1"),
+				RpcAddress:       net.ParseIP("10.0.1.1"),
+				BroadcastAddress: net.ParseIP("10.0.2.1"),
+				DataCenter:       "dc1",
+				Rack:             "r1",
+				Port:             9042,
+				HostId:           "a0000000-0000-0000-0000-000000000001",
 			}.Build()
 			implEndpoint.InternalHostInfoSetScyllaFeatures(&host, *func() *endpoint.ScyllaHostFeatures {
 				opaqueStorageValue := new(endpoint.ScyllaHostFeatures)
@@ -123,26 +128,42 @@ func TestAddressTranslation(t *testing.T) {
 			}(),
 			)
 
-			translated, err := InternalTranslateHostAddresses(translator, &host, nil)
+			translated, err := InternalTranslateHostAddresses(ctx, translator, &host, nil)
 
 			tests.AssertNil(t, "should return no error", err)
-			tests.AssertTrue(t, "translated CQL address", translatedIP.Equal(translated.CQL.Address))
-			tests.AssertEqual(t, "translated CQL port", uint16(9043), translated.CQL.Port)
-			tests.AssertTrue(t, "translated shard aware address", translatedIP.Equal(translated.ShardAware.Address))
-			tests.AssertEqual(t, "translated shard aware port", uint16(19043), translated.ShardAware.Port)
-			tests.AssertTrue(t, "translated shard aware tls address", translatedIP.Equal(translated.ShardAwareTLS.Address))
-			tests.AssertEqual(t, "translated shard aware tls port", uint16(19044), translated.ShardAwareTLS.Port)
+			tests.AssertEqual(t, "translated CQL", netip.AddrPortFrom(translatedIP, 9043), translated.CQL)
+			tests.AssertEqual(t, "translated shard aware", netip.AddrPortFrom(translatedIP, 19043), translated.ShardAware)
+			tests.AssertEqual(t, "translated shard aware tls", netip.AddrPortFrom(translatedIP, 19044), translated.ShardAwareTLS)
 		})
 	})
 	t.Run("TranslateAddressPort", func(t *testing.T) {
-		host := endpoint.HostInfoBuilder{ConnectAddress: net.ParseIP("10.0.0.1"), Port: 9042}.Build()
-		addr := endpoint.AddressPort{Address: host.UntranslatedConnectAddress(), Port: 9042}
-		t.Run("ZeroPortRejected", func(t *testing.T) {
-			translator := endpoint.AddressTranslatorFunc(func(_ endpoint.AddressTranslatorHostInfo, a endpoint.AddressPort) (endpoint.AddressPort, error) {
-				return endpoint.AddressPort{Address: a.Address}, nil
+		addr := netip.MustParseAddrPort("10.0.0.1:9042")
+		for name, result := range map[string]netip.AddrPort{
+			"ZeroPortRejected":            netip.AddrPortFrom(addr.Addr(), 0),
+			"InvalidAddrRejected":         netip.AddrPortFrom(netip.Addr{}, 9042),
+			"UnspecifiedAddrRejected":     netip.MustParseAddrPort("0.0.0.0:9042"),
+			"UnspecifiedIPv6AddrRejected": netip.MustParseAddrPort("[::]:9042"),
+		} {
+			t.Run(name, func(t *testing.T) {
+				translator := endpoint.AddressTranslatorFunc(func(context.Context, endpoint.Peer, netip.AddrPort) (netip.AddrPort, error) {
+					return result, nil
+				})
+				if _, err := endpoint.InternalTranslateAddressPort(ctx, translator, endpoint.Peer{}, addr, nil); err == nil {
+					t.Fatalf("expected translated %v to be rejected", result)
+				}
 			})
-			if _, err := endpoint.InternalTranslateAddressPort(translator, &host, addr, nil); err == nil {
-				t.Fatal("expected translated port 0 to be rejected")
+		}
+		t.Run("ContextPassed", func(t *testing.T) {
+			type key struct{}
+			ctx := context.WithValue(ctx, key{}, true)
+			translator := endpoint.AddressTranslatorFunc(func(ctx context.Context, _ endpoint.Peer, a netip.AddrPort) (netip.AddrPort, error) {
+				if ctx.Value(key{}) == nil {
+					t.Error("translator did not receive the setup context")
+				}
+				return a, nil
+			})
+			if _, err := endpoint.InternalTranslateAddressPort(ctx, translator, endpoint.Peer{}, addr, nil); err != nil {
+				t.Fatal(err)
 			}
 		})
 	})

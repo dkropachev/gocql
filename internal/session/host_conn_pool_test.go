@@ -24,6 +24,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"net/netip"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -161,7 +162,7 @@ func TestHostConnPool(t *testing.T) {
 					go func() { done <- pool.InternalConnect() }()
 					<-selected
 					if mode == "endpoint" {
-						implEndpoint.InternalHostInfoSetTranslatedConnectionInfo(host, endpoint.InternalTranslatedAddresses{CQL: endpoint.AddressPort{Address: net.ParseIP("127.0.0.2"), Port: 9042}})
+						implEndpoint.InternalHostInfoSetTranslatedConnectionInfo(host, endpoint.InternalTranslatedAddresses{CQL: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.2"), 9042)})
 						close(release)
 					} else {
 						pool.Close()

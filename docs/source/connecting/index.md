@@ -92,6 +92,14 @@ bounded by `WithDNSTimeout`, so a resolver must return once that context is
 done. To prefer or require IPv4, wrap a `*net.Resolver` and filter its result
 or pass `"ip4"` as the network.
 
+`WithAddressTranslator` takes an `endpoint.Translator`. Before each connection
+attempt it is called with the setup context, the node's `endpoint.Peer` (host ID,
+datacenter, rack, advertised addresses and ports) and each endpoint to dial as a
+`netip.AddrPort`: the CQL port and, on ScyllaDB, the shard-aware ports. It
+returns the address to dial, or the input unchanged. A translation error fails
+that connection attempt like a dial error.
+`endpoint.TranslatorFunc` adapts a function.
+
 ```{toctree}
 :maxdepth: 1
 

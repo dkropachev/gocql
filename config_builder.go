@@ -355,7 +355,9 @@ func (b *ConfigBuilder) WithHostFilter(keep func(routing.HostSnapshot) bool) *Co
 	return b
 }
 
-// WithAddressTranslator rewrites node addresses before dialing. Default identity.
+// WithAddressTranslator rewrites node addresses before dialing. It is called
+// for the CQL and any shard-aware endpoint of a node with the node's
+// endpoint.Peer; an error fails that connection attempt. Default identity.
 func (b *ConfigBuilder) WithAddressTranslator(translator endpoint.Translator) *ConfigBuilder {
 	b.settings.AddressTranslator = translator
 	return b

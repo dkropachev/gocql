@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
 	"github.com/scylladb/gocql/v2/internal/events"
@@ -81,25 +82,26 @@ func newClientRoutesEventHarness(t *testing.T, allowedConnectionIDs []string) (*
 	return h, bus
 }
 
-type testHostInfo struct {
-	hostID string
+// Host IDs used by client route translation tests.
+const (
+	hostH1      = "a0000000-0000-0000-0000-000000000001"
+	hostH2      = "a0000000-0000-0000-0000-000000000002"
+	hostH3      = "a0000000-0000-0000-0000-000000000003"
+	hostMissing = "a0000000-0000-0000-0000-0000000000ff"
+)
+
+// routePeer returns a peer with hostID, or with no host ID when it is empty.
+func routePeer(hostID string) endpoint.Peer {
+	if hostID == "" {
+		return endpoint.Peer{}
+	}
+	return endpoint.Peer{HostID: cqltype.MustParseUUID(hostID)}
 }
 
-func (t testHostInfo) HostID() string                     { return t.hostID }
-func (t testHostInfo) Rack() string                       { return "" }
-func (t testHostInfo) DataCenter() string                 { return "" }
-func (t testHostInfo) BroadcastAddress() net.IP           { return nil }
-func (t testHostInfo) ListenAddress() net.IP              { return nil }
-func (t testHostInfo) RPCAddress() net.IP                 { return nil }
-func (t testHostInfo) PreferredIP() net.IP                { return nil }
-func (t testHostInfo) Peer() net.IP                       { return nil }
-func (t testHostInfo) UntranslatedConnectAddress() net.IP { return nil }
-func (t testHostInfo) Port() int                          { return 0 }
-func (t testHostInfo) Partitioner() string                { return "" }
-func (t testHostInfo) ClusterName() string                { return "" }
-func (t testHostInfo) ScyllaShardAwarePort() uint16       { return 0 }
-func (t testHostInfo) ScyllaShardAwarePortTLS() uint16    { return 0 }
-func (t testHostInfo) ScyllaShardCount() int              { return 0 }
+// sameIP reports whether addr carries ip.
+func sameIP(addr netip.AddrPort, ip net.IP) bool {
+	return addr.Addr() == endpoint.InternalNetIPAddr(ip)
+}
 
 func newCacheEntry(routes ...InternalClientRoute) clientRouteCacheEntry {
 	return clientRouteCacheEntry{allRoutes: routes}
