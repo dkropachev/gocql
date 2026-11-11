@@ -71,14 +71,6 @@ func OpenSingleHost[D Dialect](ctx context.Context, config Config, hostID cql.UU
 
 const OverflowEvent = implCluster.OverflowEvent
 
-// Prepare prepares statement on session. At most one PrepareOptions may be
-// given; none prepares with the session's keyspace on any host.
-//
-// Deprecated: use (*Session).Prepare.
-func Prepare[D Dialect, P any, R any](ctx context.Context, session *Session[D], statement cql.Statement[P, R], options ...PrepareOptions) (*Prepared[P, R], error) {
-	return session.Prepare(ctx, statement, options...)
-}
-
 type PreparedInfo = implSession.PreparedInfo
 
 const SchemaEvent = implCluster.SchemaEvent

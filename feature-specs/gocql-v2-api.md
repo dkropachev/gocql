@@ -565,14 +565,14 @@ method on the type that owns it.
 |---|---|---|
 | `NewConfig`, `NewProfile`, `NewClientRoutes`, `Connect` | keep | construct a value from nothing |
 | `OpenSingleHost` | keep | single-host sessions are a supported entry point |
-| `Prepare` | keep, also `Session.Prepare` | the method form is preferred |
+| `Prepare` | moved to `Session.Prepare` | Go 1.27 methods take type parameters, so the free function only duplicated the method |
 | `NewUnpreparedQuery`, `NewUnpreparedStreamQuery` | removed | `Session.UnpreparedExec`, `UnpreparedOne` and `UnpreparedEach` run throwaway statements; repeated statements are prepared, and streaming is always prepared |
 | `NewStreamQuery` | removed | `Session.PrepareStream` then `PreparedStream.Query`; the stream statement declares the decoder's row type |
 | `CompileOptions` | moved to `Session.CompileOptions` | |
 | `Query.ExecBatch`, `Query.RunBatch` | moved to `Session.ExecBatch`, `Session.RunBatch[R]` | a batch is a session operation and need not include the query's statement |
 | `PageStateFromToken` | keep | `PageState` fields are private |
 | `NewQuery` | moved to `Prepared.Query` | `Prepared[P, R]` already carries the type parameters |
-| `PrepareQuery` | removed | `Prepare` then `Prepared.Query`; it saved one call |
+| `PrepareQuery` | removed | `Session.Prepare` then `Prepared.Query`; it saved one call |
 | `StartPage()` | replaced by `var StartPage` | it only returned the zero `PageState` |
 | `NewErrProtocol` | removed | builds an internal error callers have no use for |
 
@@ -583,8 +583,7 @@ worker creates a reusable query; it permits one active execution and owns all
 captured parameters through retries, pages, accepted writes and callbacks.
 
 ```go
-func Prepare[P, R any](context.Context, *Session, Statement[P, R], ...PrepareOptions) (*Prepared[P, R], error) // at most one
-func (s *Session) Prepare[P, R any](context.Context, Statement[P, R], ...PrepareOptions) (*Prepared[P, R], error)
+func (s *Session) Prepare[P, R any](context.Context, Statement[P, R], ...PrepareOptions) (*Prepared[P, R], error) // at most one
 
 // One-shot calls, safe for concurrent use; at most one CompiledOptions.
 func (p *Prepared[P, R]) Exec(context.Context, P, ...CompiledOptions) (Result, error)
