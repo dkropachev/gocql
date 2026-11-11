@@ -85,6 +85,8 @@ func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
 // whether the request may have reached the server; open Rows or a Page report
 // cqlerr.ErrClosed, and later calls return cqlerr.ErrClosed. Accepted writes and observer callbacks drain
 // in the background; Wait joins them and Session.Close joins any that remain.
+// A query dropped without Close is closed when the garbage collector finds it
+// unreachable, but call Close: collection timing is unspecified.
 func (q *Query[P, R]) Close() { q.internal().Close() }
 
 // Wait waits until the query's last execution has drained: accepted writes,

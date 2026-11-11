@@ -29,6 +29,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"weak"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
@@ -44,7 +45,7 @@ type prepareFlight struct {
 type InternalSessionRuntime struct {
 	*implCluster.Core
 	executions                                                   map[*logicalExecution]struct{}
-	queries                                                      map[*queryState]struct{}
+	queries                                                      map[weak.Pointer[queryState]]*queryEntry
 	schema                                                       *schemafence.InternalPreparedSchemaTracker
 	preparing                                                    map[prepareCacheKey]*prepareFlight
 	InternalProfile                                              *settings.Profile

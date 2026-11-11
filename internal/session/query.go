@@ -117,12 +117,7 @@ func newQueryState(s *implCluster.Core, state *queryState, retire func(), pool *
 	if pool != nil {
 		return nil
 	}
-	state.runtime.InternalMu.Lock()
-	if state.runtime.queries == nil {
-		state.runtime.queries = make(map[*queryState]struct{})
-	}
-	state.runtime.queries[state] = struct{}{}
-	state.runtime.InternalMu.Unlock()
+	state.runtime.registerQuery(state)
 	return nil
 }
 
@@ -239,9 +234,7 @@ func (s *queryState) idle() {
 		return
 	}
 	if closed {
-		s.runtime.InternalMu.Lock()
-		delete(s.runtime.queries, s)
-		s.runtime.InternalMu.Unlock()
+		s.runtime.unregisterQuery(s)
 	}
 }
 
@@ -455,9 +448,7 @@ func (s *queryState) stop() *logicalExecution {
 	s.mu.Unlock()
 	s.owner.InternalClose()
 	if !busy && !s.perCall {
-		s.runtime.InternalMu.Lock()
-		delete(s.runtime.queries, s)
-		s.runtime.InternalMu.Unlock()
+		s.runtime.unregisterQuery(s)
 	}
 	if l != nil {
 		l.cancelExecution()

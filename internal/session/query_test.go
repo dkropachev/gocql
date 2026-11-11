@@ -18,6 +18,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"weak"
 
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
@@ -404,7 +405,7 @@ func TestQuery(t *testing.T) {
 				t.Fatal("Close returned before the accepted write drained", err)
 			}
 			q.state.runtime.InternalMu.Lock()
-			_, registered := q.state.runtime.queries[&q.state]
+			_, registered := q.state.runtime.queries[weak.Make(&q.state)]
 			q.state.runtime.InternalMu.Unlock()
 			if !registered {
 				t.Fatal("session lost a closed query's pending transport storage")

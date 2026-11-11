@@ -30,10 +30,7 @@ func (rt *InternalSessionRuntime) StopActive() implCluster.InternalExecutionWait
 		rt.closingOnce.Do(func() { close(rt.closing) })
 	}
 	rt.InternalMu.Lock()
-	queries := make([]*queryState, 0, len(rt.queries))
-	for q := range rt.queries {
-		queries = append(queries, q)
-	}
+	queries := rt.openQueries()
 	pools := rt.livePools()
 	rt.InternalMu.Unlock()
 	// Pools hand over their idle queries; their busy ones are counted, and
