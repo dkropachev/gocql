@@ -95,6 +95,9 @@ var (
 	_ = flag.String("cluster-socket", "", "nodes socket files separated by comma")
 )
 
+// errMultipleRows reports that a helper expecting one row read several.
+var errMultipleRows = errors.New("integration: multiple rows")
+
 func TestMain(m *testing.M) {
 	flag.Parse()
 	// The suite is compiled for one dialect (testDialect); see
@@ -685,7 +688,7 @@ func v2ReadOne(ctx context.Context, session *gocql.Session[testDialect], stmt st
 		return cql.DynamicRow{}, err
 	}
 	if rows.NextInto(&current) {
-		return cql.DynamicRow{}, cqlerr.ErrMultipleRows
+		return cql.DynamicRow{}, errMultipleRows
 	}
 	if err := rows.Err(); err != nil {
 		return cql.DynamicRow{}, err
@@ -1264,7 +1267,7 @@ func serializationOne[R any](s *gocql.Session[testDialect], stmt string, decoder
 		return zero, err
 	}
 	if rows.NextInto(&current) {
-		return zero, cqlerr.ErrMultipleRows
+		return zero, errMultipleRows
 	}
 	if err := rows.Err(); err != nil {
 		return zero, err

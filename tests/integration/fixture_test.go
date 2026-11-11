@@ -118,8 +118,8 @@ func TestFixture(t *testing.T) {
 		if _, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ?", cql.IntValue(2)); !errors.Is(err, cqlerr.ErrNoRows) {
 			t.Fatalf("empty result: got %v, want ErrNoRows", err)
 		}
-		if _, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ?", cql.IntValue(1)); !errors.Is(err, cqlerr.ErrMultipleRows) {
-			t.Fatalf("multiple result pages: got %v, want ErrMultipleRows", err)
+		if _, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ?", cql.IntValue(1)); !errors.Is(err, errMultipleRows) {
+			t.Fatalf("multiple result pages: got %v, want errMultipleRows", err)
 		}
 		rows, err := v2Query(ctx, session, "SELECT id FROM "+table+" WHERE bucket = ?", cql.IntValue(1))
 		if err != nil {

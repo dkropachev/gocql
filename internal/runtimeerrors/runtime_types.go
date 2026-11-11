@@ -15,7 +15,6 @@ var (
 	ErrPagingComplete   = errors.New("gocql: completed page cannot be resumed")
 	ErrPagingNoProgress = errors.New("gocql: paging made no progress")
 	ErrNoRows           = errors.New("gocql: no rows")
-	ErrMultipleRows     = errors.New("gocql: multiple rows")
 )
 
 // SchemaChangedError requires preparing and binding again after incompatible metadata.

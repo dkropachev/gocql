@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -19,6 +20,9 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/retry"
 )
+
+// errMultipleRows reports that a helper expecting one row read several.
+var errMultipleRows = errors.New("integration: multiple rows")
 
 // fixtureParts names the settings the shared fixture chooses from the
 // integration flags. A test that chooses one of them itself leaves that part
@@ -343,7 +347,7 @@ func v2ReadOne(ctx context.Context, session *gocql.Session[testDialect], stmt st
 		return cql.DynamicRow{}, err
 	}
 	if rows.NextInto(&cur) {
-		return cql.DynamicRow{}, cqlerr.ErrMultipleRows
+		return cql.DynamicRow{}, errMultipleRows
 	}
 	if err := rows.Err(); err != nil {
 		return cql.DynamicRow{}, err

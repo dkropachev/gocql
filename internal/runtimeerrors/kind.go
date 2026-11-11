@@ -107,19 +107,18 @@ func KindOf(err error) Kind {
 	case errors.Is(err, ErrClosed), errors.Is(err, ErrSessionClosed), errors.Is(err, ErrStaleRows), errors.Is(err, cqltype.ErrReleased):
 		return KindClosed
 	case hasType[*cqltype.ValidationError](err), hasType[*cqltype.CodecError](err), hasType[*SchemaChangedError](err), hasType[*UnsupportedSettingError](err), hasType[*ServerMismatchError](err),
-		errors.Is(err, ErrQueryArgLength), errors.Is(err, ErrUseStmt), errors.Is(err, ErrTooManyStmts),
+		errors.Is(err, ErrUseStmt),
 		errors.Is(err, ErrNoKeyspace), errors.Is(err, ErrNoTable), errors.Is(err, ErrKeyspaceDoesNotExist),
-		errors.Is(err, ErrBusy), errors.Is(err, ErrConditionalExec), errors.Is(err, ErrPagingComplete), errors.Is(err, ErrUnsupported):
+		errors.Is(err, ErrBusy), errors.Is(err, ErrConditionalExec), errors.Is(err, ErrPagingComplete):
 		return KindInvalid
 	case hasType[*cqltype.ProtocolError](err), hasType[protocol.ErrProtocol](err), hasType[*protocol.MalformedFrameError](err), errors.Is(err, protocol.ErrFrameTooBig):
 		return KindProtocol
-	case errors.Is(err, ErrTimeoutNoResponse), errors.Is(err, ErrTooManyTimeouts), errors.Is(err, protocol.ErrReadHeaderTimeout):
+	case errors.Is(err, ErrTimeoutNoResponse), errors.Is(err, protocol.ErrReadHeaderTimeout):
 		return KindTimeout
 	case isNetTimeout(err):
 		return KindTimeout
-	case hasType[*ConnectError](err), errors.Is(err, ErrNoConnections), errors.Is(err, ErrNoConnectionsInPool),
-		errors.Is(err, ErrNoConnectionsStarted), errors.Is(err, ErrConnectionClosed), errors.Is(err, ErrHostDown),
-		errors.Is(err, ErrNoPool), errors.Is(err, ErrNoStreams), errors.Is(err, ErrNoHosts), errors.Is(err, ErrSessionNotReady),
+	case hasType[*ConnectError](err), errors.Is(err, ErrNoConnections),
+		errors.Is(err, ErrNoConnectionsStarted), errors.Is(err, ErrConnectionClosed), errors.Is(err, ErrNoStreams), errors.Is(err, ErrNoHosts), errors.Is(err, ErrSessionNotReady),
 		hasType[net.Error](err), errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, net.ErrClosed):
 		return KindConnection
 	}

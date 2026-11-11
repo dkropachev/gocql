@@ -100,39 +100,4 @@ func TestQueryError(t *testing.T) {
 			})
 		}
 	})
-
-	t.Run("PotentiallyExecuted", func(t *testing.T) {
-		t.Parallel()
-
-		tests := []struct {
-			name                string
-			potentiallyExecuted bool
-			expected            bool
-		}{
-			{
-				name:                "potentially executed true",
-				potentiallyExecuted: true,
-				expected:            true,
-			},
-			{
-				name:                "potentially executed false",
-				potentiallyExecuted: false,
-				expected:            false,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				qErr := NewQueryError(QueryErrorState{
-					InternalErr:                 errors.New("test error"),
-					InternalPotentiallyExecuted: tt.potentiallyExecuted,
-				})
-
-				got := qErr.PotentiallyExecuted()
-				if got != tt.expected {
-					t.Fatalf("QueryError.PotentiallyExecuted() = %v, expected %v", got, tt.expected)
-				}
-			})
-		}
-	})
 }

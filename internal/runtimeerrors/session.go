@@ -30,16 +30,12 @@ import (
 
 var (
 	ErrNotFound             = errors.New("gocql: not found")
-	ErrUnavailable          = errors.New("gocql: unavailable")
-	ErrUnsupported          = errors.New("gocql: feature not supported")
-	ErrTooManyStmts         = errors.New("gocql: too many statements")
 	ErrUseStmt              = errors.New("gocql: USE statements are not supported: set the session keyspace in the cluster config, or qualify table names")
 	ErrSessionClosed        = errors.New("gocql: session has been closed")
 	ErrNoConnections        = errors.New("gocql: no hosts available in the pool")
 	ErrNoKeyspace           = errors.New("gocql: no keyspace provided")
 	ErrNoTable              = errors.New("gocql: no table name provided")
 	ErrKeyspaceDoesNotExist = errors.New("gocql: keyspace does not exist")
-	ErrNoMetadata           = errors.New("gocql: no metadata available")
 	ErrTabletsNotUsed       = errors.New("gocql: tablets not used")
 	ErrSessionNotReady      = errors.New("gocql: session is not ready yet")
 )

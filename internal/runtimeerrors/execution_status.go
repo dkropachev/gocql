@@ -38,9 +38,8 @@ func ExecutionStatusOf(err error) cqltype.ExecutionStatus {
 	// no effect. Validation and codec errors also arise from decoding a
 	// response, after the server executed the request.
 	if hasType[*SchemaChangedError](err) ||
-		errors.Is(err, ErrNoConnections) || errors.Is(err, ErrNoConnectionsInPool) ||
-		errors.Is(err, ErrNoPool) || errors.Is(err, ErrHostDown) || errors.Is(err, ErrSessionClosed) ||
-		errors.Is(err, ErrSessionNotReady) || errors.Is(err, ErrQueryArgLength) || errors.Is(err, ErrBusy) || errors.Is(err, ErrConditionalExec) ||
+		errors.Is(err, ErrNoConnections) || errors.Is(err, ErrSessionClosed) ||
+		errors.Is(err, ErrSessionNotReady) || errors.Is(err, ErrBusy) || errors.Is(err, ErrConditionalExec) ||
 		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return cqltype.NotExecuted
 	}

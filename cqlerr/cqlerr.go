@@ -203,7 +203,6 @@ type (
 	NoHostsError            = metadata.NoHostsError
 	PartialRefreshError     = metadata.PartialRefreshError
 	ErrProtocol             = protocol.ErrProtocol
-	ErrSchemaMismatch       = transport.ErrSchemaMismatch
 	// ConnectError reports that no host was reachable while a session was
 	// connecting; it matches ErrNoConnectionsStarted.
 	ConnectError = runtimeerrors.ConnectError
@@ -220,25 +219,14 @@ var (
 	ErrClosed = runtimeerrors.ErrClosed
 	// ErrConditionalExec reports an Exec or ExecBatch call for a statement or
 	// batch known to be conditional. Nothing was sent.
-	ErrConditionalExec  = runtimeerrors.ErrConditionalExec
-	ErrConnectionClosed = runtimeerrors.ErrConnectionClosed
-	ErrFrameTooBig      = protocol.ErrFrameTooBig
-	// Deprecated: the driver never returns ErrHostDown.
-	ErrHostDown = runtimeerrors.ErrHostDown
-	// Deprecated: the driver never returns ErrHostQueryFailed.
-	ErrHostQueryFailed      = runtimeerrors.ErrHostQueryFailed
-	ErrKeyspaceDoesNotExist = runtimeerrors.ErrKeyspaceDoesNotExist
-	ErrMultipleRows         = runtimeerrors.ErrMultipleRows
-	ErrNoConnections        = runtimeerrors.ErrNoConnections
-	// Deprecated: the driver never returns ErrNoConnectionsInPool.
-	ErrNoConnectionsInPool  = runtimeerrors.ErrNoConnectionsInPool
-	ErrNoConnectionsStarted = runtimeerrors.ErrNoConnectionsStarted
-	ErrNoHosts              = runtimeerrors.ErrNoHosts
-	ErrNoKeyspace           = runtimeerrors.ErrNoKeyspace
-	// Deprecated: the driver never returns ErrNoMetadata.
-	ErrNoMetadata = runtimeerrors.ErrNoMetadata
-	// Deprecated: the driver never returns ErrNoPool.
-	ErrNoPool                       = runtimeerrors.ErrNoPool
+	ErrConditionalExec              = runtimeerrors.ErrConditionalExec
+	ErrConnectionClosed             = runtimeerrors.ErrConnectionClosed
+	ErrFrameTooBig                  = protocol.ErrFrameTooBig
+	ErrKeyspaceDoesNotExist         = runtimeerrors.ErrKeyspaceDoesNotExist
+	ErrNoConnections                = runtimeerrors.ErrNoConnections
+	ErrNoConnectionsStarted         = runtimeerrors.ErrNoConnectionsStarted
+	ErrNoHosts                      = runtimeerrors.ErrNoHosts
+	ErrNoKeyspace                   = runtimeerrors.ErrNoKeyspace
 	ErrNoRows                       = runtimeerrors.ErrNoRows
 	ErrNoStreams                    = runtimeerrors.ErrNoStreams
 	ErrNoTable                      = runtimeerrors.ErrNoTable
@@ -246,7 +234,6 @@ var (
 	ErrPagingComplete               = runtimeerrors.ErrPagingComplete
 	ErrPagingNoProgress             = runtimeerrors.ErrPagingNoProgress
 	ErrPagingStateLimit             = runtimeerrors.ErrPagingStateLimit
-	ErrQueryArgLength               = runtimeerrors.ErrQueryArgLength
 	ErrReadHeaderTimeout            = protocol.ErrReadHeaderTimeout
 	ErrReleased                     = cqltype.ErrReleased
 	ErrScyllaSourcePortAlreadyInUse = transport.ErrScyllaSourcePortAlreadyInUse
@@ -255,13 +242,5 @@ var (
 	ErrStaleRows                    = runtimeerrors.ErrStaleRows
 	ErrTabletsNotUsed               = runtimeerrors.ErrTabletsNotUsed
 	ErrTimeoutNoResponse            = runtimeerrors.ErrTimeoutNoResponse
-	// Deprecated: the driver never returns ErrTooManyStmts.
-	ErrTooManyStmts = runtimeerrors.ErrTooManyStmts
-	// Deprecated: the driver never returns ErrTooManyTimeouts.
-	ErrTooManyTimeouts = runtimeerrors.ErrTooManyTimeouts
-	// Deprecated: the driver never returns ErrUnavailable.
-	ErrUnavailable = runtimeerrors.ErrUnavailable
-	// Deprecated: the driver never returns ErrUnsupported.
-	ErrUnsupported = runtimeerrors.ErrUnsupported
-	ErrUseStmt     = runtimeerrors.ErrUseStmt
+	ErrUseStmt                      = runtimeerrors.ErrUseStmt
 )

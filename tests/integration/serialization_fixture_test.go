@@ -77,7 +77,7 @@ func serializationOne[R any](s *gocql.Session[testDialect], stmt string, decoder
 		return zero, err
 	}
 	if rows.NextInto(&current) {
-		return zero, cqlerr.ErrMultipleRows
+		return zero, errMultipleRows
 	}
 	if err := rows.Err(); err != nil {
 		return zero, err

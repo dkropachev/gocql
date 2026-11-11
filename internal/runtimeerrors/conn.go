@@ -34,16 +34,9 @@ import (
 )
 
 var (
-	ErrQueryArgLength    = errors.New("gocql: query argument length mismatch")
 	ErrTimeoutNoResponse = errors.New("gocql: no response received from cassandra within timeout period")
-	// Deprecated: ErrTooManyTimeouts is no longer produced by the library.
-	// It will be removed in a future major release.
-	ErrTooManyTimeouts     = errors.New("gocql: too many query timeouts on the connection")
-	ErrConnectionClosed    = errors.New("gocql: connection closed waiting for response")
-	ErrNoStreams           = errors.New("gocql: no streams available on connection")
-	ErrHostDown            = errors.New("gocql: host is nil or down")
-	ErrNoPool              = errors.New("gocql: host does not have a pool")
-	ErrNoConnectionsInPool = errors.New("gocql: host pool does not have connections")
+	ErrConnectionClosed  = errors.New("gocql: connection closed waiting for response")
+	ErrNoStreams         = errors.New("gocql: no streams available on connection")
 )
 
 type QueryError struct {
@@ -52,14 +45,6 @@ type QueryError struct {
 
 func (e *QueryError) IsIdempotent() bool {
 	return QueryErrorData(e).isIdempotent
-}
-
-// PotentiallyExecuted reports that request bytes reached the server.
-//
-// Deprecated: use ExecutionStatus, which also accounts for server errors that
-// guarantee nothing was applied.
-func (e *QueryError) PotentiallyExecuted() bool {
-	return QueryErrorData(e).InternalPotentiallyExecuted
 }
 
 // ExecutionStatus reports what this attempt may have done on the cluster.

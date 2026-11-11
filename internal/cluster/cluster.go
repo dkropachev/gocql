@@ -707,7 +707,6 @@ const defaultCQLPort = 9042
 var (
 	ErrNoHosts              = runtimeerrors.ErrNoHosts
 	ErrNoConnectionsStarted = runtimeerrors.ErrNoConnectionsStarted
-	ErrHostQueryFailed      = runtimeerrors.ErrHostQueryFailed
 )
 
 // learnPortFromHosts inspects the host entries for embedded ports.

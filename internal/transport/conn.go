@@ -1942,58 +1942,6 @@ func (c *Conn) getCurrentKeyspace() string {
 	return ""
 }
 
-func InternalGetSchemaAgreement(localSchemaVersion string, querySystemPeersRows []InternalSchemaAgreementHost, logger *slog.Logger) error {
-	logger = logging.Or(logger)
-	versions := make(map[string]struct{})
-
-	for _, row := range querySystemPeersRows {
-		if !row.IsValid() {
-			logger.Warn("skipping invalid peer or peer with empty schema_version", "peer", fmt.Sprintf("%v", row))
-			continue
-		}
-		versions[row.SchemaVersion.String()] = struct{}{}
-	}
-
-	if localSchemaVersion != "" {
-		versions[localSchemaVersion] = struct{}{}
-	}
-
-	if len(versions) > 1 {
-		schemas := make([]string, 0, len(versions))
-		for schema := range versions {
-			schemas = append(schemas, schema)
-		}
-
-		return func() *ErrSchemaMismatch {
-			opaqueStorageValue := new(ErrSchemaMismatch)
-			opaqueStorageValue.privateStorage.schemas = schemas
-			return opaqueStorageValue
-		}()
-	}
-
-	return nil
-}
-
-type InternalSchemaAgreementHost struct {
-	DataCenter    string
-	Rack          string
-	RPCAddress    string
-	HostID        cqltype.UUID
-	SchemaVersion cqltype.UUID
-}
-
-func (h *InternalSchemaAgreementHost) IsValid() bool {
-	return h.DataCenter != "" && h.Rack != "" && h.HostID.String() != "" && h.SchemaVersion.String() != ""
-}
-
-type ErrSchemaMismatch struct {
-	privateStorage ErrSchemaMismatchStorage
-}
-
-func (e *ErrSchemaMismatch) Error() string {
-	return fmt.Sprintf("gocql: cluster schema versions not consistent: %+v", e.privateStorage.schemas)
-}
-
 func unmarshalTabletHint(hint []byte, _ uint8, keyspace, table string) (tablets.TabletInfo, error) {
 	return tablets.ParseHint(hint, keyspace, table)
 }
