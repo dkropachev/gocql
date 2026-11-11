@@ -88,7 +88,7 @@ func TestScan(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id text PRIMARY KEY,val list<frozen<map<text,text>>>)", table))
 			type nested = []cql.Entry[string, string]
 			want := []nested{{{Key: "key1", Value: "val1"}}, {{Key: "key2", Value: "val2"}}}
-			prepared := cassandraPrepared(t, session, cql.Statement[[]nested, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,val) VALUES('key',?)", table), Params: cql.OneParam(cql.ListEncoder(cql.MapEncoder(cql.StringEncoder, cql.StringEncoder))), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
+			prepared := cassandraPrepared(t, session, cql.Statement[[]nested, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,val) VALUES('key',?)", table), Params: cql.OneParam(cql.ListEncoder(cql.MapEncoder(cql.StringCodec, cql.StringCodec))), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 			_, err := Exec(context.Background(), session, cassandraBound(t, prepared, want), gocql.CompiledOptions{})
 			require.NoError(t, err)
 			row := cassandraReadBound(t, session, cassandraUnprepared(t, fmt.Sprintf("SELECT val FROM %s WHERE id='key'", table), cql.OneColumn(cql.ListDecoder(cql.MapDecoder(cql.TextCodec, cql.TextCodec)))), gocql.Options{})
@@ -175,7 +175,7 @@ func TestScan(t *testing.T) {
 				Name   FullName
 				Number int32
 			}
-			params := cql.Params(cql.Param("testtext", cql.StringEncoder, func(v input) string { return v.Text }), cql.Param("testfullname", fullNameCodec{}, func(v input) FullName { return v.Name }), cql.Param("testint", cql.Int32Codec, func(v input) int32 { return v.Number }))
+			params := cql.Params(cql.Param("testtext", cql.StringCodec, func(v input) string { return v.Text }), cql.Param("testfullname", fullNameCodec{}, func(v input) FullName { return v.Name }), cql.Param("testint", cql.Int32Codec, func(v input) int32 { return v.Number }))
 			prepared := cassandraPrepared(t, session, cql.Statement[input, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(testtext,testfullname,testint) VALUES(?,?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 			_, err := Exec(context.Background(), session, cassandraBound(t, prepared, input{"testtext", FullName{"John", "Doe"}, 100}), gocql.CompiledOptions{})
 			require.NoError(t, err)
@@ -190,7 +190,7 @@ func TestScan(t *testing.T) {
 			require.Equal(t, FullName{"John", "Doe"}, got.Name)
 			require.Equal(t, int32(100), got.Number)
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(testtext,testint) VALUES(?,?)", table), codecTestMust(cql.TextValue("null-int")), cql.NullValue(cql.IntValue(0).Type()))
-			nullable := cassandraPrepared(t, session, cql.Statement[string, cql.Nullable[int32]]{CQL: fmt.Sprintf("SELECT testint FROM %s WHERE testtext=?", table), Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.NullableCodec(cql.Int32Codec))}, gocql.PrepareOptions{})
+			nullable := cassandraPrepared(t, session, cql.Statement[string, cql.Nullable[int32]]{CQL: fmt.Sprintf("SELECT testint FROM %s WHERE testtext=?", table), Params: cql.OneParam(cql.StringCodec), Rows: cql.OneColumn(cql.NullableCodec(cql.Int32Codec))}, gocql.PrepareOptions{})
 			require.False(t, cassandraReadBound(t, session, cassandraBound(t, nullable, "null-int"), gocql.Options{}).Valid)
 		})
 		t.Run("Rows", func(t *testing.T) {
@@ -253,7 +253,7 @@ func TestScan(t *testing.T) {
 			}
 			type result struct{ N int32 }
 			decoder := cql.Row(cql.IgnoreColumn[result]("foo"), cql.Column("bar", cql.Int32Codec, func(r *result) *int32 { return &r.N }))
-			prepared := cassandraPrepared(t, session, cql.Statement[string, result]{CQL: fmt.Sprintf("SELECT * FROM %s WHERE foo=?", table), Params: cql.OneParam(cql.StringEncoder), Rows: decoder}, gocql.PrepareOptions{})
+			prepared := cassandraPrepared(t, session, cql.Statement[string, result]{CQL: fmt.Sprintf("SELECT * FROM %s WHERE foo=?", table), Params: cql.OneParam(cql.StringCodec), Rows: decoder}, gocql.PrepareOptions{})
 			rows, err := Run(context.Background(), session, cassandraBound(t, prepared, "squares"), gocql.CompiledOptions{})
 			require.NoError(t, err)
 			defer rows.Close()

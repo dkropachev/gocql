@@ -83,7 +83,7 @@ func TestPreparedOneShot(t *testing.T) {
 				var wg sync.WaitGroup
 				errs := make(chan error, 32)
 				if workload == "pwrite" {
-					statement := binding.Statement[loopbackRow, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k, value) VALUES(?, ?)", Params: codec.Params(codec.ParamAt(0, codec.Int32, func(r loopbackRow) int32 { return r.k }), codec.ParamAt(1, codec.BytesEncoder, func(r loopbackRow) []byte { return r.value })), Rows: codec.EmptyRowDecoder}
+					statement := binding.Statement[loopbackRow, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k, value) VALUES(?, ?)", Params: codec.Params(codec.ParamAt(0, codec.Int32, func(r loopbackRow) int32 { return r.k }), codec.ParamAt(1, codec.ByteSliceCodec, func(r loopbackRow) []byte { return r.value })), Rows: codec.EmptyRowDecoder}
 					p := codecTestMust(Prepare(ctx, s, statement, PrepareOptions{}))
 					for w := range 32 {
 						wg.Go(func() {

@@ -64,13 +64,13 @@ func TestMapDecoders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	codec := cql.MapCodec(cql.OwnedBlobCodec, cql.Int32Codec)
+	codec := cql.MapCodec(cql.ByteSliceCodec, cql.Int32Codec)
 	want := []cql.Entry[[]byte, int32]{{Key: []byte("z"), Value: 7}, {Key: []byte("a"), Value: 3}}
 	encoded, err := cql.EncodeValue(typ, codec, want)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, decoder := range []cql.Decoder[[]cql.Entry[[]byte, int32]]{codec, cql.MapDecoder(cql.OwnedBlobCodec, cql.Int32Codec)} {
+	for _, decoder := range []cql.Decoder[[]cql.Entry[[]byte, int32]]{codec, cql.MapDecoder(cql.ByteSliceCodec, cql.Int32Codec)} {
 		got, err := cql.DecodeValue(decoder, encoded)
 		if err != nil || !reflect.DeepEqual(got, want) {
 			t.Fatalf("decode = %v, %v; want ordered non-comparable keys %v", got, err, want)
@@ -95,7 +95,7 @@ func TestMapDecoders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, err := cql.DecodeValue(cql.MapDecoder(cql.OwnedBlobCodec, cql.Int32Codec), malformed); err == nil || got != nil {
+	if got, err := cql.DecodeValue(cql.MapDecoder(cql.ByteSliceCodec, cql.Int32Codec), malformed); err == nil || got != nil {
 		t.Fatalf("malformed map exposed partial values: %v, %v", got, err)
 	}
 }

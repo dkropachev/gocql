@@ -34,6 +34,6 @@ A page can hold fewer rows than the page size, or none, while `More()` is
 still true, so decide whether to continue with `More()`, never with the
 number of rows on the page.
 
-Use `RowInto` with `OwnedBlobCodec` for reusable owned buffered destinations.
+Use `RowInto` with `ByteSliceCodec` for reusable owned buffered destinations.
 See [streaming](streaming.md) for seeded streaming decoders and explicit
 incremental receive before a complete page arrives.

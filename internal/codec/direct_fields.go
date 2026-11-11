@@ -25,9 +25,9 @@ const (
 	directInt                  // a built-in signed integer codec of width bytes
 	directBlob                 // BlobCodec: a view borrowing the response
 	directText                 // TextCodec or ASCIICodec: a validated view borrowing the response
-	directOwnedBlob            // OwnedBlobCodec: a copy into the field's capacity
-	directBytes                // BytesEncoder
-	directString               // StringEncoder or ASCIIEncoder
+	directOwnedBlob            // ByteSliceCodec: a copy into the field's capacity
+	directBytes                // ByteSliceCodec
+	directString               // StringCodec or ASCIIStringCodec
 )
 
 // funcPointer returns a func value's pointer. A func value is one pointer
@@ -127,7 +127,7 @@ func (f outputField[R, V]) directRowOp() (rowOp[R], bool) {
 			return rowOp[R]{}, false
 		}
 		op.columnKind, op.alt, op.compiled = c.kind, c.alternative, c.compiled
-	case ownedBlobCodec:
+	case byteSliceCodec:
 		op.kind = directOwnedBlob
 	case textCodec:
 		// The field stays for columns of another kind, whose type error the
@@ -177,7 +177,7 @@ func (op *rowOp[R]) decodeDirect(reader *RowReader, dst *R) error {
 	case directText:
 		return op.decodeText(reader, dst, ptr)
 	default: // directOwnedBlob
-		return ownedBlobCodec{}.decodeColumnInto(reader, (*[]byte)(ptr))
+		return byteSliceCodec{}.decodeColumnInto(reader, (*[]byte)(ptr))
 	}
 }
 
@@ -217,12 +217,12 @@ func (f inputField[P, V]) directParamOp() (paramOp[P], bool) {
 			return paramOp[P]{}, false
 		}
 		op.kind, op.width, op.columnKind, op.alt = directInt, width, c.kind, c.alternative
-	case bytesEncoder:
+	case byteSliceCodec:
 		if !c.compiled {
 			return paramOp[P]{}, false
 		}
 		op.kind = directBytes
-	case stringEncoder:
+	case stringCodec:
 		if !c.compiled {
 			return paramOp[P]{}, false
 		}

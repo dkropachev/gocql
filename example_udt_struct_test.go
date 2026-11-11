@@ -45,7 +45,7 @@ func Example_userDefinedTypes() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	encoder := cql.UDTEncoder(cql.Params(cql.Param("street", cql.StringEncoder, func(v address) string { return v.Street }), cql.Param("number", cql.Int32Codec, func(v address) int32 { return v.Number })), opts)
+	encoder := cql.UDTEncoder(cql.Params(cql.Param("street", cql.StringCodec, func(v address) string { return v.Street }), cql.Param("number", cql.Int32Codec, func(v address) int32 { return v.Number })), opts)
 	encoded, err := cql.EncodeValue(typ, encoder, address{"Main Street", 42})
 	if err != nil {
 		log.Fatal(err)

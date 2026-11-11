@@ -28,7 +28,7 @@ func TestDetachRow(t *testing.T) {
 		input := row{View: cqltype.BorrowBytes([]byte("view")), Owned: []byte("owned"), Nested: []cqltype.Text{text}}
 		encoder := Params(
 			Param("view", BlobCodec, func(r row) cqltype.Bytes { return r.View }),
-			Param("owned", BytesEncoder, func(r row) []byte { return r.Owned }),
+			Param("owned", ByteSliceCodec, func(r row) []byte { return r.Owned }),
 			Param("nested", ListEncoder(TextCodec), func(r row) []cqltype.Text { return r.Nested }),
 		)
 		body := encodeTestParams(t, columns, encoder, input)
@@ -36,7 +36,7 @@ func TestDetachRow(t *testing.T) {
 		defer lease.Release()
 		plan := CodecTestMust(RowInto(func(*row) {},
 			Column("view", BlobCodec, func(r *row) *cqltype.Bytes { return &r.View }),
-			Column("owned", OwnedBlobCodec, func(r *row) *[]byte { return &r.Owned }),
+			Column("owned", ByteSliceCodec, func(r *row) *[]byte { return &r.Owned }),
 			Column("nested", ListCodec(TextCodec), func(r *row) *[]cqltype.Text { return &r.Nested }),
 		).Compile(columns))
 		dst := row{Owned: make([]byte, 0, 64), Nested: make([]cqltype.Text, 1)}
@@ -59,7 +59,7 @@ func TestDetachRow(t *testing.T) {
 	})
 	t.Run("CustomCloneFallback", func(t *testing.T) {
 		columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: cqltype.BlobType})
-		body := encodeTestParams(t, columns, OneParam(BytesEncoder), []byte("custom"))
+		body := encodeTestParams(t, columns, OneParam(ByteSliceCodec), []byte("custom"))
 		lease := wire.NewLease(body, nil)
 		defer lease.Release()
 		base := CodecTestMust(OneColumn(BlobCodec).Compile(columns))
@@ -95,7 +95,7 @@ func TestDetachRow(t *testing.T) {
 
 	t.Run("DynamicRow", func(t *testing.T) {
 		columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: cqltype.BlobType})
-		body := encodeTestParams(t, columns, OneParam(BytesEncoder), []byte("dynamic"))
+		body := encodeTestParams(t, columns, OneParam(ByteSliceCodec), []byte("dynamic"))
 		lease := wire.NewLease(body, nil)
 		defer lease.Release()
 		plan := CodecTestMust(DynamicRows.Compile(columns))

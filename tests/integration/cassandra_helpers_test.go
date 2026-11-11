@@ -280,7 +280,7 @@ type fullNameCodec struct{}
 
 func (fullNameCodec) CheckType(t cql.DataType) error { return cql.TextCodec.CheckType(t) }
 func (fullNameCodec) Encode(w *cql.ValueWriter, n FullName) error {
-	return cql.StringEncoder.Encode(w, n.FirstName+" "+n.LastName)
+	return cql.StringCodec.Encode(w, n.FirstName+" "+n.LastName)
 }
 func (fullNameCodec) Decode(r cql.ValueReader) (FullName, error) {
 	text, err := cql.TextCodec.Decode(r)

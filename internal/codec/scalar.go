@@ -215,14 +215,11 @@ var (
 	UUIDCodec     Codec[cqltype.UUID] = scalarCodec[cqltype.UUID]{kind: cqltype.TypeUUID, encode: encodeUUID, decode: decodeUUID}
 	TimeUUIDCodec Codec[TimeUUID]     = scalarCodec[TimeUUID]{kind: cqltype.TypeTimeUUID, encode: encodeTimeUUID, decode: decodeTimeUUID}
 	InetCodec     Codec[netip.Addr]   = scalarCodec[netip.Addr]{kind: cqltype.TypeInet, encode: encodeInet, decode: decodeInet}
-	StringEncoder Encoder[string]     = stringEncoder{}
-	ASCIIEncoder  Encoder[string]     = stringEncoder{ascii: true}
 	// StringCodec encodes a string and decodes into a newly allocated one,
 	// so decoded values stay valid after the row. TextCodec decodes without
 	// copying.
-	StringCodec      Codec[string]        = stringEncoder{}
-	ASCIIStringCodec Codec[string]        = stringEncoder{ascii: true}
-	BytesEncoder     Encoder[[]byte]      = bytesEncoder{}
+	StringCodec      Codec[string]        = stringCodec{}
+	ASCIIStringCodec Codec[string]        = stringCodec{ascii: true}
 	TextCodec        Codec[cqltype.Text]  = textCodec{}
 	ASCIICodec       Codec[cqltype.Text]  = textCodec{ascii: true}
 	BlobCodec        Codec[cqltype.Bytes] = scalarCodec[cqltype.Bytes]{kind: cqltype.TypeBlob,
@@ -344,7 +341,7 @@ func decodeInet(r ValueReader) (netip.Addr, error) {
 	}
 }
 
-type stringEncoder struct{ ascii, compiled bool }
+type stringCodec struct{ ascii, compiled bool }
 
 func checkTextType(t cqltype.DataType, ascii bool) error {
 	if ascii {
@@ -356,11 +353,11 @@ func checkTextType(t cqltype.DataType, ascii bool) error {
 	}
 	return fmt.Errorf("gocql: incompatible text type %s", t.Kind())
 }
-func (c stringEncoder) CheckType(t cqltype.DataType) error {
+func (c stringCodec) CheckType(t cqltype.DataType) error {
 	perfCheckType()
 	return checkTextType(t, c.ascii)
 }
-func (c stringEncoder) Encode(w *ValueWriter, v string) error {
+func (c stringCodec) Encode(w *ValueWriter, v string) error {
 	if e := c.typeGuard(w.Type()); e != nil {
 		return e
 	}
@@ -377,37 +374,20 @@ func (c stringEncoder) Encode(w *ValueWriter, v string) error {
 }
 
 // Decode copies the text value into a new string.
-func (c stringEncoder) Decode(r ValueReader) (string, error) {
+func (c stringCodec) Decode(r ValueReader) (string, error) {
 	t, err := textCodec(c).Decode(r)
 	if err != nil {
 		return "", err
 	}
 	return t.String(), nil
 }
-func (stringEncoder) Clone(v string) string { return v }
-func (c stringEncoder) compileValueDecoder(t cqltype.DataType) (Decoder[string], error) {
+func (stringCodec) Clone(v string) string { return v }
+func (c stringCodec) compileValueDecoder(t cqltype.DataType) (Decoder[string], error) {
 	if e := c.CheckType(t); e != nil {
 		return nil, e
 	}
 	c.compiled = true
 	return c, nil
-}
-
-type bytesEncoder struct{ compiled bool }
-
-func (bytesEncoder) CheckType(t cqltype.DataType) error {
-	perfCheckType()
-
-	if t.Kind() != cqltype.TypeBlob {
-		return fmt.Errorf("gocql: blob codec cannot use %s", t.Kind())
-	}
-	return nil
-}
-func (c bytesEncoder) Encode(w *ValueWriter, v []byte) error {
-	if e := c.typeGuard(w.Type()); e != nil {
-		return e
-	}
-	return w.BorrowBytes(v)
 }
 
 type textCodec struct{ ascii, compiled bool }
@@ -952,26 +932,13 @@ func (c textCodec) compileValueEncoder(t cqltype.DataType) (Encoder[cqltype.Text
 	c.compiled = true
 	return c, nil
 }
-func (c stringEncoder) typeGuard(t cqltype.DataType) error {
+func (c stringCodec) typeGuard(t cqltype.DataType) error {
 	if c.compiled {
 		return checkTextType(t, c.ascii)
 	}
 	return c.CheckType(t)
 }
-func (c stringEncoder) compileValueEncoder(t cqltype.DataType) (Encoder[string], error) {
-	if e := c.CheckType(t); e != nil {
-		return nil, e
-	}
-	c.compiled = true
-	return c, nil
-}
-func (c bytesEncoder) typeGuard(t cqltype.DataType) error {
-	if c.compiled {
-		return checkScalarType(t, cqltype.TypeBlob, 0)
-	}
-	return c.CheckType(t)
-}
-func (c bytesEncoder) compileValueEncoder(t cqltype.DataType) (Encoder[[]byte], error) {
+func (c stringCodec) compileValueEncoder(t cqltype.DataType) (Encoder[string], error) {
 	if e := c.CheckType(t); e != nil {
 		return nil, e
 	}

@@ -99,54 +99,52 @@ func builtinFields[P any]() []builtinField[P] {
 	// WithCodec or a codec= tag) because key and value pairs multiply.
 	var fields []builtinField[P]
 	add := func(entries ...builtinField[P]) { fields = append(fields, entries...) }
-	add(builtin[P](Bool, Bool, Bool, "bool", "BoolCodec", "BoolCodec", "BoolCodec", true)...)
-	add(builtin[P](Int8, Int8, Int8, "int8", "Int8Codec", "Int8Codec", "Int8Codec", true)...)
-	add(builtin[P](Int16, Int16, Int16, "int16", "Int16Codec", "Int16Codec", "Int16Codec", true)...)
-	add(builtin[P](Int32, Int32, Int32, "int32", "Int32Codec", "Int32Codec", "Int32Codec", true)...)
-	add(builtin[P](Int64, Int64, Int64, "int64", "Int64Codec", "Int64Codec", "Int64Codec", true)...)
-	add(builtin[P](Float32, Float32, Float32, "float32", "Float32Codec", "Float32Codec", "Float32Codec", true)...)
-	add(builtin[P](Float64, Float64, Float64, "float64", "Float64Codec", "Float64Codec", "Float64Codec", true)...)
-	add(builtin[P](StringCodec, StringCodec, StringCodec, "string", "StringCodec", "StringCodec", "StringCodec", true)...)
-	add(builtin[P](ASCIIStringCodec, ASCIIStringCodec, ASCIIStringCodec, "string", "ASCIIStringCodec", "ASCIIStringCodec", "ASCIIStringCodec", false)...)
-	add(builtin[P](BytesEncoder, OwnedBlobCodec, OwnedBlobCodec, "[]byte", "BytesEncoder", "OwnedBlobCodec", "OwnedBlobCodec", true)...)
-	add(builtin[P](BlobCodec, BlobCodec, BlobCodec, "cql.Bytes", "BlobCodec", "BlobCodec", "BlobCodec", true)...)
-	add(builtin[P](UUIDCodec, UUIDCodec, UUIDCodec, "cql.UUID", "UUIDCodec", "UUIDCodec", "UUIDCodec", true)...)
-	add(builtin[P](TimeUUIDCodec, TimeUUIDCodec, TimeUUIDCodec, "cql.TimeUUID", "TimeUUIDCodec", "TimeUUIDCodec", "TimeUUIDCodec", true)...)
-	add(builtin[P](InetCodec, InetCodec, InetCodec, "netip.Addr", "InetCodec", "InetCodec", "InetCodec", true)...)
-	add(builtin[P](CounterCodec, CounterCodec, CounterCodec, "cql.Counter", "CounterCodec", "CounterCodec", "CounterCodec", true)...)
-	add(builtin[P](VarintCodec, VarintCodec, VarintCodec, "cql.Varint", "VarintCodec", "VarintCodec", "VarintCodec", true)...)
-	add(builtin[P](DecimalCodec, DecimalCodec, DecimalCodec, "cql.Decimal", "DecimalCodec", "DecimalCodec", "DecimalCodec", true)...)
-	add(builtin[P](DateCodec, DateCodec, DateCodec, "cql.Date", "DateCodec", "DateCodec", "DateCodec", true)...)
-	add(builtin[P](TimeCodec, TimeCodec, TimeCodec, "cql.TimeOfDay", "TimeCodec", "TimeCodec", "TimeCodec", true)...)
-	add(builtin[P](TimestampCodec, TimestampCodec, TimestampCodec, "cql.Timestamp", "TimestampCodec", "TimestampCodec", "TimestampCodec", true)...)
-	add(builtin[P](DurationCodec, DurationCodec, DurationCodec, "cql.Duration", "DurationCodec", "DurationCodec", "DurationCodec", true)...)
+	add(builtin[P](Bool, "bool", "BoolCodec", true)...)
+	add(builtin[P](Int8, "int8", "Int8Codec", true)...)
+	add(builtin[P](Int16, "int16", "Int16Codec", true)...)
+	add(builtin[P](Int32, "int32", "Int32Codec", true)...)
+	add(builtin[P](Int64, "int64", "Int64Codec", true)...)
+	add(builtin[P](Float32, "float32", "Float32Codec", true)...)
+	add(builtin[P](Float64, "float64", "Float64Codec", true)...)
+	add(builtin[P](StringCodec, "string", "StringCodec", true)...)
+	add(builtin[P](ASCIIStringCodec, "string", "ASCIIStringCodec", false)...)
+	add(builtin[P](ByteSliceCodec, "[]byte", "ByteSliceCodec", true)...)
+	add(builtin[P](BlobCodec, "cql.Bytes", "BlobCodec", true)...)
+	add(builtin[P](UUIDCodec, "cql.UUID", "UUIDCodec", true)...)
+	add(builtin[P](TimeUUIDCodec, "cql.TimeUUID", "TimeUUIDCodec", true)...)
+	add(builtin[P](InetCodec, "netip.Addr", "InetCodec", true)...)
+	add(builtin[P](CounterCodec, "cql.Counter", "CounterCodec", true)...)
+	add(builtin[P](VarintCodec, "cql.Varint", "VarintCodec", true)...)
+	add(builtin[P](DecimalCodec, "cql.Decimal", "DecimalCodec", true)...)
+	add(builtin[P](DateCodec, "cql.Date", "DateCodec", true)...)
+	add(builtin[P](TimeCodec, "cql.TimeOfDay", "TimeCodec", true)...)
+	add(builtin[P](TimestampCodec, "cql.Timestamp", "TimestampCodec", true)...)
+	add(builtin[P](DurationCodec, "cql.Duration", "DurationCodec", true)...)
 	return fields
 }
 
 // builtin returns the entries for V, Nullable[V], and []V as a list (the
-// default) or a set (`codec=SetCodec`) of elem, the codec V's elements use.
-func builtin[P, V any](enc Encoder[V], dec Decoder[V], elem Codec[V], typeSrc, encName, decName, elemName string, def bool) []builtinField[P] {
-	names := []string{encName}
-	if decName != encName {
-		names = append(names, decName)
-	}
+// default), a set (`codec=SetCodec`) or a vector (`codec=VectorCodec`) of c.
+// name is c's exported name, which a `codec=` tag selects it by.
+func builtin[P, V any](c Codec[V], typeSrc, name string, def bool) []builtinField[P] {
+	names := []string{name}
 	plain := builtinField[P]{
 		BuiltinFieldType: BuiltinFieldType{
 			Type: reflect.TypeFor[V](), TypeSrc: typeSrc,
-			EncoderSrc: "cql." + encName, DecoderSrc: "cql." + decName,
+			EncoderSrc: "cql." + name, DecoderSrc: "cql." + name,
 			Names: names, Default: def,
 		},
-		param:  fieldParam[P](enc),
-		column: fieldColumn[P](dec),
+		param:  fieldParam[P](Encoder[V](c)),
+		column: fieldColumn[P](Decoder[V](c)),
 	}
 	nullable := builtinField[P]{
 		BuiltinFieldType: BuiltinFieldType{
 			Type: reflect.TypeFor[cqltype.Nullable[V]](), TypeSrc: "cql.Nullable[" + typeSrc + "]",
-			EncoderSrc: "cql.NullableEncoder(cql." + encName + ")", DecoderSrc: "cql.NullableDecoder(cql." + decName + ")",
+			EncoderSrc: "cql.NullableEncoder(cql." + name + ")", DecoderSrc: "cql.NullableDecoder(cql." + name + ")",
 			Names: names, Default: def,
 		},
-		param:  fieldParam[P](NullableEncoder(enc)),
-		column: fieldColumn[P](NullableDecoder(dec)),
+		param:  fieldParam[P](NullableEncoder[V](c)),
+		column: fieldColumn[P](NullableDecoder[V](c)),
 	}
 	collection := func(codec Codec[[]V], src string, names []string, def bool) builtinField[P] {
 		return builtinField[P]{
@@ -159,10 +157,10 @@ func builtin[P, V any](enc Encoder[V], dec Decoder[V], elem Codec[V], typeSrc, e
 		}
 	}
 	fields := []builtinField[P]{plain, nullable,
-		collection(ListCodec(elem), "cql.ListCodec(cql."+elemName+")", names, def)}
+		collection(ListCodec(c), "cql.ListCodec(cql."+name+")", names, def)}
 	if def {
-		fields = append(fields, collection(SetCodec(elem), "cql.SetCodec(cql."+elemName+")", []string{"SetCodec"}, false))
-		fields = append(fields, collection(VectorCodec(elem), "cql.VectorCodec(cql."+elemName+")", []string{"VectorCodec"}, false))
+		fields = append(fields, collection(SetCodec(c), "cql.SetCodec(cql."+name+")", []string{"SetCodec"}, false))
+		fields = append(fields, collection(VectorCodec(c), "cql.VectorCodec(cql."+name+")", []string{"VectorCodec"}, false))
 	}
 	return fields
 }

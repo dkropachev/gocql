@@ -131,7 +131,7 @@ func TestQuery(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int,cluster int,value text,PRIMARY KEY(id,cluster))", table))
-			params := cql.Params(cql.Param("value", cql.StringEncoder, func(v ClusteredKeyValue) string { return v.Value }), cql.Param("cluster", cql.Int32Codec, func(v ClusteredKeyValue) int32 { return v.Cluster }), cql.Param("id", cql.Int32Codec, func(v ClusteredKeyValue) int32 { return v.Id }))
+			params := cql.Params(cql.Param("value", cql.StringCodec, func(v ClusteredKeyValue) string { return v.Value }), cql.Param("cluster", cql.Int32Codec, func(v ClusteredKeyValue) int32 { return v.Cluster }), cql.Param("id", cql.Int32Codec, func(v ClusteredKeyValue) int32 { return v.Id }))
 			prepared := cassandraPrepared(t, session, cql.Statement[ClusteredKeyValue, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,cluster,value) VALUES(?,?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 			require.Equal(t, 3, prepared.Parameters().Len())
 			_, err := Exec(context.Background(), session, cassandraBound(t, prepared, ClusteredKeyValue{200, 300, "baz"}), gocql.CompiledOptions{})
@@ -709,7 +709,7 @@ func TestQuery(t *testing.T) {
 			}
 			typ := cql.TextType
 			var keyspaceName string
-			found, _, err := session.UnpreparedOne(verify, cql.Statement[string, string]{Kind: cql.OrdinaryStatement, CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name=?", Params: cql.OneParam(cql.StringEncoder), Rows: cql.OneColumn(cql.StringCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "keyspace_name", Type: typ})}, namespace, &keyspaceName)
+			found, _, err := session.UnpreparedOne(verify, cql.Statement[string, string]{Kind: cql.OrdinaryStatement, CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name=?", Params: cql.OneParam(cql.StringCodec), Rows: cql.OneColumn(cql.StringCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "keyspace_name", Type: typ})}, namespace, &keyspaceName)
 			if err != nil {
 				t.Error(err)
 				return
@@ -748,7 +748,7 @@ func TestQuery(t *testing.T) {
 			K, C int32
 			P    []byte
 		}
-		write := codecTestMust(session.Prepare(ctx, cql.Statement[record, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO " + table + "(k,c,p)VALUES(?,?,?)", Params: cql.Params(cql.Param("k", cql.Int32Codec, func(r record) int32 { return r.K }), cql.Param("c", cql.Int32Codec, func(r record) int32 { return r.C }), cql.Param("p", cql.BytesEncoder, func(r record) []byte { return r.P })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
+		write := codecTestMust(session.Prepare(ctx, cql.Statement[record, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO " + table + "(k,c,p)VALUES(?,?,?)", Params: cql.Params(cql.Param("k", cql.Int32Codec, func(r record) int32 { return r.K }), cql.Param("c", cql.Int32Codec, func(r record) int32 { return r.C }), cql.Param("p", cql.ByteSliceCodec, func(r record) []byte { return r.P })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
 		w := codecTestMust(write.Query(gocql.Options{}))
 		defer w.Close()
 		payload := bytes.Repeat([]byte{42}, 4096)
@@ -757,7 +757,7 @@ func TestQuery(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		decoder := cql.RowInto(func(*record) {}, cql.Column("c", cql.Int32Codec, func(r *record) *int32 { return &r.C }), cql.Column("p", cql.OwnedBlobCodec, func(r *record) *[]byte { return &r.P }))
+		decoder := cql.RowInto(func(*record) {}, cql.Column("c", cql.Int32Codec, func(r *record) *int32 { return &r.C }), cql.Column("p", cql.ByteSliceCodec, func(r *record) *[]byte { return &r.P }))
 		read := codecTestMust(session.Prepare(ctx, cql.Statement[int32, record]{Kind: cql.OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32Codec), Rows: decoder}, gocql.PrepareOptions{}))
 		q := codecTestMust(read.Query(gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
 		defer q.Close()

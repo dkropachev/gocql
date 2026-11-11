@@ -171,7 +171,7 @@ func TestRowsCodec(t *testing.T) {
 				}
 				return &value.Inner
 			}))
-			params := OneParam(TupleEncoder(PairParams(1, OneParam(Int32), OneParam(StringEncoder))))
+			params := OneParam(TupleEncoder(PairParams(1, OneParam(Int32), OneParam(StringCodec))))
 			body := encodeTestParams(t, columns, params, Pair[int32, string]{First: 7, Second: "borrowed"})
 			lease := wire.NewLease(body, nil)
 			plan := CodecTestMust(decoder.Compile(columns))
@@ -201,7 +201,7 @@ func TestRowsCodec(t *testing.T) {
 	})
 	t.Run("DirectOps", func(t *testing.T) {
 		// A writer that owns its input copies blobs into the frame even on a
-		// borrowing builder, as BytesEncoder does, so the caller may reuse them.
+		// borrowing builder, as ByteSliceCodec does, so the caller may reuse them.
 		t.Run("ParamsCopyOwnedInput", func(t *testing.T) {
 			columns := directColumns(t)
 			plan := CodecTestMust(directParams.Compile(columns))
@@ -447,7 +447,7 @@ func TestRowsCodec(t *testing.T) {
 		})
 		t.Run("OwnedDetachesOnlyBorrowed", func(t *testing.T) {
 			columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "blob", Type: rowTestType(t, cqltype.TypeBlob)})
-			plan, err := OneParam(BytesEncoder).Compile(columns)
+			plan, err := OneParam(ByteSliceCodec).Compile(columns)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -498,7 +498,7 @@ func TestRowsCodec(t *testing.T) {
 			)
 			params := Params(
 				Param("key", Int32, func(v input) int32 { return v.Key }),
-				Param("body", BytesEncoder, func(v input) []byte { return v.Body }),
+				Param("body", ByteSliceCodec, func(v input) []byte { return v.Body }),
 			)
 			payload := []byte("borrowed payload")
 			chain := encodeTestParams(t, columns, params, input{Key: 42, Body: payload})

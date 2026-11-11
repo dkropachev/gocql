@@ -48,8 +48,8 @@ func (c scalarCodec[T]) detachValue(dst *T) {
 	}
 }
 
-func (stringEncoder) detachValue(*string)         {}
-func (ownedBlobCodec) detachValue(*[]byte)        {}
+func (stringCodec) detachValue(*string)           {}
+func (byteSliceCodec) detachValue(*[]byte)        {}
 func (c textCodec) detachValue(dst *cqltype.Text) { *dst = c.Clone(*dst) }
 
 func (c nullableDecoder[T]) detachValue(dst *cqltype.Nullable[T]) {

@@ -17,7 +17,7 @@ import (
 func eachTestQuery(t *testing.T) (*Query[codec.EmptyRecord, []byte], func(bodies ...[]byte) chan struct{}) {
 	t.Helper()
 	s, conns, peers := runtimeTestSession(t, 1)
-	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
 	q := codecTestMust(unpreparedQuery(s, statement, Options{}))
 	t.Cleanup(q.Close)
 	serve := func(bodies ...[]byte) chan struct{} {
@@ -42,7 +42,7 @@ func eachTestQuery(t *testing.T) (*Query[codec.EmptyRecord, []byte], func(bodies
 func eachPageTimeoutQuery(t *testing.T) (*Query[codec.EmptyRecord, []byte], net.Conn) {
 	t.Helper()
 	s, _, peers := runtimeTestSession(t, 1)
-	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
 	options := testOptions(Options{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Second}, PageTimeout: cqltype.Option[time.Duration]{Set: true, Value: 100 * time.Millisecond}})
 	q := codecTestMust(unpreparedQuery(s, statement, options.Values()))
 	t.Cleanup(q.Close)

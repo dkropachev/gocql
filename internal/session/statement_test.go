@@ -9,8 +9,8 @@ import (
 
 type countingBlobEncoder struct{ calls *int }
 
-func (c countingBlobEncoder) CheckType(t cql.DataType) error { return cql.BytesEncoder.CheckType(t) }
+func (c countingBlobEncoder) CheckType(t cql.DataType) error { return cql.ByteSliceCodec.CheckType(t) }
 func (c countingBlobEncoder) Encode(w *cql.ValueWriter, b []byte) error {
 	*c.calls++
-	return cql.BytesEncoder.Encode(w, b)
+	return cql.ByteSliceCodec.Encode(w, b)
 }

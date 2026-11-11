@@ -68,7 +68,7 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 			}
 			return fixtureBody(typ, implCodec.InetCodec, ip)
 		}
-		return fixtureBody(typ, implCodec.StringEncoder, v)
+		return fixtureBody(typ, implCodec.StringCodec, v)
 	case net.IP:
 		ip, ok := netip.AddrFromSlice(v)
 		if !ok {
@@ -90,7 +90,7 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 		for k, x := range v {
 			entries = append(entries, implCodec.Entry[string, cqltype.Bytes]{Key: k, Value: cqltype.BorrowBytes(x)})
 		}
-		return fixtureBody(typ, implCodec.MapEncoder(implCodec.StringEncoder, implCodec.BlobCodec), entries)
+		return fixtureBody(typ, implCodec.MapEncoder(implCodec.StringCodec, implCodec.BlobCodec), entries)
 	case bool:
 		return fixtureBody(typ, implCodec.Bool, v)
 	case int:
@@ -103,15 +103,15 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 		return fixtureBody(typ, implCodec.Float64, v)
 	case []string:
 		if typ.Kind() == cqltype.TypeSet {
-			return fixtureBody(typ, implCodec.SetEncoder(implCodec.StringEncoder), v)
+			return fixtureBody(typ, implCodec.SetEncoder(implCodec.StringCodec), v)
 		}
-		return fixtureBody(typ, implCodec.ListEncoder(implCodec.StringEncoder), v)
+		return fixtureBody(typ, implCodec.ListEncoder(implCodec.StringCodec), v)
 	case map[string]string:
 		entries := make([]implCodec.Entry[string, string], 0, len(v))
 		for k, x := range v {
 			entries = append(entries, implCodec.Entry[string, string]{Key: k, Value: x})
 		}
-		return fixtureBody(typ, implCodec.MapEncoder(implCodec.StringEncoder, implCodec.StringEncoder), entries)
+		return fixtureBody(typ, implCodec.MapEncoder(implCodec.StringCodec, implCodec.StringCodec), entries)
 	default:
 		return nil, fmt.Errorf("unsupported explicit fixture value %T", value)
 	}

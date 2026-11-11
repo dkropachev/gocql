@@ -157,7 +157,7 @@ func injectInvalidPreparedStatement(t *testing.T, session *gocql.Session[testDia
 	t.Helper()
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(foo varchar,bar int,PRIMARY KEY(foo,bar))", table))
 	conn := getRandomConn(t, session)
-	prepared := cassandraPrepared(t, session, cql.Statement[string, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,7)", table), Params: cql.OneParam(cql.StringEncoder), Rows: cql.EmptyRowDecoder}, *func() *implSession.PrepareOptions {
+	prepared := cassandraPrepared(t, session, cql.Statement[string, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,7)", table), Params: cql.OneParam(cql.StringCodec), Rows: cql.EmptyRowDecoder}, *func() *implSession.PrepareOptions {
 		opaqueStorageValuex := new(implSession.PrepareOptions)
 		opaqueStorageValuex.HostID = cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
 		implSession.PrepareOptionsData(opaqueStorageValuex).InternalConnection = conn

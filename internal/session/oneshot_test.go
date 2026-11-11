@@ -72,7 +72,7 @@ func parseOneShotExecute(stream int, b []byte) oneShotRequest {
 }
 
 func oneShotStatement() binding.Statement[int32, []byte] {
-	return binding.Statement[int32, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: codec.OneParam(codec.Int32), Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+	return binding.Statement[int32, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: codec.OneParam(codec.Int32), Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
 }
 
 func oneShotPrepare(t testing.TB, s *cluster.Core, peer net.Conn, requests chan oneShotRequest) *Prepared[int32, []byte] {

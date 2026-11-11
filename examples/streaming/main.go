@@ -203,8 +203,8 @@ func stream[D gocql.Dialect](ctx context.Context, cfg gocql.Config, incremental,
 	}
 	insert, err := s.Prepare(ctx, cql.Statement[record, cql.EmptyRow]{CQL: "INSERT INTO " + table + " (id,payload,pieces) VALUES (?,?,?)", Params: cql.Params(
 		cql.Param("id", cql.Int32Codec, func(v record) int32 { return v.ID }),
-		cql.Param("payload", cql.BytesEncoder, func(v record) []byte { return v.Payload }),
-		cql.Param("pieces", cql.ListEncoder(cql.BytesEncoder), func(v record) [][]byte { return v.Pieces }),
+		cql.Param("payload", cql.ByteSliceCodec, func(v record) []byte { return v.Payload }),
+		cql.Param("pieces", cql.ListEncoder(cql.ByteSliceCodec), func(v record) [][]byte { return v.Pieces }),
 	), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 	if err != nil {
 		return err

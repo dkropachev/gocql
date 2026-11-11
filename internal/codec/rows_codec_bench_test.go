@@ -39,7 +39,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 		decoder := Row(Column("number", Int32, func(r *row) *int32 { return &r.Number }), Column("payload", BlobCodec, func(r *row) *cqltype.Bytes { return &r.Payload }))
 		plan := CodecTestMust(decoder.Compile(cols))
 		payload := bytes.Repeat([]byte{0x31}, 512000)
-		framed := append(streamEncodedFixture(b, integer, Int32, int32(1)), streamEncodedFixture(b, blob, BytesEncoder, payload)...)
+		framed := append(streamEncodedFixture(b, integer, Int32, int32(1)), streamEncodedFixture(b, blob, ByteSliceCodec, payload)...)
 		for _, fragments := range []int{1, 1024, 65536} {
 			parts := make([]wire.Span, 0, fragments)
 			for start := 0; start < len(framed); {

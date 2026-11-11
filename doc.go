@@ -68,7 +68,7 @@
 // Page-buffered memory scales with concurrent response pages and is bounded by
 // configured frame and decompression limits. Borrowed result views expire on
 // advancement or cursor Close unless a PageLease retains their page.
-// OwnedBlobCodec fills reusable owned slices with RowInto.
+// ByteSliceCodec fills reusable owned slices with RowInto.
 //
 // The driver logs through log/slog, to slog.Default() unless
 // ConfigBuilder.WithLogger supplies another logger. Debug carries

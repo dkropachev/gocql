@@ -9,9 +9,9 @@ predeclared scalars such as `TextType` and `IntType` need no error check.
 `Row(Column(...))` map struct fields explicitly.
 
 Native scalars have explicit codecs such as Int32Codec, Int64Codec, BoolCodec, UUIDCodec,
-TimestampCodec and DurationCodec. `StringEncoder` encodes a Go string;
-TextCodec decodes a borrowed Text. BytesEncoder accepts []byte and BlobCodec
-uses borrowed Bytes. Collection decoders eagerly produce slices whose payload elements may borrow pages;
+TimestampCodec and DurationCodec. `StringCodec` and `ByteSliceCodec` encode a Go string and []byte and decode
+an owned copy; TextCodec and BlobCodec decode a borrowed Text and Bytes
+without copying. Collection decoders eagerly produce slices whose payload elements may borrow pages;
 nullable/empty wrappers distinguish null, empty and present values. Unset is
 an explicit binding state and is invalid in results.
 

@@ -355,7 +355,7 @@ func TestRouting(t *testing.T) {
 				Key   string
 				Value int32
 			}
-			params := cql.Params(cql.Param("key", cql.StringEncoder, func(v input) string { return v.Key }), cql.Param("value", cql.Int32Codec, func(v input) int32 { return v.Value }))
+			params := cql.Params(cql.Param("key", cql.StringCodec, func(v input) string { return v.Key }), cql.Param("value", cql.Int32Codec, func(v input) int32 { return v.Value }))
 			prepared := cassandraPrepared(t, session, cql.Statement[input, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(key,value) VALUES(?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 			require.Equal(t, []int{0}, prepared.Info().PartitionKeyIndexes)
 			bound := cassandraBound(t, prepared, input{"routing-key", 5})

@@ -14,24 +14,24 @@ import (
 type countingBlobEncoder struct{ calls *int }
 
 func (c countingBlobEncoder) CheckType(t cqltype.DataType) error {
-	return codec.BytesEncoder.CheckType(t)
+	return codec.ByteSliceCodec.CheckType(t)
 }
 func (c countingBlobEncoder) Encode(w *codec.ValueWriter, b []byte) error {
 	*c.calls++
-	return codec.BytesEncoder.Encode(w, b)
+	return codec.ByteSliceCodec.Encode(w, b)
 }
 
 var errFailingBlob = errors.New("failing blob")
 
-// failingBlobEncoder encodes like BytesEncoder, then fails for the value
+// failingBlobEncoder encodes like ByteSliceCodec, then fails for the value
 // "fail" after writing it.
 type failingBlobEncoder struct{}
 
 func (failingBlobEncoder) CheckType(t cqltype.DataType) error {
-	return codec.BytesEncoder.CheckType(t)
+	return codec.ByteSliceCodec.CheckType(t)
 }
 func (failingBlobEncoder) Encode(w *codec.ValueWriter, b []byte) error {
-	if err := codec.BytesEncoder.Encode(w, b); err != nil {
+	if err := codec.ByteSliceCodec.Encode(w, b); err != nil {
 		return err
 	}
 	if bytes.Equal(b, []byte("fail")) {

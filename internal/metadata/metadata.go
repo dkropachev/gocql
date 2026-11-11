@@ -375,7 +375,7 @@ type v2SchemaParams struct{ count int }
 func (v2SchemaParams) Compile(columns cqltype.Columns) (codec.ParamPlan[[]string], error) {
 	for i := 0; i < columns.Len(); i++ {
 		c, _ := columns.At(i)
-		if err := codec.StringEncoder.CheckType(c.Type); err != nil {
+		if err := codec.StringCodec.CheckType(c.Type); err != nil {
 			return nil, err
 		}
 	}
@@ -386,7 +386,7 @@ func (p v2SchemaParams) Encode(w *codec.ParamWriter, values []string) error {
 		return cqltype.TypeValidation("schema parameters", "wrong count")
 	}
 	for _, value := range values {
-		if err := w.WriteParam(codec.StringEncoder, value); err != nil {
+		if err := w.WriteParam(codec.StringCodec, value); err != nil {
 			return err
 		}
 	}

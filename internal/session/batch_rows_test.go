@@ -20,8 +20,8 @@ type batchRow struct{ A, B []byte }
 const heldQueryAllocs = 3
 
 var (
-	batchRowA = codec.Row(codec.Column("value", codec.OwnedBlobCodec, func(r *batchRow) *[]byte { return &r.A }))
-	batchRowB = codec.Row(codec.Column("value", codec.OwnedBlobCodec, func(r *batchRow) *[]byte { return &r.B }))
+	batchRowA = codec.Row(codec.Column("value", codec.ByteSliceCodec, func(r *batchRow) *[]byte { return &r.A }))
+	batchRowB = codec.Row(codec.Column("value", codec.ByteSliceCodec, func(r *batchRow) *[]byte { return &r.B }))
 )
 
 // runBatchRows reads every row of a RunBatch and closes the rows, returning
@@ -127,7 +127,7 @@ func TestUnpreparedAddToBatch(t *testing.T) {
 	var batch Batch
 	statement := binding.Statement[[]byte, codec.EmptyRecord]{
 		Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)",
-		Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder,
+		Params: codec.OneParam(codec.ByteSliceCodec), Rows: codec.EmptyRowDecoder,
 		BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: cqltype.BlobType}),
 	}
 	if err := session.UnpreparedAddToBatch(&batch, statement, []byte("abc")); err != nil {

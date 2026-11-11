@@ -42,7 +42,7 @@ type v2Worker struct {
 }
 
 var streamDecoder = cql.StreamRow(func(*row) {}, cql.StreamColumn("k", cql.StreamInt32, func(r *row) *int32 { return &r.K }), cql.StreamColumn("r", cql.StreamInt32, func(r *row) *int32 { return &r.R }), cql.StreamColumn("p", cql.StreamBlob, func(r *row) *[]byte { return &r.P }))
-var bufferedDecoder = cql.RowInto(func(*row) {}, cql.Column("k", cql.Int32Codec, func(r *row) *int32 { return &r.K }), cql.Column("r", cql.Int32Codec, func(r *row) *int32 { return &r.R }), cql.Column("p", cql.OwnedBlobCodec, func(r *row) *[]byte { return &r.P }))
+var bufferedDecoder = cql.RowInto(func(*row) {}, cql.Column("k", cql.Int32Codec, func(r *row) *int32 { return &r.K }), cql.Column("r", cql.Int32Codec, func(r *row) *int32 { return &r.R }), cql.Column("p", cql.ByteSliceCodec, func(r *row) *[]byte { return &r.P }))
 
 func connect(hosts []string) (adapter, error) {
 	policy, _ := routing.NewPolicy(routing.Options{TokenAware: true, Datacenter: "datacenter1"})
@@ -111,7 +111,7 @@ func (a *v2Adapter) Evidence() any {
 }
 
 var keyParams = cql.Params(cql.Param("k", cql.Int32Codec, func(k int32) int32 { return k }))
-var rowParams = cql.Params(cql.Param("k", cql.Int32Codec, func(r row) int32 { return r.K }), cql.Param("r", cql.Int32Codec, func(r row) int32 { return r.R }), cql.Param("p", cql.BytesEncoder, func(r row) []byte { return r.P }))
+var rowParams = cql.Params(cql.Param("k", cql.Int32Codec, func(r row) int32 { return r.K }), cql.Param("r", cql.Int32Codec, func(r row) int32 { return r.R }), cql.Param("p", cql.ByteSliceCodec, func(r row) []byte { return r.P }))
 
 // prepared prepares, once, the read and write statements of the point or
 // paged table and checks that the read is token routed.

@@ -76,7 +76,7 @@ func TestPerformance(t *testing.T) {
 			}
 		}()
 		exec("CREATE TABLE " + ks + ".records(cell int,id int,payload blob,pieces list<blob>,PRIMARY KEY(cell,id))")
-		insert := codecTestMust(s.Prepare(ctx, cql.Statement[testInput, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(cell,id,payload,pieces)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testInput) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testInput) int32 { return v.ID }), cql.Param("payload", cql.BytesEncoder, func(v testInput) []byte { return v.Payload }), cql.Param("pieces", cql.ListEncoder(cql.BytesEncoder), func(v testInput) [][]byte { return v.Pieces })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
+		insert := codecTestMust(s.Prepare(ctx, cql.Statement[testInput, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(cell,id,payload,pieces)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testInput) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testInput) int32 { return v.ID }), cql.Param("payload", cql.ByteSliceCodec, func(v testInput) []byte { return v.Payload }), cql.Param("pieces", cql.ListEncoder(cql.ByteSliceCodec), func(v testInput) [][]byte { return v.Pieces })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
 		// Only one 4KiB source exists locally. All source bindings drain before the
 		// fixed-session baseline, and source payload/nested buffers are then released.
 		func() {
@@ -379,7 +379,7 @@ func TestPerformance(t *testing.T) {
 			}
 		}()
 		exec("CREATE TABLE " + ks + ".records(cell int,id int,payload blob,pieces list<blob>,PRIMARY KEY(cell,id))")
-		insert := codecTestMust(s.Prepare(ctx, cql.Statement[testInput, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(cell,id,payload,pieces)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testInput) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testInput) int32 { return v.ID }), cql.Param("payload", cql.BytesEncoder, func(v testInput) []byte { return v.Payload }), cql.Param("pieces", cql.ListEncoder(cql.BytesEncoder), func(v testInput) [][]byte { return v.Pieces })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
+		insert := codecTestMust(s.Prepare(ctx, cql.Statement[testInput, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(cell,id,payload,pieces)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testInput) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testInput) int32 { return v.ID }), cql.Param("payload", cql.ByteSliceCodec, func(v testInput) []byte { return v.Payload }), cql.Param("pieces", cql.ListEncoder(cql.ByteSliceCodec), func(v testInput) [][]byte { return v.Pieces })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
 		for _, size := range []int{32, 4096, 256 << 10, 8 << 20} {
 			count := 128
 			if size >= 256<<10 {

@@ -46,7 +46,7 @@ func testOwnedQuery(t testing.TB) *Query[[]byte, codec.EmptyRecord] {
 	t.Helper()
 	s, _ := attachmentSession()
 	typ := cqltype.BlobType
-	q, err := unpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, Options{})
+	q, err := unpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.ByteSliceCodec), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -545,7 +545,7 @@ func TestQuery(t *testing.T) {
 		// Cancelling the caller's context interrupts a retry delay.
 		t.Run("ParentCancelInterruptsRetryDelay", func(t *testing.T) {
 			s, _, peers := runtimeTestSession(t, 1)
-			statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+			statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
 			profile := settings.InternalDefaultProfile()
 			profile.Retry = eachRetryAfterDelay{}
 			q := codecTestMust(unpreparedQuery(s, statement, Options{Profile: new(profile), Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Minute}}))
@@ -574,7 +574,7 @@ func TestQuery(t *testing.T) {
 		// although the execution context registers no watcher on it.
 		t.Run("ParentCancelInterruptsWait", func(t *testing.T) {
 			s, _, peers := runtimeTestSession(t, 1)
-			statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+			statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
 			q := codecTestMust(unpreparedQuery(s, statement, Options{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Second}}))
 			t.Cleanup(q.Close)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -667,7 +667,7 @@ func TestQuery(t *testing.T) {
 			state.InternalInfo.PartitionKeyIndexes = []int{0}
 			handle := new(Prepared[[]byte, cqltype.Bytes])
 			PreparedData(handle).InternalState = state
-			PreparedData(handle).params = codecTestMust(codec.OneParam(codec.BytesEncoder).Compile(columns))
+			PreparedData(handle).params = codecTestMust(codec.OneParam(codec.ByteSliceCodec).Compile(columns))
 			PreparedData(handle).rows = codec.OneColumn(codec.BlobCodec)
 			PreparedData(handle).plans = &InternalResultPlanCache[cqltype.Bytes]{}
 			q := codecTestMust(handle.Query(Options{}))
@@ -769,7 +769,7 @@ func TestQuery(t *testing.T) {
 			entered := make(chan struct{})
 			conns[0].InternalW = &transport.InternalDeadlineContextWriter{InternalW: &acceptedWriter{Conn: conns[0].InternalR.(*transport.InternalConnReader).InternalConn, entered: entered}, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
 			typ := cqltype.BlobType
-			q := codecTestMust(unpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(value)VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: typ})}, Options{}))
+			q := codecTestMust(unpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(value)VALUES(?)", Params: codec.OneParam(codec.ByteSliceCodec), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: typ})}, Options{}))
 			defer q.Close()
 			input := bytes.Repeat([]byte{31}, 128<<10)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -1060,7 +1060,7 @@ func TestQuery(t *testing.T) {
 		t.Run("OwnedPreserveDestination", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			type output struct{ Value []byte }
-			decoder := codec.RowInto(func(*output) {}, codec.Column("value", codec.OwnedBlobCodec, func(v *output) *[]byte { return &v.Value }))
+			decoder := codec.RowInto(func(*output) {}, codec.Column("value", codec.ByteSliceCodec, func(v *output) *[]byte { return &v.Value }))
 			q := codecTestMust(unpreparedQuery(s, binding.Statement[codec.EmptyRecord, output]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: decoder}, Options{}))
 			defer q.Close()
 			served := make(chan struct{})

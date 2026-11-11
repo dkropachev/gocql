@@ -75,7 +75,7 @@ func (p v2RouteParams) Encode(w *codec.ParamWriter, values [][]string) error {
 			if err := w.WriteParam(codec.ListEncoder(codec.UUIDCodec), ids); err != nil {
 				return err
 			}
-		} else if err := w.WriteParam(codec.ListEncoder(codec.StringEncoder), vs); err != nil {
+		} else if err := w.WriteParam(codec.ListEncoder(codec.StringCodec), vs); err != nil {
 			return err
 		}
 	}

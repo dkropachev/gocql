@@ -116,7 +116,7 @@ func TestStructMapping(t *testing.T) {
 				Param("id", Int64, func(collectionRow) int64 { return 1 }),
 				Param("names", NullableEncoder(ListEncoder(StringCodec)), func(collectionRow) cqltype.Nullable[[]string] { return cqltype.Nullable[[]string]{} }),
 				Param("scores", SetEncoder(Int32), func(collectionRow) []int32 { return nil }),
-				Param("blobs", NullableEncoder(ListEncoder(BytesEncoder)), func(collectionRow) cqltype.Nullable[[][]byte] { return cqltype.Nullable[[][]byte]{} }),
+				Param("blobs", NullableEncoder(ListEncoder(ByteSliceCodec)), func(collectionRow) cqltype.Nullable[[][]byte] { return cqltype.Nullable[[][]byte]{} }),
 				Param("attrs", NullableEncoder(MapEncoder(StringCodec, Int64)), func(collectionRow) cqltype.Nullable[[]Entry[string, int64]] {
 					return cqltype.Nullable[[]Entry[string, int64]]{}
 				}),
@@ -174,7 +174,7 @@ func TestStructMapping(t *testing.T) {
 				Param("id", Int64, func(v collectionRow) int64 { return v.ID }),
 				Param("names", ListEncoder(StringCodec), func(v collectionRow) []string { return v.Names }),
 				Param("scores", SetEncoder(Int32), func(v collectionRow) []int32 { return v.Scores }),
-				Param("blobs", ListEncoder(BytesEncoder), func(v collectionRow) [][]byte { return v.Blobs }),
+				Param("blobs", ListEncoder(ByteSliceCodec), func(v collectionRow) [][]byte { return v.Blobs }),
 				Param("attrs", MapEncoder(StringCodec, Int64), func(v collectionRow) []Entry[string, int64] { return v.Attrs }),
 			)
 			if got, want := chainBytes(t, chain), chainBytes(t, encodeTestParams(t, columns, hand, value)); !reflect.DeepEqual(got, want) {
@@ -209,12 +209,12 @@ func TestStructMapping(t *testing.T) {
 			hand := Params(
 				Param("id", Int64, func(v small) int64 { return v.ID }),
 				Param("name", StringCodec, func(v small) string { return v.Name }),
-				Param("blob", BytesEncoder, func(v small) []byte { return v.Blob }),
+				Param("blob", ByteSliceCodec, func(v small) []byte { return v.Blob }),
 			)
 			handRows := Row(
 				Column("id", Int64, func(v *small) *int64 { return &v.ID }),
 				Column("name", StringCodec, func(v *small) *string { return &v.Name }),
-				Column("blob", OwnedBlobCodec, func(v *small) *[]byte { return &v.Blob }),
+				Column("blob", ByteSliceCodec, func(v *small) *[]byte { return &v.Blob }),
 			)
 			value := small{ID: 1, Name: "x", Blob: []byte{1}}
 			encodeAllocs := func(params ParamEncoder[small]) float64 {

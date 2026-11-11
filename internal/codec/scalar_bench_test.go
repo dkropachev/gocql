@@ -77,7 +77,7 @@ func BenchmarkScalar(b *testing.B) {
 		for b.Loop() {
 			builder := wire.NewBuilder(16)
 			w := NewValueWriter(builder, typ, true)
-			if err := BytesEncoder.Encode(w, data); err != nil {
+			if err := ByteSliceCodec.Encode(w, data); err != nil {
 				b.Fatal(err)
 			}
 			if err := FinishValueWriter(w); err != nil {
@@ -103,11 +103,11 @@ func BenchmarkScalar(b *testing.B) {
 						b.SetBytes(int64(size))
 						for b.Loop() {
 							if text {
-								if _, e := EncodeValueBorrowed(typ, StringEncoder, stringData); e != nil {
+								if _, e := EncodeValueBorrowed(typ, StringCodec, stringData); e != nil {
 									b.Fatal(e)
 								}
 							} else {
-								if _, e := EncodeValueBorrowed(typ, BytesEncoder, data); e != nil {
+								if _, e := EncodeValueBorrowed(typ, ByteSliceCodec, data); e != nil {
 									b.Fatal(e)
 								}
 							}

@@ -38,7 +38,7 @@ func TestStream(t *testing.T) {
 			blob := FoundationScalar(t, cqltype.TypeBlob)
 			list := CodecTestMust(cqltype.ListType(blob))
 			payload := bytes.Repeat([]byte{0x72}, 300<<10)
-			data := streamEncodedFixture(t, list, ListEncoder(BytesEncoder), [][]byte{payload})
+			data := streamEncodedFixture(t, list, ListEncoder(ByteSliceCodec), [][]byte{payload})
 			dst := StreamEncodedValue{Bytes: make([]byte, 0, len(data)-4)}
 			start := uintptr(unsafe.Pointer(unsafe.SliceData(dst.Bytes)))
 			end := start + uintptr(cap(dst.Bytes))
@@ -69,7 +69,7 @@ func TestStream(t *testing.T) {
 		t.Run("NestedCapacityAndBacking", func(t *testing.T) {
 			blob := FoundationScalar(t, cqltype.TypeBlob)
 			list := CodecTestMust(cqltype.ListType(blob))
-			data := streamEncodedFixture(t, list, ListEncoder(BytesEncoder), [][]byte{[]byte("one"), []byte("two")})
+			data := streamEncodedFixture(t, list, ListEncoder(ByteSliceCodec), [][]byte{[]byte("one"), []byte("two")})
 			first, second := make([]byte, 8), make([]byte, 8)
 			out := [][]byte{first[:0], second[:0]}
 			if err := StreamDecodeFixture(t, list, StreamList(StreamBlob), data, &out, 1); err != nil || len(out) != 2 || string(out[0]) != "one" || &out[0][0] != &first[0] || &out[1][0] != &second[0] {
@@ -94,13 +94,13 @@ func TestStream(t *testing.T) {
 			}
 			m := CodecTestMust(cqltype.MapType(blob, list))
 			input := []Entry[[]byte, [][]byte]{{Key: []byte("k"), Value: [][]byte{[]byte("one"), []byte("two")}}}
-			mdata := streamEncodedFixture(t, m, MapEncoder(BytesEncoder, ListEncoder(BytesEncoder)), input)
+			mdata := streamEncodedFixture(t, m, MapEncoder(ByteSliceCodec, ListEncoder(ByteSliceCodec)), input)
 			mapped := []Entry[[]byte, [][]byte]{{Key: make([]byte, 0, 4), Value: [][]byte{first[:0], second[:0]}}}
 			if err := StreamDecodeFixture(t, m, StreamMap(StreamBlob, StreamList(StreamBlob)), mdata, &mapped, 1); err != nil || string(mapped[0].Key) != "k" || string(mapped[0].Value[1]) != "two" {
 				t.Fatal("map", mapped, err)
 			}
 			set := CodecTestMust(cqltype.SetType(blob))
-			setData := streamEncodedFixture(t, set, SetEncoder(BytesEncoder), [][]byte{[]byte("x")})
+			setData := streamEncodedFixture(t, set, SetEncoder(ByteSliceCodec), [][]byte{[]byte("x")})
 			out = out[:0]
 			if err := StreamDecodeFixture(t, set, StreamSet(StreamBlob), setData, &out, 1); err != nil || string(out[0]) != "x" {
 				t.Fatal("set", err)
@@ -122,7 +122,7 @@ func TestStream(t *testing.T) {
 				t.Fatal("short vector accepted")
 			}
 			variable := CodecTestMust(cqltype.VectorDataType(text, 2))
-			vdata := streamEncodedFixture(t, variable, VectorEncoder(StringEncoder), []string{"€", ""})
+			vdata := streamEncodedFixture(t, variable, VectorEncoder(StringCodec), []string{"€", ""})
 			vout := [][]byte{make([]byte, 0, 4), make([]byte, 0, 1)}
 			if err := StreamDecodeFixture(t, variable, StreamVector(StreamText), vdata, &vout, 1); err != nil || string(vout[0]) != "€" || len(vout[1]) != 0 {
 				t.Fatal("variable vector", vout, err)
@@ -169,7 +169,7 @@ func TestStream(t *testing.T) {
 			cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: tuple})
 			checks := 0
 			plan := CodecTestMust(StreamOneColumn(customStreamDecoder{&checks}).Compile(cols))
-			data := streamEncodedFixture(t, tuple, TupleEncoder(PairParams(1, OneParam(Int32), OneParam(BytesEncoder))), Pair[int32, []byte]{7, []byte("payload")})
+			data := streamEncodedFixture(t, tuple, TupleEncoder(PairParams(1, OneParam(Int32), OneParam(ByteSliceCodec))), Pair[int32, []byte]{7, []byte("payload")})
 			combined := bytes.Repeat(data, 100)
 			reader, scope := streamReaderFixture(t, cols, bytes.NewReader(combined), len(combined))
 			dst := customStreamPair{B: make([]byte, 0, 32)}
@@ -496,9 +496,9 @@ func TestStream(t *testing.T) {
 			}
 			integer, text := FoundationScalar(t, cqltype.TypeInt), FoundationScalar(t, cqltype.TypeText)
 			tuple := CodecTestMust(cqltype.TupleType(integer, text))
-			encoder := TupleEncoder(Params(ParamAt(0, Int32, func(r record) int32 { return r.ID }), ParamAt(1, NullableEncoder(BytesEncoder), func(r record) cqltype.Nullable[[]byte] { return r.Name })))
+			encoder := TupleEncoder(Params(ParamAt(0, Int32, func(r record) int32 { return r.ID }), ParamAt(1, NullableEncoder(ByteSliceCodec), func(r record) cqltype.Nullable[[]byte] { return r.Name })))
 			_ = encoder // Text uses a typed string input fixture below.
-			params := TupleEncoder(PairParams(1, OneParam(Int32), OneParam(NullableEncoder(StringEncoder))))
+			params := TupleEncoder(PairParams(1, OneParam(Int32), OneParam(NullableEncoder(StringCodec))))
 			data := streamEncodedFixture(t, tuple, params, Pair[int32, cqltype.Nullable[string]]{First: 7, Second: cqltype.Nullable[string]{Value: "name", Valid: true}})
 			row := StreamRow(func(r *record) { r.Unmapped = 0 }, StreamColumnAt(0, StreamInt32, func(r *record) *int32 { return &r.ID }), StreamColumnAt(1, StreamNullable(StreamText), func(r *record) *cqltype.Nullable[[]byte] { return &r.Name }))
 			backing := make([]byte, 10)

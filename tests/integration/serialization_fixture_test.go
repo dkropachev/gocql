@@ -120,7 +120,7 @@ func (serializationStringCodec) CheckType(t cql.DataType) error {
 	return cql.TextCodec.CheckType(t)
 }
 func (serializationStringCodec) Encode(w *cql.ValueWriter, s string) error {
-	return cql.StringEncoder.Encode(w, s)
+	return cql.StringCodec.Encode(w, s)
 }
 func (serializationStringCodec) Decode(r cql.ValueReader) (string, error) {
 	v, e := cql.TextCodec.Decode(r)

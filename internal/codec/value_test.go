@@ -154,7 +154,7 @@ func TestValue(t *testing.T) {
 		t.Run("OwnedAndBorrowed", func(t *testing.T) {
 			typ := FoundationScalar(t, cqltype.TypeBlob)
 			source := []byte("source")
-			borrowed, err := EncodeValueBorrowed(typ, BytesEncoder, source)
+			borrowed, err := EncodeValueBorrowed(typ, ByteSliceCodec, source)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -166,7 +166,7 @@ func TestValue(t *testing.T) {
 			}); err != nil {
 				t.Fatal(err)
 			}
-			owned, err := EncodeValue(typ, BytesEncoder, source)
+			owned, err := EncodeValue(typ, ByteSliceCodec, source)
 			if err != nil {
 				t.Fatal(err)
 			}

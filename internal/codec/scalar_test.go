@@ -126,8 +126,8 @@ func FuzzV2ScalarUTF8(f *testing.F) {
 }
 
 func TestScalar(t *testing.T) {
-	t.Run("BytesEncoder", func(t *testing.T) {
-		frame, err := scalarEncode(t, BytesEncoder, cqltype.TypeBlob, []byte(nil))
+	t.Run("ByteSliceCodec", func(t *testing.T) {
+		frame, err := scalarEncode(t, ByteSliceCodec, cqltype.TypeBlob, []byte(nil))
 		if err != nil || !bytes.Equal(frame, []byte{0, 0, 0, 0}) {
 			t.Fatalf("nil blob should be present empty: %x %v", frame, err)
 		}
@@ -500,7 +500,7 @@ func TestScalar(t *testing.T) {
 			builder := wire.NewBuilder(16)
 			large := []byte(strings.Repeat("a", 1<<20))
 			w := NewValueWriter(builder, scalarType(t, cqltype.TypeBlob), true)
-			if err := BytesEncoder.Encode(w, large); err != nil {
+			if err := ByteSliceCodec.Encode(w, large); err != nil {
 				t.Fatal(err)
 			}
 			if err := FinishValueWriter(w); err != nil {
@@ -526,11 +526,11 @@ func TestScalar(t *testing.T) {
 		t.Run("PublicValue", func(t *testing.T) {
 			typ := scalarType(t, cqltype.TypeBlob)
 			source := []byte{1, 2, 3}
-			borrowed, err := EncodeValueBorrowed(typ, BytesEncoder, source)
+			borrowed, err := EncodeValueBorrowed(typ, ByteSliceCodec, source)
 			if err != nil {
 				t.Fatal(err)
 			}
-			owned, err := EncodeValue(typ, BytesEncoder, source)
+			owned, err := EncodeValue(typ, ByteSliceCodec, source)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -631,7 +631,7 @@ func TestScalar(t *testing.T) {
 					t.Fatalf("valid UTF-8 split %d: %v", split, err)
 				}
 			}
-			frame, err := scalarEncode(t, StringEncoder, cqltype.TypeText, s)
+			frame, err := scalarEncode(t, StringCodec, cqltype.TypeText, s)
 			if err != nil || !bytes.Equal(frame[4:], []byte(s)) {
 				t.Fatalf("text encode: %v", err)
 			}
@@ -642,11 +642,11 @@ func TestScalar(t *testing.T) {
 					t.Fatalf("accepted invalid UTF-8 %x split %d", data, split)
 				}
 			}
-			if _, err := scalarEncode(t, StringEncoder, cqltype.TypeText, string(data)); err == nil {
+			if _, err := scalarEncode(t, StringCodec, cqltype.TypeText, string(data)); err == nil {
 				t.Fatal("encoded invalid UTF-8")
 			}
 		}
-		if _, err := scalarEncode(t, ASCIIEncoder, cqltype.TypeAscii, "café"); err == nil {
+		if _, err := scalarEncode(t, ASCIIStringCodec, cqltype.TypeAscii, "café"); err == nil {
 			t.Fatal("encoded non-ASCII")
 		}
 		if _, err := ASCIICodec.Decode(ScalarReader(t, cqltype.TypeAscii, cqltype.Present, []byte{0x7f}, []byte{0x80})); err == nil {
@@ -655,8 +655,8 @@ func TestScalar(t *testing.T) {
 		if _, err := scalarEncode(t, ASCIICodec, cqltype.TypeAscii, CodecTestMust(cqltype.BorrowText("é"))); err == nil {
 			t.Fatal("borrowed Text bypassed ASCII validation")
 		}
-		if err := StringEncoder.CheckType(scalarType(t, cqltype.TypeAscii)); err == nil {
-			t.Fatal("StringEncoder accepted ASCII metadata")
+		if err := StringCodec.CheckType(scalarType(t, cqltype.TypeAscii)); err == nil {
+			t.Fatal("StringCodec accepted ASCII metadata")
 		}
 		source := []byte("hello")
 		value, err := TextCodec.Decode(ScalarReader(t, cqltype.TypeText, cqltype.Present, source[:2], source[2:]))

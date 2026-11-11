@@ -61,7 +61,7 @@ func BenchmarkPrepared(b *testing.B) {
 					prepared := new(Prepared[[]byte, cqltype.Bytes])
 					PreparedData(prepared).InternalState = state
 					PreparedData(prepared).kind = cqltype.OrdinaryStatement
-					PreparedData(prepared).params = codecTestMust(codec.OneParam(codec.BytesEncoder).Compile(columns))
+					PreparedData(prepared).params = codecTestMust(codec.OneParam(codec.ByteSliceCodec).Compile(columns))
 					PreparedData(prepared).rows = codec.OneColumn(codec.BlobCodec)
 					host := new(endpoint.HostInfo)
 					implEndpoint.HostInfoData(host).InternalHostId = id

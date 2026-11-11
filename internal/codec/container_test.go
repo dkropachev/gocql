@@ -35,7 +35,7 @@ func TestContainer(t *testing.T) {
 			blob := rowTestType(t, cqltype.TypeBlob)
 			list, _ := cqltype.ListType(blob)
 			payload := []byte("fragmented")
-			encoded, err := EncodeValueBorrowed(list, ListEncoder(BytesEncoder), [][]byte{payload})
+			encoded, err := EncodeValueBorrowed(list, ListEncoder(ByteSliceCodec), [][]byte{payload})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -80,7 +80,7 @@ func TestContainer(t *testing.T) {
 			if string(clone[0].OwnedBytes()) != "fragmented" {
 				t.Fatal("detached clone failed")
 			}
-			owned, err := EncodeValue(list, ListEncoder(BytesEncoder), [][]byte{payload})
+			owned, err := EncodeValue(list, ListEncoder(ByteSliceCodec), [][]byte{payload})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -94,7 +94,7 @@ func TestContainer(t *testing.T) {
 		text, blob := FoundationScalar(t, cqltype.TypeText), FoundationScalar(t, cqltype.TypeBlob)
 		tuple := CodecTestMust(cqltype.TupleType(text, blob))
 		list := CodecTestMust(cqltype.ListType(tuple))
-		encoder := ListEncoder(TupleEncoder(PairParams(1, OneParam(StringEncoder), OneParam(BytesEncoder))))
+		encoder := ListEncoder(TupleEncoder(PairParams(1, OneParam(StringCodec), OneParam(ByteSliceCodec))))
 		encoded := CodecTestMust(EncodeValueBorrowed(list, encoder, []Pair[string, []byte]{{"one", []byte("blob")}, {"two", []byte("more")}}))
 		lease := wire.NewLease(cqltype.BytesChain(encoded.body), nil)
 		borrowed := EncodedValue{typ: list, state: cqltype.Present, body: cqltype.BytesView(cqltype.BytesChain(encoded.body), wire.RefOf(lease))}
@@ -235,7 +235,7 @@ func TestContainer(t *testing.T) {
 		text := rowTestType(t, cqltype.TypeText)
 		blob := rowTestType(t, cqltype.TypeBlob)
 		mapType, _ := cqltype.MapType(text, blob)
-		encoded := containerGolden(t, mapType, MapEncoder(StringEncoder, BytesEncoder), []Entry[string, []byte]{{"x", []byte("y")}}, "0000000100000001780000000179")
+		encoded := containerGolden(t, mapType, MapEncoder(StringCodec, ByteSliceCodec), []Entry[string, []byte]{{"x", []byte("y")}}, "0000000100000001780000000179")
 		mapping, err := DecodeValue(MapDecoder(TextCodec, BlobCodec), encoded)
 		if err != nil {
 			t.Fatal(err)
@@ -247,7 +247,7 @@ func TestContainer(t *testing.T) {
 		tiny, _ := cqltype.VectorDataType(rowTestType(t, cqltype.TypeTinyInt), 2)
 		containerGolden(t, tiny, VectorEncoder(Int8), []int8{1, -1}, "010101ff")
 		texts, _ := cqltype.VectorDataType(text, 2)
-		encoded = containerGolden(t, texts, VectorEncoder(StringEncoder), []string{"", "é"}, "0002c3a9")
+		encoded = containerGolden(t, texts, VectorEncoder(StringCodec), []string{"", "é"}, "0002c3a9")
 		strings, err := DecodeValue(VectorDecoder(TextCodec), encoded)
 		if err != nil {
 			t.Fatal(err)
@@ -311,7 +311,7 @@ func TestContainer(t *testing.T) {
 			vector, _ := cqltype.VectorDataType(rowTestType(t, cqltype.TypeBlob), 2)
 			payload := bytes.Repeat([]byte{'x'}, 128)
 			input := [][]byte{payload, {}}
-			borrowed, err := EncodeValueBorrowed(vector, VectorEncoder(BytesEncoder), input)
+			borrowed, err := EncodeValueBorrowed(vector, VectorEncoder(ByteSliceCodec), input)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -329,7 +329,7 @@ func TestContainer(t *testing.T) {
 			if !alias {
 				t.Fatal("variable vector encoder gathered its payload")
 			}
-			owned, err := EncodeValue(vector, VectorEncoder(BytesEncoder), input)
+			owned, err := EncodeValue(vector, VectorEncoder(ByteSliceCodec), input)
 			if err != nil {
 				t.Fatal(err)
 			}

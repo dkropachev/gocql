@@ -159,7 +159,7 @@ type T struct {
 					t.Errorf("missing %s in:\n%s", want, out)
 				}
 			}
-			if want := `cql.Column("b", cql.ListCodec(cql.OwnedBlobCodec), func(v *T) *Blobs { return &v.B })`; !strings.Contains(out, want) {
+			if want := `cql.Column("b", cql.ListCodec(cql.ByteSliceCodec), func(v *T) *Blobs { return &v.B })`; !strings.Contains(out, want) {
 				t.Errorf("missing %s in:\n%s", want, out)
 			}
 		})

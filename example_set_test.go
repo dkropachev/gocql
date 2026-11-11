@@ -37,7 +37,7 @@ func Example_set() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	encoded, err := cql.EncodeValue(typ, cql.SetEncoder(cql.StringEncoder), []string{"alpha", "beta"})
+	encoded, err := cql.EncodeValue(typ, cql.SetEncoder(cql.StringCodec), []string{"alpha", "beta"})
 	if err != nil {
 		log.Fatal(err)
 	}

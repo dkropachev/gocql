@@ -22,8 +22,8 @@ func TestStreamNullCollectionsPreserveStorage(t *testing.T) {
 		encoder Encoder[[][]byte]
 		decoder StreamDecoder[[][]byte]
 	}{
-		{"list", CodecTestMust(cqltype.ListType(cqltype.BlobType)), ListEncoder(BytesEncoder), StreamList(StreamBlob)},
-		{"set", CodecTestMust(cqltype.SetType(cqltype.BlobType)), SetEncoder(BytesEncoder), StreamSet(StreamBlob)},
+		{"list", CodecTestMust(cqltype.ListType(cqltype.BlobType)), ListEncoder(ByteSliceCodec), StreamList(StreamBlob)},
+		{"set", CodecTestMust(cqltype.SetType(cqltype.BlobType)), SetEncoder(ByteSliceCodec), StreamSet(StreamBlob)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			data := streamEncodedFixture(t, tc.typ, tc.encoder, [][]byte{[]byte("one"), []byte("two")})
@@ -68,7 +68,7 @@ func TestStreamNullCollectionsPreserveStorage(t *testing.T) {
 		list := CodecTestMust(cqltype.ListType(cqltype.BlobType))
 		typ := CodecTestMust(cqltype.MapType(cqltype.BlobType, list))
 		decoder := StreamMap(StreamBlob, StreamList(StreamBlob))
-		data := streamEncodedFixture(t, typ, MapEncoder(BytesEncoder, ListEncoder(BytesEncoder)), []Entry[[]byte, [][]byte]{{Key: []byte("key"), Value: [][]byte{[]byte("value")}}})
+		data := streamEncodedFixture(t, typ, MapEncoder(ByteSliceCodec, ListEncoder(ByteSliceCodec)), []Entry[[]byte, [][]byte]{{Key: []byte("key"), Value: [][]byte{[]byte("value")}}})
 		key, value := make([]byte, 0, 8), make([]byte, 0, 8)
 		children := [][]byte{value}
 		dst := []Entry[[]byte, [][]byte]{{Key: key, Value: children}}

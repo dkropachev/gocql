@@ -32,9 +32,9 @@ func TestCodecPerf(t *testing.T) {
 						var encoded EncodedValue
 						var err error
 						if text {
-							encoded, err = EncodeValueBorrowed(typ, StringEncoder, string(data))
+							encoded, err = EncodeValueBorrowed(typ, StringCodec, string(data))
 						} else {
-							encoded, err = EncodeValueBorrowed(typ, BytesEncoder, data)
+							encoded, err = EncodeValueBorrowed(typ, ByteSliceCodec, data)
 						}
 						if err != nil {
 							t.Fatal(err)

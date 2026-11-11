@@ -286,7 +286,7 @@ type fullNameCodec struct{}
 
 func (fullNameCodec) CheckType(t cql.DataType) error { return cql.TextCodec.CheckType(t) }
 func (fullNameCodec) Encode(w *cql.ValueWriter, n FullName) error {
-	return cql.StringEncoder.Encode(w, n.FirstName+" "+n.LastName)
+	return cql.StringCodec.Encode(w, n.FirstName+" "+n.LastName)
 }
 func (fullNameCodec) Decode(r cql.ValueReader) (FullName, error) {
 	text, err := cql.TextCodec.Decode(r)
@@ -1282,7 +1282,7 @@ func (serializationStringCodec) CheckType(t cql.DataType) error {
 	return cql.TextCodec.CheckType(t)
 }
 func (serializationStringCodec) Encode(w *cql.ValueWriter, s string) error {
-	return cql.StringEncoder.Encode(w, s)
+	return cql.StringCodec.Encode(w, s)
 }
 func (serializationStringCodec) Decode(r cql.ValueReader) (string, error) {
 	v, e := cql.TextCodec.Decode(r)

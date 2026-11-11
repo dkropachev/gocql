@@ -280,7 +280,7 @@ func TestSession(t *testing.T) {
 				}
 			}()
 			exec("CREATE TABLE " + ks + ".records(id int PRIMARY KEY,value blob)")
-			insert := codecTestMust(s.Prepare(ctx, cql.Statement[[]byte, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(id,value)VALUES(1,?)", Kind: cql.OrdinaryStatement, Params: cql.OneParam(cql.BytesEncoder), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
+			insert := codecTestMust(s.Prepare(ctx, cql.Statement[[]byte, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(id,value)VALUES(1,?)", Kind: cql.OrdinaryStatement, Params: cql.OneParam(cql.ByteSliceCodec), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
 			write := func(value byte) {
 				t.Helper()
 				payload := bytes.Repeat([]byte{value}, 1<<20)
@@ -1077,7 +1077,7 @@ func TestSession(t *testing.T) {
 			ID    int32
 			Value cql.Bytes
 		}
-		inputs := cql.Params(cql.Param("id", cql.Int32Codec, func(v input) int32 { return v.ID }), cql.Param("value", cql.BytesEncoder, func(v input) []byte { return v.Value }))
+		inputs := cql.Params(cql.Param("id", cql.Int32Codec, func(v input) int32 { return v.ID }), cql.Param("value", cql.ByteSliceCodec, func(v input) []byte { return v.Value }))
 		rows := cql.Row(cql.Column("id", cql.Int32Codec, func(v *output) *int32 { return &v.ID }), cql.Column("value", cql.BlobCodec, func(v *output) *cql.Bytes { return &v.Value }))
 		prepared, err := session.Prepare(ctx, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".values (id,value) VALUES (?,?)", Params: inputs, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 		if err != nil {

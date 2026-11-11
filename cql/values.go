@@ -14,7 +14,6 @@ import (
 )
 
 var ASCIICodec = codec.ASCIICodec
-var ASCIIEncoder = codec.ASCIIEncoder
 
 // ASCIIValue constructs a dynamic CQL ASCII value.
 func ASCIIValue(s string) (Value, error) { return codec.ASCIIValue(s) }
@@ -56,8 +55,6 @@ func BorrowText(s string) (Text, error) { return cqltype.BorrowText(s) }
 // best-effort: a release that races the check is not caught, so a view must
 // never be used after its page may have been released.
 type Bytes = cqltype.Bytes
-
-var BytesEncoder = codec.BytesEncoder
 
 type CASResult[R any] = codec.CASResult[R]
 
@@ -562,8 +559,6 @@ var StreamVarint = codec.StreamVarint
 func StreamVector[T any](child StreamDecoder[T]) StreamDecoder[[]T] {
 	return codec.StreamVector[T](child)
 }
-
-var StringEncoder = codec.StringEncoder
 
 // StringCodec encodes a string and decodes text into a newly allocated
 // string that stays valid after the row is released. Use TextCodec to decode

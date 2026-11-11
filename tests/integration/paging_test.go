@@ -314,7 +314,7 @@ func TestPaging(t *testing.T) {
 			Pieces [][]byte
 			Text   string
 		}
-		params := cql.Params(cql.Param("id", cql.Int32Codec, func(v input) int32 { return v.ID }), cql.Param("value", cql.BytesEncoder, func(v input) []byte { return v.Value }), cql.Param("pieces", cql.ListEncoder(cql.BytesEncoder), func(v input) [][]byte { return v.Pieces }), cql.Param("txt", cql.StringEncoder, func(v input) string { return v.Text }))
+		params := cql.Params(cql.Param("id", cql.Int32Codec, func(v input) int32 { return v.ID }), cql.Param("value", cql.ByteSliceCodec, func(v input) []byte { return v.Value }), cql.Param("pieces", cql.ListEncoder(cql.ByteSliceCodec), func(v input) [][]byte { return v.Pieces }), cql.Param("txt", cql.StringCodec, func(v input) string { return v.Text }))
 		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".records(id,value,pieces,txt)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: params, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
 		payload := bytes.Repeat([]byte("segment-crossing"), 30000)
 		textPayload := strings.Repeat("stream-🙂-", 24000)

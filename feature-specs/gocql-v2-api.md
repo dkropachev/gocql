@@ -304,11 +304,9 @@ var TimeUUIDCodec Codec[TimeUUID]
 var InetCodec Codec[netip.Addr]
 var VarintCodec Codec[Varint]
 var DecimalCodec Codec[Decimal]
-var StringEncoder Encoder[string]             // text/varchar
-var ASCIIEncoder Encoder[string]
 var StringCodec Codec[string]                 // text/varchar; decodes an owned copy
 var ASCIIStringCodec Codec[string]
-var BytesEncoder Encoder[[]byte]              // blob; borrows input
+var ByteSliceCodec Codec[[]byte]               // blob; borrows input, decodes an owned copy
 var TextCodec Codec[Text]                     // text/varchar borrowed view
 var ASCIICodec Codec[Text]
 var BlobCodec Codec[Bytes]
@@ -331,7 +329,7 @@ an encodable timeuuid; Nullable represents NULL.
 VectorDataType has Kind TypeCustom plus Dimension; ScalarType(TypeCustom)
 rejects an incomplete custom descriptor.
 
-Nil `[]byte` passed to BytesEncoder is present empty blob. Null is always
+Nil `[]byte` passed to ByteSliceCodec is present empty blob. Null is always
 explicit; nil collections likewise encode a zero count. Nonnullable scalar and vector decoders
 reject null. List/set/map decoders, buffered and streaming, interpret NULL as
 empty while preserving destination capacity; Nullable preserves null independently
@@ -414,8 +412,8 @@ func Collect[T any](*ValueIterator[T]) ([]T, error)
 ```
 
 BorrowText validates UTF-8 and returns ValidationError for invalid input.
-TextValue likewise returns an error for invalid UTF-8. StringEncoder and
-ASCIIEncoder return ordinary codec errors for invalid encoded input. Malformed
+TextValue likewise returns an error for invalid UTF-8. StringCodec and
+ASCIIStringCodec return ordinary codec errors for invalid encoded input. Malformed
 input is never a reason for a constructor panic.
 
 Buffered Bytes and Text retain fragments; a cell is not flattened when it

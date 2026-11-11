@@ -32,7 +32,7 @@ func TestTupleUDT(t *testing.T) {
 		text := rowTestType(t, cqltype.TypeText)
 		list, _ := cqltype.ListType(text)
 		tuple, _ := cqltype.TupleType(list)
-		encoder := TupleEncoder(OneParam(ListEncoder(StringEncoder)))
+		encoder := TupleEncoder(OneParam(ListEncoder(StringCodec)))
 		decoder := TupleDecoder(OneColumn(ListDecoder(TextCodec)))
 		encoded, err := EncodeValueBorrowed(tuple, encoder, []string{"first", "second"})
 		if err != nil {
@@ -98,7 +98,7 @@ func TestTupleUDT(t *testing.T) {
 			tuple, _ := cqltype.TupleType(integer, text)
 			encoder := TupleEncoder(Params(
 				ParamAt(0, Int32, func(v input) int32 { return v.ID }),
-				ParamAt(1, NullableEncoder(StringEncoder), func(v input) cqltype.Nullable[string] { return v.Name }),
+				ParamAt(1, NullableEncoder(StringCodec), func(v input) cqltype.Nullable[string] { return v.Name }),
 			))
 			decoder := TupleDecoder(Row(
 				ColumnAt(0, Int32, func(v *output) *int32 { return &v.ID }),

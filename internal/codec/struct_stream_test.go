@@ -42,11 +42,11 @@ func streamFixtureColumns(t testing.TB) cqltype.Columns {
 func streamFixtureRow(t testing.TB, columns cqltype.Columns, v streamFixture) []byte {
 	t.Helper()
 	params := Params(
-		Param("payload", BytesEncoder, func(v streamFixture) []byte { return v.Payload }),
+		Param("payload", ByteSliceCodec, func(v streamFixture) []byte { return v.Payload }),
 		Param("id", Int32, func(v streamFixture) int32 { return v.ID }),
 		Param("key", UUIDCodec, func(v streamFixture) cqltype.UUID { return v.Key }),
 		Param("name", StringCodec, func(v streamFixture) string { return string(v.Name) }),
-		Param("pieces", ListEncoder(BytesEncoder), func(v streamFixture) [][]byte { return v.Pieces }),
+		Param("pieces", ListEncoder(ByteSliceCodec), func(v streamFixture) [][]byte { return v.Pieces }),
 		Param("tags", SetEncoder(Int32), func(v streamFixture) []int32 { return v.Tags }),
 		Param("maybe", NullableEncoder(Int64), func(v streamFixture) cqltype.Nullable[int64] { return v.Maybe }),
 		Param("at", TimestampCodec, func(v streamFixture) cqltype.Timestamp { return v.At }),

@@ -18,7 +18,7 @@ func TestParameterBuffer(t *testing.T) {
 	// and copies only when it outgrows that capacity.
 	t.Run("EncodeAppend", func(t *testing.T) {
 		columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: cqltype.BlobType})
-		plan, err := codec.OneParam(codec.BytesEncoder).Compile(columns)
+		plan, err := codec.OneParam(codec.ByteSliceCodec).Compile(columns)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -69,7 +69,7 @@ func TestParameterBuffer(t *testing.T) {
 		t.Run("MatchesCheckedGenericEncoding", func(t *testing.T) {
 			typ := cqltype.BlobType
 			columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: typ})
-			plan, err := codec.OneParam(codec.BindEncoder(codec.BytesEncoder)).Compile(columns)
+			plan, err := codec.OneParam(codec.BindEncoder(codec.ByteSliceCodec)).Compile(columns)
 			if err != nil {
 				t.Fatal(err)
 			}

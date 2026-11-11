@@ -40,7 +40,7 @@ import (
 func batchTestQuery(t testing.TB, s *implCluster.Core) *Query[[]byte, codec.EmptyRecord] {
 	t.Helper()
 	typ := cqltype.BlobType
-	q, err := unpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, Options{})
+	q, err := unpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.ByteSliceCodec), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,7 +304,7 @@ func TestBatch(t *testing.T) {
 				state.InternalInfo.PartitionKeyIndexes = []int{0}
 				handle := new(Prepared[[]byte, codec.EmptyRecord])
 				PreparedData(handle).InternalState = state
-				PreparedData(handle).params = codecTestMust(codec.OneParam(codec.BytesEncoder).Compile(columns))
+				PreparedData(handle).params = codecTestMust(codec.OneParam(codec.ByteSliceCodec).Compile(columns))
 				PreparedData(handle).rows = codec.EmptyRowDecoder
 				PreparedData(handle).plans = &InternalResultPlanCache[codec.EmptyRecord]{}
 				q := codecTestMust(handle.Query(Options{}))
