@@ -69,9 +69,6 @@ type Codec[T any] interface {
 	Decoder[T]
 }
 
-// Deprecated: use (*ValueIterator[T]).Collect.
-func Collect[T any](iterator *ValueIterator[T]) ([]T, error) { return iterator.Collect() }
-
 // Column maps the named result column through valueCodec into the address returned by field.
 // The accessor must return a non-nil address within the destination and must not retain it.
 func Column[R any, V any](name string, valueCodec Decoder[V], field func(*R) *V) OutputField[R] {
@@ -366,16 +363,6 @@ const Present = cqltype.Present
 // RandomUUID generates a totally random UUID (version 4) as described in
 // RFC 4122.
 func RandomUUID() (UUID, error) { return cqltype.RandomUUID() }
-
-// Deprecated: use (*RowReader).ReadColumn.
-func ReadColumn[T any](reader *RowReader, decoder Decoder[T]) (T, error) {
-	return reader.ReadColumn(decoder)
-}
-
-// Deprecated: use (*StreamRowReader).ReadColumn.
-func ReadStreamColumn[T any](reader *StreamRowReader, plan StreamValuePlan[T], dst *T) error {
-	return reader.ReadColumn(plan, dst)
-}
 
 // Row builds a row decoder from field mappings. Borrowed fields follow the execution lifetime;
 // One detaches them, Each lends them during its callback, and cursors lend them until advancement.
@@ -766,11 +753,6 @@ func VectorEncoder[T any](element Encoder[T]) Encoder[[]T] { return codec.Vector
 
 // VectorValue constructs a dynamic vector value, checking its dimension and element types.
 func VectorValue(t DataType, v []Value) (Value, error) { return codec.VectorValue(t, v) }
-
-// Deprecated: use (*ParamWriter).WriteParam.
-func WriteParam[T any](writer *ParamWriter, encoder Encoder[T], value T) error {
-	return writer.WriteParam(encoder, value)
-}
 
 const (
 	LoggedBatch   = cqltype.LoggedBatch

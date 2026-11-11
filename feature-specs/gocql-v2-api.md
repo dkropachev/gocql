@@ -160,9 +160,9 @@ func (c *ValueCursor) Child(DataType) (ValueReader, error)
 func (c *ValueCursor) RequireEnd() error
 
 type ParamWriter struct { /* exact metadata count, framing transaction */ }
-func WriteParam[T any](w *ParamWriter, encoder Encoder[T], value T) error
+func (w *ParamWriter) WriteParam[T any](encoder Encoder[T], value T) error
 type RowReader struct { /* current physical row, checked cursor */ }
-func ReadColumn[T any](r *RowReader, decoder Decoder[T]) (T, error)
+func (r *RowReader) ReadColumn[T any](decoder Decoder[T]) (T, error)
 func (r *RowReader) SkipColumn() error
 ```
 
@@ -408,7 +408,7 @@ type UDTOptions struct {
 func UDTOptionsFor(DataType) (UDTOptions, error) // identity from a UDT DataType
 func UDTEncoder[T any](ParamEncoder[T], UDTOptions) Encoder[T]
 func UDTDecoder[T any](RowDecoder[T], UDTOptions) Decoder[T]
-func Collect[T any](*ValueIterator[T]) ([]T, error)
+func (i *ValueIterator[T]) Collect() ([]T, error)
 ```
 
 BorrowText validates UTF-8 and returns ValidationError for invalid input.
@@ -937,7 +937,7 @@ func StreamOneColumn[T any](StreamDecoder[T]) StreamRowDecoder[T]
 
 // Readers are scoped mutable limited readers, never retained-byte views.
 type StreamRowReader struct { /* checked count and column cursor */ }
-func ReadStreamColumn[T any](*StreamRowReader, StreamValuePlan[T], *T) error
+func (r *StreamRowReader) ReadColumn[T any](StreamValuePlan[T], *T) error
 func (r *StreamRowReader) Context() context.Context
 func (r *StreamRowReader) SkipColumn() error
 func (r *StreamRowReader) RequireEnd() error

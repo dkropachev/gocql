@@ -63,8 +63,8 @@ compilation. A plan is immutable and safe to share across independent
 executions. It must not retain a reader, writer, destination, or mutable
 per-execution state.
 
-Use `WriteParam` for each parameter in physical server order and `ReadColumn`
-for each buffered result column. `RowReader.SkipColumn` skips an ignored
+Use `ParamWriter.WriteParam` for each parameter in physical server order and
+`RowReader.ReadColumn` for each buffered result column. `RowReader.SkipColumn` skips an ignored
 column. Scalar encoders write a cell's body using `ValueWriter`; the driver
 owns length framing and rolls back failed encodes. `ValueReader` is a value
 snapshot; its cursors are independent. Width, state and payload validation
@@ -89,7 +89,7 @@ values while preserving mapped buffers and nested capacity. It runs before
 decoding each row or value. An optional declaration-level `StreamResetter`
 also resets fields absent from actual metadata without needing a compiled
 database type. Custom streaming declarations mapping such absent fields must
-provide it. Use `ReadStreamColumn` with a checked child plan. Do not adapt a
+provide it. Use `StreamRowReader.ReadColumn` with a checked child plan. Do not adapt a
 buffered decoder by accumulating an entire streamed cell.
 
 Streaming decoders must report `cqlerr.StreamCapacityError` when caller
