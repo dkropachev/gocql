@@ -59,13 +59,13 @@ func TestPool(t *testing.T) {
 				policy := &testConviction{cause: cause, verdict: verdict}
 				var dials atomic.Int32
 				config := newFixtureConfig(getClusterHosts()[:1], 0, func(c *gocql.ConfigBuilder) {
-					c.NoDiscovery().
+					c.WithDiscovery(false).
 						WithPoolSize(gocql.PerHost(1)).
 						NoAdvancedShardAwareness().
 						WithReconnect(noReconnect{}).
 						WithConviction(policy).
-						NoHeartbeat().
-						NoMetadataRefresh()
+						WithHeartbeat(0, 0).
+						WithMetadataRefresh(0)
 				})
 				config.WithDialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 					if dials.Add(1) > 1 {
@@ -126,7 +126,7 @@ func TestPool(t *testing.T) {
 			compression = "no-compression"
 		}
 		config := createV2ClusterWithout(skip)
-		config.WithPoolSize(gocql.PerHost(1)).NoHeartbeat()
+		config.WithPoolSize(gocql.PerHost(1)).WithHeartbeat(0, 0)
 		if *flagProto < 5 {
 			config.WithCompression(gocql.NoCompression)
 		}
@@ -299,7 +299,7 @@ func TestPool(t *testing.T) {
 		for _, mode := range []string{"host", "shard"} {
 			t.Run(mode, func(t *testing.T) {
 				config := createV2ClusterWithout(fixtureTLS)
-				config.NoHeartbeat()
+				config.WithHeartbeat(0, 0)
 				if *flagRunSslTest {
 					config.WithCoalesceWrites(100 * time.Microsecond)
 				}

@@ -1537,13 +1537,16 @@ Configuration retains useful existing setup capabilities. A `Config` is an
 opaque, immutable value made only by `ConfigBuilder.Build`; users never write a
 `Config` literal or assign its fields. Each builder method sets one setting
 and is named `With*` (`WithPort`, `WithTLS`, `WithTimeout`), except `Build`,
-`ConfigureDefaultProfile` and the `No*` off switches; settings not chosen keep the driver's behavior, and when a setting is chosen
+`ConfigureDefaultProfile` and `NoAdvancedShardAwareness`. An on/off setting
+takes a bool (`WithDiscovery(false)`), and a size or interval whose zero has no
+other meaning turns its feature off at zero (`WithHeartbeat(0, 0)`,
+`WithMetadataRefresh(0)`, `WithPreparedCacheSize(0)`), so no setting has a
+separate `No*` twin; settings not chosen keep the driver's behavior, and when a setting is chosen
 again the last call wins. Setters store the latest value without validation or
 call history.
 `Build` validates only the final configuration and returns its first typed error.
 Correcting a setting clears the error on the next Build. Optional zero durations
-disable their budget, and nil optional providers remove overrides. With* methods
-restore features after No* switches. `WithIgnoreEvents` replaces its complete
+disable their budget, and nil optional providers remove overrides. `WithIgnoreEvents` replaces its complete
 list. `WithDefaultProfile(Profile)` replaces the complete execution profile;
 `ConfigureDefaultProfile` composes callbacks, and a nil callback resets the profile. Slice inputs are copied; Build snapshots
 configuration values while callback/provider objects remain shared and concurrency-safe.

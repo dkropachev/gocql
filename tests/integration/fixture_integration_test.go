@@ -36,8 +36,8 @@ func cleanupNamespaces(t *testing.T, allowed []string) {
 	matches := func(name string) bool { return owns(name) && (allowed == nil || selected[name]) }
 	config := createV2Cluster(func(c *gocql.ConfigBuilder) {
 		c.WithIgnoreEvents(gocql.SchemaEvent, gocql.TopologyEvent, gocql.StatusEvent).
-			WithManualSchemaAgreement().
-			NoRefreshAfterAgreement()
+			WithAutomaticSchemaAgreement(false).
+			WithRefreshAfterAgreement(false)
 	})
 	s, err := gocql.Connect[testDialect](ctx, mustBuild(t, config))
 	if err != nil {

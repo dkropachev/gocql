@@ -78,11 +78,11 @@ func benchConfig(d endpoint.Dialer) gocql.Config {
 	}
 	c, err := gocql.NewConfig(address).
 		WithAuth(auth.Password("cassandra", "cassandra")).
-		NoHeartbeat().
-		NoMetadataRefresh().
-		NoConfigReport().
+		WithHeartbeat(0, 0).
+		WithMetadataRefresh(0).
+		WithConfigReport(false).
 		WithPoolSize(gocql.PerHost(1)).
-		NoDiscovery().
+		WithDiscovery(false).
 		WithDialer(d).
 		Build()
 	if err != nil {

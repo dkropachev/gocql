@@ -44,7 +44,7 @@ func TestPerformance(t *testing.T) {
 		runtime.GC()
 		initial := mem().HeapAlloc
 		config := createV2Cluster(func(c *gocql.ConfigBuilder) {
-			c.WithPoolSize(gocql.PerHost(8)).NoHeartbeat().NoMetadataRefresh()
+			c.WithPoolSize(gocql.PerHost(8)).WithHeartbeat(0, 0).WithMetadataRefresh(0)
 		})
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 		defer cancel()
@@ -334,7 +334,7 @@ func TestPerformance(t *testing.T) {
 			c.WithPoolSize(gocql.PerShard(1)).
 				WithAdvancedShardAwareness(32768, 65535).
 				WithHeartbeat(30*time.Second, 30*time.Second).
-				NoMetadataRefresh()
+				WithMetadataRefresh(0)
 			c.WithDialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 				conn, err := (endpoint.DefaultDialer{}).DialContext(ctx, target)
 				if err != nil {

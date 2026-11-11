@@ -237,7 +237,7 @@ func TestSession(t *testing.T) {
 		// retained delivered pages, and a late lease cannot repopulate the closed cache.
 		t.Run("PageCacheOwnership", func(t *testing.T) {
 			config := mustBuild(t, createV2Cluster(func(c *gocql.ConfigBuilder) {
-				c.WithPoolSize(gocql.PerHost(1)).NoHeartbeat().NoMetadataRefresh()
+				c.WithPoolSize(gocql.PerHost(1)).WithHeartbeat(0, 0).WithMetadataRefresh(0)
 			}))
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
@@ -900,7 +900,7 @@ func TestSession(t *testing.T) {
 					p.WithConsistency(cql.Quorum).WithTimeout(*flagTimeout).WithRetry(retry.Safe{MaxAttempts: max(1, *flagRetry+1)})
 				}).
 				WithPoolSize(gocql.PerHost(1)).
-				NoDiscovery().
+				WithDiscovery(false).
 				WithReconnect(unixSocketNoReconnect{}).
 				WithIgnoreEvents(gocql.StatusEvent, gocql.TopologyEvent, gocql.SchemaEvent).
 				WithConnectTimeout(connectTimeout).
@@ -990,7 +990,7 @@ func TestSession(t *testing.T) {
 	t.Run("Smoke", func(t *testing.T) {
 		// The smoke cluster speaks the dialect the suite is built for.
 		config := gocql.NewConfig(strings.Split(v2SmokeOption("cluster", "127.0.20.1,127.0.20.2,127.0.20.3"), ",")...).
-			NoConfigReport().
+			WithConfigReport(false).
 			ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) {
 				p.WithTimeout(30 * time.Second).WithConsistency(cql.LocalQuorum)
 			})

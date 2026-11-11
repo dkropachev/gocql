@@ -51,7 +51,7 @@ func TestMetadata(t *testing.T) {
 		defer cancel()
 		contactPoints := getClusterHosts()
 		config := createV2Cluster(func(c *gocql.ConfigBuilder) {
-			c.NoDiscovery().WithPoolSize(gocql.PerHost(1)).NoAdvancedShardAwareness()
+			c.WithDiscovery(false).WithPoolSize(gocql.PerHost(1)).NoAdvancedShardAwareness()
 		})
 		s, err := gocql.Connect[testDialect](ctx, mustBuild(t, config))
 		if err != nil {

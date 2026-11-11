@@ -53,10 +53,13 @@ several dialects is generic over it:
 func load[D gocql.Dialect](ctx context.Context, s *gocql.Session[D]) error { ... }
 ```
 
-Use `NoHeartbeat`, `NoAdvancedShardAwareness`, `NoMetadataRefresh` and
-`NoPreparedCache` to disable features; their corresponding `With*` methods
-restore them. `WithDiscovery`, `WithConfigReport`, `WithAutomaticSchemaAgreement`
-and `WithRefreshAfterAgreement` restore those defaults after their off switches.
+Zero turns a feature off where zero has no other meaning:
+`WithHeartbeat(0, 0)` sends no heartbeats, `WithMetadataRefresh(0)` stops
+periodic metadata reloads and `WithPreparedCacheSize(0)` caches no prepared
+statements. On/off settings take a bool: `WithNagle`, `WithDiscovery`,
+`WithConfigReport`, `WithAutomaticSchemaAgreement` and
+`WithRefreshAfterAgreement`. `NoAdvancedShardAwareness` turns off what
+`WithAdvancedShardAwareness(first, last)` configures.
 `ProfileBuilder.WithPrefetch(0)` disables prefetch and `WithPrefetch(1)` restores it.
 Zero optional timeouts disable their budget; nil optional providers clear the
 override, including `WithTLS(nil)` for plaintext. `WithDefaultProfile(profile)`

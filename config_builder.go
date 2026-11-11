@@ -228,15 +228,10 @@ func (b *ConfigBuilder) WithDNSTimeout(d time.Duration) *ConfigBuilder {
 	return b
 }
 
-// WithNagle keeps Nagle's algorithm on. By default TCP_NODELAY turns it off.
-func (b *ConfigBuilder) WithNagle() *ConfigBuilder {
-	b.settings.NoDelay = false
-	return b
-}
-
-// NoNagle enables TCP_NODELAY. It replaces WithNagle and is the default.
-func (b *ConfigBuilder) NoNagle() *ConfigBuilder {
-	b.settings.NoDelay = true
+// WithNagle turns Nagle's algorithm on or off. Off sets TCP_NODELAY. Default
+// off.
+func (b *ConfigBuilder) WithNagle(on bool) *ConfigBuilder {
+	b.settings.NoDelay = !on
 	return b
 }
 
@@ -273,18 +268,12 @@ func (b *ConfigBuilder) WithWriteTimeout(d time.Duration) *ConfigBuilder {
 }
 
 // WithHeartbeat sends a CQL OPTIONS request on idle connections every interval
-// and drops a connection whose heartbeat takes longer than timeout. It
-// replaces NoHeartbeat. Default 30s and 30s.
+// and drops a connection whose heartbeat takes longer than timeout. A zero
+// interval sends no heartbeats: WithHeartbeat(0, 0) turns them off. A positive
+// interval needs a positive timeout. Default 30s and 30s.
 func (b *ConfigBuilder) WithHeartbeat(interval, timeout time.Duration) *ConfigBuilder {
 	b.settings.KeepaliveInterval = interval
 	b.settings.KeepaliveTimeout = timeout
-	return b
-}
-
-// NoHeartbeat sends no heartbeats. It replaces WithHeartbeat.
-func (b *ConfigBuilder) NoHeartbeat() *ConfigBuilder {
-	b.settings.KeepaliveInterval = 0
-	b.settings.KeepaliveTimeout = 0
 	return b
 }
 
@@ -375,19 +364,12 @@ func (b *ConfigBuilder) NoAdvancedShardAwareness() *ConfigBuilder {
 	return b
 }
 
-// NoDiscovery connects only to the contact points instead of discovering the
-// cluster's nodes. Implied for a Unix socket.
-func (b *ConfigBuilder) NoDiscovery() *ConfigBuilder {
+// WithDiscovery chooses whether the session discovers and connects to the
+// cluster's nodes (true) or connects only to the contact points (false).
+// Default true, except for a Unix socket, where it is false unless chosen.
+func (b *ConfigBuilder) WithDiscovery(on bool) *ConfigBuilder {
 	b.discoveryChosen = true
-	b.settings.Metadata.InitialDiscovery = false
-	return b
-}
-
-// WithDiscovery discovers and connects to the cluster's nodes. It replaces
-// NoDiscovery. Discovery is on by default except for Unix sockets.
-func (b *ConfigBuilder) WithDiscovery() *ConfigBuilder {
-	b.discoveryChosen = true
-	b.settings.Metadata.InitialDiscovery = true
+	b.settings.Metadata.InitialDiscovery = on
 	return b
 }
 
@@ -454,17 +436,10 @@ func (b *ConfigBuilder) WithPartitioner(name string, partitioner routing.TokenPa
 	return b
 }
 
-// WithMetadataRefresh reloads metadata every interval. It replaces
-// NoMetadataRefresh. Default 60s.
+// WithMetadataRefresh reloads metadata every interval. Zero turns periodic
+// reloads off; events and schema agreement still refresh it. Default 60s.
 func (b *ConfigBuilder) WithMetadataRefresh(interval time.Duration) *ConfigBuilder {
 	b.settings.Metadata.PeriodicRefresh = interval
-	return b
-}
-
-// NoMetadataRefresh turns periodic metadata reloads off. It replaces
-// WithMetadataRefresh.
-func (b *ConfigBuilder) NoMetadataRefresh() *ConfigBuilder {
-	b.settings.Metadata.PeriodicRefresh = 0
 	return b
 }
 
@@ -497,30 +472,18 @@ func (b *ConfigBuilder) WithSchemaAgreement(timeout, poll time.Duration) *Config
 	return b
 }
 
-// WithManualSchemaAgreement stops waiting for schema agreement after DDL; call
-// Session.AwaitSchemaAgreement instead.
-func (b *ConfigBuilder) WithManualSchemaAgreement() *ConfigBuilder {
-	b.settings.Metadata.AutomaticAgreement = false
+// WithAutomaticSchemaAgreement chooses whether a DDL statement waits for
+// schema agreement before it returns. With false, call
+// Session.AwaitSchemaAgreement where agreement matters. Default true.
+func (b *ConfigBuilder) WithAutomaticSchemaAgreement(on bool) *ConfigBuilder {
+	b.settings.Metadata.AutomaticAgreement = on
 	return b
 }
 
-// WithAutomaticSchemaAgreement waits for agreement after DDL. It replaces
-// WithManualSchemaAgreement and is the default.
-func (b *ConfigBuilder) WithAutomaticSchemaAgreement() *ConfigBuilder {
-	b.settings.Metadata.AutomaticAgreement = true
-	return b
-}
-
-// NoRefreshAfterAgreement skips the metadata reload after schema agreement.
-func (b *ConfigBuilder) NoRefreshAfterAgreement() *ConfigBuilder {
-	b.settings.Metadata.RefreshAfterAgreement = false
-	return b
-}
-
-// WithRefreshAfterAgreement reloads metadata after schema agreement. It
-// replaces NoRefreshAfterAgreement and is the default.
-func (b *ConfigBuilder) WithRefreshAfterAgreement() *ConfigBuilder {
-	b.settings.Metadata.RefreshAfterAgreement = true
+// WithRefreshAfterAgreement chooses whether metadata is reloaded once schema
+// agreement is reached. Default true.
+func (b *ConfigBuilder) WithRefreshAfterAgreement(on bool) *ConfigBuilder {
+	b.settings.Metadata.RefreshAfterAgreement = on
 	return b
 }
 
@@ -546,17 +509,11 @@ func (b *ConfigBuilder) ConfigureDefaultProfile(choose func(*ProfileBuilder)) *C
 	return b
 }
 
-// WithPreparedCacheSize keeps up to n prepared statements. It replaces
-// NoPreparedCache. Default 1000.
+// WithPreparedCacheSize keeps up to n prepared statements, so preparing the
+// same CQL again reuses the cached statement. Zero turns the cache off: every
+// Session.Prepare prepares anew. Default 1000.
 func (b *ConfigBuilder) WithPreparedCacheSize(n int) *ConfigBuilder {
 	b.settings.PreparedCacheSize = n
-	return b
-}
-
-// NoPreparedCache prepares statements without caching them. It replaces
-// WithPreparedCacheSize.
-func (b *ConfigBuilder) NoPreparedCache() *ConfigBuilder {
-	b.settings.PreparedCacheSize = 0
 	return b
 }
 
@@ -608,16 +565,10 @@ func (b *ConfigBuilder) WithLifecycleObserver(observer LifecycleObserver) *Confi
 	return b
 }
 
-// NoConfigReport stops sending the driver configuration to the server.
-func (b *ConfigBuilder) NoConfigReport() *ConfigBuilder {
-	b.settings.ReportConfiguration = false
-	return b
-}
-
-// WithConfigReport sends the driver configuration to the server. It replaces
-// NoConfigReport and is the default.
-func (b *ConfigBuilder) WithConfigReport() *ConfigBuilder {
-	b.settings.ReportConfiguration = true
+// WithConfigReport chooses whether the driver configuration is sent to the
+// server. Default true.
+func (b *ConfigBuilder) WithConfigReport(on bool) *ConfigBuilder {
+	b.settings.ReportConfiguration = on
 	return b
 }
 

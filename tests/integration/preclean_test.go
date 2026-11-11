@@ -49,8 +49,8 @@ func dropLeftoverKeyspaces() error {
 	config, err := createV2Cluster(func(c *gocql.ConfigBuilder) {
 		c.WithKeyspace("system").
 			WithIgnoreEvents(gocql.SchemaEvent, gocql.TopologyEvent, gocql.StatusEvent).
-			WithManualSchemaAgreement().
-			NoRefreshAfterAgreement()
+			WithAutomaticSchemaAgreement(false).
+			WithRefreshAfterAgreement(false)
 	}).Build()
 	if err != nil {
 		return fmt.Errorf("build config: %w", err)

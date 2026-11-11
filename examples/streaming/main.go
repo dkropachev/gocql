@@ -54,8 +54,8 @@ func run() (resultErr error) {
 	builder := gocql.NewConfig(strings.Split(*hosts, ",")...).
 		WithPoolSize(gocql.PerHost(1)).
 		NoAdvancedShardAwareness().
-		NoHeartbeat().
-		NoMetadataRefresh()
+		WithHeartbeat(0, 0).
+		WithMetadataRefresh(0)
 	if _, port, err := net.SplitHostPort(strings.Split(*hosts, ",")[0]); err == nil {
 		n, err := strconv.ParseUint(port, 10, 16)
 		if err != nil {

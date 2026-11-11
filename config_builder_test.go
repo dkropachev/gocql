@@ -94,17 +94,17 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("ExclusiveOptionsReplace", func(t *testing.T) {
 		c := mustBuildConfig(t, NewConfig("h").
-			WithHeartbeat(time.Second, time.Second).NoHeartbeat().
+			WithHeartbeat(time.Second, time.Second).WithHeartbeat(0, 0).
 			WithPoolSize(PerHost(4)).WithPoolSize(PerShard(2)).
 			WithAdvancedShardAwareness(50000, 60000).NoAdvancedShardAwareness().
-			WithMetadataRefresh(time.Second).NoMetadataRefresh().
-			WithPreparedCacheSize(10).NoPreparedCache().
+			WithMetadataRefresh(time.Second).WithMetadataRefresh(0).
+			WithPreparedCacheSize(10).WithPreparedCacheSize(0).
 			WithTimestampGenerator(func() int64 { return 1 }).WithServerTimestamps()).settings
 		if c.KeepaliveInterval != 0 || c.Pool.ConnectionsPerHost != 0 || c.Pool.ConnectionsPerShard != 2 || c.Pool.ShardAwarePort ||
 			c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.TimestampGenerator != nil {
 			t.Fatalf("a later call did not replace an earlier one: %+v", c)
 		}
-		c = mustBuildConfig(t, NewConfig("h").NoHeartbeat().WithHeartbeat(time.Second, 2*time.Second).WithPoolSize(PerShard(2)).WithPoolSize(PerHost(4))).settings
+		c = mustBuildConfig(t, NewConfig("h").WithHeartbeat(0, 0).WithHeartbeat(time.Second, 2*time.Second).WithPoolSize(PerShard(2)).WithPoolSize(PerHost(4))).settings
 		if c.KeepaliveInterval != time.Second || c.KeepaliveTimeout != 2*time.Second || c.Pool.ConnectionsPerHost != 4 {
 			t.Fatalf("reverse order: %+v", c)
 		}
@@ -124,15 +124,15 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("CorrectionsAndResets", func(t *testing.T) {
 		b := NewConfig().WithContactPoints("h").
-			WithHeartbeat(-time.Second, -time.Second).NoHeartbeat().
+			WithHeartbeat(-time.Second, -time.Second).WithHeartbeat(0, 0).
 			WithIgnoreEvents(OverflowEvent).WithIgnoreEvents(StatusEvent).
 			WithTLS(StaticTLS(nil)).WithTLS(nil).
 			WithClientRoutes(NewClientRoutes()).WithClientRoutes(nil).
 			WithMetadataKeyspaces("").WithMetadataKeyspaces().
-			NoDiscovery().WithDiscovery().
-			NoConfigReport().WithConfigReport().
-			WithManualSchemaAgreement().WithAutomaticSchemaAgreement().
-			NoRefreshAfterAgreement().WithRefreshAfterAgreement().
+			WithDiscovery(false).WithDiscovery(true).
+			WithConfigReport(false).WithConfigReport(true).
+			WithAutomaticSchemaAgreement(false).WithAutomaticSchemaAgreement(true).
+			WithRefreshAfterAgreement(false).WithRefreshAfterAgreement(true).
 			ConfigureDefaultProfile(func(p *ProfileBuilder) {
 				p.WithPageSize(0).WithPageSize(42).NoPrefetch().WithPrefetch(1)
 			})
@@ -347,11 +347,14 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("DisableMethods", func(t *testing.T) {
-		c := mustBuildConfig(t, NewConfig("h").NoHeartbeat().NoMetadataRefresh().NoPreparedCache().WithServerTimestamps().
-			NoConfigReport().NoDiscovery().WithManualSchemaAgreement().NoRefreshAfterAgreement().NoAdvancedShardAwareness()).settings
+		c := mustBuildConfig(t, NewConfig("h").WithHeartbeat(0, 0).WithMetadataRefresh(0).WithPreparedCacheSize(0).WithServerTimestamps().
+			WithConfigReport(false).WithDiscovery(false).WithAutomaticSchemaAgreement(false).WithRefreshAfterAgreement(false).NoAdvancedShardAwareness().WithNagle(true)).settings
 		if c.KeepaliveInterval != 0 || c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.TimestampGenerator != nil ||
-			c.ReportConfiguration || c.Metadata.InitialDiscovery || c.Metadata.AutomaticAgreement || c.Metadata.RefreshAfterAgreement || c.Pool.ShardAwarePort {
-			t.Fatalf("a No* method left its feature on: %+v", c)
+			c.ReportConfiguration || c.Metadata.InitialDiscovery || c.Metadata.AutomaticAgreement || c.Metadata.RefreshAfterAgreement || c.Pool.ShardAwarePort || c.NoDelay {
+			t.Fatalf("a disabling setting left its feature on: %+v", c)
+		}
+		if c := mustBuildConfig(t, NewConfig("h").WithNagle(true).WithNagle(false)).settings; !c.NoDelay {
+			t.Fatal("WithNagle(false) did not set TCP_NODELAY")
 		}
 	})
 

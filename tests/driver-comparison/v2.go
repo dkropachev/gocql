@@ -62,7 +62,7 @@ func connect(hosts []string) (adapter, error) {
 	if *metadataRefresh > 0 {
 		builder.WithMetadataRefresh(*metadataRefresh)
 	} else {
-		builder.NoMetadataRefresh()
+		builder.WithMetadataRefresh(0)
 	}
 	c, e := builder.Build()
 	if e != nil {
