@@ -93,7 +93,7 @@ type InternalV2PeripheralState struct {
 	latencyTick            int
 	latencyPublished       uint64
 	orphans                atomic.Uint64
-	InternalMu             sync.RWMutex // per-request feedback captures read under RLock
+	InternalMu             sync.RWMutex // guards pending scopes and feedback captures; per-request paths read InternalSchemaReconciled atomically, not under this lock
 	metricsOnce            sync.Once
 	periodicOnce           sync.Once
 	InternalFeedbackOnce   sync.Once

@@ -18,6 +18,7 @@ package session
 
 import (
 	"github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/transport"
 
@@ -72,5 +73,83 @@ func waitReconciliation(t *testing.T, p *cluster.InternalV2PeripheralState) {
 			t.Fatal("required reconciliation did not finish")
 		}
 		time.Sleep(time.Millisecond)
+	}
+}
+
+func pendingConflictSession(t *testing.T) *cluster.Core {
+	t.Helper()
+	s := new(cluster.Core)
+	cluster.SessionData(s).InternalLogger = logging.Nop()
+	cluster.SessionData(s).InternalCtx, cluster.SessionData(s).InternalCancel = context.WithCancel(context.Background())
+	t.Cleanup(func() { s.Close() })
+	return s
+}
+
+// While a scope is pending only the schema retry worker can clear it, so a
+// dirty statement's attempts must neither take the session-wide peripheral
+// lock nor its own conflictMu.
+func TestPendingConflictAttemptDoesNotBlockOnPeripheralLock(t *testing.T) {
+	s := pendingConflictSession(t)
+	state := &InternalPreparedState{InternalSession: s, InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl"}}
+	if err := state.noteMetadataConflict(); err != nil {
+		t.Fatal(err)
+	}
+	p := s.Peripheral()
+	p.InternalMu.Lock()
+	defer p.InternalMu.Unlock()
+	done := make(chan error, 1)
+	go func() { done <- state.reconcilePendingConflict() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("attempt blocked on the peripheral lock while its scope is pending")
+	}
+}
+
+func TestPendingConflictConcurrentAttemptsDoNotQueue(t *testing.T) {
+	s := pendingConflictSession(t)
+	state := &InternalPreparedState{InternalSession: s, InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl"}}
+	if err := state.noteMetadataConflict(); err != nil {
+		t.Fatal(err)
+	}
+	state.conflictMu.Lock()
+	defer state.conflictMu.Unlock()
+	var wg sync.WaitGroup
+	for i := 0; i < 32; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := state.reconcilePendingConflict(); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("attempts queued on conflictMu while the scope is pending")
+	}
+}
+
+// The flag must stay set until the scope is reconciled, so that the first
+// attempt after reconciliation clears it.
+func TestPendingConflictKeepsDirty(t *testing.T) {
+	s := pendingConflictSession(t)
+	state := &InternalPreparedState{InternalSession: s, InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl"}}
+	if err := state.noteMetadataConflict(); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 1000; i++ {
+		if err := state.reconcilePendingConflict(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !state.conflictDirty.Load() {
+		t.Fatal("dirty cleared while pending")
 	}
 }
