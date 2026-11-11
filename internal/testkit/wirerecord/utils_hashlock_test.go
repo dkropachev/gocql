@@ -1,4 +1,4 @@
-package dialer
+package wirerecord
 
 import (
 	frm "github.com/scylladb/gocql/v2/internal/frame"

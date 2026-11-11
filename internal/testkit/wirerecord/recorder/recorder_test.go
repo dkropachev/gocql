@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/dialer"
+	"github.com/scylladb/gocql/v2/internal/testkit/wirerecord"
 )
 
 // stubConn is a net.Conn whose Read serves a fixed byte stream and whose Write
@@ -79,7 +79,7 @@ func startupFrame() []byte {
 }
 
 // recordedFrames decodes the newline-delimited records the recorder wrote.
-func recordedFrames(t *testing.T, fname string) []dialer.Record {
+func recordedFrames(t *testing.T, fname string) []wirerecord.Record {
 	t.Helper()
 
 	data, err := os.ReadFile(fname)
@@ -94,9 +94,9 @@ func recordedFrames(t *testing.T, fname string) []dialer.Record {
 		return nil
 	}
 
-	var records []dialer.Record
+	var records []wirerecord.Record
 	for _, line := range bytes.Split(bytes.TrimRight(data, "\n"), []byte{'\n'}) {
-		var record dialer.Record
+		var record wirerecord.Record
 		if err := json.Unmarshal(line, &record); err != nil {
 			t.Fatalf("decoding %s: %v", fname, err)
 		}

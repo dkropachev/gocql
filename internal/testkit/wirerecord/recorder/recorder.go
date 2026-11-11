@@ -15,8 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/scylladb/gocql/v2/dialer"
 	"github.com/scylladb/gocql/v2/endpoint"
+	"github.com/scylladb/gocql/v2/internal/testkit/wirerecord"
 )
 
 // Option configures a RecordDialer.
@@ -32,7 +32,7 @@ type Option func(*RecordDialer)
 // protocol v5 is not ignored but refused: there it compresses frame bodies rather than
 // transport segments, which is a different thing this package does not implement, and
 // left alone it would surface as a recording whose hashes never match on replay.
-func WithSegmentCompressor(comp dialer.SegmentCompressor) Option {
+func WithSegmentCompressor(comp wirerecord.SegmentCompressor) Option {
 	return func(d *RecordDialer) { d.comp = comp }
 }
 
@@ -46,7 +46,7 @@ func NewRecordDialer(dir string, opts ...Option) *RecordDialer {
 
 type RecordDialer struct {
 	dir  string
-	comp dialer.SegmentCompressor
+	comp wirerecord.SegmentCompressor
 	net.Dialer
 }
 
@@ -138,7 +138,7 @@ func openRecordingFile(fname string) (*os.File, error) {
 // So a recording directory has to be per run. Making the file name unique per
 // connection instead would need the replayer to stop deriving the same name from the
 // same two values, which is a different design than the one here.
-func NewConnectionRecorder(fname string, conn net.Conn, comp dialer.SegmentCompressor) (net.Conn, error) {
+func NewConnectionRecorder(fname string, conn net.Conn, comp wirerecord.SegmentCompressor) (net.Conn, error) {
 	fd_writes, err := openRecordingFile(fname + "Writes")
 	if err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ func NewConnectionRecorder(fname string, conn net.Conn, comp dialer.SegmentCompr
 	}
 	// Both directions share one Framing: the handshake fact that switches them to
 	// transport segments is carried by a response, and applies to requests too.
-	framing := dialer.NewFraming(comp)
+	framing := wirerecord.NewFraming(comp)
 	return &ConnectionRecorder{
 		fd_writes:    fd_writes,
 		fd_reads:     fd_reads,
@@ -162,14 +162,14 @@ func NewConnectionRecorder(fname string, conn net.Conn, comp dialer.SegmentCompr
 // FrameWriter records the CQL frames of one direction of a connection, one JSON
 // object per line.
 //
-// Frame boundaries come from a dialer.Decoder, which follows the connection across the
+// Frame boundaries come from a wirerecord.Decoder, which follows the connection across the
 // handshake: bare CQL frames to begin with, transport segments once a protocol v5
 // connection switches. Recordings hold bare frames either way, so the format does not
 // depend on the protocol version and a v5 recording is stored unwrapped and
 // decompressed.
 type FrameWriter struct {
-	framing *dialer.Framing
-	decoder *dialer.Decoder
+	framing *wirerecord.Framing
+	decoder *wirerecord.Decoder
 	// response reports whether this direction carries responses. It decides which of
 	// the two handshake facts this direction can observe.
 	response bool
@@ -214,16 +214,16 @@ func (f *FrameWriter) record(frame []byte, file *os.File) error {
 		// before being recorded rather than each write being appended as it arrives.
 		// Missing the opt-in here would stamp every later EXECUTE false and turn
 		// replay into silent hash mismatches rather than an error.
-		if !f.useMetadataID && dialer.StartupNegotiatesMetadataID(frame) {
+		if !f.useMetadataID && wirerecord.StartupNegotiatesMetadataID(frame) {
 			f.useMetadataID = true
 		}
 	}
 
-	record := dialer.Record{
+	record := wirerecord.Record{
 		Data:          frame,
 		StreamID:      int(frame[2])<<8 | int(frame[3]),
 		UseMetadataID: f.useMetadataID,
-		Proto:         dialer.FrameProtoVersion(frame),
+		Proto:         wirerecord.FrameProtoVersion(frame),
 	}
 
 	jsonData, err := json.Marshal(record)
@@ -477,7 +477,7 @@ func (c *ConnectionRecorder) close() error {
 	// only as an unpaired stream or an unmatched hash, with nothing pointing at this
 	// session.
 	if c.read_record.decoder.Pending() || c.write_record.decoder.Pending() {
-		return fmt.Errorf("gocql/dialer: the connection closed in the middle of a frame or segment chain; the recording is truncated")
+		return fmt.Errorf("gocql/wirerecord: the connection closed in the middle of a frame or segment chain; the recording is truncated")
 	}
 	return nil
 }

@@ -1,4 +1,4 @@
-package dialer
+package wirerecord
 
 import (
 	"fmt"
@@ -196,7 +196,7 @@ func (s *FrameSplitter) consume(b []byte, emit func(frame []byte) error) (int, e
 		// closed either way. Re-running it on each chunk of a dribbled header is the
 		// same verdict on the same byte.
 		if version := FrameProtoVersion(s.frame); version < protoVersion3 {
-			return taken, s.fail(fmt.Errorf("gocql/dialer: connection is at protocol v%d; the record and replay dialers read the protocol v3+ frame header", version))
+			return taken, s.fail(fmt.Errorf("gocql/wirerecord: connection is at protocol v%d; the record and replay dialers read the protocol v3+ frame header", version))
 		}
 
 		bodyLen, ok := FrameBodyLen(s.frame)
@@ -209,7 +209,7 @@ func (s *FrameSplitter) consume(b []byte, emit func(frame []byte) error) (int, e
 		// time, on nothing more than a corrupt header. The driver's own reader
 		// bounds the same field the same way.
 		if bodyLen < 0 || bodyLen > frm.MaxFrameSize {
-			return taken, s.fail(fmt.Errorf("gocql/dialer: frame declares an invalid body length %d", bodyLen))
+			return taken, s.fail(fmt.Errorf("gocql/wirerecord: frame declares an invalid body length %d", bodyLen))
 		}
 
 		// The whole body is owed and its length is now known, so reserve it in one

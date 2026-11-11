@@ -1,4 +1,4 @@
-package dialer
+package wirerecord
 
 import (
 	"encoding/binary"
@@ -9,8 +9,7 @@ import (
 )
 
 // passthroughCompressor is a no-op compressor that still honours the append
-// contract. Using a real lz4 would drag in a separate module; what these tests need
-// is the compressed *layout*, not compression.
+// contract. What these tests need is the compressed *layout*, not compression.
 type passthroughCompressor struct{}
 
 func (passthroughCompressor) AppendCompressed(dst, src []byte) ([]byte, error) {

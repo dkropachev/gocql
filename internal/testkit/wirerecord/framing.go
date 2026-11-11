@@ -1,4 +1,4 @@
-package dialer
+package wirerecord
 
 import (
 	"fmt"
@@ -116,12 +116,12 @@ func (f *Framing) ObserveRequest(frame []byte) error {
 	}
 
 	if !FrameIsProtoV5OrNewer(frame) {
-		return fmt.Errorf("gocql/dialer: connection negotiated %q compression at protocol v%d, which compresses frame bodies rather than transport segments; the record and replay dialers support compression only from protocol v5",
+		return fmt.Errorf("gocql/wirerecord: connection negotiated %q compression at protocol v%d, which compresses frame bodies rather than transport segments; the record and replay dialers support compression only from protocol v5",
 			algorithm, FrameProtoVersion(frame))
 	}
 
 	if named, ok := f.comp.(interface{ Name() string }); ok && !strings.EqualFold(named.Name(), algorithm) {
-		return fmt.Errorf("gocql/dialer: connection negotiated %q compression but the dialer was given a %q compressor",
+		return fmt.Errorf("gocql/wirerecord: connection negotiated %q compression but the dialer was given a %q compressor",
 			algorithm, named.Name())
 	}
 
@@ -303,7 +303,7 @@ func (d *Decoder) startSegments() error {
 	// segment decoder and read whatever the next bytes happened to look like as a
 	// segment header.
 	if d.plain.Pending() {
-		return d.plain.fail(fmt.Errorf("gocql/dialer: connection switched to transport segments in the middle of a frame"))
+		return d.plain.fail(fmt.Errorf("gocql/wirerecord: connection switched to transport segments in the middle of a frame"))
 	}
 
 	comp, err := d.framing.segmentCompressor()

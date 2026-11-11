@@ -7,14 +7,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/dialer"
-	"github.com/scylladb/gocql/v2/dialer/replayer"
 	"github.com/scylladb/gocql/v2/internal/segment"
+	"github.com/scylladb/gocql/v2/internal/testkit/wirerecord"
+	"github.com/scylladb/gocql/v2/internal/testkit/wirerecord/replayer"
 )
 
-// passthroughCompressor is a no-op compressor that honours the append contract. A real
-// lz4 lives in a separate Go module; what these tests need is the compressed segment
-// *layout*, not compression.
+// passthroughCompressor is a no-op compressor that honours the append contract. What
+// these tests need is the compressed segment *layout*, not compression.
 type passthroughCompressor struct{}
 
 func (passthroughCompressor) AppendCompressed(dst, src []byte) ([]byte, error) {
@@ -95,13 +94,13 @@ func v5Conversation(compression string) []exchange {
 }
 
 // onWire renders one frame as the bytes that would cross the socket for it.
-func onWire(t *testing.T, frame []byte, segmented bool, comp dialer.SegmentCompressor) []byte {
+func onWire(t *testing.T, frame []byte, segmented bool, comp wirerecord.SegmentCompressor) []byte {
 	t.Helper()
 
 	if !segmented {
 		return frame
 	}
-	out, err := dialer.AppendSegmented(nil, frame, comp)
+	out, err := wirerecord.AppendSegmented(nil, frame, comp)
 	if err != nil {
 		t.Fatalf("encoding a frame: %v", err)
 	}
@@ -110,7 +109,7 @@ func onWire(t *testing.T, frame []byte, segmented bool, comp dialer.SegmentCompr
 
 // wire renders one direction of a conversation as the whole byte stream, which is what
 // the recorder's stub connection hands back.
-func wire(t *testing.T, conv []exchange, comp dialer.SegmentCompressor, responses bool) []byte {
+func wire(t *testing.T, conv []exchange, comp wirerecord.SegmentCompressor, responses bool) []byte {
 	t.Helper()
 
 	var out []byte
@@ -156,7 +155,7 @@ func queryV5(streamID int, query string, timestamp int64) []byte {
 
 // recordConversation records conv through a ConnectionRecorder fed the bytes a socket
 // would have carried for it, and closes the recorder.
-func recordConversation(t *testing.T, fname string, conv []exchange, comp dialer.SegmentCompressor) {
+func recordConversation(t *testing.T, fname string, conv []exchange, comp wirerecord.SegmentCompressor) {
 	t.Helper()
 
 	rec, err := NewConnectionRecorder(fname, &stubConn{readData: wire(t, conv, comp, true)}, comp)
@@ -180,7 +179,7 @@ func recordConversation(t *testing.T, fname string, conv []exchange, comp dialer
 
 // replayConversation replays conv against the recording at fname, and checks every
 // response comes back framed the way the driver expects.
-func replayConversation(t *testing.T, fname string, conv []exchange, comp dialer.SegmentCompressor) {
+func replayConversation(t *testing.T, fname string, conv []exchange, comp wirerecord.SegmentCompressor) {
 	t.Helper()
 
 	rep, err := replayer.NewConnectionReplayer(fname, comp)
@@ -219,11 +218,11 @@ func replayConversation(t *testing.T, fname string, conv []exchange, comp dialer
 }
 
 // expectedResponseWire is what the replayer should put on the wire for one exchange.
-func expectedResponseWire(ex exchange, comp dialer.SegmentCompressor) ([]byte, error) {
+func expectedResponseWire(ex exchange, comp wirerecord.SegmentCompressor) ([]byte, error) {
 	if !ex.segmented {
 		return ex.response, nil
 	}
-	return dialer.AppendSegmented(nil, ex.response, comp)
+	return wirerecord.AppendSegmented(nil, ex.response, comp)
 }
 
 func TestRoundTrip(t *testing.T) {
@@ -241,7 +240,7 @@ func TestRoundTrip(t *testing.T) {
 			for _, cc := range []struct {
 				name        string
 				compression string
-				comp        dialer.SegmentCompressor
+				comp        wirerecord.SegmentCompressor
 			}{
 				{name: "uncompressed", compression: ""},
 				{name: "compressed", compression: "lz4", comp: passthroughCompressor{}},
@@ -344,8 +343,8 @@ func TestRoundTrip(t *testing.T) {
 			if err == nil {
 				t.Fatal("a compressed v5 connection was recorded without a compressor")
 			}
-			if !errors.Is(err, dialer.ErrSegmentCompressorRequired) {
-				t.Errorf("error = %v, want dialer.ErrSegmentCompressorRequired", err)
+			if !errors.Is(err, wirerecord.ErrSegmentCompressorRequired) {
+				t.Errorf("error = %v, want wirerecord.ErrSegmentCompressorRequired", err)
 			}
 		})
 	})

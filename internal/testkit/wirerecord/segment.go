@@ -1,4 +1,4 @@
-package dialer
+package wirerecord
 
 import (
 	"bytes"
@@ -10,11 +10,10 @@ import (
 // SegmentCompressor compresses and decompresses protocol v5 transport segment
 // payloads.
 //
-// It is structurally identical to gocql.SegmentCompressor, and a value of that type
-// satisfies this directly. It is redeclared rather than imported because this package
-// does not depend on the driver, and because the only compressor that implements it —
-// lz4 — lives in a separate module that the driver cannot construct for itself. A
-// caller that wants compressed v5 recordings therefore has to hand one in.
+// It is structurally identical to gocql.SegmentCompressor, and a value of that type,
+// such as wirecompress.LZ4Compressor, satisfies this directly. It is redeclared
+// rather than imported because this package does not depend on the driver. A caller
+// that wants compressed v5 recordings hands one in.
 //
 // A nil SegmentCompressor means the uncompressed segment layout. Note that a typed
 // nil is not nil as an interface, so pass an untyped nil rather than a nil variable
@@ -143,7 +142,7 @@ func (s *SegmentSplitter) Feed(b []byte, emit func(frame []byte) error) error {
 			s.rdr.Reset(s.buf[:headerSize])
 			hdr, err := segment.ReadHeader(&s.rdr, s.compressed())
 			if err != nil {
-				return s.fail(fmt.Errorf("gocql/dialer: failed to decode segment header: %w", err))
+				return s.fail(fmt.Errorf("gocql/wirerecord: failed to decode segment header: %w", err))
 			}
 			s.hdr, s.hdrValid = hdr, true
 		}
@@ -154,19 +153,19 @@ func (s *SegmentSplitter) Feed(b []byte, emit func(frame []byte) error) error {
 		}
 
 		if s.hdr.IsSelfContained && s.chainOpen {
-			return s.fail(fmt.Errorf("gocql/dialer: received a self-contained segment while a segment chain was still open"))
+			return s.fail(fmt.Errorf("gocql/wirerecord: received a self-contained segment while a segment chain was still open"))
 		}
 
 		s.rdr.Reset(s.buf[headerSize:total])
 		payload, err := segment.ReadPayload(&s.rdr, s.hdr, s.comp, &s.scratch)
 		if err != nil {
-			return s.fail(fmt.Errorf("gocql/dialer: failed to decode segment payload: %w", err))
+			return s.fail(fmt.Errorf("gocql/wirerecord: failed to decode segment payload: %w", err))
 		}
 		// Progress is the decoded payload, which is what readContinuationSegment
 		// measures: a compressed segment can carry no wire bytes and still decode to
 		// some.
 		if !s.hdr.IsSelfContained && s.chainOpen && len(payload) == 0 {
-			return s.fail(fmt.Errorf("gocql/dialer: segment chain made no progress (empty payload)"))
+			return s.fail(fmt.Errorf("gocql/wirerecord: segment chain made no progress (empty payload)"))
 		}
 
 		emitted := 0
@@ -178,10 +177,10 @@ func (s *SegmentSplitter) Feed(b []byte, emit func(frame []byte) error) error {
 		}
 
 		if s.hdr.IsSelfContained && s.frames.Pending() {
-			return s.fail(fmt.Errorf("gocql/dialer: self-contained segment ended in the middle of a frame"))
+			return s.fail(fmt.Errorf("gocql/wirerecord: self-contained segment ended in the middle of a frame"))
 		}
 		if !s.hdr.IsSelfContained && (emitted > 1 || (emitted == 1 && s.frames.Pending())) {
-			return s.fail(fmt.Errorf("gocql/dialer: segment chain carried more than the one frame it was split from"))
+			return s.fail(fmt.Errorf("gocql/wirerecord: segment chain carried more than the one frame it was split from"))
 		}
 
 		// A self-contained segment is not in a chain, and the segment that delivered the

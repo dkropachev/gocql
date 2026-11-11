@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/dialer"
+	"github.com/scylladb/gocql/v2/internal/testkit/wirerecord"
 )
 
 func TestConnectionReplayer(t *testing.T) {
@@ -42,7 +42,7 @@ func TestConnectionReplayer(t *testing.T) {
 		t.Run("UnmatchedWriteAfterCloseFails", func(t *testing.T) {
 			c := newTestReplayer(0x04, &FrameRecorded{
 				Response: responseFrame(0x0001, 8),
-				Hash:     dialer.GetFrameHash(requestFrame(0x05, 1), false),
+				Hash:     wirerecord.GetFrameHash(requestFrame(0x05, 1), false),
 			})
 
 			if err := c.Close(); err != nil {
@@ -60,7 +60,7 @@ func TestConnectionReplayer(t *testing.T) {
 			req := requestFrame(0x05, 1)
 			c := newTestReplayer(0x04, &FrameRecorded{
 				Response: responseFrame(0x0001, 8),
-				Hash:     dialer.GetFrameHash(req, false),
+				Hash:     wirerecord.GetFrameHash(req, false),
 			})
 
 			type readResult struct {
@@ -99,7 +99,7 @@ func TestConnectionReplayer(t *testing.T) {
 			req := requestFrame(0x05, 1)
 			c := newTestReplayer(0x04, &FrameRecorded{
 				Response: responseFrame(0x0001, 8),
-				Hash:     dialer.GetFrameHash(req, false),
+				Hash:     wirerecord.GetFrameHash(req, false),
 			})
 
 			if err := c.Close(); err != nil {
@@ -110,7 +110,7 @@ func TestConnectionReplayer(t *testing.T) {
 				t.Fatalf("Write after Close = %v, want net.ErrClosed", err)
 			}
 
-			// dialer.FrameSplitter.Feed latches the emit error, so the connection stays failed.
+			// wirerecord.FrameSplitter.Feed latches the emit error, so the connection stays failed.
 			if _, err := c.Write(req); !errors.Is(err, net.ErrClosed) {
 				t.Errorf("second Write after Close = %v, want the latched net.ErrClosed", err)
 			}
@@ -134,7 +134,7 @@ func TestConnectionReplayer(t *testing.T) {
 				name string
 				// comp covers both ways EncodeResponse fails: nil is refused before anything is
 				// written, the other fails after.
-				comp dialer.SegmentCompressor
+				comp wirerecord.SegmentCompressor
 			}{
 				{name: "no compressor for a compressed connection", comp: nil},
 				{name: "compressor fails after writing", comp: failAfterWriting{err: errors.New("compressor failed")}},
@@ -184,7 +184,7 @@ func TestConnectionReplayer(t *testing.T) {
 		// saw produces.
 		t.Run("RefusesUnpairedRecording", func(t *testing.T) {
 			base := filepath.Join(t.TempDir(), "rec")
-			writeRecordsTo(t, base+"Writes", dialer.Record{Data: optionsFrame(0x04), StreamID: 1, Proto: 0x04})
+			writeRecordsTo(t, base+"Writes", wirerecord.Record{Data: optionsFrame(0x04), StreamID: 1, Proto: 0x04})
 			writeRecordsTo(t, base+"Reads")
 
 			conn, err := NewConnectionReplayer(base, nil)
@@ -212,7 +212,7 @@ func TestConnectionReplayer(t *testing.T) {
 				reqs[i] = requestFrame(byte(i), i)
 				frames[i] = &FrameRecorded{
 					Response: responseFrame(i, 8),
-					Hash:     dialer.GetFrameHash(reqs[i], false),
+					Hash:     wirerecord.GetFrameHash(reqs[i], false),
 				}
 			}
 
@@ -265,7 +265,7 @@ func TestConnectionReplayer(t *testing.T) {
 			const (
 				requests    = 200
 				bodyLen     = 8
-				responseLen = dialer.FrameHeaderLen + bodyLen
+				responseLen = wirerecord.FrameHeaderLen + bodyLen
 			)
 
 			// A distinct opcode per request: GetFrameHash blanks the stream id before hashing, so
@@ -276,7 +276,7 @@ func TestConnectionReplayer(t *testing.T) {
 				reqs[i] = requestFrame(byte(i), i)
 				frames[i] = &FrameRecorded{
 					Response: responseFrame(i, bodyLen),
-					Hash:     dialer.GetFrameHash(reqs[i], false),
+					Hash:     wirerecord.GetFrameHash(reqs[i], false),
 				}
 			}
 			c := newTestReplayer(0x04, frames...)
@@ -327,7 +327,7 @@ func TestConnectionReplayer(t *testing.T) {
 			req := optionsFrame(0x04)
 			c := newTestReplayer(0x04, &FrameRecorded{
 				Response: optionsFrame(0x84),
-				Hash:     dialer.GetFrameHash(req, false),
+				Hash:     wirerecord.GetFrameHash(req, false),
 			})
 
 			n, err := c.Write(req)
@@ -398,7 +398,7 @@ func TestConnectionReplayer(t *testing.T) {
 			req := optionsFrame(0x05)
 			c := newTestReplayer(0x05, &FrameRecorded{
 				Response: optionsFrame(0x85),
-				Hash:     dialer.GetFrameHash(append([]byte(nil), req...), false),
+				Hash:     wirerecord.GetFrameHash(append([]byte(nil), req...), false),
 			})
 
 			if _, err := c.Write(append([]byte(nil), req...)); err != nil {
@@ -426,7 +426,7 @@ func TestConnectionReplayer(t *testing.T) {
 				request[3] = byte(streamID & 0xFF)
 
 				c := newTestReplayer(0x04, frame)
-				frame.Hash = dialer.GetFrameHash(append([]byte(nil), request...), false)
+				frame.Hash = wirerecord.GetFrameHash(append([]byte(nil), request...), false)
 
 				if _, err := c.Write(append([]byte(nil), request...)); err != nil {
 					t.Fatalf("iteration %d: Write: %v", i, err)
@@ -457,13 +457,13 @@ func TestConnectionReplayer(t *testing.T) {
 				response []byte
 			}{
 				{name: "empty record", response: nil},
-				{name: "truncated record", response: full[:dialer.FrameHeaderLen+16]},
+				{name: "truncated record", response: full[:wirerecord.FrameHeaderLen+16]},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					request := optionsFrame(0x04)
 					c := newTestReplayer(0x04, &FrameRecorded{
 						Response: append([]byte(nil), tc.response...),
-						Hash:     dialer.GetFrameHash(append([]byte(nil), request...), false),
+						Hash:     wirerecord.GetFrameHash(append([]byte(nil), request...), false),
 					})
 					if _, err := c.Write(append([]byte(nil), request...)); err != nil {
 						t.Fatalf("Write: %v", err)
@@ -474,7 +474,7 @@ func TestConnectionReplayer(t *testing.T) {
 						t.Fatalf("Read returned (%d, nil) for a record that is not one whole frame", n)
 					}
 
-					// The latch is reported even for a zero-length read, the way dialer.Feed
+					// The latch is reported even for a zero-length read, the way wirerecord.Feed
 					// reports one for an empty buffer: a caller that took (0, nil) for "nothing
 					// yet, still healthy" would park on a connection that is finished.
 					if n, err := c.Read(nil); err == nil || !errors.Is(err, first) {
@@ -520,7 +520,7 @@ func TestConnectionReplayer(t *testing.T) {
 					response := responseFrame(recordedStreamID, bodyLen)
 					c := newTestReplayer(0x04, &FrameRecorded{
 						Response: append([]byte(nil), response...),
-						Hash:     dialer.GetFrameHash(append([]byte(nil), request...), false),
+						Hash:     wirerecord.GetFrameHash(append([]byte(nil), request...), false),
 					})
 
 					if _, err := c.Write(append([]byte(nil), request...)); err != nil {
@@ -557,7 +557,7 @@ func TestConnectionReplayer(t *testing.T) {
 
 			c := newTestReplayer(0x04, &FrameRecorded{
 				Response: nil,
-				Hash:     dialer.GetFrameHash(append([]byte(nil), request...), false),
+				Hash:     wirerecord.GetFrameHash(append([]byte(nil), request...), false),
 			})
 
 			if _, err := c.Write(append([]byte(nil), request...)); err != nil {
@@ -595,14 +595,14 @@ func TestConnectionReplayer(t *testing.T) {
 				response []byte
 			}{
 				{"shorter than a header", []byte{0x84, 0x00}},
-				{"header declares more body than arrived", full[:dialer.FrameHeaderLen+16]},
+				{"header declares more body than arrived", full[:wirerecord.FrameHeaderLen+16]},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					request := optionsFrame(0x04)
 
 					c := newTestReplayer(0x04, &FrameRecorded{
 						Response: append([]byte(nil), tc.response...),
-						Hash:     dialer.GetFrameHash(append([]byte(nil), request...), false),
+						Hash:     wirerecord.GetFrameHash(append([]byte(nil), request...), false),
 					})
 
 					if _, err := c.Write(append([]byte(nil), request...)); err != nil {
@@ -641,18 +641,18 @@ func TestConnectionReplayer(t *testing.T) {
 			c := newTestReplayer(0x04,
 				&FrameRecorded{
 					Response: responseFrame(0x0040, big),
-					Hash:     dialer.GetFrameHash(append([]byte(nil), first...), false),
+					Hash:     wirerecord.GetFrameHash(append([]byte(nil), first...), false),
 				},
 				&FrameRecorded{
 					Response: responseFrame(0x0041, small),
-					Hash:     dialer.GetFrameHash(append([]byte(nil), second...), false),
+					Hash:     wirerecord.GetFrameHash(append([]byte(nil), second...), false),
 				},
 			)
 
 			if _, err := c.Write(append([]byte(nil), first...)); err != nil {
 				t.Fatalf("Write: %v", err)
 			}
-			readAll(t, c, dialer.FrameHeaderLen+big, 4096)
+			readAll(t, c, wirerecord.FrameHeaderLen+big, 4096)
 
 			// patched is released as soon as the response has been encoded out of it.
 			if cap(c.patched) > maxRetainedResponse {
@@ -667,7 +667,7 @@ func TestConnectionReplayer(t *testing.T) {
 			if _, err := c.Write(append([]byte(nil), second...)); err != nil {
 				t.Fatalf("Write: %v", err)
 			}
-			readAll(t, c, dialer.FrameHeaderLen+small, 4096)
+			readAll(t, c, wirerecord.FrameHeaderLen+small, 4096)
 
 			if cap(c.outgoing) > maxRetainedResponse {
 				t.Errorf("outgoing still holds %d bytes after the outsized response drained", cap(c.outgoing))

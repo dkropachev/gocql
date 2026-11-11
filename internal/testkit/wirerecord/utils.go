@@ -1,14 +1,13 @@
-// Package dialer provides the record/replay and single-connection benchmark
+// Package wirerecord provides the record/replay and single-connection benchmark
 // harness the driver uses to exercise its own wire handling against captured
 // traffic.
 //
-// It is not part of the driver's supported API. Its exported identifiers exist so
-// the recorder and replayer subpackages and the benchmarks can share frame
-// parsing, and they change whenever the wire handling they mirror changes —
-// GetFrameHash, for instance, needs whatever protocol context a frame's layout
-// depends on but its bytes do not reveal. Expect breaking signature changes
-// without a major version bump.
-package dialer
+// It is test tooling. Its exported identifiers exist so the recorder and
+// replayer subpackages and the benchmarks can share frame parsing, and they
+// change whenever the wire handling they mirror changes — GetFrameHash, for
+// instance, needs whatever protocol context a frame's layout depends on but its
+// bytes do not reveal.
+package wirerecord
 
 import (
 	"bytes"
@@ -22,10 +21,10 @@ import (
 // ErrSegmentCompressorRequired is returned when a connection negotiated compression
 // on protocol v5 but no compressor was supplied to the dialer.
 //
-// The driver's only segment compressor, lz4, lives in a separate Go module, so this
-// module cannot construct one for itself; a caller recording or replaying a compressed
-// v5 connection has to hand one in (see recorder.WithSegmentCompressor).
-var ErrSegmentCompressorRequired = errors.New("gocql/dialer: protocol v5 connection negotiated compression, but no SegmentCompressor was supplied to the dialer")
+// This package does not pick a compressor itself; a caller recording or replaying a
+// compressed v5 connection hands one in (see recorder.WithSegmentCompressor), such as
+// the driver's wirecompress.LZ4Compressor.
+var ErrSegmentCompressorRequired = errors.New("gocql/wirerecord: protocol v5 connection negotiated compression, but no SegmentCompressor was supplied to the dialer")
 
 // FrameProtoVersion returns the protocol version of the CQL frame b starts, or 0 if
 // b is empty.

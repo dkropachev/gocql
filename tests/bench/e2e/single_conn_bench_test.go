@@ -37,9 +37,9 @@ import (
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
-	"github.com/scylladb/gocql/v2/dialer/recorder"
-	"github.com/scylladb/gocql/v2/dialer/replayer"
 	"github.com/scylladb/gocql/v2/endpoint"
+	"github.com/scylladb/gocql/v2/internal/testkit/wirerecord/recorder"
+	"github.com/scylladb/gocql/v2/internal/testkit/wirerecord/replayer"
 )
 
 type corpusConfig struct {

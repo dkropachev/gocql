@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/dialer"
+	"github.com/scylladb/gocql/v2/internal/testkit/wirerecord"
 )
 
 func TestRecording(t *testing.T) {
@@ -125,8 +125,8 @@ func TestRecording(t *testing.T) {
 		// produces a line past bufio.MaxScanTokenSize — which is what the loader used to
 		// read records with, and it failed the whole recording with "token too long".
 		t.Run("LargeRecord", func(t *testing.T) {
-			big := dialer.Record{StreamID: 1, Data: bytes.Repeat([]byte{0xAB}, 128*1024)}
-			small := dialer.Record{StreamID: 2, Data: optionsFrame(0x04), UseMetadataID: true}
+			big := wirerecord.Record{StreamID: 1, Data: bytes.Repeat([]byte{0xAB}, 128*1024)}
+			small := wirerecord.Record{StreamID: 2, Data: optionsFrame(0x04), UseMetadataID: true}
 
 			line, err := json.Marshal(big)
 			if err != nil {
@@ -158,8 +158,8 @@ func TestRecording(t *testing.T) {
 		// the frames around it still load. The last record deliberately has no trailing
 		// newline, which a truncated recording also looks like.
 		t.Run("SkipsDamagedRecord", func(t *testing.T) {
-			first := dialer.Record{StreamID: 1, Data: optionsFrame(0x04)}
-			last := dialer.Record{StreamID: 3, Data: optionsFrame(0x04)}
+			first := wirerecord.Record{StreamID: 1, Data: optionsFrame(0x04)}
+			last := wirerecord.Record{StreamID: 3, Data: optionsFrame(0x04)}
 
 			firstLine, err := json.Marshal(first)
 			if err != nil {
@@ -201,7 +201,7 @@ func TestRecording(t *testing.T) {
 		// the version from the frame's own bytes.
 		t.Run("PrefersStampedProto", func(t *testing.T) {
 			t.Run("stamped, nothing paired", func(t *testing.T) {
-				writes := writeRecords(t, "Writes", dialer.Record{Data: optionsFrame(0x05), StreamID: 1, Proto: 0x05})
+				writes := writeRecords(t, "Writes", wirerecord.Record{Data: optionsFrame(0x05), StreamID: 1, Proto: 0x05})
 				reads := writeRecords(t, "Reads")
 
 				_, proto, err := loadResponseFramesFromFiles(reads, writes)
@@ -215,8 +215,8 @@ func TestRecording(t *testing.T) {
 
 			t.Run("stamped versions disagree", func(t *testing.T) {
 				writes := writeRecords(t, "Writes",
-					dialer.Record{Data: optionsFrame(0x04), StreamID: 1, Proto: 0x04},
-					dialer.Record{Data: optionsFrame(0x05), StreamID: 2, Proto: 0x05})
+					wirerecord.Record{Data: optionsFrame(0x04), StreamID: 1, Proto: 0x04},
+					wirerecord.Record{Data: optionsFrame(0x05), StreamID: 2, Proto: 0x05})
 				reads := writeRecords(t, "Reads")
 
 				_, _, err := loadResponseFramesFromFiles(reads, writes)
@@ -232,8 +232,8 @@ func TestRecording(t *testing.T) {
 
 			t.Run("derived versions disagree", func(t *testing.T) {
 				writes := writeRecords(t, "Writes",
-					dialer.Record{Data: optionsFrame(0x04), StreamID: 1},
-					dialer.Record{Data: optionsFrame(0x05), StreamID: 2})
+					wirerecord.Record{Data: optionsFrame(0x04), StreamID: 1},
+					wirerecord.Record{Data: optionsFrame(0x05), StreamID: 2})
 				reads := writeRecords(t, "Reads")
 
 				if _, _, err := loadResponseFramesFromFiles(reads, writes); err == nil {
@@ -248,11 +248,11 @@ func TestRecording(t *testing.T) {
 				// later stamped one. Taking the version from the stamped record alone left
 				// the rest unchecked.
 				writes := writeRecords(t, "Writes",
-					dialer.Record{Data: optionsFrame(0x05), StreamID: 1, Proto: 0x05},
-					dialer.Record{Data: optionsFrame(0x04), StreamID: 2})
+					wirerecord.Record{Data: optionsFrame(0x05), StreamID: 1, Proto: 0x05},
+					wirerecord.Record{Data: optionsFrame(0x04), StreamID: 2})
 				reads := writeRecords(t, "Reads",
-					dialer.Record{Data: optionsFrame(0x85), StreamID: 1},
-					dialer.Record{Data: optionsFrame(0x84), StreamID: 2})
+					wirerecord.Record{Data: optionsFrame(0x85), StreamID: 1},
+					wirerecord.Record{Data: optionsFrame(0x84), StreamID: 2})
 
 				_, _, err := loadResponseFramesFromFiles(reads, writes)
 				if err == nil {
@@ -266,8 +266,8 @@ func TestRecording(t *testing.T) {
 			})
 
 			t.Run("unstamped legacy record", func(t *testing.T) {
-				writes := writeRecords(t, "Writes", dialer.Record{Data: optionsFrame(0x04), StreamID: 1})
-				reads := writeRecords(t, "Reads", dialer.Record{Data: optionsFrame(0x84), StreamID: 1})
+				writes := writeRecords(t, "Writes", wirerecord.Record{Data: optionsFrame(0x04), StreamID: 1})
+				reads := writeRecords(t, "Reads", wirerecord.Record{Data: optionsFrame(0x84), StreamID: 1})
 
 				_, proto, err := loadResponseFramesFromFiles(reads, writes)
 				if err != nil {
@@ -295,8 +295,8 @@ func TestRecording(t *testing.T) {
 					if mode == "different response" {
 						second[4] = 2
 					}
-					writes := writeRecords(t, "Writes", dialer.Record{Data: a, StreamID: 1, Proto: 4}, dialer.Record{Data: b, StreamID: 2, Proto: 4})
-					reads := writeRecords(t, "Reads", dialer.Record{Data: first, StreamID: 1, Proto: 4}, dialer.Record{Data: second, StreamID: 2, Proto: 4})
+					writes := writeRecords(t, "Writes", wirerecord.Record{Data: a, StreamID: 1, Proto: 4}, wirerecord.Record{Data: b, StreamID: 2, Proto: 4})
+					reads := writeRecords(t, "Reads", wirerecord.Record{Data: first, StreamID: 1, Proto: 4}, wirerecord.Record{Data: second, StreamID: 2, Proto: 4})
 					frames, _, err := loadResponseFramesFromFiles(reads, writes)
 					if mode == "identical" {
 						if err != nil || len(frames) != 1 {

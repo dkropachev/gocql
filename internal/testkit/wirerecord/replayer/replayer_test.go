@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/dialer"
+	"github.com/scylladb/gocql/v2/internal/testkit/wirerecord"
 )
 
 // optionsFrame builds a body-less OPTIONS frame with the given version byte.
@@ -35,20 +35,20 @@ func newTestReplayer(proto byte, frames ...*FrameRecorded) *ConnectionReplayer {
 }
 
 // newTestReplayerWith is the same for a connection given a segment compressor.
-func newTestReplayerWith(comp dialer.SegmentCompressor, proto byte, frames ...*FrameRecorded) *ConnectionReplayer {
+func newTestReplayerWith(comp wirerecord.SegmentCompressor, proto byte, frames ...*FrameRecorded) *ConnectionReplayer {
 	return newConnectionReplayer(frames, proto, comp)
 }
 
 // writeRecords writes the given records to a file in the recorder's format, one
 // JSON object per line, and returns its path.
-func writeRecords(t *testing.T, name string, records ...dialer.Record) string {
+func writeRecords(t *testing.T, name string, records ...wirerecord.Record) string {
 	t.Helper()
 	return writeRecordsTo(t, filepath.Join(t.TempDir(), name), records...)
 }
 
 // writeRecordsTo writes the records to an exact path, for the tests that need both
 // halves of one recording to share a directory.
-func writeRecordsTo(t *testing.T, path string, records ...dialer.Record) string {
+func writeRecordsTo(t *testing.T, path string, records ...wirerecord.Record) string {
 	t.Helper()
 
 	var buf bytes.Buffer

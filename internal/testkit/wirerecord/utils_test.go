@@ -1,4 +1,4 @@
-package dialer
+package wirerecord
 
 // frameV4 builds a protocol v4 request frame: version, header flags, a 2-byte
 // stream id, the opcode and the 4-byte body length, followed by body.

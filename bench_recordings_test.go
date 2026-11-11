@@ -15,8 +15,8 @@ import (
 	protocol "github.com/scylladb/gocql/v2/internal/protocol"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 
-	"github.com/scylladb/gocql/v2/dialer"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/testkit/wirerecord"
 
 	"os"
 	"path/filepath"
@@ -75,7 +75,7 @@ func recordedIsQuery(frame []byte) bool {
 // recordedQueryText returns a QUERY frame's query text, the parameter bytes behind it,
 // and whether the frame is one this guard can read.
 //
-// The offsets are dialer's own: a v3+ request header is version, flags, a 2-byte stream
+// The offsets are wirerecord's own: a v3+ request header is version, flags, a 2-byte stream
 // id, the opcode and the 4-byte body length, and a QUERY body opens with the query as a
 // [long string].
 //
@@ -95,7 +95,7 @@ func recordedQueryText(t *testing.T, i int, frame []byte) (string, []byte, bool)
 
 	const longStringLen = 4
 
-	textStart := dialer.FrameHeaderLen + longStringLen
+	textStart := wirerecord.FrameHeaderLen + longStringLen
 	if !recordedIsQuery(frame) {
 		return "", nil, false
 	}
@@ -106,17 +106,17 @@ func recordedQueryText(t *testing.T, i int, frame []byte) (string, []byte, bool)
 		t.Fatalf("record %d: a QUERY stops inside the header its query text follows", i)
 	}
 
-	// Read the length signed, as dialer.addLongString does and for its reason: a
+	// Read the length signed, as wirerecord.addLongString does and for its reason: a
 	// negative value is a damaged field rather than a 4 GB one. int is 64 bits here,
 	// so reading it unsigned would put 0xFFFFFFFF at 4294967295 and report a plain
 	// overrun instead of naming the malformed length.
-	size := frame[dialer.FrameHeaderLen:textStart]
+	size := frame[wirerecord.FrameHeaderLen:textStart]
 	length := int(int32(uint32(size[0])<<24 | uint32(size[1])<<16 | uint32(size[2])<<8 | uint32(size[3])))
 	if length < 0 {
 		t.Fatalf("record %d: a QUERY's query text announces a negative length (%d)", i, length)
 	}
 	// Compared against the space left rather than added to textStart, for the reason
-	// dialer.fits documents: textStart+length overflows a 32-bit int at the largest
+	// wirerecord.fits documents: textStart+length overflows a 32-bit int at the largest
 	// length a [long string] can encode, and the negative sum passes every bound.
 	if length > len(frame)-textStart {
 		t.Fatalf("record %d: a QUERY's query text runs past the frame", i)
@@ -124,7 +124,7 @@ func recordedQueryText(t *testing.T, i int, frame []byte) (string, []byte, bool)
 	return string(frame[textStart : textStart+length]), frame[textStart+length:], true
 }
 
-func readRecording(t *testing.T, name string) []dialer.Record {
+func readRecording(t *testing.T, name string) []wirerecord.Record {
 	t.Helper()
 
 	dir := filepath.Join("tests", "bench", "e2e")
@@ -140,9 +140,9 @@ func readRecording(t *testing.T, name string) []dialer.Record {
 		t.Fatalf("the recording at %s holds no records", path)
 	}
 
-	var records []dialer.Record
+	var records []wirerecord.Record
 	for i, line := range strings.Split(trimmed, "\n") {
-		var record dialer.Record
+		var record wirerecord.Record
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
 			t.Fatalf("record %d does not decode: %v", i, err)
 		}
