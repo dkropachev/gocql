@@ -114,7 +114,7 @@ func TestTupleUDT(t *testing.T) {
 			if err != nil || decoded.ID != 7 || decoded.Name.Valid {
 				t.Fatalf("short tuple=%+v err=%v", decoded, err)
 			}
-			nonnullable := TupleDecoder(PairRows(1, OneColumn(Int32), OneColumn(TextCodec)))
+			nonnullable := TupleDecoder(PairRows(OneColumn(Int32), OneColumn(TextCodec)))
 			if _, err := DecodeValue(nonnullable, containerValue(t, tuple, short)); err == nil {
 				t.Fatal("absent suffix became nonnullable zero value")
 			}
@@ -138,8 +138,8 @@ func TestTupleUDT(t *testing.T) {
 			}
 			// The tuple stays one column even when adjacent to an ordinary scalar.
 			columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "record", Type: tuple}, cqltype.ColumnSpec{Name: "tail", Type: integer})
-			chain := encodeTestParams(t, columns, PairParams(1, OneParam(encoder), OneParam(Int32)), Pair[input, int32]{First: input{ID: 7}, Second: 9})
-			plan, err := PairRows(1, OneColumn(decoder), OneColumn(Int32)).Compile(columns)
+			chain := encodeTestParams(t, columns, PairParams(OneParam(encoder), OneParam(Int32)), Pair[input, int32]{First: input{ID: 7}, Second: 9})
+			plan, err := PairRows(OneColumn(decoder), OneColumn(Int32)).Compile(columns)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -284,8 +284,8 @@ func TestTupleUDT(t *testing.T) {
 			integer := rowTestType(t, cqltype.TypeInt)
 			typ, _ := cqltype.UDTType("ks", "record", cqltype.ColumnSpec{Name: "id", Type: integer}, cqltype.ColumnSpec{Name: "extra", Type: integer})
 			options := UDTOptions{Keyspace: "ks", Name: "record", AllowExtraDatabaseFields: true}
-			params := MapParams(Params(Param("id", Int32, func(v int32) int32 { return v })), func(v int64) int32 { return int32(v) })
-			rows := MapRows(Row(Column("id", Int32, func(v *int32) *int32 { return v })), func(v int32) int64 { return int64(v) }, func(v int64) int64 { return v })
+			params := ConvertParams(Params(Param("id", Int32, func(v int32) int32 { return v })), func(v int64) int32 { return int32(v) })
+			rows := ConvertRows(Row(Column("id", Int32, func(v *int32) *int32 { return v })), func(v int32) int64 { return int64(v) }, func(v int64) int64 { return v })
 			encoded := containerGolden(t, typ, UDTEncoder(params, options), int64(7), "0000000400000007ffffffff")
 			decoded, err := DecodeValue(UDTDecoder(rows, options), encoded)
 			if err != nil || decoded != 7 {

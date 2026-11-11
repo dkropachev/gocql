@@ -62,7 +62,7 @@ type DownloadRow struct {
     Name []byte
     Payload []byte
 }
-streamDecoder := StreamRow(func(*DownloadRow) {},
+streamDecoder := StreamRowInto(func(*DownloadRow) {},
     StreamColumn("id", StreamInt32, func(r *DownloadRow) *int32 { return &r.ID }),
     StreamColumn("name", StreamText, func(r *DownloadRow) *[]byte { return &r.Name }),
     StreamColumn("payload", StreamBlob, func(r *DownloadRow) *[]byte { return &r.Payload }),
@@ -97,7 +97,7 @@ final value once rather than growing/copying it chunk by chunk.
 Scalar fields are overwritten with decoded values. Nullable mappings explicitly
 distinguish null from an empty present value and reuse available payload
 capacity. Result unset remains invalid. Reset clears logical values while preserving mapped slice/nested capacity;
-StreamRow requires an explicit callback for unmapped application state. Custom
+StreamRowInto requires an explicit callback for unmapped application state. Custom
 StreamRowPlan.Reset has the same responsibility; do not inherit the
 buffered NextInto rule that zeroes an entire R and discards its supplied slices.
 

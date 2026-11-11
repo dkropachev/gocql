@@ -19,7 +19,7 @@ type Download struct {
     Pieces [][]byte
     ApplicationState string
 }
-decoder := cql.StreamRow(func(r *Download) { r.ApplicationState = "" },
+decoder := cql.StreamRowInto(func(r *Download) { r.ApplicationState = "" },
     cql.StreamColumn("id", cql.StreamInt32, func(r *Download) *int32 { return &r.ID }),
     cql.StreamColumn("payload", cql.StreamBlob, func(r *Download) *[]byte { return &r.Payload }),
     cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(r *Download) *[][]byte { return &r.Pieces }),
@@ -62,7 +62,7 @@ NextInto. Decoders reuse capacity without growing or reallocating payloads. A
 value exceeding available capacity returns StreamCapacityError before writing
 that value body; earlier fields may already have changed. Provision capacity
 from the application's bounds, not from untrusted remote lengths. Reset clears
-logical values recursively while preserving mapped capacity. StreamRow's
+logical values recursively while preserving mapped capacity. StreamRowInto's
 explicit callback clears unmapped application state; it must preserve mapped
 buffers. Custom plans/resetters have the same responsibility.
 

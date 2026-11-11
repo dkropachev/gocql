@@ -164,7 +164,7 @@ func TestPool(t *testing.T) {
 				t.Errorf("cleanup unique stream table: %v", err)
 			}
 		}()
-		insert := codecTestMust(s.Prepare(ctx, cql.Statement[cql.Pair[int32, []byte], cql.EmptyRow]{CQL: "INSERT INTO " + qualified + "(id,value) VALUES(?,?)", Params: cql.PairParams(1, cql.OneParam(cql.Int32Codec), cql.OneParam(cql.ByteSliceCodec)), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
+		insert := codecTestMust(s.Prepare(ctx, cql.Statement[cql.Pair[int32, []byte], cql.EmptyRow]{CQL: "INSERT INTO " + qualified + "(id,value) VALUES(?,?)", Params: cql.PairParams(cql.OneParam(cql.Int32Codec), cql.OneParam(cql.ByteSliceCodec)), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
 		size := 400 << 10
 		for i := 0; i < 4; i++ {
 			payload := bytes.Repeat([]byte{byte(i + 1)}, size)
@@ -184,7 +184,7 @@ func TestPool(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer r.InternalClose(false)
-		decoder := cql.StreamRow(func(*cql.Pair[int32, []byte]) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *cql.Pair[int32, []byte]) *int32 { return &r.First }), cql.StreamColumn("value", cql.StreamBlob, func(r *cql.Pair[int32, []byte]) *[]byte { return &r.Second }))
+		decoder := cql.StreamRowInto(func(*cql.Pair[int32, []byte]) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *cql.Pair[int32, []byte]) *int32 { return &r.First }), cql.StreamColumn("value", cql.StreamBlob, func(r *cql.Pair[int32, []byte]) *[]byte { return &r.Second }))
 		request := &attemptRequest{Statement: "SELECT id,value FROM " + qualified, Consistency: cql.Quorum, PageSize: 2}
 		seen := map[int32]bool{}
 		pages := 0

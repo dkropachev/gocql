@@ -1,6 +1,6 @@
 # Custom codec contracts
 
-Most applications compose `Params`, `Row`, `StreamRow`, or their struct-mapping
+Most applications compose `Params`, `Row`, `StreamRowInto`, or their struct-mapping
 counterparts. Custom implementations use the following public contracts from
 `github.com/scylladb/gocql/v2/cql`. Some low-level plan types share their
 implementation identity through aliases; their full contracts are listed here.

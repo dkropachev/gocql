@@ -169,7 +169,7 @@ func TestStream(t *testing.T) {
 			cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: tuple})
 			checks := 0
 			plan := CodecTestMust(StreamOneColumn(customStreamDecoder{&checks}).Compile(cols))
-			data := streamEncodedFixture(t, tuple, TupleEncoder(PairParams(1, OneParam(Int32), OneParam(ByteSliceCodec))), Pair[int32, []byte]{7, []byte("payload")})
+			data := streamEncodedFixture(t, tuple, TupleEncoder(PairParams(OneParam(Int32), OneParam(ByteSliceCodec))), Pair[int32, []byte]{7, []byte("payload")})
 			combined := bytes.Repeat(data, 100)
 			reader, scope := streamReaderFixture(t, cols, bytes.NewReader(combined), len(combined))
 			dst := customStreamPair{B: make([]byte, 0, 32)}
@@ -193,7 +193,7 @@ func TestStream(t *testing.T) {
 			cases := []func() error{
 				func() error { _, e := StreamOneColumn(nilStreamValue{}).Compile(cols); return e },
 				func() error {
-					_, e := StreamRow(func(*int32) {}, StreamColumn("v", nilStreamValue{}, func(p *int32) *int32 { return p })).Compile(cols)
+					_, e := StreamRowInto(func(*int32) {}, StreamColumn("v", nilStreamValue{}, func(p *int32) *int32 { return p })).Compile(cols)
 					return e
 				},
 				func() error { _, e := StreamList(nilStreamValue{}).Compile(list); return e },
@@ -407,7 +407,7 @@ func TestStream(t *testing.T) {
 			integer := FoundationScalar(t, cqltype.TypeInt)
 			udt := CodecTestMust(cqltype.UDTType("ks", "one", cqltype.ColumnSpec{Name: "id", Type: integer}))
 			options := UDTOptions{Keyspace: "ks", Name: "one", AllowMissingFields: true, AllowExtraDatabaseFields: true}
-			absentList := StreamRow(func(*[]int32) {}, StreamColumn("missing", StreamList(customStreamNoReset{}), func(v *[]int32) *[]int32 { return v }))
+			absentList := StreamRowInto(func(*[]int32) {}, StreamColumn("missing", StreamList(customStreamNoReset{}), func(v *[]int32) *[]int32 { return v }))
 			if _, err := StreamUDT(absentList, options).Compile(udt); err == nil {
 				t.Fatal("absent list masked custom declaration reset capability")
 			}
@@ -416,7 +416,7 @@ func TestStream(t *testing.T) {
 			integer := FoundationScalar(t, cqltype.TypeInt)
 			udt := CodecTestMust(cqltype.UDTType("ks", "one", cqltype.ColumnSpec{Name: "id", Type: integer}))
 			options := UDTOptions{Keyspace: "ks", Name: "one", AllowMissingFields: true, AllowExtraDatabaseFields: true}
-			row := StreamRow(func(*int32) {}, StreamColumn("missing", customStreamResettable{}, func(value *int32) *int32 { return value }))
+			row := StreamRowInto(func(*int32) {}, StreamColumn("missing", customStreamResettable{}, func(value *int32) *int32 { return value }))
 			value := int32(42)
 			if err := StreamDecodeFixture(t, udt, StreamUDT(row, options), StreamCell(StreamCell([]byte{0, 0, 0, 7})), &value, 1); err != nil || value != 0 {
 				t.Fatal("custom declaration reset", value, err)
@@ -432,7 +432,7 @@ func TestStream(t *testing.T) {
 			integer := FoundationScalar(t, cqltype.TypeInt)
 			udt := CodecTestMust(cqltype.UDTType("ks", "one", cqltype.ColumnSpec{Name: "id", Type: integer}))
 			options := UDTOptions{Keyspace: "ks", Name: "one", AllowMissingFields: true}
-			row := StreamRow(func(*destination) {}, StreamColumn("id", StreamInt32, func(d *destination) *int32 { return &d.ID }), StreamColumn("payload", StreamBlob, func(d *destination) *[]byte { return &d.Payload }), StreamColumn("nested", StreamList(StreamBlob), func(d *destination) *[][]byte { return &d.Nested }))
+			row := StreamRowInto(func(*destination) {}, StreamColumn("id", StreamInt32, func(d *destination) *int32 { return &d.ID }), StreamColumn("payload", StreamBlob, func(d *destination) *[]byte { return &d.Payload }), StreamColumn("nested", StreamList(StreamBlob), func(d *destination) *[][]byte { return &d.Nested }))
 			backing, child := make([]byte, 16), make([]byte, 32)
 			out := destination{Payload: backing[:10], Nested: [][]byte{child[:12]}}
 			nestedStart := &out.Nested[0]
@@ -447,11 +447,11 @@ func TestStream(t *testing.T) {
 					t.Fatal("reset lost seeded storage")
 				}
 			}
-			absent := StreamRow(func(*destination) {}, StreamColumn("id", StreamInt32, func(d *destination) *int32 { return &d.ID }), StreamColumn("custom", customStreamNoReset{}, func(d *destination) *int32 { return &d.Custom }))
+			absent := StreamRowInto(func(*destination) {}, StreamColumn("id", StreamInt32, func(d *destination) *int32 { return &d.ID }), StreamColumn("custom", customStreamNoReset{}, func(d *destination) *int32 { return &d.Custom }))
 			if _, err := StreamUDT(absent, options).Compile(udt); err == nil {
 				t.Fatal("custom absent mapping silently reset without declaration capability")
 			}
-			wrapped := StreamRow(func(*cqltype.Nullable[int32]) {}, StreamColumn("missing", StreamNullable(customStreamNoReset{}), func(d *cqltype.Nullable[int32]) *cqltype.Nullable[int32] { return d }))
+			wrapped := StreamRowInto(func(*cqltype.Nullable[int32]) {}, StreamColumn("missing", StreamNullable(customStreamNoReset{}), func(d *cqltype.Nullable[int32]) *cqltype.Nullable[int32] { return d }))
 			if _, err := StreamUDT(wrapped, UDTOptions{Keyspace: "ks", Name: "one", AllowMissingFields: true, AllowExtraDatabaseFields: true}).Compile(udt); err == nil {
 				t.Fatal("wrapper advertised unsupported custom reset")
 			}
@@ -462,7 +462,7 @@ func TestStream(t *testing.T) {
 			integer := FoundationScalar(t, cqltype.TypeInt)
 			columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "dup", Type: integer}, cqltype.ColumnSpec{Name: "dup", Type: integer})
 			data := append(StreamCell([]byte{0, 0, 0, 1}), StreamCell([]byte{0, 0, 0, 2})...)
-			decoder := StreamRow(func(*Pair[int32, int32]) {}, StreamColumnAt(0, StreamInt32, func(p *Pair[int32, int32]) *int32 { return &p.First }), StreamColumnAt(1, StreamInt32, func(p *Pair[int32, int32]) *int32 { return &p.Second }))
+			decoder := StreamRowInto(func(*Pair[int32, int32]) {}, StreamColumnAt(0, StreamInt32, func(p *Pair[int32, int32]) *int32 { return &p.First }), StreamColumnAt(1, StreamInt32, func(p *Pair[int32, int32]) *int32 { return &p.Second }))
 			plan := CodecTestMust(decoder.Compile(columns))
 			reader, _ := streamReaderFixture(t, columns, bytes.NewReader(data), len(data))
 			var dst Pair[int32, int32]
@@ -470,12 +470,12 @@ func TestStream(t *testing.T) {
 			if err := plan.DecodeInto(reader, &dst); err != nil || dst.First != 1 || dst.Second != 2 {
 				t.Fatal("duplicate positional names", dst, err)
 			}
-			if _, err := StreamRow(func(*int32) {}, StreamColumn("dup", StreamInt32, func(v *int32) *int32 { return v })).Compile(columns); err == nil {
+			if _, err := StreamRowInto(func(*int32) {}, StreamColumn("dup", StreamInt32, func(v *int32) *int32 { return v })).Compile(columns); err == nil {
 				t.Fatal("ambiguous result alias accepted")
 			}
 			type value struct{ ID, Missing int32 }
 			udt := CodecTestMust(cqltype.UDTType("ks", "entry", cqltype.ColumnSpec{Name: "id", Type: integer}))
-			row := StreamRow(func(*value) {}, StreamColumn("id", StreamInt32, func(v *value) *int32 { return &v.ID }), StreamColumn("missing", StreamInt32, func(v *value) *int32 { return &v.Missing }))
+			row := StreamRowInto(func(*value) {}, StreamColumn("id", StreamInt32, func(v *value) *int32 { return &v.ID }), StreamColumn("missing", StreamInt32, func(v *value) *int32 { return &v.Missing }))
 			out := value{Missing: 9}
 			options := UDTOptions{Keyspace: "ks", Name: "entry", AllowMissingFields: true}
 			if err := StreamDecodeFixture(t, udt, StreamUDT(row, options), StreamCell(StreamCell([]byte{0, 0, 0, 7})), &out, 1); err != nil || out.ID != 7 || out.Missing != 0 {
@@ -498,9 +498,9 @@ func TestStream(t *testing.T) {
 			tuple := CodecTestMust(cqltype.TupleType(integer, text))
 			encoder := TupleEncoder(Params(ParamAt(0, Int32, func(r record) int32 { return r.ID }), ParamAt(1, NullableEncoder(ByteSliceCodec), func(r record) cqltype.Nullable[[]byte] { return r.Name })))
 			_ = encoder // Text uses a typed string input fixture below.
-			params := TupleEncoder(PairParams(1, OneParam(Int32), OneParam(NullableEncoder(StringCodec))))
+			params := TupleEncoder(PairParams(OneParam(Int32), OneParam(NullableEncoder(StringCodec))))
 			data := streamEncodedFixture(t, tuple, params, Pair[int32, cqltype.Nullable[string]]{First: 7, Second: cqltype.Nullable[string]{Value: "name", Valid: true}})
-			row := StreamRow(func(r *record) { r.Unmapped = 0 }, StreamColumnAt(0, StreamInt32, func(r *record) *int32 { return &r.ID }), StreamColumnAt(1, StreamNullable(StreamText), func(r *record) *cqltype.Nullable[[]byte] { return &r.Name }))
+			row := StreamRowInto(func(r *record) { r.Unmapped = 0 }, StreamColumnAt(0, StreamInt32, func(r *record) *int32 { return &r.ID }), StreamColumnAt(1, StreamNullable(StreamText), func(r *record) *cqltype.Nullable[[]byte] { return &r.Name }))
 			backing := make([]byte, 10)
 			out := record{Name: cqltype.Nullable[[]byte]{Value: backing[:0]}, Unmapped: 9}
 			if err := StreamDecodeFixture(t, tuple, StreamTuple(row), data, &out, 1); err != nil || out.ID != 7 || string(out.Name.Value) != "name" || out.Unmapped != 0 || &out.Name.Value[0] != &backing[0] {
@@ -512,7 +512,7 @@ func TestStream(t *testing.T) {
 				t.Fatal("omitted suffix", out, err)
 			}
 			udt := CodecTestMust(cqltype.UDTType("ks", "entry", cqltype.ColumnSpec{Name: "id", Type: integer}, cqltype.ColumnSpec{Name: "name", Type: text}))
-			named := StreamRow(func(r *record) { r.Unmapped = 0 }, StreamColumn("id", StreamInt32, func(r *record) *int32 { return &r.ID }), StreamColumn("name", StreamNullable(StreamText), func(r *record) *cqltype.Nullable[[]byte] { return &r.Name }))
+			named := StreamRowInto(func(r *record) { r.Unmapped = 0 }, StreamColumn("id", StreamInt32, func(r *record) *int32 { return &r.ID }), StreamColumn("name", StreamNullable(StreamText), func(r *record) *cqltype.Nullable[[]byte] { return &r.Name }))
 			decoder := StreamUDT(named, UDTOptions{Keyspace: "ks", Name: "entry"})
 			if err := StreamDecodeFixture(t, udt, decoder, data, &out, 1); err != nil || out.ID != 7 {
 				t.Fatal("UDT", err)
@@ -523,7 +523,7 @@ func TestStream(t *testing.T) {
 			if _, err := StreamUDT(named, UDTOptions{Keyspace: "ks", Name: "wrong"}).Compile(udt); err == nil {
 				t.Fatal("wrong identity accepted")
 			}
-			strict := StreamRow(func(r *record) {}, StreamColumn("id", StreamInt32, func(r *record) *int32 { return &r.ID }))
+			strict := StreamRowInto(func(r *record) {}, StreamColumn("id", StreamInt32, func(r *record) *int32 { return &r.ID }))
 			if _, err := StreamUDT(strict, UDTOptions{Keyspace: "ks", Name: "entry"}).Compile(udt); err == nil {
 				t.Fatal("extra UDT field accepted without policy")
 			}
@@ -547,17 +547,17 @@ func TestStream(t *testing.T) {
 			zero := CodecTestMust(cqltype.TupleType())
 			unit := EmptyRecord{}
 			empty := StreamCell(nil)
-			if err := StreamDecodeFixture(t, zero, StreamTuple(StreamRow(func(*EmptyRecord) {})), empty, &unit, 1); err != nil {
+			if err := StreamDecodeFixture(t, zero, StreamTuple(StreamRowInto(func(*EmptyRecord) {})), empty, &unit, 1); err != nil {
 				t.Fatal("zero tuple", err)
 			}
 			wrapped := cqltype.EmptyValueOf[EmptyRecord]{}
-			if err := StreamDecodeFixture(t, zero, EmptyStream(StreamTuple(StreamRow(func(*EmptyRecord) {}))), empty, &wrapped, 1); err != nil || !wrapped.Empty {
+			if err := StreamDecodeFixture(t, zero, EmptyStream(StreamTuple(StreamRowInto(func(*EmptyRecord) {}))), empty, &wrapped, 1); err != nil || !wrapped.Empty {
 				t.Fatal("zero tuple Empty", err)
 			}
 		})
 		t.Run("SkippedValuesBoundedAndChecked", func(t *testing.T) {
 			boolean, text, blob := FoundationScalar(t, cqltype.TypeBoolean), FoundationScalar(t, cqltype.TypeText), FoundationScalar(t, cqltype.TypeBlob)
-			ignored := StreamRow(func(*EmptyRecord) {})
+			ignored := StreamRowInto(func(*EmptyRecord) {})
 			for _, tc := range []struct {
 				typ  cqltype.DataType
 				body []byte

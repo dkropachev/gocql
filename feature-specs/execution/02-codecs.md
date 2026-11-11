@@ -12,7 +12,7 @@ steps 03/04/07/09/14–17.
 All RowPlan implementations expose DecodeInto. Row fields, OneColumn,
 PairRows, tuple/UDT records, CAS rows, DynamicRows and internal schema rows
 write into supplied fields and clear unmapped buffered Go state. Explicit
-MapRows callbacks still perform their requested value-returning mapping.
+ConvertRows callbacks still perform their requested value-returning mapping.
 Custom plans receive the actual caller destination. Plans never retain that
 pointer. Value-returning record decoding uses cleared, concurrency-safe pooled
 scratch; direct destination decoding does not use that complete-row scratch.

@@ -90,7 +90,7 @@ func BenchmarkSerialization(b *testing.B) {
 	b.Run("Vector", func(b *testing.B) {
 		for _, dim := range []int{128, 384, 768, 1536} {
 			b.Run(fmt.Sprint(dim), func(b *testing.B) {
-				typ, err := cql.VectorDataType(scalar(cql.TypeFloat), uint16(dim))
+				typ, err := cql.VectorType(scalar(cql.TypeFloat), uint16(dim))
 				if err != nil {
 					b.Fatal(err)
 				}

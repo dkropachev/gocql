@@ -83,7 +83,7 @@ type streamRowsPlan[R any] struct {
 	columns cqltype.Columns
 }
 
-func StreamRow[R any](reset func(*R), fields ...StreamOutputField[R]) StreamRowDecoder[R] {
+func StreamRowInto[R any](reset func(*R), fields ...StreamOutputField[R]) StreamRowDecoder[R] {
 	return streamRowsCodec[R]{reset: reset, fields: append([]StreamOutputField[R](nil), fields...)}
 }
 func (c streamRowsCodec[R]) Compile(columns cqltype.Columns) (StreamRowPlan[R], error) {

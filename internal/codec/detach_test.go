@@ -133,8 +133,8 @@ func TestDetachNestedValues(t *testing.T) {
 	)
 	text := CodecTestMust(cqltype.BorrowText("name"))
 	blob := cqltype.BorrowBytes([]byte("payload"))
-	pairParams := PairParams(1, OneParam(TextCodec), OneParam(BlobCodec))
-	pairRows := PairRows(1, OneColumn(TextCodec), OneColumn(BlobCodec))
+	pairParams := PairParams(OneParam(TextCodec), OneParam(BlobCodec))
+	pairRows := PairRows(OneColumn(TextCodec), OneColumn(BlobCodec))
 	input := row{Name: cqltype.Nullable[cqltype.Text]{Valid: true, Value: text}, Amount: Decimal{Scale: 2, Unscaled: CodecTestMust(VarintFromBytes([]byte{42}))}, Mapping: []Entry[cqltype.Text, cqltype.Bytes]{{Key: text, Value: blob}}, Record: Pair[cqltype.Text, cqltype.Bytes]{First: text, Second: blob}}
 	params := Params(
 		Param("name", NullableEncoder(TextCodec), func(r row) cqltype.Nullable[cqltype.Text] { return r.Name }),

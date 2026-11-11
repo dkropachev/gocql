@@ -46,7 +46,7 @@ func SetType(element DataType) (DataType, error)
 func MapType(key, value DataType) (DataType, error)
 func TupleType(fields ...DataType) (DataType, error)
 func UDTType(keyspace, name string, fields ...ColumnSpec) (DataType, error)
-func VectorDataType(element DataType, dimension uint16) (DataType, error)
+func VectorType(element DataType, dimension uint16) (DataType, error)
 func NewColumns(columns ...ColumnSpec) Columns
 func (t DataType) Kind() Type
 func (t DataType) Equal(other DataType) bool
@@ -112,7 +112,7 @@ the value-returning convenience over the same decoding implementation. Built-in
 Row field plans decode directly into destination fields: implementing DecodeInto
 as Decode followed by assignment of an entire temporary R is not sufficient.
 Compositions propagate destination fields to child plans where their semantics
-permit; MapRows still invokes its explicitly supplied value-returning mapper,
+permit; ConvertRows still invokes its explicitly supplied value-returning mapper,
 whose work is accounted for separately. On an error, low-level DecodeInto may
 have partially written the destination; the public iterator clears it before
 returning false. Nil returns ValidationError. Plans must never retain reader or
@@ -124,7 +124,7 @@ server metadata, a prior successful plan, or retained decode state. This makes
 TupleDecoder/UDTDecoder.Clone correct after standalone DecodeValue as well as
 normal row execution. RowPlan.Clone remains available for an already compiled
 plan and must provide the same ownership guarantee. Row, OneColumn, PairRows,
-MapRows, CASRows, DynamicRows and every custom RowDecoder implement the
+ConvertRows, CASRows, DynamicRows and every custom RowDecoder implement the
 schema-independent method; custom decoders must supply explicit clone logic.
 Caching the first successful plan to implement Clone or panicking because no
 plan was previously compiled is not permitted.
@@ -245,10 +245,10 @@ func IgnoreColumn[R any](name string) OutputField[R]
 func Row[R any](fields ...OutputField[R]) RowDecoder[R]
 func OneParam[T any](Encoder[T]) ParamEncoder[T]
 func OneColumn[T any](Decoder[T]) RowDecoder[T]
-func PairParams[A, B any](leftColumns int, a ParamEncoder[A], b ParamEncoder[B]) ParamEncoder[Pair[A, B]]
-func PairRows[A, B any](leftColumns int, a RowDecoder[A], b RowDecoder[B]) RowDecoder[Pair[A, B]]
-func MapParams[A, B any](ParamEncoder[B], func(A) B) ParamEncoder[A]
-func MapRows[A, B any](RowDecoder[A], func(A) B, func(B) B) RowDecoder[B]
+func PairParams[A, B any](a ParamEncoder[A], b ParamEncoder[B]) ParamEncoder[Pair[A, B]]
+func PairRows[A, B any](a RowDecoder[A], b RowDecoder[B]) RowDecoder[Pair[A, B]]
+func ConvertParams[A, B any](ParamEncoder[B], func(A) B) ParamEncoder[A]
+func ConvertRows[A, B any](RowDecoder[A], func(A) B, func(B) B) RowDecoder[B]
 var NoParams ParamEncoder[Unit]
 var NoRows RowDecoder[Unit]
 ```
@@ -256,9 +256,12 @@ var NoRows RowDecoder[Unit]
 `Column`/`ColumnAt` use a typed field-address accessor so decoding and recursive
 cloning both reach the same field without reflection. Accessors must return a
 non-nil address belonging to the supplied row; they must not capture an external
-mutable destination. `PairParams`/`PairRows` split Columns at the explicit
-checked leftColumns arity and concatenate positional plans; named composition
-uses `Params`/`Row` with accessors. `MapRows`' final function is its
+mutable destination. `PairParams`/`PairRows` split Columns at the left side's fixed arity
+(OneParam/OneColumn: one; Params/Row/RowInto of only ParamAt/ColumnAt: the
+highest index plus one; a nested pair: the sum of its sides), computed at
+Compile, and concatenate positional plans. Compile rejects any other left side
+with "left side has no fixed arity"; named composition
+uses `Params`/`Row` with accessors. `ConvertRows`' final function is its
 ownership-detaching clone; omitting correct clone semantics is a custom codec
 contract violation. `NoRows` accepts only results with zero physical columns;
 use a real decoder for conditional writes. Ignored result fields still have
@@ -326,7 +329,7 @@ continues returning `UUID`. TimeUUID provides canonical string/JSON/text and
 UUID timestamp/time/byte helpers. ParseTimeUUID and TimeUUIDFromUUID validate
 version 1; codecs and checked unmarshaling do likewise. The zero value is not
 an encodable timeuuid; Nullable represents NULL.
-VectorDataType has Kind TypeCustom plus Dimension; ScalarType(TypeCustom)
+VectorType has Kind TypeCustom plus Dimension; ScalarType(TypeCustom)
 rejects an incomplete custom descriptor.
 
 Nil `[]byte` passed to ByteSliceCodec is present empty blob. Null is always
@@ -932,7 +935,7 @@ type StreamValuePlan[T any] interface {
 type StreamOutputField[R any] struct { /* immutable checked field declaration */ }
 func StreamColumn[R, V any](string, StreamDecoder[V], func(*R) *V) StreamOutputField[R]
 func StreamColumnAt[R, V any](int, StreamDecoder[V], func(*R) *V) StreamOutputField[R]
-func StreamRow[R any](reset func(*R), fields ...StreamOutputField[R]) StreamRowDecoder[R]
+func StreamRowInto[R any](reset func(*R), fields ...StreamOutputField[R]) StreamRowDecoder[R]
 func StreamOneColumn[T any](StreamDecoder[T]) StreamRowDecoder[T]
 
 // Readers are scoped mutable limited readers, never retained-byte views.
@@ -998,7 +1001,7 @@ func (e *StreamCapacityError) Error() string
 
 StreamOutputField[R] is opaque, as for OutputField[R]. Unmapped physical columns
 are skipped with recursive structural/type validation; no ignore field is
-needed in StreamRow.
+needed in StreamRowInto.
 Compile validates actual metadata recursively, including children of null and
 empty values, and returns immutable plans safe for independent cursors. Plans
 capture neither readers nor destinations. Scalar rules match the buffered
@@ -1017,7 +1020,7 @@ streaming response metadata selects this call's StreamRowPlan independently of
 the buffered plan; cache reuse is scoped to this decoder and exact metadata.
 NoRows still cannot be used to describe nonzero physical result columns.
 Applications using both modes prepare the statement twice: Session.Prepare with
-an ordinary typed decoder, and Session.PrepareStream with a StreamRow decoder.
+an ordinary typed decoder, and Session.PrepareStream with a StreamRowInto decoder.
 Session.PrepareStream takes cql.StreamStatement[P,R] (CQL, Params, Rows as a
 StreamRowDecoder, Kind) and returns an immutable PreparedStream[P,R]. Its
 Query(StreamOptions) creates a worker-owned StreamQuery. Preparation validates
@@ -1044,7 +1047,7 @@ construction returns normally through the query Run method's error result.
 Reset is called on a non-nil destination before each active NextInto attempt;
 terminal/exhausted calls return false without touching it. Built-in value Reset
 clears logical values while preserving byte/element slice capacity and nested
-storage. StreamRow requires a non-nil application reset callback for unmapped
+storage. StreamRowInto requires a non-nil application reset callback for unmapped
 Go state, then resets mapped fields through child plans. The callback must
 preserve mapped storage. A custom plan has the same explicit responsibility;
 there is no promise to zero an arbitrary R while preserving its unknown storage.
@@ -1071,7 +1074,7 @@ StreamValuePlan.Reset and need not implement declaration StreamResetter.
 Custom row declarations used as tuple/UDT compositions follow the same rule
 when metadata-independent reset is required. No synthetic DataType, reflection,
 whole-row temporary or zero-assignment of arbitrary V supplies a substitute.
-StreamRow's application callback retains responsibility for unmapped Go state
+StreamRowInto's application callback retains responsibility for unmapped Go state
 and must preserve mapped storage; this optional capability does not shift that
 responsibility or relax the complete streaming type-support requirements.
 

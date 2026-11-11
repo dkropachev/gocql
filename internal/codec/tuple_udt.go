@@ -416,7 +416,7 @@ func (c mappedRows[A, B]) compileUDT(columns cqltype.Columns, options UDTOptions
 	return mappedRowPlan[A, B]{plan: plan, mapValue: c.mapValue, cloneValue: c.cloneValue}, nil
 }
 func (c pairedParams[A, B]) compileUDT(columns cqltype.Columns, options UDTOptions) (ParamPlan[Pair[A, B]], error) {
-	left, right, err := splitColumns(columns, c.split)
+	left, right, err := pairSplit(c.a, columns)
 	if err != nil {
 		return nil, err
 	}
@@ -431,7 +431,7 @@ func (c pairedParams[A, B]) compileUDT(columns cqltype.Columns, options UDTOptio
 	return pairedParamPlan[A, B]{left: left, right: right, a: a, b: b}, nil
 }
 func (c pairedRows[A, B]) compileUDT(columns cqltype.Columns, options UDTOptions) (RowPlan[Pair[A, B]], error) {
-	left, right, err := splitColumns(columns, c.split)
+	left, right, err := pairSplit(c.a, columns)
 	if err != nil {
 		return nil, err
 	}

@@ -159,7 +159,7 @@ func serializationUDT[T any](p cql.ParamEncoder[T], r cql.RowDecoder[T], opts cq
 
 func serializationRoundTrip[T any](t testing.TB, s *gocql.Session[testDialect], table, column string, id int32, codec cql.Codec[T], input T) T {
 	t.Helper()
-	params := cql.PairParams(1, cql.OneParam(cql.Int32Codec), cql.OneParam(codec))
+	params := cql.PairParams(cql.OneParam(cql.Int32Codec), cql.OneParam(codec))
 	if err := serializationExec(s, fmt.Sprintf("INSERT INTO %s (id,%s) VALUES (?,?)", table, column), params, cql.Pair[int32, T]{First: id, Second: input}); err != nil {
 		t.Fatal(err)
 	}

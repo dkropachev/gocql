@@ -556,7 +556,7 @@ type mappedParamPlan[A, B any] struct {
 	mapValue func(A) B
 }
 
-func MapParams[A, B any](codec ParamEncoder[B], mapValue func(A) B) ParamEncoder[A] {
+func ConvertParams[A, B any](codec ParamEncoder[B], mapValue func(A) B) ParamEncoder[A] {
 	return mappedParams[A, B]{codec: codec, mapValue: mapValue}
 }
 func (c mappedParams[A, B]) Compile(columns cqltype.Columns) (ParamPlan[A], error) {
@@ -584,7 +584,7 @@ type mappedRowPlan[A, B any] struct {
 	cloneValue func(B) B
 }
 
-func MapRows[A, B any](codec RowDecoder[A], mapValue func(A) B, cloneValue func(B) B) RowDecoder[B] {
+func ConvertRows[A, B any](codec RowDecoder[A], mapValue func(A) B, cloneValue func(B) B) RowDecoder[B] {
 	return mappedRows[A, B]{codec: codec, mapValue: mapValue, cloneValue: cloneValue}
 }
 func (c mappedRows[A, B]) Clone(value B) B {
@@ -640,10 +640,63 @@ func splitColumns(columns cqltype.Columns, split int) (cqltype.Columns, cqltype.
 	return cqltype.NewColumns(left...), cqltype.NewColumns(right...), nil
 }
 
+// fixedArity reports how many columns codec, a ParamEncoder or RowDecoder,
+// covers whatever the metadata: 1 for OneParam and OneColumn, the highest
+// index plus one for Params, Row and RowInto built only from ParamAt or
+// ColumnAt, and the sum of both sides for a pair. Any other codec, such as a
+// named field or a struct mapping, has none.
+func fixedArity(codec any) (int, bool) {
+	c, ok := codec.(interface{ fixedArity() (int, bool) })
+	if !ok {
+		return 0, false
+	}
+	return c.fixedArity()
+}
+
+func positionalArity[F interface{ location() fieldLocation }](fields []F) (int, bool) {
+	n := 0
+	for _, field := range fields {
+		loc := field.location()
+		if !loc.positional || loc.index < 0 {
+			return 0, false
+		}
+		n = max(n, loc.index+1)
+	}
+	return n, true
+}
+
+func (c paramsCodec[P]) fixedArity() (int, bool) {
+	if c.optional {
+		return 0, false
+	}
+	return positionalArity(c.fields)
+}
+func (c rowCodec[R]) fixedArity() (int, bool)        { return positionalArity(c.fields) }
+func (singleColumnRows[T]) fixedArity() (int, bool)  { return 1, true }
+func (c pairedParams[A, B]) fixedArity() (int, bool) { return pairArity(c.a, c.b) }
+func (c pairedRows[A, B]) fixedArity() (int, bool)   { return pairArity(c.a, c.b) }
+
+func pairArity(a, b any) (int, bool) {
+	left, ok := fixedArity(a)
+	if !ok {
+		return 0, false
+	}
+	right, ok := fixedArity(b)
+	return left + right, ok
+}
+
+// pairSplit returns the columns of a pair's left side, a, and its right side.
+func pairSplit(a any, columns cqltype.Columns) (cqltype.Columns, cqltype.Columns, error) {
+	split, ok := fixedArity(a)
+	if !ok {
+		return cqltype.Columns{}, cqltype.Columns{}, fmt.Errorf("gocql: pair left side has no fixed arity; use OneParam, OneColumn, ParamAt or ColumnAt fields, or a pair of them")
+	}
+	return splitColumns(columns, split)
+}
+
 type pairedParams[A, B any] struct {
-	a     ParamEncoder[A]
-	b     ParamEncoder[B]
-	split int
+	a ParamEncoder[A]
+	b ParamEncoder[B]
 }
 type pairedParamPlan[A, B any] struct {
 	a           ParamPlan[A]
@@ -651,14 +704,14 @@ type pairedParamPlan[A, B any] struct {
 	left, right cqltype.Columns
 }
 
-func PairParams[A, B any](leftColumns int, a ParamEncoder[A], b ParamEncoder[B]) ParamEncoder[Pair[A, B]] {
-	return pairedParams[A, B]{split: leftColumns, a: a, b: b}
+func PairParams[A, B any](a ParamEncoder[A], b ParamEncoder[B]) ParamEncoder[Pair[A, B]] {
+	return pairedParams[A, B]{a: a, b: b}
 }
 func (c pairedParams[A, B]) Compile(columns cqltype.Columns) (ParamPlan[Pair[A, B]], error) {
 	if c.a == nil || c.b == nil {
 		return nil, fmt.Errorf("gocql: nil paired parameter codec")
 	}
-	left, right, err := splitColumns(columns, c.split)
+	left, right, err := pairSplit(c.a, columns)
 	if err != nil {
 		return nil, err
 	}
@@ -703,9 +756,8 @@ func (p pairedParamPlan[A, B]) Encode(w *ParamWriter, value Pair[A, B]) error {
 }
 
 type pairedRows[A, B any] struct {
-	a     RowDecoder[A]
-	b     RowDecoder[B]
-	split int
+	a RowDecoder[A]
+	b RowDecoder[B]
 }
 type pairedRowPlan[A, B any] struct {
 	a           RowPlan[A]
@@ -713,8 +765,8 @@ type pairedRowPlan[A, B any] struct {
 	left, right cqltype.Columns
 }
 
-func PairRows[A, B any](leftColumns int, a RowDecoder[A], b RowDecoder[B]) RowDecoder[Pair[A, B]] {
-	return pairedRows[A, B]{split: leftColumns, a: a, b: b}
+func PairRows[A, B any](a RowDecoder[A], b RowDecoder[B]) RowDecoder[Pair[A, B]] {
+	return pairedRows[A, B]{a: a, b: b}
 }
 func (c pairedRows[A, B]) Clone(value Pair[A, B]) Pair[A, B] {
 	return Pair[A, B]{First: c.a.Clone(value.First), Second: c.b.Clone(value.Second)}
@@ -723,7 +775,7 @@ func (c pairedRows[A, B]) Compile(columns cqltype.Columns) (RowPlan[Pair[A, B]],
 	if c.a == nil || c.b == nil {
 		return nil, fmt.Errorf("gocql: nil paired row codec")
 	}
-	left, right, err := splitColumns(columns, c.split)
+	left, right, err := pairSplit(c.a, columns)
 	if err != nil {
 		return nil, err
 	}

@@ -226,14 +226,16 @@ func MapEncoder[K any, V any](key Encoder[K], value Encoder[V]) Encoder[[]Entry[
 	return codec.MapEncoder[K, V](key, value)
 }
 
-// MapParams adapts an encoder for B by mapping each input A to B.
-func MapParams[A any, B any](valueCodec ParamEncoder[B], mapValue func(A) B) ParamEncoder[A] {
-	return codec.MapParams[A, B](valueCodec, mapValue)
+// ConvertParams adapts an encoder for B to input A by converting each A to a B
+// with convert before encoding it.
+func ConvertParams[A any, B any](valueCodec ParamEncoder[B], convert func(A) B) ParamEncoder[A] {
+	return codec.ConvertParams[A, B](valueCodec, convert)
 }
 
-// MapRows maps decoded A rows to B; cloneValue must recursively detach borrowed data in B.
-func MapRows[A any, B any](valueCodec RowDecoder[A], mapValue func(A) B, cloneValue func(B) B) RowDecoder[B] {
-	return codec.MapRows[A, B](valueCodec, mapValue, cloneValue)
+// ConvertRows decodes A rows with valueCodec and converts each to a B with
+// convert; cloneValue must recursively detach borrowed data in B.
+func ConvertRows[A any, B any](valueCodec RowDecoder[A], convert func(A) B, cloneValue func(B) B) RowDecoder[B] {
+	return codec.ConvertRows[A, B](valueCodec, convert, cloneValue)
 }
 
 // MapType constructs a CQL Map type from its complete type description.
@@ -317,14 +319,22 @@ const OrdinaryStatement = cqltype.OrdinaryStatement
 type OutputField[R any] = codec.OutputField[R]
 type Pair[A any, B any] = codec.Pair[A, B]
 
-// PairParams combines two encoders, assigning the first leftColumns parameter columns to a.
-func PairParams[A any, B any](leftColumns int, a ParamEncoder[A], b ParamEncoder[B]) ParamEncoder[Pair[A, B]] {
-	return codec.PairParams[A, B](leftColumns, a, b)
+// PairParams combines two encoders: a binds the leading parameters and b the
+// rest. a must cover a fixed number of parameters: OneParam covers one, Params
+// built only from ParamAt fields the highest index plus one, and a PairParams
+// the sum of its sides. Compile rejects any other a, such as named fields or
+// ParamsOf.
+func PairParams[A any, B any](a ParamEncoder[A], b ParamEncoder[B]) ParamEncoder[Pair[A, B]] {
+	return codec.PairParams[A, B](a, b)
 }
 
-// PairRows combines two decoders, assigning the first leftColumns result columns to a.
-func PairRows[A any, B any](leftColumns int, a RowDecoder[A], b RowDecoder[B]) RowDecoder[Pair[A, B]] {
-	return codec.PairRows[A, B](leftColumns, a, b)
+// PairRows combines two decoders: a decodes the leading columns and b the
+// rest. a must cover a fixed number of columns: OneColumn covers one, Row or
+// RowInto built only from ColumnAt fields the highest index plus one, and a
+// PairRows the sum of its sides. Compile rejects any other a, such as named
+// fields or RowOf.
+func PairRows[A any, B any](a RowDecoder[A], b RowDecoder[B]) RowDecoder[Pair[A, B]] {
+	return codec.PairRows[A, B](a, b)
 }
 
 // Param maps a named bind marker through valueCodec from the value returned by get.
@@ -503,10 +513,10 @@ type StreamResetter[T any] interface {
 	Reset(*T)
 }
 
-// StreamRow maps result columns into caller storage. reset clears application state before
+// StreamRowInto maps result columns into caller storage. reset clears application state before
 // each row and must preserve mapped buffer capacity. Only a successful NextInto publishes a row.
-func StreamRow[R any](reset func(*R), fields ...StreamOutputField[R]) StreamRowDecoder[R] {
-	return codec.StreamRow[R](reset, fields...)
+func StreamRowInto[R any](reset func(*R), fields ...StreamOutputField[R]) StreamRowDecoder[R] {
+	return codec.StreamRowInto[R](reset, fields...)
 }
 
 // StreamRowDecoder compiles row mappings that decode into seeded caller storage.
@@ -739,8 +749,8 @@ func VarintFromBytes(b []byte) (Varint, error) { return codec.VarintFromBytes(b)
 // VarintValue constructs a dynamic CQL Varint value.
 func VarintValue(n Varint) Value { return codec.VarintValue(n) }
 
-// VectorDataType constructs a vector type with an element type and fixed nonzero dimension.
-func VectorDataType(element DataType, dimension uint16) (DataType, error) {
+// VectorType constructs a vector type with an element type and fixed nonzero dimension.
+func VectorType(element DataType, dimension uint16) (DataType, error) {
 	return cqltype.VectorDataType(element, dimension)
 }
 

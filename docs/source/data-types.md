@@ -1,7 +1,7 @@
 # Typed codecs
 
 Use immutable `DataType` and `Columns` descriptors. `ScalarType`, `ListType`,
-`SetType`, `MapType`, `TupleType`, `UDTType` and `VectorDataType` construct them;
+`SetType`, `MapType`, `TupleType`, `UDTType` and `VectorType` construct them;
 predeclared scalars such as `TextType` and `IntType` need no error check.
 `UDTOptionsFor` derives UDT codec options from a UDT `DataType`.
 `Encoder[T]`/`Decoder[T]` compile typed value plans; `ParamEncoder[P]` and

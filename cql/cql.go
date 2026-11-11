@@ -4,8 +4,8 @@
 // Package cql holds the CQL data vocabulary: statements, types, values,
 // codecs, consistency levels and server errors. It does no I/O.
 //
-// Row, RowOf, Column, OneColumn, TupleDecoder and UDTDecoder describe buffered
-// results. Their StreamRow, StreamRowOf, StreamColumn, StreamOneColumn,
+// RowInto, RowOf, Column, OneColumn, TupleDecoder and UDTDecoder describe buffered
+// results. Their StreamRowInto, StreamRowOf, StreamColumn, StreamOneColumn,
 // StreamTuple and StreamUDT counterparts describe incremental decoding into
 // caller storage. Both paths share column matching and struct tags, but compile
 // separate plans because their storage and lifetime contracts differ.

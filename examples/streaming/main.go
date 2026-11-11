@@ -220,7 +220,7 @@ func stream[D gocql.Dialect](ctx context.Context, cfg gocql.Config, incremental,
 			return err
 		}
 	}
-	decoder := cql.StreamRow(func(r *record) { r.ApplicationState = "" },
+	decoder := cql.StreamRowInto(func(r *record) { r.ApplicationState = "" },
 		cql.StreamColumn("id", cql.StreamInt32, func(r *record) *int32 { return &r.ID }),
 		cql.StreamColumn("payload", cql.StreamBlob, func(r *record) *[]byte { return &r.Payload }),
 		cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(r *record) *[][]byte { return &r.Pieces }),

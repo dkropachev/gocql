@@ -1321,7 +1321,7 @@ func TestStream(t *testing.T) {
 							r.InternalConn.InternalR.(*transport.InternalConnReader).InternalConn = &observedConn{Conn: socket, observe: sample}
 							sample()
 							if work.skip {
-								plan := codecTestMust(codec.StreamRow(func(*codec.EmptyRecord) {}).Compile(response.InternalColumns))
+								plan := codecTestMust(codec.StreamRowInto(func(*codec.EmptyRecord) {}).Compile(response.InternalColumns))
 								var dst codec.EmptyRecord
 								for i := 0; i < work.rows; i++ {
 									if ok, err := transport.InternalDecodeStreamRow(response, plan, &dst); !ok || err != nil {

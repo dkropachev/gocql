@@ -20,7 +20,7 @@ func TestCollectionDecoders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	vector, err := cql.VectorDataType(cql.IntType, 2)
+	vector, err := cql.VectorType(cql.IntType, 2)
 	if err != nil {
 		t.Fatal(err)
 	}

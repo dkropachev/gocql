@@ -94,11 +94,11 @@ func TestContainer(t *testing.T) {
 		text, blob := FoundationScalar(t, cqltype.TypeText), FoundationScalar(t, cqltype.TypeBlob)
 		tuple := CodecTestMust(cqltype.TupleType(text, blob))
 		list := CodecTestMust(cqltype.ListType(tuple))
-		encoder := ListEncoder(TupleEncoder(PairParams(1, OneParam(StringCodec), OneParam(ByteSliceCodec))))
+		encoder := ListEncoder(TupleEncoder(PairParams(OneParam(StringCodec), OneParam(ByteSliceCodec))))
 		encoded := CodecTestMust(EncodeValueBorrowed(list, encoder, []Pair[string, []byte]{{"one", []byte("blob")}, {"two", []byte("more")}}))
 		lease := wire.NewLease(cqltype.BytesChain(encoded.body), nil)
 		borrowed := EncodedValue{typ: list, state: cqltype.Present, body: cqltype.BytesView(cqltype.BytesChain(encoded.body), wire.RefOf(lease))}
-		decoder := ListDecoder(TupleDecoder(PairRows(1, OneColumn(TextCodec), OneColumn(BlobCodec))))
+		decoder := ListDecoder(TupleDecoder(PairRows(OneColumn(TextCodec), OneColumn(BlobCodec))))
 		seq := CodecTestMust(DecodeValue(decoder, borrowed))
 		values := decoder.Clone(seq)
 		dynamic := CodecTestMust(DynamicCodec.Decode(NewValueReader(list, cqltype.Present, cqltype.BytesChain(encoded.body), lease)))

@@ -76,7 +76,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 		ID    int32
 		Value []byte
 	}
-	decoder := cql.StreamRow(func(*output) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *output) *int32 { return &r.ID }), cql.StreamColumn("value", cql.StreamBlob, func(r *output) *[]byte { return &r.Value }))
+	decoder := cql.StreamRowInto(func(*output) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *output) *int32 { return &r.ID }), cql.StreamColumn("value", cql.StreamBlob, func(r *output) *[]byte { return &r.Value }))
 	streamOptions := pinned
 	streamOptions.PageSize = cql.Option[int32]{Set: true, Value: 1}
 	interrupted, err := RunStream(ctx, s, bound, decoder, gocql.StreamOptions{Incremental: true, Options: streamOptions})

@@ -155,8 +155,8 @@ func TestScan(t *testing.T) {
 			if err := truncateTable(t, s, table); err != nil {
 				t.Fatal(err)
 			}
-			fl := serializationMustType(cql.VectorDataType(cql.FloatType, 3))
-			tx := serializationMustType(cql.VectorDataType(cql.TextType, 2))
+			fl := serializationMustType(cql.VectorType(cql.FloatType, 3))
+			tx := serializationMustType(cql.VectorType(cql.TextType, 2))
 			checkDynamicSerializationCases(t, s, table, []serializationDynamicCase{{"vector_float", "[1.0,2.5,-3.0]", serializationMustValue(cql.VectorValue(fl, []cql.Value{cql.FloatValue(1), cql.FloatValue(2.5), cql.FloatValue(-3)}))}, {"vector_text", "['hello','world']", serializationMustValue(cql.VectorValue(tx, []cql.Value{codecTestMust(cql.TextValue("hello")), codecTestMust(cql.TextValue("world"))}))}})
 		})
 	})

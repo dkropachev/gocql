@@ -230,7 +230,7 @@ in a compiled plan or column accessor. Built-in field plans zero the destination
 then assign scalars and borrowed view descriptors directly to its fields. Remove
 pooled whole-row scratch from this path; Decode may create a local destination
 and delegate to DecodeInto. Avoid a fallback that calls Decode and copies a
-temporary complete row into dst. Explicit value-returning MapRows callbacks
+temporary complete row into dst. Explicit value-returning ConvertRows callbacks
 retain their documented mapping work and are measured separately.
 
 Next and NextInto share row framing, plan selection, page transition, terminal
@@ -1205,7 +1205,7 @@ Migration translations are mandatory:
 | Borrowed text/blob 0 B, 32 B, 4 KiB, 500 KiB | Zero payload-copy bytes at bind, uncompressed frame/segment assembly and decode, independent of input size. Descriptor/slab allocations reported separately. |
 | Typed row scalar/text/blob; fragmented cell | Zero per-cell heap allocations, including shared fragmented range descriptors; O(cells + spans) sequential descriptor work, zero flattened payload bytes. Row-owned dynamic indices and explicit iterator objects are reported separately. |
 | RunStream into preseeded byte/nested storage; raw v4, TLS and v5 raw/LZ4 | Direct read-target identity for raw v3/v4; bounded transform/read-ahead/discard/metadata memory independently of page, row, cell and segment counts; output storage reported separately. Record first-row latency, live bytes, copies, reads/syscalls, CPU/throughput and slow-consumer pool behavior. Compare equivalent Run/Row and buffered NextInto. |
-| NextInto into reused narrow/wide application rows; scalar/text/blob/container fields and split cells | Direct destination writes with no driver-owned complete-row temporary, zero variable-payload copy bytes, and identical leased receive backing. Report steady allocations against Next/Row; explicit MapRows callbacks and Clone/materialization costs are separate. |
+| NextInto into reused narrow/wide application rows; scalar/text/blob/container fields and split cells | Direct destination writes with no driver-owned complete-row temporary, zero variable-payload copy bytes, and identical leased receive backing. Report steady allocations against Next/Row; explicit ConvertRows callbacks and Clone/materialization costs are separate. |
 | Lazy list/map/tuple/UDT/vector traversal | No per-element payload copies or reflection; scalar iteration no per-element allocations. Explicit Collect/Clone measured separately. |
 | Dynamic Value row/collection access | No reflect/`any` destinations, no eager variable payload materialization; decoder schema plan reused. |
 | Single/composite routing, Murmur3/CDC | Encoders invoked once at bind, streaming composite token produces baseline-equivalent bytes/hash, zero routing key payload allocation. |

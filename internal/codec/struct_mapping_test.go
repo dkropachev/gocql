@@ -496,7 +496,7 @@ func TestStructMapping(t *testing.T) {
 				Maybe: cqltype.Nullable[int64]{Value: 5, Valid: true}, At: 1234,
 			}
 			data := streamFixtureRow(t, columns, value)
-			hand := StreamRow(func(*streamFixture) {},
+			hand := StreamRowInto(func(*streamFixture) {},
 				StreamColumn("id", StreamInt32, func(v *streamFixture) *int32 { return &v.ID }),
 				StreamColumn("key", StreamUUID, func(v *streamFixture) *cqltype.UUID { return &v.Key }),
 				StreamColumn("payload", StreamBlob, func(v *streamFixture) *[]byte { return &v.Payload }),

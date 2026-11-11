@@ -97,7 +97,7 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 		done <- nil
 	}()
 	resets := 0
-	decoder := codec.StreamRow(func(*[]byte) { resets++ }, codec.StreamColumn("value", codec.StreamBlob, func(v *[]byte) *[]byte { return v }))
+	decoder := codec.StreamRowInto(func(*[]byte) { resets++ }, codec.StreamColumn("value", codec.StreamBlob, func(v *[]byte) *[]byte { return v }))
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	cursor, err := RunStream(ctx, s, bound, decoder, StreamOptions{Incremental: true, Options: Options{Idempotent: true}})

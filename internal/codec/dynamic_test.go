@@ -172,7 +172,7 @@ func TestDynamic(t *testing.T) {
 			}
 			cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "n", Type: integer}, cqltype.ColumnSpec{Name: "s", Type: text})
 			chain := dynamicTestRowBody(t, cols, []Value{IntValue(3), CodecTestMust(TextValue("right"))})
-			paired := dynamicTestMust(PairRows(1, OneColumn(Int32), DynamicRows).Compile(cols))
+			paired := dynamicTestMust(PairRows(OneColumn(Int32), DynamicRows).Compile(cols))
 			pair := dynamicTestMust(paired.Decode(NewRowReader(cols, chain, nil)))
 			if pair.First != 3 || pair.Second.Columns().Len() != 1 {
 				t.Fatal("paired row did not retain physical subset")

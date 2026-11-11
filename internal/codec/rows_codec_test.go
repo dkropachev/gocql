@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -105,7 +106,7 @@ func TestRowsCodec(t *testing.T) {
 			if _, err := Row(Column("key", Int32, func(v *int32) *int32 { return v })).Compile(columns); err == nil {
 				t.Fatal("named duplicate aliases must require positional mapping")
 			}
-			plan, err := PairRows(1, OneColumn(Int32), OneColumn(Int32)).Compile(columns)
+			plan, err := PairRows(OneColumn(Int32), OneColumn(Int32)).Compile(columns)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -116,8 +117,52 @@ func TestRowsCodec(t *testing.T) {
 			if _, err := Params(ParamAt(0, Int32, func(v int32) int32 { return v })).Compile(columns); err == nil {
 				t.Fatal("unaccounted parameter accepted")
 			}
-			if _, err := PairRows(-1, OneColumn(Int32), OneColumn(Int32)).Compile(columns); err == nil {
-				t.Fatal("negative split accepted")
+		})
+		// The split is the left side's fixed arity; a left side without one
+		// fails at Compile.
+		t.Run("PairArity", func(t *testing.T) {
+			integer := rowTestType(t, cqltype.TypeInt)
+			columns := cqltype.NewColumns(
+				cqltype.ColumnSpec{Name: "a", Type: integer},
+				cqltype.ColumnSpec{Name: "b", Type: integer},
+				cqltype.ColumnSpec{Name: "c", Type: integer},
+				cqltype.ColumnSpec{Name: "d", Type: integer},
+			)
+			at := func(i int) OutputField[[2]int32] {
+				return ColumnAt(i, Int32, func(v *[2]int32) *int32 { return &v[i] })
+			}
+			paramAt := func(i int) InputField[[2]int32] {
+				return ParamAt(i, Int32, func(v [2]int32) int32 { return v[i] })
+			}
+			for name, left := range map[string]RowDecoder[[2]int32]{
+				"Row":     Row(at(0), at(1)),
+				"RowInto": RowInto(func(*[2]int32) {}, at(1), at(0)),
+			} {
+				t.Run(name, func(t *testing.T) {
+					rows := PairRows(left, PairRows(OneColumn(Int32), OneColumn(Int32)))
+					body := encodeTestParams(t, columns, PairParams(Params(paramAt(0), paramAt(1)), PairParams(OneParam(Int32), OneParam(Int32))),
+						Pair[[2]int32, Pair[int32, int32]]{[2]int32{1, 2}, Pair[int32, int32]{3, 4}})
+					plan := CodecTestMust(rows.Compile(columns))
+					got, err := plan.Decode(NewRowReader(columns, body, nil))
+					if err != nil || got.First != [2]int32{1, 2} || got.Second.First != 3 || got.Second.Second != 4 {
+						t.Fatalf("got %+v, %v", got, err)
+					}
+				})
+			}
+			nested := PairRows(PairRows(OneColumn(Int32), OneColumn(Int32)), Row(ColumnAt(0, Int32, func(v *int32) *int32 { return v }), ColumnAt(1, Int32, func(v *int32) *int32 { return v })))
+			if _, err := nested.Compile(columns); err != nil {
+				t.Fatalf("nested pair on the left: %v", err)
+			}
+			named := Row(Column("a", Int32, func(v *int32) *int32 { return v }))
+			if _, err := PairRows(named, OneColumn(Int32)).Compile(columns); err == nil || !strings.Contains(err.Error(), "left side has no fixed arity") {
+				t.Fatalf("named left side: %v", err)
+			}
+			namedParams := Params(Param("a", Int32, func(v int32) int32 { return v }))
+			if _, err := PairParams(namedParams, OneParam(Int32)).Compile(columns); err == nil || !strings.Contains(err.Error(), "left side has no fixed arity") {
+				t.Fatalf("named left parameters: %v", err)
+			}
+			if _, err := PairRows(PairRows(named, OneColumn(Int32)), OneColumn(Int32)).Compile(columns); err == nil {
+				t.Fatal("pair with a named left side has a fixed arity")
 			}
 		})
 	})
@@ -125,18 +170,19 @@ func TestRowsCodec(t *testing.T) {
 		t.Run("CompositionPropagatesDestinations", func(t *testing.T) {
 			integer := FoundationScalar(t, cqltype.TypeInt)
 			cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "a", Type: integer}, cqltype.ColumnSpec{Name: "b", Type: integer})
-			body := encodeTestParams(t, cols, PairParams(1, OneParam(Int32), OneParam(Int32)), Pair[int32, int32]{1, 2})
+			body := encodeTestParams(t, cols, PairParams(OneParam(Int32), OneParam(Int32)), Pair[int32, int32]{1, 2})
 			var dst Pair[int32, int32]
 			decodes, into := 0, 0
-			left := directTestRowDecoder{&dst.First, &decodes, &into}
+			// A pair's left side needs a fixed arity, so only the right one is
+			// a custom decoder here.
 			right := directTestRowDecoder{&dst.Second, &decodes, &into}
-			plan := CodecTestMust(PairRows(1, left, right).Compile(cols))
-			if err := plan.DecodeInto(NewRowReader(cols, body, nil), &dst); err != nil || dst.First != 1 || dst.Second != 2 || decodes != 0 || into != 2 {
+			plan := CodecTestMust(PairRows(OneColumn(Int32), right).Compile(cols))
+			if err := plan.DecodeInto(NewRowReader(cols, body, nil), &dst); err != nil || dst.First != 1 || dst.Second != 2 || decodes != 0 || into != 1 {
 				t.Fatal("pair destination", dst, decodes, into, err)
 			}
 			applied := FoundationScalar(t, cqltype.TypeBoolean)
 			casCols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "[applied]", Type: applied}, cqltype.ColumnSpec{Name: "a", Type: integer})
-			casBody := encodeTestParams(t, casCols, PairParams(1, OneParam(Bool), OneParam(Int32)), Pair[bool, int32]{false, 7})
+			casBody := encodeTestParams(t, casCols, PairParams(OneParam(Bool), OneParam(Int32)), Pair[bool, int32]{false, 7})
 			var cas CASResult[int32]
 			custom := directTestRowDecoder{&cas.Previous.Value, &decodes, &into}
 			casPlan := CodecTestMust(CASRows(custom).Compile(casCols))
@@ -171,7 +217,7 @@ func TestRowsCodec(t *testing.T) {
 				}
 				return &value.Inner
 			}))
-			params := OneParam(TupleEncoder(PairParams(1, OneParam(Int32), OneParam(StringCodec))))
+			params := OneParam(TupleEncoder(PairParams(OneParam(Int32), OneParam(StringCodec))))
 			body := encodeTestParams(t, columns, params, Pair[int32, string]{First: 7, Second: "borrowed"})
 			lease := wire.NewLease(body, nil)
 			plan := CodecTestMust(decoder.Compile(columns))
@@ -428,7 +474,7 @@ func TestRowsCodec(t *testing.T) {
 	t.Run("Params", func(t *testing.T) {
 		t.Run("FailureRollsBackWholePlan", func(t *testing.T) {
 			columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "a", Type: rowTestType(t, cqltype.TypeInt)}, cqltype.ColumnSpec{Name: "b", Type: rowTestType(t, cqltype.TypeInt)})
-			codec := PairParams(1, OneParam(Int32), OneParam[int32](failingRowEncoder{}))
+			codec := PairParams(OneParam(Int32), OneParam[int32](failingRowEncoder{}))
 			plan, err := codec.Compile(columns)
 			if err != nil {
 				t.Fatal(err)
