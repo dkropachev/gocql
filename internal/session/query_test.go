@@ -295,14 +295,14 @@ func TestQuery(t *testing.T) {
 			request.InternalLogical.InternalFinish(model.Result{}, context.Canceled)
 			request.InternalLogical.releaseInput()
 			q.state.owner.InternalRelease()
-			// The next execution waits for the drain within its context; calls
-			// without a context still report the overlap.
+			// The next execution waits for the drain within its context;
+			// Routing has scratch of its own and does not wait.
 			ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 			defer cancel()
 			if err := q.capture(ctx, input); !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatal(err)
 			}
-			if _, err := q.Routing(input); !errors.Is(err, ErrBusy) {
+			if _, err := q.Routing(input); err != nil {
 				t.Fatal(err)
 			}
 			waited := make(chan error, 1)
@@ -742,7 +742,7 @@ func TestQuery(t *testing.T) {
 			if _, err := query.Exec(wait, codec.EmptyRecord{}); !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatal(err)
 			}
-			if _, err := query.Routing(codec.EmptyRecord{}); !errors.Is(err, ErrBusy) {
+			if _, err := query.Routing(codec.EmptyRecord{}); err != nil {
 				t.Fatal(err)
 			}
 			observer.mu.Lock()
@@ -779,7 +779,8 @@ func TestQuery(t *testing.T) {
 			case <-time.After(time.Second):
 				t.Fatal("cancellation joined a blocked writer")
 			}
-			if _, err := q.Routing(input); !errors.Is(err, ErrBusy) {
+			// Routing leaves the buffer the accepted write still reads alone.
+			if _, err := q.Routing([]byte("other")); err != nil {
 				t.Fatal(err)
 			}
 			short, stopShort := context.WithTimeout(context.Background(), time.Millisecond)

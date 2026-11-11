@@ -206,6 +206,9 @@ func TestBatch(t *testing.T) {
 			if err := q.AddToBatch(&batch, []byte("v")); err != nil {
 				t.Fatal(err)
 			}
+			if _, err := q.Routing([]byte("v")); err != nil {
+				t.Fatal("Routing of a busy query:", err)
+			}
 			if batch.Len() != 1 {
 				t.Fatal(batch.Len())
 			}

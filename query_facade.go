@@ -66,8 +66,9 @@ func (q *Query[P, R]) RunUnpaged(ctx context.Context, value P) (*Page[R], error)
 	return (*Page[R])(page), err
 }
 
-// Routing reports routing information derived from value. It requires an idle
-// query and does not execute the statement.
+// Routing reports routing information derived from value without executing
+// the statement. It uses scratch of its own, so it works while the query runs,
+// drains or has an open handle; a closed query returns cqlerr.ErrClosed.
 func (q *Query[P, R]) Routing(value P) (routing.Info, error) { return q.internal().Routing(value) }
 
 // AddToBatch encodes value straight into storage batch owns. It uses none of

@@ -54,8 +54,8 @@ func TestQueryDrainAdmission(t *testing.T) {
 		if err := <-done; !errors.Is(err, context.Canceled) {
 			t.Fatal(err)
 		}
-		// Without a context there is nothing to bound a wait: ErrBusy.
-		if _, err := query.Routing(codec.EmptyRecord{}); !errors.Is(err, ErrBusy) {
+		// Routing uses scratch of its own, so a drain does not block it.
+		if _, err := query.Routing(codec.EmptyRecord{}); err != nil {
 			t.Fatal("Routing during drain:", err)
 		}
 		// An execution waits for the drain, bounded by its own context.

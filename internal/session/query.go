@@ -92,6 +92,10 @@ type Query[P, R any] struct {
 	allowUnset bool
 }
 
+// routingScratch holds Routing's encoding buffers. Routing is rare, so the
+// buffers live in a pool rather than in every Query next to its hot fields.
+var routingScratch = sync.Pool{New: func() any { return new(binding.ParameterBuffer) }}
+
 // newQueryState sets up state for session. A query of a pool is not tracked
 // by the session runtime: the runtime counts busy pooled queries instead,
 // and the pool hands its idle ones to Close.
@@ -241,15 +245,10 @@ func (s *queryState) idle() {
 	}
 }
 
-// begin starts an execution generation, waiting within ctx while the
-// previous execution only drains.
-func (s *queryState) begin(ctx context.Context) error { return s.admit(ctx, true) }
-
-// admit starts an execution generation. With wait, a previous execution that
-// already finished and only drains is waited for within ctx; without, it
-// makes admit return ErrBusy, for callers that have no context to bound the
-// wait.
-func (s *queryState) admit(ctx context.Context, wait bool) error {
+// begin starts an execution generation. A previous execution that already
+// finished and only drains is waited for within ctx; one still running, or
+// held open by a handle, makes begin return ErrBusy.
+func (s *queryState) begin(ctx context.Context) error {
 	if s.owner == nil || s.runtime == nil {
 		return cqltype.TypeValidation("query", "uninitialized query")
 	}
@@ -266,7 +265,7 @@ func (s *queryState) admit(ctx context.Context, wait bool) error {
 		// wait for it; otherwise it is still running or a handle the caller
 		// holds keeps it open, and overlapping use is an error.
 		l := s.logical
-		if !wait || l == nil || !l.lifetime.inputReleased.Load() {
+		if l == nil || !l.lifetime.inputReleased.Load() {
 			s.mu.Unlock()
 			return ErrBusy
 		}
@@ -306,17 +305,13 @@ func (s *queryState) admit(ctx context.Context, wait bool) error {
 	return nil
 }
 
+// capture captures value into the query's storage in a new execution
+// generation.
 func (q *Query[P, R]) capture(ctx context.Context, value P) error {
-	return q.captureWith(ctx, value, true)
-}
-
-// captureWith captures value into the query's storage in a new execution
-// generation; wait is as for queryState.admit.
-func (q *Query[P, R]) captureWith(ctx context.Context, value P, wait bool) error {
 	if q == nil {
 		return cqltype.TypeValidation("query", "nil query")
 	}
-	if err := q.state.admit(ctx, wait); err != nil {
+	if err := q.state.begin(ctx); err != nil {
 		return err
 	}
 	request := &q.bound.privateStorage.InternalRequest
@@ -384,15 +379,33 @@ func (q *Query[P, R]) RunUnpaged(ctx context.Context, value P) (*Page[R], error)
 	return q.state.runtime.runSinglePage(ctx, &q.bound, model.StartPage(), q.options, true)
 }
 
-// Routing captures parameters and returns their routing information without
-// sending a request. It takes no context, so unlike the executions it returns
-// ErrBusy while the previous execution still drains.
+// Routing encodes value and returns its routing information without sending a
+// request. It encodes into scratch of its own, not the execution's storage, so
+// it works while the query runs, drains or has an open handle; only a closed
+// query rejects it.
 func (q *Query[P, R]) Routing(value P) (model.RoutingInfo, error) {
-	if err := q.captureWith(context.Background(), value, false); err != nil {
+	if q == nil || q.state.owner == nil || q.state.runtime == nil {
+		return model.RoutingInfo{}, cqltype.TypeValidation("query", "uninitialized query")
+	}
+	q.state.mu.Lock()
+	closed := q.state.closed
+	q.state.mu.Unlock()
+	if closed {
+		return model.RoutingInfo{}, runtimeerrors.ErrClosed
+	}
+	scratch := routingScratch.Get().(*binding.ParameterBuffer)
+	values, err := scratch.Encode(q.params, q.columns, value, q.allowUnset)
+	request := &q.bound.privateStorage.InternalRequest
+	routing := request.routing
+	if err == nil {
+		routing.Token, err = request.InternalSource.token(values.Cells)
+	}
+	scratch.Retire()
+	routingScratch.Put(scratch)
+	if err != nil {
 		return model.RoutingInfo{}, err
 	}
-	defer q.state.owner.InternalRelease()
-	return q.bound.privateStorage.InternalRequest.routing, nil
+	return routing, nil
 }
 
 // AddToBatch encodes value with the query's parameters straight into batch's
