@@ -564,7 +564,7 @@ method on the type that owns it.
 | Function | Decision | Reason |
 |---|---|---|
 | `NewConfig`, `NewProfile`, `NewClientRoutes`, `Connect` | keep | construct a value from nothing |
-| `OpenSingleHost` | keep | single-host sessions are a supported entry point |
+| `OpenSingleHost` | replaced by `ConfigBuilder.WithOnlyHost` | a single-host session is a host filter, so it is a configuration setting that composes with `WithHostFilter`, not a second way to connect |
 | `Prepare` | moved to `Session.Prepare` | Go 1.27 methods take type parameters, so the free function only duplicated the method |
 | `NewUnpreparedQuery`, `NewUnpreparedStreamQuery` | removed | `Session.UnpreparedExec`, `UnpreparedOne` and `UnpreparedEach` run throwaway statements; repeated statements are prepared, and streaming is always prepared |
 | `NewStreamQuery` | removed | `Session.PrepareStream` then `PreparedStream.Query`; the stream statement declares the decoder's row type |
@@ -1557,7 +1557,6 @@ func (*ConfigBuilder) ConfigureDefaultProfile(func(*ProfileBuilder)) *ConfigBuil
 func NewProfile() *ProfileBuilder
 func NewClientRoutes(connectionIDs ...string) *ClientRoutesBuilder
 func Connect(context.Context, Config) (*Session, error)
-func OpenSingleHost(context.Context, Config, UUID) (*Session, error)
 ```
 
 `Connect` rejects the zero `Config`.

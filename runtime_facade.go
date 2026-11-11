@@ -6,7 +6,6 @@ package gocql
 import (
 	"context"
 
-	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
@@ -58,16 +57,6 @@ const ControlEvent = implCluster.ControlEvent
 type Event = implCluster.Event
 type EventFilter = implCluster.EventFilter
 type EventKind = implCluster.EventKind
-
-// OpenSingleHost opens a session of dialect D that uses only the node hostID.
-func OpenSingleHost[D Dialect](ctx context.Context, config Config, hostID cql.UUID) (*Session[D], error) {
-	settings, err := dialectSettings[D](config)
-	if err != nil {
-		return nil, err
-	}
-	session, err := implSession.OpenSingleHost(ctx, settings, hostID)
-	return (*Session[D])(session), err
-}
 
 const OverflowEvent = implCluster.OverflowEvent
 

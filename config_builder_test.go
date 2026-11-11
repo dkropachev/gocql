@@ -204,6 +204,26 @@ func TestConfigBuilder(t *testing.T) {
 		}
 	})
 
+	t.Run("OnlyHost", func(t *testing.T) {
+		id := cql.MustParseUUID("00112233-4455-4677-8899-aabbccddeeff")
+		other := cql.MustParseUUID("10112233-4455-4677-8899-aabbccddeeff")
+		keep := mustBuildConfig(t, NewConfig("h").WithOnlyHost(id)).settings.HostFilter
+		if keep == nil || !keep(routing.HostSnapshot{ID: id}) || keep(routing.HostSnapshot{ID: other}) {
+			t.Fatal("WithOnlyHost did not keep exactly its host")
+		}
+		keep = mustBuildConfig(t, NewConfig("h").WithOnlyHost(id).
+			WithHostFilter(func(h routing.HostSnapshot) bool { return h.Datacenter == "dc1" })).settings.HostFilter
+		if !keep(routing.HostSnapshot{ID: id, Datacenter: "dc1"}) || keep(routing.HostSnapshot{ID: id, Datacenter: "dc2"}) ||
+			keep(routing.HostSnapshot{ID: other, Datacenter: "dc1"}) {
+			t.Fatal("WithOnlyHost and WithHostFilter must both pass")
+		}
+		if _, err := NewConfig("h").WithOnlyHost(cql.UUID{}).Build(); err == nil {
+			t.Fatal("Build accepted an empty host ID")
+		} else if _, ok := errors.AsType[*cqlerr.ValidationError](err); !ok {
+			t.Fatalf("Build = %v, want a ValidationError", err)
+		}
+	})
+
 	t.Run("PoolSize", func(t *testing.T) {
 		c := mustBuildConfig(t, NewConfig("h").WithPoolSize(PerHost(3))).settings
 		if c.Pool.ConnectionsPerHost != 3 || c.Pool.ConnectionsPerShard != 0 || c.Pool.ShardAwarePort {

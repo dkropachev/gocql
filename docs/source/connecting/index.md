@@ -107,6 +107,10 @@ returns the address to dial, or the input unchanged. A translation error fails
 that connection attempt like a dial error.
 `endpoint.TranslatorFunc` adapts a function.
 
+`WithOnlyHost(id)` restricts a session to the node with that host ID, for
+example one taken from `session.Metadata().Hosts()`. It composes with
+`WithHostFilter`: a node is used only when both accept it.
+
 ```{toctree}
 :maxdepth: 1
 

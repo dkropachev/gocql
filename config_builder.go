@@ -39,6 +39,7 @@ type ConfigBuilder struct {
 	routes               *ClientRoutesBuilder
 	ignoredEvents        []EventKind
 	settings             implSettings.Config
+	onlyHost             cql.Option[cql.UUID]
 	discoveryChosen      bool
 	shardAwarenessChosen bool
 	maxExcessChosen      bool
@@ -86,6 +87,14 @@ func (b *ConfigBuilder) Build() (Config, error) {
 			return Config{}, &cqlerr.ValidationError{Field: "pool size", Err: errors.New("PerHost keeps no per-shard excess connections; drop WithMaxExcessPerShard or use PerShard")}
 		}
 		settings.Pool.ShardAwarePort = false
+	}
+	if b.onlyHost.Set {
+		id := b.onlyHost.Value
+		if id.IsEmpty() {
+			return Config{}, &cqlerr.ValidationError{Field: "only host", Err: errors.New("empty host ID")}
+		}
+		keep := settings.HostFilter
+		settings.HostFilter = func(host routing.HostSnapshot) bool { return host.ID == id && (keep == nil || keep(host)) }
 	}
 	for _, kind := range b.ignoredEvents {
 		switch kind {
@@ -385,6 +394,15 @@ func (b *ConfigBuilder) WithDiscovery() *ConfigBuilder {
 // WithHostFilter skips nodes for which keep returns false. Default all nodes.
 func (b *ConfigBuilder) WithHostFilter(keep func(routing.HostSnapshot) bool) *ConfigBuilder {
 	b.settings.HostFilter = keep
+	return b
+}
+
+// WithOnlyHost connects only to the node with host ID id, as reported by
+// Session.Metadata. It composes with WithHostFilter: a node is used when it
+// is id and the filter keeps it. The contact points still serve discovery.
+// Build rejects an empty id. Default all nodes.
+func (b *ConfigBuilder) WithOnlyHost(id cql.UUID) *ConfigBuilder {
+	b.onlyHost = cql.Some(id)
 	return b
 }
 

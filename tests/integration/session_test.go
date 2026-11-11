@@ -936,10 +936,11 @@ func TestSession(t *testing.T) {
 		})
 	})
 
-	t.Run("OpenSingleHost", func(t *testing.T) {
+	t.Run("OnlyHost", func(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
-		config := mustBuild(t, createV2Cluster())
+		builder := createV2Cluster()
+		config := mustBuild(t, builder)
 		// The standalone executor is replaced by a typed session restricted to a
 		// discovered host identity, rather than a second query execution engine.
 		discovery, err := gocql.Connect[testDialect](ctx, config)
@@ -948,7 +949,7 @@ func TestSession(t *testing.T) {
 		require.NotEmpty(t, hosts)
 		hostID := hosts[0].ID
 		require.NoError(t, discovery.Close())
-		session, err := gocql.OpenSingleHost[testDialect](ctx, config, hostID)
+		session, err := gocql.Connect[testDialect](ctx, mustBuild(t, builder.WithOnlyHost(hostID)))
 		require.NoError(t, err)
 		defer session.Close()
 		bound, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.TimeUUID]{CQL: "SELECT now() FROM system.local", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.TimeUUIDCodec)}, cql.NewColumns(), cql.EmptyParams{})
