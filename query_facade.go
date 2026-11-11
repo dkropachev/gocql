@@ -85,8 +85,12 @@ func (q *Query[P, R]) RunPage(ctx context.Context, value P, state PageState, pag
 }
 
 // Routing reports routing information derived from value without executing
-// the statement. It uses scratch of its own, so it works while the query runs,
-// drains or has an open handle; a closed query returns cqlerr.ErrClosed.
+// the statement: keyspace, table, token, statement kind and any host or shard
+// the options pin. Pass the token to metadata.Snapshot.Replicas for the
+// candidate replicas; the routing policy picks among them when the statement
+// runs, so Routing does not say which replica serves it. It uses scratch of
+// its own, so it works while the query runs, drains or has an open handle; a
+// closed query returns cqlerr.ErrClosed.
 func (q *Query[P, R]) Routing(value P) (routing.Info, error) { return q.internal().Routing(value) }
 
 // AddToBatch encodes value straight into storage batch owns. It uses none of

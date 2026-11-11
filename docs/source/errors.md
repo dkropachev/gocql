@@ -42,6 +42,26 @@ attempt. `Attempts` lists every failed attempt with its host address, shard,
 consistency, execution status and error; `errors.As` searches all of them, so a
 server error from an earlier attempt is found even after a timeout.
 
+```go
+_, err := insert.Exec(ctx, row)
+if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); ok {
+	log.Printf("stopped: %v (%s)", failure.Err, failure.ExecutionStatus())
+	for _, a := range failure.Attempts {
+		shard := "-"
+		if a.Shard.Set {
+			shard = strconv.FormatUint(uint64(a.Shard.Value), 10)
+		}
+		log.Printf("attempt %d: host %s (%s) shard %s at %s: %s: %v",
+			a.Number, a.HostID, a.Address, shard, a.Consistency, a.Status, a.Err)
+	}
+}
+```
+
+`failure.Result` holds what the execution gathered before it failed, such as
+its attempt count and latency. A successful call names its coordinator in
+`Result.HostID` and `Result.ShardID` instead: the host, and the shard on a
+shard-aware host, of the attempt that produced the result.
+
 ## Connecting
 
 When no host can be reached, `Connect` returns an error matching

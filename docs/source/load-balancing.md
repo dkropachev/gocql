@@ -39,5 +39,28 @@ consume borrowed spans synchronously. Unknown partitioners disable token routing
 with a diagnostic. Tablet placement and opaque version identities survive in
 immutable snapshots; retained snapshots remain valid after refresh.
 
+## Where did my request go?
+
+Each stage of a request has its own answer:
+
+- **Before any statement**: `session.Metadata()` returns a `metadata.Snapshot`.
+  `Snapshot.Token(keyspace, table, key...)` computes a partition's token from
+  its partition-key values, `Snapshot.Replicas(keyspace, table, token)` lists
+  its replicas as host and shard targets, and `Snapshot.TokenRanges` and
+  `Snapshot.Hosts` describe the ring.
+- **Statement and values, before executing**: `Query.Routing(value)` returns
+  the keyspace, table, token, statement kind and any host or shard pinned in
+  the options, without sending anything. Pass its token to `Snapshot.Replicas`
+  for the candidate replicas. These are the candidates, not a promise: the
+  routing policy picks among them when the request runs, and the built-in
+  policy picks a random replica.
+- **After executing**: `Result.HostID` and `Result.ShardID` name the host and
+  shard of the attempt that produced the result, and `Result.Attempts` how
+  many attempts ran. A
+  failed call's `*cqlerr.ExecutionError` lists each attempt's host, shard,
+  status and error (see [Errors](errors.md)). For every attempt as it happens,
+  including speculative and cancelled ones, implement
+  `gocql.Observer.ObserveAttempt`.
+
 The optional hostpolicy subpackage adapts go-hostpool to the typed `routing.Policy`
 and attempt observation seams.
