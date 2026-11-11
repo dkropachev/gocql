@@ -95,9 +95,12 @@ func (s *Session) UnpreparedAll[P, R any](ctx context.Context, statement cql.Sta
 	return s.internal().UnpreparedAll(ctx, internalStatement(statement), value, dst, internalOptionList(options)...)
 }
 
-// ExecBatch sends batch as one CQL BATCH request. Its statements must return no
-// columns; use RunBatch for conditional results. At most one CompiledOptions may be
-// passed. Do not modify batch until the call returns.
+// ExecBatch sends batch as one CQL BATCH request. A batch known to be
+// conditional is rejected with cqlerr.ErrConditionalExec before it is sent;
+// read its result with RunBatch. At most one CompiledOptions may be passed;
+// paging options are ignored, because a BATCH response is a single page. Do
+// not modify batch until the call returns. A reused batch sends without
+// allocating.
 func (s *Session) ExecBatch(ctx context.Context, kind cql.BatchKind, batch *Batch, options ...CompiledOptions) (Result, error) {
 	o, err := internalCompiledOptions(options)
 	if err != nil {
@@ -106,16 +109,30 @@ func (s *Session) ExecBatch(ctx context.Context, kind cql.BatchKind, batch *Batc
 	return s.internal().ExecBatch(ctx, kind, (*implSession.Batch)(batch), o)
 }
 
-// RunBatch executes a conditional batch and returns its result page, decoded
-// with decoder. Close the page when done. Options and batch ownership are as for
-// ExecBatch.
-func (s *Session) RunBatch[R any](ctx context.Context, kind cql.BatchKind, batch *Batch, decoder cql.RowDecoder[R], options ...CompiledOptions) (*Page[R], error) {
+// RunBatch sends batch as one CQL BATCH request and returns its rows, decoded
+// with decoder: the rows of a conditional batch report whether it applied.
+// Which rows the server returns differs between Cassandra and ScyllaDB; the
+// batch applied if and only if every row reports it. The rows hold a pooled
+// query until they are closed, as Prepared.Run's do. Options and batch
+// ownership are as for ExecBatch. Once its rows are closed, a batch sent again
+// with the same R and decoder reuses their storage and allocates nothing.
+func (s *Session) RunBatch[R any](ctx context.Context, kind cql.BatchKind, batch *Batch, decoder cql.RowDecoder[R], options ...CompiledOptions) (Rows[R], error) {
 	o, err := internalCompiledOptions(options)
 	if err != nil {
-		return nil, err
+		return Rows[R]{}, err
 	}
-	page, err := s.internal().RunBatch(ctx, kind, (*implSession.Batch)(batch), decoder, o)
-	return (*Page[R])(page), err
+	rows, err := s.internal().RunBatch(ctx, kind, (*implSession.Batch)(batch), decoder, o)
+	return Rows[R](rows), err
+}
+
+// UnpreparedAddToBatch appends an occasional statement with value to batch
+// without preparing it. Parameters are described by statement.BindMarkers, as
+// for UnpreparedExec. The statement is validated and its parameters compiled on
+// every call, so a statement added often is prepared once and added with
+// Prepared.AddToBatch. A member added this way gives the batch no routing
+// token; the batch routes by its first prepared member's token.
+func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement cql.Statement[P, R], value P) error {
+	return s.internal().UnpreparedAddToBatch((*implSession.Batch)(batch), internalStatement(statement), value)
 }
 
 // ID returns the session identifier sent to nodes in the SESSION_ID startup

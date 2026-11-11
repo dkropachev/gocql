@@ -159,18 +159,18 @@ func TestStructMapping(t *testing.T) {
 		if err := update.AddToBatch(&batch, guard{Bucket: 7, ID: r.ID, Name: "batched", Big: r.Big}); err != nil {
 			t.Fatal(err)
 		}
-		page, err := f.session.RunBatch(ctx, cql.LoggedBatch, &batch, updateRows)
+		rows, err := f.session.RunBatch(ctx, cql.LoggedBatch, &batch, updateRows)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer page.Close()
+		defer rows.Close()
 		applied := 0
-		for page.NextInto(&result) {
+		for rows.NextInto(&result) {
 			if result.Applied {
 				applied++
 			}
 		}
-		if err := page.Err(); err != nil || applied == 0 {
+		if err := rows.Err(); err != nil || applied == 0 {
 			t.Fatal("conditional batch:", applied, err)
 		}
 	})

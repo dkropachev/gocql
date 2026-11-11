@@ -687,10 +687,14 @@ func (rt *InternalSessionRuntime) newRowsFromResponse[R any](runctx context.Cont
 	holder, gen := b.privateStorage.rows, uint64(0)
 	// A pooled query serves other callers once these rows close, so its rows
 	// live in storage of their own: a closed handle another goroutine still
-	// holds then never reads storage a later execution reuses.
+	// holds then never reads storage a later execution reuses. A batch's rows
+	// live in storage the batch owns, which RunBatch reuses only once they
+	// are closed and which numbers its own generations.
 	queryOwned := holder != nil && request.query != nil && !request.query.perCall
 	if queryOwned {
 		gen = request.query.generation.Load()
+		*holder = rowsHolder[R]{}
+	} else if holder != nil && request.batch != nil {
 		*holder = rowsHolder[R]{}
 	} else {
 		holder = new(rowsHolder[R])

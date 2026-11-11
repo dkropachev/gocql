@@ -112,7 +112,9 @@ and no options.
 
 - **Building.** A member joins with `AddToBatch` on the statement that
   supplies it: one method per reusable form (`Prepared.AddToBatch`,
-  `Query.AddToBatch`). `AddToBatch` encodes the value straight into storage
+  `Query.AddToBatch`), and `Session.UnpreparedAddToBatch` for a throwaway
+  statement, which compiles its parameters on every call like the other
+  throwaway methods. `AddToBatch` encodes the value straight into storage
   the `Batch` owns and touches no execution state. The zero `Batch` is ready,
   and `Reset` keeps the storage for the next batch.
 - **Sending.** The session sends a batch, and the batch kind is a call
@@ -120,16 +122,24 @@ and no options.
   - None: `Session.ExecBatch`. A batch whose members the driver knows to be
     conditional is rejected before it is sent, because the result of an
     applied-or-not write cannot be returned as success or error alone.
-  - Rows: one method, for conditional batches. The response is a single page
-    with no continuation, so there is no paging, prefetch or page state.
+  - Rows: `Session.RunBatch` → `Rows`, the pull form of the many-rows
+    column. It serves conditional batches. The response is a single page
+    with no continuation, so there is no page state and no `Page`. Like
+    `Prepared.Run`'s rows, the rows hold a pooled query until they are
+    closed, and the session registers it so that `Session.Close` stops them.
 - **Options.** As for the shared form: an optional `CompiledOptions`, so the
-  send resolves nothing per call. Paging options are rejected.
+  send resolves nothing per call. Paging options are ignored, so options
+  compiled for statements serve batches too.
 - **Performance contract.** Once a reused batch has reached its working size,
   appending, `Reset` and `ExecBatch` allocate nothing
   (`internal/session/batch_allocs_test.go`), and `BenchmarkBatch` is the
   gate for changes to the path. To keep that:
   - `ExecBatch` runs on a pooled session query and takes the void-result
     path. It returns no handle, and keeps no pooled query once it returns.
+  - `RunBatch` keeps its request, plans and iterator on the `Batch`
+    (`batchRows`), reused once the previous rows are closed, while `R` and
+    the decoder stay the same. A warm `RunBatch` allocates only the held-query
+    registration that `Prepared.Run` also pays (`TestRunBatch/Allocs`).
   - The wire batch of an attempt reuses the batch's item storage. Only a
     concurrent speculative attempt builds its own.
   - Per-member work at send time is a lookup of the prepared ID on the
@@ -142,9 +152,4 @@ and no options.
 
 ## Current deviations
 
-- The rows method is `Session.RunBatch`. It returns a `*Page` that holds a
-  pooled query until it is closed, which breaks the no-handle rule and reuses
-  the pages-column type for a response that has a single page. Resolved by
-  replacing it with a push method that has no handle.
-- There is no throwaway member: constant CQL must be prepared before it can
-  join a batch. Resolved by adding an unprepared `AddToBatch`.
+None. Record any deviation from these rules here, with what resolves it.

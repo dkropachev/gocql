@@ -72,10 +72,16 @@ func batchTestServe(t testing.TB, server net.Conn) (byte, []byte) {
 // batchBenchSession returns a session whose one connection answers every
 // request with a void result.
 func batchBenchSession(b testing.TB) *implCluster.Core {
+	return batchServeSession(b, binary.BigEndian.AppendUint32(nil, frm.ResultKindVoid))
+}
+
+// batchServeSession returns a session whose one connection answers every
+// request with a protocol v4 RESULT of body.
+func batchServeSession(b testing.TB, body []byte) *implCluster.Core {
 	s, _, peers := runtimeTestSession(b, 1)
 	go func() {
 		var header [9]byte
-		response := typedTestResponse(b, 4, 0, binary.BigEndian.AppendUint32(nil, frm.ResultKindVoid))
+		response := typedTestResponse(b, 4, 0, body)
 		body := make([]byte, 1<<16)
 		for {
 			if _, err := io.ReadFull(peers[0], header[:]); err != nil {

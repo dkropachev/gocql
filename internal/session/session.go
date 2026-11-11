@@ -13,6 +13,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 // Session owns cluster metadata, pooled connections and typed executions.
@@ -90,26 +91,61 @@ func (s *Session) ExecBatch(ctx context.Context, kind cqltype.BatchKind, batch *
 }
 
 // RunBatch sends batch as one CQL BATCH of kind on s and returns its rows,
-// decoded with decoder. A conditional batch returns one row per conditional
-// statement, or one row reporting that it was not applied. Options are as for
-// ExecBatch. Close the page when done with it.
-func (s *Session) RunBatch[R any](ctx context.Context, kind cqltype.BatchKind, batch *Batch, decoder codec.RowDecoder[R], options ...CompiledOptions) (*Page[R], error) {
+// decoded with decoder. A conditional batch returns rows reporting whether it
+// applied; which rows depends on the server (docs/server-differences.md). A
+// BATCH response is a single page, so paging options are ignored. Options are
+// otherwise as for ExecBatch. The rows hold a pooled query until they are
+// closed, as Prepared.Run's do. A batch sent again once its rows are closed
+// reuses their storage, and allocates nothing while R and decoder stay the
+// same.
+func (s *Session) RunBatch[R any](ctx context.Context, kind cqltype.BatchKind, batch *Batch, decoder codec.RowDecoder[R], options ...CompiledOptions) (Rows[R], error) {
 	if s == nil {
-		return nil, cqltype.TypeValidation("session", "nil session")
+		return Rows[R]{}, cqltype.TypeValidation("session", "nil session")
 	}
 	if decoder == nil {
-		return nil, cqltype.TypeValidation("batch rows", "nil decoder")
+		return Rows[R]{}, cqltype.TypeValidation("batch rows", "nil decoder")
 	}
 	core := s.Core()
 	q, o, err := beginBatch(ctx, core, kind, batch, options)
 	if err != nil {
-		return nil, err
+		return Rows[R]{}, err
 	}
-	bound := &Bound[R]{privateStorage: BoundStorage[R]{InternalRows: decoder}}
-	batch.queryExec(&bound.privateStorage.InternalRequest, &q.state, kind)
-	page, err := q.state.runtime.runSinglePage(ctx, bound, model.StartPage(), 0, o)
+	r := batch.rowsFor(decoder)
+	batch.queryExec(&r.bound.privateStorage.InternalRequest, &q.state, kind)
+	q.hold()
+	rows, err := q.state.runtime.run(ctx, &r.bound, o)
 	q.state.owner.InternalRelease()
-	return page, err
+	if err != nil {
+		return Rows[R]{}, err
+	}
+	return r.retag(rows), nil
+}
+
+// UnpreparedAddToBatch appends statement with value to batch without
+// preparing it. Parameters are described by statement.BindMarkers, as for
+// UnpreparedExec. The parameter plan is compiled on every call; a statement
+// added often is prepared once and added with Prepared.AddToBatch. A member
+// added this way carries no routing token.
+func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement binding.Statement[P, R], value P) error {
+	if s == nil {
+		return cqltype.TypeValidation("session", "nil session")
+	}
+	if batch == nil {
+		return cqltype.TypeValidation("batch", "nil batch")
+	}
+	core := s.Core()
+	if core.Closed() {
+		return runtimeerrors.ErrClosed
+	}
+	if err := binding.ValidateStatement(&statement); err != nil {
+		return err
+	}
+	plan, err := codec.CompileParamPlan(statement.Params, statement.BindMarkers)
+	if err != nil {
+		return err
+	}
+	routing := model.RoutingInfo{Kind: statement.Kind, Conditional: statement.Kind != cqltype.OrdinaryStatement}
+	return batch.addValue(core, cqlText{}, statement.CQL, &routing, plan, statement.BindMarkers, value, true)
 }
 
 // ID returns the globally unique identifier of this session. The driver sends

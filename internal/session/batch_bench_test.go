@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
@@ -66,6 +67,33 @@ func BenchmarkBatch(b *testing.B) {
 					}
 				}
 			})
+		}
+	})
+
+	// A reused conditional batch whose response has two rows.
+	b.Run("Run", func(b *testing.B) {
+		s := batchServeSession(b, runtimeRowsBody(nil, "a", "b"))
+		q := batchTestQuery(b, s)
+		session := InternalWrapSession(s)
+		ctx := context.Background()
+		type row struct{ V cqltype.Bytes }
+		decoder := codec.Row(codec.Column("value", codec.BlobCodec, func(r *row) *cqltype.Bytes { return &r.V }))
+		var batch Batch
+		if err := q.AddToBatch(&batch, []byte("0123456789abcdef")); err != nil {
+			b.Fatal(err)
+		}
+		var dst row
+		b.ReportAllocs()
+		for b.Loop() {
+			rows, err := session.RunBatch(ctx, cqltype.LoggedBatch, &batch, decoder)
+			if err != nil {
+				b.Fatal(err)
+			}
+			for rows.NextInto(&dst) {
+			}
+			if err := rows.Close(); err != nil {
+				b.Fatal(err)
+			}
 		}
 	})
 }

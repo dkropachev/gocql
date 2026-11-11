@@ -82,19 +82,19 @@ func ExampleSession_RunBatch_conditional() {
 			log.Fatal(err)
 		}
 	}
-	page, err := session.RunBatch(ctx, cql.LoggedBatch, &batch, statement.Rows)
+	rows, err := session.RunBatch(ctx, cql.LoggedBatch, &batch, statement.Rows)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer page.Close()
+	defer rows.Close()
 	var value cql.CASResult[previous]
-	for page.NextInto(&value) {
+	for rows.NextInto(&value) {
 		fmt.Println("applied:", value.Applied)
 		if value.Previous.Set {
 			fmt.Println(value.Previous.Value.CK, value.Previous.Value.Version)
 		}
 	}
-	if err := page.Err(); err != nil {
+	if err := rows.Err(); err != nil {
 		log.Fatal(err)
 	}
 }

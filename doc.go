@@ -53,8 +53,9 @@
 // drain. Do not keep Query values in a sync.Pool: a query the pool drops stays
 // open until it is closed.
 //
-// Prepared.AddToBatch and Query.AddToBatch append statements to a Batch;
-// Session.ExecBatch and Session.RunBatch send it.
+// Prepared.AddToBatch, Query.AddToBatch and Session.UnpreparedAddToBatch
+// append statements to a Batch; Session.ExecBatch sends it, and
+// Session.RunBatch sends it and returns the Rows of a conditional batch.
 //
 // Session.PrepareStream prepares a cql.StreamStatement directly for caller
 // storage; its shareable PreparedStream creates a StreamQuery per worker. A

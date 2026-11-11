@@ -8,13 +8,13 @@ import (
 	"context"
 	"fmt"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -46,7 +46,10 @@ type Batch struct {
 	state   batchState
 	routing model.RoutingInfo
 	// exec is the request Session.ExecBatch admits; admission copies it.
-	exec    Bound[codec.EmptyRecord]
+	exec Bound[codec.EmptyRecord]
+	// rows is the *batchRows[R] of the latest RunBatch, reused by the next
+	// RunBatch with the same R once its rows are closed.
+	rows    any
 	lastGen uint64
 	// shared reports that an execution no longer tracked may still read
 	// entries or values: Reset must abandon them instead of reusing them.
@@ -133,16 +136,12 @@ func (b *Batch) requestRouting() model.RoutingInfo {
 	return routing
 }
 
-// validate checks that batch can be sent as kind with options on s.
-func validateBatch(s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, options CompiledOptions) error {
+// validate checks that batch can be sent as kind on s. A BATCH response is
+// one page with no continuation, so paging options do not apply to it and
+// are ignored: the options compiled for statements serve batches too.
+func validateBatch(s *implCluster.Core, kind cqltype.BatchKind, batch *Batch) error {
 	if batch == nil {
 		return cqltype.TypeValidation("batch", "nil batch")
-	}
-	if options.values().PageSize.Set {
-		return &settings.UnsupportedSettingError{Setting: "batch page size", Reason: "native BATCH responses do not support paging"}
-	}
-	if v := options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
-		return &settings.UnsupportedSettingError{Setting: "batch prefetch", Reason: "native BATCH responses do not support paging"}
 	}
 	if len(batch.entries) == 0 {
 		return cqltype.TypeValidation("batch", "requires 1 to 65535 entries")
@@ -267,7 +266,7 @@ func InternalAddBound[R any](batch *Batch, s *implCluster.Core, bound *Bound[R])
 // runBatch sends batch on s without a query and returns its first and
 // only page.
 func runBatch[R any](ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, decoder codec.RowDecoder[R], options CompiledOptions) (*Page[R], error) {
-	if err := validateBatch(s, kind, batch, options); err != nil {
+	if err := validateBatch(s, kind, batch); err != nil {
 		return nil, err
 	}
 	if decoder == nil {
@@ -341,7 +340,7 @@ func beginBatch(ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind
 	if err != nil {
 		return nil, o, err
 	}
-	if err := validateBatch(s, kind, batch, o); err != nil {
+	if err := validateBatch(s, kind, batch); err != nil {
 		return nil, o, err
 	}
 	pool, err := InternalRuntimeFor(s).batchQueries()
@@ -361,6 +360,69 @@ func InternalRunBatch[R any](ctx context.Context, s *implCluster.Core, kind cqlt
 // InternalExecBatch sends batch on s and drains its result.
 func InternalExecBatch(ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, options CompiledOptions) (model.Result, error) {
 	return execBatch(ctx, s, kind, batch, options)
+}
+
+// batchRows is the storage of one RunBatch execution with row type R: its
+// request, its result plans and its iterator. A Batch keeps it, so that a
+// reused batch sent again with RunBatch allocates nothing.
+type batchRows[R any] struct {
+	bound  Bound[R]
+	plans  InternalResultPlanCache[R]
+	holder rowsHolder[R]
+	// gen numbers the executions that used holder, so that a handle kept
+	// from an earlier one is stale. The pooled query each execution runs
+	// on has a generation of its own, which another query can repeat.
+	gen  uint64
+	used bool
+}
+
+// rowsFor returns the storage for a RunBatch of b decoded with decoder. It
+// reuses the storage of b's latest RunBatch with the same R once that
+// execution's rows are closed, keeping its compiled plans while decoder is
+// the same value.
+func (b *Batch) rowsFor[R any](decoder codec.RowDecoder[R]) *batchRows[R] {
+	r, ok := b.rows.(*batchRows[R])
+	if !ok || !r.idle() {
+		r = new(batchRows[R])
+		r.bound.privateStorage.rows = &r.holder
+		r.bound.privateStorage.plans = &r.plans
+		b.rows = r
+	} else if !sameRowDecoder(r.bound.privateStorage.InternalRows, decoder) {
+		r.plans = InternalResultPlanCache[R]{}
+	}
+	r.bound.privateStorage.InternalRows = decoder
+	return r
+}
+
+// idle reports whether no rows of r's latest execution are open.
+func (r *batchRows[R]) idle() bool {
+	if !r.used {
+		return true
+	}
+	rows := &r.holder.rows
+	rows.privateStorage.mu.Lock()
+	closed := rows.privateStorage.closed
+	rows.privateStorage.mu.Unlock()
+	return closed
+}
+
+// retag gives rows, just created in r's storage, a generation of r's own.
+func (r *batchRows[R]) retag(rows Rows[R]) Rows[R] {
+	r.used = true
+	r.gen++
+	rows.impl.gen.Store(r.gen)
+	rows.gen = r.gen
+	return rows
+}
+
+// sameRowDecoder reports whether a and b are the same interface value: the
+// same dynamic type and the same data word. A decoder kept in a variable and
+// passed again matches; an equal decoder built anew may not, which only
+// costs a plan compile. Plain == would panic on decoders that are not
+// comparable, such as cql.Row's.
+func sameRowDecoder[R any](a, b codec.RowDecoder[R]) bool {
+	type iface struct{ tab, data unsafe.Pointer }
+	return *(*iface)(unsafe.Pointer(&a)) == *(*iface)(unsafe.Pointer(&b))
 }
 
 func (e *batchEntry) sourceOrText() statementSource {
