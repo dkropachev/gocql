@@ -1,6 +1,11 @@
 # Lightweight transactions
 
-Set statement Kind to `ConditionalStatement` when known. Server conditional
+Set statement Kind to `ConditionalStatement` when known. `Exec` and
+`ExecBatch` reject a statement or batch known to be conditional with
+`cqlerr.ErrConditionalExec` before sending it, because the result of a
+conditional write reports whether it applied: read it with `One`, `Each`,
+`All`, `Run` or `RunBatch`. ScyllaDB marks conditional statements in
+prepared metadata. Cassandra does not, so declare the kind there. Server conditional
 metadata and SERIAL/LOCAL_SERIAL consistency also force safe conditional
 classification. Conditional requests never speculate and use deterministic
 replica ordering.

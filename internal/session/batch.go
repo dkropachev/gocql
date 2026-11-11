@@ -299,6 +299,9 @@ func (b *Batch) queryExec(dst *InternalExecutionRequest, q *queryState, kind cql
 // execBatch sends batch on s and drains its result, which must have no
 // columns.
 func execBatch(ctx context.Context, s *implCluster.Core, kind cqltype.BatchKind, batch *Batch, options CompiledOptions) (model.Result, error) {
+	if batch != nil && batch.routing.Kind == cqltype.ConditionalStatement {
+		return conditionalExec()
+	}
 	page, err := runBatch(ctx, s, kind, batch, execRowsDecoder{}, options)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err

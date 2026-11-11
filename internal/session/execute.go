@@ -800,6 +800,9 @@ func (rt *InternalSessionRuntime) exec[R any](ctx context.Context, b *Bound[R], 
 	if b == nil {
 		return model.Result{}, cqltype.TypeValidation("binding", "nil binding")
 	}
+	if b.privateStorage.InternalRequest.routing.Kind == cqltype.ConditionalStatement {
+		return conditionalExec()
+	}
 	runctx, cancel, request, err := rt.admit(ctx, b, options)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
@@ -835,6 +838,15 @@ func (rt *InternalSessionRuntime) exec[R any](ctx context.Context, b *Bound[R], 
 	for rows.NextInto(&row) {
 	}
 	return rows.Info(), rows.Err()
+}
+
+// conditionalExec rejects an Exec of a statement known to be conditional
+// before it is sent. It stays out of line so that the check costs exec
+// nothing but a compare.
+//
+//go:noinline
+func conditionalExec() (model.Result, error) {
+	return model.Result{}, runtimeerrors.ErrConditionalExec
 }
 
 type typedAttemptOutcome struct {

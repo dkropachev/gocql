@@ -91,6 +91,13 @@ page state. Explicit paging is the pages column only.
   from each request, and an option would mean compiling options per request.
   Zero uses the resolved page size. Unpaged execution is the page size
   `cql.Unpaged`, as an option or as that argument.
+- The none column (`Exec`, `UnpreparedExec`, `ExecBatch`) rejects a statement
+  or batch the driver knows to be conditional with `cqlerr.ErrConditionalExec`
+  before sending it. A conditional result reports whether the write applied,
+  and the none shape cannot return that. The kind is known when the statement
+  declares it or the server marks it, as ScyllaDB does in prepared metadata.
+  An undeclared kind on Cassandra stays unknown: the driver never parses CQL,
+  so such a request is sent and its result columns are rejected afterwards.
 - Each column uses one verb in every row: `Exec`, `One`, `Each`, `RunPage`.
   Throwaway methods carry the `Unprepared` prefix in front of that verb.
 - `AddToBatch` appears once per reusable form. `Query.Routing` reports where
@@ -135,12 +142,6 @@ and no options.
 
 ## Current deviations
 
-- `ExecBatch` sends a conditional batch and then fails on its result columns,
-  so the write may already be applied when the caller gets the error.
-  Resolved by rejecting a batch whose kind is `ConditionalStatement` in
-  `validateBatch` before it is sent. `Prepared.Exec`, `Query.Exec` and
-  `Session.UnpreparedExec` share this deviation for a single conditional
-  statement, and the same check fixes them.
 - The rows method is `Session.RunBatch`. It returns a `*Page` that holds a
   pooled query until it is closed, which breaks the no-handle rule and reuses
   the pages-column type for a response that has a single page. Resolved by

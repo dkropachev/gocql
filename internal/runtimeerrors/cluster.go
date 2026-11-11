@@ -15,6 +15,11 @@ var (
 // write, or callback. Wait joins that execution before the query is reused.
 var ErrBusy = errors.New("gocql: query is busy")
 
+// ErrConditionalExec is returned, before anything is sent, by an Exec call
+// or ExecBatch for a statement or batch the driver knows to be conditional: its
+// result is a row reporting whether it applied, which Exec cannot return.
+var ErrConditionalExec = errors.New("gocql: conditional statements return rows: use One, Each, All or Run, or RunBatch for a batch")
+
 // ErrStaleRows is reported by a Rows handle whose query has started a later
 // execution. Its storage now belongs to that execution.
 var ErrStaleRows = errors.New("gocql: rows belong to an earlier execution of the query")
