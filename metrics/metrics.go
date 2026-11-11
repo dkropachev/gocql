@@ -33,8 +33,10 @@ type Snapshot struct {
 	// Retries counts attempts the retry policy asked for, and Speculations
 	// the speculative attempts the speculation policy started.
 	Retries, Speculations uint64
-	// Orphans is reserved for requests abandoned while a node may still
-	// answer them. The session does not count them yet, so it reads zero.
+	// Orphans counts requests abandoned while a node may still answer them,
+	// such as attempts sent and then cancelled, including speculative
+	// attempts that lost, or timed out by the client. Each holds its stream until the answer arrives or the
+	// connection closes.
 	Orphans uint64
 	// InFlight is the number of executions started and not yet finished.
 	InFlight int64

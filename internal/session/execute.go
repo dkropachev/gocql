@@ -110,6 +110,9 @@ func (rt *InternalSessionRuntime) metricsSnapshot() metrics.Snapshot {
 	cache := implCluster.SessionData(rt.Core).InternalConnCfg
 	result := metrics.Snapshot{Requests: rt.requests.Load(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), Cancelled: rt.cancelled.Load(), InFlight: rt.inflight.Load()}
 	if cache != nil {
+		if cache.InternalOrphans != nil {
+			result.Orphans = cache.InternalOrphans.Load()
+		}
 		stats := cache.InternalReceiveCache.Stats()
 		result.ReceiveCacheHits, result.ReceiveCacheMisses = stats.Hits, stats.Misses
 		result.ReceiveCacheBytes, result.ReceiveCacheObjects = stats.RetainedBytes, stats.RetainedObjects

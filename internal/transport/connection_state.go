@@ -99,8 +99,13 @@ func (c *Conn) markOrphan(call *InternalCallReq) bool {
 	call.orphaned = true
 	c.orphans++
 	budget := 1024
-	if c.InternalCfg != nil && c.InternalCfg.TypedConfig != nil {
-		budget = c.InternalCfg.TypedConfig.Pool.MaxOrphanedStreams
+	if c.InternalCfg != nil {
+		if c.InternalCfg.InternalOrphans != nil {
+			c.InternalCfg.InternalOrphans.Add(1)
+		}
+		if c.InternalCfg.TypedConfig != nil {
+			budget = c.InternalCfg.TypedConfig.Pool.MaxOrphanedStreams
+		}
 	}
 	budget = min(budget, c.InternalStreams.NumStreams-1)
 	return c.orphans > budget

@@ -146,13 +146,17 @@ type SslOptions struct {
 }
 
 type ConnConfig struct {
-	TypedAuth               connectivity.AuthProvider
-	Dialer                  implEndpoint.InternalLegacyDialer
-	Logger                  *slog.Logger
-	Authenticator           Authenticator
-	Compressor              protocol.Compressor
-	HostDialer              implEndpoint.HostDialer
-	InternalReceiveCache    *wire.ReceiveCache
+	TypedAuth            connectivity.AuthProvider
+	Dialer               implEndpoint.InternalLegacyDialer
+	Logger               *slog.Logger
+	Authenticator        Authenticator
+	Compressor           protocol.Compressor
+	HostDialer           implEndpoint.HostDialer
+	InternalReceiveCache *wire.ReceiveCache
+	// InternalOrphans, when set, counts streams the session's connections
+	// abandoned while the node may still answer them. Copies of the config
+	// share it.
+	InternalOrphans         *atomic.Uint64
 	TypedConfig             *connectivity.Config
 	AuthProvider            func(h *implEndpoint.HostInfo) (Authenticator, error)
 	InternalTlsConfig       *tls.Config

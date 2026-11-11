@@ -10,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"math/rand"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -218,6 +219,8 @@ func TestTypedConn(t *testing.T) {
 	t.Run("ExecuteTyped", func(t *testing.T) {
 		t.Run("CancelKeepsStreamUntilOrphan", func(t *testing.T) {
 			c, server := typedTestConn(t, 4, nil)
+			orphans := new(atomic.Uint64)
+			c.InternalCfg.InternalOrphans = orphans
 			go c.InternalServe(c.InternalCtx)
 			ctx, cancel := context.WithCancel(context.Background())
 			out := make(chan error, 1)
@@ -232,6 +235,9 @@ func TestTypedConn(t *testing.T) {
 			}
 			if c.InternalStreams.InUse() != 1 {
 				t.Fatal("cancel reused stream before orphan arrived")
+			}
+			if got := orphans.Load(); got != 1 {
+				t.Fatalf("orphans = %d, want 1", got)
 			}
 			if _, err := server.Write(typedTestResponse(t, 4, stream, typedTestRowsBody([]byte("orphan")))); err != nil {
 				t.Fatal(err)
