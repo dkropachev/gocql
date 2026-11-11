@@ -20,11 +20,6 @@ type (
 	DialTarget         = implEndpoint.DialTarget
 )
 
-var (
-	ErrCannotFindHost    = implEndpoint.ErrCannotFindHost
-	ErrHostAlreadyExists = implEndpoint.ErrHostAlreadyExists
-)
-
 // IdentityTranslator returns a translator that leaves addresses unchanged.
 func IdentityTranslator() Translator { return implEndpoint.IdentityTranslator() }
 

@@ -25,7 +25,6 @@
 package endpoint
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -35,11 +34,6 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-)
-
-var (
-	ErrCannotFindHost    = errors.New("cannot find host")
-	ErrHostAlreadyExists = errors.New("host already exists")
 )
 
 type InternalNodeState int32
