@@ -5,6 +5,7 @@ package gocql
 
 import (
 	"context"
+	"iter"
 
 	"github.com/scylladb/gocql/v2/cql"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
@@ -83,6 +84,15 @@ func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Sta
 // one call of fn aliases the next row's data: keep bytes.Clone(row.Field).
 func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...Options) (Result, error) {
 	return s.internal().UnpreparedEach(ctx, internalStatement(statement), value, dst, fn, internalOptionList(options)...)
+}
+
+// UnpreparedAll executes an occasional statement and iterates every row
+// across all pages, decoding each into dst, as Query.All does. The statement's
+// query is closed when the loop ends; there is nothing to close. Parameters are
+// described by statement.BindMarkers. At most one Options may be passed; the
+// call validates and resolves it, and omitting it uses the session defaults.
+func (s *Session) UnpreparedAll[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...Options) iter.Seq2[*R, error] {
+	return s.internal().UnpreparedAll(ctx, internalStatement(statement), value, dst, internalOptionList(options)...)
 }
 
 // ExecBatch sends batch as one CQL BATCH request. Its statements must return no

@@ -5,6 +5,7 @@ package session
 
 import (
 	"context"
+	"iter"
 
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/codec"
@@ -43,6 +44,22 @@ func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement bindin
 	}
 	defer q.state.close()
 	return q.Each(ctx, value, dst, fn)
+}
+
+// UnpreparedAll iterates rows as Query.All does and owns its query's cleanup:
+// the query is closed when the iteration ends.
+func (s *Session) UnpreparedAll[P, R any](ctx context.Context, statement binding.Statement[P, R], value P, dst *R, options ...Options) iter.Seq2[*R, error] {
+	return func(yield func(*R, error) bool) {
+		q, err := unpreparedCall(s, statement, options)
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+		defer q.state.close()
+		if _, err := q.Each(ctx, value, dst, yieldRow(yield)); err != nil {
+			yield(nil, err)
+		}
+	}
 }
 
 // unpreparedCall validates and resolves the call's options, a throwaway call

@@ -6,6 +6,7 @@ package session
 import (
 	"context"
 	"errors"
+	"iter"
 
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
@@ -205,4 +206,30 @@ func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, model.Res
 		clearDestination(dst)
 	}
 	return found, result, err
+}
+
+// All executes the query with value and returns an iterator over every row,
+// across all pages, each decoded into dst. Rows stream page by page; they are
+// not loaded into memory. The yielded row is dst and stays valid, borrowed
+// fields included, until the next iteration. An error is yielded once, as
+// (nil, err), and ends the iteration; stopping the loop early releases the
+// execution. All runs Each, so it decodes, pages and releases exactly as
+// Each does; the query is busy while the loop runs.
+func (q *Query[P, R]) All(ctx context.Context, value P, dst *R) iter.Seq2[*R, error] {
+	return func(yield func(*R, error) bool) {
+		if _, err := q.Each(ctx, value, dst, yieldRow(yield)); err != nil {
+			yield(nil, err)
+		}
+	}
+}
+
+// yieldRow adapts a range-over-func yield to an Each callback: the loop
+// stopping becomes StopIteration, which ends Each successfully.
+func yieldRow[R any](yield func(*R, error) bool) func(*R) error {
+	return func(row *R) error {
+		if !yield(row, nil) {
+			return StopIteration
+		}
+		return nil
+	}
 }

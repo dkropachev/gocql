@@ -73,9 +73,9 @@ func BenchmarkReusableQuery(b *testing.B) {
 			name        string
 			rows, bytes int
 		}{{"point", 1, 1024}, {"partition", 128, 4096}} {
-			for _, mode := range []string{"buffered", "stream", "each"} {
-				stream, each := mode == "stream", mode == "each"
-				if each && size.rows == 1 {
+			for _, mode := range []string{"buffered", "stream", "each", "all"} {
+				stream, each, all := mode == "stream", mode == "each", mode == "all"
+				if (each || all) && size.rows == 1 {
 					continue
 				}
 				b.Run(size.name+"/"+mode, func(b *testing.B) {
@@ -150,6 +150,16 @@ func BenchmarkReusableQuery(b *testing.B) {
 							if err != nil {
 								b.Fatal(err)
 							}
+						} else if all {
+							for row, err := range query.All(ctx, codec.EmptyRecord{}, &dst) {
+								if err != nil {
+									b.Fatal(err)
+								}
+								count++
+								if len(*row) != size.bytes || (*row)[0] != 'x' || (*row)[len(*row)-1] != 'x' {
+									b.Fatal("bad diagnostic payload")
+								}
+							}
 						} else if stream {
 							cursor, err := streaming.Run(ctx, codec.EmptyRecord{})
 							if err != nil {
@@ -205,7 +215,7 @@ func BenchmarkReusableQuery(b *testing.B) {
 	b.Run("Loopback", func(b *testing.B) {
 		options := testOptions(Options{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
 		value := loopbackValue
-		for _, workload := range []string{"read", "write", "pread", "pwrite", "pone", "preadctx", "page", "pagectx", "pagepto", "pageb"} {
+		for _, workload := range []string{"read", "write", "pread", "pwrite", "pone", "preadctx", "page", "pageall", "pagectx", "pagepto", "pageb"} {
 			workerCounts := []int{1, 8, 64}
 			if strings.HasPrefix(workload, "page") {
 				workerCounts = []int{1, 4}
@@ -235,6 +245,28 @@ func BenchmarkReusableQuery(b *testing.B) {
 								})
 								if err != nil {
 									return err
+								}
+								if count != loopbackPageCount*loopbackPageRows {
+									return fmt.Errorf("incomplete diagnostic partition: %d rows", count)
+								}
+								return nil
+							}
+						case "pageall":
+							pageOptions := testOptions(Options{PageSize: cqltype.Option[int32]{Set: true, Value: loopbackPageRows}, Prefetch: cqltype.Option[int]{Set: true, Value: 0}, Timeout: cqltype.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
+							statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: implCqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
+							query := codecTestMust(unpreparedQuery(s, statement, pageOptions.Values()))
+							b.Cleanup(query.Close)
+							dst := make([]byte, 0, len(loopbackPageValue))
+							run[i] = func(ctx context.Context) error {
+								count := 0
+								for row, err := range query.All(ctx, codec.EmptyRecord{}, &dst) {
+									if err != nil {
+										return err
+									}
+									if len(*row) != len(loopbackPageValue) {
+										return fmt.Errorf("bad diagnostic row")
+									}
+									count++
 								}
 								if count != loopbackPageCount*loopbackPageRows {
 									return fmt.Errorf("incomplete diagnostic partition: %d rows", count)

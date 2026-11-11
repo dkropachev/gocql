@@ -5,13 +5,14 @@ package gocql
 
 import (
 	"context"
+	"iter"
 
 	"github.com/scylladb/gocql/v2/cql"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
 // Prepared is an immutable typed statement prepared on a session. Share it
-// between goroutines and call Exec, One or Each for ordinary executions. Each
+// between goroutines and call Exec, One, Each or All for ordinary executions. Each
 // call may take one CompiledOptions, built once by Session.CompileOptions, or omit
 // options for the session defaults. A Prepared has no Close obligation.
 type Prepared[P, R any] implSession.Prepared[P, R]
@@ -56,6 +57,27 @@ func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) 
 		return implSession.InternalExecutionErrorResult(err), err
 	}
 	return p.internal().Each(ctx, value, dst, fn, o)
+}
+
+// All iterates every row across all pages, decoding each into dst, as
+// Query.All does. Rows stream page by page; they are not loaded into memory.
+// The yielded row is valid only until the next iteration. An error is yielded
+// once as (nil, err); breaking out of the loop releases the execution. All is
+// safe for concurrent use with independent destinations. At most one
+// CompiledOptions may be passed.
+func (p *Prepared[P, R]) All(ctx context.Context, value P, dst *R, options ...CompiledOptions) iter.Seq2[*R, error] {
+	// All stays small enough to inline, so a range loop over it keeps the
+	// iterator and what it captures on the stack.
+	return func(yield func(*R, error) bool) { preparedAll(p, ctx, value, dst, options, yield) }
+}
+
+func preparedAll[P, R any](p *Prepared[P, R], ctx context.Context, value P, dst *R, options []CompiledOptions, yield func(*R, error) bool) {
+	o, err := internalCompiledOptions(options)
+	if err != nil {
+		yield(nil, err)
+		return
+	}
+	p.internal().All(ctx, value, dst, o)(yield)
 }
 
 // Query creates a worker-owned reusable query with fixed options. It also

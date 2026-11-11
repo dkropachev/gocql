@@ -83,9 +83,14 @@ func BenchmarkExecution(b *testing.B) {
 		writeStmt := binding.Statement[loopbackRow, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k, value) VALUES(?, ?)", Params: codec.Params(codec.ParamAt(0, codec.Int32, func(r loopbackRow) int32 { return r.k }), codec.ParamAt(1, codec.BytesEncoder, func(r loopbackRow) []byte { return r.value })), Rows: codec.EmptyRowDecoder}
 		readStmt := binding.Statement[int32, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: codec.OneParam(codec.Int32), Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 		variants := []string{"bind", "bindborrowed", "query", "userpool", "prepared"}
-		for _, op := range []string{"exec", "one"} {
-			workload := map[string]string{"exec": "pwrite", "one": "pone"}[op]
+		for _, op := range []string{"exec", "one", "each", "all"} {
+			workload := map[string]string{"exec": "pwrite", "one": "pone", "each": "pone", "all": "pone"}[op]
 			for _, variant := range variants {
+				// each and all compare the callback and range forms of the
+				// many-rows reads, on the two forms that offer both.
+				if (op == "each" || op == "all") && variant != "query" && variant != "prepared" {
+					continue
+				}
 				for _, workers := range []int{1, 8, 64} {
 					b.Run(fmt.Sprintf("%s/%s/w%d", op, variant, workers), func(b *testing.B) {
 						s := loopbackTestSession(b, workload)
@@ -112,6 +117,15 @@ func BenchmarkExecution(b *testing.B) {
 									return err
 								}
 								if !found || len(dst) != len(loopbackValue) {
+									return fmt.Errorf("bad diagnostic row")
+								}
+								return nil
+							}
+							checkRows := func(rows int, err error) error {
+								if err != nil {
+									return err
+								}
+								if rows != 1 || len(dst) != len(loopbackValue) {
 									return fmt.Errorf("bad diagnostic row")
 								}
 								return nil
@@ -174,6 +188,40 @@ func BenchmarkExecution(b *testing.B) {
 									found, result, err := q.One(ctx, key, &dst)
 									rpool.Put(q)
 									return check(found, result, err)
+								}
+							case "query/each":
+								run[i] = func(ctx context.Context) error {
+									rows := 0
+									_, err := rq.Each(ctx, key, &dst, func(*[]byte) error { rows++; return nil })
+									return checkRows(rows, err)
+								}
+							case "query/all":
+								run[i] = func(ctx context.Context) error {
+									rows := 0
+									for _, err := range rq.All(ctx, key, &dst) {
+										if err != nil {
+											return err
+										}
+										rows++
+									}
+									return checkRows(rows, nil)
+								}
+							case "prepared/each":
+								run[i] = func(ctx context.Context) error {
+									rows := 0
+									_, err := rp.Each(ctx, key, &dst, func(*[]byte) error { rows++; return nil }, bound)
+									return checkRows(rows, err)
+								}
+							case "prepared/all":
+								run[i] = func(ctx context.Context) error {
+									rows := 0
+									for _, err := range rp.All(ctx, key, &dst, bound) {
+										if err != nil {
+											return err
+										}
+										rows++
+									}
+									return checkRows(rows, nil)
 								}
 							case "prepared/exec":
 								run[i] = func(ctx context.Context) error { _, err := wp.Exec(ctx, input, bound); return err }

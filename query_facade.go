@@ -5,6 +5,7 @@ package gocql
 
 import (
 	"context"
+	"iter"
 
 	"github.com/scylladb/gocql/v2/internal/model"
 
@@ -42,6 +43,25 @@ func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, Result, e
 // one call of fn aliases the next row's data: keep bytes.Clone(row.Field).
 func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error) (Result, error) {
 	return q.internal().Each(ctx, value, dst, fn)
+}
+
+// All iterates every row across all pages, decoding each into dst:
+//
+//	for row, err := range q.All(ctx, value, &dst) {
+//		if err != nil {
+//			return err
+//		}
+//		use(row)
+//	}
+//
+// Rows stream page by page; they are not loaded into memory. The yielded row
+// is dst and, borrowed fields included, is valid only until the next
+// iteration; copy what you keep. An error is yielded once as (nil, err) and
+// ends the loop. Breaking out of the loop releases the execution. There is no
+// cursor to close and no Result; use Each or Run when the Result matters.
+// dst is decoded into as for Each.
+func (q *Query[P, R]) All(ctx context.Context, value P, dst *R) iter.Seq2[*R, error] {
+	return q.internal().All(ctx, value, dst)
 }
 
 // Run returns a cursor that fetches continuation pages as needed. Close the

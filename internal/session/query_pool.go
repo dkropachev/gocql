@@ -6,6 +6,7 @@ package session
 import (
 	"context"
 	"errors"
+	"iter"
 	"math/rand/v2"
 	"runtime"
 	"sync/atomic"
@@ -351,6 +352,35 @@ func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) 
 	}
 	_, result, err := pool.each(ctx, value, dst, fn, o)
 	return result, err
+}
+
+// All binds value, executes the statement once and returns an iterator over
+// every row, across all pages, each decoded into dst. Rows stream page by
+// page; they are not loaded into memory. The yielded row is dst and stays
+// valid, borrowed fields included, until the next iteration. An error is
+// yielded once, as (nil, err), and ends the iteration; stopping the loop early
+// releases the execution and its pooled query. Options are as for Exec. All is
+// safe for concurrent use with independent destinations.
+func (p *Prepared[P, R]) All(ctx context.Context, value P, dst *R, options ...CompiledOptions) iter.Seq2[*R, error] {
+	// All stays small enough to inline, so a range loop over it keeps the
+	// iterator and what it captures on the stack.
+	return func(yield func(*R, error) bool) { p.all(ctx, value, dst, options, yield) }
+}
+
+func (p *Prepared[P, R]) all(ctx context.Context, value P, dst *R, options []CompiledOptions, yield func(*R, error) bool) {
+	o, err := oneShotOptions(options)
+	if err != nil {
+		yield(nil, err)
+		return
+	}
+	pool, err := p.pool()
+	if err != nil {
+		yield(nil, err)
+		return
+	}
+	if _, _, err := pool.each(ctx, value, dst, yieldRow(yield), o); err != nil {
+		yield(nil, err)
+	}
 }
 
 // preparedPoolIdle reports how many idle queries p's pool holds.
