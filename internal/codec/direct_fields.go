@@ -24,6 +24,7 @@ const (
 	directNone      directKind = iota
 	directInt                  // a built-in signed integer codec of width bytes
 	directBlob                 // BlobCodec: a view borrowing the response
+	directText                 // TextCodec or ASCIICodec: a validated view borrowing the response
 	directOwnedBlob            // OwnedBlobCodec: a copy into the field's capacity
 	directBytes                // BytesEncoder
 	directString               // StringEncoder or ASCIIEncoder
@@ -128,6 +129,14 @@ func (f outputField[R, V]) directRowOp() (rowOp[R], bool) {
 		op.columnKind, op.alt, op.compiled = c.kind, c.alternative, c.compiled
 	case ownedBlobCodec:
 		op.kind = directOwnedBlob
+	case textCodec:
+		// The field stays for columns of another kind, whose type error the
+		// codec reports in its own words.
+		op.kind, op.field, op.compiled = directText, f, c.compiled
+		op.columnKind, op.alt = cqltype.TypeText, cqltype.TypeVarchar
+		if c.ascii {
+			op.columnKind, op.alt = cqltype.TypeAscii, 0
+		}
 	default:
 		return rowOp[R]{}, false
 	}
@@ -165,9 +174,26 @@ func (op *rowOp[R]) decodeDirect(reader *RowReader, dst *R) error {
 			*(*cqltype.Bytes)(ptr) = v
 		}
 		return err
+	case directText:
+		return op.decodeText(reader, dst, ptr)
 	default: // directOwnedBlob
 		return ownedBlobCodec{}.decodeColumnInto(reader, (*[]byte)(ptr))
 	}
+}
+
+// decodeText is decodeDirect's directText case, kept out of line so the
+// integer and blob cases keep their code layout.
+//
+//go:noinline
+func (op *rowOp[R]) decodeText(reader *RowReader, dst *R, ptr unsafe.Pointer) error {
+	if column, ok := reader.columns.At(reader.index); ok && column.Type.Kind() != op.columnKind && column.Type.Kind() != op.alt {
+		return op.field.decode(reader, dst)
+	}
+	v, err := textColumn(reader, op.columnKind, op.alt, op.compiled)
+	if err == nil {
+		*(*cqltype.Text)(ptr) = v
+	}
+	return err
 }
 
 // paramOp is one compiled parameter field.

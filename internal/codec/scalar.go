@@ -129,6 +129,19 @@ func blobColumn(r *RowReader, kind, alternative cqltype.Type, compiled bool) (cq
 	return cqltype.BytesView(body, r.lease), nil
 }
 
+// textColumn decodes a text or ascii cell like textCodec.Decode, validating
+// the view it borrows from the response.
+func textColumn(r *RowReader, kind, alternative cqltype.Type, compiled bool) (cqltype.Text, error) {
+	v, err := blobColumn(r, kind, alternative, compiled)
+	if err != nil {
+		return cqltype.Text{}, err
+	}
+	if err := validateText(v, kind == cqltype.TypeAscii); err != nil {
+		return cqltype.Text{}, err
+	}
+	return cqltype.TextView(v), nil
+}
+
 func integerCodec[T signedScalar](kind cqltype.Type, width int64) Codec[T] {
 	return scalarCodec[T]{kind: kind,
 		decodeRow: func(r *RowReader, kind, alternative cqltype.Type, compiled bool) (T, error) {

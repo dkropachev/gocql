@@ -119,6 +119,33 @@ func BenchmarkRowsCodec(b *testing.B) {
 			})
 		}
 	})
+	// BenchmarkRowsCodec/TextFields decodes a row of an int and three text views,
+	// through direct ops and through the fields' interfaces.
+	b.Run("TextFields", func(b *testing.B) {
+		columns := textColumns(b, cqltype.TypeText)
+		rows := CodecTestMust(textRows.Compile(columns))
+		var data []byte
+		data = cell(data, []byte{0, 0, 0, 7}, false)
+		data = cell(data, []byte("a moderately long text value"), false)
+		data = cell(data, []byte("ASCII-CODE-0042"), false)
+		data = cell(data, []byte("tëxt with a few multibyte runes ü"), false)
+		body, _ := wire.NewChain(wire.Borrow(data))
+		for _, mode := range []string{"direct", "interface"} {
+			r := rows
+			if mode == "interface" {
+				r = interfaceOnlyRows(rows)
+			}
+			b.Run("decode/"+mode, func(b *testing.B) {
+				var dst textRow
+				b.ReportAllocs()
+				for i := 0; i < b.N; i++ {
+					if err := r.DecodeInto(NewRowReader(columns, body, nil), &dst); err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		}
+	})
 	b.Run("FusedRowPaged", func(b *testing.B) {
 		columns := cqltype.NewColumns(
 			cqltype.ColumnSpec{Name: "key", Type: rowTestType(b, cqltype.TypeInt)},
