@@ -58,9 +58,9 @@ if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); ok {
 ```
 
 `failure.Result` holds what the execution gathered before it failed, such as
-its attempt count and latency. A successful call names its coordinator in
-`Result.HostID` and `Result.ShardID` instead: the host, and the shard on a
-shard-aware host, of the attempt that produced the result.
+its attempt count and latency. A successful call names its coordinator host
+in `Result.HostID`; an `Observer` sees the shard of every attempt in
+`AttemptEvent.Target`.
 
 ## Connecting
 

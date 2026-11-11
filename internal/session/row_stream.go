@@ -618,7 +618,6 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		s.privateStorage.info.Result.Attempts++
 		s.privateStorage.info.Result.Latency += event.Latency
 		s.privateStorage.info.Result.HostID = event.Target.HostID
-		s.privateStorage.info.Result.ShardID = model.ShortShard(event.Target.ShardID)
 		s.privateStorage.info.Result.AchievedConsistency = consistency
 
 		// Result extensions describe the latest attempt, including terminal server

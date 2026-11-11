@@ -1220,7 +1220,6 @@ type Result struct {
     TraceIDs []UUID
     CustomPayload []PayloadEntry
     AchievedConsistency Consistency
-    ShardID Option[uint16] // shard of HostID, when the host is shard-aware
 }
 ```
 

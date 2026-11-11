@@ -1018,7 +1018,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			}
 			if request.InternalLogical != nil {
 				if coordinator := request.InternalLogical.ddlCoordinator.Load(); coordinator != nil {
-					aggregate.HostID, aggregate.ShardID = *coordinator, cqltype.Option[uint16]{}
+					aggregate.HostID = *coordinator
 					failure = fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", failure)
 					log.raise(cqltype.PartiallyExecuted)
 				}
@@ -1059,7 +1059,6 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			aggregate.Attempts = startedCount
 			aggregate.Latency += outcome.event.Latency
 			aggregate.HostID = outcome.event.Target.HostID
-			aggregate.ShardID = model.ShortShard(outcome.event.Target.ShardID)
 			aggregate.AchievedConsistency = outcome.consistency
 			if response != nil {
 				mergeResponseResult(&aggregate, response)

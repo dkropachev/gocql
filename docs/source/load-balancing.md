@@ -54,9 +54,10 @@ Each stage of a request has its own answer:
   for the candidate replicas. These are the candidates, not a promise: the
   routing policy picks among them when the request runs, and the built-in
   policy picks a random replica.
-- **After executing**: `Result.HostID` and `Result.ShardID` name the host and
-  shard of the attempt that produced the result, and `Result.Attempts` how
-  many attempts ran. A
+- **After executing**: `Result.HostID` names the host of the attempt that
+  produced the result, and `Result.Attempts` how many attempts ran. The shard
+  is not in `Result`: storing it on every call slowed the w64 read path by
+  about 7%, so it comes from the observer below. A
   failed call's `*cqlerr.ExecutionError` lists each attempt's host, shard,
   status and error (see [Errors](errors.md)). For every attempt as it happens,
   including speculative and cancelled ones, implement

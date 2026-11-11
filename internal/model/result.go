@@ -15,23 +15,12 @@ import (
 // read them with the methods of the same names. A Result is a value: copies
 // never observe each other's later additions.
 type Result struct {
-	diag *resultDiagnostics
-	// HostID and ShardID name where the attempt that produced the result was
-	// sent: the host, and the shard when the host is shard-aware.
+	diag                *resultDiagnostics
 	HostID              UUID
 	Attempts            int
 	Latency             time.Duration
 	Rows                int64
 	AchievedConsistency Consistency
-	// ShardID is 16 bits wide, enough for any shard count, so that it fills
-	// the padding after the consistency: Result, returned by value from every
-	// call, keeps its size and its other fields their offsets.
-	ShardID Option[uint16]
-}
-
-// ShortShard narrows an attempt's 32-bit shard to Result.ShardID's width.
-func ShortShard(shard Option[uint32]) Option[uint16] {
-	return Option[uint16]{Value: uint16(shard.Value), Set: shard.Set}
 }
 
 type resultDiagnostics struct {
@@ -123,7 +112,6 @@ func CloneResult(result Result) Result {
 }
 func MergeResult(dst *Result, src Result) {
 	dst.HostID = src.HostID
-	dst.ShardID = src.ShardID
 	dst.Attempts += src.Attempts
 	dst.Latency += src.Latency
 	dst.Rows += src.Rows
