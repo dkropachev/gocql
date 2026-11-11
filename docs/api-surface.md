@@ -30,13 +30,11 @@ executes a statement or reads its results.
 
 ## The grid
 
-Cells marked *planned* do not exist yet.
-
 | | None | One row | Many rows | Pages |
 |---|---|---|---|---|
-| Throwaway | `Session.UnpreparedExec` | `Session.UnpreparedOne` | `Session.UnpreparedEach`, `Session.UnpreparedAll` *planned* | empty by design |
-| Worker-owned | `Query.Exec` | `Query.One` | `Query.Each`, `Query.All` *planned*, `Query.Run` | `Query.RunPage` |
-| Shared | `Prepared.Exec` | `Prepared.One` | `Prepared.Each`, `Prepared.All` *planned*, `Prepared.Run` *planned* | `Prepared.RunPage` *planned* |
+| Throwaway | `Session.UnpreparedExec` | `Session.UnpreparedOne` | `Session.UnpreparedEach`, `Session.UnpreparedAll` | empty by design |
+| Worker-owned | `Query.Exec` | `Query.One` | `Query.Each`, `Query.All`, `Query.Run` | `Query.RunPage` |
+| Shared | `Prepared.Exec` | `Prepared.One` | `Prepared.Each`, `Prepared.All`, `Prepared.Run` | `Prepared.RunPage` |
 
 Throwaway pages stay empty: a caller that pages through results is executing
 the statement repeatedly, so it prepares the statement.
@@ -83,12 +81,16 @@ page state. Explicit paging is the pages column only.
   - **Pull**, `Run` → `Rows`: the caller advances, picks the destination of
     each row, and can pin a page with `Retain`. Absent from the throwaway row,
     because it returns a handle.
-- A handle returned by the shared form (`Rows`, `Page`) holds a pooled query.
-  It carries a `runtime.AddCleanup` that releases the query if the handle is
-  dropped unclosed, so a leaked handle cannot hold `Session.Close` open.
-- A setting that changes how a cell executes (page size, consistency) is an
-  option, not a new method. Unpaged execution is the page size
-  `PageSize: cql.Unpaged`.
+- A handle returned by the shared form (`Rows`, `Page`) holds a pooled query
+  until it is closed. The session registers that query while the handle is
+  open, so `Session.Close` stops the handle instead of waiting for it, and a
+  `runtime.AddCleanup` releases the query if the handle is dropped unclosed.
+- A setting that changes how a cell executes (consistency, timeouts) is an
+  option, not a new method. The page size of the pages column is the
+  exception: it is a `RunPage` argument, because a paginated endpoint takes it
+  from each request, and an option would mean compiling options per request.
+  Zero uses the resolved page size. Unpaged execution is the page size
+  `cql.Unpaged`, as an option or as that argument.
 - Each column uses one verb in every row: `Exec`, `One`, `Each`, `RunPage`.
   Throwaway methods carry the `Unprepared` prefix in front of that verb.
 - `AddToBatch` appears once per reusable form. `Query.Routing` reports where
@@ -97,9 +99,4 @@ page state. Explicit paging is the pages column only.
 
 ## Current deviations
 
-Update this list as each one is resolved.
-
-- `Query.All`, `Prepared.All` and `Session.UnpreparedAll` are missing from the
-  many-rows range mode. They must benchmark as fast as `Each` before they ship.
-- `Prepared.Run` is missing from the shared pull mode.
-- `Prepared.RunPage` is missing from the shared pages cell.
+None. Record any deviation from this rule here, with what resolves it.

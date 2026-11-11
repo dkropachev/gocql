@@ -4,9 +4,10 @@
 `Params` or `Rows` means none for `cql.EmptyParams` or `cql.EmptyRow`. Prepare
 once and share immutable prepared handles. To execute a prepared statement
 once from any goroutine, call `prepared.Exec(ctx, input)`,
-`prepared.One(ctx, input, &dst)` or `prepared.Each(ctx, input, &dst, fn)`.
-`Exec` and `Each` return `(Result, error)`, `One` returns
-`(bool, Result, error)`. They run on queries the statement keeps, and take at
+`prepared.One(ctx, input, &dst)`, `prepared.Each(ctx, input, &dst, fn)` or
+`prepared.All(ctx, input, &dst)`. `Exec` and `Each` return `(Result, error)`,
+`One` returns `(bool, Result, error)`, and `All` returns an iterator for a
+range loop that yields each row and, once, any error. They run on queries the statement keeps, and take at
 most one `CompiledOptions` for that call: compile `Options` for the session once with
 `session.CompileOptions(options)` and reuse the result, or pass none for the
 session default. They return once the execution has finished. `One` detaches borrowed fields
@@ -21,9 +22,13 @@ and other callback errors are returned and reported to observers as failures.
 `Result.Rows` counts rows fetched in response pages, which may exceed the number
 of callback invocations after early stopping.
 
+`prepared.Run(ctx, input)` returns `Rows` for pull iteration and
+`prepared.RunPage(ctx, input, state, pageSize)` one `Page` for explicit paging.
+Each handle holds one of the statement's pooled queries until it is closed.
+
 For manual cursor lifetimes, explicit paging, or a worker that runs one
 statement repeatedly and benefits from skipping the pool hand-off, create one query per worker
-with `prepared.Query(options)`; it has the same `Exec`, `One` and `Each` plus
+with `prepared.Query(options)`; it has the same `Exec`, `One`, `Each`, `All`,
 `Run` and `RunPage`.
 The `session.Unprepared*` calls run a statement without preparing it and take the
 parameter columns from `Statement.BindMarkers`. To decode into caller storage,

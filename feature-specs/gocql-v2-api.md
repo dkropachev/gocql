@@ -590,6 +590,9 @@ func (s *Session) Prepare[P, R any](context.Context, Statement[P, R], ...Prepare
 func (p *Prepared[P, R]) Exec(context.Context, P, ...CompiledOptions) (Result, error)
 func (p *Prepared[P, R]) One(context.Context, P, *R, ...CompiledOptions) (bool, Result, error)
 func (p *Prepared[P, R]) Each(context.Context, P, *R, func(*R) error, ...CompiledOptions) (Result, error)
+func (p *Prepared[P, R]) All(context.Context, P, *R, ...CompiledOptions) iter.Seq2[*R, error]
+func (p *Prepared[P, R]) Run(context.Context, P, ...CompiledOptions) (Rows[R], error)                // holds a pooled query until closed
+func (p *Prepared[P, R]) RunPage(context.Context, P, PageState, int32, ...CompiledOptions) (*Page[R], error)
 func (p *Prepared[P, R]) AddToBatch(*Batch, P) error
 
 // Worker-owned reusable queries.
@@ -597,11 +600,13 @@ func (p *Prepared[P, R]) Query(Options) (*Query[P, R], error)
 func (s *Session) UnpreparedExec[P any](context.Context, Statement[P, EmptyRow], P, ...Options) (Result, error)
 func (s *Session) UnpreparedOne[P, R any](context.Context, Statement[P, R], P, *R, ...Options) (bool, Result, error)
 func (s *Session) UnpreparedEach[P, R any](context.Context, Statement[P, R], P, *R, func(*R) error, ...Options) (Result, error)
+func (s *Session) UnpreparedAll[P, R any](context.Context, Statement[P, R], P, *R, ...Options) iter.Seq2[*R, error]
 func (q *Query[P, R]) Exec(context.Context, P) (Result, error)
 func (q *Query[P, R]) Each(context.Context, P, *R, func(*R) error) (Result, error)
 func (q *Query[P, R]) One(context.Context, P, *R) (bool, Result, error)
+func (q *Query[P, R]) All(context.Context, P, *R) iter.Seq2[*R, error]
 func (q *Query[P, R]) Run(context.Context, P) (Rows[R], error)
-func (q *Query[P, R]) RunPage(context.Context, P, PageState) (*Page[R], error)
+func (q *Query[P, R]) RunPage(context.Context, P, PageState, int32) (*Page[R], error) // page size: 0 resolved, cql.Unpaged
 func (q *Query[P, R]) Routing(P) (RoutingInfo, error)
 func (q *Query[P, R]) AddToBatch(*Batch, P) error
 func (q *Query[P, R]) Close()                       // stop at once
@@ -611,16 +616,26 @@ func (s *Session) ExecBatch(context.Context, BatchKind, *Batch, ...CompiledOptio
 func (s *Session) RunBatch[R any](context.Context, BatchKind, *Batch, RowDecoder[R], ...CompiledOptions) (*Page[R], error)
 ```
 
-Prepared.Exec, One and Each run on queries the prepared statement keeps in a
-lock-free pool, so they allocate no per-call execution state. A worker-owned
-Query skips that pool hand-off (about 2 to 4 percent of client CPU at 64
-workers on the loopback benchmark), resolves its Options once, and is the only
-form whose handles (Rows, Page) outlive the call; it keeps Exec, One and Each
-for workers that run one statement repeatedly. Both forms report results the same way. One detaches borrowed fields before
+Prepared.Exec, One, Each and All run on queries the prepared statement keeps in
+a lock-free pool, so they allocate no per-call execution state. Prepared.Run and
+RunPage return a handle that holds a pooled query until it is closed: the
+session registers that query while the handle is open, so Session.Close stops
+the handle, and a handle dropped without Close releases its query once the
+garbage collector finds it. A worker-owned Query skips the pool hand-off (about
+2 to 4 percent of client CPU at 64 workers on the loopback benchmark) and
+resolves its Options once; it keeps the same calls for workers that run one
+statement repeatedly.
+
+All is the range-over-func form of Each: it yields dst for every row across
+all pages, valid until the next iteration, then any error once as (nil, err);
+breaking out of the loop releases the execution. It returns no Result. RunPage
+takes the page size as an argument rather than an option, so a paginated
+endpoint can take it from each request without compiling options: zero uses
+the resolved page size and cql.Unpaged requests the whole result. Both forms report results the same way. One detaches borrowed fields before
 releasing the response, preserving already-owned built-in destination buffers.
 Each lends borrowed fields only during its callback. Custom row/value decoders
 fall back to their recursive Clone contract when One detaches results.
-Session.UnpreparedExec, UnpreparedOne and UnpreparedEach provide occasional typed
+Session.UnpreparedExec, UnpreparedOne, UnpreparedEach and UnpreparedAll provide occasional typed
 CQL text execution without a caller-owned query. They take at most one plain
 Options and validate it during the call. Their cleanup stops admission
 on every return and keeps any remaining drain registered with the session.

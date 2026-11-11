@@ -14,9 +14,9 @@ import (
 
 // Prepared is an immutable typed statement prepared on a session. Share it
 // between goroutines and call Exec, One, Each or All for ordinary executions,
-// Run or RunPage for a handle the caller closes. Each
-// call may take one CompiledOptions, built once by Session.CompileOptions, or omit
-// options for the session defaults. A Prepared has no Close obligation.
+// or Run or RunPage for a handle the caller closes. Each call may take one
+// CompiledOptions, built once by Session.CompileOptions, or omit options for
+// the session defaults. A Prepared has no Close obligation.
 type Prepared[P, R any] implSession.Prepared[P, R]
 
 func (p *Prepared[P, R]) internal() *implSession.Prepared[P, R] {

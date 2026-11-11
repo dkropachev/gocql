@@ -33,15 +33,18 @@
 // Exec and Each return (Result, error) and One returns (bool, Result, error),
 // on Prepared and Query alike. One detaches borrowed fields before returning;
 // Each lends them only until its callback returns. Returning StopIteration
-// from Each stops successfully; other callback errors are returned.
+// from Each stops successfully; other callback errors are returned. All is the
+// range form of Each: a for-range loop over All yields every row, valid until
+// the next iteration, and any error once; breaking out releases the execution.
+// Prepared.Run returns Rows to iterate with NextInto and close, and
+// Prepared.RunPage returns one Page from a saved PageState with a page size
+// argument; each handle holds a pooled query until it is closed.
 //
 // Prepared.Query creates a reusable query owned by one goroutine. It resolves
 // its Options once and saves the pool hand-off of the one-shot calls (about 2
-// to 4 percent of client CPU at high concurrency), and it adds the executions
-// whose handles outlive the call: Run returns Rows to iterate with NextInto and
-// close, and RunPage pages explicitly from a saved PageState. The page size
-// cql.Unpaged requests the whole result in one response. Session.UnpreparedExec, UnpreparedOne and
-// UnpreparedEach run occasional CQL text statements without server preparation
+// to 4 percent of client CPU at high concurrency), and has the same calls. The
+// page size cql.Unpaged requests the whole result in one response.
+// Session.UnpreparedExec, UnpreparedOne, UnpreparedEach and UnpreparedAll run occasional CQL text statements without server preparation
 // and without a query to close; prepare a statement that runs repeatedly. Parameters are
 // copied during execution admission. A call while
 // a Rows, Page or RowStream of the query is open, or while another goroutine's

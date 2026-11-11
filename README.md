@@ -72,17 +72,41 @@ reuse their capacity, so a slice kept from one row aliases the next row's data:
 keep `bytes.Clone(row.Field)`. Return `gocql.StopIteration` to stop `Each` successfully; other
 callback errors are returned and recorded as failures.
 
+`prepared.All(ctx, input, &dst)` is the range form of `Each`:
+
+```go
+for row, err := range prepared.All(ctx, input, &dst) {
+	if err != nil {
+		return err
+	}
+	use(row)
+}
+```
+
+Rows stream page by page, not into memory; each yielded row is valid until the
+next iteration, and `break` releases the execution. An error is yielded once.
+`All` returns no `Result`; use `Each` when the result matters.
+`prepared.Run(ctx, input)` returns `Rows` for pull iteration, and
+`prepared.RunPage(ctx, input, state, pageSize)` returns one `Page` for explicit
+paging, such as a paginated endpoint that hands its client a cursor. Both hold
+one of the statement's pooled queries until closed; `Session.Close` stops
+handles still open, and a handle dropped without Close releases its query once
+collected.
+
 `prepared.Query(options)` creates a reusable query owned by one worker; any
 number of queries can share one preparation. It resolves its options once and
 skips the one-shot calls' pool hand-off, which saves about 2 to 4 percent of
 client CPU at high concurrency, and it adds the executions whose handles
 outlive the call: `Run` returns `Rows`, iterated with `NextInto` and closed by
 the caller; and `RunPage` resumes from a saved `PageState` for explicit paging.
-The page size `cql.Unpaged` (`Options{PageSize: cql.Some(cql.Unpaged)}`)
-requests the whole result in one response.
+It also has `All`. `RunPage` takes the page size as an argument, so a size
+that changes per request needs no new options; zero uses the resolved page
+size. The page size `cql.Unpaged`, as that argument or as
+`Options{PageSize: cql.Some(cql.Unpaged)}`, requests the whole result in one
+response.
 
-`session.UnpreparedExec`, `session.UnpreparedOne`, and `session.UnpreparedEach`
-handle occasional CQL text executions without leaving a query to close; prepare
+`session.UnpreparedExec`, `session.UnpreparedOne`, `session.UnpreparedEach` and
+`session.UnpreparedAll` handle occasional CQL text executions without leaving a query to close; prepare
 a statement that runs repeatedly. Each call copies its parameters during admission. A call while
 a `Rows`, `Page` or stream of the query is open, or while another goroutine's
 call runs, returns `ErrBusy`; a call after an execution that already returned

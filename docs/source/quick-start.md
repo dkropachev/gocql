@@ -15,7 +15,8 @@ Declare a `cql.Statement[P,R]` with `CQL`, `Params` and `Rows`.
 `session.Prepare(ctx, statement)` prepares it and validates its codecs
 against server metadata. The prepared statement is safe to share between
 goroutines and needs no Close: `prepared.Exec` runs a statement without
-results, `prepared.One` reads one row and `prepared.Each` visits every row.
+results, `prepared.One` reads one row, and `prepared.Each` or a range loop over
+`prepared.All` visits every row.
 A statement without results has the row type `cql.EmptyRow`; one with no bind
 markers takes `cql.EmptyParams`. Leave `Params` or `Rows` nil for those empty
 types; `cql.Command(text)` builds a statement with neither, such as DDL.
@@ -24,7 +25,7 @@ Parameters are copied on admission.
 A worker that runs one statement many times can own a reusable query:
 `prepared.Query(options)` keeps parameter buffers and resolved options across
 executions, and several queries can share one preparation. A query has the
-same `Exec`, `One` and `Each`, plus `query.Run`, which returns typed rows:
+same `Exec`, `One`, `Each` and `All`, plus `query.Run`, which returns typed rows:
 check `Rows.Err()` after iteration and close the rows. A query call while a
 `Rows` of that query is open, or while another goroutine's call runs, returns
 `ErrBusy`. Close the query when the worker finishes with `defer query.Close()`.
