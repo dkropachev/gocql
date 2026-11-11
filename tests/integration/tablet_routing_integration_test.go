@@ -25,7 +25,7 @@ type tabletObservation struct {
 	stable    bool
 }
 
-func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table cql.UUID, token int64) tabletObservation {
+func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session[testDialect], table cql.UUID, token int64) tabletObservation {
 	t.Helper()
 	type parameters struct {
 		Table cql.UUID

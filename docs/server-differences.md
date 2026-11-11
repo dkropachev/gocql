@@ -12,6 +12,35 @@ not yet checked against a live cluster. They are marked **unverified**. Add an
 integration assertion before relying on one, and drop the mark once it is
 checked.
 
+## Dialects
+
+A session is opened for one dialect, chosen by the caller as the type
+parameter of `Connect` (`dialect.go`): `ScyllaV4`, `CassandraV4` or
+`CassandraV5`. A dialect sets two things in the session's settings, at
+`Connect` and never again:
+
+- **Protocol version** (`settings.Config.Protocol`). Every connection speaks
+  it. There is no negotiation and no fallback: a server that refuses it fails
+  the connection. What each version puts on the wire is defined once per
+  version in `internal/protocol/version_v4.go` and `version_v5.go`, and code
+  asks a connection's `protocol.Version`, never compares version numbers.
+- **Server** (`settings.Config.Server`). Opening the session checks the
+  control connection against it (`cluster.checkServer`) and fails with
+  `cqlerr.ServerMismatchError` on the other database. The zero `ServerAny`
+  checks nothing; only the driver's internal tests use it.
+
+Behaviour that depends on the server is decided from these values when a
+statement is prepared or a decoder compiled, never per request or per row.
+Only `Session` carries the dialect type. `Prepared`, `Query`, `Batch` and
+`Rows` do not, so that a dialect does not spread through every signature. API
+that only one dialect supports takes a `*Session` of that dialect, which makes
+using it with another a compile error.
+
+A method called on a type parameter goes through Go's instantiation
+dictionary, which measured 2.5 times slower than the version branch it would
+replace. So the dialect type is only read at `Connect`, and hot paths read the
+plain values it set.
+
 ## Conditional statements (LWT)
 
 Every conditional response is a ROWS result whose first column is `[applied]`
@@ -121,7 +150,7 @@ negotiation or metadata does not drop one.
 
 | Difference | Driver |
 |---|---|
-| Highest protocol version: Cassandra v5, ScyllaDB v4 plus extensions | Version negotiation |
+| Highest protocol version: Cassandra v5, ScyllaDB v4 plus extensions | The dialect fixes the version (`CassandraV5`, `ScyllaV4`); nothing is negotiated |
 | Result metadata ID: v5 on Cassandra, v4 via `SCYLLA_USE_METADATA_ID` on ScyllaDB | `internal/transport/conn.go`, `internal/protocol/framer.go` |
 | Shard information in SUPPORTED (`SCYLLA_SHARD`, `SCYLLA_NR_SHARDS`, `SCYLLA_SHARD_AWARE_PORT` and others): ScyllaDB only | `internal/endpoint/scylla.go` |
 | Tablet routing hint in the custom payload (`tablets-routing-v1`): ScyllaDB only | `internal/tablets/hint_parser.go` |

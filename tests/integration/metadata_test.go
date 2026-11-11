@@ -53,7 +53,7 @@ func TestMetadata(t *testing.T) {
 		config := createV2Cluster(func(c *gocql.ConfigBuilder) {
 			c.NoDiscovery().WithConnectionsPerHost(1).NoAdvancedShardAwareness()
 		})
-		s, err := gocql.Connect(ctx, mustBuild(t, config))
+		s, err := gocql.Connect[testDialect](ctx, mustBuild(t, config))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -168,7 +168,7 @@ func TestMetadata(t *testing.T) {
 
 			cluster := createV2Cluster().WithIgnoreEvents(gocql.TopologyEvent, gocql.StatusEvent)
 
-			sess, err := gocql.Connect(context.Background(), mustBuild(t, cluster))
+			sess, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, cluster))
 			if err != nil {
 				t.Fatalf("unable to create session: %v", err)
 			}
@@ -200,7 +200,7 @@ func TestMetadata(t *testing.T) {
 		t.Run("SchemaChange", func(t *testing.T) {
 			cluster := createV2Cluster()
 
-			sess, err := gocql.Connect(context.Background(), mustBuild(t, cluster))
+			sess, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, cluster))
 			if err != nil {
 				t.Fatalf("unable to create session: %v", err)
 			}
@@ -266,7 +266,7 @@ func TestMetadata(t *testing.T) {
 		})
 		t.Run("InvalidPeer", func(t *testing.T) {
 			t.Parallel()
-			if *flagDistribution != "cassandra" {
+			if *flagDistribution != "cassandra" || testDialectProtocol != 4 {
 				t.Skip("incomplete-peer wire fixture uses Cassandra's native v4 metadata")
 			}
 			if *flagRunSslTest {
@@ -277,9 +277,9 @@ func TestMetadata(t *testing.T) {
 			fixture := &incompletePeerDialer{}
 			// TLS is never set here: the test skips under -runssl above.
 			config := createV2ClusterWithout(fixtureProtocol|fixtureCompression, func(c *gocql.ConfigBuilder) {
-				c.WithProtocolVersion(gocql.Protocol4).WithCompression(gocql.NoCompression).WithDialer(fixture)
+				c.WithCompression(gocql.NoCompression).WithDialer(fixture)
 			})
-			session, err := gocql.Connect(context.Background(), mustBuild(t, config))
+			session, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, config))
 			require.NoError(t, err)
 			defer session.Close()
 			require.Positive(t, fixture.injected.Load(), "discovery must consume injected incomplete peer")

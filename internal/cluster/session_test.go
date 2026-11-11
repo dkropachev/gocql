@@ -44,7 +44,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -280,7 +279,7 @@ func TestSession(t *testing.T) {
 			// Validate's call passes, Session.init's sees zero.
 			{name: "after Validate", allowed: 1, wantErr: "no connection attempted"},
 			// Session.init must keep the limit it checked, not ask again.
-			{name: "after the check", allowed: 2, wantErr: "no host reachable during protocol discovery: 127.0.0.1:1: "},
+			{name: "after the check", allowed: 2, wantErr: "no host reachable during control connection: 127.0.0.1:1: "},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
@@ -403,40 +402,6 @@ func TestSession(t *testing.T) {
 		p.InternalConfig.LifecycleObserver = panicLifecycle{}
 		sessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "test", At: time.Now()})
 		s.CloseV2Peripheral()
-	})
-
-	t.Run("ParseProtocolFromError", func(t *testing.T) {
-		t.Parallel()
-
-		tests := [...]struct {
-			err   error
-			proto int
-		}{
-			{
-				err: &transport.InternalProtocolError{
-					InternalFrame: &frm.ErrorFrame{
-						Code:    0x10,
-						Message: "Invalid or unsupported protocol version (5); the lowest supported version is 3 and the greatest is 4",
-					},
-				},
-				proto: protocol.ProtoVersion4,
-			},
-			{
-				err: &transport.InternalProtocolError{
-					InternalFrame: func() *frm.ErrorFrame {
-						f := frm.NewErrorFrame(frm.FrameHeader{Version: 0x83}, 0x10, "Invalid or unsupported protocol version: 5")
-						return &f
-					}(),
-				},
-				proto: 3,
-			},
-		}
-
-		for i, test := range tests {
-			if proto := parseProtocolFromError(test.err); proto != test.proto {
-				t.Errorf("%d: exepcted proto %d got %d", i, test.proto, proto)
-			}
-		}
 	})
 
 	// TestSession/PseudoRandomUUID covers the fallback newSessionID uses if RandomUUID

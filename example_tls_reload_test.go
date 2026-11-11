@@ -28,7 +28,7 @@ func ExampleNewTLSFiles() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	session, err := gocql.Connect(context.Background(), config)
+	session, err := gocql.Connect[gocql.ScyllaV4](context.Background(), config)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func ExampleTLSSource() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	session, err := gocql.Connect(context.Background(), config)
+	session, err := gocql.Connect[gocql.ScyllaV4](context.Background(), config)
 	if err != nil {
 		log.Fatal(err)
 	}

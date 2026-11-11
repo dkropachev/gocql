@@ -33,7 +33,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
-func admitExecution[R any](a0 context.Context, a1 *gocql.Session, a2 *implSession.Bound[R], a3 gocql.CompiledOptions) (context.Context, context.CancelFunc, *executionRequest, error) {
+func admitExecution[R any](a0 context.Context, a1 *gocql.Session[testDialect], a2 *implSession.Bound[R], a3 gocql.CompiledOptions) (context.Context, context.CancelFunc, *executionRequest, error) {
 	return implSession.InternalAdmitExecution[R](a0, (*implSession.Session)(a1).Core(), a2, implSession.CompiledOptions(a3))
 }
 
@@ -64,7 +64,7 @@ func newPage[R any](a0 *responsePage, a1 cql.RowDecoder[R], a2 func()) (*gocql.P
 	return (*gocql.Page[R])(result), err
 }
 
-func newSchemaSource(a0 *gocql.Session) implMetadata.Source {
+func newSchemaSource(a0 *gocql.Session[testDialect]) implMetadata.Source {
 	return (*implSession.Session)(a0).Core().NewSchemaSource()
 }
 
@@ -74,7 +74,7 @@ func readV2SystemRows[P any, R any](a0 context.Context, a1 *driverConn, a2 cql.S
 	return implCluster.InternalReadV2SystemRows[P, R](a0, a1, fixtureStatement(a2), a3, a4)
 }
 
-func resolveOptions(a0 *gocql.Session, a1 gocql.Options) (resolvedOptions, error) {
+func resolveOptions(a0 *gocql.Session[testDialect], a1 gocql.Options) (resolvedOptions, error) {
 	o, err := a0.CompileOptions(a1)
 	if err != nil {
 		return resolvedOptions{}, err
@@ -84,7 +84,7 @@ func resolveOptions(a0 *gocql.Session, a1 gocql.Options) (resolvedOptions, error
 
 type resolvedOptions = implSession.InternalResolvedOptions
 
-func runtimeFor(a0 *gocql.Session) *sessionRuntime {
+func runtimeFor(a0 *gocql.Session[testDialect]) *sessionRuntime {
 	return implSession.InternalRuntimeFor((*implSession.Session)(a0).Core())
 }
 

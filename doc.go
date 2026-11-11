@@ -23,8 +23,11 @@
  */
 
 // Package gocql implements the typed Cassandra and ScyllaDB native protocol API.
-// Connect opens a validated Config. Statements declare parameter encoders and row
-// decoders. Session.Prepare creates shareable immutable plans.
+// Connect opens a validated Config as a Session of a Dialect, the database
+// and native protocol version the caller connects to: ScyllaV4, CassandraV4
+// or CassandraV5. The driver negotiates no version. Statements declare
+// parameter encoders and row decoders. Session.Prepare creates shareable
+// immutable plans.
 //
 // Prepared.Exec, One and Each execute a prepared statement once. They are safe
 // for concurrent use and run on queries the statement keeps for them, so they

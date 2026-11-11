@@ -40,7 +40,7 @@ func probeSelectWithoutFrom() {
 		selectWithoutFromProbeErr = err
 		return
 	}
-	session, err := gocql.Connect(context.Background(), config)
+	session, err := gocql.Connect[testDialect](context.Background(), config)
 	if err != nil {
 		selectWithoutFromProbeErr = err
 		return
@@ -79,16 +79,16 @@ func isRejectedByServer(err error) bool {
 	code := serverErrorCode(err)
 	return code == cqlerr.ErrCodeSyntax || code == cqlerr.ErrCodeInvalid
 }
-func createSessionWithoutKeyspace(t testing.TB) *gocql.Session {
+func createSessionWithoutKeyspace(t testing.TB) *gocql.Session[testDialect] {
 	t.Helper()
 	// createV2Cluster never sets a keyspace; only createV2SessionFromConfig does.
-	session, err := gocql.Connect(context.Background(), mustBuild(t, createV2Cluster()))
+	session, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, createV2Cluster()))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return session
 }
-func noFromOne(t testing.TB, s *gocql.Session, stmt string, values ...cql.Value) cql.DynamicRow {
+func noFromOne(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...cql.Value) cql.DynamicRow {
 	t.Helper()
 	row, err := v2ReadOne(context.Background(), s, stmt, values...)
 	if err != nil {
@@ -120,7 +120,7 @@ func noFromText(t testing.TB, row cql.DynamicRow, index int) string {
 	}
 	return value.String()
 }
-func noFromRows(t testing.TB, s *gocql.Session, stmt string, values ...cql.Value) gocql.Rows[cql.DynamicRow] {
+func noFromRows(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...cql.Value) gocql.Rows[cql.DynamicRow] {
 	t.Helper()
 	rows, err := v2Query(context.Background(), s, stmt, values...)
 	if err != nil {

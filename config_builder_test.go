@@ -54,7 +54,7 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("ZeroConfigRejected", func(t *testing.T) {
-		_, err := Connect(context.Background(), Config{})
+		_, err := Connect[ScyllaV4](context.Background(), Config{})
 		if _, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || !strings.Contains(err.Error(), "NewConfig") {
 			t.Fatalf("Connect(Config{}) = %v, want a validation error naming NewConfig", err)
 		}
@@ -123,7 +123,7 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("CorrectionsAndResets", func(t *testing.T) {
-		b := NewConfig().WithContactPoints("h").WithProtocolVersion(99).WithProtocolVersion(Protocol4).
+		b := NewConfig().WithContactPoints("h").
 			WithHeartbeat(-time.Second, -time.Second).NoHeartbeat().
 			WithIgnoreEvents(OverflowEvent).WithIgnoreEvents(StatusEvent).
 			WithTLS(StaticTLS(nil)).WithTLS(nil).

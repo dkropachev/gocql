@@ -21,7 +21,7 @@ func testV2InvalidDatacenter(t *testing.T, options routing.Options) {
 	t.Helper()
 	cluster := createV2Cluster()
 	v2ConfigureRouting(t, cluster, options)
-	session, err := gocql.Connect(context.Background(), mustBuild(t, cluster))
+	session, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, cluster))
 	if session != nil {
 		session.Close()
 	}
@@ -36,7 +36,7 @@ func testV2InvalidDatacenter(t *testing.T, options routing.Options) {
 func testIfPolicyInitializedProperly(t *testing.T, cluster gocql.Config, keyspace string) {
 	t.Helper()
 	ctx := context.Background()
-	session, err := gocql.Connect(ctx, cluster)
+	session, err := gocql.Connect[testDialect](ctx, cluster)
 	if err != nil {
 		t.Fatalf("failed to connect: %v", err)
 	}

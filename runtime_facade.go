@@ -40,15 +40,17 @@ const MaxBatchStatements = implCluster.MaxBatchStatements
 
 const ClientRouteEvent = implCluster.ClientRouteEvent
 
-// Connect opens a session with config, which must come from
-// ConfigBuilder.Build.
-func Connect(ctx context.Context, config Config) (*Session, error) {
-	settings, err := config.resolved()
+// Connect opens a session of dialect D with config, which must come from
+// ConfigBuilder.Build. D fixes the protocol version and the database:
+// Connect fails when the cluster does not speak that version, or is not that
+// database (cqlerr.ServerMismatchError).
+func Connect[D Dialect](ctx context.Context, config Config) (*Session[D], error) {
+	settings, err := dialectSettings[D](config)
 	if err != nil {
 		return nil, err
 	}
 	session, err := implSession.Connect(ctx, settings)
-	return (*Session)(session), err
+	return (*Session[D])(session), err
 }
 
 const ControlEvent = implCluster.ControlEvent
@@ -57,14 +59,14 @@ type Event = implCluster.Event
 type EventFilter = implCluster.EventFilter
 type EventKind = implCluster.EventKind
 
-// OpenSingleHost opens a session that uses only the node hostID.
-func OpenSingleHost(ctx context.Context, config Config, hostID cql.UUID) (*Session, error) {
-	settings, err := config.resolved()
+// OpenSingleHost opens a session of dialect D that uses only the node hostID.
+func OpenSingleHost[D Dialect](ctx context.Context, config Config, hostID cql.UUID) (*Session[D], error) {
+	settings, err := dialectSettings[D](config)
 	if err != nil {
 		return nil, err
 	}
 	session, err := implSession.OpenSingleHost(ctx, settings, hostID)
-	return (*Session)(session), err
+	return (*Session[D])(session), err
 }
 
 const OverflowEvent = implCluster.OverflowEvent
@@ -73,7 +75,7 @@ const OverflowEvent = implCluster.OverflowEvent
 // given; none prepares with the session's keyspace on any host.
 //
 // Deprecated: use (*Session).Prepare.
-func Prepare[P any, R any](ctx context.Context, session *Session, statement cql.Statement[P, R], options ...PrepareOptions) (*Prepared[P, R], error) {
+func Prepare[D Dialect, P any, R any](ctx context.Context, session *Session[D], statement cql.Statement[P, R], options ...PrepareOptions) (*Prepared[P, R], error) {
 	return session.Prepare(ctx, statement, options...)
 }
 

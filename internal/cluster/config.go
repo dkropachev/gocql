@@ -40,6 +40,7 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 	legacy.privateStorage.defaultProfile = profile
 	legacy.Port = int(config.Port)
 	legacy.ProtoVersion = config.Protocol
+	legacy.Server = config.Server
 	legacy.Keyspace = config.Keyspace
 	legacy.CQLVersion = config.CQLVersion
 	legacy.ConnectTimeout = config.ConnectTimeout

@@ -41,7 +41,7 @@ func main() {
 func run() (resultErr error) {
 	hosts := flag.String("hosts", "127.0.0.1:9042", "comma-separated native endpoints")
 	incremental := flag.Bool("incremental", false, "use bounded incremental receive instead of page buffering")
-	protocol := flag.Int("protocol", 4, "native protocol version")
+	dialect := flag.String("dialect", "scylla-v4", "scylla-v4, cassandra-v4 or cassandra-v5")
 	compression := flag.String("compression", "none", "none, lz4 or snappy")
 	username := flag.String("username", "", "authentication username")
 	password := flag.String("password", "", "authentication password (prefer GOCQL_PASSWORD)")
@@ -52,7 +52,6 @@ func run() (resultErr error) {
 	uri := flag.String("tls-uri", "", "explicit TLS URI identity instead of DNS")
 	flag.Parse()
 	builder := gocql.NewConfig(strings.Split(*hosts, ",")...).
-		WithProtocolVersion(gocql.ProtocolVersion(*protocol)).
 		WithConnectionsPerHost(1).
 		NoAdvancedShardAwareness().
 		NoHeartbeat().
@@ -128,7 +127,26 @@ func run() (resultErr error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	s, err := gocql.Connect(ctx, cfg)
+	// The dialect is a type: the program picks it once and runs the rest
+	// generically.
+	switch *dialect {
+	case "scylla-v4":
+		return stream[gocql.ScyllaV4](ctx, cfg, *incremental, false, frameCompression)
+	case "cassandra-v4":
+		return stream[gocql.CassandraV4](ctx, cfg, *incremental, false, frameCompression)
+	case "cassandra-v5":
+		return stream[gocql.CassandraV5](ctx, cfg, *incremental, true, frameCompression)
+	}
+	return fmt.Errorf("unknown dialect %q", *dialect)
+}
+
+// stream connects with dialect D and streams the example table. segments
+// reports that the dialect's protocol compresses transport segments rather
+// than frames.
+func stream[D gocql.Dialect](ctx context.Context, cfg gocql.Config, incremental, segments bool, frameCompression gocql.Compression) (resultErr error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	s, err := gocql.Connect[D](ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -219,14 +237,14 @@ func run() (resultErr error) {
 		return fmt.Errorf("missing discovered hosts")
 	}
 	pinned := gocql.Options{PageSize: cql.Some[int32](2), HostID: cql.Some(hostsSnapshot[0].ID)}
-	options := gocql.StreamOptions{Incremental: *incremental, Options: pinned}
+	options := gocql.StreamOptions{Incremental: incremental, Options: pinned}
 	query, err := prepared.Query(options)
 	if err != nil {
 		return err
 	}
 	defer query.Close()
 	stream, err := query.Run(ctx, cql.EmptyParams{})
-	if *incremental && *protocol < 5 && frameCompression != gocql.NoCompression {
+	if incremental && !segments && frameCompression != gocql.NoCompression {
 		if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {
 			return fmt.Errorf("expected frame compression capability error, got %w", err)
 		}

@@ -24,19 +24,19 @@ type Bound[R any] = implSession.Bound[R]
 // batchItem is one binding of a test batch. It is copied into a gocql.Batch
 // when the batch is sent, so closing the binding first fails the batch.
 type batchItem struct {
-	add func(*gocql.Batch, *gocql.Session) error
+	add func(*gocql.Batch, *gocql.Session[testDialect]) error
 }
 
 func BatchEntry[R any](bound *Bound[R]) (batchItem, error) {
 	if bound == nil {
 		return batchItem{}, errors.New("nil binding")
 	}
-	return batchItem{add: func(batch *gocql.Batch, s *gocql.Session) error {
+	return batchItem{add: func(batch *gocql.Batch, s *gocql.Session[testDialect]) error {
 		return implSession.InternalAddBound((*implSession.Batch)(batch), (*implSession.Session)(s).Core(), bound)
 	}}, nil
 }
 
-func buildBatch(s *gocql.Session, items []batchItem) (*gocql.Batch, error) {
+func buildBatch(s *gocql.Session[testDialect], items []batchItem) (*gocql.Batch, error) {
 	batch := new(gocql.Batch)
 	for _, item := range items {
 		if err := item.add(batch, s); err != nil {
@@ -46,7 +46,7 @@ func buildBatch(s *gocql.Session, items []batchItem) (*gocql.Batch, error) {
 	return batch, nil
 }
 
-func execBatch(ctx context.Context, s *gocql.Session, kind cql.BatchKind, items []batchItem, options gocql.CompiledOptions) (gocql.Result, error) {
+func execBatch(ctx context.Context, s *gocql.Session[testDialect], kind cql.BatchKind, items []batchItem, options gocql.CompiledOptions) (gocql.Result, error) {
 	batch, err := buildBatch(s, items)
 	if err != nil {
 		return gocql.Result{}, err
@@ -54,7 +54,7 @@ func execBatch(ctx context.Context, s *gocql.Session, kind cql.BatchKind, items 
 	return implSession.InternalExecBatch(ctx, (*implSession.Session)(s).Core(), kind, (*implSession.Batch)(batch), implSession.CompiledOptions(options))
 }
 
-func runBatch[R any](ctx context.Context, s *gocql.Session, kind cql.BatchKind, items []batchItem, decoder cql.RowDecoder[R], options gocql.CompiledOptions) (*gocql.Page[R], error) {
+func runBatch[R any](ctx context.Context, s *gocql.Session[testDialect], kind cql.BatchKind, items []batchItem, decoder cql.RowDecoder[R], options gocql.CompiledOptions) (*gocql.Page[R], error) {
 	batch, err := buildBatch(s, items)
 	if err != nil {
 		return nil, err
@@ -75,21 +75,21 @@ func BindUnpreparedOwned[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a
 	return implSession.BindUnpreparedOwned[P, R](fixtureStatement(a0), a1, a2)
 }
 
-func Exec[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.CompiledOptions) (gocql.Result, error) {
+func Exec[R any](a0 context.Context, a1 *gocql.Session[testDialect], a2 *Bound[R], a3 gocql.CompiledOptions) (gocql.Result, error) {
 	return implSession.Exec[R](a0, (*implSession.Session)(a1).Core(), a2, implSession.CompiledOptions(a3))
 }
 
-func Run[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.CompiledOptions) (gocql.Rows[R], error) {
+func Run[R any](a0 context.Context, a1 *gocql.Session[testDialect], a2 *Bound[R], a3 gocql.CompiledOptions) (gocql.Rows[R], error) {
 	result, err := implSession.Run[R](a0, (*implSession.Session)(a1).Core(), a2, implSession.CompiledOptions(a3))
 	return gocql.Rows[R](result), err
 }
 
-func RunPage[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.PageState, a4 gocql.CompiledOptions) (*gocql.Page[R], error) {
+func RunPage[R any](a0 context.Context, a1 *gocql.Session[testDialect], a2 *Bound[R], a3 gocql.PageState, a4 gocql.CompiledOptions) (*gocql.Page[R], error) {
 	result, err := implSession.RunPage[R](a0, (*implSession.Session)(a1).Core(), a2, model.PageState(a3), 0, implSession.CompiledOptions(a4))
 	return (*gocql.Page[R])(result), err
 }
 
-func RunStream[B any, R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[B], a3 cql.StreamRowDecoder[R], a4 gocql.StreamOptions) (*gocql.RowStream[R], error) {
+func RunStream[B any, R any](a0 context.Context, a1 *gocql.Session[testDialect], a2 *Bound[B], a3 cql.StreamRowDecoder[R], a4 gocql.StreamOptions) (*gocql.RowStream[R], error) {
 	result, err := implSession.IntegrationRunStream[B, R](a0, (*implSession.Session)(a1).Core(), a2, a3, implSession.StreamOptions{Options: implSession.CompiledOptions(bindOptions(a1, a4.Options)).Values(), Limits: a4.Limits, Incremental: a4.Incremental})
 	return (*gocql.RowStream[R])(result), err
 }

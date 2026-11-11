@@ -28,7 +28,7 @@ func cassandraOverride(base, override string) string {
 	return base
 }
 
-func isDescribeKeyspaceSupported(t *testing.T, s *gocql.Session) bool {
+func isDescribeKeyspaceSupported(t *testing.T, s *gocql.Session[testDialect]) bool {
 	t.Helper()
 
 	rows, err := v2Query(context.Background(), s, `DESCRIBE KEYSPACE system WITH INTERNALS`)
@@ -46,7 +46,7 @@ func isDescribeKeyspaceSupported(t *testing.T, s *gocql.Session) bool {
 	return true
 }
 
-func cleanup(t *testing.T, session *gocql.Session, keyspace string) {
+func cleanup(t *testing.T, session *gocql.Session[testDialect], keyspace string) {
 	if err := v2CreateTable(context.Background(), session, `DROP KEYSPACE IF EXISTS `+keyspace); err != nil {
 		t.Fatalf("unable to drop keyspace: %v", err)
 	}
@@ -81,7 +81,7 @@ func trimSchema(s string) string {
 }
 
 // Probe server-default tablet behavior in an isolated keyspace using typed rows.
-func v2SchemaRoutingTabletsAutoEnabled(t *testing.T, session *gocql.Session) bool {
+func v2SchemaRoutingTabletsAutoEnabled(t *testing.T, session *gocql.Session[testDialect]) bool {
 	t.Helper()
 	supported, err := v2TabletsSupported(context.Background(), session)
 	if err != nil {
@@ -103,7 +103,7 @@ func v2SchemaRoutingTabletsAutoEnabled(t *testing.T, session *gocql.Session) boo
 // Development group-0 schema transactions can explicitly abort on a concurrent
 // topology/schema change. Retry only this server-declared aborted transaction;
 // keep all input/dump/golden assertions and propagate every other failure.
-func recreateExec(t testing.TB, s *gocql.Session, stmt string) (gocql.Result, error) {
+func recreateExec(t testing.TB, s *gocql.Session[testDialect], stmt string) (gocql.Result, error) {
 	t.Helper()
 	var result gocql.Result
 	var err error

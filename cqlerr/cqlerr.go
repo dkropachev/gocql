@@ -200,16 +200,19 @@ type (
 	// connecting; it matches ErrNoConnectionsStarted.
 	ConnectError = runtimeerrors.ConnectError
 	HostError    = runtimeerrors.HostError
+	// ServerMismatchError reports that Connect reached a database other than
+	// the one its dialect names.
+	ServerMismatchError = runtimeerrors.ServerMismatchError
 )
 
 // Sentinels.
 
 var (
-	ErrBusy             = runtimeerrors.ErrBusy
-	ErrClosed           = runtimeerrors.ErrClosed
+	ErrBusy   = runtimeerrors.ErrBusy
+	ErrClosed = runtimeerrors.ErrClosed
 	// ErrConditionalExec reports an Exec or ExecBatch call for a statement or
 	// batch known to be conditional. Nothing was sent.
-	ErrConditionalExec = runtimeerrors.ErrConditionalExec
+	ErrConditionalExec  = runtimeerrors.ErrConditionalExec
 	ErrConnectionClosed = runtimeerrors.ErrConnectionClosed
 	ErrFrameTooBig      = protocol.ErrFrameTooBig
 	// Deprecated: the driver never returns ErrHostDown.

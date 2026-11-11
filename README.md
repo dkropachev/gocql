@@ -24,7 +24,9 @@ import (
 
 config, err := gocql.NewConfig("127.0.0.1:9042").Build()
 if err != nil { return err }
-session, err := gocql.Connect(ctx, config)
+// The dialect names the database and protocol version: ScyllaV4,
+// CassandraV4 or CassandraV5. Nothing is negotiated.
+session, err := gocql.Connect[gocql.ScyllaV4](ctx, config)
 if err != nil { return err }
 defer session.Close()
 

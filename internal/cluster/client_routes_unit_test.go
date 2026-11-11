@@ -35,9 +35,6 @@ func (f *fakeControlConn) query(statement string, values ...any) *nativeResultFi
 func (f *fakeControlConn) querySystem(statement string, values ...any) *nativeResultFixture {
 	return &nativeResultFixture{}
 }
-func (f *fakeControlConn) InternalDiscoverProtocol(hosts []*endpoint.HostInfo) (int, error) {
-	return 0, nil
-}
 func (f *fakeControlConn) InternalConnect(hosts []*endpoint.HostInfo) error { return nil }
 func (f *fakeControlConn) InternalClose()                                   {}
 func (f *fakeControlConn) InternalGetSession() *Core                        { return nil }

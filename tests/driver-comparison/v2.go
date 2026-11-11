@@ -22,7 +22,7 @@ type borrowedRow struct {
 	P    cql.Bytes
 }
 type v2Adapter struct {
-	s             *g.Session
+	s             *g.Session[g.ScyllaV4]
 	mu            sync.Mutex
 	reads         [2]*g.Prepared[int32, row]
 	writes        [2]*g.Prepared[row, cql.EmptyRow]
@@ -47,7 +47,6 @@ var bufferedDecoder = cql.RowInto(func(*row) {}, cql.Column("k", cql.Int32Codec,
 func connect(hosts []string) (adapter, error) {
 	policy, _ := routing.NewPolicy(routing.Options{TokenAware: true, Datacenter: "datacenter1"})
 	builder := g.NewConfig(hosts...).
-		WithProtocolVersion(g.Protocol4).
 		WithConnectionsPerShard(1).
 		WithMaxExcessPerShard(0).
 		ConfigureDefaultProfile(func(p *g.ProfileBuilder) {
@@ -71,7 +70,7 @@ func connect(hosts []string) (adapter, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	s, e := g.Connect(ctx, c)
+	s, e := g.Connect[g.ScyllaV4](ctx, c)
 	if e != nil {
 		return nil, e
 	}

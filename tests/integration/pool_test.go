@@ -78,7 +78,7 @@ func TestPool(t *testing.T) {
 				}))
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
-				s, err := gocql.Connect(ctx, mustBuild(t, config))
+				s, err := gocql.Connect[testDialect](ctx, mustBuild(t, config))
 				if s != nil {
 					s.Close()
 				}

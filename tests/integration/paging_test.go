@@ -280,7 +280,7 @@ func TestPaging(t *testing.T) {
 		}))
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
-		s, err := gocql.Connect(ctx, config)
+		s, err := gocql.Connect[testDialect](ctx, config)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -475,7 +475,7 @@ func TestPaging(t *testing.T) {
 		}
 		// Use another real client: this stream deliberately owns its one configured
 		// connection slot across pages, including during caller think time.
-		ddlSession, err := gocql.Connect(ctx, config)
+		ddlSession, err := gocql.Connect[testDialect](ctx, config)
 		if err != nil {
 			t.Fatal(err)
 		}

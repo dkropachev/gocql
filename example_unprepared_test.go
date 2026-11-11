@@ -17,7 +17,7 @@ func ExampleSession_UnpreparedExec() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	session, err := gocql.Connect(ctx, config)
+	session, err := gocql.Connect[gocql.ScyllaV4](ctx, config)
 	if err != nil {
 		log.Fatal(err)
 	}

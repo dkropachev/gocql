@@ -71,7 +71,7 @@ func requireCassandraFixtures(t *testing.T) {
 }
 
 // readV2ClientOptions keeps node-local startup reports on the control connection.
-func readV2ClientOptions(ctx context.Context, session *gocql.Session, stmt string) ([]map[string]string, error) {
+func readV2ClientOptions(ctx context.Context, session *gocql.Session[testDialect], stmt string) ([]map[string]string, error) {
 	handle := (*implSession.Session)(session).Data().InternalControl.InternalGetConn()
 	if handle == nil {
 		return nil, errNoControl
@@ -96,7 +96,7 @@ func readV2ClientOptions(ctx context.Context, session *gocql.Session, stmt strin
 	return result, nil
 }
 
-func queryV2ControlKey(ctx context.Context, session *gocql.Session) error {
+func queryV2ControlKey(ctx context.Context, session *gocql.Session[testDialect]) error {
 	handle := (*implSession.Session)(session).Data().InternalControl.InternalGetConn()
 	if handle == nil {
 		return errNoControl

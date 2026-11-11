@@ -40,7 +40,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"regexp"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -74,7 +73,6 @@ const (
 type InternalControlConnection interface {
 	InternalGetConn() *InternalConnHost
 	InternalAwaitSchemaAgreement() error
-	InternalDiscoverProtocol(hosts []*implEndpoint.HostInfo) (int, error)
 	InternalConnect(hosts []*implEndpoint.HostInfo) error
 	InternalClose()
 	InternalGetSession() *Core
@@ -169,64 +167,6 @@ func shuffleHosts(hosts []*implEndpoint.HostInfo) []*implEndpoint.HostInfo {
 	return shuffled
 }
 
-// this is going to be version dependant and a nightmare to maintain :(
-var protocolSupportRe = regexp.MustCompile(`the lowest supported version is \d+ and the greatest is (\d+)$`)
-
-func parseProtocolFromError(err error) int {
-	// I really wish this had the actual info in the error frame...
-	matches := protocolSupportRe.FindAllStringSubmatch(err.Error(), -1)
-	if len(matches) != 1 || len(matches[0]) != 2 {
-		if verr, ok := errors.AsType[*transport.InternalProtocolError](err); ok {
-			return int(verr.InternalFrame.Header().Version.Version())
-		}
-		return 0
-	}
-
-	max, err := strconv.Atoi(matches[0][1])
-	if err != nil {
-		return 0
-	}
-
-	return max
-}
-
-func (c *InternalControlConn) InternalDiscoverProtocol(hosts []*implEndpoint.HostInfo) (int, error) {
-	hosts = shuffleHosts(hosts)
-
-	connCfg := *c.InternalSession.privateStorage.InternalConnCfg
-	connCfg.ProtoVersion = protocol.ProtoVersion4 // TODO: define maxProtocol
-
-	handler := transport.InternalConnErrorHandlerFn(func(c *transport.Conn, err error, closed bool) {
-		// we should never get here, but if we do it means we connected to a
-		// host successfully which means our attempted protocol version worked
-		if !closed {
-			c.Close()
-		}
-	})
-
-	failure := &runtimeerrors.ConnectError{Stage: "protocol discovery"}
-	for _, host := range hosts {
-		conn, err := sessionDial(c.InternalSession, c.InternalSession.privateStorage.InternalCtx, host, &connCfg, handler)
-		// not need to call conn.finalizeConnection since this connection to be terminated right away
-		if conn != nil {
-			conn.Close()
-		}
-
-		if err == nil {
-			return connCfg.ProtoVersion, nil
-		}
-
-		if proto := parseProtocolFromError(err); proto > 0 {
-			return proto, nil
-		}
-		failure.Hosts = append(failure.Hosts, runtimeerrors.HostError{Address: hostAddress(host), Err: err})
-	}
-	if len(failure.Hosts) == 0 {
-		return 0, errors.New("control: no endpoints specified")
-	}
-	return 0, failure
-}
-
 func hostAddress(host *implEndpoint.HostInfo) string {
 	return net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(host.Port()))
 }
@@ -237,12 +177,6 @@ func hostAddress(host *implEndpoint.HostInfo) string {
 //
 // It is declared here, rather than alongside the rest of Session, so it sits
 // next to the paths whose agreement it exists to guarantee.
-//
-// controlConn.InternalDiscoverProtocol is a deliberate exception: it hand-copies
-// *s.connCfg instead of going through here, because its throwaway probe
-// connections are discarded immediately and must not be marked as the control
-// connection - doing so would race the real control connection and report
-// DRIVER_CONFIG more than once.
 func sessionControlConnConfig(s *Core) *transport.ConnConfig {
 	cfg := *s.privateStorage.InternalConnCfg
 	cfg.InternalDisableCoalesce = true

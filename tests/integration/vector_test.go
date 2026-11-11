@@ -99,11 +99,11 @@ var serializationDecimal = cql.NamedScalar(cql.DecimalCodec, func(v inf.Dec) cql
 
 type serializationVectorCase struct {
 	name, stmt string
-	run        func(*testing.T, *gocql.Session, string, string)
+	run        func(*testing.T, *gocql.Session[testDialect], string, string)
 }
 
 func vectorCase[T any](name, stmt string, codec cql.Codec[T], input []T, compare func(*testing.T, []T, []T)) serializationVectorCase {
-	return serializationVectorCase{name, stmt, func(t *testing.T, s *gocql.Session, table, column string) {
+	return serializationVectorCase{name, stmt, func(t *testing.T, s *gocql.Session[testDialect], table, column string) {
 		got := serializationRoundTrip(t, s, table, column, 1, serializationVector(codec), input)
 		if compare != nil {
 			compare(t, input, got)

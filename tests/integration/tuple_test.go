@@ -47,7 +47,7 @@ var serializationNullableCoordCodec = serializationTuple(
 	cql.Params(cql.ParamAt(0, cql.NullableCodec(cql.Int32Codec), func(v serializationNullableCoord) cql.Nullable[int32] { return v.X }), cql.ParamAt(1, cql.NullableCodec(cql.Int32Codec), func(v serializationNullableCoord) cql.Nullable[int32] { return v.Y })),
 	cql.Row(cql.ColumnAt(0, cql.NullableCodec(cql.Int32Codec), func(v *serializationNullableCoord) *cql.Nullable[int32] { return &v.X }), cql.ColumnAt(1, cql.NullableCodec(cql.Int32Codec), func(v *serializationNullableCoord) *cql.Nullable[int32] { return &v.Y })))
 
-func tupleTable(t *testing.T, s *gocql.Session, typ string) string {
+func tupleTable(t *testing.T, s *gocql.Session[testDialect], typ string) string {
 	t.Helper()
 	table := serializationTableName(t)
 	serializationDDL(t, s, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,val %s)", table, typ))

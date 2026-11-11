@@ -145,12 +145,12 @@ func TestFraming(t *testing.T) {
 				table string
 				// gate returns a reason to skip, or "" to run. It may also fail outright, for
 				// a state that must not be allowed to pass as a skip.
-				gate func(t *testing.T, session *gocql.Session, conn *driverConn) string
+				gate func(t *testing.T, session *gocql.Session[testDialect], conn *driverConn) string
 			}{
 				{
 					name:  "native protocol v5",
 					table: "metadata_changed",
-					gate: func(t *testing.T, session *gocql.Session, conn *driverConn) string {
+					gate: func(t *testing.T, session *gocql.Session[testDialect], conn *driverConn) string {
 						if (*implSession.Session)(session).Data().InternalCfg.ProtoVersion < protoVersion5 {
 							return "Metadata_changed mechanism is only available in proto > 4"
 						}
@@ -163,7 +163,7 @@ func TestFraming(t *testing.T) {
 				{
 					name:  "protocol v4 with SCYLLA_USE_METADATA_ID",
 					table: "scylla_metadata_changed",
-					gate: func(t *testing.T, session *gocql.Session, conn *driverConn) string {
+					gate: func(t *testing.T, session *gocql.Session[testDialect], conn *driverConn) string {
 						// The extension backports the v5 result metadata id to v4 and is
 						// negotiated there only, so a run pinned to another protocol version
 						// says nothing about it either way.

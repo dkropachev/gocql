@@ -20,9 +20,38 @@ config, err := gocql.NewConfig("10.0.0.1", "10.0.0.2").
 
 Contact points may include native ports; `WithPort` supplies the port when one is
 absent. A single absolute path, optionally prefixed with `unix:`, connects to a
-Unix socket: protocol 3 and no host discovery are then filled in unless
-chosen. `WithProtocolVersion` selects 3, 4 or 5; automatic negotiation caps at
-4, so select `Protocol5` explicitly for a server that supports it.
+Unix socket: no host discovery is then filled in unless chosen.
+
+## Dialects
+
+`Connect` takes the dialect as a type parameter: the database and the native
+protocol version you connect to.
+
+```go
+session, err := gocql.Connect[gocql.ScyllaV4](ctx, config)
+```
+
+| Dialect | Database | Protocol |
+|---|---|---|
+| `gocql.ScyllaV4` | ScyllaDB | 4, with ScyllaDB's extensions |
+| `gocql.CassandraV4` | Apache Cassandra | 4 |
+| `gocql.CassandraV5` | Apache Cassandra 4.0 or later | 5 |
+
+The driver negotiates no version: every connection speaks the dialect's, and
+`Connect` fails when the cluster does not. It also fails with
+`cqlerr.ServerMismatchError` when the cluster is not the dialect's database.
+The dialect fixes how the driver reads results that differ between Cassandra
+and ScyllaDB ([differences](../server-differences.md)), at no cost per request.
+Protocol 5 has no frame compression, so `CassandraV5` with Snappy fails at
+`Connect`; use LZ4 or none.
+
+The dialect is part of the session's type, `*gocql.Session[gocql.ScyllaV4]`.
+Prepared statements, queries and batches do not carry it. Code that serves
+several dialects is generic over it:
+
+```go
+func load[D gocql.Dialect](ctx context.Context, s *gocql.Session[D]) error { ... }
+```
 
 Use `NoHeartbeat`, `NoAdvancedShardAwareness`, `NoMetadataRefresh` and
 `NoPreparedCache` to disable features; their corresponding `With*` methods

@@ -29,7 +29,7 @@ import (
 
 // These fixture helpers compose the public codecs; the integration values never
 // pass through reflected parameter binding or result destination discovery.
-func serializationExec[P any](s *gocql.Session, stmt string, encoder cql.ParamEncoder[P], value P) error {
+func serializationExec[P any](s *gocql.Session[testDialect], stmt string, encoder cql.ParamEncoder[P], value P) error {
 	ctx := context.Background()
 	p, err := s.Prepare(ctx, cql.Statement[P, cql.EmptyRow]{CQL: stmt, Params: encoder, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 	if err != nil {
@@ -44,7 +44,7 @@ func serializationExec[P any](s *gocql.Session, stmt string, encoder cql.ParamEn
 	return err
 }
 
-func serializationRows[R any](s *gocql.Session, stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (gocql.Rows[R], error) {
+func serializationRows[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (gocql.Rows[R], error) {
 	ctx := context.Background()
 	p, err := s.Prepare(ctx, cql.Statement[[]cql.Value, R]{CQL: stmt, Params: cql.DynamicParams, Rows: decoder}, gocql.PrepareOptions{})
 	if err != nil {
@@ -58,7 +58,7 @@ func serializationRows[R any](s *gocql.Session, stmt string, decoder cql.RowDeco
 	return Run(ctx, s, b, gocql.CompiledOptions{})
 }
 
-func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (R, error) {
+func serializationOne[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (R, error) {
 	var zero R
 	rows, err := serializationRows(s, stmt, decoder, values...)
 	if err != nil {
@@ -85,19 +85,19 @@ func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecod
 	return row, rows.Close()
 }
 
-func serializationDDL(t testing.TB, s *gocql.Session, stmt string) {
+func serializationDDL(t testing.TB, s *gocql.Session[testDialect], stmt string) {
 	t.Helper()
 	if err := v2CreateTable(context.Background(), s, stmt); err != nil {
 		t.Fatal(err)
 	}
 }
-func serializationWrite(t testing.TB, s *gocql.Session, stmt string, values ...cql.Value) {
+func serializationWrite(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...cql.Value) {
 	t.Helper()
 	if _, err := v2Exec(context.Background(), s, stmt, values...); err != nil {
 		t.Fatal(err)
 	}
 }
-func serializationColumn(t testing.TB, s *gocql.Session, stmt string, values ...cql.Value) cql.Value {
+func serializationColumn(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...cql.Value) cql.Value {
 	t.Helper()
 	r, err := v2ReadOne(context.Background(), s, stmt, values...)
 	if err != nil {
@@ -157,7 +157,7 @@ func serializationUDT[T any](p cql.ParamEncoder[T], r cql.RowDecoder[T], opts cq
 	return serializationCodec[T]{cql.UDTEncoder(p, opts), cql.UDTDecoder(r, opts)}
 }
 
-func serializationRoundTrip[T any](t testing.TB, s *gocql.Session, table, column string, id int32, codec cql.Codec[T], input T) T {
+func serializationRoundTrip[T any](t testing.TB, s *gocql.Session[testDialect], table, column string, id int32, codec cql.Codec[T], input T) T {
 	t.Helper()
 	params := cql.PairParams(1, cql.OneParam(cql.Int32Codec), cql.OneParam(codec))
 	if err := serializationExec(s, fmt.Sprintf("INSERT INTO %s (id,%s) VALUES (?,?)", table, column), params, cql.Pair[int32, T]{First: id, Second: input}); err != nil {

@@ -27,7 +27,6 @@ package cluster
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 
 	"log/slog"
@@ -294,21 +293,6 @@ func (s *Core) init() error {
 				time.Sleep(reconnectionPolicy.GetInterval(i))
 			}
 
-			if s.privateStorage.InternalCfg.ProtoVersion == 0 {
-				var proto int
-				proto, err = s.privateStorage.InternalControl.InternalDiscoverProtocol(hosts)
-				if err != nil {
-					s.logger().Debug("protocol discovery failed", "attempt", i, logging.Err(err))
-					continue
-				} else if proto == 0 {
-					return errors.New("unable to discover protocol version")
-				}
-
-				// TODO(zariel): we really only need this in 1 place
-				s.privateStorage.InternalCfg.ProtoVersion = proto
-				s.privateStorage.InternalConnCfg.ProtoVersion = proto
-			}
-
 			if err = s.privateStorage.InternalControl.InternalConnect(hosts); err != nil {
 				s.logger().Debug("control connection attempt failed", "attempt", i, logging.Err(err))
 				continue
@@ -320,6 +304,9 @@ func (s *Core) init() error {
 		}
 
 		conn := s.privateStorage.InternalControl.InternalGetConn().InternalConn.(*transport.Conn)
+		if err := checkServer(s.privateStorage.InternalCfg.Server, conn); err != nil {
+			return err
+		}
 		conn.InternalMu.Lock()
 		s.privateStorage.tabletsRoutingV1 = conn.InternalIsTabletSupported()
 		conn.InternalMu.Unlock()
@@ -787,3 +774,20 @@ func (e Error) Error() string {
 // MaxBatchStatements is the most statements one BATCH request can carry: the
 // native protocol counts them in an unsigned 16-bit field.
 const MaxBatchStatements = 65535
+
+// checkServer fails opening a session whose control connection reached a
+// server other than the one its dialect names: the dialect fixes how the
+// driver reads results that differ between Cassandra and ScyllaDB.
+func checkServer(want implSettings.Server, conn *transport.Conn) error {
+	if want == implSettings.ServerAny {
+		return nil
+	}
+	got := implSettings.ServerCassandra
+	if conn.InternalIsScyllaConn() {
+		got = implSettings.ServerScylla
+	}
+	if got != want {
+		return &runtimeerrors.ServerMismatchError{Want: want.String(), Got: got.String()}
+	}
+	return nil
+}

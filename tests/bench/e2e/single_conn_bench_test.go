@@ -77,7 +77,6 @@ func benchConfig(d endpoint.Dialer) gocql.Config {
 		}
 	}
 	c, err := gocql.NewConfig(address).
-		WithProtocolVersion(gocql.Protocol4).
 		WithAuth(auth.Password("cassandra", "cassandra")).
 		NoHeartbeat().
 		NoMetadataRefresh().
@@ -91,11 +90,15 @@ func benchConfig(d endpoint.Dialer) gocql.Config {
 	}
 	return c
 }
-func benchExec(ctx context.Context, s *gocql.Session, text string) error {
+
+// benchDialect is the dialect of the recorded corpus and the bench cluster.
+type benchDialect = gocql.ScyllaV4
+
+func benchExec(ctx context.Context, s *gocql.Session[benchDialect], text string) error {
 	_, e := s.UnpreparedExec(ctx, cql.Command(text), cql.EmptyParams{})
 	return e
 }
-func InitializeCluster(ctx context.Context, s *gocql.Session) error {
+func InitializeCluster(ctx context.Context, s *gocql.Session[benchDialect]) error {
 	for _, text := range []string{"CREATE TABLE " + corpus.Namespace + ".table1(pk int PRIMARY KEY,ck int,v text)"} {
 		if err := benchExec(ctx, s, text); err != nil {
 			return err
@@ -103,7 +106,7 @@ func InitializeCluster(ctx context.Context, s *gocql.Session) error {
 	}
 	return nil
 }
-func cleanupNamespace(s *gocql.Session) error {
+func cleanupNamespace(s *gocql.Session[benchDialect]) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := benchExec(ctx, s, "DROP KEYSPACE IF EXISTS "+corpus.Namespace); err != nil {
@@ -145,7 +148,7 @@ func generateCaptures(ctx context.Context) (err error) {
 	if corpus.Address == "" {
 		return fmt.Errorf("capture generation requires explicit GOCQL_BENCH_ADDRESS")
 	}
-	s, err := gocql.Connect(ctx, benchConfig(nil))
+	s, err := gocql.Connect[benchDialect](ctx, benchConfig(nil))
 	if err != nil {
 		return err
 	}
@@ -199,10 +202,10 @@ func generateCaptures(ctx context.Context) (err error) {
 	}
 	return os.WriteFile(corpusPath("corpus.json"), append(data, '\n'), 0600)
 }
-func benchRead(s *gocql.Session, id int32) error {
+func benchRead(s *gocql.Session[benchDialect], id int32) error {
 	return benchReadContext(context.Background(), s, id)
 }
-func benchReadContext(ctx context.Context, s *gocql.Session, id int32) error {
+func benchReadContext(ctx context.Context, s *gocql.Session[benchDialect], id int32) error {
 	p, e := s.Prepare(ctx, cql.Statement[int32, cql.Text]{CQL: "SELECT v FROM " + corpus.Namespace + ".table1 WHERE pk = ?;", Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.TextCodec)}, gocql.PrepareOptions{})
 	if e != nil {
 		return e
@@ -239,10 +242,10 @@ type benchInsert struct {
 	Value  string
 }
 
-func benchWrite(s *gocql.Session, id int32) error {
+func benchWrite(s *gocql.Session[benchDialect], id int32) error {
 	return benchWriteContext(context.Background(), s, id)
 }
-func benchWriteContext(ctx context.Context, s *gocql.Session, id int32) error {
+func benchWriteContext(ctx context.Context, s *gocql.Session[benchDialect], id int32) error {
 	p, e := s.Prepare(ctx, cql.Statement[benchInsert, cql.EmptyRow]{CQL: "INSERT INTO " + corpus.Namespace + ".table1 (pk, ck, v) VALUES (?, ?, ?);", Params: cql.Params(cql.Param("pk", cql.Int32Codec, func(v benchInsert) int32 { return v.PK }), cql.Param("ck", cql.Int32Codec, func(v benchInsert) int32 { return v.CK }), cql.Param("v", cql.StringEncoder, func(v benchInsert) string { return v.Value })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 	if e != nil {
 		return e
@@ -257,7 +260,7 @@ func benchWriteContext(ctx context.Context, s *gocql.Session, id int32) error {
 }
 func RecordSelectTraffic(ctx context.Context, size int, dir string) error {
 	d := newCaptureDialer(dir, false)
-	s, e := gocql.Connect(ctx, benchConfig(d))
+	s, e := gocql.Connect[benchDialect](ctx, benchConfig(d))
 	if e != nil {
 		return e
 	}
@@ -271,7 +274,7 @@ func RecordSelectTraffic(ctx context.Context, size int, dir string) error {
 }
 func RecordInsertTraffic(ctx context.Context, size int, dir string) error {
 	d := newCaptureDialer(dir, false)
-	s, e := gocql.Connect(ctx, benchConfig(d))
+	s, e := gocql.Connect[benchDialect](ctx, benchConfig(d))
 	if e != nil {
 		return e
 	}
@@ -364,7 +367,7 @@ func (d *captureDialer) track(conn net.Conn) {
 	d.connections = append(d.connections, conn)
 	d.mu.Unlock()
 }
-func finishCapture(s *gocql.Session, d *captureDialer) error {
+func finishCapture(s *gocql.Session[benchDialect], d *captureDialer) error {
 	// Session.Close joins all driver I/O before checking every recorder's cached
 	// Close result, including descriptor flush/close errors hidden by net.Conn I/O.
 	err := s.Close()
@@ -396,7 +399,7 @@ func (c *captureTCP) SetLinger(v int) error                    { return c.socket
 func BenchmarkSingleConnection(b *testing.B) {
 	b.Run("Insert", func(b *testing.B) {
 		d := newCaptureDialer(corpusPath("rec_insert"), true)
-		s, e := gocql.Connect(context.Background(), benchConfig(d))
+		s, e := gocql.Connect[benchDialect](context.Background(), benchConfig(d))
 		if e != nil {
 			b.Fatal(e)
 		}
@@ -418,7 +421,7 @@ func BenchmarkSingleConnection(b *testing.B) {
 
 	b.Run("Select", func(b *testing.B) {
 		d := newCaptureDialer(corpusPath("rec_select"), true)
-		s, e := gocql.Connect(context.Background(), benchConfig(d))
+		s, e := gocql.Connect[benchDialect](context.Background(), benchConfig(d))
 		if e != nil {
 			b.Fatal(e)
 		}
@@ -443,13 +446,13 @@ func TestSingleConnection(t *testing.T) {
 	t.Run("Replay", func(t *testing.T) {
 		for _, workload := range []struct {
 			name, dir string
-			operation func(*gocql.Session, int32) error
+			operation func(*gocql.Session[benchDialect], int32) error
 		}{
 			{"select", "rec_select", benchRead}, {"insert", "rec_insert", benchWrite},
 		} {
 			t.Run(workload.name, func(t *testing.T) {
 				d := newCaptureDialer(corpusPath(workload.dir), true)
-				s, err := gocql.Connect(context.Background(), benchConfig(d))
+				s, err := gocql.Connect[benchDialect](context.Background(), benchConfig(d))
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -21,7 +21,7 @@ import (
 )
 
 type shardAwareTestCluster struct {
-	connect func(context.Context, legacyDialer, bool) (*gocql.Session, error)
+	connect func(context.Context, legacyDialer, bool) (*gocql.Session[testDialect], error)
 	useTLS  bool
 	port    uint16
 }
@@ -218,7 +218,7 @@ func getShardAwarePort(pool *hostConnPool, useTLS bool) uint16 {
 	return pool.Host().ScyllaShardAwarePort()
 }
 
-func triggerPoolsRefill(sess *gocql.Session) {
+func triggerPoolsRefill(sess *gocql.Session[testDialect]) {
 	hosts := (*implSession.Session)(sess).Data().InternalHostSource.InternalGetHostsList()
 	for _, host := range hosts {
 		hostPool, _ := (*implSession.Session)(sess).Data().InternalPool.InternalGetPool(host)
@@ -231,7 +231,7 @@ func triggerPoolsRefill(sess *gocql.Session) {
 // does not choose, so filling takes a varying number of rounds; a round that
 // is still filling after 10 s under load is progress, not a failure. Only the
 // overall minute running out is.
-func fillPoolsByRetry(t *testing.T, sess *gocql.Session) {
+func fillPoolsByRetry(t *testing.T, sess *gocql.Session[testDialect]) {
 	t.Helper()
 	const budget = time.Minute
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
@@ -249,7 +249,7 @@ func fillPoolsByRetry(t *testing.T, sess *gocql.Session) {
 	}
 }
 
-func waitUntilPoolsStopFilling(ctx context.Context, sess *gocql.Session, timeout time.Duration) error {
+func waitUntilPoolsStopFilling(ctx context.Context, sess *gocql.Session[testDialect], timeout time.Duration) error {
 	deadline := time.After(timeout)
 	for !checkIfPoolsStoppedFilling(sess) {
 		select {
@@ -267,7 +267,7 @@ func waitUntilPoolsStopFilling(ctx context.Context, sess *gocql.Session, timeout
 	return nil
 }
 
-func checkIfPoolsStoppedFilling(sess *gocql.Session) bool {
+func checkIfPoolsStoppedFilling(sess *gocql.Session[testDialect]) bool {
 	hosts := (*implSession.Session)(sess).Data().InternalHostSource.InternalGetHostsList()
 	for _, host := range hosts {
 		hostPool, _ := (*implSession.Session)(sess).Data().InternalPool.InternalGetPool(host)
@@ -284,7 +284,7 @@ func checkIfPoolsStoppedFilling(sess *gocql.Session) bool {
 	return true
 }
 
-func checkIfPoolsAreFull(sess *gocql.Session) bool {
+func checkIfPoolsAreFull(sess *gocql.Session[testDialect]) bool {
 	hosts := (*implSession.Session)(sess).Data().InternalHostSource.InternalGetHostsList()
 	for _, host := range hosts {
 		hostPool, _ := (*implSession.Session)(sess).Data().InternalPool.InternalGetPool(host)

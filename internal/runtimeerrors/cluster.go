@@ -15,6 +15,17 @@ var (
 // write, or callback. Wait joins that execution before the query is reused.
 var ErrBusy = errors.New("gocql: query is busy")
 
+// ServerMismatchError reports that a session opened for one database reached
+// another: Connect[gocql.ScyllaV4] reaching Cassandra, or a Cassandra
+// dialect reaching ScyllaDB.
+type ServerMismatchError struct {
+	Want, Got string
+}
+
+func (e *ServerMismatchError) Error() string {
+	return "gocql: the session's dialect expects " + e.Want + " but the cluster is " + e.Got
+}
+
 // ErrConditionalExec is returned, before anything is sent, by an Exec call
 // or ExecBatch for a statement or batch the driver knows to be conditional: its
 // result is a row reporting whether it applied, which Exec cannot return.

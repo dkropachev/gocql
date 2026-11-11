@@ -27,7 +27,7 @@ func codecTestMust[T any](v T, err error) T {
 
 // bindOptions binds v to session, failing loudly on values a test meant to
 // be valid.
-func bindOptions[O fixtureOptions](session *gocql.Session, v O) gocql.CompiledOptions {
+func bindOptions[O fixtureOptions](session *gocql.Session[testDialect], v O) gocql.CompiledOptions {
 	switch o := any(v).(type) {
 	case gocql.Options:
 		return codecTestMust(session.CompileOptions(o))
@@ -39,7 +39,7 @@ func bindOptions[O fixtureOptions](session *gocql.Session, v O) gocql.CompiledOp
 
 // prepareFixture preserves connection injection only inside these historical
 // protocol fixtures. Public preparation remains free of transport hooks.
-func prepareFixture[P, R any, O fixturePrepareOptions](ctx context.Context, session *gocql.Session, statement cql.Statement[P, R], options O) (*gocql.Prepared[P, R], error) {
+func prepareFixture[P, R any, O fixturePrepareOptions](ctx context.Context, session *gocql.Session[testDialect], statement cql.Statement[P, R], options O) (*gocql.Prepared[P, R], error) {
 	var internal implSession.PrepareOptions
 	switch o := any(options).(type) {
 	case gocql.PrepareOptions:

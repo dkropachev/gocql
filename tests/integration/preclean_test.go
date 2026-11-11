@@ -101,9 +101,9 @@ func dropLeftoverKeyspaces() error {
 // superuser a few seconds after the native transport starts accepting
 // connections, so a suite started right after make cassandra-start would see
 // every session refused. Any other error is returned at once.
-func connectOnceCredentialsWork(ctx context.Context, config gocql.Config) (*gocql.Session, error) {
+func connectOnceCredentialsWork(ctx context.Context, config gocql.Config) (*gocql.Session[testDialect], error) {
 	for {
-		s, err := gocql.Connect(ctx, config)
+		s, err := gocql.Connect[testDialect](ctx, config)
 		if request, ok := errors.AsType[cqlerr.RequestError](err); err == nil || !ok || request.GetCode() != cqlerr.ErrCodeCredentials {
 			return s, err
 		}

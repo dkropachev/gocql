@@ -97,6 +97,15 @@ var (
 
 func TestMain(m *testing.M) {
 	flag.Parse()
+	// The suite is compiled for one dialect (testDialect); see
+	// tests/integration/dialect_scylla_test.go.
+	if *flagProto == 0 {
+		*flagProto = testDialectProtocol
+	}
+	if *flagDistribution != testDialectDistribution || *flagProto != testDialectProtocol {
+		fmt.Fprintf(os.Stderr, "the suite is built for %s protocol %d, but -distribution=%s -proto=%d\n", testDialectDistribution, testDialectProtocol, *flagDistribution, *flagProto)
+		os.Exit(2)
+	}
 	useSharedCluster()
 	os.Exit(m.Run())
 }
@@ -223,11 +232,11 @@ func BindUnpreparedOwned[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a
 	return implSession.BindUnpreparedOwned[P, R](binding.Statement[P, R]{CQL: a0.CQL, Params: a0.Params, Rows: a0.Rows, Kind: a0.Kind, BindMarkers: a0.BindMarkers}, a1, a2)
 }
 
-func Exec[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.CompiledOptions) (gocql.Result, error) {
+func Exec[R any](a0 context.Context, a1 *gocql.Session[testDialect], a2 *Bound[R], a3 gocql.CompiledOptions) (gocql.Result, error) {
 	return implSession.Exec[R](a0, (*implSession.Session)(a1).Core(), a2, implSession.CompiledOptions(a3))
 }
 
-func Run[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.CompiledOptions) (gocql.Rows[R], error) {
+func Run[R any](a0 context.Context, a1 *gocql.Session[testDialect], a2 *Bound[R], a3 gocql.CompiledOptions) (gocql.Rows[R], error) {
 	result, err := implSession.Run[R](a0, (*implSession.Session)(a1).Core(), a2, implSession.CompiledOptions(a3))
 	return gocql.Rows[R](result), err
 }
@@ -403,7 +412,7 @@ func codecTestMust[T any](v T, err error) T {
 
 // bindOptions binds v to session, failing loudly on values a test meant to
 // be valid.
-func bindOptions(session *gocql.Session, v gocql.Options) gocql.CompiledOptions {
+func bindOptions(session *gocql.Session[testDialect], v gocql.Options) gocql.CompiledOptions {
 	o, err := session.CompileOptions(v)
 	if err != nil {
 		panic(err)
@@ -443,7 +452,7 @@ func createV2ClusterWithout(skip fixtureParts, opts ...func(*gocql.ConfigBuilder
 func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*gocql.ConfigBuilder)) *gocql.ConfigBuilder {
 	b := gocql.NewConfig(hosts...)
 	if skip&fixtureProtocol == 0 {
-		b.WithProtocolVersion(gocql.ProtocolVersion(*flagProto)).WithCQLVersion(*flagCQL)
+		b.WithCQLVersion(*flagCQL)
 	}
 	if skip&fixtureAgreement == 0 {
 		b.WithSchemaAgreement(2*time.Minute, 200*time.Millisecond)
@@ -567,7 +576,7 @@ func fixtureTLSConfig(base *tls.Config) *tls.Config {
 	return fixtureTLS
 }
 
-func createV2Session(t testing.TB, opts ...func(*gocql.ConfigBuilder)) *gocql.Session {
+func createV2Session(t testing.TB, opts ...func(*gocql.ConfigBuilder)) *gocql.Session[testDialect] {
 	t.Helper()
 	return createV2SessionFromConfig(createV2Cluster(opts...), t, false)
 }
@@ -582,7 +591,7 @@ func mustBuild(t testing.TB, b *gocql.ConfigBuilder) gocql.Config {
 	return config
 }
 
-func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisabled bool) *gocql.Session {
+func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisabled bool) *gocql.Session[testDialect] {
 	t.Helper()
 	keyspace := fixtureKeyspace("")
 	if tabletsDisabled {
@@ -597,7 +606,7 @@ func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisa
 			ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithTimeout(30 * time.Second) }))
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
-		session, err := gocql.Connect(ctx, bootstrap)
+		session, err := gocql.Connect[testDialect](ctx, bootstrap)
 		if err != nil {
 			t.Fatalf("connect to create typed integration keyspace: %v", err)
 		}
@@ -617,7 +626,7 @@ func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisa
 	config := mustBuild(t, b.WithKeyspace(keyspace))
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	session, err := gocql.Connect(ctx, config)
+	session, err := gocql.Connect[testDialect](ctx, config)
 	if err != nil {
 		t.Fatalf("create typed integration session: %v", err)
 	}
@@ -632,7 +641,7 @@ func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisa
 	return session
 }
 
-func v2TabletsSupported(ctx context.Context, session *gocql.Session) (bool, error) {
+func v2TabletsSupported(ctx context.Context, session *gocql.Session[testDialect]) (bool, error) {
 	row, err := v2ReadOne(ctx, session, "SELECT * FROM system.local")
 	if err != nil {
 		return false, err
@@ -665,7 +674,7 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session) (bool, erro
 	return false, nil
 }
 
-func v2Query(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (gocql.Rows[cql.DynamicRow], error) {
+func v2Query(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...cql.Value) (gocql.Rows[cql.DynamicRow], error) {
 	statement := cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}
 	var bound *Bound[cql.DynamicRow]
 	var err error
@@ -687,7 +696,7 @@ func v2Query(ctx context.Context, session *gocql.Session, stmt string, values ..
 	return Run(ctx, session, bound, gocql.CompiledOptions{})
 }
 
-func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (cql.DynamicRow, error) {
+func v2ReadOne(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...cql.Value) (cql.DynamicRow, error) {
 	rows, err := v2Query(ctx, session, stmt, values...)
 	if err != nil {
 		return cql.DynamicRow{}, err
@@ -713,7 +722,7 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 	return row, rows.Close()
 }
 
-func v2CreateTable(ctx context.Context, session *gocql.Session, stmt string) error {
+func v2CreateTable(ctx context.Context, session *gocql.Session[testDialect], stmt string) error {
 	bound, err := BindUnpreparedOwned(cql.Command(stmt), cql.NewColumns(), cql.EmptyParams{})
 	if err != nil {
 		return err
@@ -1236,7 +1245,7 @@ func (ltd *loggingTestDialer) connectionEvents(address string) []testConnectionE
 
 // These fixture helpers compose the public codecs; the integration values never
 // pass through reflected parameter binding or result destination discovery.
-func serializationExec[P any](s *gocql.Session, stmt string, encoder cql.ParamEncoder[P], value P) error {
+func serializationExec[P any](s *gocql.Session[testDialect], stmt string, encoder cql.ParamEncoder[P], value P) error {
 	ctx := context.Background()
 	p, err := s.Prepare(ctx, cql.Statement[P, cql.EmptyRow]{CQL: stmt, Params: encoder, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 	if err != nil {
@@ -1251,7 +1260,7 @@ func serializationExec[P any](s *gocql.Session, stmt string, encoder cql.ParamEn
 	return err
 }
 
-func serializationRows[R any](s *gocql.Session, stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (gocql.Rows[R], error) {
+func serializationRows[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (gocql.Rows[R], error) {
 	ctx := context.Background()
 	p, err := s.Prepare(ctx, cql.Statement[[]cql.Value, R]{CQL: stmt, Params: cql.DynamicParams, Rows: decoder}, gocql.PrepareOptions{})
 	if err != nil {
@@ -1265,7 +1274,7 @@ func serializationRows[R any](s *gocql.Session, stmt string, decoder cql.RowDeco
 	return Run(ctx, s, b, gocql.CompiledOptions{})
 }
 
-func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (R, error) {
+func serializationOne[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (R, error) {
 	var zero R
 	rows, err := serializationRows(s, stmt, decoder, values...)
 	if err != nil {

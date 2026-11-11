@@ -169,14 +169,9 @@ type InternalClusterSettings struct {
 	// The maximum amount of time to wait for schema agreement in a cluster after
 	// receiving a schema change frame. (default: 60s)
 	MaxWaitSchemaAgreement time.Duration
-	// ProtoVersion sets the version of the native protocol to use, this will
-	// enable features in the driver for specific protocol versions, generally this
-	// should be set to a supported version (3,4,5) for the cluster being connected to.
-	//
-	// If it is 0 or unset (the default) then the driver will attempt to discover the
-	// highest supported protocol up to version 4. Protocol version 5 must currently
-	// be selected explicitly. In clusters with nodes of different versions the protocol
-	// selected is not defined (ie, it can be any of the supported in the cluster).
+	// ProtoVersion is the native protocol version every connection speaks, 4
+	// or 5. The driver negotiates none: a server that does not speak it fails
+	// the connection.
 	ProtoVersion int
 	// Maximum number of inflight requests allowed per connection.
 	// Default: 32768 for CQL v3 and newer
@@ -317,6 +312,10 @@ type InternalClusterSettings struct {
 	// Default: true, and has no effect on a connection that exchanges result
 	// metadata IDs.
 	DisableSkipMetadata bool
+	// Server is the database the session expects; opening the session fails
+	// when the control connection reaches another. The zero Server checks
+	// nothing.
+	Server settings.Server
 	// DisableShardAwarePort disables advanced shard awareness: the driver will not
 	// choose a source port and connect through Scylla's shard-aware port to target
 	// a desired shard. Per-shard connection pooling and token-to-shard routing remain
@@ -374,6 +373,7 @@ type InternalClusterSettings struct {
 func InternalNewClusterSettings(hosts ...string) *InternalClusterSettings {
 	logger := slog.Default()
 	cfg := &InternalClusterSettings{
+		ProtoVersion:                  protocol.ProtoVersion4,
 		Hosts:                         hosts,
 		CQLVersion:                    "3.0.0",
 		Timeout:                       11 * time.Second,
@@ -646,8 +646,8 @@ func (cfg *InternalClusterSettings) Validate() error {
 		return cqltype.TypeValidation("MaxWaitSchemaAgreement", "must not be negative")
 	}
 
-	if cfg.ProtoVersion < 0 || cfg.ProtoVersion > 127 {
-		return cqltype.TypeValidation("ProtoVersion", "must be between 0 and 127")
+	if cfg.ProtoVersion != protocol.ProtoVersion4 && cfg.ProtoVersion != protocol.ProtoVersion5 {
+		return cqltype.TypeValidation("ProtoVersion", "supported versions are 4 and 5")
 	}
 
 	if cfg.ProtoVersion >= protocol.ProtoVersion5 && cfg.Compressor != nil {

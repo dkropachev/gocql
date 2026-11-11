@@ -14,7 +14,7 @@ import (
 func TestPrepareOptions(t *testing.T) {
 	t.Run("CompileOptions", func(t *testing.T) {
 		t.Run("RequiresSession", func(t *testing.T) {
-			var s *Session
+			var s *testSession
 			if _, err := s.CompileOptions(Options{}); err == nil {
 				t.Fatal("options bound without a session")
 			}
@@ -23,7 +23,7 @@ func TestPrepareOptions(t *testing.T) {
 
 	t.Run("OnePrepareOptions", func(t *testing.T) {
 		t.Run("AcceptsAtMostOne", func(t *testing.T) {
-			var s *Session
+			var s *testSession
 			statement := cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "SELECT now() FROM system.local"}
 			ctx := context.Background()
 			for _, options := range [][]PrepareOptions{nil, {{Keyspace: "ks"}}} {

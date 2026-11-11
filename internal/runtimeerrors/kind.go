@@ -106,7 +106,7 @@ func KindOf(err error) Kind {
 	switch {
 	case errors.Is(err, ErrClosed), errors.Is(err, ErrSessionClosed), errors.Is(err, ErrStaleRows), errors.Is(err, cqltype.ErrReleased):
 		return KindClosed
-	case hasType[*cqltype.ValidationError](err), hasType[*cqltype.CodecError](err), hasType[*SchemaChangedError](err), hasType[*UnsupportedSettingError](err),
+	case hasType[*cqltype.ValidationError](err), hasType[*cqltype.CodecError](err), hasType[*SchemaChangedError](err), hasType[*UnsupportedSettingError](err), hasType[*ServerMismatchError](err),
 		errors.Is(err, ErrQueryArgLength), errors.Is(err, ErrUseStmt), errors.Is(err, ErrTooManyStmts),
 		errors.Is(err, ErrNoKeyspace), errors.Is(err, ErrNoTable), errors.Is(err, ErrKeyspaceDoesNotExist),
 		errors.Is(err, ErrBusy), errors.Is(err, ErrConditionalExec), errors.Is(err, ErrPagingComplete), errors.Is(err, ErrUnsupported):

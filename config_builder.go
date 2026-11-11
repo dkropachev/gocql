@@ -29,17 +29,6 @@ type Config struct {
 	settings *implSettings.Config
 }
 
-// ProtocolVersion selects the native protocol version.
-type ProtocolVersion uint8
-
-const (
-	// ProtocolAuto negotiates a supported version up to protocol 4.
-	// Select Protocol5 explicitly to use protocol 5.
-	ProtocolAuto ProtocolVersion = 0
-	Protocol4    ProtocolVersion = 4
-	Protocol5    ProtocolVersion = 5
-)
-
 // ConfigBuilder assembles a Config. Settings that are not chosen keep the
 // driver's behavior; when a setting is chosen again, the last call wins.
 // Setters only store values; Build validates the final configuration.
@@ -141,12 +130,6 @@ func (b *ConfigBuilder) WithAuth(provider auth.Provider) *ConfigBuilder {
 // address. A nil source selects plaintext. Default plaintext.
 func (b *ConfigBuilder) WithTLS(source TLSSource) *ConfigBuilder {
 	b.settings.TLSSource = source
-	return b
-}
-
-// WithProtocolVersion pins the native protocol version. Default ProtocolAuto.
-func (b *ConfigBuilder) WithProtocolVersion(version ProtocolVersion) *ConfigBuilder {
-	b.settings.Protocol = int(version)
 	return b
 }
 
@@ -589,7 +572,7 @@ func (c Config) String() string {
 	}
 	s := c.settings
 	var w strings.Builder
-	fmt.Fprintf(&w, "contact points=%v port=%d keyspace=%q protocol=%d compression=%v", s.ContactPoints, s.Port, s.Keyspace, s.Protocol, s.Compression)
+	fmt.Fprintf(&w, "contact points=%v port=%d keyspace=%q compression=%v", s.ContactPoints, s.Port, s.Keyspace, s.Compression)
 	fmt.Fprintf(&w, " tls=%t auth=%t", s.TLS != nil, s.Auth != nil)
 	fmt.Fprintf(&w, " connections per shard=%d per host=%d advanced shard awareness=%t", s.Pool.ConnectionsPerShard, s.Pool.ConnectionsPerHost, s.Pool.ShardAwarePort)
 	fmt.Fprintf(&w, " discovery=%t metadata=%d prepared cache=%d", s.Metadata.InitialDiscovery, s.Metadata.Mode, s.PreparedCacheSize)

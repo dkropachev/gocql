@@ -54,13 +54,13 @@ type WikiPage struct {
 type WikiAttachment []byte
 
 type WikiTest struct {
-	session *gocql.Session
+	session *gocql.Session[testDialect]
 	tb      testing.TB
 
 	table string
 }
 
-func CreateSchema(session *gocql.Session, tb testing.TB, table string) *WikiTest {
+func CreateSchema(session *gocql.Session[testDialect], tb testing.TB, table string) *WikiTest {
 	table = serializationTableName(tb, table)
 	if err := v2CreateTable(context.Background(), session, fmt.Sprintf(("DROP TABLE IF EXISTS "+fixtureKeyspace("")+".%s"), table)); err != nil {
 		tb.Fatal("CreateSchema:", err)

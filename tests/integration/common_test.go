@@ -44,7 +44,7 @@ import (
 
 var (
 	flagCluster           = flag.String("cluster", "127.0.0.1", "a comma-separated list of host:port tuples")
-	flagProto             = flag.Int("proto", 0, "protcol version")
+	flagProto             = flag.Int("proto", 0, "protocol version; must match the dialect the suite is built for, which it defaults to")
 	flagCQL               = flag.String("cql", "3.0.0", "CQL version")
 	flagRF                = flag.Int("rf", 1, "replication factor for test keyspace")
 	clusterSize           = flag.Int("clusterSize", 1, "the expected size of the cluster")
@@ -68,6 +68,16 @@ func init() {
 
 func TestMain(m *testing.M) {
 	flag.Parse()
+	// The suite is compiled for one dialect (testDialect). Its flags must
+	// describe the same cluster, or every connection would fail.
+	if *flagProto == 0 {
+		*flagProto = testDialectProtocol
+	}
+	if *flagDistribution != testDialectDistribution || *flagProto != testDialectProtocol {
+		fmt.Fprintf(os.Stderr, "the suite is built for %s protocol %d, but -distribution=%s -proto=%d; build with the dialect_cassandra_v4 or dialect_cassandra_v5 tag for Cassandra\n",
+			testDialectDistribution, testDialectProtocol, *flagDistribution, *flagProto)
+		os.Exit(2)
+	}
 	slog.SetLogLoggerLevel(flagLogLevel)
 	// Before the keyspace cleanup: with no -cluster, this finds the cluster.
 	teardownCCM := setupCCM()

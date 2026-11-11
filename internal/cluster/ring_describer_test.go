@@ -199,9 +199,6 @@ func (m *mockControlConn) InternalAwaitSchemaAgreement() error { return nil }
 func (m *mockControlConn) query(statement string, values ...any) (iter *nativeResultFixture) {
 	return nil
 }
-func (m *mockControlConn) InternalDiscoverProtocol(hosts []*endpoint.HostInfo) (int, error) {
-	return 0, nil
-}
 func (m *mockControlConn) InternalConnect(hosts []*endpoint.HostInfo) error { return nil }
 func (m *mockControlConn) InternalClose()                                   {}
 func (m *mockControlConn) InternalGetSession() *Core                        { return nil }

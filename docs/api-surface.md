@@ -5,6 +5,16 @@ Each cell holds exactly one method. Streaming sits outside the grid as its own
 API. Apply this whenever you add, rename, remove or review a public method that
 executes a statement or reads its results.
 
+## Dialect
+
+`Session` is generic over its `Dialect` (`ScyllaV4`, `CassandraV4`,
+`CassandraV5`), chosen at `Connect`. The grid below is the same for every
+dialect. No other execution type carries the dialect: `Prepared`, `Query`,
+`Batch`, `Rows` and `Page` stay dialect-free, so a dialect never adds a type
+parameter to them. A method that only one dialect supports is a function that
+takes a `*Session` of that dialect, not a method that fails at run time on the
+others. See `docs/server-differences.md`.
+
 ## Statement kinds
 
 1. **Throwaway**: CQL text executed once, unprepared. UX is the only concern:

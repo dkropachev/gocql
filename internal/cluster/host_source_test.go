@@ -49,9 +49,6 @@ func (*systemSchemaTestControl) query(string, ...any) (iter *nativeResultFixture
 func (c *systemSchemaTestControl) querySystem(string, ...any) (iter *nativeResultFixture) {
 	return c.iter
 }
-func (*systemSchemaTestControl) InternalDiscoverProtocol([]*endpoint.HostInfo) (int, error) {
-	return 0, nil
-}
 func (*systemSchemaTestControl) InternalConnect([]*endpoint.HostInfo) error { return nil }
 func (*systemSchemaTestControl) InternalClose()                             {}
 func (*systemSchemaTestControl) InternalGetSession() *Core                  { return nil }

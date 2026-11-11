@@ -56,7 +56,7 @@ func (c positionCodec) Encode(w *cql.ValueWriter, p position) error { return c.f
 func (c positionCodec) Decode(r cql.ValueReader) (position, error)  { return c.fields.Decode(r) }
 func (positionCodec) Clone(p position) position                     { return p }
 
-func udtTable(t *testing.T, s *gocql.Session, fields string) (string, string) {
+func udtTable(t *testing.T, s *gocql.Session[testDialect], fields string) (string, string) {
 	t.Helper()
 	table, typ := serializationTableName(t), serializationTypeName(t)
 	serializationDDL(t, s, fmt.Sprintf("CREATE TYPE %s(%s)", typ, fields))

@@ -35,7 +35,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	s, err := gocql.Connect(ctx, mustBuild(t, config))
+	s, err := gocql.Connect[testDialect](ctx, mustBuild(t, config))
 	if err != nil {
 		t.Fatal(err)
 	}

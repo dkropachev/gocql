@@ -60,7 +60,7 @@ const smColumns = "bucket, id, name, ascii_name, flag, tiny, small, big, float, 
 var smAttrs = cql.WithCodec[smRecord](cql.MapCodec(cql.StringCodec, cql.Int64Codec))
 
 type smFixture struct {
-	session *gocql.Session
+	session *gocql.Session[testDialect]
 	table   string
 }
 

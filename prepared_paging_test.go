@@ -39,7 +39,7 @@ func (d countingDecoder) Compile(c cql.Columns) (cql.RowPlan[cql.Bytes], error) 
 }
 func (d countingDecoder) Clone(v cql.Bytes) cql.Bytes { return v.Clone() }
 
-func testPreparedState(t *testing.T, s *Session, columns cql.Columns) (*preparedState, *hostPrepared) {
+func testPreparedState(t *testing.T, s *testSession, columns cql.Columns) (*preparedState, *hostPrepared) {
 	t.Helper()
 	tracker := runtimeFor(s).InternalSchemaTracker()
 	dependencies := tracker.InternalDependencies("ks", cql.NewColumns(), columns)

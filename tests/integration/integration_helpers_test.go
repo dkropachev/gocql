@@ -52,7 +52,7 @@ func createV2ClusterWithout(skip fixtureParts, opts ...func(*gocql.ConfigBuilder
 func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*gocql.ConfigBuilder)) *gocql.ConfigBuilder {
 	b := gocql.NewConfig(hosts...)
 	if skip&fixtureProtocol == 0 {
-		b.WithProtocolVersion(gocql.ProtocolVersion(*flagProto)).WithCQLVersion(*flagCQL)
+		b.WithCQLVersion(*flagCQL)
 	}
 	if skip&fixtureAgreement == 0 {
 		b.WithSchemaAgreement(2*time.Minute, 200*time.Millisecond)
@@ -176,14 +176,14 @@ func fixtureTLSConfig(base *tls.Config) *tls.Config {
 	return fixtureTLS
 }
 
-func createV2Session(t testing.TB, opts ...func(*gocql.ConfigBuilder)) *gocql.Session {
+func createV2Session(t testing.TB, opts ...func(*gocql.ConfigBuilder)) *gocql.Session[testDialect] {
 	t.Helper()
 	return createV2SessionFromConfig(createV2Cluster(opts...), t, false)
 }
 
 // createV2SessionWithout opens a fixture session that leaves out skip, for a
 // test whose options choose those settings.
-func createV2SessionWithout(t testing.TB, skip fixtureParts, opts ...func(*gocql.ConfigBuilder)) *gocql.Session {
+func createV2SessionWithout(t testing.TB, skip fixtureParts, opts ...func(*gocql.ConfigBuilder)) *gocql.Session[testDialect] {
 	t.Helper()
 	return createV2SessionFromConfig(createV2ClusterWithout(skip, opts...), t, false)
 }
@@ -198,7 +198,7 @@ func mustBuild(t testing.TB, b *gocql.ConfigBuilder) gocql.Config {
 	return config
 }
 
-func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisabled bool) *gocql.Session {
+func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisabled bool) *gocql.Session[testDialect] {
 	t.Helper()
 	keyspace := fixtureKeyspace("")
 	if tabletsDisabled {
@@ -213,7 +213,7 @@ func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisa
 			ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithTimeout(30 * time.Second) }))
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
-		session, err := gocql.Connect(ctx, bootstrap)
+		session, err := gocql.Connect[testDialect](ctx, bootstrap)
 		if err != nil {
 			t.Fatalf("connect to create typed integration keyspace: %v", err)
 		}
@@ -233,7 +233,7 @@ func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisa
 	config := mustBuild(t, b.WithKeyspace(keyspace))
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	session, err := gocql.Connect(ctx, config)
+	session, err := gocql.Connect[testDialect](ctx, config)
 	if err != nil {
 		t.Fatalf("create typed integration session: %v", err)
 	}
@@ -248,7 +248,7 @@ func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisa
 	return session
 }
 
-func v2TabletsSupported(ctx context.Context, session *gocql.Session) (bool, error) {
+func v2TabletsSupported(ctx context.Context, session *gocql.Session[testDialect]) (bool, error) {
 	row, err := v2ReadOne(ctx, session, "SELECT * FROM system.local")
 	if err != nil {
 		return false, err
@@ -283,7 +283,7 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session) (bool, erro
 
 // v2Exec and v2Query accept only explicitly typed dynamic values. Owned binding
 // lets callers release or change their inputs as soon as these helpers return.
-func v2Exec(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (gocql.Result, error) {
+func v2Exec(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...cql.Value) (gocql.Result, error) {
 	statement := cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}
 	var bound *Bound[cql.EmptyRow]
 	var err error
@@ -303,7 +303,7 @@ func v2Exec(ctx context.Context, session *gocql.Session, stmt string, values ...
 	return Exec(ctx, session, bound, gocql.CompiledOptions{})
 }
 
-func v2Query(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (gocql.Rows[cql.DynamicRow], error) {
+func v2Query(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...cql.Value) (gocql.Rows[cql.DynamicRow], error) {
 	statement := cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}
 	var bound *Bound[cql.DynamicRow]
 	var err error
@@ -325,7 +325,7 @@ func v2Query(ctx context.Context, session *gocql.Session, stmt string, values ..
 	return Run(ctx, session, bound, gocql.CompiledOptions{})
 }
 
-func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (cql.DynamicRow, error) {
+func v2ReadOne(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...cql.Value) (cql.DynamicRow, error) {
 	rows, err := v2Query(ctx, session, stmt, values...)
 	if err != nil {
 		return cql.DynamicRow{}, err
@@ -351,7 +351,7 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 	return row, rows.Close()
 }
 
-func v2CreateTable(ctx context.Context, session *gocql.Session, stmt string) error {
+func v2CreateTable(ctx context.Context, session *gocql.Session[testDialect], stmt string) error {
 	bound, err := BindUnpreparedOwned(cql.Command(stmt), cql.NewColumns(), cql.EmptyParams{})
 	if err != nil {
 		return err

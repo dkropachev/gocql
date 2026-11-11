@@ -30,7 +30,7 @@ import (
 
 type hostPrepared = implSession.InternalHostPrepared
 
-func newConnectionHooks(a0 *Session) implTransport.InternalConnectionHooks {
+func newConnectionHooks(a0 *testSession) implTransport.InternalConnectionHooks {
 	return (*implSession.Session)(a0).Core().NewConnectionHooks()
 }
 
@@ -40,7 +40,7 @@ type resultPlanCache[R any] = implSession.InternalResultPlanCache[R]
 
 type ringDescriber = implCluster.InternalRingDescriber
 
-func runtimeFor(a0 *Session) *sessionRuntime {
+func runtimeFor(a0 *testSession) *sessionRuntime {
 	return implSession.InternalRuntimeFor((*implSession.Session)(a0).Core())
 }
 

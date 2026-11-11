@@ -1,8 +1,11 @@
 # Cassandra and ScyllaDB differences
 
-The driver works with both Apache Cassandra and ScyllaDB. Most responses are the
-same on both, and the driver absorbs most of the differences. The ones below
-change what your code sees, so write code that works for both.
+The driver works with both Apache Cassandra and ScyllaDB. You name the one you
+connect to with the session's dialect: `gocql.Connect[gocql.ScyllaV4]`,
+`[gocql.CassandraV4]` or `[gocql.CassandraV5]` (see
+[connecting](connecting/index.md)). Most responses are the same on both, and
+the driver absorbs most of the differences. The ones below change what your
+code sees. Code that is generic over the dialect should handle both.
 
 ## Lightweight transactions
 

@@ -122,7 +122,7 @@ func TestExamples(t *testing.T) {
 	t.Run("Streaming", func(t *testing.T) {
 		cfg := mustBuild(t, createV2Cluster())
 		host := getClusterHosts()[0]
-		args := []string{"run", "./examples/streaming", "-hosts", net.JoinHostPort(host, strconv.Itoa(int(fixturePort()))), "-protocol", strconv.Itoa(*flagProto)}
+		args := []string{"run", "./examples/streaming", "-hosts", net.JoinHostPort(host, strconv.Itoa(int(fixturePort()))), "-dialect", testDialectDistribution + "-v" + strconv.Itoa(testDialectProtocol)}
 		switch *flagCompressTest {
 		case "lz4":
 			args = append(args, "-compression", "lz4")

@@ -195,7 +195,7 @@ func TestWorkCountsPerf(t *testing.T) {
 			}
 			// Warm prepared lookup remains usable while the discovery LRU lock is held;
 			// unrelated schema events leave the captured table generation current.
-			s := (*Session)(implSession.InternalWrapSession(new(implCluster.Core)))
+			s := (*testSession)(implSession.InternalWrapSession(new(implCluster.Core)))
 			(*implSession.Session)(s).Data().InternalLogger = logging.Nop()
 			cols := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "v", Type: cql.BlobType})
 			_, hp := testPreparedState(t, s, cols)

@@ -22,7 +22,7 @@ import (
 // operation, so when several parallel tests issue DDL/TRUNCATE concurrently
 // Scylla rejects the overlapping request, and SimpleRetryPolicy does not retry
 // it. See scylladb/gocql#895.
-func truncateTable(t *testing.T, session *gocql.Session, fqTable string) error {
+func truncateTable(t *testing.T, session *gocql.Session[testDialect], fqTable string) error {
 	t.Helper()
 	return retryOnTopologyBusy(func() error {
 		_, err := v2Exec(context.Background(), session, "TRUNCATE "+fqTable)
@@ -110,7 +110,7 @@ func serializationMustType(v cql.DataType, err error) cql.DataType {
 
 // Historical method subcase names identify the preserved coverage: collection
 // of cloned rows and single-row access with an explicitly retained page.
-func dynamicSerializationResult(t *testing.T, s *gocql.Session, stmt, method string, args ...cql.Value) cql.Value {
+func dynamicSerializationResult(t *testing.T, s *gocql.Session[testDialect], stmt, method string, args ...cql.Value) cql.Value {
 	t.Helper()
 	rows, err := v2Query(t.Context(), s, stmt, args...)
 	if err != nil {
@@ -161,7 +161,7 @@ type serializationDynamicCase struct {
 	expected   cql.Value
 }
 
-func checkDynamicSerializationCases(t *testing.T, s *gocql.Session, table string, cases []serializationDynamicCase) {
+func checkDynamicSerializationCases(t *testing.T, s *gocql.Session[testDialect], table string, cases []serializationDynamicCase) {
 	t.Helper()
 	for i, tc := range cases {
 		run := func(t *testing.T) {

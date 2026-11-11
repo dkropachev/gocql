@@ -35,7 +35,7 @@ func TestFixture(t *testing.T) {
 		if !*flagRunSslTest || *flagDistribution != "scylla" {
 			t.Skip("requires Scylla mutual-TLS fixture")
 		}
-		accepted, err := gocql.Connect(context.Background(), mustBuild(t, createV2Cluster()))
+		accepted, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, createV2Cluster()))
 		if err != nil {
 			t.Fatal("valid client certificate rejected", err)
 		}
@@ -45,7 +45,7 @@ func TestFixture(t *testing.T) {
 			noCertificate.Certificates = nil
 			c.WithTLS(gocql.StaticTLS(fixtureTLSConfig(noCertificate)))
 		})
-		rejected, err := gocql.Connect(context.Background(), mustBuild(t, config))
+		rejected, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, config))
 		if err == nil {
 			rejected.Close()
 			t.Fatal("mutual-TLS server accepted missing client certificate")
@@ -140,7 +140,7 @@ func TestFixture(t *testing.T) {
 	})
 
 	t.Run("Identity", func(t *testing.T) {
-		s, err := gocql.Connect(context.Background(), mustBuild(t, createV2Cluster()))
+		s, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, createV2Cluster()))
 		if err != nil {
 			t.Fatal(err)
 		}

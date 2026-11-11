@@ -138,7 +138,7 @@ func testCPU() int64 {
 func mem() runtime.MemStats { var m runtime.MemStats; runtime.ReadMemStats(&m); return m }
 
 // Negotiated metadata is captured outside all normal measurement intervals.
-func testNegotiated(s *gocql.Session) []map[string]interface{} {
+func testNegotiated(s *gocql.Session[testDialect]) []map[string]interface{} {
 	p := (*implSession.Session)(s).Data().InternalPool
 	p.InternalMu.RLock()
 	defer p.InternalMu.RUnlock()

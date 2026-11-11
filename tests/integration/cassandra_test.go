@@ -83,7 +83,7 @@ func pollUntil(timeout time.Duration, cond func() bool) bool {
 //
 // The host list is re-read on every attempt, so a host marked up while this waits is
 // included and one marked down stops being required.
-func waitForHostConns(t *testing.T, session *gocql.Session) map[string]*driverConn {
+func waitForHostConns(t *testing.T, session *gocql.Session[testDialect]) map[string]*driverConn {
 	t.Helper()
 
 	conns := make(map[string]*driverConn)
@@ -140,7 +140,7 @@ func waitForHostConns(t *testing.T, session *gocql.Session) map[string]*driverCo
 // getRandomConn returns a pooled connection, waiting for one rather than failing the
 // moment none is pickable. See waitForHostConns: an empty pool straight after
 // createV2Session is a pool still filling, not an anomaly.
-func getRandomConn(t *testing.T, session *gocql.Session) *driverConn {
+func getRandomConn(t *testing.T, session *gocql.Session[testDialect]) *driverConn {
 	t.Helper()
 
 	var conn *driverConn
@@ -153,7 +153,7 @@ func getRandomConn(t *testing.T, session *gocql.Session) *driverConn {
 	return conn
 }
 
-func injectInvalidPreparedStatement(t *testing.T, session *gocql.Session, table string) (*Bound[cql.EmptyRow], *driverConn) {
+func injectInvalidPreparedStatement(t *testing.T, session *gocql.Session[testDialect], table string) (*Bound[cql.EmptyRow], *driverConn) {
 	t.Helper()
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(foo varchar,bar int,PRIMARY KEY(foo,bar))", table))
 	conn := getRandomConn(t, session)
@@ -190,7 +190,7 @@ func columnNames(columns map[string]*metadata.Column) []string {
 // runMetadataChangedFlow drives the METADATA_CHANGED flow against
 // gocql_test.<table>, with every statement pinned to conn so they all land on the
 // node whose prepared-statement cache entry is being inspected.
-func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverConn, table string) {
+func runMetadataChangedFlow(t *testing.T, session *gocql.Session[testDialect], conn *driverConn, table string) {
 	t.Helper()
 	qualified := (fixtureKeyspace("") + ".") + table
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

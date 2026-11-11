@@ -14,16 +14,19 @@ import (
 )
 
 // Session owns cluster metadata, pooled connections and typed executions.
-// Connect constructs a session. Sessions and their prepared statements are safe
-// for concurrent use. Close the session when the application stops using it.
-type Session implSession.Session
+// Connect constructs a session of a Dialect: ScyllaV4, CassandraV4 or
+// CassandraV5. The dialect is part of the type, so code that works with any
+// cluster is generic over it. Prepared statements, queries and batches do not
+// carry it. Sessions and their prepared statements are safe for concurrent
+// use. Close the session when the application stops using it.
+type Session[D Dialect] implSession.Session
 
-func (s *Session) internal() *implSession.Session { return (*implSession.Session)(s) }
+func (s *Session[D]) internal() *implSession.Session { return (*implSession.Session)(s) }
 
 // Prepare prepares statement for repeated execution. The returned handle is
 // immutable and safe to share between goroutines. At most one PrepareOptions
 // may be passed; omitting it uses the session keyspace and any eligible host.
-func (s *Session) Prepare[P, R any](ctx context.Context, statement cql.Statement[P, R], options ...PrepareOptions) (*Prepared[P, R], error) {
+func (s *Session[D]) Prepare[P, R any](ctx context.Context, statement cql.Statement[P, R], options ...PrepareOptions) (*Prepared[P, R], error) {
 	o, err := internalPrepareOptions(options)
 	if err != nil {
 		return nil, err
@@ -37,7 +40,7 @@ func (s *Session) Prepare[P, R any](ctx context.Context, statement cql.Statement
 // decoder against server metadata when available; conditional result metadata
 // unavailable during preparation is checked on execution. At most one
 // PrepareOptions may be supplied.
-func (s *Session) PrepareStream[P, R any](ctx context.Context, statement cql.StreamStatement[P, R], options ...PrepareOptions) (*PreparedStream[P, R], error) {
+func (s *Session[D]) PrepareStream[P, R any](ctx context.Context, statement cql.StreamStatement[P, R], options ...PrepareOptions) (*PreparedStream[P, R], error) {
 	o, err := internalPrepareOptions(options)
 	if err != nil {
 		return nil, err
@@ -52,7 +55,7 @@ func (s *Session) PrepareStream[P, R any](ctx context.Context, statement cql.Str
 // and is resolved again on each call. Use context deadlines for per-request
 // time limits. Policy and observer objects remain shared and must be safe for
 // concurrent use.
-func (s *Session) CompileOptions(options Options) (CompiledOptions, error) {
+func (s *Session[D]) CompileOptions(options Options) (CompiledOptions, error) {
 	o, err := s.internal().CompileOptions(internalOptions(options))
 	return CompiledOptions(o), err
 }
@@ -61,7 +64,7 @@ func (s *Session) CompileOptions(options Options) (CompiledOptions, error) {
 // leaving a query to close. It must return no result columns. Parameters are
 // described by statement.BindMarkers. At most one Options may be passed; the
 // call validates and resolves it, and omitting it uses the session defaults.
-func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...Options) (Result, error) {
+func (s *Session[D]) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...Options) (Result, error) {
 	return s.internal().UnpreparedExec(ctx, internalStatement(statement), value, internalOptionList(options)...)
 }
 
@@ -70,7 +73,7 @@ func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.State
 // are detached before return; there is no query or cursor to close. Parameters
 // are described by statement.BindMarkers. At most one Options may be passed;
 // the call validates and resolves it, and omitting it uses the session defaults.
-func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...Options) (bool, Result, error) {
+func (s *Session[D]) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...Options) (bool, Result, error) {
 	return s.internal().UnpreparedOne(ctx, internalStatement(statement), value, dst, internalOptionList(options)...)
 }
 
@@ -82,7 +85,7 @@ func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Sta
 // dst is decoded into for every row. With cql.ReuseBuffers, or a RowInto reset
 // that keeps slices, []byte fields reuse their capacity, so a slice kept from
 // one call of fn aliases the next row's data: keep bytes.Clone(row.Field).
-func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...Options) (Result, error) {
+func (s *Session[D]) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...Options) (Result, error) {
 	return s.internal().UnpreparedEach(ctx, internalStatement(statement), value, dst, fn, internalOptionList(options)...)
 }
 
@@ -91,7 +94,7 @@ func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.St
 // query is closed when the loop ends; there is nothing to close. Parameters are
 // described by statement.BindMarkers. At most one Options may be passed; the
 // call validates and resolves it, and omitting it uses the session defaults.
-func (s *Session) UnpreparedAll[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...Options) iter.Seq2[*R, error] {
+func (s *Session[D]) UnpreparedAll[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...Options) iter.Seq2[*R, error] {
 	return s.internal().UnpreparedAll(ctx, internalStatement(statement), value, dst, internalOptionList(options)...)
 }
 
@@ -101,7 +104,7 @@ func (s *Session) UnpreparedAll[P, R any](ctx context.Context, statement cql.Sta
 // paging options are ignored, because a BATCH response is a single page. Do
 // not modify batch until the call returns. A reused batch sends without
 // allocating.
-func (s *Session) ExecBatch(ctx context.Context, kind cql.BatchKind, batch *Batch, options ...CompiledOptions) (Result, error) {
+func (s *Session[D]) ExecBatch(ctx context.Context, kind cql.BatchKind, batch *Batch, options ...CompiledOptions) (Result, error) {
 	o, err := internalCompiledOptions(options)
 	if err != nil {
 		return implSession.InternalExecutionErrorResult(err), err
@@ -116,7 +119,7 @@ func (s *Session) ExecBatch(ctx context.Context, kind cql.BatchKind, batch *Batc
 // query until they are closed, as Prepared.Run's do. Options and batch
 // ownership are as for ExecBatch. Once its rows are closed, a batch sent again
 // with the same R and decoder reuses their storage and allocates nothing.
-func (s *Session) RunBatch[R any](ctx context.Context, kind cql.BatchKind, batch *Batch, decoder cql.RowDecoder[R], options ...CompiledOptions) (Rows[R], error) {
+func (s *Session[D]) RunBatch[R any](ctx context.Context, kind cql.BatchKind, batch *Batch, decoder cql.RowDecoder[R], options ...CompiledOptions) (Rows[R], error) {
 	o, err := internalCompiledOptions(options)
 	if err != nil {
 		return Rows[R]{}, err
@@ -131,47 +134,47 @@ func (s *Session) RunBatch[R any](ctx context.Context, kind cql.BatchKind, batch
 // every call, so a statement added often is prepared once and added with
 // Prepared.AddToBatch. A member added this way gives the batch no routing
 // token; the batch routes by its first prepared member's token.
-func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement cql.Statement[P, R], value P) error {
+func (s *Session[D]) UnpreparedAddToBatch[P, R any](batch *Batch, statement cql.Statement[P, R], value P) error {
 	return s.internal().UnpreparedAddToBatch((*implSession.Batch)(batch), internalStatement(statement), value)
 }
 
 // ID returns the session identifier sent to nodes in the SESSION_ID startup
 // option. It remains valid after Close and can correlate client observations
 // with system.clients.client_options.
-func (s *Session) ID() string { return s.internal().ID() }
+func (s *Session[D]) ID() string { return s.internal().ID() }
 
 // AwaitSchemaAgreement waits for nodes' schema versions to agree, bounded by
 // ctx and the configured schema agreement timeout.
-func (s *Session) AwaitSchemaAgreement(ctx context.Context) error {
+func (s *Session[D]) AwaitSchemaAgreement(ctx context.Context) error {
 	return s.internal().AwaitSchemaAgreement(ctx)
 }
 
 // Close stops new work, cancels in-flight requests and joins connections,
 // writers and callbacks. Retained output page leases remain valid.
-func (s *Session) Close() error { return s.internal().Close() }
+func (s *Session[D]) Close() error { return s.internal().Close() }
 
 // Closed reports whether session shutdown has started.
-func (s *Session) Closed() bool { return s.internal().Closed() }
+func (s *Session[D]) Closed() bool { return s.internal().Closed() }
 
 // Metadata returns the current immutable cluster metadata snapshot.
-func (s *Session) Metadata() *metadata.Snapshot { return s.internal().Metadata() }
+func (s *Session[D]) Metadata() *metadata.Snapshot { return s.internal().Metadata() }
 
 // Metrics returns the session's current metrics snapshot.
-func (s *Session) Metrics() routing.MetricsSnapshot { return s.internal().Metrics() }
+func (s *Session[D]) Metrics() routing.MetricsSnapshot { return s.internal().Metrics() }
 
 // RefreshMetadata waits for a shared topology refresh under ctx. The queries
 // performing that refresh use the configured metadata timeout.
-func (s *Session) RefreshMetadata(ctx context.Context) error {
+func (s *Session[D]) RefreshMetadata(ctx context.Context) error {
 	return s.internal().RefreshMetadata(ctx)
 }
 
 // Trace reads a trace's events, polling for readiness within ctx.
-func (s *Session) Trace(ctx context.Context, id cql.UUID) (TraceInfo, error) {
+func (s *Session[D]) Trace(ctx context.Context, id cql.UUID) (TraceInfo, error) {
 	return s.internal().Trace(ctx, id)
 }
 
 // Subscribe subscribes to matching session events. Close the subscription when
 // done consuming it.
-func (s *Session) Subscribe(filter EventFilter) (*Subscription, error) {
+func (s *Session[D]) Subscribe(filter EventFilter) (*Subscription, error) {
 	return s.internal().Subscribe(filter)
 }

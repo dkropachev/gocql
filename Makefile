@@ -356,8 +356,8 @@ scylla-stop: .prepare-scylla-ccm
 test-integration-cassandra: cassandra-start
 	@echo "Run integration tests for proto ${TEST_CQL_PROTOCOL} on cassandra ${CASSANDRA_VERSION}"
 	export ${CCM_TEST_ENV} GOCQL_CCM_CLUSTER=${CCM_CASSANDRA_CLUSTER_NAME}
-	echo "go test -v ${TEST_OPTS} -tags \"${TEST_INTEGRATION_TAGS}\" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution cassandra -runauth -runcassandrafixtures -gocql.timeout=60s -runssl -proto=${TEST_CQL_PROTOCOL} -rf=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} ${COVER_RUNTIME_ARGS}"
-	go test -v ${TEST_OPTS} -tags "${TEST_INTEGRATION_TAGS}" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution cassandra -runauth -runcassandrafixtures -gocql.timeout=60s -runssl -proto=${TEST_CQL_PROTOCOL} -rf=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} ${COVER_RUNTIME_ARGS}
+	echo "go test -v ${TEST_OPTS} -tags \"${TEST_INTEGRATION_TAGS} dialect_cassandra_v${TEST_CQL_PROTOCOL}\" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution cassandra -runauth -runcassandrafixtures -gocql.timeout=60s -runssl -proto=${TEST_CQL_PROTOCOL} -rf=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} ${COVER_RUNTIME_ARGS}"
+	go test -v ${TEST_OPTS} -tags "${TEST_INTEGRATION_TAGS} dialect_cassandra_v${TEST_CQL_PROTOCOL}" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution cassandra -runauth -runcassandrafixtures -gocql.timeout=60s -runssl -proto=${TEST_CQL_PROTOCOL} -rf=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} ${COVER_RUNTIME_ARGS}
 
 test-integration-scylla: scylla-start
 	@echo "Run integration tests for proto ${TEST_CQL_PROTOCOL} on scylla ${SCYLLA_VERSION}"
