@@ -200,7 +200,7 @@ func bindPrepared[P, R any](p *Prepared[P, R], value P, owned bool) (*Bound[R], 
 	info := p.privateStorage.InternalState.InternalInfo
 	statement, keyspace := p.privateStorage.InternalState.InternalStatement, p.privateStorage.InternalState.InternalKeyspace
 	p.privateStorage.InternalState.InternalMu.RUnlock()
-	allowUnset := p.privateStorage.InternalState.InternalProtocol >= 4
+	allowUnset := true
 	values, err := binding.InternalEncodeParameters(p.privateStorage.params, columns, value, owned, allowUnset)
 	if err != nil {
 		return nil, err

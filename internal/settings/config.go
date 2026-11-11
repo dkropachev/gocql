@@ -119,8 +119,8 @@ func (config Config) Validate() error {
 	if len(config.ContactPoints) == 0 {
 		return cqltype.TypeValidation("contact points", "at least one contact point is required")
 	}
-	if config.Protocol != 0 && config.Protocol != 3 && config.Protocol != 4 && config.Protocol != 5 {
-		return cqltype.TypeValidation("protocol", "supported versions are 3, 4 and 5")
+	if config.Protocol != 0 && config.Protocol != 4 && config.Protocol != 5 {
+		return cqltype.TypeValidation("protocol", "supported versions are 4 and 5")
 	}
 	if config.Port == 0 {
 		return cqltype.TypeValidation("port", "must not be zero")

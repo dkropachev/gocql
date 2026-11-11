@@ -47,7 +47,7 @@ func ReadRows[P, R any](ctx context.Context, version byte, timeout time.Duration
 	if err != nil {
 		return nil, err
 	}
-	values, err := binding.InternalEncodeParameters(plan, columns, value, true, version >= 4)
+	values, err := binding.InternalEncodeParameters(plan, columns, value, true, true)
 	if err != nil {
 		return nil, err
 	}

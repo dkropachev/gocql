@@ -877,8 +877,11 @@ func (c *Conn) InternalUsesMetadataID() bool {
 // Read from the same framer config as usesMetadataID, for the same reason, and
 // because initCache has already masked the protocol version there.
 func (c *Conn) InternalTracksResultMetadataID() bool {
-	return c.InternalFramers.InternalDefaults.InternalProto > protocol.ProtoVersion4 || c.InternalFramers.InternalDefaults.InternalScyllaUseMetadataID
+	return protocol.VersionFor(c.InternalFramers.InternalDefaults.InternalProto).ResultMetadataID || c.InternalFramers.InternalDefaults.InternalScyllaUseMetadataID
 }
+
+// InternalWire returns what c's protocol version puts on the wire.
+func (c *Conn) InternalWire() *protocol.Version { return protocol.VersionFor(c.InternalVersion) }
 
 func (c *Conn) close() error {
 	return c.InternalR.Close()
@@ -1005,7 +1008,7 @@ func (c *Conn) InternalHeartBeat(ctx context.Context) {
 
 func (c *Conn) InternalRecv(ctx context.Context, startupCompleted bool) error {
 
-	if startupCompleted && c.InternalVersion > protocol.ProtoVersion4 {
+	if startupCompleted && c.InternalWire().Segments {
 		return c.InternalRecvSegment(ctx)
 	}
 
@@ -1739,7 +1742,7 @@ func (c *Conn) execAdmitted(ctx context.Context, req protocol.FrameBuilder, trac
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err, InternalPotentiallyExecuted: false})
 	}
 
-	if c.InternalVersion > protocol.ProtoVersion4 && startupCompleted {
+	if c.InternalWire().Segments && startupCompleted {
 		if err = framer.PrepareModernLayout(); err != nil {
 			c.InternalReleaseWriteFramer(framer)
 

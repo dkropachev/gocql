@@ -428,7 +428,7 @@ func TestSession(t *testing.T) {
 						return &f
 					}(),
 				},
-				proto: protocol.ProtoVersion3,
+				proto: 3,
 			},
 		}
 
@@ -538,7 +538,7 @@ func TestSession(t *testing.T) {
 
 				srv := newTestServerOpts{
 					addr:     "127.0.0.1:0",
-					protocol: implProtocol.ProtoVersion3,
+					protocol: implProtocol.ProtoVersion4,
 					recvHook: func(f *implProtocol.Framer) {
 						if f.Header.Op != frm.OpStartup {
 							return
@@ -559,7 +559,7 @@ func TestSession(t *testing.T) {
 
 				sessions := make([]*Core, 0, tt.sessionCount)
 				for i := 0; i < tt.sessionCount; i++ {
-					cluster := testCluster(implProtocol.ProtoVersion3, srv.Address)
+					cluster := testCluster(implProtocol.ProtoVersion4, srv.Address)
 					cluster.NumConns = connsPerSession
 					session, err := cluster.Open()
 					if err != nil {

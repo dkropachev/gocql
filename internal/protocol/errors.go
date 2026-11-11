@@ -318,7 +318,7 @@ func decodeServerError(r errorBody, head frm.FrameHeader, proto byte, rateLimitC
 		return &RequestErrUnprepared{ErrorFrame: base, StatementId: r.shortBytes()}
 	case ErrCodeReadFailure:
 		e := &RequestErrReadFailure{ErrorFrame: base, Consistency: Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32()}
-		if proto >= ProtoVersion5 {
+		if VersionFor(proto).FailureReasonMap {
 			e.ErrorMap = r.errorMap()
 			e.NumFailures = len(e.ErrorMap)
 		} else {
@@ -328,7 +328,7 @@ func decodeServerError(r errorBody, head frm.FrameHeader, proto byte, rateLimitC
 		return e
 	case ErrCodeWriteFailure:
 		e := &RequestErrWriteFailure{ErrorFrame: base, Consistency: Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32()}
-		if proto >= ProtoVersion5 {
+		if VersionFor(proto).FailureReasonMap {
 			e.ErrorMap = r.errorMap()
 			e.NumFailures = len(e.ErrorMap)
 		} else {

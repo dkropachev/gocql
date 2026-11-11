@@ -423,7 +423,7 @@ func (c *Conn) InternalRefreshNativeProtocol() {
 
 func (c *Conn) buildNativeProtocol() *protocol.Settings {
 	limits := c.typedProtocolLimits()
-	p := protocol.Settings{MetadataReuse: &c.typedMetadataReuse, Protocol: c.InternalVersion, Flags: c.InternalFramers.InternalDefaults.InternalFlags, MetadataID: c.InternalFramers.InternalDefaults.InternalScyllaUseMetadataID, TabletsRoutingV2: c.InternalFramers.InternalDefaults.InternalTabletsRoutingV2, MaxFrameBytes: limits.MaxFrameBytes, MaxDecompressedBytes: limits.MaxDecompressedBytes, MaxMetadataDepth: limits.MaxMetadataDepth, FlagLWT: c.InternalFramers.InternalDefaults.InternalFlagLWT, RateLimitingErrorCode: c.InternalFramers.InternalDefaults.rateLimitingErrorCode, SegmentCompression: c.InternalSegCompressor != nil}
+	p := protocol.Settings{MetadataReuse: &c.typedMetadataReuse, Version: *c.InternalWire(), Flags: c.InternalFramers.InternalDefaults.InternalFlags, MetadataID: c.InternalFramers.InternalDefaults.InternalScyllaUseMetadataID, TabletsRoutingV2: c.InternalFramers.InternalDefaults.InternalTabletsRoutingV2, MaxFrameBytes: limits.MaxFrameBytes, MaxDecompressedBytes: limits.MaxDecompressedBytes, MaxMetadataDepth: limits.MaxMetadataDepth, FlagLWT: c.InternalFramers.InternalDefaults.InternalFlagLWT, RateLimitingErrorCode: c.InternalFramers.InternalDefaults.rateLimitingErrorCode, SegmentCompression: c.InternalSegCompressor != nil}
 	if c.InternalCompressor != nil {
 		p.Compression = c.InternalCompressor.Name()
 	}

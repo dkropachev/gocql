@@ -7,9 +7,9 @@ standalone compressor module or `replace` directive is needed. Native protocol
 spans directly and sends original spans when a v5 segment is incompressible.
 
 Explicit incremental receive supports no compression on raw/TLS transports and protocol 5 LZ4
-segments. Protocol 3/4 frame compression with LZ4 or Snappy produces an explicit
+segments. Protocol 4 frame compression with LZ4 or Snappy produces an explicit
 `StreamCapabilityError` before streaming submission. Incremental receive reports its capability error explicitly. Default
-page-buffered streaming and ordinary buffered execution support protocol 3/4
+page-buffered streaming and ordinary buffered execution support protocol 4
 frame compression.
 
 See [streaming](../statements/streaming.md) for transform staging and lifetime.

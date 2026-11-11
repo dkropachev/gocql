@@ -52,7 +52,7 @@ import "github.com/scylladb/gocql/v2/internal/protocol"
 // connection should die — not mid-stream, on a path whose callers can only turn it
 // into a per-request error.
 func (c *Conn) resolveSegmentCompressor() error {
-	if c.InternalVersion <= protocol.ProtoVersion4 {
+	if !c.InternalWire().Segments {
 		return nil
 	}
 

@@ -753,7 +753,7 @@ func TestDriverConfigReport(t *testing.T) {
 
 				srv := newTestServerOpts{
 					addr:     "127.0.0.1:0",
-					protocol: implProtocol.ProtoVersion3,
+					protocol: implProtocol.ProtoVersion4,
 					recvHook: func(f *implProtocol.Framer) {
 						if f.Header.Op != frm.OpStartup {
 							return
@@ -778,7 +778,7 @@ func TestDriverConfigReport(t *testing.T) {
 				// single pool connection, waited for below, keeps the STARTUP count
 				// deterministic: the rest of a larger pool is filled
 				// asynchronously and could land a frame mid-test.
-				cluster := testCluster(implProtocol.ProtoVersion3, srv.Address)
+				cluster := testCluster(implProtocol.ProtoVersion4, srv.Address)
 				cluster.NumConns = 1
 				session, err := cluster.Open()
 				if err != nil {
@@ -1034,7 +1034,7 @@ func TestDriverConfigReport(t *testing.T) {
 
 			srv := newTestServerOpts{
 				addr:     "127.0.0.1:0",
-				protocol: implProtocol.ProtoVersion3,
+				protocol: implProtocol.ProtoVersion4,
 				recvHook: func(f *implProtocol.Framer) {
 					if f.Header.Op != frm.OpStartup {
 						return
@@ -1050,7 +1050,7 @@ func TestDriverConfigReport(t *testing.T) {
 			}.newServer(t, ctx)
 			defer srv.Stop()
 
-			cluster := testCluster(implProtocol.ProtoVersion3, srv.Address)
+			cluster := testCluster(implProtocol.ProtoVersion4, srv.Address)
 			cluster.NumConns = 1
 			cluster.DisableDriverConfigReporting = true
 			session, err := cluster.Open()
@@ -1123,7 +1123,7 @@ func TestDriverConfigReport(t *testing.T) {
 
 			srv := newTestServerOpts{
 				addr:     "127.0.0.1:0",
-				protocol: implProtocol.ProtoVersion3,
+				protocol: implProtocol.ProtoVersion4,
 				recvHook: func(f *implProtocol.Framer) {
 					if f.Header.Op != frm.OpStartup {
 						return
@@ -1142,7 +1142,7 @@ func TestDriverConfigReport(t *testing.T) {
 			}.newServer(t, ctx)
 			defer srv.Stop()
 
-			cluster := testCluster(implProtocol.ProtoVersion3, srv.Address)
+			cluster := testCluster(implProtocol.ProtoVersion4, srv.Address)
 			cluster.NumConns = connsPerSession
 			session, err := cluster.Open()
 			if err != nil {

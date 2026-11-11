@@ -71,7 +71,7 @@ func TestTypedConn(t *testing.T) {
 		})
 
 		t.Run("ExecutePrepareBatchWireOracle", func(t *testing.T) {
-			for _, proto := range []byte{3, 4, 5} {
+			for _, proto := range []byte{4, 5} {
 				payload := []byte("borrowed-batch-value")
 				values := typedTestChain(t, binary.BigEndian.AppendUint32(nil, uint32(len(payload))), payload)
 				for _, kind := range []string{"prepare", "execute", "batch"} {
@@ -141,7 +141,7 @@ func TestTypedConn(t *testing.T) {
 			payload := bytes.Repeat([]byte("original-borrowed-payload"), 7000)
 			length := binary.BigEndian.AppendUint32(nil, uint32(len(payload)))
 			values := typedTestChain(t, length, payload)
-			for _, proto := range []byte{3, 4, 5} {
+			for _, proto := range []byte{4, 5} {
 				c := &transport.Conn{InternalVersion: proto}
 				c.InternalInitFramerCache()
 				request := &model.AttemptRequest{Statement: "INSERT INTO ks.tbl (value) VALUES (?)", Values: values, ValueCount: 1, Consistency: implCqltype.Quorum, SerialConsistency: implCqltype.LocalSerial, PageSize: 83, PagingState: []byte{1, 2, 3}, Timestamp: 78321, DefaultTimestamp: true, Trace: true}

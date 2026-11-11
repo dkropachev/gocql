@@ -64,7 +64,6 @@ type batchEntry struct {
 	columns    cqltype.Columns
 	start, end int
 	count      int
-	unset      bool // a value is unset, which requires protocol v4
 }
 
 // batchState is the batch an execution sends: a snapshot of the
@@ -213,13 +212,6 @@ func (b *Batch) admit(s *implCluster.Core, r *model.RoutingInfo) error {
 
 // appendEntry records a statement whose values are b.values[start:].
 func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, statement string, r *model.RoutingInfo, values model.EncodedValues, start int) {
-	unset := false
-	for i := range values.Cells {
-		if values.Cells[i].State == cqltype.Unset {
-			unset = true
-			break
-		}
-	}
 	b.entries = append(b.entries, batchEntry{
 		source:    source,
 		statement: statement,
@@ -227,7 +219,6 @@ func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, stateme
 		start:     start,
 		end:       len(b.values),
 		count:     len(values.Cells),
-		unset:     unset,
 	})
 	if len(b.entries) == 1 {
 		b.routing.Kind = cqltype.OrdinaryStatement
@@ -455,9 +446,6 @@ func (s *InternalSessionRuntime) prepareBatchAttempt(ctx context.Context, conn *
 	}
 	for i := range batch.entries {
 		entry := &batch.entries[i]
-		if entry.unset && conn.InternalVersion < 4 {
-			return request, cqltype.TypeValidation("unset", "requires protocol v4")
-		}
 		item := model.TypedBatchItem{Statement: entry.statement, Values: wire.ChainOf(batch.values[entry.start:entry.end]), ValueCount: entry.count}
 		prepared, err := entry.sourceOrText().onConn(ctx, s, conn, entry.encoded(), false, nil)
 		if err != nil {

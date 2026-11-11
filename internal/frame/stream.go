@@ -55,15 +55,12 @@ func DecodeHeader(p []byte) (FrameHeader, error) {
 // CheckResponseHeader validates the common response direction, version, flags,
 // opcode and event-stream rules before any body-specific parser runs.
 func CheckResponseHeader(h FrameHeader, version byte, extensionFlags ...byte) error {
-	if version < 3 || version > 5 || h.Version.Request() || h.Version.Version() != version {
+	if version < 4 || version > 5 || h.Version.Request() || h.Version.Version() != version {
 		return fmt.Errorf("gocql: unexpected response version %d", h.Version)
 	}
-	allowed := byte(FlagCompress | FlagTracing)
+	allowed := byte(FlagCompress | FlagTracing | FlagCustomPayload | FlagWarning)
 	for _, flags := range extensionFlags {
 		allowed |= flags & FlagCustomPayload
-	}
-	if version >= 4 {
-		allowed |= FlagCustomPayload | FlagWarning
 	}
 	if version >= 5 {
 		allowed |= FlagBetaProtocol
@@ -113,7 +110,7 @@ func ReadStreamHeader(ctx context.Context, source io.Reader, version byte, limit
 	if err != nil {
 		return FrameHeader{}, err
 	}
-	if version < 3 || version > 5 {
+	if version < 4 || version > 5 {
 		return FrameHeader{}, fmt.Errorf("gocql: invalid streaming protocol version %d", version)
 	}
 	var raw [HeaderSize]byte

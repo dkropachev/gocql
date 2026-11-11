@@ -383,7 +383,7 @@ func TestTypedConn(t *testing.T) {
 			for _, mode := range []struct {
 				version     byte
 				compression protocol.Compressor
-			}{{3, nil}, {4, nil}, {5, nil}, {5, lz4.LZ4Compressor{}}} {
+			}{{4, nil}, {5, nil}, {5, lz4.LZ4Compressor{}}} {
 				t.Run(string(rune('0'+mode.version))+func() string {
 					if mode.compression != nil {
 						return "lz4"
@@ -443,7 +443,7 @@ func TestTypedConn(t *testing.T) {
 			for _, mode := range []struct {
 				version    byte
 				compressor protocol.Compressor
-			}{{3, nil}, {4, nil}, {5, nil}, {5, lz4.LZ4Compressor{}}} {
+			}{{4, nil}, {5, nil}, {5, lz4.LZ4Compressor{}}} {
 				version := mode.version
 				t.Run(fmt.Sprintf("%d-%v", version, mode.compressor), func(t *testing.T) {
 					c, rawServer := typedTestConn(t, version, mode.compressor)

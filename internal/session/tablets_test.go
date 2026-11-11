@@ -18,7 +18,6 @@ package session
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -28,7 +27,6 @@ import (
 	"time"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
@@ -137,57 +135,6 @@ func TestTablets(t *testing.T) {
 	})
 
 	t.Run("Payload", func(t *testing.T) {
-		t.Run("V3NegotiatedEnvelope", func(t *testing.T) {
-			for _, streaming := range []bool{false, true} {
-				for _, negotiated := range []bool{false, true} {
-					t.Run(fmt.Sprintf("stream=%t/negotiated=%t", streaming, negotiated), func(t *testing.T) {
-						s, c, peer := rowStreamSession(t, 3, nil)
-						c.InternalFramers.InternalDefaults.InternalTabletsRoutingV1 = negotiated
-						done := make(chan struct{})
-						go func() {
-							defer close(done)
-							id := typedTestReadRequest(t, c, peer)
-							body := append([]byte{0, 0}, runtimeRowsBody(nil, "value")...)
-							frame := typedTestResponse(t, 3, id, body)
-							frame[1] = 4
-							_, _ = peer.Write(frame)
-						}()
-						b := runtimeQuery(t)
-						defer b.Close()
-						ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-						defer cancel()
-						var err error
-						if streaming {
-							var cursor *RowStream[[]byte]
-							cursor, err = RunStream(ctx, s, b, codec.StreamOneColumn(codec.StreamBlob), StreamOptions{Incremental: true})
-							if err == nil {
-								dst := make([]byte, 0, 10)
-								if !cursor.NextInto(&dst) || string(dst) != "value" {
-									t.Fatal(cursor.Err())
-								}
-								cursor.NextInto(&dst)
-								cursor.Close()
-							}
-						}
-						if !streaming {
-							var page *Page[cqltype.Bytes]
-							page, err = RunPage(ctx, s, b, model.StartPage(), 0, CompiledOptions{})
-							if err == nil {
-								var row cqltype.Bytes
-								if !page.NextInto(&row) || string(row.OwnedBytes()) != "value" {
-									t.Fatal(page.Err())
-								}
-								page.Close()
-							}
-						}
-						if (err == nil) != negotiated {
-							t.Fatal("negotiated flag fence", err)
-						}
-						<-done
-					})
-				}
-			}
-		})
 
 		t.Run("Wire", func(t *testing.T) {
 			target := implModel.Target{HostID: implCqltype.UUID{15: 7}, ShardID: implCqltype.Option[uint32]{Value: math.MaxInt32, Set: true}}
@@ -232,7 +179,7 @@ func TestTablets(t *testing.T) {
 					t.Fatal("accepted negative shard")
 				}
 			}
-			for _, proto := range []byte{3, 4, 5} {
+			for _, proto := range []byte{4, 5} {
 				for _, kind := range []string{"query", "execute", "batch", "prepare"} {
 					c := &transport.Conn{InternalVersion: proto}
 					c.InternalInitFramerCache()

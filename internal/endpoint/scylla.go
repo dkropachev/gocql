@@ -16,7 +16,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
-// V2's version block follows the pinned extension, independent of protocol v3/4/5.
+// V2's version block follows the pinned extension, independent of protocol v4/5.
 type tabletsRoutingV2Ext struct{}
 
 func (tabletsRoutingV2Ext) InternalName() string { return InternalTabletsRoutingV2 }
@@ -288,13 +288,11 @@ type InternalScyllaUseMetadataIDExt struct {
 // which is the whole of what the extension is: a backport of the v5 result metadata
 // id to v4. Version matters because opting in changes the wire format — EXECUTE
 // carries a [short bytes] result metadata id and RESULT/Prepared answers with one
-// (see writeExecuteFrame and parseResultPrepared) — so on v3, where that field is not
-// defined, the opt-in would desynchronise a connection the driver otherwise supports
-// (newFramer accepts v3, and a non-zero clusterSettings.ProtoVersion skips
-// discoverProtocol). On v5 the field is already mandatory and Conn.tracksResultMetadataID
-// is true without the extension, so asking for it again would be redundant.
+// (see writeExecuteFrame and parseResultPrepared). On v5 the field is already
+// mandatory and Conn.tracksResultMetadataID is true without the extension, so
+// asking for it again would be redundant.
 func InternalNewScyllaUseMetadataIDExt(supported map[string][]string, version byte) *InternalScyllaUseMetadataIDExt {
-	if version&protocol.ProtoVersionMask != protocol.ProtoVersion4 {
+	if protocol.VersionFor(version).ResultMetadataID {
 		return nil
 	}
 	if _, found := supported[InternalScyllaUseMetadataID]; found {

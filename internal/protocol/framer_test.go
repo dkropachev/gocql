@@ -85,7 +85,7 @@ func TestFramer(t *testing.T) {
 				t.Skip("skipping test in travis due to memory pressure with the race detecor")
 			}
 
-			framer := newFramer(nil, 3)
+			framer := newFramer(nil, 4)
 
 			framer.WriteHeader(0, frm.OpStartup, 1)
 			framer.WriteBytes(make([]byte, frm.MaxFrameSize+1))
@@ -660,12 +660,12 @@ func TestFramer(t *testing.T) {
 			r := &bytes.Buffer{}
 			r.Write(make([]byte, frm.MaxFrameSize+1))
 			// write a new header right after this frame to verify that we can read it
-			r.Write([]byte{0x03, 0x00, 0x00, 0x00, byte(frm.OpReady), 0x00, 0x00, 0x00, 0x00})
+			r.Write([]byte{0x04, 0x00, 0x00, 0x00, byte(frm.OpReady), 0x00, 0x00, 0x00, 0x00})
 
-			framer := newFramer(nil, 3)
+			framer := newFramer(nil, 4)
 
 			head := frm.FrameHeader{
-				Version: protoVersion3,
+				Version: protoVersion4,
 				Op:      frm.OpReady,
 				Length:  r.Len() - 9,
 			}

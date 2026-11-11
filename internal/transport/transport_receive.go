@@ -67,7 +67,7 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 		if _, err = io.ReadFull(src.InternalR, data); err != nil {
 			fatal = true
 		} else {
-			if c.InternalVersion < 5 && head.Flags&frm.FlagCompress != 0 {
+			if !c.InternalWire().Segments && head.Flags&frm.FlagCompress != 0 {
 				if c.InternalCompressor == nil {
 					err = fmt.Errorf("gocql: compressed frame without compressor")
 				} else {
@@ -119,7 +119,7 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 			}
 			if err == nil {
 				body, _ = wire.NewChain(wire.Borrow(data))
-				if c.InternalVersion < 5 && head.Flags&frm.FlagCompress == 0 {
+				if !c.InternalWire().Segments && head.Flags&frm.FlagCompress == 0 {
 					returned = true
 					owner = wire.NewCachedLease(body, cache, data, epoch)
 				} else if pooledDecode && head.Flags&frm.FlagCompress != 0 {
@@ -281,12 +281,10 @@ func (c *Conn) InternalReadTypedSegmentPayload(hdr segment.Header) (*wire.Lease,
 	return segment.ReadOwnedPayload(c.InternalR, hdr, c.InternalSegCompressor)
 }
 
-// Scylla negotiates tablet feedback even on native v3. Permit its custom payload
-// envelope only for that advertised extension; ordinary v3 remains strict.
+// typedResponseExtensionFlags returns the response header flags extensions
+// add to the version's own. Every supported version already allows the custom
+// payload that carries ScyllaDB's tablet feedback, so none do.
 func (c *Conn) typedResponseExtensionFlags() byte {
-	if c.InternalVersion == 3 && (c.InternalFramers.InternalDefaults.InternalTabletsRoutingV1 || c.InternalFramers.InternalDefaults.InternalTabletsRoutingV2) {
-		return frm.FlagCustomPayload
-	}
 	return 0
 }
 

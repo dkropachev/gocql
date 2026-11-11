@@ -21,7 +21,7 @@ package session
 
 import "strings"
 
-// v3/v4 have no per-query keyspace flag. Accept a different effective keyspace
+// Protocol v4 has no per-query keyspace flag. Accept a different effective keyspace
 // only when every statement table reference explicitly selects it. This checks
 // qualification only; statement kind is always declared/server confirmed.
 func qualifiedForKeyspace(cql, keyspace string) bool {

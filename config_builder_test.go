@@ -184,13 +184,10 @@ func TestConfigBuilder(t *testing.T) {
 		}
 	})
 
-	t.Run("UnixSocketInfersProtocolAndDiscovery", func(t *testing.T) {
+	t.Run("UnixSocketInfersNoDiscovery", func(t *testing.T) {
 		c := mustBuildConfig(t, NewConfig("/var/lib/scylla/cql.m")).settings
-		if c.Protocol != 3 || c.Metadata.InitialDiscovery {
-			t.Fatalf("protocol %d discovery %t, want 3 and false", c.Protocol, c.Metadata.InitialDiscovery)
-		}
-		if _, err := NewConfig("/var/lib/scylla/cql.m").WithProtocolVersion(Protocol4).Build(); err == nil {
-			t.Fatal("explicit protocol 4 on a Unix socket was accepted")
+		if c.Metadata.InitialDiscovery {
+			t.Fatal("a Unix socket kept host discovery")
 		}
 		if _, err := NewConfig("/var/lib/scylla/cql.m").WithTLS(StaticTLS(&tls.Config{})).Build(); err == nil {
 			t.Fatal("TLS on a Unix socket was accepted")

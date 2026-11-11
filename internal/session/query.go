@@ -171,7 +171,7 @@ func newPreparedQuery[P, R any](p *Prepared[P, R], options CompiledOptions, pool
 	state := p.privateStorage.InternalState
 	// Statement, keyspace, parameters and info are fixed when the prepared
 	// state is built, so the query's request takes them once.
-	q := &Query[P, R]{options: options, params: p.privateStorage.params, columns: state.InternalParameters, allowUnset: state.InternalProtocol >= 4}
+	q := &Query[P, R]{options: options, params: p.privateStorage.params, columns: state.InternalParameters, allowUnset: true}
 	q.bound.privateStorage.InternalRows = p.privateStorage.rows
 	q.bound.privateStorage.plans = p.privateStorage.plans
 	q.bound.privateStorage.rows = &q.rows

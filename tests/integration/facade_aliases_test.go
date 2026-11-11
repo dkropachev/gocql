@@ -146,8 +146,6 @@ const headSize = protocol.HeadSize
 
 func newFramer(a0 retiredCompressor, a1 byte) *framer { return protocol.NewFramer(a0, a1) }
 
-const protoVersion3 = protocol.ProtoVersion3
-
 const protoVersion4 = protocol.ProtoVersion4
 
 const protoVersion5 = protocol.ProtoVersion5

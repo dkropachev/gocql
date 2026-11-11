@@ -149,10 +149,10 @@ per object and 64 objects per session.
 
 | Streaming mode | Behavior |
 | --- | --- |
-| Protocol 3/4, raw or TLS, no compression | Incremental receive into caller storage |
+| Protocol 4, raw or TLS, no compression | Incremental receive into caller storage |
 | Protocol 5, raw or TLS, no compression | Checked segments with bounded staging |
 | Protocol 5, raw or TLS, LZ4 | Bounded segment decompression |
-| Protocol 3/4, LZ4 or Snappy frame compression | Explicit `StreamCapabilityError` before streaming submission |
+| Protocol 4, LZ4 or Snappy frame compression | Explicit `StreamCapabilityError` before streaming submission |
 
 Normal buffered execution supports negotiated LZ4 and Snappy subject to native
 protocol rules; protocol 5 compression uses LZ4. Configure

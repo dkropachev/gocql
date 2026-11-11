@@ -321,7 +321,7 @@ func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
 		return runtimeerrors.ErrClosed
 	}
 	routing := preparedRouting(state, p.privateStorage.kind)
-	return batch.addValue(s, preparedSource{state: state}, state.InternalStatement, &routing, p.privateStorage.params, state.InternalParameters, value, state.InternalProtocol >= 4)
+	return batch.addValue(s, preparedSource{state: state}, state.InternalStatement, &routing, p.privateStorage.params, state.InternalParameters, value, true)
 }
 
 // oneShotOptions returns the options of a one-shot call: none gives the zero

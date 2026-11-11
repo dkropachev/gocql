@@ -43,7 +43,6 @@ func TestStreamEnvelope(t *testing.T) {
 				{"negative", streamHeader(0x84, 0, 0, OpResult, math.MaxUint32), 4, wire.StreamLimits{}, nil},
 				{"too-big", streamHeader(0x84, 0, 0, OpResult, 100), 4, wire.StreamLimits{MaxBytes: 99}, wire.ErrLimit},
 				{"flags", streamHeader(0x84, 0x80, 0, OpResult, 0), 4, wire.StreamLimits{}, nil},
-				{"v3-warning", streamHeader(0x83, FlagWarning, 0, OpResult, 0), 3, wire.StreamLimits{}, nil},
 				{"compression", streamHeader(0x84, FlagCompress, 0, OpResult, 0), 4, wire.StreamLimits{}, ErrStreamFrameCompression},
 				{"opcode", streamHeader(0x84, 0, 0, 0xff, 0), 4, wire.StreamLimits{}, nil},
 				{"negative-stream", streamHeader(0x84, 0, -1, OpResult, 0), 4, wire.StreamLimits{}, nil},
@@ -72,7 +71,7 @@ func TestStreamEnvelope(t *testing.T) {
 			body = append(body, "one"...)
 			body = binary.BigEndian.AppendUint32(body, 3)
 			body = append(body, "two"...)
-			for _, version := range []byte{3, 4, 5} {
+			for _, version := range []byte{4, 5} {
 				for chunk := 1; chunk <= 9; chunk++ {
 					data := append(streamHeader(version|0x80, 0, 2, OpResult, uint32(len(body))), body...)
 					source := &envelopeSource{data: data, chunk: chunk, gate: HeaderSize + 7}

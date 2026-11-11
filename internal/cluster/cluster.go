@@ -279,7 +279,7 @@ type InternalClusterSettings struct {
 	// Default idempotence for queries
 	DefaultIdempotence bool
 	// Sends a client side timestamp for all requests which overrides the timestamp at which it arrives at the server.
-	// Default: true, only enabled for protocol 3 and above.
+	// Default: true.
 	DefaultTimestamp bool
 	// DisableSkipMetadata will override the internal result metadata cache so that the driver does not
 	// send skip_metadata for queries, this means that the result will always contain

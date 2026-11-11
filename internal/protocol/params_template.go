@@ -93,10 +93,7 @@ func (c *Settings) writeTemplatedParams(e *TypedEnvelope, r *model.AttemptReques
 	if r.PagingState != nil {
 		flags |= frm.FlagWithPagingState
 	}
-	n := 3
-	if c.Protocol >= 5 {
-		n = 6
-	}
+	n := 2 + c.Version.FlagsWidth()
 	if r.ValueCount > 0 {
 		n += 2
 	}
@@ -106,7 +103,7 @@ func (c *Settings) writeTemplatedParams(e *TypedEnvelope, r *model.AttemptReques
 		return
 	}
 	binary.BigEndian.PutUint16(p, uint16(r.Consistency))
-	if c.Protocol >= 5 {
+	if c.Version.WideFlags {
 		binary.BigEndian.PutUint32(p[2:], flags)
 		p = p[6:]
 	} else {

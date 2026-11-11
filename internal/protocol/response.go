@@ -314,7 +314,7 @@ func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLW
 		p.Check(fmt.Errorf("gocql: negative column count %d", count))
 		return Columns{}, 0
 	}
-	if prepared && p.Proto >= 4 {
+	if prepared {
 		n := p.Count(2)
 		page.pkIndexes = make([]int, n)
 		for i := range page.pkIndexes {
@@ -425,7 +425,7 @@ func (c *Settings) ParseTypedResponseInto(head frm.FrameHeader, body wire.Chain,
 	// A caller's page arrives with the result columns it expects.
 	expect := page.Columns
 	*page = model.ResponseData{Owner: owner, InternalParseCursor: wire.CursorOver(body)}
-	p := &TypedParser{expect: expect, reuse: c.MetadataReuse, Cursor: &page.InternalParseCursor, Proto: c.Protocol, MetadataID: c.Protocol >= 5 || c.MetadataID, owner: owner, MaxDepth: c.MaxMetadataDepth}
+	p := &TypedParser{expect: expect, reuse: c.MetadataReuse, Cursor: &page.InternalParseCursor, Proto: c.Version.Number, MetadataID: c.Version.ResultMetadataID || c.MetadataID, owner: owner, MaxDepth: c.MaxMetadataDepth}
 	if head.Flags&frm.FlagTracing != 0 {
 		page.Extra().TraceID = p.Copy(16)
 	}

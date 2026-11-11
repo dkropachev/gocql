@@ -36,7 +36,6 @@ const (
 	// ProtocolAuto negotiates a supported version up to protocol 4.
 	// Select Protocol5 explicitly to use protocol 5.
 	ProtocolAuto ProtocolVersion = 0
-	Protocol3    ProtocolVersion = 3
 	Protocol4    ProtocolVersion = 4
 	Protocol5    ProtocolVersion = 5
 )
@@ -51,15 +50,14 @@ type ConfigBuilder struct {
 	routes               *ClientRoutesBuilder
 	ignoredEvents        []EventKind
 	settings             implSettings.Config
-	protocolChosen       bool
 	discoveryChosen      bool
 	shardAwarenessChosen bool
 }
 
 // NewConfig starts a configuration that connects to contactPoints. A contact
 // point is host[:port], or a single absolute Unix socket path (optionally
-// prefixed with "unix:"); for a socket, protocol 3 and no host discovery are
-// filled in unless chosen.
+// prefixed with "unix:"); for a socket, no host discovery is filled in unless
+// chosen.
 func NewConfig(contactPoints ...string) *ConfigBuilder {
 	return &ConfigBuilder{settings: implSettings.DefaultConfig(contactPoints...), profile: NewProfile()}
 }
@@ -76,9 +74,6 @@ func (b *ConfigBuilder) Build() (Config, error) {
 		settings.ClientRoutes = &routes
 	}
 	if path, _ := implSettings.InternalUnixSocketPath(settings.ContactPoints); path != "" {
-		if !b.protocolChosen {
-			settings.Protocol = int(Protocol3)
-		}
 		if !b.discoveryChosen {
 			settings.Metadata.InitialDiscovery = false
 		}
@@ -149,10 +144,8 @@ func (b *ConfigBuilder) WithTLS(source TLSSource) *ConfigBuilder {
 	return b
 }
 
-// WithProtocolVersion pins the native protocol version. Default ProtocolAuto, or
-// Protocol3 for a Unix socket.
+// WithProtocolVersion pins the native protocol version. Default ProtocolAuto.
 func (b *ConfigBuilder) WithProtocolVersion(version ProtocolVersion) *ConfigBuilder {
-	b.protocolChosen = true
 	b.settings.Protocol = int(version)
 	return b
 }

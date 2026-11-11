@@ -255,7 +255,7 @@ func TestScyllaSupported(t *testing.T) {
 		// without going through discoverProtocol, and newFramer accepts v3 through v5.
 		t.Run("newScyllaUseMetadataIDExt opts in on v4 only", func(t *testing.T) {
 			advertised := map[string][]string{endpoint.InternalScyllaUseMetadataID: {}}
-			for _, version := range []byte{protocol.ProtoVersion3, protocol.ProtoVersion5} {
+			for _, version := range []byte{protocol.ProtoVersion5} {
 				if ext := endpoint.InternalNewScyllaUseMetadataIDExt(advertised, version); ext != nil {
 					t.Errorf("protocol v%d: expected a nil extension, got %+v", version, ext)
 				}
@@ -287,21 +287,6 @@ func TestScyllaSupported(t *testing.T) {
 			extsAbsent := endpoint.InternalParseCQLProtocolExtensions(map[string][]string{}, protocol.ProtoVersion4, logging.Nop())
 			if endpoint.InternalFindCQLProtoExtByName(extsAbsent, endpoint.InternalScyllaUseMetadataID) != nil {
 				t.Error("did not expect SCYLLA_USE_METADATA_ID to be registered when not advertised")
-			}
-		})
-
-		// The list parseCQLProtocolExtensions returns is what startupCoordinator.startup
-		// serializes into STARTUP, so keeping the extension out of it on v3 is what keeps
-		// the opt-in off the wire — the framer config follows from the same list.
-		t.Run("parseCQLProtocolExtensions leaves the extension out below v4", func(t *testing.T) {
-			advertised := map[string][]string{endpoint.InternalScyllaUseMetadataID: {}, endpoint.InternalTabletsRoutingV1: {}}
-			exts := endpoint.InternalParseCQLProtocolExtensions(advertised, protocol.ProtoVersion3, logging.Nop())
-			if endpoint.InternalFindCQLProtoExtByName(exts, endpoint.InternalScyllaUseMetadataID) != nil {
-				t.Error("did not expect SCYLLA_USE_METADATA_ID to be registered on protocol v3")
-			}
-			// Version-independent extensions are unaffected by the gate.
-			if endpoint.InternalFindCQLProtoExtByName(exts, endpoint.InternalTabletsRoutingV1) == nil {
-				t.Error("expected TABLETS_ROUTING_V1 to still be registered on protocol v3")
 			}
 		})
 

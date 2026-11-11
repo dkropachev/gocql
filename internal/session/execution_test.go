@@ -67,7 +67,7 @@ func TestExecution(t *testing.T) {
 	t.Run("Bind", func(t *testing.T) {
 		t.Run("CanonicalAssembly", func(t *testing.T) {
 			for _, size := range []int{0, 32, 4096, 500 << 10} {
-				for _, proto := range []byte{3, 4, 5} {
+				for _, proto := range []byte{4, 5} {
 					for _, owned := range []bool{false, true} {
 						t.Run(fmt.Sprintf("bytes%d/v%d/owned%t", size, proto, owned), func(t *testing.T) {
 							typ := cqltype.BlobType

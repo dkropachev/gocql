@@ -48,9 +48,6 @@ import (
 const (
 	ProtoDirectionMask = 0x80
 	ProtoVersionMask   = 0x7F
-	protoVersion1      = 0x01
-	ProtoVersion2      = 0x02
-	ProtoVersion3      = 0x03
 	ProtoVersion4      = 0x04
 	// protoVersion5 is the final (non-beta) native protocol v5: the envelope and
 	// transport-segment layout implemented by segment.go.
@@ -138,7 +135,7 @@ func DefaultFramerFlags(compressor Compressor, version byte) byte {
 	// Mask off the direction/reserved high bit: newFramer is called with the
 	// unmasked version byte, and an unmasked byte must not defeat the v5 check and
 	// re-enable frame-header compression on v5.
-	if compressor != nil && version&ProtoVersionMask < ProtoVersion5 {
+	if compressor != nil && !VersionFor(version).Segments {
 		return frm.FlagCompress
 	}
 	return 0
@@ -251,7 +248,7 @@ func (f *Framer) ReadFrame(r io.Reader, head *frm.FrameHeader) error {
 		return fmt.Errorf("unable to read frame body: read %d/%d bytes: %w", n, head.Length, err)
 	}
 
-	if f.Proto < ProtoVersion5 && head.Flags&frm.FlagCompress == frm.FlagCompress {
+	if !VersionFor(f.Proto).Segments && head.Flags&frm.FlagCompress == frm.FlagCompress {
 		if f.Compressor == nil {
 			return NewErrProtocol("no compressor available with compressed frame body")
 		}
@@ -430,7 +427,7 @@ func (f *Framer) Finish() error {
 		return ErrFrameTooBig
 	}
 
-	if f.Proto < ProtoVersion5 && f.Buf[1]&frm.FlagCompress == frm.FlagCompress {
+	if !VersionFor(f.Proto).Segments && f.Buf[1]&frm.FlagCompress == frm.FlagCompress {
 		if f.Compressor == nil {
 			panic("compress flag set with no compressor")
 		}
@@ -670,7 +667,7 @@ func (f *Framer) ParsePreparedMetadata() PreparedMetadata {
 	}
 	meta.ActualColCount = meta.ColCount
 
-	if f.Proto >= ProtoVersion4 {
+	{
 		pkeyCount := f.ReadInt()
 		// Like the colCount guard above, reject a negative count: make would panic
 		// with a runtime error, which parseFrame's recover re-panics rather than
@@ -832,7 +829,7 @@ func (f *Framer) ParseResultMetadata() ResultMetadata {
 	// (ResultSet$ResultMetadata$Codec.encode) and the v5 spec. See
 	// TestResponse/ParseResultMetadata/PagingStateBeforeNewMetadataID, which is the only
 	// test that can distinguish the two orderings.
-	if (f.Proto > ProtoVersion4 || f.ScyllaUseMetadataID) && meta.Flags&frm.FlagMetaDataChanged == frm.FlagMetaDataChanged {
+	if (VersionFor(f.Proto).ResultMetadataID || f.ScyllaUseMetadataID) && meta.Flags&frm.FlagMetaDataChanged == frm.FlagMetaDataChanged {
 		meta.NewMetadataID = f.ReadShortBytesCopy()
 	}
 
@@ -977,7 +974,7 @@ func (f *Framer) parseResultPrepared() Frame {
 		preparedID:  f.ReadShortBytesCopy(),
 	}
 
-	if f.Proto > ProtoVersion4 || f.ScyllaUseMetadataID {
+	if VersionFor(f.Proto).ResultMetadataID || f.ScyllaUseMetadataID {
 		frame.ResultMetadataID = f.ReadShortBytesCopy()
 	}
 
@@ -1115,11 +1112,11 @@ func (f *Framer) writeAuthResponseFrame(streamID int, data []byte) error {
 // calls it before writing any byte, so a rejected option cannot leave a partially
 // serialised frame behind.
 func (f *Framer) ValidateV5Options(keyspace string, nowInSeconds *int) error {
-	if keyspace != "" && f.Proto < ProtoVersion5 {
+	if keyspace != "" && !VersionFor(f.Proto).QueryKeyspace {
 		return fmt.Errorf("gocql: keyspace override can only be set with protocol v5 or higher, current protocol: %d", f.Proto)
 	}
 	if nowInSeconds != nil {
-		if f.Proto < ProtoVersion5 {
+		if !VersionFor(f.Proto).NowInSeconds {
 			return fmt.Errorf("gocql: now_in_seconds can only be set with protocol v5 or higher, current protocol: %d", f.Proto)
 		}
 		if v := *nowInSeconds; v < math.MinInt32 || v > math.MaxInt32 {
@@ -1422,9 +1419,6 @@ func appendLong(p []byte, n int64) []byte {
 
 func (f *Framer) WriteCustomPayload(customPayload *map[string][]byte) {
 	if len(*customPayload) > 0 {
-		if f.Proto < ProtoVersion4 {
-			panic("Custom payload is not supported with version V3 or less")
-		}
 		f.writeBytesMap(*customPayload)
 	}
 }
@@ -1550,7 +1544,7 @@ func (f *Framer) writeBytesMap(m map[string][]byte) {
 // f.wireBuf for the next request on this framer.
 func (f *Framer) PrepareModernLayout() error {
 	// Ensure protocol version is V5 or higher
-	if f.Proto < ProtoVersion5 {
+	if !VersionFor(f.Proto).Segments {
 		return fmt.Errorf("gocql: modern layout is not supported with protocol version %d (requires v5+)", f.Proto)
 	}
 
@@ -1609,14 +1603,14 @@ func (f *Framer) growWireBuf(n int) []byte {
 }
 
 // useKeyspaceFrame is the parameter-free QUERY needed while opening a pooled
-// connection on protocols3/4. Application requests use the canonical span writer.
+// connection on protocol v4. Application requests use the canonical span writer.
 type UseKeyspaceFrame struct{ Statement string }
 
 func (w *UseKeyspaceFrame) BuildFrame(f *Framer, streamID int) error {
 	f.WriteHeader(f.Flags, frm.OpQuery, streamID)
 	f.WriteLongString(w.Statement)
 	f.WriteConsistency(One)
-	if f.Proto >= ProtoVersion5 {
+	if VersionFor(f.Proto).WideFlags {
 		f.WriteUint(0)
 	} else {
 		f.WriteByteValue(0)

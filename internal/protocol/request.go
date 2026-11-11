@@ -101,11 +101,11 @@ func (c *Settings) BuildTypedRequest(req *model.AttemptRequest, stream int) (wir
 // values are still only referenced. When used reports true, the frame aliases
 // scratch until its writer finishes.
 func (c *Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, scratch *wire.BuilderScratch) (frame wire.Chain, used bool, err error) {
-	proto := c.Protocol
-	if proto < 3 || proto > 5 {
+	proto := c.Version.Number
+	if proto != ProtoVersion4 && proto != ProtoVersion5 {
 		return wire.Chain{}, false, fmt.Errorf("gocql: unsupported typed Protocol %d", proto)
 	}
-	if (req.Keyspace != "" || req.HasNowInSeconds) && proto < 5 {
+	if req.Keyspace != "" && !c.Version.QueryKeyspace || req.HasNowInSeconds && !c.Version.NowInSeconds {
 		return wire.Chain{}, false, fmt.Errorf("gocql: keyspace and now_in_seconds overrides require Protocol v5")
 	}
 	if req.PageSize < 0 || int64(req.PageSize) > math.MaxInt32 {
@@ -134,7 +134,7 @@ func (c *Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, 
 	}
 	// Uncompressed native frames can share one scalar slab and immutable span
 	// index with their body. Write the known header now and patch only its owned
-	// length field before Freeze; v3/v4 compressors still receive the body alone.
+	// length field before Freeze; v4 compressors still receive the body alone.
 	inlineHeader := proto >= 5 || c.Compression == ""
 	used = scratch != nil && inlineHeader
 	if used {
@@ -160,9 +160,6 @@ func (c *Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, 
 		e.U32(0)
 	}
 	if len(req.Payload) > 0 {
-		if proto < 4 {
-			return wire.Chain{}, false, fmt.Errorf("gocql: custom payload requires Protocol v4")
-		}
 		if len(req.Payload) > math.MaxUint16 {
 			return wire.Chain{}, false, fmt.Errorf("gocql: too many payload entries")
 		}
@@ -347,10 +344,7 @@ func (c *Settings) WriteTypedParams(e *TypedEnvelope, r *model.AttemptRequest, b
 		flags |= frm.FlagWithNowInSeconds
 		after += 4
 	}
-	n := 3
-	if c.Protocol >= 5 {
-		n = 6
-	}
+	n := 2 + c.Version.FlagsWidth()
 	if values {
 		n += 2
 	}
@@ -360,7 +354,7 @@ func (c *Settings) WriteTypedParams(e *TypedEnvelope, r *model.AttemptRequest, b
 		return
 	}
 	binary.BigEndian.PutUint16(p, uint16(r.Consistency))
-	if c.Protocol >= 5 {
+	if c.Version.WideFlags {
 		binary.BigEndian.PutUint32(p[2:], flags)
 		p = p[6:]
 	} else {
@@ -433,8 +427,9 @@ type Settings struct {
 	MaxFrameBytes, MaxDecompressedBytes int64
 	MaxMetadataDepth                    int
 	FlagLWT, RateLimitingErrorCode      int
-	Protocol                            byte
-	Flags                               byte
-	MetadataID, TabletsRoutingV2        bool
-	SegmentCompression                  bool
+	// Version is what the connection's protocol version puts on the wire.
+	Version                      Version
+	Flags                        byte
+	MetadataID, TabletsRoutingV2 bool
+	SegmentCompression           bool
 }

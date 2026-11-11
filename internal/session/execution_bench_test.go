@@ -305,7 +305,7 @@ func BenchmarkExecution(b *testing.B) {
 		srv := NewTestServer(b, 3, context.Background())
 		defer srv.Stop()
 
-		cluster := testCluster(implProtocol.ProtoVersion3, srv.Address)
+		cluster := testCluster(implProtocol.ProtoVersion4, srv.Address)
 		// Set the timeout arbitrarily low so that the query hits the timeout in a
 		// timely manner.
 		cluster.Timeout = 500 * time.Millisecond

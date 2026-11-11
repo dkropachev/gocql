@@ -71,10 +71,10 @@ func startServerWithShardAwarePort(t testing.TB, useTLS bool) (makeCluster makeC
 	makeServer := func(factory testSupportedFactory) *TestServer {
 		if useTLS {
 			return NewSSLTestServerWithSupportedFactory(t,
-				protocol.ProtoVersion3, context.Background(), factory)
+				protocol.ProtoVersion4, context.Background(), factory)
 		}
 		return NewTestServerWithAddressAndSupportedFactory("127.0.0.1:0", t,
-			protocol.ProtoVersion3, context.Background(), factory)
+			protocol.ProtoVersion4, context.Background(), factory)
 	}
 
 	srvRegular := makeServer(regularSupportedFactory)
@@ -89,13 +89,13 @@ func startServerWithShardAwarePort(t testing.TB, useTLS bool) (makeCluster makeC
 	makeCluster = func() shardAwareTestCluster {
 		var cluster *InternalClusterSettings
 		if useTLS {
-			cluster = createTestSslCluster(srvRegular.Address, protocol.ProtoVersion3, false)
+			cluster = createTestSslCluster(srvRegular.Address, protocol.ProtoVersion4, false)
 
 			// Give a long timeout. For some reason, closing tls connections
 			// result in an i/o timeout error, and this mitigates this problem.
 			cluster.Timeout = 1 * time.Minute
 		} else {
-			cluster = testCluster(protocol.ProtoVersion3, srvRegular.Address)
+			cluster = testCluster(protocol.ProtoVersion4, srvRegular.Address)
 		}
 		return shardAwareTestCluster{
 			useTLS: useTLS,

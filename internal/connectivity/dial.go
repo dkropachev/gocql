@@ -113,9 +113,6 @@ func UnixContact(config Config) (string, error) {
 		if config.Metadata.InitialDiscovery {
 			return "", &UnsupportedSettingError{Setting: "Unix discovery", Reason: "one local socket requires InitialDiscovery=false"}
 		}
-		if config.Protocol != 3 {
-			return "", &UnsupportedSettingError{Setting: "Unix protocol", Reason: "explicit native protocol 3 is required"}
-		}
 		if config.TLS != nil {
 			return "", &UnsupportedSettingError{Setting: "Unix TLS", Reason: "maintenance sockets carry plaintext native protocol"}
 		}

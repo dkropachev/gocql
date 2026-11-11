@@ -189,7 +189,7 @@ func (r *InternalExclusiveConn) InternalInitStream(limits StreamLimits) error {
 	if err := r.InternalMetadataBudget.SetLimit(l.MaxMetadataBytes); err != nil {
 		return err
 	}
-	if r.InternalConn.InternalVersion == 5 {
+	if r.InternalConn.InternalWire().Segments {
 		units, err := segment.NewUnitReader(r.InternalCtx, r.socketSource(), r.InternalConn.InternalSegCompressor, segment.UnitLimits{MaxStorageBytes: l.MaxTransformBytes, MaxDecodedBytes: int(min(r.InternalConn.typedProtocolLimits().MaxDecompressedBytes, segment.MaxPayloadSize))})
 		if err != nil {
 			return err

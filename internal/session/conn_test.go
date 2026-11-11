@@ -61,7 +61,7 @@ import (
 )
 
 const (
-	defaultProto = implProtocol.ProtoVersion3
+	defaultProto = implProtocol.ProtoVersion4
 )
 
 type brokenDNSResolver struct{}

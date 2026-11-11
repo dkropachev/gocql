@@ -171,35 +171,6 @@ func TestConnStartup(t *testing.T) {
 	})
 
 	t.Run("InitFramerCache", func(t *testing.T) {
-		// TestConnStartup/InitFramerCache/ProtoV3IgnoresScyllaUseMetadataID pins the negotiation gate from
-		// the connection's end: a v3 connection to a server advertising SCYLLA_USE_METADATA_ID
-		// must come out of the handshake with the extension nowhere on it. It goes through
-		// parseCQLProtocolExtensions rather than setting cqlProtoExts directly, because that
-		// list is also what startupCoordinator.startup serializes into STARTUP — an extension
-		// filtered out there is one the driver neither announces nor encodes.
-		t.Run("ProtoV3IgnoresScyllaUseMetadataID", func(t *testing.T) {
-			t.Parallel()
-
-			c := &transport.Conn{InternalVersion: implProtocol.ProtoVersion3, InternalLogger: logging.Nop()}
-			c.InternalCqlProtoExts = endpoint.InternalParseCQLProtocolExtensions(map[string][]string{endpoint.InternalScyllaUseMetadataID: {}}, c.InternalVersion, c.InternalLogger)
-			c.InternalInitFramerCache()
-
-			if endpoint.InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, endpoint.InternalScyllaUseMetadataID) != nil {
-				t.Error("SCYLLA_USE_METADATA_ID should not be negotiated on a protocol v3 connection")
-			}
-			if c.InternalFramers.InternalDefaults.InternalScyllaUseMetadataID {
-				t.Error("framerConfig.scyllaUseMetadataID should be false on a protocol v3 connection")
-			}
-			if c.InternalUsesMetadataID() {
-				t.Error("driverConn.usesMetadataID() should be false on a protocol v3 connection")
-			}
-			if c.InternalTracksResultMetadataID() {
-				t.Error("driverConn.tracksResultMetadataID() should be false on a protocol v3 connection")
-			}
-			if c.InternalGetWriteFramer().ScyllaUseMetadataID {
-				t.Error("write framer should not have scyllaUseMetadataID set on a protocol v3 connection")
-			}
-		})
 
 		// TestConnStartup/InitFramerCache/ScyllaUseMetadataID guards against scyllaUseMetadataID
 		// being negotiated on the driverConn but never reaching the pooled framers that

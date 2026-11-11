@@ -891,7 +891,6 @@ func TestSession(t *testing.T) {
 				}).
 				WithConnectionsPerHost(1).
 				NoDiscovery().
-				WithProtocolVersion(gocql.Protocol3).
 				WithReconnect(unixSocketNoReconnect{}).
 				WithIgnoreEvents(gocql.StatusEvent, gocql.TopologyEvent, gocql.SchemaEvent).
 				WithConnectTimeout(connectTimeout).

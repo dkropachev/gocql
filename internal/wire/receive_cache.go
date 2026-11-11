@@ -5,7 +5,7 @@ package wire
 
 import "sync"
 
-// ReceiveCache reuses only fully released raw v3/v4 frame allocations. One
+// ReceiveCache reuses only fully released raw v4 frame allocations. One
 // session owns it, with hard idle byte/object/individual limits independent of
 // connection/shard counts. Outstanding page bytes are ordinary demand, not idle.
 type ReceiveCache struct {

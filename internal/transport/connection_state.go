@@ -173,10 +173,10 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 	if !ok || reader.InternalConn == nil || reader.InternalR != nil && !reader.transferable {
 		return nil, &codec.StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "connection has no transferable reader"}
 	}
-	if c.InternalVersion < 3 || c.InternalVersion > 5 || c.InternalVersion < 5 && c.InternalCompressor != nil {
+	if !c.InternalWire().Segments && c.InternalCompressor != nil {
 		return nil, &codec.StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "frame compression has no incremental receive transform"}
 	}
-	if c.InternalVersion == 5 && c.InternalCompressor != nil && c.InternalCompressor.Name() != "lz4" {
+	if c.InternalWire().Segments && c.InternalCompressor != nil && c.InternalCompressor.Name() != "lz4" {
 		return nil, &codec.StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "v5 streaming requires raw or LZ4 segments"}
 	}
 	c.InternalMu.Lock()

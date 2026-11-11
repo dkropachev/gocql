@@ -843,7 +843,7 @@ func TestStream(t *testing.T) {
 				name        string
 				proto       byte
 				compression implProtocol.Compressor
-			}{{"v3", 3, nil}, {"v4", 4, nil}, {"v5raw", 5, nil}, {"v5lz4", 5, lz4.LZ4Compressor{}}} {
+			}{{"v4", 4, nil}, {"v5raw", 5, nil}, {"v5lz4", 5, lz4.LZ4Compressor{}}} {
 				t.Run(mode.name, func(t *testing.T) {
 					s, c, peer := rowStreamSession(t, mode.proto, mode.compression)
 					payload := bytes.Repeat([]byte("caller-owned"), 40000)

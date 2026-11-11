@@ -1093,7 +1093,7 @@ func TestQuery(t *testing.T) {
 	t.Run("Stream", func(t *testing.T) {
 		t.Run("BufferedProtocolTLSMatrix", func(t *testing.T) {
 			modes := append([]fixtureMode(nil), fixtureModes...)
-			modes = append(modes, fixtureMode{"v3lz4frame", 3, wirecompress.LZ4Compressor{}, false}, fixtureMode{"v4lz4frame", 4, wirecompress.LZ4Compressor{}, false}, fixtureMode{"v4snappyframe", 4, wirecompress.SnappyCompressor{}, false}, fixtureMode{"v4lz4frametls", 4, wirecompress.LZ4Compressor{}, true})
+			modes = append(modes, fixtureMode{"v4lz4frame", 4, wirecompress.LZ4Compressor{}, false}, fixtureMode{"v4snappyframe", 4, wirecompress.SnappyCompressor{}, false}, fixtureMode{"v4lz4frametls", 4, wirecompress.LZ4Compressor{}, true})
 			for _, mode := range modes {
 				t.Run(mode.name, func(t *testing.T) {
 					s, c, peer := fixtureStreamSession(t, mode)

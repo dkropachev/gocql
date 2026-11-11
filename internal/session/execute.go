@@ -164,9 +164,9 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 		return nil, err
 	}
 	wireKeyspace := keyspace
-	if conn.InternalVersion < 5 {
+	if !conn.InternalWire().QueryKeyspace {
 		if keyspace != implCluster.SessionData(s.Core).InternalCfg.Keyspace && !qualifiedForKeyspace(statement, keyspace) {
-			return nil, cqltype.TypeValidation("prepare keyspace", "protocol v3/v4 requires the session keyspace")
+			return nil, cqltype.TypeValidation("prepare keyspace", "protocol v4 requires the session keyspace")
 		}
 		wireKeyspace = ""
 	}
@@ -290,7 +290,7 @@ func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *transpor
 		}
 	}()
 	wireKeyspace := state.InternalKeyspace
-	if conn.InternalVersion < 5 {
+	if !conn.InternalWire().QueryKeyspace {
 		wireKeyspace = ""
 	}
 	page, err := conn.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: state.InternalStatement, Keyspace: wireKeyspace, Prepare: true})
@@ -362,26 +362,6 @@ func (s *InternalSessionRuntime) hostPreparedInfo(conn *transport.Conn, page *tr
 				info.Keyspace = col.Keyspace
 			}
 			info.Table = col.Table
-		}
-	}
-	if conn.InternalVersion < 4 && len(info.PartitionKeyIndexes) == 0 && info.Table != "" {
-		if ks := routing.SnapshotData(s.Core.Metadata()).InternalKeyspaces[info.Keyspace]; ks != nil {
-			if table := ks.Tables[info.Table]; table != nil {
-				for _, key := range table.PartitionKey {
-					index := -1
-					for i, c := range cqltype.ColumnSlice(page.BindColumns()) {
-						if c.Name == key.Name && c.Table == info.Table && c.Keyspace == info.Keyspace {
-							index = i
-							break
-						}
-					}
-					if index < 0 {
-						info.PartitionKeyIndexes = nil
-						break
-					}
-					info.PartitionKeyIndexes = append(info.PartitionKeyIndexes, index)
-				}
-			}
 		}
 	}
 	for _, index := range info.PartitionKeyIndexes {
@@ -1177,24 +1157,15 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 // off the heap.
 func (s *InternalSessionRuntime) newAttempt(w *model.AttemptRequest, conn *transport.Conn, request *InternalExecutionRequest, state model.PageState, consistency cqltype.Consistency) error {
 	opts := &request.InternalOptions.InternalOptions
-	if conn.InternalVersion < 5 && request.keyspace != "" && request.keyspace != implCluster.SessionData(s.Core).InternalCfg.Keyspace && !requestQualifiedForKeyspace(request, request.keyspace) {
-		return cqltype.TypeValidation("keyspace", "protocol v3/v4 requires the session keyspace")
+	version := conn.InternalWire()
+	if !version.QueryKeyspace && request.keyspace != "" && request.keyspace != implCluster.SessionData(s.Core).InternalCfg.Keyspace && !requestQualifiedForKeyspace(request, request.keyspace) {
+		return cqltype.TypeValidation("keyspace", "protocol v4 requires the session keyspace")
 	}
-	if conn.InternalVersion < 4 {
-		if len(opts.CustomPayload) > 0 {
-			return cqltype.TypeValidation("payload", "requires protocol v4")
-		}
-		for _, cell := range request.InternalValues.Cells {
-			if cell.State == cqltype.Unset {
-				return cqltype.TypeValidation("unset", "requires protocol v4")
-			}
-		}
-	}
-	if opts.NowInSeconds.Set && conn.InternalVersion < 5 {
+	if opts.NowInSeconds.Set && !version.NowInSeconds {
 		return cqltype.TypeValidation("now in seconds", "requires protocol v5")
 	}
 	*w = model.AttemptRequest{TabletVersionBlock: request.tabletVersionBlock, Statement: request.statement, Values: request.InternalValues.Framed, ValueCount: len(request.InternalValues.Cells), Consistency: consistency, PageSize: int(request.InternalOptions.InternalProfile.PageSize), Keyspace: request.keyspace, Trace: opts.Trace, Payload: opts.CustomPayload}
-	if conn.InternalVersion < 5 {
+	if !version.QueryKeyspace {
 		w.Keyspace = ""
 	}
 	if state.More() {

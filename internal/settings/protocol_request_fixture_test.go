@@ -296,13 +296,11 @@ func fixtureWriteBatch(f *protocol.Framer, streamID int, w *fixtureBatchFrame, c
 
 	f.WriteConsistency(w.consistency)
 
-	if f.Proto > protocol.ProtoVersion2 {
-		if w.serialConsistency > 0 {
-			flags |= frm.FlagWithSerialConsistency
-		}
-		if w.defaultTimestamp {
-			flags |= frm.FlagDefaultTimestamp
-		}
+	if w.serialConsistency > 0 {
+		flags |= frm.FlagWithSerialConsistency
+	}
+	if w.defaultTimestamp {
+		flags |= frm.FlagDefaultTimestamp
 	}
 
 	if w.keyspace != "" {
@@ -319,25 +317,18 @@ func fixtureWriteBatch(f *protocol.Framer, streamID int, w *fixtureBatchFrame, c
 		f.WriteByteValue(byte(flags))
 	}
 
-	// serialConsistency and defaultTimestamp are only signalled by flags on
-	// proto > v2, so their fields must only be written on proto > v2 as well;
-	// otherwise the bytes would not be described by any flag and would corrupt
-	// the frame. (In practice proto < v3 is unreachable: readHeader rejects
-	// response versions below protoVersion3.)
-	if f.Proto > protocol.ProtoVersion2 {
-		if w.serialConsistency > 0 {
-			f.WriteConsistency(w.serialConsistency)
-		}
+	if w.serialConsistency > 0 {
+		f.WriteConsistency(w.serialConsistency)
+	}
 
-		if w.defaultTimestamp {
-			var ts int64
-			if w.defaultTimestampValue != 0 {
-				ts = w.defaultTimestampValue
-			} else {
-				ts = time.Now().UnixNano() / 1000
-			}
-			f.WriteLong(ts)
+	if w.defaultTimestamp {
+		var ts int64
+		if w.defaultTimestampValue != 0 {
+			ts = w.defaultTimestampValue
+		} else {
+			ts = time.Now().UnixNano() / 1000
 		}
+		f.WriteLong(ts)
 	}
 
 	if w.keyspace != "" {

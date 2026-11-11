@@ -137,7 +137,7 @@ func TestNativeReadAhead(t *testing.T) {
 			}
 		})
 		t.Run("FrameValidationPrecedesBody", func(t *testing.T) {
-			for _, version := range []byte{3, 4} {
+			for _, version := range []byte{4} {
 				for _, invalid := range []string{"version", "length", "flag", "opcode"} {
 					header := []byte{version | 0x80, 0, 0, 1, byte(frm.OpResult), 0, 0, 0, 8}
 					switch invalid {

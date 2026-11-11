@@ -478,7 +478,7 @@ func TestConnectionSetup(t *testing.T) {
 	t.Run("Unix", func(t *testing.T) {
 		t.Run("TargetAndUnsupportedSettings", func(t *testing.T) {
 			config := settings.DefaultConfig("unix:" + t.TempDir() + "/maintenance")
-			config.Protocol = 3
+			config.Protocol = 4
 			config.Metadata.InitialDiscovery = false
 			targetSeen := false
 			config.Dialer = endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
@@ -504,7 +504,7 @@ func TestConnectionSetup(t *testing.T) {
 			if !targetSeen {
 				t.Fatal("dialer bypassed")
 			}
-			for _, change := range []func(*settings.Config){func(c *settings.Config) { c.Protocol = 4 }, func(c *settings.Config) { c.TLS = &tls.Config{} }, func(c *settings.Config) { c.LocalAddress = netip.MustParseAddr("127.0.0.1") }} {
+			for _, change := range []func(*settings.Config){func(c *settings.Config) { c.TLS = &tls.Config{} }, func(c *settings.Config) { c.LocalAddress = netip.MustParseAddr("127.0.0.1") }} {
 				invalid := config
 				change(&invalid)
 				err := invalid.Validate()

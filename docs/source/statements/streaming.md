@@ -89,9 +89,9 @@ The following receive capability and scratch limits apply to explicit
 **incremental** mode. Default page buffering supports all normal buffered
 protocol/compression combinations.
 
-Protocol 3/4 uncompressed raw/TLS and protocol 5 uncompressed or LZ4 raw/TLS are
+Protocol 4 uncompressed raw/TLS and protocol 5 uncompressed or LZ4 raw/TLS are
 supported. Raw eligible payload reads target caller arrays directly; TLS,
-segment integrity and LZ4 use bounded staging/transform units. Protocol 3/4 LZ4
+segment integrity and LZ4 use bounded staging/transform units. Protocol 4 LZ4
 or Snappy frame compression is explicitly rejected with StreamCapabilityError
 before streaming submission. Incremental mode reports its capability error explicitly.
 Set StreamOptions.Limits for metadata, read-ahead, discard and transform budgets;

@@ -13,8 +13,7 @@ import (
 // once, indexed by request shape and by whether the request sends a default
 // timestamp. The shapes are protocol 4; protocol 5 QUERY, in the keyspace the
 // options name or else the session's; and protocol 5 EXECUTE, which sends no
-// keyspace. A QUERY in another keyspace, or a request on protocol 3, falls
-// back to the template caches. A slot whose Protocol is zero holds none.
+// keyspace. A QUERY in another keyspace falls back to the template caches. A slot whose Protocol is zero holds none.
 type optionTemplates [3][2]model.ParamsTemplate
 
 // newOptionTemplates encodes the parameters blocks of options resolved to
@@ -61,7 +60,7 @@ func (t *optionTemplates) find(w *model.AttemptRequest, version byte) *model.Par
 		return nil
 	}
 	shape := 0
-	if version == 5 {
+	if protocol.VersionFor(version).QueryKeyspace {
 		shape = 1
 		if len(w.PreparedID) > 0 {
 			shape = 2
@@ -79,8 +78,8 @@ func (t *optionTemplates) find(w *model.AttemptRequest, version byte) *model.Par
 }
 
 // paramsTemplate returns resolved's parameters template for w on a
-// connection of version, or nil to encode w field by field: for a batch, on
-// protocol 3, for a QUERY outside the options' keyspace, and for options
+// connection of version, or nil to encode w field by field: for a batch,
+// for a QUERY outside the options' keyspace, and for options
 // resolved for one execution, which encode no templates.
 func paramsTemplate(resolved *InternalResolvedOptions, w *model.AttemptRequest, version byte) *model.ParamsTemplate {
 	if w.Batch != nil {

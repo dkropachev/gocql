@@ -40,8 +40,6 @@ func newFramer(a0 Compressor, a1 byte) *framer { return NewFramer(a0, a1) }
 type preparedMetadata = PreparedMetadata
 
 const protoDirectionMask = ProtoDirectionMask
-const protoVersion2 = ProtoVersion2
-const protoVersion3 = ProtoVersion3
 const protoVersion4 = ProtoVersion4
 const protoVersion5 = ProtoVersion5
 const protoVersionMask = ProtoVersionMask

@@ -229,10 +229,8 @@ type queryDefaultsReport struct {
 	// clusterSettings.Validate itself uses to treat the field as unset.
 	SerialConsistency string `json:"serial-consistency,omitempty"`
 	Idempotence       bool   `json:"idempotence"`
-	// ClientTimestamps reports DefaultTimestamp as configured, not additionally
-	// gated on the negotiated protocol version: the client-timestamp flag is
-	// only suppressed below protocol v3 (frame.go), a corner case not worth
-	// threading the negotiated version through the report for.
+	// ClientTimestamps reports DefaultTimestamp as configured: every supported
+	// protocol version carries the client-timestamp flag.
 	ClientTimestamps bool `json:"client-timestamps"`
 }
 
