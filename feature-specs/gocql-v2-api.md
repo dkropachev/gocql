@@ -488,7 +488,7 @@ type ValueEntry struct { Key, Value Value }
 func (v Value) Type() DataType
 func (v Value) State() CellState
 func (v Value) Clone() Value
-func (v Value) BoolCodec() (bool, error)
+func (v Value) Bool() (bool, error)
 func (v Value) Signed() (int64, error)
 func (v Value) Float() (float64, error)
 func (v Value) Text() (Text, error)
