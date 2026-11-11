@@ -105,7 +105,7 @@ func TestOptions(t *testing.T) {
 		t.Run("RejectsInvalidValues", func(t *testing.T) {
 			invalid := map[string]Options{
 				"consistency":  {Consistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.Consistency(0xff)}},
-				"serial":       {SerialConsistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.One}},
+				"serial":       {SerialConsistency: SerialOmit + 1},
 				"timeout":      {Timeout: cqltype.Option[time.Duration]{Set: true, Value: -1}},
 				"page size":    {PageSize: cqltype.Option[int32]{Set: true}},
 				"prefetch":     {Prefetch: cqltype.Option[int]{Set: true, Value: 2}},
@@ -113,7 +113,6 @@ func TestOptions(t *testing.T) {
 				"shard":        {ShardID: cqltype.Option[uint32]{Set: true}},
 				"payload keys": {CustomPayload: []model.PayloadEntry{{Key: "k"}, {Key: "k"}}},
 				"profile":      {Profile: &settings.Profile{}},
-				"serial both":  {SerialConsistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.LocalSerial}, NoSerialConsistency: true},
 			}
 			for name, values := range invalid {
 				if _, err := NewCompiledOptions(nil, values); err == nil {
@@ -123,14 +122,16 @@ func TestOptions(t *testing.T) {
 		})
 
 		t.Run("SerialConsistencyOverrides", func(t *testing.T) {
-			set, err := resolveOptionValues(nil, Options{SerialConsistency: cqltype.Some(cqltype.Serial)})
-			if err != nil {
-				t.Fatal(err)
+			for override, want := range map[SerialOverride]cqltype.Consistency{SerialSerial: cqltype.Serial, SerialLocal: cqltype.LocalSerial} {
+				set, err := resolveOptionValues(nil, Options{SerialConsistency: override})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !set.InternalProfile.SerialConsistency.Set || set.InternalProfile.SerialConsistency.Value != want {
+					t.Fatalf("SerialConsistency = %+v, want %v", set.InternalProfile.SerialConsistency, want)
+				}
 			}
-			if !set.InternalProfile.SerialConsistency.Set || set.InternalProfile.SerialConsistency.Value != cqltype.Serial {
-				t.Fatalf("SerialConsistency = %+v, want SERIAL", set.InternalProfile.SerialConsistency)
-			}
-			none, err := resolveOptionValues(nil, Options{NoSerialConsistency: true})
+			none, err := resolveOptionValues(nil, Options{SerialConsistency: SerialOmit})
 			if err != nil {
 				t.Fatal(err)
 			}

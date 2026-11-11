@@ -201,17 +201,17 @@ func TestConditional(t *testing.T) {
 		table := testTableName(t)
 		cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY)", table))
 		for i, tc := range []struct {
-			name        string
-			consistency cql.Consistency
-		}{{"Any", cql.Any}, {"One", cql.One}, {"Two", cql.Two}, {"Three", cql.Three}, {"Quorum", cql.Quorum}, {"LocalQuorum", cql.LocalQuorum}, {"EachQuorum", cql.EachQuorum}, {"Serial", cql.Serial}, {"LocalSerial", cql.LocalSerial}, {"LocalOne", cql.LocalOne}} {
+			name     string
+			override gocql.SerialOverride
+		}{{"Inherit", gocql.SerialInherit}, {"Serial", gocql.SerialSerial}, {"Local", gocql.SerialLocal}, {"Omit", gocql.SerialOmit}, {"Unknown", gocql.SerialOmit + 1}} {
 			t.Run(tc.name, func(t *testing.T) {
 				bound := cassandraWriteBound(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), []cql.Value{cql.IntValue(int32(i + 1))}, gocql.PrepareOptions{})
 				// Serial consistency is checked when the options are built.
-				options, err := session.CompileOptions(gocql.Options{SerialConsistency: cql.Some(tc.consistency)})
+				options, err := session.CompileOptions(gocql.Options{SerialConsistency: tc.override})
 				if err == nil {
 					_, err = Exec(context.Background(), session, bound, options)
 				}
-				if tc.consistency == cql.Serial || tc.consistency == cql.LocalSerial {
+				if tc.override <= gocql.SerialOmit {
 					require.NoError(t, err)
 					require.Equal(t, int64(i+1), cassandraInt(t, cassandraRead(t, session, fmt.Sprintf("SELECT id FROM %s WHERE id=?", table), cql.IntValue(int32(i+1))), "id"))
 				} else {

@@ -29,16 +29,29 @@ type Options struct {
 	PageSize             cqltype.Option[int32]
 	NowInSeconds         cqltype.Option[int32]
 	ShardID              cqltype.Option[uint32]
-	// SerialConsistency overrides the profile's serial consistency;
-	// NoSerialConsistency sends none instead. Setting both is an error.
-	SerialConsistency   cqltype.Option[cqltype.Consistency]
-	Consistency         cqltype.Option[cqltype.Consistency]
-	HostID              cqltype.Option[cqltype.UUID]
-	IncludeMetadata     bool
-	Idempotent          bool
-	Trace               bool
-	NoSerialConsistency bool
+	Consistency          cqltype.Option[cqltype.Consistency]
+	HostID               cqltype.Option[cqltype.UUID]
+	// SerialConsistency overrides the profile's serial consistency.
+	SerialConsistency SerialOverride
+	IncludeMetadata   bool
+	Idempotent        bool
+	Trace             bool
 }
+
+// SerialOverride chooses the serial consistency of an execution relative to
+// its profile.
+type SerialOverride uint8
+
+const (
+	// SerialInherit keeps the profile's serial consistency.
+	SerialInherit SerialOverride = iota
+	// SerialSerial sends SERIAL.
+	SerialSerial
+	// SerialLocal sends LOCAL_SERIAL.
+	SerialLocal
+	// SerialOmit sends no serial consistency.
+	SerialOmit
+)
 
 type InternalResolvedOptions struct {
 	// templates holds the options' parameters blocks, encoded when they were
@@ -72,14 +85,16 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	if options.Consistency.Set {
 		p.Consistency = options.Consistency.Value
 	}
-	if options.SerialConsistency.Set && options.NoSerialConsistency {
-		return InternalResolvedOptions{}, cqltype.TypeValidation("serial consistency", "set together with NoSerialConsistency")
-	}
-	if options.SerialConsistency.Set {
-		p.SerialConsistency = options.SerialConsistency
-	}
-	if options.NoSerialConsistency {
+	switch options.SerialConsistency {
+	case SerialInherit:
+	case SerialSerial:
+		p.SerialConsistency = cqltype.Some(cqltype.Serial)
+	case SerialLocal:
+		p.SerialConsistency = cqltype.Some(cqltype.LocalSerial)
+	case SerialOmit:
 		p.SerialConsistency = cqltype.Option[cqltype.Consistency]{}
+	default:
+		return InternalResolvedOptions{}, cqltype.TypeValidation("serial consistency", "unknown override %d", options.SerialConsistency)
 	}
 	if options.Timeout.Set {
 		p.Timeout = options.Timeout.Value
@@ -98,9 +113,6 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	}
 	if options.Consistency.Set && !settings.InternalValidConsistency(p.Consistency) {
 		return InternalResolvedOptions{}, cqltype.TypeValidation("consistency", "invalid consistency")
-	}
-	if options.SerialConsistency.Set && p.SerialConsistency.Set && p.SerialConsistency.Value != cqltype.Serial && p.SerialConsistency.Value != cqltype.LocalSerial {
-		return InternalResolvedOptions{}, cqltype.TypeValidation("serial consistency", "must be SERIAL or LOCAL_SERIAL")
 	}
 	if options.Timeout.Set && p.Timeout < 0 || options.PageTimeout.Set && p.PageTimeout < 0 {
 		return InternalResolvedOptions{}, cqltype.TypeValidation("timeout", "must not be negative")

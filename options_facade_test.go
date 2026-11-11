@@ -26,15 +26,15 @@ func TestPublicOptionsSnapshot(t *testing.T) {
 		Timeout:       cql.Some(time.Second), PageTimeout: cql.Some(2 * time.Second),
 		Prefetch: cql.Some(0), Timestamp: cql.Some[int64](123), PageSize: cql.Some[int32](5),
 		NowInSeconds: cql.Some[int32](456), ShardID: cql.Some[uint32](2),
-		SerialConsistency: cql.Some(cql.Serial), Consistency: cql.Some(cql.One),
+		SerialConsistency: SerialSerial, Consistency: cql.Some(cql.One),
 		HostID:          cql.Some(cql.MustParseUUID("00112233-4455-4677-8899-aabbccddeeff")),
 		IncludeMetadata: true, Idempotent: true, Trace: true,
 	}
 	if got := publicOptions(internalOptions(want)); !reflect.DeepEqual(got, want) {
 		t.Fatalf("public options lost settings:\n got %+v\nwant %+v", got, want)
 	}
-	if got := publicOptions(internalOptions(Options{NoSerialConsistency: true})); !got.NoSerialConsistency {
-		t.Fatal("explicitly disabled serial consistency was lost")
+	if got := publicOptions(internalOptions(Options{SerialConsistency: SerialOmit})); got.SerialConsistency != SerialOmit {
+		t.Fatal("explicitly omitted serial consistency was lost")
 	}
 	raw := codecTestMust(implSession.NewCompiledOptions(nil, internalOptions(want)))
 	bound := CompiledOptions(raw)

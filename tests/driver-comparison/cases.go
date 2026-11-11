@@ -375,7 +375,7 @@ func (c *v2Case) lwt(id, n int) (op, error) {
 			return nil, fmt.Errorf("lwt key %d missing; run -mode prepare -scenario lwt", keys[j])
 		}
 	}
-	q, err := update.Query(g.Options{SerialConsistency: cql.Some(cql.LocalSerial)})
+	q, err := update.Query(g.Options{SerialConsistency: g.SerialLocal})
 	if err != nil {
 		return nil, err
 	}

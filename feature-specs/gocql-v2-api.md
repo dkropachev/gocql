@@ -1174,8 +1174,7 @@ func (CompiledOptions) Values() Options          // a copy, to derive other opti
 type Options struct {
     Profile *Profile                              // copied when resolved
     Consistency Option[Consistency]
-    SerialConsistency Option[Consistency]         // inherit / set
-    NoSerialConsistency bool                      // omit; error with SerialConsistency
+    SerialConsistency SerialOverride              // SerialInherit (zero), SerialSerial, SerialLocal, SerialOmit
     Timeout Option[time.Duration]                 // 0 disables profile timeout
     PageTimeout Option[time.Duration]
     PageSize Option[int32]
@@ -1193,6 +1192,8 @@ type Options struct {
     Observer Observer
 }
 type PayloadEntry struct { Key string; Value Nullable[Bytes] }
+type SerialOverride uint8                         // one field, so no invalid combination exists
+const (SerialInherit SerialOverride = iota; SerialSerial; SerialLocal; SerialOmit)
 type Profile struct {
     Consistency Consistency
     SerialConsistency Option[Consistency]

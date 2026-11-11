@@ -35,15 +35,31 @@ type Options struct {
 	PageSize     cql.Option[int32]
 	NowInSeconds cql.Option[int32]
 	ShardID      cql.Option[uint32]
-	// SerialConsistency and NoSerialConsistency are mutually exclusive.
-	SerialConsistency   cql.Option[cql.Consistency]
-	Consistency         cql.Option[cql.Consistency]
-	HostID              cql.Option[cql.UUID]
-	IncludeMetadata     bool
-	Idempotent          bool
-	Trace               bool
-	NoSerialConsistency bool
+	Consistency  cql.Option[cql.Consistency]
+	HostID       cql.Option[cql.UUID]
+	// SerialConsistency overrides the profile's serial consistency of
+	// conditional statements. The zero value, SerialInherit, keeps it.
+	SerialConsistency SerialOverride
+	IncludeMetadata   bool
+	Idempotent        bool
+	Trace             bool
 }
+
+// SerialOverride chooses the serial consistency an execution sends, relative
+// to its profile's Profile.SerialConsistency. The zero value inherits it.
+type SerialOverride uint8
+
+const (
+	// SerialInherit keeps the profile's serial consistency.
+	SerialInherit = SerialOverride(implSession.SerialInherit)
+	// SerialSerial sends SERIAL.
+	SerialSerial = SerialOverride(implSession.SerialSerial)
+	// SerialLocal sends LOCAL_SERIAL.
+	SerialLocal = SerialOverride(implSession.SerialLocal)
+	// SerialOmit sends no serial consistency, so the server applies its own
+	// default (SERIAL).
+	SerialOmit = SerialOverride(implSession.SerialOmit)
+)
 
 // CompiledOptions is an immutable snapshot made by Session.CompileOptions. Reuse it
 // for recurring one-shot execution settings; the zero value uses session
@@ -85,9 +101,9 @@ func internalOptions(o Options) implSession.Options {
 		CustomPayload: o.CustomPayload, Timeout: o.Timeout, PageTimeout: o.PageTimeout,
 		Prefetch: o.Prefetch, Timestamp: o.Timestamp, PageSize: o.PageSize,
 		NowInSeconds: o.NowInSeconds, ShardID: o.ShardID,
-		SerialConsistency: o.SerialConsistency, Consistency: o.Consistency,
+		SerialConsistency: implSession.SerialOverride(o.SerialConsistency), Consistency: o.Consistency,
 		HostID: o.HostID, IncludeMetadata: o.IncludeMetadata,
-		Idempotent: o.Idempotent, Trace: o.Trace, NoSerialConsistency: o.NoSerialConsistency,
+		Idempotent: o.Idempotent, Trace: o.Trace,
 	}
 	if o.Profile != nil {
 		profile := internalProfile(*o.Profile)
@@ -102,9 +118,9 @@ func publicOptions(o implSession.Options) Options {
 		CustomPayload: o.CustomPayload, Timeout: o.Timeout, PageTimeout: o.PageTimeout,
 		Prefetch: o.Prefetch, Timestamp: o.Timestamp, PageSize: o.PageSize,
 		NowInSeconds: o.NowInSeconds, ShardID: o.ShardID,
-		SerialConsistency: o.SerialConsistency, Consistency: o.Consistency,
+		SerialConsistency: SerialOverride(o.SerialConsistency), Consistency: o.Consistency,
 		HostID: o.HostID, IncludeMetadata: o.IncludeMetadata,
-		Idempotent: o.Idempotent, Trace: o.Trace, NoSerialConsistency: o.NoSerialConsistency,
+		Idempotent: o.Idempotent, Trace: o.Trace,
 	}
 	if o.Profile != nil {
 		profile := publicProfile(*o.Profile)
