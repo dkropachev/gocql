@@ -19,6 +19,9 @@ type ValidationError struct {
 func (e *ValidationError) Error() string { return fmt.Sprintf("gocql: invalid %s: %v", e.Field, e.Err) }
 func (e *ValidationError) Unwrap() error { return e.Err }
 
+// Kind returns KindInvalid.
+func (e *ValidationError) Kind() Kind { return KindInvalid }
+
 // CodecError records the physical column and nested path of a codec failure.
 type CodecError struct {
 	Err    error
@@ -32,6 +35,9 @@ func (e *CodecError) Error() string {
 	return fmt.Sprintf("gocql: %s column %d (%s)%s: %v", e.Stage, e.Index, e.Column, e.Path, e.Err)
 }
 func (e *CodecError) Unwrap() error { return e.Err }
+
+// Kind returns KindInvalid.
+func (e *CodecError) Kind() Kind { return KindInvalid }
 
 // ProtocolError reports that a peer violated the CQL protocol: a frame the
 // driver cannot accept, or data that does not decode.
@@ -58,3 +64,6 @@ func (e *ProtocolError) Error() string {
 	return fmt.Sprintf("gocql: %s at byte %d: %v", e.Stage, e.Offset, e.Err)
 }
 func (e *ProtocolError) Unwrap() error { return e.Err }
+
+// Kind returns KindProtocol.
+func (e *ProtocolError) Kind() Kind { return KindProtocol }

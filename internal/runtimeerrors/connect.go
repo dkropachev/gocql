@@ -44,6 +44,10 @@ func (e *ConnectError) Error() string {
 	return b.String()
 }
 
+// Kind returns KindConnection. KindOf reports a host's server error instead,
+// such as KindUnauthorized for rejected credentials.
+func (e *ConnectError) Kind() Kind { return KindConnection }
+
 // Unwrap returns ErrNoConnectionsStarted followed by each host's error.
 func (e *ConnectError) Unwrap() []error {
 	out := make([]error, 0, 1+len(e.Hosts))

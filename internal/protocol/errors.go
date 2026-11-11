@@ -189,6 +189,7 @@ type UnavailableError struct {
 func (e *UnavailableError) Code() ErrorCode      { return CodeUnavailable }
 func (e *UnavailableError) Error() string        { return e.text(CodeUnavailable) }
 func (e *UnavailableError) Is(target error) bool { return target == CodeUnavailable }
+func (e *UnavailableError) Kind() Kind           { return KindUnavailable }
 
 // ErrorMap maps the address of each replica that failed to its failure
 // reason code.
@@ -208,6 +209,7 @@ type WriteTimeoutError struct {
 func (e *WriteTimeoutError) Code() ErrorCode      { return CodeWriteTimeout }
 func (e *WriteTimeoutError) Error() string        { return e.text(CodeWriteTimeout) }
 func (e *WriteTimeoutError) Is(target error) bool { return target == CodeWriteTimeout }
+func (e *WriteTimeoutError) Kind() Kind           { return KindTimeout }
 
 // WriteFailureError reports that replicas failed a write.
 type WriteFailureError struct {
@@ -225,6 +227,7 @@ type WriteFailureError struct {
 func (e *WriteFailureError) Code() ErrorCode      { return CodeWriteFailure }
 func (e *WriteFailureError) Error() string        { return e.text(CodeWriteFailure) }
 func (e *WriteFailureError) Is(target error) bool { return target == CodeWriteFailure }
+func (e *WriteFailureError) Kind() Kind           { return KindServer }
 
 // CDCWriteFailureError reports that a write to a CDC-enabled table failed.
 type CDCWriteFailureError struct {
@@ -235,6 +238,7 @@ type CDCWriteFailureError struct {
 func (e *CDCWriteFailureError) Code() ErrorCode      { return CodeCDCWriteFailure }
 func (e *CDCWriteFailureError) Error() string        { return e.text(CodeCDCWriteFailure) }
 func (e *CDCWriteFailureError) Is(target error) bool { return target == CodeCDCWriteFailure }
+func (e *CDCWriteFailureError) Kind() Kind           { return KindServer }
 
 // ReadTimeoutError reports that replicas did not answer a read in time.
 type ReadTimeoutError struct {
@@ -250,6 +254,7 @@ type ReadTimeoutError struct {
 func (e *ReadTimeoutError) Code() ErrorCode      { return CodeReadTimeout }
 func (e *ReadTimeoutError) Error() string        { return e.text(CodeReadTimeout) }
 func (e *ReadTimeoutError) Is(target error) bool { return target == CodeReadTimeout }
+func (e *ReadTimeoutError) Kind() Kind           { return KindTimeout }
 
 // AlreadyExistsError reports that a keyspace or table to create already
 // exists. Table is empty for a keyspace.
@@ -263,6 +268,7 @@ type AlreadyExistsError struct {
 func (e *AlreadyExistsError) Code() ErrorCode      { return CodeAlreadyExists }
 func (e *AlreadyExistsError) Error() string        { return e.text(CodeAlreadyExists) }
 func (e *AlreadyExistsError) Is(target error) bool { return target == CodeAlreadyExists }
+func (e *AlreadyExistsError) Kind() Kind           { return KindInvalid }
 
 // UnpreparedError reports that the server does not know a prepared
 // statement. The driver prepares it again and retries on its own.
@@ -275,6 +281,7 @@ type UnpreparedError struct {
 func (e *UnpreparedError) Code() ErrorCode      { return CodeUnprepared }
 func (e *UnpreparedError) Error() string        { return e.text(CodeUnprepared) }
 func (e *UnpreparedError) Is(target error) bool { return target == CodeUnprepared }
+func (e *UnpreparedError) Kind() Kind           { return KindInvalid }
 
 // ReadFailureError reports that replicas failed a read.
 type ReadFailureError struct {
@@ -292,6 +299,7 @@ type ReadFailureError struct {
 func (e *ReadFailureError) Code() ErrorCode      { return CodeReadFailure }
 func (e *ReadFailureError) Error() string        { return e.text(CodeReadFailure) }
 func (e *ReadFailureError) Is(target error) bool { return target == CodeReadFailure }
+func (e *ReadFailureError) Kind() Kind           { return KindServer }
 
 // FunctionFailureError reports that a user-defined function failed.
 type FunctionFailureError struct {
@@ -305,6 +313,7 @@ type FunctionFailureError struct {
 func (e *FunctionFailureError) Code() ErrorCode      { return CodeFunctionFailure }
 func (e *FunctionFailureError) Error() string        { return e.text(CodeFunctionFailure) }
 func (e *FunctionFailureError) Is(target error) bool { return target == CodeFunctionFailure }
+func (e *FunctionFailureError) Kind() Kind           { return KindInvalid }
 
 // CASWriteUnknownError reports that a conditional write timed out with an
 // unknown outcome. Cassandra sends it on protocol 5; see IsCASWriteUnknown
@@ -320,6 +329,7 @@ type CASWriteUnknownError struct {
 func (e *CASWriteUnknownError) Code() ErrorCode      { return CodeCASWriteUnknown }
 func (e *CASWriteUnknownError) Error() string        { return e.text(CodeCASWriteUnknown) }
 func (e *CASWriteUnknownError) Is(target error) bool { return target == CodeCASWriteUnknown }
+func (e *CASWriteUnknownError) Kind() Kind           { return KindServer }
 
 // OpType is the kind of operation a rate limit rejected.
 type OpType uint8
@@ -343,6 +353,7 @@ type RateLimitReachedError struct {
 func (e *RateLimitReachedError) Code() ErrorCode      { return CodeRateLimitReached }
 func (e *RateLimitReachedError) Error() string        { return e.text(CodeRateLimitReached) }
 func (e *RateLimitReachedError) Is(target error) bool { return target == CodeRateLimitReached }
+func (e *RateLimitReachedError) Kind() Kind           { return KindRateLimited }
 
 // OtherServerError is a server error whose code carries no fields of its
 // own: Server, Protocol, BadCredentials, Overloaded, Bootstrapping, Truncate,
@@ -362,6 +373,28 @@ func NewOtherServerError(code ErrorCode, message string) *OtherServerError {
 func (e *OtherServerError) Code() ErrorCode      { return e.code }
 func (e *OtherServerError) Error() string        { return e.text(e.code) }
 func (e *OtherServerError) Is(target error) bool { return target == e.code }
+func (e *OtherServerError) Kind() Kind           { return CodeKind(e.code) }
+
+// CodeKind classifies a code the way KindOf classifies the server errors that
+// carry it.
+func CodeKind(c ErrorCode) Kind {
+	switch c {
+	case CodeReadTimeout, CodeWriteTimeout:
+		return KindTimeout
+	case CodeUnavailable:
+		return KindUnavailable
+	case CodeOverloaded, CodeBootstrapping:
+		return KindOverloaded
+	case CodeSyntax, CodeInvalid, CodeAlreadyExists, CodeConfig, CodeFunctionFailure, CodeUnprepared:
+		return KindInvalid
+	case CodeUnauthorized, CodeBadCredentials:
+		return KindUnauthorized
+	case CodeProtocol:
+		return KindProtocol
+	default:
+		return KindServer
+	}
+}
 
 // ServerErrorExecutionStatus reports what a request that failed with err may have
 // done on the cluster. It is the single classification of server error codes

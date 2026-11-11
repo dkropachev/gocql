@@ -25,6 +25,12 @@ limited, invalid, unauthorized, connection, canceled, closed, protocol or
 server. `Kind.Transient` reports whether a later attempt can succeed. It does
 not say whether a retry is safe; combine it with the execution status.
 
+When an error wraps several others, a cancellation decides first, then a
+deadline, then a server error, then the driver's own errors. A `Connect` that
+failed because a host rejected the credentials therefore reports
+`KindUnauthorized`, not `KindConnection`. Server errors and the driver's error
+types also report their own kind with a `Kind` method.
+
 ## Server errors
 
 Every server error implements `cqlerr.ServerError`, whose `Code`, `Message`

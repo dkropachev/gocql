@@ -26,3 +26,6 @@ type SchemaChangedError struct {
 func (e *SchemaChangedError) Error() string {
 	return "gocql: bound parameter schema changed for " + e.Statement
 }
+
+// Kind returns KindInvalid.
+func (e *SchemaChangedError) Kind() Kind { return KindInvalid }

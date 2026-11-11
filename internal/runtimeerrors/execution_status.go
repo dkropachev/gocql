@@ -19,31 +19,69 @@ type executionStatusReporter interface {
 	ExecutionStatus() cqltype.ExecutionStatus
 }
 
+// statusWalk is the state of one ExecutionStatusOf walk over an error tree.
+type statusWalk struct {
+	reporter    executionStatusReporter
+	server      protocol.ServerError
+	notExecuted bool
+}
+
+// visit inspects one error of the tree, not what it wraps, and reports
+// whether the walk must go on.
+func (w *statusWalk) visit(err error) bool {
+	if reporter, ok := err.(executionStatusReporter); ok { //nolint:errorlint // one node of a tree walkErrors walks
+		w.reporter = reporter // the first one decides
+		return false
+	}
+	if w.server == nil {
+		w.server, _ = err.(protocol.ServerError) //nolint:errorlint // one node of a tree walkErrors walks
+	}
+	if !w.notExecuted {
+		w.notExecuted = unsent(err)
+	}
+	return true
+}
+
+// unsent reports whether err proves that a request was never sent. Only
+// conditions raised before anything is sent do: validation and codec errors
+// also arise from decoding a response, after the server executed the
+// request.
+func unsent(err error) bool {
+	if _, ok := err.(*SchemaChangedError); ok { //nolint:errorlint // one node of a tree walkErrors walks
+		return true
+	}
+	switch err {
+	case ErrNoConnections, ErrSessionClosed, ErrSessionNotReady, ErrBusy, ErrConditionalExec, //nolint:errorlint // one node of a tree walkErrors walks
+		context.Canceled, context.DeadlineExceeded:
+		return true
+	}
+	return false
+}
+
 // ExecutionStatusOf reports what the request that failed with err may have
 // done on the cluster. The driver wraps every failure that follows a sent
 // attempt in a QueryError or ExecutionError carrying that verdict, so a bare
 // cancellation means the request was never sent. Any other error the driver
 // cannot attribute reports MaybeExecuted.
+//
+// It walks err's tree once: the first QueryError or ExecutionError decides,
+// then the first server error, then any error proving the request unsent.
 func ExecutionStatusOf(err error) cqltype.ExecutionStatus {
 	if err == nil {
 		return cqltype.NotExecuted
 	}
-	if reporter, ok := errors.AsType[executionStatusReporter](err); ok {
-		return reporter.ExecutionStatus()
-	}
-	if server, ok := errors.AsType[protocol.ServerError](err); ok {
-		return protocol.ServerErrorExecutionStatus(server)
-	}
-	// Only conditions raised before anything is sent prove the request had
-	// no effect. Validation and codec errors also arise from decoding a
-	// response, after the server executed the request.
-	if hasType[*SchemaChangedError](err) ||
-		errors.Is(err, ErrNoConnections) || errors.Is(err, ErrSessionClosed) ||
-		errors.Is(err, ErrSessionNotReady) || errors.Is(err, ErrBusy) || errors.Is(err, ErrConditionalExec) ||
-		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	var w statusWalk
+	walkErrors(err, nil, &w)
+	switch {
+	case w.reporter != nil:
+		return w.reporter.ExecutionStatus()
+	case w.server != nil:
+		return protocol.ServerErrorExecutionStatus(w.server)
+	case w.notExecuted:
 		return cqltype.NotExecuted
+	default:
+		return cqltype.MaybeExecuted
 	}
-	return cqltype.MaybeExecuted
 }
 
 // AttemptFailure records one failed attempt of a request.

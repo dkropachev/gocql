@@ -14,79 +14,148 @@ import (
 )
 
 // Kind groups errors by what a caller can do about them.
-type Kind uint8
+type Kind = cqltype.Kind
 
 const (
-	// KindUnknown is an error the driver does not classify.
-	KindUnknown Kind = iota
-	// KindTimeout: the server or the driver gave up waiting, or the caller's
-	// deadline passed.
-	KindTimeout
-	// KindUnavailable: too few replicas were alive to try the request.
-	KindUnavailable
-	// KindOverloaded: the coordinator was overloaded or still bootstrapping.
-	KindOverloaded
-	// KindRateLimited: the request exceeded a per-partition rate limit.
-	KindRateLimited
-	// KindInvalid: the request or its values are wrong; retrying cannot help.
-	KindInvalid
-	// KindUnauthorized: authentication failed or permission was denied.
-	KindUnauthorized
-	// KindConnection: no connection could carry the request, or it broke.
-	KindConnection
-	// KindCanceled: the caller canceled the request.
-	KindCanceled
-	// KindClosed: the session or query was closed.
-	KindClosed
-	// KindProtocol: a peer violated the CQL protocol.
-	KindProtocol
-	// KindServer: the server failed while executing the request.
-	KindServer
+	KindUnknown      = cqltype.KindUnknown
+	KindTimeout      = cqltype.KindTimeout
+	KindUnavailable  = cqltype.KindUnavailable
+	KindOverloaded   = cqltype.KindOverloaded
+	KindRateLimited  = cqltype.KindRateLimited
+	KindInvalid      = cqltype.KindInvalid
+	KindUnauthorized = cqltype.KindUnauthorized
+	KindConnection   = cqltype.KindConnection
+	KindCanceled     = cqltype.KindCanceled
+	KindClosed       = cqltype.KindClosed
+	KindProtocol     = cqltype.KindProtocol
+	KindServer       = cqltype.KindServer
 )
 
-func (k Kind) String() string {
+// kinded is an error that knows its Kind: every server error and every
+// error type the driver defines.
+type kinded interface {
+	error
+	Kind() Kind
+}
+
+// rank orders the errors of one tree: when it holds several, KindOf reports
+// the one of lowest rank. A cancellation explains the failure better than
+// the server error of an earlier attempt, and a server error better than the
+// connection the driver closed because of it.
+type rank uint8
+
+const (
+	rankCanceled rank = iota
+	rankDeadline
+	rankServer
+	rankClosed
+	rankInvalid
+	rankProtocol
+	rankTimeout
+	rankConnection
+	rankNone
+)
+
+func rankOf(k Kind) rank {
 	switch k {
-	case KindTimeout:
-		return "timeout"
-	case KindUnavailable:
-		return "unavailable"
-	case KindOverloaded:
-		return "overloaded"
-	case KindRateLimited:
-		return "rate limited"
-	case KindInvalid:
-		return "invalid"
-	case KindUnauthorized:
-		return "unauthorized"
-	case KindConnection:
-		return "connection"
-	case KindCanceled:
-		return "canceled"
 	case KindClosed:
-		return "closed"
+		return rankClosed
+	case KindInvalid:
+		return rankInvalid
 	case KindProtocol:
-		return "protocol"
-	case KindServer:
-		return "server"
+		return rankProtocol
+	case KindTimeout:
+		return rankTimeout
+	case KindConnection:
+		return rankConnection
 	default:
-		return "unknown"
+		return rankNone
 	}
 }
 
-// Transient reports whether the same request can succeed later, possibly on
-// another host. Whether replaying it is safe is a separate question; see
-// ExecutionStatusOf.
-func (k Kind) Transient() bool {
-	switch k {
-	case KindTimeout, KindUnavailable, KindOverloaded, KindRateLimited, KindConnection:
-		return true
-	default:
+// serverKind classifies a server error. The driver's own have a Kind method;
+// another implementation is classified by its code.
+func serverKind(err protocol.ServerError) Kind {
+	if k, ok := err.(kinded); ok {
+		return k.Kind()
+	}
+	return protocol.CodeKind(err.Code())
+}
+
+// sentinelKind classifies an error by identity: the driver's sentinels and
+// the standard library errors a broken connection reports. Every sentinel is
+// a comparable value, so the comparison cannot panic.
+func sentinelKind(err error) Kind {
+	switch err {
+	case ErrClosed, ErrSessionClosed, ErrStaleRows, cqltype.ErrReleased: //nolint:errorlint // one node of a tree walkErrors walks
+		return KindClosed
+	case ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete:
+		return KindInvalid
+	case protocol.ErrFrameTooBig:
+		return KindProtocol
+	case ErrTimeoutNoResponse, protocol.ErrReadHeaderTimeout:
+		return KindTimeout
+	case ErrNoConnections, ErrNoConnectionsStarted, ErrConnectionClosed, ErrNoStreams, ErrNoHosts, ErrSessionNotReady,
+		io.EOF, io.ErrUnexpectedEOF, net.ErrClosed:
+		return KindConnection
+	}
+	return KindUnknown
+}
+
+// kindWalk is the state of one KindOf walk over an error tree.
+type kindWalk struct {
+	// network is the first net.Error of the tree.
+	network net.Error
+	kind    Kind
+	rank    rank
+}
+
+// visit classifies one error of the tree, not what it wraps, and reports
+// whether the walk must go on.
+func (w *kindWalk) visit(err error) bool {
+	if err == context.Canceled { //nolint:errorlint // one node of a tree walkErrors walks
+		w.kind, w.rank = KindCanceled, rankCanceled
 		return false
 	}
+	if w.rank <= rankDeadline {
+		return true // only a cancellation outranks a deadline
+	}
+	if err == context.DeadlineExceeded { //nolint:errorlint // one node of a tree walkErrors walks
+		w.kind, w.rank = KindTimeout, rankDeadline
+		return true
+	}
+	if w.rank <= rankServer {
+		return true
+	}
+	if server, ok := err.(protocol.ServerError); ok { //nolint:errorlint // one node of a tree walkErrors walks
+		// The first server error of the tree decides, as errors.As finds it.
+		w.kind, w.rank = serverKind(server), rankServer
+		return true
+	}
+	k := sentinelKind(err)
+	if k == KindUnknown {
+		if typed, ok := err.(kinded); ok { //nolint:errorlint // one node of a tree walkErrors walks
+			k = typed.Kind()
+		}
+	}
+	if r := rankOf(k); r < w.rank {
+		w.kind, w.rank = k, r
+	}
+	if w.network == nil {
+		w.network, _ = err.(net.Error) //nolint:errorlint // one node of a tree walkErrors walks
+	}
+	return true
 }
 
 // KindOf classifies err. For a request that failed after several attempts it
 // classifies the reason the request stopped.
+//
+// It walks err's tree once, as errors.Is and errors.As do. When the tree
+// holds several classified errors, a cancellation wins over a deadline, a
+// deadline over a server error, and a server error over the driver's own
+// errors, which rank closed, invalid, protocol, timeout, then connection. A
+// net.Error that is no driver error classifies as a timeout when the first
+// one of the tree times out, and as a connection failure otherwise.
 func KindOf(err error) Kind {
 	if err == nil {
 		return KindUnknown
@@ -94,67 +163,46 @@ func KindOf(err error) Kind {
 	if request, ok := errors.AsType[*ExecutionError](err); ok {
 		err = request.Err
 	}
-	switch {
-	case errors.Is(err, context.Canceled):
-		return KindCanceled
-	case errors.Is(err, context.DeadlineExceeded):
-		return KindTimeout
-	}
-	if server, ok := errors.AsType[protocol.ServerError](err); ok {
-		return serverKind(server)
-	}
-	switch {
-	case errors.Is(err, ErrClosed), errors.Is(err, ErrSessionClosed), errors.Is(err, ErrStaleRows), errors.Is(err, cqltype.ErrReleased):
-		return KindClosed
-	case hasType[*cqltype.ValidationError](err), hasType[*cqltype.CodecError](err), hasType[*SchemaChangedError](err), hasType[*UnsupportedSettingError](err), hasType[*ServerMismatchError](err),
-		errors.Is(err, ErrUseStmt),
-		errors.Is(err, ErrNoKeyspace), errors.Is(err, ErrNoTable), errors.Is(err, ErrKeyspaceDoesNotExist),
-		errors.Is(err, ErrBusy), errors.Is(err, ErrConditionalExec), errors.Is(err, ErrPagingComplete):
-		return KindInvalid
-	case hasType[*cqltype.ProtocolError](err), hasType[*protocol.MalformedFrameError](err), errors.Is(err, protocol.ErrFrameTooBig):
-		return KindProtocol
-	case errors.Is(err, ErrTimeoutNoResponse), errors.Is(err, protocol.ErrReadHeaderTimeout):
-		return KindTimeout
-	case isNetTimeout(err):
-		return KindTimeout
-	case hasType[*ConnectError](err), errors.Is(err, ErrNoConnections),
-		errors.Is(err, ErrNoConnectionsStarted), errors.Is(err, ErrConnectionClosed), errors.Is(err, ErrNoStreams), errors.Is(err, ErrNoHosts), errors.Is(err, ErrSessionNotReady),
-		hasType[net.Error](err), errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, net.ErrClosed):
+	w := kindWalk{kind: KindUnknown, rank: rankNone}
+	walkErrors(err, &w, nil)
+	if w.network != nil && w.rank > rankTimeout {
+		if w.network.Timeout() {
+			return KindTimeout
+		}
 		return KindConnection
 	}
-	return KindUnknown
+	return w.kind
 }
 
-// hasType reports whether err's tree holds an error of type E.
-func hasType[E error](err error) bool {
-	_, ok := errors.AsType[E](err)
-	return ok
-}
-
-func isNetTimeout(err error) bool {
-	network, ok := errors.AsType[net.Error](err)
-	return ok && network.Timeout()
-}
-
-func serverKind(err protocol.ServerError) Kind {
-	if _, ok := err.(*protocol.RateLimitReachedError); ok {
-		return KindRateLimited
+// walkErrors calls kinds.visit, or statuses.visit when kinds is nil, for err
+// and every error it wraps, depth first in the order errors.Is and errors.As
+// use, until visit returns false. It reports whether the walk ran to the
+// end. It takes concrete walkers, not an interface or a function, so that
+// they stay on the caller's stack.
+func walkErrors(err error, kinds *kindWalk, statuses *statusWalk) bool {
+	for err != nil {
+		var more bool
+		if kinds != nil {
+			more = kinds.visit(err)
+		} else {
+			more = statuses.visit(err)
+		}
+		if !more {
+			return false
+		}
+		switch wrapper := err.(type) { //nolint:errorlint // unwraps one level, as errors.Is does
+		case interface{ Unwrap() error }:
+			err = wrapper.Unwrap()
+		case interface{ Unwrap() []error }:
+			for _, inner := range wrapper.Unwrap() {
+				if !walkErrors(inner, kinds, statuses) {
+					return false
+				}
+			}
+			return true
+		default:
+			return true
+		}
 	}
-	switch err.Code() {
-	case protocol.CodeReadTimeout, protocol.CodeWriteTimeout:
-		return KindTimeout
-	case protocol.CodeUnavailable:
-		return KindUnavailable
-	case protocol.CodeOverloaded, protocol.CodeBootstrapping:
-		return KindOverloaded
-	case protocol.CodeSyntax, protocol.CodeInvalid, protocol.CodeAlreadyExists, protocol.CodeConfig,
-		protocol.CodeFunctionFailure, protocol.CodeUnprepared:
-		return KindInvalid
-	case protocol.CodeUnauthorized, protocol.CodeBadCredentials:
-		return KindUnauthorized
-	case protocol.CodeProtocol:
-		return KindProtocol
-	default:
-		return KindServer
-	}
+	return true
 }

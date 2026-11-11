@@ -58,27 +58,34 @@ func ExecutionStatusOf(err error) ExecutionStatus { return runtimeerrors.Executi
 
 // Classification.
 
-// Kind groups errors by what a caller can do about them.
-type Kind = runtimeerrors.Kind
+// Kind groups errors by what a caller can do about them. Server errors and
+// the driver's error types report theirs with a Kind method; KindOf
+// classifies any error.
+type Kind = cqltype.Kind
 
 const (
-	KindUnknown      = runtimeerrors.KindUnknown
-	KindTimeout      = runtimeerrors.KindTimeout
-	KindUnavailable  = runtimeerrors.KindUnavailable
-	KindOverloaded   = runtimeerrors.KindOverloaded
-	KindRateLimited  = runtimeerrors.KindRateLimited
-	KindInvalid      = runtimeerrors.KindInvalid
-	KindUnauthorized = runtimeerrors.KindUnauthorized
-	KindConnection   = runtimeerrors.KindConnection
-	KindCanceled     = runtimeerrors.KindCanceled
-	KindClosed       = runtimeerrors.KindClosed
-	KindProtocol     = runtimeerrors.KindProtocol
-	KindServer       = runtimeerrors.KindServer
+	KindUnknown      = cqltype.KindUnknown
+	KindTimeout      = cqltype.KindTimeout
+	KindUnavailable  = cqltype.KindUnavailable
+	KindOverloaded   = cqltype.KindOverloaded
+	KindRateLimited  = cqltype.KindRateLimited
+	KindInvalid      = cqltype.KindInvalid
+	KindUnauthorized = cqltype.KindUnauthorized
+	KindConnection   = cqltype.KindConnection
+	KindCanceled     = cqltype.KindCanceled
+	KindClosed       = cqltype.KindClosed
+	KindProtocol     = cqltype.KindProtocol
+	KindServer       = cqltype.KindServer
 )
 
 // KindOf classifies err. For a request that failed after several attempts it
 // classifies the reason the request stopped. Kind.Transient reports whether
 // trying again can help; ExecutionStatusOf reports whether it is safe.
+//
+// When err wraps several errors, a cancellation wins over a deadline, a
+// deadline over a server error, and a server error over the driver's own
+// errors, so a ConnectError whose host rejected the credentials reports
+// KindUnauthorized.
 func KindOf(err error) Kind { return runtimeerrors.KindOf(err) }
 
 // IsCASWriteUnknown reports whether err says that a conditional (LWT) write

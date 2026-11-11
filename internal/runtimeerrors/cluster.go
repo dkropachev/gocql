@@ -25,6 +25,9 @@ func (e *ServerMismatchError) Error() string {
 	return "gocql: the session's dialect expects " + e.Want + " but the cluster is " + e.Got
 }
 
+// Kind returns KindInvalid.
+func (e *ServerMismatchError) Kind() Kind { return KindInvalid }
+
 // ErrConditionalExec is returned, before anything is sent, by an Exec call
 // or ExecBatch for a statement or batch the driver knows to be conditional: its
 // result is a row reporting whether it applied, which Exec cannot return.

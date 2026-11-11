@@ -8,3 +8,6 @@ type UnsupportedSettingError struct{ Setting, Reason string }
 func (e *UnsupportedSettingError) Error() string {
 	return "gocql: unsupported " + e.Setting + ": " + e.Reason
 }
+
+// Kind returns KindInvalid.
+func (e *UnsupportedSettingError) Kind() Kind { return KindInvalid }
