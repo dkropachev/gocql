@@ -36,7 +36,6 @@ import (
 	"crypto/tls"
 	"net"
 	"net/netip"
-	"strconv"
 	"strings"
 
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -147,34 +146,6 @@ func Dial(ctx context.Context, host *implEndpoint.HostInfo, cfg *ConnConfig, err
 	}
 
 	return c, nil
-}
-
-type defaultHostDialer struct {
-	dialer    implEndpoint.InternalLegacyDialer
-	tlsConfig *tls.Config
-}
-
-func (hd *defaultHostDialer) DialHost(ctx context.Context, host *implEndpoint.HostInfo) (*implEndpoint.DialedHost, error) {
-	ip := host.ConnectAddress()
-	port := host.Port()
-
-	if !implEndpoint.InternalValidIpAddr(ip) {
-		return nil, fmt.Errorf("host missing connect ip address: %v", ip)
-	} else if port == 0 {
-		return nil, fmt.Errorf("host missing port: %v", port)
-	}
-
-	addr := net.JoinHostPort(ip.String(), strconv.Itoa(port))
-	translatedInfo := implEndpoint.InternalHostInfoGetTranslatedConnectionInfo(host)
-	if translatedInfo != nil {
-		addr = translatedInfo.CQL.String()
-	}
-
-	conn, err := hd.dialer.DialContext(ctx, "tcp", addr)
-	if err != nil {
-		return nil, err
-	}
-	return WrapTLS(ctx, conn, addr, hd.tlsConfig)
 }
 
 func InternalTlsConfigForAddr(tlsConfig *tls.Config, addr string) *tls.Config {

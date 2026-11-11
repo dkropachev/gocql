@@ -370,9 +370,6 @@ func putFrameScratch(s *wire.BuilderScratch) {
 func (c *Conn) InternalBuildTypedRequest(req *model.AttemptRequest, stream int) (wire.Chain, error) {
 	return c.nativeProtocol().BuildTypedRequest(req, stream)
 }
-func (c *Conn) writeTypedParams(e *protocol.TypedEnvelope, req *model.AttemptRequest, batch bool) {
-	c.nativeProtocol().WriteTypedParams(e, req, batch)
-}
 
 // InternalCloseOnCancel makes cancelling InternalCtx close the connection,
 // which delivers the closure to every waiting typed call, so their waits

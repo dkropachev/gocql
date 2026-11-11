@@ -29,7 +29,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 
 	"github.com/scylladb/gocql/v2/internal/codec"
 
@@ -198,12 +197,6 @@ func (r *InternalExclusiveConn) InternalInitStream(limits StreamLimits) error {
 	}
 	r.InternalComplete = true
 	return nil
-}
-func (r *InternalExclusiveConn) receiveSource() io.Reader {
-	if r.InternalUnits != nil {
-		return r.InternalUnits
-	}
-	return r.socketSource()
 }
 func (r *InternalExclusiveConn) InternalFinishResponse() error {
 	if r.InternalUnits != nil {

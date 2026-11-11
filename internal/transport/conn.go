@@ -56,7 +56,6 @@ import (
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	"github.com/scylladb/gocql/v2/internal/streams"
-	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -1391,36 +1390,6 @@ func (c *Conn) readContinuationSegment() ([]byte, error) {
 	return payload, nil
 }
 
-func (c *Conn) processAllFramesInSegment(ctx context.Context, r *bytes.Reader, netStart, netEnd time.Time) error {
-	// A self-contained segment carries one or more complete CQL frames, so we
-	// drain them all. This is safe to iterate: the segment payload has already
-	// been CRC32-verified, and processFrameSource consumes exactly one frame
-	// (header + body) per call, keeping r aligned for the next iteration. It
-	// returns a non-nil error only for connection-fatal conditions (which stops
-	// the loop); a per-request decode error is delivered to that request's
-	// waiting caller and it returns nil, so sibling frames in the same segment are
-	// still processed.
-	//
-	// r is passed as the segment as well as the reader, which is what bounds each
-	// frame's declared body length by the bytes actually left in the segment (see
-	// frameSource).
-	//
-	// Every frame packed into this segment reports the same observer window: they
-	// did all arrive in the one network read, and attributing a slice of it to
-	// each would be an invention.
-	var err error
-	for r.Len() > 0 && err == nil {
-		err = c.InternalProcessFrameSource(ctx, InternalFrameSource{
-			InternalR: r,
-			segment:   r,
-			netStart:  netStart,
-			netEnd:    netEnd,
-		})
-	}
-
-	return err
-}
-
 var _ InternalConnReadSource = (*InternalConnReader)(nil)
 
 type InternalCallReq struct {
@@ -1943,19 +1912,6 @@ func (c *Conn) InternalUseKeyspaceContext(ctx context.Context, keyspace string) 
 // currentKeyspace field for why it is atomic.
 func (c *Conn) setCurrentKeyspace(keyspace string) {
 	c.currentKeyspace.Store(&keyspace)
-}
-
-// getCurrentKeyspace returns the keyspace this connection was switched to, or ""
-// if it was never switched (Cluster.Keyspace empty, or a control connection).
-func (c *Conn) getCurrentKeyspace() string {
-	if ks := c.currentKeyspace.Load(); ks != nil {
-		return *ks
-	}
-	return ""
-}
-
-func unmarshalTabletHint(hint []byte, _ uint8, keyspace, table string) (tablets.TabletInfo, error) {
-	return tablets.ParseHint(hint, keyspace, table)
 }
 
 const InternalQrySystemPeers = "SELECT peer, data_center, host_id, rack, release_version, rpc_address, schema_version, tokens FROM system.peers"
@@ -2483,14 +2439,6 @@ func (w *InternalWriteCoalescer) InternalWriteFlusherImpl(timerC <-chan time.Tim
 			}
 		}
 	}
-}
-
-func (w *InternalWriteCoalescer) flush(resultChans []chan<- InternalWriteResult, buffers net.Buffers) {
-	sizes := make([]int64, len(buffers))
-	for i, b := range buffers {
-		sizes[i] = int64(len(b))
-	}
-	w.InternalFlushSizes(resultChans, buffers, sizes)
 }
 
 func (w *InternalWriteCoalescer) InternalFlushSizes(resultChans []chan<- InternalWriteResult, buffers net.Buffers, sizes []int64) {
