@@ -24,6 +24,8 @@ func (p PageState) Token() []byte { return model.PageState(p).Token() }
 // use PageState.More and PageState.Complete to distinguish continuation and completion.
 func PageStateFromToken(token []byte) PageState { return PageState(model.PageStateFromToken(token)) }
 
+// Result describes a completed execution. HostID and ShardID name the host,
+// and the shard on a shard-aware host, of the attempt that produced it.
 type Result = model.Result
 
 // StartPage is the state that starts paging from the first page. It is the

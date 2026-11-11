@@ -24,6 +24,15 @@ type attemptLog struct {
 	raised   bool
 }
 
+// connShard returns the shard of conn, unset when its host is not
+// shard-aware.
+func connShard(conn *transport.Conn) cqltype.Option[uint16] {
+	if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards == 0 {
+		return cqltype.Option[uint16]{}
+	}
+	return cqltype.Option[uint16]{Value: uint16(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard), Set: true}
+}
+
 // fail records a failed attempt and returns its execution status. It stays
 // out of line so the request loops keep their happy-path frame small.
 //

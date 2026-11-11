@@ -108,6 +108,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		aggregate.Attempts = attempt
 		aggregate.Latency += time.Since(started)
 		aggregate.HostID = conn.InternalHostID()
+		aggregate.ShardID = connShard(conn)
 		aggregate.AchievedConsistency = consistency
 		mergeResponseResult(&aggregate, response)
 		if err == nil {
