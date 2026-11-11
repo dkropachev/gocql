@@ -44,9 +44,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	defer s.Close()
 	exec := func(stmt string) {
 		t.Helper()
-		b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{}))
-		defer b.Close()
-		if _, err := Exec(ctx, s, b, gocql.CompiledOptions{}); err != nil {
+		if _, err := s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyParams{}); err != nil {
 			t.Fatal(stmt, err)
 		}
 	}
@@ -72,8 +70,6 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 
 	statement := cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: "SELECT id,value FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}
 	prepared := codecTestMust(s.Prepare(ctx, statement, gocql.PrepareOptions{}))
-	bound := codecTestMust(BindOwned(prepared, cql.EmptyParams{}))
-	defer bound.Close()
 	type output struct {
 		ID    int32
 		Value []byte
@@ -81,7 +77,8 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	decoder := stream.RowInto(func(*output) {}, stream.Column("id", stream.Int32, func(r *output) *int32 { return &r.ID }), stream.Column("value", stream.Blob, func(r *output) *[]byte { return &r.Value }))
 	streamOptions := pinned
 	streamOptions.PageSize = cql.Option[int32]{Set: true, Value: 1}
-	interrupted, err := RunStream(ctx, s, bound, decoder, gocql.StreamOptions{Incremental: true, Options: streamOptions})
+	streamPrepared := codecTestMust(s.PrepareStream(ctx, stream.Statement[cql.EmptyParams, output]{CQL: statement.CQL, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: decoder}))
+	interrupted, err := pagingRunStream(ctx, t, streamPrepared, cql.EmptyParams{}, gocql.StreamOptions{Incremental: true, Options: streamOptions})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +113,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	probeOptions.Prefetch = cql.Option[int]{Set: true, Value: 0}
 	deadline := time.Now().Add(40 * time.Second)
 	for {
-		probe, probeErr := Run(ctx, s, bound, bindOptions(s, probeOptions))
+		probe, probeErr := prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, probeOptions))
 		if probeErr == nil {
 			n := 0
 			var row dynamic.Row

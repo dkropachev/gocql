@@ -79,11 +79,7 @@ func TestRouting(t *testing.T) {
 			{TokenAware: true, Datacenter: dc, Rack: rack},
 			{},
 		}
-		bound, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: "SELECT host_id FROM system.local", Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}, cql.NewColumns(), cql.EmptyParams{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer bound.Close()
+		hostIDStatement := cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: "SELECT host_id FROM system.local", Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}
 		for i, options := range policies {
 			policy, err := routing.NewPolicy(options)
 			if err != nil {
@@ -98,10 +94,8 @@ func TestRouting(t *testing.T) {
 				}
 				handle := new(profile)
 				ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
-				rows, queryErr := Run(ctx, session, bound, bindOptions(session, gocql.Options{Profile: handle}))
-				if queryErr == nil {
-					queryErr = rows.Close()
-				}
+				var row dynamic.Row
+				_, queryErr := session.UnpreparedEach(ctx, hostIDStatement, cql.EmptyParams{}, &row, func(*dynamic.Row) error { return nil }, gocql.Options{Profile: handle})
 				if ctx.Err() != nil {
 					t.Errorf("policy %d oneHost=%t hung when every host was down: %v", i, oneHost, queryErr)
 				}
@@ -168,15 +162,7 @@ func TestRouting(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				bound, err := BindOwned(prepared, []dynamic.Value{dynamic.UUID(codecTestMust(cql.ParseUUID(connectionID))), dynamic.UUID(codecTestMust(cql.ParseUUID(hostID))), codecTestMust(dynamic.Text(ip.String())), codecTestMust(dynamic.Text(rack))})
-				if err != nil {
-					t.Fatal(err)
-				}
-				_, err = Exec(ctx, session, bound, bindOptions(session, gocql.Options{Consistency: cql.Option[cql.Consistency]{Set: true, Value: cql.All}}))
-				bound.Close()
-				if waitErr := bound.Wait(ctx); waitErr != nil {
-					t.Fatal(waitErr)
-				}
+				_, err = prepared.Exec(ctx, []dynamic.Value{dynamic.UUID(codecTestMust(cql.ParseUUID(connectionID))), dynamic.UUID(codecTestMust(cql.ParseUUID(hostID))), codecTestMust(dynamic.Text(ip.String())), codecTestMust(dynamic.Text(rack))}, bindOptions(session, gocql.Options{Consistency: cql.Option[cql.Consistency]{Set: true, Value: cql.All}}))
 
 				if err != nil {
 					t.Fatalf("unable to insert connection metadata: %s", err.Error())
@@ -359,10 +345,10 @@ func TestRouting(t *testing.T) {
 			params := cql.Params(cql.Param("key", cql.StringCodec, func(v input) string { return v.Key }), cql.Param("value", cql.Int32Codec, func(v input) int32 { return v.Value }))
 			prepared := cassandraPrepared(t, session, cql.Statement[input, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(key,value) VALUES(?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
 			require.Equal(t, []int{0}, prepared.Info().PartitionKeyIndexes)
-			bound := cassandraBound(t, prepared, input{"routing-key", 5})
-			require.True(t, bound.Routing().Token.Set)
-			require.Equal(t, murmur.Murmur3H1([]byte("routing-key")), bound.Routing().Token.Value)
-			_, err := Exec(context.Background(), session, bound, gocql.CompiledOptions{})
+			info := routingTestInfo(t, prepared, input{"routing-key", 5})
+			require.True(t, info.Token.Set)
+			require.Equal(t, murmur.Murmur3H1([]byte("routing-key")), info.Token.Value)
+			_, err := prepared.Exec(context.Background(), input{"routing-key", 5})
 			require.NoError(t, err)
 		})
 		// Integration test of the routing key calculation
@@ -392,15 +378,11 @@ func TestRouting(t *testing.T) {
 				}
 				again := cassandraPrepared(t, session, statement, gocql.PrepareOptions{})
 				require.Same(t, preparedData(prepared).InternalState, preparedData(again).InternalState, "preparing again must hit typed cache")
-				bound := cassandraBound(t, prepared, []dynamic.Value{dynamic.Int(1), dynamic.Int(2)})
-				key, present, err := newPartitionKey(implSession.BoundData(bound).InternalRequest.InternalValues.Cells, prepared.Info().PartitionKeyIndexes)
-				require.NoError(t, err)
-				require.True(t, present)
-				var keyBytes []byte
-				require.NoError(t, key.ForEach(func(span cql.Bytes) error { keyBytes = append(keyBytes, span.OwnedBytes()...); return nil }))
-				require.Equal(t, tc.key, keyBytes, "canonical single/composite partition-key bytes")
-				require.True(t, bound.Routing().Token.Set)
-				require.Equal(t, murmur.Murmur3H1(tc.key), bound.Routing().Token.Value)
+				// The token is murmur3 of the canonical single/composite
+				// partition-key bytes, so it pins those bytes.
+				info := routingTestInfo(t, prepared, []dynamic.Value{dynamic.Int(1), dynamic.Int(2)})
+				require.True(t, info.Token.Set)
+				require.Equal(t, murmur.Murmur3H1(tc.key), info.Token.Value, "canonical single/composite partition-key token")
 				runtime.InternalMu.Lock()
 				size := len(runtime.InternalPrepared)
 				runtime.InternalMu.Unlock()
@@ -424,9 +406,9 @@ func TestRouting(t *testing.T) {
 			insert := "INSERT INTO " + table + "(id) VALUES(?)"
 			selectCQL := "SELECT * FROM " + table + " WHERE id=?"
 			for i, keyspace := range []string{fixtureKeyspace(""), ks} {
-				write := cassandraWriteBound(t, session, insert, []dynamic.Value{dynamic.Int(int32(i + 1))}, gocql.PrepareOptions{Keyspace: keyspace})
-				require.Equal(t, keyspace, write.Routing().Keyspace)
-				require.True(t, write.Routing().Token.Set)
+				write := routingTestInfo(t, cassandraWritePrepared(t, session, insert, gocql.PrepareOptions{Keyspace: keyspace}), []dynamic.Value{dynamic.Int(int32(i + 1))})
+				require.Equal(t, keyspace, write.Keyspace)
+				require.True(t, write.Token.Set)
 				runtime := runtimeFor(session)
 				runtime.InternalMu.Lock()
 				found := false
@@ -437,10 +419,10 @@ func TestRouting(t *testing.T) {
 					}
 				}
 				runtime.InternalMu.Unlock()
-				require.True(t, found, "cache must include keyspace-specific binding")
-				read := cassandraDynamicBound(t, session, selectCQL, []dynamic.Value{dynamic.Int(1)}, gocql.PrepareOptions{Keyspace: keyspace})
-				require.Equal(t, keyspace, read.Routing().Keyspace)
-				require.True(t, read.Routing().Token.Set)
+				require.True(t, found, "cache must include keyspace-specific statement")
+				read := routingTestInfo(t, cassandraDynamicPrepared(t, session, selectCQL, gocql.PrepareOptions{Keyspace: keyspace}), []dynamic.Value{dynamic.Int(1)})
+				require.Equal(t, keyspace, read.Keyspace)
+				require.True(t, read.Token.Set)
 			}
 		})
 	})
@@ -479,11 +461,8 @@ func TestRouting(t *testing.T) {
 				t.Fatal(err)
 			}
 			for i := int32(0); i < 5; i++ {
-				bound, err := BindOwned(prepared, []dynamic.Value{dynamic.Int(i)})
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer bound.Close()
+				value := []dynamic.Value{dynamic.Int(i)}
+				route := routingTestInfo(t, prepared, value)
 				// Tablet placement settles asynchronously, and under the parallel suite
 				// a 2s budget left only about four attempts (scylladb/gocql#635). The
 				// budget bounds waiting, not success: a converged key returns at once.
@@ -495,7 +474,7 @@ func TestRouting(t *testing.T) {
 					// Warm the cache by visiting existing shard slots. With RF equal to the
 					// cluster size and token-aligned tablet shards, every ordinary V1 request
 					// can already reach an owner and legitimately receive no feedback.
-					cached, _ := session.Metadata().Replicas(bound.Routing().Keyspace, table, bound.Routing().Token.Value)
+					cached, _ := session.Metadata().Replicas(route.Keyspace, table, route.Token.Value)
 					if len(cached) == 0 {
 						hosts := session.Metadata().Hosts()
 						if len(hosts) > 0 && hosts[0].Shards > 1 {
@@ -505,7 +484,7 @@ func TestRouting(t *testing.T) {
 							options = values
 						}
 					}
-					rows, err := Run(ctx, session, bound, bindOptions(session, options))
+					rows, err := prepared.Run(ctx, value, bindOptions(session, options))
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -525,7 +504,7 @@ func TestRouting(t *testing.T) {
 							continue
 						}
 						hinted = true
-						tablet, err := parseTypedTabletPayload(entry.Value.Value, bound.Routing().Keyspace, table, entry.Key == "tablets-routing-v2")
+						tablet, err := parseTypedTabletPayload(entry.Value.Value, route.Keyspace, table, entry.Key == "tablets-routing-v2")
 						if err != nil {
 							rows.Close()
 							t.Fatalf("failed to extract tablet information: %v", err)
@@ -541,7 +520,7 @@ func TestRouting(t *testing.T) {
 					}
 					if !hinted {
 						snapshot := session.Metadata()
-						replicas, err := snapshot.Replicas(bound.Routing().Keyspace, table, bound.Routing().Token.Value)
+						replicas, err := snapshot.Replicas(route.Keyspace, table, route.Token.Value)
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -649,13 +628,11 @@ func TestRouting(t *testing.T) {
 				t.Fatal(err)
 			}
 			p := codecTestMust(s.Prepare(ctx, cql.Statement[int32, dynamic.Row]{CQL: "SELECT v FROM " + ks + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32Codec), Rows: dynamic.Rows}, gocql.PrepareOptions{}))
-			b := codecTestMust(BindBorrowed(p, int32(1)))
-			defer b.Close()
 			var leader cql.UUID
 			stable := 0
 			feedback := 0
 			for attempt := 0; attempt < 256 && stable < 16; attempt++ {
-				rows, err := Run(ctx, s, b, bindOptions(s, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.LocalQuorum, Set: true}}))
+				rows, err := p.Run(ctx, int32(1), bindOptions(s, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.LocalQuorum, Set: true}}))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -744,8 +721,7 @@ func TestRouting(t *testing.T) {
 			read := codecTestMust(s.Prepare(ctx, cql.Statement[int32, dynamic.Row]{CQL: "SELECT pk,v FROM " + keyspace + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32Codec), Rows: dynamic.Rows}, gocql.PrepareOptions{}))
 			feedback := 0
 			for key := int32(0); key < 8; key++ {
-				bound := codecTestMust(BindBorrowed(insert, key))
-				result, err := Exec(ctx, s, bound, gocql.CompiledOptions{})
+				result, err := insert.Exec(ctx, key)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -754,7 +730,6 @@ func TestRouting(t *testing.T) {
 						feedback++
 					}
 				}
-				bound.Close()
 			}
 			// Read the server's authoritative tablet table independently of feedback.
 			id := codecTestMust(cql.ParseUUID(ks.Tables["records"].ID))
@@ -803,8 +778,7 @@ func TestRouting(t *testing.T) {
 			v2 := (*implSession.Session)(s).Core().GetConn().InternalFramers.InternalDefaults.InternalTabletsRoutingV2
 			t.Logf("tablet v2 negotiated=%t, server table ID=%s, authoritative ranges=%d", v2, id, len(authoritative))
 			for key := int32(0); key < 8; key++ {
-				b := codecTestMust(BindBorrowed(read, key))
-				token := b.Routing().Token
+				token := routingTestInfo(t, read, key).Token
 				if !token.Set {
 					t.Fatal("prepared partition key did not produce token")
 				}
@@ -829,7 +803,7 @@ func TestRouting(t *testing.T) {
 					if attempt < 3 {
 						opts = gocql.Options{HostID: cql.Option[cql.UUID]{Value: implRouting.SnapshotData(s.Metadata()).InternalHosts[attempt%len(implRouting.SnapshotData(s.Metadata()).InternalHosts)].ID, Set: true}}
 					}
-					rows, err := Run(ctx, s, b, bindOptions(s, opts))
+					rows, err := read.Run(ctx, key, bindOptions(s, opts))
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -888,7 +862,6 @@ func TestRouting(t *testing.T) {
 				if verified != 8 {
 					t.Fatalf("key %d did not converge on stable authoritative replicas and eight routed coordinators within 96 total attempts: latest=%+v", key, latest)
 				}
-				b.Close()
 			}
 			if feedback == 0 {
 				t.Fatal("cold cache did not receive real tablet feedback")
@@ -916,9 +889,9 @@ func TestRouting(t *testing.T) {
 				cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,data text)", name))
 			}
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,data) VALUES(?,?)", table), dynamic.Int(42), codecTestMust(dynamic.Text("8 * 6 =")))
-			bound := cassandraDynamicBound(t, session, fmt.Sprintf("SELECT data FROM %s WHERE id=?", table), []dynamic.Value{dynamic.Int(42)}, gocql.PrepareOptions{})
-			require.True(t, bound.Routing().Token.Set)
-			require.Equal(t, "8 * 6 =", cassandraText(t, cassandraReadBound(t, session, bound, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}), "data"))
+			prepared := cassandraDynamicPrepared(t, session, fmt.Sprintf("SELECT data FROM %s WHERE id=?", table), gocql.PrepareOptions{})
+			require.True(t, routingTestInfo(t, prepared, []dynamic.Value{dynamic.Int(42)}).Token.Set)
+			require.Equal(t, "8 * 6 =", cassandraText(t, cassandraReadOne(t, session, prepared, []dynamic.Value{dynamic.Int(42)}, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}), "data"))
 		})
 		t.Run("HostPolicy", func(t *testing.T) {
 			t.Parallel()
@@ -943,4 +916,19 @@ func TestRouting(t *testing.T) {
 			}
 		})
 	})
+}
+
+// routingTestInfo returns the routing a query of p computes for value.
+func routingTestInfo[P, R any](t testing.TB, p *gocql.Prepared[P, R], value P) routing.Info {
+	t.Helper()
+	q, err := p.Query(gocql.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer q.Close()
+	info, err := q.Routing(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info
 }

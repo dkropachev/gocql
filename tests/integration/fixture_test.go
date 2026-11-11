@@ -78,7 +78,7 @@ func TestFixture(t *testing.T) {
 	})
 
 	// This verifies the helpers' ownership and cardinality contract against a real
-	// server, including the second page after the helper closes its bound handle.
+	// server, including the second page fetched after the helper returns its cursor.
 	t.Run("Helpers", func(t *testing.T) {
 		session := createV2Session(t, func(config *gocql.ConfigBuilder) {
 			config.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithPageSize(1) })

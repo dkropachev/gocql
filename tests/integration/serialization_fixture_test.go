@@ -36,12 +36,7 @@ func serializationExec[P any](s *gocql.Session[testDialect], stmt string, encode
 	if err != nil {
 		return err
 	}
-	b, err := BindOwned(p, value)
-	if err != nil {
-		return err
-	}
-	defer b.Close()
-	_, err = Exec(ctx, s, b, gocql.CompiledOptions{})
+	_, err = p.Exec(ctx, value)
 	return err
 }
 
@@ -51,12 +46,7 @@ func serializationRows[R any](s *gocql.Session[testDialect], stmt string, decode
 	if err != nil {
 		return gocql.Rows[R]{}, err
 	}
-	b, err := BindOwned(p, values)
-	if err != nil {
-		return gocql.Rows[R]{}, err
-	}
-	defer b.Close()
-	return Run(ctx, s, b, gocql.CompiledOptions{})
+	return p.Run(ctx, values)
 }
 
 func serializationOne[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...dynamic.Value) (R, error) {

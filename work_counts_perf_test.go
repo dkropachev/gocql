@@ -172,7 +172,7 @@ func TestWorkCountsPerf(t *testing.T) {
 					}()
 					implSession.ResetPerfCounters()
 					wire.ResetPerfCounters()
-					rows := codecTestMust(Run(context.Background(), s, bound, bindOptions(s, options)))
+					rows := codecTestMust(runtimeRun(s, bound, bindOptions(s, options)))
 					var row cql.Bytes
 					for rows.NextInto(&row) {
 					}
@@ -342,7 +342,7 @@ func TestWorkCountsPerf(t *testing.T) {
 											ps[0].Write(typedTestResponse(t, 4, id, runtimeRowsBody(token, values...)))
 										}
 									}()
-									rows, e := Run(context.Background(), s, bound, bindOptions(s, options))
+									rows, e := runtimeRun(s, bound, bindOptions(s, options))
 									if e != nil {
 										errors <- e
 										return
@@ -418,4 +418,20 @@ type speculation struct{}
 
 func (speculation) Delay(int, metrics.Snapshot) (time.Duration, bool) {
 	return time.Hour, true
+}
+
+// runtimeQuery binds an unprepared read of ks.tbl. The fake peers answer it
+// without a PREPARE exchange, which the public API always makes.
+func runtimeQuery(t testing.TB) *implSession.Bound[cql.Bytes] {
+	t.Helper()
+	statement := cql.Statement[cql.EmptyParams, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}
+	b, err := implSession.BindUnpreparedBorrowed(internalStatement(statement), cql.NewColumns(), cql.EmptyParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+func runtimeRun(s *testSession, bound *implSession.Bound[cql.Bytes], options CompiledOptions) (implSession.Rows[cql.Bytes], error) {
+	return implSession.Run(context.Background(), (*implSession.Session)(s).Core(), bound, implSession.CompiledOptions(options))
 }

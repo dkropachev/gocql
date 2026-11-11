@@ -56,12 +56,10 @@ import (
 	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
-	"github.com/scylladb/gocql/v2/internal/binding"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	protocol "github.com/scylladb/gocql/v2/internal/protocol"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
-	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/internal/testkit"
 	"github.com/scylladb/gocql/v2/internal/testkit/ccm"
 	"github.com/scylladb/gocql/v2/metadata"
@@ -222,29 +220,6 @@ func init() {
 	log.SetFlags(log.Lshortfile | log.LstdFlags)
 }
 
-type Bound[R any] = implSession.Bound[R]
-
-func BindBorrowed[P any, R any](a0 *gocql.Prepared[P, R], a1 P) (*Bound[R], error) {
-	return implSession.BindBorrowed[P, R]((*implSession.Prepared[P, R])(a0), a1)
-}
-
-func BindOwned[P any, R any](a0 *gocql.Prepared[P, R], a1 P) (*Bound[R], error) {
-	return implSession.BindOwned[P, R]((*implSession.Prepared[P, R])(a0), a1)
-}
-
-func BindUnpreparedOwned[P any, R any](a0 cql.Statement[P, R], a1 cql.Columns, a2 P) (*Bound[R], error) {
-	return implSession.BindUnpreparedOwned[P, R](binding.Statement[P, R]{CQL: a0.CQL, Params: a0.Params, Rows: a0.Rows, Kind: a0.Kind, BindMarkers: a0.BindMarkers}, a1, a2)
-}
-
-func Exec[R any](a0 context.Context, a1 *gocql.Session[testDialect], a2 *Bound[R], a3 gocql.CompiledOptions) (gocql.Result, error) {
-	return implSession.Exec[R](a0, (*implSession.Session)(a1).Core(), a2, implSession.CompiledOptions(a3))
-}
-
-func Run[R any](a0 context.Context, a1 *gocql.Session[testDialect], a2 *Bound[R], a3 gocql.CompiledOptions) (gocql.Rows[R], error) {
-	result, err := implSession.Run[R](a0, (*implSession.Session)(a1).Core(), a2, implSession.CompiledOptions(a3))
-	return gocql.Rows[R](result), err
-}
-
 type cassandraObserver struct {
 	mu       sync.Mutex
 	requests []gocql.RequestEvent
@@ -383,16 +358,6 @@ func codecTestMust[T any](v T, err error) T {
 		panic(err)
 	}
 	return v
-}
-
-// bindOptions binds v to session, failing loudly on values a test meant to
-// be valid.
-func bindOptions(session *gocql.Session[testDialect], v gocql.Options) gocql.CompiledOptions {
-	o, err := session.CompileOptions(v)
-	if err != nil {
-		panic(err)
-	}
-	return o
 }
 
 // fixtureParts names the settings the shared fixture chooses from the
@@ -651,24 +616,11 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session[testDialect]
 
 func v2Query(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...dynamic.Value) (gocql.Rows[dynamic.Row], error) {
 	statement := cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: stmt, Params: dynamic.Params, Rows: dynamic.Rows}
-	var bound *Bound[dynamic.Row]
-	var err error
-	if len(values) == 0 {
-		bound, err = BindUnpreparedOwned(statement, cql.NewColumns(), values)
-	} else {
-		var prepared *gocql.Prepared[[]dynamic.Value, dynamic.Row]
-		prepared, err = session.Prepare(ctx, statement, gocql.PrepareOptions{})
-		if err == nil {
-			bound, err = BindOwned(prepared, values)
-		}
-	}
+	prepared, err := session.Prepare(ctx, statement, gocql.PrepareOptions{})
 	if err != nil {
 		return gocql.Rows[dynamic.Row]{}, err
 	}
-	// Run admits the request before returning. Rows owns the execution reference
-	// until it is exhausted or closed, even after closing the binding here.
-	defer bound.Close()
-	return Run(ctx, session, bound, gocql.CompiledOptions{})
+	return prepared.Run(ctx, values)
 }
 
 func v2ReadOne(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...dynamic.Value) (dynamic.Row, error) {
@@ -698,12 +650,7 @@ func v2ReadOne(ctx context.Context, session *gocql.Session[testDialect], stmt st
 }
 
 func v2CreateTable(ctx context.Context, session *gocql.Session[testDialect], stmt string) error {
-	bound, err := BindUnpreparedOwned(cql.Command(stmt), cql.NewColumns(), cql.EmptyParams{})
-	if err != nil {
-		return err
-	}
-	defer bound.Close()
-	if _, err := Exec(ctx, session, bound, bindOptions(session, gocql.Options{Idempotent: true, Retry: retry.Safe{MaxAttempts: 4}})); err != nil {
+	if _, err := session.UnpreparedExec(ctx, cql.Command(stmt), cql.EmptyParams{}, gocql.Options{Idempotent: true, Retry: retry.Safe{MaxAttempts: 4}}); err != nil {
 		return err
 	}
 	if err := session.AwaitSchemaAgreement(ctx); err != nil {
@@ -1226,12 +1173,7 @@ func serializationExec[P any](s *gocql.Session[testDialect], stmt string, encode
 	if err != nil {
 		return err
 	}
-	b, err := BindOwned(p, value)
-	if err != nil {
-		return err
-	}
-	defer b.Close()
-	_, err = Exec(ctx, s, b, gocql.CompiledOptions{})
+	_, err = p.Exec(ctx, value)
 	return err
 }
 
@@ -1241,12 +1183,7 @@ func serializationRows[R any](s *gocql.Session[testDialect], stmt string, decode
 	if err != nil {
 		return gocql.Rows[R]{}, err
 	}
-	b, err := BindOwned(p, values)
-	if err != nil {
-		return gocql.Rows[R]{}, err
-	}
-	defer b.Close()
-	return Run(ctx, s, b, gocql.CompiledOptions{})
+	return p.Run(ctx, values)
 }
 
 func serializationOne[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...dynamic.Value) (R, error) {

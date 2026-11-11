@@ -139,13 +139,11 @@ func TestPool(t *testing.T) {
 		table := fmt.Sprintf("pool_stream_%x", time.Now().UnixNano())
 		qualified := (fixtureKeyspace("") + ".") + table
 		ddl := func(stmt string) {
-			b := codecTestMust(BindUnpreparedOwned(cql.Command(stmt), cql.NewColumns(), cql.EmptyParams{}))
-			defer b.Close()
-			if _, err := Exec(ctx, s, b, bindOptions(s, *func() *implSession.Options {
+			if _, err := metadataExecOnConn(ctx, s, stmt, *func() *implSession.Options {
 				opaqueStorageValue := new(implSession.Options)
 				implSession.OptionsData(opaqueStorageValue).InternalConnection = conn
 				return opaqueStorageValue
-			}())); err != nil {
+			}()); err != nil {
 				t.Fatal(err)
 			}
 			if err := (*implSession.Session)(s).Core().AwaitV2SchemaAgreementOn(ctx, conn); err != nil {
@@ -156,11 +154,7 @@ func TestPool(t *testing.T) {
 		defer func() {
 			cleanup, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
-			b, err := BindUnpreparedOwned(cql.Command("DROP TABLE IF EXISTS "+qualified), cql.NewColumns(), cql.EmptyParams{})
-			if err == nil {
-				defer b.Close()
-				_, err = Exec(cleanup, s, b, gocql.CompiledOptions{})
-			}
+			_, err := s.UnpreparedExec(cleanup, cql.Command("DROP TABLE IF EXISTS "+qualified), cql.EmptyParams{})
 			if err != nil {
 				t.Errorf("cleanup unique stream table: %v", err)
 			}
@@ -169,9 +163,7 @@ func TestPool(t *testing.T) {
 		size := 400 << 10
 		for i := 0; i < 4; i++ {
 			payload := bytes.Repeat([]byte{byte(i + 1)}, size)
-			bound := codecTestMust(BindOwned(insert, cql.Pair[int32, []byte]{First: int32(i), Second: payload}))
-			_, err := Exec(ctx, s, bound, gocql.CompiledOptions{})
-			bound.Close()
+			_, err := insert.Exec(ctx, cql.Pair[int32, []byte]{First: int32(i), Second: payload})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -260,13 +252,9 @@ func TestPool(t *testing.T) {
 			case <-time.After(10 * time.Millisecond):
 			}
 		}
-		query := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, int32]{CQL: "SELECT id FROM " + qualified + " LIMIT 1", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.Int32Codec)}, cql.NewColumns(), cql.EmptyParams{}))
-		defer query.Close()
-		rows := codecTestMust(Run(ctx, s, query, gocql.CompiledOptions{}))
-		defer rows.Close()
 		var id int32
-		if !rows.NextInto(&id) {
-			t.Fatal("shared execution after repair", rows.Err())
+		if found, _, err := s.UnpreparedOne(ctx, cql.Statement[cql.EmptyParams, int32]{CQL: "SELECT id FROM " + qualified + " LIMIT 1", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.Int32Codec)}, cql.EmptyParams{}, &id); err != nil || !found {
+			t.Fatal("shared execution after repair", found, err)
 		}
 		t.Logf("live streaming proto=%d TLS=%v compression=%s rows=%d pages=%d", *flagProto, *flagRunSslTest, compression, len(seen), pages)
 	})

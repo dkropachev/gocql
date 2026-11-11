@@ -304,32 +304,47 @@ func TestSelectWithoutFrom(t *testing.T) {
 		var baseline cql.Columns
 		for _, mode := range []string{"prepared", "prepared with metadata", "not prepared"} {
 			t.Run(mode, func(t *testing.T) {
-				var bound *Bound[dynamic.Row]
-				var err error
+				// Only prepared statements return a cursor; the unprepared mode
+				// reads its rows, and their metadata, through UnpreparedEach.
+				var columns cql.Columns
+				var result []dynamic.Row
 				if mode == "not prepared" {
-					bound, err = BindUnpreparedOwned(statement, cql.NewColumns(), cql.EmptyParams{})
+					var cur dynamic.Row
+					if _, err := session.UnpreparedEach(context.Background(), statement, cql.EmptyParams{}, &cur, func(r *dynamic.Row) error {
+						result = append(result, r.Clone())
+						return nil
+					}); err != nil {
+						t.Fatal(err)
+					}
+					if len(result) == 0 {
+						t.Fatal("missing row")
+					}
+					columns = result[0].Columns()
 				} else {
 					prepared, e := session.Prepare(context.Background(), statement, gocql.PrepareOptions{})
 					if e != nil {
 						t.Fatal(e)
 					}
-					bound, err = BindOwned(prepared, cql.EmptyParams{})
-				}
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer func() {
-					bound.Close()
-					if err := bound.Wait(context.Background()); err != nil {
-						t.Error(err)
+					rows, err := prepared.Run(context.Background(), cql.EmptyParams{}, bindOptions(session, gocql.Options{IncludeMetadata: mode == "prepared with metadata"}))
+					if err != nil {
+						t.Fatal(err)
 					}
-				}()
-				rows, err := Run(context.Background(), session, bound, bindOptions(session, gocql.Options{IncludeMetadata: mode == "prepared with metadata"}))
-				if err != nil {
-					t.Fatal(err)
+					columns = rows.Columns()
+					var cur dynamic.Row
+					for rows.NextInto(&cur) {
+						row, err := rows.Clone()
+						if err != nil {
+							t.Fatal(err)
+						}
+						result = append(result, row)
+					}
+					if err := rows.Err(); err != nil {
+						t.Fatal(err)
+					}
+					if err := rows.Close(); err != nil {
+						t.Fatal(err)
+					}
 				}
-				defer rows.Close()
-				columns := rows.Columns()
 				logColumns(t, stmt+" "+mode, columns)
 				if columns.Len() != 3 {
 					t.Fatal("expected three columns")
@@ -345,19 +360,16 @@ func TestSelectWithoutFrom(t *testing.T) {
 				} else if !columns.Equal(baseline) {
 					t.Fatal("metadata differs across execution modes")
 				}
-				var row dynamic.Row
-				if !rows.NextInto(&row) {
-					t.Fatalf("missing row: %v", rows.Err())
+				if len(result) == 0 {
+					t.Fatal("missing row")
 				}
+				row := result[0]
 				yes, e := noFromValue(t, row, 2).Bool()
 				if e != nil || !yes || noFromInt(t, row, 0) != 1 || noFromText(t, row, 1) != "a" {
 					t.Fatal("wrong selector values")
 				}
-				if rows.NextInto(&row) {
+				if len(result) > 1 {
 					t.Fatal("extra virtual row")
-				}
-				if err := rows.Err(); err != nil {
-					t.Fatal(err)
 				}
 			})
 		}
@@ -432,17 +444,21 @@ func TestSelectWithoutFrom(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				b, err := BindOwned(p, tc.values)
+				q, err := p.Query(gocql.Options{})
 				if err != nil {
 					t.Fatal(err)
 				}
-				defer func() { b.Close(); _ = b.Wait(context.Background()) }()
+				info, err := q.Routing(tc.values)
+				q.Close()
+				if err != nil {
+					t.Fatal(err)
+				}
 				// v2 resolves absent partition-key metadata directly. Legacy failed virtual-table
 				// lookups are deliberately eliminated; no token may be invented in either case.
-				if b.Routing().Token.Set {
+				if info.Token.Set {
 					t.Fatal("no-FROM SELECT invented a partition token")
 				}
-				rows, err := Run(context.Background(), session, b, gocql.CompiledOptions{})
+				rows, err := p.Run(context.Background(), tc.values)
 				if err != nil {
 					t.Fatal(err)
 				}

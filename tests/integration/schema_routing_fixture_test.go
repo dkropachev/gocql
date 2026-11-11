@@ -51,12 +51,7 @@ func v2SchemaRoutingExec(ctx context.Context, session *gocql.Session[testDialect
 	if err != nil {
 		return gocql.Result{}, err
 	}
-	bound, err := BindOwned(prepared, values)
-	if err != nil {
-		return gocql.Result{}, err
-	}
-	defer bound.Close()
-	return Exec(ctx, session, bound, bindOptions(session, options))
+	return prepared.Exec(ctx, values, bindOptions(session, options))
 }
 
 func v2SchemaRoutingInt(t testing.TB, row dynamic.Row, name string) int32 {

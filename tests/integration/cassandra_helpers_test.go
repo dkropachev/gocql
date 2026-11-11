@@ -90,41 +90,11 @@ func cassandraPrepared[P, R any, O fixturePrepareOptions](t testing.TB, s *gocql
 	}
 	return p
 }
-func cassandraBound[P, R any](t testing.TB, p *gocql.Prepared[P, R], value P) *Bound[R] {
+
+// cassandraReadOne runs p with value and returns its only row.
+func cassandraReadOne[P, R any, O fixtureOptions](t testing.TB, s *gocql.Session[testDialect], p *gocql.Prepared[P, R], value P, options O) R {
 	t.Helper()
-	b, err := BindOwned(p, value)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		b.Close()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := b.Wait(ctx); err != nil {
-			t.Error(err)
-		}
-	})
-	return b
-}
-func cassandraUnprepared[R any](t testing.TB, stmt string, decoder cql.RowDecoder[R]) *Bound[R] {
-	t.Helper()
-	b, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, R]{CQL: stmt, Params: cql.EmptyParamsEncoder, Rows: decoder}, cql.NewColumns(), cql.EmptyParams{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		b.Close()
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := b.Wait(ctx); err != nil {
-			t.Error(err)
-		}
-	})
-	return b
-}
-func cassandraReadBound[R any, O fixtureOptions](t testing.TB, s *gocql.Session[testDialect], b *Bound[R], options O) R {
-	t.Helper()
-	rows, err := Run(context.Background(), s, b, bindOptions(s, options))
+	rows, err := p.Run(context.Background(), value, bindOptions(s, options))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,25 +115,52 @@ func cassandraReadBound[R any, O fixtureOptions](t testing.TB, s *gocql.Session[
 	}
 	return row
 }
-func cassandraItem[R any](t testing.TB, b *Bound[R]) batchItem {
+
+// cassandraUnpreparedOne runs stmt without preparing it and returns its only
+// row, detached from the response.
+func cassandraUnpreparedOne[R any](t testing.TB, s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], options gocql.Options) R {
 	t.Helper()
-	item, err := BatchEntry(b)
-	if err != nil {
+	rows := cassandraUnpreparedAll(t, s, stmt, decoder, options)
+	if len(rows) != 1 {
+		t.Fatalf("expected exactly one row, got %d", len(rows))
+	}
+	return rows[0]
+}
+
+// cassandraUnpreparedAll runs stmt without preparing it and returns every
+// row across all pages, detached from the responses.
+func cassandraUnpreparedAll[R any](t testing.TB, s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], options gocql.Options) []R {
+	t.Helper()
+	var result []R
+	var cur R
+	statement := cql.Statement[cql.EmptyParams, R]{CQL: stmt, Params: cql.EmptyParamsEncoder, Rows: decoder}
+	if _, err := s.UnpreparedEach(context.Background(), statement, cql.EmptyParams{}, &cur, func(row *R) error {
+		result = append(result, decoder.Clone(*row))
+		return nil
+	}, options); err != nil {
 		t.Fatal(err)
 	}
-	return item
+	return result
 }
-func cassandraDynamicBound[O fixturePrepareOptions](t testing.TB, s *gocql.Session[testDialect], stmt string, values []dynamic.Value, options O) *Bound[dynamic.Row] {
+
+// cassandraAdd appends p with value to batch.
+func cassandraAdd[P, R any](t testing.TB, batch *gocql.Batch, p *gocql.Prepared[P, R], value P) {
 	t.Helper()
-	return cassandraBound(t, cassandraPrepared(t, s, cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: stmt, Params: dynamic.Params, Rows: dynamic.Rows}, options), values)
+	if err := p.AddToBatch(batch, value); err != nil {
+		t.Fatal(err)
+	}
 }
-func cassandraWriteBound[O fixturePrepareOptions](t testing.TB, s *gocql.Session[testDialect], stmt string, values []dynamic.Value, options O) *Bound[cql.EmptyRow] {
+func cassandraDynamicPrepared[O fixturePrepareOptions](t testing.TB, s *gocql.Session[testDialect], stmt string, options O) *gocql.Prepared[[]dynamic.Value, dynamic.Row] {
 	t.Helper()
-	return cassandraBound(t, cassandraPrepared(t, s, cql.Statement[[]dynamic.Value, cql.EmptyRow]{CQL: stmt, Params: dynamic.Params, Rows: cql.EmptyRowDecoder}, options), values)
+	return cassandraPrepared(t, s, cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: stmt, Params: dynamic.Params, Rows: dynamic.Rows}, options)
 }
-func cassandraRows[O fixtureOptions](t testing.TB, s *gocql.Session[testDialect], b *Bound[dynamic.Row], options O) []dynamic.Row {
+func cassandraWritePrepared[O fixturePrepareOptions](t testing.TB, s *gocql.Session[testDialect], stmt string, options O) *gocql.Prepared[[]dynamic.Value, cql.EmptyRow] {
 	t.Helper()
-	rows, err := Run(context.Background(), s, b, bindOptions(s, options))
+	return cassandraPrepared(t, s, cql.Statement[[]dynamic.Value, cql.EmptyRow]{CQL: stmt, Params: dynamic.Params, Rows: cql.EmptyRowDecoder}, options)
+}
+func cassandraRows[P any, O fixtureOptions](t testing.TB, s *gocql.Session[testDialect], p *gocql.Prepared[P, dynamic.Row], value P, options O) []dynamic.Row {
+	t.Helper()
+	rows, err := p.Run(context.Background(), value, bindOptions(s, options))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,9 +179,9 @@ func cassandraRows[O fixtureOptions](t testing.TB, s *gocql.Session[testDialect]
 	}
 	return result
 }
-func cassandraBatch[O fixtureOptions](t testing.TB, s *gocql.Session[testDialect], kind cql.BatchKind, items []batchItem, options O) gocql.Result {
+func cassandraBatch[O fixtureOptions](t testing.TB, s *gocql.Session[testDialect], batch *gocql.Batch, options O) gocql.Result {
 	t.Helper()
-	r, e := execBatch(context.Background(), s, kind, items, bindOptions(s, options))
+	r, e := s.ExecBatch(context.Background(), batch, bindOptions(s, options))
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -295,9 +292,9 @@ func (fullNameCodec) Decode(r cql.ValueReader) (FullName, error) {
 	return FullName{FirstName: names[0], LastName: names[1]}, nil
 }
 func (fullNameCodec) Clone(n FullName) FullName { return n }
-func cassandraCASBound[R any](t testing.TB, s *gocql.Session[testDialect], stmt string, values []dynamic.Value, decoder cql.RowDecoder[R]) *Bound[cql.CASResult[R]] {
+func cassandraCASPrepared[R any](t testing.TB, s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R]) *gocql.Prepared[[]dynamic.Value, cql.CASResult[R]] {
 	t.Helper()
-	return cassandraBound(t, cassandraPrepared(t, s, cql.Statement[[]dynamic.Value, cql.CASResult[R]]{CQL: stmt, Params: dynamic.Params, Rows: cql.CASRows(decoder)}, gocql.PrepareOptions{}), values)
+	return cassandraPrepared(t, s, cql.Statement[[]dynamic.Value, cql.CASResult[R]]{CQL: stmt, Params: dynamic.Params, Rows: cql.CASRows(decoder)}, gocql.PrepareOptions{})
 }
 
 func cassandraUUID(text string) cql.UUID {

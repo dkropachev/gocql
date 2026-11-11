@@ -154,7 +154,7 @@ func getRandomConn(t *testing.T, session *gocql.Session[testDialect]) *driverCon
 	return conn
 }
 
-func injectInvalidPreparedStatement(t *testing.T, session *gocql.Session[testDialect], table string) (*Bound[cql.EmptyRow], *driverConn) {
+func injectInvalidPreparedStatement(t *testing.T, session *gocql.Session[testDialect], table string) (*gocql.Prepared[string, cql.EmptyRow], *driverConn) {
 	t.Helper()
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(foo varchar,bar int,PRIMARY KEY(foo,bar))", table))
 	conn := getRandomConn(t, session)
@@ -169,7 +169,7 @@ func injectInvalidPreparedStatement(t *testing.T, session *gocql.Session[testDia
 	host.InternalId = []byte("foobar")
 	preparedData(prepared).InternalState.InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)] = host
 	preparedData(prepared).InternalState.InternalMu.Unlock()
-	return cassandraBound(t, prepared, "bar"), conn
+	return prepared, conn
 }
 
 func tableNames(tables map[string]*metadata.Table) []string {
@@ -209,16 +209,15 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session[testDialect], c
 		implSession.PrepareOptionsData(opaqueStorageValuexxxxx).InternalConnection = conn
 		return opaqueStorageValuexxxxx
 	}()
-	create := cassandraUnprepared(t, "CREATE TABLE "+qualified+"(id int PRIMARY KEY)", cql.EmptyRowDecoder)
-	_, err := Exec(ctx, session, create, bindOptions(session, options))
+	// Unprepared statements take only public options, which pin the host but
+	// not the connection.
+	_, err := session.UnpreparedExec(ctx, cql.Command("CREATE TABLE "+qualified+"(id int PRIMARY KEY)"), cql.EmptyParams{}, gocql.Options{HostID: host})
 	require.NoError(t, err)
 	require.NoError(t, (*implSession.Session)(session).Core().AwaitV2SchemaAgreementOn(ctx, conn))
-	write := cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id) VALUES(?)", []dynamic.Value{dynamic.Int(1)}, prepareOptions)
-	_, err = Exec(ctx, session, write, bindOptions(session, options))
+	_, err = cassandraWritePrepared(t, session, "INSERT INTO "+qualified+"(id) VALUES(?)", prepareOptions).Exec(ctx, []dynamic.Value{dynamic.Int(1)}, bindOptions(session, options))
 	require.NoError(t, err)
 	prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: "SELECT * FROM " + qualified, Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}, prepareOptions)
-	bound := cassandraBound(t, prepared, cql.EmptyParams{})
-	row := cassandraReadBound(t, session, bound, options)
+	row := cassandraReadOne(t, session, prepared, cql.EmptyParams{}, options)
 	require.Equal(t, 1, row.Columns().Len())
 	require.Equal(t, int64(1), cassandraInt(t, row, "id"))
 	cached := func() hostPrepared {
@@ -234,18 +233,16 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session[testDialect], c
 	}
 	before := cached()
 	require.NotEmpty(t, before.InternalMetadataID)
-	alter := cassandraUnprepared(t, "ALTER TABLE "+qualified+" ADD new_col int", cql.EmptyRowDecoder)
-	_, err = Exec(ctx, session, alter, bindOptions(session, options))
+	_, err = session.UnpreparedExec(ctx, cql.Command("ALTER TABLE "+qualified+" ADD new_col int"), cql.EmptyParams{}, gocql.Options{HostID: host})
 	require.NoError(t, err)
 	// Include the exact host that applied ALTER; checking another host can
 	// falsely agree on the old version before schema propagation starts.
 	require.NoError(t, (*implSession.Session)(session).Core().AwaitV2SchemaAgreementOn(ctx, conn))
-	write = cassandraWriteBound(t, session, "INSERT INTO "+qualified+"(id,new_col) VALUES(?,?)", []dynamic.Value{dynamic.Int(2), dynamic.Int(10)}, prepareOptions)
-	_, err = Exec(ctx, session, write, bindOptions(session, options))
+	_, err = cassandraWritePrepared(t, session, "INSERT INTO "+qualified+"(id,new_col) VALUES(?,?)", prepareOptions).Exec(ctx, []dynamic.Value{dynamic.Int(2), dynamic.Int(10)}, bindOptions(session, options))
 	require.NoError(t, err)
 	checkRows := func() {
 		t.Helper()
-		rows, err := Run(ctx, session, bound, bindOptions(session, options))
+		rows, err := prepared.Run(ctx, cql.EmptyParams{}, bindOptions(session, options))
 		require.NoError(t, err)
 		defer rows.Close()
 		found := map[int64]dynamic.Value{}

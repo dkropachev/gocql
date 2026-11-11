@@ -69,11 +69,3 @@ func runtimeRowsBody(token []byte, values ...string) []byte {
 	}
 	return b
 }
-func runtimeQuery(t testing.TB) *Bound[cql.Bytes] {
-	t.Helper()
-	b, err := BindUnpreparedBorrowed(cql.Statement[cql.EmptyParams, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}, cql.NewColumns(), cql.EmptyParams{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
-}

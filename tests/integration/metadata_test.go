@@ -84,16 +84,11 @@ func TestMetadata(t *testing.T) {
 		}
 		exec := func(stmt string) {
 			t.Helper()
-			b, err := BindUnpreparedOwned(cql.Command(stmt), cql.NewColumns(), cql.EmptyParams{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer b.Close()
-			if _, err := Exec(ctx, s, b, bindOptions(s, *func() *implSession.Options {
+			if _, err := metadataExecOnConn(ctx, s, stmt, *func() *implSession.Options {
 				opaqueStorageValue := new(implSession.Options)
 				implSession.OptionsData(opaqueStorageValue).InternalConnection = conn
 				return opaqueStorageValue
-			}())); err != nil {
+			}()); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -101,15 +96,11 @@ func TestMetadata(t *testing.T) {
 		defer func() {
 			cleanup, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			b, err := BindUnpreparedOwned(cql.Command("DROP KEYSPACE IF EXISTS "+keyspace), cql.NewColumns(), cql.EmptyParams{})
-			if err == nil {
-				defer b.Close()
-				_, err = Exec(cleanup, s, b, bindOptions(s, *func() *implSession.Options {
-					opaqueStorageValuex := new(implSession.Options)
-					implSession.OptionsData(opaqueStorageValuex).InternalConnection = conn
-					return opaqueStorageValuex
-				}()))
-			}
+			_, err := metadataExecOnConn(cleanup, s, "DROP KEYSPACE IF EXISTS "+keyspace, *func() *implSession.Options {
+				opaqueStorageValuex := new(implSession.Options)
+				implSession.OptionsData(opaqueStorageValuex).InternalConnection = conn
+				return opaqueStorageValuex
+			}())
 			if err != nil {
 				t.Error("cleanup unique keyspace", err)
 			}
@@ -931,4 +922,15 @@ func TestMetadata(t *testing.T) {
 			t.Run("empty_keyspace", func(t *testing.T) { _, found := session.Metadata().Keyspace(""); require.False(t, found) })
 		})
 	})
+}
+
+// metadataExecOnConn prepares stmt and runs it with options. Statements are
+// prepared because only prepared execution accepts the fixture's internal
+// connection seam.
+func metadataExecOnConn(ctx context.Context, s *gocql.Session[testDialect], stmt string, options implSession.Options) (gocql.Result, error) {
+	prepared, err := s.Prepare(ctx, cql.Command(stmt), gocql.PrepareOptions{})
+	if err != nil {
+		return gocql.Result{}, err
+	}
+	return prepared.Exec(ctx, cql.EmptyParams{}, bindOptions(s, options))
 }

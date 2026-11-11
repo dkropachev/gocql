@@ -92,18 +92,22 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster gocql.Config, keyspac
 	if err != nil {
 		t.Fatal(err)
 	}
-	bound, err := BindOwned(prepared, []dynamic.Value{dynamic.Int(7)})
+	key := []dynamic.Value{dynamic.Int(7)}
+	query, err := prepared.Query(gocql.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer bound.Close()
-	ri := bound.Routing()
+	ri, err := query.Routing(key)
+	query.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ri.Token.Set {
 		t.Fatal("prepared partition key has no routing token")
 	}
 	replicas, err := session.Metadata().Replicas(keyspace, table, ri.Token.Value)
 	if err != nil || len(replicas) == 0 {
-		t.Fatalf("missing bound token replicas: %v", err)
+		t.Fatalf("missing routing token replicas: %v", err)
 	}
 	for _, options := range []routing.Options{
 		{TokenAware: true},
@@ -121,7 +125,7 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster gocql.Config, keyspac
 			t.Fatal(err)
 		}
 		handle := new(profile)
-		rows, err := Run(ctx, session, bound, bindOptions(session, gocql.Options{Profile: handle, Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}))
+		rows, err := prepared.Run(ctx, key, bindOptions(session, gocql.Options{Profile: handle, Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}))
 		if err != nil {
 			t.Fatal(err)
 		}

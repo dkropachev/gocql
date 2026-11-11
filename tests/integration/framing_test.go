@@ -241,8 +241,7 @@ func TestFraming(t *testing.T) {
 				implSession.PrepareOptionsData(opaqueStorageValuexxxxxx).InternalConnection = conn
 				return opaqueStorageValuexxxxxx
 			}())
-			bound := cassandraBound(t, prepared, int32(1))
-			cassandraReadBound(t, session, bound, *func() *implSession.Options {
+			cassandraReadOne(t, session, prepared, int32(1), *func() *implSession.Options {
 				opaqueStorageValuexxxxxxx := new(implSession.Options)
 				opaqueStorageValuexxxxxxx.HostID = host
 				implSession.OptionsData(opaqueStorageValuexxxxxxx).InternalConnection = conn
@@ -257,7 +256,7 @@ func TestFraming(t *testing.T) {
 			cached.InternalRevision++
 			preparedData(prepared).InternalState.InternalHosts[host.Value] = &cached
 			preparedData(prepared).InternalState.InternalMu.Unlock()
-			row := cassandraReadBound(t, session, bound, *func() *implSession.Options {
+			row := cassandraReadOne(t, session, prepared, int32(1), *func() *implSession.Options {
 				opaqueStorageValuexxxxxxxx := new(implSession.Options)
 				opaqueStorageValuexxxxxxxx.HostID = host
 				implSession.OptionsData(opaqueStorageValuexxxxxxxx).InternalConnection = conn

@@ -16,7 +16,6 @@ import (
 	"github.com/scylladb/gocql/v2/cql/stream"
 	binding "github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	routing "github.com/scylladb/gocql/v2/routing"
 
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -27,16 +26,11 @@ import (
 
 	pool "github.com/scylladb/gocql/v2/internal/pool"
 	protocol "github.com/scylladb/gocql/v2/internal/protocol"
-	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 
 	"github.com/scylladb/gocql/v2/internal/tablets"
 )
-
-func admitExecution[R any](a0 context.Context, a1 *gocql.Session[testDialect], a2 *implSession.Bound[R], a3 gocql.CompiledOptions) (context.Context, context.CancelFunc, *executionRequest, error) {
-	return implSession.InternalAdmitExecution[R](a0, (*implSession.Session)(a1).Core(), a2, implSession.CompiledOptions(a3))
-}
 
 type clientRoute = implCluster.InternalClientRoute
 
@@ -47,8 +41,6 @@ type driverConfigReport = implCluster.InternalDriverConfigReport
 const driverConfigStartupKey = implCluster.InternalDriverConfigStartupKey
 
 const driverConfigVersion = implCluster.InternalDriverConfigVersion
-
-type executionRequest = implSession.InternalExecutionRequest
 
 func getHostPortMappingForConnectionIDs(a0 controlConnection, a1 string, a2 []string, a3 bool) ([]clientRoute, error) {
 	return implCluster.InternalGetHostPortMappingForConnectionIDs(a0, a1, a2, a3)
@@ -117,8 +109,6 @@ type attemptRequest = model.AttemptRequest
 
 func dataTypeFromInfo(a0 cqltype.TypeInfo) (cql.DataType, error) { return cqltype.DataTypeFromInfo(a0) }
 
-type encodedCell = model.EncodedCell
-
 type defaultConnPicker = pool.InternalDefaultConnPicker
 
 type hostConnPool = pool.InternalHostConnPool
@@ -170,7 +160,3 @@ type cassVersion = implEndpoint.InternalCassVersion
 type legacyDialer = implEndpoint.InternalLegacyDialer
 
 type scyllaSourcePortCtx = implEndpoint.InternalScyllaSourcePortCtx
-
-func newPartitionKey(a0 []encodedCell, a1 []int) (routing.PartitionKey, bool, error) {
-	return implRouting.InternalNewPartitionKey(a0, a1)
-}

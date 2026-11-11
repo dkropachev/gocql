@@ -37,20 +37,26 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session[testDia
 		Params: cql.Params(cql.Param("id", cql.UUIDCodec, func(p parameters) cql.UUID { return p.Table }), cql.Param("token", cql.Int64Codec, func(p parameters) int64 { return p.Token })),
 		Rows:   dynamic.Rows,
 	}
-	columns := cql.NewColumns(cql.ColumnSpec{Name: "id", Type: cql.UUIDType}, cql.ColumnSpec{Name: "token", Type: cql.BigIntType})
-	bound := codecTestMust(BindUnpreparedOwned(statement, columns, parameters{table, token}))
-	defer bound.Close()
+	statement.BindMarkers = cql.NewColumns(cql.ColumnSpec{Name: "id", Type: cql.UUIDType}, cql.ColumnSpec{Name: "token", Type: cql.BigIntType})
 	observation := tabletObservation{stable: true}
 	for index, host := range s.Metadata().Hosts() {
-		page := codecTestMust(RunPage(ctx, s, bound, gocql.StartPage, bindOptions(s, gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: host.ID}, PageSize: cql.Some(cql.Unpaged)})))
-		if page.Info().HostID != host.ID {
-			t.Fatal("authoritative read lost exact host pin", page.Info().HostID, host.ID)
+		var rows []dynamic.Row
+		var cur dynamic.Row
+		info, err := s.UnpreparedEach(ctx, statement, parameters{table, token}, &cur, func(r *dynamic.Row) error {
+			rows = append(rows, r.Clone())
+			return nil
+		}, gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: host.ID}, PageSize: cql.Some(cql.Unpaged)})
+		if err != nil {
+			t.Fatal(err)
 		}
-		observation.readNodes = append(observation.readNodes, page.Info().HostID)
-		var row dynamic.Row
-		if !page.NextInto(&row) {
-			t.Fatal("authoritative tablet absent", page.Err())
+		if info.HostID != host.ID {
+			t.Fatal("authoritative read lost exact host pin", info.HostID, host.ID)
 		}
+		observation.readNodes = append(observation.readNodes, info.HostID)
+		if len(rows) == 0 {
+			t.Fatal("authoritative tablet absent")
+		}
+		row := rows[0]
 		last := codecTestMust(codecTestMust(row.Get("last_token")).Signed())
 		iterator := codecTestMust(codecTestMust(row.Get("replicas")).Elements())
 		var replicas []routing.Target
@@ -78,11 +84,8 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session[testDia
 		if codecTestMust(row.Get("new_replicas")).State() != cql.Null || codecTestMust(row.Get("stage")).State() != cql.Null {
 			observation.stable = false
 		}
-		if page.NextInto(&row) || page.Err() != nil {
-			t.Fatal("authoritative query count", page.Err())
-		}
-		if err := page.Close(); err != nil {
-			t.Fatal(err)
+		if len(rows) != 1 {
+			t.Fatal("authoritative query count", len(rows))
 		}
 		if index == 0 {
 			observation.last, observation.replicas = last, replicas
@@ -92,10 +95,6 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session[testDia
 	}
 	if len(observation.readNodes) == 0 {
 		t.Fatal("no authoritative read nodes")
-	}
-	bound.Close()
-	if err := bound.Wait(ctx); err != nil {
-		t.Fatal(err)
 	}
 	return observation
 }

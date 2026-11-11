@@ -86,11 +86,12 @@ func TestPaging(t *testing.T) {
 			}
 			cassandraWrite(t, session, fmt.Sprintf("DELETE FROM %s WHERE p1=? AND p2=? AND c1>=? AND c1<?", table), dynamic.Int(targetP1), dynamic.Int(targetP2), dynamic.Int(deletedRangeStart), dynamic.Int(deletedRangeEnd))
 		})
-		bound := cassandraUnprepared(t, selectCQL, dynamic.Rows)
+		// Manual paging needs a page cursor, which only prepared statements return.
+		prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: selectCQL, Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}, gocql.PrepareOptions{})
 		t.Run("AutoPagination", func(t *testing.T) {
 			for _, c := range []cql.Consistency{cql.One, cql.Quorum} {
 				t.Run(c.String(), func(t *testing.T) {
-					validate(t, cassandraRows(t, session, bound, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: c, Set: true}, PageSize: cql.Option[int32]{Value: pageSize, Set: true}}))
+					validate(t, cassandraUnpreparedAll(t, session, selectCQL, dynamic.Rows, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: c, Set: true}, PageSize: cql.Option[int32]{Value: pageSize, Set: true}}))
 				})
 			}
 		})
@@ -100,7 +101,7 @@ func TestPaging(t *testing.T) {
 					var result []dynamic.Row
 					state := gocql.StartPage
 					for {
-						page, err := RunPage(context.Background(), session, bound, state, bindOptions(session, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: c, Set: true}, PageSize: cql.Option[int32]{Value: pageSize, Set: true}}))
+						page, err := prepared.RunPage(context.Background(), cql.EmptyParams{}, state, 0, bindOptions(session, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: c, Set: true}, PageSize: cql.Option[int32]{Value: pageSize, Set: true}}))
 						require.NoError(t, err)
 						defer page.Close()
 						next := page.State()
@@ -141,11 +142,10 @@ func TestPaging(t *testing.T) {
 			for i := int32(0); i < 100; i++ {
 				cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), dynamic.Int(i))
 			}
-			bound := cassandraUnprepared(t, fmt.Sprintf("SELECT id FROM %s", table), dynamic.Rows)
-			rows := cassandraRows(t, session, bound, gocql.Options{PageSize: cql.Option[int32]{Value: 10, Set: true}})
+			rows := cassandraUnpreparedAll(t, session, fmt.Sprintf("SELECT id FROM %s", table), dynamic.Rows, gocql.Options{PageSize: cql.Option[int32]{Value: 10, Set: true}})
 			require.Len(t, rows, 100)
 		})
-		t.Run("Bound", func(t *testing.T) {
+		t.Run("ReusedPrepared", func(t *testing.T) {
 			t.Parallel()
 			session := createV2Session(t)
 			defer session.Close()
@@ -155,12 +155,12 @@ func TestPaging(t *testing.T) {
 				cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES (?,?)", table), dynamic.Int(1), dynamic.Int(i))
 			}
 			prepared := cassandraPrepared(t, session, cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: fmt.Sprintf("SELECT val FROM %s WHERE id=? AND val<?", table), Params: dynamic.Params, Rows: dynamic.Rows}, gocql.PrepareOptions{})
-			first := cassandraBound(t, prepared, []dynamic.Value{dynamic.Int(1), dynamic.Int(50)})
-			second := cassandraBound(t, prepared, []dynamic.Value{dynamic.Int(1), dynamic.Int(20)})
+			first := []dynamic.Value{dynamic.Int(1), dynamic.Int(50)}
+			second := []dynamic.Value{dynamic.Int(1), dynamic.Int(20)}
 			options := gocql.Options{PageSize: cql.Option[int32]{Value: 10, Set: true}}
-			require.Len(t, cassandraRows(t, session, first, options), 50)
-			require.Len(t, cassandraRows(t, session, second, options), 20)
-			require.Len(t, cassandraRows(t, session, first, options), 50, "new binding must not mutate old binding")
+			require.Len(t, cassandraRows(t, session, prepared, first, options), 50)
+			require.Len(t, cassandraRows(t, session, prepared, second, options), 20)
+			require.Len(t, cassandraRows(t, session, prepared, first, options), 50, "later values must not leak into an earlier execution")
 		})
 	})
 
@@ -174,11 +174,12 @@ func TestPaging(t *testing.T) {
 		for i := int32(0); i < count; i++ {
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,count) VALUES(?,?)", table), dynamic.Int(i), dynamic.Int(i*i))
 		}
-		bound := cassandraUnprepared(t, "SELECT id,count FROM "+table, dynamic.Rows)
+		// Manual paging needs a page cursor, which only prepared statements return.
+		prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: "SELECT id,count FROM " + table, Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}, gocql.PrepareOptions{})
 		state := gocql.StartPage
 		fetched := 0
 		for {
-			page, err := RunPage(context.Background(), session, bound, state, bindOptions(session, gocql.Options{PageSize: cql.Option[int32]{Value: 2, Set: true}}))
+			page, err := prepared.RunPage(context.Background(), cql.EmptyParams{}, state, 0, bindOptions(session, gocql.Options{PageSize: cql.Option[int32]{Value: 2, Set: true}}))
 			require.NoError(t, err)
 			defer page.Close()
 			var row dynamic.Row
@@ -219,8 +220,6 @@ func TestPaging(t *testing.T) {
 		var calls atomic.Int32
 		decoder := liveDecoder{calls: &calls, base: cql.Row(cql.Column("val", cql.Int32Codec, func(r *liveDestination) *int32 { return &r.Value }), cql.Column("payload", cql.BlobCodec, func(r *liveDestination) *cql.Bytes { return &r.Payload }))}
 		prepared := codecTestMust(session.Prepare(ctx, cql.Statement[int32, liveDestination]{CQL: "SELECT val,payload FROM " + table + " WHERE id=?", Params: cql.OneParam(cql.Int32Codec), Rows: decoder}, gocql.PrepareOptions{}))
-		bound := codecTestMust(BindBorrowed(prepared, int32(1)))
-		defer bound.Close()
 		churn := make(chan error, 1)
 		go func() {
 			for i := 0; i < 8; i++ {
@@ -235,7 +234,7 @@ func TestPaging(t *testing.T) {
 			}
 			churn <- nil
 		}()
-		rows := codecTestMust(Run(ctx, session, bound, bindOptions(session, gocql.Options{PageSize: cql.Option[int32]{Value: 3, Set: true}})))
+		rows := codecTestMust(prepared.Run(ctx, int32(1), bindOptions(session, gocql.Options{PageSize: cql.Option[int32]{Value: 3, Set: true}})))
 		defer rows.Close()
 		var dst liveDestination
 		var retained *gocql.PageLease
@@ -270,10 +269,6 @@ func TestPaging(t *testing.T) {
 		if !bytes.Equal(first.OwnedBytes(), payload) {
 			t.Fatal("retained output lost during DDL")
 		}
-		bound.Close()
-		if err := bound.Wait(ctx); err != nil {
-			t.Fatal(err)
-		}
 	})
 
 	t.Run("Stream", func(t *testing.T) {
@@ -290,9 +285,7 @@ func TestPaging(t *testing.T) {
 		keyspace := testKeyspaceName(t, fmt.Sprintf("%x", time.Now().UnixNano()))
 		exec := func(stmt string) {
 			t.Helper()
-			b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{}))
-			defer b.Close()
-			if _, err := Exec(ctx, s, b, gocql.CompiledOptions{}); err != nil {
+			if _, err := s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyParams{}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -300,11 +293,7 @@ func TestPaging(t *testing.T) {
 		defer func() {
 			cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
 			defer stop()
-			b, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + keyspace, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{})
-			if err == nil {
-				defer b.Close()
-				_, err = Exec(cleanup, s, b, gocql.CompiledOptions{})
-			}
+			_, err := s.UnpreparedExec(cleanup, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + keyspace, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyParams{})
 			if err != nil {
 				t.Error("unique keyspace cleanup", err)
 			}
@@ -321,20 +310,12 @@ func TestPaging(t *testing.T) {
 		payload := bytes.Repeat([]byte("segment-crossing"), 30000)
 		textPayload := strings.Repeat("stream-🙂-", 24000)
 		for i := 0; i < 5; i++ {
-			b := codecTestMust(BindOwned(prepared, input{int32(i), payload, [][]byte{[]byte("nested"), []byte("storage")}, textPayload}))
-			_, err := Exec(ctx, s, b, gocql.CompiledOptions{})
-			b.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := b.Wait(ctx); err != nil {
+			if _, err := prepared.Exec(ctx, input{int32(i), payload, [][]byte{[]byte("nested"), []byte("storage")}, textPayload}); err != nil {
 				t.Fatal(err)
 			}
 		}
 		statement := cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: "SELECT id,value,pieces,txt FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}
 		selectPrepared := codecTestMust(s.Prepare(ctx, statement, gocql.PrepareOptions{}))
-		bound := codecTestMust(BindOwned(selectPrepared, cql.EmptyParams{}))
-		defer bound.Close()
 		type output struct {
 			ID     int32
 			Value  []byte
@@ -343,15 +324,32 @@ func TestPaging(t *testing.T) {
 		}
 		decoder := stream.RowInto(func(*output) {}, stream.Column("id", stream.Int32, func(r *output) *int32 { return &r.ID }), stream.Column("value", stream.Blob, func(r *output) *[]byte { return &r.Value }), stream.Column("pieces", stream.List(stream.Blob), func(r *output) *[][]byte { return &r.Pieces }), stream.Column("txt", stream.Text, func(r *output) *[]byte { return &r.Text }))
 		options := gocql.StreamOptions{Incremental: true, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}
+		streamStatement := stream.Statement[cql.EmptyParams, output]{CQL: statement.CQL, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: decoder}
+		streamPrepared, err := s.PrepareStream(ctx, streamStatement)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Streaming is always prepared, so the empty-result and changed-metadata
+		// cases prepare their statements too.
+		streamStatement.CQL = "SELECT id,value,pieces,txt FROM " + keyspace + ".records WHERE id=-1"
+		emptyPrepared, err := s.PrepareStream(ctx, streamStatement)
+		if err != nil {
+			t.Fatal(err)
+		}
+		streamStatement.CQL = "SELECT * FROM " + keyspace + ".records"
+		changedPrepared, err := s.PrepareStream(ctx, streamStatement)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if *flagProto < 5 && fixtureCompressed() {
-			_, err := RunStream(ctx, s, bound, decoder, options)
+			_, err := pagingRunStream(ctx, t, streamPrepared, cql.EmptyParams{}, options)
 			if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {
 				t.Fatal("frame compression pre-submit capability", err)
 			}
 			t.Log("frame-compressed streaming explicitly rejected before query")
 			return
 		}
-		stream, err := RunStream(ctx, s, bound, decoder, options)
+		cursor, err := pagingRunStream(ctx, t, streamPrepared, cql.EmptyParams{}, options)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -359,7 +357,7 @@ func TestPaging(t *testing.T) {
 		valueBacking := &dst.Value[:cap(dst.Value)][0]
 		nestedBacking := &dst.Pieces[0][:cap(dst.Pieces[0])][0]
 		seen := map[int32]bool{}
-		for stream.NextInto(&dst) {
+		for cursor.NextInto(&dst) {
 			if seen[dst.ID] || !bytes.Equal(dst.Value, payload) || string(dst.Text) != textPayload || len(dst.Pieces) != 2 || string(dst.Pieces[0]) != "nested" || string(dst.Pieces[1]) != "storage" {
 				t.Fatal("streamed live output", dst.ID, len(dst.Value), dst.Pieces)
 			}
@@ -368,13 +366,13 @@ func TestPaging(t *testing.T) {
 			}
 			seen[dst.ID] = true
 		}
-		if err := stream.Err(); err != nil {
+		if err := cursor.Err(); err != nil {
 			t.Fatal(err)
 		}
-		if err := stream.Close(); err != nil {
+		if err := cursor.Close(); err != nil {
 			t.Fatal(err)
 		}
-		info := stream.Info()
+		info := cursor.Info()
 		if len(seen) != 5 || info.DeliveredRows != 5 || info.Pages < 3 || info.Result.Attempts < 3 || !info.OutputStarted {
 			t.Fatal("incomplete live stream", len(seen), info)
 		}
@@ -383,7 +381,7 @@ func TestPaging(t *testing.T) {
 		}
 		// A separate caller destination is never borrowed past early Close. Ordinary
 		// configured pool repair must restore subsequent execution within its budget.
-		early, err := RunStream(ctx, s, bound, decoder, options)
+		early, err := pagingRunStream(ctx, t, streamPrepared, cql.EmptyParams{}, options)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -418,7 +416,7 @@ func TestPaging(t *testing.T) {
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
-		rows, err := Run(ctx, s, bound, bindOptions(s, gocql.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}}))
+		rows, err := selectPrepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, gocql.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -430,8 +428,7 @@ func TestPaging(t *testing.T) {
 		if err := rows.Close(); err != nil || count != 5 {
 			t.Fatal("shared execution after stream repair", count, err)
 		}
-		emptyBound := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: "SELECT id,value,pieces,txt FROM " + keyspace + ".records WHERE id=-1", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}, cql.NewColumns(), cql.EmptyParams{}))
-		empty, err := RunStream(ctx, s, emptyBound, decoder, options)
+		empty, err := pagingRunStream(ctx, t, emptyPrepared, cql.EmptyParams{}, options)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -439,14 +436,10 @@ func TestPaging(t *testing.T) {
 			t.Fatal("empty result", empty.Err(), empty.Info())
 		}
 		empty.Close()
-		emptyBound.Close()
 
 		// Change a SELECT * result while its pull-driven continuation is live. The
-		// existing binding must select a new streaming plan from real server metadata.
-		changedPrepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: "SELECT * FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}, gocql.PrepareOptions{}))
-		changedBound := codecTestMust(BindOwned(changedPrepared, cql.EmptyParams{}))
-		defer changedBound.Close()
-		changed, err := RunStream(ctx, s, changedBound, decoder, gocql.StreamOptions{Incremental: true, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 1}}})
+		// existing stream must select a new streaming plan from real server metadata.
+		changed, err := pagingRunStream(ctx, t, changedPrepared, cql.EmptyParams{}, gocql.StreamOptions{Incremental: true, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 1}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -466,7 +459,7 @@ func TestPaging(t *testing.T) {
 		}
 		defer sub.Close()
 		blockedCtx, blockedCancel := context.WithTimeout(ctx, 100*time.Millisecond)
-		second, blockedErr := RunStream(blockedCtx, s, bound, decoder, gocql.StreamOptions{Incremental: true, Options: gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: changed.Info().Result.HostID}}})
+		second, blockedErr := pagingRunStream(blockedCtx, t, streamPrepared, cql.EmptyParams{}, gocql.StreamOptions{Incremental: true, Options: gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: changed.Info().Result.HostID}}})
 		blockedCancel()
 		if second != nil {
 			second.Close()
@@ -512,10 +505,17 @@ func TestPaging(t *testing.T) {
 		}
 		t.Logf("live metadata change: 4 -> %d physical columns, %d delivered rows", changed.Columns().Len(), len(changedSeen))
 
-		bound.Close()
-		if err := bound.Wait(ctx); err != nil {
-			t.Fatal(err)
-		}
-		t.Logf("public RunStream protocol=%d compression=%s tls=%v rows=%d pages=%d bytes/row=%d attempts=%d", *flagProto, *flagCompressTest, *flagRunSslTest, info.DeliveredRows, info.Pages, len(payload), info.Result.Attempts)
+		t.Logf("public stream protocol=%d compression=%s tls=%v rows=%d pages=%d bytes/row=%d attempts=%d", *flagProto, *flagCompressTest, *flagRunSslTest, info.DeliveredRows, info.Pages, len(payload), info.Result.Attempts)
 	})
+}
+
+// pagingRunStream runs ps once with options. The stream query is closed when
+// the test ends, after the deferred closes of its streams.
+func pagingRunStream[P, R any](ctx context.Context, t testing.TB, ps *gocql.PreparedStream[P, R], value P, options gocql.StreamOptions) (*gocql.RowStream[R], error) {
+	q, err := ps.Query(options)
+	if err != nil {
+		return nil, err
+	}
+	t.Cleanup(q.Close)
+	return q.Run(ctx, value)
 }

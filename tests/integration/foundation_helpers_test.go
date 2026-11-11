@@ -54,3 +54,9 @@ func prepareFixture[P, R any, O fixturePrepareOptions](ctx context.Context, sess
 func fixtureStatement[P, R any](s cql.Statement[P, R]) binding.Statement[P, R] {
 	return binding.Statement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, Kind: s.Kind, BindMarkers: s.BindMarkers}
 }
+
+// preparedData exposes a prepared statement's per-host cache to the protocol
+// and cache fixtures, which inspect or corrupt cached prepared IDs.
+func preparedData[P, R any](p *gocql.Prepared[P, R]) *implSession.PreparedStorage[P, R] {
+	return implSession.PreparedData((*implSession.Prepared[P, R])(p))
+}

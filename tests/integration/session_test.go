@@ -63,27 +63,6 @@ import (
 	"github.com/scylladb/gocql/v2/retry"
 )
 
-// Typed request helpers keep parameter construction explicit and bind inputs once.
-func sessionTestBind(t testing.TB, session *gocql.Session[testDialect], stmt string, values ...dynamic.Value) *Bound[cql.EmptyRow] {
-	t.Helper()
-	prepared, err := session.Prepare(context.Background(), cql.Statement[[]dynamic.Value, cql.EmptyRow]{CQL: stmt, Params: dynamic.Params, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	bound, err := BindOwned(prepared, values)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return bound
-}
-func sessionTestItem[R any](t testing.TB, bound *Bound[R]) batchItem {
-	t.Helper()
-	item, err := BatchEntry(bound)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return item
-}
 func sessionTestInt(t testing.TB, row dynamic.Row, name string) int64 {
 	t.Helper()
 	value, err := row.Get(name)
@@ -251,9 +230,7 @@ func TestSession(t *testing.T) {
 			created := false
 			exec := func(stmt string) {
 				t.Helper()
-				b := codecTestMust(BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{}))
-				defer b.Close()
-				if _, e := Exec(ctx, s, b, gocql.CompiledOptions{}); e != nil {
+				if _, e := s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyParams{}); e != nil {
 					t.Fatal(e)
 				}
 			}
@@ -271,11 +248,7 @@ func TestSession(t *testing.T) {
 					return
 				}
 				defer cleanupSession.Close()
-				b, e := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + ks, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyParams{})
-				if e == nil {
-					defer b.Close()
-					_, e = Exec(cleanup, cleanupSession, b, gocql.CompiledOptions{})
-				}
+				_, e = cleanupSession.UnpreparedExec(cleanup, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + ks, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyParams{})
 				if e != nil {
 					t.Error(e)
 				}
@@ -285,21 +258,13 @@ func TestSession(t *testing.T) {
 			write := func(value byte) {
 				t.Helper()
 				payload := bytes.Repeat([]byte{value}, 1<<20)
-				bound := codecTestMust(BindBorrowed(insert, payload))
-				_, e := Exec(ctx, s, bound, gocql.CompiledOptions{})
-				bound.Close()
-				if e != nil {
-					t.Fatal(e)
-				}
-				if e = bound.Wait(ctx); e != nil {
+				if _, e := insert.Exec(ctx, payload); e != nil {
 					t.Fatal(e)
 				}
 			}
 			write(0x71)
 			prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}, gocql.PrepareOptions{}))
-			bound := codecTestMust(BindOwned(prepared, cql.EmptyParams{}))
-			defer bound.Close()
-			rows := codecTestMust(Run(ctx, s, bound, bindOptions(s, gocql.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
+			rows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, gocql.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
 			var old cql.Bytes
 			if !rows.NextInto(&old) {
 				t.Fatal(rows.Err())
@@ -320,7 +285,7 @@ func TestSession(t *testing.T) {
 			})
 			for generation := 0; generation < 8; generation++ {
 				write(byte(0x72 + generation))
-				freshRows := codecTestMust(Run(ctx, s, bound, bindOptions(s, gocql.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
+				freshRows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, gocql.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
 				var view cql.Bytes
 				if !freshRows.NextInto(&view) {
 					t.Fatal(freshRows.Err())
@@ -395,23 +360,23 @@ func TestSession(t *testing.T) {
 			intType := cql.IntType
 			var encoded int32
 			statement := cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO test(id) VALUES (?)", Params: cql.Params(cql.ParamAt(0, cql.Int32Codec, func(n int32) int32 { encoded = n; return n })), Rows: cql.EmptyRowDecoder}
-			bound, err := BindUnpreparedOwned(statement, cql.NewColumns(cql.ColumnSpec{Name: "id", Type: intType}), int32(1))
-			require.NoError(t, err)
-			defer bound.Close()
-			require.Equal(t, int32(1), encoded, "typed parameter accessor replaces callback binding")
+			statement.BindMarkers = cql.NewColumns(cql.ColumnSpec{Name: "id", Type: intType})
+			batch := &gocql.Batch{}
+			require.NoError(t, session.UnpreparedAddToBatch(batch, statement, int32(1)))
+			require.Equal(t, int32(1), encoded, "typed parameter accessor encodes the value when it is added")
 			// An incomplete session now reports ErrNoConnections from the typed path.
 			// It does not construct the old mutable Query/Iter error holder.
-			_, err = Run(ctx, session, bound, gocql.CompiledOptions{})
+			var row cql.EmptyRow
+			_, err = session.UnpreparedEach(ctx, statement, int32(1), &row, func(*cql.EmptyRow) error { return nil })
 			require.ErrorIs(t, err, cqlerr.ErrNoConnections)
-			batch := []batchItem{sessionTestItem(t, bound)}
-			_, err = execBatch(ctx, session, cql.LoggedBatch, batch, gocql.CompiledOptions{})
+			_, err = session.ExecBatch(ctx, batch)
 			require.ErrorIs(t, err, cqlerr.ErrNoConnections)
 			require.NoError(t, session.Close())
 			require.True(t, session.Closed())
 			require.NoError(t, session.Close())
-			_, err = execBatch(ctx, session, cql.LoggedBatch, batch, gocql.CompiledOptions{})
+			_, err = session.ExecBatch(ctx, batch)
 			require.ErrorIs(t, err, cqlerr.ErrClosed)
-			_, err = Exec(ctx, session, bound, gocql.CompiledOptions{})
+			_, err = session.UnpreparedExec(ctx, statement, int32(1))
 			require.ErrorIs(t, err, cqlerr.ErrClosed)
 		})
 	})
@@ -953,18 +918,16 @@ func TestSession(t *testing.T) {
 		session, err := gocql.Connect[testDialect](ctx, mustBuild(t, builder.WithOnlyHost(hostID)))
 		require.NoError(t, err)
 		defer session.Close()
-		bound, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, cql.TimeUUID]{CQL: "SELECT now() FROM system.local", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.TimeUUIDCodec)}, cql.NewColumns(), cql.EmptyParams{})
-		require.NoError(t, err)
-		defer bound.Close()
-		rows, err := Run(ctx, session, bound, gocql.CompiledOptions{})
-		require.NoError(t, err)
-		defer rows.Close()
 		var now cql.TimeUUID
-		require.True(t, rows.NextInto(&now))
-		require.False(t, cql.UUID(now).IsEmpty())
-		require.False(t, rows.NextInto(&now))
-		require.NoError(t, rows.Err())
-		require.Equal(t, hostID, rows.Info().HostID)
+		var nows []cql.TimeUUID
+		info, err := session.UnpreparedEach(ctx, cql.Statement[cql.EmptyParams, cql.TimeUUID]{CQL: "SELECT now() FROM system.local", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.TimeUUIDCodec)}, cql.EmptyParams{}, &now, func(n *cql.TimeUUID) error {
+			nows = append(nows, *n)
+			return nil
+		})
+		require.NoError(t, err)
+		require.Len(t, nows, 1)
+		require.False(t, cql.UUID(nows[0]).IsEmpty())
+		require.Equal(t, hostID, info.HostID)
 		for _, host := range session.Metadata().Hosts() {
 			if host.Connected {
 				require.Equal(t, hostID, host.ID, "single-host session connected to another host")
@@ -1050,23 +1013,14 @@ func TestSession(t *testing.T) {
 		keyspace := fmt.Sprintf("v2_runtime_%x", time.Now().UnixNano())
 		exec := func(stmt string) {
 			t.Helper()
-			bound, err := BindUnpreparedOwned(cql.Command(stmt), cql.NewColumns(), cql.EmptyParams{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer bound.Close()
-			if _, err = Exec(ctx, session, bound, gocql.CompiledOptions{}); err != nil {
+			if _, err := session.UnpreparedExec(ctx, cql.Command(stmt), cql.EmptyParams{}); err != nil {
 				t.Fatal(err)
 			}
 		}
 		exec("CREATE KEYSPACE " + keyspace + " WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':1}")
 		defer func() {
-			bound, err := BindUnpreparedOwned(cql.Command("DROP KEYSPACE "+keyspace), cql.NewColumns(), cql.EmptyParams{})
-			if err == nil {
-				defer bound.Close()
-				if _, err = Exec(context.Background(), session, bound, gocql.CompiledOptions{}); err != nil {
-					t.Error(err)
-				}
+			if _, err := session.UnpreparedExec(context.Background(), cql.Command("DROP KEYSPACE "+keyspace), cql.EmptyParams{}); err != nil {
+				t.Error(err)
 			}
 		}()
 		exec("CREATE TABLE " + keyspace + ".values (id int PRIMARY KEY, value blob)")
@@ -1085,27 +1039,32 @@ func TestSession(t *testing.T) {
 			t.Fatal(err)
 		}
 		payload := bytes.Repeat([]byte("typed-large-segment-payload"), 24000)
-		for id := int32(1); id <= 3; id++ {
-			bound, err := BindBorrowed(prepared, input{ID: id, Value: payload})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bound.Routing().Token.Set {
-				t.Fatal("prepared partition key had no routing token")
-			}
-			if _, err = Exec(ctx, session, bound, gocql.CompiledOptions{}); err != nil {
-				t.Fatal(err)
-			}
-			bound.Close()
-			if err = bound.Wait(ctx); err != nil {
-				t.Fatal(err)
-			}
-		}
-		selectBound, err := BindUnpreparedOwned(cql.Statement[cql.EmptyParams, output]{CQL: "SELECT id,value FROM " + keyspace + ".values", Params: cql.EmptyParamsEncoder, Rows: rows}, cql.NewColumns(), cql.EmptyParams{})
+		insert, err := prepared.Query(gocql.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		result, err := Run(ctx, session, selectBound, bindOptions(session, gocql.Options{PageSize: cql.Option[int32]{Value: 1, Set: true}}))
+		for id := int32(1); id <= 3; id++ {
+			info, err := insert.Routing(input{ID: id, Value: payload})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !info.Token.Set {
+				t.Fatal("prepared partition key had no routing token")
+			}
+			if _, err = insert.Exec(ctx, input{ID: id, Value: payload}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		insert.Close()
+		if err = insert.Wait(ctx); err != nil {
+			t.Fatal(err)
+		}
+		// Only prepared statements return a cursor that can be retained.
+		selectPrepared, err := session.Prepare(ctx, cql.Statement[cql.EmptyParams, output]{CQL: "SELECT id,value FROM " + keyspace + ".values", Params: cql.EmptyParamsEncoder, Rows: rows}, gocql.PrepareOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err := selectPrepared.Run(ctx, cql.EmptyParams{}, bindOptions(session, gocql.Options{PageSize: cql.Option[int32]{Value: 1, Set: true}}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1140,8 +1099,7 @@ func TestSession(t *testing.T) {
 		if result.Info().Rows != 3 {
 			t.Fatalf("reported rows %d", result.Info().Rows)
 		}
-		selectBound.Close()
-		if err = selectBound.Wait(ctx); err != nil {
+		if err = result.Close(); err != nil {
 			t.Fatal(err)
 		}
 		if !bytes.Equal(view.OwnedBytes(), payload) {

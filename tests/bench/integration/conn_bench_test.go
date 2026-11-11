@@ -62,22 +62,21 @@ func BenchmarkConn(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			worker := seed.Add(1)
+			// Each worker owns a reusable query. Routing encodes the parameter
+			// and computes the token without executing the statement.
+			query, err := prepared.Query(gocql.Options{})
+			if err != nil {
+				b.Error(err)
+				return
+			}
+			defer query.Close()
 			for i := uint64(0); pb.Next(); i++ {
-				// Immutable Bind replaces rebinding one mutable query. Routing reads
-				// the token computed from its canonical parameter bytes once.
-				bound, err := BindBorrowed(prepared, int32(i*worker))
+				info, err := query.Routing(int32(i * worker))
 				if err != nil {
 					b.Error(err)
 					return
 				}
-				routing := bound.Routing()
-				bound.Close()
-				err = bound.Wait(ctx)
-				if err != nil {
-					b.Error(err)
-					return
-				}
-				if !routing.Token.Set {
+				if !info.Token.Set {
 					b.Error("missing routing token")
 					return
 				}
@@ -103,21 +102,20 @@ func BenchmarkConn(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			worker := seed.Add(1)
+			query, err := prepared.Query(gocql.Options{})
+			if err != nil {
+				b.Error(err)
+				return
+			}
+			defer func() {
+				query.Close()
+				if err := query.Wait(ctx); err != nil {
+					b.Error(err)
+				}
+			}()
 			for i := uint64(0); pb.Next(); i++ {
-				bound, err := BindOwned(prepared, int32(i*worker))
-				if err != nil {
+				if _, err := query.Exec(ctx, int32(i*worker)); err != nil {
 					b.Error(err)
-					return
-				}
-				_, err = Exec(ctx, session, bound, gocql.CompiledOptions{})
-				bound.Close()
-				waitErr := bound.Wait(ctx)
-				if err != nil {
-					b.Error(err)
-					return
-				}
-				if waitErr != nil {
-					b.Error(waitErr)
 					return
 				}
 			}
