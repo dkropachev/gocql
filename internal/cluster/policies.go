@@ -36,10 +36,8 @@ import (
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 
-	randv2 "math/rand/v2"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 const hostInfoListMapThreshold = 20
@@ -299,34 +297,6 @@ func (host int64SelectedHost) TokenInt64() (implEndpoint.InternalInt64Token, boo
 
 func (host int64SelectedHost) Mark(err error) {}
 
-func newSingleHost(info *implEndpoint.HostInfo, maxRetries byte, retryDelay time.Duration) *singleHost {
-	return &singleHost{info: info, maxRetries: maxRetries, delay: retryDelay}
-}
-
-type singleHost struct {
-	info       *implEndpoint.HostInfo
-	delay      time.Duration
-	retry      byte
-	maxRetries byte
-}
-
-func (s *singleHost) selectHost() implEndpoint.SelectedHost {
-	if s.retry >= s.maxRetries {
-		return nil
-	}
-	if s.retry > 0 && s.delay > 0 {
-		time.Sleep(s.delay)
-	}
-	s.retry++
-	return s
-}
-
-func (s singleHost) Info() *implEndpoint.HostInfo { return s.info }
-
-func (s singleHost) Token() implEndpoint.Token { return nil }
-
-func (s singleHost) Mark(error) {}
-
 // NextHost is an iteration function over picked hosts
 type NextHost func() implEndpoint.SelectedHost
 
@@ -362,12 +332,6 @@ func (r *InternalRoundRobinHostPolicy) HostUp(host *implEndpoint.HostInfo) {
 
 func (r *InternalRoundRobinHostPolicy) HostDown(host *implEndpoint.HostInfo) {
 	r.RemoveHost(host)
-}
-
-func ShuffleReplicas() func(*tokenAwareHostPolicy) {
-	return func(t *tokenAwareHostPolicy) {
-		t.privateStorage.shuffleReplicas = true
-	}
 }
 
 func DontShuffleReplicas() func(*tokenAwareHostPolicy) {
@@ -649,13 +613,6 @@ func (s *hostSet) contains(h *implEndpoint.HostInfo) bool {
 	return false
 }
 
-// shuffleHostsInPlace shuffles the given slice in-place using math/rand/v2.
-func shuffleHostsInPlace(hosts []*implEndpoint.HostInfo) {
-	randv2.Shuffle(len(hosts), func(i, j int) {
-		hosts[i], hosts[j] = hosts[j], hosts[i]
-	})
-}
-
 // partitionHealthy performs an in-place stable partition of replicas, moving
 // healthy (non-busy) hosts to the front while preserving relative order.
 func partitionHealthy(replicas []*implEndpoint.HostInfo, s *Core) {
@@ -815,47 +772,6 @@ func (d *dcAwareRR) RemoveHost(host *implEndpoint.HostInfo) {
 func (d *dcAwareRR) HostUp(host *implEndpoint.HostInfo)   { d.AddHost(host) }
 func (d *dcAwareRR) HostDown(host *implEndpoint.HostInfo) { d.RemoveHost(host) }
 
-// This function is supposed to be called in a fashion
-// roundRobbin(offset, hostsPriority1, hostsPriority2, hostsPriority3 ... )
-//
-// E.g. for DC-naive strategy:
-// roundRobbin(offset, allHosts)
-//
-// For tiered and DC-aware strategy:
-// roundRobbin(offset, localHosts, remoteHosts)
-func roundRobbin(shift int, hosts ...[]*implEndpoint.HostInfo) NextHost {
-	currentLayer := 0
-	currentlyObserved := 0
-
-	return func() implEndpoint.SelectedHost {
-		// iterate over layers
-		for {
-			if currentLayer == len(hosts) {
-				return nil
-			}
-
-			currentLayerSize := len(hosts[currentLayer])
-
-			// iterate over hosts within a layer
-			for {
-				currentlyObserved++
-				if currentlyObserved > currentLayerSize {
-					currentLayer++
-					currentlyObserved = 0
-					break
-				}
-
-				h := hosts[currentLayer][(shift+currentlyObserved)%currentLayerSize]
-
-				if h.IsUp() {
-					return selectedHost{info: h}
-				}
-
-			}
-		}
-	}
-}
-
 // RackAwareRoundRobinPolicy is a host selection policies which will prioritize and
 // return hosts which are in the local rack, before hosts in the local datacenter but
 // a different rack, before hosts in all other datacenters
@@ -907,13 +823,6 @@ func (d *rackAwareRR) MaxHostTier() uint {
 
 func (d *rackAwareRR) setDCFailoverDisabled() {
 	d.disableDCFailover = true
-}
-
-// dcFailoverDisabled reports whether this policy was constructed with
-// HostPolicyOptionDisableDCFailover. Used by driver_config.go to report
-// query.load-balancing.policy.fallback-to-non-preferred-nodes.
-func (d *rackAwareRR) dcFailoverDisabled() bool {
-	return d.disableDCFailover
 }
 
 // localDatacenter and localRackName report the datacenter/rack this policy

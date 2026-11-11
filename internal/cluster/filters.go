@@ -80,12 +80,6 @@ func DataCenterHostFilter(dataCenter string) HostFilter {
 	return dataCenterHostFilter{dataCenter: dataCenter}
 }
 
-// Deprecated: Use DataCenterHostFilter instead.
-// DataCentreHostFilter is an alias that doesn't use the preferred spelling.
-func DataCentreHostFilter(dataCenter string) HostFilter {
-	return DataCenterHostFilter(dataCenter)
-}
-
 // WhiteListHostFilter filters incoming hosts by checking that their address is
 // in the initial hosts whitelist. It probes all known addresses of a host
 // (connect, rpc, broadcast, listen, peer, preferred, translated CQL) for a match.

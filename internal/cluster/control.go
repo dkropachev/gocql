@@ -308,12 +308,6 @@ func (c *InternalControlConn) setupConn(conn *transport.Conn) error {
 	}
 	return nil
 }
-
-func (c *InternalControlConn) registerEvents(conn *transport.Conn) error {
-	ctx, cancel := conn.InternalOpeningContext(conn.InternalCtx)
-	defer cancel()
-	return c.registerEventsContext(ctx, conn)
-}
 func (c *InternalControlConn) registerEventsContext(ctx context.Context, conn *transport.Conn) error {
 	var events []string
 

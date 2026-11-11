@@ -287,16 +287,6 @@ func (r *InternalRingDescriber) bumpRevisionLocked() {
 	r.hostsView.Store(nil)
 }
 
-func (r *InternalRingDescriber) getHostsMap() map[string]*implEndpoint.HostInfo {
-	r.mu.RLock()
-	hosts := make(map[string]*implEndpoint.HostInfo, len(r.InternalHosts))
-	for k, v := range r.InternalHosts {
-		hosts[k] = v
-	}
-	r.mu.RUnlock()
-	return hosts
-}
-
 func (r *InternalRingDescriber) InternalAddOrUpdate(host *implEndpoint.HostInfo) *implEndpoint.HostInfo {
 	if existingHost, ok := r.addHostIfMissing(host); ok {
 		implEndpoint.InternalHostInfoUpdate(existingHost, host)

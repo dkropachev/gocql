@@ -235,25 +235,6 @@ func connectSettings(cfg InternalClusterSettings) (*Core, error) {
 	return s, nil
 }
 
-func connectSettingsAsync(cfg InternalClusterSettings) (*Core, error) {
-	s, err := newSessionCommon(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	go func() {
-		if initErr := s.init(); initErr != nil {
-			s.privateStorage.InternalSessionStateMu.Lock()
-			s.privateStorage.initErr = fmt.Errorf("gocql: unable to create session: %w", initErr)
-			s.privateStorage.InternalSessionStateMu.Unlock()
-		}
-		s.privateStorage.readyCh <- struct{}{}
-		close(s.privateStorage.readyCh)
-	}()
-
-	return s, nil
-}
-
 // SubscribeToEvents adds a new subscriber to the event bus.
 // name: subscriber name
 // queueSize: buffer size for the subscriber events, when buffer is overflowed events are dropped
@@ -599,28 +580,10 @@ func sessionReady(s *Core) error {
 	return err
 }
 
-func sessionWaitUntilReady(s *Core) error {
-	<-s.privateStorage.readyCh
-	return s.privateStorage.initErr
-}
-
 func sessionRemoveHost(s *Core, h *implEndpoint.HostInfo) {
 	s.privateStorage.InternalPolicy.RemoveHost(h)
 	s.privateStorage.InternalPool.InternalRemoveHost(implEndpoint.InternalHostInfoHostUUID(h))
 	s.privateStorage.InternalHostSource.InternalRemoveHost(h.HostID())
-}
-
-// KeyspaceMetadata returns the schema metadata for the keyspace specified. Returns an error if the keyspace does not exist.
-func sessionKeyspaceMetadata(s *Core, keyspace string) (*metadata.KeyspaceMetadata, error) {
-	if s.Closed() {
-		return nil, runtimeerrors.ErrSessionClosed
-	} else if err := sessionReady(s); err != nil {
-		return nil, err
-	} else if keyspace == "" {
-		return nil, runtimeerrors.ErrNoKeyspace
-	}
-
-	return s.privateStorage.InternalMetadataDescriber.GetKeyspace(keyspace)
 }
 
 // TableMetadata returns the schema metadata for the specified table. Returns an error if the keyspace or table does not exist.
@@ -636,22 +599,6 @@ func sessionTableMetadata(s *Core, keyspace, table string) (*metadata.TableMetad
 	}
 
 	return s.privateStorage.InternalMetadataDescriber.GetTable(keyspace, table)
-}
-
-// TabletsMetadata returns the metadata about all tablets across all keyspaces and tables.
-//
-// Deprecated: Use [Session.TableTabletsMetadata] for per-table lookups or
-// [Session.ForEachTablet] to iterate without aggregating into a flat list.
-func sessionTabletsMetadata(s *Core) (tablets.TabletInfoList, error) {
-	if s.Closed() {
-		return nil, runtimeerrors.ErrSessionClosed
-	} else if err := sessionReady(s); err != nil {
-		return nil, err
-	} else if !s.privateStorage.tabletsRoutingV1 {
-		return nil, runtimeerrors.ErrTabletsNotUsed
-	}
-
-	return s.privateStorage.InternalMetadataDescriber.getTablets(), nil
 }
 
 // TableTabletsMetadata returns the tablet metadata for the specified keyspace and table.
@@ -730,16 +677,6 @@ func sessionGetHostPoolByID(s *Core, hostID string) pool.HostPoolInfo {
 		return nil
 	}
 	return hostPool
-}
-
-// IterateHostPools calls iter once for each host's connection pool, stopping
-// early if iter returns false. Iteration order is unspecified.
-//
-// iter runs while an internal lock on the pool is held, so it must not call
-// back into the Session -- anything that adds or removes a host, or closes the
-// session, will deadlock -- and it should not block.
-func sessionIterateHostPools(s *Core, iter func(info pool.HostPoolInfo) bool) {
-	s.privateStorage.InternalPool.InternalIteratePool(iter)
 }
 
 type ObservedConnect struct {

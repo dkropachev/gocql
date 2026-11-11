@@ -409,10 +409,6 @@ func (cfg *InternalClusterSettings) Open() (*Core, error) {
 	return connectSettings(*cfg)
 }
 
-func (cfg *InternalClusterSettings) openAsync() (*Core, error) {
-	return connectSettingsAsync(*cfg)
-}
-
 func (cfg *InternalClusterSettings) FilterHost(host *endpoint.HostInfo) bool {
 	return !(cfg.HostFilter == nil || cfg.HostFilter.Accept(host))
 }
@@ -453,25 +449,9 @@ func (cfg *InternalClusterSettings) WithOptions(opts ...ClusterOption) *Internal
 
 type ClientRoutesOption func(*ClientRoutesConfig)
 
-// Deprecated: WithMaxResolverConcurrency no longer has any effect
-func WithMaxResolverConcurrency(val int) func(*ClientRoutesConfig) {
-	return func(cfg *ClientRoutesConfig) {}
-}
-
-// Deprecated: WithResolveHealthyEndpointPeriod no longer has any effect
-func WithResolveHealthyEndpointPeriod(val time.Duration) func(*ClientRoutesConfig) {
-	return func(cfg *ClientRoutesConfig) {}
-}
-
 func WithEndpoints(endpoints ...ClientRoutesEndpoint) func(*ClientRoutesConfig) {
 	return func(cfg *ClientRoutesConfig) {
 		cfg.Endpoints = endpoints
-	}
-}
-
-func WithTable(tableName string) func(*ClientRoutesConfig) {
-	return func(cfg *ClientRoutesConfig) {
-		cfg.TableName = tableName
 	}
 }
 
