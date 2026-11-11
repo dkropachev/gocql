@@ -110,6 +110,9 @@ page state. Explicit paging is the pages column only.
   declares it or the server marks it, as ScyllaDB does in prepared metadata.
   An undeclared kind on Cassandra stays unknown: the driver never parses CQL,
   so such a request is sent and its result columns are rejected afterwards.
+  A statement executed with SERIAL or LOCAL_SERIAL consistency is a Paxos read:
+  it is not rejected up front, and `Exec` fails on its result columns like any
+  other row-returning statement.
 - Each column uses one verb in every row: `Exec`, `One`, `Each`, `RunPage`.
   Throwaway methods carry the `Unprepared` prefix in front of that verb.
 - `AddToBatch` appears once per reusable form. `Query.Routing` reports where

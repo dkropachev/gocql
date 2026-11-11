@@ -587,6 +587,10 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 	request.routing.Consistency = resolved.InternalProfile.Consistency
 	request.routing.HostID = values.HostID
 	request.routing.ShardID = values.ShardID
+	// SERIAL/LOCAL_SERIAL main consistency is a Paxos read. It is routed and
+	// retried like a conditional statement (strict replica order, no
+	// speculation, no client timestamp), but its result is ordinary rows, so
+	// the none column's up-front conditional rejection does not apply.
 	if resolved.InternalProfile.Consistency == cqltype.Serial || resolved.InternalProfile.Consistency == cqltype.LocalSerial {
 		request.routing.Kind = cqltype.ConditionalStatement
 	}
