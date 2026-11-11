@@ -61,7 +61,7 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("BuildValidatesFinalSettings", func(t *testing.T) {
-		b := NewConfig("h").WithPort(0).WithConnectionsPerShard(-1)
+		b := NewConfig("h").WithPort(0).WithPoolSize(PerShard(-1))
 		if _, err := b.Build(); err == nil {
 			t.Fatal("Build accepted an invalid port")
 		} else if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "port" {
@@ -71,7 +71,7 @@ func TestConfigBuilder(t *testing.T) {
 		if _, err := b.Build(); err == nil {
 			t.Fatal("correcting the port hid the invalid pool size")
 		}
-		b.WithConnectionsPerShard(2)
+		b.WithPoolSize(PerShard(2))
 		mustBuildConfig(t, b)
 	})
 
@@ -82,7 +82,7 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("LastCallWins", func(t *testing.T) {
-		c := mustBuildConfig(t, NewConfig("h").WithConnectionsPerShard(3).WithConnectionsPerShard(4).
+		c := mustBuildConfig(t, NewConfig("h").WithPoolSize(PerShard(3)).WithPoolSize(PerShard(4)).
 			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.One) }).
 			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.All) }).
 			WithClientRoutes(NewClientRoutes("c1").WithHostnameOverride("c1", "a").WithHostnameOverride("c1", "b")).
@@ -95,7 +95,7 @@ func TestConfigBuilder(t *testing.T) {
 	t.Run("ExclusiveOptionsReplace", func(t *testing.T) {
 		c := mustBuildConfig(t, NewConfig("h").
 			WithHeartbeat(time.Second, time.Second).NoHeartbeat().
-			WithConnectionsPerHost(4).WithConnectionsPerShard(2).
+			WithPoolSize(PerHost(4)).WithPoolSize(PerShard(2)).
 			WithAdvancedShardAwareness(50000, 60000).NoAdvancedShardAwareness().
 			WithMetadataRefresh(time.Second).NoMetadataRefresh().
 			WithPreparedCacheSize(10).NoPreparedCache().
@@ -104,21 +104,21 @@ func TestConfigBuilder(t *testing.T) {
 			c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.TimestampGenerator != nil {
 			t.Fatalf("a later call did not replace an earlier one: %+v", c)
 		}
-		c = mustBuildConfig(t, NewConfig("h").NoHeartbeat().WithHeartbeat(time.Second, 2*time.Second).WithConnectionsPerShard(2).WithConnectionsPerHost(4)).settings
+		c = mustBuildConfig(t, NewConfig("h").NoHeartbeat().WithHeartbeat(time.Second, 2*time.Second).WithPoolSize(PerShard(2)).WithPoolSize(PerHost(4))).settings
 		if c.KeepaliveInterval != time.Second || c.KeepaliveTimeout != 2*time.Second || c.Pool.ConnectionsPerHost != 4 {
 			t.Fatalf("reverse order: %+v", c)
 		}
 	})
 
 	t.Run("InvalidLastValueReplacesPreviousValue", func(t *testing.T) {
-		b := NewConfig("h").WithConnectionsPerShard(3).WithConnectionsPerShard(-1)
+		b := NewConfig("h").WithPoolSize(PerShard(3)).WithPoolSize(PerShard(-1))
 		if got := b.settings.Pool.ConnectionsPerShard; got != -1 {
 			t.Fatalf("ConnectionsPerShard = %d, want the last value -1", got)
 		}
 		if _, err := b.Build(); err == nil {
 			t.Fatal("Build accepted the invalid last value")
 		}
-		b.WithConnectionsPerHost(4)
+		b.WithPoolSize(PerHost(4))
 		mustBuildConfig(t, b)
 	})
 
@@ -201,6 +201,36 @@ func TestConfigBuilder(t *testing.T) {
 		}
 		if _, err := NewConfig("h").WithAdvancedShardAwareness(49152, 65535).WithClientRoutes(NewClientRoutes("c1")).Build(); err == nil {
 			t.Fatal("explicit advanced shard awareness with client routes was accepted")
+		}
+	})
+
+	t.Run("PoolSize", func(t *testing.T) {
+		c := mustBuildConfig(t, NewConfig("h").WithPoolSize(PerHost(3))).settings
+		if c.Pool.ConnectionsPerHost != 3 || c.Pool.ConnectionsPerShard != 0 || c.Pool.ShardAwarePort {
+			t.Fatalf("PerHost(3) pool = %+v, want 3 per host without the shard-aware port", c.Pool)
+		}
+		c = mustBuildConfig(t, NewConfig("h").WithPoolSize(PerHost(3)).NoAdvancedShardAwareness()).settings
+		if c.Pool.ConnectionsPerHost != 3 || c.Pool.ShardAwarePort {
+			t.Fatalf("PerHost with NoAdvancedShardAwareness: %+v", c.Pool)
+		}
+		c = mustBuildConfig(t, NewConfig("h").WithPoolSize(PerHost(3)).WithPoolSize(PerShard(2)).
+			WithAdvancedShardAwareness(50000, 60000).WithMaxExcessPerShard(1)).settings
+		if c.Pool.ConnectionsPerShard != 2 || c.Pool.ConnectionsPerHost != 0 || !c.Pool.ShardAwarePort || c.Pool.MaxExcessPerShard != 1 {
+			t.Fatalf("PerShard after PerHost: %+v", c.Pool)
+		}
+		for name, b := range map[string]*ConfigBuilder{
+			"AdvancedShardAwareness": NewConfig("h").WithAdvancedShardAwareness(50000, 60000).WithPoolSize(PerHost(2)),
+			"MaxExcessPerShard":      NewConfig("h").WithPoolSize(PerHost(2)).WithMaxExcessPerShard(2),
+			"Zero":                   NewConfig("h").WithPoolSize(PerHost(0)),
+			"ZeroValue":              NewConfig("h").WithPoolSize(PoolSize{}),
+		} {
+			t.Run(name, func(t *testing.T) {
+				if _, err := b.Build(); err == nil {
+					t.Fatal("Build accepted the pool size")
+				} else if _, ok := errors.AsType[*cqlerr.ValidationError](err); !ok {
+					t.Fatalf("Build = %v, want a ValidationError", err)
+				}
+			})
 		}
 	})
 

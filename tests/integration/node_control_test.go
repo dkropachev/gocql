@@ -27,7 +27,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	cluster := nodeControlCluster(t, 1)
 	node := cluster.Node(1)
 	config := newFixtureConfig(cluster.IPs(), fixtureCompression, func(c *gocql.ConfigBuilder) {
-		c.WithConnectionsPerHost(1).NoHeartbeat().NoMetadataRefresh().
+		c.WithPoolSize(gocql.PerHost(1)).NoHeartbeat().NoMetadataRefresh().
 			// Streaming rejects frame compression before protocol v5, and the
 			// suite's default compressor would skip this test on every v4 lane.
 			// Compression is not what it tests.

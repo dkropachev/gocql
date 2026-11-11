@@ -44,7 +44,7 @@ func TestPerformance(t *testing.T) {
 		runtime.GC()
 		initial := mem().HeapAlloc
 		config := createV2Cluster(func(c *gocql.ConfigBuilder) {
-			c.WithConnectionsPerHost(8).NoHeartbeat().NoMetadataRefresh()
+			c.WithPoolSize(gocql.PerHost(8)).NoHeartbeat().NoMetadataRefresh()
 		})
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 		defer cancel()
@@ -331,7 +331,7 @@ func TestPerformance(t *testing.T) {
 			t.Fatal(e)
 		}
 		config := createV2Cluster(func(c *gocql.ConfigBuilder) {
-			c.WithConnectionsPerShard(1).
+			c.WithPoolSize(gocql.PerShard(1)).
 				WithAdvancedShardAwareness(32768, 65535).
 				WithHeartbeat(30*time.Second, 30*time.Second).
 				NoMetadataRefresh()

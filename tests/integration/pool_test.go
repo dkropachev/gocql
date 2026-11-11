@@ -60,7 +60,7 @@ func TestPool(t *testing.T) {
 				var dials atomic.Int32
 				config := newFixtureConfig(getClusterHosts()[:1], 0, func(c *gocql.ConfigBuilder) {
 					c.NoDiscovery().
-						WithConnectionsPerHost(1).
+						WithPoolSize(gocql.PerHost(1)).
 						NoAdvancedShardAwareness().
 						WithReconnect(noReconnect{}).
 						WithConviction(policy).
@@ -126,7 +126,7 @@ func TestPool(t *testing.T) {
 			compression = "no-compression"
 		}
 		config := createV2ClusterWithout(skip)
-		config.WithConnectionsPerHost(1).NoHeartbeat()
+		config.WithPoolSize(gocql.PerHost(1)).NoHeartbeat()
 		if *flagProto < 5 {
 			config.WithCompression(gocql.NoCompression)
 		}
@@ -304,9 +304,9 @@ func TestPool(t *testing.T) {
 					config.WithCoalesceWrites(100 * time.Microsecond)
 				}
 				if mode == "host" {
-					config.WithConnectionsPerHost(2)
+					config.WithPoolSize(gocql.PerHost(2))
 				} else {
-					config.WithConnectionsPerShard(2)
+					config.WithPoolSize(gocql.PerShard(2))
 				}
 				// The fixture enables the shard-aware port by default.
 				const shardAwarePort = true

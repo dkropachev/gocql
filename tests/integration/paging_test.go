@@ -276,7 +276,7 @@ func TestPaging(t *testing.T) {
 
 	t.Run("Stream", func(t *testing.T) {
 		config := mustBuild(t, createV2Cluster(func(c *gocql.ConfigBuilder) {
-			c.WithConnectionsPerHost(1).NoHeartbeat().NoMetadataRefresh()
+			c.WithPoolSize(gocql.PerHost(1)).NoHeartbeat().NoMetadataRefresh()
 		}))
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()

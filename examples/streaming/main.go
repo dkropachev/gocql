@@ -52,7 +52,7 @@ func run() (resultErr error) {
 	uri := flag.String("tls-uri", "", "explicit TLS URI identity instead of DNS")
 	flag.Parse()
 	builder := gocql.NewConfig(strings.Split(*hosts, ",")...).
-		WithConnectionsPerHost(1).
+		WithPoolSize(gocql.PerHost(1)).
 		NoAdvancedShardAwareness().
 		NoHeartbeat().
 		NoMetadataRefresh()

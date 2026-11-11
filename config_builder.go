@@ -41,6 +41,8 @@ type ConfigBuilder struct {
 	settings             implSettings.Config
 	discoveryChosen      bool
 	shardAwarenessChosen bool
+	maxExcessChosen      bool
+	perHost              bool
 }
 
 // NewConfig starts a configuration that connects to contactPoints. A contact
@@ -74,6 +76,15 @@ func (b *ConfigBuilder) Build() (Config, error) {
 		}
 	}
 	if settings.ClientRoutes != nil && !b.shardAwarenessChosen {
+		settings.Pool.ShardAwarePort = false
+	}
+	if b.perHost {
+		if b.shardAwarenessChosen && settings.Pool.ShardAwarePort {
+			return Config{}, &cqlerr.ValidationError{Field: "pool size", Err: errors.New("PerHost dials no shard-aware port; drop WithAdvancedShardAwareness or use PerShard")}
+		}
+		if b.maxExcessChosen {
+			return Config{}, &cqlerr.ValidationError{Field: "pool size", Err: errors.New("PerHost keeps no per-shard excess connections; drop WithMaxExcessPerShard or use PerShard")}
+		}
 		settings.Pool.ShardAwarePort = false
 	}
 	for _, kind := range b.ignoredEvents {
@@ -276,25 +287,47 @@ func (b *ConfigBuilder) WithCoalesceWrites(wait time.Duration) *ConfigBuilder {
 	return b
 }
 
-// WithConnectionsPerShard opens n connections per shard of each node. It
-// replaces WithConnectionsPerHost. Default 1.
-func (b *ConfigBuilder) WithConnectionsPerShard(n int) *ConfigBuilder {
-	b.settings.Pool.ConnectionsPerShard = n
-	b.settings.Pool.ConnectionsPerHost = 0
-	return b
+// PoolSize is how many connections the session keeps open to each node. Make
+// one with PerShard or PerHost.
+type PoolSize struct {
+	n       int
+	perHost bool
 }
 
-// WithConnectionsPerHost opens n connections per node regardless of its shard
-// count. It replaces WithConnectionsPerShard.
-func (b *ConfigBuilder) WithConnectionsPerHost(n int) *ConfigBuilder {
-	b.settings.Pool.ConnectionsPerHost = n
-	b.settings.Pool.ConnectionsPerShard = 0
+// PerShard keeps n connections to every shard of each node, so each request
+// goes out on a connection of the shard that owns its data. A node that
+// reports no shards, such as Cassandra, counts as one shard. This is the
+// default, with n = 1.
+func PerShard(n int) PoolSize { return PoolSize{n: n} }
+
+// PerHost keeps n connections to each node regardless of its shard count.
+//
+// On ScyllaDB it turns shard-aware connection management off: connections are
+// dialed through the regular port only, never the shard-aware port (as with
+// NoAdvancedShardAwareness), so the node assigns each connection's shard and
+// some shards may get none. A request whose shard has no connection goes out
+// on another shard's connection and costs the node a cross-shard hop. There
+// are no per-shard excess connections, so WithMaxExcessPerShard does not
+// apply. Build rejects PerHost together with WithAdvancedShardAwareness or
+// WithMaxExcessPerShard.
+func PerHost(n int) PoolSize { return PoolSize{n: n, perHost: true} }
+
+// WithPoolSize sets how many connections the session keeps to each node:
+// PerShard or PerHost. n must be positive. Default PerShard(1).
+func (b *ConfigBuilder) WithPoolSize(size PoolSize) *ConfigBuilder {
+	b.perHost = size.perHost
+	if size.perHost {
+		b.settings.Pool.ConnectionsPerHost, b.settings.Pool.ConnectionsPerShard = size.n, 0
+	} else {
+		b.settings.Pool.ConnectionsPerShard, b.settings.Pool.ConnectionsPerHost = size.n, 0
+	}
 	return b
 }
 
 // WithMaxExcessPerShard caps connections opened beyond the target per shard.
-// Default 2.
+// It applies to PerShard pools only. Default 2.
 func (b *ConfigBuilder) WithMaxExcessPerShard(n int) *ConfigBuilder {
+	b.maxExcessChosen = true
 	b.settings.Pool.MaxExcessPerShard = n
 	return b
 }
@@ -316,7 +349,7 @@ func (b *ConfigBuilder) WithMaxOrphanedStreams(n int) *ConfigBuilder {
 // WithAdvancedShardAwareness picks the shard of each new connection by dialing
 // the node's shard-aware port from a local source port chosen from first to
 // last. It replaces NoAdvancedShardAwareness. Default on with ports
-// 49152-65535, except under WithClientRoutes.
+// 49152-65535, except under WithClientRoutes or PerHost.
 func (b *ConfigBuilder) WithAdvancedShardAwareness(first, last uint16) *ConfigBuilder {
 	b.shardAwarenessChosen = true
 	b.settings.Pool.ShardAwarePort = true

@@ -13,7 +13,7 @@ profile, err := gocql.NewProfile().
 if err != nil { return err }
 config, err := gocql.NewConfig("10.0.0.1", "10.0.0.2").
     WithKeyspace("app").
-    WithConnectionsPerShard(2).
+    WithPoolSize(gocql.PerShard(2)).
     WithDefaultProfile(profile).
     Build()
 ```
@@ -72,8 +72,13 @@ and `Build` snapshots the finished configuration. `StaticTLS` copies its input
 when constructed. Callbacks and provider objects remain shared and must support
 concurrent use.
 
-Use `WithConnectionsPerHost` for a host override or `WithConnectionsPerShard` for
-shard sizing; the later call replaces the earlier one. An explicit incremental stream occupies one configured connection through
+`WithPoolSize` sizes each node's pool: `gocql.PerShard(n)` keeps n connections
+to every shard (the default is `PerShard(1)`), and `gocql.PerHost(n)` keeps n
+per node regardless of its shard count. `PerHost` turns shard-aware connection
+management off: connections use the regular port only, the node picks their
+shards, and requests for a shard without a connection take another shard's
+connection. `Build` rejects `PerHost` with `WithAdvancedShardAwareness` or
+`WithMaxExcessPerShard`. An explicit incremental stream occupies one configured connection through
 idle time and pages. Default page-buffered streams use normal multiplexing. Cancellation interrupts work;
 Session.Close rejects new work, cancels requests and joins writers/workers.
 Queries copy parameters during admission; the next execution waits within its

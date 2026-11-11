@@ -237,7 +237,7 @@ func TestSession(t *testing.T) {
 		// retained delivered pages, and a late lease cannot repopulate the closed cache.
 		t.Run("PageCacheOwnership", func(t *testing.T) {
 			config := mustBuild(t, createV2Cluster(func(c *gocql.ConfigBuilder) {
-				c.WithConnectionsPerHost(1).NoHeartbeat().NoMetadataRefresh()
+				c.WithPoolSize(gocql.PerHost(1)).NoHeartbeat().NoMetadataRefresh()
 			}))
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
@@ -899,7 +899,7 @@ func TestSession(t *testing.T) {
 				ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) {
 					p.WithConsistency(cql.Quorum).WithTimeout(*flagTimeout).WithRetry(retry.Safe{MaxAttempts: max(1, *flagRetry+1)})
 				}).
-				WithConnectionsPerHost(1).
+				WithPoolSize(gocql.PerHost(1)).
 				NoDiscovery().
 				WithReconnect(unixSocketNoReconnect{}).
 				WithIgnoreEvents(gocql.StatusEvent, gocql.TopologyEvent, gocql.SchemaEvent).

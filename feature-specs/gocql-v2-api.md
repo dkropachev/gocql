@@ -1579,7 +1579,10 @@ prompt/nonblocking and cannot reenter blocking Close/Wait. The implementation
 contract defines route selection, snapshots and duration defaults. Client
 routes supply per-connection-ID endpoint overrides and disable advanced shard
 awareness (shard selection by source port through the shard-aware port), which
-their proxy breaks. Keepalive, orphan-stream budget, connection repair and
+their proxy breaks. `WithPoolSize` takes `PerShard(n)` (default `PerShard(1)`)
+or `PerHost(n)`; `PerHost` dials the regular port only and keeps no per-shard
+excess, so Build rejects it with `WithAdvancedShardAwareness` or
+`WithMaxExcessPerShard`. Keepalive, orphan-stream budget, connection repair and
 graceful close remain separate from user-request timeout.
 
 Errors preserve `errors.Is`/`errors.As` and server error codes/details. Define

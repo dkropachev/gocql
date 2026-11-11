@@ -903,7 +903,7 @@ func TestRouting(t *testing.T) {
 		t.Run("ConnPool", func(t *testing.T) {
 			t.Parallel()
 			session := createV2SessionFromConfig(createV2ClusterWithout(fixtureConsistency, func(c *gocql.ConfigBuilder) {
-				c.WithConnectionsPerHost(1)
+				c.WithPoolSize(gocql.PerHost(1))
 				// The row is read back at ONE: write it at ALL so any replica has it.
 				c.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithPageSize(1).WithConsistency(cql.All) })
 			}), t, false)

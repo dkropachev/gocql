@@ -81,7 +81,7 @@ func benchConfig(d endpoint.Dialer) gocql.Config {
 		NoHeartbeat().
 		NoMetadataRefresh().
 		NoConfigReport().
-		WithConnectionsPerHost(1).
+		WithPoolSize(gocql.PerHost(1)).
 		NoDiscovery().
 		WithDialer(d).
 		Build()

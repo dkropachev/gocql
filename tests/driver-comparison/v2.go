@@ -47,7 +47,7 @@ var bufferedDecoder = cql.RowInto(func(*row) {}, cql.Column("k", cql.Int32Codec,
 func connect(hosts []string) (adapter, error) {
 	policy, _ := routing.NewPolicy(routing.Options{TokenAware: true, Datacenter: "datacenter1"})
 	builder := g.NewConfig(hosts...).
-		WithConnectionsPerShard(1).
+		WithPoolSize(g.PerShard(1)).
 		WithMaxExcessPerShard(0).
 		ConfigureDefaultProfile(func(p *g.ProfileBuilder) {
 			p.WithConsistency(cql.LocalQuorum).
