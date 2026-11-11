@@ -816,9 +816,9 @@ func TestQuery(t *testing.T) {
 			t.Fatal("explicit paging count", pageRows)
 		}
 		t.Log("query reuse, stale cursors, owned destinations and explicit paging passed")
-		unpaged := codecTestMust(read.Query(gocql.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}}))
+		unpaged := codecTestMust(read.Query(gocql.Options{PageSize: cql.Some(cql.Unpaged), Prefetch: cql.Option[int]{Set: true, Value: 0}}))
 		defer unpaged.Close()
-		page := codecTestMust(unpaged.RunUnpaged(ctx, int32(1)))
+		page := codecTestMust(unpaged.RunPage(ctx, int32(1), gocql.StartPage))
 		n := 0
 		var unpagedRow record
 		for page.NextInto(&unpagedRow) {

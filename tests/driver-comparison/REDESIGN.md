@@ -30,7 +30,7 @@ control. [Machine-readable state](REDESIGN-STATE.json) records the remaining wor
 ## Implemented
 
 `Prepared.Query` creates worker-owned reusable queries with
-parameter-taking Exec, Run, RunPage and RunUnpaged methods. Prepared plans stay
+parameter-taking Exec, Run and RunPage methods. Prepared plans stay
 shareable. Admission copies input, captures cell boundaries during encoding,
 and computes routing from those bytes. Concurrent use returns ErrBusy. Close
 stops admission and cancels execution; Wait joins accepted writers and callbacks.

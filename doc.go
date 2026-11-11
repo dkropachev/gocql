@@ -39,8 +39,8 @@
 // its Options once and saves the pool hand-off of the one-shot calls (about 2
 // to 4 percent of client CPU at high concurrency), and it adds the executions
 // whose handles outlive the call: Run returns Rows to iterate with NextInto and
-// close, RunPage pages explicitly from a saved PageState, and RunUnpaged
-// requests one unpaged response. Session.UnpreparedExec, UnpreparedOne and
+// close, and RunPage pages explicitly from a saved PageState. The page size
+// cql.Unpaged requests the whole result in one response. Session.UnpreparedExec, UnpreparedOne and
 // UnpreparedEach run occasional CQL text statements without server preparation
 // and without a query to close; prepare a statement that runs repeatedly. Parameters are
 // copied during execution admission. A call while

@@ -282,7 +282,7 @@ func runBatch[R any](ctx context.Context, s *implCluster.Core, kind cqltype.Batc
 	bound := new(Bound[R])
 	bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalOwner: owner, routing: batch.requestRouting(), batch: state}
 	bound.privateStorage.InternalRows = decoder
-	page, err := runtimeOf(s).runSinglePage(ctx, bound, model.StartPage(), options, false)
+	page, err := runtimeOf(s).runSinglePage(ctx, bound, model.StartPage(), options)
 	owner.InternalClose()
 	return page, err
 }

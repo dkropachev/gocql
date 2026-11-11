@@ -101,6 +101,4 @@ Update this list as each one is resolved.
   many-rows range mode. They must benchmark as fast as `Each` before they ship.
 - `Prepared.Run` is missing from the shared pull mode.
 - Throwaway calls take `...CompiledOptions`; they should take `Options`.
-- `Query.RunUnpaged`: an execution mode written as a method. Replace it with
-  `PageSize: cql.Unpaged`.
 - `Prepared.RunPage` is missing from the shared pages cell.

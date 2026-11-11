@@ -177,7 +177,7 @@ func TestConfig(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			for _, include := range []bool{false, true, false} {
-				page := codecTestMust(RunUnpaged(ctx, s, bound, testOptions(Options{IncludeMetadata: include})))
+				page := codecTestMust(RunPage(ctx, s, bound, model.StartPage(), testOptions(Options{IncludeMetadata: include, PageSize: cqltype.Some(cqltype.Unpaged)})))
 				var row cqltype.Bytes
 				if !page.NextInto(&row) || string(row.OwnedBytes()) != "value" {
 					t.Fatal(page.Err())
@@ -201,11 +201,10 @@ func TestConfig(t *testing.T) {
 			s, _, _ := runtimeTestSession(t, 0)
 			b := runtimeQuery(t)
 			defer b.Close()
-			_, err := RunUnpaged(context.Background(), s, b, testOptions(Options{PageSize: implCql.Option[int32]{Set: true, Value: 1}}))
-			if !hasErrorType[*settings.UnsupportedSettingError](err) {
-				t.Fatal(err)
+			if _, err := InternalCompileOptions(s, Options{PageSize: cqltype.Some(cqltype.Unpaged), Prefetch: implCql.Option[int]{Set: true, Value: 1}}); !hasErrorType[*settings.UnsupportedSettingError](err) {
+				t.Fatal("unpaged with prefetch", err)
 			}
-			_, err = RunPage(context.Background(), s, b, model.StartPage(), testOptions(Options{Prefetch: implCql.Option[int]{Set: true, Value: 1}}))
+			_, err := RunPage(context.Background(), s, b, model.StartPage(), testOptions(Options{Prefetch: implCql.Option[int]{Set: true, Value: 1}}))
 			if !hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal(err)
 			}
@@ -460,8 +459,9 @@ func TestConfig(t *testing.T) {
 			explicit := runtimeQuery(t)
 			values := options.Values()
 			values.Timestamp = cqltype.Option[int64]{Set: true, Value: 0}
+			values.PageSize = cqltype.Some(cqltype.Unpaged)
 			opts := testOptions(values)
-			page := codecTestMust(RunUnpaged(ctx, s, explicit, opts))
+			page := codecTestMust(RunPage(ctx, s, explicit, model.StartPage(), opts))
 			if err := page.Close(); err != nil {
 				t.Fatal(err)
 			}
@@ -470,7 +470,9 @@ func TestConfig(t *testing.T) {
 				t.Fatal(err)
 			}
 			conditional := codecTestMust(BindUnpreparedBorrowed(binding.Statement[codec.EmptyRecord, cqltype.Bytes]{Kind: cqltype.ConditionalStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.OneColumn(codec.BlobCodec)}, cqltype.NewColumns(), codec.EmptyRecord{}))
-			page = codecTestMust(RunUnpaged(ctx, s, conditional, options))
+			unpaged := options.Values()
+			unpaged.PageSize = cqltype.Some(cqltype.Unpaged)
+			page = codecTestMust(RunPage(ctx, s, conditional, model.StartPage(), testOptions(unpaged)))
 			if err := page.Close(); err != nil {
 				t.Fatal(err)
 			}

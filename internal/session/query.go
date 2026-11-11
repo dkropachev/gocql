@@ -351,14 +351,7 @@ func (q *Query[P, R]) RunPage(ctx context.Context, value P, state model.PageStat
 		return nil, err
 	}
 	defer q.state.owner.InternalRelease()
-	return q.state.runtime.runSinglePage(ctx, &q.bound, state, q.options, false)
-}
-func (q *Query[P, R]) RunUnpaged(ctx context.Context, value P) (*Page[R], error) {
-	if err := q.capture(ctx, value); err != nil {
-		return nil, err
-	}
-	defer q.state.owner.InternalRelease()
-	return q.state.runtime.runSinglePage(ctx, &q.bound, model.StartPage(), q.options, true)
+	return q.state.runtime.runSinglePage(ctx, &q.bound, state, q.options)
 }
 
 // Routing encodes value and returns its routing information without sending a

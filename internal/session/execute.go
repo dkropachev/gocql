@@ -723,23 +723,15 @@ func (rt *InternalSessionRuntime) newRowsFromResponse[R any](runctx context.Cont
 
 // RunPage executes one page of b on s, starting at state.
 func RunPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state model.PageState, options CompiledOptions) (*Page[R], error) {
-	return runtimeOf(s).runSinglePage(ctx, b, state, options, false)
+	return runtimeOf(s).runSinglePage(ctx, b, state, options)
 }
 
-// RunUnpaged executes b on s as one unpaged request.
-func RunUnpaged[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions) (*Page[R], error) {
-	return runtimeOf(s).runSinglePage(ctx, b, model.StartPage(), options, true)
-}
-
-func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *Bound[R], state model.PageState, options CompiledOptions, unpaged bool) (*Page[R], error) {
+func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *Bound[R], state model.PageState, options CompiledOptions) (*Page[R], error) {
 	if state.Complete() {
 		return nil, runtimeerrors.ErrPagingComplete
 	}
 	if v := options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, &settings.UnsupportedSettingError{Setting: "prefetch", Reason: "single-page execution has no automatic pager"}
-	}
-	if unpaged && options.values().PageSize.Set {
-		return nil, &settings.UnsupportedSettingError{Setting: "page size", Reason: "unpaged execution has no page size"}
 	}
 	runctx, cancel, request, err := rt.admit(ctx, b, options)
 	if err != nil {
@@ -748,21 +740,10 @@ func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *B
 	// A Page outlives its query's generation as a stale handle whose
 	// accessors still read its response, so it never uses query storage.
 	request.responseDest = nil
-	if unpaged {
-		request.InternalOptions.InternalProfile.PageSize = 0
-	}
 	response, err := rt.executePage(runctx, request, state)
 	if err != nil {
 		cancel()
 		request.InternalLogical.InternalFinish(InternalExecutionErrorResult(err), err)
-		request.InternalLogical.releaseInput()
-		return nil, err
-	}
-	if unpaged && response.State.More() {
-		response.Owner.Release()
-		err = cqltype.TypeValidation("unpaged response", "server returned continuation")
-		cancel()
-		request.InternalLogical.InternalFinish(response.Result, err)
 		request.InternalLogical.releaseInput()
 		return nil, err
 	}

@@ -38,9 +38,11 @@ type Profile struct {
 	Speculation          SpeculationPolicy
 	Timeout, PageTimeout time.Duration
 	Prefetch             int
-	PageSize             int32
-	SerialConsistency    cql.Option[cql.Consistency]
-	Consistency          cql.Consistency
+	// PageSize is the rows per page; cql.Unpaged requests the whole result
+	// in one response.
+	PageSize          int32
+	SerialConsistency cql.Option[cql.Consistency]
+	Consistency       cql.Consistency
 }
 type ReconnectPolicy = implSettings.ReconnectPolicy
 type RequestEvent = implSettings.RequestEvent

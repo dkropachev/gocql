@@ -62,3 +62,10 @@ type Option[T any] = cqltype.Option[T]
 
 // Some returns an Option set to v.
 func Some[T any](v T) Option[T] { return cqltype.Some(v) }
+
+// Unpaged is the page size that requests a result without paging, as in
+// Options{PageSize: cql.Some(cql.Unpaged)} or Profile.PageSize. The request
+// carries no page size, so the server returns the whole result in one
+// response, within its own result size limits. Use it for results known to be
+// small; a large unpaged result costs server and client memory at once.
+const Unpaged = cqltype.Unpaged

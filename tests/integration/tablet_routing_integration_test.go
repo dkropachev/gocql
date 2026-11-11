@@ -41,7 +41,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table 
 	defer bound.Close()
 	observation := tabletObservation{stable: true}
 	for index, host := range s.Metadata().Hosts() {
-		page := codecTestMust(RunUnpaged(ctx, s, bound, bindOptions(s, gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: host.ID}})))
+		page := codecTestMust(RunPage(ctx, s, bound, gocql.StartPage, bindOptions(s, gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: host.ID}, PageSize: cql.Some(cql.Unpaged)})))
 		if page.Info().HostID != host.ID {
 			t.Fatal("authoritative read lost exact host pin", page.Info().HostID, host.ID)
 		}

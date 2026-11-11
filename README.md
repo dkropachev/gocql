@@ -77,8 +77,9 @@ number of queries can share one preparation. It resolves its options once and
 skips the one-shot calls' pool hand-off, which saves about 2 to 4 percent of
 client CPU at high concurrency, and it adds the executions whose handles
 outlive the call: `Run` returns `Rows`, iterated with `NextInto` and closed by
-the caller; `RunPage` resumes from a saved `PageState` for explicit paging, and
-`RunUnpaged` requests one unpaged response.
+the caller; and `RunPage` resumes from a saved `PageState` for explicit paging.
+The page size `cql.Unpaged` (`Options{PageSize: cql.Some(cql.Unpaged)}`)
+requests the whole result in one response.
 
 `session.UnpreparedExec`, `session.UnpreparedOne`, and `session.UnpreparedEach`
 handle occasional CQL text executions without leaving a query to close; prepare

@@ -10,8 +10,9 @@ Clone explicitly detaches a value. A retained page survives Session.Close and
 does not retain query input storage.
 
 For explicit paging use `query.RunPage(ctx, parameters, StartPage)` and
-carry the returned page state to the next call. `query.RunUnpaged` explicitly requests
-one unpaged response. Check iteration errors and close all delivered pages.
+carry the returned page state to the next call. The page size `cql.Unpaged`
+(`Options{PageSize: cql.Some(cql.Unpaged)}`) sends no page size, so the server
+returns the whole result in one response; keep it for small results. Check iteration errors and close all delivered pages.
 Cyclic/nonprogressing state and retained paging-history limits report errors.
 
 `page.State()` remains available after the page closes. A state distinguishes

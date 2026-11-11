@@ -54,15 +54,10 @@ func (q *Query[P, R]) Run(ctx context.Context, value P) (Rows[R], error) {
 
 // RunPage executes one page, resuming from state. StartPage begins the first
 // page. Page.State remains available after Close; close the page before reusing q.
+// With the page size cql.Unpaged the page is the whole result: the response is
+// bounded by the server and by the configured frame and decompression limits.
 func (q *Query[P, R]) RunPage(ctx context.Context, value P, state PageState) (*Page[R], error) {
 	page, err := q.internal().RunPage(ctx, value, model.PageState(state))
-	return (*Page[R])(page), err
-}
-
-// RunUnpaged requests one response without paging. The response is bounded by
-// the configured frame and decompression limits. Close its page when done.
-func (q *Query[P, R]) RunUnpaged(ctx context.Context, value P) (*Page[R], error) {
-	page, err := q.internal().RunUnpaged(ctx, value)
 	return (*Page[R])(page), err
 }
 

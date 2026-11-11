@@ -602,7 +602,6 @@ func (q *Query[P, R]) Each(context.Context, P, *R, func(*R) error) (Result, erro
 func (q *Query[P, R]) One(context.Context, P, *R) (bool, Result, error)
 func (q *Query[P, R]) Run(context.Context, P) (Rows[R], error)
 func (q *Query[P, R]) RunPage(context.Context, P, PageState) (*Page[R], error)
-func (q *Query[P, R]) RunUnpaged(context.Context, P) (*Page[R], error)
 func (q *Query[P, R]) Routing(P) (RoutingInfo, error)
 func (q *Query[P, R]) AddToBatch(*Batch, P) error
 func (q *Query[P, R]) Close()                       // stop at once
@@ -842,7 +841,8 @@ argument. Token is nil for start and complete; use More/Complete to distinguish
 them. A continuation with zero token bytes still has More()==true. Complete is
 output-only: passing it to RunPage returns ErrPagingComplete before
 admission/I/O. This continuation-only import API does not round-trip start or
-complete through Token. RunUnpaged rejects a continuation. Exec drains and
+complete through Token. The page size cql.Unpaged (math.MaxInt32) resolves to
+a request without a page size and rejects an explicit nonzero prefetch. Exec drains and
 closes all rows and fails if result columns exist; conditional writes use
 CASRows and consume every row, including multi-row conditional batches. CASRows
 handles an applied-only response and checked previous-value metadata; Previous

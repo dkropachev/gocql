@@ -94,11 +94,6 @@ func RunStream[B any, R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[B]
 	return (*gocql.RowStream[R])(result), err
 }
 
-func RunUnpaged[R any](a0 context.Context, a1 *gocql.Session, a2 *Bound[R], a3 gocql.CompiledOptions) (*gocql.Page[R], error) {
-	result, err := implSession.RunUnpaged[R](a0, (*implSession.Session)(a1).Core(), a2, implSession.CompiledOptions(a3))
-	return (*gocql.Page[R])(result), err
-}
-
 // preparedData crosses the public facade only for protocol/cache fixtures.
 func preparedData[P, R any](p *gocql.Prepared[P, R]) *implSession.PreparedStorage[P, R] {
 	return implSession.PreparedData((*implSession.Prepared[P, R])(p))

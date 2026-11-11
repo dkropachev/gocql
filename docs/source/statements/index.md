@@ -24,7 +24,7 @@ of callback invocations after early stopping.
 For manual cursor lifetimes, explicit paging, or a worker that runs one
 statement repeatedly and benefits from skipping the pool hand-off, create one query per worker
 with `prepared.Query(options)`; it has the same `Exec`, `One` and `Each` plus
-`Run`, `RunPage` and `RunUnpaged`.
+`Run` and `RunPage`.
 The `session.Unprepared*` calls run a statement without preparing it and take the
 parameter columns from `Statement.BindMarkers`. To decode into caller storage,
 use `session.PrepareStream` with a `cql.StreamStatement[P,R]` and call

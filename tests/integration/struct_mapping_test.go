@@ -405,7 +405,7 @@ func TestStructMapping(t *testing.T) {
 		}
 	})
 
-	// Query.Exec, Run, RunPage, RunUnpaged, Each, One and Routing,
+	// Query.Exec, Run, RunPage (paged and unpaged), Each, One and Routing,
 	// with paging across pages of two rows.
 	t.Run("Query", func(t *testing.T) {
 		ctx, f := newSMFixture(t)
@@ -489,14 +489,14 @@ func TestStructMapping(t *testing.T) {
 				t.Fatalf("RunPage: %d rows, want %d", n, len(want))
 			}
 		})
-		t.Run("RunUnpaged", func(t *testing.T) {
-			// Unpaged execution takes a query without a page size.
-			read, err := f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)).Query(gocql.Options{})
+		t.Run("Unpaged", func(t *testing.T) {
+			// The cql.Unpaged page size returns the whole result as one page.
+			read, err := f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)).Query(gocql.Options{PageSize: cql.Some(cql.Unpaged)})
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer read.Close()
-			page, err := read.RunUnpaged(ctx, 2)
+			page, err := read.RunPage(ctx, 2, gocql.StartPage)
 			if err != nil {
 				t.Fatal(err)
 			}

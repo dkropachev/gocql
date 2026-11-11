@@ -29,9 +29,11 @@ type Options struct {
 	Timeout, PageTimeout cql.Option[time.Duration]
 	Prefetch             cql.Option[int]
 	Timestamp            cql.Option[int64]
-	PageSize             cql.Option[int32]
-	NowInSeconds         cql.Option[int32]
-	ShardID              cql.Option[uint32]
+	// PageSize is the rows per page; cql.Unpaged requests the whole result
+	// in one response.
+	PageSize     cql.Option[int32]
+	NowInSeconds cql.Option[int32]
+	ShardID      cql.Option[uint32]
 	// SerialConsistency and NoSerialConsistency are mutually exclusive.
 	SerialConsistency   cql.Option[cql.Consistency]
 	Consistency         cql.Option[cql.Consistency]
