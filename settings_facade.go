@@ -6,10 +6,7 @@ package gocql
 import (
 	"time"
 
-	"log/slog"
-
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/internal/logging"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/retry"
@@ -60,15 +57,6 @@ type SimpleConvictionPolicy = implSettings.SimpleConvictionPolicy
 // SpeculationPolicy schedules additional attempts of eligible executions.
 type SpeculationPolicy interface {
 	Delay(attempt int, metrics routing.MetricsSnapshot) (time.Duration, bool)
-}
-
-// PrintfLogger is satisfied by *log.Logger and most printf-style loggers.
-type PrintfLogger = logging.Printfer
-
-// NewPrintfLogger adapts a printf-style logger for WithLogger. Each record at or above level
-// becomes one logfmt line passed to l.Printf.
-func NewPrintfLogger(l PrintfLogger, level slog.Leveler) *slog.Logger {
-	return slog.New(logging.NewPrintfHandler(l, level))
 }
 
 func internalProfile(p Profile) implSettings.Profile {

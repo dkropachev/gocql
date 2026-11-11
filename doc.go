@@ -78,6 +78,8 @@
 // Context is in attributes (host, shard, keyspace, err, ...), and every record
 // carries logger=gocql. Repeated Info-or-higher records with the same message
 // and host are collapsed to one per 10 seconds with a suppressed count, and a
-// panicking handler cannot break the driver. NewPrintfLogger adapts a
-// printf-style logger.
+// panicking handler cannot break the driver. To log through a *log.Logger l
+// at level lvl, use the standard library's text handler:
+//
+//	config.WithLogger(slog.New(slog.NewTextHandler(l.Writer(), &slog.HandlerOptions{Level: lvl})))
 package gocql

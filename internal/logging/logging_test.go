@@ -18,7 +18,6 @@ package logging
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -54,17 +53,6 @@ func (h panicHandler) Enabled(context.Context, slog.Level) bool {
 func (panicHandler) Handle(context.Context, slog.Record) error { panic("handle") }
 func (panicHandler) WithAttrs([]slog.Attr) slog.Handler        { panic("attrs") }
 func (panicHandler) WithGroup(string) slog.Handler             { panic("group") }
-
-type printfRecorder struct {
-	lines []string
-	mu    sync.Mutex
-}
-
-func (p *printfRecorder) Printf(format string, v ...any) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.lines = append(p.lines, fmt.Sprintf(format, v...))
-}
 
 func TestLogging(t *testing.T) {
 	t.Parallel()
@@ -177,21 +165,5 @@ func TestLogging(t *testing.T) {
 				t.Fatalf("tracked keys after prune = %d, want <= %d", n, maxRateLimitKeys)
 			}
 		})
-	})
-
-	t.Run("PrintfHandler", func(t *testing.T) {
-		t.Parallel()
-		p := &printfRecorder{}
-		l := slog.New(NewPrintfHandler(p, slog.LevelInfo))
-		l.Debug("hidden")
-		l.Warn("shown", KeyShard, 3)
-		if len(p.lines) != 1 {
-			t.Fatalf("lines = %q, want one", p.lines)
-		}
-		line := p.lines[0]
-		if strings.Contains(line, "time=") || strings.HasSuffix(line, "\n") ||
-			!strings.Contains(line, `level=WARN msg=shown shard=3`) {
-			t.Fatalf("line = %q", line)
-		}
 	})
 }

@@ -545,9 +545,13 @@ func (b *ConfigBuilder) WithClientID(id string) *ConfigBuilder {
 }
 
 // WithLogger receives the driver's structured log records. Default slog.Default().
-// Use slog.New(slog.DiscardHandler) to silence the driver, a Debug-level handler for
-// per-connection detail, or NewPrintfLogger for a printf-style logger. Records at Info and
-// above are rate-limited per message and host; handler panics are contained.
+// Use slog.New(slog.DiscardHandler) to silence the driver, or a Debug-level handler for
+// per-connection detail. To log through a *log.Logger l at level lvl, pass
+//
+//	slog.New(slog.NewTextHandler(l.Writer(), &slog.HandlerOptions{Level: lvl}))
+//
+// Records at Info and above are rate-limited per message and host; handler
+// panics are contained.
 func (b *ConfigBuilder) WithLogger(logger *slog.Logger) *ConfigBuilder {
 	b.settings.Logger = logger
 	return b
