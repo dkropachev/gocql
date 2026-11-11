@@ -693,7 +693,7 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			defer func() { _ = q.Close(ctx) }()
+			defer q.Close()
 			_, err = q.Exec(ctx, cql.EmptyParams{})
 			return err
 		}
@@ -718,7 +718,7 @@ func TestQuery(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			defer func() { _ = query.Close(verify) }()
+			defer query.Close()
 			rows, err := query.Run(verify, namespace)
 			if err != nil {
 				t.Error(err)
@@ -765,7 +765,7 @@ func TestQuery(t *testing.T) {
 		}
 		write := codecTestMust(session.Prepare(ctx, cql.Statement[record, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO " + table + "(k,c,p)VALUES(?,?,?)", Params: cql.Params(cql.Param("k", cql.Int32Codec, func(r record) int32 { return r.K }), cql.Param("c", cql.Int32Codec, func(r record) int32 { return r.C }), cql.Param("p", cql.BytesEncoder, func(r record) []byte { return r.P })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
 		w := codecTestMust(write.Query(gocql.Options{}))
-		defer func() { _ = w.Close(ctx) }()
+		defer w.Close()
 		payload := bytes.Repeat([]byte{42}, 4096)
 		for i := int32(0); i < 6; i++ {
 			if _, err := w.Exec(ctx, record{K: 1, C: i, P: payload}); err != nil {
@@ -775,7 +775,7 @@ func TestQuery(t *testing.T) {
 		decoder := cql.RowInto(func(*record) {}, cql.Column("c", cql.Int32Codec, func(r *record) *int32 { return &r.C }), cql.Column("p", cql.OwnedBlobCodec, func(r *record) *[]byte { return &r.P }))
 		read := codecTestMust(session.Prepare(ctx, cql.Statement[int32, record]{Kind: cql.OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32Codec), Rows: decoder}, gocql.PrepareOptions{}))
 		q := codecTestMust(read.Query(gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
-		defer func() { _ = q.Close(ctx) }()
+		defer q.Close()
 		var previous gocql.Rows[record]
 		for range 2 {
 			rows := codecTestMust(q.Run(ctx, int32(1)))
@@ -832,7 +832,7 @@ func TestQuery(t *testing.T) {
 		}
 		t.Log("query reuse, stale cursors, owned destinations and explicit paging passed")
 		unpaged := codecTestMust(read.Query(gocql.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}}))
-		defer func() { _ = unpaged.Close(ctx) }()
+		defer unpaged.Close()
 		page := codecTestMust(unpaged.RunUnpaged(ctx, int32(1)))
 		n := 0
 		var unpagedRow record
@@ -850,7 +850,8 @@ func TestQuery(t *testing.T) {
 				if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {
 					t.Fatal(err)
 				}
-				if err := streamQuery.Close(ctx); err != nil {
+				streamQuery.Close()
+				if err := streamQuery.Wait(ctx); err != nil {
 					t.Fatal(err)
 				}
 				continue
@@ -869,7 +870,8 @@ func TestQuery(t *testing.T) {
 			if err := cursor.Close(); err != nil {
 				t.Fatal(err)
 			}
-			if err := streamQuery.Close(ctx); err != nil {
+			streamQuery.Close()
+			if err := streamQuery.Wait(ctx); err != nil {
 				t.Fatal(err)
 			}
 			if count != 6 {

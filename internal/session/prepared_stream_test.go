@@ -31,7 +31,7 @@ func TestPreparedStream(t *testing.T) {
 		}
 		statement.BindMarkers = cqltype.NewColumns(cqltype.ColumnSpec{Name: "k", Type: cqltype.IntType})
 		q := codecTestMust(session.UnpreparedStreamQuery(statement, StreamOptions{}))
-		defer func() { _ = q.Close(context.Background()) }()
+		defer q.Close()
 		served := make(chan struct{})
 		go func() {
 			defer close(served)
@@ -91,7 +91,7 @@ func TestPreparedStream(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				defer q.Close(context.Background())
+				defer q.Close()
 				rows, err := q.Run(ctx, codec.EmptyRecord{})
 				if err != nil {
 					t.Fatal(err)
@@ -130,7 +130,7 @@ func TestPreparedStream(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer q.Close(context.Background())
+		defer q.Close()
 		for range 2 {
 			go func() {
 				r := <-requests
@@ -192,7 +192,7 @@ func TestPreparedStream(t *testing.T) {
 					failures <- err
 					return
 				}
-				defer q.Close(context.Background())
+				defer q.Close()
 				dst := make([]byte, 0, len(loopbackValue))
 				for range 3 {
 					rows, err := q.Run(ctx, int32(worker))
@@ -243,7 +243,7 @@ func TestPreparedStream(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer q.Close(context.Background())
+		defer q.Close()
 		// The response supplies a column with another name. The one-column
 		// decoder accepts its type, but must compile the changed metadata.
 		body := runtimeRowsBody(nil, "changed")
@@ -280,7 +280,8 @@ func TestPreparedStream(t *testing.T) {
 		if string(dst) != "untouched" || decoder.compiles.Load() != 3 {
 			t.Fatal("incompatible metadata bypassed validation or touched output")
 		}
-		if err := q.Close(ctx); err != nil {
+		q.Close()
+		if err := q.Wait(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if q.query.state.runtime.inflight.Load() != 0 {

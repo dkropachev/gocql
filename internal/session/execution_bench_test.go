@@ -120,10 +120,10 @@ func BenchmarkExecution(b *testing.B) {
 							var rq *Query[int32, []byte]
 							if variant == "query" && op == "exec" {
 								wq = codecTestMust(wp.Query(options.Values()))
-								b.Cleanup(func() { _ = wq.Close(context.Background()) })
+								b.Cleanup(wq.Close)
 							} else if variant == "query" {
 								rq = codecTestMust(rp.Query(options.Values()))
-								b.Cleanup(func() { _ = rq.Close(context.Background()) })
+								b.Cleanup(rq.Close)
 							}
 							switch variant + "/" + op {
 							case "bind/exec", "bindborrowed/exec":

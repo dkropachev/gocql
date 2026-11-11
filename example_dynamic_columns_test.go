@@ -49,7 +49,7 @@ func Example_dynamicColumns() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer func() { _ = b.Close(ctx) }()
+	defer b.Close()
 	rows, err := b.Run(ctx, cql.EmptyParams{})
 	if err != nil {
 		log.Fatal(err)

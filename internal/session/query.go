@@ -495,16 +495,27 @@ func (s *queryState) wait(ctx context.Context) error {
 	}
 }
 
-// Close stops the query permanently and waits until its last execution has
-// drained: accepted transport writes, attempts in flight and their observer
-// callbacks. Rows, a Page or a batch page of the query that is still open is
-// stopped and reports ErrClosed. If ctx ends first, Close returns ctx.Err();
-// the query is closed regardless, and Session.Close waits for its drain.
-func (q *Query[P, R]) Close(ctx context.Context) error {
+// Close stops the query permanently and returns at once. A running call is
+// cancelled and returns an error matching context.Canceled; Rows, a Page or a batch page of the query
+// that is still open is stopped and reports ErrClosed; later calls return
+// ErrClosed. The last execution's accepted writes, attempts and observer
+// callbacks drain in the background: Wait joins them, and Session.Close joins
+// any that remain. Close may be called from any goroutine, and again.
+func (q *Query[P, R]) Close() {
+	if q == nil {
+		return
+	}
+	q.state.close()
+}
+
+// Wait waits until the query's last execution has drained: accepted
+// transport writes, attempts in flight and their observer callbacks. It
+// returns ctx.Err() if ctx ends first. After Close, a nil result means
+// nothing of the query remains in flight.
+func (q *Query[P, R]) Wait(ctx context.Context) error {
 	if q == nil {
 		return cqltype.TypeValidation("query", "nil query")
 	}
-	q.state.close()
 	return q.state.wait(ctx)
 }
 

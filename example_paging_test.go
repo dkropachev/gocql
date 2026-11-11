@@ -49,7 +49,7 @@ func Example_paging() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer func() { _ = b.Close(ctx) }()
+	defer b.Close()
 	var state gocql.PageState
 	var id int32
 	for {

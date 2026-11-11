@@ -30,7 +30,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = insert.Close(ctx) }()
+		defer insert.Close()
 		var batch gocql.Batch
 		var want []smRecord
 		for i := range 3 {
@@ -73,7 +73,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = add.Close(ctx) }()
+		defer add.Close()
 		if err := truncateTable(t, f.session, counters); err != nil {
 			t.Fatal(err)
 		}
@@ -97,7 +97,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = read.Close(ctx) }()
+		defer read.Close()
 		var h hit
 		if ok, _, err := read.One(ctx, 1, &h); err != nil || !ok || h != (hit{K: 1, Hits: 5}) {
 			t.Fatal(h, ok, err)
@@ -121,7 +121,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = insert.Close(ctx) }()
+		defer insert.Close()
 		r := smRecordAt(7, 0)
 		var result cql.CASResult[smRecord]
 		if ok, _, err := insert.One(ctx, r, &result); err != nil || !ok || !result.Applied {
@@ -154,7 +154,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = update.Close(ctx) }()
+		defer update.Close()
 		var batch gocql.Batch
 		if err := update.AddToBatch(&batch, guard{Bucket: 7, ID: r.ID, Name: "batched", Big: r.Big}); err != nil {
 			t.Fatal(err)
@@ -209,7 +209,8 @@ func TestStructMapping(t *testing.T) {
 			if _, err := insert.Exec(ctx, event(i)); err != nil {
 				t.Fatal(err)
 			}
-			if err := insert.Close(ctx); err != nil {
+			insert.Close()
+			if err := insert.Wait(ctx); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -235,7 +236,8 @@ func TestStructMapping(t *testing.T) {
 			}); err != nil || n != 2 {
 				t.Fatal(n, err)
 			}
-			if err := read.Close(ctx); err != nil {
+			read.Close()
+			if err := read.Wait(ctx); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -268,7 +270,8 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(n, err)
 			}
 			stream.Close()
-			if err := q.Close(ctx); err != nil {
+			q.Close()
+			if err := q.Wait(ctx); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -314,7 +317,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = insert.Close(ctx) }()
+		defer insert.Close()
 		huge, _ := new(big.Int).SetString("-123456789012345678901234567890", 10)
 		in := numeric{K: 1, V: cql.VarintFromBigInt(huge), D: cql.Decimal{Unscaled: cql.VarintFromBigInt(big.NewInt(314)), Scale: 2}}
 		if _, err := insert.Exec(ctx, in); err != nil {
@@ -330,7 +333,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = read.Close(ctx) }()
+		defer read.Close()
 		// Varint and Decimal borrow the response page: read them while the row is
 		// current, or Clone the row to keep it.
 		rows, err := read.Run(ctx, 1)
@@ -410,7 +413,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = insert.Close(ctx) }()
+		defer insert.Close()
 		var want []smRecord
 		for i := range 5 {
 			r := smRecordAt(2, i)
@@ -426,7 +429,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = read.Close(ctx) }()
+		defer read.Close()
 
 		t.Run("Run", func(t *testing.T) {
 			rows, err := read.Run(ctx, 2)
@@ -492,7 +495,7 @@ func TestStructMapping(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer func() { _ = read.Close(ctx) }()
+			defer read.Close()
 			page, err := read.RunUnpaged(ctx, 2)
 			if err != nil {
 				t.Fatal(err)
@@ -551,7 +554,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = read.Close(ctx) }()
+		defer read.Close()
 		rows, err := read.Run(ctx, 5)
 		if err != nil {
 			t.Fatal(err)
@@ -624,7 +627,8 @@ func TestStructMapping(t *testing.T) {
 				if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {
 					t.Fatal("frame-compressed incremental stream not rejected:", err)
 				}
-				if err := q.Close(ctx); err != nil {
+				q.Close()
+				if err := q.Wait(ctx); err != nil {
 					t.Fatal(err)
 				}
 				continue
@@ -633,7 +637,8 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 			check(t, stream)
-			if err := q.Close(ctx); err != nil {
+			q.Close()
+			if err := q.Wait(ctx); err != nil {
 				t.Fatal(err)
 			}
 			u, err := f.session.UnpreparedStreamQuery(cql.StreamStatement[int32, smStream]{
@@ -648,7 +653,8 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 			check(t, stream)
-			if err := u.Close(ctx); err != nil {
+			u.Close()
+			if err := u.Wait(ctx); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -674,7 +680,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = update.Close(ctx) }()
+		defer update.Close()
 		edit := smRecord{Bucket: r.Bucket, ID: r.ID, Name: "edited", Tags: []string{"z"}, Big: 12345}
 		if _, err := update.Exec(ctx, edit); err != nil {
 			t.Fatal(err)
@@ -699,7 +705,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = read.Close(ctx) }()
+		defer read.Close()
 		got := partial{Big: 7, Note: "kept"}
 		if ok, _, err := read.One(ctx, smKey{Bucket: r.Bucket, ID: r.ID}, &got); err != nil || !ok {
 			t.Fatal(ok, err)
@@ -737,7 +743,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = insert.Close(ctx) }()
+		defer insert.Close()
 		r := smRecordAt(8, 0)
 		if _, err := insert.Exec(ctx, r); err != nil {
 			t.Fatal(err)
@@ -756,7 +762,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer func() { _ = read.Close(ctx) }()
+		defer read.Close()
 		var got smRecord
 		if ok, _, err := read.One(ctx, smKey{Bucket: 8, ID: r.ID}, &got); err != nil || !ok {
 			t.Fatal(ok, err)

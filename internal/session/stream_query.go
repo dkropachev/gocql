@@ -105,14 +105,22 @@ func (q *StreamQuery[P, R]) Run(ctx context.Context, value P) (*RowStream[R], er
 	return q.query.state.runtime.runStream(ctx, &q.query.bound, q.decoder, q.query.options, q.options.Limits, q.options.Incremental, &q.plans)
 }
 
-// Close stops the query permanently and waits until its last execution has
-// drained, as Query.Close does. A RowStream that is still open is stopped and
-// reports ErrClosed.
-func (q *StreamQuery[P, R]) Close(ctx context.Context) error {
+// Close stops the query permanently and returns at once, as Query.Close
+// does. A RowStream that is still open is stopped and reports ErrClosed.
+func (q *StreamQuery[P, R]) Close() {
+	if q == nil {
+		return
+	}
+	q.query.Close()
+}
+
+// Wait waits until the query's last execution has drained, as Query.Wait
+// does.
+func (q *StreamQuery[P, R]) Wait(ctx context.Context) error {
 	if q == nil {
 		return cqltype.TypeValidation("query", "nil query")
 	}
-	return q.query.Close(ctx)
+	return q.query.Wait(ctx)
 }
 
 func (s *RowStream[R]) loadBufferedPage() error {

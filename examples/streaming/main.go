@@ -150,7 +150,7 @@ func run() (resultErr error) {
 		if err != nil {
 			return err
 		}
-		defer func() { _ = b.Close(operation) }()
+		defer b.Close()
 		_, err = b.Exec(operation, cql.EmptyParams{})
 		return err
 	}
@@ -200,7 +200,7 @@ func run() (resultErr error) {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = writeQuery.Close(ctx) }()
+	defer writeQuery.Close()
 	payload := bytes.Repeat([]byte("typed-stream-"), 16384)
 	for i := int32(0); i < 3; i++ {
 		if _, err := writeQuery.Exec(ctx, record{ID: i, Payload: payload, Pieces: [][]byte{[]byte("nested"), []byte("storage")}}); err != nil {
@@ -229,7 +229,7 @@ func run() (resultErr error) {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = query.Close(ctx) }()
+	defer query.Close()
 	stream, err := query.Run(ctx, cql.EmptyParams{})
 	if *incremental && *protocol < 5 && frameCompression != gocql.NoCompression {
 		if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {
@@ -270,7 +270,8 @@ func run() (resultErr error) {
 	if err := stream.Close(); err != nil {
 		return err
 	}
-	if err := query.Close(ctx); err != nil {
+	query.Close()
+	if err := query.Wait(ctx); err != nil {
 		return err
 	}
 	if len(seen) != 3 || !bytes.Equal(row.Payload, payload) {

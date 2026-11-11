@@ -34,7 +34,7 @@ func TestQueryDrainAdmission(t *testing.T) {
 			}
 		}}
 		query := codecTestMust(unpreparedQuery(s, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, Options{Observer: observer}))
-		t.Cleanup(func() { _ = query.Close(context.Background()) })
+		t.Cleanup(query.Close)
 		served := make(chan struct{})
 		go func() {
 			defer close(served)
@@ -104,13 +104,15 @@ func TestQueryDrainAdmission(t *testing.T) {
 		<-done
 		short, stopShort := context.WithTimeout(context.Background(), 10*time.Millisecond)
 		defer stopShort()
-		if err := query.Close(short); !errors.Is(err, context.DeadlineExceeded) {
+		query.Close()
+		if err := query.Wait(short); !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatal("Close returned before the drain:", err)
 		}
 		close(release)
 		joined, finish := context.WithTimeout(context.Background(), 5*time.Second)
 		defer finish()
-		if err := query.Close(joined); err != nil {
+		query.Close()
+		if err := query.Wait(joined); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := query.Exec(joined, codec.EmptyRecord{}); !errors.Is(err, runtimeerrors.ErrClosed) {

@@ -79,11 +79,19 @@ func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
 	return q.internal().AddToBatch((*implSession.Batch)(batch), value)
 }
 
-// Close permanently stops the query and any active cursor, then waits for
-// accepted writes and callbacks to drain. If ctx expires, cleanup continues
-// under the session and Session.Close joins it. Use a separate bounded cleanup
-// context when a cancelled request context cannot wait for the drain.
-func (q *Query[P, R]) Close(ctx context.Context) error { return q.internal().Close(ctx) }
+// Close stops the query permanently and returns at once. It may be called
+// from any goroutine: a call running at that moment is cancelled and returns
+// an error matching context.Canceled, with cqlerr.ExecutionStatusOf reporting
+// whether the request may have reached the server; open Rows or a Page report
+// cqlerr.ErrClosed, and later calls return cqlerr.ErrClosed. Accepted writes and observer callbacks drain
+// in the background; Wait joins them and Session.Close joins any that remain.
+func (q *Query[P, R]) Close() { q.internal().Close() }
+
+// Wait waits until the query's last execution has drained: accepted writes,
+// attempts in flight and observer callbacks. It returns ctx.Err() if ctx ends
+// first. Wait after Close when code that follows must not race those
+// callbacks, for example before tearing down state an Observer uses.
+func (q *Query[P, R]) Wait(ctx context.Context) error { return q.internal().Wait(ctx) }
 
 // StreamQuery owns reusable state for streaming into seeded caller storage.
 // Close it when done and close each Run cursor before starting another run.
@@ -99,8 +107,12 @@ func (q *StreamQuery[P, R]) Run(ctx context.Context, value P) (*RowStream[R], er
 	return (*RowStream[R])(stream), err
 }
 
-// Close stops admission, cancels any active cursor and waits for drain, as
-// Query.Close does.
-func (q *StreamQuery[P, R]) Close(ctx context.Context) error {
-	return (*implSession.StreamQuery[P, R])(q).Close(ctx)
+// Close stops the query permanently and returns at once, as Query.Close
+// does. An open RowStream reports cqlerr.ErrClosed.
+func (q *StreamQuery[P, R]) Close() { (*implSession.StreamQuery[P, R])(q).Close() }
+
+// Wait waits until the query's last execution has drained, as Query.Wait
+// does.
+func (q *StreamQuery[P, R]) Wait(ctx context.Context) error {
+	return (*implSession.StreamQuery[P, R])(q).Wait(ctx)
 }

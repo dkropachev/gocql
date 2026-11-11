@@ -96,7 +96,7 @@ func benchExec(ctx context.Context, s *gocql.Session, text string) error {
 	if e != nil {
 		return e
 	}
-	defer func() { _ = b.Close(ctx) }()
+	defer b.Close()
 	_, e = b.Exec(ctx, cql.EmptyParams{})
 	return e
 }
@@ -122,7 +122,7 @@ func cleanupNamespace(s *gocql.Session) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = b.Close(ctx) }()
+	defer b.Close()
 	rows, err := b.Run(ctx, corpus.Namespace)
 	if err != nil {
 		return err
@@ -216,7 +216,7 @@ func benchReadContext(ctx context.Context, s *gocql.Session, id int32) error {
 	if e != nil {
 		return e
 	}
-	defer func() { _ = b.Close(ctx) }()
+	defer b.Close()
 	rows, e := b.Run(ctx, id)
 	if e != nil {
 		return e
@@ -256,7 +256,7 @@ func benchWriteContext(ctx context.Context, s *gocql.Session, id int32) error {
 	if e != nil {
 		return e
 	}
-	defer func() { _ = b.Close(ctx) }()
+	defer b.Close()
 	_, e = b.Exec(ctx, benchInsert{id, id % 5, fmt.Sprintf("Name_%d", id)})
 	return e
 }

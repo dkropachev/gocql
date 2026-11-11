@@ -44,7 +44,7 @@ func batchTestQuery(t testing.TB, s *implCluster.Core) *Query[[]byte, codec.Empt
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = q.Close(context.Background()) })
+	t.Cleanup(q.Close)
 	return q
 }
 
@@ -179,7 +179,7 @@ func TestBatch(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer func() { _ = q.Close(context.Background()) }()
+			defer q.Close()
 			var batch Batch
 			if err := q.AddToBatch(&batch, []byte("kept")); err != nil {
 				t.Fatal(err)
@@ -302,7 +302,7 @@ func TestBatch(t *testing.T) {
 				PreparedData(handle).rows = codec.EmptyRowDecoder
 				PreparedData(handle).plans = &InternalResultPlanCache[codec.EmptyRecord]{}
 				q := codecTestMust(handle.Query(Options{}))
-				t.Cleanup(func() { _ = q.Close(context.Background()) })
+				t.Cleanup(q.Close)
 				return q
 			}
 			first, second := query("id1"), query("id2")
@@ -531,7 +531,8 @@ func TestBatch(t *testing.T) {
 		q.state.owner.InternalRelease()
 		closeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-		if err := q.Close(closeCtx); err != nil {
+		q.Close()
+		if err := q.Wait(closeCtx); err != nil {
 			t.Fatal(err)
 		}
 		if err := q.AddToBatch(&batch, []byte("v")); !errors.Is(err, implRuntimeerrors.ErrClosed) {

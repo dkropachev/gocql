@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
@@ -77,8 +76,8 @@ func ExampleParamsOf() {
 
 // ExamplePrepared_Query shows a worker that runs one statement many times. Its
 // Query keeps parameter buffers and resolved options across executions; the
-// worker owns it and closes it with its own bounded context, so a cancelled
-// request context does not skip the wait for pending writes.
+// worker owns it and closes it when done. Close returns at once; pending writes
+// drain in the background, and Session.Close joins them.
 func ExamplePrepared_Query() {
 	// Assumes example.tweet(timeline text, id uuid, text text, PRIMARY KEY(timeline,id)).
 	ctx := context.Background()
@@ -113,13 +112,7 @@ func ExamplePrepared_Query() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer func() {
-		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		if err := worker.Close(cctx); err != nil {
-			log.Print(err)
-		}
-	}()
+	defer worker.Close()
 	for tweet := range edits {
 		if _, err := worker.Exec(ctx, tweet); err != nil {
 			log.Print(err)

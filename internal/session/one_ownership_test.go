@@ -21,7 +21,7 @@ func TestOneOwnsBorrowedResult(t *testing.T) {
 			statement := binding.Statement[int32, cqltype.Bytes]{CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: codec.OneParam(codec.Int32), Rows: codec.OneColumn(codec.BlobCodec), BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "k", Type: cqltype.IntType})}
 			p := codecTestMust(Prepare(context.Background(), s, statement, PrepareOptions{}))
 			q := codecTestMust(p.Query(Options{}))
-			defer q.Close(context.Background())
+			defer q.Close()
 			read := func(dst *cqltype.Bytes) (bool, model.Result, error) {
 				switch mode {
 				case "prepared":

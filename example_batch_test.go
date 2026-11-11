@@ -90,11 +90,7 @@ func ExampleSession_ExecBatch() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer func() {
-		if err := selectAll.Close(ctx); err != nil {
-			log.Print(err)
-		}
-	}()
+	defer selectAll.Close()
 	var row item
 	_, err = selectAll.Each(ctx, cql.EmptyParams{}, &row, func(v *item) error {
 		fmt.Println(v.PK, v.CK, v.Description)

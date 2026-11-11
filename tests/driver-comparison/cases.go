@@ -190,7 +190,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			if err != nil {
 				return err
 			}
-			defer func() { _ = q.Close(ctx) }()
+			defer q.Close()
 			found, _, err := q.One(ctx, k, &c.out)
 			return c.found(found, err)
 		}, nil
@@ -248,7 +248,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			if err != nil {
 				return err
 			}
-			defer func() { _ = q.Close(ctx) }()
+			defer q.Close()
 			_, err = q.Exec(ctx, row{K: k, P: payload(false, k, 0)})
 			return err
 		}, nil

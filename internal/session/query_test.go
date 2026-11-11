@@ -49,7 +49,7 @@ func testOwnedQuery(t testing.TB) *Query[[]byte, codec.EmptyRecord] {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = q.Close(context.Background()) })
+	t.Cleanup(q.Close)
 	return q
 }
 
@@ -321,7 +321,8 @@ func TestQuery(t *testing.T) {
 				t.Fatal(err)
 			}
 			q.state.owner.InternalRelease()
-			if err := q.Close(context.Background()); err != nil {
+			q.Close()
+			if err := q.Wait(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 			if err := q.capture(context.Background(), input); !errors.Is(err, runtimeerrors.ErrClosed) {
@@ -378,11 +379,13 @@ func TestQuery(t *testing.T) {
 			// Close stops the query at once but waits for the admitted capture.
 			short, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 			defer cancel()
-			if err := q.Close(short); !errors.Is(err, context.DeadlineExceeded) {
+			q.Close()
+			if err := q.Wait(short); !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatal(err)
 			}
 			q.state.owner.InternalRelease()
-			if err := q.Close(context.Background()); err != nil {
+			q.Close()
+			if err := q.Wait(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -396,7 +399,8 @@ func TestQuery(t *testing.T) {
 			q.state.owner.InternalRelease()
 			short, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 			defer cancel()
-			if err := q.Close(short); !errors.Is(err, context.DeadlineExceeded) {
+			q.Close()
+			if err := q.Wait(short); !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatal("Close returned before the accepted write drained", err)
 			}
 			q.state.runtime.InternalMu.Lock()
@@ -432,11 +436,13 @@ func TestQuery(t *testing.T) {
 			q.state.owner.InternalRelease()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 			defer cancel()
-			if err := q.Close(ctx); !errors.Is(err, context.DeadlineExceeded) {
+			q.Close()
+			if err := q.Wait(ctx); !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatalf("Close with a held write = %v, want deadline exceeded", err)
 			}
 			writer.Release()
-			if err := q.Close(context.Background()); err != nil {
+			q.Close()
+			if err := q.Wait(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := q.Exec(context.Background(), []byte("value")); err == nil {
@@ -542,7 +548,7 @@ func TestQuery(t *testing.T) {
 			profile := settings.InternalDefaultProfile()
 			profile.Retry = eachRetryAfterDelay{}
 			q := codecTestMust(unpreparedQuery(s, statement, Options{Profile: new(profile), Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Minute}}))
-			t.Cleanup(func() { _ = q.Close(context.Background()) })
+			t.Cleanup(q.Close)
 			ctx, cancel := context.WithCancel(context.Background())
 			go func() {
 				_, stream, _, err := readRequest(peers[0])
@@ -569,7 +575,7 @@ func TestQuery(t *testing.T) {
 			s, _, peers := runtimeTestSession(t, 1)
 			statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.OwnedBlobCodec, func(dst *[]byte) *[]byte { return dst }))}
 			q := codecTestMust(unpreparedQuery(s, statement, Options{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Second}}))
-			t.Cleanup(func() { _ = q.Close(context.Background()) })
+			t.Cleanup(q.Close)
 			ctx, cancel := context.WithCancel(context.Background())
 			go func() {
 				if _, _, _, err := readRequest(peers[0]); err != nil {
@@ -664,7 +670,7 @@ func TestQuery(t *testing.T) {
 			PreparedData(handle).rows = codec.OneColumn(codec.BlobCodec)
 			PreparedData(handle).plans = &InternalResultPlanCache[cqltype.Bytes]{}
 			q := codecTestMust(handle.Query(Options{}))
-			defer func() { _ = q.Close(context.Background()) }()
+			defer q.Close()
 			serverDone := make(chan error, 1)
 			go func() {
 				for step := 0; step < 4; step++ {
@@ -715,7 +721,7 @@ func TestQuery(t *testing.T) {
 			entered, release := make(chan struct{}), make(chan struct{})
 			observer := &execVoidObserver{onAttempt: func(routing.AttemptEvent) { close(entered); <-release }}
 			query := codecTestMust(unpreparedQuery(s, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, Options{Observer: observer}))
-			defer func() { _ = query.Close(context.Background()) }()
+			defer query.Close()
 			served := make(chan struct{})
 			go func() {
 				defer close(served)
@@ -763,7 +769,7 @@ func TestQuery(t *testing.T) {
 			conns[0].InternalW = &transport.InternalDeadlineContextWriter{InternalW: &acceptedWriter{Conn: conns[0].InternalR.(*transport.InternalConnReader).InternalConn, entered: entered}, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
 			typ := cqltype.BlobType
 			q := codecTestMust(unpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(value)VALUES(?)", Params: codec.OneParam(codec.BytesEncoder), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: typ})}, Options{}))
-			defer func() { _ = q.Close(context.Background()) }()
+			defer q.Close()
 			input := bytes.Repeat([]byte{31}, 128<<10)
 			ctx, cancel := context.WithCancel(context.Background())
 			done := make(chan error, 1)
@@ -850,7 +856,8 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := q.Close(context.Background()); err != nil {
+			q.Close()
+			if err := q.Wait(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := unpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)"}, Options{}); err == nil {
@@ -991,7 +998,7 @@ func TestQuery(t *testing.T) {
 		t.Run("HandleGoesStaleOnNextExecution", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			q := codecTestMust(unpreparedQuery(s, binding.Statement[codec.EmptyRecord, cqltype.Bytes]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.OneColumn(codec.BlobCodec)}, Options{}))
-			defer func() { _ = q.Close(context.Background()) }()
+			defer q.Close()
 			served := make(chan struct{})
 			go func() {
 				defer close(served)
@@ -1054,7 +1061,7 @@ func TestQuery(t *testing.T) {
 			type output struct{ Value []byte }
 			decoder := codec.RowInto(func(*output) {}, codec.Column("value", codec.OwnedBlobCodec, func(v *output) *[]byte { return &v.Value }))
 			q := codecTestMust(unpreparedQuery(s, binding.Statement[codec.EmptyRecord, output]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: decoder}, Options{}))
-			defer func() { _ = q.Close(context.Background()) }()
+			defer q.Close()
 			served := make(chan struct{})
 			go func() {
 				defer close(served)
@@ -1090,7 +1097,7 @@ func TestQuery(t *testing.T) {
 				t.Run(mode.name, func(t *testing.T) {
 					s, c, peer := fixtureStreamSession(t, mode)
 					query := codecTestMust(unpreparedStreamQuery(s, StreamStatement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.StreamOneColumn(codec.StreamBlob)}, StreamOptions{}))
-					defer func() { _ = query.Close(context.Background()) }()
+					defer query.Close()
 					served := make(chan struct{})
 					go func() {
 						defer close(served)
@@ -1131,8 +1138,8 @@ func TestQuery(t *testing.T) {
 			statement := StreamStatement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.StreamOneColumn(codec.StreamBlob)}
 			q := codecTestMust(unpreparedStreamQuery(s, statement, StreamOptions{}))
 			other := codecTestMust(unpreparedStreamQuery(s, statement, StreamOptions{}))
-			defer func() { _ = q.Close(context.Background()) }()
-			defer func() { _ = other.Close(context.Background()) }()
+			defer q.Close()
+			defer other.Close()
 			served := make(chan struct{})
 			go func() {
 				defer close(served)
@@ -1197,7 +1204,8 @@ func TestQuery(t *testing.T) {
 			if _, err := q.Exec(context.Background(), codec.EmptyRecord{}); err == nil {
 				t.Fatal("zero query executed")
 			}
-			if err := q.Close(context.Background()); err == nil {
+			q.Close()
+			if err := q.Wait(context.Background()); err == nil {
 				t.Fatal("zero query close succeeded")
 			}
 		})

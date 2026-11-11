@@ -93,7 +93,7 @@ func (a *v2Adapter) Exec(ctx context.Context, q string) error {
 	if e != nil {
 		return e
 	}
-	defer func() { _ = b.Close(ctx) }()
+	defer b.Close()
 	_, e = b.Exec(ctx, cql.EmptyParams{})
 	return e
 }
@@ -107,7 +107,7 @@ func (a *v2Adapter) Evidence() any {
 				if err == nil {
 					routing = append(routing, info)
 				}
-				_ = b.Close(context.Background())
+				b.Close()
 			}
 		}
 	}
@@ -140,7 +140,7 @@ func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[r
 			return nil, nil, e
 		}
 		routing, e := q.Routing(int32(0))
-		_ = q.Close(ctx)
+		q.Close()
 		if e != nil {
 			return nil, nil, e
 		}
@@ -174,13 +174,13 @@ func (a *v2Adapter) Worker(paged, stream bool) (worker, error) {
 	}
 	writeQuery, e := write.Query(a.metadata)
 	if e != nil {
-		_ = readQuery.Close(context.Background())
+		readQuery.Close()
 		return nil, e
 	}
 	streamQuery, e := read.StreamQuery(streamDecoder, g.StreamOptions{Incremental: *incremental})
 	if e != nil {
-		_ = readQuery.Close(context.Background())
-		_ = writeQuery.Close(context.Background())
+		readQuery.Close()
+		writeQuery.Close()
 		return nil, e
 	}
 	return &v2Worker{a: a, read: readQuery, write: writeQuery, streamQuery: streamQuery, stream: stream, out: row{P: make([]byte, 0, size)}}, nil
