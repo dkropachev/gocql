@@ -81,7 +81,7 @@ func (c *memoryConn) SetReadDeadline(time.Time) error  { return nil }
 func (c *memoryConn) SetWriteDeadline(time.Time) error { return nil }
 func memoryReservation(version byte, compressor protocol.Compressor, source net.Conn) *InternalExclusiveConn {
 	ctx, cancel := context.WithCancel(context.Background())
-	c := &Conn{InternalVersion: version, InternalCtx: ctx, InternalCancel: cancel, InternalR: &InternalConnReader{InternalConn: source}, InternalStreams: streams.New(), InternalLogger: logging.InternalNopLogger{}, InternalErrorHandler: InternalConnErrorHandlerFn(func(*Conn, error, bool) {}), InternalCompressor: compressor}
+	c := &Conn{InternalVersion: version, InternalCtx: ctx, InternalCancel: cancel, InternalR: &InternalConnReader{InternalConn: source}, InternalStreams: streams.New(), InternalLogger: logging.Nop(), InternalErrorHandler: InternalConnErrorHandlerFn(func(*Conn, error, bool) {}), InternalCompressor: compressor}
 	c.InternalW = &InternalDeadlineContextWriter{InternalW: source, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
 	if version == 5 && compressor != nil {
 		c.InternalSegCompressor = compressor.(segment.Compressor)
@@ -368,7 +368,7 @@ func BenchmarkStreamTransport(b *testing.B) {
 				plain := &plaintextCounter{Conn: client}
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				c := &Conn{InternalVersion: 4, InternalCtx: ctx, InternalCancel: cancel, InternalR: &InternalConnReader{InternalConn: plain}, InternalStreams: streams.New(), InternalLogger: logging.InternalNopLogger{}, InternalErrorHandler: InternalConnErrorHandlerFn(func(*Conn, error, bool) {})}
+				c := &Conn{InternalVersion: 4, InternalCtx: ctx, InternalCancel: cancel, InternalR: &InternalConnReader{InternalConn: plain}, InternalStreams: streams.New(), InternalLogger: logging.Nop(), InternalErrorHandler: InternalConnErrorHandlerFn(func(*Conn, error, bool) {})}
 				c.InternalW = &InternalDeadlineContextWriter{InternalW: client, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
 				c.InternalInitFramerCache()
 				stream, _ := c.InternalStreams.GetStream()

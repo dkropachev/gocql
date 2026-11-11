@@ -23,7 +23,8 @@ import (
 	"crypto/x509"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/logging"
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
@@ -107,7 +108,7 @@ func TestTLSConfig(t *testing.T) {
 			for _, test := range tests {
 				test := test
 				t.Run(test.name, func(t *testing.T) {
-					tlsConfig, err := setupTLSConfig(test.opts, &logging.InternalDefaultLogger{})
+					tlsConfig, err := setupTLSConfig(test.opts, slog.Default())
 					if err != nil {
 						t.Fatalf("unexpected error %q", err.Error())
 					}
@@ -137,7 +138,7 @@ func TestTLSConfig(t *testing.T) {
 					EnableHostVerification: true,
 				}
 
-				tlsConfig, err := setupTLSConfig(opts, &logging.InternalDefaultLogger{})
+				tlsConfig, err := setupTLSConfig(opts, slog.Default())
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -156,7 +157,7 @@ func TestTLSConfig(t *testing.T) {
 					EnableHostVerification: false,
 				}
 
-				tlsConfig, err := setupTLSConfig(opts, &logging.InternalDefaultLogger{})
+				tlsConfig, err := setupTLSConfig(opts, slog.Default())
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -177,7 +178,7 @@ func TestTLSConfig(t *testing.T) {
 					},
 				}
 
-				tlsConfig, err := setupTLSConfig(opts, &logging.InternalDefaultLogger{})
+				tlsConfig, err := setupTLSConfig(opts, slog.Default())
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -197,7 +198,7 @@ func TestTLSConfig(t *testing.T) {
 					DisableStrictCertificateValidation: true,
 				}
 
-				tlsConfig, err := setupTLSConfig(opts, &logging.InternalDefaultLogger{})
+				tlsConfig, err := setupTLSConfig(opts, slog.Default())
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}

@@ -141,7 +141,7 @@ func newNodeEventFixture(t *testing.T, opts ...func(*cluster.InternalClusterSett
 	s := func() *cluster.Core {
 		opaqueStorageValue := new(cluster.Core)
 		implCluster.SessionData(opaqueStorageValue).InternalPolicy = policy
-		implCluster.SessionData(opaqueStorageValue).InternalLogger = &logging.InternalTestLogger{}
+		implCluster.SessionData(opaqueStorageValue).InternalLogger = logging.Nop()
 		return opaqueStorageValue
 	}()
 	implCluster.SessionData(s).InternalCfg.ConvictionPolicy = &settings.SimpleConvictionPolicy{}

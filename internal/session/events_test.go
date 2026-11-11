@@ -43,11 +43,11 @@ func TestEvents(t *testing.T) {
 		t.Run("ChargeTransfersUntilConsumption", func(t *testing.T) {
 			entered, release := make(chan struct{}), make(chan struct{})
 			var freed atomic.Int32
-			downstream := cluster.InternalNewEventDebouncer("owned", func([]protocol.Frame) { close(entered); <-release }, logging.InternalNopLogger{})
+			downstream := cluster.InternalNewEventDebouncer("owned", func([]protocol.Frame) { close(entered); <-release }, logging.Nop())
 			conn, _ := typedTestConn(t, 4, nil)
 			s := func() *cluster.Core {
 				opaqueStorageValuexxxxxxxx := new(cluster.Core)
-				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalLogger = logging.InternalNopLogger{}
+				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalLogger = logging.Nop()
 				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalSchemaEvents = downstream
 				return opaqueStorageValuexxxxxxxx
 			}()
@@ -85,12 +85,12 @@ func TestEvents(t *testing.T) {
 			c, _ := typedTestConn(t, 4, nil)
 			timer := time.NewTimer(time.Hour)
 			defer timer.Stop()
-			consumer := &cluster.InternalEventDebouncer{InternalTimer: timer, InternalLogger: logging.InternalNopLogger{}}
+			consumer := &cluster.InternalEventDebouncer{InternalTimer: timer, InternalLogger: logging.Nop()}
 			consumer.InternalMu.Lock()
 			session := func() *cluster.Core {
 				opaqueStorageValuexxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxx).InternalCtx = c.InternalCtx
-				implCluster.SessionData(opaqueStorageValuexxxxxxx).InternalLogger = logging.InternalNopLogger{}
+				implCluster.SessionData(opaqueStorageValuexxxxxxx).InternalLogger = logging.Nop()
 				implCluster.SessionData(opaqueStorageValuexxxxxxx).InternalNodeEvents = consumer
 				return opaqueStorageValuexxxxxxx
 			}()
@@ -161,7 +161,7 @@ func TestEvents(t *testing.T) {
 					close(entered)
 					<-release
 				}
-			}, logging.InternalNopLogger{})
+			}, logging.Nop())
 			d.InternalResync = func() { resync.Add(1) }
 			for i := 0; i < cluster.InternalEventBufferSize+1; i++ {
 				d.InternalDebounce(&frm.StatusChangeEventFrame{})

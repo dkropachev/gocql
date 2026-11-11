@@ -30,8 +30,10 @@ import (
 	"strconv"
 	"strings"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
+	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 )
 
@@ -111,12 +113,13 @@ func getReplicationFactorFromOpts(val string) (int, error) {
 	return n, nil
 }
 
-func getStrategy(ks *metadata.KeyspaceMetadata, logger logging.StdLogger) placementStrategy {
+func getStrategy(ks *metadata.KeyspaceMetadata, logger *slog.Logger) placementStrategy {
+	logger = logging.Or(logger)
 	switch {
 	case strings.Contains(ks.StrategyClass, "SimpleStrategy"):
 		rf, err := getReplicationFactorFromOpts(ks.StrategyOptions["replication_factor"])
 		if err != nil {
-			logger.Printf("parse rf for keyspace %q: %v", ks.Name, err)
+			logger.Warn("unparsable replication factor; keyspace not token-aware", logging.KeyKeyspace, ks.Name, logging.Err(err))
 			return nil
 		}
 		return &simpleStrategy{rf: rf}
@@ -129,7 +132,7 @@ func getStrategy(ks *metadata.KeyspaceMetadata, logger logging.StdLogger) placem
 
 			rf, err := getReplicationFactorFromOpts(rf)
 			if err != nil {
-				logger.Printf("parse rf for keyspace %q, dc %q: %v", ks.Name, dc, err)
+				logger.Warn("unparsable replication factor; skipping DC", logging.KeyKeyspace, ks.Name, logging.KeyDC, dc, logging.Err(err))
 				// skip DC if the rf is invalid/unsupported, so that we can at least work with other working DCs.
 				continue
 			}
@@ -140,7 +143,7 @@ func getStrategy(ks *metadata.KeyspaceMetadata, logger logging.StdLogger) placem
 	case strings.Contains(ks.StrategyClass, "LocalStrategy"):
 		return nil
 	default:
-		logger.Printf("parse rf for keyspace %q: unsupported strategy class: %v", ks.Name, ks.StrategyClass)
+		logger.Debug("unsupported replication strategy; keyspace not token-aware", logging.KeyKeyspace, ks.Name, "strategy", ks.StrategyClass)
 		return nil
 	}
 }

@@ -19,6 +19,8 @@
 package session
 
 import (
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
@@ -27,7 +29,6 @@ import (
 
 	"crypto/sha256"
 	"fmt"
-	"log"
 	"runtime"
 	"sort"
 	"strings"
@@ -416,7 +417,7 @@ func newSchemaEventTestSession(control cluster.InternalControlConnection, policy
 		opaqueStorageValue := new(cluster.Core)
 		implCluster.SessionData(opaqueStorageValue).InternalControl = control
 		implCluster.SessionData(opaqueStorageValue).InternalPolicy = policy
-		implCluster.SessionData(opaqueStorageValue).InternalLogger = log.Default()
+		implCluster.SessionData(opaqueStorageValue).InternalLogger = slog.Default()
 		implCluster.SessionData(opaqueStorageValue).InternalCfg = cluster.InternalClusterSettings{Keyspace: keyspace}
 		return opaqueStorageValue
 	}()

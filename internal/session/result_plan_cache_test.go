@@ -39,7 +39,7 @@ func TestResultPlanCache(t *testing.T) {
 		t.Run("OldPageKeepsMatchingPlan", func(t *testing.T) {
 			s := func() *cluster.Core {
 				opaqueStorageValuexxxxxx := new(cluster.Core)
-				implCluster.SessionData(opaqueStorageValuexxxxxx).InternalLogger = logging.InternalNopLogger{}
+				implCluster.SessionData(opaqueStorageValuexxxxxx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexxxxxx
 			}()
 			columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
@@ -66,7 +66,7 @@ func TestResultPlanCache(t *testing.T) {
 		t.Run("SchemaFenceKeepsRetainedPage", func(t *testing.T) {
 			s := func() *cluster.Core {
 				opaqueStorageValuexxxxxxx := new(cluster.Core)
-				implCluster.SessionData(opaqueStorageValuexxxxxxx).InternalLogger = logging.InternalNopLogger{}
+				implCluster.SessionData(opaqueStorageValuexxxxxxx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexxxxxxx
 			}()
 			columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
@@ -93,7 +93,7 @@ func TestResultPlanCache(t *testing.T) {
 		t.Run("SharesEpochGate", func(t *testing.T) {
 			s := func() *cluster.Core {
 				opaqueStorageValuexxxxxxxxxxx := new(cluster.Core)
-				implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalLogger = logging.InternalNopLogger{}
+				implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexxxxxxxxxxx
 			}()
 			columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})

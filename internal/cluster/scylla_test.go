@@ -34,7 +34,7 @@ func hammerConnPicker(t *testing.T, wg *sync.WaitGroup, s *implPool.InternalScyl
 func framerForExts(exts []endpoint.InternalCqlProtocolExtension) *protocol.Framer {
 	conn := mockConn(0)
 	conn.InternalVersion = protocol.ProtoVersion4
-	conn.InternalLogger = &logging.InternalTestLogger{}
+	conn.InternalLogger = logging.Nop()
 	conn.InternalCqlProtoExts = exts
 	conn.InternalInitFramerCache()
 	return conn.InternalGetWriteFramer()
@@ -82,7 +82,7 @@ func mockConnForPicker(shard, nrShards int) *transport.Conn {
 		InternalAddr:    fmt.Sprintf("192.168.1.%d:9042", shard+1),
 		InternalClosed:  false,
 		InternalMu:      sync.Mutex{},
-		InternalLogger:  &logging.InternalTestLogger{},
+		InternalLogger:  logging.Nop(),
 		InternalCtx:     ctx,
 		InternalCancel:  cancel,
 		InternalCalls:   newCallTable(),

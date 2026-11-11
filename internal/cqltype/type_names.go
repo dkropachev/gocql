@@ -5,9 +5,14 @@ package cqltype
 
 import (
 	"encoding/hex"
+	"fmt"
 
 	"strconv"
 	"strings"
+
+	"log/slog"
+
+	"github.com/scylladb/gocql/v2/internal/logging"
 )
 
 func AsVectorType(t TypeInfo) (VectorType, bool) {
@@ -36,7 +41,7 @@ func AsVectorType(t TypeInfo) (VectorType, bool) {
 	if err != nil || dim < 1 {
 		return VectorType{}, false
 	}
-	subType := GetCassandraLongType(subStr, n.Version(), NopTypeLogger{})
+	subType := GetCassandraLongType(subStr, n.Version(), logging.Nop())
 	// recurse if subtype itself is still a custom vector
 	if innerVec, ok := AsVectorType(subType); ok {
 		subType = innerVec
@@ -48,7 +53,8 @@ func AsVectorType(t TypeInfo) (VectorType, bool) {
 	}, true
 }
 
-func GetCassandraLongType(name string, protoVer byte, logger TypeLogger) TypeInfo {
+func GetCassandraLongType(name string, protoVer byte, logger *slog.Logger) TypeInfo {
+	logger = logging.Or(logger)
 	const prefix = ApacheCassandraTypePrefix
 	if strings.HasPrefix(name, prefix+"SetType") {
 		return CollectionType{
@@ -63,7 +69,7 @@ func GetCassandraLongType(name string, protoVer byte, logger TypeLogger) TypeInf
 	} else if strings.HasPrefix(name, prefix+"MapType") {
 		names := SplitJavaCompositeTypes(name, prefix+"MapType")
 		if len(names) != 2 {
-			logger.Printf("gocql: error parsing map type, it has %d subelements, expecting 2\n", len(names))
+			logger.Warn("unparsable type definition", "type", name, "detail", fmt.Sprintf("map type, it has %d subelements, expecting 2", len(names)))
 			return NewCustomType(protoVer, TypeCustom, name)
 		}
 		return CollectionType{
@@ -87,7 +93,7 @@ func GetCassandraLongType(name string, protoVer byte, logger TypeLogger) TypeInf
 		names := SplitJavaCompositeTypes(name, prefix+"UserType")
 		// Without keyspace and type name, make() below gets a negative length.
 		if len(names) < 2 {
-			logger.Printf("gocql: error parsing udt type, it has %d subelements, expecting at least 2\n", len(names))
+			logger.Warn("unparsable type definition", "type", name, "detail", fmt.Sprintf("udt type, it has %d subelements, expecting at least 2", len(names)))
 			return NewCustomType(protoVer, TypeCustom, name)
 		}
 		fields := make([]UDTField, len(names)-2)
@@ -95,7 +101,7 @@ func GetCassandraLongType(name string, protoVer byte, logger TypeLogger) TypeInf
 		for i := 2; i < len(names); i++ {
 			spec := strings.Split(names[i], ":")
 			if len(spec) < 2 {
-				logger.Printf("gocql: error parsing udt field %q, expecting <name>:<type>\n", names[i])
+				logger.Warn("unparsable type definition", "type", name, "detail", fmt.Sprintf("udt field %q, expecting <name>:<type>", names[i]))
 				return NewCustomType(protoVer, TypeCustom, name)
 			}
 			fieldName, _ := hex.DecodeString(spec[0])
@@ -116,7 +122,7 @@ func GetCassandraLongType(name string, protoVer byte, logger TypeLogger) TypeInf
 		names := SplitJavaCompositeTypes(name, prefix+"VectorType")
 		// Without the element type and the dimensions, indexing names below panics.
 		if len(names) != 2 {
-			logger.Printf("gocql: error parsing vector type, it has %d subelements, expecting 2\n", len(names))
+			logger.Warn("unparsable type definition", "type", name, "detail", fmt.Sprintf("vector type, it has %d subelements, expecting 2", len(names)))
 			return NewCustomType(protoVer, TypeCustom, name)
 		}
 		// A nested vector arrives here, not readVectorTypeInfo, which validates only
@@ -125,19 +131,19 @@ func GetCassandraLongType(name string, protoVer byte, logger TypeLogger) TypeInf
 		if elem == "" {
 			// Without this the element resolves to a custom type with no name at all,
 			// while the other two parsers of this grammar both reject it.
-			logger.Printf("gocql: error parsing vector type %q: missing element type\n", name)
+			logger.Warn("unparsable type definition", "type", name, "detail", fmt.Sprintf("vector type %q: missing element type", name))
 			return NewCustomType(protoVer, TypeCustom, name)
 		}
 		subType := GetCassandraLongType(elem, protoVer, logger)
 		// A negative dimension reaches unmarshalVector's MakeSlice.
 		dim, err := strconv.Atoi(strings.TrimSpace(names[1]))
 		if err != nil {
-			logger.Printf("gocql: error parsing vector dimensions %q: %v\n", names[1], err)
+			logger.Warn("unparsable type definition", "type", name, "detail", fmt.Sprintf("vector dimensions %q: %v", names[1], err))
 			return NewCustomType(protoVer, TypeCustom, name)
 		}
 		if dim < 1 {
 			// Separate arm: err is nil here, so %v would log "<nil>".
-			logger.Printf("gocql: error parsing vector dimensions %q: expecting a positive value\n", names[1])
+			logger.Warn("unparsable type definition", "type", name, "detail", fmt.Sprintf("vector dimensions %q: expecting a positive value", names[1]))
 			return NewCustomType(protoVer, TypeCustom, name)
 		}
 
@@ -262,8 +268,3 @@ func GetApacheCassandraType(class string) Type {
 }
 
 const ApacheCassandraTypePrefix = "org.apache.cassandra.db.marshal."
-
-type TypeLogger interface{ Printf(string, ...any) }
-type NopTypeLogger struct{}
-
-func (NopTypeLogger) Printf(string, ...any) {}

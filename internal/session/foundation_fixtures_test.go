@@ -136,7 +136,7 @@ func (c *memoryConn) SetReadDeadline(time.Time) error  { return nil }
 func (c *memoryConn) SetWriteDeadline(time.Time) error { return nil }
 func memoryReservation(version byte, compressor protocol.Compressor, source net.Conn) *transport.InternalExclusiveConn {
 	ctx, cancel := context.WithCancel(context.Background())
-	c := &transport.Conn{InternalVersion: version, InternalCtx: ctx, InternalCancel: cancel, InternalR: &transport.InternalConnReader{InternalConn: source}, InternalStreams: streams.New(), InternalLogger: logging.InternalNopLogger{}, InternalErrorHandler: transport.InternalConnErrorHandlerFn(func(*transport.Conn, error, bool) {}), InternalCompressor: compressor}
+	c := &transport.Conn{InternalVersion: version, InternalCtx: ctx, InternalCancel: cancel, InternalR: &transport.InternalConnReader{InternalConn: source}, InternalStreams: streams.New(), InternalLogger: logging.Nop(), InternalErrorHandler: transport.InternalConnErrorHandlerFn(func(*transport.Conn, error, bool) {}), InternalCompressor: compressor}
 	c.InternalW = &transport.InternalDeadlineContextWriter{InternalW: source, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
 	if version == 5 && compressor != nil {
 		c.InternalSegCompressor = compressor.(segment.Compressor)

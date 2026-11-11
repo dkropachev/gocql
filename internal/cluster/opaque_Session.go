@@ -30,10 +30,11 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/events"
 	"github.com/scylladb/gocql/v2/internal/debounce"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/schemafence"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -46,7 +47,7 @@ type SessionStorage struct {
 	InternalTypedReady          atomic.Value // the *session.InternalSessionRuntime in InternalTypedState, once fully initialized; never replaced
 	InternalControl             InternalControlConnection
 	InternalCtx                 context.Context
-	InternalLogger              logging.StdLogger
+	InternalLogger              *slog.Logger
 	InternalPolicy              HostSelectionPolicy
 	connectObserver             ConnectObserver
 	frameObserver               transport.FrameHeaderObserver

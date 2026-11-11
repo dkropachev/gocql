@@ -58,7 +58,7 @@ func TestConnectionSetup(t *testing.T) {
 			for _, cause := range []error{errors.New("fixture dial rejected"), &frm.ErrorFrame{Code: protocol.ErrCodeCredentials, Message: "rejected"}} {
 				config := settings.DefaultConfig("127.0.20.1")
 				config.Protocol = 4
-				config.Logger = logging.InternalNopLogger{}
+				config.Logger = logging.Nop()
 				config.Dialer = endpoint.DialerFunc(func(context.Context, endpoint.DialTarget) (net.Conn, error) { return nil, cause })
 				session, err := Connect(context.Background(), config)
 				if session != nil {
@@ -140,7 +140,7 @@ func TestConnectionSetup(t *testing.T) {
 			}
 			session := func() *cluster.Core {
 				opaqueStorageValuexxxxxxxx := new(cluster.Core)
-				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalLogger = logging.InternalNopLogger{}
+				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalLogger = logging.Nop()
 				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalAddressTranslator = endpoint.AddressTranslatorFunc(func(_ endpoint.AddressTranslatorHostInfo, addr endpoint.AddressPort) (endpoint.AddressPort, error) {
 					time.Sleep(20 * time.Millisecond)
 					return addr, nil

@@ -30,7 +30,7 @@ func runtimeTestSession(t testing.TB, n int) (*cluster.Core, []*transport.Conn, 
 	t.Helper()
 	s := func() *cluster.Core {
 		opaqueStorageValue := new(cluster.Core)
-		implCluster.SessionData(opaqueStorageValue).InternalLogger = logging.InternalNopLogger{}
+		implCluster.SessionData(opaqueStorageValue).InternalLogger = logging.Nop()
 		return opaqueStorageValue
 	}()
 	implCluster.SessionData(s).InternalHostSource = &cluster.InternalRingDescriber{InternalHosts: map[string]*endpoint.HostInfo{}}

@@ -10,8 +10,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/scylladb/gocql/v2/internal/debug"
-	logging "github.com/scylladb/gocql/v2/internal/logging"
+	"log/slog"
+
+	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
@@ -183,7 +184,8 @@ type InternalRateLimitExt struct {
 
 // Factory function to deserialize and create an `rateLimitExt` instance
 // from SUPPORTED message payload.
-func newRateLimitExt(supported map[string][]string, logger logging.StdLogger) *InternalRateLimitExt {
+func newRateLimitExt(supported map[string][]string, logger *slog.Logger) *InternalRateLimitExt {
+	logger = logging.Or(logger)
 	const rateLimitErrorCode = "ERROR_CODE"
 
 	if v, found := supported[InternalRateLimitError]; found {
@@ -198,9 +200,7 @@ func newRateLimitExt(supported map[string][]string, logger logging.StdLogger) *I
 					errorCode int
 				)
 				if errorCode, err = strconv.Atoi(splitVal[1]); err != nil {
-					if debug.Enabled {
-						logger.Printf("scylla: failed to parse %s value %v: %s", rateLimitErrorCode, splitVal[1], err)
-					}
+					logger.Warn("unparsable SUPPORTED option", "option", rateLimitErrorCode, "value", splitVal[1], logging.Err(err))
 					return nil
 				}
 				return &InternalRateLimitExt{
@@ -238,7 +238,8 @@ type InternalLwtAddMetadataMarkExt struct {
 
 // Factory function to deserialize and create an `lwtAddMetadataMarkExt` instance
 // from SUPPORTED message payload.
-func InternalNewLwtAddMetaMarkExt(supported map[string][]string, logger logging.StdLogger) *InternalLwtAddMetadataMarkExt {
+func InternalNewLwtAddMetaMarkExt(supported map[string][]string, logger *slog.Logger) *InternalLwtAddMetadataMarkExt {
+	logger = logging.Or(logger)
 	const lwtOptMetaBitMaskKey = "LWT_OPTIMIZATION_META_BIT_MASK"
 
 	if v, found := supported[InternalLwtAddMetadataMarkKey]; found {
@@ -255,9 +256,7 @@ func InternalNewLwtAddMetaMarkExt(supported map[string][]string, logger logging.
 				value, parseErr := strconv.ParseUint(splitVal[1], 10, 32)
 				bitMask, err = int(value), parseErr
 				if err != nil {
-					if debug.Enabled {
-						logger.Printf("scylla: failed to parse %s value %v: %s", lwtOptMetaBitMaskKey, splitVal[1], err)
-					}
+					logger.Warn("unparsable SUPPORTED option", "option", lwtOptMetaBitMaskKey, "value", splitVal[1], logging.Err(err))
 					return nil
 				}
 				return &InternalLwtAddMetadataMarkExt{
@@ -316,7 +315,8 @@ func (ext *InternalScyllaUseMetadataIDExt) InternalSerialize() map[string]string
 	}
 }
 
-func InternalParseSupported(supported map[string][]string, logger logging.StdLogger) ScyllaConnectionFeatures {
+func InternalParseSupported(supported map[string][]string, logger *slog.Logger) ScyllaConnectionFeatures {
+	logger = logging.Or(logger)
 	const (
 		scyllaShard             = "SCYLLA_SHARD"
 		scyllaNrShards          = "SCYLLA_NR_SHARDS"
@@ -334,23 +334,17 @@ func InternalParseSupported(supported map[string][]string, logger logging.StdLog
 
 	if s, ok := supported[scyllaShard]; ok && len(s) > 0 {
 		if si.privateStorage.InternalShard, err = strconv.Atoi(s[0]); err != nil {
-			if debug.Enabled {
-				logger.Printf("scylla: failed to parse %s value %v: %s", scyllaShard, s, err)
-			}
+			logger.Warn("unparsable SUPPORTED option", "option", scyllaShard, "value", s, logging.Err(err))
 		}
 	}
 	if s, ok := supported[scyllaNrShards]; ok && len(s) > 0 {
 		if si.ScyllaHostFeatures.privateStorage.InternalNrShards, err = strconv.Atoi(s[0]); err != nil {
-			if debug.Enabled {
-				logger.Printf("scylla: failed to parse %s value %v: %s", scyllaNrShards, s, err)
-			}
+			logger.Warn("unparsable SUPPORTED option", "option", scyllaNrShards, "value", s, logging.Err(err))
 		}
 	}
 	if s, ok := supported[scyllaShardingIgnoreMSB]; ok && len(s) > 0 {
 		if si.ScyllaHostFeatures.privateStorage.InternalMsbIgnore, err = strconv.ParseUint(s[0], 10, 64); err != nil {
-			if debug.Enabled {
-				logger.Printf("scylla: failed to parse %s value %v: %s", scyllaShardingIgnoreMSB, s, err)
-			}
+			logger.Warn("unparsable SUPPORTED option", "option", scyllaShardingIgnoreMSB, "value", s, logging.Err(err))
 		}
 	}
 
@@ -362,18 +356,14 @@ func InternalParseSupported(supported map[string][]string, logger logging.StdLog
 	}
 	if s, ok := supported[scyllaShardAwarePort]; ok && len(s) > 0 {
 		if shardAwarePort, err := strconv.ParseUint(s[0], 10, 16); err != nil {
-			if debug.Enabled {
-				logger.Printf("scylla: failed to parse %s value %v: %s", scyllaShardAwarePort, s, err)
-			}
+			logger.Warn("unparsable SUPPORTED option", "option", scyllaShardAwarePort, "value", s, logging.Err(err))
 		} else {
 			si.ScyllaHostFeatures.privateStorage.InternalShardAwarePort = uint16(shardAwarePort)
 		}
 	}
 	if s, ok := supported[scyllaShardAwarePortSSL]; ok && len(s) > 0 {
 		if shardAwarePortTLS, err := strconv.ParseUint(s[0], 10, 16); err != nil {
-			if debug.Enabled {
-				logger.Printf("scylla: failed to parse %s value %v: %s", scyllaShardAwarePortSSL, s, err)
-			}
+			logger.Warn("unparsable SUPPORTED option", "option", scyllaShardAwarePortSSL, "value", s, logging.Err(err))
 		} else {
 			si.ScyllaHostFeatures.privateStorage.InternalShardAwarePortTLS = uint16(shardAwarePortTLS)
 		}
@@ -403,9 +393,15 @@ func InternalParseSupported(supported map[string][]string, logger logging.StdLog
 		}
 	}
 	if !complete || si.privateStorage.InternalShard < 0 || si.privateStorage.InternalShard >= si.ScyllaHostFeatures.privateStorage.InternalNrShards || si.ScyllaHostFeatures.privateStorage.InternalNrShards > 65535 || si.ScyllaHostFeatures.privateStorage.InternalMsbIgnore > 63 || si.ScyllaHostFeatures.privateStorage.InternalPartitioner != "org.apache.cassandra.dht.Murmur3Partitioner" || si.ScyllaHostFeatures.privateStorage.InternalShardingAlgorithm != "biased-token-round-robin" || si.ScyllaHostFeatures.privateStorage.InternalNrShards <= 0 {
-		if debug.Enabled {
-			logger.Printf("scylla: unsupported sharding configuration, partitioner=%s, algorithm=%s, no_shards=%d, msb_ignore=%d", si.ScyllaHostFeatures.privateStorage.InternalPartitioner, si.ScyllaHostFeatures.privateStorage.InternalShardingAlgorithm, si.ScyllaHostFeatures.privateStorage.InternalNrShards, si.ScyllaHostFeatures.privateStorage.InternalMsbIgnore)
+		level := slog.LevelWarn
+		if !complete {
+			// Not a sharded Scylla node (e.g. Cassandra): nothing is wrong.
+			level = slog.LevelDebug
 		}
+		features := &si.ScyllaHostFeatures.privateStorage
+		logger.Log(context.Background(), level, "shard awareness disabled: unsupported sharding configuration",
+			"partitioner", features.InternalPartitioner, "algorithm", features.InternalShardingAlgorithm,
+			"nr_shards", features.InternalNrShards, "msb_ignore", features.InternalMsbIgnore, logging.KeyShard, si.privateStorage.InternalShard)
 		si.privateStorage.InternalShard = 0
 		si.ScyllaHostFeatures.privateStorage.InternalNrShards = 0
 		si.ScyllaHostFeatures.privateStorage.InternalMsbIgnore = 0
@@ -420,7 +416,8 @@ func InternalParseSupported(supported map[string][]string, logger logging.StdLog
 // version: an extension whose wire effect is version-specific is gated on it here,
 // which is the single point that feeds both the STARTUP opt-in (startupCoordinator.startup)
 // and the framer config (connFramers.initCache), so the two cannot disagree.
-func InternalParseCQLProtocolExtensions(supported map[string][]string, version byte, logger logging.StdLogger) []InternalCqlProtocolExtension {
+func InternalParseCQLProtocolExtensions(supported map[string][]string, version byte, logger *slog.Logger) []InternalCqlProtocolExtension {
+	logger = logging.Or(logger)
 	exts := []InternalCqlProtocolExtension{}
 
 	lwtExt := InternalNewLwtAddMetaMarkExt(supported, logger)

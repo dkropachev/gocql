@@ -3,6 +3,7 @@ package gocql
 import (
 	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/logging"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 
 	"encoding/binary"
@@ -16,7 +17,7 @@ func runtimeTestSession(t testing.TB, n int) (*Session, []*driverConn, []net.Con
 	t.Helper()
 	s := func() *Session {
 		opaqueStorageValue := (*Session)(implSession.InternalWrapSession(new(implCluster.Core)))
-		(*implSession.Session)(opaqueStorageValue).Data().InternalLogger = nopLogger{}
+		(*implSession.Session)(opaqueStorageValue).Data().InternalLogger = logging.Nop()
 		return opaqueStorageValue
 	}()
 	(*implSession.Session)(s).Data().InternalHostSource = &ringDescriber{InternalHosts: map[string]*HostInfo{}}

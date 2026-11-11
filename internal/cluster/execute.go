@@ -8,6 +8,7 @@ import (
 	"math"
 
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
@@ -100,7 +101,7 @@ func (s *Core) ObserveSafely(fn func()) {
 		if v := recover(); v != nil && s.privateStorage.InternalLogger != nil {
 			func() {
 				defer func() { _ = recover() }()
-				s.privateStorage.InternalLogger.Printf("gocql: observer panic: %v", v)
+				s.logger().Error("observer panicked", "panic", v)
 			}()
 		}
 	}()
@@ -201,7 +202,7 @@ func (s *Core) ApplyTypedFeedbackStamped(response *transport.InternalResponsePag
 		hint, err := transport.InternalParseTypedTabletPayload(entry.Value.Value, routing.Keyspace, routing.Table, features.InternalTabletsRoutingV2)
 		if err != nil {
 			if s.privateStorage.InternalLogger != nil {
-				s.privateStorage.InternalLogger.Printf("gocql: tablet hint rejected: %v", err)
+				s.logger().Warn("tablet hint rejected", logging.KeyKeyspace, routing.Keyspace, logging.KeyTable, routing.Table, logging.Err(err))
 			}
 			return
 		}

@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/streams"
 
 	"crypto/tls"
@@ -133,7 +134,7 @@ func Dial(ctx context.Context, host *implEndpoint.HostInfo, cfg *ConnConfig, err
 		},
 		InternalCtx:            connectionCtx,
 		InternalCancel:         cancel,
-		InternalLogger:         cfg.logger(),
+		InternalLogger:         cfg.logger().With(logging.KeyHost, dialedHost.Conn.RemoteAddr().String()),
 		InternalStreamObserver: opening.StreamObserver,
 	}
 	c.InternalSetSystemRequestTimeout(cfg.ConnectTimeout)

@@ -33,6 +33,8 @@ import (
 	"testing"
 	"time"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/events"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
@@ -55,7 +57,7 @@ func TestSession(t *testing.T) {
 			SessionData(opaqueStorageValue).eventBus = eventbus.New[events.Event](eventbus.EventBusConfig{
 				InputEventsQueueSize: 1,
 			}, nil)
-			SessionData(opaqueStorageValue).InternalLogger = &logging.InternalNopLogger{}
+			SessionData(opaqueStorageValue).InternalLogger = logging.Nop()
 			return opaqueStorageValue
 		}()
 
@@ -97,7 +99,7 @@ func TestSession(t *testing.T) {
 
 		session := func() *Core {
 			opaqueStorageValuexxxxxx := new(Core)
-			SessionData(opaqueStorageValuexxxxxx).InternalLogger = &logging.InternalTestLogger{}
+			SessionData(opaqueStorageValuexxxxxx).InternalLogger = logging.Nop()
 			return opaqueStorageValuexxxxxx
 		}()
 		SessionData(session).InternalPool = &implPool.InternalPolicyConnPool{InternalServices: session.NewPoolServices(), InternalHostConnPools: map[cqltype.UUID]*implPool.InternalHostConnPool{}}
@@ -155,7 +157,7 @@ func TestSession(t *testing.T) {
 			t.Helper()
 			session := func() *Core {
 				opaqueStorageValuexxxxx := new(Core)
-				SessionData(opaqueStorageValuexxxxx).InternalLogger = &logging.InternalTestLogger{}
+				SessionData(opaqueStorageValuexxxxx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexxxxx
 			}()
 			p := &implPool.InternalPolicyConnPool{InternalHostConnPools: map[cqltype.UUID]*implPool.InternalHostConnPool{}}
@@ -287,7 +289,7 @@ func TestSession(t *testing.T) {
 				cfg := InternalNewClusterSettings("127.0.0.1")
 				cfg.Port = 1 // refused, so an attempt fails fast
 				cfg.InitialReconnectionPolicy = &shrinkingRetryPolicy{allowed: tt.allowed}
-				cfg.Logger = logging.InternalNopLogger{}
+				cfg.Logger = logging.Nop()
 
 				s, err := connectSettings(*cfg)
 				if err == nil {
@@ -378,7 +380,7 @@ func TestSession(t *testing.T) {
 	})
 
 	t.Run("NewSessionID", func(t *testing.T) {
-		logger := &logging.InternalDefaultLogger{}
+		logger := slog.Default()
 
 		id1 := newSessionID(logger)
 		id2 := newSessionID(logger)

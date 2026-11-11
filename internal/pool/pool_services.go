@@ -7,15 +7,16 @@ import (
 	"context"
 	"net"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 type InternalPoolServices struct {
 	Context      context.Context
-	Logger       logging.StdLogger
+	Logger       *slog.Logger
 	Config       *connectivity.Config
 	Conviction   connectivity.ConvictionPolicy
 	Reconnection ReconnectionPolicy

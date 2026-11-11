@@ -31,11 +31,12 @@ import (
 	"sync"
 	"testing"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/wire"
@@ -77,7 +78,7 @@ func TestConn(t *testing.T) {
 		}
 
 		// initCache is what the connection actually uses once the handshake completed.
-		c := &Conn{InternalVersion: protocol.ProtoVersion5, InternalCompressor: comp, InternalLogger: &logging.InternalDefaultLogger{}}
+		c := &Conn{InternalVersion: protocol.ProtoVersion5, InternalCompressor: comp, InternalLogger: slog.Default()}
 		c.InternalInitFramerCache()
 		if c.InternalFramers.InternalDefaults.InternalFlags&frm.FlagBetaProtocol != 0 {
 			t.Error("initFramerCache(v5) seeded FlagBetaProtocol")

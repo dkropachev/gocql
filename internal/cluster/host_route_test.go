@@ -49,7 +49,7 @@ func hostRoutingSession(b testing.TB, tablets bool) *Core {
 		routing.SnapshotData(m).InternalKeyspaces["ks"].TabletBased = false
 		routing.SnapshotData(m).InternalPlacements = nil
 	}
-	SessionData(s).InternalLogger = logging.InternalNopLogger{}
+	SessionData(s).InternalLogger = logging.Nop()
 	SessionData(s).InternalHostSource = &InternalRingDescriber{InternalHosts: map[string]*endpoint.HostInfo{}}
 	SessionData(s).InternalPool = &implPool.InternalPolicyConnPool{InternalHostConnPools: map[cqltype.UUID]*implPool.InternalHostConnPool{}}
 	config := settings.DefaultConfig("localhost")

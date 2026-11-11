@@ -34,8 +34,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/debug"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -235,11 +236,13 @@ func (p *InternalPolicyConnPool) InternalRemoveHost(hostID cqltype.UUID) {
 
 // hostConnPool is a connection pool for a single host.
 // Connection selection is based on a provided ConnSelectionPolicy
+func (pool *InternalHostConnPool) logger() *slog.Logger { return logging.Or(pool.InternalLogger) }
+
 type InternalHostConnPool struct {
 	InternalServices     InternalPoolServices
 	InternalConnPicker   ConnPicker
 	typed                atomic.Pointer[InternalTypedConnPicker]
-	InternalLogger       logging.StdLogger
+	InternalLogger       *slog.Logger
 	InternalRepairCtx    context.Context
 	InternalHost         *implEndpoint.HostInfo
 	InternalDebouncer    *debounce.SimpleDebouncer
@@ -501,21 +504,17 @@ func (pool *InternalHostConnPool) logConnectErr(err error) {
 	if opErr, ok := errors.AsType[*net.OpError](err); ok && (opErr.Op == "dial" || opErr.Op == "read") {
 		// connection refused
 		// these are typical during a node outage so avoid log spam.
-		if debug.Enabled {
-			pool.InternalLogger.Printf("unable to dial %q: %v\n", pool.InternalHost, err)
-		}
+		pool.logger().Debug("unable to dial host", logging.KeyHost, pool.InternalHost.ConnectAddress().String(), logging.Err(err))
 	} else if err != nil {
 		// unexpected error
-		pool.InternalLogger.Printf("error: failed to connect to %q due to error: %v", pool.InternalHost, err)
+		pool.logger().Warn("failed to connect to host", logging.KeyHost, pool.InternalHost.ConnectAddress().String(), logging.Err(err))
 	}
 }
 
 // transition back to a not-filling state.
 func (pool *InternalHostConnPool) fillingStopped(err error) {
 	if err != nil {
-		if debug.Enabled {
-			pool.InternalLogger.Printf("gocql: filling stopped %q: %v\n", pool.InternalHost.ConnectAddress(), err)
-		}
+		pool.logger().Debug("pool filling stopped", logging.KeyHost, pool.InternalHost.ConnectAddress().String(), logging.Err(err))
 		// wait for some time to avoid back-to-back filling
 		// this provides some time between failed attempts
 		// to fill the pool for the host to recover
@@ -547,9 +546,7 @@ func (pool *InternalHostConnPool) fillingStopped(err error) {
 
 	// if we errored and the size is now zero, make sure the host is marked as down
 	// see https://github.com/apache/cassandra-gocql-driver/issues/1614
-	if debug.Enabled {
-		pool.InternalLogger.Printf("gocql: conns of pool after stopped %q: %v\n", host.ConnectAddress(), count)
-	}
+	pool.logger().Debug("pool size after filling stopped", logging.KeyHost, host.ConnectAddress().String(), "conns", count)
 	if err != nil && count == 0 {
 		// An empty failed pool supplies its detached physical host context. Avoid
 		// looking the pool up through its parent while initial SetHosts may be
@@ -635,10 +632,8 @@ func (pool *InternalHostConnPool) InternalConnect() (err error) {
 				break
 			}
 		}
-		if debug.Enabled {
-			pool.InternalLogger.Printf("gocql: connection failed %q: %v, reconnecting with %T\n",
-				pool.InternalHost.ConnectAddress(), err, reconnectionPolicy)
-		}
+		pool.logger().Debug("connection failed; reconnecting", logging.KeyHost, pool.InternalHost.ConnectAddress().String(),
+			logging.Err(err), "attempt", i, "policy", fmt.Sprintf("%T", reconnectionPolicy))
 		time.Sleep(reconnectionPolicy.GetInterval(i))
 	}
 
@@ -720,9 +715,7 @@ func (pool *InternalHostConnPool) InternalConnect() (err error) {
 			closeConns(p.takeRetired()...)
 		}
 		conn.Close()
-		if debug.Enabled {
-			pool.InternalLogger.Printf("gocql: pool connection was not added to the pool: %w", err)
-		}
+		pool.logger().Debug("connection not added to pool", logging.KeyHost, pool.InternalHost.ConnectAddress().String(), logging.Err(err))
 		return nil
 	}
 	if typed {
@@ -779,9 +772,7 @@ func (pool *InternalHostConnPool) HandleError(conn *transport.Conn, err error, c
 		pool.InternalState = poolBroken
 	}
 	pool.InternalMu.Unlock()
-	if debug.Enabled {
-		pool.InternalLogger.Printf("gocql: pool connection error %q: %v", conn.InternalAddr, err)
-	}
+	pool.logger().Debug("pool connection error", logging.KeyHost, conn.InternalAddr, logging.Err(err))
 	if _, typed := pool.typedConfig(); typed {
 		pool.InternalScheduleTypedRepair()
 	} else {

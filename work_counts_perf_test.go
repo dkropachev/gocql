@@ -20,6 +20,7 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implCodec "github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
@@ -195,7 +196,7 @@ func TestWorkCountsPerf(t *testing.T) {
 			// Warm prepared lookup remains usable while the discovery LRU lock is held;
 			// unrelated schema events leave the captured table generation current.
 			s := (*Session)(implSession.InternalWrapSession(new(implCluster.Core)))
-			(*implSession.Session)(s).Data().InternalLogger = nopLogger{}
+			(*implSession.Session)(s).Data().InternalLogger = logging.Nop()
 			cols := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "v", Type: cql.BlobType})
 			_, hp := testPreparedState(t, s, cols)
 			for i := 0; i < 1000; i++ {

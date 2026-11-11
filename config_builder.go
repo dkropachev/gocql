@@ -6,6 +6,7 @@ package gocql
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"strings"
 	"time"
@@ -553,8 +554,11 @@ func (b *ConfigBuilder) WithClientID(id string) *ConfigBuilder {
 	return b
 }
 
-// WithLogger receives the driver's log lines. Default none.
-func (b *ConfigBuilder) WithLogger(logger StdLogger) *ConfigBuilder {
+// WithLogger receives the driver's structured log records. Default slog.Default().
+// Use slog.New(slog.DiscardHandler) to silence the driver, a Debug-level handler for
+// per-connection detail, or NewPrintfLogger for a printf-style logger. Records at Info and
+// above are rate-limited per message and host; handler panics are contained.
+func (b *ConfigBuilder) WithLogger(logger *slog.Logger) *ConfigBuilder {
 	b.settings.Logger = logger
 	return b
 }

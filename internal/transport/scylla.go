@@ -12,7 +12,8 @@ import (
 	"strconv"
 	"syscall"
 
-	"github.com/scylladb/gocql/v2/internal/debug"
+	"log/slog"
+
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
 )
@@ -25,7 +26,7 @@ func (c *Conn) InternalIsScyllaConn() bool {
 
 type InternalScyllaDialer struct {
 	InternalDialer    implEndpoint.InternalLegacyDialer
-	InternalLogger    logging.StdLogger
+	InternalLogger    *slog.Logger
 	InternalTlsConfig *tls.Config
 }
 
@@ -77,9 +78,7 @@ func (sd *InternalScyllaDialer) DialShard(ctx context.Context, host *implEndpoin
 		}
 	}
 
-	if debug.Enabled {
-		sd.InternalLogger.Printf("scylla: connecting to shard %d", shardID)
-	}
+	sd.logger().Debug("connecting to shard", logging.KeyHost, addr, logging.KeyShard, shardID)
 
 	conn, err := sd.dialShardAware(ctx, addr, shardAwareAddr, iter)
 	if err != nil {
@@ -104,22 +103,18 @@ func (sd *InternalScyllaDialer) dialShardAware(ctx context.Context, addr, shardA
 
 			continue
 		} else if err != nil {
-			conn, err := sd.InternalDialer.DialContext(ctx, "tcp", addr)
-			if err == nil {
-
-				if debug.Enabled {
-					sd.InternalLogger.Printf(
-						"scylla: %s couldn't connect to shard-aware address while the non-shard-aware address %s is available; this might be an issue with ",
-						addr,
-						shardAwareAddr,
-					)
-				}
+			fallback, fallbackErr := sd.InternalDialer.DialContext(ctx, "tcp", addr)
+			if fallbackErr == nil {
+				sd.logger().Warn("shard-aware port unreachable while the regular port works; check NAT or firewall rules",
+					logging.KeyHost, addr, "shard_aware_addr", shardAwareAddr, logging.Err(err))
 			}
-			return conn, err
+			return fallback, fallbackErr
 		}
 		return conn, err
 	}
 }
+
+func (sd *InternalScyllaDialer) logger() *slog.Logger { return logging.Or(sd.InternalLogger) }
 
 var ErrScyllaSourcePortAlreadyInUse = errors.New("scylla: source port is already in use")
 

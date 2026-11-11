@@ -44,6 +44,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/scylladb/gocql/v2/internal/logging"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 
 	"github.com/stretchr/testify/require"
@@ -376,7 +377,7 @@ func TestSession(t *testing.T) {
 			// prefetch became a bounded count of zero or one physical page.
 			session := func() *gocql.Session {
 				opaqueStorageValue := (*gocql.Session)(implSession.InternalWrapSession(new(implCluster.Core)))
-				(*implSession.Session)(opaqueStorageValue).Data().InternalLogger = nopLogger{}
+				(*implSession.Session)(opaqueStorageValue).Data().InternalLogger = logging.Nop()
 				return opaqueStorageValue
 			}()
 			profileOptions, err := resolveOptions(session, gocql.Options{Profile: &profile})

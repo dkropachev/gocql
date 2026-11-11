@@ -5,6 +5,7 @@ package protocol
 
 import (
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/logging"
 
 	"bytes"
 	"fmt"
@@ -242,7 +243,7 @@ func (p *TypedParser) dataType(depth int) DataType {
 				break
 			}
 			// This legacy adapter translates schema descriptions only, never values.
-			element, parseErr := DataTypeFromInfo(GetCassandraLongType(strings.TrimSpace(args[:split]), p.Proto, NopTypeLogger{}))
+			element, parseErr := DataTypeFromInfo(GetCassandraLongType(strings.TrimSpace(args[:split]), p.Proto, logging.Nop()))
 			if parseErr != nil {
 				err = parseErr
 				break

@@ -146,6 +146,6 @@ func (srv *controlTestServer) registered() [][]string {
 func (srv *controlTestServer) cluster() *implCluster.InternalClusterSettings {
 	cfg := implCluster.InternalNewClusterSettings(srv.Address)
 	cfg.ProtoVersion = protocol.ProtoVersion4
-	cfg.Logger = logging.InternalNopLogger{}
+	cfg.Logger = logging.Nop()
 	return cfg
 }

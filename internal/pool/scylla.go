@@ -13,8 +13,9 @@ import (
 
 	"time"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/debug"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -33,7 +34,7 @@ import (
 // it tries to make, the shard that it aims to connect to is chosen
 // in a round-robin fashion.
 type InternalScyllaConnPicker struct {
-	InternalLogger logging.StdLogger
+	InternalLogger *slog.Logger
 	// disableShardAwarePortUntil is used to temporarily disable new connections to the shard-aware port temporarily
 	InternalDisableShardAwarePortUntil *atomic.Pointer[time.Time]
 	InternalAddress                    string
@@ -50,16 +51,17 @@ type InternalScyllaConnPicker struct {
 	InternalShardAwarePortDisabled     bool
 }
 
-func newScyllaConnPicker(conn *transport.Conn, logger logging.StdLogger) *InternalScyllaConnPicker {
+func (p *InternalScyllaConnPicker) logger() *slog.Logger { return logging.Or(p.InternalLogger) }
+
+func newScyllaConnPicker(conn *transport.Conn, logger *slog.Logger) *InternalScyllaConnPicker {
+	logger = logging.Or(logger)
 	addr := conn.Address()
 
 	if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards == 0 {
 		panic(fmt.Sprintf("scylla: %s not a sharded connection", addr))
 	}
 
-	if debug.Enabled {
-		logger.Printf("scylla: %s new conn picker sharding options %+v", addr, conn.InternalScyllaSupported)
-	}
+	logger.Debug("new shard-aware conn picker", logging.KeyHost, addr, "sharding", fmt.Sprintf("%+v", conn.InternalScyllaSupported))
 
 	return &InternalScyllaConnPicker{
 		InternalAddress:                addr,
@@ -187,10 +189,7 @@ func (p *InternalScyllaConnPicker) Put(conn *transport.Conn) error {
 	defer p.InternalMu.Unlock()
 
 	if nrShards != p.InternalNrShards {
-		if debug.Enabled {
-			p.InternalLogger.Printf("scylla: %s shard count changed from %d to %d, rebuilding connection pool",
-				p.InternalAddress, p.InternalNrShards, nrShards)
-		}
+		p.logger().Info("shard count changed; rebuilding connection pool", logging.KeyHost, p.InternalAddress, "from", p.InternalNrShards, "to", nrShards)
 		p.handleShardCountChange(conn, nrShards)
 	} else if nrShards != len(p.InternalConns) {
 		conns := p.InternalConns
@@ -206,27 +205,22 @@ func (p *InternalScyllaConnPicker) Put(conn *transport.Conn) error {
 			// changes the source port along the way, therefore we can't trust
 			// the shard-aware port to return connection to the shard
 			// that we requested. Fall back to non-shard-aware port for some time.
-			p.InternalLogger.Printf(
-				"scylla: connection to shard-aware address %s resulted in wrong shard being assigned; please check that you are not behind a NAT or AddressTranslater which changes source ports; falling back to non-shard-aware port for %v",
-				p.InternalAddress,
-				scyllaShardAwarePortFallbackDuration,
-			)
+			p.logger().Warn("shard-aware port assigned the wrong shard; check for NAT or an address translator that rewrites source ports; falling back to the regular port",
+				logging.KeyHost, p.InternalAddress, logging.KeyShard, shard, "fallback", scyllaShardAwarePortFallbackDuration)
 			until := time.Now().Add(scyllaShardAwarePortFallbackDuration)
 			p.InternalDisableShardAwarePortUntil.Store(&until)
 
 			return fmt.Errorf("connection landed on %d shard that already has connection", shard)
 		} else {
 			p.InternalExcessConns = append(p.InternalExcessConns, conn)
-			if debug.Enabled {
-				p.InternalLogger.Printf("scylla: %s put shard %d excess connection total: %d missing: %d excess: %d", p.InternalAddress, shard, p.InternalNrConns, p.InternalNrShards-p.InternalNrConns, len(p.InternalExcessConns))
-			}
+			p.logger().Debug("added excess shard connection", logging.KeyHost, p.InternalAddress, logging.KeyShard, shard,
+				"total", p.InternalNrConns, "missing", p.InternalNrShards-p.InternalNrConns, "excess", len(p.InternalExcessConns))
 		}
 	} else {
 		p.InternalConns[shard] = conn
 		p.InternalNrConns++
-		if debug.Enabled {
-			p.InternalLogger.Printf("scylla: %s put shard %d connection total: %d missing: %d", p.InternalAddress, shard, p.InternalNrConns, p.InternalNrShards-p.InternalNrConns)
-		}
+		p.logger().Debug("added shard connection", logging.KeyHost, p.InternalAddress, logging.KeyShard, shard,
+			"total", p.InternalNrConns, "missing", p.InternalNrShards-p.InternalNrConns)
 	}
 
 	if p.shouldCloseExcessConns() {
@@ -241,9 +235,7 @@ func (p *InternalScyllaConnPicker) handleShardCountChange(newConn *transport.Con
 	oldConns := make([]*transport.Conn, len(p.InternalConns))
 	copy(oldConns, p.InternalConns)
 
-	if debug.Enabled {
-		p.InternalLogger.Printf("scylla: %s handling shard topology change from %d to %d", p.InternalAddress, oldShardCount, newShardCount)
-	}
+	p.logger().Debug("handling shard topology change", logging.KeyHost, p.InternalAddress, "from", oldShardCount, "to", newShardCount)
 
 	newConns := make([]*transport.Conn, newShardCount)
 	var toClose []*transport.Conn
@@ -271,9 +263,7 @@ func (p *InternalScyllaConnPicker) handleShardCountChange(newConn *transport.Con
 		go closeConns(toClose...)
 	}
 
-	if debug.Enabled {
-		p.InternalLogger.Printf("scylla: %s migrated %d/%d connections to new shard topology, closing %d excess connections", p.InternalAddress, migratedCount, len(oldConns), len(toClose))
-	}
+	p.logger().Debug("migrated connections to new shard topology", logging.KeyHost, p.InternalAddress, "migrated", migratedCount, "previous", len(oldConns), "closing", len(toClose))
 }
 
 func (p *InternalScyllaConnPicker) shouldCloseExcessConns() bool {
@@ -307,14 +297,10 @@ func (p *InternalScyllaConnPicker) Remove(conn *transport.Conn) {
 	if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards == 0 {
 		// It is possible for Remove to be called before the connection is added to the pool.
 		// Ignoring these connections here is safe.
-		if debug.Enabled {
-			p.InternalLogger.Printf("scylla: %s has unknown sharding state, ignoring it", p.InternalAddress)
-		}
+		p.logger().Debug("removing connection with unknown shard; ignoring", logging.KeyHost, p.InternalAddress)
 		return
 	}
-	if debug.Enabled {
-		p.InternalLogger.Printf("scylla: %s remove shard %d connection", p.InternalAddress, shard)
-	}
+	p.logger().Debug("removing shard connection", logging.KeyHost, p.InternalAddress, logging.KeyShard, shard)
 
 	p.InternalMu.Lock()
 	defer p.InternalMu.Unlock()
@@ -355,21 +341,13 @@ func (p *InternalScyllaConnPicker) Close() {
 	// Close connections outside of the lock to avoid deadlocks when a
 	// connection close triggers HandleError. See scylladb/gocql#53.
 	if len(conns) > 0 {
-		if debug.Enabled {
-			p.InternalLogger.Printf("scylla: %s closing %d connections", p.InternalAddress, len(conns))
-		}
+		p.logger().Debug("closing shard connections", logging.KeyHost, p.InternalAddress, "count", len(conns))
 		go closeConns(conns...)
-	} else if debug.Enabled {
-		p.InternalLogger.Printf("scylla: %s no connections to close", p.InternalAddress)
 	}
 
 	if len(excessConns) > 0 {
-		if debug.Enabled {
-			p.InternalLogger.Printf("scylla: %s closing %d excess connections", p.InternalAddress, len(excessConns))
-		}
+		p.logger().Debug("closing excess shard connections", logging.KeyHost, p.InternalAddress, "count", len(excessConns))
 		go closeConns(excessConns...)
-	} else if debug.Enabled {
-		p.InternalLogger.Printf("scylla: %s no excess connections to close", p.InternalAddress)
 	}
 }
 
@@ -377,18 +355,13 @@ func (p *InternalScyllaConnPicker) Close() {
 // The actual connection closing happens asynchronously outside the lock.
 func (p *InternalScyllaConnPicker) closeExcessConnsLocked() {
 	if len(p.InternalExcessConns) == 0 {
-		if debug.Enabled {
-			p.InternalLogger.Printf("scylla: %s no excess connections to close", p.InternalAddress)
-		}
 		return
 	}
 
 	conns := p.InternalExcessConns
 	p.InternalExcessConns = nil
 
-	if debug.Enabled {
-		p.InternalLogger.Printf("scylla: %s closing %d excess connections", p.InternalAddress, len(conns))
-	}
+	p.logger().Debug("closing excess shard connections", logging.KeyHost, p.InternalAddress, "count", len(conns))
 	go closeConns(conns...)
 }
 

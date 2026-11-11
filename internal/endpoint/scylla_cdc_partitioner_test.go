@@ -23,7 +23,7 @@ import (
 	"math"
 	"testing"
 
-	logging "github.com/scylladb/gocql/v2/internal/logging"
+	"log/slog"
 )
 
 func TestScyllaCDCPartitioner(t *testing.T) {
@@ -32,7 +32,7 @@ func TestScyllaCDCPartitioner(t *testing.T) {
 		t.Run("MatchesHash", func(t *testing.T) {
 			t.Parallel()
 
-			p := InternalScyllaCDCPartitioner{InternalLogger: &logging.InternalDefaultLogger{}}
+			p := InternalScyllaCDCPartitioner{InternalLogger: slog.Default()}
 			var _ InternalInt64Hasher = p
 
 			mk16 := func(upper uint64, version uint64) []byte {
@@ -71,7 +71,7 @@ func TestScyllaCDCPartitioner(t *testing.T) {
 		t.Run("ShortKeyReturnsMinToken", func(t *testing.T) {
 			t.Parallel()
 
-			p := InternalScyllaCDCPartitioner{InternalLogger: &logging.InternalDefaultLogger{}}
+			p := InternalScyllaCDCPartitioner{InternalLogger: slog.Default()}
 			got := p.InternalHashInt64([]byte{1, 2, 3})
 			if got != int64(scyllaCDCMinToken) {
 				t.Fatalf("hashInt64(short key) = %d, want %d (scyllaCDCMinToken)", got, int64(scyllaCDCMinToken))
@@ -79,7 +79,7 @@ func TestScyllaCDCPartitioner(t *testing.T) {
 		})
 
 		t.Run("ZeroAlloc", func(t *testing.T) {
-			p := InternalScyllaCDCPartitioner{InternalLogger: &logging.InternalDefaultLogger{}}
+			p := InternalScyllaCDCPartitioner{InternalLogger: slog.Default()}
 			pk := make([]byte, 16)
 			binary.BigEndian.PutUint64(pk[0:], 12345)
 			binary.BigEndian.PutUint64(pk[8:], 1)

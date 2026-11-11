@@ -39,7 +39,7 @@ func TestScyllaSupported(t *testing.T) {
 		makeConn := func(supported map[string][]string) *transport.Conn {
 			conn := mockConn(0)
 			conn.InternalSupported = supported
-			conn.InternalScyllaSupported = endpoint.InternalParseSupported(supported, &logging.InternalTestLogger{})
+			conn.InternalScyllaSupported = endpoint.InternalParseSupported(supported, logging.Nop())
 			return conn
 		}
 
@@ -196,7 +196,7 @@ func TestScyllaSupported(t *testing.T) {
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
 				t.Parallel()
-				got := endpoint.InternalParseSupported(tt.supported, &logging.InternalTestLogger{})
+				got := endpoint.InternalParseSupported(tt.supported, logging.Nop())
 				assert.Equal(t, tt.nrShards, implEndpoint.ScyllaHostFeaturesData(&got.ScyllaHostFeatures).InternalNrShards, "nrShards")
 				assert.Equal(t, tt.msbIgnore, implEndpoint.ScyllaHostFeaturesData(&got.ScyllaHostFeatures).InternalMsbIgnore, "msbIgnore")
 				assert.Equal(t, tt.shardingAlgorithm, implEndpoint.ScyllaHostFeaturesData(&got.ScyllaHostFeatures).InternalShardingAlgorithm, "shardingAlgorithm")
@@ -279,12 +279,12 @@ func TestScyllaSupported(t *testing.T) {
 		})
 
 		t.Run("parseCQLProtocolExtensions registers the extension only when advertised", func(t *testing.T) {
-			exts := endpoint.InternalParseCQLProtocolExtensions(map[string][]string{endpoint.InternalScyllaUseMetadataID: {}}, protocol.ProtoVersion4, &logging.InternalTestLogger{})
+			exts := endpoint.InternalParseCQLProtocolExtensions(map[string][]string{endpoint.InternalScyllaUseMetadataID: {}}, protocol.ProtoVersion4, logging.Nop())
 			if endpoint.InternalFindCQLProtoExtByName(exts, endpoint.InternalScyllaUseMetadataID) == nil {
 				t.Error("expected parseCQLProtocolExtensions to register SCYLLA_USE_METADATA_ID when advertised")
 			}
 
-			extsAbsent := endpoint.InternalParseCQLProtocolExtensions(map[string][]string{}, protocol.ProtoVersion4, &logging.InternalTestLogger{})
+			extsAbsent := endpoint.InternalParseCQLProtocolExtensions(map[string][]string{}, protocol.ProtoVersion4, logging.Nop())
 			if endpoint.InternalFindCQLProtoExtByName(extsAbsent, endpoint.InternalScyllaUseMetadataID) != nil {
 				t.Error("did not expect SCYLLA_USE_METADATA_ID to be registered when not advertised")
 			}
@@ -295,7 +295,7 @@ func TestScyllaSupported(t *testing.T) {
 		// the opt-in off the wire — the framer config follows from the same list.
 		t.Run("parseCQLProtocolExtensions leaves the extension out below v4", func(t *testing.T) {
 			advertised := map[string][]string{endpoint.InternalScyllaUseMetadataID: {}, endpoint.InternalTabletsRoutingV1: {}}
-			exts := endpoint.InternalParseCQLProtocolExtensions(advertised, protocol.ProtoVersion3, &logging.InternalTestLogger{})
+			exts := endpoint.InternalParseCQLProtocolExtensions(advertised, protocol.ProtoVersion3, logging.Nop())
 			if endpoint.InternalFindCQLProtoExtByName(exts, endpoint.InternalScyllaUseMetadataID) != nil {
 				t.Error("did not expect SCYLLA_USE_METADATA_ID to be registered on protocol v3")
 			}
@@ -325,7 +325,7 @@ func TestScyllaSupported(t *testing.T) {
 				t.Fatal("malformed SUPPORTED not rejected before parse", values, err)
 			}
 			// Legacy callers are also panic-free, even if they do not request typed setup.
-			endpoint.InternalParseSupported(values, logging.InternalNopLogger{})
+			endpoint.InternalParseSupported(values, logging.Nop())
 		}
 		for _, values := range []map[string][]string{nil, {}, {endpoint.InternalScyllaUseMetadataID: nil}, {"SCYLLA_SHARD_AWARE_PORT": {"19042"}, endpoint.InternalLwtAddMetadataMarkKey: {"LWT_OPTIMIZATION_META_BIT_MASK=536870912"}}, validSupported()} {
 			if err := transport.InternalValidateV2Supported(values, options); err != nil {
@@ -333,7 +333,7 @@ func TestScyllaSupported(t *testing.T) {
 			}
 		}
 		values := validSupported()
-		if got := endpoint.InternalParseSupported(values, logging.InternalNopLogger{}); implEndpoint.ScyllaHostFeaturesData(&got.ScyllaHostFeatures).InternalNrShards != 12 || implEndpoint.ScyllaHostFeaturesData(&got.ScyllaHostFeatures).InternalMsbIgnore != 0 {
+		if got := endpoint.InternalParseSupported(values, logging.Nop()); implEndpoint.ScyllaHostFeaturesData(&got.ScyllaHostFeatures).InternalNrShards != 12 || implEndpoint.ScyllaHostFeaturesData(&got.ScyllaHostFeatures).InternalMsbIgnore != 0 {
 			t.Fatal("explicit zero MSB disabled valid sharding", got)
 		}
 		values["SCYLLA_NR_SHARDS"] = []string{"65535"}
@@ -342,7 +342,7 @@ func TestScyllaSupported(t *testing.T) {
 		if err := transport.InternalValidateV2Supported(values, options); err != nil {
 			t.Fatal("valid16-bit maximum rejected", err)
 		}
-		maximum := endpoint.InternalParseSupported(values, logging.InternalNopLogger{})
+		maximum := endpoint.InternalParseSupported(values, logging.Nop())
 		if implEndpoint.ScyllaHostFeaturesData(&maximum.ScyllaHostFeatures).InternalNrShards != 65535 || implEndpoint.ScyllaConnectionFeaturesData(&maximum).InternalShard != 65534 || implEndpoint.ScyllaHostFeaturesData(&maximum.ScyllaHostFeatures).InternalMsbIgnore != 63 {
 			t.Fatal(maximum)
 		}

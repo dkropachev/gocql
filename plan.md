@@ -640,8 +640,8 @@ Representative commands, to run after implementation resumes:
 ```sh
 python3 feature-specs/verify.py
 go test -race -tags unit -timeout=5m ./...
-go test -c -tags 'integration gocql_debug' -o /tmp/gocql-v2-integration.test .
-go test -json -race -tags 'integration gocql_debug' -timeout=20m . -args \
+go test -c -tags integration -o /tmp/gocql-v2-integration.test .
+go test -json -race -tags integration -timeout=20m . -args \
   -distribution=cassandra -proto=5 -compressor=lz4 -runssl \
   -runcassandrafixtures -gocql.cversion=5.0.9 \
   -cluster=127.0.21.1,127.0.21.2,127.0.21.3 -clusterSize=3 -rf=3

@@ -30,11 +30,12 @@ import (
 	"strings"
 	"testing"
 
+	"log/slog"
+
 	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/tests"
@@ -260,7 +261,7 @@ func TestHostDiscovery(t *testing.T) {
 				},
 			}
 
-			var logger logging.StdLogger
+			var logger *slog.Logger
 			t.Run("OmitOneZeroTokenNode", func(t *testing.T) {
 				peers, err := getPeersFromQuerySystemPeers(
 					peersRows,

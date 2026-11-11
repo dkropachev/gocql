@@ -27,9 +27,11 @@ package cluster
 import (
 	"fmt"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
+	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -592,7 +594,8 @@ func (t *tokenAwareHostPolicy) getMetadataForUpdate() *clusterMeta {
 
 // resetTokenRing creates a new tokenRing.
 // It must be called with t.mu locked.
-func (m *clusterMeta) resetTokenRing(partitioner string, hosts []*implEndpoint.HostInfo, logger logging.StdLogger) {
+func (m *clusterMeta) resetTokenRing(partitioner string, hosts []*implEndpoint.HostInfo, logger *slog.Logger) {
+	logger = logging.Or(logger)
 	if partitioner == "" {
 		// partitioner not yet set
 		return
@@ -601,7 +604,7 @@ func (m *clusterMeta) resetTokenRing(partitioner string, hosts []*implEndpoint.H
 	// create a new token ring
 	tokenRing, err := implEndpoint.InternalNewTokenRing(partitioner, hosts)
 	if err != nil {
-		logger.Printf("Unable to update the token ring due to error: %s", err)
+		logger.Warn("unable to update token ring", "partitioner", partitioner, logging.Err(err))
 		return
 	}
 

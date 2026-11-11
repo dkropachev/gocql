@@ -55,7 +55,7 @@ func TestSchemaMetadata(t *testing.T) {
 			s := func() *cluster.Core {
 				opaqueStorageValuexxxxxxxxxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxxxxxxx).InternalHostSource = &cluster.InternalRingDescriber{}
-				implCluster.SessionData(opaqueStorageValuexxxxxxxxxxxxxx).InternalLogger = logging.InternalNopLogger{}
+				implCluster.SessionData(opaqueStorageValuexxxxxxxxxxxxxx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexxxxxxxxxxxxxx
 			}()
 			defer s.Close()

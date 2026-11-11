@@ -139,7 +139,7 @@ func TestClusterSettings(t *testing.T) {
 
 			for _, serial := range []cqltype.Consistency{cqltype.Serial, cqltype.LocalSerial} {
 				cfg := InternalNewClusterSettings("10.0.0.1")
-				cfg.Logger = logging.InternalNopLogger{}
+				cfg.Logger = logging.Nop()
 				cfg.SerialConsistency = serial
 				cfg.Port = 65535
 				if err := cfg.Validate(); err != nil {
@@ -154,7 +154,7 @@ func TestClusterSettings(t *testing.T) {
 			t.Parallel()
 
 			cfg := InternalNewClusterSettings("10.0.0.1")
-			cfg.Logger = logging.InternalNopLogger{}
+			cfg.Logger = logging.Nop()
 			if err := cfg.Validate(); err != nil {
 				t.Fatal(err)
 			}
@@ -163,7 +163,7 @@ func TestClusterSettings(t *testing.T) {
 			}
 
 			cfg = InternalNewClusterSettings("10.0.0.1:19042", "10.0.0.2")
-			cfg.Logger = logging.InternalNopLogger{}
+			cfg.Logger = logging.Nop()
 			cfg.ClientRoutesConfig = &ClientRoutesConfig{}
 			err := cfg.Validate()
 			// The empty routes config is itself invalid; what matters is that mixed host
@@ -459,13 +459,13 @@ func TestClusterSettings(t *testing.T) {
 				t.Run(tc.name, func(t *testing.T) {
 					t.Parallel()
 					cfg := InternalNewClusterSettings("10.0.0.1")
-					cfg.Logger = logging.InternalNopLogger{}
+					cfg.Logger = logging.Nop()
 					if err := cfg.Validate(); err != nil {
 						t.Fatalf("baseline config invalid: %v", err)
 					}
 
 					cfg = InternalNewClusterSettings("10.0.0.1")
-					cfg.Logger = logging.InternalNopLogger{}
+					cfg.Logger = logging.Nop()
 					tc.mutate(cfg)
 					err := cfg.Validate()
 					if err == nil || !strings.Contains(err.Error(), tc.wantErr) {

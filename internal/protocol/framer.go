@@ -27,6 +27,7 @@ package protocol
 import (
 	. "github.com/scylladb/gocql/v2/internal/cqltype"
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
 
 	"encoding/binary"
@@ -638,7 +639,7 @@ func (f *Framer) readVectorTypeInfo(simple NativeType, vectorTypePrefix string) 
 
 	return VectorType{
 		NativeType: simple,
-		SubType:    cqltype.GetCassandraLongType(typeStr, f.Proto, cqltype.NopTypeLogger{}),
+		SubType:    cqltype.GetCassandraLongType(typeStr, f.Proto, logging.Nop()),
 		Dimensions: dim,
 	}
 }

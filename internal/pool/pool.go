@@ -536,7 +536,7 @@ func (pool *InternalHostConnPool) InternalScheduleTypedRepair() {
 	delay, again := policy.Delay(attempt)
 	if delay < 0 {
 		again = false
-		pool.InternalLogger.Printf("gocql: reconnect policy returned negative delay")
+		pool.logger().Warn("reconnect policy returned a negative delay; stopping reconnection")
 	}
 	pool.InternalMu.Lock()
 	if !again {

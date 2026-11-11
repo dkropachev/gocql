@@ -12,6 +12,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
+	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
@@ -372,11 +373,11 @@ func newDriverConfigReporter(s *Core) *driverConfigReporter {
 func (r *driverConfigReporter) InternalUpdateStartupOptions(opts map[string]string, isScyllaConn bool) {
 	report, err := r.buildReport(isScyllaConn)
 	if err != nil {
-		r.session.privateStorage.InternalLogger.Printf("gocql: unable to report driver configuration: %v", err)
+		r.session.logger().Warn("unable to report driver configuration", logging.Err(err))
 		return
 	}
 	if len(report) > maxDriverConfigSize {
-		r.session.privateStorage.InternalLogger.Printf("gocql: driver configuration report is %d bytes, exceeding the %d byte limit; omitting it", len(report), maxDriverConfigSize)
+		r.session.logger().Warn("driver configuration report exceeds size limit; omitting it", "bytes", len(report), "limit", maxDriverConfigSize)
 		return
 	}
 	opts[InternalDriverConfigStartupKey] = report

@@ -26,6 +26,10 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	"log/slog"
+
+	"github.com/scylladb/gocql/v2/internal/logging"
 )
 
 var (
@@ -79,7 +83,7 @@ const (
 
 // EventBus manages event distribution to multiple subscribers
 type EventBus[T any] struct {
-	logger       StdLogger
+	logger       *slog.Logger
 	input        chan T
 	closedSignal chan struct{}
 	subscribers  []*subscriber[T]
@@ -89,12 +93,6 @@ type EventBus[T any] struct {
 	status       status
 }
 
-type StdLogger interface {
-	Print(v ...any)
-	Printf(format string, v ...any)
-	Println(v ...any)
-}
-
 type EventBusConfig struct {
 	// Size of the event queue, when queue gets more events than queue events are getting dropped.
 	InputEventsQueueSize int
@@ -102,10 +100,10 @@ type EventBusConfig struct {
 
 // New creates a new EventBus with the specified input channel buffer size.
 // The EventBus must be status with Start() before it begins processing events.
-func New[T any](cfg EventBusConfig, logger StdLogger) *EventBus[T] {
+func New[T any](cfg EventBusConfig, logger *slog.Logger) *EventBus[T] {
 	return &EventBus[T]{
 		cfg:          cfg,
-		logger:       logger,
+		logger:       logging.Or(logger),
 		input:        make(chan T, cfg.InputEventsQueueSize),
 		closedSignal: make(chan struct{}, 1),
 		status:       statusInitialized,
@@ -244,9 +242,7 @@ func (eb *EventBus[T]) run() {
 			return
 		case event, ok := <-eb.input:
 			if !ok {
-				if eb.logger == nil {
-					eb.logger.Printf("eventbus channel has been closed, it should not have happened, report the bug please.")
-				}
+				eb.logger.Error("eventbus input closed unexpectedly; please report this driver bug")
 				return
 			}
 			eb.distribute(event)
@@ -268,9 +264,7 @@ func (eb *EventBus[T]) distribute(event T) {
 		select {
 		case sub.ch <- event:
 		default:
-			if eb.logger != nil {
-				eb.logger.Printf("eventbus: dropped event for subscriber %s, make sure it is running and update it's channel size\n", sub.name)
-			}
+			eb.logger.Warn("eventbus dropped event; subscriber is not draining its channel", "subscriber", sub.name)
 		}
 	}
 }

@@ -22,6 +22,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -56,11 +57,12 @@ type panicObserver struct{}
 func (panicObserver) ObserveRequest(settings.RequestEvent) { panic("request") }
 func (panicObserver) ObserveAttempt(routing.AttemptEvent)  { panic("attempt") }
 
-type panicLogger struct{}
+type panicHandler struct{}
 
-func (panicLogger) Print(...any)          { panic("logger") }
-func (panicLogger) Printf(string, ...any) { panic("logger") }
-func (panicLogger) Println(...any)        { panic("logger") }
+func (panicHandler) Enabled(context.Context, slog.Level) bool  { return true }
+func (panicHandler) Handle(context.Context, slog.Record) error { panic("logger") }
+func (h panicHandler) WithAttrs([]slog.Attr) slog.Handler      { return h }
+func (h panicHandler) WithGroup(string) slog.Handler           { return h }
 func TestExecution(t *testing.T) {
 	t.Run("Bind", func(t *testing.T) {
 		t.Run("CanonicalAssembly", func(t *testing.T) {
@@ -444,15 +446,13 @@ func TestExecution(t *testing.T) {
 
 	t.Run("Logger", func(t *testing.T) {
 		t.Run("ConcurrentCapture", func(t *testing.T) {
-			logger := &logging.InternalTestLogger{}
+			logger, out := logging.NewCapture()
 			done := make(chan struct{}, 8)
 			for i := 0; i < 8; i++ {
 				go func() {
 					for j := 0; j < 100; j++ {
-						logger.Print("a")
-						logger.Printf("%s", "b")
-						logger.Println("c")
-						_ = logger.String()
+						logger.Info("a")
+						_ = out.String()
 					}
 					done <- struct{}{}
 				}()
@@ -460,18 +460,17 @@ func TestExecution(t *testing.T) {
 			for i := 0; i < 8; i++ {
 				<-done
 			}
-			if len(logger.String()) != 8*100*4 {
+			if len(out.Records()) != 8*100 || strings.Count(out.String(), "msg=a") != 8*100 {
 				t.Fatal("lost concurrent log data")
 			}
 		})
 
 		t.Run("ObserverPanicsContained", func(t *testing.T) {
-			logger := logging.InternalV2SafeLogger{InternalLogger: panicLogger{}}
-			logger.Print("x")
-			logger.Printf("%s", "x")
-			logger.Println("x")
+			logger := slog.New(logging.SafeHandler{Next: panicHandler{}})
+			logger.Info("x")
+			logger.With("k", "v").WithGroup("g").Warn("x")
 			s, cs, ps := runtimeTestSession(t, 1)
-			implCluster.SessionData(s).InternalLogger = panicLogger{}
+			implCluster.SessionData(s).InternalLogger = slog.New(panicHandler{})
 			go func() {
 				stream := typedTestReadRequest(t, cs[0], ps[0])
 				_, _ = ps[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))

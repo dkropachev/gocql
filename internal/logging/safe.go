@@ -16,19 +16,42 @@
 
 package logging
 
-// Logging must never turn observation/setup into a request panic. Logger
-// implementations remain responsible for their shared concurrency contract.
-type InternalV2SafeLogger struct{ InternalLogger StdLogger }
+import (
+	"context"
+	"log/slog"
+)
 
-func (l InternalV2SafeLogger) Print(v ...any) {
-	defer func() { _ = recover() }()
-	l.InternalLogger.Print(v...)
+// SafeHandler contains panics raised by Next so a faulty user handler cannot break the driver.
+type SafeHandler struct{ Next slog.Handler }
+
+func (h SafeHandler) Enabled(ctx context.Context, level slog.Level) (enabled bool) {
+	defer func() {
+		if recover() != nil {
+			enabled = false
+		}
+	}()
+	return h.Next.Enabled(ctx, level)
 }
-func (l InternalV2SafeLogger) Printf(format string, v ...any) {
+
+func (h SafeHandler) Handle(ctx context.Context, r slog.Record) (err error) {
 	defer func() { _ = recover() }()
-	l.InternalLogger.Printf(format, v...)
+	return h.Next.Handle(ctx, r)
 }
-func (l InternalV2SafeLogger) Println(v ...any) {
-	defer func() { _ = recover() }()
-	l.InternalLogger.Println(v...)
+
+func (h SafeHandler) WithAttrs(attrs []slog.Attr) (out slog.Handler) {
+	defer func() {
+		if recover() != nil {
+			out = h
+		}
+	}()
+	return SafeHandler{Next: h.Next.WithAttrs(attrs)}
+}
+
+func (h SafeHandler) WithGroup(name string) (out slog.Handler) {
+	defer func() {
+		if recover() != nil {
+			out = h
+		}
+	}()
+	return SafeHandler{Next: h.Next.WithGroup(name)}
 }

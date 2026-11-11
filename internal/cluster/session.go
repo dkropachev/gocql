@@ -25,15 +25,16 @@
 package cluster
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
+	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
@@ -49,7 +50,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/events"
 	"github.com/scylladb/gocql/v2/internal/debounce"
-	"github.com/scylladb/gocql/v2/internal/debug"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 )
@@ -57,6 +57,8 @@ import (
 // Core owns cluster metadata, pooled connections and typed executions. It
 // is safe for concurrent use. The public Session in internal/session wraps
 // it; Connect constructs validated sessions.
+func (s *Core) logger() *slog.Logger { return logging.Or(s.privateStorage.InternalLogger) }
+
 type Core struct {
 	privateStorage SessionStorage
 
@@ -179,10 +181,11 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 // (golang/go#66821). Since RandomUUID's signature still admits an error,
 // handling it costs little and keeps the id unconditional whatever a future
 // implementation does.
-func newSessionID(logger logging.StdLogger) string {
+func newSessionID(logger *slog.Logger) string {
+	logger = logging.Or(logger)
 	id, err := cqltype.RandomUUID()
 	if err != nil {
-		logger.Printf("gocql: unable to generate a random session id, falling back to a pseudo-random one: %v", err)
+		logger.Warn("unable to generate a random session id; falling back to a pseudo-random one", logging.Err(err))
 		id = pseudoRandomUUID()
 	}
 	return id.String()
@@ -295,9 +298,7 @@ func (s *Core) init() error {
 				var proto int
 				proto, err = s.privateStorage.InternalControl.InternalDiscoverProtocol(hosts)
 				if err != nil {
-					if debug.Enabled {
-						s.privateStorage.InternalLogger.Println(err.Error())
-					}
+					s.logger().Debug("protocol discovery failed", "attempt", i, logging.Err(err))
 					continue
 				} else if proto == 0 {
 					return errors.New("unable to discover protocol version")
@@ -309,9 +310,7 @@ func (s *Core) init() error {
 			}
 
 			if err = s.privateStorage.InternalControl.InternalConnect(hosts); err != nil {
-				if debug.Enabled {
-					s.privateStorage.InternalLogger.Println(err.Error())
-				}
+				s.logger().Debug("control connection attempt failed", "attempt", i, logging.Err(err))
 				continue
 			}
 			break
@@ -487,13 +486,12 @@ func (s *Core) reconnectDownedHosts(intv time.Duration) {
 		case <-reconnectTicker.C:
 			hosts := s.privateStorage.InternalHostSource.InternalGetHostsList()
 
-			// Print session.hostSource for debug.
-			if debug.Enabled {
-				buf := bytes.NewBufferString("Session.hostSource:")
+			if s.logger().Enabled(context.Background(), slog.LevelDebug) {
+				states := make([]string, 0, len(hosts))
 				for _, h := range hosts {
-					buf.WriteString("[" + h.ConnectAddress().String() + ":" + h.State().String() + "]")
+					states = append(states, h.ConnectAddress().String()+":"+h.State().String())
 				}
-				s.privateStorage.InternalLogger.Println(buf.String())
+				s.logger().Debug("reconnect tick", "hosts", states)
 			}
 
 			for _, h := range hosts {

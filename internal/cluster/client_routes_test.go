@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/events"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
@@ -193,7 +195,7 @@ func TestClientRoutes(t *testing.T) {
 			SessionData(opaqueStorageValuexxxxxxxxxxx).eventBus = eventbus.New[events.Event](eventbus.EventBusConfig{
 				InputEventsQueueSize: 1,
 			}, nil)
-			SessionData(opaqueStorageValuexxxxxxxxxxx).InternalLogger = &logging.InternalNopLogger{}
+			SessionData(opaqueStorageValuexxxxxxxxxxx).InternalLogger = logging.Nop()
 			return opaqueStorageValuexxxxxxxxxxx
 		}()
 
@@ -205,7 +207,7 @@ func TestClientRoutes(t *testing.T) {
 		h := NewClientRoutesAddressTranslator(ClientRoutesConfig{
 			TableName: "system.client_routes",
 			Endpoints: ClientRoutesEndpointList{{ConnectionID: "c1"}},
-		}, nil, false, &logging.InternalNopLogger{})
+		}, nil, false, logging.Nop())
 		defer h.Stop()
 
 		if err := h.Initialize(s); err != nil {
@@ -337,7 +339,7 @@ func TestClientRoutes(t *testing.T) {
 	t.Run("Stop", func(t *testing.T) {
 		h := func() *ClientRoutesHandler {
 			opaqueStorageValuexxxxxxxxx := new(ClientRoutesHandler)
-			ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxx).log = &logging.InternalDefaultLogger{}
+			ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxx).log = slog.Default()
 			ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxx).c = &fakeControlConn{}
 			ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxx).InternalCloseChan = make(chan struct{})
 			ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxx).InternalUpdateTasks = make(chan InternalUpdateTask, 1024)
@@ -654,7 +656,7 @@ func TestClientRoutes(t *testing.T) {
 			}
 			h := func() *ClientRoutesHandler {
 				opaqueStorageValuexxxxxxxxxxxx := new(ClientRoutesHandler)
-				ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxxxxx).log = &logging.InternalDefaultLogger{}
+				ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxxxxx).log = slog.Default()
 				ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxxxxx).c = &fakeControlConn{iter: &nativeResultFixture{err: errors.New("query failed")}}
 				ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxxxxx).InternalCloseChan = make(chan struct{})
 				ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxxxxx).InternalUpdateTasks = make(chan InternalUpdateTask, 1024)
@@ -703,7 +705,7 @@ func TestClientRoutes(t *testing.T) {
 	t.Run("UpdateHostPortMappingSync", func(t *testing.T) {
 		h := func() *ClientRoutesHandler {
 			opaqueStorageValuexxxxxxxxxx := new(ClientRoutesHandler)
-			ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxxx).log = &logging.InternalDefaultLogger{}
+			ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxxx).log = slog.Default()
 			ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxxx).c = &fakeControlConn{}
 			ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxxx).InternalCloseChan = make(chan struct{})
 			ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxxx).InternalUpdateTasks = make(chan InternalUpdateTask, 1024)

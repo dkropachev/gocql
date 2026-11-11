@@ -85,7 +85,7 @@ func TestClientRoutes(t *testing.T) {
 			config.Metadata.InitialDiscovery = false
 			config.Pool.ShardAwarePort = false
 			config.Pool.ConnectionsPerHost = 1
-			config.Logger = logging.InternalNopLogger{}
+			config.Logger = logging.Nop()
 			config.ClientRoutes = &settings.ClientRoutesOptions{ConnectionIDs: []string{ids[0].String(), ids[1].String(), ids[2].String()}}
 			config.DNSResolver = dnsResolverFunc(func(name string) ([]net.IP, error) {
 				if name == "bad-dns" {
@@ -125,7 +125,7 @@ func TestClientRoutes(t *testing.T) {
 
 	t.Run("Update", func(t *testing.T) {
 		t.Run("DeletionAdvancesInsertionEpoch", func(t *testing.T) {
-			p := cluster.NewClientRoutesAddressTranslator(cluster.ClientRoutesConfig{}, nil, false, logging.InternalNopLogger{})
+			p := cluster.NewClientRoutesAddressTranslator(cluster.ClientRoutesConfig{}, nil, false, logging.Nop())
 			host := func() *endpoint.HostInfo {
 				opaqueStorageValuexxxxxxxxxxx := new(endpoint.HostInfo)
 				implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxx).InternalHostId = cqltype.MustRandomUUID()
@@ -149,7 +149,7 @@ func TestClientRoutes(t *testing.T) {
 		})
 
 		t.Run("EmptyFullReadDetectsNewerPair", func(t *testing.T) {
-			p := cluster.NewClientRoutesAddressTranslator(cluster.ClientRoutesConfig{}, nil, false, logging.InternalNopLogger{})
+			p := cluster.NewClientRoutesAddressTranslator(cluster.ClientRoutesConfig{}, nil, false, logging.Nop())
 			before := p.CaptureRouteEpochs()
 			p.InvalidateRouteTask(cluster.InternalUpdateTask{InternalPairs: []cluster.InternalPair{{InternalConnectionID: "connection", InternalHostID: "new-host"}}})
 			if p.ApplyRouteRead(cluster.InternalUpdateTask{InternalConnectionIDs: []string{"connection"}}, before, nil) {
@@ -158,7 +158,7 @@ func TestClientRoutes(t *testing.T) {
 		})
 
 		t.Run("EventExpansionFallsBackToFullRefresh", func(t *testing.T) {
-			p := cluster.NewClientRoutesAddressTranslator(cluster.ClientRoutesConfig{Endpoints: cluster.ClientRoutesEndpointList{{ConnectionID: "allowed"}}}, nil, false, logging.InternalNopLogger{})
+			p := cluster.NewClientRoutesAddressTranslator(cluster.ClientRoutesConfig{Endpoints: cluster.ClientRoutesEndpointList{{ConnectionID: "allowed"}}}, nil, false, logging.Nop())
 			// More than the bounded pair capacity must schedule a full connection scope,
 			// without allocating the Cartesian product or dropping required recovery.
 			hosts := make([]string, 1025)
@@ -195,7 +195,7 @@ func TestClientRoutes(t *testing.T) {
 		})
 
 		t.Run("FencePerPairAndPreserveDisjoint", func(t *testing.T) {
-			p := cluster.NewClientRoutesAddressTranslator(cluster.ClientRoutesConfig{Endpoints: cluster.ClientRoutesEndpointList{{ConnectionID: "a"}, {ConnectionID: "b"}}}, nil, false, logging.InternalNopLogger{})
+			p := cluster.NewClientRoutesAddressTranslator(cluster.ClientRoutesConfig{Endpoints: cluster.ClientRoutesEndpointList{{ConnectionID: "a"}, {ConnectionID: "b"}}}, nil, false, logging.Nop())
 			a := cluster.InternalClientRoute{InternalConnectionID: "a", InternalHostID: "host", InternalAddress: "old", InternalPort: 9042}
 			b := cluster.InternalClientRoute{InternalConnectionID: "b", InternalHostID: "host", InternalAddress: "b", InternalPort: 9042}
 			implCluster.ClientRoutesHandlerData(p).InternalRouteCache.ReplaceByConnectionIDs([]string{"a", "b"}, []cluster.InternalClientRoute{b, a})

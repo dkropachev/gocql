@@ -64,4 +64,15 @@
 // configured frame and decompression limits. Borrowed result views expire on
 // advancement or cursor Close unless a PageLease retains their page.
 // OwnedBlobCodec fills reusable owned slices with RowInto.
+//
+// The driver logs through log/slog, to slog.Default() unless
+// ConfigBuilder.WithLogger supplies another logger. Debug carries
+// per-connection detail such as shard dialing; Info reports cluster changes
+// such as nodes going up or down; Warn reports degraded but continuing
+// operation; Error reports a subsystem that will not recover by itself.
+// Context is in attributes (host, shard, keyspace, err, ...), and every record
+// carries logger=gocql. Repeated Info-or-higher records with the same message
+// and host are collapsed to one per 10 seconds with a suppressed count, and a
+// panicking handler cannot break the driver. NewPrintfLogger adapts a
+// printf-style logger.
 package gocql

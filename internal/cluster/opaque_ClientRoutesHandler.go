@@ -7,15 +7,16 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/events"
 
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
-	"github.com/scylladb/gocql/v2/internal/logging"
 )
 
 type ClientRoutesHandlerStorage struct {
-	log                 logging.StdLogger
+	log                 *slog.Logger
 	c                   InternalControlConnection
 	resolver            endpoint.DNSResolver
 	InternalSession     *Core

@@ -69,7 +69,7 @@ func TestHostConnPool(t *testing.T) {
 				NumConns:         2,
 				ConvictionPolicy: &settings.SimpleConvictionPolicy{},
 			}
-			SessionData(opaqueStorageValuex).InternalLogger = logging.InternalNopLogger{}
+			SessionData(opaqueStorageValuex).InternalLogger = logging.Nop()
 			return opaqueStorageValuex
 		}()
 
@@ -79,7 +79,7 @@ func TestHostConnPool(t *testing.T) {
 			InternalSize:       2,
 			InternalKeyspace:   "test",
 			InternalConnPicker: implPool.InternalNopConnPicker{},
-			InternalLogger:     logging.InternalNopLogger{},
+			InternalLogger:     logging.Nop(),
 			InternalDebouncer:  debounce.NewSimpleDebouncer(),
 		}
 
@@ -92,7 +92,7 @@ func TestHostConnPool(t *testing.T) {
 				InternalErrorHandler: pool,
 				InternalCancel:       cancel,
 				InternalCtx:          ctx,
-				InternalLogger:       logging.InternalNopLogger{},
+				InternalLogger:       logging.Nop(),
 			}
 			_ = picker.Put(conn)
 		}
@@ -133,7 +133,7 @@ func TestHostConnPool(t *testing.T) {
 					NumConns:         1,
 					ConvictionPolicy: &settings.SimpleConvictionPolicy{},
 				}
-				SessionData(opaqueStorageValuexxx).InternalLogger = logging.InternalNopLogger{}
+				SessionData(opaqueStorageValuexxx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexxx
 			}()
 
@@ -143,7 +143,7 @@ func TestHostConnPool(t *testing.T) {
 				InternalSize:       1,
 				InternalKeyspace:   "test",
 				InternalConnPicker: implPool.InternalNopConnPicker{},
-				InternalLogger:     logging.InternalNopLogger{},
+				InternalLogger:     logging.Nop(),
 				InternalDebouncer:  debounce.NewSimpleDebouncer(),
 				InternalClosed:     true,
 			}
@@ -154,7 +154,7 @@ func TestHostConnPool(t *testing.T) {
 				InternalErrorHandler: pool,
 				InternalCancel:       cancel,
 				InternalCtx:          ctx,
-				InternalLogger:       logging.InternalNopLogger{},
+				InternalLogger:       logging.Nop(),
 			}
 
 			done := make(chan struct{})
@@ -185,7 +185,7 @@ func TestHostConnPool(t *testing.T) {
 					session := func() *Core {
 						opaqueStorageValuexxxxxxxx := new(Core)
 						SessionData(opaqueStorageValuexxxxxxxx).InternalCfg = InternalClusterSettings{ReconnectionPolicy: &implPool.ConstantReconnectionPolicy{MaxRetries: retries}}
-						SessionData(opaqueStorageValuexxxxxxxx).InternalLogger = logging.InternalNopLogger{}
+						SessionData(opaqueStorageValuexxxxxxxx).InternalLogger = logging.Nop()
 						return opaqueStorageValuexxxxxxxx
 					}()
 
@@ -209,8 +209,8 @@ func TestHostConnPool(t *testing.T) {
 		s := func() *Core {
 			opaqueStorageValuexxxxxx := new(Core)
 			SessionData(opaqueStorageValuexxxxxx).InternalCtx = ctx
-			SessionData(opaqueStorageValuexxxxxx).InternalLogger = logging.InternalNopLogger{}
-			SessionData(opaqueStorageValuexxxxxx).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityPointer(), ProtoVersion: 4, HostDialer: dialer, Logger: logging.InternalNopLogger{}}
+			SessionData(opaqueStorageValuexxxxxx).InternalLogger = logging.Nop()
+			SessionData(opaqueStorageValuexxxxxx).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityPointer(), ProtoVersion: 4, HostDialer: dialer, Logger: logging.Nop()}
 			return opaqueStorageValuexxxxxx
 		}()
 		SessionData(s).InternalCfg.ReconnectionPolicy = &implPool.NoReconnectionPolicy{}
@@ -251,14 +251,14 @@ func TestHostConnPool(t *testing.T) {
 		conn := mockConn(0)
 		conn.InternalScyllaSupported = endpoint.InternalParseSupported(map[string][]string{
 			endpoint.InternalLwtAddMetadataMarkKey: {"LWT_OPTIMIZATION_META_BIT_MASK=8"},
-		}, &logging.InternalTestLogger{})
+		}, logging.Nop())
 		require.True(t, conn.InternalIsScyllaConn())
 		require.Zero(t, implEndpoint.ScyllaHostFeaturesValueData(conn.InternalGetScyllaSupported().ScyllaHostFeatures).InternalNrShards)
 
 		pool := &implPool.InternalHostConnPool{
 			InternalSize:       1,
 			InternalConnPicker: implPool.InternalNopConnPicker{},
-			InternalLogger:     &logging.InternalTestLogger{},
+			InternalLogger:     logging.Nop(),
 		}
 		pool.InternalInitConnPicker(conn)
 

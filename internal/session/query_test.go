@@ -93,7 +93,7 @@ func loopbackTestSession(t testing.TB, workload string) *cluster.Core {
 		t.Fatalf("loopback server did not start: %q %v", line, err)
 	}
 	s := new(cluster.Core)
-	implCluster.SessionData(s).InternalLogger = logging.InternalNopLogger{}
+	implCluster.SessionData(s).InternalLogger = logging.Nop()
 	implCluster.SessionData(s).InternalHostSource = &cluster.InternalRingDescriber{InternalHosts: map[string]*endpoint.HostInfo{}}
 	implCluster.SessionData(s).InternalPool = &pool.InternalPolicyConnPool{InternalHostConnPools: map[implCqltype.UUID]*pool.InternalHostConnPool{}}
 	conn := transporttestkit.NewDialedConn(t, 4, addr)

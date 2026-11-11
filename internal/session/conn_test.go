@@ -44,6 +44,8 @@ import (
 	"testing"
 	"time"
 
+	"log/slog"
+
 	"github.com/stretchr/testify/require"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -151,13 +153,15 @@ type unexpectedOptionsLogger struct {
 	seenOnce sync.Once
 }
 
-func (l *unexpectedOptionsLogger) Print(v ...any)   {}
-func (l *unexpectedOptionsLogger) Println(v ...any) {}
-func (l *unexpectedOptionsLogger) Printf(format string, v ...any) {
-	if strings.Contains(format, "unexpected frame in response to options") {
+func (l *unexpectedOptionsLogger) Enabled(context.Context, slog.Level) bool { return true }
+func (l *unexpectedOptionsLogger) Handle(_ context.Context, r slog.Record) error {
+	if strings.Contains(r.Message, "unexpected frame in response to OPTIONS") {
 		l.seenOnce.Do(func() { close(l.seen) })
 	}
+	return nil
 }
+func (l *unexpectedOptionsLogger) WithAttrs([]slog.Attr) slog.Handler { return l }
+func (l *unexpectedOptionsLogger) WithGroup(string) slog.Handler      { return l }
 
 type testContextWriter struct {
 	n       int
@@ -198,7 +202,7 @@ func newTestExecConn(t *testing.T, w transport.InternalContextWriter) (*transpor
 		InternalR:    bufio.NewReader(client),
 	}
 	c.InternalW = w
-	c.InternalLogger = logging.InternalNopLogger{}
+	c.InternalLogger = logging.Nop()
 	c.InternalErrorHandler = transport.InternalConnErrorHandlerFn(func(*transport.Conn, error, bool) {})
 	c.InternalStreams = streams.New()
 	c.InternalCalls = newCallTable()
@@ -1309,40 +1313,6 @@ type applicationInfoFunc func(map[string]string)
 
 func (f applicationInfoFunc) UpdateStartupOptions(opts map[string]string) { f(opts) }
 
-// recordingLogger captures log output for assertions.
-//
-// logger.go's testLogger is not usable here: it wraps a bare bytes.Buffer, and the
-// connection's own goroutines log while the test reads, which -race flags. The mutex is
-// the whole difference.
-type recordingLogger struct {
-	mu      sync.Mutex
-	capture bytes.Buffer
-}
-
-func (l *recordingLogger) Print(v ...any) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	fmt.Fprint(&l.capture, v...)
-}
-
-func (l *recordingLogger) Printf(format string, v ...any) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	fmt.Fprintf(&l.capture, format, v...)
-}
-
-func (l *recordingLogger) Println(v ...any) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	fmt.Fprintln(&l.capture, v...)
-}
-
-func (l *recordingLogger) String() string {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.capture.String()
-}
-
 // compressionInjectingAppInfo is an ApplicationInfo that writes the driver-owned
 // COMPRESSION key, which the interface does not prevent: UpdateStartupOptions is handed
 // the raw options map.
@@ -2289,7 +2259,7 @@ func TestConn(t *testing.T) {
 			conn, server := newTestExecConn(t, testContextWriter{})
 			conn.InternalVersion = implProtocol.ProtoVersion4
 			conn.InternalCfg = &transport.ConnConfig{}
-			conn.InternalLogger = log
+			conn.InternalLogger = slog.New(log)
 			defer server.Close()
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -2373,11 +2343,11 @@ func TestConn(t *testing.T) {
 			// points it fails in resolveInitialEndpoints, well before refreshRingNow.
 			sess := func() *implCluster.Core {
 				opaqueStorageValue := new(implCluster.Core)
-				implCluster.SessionData(opaqueStorageValue).InternalLogger = log
+				implCluster.SessionData(opaqueStorageValue).InternalLogger = slog.New(log)
 				implCluster.SessionData(opaqueStorageValue).InternalConnCfg = &transport.ConnConfig{}
 				return opaqueStorageValue
 			}()
-			implCluster.SessionData(sess).InternalHostSource = &implCluster.InternalRingDescriber{InternalCfg: &implCluster.SessionData(sess).InternalCfg, InternalLogger: log}
+			implCluster.SessionData(sess).InternalHostSource = &implCluster.InternalRingDescriber{InternalCfg: &implCluster.SessionData(sess).InternalCfg, InternalLogger: slog.New(log)}
 
 			// state is left at controlConnStarting so heartBeat's CAS lets it run.
 			cc := &implCluster.InternalControlConn{InternalSession: sess, InternalQuit: make(chan struct{})}
@@ -2460,7 +2430,7 @@ func TestConn(t *testing.T) {
 
 			cluster := testCluster(defaultProto, srv.Address)
 			cluster.NumConns = 1
-			cluster.Logger = log
+			cluster.Logger = slog.New(log)
 			db, err := cluster.Open()
 			if err != nil {
 				t.Fatal(err)
@@ -2517,7 +2487,7 @@ func TestConn(t *testing.T) {
 				InternalCalls:   callTableOf(1, call),
 				InternalVersion: implProtocol.ProtoVersion4,
 				InternalStreams: streams.New(),
-				InternalLogger:  logging.InternalNopLogger{},
+				InternalLogger:  logging.Nop(),
 			}
 
 			err := c.InternalProcessFrame(context.Background(), c.InternalR)
@@ -2600,7 +2570,7 @@ func TestConn(t *testing.T) {
 						InternalCalls:   callTableOf(1, call),
 						InternalVersion: implProtocol.ProtoVersion4,
 						InternalStreams: streams.New(),
-						InternalLogger:  logging.InternalNopLogger{},
+						InternalLogger:  logging.Nop(),
 					}
 
 					err := c.InternalProcessFrameSource(context.Background(), src)
@@ -2700,7 +2670,7 @@ func TestConn(t *testing.T) {
 					InternalR: bufio.NewReader(&buf),
 				},
 				InternalStreams: streams.New(),
-				InternalLogger:  &logging.InternalDefaultLogger{},
+				InternalLogger:  slog.Default(),
 				InternalCfg:     &transport.ConnConfig{},
 			}
 
@@ -2725,7 +2695,7 @@ func TestConn(t *testing.T) {
 				InternalCalls:   callTableOf(1, call),
 				InternalVersion: implProtocol.ProtoVersion4,
 				InternalStreams: streams.New(),
-				InternalLogger:  logging.InternalNopLogger{},
+				InternalLogger:  logging.Nop(),
 			}
 
 			err := c.InternalProcessFrameSource(context.Background(), transport.InternalFrameSource{InternalR: bytes.NewReader(header)})
@@ -2954,7 +2924,7 @@ func TestConn(t *testing.T) {
 				InternalAddr:       server.RemoteAddr().String(),
 				InternalStreams:    streams.New(),
 				InternalIsSchemaV2: true,
-				InternalLogger:     logging.InternalNopLogger{},
+				InternalLogger:     logging.Nop(),
 				InternalW:          w,
 			}
 			c.InternalWriteTimeout.Store(int64(time.Second * 10))
@@ -3154,7 +3124,7 @@ func TestConn(t *testing.T) {
 				InternalAddr:       server.RemoteAddr().String(),
 				InternalStreams:    streams.New(),
 				InternalIsSchemaV2: true,
-				InternalLogger:     logging.InternalNopLogger{},
+				InternalLogger:     logging.Nop(),
 				InternalW:          w,
 			}
 			c.InternalWriteTimeout.Store(int64(time.Second * 10))

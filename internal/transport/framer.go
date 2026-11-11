@@ -17,11 +17,13 @@
 package transport
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
@@ -90,28 +92,28 @@ func (cf *connFramers) initCache(c *Conn) {
 		if castedExt, ok := lwtExt.(*endpoint.InternalLwtAddMetadataMarkExt); ok {
 			cfg.InternalFlagLWT = castedExt.InternalLwtOptMetaBitMask
 		} else {
-			c.InternalLogger.Printf("gocql: failed to cast CQL protocol extension %s to %T", endpoint.InternalLwtAddMetadataMarkKey, endpoint.InternalLwtAddMetadataMarkExt{})
+			c.logger().Error("CQL protocol extension has unexpected type; please report this driver bug", "extension", endpoint.InternalLwtAddMetadataMarkKey, "want", fmt.Sprintf("%T", endpoint.InternalLwtAddMetadataMarkExt{}))
 		}
 	}
 	if rateLimitErrorExt := endpoint.InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, endpoint.InternalRateLimitError); rateLimitErrorExt != nil {
 		if castedExt, ok := rateLimitErrorExt.(*endpoint.InternalRateLimitExt); ok {
 			cfg.rateLimitingErrorCode = castedExt.InternalRateLimitErrorCode
 		} else {
-			c.InternalLogger.Printf("gocql: failed to cast CQL protocol extension %s to %T", endpoint.InternalRateLimitError, endpoint.InternalRateLimitExt{})
+			c.logger().Error("CQL protocol extension has unexpected type; please report this driver bug", "extension", endpoint.InternalRateLimitError, "want", fmt.Sprintf("%T", endpoint.InternalRateLimitExt{}))
 		}
 	}
 	if tabletsExt := endpoint.InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, endpoint.InternalTabletsRoutingV1); tabletsExt != nil {
 		if _, ok := tabletsExt.(*endpoint.InternalTabletsRoutingV1Ext); ok {
 			cfg.InternalTabletsRoutingV1 = true
 		} else {
-			c.InternalLogger.Printf("gocql: failed to cast CQL protocol extension %s to %T", endpoint.InternalTabletsRoutingV1, endpoint.InternalTabletsRoutingV1Ext{})
+			c.logger().Error("CQL protocol extension has unexpected type; please report this driver bug", "extension", endpoint.InternalTabletsRoutingV1, "want", fmt.Sprintf("%T", endpoint.InternalTabletsRoutingV1Ext{}))
 		}
 	}
 	if metadataIDExt := endpoint.InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, endpoint.InternalScyllaUseMetadataID); metadataIDExt != nil {
 		if _, ok := metadataIDExt.(*endpoint.InternalScyllaUseMetadataIDExt); ok {
 			cfg.InternalScyllaUseMetadataID = true
 		} else {
-			c.InternalLogger.Printf("gocql: failed to cast CQL protocol extension %s to %T", endpoint.InternalScyllaUseMetadataID, endpoint.InternalScyllaUseMetadataIDExt{})
+			c.logger().Error("CQL protocol extension has unexpected type; please report this driver bug", "extension", endpoint.InternalScyllaUseMetadataID, "want", fmt.Sprintf("%T", endpoint.InternalScyllaUseMetadataIDExt{}))
 		}
 	}
 	cfg.InternalTabletsRoutingV2 = endpoint.InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, endpoint.InternalTabletsRoutingV2) != nil
@@ -262,7 +264,7 @@ func (fp *framerPool) close() {
 	fp.enabled.Store(false)
 }
 
-func (fp *framerPool) updateAvg(logger logging.StdLogger, bufCap int64) (int64, bool) {
+func (fp *framerPool) updateAvg(logger *slog.Logger, bufCap int64) (int64, bool) {
 	if bufCap > maxReasonableBufferSize {
 		bufCap = maxReasonableBufferSize
 	}
@@ -287,7 +289,7 @@ func (fp *framerPool) updateAvg(logger logging.StdLogger, bufCap int64) (int64, 
 	}
 
 	if logger != nil {
-		logger.Printf("gocql: EWMA update failed after %d retries, skipping shrink decision", maxCASRetries)
+		logger.Debug("framer pool EWMA update contended; skipping shrink decision", "retries", maxCASRetries)
 	}
 	return fp.InternalBufAvgSize.Load(), false
 }

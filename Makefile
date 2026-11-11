@@ -43,7 +43,7 @@ INTEGRATION_PKG ?= ./tests/integration
 # knob entirely; that raises the ScyllaDB default from 5m to 10m, which only
 # changes how long a hung run burns before it dumps.
 TEST_INTEGRATION_TIMEOUT ?= 10m
-TEST_INTEGRATION_TAGS ?= integration gocql_debug
+TEST_INTEGRATION_TAGS ?= integration
 JVM_EXTRA_OPTS ?= -Dcassandra.superuser_setup_delay_ms=0 -Dcassandra.test.fail_writes_ks=gocql_test_fail -Dcassandra.custom_query_handler_class=org.apache.cassandra.cql3.CustomPayloadMirroringQueryHandler
 
 # COVER_ARGS is appended to every `go test ... ./...` invocation below. It is
@@ -454,11 +454,11 @@ check-go-mod-drift:
 
 # The architecture-dependent part of check. It is not redundant with test-unit:
 # `go test` compiles no non-test file behind a build tag -- integration_only.go,
-# internal/debug/debug_on.go, the gocql_perf counters.
+# the gocql_perf counters.
 build:
 	@echo "Build"
 	go build ./...
-	go build -tags "integration gocql_debug gocql_perf" ./...
+	go build -tags "integration gocql_perf" ./...
 
 check: build .prepare-golangci check-go-mod-drift
 	echo "Check linting"

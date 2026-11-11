@@ -74,7 +74,7 @@ func TestTypedConnPicker(t *testing.T) {
 	})
 
 	t.Run("ShardOf", func(t *testing.T) {
-		features := endpoint.InternalParseSupported(validSupported(), logging.InternalNopLogger{})
+		features := endpoint.InternalParseSupported(validSupported(), logging.Nop())
 		options := settings.DefaultConfig("localhost").Pool
 		p := codecTestMust(implPool.InternalNewTypedConnPicker(&transport.Conn{InternalScyllaSupported: features}, options))
 		if p.InternalShardOf(math.MinInt64) != 0 || p.InternalShardOf(math.MaxInt64) != 11 {
@@ -86,7 +86,7 @@ func TestTypedConnPicker(t *testing.T) {
 		if err := transport.InternalValidateV2Supported(values, options); err != nil {
 			t.Fatal(err)
 		}
-		ext := endpoint.InternalNewLwtAddMetaMarkExt(values, logging.InternalNopLogger{})
+		ext := endpoint.InternalNewLwtAddMetaMarkExt(values, logging.Nop())
 		if ext == nil || ext.InternalSerialize()[endpoint.InternalLwtAddMetadataMarkKey] != "LWT_OPTIMIZATION_META_BIT_MASK="+strconv.FormatUint(1<<31, 10) {
 			t.Fatal("high LWT bit did not roundtrip")
 		}

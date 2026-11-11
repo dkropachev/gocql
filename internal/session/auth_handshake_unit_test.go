@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -70,55 +71,31 @@ func (srv *authTestServer) received() []string {
 	return append([]string(nil), srv.tokens...)
 }
 
-// syncLogger captures log output from the pool's goroutines.
-type syncLogger struct {
-	mu  sync.Mutex
-	buf strings.Builder
-}
-
-func (l *syncLogger) Print(v ...any) { l.write(fmt.Sprint(v...)) }
-func (l *syncLogger) Printf(format string, v ...any) {
-	l.write(fmt.Sprintf(format, v...))
-}
-func (l *syncLogger) Println(v ...any) { l.write(fmt.Sprintln(v...)) }
-
-func (l *syncLogger) write(s string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.buf.WriteString(s)
-}
-
-func (l *syncLogger) String() string {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.buf.String()
-}
-
 // cluster returns a config for one connection to srv that gives up after a
 // single attempt. testCluster has no control connection, so open
 // reports a failed handshake only as ErrNoConnectionsStarted; the cause is in
 // the pool's log, which lands in the returned logger.
-func (srv *authTestServer) cluster(auth transport.Authenticator) (*implCluster.InternalClusterSettings, *syncLogger) {
+func (srv *authTestServer) cluster(auth transport.Authenticator) (*implCluster.InternalClusterSettings, *logging.Capture) {
 	cfg := testCluster(protocol.ProtoVersion4, srv.Address)
 	cfg.NumConns = 1
 	cfg.Authenticator = auth
 	cfg.InitialReconnectionPolicy = &pool.ConstantReconnectionPolicy{MaxRetries: 1}
 	cfg.ReconnectionPolicy = &pool.ConstantReconnectionPolicy{MaxRetries: 1}
-	log := &syncLogger{}
-	cfg.Logger = log
-	return cfg, log
+	logger, out := logging.NewCapture()
+	cfg.Logger = logger
+	return cfg, out
 }
 
 // requireHandshakeError fails t unless open failed and the pool
 // logged a cause containing want.
-func requireHandshakeError(t *testing.T, cfg *implCluster.InternalClusterSettings, log *syncLogger, want string) {
+func requireHandshakeError(t *testing.T, cfg *implCluster.InternalClusterSettings, log *logging.Capture, want string) {
 	t.Helper()
 	s, err := cfg.Open()
 	if err == nil {
 		s.Close()
 		t.Fatal("open succeeded, want an authentication error")
 	}
-	if !strings.Contains(err.Error(), want) && !strings.Contains(log.String(), want) {
+	if !strings.Contains(err.Error(), want) && !log.Contains(want) {
 		t.Fatalf("open error = %v, log = %q; want the cause %q", err, log.String(), want)
 	}
 }

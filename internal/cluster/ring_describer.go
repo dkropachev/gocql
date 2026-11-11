@@ -9,9 +9,11 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
+	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
@@ -19,7 +21,7 @@ import (
 // Polls system.peers at a specific interval to find new hosts
 type InternalRingDescriber struct {
 	control        InternalControlConnection
-	InternalLogger logging.StdLogger
+	InternalLogger *slog.Logger
 	InternalCfg    *InternalClusterSettings
 	// hosts are the set of all hosts in the cassandra ring that we know of.
 	// key of map is host_id.
@@ -96,7 +98,8 @@ func (r *InternalRingDescriber) getClusterPeerInfo(ctx context.Context, c transp
 	return valid, nil
 }
 
-func getPeersFromQuerySystemPeers(querySystemPeerRows []map[string]any, defaultPort int, logger logging.StdLogger) ([]*implEndpoint.HostInfo, error) {
+func getPeersFromQuerySystemPeers(querySystemPeerRows []map[string]any, defaultPort int, logger *slog.Logger) ([]*implEndpoint.HostInfo, error) {
+	logger = logging.Or(logger)
 	var peers []*implEndpoint.HostInfo
 
 	for _, row := range querySystemPeerRows {
@@ -106,8 +109,7 @@ func getPeersFromQuerySystemPeers(querySystemPeerRows []map[string]any, defaultP
 			return nil, err
 		} else if !isValidPeer(host) {
 			// If it's not a valid peer
-			logger.Printf("Found invalid peer '%s' "+
-				"Likely due to a gossip or snitch issue, this host will be ignored", host)
+			logger.Warn("ignoring invalid peer, likely a gossip or snitch issue", "peer", host.String())
 			continue
 		} else if isZeroToken(host) {
 			continue

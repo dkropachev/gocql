@@ -125,11 +125,11 @@ func TestHostConnPool(t *testing.T) {
 					s := func() *cluster.Core {
 						opaqueStorageValuexxxxxxxxxxxxxx := new(cluster.Core)
 						implCluster.SessionData(opaqueStorageValuexxxxxxxxxxxxxx).InternalCtx = ctx
-						implCluster.SessionData(opaqueStorageValuexxxxxxxxxxxxxx).InternalLogger = logging.InternalNopLogger{}
+						implCluster.SessionData(opaqueStorageValuexxxxxxxxxxxxxx).InternalLogger = logging.Nop()
 						return opaqueStorageValuexxxxxxxxxxxxxx
 					}()
 					implCluster.SessionData(s).InternalCfg.ReconnectionPolicy = &implPool.NoReconnectionPolicy{}
-					implCluster.SessionData(s).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityPointer(), ProtoVersion: 4, CQLVersion: "3.0.0", ConnectTimeout: time.Second, HostDialer: &transport.InternalV2TLSHostDialer{InternalConfig: config.Connectivity()}, Logger: logging.InternalNopLogger{}}
+					implCluster.SessionData(s).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityPointer(), ProtoVersion: 4, CQLVersion: "3.0.0", ConnectTimeout: time.Second, HostDialer: &transport.InternalV2TLSHostDialer{InternalConfig: config.Connectivity()}, Logger: logging.Nop()}
 					pool := s.NewHostConnPool(host, 1, "")
 					defer pool.Close()
 					serverDone := make(chan struct{})
@@ -197,7 +197,7 @@ func TestHostConnPool(t *testing.T) {
 			s := func() *cluster.Core {
 				opaqueStorageValuexxxxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxx).InternalCtx = ctx
-				implCluster.SessionData(opaqueStorageValuexxxxxxxxx).InternalLogger = logging.InternalNopLogger{}
+				implCluster.SessionData(opaqueStorageValuexxxxxxxxx).InternalLogger = logging.Nop()
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxx).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityPointer()}
 				return opaqueStorageValuexxxxxxxxx
 			}()
@@ -259,7 +259,7 @@ func TestHostConnPool(t *testing.T) {
 					s := func() *cluster.Core {
 						opaqueStorageValuexxxxxxxxxxx := new(cluster.Core)
 						implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalCtx = ctx
-						implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalLogger = logging.InternalNopLogger{}
+						implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalLogger = logging.Nop()
 						implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityPointer(), HostDialer: countingHostDialer{&dials}}
 						return opaqueStorageValuexxxxxxxxxxx
 					}()

@@ -27,8 +27,9 @@ import (
 	"testing"
 	"time"
 
+	"log/slog"
+
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	"github.com/scylladb/gocql/v2/internal/streams"
@@ -189,7 +190,7 @@ func TestSegment(t *testing.T) {
 				src = src[n:]
 			}
 			reader := &typedSegmentAllocationReader{segmentReader: newSegmentReader(bytes.Repeat(stream, runs))}
-			c := &Conn{InternalVersion: protocol.ProtoVersion5, InternalR: reader, InternalStreams: streams.New(), InternalCalls: newCallTable(), InternalLogger: &logging.InternalDefaultLogger{}}
+			c := &Conn{InternalVersion: protocol.ProtoVersion5, InternalR: reader, InternalStreams: streams.New(), InternalCalls: newCallTable(), InternalLogger: slog.Default()}
 			c.InternalInitFramerCache()
 			var before, after runtime.MemStats
 			runtime.ReadMemStats(&before)
@@ -304,7 +305,7 @@ func TestSegment(t *testing.T) {
 			c := &Conn{
 				InternalR:       newSegmentReader(stream),
 				InternalStreams: streams.New(),
-				InternalLogger:  &logging.InternalDefaultLogger{},
+				InternalLogger:  slog.Default(),
 			}
 			c.InternalInitFramerCache()
 			return c
@@ -374,7 +375,7 @@ func TestSegment(t *testing.T) {
 				c := &Conn{
 					InternalR:             r,
 					InternalStreams:       streams.New(),
-					InternalLogger:        &logging.InternalDefaultLogger{},
+					InternalLogger:        slog.Default(),
 					InternalFrameObserver: observer,
 				}
 				c.InternalInitFramerCache()

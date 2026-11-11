@@ -14,14 +14,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"log/slog"
+
 	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
-
 	// DialHost opens a raw socket using immutable host metadata; TLS is applied afterward.
-	logging "github.com/scylladb/gocql/v2/internal/logging"
 )
 
 type Config struct {
@@ -34,7 +34,7 @@ type Config struct {
 	AddressTranslator implEndpoint.AddressTranslator
 	Observer          Observer
 	LifecycleObserver LifecycleObserver
-	Logger            logging.StdLogger
+	Logger            *slog.Logger
 	DialHost          func(context.Context, implEndpoint.DialTarget) (net.Conn, error)
 	TLS               *tls.Config
 	// TLSSource, when set, supplies TLS for every dial; TLS then holds its

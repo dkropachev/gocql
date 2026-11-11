@@ -14,8 +14,6 @@ import (
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 
-	logging "github.com/scylladb/gocql/v2/internal/logging"
-
 	model "github.com/scylladb/gocql/v2/internal/model"
 	paging "github.com/scylladb/gocql/v2/internal/paging"
 	pool "github.com/scylladb/gocql/v2/internal/pool"
@@ -95,8 +93,6 @@ type retiredScyllaShardAwareDialer = implEndpoint.ScyllaShardAwareDialer
 type cassVersion = implEndpoint.InternalCassVersion
 
 func defaultProfile() Profile { return publicProfile(implSettings.InternalDefaultProfile()) }
-
-type nopLogger = logging.InternalNopLogger
 
 type scyllaSourcePortCtx = implEndpoint.InternalScyllaSourcePortCtx
 

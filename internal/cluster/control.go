@@ -30,6 +30,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -143,7 +144,7 @@ func (c *InternalControlConn) InternalHeartBeat() {
 			// counter here as there is in Conn.heartBeat -- every non-SUPPORTED
 			// outcome already reconnects, so this arm joins them rather than adding
 			// a bound only it would respect.
-			c.InternalSession.privateStorage.InternalLogger.Printf("gocql: unexpected frame in response to options: %T\n", resp)
+			c.InternalSession.logger().Warn("control connection: unexpected frame in response to OPTIONS; reconnecting", "frame", fmt.Sprintf("%T", resp))
 			goto reconn
 		}
 
@@ -267,7 +268,7 @@ func (c *InternalControlConn) InternalConnect(hosts []*implEndpoint.HostInfo) er
 		conn, err = sessionDial(c.InternalSession, c.InternalSession.privateStorage.InternalCtx, host, cfg, c)
 		// conn.finalizeConnection() to be called outside of this function, since initialization process is not completed yet
 		if err != nil {
-			c.InternalSession.privateStorage.InternalLogger.Printf("gocql: unable to dial control conn %v:%v: %v\n", host.ConnectAddress(), host.Port(), err)
+			c.InternalSession.logger().Warn("control connection: dial failed", logging.KeyHost, hostAddress(host), logging.Err(err))
 			failure.Hosts = append(failure.Hosts, runtimeerrors.HostError{Address: hostAddress(host), Err: err})
 			continue
 		}
@@ -275,7 +276,7 @@ func (c *InternalControlConn) InternalConnect(hosts []*implEndpoint.HostInfo) er
 		if err == nil {
 			break
 		}
-		c.InternalSession.privateStorage.InternalLogger.Printf("gocql: unable setup control conn %v:%v: %v\n", host.ConnectAddress(), host.Port(), err)
+		c.InternalSession.logger().Warn("control connection: setup failed", logging.KeyHost, hostAddress(host), logging.Err(err))
 		failure.Hosts = append(failure.Hosts, runtimeerrors.HostError{Address: hostAddress(host), Err: err})
 		conn.Close()
 		conn = nil
@@ -429,14 +430,14 @@ func (c *InternalControlConn) InternalReconnect() error {
 
 	err := c.attemptReconnect()
 	if err != nil {
-		err = fmt.Errorf("gocql: unable to reconnect control connection: %w\n", err)
-		c.InternalSession.privateStorage.InternalLogger.Printf(err.Error())
+		err = fmt.Errorf("gocql: unable to reconnect control connection: %w", err)
+		c.InternalSession.logger().Error("control connection: reconnect failed", logging.Err(err))
 		return err
 	}
 
 	err = c.InternalSession.RefreshRingNow()
 	if err != nil {
-		c.InternalSession.privateStorage.InternalLogger.Printf("gocql: unable to refresh ring: %v\n", err)
+		c.InternalSession.logger().Warn("control connection: ring refresh failed", logging.Err(err))
 	}
 
 	if c.InternalSession.privateStorage.InternalMetadataDescriber == nil {
@@ -444,7 +445,7 @@ func (c *InternalControlConn) InternalReconnect() error {
 	}
 	err = c.InternalSession.privateStorage.InternalMetadataDescriber.refreshAllSchema()
 	if err != nil {
-		c.InternalSession.privateStorage.InternalLogger.Printf("gocql: unable to refresh the schema: %v\n", err)
+		c.InternalSession.logger().Warn("control connection: schema refresh failed", logging.Err(err))
 	}
 	return nil
 }
@@ -470,8 +471,7 @@ func (c *InternalControlConn) attemptReconnect() error {
 	if err == nil {
 		return nil
 	}
-	c.InternalSession.privateStorage.InternalLogger.Printf("gocql: unable to connect to any ring node: %v\n", err)
-	c.InternalSession.privateStorage.InternalLogger.Printf("gocql: control falling back to initial contact points.\n")
+	c.InternalSession.logger().Warn("control connection: no ring node reachable; falling back to initial contact points", logging.Err(err))
 	// Fallback to initial contact points, as it may be the case that all known initialHosts
 	// changed their IPs while keeping the same hostname(s).
 	initialHosts, resolvErr := implEndpoint.InternalResolveInitialEndpoints(c.InternalSession.privateStorage.InternalCfg.DNSResolver, c.InternalSession.privateStorage.InternalCfg.Hosts, c.InternalSession.privateStorage.InternalCfg.Port, c.InternalSession.privateStorage.InternalLogger)
@@ -491,12 +491,12 @@ func (c *InternalControlConn) attemptReconnectToAnyOfHosts(hosts []*implEndpoint
 			if c.InternalSession.privateStorage.InternalCfg.ConvictionPolicy.AddFailure(err, snapshot) {
 				c.InternalSession.HandleNodeDown(host.ConnectAddress(), host.Port())
 			}
-			c.InternalSession.privateStorage.InternalLogger.Printf("gocql: unable to dial control conn %v:%v: %v\n", host.ConnectAddress(), host.Port(), err)
+			c.InternalSession.logger().Warn("control connection: dial failed", logging.KeyHost, hostAddress(host), logging.Err(err))
 			continue
 		}
 		err = c.setupConn(conn)
 		if err != nil {
-			c.InternalSession.privateStorage.InternalLogger.Printf("gocql: unable setup control conn %v:%v: %v\n", host.ConnectAddress(), host.Port(), err)
+			c.InternalSession.logger().Warn("control connection: setup failed", logging.KeyHost, hostAddress(host), logging.Err(err))
 			conn.Close()
 			continue
 		}

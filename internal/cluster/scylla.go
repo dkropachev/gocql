@@ -4,8 +4,9 @@
 package cluster
 
 import (
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
 )
 
 var _ endpoint.InternalCqlProtocolExtension = &endpoint.InternalTabletsRoutingV1Ext{}
@@ -24,7 +25,7 @@ func scyllaGetTablePartitioner(session *Core, keyspaceName, tableName string) (e
 		return nil, err
 	}
 	if isCdc {
-		return endpoint.InternalScyllaCDCPartitioner{InternalLogger: &logging.InternalDefaultLogger{}}, nil
+		return endpoint.InternalScyllaCDCPartitioner{InternalLogger: slog.Default()}, nil
 	}
 
 	return nil, nil

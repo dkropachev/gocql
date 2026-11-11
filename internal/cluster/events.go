@@ -26,14 +26,17 @@ package cluster
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/events"
-	"github.com/scylladb/gocql/v2/internal/debug"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
+	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
@@ -43,7 +46,7 @@ import (
 )
 
 type InternalEventDebouncer struct {
-	InternalLogger   logging.StdLogger
+	InternalLogger   *slog.Logger
 	InternalTimer    *time.Timer
 	callback         func([]protocol.Frame)
 	quit             chan struct{}
@@ -58,7 +61,8 @@ type InternalEventDebouncer struct {
 	InternalOverflow bool
 }
 
-func InternalNewEventDebouncer(name string, eventHandler func([]protocol.Frame), logger logging.StdLogger) *InternalEventDebouncer {
+func InternalNewEventDebouncer(name string, eventHandler func([]protocol.Frame), logger *slog.Logger) *InternalEventDebouncer {
+	logger = logging.Or(logger)
 	e := &InternalEventDebouncer{
 		name: name,
 		quit: make(chan struct{}), done: make(chan struct{}),
@@ -198,7 +202,7 @@ func sessionPublishEvent(s *Core, event events.Event) {
 	}
 
 	if !s.privateStorage.eventBus.PublishEvent(event) {
-		s.privateStorage.InternalLogger.Printf("can't publish event, eventbus is full, increase Cluster.EventBusConfig.InputEventsQueueSize; event is dropped")
+		s.logger().Warn("eventbus is full; event dropped (increase EventBusConfig.InputEventsQueueSize)")
 	}
 }
 
@@ -225,9 +229,7 @@ func (s *Core) handleEventOwnedContext(ctx context.Context, frame protocol.Frame
 			return false
 		}
 	}
-	if debug.Enabled {
-		s.privateStorage.InternalLogger.Printf("gocql: handling frame: %v\n", frame)
-	}
+	s.logger().Debug("handling event frame", "frame", frame)
 
 	source := events.FrameToEvent(frame)
 	if source != nil {
@@ -251,7 +253,7 @@ func (s *Core) handleEventOwnedContext(ctx context.Context, frame protocol.Frame
 			return s.privateStorage.InternalClientRoutesHandler.HandleRouteEventOwned(source, release)
 		}
 	default:
-		s.privateStorage.InternalLogger.Printf("gocql: invalid event frame (%T): %v\n", f, f)
+		s.logger().Warn("invalid event frame", "type", fmt.Sprintf("%T", f), "frame", f)
 	}
 	return false
 
@@ -368,9 +370,7 @@ func (s *Core) HandleNodeEvent(frames []protocol.Frame) {
 	}
 
 	for _, f := range sEvents {
-		if debug.Enabled {
-			s.privateStorage.InternalLogger.Printf("gocql: dispatching status change event: %+v\n", f)
-		}
+		s.logger().Debug("dispatching status change event", "change", f.change, logging.KeyHost, net.JoinHostPort(f.host.String(), strconv.Itoa(f.port)))
 
 		// ignore events we received if they were disabled
 		// see https://github.com/apache/cassandra-gocql-driver/issues/1591
@@ -401,9 +401,7 @@ func (s *Core) HandleNodeEvent(frames []protocol.Frame) {
 }
 
 func sessionHandleNodeUp(s *Core, eventIp net.IP, eventPort int) {
-	if debug.Enabled {
-		s.privateStorage.InternalLogger.Printf("gocql: Session.handleNodeUp: %s:%d\n", eventIp.String(), eventPort)
-	}
+	s.logger().Info("node up", logging.KeyHost, net.JoinHostPort(eventIp.String(), strconv.Itoa(eventPort)))
 
 	host, ok := s.privateStorage.InternalHostSource.getHostByIP(eventIp.String())
 	if !ok {
@@ -463,9 +461,7 @@ func sessionHandleNodeConnected(s *Core, host *implEndpoint.HostInfo) {
 		return
 	}
 	defer s.PublishV2Metadata()
-	if debug.Enabled {
-		s.privateStorage.InternalLogger.Printf("gocql: Session.handleNodeConnected: %s:%d\n", host.ConnectAddress(), host.Port())
-	}
+	s.logger().Debug("node connected", logging.KeyHost, net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(host.Port())))
 	implEndpoint.InternalHostInfoSetState(host, implEndpoint.NodeUp)
 	sessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "host", Stage: "connected", HostID: implEndpoint.InternalHostInfoHostUUID(host), At: time.Now()})
 
@@ -476,9 +472,7 @@ func sessionHandleNodeConnected(s *Core, host *implEndpoint.HostInfo) {
 
 func (s *Core) HandleNodeDown(ip net.IP, port int) {
 	defer s.PublishV2Metadata()
-	if debug.Enabled {
-		s.privateStorage.InternalLogger.Printf("gocql: Session.handleNodeDown: %s:%d\n", ip.String(), port)
-	}
+	s.logger().Info("node down", logging.KeyHost, net.JoinHostPort(ip.String(), strconv.Itoa(port)))
 
 	host, ok := s.privateStorage.InternalHostSource.getHostByIP(ip.String())
 	if ok {

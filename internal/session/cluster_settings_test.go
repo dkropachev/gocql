@@ -333,7 +333,7 @@ func TestClusterSettings(t *testing.T) {
 
 	t.Run("Open", func(t *testing.T) {
 		t.Run("DNSLookupConnected", func(t *testing.T) {
-			log := &logging.InternalTestLogger{}
+			log, logOut := logging.NewCapture()
 
 			// Override the default DNS resolver and restore at the end
 
@@ -356,13 +356,13 @@ func TestClusterSettings(t *testing.T) {
 				t.Fatal("open() should have connected")
 			}
 
-			if !strings.Contains(log.String(), "failed to resolve endpoint") {
-				t.Fatalf("Expected to receive 'failed to resolve endpoint' log message  - got '%s' instead", log.String())
+			if !strings.Contains(logOut.String(), "failed to resolve endpoint") {
+				t.Fatalf("Expected to receive 'failed to resolve endpoint' log message  - got '%s' instead", logOut.String())
 			}
 		})
 
 		t.Run("DNSLookupError", func(t *testing.T) {
-			log := &logging.InternalTestLogger{}
+			log, logOut := logging.NewCapture()
 
 			// Override the default DNS resolver and restore at the end
 			hosts := []string{"cassandra1.invalid", "cassandra2.invalid"}
@@ -380,8 +380,8 @@ func TestClusterSettings(t *testing.T) {
 				t.Fatal("open() should have returned an error")
 			}
 
-			if !strings.Contains(log.String(), "failed to resolve endpoint") {
-				t.Fatalf("Expected to receive 'failed to resolve endpoint' log message  - got '%s' instead", log.String())
+			if !strings.Contains(logOut.String(), "failed to resolve endpoint") {
+				t.Fatalf("Expected to receive 'failed to resolve endpoint' log message  - got '%s' instead", logOut.String())
 			}
 
 			if !strings.Contains(err.Error(), "unable to create session: failed to resolve any of the provided hostnames") {
@@ -533,7 +533,7 @@ func TestClusterSettings(t *testing.T) {
 
 		t.Run("StartupTimeout", func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
-			log := &logging.InternalTestLogger{}
+			log, logOut := logging.NewCapture()
 
 			srv := NewTestServer(t, defaultProto, ctx)
 			defer srv.Stop()
@@ -566,8 +566,8 @@ func TestClusterSettings(t *testing.T) {
 				t.Fatalf("Expected to receive no connections error - got '%s'", err)
 			}
 
-			if !strings.Contains(log.String(), "no response to connection startup within timeout") && !strings.Contains(log.String(), "no response received from cassandra within timeout period") {
-				t.Fatalf("Expected to receive timeout log message  - got '%s'", log.String())
+			if !strings.Contains(logOut.String(), "no response to connection startup within timeout") && !strings.Contains(logOut.String(), "no response received from cassandra within timeout period") {
+				t.Fatalf("Expected to receive timeout log message  - got '%s'", logOut.String())
 			}
 
 			cancel()

@@ -32,6 +32,8 @@ import (
 	"errors"
 	"fmt"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/logging"
@@ -145,7 +147,7 @@ type SslOptions struct {
 type ConnConfig struct {
 	TypedAuth               connectivity.AuthProvider
 	Dialer                  implEndpoint.InternalLegacyDialer
-	Logger                  logging.StdLogger
+	Logger                  *slog.Logger
 	Authenticator           Authenticator
 	Compressor              protocol.Compressor
 	HostDialer              implEndpoint.HostDialer
@@ -166,9 +168,9 @@ type ConnConfig struct {
 	InternalIsControlConn bool
 }
 
-func (c *ConnConfig) logger() logging.StdLogger {
+func (c *ConnConfig) logger() *slog.Logger {
 	if c.Logger == nil {
-		return &logging.InternalDefaultLogger{}
+		return slog.Default()
 	}
 	return c.Logger
 }
@@ -195,13 +197,15 @@ type ConnInterface interface {
 // Conn is a single connection to a Cassandra node. It can be used to execute
 // queries, but users are usually advised to use a more reliable, higher
 // level API.
+func (c *Conn) logger() *slog.Logger { return logging.Or(c.InternalLogger) }
+
 type Conn struct {
 	InternalOpeningDeadline time.Time
 	auth                    Authenticator
 	InternalFrameObserver   FrameHeaderObserver
 	InternalStreamObserver  StreamObserver
 	InternalW               InternalContextWriter
-	InternalLogger          logging.StdLogger
+	InternalLogger          *slog.Logger
 	InternalCtx             context.Context
 	InternalErrorHandler    ConnErrorHandler
 	InternalCompressor      protocol.Compressor
@@ -385,7 +389,8 @@ func (c *Conn) InternalGetScyllaSupported() implEndpoint.ScyllaConnectionFeature
 	return c.InternalScyllaSupported
 }
 
-func InternalTranslateHostAddresses(addressTranslator implEndpoint.AddressTranslator, host *implEndpoint.HostInfo, logger logging.StdLogger) (implEndpoint.InternalTranslatedAddresses, error) {
+func InternalTranslateHostAddresses(addressTranslator implEndpoint.AddressTranslator, host *implEndpoint.HostInfo, logger *slog.Logger) (implEndpoint.InternalTranslatedAddresses, error) {
+	logger = logging.Or(logger)
 	port := host.Port()
 	if port < 1 || port > 65535 {
 		return implEndpoint.InternalTranslatedAddresses{}, fmt.Errorf("invalid CQL port %d for host %s: port must be between 1 and 65535", port, host.UntranslatedConnectAddress())
@@ -672,8 +677,8 @@ func (s *startupCoordinator) startup(ctx context.Context, startupCompleted *atom
 			if s.conn.InternalCfg.TypedConfig != nil {
 				return &connectivity.UnsupportedSettingError{Setting: "compression", Reason: "server does not advertise requested " + name}
 			}
-			s.conn.InternalLogger.Printf("gocql: %s does not support the requested %q compression, continuing uncompressed (server offers: %v)\n",
-				s.conn.InternalAddr, name, comp)
+			s.conn.logger().Warn("server does not support requested compression; continuing uncompressed",
+				"requested", name, "offered", comp)
 			s.conn.InternalCompressor = nil
 		}
 	}
@@ -904,7 +909,7 @@ func (c *Conn) InternalServe(ctx context.Context) {
 			// An exclusive reservation interrupts the idle header wait on
 			// purpose to pause this reader; that is not a timeout.
 			if !c.pauseRequested.Load() {
-				c.InternalLogger.Print("gocql: read header timeout")
+				c.logger().Debug("read header timeout")
 			}
 			err = nil
 			continue
@@ -990,7 +995,7 @@ func (c *Conn) InternalHeartBeat(ctx context.Context) {
 			failures++
 		default:
 
-			c.InternalLogger.Printf("gocql: unexpected frame in response to options: %T\n", resp)
+			c.logger().Warn("unexpected frame in response to OPTIONS", "frame", fmt.Sprintf("%T", resp))
 			failures++
 
 			sleepTime = 1 * time.Second
@@ -1091,7 +1096,7 @@ func (c *Conn) InternalProcessFrameSource(ctx context.Context, src InternalFrame
 		if err != nil {
 			if head.Stream == -1 {
 
-				c.InternalLogger.Printf("gocql: unable to parse event frame: %v\n", err)
+				c.logger().Warn("unparsable event frame", logging.Err(err))
 				return nil
 			}
 			return err
@@ -1128,7 +1133,7 @@ func (c *Conn) InternalProcessFrameSource(ctx context.Context, src InternalFrame
 	c.InternalCalls.Delete(head.Stream)
 	c.InternalMu.Unlock()
 	if call == nil {
-		c.InternalLogger.Printf("gocql: received response for stream which has no handler: header=%v\n", head)
+		c.logger().Warn("response for stream with no handler", logging.KeyStream, head.Stream, "opcode", head.Op.String())
 		return c.discardFrame(r, head)
 	}
 
@@ -1943,12 +1948,13 @@ func (c *Conn) getCurrentKeyspace() string {
 	return ""
 }
 
-func InternalGetSchemaAgreement(localSchemaVersion string, querySystemPeersRows []InternalSchemaAgreementHost, logger logging.StdLogger) error {
+func InternalGetSchemaAgreement(localSchemaVersion string, querySystemPeersRows []InternalSchemaAgreementHost, logger *slog.Logger) error {
+	logger = logging.Or(logger)
 	versions := make(map[string]struct{})
 
 	for _, row := range querySystemPeersRows {
 		if !row.IsValid() {
-			logger.Printf("invalid peer or peer with empty schema_version: peer=%q", row)
+			logger.Warn("skipping invalid peer or peer with empty schema_version", "peer", fmt.Sprintf("%v", row))
 			continue
 		}
 		versions[row.SchemaVersion.String()] = struct{}{}

@@ -56,7 +56,7 @@ func TestTypedConn(t *testing.T) {
 			c.InternalHooks = func() *Core {
 				opaqueStorageValuexxxx := new(Core)
 				SessionData(opaqueStorageValuexxxx).InternalCtx = c.InternalCtx
-				SessionData(opaqueStorageValuexxxx).InternalLogger = logging.InternalNopLogger{}
+				SessionData(opaqueStorageValuexxxx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexxxx
 			}().NewConnectionHooks()
 			budget := &protocol.StreamMetadataBudget{Limit: 1 << 20}
@@ -210,13 +210,13 @@ func TestTypedConn(t *testing.T) {
 			for _, limit := range []int64{512, 1 << 20} {
 				t.Run(fmt.Sprint(limit), func(t *testing.T) {
 					c, server := typedTestConn(t, 4, nil)
-					consumer := &InternalEventDebouncer{InternalTimer: time.NewTimer(time.Hour), InternalLogger: logging.InternalNopLogger{}}
+					consumer := &InternalEventDebouncer{InternalTimer: time.NewTimer(time.Hour), InternalLogger: logging.Nop()}
 					defer consumer.InternalTimer.Stop()
 					consumer.InternalMu.Lock()
 					c.InternalHooks = func() *Core {
 						opaqueStorageValuexxx := new(Core)
 						SessionData(opaqueStorageValuexxx).InternalCtx = c.InternalCtx
-						SessionData(opaqueStorageValuexxx).InternalLogger = logging.InternalNopLogger{}
+						SessionData(opaqueStorageValuexxx).InternalLogger = logging.Nop()
 						SessionData(opaqueStorageValuexxx).InternalNodeEvents = consumer
 						return opaqueStorageValuexxx
 					}().NewConnectionHooks()
@@ -494,7 +494,7 @@ func TestTypedConn(t *testing.T) {
 					c.InternalHooks = func() *Core {
 						opaqueStorageValuexx := new(Core)
 						SessionData(opaqueStorageValuexx).InternalCtx = c.InternalCtx
-						SessionData(opaqueStorageValuexx).InternalLogger = logging.InternalNopLogger{}
+						SessionData(opaqueStorageValuexx).InternalLogger = logging.Nop()
 						return opaqueStorageValuexx
 					}().NewConnectionHooks()
 					r := reserve(t, c)
@@ -771,7 +771,7 @@ func TestTypedConn(t *testing.T) {
 				session := func() *Core {
 					opaqueStorageValuexxxxxxx := new(Core)
 					SessionData(opaqueStorageValuexxxxxxx).InternalCtx = ctx
-					SessionData(opaqueStorageValuexxxxxxx).InternalLogger = logging.InternalNopLogger{}
+					SessionData(opaqueStorageValuexxxxxxx).InternalLogger = logging.Nop()
 					return opaqueStorageValuexxxxxxx
 				}()
 				host := func() *endpoint.HostInfo {
@@ -808,7 +808,7 @@ func TestTypedConn(t *testing.T) {
 					}
 					done <- nil
 				}()
-				cfg := &transport.ConnConfig{TypedConfig: config.ConnectivityPointer(), ProtoVersion: 4, CQLVersion: "3.0.0", ConnectTimeout: time.Second, HostDialer: fixedHostDialer{client}, Compressor: compressor, Logger: logging.InternalNopLogger{}}
+				cfg := &transport.ConnConfig{TypedConfig: config.ConnectivityPointer(), ProtoVersion: 4, CQLVersion: "3.0.0", ConnectTimeout: time.Second, HostDialer: fixedHostDialer{client}, Compressor: compressor, Logger: logging.Nop()}
 				conn, err := sessionDialWithoutObserver(session, ctx, host, cfg, transport.InternalConnErrorHandlerFn(func(*transport.Conn, error, bool) {}), 0, 0)
 				if _, ok := errors.AsType[*settings.UnsupportedSettingError](err); conn != nil || !ok {
 					t.Fatal("requested compression silently downgraded", err)

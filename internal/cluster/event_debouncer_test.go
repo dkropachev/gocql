@@ -30,8 +30,9 @@ import (
 	"testing"
 	"time"
 
+	"log/slog"
+
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
@@ -55,7 +56,7 @@ func TestEventDebouncer(t *testing.T) {
 					default:
 					}
 				}
-			}, &logging.InternalDefaultLogger{})
+			}, slog.Default())
 			defer debouncer.InternalStop()
 
 			for i := 0; i < eventCount; i++ {
@@ -103,7 +104,7 @@ func TestEventDebouncer(t *testing.T) {
 					default:
 					}
 				}
-			}, &logging.InternalDefaultLogger{})
+			}, slog.Default())
 			defer debouncer.InternalStop()
 
 			// Send events in two batches separated by more than eventDebounceTime

@@ -29,33 +29,32 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/scylladb/gocql/v2/internal/debug"
-	logging "github.com/scylladb/gocql/v2/internal/logging"
+	"log/slog"
+
+	"github.com/scylladb/gocql/v2/internal/logging"
 )
 
 // InternalTranslateAddressPort applies addressTranslator to addr of host. A nil
 // translator or an invalid addr returns addr unchanged.
-func InternalTranslateAddressPort(addressTranslator AddressTranslator, host *HostInfo, addr AddressPort, logger logging.StdLogger) (AddressPort, error) {
+func InternalTranslateAddressPort(addressTranslator AddressTranslator, host *HostInfo, addr AddressPort, logger *slog.Logger) (AddressPort, error) {
+	logger = logging.Or(logger)
 	if addressTranslator == nil || !addr.IsValid() {
 		return addr, nil
 	}
 	newAddr, err := addressTranslator.TranslateHost(host, addr)
 	if err != nil {
-		if debug.Enabled {
-			logger.Printf("gocql: failed to translate address %q: %s", addr, err.Error())
-		}
+		logger.Debug("address translation failed", "addr", addr.String(), logging.Err(err))
 		return addr, err
 	}
 	if newAddr.Port == 0 {
 		return addr, fmt.Errorf("invalid translated port 0 for %q: port must be between 1 and 65535", addr)
 	}
-	if debug.Enabled {
-		logger.Printf("gocql: translated address %q to %q", addr, newAddr)
-	}
+	logger.Debug("translated address", "addr", addr.String(), "translated", newAddr.String())
 	return newAddr, nil
 }
 
-func InternalResolveInitialEndpoints(resolver DNSResolver, addrs []string, defaultPort int, logger logging.StdLogger) ([]*HostInfo, error) {
+func InternalResolveInitialEndpoints(resolver DNSResolver, addrs []string, defaultPort int, logger *slog.Logger) ([]*HostInfo, error) {
+	logger = logging.Or(logger)
 	var hosts []*HostInfo
 	var errs []error
 	for _, hostaddr := range addrs {
@@ -63,7 +62,7 @@ func InternalResolveInitialEndpoints(resolver DNSResolver, addrs []string, defau
 		if err != nil {
 			err = fmt.Errorf("failed to resolve endpoint %q: %w", hostaddr, err)
 			errs = append(errs, err)
-			logger.Println(err.Error())
+			logger.Warn("contact point did not resolve", "contact", hostaddr, logging.Err(err))
 			continue
 		}
 		hosts = append(hosts, resolvedHosts...)

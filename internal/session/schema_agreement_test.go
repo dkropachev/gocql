@@ -35,13 +35,14 @@ import (
 	"testing"
 	"time"
 
+	"log/slog"
+
 	"github.com/stretchr/testify/assert"
 
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/routing"
@@ -293,7 +294,7 @@ func TestSchemaAgreement(t *testing.T) {
 			},
 		}
 
-		var logger logging.StdLogger
+		var logger *slog.Logger
 
 		t.Run("SchemaNotConsistent", func(t *testing.T) {
 			err := transport.InternalGetSchemaAgreement(

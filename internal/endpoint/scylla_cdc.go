@@ -4,11 +4,11 @@
 package endpoint
 
 import (
+	"context"
 	"encoding/binary"
 	"math"
 
-	"github.com/scylladb/gocql/v2/internal/debug"
-	"github.com/scylladb/gocql/v2/internal/logging"
+	"log/slog"
 )
 
 // cdc partitioner
@@ -28,7 +28,7 @@ const (
 )
 
 type InternalScyllaCDCPartitioner struct {
-	InternalLogger logging.StdLogger
+	InternalLogger *slog.Logger
 }
 
 func (p InternalScyllaCDCPartitioner) Name() string {
@@ -43,21 +43,21 @@ func (p InternalScyllaCDCPartitioner) InternalHashInt64(partitionKey []byte) int
 	if len(partitionKey) < 8 {
 		// The key is too short to extract any sensible token,
 		// so return the min token instead
-		if debug.Enabled {
-			p.InternalLogger.Printf("scylla: cdc partition key too short: %d < 8", len(partitionKey))
+		if l := p.InternalLogger; l != nil {
+			l.Debug("cdc partition key too short; using min token", "len", len(partitionKey))
 		}
 		return int64(scyllaCDCMinToken)
 	}
 
 	upperQword := binary.BigEndian.Uint64(partitionKey[0:])
 
-	if debug.Enabled {
-		// In debug mode, do some more checks
+	if l := p.InternalLogger; l != nil && l.Enabled(context.Background(), slog.LevelDebug) {
+		// With Debug enabled, do some more checks
 
 		if len(partitionKey) != scyllaCDCPartitionKeyLength {
 			// The token has unrecognized format, but the first quadword
 			// should be the token value that we want
-			p.InternalLogger.Printf("scylla: wrong size of cdc partition key: %d", len(partitionKey))
+			l.Debug("unexpected cdc partition key length", "len", len(partitionKey), "want", scyllaCDCPartitionKeyLength)
 		}
 
 		lowerQword := binary.BigEndian.Uint64(partitionKey[8:])
@@ -65,12 +65,8 @@ func (p InternalScyllaCDCPartitioner) InternalHashInt64(partitionKey []byte) int
 		if version < scyllaCDCMinSupportedVersion || version > scyllaCDCMaxSupportedVersion {
 			// We don't support this version yet,
 			// the token may be wrong
-			p.InternalLogger.Printf(
-				"scylla: unsupported version: %d is not in range [%d, %d]",
-				version,
-				scyllaCDCMinSupportedVersion,
-				scyllaCDCMaxSupportedVersion,
-			)
+			l.Debug("unsupported cdc stream version; token may be wrong", "version", version,
+				"min", scyllaCDCMinSupportedVersion, "max", scyllaCDCMaxSupportedVersion)
 		}
 	}
 

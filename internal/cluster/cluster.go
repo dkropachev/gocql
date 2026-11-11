@@ -35,10 +35,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
-	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -78,7 +79,7 @@ type InternalClusterSettings struct {
 	DNSResolver endpoint.DNSResolver
 	// Logger for this clusterSettings.
 	// If not specified, defaults to the gocql.defaultLogger.
-	Logger logging.StdLogger
+	Logger *slog.Logger
 	// HostDialer will be used to establish all connections for this Cluster.
 	// Unlike Dialer, HostDialer is responsible for setting up the entire connection, including the TLS session.
 	// To support shard-aware port, HostDialer should implement ShardDialer.
@@ -371,7 +372,7 @@ type InternalClusterSettings struct {
 // resolves to more than 1 IP address then the driver may connect multiple times to
 // the same host, and will not mark the node being down or up from events.
 func InternalNewClusterSettings(hosts ...string) *InternalClusterSettings {
-	logger := &logging.InternalDefaultLogger{}
+	logger := slog.Default()
 	cfg := &InternalClusterSettings{
 		Hosts:                         hosts,
 		CQLVersion:                    "3.0.0",
@@ -407,9 +408,9 @@ func InternalNewClusterSettings(hosts ...string) *InternalClusterSettings {
 	return cfg
 }
 
-func (cfg *InternalClusterSettings) logger() logging.StdLogger {
+func (cfg *InternalClusterSettings) logger() *slog.Logger {
 	if cfg.Logger == nil {
-		return &logging.InternalDefaultLogger{}
+		return slog.Default()
 	}
 	return cfg.Logger
 }
@@ -674,7 +675,7 @@ func (cfg *InternalClusterSettings) Validate() error {
 		// skipping is both safe and the default — so say which case is actually risky.
 		// The protocol version is negotiated per connection, long after Validate runs,
 		// so this cannot be narrowed down here.
-		cfg.Logger.Println("warning: skipping result metadata can lead to unpredictable results if columns involved in a prepared query are altered, on connections that exchange no result metadata ID (protocol v4 or lower without the SCYLLA_USE_METADATA_ID extension).")
+		cfg.logger().Warn("skipping result metadata can lead to unpredictable results if columns involved in a prepared query are altered, on connections that exchange no result metadata ID (protocol v4 or lower without the SCYLLA_USE_METADATA_ID extension)")
 	}
 
 	if cfg.SerialConsistency > 0 && !cfg.SerialConsistency.IsSerial() {
@@ -752,7 +753,7 @@ func learnPortFromHosts(hosts []string) (int, error) {
 	return port, nil
 }
 
-func setupTLSConfig(sslOpts *transport.SslOptions, logger logging.StdLogger) (*tls.Config, error) {
+func setupTLSConfig(sslOpts *transport.SslOptions, logger *slog.Logger) (*tls.Config, error) {
 	//  Config.InsecureSkipVerify | EnableHostVerification | Result
 	//  Config is nil             | true                   | verify host
 	//  Config is nil             | false                  | do not verify host
@@ -803,8 +804,7 @@ func setupTLSConfig(sslOpts *transport.SslOptions, logger logging.StdLogger) (*t
 	// Emit deprecation warning if the option is used
 	if sslOpts.DisableStrictCertificateValidation {
 		if logger != nil {
-			logger.Println("gocql: WARNING - DisableStrictCertificateValidation is deprecated and will be removed in a future version. " +
-				"Please ensure your certificate chains are properly configured to work with strict validation.")
+			logger.Warn("DisableStrictCertificateValidation is deprecated and will be removed; configure certificate chains for strict validation")
 		}
 	}
 

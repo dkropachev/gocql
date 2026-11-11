@@ -34,6 +34,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/logging"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 
 	"github.com/stretchr/testify/require"
@@ -914,7 +915,7 @@ func TestQuery(t *testing.T) {
 			// reaches connection selection even for formerly unprepared DDL.
 			session := func() *gocql.Session {
 				opaqueStorageValuex := (*gocql.Session)(implSession.InternalWrapSession(new(implCluster.Core)))
-				(*implSession.Session)(opaqueStorageValuex).Data().InternalLogger = nopLogger{}
+				(*implSession.Session)(opaqueStorageValuex).Data().InternalLogger = logging.Nop()
 				return opaqueStorageValuex
 			}()
 			defer session.Close()
@@ -968,7 +969,7 @@ func TestQuery(t *testing.T) {
 			// the server for metadata, including DDL previously classified false.
 			session := func() *gocql.Session {
 				opaqueStorageValue := (*gocql.Session)(implSession.InternalWrapSession(new(implCluster.Core)))
-				(*implSession.Session)(opaqueStorageValue).Data().InternalLogger = nopLogger{}
+				(*implSession.Session)(opaqueStorageValue).Data().InternalLogger = logging.Nop()
 				return opaqueStorageValue
 			}()
 			defer session.Close()

@@ -131,7 +131,7 @@ func BenchmarkPrepared(b *testing.B) {
 	b.Run("WarmSelection", func(b *testing.B) {
 		s := func() *cluster.Core {
 			opaqueStorageValue := new(cluster.Core)
-			implCluster.SessionData(opaqueStorageValue).InternalLogger = logging.InternalNopLogger{}
+			implCluster.SessionData(opaqueStorageValue).InternalLogger = logging.Nop()
 			return opaqueStorageValue
 		}()
 		columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.BlobType})

@@ -93,7 +93,7 @@ func TestTablets(t *testing.T) {
 				if both {
 					supported[endpoint.InternalTabletsRoutingV2] = []string{}
 				}
-				exts := endpoint.InternalTypedTabletExtensions(endpoint.InternalParseCQLProtocolExtensions(supported, 4, logging.InternalNopLogger{}), supported)
+				exts := endpoint.InternalTypedTabletExtensions(endpoint.InternalParseCQLProtocolExtensions(supported, 4, logging.Nop()), supported)
 				c := &transport.Conn{InternalVersion: 4, InternalCqlProtoExts: exts}
 				c.InternalInitFramerCache()
 				if c.InternalFramers.InternalDefaults.InternalTabletsRoutingV2 != both || c.InternalFramers.InternalDefaults.InternalTabletsRoutingV1 == both {

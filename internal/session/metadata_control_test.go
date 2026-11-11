@@ -97,7 +97,7 @@ func agreementSession(t *testing.T) (*cluster.Core, cqltype.UUID, cqltype.UUID) 
 	t.Helper()
 	s := func() *cluster.Core {
 		opaqueStorageValuexxx := new(cluster.Core)
-		implCluster.SessionData(opaqueStorageValuexxx).InternalLogger = logging.InternalNopLogger{}
+		implCluster.SessionData(opaqueStorageValuexxx).InternalLogger = logging.Nop()
 		return opaqueStorageValuexxx
 	}()
 	config := settings.DefaultConfig("localhost")

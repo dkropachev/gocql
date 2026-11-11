@@ -87,10 +87,10 @@ func TestCassType(t *testing.T) {
 				t.Run(test.name, func(t *testing.T) {
 					t.Parallel()
 
-					logger := &logging.InternalTestLogger{}
+					logger, loggerOut := logging.NewCapture()
 					getCassandraLongType(test.typ, 0, logger)
 
-					got := logger.String()
+					got := loggerOut.String()
 					if !strings.Contains(got, test.want) {
 						t.Errorf("getCassandraLongType(%q) logged %q, want it to contain %q", test.typ, got, test.want)
 					}
@@ -131,7 +131,7 @@ func TestCassType(t *testing.T) {
 				t.Run(test.name, func(t *testing.T) {
 					t.Parallel()
 
-					assertResolvedType(t, test.typ, getCassandraLongType(test.typ, 0, logging.InternalNopLogger{}), test.want)
+					assertResolvedType(t, test.typ, getCassandraLongType(test.typ, 0, logging.Nop()), test.want)
 				})
 			}
 		})
@@ -188,7 +188,7 @@ func TestCassType(t *testing.T) {
 				t.Run(test.name, func(t *testing.T) {
 					t.Parallel()
 
-					assertResolvedType(t, test.typ, getCassandraLongType(test.typ, 0, logging.InternalNopLogger{}), test.want)
+					assertResolvedType(t, test.typ, getCassandraLongType(test.typ, 0, logging.Nop()), test.want)
 				})
 			}
 		})

@@ -9,6 +9,7 @@ import (
 	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	logging "github.com/scylladb/gocql/v2/internal/logging"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
@@ -1220,7 +1221,7 @@ func (s *Core) runV2PeriodicRefresh(options settings.MetadataOptions) {
 		err := s.RefreshMetadata(ctx)
 		cancel()
 		if err != nil && s.privateStorage.InternalLogger != nil {
-			s.privateStorage.InternalLogger.Printf("gocql: periodic metadata refresh: %v", err)
+			s.logger().Warn("periodic metadata refresh failed", logging.Err(err))
 		}
 	}
 }

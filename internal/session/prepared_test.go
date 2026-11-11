@@ -49,7 +49,7 @@ func TestPrepared(t *testing.T) {
 		t.Run("OverflowPropagatesAndRetries", func(t *testing.T) {
 			s := func() *cluster.Core {
 				opaqueStorageValue := new(cluster.Core)
-				implCluster.SessionData(opaqueStorageValue).InternalLogger = logging.InternalNopLogger{}
+				implCluster.SessionData(opaqueStorageValue).InternalLogger = logging.Nop()
 				return opaqueStorageValue
 			}()
 			implCluster.SessionData(s).InternalCtx, implCluster.SessionData(s).InternalCancel = context.WithCancel(context.Background())
@@ -138,7 +138,7 @@ func TestPrepared(t *testing.T) {
 		t.Run("RescheduleAfterReconciliation", func(t *testing.T) {
 			s := func() *cluster.Core {
 				opaqueStorageValuex := new(cluster.Core)
-				implCluster.SessionData(opaqueStorageValuex).InternalLogger = logging.InternalNopLogger{}
+				implCluster.SessionData(opaqueStorageValuex).InternalLogger = logging.Nop()
 				return opaqueStorageValuex
 			}()
 			implCluster.SessionData(s).InternalCtx, implCluster.SessionData(s).InternalCancel = context.WithCancel(context.Background())
@@ -505,7 +505,7 @@ func TestPrepared(t *testing.T) {
 		t.Run("ConflictingHostsCoalesce", func(t *testing.T) {
 			s := func() *cluster.Core {
 				opaqueStorageValuexxxxxxxxxx := new(cluster.Core)
-				implCluster.SessionData(opaqueStorageValuexxxxxxxxxx).InternalLogger = logging.InternalNopLogger{}
+				implCluster.SessionData(opaqueStorageValuexxxxxxxxxx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexxxxxxxxxx
 			}()
 			implCluster.SessionData(s).InternalCtx, implCluster.SessionData(s).InternalCancel = context.WithCancel(context.Background())
@@ -686,7 +686,7 @@ func TestPrepared(t *testing.T) {
 		t.Run("DependencyTypesAndSnapshotChanges", func(t *testing.T) {
 			s := func() *cluster.Core {
 				opaqueStorageValuexx := new(cluster.Core)
-				implCluster.SessionData(opaqueStorageValuexx).InternalLogger = logging.InternalNopLogger{}
+				implCluster.SessionData(opaqueStorageValuexx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexx
 			}()
 			integer := codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))
@@ -725,7 +725,7 @@ func TestPrepared(t *testing.T) {
 		t.Run("IntroducesUDTDependency", func(t *testing.T) {
 			s := func() *cluster.Core {
 				opaqueStorageValuexxx := new(cluster.Core)
-				implCluster.SessionData(opaqueStorageValuexxx).InternalLogger = logging.InternalNopLogger{}
+				implCluster.SessionData(opaqueStorageValuexxx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexxx
 			}()
 			columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
@@ -749,7 +749,7 @@ func TestPrepared(t *testing.T) {
 		t.Run("RetainedAcrossSchemaChange", func(t *testing.T) {
 			s := func() *cluster.Core {
 				opaqueStorageValue := new(cluster.Core)
-				implCluster.SessionData(opaqueStorageValue).InternalLogger = logging.InternalNopLogger{}
+				implCluster.SessionData(opaqueStorageValue).InternalLogger = logging.Nop()
 				return opaqueStorageValue
 			}()
 			columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
@@ -782,7 +782,7 @@ func TestPrepared(t *testing.T) {
 		t.Run("ExactEntryEpochAndOpaqueIDs", func(t *testing.T) {
 			s := func() *cluster.Core {
 				opaqueStorageValuex := new(cluster.Core)
-				implCluster.SessionData(opaqueStorageValuex).InternalLogger = logging.InternalNopLogger{}
+				implCluster.SessionData(opaqueStorageValuex).InternalLogger = logging.Nop()
 				return opaqueStorageValuex
 			}()
 			blob := codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))
@@ -857,7 +857,7 @@ func TestPrepared(t *testing.T) {
 		t.Run("NewDependencyEventFences", func(t *testing.T) {
 			s := func() *cluster.Core {
 				opaqueStorageValuexxxx := new(cluster.Core)
-				implCluster.SessionData(opaqueStorageValuexxxx).InternalLogger = logging.InternalNopLogger{}
+				implCluster.SessionData(opaqueStorageValuexxxx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexxxx
 			}()
 			columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})

@@ -12,10 +12,11 @@ import (
 
 	"time"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/events"
-	"github.com/scylladb/gocql/v2/internal/debug"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
+	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
@@ -352,8 +353,8 @@ func (p *ClientRoutesHandler) Initialize(s *Core) error {
 	p.privateStorage.initialized.Store(true)
 	p.privateStorage.queueMu.Unlock()
 	err := clientRoutesHandlerUpdateHostPortMappingSync(p, InternalUpdateTask{InternalConnectionIDs: p.privateStorage.cfg.Endpoints.GetAllConnectionIDs()})
-	if err != nil && p.privateStorage.log != nil {
-		p.privateStorage.log.Printf("error updating host ports: %v", err)
+	if err != nil {
+		p.logger().Warn("client routes: updating host ports failed", logging.Err(err))
 	}
 	return err
 }
@@ -405,14 +406,8 @@ func clientRoutesHandlerStartReadingEvents(p *ClientRoutesHandler, connectionIDs
 		for event := range p.privateStorage.sub.Events() {
 			switch evt := event.(type) {
 			case *events.ClientRoutesChangedEvent:
-				if debug.Enabled {
-					if len(evt.ConnectionIDs) == 0 {
-						p.privateStorage.log.Printf("got CLIENT_ROUTES_CHANGE event with no connection IDs")
-						continue
-					}
-					if len(evt.HostIDs) == 0 {
-						p.privateStorage.log.Printf("got CLIENT_ROUTES_CHANGE event with no host IDs")
-					}
+				if len(evt.HostIDs) == 0 {
+					p.logger().Debug("CLIENT_ROUTES_CHANGE event has no host IDs")
 				}
 				filteredConnectionIDs := filterAllowedConnectionIDs(evt.ConnectionIDs, connectionIDs)
 				if len(filteredConnectionIDs) == 0 {
@@ -496,9 +491,7 @@ func (p *ClientRoutesHandler) StartUpdateWorker() {
 					return p.updateHostPortMapping(task)
 				}()
 				if err != nil {
-					if debug.Enabled {
-						p.privateStorage.log.Printf("failed to update host port mapping: %v", err)
-					}
+					p.logger().Warn("client routes: updating host port mapping failed", logging.Err(err))
 				}
 				if p.privateStorage.needsResync.Swap(false) {
 					_ = p.refreshContext(metadata.InternalV2SchemaContext(p.privateStorage.InternalSession.NewSchemaSource()))
@@ -523,7 +516,7 @@ func NewClientRoutesAddressTranslator(
 	cfg ClientRoutesConfig,
 	resolver endpoint.DNSResolver,
 	pickTLSPorts bool,
-	log logging.StdLogger,
+	log *slog.Logger,
 ) *ClientRoutesHandler {
 	if resolver == nil {
 		resolver = endpoint.InternalDefaultDnsResolver
@@ -537,7 +530,7 @@ func NewClientRoutesAddressTranslator(
 	return func() *ClientRoutesHandler {
 		opaqueStorageValue := new(ClientRoutesHandler)
 		opaqueStorageValue.privateStorage.cfg = cfg
-		opaqueStorageValue.privateStorage.log = log
+		opaqueStorageValue.privateStorage.log = logging.Or(log)
 		opaqueStorageValue.privateStorage.pickTLSPorts = pickTLSPorts
 		opaqueStorageValue.privateStorage.InternalCloseChan = make(chan struct{})
 		opaqueStorageValue.privateStorage.InternalUpdateTasks = make(chan InternalUpdateTask, 1024)
@@ -548,6 +541,8 @@ func NewClientRoutesAddressTranslator(
 	}()
 
 }
+
+func (p *ClientRoutesHandler) logger() *slog.Logger { return logging.Or(p.privateStorage.log) }
 
 var _ endpoint.AddressTranslator = func() *ClientRoutesHandler {
 	opaqueStorageValuex := new(ClientRoutesHandler)

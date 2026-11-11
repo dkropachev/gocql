@@ -143,10 +143,10 @@ func TestConnStartup(t *testing.T) {
 				})
 			defer srv.Stop()
 
-			rec := &recordingLogger{}
+			recLogger, rec := logging.NewCapture()
 			cluster := testCluster(implProtocol.ProtoVersion4, srv.Address)
 			cluster.Compressor = wirecompress.SnappyCompressor{}
-			cluster.Logger = rec
+			cluster.Logger = recLogger
 
 			db, err := cluster.Open()
 			require.NoError(t, err)
@@ -180,7 +180,7 @@ func TestConnStartup(t *testing.T) {
 		t.Run("ProtoV3IgnoresScyllaUseMetadataID", func(t *testing.T) {
 			t.Parallel()
 
-			c := &transport.Conn{InternalVersion: implProtocol.ProtoVersion3, InternalLogger: &logging.InternalTestLogger{}}
+			c := &transport.Conn{InternalVersion: implProtocol.ProtoVersion3, InternalLogger: logging.Nop()}
 			c.InternalCqlProtoExts = endpoint.InternalParseCQLProtocolExtensions(map[string][]string{endpoint.InternalScyllaUseMetadataID: {}}, c.InternalVersion, c.InternalLogger)
 			c.InternalInitFramerCache()
 

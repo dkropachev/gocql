@@ -33,10 +33,11 @@ import (
 	"net"
 	"testing"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/pool"
 )
 
@@ -613,7 +614,7 @@ func TestHostSelectionPolicy(t *testing.T) {
 
 		policy.Init(func() *Core {
 			opaqueStorageValuexxx := new(Core)
-			SessionData(opaqueStorageValuexxx).InternalLogger = &logging.InternalDefaultLogger{}
+			SessionData(opaqueStorageValuexxx).InternalLogger = slog.Default()
 			return opaqueStorageValuexxx
 		}())
 		if tokenAwareHostPolicyData(policyInternal).getKeyspaceMetadata == nil {

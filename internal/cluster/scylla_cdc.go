@@ -6,11 +6,12 @@ package cluster
 import (
 	"strings"
 
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
 )
 
-var _ endpoint.Partitioner = endpoint.InternalScyllaCDCPartitioner{InternalLogger: &logging.InternalDefaultLogger{}}
+var _ endpoint.Partitioner = endpoint.InternalScyllaCDCPartitioner{InternalLogger: slog.Default()}
 
 var _ endpoint.InternalInt64Hasher = endpoint.InternalScyllaCDCPartitioner{}
 

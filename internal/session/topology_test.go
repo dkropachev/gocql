@@ -42,7 +42,7 @@ func TestTopology(t *testing.T) {
 			config.Metadata.AutomaticAgreement = false
 			config.Pool.ShardAwarePort = false
 			config.Pool.ConnectionsPerHost = 1
-			config.Logger = logging.InternalNopLogger{}
+			config.Logger = logging.Nop()
 			s, err := Connect(context.Background(), config)
 			if err != nil {
 				t.Fatal(err)

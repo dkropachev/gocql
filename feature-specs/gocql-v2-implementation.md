@@ -832,7 +832,7 @@ type Config struct {
     TimestampGenerator func() int64
     Observer Observer
     LifecycleObserver LifecycleObserver
-    Logger StdLogger
+    Logger *slog.Logger // nil means slog.Default()
 }
 // Both hooks open raw connections; the driver performs TLS and CQL setup.
 type DialTarget struct {

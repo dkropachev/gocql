@@ -30,6 +30,7 @@ import (
 	"flag"
 	"fmt"
 	"hash/fnv"
+	"log/slog"
 
 	"log"
 
@@ -57,10 +58,17 @@ var (
 	flagClusterSocket     = flag.String("cluster-socket", "", "nodes socket files separated by comma")
 	flagDistribution      = flag.String("distribution", "scylla", "database distribution - scylla or cassandra")
 	flagCassVersion       cassVersion
+	// Integration lanes keep the per-connection detail the gocql_debug tag used to compile in.
+	flagLogLevel = slog.LevelDebug
 )
+
+func init() {
+	flag.TextVar(&flagLogLevel, "gocql.loglevel", slog.LevelDebug, "minimum level of driver log records written to stderr")
+}
 
 func TestMain(m *testing.M) {
 	flag.Parse()
+	slog.SetLogLoggerLevel(flagLogLevel)
 	// Before the keyspace cleanup: with no -cluster, this finds the cluster.
 	teardownCCM := setupCCM()
 	// A failed cleanup is reported, not fatal: tests that need no cluster still

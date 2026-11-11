@@ -4,8 +4,9 @@
 package cluster
 
 import (
+	"log/slog"
+
 	"github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
 
@@ -21,7 +22,7 @@ func newTestReportSession(cfg InternalClusterSettings, policy HostSelectionPolic
 		opaqueStorageValuex := new(Core)
 		SessionData(opaqueStorageValuex).InternalCfg = cfg
 		SessionData(opaqueStorageValuex).InternalPolicy = policy
-		SessionData(opaqueStorageValuex).InternalLogger = &logging.InternalDefaultLogger{}
+		SessionData(opaqueStorageValuex).InternalLogger = slog.Default()
 		return opaqueStorageValuex
 	}()
 }

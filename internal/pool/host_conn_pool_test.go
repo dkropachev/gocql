@@ -29,7 +29,7 @@ func TestHostConnPool(t *testing.T) {
 					endpoint.InternalHostInfoSetScyllaFeatures(&host, features)
 					cause := errors.New("actual pool failure completion")
 					calls, downs := 0, 0
-					p := &InternalHostConnPool{InternalHost: &host, InternalConnPicker: convictionPicker{}, InternalLogger: logging.InternalNopLogger{}}
+					p := &InternalHostConnPool{InternalHost: &host, InternalConnPicker: convictionPicker{}, InternalLogger: logging.Nop()}
 					policy := &convictionRecorder{callback: func(err error, snapshot model.HostSnapshot) bool {
 						if !p.InternalMu.TryLock() {
 							t.Fatal("conviction callback holds pool lock")

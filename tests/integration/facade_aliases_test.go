@@ -21,7 +21,6 @@ import (
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 
-	logging "github.com/scylladb/gocql/v2/internal/logging"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	model "github.com/scylladb/gocql/v2/internal/model"
 
@@ -170,8 +169,6 @@ type retiredScyllaShardAwareDialer = implEndpoint.ScyllaShardAwareDialer
 type cassVersion = implEndpoint.InternalCassVersion
 
 type legacyDialer = implEndpoint.InternalLegacyDialer
-
-type nopLogger = logging.InternalNopLogger
 
 type scyllaSourcePortCtx = implEndpoint.InternalScyllaSourcePortCtx
 

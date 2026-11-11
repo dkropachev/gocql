@@ -70,7 +70,7 @@ func TestScyllaConnPicker(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				t.Parallel()
 
-				logger := &logging.InternalTestLogger{}
+				logger, _ := logging.NewCapture()
 				picker := &implPool.InternalScyllaConnPicker{
 					InternalLogger:                     logger,
 					InternalDisableShardAwarePortUntil: new(atomic.Pointer[time.Time]),

@@ -69,7 +69,7 @@ That said, the point of writing tests is to provide a safety net to catch regres
 The repository has one module, `github.com/scylladb/gocql/v2`, including codec,
 compression and replay benchmark packages. Run `make check-go-mod-drift`,
 `go test -race -timeout=5m ./...` and compilation with
-`-tags 'integration gocql_debug'`. New examples must compile with the normal
+`-tags integration`. New examples must compile with the normal
 consumer package build and use typed codecs.
 
 Use the owned native fixture runner described in tests/fixtures/README.md for
