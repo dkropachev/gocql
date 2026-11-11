@@ -784,6 +784,6 @@ func (e Error) Error() string {
 	return e.Message
 }
 
-// BatchSizeMaximum is the maximum number of statements a batch operation can have.
-// This limit is set by cassandra and could change in the future.
-const BatchSizeMaximum = 65535
+// MaxBatchStatements is the most statements one BATCH request can carry: the
+// native protocol counts them in an unsigned 16-bit field.
+const MaxBatchStatements = 65535

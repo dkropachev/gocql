@@ -19,9 +19,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-// maxBatchEntries is the protocol's limit on the statements of one BATCH.
-const maxBatchEntries = 65535
-
 // Batch collects statements, each with its values, to send as one CQL
 // BATCH request. Prepared.AddToBatch and Query.AddToBatch append a
 // statement; Session.ExecBatch and Session.RunBatch send the batch.
@@ -203,7 +200,7 @@ func (b *Batch) admit(s *implCluster.Core, r *model.RoutingInfo) error {
 	if b == nil {
 		return cqltype.TypeValidation("batch", "nil batch")
 	}
-	if len(b.entries) == maxBatchEntries {
+	if len(b.entries) == implCluster.MaxBatchStatements {
 		return cqltype.TypeValidation("batch", "requires 1 to 65535 entries")
 	}
 	if b.session != nil && b.session != s {

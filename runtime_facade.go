@@ -12,8 +12,9 @@ import (
 )
 
 // Batch collects statements, each with its values, to send as one CQL
-// BATCH request: Query.AddToBatch appends a statement, Session.ExecBatch and
-// Session.RunBatch send the batch, and Reset empties it for reuse. Once a
+// BATCH request: Prepared.AddToBatch and Query.AddToBatch append a statement,
+// Session.ExecBatch and Session.RunBatch send the batch, and Reset empties it
+// for reuse. Once a
 // batch has grown to its working size, appending allocates nothing. The
 // zero Batch is ready to use; a Batch is not safe for concurrent use and
 // must not be copied.
@@ -32,7 +33,10 @@ func (b *Batch) Len() int { return (*implSession.Batch)(b).Len() }
 // Reset clears statements while preserving the batch's reusable capacity.
 func (b *Batch) Reset() { (*implSession.Batch)(b).Reset() }
 
-const BatchSizeMaximum = implCluster.BatchSizeMaximum
+// MaxBatchStatements is the most statements one Batch can hold: the native
+// protocol counts a BATCH request's statements in an unsigned 16-bit field.
+// AddToBatch rejects the statement after it.
+const MaxBatchStatements = implCluster.MaxBatchStatements
 
 const ClientRouteEvent = implCluster.ClientRouteEvent
 
