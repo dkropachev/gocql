@@ -28,7 +28,7 @@ func BenchmarkPreparedOneShotBurst(b *testing.B) {
 				for i := range n {
 					go func() {
 						var dst []byte
-						_, _, err := p.One(context.Background(), int32(i), &dst)
+						_, _, err := p.One(context.Background(), int32(i), &dst, CompiledOptions{})
 						errs <- err
 					}()
 				}

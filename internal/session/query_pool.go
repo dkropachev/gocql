@@ -324,49 +324,29 @@ func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
 	return batch.addValue(s, preparedSource{state: state}, state.InternalStatement, &routing, p.privateStorage.params, state.InternalParameters, value, true)
 }
 
-// oneShotOptions returns the options of a one-shot call: none gives the zero
-// CompiledOptions.
-func oneShotOptions(options []CompiledOptions) (CompiledOptions, error) {
-	switch len(options) {
-	case 0:
-		return CompiledOptions{}, nil
-	case 1:
-		return options[0], nil
-	}
-	return CompiledOptions{}, cqltype.TypeValidation("options", "at most one CompiledOptions")
-}
-
 // Exec binds value and executes the statement once. The statement must not
-// return rows. At most one CompiledOptions may be given, for this call only;
-// none uses the session's default profile. Exec is safe for concurrent use:
+// return rows. The CompiledOptions applies to this call only; the zero value uses
+// the session's default profile. Exec is safe for concurrent use:
 // it runs on a query the statement keeps for one-shot calls, so it allocates
 // no per-call execution state.
-func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...CompiledOptions) (model.Result, error) {
-	o, err := oneShotOptions(options)
-	if err != nil {
-		return InternalExecutionErrorResult(err), err
-	}
+func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options CompiledOptions) (model.Result, error) {
 	pool, err := p.pool()
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
-	return pool.exec(ctx, value, o)
+	return pool.exec(ctx, value, options)
 }
 
 // One binds value, executes the statement once and decodes its first row
 // into dst, reporting whether a row existed; without one, dst is cleared.
 // Borrowed fields are detached before response storage is released. Options
 // are as for Exec. One is safe for concurrent use.
-func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...CompiledOptions) (bool, model.Result, error) {
-	o, err := oneShotOptions(options)
-	if err != nil {
-		return false, InternalExecutionErrorResult(err), err
-	}
+func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options CompiledOptions) (bool, model.Result, error) {
 	pool, err := p.pool()
 	if err != nil {
 		return false, InternalExecutionErrorResult(err), err
 	}
-	found, result, err := pool.each(ctx, value, dst, nil, o)
+	found, result, err := pool.each(ctx, value, dst, nil, options)
 	if !found && err == nil {
 		clearDestination(dst)
 	}
@@ -378,19 +358,15 @@ func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...Co
 // response storage are valid only until fn returns. A non-nil error from fn
 // stops the iteration and is returned. Options are as for Exec. Each is safe
 // for concurrent use.
-func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...CompiledOptions) (model.Result, error) {
+func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options CompiledOptions) (model.Result, error) {
 	if fn == nil {
 		return nilEachCallback()
-	}
-	o, err := oneShotOptions(options)
-	if err != nil {
-		return InternalExecutionErrorResult(err), err
 	}
 	pool, err := p.pool()
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
-	_, result, err := pool.each(ctx, value, dst, fn, o)
+	_, result, err := pool.each(ctx, value, dst, fn, options)
 	return result, err
 }
 
@@ -401,24 +377,19 @@ func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) 
 // yielded once, as (nil, err), and ends the iteration; stopping the loop early
 // releases the execution and its pooled query. Options are as for Exec. All is
 // safe for concurrent use with independent destinations.
-func (p *Prepared[P, R]) All(ctx context.Context, value P, dst *R, options ...CompiledOptions) iter.Seq2[*R, error] {
+func (p *Prepared[P, R]) All(ctx context.Context, value P, dst *R, options CompiledOptions) iter.Seq2[*R, error] {
 	// All stays small enough to inline, so a range loop over it keeps the
 	// iterator and what it captures on the stack.
 	return func(yield func(*R, error) bool) { p.all(ctx, value, dst, options, yield) }
 }
 
-func (p *Prepared[P, R]) all(ctx context.Context, value P, dst *R, options []CompiledOptions, yield func(*R, error) bool) {
-	o, err := oneShotOptions(options)
-	if err != nil {
-		yield(nil, err)
-		return
-	}
+func (p *Prepared[P, R]) all(ctx context.Context, value P, dst *R, options CompiledOptions, yield func(*R, error) bool) {
 	pool, err := p.pool()
 	if err != nil {
 		yield(nil, err)
 		return
 	}
-	if _, _, err := pool.each(ctx, value, dst, yieldRow(yield), o); err != nil {
+	if _, _, err := pool.each(ctx, value, dst, yieldRow(yield), options); err != nil {
 		yield(nil, err)
 	}
 }
@@ -429,32 +400,24 @@ func (p *Prepared[P, R]) all(ctx context.Context, value P, dst *R, options []Com
 // still open, and rows dropped without Close release their query when the
 // garbage collector finds them. Options are as for Exec. Run is safe for
 // concurrent use; each Rows is not.
-func (p *Prepared[P, R]) Run(ctx context.Context, value P, options ...CompiledOptions) (Rows[R], error) {
-	o, err := oneShotOptions(options)
-	if err != nil {
-		return Rows[R]{}, err
-	}
+func (p *Prepared[P, R]) Run(ctx context.Context, value P, options CompiledOptions) (Rows[R], error) {
 	pool, err := p.pool()
 	if err != nil {
 		return Rows[R]{}, err
 	}
-	return pool.run(ctx, value, o)
+	return pool.run(ctx, value, options)
 }
 
 // RunPage binds value and executes one page of the statement, resuming from
 // state, as Query.RunPage does with pageSize. The page holds one of the
 // statement's pooled queries until it is closed, as Run's rows do. Options are
 // as for Exec. RunPage is safe for concurrent use; each Page is not.
-func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state model.PageState, pageSize int32, options ...CompiledOptions) (*Page[R], error) {
-	o, err := oneShotOptions(options)
-	if err != nil {
-		return nil, err
-	}
+func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state model.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
 	pool, err := p.pool()
 	if err != nil {
 		return nil, err
 	}
-	return pool.runPage(ctx, value, state, pageSize, o)
+	return pool.runPage(ctx, value, state, pageSize, options)
 }
 
 // preparedPoolIdle reports how many idle queries p's pool holds.

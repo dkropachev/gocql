@@ -5,7 +5,6 @@ package session
 
 import (
 	"context"
-	"errors"
 
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -44,18 +43,9 @@ func (s *Session) Data() *implCluster.SessionStorage {
 	return implCluster.SessionData(s.Core())
 }
 
-// Prepare prepares statement on s. At most one PrepareOptions may be given;
-// none prepares with the session's keyspace on any host.
-func (s *Session) Prepare[P, R any](ctx context.Context, statement binding.Statement[P, R], options ...PrepareOptions) (*Prepared[P, R], error) {
-	var o PrepareOptions
-	switch len(options) {
-	case 0:
-	case 1:
-		o = options[0]
-	default:
-		return nil, errors.New("gocql: at most one PrepareOptions")
-	}
-	return Prepare(ctx, s.Core(), statement, o)
+// Prepare prepares statement on s. The zero PrepareOptions prepares with the session's keyspace on any host.
+func (s *Session) Prepare[P, R any](ctx context.Context, statement binding.Statement[P, R], options PrepareOptions) (*Prepared[P, R], error) {
+	return Prepare(ctx, s.Core(), statement, options)
 }
 
 // CompileOptions validates options and resolves them for s into CompiledOptions,
@@ -72,21 +62,21 @@ func (s *Session) CompileOptions(options Options) (CompiledOptions, error) {
 
 // ExecBatch sends batch as one CQL BATCH of batch.Kind on s. The batch's
 // statements must produce no result columns; RunBatch reads the rows of a
-// conditional batch. At most one CompiledOptions may be given; none uses the
+// conditional batch. The zero CompiledOptions uses the
 // session's default profile. ExecBatch is safe for concurrent use with other
 // session calls, but a Batch must not be changed while it is sent.
-func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options ...CompiledOptions) (model.Result, error) {
+func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options CompiledOptions) (model.Result, error) {
 	if s == nil {
 		err := cqltype.TypeValidation("session", "nil session")
 		return InternalExecutionErrorResult(err), err
 	}
 	core := s.Core()
-	q, o, err := beginBatch(ctx, core, batch, options)
+	q, err := beginBatch(ctx, core, batch)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
 	batch.queryExec(&batch.exec.privateStorage.InternalRequest, &q.state)
-	result, err := q.state.runtime.exec(ctx, &batch.exec, o)
+	result, err := q.state.runtime.exec(ctx, &batch.exec, options)
 	q.state.owner.InternalRelease()
 	return result, err
 }
@@ -99,7 +89,7 @@ func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options ...Compil
 // closed, as Prepared.Run's do. A batch sent again once its rows are closed
 // reuses their storage, and allocates nothing while R and decoder stay the
 // same.
-func (s *Session) RunBatch[R any](ctx context.Context, batch *Batch, decoder codec.RowDecoder[R], options ...CompiledOptions) (Rows[R], error) {
+func (s *Session) RunBatch[R any](ctx context.Context, batch *Batch, decoder codec.RowDecoder[R], options CompiledOptions) (Rows[R], error) {
 	if s == nil {
 		return Rows[R]{}, cqltype.TypeValidation("session", "nil session")
 	}
@@ -107,14 +97,14 @@ func (s *Session) RunBatch[R any](ctx context.Context, batch *Batch, decoder cod
 		return Rows[R]{}, cqltype.TypeValidation("batch rows", "nil decoder")
 	}
 	core := s.Core()
-	q, o, err := beginBatch(ctx, core, batch, options)
+	q, err := beginBatch(ctx, core, batch)
 	if err != nil {
 		return Rows[R]{}, err
 	}
 	r := batch.rowsFor(decoder)
 	batch.queryExec(&r.bound.privateStorage.InternalRequest, &q.state)
 	q.hold()
-	rows, err := q.state.runtime.run(ctx, &r.bound, o)
+	rows, err := q.state.runtime.run(ctx, &r.bound, options)
 	q.state.owner.InternalRelease()
 	if err != nil {
 		return Rows[R]{}, err

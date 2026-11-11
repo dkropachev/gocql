@@ -24,7 +24,7 @@ func TestRunBatchAllocs(t *testing.T) {
 	decoder := codec.Row(codec.Column("value", codec.BlobCodec, func(r *borrowed) *cqltype.Bytes { return &r.V }))
 	var row borrowed
 	send := func() {
-		rows, err := session.RunBatch(context.Background(), batch, decoder)
+		rows, err := session.RunBatch(context.Background(), batch, decoder, CompiledOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}

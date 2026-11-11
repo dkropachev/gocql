@@ -62,7 +62,7 @@ func BenchmarkBatch(b *testing.B) {
 							b.Fatal(err)
 						}
 					}
-					if _, err := session.ExecBatch(ctx, &batch); err != nil {
+					if _, err := session.ExecBatch(ctx, &batch, CompiledOptions{}); err != nil {
 						b.Fatal(err)
 					}
 				}
@@ -85,7 +85,7 @@ func BenchmarkBatch(b *testing.B) {
 		var dst row
 		b.ReportAllocs()
 		for b.Loop() {
-			rows, err := session.RunBatch(ctx, &batch, decoder)
+			rows, err := session.RunBatch(ctx, &batch, decoder, CompiledOptions{})
 			if err != nil {
 				b.Fatal(err)
 			}

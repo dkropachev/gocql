@@ -34,9 +34,13 @@ func (p *Prepared[P, R]) internal() *implSession.Prepared[P, R] {
 // Exec executes a statement with no result columns. It is safe for concurrent
 // use. At most one exec.CompiledOptions may be passed.
 func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...exec.CompiledOptions) (Result, error) {
-	o, err := internalCompiledOptions(options)
-	if err != nil {
-		return implSession.InternalExecutionErrorResult(err), err
+	var o implSession.CompiledOptions
+	switch len(options) {
+	case 0:
+	case 1:
+		o = implSession.CompiledOptions(options[0])
+	default:
+		return tooManyOptionsResult()
 	}
 	return p.internal().Exec(ctx, value, o)
 }
@@ -47,9 +51,13 @@ func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...exec.Comp
 // buffers. The result stays valid after the call. One is safe for concurrent
 // use with independent destinations. At most one exec.CompiledOptions may be passed.
 func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...exec.CompiledOptions) (bool, Result, error) {
-	o, err := internalCompiledOptions(options)
-	if err != nil {
-		return false, implSession.InternalExecutionErrorResult(err), err
+	var o implSession.CompiledOptions
+	switch len(options) {
+	case 0:
+	case 1:
+		o = implSession.CompiledOptions(options[0])
+	default:
+		return tooManyOptionsFound()
 	}
 	return p.internal().One(ctx, value, dst, o)
 }
@@ -62,9 +70,13 @@ func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...ex
 // that keeps slices, []byte fields reuse their capacity, so a slice kept from
 // one call of fn aliases the next row's data: keep bytes.Clone(row.Field).
 func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...exec.CompiledOptions) (Result, error) {
-	o, err := internalCompiledOptions(options)
-	if err != nil {
-		return implSession.InternalExecutionErrorResult(err), err
+	var o implSession.CompiledOptions
+	switch len(options) {
+	case 0:
+	case 1:
+		o = implSession.CompiledOptions(options[0])
+	default:
+		return tooManyOptionsResult()
 	}
 	return p.internal().Each(ctx, value, dst, fn, o)
 }
@@ -82,9 +94,13 @@ func (p *Prepared[P, R]) All(ctx context.Context, value P, dst *R, options ...ex
 }
 
 func preparedAll[P, R any](p *Prepared[P, R], ctx context.Context, value P, dst *R, options []exec.CompiledOptions, yield func(*R, error) bool) {
-	o, err := internalCompiledOptions(options)
-	if err != nil {
-		yield(nil, err)
+	var o implSession.CompiledOptions
+	switch len(options) {
+	case 0:
+	case 1:
+		o = implSession.CompiledOptions(options[0])
+	default:
+		yield(nil, tooManyOptions())
 		return
 	}
 	p.internal().All(ctx, value, dst, o)(yield)
@@ -98,9 +114,13 @@ func preparedAll[P, R any](p *Prepared[P, R], ctx context.Context, value P, dst 
 // finds them. Run is safe for concurrent use; each Rows is not. At most one
 // exec.CompiledOptions may be passed.
 func (p *Prepared[P, R]) Run(ctx context.Context, value P, options ...exec.CompiledOptions) (Rows[R], error) {
-	o, err := internalCompiledOptions(options)
-	if err != nil {
-		return Rows[R]{}, err
+	var o implSession.CompiledOptions
+	switch len(options) {
+	case 0:
+	case 1:
+		o = implSession.CompiledOptions(options[0])
+	default:
+		return Rows[R]{}, tooManyOptions()
 	}
 	rows, err := p.internal().Run(ctx, value, o)
 	return Rows[R](rows), err
@@ -113,9 +133,13 @@ func (p *Prepared[P, R]) Run(ctx context.Context, value P, options ...exec.Compi
 // queries until it is closed, as Run's rows do. RunPage is safe for concurrent
 // use; each Page is not. At most one exec.CompiledOptions may be passed.
 func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32, options ...exec.CompiledOptions) (*Page[R], error) {
-	o, err := internalCompiledOptions(options)
-	if err != nil {
-		return nil, err
+	var o implSession.CompiledOptions
+	switch len(options) {
+	case 0:
+	case 1:
+		o = implSession.CompiledOptions(options[0])
+	default:
+		return nil, tooManyOptions()
 	}
 	page, err := p.internal().RunPage(ctx, value, model.PageState(state), pageSize, o)
 	return (*Page[R])(page), err

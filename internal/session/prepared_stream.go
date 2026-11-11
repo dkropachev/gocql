@@ -30,15 +30,8 @@ type PreparedStream[P, R any] struct {
 	plan     codec.StreamRowPlan[R]
 }
 
-func (s *Session) PrepareStream[P, R any](ctx context.Context, statement StreamStatement[P, R], options ...PrepareOptions) (*PreparedStream[P, R], error) {
-	var o PrepareOptions
-	if len(options) > 1 {
-		return nil, cqltype.TypeValidation("prepare options", "at most one PrepareOptions")
-	}
-	if len(options) == 1 {
-		o = options[0]
-	}
-	return PrepareStream(ctx, s.Core(), statement, o)
+func (s *Session) PrepareStream[P, R any](ctx context.Context, statement StreamStatement[P, R], options PrepareOptions) (*PreparedStream[P, R], error) {
+	return PrepareStream(ctx, s.Core(), statement, options)
 }
 
 func PrepareStream[P, R any](ctx context.Context, session *implCluster.Core, statement StreamStatement[P, R], options PrepareOptions) (*PreparedStream[P, R], error) {
