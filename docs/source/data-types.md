@@ -47,8 +47,12 @@ reflected mappings. A recognized built-in field tag takes precedence over a
 type-wide override; the override takes precedence over the generated/default
 codec, including a custom-expression default. Other generated expressions keep
 their codecs. Each call constructs an independent mapping; options never mutate
-registered defaults. `ReuseBuffers` independently controls buffered destination
-reuse.
+generated defaults. Each option has a scope, and the other functions ignore it:
+`WithCodec` applies to `ParamsOf` and `RowOf`, `WithStreamCodec` to
+`StreamRowOf`, and `ReuseBuffers` to `RowOf`, keeping slice field storage
+between rows; `StreamRowOf` always reuses that storage. `BindValue` binds
+Present, Null and Unset only; binding fails for `EmptyCell`, so bind an
+`EmptyValueOf` through `EmptyCodec` for an empty value.
 
 See [custom codec contracts](custom-codecs.md) for extension interfaces and plan
 ownership requirements.

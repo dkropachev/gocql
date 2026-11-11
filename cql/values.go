@@ -27,7 +27,9 @@ func BigIntValue(n int64) Value { return codec.BigIntValue(n) }
 func BindEncoder[T any](base Encoder[T]) Encoder[BindValue[T]] { return codec.BindEncoder[T](base) }
 
 // BindValue controls parameters using Present, Null, or Unset.
-// Its zero value binds the ordinary zero value of T.
+// Its zero value binds the ordinary zero value of T. Binding fails for any
+// other State, EmptyCell included; to bind an empty value, wrap the base
+// codec with EmptyCodec and bind an EmptyValueOf.
 type BindValue[T any] = cqltype.BindValue[T]
 
 var BlobCodec = codec.BlobCodec

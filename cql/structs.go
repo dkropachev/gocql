@@ -5,7 +5,17 @@ package cql
 
 import codec "github.com/scylladb/gocql/v2/internal/codec"
 
-// StructOption configures ParamsOf and RowOf.
+// StructOption configures ParamsOf, RowOf and StreamRowOf. Each option
+// affects only some of them, and the others ignore it:
+//
+//   - WithCodec: ParamsOf and RowOf. StreamRowOf decodes with stream
+//     decoders, so it ignores WithCodec; use WithStreamCodec.
+//   - WithStreamCodec: StreamRowOf only.
+//   - ReuseBuffers: RowOf only. ParamsOf has no destination, and
+//     StreamRowOf always reuses its slice storage.
+//
+// Each call builds an independent mapping; options never change a generated
+// mapping in place.
 type StructOption[P any] = codec.StructOption[P]
 
 // StructFields is a struct's complete mapping. cmd/cqlgen generates it as a
@@ -64,6 +74,7 @@ func MustRowOf[R any](opts ...StructOption[R]) RowDecoder[R] { return must(RowOf
 // with no built-in codec, such as a UDT, or a replacement for V's default.
 // Recognized built-in codec tags take precedence. The option also applies to
 // generated mappings; other generated custom-expression codecs remain defaults.
+// It affects ParamsOf and RowOf; StreamRowOf ignores it.
 func WithCodec[P, V any](c Codec[V]) StructOption[P] { return codec.WithCodec[P, V](c) }
 
 // StreamRowOf decodes streamed rows into struct P by column name, mapped like
@@ -99,15 +110,19 @@ func must[T any](v T, err error) T {
 }
 
 // WithStreamCodec maps P's fields of type V, Nullable[V] and []V (as a list)
-// with decoder in StreamRowOf.
-// Recognized built-in stream tags take precedence, including in generated mappings.
+// with decoder in StreamRowOf. Recognized built-in stream tags take
+// precedence, including in generated mappings. It affects StreamRowOf only;
+// ParamsOf and RowOf ignore it.
 func WithStreamCodec[P, V any](decoder StreamDecoder[V]) StructOption[P] {
 	return codec.WithStreamCodec[P, V](decoder)
 }
 
-// ReuseBuffers makes RowOf keep the storage of P's []byte fields between rows
-// decoded into the same destination, as RowInto does. The next row overwrites
-// those bytes, so copy a field that must outlive its row.
+// ReuseBuffers makes RowOf keep the storage of P's slice fields, such as
+// []byte and lists, between rows decoded into the same destination, as
+// RowInto does. The next row overwrites that storage, so copy a field that
+// must outlive its row. Other fields, maps included, are zeroed as usual.
+// It affects RowOf only: ParamsOf has no destination, and StreamRowOf always
+// reuses slice storage.
 func ReuseBuffers[P any]() StructOption[P] { return codec.ReuseBuffers[P]() }
 
 // ListCodec encodes and decodes a list as a []T, the form struct mappings

@@ -1677,8 +1677,9 @@ initialization order. Generated struct mappings honor WithCodec/WithStreamCodec 
 Recognized built-in tags take precedence over type overrides; overrides replace
 untagged and custom-expression defaults of the matching Go type. Unaffected
 custom-expression defaults retain their generated implementations. Each mapping
-is independent and generated defaults are never mutated. ReuseBuffers is an
-independent mapping option. No per-row override resolution is permitted.
+is independent and generated defaults are never mutated. Option scopes:
+WithCodec affects ParamsOf and RowOf, WithStreamCodec only StreamRowOf, and
+ReuseBuffers only RowOf; the other functions ignore them. No per-row override resolution is permitted.
 
 All Each callbacks may return gocql.StopIteration or a chain of single-error
 wrappers to stop successfully. Joined errors remain failures. Only callback returns recognize this signal:
