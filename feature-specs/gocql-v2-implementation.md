@@ -810,7 +810,7 @@ type Config struct {
     LocalAddress netip.Addr
     Dialer Dialer
     DialHost func(context.Context, DialTarget) (net.Conn, error)
-    DNSResolver DNSResolver
+    DNSResolver Resolver
     TLS *tls.Config
     TLSForHost func(context.Context, HostSnapshot) (*tls.Config, error)
     Auth AuthProvider

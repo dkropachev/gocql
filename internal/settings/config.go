@@ -27,7 +27,7 @@ import (
 type Config struct {
 	LocalAddress      netip.Addr
 	Dialer            implEndpoint.Dialer
-	DNSResolver       implEndpoint.DNSResolver
+	DNSResolver       implEndpoint.Resolver
 	Auth              AuthProvider
 	Reconnect         ReconnectPolicy
 	Conviction        ConvictionPolicy

@@ -25,16 +25,18 @@
 package endpoint
 
 import (
+	"context"
 	"fmt"
 
 	"net"
+	"net/netip"
 
 	"strconv"
 
 	"time"
 )
 
-func InternalResolveInitialEndpoint(resolver DNSResolver, addr string, defaultPort int) ([]*HostInfo, error) {
+func InternalResolveInitialEndpoint(resolver Resolver, addr string, defaultPort int) ([]*HostInfo, error) {
 	var port int
 	host, portStr, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -62,22 +64,22 @@ func InternalResolveInitialEndpoint(resolver DNSResolver, addr string, defaultPo
 	}
 
 	// Look up host in DNS
-	var ips []net.IP
+	var addrs []netip.Addr
 	var setupDeadline time.Time
 	if typed, ok := resolver.(*InternalV2DNSResolver); ok {
-		ips, setupDeadline, err = typed.lookupSetup(host)
+		addrs, setupDeadline, err = typed.lookupSetup(host)
 	} else {
-		ips, err = resolver.LookupIP(host)
+		addrs, err = resolver.LookupNetIP(context.Background(), "ip", host)
 	}
 	if err != nil {
 		return nil, err
-	} else if len(ips) == 0 {
+	} else if len(addrs) == 0 {
 		return nil, fmt.Errorf("no IP's returned from DNS lookup for %q", addr)
 	}
 
 	var hosts []*HostInfo
-	for _, ip := range ips {
-		if InternalValidIpAddr(ip) {
+	for _, a := range addrs {
+		if ip := net.IP(a.Unmap().AsSlice()); InternalValidIpAddr(ip) {
 			hb := HostInfoBuilder{
 				// Fake hosts for initial endpoints do not need HostID
 				Hostname:       host,

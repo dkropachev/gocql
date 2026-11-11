@@ -81,8 +81,7 @@ func TestConnectionSetup(t *testing.T) {
 			resolver := &endpoint.InternalV2DNSResolver{InternalBase: runtimeBlockingDNS{done: make(chan struct{})}}
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
-			resolver.InternalStartup.Store(&endpoint.InternalContextBox{InternalCtx: ctx})
-			if _, err := resolver.LookupIP("ignored"); !errors.Is(err, context.Canceled) {
+			if _, err := resolver.LookupNetIP(ctx, "ip", "ignored"); !errors.Is(err, context.Canceled) {
 				t.Fatal(err)
 			}
 			close(resolver.InternalBase.(runtimeBlockingDNS).done)

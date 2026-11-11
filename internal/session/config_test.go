@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"reflect"
 	"sync/atomic"
 	"testing"
@@ -46,7 +47,14 @@ import (
 
 type runtimeBlockingDNS struct{ done chan struct{} }
 
-func (d runtimeBlockingDNS) LookupIP(string) ([]net.IP, error) { <-d.done; return nil, nil }
+func (d runtimeBlockingDNS) LookupNetIP(ctx context.Context, _, _ string) ([]netip.Addr, error) {
+	select {
+	case <-d.done:
+		return nil, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
 
 func TestConfig(t *testing.T) {
 	t.Run("Defaults", func(t *testing.T) {

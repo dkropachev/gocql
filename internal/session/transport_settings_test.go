@@ -26,6 +26,7 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"net/netip"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -71,7 +72,10 @@ func codecTestMust2(a, b string, err error) (string, string) {
 
 type testDNS func(string) ([]net.IP, error)
 
-func (f testDNS) LookupIP(name string) ([]net.IP, error) { return f(name) }
+func (f testDNS) LookupNetIP(_ context.Context, _, name string) ([]netip.Addr, error) {
+	ips, err := f(name)
+	return netIPAddrs(ips), err
+}
 
 type testReconnect struct {
 	calls chan int

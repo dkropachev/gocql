@@ -337,35 +337,6 @@ type unixSocketNoReconnect struct{}
 
 func (unixSocketNoReconnect) Delay(int) (time.Duration, bool) { return 0, false }
 
-type mockDNSResolver struct {
-	lock sync.RWMutex
-	data map[string][]net.IP
-}
-
-func (r *mockDNSResolver) LookupIP(host string) ([]net.IP, error) {
-	r.lock.RLock()
-	defer r.lock.RUnlock()
-	ips, _ := r.data[host]
-	if len(ips) == 0 {
-		return nil, &net.DNSError{Err: errors.New("no IP addresses").Error(), Name: host}
-	}
-	return ips, nil
-}
-
-func (r *mockDNSResolver) Update(host string, ips ...net.IP) {
-	r.lock.Lock()
-	r.data[host] = ips
-	defer r.lock.Unlock()
-}
-
-func (r *mockDNSResolver) Delete(hosts ...string) {
-	r.lock.Lock()
-	for _, host := range hosts {
-		delete(r.data, host)
-	}
-	defer r.lock.Unlock()
-}
-
 type framer = protocol.Framer
 
 const headSize = protocol.HeadSize

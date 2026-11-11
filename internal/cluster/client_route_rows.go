@@ -184,21 +184,13 @@ func (p *ClientRoutesHandler) resolveRoute(ctx context.Context, route InternalCl
 	if override := p.privateStorage.addrOverrides[route.InternalConnectionID]; override != "" {
 		name = override
 	}
-	var ips []net.IP
-	var err error
-	if resolver, ok := p.privateStorage.resolver.(interface {
-		LookupIPContext(context.Context, string) ([]net.IP, error)
-	}); ok {
-		ips, err = resolver.LookupIPContext(ctx, name)
-	} else {
-		ips, err = p.privateStorage.resolver.LookupIP(name)
-	}
+	addrs, err := p.privateStorage.resolver.LookupNetIP(ctx, "ip", name)
 	if err != nil {
 		return nil, err
 	}
 	var out []implEndpoint.AddressPort
-	for _, ip := range ips {
-		if implEndpoint.InternalValidIpAddr(ip) {
+	for _, a := range addrs {
+		if ip := net.IP(a.Unmap().AsSlice()); implEndpoint.InternalValidIpAddr(ip) {
 			out = append(out, implEndpoint.AddressPort{Address: ip, Port: route.InternalPort})
 		}
 	}

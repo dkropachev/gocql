@@ -180,7 +180,7 @@ session once, so query executions do no per-call work. One-shot executions
 `CompiledOptions` from `session.CompileOptions(options)`, which does the same work up
 front. Compiled options carry their session's default profile and keyspace; on
 another session they are resolved again for that session on each execution.
-`endpoint.Dialer`, `endpoint.DNSResolver`,
+`endpoint.Dialer`, `endpoint.Resolver`,
 `endpoint.Translator`, `ReconnectPolicy`, `routing.TokenPartitioner`,
 `routing.Policy`, observers and immutable
 metadata snapshots provide typed extension points. Host/shard pool sizing,

@@ -26,6 +26,7 @@ package cluster
 
 import (
 	"fmt"
+	"net"
 
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
@@ -89,7 +90,7 @@ func DataCentreHostFilter(dataCenter string) HostFilter {
 // in the initial hosts whitelist. It probes all known addresses of a host
 // (connect, rpc, broadcast, listen, peer, preferred, translated CQL) for a match.
 func WhiteListHostFilter(hosts ...string) (HostFilter, error) {
-	hostInfos, err := implEndpoint.InternalResolveInitialEndpoints(implEndpoint.InternalDefaultDnsResolver, hosts, 9042, logging.Nop())
+	hostInfos, err := implEndpoint.InternalResolveInitialEndpoints(net.DefaultResolver, hosts, 9042, logging.Nop())
 	if err != nil {
 		return nil, fmt.Errorf("gocql: unable to look up white-listed hosts: %w", err)
 	}

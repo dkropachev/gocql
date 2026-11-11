@@ -182,8 +182,10 @@ func (b *ConfigBuilder) WithDialer(dialer endpoint.Dialer) *ConfigBuilder {
 	return b
 }
 
-// WithResolver resolves contact point names. Default the system resolver.
-func (b *ConfigBuilder) WithResolver(resolver endpoint.DNSResolver) *ConfigBuilder {
+// WithResolver resolves contact point and client route host names. Each
+// lookup is bounded by the DNS timeout through its context, which the resolver
+// must honour. Default net.DefaultResolver.
+func (b *ConfigBuilder) WithResolver(resolver endpoint.Resolver) *ConfigBuilder {
 	b.settings.DNSResolver = resolver
 	return b
 }

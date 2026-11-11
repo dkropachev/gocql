@@ -83,7 +83,7 @@ type ConvictionPolicy interface {
 type Config struct {
 	LocalAddress                                                                     netip.Addr
 	Dialer                                                                           implEndpoint.Dialer
-	DNSResolver                                                                      implEndpoint.DNSResolver
+	DNSResolver                                                                      implEndpoint.Resolver
 	Reconnect                                                                        ReconnectPolicy
 	DialHost                                                                         func(context.Context, implEndpoint.DialTarget) (net.Conn, error)
 	TLS                                                                              *tls.Config

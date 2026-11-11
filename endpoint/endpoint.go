@@ -12,8 +12,7 @@ type (
 	Translator         = implEndpoint.AddressTranslator
 	TranslatorFunc     = implEndpoint.AddressTranslatorFunc
 	TranslatorHostInfo = implEndpoint.AddressTranslatorHostInfo
-	DNSResolver        = implEndpoint.DNSResolver
-	SimpleDNSResolver  = implEndpoint.SimpleDNSResolver
+	Resolver           = implEndpoint.Resolver
 	Dialer             = implEndpoint.Dialer
 	DialerFunc         = implEndpoint.DialerFunc
 	DefaultDialer      = implEndpoint.DefaultDialer
@@ -22,8 +21,3 @@ type (
 
 // IdentityTranslator returns a translator that leaves addresses unchanged.
 func IdentityTranslator() Translator { return implEndpoint.IdentityTranslator() }
-
-// NewSimpleDNSResolver returns a resolver backed by the standard library.
-func NewSimpleDNSResolver(preferIPv4 bool) *SimpleDNSResolver {
-	return implEndpoint.NewSimpleDNSResolver(preferIPv4)
-}

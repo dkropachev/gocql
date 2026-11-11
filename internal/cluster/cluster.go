@@ -76,7 +76,7 @@ type InternalClusterSettings struct {
 	// ApplicationInfo reports application information to the server by inserting it into options of the STARTUP frame
 	ApplicationInfo endpoint.ApplicationInfo
 	// DNSResolver Resolves DNS names to IP addresses
-	DNSResolver endpoint.DNSResolver
+	DNSResolver endpoint.Resolver
 	// Logger for this clusterSettings.
 	// If not specified, defaults to the gocql.defaultLogger.
 	Logger *slog.Logger
@@ -399,7 +399,7 @@ func InternalNewClusterSettings(hosts ...string) *InternalClusterSettings {
 		MetadataSchemaRequestTimeout:  60 * time.Second,
 		DisableSkipMetadata:           true,
 		Logger:                        logger,
-		DNSResolver:                   endpoint.InternalDefaultDnsResolver,
+		DNSResolver:                   net.DefaultResolver,
 		EventBusConfig: eventbus.EventBusConfig{
 			InputEventsQueueSize: 10240,
 		},

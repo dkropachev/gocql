@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"net/netip"
 	"strings"
 	"sync"
 	"testing"
@@ -446,7 +447,7 @@ func TestSession(t *testing.T) {
 	t.Run("ResolveInitialEndpoint", func(t *testing.T) {
 		t.Parallel()
 
-		resolver := endpoint.NewSimpleDNSResolver(true)
+		resolver := ipv4OnlyResolver{}
 
 		tests := [...]struct {
 			addr string
@@ -584,4 +585,12 @@ func TestSession(t *testing.T) {
 			})
 		}
 	})
+}
+
+// ipv4OnlyResolver resolves IPv4 addresses only, so "localhost" maps to
+// 127.0.0.1 regardless of the host's resolver ordering.
+type ipv4OnlyResolver struct{}
+
+func (ipv4OnlyResolver) LookupNetIP(ctx context.Context, _, host string) ([]netip.Addr, error) {
+	return net.DefaultResolver.LookupNetIP(ctx, "ip4", host)
 }

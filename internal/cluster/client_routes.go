@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"slices"
 	"sync"
 
@@ -514,12 +515,12 @@ func (p *ClientRoutesHandler) updateHostPortMapping(task InternalUpdateTask) err
 
 func NewClientRoutesAddressTranslator(
 	cfg ClientRoutesConfig,
-	resolver endpoint.DNSResolver,
+	resolver endpoint.Resolver,
 	pickTLSPorts bool,
 	log *slog.Logger,
 ) *ClientRoutesHandler {
 	if resolver == nil {
-		resolver = endpoint.InternalDefaultDnsResolver
+		resolver = net.DefaultResolver
 	}
 	overrides := make(map[string]string, len(cfg.Endpoints))
 	for _, ep := range cfg.Endpoints {

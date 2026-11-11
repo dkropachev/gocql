@@ -81,9 +81,16 @@ context for the preceding execution to drain.
 
 `endpoint.Dialer` receives a typed `endpoint.DialTarget` and customizes host
 setup. Hooks honor context cancellation and the selected endpoint/source.
-`endpoint.DNSResolver`, `endpoint.Translator`, `HostFilter` and `ReconnectPolicy` are
+`endpoint.Resolver`, `endpoint.Translator`, `HostFilter` and `ReconnectPolicy` are
 independent extension points. Synchronous callbacks must be prompt and must
 not reenter blocking Close/Wait.
+
+`WithResolver` takes an `endpoint.Resolver`, which resolves contact point and
+client route host names. `*net.Resolver` satisfies it; the default is
+`net.DefaultResolver`. Each lookup runs on the calling goroutine with a context
+bounded by `WithDNSTimeout`, so a resolver must return once that context is
+done. To prefer or require IPv4, wrap a `*net.Resolver` and filter its result
+or pass `"ip4"` as the network.
 
 ```{toctree}
 :maxdepth: 1

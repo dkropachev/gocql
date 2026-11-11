@@ -18,7 +18,7 @@ import (
 type ClientRoutesHandlerStorage struct {
 	log                 *slog.Logger
 	c                   InternalControlConnection
-	resolver            endpoint.DNSResolver
+	resolver            endpoint.Resolver
 	InternalSession     *Core
 	connectionEpoch     map[string]uint64
 	pairEpoch           map[InternalPair]uint64

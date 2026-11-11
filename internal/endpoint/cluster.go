@@ -28,11 +28,14 @@ import (
 	"context"
 
 	"net"
-	"os"
+	"net/netip"
 )
 
-type DNSResolver interface {
-	LookupIP(host string) ([]net.IP, error)
+// Resolver resolves host names to IP addresses. *net.Resolver satisfies it.
+// network is "ip", "ip4" or "ip6", as for net.Resolver.LookupNetIP.
+// Implementations must return promptly once ctx is done.
+type Resolver interface {
+	LookupNetIP(ctx context.Context, network, host string) ([]netip.Addr, error)
 }
 
 type ApplicationInfo interface {
@@ -65,41 +68,6 @@ func (i *StaticApplicationInfo) UpdateStartupOptions(opts map[string]string) {
 		opts["CLIENT_ID"] = i.privateStorage.clientID
 	}
 }
-
-type SimpleDNSResolver struct {
-	privateStorage SimpleDNSResolverStorage
-}
-
-func NewSimpleDNSResolver(hostLookupPreferV4 bool) *SimpleDNSResolver {
-	return func() *SimpleDNSResolver {
-		opaqueStorageValuex := new(SimpleDNSResolver)
-		opaqueStorageValuex.privateStorage.hostLookupPreferV4 = hostLookupPreferV4
-		return opaqueStorageValuex
-	}()
-
-}
-
-func (r SimpleDNSResolver) LookupIP(host string) ([]net.IP, error) {
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		return nil, err
-	}
-	// Filter to v4 addresses if any present
-	if r.privateStorage.hostLookupPreferV4 {
-		var preferredIPs []net.IP
-		for _, v := range ips {
-			if v4 := v.To4(); v4 != nil {
-				preferredIPs = append(preferredIPs, v4)
-			}
-		}
-		if len(preferredIPs) != 0 {
-			ips = preferredIPs
-		}
-	}
-	return ips, nil
-}
-
-var InternalDefaultDnsResolver = NewSimpleDNSResolver(os.Getenv("GOCQL_HOST_LOOKUP_PREFER_V4") == "true")
 
 type InternalLegacyDialer interface {
 	DialContext(ctx context.Context, network, addr string) (net.Conn, error)

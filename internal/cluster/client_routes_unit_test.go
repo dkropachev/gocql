@@ -1,7 +1,9 @@
 package cluster
 
 import (
+	"context"
 	"net"
+	"net/netip"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/internal/endpoint"
@@ -9,11 +11,23 @@ import (
 	"github.com/scylladb/gocql/v2/internal/events"
 )
 
-// dnsResolverFunc adapts a function to the DNSResolver interface.
+// dnsResolverFunc adapts a function to the Resolver interface.
 type dnsResolverFunc func(host string) ([]net.IP, error)
 
-func (f dnsResolverFunc) LookupIP(host string) ([]net.IP, error) {
-	return f(host)
+func (f dnsResolverFunc) LookupNetIP(_ context.Context, _, host string) ([]netip.Addr, error) {
+	ips, err := f(host)
+	return netIPAddrs(ips), err
+}
+
+// netIPAddrs converts test fixtures written as net.IP to resolver results.
+func netIPAddrs(ips []net.IP) []netip.Addr {
+	var out []netip.Addr
+	for _, ip := range ips {
+		if a, ok := netip.AddrFromSlice(ip); ok {
+			out = append(out, a.Unmap())
+		}
+	}
+	return out
 }
 
 type fakeControlConn struct {

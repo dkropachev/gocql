@@ -36,6 +36,7 @@ import (
 	"io"
 	"math/rand"
 	"net"
+	"net/netip"
 	"os"
 	"strings"
 	"sync"
@@ -66,7 +67,7 @@ const (
 
 type brokenDNSResolver struct{}
 
-func (b brokenDNSResolver) LookupIP(host string) ([]net.IP, error) {
+func (b brokenDNSResolver) LookupNetIP(_ context.Context, _, host string) ([]netip.Addr, error) {
 	err := errors.New("this error comes from mocked broken resolver")
 	return nil, &net.DNSError{
 		UnwrapErr: err,
@@ -125,7 +126,7 @@ func newTestSession(proto frm.ProtoVersion, addresses ...string) (*implCluster.C
 	return testCluster(proto, addresses...).Open()
 }
 
-var _ endpoint.DNSResolver = brokenDNSResolver{}
+var _ endpoint.Resolver = brokenDNSResolver{}
 
 type testRetryPolicy struct {
 	NumRetries int

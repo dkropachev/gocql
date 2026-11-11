@@ -53,7 +53,7 @@ func InternalTranslateAddressPort(addressTranslator AddressTranslator, host *Hos
 	return newAddr, nil
 }
 
-func InternalResolveInitialEndpoints(resolver DNSResolver, addrs []string, defaultPort int, logger *slog.Logger) ([]*HostInfo, error) {
+func InternalResolveInitialEndpoints(resolver Resolver, addrs []string, defaultPort int, logger *slog.Logger) ([]*HostInfo, error) {
 	logger = logging.Or(logger)
 	var hosts []*HostInfo
 	var errs []error
