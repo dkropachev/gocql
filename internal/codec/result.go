@@ -17,6 +17,12 @@ type casRowPlan[R any] struct {
 	columns  cqltype.Columns
 }
 
+// lenientRowDecoder is a field-mapped decoder that can compile a plan which
+// skips columns it has no field for and leaves fields without a column zero.
+type lenientRowDecoder[R any] interface {
+	compileLenient(columns cqltype.Columns) (RowPlan[R], error)
+}
+
 func CASRows[R any](decoder RowDecoder[R]) RowDecoder[CASResult[R]] {
 	return casRows[R]{decoder: decoder}
 }
@@ -37,7 +43,13 @@ func (c casRows[R]) Compile(columns cqltype.Columns) (RowPlan[CASResult[R]], err
 		if c.decoder == nil {
 			return nil, cqltype.TypeValidation("CAS result", "nil previous-value decoder")
 		}
-		p.previous, err = CompileRowPlan(c.decoder, previous)
+		// The previous row's columns differ between Cassandra and ScyllaDB
+		// and between outcomes, so a field-mapped decoder compiles leniently.
+		if lenient, ok := c.decoder.(lenientRowDecoder[R]); ok {
+			p.previous, err = lenient.compileLenient(previous)
+		} else {
+			p.previous, err = CompileRowPlan(c.decoder, previous)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -63,7 +75,7 @@ func (p casRowPlan[R]) DecodeInto(reader *RowReader, dst *CASResult[R]) error {
 	if p.previous == nil {
 		return nil
 	}
-	if dst.Applied && skipNullPrevious(reader, p.columns.Len()) {
+	if skipNullPrevious(reader, p.columns.Len()) {
 		return nil
 	}
 	columns, index := reader.columns, reader.index
@@ -94,11 +106,10 @@ func (c casRows[R]) Clone(value CASResult[R]) CASResult[R] {
 	return value
 }
 
-// skipNullPrevious consumes the previous-row cells of an applied conditional
-// statement when all of them are null, and reports whether it did. Scylla
-// sends the previous row's columns even when the statement applied; all null,
-// they mean there was no previous row, which a decoder with non-nullable
-// fields could not decode.
+// skipNullPrevious consumes the previous-row cells of a conditional result
+// when all of them are null, and reports whether it did. ScyllaDB sends the
+// previous row's columns whatever the outcome; all null, they mean there was
+// no previous row, which a decoder with non-nullable fields could not decode.
 func skipNullPrevious(reader *RowReader, n int) bool {
 	if reader.cursor == nil || reader.cursor.Remaining() == 0 {
 		return false

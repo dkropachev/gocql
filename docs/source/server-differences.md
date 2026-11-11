@@ -16,17 +16,19 @@ What the server returns for a single conditional statement:
 |---|---|---|
 | Applied | `Applied` only. `Previous` is unset | The values from before the write in `Previous`. `Previous` is unset when the row did not exist |
 | Not applied | The current values of the condition columns in `Previous`. Every column for `IF EXISTS` / `IF NOT EXISTS` | The values from before the write in `Previous` |
-| Not applied, row absent | `Applied` only. `Previous` is unset | Every returned column is NULL. The driver decodes them into `Previous`, so a field that cannot hold NULL fails to decode |
+| Not applied, row absent | `Applied` only. `Previous` is unset | `Previous` is unset |
 
 Write portable code this way:
 
 - Decide on `Applied`. Treat `Previous` as extra information: on an applied
   statement only ScyllaDB fills it.
-- Decode `Previous` with a struct mapping (`cql.MustRowOf[T]()`) whose struct
-  has a field for every column the statement can return. The two servers return
-  different column sets, and a struct mapping leaves fields without a returned
-  column at their zero value. A hand-written `cql.Row(...)` must match the
-  returned columns exactly, so it can fail on one server and not the other.
+- Decode `Previous` with a field-mapped decoder: `cql.MustRowOf[T]()` or
+  `cql.Row(...)`. The two servers return different column sets, so inside
+  `cql.CASRows` such a decoder skips returned columns it has no field for and
+  leaves fields without a returned column at their zero value. Give it a field
+  for every column you need on either server.
+- `Previous` is unset when every returned column is NULL, which is how
+  ScyllaDB reports that there was no previous row.
 
 ## Conditional batches
 

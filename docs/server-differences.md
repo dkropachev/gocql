@@ -32,9 +32,15 @@ Driver handling:
 
 - `CASRows` (`internal/codec/result.go`) requires `[applied]` first. It decodes
   the rest into `CASResult.Previous` only when previous columns are present.
-  `skipNullPrevious` consumes an all-NULL previous row on an applied ScyllaDB
-  response, so `Previous` stays unset and a decoder with non-nullable fields
-  does not fail.
+  `skipNullPrevious` consumes an all-NULL previous row whatever the outcome,
+  so `Previous` stays unset and a decoder with non-nullable fields does not
+  fail. ScyllaDB sends one when there was no previous row. All-NULL columns
+  on an existing row (Cassandra's condition columns only, for example) also
+  read as unset.
+- A field-mapped previous decoder (`cql.Row`, `RowOf`, `MustRowOf`) compiles
+  leniently (`rowCodec.compileLenient`): a column without a field is skipped
+  and a field without a column stays zero, so one decoder fits both servers'
+  column sets. Other decoders compile strictly, as before.
 - The row plan is chosen per response's column set
   (`InternalResultPlanCache.InternalSelectPlan`), so Cassandra's changing
   metadata compiles one plan per shape. ScyllaDB compiles once.
@@ -44,18 +50,6 @@ Driver handling:
 
 Open gaps:
 
-- Row mapping compiles with `extra=false` (`internal/codec/rows_codec.go:245`):
-  a returned column without an accessor fails. Struct mappings (`RowOf`,
-  `MustRowOf`) skip missing fields, but `cql.Row(...)` rejects them too. A
-  previous-row decoder that names exactly one server's column set can fail on
-  the other. The planned fix is for `CASRows` to compile the previous plan
-  leniently: extra columns skipped, missing fields left zero.
-- `skipNullPrevious` runs only when `[applied]` is true. A not-applied
-  ScyllaDB response for an absent row (for example `UPDATE ... IF v = 1` on a
-  missing row) carries an all-NULL previous row, and the driver decodes it into
-  `Previous`. A non-nullable field then fails to decode. The fix is to run
-  `skipNullPrevious` whatever `[applied]` says. That costs the same prefix scan
-  the applied path already pays, and only on conditional results.
 - `CASResult.Previous` on an applied row is ScyllaDB-only. It is kept as is,
   because normalising it away would discard ScyllaDB data.
 

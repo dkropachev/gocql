@@ -14,9 +14,9 @@ import (
 )
 
 func TestStructMapping(t *testing.T) {
-	// Scylla sends the previous row's columns even when a conditional statement
-	// applied; all null, they decode as no previous row, so a struct with
-	// non-nullable fields still decodes the result.
+	// ScyllaDB sends the previous row's columns whatever the outcome; all null,
+	// they decode as no previous row, so a struct with non-nullable fields
+	// still decodes the result.
 	t.Run("CASResult", func(t *testing.T) {
 		type previous struct {
 			K int32
@@ -60,10 +60,52 @@ func TestStructMapping(t *testing.T) {
 		if err != nil || !got.Applied || got.Previous.Value != (previous{K: 8, V: "y"}) {
 			t.Fatalf("applied with previous: %+v %v", got, err)
 		}
-		// A null previous row of a statement that did not apply still fails on
-		// non-nullable fields, as before.
-		if _, err := decode(rowScalarFrame(1, []byte{0}), null, null); err == nil {
-			t.Fatal("not applied with null previous decoded into non-nullable fields")
+		// ScyllaDB answers a statement that did not apply to a missing row
+		// with a null previous row too.
+		if got, err := decode(rowScalarFrame(1, []byte{0}), null, null); err != nil || got.Applied || got.Previous.Set {
+			t.Fatalf("not applied with null previous: %+v %v", got, err)
+		}
+	})
+	// The previous row's columns differ by server and outcome: a field-mapped
+	// decoder skips columns it has no field for and leaves fields without a
+	// column zero.
+	t.Run("CASResultLenient", func(t *testing.T) {
+		type previous struct {
+			K int32
+			W string
+		}
+		columns := cqltype.NewColumns(
+			cqltype.ColumnSpec{Name: "[applied]", Type: rowTestType(t, cqltype.TypeBoolean)},
+			cqltype.ColumnSpec{Name: "k", Type: rowTestType(t, cqltype.TypeInt)},
+			cqltype.ColumnSpec{Name: "v", Type: rowTestType(t, cqltype.TypeText)},
+		)
+		for name, decoder := range map[string]RowDecoder[previous]{
+			"struct": MustRowOf[previous](),
+			"row": Row(
+				Column("k", Int32, func(p *previous) *int32 { return &p.K }),
+				Column("w", StringCodec, func(p *previous) *string { return &p.W }),
+			),
+		} {
+			plan, err := CASRows(decoder).Compile(columns)
+			if err != nil {
+				t.Fatal(name, err)
+			}
+			var data []byte
+			for _, c := range [][]byte{rowScalarFrame(1, []byte{0}), rowScalarFrame(4, []byte{0, 0, 0, 7}), rowScalarFrame(1, []byte("x"))} {
+				data = append(data, c...)
+			}
+			chain, err := wire.NewChain(wire.Borrow(data))
+			if err != nil {
+				t.Fatal(err)
+			}
+			reader := NewRowReader(columns, chain, wire.NewLease(chain, nil))
+			got, err := plan.Decode(reader)
+			if err == nil {
+				err = FinishRowReader(reader)
+			}
+			if err != nil || got.Applied || !got.Previous.Set || got.Previous.Value != (previous{K: 7}) {
+				t.Fatalf("%s: %+v %v", name, got, err)
+			}
 		}
 	})
 	t.Run("Collections", func(t *testing.T) {

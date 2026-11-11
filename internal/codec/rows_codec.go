@@ -427,6 +427,17 @@ func (c rowCodec[R]) Clone(source R) R {
 	return dst
 }
 func (c rowCodec[R]) Compile(columns cqltype.Columns) (RowPlan[R], error) {
+	return c.compile(columns, c.optional, false)
+}
+
+// compileLenient compiles the previous-row plan of a conditional result,
+// whose columns differ by server and outcome: a field without a column is
+// left at its zero value and a column without a field is skipped.
+func (c rowCodec[R]) compileLenient(columns cqltype.Columns) (RowPlan[R], error) {
+	return c.compile(columns, true, true)
+}
+
+func (c rowCodec[R]) compile(columns cqltype.Columns, optional, extra bool) (RowPlan[R], error) {
 	locations := make([]fieldLocation, len(c.fields))
 	for i, field := range c.fields {
 		if field == nil {
@@ -434,13 +445,17 @@ func (c rowCodec[R]) Compile(columns cqltype.Columns) (RowPlan[R], error) {
 		}
 		locations[i] = field.location()
 	}
-	mapping, err := mapFields(columns, locations, false, c.optional)
+	mapping, err := mapColumnFields(columns, locations, false, optional, extra)
 	if err != nil {
 		return nil, err
 	}
 	plan := rowPlan[R]{reset: c.reset, ordered: make([]OutputField[R], len(mapping)), scratch: syncx.NewPool(func() *R { return new(R) })}
 	for index, field := range mapping {
 		column, _ := columns.At(index)
+		if field < 0 {
+			plan.ordered[index] = ignoredField[R]{loc: fieldLocation{name: column.Name}}
+			continue
+		}
 		compiled, err := c.fields[field].compile(column.Type)
 		if err != nil {
 			return nil, fmt.Errorf("gocql: result column %d (%s): %w", index, column.Name, err)
