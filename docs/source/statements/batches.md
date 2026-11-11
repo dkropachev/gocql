@@ -33,4 +33,6 @@ parameter schemas and observation remain typed. Batches do not speculate.
 
 Conditional batch results use `session.RunBatch(ctx, kind, &batch, decoder)`,
 which decodes the rows with `decoder` and returns a page to close. See
-[lightweight transactions](lightweight-transactions.md).
+[lightweight transactions](lightweight-transactions.md). The rows of a conditional batch
+differ between Cassandra and ScyllaDB. See
+[Cassandra and ScyllaDB differences](../server-differences.md).

@@ -95,8 +95,55 @@ page state. Explicit paging is the pages column only.
   Throwaway methods carry the `Unprepared` prefix in front of that verb.
 - `AddToBatch` appears once per reusable form. `Query.Routing` reports where
   an execution with the given values would go, and lives on `Query`.
-- Batches are outside this rule.
+- Batches follow the batch rules below, not the grid.
+
+## Batches
+
+A batch is a reusable request: it gets the same performance treatment as the
+reusable kinds, and its happy path is a reused `Batch` sent with `ExecBatch`
+and no options.
+
+- **Building.** A member joins with `AddToBatch` on the statement that
+  supplies it: one method per reusable form (`Prepared.AddToBatch`,
+  `Query.AddToBatch`). `AddToBatch` encodes the value straight into storage
+  the `Batch` owns and touches no execution state. The zero `Batch` is ready,
+  and `Reset` keeps the storage for the next batch.
+- **Sending.** The session sends a batch, and the batch kind is a call
+  argument, not batch state:
+  - None: `Session.ExecBatch`. A batch whose members the driver knows to be
+    conditional is rejected before it is sent, because the result of an
+    applied-or-not write cannot be returned as success or error alone.
+  - Rows: one method, for conditional batches. The response is a single page
+    with no continuation, so there is no paging, prefetch or page state.
+- **Options.** As for the shared form: an optional `CompiledOptions`, so the
+  send resolves nothing per call. Paging options are rejected.
+- **Performance contract.** Once a reused batch has reached its working size,
+  appending, `Reset` and `ExecBatch` allocate nothing
+  (`internal/session/batch_allocs_test.go`), and `BenchmarkBatch` is the
+  gate for changes to the path. To keep that:
+  - `ExecBatch` runs on a pooled session query and takes the void-result
+    path. It returns no handle, and keeps no pooled query once it returns.
+  - The wire batch of an attempt reuses the batch's item storage. Only a
+    concurrent speculative attempt builds its own.
+  - Per-member work at send time is a lookup of the prepared ID on the
+    attempt's host. Encoding, routing and validation happen at `AddToBatch`.
+  - A cancelled execution that may still read the batch keeps its storage,
+    and `Reset` abandons the storage to that execution instead of copying it
+    on every send.
+- **Routing.** The token is the first routable member's token. Members must
+  share one session and one keyspace, checked at `AddToBatch`.
 
 ## Current deviations
 
-None. Record any deviation from this rule here, with what resolves it.
+- `ExecBatch` sends a conditional batch and then fails on its result columns,
+  so the write may already be applied when the caller gets the error.
+  Resolved by rejecting a batch whose kind is `ConditionalStatement` in
+  `validateBatch` before it is sent. `Prepared.Exec`, `Query.Exec` and
+  `Session.UnpreparedExec` share this deviation for a single conditional
+  statement, and the same check fixes them.
+- The rows method is `Session.RunBatch`. It returns a `*Page` that holds a
+  pooled query until it is closed, which breaks the no-handle rule and reuses
+  the pages-column type for a response that has a single page. Resolved by
+  replacing it with a push method that has no handle.
+- There is no throwaway member: constant CQL must be prepared before it can
+  join a batch. Resolved by adding an unprepared `AddToBatch`.

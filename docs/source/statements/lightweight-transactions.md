@@ -10,3 +10,7 @@ typed `CASResult[R]`. For conditional batches, pass this decoder to `session.Run
 The ordinary `Options` carries regular and serial consistency; profile defaults
 apply when an explicit override is absent. Inspect every returned row and close
 the result page/rows even when the condition was not applied.
+
+Cassandra and ScyllaDB return different rows and columns for conditional
+statements and batches. See [Cassandra and ScyllaDB differences](../server-differences.md)
+for what each one returns and how to decode it portably.

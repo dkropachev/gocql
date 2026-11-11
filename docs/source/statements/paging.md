@@ -30,6 +30,9 @@ valid: nil or empty input to `PageStateFromToken` always creates a continuation.
 The initial and complete states both return nil from `Token()`; use `More()`
 and `Complete()` to distinguish them. An HTTP API can omit its next-page token
 when `More()` is false, representing completion separately from token bytes.
+A page can hold fewer rows than the page size, or none, while `More()` is
+still true, so decide whether to continue with `More()`, never with the
+number of rows on the page.
 
 Use `RowInto` with `OwnedBlobCodec` for reusable owned buffered destinations.
 See [streaming](streaming.md) for seeded streaming decoders and explicit
