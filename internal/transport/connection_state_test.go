@@ -451,10 +451,18 @@ func TestTypedRequestTakesNoConnLock(t *testing.T) {
 // Registrations and withdrawals racing close: every call registered is either
 // withdrawn by its caller or drained and answered by close, a registration
 // after close fails with ErrConnectionClosed, and the table ends empty.
+// Streams held outside the table push the workers' streams into chunks that
+// are not yet published, so chunk publication races close too.
 func TestCallTableCloseRace(t *testing.T) {
 	closeErr := errors.New("test close")
+	published := 0
 	for round := range 200 {
 		c, _ := invPair(t, 4)
+		held := callChunkSize*(1+round%4) - round%8
+		for range held {
+			c.InternalStreams.GetStream()
+		}
+		fresh := held / callChunkSize // no chunk is published yet: held streams are not registered
 		const workers = 16
 		var wg sync.WaitGroup
 		start := make(chan struct{})
@@ -493,16 +501,27 @@ func TestCallTableCloseRace(t *testing.T) {
 			})
 		}
 		close(start)
-		time.Sleep(time.Duration(rand.IntN(200)) * time.Microsecond)
+		if round%3 != 0 {
+			// Otherwise close races the first registrations, chunk publication
+			// included; rounds with held%256 != 0 also cross a chunk boundary.
+			time.Sleep(time.Duration(rand.IntN(200)) * time.Microsecond)
+		}
 		c.InternalCloseWithError(closeErr)
 		wg.Wait()
 		if n := c.InternalCalls.Len(); n != 0 {
 			t.Fatalf("round %d: %d calls left in the table after close", round, n)
 		}
+		if c.InternalCalls.chunks[fresh].Load() != nil {
+			published++
+		}
 		if t.Failed() {
 			return
 		}
 	}
+	if published == 0 {
+		t.Fatal("no round registered into a chunk beyond the held streams")
+	}
+	t.Logf("%d rounds published a chunk while racing close", published)
 }
 
 // A reservation takes one connection out of shared use; the session-wide
