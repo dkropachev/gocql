@@ -201,6 +201,11 @@ type InternalExecutionRequest struct {
 	routing            model.RoutingInfo
 	InternalOptions    InternalResolvedOptions
 	tabletVersionBlock byte
+	// hasCounter reports a counter write: a statement with a counter
+	// parameter or a counter batch. Counter writes take no client timestamp.
+	// It is set when the request is bound, so admission does not scan the
+	// values.
+	hasCounter bool
 }
 
 type ExecutionError = runtimeerrors.ExecutionError

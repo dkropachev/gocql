@@ -245,7 +245,7 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 	dependencies := tracker.InternalDependencies(info.Keyspace, page.BindColumns(), page.Columns)
 	epoch := dependencies.InternalSince(started)
 	result := &model.ResultSchemaIdentity{InternalColumns: page.Columns, InternalEpoch: epoch, InternalTracker: dependencies.InternalTracker}
-	state = &InternalPreparedState{InternalSession: s.Core, InternalProtocol: conn.InternalVersion, InternalStatement: statement, InternalKeyspace: keyspace, InternalParameters: page.BindColumns(), InternalColumns: page.Columns, InternalInfo: info, InternalDependencies: dependencies, InternalInitialEpoch: epoch, partitioner: s.Core.PreparedPartitionerName(info.Keyspace, info.Table)}
+	state = &InternalPreparedState{InternalSession: s.Core, InternalProtocol: conn.InternalVersion, InternalStatement: statement, InternalKeyspace: keyspace, InternalParameters: page.BindColumns(), hasCounter: hasCounterColumn(page.BindColumns()), InternalColumns: page.Columns, InternalInfo: info, InternalDependencies: dependencies, InternalInitialEpoch: epoch, partitioner: s.Core.PreparedPartitionerName(info.Keyspace, info.Table)}
 	state.view.Store(&preparedView{hosts: map[cqltype.UUID]*InternalHostPrepared{conn.InternalHostID(): {InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: page.Columns, InternalGeneration: generation, InternalRevision: 1, InternalEpoch: epoch, InternalResult: result}}, result: result, resultHost: conn.InternalHostID()})
 
 	tracker.InternalMu.RLock()
@@ -689,7 +689,7 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 		return nil, nil, nil, err
 	}
 	rt.inflight.Add(1)
-	if mode := rt.config.Timestamps.Mode(); mode != settings.ServerTimestampMode && !request.routing.Conditional && !requestHasCounter(request) && !request.InternalOptions.InternalOptions.Timestamp.Set {
+	if mode := rt.config.Timestamps.Mode(); mode != settings.ServerTimestampMode && !request.routing.Conditional && !request.hasCounter && !request.InternalOptions.InternalOptions.Timestamp.Set {
 		var timestamp int64
 		if mode == settings.DriverTimestampMode {
 			timestamp = rt.timestamps.next(started)
@@ -1381,12 +1381,11 @@ func attemptBytesWritten(err error) bool {
 	return runtimeerrors.ExecutionStatusOf(err) != cqltype.NotExecuted
 }
 
-func requestHasCounter(request *InternalExecutionRequest) bool {
-	if request.batch != nil && request.batch.kind == cqltype.CounterBatch {
-		return true
-	}
-	for _, cell := range request.InternalValues.Cells {
-		if cell.Typ.Kind() == cqltype.TypeCounter {
+// hasCounterColumn reports whether columns, a statement's parameters, include
+// a counter: executing the statement is then a counter write.
+func hasCounterColumn(columns cqltype.Columns) bool {
+	for _, column := range cqltype.ColumnSlice(columns) {
+		if column.Type.Kind() == cqltype.TypeCounter {
 			return true
 		}
 	}

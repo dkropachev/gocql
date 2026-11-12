@@ -177,7 +177,7 @@ func newPreparedQuery[P, R any](p *Prepared[P, R], options CompiledOptions, pool
 	q.bound.privateStorage.rows = &q.rows
 	info := &state.InternalInfo
 	kind := p.privateStorage.kind
-	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, routing: model.RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Kind: kind, Conditional: kind != cqltype.OrdinaryStatement}}
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, routing: model.RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Kind: kind, Conditional: kind != cqltype.OrdinaryStatement}, hasCounter: state.hasCounter}
 	if err := newQueryState(p.privateStorage.InternalState.InternalSession, &q.state, q.retire, pool); err != nil {
 		return nil, err
 	}
@@ -199,7 +199,7 @@ func newUnpreparedQuery[P, R any](s *implCluster.Core, statement binding.Stateme
 	q.bound.privateStorage.InternalRows = statement.Rows
 	q.bound.privateStorage.plans = &InternalResultPlanCache[R]{}
 	q.bound.privateStorage.rows = &q.rows
-	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement.CQL, InternalSource: cqlText{}, routing: model.RoutingInfo{Kind: statement.Kind, Conditional: statement.Kind != cqltype.OrdinaryStatement}}
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement.CQL, InternalSource: cqlText{}, routing: model.RoutingInfo{Kind: statement.Kind, Conditional: statement.Kind != cqltype.OrdinaryStatement}, hasCounter: hasCounterColumn(columns)}
 	if err := newQueryState(s, &q.state, q.retire, nil); err != nil {
 		return nil, err
 	}
