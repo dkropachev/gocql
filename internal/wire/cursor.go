@@ -20,6 +20,7 @@ package wire
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 )
 
@@ -244,5 +245,98 @@ func (c *Cursor) advanceNested(n int64) {
 		n -= int64(available)
 		c.index++
 		c.offset = 0
+	}
+}
+
+// The Head methods are call-free fast paths for row decoding loops. Each
+// succeeds only while the cursor is on the head span and the bytes it reads
+// end strictly inside it, so the cursor never rests on the head's end, which
+// the slow paths treat as a move to the next span. On a miss they report
+// false and leave the cursor unmoved; the caller then takes the checked
+// method. They rely on c.remaining >= len(head)-c.offset while c.index == 0,
+// which assertHead checks in gocql_debug builds.
+
+// HeadUint32 is Uint32 for a scalar that ends strictly inside the head span.
+func (c *Cursor) HeadUint32() (uint32, bool) {
+	if end := c.offset + 4; c.index == 0 && end < len(c.chain.head.data) {
+		if debugCursor {
+			c.assertHead()
+		}
+		v := binary.BigEndian.Uint32(c.chain.head.data[c.offset:end])
+		c.offset = end
+		c.remaining -= 4
+		return v, true
+	}
+	return 0, false
+}
+
+// HeadUint64 is Uint64 for a scalar that ends strictly inside the head span.
+func (c *Cursor) HeadUint64() (uint64, bool) {
+	if end := c.offset + 8; c.index == 0 && end < len(c.chain.head.data) {
+		if debugCursor {
+			c.assertHead()
+		}
+		v := binary.BigEndian.Uint64(c.chain.head.data[c.offset:end])
+		c.offset = end
+		c.remaining -= 8
+		return v, true
+	}
+	return 0, false
+}
+
+// HeadSkip is Skip for a nonnegative n that ends strictly inside the head
+// span. A negative n misses, leaving Skip to report ErrBounds.
+func (c *Cursor) HeadSkip(n int64) bool {
+	if end := int64(c.offset) + n; c.index == 0 && n >= 0 && end < int64(len(c.chain.head.data)) {
+		if debugCursor {
+			c.assertHead()
+		}
+		c.offset = int(end)
+		c.remaining -= n
+		return true
+	}
+	return false
+}
+
+// PeekHeadUint32 returns the next four bytes as a big-endian scalar, without
+// advancing, when they end strictly inside the head span.
+func (c *Cursor) PeekHeadUint32() (uint32, bool) {
+	if end := c.offset + 4; c.index == 0 && end < len(c.chain.head.data) {
+		if debugCursor {
+			c.assertHead()
+		}
+		return binary.BigEndian.Uint32(c.chain.head.data[c.offset:end]), true
+	}
+	return 0, false
+}
+
+// HeadBytes returns the next n bytes, without advancing, when they end
+// strictly inside the head span. n must be nonnegative. The bytes are a
+// read-only view of the chain's payload.
+func (c *Cursor) HeadBytes(n int) ([]byte, bool) {
+	if end := c.offset + n; c.index == 0 && end < len(c.chain.head.data) {
+		if debugCursor {
+			c.assertHead()
+		}
+		return c.chain.head.data[c.offset:end], true
+	}
+	return nil, false
+}
+
+// AdvanceHead moves past n bytes that a successful PeekHeadUint32 or
+// HeadBytes proved end strictly inside the head span. It checks nothing.
+func (c *Cursor) AdvanceHead(n int) {
+	c.offset += n
+	c.remaining -= int64(n)
+}
+
+// assertHead panics when the head-span invariant the fast paths rely on
+// does not hold: every head byte after the offset is still in range.
+//
+//go:noinline
+func (c *Cursor) assertHead() {
+	if c.index != 0 || c.offset < 0 || c.remaining < int64(len(c.chain.head.data)-c.offset) {
+		panic(fmt.Sprintf("wire: cursor head invariant: index %d offset %d remaining %d head %d",
+			c.index, c.offset, c.remaining, len(c.chain.head.data)))
 	}
 }
