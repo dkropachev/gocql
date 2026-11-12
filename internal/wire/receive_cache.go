@@ -4,135 +4,168 @@
 package wire
 
 import (
+	"math/bits"
 	"sync"
 	"sync/atomic"
 )
 
 // ReceiveCache reuses only fully released raw v4 frame allocations. One
-// session owns it, with hard idle byte/object/individual limits independent of
+// session owns it, with hard idle byte/object limits independent of
 // connection/shard counts. Outstanding page bytes are ordinary demand, not idle.
+//
+// Buffers are kept on power-of-two size-class free lists (4 KiB to 1 MiB), each
+// a small mutex-protected LIFO stack. Acquire pops from the class that fits the
+// request and Release pushes onto the largest class the buffer can serve, so
+// neither scans. Requests above the largest class are plain allocations.
 type ReceiveCache struct {
-	entries [][]byte
-	bytes   int
-	epoch   uint64
-	mu      sync.Mutex
-	closed  bool
-	// The statistics are atomic so that Stats, which every speculation
-	// decision reads through the session metrics, never takes mu. The
-	// retained figures mirror bytes and len(entries), stored under mu.
-	hits, misses                   atomic.Uint64
-	retainedBytes, retainedObjects atomic.Int64
+	// idle packs the bytes (low idleObjectShift bits) and count of buffers
+	// stacked above each class's first receiveClassFree entries, so one CAS
+	// enforces the shared budget. The first entries of a class are covered by
+	// the fixed receiveCacheFreeBytes/Objects allowance and cost no atomic.
+	idle    atomic.Int64
+	epoch   atomic.Uint64
+	closed  atomic.Bool
+	over    atomic.Uint64 // misses above the largest class
+	classes [receiveCacheClasses]receiveClass
 }
 
-// publishRetained mirrors the retained size into the statistics; c.mu must be held.
-func (c *ReceiveCache) publishRetained() {
-	c.retainedBytes.Store(int64(c.bytes))
-	c.retainedObjects.Store(int64(len(c.entries)))
+type receiveClass struct {
+	mu           sync.Mutex
+	stack        [][]byte
+	hits, misses uint64
+	_            [64]byte // keep neighbouring classes off one cache line
 }
 
 const ReceiveCacheMaxBytes = 16 << 20
-const ReceiveCacheMaxObjects = 64
-const ReceiveCacheMaxObject = 9 << 20
+
+// ReceiveCacheMaxObjects bounds idle buffers over all classes: 64 under the
+// shared budget plus the fixed per-class allowance.
+const ReceiveCacheMaxObjects = receiveCacheSharedObjects + receiveCacheFreeObjects
+
+// ReceiveCacheMaxObject is the largest buffer Release retains.
+const ReceiveCacheMaxObject = receiveCacheMinClass << (receiveCacheClasses - 1)
+
+const (
+	receiveCacheMinShift       = 12
+	receiveCacheMinClass       = 1 << receiveCacheMinShift
+	receiveCacheClasses        = 9 // 4 KiB ... 1 MiB
+	idleObjectShift            = 40
+	idleObjectUnit       int64 = 1 << idleObjectShift
+	// Each class keeps its first receiveClassFree buffers outside the shared
+	// budget; the budget leaves room for them within the hard limits.
+	receiveClassFree          = 2
+	receiveCacheSharedObjects = 64
+	receiveCacheFreeObjects   = receiveClassFree * receiveCacheClasses
+	receiveCacheFreeBytes     = receiveClassFree * (receiveCacheMinClass<<receiveCacheClasses - receiveCacheMinClass)
+)
 
 func (c *ReceiveCache) Acquire(n int) ([]byte, uint64) {
 	if c == nil {
 		return make([]byte, n), 0
 	}
-	c.mu.Lock()
-	epoch := c.epoch
-	if !c.closed {
-		best := -1
-		for i, b := range c.entries {
-			if cap(b) == n {
-				// No entry fits better than an exact one.
-				best = i
+	epoch := c.epoch.Load()
+	if n > ReceiveCacheMaxObject {
+		c.over.Add(1)
+		return make([]byte, n), epoch
+	}
+	idx := 0
+	if n > receiveCacheMinClass {
+		idx = bits.Len(uint(n-1)) - receiveCacheMinShift
+	}
+	cl := &c.classes[idx]
+	cl.mu.Lock()
+	if last := len(cl.stack) - 1; last >= 0 && !c.closed.Load() {
+		b := cl.stack[last]
+		cl.stack[last] = nil
+		cl.stack = cl.stack[:last]
+		cl.hits++
+		cl.mu.Unlock()
+		if last >= receiveClassFree {
+			c.idle.Add(-(int64(cap(b)) + idleObjectUnit))
+		}
+		return b[:n], epoch
+	}
+	cl.misses++
+	cl.mu.Unlock()
+	// Full class capacity lets the buffer serve any request of its class.
+	return make([]byte, n, receiveCacheMinClass<<idx), epoch
+}
+
+func (c *ReceiveCache) Release(b []byte, epoch uint64) {
+	size := cap(b)
+	if c == nil || size < receiveCacheMinClass || size > ReceiveCacheMaxObject {
+		return
+	}
+	idx := bits.Len(uint(size)) - 1 - receiveCacheMinShift
+	cl := &c.classes[idx]
+	cl.mu.Lock()
+	// Checked under the class lock: Clear/Close bump the state first and then
+	// sweep every class, so a stale buffer cannot slip in behind the sweep.
+	if c.closed.Load() || epoch != c.epoch.Load() {
+		cl.mu.Unlock()
+		return
+	}
+	if len(cl.stack) >= receiveClassFree {
+		for {
+			v := c.idle.Load()
+			if v&(idleObjectUnit-1)+int64(size) > ReceiveCacheMaxBytes-receiveCacheFreeBytes || v>>idleObjectShift >= receiveCacheSharedObjects {
+				cl.mu.Unlock()
+				return
+			}
+			if c.idle.CompareAndSwap(v, v+int64(size)+idleObjectUnit) {
 				break
 			}
-			if cap(b) >= n && (cap(b) <= 4096 || n >= cap(b)-n) && (best < 0 || cap(b) < cap(c.entries[best])) {
-				best = i
-			}
-		}
-		if best >= 0 {
-			c.hits.Add(1)
-			b := c.entries[best]
-			c.bytes -= cap(b)
-			last := len(c.entries) - 1
-			c.entries[best] = c.entries[last]
-			c.entries[last] = nil
-			c.entries = c.entries[:last]
-			c.publishRetained()
-			c.mu.Unlock()
-			return b[:n], epoch
 		}
 	}
-	c.mu.Unlock()
-	c.misses.Add(1)
-	return make([]byte, n), epoch
+	cl.stack = append(cl.stack, b[:size])
+	cl.mu.Unlock()
 }
-func (c *ReceiveCache) Release(b []byte, epoch uint64) {
-	if c == nil || cap(b) > ReceiveCacheMaxObject || cap(b) == 0 {
-		return
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	// Eviction may run before an early return, so publish on every exit.
-	defer c.publishRetained()
-	if c.closed || epoch != c.epoch {
-		return
-	}
-	// Keep the largest reusable frame classes under the same fixed session cap.
-	// Inspect at most 64 slots; tiny metadata cannot starve data frame reuse.
-	for len(c.entries) >= ReceiveCacheMaxObjects || cap(b) > ReceiveCacheMaxBytes-c.bytes {
-		smallest := -1
-		for i, v := range c.entries {
-			if smallest < 0 || cap(v) < cap(c.entries[smallest]) {
-				smallest = i
-			}
-		}
-		if smallest < 0 || cap(c.entries[smallest]) >= cap(b) {
-			return
-		}
-		c.bytes -= cap(c.entries[smallest])
-		last := len(c.entries) - 1
-		c.entries[smallest] = c.entries[last]
-		c.entries[last] = nil
-		c.entries = c.entries[:last]
-	}
-	c.entries = append(c.entries, b[:cap(b)])
-	c.bytes += cap(b)
-}
+
+// Clear drops idle storage and invalidates buffers acquired earlier.
 func (c *ReceiveCache) Clear() {
 	if c == nil {
 		return
 	}
-	c.mu.Lock()
-	clear(c.entries)
-	c.entries = nil
-	c.bytes = 0
-	c.epoch++
-	c.publishRetained()
-	c.mu.Unlock()
+	c.epoch.Add(1)
+	c.drain()
 }
+
 func (c *ReceiveCache) Close() {
 	if c == nil {
 		return
 	}
-	c.mu.Lock()
-	clear(c.entries)
-	c.entries = nil
-	c.bytes = 0
-	c.epoch++
-	c.closed = true
-	c.publishRetained()
-	c.mu.Unlock()
+	c.closed.Store(true)
+	c.epoch.Add(1)
+	c.drain()
 }
+
+func (c *ReceiveCache) drain() {
+	for i := range c.classes {
+		cl := &c.classes[i]
+		cl.mu.Lock()
+		for j := receiveClassFree; j < len(cl.stack); j++ {
+			c.idle.Add(-(int64(cap(cl.stack[j])) + idleObjectUnit))
+		}
+		clear(cl.stack)
+		cl.stack = nil
+		cl.mu.Unlock()
+	}
+}
+
 func (c *ReceiveCache) Storage() (bytes, objects int) {
 	if c == nil {
 		return
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.bytes, len(c.entries)
+	for i := range c.classes {
+		cl := &c.classes[i]
+		cl.mu.Lock()
+		for _, b := range cl.stack {
+			bytes += cap(b)
+		}
+		objects += len(cl.stack)
+		cl.mu.Unlock()
+	}
+	return
 }
 
 // ReceiveCacheStats reports cumulative reuse and current idle retention. Active
@@ -146,5 +179,20 @@ func (c *ReceiveCache) Stats() ReceiveCacheStats {
 	if c == nil {
 		return ReceiveCacheStats{}
 	}
-	return ReceiveCacheStats{Hits: c.hits.Load(), Misses: c.misses.Load(), RetainedBytes: int(c.retainedBytes.Load()), RetainedObjects: int(c.retainedObjects.Load())}
+	// Stats takes each class lock once, briefly. Counting under the class
+	// locks keeps atomics off Acquire and Release; Stats is read only by
+	// speculation decisions and metrics snapshots.
+	st := ReceiveCacheStats{Misses: c.over.Load()}
+	for i := range c.classes {
+		cl := &c.classes[i]
+		cl.mu.Lock()
+		st.Hits += cl.hits
+		st.Misses += cl.misses
+		for _, b := range cl.stack {
+			st.RetainedBytes += cap(b)
+		}
+		st.RetainedObjects += len(cl.stack)
+		cl.mu.Unlock()
+	}
+	return st
 }
