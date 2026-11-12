@@ -39,7 +39,39 @@ func (c scalarCodec[T]) decodeColumnInto(r *RowReader, dst *T) error {
 // on the row cursor for direct consumption. On a semantic error it skips the
 // body, matching nextValue followed by scalarCodec.Decode. A zero width admits
 // an arbitrary blob length; scalar widths require an exact match.
+//
+// The fast path accepts only a cell that already passes every check: a
+// column of the codec's kind, a live lease, and a present body of the
+// required width whose length prefix ends inside the cursor's head span. It
+// consumes nothing until all hold; any other cell goes to scalarColumnSlow,
+// which reproduces every error and cursor position. A zero DataType has kind
+// TypeCustom, which no scalar codec uses, so the kind check also covers
+// ValidateDataType.
 func (r *RowReader) scalarColumn(kind, alternative cqltype.Type, compiled bool, width int64) (int64, error) {
+	if r != nil && r.cursor != nil {
+		if column, ok := r.columns.At(r.index); ok {
+			k := column.Type.Kind()
+			if prefix, ok := r.cursor.PeekHeadUint32(); ok && (k == kind || alternative != 0 && k == alternative) && (r.lease.IsZero() || r.lease.Alive()) {
+				length := int64(int32(prefix))
+				if length >= 0 && length <= r.cursor.Remaining()-4 && (width == 0 || length == width) {
+					if !compiled {
+						perfCheckType()
+					}
+					r.cursor.AdvanceHead(4)
+					r.index++
+					return length, nil
+				}
+			}
+		}
+	}
+	return r.scalarColumnSlow(kind, alternative, compiled, width)
+}
+
+// scalarColumnSlow is scalarColumn for every cell the fast path declines:
+// errors, nulls, missing cells and prefixes that reach a span boundary.
+//
+//go:noinline
+func (r *RowReader) scalarColumnSlow(kind, alternative cqltype.Type, compiled bool, width int64) (int64, error) {
 	if r == nil || r.cursor == nil {
 		return 0, fmt.Errorf("gocql: nil row reader")
 	}
@@ -87,11 +119,6 @@ func (r *RowReader) scalarColumn(kind, alternative cqltype.Type, compiled bool, 
 	}
 	if length == -1 {
 		return 0, fmt.Errorf("gocql: nonnullable %s cannot decode cell state %d", column.Type.Kind(), cqltype.Null)
-	}
-	// This is the same present-value lease guard as requirePresent. The integer
-	// path also retains its cursor guard before loading the scalar.
-	if !r.lease.IsZero() && !r.lease.Alive() {
-		return fail(cqltype.ErrReleased)
 	}
 	if width > 0 && int64(length) != width {
 		return fail(fmt.Errorf("gocql: %s requires %d bytes, got %d", column.Type.Kind(), width, length))
