@@ -16,6 +16,8 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/scylladb/gocql/v2/exec"
+
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
@@ -150,9 +152,9 @@ func TestWorkCountsPerf(t *testing.T) {
 						profile.Speculation = speculation{}
 					}
 					handle := new(profile)
-					options := Options{Profile: handle, Idempotent: true}
+					options := exec.Options{Profile: handle, Idempotent: true}
 					if mode == "default" {
-						options = Options{}
+						options = exec.Options{}
 					}
 					if enabled {
 						options.Observer = observer
@@ -202,7 +204,7 @@ func TestWorkCountsPerf(t *testing.T) {
 			cols := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "v", Type: cql.BlobType})
 			_, hp := testPreparedState(t, s, cols)
 			for i := 0; i < 1000; i++ {
-				(*implSession.Session)(s).Core().InvalidatePreparedSchema(Event{Keyspace: "unrelated", Object: fmt.Sprint(i), Target: "TABLE"})
+				(*implSession.Session)(s).Core().InvalidatePreparedSchema(implCluster.Event{Keyspace: "unrelated", Object: fmt.Sprint(i), Target: "TABLE"})
 			}
 			if !hp.InternalEpoch.InternalCurrent() {
 				t.Fatal("unrelated invalidation")
@@ -326,7 +328,7 @@ func TestWorkCountsPerf(t *testing.T) {
 									defer bound.Close()
 									profile := defaultProfile()
 									profile.Prefetch = prefetch
-									options := Options{Profile: new(profile)}
+									options := exec.Options{Profile: new(profile)}
 									values := make([]string, cells)
 									for i := range values {
 										values[i] = "q"
@@ -433,6 +435,6 @@ func runtimeQuery(t testing.TB) *implSession.Bound[cql.Bytes] {
 	return b
 }
 
-func runtimeRun(s *testSession, bound *implSession.Bound[cql.Bytes], options CompiledOptions) (implSession.Rows[cql.Bytes], error) {
+func runtimeRun(s *testSession, bound *implSession.Bound[cql.Bytes], options exec.CompiledOptions) (implSession.Rows[cql.Bytes], error) {
 	return implSession.Run(context.Background(), (*implSession.Session)(s).Core(), bound, implSession.CompiledOptions(options))
 }

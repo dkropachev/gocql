@@ -68,7 +68,7 @@ from arbitrary Go values. See [custom codec contracts](docs/source/custom-codecs
 `prepared.Exec(ctx, input)`, `prepared.One(ctx, input, &dst)` and
 `prepared.Each(ctx, input, &dst, fn)` run the statement once. They are safe for
 concurrent use and run on queries the statement keeps for them, so they
-allocate no per-call execution state. Each takes at most one `CompiledOptions`
+allocate no per-call execution state. Each takes at most one `exec.CompiledOptions`
 from `session.CompileOptions(options)`; none uses the session default. They return
 only when the execution has finished. `One` detaches borrowed fields before
 returning, so its result remains valid.
@@ -109,7 +109,7 @@ the caller; and `RunPage` resumes from a saved `cql.PageState` for explicit pagi
 It also has `All`. `RunPage` takes the page size as an argument, so a size
 that changes per request needs no new options; zero uses the resolved page
 size. The page size `cql.Unpaged`, as that argument or as
-`Options{PageSize: cql.Some(cql.Unpaged)}`, requests the whole result in one
+`exec.Options{PageSize: cql.Some(cql.Unpaged)}`, requests the whole result in one
 response.
 
 `session.UnpreparedExec`, `session.UnpreparedOne`, `session.UnpreparedEach` and
@@ -134,7 +134,7 @@ borrow their pages.
 prepares directly for caller-storage decoding. Share its immutable handle and
 create a query per worker with `prepared.Query(options)`. The query decodes into
 seeded caller storage. It buffers each page on
-normal multiplexed connections by default. `StreamOptions{Incremental: true}`
+normal multiplexed connections by default. `exec.StreamOptions{Incremental: true}`
 selects bounded incremental receive with an exclusive connection reservation. Read the
 [streaming guide](docs/source/statements/streaming.md) and run the complete
 [standalone example](examples/streaming/main.go):
@@ -179,12 +179,13 @@ TLS with `crypto/tls`, authentication with `auth.Password` or an `auth.Provider`
 routing/retry/speculation through `WithDefaultProfile` or a per-query
 `*config.Profile`, built with `config.NewProfile` (a `config.Profile` literal is
 rejected).
-Per-execution settings are plain `gocql.Options` values, for example
-`gocql.Options{PageSize: cql.Some[int32](100)}`; the zero `Options{}` uses the
+Per-execution settings are plain `exec.Options` values (package
+`github.com/scylladb/gocql/v2/exec`), for example
+`exec.Options{PageSize: cql.Some[int32](100)}`; the zero `exec.Options{}` uses the
 session default. Query constructors validate, resolve and encode them for their
 session once, so query executions do no per-call work. One-shot executions
 (`prepared.Exec/One/Each`, `session.ExecBatch`, `session.RunBatch`) take
-`CompiledOptions` from `session.CompileOptions(options)`, which does the same work up
+`exec.CompiledOptions` from `session.CompileOptions(options)`, which does the same work up
 front. Compiled options carry their session's default profile and keyspace; on
 another session they are resolved again for that session on each execution.
 `endpoint.Dialer`, `endpoint.Resolver`,

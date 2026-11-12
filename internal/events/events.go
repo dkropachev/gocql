@@ -19,7 +19,7 @@
 // Package events holds the driver's internal event types: the server's
 // topology, status, schema and client-routes events, decoded from frames by
 // FrameToEvent, and the session's control-connection events. They travel on
-// the session's internal event bus; the public model is gocql.Event.
+// the session's internal event bus; the public model is event.Event.
 package events
 
 import (

@@ -54,15 +54,15 @@ the statement repeatedly, so it prepares the statement.
 ## Options
 
 - Worker-owned: options are fixed when the query is created.
-- Shared: each call ends in `options ...CompiledOptions`, made once by
+- Shared: each call ends in `options ...exec.CompiledOptions`, made once by
   `Session.CompileOptions`. The variadic is Go's form of an optional
   parameter, so the common call carries no options at all (`p.Exec(ctx, v)`)
   and uses the session defaults. At most one value is accepted; a second
   fails the call at once with a validation error. The type is
-  `CompiledOptions`, not `Options`, because the shared form is the hot path:
+  `exec.CompiledOptions`, not `exec.Options`, because the shared form is the hot path:
   validation, payload copying and default resolution happen once at setup,
   and each call passes a pointer to the frozen result.
-- Throwaway: each call ends in `options ...Options`, the same optional
+- Throwaway: each call ends in `options ...exec.Options`, the same optional
   parameter with at most one value. The call validates and resolves it: a
   throwaway statement has no setup step to compile options in, and its path
   is not optimised.
@@ -143,7 +143,7 @@ and no options.
     with no continuation, so there is no page state and no `Page`. Like
     `Prepared.Run`'s rows, the rows hold a pooled query until they are
     closed, and the session registers it so that `Session.Close` stops them.
-- **Options.** As for the shared form: an optional `CompiledOptions`, so the
+- **Options.** As for the shared form: an optional `exec.CompiledOptions`, so the
   send resolves nothing per call. Paging options are ignored, so options
   compiled for statements serve batches too.
 - **Performance contract.** Once a reused batch has reached its working size,

@@ -2,11 +2,11 @@
 
 `session.PrepareStream(ctx, stream.Statement[P,R]{CQL: text, Params: params,
 Rows: decoder})` prepares directly for caller-storage decoding. Its immutable
-`PreparedStream` handle can be shared; `prepared.Query(StreamOptions{})` creates
+`PreparedStream` handle can be shared; `prepared.Query(exec.StreamOptions{})` creates
 a query for one worker. Streaming is always prepared; `Rows` supplies the
 streaming decoder. The query's `Run(ctx, parameters)` method returns a cursor; `NextInto(&row)` decodes
 into seeded caller storage. By default it buffers a complete response page on
-normal multiplexed connections. `StreamOptions{Incremental: true}` selects
+normal multiplexed connections. `exec.StreamOptions{Incremental: true}` selects
 bounded incremental receive through an exclusive connection reservation. The standalone
 [`examples/streaming/main.go`](../../../examples/streaming/main.go) program
 creates its schema, checks exact results and backing identity, and runs through
@@ -33,7 +33,7 @@ prepared, err := session.PrepareStream(ctx, stream.Statement[cql.EmptyParams, Do
     Rows: decoder,
 })
 if err != nil { return err }
-query, err := prepared.Query(gocql.StreamOptions{})
+query, err := prepared.Query(exec.StreamOptions{})
 if err != nil { return err }
 defer query.Close()
 stream, err := query.Run(ctx, cql.EmptyParams{})
@@ -94,7 +94,7 @@ supported. Raw eligible payload reads target caller arrays directly; TLS,
 segment integrity and LZ4 use bounded staging/transform units. Protocol 4 LZ4
 or Snappy frame compression is explicitly rejected with StreamCapabilityError
 before streaming submission. Incremental mode reports its capability error explicitly.
-Set StreamOptions.Limits for metadata, read-ahead, discard and transform budgets;
+Set exec.StreamOptions.Limits for metadata, read-ahead, discard and transform budgets;
 The configuration builder's `WithMaxFrameSize`, `WithMaxDecompressedSize`
 and `WithMaxMetadataDepth` bound response sizes and nesting. A limit error is terminal. StreamInfo reports delivered rows, pages and attempts.
 

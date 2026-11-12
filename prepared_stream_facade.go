@@ -5,6 +5,7 @@ package gocql
 
 import (
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/exec"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
@@ -16,7 +17,7 @@ type PreparedStream[P, R any] implSession.PreparedStream[P, R]
 
 // Query creates a reusable stream query with fixed options. Close the query when
 // its worker finishes, and close each execution cursor before reusing it.
-func (p *PreparedStream[P, R]) Query(options StreamOptions) (*StreamQuery[P, R], error) {
+func (p *PreparedStream[P, R]) Query(options exec.StreamOptions) (*StreamQuery[P, R], error) {
 	q, err := (*implSession.PreparedStream[P, R])(p).Query(internalStreamOptions(options))
 	return (*StreamQuery[P, R])(q), err
 }

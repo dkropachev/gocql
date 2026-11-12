@@ -8,7 +8,7 @@ once from any goroutine, call `prepared.Exec(ctx, input)`,
 `prepared.All(ctx, input, &dst)`. `Exec` and `Each` return `(Result, error)`,
 `One` returns `(bool, Result, error)`, and `All` returns an iterator for a
 range loop that yields each row and, once, any error. They run on queries the statement keeps, and take at
-most one `CompiledOptions` for that call: compile `Options` for the session once with
+most one `exec.CompiledOptions` for that call: compile `exec.Options` for the session once with
 `session.CompileOptions(options)` and reuse the result, or pass none for the
 session default. They return once the execution has finished. `One` detaches borrowed fields
 before returning, so the row remains usable. `Each` lends borrowed fields only
@@ -35,13 +35,13 @@ parameter columns from `Statement.BindMarkers`. To decode into caller storage,
 use `session.PrepareStream` with a `stream.Statement[P,R]` and call
 `prepared.Query(streamOptions)`; this checks the streaming decoder directly
 without requiring a buffered row mapping. It buffers pages by default; set
-`StreamOptions.Incremental` for bounded incremental receive.
+`exec.StreamOptions.Incremental` for bounded incremental receive.
 Queries reject overlap (an open handle, or another goroutine's call) with
 `ErrBusy`, wait for an execution that already returned to drain, and own
 captured parameters through drain. `query.Close()` stops a query at once, and
 `query.Wait(ctx)` waits for its drain.
 
-`Options` overlays the selected profile using explicit `Option[T]` values for
+`exec.Options` overlays the selected profile using explicit `Option[T]` values for
 settings where zero is meaningful. It carries consistency, paging, tracing,
 custom payload, idempotence and host/shard targeting. `Kind` classifies known
 ordinary/conditional statements; unknown or conditional requests cannot
@@ -59,7 +59,7 @@ request-timeouts
 
 For occasional statements, `Session.UnpreparedExec`, `UnpreparedOne`, and
 `UnpreparedEach` execute typed CQL text and own their cleanup. Parameters must
-be described by `Statement.BindMarkers`. They take at most one plain `Options`,
+be described by `Statement.BindMarkers`. They take at most one plain `exec.Options`,
 validated during the call. Frequent statements should be prepared
 once and shared. Create reusable queries once per worker, rather than once per
 HTTP request, and close each one. A query dropped without `Close` is closed

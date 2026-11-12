@@ -8,6 +8,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/exec"
 	"github.com/scylladb/gocql/v2/metadata"
 	routing "github.com/scylladb/gocql/v2/routing"
 
@@ -89,12 +90,12 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 	if _, err := v2Exec(ctx, session, fmt.Sprintf("INSERT INTO %s.%s (pk, v) VALUES (?, ?)", keyspace, table), dynamic.Int(7), dynamic.Int(9)); err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := session.Prepare(ctx, cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: fmt.Sprintf("SELECT pk, v FROM %s.%s WHERE pk = ?", keyspace, table), Params: dynamic.Params, Rows: dynamic.Rows}, gocql.PrepareOptions{})
+	prepared, err := session.Prepare(ctx, cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: fmt.Sprintf("SELECT pk, v FROM %s.%s WHERE pk = ?", keyspace, table), Params: dynamic.Params, Rows: dynamic.Rows}, exec.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	key := []dynamic.Value{dynamic.Int(7)}
-	query, err := prepared.Query(gocql.Options{})
+	query, err := prepared.Query(exec.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +127,7 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 			t.Fatal(err)
 		}
 		handle := new(profile)
-		rows, err := prepared.Run(ctx, key, bindOptions(session, gocql.Options{Profile: handle, Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}))
+		rows, err := prepared.Run(ctx, key, bindOptions(session, exec.Options{Profile: handle, Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}))
 		if err != nil {
 			t.Fatal(err)
 		}

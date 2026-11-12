@@ -28,7 +28,7 @@ the batch no routing token: the batch routes by its first prepared member.
 later input mutation cannot change the batch. It uses none of the query's
 execution state: `Query.AddToBatch` works while the query runs or has an open
 `Rows`, and `Prepared.AddToBatch` takes no pooled query. `ExecBatch` and `RunBatch` take at most one
-`CompiledOptions` from `session.CompileOptions`. A batch response is a single
+`exec.CompiledOptions` from `session.CompileOptions`. A batch response is a single
 page, so paging options are ignored and the options you compiled for
 statements work for batches too. A batch
 may be sent again unchanged. `Reset` empties it and keeps its storage and its

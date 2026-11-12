@@ -7,8 +7,8 @@ and `ExecutionStatus`, which reports whether the attempt may have changed data
 `retry.Next` or `retry.IgnoreWrite`, with optional consistency and delay;
 achieved consistency is reported.
 
-`Options.Retry == nil` inherits the selected profile's retry policy. Use
-`Options{Retry: retry.Never{}}` to stop after the first failed attempt without
+`exec.Options.Retry == nil` inherits the selected profile's retry policy. Use
+`exec.Options{Retry: retry.Never{}}` to stop after the first failed attempt without
 replacing other profile settings. `Profile.Retry == nil` disables retries in a
 complete profile; `retry.Never{}` can express that choice there too.
 

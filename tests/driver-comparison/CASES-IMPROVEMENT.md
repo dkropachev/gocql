@@ -141,5 +141,5 @@ e2268627~1.
   (closures and scope bookkeeping per cell); a structural rewrite of
   `wire.Stream` children, not a local change.
 - Per-operation client timestamps on a reused `Query` need one-shot
-  `Options` per call (D3); master sets them on a reused query. An API
+  `exec.Options` per call (D3); master sets them on a reused query. An API
   addition, out of scope.

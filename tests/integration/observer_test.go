@@ -38,6 +38,7 @@ import (
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
+	"github.com/scylladb/gocql/v2/exec"
 )
 
 func TestObserver(t *testing.T) {
@@ -55,9 +56,9 @@ func TestObserver(t *testing.T) {
 		for i := int32(0); i < 100; i++ {
 			stmt := fmt.Sprintf("INSERT INTO %s(id,other) VALUES(?,%d)", table, i)
 			cqls = append(cqls, stmt)
-			cassandraAdd(t, batch, cassandraWritePrepared(t, session, stmt, gocql.PrepareOptions{}), []dynamic.Value{dynamic.Int(i)})
+			cassandraAdd(t, batch, cassandraWritePrepared(t, session, stmt, exec.PrepareOptions{}), []dynamic.Value{dynamic.Int(i)})
 		}
-		cassandraBatch(t, session, batch, gocql.Options{Observer: observer})
+		cassandraBatch(t, session, batch, exec.Options{Observer: observer})
 		events, _ := observer.snapshot()
 		require.Len(t, events, 1)
 		require.NoError(t, events[0].Err)
@@ -65,7 +66,7 @@ func TestObserver(t *testing.T) {
 		require.Equal(t, cqls, events[0].BatchStatements)
 		// Observations expose typed parameter descriptors, never retained input
 		// payloads. Verify each bound value by reading the resulting rows.
-		rows := cassandraUnpreparedAll(t, session, "SELECT id,other FROM "+table, dynamic.Rows, gocql.Options{})
+		rows := cassandraUnpreparedAll(t, session, "SELECT id,other FROM "+table, dynamic.Rows, exec.Options{})
 		require.Len(t, rows, 100)
 		for _, row := range rows {
 			require.Equal(t, cassandraInt(t, row, "id"), cassandraInt(t, row, "other"))
@@ -92,7 +93,7 @@ func TestObserver(t *testing.T) {
 			require.Equal(t, i/10+1, len(attempts), "row %d", i)
 			i++
 			return nil
-		}, gocql.Options{PageSize: cql.Option[int32]{Value: 10, Set: true}, Prefetch: cql.Option[int]{Value: 0, Set: true}, Observer: observer})
+		}, exec.Options{PageSize: cql.Option[int32]{Value: 10, Set: true}, Prefetch: cql.Option[int]{Value: 0, Set: true}, Observer: observer})
 		require.NoError(t, err)
 		require.Equal(t, 50, i)
 		events, attempts := observer.snapshot()
@@ -118,8 +119,8 @@ func TestObserver(t *testing.T) {
 			require.Equal(t, wantErr, events[0].Err != nil)
 		}
 		selectCQL := fmt.Sprintf("SELECT id FROM %s WHERE id = ?", table)
-		read := cassandraDynamicPrepared(t, session, selectCQL, gocql.PrepareOptions{})
-		rows, err := read.Run(context.Background(), []dynamic.Value{dynamic.Int(43)}, bindOptions(session, gocql.Options{Observer: observer}))
+		read := cassandraDynamicPrepared(t, session, selectCQL, exec.PrepareOptions{})
+		rows, err := read.Run(context.Background(), []dynamic.Value{dynamic.Int(43)}, bindOptions(session, exec.Options{Observer: observer}))
 		require.NoError(t, err)
 		defer rows.Close()
 		var row dynamic.Row
@@ -128,24 +129,24 @@ func TestObserver(t *testing.T) {
 		check(selectCQL, false)
 		observer.reset()
 		insertCQL := fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table)
-		write := cassandraWritePrepared(t, session, insertCQL, gocql.PrepareOptions{})
-		_, err = write.Exec(context.Background(), []dynamic.Value{dynamic.Int(42)}, bindOptions(session, gocql.Options{Observer: observer}))
+		write := cassandraWritePrepared(t, session, insertCQL, exec.PrepareOptions{})
+		_, err = write.Exec(context.Background(), []dynamic.Value{dynamic.Int(42)}, bindOptions(session, exec.Options{Observer: observer}))
 		require.NoError(t, err)
 		check(insertCQL, false)
 		observer.reset()
-		require.Equal(t, int64(42), cassandraInt(t, cassandraReadOne(t, session, read, []dynamic.Value{dynamic.Int(42)}, gocql.Options{Observer: observer}), "id"))
+		require.Equal(t, int64(42), cassandraInt(t, cassandraReadOne(t, session, read, []dynamic.Value{dynamic.Int(42)}, exec.Options{Observer: observer}), "id"))
 		check(selectCQL, false)
 		observer.reset()
 		other := createV2Session(t, func(c *config.ConfigBuilder) { c.WithObserver(observer) })
 		defer other.Close()
 		observer.reset()
-		read = cassandraDynamicPrepared(t, other, selectCQL, gocql.PrepareOptions{})
-		require.Equal(t, int64(42), cassandraInt(t, cassandraReadOne(t, other, read, []dynamic.Value{dynamic.Int(42)}, gocql.Options{}), "id"))
+		read = cassandraDynamicPrepared(t, other, selectCQL, exec.PrepareOptions{})
+		require.Equal(t, int64(42), cassandraInt(t, cassandraReadOne(t, other, read, []dynamic.Value{dynamic.Int(42)}, exec.Options{}), "id"))
 		check(selectCQL, false)
 		observer.reset()
 		bad := cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: "SELECT id FROM unknown_table WHERE id = 42", Rows: dynamic.Rows}
 		var badRow dynamic.Row
-		_, err = session.UnpreparedEach(context.Background(), bad, cql.EmptyParams{}, &badRow, func(*dynamic.Row) error { return nil }, gocql.Options{Observer: observer})
+		_, err = session.UnpreparedEach(context.Background(), bad, cql.EmptyParams{}, &badRow, func(*dynamic.Row) error { return nil }, exec.Options{Observer: observer})
 		require.Error(t, err)
 		check("SELECT id FROM unknown_table WHERE id = 42", true)
 	})
@@ -159,8 +160,8 @@ func TestObserver(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s (id int PRIMARY KEY)", table))
-			write := cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), gocql.PrepareOptions{})
-			result, err := write.Exec(context.Background(), []dynamic.Value{dynamic.Int(42)}, bindOptions(session, gocql.Options{Trace: true}))
+			write := cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), exec.PrepareOptions{})
+			result, err := write.Exec(context.Background(), []dynamic.Value{dynamic.Int(42)}, bindOptions(session, exec.Options{Trace: true}))
 			require.NoError(t, err)
 			require.NotEmpty(t, result.TraceIDs)
 			checkTrace := func(ids []cql.UUID) {
@@ -176,10 +177,10 @@ func TestObserver(t *testing.T) {
 				}
 			}
 			checkTrace(result.TraceIDs())
-			read := cassandraDynamicPrepared(t, session, fmt.Sprintf("SELECT id FROM %s WHERE id = ?", table), gocql.PrepareOptions{})
+			read := cassandraDynamicPrepared(t, session, fmt.Sprintf("SELECT id FROM %s WHERE id = ?", table), exec.PrepareOptions{})
 			// Options are explicit per execution; the same statement can be traced repeatedly.
 			for i := 0; i < 2; i++ {
-				rows, err := read.Run(context.Background(), []dynamic.Value{dynamic.Int(42)}, bindOptions(session, gocql.Options{Trace: true}))
+				rows, err := read.Run(context.Background(), []dynamic.Value{dynamic.Int(42)}, bindOptions(session, exec.Options{Trace: true}))
 				require.NoError(t, err)
 				defer rows.Close()
 				var row dynamic.Row
@@ -198,13 +199,13 @@ func TestObserver(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			require.NoError(t, v2CreateTable(ctx, session, fmt.Sprintf((`CREATE TABLE `+fixtureKeyspace("")+`.%s (id int primary key)`), table)))
-			write := cassandraWritePrepared(t, session, fmt.Sprintf(`INSERT INTO %s (id) VALUES (?)`, table), gocql.PrepareOptions{})
-			inserted, err := write.Exec(ctx, []dynamic.Value{dynamic.Int(42)}, bindOptions(session, gocql.Options{Trace: true}))
+			write := cassandraWritePrepared(t, session, fmt.Sprintf(`INSERT INTO %s (id) VALUES (?)`, table), exec.PrepareOptions{})
+			inserted, err := write.Exec(ctx, []dynamic.Value{dynamic.Int(42)}, bindOptions(session, exec.Options{Trace: true}))
 			require.NoError(t, err)
 			require.NotEmpty(t, inserted.TraceIDs)
-			prepared, err := session.Prepare(ctx, cql.Statement[int32, int32]{CQL: fmt.Sprintf(`SELECT id FROM %s WHERE id = ?`, table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.Int32Codec)}, gocql.PrepareOptions{})
+			prepared, err := session.Prepare(ctx, cql.Statement[int32, int32]{CQL: fmt.Sprintf(`SELECT id FROM %s WHERE id = ?`, table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.Int32Codec)}, exec.PrepareOptions{})
 			require.NoError(t, err)
-			rows, err := prepared.Run(ctx, int32(42), bindOptions(session, gocql.Options{Trace: true}))
+			rows, err := prepared.Run(ctx, int32(42), bindOptions(session, exec.Options{Trace: true}))
 			require.NoError(t, err)
 			defer rows.Close()
 			var value int32

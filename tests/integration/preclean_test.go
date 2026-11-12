@@ -18,6 +18,7 @@ import (
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 )
 
 // dropLeftoverKeyspaces removes what an earlier run against the same cluster
@@ -48,7 +49,7 @@ func dropLeftoverKeyspaces() error {
 	defer cancel()
 	cfg, err := createV2Cluster(func(c *config.ConfigBuilder) {
 		c.WithKeyspace("system").
-			WithIgnoreEvents(gocql.SchemaEvent, gocql.TopologyEvent, gocql.StatusEvent).
+			WithIgnoreEvents(event.Schema, event.Topology, event.Status).
 			WithAutomaticSchemaAgreement(false).
 			WithRefreshAfterAgreement(false)
 	}).Build()

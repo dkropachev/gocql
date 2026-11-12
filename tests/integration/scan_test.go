@@ -36,9 +36,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
+	"github.com/scylladb/gocql/v2/exec"
 )
 
 func TestScan(t *testing.T) {
@@ -89,10 +89,10 @@ func TestScan(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id text PRIMARY KEY,val list<frozen<map<text,text>>>)", table))
 			type nested = []cql.Entry[string, string]
 			want := []nested{{{Key: "key1", Value: "val1"}}, {{Key: "key2", Value: "val2"}}}
-			prepared := cassandraPrepared(t, session, cql.Statement[[]nested, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,val) VALUES('key',?)", table), Params: cql.OneParam(cql.ListEncoder(cql.MapEncoder(cql.StringCodec, cql.StringCodec))), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
+			prepared := cassandraPrepared(t, session, cql.Statement[[]nested, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,val) VALUES('key',?)", table), Params: cql.OneParam(cql.ListEncoder(cql.MapEncoder(cql.StringCodec, cql.StringCodec))), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
 			_, err := prepared.Exec(context.Background(), want)
 			require.NoError(t, err)
-			row := cassandraUnpreparedOne(t, session, fmt.Sprintf("SELECT val FROM %s WHERE id='key'", table), cql.OneColumn(cql.ListDecoder(cql.MapDecoder(cql.TextCodec, cql.TextCodec))), gocql.Options{})
+			row := cassandraUnpreparedOne(t, session, fmt.Sprintf("SELECT val FROM %s WHERE id='key'", table), cql.OneColumn(cql.ListDecoder(cql.MapDecoder(cql.TextCodec, cql.TextCodec))), exec.Options{})
 			var got []nested
 			for _, mapping := range row {
 				var entries nested
@@ -177,7 +177,7 @@ func TestScan(t *testing.T) {
 				Number int32
 			}
 			params := cql.Params(cql.Param("testtext", cql.StringCodec, func(v input) string { return v.Text }), cql.Param("testfullname", fullNameCodec{}, func(v input) FullName { return v.Name }), cql.Param("testint", cql.Int32Codec, func(v input) int32 { return v.Number }))
-			prepared := cassandraPrepared(t, session, cql.Statement[input, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(testtext,testfullname,testint) VALUES(?,?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
+			prepared := cassandraPrepared(t, session, cql.Statement[input, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(testtext,testfullname,testint) VALUES(?,?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
 			_, err := prepared.Exec(context.Background(), input{"testtext", FullName{"John", "Doe"}, 100})
 			require.NoError(t, err)
 			type output struct {
@@ -186,13 +186,13 @@ func TestScan(t *testing.T) {
 				Number int32
 			}
 			decoder := cql.Row(cql.Column("testtext", cql.TextCodec, func(v *output) *cql.Text { return &v.Text }), cql.Column("testfullname", fullNameCodec{}, func(v *output) *FullName { return &v.Name }), cql.Column("testint", cql.Int32Codec, func(v *output) *int32 { return &v.Number }))
-			got := cassandraUnpreparedOne(t, session, "SELECT * FROM "+table, decoder, gocql.Options{})
+			got := cassandraUnpreparedOne(t, session, "SELECT * FROM "+table, decoder, exec.Options{})
 			require.Equal(t, "testtext", got.Text.String())
 			require.Equal(t, FullName{"John", "Doe"}, got.Name)
 			require.Equal(t, int32(100), got.Number)
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(testtext,testint) VALUES(?,?)", table), codecTestMust(dynamic.Text("null-int")), dynamic.Null(dynamic.Int(0).Type()))
-			nullable := cassandraPrepared(t, session, cql.Statement[string, cql.Nullable[int32]]{CQL: fmt.Sprintf("SELECT testint FROM %s WHERE testtext=?", table), Params: cql.OneParam(cql.StringCodec), Rows: cql.OneColumn(cql.NullableCodec(cql.Int32Codec))}, gocql.PrepareOptions{})
-			require.False(t, cassandraReadOne(t, session, nullable, "null-int", gocql.Options{}).Valid)
+			nullable := cassandraPrepared(t, session, cql.Statement[string, cql.Nullable[int32]]{CQL: fmt.Sprintf("SELECT testint FROM %s WHERE testtext=?", table), Params: cql.OneParam(cql.StringCodec), Rows: cql.OneColumn(cql.NullableCodec(cql.Int32Codec))}, exec.PrepareOptions{})
+			require.False(t, cassandraReadOne(t, session, nullable, "null-int", exec.Options{}).Valid)
 		})
 		t.Run("Rows", func(t *testing.T) {
 			t.Parallel()
@@ -202,7 +202,7 @@ func TestScan(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(fullname text PRIMARY KEY,age int,address inet,data blob)", table))
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(fullname,age,address) VALUES(?,?,?)", table), codecTestMust(dynamic.Text("Grace Hopper")), dynamic.Int(31), cassandraValue(dynamic.Inet(netip.MustParseAddr("10.0.0.1"))))
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(fullname,age,address,data) VALUES(?,?,?,?)", table), codecTestMust(dynamic.Text("Ada Lovelace")), dynamic.Int(30), cassandraValue(dynamic.Inet(netip.MustParseAddr("10.0.0.2"))), dynamic.Blob([]byte(`{"foo": "bar"}`)))
-			rows := cassandraUnpreparedAll(t, session, "SELECT * FROM "+table, dynamic.Rows, gocql.Options{})
+			rows := cassandraUnpreparedAll(t, session, "SELECT * FROM "+table, dynamic.Rows, exec.Options{})
 			require.Len(t, rows, 2)
 			for i, want := range []struct {
 				name    string
@@ -238,8 +238,8 @@ func TestScan(t *testing.T) {
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,time timestamp,num int)", table))
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,num) VALUES(?,?)", table), dynamic.Int(1), dynamic.Int(561))
-			read := cassandraPrepared(t, session, cql.Statement[int32, cql.Nullable[cql.Timestamp]]{CQL: fmt.Sprintf("SELECT time FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.NullableCodec(cql.TimestampCodec))}, gocql.PrepareOptions{})
-			value := cassandraReadOne(t, session, read, int32(1), gocql.Options{})
+			read := cassandraPrepared(t, session, cql.Statement[int32, cql.Nullable[cql.Timestamp]]{CQL: fmt.Sprintf("SELECT time FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.NullableCodec(cql.TimestampCodec))}, exec.PrepareOptions{})
+			value := cassandraReadOne(t, session, read, int32(1), exec.Options{})
 			require.False(t, value.Valid)
 			require.Zero(t, value.Value)
 		})
@@ -254,7 +254,7 @@ func TestScan(t *testing.T) {
 			}
 			type result struct{ N int32 }
 			decoder := cql.Row(cql.IgnoreColumn[result]("foo"), cql.Column("bar", cql.Int32Codec, func(r *result) *int32 { return &r.N }))
-			prepared := cassandraPrepared(t, session, cql.Statement[string, result]{CQL: fmt.Sprintf("SELECT * FROM %s WHERE foo=?", table), Params: cql.OneParam(cql.StringCodec), Rows: decoder}, gocql.PrepareOptions{})
+			prepared := cassandraPrepared(t, session, cql.Statement[string, result]{CQL: fmt.Sprintf("SELECT * FROM %s WHERE foo=?", table), Params: cql.OneParam(cql.StringCodec), Rows: decoder}, exec.PrepareOptions{})
 			rows, err := prepared.Run(context.Background(), "squares")
 			require.NoError(t, err)
 			defer rows.Close()
@@ -307,10 +307,10 @@ func TestScan(t *testing.T) {
 		// Preserve the three result-consumption forms as cloned slices, a cursor,
 		// and an exactly-one-row read, all with explicit dynamic values. Only a
 		// prepared statement returns a cursor.
-		rows := cassandraUnpreparedAll(t, session, "SELECT * FROM "+table, dynamic.Rows, gocql.Options{})
+		rows := cassandraUnpreparedAll(t, session, "SELECT * FROM "+table, dynamic.Rows, exec.Options{})
 		require.Len(t, rows, 1)
 		check(rows[0])
-		selectAll := cassandraDynamicPrepared(t, session, "SELECT * FROM "+table, gocql.PrepareOptions{})
+		selectAll := cassandraDynamicPrepared(t, session, "SELECT * FROM "+table, exec.PrepareOptions{})
 		cursor, err := selectAll.Run(context.Background(), nil)
 		require.NoError(t, err)
 		defer cursor.Close()

@@ -7,15 +7,16 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/exec"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
 type fixtureOptions interface {
-	gocql.Options | implSession.Options
+	exec.Options | implSession.Options
 }
 type fixturePrepareOptions interface {
-	gocql.PrepareOptions | implSession.PrepareOptions
+	exec.PrepareOptions | implSession.PrepareOptions
 }
 
 func codecTestMust[T any](v T, err error) T {
@@ -27,12 +28,12 @@ func codecTestMust[T any](v T, err error) T {
 
 // bindOptions binds v to session, failing loudly on values a test meant to
 // be valid.
-func bindOptions[O fixtureOptions](session *gocql.Session[testDialect], v O) gocql.CompiledOptions {
+func bindOptions[O fixtureOptions](session *gocql.Session[testDialect], v O) exec.CompiledOptions {
 	switch o := any(v).(type) {
-	case gocql.Options:
+	case exec.Options:
 		return codecTestMust(session.CompileOptions(o))
 	case implSession.Options:
-		return gocql.CompiledOptions(codecTestMust(implSession.InternalCompileOptions((*implSession.Session)(session).Core(), o)))
+		return exec.CompiledOptions(codecTestMust(implSession.InternalCompileOptions((*implSession.Session)(session).Core(), o)))
 	}
 	panic("unreachable fixture options type")
 }
@@ -42,7 +43,7 @@ func bindOptions[O fixtureOptions](session *gocql.Session[testDialect], v O) goc
 func prepareFixture[P, R any, O fixturePrepareOptions](ctx context.Context, session *gocql.Session[testDialect], statement cql.Statement[P, R], options O) (*gocql.Prepared[P, R], error) {
 	var internal implSession.PrepareOptions
 	switch o := any(options).(type) {
-	case gocql.PrepareOptions:
+	case exec.PrepareOptions:
 		internal = implSession.PrepareOptions{Keyspace: o.Keyspace, HostID: o.HostID, Trace: o.Trace}
 	case implSession.PrepareOptions:
 		internal = o

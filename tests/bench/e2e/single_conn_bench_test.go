@@ -39,6 +39,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
+	"github.com/scylladb/gocql/v2/exec"
 	"github.com/scylladb/gocql/v2/internal/testkit/wirerecord/recorder"
 	"github.com/scylladb/gocql/v2/internal/testkit/wirerecord/replayer"
 )
@@ -110,11 +111,11 @@ func cleanupNamespace(s *gocql.Session[benchDialect]) error {
 	if err := benchExec(ctx, s, "DROP KEYSPACE IF EXISTS "+corpus.Namespace); err != nil {
 		return err
 	}
-	p, err := s.Prepare(ctx, cql.Statement[string, cql.Text]{CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name = ?", Params: cql.OneParam(cql.StringCodec), Rows: cql.OneColumn(cql.TextCodec)}, gocql.PrepareOptions{})
+	p, err := s.Prepare(ctx, cql.Statement[string, cql.Text]{CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name = ?", Params: cql.OneParam(cql.StringCodec), Rows: cql.OneColumn(cql.TextCodec)}, exec.PrepareOptions{})
 	if err != nil {
 		return err
 	}
-	b, err := p.Query(gocql.Options{})
+	b, err := p.Query(exec.Options{})
 	if err != nil {
 		return err
 	}
@@ -204,11 +205,11 @@ func benchRead(s *gocql.Session[benchDialect], id int32) error {
 	return benchReadContext(context.Background(), s, id)
 }
 func benchReadContext(ctx context.Context, s *gocql.Session[benchDialect], id int32) error {
-	p, e := s.Prepare(ctx, cql.Statement[int32, cql.Text]{CQL: "SELECT v FROM " + corpus.Namespace + ".table1 WHERE pk = ?;", Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.TextCodec)}, gocql.PrepareOptions{})
+	p, e := s.Prepare(ctx, cql.Statement[int32, cql.Text]{CQL: "SELECT v FROM " + corpus.Namespace + ".table1 WHERE pk = ?;", Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.TextCodec)}, exec.PrepareOptions{})
 	if e != nil {
 		return e
 	}
-	b, e := p.Query(gocql.Options{})
+	b, e := p.Query(exec.Options{})
 	if e != nil {
 		return e
 	}
@@ -244,11 +245,11 @@ func benchWrite(s *gocql.Session[benchDialect], id int32) error {
 	return benchWriteContext(context.Background(), s, id)
 }
 func benchWriteContext(ctx context.Context, s *gocql.Session[benchDialect], id int32) error {
-	p, e := s.Prepare(ctx, cql.Statement[benchInsert, cql.EmptyRow]{CQL: "INSERT INTO " + corpus.Namespace + ".table1 (pk, ck, v) VALUES (?, ?, ?);", Params: cql.Params(cql.Param("pk", cql.Int32Codec, func(v benchInsert) int32 { return v.PK }), cql.Param("ck", cql.Int32Codec, func(v benchInsert) int32 { return v.CK }), cql.Param("v", cql.StringCodec, func(v benchInsert) string { return v.Value })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
+	p, e := s.Prepare(ctx, cql.Statement[benchInsert, cql.EmptyRow]{CQL: "INSERT INTO " + corpus.Namespace + ".table1 (pk, ck, v) VALUES (?, ?, ?);", Params: cql.Params(cql.Param("pk", cql.Int32Codec, func(v benchInsert) int32 { return v.PK }), cql.Param("ck", cql.Int32Codec, func(v benchInsert) int32 { return v.CK }), cql.Param("v", cql.StringCodec, func(v benchInsert) string { return v.Value })), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
 	if e != nil {
 		return e
 	}
-	b, e := p.Query(gocql.Options{})
+	b, e := p.Query(exec.Options{})
 	if e != nil {
 		return e
 	}

@@ -31,6 +31,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/exec"
 
 	"log"
 )
@@ -50,7 +51,7 @@ func Example_paging() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	b, err := p.Query(gocql.Options{PageSize: cql.Some[int32](2)})
+	b, err := p.Query(exec.Options{PageSize: cql.Some[int32](2)})
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -26,6 +26,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/exec"
 )
 
 type record struct {
@@ -166,7 +167,7 @@ func streamTable[D gocql.Dialect](ctx context.Context, cfg config.Config, increm
 		_, err := s.UnpreparedExec(operation, cql.Command(text), cql.EmptyParams{})
 		return err
 	}
-	exec := func(text string) error { return execContext(ctx, text) }
+	runDDL := func(text string) error { return execContext(ctx, text) }
 	owned := true
 	defer func() {
 		if owned {
@@ -179,7 +180,7 @@ func streamTable[D gocql.Dialect](ctx context.Context, cfg config.Config, increm
 			}
 		}
 	}()
-	if err := exec("CREATE KEYSPACE " + namespace + " WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':1}"); err != nil {
+	if err := runDDL("CREATE KEYSPACE " + namespace + " WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':1}"); err != nil {
 		if _, ok := errors.AsType[*cqlerr.AlreadyExistsError](err); ok {
 			owned = false
 		}
@@ -197,18 +198,18 @@ func streamTable[D gocql.Dialect](ctx context.Context, cfg config.Config, increm
 		return ctx.Err()
 	}
 	table := namespace + ".records"
-	if err := exec("CREATE TABLE " + table + " (id int PRIMARY KEY,payload blob,pieces list<blob>)"); err != nil {
+	if err := runDDL("CREATE TABLE " + table + " (id int PRIMARY KEY,payload blob,pieces list<blob>)"); err != nil {
 		return err
 	}
 	insert, err := s.Prepare(ctx, cql.Statement[record, cql.EmptyRow]{CQL: "INSERT INTO " + table + " (id,payload,pieces) VALUES (?,?,?)", Params: cql.Params(
 		cql.Param("id", cql.Int32Codec, func(v record) int32 { return v.ID }),
 		cql.Param("payload", cql.ByteSliceCodec, func(v record) []byte { return v.Payload }),
 		cql.Param("pieces", cql.ListEncoder(cql.ByteSliceCodec), func(v record) [][]byte { return v.Pieces }),
-	), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
+	), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
 	if err != nil {
 		return err
 	}
-	writeQuery, err := insert.Query(gocql.Options{})
+	writeQuery, err := insert.Query(exec.Options{})
 	if err != nil {
 		return err
 	}
@@ -235,8 +236,8 @@ func streamTable[D gocql.Dialect](ctx context.Context, cfg config.Config, increm
 	if len(hostsSnapshot) == 0 {
 		return fmt.Errorf("missing discovered hosts")
 	}
-	pinned := gocql.Options{PageSize: cql.Some[int32](2), HostID: cql.Some(hostsSnapshot[0].ID)}
-	options := gocql.StreamOptions{Incremental: incremental, Options: pinned}
+	pinned := exec.Options{PageSize: cql.Some[int32](2), HostID: cql.Some(hostsSnapshot[0].ID)}
+	options := exec.StreamOptions{Incremental: incremental, Options: pinned}
 	query, err := prepared.Query(options)
 	if err != nil {
 		return err

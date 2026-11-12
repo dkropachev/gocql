@@ -56,6 +56,8 @@ import (
 	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
+	"github.com/scylladb/gocql/v2/event"
+	"github.com/scylladb/gocql/v2/exec"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -229,13 +231,13 @@ func TestSession(t *testing.T) {
 			defer s.Close()
 			ks := testKeyspaceName(t, fmt.Sprintf("%x", time.Now().UnixNano()))
 			created := false
-			exec := func(stmt string) {
+			runDDL := func(stmt string) {
 				t.Helper()
 				if _, e := s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyParams{}); e != nil {
 					t.Fatal(e)
 				}
 			}
-			exec("CREATE KEYSPACE " + ks + " WITH replication={'class':'NetworkTopologyStrategy','replication_factor':1}")
+			runDDL("CREATE KEYSPACE " + ks + " WITH replication={'class':'NetworkTopologyStrategy','replication_factor':1}")
 			created = true
 			defer func() {
 				if !created {
@@ -254,8 +256,8 @@ func TestSession(t *testing.T) {
 					t.Error(e)
 				}
 			}()
-			exec("CREATE TABLE " + ks + ".records(id int PRIMARY KEY,value blob)")
-			insert := codecTestMust(s.Prepare(ctx, cql.Statement[[]byte, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(id,value)VALUES(1,?)", Kind: cql.OrdinaryStatement, Params: cql.OneParam(cql.ByteSliceCodec), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
+			runDDL("CREATE TABLE " + ks + ".records(id int PRIMARY KEY,value blob)")
+			insert := codecTestMust(s.Prepare(ctx, cql.Statement[[]byte, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(id,value)VALUES(1,?)", Kind: cql.OrdinaryStatement, Params: cql.OneParam(cql.ByteSliceCodec), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{}))
 			write := func(value byte) {
 				t.Helper()
 				payload := bytes.Repeat([]byte{value}, 1<<20)
@@ -264,8 +266,8 @@ func TestSession(t *testing.T) {
 				}
 			}
 			write(0x71)
-			prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}, gocql.PrepareOptions{}))
-			rows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, gocql.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
+			prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}, exec.PrepareOptions{}))
+			rows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, exec.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
 			var old cql.Bytes
 			if !rows.NextInto(&old) {
 				t.Fatal(rows.Err())
@@ -286,7 +288,7 @@ func TestSession(t *testing.T) {
 			})
 			for generation := 0; generation < 8; generation++ {
 				write(byte(0x72 + generation))
-				freshRows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, gocql.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
+				freshRows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, exec.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
 				var view cql.Bytes
 				if !freshRows.NextInto(&view) {
 					t.Fatal(freshRows.Err())
@@ -347,11 +349,11 @@ func TestSession(t *testing.T) {
 				(*implSession.Session)(opaqueStorageValue).Data().InternalLogger = logging.Nop()
 				return opaqueStorageValue
 			}()
-			profileOptions, err := resolveOptions(session, gocql.Options{Profile: &profile})
+			profileOptions, err := resolveOptions(session, exec.Options{Profile: &profile})
 			require.NoError(t, err)
 			runtimeFor(session).InternalSetProfile(&profileOptions.InternalProfile)
 			defer session.Close()
-			resolved, err := resolveOptions(session, gocql.Options{Trace: true})
+			resolved, err := resolveOptions(session, exec.Options{Trace: true})
 			require.NoError(t, err)
 			require.Equal(t, cql.All, resolved.InternalProfile.Consistency)
 			require.Equal(t, int32(100), resolved.InternalProfile.PageSize)
@@ -869,7 +871,7 @@ func TestSession(t *testing.T) {
 				WithConnectionsPerHost(1).
 				WithDiscovery(false).
 				WithReconnect(unixSocketNoReconnect{}).
-				WithIgnoreEvents(gocql.StatusEvent, gocql.TopologyEvent, gocql.SchemaEvent).
+				WithIgnoreEvents(event.Status, event.Topology, event.Schema).
 				WithConnectTimeout(connectTimeout).
 				WithDialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 					return (&net.Dialer{Timeout: connectTimeout}).DialContext(ctx, target.Network, target.Address)
@@ -1012,19 +1014,19 @@ func TestSession(t *testing.T) {
 		}
 		defer session.Close()
 		keyspace := fmt.Sprintf("v2_runtime_%x", time.Now().UnixNano())
-		exec := func(stmt string) {
+		runDDL := func(stmt string) {
 			t.Helper()
 			if _, err := session.UnpreparedExec(ctx, cql.Command(stmt), cql.EmptyParams{}); err != nil {
 				t.Fatal(err)
 			}
 		}
-		exec("CREATE KEYSPACE " + keyspace + " WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':1}")
+		runDDL("CREATE KEYSPACE " + keyspace + " WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':1}")
 		defer func() {
 			if _, err := session.UnpreparedExec(context.Background(), cql.Command("DROP KEYSPACE "+keyspace), cql.EmptyParams{}); err != nil {
 				t.Error(err)
 			}
 		}()
-		exec("CREATE TABLE " + keyspace + ".values (id int PRIMARY KEY, value blob)")
+		runDDL("CREATE TABLE " + keyspace + ".values (id int PRIMARY KEY, value blob)")
 		type input struct {
 			ID    int32
 			Value []byte
@@ -1035,12 +1037,12 @@ func TestSession(t *testing.T) {
 		}
 		inputs := cql.Params(cql.Param("id", cql.Int32Codec, func(v input) int32 { return v.ID }), cql.Param("value", cql.ByteSliceCodec, func(v input) []byte { return v.Value }))
 		rows := cql.Row(cql.Column("id", cql.Int32Codec, func(v *output) *int32 { return &v.ID }), cql.Column("value", cql.BlobCodec, func(v *output) *cql.Bytes { return &v.Value }))
-		prepared, err := session.Prepare(ctx, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".values (id,value) VALUES (?,?)", Params: inputs, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
+		prepared, err := session.Prepare(ctx, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".values (id,value) VALUES (?,?)", Params: inputs, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		payload := bytes.Repeat([]byte("typed-large-segment-payload"), 24000)
-		insert, err := prepared.Query(gocql.Options{})
+		insert, err := prepared.Query(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1061,11 +1063,11 @@ func TestSession(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Only prepared statements return a cursor that can be retained.
-		selectPrepared, err := session.Prepare(ctx, cql.Statement[cql.EmptyParams, output]{CQL: "SELECT id,value FROM " + keyspace + ".values", Params: cql.EmptyParamsEncoder, Rows: rows}, gocql.PrepareOptions{})
+		selectPrepared, err := session.Prepare(ctx, cql.Statement[cql.EmptyParams, output]{CQL: "SELECT id,value FROM " + keyspace + ".values", Params: cql.EmptyParamsEncoder, Rows: rows}, exec.PrepareOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		result, err := selectPrepared.Run(ctx, cql.EmptyParams{}, bindOptions(session, gocql.Options{PageSize: cql.Option[int32]{Value: 1, Set: true}}))
+		result, err := selectPrepared.Run(ctx, cql.EmptyParams{}, bindOptions(session, exec.Options{PageSize: cql.Option[int32]{Value: 1, Set: true}}))
 		if err != nil {
 			t.Fatal(err)
 		}

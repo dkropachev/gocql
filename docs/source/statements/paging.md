@@ -17,7 +17,7 @@ carry the returned page state to the next call. `prepared.RunPage` serves
 concurrent handlers, such as a paginated endpoint: keep `page.State()`, not the
 page. The page size is an argument so it can come from each request; zero
 uses the resolved page size. The page size `cql.Unpaged`, as that argument or
-as `Options{PageSize: cql.Some(cql.Unpaged)}`, sends no page size, so the
+as `exec.Options{PageSize: cql.Some(cql.Unpaged)}`, sends no page size, so the
 server returns the whole result in one response; keep it for small results. Check iteration errors and close all delivered pages.
 Cyclic/nonprogressing state and retained paging-history limits report errors.
 

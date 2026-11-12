@@ -32,9 +32,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/exec"
 	routing "github.com/scylladb/gocql/v2/routing"
 )
 
@@ -54,7 +54,7 @@ func BenchmarkConn(b *testing.B) {
 		if err := v2CreateTable(ctx, session, fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (id int primary key)", table)); err != nil {
 			b.Fatal(err)
 		}
-		prepared, err := session.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
+		prepared, err := session.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -65,7 +65,7 @@ func BenchmarkConn(b *testing.B) {
 			worker := seed.Add(1)
 			// Each worker owns a reusable query. Routing encodes the parameter
 			// and computes the token without executing the statement.
-			query, err := prepared.Query(gocql.Options{})
+			query, err := prepared.Query(exec.Options{})
 			if err != nil {
 				b.Error(err)
 				return
@@ -94,7 +94,7 @@ func BenchmarkConn(b *testing.B) {
 		if err := v2CreateTable(ctx, session, fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (id int primary key)", table)); err != nil {
 			b.Fatal(err)
 		}
-		prepared, err := session.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
+		prepared, err := session.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -103,7 +103,7 @@ func BenchmarkConn(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			worker := seed.Add(1)
-			query, err := prepared.Query(gocql.Options{})
+			query, err := prepared.Query(exec.Options{})
 			if err != nil {
 				b.Error(err)
 				return

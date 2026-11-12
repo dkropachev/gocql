@@ -39,6 +39,7 @@ import (
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
+	"github.com/scylladb/gocql/v2/event"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
@@ -189,7 +190,7 @@ func TestFraming(t *testing.T) {
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					session := createV2Session(t, func(c *config.ConfigBuilder) {
-						c.WithIgnoreEvents(gocql.SchemaEvent).WithAutomaticSchemaAgreement(false).WithRefreshAfterAgreement(false)
+						c.WithIgnoreEvents(event.Schema).WithAutomaticSchemaAgreement(false).WithRefreshAfterAgreement(false)
 					})
 					defer session.Close()
 
@@ -221,7 +222,7 @@ func TestFraming(t *testing.T) {
 		// test_empty_sentinel_id_triggers_metadata_changed (scylladb/python-driver#770).
 		t.Run("ScyllaEmpty", func(t *testing.T) {
 			session := createV2Session(t, func(c *config.ConfigBuilder) {
-				c.WithIgnoreEvents(gocql.SchemaEvent).WithAutomaticSchemaAgreement(false).WithRefreshAfterAgreement(false)
+				c.WithIgnoreEvents(event.Schema).WithAutomaticSchemaAgreement(false).WithRefreshAfterAgreement(false)
 			})
 			defer session.Close()
 			conn := getRandomConn(t, session)
