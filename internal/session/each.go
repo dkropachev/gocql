@@ -137,12 +137,14 @@ func (rt *InternalSessionRuntime) decodeEach[R any](ctx context.Context, respons
 	if response.RowCount < 0 {
 		return &cqltype.ProtocolError{Stage: "rows", Err: errors.New("negative row count")}
 	}
-	preserves := codec.PreservesRowDestination(plan)
+	// Built-in plans clear the destination themselves; only an application
+	// plan needs it cleared here.
+	manages := codec.ManagesRowDestination(plan)
 	scratch.cursor = wire.CursorOver(response.Rows)
 	reader := &scratch.reader
 	for i := int32(0); i < response.RowCount; i++ {
 		*reader = codec.RowReaderFromCursor(response.Columns, &scratch.cursor, response.Owner)
-		if !preserves {
+		if !manages {
 			clearDestination(dst)
 		}
 		if err := plan.DecodeInto(reader, dst); err != nil {

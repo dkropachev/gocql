@@ -86,6 +86,7 @@ func newPageInto[R any](page *Page[R], response *transport.InternalResponsePage,
 func (p *Page[R]) initResponse(response *transport.InternalResponsePage, plan codec.RowPlan[R], release func()) {
 	p.privateStorage.response = response
 	p.privateStorage.plan = plan
+	p.privateStorage.managed = codec.ManagesRowDestination(plan)
 	p.privateStorage.InternalCursor = wire.CursorOver(response.Rows)
 	p.privateStorage.release = release
 }
@@ -141,8 +142,9 @@ func (p *Page[R]) advance(dst *R) bool {
 		return false
 	}
 	p.privateStorage.reader = codec.RowReaderFromCursor(p.privateStorage.response.Columns, &p.privateStorage.InternalCursor, p.privateStorage.response.Owner)
-	// The plan receives the actual application destination, never a row temporary.
-	if !codec.PreservesRowDestination(p.privateStorage.plan) {
+	// The plan receives the actual application destination, never a row
+	// temporary. A built-in plan clears it itself.
+	if !p.privateStorage.managed {
 		clearDestination(dst)
 	}
 	err := p.privateStorage.plan.DecodeInto(&p.privateStorage.reader, dst)
@@ -628,7 +630,10 @@ func (r *rowsImpl[R]) Columns() cqltype.Columns {
 }
 
 type execRowsDecoder struct{}
-type execRowsPlan struct{ count int }
+type execRowsPlan struct {
+	codec.ManagedRowDestination
+	count int
+}
 
 func (execRowsDecoder) Compile(columns cqltype.Columns) (codec.RowPlan[codec.EmptyRecord], error) {
 	return execRowsPlan{count: columns.Len()}, nil
@@ -716,6 +721,8 @@ type pageStorage[R any] struct {
 	valid          bool
 	closed         bool
 	exhausted      bool
+	// managed caches codec.ManagesRowDestination of plan for the page.
+	managed bool
 }
 
 type rowsStorage[R any] struct {

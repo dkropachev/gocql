@@ -416,6 +416,34 @@ func PreservesRowDestination[R any](plan RowPlan[R]) bool {
 	p, ok := plan.(interface{ preserveDestination() bool })
 	return ok && p.preserveDestination()
 }
+
+// rowDestinationManager marks a built-in row plan whose DecodeInto zeroes, or
+// resets, the whole destination before it decodes, so the caller need not
+// clear the destination before each row. The method is unexported: an
+// application plan cannot claim it and is always handed a cleared row.
+type rowDestinationManager interface{ managesRowDestination() }
+
+// ManagedRowDestination gives a built-in row plan outside this package the
+// rowDestinationManager marker when embedded. Embed it only in a plan whose
+// DecodeInto overwrites the whole destination.
+type ManagedRowDestination struct{}
+
+func (ManagedRowDestination) managesRowDestination() {}
+
+func (rowPlan[R]) managesRowDestination()          {}
+func (singleColumnPlan[T]) managesRowDestination() {}
+func (mappedRowPlan[A, B]) managesRowDestination() {}
+func (pairedRowPlan[A, B]) managesRowDestination() {}
+func (casRowPlan[R]) managesRowDestination()       {}
+func (dynamicRowsPlan) managesRowDestination()     {}
+
+// ManagesRowDestination reports whether plan clears, or resets, the whole
+// destination itself before decoding a row. Callers check it once per plan,
+// not per row.
+func ManagesRowDestination[R any](plan RowPlan[R]) bool {
+	_, ok := plan.(rowDestinationManager)
+	return ok
+}
 func (c rowCodec[R]) Clone(source R) R {
 	dst := source
 	for _, field := range c.fields {

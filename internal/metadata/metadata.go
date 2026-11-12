@@ -292,6 +292,7 @@ type InternalV2SchemaRows[R any] struct {
 	InternalFields []InternalV2SchemaField[R]
 }
 type v2SchemaRowPlan[R any] struct {
+	codec.ManagedRowDestination
 	initialize func() *R
 	steps      []func(*R, *codec.RowReader) error
 }
