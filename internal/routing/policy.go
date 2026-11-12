@@ -207,6 +207,9 @@ type InternalRoutingDecisions struct{ InternalSlow map[cqltype.UUID]time.Time }
 type InternalRoutingPolicy struct {
 	InternalDecisions atomic.Pointer[InternalRoutingDecisions]
 	updateAfter       atomic.Pointer[time.Time]
+	// validated is the last host index whose datacenter and rack
+	// Validate found eligible.
+	validated atomic.Pointer[InternalRoutingHostIndex]
 	// fixed holds, for each replica count up to sixteen, the permutation
 	// a plan applies when replicas are not shuffled per request, which
 	// depends only on seed and the count.
@@ -251,6 +254,11 @@ func NewRoutingPolicy(o RoutingOptions) (RoutingPolicy, error) {
 	}
 	return p, nil
 }
+
+// validateRackLookup, when set by a test, is called for each rack lookup
+// Validate makes.
+var validateRackLookup func()
+
 func (p *InternalRoutingPolicy) Validate(m *MetadataSnapshot) error {
 	if m == nil {
 		return cqltype.TypeValidation("routing", "missing metadata")
@@ -258,14 +266,36 @@ func (p *InternalRoutingPolicy) Validate(m *MetadataSnapshot) error {
 	if p.InternalOptions.Datacenter == "" {
 		return nil
 	}
-	idx := m.routingIndex()
-	dc := idx.enabledDC[p.InternalOptions.Datacenter] > 0
-	rack := idx.enabledRack[routingLocality{p.InternalOptions.Datacenter, p.InternalOptions.Rack}] > 0
-	if !dc {
-		return cqltype.TypeValidation("routing datacenter", "%q has no eligible hosts", p.InternalOptions.Datacenter)
+	// The index a snapshot publishes is never changed, so the last index
+	// that passed passes again. A miss validates the index in hand.
+	idx := SnapshotData(m).InternalHostIndex
+	if idx != nil && p.validated.Load() == idx {
+		return nil
 	}
-	if p.InternalOptions.Rack != "" && !rack {
-		return cqltype.TypeValidation("routing rack", "%q has no eligible hosts", p.InternalOptions.Rack)
+	if idx == nil {
+		idx = m.routingIndex()
+	}
+	if err := p.validateIndex(idx); err != nil {
+		return err
+	}
+	if SnapshotData(m).InternalHostIndex == idx {
+		p.validated.Store(idx)
+	}
+	return nil
+}
+
+func (p *InternalRoutingPolicy) validateIndex(idx *InternalRoutingHostIndex) error {
+	o := &p.InternalOptions
+	if idx.enabledDC[o.Datacenter] <= 0 {
+		return cqltype.TypeValidation("routing datacenter", "%q has no eligible hosts", o.Datacenter)
+	}
+	if o.Rack != "" {
+		if validateRackLookup != nil {
+			validateRackLookup()
+		}
+		if idx.enabledRack[routingLocality{o.Datacenter, o.Rack}] <= 0 {
+			return cqltype.TypeValidation("routing rack", "%q has no eligible hosts", o.Rack)
+		}
 	}
 	return nil
 }
