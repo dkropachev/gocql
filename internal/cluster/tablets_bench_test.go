@@ -144,12 +144,12 @@ func BenchmarkTablets(b *testing.B) {
 							current := p.InternalSnapshot.Load()
 							stamp := s.CaptureTabletFeedback(info, current)
 							r, _ := routing.InternalMetadataSnapshotTabletRoot(current, k)
-							sessionResolveTabletFeedback(&stamp, k)
+							identity := sessionResolveTabletFeedback(&stamp, k)
 							stamp.InternalSnapshot = nil
 							if !duplicate {
 								h = h.WithVersion(uint64(i + 1))
 							}
-							updates[InternalV2TabletFeedbackKey{InternalKeyspace: "ks", InternalTable: "table", InternalEnd: 1}] = InternalV2PendingTabletFeedback{InternalHint: h, InternalStamp: stamp, observation: implRouting.InternalObserveTabletRanges(r, 0, 1)}
+							updates[InternalV2TabletFeedbackKey{InternalKeyspace: "ks", InternalTable: "table", InternalEnd: 1}] = InternalV2PendingTabletFeedback{InternalHint: h, InternalStamp: stamp, identity: identity, observation: implRouting.InternalObserveTabletRanges(r, 0, 1)}
 							s.PublishTabletFeedback(p, updates, false)
 						}
 					})

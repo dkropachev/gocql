@@ -170,7 +170,10 @@ func TestTabletIndex(t *testing.T) {
 			m := NewMetadataSnapshot(SnapshotState{InternalPlacements: roots[i]})
 			for _, token := range []int64{-1, 0, 1, 50, 100, 150, 250, 399, 400, 401} {
 				info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: token, Set: true}}
-				if got, want := InternalLookupTabletCached(m, info, &c), InternalLookupTablet(m, info); got != want {
+				got, want := InternalLookupTabletCached(m, info, &c), InternalLookupTablet(m, info)
+				// A cached lookup also carries the vnode ranges it found.
+				got.cached = nil
+				if got != want {
 					t.Fatalf("tree %d token %d: cached lookup %+v, uncached %+v", i, token, got, want)
 				}
 			}
