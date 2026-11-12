@@ -35,13 +35,15 @@ type Snapshot struct {
 	Retries, Speculations uint64
 	// Orphans counts requests abandoned while a node may still answer them,
 	// such as attempts sent and then cancelled, including speculative
-	// attempts that lost, or timed out by the client. Each holds its stream until the answer arrives or the
-	// connection closes.
+	// attempts that lost, or timed out by the client. Each holds its stream
+	// until the answer arrives or the connection closes.
 	Orphans uint64
 	// InFlight is the number of executions started and not yet finished.
 	InFlight int64
 	// LatencyP50, LatencyP95 and LatencyP99 are percentiles of the latency
-	// of the last 1024 finished executions, recomputed once a second. They
-	// are zero until the first computation.
+	// of the executions that succeeded in the last ten seconds, at most the
+	// latest 1024 of them, recomputed once a second. Failed executions are
+	// not included. When none succeeded since the last computation, the
+	// previous values stay. They are zero until the first computation.
 	LatencyP50, LatencyP95, LatencyP99 time.Duration
 }

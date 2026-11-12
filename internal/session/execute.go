@@ -110,9 +110,6 @@ func (rt *InternalSessionRuntime) metricsSnapshot() metrics.Snapshot {
 	cache := implCluster.SessionData(rt.Core).InternalConnCfg
 	result := metrics.Snapshot{Requests: rt.requests.Load(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), Cancelled: rt.cancelled.Load(), InFlight: rt.inflight.Load()}
 	if cache != nil {
-		if cache.InternalOrphans != nil {
-			result.Orphans = cache.InternalOrphans.Load()
-		}
 		stats := cache.InternalReceiveCache.Stats()
 		result.ReceiveCacheHits, result.ReceiveCacheMisses = stats.Hits, stats.Misses
 		result.ReceiveCacheBytes, result.ReceiveCacheObjects = stats.RetainedBytes, stats.RetainedObjects
@@ -486,9 +483,13 @@ func (l *logicalExecution) InternalFinish(result model.Result, err error) {
 	}
 	rt := l.rt
 	rt.inflight.Add(-1)
-	rt.RecordV2Latency(time.Since(l.started))
+	// Failed executions stay out of the percentiles: a burst of timeouts
+	// would otherwise pin them at the timeout, and a speculation policy
+	// reading them would wait that long before speculating.
 	if err != nil {
 		rt.errors.Add(1)
+	} else {
+		rt.RecordV2Latency(time.Since(l.started))
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		rt.cancelled.Add(1)

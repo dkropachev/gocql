@@ -125,7 +125,7 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 	s.privateStorage.InternalConnCfg = connCfg
 	if runtimeConfig != nil {
 		connCfg.InternalReceiveCache = new(wire.ReceiveCache)
-		connCfg.InternalOrphans = new(atomic.Uint64)
+		connCfg.InternalOrphans = s.OrphanCounter()
 		connCfg.TypedConfig = (*runtimeConfig).ConnectivityPointer()
 		connCfg.TypedAuth = runtimeConfig.Auth
 		connCfg.TypedLimits = runtimeConfig.Limits
