@@ -110,6 +110,12 @@ func TestConfigBuilder(t *testing.T) {
 			c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.TimestampGenerator != nil {
 			t.Fatalf("a later call did not replace an earlier one: %+v", c)
 		}
+		if c.DefaultTimestamps {
+			t.Fatal("WithServerTimestamps kept the default timestamp mark")
+		}
+		if c := mustBuildConfig(t, New("h").WithTimestampGenerator(func() int64 { return 1 })).settings; c.DefaultTimestamps {
+			t.Fatal("a user timestamp generator kept the default timestamp mark")
+		}
 		c = mustBuildConfig(t, New("h").WithHeartbeat(0, 0).WithHeartbeat(time.Second, 2*time.Second).WithConnectionsPerShard(2).WithConnectionsPerHost(4)).settings
 		if c.KeepaliveInterval != time.Second || c.KeepaliveTimeout != 2*time.Second || c.Pool.ConnectionsPerHost != 4 {
 			t.Fatalf("reverse order: %+v", c)

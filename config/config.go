@@ -536,6 +536,7 @@ func (b *ConfigBuilder) WithPreparedCacheSize(n int) *ConfigBuilder {
 // WithServerTimestamps. Default a monotonic clock.
 func (b *ConfigBuilder) WithTimestampGenerator(next func() int64) *ConfigBuilder {
 	b.settings.TimestampGenerator = next
+	b.settings.DefaultTimestamps = false
 	return b
 }
 
@@ -543,6 +544,7 @@ func (b *ConfigBuilder) WithTimestampGenerator(next func() int64) *ConfigBuilder
 // replaces WithTimestampGenerator.
 func (b *ConfigBuilder) WithServerTimestamps() *ConfigBuilder {
 	b.settings.TimestampGenerator = nil
+	b.settings.DefaultTimestamps = false
 	return b
 }
 

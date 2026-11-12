@@ -79,7 +79,9 @@ type InternalSessionRuntime struct {
 	// another's lines.
 	_         cacheLinePad
 	requestID atomic.Uint64
-	_         cacheLinePad
+	// timestamps is written with requestID, by the same admission.
+	timestamps startTimestamps
+	_          cacheLinePad
 	// attempts..inflight feed Metrics only.
 	attempts, errors, retries, speculations, cancelled atomic.Uint64
 	inflight                                           atomic.Int64
@@ -88,6 +90,26 @@ type InternalSessionRuntime struct {
 	// is the channel it waits on.
 	pooledBusy atomic.Int64
 	_          cacheLinePad
+}
+
+// startTimestamps is the session's default client timestamp source. It takes
+// each timestamp from the start time admission already read, instead of
+// reading the clock again as settings.InternalNewTimestampGenerator does.
+type startTimestamps struct{ last atomic.Int64 }
+
+// next returns started in microseconds, raised above every timestamp returned
+// before. One CAS keeps the timestamps strictly increasing; when it loses to a
+// concurrent request, the increment after that request's value is used.
+func (t *startTimestamps) next(started time.Time) int64 {
+	now := started.UnixMicro()
+	prev := t.last.Load()
+	if now <= prev {
+		now = prev + 1
+	}
+	if t.last.CompareAndSwap(prev, now) {
+		return now
+	}
+	return t.last.Add(1)
 }
 
 // cacheLineSize is the coherence unit hot counters are padded to.
@@ -668,7 +690,13 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 	}
 	rt.inflight.Add(1)
 	if !request.routing.Conditional && !requestHasCounter(request) && !request.InternalOptions.InternalOptions.Timestamp.Set && rt.config.TimestampGenerator != nil {
-		request.InternalOptions.InternalOptions.Timestamp = cqltype.Option[int64]{Value: rt.config.TimestampGenerator(), Set: true}
+		var timestamp int64
+		if rt.config.DefaultTimestamps {
+			timestamp = rt.timestamps.next(started)
+		} else {
+			timestamp = rt.config.TimestampGenerator()
+		}
+		request.InternalOptions.InternalOptions.Timestamp = cqltype.Option[int64]{Value: timestamp, Set: true}
 	}
 	return runctx, cancel, request, nil
 }
