@@ -45,41 +45,57 @@ type prepareFlight struct {
 }
 type InternalSessionRuntime struct {
 	*implCluster.Core
-	executions                                         map[*logicalExecution]struct{}
-	queries                                            map[weak.Pointer[queryState]]*queryEntry
-	schema                                             *schemafence.InternalPreparedSchemaTracker
-	preparing                                          map[prepareCacheKey]*prepareFlight
-	InternalProfile                                    *settings.Profile
-	InternalPrepared                                   map[prepareCacheKey]*InternalPreparedState
-	pools                                              map[*queryPoolEntry]struct{}
-	InternalPrepareOrder                               []prepareCacheKey
-	defaultOptions                                     InternalResolvedOptions // the zero CompiledOptions resolved for this session
-	config                                             settings.Config
-	prepareWorkers                                     sync.WaitGroup
-	requestID                                          atomic.Uint64
-	attempts, errors, retries, speculations, cancelled atomic.Uint64
-	inflight                                           atomic.Int64
-	// refusedDuringClose counts requests that took an id but were refused
-	// because the session was closing. Requests is requestID minus this, so
-	// admission writes no separate request counter.
-	refusedDuringClose atomic.Uint64
-	// pooledBusy counts busy queries of prepared statements' one-shot pools.
-	// Close waits for it to reach zero; pooledWake, guarded by InternalMu,
-	// is the channel it waits on.
-	pooledBusy atomic.Int64
-	pooledWake chan struct{}
+	executions           map[*logicalExecution]struct{}
+	queries              map[weak.Pointer[queryState]]*queryEntry
+	schema               *schemafence.InternalPreparedSchemaTracker
+	preparing            map[prepareCacheKey]*prepareFlight
+	InternalProfile      *settings.Profile
+	InternalPrepared     map[prepareCacheKey]*InternalPreparedState
+	pools                map[*queryPoolEntry]struct{}
+	InternalPrepareOrder []prepareCacheKey
+	defaultOptions       InternalResolvedOptions // the zero CompiledOptions resolved for this session
+	config               settings.Config
+	prepareWorkers       sync.WaitGroup
+	pooledWake           chan struct{}
 	// batchPool keeps the queries that run the session's batches, created
 	// by the first batch.
 	batchPool *queryPool[codec.EmptyRecord, codec.EmptyRecord]
 	batchErr  error
-	batchOnce sync.Once
 	// closing is closed when Close starts stopping executions.
-	closing              chan struct{}
-	closingOnce          sync.Once
-	prepareWorkersMu     sync.Mutex
-	InternalMu           sync.Mutex
+	closing          chan struct{}
+	batchOnce        sync.Once
+	closingOnce      sync.Once
+	prepareWorkersMu sync.Mutex
+	InternalMu       sync.Mutex
+	// refusedDuringClose counts requests that took an id but were refused
+	// because the session was closing. Requests is requestID minus this, so
+	// admission writes no separate request counter.
+	refusedDuringClose   atomic.Uint64
 	prepareWorkersClosed bool
+
+	// The fields below are written by every request. Each group has its own
+	// cache line, so that the writes do not evict the read-mostly fields
+	// above (config, defaultOptions) from other cores' caches, nor one
+	// another's lines.
+	_         cacheLinePad
+	requestID atomic.Uint64
+	_         cacheLinePad
+	// attempts..inflight feed Metrics only.
+	attempts, errors, retries, speculations, cancelled atomic.Uint64
+	inflight                                           atomic.Int64
+	// pooledBusy counts busy queries of prepared statements' one-shot pools.
+	// Close waits for it to reach zero; pooledWake, guarded by InternalMu,
+	// is the channel it waits on.
+	pooledBusy atomic.Int64
+	_          cacheLinePad
 }
+
+// cacheLineSize is the coherence unit hot counters are padded to.
+const cacheLineSize = 64
+
+// cacheLinePad keeps the fields on either side of it off one cache line,
+// whatever the alignment of the struct that holds it.
+type cacheLinePad struct{ _ [cacheLineSize]byte }
 
 func InternalRuntimeFor(s *implCluster.Core) *InternalSessionRuntime {
 	// The runtime is created once per session and never replaced, so every
@@ -501,7 +517,7 @@ func (l *logicalExecution) InternalFinish(result model.Result, err error) {
 	if err != nil {
 		rt.errors.Add(1)
 	} else {
-		rt.RecordV2Latency(time.Since(l.started))
+		rt.RecordV2Latency(l.id, time.Since(l.started))
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		rt.cancelled.Add(1)
