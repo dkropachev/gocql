@@ -156,7 +156,7 @@ func (r *MetadataReuse) store(encoded wire.Chain, columns, expect Columns, globa
 	}
 	e := &r.entries[slot]
 	n := encoded.Len()
-	if cap(e.encoded) < int(n) {
+	if c := cap(e.encoded); c < int(n) || (c > 4096 && c > 4*int(n)) {
 		e.encoded = make([]byte, int(n))
 	} else {
 		e.encoded = e.encoded[:n]

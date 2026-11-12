@@ -20,8 +20,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	implSession "github.com/scylladb/gocql/v2/internal/session"
-
 	"github.com/scylladb/gocql/v2/cql"
 )
 
@@ -39,13 +37,12 @@ func (d countingDecoder) Compile(c cql.Columns) (cql.RowPlan[cql.Bytes], error) 
 }
 func (d countingDecoder) Clone(v cql.Bytes) cql.Bytes { return v.Clone() }
 
-func testPreparedState(t *testing.T, s *testSession, columns cql.Columns) (*preparedState, *hostPrepared) {
+func testHostPrepared(t *testing.T, s *testSession, columns cql.Columns) *hostPrepared {
 	t.Helper()
 	tracker := runtimeFor(s).InternalSchemaTracker()
 	dependencies := tracker.InternalDependencies("ks", cql.NewColumns(), columns)
 	epoch := dependencies.InternalSnapshot()
 	result := &typedResultMetadata{InternalColumns: columns, InternalEpoch: epoch, InternalTracker: tracker}
 	hp := &hostPrepared{InternalId: []byte("id"), InternalMetadataID: []byte("meta"), InternalColumns: columns, InternalResult: result, InternalEpoch: epoch, InternalRevision: 1}
-	state := &preparedState{InternalSession: (*implSession.Session)(s).Core(), InternalProtocol: 4, InternalStatement: "SELECT value FROM ks.tbl", InternalKeyspace: "ks", InternalParameters: cql.NewColumns(), InternalColumns: columns, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl"}}
-	return state, hp
+	return hp
 }

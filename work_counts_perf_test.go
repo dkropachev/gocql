@@ -202,7 +202,7 @@ func TestWorkCountsPerf(t *testing.T) {
 			s := (*testSession)(implSession.InternalWrapSession(new(implCluster.Core)))
 			(*implSession.Session)(s).Data().InternalLogger = logging.Nop()
 			cols := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "v", Type: cql.BlobType})
-			_, hp := testPreparedState(t, s, cols)
+			hp := testHostPrepared(t, s, cols)
 			for i := 0; i < 1000; i++ {
 				(*implSession.Session)(s).Core().InvalidatePreparedSchema(implCluster.Event{Keyspace: "unrelated", Object: fmt.Sprint(i), Target: "TABLE"})
 			}

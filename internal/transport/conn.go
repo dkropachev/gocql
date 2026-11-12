@@ -289,7 +289,7 @@ type Conn struct {
 	segScratch                  segment.Scratch
 	InternalCqlProtoExts        []implEndpoint.InternalCqlProtocolExtension
 	InternalFramers             connFramers
-	typedMetadataReuse          protocol.MetadataReuse
+	typedMetadataReuse          *protocol.MetadataReuse
 	InternalScyllaSupported     implEndpoint.ScyllaConnectionFeatures
 	InternalOpeningSharderEpoch uint64
 	InternalTargetEpoch         uint64
