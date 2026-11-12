@@ -84,6 +84,9 @@ type InternalV2PeripheralState struct {
 	schemaGeneration              atomic.Uint64
 	InternalPlacementEpoch        atomic.Uint64
 	latencyCount                  atomic.Uint64
+	// latencyStored counts samples whose value is in latency. It trails
+	// latencyCount while a RecordV2Latency is between its two steps.
+	latencyStored atomic.Uint64
 	// latencyMarks, latencyTick and latencyPublished belong to
 	// publishLatencySummary.
 	latencyMarks           [10]uint64
@@ -1124,24 +1127,33 @@ func (s *Core) RecordV2Latency(latency time.Duration) {
 	p := s.Peripheral()
 	index := p.latencyCount.Add(1) - 1
 	p.latency[index%uint64(len(p.latency))].Store(int64(latency))
+	p.latencyStored.Add(1)
 }
 
 // publishLatencySummary recomputes the percentiles from the samples recorded
 // in the last len(latencyMarks) calls, at most len(latency) of them. Bounding
 // the window by time as well as by count keeps the figures current when
-// executions are rare. When nothing was recorded since the previous call, the
+// executions are rare. When no sample was stored since the previous call, the
 // previous figures stay. Only the metrics worker calls it, once a second.
 func (p *InternalV2PeripheralState) publishLatencySummary() {
+	// Read stored first: a sample counted in count but not yet in stored may
+	// have been read before its value landed, and the later increment of
+	// stored brings a recomputation that picks the value up.
+	stored := p.latencyStored.Load()
 	count := p.latencyCount.Load()
 	// latencyMarks[latencyTick] holds the count from len(latencyMarks) calls ago.
 	since := p.latencyMarks[p.latencyTick]
 	p.latencyMarks[p.latencyTick] = count
 	p.latencyTick = (p.latencyTick + 1) % len(p.latencyMarks)
-	if count == p.latencyPublished {
+	if stored == p.latencyPublished {
 		return
 	}
-	p.latencyPublished = count
+	p.latencyPublished = stored
 	n := min(count-since, uint64(len(p.latency)))
+	if n == 0 {
+		// Only samples counted before the window landed since the last call.
+		return
+	}
 	samples := make([]time.Duration, int(n))
 	for i := range samples {
 		samples[i] = time.Duration(p.latency[(count-n+uint64(i))%uint64(len(p.latency))].Load())

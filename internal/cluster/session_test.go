@@ -285,6 +285,20 @@ func TestSession(t *testing.T) {
 		if m := s.Metrics(); m.LatencyP50 != time.Minute {
 			t.Fatal("percentiles kept samples beyond the newest 1024:", m)
 		}
+		// A recomputation between RecordV2Latency counting a sample and
+		// storing it reads the slot's old value. The next one after the
+		// store must pick the value up rather than treat the count as seen.
+		for range 2 * len(p.latencyMarks) {
+			p.publishLatencySummary()
+		}
+		index := p.latencyCount.Add(1) - 1
+		p.publishLatencySummary()
+		p.latency[index%uint64(len(p.latency))].Store(int64(time.Hour))
+		p.latencyStored.Add(1)
+		p.publishLatencySummary()
+		if m := s.Metrics(); m.LatencyP50 != time.Hour {
+			t.Fatal("percentiles missed a sample stored after a recomputation counted it:", m)
+		}
 		generation := sessionTypedSchemaGeneration(s)
 		s.PublishV2Metadata()
 		if sessionTypedSchemaGeneration(s) != generation {
