@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -30,6 +31,20 @@ func invPair(t testing.TB, proto byte) (*Conn, net.Conn) {
 	c.InternalCloseOnCancel()
 	t.Cleanup(func() { c.Close(); server.Close(); c.InternalCfg.InternalReceiveCache.Close() })
 	return c, server
+}
+
+func invRowsBody(value []byte) []byte {
+	out := binary.BigEndian.AppendUint32(nil, 2)
+	out = binary.BigEndian.AppendUint32(out, 1)
+	out = binary.BigEndian.AppendUint32(out, 1)
+	for _, s := range []string{"ks", "tbl", "value"} {
+		out = binary.BigEndian.AppendUint16(out, uint16(len(s)))
+		out = append(out, s...)
+	}
+	out = binary.BigEndian.AppendUint16(out, uint16(cqltype.TypeBlob))
+	out = binary.BigEndian.AppendUint32(out, 1)
+	out = binary.BigEndian.AppendUint32(out, uint32(len(value)))
+	return append(out, value...)
 }
 
 func invFrame(proto byte, stream int, body []byte) []byte {
@@ -81,5 +96,65 @@ func TestReceiveTypedCallParseFailureClearsDest(t *testing.T) {
 	}
 	if dest.Rows.Len() != 0 || dest.Kind != 0 {
 		t.Fatalf("dest not cleared: kind=%d", dest.Kind)
+	}
+}
+
+// A response that arrives after its caller was cancelled must not delay the
+// response of another stream on the same connection.
+func TestLateResponseAfterCancelDoesNotDelayOthers(t *testing.T) {
+	c, server := invPair(t, 4)
+	go c.InternalServe(c.InternalCtx)
+	for i := 0; i < 20; i++ {
+		ctxA, cancelA := context.WithCancel(context.Background())
+		aErr := make(chan error, 1)
+		go func() {
+			page, err := c.InternalExecuteTyped(ctxA, &model.AttemptRequest{Statement: "SELECT a", Consistency: cqltype.One})
+			if page != nil {
+				page.Owner.Release()
+			}
+			aErr <- err
+		}()
+		aStream, err := invReadRequest(server)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cancelA()
+		if err := <-aErr; err == nil {
+			t.Fatal("A was not cancelled")
+		}
+		bDone := make(chan error, 1)
+		go func() {
+			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT b", Consistency: cqltype.One})
+			if err == nil {
+				page.Owner.Release()
+			}
+			bDone <- err
+		}()
+		bStream, err := invReadRequest(server)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// net.Pipe writes complete only when the reader consumed them, so
+		// they run apart from the checks below.
+		go func() {
+			server.Write(invFrame(4, aStream, invRowsBody([]byte("a"))))
+			server.Write(invFrame(4, bStream, invRowsBody([]byte("b"))))
+		}()
+		select {
+		case err := <-bDone:
+			if err != nil {
+				t.Fatalf("B: %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("B was delayed by A's late response")
+		}
+	}
+	// A's late response frees its stream; give the reader no more than a second.
+	deadline := time.Now().Add(time.Second)
+	for c.InternalStreams.InUse() != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("streams in use after run: %d", c.InternalStreams.InUse())
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
