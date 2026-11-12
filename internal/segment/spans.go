@@ -94,33 +94,54 @@ func putHeader(header []byte, payloadLen int64, uncompressedLen int64, selfConta
 // ReadOwnedPayload receives directly into final immutable storage. The returned
 // lease can outlive both the connection and reads of subsequent segments.
 func ReadOwnedPayload(r io.Reader, h Header, comp Compressor) (*wire.Lease, error) {
+	var trailer [Crc32Size]byte
+	return ReadCachedPayload(r, h, comp, nil, trailer[:])
+}
+
+// ReadCachedPayload is ReadOwnedPayload into storage acquired from cache, which
+// the lease's final release returns there. It reads the CRC32 trailer through
+// trailer, which holds at least Crc32Size bytes, so a caller-owned buffer keeps
+// it from escaping. A nil cache allocates the storage.
+func ReadCachedPayload(r io.Reader, h Header, comp Compressor, cache *wire.ReceiveCache, trailer []byte) (*wire.Lease, error) {
 	if err := validatePayloadHeader(h, comp != nil); err != nil {
 		return nil, err
 	}
-	payload := make([]byte, h.PayloadLen)
+	payload, epoch := cache.Acquire(h.PayloadLen)
 	if _, err := io.ReadFull(r, payload); err != nil {
+		cache.Release(payload, epoch)
 		return nil, fmt.Errorf("gocql: failed reading segment payload: %w", err)
 	}
-	var trailer [4]byte
-	if _, err := io.ReadFull(r, trailer[:]); err != nil {
+	trailer = trailer[:Crc32Size]
+	if _, err := io.ReadFull(r, trailer); err != nil {
+		cache.Release(payload, epoch)
 		return nil, fmt.Errorf("gocql: failed reading segment CRC: %w", err)
 	}
-	if crc.Crc32(payload) != binary.LittleEndian.Uint32(trailer[:]) {
+	if crc.Crc32(payload) != binary.LittleEndian.Uint32(trailer) {
+		cache.Release(payload, epoch)
 		return nil, fmt.Errorf("gocql: crc32 mismatch in segment payload")
 	}
 	if h.UncompressedLen != 0 {
 		if comp == nil {
+			cache.Release(payload, epoch)
 			return nil, fmt.Errorf("gocql: compressed segment without compressor")
 		}
-		decoded, err := comp.AppendDecompressed(make([]byte, 0, h.UncompressedLen), payload, uint32(h.UncompressedLen))
+		out, outEpoch := cache.Acquire(h.UncompressedLen)
+		decoded, err := comp.AppendDecompressed(out[:0], payload, uint32(h.UncompressedLen))
+		if err == nil && len(decoded) != h.UncompressedLen {
+			err = fmt.Errorf("gocql: segment decompressed to %d bytes, expected %d", len(decoded), h.UncompressedLen)
+		}
 		if err != nil {
+			cache.Release(out, outEpoch)
+			cache.Release(payload, epoch)
 			return nil, err
 		}
-		if len(decoded) != h.UncompressedLen {
-			return nil, fmt.Errorf("gocql: segment decompressed to %d bytes, expected %d", len(decoded), h.UncompressedLen)
+		if &decoded[0] != &out[0] {
+			// The decoder returned storage of its own, which may alias its
+			// input: neither buffer goes back to the cache.
+			return wire.NewLease(wire.ChainOf(decoded), nil), nil
 		}
-		payload = decoded
+		cache.Release(payload, epoch)
+		return wire.NewCachedLease(wire.ChainOf(decoded), cache, out, outEpoch), nil
 	}
-	chain, _ := wire.NewChain(wire.Borrow(payload))
-	return wire.NewLease(chain, nil), nil
+	return wire.NewCachedLease(wire.ChainOf(payload), cache, payload, epoch), nil
 }

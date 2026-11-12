@@ -204,16 +204,24 @@ func ReadPayload(r io.Reader, h Header, comp Compressor, scratch *Scratch) ([]by
 	return ReadUncompressedPayload(r, h, scratch)
 }
 
-// ReadUncompressedHeader decodes an uncompressed segment header.
-func ReadUncompressedHeader(r io.Reader) (Header, error) {
-	const headerSize = 3
-
-	var header [headerSize + Crc24Size]byte
-	if _, err := io.ReadFull(r, header[:]); err != nil {
+// ReadHeaderInto is ReadHeader reading the header through buf, which holds at
+// least HeaderSize(compressed) bytes. A caller-owned buf keeps the header bytes
+// from escaping to the heap through r.
+func ReadHeaderInto(r io.Reader, compressed bool, buf []byte) (Header, error) {
+	p := buf[:HeaderSize(compressed)]
+	if _, err := io.ReadFull(r, p); err != nil {
+		if compressed {
+			return Header{}, fmt.Errorf("gocql: failed to read compressed frame header, err: %w", err)
+		}
 		return Header{}, fmt.Errorf("gocql: failed to read uncompressed frame, err: %w", err)
 	}
+	return DecodeHeader(p, compressed)
+}
 
-	return DecodeHeader(header[:], false)
+// ReadUncompressedHeader decodes an uncompressed segment header.
+func ReadUncompressedHeader(r io.Reader) (Header, error) {
+	var header [UncompressedHeaderSize]byte
+	return ReadHeaderInto(r, false, header[:])
 }
 
 // ReadUncompressedPayload reads the payload of an uncompressed segment and
@@ -247,14 +255,8 @@ func ReadUncompressedPayload(r io.Reader, h Header, scratch *Scratch) ([]byte, e
 
 // ReadCompressedHeader decodes a compressed segment header.
 func ReadCompressedHeader(r io.Reader) (Header, error) {
-	const headerSize = 5
-
-	var headerBuf [headerSize + Crc24Size]byte
-	if _, err := io.ReadFull(r, headerBuf[:]); err != nil {
-		return Header{}, fmt.Errorf("gocql: failed to read compressed frame header, err: %w", err)
-	}
-
-	return DecodeHeader(headerBuf[:], true)
+	var header [CompressedHeaderSize]byte
+	return ReadHeaderInto(r, true, header[:])
 }
 
 // ReadCompressedPayload reads the payload of a compressed segment, verifies its

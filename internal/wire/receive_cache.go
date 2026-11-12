@@ -9,7 +9,8 @@ import (
 	"sync/atomic"
 )
 
-// ReceiveCache reuses only fully released raw v4 frame allocations. One
+// ReceiveCache reuses only fully released receive buffers: raw v4 frame
+// bodies and v5 segment payloads. One
 // session owns it, with hard idle byte/object limits independent of
 // connection/shard counts. Outstanding page bytes are outside it: they are
 // ordinary demand, not idle.

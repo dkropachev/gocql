@@ -173,39 +173,72 @@ func (c *Conn) InternalRecvLeasedSegment(ctx context.Context) error {
 		return err
 	}
 	end := c.observedNow()
-	if hdr.IsSelfContained {
-		defer first.Release()
-		cursor := wire.NewCursor(first.Chain())
-		for cursor.Remaining() > 0 {
-			frameHeader, err := cursor.Take(protocol.HeadSize)
-			if err != nil {
-				return fmt.Errorf("gocql: incomplete frame header in self-contained segment: %w", err)
-			}
-			head, err := protocol.ReadHeader(newChainReader(frameHeader), c.headerBuf[:])
-			if err != nil {
-				return err
-			}
-			body, err := cursor.Take(int64(head.Length))
-			if err != nil {
-				return fmt.Errorf("gocql: frame header declares a %d byte body but only %d bytes remain in the self-contained segment", head.Length, cursor.Remaining())
-			}
-			if err := c.processOwnedFrame(ctx, frameHeader, body, first, start, end); err != nil {
-				return err
-			}
-		}
-		return nil
+	if !hdr.IsSelfContained {
+		return c.recvSplitLeasedFrame(ctx, first, start, end)
 	}
-	owners := []*wire.Lease{first}
+	defer first.Release()
+	cursor := wire.CursorOver(first.Chain())
+	for cursor.Remaining() > 0 {
+		frameHeader, err := cursor.Take(protocol.HeadSize)
+		if err != nil {
+			return fmt.Errorf("gocql: incomplete frame header in self-contained segment: %w", err)
+		}
+		_, _ = frameHeader.CopyTo(c.headerBuf[:])
+		head, err := frm.DecodeHeader(c.headerBuf[:])
+		if err != nil {
+			return err
+		}
+		body, err := cursor.Take(int64(head.Length))
+		if err != nil {
+			return fmt.Errorf("gocql: frame header declares a %d byte body but only %d bytes remain in the self-contained segment", head.Length, cursor.Remaining())
+		}
+		if err := c.processFrameSource(ctx, InternalFrameSource{owner: first, chain: body, netStart: start, netEnd: end}, &head); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// splitFrame owns the segments one frame was split across. A retained page
+// keeps it, and through it every segment payload, alive.
+type splitFrame struct {
+	owners []*wire.Lease
+	wire.Lease
+}
+
+func (f *splitFrame) ReleaseLease() {
+	for _, owner := range f.owners {
+		owner.Release()
+	}
+	f.owners = nil
+}
+
+// splitFrameSegments is how many segments a split frame collects without
+// allocating: 16 full segments carry a 2 MiB frame.
+const splitFrameSegments = 16
+
+// recvSplitLeasedFrame reassembles one frame the peer split across
+// non-self-contained segments, the first of which is first, and processes it.
+// It owns first's reference.
+//
+// Segment owners and span descriptors collect in stack arrays. The frame's
+// lease, its owner list and its span index are allocated once per frame and
+// belong to that frame alone: a page that retains it must never see them
+// rewritten by a later frame.
+func (c *Conn) recvSplitLeasedFrame(ctx context.Context, first *wire.Lease, start, end time.Time) error {
+	var ownerBuf [splitFrameSegments]*wire.Lease
+	var spanBuf [splitFrameSegments]wire.Span
+	owners := append(ownerBuf[:0], first)
+	spans := spanBuf[:0]
 	defer func() {
 		for _, owner := range owners {
 			owner.Release()
 		}
 	}()
-	var spans []wire.Span
-	_ = first.Chain().Each(func(s wire.Span) error { spans = append(spans, s); return nil })
+	spans = appendChainSpans(spans, first.Chain())
 	total := first.Chain().Len()
 	readNext := func() error {
-		nextHdr, err := segment.ReadHeader(c.InternalR, c.InternalSegCompressor != nil)
+		nextHdr, err := segment.ReadHeaderInto(c.InternalR, c.InternalSegCompressor != nil, c.headerBuf[:])
 		if err != nil {
 			return fmt.Errorf("gocql: failed to read continuation segment header: %w", err)
 		}
@@ -221,7 +254,7 @@ func (c *Conn) InternalRecvLeasedSegment(ctx context.Context) error {
 			return fmt.Errorf("gocql: continuation segment made no progress (empty payload)")
 		}
 		owners = append(owners, next)
-		_ = next.Chain().Each(func(s wire.Span) error { spans = append(spans, s); return nil })
+		spans = appendChainSpans(spans, next.Chain())
 		total += next.Chain().Len()
 		return nil
 	}
@@ -231,9 +264,13 @@ func (c *Conn) InternalRecvLeasedSegment(ctx context.Context) error {
 		}
 		end = c.observedNow()
 	}
-	chain, _ := wire.NewChain(spans...)
-	header, _ := chain.Slice(0, protocol.HeadSize)
-	head, err := protocol.ReadHeader(newChainReader(header), c.headerBuf[:])
+	n := 0
+	for _, s := range spans {
+		if n += copy(c.headerBuf[n:], s.Bytes()); n == protocol.HeadSize {
+			break
+		}
+	}
+	head, err := frm.DecodeHeader(c.headerBuf[:])
 	if err != nil {
 		return err
 	}
@@ -250,35 +287,31 @@ func (c *Conn) InternalRecvLeasedSegment(ctx context.Context) error {
 	if total != expected {
 		return fmt.Errorf("gocql: segmented frame exceeds its declared length %d", expected)
 	}
-	chain, _ = wire.NewChain(spans...)
+	chain, _ := wire.NewChain(spans...)
 	body, _ := chain.Slice(protocol.HeadSize, int64(head.Length))
-
-	retained := append([]*wire.Lease(nil), owners...)
-	for _, owner := range retained {
-		owner.Retain()
-	}
-	owner := wire.NewLease(chain, func() {
-		for _, part := range retained {
-			part.Release()
-		}
-	})
-	defer owner.Release()
-	return c.processOwnedFrame(ctx, header, body, owner, start, end)
+	frame := &splitFrame{owners: append([]*wire.Lease(nil), owners...)}
+	owners = owners[:0]
+	wire.InitLease(&frame.Lease, chain, frame)
+	defer frame.Release()
+	return c.processFrameSource(ctx, InternalFrameSource{owner: &frame.Lease, chain: body, netStart: start, netEnd: end}, &head)
 }
 
-func (c *Conn) processOwnedFrame(ctx context.Context, header, body wire.Chain, owner *wire.Lease, start, end time.Time) error {
-	var spans []wire.Span
-	_ = header.Each(func(s wire.Span) error { spans = append(spans, s); return nil })
-	_ = body.Each(func(s wire.Span) error { spans = append(spans, s); return nil })
-	chain, _ := wire.NewChain(spans...)
-	return c.InternalProcessFrameSource(ctx, InternalFrameSource{InternalR: newChainReader(chain), owner: owner, chain: body, netStart: start, netEnd: end})
+// appendChainSpans appends c's spans to dst.
+func appendChainSpans(dst []wire.Span, c wire.Chain) []wire.Span {
+	_ = c.Each(func(s wire.Span) error { dst = append(dst, s); return nil })
+	return dst
 }
 
 func (c *Conn) InternalReadTypedSegmentPayload(hdr segment.Header) (*wire.Lease, error) {
 	if int64(hdr.UncompressedLen) > c.typedProtocolLimits().MaxDecompressedBytes {
 		return nil, protocol.ErrFrameTooBig
 	}
-	return segment.ReadOwnedPayload(c.InternalR, hdr, c.InternalSegCompressor)
+	var cache *wire.ReceiveCache
+	if c.InternalCfg != nil {
+		cache = c.InternalCfg.InternalReceiveCache
+	}
+	// The trailer goes through headerBuf: no header is being read meanwhile.
+	return segment.ReadCachedPayload(c.InternalR, hdr, c.InternalSegCompressor, cache, c.headerBuf[:])
 }
 
 // typedResponseExtensionFlags returns the response header flags extensions
