@@ -5,6 +5,7 @@ package routing
 
 import (
 	"math"
+	"sync/atomic"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
@@ -79,5 +80,23 @@ func TestRoutingCacheInvalidatesOnSnapshotChange(t *testing.T) {
 	SnapshotData(dropped).InternalKeyspaces["ks"].Tables = nil
 	if got := cachedReplicas(dropped, &c); got != nil {
 		t.Fatalf("dropped table: replicas %v", got)
+	}
+}
+
+// TestRoutingCacheStalePlacementSignal checks that a statement whose vnode
+// ranges are cached for a snapshot routes to no replicas once a tablet
+// update bumps the placement signal past that snapshot's epoch, as an
+// uncached lookup does.
+func TestRoutingCacheStalePlacementSignal(t *testing.T) {
+	var c InternalPlacementCache
+	var signal atomic.Uint64
+	m := vnodeCacheSnapshot(1, 2, 3)
+	SnapshotData(m).InternalPlacementSignal = &signal
+	if got := replicaHosts(cachedReplicas(m, &c)); string(got) != "\x01\x02\x03" {
+		t.Fatalf("warm route: replicas %v", got)
+	}
+	signal.Add(1)
+	if got := cachedReplicas(m, &c); got != nil {
+		t.Fatalf("route after the placement signal moved on: replicas %v", got)
 	}
 }

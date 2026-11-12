@@ -46,7 +46,9 @@ type InternalPreparedState struct {
 	view                 atomic.Pointer[preparedView]
 	preparing            map[cqltype.UUID]*hostPrepareFlight
 	InternalDependencies *schemafence.InternalPreparedDependencies
-	// tabletPlacement finds the statement's table among tablet placements.
+	// tabletPlacement caches where the statement's table is placed in the
+	// snapshot it last routed by: its tablet placement, or else its token
+	// ranges.
 	tabletPlacement                     routing.InternalPlacementCache
 	InternalStatement, InternalKeyspace string
 	partitioner                         string
