@@ -435,9 +435,8 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 				if c.InternalExclusive() {
 					continue
 				}
-				c.InternalMu.Lock()
-				idle := c.InternalSharedOps() == 0 && c.InternalCalls.Len() == 0 && c.InternalStreams.InUse() == 0
-				c.InternalMu.Unlock()
+				// Registered calls hold streams, so streams cover them.
+				idle := c.InternalSharedOps() == 0 && c.InternalStreams.InUse() == 0
 				if pass == 0 && !idle || pass == 1 && idle {
 					continue
 				}

@@ -242,8 +242,9 @@ type Conn struct {
 	InternalSupported                         map[string][]string
 	InternalStreams                           *streams.IDGenerator
 	InternalHost                              *implEndpoint.HostInfo
-	// calls maps stream IDs to in-flight callReqs. It is protected by mu.
-	// calls should not be used when closed is true, calls is set to nil when closed=true.
+	// InternalCalls maps stream IDs to in-flight calls. It is lock-free (see
+	// InternalCallTable); close drains it in place after setting the closed
+	// admission flag.
 	InternalCalls  *InternalCallTable
 	InternalCancel context.CancelFunc
 	// currentKeyspace is the keyspace this connection was switched to by
@@ -292,7 +293,6 @@ type Conn struct {
 	InternalScyllaSupported     implEndpoint.ScyllaConnectionFeatures
 	InternalOpeningSharderEpoch uint64
 	InternalTargetEpoch         uint64
-	orphans                     int
 	InternalMetadataTimeout     time.Duration
 	coalesceWait                time.Duration
 	InternalWriteTimeout        atomic.Int64
@@ -307,6 +307,7 @@ type Conn struct {
 	admission        atomic.Uint64
 	pauseRequested   atomic.Bool // mirrors pauseWanted for the reader's lock-free check
 	tabletsRoutingV1 int32
+	orphans          atomic.Int32 // calls that stopped waiting for an outstanding response
 	// headerBuf holds the frame or segment header, or segment trailer, being
 	// read or decoded, so none escapes through the reader. Like headerReader it
 	// is only touched by the receiving goroutine, one header at a time.
@@ -776,11 +777,12 @@ func (c *Conn) InternalCloseWithError(err error) {
 		return
 	}
 	c.InternalClosed = true
+	// Setting the flag before draining the table is what keeps a call from
+	// staying registered after close: a registration racing this close
+	// either lands before the drain reads its slot, or reads the flag after
+	// it and withdraws itself (see allocCall).
 	c.admission.Or(admissionClosed)
 	c.changeLocked()
-	callsToClose := c.InternalCalls
-
-	c.InternalCalls = nil
 	c.InternalMu.Unlock()
 
 	// Close the socket before joining calls: an accepted span write may be
@@ -793,10 +795,14 @@ func (c *Conn) InternalCloseWithError(err error) {
 	}
 	cerr = c.close()
 
-	seen := make(map[*InternalCallReq]bool, callsToClose.Len())
-	for _, req := range callsToClose.All() {
+	// A call sits in one slot unless a test arranged otherwise.
+	var seen map[*InternalCallReq]bool
+	c.InternalCalls.drain(func(req *InternalCallReq) {
 		if seen[req] {
-			continue
+			return
+		}
+		if seen == nil {
+			seen = make(map[*InternalCallReq]bool)
 		}
 		seen[req] = true
 
@@ -817,7 +823,7 @@ func (c *Conn) InternalCloseWithError(err error) {
 			})
 		}
 		putCallReq(req)
-	}
+	})
 
 	c.InternalFramers.close()
 
@@ -1135,22 +1141,21 @@ func (c *Conn) processFrameSource(ctx context.Context, src InternalFrameSource, 
 		}
 	}
 
-	c.InternalMu.Lock()
-	if c.InternalClosed {
-		c.InternalMu.Unlock()
+	// The reader takes the call over by emptying its slot. Losing the CAS means
+	// the caller withdrew an unsent request or close took the call.
+	if c.admission.Load()&admissionClosed != 0 {
 		return runtimeerrors.ErrConnectionClosed
 	}
 	call := c.InternalCalls.Get(head.Stream)
-
-	if call != nil {
-		if streamID := call.InternalStreamID; head.Stream != streamID {
-			c.InternalMu.Unlock()
-
-			return fmt.Errorf("gocql: response for stream %d dispatched to a call on stream %d", head.Stream, streamID)
+	if call != nil && !c.InternalCalls.remove(head.Stream, call) {
+		if c.admission.Load()&admissionClosed != 0 {
+			return runtimeerrors.ErrConnectionClosed
 		}
+		call = nil
 	}
-	c.InternalCalls.Delete(head.Stream)
-	c.InternalMu.Unlock()
+	if call != nil && call.InternalStreamID != head.Stream {
+		return c.misplacedCall(call, head.Stream)
+	}
 	if call == nil {
 		c.logger().Warn("response for stream with no handler", logging.KeyStream, head.Stream, "opcode", head.Op.String())
 		if parsed != nil {
@@ -1224,6 +1229,17 @@ func (c *Conn) readFrameIntoFramer(src InternalFrameSource, head frm.FrameHeader
 	return framer, nil
 }
 
+// misplacedCall puts back a call found under a stream other than its own
+// (a corrupt table) and reports the fatal error. The call stays where it was
+// found, so closing the connection resolves it.
+//
+//go:noinline
+func (c *Conn) misplacedCall(call *InternalCallReq, stream int) error {
+	streamID := call.InternalStreamID
+	c.InternalCalls.register(stream, call)
+	return fmt.Errorf("gocql: response for stream %d dispatched to a call on stream %d", stream, streamID)
+}
+
 func (c *Conn) InternalAbandonRecvCall(call *InternalCallReq, framer *protocol.Framer) {
 	c.InternalReleaseReadFramer(framer)
 	c.releaseStream(call)
@@ -1238,7 +1254,8 @@ func (c *Conn) InternalAbandonRecvCall(call *InternalCallReq, framer *protocol.F
 // stream can be reused at once.
 func (c *Conn) releaseStream(call *InternalCallReq) {
 	if call.orphaned {
-		c.settleOrphan(call)
+		call.orphaned = false
+		c.orphans.Add(-1)
 	}
 	c.freeStream(call.InternalStreamID)
 
@@ -1533,24 +1550,18 @@ func (call *InternalCallReq) waitExecDone(where string) {
 	call.waitCallReqDone(where)
 }
 
-// InternalRemoveCallIfOpen removes call from c.calls only if exec() still owns
-// its cleanup and call is still the call registered for its stream. Removal is
-// by identity: the stream may already have been freed and reused by another
-// call, which must stay registered. Once the connection has started closing,
-// closeWithError() becomes responsible for draining and recycling detached
-// callReqs.
+// InternalRemoveCallIfOpen removes call from the call table only if exec()
+// still owns its cleanup and call is still the call registered for its
+// stream. Removal is by identity: the stream may already have been freed and
+// reused by another call, which must stay registered. Once the connection has
+// started closing, closeWithError() becomes responsible for draining and
+// recycling detached callReqs. A close that sets its flag after the check
+// below and before the CAS does not find the call: the CAS decides the owner.
 func (c *Conn) InternalRemoveCallIfOpen(call *InternalCallReq) bool {
-	c.InternalMu.Lock()
-	defer c.InternalMu.Unlock()
-
-	if c.InternalClosed || c.InternalCalls == nil {
+	if c.InternalCalls == nil || c.admission.Load()&admissionClosed != 0 {
 		return false
 	}
-	if c.InternalCalls.Get(call.InternalStreamID) != call {
-		return false
-	}
-
-	return c.InternalCalls.Delete(call.InternalStreamID) != nil
+	return c.InternalCalls.remove(call.InternalStreamID, call)
 }
 
 type InternalCallResp struct {
@@ -1590,16 +1601,50 @@ func InternalDrainWake(ch chan InternalCallResp) {
 	}
 }
 
-// allocCall allocates a stream for call and registers call under it in one
-// critical section. It fails if the connection already started closing or has
-// no free stream.
+// allocCall allocates a stream for call and registers call under it, without
+// the connection lock. It fails if the connection already started closing or
+// has no free stream.
 func (c *Conn) allocCall(call *InternalCallReq) error {
-	c.InternalMu.Lock()
-	defer c.InternalMu.Unlock()
-	if c.InternalClosed {
-		return runtimeerrors.ErrConnectionClosed
+	stream, ok := c.InternalStreams.GetStream()
+	if !ok {
+		return runtimeerrors.ErrNoStreams
 	}
-	return c.allocCallLocked(call)
+	call.InternalStreamID = stream
+	if !c.InternalCalls.register(stream, call) {
+		return c.streamTaken(stream)
+	}
+	// Close sets its flag before draining the table; this reads the flag
+	// after registering. So either the drain finds the call, or this sees
+	// the flag and withdraws it.
+	if c.admission.Load()&admissionClosed != 0 {
+		return c.registeredOnClosed(call)
+	}
+	return nil
+}
+
+// streamTaken reports a free stream whose slot still holds a call.
+//
+//go:noinline
+func (c *Conn) streamTaken(stream int) error {
+	existing := -1
+	if call := c.InternalCalls.Get(stream); call != nil {
+		existing = call.InternalStreamID
+	}
+	c.freeStream(stream)
+	return fmt.Errorf("attempting to use stream already in use: %d -> %d", stream, existing)
+}
+
+// registeredOnClosed withdraws a call registered on a connection that started
+// closing. If close's drain took it first, the call stays with close, which
+// answers it, and the caller proceeds as for any registered call.
+//
+//go:noinline
+func (c *Conn) registeredOnClosed(call *InternalCallReq) error {
+	if !c.InternalCalls.remove(call.InternalStreamID, call) {
+		return nil
+	}
+	c.freeStream(call.InternalStreamID)
+	return runtimeerrors.ErrConnectionClosed
 }
 
 // allocSharedCall is beginShared followed by allocCall. Admission takes the
@@ -1613,21 +1658,6 @@ func (c *Conn) allocSharedCall(ctx context.Context, call *InternalCallReq) error
 		c.endShared()
 		return err
 	}
-	return nil
-}
-
-func (c *Conn) allocCallLocked(call *InternalCallReq) error {
-	stream, ok := c.InternalStreams.GetStream()
-	if !ok {
-		return runtimeerrors.ErrNoStreams
-	}
-	if existingCall := c.InternalCalls.Get(stream); existingCall != nil {
-		c.freeStream(stream)
-		return fmt.Errorf("attempting to use stream already in use: %d -> %d", stream,
-			existingCall.InternalStreamID)
-	}
-	call.InternalStreamID = stream
-	c.InternalCalls.Set(stream, call)
 	return nil
 }
 

@@ -16,6 +16,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -39,9 +40,7 @@ func receiveWithin[T any](t *testing.T, ch <-chan T, what string) T {
 // connCounters reads streams in use, registered calls, orphans and shared ops.
 func connCounters(c *Conn) (streams, calls, orphans, shared int) {
 	shared = c.InternalSharedOps()
-	c.InternalMu.Lock()
-	defer c.InternalMu.Unlock()
-	return c.InternalStreams.InUse(), c.InternalCalls.Len(), c.orphans, shared
+	return c.InternalStreams.InUse(), c.InternalCalls.Len(), int(c.orphans.Load()), shared
 }
 
 // expectReservationBlocked fails unless a reservation attempt times out.
@@ -404,6 +403,105 @@ func TestCallerFreesDeliveredStream(t *testing.T) {
 	page.Owner.Release()
 	if s, calls, o, shared := connCounters(c); s != 0 || calls != 0 || o != 0 || shared != 0 {
 		t.Fatalf("after cleanup: streams %d, calls %d, orphans %d, shared %d", s, calls, o, shared)
+	}
+}
+
+// A typed request on a healthy connection, the reader's delivery included,
+// never takes the connection lock: requests complete while a test holds it.
+func TestTypedRequestTakesNoConnLock(t *testing.T) {
+	c, server := invPair(t, 4)
+	go c.InternalServe(c.InternalCtx)
+	go func() {
+		for {
+			stream, err := invReadRequest(server)
+			if err != nil {
+				return
+			}
+			server.Write(invFrame(4, stream, typedTestRowsBody([]byte("v"))))
+		}
+	}()
+	c.InternalMu.Lock()
+	done := make(chan error, 1)
+	go func() {
+		for range 50 {
+			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+			if err != nil {
+				done <- err
+				return
+			}
+			page.Owner.Release()
+		}
+		done <- nil
+	}()
+	select {
+	case err := <-done:
+		c.InternalMu.Unlock()
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		c.InternalMu.Unlock()
+		t.Fatal("typed requests blocked on the connection lock")
+	}
+	if s, calls, o, shared := connCounters(c); s != 0 || calls != 0 || o != 0 || shared != 0 {
+		t.Fatalf("counters: streams %d, calls %d, orphans %d, shared %d", s, calls, o, shared)
+	}
+}
+
+// Registrations and withdrawals racing close: every call registered is either
+// withdrawn by its caller or drained and answered by close, a registration
+// after close fails with ErrConnectionClosed, and the table ends empty.
+func TestCallTableCloseRace(t *testing.T) {
+	closeErr := errors.New("test close")
+	for round := range 200 {
+		c, _ := invPair(t, 4)
+		const workers = 16
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		for range workers {
+			wg.Go(func() {
+				<-start
+				for {
+					call := getCallReq(0)
+					call.typed = true
+					if err := c.allocCall(call); err != nil {
+						if !errors.Is(err, runtimeerrors.ErrConnectionClosed) {
+							t.Errorf("round %d: allocCall: %v", round, err)
+						}
+						call.finishExec()
+						putCallReq(call)
+						return
+					}
+					if c.InternalRemoveCallIfOpen(call) {
+						c.releaseStream(call)
+						call.finishExec()
+						putCallReq(call)
+						continue
+					}
+					// Close owns the call: it answers, then waits for us.
+					select {
+					case resp := <-call.InternalResp:
+						if !errors.Is(resp.InternalErr, closeErr) {
+							t.Errorf("round %d: drained call got %v", round, resp.InternalErr)
+						}
+					case <-time.After(5 * time.Second):
+						t.Errorf("round %d: registered call never answered after close", round)
+					}
+					call.finishExec()
+					return
+				}
+			})
+		}
+		close(start)
+		time.Sleep(time.Duration(rand.IntN(200)) * time.Microsecond)
+		c.InternalCloseWithError(closeErr)
+		wg.Wait()
+		if n := c.InternalCalls.Len(); n != 0 {
+			t.Fatalf("round %d: %d calls left in the table after close", round, n)
+		}
+		if t.Failed() {
+			return
+		}
 	}
 }
 

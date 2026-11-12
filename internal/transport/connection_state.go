@@ -41,14 +41,15 @@ var errOrphanBudget = errors.New("gocql: abandoned stream budget exceeded")
 // admission packs a connection's shared-operation count with two flags.
 // Shared operations enter with a CAS loop and leave with one Add. The flags
 // change only under InternalMu: closed once, by InternalCloseWithError;
-// exclusive by a reserver, which waits under InternalMu until the count, the
-// calls (orphans included) and the streams in use are all zero. A shared
-// operation that finds a flag set takes InternalMu and waits on the change
-// channel, and one that leaves an exclusive connection idle wakes the reserver
-// the same way.
+// exclusive by a reserver, which waits under InternalMu until the count and the
+// streams in use (which cover every registered call, orphans included) are both
+// zero. A shared operation that finds a flag set takes InternalMu and waits on
+// the change channel; the endShared or stream free that leaves an exclusive
+// connection idle wakes the reserver the same way.
 //
-// admissionClosed only gates admission. InternalClosed remains the authority
-// on whether the connection is closed; both are written under InternalMu.
+// admissionClosed gates admission, call registration and the reader's
+// dispatch, which read it without the lock. InternalClosed remains the
+// authority for everything else; both are written under InternalMu.
 const (
 	admissionClosed    = 1 << 63
 	admissionExclusive = 1 << 62
@@ -177,26 +178,17 @@ func (c *Conn) freeStream(stream int) {
 	}
 }
 
-// settleOrphan returns an orphan's budget once its late response arrived or
-// it was otherwise released.
-//
-//go:noinline
-func (c *Conn) settleOrphan(call *InternalCallReq) {
-	c.InternalMu.Lock()
-	c.orphans--
-	call.orphaned = false
-	c.InternalMu.Unlock()
-}
-
+// markOrphan records that call stopped waiting for a response that may still
+// arrive: the call keeps its slot and stream until that response or close. It
+// reports whether the connection exceeded its orphan budget. Only call's
+// caller marks it, before it stops waiting; whoever releases the stream later
+// reads the mark after the call's state CAS that hands it the call.
 func (c *Conn) markOrphan(call *InternalCallReq) bool {
-	c.InternalMu.Lock()
-	defer c.InternalMu.Unlock()
-
-	if c.InternalClosed || c.InternalCalls.Get(call.InternalStreamID) != call || call.orphaned {
+	if c.admission.Load()&admissionClosed != 0 || c.InternalCalls.Get(call.InternalStreamID) != call || call.orphaned {
 		return false
 	}
 	call.orphaned = true
-	c.orphans++
+	n := int(c.orphans.Add(1))
 	budget := 1024
 	if c.InternalCfg != nil {
 		if c.InternalCfg.InternalOrphans != nil {
@@ -207,7 +199,7 @@ func (c *Conn) markOrphan(call *InternalCallReq) bool {
 		}
 	}
 	budget = min(budget, c.InternalStreams.NumStreams-1)
-	return c.orphans > budget
+	return n > budget
 }
 
 // pauseSharedReader is called only at a complete native frame/v5 segment
@@ -312,7 +304,10 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 			c.InternalMu.Unlock()
 			return nil, runtimeerrors.ErrConnectionClosed
 		}
-		if c.admission.Load()&admissionCountMask == 0 && c.InternalCalls.Len() == 0 && c.InternalStreams.InUse() == 0 {
+		// Every registered call, orphans included, holds a stream until it
+		// leaves the table, so no stream in use means no call either. The
+		// last endShared and the last stream free wake this loop.
+		if c.admission.Load()&admissionCountMask == 0 && c.InternalStreams.InUse() == 0 {
 			c.pauseWanted = true
 			c.pauseRequested.Store(true)
 			c.readerPaused = make(chan struct{})

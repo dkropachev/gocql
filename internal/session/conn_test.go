@@ -1871,10 +1871,8 @@ func TestConn(t *testing.T) {
 					t.Fatal("Close did not wait for the in-flight exec cleanup")
 				}
 
-				c.InternalMu.Lock()
-				defer c.InternalMu.Unlock()
-				if c.InternalCalls != nil {
-					t.Fatal("expected in-flight calls to be detached on Close")
+				if n := c.InternalCalls.Len(); n != 0 {
+					t.Fatalf("expected in-flight calls to be detached on Close, %d left", n)
 				}
 			})
 		})
