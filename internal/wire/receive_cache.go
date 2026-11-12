@@ -3,18 +3,31 @@
 
 package wire
 
-import "sync"
+import (
+	"sync"
+	"sync/atomic"
+)
 
 // ReceiveCache reuses only fully released raw v4 frame allocations. One
 // session owns it, with hard idle byte/object/individual limits independent of
 // connection/shard counts. Outstanding page bytes are ordinary demand, not idle.
 type ReceiveCache struct {
-	entries      [][]byte
-	bytes        int
-	epoch        uint64
-	hits, misses uint64
-	mu           sync.Mutex
-	closed       bool
+	entries [][]byte
+	bytes   int
+	epoch   uint64
+	mu      sync.Mutex
+	closed  bool
+	// The statistics are atomic so that Stats, which every speculation
+	// decision reads through the session metrics, never takes mu. The
+	// retained figures mirror bytes and len(entries), stored under mu.
+	hits, misses                   atomic.Uint64
+	retainedBytes, retainedObjects atomic.Int64
+}
+
+// publishRetained mirrors the retained size into the statistics; c.mu must be held.
+func (c *ReceiveCache) publishRetained() {
+	c.retainedBytes.Store(int64(c.bytes))
+	c.retainedObjects.Store(int64(len(c.entries)))
 }
 
 const ReceiveCacheMaxBytes = 16 << 20
@@ -40,19 +53,20 @@ func (c *ReceiveCache) Acquire(n int) ([]byte, uint64) {
 			}
 		}
 		if best >= 0 {
-			c.hits++
+			c.hits.Add(1)
 			b := c.entries[best]
 			c.bytes -= cap(b)
 			last := len(c.entries) - 1
 			c.entries[best] = c.entries[last]
 			c.entries[last] = nil
 			c.entries = c.entries[:last]
+			c.publishRetained()
 			c.mu.Unlock()
 			return b[:n], epoch
 		}
 	}
-	c.misses++
 	c.mu.Unlock()
+	c.misses.Add(1)
 	return make([]byte, n), epoch
 }
 func (c *ReceiveCache) Release(b []byte, epoch uint64) {
@@ -61,6 +75,8 @@ func (c *ReceiveCache) Release(b []byte, epoch uint64) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	// Eviction may run before an early return, so publish on every exit.
+	defer c.publishRetained()
 	if c.closed || epoch != c.epoch {
 		return
 	}
@@ -94,6 +110,7 @@ func (c *ReceiveCache) Clear() {
 	c.entries = nil
 	c.bytes = 0
 	c.epoch++
+	c.publishRetained()
 	c.mu.Unlock()
 }
 func (c *ReceiveCache) Close() {
@@ -106,6 +123,7 @@ func (c *ReceiveCache) Close() {
 	c.bytes = 0
 	c.epoch++
 	c.closed = true
+	c.publishRetained()
 	c.mu.Unlock()
 }
 func (c *ReceiveCache) Storage() (bytes, objects int) {
@@ -128,7 +146,5 @@ func (c *ReceiveCache) Stats() ReceiveCacheStats {
 	if c == nil {
 		return ReceiveCacheStats{}
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return ReceiveCacheStats{Hits: c.hits, Misses: c.misses, RetainedBytes: c.bytes, RetainedObjects: len(c.entries)}
+	return ReceiveCacheStats{Hits: c.hits.Load(), Misses: c.misses.Load(), RetainedBytes: int(c.retainedBytes.Load()), RetainedObjects: int(c.retainedObjects.Load())}
 }
