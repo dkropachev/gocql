@@ -69,9 +69,13 @@ type BuilderScratch struct {
 	slab  []byte
 	parts []builderPart
 	tail  []indexedSpan
-	// dirtyParts and dirtyTail count the leading descriptors the last
-	// encoding may have left set.
-	dirtyParts, dirtyTail int
+	// out is the index of a chain Wrap built around a frozen one.
+	out []indexedSpan
+	// frame holds the bytes Wrap's envelope adds around the chain.
+	frame [16]byte
+	// dirtyParts, dirtyTail and dirtyOut count the leading descriptors the
+	// last encoding may have left set.
+	dirtyParts, dirtyTail, dirtyOut int
 }
 
 // Scratch keeps storage an encoding outgrew it with, up to these sizes, so
@@ -92,7 +96,49 @@ func NewBuilderScratch(slab, spans int) *BuilderScratch {
 func (s *BuilderScratch) Reset() {
 	clear(s.parts[:s.dirtyParts])
 	clear(s.tail[:s.dirtyTail])
-	s.dirtyParts, s.dirtyTail = 0, 0
+	clear(s.out[:s.dirtyOut])
+	s.dirtyParts, s.dirtyTail, s.dirtyOut = 0, 0, 0
+}
+
+// FrameBytes returns 16 bytes of s's storage for a Wrap envelope's header and
+// trailer. They stay valid until s is reused.
+func (s *BuilderScratch) FrameBytes() []byte { return s.frame[:] }
+
+// Wrap returns head, then c, then trailer as one chain whose span index lives
+// in s, so it allocates only while s is smaller than the chain. The result
+// aliases s and c's storage; s may be reused only after it drained.
+func (s *BuilderScratch) Wrap(head Span, c Chain, trailer Span) (Chain, error) {
+	n := c.count() + 1
+	var out []indexedSpan
+	if cap(s.out) >= n {
+		out = s.out[:n]
+		s.dirtyOut = n
+	} else {
+		out = make([]indexedSpan, n)
+		if n <= maxScratchSpans {
+			s.out, s.dirtyOut = out, n
+		}
+	}
+	end := int64(head.Len())
+	var err error
+	i := 0
+	var ferr error
+	_ = c.Each(func(sp Span) error {
+		if end, ferr = addLength(end, sp.Len()); ferr != nil {
+			return ferr
+		}
+		out[i] = indexedSpan{span: sp, end: end}
+		i++
+		return nil
+	})
+	if ferr != nil {
+		return Chain{}, ferr
+	}
+	if end, err = addLength(end, trailer.Len()); err != nil {
+		return Chain{}, err
+	}
+	out[i] = indexedSpan{span: trailer, end: end}
+	return Chain{head: head, tail: out, len: end}, nil
 }
 
 // UseScratch starts an encoding in s. The builder must be empty.

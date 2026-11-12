@@ -31,8 +31,49 @@ func EncodeSpans(payload wire.Chain, selfContained, compressed bool) (wire.Chain
 	}
 	headerSize := HeaderSize(compressed)
 	header := make([]byte, headerSize)
-	fields := headerSize - Crc24Size
-	packed := uint64(payload.Len())
+	putHeader(header, payload.Len(), uncompressedLen, selfContained, compressed)
+	sum := crcSeed
+	spans := []wire.Span{wire.Borrow(header)}
+	_ = payload.Each(func(s wire.Span) error {
+		sum = crc32.Update(sum, crc32.IEEETable, s.Bytes())
+		spans = append(spans, s)
+		return nil
+	})
+	trailer := make([]byte, 4)
+	binary.LittleEndian.PutUint32(trailer, sum)
+	spans = append(spans, wire.Borrow(trailer))
+	return wire.NewChain(spans...)
+}
+
+// EncodeUncompressedInto is EncodeSpans for an uncompressed payload that fits
+// one segment, writing the header, trailer and span index into sc: it does not
+// allocate once sc has grown. The result aliases sc, so sc may be reused only
+// after the returned chain drained.
+func EncodeUncompressedInto(sc *wire.BuilderScratch, payload wire.Chain, selfContained bool) (wire.Chain, error) {
+	if payload.Len() > MaxPayloadSize {
+		return wire.Chain{}, fmt.Errorf("gocql: segment payload exceeds %d", MaxPayloadSize)
+	}
+	var hdr [UncompressedHeaderSize]byte
+	putHeader(hdr[:], payload.Len(), 0, selfContained, false)
+	sum := crcSeed
+	_ = payload.Each(func(s wire.Span) error {
+		sum = crc32.Update(sum, crc32.IEEETable, s.Bytes())
+		return nil
+	})
+	frame := sc.FrameBytes()
+	copy(frame, hdr[:])
+	binary.LittleEndian.PutUint32(frame[UncompressedHeaderSize:], sum)
+	return sc.Wrap(wire.Borrow(frame[:UncompressedHeaderSize]), payload,
+		wire.Borrow(frame[UncompressedHeaderSize:UncompressedHeaderSize+Crc32Size]))
+}
+
+// crcSeed is the CRC32 state after the segment payload's fixed initial bytes.
+var crcSeed = crc32.ChecksumIEEE([]byte{0xfa, 0x2d, 0x55, 0xca})
+
+// putHeader writes a segment header, its CRC24 included, into header.
+func putHeader(header []byte, payloadLen int64, uncompressedLen int64, selfContained, compressed bool) {
+	fields := len(header) - Crc24Size
+	packed := uint64(payloadLen)
 	if compressed {
 		packed |= uint64(uncompressedLen) << 17
 		if selfContained {
@@ -48,17 +89,6 @@ func EncodeSpans(payload wire.Chain, selfContained, compressed bool) (wire.Chain
 	for i := 0; i < 3; i++ {
 		header[fields+i] = byte(checksum >> (8 * i))
 	}
-	sum := crc32.ChecksumIEEE([]byte{0xfa, 0x2d, 0x55, 0xca})
-	spans := []wire.Span{wire.Borrow(header)}
-	_ = payload.Each(func(s wire.Span) error {
-		sum = crc32.Update(sum, crc32.IEEETable, s.Bytes())
-		spans = append(spans, s)
-		return nil
-	})
-	trailer := make([]byte, 4)
-	binary.LittleEndian.PutUint32(trailer, sum)
-	spans = append(spans, wire.Borrow(trailer))
-	return wire.NewChain(spans...)
 }
 
 // ReadOwnedPayload receives directly into final immutable storage. The returned

@@ -57,6 +57,30 @@ func BenchmarkWriter(b *testing.B) {
 			}
 		}
 	})
+	// BuildRequestInto is BuildRequest through the production entry point:
+	// BuildTypedRequestInto with pooled scratch, as Conn.InternalSendTyped uses.
+	b.Run("BuildRequestInto", func(b *testing.B) {
+		for _, proto := range []byte{4, 5} {
+			b.Run(fmt.Sprintf("v%d", proto), func(b *testing.B) {
+				payload := bytes.Repeat([]byte{'v'}, 32)
+				values, _ := wire.NewChain(wire.Borrow(binary.BigEndian.AppendUint32(nil, 32)), wire.Borrow(payload))
+				c := &Conn{InternalVersion: proto}
+				c.InternalInitFramerCache()
+				req := &model.AttemptRequest{Statement: "INSERT INTO tbl (v) VALUES (?)", Values: values, ValueCount: 1, Consistency: cqltype.One}
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					scratch := getFrameScratch()
+					out, _, err := c.nativeProtocol().BuildTypedRequestInto(req, 3, scratch)
+					if err != nil {
+						b.Fatal(err)
+					}
+					typedTransportBenchmarkSink = out
+					putFrameScratch(scratch)
+				}
+			})
+		}
+	})
 	// Uses real loopback sockets and the actual coalescer; no wrapper hides writev.
 	// OS syscall counts are collected in separate strace runs of the same cases.
 	b.Run("SocketWrites", func(b *testing.B) {
@@ -212,4 +236,27 @@ func (w *typedTLSRecorder) Write(p []byte) (int, error) {
 	}
 	w.next++
 	return w.conn.Write(p)
+}
+
+func TestBuildRequestIntoV5Allocs(t *testing.T) {
+	payload := bytes.Repeat([]byte{'v'}, 32)
+	values, _ := wire.NewChain(wire.Borrow(binary.BigEndian.AppendUint32(nil, 32)), wire.Borrow(payload))
+	c := &Conn{InternalVersion: 5}
+	c.InternalInitFramerCache()
+	req := &model.AttemptRequest{Statement: "INSERT INTO tbl (v) VALUES (?)", Values: values, ValueCount: 1, Consistency: cqltype.One}
+	proto := c.nativeProtocol()
+	// A held scratch, not the pool: sync.Pool drops items under -race.
+	scratch := wire.NewBuilderScratch(256, 16)
+	build := func() {
+		out, _, err := proto.BuildTypedRequestInto(req, 3, scratch)
+		if err != nil {
+			t.Fatal(err)
+		}
+		typedTransportBenchmarkSink = out
+		scratch.Reset()
+	}
+	build()
+	if got := testing.AllocsPerRun(100, build); got != 0 {
+		t.Fatalf("v5 BuildTypedRequestInto allocs = %v, want 0", got)
+	}
 }
