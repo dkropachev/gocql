@@ -24,7 +24,8 @@ type Snapshot struct {
 	// still in use are not included.
 	ReceiveCacheBytes, ReceiveCacheObjects int
 	// Requests counts executions started, and Attempts the requests they
-	// sent to nodes, including retries and speculative attempts.
+	// sent to nodes, including retries and speculative attempts. While an
+	// admission is being refused, Requests may briefly include it.
 	Requests, Attempts uint64
 	// Errors counts executions that ended with an error, and Cancelled
 	// those of them that ended because their context was cancelled or its
