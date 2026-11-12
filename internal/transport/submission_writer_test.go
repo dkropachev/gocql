@@ -226,8 +226,12 @@ func TestSubmissionWriter(t *testing.T) {
 		if !late.unsent() {
 			t.Fatal("ticket queued behind a failed write reported as transmitted")
 		}
-		if !socket.closed.Load() {
-			t.Fatal("connection not closed after the failed write")
+		// The writer finishes the tickets before it closes the connection.
+		for deadline := time.Now().Add(10 * time.Second); !socket.closed.Load(); {
+			if time.Now().After(deadline) {
+				t.Fatal("connection not closed after the failed write")
+			}
+			time.Sleep(time.Millisecond)
 		}
 		if _, err := conn.submitTyped(context.Background(), chain, wire.NewLease(chain, nil)); !errors.Is(err, runtimeerrors.ErrConnectionClosed) {
 			t.Fatal("submit after a failed write accepted", err)
