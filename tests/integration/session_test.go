@@ -858,8 +858,8 @@ func TestSession(t *testing.T) {
 
 			const connectTimeout = 5 * time.Second
 			// The maintenance socket carries plaintext CQL even when TCP clients use
-			// TLS. A builder cannot drop TLS once set, so this starts from config.New
-			// rather than createV2Cluster and copies the fixture's non-TLS settings.
+			// TLS, so this starts from config.New rather than createV2Cluster and
+			// copies only the fixture's settings that apply to the socket.
 			c := config.New("unix:"+socketFiles[0]).
 				WithCQLVersion(*flagCQL).
 				WithSchemaAgreement(2*time.Minute, 200*time.Millisecond).

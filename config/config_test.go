@@ -85,10 +85,16 @@ func TestConfigBuilder(t *testing.T) {
 		c := mustBuildConfig(t, New("h").WithConnectionsPerShard(3).WithConnectionsPerShard(4).
 			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.One) }).
 			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.All) }).
-			WithClientRoutes("c1").WithClientRouteHostname("c1", "a").WithClientRouteHostname("c1", "b").
+			WithClientRoutes(mustRoutes(NewClientRoutes().WithRoute("c1", "a").WithRoute("c2", "x"))).
+			WithClientRoutes(mustRoutes(NewClientRoutes().WithRoute("c1", "a").WithRoute("c1", "b"))).
 			NoAdvancedShardAwareness()).settings
-		if c.Pool.ConnectionsPerShard != 4 || c.DefaultProfile.Consistency != cql.All || c.ClientRoutes.HostnameOverrides["c1"] != "b" {
-			t.Fatalf("pool %+v consistency %v overrides %v", c.Pool, c.DefaultProfile.Consistency, c.ClientRoutes.HostnameOverrides)
+		if c.Pool.ConnectionsPerShard != 4 || c.DefaultProfile.Consistency != cql.All {
+			t.Fatalf("pool %+v consistency %v", c.Pool, c.DefaultProfile.Consistency)
+		}
+		// The last WithClientRoutes replaces every route and override; the
+		// last WithRoute for an ID replaces its hostname.
+		if r := c.ClientRoutes; !reflect.DeepEqual(r.ConnectionIDs, []string{"c1"}) || !reflect.DeepEqual(r.HostnameOverrides, map[string]string{"c1": "b"}) {
+			t.Fatalf("client routes = %+v", *r)
 		}
 	})
 
@@ -100,7 +106,7 @@ func TestConfigBuilder(t *testing.T) {
 			WithMetadataRefresh(time.Second).WithMetadataRefresh(0).
 			WithPreparedCacheSize(10).WithPreparedCacheSize(0).
 			WithTimestampGenerator(func() int64 { return 1 }).WithServerTimestamps()).settings
-		if c.KeepaliveInterval != 0 || c.Pool.ConnectionsPerHost != 0 || c.Pool.ConnectionsPerShard != 2 || c.Pool.ShardAwarePort ||
+		if c.KeepaliveInterval != 0 || c.Pool.ConnectionsPerHost != 0 || c.Pool.ConnectionsPerShard != 2 || c.Pool.AdvancedShardAwareness.Enabled ||
 			c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.TimestampGenerator != nil {
 			t.Fatalf("a later call did not replace an earlier one: %+v", c)
 		}
@@ -127,7 +133,7 @@ func TestConfigBuilder(t *testing.T) {
 			WithHeartbeat(-time.Second, -time.Second).WithHeartbeat(0, 0).
 			WithIgnoreEvents(implCluster.OverflowEvent).WithIgnoreEvents(implCluster.StatusEvent).
 			WithTLSSource(staticTLS{}).WithTLS(nil).
-			WithClientRoutes("c1").WithClientRouteHostname("c1", "a").WithClientRouteTLS(true).WithClientRoutes().
+			WithClientRoutes(mustRoutes(NewClientRoutes().WithRoute("c1", "a"))).WithClientRoutes(ClientRoutes{}).
 			WithMetadataKeyspaces("").WithMetadataKeyspaces().
 			WithDiscovery(false).WithDiscovery(true).
 			WithConfigReport(false).WithConfigReport(true).
@@ -176,11 +182,8 @@ func TestConfigBuilder(t *testing.T) {
 			b    *ConfigBuilder
 			want string
 		}{
-			"NoConfig":         {New("h").WithTLSSource(staticTLS{}), "returned no config"},
-			"UnixSocket":       {New("/var/lib/scylla/cql.m").WithTLSSource(source), "Unix TLS"},
-			"UnverifiedRoutes": {New("h").WithClientRoutes("c").WithClientRouteTLS(true).WithTLS(&tls.Config{InsecureSkipVerify: true}), "client routes TLS"},
-			"OrphanRouteHost":  {New("h").WithClientRouteHostname("c", "a"), "without WithClientRoutes"},
-			"OrphanRouteTLS":   {New("h").WithClientRouteTLS(true), "without WithClientRoutes"},
+			"NoConfig":   {New("h").WithTLSSource(staticTLS{}), "returned no config"},
+			"UnixSocket": {New("/var/lib/scylla/cql.m").WithTLSSource(source), "Unix TLS"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				if _, err := tc.b.Build(); err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -200,13 +203,63 @@ func TestConfigBuilder(t *testing.T) {
 		}
 	})
 
-	t.Run("ClientRoutesInfersNoAdvancedShardAwareness", func(t *testing.T) {
-		c := mustBuildConfig(t, New("h").WithClientRoutes("c1")).settings
-		if c.Pool.ShardAwarePort {
+	t.Run("ClientRoutes", func(t *testing.T) {
+		b := NewClientRoutes().WithRoute("c1", "a").WithRoute("c2", "")
+		routes := mustRoutes(b)
+		b.WithRoute("c1", "changed").WithRoute("c3", "")
+		got := routes.Routes()
+		if want := []ClientRoute{{ConnectionID: "c1", Hostname: "a"}, {ConnectionID: "c2"}}; !reflect.DeepEqual(got, want) {
+			t.Fatalf("Routes() = %+v, want %+v unaffected by later builder calls", got, want)
+		}
+		got[0].Hostname = "mutated"
+		if routes.Routes()[0].Hostname != "a" {
+			t.Fatal("Routes() exposed the internal slice")
+		}
+		r := mustBuildConfig(t, New("h").WithClientRoutes(routes)).settings.ClientRoutes
+		if !reflect.DeepEqual(r.ConnectionIDs, []string{"c1", "c2"}) || !reflect.DeepEqual(r.HostnameOverrides, map[string]string{"c1": "a"}) {
+			t.Fatalf("client routes settings = %+v", *r)
+		}
+		if len((ClientRoutes{}).Routes()) != 0 {
+			t.Fatal("zero ClientRoutes has routes")
+		}
+		for name, b := range map[string]*ClientRoutesBuilder{
+			"NoRoutes": NewClientRoutes(),
+			"EmptyID":  NewClientRoutes().WithRoute("", "a"),
+		} {
+			t.Run(name, func(t *testing.T) {
+				if _, err := b.Build(); err == nil {
+					t.Fatal("Build accepted the routes")
+				} else if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "client routes" {
+					t.Fatalf("Build = %v, want a client routes ValidationError", err)
+				}
+			})
+		}
+	})
+
+	t.Run("ClientRoutesAdvancedShardAwareness", func(t *testing.T) {
+		routes := mustRoutes(NewClientRoutes().WithRoute("c1", ""))
+		if c := mustBuildConfig(t, New("h").WithClientRoutes(routes)).settings; c.Pool.AdvancedShardAwareness.Enabled {
 			t.Fatal("advanced shard awareness stayed on under client routes")
 		}
-		if _, err := New("h").WithAdvancedShardAwareness(49152, 65535).WithClientRoutes("c1").Build(); err == nil {
-			t.Fatal("explicit advanced shard awareness with client routes was accepted")
+		c := mustBuildConfig(t, New("h").WithAdvancedShardAwareness(50000, 60000).WithClientRoutes(routes)).settings
+		if !c.Pool.AdvancedShardAwareness.Enabled || c.Pool.AdvancedShardAwareness.SourcePortStart != 50000 || c.Pool.AdvancedShardAwareness.SourcePortEnd != 60000 {
+			t.Fatalf("explicit advanced shard awareness under client routes: %+v", c.Pool)
+		}
+		if c := mustBuildConfig(t, New("h").WithDefaultAdvancedShardAwareness().WithClientRoutes(routes)).settings; !c.Pool.AdvancedShardAwareness.Enabled {
+			t.Fatal("WithDefaultAdvancedShardAwareness did not turn it on under client routes")
+		}
+		if c := mustBuildConfig(t, New("h").WithDefaultAdvancedShardAwareness().NoAdvancedShardAwareness().WithClientRoutes(routes)).settings; c.Pool.AdvancedShardAwareness.Enabled {
+			t.Fatal("NoAdvancedShardAwareness did not win")
+		}
+	})
+
+	t.Run("DefaultAdvancedShardAwareness", func(t *testing.T) {
+		c := mustBuildConfig(t, New("h").WithAdvancedShardAwareness(50000, 60000).WithDefaultAdvancedShardAwareness()).settings
+		if !c.Pool.AdvancedShardAwareness.Enabled || c.Pool.AdvancedShardAwareness.SourcePortStart != 49152 || c.Pool.AdvancedShardAwareness.SourcePortEnd != 65535 {
+			t.Fatalf("WithDefaultAdvancedShardAwareness: %+v", c.Pool)
+		}
+		if c := mustBuildConfig(t, New("h").NoAdvancedShardAwareness().WithDefaultAdvancedShardAwareness()).settings; !c.Pool.AdvancedShardAwareness.Enabled {
+			t.Fatal("WithDefaultAdvancedShardAwareness did not replace NoAdvancedShardAwareness")
 		}
 	})
 
@@ -232,16 +285,16 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("PoolSize", func(t *testing.T) {
 		c := mustBuildConfig(t, New("h").WithConnectionsPerHost(3)).settings
-		if c.Pool.ConnectionsPerHost != 3 || c.Pool.ConnectionsPerShard != 0 || c.Pool.ShardAwarePort {
+		if c.Pool.ConnectionsPerHost != 3 || c.Pool.ConnectionsPerShard != 0 || c.Pool.AdvancedShardAwareness.Enabled {
 			t.Fatalf("WithConnectionsPerHost(3) pool = %+v, want 3 per host without the shard-aware port", c.Pool)
 		}
 		c = mustBuildConfig(t, New("h").WithConnectionsPerHost(3).NoAdvancedShardAwareness()).settings
-		if c.Pool.ConnectionsPerHost != 3 || c.Pool.ShardAwarePort {
+		if c.Pool.ConnectionsPerHost != 3 || c.Pool.AdvancedShardAwareness.Enabled {
 			t.Fatalf("PerHost with NoAdvancedShardAwareness: %+v", c.Pool)
 		}
 		c = mustBuildConfig(t, New("h").WithConnectionsPerHost(3).WithConnectionsPerShard(2).
 			WithAdvancedShardAwareness(50000, 60000).WithMaxExcessPerShard(1)).settings
-		if c.Pool.ConnectionsPerShard != 2 || c.Pool.ConnectionsPerHost != 0 || !c.Pool.ShardAwarePort || c.Pool.MaxExcessPerShard != 1 {
+		if c.Pool.ConnectionsPerShard != 2 || c.Pool.ConnectionsPerHost != 0 || !c.Pool.AdvancedShardAwareness.Enabled || c.Pool.MaxExcessPerShard != 1 {
 			t.Fatalf("PerShard after PerHost: %+v", c.Pool)
 		}
 		for name, b := range map[string]*ConfigBuilder{
@@ -355,7 +408,7 @@ func TestConfigBuilder(t *testing.T) {
 		c := mustBuildConfig(t, New("h").WithHeartbeat(0, 0).WithMetadataRefresh(0).WithPreparedCacheSize(0).WithServerTimestamps().
 			WithConfigReport(false).WithDiscovery(false).WithAutomaticSchemaAgreement(false).WithRefreshAfterAgreement(false).NoAdvancedShardAwareness().WithNagle(true)).settings
 		if c.KeepaliveInterval != 0 || c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.TimestampGenerator != nil ||
-			c.ReportConfiguration || c.Metadata.InitialDiscovery || c.Metadata.AutomaticAgreement || c.Metadata.RefreshAfterAgreement || c.Pool.ShardAwarePort || c.NoDelay {
+			c.ReportConfiguration || c.Metadata.InitialDiscovery || c.Metadata.AutomaticAgreement || c.Metadata.RefreshAfterAgreement || c.Pool.AdvancedShardAwareness.Enabled || c.NoDelay {
 			t.Fatalf("a disabling setting left its feature on: %+v", c)
 		}
 		if c := mustBuildConfig(t, New("h").WithNagle(true).WithNagle(false)).settings; !c.NoDelay {
@@ -386,6 +439,8 @@ func TestConfigBuilder(t *testing.T) {
 		}
 	})
 }
+
+func mustRoutes(b *ClientRoutesBuilder) ClientRoutes { return codecTestMust(b.Build()) }
 
 func codecTestMust[T any](v T, err error) T {
 	if err != nil {

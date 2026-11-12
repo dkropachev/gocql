@@ -14,14 +14,14 @@ func makeIntegrationShardAwareCluster() shardAwareTestCluster {
 	return shardAwareTestCluster{
 		useTLS: *flagRunSslTest,
 		port:   shardTestContactPort(getClusterHosts(), fixturePort()),
-		connect: func(ctx context.Context, dialer legacyDialer, disableShardAwarePort bool) (*gocql.Session[testDialect], error) {
+		connect: func(ctx context.Context, dialer legacyDialer, noAdvancedShardAwareness bool) (*gocql.Session[testDialect], error) {
 			config := createV2Cluster().WithDialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 				if target.LocalAddress.IsValid() {
 					ctx = context.WithValue(ctx, scyllaSourcePortCtx{}, target.LocalAddress.Port())
 				}
 				return dialer.DialContext(ctx, target.Network, target.Address)
 			}))
-			if disableShardAwarePort {
+			if noAdvancedShardAwareness {
 				config.NoAdvancedShardAwareness()
 			}
 			built, err := config.Build()

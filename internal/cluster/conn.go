@@ -27,12 +27,19 @@ package cluster
 import (
 	"context"
 
+	"github.com/scylladb/gocql/v2/internal/connectivity"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 
 	"time"
 
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 )
+
+// advancedShardAwareness reports whether new connections dial the shard-aware
+// port. A session without a typed config keeps it on.
+func advancedShardAwareness(typed *connectivity.Config) bool {
+	return typed == nil || typed.Pool.AdvancedShardAwareness.Enabled && typed.Pool.ConnectionsPerHost == 0
+}
 
 func (s *Core) connectShard(ctx context.Context, host *implEndpoint.HostInfo, errorHandler implTransport.ConnErrorHandler,
 	shardID, nrShards int) (*implTransport.Conn, error) {
@@ -112,5 +119,5 @@ func sessionDialWithoutObserver(s *Core, ctx context.Context, host *implEndpoint
 	if s.privateStorage.driverConfigReporter != nil {
 		reporter = s.privateStorage.driverConfigReporter
 	}
-	return implTransport.Dial(ctx, host, cfg, errorHandler, shardID, nrShards, implTransport.Opening{Context: s.privateStorage.InternalCtx, Hooks: s.NewConnectionHooks(), Identity: implTransport.InternalStartupIdentity{DriverName: s.privateStorage.InternalCfg.DriverName, DriverVersion: s.privateStorage.InternalCfg.DriverVersion, ApplicationInfo: s.privateStorage.InternalCfg.ApplicationInfo, SessionID: s.privateStorage.id}, Reporter: reporter, MetadataTimeout: s.privateStorage.InternalCfg.MetadataSchemaRequestTimeout, CoalesceWait: s.privateStorage.InternalCfg.WriteCoalesceWaitTime, PoolPolicy: implTransport.InternalConnectionPoolPolicy{InternalDisableShardAware: s.privateStorage.InternalCfg.DisableShardAwarePort, InternalMaxExcessRate: s.privateStorage.InternalCfg.MaxExcessShardConnectionsRate}, MaxRequests: s.privateStorage.InternalCfg.MaxRequestsPerConn, FrameObserver: s.privateStorage.frameObserver, StreamObserver: s.privateStorage.streamObserver})
+	return implTransport.Dial(ctx, host, cfg, errorHandler, shardID, nrShards, implTransport.Opening{Context: s.privateStorage.InternalCtx, Hooks: s.NewConnectionHooks(), Identity: implTransport.InternalStartupIdentity{DriverName: s.privateStorage.InternalCfg.DriverName, DriverVersion: s.privateStorage.InternalCfg.DriverVersion, ApplicationInfo: s.privateStorage.InternalCfg.ApplicationInfo, SessionID: s.privateStorage.id}, Reporter: reporter, MetadataTimeout: s.privateStorage.InternalCfg.MetadataSchemaRequestTimeout, CoalesceWait: s.privateStorage.InternalCfg.WriteCoalesceWaitTime, PoolPolicy: implTransport.InternalConnectionPoolPolicy{InternalDisableShardAware: !advancedShardAwareness(cfg.TypedConfig), InternalMaxExcessRate: s.privateStorage.InternalCfg.MaxExcessShardConnectionsRate}, MaxRequests: s.privateStorage.InternalCfg.MaxRequestsPerConn, FrameObserver: s.privateStorage.frameObserver, StreamObserver: s.privateStorage.streamObserver})
 }

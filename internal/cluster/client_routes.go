@@ -72,19 +72,6 @@ type ClientRoutesConfig struct {
 	// endpoints are always blocked. This field will be removed in a future
 	// release.
 	BlockUnknownEndpoints bool
-
-	// EnableShardAwareness controls advanced shard awareness for ClientRoutes:
-	// choosing a connection's source port so Scylla assigns it to a desired shard.
-	// Per-shard connection pooling and token-to-shard routing remain enabled when
-	// this option is false.
-	//
-	// By default this is false because PrivateLink paths commonly use NAT.
-	//
-	// Set this to true only when the client-route endpoint forwards to Scylla's
-	// Proxy Protocol v2 shard-aware CQL listener and the proxy supplies the original
-	// client source port in the Proxy Protocol v2 header. clusterSettings's
-	// DisableShardAwarePort setting takes precedence.
-	EnableShardAwareness bool
 }
 
 func (cfg *ClientRoutesConfig) Validate() error {

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
@@ -386,9 +387,13 @@ func (r *driverConfigReporter) InternalUpdateStartupOptions(opts map[string]stri
 // than a snapshot from whenever it was first requested.
 func (r *driverConfigReporter) buildReport(isScyllaConn bool) (string, error) {
 	cfg := &r.session.privateStorage.InternalCfg
+	var typed *connectivity.Config
+	if connCfg := r.session.privateStorage.InternalConnCfg; connCfg != nil {
+		typed = connCfg.TypedConfig
+	}
 	report := InternalDriverConfigReport{
 		Version:      InternalDriverConfigVersion,
-		Connection:   buildConnectionReport(cfg),
+		Connection:   buildConnectionReport(cfg, typed),
 		ControlPlane: buildControlPlaneReport(cfg, isScyllaConn),
 		Query:        r.session.BuildQueryReport(),
 	}
@@ -396,11 +401,11 @@ func (r *driverConfigReporter) buildReport(isScyllaConn bool) (string, error) {
 	return string(data), err
 }
 
-func buildConnectionReport(cfg *InternalClusterSettings) connectionReport {
+func buildConnectionReport(cfg *InternalClusterSettings, typed *connectivity.Config) connectionReport {
 	report := connectionReport{
 		Connect:      connectReport{TimeoutMs: positiveMillis(cfg.ConnectTimeout)},
 		Requests:     buildRequestsReport(cfg),
-		Pool:         connectionPoolReport{ShardAware: shardAwareReport{Enabled: shardAwareEnabled(cfg)}},
+		Pool:         connectionPoolReport{ShardAware: shardAwareReport{Enabled: shardAwareEnabled(cfg, typed)}},
 		Socket:       buildSocketReport(),
 		Reconnection: reconnectionGroupReport{Policy: buildReconnectionPolicyReport(cfg.ReconnectionPolicy)},
 	}
@@ -540,8 +545,9 @@ func effectiveInFlightMax(configured int) int {
 // shard-aware port at all. Two independent things have to hold, and the
 // schema has one boolean for both.
 //
-// DisableShardAwarePort must be unset: it makes scyllaConnPicker.NextShard
-// return no shard, which sends every dial down the plain path.
+// Advanced shard awareness must be on in the typed config: off, it makes
+// scyllaConnPicker.NextShard return no shard, which sends every dial down the
+// plain path.
 //
 // The dialer must also be able to target a shard. Session.dialWithoutObserver
 // type-asserts HostDialer to ShardDialer and silently falls back to DialHost
@@ -549,8 +555,8 @@ func effectiveInFlightMax(configured int) int {
 // DialShard can never reach the shard-aware port however the flag is set.
 // A nil HostDialer is capable: connConfig substitutes a *scyllaDialer, which
 // implements ShardDialer.
-func shardAwareEnabled(cfg *InternalClusterSettings) bool {
-	if cfg.DisableShardAwarePort {
+func shardAwareEnabled(cfg *InternalClusterSettings, typed *connectivity.Config) bool {
+	if !advancedShardAwareness(typed) {
 		return false
 	}
 	if cfg.HostDialer == nil {

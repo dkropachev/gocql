@@ -19,6 +19,7 @@ import (
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/santhosh-tekuri/jsonschema/v6/kind"
 
+	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -78,7 +79,7 @@ func TestDriverConfigReport(t *testing.T) {
 				t.Run(tt.name, func(t *testing.T) {
 					cfg := *InternalNewClusterSettings("127.0.0.1")
 					cfg.HostFilter = tt.filter
-					if diff := cmp.Diff(tt.want, buildConnectionReport(&cfg).NodePreference); diff != "" {
+					if diff := cmp.Diff(tt.want, buildConnectionReport(&cfg, nil).NodePreference); diff != "" {
 						t.Errorf("connection.node-preference mismatch:\n%s", diff)
 					}
 				})
@@ -89,7 +90,7 @@ func TestDriverConfigReport(t *testing.T) {
 			cfg := *InternalNewClusterSettings("127.0.0.1")
 			cfg.ReadTimeout = 0
 			cfg.WriteTimeout = 0
-			report := buildConnectionReport(&cfg)
+			report := buildConnectionReport(&cfg, nil)
 			if report.Read != nil {
 				t.Errorf("expected read to be omitted when ReadTimeout is 0, got %+v", report.Read)
 			}
@@ -103,7 +104,7 @@ func TestDriverConfigReport(t *testing.T) {
 			cfg.ReadTimeout = 5 * time.Second
 			cfg.WriteTimeout = 7 * time.Second
 			cfg.SslOpts = &transport.SslOptions{EnableHostVerification: true}
-			report = buildConnectionReport(&cfg)
+			report = buildConnectionReport(&cfg, nil)
 			if report.Read == nil || report.Read.TimeoutMs != 5000 {
 				t.Errorf("expected read.timeout-ms 5000, got %+v", report.Read)
 			}
@@ -117,14 +118,14 @@ func TestDriverConfigReport(t *testing.T) {
 			// HostDialer takes over connection setup entirely, so SslOpts is ignored
 			// (see clusterSettings.SslOpts) and the effective TLS state is unknown.
 			cfg.HostDialer = fakeHostDialer{}
-			report = buildConnectionReport(&cfg)
+			report = buildConnectionReport(&cfg, nil)
 			if report.TLS != nil {
 				t.Errorf("expected tls to be omitted when HostDialer is set, got %+v", report.TLS)
 			}
 		})
 
 		// TestDriverConfigReport/BuildConnectionReport/ShardAware covers both gates on reaching the
-		// shard-aware port. DisableShardAwarePort is the obvious one; the dialer's
+		// shard-aware port. Advanced shard awareness in the typed config is the obvious one; the dialer's
 		// capability is the one easy to miss, since Session.dialWithoutObserver falls
 		// back to DialHost silently when HostDialer is not a ShardDialer.
 		t.Run("ShardAware", func(t *testing.T) {
@@ -156,9 +157,12 @@ func TestDriverConfigReport(t *testing.T) {
 			for _, tt := range tests {
 				t.Run(tt.name, func(t *testing.T) {
 					cfg := *InternalNewClusterSettings("127.0.0.1")
-					cfg.DisableShardAwarePort = tt.disable
 					cfg.HostDialer = tt.hostDialer
-					if got := buildConnectionReport(&cfg).Pool.ShardAware.Enabled; got != tt.want {
+					var typed *connectivity.Config
+					if tt.disable {
+						typed = &connectivity.Config{}
+					}
+					if got := buildConnectionReport(&cfg, typed).Pool.ShardAware.Enabled; got != tt.want {
 						t.Errorf("shard-aware.enabled = %v, want %v", got, tt.want)
 					}
 				})
@@ -1006,7 +1010,7 @@ func TestDriverConfigReport(t *testing.T) {
 			cfg.HostDialer = hostDialer
 
 			_, canDialShard := hostDialer.(endpoint.ShardDialer)
-			if got := shardAwareEnabled(&cfg); got != canDialShard {
+			if got := shardAwareEnabled(&cfg, nil); got != canDialShard {
 				t.Errorf("%T: reported %v, but dialWithoutObserver would take the shard-aware path = %v",
 					hostDialer, got, canDialShard)
 			}

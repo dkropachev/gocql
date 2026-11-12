@@ -118,7 +118,7 @@ func (p *InternalTypedConnPicker) InFlight() int {
 func (p *InternalTypedConnPicker) NextShard() (int, int) {
 	p.InternalMu.Lock()
 	defer p.InternalMu.Unlock()
-	if p.closed || p.options.ConnectionsPerHost > 0 || !p.options.ShardAwarePort || p.InternalNrShards <= 1 || time.Now().Before(p.fallbackUntil) {
+	if p.closed || p.options.ConnectionsPerHost > 0 || !p.options.AdvancedShardAwareness.Enabled || p.InternalNrShards <= 1 || time.Now().Before(p.fallbackUntil) {
 		return 0, 0
 	}
 	shard := -1

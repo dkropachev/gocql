@@ -54,7 +54,6 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 	legacy.MaxPreparedStmts = config.PreparedCacheSize
 	legacy.MaxRequestsPerConn = config.Pool.MaxRequestsPerConnection
 	legacy.MaxExcessShardConnectionsRate = float32(config.Pool.MaxExcessPerShard)
-	legacy.DisableShardAwarePort = !config.Pool.ShardAwarePort || config.Pool.ConnectionsPerHost > 0
 	legacy.NumConns = config.Pool.ConnectionsPerHost
 	if legacy.NumConns == 0 {
 		legacy.NumConns = config.Pool.ConnectionsPerShard

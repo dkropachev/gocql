@@ -60,10 +60,12 @@ func TestConfig(t *testing.T) {
 	t.Run("Defaults", func(t *testing.T) {
 		t.Run("Transport", func(t *testing.T) {
 			c := settings.DefaultConfig("localhost")
-			if c.ConnectTimeout != 5*time.Second || c.DNSTimeout != 5*time.Second || c.ReadTimeout != 0 || c.WriteTimeout != 0 || c.SocketKeepalive != 0 || c.CoalesceWait != 0 || c.KeepaliveInterval != 30*time.Second || c.KeepaliveTimeout != 30*time.Second || c.Pool.SourcePortStart != 49152 || c.Pool.SourcePortEnd != 65535 {
+			if c.ConnectTimeout != 5*time.Second || c.DNSTimeout != 5*time.Second || c.ReadTimeout != 0 || c.WriteTimeout != 0 || c.SocketKeepalive != 0 || c.CoalesceWait != 0 || c.KeepaliveInterval != 30*time.Second || c.KeepaliveTimeout != 30*time.Second || c.Pool.AdvancedShardAwareness.SourcePortStart != 49152 || c.Pool.AdvancedShardAwareness.SourcePortEnd != 65535 {
 				t.Fatal("transport defaults", c)
 			}
-			for _, change := range []func(*settings.Config){func(c *settings.Config) { c.Pool.ConnectionsPerShard = 0 }, func(c *settings.Config) { c.Pool.MaxRequestsPerConnection = 0 }, func(c *settings.Config) { c.Pool.MaxOrphanedStreams = -1 }, func(c *settings.Config) { c.Pool.SourcePortStart = 0 }, func(c *settings.Config) { c.Pool.SourcePortStart = 65535; c.Pool.SourcePortEnd = 49152 }, func(c *settings.Config) { c.Linger = cqltype.Option[time.Duration]{Value: time.Millisecond, Set: true} }} {
+			for _, change := range []func(*settings.Config){func(c *settings.Config) { c.Pool.ConnectionsPerShard = 0 }, func(c *settings.Config) { c.Pool.MaxRequestsPerConnection = 0 }, func(c *settings.Config) { c.Pool.MaxOrphanedStreams = -1 }, func(c *settings.Config) { c.Pool.AdvancedShardAwareness.SourcePortStart = 0 }, func(c *settings.Config) {
+				c.Pool.AdvancedShardAwareness = settings.AdvancedShardAwarenessOptions{Enabled: true, SourcePortStart: 65535, SourcePortEnd: 49152}
+			}, func(c *settings.Config) { c.Linger = cqltype.Option[time.Duration]{Value: time.Millisecond, Set: true} }} {
 				invalid := settings.DefaultConfig("localhost")
 				change(&invalid)
 				if err := invalid.Validate(); err == nil {

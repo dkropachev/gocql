@@ -40,7 +40,7 @@ func TestTopology(t *testing.T) {
 			config.Metadata.Mode = settings.MetadataSchemaNone
 			config.Metadata.InitialDiscovery = false
 			config.Metadata.AutomaticAgreement = false
-			config.Pool.ShardAwarePort = false
+			config.Pool.AdvancedShardAwareness.Enabled = false
 			config.Pool.ConnectionsPerHost = 1
 			config.Logger = logging.Nop()
 			s, err := Connect(context.Background(), config)
