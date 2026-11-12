@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/exec"
 
 	inf "gopkg.in/inf.v0"
 
@@ -32,7 +33,7 @@ import (
 // pass through reflected parameter binding or result destination discovery.
 func serializationExec[P any](s *gocql.Session[testDialect], stmt string, encoder cql.ParamEncoder[P], value P) error {
 	ctx := context.Background()
-	p, err := s.Prepare(ctx, cql.Statement[P, cql.EmptyRow]{CQL: stmt, Params: encoder, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
+	p, err := s.Prepare(ctx, cql.Statement[P, cql.EmptyRow]{CQL: stmt, Params: encoder, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
 	if err != nil {
 		return err
 	}
@@ -42,7 +43,7 @@ func serializationExec[P any](s *gocql.Session[testDialect], stmt string, encode
 
 func serializationRows[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...dynamic.Value) (gocql.Rows[R], error) {
 	ctx := context.Background()
-	p, err := s.Prepare(ctx, cql.Statement[[]dynamic.Value, R]{CQL: stmt, Params: dynamic.Params, Rows: decoder}, gocql.PrepareOptions{})
+	p, err := s.Prepare(ctx, cql.Statement[[]dynamic.Value, R]{CQL: stmt, Params: dynamic.Params, Rows: decoder}, exec.PrepareOptions{})
 	if err != nil {
 		return gocql.Rows[R]{}, err
 	}

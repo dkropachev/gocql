@@ -41,6 +41,8 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/event"
+	"github.com/scylladb/gocql/v2/exec"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/internal/tests"
 	"github.com/scylladb/gocql/v2/routing"
@@ -73,7 +75,7 @@ func TestMetadata(t *testing.T) {
 			t.Fatal(err)
 		}
 		keyspace := fmt.Sprintf("metadata_control_%x", time.Now().UnixNano())
-		sub, err := s.Subscribe(gocql.EventFilter{Kinds: []gocql.EventKind{gocql.SchemaEvent}, Keyspace: keyspace, Capacity: 64})
+		sub, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.Schema}, Keyspace: keyspace, Capacity: 64})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -83,7 +85,7 @@ func TestMetadata(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		exec := func(stmt string) {
+		runDDL := func(stmt string) {
 			t.Helper()
 			if _, err := metadataExecOnConn(ctx, s, stmt, *func() *implSession.Options {
 				opaqueStorageValue := new(implSession.Options)
@@ -93,7 +95,7 @@ func TestMetadata(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		exec("CREATE KEYSPACE " + keyspace + " WITH replication={'class':'NetworkTopologyStrategy','replication_factor':1}")
+		runDDL("CREATE KEYSPACE " + keyspace + " WITH replication={'class':'NetworkTopologyStrategy','replication_factor':1}")
 		defer func() {
 			cleanup, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -106,8 +108,8 @@ func TestMetadata(t *testing.T) {
 				t.Error("cleanup unique keyspace", err)
 			}
 		}()
-		exec("CREATE TYPE " + keyspace + ".record (value text)")
-		exec("CREATE TABLE " + keyspace + ".records (id int PRIMARY KEY,value frozen<record>)")
+		runDDL("CREATE TYPE " + keyspace + ".record (value text)")
+		runDDL("CREATE TABLE " + keyspace + ".records (id int PRIMARY KEY,value frozen<record>)")
 		if err := s.RefreshMetadata(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -142,7 +144,7 @@ func TestMetadata(t *testing.T) {
 				t.Fatal("schema event not delivered")
 			}
 		}
-		exec("DROP TABLE " + keyspace + ".records")
+		runDDL("DROP TABLE " + keyspace + ".records")
 		if err := s.RefreshMetadata(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -158,7 +160,7 @@ func TestMetadata(t *testing.T) {
 		t.Run("ControlReconnect", func(t *testing.T) {
 			t.Parallel()
 
-			cluster := createV2Cluster().WithIgnoreEvents(gocql.TopologyEvent, gocql.StatusEvent)
+			cluster := createV2Cluster().WithIgnoreEvents(event.Topology, event.Status)
 
 			sess, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, cluster))
 			if err != nil {
@@ -166,7 +168,7 @@ func TestMetadata(t *testing.T) {
 			}
 			defer sess.Close()
 
-			sub, err := sess.Subscribe(gocql.EventFilter{Kinds: []gocql.EventKind{gocql.ControlEvent}, Capacity: 10})
+			sub, err := sess.Subscribe(event.Filter{Kinds: []event.Kind{event.Control}, Capacity: 10})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -178,7 +180,7 @@ func TestMetadata(t *testing.T) {
 
 			select {
 			case ev := <-sub.Events():
-				if ev.Kind != gocql.ControlEvent || ev.Change != "RECONNECTED" || ev.HostID.IsEmpty() || !ev.Address.IsValid() {
+				if ev.Kind != event.Control || ev.Change != "RECONNECTED" || ev.HostID.IsEmpty() || !ev.Address.IsValid() {
 					t.Fatalf("unexpected reconnect event: %+v", ev)
 				}
 			case <-time.After(30 * time.Second):
@@ -202,7 +204,7 @@ func TestMetadata(t *testing.T) {
 
 			// Filter events to the specific keyspace this test creates, so that
 			// concurrent DDL from parallel tests does not cause spurious matches.
-			sub, err := sess.Subscribe(gocql.EventFilter{Kinds: []gocql.EventKind{gocql.SchemaEvent}, Keyspace: keyspace, Capacity: 10})
+			sub, err := sess.Subscribe(event.Filter{Kinds: []event.Kind{event.Schema}, Keyspace: keyspace, Capacity: 10})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -220,7 +222,7 @@ func TestMetadata(t *testing.T) {
 
 			select {
 			case ev := <-sub.Events():
-				if ev.Kind != gocql.SchemaEvent || ev.Target != "KEYSPACE" || ev.Keyspace != keyspace || ev.Change != "CREATED" {
+				if ev.Kind != event.Schema || ev.Target != "KEYSPACE" || ev.Keyspace != keyspace || ev.Change != "CREATED" {
 					t.Fatalf("unexpected schema event: %+v", ev)
 				}
 			case <-time.After(30 * time.Second):
@@ -929,7 +931,7 @@ func TestMetadata(t *testing.T) {
 // prepared because only prepared execution accepts the fixture's internal
 // connection seam.
 func metadataExecOnConn(ctx context.Context, s *gocql.Session[testDialect], stmt string, options implSession.Options) (gocql.Result, error) {
-	prepared, err := s.Prepare(ctx, cql.Command(stmt), gocql.PrepareOptions{})
+	prepared, err := s.Prepare(ctx, cql.Command(stmt), exec.PrepareOptions{})
 	if err != nil {
 		return gocql.Result{}, err
 	}

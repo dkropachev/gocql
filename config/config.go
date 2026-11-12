@@ -16,6 +16,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
+	"github.com/scylladb/gocql/v2/event"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/metadata"
@@ -38,7 +39,7 @@ type Config struct {
 // providers remove the override. A ConfigBuilder is not safe for concurrent use.
 type ConfigBuilder struct {
 	profile              *ProfileBuilder
-	ignoredEvents        []EventKind
+	ignoredEvents        []event.Kind
 	routes               ClientRoutes
 	settings             implSettings.Config
 	onlyHost             cql.Option[cql.UUID]
@@ -470,11 +471,11 @@ func (b *ConfigBuilder) WithMetadataServerTimeout(d time.Duration) *ConfigBuilde
 	return b
 }
 
-// WithIgnoreEvents stops listening for the given server events: TopologyEvent,
-// StatusEvent, SchemaEvent or ClientRouteEvent. Each call replaces the complete
+// WithIgnoreEvents stops listening for the given server events: event.Topology,
+// event.Status, event.Schema or event.ClientRoute. Each call replaces the complete
 // ignored-event list; no arguments restores all events. Default none ignored.
-func (b *ConfigBuilder) WithIgnoreEvents(kinds ...EventKind) *ConfigBuilder {
-	b.ignoredEvents = append([]EventKind(nil), kinds...)
+func (b *ConfigBuilder) WithIgnoreEvents(kinds ...event.Kind) *ConfigBuilder {
+	b.ignoredEvents = append([]event.Kind(nil), kinds...)
 	return b
 }
 

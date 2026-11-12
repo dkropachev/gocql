@@ -11,6 +11,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/exec"
 )
 
 // Tweet maps to example.tweet by column name. Running
@@ -109,7 +110,7 @@ func ExamplePrepared_Query() {
 		}
 	}()
 
-	worker, err := edit.Query(gocql.Options{})
+	worker, err := edit.Query(exec.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}

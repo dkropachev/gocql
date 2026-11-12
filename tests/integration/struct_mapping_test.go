@@ -16,6 +16,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/exec"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/tests/integration/internal/mapped"
 )
@@ -27,7 +28,7 @@ func TestStructMapping(t *testing.T) {
 	// Query.AddToBatch with Session.ExecBatch, and a counter table updated through a struct.
 	t.Run("Batch", func(t *testing.T) {
 		ctx, f := newSMFixture(t)
-		insert, err := f.insert(t, ctx).Query(gocql.Options{})
+		insert, err := f.insert(t, ctx).Query(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -70,7 +71,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		add, err := addPrepared.Query(gocql.Options{})
+		add, err := addPrepared.Query(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -95,7 +96,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		read, err := readPrepared.Query(gocql.Options{})
+		read, err := readPrepared.Query(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -119,7 +120,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		insert, err := insertPrepared.Query(gocql.Options{})
+		insert, err := insertPrepared.Query(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -152,7 +153,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		update, err := updatePrepared.Query(gocql.Options{})
+		update, err := updatePrepared.Query(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -204,7 +205,7 @@ func TestStructMapping(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			insert, err := insertPrepared.Query(gocql.Options{})
+			insert, err := insertPrepared.Query(exec.Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -223,7 +224,7 @@ func TestStructMapping(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			read, err := readPrepared.Query(gocql.Options{})
+			read, err := readPrepared.Query(exec.Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -251,7 +252,7 @@ func TestStructMapping(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			q, err := prepared.Query(gocql.StreamOptions{})
+			q, err := prepared.Query(exec.StreamOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -315,7 +316,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		insert, err := insertPrepared.Query(gocql.Options{})
+		insert, err := insertPrepared.Query(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -331,7 +332,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		read, err := readPrepared.Query(gocql.Options{})
+		read, err := readPrepared.Query(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -411,7 +412,7 @@ func TestStructMapping(t *testing.T) {
 	// with paging across pages of two rows.
 	t.Run("Query", func(t *testing.T) {
 		ctx, f := newSMFixture(t)
-		insert, err := f.insert(t, ctx).Query(gocql.Options{})
+		insert, err := f.insert(t, ctx).Query(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -427,7 +428,7 @@ func TestStructMapping(t *testing.T) {
 		if _, err := insert.Routing(want[0]); err != nil {
 			t.Fatal(err)
 		}
-		read, err := f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)).Query(gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}})
+		read, err := f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)).Query(exec.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -493,7 +494,7 @@ func TestStructMapping(t *testing.T) {
 		})
 		t.Run("Unpaged", func(t *testing.T) {
 			// The cql.Unpaged page size returns the whole result as one page.
-			read, err := f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)).Query(gocql.Options{PageSize: cql.Some(cql.Unpaged)})
+			read, err := f.selectBucket(t, ctx, cql.MustRowOf(smAttrs)).Query(exec.Options{PageSize: cql.Some(cql.Unpaged)})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -552,7 +553,7 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		read, err := f.selectBucket(t, ctx, cql.MustRowOf(smAttrs, cql.ReuseBuffers[smRecord]())).Query(gocql.Options{})
+		read, err := f.selectBucket(t, ctx, cql.MustRowOf(smAttrs, cql.ReuseBuffers[smRecord]())).Query(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -619,7 +620,7 @@ func TestStructMapping(t *testing.T) {
 		// incremental stream is rejected before the query is sent.
 		frameCompressed := *flagProto < 5 && fixtureCompressed()
 		for _, incremental := range []bool{false, true} {
-			options := gocql.StreamOptions{Incremental: incremental, Options: gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}
+			options := exec.StreamOptions{Incremental: incremental, Options: exec.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}
 			q, err := read.Query(options)
 			if err != nil {
 				t.Fatal(err)
@@ -662,7 +663,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		update, err := updatePrepared.Query(gocql.Options{})
+		update, err := updatePrepared.Query(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -687,7 +688,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		read, err := readPrepared.Query(gocql.Options{})
+		read, err := readPrepared.Query(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}

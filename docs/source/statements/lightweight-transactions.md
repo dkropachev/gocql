@@ -12,10 +12,10 @@ replica ordering.
 
 Use `CASRows(decoder)` to decode the applied flag and the returned row through a
 typed `CASResult[R]`. For conditional batches, pass this decoder to `session.RunBatch`.
-The ordinary `Options` carries regular and serial consistency; profile defaults
-apply when an explicit override is absent. `Options.SerialConsistency` is a
-`SerialOverride`: `SerialInherit` (the zero value) keeps the profile's,
-`SerialSerial` and `SerialLocal` send SERIAL or LOCAL_SERIAL, and `SerialOmit`
+The ordinary `exec.Options` carries regular and serial consistency; profile defaults
+apply when an explicit override is absent. `exec.Options.SerialConsistency` is an
+`exec.SerialOverride`: `exec.SerialInherit` (the zero value) keeps the profile's,
+`exec.SerialSerial` and `exec.SerialLocal` send SERIAL or LOCAL_SERIAL, and `exec.SerialOmit`
 sends none. Inspect every returned row and close
 the result rows even when the condition was not applied.
 

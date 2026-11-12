@@ -11,6 +11,7 @@ import (
 	"context"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/exec"
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/stream"
@@ -67,7 +68,7 @@ func readV2SystemRows[P any, R any](a0 context.Context, a1 *driverConn, a2 cql.S
 	return implCluster.InternalReadV2SystemRows[P, R](a0, a1, fixtureStatement(a2), a3, a4)
 }
 
-func resolveOptions(a0 *gocql.Session[testDialect], a1 gocql.Options) (resolvedOptions, error) {
+func resolveOptions(a0 *gocql.Session[testDialect], a1 exec.Options) (resolvedOptions, error) {
 	o, err := a0.CompileOptions(a1)
 	if err != nil {
 		return resolvedOptions{}, err

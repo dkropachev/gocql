@@ -7,7 +7,8 @@ import (
 	"sync"
 	"testing"
 
-	. "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/event"
+
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	oldevents "github.com/scylladb/gocql/v2/internal/events"
 )
@@ -20,7 +21,7 @@ func TestSessionAPI(t *testing.T) {
 				return opaqueStorageValuex
 			}()
 
-			sub, err := s.Subscribe(EventFilter{Capacity: 1})
+			sub, err := s.Subscribe(event.Filter{Capacity: 1})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -42,12 +43,12 @@ func TestSessionAPI(t *testing.T) {
 				return opaqueStorageValue
 			}()
 
-			filter := EventFilter{Kinds: []EventKind{SchemaEvent}, Keyspace: "ks", Capacity: 1}
+			filter := event.Filter{Kinds: []event.Kind{event.Schema}, Keyspace: "ks", Capacity: 1}
 			sub, err := s.Subscribe(filter)
 			if err != nil {
 				t.Fatal(err)
 			}
-			filter.Kinds[0] = StatusEvent
+			filter.Kinds[0] = event.Status
 			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "CREATED", Keyspace: "other", Table: "x"})
 			select {
 			case e := <-sub.Events():
@@ -56,23 +57,23 @@ func TestSessionAPI(t *testing.T) {
 			}
 			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "CREATED", Keyspace: "ks", Table: "a"})
 			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "CREATED", Keyspace: "ks", Table: "b"})
-			event := <-sub.Events()
-			if event.Kind != OverflowEvent || event.Change != "RESYNC" || event.Generation != s.Metadata().Generation() {
-				t.Fatal(event)
+			got := <-sub.Events()
+			if got.Kind != event.Overflow || got.Change != "RESYNC" || got.Generation != s.Metadata().Generation() {
+				t.Fatal(got)
 			}
 			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "DROPPED", Keyspace: "ks", Table: "b"})
 			if _, ok := <-sub.Events(); ok {
 				t.Fatal("overflow subscription must close after terminal marker")
 			}
-			fresh, err := s.Subscribe(EventFilter{Kinds: []EventKind{SchemaEvent}, Keyspace: "ks", Capacity: 4})
+			fresh, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.Schema}, Keyspace: "ks", Capacity: 4})
 			if err != nil {
 				t.Fatal(err)
 			}
 			snapshot := s.Metadata()
 			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "CREATED", Keyspace: "ks", Table: "c"})
-			event = <-fresh.Events()
-			if event.Generation <= snapshot.Generation() {
-				t.Fatal("publication event did not follow subscribed snapshot", event)
+			got = <-fresh.Events()
+			if got.Generation <= snapshot.Generation() {
+				t.Fatal("publication event did not follow subscribed snapshot", got)
 			}
 			fresh.Close()
 			sub.Close()
@@ -81,7 +82,7 @@ func TestSessionAPI(t *testing.T) {
 				t.Fatal("closed subscription not closed")
 			}
 			s.CloseV2Peripheral()
-			if _, err := s.Subscribe(EventFilter{}); err == nil {
+			if _, err := s.Subscribe(event.Filter{}); err == nil {
 				t.Fatal("subscribe after close succeeded")
 			}
 		})

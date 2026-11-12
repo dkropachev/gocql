@@ -28,6 +28,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/endpoint"
+	"github.com/scylladb/gocql/v2/exec"
 )
 
 func TestPerformance(t *testing.T) {
@@ -56,13 +57,13 @@ func TestPerformance(t *testing.T) {
 		}
 		defer s.Close()
 		ks := testKeyspaceName(t, fmt.Sprintf("%x", time.Now().UnixNano()))
-		exec := func(stmt string) {
+		runDDL := func(stmt string) {
 			t.Helper()
 			if _, e := s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyParams{}); e != nil {
 				t.Fatal(e)
 			}
 		}
-		exec("CREATE KEYSPACE " + ks + " WITH replication={'class':'NetworkTopologyStrategy','replication_factor':1}")
+		runDDL("CREATE KEYSPACE " + ks + " WITH replication={'class':'NetworkTopologyStrategy','replication_factor':1}")
 		defer func() {
 			cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
 			defer stop()
@@ -71,8 +72,8 @@ func TestPerformance(t *testing.T) {
 				t.Error(e)
 			}
 		}()
-		exec("CREATE TABLE " + ks + ".records(cell int,id int,payload blob,pieces list<blob>,PRIMARY KEY(cell,id))")
-		insert := codecTestMust(s.Prepare(ctx, cql.Statement[testInput, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(cell,id,payload,pieces)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testInput) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testInput) int32 { return v.ID }), cql.Param("payload", cql.ByteSliceCodec, func(v testInput) []byte { return v.Payload }), cql.Param("pieces", cql.ListEncoder(cql.ByteSliceCodec), func(v testInput) [][]byte { return v.Pieces })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
+		runDDL("CREATE TABLE " + ks + ".records(cell int,id int,payload blob,pieces list<blob>,PRIMARY KEY(cell,id))")
+		insert := codecTestMust(s.Prepare(ctx, cql.Statement[testInput, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(cell,id,payload,pieces)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testInput) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testInput) int32 { return v.ID }), cql.Param("payload", cql.ByteSliceCodec, func(v testInput) []byte { return v.Payload }), cql.Param("pieces", cql.ListEncoder(cql.ByteSliceCodec), func(v testInput) [][]byte { return v.Pieces })), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{}))
 		// Only one 4KiB source exists locally. All source writes drain before the
 		// fixed-session baseline, and source payload/nested buffers are then released.
 		func() {
@@ -84,7 +85,7 @@ func TestPerformance(t *testing.T) {
 			}
 		}()
 		decoder := cql.Row(cql.Column("id", cql.Int32Codec, func(v *testBorrowed) *int32 { return &v.ID }), cql.Column("payload", cql.BlobCodec, func(v *testBorrowed) *cql.Bytes { return &v.Payload }), cql.Column("pieces", cql.ListDecoder(cql.BlobCodec), func(v *testBorrowed) *[]cql.Bytes { return &v.Pieces }))
-		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, testBorrowed]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=4096 AND id<128", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: decoder}, gocql.PrepareOptions{}))
+		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, testBorrowed]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=4096 AND id<128", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: decoder}, exec.PrepareOptions{}))
 		streamDecoder := stream.RowInto(func(*testOutput) {}, stream.Column("id", stream.Int32, func(v *testOutput) *int32 { return &v.ID }), stream.Column("payload", stream.Blob, func(v *testOutput) *[]byte { return &v.Payload }), stream.Column("pieces", stream.List(stream.Blob), func(v *testOutput) *[][]byte { return &v.Pieces }))
 		streamPrepared := codecTestMust(s.PrepareStream(ctx, stream.Statement[cql.EmptyParams, testOutput]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=4096 AND id<128", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: streamDecoder}))
 		runtime.GC()
@@ -155,9 +156,9 @@ func TestPerformance(t *testing.T) {
 								return nil
 							}
 							run := func() error {
-								options := gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: 128}, Prefetch: cql.Option[int]{Set: true, Value: 0}}
+								options := exec.Options{PageSize: cql.Option[int32]{Set: true, Value: 128}, Prefetch: cql.Option[int]{Set: true, Value: 0}}
 								if api == "stream" {
-									query, e := streamPrepared.Query(gocql.StreamOptions{Incremental: true, Options: options})
+									query, e := streamPrepared.Query(exec.StreamOptions{Incremental: true, Options: options})
 									if e != nil {
 										return e
 									}
@@ -351,13 +352,13 @@ func TestPerformance(t *testing.T) {
 		runtime.GC()
 		sessionHeap := mem().HeapAlloc
 		ks := testKeyspaceName(t, fmt.Sprintf("%x", time.Now().UnixNano()))
-		exec := func(stmt string) {
+		runDDL := func(stmt string) {
 			t.Helper()
 			if _, e := s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyParams{}); e != nil {
 				t.Fatal(e)
 			}
 		}
-		exec("CREATE KEYSPACE " + ks + " WITH replication={'class':'NetworkTopologyStrategy','replication_factor':1}")
+		runDDL("CREATE KEYSPACE " + ks + " WITH replication={'class':'NetworkTopologyStrategy','replication_factor':1}")
 		defer func() {
 			cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
 			defer stop()
@@ -366,8 +367,8 @@ func TestPerformance(t *testing.T) {
 				t.Error("owned cleanup", e)
 			}
 		}()
-		exec("CREATE TABLE " + ks + ".records(cell int,id int,payload blob,pieces list<blob>,PRIMARY KEY(cell,id))")
-		insert := codecTestMust(s.Prepare(ctx, cql.Statement[testInput, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(cell,id,payload,pieces)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testInput) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testInput) int32 { return v.ID }), cql.Param("payload", cql.ByteSliceCodec, func(v testInput) []byte { return v.Payload }), cql.Param("pieces", cql.ListEncoder(cql.ByteSliceCodec), func(v testInput) [][]byte { return v.Pieces })), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
+		runDDL("CREATE TABLE " + ks + ".records(cell int,id int,payload blob,pieces list<blob>,PRIMARY KEY(cell,id))")
+		insert := codecTestMust(s.Prepare(ctx, cql.Statement[testInput, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(cell,id,payload,pieces)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testInput) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testInput) int32 { return v.ID }), cql.Param("payload", cql.ByteSliceCodec, func(v testInput) []byte { return v.Payload }), cql.Param("pieces", cql.ListEncoder(cql.ByteSliceCodec), func(v testInput) [][]byte { return v.Pieces })), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{}))
 		for _, size := range []int{32, 4096, 256 << 10, 8 << 20} {
 			count := 128
 			if size >= 256<<10 {
@@ -381,7 +382,7 @@ func TestPerformance(t *testing.T) {
 			}
 		}
 		borrowedDecoder := cql.Row(cql.Column("id", cql.Int32Codec, func(v *testBorrowed) *int32 { return &v.ID }), cql.Column("payload", cql.BlobCodec, func(v *testBorrowed) *cql.Bytes { return &v.Payload }), cql.Column("pieces", cql.ListDecoder(cql.BlobCodec), func(v *testBorrowed) *[]cql.Bytes { return &v.Pieces }))
-		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[testQuery, testBorrowed]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=? AND id<?", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testQuery) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testQuery) int32 { return v.Rows })), Rows: borrowedDecoder}, gocql.PrepareOptions{}))
+		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[testQuery, testBorrowed]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=? AND id<?", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testQuery) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testQuery) int32 { return v.Rows })), Rows: borrowedDecoder}, exec.PrepareOptions{}))
 		streamDecoder := stream.RowInto(func(*testOutput) {}, stream.Column("id", stream.Int32, func(v *testOutput) *int32 { return &v.ID }), stream.Column("payload", stream.Blob, func(v *testOutput) *[]byte { return &v.Payload }), stream.Column("pieces", stream.List(stream.Blob), func(v *testOutput) *[][]byte { return &v.Pieces }))
 		streamPrepared := codecTestMust(s.PrepareStream(ctx, stream.Statement[testQuery, testOutput]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=? AND id<?", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testQuery) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testQuery) int32 { return v.Rows })), Rows: streamDecoder}))
 		shapes := []testShape{{"small", 1, 32, 1, 1, false}, {"page1", 128, 4096, 1, 1, false}, {"page32", 128, 4096, 32, 1, false}, {"rows1", 1, 4096, 128, 1, false}, {"rows128", 128, 4096, 128, 1, false}, {"cell256K", 1, 256 << 10, 1, 1, false}, {"cell8M", 1, 8 << 20, 1, 1, false}, {"concurrent", 128, 4096, 32, 4, false}, {"slow", 128, 4096, 32, 1, true}}
@@ -400,7 +401,7 @@ func TestPerformance(t *testing.T) {
 					for i := range outputs {
 						outputs[i] = testOutput{Payload: make([]byte, 0, shape.Cell), Pieces: [][]byte{make([]byte, 0, 5), make([]byte, 0, 6)}}
 					}
-					options := gocql.Options{PageSize: cql.Option[int32]{Set: true, Value: int32(shape.Page)}, Prefetch: cql.Option[int]{Set: true, Value: 0}}
+					options := exec.Options{PageSize: cql.Option[int32]{Set: true, Value: int32(shape.Page)}, Prefetch: cql.Option[int]{Set: true, Value: 0}}
 					run := func(worker int, sample func()) (int64, int64, error) {
 						dst := &outputs[worker]
 						backing := unsafe.SliceData(dst.Payload[:cap(dst.Payload)])
@@ -424,7 +425,7 @@ func TestPerformance(t *testing.T) {
 							return nil
 						}
 						if api == "stream" {
-							query, e := streamPrepared.Query(gocql.StreamOptions{Incremental: true, Options: options})
+							query, e := streamPrepared.Query(exec.StreamOptions{Incremental: true, Options: options})
 							if e != nil {
 								return 0, 0, e
 							}

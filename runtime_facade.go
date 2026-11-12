@@ -48,8 +48,6 @@ func (b *Batch) Reset() { (*implSession.Batch)(b).Reset() }
 // AddToBatch rejects the statement after it.
 const MaxBatchStatements = implCluster.MaxBatchStatements
 
-const ClientRouteEvent = implCluster.ClientRouteEvent
-
 // Connect opens a session of dialect D with cfg, which must come from
 // config.ConfigBuilder.Build. D fixes the protocol version and the database:
 // Connect fails when the cluster does not speak that version, or is not that
@@ -63,27 +61,7 @@ func Connect[D Dialect](ctx context.Context, cfg config.Config) (*Session[D], er
 	return (*Session[D])(session), err
 }
 
-const ControlEvent = implCluster.ControlEvent
-
-type Event = implCluster.Event
-type EventFilter = implCluster.EventFilter
-type EventKind = implCluster.EventKind
-
-const OverflowEvent = implCluster.OverflowEvent
-
 type PreparedInfo = implSession.PreparedInfo
-
-const SchemaEvent = implCluster.SchemaEvent
-
-const StatusEvent = implCluster.StatusEvent
 
 // StreamInfo reports delivered rows, pages and execution progress.
 type StreamInfo = implSession.StreamInfo
-
-type Subscription = implCluster.Subscription
-
-const TopologyEvent = implCluster.TopologyEvent
-
-type TraceEntry = implCluster.TraceEntry
-type TraceEvent = implCluster.TraceEvent
-type TraceInfo = implCluster.TraceInfo

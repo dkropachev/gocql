@@ -57,6 +57,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
+	"github.com/scylladb/gocql/v2/exec"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	protocol "github.com/scylladb/gocql/v2/internal/protocol"
@@ -617,7 +618,7 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session[testDialect]
 
 func v2Query(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...dynamic.Value) (gocql.Rows[dynamic.Row], error) {
 	statement := cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: stmt, Params: dynamic.Params, Rows: dynamic.Rows}
-	prepared, err := session.Prepare(ctx, statement, gocql.PrepareOptions{})
+	prepared, err := session.Prepare(ctx, statement, exec.PrepareOptions{})
 	if err != nil {
 		return gocql.Rows[dynamic.Row]{}, err
 	}
@@ -651,7 +652,7 @@ func v2ReadOne(ctx context.Context, session *gocql.Session[testDialect], stmt st
 }
 
 func v2CreateTable(ctx context.Context, session *gocql.Session[testDialect], stmt string) error {
-	if _, err := session.UnpreparedExec(ctx, cql.Command(stmt), cql.EmptyParams{}, gocql.Options{Idempotent: true, Retry: retry.Safe{MaxAttempts: 4}}); err != nil {
+	if _, err := session.UnpreparedExec(ctx, cql.Command(stmt), cql.EmptyParams{}, exec.Options{Idempotent: true, Retry: retry.Safe{MaxAttempts: 4}}); err != nil {
 		return err
 	}
 	if err := session.AwaitSchemaAgreement(ctx); err != nil {
@@ -1170,7 +1171,7 @@ func (ltd *loggingTestDialer) connectionEvents(address string) []testConnectionE
 // pass through reflected parameter binding or result destination discovery.
 func serializationExec[P any](s *gocql.Session[testDialect], stmt string, encoder cql.ParamEncoder[P], value P) error {
 	ctx := context.Background()
-	p, err := s.Prepare(ctx, cql.Statement[P, cql.EmptyRow]{CQL: stmt, Params: encoder, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
+	p, err := s.Prepare(ctx, cql.Statement[P, cql.EmptyRow]{CQL: stmt, Params: encoder, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
 	if err != nil {
 		return err
 	}
@@ -1180,7 +1181,7 @@ func serializationExec[P any](s *gocql.Session[testDialect], stmt string, encode
 
 func serializationRows[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...dynamic.Value) (gocql.Rows[R], error) {
 	ctx := context.Background()
-	p, err := s.Prepare(ctx, cql.Statement[[]dynamic.Value, R]{CQL: stmt, Params: dynamic.Params, Rows: decoder}, gocql.PrepareOptions{})
+	p, err := s.Prepare(ctx, cql.Statement[[]dynamic.Value, R]{CQL: stmt, Params: dynamic.Params, Rows: decoder}, exec.PrepareOptions{})
 	if err != nil {
 		return gocql.Rows[R]{}, err
 	}

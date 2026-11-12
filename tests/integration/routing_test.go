@@ -43,6 +43,8 @@ import (
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
+	"github.com/scylladb/gocql/v2/event"
+	"github.com/scylladb/gocql/v2/exec"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/murmur"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
@@ -96,7 +98,7 @@ func TestRouting(t *testing.T) {
 				handle := new(profile)
 				ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 				var row dynamic.Row
-				_, queryErr := session.UnpreparedEach(ctx, hostIDStatement, cql.EmptyParams{}, &row, func(*dynamic.Row) error { return nil }, gocql.Options{Profile: handle})
+				_, queryErr := session.UnpreparedEach(ctx, hostIDStatement, cql.EmptyParams{}, &row, func(*dynamic.Row) error { return nil }, exec.Options{Profile: handle})
 				if ctx.Err() != nil {
 					t.Errorf("policy %d oneHost=%t hung when every host was down: %v", i, oneHost, queryErr)
 				}
@@ -159,11 +161,11 @@ func TestRouting(t *testing.T) {
                     connection_id, host_id, Address, port, tls_port, alternator_port, alternator_https_port, Datacenter, Rack)
                     VALUES (?, ?, ?, 9042, 9142, 0, 0, 'dc1', ?)`, qualifiedTable),
 					Kind: cql.OrdinaryStatement, Params: dynamic.Params, Rows: cql.EmptyRowDecoder,
-				}, gocql.PrepareOptions{})
+				}, exec.PrepareOptions{})
 				if err != nil {
 					t.Fatal(err)
 				}
-				_, err = prepared.Exec(ctx, []dynamic.Value{dynamic.UUID(codecTestMust(cql.ParseUUID(connectionID))), dynamic.UUID(codecTestMust(cql.ParseUUID(hostID))), codecTestMust(dynamic.Text(ip.String())), codecTestMust(dynamic.Text(rack))}, bindOptions(session, gocql.Options{Consistency: cql.Option[cql.Consistency]{Set: true, Value: cql.All}}))
+				_, err = prepared.Exec(ctx, []dynamic.Value{dynamic.UUID(codecTestMust(cql.ParseUUID(connectionID))), dynamic.UUID(codecTestMust(cql.ParseUUID(hostID))), codecTestMust(dynamic.Text(ip.String())), codecTestMust(dynamic.Text(rack))}, bindOptions(session, exec.Options{Consistency: cql.Option[cql.Consistency]{Set: true, Value: cql.All}}))
 
 				if err != nil {
 					t.Fatalf("unable to insert connection metadata: %s", err.Error())
@@ -344,7 +346,7 @@ func TestRouting(t *testing.T) {
 				Value int32
 			}
 			params := cql.Params(cql.Param("key", cql.StringCodec, func(v input) string { return v.Key }), cql.Param("value", cql.Int32Codec, func(v input) int32 { return v.Value }))
-			prepared := cassandraPrepared(t, session, cql.Statement[input, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(key,value) VALUES(?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{})
+			prepared := cassandraPrepared(t, session, cql.Statement[input, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(key,value) VALUES(?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
 			require.Equal(t, []int{0}, prepared.Info().PartitionKeyIndexes)
 			info := routingTestInfo(t, prepared, input{"routing-key", 5})
 			require.True(t, info.Token.Set)
@@ -355,7 +357,7 @@ func TestRouting(t *testing.T) {
 		// Integration test of the routing key calculation
 		t.Run("Computed", func(t *testing.T) {
 			t.Parallel()
-			session := createV2Session(t, func(c *config.ConfigBuilder) { c.WithIgnoreEvents(gocql.SchemaEvent) })
+			session := createV2Session(t, func(c *config.ConfigBuilder) { c.WithIgnoreEvents(event.Schema) })
 			defer session.Close()
 			single, composite := testTableName(t, "single"), testTableName(t, "composite")
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(first_id int,second_id int,PRIMARY KEY(first_id,second_id))", single))
@@ -370,14 +372,14 @@ func TestRouting(t *testing.T) {
 				key     []byte
 			}{{single, []int{1}, []byte{0, 0, 0, 2}}, {composite, []int{1, 0}, []byte{0, 4, 0, 0, 0, 2, 0, 0, 4, 0, 0, 0, 1, 0}}} {
 				statement := cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: fmt.Sprintf("SELECT * FROM %s WHERE second_id=? AND first_id=?", tc.table), Params: dynamic.Params, Rows: dynamic.Rows}
-				prepared := cassandraPrepared(t, session, statement, gocql.PrepareOptions{})
+				prepared := cassandraPrepared(t, session, statement, exec.PrepareOptions{})
 				require.Equal(t, tc.indexes, prepared.Info().PartitionKeyIndexes)
 				for _, index := range tc.indexes {
 					column, ok := prepared.Parameters().At(index)
 					require.True(t, ok)
 					require.Equal(t, cql.TypeInt, column.Type.Kind())
 				}
-				again := cassandraPrepared(t, session, statement, gocql.PrepareOptions{})
+				again := cassandraPrepared(t, session, statement, exec.PrepareOptions{})
 				require.Same(t, preparedData(prepared).InternalState, preparedData(again).InternalState, "preparing again must hit typed cache")
 				// The token is murmur3 of the canonical single/composite
 				// partition-key bytes, so it pins those bytes.
@@ -407,7 +409,7 @@ func TestRouting(t *testing.T) {
 			insert := "INSERT INTO " + table + "(id) VALUES(?)"
 			selectCQL := "SELECT * FROM " + table + " WHERE id=?"
 			for i, keyspace := range []string{fixtureKeyspace(""), ks} {
-				write := routingTestInfo(t, cassandraWritePrepared(t, session, insert, gocql.PrepareOptions{Keyspace: keyspace}), []dynamic.Value{dynamic.Int(int32(i + 1))})
+				write := routingTestInfo(t, cassandraWritePrepared(t, session, insert, exec.PrepareOptions{Keyspace: keyspace}), []dynamic.Value{dynamic.Int(int32(i + 1))})
 				require.Equal(t, keyspace, write.Keyspace)
 				require.True(t, write.Token.Set)
 				runtime := runtimeFor(session)
@@ -421,7 +423,7 @@ func TestRouting(t *testing.T) {
 				}
 				runtime.InternalMu.Unlock()
 				require.True(t, found, "cache must include keyspace-specific statement")
-				read := routingTestInfo(t, cassandraDynamicPrepared(t, session, selectCQL, gocql.PrepareOptions{Keyspace: keyspace}), []dynamic.Value{dynamic.Int(1)})
+				read := routingTestInfo(t, cassandraDynamicPrepared(t, session, selectCQL, exec.PrepareOptions{Keyspace: keyspace}), []dynamic.Value{dynamic.Int(1)})
 				require.Equal(t, keyspace, read.Keyspace)
 				require.True(t, read.Token.Set)
 			}
@@ -457,7 +459,7 @@ func TestRouting(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			prepared, err := session.Prepare(ctx, cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: fmt.Sprintf(`SELECT pk, ck, v FROM %s WHERE pk = ?`, table), Params: dynamic.Params, Rows: dynamic.Rows}, gocql.PrepareOptions{})
+			prepared, err := session.Prepare(ctx, cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: fmt.Sprintf(`SELECT pk, ck, v FROM %s WHERE pk = ?`, table), Params: dynamic.Params, Rows: dynamic.Rows}, exec.PrepareOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -471,7 +473,7 @@ func TestRouting(t *testing.T) {
 				success := false
 				for attempt := 1; time.Since(startTime) < timeout; attempt++ {
 					observer := new(v2TabletAttemptObserver)
-					options := gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, Observer: observer}
+					options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, Observer: observer}
 					// Warm the cache by visiting existing shard slots. With RF equal to the
 					// cluster size and token-aligned tablet shards, every ordinary V1 request
 					// can already reach an owner and legitimately receive no feedback.
@@ -628,12 +630,12 @@ func TestRouting(t *testing.T) {
 			if _, err := v2Exec(ctx, s, "INSERT INTO "+ks+".records(pk,v) VALUES(1,7)"); err != nil {
 				t.Fatal(err)
 			}
-			p := codecTestMust(s.Prepare(ctx, cql.Statement[int32, dynamic.Row]{CQL: "SELECT v FROM " + ks + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32Codec), Rows: dynamic.Rows}, gocql.PrepareOptions{}))
+			p := codecTestMust(s.Prepare(ctx, cql.Statement[int32, dynamic.Row]{CQL: "SELECT v FROM " + ks + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32Codec), Rows: dynamic.Rows}, exec.PrepareOptions{}))
 			var leader cql.UUID
 			stable := 0
 			feedback := 0
 			for attempt := 0; attempt < 256 && stable < 16; attempt++ {
-				rows, err := p.Run(ctx, int32(1), bindOptions(s, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.LocalQuorum, Set: true}}))
+				rows, err := p.Run(ctx, int32(1), bindOptions(s, exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.LocalQuorum, Set: true}}))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -718,8 +720,8 @@ func TestRouting(t *testing.T) {
 			if !ks.TabletBased || ks.Tables["records"].ID == "" {
 				t.Fatal("server tablet/table UUID metadata absent", ks)
 			}
-			insert := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".records(pk,v) VALUES(?,7)", Params: cql.OneParam(cql.Int32Codec), Rows: cql.EmptyRowDecoder}, gocql.PrepareOptions{}))
-			read := codecTestMust(s.Prepare(ctx, cql.Statement[int32, dynamic.Row]{CQL: "SELECT pk,v FROM " + keyspace + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32Codec), Rows: dynamic.Rows}, gocql.PrepareOptions{}))
+			insert := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".records(pk,v) VALUES(?,7)", Params: cql.OneParam(cql.Int32Codec), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{}))
+			read := codecTestMust(s.Prepare(ctx, cql.Statement[int32, dynamic.Row]{CQL: "SELECT pk,v FROM " + keyspace + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32Codec), Rows: dynamic.Rows}, exec.PrepareOptions{}))
 			feedback := 0
 			for key := int32(0); key < 8; key++ {
 				result, err := insert.Exec(ctx, key)
@@ -800,9 +802,9 @@ func TestRouting(t *testing.T) {
 				var latest tabletObservation
 				for attempt := 0; attempt < 96 && verified < 8; attempt++ {
 					before := tabletAuthority(t, ctx, s, id, token.Value)
-					opts := gocql.Options{}
+					opts := exec.Options{}
 					if attempt < 3 {
-						opts = gocql.Options{HostID: cql.Option[cql.UUID]{Value: implRouting.SnapshotData(s.Metadata()).InternalHosts[attempt%len(implRouting.SnapshotData(s.Metadata()).InternalHosts)].ID, Set: true}}
+						opts = exec.Options{HostID: cql.Option[cql.UUID]{Value: implRouting.SnapshotData(s.Metadata()).InternalHosts[attempt%len(implRouting.SnapshotData(s.Metadata()).InternalHosts)].ID, Set: true}}
 					}
 					rows, err := read.Run(ctx, key, bindOptions(s, opts))
 					if err != nil {
@@ -890,9 +892,9 @@ func TestRouting(t *testing.T) {
 				cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,data text)", name))
 			}
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,data) VALUES(?,?)", table), dynamic.Int(42), codecTestMust(dynamic.Text("8 * 6 =")))
-			prepared := cassandraDynamicPrepared(t, session, fmt.Sprintf("SELECT data FROM %s WHERE id=?", table), gocql.PrepareOptions{})
+			prepared := cassandraDynamicPrepared(t, session, fmt.Sprintf("SELECT data FROM %s WHERE id=?", table), exec.PrepareOptions{})
 			require.True(t, routingTestInfo(t, prepared, []dynamic.Value{dynamic.Int(42)}).Token.Set)
-			require.Equal(t, "8 * 6 =", cassandraText(t, cassandraReadOne(t, session, prepared, []dynamic.Value{dynamic.Int(42)}, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}), "data"))
+			require.Equal(t, "8 * 6 =", cassandraText(t, cassandraReadOne(t, session, prepared, []dynamic.Value{dynamic.Int(42)}, exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}}), "data"))
 		})
 		t.Run("HostPolicy", func(t *testing.T) {
 			t.Parallel()
@@ -922,7 +924,7 @@ func TestRouting(t *testing.T) {
 // routingTestInfo returns the routing a query of p computes for value.
 func routingTestInfo[P, R any](t testing.TB, p *gocql.Prepared[P, R], value P) routing.Info {
 	t.Helper()
-	q, err := p.Query(gocql.Options{})
+	q, err := p.Query(exec.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,7 +9,11 @@ Module: `github.com/scylladb/gocql/v2`. The public packages are:
 
 | Package | Contents |
 |---|---|
-| `gocql` (module root) | dialects, `Connect`, `Session[D]`, configuration and profile builders, `Prepared`, `Query`, `Batch`, cursors, `Options`, observers |
+| `gocql` (module root) | dialects, `Connect`, `Session[D]`, `Prepared`, `Query`, `Batch`, cursors, results |
+| `config` | cluster configuration and profile builders, observers |
+| `exec` | per-execution options: `Options`, `CompiledOptions`, `PrepareOptions`, `StreamOptions`, `StreamLimits`, `SerialOverride` |
+| `event` | cluster events delivered by `Session.Subscribe` |
+| `trace` | query traces read by `Session.Trace` |
 | `cql` | statements, data types, values, buffered codecs, parameter and row mappings, consistency |
 | `cql/stream` | decoders that write streamed rows into caller storage |
 | `cql/dynamic` | values whose types are known only from metadata at run time |
@@ -687,12 +691,15 @@ worker creates a reusable query; it permits one active execution and owns all
 captured parameters through retries, pages, accepted writes and callbacks.
 
 ```go
+// package exec
 type PrepareOptions struct {
     Keyspace string
     HostID cql.Option[cql.UUID]
     Trace bool
 }
-func (s *Session[D]) Prepare[P, R any](context.Context, cql.Statement[P, R], ...PrepareOptions) (*Prepared[P, R], error) // at most one
+
+// package gocql
+func (s *Session[D]) Prepare[P, R any](context.Context, cql.Statement[P, R], ...exec.PrepareOptions) (*Prepared[P, R], error) // at most one
 func (p *Prepared[P, R]) Parameters() cql.Columns
 func (p *Prepared[P, R]) Columns() cql.Columns
 func (p *Prepared[P, R]) Info() PreparedInfo
@@ -704,21 +711,21 @@ type PreparedInfo struct {
     Generation uint64
 }
 
-// One-shot calls, safe for concurrent use; at most one CompiledOptions.
-func (p *Prepared[P, R]) Exec(context.Context, P, ...CompiledOptions) (Result, error)
-func (p *Prepared[P, R]) One(context.Context, P, *R, ...CompiledOptions) (bool, Result, error)
-func (p *Prepared[P, R]) Each(context.Context, P, *R, func(*R) error, ...CompiledOptions) (Result, error)
-func (p *Prepared[P, R]) All(context.Context, P, *R, ...CompiledOptions) iter.Seq2[*R, error]
-func (p *Prepared[P, R]) Run(context.Context, P, ...CompiledOptions) (Rows[R], error)                // holds a pooled query until closed
-func (p *Prepared[P, R]) RunPage(context.Context, P, cql.PageState, int32, ...CompiledOptions) (*Page[R], error)
+// One-shot calls, safe for concurrent use; at most one exec.CompiledOptions.
+func (p *Prepared[P, R]) Exec(context.Context, P, ...exec.CompiledOptions) (Result, error)
+func (p *Prepared[P, R]) One(context.Context, P, *R, ...exec.CompiledOptions) (bool, Result, error)
+func (p *Prepared[P, R]) Each(context.Context, P, *R, func(*R) error, ...exec.CompiledOptions) (Result, error)
+func (p *Prepared[P, R]) All(context.Context, P, *R, ...exec.CompiledOptions) iter.Seq2[*R, error]
+func (p *Prepared[P, R]) Run(context.Context, P, ...exec.CompiledOptions) (Rows[R], error)                // holds a pooled query until closed
+func (p *Prepared[P, R]) RunPage(context.Context, P, cql.PageState, int32, ...exec.CompiledOptions) (*Page[R], error)
 func (p *Prepared[P, R]) AddToBatch(*Batch, P) error
 
 // Worker-owned reusable queries.
-func (p *Prepared[P, R]) Query(Options) (*Query[P, R], error)
-func (s *Session[D]) UnpreparedExec[P any](context.Context, cql.Statement[P, cql.EmptyRow], P, ...Options) (Result, error)
-func (s *Session[D]) UnpreparedOne[P, R any](context.Context, cql.Statement[P, R], P, *R, ...Options) (bool, Result, error)
-func (s *Session[D]) UnpreparedEach[P, R any](context.Context, cql.Statement[P, R], P, *R, func(*R) error, ...Options) (Result, error)
-func (s *Session[D]) UnpreparedAll[P, R any](context.Context, cql.Statement[P, R], P, *R, ...Options) iter.Seq2[*R, error]
+func (p *Prepared[P, R]) Query(exec.Options) (*Query[P, R], error)
+func (s *Session[D]) UnpreparedExec[P any](context.Context, cql.Statement[P, cql.EmptyRow], P, ...exec.Options) (Result, error)
+func (s *Session[D]) UnpreparedOne[P, R any](context.Context, cql.Statement[P, R], P, *R, ...exec.Options) (bool, Result, error)
+func (s *Session[D]) UnpreparedEach[P, R any](context.Context, cql.Statement[P, R], P, *R, func(*R) error, ...exec.Options) (Result, error)
+func (s *Session[D]) UnpreparedAll[P, R any](context.Context, cql.Statement[P, R], P, *R, ...exec.Options) iter.Seq2[*R, error]
 func (s *Session[D]) UnpreparedAddToBatch[P, R any](*Batch, cql.Statement[P, R], P) error
 func (q *Query[P, R]) Exec(context.Context, P) (Result, error)
 func (q *Query[P, R]) Each(context.Context, P, *R, func(*R) error) (Result, error)
@@ -731,8 +738,8 @@ func (q *Query[P, R]) AddToBatch(*Batch, P) error
 func (q *Query[P, R]) Close()                       // stop at once
 func (q *Query[P, R]) Wait(context.Context) error   // join the drain
 
-func (s *Session[D]) ExecBatch(context.Context, *Batch, ...CompiledOptions) (Result, error)          // sends batch.Kind
-func (s *Session[D]) RunBatch[R any](context.Context, *Batch, cql.RowDecoder[R], ...CompiledOptions) (Rows[R], error)
+func (s *Session[D]) ExecBatch(context.Context, *Batch, ...exec.CompiledOptions) (Result, error)          // sends batch.Kind
+func (s *Session[D]) RunBatch[R any](context.Context, *Batch, cql.RowDecoder[R], ...exec.CompiledOptions) (Rows[R], error)
 ```
 
 Prepared.Exec, One, Each and All run on queries the prepared statement keeps in
@@ -742,7 +749,7 @@ session registers that query while the handle is open, so Session.Close stops
 the handle, and a handle dropped without Close releases its query once the
 garbage collector finds it. A worker-owned Query skips the pool hand-off (about
 2 to 4 percent of client CPU at 64 workers on the loopback benchmark) and
-resolves its Options once; it keeps the same calls for workers that run one
+resolves its exec.Options once; it keeps the same calls for workers that run one
 statement repeatedly.
 
 All is the range-over-func form of Each: it yields dst for every row across
@@ -757,7 +764,7 @@ fall back to their recursive Clone contract when One detaches results.
 Session.UnpreparedExec, UnpreparedOne, UnpreparedEach and UnpreparedAll provide occasional typed
 CQL text execution without a caller-owned query, and UnpreparedAddToBatch
 appends an unprepared statement to a batch. They take at most one plain
-Options and validate it during the call. Their cleanup stops admission
+exec.Options and validate it during the call. Their cleanup stops admission
 on every return and keeps any remaining drain registered with the session.
 
 Input is copied during execution admission,
@@ -985,9 +992,9 @@ is absent only if no previous columns were returned.
 Queries are page-buffered by default and use shared multiplexed connections.
 Memory scales with concurrent response pages, bounded by frame/decompression
 limits. Streaming codecs still write seeded caller destinations. Set
-StreamOptions.Incremental for explicit bounded receive; the exclusive-connection,
+exec.StreamOptions.Incremental for explicit bounded receive; the exclusive-connection,
 raw receive, transform, read-ahead and working-storage clauses below describe
-that explicit mode. StreamLimits receive budgets apply to incremental mode.
+that explicit mode. exec.StreamLimits receive budgets apply to incremental mode.
 All framing, malformed-value, cancellation and decoder checks remain mandatory
 in both modes. Incremental native read-ahead is bounded by its configured limit
 and 4 KiB. Shared connections retain an 8 KiB reader, transferred without losing
@@ -996,11 +1003,11 @@ The user-facing description is docs/source/statements/streaming.md.
 
 ```go
 // Streaming is always prepared: Session.PrepareStream, then PreparedStream.Query.
-func (s *Session[D]) PrepareStream[P, R any](context.Context, stream.Statement[P, R], ...PrepareOptions) (*PreparedStream[P, R], error)
+func (s *Session[D]) PrepareStream[P, R any](context.Context, stream.Statement[P, R], ...exec.PrepareOptions) (*PreparedStream[P, R], error)
 func (p *PreparedStream[P, R]) Parameters() cql.Columns
 func (p *PreparedStream[P, R]) Columns() cql.Columns
 func (p *PreparedStream[P, R]) Info() PreparedInfo
-func (p *PreparedStream[P, R]) Query(StreamOptions) (*StreamQuery[P, R], error)
+func (p *PreparedStream[P, R]) Query(exec.StreamOptions) (*StreamQuery[P, R], error)
 func (q *StreamQuery[P, R]) Run(context.Context, P) (*RowStream[R], error)
 func (q *StreamQuery[P, R]) Close()
 func (q *StreamQuery[P, R]) Wait(context.Context) error
@@ -1011,6 +1018,7 @@ func (s *RowStream[R]) Close() error
 func (s *RowStream[R]) Columns() cql.Columns
 func (s *RowStream[R]) Info() StreamInfo
 
+// package exec
 type StreamOptions struct {
     Incremental bool
     Options Options
@@ -1022,6 +1030,8 @@ type StreamLimits struct {
     DiscardBytes int
     MaxTransformBytes int64
 }
+
+// package gocql
 type StreamInfo struct {
     Result Result
     DeliveredRows int64
@@ -1143,7 +1153,7 @@ reuse is scoped to this decoder and exact metadata. Applications using both mode
 an ordinary typed decoder, and Session.PrepareStream with a stream.RowInto decoder.
 Session.PrepareStream takes stream.Statement[P,R] (CQL, Params, Rows as a
 stream.RowDecoder, Kind) and returns an immutable PreparedStream[P,R]. Its
-Query(StreamOptions) creates a worker-owned StreamQuery. Preparation validates
+Query(exec.StreamOptions) creates a worker-owned StreamQuery. Preparation validates
 the streaming plan against available metadata, deferring only absent conditional
 result metadata. No buffered decoder is needed. Query-local caches revalidate
 actual changed result metadata without changing the shared preparation.
@@ -1223,14 +1233,14 @@ destination. Skip and SkipColumn validate discarded values with bounded
 scratch, including nested structure, rather than trusting lengths alone.
 
 The mode disables inherited prefetch and speculation regardless of profile
-defaults. Explicit nonzero Options.Prefetch fails validation before submission;
+defaults. Explicit nonzero exec.Options.Prefetch fails validation before submission;
 zero or inherited Prefetch is accepted. Retry and reprepare are permitted only
 before OutputStarted and any delivered row, under the ordinary safe-request
 rules. A row decoder/reset error or later I/O failure is terminal, with no
 transparent replay. StreamQuery.Close() stops the cursor and StreamQuery.Wait(ctx) covers final transport and callback drain;
 streamed output remains caller-owned.
 
-StreamLimits zero fields select defaults: 1 MiB simultaneously retained
+exec.StreamLimits zero fields select defaults: 1 MiB simultaneously retained
 metadata/control bytes,
 32 KiB connection read-ahead, 32 KiB discard scratch, and 262,158 transform bytes
 (two maximum 131,071-byte v5 units plus 16 bytes of framing). Negative/overflowing
@@ -1281,19 +1291,21 @@ also interrupts active streams; already written caller output remains valid.
 ## Options, profiles, batches and results
 
 ```go
-// Options are plain values; the zero Options uses the session default
-// profile. Query constructors take Options and validate, resolve and encode
+// exec.Options are plain values; the zero exec.Options uses the session default
+// profile. Query constructors take exec.Options and validate, resolve and encode
 // them for their session once. One-shot executions (Prepared.Exec/One/Each,
-// Session.ExecBatch, Session.RunBatch) take CompiledOptions: Options compiled by
+// Session.ExecBatch, Session.RunBatch) take exec.CompiledOptions: exec.Options compiled by
 // Session.CompileOptions for one session's default profile and keyspace. On
-// another session, CompiledOptions are resolved again for that session on each
-// execution. The zero CompiledOptions uses the executing session's default profile.
+// another session, exec.CompiledOptions are resolved again for that session on each
+// execution. The zero exec.CompiledOptions uses the executing session's default profile.
+func (s *Session[D]) CompileOptions(exec.Options) (exec.CompiledOptions, error)
+
+// package exec
 type CompiledOptions struct { /* frozen, resolved options */ }
-func (s *Session[D]) CompileOptions(Options) (CompiledOptions, error)
 func (CompiledOptions) Values() Options          // a copy, to derive other options
 
 type Options struct {
-    Profile *Profile                              // copied when resolved
+    Profile *config.Profile                       // copied when resolved
     Consistency cql.Option[cql.Consistency]
     SerialConsistency SerialOverride              // SerialInherit (zero), SerialSerial, SerialLocal, SerialOmit
     Timeout cql.Option[time.Duration]             // 0 disables profile timeout
@@ -1315,7 +1327,7 @@ type Options struct {
 // package cql
 type PayloadEntry struct { Key string; Value Nullable[Bytes] }
 
-// package gocql
+// package exec
 type SerialOverride uint8                         // one field, so no invalid combination exists
 const (SerialInherit SerialOverride = iota; SerialSerial; SerialLocal; SerialOmit)
 
@@ -1366,14 +1378,14 @@ func (r Result) CustomPayload() []cql.PayloadEntry
 
 Invalid values fail in the query constructor or Session.CompileOptions, before any
 execution. A query uses its options as resolved when it is created; options
-passed per call use the resolution CompileOptions made. A zero Options inherits the selected session profile, is non-idempotent, and has
+passed per call use the resolution CompileOptions made. A zero exec.Options inherits the selected session profile, is non-idempotent, and has
 no tracing/timestamp/keyspace override. Override validation returns typed
 errors, not panics. A profile is a plain value, made by `ProfileBuilder.Build`:
 it carries an unexported built mark, so a `Profile{...}` literal, whose unset
 fields would be zero rather than the defaults, fails `WithDefaultProfile` at
-Build and `Options.Profile` at compile time. A copy of a built profile stays
+Build and `exec.Options.Profile` at compile time. A copy of a built profile stays
 built. Build copies
-the default profile and compiling copies Options.Profile, so changing a
+the default profile and compiling copies exec.Options.Profile, so changing a
 Profile after it was handed over has no effect. Admission validates nothing and
 shares the resolved options across attempts/pages; CustomPayload is copied once,
 when the options are compiled.
@@ -1627,16 +1639,18 @@ a bounded atomic signal even when the normal queue is full.
 func (s *Session[D]) Metadata() *metadata.Snapshot
 func (s *Session[D]) RefreshMetadata(context.Context) error
 func (s *Session[D]) AwaitSchemaAgreement(context.Context) error
-func (s *Session[D]) Subscribe(EventFilter) (*Subscription, error)
+func (s *Session[D]) Subscribe(event.Filter) (*event.Subscription, error)
 func (s *Session[D]) Metrics() metrics.Snapshot // session-wide counters
-func (s *Session[D]) Trace(context.Context, cql.UUID) (TraceInfo, error)
+func (s *Session[D]) Trace(context.Context, cql.UUID) (trace.Info, error)
 func (s *Session[D]) Close() error
 func (s *Session[D]) Closed() bool
-type EventKind uint8
-const (TopologyEvent EventKind = iota; StatusEvent; SchemaEvent; ControlEvent; ClientRouteEvent; OverflowEvent)
-type EventFilter struct { Keyspace string; Kinds []EventKind; Capacity int }
+
+// package event
+type Kind uint8
+const (Topology Kind = iota; Status; Schema; Control; ClientRoute; Overflow)
+type Filter struct { Keyspace string; Kinds []Kind; Capacity int }
 type Event struct {
-    Kind EventKind
+    Kind Kind
     Generation uint64
     Address netip.AddrPort
     HostID cql.UUID
@@ -1701,12 +1715,12 @@ topology/status/schema/control/client-route variants and carry a generation.
 Publication events are emitted only after the corresponding snapshot is visible.
 A subscription has a bounded queue (positive Capacity; zero selects 64, negative
 is invalid). On overflow the dispatcher discards queued deltas, guarantees one
-OverflowEvent carrying the highest discarded generation, then closes that
+event.Overflow carrying the highest discarded generation, then closes that
 subscription after the marker; it never waits on control I/O. Resynchronize by
 subscribing again first, then reading Metadata (or completing an explicit
 refresh if freshness is required), and ignoring queued publication events at or
 below the snapshot generation. This subscribe-before-snapshot rule also applies
-to initial subscription. Subscription.Close is idempotent, cancels delivery
+to initial subscription. event.Subscription.Close is idempotent, cancels delivery
 without requiring the caller to drain, and cannot block control work. Schema
 refresh validates duplicate identities, key order, UDT cycles and type syntax;
 an incomplete topology read cannot replace a complete valid snapshot. Bad
@@ -1931,9 +1945,9 @@ and reconnect policy; it never extends the spent attempt or caller deadline.
 
 ## Struct mapping, documentation and stopping iteration
 
-Public Statement, stream.Statement, Options, PrepareOptions, StreamOptions and
+Public Statement, stream.Statement, exec.Options, exec.PrepareOptions, exec.StreamOptions and
 Profile records expose their fields directly in package documentation.
-CompiledOptions.Values returns public Options. The high-level codec and observer
+exec.CompiledOptions.Values returns public exec.Options. The high-level codec and observer
 interfaces expose their methods; lower-level plan contracts are documented in
 docs/source/custom-codecs.md. Facade adapters copy settings only, never payloads
 or codec plans, and introduce no serializer.
@@ -1958,6 +1972,6 @@ before request metrics and observers. No later row callbacks or continuation
 pages run. Ordinary callback errors remain failures. Result.Rows continues
 counting fetched response rows, rather than callback invocations.
 
-Options and CompiledOptions remain separate. Compile recurring settings once;
+exec.Options and exec.CompiledOptions remain separate. Compile recurring settings once;
 request-specific options may be compiled for one-shot calls. Query settings remain
 immutable and request context deadlines need no new options compilation.

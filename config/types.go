@@ -7,18 +7,12 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/metrics"
 	"github.com/scylladb/gocql/v2/retry"
 	"github.com/scylladb/gocql/v2/routing"
 )
-
-// EventKind is the kind of a gocql.Event. ConfigBuilder.WithIgnoreEvents takes
-// gocql.TopologyEvent, gocql.StatusEvent, gocql.SchemaEvent and
-// gocql.ClientRouteEvent.
-type EventKind = implCluster.EventKind
 
 type ConvictionPolicy = implSettings.ConvictionPolicy
 

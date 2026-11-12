@@ -16,7 +16,7 @@
 //
 // NewProfile starts a ProfileBuilder for execution defaults: the session's
 // default profile (ConfigBuilder.WithDefaultProfile) or a per-request one
-// (gocql.Options.Profile). WithTLS encrypts connections with a fixed
+// (exec.Options.Profile). WithTLS encrypts connections with a fixed
 // tls.Config; WithTLSSource takes a TLSSource such as NewTLSFiles, which
 // reloads certificates while the session runs. Observer and LifecycleObserver
 // receive requests and session events.

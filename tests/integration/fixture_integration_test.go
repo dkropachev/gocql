@@ -13,6 +13,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
+	"github.com/scylladb/gocql/v2/event"
 )
 
 // A nil allowlist cleans the whole owned run after its test process joins. A
@@ -35,7 +36,7 @@ func cleanupNamespaces(t *testing.T, allowed []string) {
 	}
 	matches := func(name string) bool { return owns(name) && (allowed == nil || selected[name]) }
 	cfg := createV2Cluster(func(c *config.ConfigBuilder) {
-		c.WithIgnoreEvents(gocql.SchemaEvent, gocql.TopologyEvent, gocql.StatusEvent).
+		c.WithIgnoreEvents(event.Schema, event.Topology, event.Status).
 			WithAutomaticSchemaAgreement(false).
 			WithRefreshAfterAgreement(false)
 	})

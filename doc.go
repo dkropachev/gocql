@@ -31,7 +31,7 @@
 //
 // Prepared.Exec, One and Each execute a prepared statement once. They are safe
 // for concurrent use and run on queries the statement keeps for them, so they
-// allocate no per-call execution state. Each takes at most one CompiledOptions,
+// allocate no per-call execution state. Each takes at most one exec.CompiledOptions,
 // made once by Session.CompileOptions; none uses the session's default profile.
 // Exec and Each return (Result, error) and One returns (bool, Result, error),
 // on Prepared and Query alike. One detaches borrowed fields before returning;
@@ -44,7 +44,7 @@
 // argument; each handle holds a pooled query until it is closed.
 //
 // Prepared.Query creates a reusable query owned by one goroutine. It resolves
-// its Options once and saves the pool hand-off of the one-shot calls (about 2
+// its exec.Options once and saves the pool hand-off of the one-shot calls (about 2
 // to 4 percent of client CPU at high concurrency), and has the same calls. The
 // page size cql.Unpaged requests the whole result in one response.
 // Session.UnpreparedExec, UnpreparedOne, UnpreparedEach and UnpreparedAll run occasional CQL text statements without server preparation
@@ -63,7 +63,7 @@
 // Session.PrepareStream prepares a stream.Statement directly for caller
 // storage; its shareable PreparedStream creates a StreamQuery per worker. A
 // StreamQuery decodes into seeded caller storage and buffers one response page
-// on normal multiplexed connections by default. StreamOptions.Incremental opts into bounded
+// on normal multiplexed connections by default. exec.StreamOptions.Incremental opts into bounded
 // incremental receive through an exclusive connection reservation.
 // Page-buffered memory scales with concurrent response pages and is bounded by
 // configured frame and decompression limits. Borrowed result views expire on

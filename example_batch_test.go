@@ -32,6 +32,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/exec"
 )
 
 // ExampleSession_ExecBatch builds a batch one statement at a time and sends it.
@@ -74,7 +75,7 @@ func ExampleSession_ExecBatch() {
 			log.Fatal(err)
 		}
 	}
-	idempotent, err := session.CompileOptions(gocql.Options{Idempotent: true})
+	idempotent, err := session.CompileOptions(exec.Options{Idempotent: true})
 	if err != nil {
 		log.Fatal(err)
 	}

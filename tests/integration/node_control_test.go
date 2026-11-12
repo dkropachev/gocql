@@ -19,6 +19,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cql/stream"
+	"github.com/scylladb/gocql/v2/exec"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
@@ -43,19 +44,19 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	exec := func(stmt string) {
+	runDDL := func(stmt string) {
 		t.Helper()
 		if _, err := s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyParams{}); err != nil {
 			t.Fatal(stmt, err)
 		}
 	}
 	keyspace := testKeyspaceName(t, fmt.Sprintf("%x", time.Now().UnixNano()))
-	exec("CREATE KEYSPACE " + keyspace + " WITH replication={'class':'NetworkTopologyStrategy','replication_factor':1}")
+	runDDL("CREATE KEYSPACE " + keyspace + " WITH replication={'class':'NetworkTopologyStrategy','replication_factor':1}")
 	// The cluster is reused by the next node-control test.
-	defer exec("DROP KEYSPACE " + keyspace)
-	exec("CREATE TABLE " + keyspace + ".records(id int PRIMARY KEY,value blob)")
+	defer runDDL("DROP KEYSPACE " + keyspace)
+	runDDL("CREATE TABLE " + keyspace + ".records(id int PRIMARY KEY,value blob)")
 	for i := range 5 {
-		exec(fmt.Sprintf("INSERT INTO %s.records(id,value)VALUES(%d,0x%02x)", keyspace, i, i))
+		runDDL(fmt.Sprintf("INSERT INTO %s.records(id,value)VALUES(%d,0x%02x)", keyspace, i, i))
 	}
 
 	var target cql.UUID
@@ -67,10 +68,10 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	if target.IsEmpty() {
 		t.Fatal("no host for", node.IP())
 	}
-	pinned := gocql.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: target}}
+	pinned := exec.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: target}}
 
 	statement := cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: "SELECT id,value FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}
-	prepared := codecTestMust(s.Prepare(ctx, statement, gocql.PrepareOptions{}))
+	prepared := codecTestMust(s.Prepare(ctx, statement, exec.PrepareOptions{}))
 	type output struct {
 		ID    int32
 		Value []byte
@@ -79,7 +80,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	streamOptions := pinned
 	streamOptions.PageSize = cql.Option[int32]{Set: true, Value: 1}
 	streamPrepared := codecTestMust(s.PrepareStream(ctx, stream.Statement[cql.EmptyParams, output]{CQL: statement.CQL, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: decoder}))
-	interrupted, err := pagingRunStream(ctx, t, streamPrepared, cql.EmptyParams{}, gocql.StreamOptions{Incremental: true, Options: streamOptions})
+	interrupted, err := pagingRunStream(ctx, t, streamPrepared, cql.EmptyParams{}, exec.StreamOptions{Incremental: true, Options: streamOptions})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,5 +1,7 @@
 package gocql
 
+import "github.com/scylladb/gocql/v2/exec"
+
 func codecTestMust[T any](v T, err error) T {
 	if err != nil {
 		panic(err)
@@ -9,7 +11,7 @@ func codecTestMust[T any](v T, err error) T {
 
 // bindOptions binds v to session, failing loudly on values a test meant to
 // be valid.
-func bindOptions(session *testSession, v Options) CompiledOptions {
+func bindOptions(session *testSession, v exec.Options) exec.CompiledOptions {
 	o, err := session.CompileOptions(v)
 	if err != nil {
 		panic(err)

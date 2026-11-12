@@ -13,6 +13,7 @@ import (
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/exec"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/retry"
@@ -21,24 +22,24 @@ import (
 func TestPublicOptionsSnapshot(t *testing.T) {
 	profile := codecTestMust(config.NewProfile().WithPageSize(11).Build())
 	payload := []byte("original")
-	want := Options{
+	want := exec.Options{
 		Profile: &profile, Retry: retry.Safe{MaxAttempts: 7}, Keyspace: "ks",
 		CustomPayload: []cql.PayloadEntry{{Key: "key", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes(payload)}}},
 		Timeout:       cql.Some(time.Second), PageTimeout: cql.Some(2 * time.Second),
 		Prefetch: cql.Some(0), Timestamp: cql.Some[int64](123), PageSize: cql.Some[int32](5),
 		NowInSeconds: cql.Some[int32](456), ShardID: cql.Some[uint32](2),
-		SerialConsistency: SerialSerial, Consistency: cql.Some(cql.One),
+		SerialConsistency: exec.SerialSerial, Consistency: cql.Some(cql.One),
 		HostID:          cql.Some(cql.MustParseUUID("00112233-4455-4677-8899-aabbccddeeff")),
 		IncludeMetadata: true, Idempotent: true, Trace: true,
 	}
-	if got := publicOptions(internalOptions(want)); !reflect.DeepEqual(got, want) {
+	if got := roundTripOptions(t, want); !reflect.DeepEqual(got, want) {
 		t.Fatalf("public options lost settings:\n got %+v\nwant %+v", got, want)
 	}
-	if got := publicOptions(internalOptions(Options{SerialConsistency: SerialOmit})); got.SerialConsistency != SerialOmit {
+	if got := roundTripOptions(t, exec.Options{SerialConsistency: exec.SerialOmit}); got.SerialConsistency != exec.SerialOmit {
 		t.Fatal("explicitly omitted serial consistency was lost")
 	}
 	raw := codecTestMust(implSession.NewCompiledOptions(nil, internalOptions(want)))
-	bound := CompiledOptions(raw)
+	bound := exec.CompiledOptions(raw)
 	profile.PageSize = 99
 	payload[0] = 'X'
 	got := bound.Values()
@@ -50,21 +51,32 @@ func TestPublicOptionsSnapshot(t *testing.T) {
 	if again := bound.Values(); again.Profile.PageSize != 11 || again.CustomPayload[0].Key != "key" {
 		t.Fatal("Values exposed mutable bound storage")
 	}
-	if zero := (CompiledOptions{}).Values(); !reflect.DeepEqual(zero, Options{}) {
+	if zero := (exec.CompiledOptions{}).Values(); !reflect.DeepEqual(zero, exec.Options{}) {
 		t.Fatalf("zero bound options do not return zero overrides: %+v", zero)
 	}
 }
 
+// roundTripOptions converts o to the internal options, compiles them and
+// reads them back through exec.CompiledOptions.Values.
+func roundTripOptions(t *testing.T, o exec.Options) exec.Options {
+	t.Helper()
+	compiled, err := implSession.NewCompiledOptions(nil, internalOptions(o))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return exec.CompiledOptions(compiled).Values()
+}
+
 func TestOptionsProfileMustBeBuilt(t *testing.T) {
 	literal := config.Profile{PageSize: 1000}
-	_, err := implSession.NewCompiledOptions(nil, internalOptions(Options{Profile: &literal}))
+	_, err := implSession.NewCompiledOptions(nil, internalOptions(exec.Options{Profile: &literal}))
 	if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "profile" || !strings.Contains(err.Error(), "NewProfile") {
 		t.Fatalf("compiling a Profile literal = %v, want a profile ValidationError naming NewProfile", err)
 	}
 	built := codecTestMust(config.NewProfile().Build())
 	built.PageSize = 1000
-	compiled := codecTestMust(implSession.NewCompiledOptions(nil, internalOptions(Options{Profile: &built})))
-	if got := CompiledOptions(compiled).Values().Profile; got == nil || got.PageSize != 1000 || !builtProfile(*got) {
+	compiled := codecTestMust(implSession.NewCompiledOptions(nil, internalOptions(exec.Options{Profile: &built})))
+	if got := exec.CompiledOptions(compiled).Values().Profile; got == nil || got.PageSize != 1000 || !builtProfile(*got) {
 		t.Fatalf("edited built profile = %+v", got)
 	}
 }
@@ -74,9 +86,9 @@ func TestOptionsProfileMustBeBuilt(t *testing.T) {
 func TestPublicOptionFields(t *testing.T) {
 	for _, pair := range [][2]reflect.Type{
 		{reflect.TypeFor[config.Profile](), reflect.TypeFor[implSettings.Profile]()},
-		{reflect.TypeFor[Options](), reflect.TypeFor[implSession.Options]()},
-		{reflect.TypeFor[PrepareOptions](), reflect.TypeFor[implSession.PrepareOptions]()},
-		{reflect.TypeFor[StreamOptions](), reflect.TypeFor[implSession.StreamOptions]()},
+		{reflect.TypeFor[exec.Options](), reflect.TypeFor[implSession.Options]()},
+		{reflect.TypeFor[exec.PrepareOptions](), reflect.TypeFor[implSession.PrepareOptions]()},
+		{reflect.TypeFor[exec.StreamOptions](), reflect.TypeFor[implSession.StreamOptions]()},
 	} {
 		public, internal := pair[0], pair[1]
 		for i := range internal.NumField() {
