@@ -29,4 +29,32 @@ func BenchmarkReceiveCache(b *testing.B) {
 			}
 		})
 	})
+	// A loopback page frame just over 128 KiB, and a default-size page.
+	for _, c := range []struct {
+		name string
+		size int
+	}{{"serial131k", 131000}, {"serial1500k", 1500 << 10}} {
+		b.Run(c.name, func(b *testing.B) {
+			cache := new(ReceiveCache)
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				buf, e := cache.Acquire(c.size)
+				buf[0] = 1
+				cache.Release(buf, e)
+			}
+		})
+	}
+	// Eight goroutines contending for one class.
+	b.Run("parallel8", func(b *testing.B) {
+		cache := new(ReceiveCache)
+		b.ReportAllocs()
+		b.SetParallelism(8)
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				buf, e := cache.Acquire(4 << 10)
+				buf[0] = 1
+				cache.Release(buf, e)
+			}
+		})
+	})
 }

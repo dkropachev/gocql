@@ -11,21 +11,28 @@ import (
 
 // ReceiveCache reuses only fully released raw v4 frame allocations. One
 // session owns it, with hard idle byte/object limits independent of
-// connection/shard counts. Outstanding page bytes are ordinary demand, not idle.
+// connection/shard counts. Outstanding page bytes are outside it: they are
+// ordinary demand, not idle.
 //
-// Buffers are kept on power-of-two size-class free lists (4 KiB to 1 MiB), each
-// a small mutex-protected LIFO stack. Acquire pops from the class that fits the
-// request and Release pushes onto the largest class the buffer can serve, so
-// neither scans. Requests above the largest class are plain allocations.
+// Buffers are kept on size-class free lists, each a small mutex-protected LIFO
+// stack. Classes are powers of two from 4 KiB to 64 KiB, then four steps per
+// power of two (64, 80, 96, 112, 128, 160, ... KiB) up to 8 MiB, so a class
+// wastes at most 25% of a request. The class index is bit arithmetic: Acquire
+// pops from the smallest class that fits and allocates a full class-size
+// buffer on a miss; Release accepts only exact class sizes. Requests above
+// 8 MiB are plain allocations.
 type ReceiveCache struct {
 	// idle packs the bytes (low idleObjectShift bits) and count of buffers
-	// stacked above each class's first receiveClassFree entries, so one CAS
-	// enforces the shared budget. The first entries of a class are covered by
-	// the fixed receiveCacheFreeBytes/Objects allowance and cost no atomic.
+	// under the shared budget: every buffer of a class above
+	// receiveCacheFreeClassMax, and everything stacked above the first
+	// receiveClassFree entries of the smaller classes. One CAS enforces it.
+	// The remaining entries are covered by the fixed receiveCacheFreeBytes and
+	// receiveCacheFreeObjects allowance and cost no atomic.
 	idle    atomic.Int64
 	epoch   atomic.Uint64
 	closed  atomic.Bool
 	over    atomic.Uint64 // misses above the largest class
+	_       [64]byte      // header off the first class's mutex
 	classes [receiveCacheClasses]receiveClass
 }
 
@@ -39,25 +46,53 @@ type receiveClass struct {
 const ReceiveCacheMaxBytes = 16 << 20
 
 // ReceiveCacheMaxObjects bounds idle buffers over all classes: 64 under the
-// shared budget plus the fixed per-class allowance.
+// shared budget plus the fixed allowance of the small classes.
 const ReceiveCacheMaxObjects = receiveCacheSharedObjects + receiveCacheFreeObjects
 
 // ReceiveCacheMaxObject is the largest buffer Release retains.
-const ReceiveCacheMaxObject = receiveCacheMinClass << (receiveCacheClasses - 1)
+const ReceiveCacheMaxObject = 8 << 20
 
 const (
-	receiveCacheMinShift       = 12
-	receiveCacheMinClass       = 1 << receiveCacheMinShift
-	receiveCacheClasses        = 9 // 4 KiB ... 1 MiB
-	idleObjectShift            = 40
-	idleObjectUnit       int64 = 1 << idleObjectShift
-	// Each class keeps its first receiveClassFree buffers outside the shared
-	// budget; the budget leaves room for them within the hard limits.
+	receiveCacheMinShift = 12
+	receiveCacheMinClass = 1 << receiveCacheMinShift
+	// Classes: 4, 8, 16, 32, 64 KiB, then 4 steps in each of the 7 octaves
+	// (64 KiB, 128 KiB], ... (4 MiB, 8 MiB].
+	receiveCacheClasses       = 5 + 7*4
+	idleObjectShift           = 40
+	idleObjectUnit      int64 = 1 << idleObjectShift
+	// The first receiveClassFree buffers of every class up to
+	// receiveCacheFreeClassMax (256 KiB) stay outside the shared budget, which
+	// leaves room for them within the hard limits. Larger classes (frames of
+	// 320 KiB and up) always go through the atomic budget.
 	receiveClassFree          = 2
+	receiveCacheFreeClassMax  = 12
 	receiveCacheSharedObjects = 64
-	receiveCacheFreeObjects   = receiveClassFree * receiveCacheClasses
-	receiveCacheFreeBytes     = receiveClassFree * (receiveCacheMinClass<<receiveCacheClasses - receiveCacheMinClass)
+	receiveCacheFreeObjects   = receiveClassFree * (receiveCacheFreeClassMax + 1)
+	// 2 * (4+8+16+32+64 + 80..128 + 160..256 KiB).
+	receiveCacheFreeBytes = 2 * (124 + 416 + 832) << 10
 )
+
+// receiveClassIndex returns the smallest class holding n bytes, n <= 8 MiB.
+func receiveClassIndex(n int) int {
+	if n <= receiveCacheMinClass {
+		return 0
+	}
+	if n <= 64<<10 {
+		return bits.Len(uint(n-1)) - receiveCacheMinShift
+	}
+	m := uint(n - 1)
+	e := bits.Len(m) - 1 // >= 16
+	return 5 + (e-16)*4 + int(m>>(e-2))&3
+}
+
+// receiveClassSize is the capacity of class idx.
+func receiveClassSize(idx int) int {
+	if idx < 5 {
+		return receiveCacheMinClass << idx
+	}
+	j := idx - 5
+	return (4 + 1 + j&3) << (16 + j>>2 - 2)
+}
 
 func (c *ReceiveCache) Acquire(n int) ([]byte, uint64) {
 	if c == nil {
@@ -68,10 +103,7 @@ func (c *ReceiveCache) Acquire(n int) ([]byte, uint64) {
 		c.over.Add(1)
 		return make([]byte, n), epoch
 	}
-	idx := 0
-	if n > receiveCacheMinClass {
-		idx = bits.Len(uint(n-1)) - receiveCacheMinShift
-	}
+	idx := receiveClassIndex(n)
 	cl := &c.classes[idx]
 	cl.mu.Lock()
 	if last := len(cl.stack) - 1; last >= 0 && !c.closed.Load() {
@@ -80,7 +112,7 @@ func (c *ReceiveCache) Acquire(n int) ([]byte, uint64) {
 		cl.stack = cl.stack[:last]
 		cl.hits++
 		cl.mu.Unlock()
-		if last >= receiveClassFree {
+		if last >= receiveClassFreeEntries(idx) {
 			c.idle.Add(-(int64(cap(b)) + idleObjectUnit))
 		}
 		return b[:n], epoch
@@ -88,15 +120,29 @@ func (c *ReceiveCache) Acquire(n int) ([]byte, uint64) {
 	cl.misses++
 	cl.mu.Unlock()
 	// Full class capacity lets the buffer serve any request of its class.
-	return make([]byte, n, receiveCacheMinClass<<idx), epoch
+	return make([]byte, n, receiveClassSize(idx)), epoch
 }
 
+// receiveClassFreeEntries is how many buffers of class idx bypass the budget.
+func receiveClassFreeEntries(idx int) int {
+	if idx > receiveCacheFreeClassMax {
+		return 0
+	}
+	return receiveClassFree
+}
+
+// Release returns b, which must have been acquired from a cache of this
+// version (its capacity is an exact class size). Other capacities are
+// dropped, so the byte bound cannot be exceeded by odd allocations.
 func (c *ReceiveCache) Release(b []byte, epoch uint64) {
 	size := cap(b)
 	if c == nil || size < receiveCacheMinClass || size > ReceiveCacheMaxObject {
 		return
 	}
-	idx := bits.Len(uint(size)) - 1 - receiveCacheMinShift
+	idx := receiveClassIndex(size)
+	if receiveClassSize(idx) != size {
+		return
+	}
 	cl := &c.classes[idx]
 	cl.mu.Lock()
 	// Checked under the class lock: Clear/Close bump the state first and then
@@ -105,7 +151,7 @@ func (c *ReceiveCache) Release(b []byte, epoch uint64) {
 		cl.mu.Unlock()
 		return
 	}
-	if len(cl.stack) >= receiveClassFree {
+	if len(cl.stack) >= receiveClassFreeEntries(idx) {
 		for {
 			v := c.idle.Load()
 			if v&(idleObjectUnit-1)+int64(size) > ReceiveCacheMaxBytes-receiveCacheFreeBytes || v>>idleObjectShift >= receiveCacheSharedObjects {
@@ -143,7 +189,7 @@ func (c *ReceiveCache) drain() {
 	for i := range c.classes {
 		cl := &c.classes[i]
 		cl.mu.Lock()
-		for j := receiveClassFree; j < len(cl.stack); j++ {
+		for j := receiveClassFreeEntries(i); j < len(cl.stack); j++ {
 			c.idle.Add(-(int64(cap(cl.stack[j])) + idleObjectUnit))
 		}
 		clear(cl.stack)

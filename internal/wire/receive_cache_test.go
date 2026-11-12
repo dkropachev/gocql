@@ -89,7 +89,8 @@ func TestReceiveCache(t *testing.T) {
 		for i := 0; i < 20; i++ {
 			cache.Release(make([]byte, 1<<20), cache.epoch.Load())
 		}
-		if n, c := cache.Storage(); n > ReceiveCacheMaxBytes || n < ReceiveCacheMaxBytes-2*(1<<20) || c < 14 {
+		// 1 MiB frames have no free allowance: only the shared budget counts.
+		if n, c := cache.Storage(); n != (ReceiveCacheMaxBytes-receiveCacheFreeBytes)>>20<<20 || c != n>>20 {
 			t.Fatal("total budget", n, c)
 		}
 		active, e := cache.Acquire(1 << 20)
@@ -196,7 +197,7 @@ func TestReceiveCacheSizeClasses(t *testing.T) {
 	})
 	t.Run("SameSizeReuse", func(t *testing.T) {
 		cache := new(ReceiveCache)
-		for _, n := range []int{100, 4096, 5000, 64 << 10, 1 << 20} {
+		for _, n := range []int{100, 4096, 5000, 64 << 10, 131000, 1 << 20, 1536 << 10, 5 << 20, 8 << 20} {
 			b, e := cache.Acquire(n)
 			if len(b) != n {
 				t.Fatal(len(b), n)
@@ -210,7 +211,7 @@ func TestReceiveCacheSizeClasses(t *testing.T) {
 	})
 	t.Run("OversizeFallback", func(t *testing.T) {
 		cache := new(ReceiveCache)
-		n := 3<<20 + 1
+		n := 8<<20 + 1
 		b, e := cache.Acquire(n)
 		if len(b) != n {
 			t.Fatal(len(b))
@@ -225,11 +226,11 @@ func TestReceiveCacheSizeClasses(t *testing.T) {
 	})
 	t.Run("LargerBufferServesSmallerRequest", func(t *testing.T) {
 		cache := new(ReceiveCache)
-		big := make([]byte, 9000)
+		big := make([]byte, 10000, 16384)
 		cache.Release(big, 0)
-		got, _ := cache.Acquire(8192)
-		if &got[0] != &big[0] || len(got) != 8192 {
-			t.Fatal("floor class entry not reused")
+		got, _ := cache.Acquire(9000)
+		if &got[0] != &big[0] || len(got) != 9000 {
+			t.Fatal("class entry not reused for a smaller request")
 		}
 	})
 	t.Run("Concurrent", func(t *testing.T) {
@@ -239,8 +240,11 @@ func TestReceiveCacheSizeClasses(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				for i := 0; i < 2000; i++ {
-					n := 1 << (8 + (i+g)%13)
+				for i := 0; i < 400; i++ {
+					n := 1 << (8 + (i+g)%16)
+					if n > 1<<20 && i%8 != 0 {
+						n = 1 << 12
+					}
 					b, e := cache.Acquire(n)
 					for j := range b {
 						b[j] = byte(g)
@@ -251,7 +255,7 @@ func TestReceiveCacheSizeClasses(t *testing.T) {
 							return
 						}
 					}
-					if i%500 == 0 {
+					if i%100 == 0 {
 						cache.Clear()
 					}
 					cache.Release(b, e)
@@ -289,4 +293,74 @@ func TestReceiveCacheSizeClasses(t *testing.T) {
 			t.Fatal(n, c, cache.idle.Load())
 		}
 	})
+}
+
+func TestReceiveCacheClassTable(t *testing.T) {
+	prev := 0
+	free := 0
+	for idx := 0; idx < receiveCacheClasses; idx++ {
+		size := receiveClassSize(idx)
+		if size <= prev {
+			t.Fatal("sizes not increasing", idx, size)
+		}
+		if got := receiveClassIndex(size); got != idx {
+			t.Fatal("round trip", idx, size, got)
+		}
+		if idx > 0 && receiveClassIndex(prev+1) != idx {
+			t.Fatal("boundary", idx, prev+1)
+		}
+		if size > 64<<10 && size-prev > size/4 {
+			t.Fatal("more than 25% waste", size, prev)
+		}
+		if idx <= receiveCacheFreeClassMax {
+			free += receiveClassFree * size
+		}
+		prev = size
+	}
+	if prev != ReceiveCacheMaxObject {
+		t.Fatal("largest class", prev)
+	}
+	if free != receiveCacheFreeBytes {
+		t.Fatal("free allowance", free, receiveCacheFreeBytes)
+	}
+	if receiveCacheFreeBytes >= ReceiveCacheMaxBytes {
+		t.Fatal("no shared budget left")
+	}
+}
+
+func TestReceiveCacheRejectsOddCapacity(t *testing.T) {
+	cache := new(ReceiveCache)
+	for _, n := range []int{4097, 100 << 10, 131000, 1<<20 + 1, 9 << 20} {
+		cache.Release(make([]byte, n), 0)
+	}
+	if n, c := cache.Storage(); n != 0 || c != 0 {
+		t.Fatal("odd capacity retained", n, c)
+	}
+}
+
+func TestReceiveCacheLargeClassesBounded(t *testing.T) {
+	cache := new(ReceiveCache)
+	for i := 0; i < 50; i++ {
+		for _, n := range []int{8 << 20, 5 << 20, 3 << 20, 2 << 20, 1 << 20, 320 << 10} {
+			b, e := cache.Acquire(n)
+			cache.Release(b, e)
+			held, he := cache.Acquire(n)
+			cache.Release(held, he)
+			if bytes, objects := cache.Storage(); bytes > ReceiveCacheMaxBytes || objects > ReceiveCacheMaxObjects {
+				t.Fatal("bound", bytes, objects)
+			}
+		}
+	}
+	var live [][]byte
+	var eps []uint64
+	for i := 0; i < 40; i++ {
+		b, e := cache.Acquire(4 << 20)
+		live, eps = append(live, b), append(eps, e)
+	}
+	for i, b := range live {
+		cache.Release(b, eps[i])
+	}
+	if bytes, _ := cache.Storage(); bytes > ReceiveCacheMaxBytes {
+		t.Fatal("idle bytes over budget", bytes)
+	}
 }
