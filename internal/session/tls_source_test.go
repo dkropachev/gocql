@@ -40,7 +40,7 @@ func TestTLSSourceSession(t *testing.T) {
 	config.Metadata.PeriodicRefresh = 0
 	config.ReportConfiguration = false
 	config.Pool.ConnectionsPerHost = 1
-	config.Pool.ShardAwarePort = false
+	config.Pool.AdvancedShardAwareness.Enabled = false
 	config.TLS = source.TLSConfig()
 	config.TLSSource = source
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -638,8 +638,12 @@ methods may declare their own type parameters, so the generic operations are
 methods on the type that owns them (`Session.Prepare`, `Session.PrepareStream`,
 `Session.RunBatch`, `Session.Unprepared*`, `Prepared.Query`,
 `PreparedStream.Query`). Settings that only refine a builder are methods of
-the builder, not values made by a function: pool size, client routes and a
-fixed TLS configuration are `ConfigBuilder` methods.
+the builder, not values made by a function: pool size and a fixed TLS
+configuration are `ConfigBuilder` methods. Client routes are one read-only
+`config.ClientRoutes`, built with `config.NewClientRoutes().WithRoute(id,
+hostname)...Build()` and passed to `WithClientRoutes`, so a hostname override
+belongs to its route and one call replaces the whole setting. Routed
+connections dial the route's `tls_port` exactly when TLS is configured.
 
 The root package has one function, `Connect[D Dialect](context.Context,
 config.Config) (*Session[D], error)`, which opens a session of dialect D. It
@@ -651,6 +655,7 @@ owns its type:
 |---|---|
 | `config.New(contactPoints ...string) *config.ConfigBuilder` | starts a configuration |
 | `config.NewProfile() *config.ProfileBuilder` | starts an execution profile |
+| `config.NewClientRoutes() *config.ClientRoutesBuilder` | starts a client routes setting |
 | `config.NewTLSFiles(*tls.Config, config.TLSFiles) (*config.TLSFileSource, error)` | a TLS configuration reloaded from files |
 | `cql.PageStateFromToken([]byte) cql.PageState` | a continuation from a saved token; `PageState` fields are private |
 
@@ -1771,16 +1776,20 @@ func (*ConfigBuilder) WithConnectionsPerShard(n int) *ConfigBuilder
 func (*ConfigBuilder) WithConnectionsPerHost(n int) *ConfigBuilder
 func (*ConfigBuilder) WithTLS(*tls.Config) *ConfigBuilder
 func (*ConfigBuilder) WithTLSSource(TLSSource) *ConfigBuilder
-func (*ConfigBuilder) WithClientRoutes(connectionIDs ...string) *ConfigBuilder
-func (*ConfigBuilder) WithClientRouteHostname(connectionID, hostname string) *ConfigBuilder
-func (*ConfigBuilder) WithClientRouteTLS(bool) *ConfigBuilder
+func (*ConfigBuilder) WithClientRoutes(ClientRoutes) *ConfigBuilder // replaces all; ClientRoutes{} removes
 func (*ConfigBuilder) WithAuth(auth.Provider) *ConfigBuilder
 func (*ConfigBuilder) WithResolver(endpoint.Resolver) *ConfigBuilder
 func (*ConfigBuilder) WithAddressTranslator(endpoint.Translator) *ConfigBuilder
 func (*ConfigBuilder) WithDialer(endpoint.Dialer) *ConfigBuilder
 func (*ConfigBuilder) WithPartitioner(name string, routing.TokenPartitioner) *ConfigBuilder
 func (*ConfigBuilder) WithMetadataMode(metadata.Mode) *ConfigBuilder
+func (*ConfigBuilder) WithAdvancedShardAwareness(first, last uint16) *ConfigBuilder
+func (*ConfigBuilder) WithDefaultAdvancedShardAwareness() *ConfigBuilder // ports 49152-65535
 func NewProfile() *ProfileBuilder
+func NewClientRoutes() *ClientRoutesBuilder
+func (*ClientRoutesBuilder) WithRoute(connectionID, hostname string) *ClientRoutesBuilder
+func (*ClientRoutesBuilder) Build() (ClientRoutes, error)
+func (ClientRoutes) Routes() []ClientRoute // copy; ClientRoute{ConnectionID, Hostname}
 
 // package gocql
 func Connect[D Dialect](context.Context, config.Config) (*Session[D], error)
@@ -1809,7 +1818,8 @@ files when a check fails. Context-taking hooks honor cancellation; synchronous c
 prompt/nonblocking and cannot reenter blocking Close/Wait. Client
 routes supply per-connection-ID endpoint overrides and disable advanced shard
 awareness (shard selection by source port through the shard-aware port), which
-their proxy breaks. `WithConnectionsPerShard(n)` (default 1) and
+their proxy breaks, unless `WithAdvancedShardAwareness` or
+`WithDefaultAdvancedShardAwareness` is called. `WithConnectionsPerShard(n)` (default 1) and
 `WithConnectionsPerHost(n)` size the pool, the later call winning;
 `WithConnectionsPerHost` dials the regular port only and keeps no per-shard
 excess, so Build rejects it with `WithAdvancedShardAwareness` or

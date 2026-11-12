@@ -18,7 +18,7 @@ import (
 )
 
 type shardAwareTestCluster struct {
-	connect func(context.Context, endpoint.InternalLegacyDialer, bool) (*Core, error)
+	connect func(context.Context, endpoint.InternalLegacyDialer) (*Core, error)
 	useTLS  bool
 	port    uint16
 }
@@ -56,7 +56,7 @@ func testShardAwarePortNoReconnections(t *testing.T, makeCluster makeClusterTest
 
 			useTLS := cluster.useTLS
 
-			sess, err := cluster.connect(ctx, dialer, false)
+			sess, err := cluster.connect(ctx, dialer)
 			if err != nil {
 				pushErr(fmt.Errorf("create session: %w", err))
 				cancel()
@@ -132,7 +132,7 @@ func testShardAwarePortMaliciousNAT(t *testing.T, makeCluster makeClusterTestFun
 	cluster := makeCluster()
 	dialer := &sourcePortOffByOneTestDialer{}
 
-	sess, err := cluster.connect(context.Background(), dialer, false)
+	sess, err := cluster.connect(context.Background(), dialer)
 	if err != nil {
 		t.Fatalf("an error occurred while creating a session: %s", err)
 	}
@@ -163,7 +163,7 @@ func testShardAwarePortUnreachable(t *testing.T, makeCluster makeClusterTestFunc
 	cluster := makeCluster()
 	dialer := &allowOnlyNonShardAwarePortDialer{allowedPort: cluster.port}
 
-	sess, err := cluster.connect(context.Background(), dialer, false)
+	sess, err := cluster.connect(context.Background(), dialer)
 	if err != nil {
 		t.Fatalf("an error occurred while creating a session: %s", err)
 	}
@@ -186,45 +186,6 @@ func testShardAwarePortUnreachable(t *testing.T, makeCluster makeClusterTestFunc
 		}
 
 		triggerPoolsRefill(sess)
-	}
-}
-
-func testShardAwarePortUnusedIfNotEnabled(t *testing.T, makeCluster makeClusterTestFunc) {
-	dialer := newLoggingTestDialer()
-	cluster := makeCluster()
-
-	useTLS := cluster.useTLS
-
-	// Explicitly disable the shard aware port.
-	sess, err := cluster.connect(context.Background(), dialer, true)
-	if err != nil {
-		t.Fatalf("an error occurred while creating a session: %s", err)
-	}
-	defer sess.Close()
-
-	if err := waitUntilPoolsStopFilling(context.Background(), sess, 10*time.Second); err != nil {
-		t.Fatal(err)
-	}
-
-	hosts := SessionData(sess).InternalHostSource.InternalGetHostsList()
-	for _, host := range hosts {
-		t.Logf("checking host %s", implEndpoint.HostInfoData(host).InternalHostname)
-		hostPool, _ := SessionData(sess).InternalPool.InternalGetPool(host)
-
-		shardAwarePort := getShardAwarePort(hostPool, useTLS)
-		if shardAwarePort == 0 {
-			// Shard aware port was not exposed by the host
-			t.Log("the host does not expose a shard-aware port, skipping")
-			continue
-		}
-
-		events := dialer.connectionEvents(host.ConnectAddress().String())
-
-		for _, evt := range events {
-			if evt.destinationPort == shardAwarePort {
-				t.Error("there was an attempt to connect to a shard aware port, but the configuration does not allow that")
-			}
-		}
 	}
 }
 

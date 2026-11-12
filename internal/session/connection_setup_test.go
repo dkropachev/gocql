@@ -250,8 +250,8 @@ func TestConnectionSetup(t *testing.T) {
 			}()
 			implEndpoint.InternalHostInfoSetTranslatedConnectionInfo(host, endpoint.InternalTranslatedAddresses{CQL: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 9042), ShardAware: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 19042)})
 			config := settings.DefaultConfig("localhost")
-			config.Pool.SourcePortStart = 49152
-			config.Pool.SourcePortEnd = 49155
+			config.Pool.AdvancedShardAwareness.SourcePortStart = 49152
+			config.Pool.AdvancedShardAwareness.SourcePortEnd = 49155
 			var targeted, ordinary int
 			config.DialHost = func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 				if target.ShardID.Set {
@@ -377,7 +377,7 @@ func TestConnectionSetup(t *testing.T) {
 			config := settings.DefaultConfig("localhost")
 			config.TLS = first
 			config.TLSSource = live
-			config.Pool.ShardAwarePort = false
+			config.Pool.AdvancedShardAwareness.Enabled = false
 			dialer := &transport.InternalV2TLSHostDialer{InternalConfig: config.Connectivity()}
 			host := testHost(t, listener.Addr())
 			dial := func() error {
@@ -467,7 +467,7 @@ func TestConnectionSetup(t *testing.T) {
 			if err = <-accepted; err != nil {
 				t.Fatal(err)
 			}
-			if !selected.ShardID.Set || selected.ShardID.Value != 1 || !selected.LocalAddress.IsValid() || selected.LocalAddress.Port()%2 != 1 || selected.LocalAddress.Port() < config.Pool.SourcePortStart || !implEndpoint.DialedHostData(conn).InternalShardTarget.Set {
+			if !selected.ShardID.Set || selected.ShardID.Value != 1 || !selected.LocalAddress.IsValid() || selected.LocalAddress.Port()%2 != 1 || selected.LocalAddress.Port() < config.Pool.AdvancedShardAwareness.SourcePortStart || !implEndpoint.DialedHostData(conn).InternalShardTarget.Set {
 				t.Fatal("shard target/source lost", selected)
 			}
 		})

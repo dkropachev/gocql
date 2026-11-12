@@ -33,12 +33,6 @@ func TestShardAwarePort(t *testing.T) {
 
 			testWithAndWithoutTLS(t, testShardAwarePortUnreachable)
 		})
-
-		t.Run("UnusedIfNotEnabled", func(t *testing.T) {
-			t.Parallel()
-
-			testWithAndWithoutTLS(t, testShardAwarePortUnusedIfNotEnabled)
-		})
 	})
 
 	t.Run("PortIterator", func(t *testing.T) {

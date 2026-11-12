@@ -36,7 +36,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/events"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/tests"
 )
 
 func TestClientRoutes(t *testing.T) {
@@ -220,63 +219,6 @@ func TestClientRoutes(t *testing.T) {
 
 		if err := h.Initialize(s); err == nil {
 			t.Fatal("expected second Initialize call to fail")
-		}
-	})
-
-	t.Run("NewSessionCommon", func(t *testing.T) {
-		t.Parallel()
-
-		testCases := []struct {
-			name                  string
-			clientRoutes          *ClientRoutesConfig
-			disableShardAwarePort bool
-			wantDisabled          bool
-		}{
-			{
-				name:         "no client routes",
-				wantDisabled: false,
-			},
-			{
-				name: "client routes disable shard awareness by default",
-				clientRoutes: &ClientRoutesConfig{
-					Endpoints: ClientRoutesEndpointList{{ConnectionID: "connection-id"}},
-				},
-				wantDisabled: true,
-			},
-			{
-				name: "client routes explicitly enable shard awareness",
-				clientRoutes: &ClientRoutesConfig{
-					Endpoints:            ClientRoutesEndpointList{{ConnectionID: "connection-id"}},
-					EnableShardAwareness: true,
-				},
-				wantDisabled: false,
-			},
-			{
-				name: "cluster-wide disable overrides client routes enable",
-				clientRoutes: &ClientRoutesConfig{
-					Endpoints:            ClientRoutesEndpointList{{ConnectionID: "connection-id"}},
-					EnableShardAwareness: true,
-				},
-				disableShardAwarePort: true,
-				wantDisabled:          true,
-			},
-		}
-
-		for _, tt := range testCases {
-			t.Run(tt.name, func(t *testing.T) {
-				t.Parallel()
-
-				cfg := InternalNewClusterSettings("127.0.0.1")
-				cfg.ClientRoutesConfig = tt.clientRoutes
-				cfg.DisableShardAwarePort = tt.disableShardAwarePort
-				session, err := newSessionCommon(*cfg)
-				if err != nil {
-					t.Fatalf("new session: %v", err)
-				}
-				t.Cleanup(func() { _ = session.Close() })
-
-				tests.AssertEqual(t, "disable shard-aware port", tt.wantDisabled, SessionData(session).InternalCfg.DisableShardAwarePort)
-			})
 		}
 	})
 
@@ -734,22 +676,5 @@ func TestClientRoutes(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Fatal("timed out waiting for synchronous update")
 		}
-	})
-
-	t.Run("WithShardAwareness", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := InternalNewClusterSettings("127.0.0.1")
-		cfg.WithOptions(
-			WithClientRoutes(
-				WithEndpoints(ClientRoutesEndpoint{ConnectionID: "connection-id"}),
-				WithShardAwareness(true),
-			),
-		)
-
-		if cfg.ClientRoutesConfig == nil {
-			t.Fatal("expected client routes config")
-		}
-		tests.AssertEqual(t, "client routes shard awareness", true, cfg.ClientRoutesConfig.EnableShardAwareness)
 	})
 }

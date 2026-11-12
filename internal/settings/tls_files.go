@@ -87,11 +87,3 @@ func BuildTLSFromFiles(base *tls.Config, content TLSFilesContent) (*tls.Config, 
 	}
 	return config, nil
 }
-
-// ValidateClientRoutesTLS reports a TLS config that client routes cannot use.
-func ValidateClientRoutesTLS(routes *ClientRoutesOptions, config *tls.Config) error {
-	if routes != nil && routes.TLS && (config == nil || config.InsecureSkipVerify && config.VerifyConnection == nil && config.VerifyPeerCertificate == nil) {
-		return cqltype.TypeValidation("client routes TLS", "verified TLS configuration required")
-	}
-	return nil
-}

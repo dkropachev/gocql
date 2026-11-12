@@ -5,7 +5,6 @@ package session
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -32,7 +31,7 @@ func TestClientRoutes(t *testing.T) {
 	t.Run("Config", func(t *testing.T) {
 		t.Run("SnapshotsAndValidation", func(t *testing.T) {
 			cfg := settings.DefaultConfig("localhost")
-			cfg.Pool.ShardAwarePort = false
+			cfg.Pool.AdvancedShardAwareness.Enabled = false
 			cfg.ClientRoutes = &settings.ClientRoutesOptions{ConnectionIDs: []string{"one", "two"}, HostnameOverrides: map[string]string{"one": "proxy.example"}}
 			if err := cfg.Validate(); err != nil {
 				t.Fatal(err)
@@ -43,13 +42,18 @@ func TestClientRoutes(t *testing.T) {
 			if snapshot.ClientRoutes.ConnectionIDs[0] != "one" || snapshot.ClientRoutes.HostnameOverrides["one"] != "proxy.example" {
 				t.Fatal("route config aliases input")
 			}
-			edits := []func(*settings.Config){func(c *settings.Config) { c.Pool.ShardAwarePort = true }, func(c *settings.Config) { c.ClientRoutes.ConnectionIDs = []string{"one", "one"} }, func(c *settings.Config) { c.ClientRoutes.HostnameOverrides["unknown"] = "host" }, func(c *settings.Config) { c.ClientRoutes.HostnameOverrides["one"] = "" }, func(c *settings.Config) { c.ClientRoutes.TLS = true }, func(c *settings.Config) { c.ClientRoutes.TLS = true; c.TLS = &tls.Config{InsecureSkipVerify: true} }}
+			edits := []func(*settings.Config){func(c *settings.Config) { c.AddressTranslator = implEndpoint.AddressTranslatorFunc(nil) }, func(c *settings.Config) { c.ClientRoutes.ConnectionIDs = []string{"one", "one"} }, func(c *settings.Config) { c.ClientRoutes.HostnameOverrides["unknown"] = "host" }, func(c *settings.Config) { c.ClientRoutes.HostnameOverrides["one"] = "" }}
 			for _, edit := range edits {
 				c := snapshot.Snapshot()
 				edit(&c)
 				if err := c.Validate(); err == nil {
 					t.Fatal("incompatible route setting accepted")
 				}
+			}
+			shardAware := snapshot.Snapshot()
+			shardAware.Pool.AdvancedShardAwareness.Enabled = true
+			if err := shardAware.Validate(); err != nil {
+				t.Fatalf("client routes with advanced shard awareness: %v", err)
 			}
 		})
 	})
@@ -83,7 +87,7 @@ func TestClientRoutes(t *testing.T) {
 			config.Protocol = 4
 			config.Metadata.Mode = settings.MetadataSchemaNone
 			config.Metadata.InitialDiscovery = false
-			config.Pool.ShardAwarePort = false
+			config.Pool.AdvancedShardAwareness.Enabled = false
 			config.Pool.ConnectionsPerHost = 1
 			config.Logger = logging.Nop()
 			config.ClientRoutes = &settings.ClientRoutesOptions{ConnectionIDs: []string{ids[0].String(), ids[1].String(), ids[2].String()}}

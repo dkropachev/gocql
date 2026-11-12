@@ -274,7 +274,7 @@ func TestEvents(t *testing.T) {
 					config.Metadata.PeriodicRefresh = 0
 					config.ReportConfiguration = false
 					config.Pool.ConnectionsPerHost = 1
-					config.Pool.ShardAwarePort = false
+					config.Pool.AdvancedShardAwareness.Enabled = false
 					config.Metadata.TopologyEvents = enabled == "topology"
 					config.Metadata.StatusEvents = enabled == "status"
 					config.Metadata.SchemaEvents = enabled == "schema"

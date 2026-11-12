@@ -39,7 +39,7 @@ type Config struct {
 type ConfigBuilder struct {
 	profile              *ProfileBuilder
 	ignoredEvents        []EventKind
-	routes               implSettings.ClientRoutesOptions
+	routes               ClientRoutes
 	settings             implSettings.Config
 	onlyHost             cql.Option[cql.UUID]
 	discoveryChosen      bool
@@ -63,11 +63,8 @@ func (b *ConfigBuilder) Build() (Config, error) {
 	settings := b.settings
 	profile := b.profile.profile
 	settings.DefaultProfile = &profile
-	if len(b.routes.ConnectionIDs) > 0 {
-		routes := b.routes
-		settings.ClientRoutes = &routes
-	} else if len(b.routes.HostnameOverrides) > 0 || b.routes.TLS {
-		return Config{}, &cqlerr.ValidationError{Field: "client routes", Err: errors.New("hostname override or TLS requirement without WithClientRoutes")}
+	if len(b.routes.routes) > 0 {
+		settings.ClientRoutes = b.routes.options()
 	}
 	if path, _ := implSettings.InternalUnixSocketPath(settings.ContactPoints); path != "" {
 		if !b.discoveryChosen {
@@ -81,16 +78,16 @@ func (b *ConfigBuilder) Build() (Config, error) {
 		}
 	}
 	if settings.ClientRoutes != nil && !b.shardAwarenessChosen {
-		settings.Pool.ShardAwarePort = false
+		settings.Pool.AdvancedShardAwareness.Enabled = false
 	}
 	if b.perHost {
-		if b.shardAwarenessChosen && settings.Pool.ShardAwarePort {
+		if b.shardAwarenessChosen && settings.Pool.AdvancedShardAwareness.Enabled {
 			return Config{}, &cqlerr.ValidationError{Field: "pool size", Err: errors.New("WithConnectionsPerHost dials no shard-aware port; drop WithAdvancedShardAwareness or use WithConnectionsPerShard")}
 		}
 		if b.maxExcessChosen {
 			return Config{}, &cqlerr.ValidationError{Field: "pool size", Err: errors.New("WithConnectionsPerHost keeps no per-shard excess connections; drop WithMaxExcessPerShard or use WithConnectionsPerShard")}
 		}
-		settings.Pool.ShardAwarePort = false
+		settings.Pool.AdvancedShardAwareness.Enabled = false
 	}
 	if b.onlyHost.Set {
 		id := b.onlyHost.Value
@@ -264,7 +261,7 @@ func (b *ConfigBuilder) WithSocketBuffers(receive, send int) *ConfigBuilder {
 	return b
 }
 
-// WithLinger sets SO_LINGER in whole seconds; Linger(0) resets connections on
+// WithLinger sets SO_LINGER in whole seconds; WithLinger(0) resets connections on
 // close. Default the OS's.
 func (b *ConfigBuilder) WithLinger(d time.Duration) *ConfigBuilder {
 	b.settings.Linger = cql.Some(d)
@@ -353,12 +350,21 @@ func (b *ConfigBuilder) WithMaxOrphanedStreams(n int) *ConfigBuilder {
 // WithAdvancedShardAwareness picks the shard of each new connection by dialing
 // the node's shard-aware port from a local source port chosen from first to
 // last. It replaces NoAdvancedShardAwareness. Default on with ports
-// 49152-65535, except under WithClientRoutes or WithConnectionsPerHost.
+// 49152-65535, except under WithConnectionsPerHost and WithClientRoutes.
+// Calling it turns it on under WithClientRoutes; do that only when every route
+// endpoint forwards to ScyllaDB's Proxy Protocol v2 shard-aware listener and
+// passes the client's source port, since NAT rewrites the port and loses the
+// shard.
 func (b *ConfigBuilder) WithAdvancedShardAwareness(first, last uint16) *ConfigBuilder {
 	b.shardAwarenessChosen = true
-	b.settings.Pool.ShardAwarePort = true
-	b.settings.Pool.SourcePortStart, b.settings.Pool.SourcePortEnd = first, last
+	b.settings.Pool.AdvancedShardAwareness = implSettings.AdvancedShardAwarenessOptions{Enabled: true, SourcePortStart: first, SourcePortEnd: last}
 	return b
+}
+
+// WithDefaultAdvancedShardAwareness is WithAdvancedShardAwareness with the
+// default source ports, 49152-65535.
+func (b *ConfigBuilder) WithDefaultAdvancedShardAwareness() *ConfigBuilder {
+	return b.WithAdvancedShardAwareness(49152, 65535)
 }
 
 // NoAdvancedShardAwareness connects through the regular port only and lets
@@ -366,7 +372,7 @@ func (b *ConfigBuilder) WithAdvancedShardAwareness(first, last uint16) *ConfigBu
 // covered. It replaces WithAdvancedShardAwareness.
 func (b *ConfigBuilder) NoAdvancedShardAwareness() *ConfigBuilder {
 	b.shardAwarenessChosen = true
-	b.settings.Pool.ShardAwarePort = false
+	b.settings.Pool.AdvancedShardAwareness.Enabled = false
 	return b
 }
 
@@ -402,38 +408,11 @@ func (b *ConfigBuilder) WithAddressTranslator(translator endpoint.Translator) *C
 	return b
 }
 
-// WithClientRoutes connects through ScyllaDB client routes with the given
-// client connection IDs. With no IDs it removes client routes, together with
-// their hostname overrides and TLS requirement. Default none.
-func (b *ConfigBuilder) WithClientRoutes(connectionIDs ...string) *ConfigBuilder {
-	if len(connectionIDs) == 0 {
-		b.routes = implSettings.ClientRoutesOptions{}
-		return b
-	}
-	b.routes.ConnectionIDs = append([]string(nil), connectionIDs...)
-	return b
-}
-
-// WithClientRouteHostname dials hostname for the client route connectionID.
-// An empty hostname removes that connection's override. Build rejects an
-// override without WithClientRoutes.
-func (b *ConfigBuilder) WithClientRouteHostname(connectionID, hostname string) *ConfigBuilder {
-	if hostname == "" {
-		delete(b.routes.HostnameOverrides, connectionID)
-		return b
-	}
-	if b.routes.HostnameOverrides == nil {
-		b.routes.HostnameOverrides = make(map[string]string)
-	}
-	b.routes.HostnameOverrides[connectionID] = hostname
-	return b
-}
-
-// WithClientRouteTLS chooses whether routed connections require verified TLS;
-// WithTLS still controls connection encryption. Build rejects true without
-// WithClientRoutes. Default false.
-func (b *ConfigBuilder) WithClientRouteTLS(on bool) *ConfigBuilder {
-	b.routes.TLS = on
+// WithClientRoutes connects through ScyllaDB client routes built with
+// NewClientRoutes. Each call replaces the complete client routes setting; the
+// zero ClientRoutes removes them. Default none.
+func (b *ConfigBuilder) WithClientRoutes(routes ClientRoutes) *ConfigBuilder {
+	b.routes = routes
 	return b
 }
 
@@ -621,7 +600,7 @@ func (c Config) String() string {
 	var w strings.Builder
 	fmt.Fprintf(&w, "contact points=%v port=%d keyspace=%q compression=%v", s.ContactPoints, s.Port, s.Keyspace, s.Compression)
 	fmt.Fprintf(&w, " tls=%t auth=%t", s.TLS != nil, s.Auth != nil)
-	fmt.Fprintf(&w, " connections per shard=%d per host=%d advanced shard awareness=%t", s.Pool.ConnectionsPerShard, s.Pool.ConnectionsPerHost, s.Pool.ShardAwarePort)
+	fmt.Fprintf(&w, " connections per shard=%d per host=%d advanced shard awareness=%t", s.Pool.ConnectionsPerShard, s.Pool.ConnectionsPerHost, s.Pool.AdvancedShardAwareness.Enabled)
 	fmt.Fprintf(&w, " discovery=%t metadata=%d prepared cache=%d", s.Metadata.InitialDiscovery, s.Metadata.Mode, s.PreparedCacheSize)
 	if p := s.DefaultProfile; p != nil {
 		fmt.Fprintf(&w, " consistency=%v timeout=%v page size=%d", p.Consistency, p.Timeout, p.PageSize)

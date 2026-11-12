@@ -72,7 +72,6 @@ func newSessionCommon(cfg InternalClusterSettings) (*Core, error) {
 }
 
 func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implSettings.Config, initialize func(*Core, implSettings.Config) *implSettings.Config) (*Core, error) {
-	cfg.applyClientRoutesConfig()
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("gocql: unable to create session: cluster config validation failed: %w", err)
 	}
@@ -130,9 +129,6 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 		connCfg.TypedAuth = runtimeConfig.Auth
 		connCfg.TypedLimits = runtimeConfig.Limits
 		s.ConfigureV2Peripheral(*runtimeConfig)
-		if s.privateStorage.InternalClientRoutesHandler != nil {
-			s.privateStorage.InternalClientRoutesHandler.privateStorage.pickTLSPorts = runtimeConfig.ClientRoutes.TLS
-		}
 	}
 	s.privateStorage.InternalMetadataDescriber = s.NewMetadataDescriber()
 	s.privateStorage.eventBus = eventbus.New[events.Event](cfg.EventBusConfig, cfg.Logger)

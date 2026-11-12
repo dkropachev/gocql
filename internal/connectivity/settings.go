@@ -26,8 +26,15 @@ type PoolOptions struct {
 	MaxExcessPerShard                       int
 	MaxRequestsPerConnection                int
 	MaxOrphanedStreams                      int
-	ShardAwarePort                          bool
-	SourcePortStart, SourcePortEnd          uint16
+	AdvancedShardAwareness                  AdvancedShardAwarenessOptions
+}
+
+// AdvancedShardAwarenessOptions picks each connection's shard by dialing the
+// node's shard-aware port from a local source port in
+// [SourcePortStart, SourcePortEnd].
+type AdvancedShardAwarenessOptions struct {
+	Enabled                        bool
+	SourcePortStart, SourcePortEnd uint16
 }
 
 type ReconnectPolicy interface {
@@ -59,7 +66,6 @@ type TLSSource interface {
 type ClientRoutesOptions struct {
 	HostnameOverrides map[string]string
 	ConnectionIDs     []string
-	TLS               bool
 }
 
 type AuthProvider interface {

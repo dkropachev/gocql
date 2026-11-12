@@ -52,9 +52,6 @@ func (d *InternalV2TLSHostDialer) selectedTLS(ctx context.Context, host model.Ho
 	if c != nil {
 		c = connectivity.CloneTLSConfig(c)
 	}
-	if d.InternalConfig.ClientRoutes != nil && d.InternalConfig.ClientRoutes.TLS && (c == nil || c.InsecureSkipVerify && c.VerifyConnection == nil && c.VerifyPeerCertificate == nil) {
-		return nil, cqltype.TypeValidation("client routes TLS", "usable verified TLS required")
-	}
 	return c, nil
 }
 func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target implEndpoint.DialTarget) (net.Conn, error) {
@@ -216,7 +213,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 	}
 	var c net.Conn
 	var selectedShard cqltype.Option[uint32]
-	if shards > 0 && d.InternalConfig.Pool.ShardAwarePort && d.InternalConfig.Pool.ConnectionsPerHost == 0 {
+	if shards > 0 && d.InternalConfig.Pool.AdvancedShardAwareness.Enabled && d.InternalConfig.Pool.ConnectionsPerHost == 0 {
 		if shard < 0 || shard >= shards {
 			return nil, cqltype.TypeValidation("shard", "target out of range")
 		}
@@ -229,7 +226,8 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 			}
 		}
 		if endpoint != "" {
-			for port := int(d.InternalConfig.Pool.SourcePortStart); port <= int(d.InternalConfig.Pool.SourcePortEnd); port++ {
+			sa := d.InternalConfig.Pool.AdvancedShardAwareness
+			for port := int(sa.SourcePortStart); port <= int(sa.SourcePortEnd); port++ {
 				if port%shards != shard {
 					continue
 				}
