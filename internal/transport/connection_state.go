@@ -45,6 +45,9 @@ var errOrphanBudget = errors.New("gocql: abandoned stream budget exceeded")
 // included) and the streams in use are all zero. A shared operation that finds
 // a flag set takes InternalMu and waits on the change channel, and one that
 // leaves an exclusive connection idle wakes the reserver the same way.
+//
+// admissionClosed only gates admission. InternalClosed remains the authority
+// on whether the connection is closed; both are written under InternalMu.
 const (
 	admissionClosed    = 1 << 63
 	admissionExclusive = 1 << 62
@@ -142,6 +145,10 @@ func (c *Conn) beginSharedSlow(ctx context.Context) error {
 	}
 }
 
+// endShared ends one shared admission. Every call must pair with a successful
+// beginShared (or allocSharedCall): the count shares a word with the flags, so
+// an unbalanced call would borrow from the exclusive bit instead of going
+// negative.
 func (c *Conn) endShared() {
 	if w := c.admission.Add(^uint64(0)); w&admissionExclusive != 0 && w&admissionCountMask == 0 {
 		c.wakeReserver()
