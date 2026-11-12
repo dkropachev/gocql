@@ -85,9 +85,12 @@ func (rt *InternalSessionRuntime) runStream[B, R any](ctx context.Context, bound
 	}
 	session := rt.Core
 	// A stream never prefetches or speculates, whatever its profile says.
-	request.InternalOptions.InternalProfile.Prefetch = 0
-	request.InternalOptions.InternalOptions.Prefetch = cqltype.Option[int]{Set: true, Value: 0}
-	request.InternalOptions.InternalProfile.Speculation = nil
+	if o := request.options; o.InternalProfile.Prefetch != 0 || o.InternalProfile.Speculation != nil {
+		o = request.ownOptions()
+		o.InternalProfile.Prefetch = 0
+		o.InternalOptions.Prefetch = cqltype.Option[int]{Set: true, Value: 0}
+		o.InternalProfile.Speculation = nil
+	}
 	request.responseDest = nil // a stream handle keeps its pages beyond the query's generation
 	cursor := func() *RowStream[R] {
 		opaqueStorageValue := new(RowStream[R])
@@ -521,8 +524,8 @@ func (s *RowStream[R]) wireRequest(consistency cqltype.Consistency) (*model.Atte
 	if err := rt.newAttempt(w, conn, r, s.state, consistency); err != nil {
 		return nil, err
 	}
-	setPrepared(w, s.privateStorage.prepared, conn, r.InternalOptions.InternalOptions.IncludeMetadata)
-	w.Params = paramsTemplate(&r.InternalOptions, w, conn.InternalVersion)
+	setPrepared(w, s.privateStorage.prepared, conn, r.options.InternalOptions.IncludeMetadata)
+	w.Params = paramsTemplate(r.options, w, conn.InternalVersion)
 	return w, nil
 }
 
@@ -547,7 +550,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 	tablet := lookupRequestTablet(metadata, request)
 	request.tabletVersionBlock = tablet.VersionBlock(request.routing)
 	var plan implRouting.QueryPlan
-	if policy := request.InternalOptions.InternalProfile.Routing; policy != nil {
+	if policy := request.options.InternalProfile.Routing; policy != nil {
 		if err := policy.Validate(metadata); err != nil {
 			return err
 		}
@@ -558,10 +561,10 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		}
 	}
 	pagectx := s.privateStorage.ctx
-	if timeout := request.InternalOptions.InternalProfile.PageTimeout; timeout > 0 {
+	if timeout := request.options.InternalProfile.PageTimeout; timeout > 0 {
 		pagectx, s.privateStorage.pageCancel = context.WithTimeout(s.privateStorage.ctx, timeout)
 	}
-	consistency := request.InternalOptions.InternalProfile.Consistency
+	consistency := request.options.InternalProfile.Consistency
 	for attempt := 1; ; attempt++ {
 		if err := pagectx.Err(); err != nil {
 			return err
@@ -612,7 +615,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		if observer := request.InternalLogical.observer; observer != nil {
 			s.privateStorage.session.ObserveSafely(func() { observer.ObserveAttempt(event) })
 		}
-		if policy := request.InternalOptions.InternalProfile.Routing; policy != nil {
+		if policy := request.options.InternalProfile.Routing; policy != nil {
 			s.privateStorage.session.ObserveSafely(func() { policy.Observe(event) })
 		}
 		s.privateStorage.mu.Lock()
@@ -691,8 +694,8 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			continue
 		}
 		decision := retry.Decision{}
-		if policy := request.InternalOptions.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
+		if policy := request.options.InternalProfile.Retry; policy != nil {
+			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
 		}
 		if decision.Action == retry.Stop {
 			return err

@@ -32,9 +32,11 @@ type queryState struct {
 	done         chan struct{} // created by the first waiter of a busy generation
 	retire       func()
 	resolved     *InternalResolvedOptions // the query's options, resolved at creation
-	// _ holds the place of a removed field: moving the fields after it
+	// optionsScratch holds options an execution resolves or overrides for
+	// itself, allocated on first use (see InternalExecutionRequest.ownOptions).
+	// It also holds the place of a removed field: moving the fields after it
 	// slows admission by about 3%.
-	_ [8]byte
+	optionsScratch *InternalResolvedOptions
 	// historyInline is the inline paging history storage the query's
 	// iterator lends its history.
 	historyInline [paging.InternalInlineHistory]model.PageState

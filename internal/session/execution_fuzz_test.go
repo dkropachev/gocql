@@ -61,7 +61,7 @@ func FuzzStreamExecutionBoundary(f *testing.F) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		request.InternalOptions.InternalProfile.Speculation = nil
+		request.ownOptions().InternalProfile.Speculation = nil
 		cursor := func() *RowStream[[]byte] {
 			opaqueStorageValuexx := new(RowStream[[]byte])
 			RowStreamData(opaqueStorageValuexx).ctx = ctx

@@ -572,7 +572,7 @@ func (f *InternalPageFuture) InternalClose() {
 	}
 }
 func (r *rowsImpl[R]) startPrefetch() {
-	if r.privateStorage.request.InternalOptions.InternalProfile.Prefetch == 0 || r.privateStorage.page == nil || r.privateStorage.closed {
+	if r.privateStorage.request.options.InternalProfile.Prefetch == 0 || r.privateStorage.page == nil || r.privateStorage.closed {
 		return
 	}
 	state := r.privateStorage.page.State()

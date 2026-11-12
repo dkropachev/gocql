@@ -189,23 +189,65 @@ type InternalExecutionRequest struct {
 	responseDest *transport.InternalResponsePage
 	// served is the connection whose attempt produced the last direct page;
 	// pinned, when set, is where the next page's first attempt goes.
-	served, pinned     *transport.Conn
-	connection         *transport.Conn
-	InternalOwner      *inputOwner
-	batch              *batchState
-	InternalLogical    *logicalExecution
-	statement          string
-	keyspace           string
-	InternalValues     model.EncodedValues
-	tabletFeedback     routing.InternalTabletFeedbackStamp
-	routing            model.RoutingInfo
-	InternalOptions    InternalResolvedOptions
+	served, pinned  *transport.Conn
+	connection      *transport.Conn
+	InternalOwner   *inputOwner
+	batch           *batchState
+	InternalLogical *logicalExecution
+	statement       string
+	keyspace        string
+	InternalValues  model.EncodedValues
+	tabletFeedback  routing.InternalTabletFeedbackStamp
+	routing         model.RoutingInfo
+	// options are the request's resolved options: the session's defaults,
+	// frozen CompiledOptions or a query's own resolution, all shared, so
+	// never changed through the request. An execution that overrides them
+	// first takes a copy of its own with ownOptions.
+	options *InternalResolvedOptions
+	// timestamp is the client timestamp the request sends when
+	// hasTimestamp: its options' own or one admission generated.
+	timestamp          int64
 	tabletVersionBlock byte
 	// hasCounter reports a counter write: a statement with a counter
 	// parameter or a counter batch. Counter writes take no client timestamp.
 	// It is set when the request is bound, so admission does not scan the
 	// values.
-	hasCounter bool
+	hasCounter   bool
+	hasTimestamp bool
+}
+
+// InternalResolved returns the options request was admitted with.
+func (r *InternalExecutionRequest) InternalResolved() *InternalResolvedOptions {
+	return r.options
+}
+
+// ownOptions makes request's options its own to change, for an execution
+// that overrides them: a copy in scratch the request's query keeps for its
+// executions, or in new storage without a query. The query's next
+// execution begins only after this one drained, so it never shares the
+// scratch with a running execution.
+func (r *InternalExecutionRequest) ownOptions() *InternalResolvedOptions {
+	scratch := r.optionsScratch()
+	if r.options != scratch {
+		*scratch = *r.options
+		r.options = scratch
+	}
+	return scratch
+}
+
+// optionsScratch returns storage for options resolved or overridden for one
+// execution of r. It is off the default path, so it is not inlined there.
+//
+//go:noinline
+func (r *InternalExecutionRequest) optionsScratch() *InternalResolvedOptions {
+	q := r.query
+	if q == nil {
+		return new(InternalResolvedOptions)
+	}
+	if q.optionsScratch == nil {
+		q.optionsScratch = new(InternalResolvedOptions)
+	}
+	return q.optionsScratch
 }
 
 type ExecutionError = runtimeerrors.ExecutionError
