@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -48,7 +49,9 @@ func TestPrepared(t *testing.T) {
 		t.Run("Eviction", func(t *testing.T) {
 			t.Parallel()
 			const maxPrepared = 4
-			session := createV2Session(t, func(c *gocql.ConfigBuilder) { c.WithPreparedCacheSize(maxPrepared).WithIgnoreEvents(gocql.SchemaEvent) })
+			session := createV2Session(t, func(c *config.ConfigBuilder) {
+				c.WithPreparedCacheSize(maxPrepared).WithIgnoreEvents(gocql.SchemaEvent)
+			})
 			defer session.Close()
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,mod int)", table))
@@ -229,7 +232,7 @@ func TestPrepared(t *testing.T) {
 			if flagCassVersion.Major == 0 || flagCassVersion.Before(2, 1, 3) {
 				t.Skipf("skipping TestPrepared/Reprepare/AfterAlterTable due to CASSANDRA-7910 in Cassandra <2.1.3 version=%v", flagCassVersion)
 			}
-			session := createV2Session(t, func(c *gocql.ConfigBuilder) { c.WithPoolSize(gocql.PerHost(1)) })
+			session := createV2Session(t, func(c *config.ConfigBuilder) { c.WithConnectionsPerHost(1) })
 			defer session.Close()
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id text PRIMARY KEY)", table))

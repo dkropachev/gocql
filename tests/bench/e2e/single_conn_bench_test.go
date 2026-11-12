@@ -35,6 +35,7 @@ import (
 
 	"github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/auth"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
@@ -65,7 +66,7 @@ func freshNamespace() (string, error) {
 	return name, nil
 }
 func corpusPath(name string) string { return filepath.Join(corpusRoot, name) }
-func benchConfig(d endpoint.Dialer) gocql.Config {
+func benchConfig(d endpoint.Dialer) config.Config {
 	address := os.Getenv("GOCQL_BENCH_ADDRESS")
 	if address == "" {
 		address = corpus.Address
@@ -73,12 +74,12 @@ func benchConfig(d endpoint.Dialer) gocql.Config {
 			address = "127.0.20.1:9042"
 		}
 	}
-	c, err := gocql.NewConfig(address).
+	c, err := config.New(address).
 		WithAuth(auth.Password("cassandra", "cassandra")).
 		WithHeartbeat(0, 0).
 		WithMetadataRefresh(0).
 		WithConfigReport(false).
-		WithPoolSize(gocql.PerHost(1)).
+		WithConnectionsPerHost(1).
 		WithDiscovery(false).
 		WithDialer(d).
 		Build()

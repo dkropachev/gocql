@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/config"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 
 	gocql "github.com/scylladb/gocql/v2"
@@ -28,16 +29,16 @@ import (
 func TestRunStreamCoordinatorStop(t *testing.T) {
 	cluster := nodeControlCluster(t, 1)
 	node := cluster.Node(1)
-	config := newFixtureConfig(cluster.IPs(), fixtureCompression, func(c *gocql.ConfigBuilder) {
-		c.WithPoolSize(gocql.PerHost(1)).WithHeartbeat(0, 0).WithMetadataRefresh(0).
+	cfg := newFixtureConfig(cluster.IPs(), fixtureCompression, func(c *config.ConfigBuilder) {
+		c.WithConnectionsPerHost(1).WithHeartbeat(0, 0).WithMetadataRefresh(0).
 			// Streaming rejects frame compression before protocol v5, and the
 			// suite's default compressor would skip this test on every v4 lane.
 			// Compression is not what it tests.
-			WithCompression(gocql.NoCompression)
+			WithCompression(config.NoCompression)
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	s, err := gocql.Connect[testDialect](ctx, mustBuild(t, config))
+	s, err := gocql.Connect[testDialect](ctx, mustBuild(t, cfg))
 	if err != nil {
 		t.Fatal(err)
 	}

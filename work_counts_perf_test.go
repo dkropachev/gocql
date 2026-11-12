@@ -16,6 +16,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -411,8 +412,8 @@ func TestWorkCountsPerf(t *testing.T) {
 
 type testObserver struct{ requests, attempts atomic.Int64 }
 
-func (o *testObserver) ObserveRequest(RequestEvent) { o.requests.Add(1) }
-func (o *testObserver) ObserveAttempt(AttemptEvent) { o.attempts.Add(1) }
+func (o *testObserver) ObserveRequest(config.RequestEvent) { o.requests.Add(1) }
+func (o *testObserver) ObserveAttempt(config.AttemptEvent) { o.attempts.Add(1) }
 
 type speculation struct{}
 

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
@@ -18,7 +19,7 @@ import (
 )
 
 func TestPublicOptionsSnapshot(t *testing.T) {
-	profile := codecTestMust(NewProfile().WithPageSize(11).Build())
+	profile := codecTestMust(config.NewProfile().WithPageSize(11).Build())
 	payload := []byte("original")
 	want := Options{
 		Profile: &profile, Retry: retry.Safe{MaxAttempts: 7}, Keyspace: "ks",
@@ -55,15 +56,15 @@ func TestPublicOptionsSnapshot(t *testing.T) {
 }
 
 func TestOptionsProfileMustBeBuilt(t *testing.T) {
-	literal := Profile{PageSize: 1000}
+	literal := config.Profile{PageSize: 1000}
 	_, err := implSession.NewCompiledOptions(nil, internalOptions(Options{Profile: &literal}))
 	if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "profile" || !strings.Contains(err.Error(), "NewProfile") {
 		t.Fatalf("compiling a Profile literal = %v, want a profile ValidationError naming NewProfile", err)
 	}
-	built := codecTestMust(NewProfile().Build())
+	built := codecTestMust(config.NewProfile().Build())
 	built.PageSize = 1000
 	compiled := codecTestMust(implSession.NewCompiledOptions(nil, internalOptions(Options{Profile: &built})))
-	if got := CompiledOptions(compiled).Values().Profile; got == nil || got.PageSize != 1000 || !got.built {
+	if got := CompiledOptions(compiled).Values().Profile; got == nil || got.PageSize != 1000 || !builtProfile(*got) {
 		t.Fatalf("edited built profile = %+v", got)
 	}
 }
@@ -72,7 +73,7 @@ func TestOptionsProfileMustBeBuilt(t *testing.T) {
 // settings are added. Private execution hooks deliberately stay internal.
 func TestPublicOptionFields(t *testing.T) {
 	for _, pair := range [][2]reflect.Type{
-		{reflect.TypeFor[Profile](), reflect.TypeFor[implSettings.Profile]()},
+		{reflect.TypeFor[config.Profile](), reflect.TypeFor[implSettings.Profile]()},
 		{reflect.TypeFor[Options](), reflect.TypeFor[implSession.Options]()},
 		{reflect.TypeFor[PrepareOptions](), reflect.TypeFor[implSession.PrepareOptions]()},
 		{reflect.TypeFor[StreamOptions](), reflect.TypeFor[implSession.StreamOptions]()},
@@ -96,4 +97,9 @@ func TestPublicOptionFields(t *testing.T) {
 			}
 		}
 	}
+}
+
+func builtProfile(p config.Profile) bool {
+	v := implSettings.InternalProfileFromPublic(p)
+	return v.InternalBuilt()
 }

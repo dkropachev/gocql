@@ -17,11 +17,12 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/routing"
 )
 
-func testNamespace(t *testing.T, cfg gocql.Config, namespace string, wantPresent bool) {
+func testNamespace(t *testing.T, cfg config.Config, namespace string, wantPresent bool) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -51,7 +52,7 @@ func testNamespace(t *testing.T, cfg gocql.Config, namespace string, wantPresent
 		t.Fatalf("namespace %s present=%t want=%t", namespace, present, wantPresent)
 	}
 }
-func ownedChild(t *testing.T, binary string, args, env []string, kill bool, cfg gocql.Config) (string, string, error) {
+func ownedChild(t *testing.T, binary string, args, env []string, kill bool, cfg config.Config) (string, string, error) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()

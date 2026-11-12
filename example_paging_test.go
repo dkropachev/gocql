@@ -29,6 +29,7 @@ import (
 	"fmt"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 
 	"log"
@@ -36,11 +37,11 @@ import (
 
 func Example_paging() {
 	ctx := context.Background()
-	config, err := gocql.NewConfig("localhost:9042").Build()
+	cfg, err := config.New("localhost:9042").Build()
 	if err != nil {
 		log.Fatal(err)
 	}
-	s, err := gocql.Connect[gocql.ScyllaV4](ctx, config)
+	s, err := gocql.Connect[gocql.ScyllaV4](ctx, cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -54,7 +55,7 @@ func Example_paging() {
 		log.Fatal(err)
 	}
 	defer b.Close()
-	var state gocql.PageState
+	var state cql.PageState
 	var id int32
 	for {
 		page, err := b.RunPage(ctx, cql.EmptyParams{}, state, 0)

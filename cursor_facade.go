@@ -77,7 +77,7 @@ func (r *Page[R]) Clone() (R, error) { return (*implSession.Page[R])(r).Clone() 
 func (r *Page[R]) Info() Result { return (*implSession.Page[R])(r).Info() }
 
 // State returns the paging state, which remains available after Close.
-func (r *Page[R]) State() PageState { return PageState((*implSession.Page[R])(r).State()) }
+func (r *Page[R]) State() cql.PageState { return cql.PageState((*implSession.Page[R])(r).State()) }
 
 // RowStream decodes into seeded caller-owned storage. Only a true NextInto
 // publishes a complete row; errors can leave partial destination contents. Buffer

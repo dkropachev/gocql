@@ -39,6 +39,7 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/endpoint"
@@ -59,16 +60,16 @@ func TestPool(t *testing.T) {
 				cause := errors.New("injected data connection failure")
 				policy := &testConviction{cause: cause, verdict: verdict}
 				var dials atomic.Int32
-				config := newFixtureConfig(getClusterHosts()[:1], 0, func(c *gocql.ConfigBuilder) {
+				cfg := newFixtureConfig(getClusterHosts()[:1], 0, func(c *config.ConfigBuilder) {
 					c.WithDiscovery(false).
-						WithPoolSize(gocql.PerHost(1)).
+						WithConnectionsPerHost(1).
 						NoAdvancedShardAwareness().
 						WithReconnect(noReconnect{}).
 						WithConviction(policy).
 						WithHeartbeat(0, 0).
 						WithMetadataRefresh(0)
 				})
-				config.WithDialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
+				cfg.WithDialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 					if dials.Add(1) > 1 {
 						policy.mu.Lock()
 						policy.targets = append(policy.targets, target.Host)
@@ -79,7 +80,7 @@ func TestPool(t *testing.T) {
 				}))
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
-				s, err := gocql.Connect[testDialect](ctx, mustBuild(t, config))
+				s, err := gocql.Connect[testDialect](ctx, mustBuild(t, cfg))
 				if s != nil {
 					s.Close()
 				}
@@ -126,12 +127,12 @@ func TestPool(t *testing.T) {
 			skip = fixtureCompression
 			compression = "no-compression"
 		}
-		config := createV2ClusterWithout(skip)
-		config.WithPoolSize(gocql.PerHost(1)).WithHeartbeat(0, 0)
+		cfg := createV2ClusterWithout(skip)
+		cfg.WithConnectionsPerHost(1).WithHeartbeat(0, 0)
 		if *flagProto < 5 {
-			config.WithCompression(gocql.NoCompression)
+			cfg.WithCompression(config.NoCompression)
 		}
-		s := createV2SessionFromConfig(config, t, false)
+		s := createV2SessionFromConfig(cfg, t, false)
 		defer s.Close()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
@@ -287,15 +288,15 @@ func TestPool(t *testing.T) {
 	t.Run("Sizing", func(t *testing.T) {
 		for _, mode := range []string{"host", "shard"} {
 			t.Run(mode, func(t *testing.T) {
-				config := createV2ClusterWithout(fixtureTLS)
-				config.WithHeartbeat(0, 0)
+				cfg := createV2ClusterWithout(fixtureTLS)
+				cfg.WithHeartbeat(0, 0)
 				if *flagRunSslTest {
-					config.WithCoalesceWrites(100 * time.Microsecond)
+					cfg.WithCoalesceWrites(100 * time.Microsecond)
 				}
 				if mode == "host" {
-					config.WithPoolSize(gocql.PerHost(2))
+					cfg.WithConnectionsPerHost(2)
 				} else {
-					config.WithPoolSize(gocql.PerShard(2))
+					cfg.WithConnectionsPerShard(2)
 				}
 				// The fixture enables the shard-aware port by default.
 				const shardAwarePort = true
@@ -307,9 +308,9 @@ func TestPool(t *testing.T) {
 						tlsCalls.Add(1)
 						return nil
 					}
-					config.WithTLS(gocql.StaticTLS(fixtureTLSConfig(base)))
+					cfg.WithTLS(fixtureTLSConfig(base))
 				}
-				s := createV2SessionFromConfig(config, t, false)
+				s := createV2SessionFromConfig(cfg, t, false)
 				defer s.Close()
 				ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 				defer cancel()

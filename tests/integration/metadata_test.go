@@ -39,6 +39,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/internal/tests"
@@ -50,10 +51,10 @@ func TestMetadata(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		contactPoints := getClusterHosts()
-		config := createV2Cluster(func(c *gocql.ConfigBuilder) {
-			c.WithDiscovery(false).WithPoolSize(gocql.PerHost(1)).NoAdvancedShardAwareness()
+		cfg := createV2Cluster(func(c *config.ConfigBuilder) {
+			c.WithDiscovery(false).WithConnectionsPerHost(1).NoAdvancedShardAwareness()
 		})
-		s, err := gocql.Connect[testDialect](ctx, mustBuild(t, config))
+		s, err := gocql.Connect[testDialect](ctx, mustBuild(t, cfg))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -267,10 +268,10 @@ func TestMetadata(t *testing.T) {
 			}
 			fixture := &incompletePeerDialer{}
 			// TLS is never set here: the test skips under -runssl above.
-			config := createV2ClusterWithout(fixtureProtocol|fixtureCompression, func(c *gocql.ConfigBuilder) {
-				c.WithCompression(gocql.NoCompression).WithDialer(fixture)
+			cfg := createV2ClusterWithout(fixtureProtocol|fixtureCompression, func(c *config.ConfigBuilder) {
+				c.WithCompression(config.NoCompression).WithDialer(fixture)
 			})
-			session, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, config))
+			session, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, cfg))
 			require.NoError(t, err)
 			defer session.Close()
 			require.Positive(t, fixture.injected.Load(), "discovery must consume injected incomplete peer")

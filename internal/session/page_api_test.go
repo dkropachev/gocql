@@ -9,7 +9,6 @@ import (
 	"errors"
 	"testing"
 
-	. "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -43,7 +42,7 @@ func TestPageAPI(t *testing.T) {
 			chain, _ := wire.NewChain(wire.Borrow(body))
 			released := false
 			owner := wire.NewLease(chain, func() { released = true })
-			response := &responsePage{ResponseData: responseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner, State: model.PageState(PageStateFromToken([]byte{1}))}}
+			response := &responsePage{ResponseData: responseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner, State: model.PageState(cql.PageStateFromToken([]byte{1}))}}
 			page, err := newPage(response, cql.OneColumn(cql.BlobCodec), nil)
 			if err != nil {
 				t.Fatal(err)

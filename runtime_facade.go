@@ -6,6 +6,7 @@ package gocql
 import (
 	"context"
 
+	"github.com/scylladb/gocql/v2/config"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
@@ -49,12 +50,12 @@ const MaxBatchStatements = implCluster.MaxBatchStatements
 
 const ClientRouteEvent = implCluster.ClientRouteEvent
 
-// Connect opens a session of dialect D with config, which must come from
-// ConfigBuilder.Build. D fixes the protocol version and the database:
+// Connect opens a session of dialect D with cfg, which must come from
+// config.ConfigBuilder.Build. D fixes the protocol version and the database:
 // Connect fails when the cluster does not speak that version, or is not that
 // database (cqlerr.ServerMismatchError).
-func Connect[D Dialect](ctx context.Context, config Config) (*Session[D], error) {
-	settings, err := dialectSettings[D](config)
+func Connect[D Dialect](ctx context.Context, cfg config.Config) (*Session[D], error) {
+	settings, err := dialectSettings[D](cfg)
 	if err != nil {
 		return nil, err
 	}

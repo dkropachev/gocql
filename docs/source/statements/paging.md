@@ -12,7 +12,7 @@ the next advancement or Close unless a retained `PageLease` pins that page.
 Clone explicitly detaches a value. A retained page survives Session.Close and
 does not retain query input storage.
 
-For explicit paging use `RunPage(ctx, parameters, StartPage, pageSize)` and
+For explicit paging use `RunPage(ctx, parameters, cql.StartPage, pageSize)` and
 carry the returned page state to the next call. `prepared.RunPage` serves
 concurrent handlers, such as a paginated endpoint: keep `page.State()`, not the
 page. The page size is an argument so it can come from each request; zero
@@ -25,7 +25,7 @@ Cyclic/nonprogressing state and retained paging-history limits report errors.
 the initial page, a continuation, and completion. `state.Token()` returns an
 owned copy of the server continuation token; it does not serialize the full
 state. Check `state.More()` before exporting a token, and use
-`gocql.PageStateFromToken(token)` to resume it. Empty continuation tokens are
+`cql.PageStateFromToken(token)` to resume it. Empty continuation tokens are
 valid: nil or empty input to `PageStateFromToken` always creates a continuation.
 The initial and complete states both return nil from `Token()`; use `More()`
 and `Complete()` to distinguish them. An HTTP API can omit its next-page token

@@ -9,6 +9,7 @@ import (
 	"log"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 )
@@ -16,11 +17,11 @@ import (
 // Example_errors shows how to tell whether a failed write changed data.
 func Example_errors() {
 	ctx := context.Background()
-	config, err := gocql.NewConfig("localhost:9042").Build()
+	cfg, err := config.New("localhost:9042").Build()
 	if err != nil {
 		log.Fatal(err)
 	}
-	session, err := gocql.Connect[gocql.ScyllaV4](ctx, config)
+	session, err := gocql.Connect[gocql.ScyllaV4](ctx, cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -67,11 +68,11 @@ func Example_errors() {
 
 // Example_connectErrors shows how to inspect a failed connect.
 func Example_connectErrors() {
-	config, err := gocql.NewConfig("localhost:9042").Build()
+	cfg, err := config.New("localhost:9042").Build()
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = gocql.Connect[gocql.ScyllaV4](context.Background(), config)
+	_, err = gocql.Connect[gocql.ScyllaV4](context.Background(), cfg)
 	if errors.Is(err, cqlerr.ErrNoConnectionsStarted) {
 		if connect, ok := errors.AsType[*cqlerr.ConnectError](err); ok {
 			for _, host := range connect.Hosts {

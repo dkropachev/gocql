@@ -10,6 +10,7 @@ import (
 	"time"
 
 	g "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/retry"
@@ -47,10 +48,10 @@ var bufferedDecoder = cql.RowInto(func(*row) {}, cql.Column("k", cql.Int32Codec,
 
 func connect(hosts []string) (adapter, error) {
 	policy, _ := routing.NewPolicy(routing.Options{TokenAware: true, Datacenter: "datacenter1"})
-	builder := g.NewConfig(hosts...).
-		WithPoolSize(g.PerShard(1)).
+	builder := config.New(hosts...).
+		WithConnectionsPerShard(1).
 		WithMaxExcessPerShard(0).
-		ConfigureDefaultProfile(func(p *g.ProfileBuilder) {
+		ConfigureDefaultProfile(func(p *config.ProfileBuilder) {
 			p.WithConsistency(cql.LocalQuorum).
 				NoSerialConsistency().
 				WithTimeout(10 * time.Second).

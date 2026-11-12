@@ -1,9 +1,10 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package gocql
+package config
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,6 +16,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/retry"
@@ -22,7 +24,7 @@ import (
 )
 
 // Config is a validated, immutable session configuration. Build one with
-// NewConfig and ConfigBuilder.Build; the zero Config is rejected by Connect.
+// New and ConfigBuilder.Build; the zero Config is rejected by gocql.Connect.
 // Build snapshots configuration values. Callbacks and provider objects remain
 // shared and must support concurrent use. A Config can be reused for many sessions.
 type Config struct {
@@ -36,8 +38,8 @@ type Config struct {
 // providers remove the override. A ConfigBuilder is not safe for concurrent use.
 type ConfigBuilder struct {
 	profile              *ProfileBuilder
-	routes               *ClientRoutesBuilder
 	ignoredEvents        []EventKind
+	routes               implSettings.ClientRoutesOptions
 	settings             implSettings.Config
 	onlyHost             cql.Option[cql.UUID]
 	discoveryChosen      bool
@@ -46,11 +48,11 @@ type ConfigBuilder struct {
 	perHost              bool
 }
 
-// NewConfig starts a configuration that connects to contactPoints. A contact
+// New starts a configuration that connects to contactPoints. A contact
 // point is host[:port], or a single absolute Unix socket path (optionally
 // prefixed with "unix:"); for a socket, no host discovery is filled in unless
 // chosen.
-func NewConfig(contactPoints ...string) *ConfigBuilder {
+func New(contactPoints ...string) *ConfigBuilder {
 	return &ConfigBuilder{settings: implSettings.DefaultConfig(contactPoints...), profile: NewProfile()}
 }
 
@@ -61,9 +63,11 @@ func (b *ConfigBuilder) Build() (Config, error) {
 	settings := b.settings
 	profile := b.profile.profile
 	settings.DefaultProfile = &profile
-	if b.routes != nil {
-		routes := b.routes.routes
+	if len(b.routes.ConnectionIDs) > 0 {
+		routes := b.routes
 		settings.ClientRoutes = &routes
+	} else if len(b.routes.HostnameOverrides) > 0 || b.routes.TLS {
+		return Config{}, &cqlerr.ValidationError{Field: "client routes", Err: errors.New("hostname override or TLS requirement without WithClientRoutes")}
 	}
 	if path, _ := implSettings.InternalUnixSocketPath(settings.ContactPoints); path != "" {
 		if !b.discoveryChosen {
@@ -81,10 +85,10 @@ func (b *ConfigBuilder) Build() (Config, error) {
 	}
 	if b.perHost {
 		if b.shardAwarenessChosen && settings.Pool.ShardAwarePort {
-			return Config{}, &cqlerr.ValidationError{Field: "pool size", Err: errors.New("PerHost dials no shard-aware port; drop WithAdvancedShardAwareness or use PerShard")}
+			return Config{}, &cqlerr.ValidationError{Field: "pool size", Err: errors.New("WithConnectionsPerHost dials no shard-aware port; drop WithAdvancedShardAwareness or use WithConnectionsPerShard")}
 		}
 		if b.maxExcessChosen {
-			return Config{}, &cqlerr.ValidationError{Field: "pool size", Err: errors.New("PerHost keeps no per-shard excess connections; drop WithMaxExcessPerShard or use PerShard")}
+			return Config{}, &cqlerr.ValidationError{Field: "pool size", Err: errors.New("WithConnectionsPerHost keeps no per-shard excess connections; drop WithMaxExcessPerShard or use WithConnectionsPerShard")}
 		}
 		settings.Pool.ShardAwarePort = false
 	}
@@ -98,13 +102,13 @@ func (b *ConfigBuilder) Build() (Config, error) {
 	}
 	for _, kind := range b.ignoredEvents {
 		switch kind {
-		case TopologyEvent:
+		case implCluster.TopologyEvent:
 			settings.Metadata.TopologyEvents = false
-		case StatusEvent:
+		case implCluster.StatusEvent:
 			settings.Metadata.StatusEvents = false
-		case SchemaEvent:
+		case implCluster.SchemaEvent:
 			settings.Metadata.SchemaEvents = false
-		case ClientRouteEvent:
+		case implCluster.ClientRouteEvent:
 			settings.Metadata.ClientRouteEvents = false
 		default:
 			return Config{}, &cqlerr.ValidationError{Field: "ignored events", Err: fmt.Errorf("%d is not a server event", kind)}
@@ -124,7 +128,7 @@ func (b *ConfigBuilder) WithPort(port uint16) *ConfigBuilder {
 }
 
 // WithContactPoints replaces all contact points, using the same address syntax
-// as NewConfig. Build requires at least one contact point.
+// as New. Build requires at least one contact point.
 func (b *ConfigBuilder) WithContactPoints(contactPoints ...string) *ConfigBuilder {
 	b.settings.ContactPoints = append([]string(nil), contactPoints...)
 	return b
@@ -142,13 +146,25 @@ func (b *ConfigBuilder) WithAuth(provider auth.Provider) *ConfigBuilder {
 	return b
 }
 
-// WithTLS encrypts every connection with the configuration source returns
-// when the connection is dialed: StaticTLS for a fixed configuration,
-// NewTLSFiles or your own TLSSource for one that changes while the session runs. Build
-// validates the configuration source returns at that time. Unless it skips
-// verification or names a server, each connection verifies the node's IP
-// address. A nil source selects plaintext. Default plaintext.
-func (b *ConfigBuilder) WithTLS(source TLSSource) *ConfigBuilder {
+// WithTLS encrypts every connection with a copy of config, taken now. Unless
+// config skips verification or names a server, each connection verifies the
+// node's IP address. A nil config selects plaintext. It replaces
+// WithTLSSource. Default plaintext.
+func (b *ConfigBuilder) WithTLS(config *tls.Config) *ConfigBuilder {
+	if config == nil {
+		b.settings.TLSSource = nil
+	} else {
+		b.settings.TLSSource = staticTLS{config: implSettings.InternalCloneV2TLSConfig(config)}
+	}
+	return b
+}
+
+// WithTLSSource encrypts every connection with the configuration source
+// returns when the connection is dialed, for one that changes while the
+// session runs: NewTLSFiles or your own TLSSource. Build validates the
+// configuration source returns at that time. Verification is as for WithTLS.
+// A nil source selects plaintext. It replaces WithTLS.
+func (b *ConfigBuilder) WithTLSSource(source TLSSource) *ConfigBuilder {
 	b.settings.TLSSource = source
 	return b
 }
@@ -285,20 +301,18 @@ func (b *ConfigBuilder) WithCoalesceWrites(wait time.Duration) *ConfigBuilder {
 	return b
 }
 
-// PoolSize is how many connections the session keeps open to each node. Make
-// one with PerShard or PerHost.
-type PoolSize struct {
-	n       int
-	perHost bool
+// WithConnectionsPerShard keeps n connections to every shard of each node, so
+// each request goes out on a connection of the shard that owns its data. A
+// node that reports no shards, such as Cassandra, counts as one shard. n must
+// be positive. It replaces WithConnectionsPerHost. Default 1.
+func (b *ConfigBuilder) WithConnectionsPerShard(n int) *ConfigBuilder {
+	b.perHost = false
+	b.settings.Pool.ConnectionsPerShard, b.settings.Pool.ConnectionsPerHost = n, 0
+	return b
 }
 
-// PerShard keeps n connections to every shard of each node, so each request
-// goes out on a connection of the shard that owns its data. A node that
-// reports no shards, such as Cassandra, counts as one shard. This is the
-// default, with n = 1.
-func PerShard(n int) PoolSize { return PoolSize{n: n} }
-
-// PerHost keeps n connections to each node regardless of its shard count.
+// WithConnectionsPerHost keeps n connections to each node regardless of its
+// shard count. n must be positive. It replaces WithConnectionsPerShard.
 //
 // On ScyllaDB it turns shard-aware connection management off: connections are
 // dialed through the regular port only, never the shard-aware port (as with
@@ -306,24 +320,16 @@ func PerShard(n int) PoolSize { return PoolSize{n: n} }
 // some shards may get none. A request whose shard has no connection goes out
 // on another shard's connection and costs the node a cross-shard hop. There
 // are no per-shard excess connections, so WithMaxExcessPerShard does not
-// apply. Build rejects PerHost together with WithAdvancedShardAwareness or
+// apply. Build rejects it together with WithAdvancedShardAwareness or
 // WithMaxExcessPerShard.
-func PerHost(n int) PoolSize { return PoolSize{n: n, perHost: true} }
-
-// WithPoolSize sets how many connections the session keeps to each node:
-// PerShard or PerHost. n must be positive. Default PerShard(1).
-func (b *ConfigBuilder) WithPoolSize(size PoolSize) *ConfigBuilder {
-	b.perHost = size.perHost
-	if size.perHost {
-		b.settings.Pool.ConnectionsPerHost, b.settings.Pool.ConnectionsPerShard = size.n, 0
-	} else {
-		b.settings.Pool.ConnectionsPerShard, b.settings.Pool.ConnectionsPerHost = size.n, 0
-	}
+func (b *ConfigBuilder) WithConnectionsPerHost(n int) *ConfigBuilder {
+	b.perHost = true
+	b.settings.Pool.ConnectionsPerHost, b.settings.Pool.ConnectionsPerShard = n, 0
 	return b
 }
 
 // WithMaxExcessPerShard caps connections opened beyond the target per shard.
-// It applies to PerShard pools only. Default 2.
+// It applies to WithConnectionsPerShard pools only. Default 2.
 func (b *ConfigBuilder) WithMaxExcessPerShard(n int) *ConfigBuilder {
 	b.maxExcessChosen = true
 	b.settings.Pool.MaxExcessPerShard = n
@@ -347,7 +353,7 @@ func (b *ConfigBuilder) WithMaxOrphanedStreams(n int) *ConfigBuilder {
 // WithAdvancedShardAwareness picks the shard of each new connection by dialing
 // the node's shard-aware port from a local source port chosen from first to
 // last. It replaces NoAdvancedShardAwareness. Default on with ports
-// 49152-65535, except under WithClientRoutes or PerHost.
+// 49152-65535, except under WithClientRoutes or WithConnectionsPerHost.
 func (b *ConfigBuilder) WithAdvancedShardAwareness(first, last uint16) *ConfigBuilder {
 	b.shardAwarenessChosen = true
 	b.settings.Pool.ShardAwarePort = true
@@ -396,9 +402,38 @@ func (b *ConfigBuilder) WithAddressTranslator(translator endpoint.Translator) *C
 	return b
 }
 
-// WithClientRoutes connects through ScyllaDB client routes. Nil removes routes.
-func (b *ConfigBuilder) WithClientRoutes(routes *ClientRoutesBuilder) *ConfigBuilder {
-	b.routes = routes
+// WithClientRoutes connects through ScyllaDB client routes with the given
+// client connection IDs. With no IDs it removes client routes, together with
+// their hostname overrides and TLS requirement. Default none.
+func (b *ConfigBuilder) WithClientRoutes(connectionIDs ...string) *ConfigBuilder {
+	if len(connectionIDs) == 0 {
+		b.routes = implSettings.ClientRoutesOptions{}
+		return b
+	}
+	b.routes.ConnectionIDs = append([]string(nil), connectionIDs...)
+	return b
+}
+
+// WithClientRouteHostname dials hostname for the client route connectionID.
+// An empty hostname removes that connection's override. Build rejects an
+// override without WithClientRoutes.
+func (b *ConfigBuilder) WithClientRouteHostname(connectionID, hostname string) *ConfigBuilder {
+	if hostname == "" {
+		delete(b.routes.HostnameOverrides, connectionID)
+		return b
+	}
+	if b.routes.HostnameOverrides == nil {
+		b.routes.HostnameOverrides = make(map[string]string)
+	}
+	b.routes.HostnameOverrides[connectionID] = hostname
+	return b
+}
+
+// WithClientRouteTLS chooses whether routed connections require verified TLS;
+// WithTLS still controls connection encryption. Build rejects true without
+// WithClientRoutes. Default false.
+func (b *ConfigBuilder) WithClientRouteTLS(on bool) *ConfigBuilder {
+	b.routes.TLS = on
 	return b
 }
 
@@ -580,7 +615,7 @@ func (b *ConfigBuilder) WithConfigReport(on bool) *ConfigBuilder {
 // printed.
 func (c Config) String() string {
 	if c.settings == nil {
-		return "gocql.Config{}"
+		return "config.Config{}"
 	}
 	s := c.settings
 	var w strings.Builder
@@ -598,7 +633,7 @@ func (c Config) String() string {
 // Config.
 func (c Config) resolved() (implSettings.Config, error) {
 	if c.settings == nil {
-		return implSettings.Config{}, &cqlerr.ValidationError{Field: "Config", Err: errors.New("zero Config; build one with gocql.NewConfig")}
+		return implSettings.Config{}, &cqlerr.ValidationError{Field: "Config", Err: errors.New("zero Config; build one with config.New")}
 	}
 	return *c.settings, nil
 }
@@ -703,41 +738,4 @@ func (p *ProfileBuilder) WithRouting(policy routing.Policy) *ProfileBuilder {
 func (p *ProfileBuilder) WithSpeculation(policy SpeculationPolicy) *ProfileBuilder {
 	p.profile.Speculation = policy
 	return p
-}
-
-// ClientRoutesBuilder assembles ScyllaDB client routes settings.
-type ClientRoutesBuilder struct {
-	routes implSettings.ClientRoutesOptions
-}
-
-// NewClientRoutes routes through the given client connection IDs.
-func NewClientRoutes(connectionIDs ...string) *ClientRoutesBuilder {
-	return &ClientRoutesBuilder{routes: implSettings.ClientRoutesOptions{ConnectionIDs: append([]string(nil), connectionIDs...)}}
-}
-
-// WithHostnameOverride dials hostname for connectionID. An empty hostname
-// removes that connection's override.
-func (r *ClientRoutesBuilder) WithHostnameOverride(connectionID, hostname string) *ClientRoutesBuilder {
-	if hostname == "" {
-		delete(r.routes.HostnameOverrides, connectionID)
-		return r
-	}
-	if r.routes.HostnameOverrides == nil {
-		r.routes.HostnameOverrides = make(map[string]string)
-	}
-	r.routes.HostnameOverrides[connectionID] = hostname
-	return r
-}
-
-// WithTLS requires verified TLS on routed connections.
-func (r *ClientRoutesBuilder) WithTLS() *ClientRoutesBuilder {
-	r.routes.TLS = true
-	return r
-}
-
-// NoTLS removes the client-route requirement for verified TLS. It replaces
-// WithTLS; the session's WithTLS still controls connection encryption.
-func (r *ClientRoutesBuilder) NoTLS() *ClientRoutesBuilder {
-	r.routes.TLS = false
-	return r
 }

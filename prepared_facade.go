@@ -111,7 +111,7 @@ func (p *Prepared[P, R]) Run(ctx context.Context, value P, options ...CompiledOp
 // Page.State, not the page. The page holds one of the statement's pooled
 // queries until it is closed, as Run's rows do. RunPage is safe for concurrent
 // use; each Page is not. At most one CompiledOptions may be passed.
-func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state PageState, pageSize int32, options ...CompiledOptions) (*Page[R], error) {
+func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32, options ...CompiledOptions) (*Page[R], error) {
 	o, err := internalCompiledOptions(options)
 	if err != nil {
 		return nil, err

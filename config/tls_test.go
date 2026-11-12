@@ -1,7 +1,7 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package gocql
+package config
 
 import (
 	"crypto/ecdsa"
@@ -106,7 +106,7 @@ func (f *tlsTestFiles) trusts(config *tls.Config, serial int64) bool {
 
 func TestTLSSource(t *testing.T) {
 	t.Run("Files/Arguments", func(t *testing.T) {
-		pki := TLSFiles{CertFile: "testdata/pki/gocql.crt", KeyFile: "testdata/pki/gocql.key", CAFile: "testdata/pki/ca.crt"}
+		pki := TLSFiles{CertFile: "../testdata/pki/gocql.crt", KeyFile: "../testdata/pki/gocql.key", CAFile: "../testdata/pki/ca.crt"}
 		getCert := &tls.Config{GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) { return nil, nil }}
 		for name, tc := range map[string]struct {
 			base  *tls.Config
@@ -117,9 +117,9 @@ func TestTLSSource(t *testing.T) {
 			"Empty":                {nil, TLSFiles{}, "pair or a CA file is required"},
 			"NegativeInterval":     {nil, TLSFiles{CAFile: pki.CAFile, Interval: -time.Second}, "must not be negative"},
 			"GetClientCertificate": {getCert, pki, "GetClientCertificate"},
-			"MissingFile":          {nil, TLSFiles{CAFile: "testdata/pki/missing.crt"}, "missing.crt"},
-			"MismatchedPair":       {nil, TLSFiles{CertFile: pki.CertFile, KeyFile: "testdata/pki/cassandra.key"}, "cert and key"},
-			"NotPEM":               {nil, TLSFiles{CAFile: "testdata/pki/ca.cnf"}, "no PEM certificates"},
+			"MissingFile":          {nil, TLSFiles{CAFile: "../testdata/pki/missing.crt"}, "missing.crt"},
+			"MismatchedPair":       {nil, TLSFiles{CertFile: pki.CertFile, KeyFile: "../testdata/pki/cassandra.key"}, "cert and key"},
+			"NotPEM":               {nil, TLSFiles{CAFile: "../testdata/pki/ca.cnf"}, "no PEM certificates"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				if _, err := NewTLSFiles(tc.base, tc.files); err == nil || !strings.Contains(err.Error(), tc.want) {

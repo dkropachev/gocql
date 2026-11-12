@@ -1,4 +1,7 @@
-package gocql
+// Copyright 2026 The Gocql Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license.
+
+package cql
 
 import (
 	model "github.com/scylladb/gocql/v2/internal/model"
@@ -23,8 +26,6 @@ func (p PageState) Token() []byte { return model.PageState(p).Token() }
 // inputs both represent an empty continuation. Use StartPage to begin paging;
 // use PageState.More and PageState.Complete to distinguish continuation and completion.
 func PageStateFromToken(token []byte) PageState { return PageState(model.PageStateFromToken(token)) }
-
-type Result = model.Result
 
 // StartPage is the state that starts paging from the first page. It is the
 // zero PageState.

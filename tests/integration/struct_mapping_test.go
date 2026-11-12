@@ -460,7 +460,7 @@ func TestStructMapping(t *testing.T) {
 			}
 		})
 		t.Run("RunPage", func(t *testing.T) {
-			state, n := gocql.StartPage, 0
+			state, n := cql.StartPage, 0
 			for pages := 0; ; pages++ {
 				page, err := read.RunPage(ctx, 2, state, 0)
 				if err != nil {
@@ -482,7 +482,7 @@ func TestStructMapping(t *testing.T) {
 					break
 				}
 				// Resume from a page state saved as bytes, as a client would.
-				state = gocql.PageStateFromToken(next.Token())
+				state = cql.PageStateFromToken(next.Token())
 				if pages > len(want) {
 					t.Fatal("paging does not end")
 				}
@@ -498,7 +498,7 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer read.Close()
-			page, err := read.RunPage(ctx, 2, gocql.StartPage, 0)
+			page, err := read.RunPage(ctx, 2, cql.StartPage, 0)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -1,18 +1,24 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package gocql
+package config
 
 import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/metrics"
 	"github.com/scylladb/gocql/v2/retry"
 	"github.com/scylladb/gocql/v2/routing"
 )
+
+// EventKind is the kind of a gocql.Event. ConfigBuilder.WithIgnoreEvents takes
+// gocql.TopologyEvent, gocql.StatusEvent, gocql.SchemaEvent and
+// gocql.ClientRouteEvent.
+type EventKind = implCluster.EventKind
 
 type ConvictionPolicy = implSettings.ConvictionPolicy
 
@@ -30,10 +36,10 @@ type AttemptEvent = implRouting.AttemptEvent
 
 // Profile supplies reusable execution defaults. Build one with NewProfile and
 // ProfileBuilder.Build. A Profile written as a literal, such as
-// gocql.Profile{PageSize: 1000}, would leave every other field zero instead of
+// config.Profile{PageSize: 1000}, would leave every other field zero instead of
 // the driver's default (consistency ANY, no retries, no timeout, no prefetch,
-// no serial consistency), so ConfigBuilder.WithDefaultProfile, the query
-// constructors and Session.CompileOptions reject it with a validation error.
+// no serial consistency), so ConfigBuilder.WithDefaultProfile, gocql's query
+// constructors and gocql.Session.CompileOptions reject it with a validation error.
 // A built Profile may be copied and its fields changed: the copy stays built.
 // Config and query construction snapshot its fields; policy objects stay shared.
 type Profile struct {
@@ -57,7 +63,7 @@ type SimpleConvictionPolicy = implSettings.SimpleConvictionPolicy
 
 // SpeculationPolicy schedules additional attempts of eligible executions.
 // Delay receives the attempt number and the session's counters, as
-// Session.Metrics returns them.
+// gocql.Session.Metrics returns them.
 type SpeculationPolicy interface {
 	Delay(attempt int, metrics metrics.Snapshot) (time.Duration, bool)
 }
@@ -77,4 +83,8 @@ func publicProfile(p implSettings.Profile) Profile {
 		Timeout: p.Timeout, PageTimeout: p.PageTimeout, Prefetch: p.Prefetch,
 		PageSize: p.PageSize, SerialConsistency: p.SerialConsistency, Consistency: p.Consistency,
 		built: p.InternalBuilt()}
+}
+
+func init() {
+	implSettings.InternalLinkPublic(Config.resolved, internalProfile, publicProfile)
 }

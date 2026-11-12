@@ -40,7 +40,7 @@ func InternalDefaultProfile() Profile {
 }
 func (p Profile) ValidateProfile() error {
 	if p.unbuilt {
-		return cqltype.TypeValidation("profile", "not built: a Profile literal leaves unset fields zero instead of the driver's defaults; build it with gocql.NewProfile")
+		return cqltype.TypeValidation("profile", "not built: a Profile literal leaves unset fields zero instead of the driver's defaults; build it with config.NewProfile")
 	}
 	if !InternalValidConsistency(p.Consistency) {
 		return cqltype.TypeValidation("consistency", "invalid consistency")

@@ -37,6 +37,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/config"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 
 	"github.com/stretchr/testify/require"
@@ -54,8 +55,8 @@ func TestPaging(t *testing.T) {
 		// The reads below run at ONE and QUORUM. Writes at the default QUORUM
 		// leave a replica that a ONE read can reach before it has every row
 		// (W+R must exceed RF), so the fixture is written at ALL.
-		session := createV2SessionFromConfig(createV2ClusterWithout(fixtureConsistency, func(c *gocql.ConfigBuilder) {
-			c.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithConsistency(cql.All) })
+		session := createV2SessionFromConfig(createV2ClusterWithout(fixtureConsistency, func(c *config.ConfigBuilder) {
+			c.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithConsistency(cql.All) })
 		}), t, false)
 		defer session.Close()
 		table := testTableName(t)
@@ -99,7 +100,7 @@ func TestPaging(t *testing.T) {
 			for _, c := range []cql.Consistency{cql.One, cql.Quorum} {
 				t.Run(c.String(), func(t *testing.T) {
 					var result []dynamic.Row
-					state := gocql.StartPage
+					state := cql.StartPage
 					for {
 						page, err := prepared.RunPage(context.Background(), cql.EmptyParams{}, state, 0, bindOptions(session, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: c, Set: true}, PageSize: cql.Option[int32]{Value: pageSize, Set: true}}))
 						require.NoError(t, err)
@@ -121,7 +122,7 @@ func TestPaging(t *testing.T) {
 							break
 						}
 						require.NotEqual(t, state.Token(), next.Token())
-						state = gocql.PageStateFromToken(next.Token())
+						state = cql.PageStateFromToken(next.Token())
 					}
 					validate(t, result)
 				})
@@ -176,7 +177,7 @@ func TestPaging(t *testing.T) {
 		}
 		// Manual paging needs a page cursor, which only prepared statements return.
 		prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: "SELECT id,count FROM " + table, Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}, gocql.PrepareOptions{})
-		state := gocql.StartPage
+		state := cql.StartPage
 		fetched := 0
 		for {
 			page, err := prepared.RunPage(context.Background(), cql.EmptyParams{}, state, 0, bindOptions(session, gocql.Options{PageSize: cql.Option[int32]{Value: 2, Set: true}}))
@@ -193,7 +194,7 @@ func TestPaging(t *testing.T) {
 			if state.Complete() {
 				break
 			}
-			state = gocql.PageStateFromToken(state.Token())
+			state = cql.PageStateFromToken(state.Token())
 		}
 		require.Equal(t, count, fetched)
 	})
@@ -272,12 +273,12 @@ func TestPaging(t *testing.T) {
 	})
 
 	t.Run("Stream", func(t *testing.T) {
-		config := mustBuild(t, createV2Cluster(func(c *gocql.ConfigBuilder) {
-			c.WithPoolSize(gocql.PerHost(1)).WithHeartbeat(0, 0).WithMetadataRefresh(0)
+		cfg := mustBuild(t, createV2Cluster(func(c *config.ConfigBuilder) {
+			c.WithConnectionsPerHost(1).WithHeartbeat(0, 0).WithMetadataRefresh(0)
 		}))
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
-		s, err := gocql.Connect[testDialect](ctx, config)
+		s, err := gocql.Connect[testDialect](ctx, cfg)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -470,7 +471,7 @@ func TestPaging(t *testing.T) {
 		}
 		// Use another real client: this stream deliberately owns its one configured
 		// connection slot across pages, including during caller think time.
-		ddlSession, err := gocql.Connect[testDialect](ctx, config)
+		ddlSession, err := gocql.Connect[testDialect](ctx, cfg)
 		if err != nil {
 			t.Fatal(err)
 		}

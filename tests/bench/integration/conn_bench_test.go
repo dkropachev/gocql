@@ -33,6 +33,7 @@ import (
 	"testing"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	routing "github.com/scylladb/gocql/v2/routing"
 )
@@ -41,12 +42,12 @@ func BenchmarkConn(b *testing.B) {
 	b.Run("RoutingKey", func(b *testing.B) {
 		const workers = 16
 		ctx := context.Background()
-		session := createV2Session(b, func(config *gocql.ConfigBuilder) {
+		session := createV2Session(b, func(cfg *config.ConfigBuilder) {
 			policy, err := routing.NewPolicy(routing.Options{TokenAware: true})
 			if err != nil {
 				b.Fatal(err)
 			}
-			config.WithPoolSize(gocql.PerHost(1)).ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithRouting(policy) })
+			cfg.WithConnectionsPerHost(1).ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithRouting(policy) })
 		})
 		defer session.Close()
 		table := testTableName(b)
@@ -87,7 +88,7 @@ func BenchmarkConn(b *testing.B) {
 	b.Run("Stress", func(b *testing.B) {
 		const workers = 16
 		ctx := context.Background()
-		session := createV2Session(b, func(config *gocql.ConfigBuilder) { config.WithPoolSize(gocql.PerHost(1)) })
+		session := createV2Session(b, func(cfg *config.ConfigBuilder) { cfg.WithConnectionsPerHost(1) })
 		defer session.Close()
 		table := testTableName(b)
 		if err := v2CreateTable(ctx, session, fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (id int primary key)", table)); err != nil {

@@ -30,6 +30,7 @@ import (
 	"log"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 )
 
@@ -37,11 +38,11 @@ import (
 func ExampleSession_ExecBatch() {
 	// Assumes example.batches(pk int, ck int, description text, PRIMARY KEY(pk, ck)).
 	ctx := context.Background()
-	config, err := gocql.NewConfig("localhost:9042").WithKeyspace("example").Build()
+	cfg, err := config.New("localhost:9042").WithKeyspace("example").Build()
 	if err != nil {
 		log.Fatal(err)
 	}
-	session, err := gocql.Connect[gocql.ScyllaV4](ctx, config)
+	session, err := gocql.Connect[gocql.ScyllaV4](ctx, cfg)
 	if err != nil {
 		log.Fatal(err)
 	}

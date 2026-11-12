@@ -268,7 +268,7 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			page, err := prepared.RunPage(context.Background(), []dynamic.Value{dynamic.Int(42)}, gocql.StartPage, 0, bindOptions(session, options))
+			page, err := prepared.RunPage(context.Background(), []dynamic.Value{dynamic.Int(42)}, cql.StartPage, 0, bindOptions(session, options))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -317,7 +317,7 @@ func TestQuery(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, customPayload := range values {
-				page, err := prepared.RunPage(context.Background(), []dynamic.Value{dynamic.Int(42)}, gocql.StartPage, 0, bindOptions(session, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, CustomPayload: customPayload}))
+				page, err := prepared.RunPage(context.Background(), []dynamic.Value{dynamic.Int(42)}, cql.StartPage, 0, bindOptions(session, gocql.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, CustomPayload: customPayload}))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -755,7 +755,7 @@ func TestQuery(t *testing.T) {
 			}
 			previous = rows
 		}
-		state := gocql.StartPage
+		state := cql.StartPage
 		pageRows := 0
 		var stalePage *gocql.Page[record]
 		for {
@@ -785,7 +785,7 @@ func TestQuery(t *testing.T) {
 		t.Log("query reuse, stale cursors, owned destinations and explicit paging passed")
 		unpaged := codecTestMust(read.Query(gocql.Options{PageSize: cql.Some(cql.Unpaged), Prefetch: cql.Option[int]{Set: true, Value: 0}}))
 		defer unpaged.Close()
-		page := codecTestMust(unpaged.RunPage(ctx, int32(1), gocql.StartPage, 0))
+		page := codecTestMust(unpaged.RunPage(ctx, int32(1), cql.StartPage, 0))
 		n := 0
 		var unpagedRow record
 		for page.NextInto(&unpagedRow) {

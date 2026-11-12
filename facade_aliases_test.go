@@ -8,6 +8,7 @@ package gocql
 import (
 	"context"
 
+	"github.com/scylladb/gocql/v2/config"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	routing "github.com/scylladb/gocql/v2/routing"
 
@@ -92,7 +93,9 @@ type retiredScyllaShardAwareDialer = implEndpoint.ScyllaShardAwareDialer
 
 type cassVersion = implEndpoint.InternalCassVersion
 
-func defaultProfile() Profile { return publicProfile(implSettings.InternalDefaultProfile()) }
+func defaultProfile() config.Profile {
+	return implSettings.InternalProfileToPublic[config.Profile](implSettings.InternalDefaultProfile())
+}
 
 type scyllaSourcePortCtx = implEndpoint.InternalScyllaSourcePortCtx
 

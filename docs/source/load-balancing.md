@@ -61,7 +61,7 @@ Each stage of a request has its own answer:
   failed call's `*cqlerr.ExecutionError` lists each attempt's host, shard,
   status and error (see [Errors](errors.md)). For every attempt as it happens,
   including speculative and cancelled ones, implement
-  `gocql.Observer.ObserveAttempt`.
+  `config.Observer.ObserveAttempt`.
 
 ## Writing your own policy
 
@@ -85,7 +85,7 @@ func (p *skipFailed) Pick(info routing.Info, m *metadata.Snapshot) (routing.Rout
 	return r, ok
 }
 
-func (p *skipFailed) Observe(e gocql.AttemptEvent) {
+func (p *skipFailed) Observe(e config.AttemptEvent) {
 	switch {
 	case e.Cancelled:
 	case e.Err != nil:
