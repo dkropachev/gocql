@@ -150,10 +150,7 @@ func TestInputOwner(t *testing.T) {
 			if err := parent.InternalWait(context.Background()); err != nil {
 				t.Fatal(err)
 			}
-			rt.InternalMu.Lock()
-			remaining := len(rt.executions)
-			rt.InternalMu.Unlock()
-			if remaining != 0 {
+			if rt.activeExecutions() != 0 {
 				t.Fatal("execution registry retained drained owners")
 			}
 		})

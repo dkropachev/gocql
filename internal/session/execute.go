@@ -45,7 +45,6 @@ type prepareFlight struct {
 }
 type InternalSessionRuntime struct {
 	*implCluster.Core
-	executions           map[*logicalExecution]struct{}
 	queries              map[weak.Pointer[queryState]]*queryEntry
 	schema               *schemafence.InternalPreparedSchemaTracker
 	preparing            map[prepareCacheKey]*prepareFlight
@@ -91,7 +90,8 @@ type InternalSessionRuntime struct {
 	// pooledBusy counts busy queries of prepared statements' one-shot pools.
 	// Close waits for it to reach zero on pooledWake.
 	pooledBusy atomic.Int64
-	_          cacheLinePad
+	// registry holds the in-flight executions no reusable query owns.
+	registry executionRegistry
 }
 
 // startTimestamps is the session's default client timestamp source. It takes

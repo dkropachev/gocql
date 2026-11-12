@@ -108,38 +108,108 @@ func (s *InternalSessionRuntime) registerExecution(l *logicalExecution, parent *
 		l.request.InternalOwner = &query.execOwner
 		return nil
 	}
-	implCluster.SessionData(s.Core).InternalSessionStateMu.RLock()
-	defer implCluster.SessionData(s.Core).InternalSessionStateMu.RUnlock()
-	if implCluster.SessionData(s.Core).InternalIsClosing || implCluster.SessionData(s.Core).InternalIsClosed {
+	// Close marks the session closing (Core.Closed) before it lists the
+	// registry, shard by shard under each shard's lock. Checking the mark under
+	// the shard lock orders this registration either before Close's listing of
+	// the shard, which then finds it, or after the mark, which refuses it; a
+	// refused execution is never listed.
+	e := &sessionExecution{l: l, parent: parent}
+	e.owner.state.Store(ownerClosed | 1)
+	e.owner.onDrain = e.drained
+	shard := s.registry.shard(l.id)
+	e.shard = shard
+	shard.mu.Lock()
+	if s.Core.Closed() {
+		shard.mu.Unlock()
 		return runtimeerrors.ErrClosed
 	}
-	rt := s
-	rt.InternalMu.Lock()
-	if rt.executions == nil {
-		rt.executions = make(map[*logicalExecution]struct{})
-	}
-	rt.executions[l] = struct{}{}
-	rt.InternalMu.Unlock()
-	owner := newClosedInputOwner()
-	done := l.lifetime.done
-	owner.onDrain = func() {
-		rt.InternalMu.Lock()
-		delete(rt.executions, l)
-		rt.InternalMu.Unlock()
-		close(done)
-		parent.InternalRelease()
-	}
-	l.request.InternalOwner = owner
+	// Close may stop the execution as soon as the lock is released, and the
+	// stop releases this owner.
+	l.request.InternalOwner = &e.owner
+	shard.push(e)
+	shard.mu.Unlock()
 	return nil
 }
-func (s *InternalSessionRuntime) stopExecutions() []*logicalExecution {
-	rt := s
-	rt.InternalMu.Lock()
-	active := make([]*logicalExecution, 0, len(rt.executions))
-	for l := range rt.executions {
-		active = append(active, l)
+
+// executionShards is the number of registry shards, a power of two. Each
+// shard has its own lock and cache lines, so concurrent registrations, which
+// take consecutive request ids, rarely share either.
+const executionShards = 32
+
+// executionRegistry holds the session's in-flight executions that no reusable
+// query owns, for Close to stop. It replaced a map under the session's
+// InternalMu: registration and drain each took that lock, so every
+// Bind+Exec serialized on it twice.
+type executionRegistry struct {
+	_      cacheLinePad
+	shards [executionShards]executionShard
+}
+
+// A shard spans two cache lines: the registry is only 8-byte aligned, so with
+// one line per shard its lock could share a line with a neighbour's.
+type executionShard struct {
+	mu   sync.Mutex
+	head *sessionExecution
+	_    [2*cacheLineSize - 16]byte
+}
+
+func (r *executionRegistry) shard(id uint64) *executionShard {
+	return &r.shards[id&(executionShards-1)]
+}
+
+// sessionExecution is a registered execution: its input owner and its links
+// in a shard's list. The owner drains when the execution's own reference and
+// every writer's are released.
+type sessionExecution struct {
+	owner      inputOwner
+	l          *logicalExecution
+	parent     *inputOwner
+	shard      *executionShard
+	prev, next *sessionExecution
+}
+
+// push and unlink run under the shard lock.
+func (sh *executionShard) push(e *sessionExecution) {
+	e.next = sh.head
+	if sh.head != nil {
+		sh.head.prev = e
 	}
-	rt.InternalMu.Unlock()
+	sh.head = e
+}
+
+func (sh *executionShard) unlink(e *sessionExecution) {
+	if e.prev != nil {
+		e.prev.next = e.next
+	} else {
+		sh.head = e.next
+	}
+	if e.next != nil {
+		e.next.prev = e.prev
+	}
+	e.prev, e.next = nil, nil
+}
+
+func (e *sessionExecution) drained() {
+	e.shard.mu.Lock()
+	e.shard.unlink(e)
+	e.shard.mu.Unlock()
+	close(e.l.lifetime.done)
+	e.parent.InternalRelease()
+}
+
+// stopExecutions cancels and stops every registered execution, returning them
+// for Close to join. Close marked the session closing first, so every
+// registration either is listed here or was refused.
+func (s *InternalSessionRuntime) stopExecutions() []*logicalExecution {
+	var active []*logicalExecution
+	for i := range s.registry.shards {
+		shard := &s.registry.shards[i]
+		shard.mu.Lock()
+		for e := shard.head; e != nil; e = e.next {
+			active = append(active, e.l)
+		}
+		shard.mu.Unlock()
+	}
 	// Cancel every operation before joining one of them.
 	for _, l := range active {
 		l.cancelExecution()
@@ -148,6 +218,20 @@ func (s *InternalSessionRuntime) stopExecutions() []*logicalExecution {
 		l.shutdown()
 	}
 	return active
+}
+
+// activeExecutions counts the registered executions.
+func (s *InternalSessionRuntime) activeExecutions() int {
+	n := 0
+	for i := range s.registry.shards {
+		shard := &s.registry.shards[i]
+		shard.mu.Lock()
+		for e := shard.head; e != nil; e = e.next {
+			n++
+		}
+		shard.mu.Unlock()
+	}
+	return n
 }
 
 // A zero duration disables only this local deadline. WithTimeout itself avoids

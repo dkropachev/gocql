@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
 
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
@@ -34,17 +34,29 @@ func TestRequestCount(t *testing.T) {
 		if _, err := Exec(context.Background(), s, b, CompiledOptions{}); err != nil {
 			t.Fatal(err)
 		}
-		data := implCluster.SessionData(s)
-		data.InternalSessionStateMu.Lock()
-		data.InternalIsClosing = true
-		data.InternalSessionStateMu.Unlock()
-		if _, err := Exec(context.Background(), s, b, CompiledOptions{}); !errors.Is(err, runtimeerrors.ErrClosed) {
+		// Hold every registry shard so that the second Exec takes its id and
+		// then waits to register while Close marks the session closing.
+		rt := InternalRuntimeFor(s)
+		for i := range rt.registry.shards {
+			rt.registry.shards[i].mu.Lock()
+		}
+		refused := make(chan error, 1)
+		go func() { _, err := Exec(context.Background(), s, b, CompiledOptions{}); refused <- err }()
+		for rt.requestID.Load() != 2 {
+			runtime.Gosched()
+		}
+		closed := make(chan struct{})
+		go func() { _ = s.Close(); close(closed) }()
+		for !s.Closed() {
+			runtime.Gosched()
+		}
+		for i := range rt.registry.shards {
+			rt.registry.shards[i].mu.Unlock()
+		}
+		if err := <-refused; !errors.Is(err, runtimeerrors.ErrClosed) {
 			t.Fatalf("Exec on a closing session: %v", err)
 		}
-		data.InternalSessionStateMu.Lock()
-		data.InternalIsClosing = false
-		data.InternalSessionStateMu.Unlock()
-		rt := InternalRuntimeFor(s)
+		<-closed
 		if refused := rt.refusedRegistrations.Load(); refused != 1 || rt.requestID.Load() != 2 {
 			t.Fatalf("refused %d of %d ids, want 1 of 2", refused, rt.requestID.Load())
 		}

@@ -264,7 +264,7 @@ func TestQuery(t *testing.T) {
 			if got := string(batch.values[entry.start+4 : entry.end]); got != "batch entry" {
 				t.Fatal(got)
 			}
-			if len(q.state.runtime.executions) != 0 || len(q.state.runtime.queries) != 1 {
+			if q.state.runtime.activeExecutions() != 0 || len(q.state.runtime.queries) != 1 {
 				t.Fatal("per-operation registration")
 			}
 		})
