@@ -2111,6 +2111,11 @@ type InternalConnReader struct {
 	pause          atomic.Bool
 	InternalDisarm atomic.Bool
 	transferable   bool
+	// lastDeadlineZero records that the socket's read deadline is already zero:
+	// the last SetReadDeadline succeeded with a zero time. It lets the default
+	// no-timeout configuration skip the syscall on every read. Guarded by
+	// deadlineMu, and cleared by every call that applies a non-zero deadline.
+	lastDeadlineZero bool
 }
 
 // maxReadAttempts bounds how many times Read re-arms the deadline and resumes a
@@ -2208,16 +2213,29 @@ func (c *InternalConnReader) armDeadline() error {
 	}
 	if c.InternalDisarm.Load() {
 		if c.pause.Load() {
+			c.lastDeadlineZero = false
 			return c.InternalConn.SetReadDeadline(time.Now())
 		}
 
-		return c.InternalConn.SetReadDeadline(time.Time{})
+		return c.setZeroReadDeadline()
 	}
 	if timeout := c.GetTimeout(); timeout > 0 {
+		c.lastDeadlineZero = false
 		return c.InternalConn.SetReadDeadline(time.Now().Add(timeout))
 	}
 
-	return c.InternalConn.SetReadDeadline(time.Time{})
+	return c.setZeroReadDeadline()
+}
+
+// setZeroReadDeadline clears the read deadline unless it is already clear.
+// The caller holds deadlineMu.
+func (c *InternalConnReader) setZeroReadDeadline() error {
+	if c.lastDeadlineZero {
+		return nil
+	}
+	err := c.InternalConn.SetReadDeadline(time.Time{})
+	c.lastDeadlineZero = err == nil
+	return err
 }
 
 // setDisarm enables or disables the read-deadline disarm used around the
@@ -2285,6 +2303,25 @@ type InternalDeadlineContextWriter struct {
 	// InternalSemaphore; it lives here so that a write does not allocate it.
 	writeBuffers    net.Buffers
 	InternalTimeout atomic.Int64
+	// lastDeadlineZero records that the socket's write deadline is already
+	// zero, so a no-timeout writer skips the syscall. Guarded by
+	// InternalSemaphore.
+	lastDeadlineZero bool
+}
+
+// setWriteDeadline applies timeout's deadline unless the socket already has a
+// zero deadline and timeout asks for none. *lastZero is guarded by the caller.
+func setWriteDeadline(w deadlineWriter, lastZero *bool, timeout int64) error {
+	if timeout > 0 {
+		*lastZero = false
+		return w.SetWriteDeadline(time.Now().Add(time.Duration(timeout)))
+	}
+	if *lastZero {
+		return nil
+	}
+	err := w.SetWriteDeadline(time.Time{})
+	*lastZero = err == nil
+	return err
 }
 
 func (c *InternalDeadlineContextWriter) InternalSetWriteTimeout(timeout time.Duration) {
@@ -2307,7 +2344,7 @@ func (c *InternalDeadlineContextWriter) InternalWriteContext(ctx context.Context
 		<-c.InternalSemaphore
 	}()
 
-	if err := c.InternalW.SetWriteDeadline(effectiveWriteDeadline(c.InternalTimeout.Load())); err != nil {
+	if err := setWriteDeadline(c.InternalW, &c.lastDeadlineZero, c.InternalTimeout.Load()); err != nil {
 		return 0, err
 	}
 

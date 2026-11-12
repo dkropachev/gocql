@@ -650,10 +650,13 @@ func (r *InternalConnReader) requestPause(pause bool) error {
 		return nil
 	}
 	if pause && r.InternalDisarm.Load() {
+		r.lastDeadlineZero = false
 		return r.InternalConn.SetReadDeadline(time.Now())
 	}
 	if !pause {
-		return r.InternalConn.SetReadDeadline(time.Time{})
+		err := r.InternalConn.SetReadDeadline(time.Time{})
+		r.lastDeadlineZero = err == nil
+		return err
 	}
 	return nil
 }

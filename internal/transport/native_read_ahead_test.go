@@ -58,6 +58,9 @@ func TestNativeReadAhead(t *testing.T) {
 				data := bytes.Repeat([]byte("b"), 32<<10)
 				conn := &aheadConn{data: append(bytes.Clone(data), []byte("next-header")...)}
 				raw := &InternalConnReader{InternalConn: conn}
+				// A non-zero timeout so every socket read re-arms; a zero one is
+				// skipped once cleared (TestReaderSkipsRedundantZeroDeadline).
+				raw.SetTimeout(time.Second)
 				var ahead nativeStreamReadAhead
 				ahead.begin(raw, int64(len(data)), limit)
 				var got []byte
