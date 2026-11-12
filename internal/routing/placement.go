@@ -10,6 +10,7 @@ import (
 	"math/rand/v2"
 	"strings"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
@@ -275,16 +276,34 @@ func InternalMetadataSnapshotTabletRoot(m *MetadataSnapshot, k InternalMetadataT
 // snapshot, found once for an execution and shared by its tablet version
 // block and its routing plan.
 type InternalTabletLookup struct {
-	// node is the tablet holding the token, or nil.
-	node *InternalTabletRange
+	// ref is, when tracked, the tablet holding the token
+	// (*InternalTabletRange) or nil; otherwise it is nil or the
+	// *placementCacheEntry holding the table's token ranges in the snapshot
+	// the lookup ran in. One field for both keeps the lookup at 16 bytes,
+	// which execution and planning copy on every request.
+	ref unsafe.Pointer
 	// tracked reports that the snapshot tracks the table's tablets, so
 	// a missing node means no replicas rather than vnode placement.
 	tracked bool
 	// done reports that the lookup ran; the zero lookup did not.
 	done bool
-	// cached, when set, holds the table's token ranges in the snapshot
-	// the lookup ran in, for a table without a tablet placement.
-	cached *placementCacheEntry
+}
+
+// node is the tablet holding the token, or nil.
+func (l *InternalTabletLookup) node() *InternalTabletRange {
+	if l.tracked {
+		return (*InternalTabletRange)(l.ref)
+	}
+	return nil
+}
+
+// cached is the placement cache entry the lookup found the table's token
+// ranges in, or nil.
+func (l *InternalTabletLookup) cached() *placementCacheEntry {
+	if l.tracked {
+		return nil
+	}
+	return (*placementCacheEntry)(l.ref)
 }
 
 // InternalLookupTablet finds the tablet holding info's token in m.
@@ -300,7 +319,7 @@ func InternalLookupTablet(m *MetadataSnapshot, info model.RoutingInfo) InternalT
 	}
 	if n := SnapshotData(m).InternalPlacements.Get(InternalMetadataTable{InternalKeyspace: info.Keyspace, InternalTable: info.Table}); n != nil {
 		l.tracked = true
-		l.node = n.InternalValue.tabletRangeFor(info.Token.Value)
+		l.ref = unsafe.Pointer(n.InternalValue.tabletRangeFor(info.Token.Value))
 	}
 	return l
 }
@@ -344,9 +363,9 @@ func InternalLookupTabletCached(m *MetadataSnapshot, info model.RoutingInfo, c *
 	}
 	if e.placement != nil {
 		l.tracked = true
-		l.node = e.placement.tabletRangeFor(info.Token.Value)
+		l.ref = unsafe.Pointer(e.placement.tabletRangeFor(info.Token.Value))
 	} else {
-		l.cached = e
+		l.ref = unsafe.Pointer(e)
 	}
 	return l
 }
@@ -371,7 +390,7 @@ func (l *InternalTabletLookup) VersionBlock(info model.RoutingInfo) byte {
 	if info.Table == "" || info.Keyspace == "" || !info.Token.Set {
 		return 0
 	}
-	if n := l.node; n != nil && n.InternalVersion.Set {
+	if n := l.node(); n != nil && n.InternalVersion.Set {
 		index := rand.Uint32N(16)
 		return byte(index<<4) | byte(n.InternalVersion.Value>>(index*4)&15)
 	}
@@ -396,12 +415,12 @@ func (m *MetadataSnapshot) lookupReplicas(l *InternalTabletLookup, keyspace, tab
 		return nil, nil
 	}
 	if l.tracked {
-		if n := l.node; n != nil {
+		if n := l.node(); n != nil {
 			return n.InternalSpan.Replicas, n
 		}
 		return nil, nil
 	}
-	if e := l.cached; e != nil && e.snapshot == m {
+	if e := l.cached(); e != nil && e.snapshot == m {
 		if len(e.ranges) == 0 {
 			return nil, nil
 		}
