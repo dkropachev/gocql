@@ -379,9 +379,9 @@ func TestStreamObserverOncePerStream(t *testing.T) {
 	}
 }
 
-// The reader frees a live call's stream when it unregisters the call, before
-// the caller runs its cleanup.
-func TestReaderFreesDeliveredStream(t *testing.T) {
+// The reader unregisters a live call; the caller frees its stream in its
+// cleanup, so a delivered call keeps its stream until then.
+func TestCallerFreesDeliveredStream(t *testing.T) {
 	c, server := invPair(t, 4)
 	go c.InternalServe(c.InternalCtx)
 	go func() {
@@ -397,8 +397,8 @@ func TestReaderFreesDeliveredStream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s, calls, _, _ := connCounters(c); s != 0 || calls != 0 {
-		t.Fatalf("before cleanup: streams %d, calls %d, want 0", s, calls)
+	if s, calls, _, _ := connCounters(c); s != 1 || calls != 0 {
+		t.Fatalf("before cleanup: streams %d, calls %d, want 1 and 0", s, calls)
 	}
 	x.cleanup(req)
 	page.Owner.Release()

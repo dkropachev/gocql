@@ -167,6 +167,27 @@ func (c *Conn) wakeReserver() {
 	c.InternalMu.Unlock()
 }
 
+// freeStream releases stream. A release that leaves no stream in use while a
+// reservation is acquiring wakes the reserver: it set the exclusive flag
+// before reading the in-use count, and this release cleared the count before
+// reading the flag, so one of the two sees the other.
+func (c *Conn) freeStream(stream int) {
+	if inuse, idle := c.InternalStreams.Release(stream); inuse && idle && c.admission.Load()&admissionExclusive != 0 {
+		c.wakeReserver()
+	}
+}
+
+// settleOrphan returns an orphan's budget once its late response arrived or
+// it was otherwise released.
+//
+//go:noinline
+func (c *Conn) settleOrphan(call *InternalCallReq) {
+	c.InternalMu.Lock()
+	c.orphans--
+	call.orphaned = false
+	c.InternalMu.Unlock()
+}
+
 func (c *Conn) markOrphan(call *InternalCallReq) bool {
 	c.InternalMu.Lock()
 	defer c.InternalMu.Unlock()
@@ -324,9 +345,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 	if err = ctx.Err(); err != nil {
 		return nil, err
 	}
-	c.InternalMu.Lock()
 	stream, ok := c.InternalStreams.GetStream()
-	c.InternalMu.Unlock()
 	if !ok {
 		return nil, runtimeerrors.ErrNoStreams
 	}
@@ -342,9 +361,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 	}()
 
 	if err = r.InternalInitStream(limits); err != nil {
-		c.InternalMu.Lock()
-		c.InternalStreams.Clear(stream)
-		c.InternalMu.Unlock()
+		c.freeStream(stream)
 		return nil, err
 	}
 	r.stop = context.AfterFunc(ctx, func() { r.cancelLifetime(ctx.Err()) })
@@ -422,9 +439,7 @@ func (r *InternalExclusiveConn) closeOwned(reusable bool) error {
 	if r.stop != nil {
 		r.stop()
 	}
-	r.InternalConn.InternalMu.Lock()
-	r.InternalConn.InternalStreams.Clear(r.InternalStream)
-	r.InternalConn.InternalMu.Unlock()
+	r.InternalConn.freeStream(r.InternalStream)
 	reader := r.InternalConn.InternalR.(*InternalConnReader)
 	if reusable && (!r.InternalComplete || r.InternalUnits != nil && !r.InternalUnits.boundary()) {
 		r.closeErr = fmt.Errorf("gocql: incomplete streaming response")

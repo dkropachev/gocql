@@ -1148,21 +1148,6 @@ func (c *Conn) processFrameSource(ctx context.Context, src InternalFrameSource, 
 
 			return fmt.Errorf("gocql: response for stream %d dispatched to a call on stream %d", head.Stream, streamID)
 		}
-		// The server answered: no later frame can arrive on this stream, and
-		// the call is unregistered below, so the stream is free again. It is
-		// freed after the header only, so another request may take the ID
-		// while this frame's body is still being read. That is safe: the call
-		// is already out of the table, so the new request's response finds its
-		// own call, and an exclusive reservation pauses the reader only between
-		// frames (see requestPause), so it cannot take the socket mid-body even
-		// if this call's caller gives up meanwhile. A live caller's cleanup then
-		// skips the connection lock (see releaseStream); an orphan keeps its
-		// stream until releaseStream settles its count.
-		if !call.orphaned {
-			c.InternalStreams.Clear(head.Stream)
-			call.streamFreed = true
-			c.changeLocked()
-		}
 	}
 	c.InternalCalls.Delete(head.Stream)
 	c.InternalMu.Unlock()
@@ -1246,21 +1231,16 @@ func (c *Conn) InternalAbandonRecvCall(call *InternalCallReq, framer *protocol.F
 	putCallReq(call)
 }
 
-// releaseStream frees call's stream unless the reader already did, settles an
-// orphan, and ends the stream for the observer. Its caller owns call's cleanup:
-// either it received the reader's response, whose delivery orders the reader's
-// streamFreed write before this read, or call never reached the reader.
+// releaseStream frees call's stream, settles an orphan, and ends the stream
+// for the observer. Its caller owns call's cleanup: it received the reader's
+// response, or the call never reached the reader, or it is the reader and the
+// caller had stopped waiting. call is out of the call table by then, so the
+// stream can be reused at once.
 func (c *Conn) releaseStream(call *InternalCallReq) {
-	if call.orphaned || !call.streamFreed {
-		c.InternalMu.Lock()
-		if call.orphaned {
-			c.orphans--
-			call.orphaned = false
-		}
-		c.InternalStreams.Clear(call.InternalStreamID)
-		c.changeLocked()
-		c.InternalMu.Unlock()
+	if call.orphaned {
+		c.settleOrphan(call)
 	}
+	c.freeStream(call.InternalStreamID)
 
 	if call.streamObserverContext != nil {
 		call.streamObserverEndOnce.Do(func() {
@@ -1460,9 +1440,6 @@ type InternalCallReq struct {
 	state                 atomic.Uint32 // callWaiting, callClaimed, callDelivered or callStopped
 	orphaned              bool
 	typed                 bool
-	// streamFreed is set under InternalMu by the reader that freed the stream
-	// when it unregistered the call; releaseStream then leaves the stream alone.
-	streamFreed bool
 }
 
 var callReqPool = syncx.NewPool(func() *InternalCallReq {
@@ -1475,7 +1452,6 @@ func getCallReq(streamID int) *InternalCallReq {
 	call.state.Store(callWaiting)
 	call.typed = false
 	call.orphaned = false
-	call.streamFreed = false
 	call.InternalStreamID = streamID
 	call.dest = nil
 	call.streamObserverContext = nil
@@ -1646,7 +1622,7 @@ func (c *Conn) allocCallLocked(call *InternalCallReq) error {
 		return runtimeerrors.ErrNoStreams
 	}
 	if existingCall := c.InternalCalls.Get(stream); existingCall != nil {
-		c.InternalStreams.Clear(stream)
+		c.freeStream(stream)
 		return fmt.Errorf("attempting to use stream already in use: %d -> %d", stream,
 			existingCall.InternalStreamID)
 	}
