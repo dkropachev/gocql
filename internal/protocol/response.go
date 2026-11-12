@@ -65,15 +65,18 @@ type metadataReuseEntry struct {
 }
 
 // match reports whether the entry holds metadata of count columns encoded
-// exactly as the next bytes of cursor, advancing cursor past them if so.
+// exactly as the next bytes of cursor, advancing cursor past them if so; on a
+// mismatch the caller restores cursor.
 func (e *metadataReuseEntry) match(cursor *wire.Cursor, count int, global bool, depth int) bool {
 	if e.columns.Len() != count || e.global != global || int(e.depth) != depth || len(e.encoded) == 0 {
 		return false
 	}
-	next := *cursor
-	candidate, err := next.Take(int64(len(e.encoded)))
+	candidate, err := cursor.Take(int64(len(e.encoded)))
 	if err != nil {
 		return false
+	}
+	if b, ok := candidate.Contiguous(); ok {
+		return bytes.Equal(b, e.encoded)
 	}
 	offset, same := 0, true
 	_ = candidate.Each(func(span wire.Span) error {
@@ -84,9 +87,6 @@ func (e *metadataReuseEntry) match(cursor *wire.Cursor, count int, global bool, 
 		offset += n
 		return nil
 	})
-	if same {
-		*cursor = next
-	}
 	return same
 }
 
@@ -94,6 +94,7 @@ func (e *metadataReuseEntry) match(cursor *wire.Cursor, count int, global bool, 
 // next bytes of cursor, probing first the entry of the request's expected
 // columns. On a hit it advances cursor past the metadata.
 func (r *MetadataReuse) lookup(cursor *wire.Cursor, expect Columns, count int, global bool, depth int) (Columns, bool) {
+	start := *cursor
 	tried := -1
 	if expect.Len() > 0 {
 		for i := range r.entries {
@@ -106,6 +107,7 @@ func (r *MetadataReuse) lookup(cursor *wire.Cursor, expect Columns, count int, g
 					}
 					return e.hit, true
 				}
+				*cursor = start
 				tried = i
 				break
 			}
@@ -113,7 +115,11 @@ func (r *MetadataReuse) lookup(cursor *wire.Cursor, expect Columns, count int, g
 	}
 	for i := range r.entries {
 		e := &r.entries[i]
-		if i == tried || !e.match(cursor, count, global, depth) {
+		if i == tried {
+			continue
+		}
+		if !e.match(cursor, count, global, depth) {
+			*cursor = start
 			continue
 		}
 		if expect.Len() == count && e.columns.Equal(expect) {
