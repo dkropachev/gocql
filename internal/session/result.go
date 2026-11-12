@@ -86,7 +86,7 @@ func newPageInto[R any](page *Page[R], response *transport.InternalResponsePage,
 func (p *Page[R]) initResponse(response *transport.InternalResponsePage, plan codec.RowPlan[R], release func()) {
 	p.privateStorage.response = response
 	p.privateStorage.plan = plan
-	p.privateStorage.managed = codec.ManagesRowDestination(plan)
+	p.privateStorage.rowDest = rowDestinationOf(plan)
 	p.privateStorage.InternalCursor = wire.CursorOver(response.Rows)
 	p.privateStorage.release = release
 }
@@ -102,7 +102,7 @@ func (p *Page[R]) NextInto(dst *R) bool {
 	}
 	defer p.afterAdvance()
 	ok := p.advance(dst)
-	if !ok && !codec.PreservesRowDestination(p.privateStorage.plan) {
+	if !ok && p.privateStorage.rowDest != preservedRowDestination {
 		clearDestination(dst)
 	}
 	return ok
@@ -144,7 +144,7 @@ func (p *Page[R]) advance(dst *R) bool {
 	p.privateStorage.reader = codec.RowReaderFromCursor(p.privateStorage.response.Columns, &p.privateStorage.InternalCursor, p.privateStorage.response.Owner)
 	// The plan receives the actual application destination, never a row
 	// temporary. A built-in plan clears it itself.
-	if !p.privateStorage.managed {
+	if p.privateStorage.rowDest == clearedRowDestination {
 		clearDestination(dst)
 	}
 	err := p.privateStorage.plan.DecodeInto(&p.privateStorage.reader, dst)
@@ -264,7 +264,7 @@ func (r *rowsImpl[R]) NextInto(dst *R) bool {
 	r.privateStorage.mu.Lock()
 	defer r.unlockAfterAdvance()
 	ok := r.advance(dst)
-	if !ok && (r.privateStorage.page == nil || !codec.PreservesRowDestination(r.privateStorage.page.privateStorage.plan)) {
+	if !ok && (r.privateStorage.page == nil || r.privateStorage.page.privateStorage.rowDest != preservedRowDestination) {
 		clearDestination(dst)
 	}
 	return ok
@@ -283,25 +283,12 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 		if r.privateStorage.rejectColumns && r.privateStorage.page != nil && r.privateStorage.page.Columns().Len() != 0 && r.privateStorage.terminalErr == nil {
 			r.privateStorage.terminalErr = cqltype.TypeValidation("Exec", "result columns require Run")
 		}
-		if r.privateStorage.session != nil && r.privateStorage.session.Closed() {
-			r.privateStorage.err = runtimeerrors.ErrClosed
-			r.closeLocked()
-			return false
-		}
-		if err := r.privateStorage.ctx.Err(); err != nil {
-			r.privateStorage.err = err
-			r.closeLocked()
-			return false
-		}
 		if r.privateStorage.page.NextInto(dst) {
+			// Session.Close cancels the context of every open Rows, so
+			// one check after decoding catches both a cancelled caller and
+			// a closed session.
 			if err := r.privateStorage.ctx.Err(); err != nil {
-				r.privateStorage.err = err
-				r.closeLocked()
-				return false
-			}
-			if r.privateStorage.session != nil && r.privateStorage.session.Closed() {
-				r.privateStorage.err = runtimeerrors.ErrClosed
-				r.closeLocked()
+				r.stop(err)
 				return false
 			}
 			r.privateStorage.valid = true
@@ -310,6 +297,10 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 		if err := r.privateStorage.page.Err(); err != nil {
 			r.privateStorage.err = err
 			r.closeLocked()
+			return false
+		}
+		if err := r.privateStorage.ctx.Err(); err != nil {
+			r.stop(err)
 			return false
 		}
 		state := r.privateStorage.page.State()
@@ -356,6 +347,19 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 		}
 		r.startPrefetch()
 	}
+}
+
+// stop ends the rows on a cancelled context, reporting ErrClosed when the
+// cancellation came from Session.Close. It is out of line to keep the row
+// loop small.
+//
+//go:noinline
+func (r *rowsImpl[R]) stop(err error) {
+	if r.privateStorage.session != nil && r.privateStorage.session.Closed() {
+		err = runtimeerrors.ErrClosed
+	}
+	r.privateStorage.err = err
+	r.closeLocked()
 }
 func (r *rowsImpl[R]) Err() error {
 	if r == nil {
@@ -721,8 +725,32 @@ type pageStorage[R any] struct {
 	valid          bool
 	closed         bool
 	exhausted      bool
-	// managed caches codec.ManagesRowDestination of plan for the page.
-	managed bool
+	// rowDest caches how plan treats the row destination.
+	rowDest rowDestination
+}
+
+// rowDestination is how a page's plan treats the row destination, decided
+// once per page.
+type rowDestination uint8
+
+const (
+	// clearedRowDestination: the page clears the destination before each row.
+	clearedRowDestination rowDestination = iota
+	// managedRowDestination: the plan clears it itself.
+	managedRowDestination
+	// preservedRowDestination: the plan resets it itself, and the page keeps
+	// it when iteration ends (codec.PreservesRowDestination).
+	preservedRowDestination
+)
+
+func rowDestinationOf[R any](plan codec.RowPlan[R]) rowDestination {
+	switch {
+	case codec.PreservesRowDestination(plan):
+		return preservedRowDestination
+	case codec.ManagesRowDestination(plan):
+		return managedRowDestination
+	}
+	return clearedRowDestination
 }
 
 type rowsStorage[R any] struct {

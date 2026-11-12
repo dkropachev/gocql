@@ -143,7 +143,7 @@ func TestPageStorageFlagsInPadding(t *testing.T) {
 	if got, want := unsafe.Sizeof(s), unsafe.Offsetof(s.index)+8; got != want {
 		t.Fatalf("pageStorage is %d bytes, want %d", got, want)
 	}
-	if unsafe.Offsetof(s.managed) <= unsafe.Offsetof(s.index) {
-		t.Fatal("managed is not in the tail padding")
+	if unsafe.Offsetof(s.rowDest) <= unsafe.Offsetof(s.index) {
+		t.Fatal("rowDest is not in the tail padding")
 	}
 }
