@@ -84,18 +84,23 @@ type InternalV2PeripheralState struct {
 	schemaGeneration              atomic.Uint64
 	InternalPlacementEpoch        atomic.Uint64
 	latencyCount                  atomic.Uint64
-	orphans                       atomic.Uint64
-	InternalMu                    sync.RWMutex // per-request feedback captures read under RLock
-	metricsOnce                   sync.Once
-	periodicOnce                  sync.Once
-	InternalFeedbackOnce          sync.Once
-	publishMu                     sync.Mutex
-	hostMu                        sync.Mutex
-	InternalFeedbackMu            sync.Mutex
-	InternalRetryScheduled        atomic.Bool
-	schemaRetryNeeded             atomic.Bool
-	closed                        bool
-	InternalFeedbackResync        bool
+	// latencyMarks, latencyTick and latencyPublished belong to
+	// publishLatencySummary.
+	latencyMarks           [10]uint64
+	latencyTick            int
+	latencyPublished       uint64
+	orphans                atomic.Uint64
+	InternalMu             sync.RWMutex // per-request feedback captures read under RLock
+	metricsOnce            sync.Once
+	periodicOnce           sync.Once
+	InternalFeedbackOnce   sync.Once
+	publishMu              sync.Mutex
+	hostMu                 sync.Mutex
+	InternalFeedbackMu     sync.Mutex
+	InternalRetryScheduled atomic.Bool
+	schemaRetryNeeded      atomic.Bool
+	closed                 bool
+	InternalFeedbackResync bool
 }
 
 func (s *Core) Peripheral() *InternalV2PeripheralState {
@@ -1111,6 +1116,7 @@ func sessionTypedSchemaGeneration(s *Core) uint64 {
 	return p.schemaGeneration.Load() + 1
 }
 
+// RecordV2Latency records the latency of an execution that succeeded.
 func (s *Core) RecordV2Latency(latency time.Duration) {
 	if s == nil || latency < 0 {
 		return
@@ -1118,27 +1124,36 @@ func (s *Core) RecordV2Latency(latency time.Duration) {
 	p := s.Peripheral()
 	index := p.latencyCount.Add(1) - 1
 	p.latency[index%uint64(len(p.latency))].Store(int64(latency))
-
 }
+
+// publishLatencySummary recomputes the percentiles from the samples recorded
+// in the last len(latencyMarks) calls, at most len(latency) of them. Bounding
+// the window by time as well as by count keeps the figures current when
+// executions are rare. When nothing was recorded since the previous call, the
+// previous figures stay. Only the metrics worker calls it, once a second.
 func (p *InternalV2PeripheralState) publishLatencySummary() {
-	count := min(p.latencyCount.Load(), uint64(len(p.latency)))
-	if count == 0 {
+	count := p.latencyCount.Load()
+	// latencyMarks[latencyTick] holds the count from len(latencyMarks) calls ago.
+	since := p.latencyMarks[p.latencyTick]
+	p.latencyMarks[p.latencyTick] = count
+	p.latencyTick = (p.latencyTick + 1) % len(p.latencyMarks)
+	if count == p.latencyPublished {
 		return
 	}
-	samples := make([]time.Duration, int(count))
+	p.latencyPublished = count
+	n := min(count-since, uint64(len(p.latency)))
+	samples := make([]time.Duration, int(n))
 	for i := range samples {
-		samples[i] = time.Duration(p.latency[i].Load())
+		samples[i] = time.Duration(p.latency[(count-n+uint64(i))%uint64(len(p.latency))].Load())
 	}
-	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
+	slices.Sort(samples)
 	percentile := func(percent int) time.Duration { return samples[(len(samples)*percent+99)/100-1] }
 	p.latencySummary.Store(&v2LatencySummary{p50: percentile(50), p95: percentile(95), p99: percentile(99)})
 }
 
-func sessionRecordV2Orphan(s *Core) {
-	if s != nil {
-		s.Peripheral().orphans.Add(1)
-	}
-}
+// OrphanCounter is the counter the session's connections add abandoned
+// streams to, and Metrics reports as Orphans.
+func (s *Core) OrphanCounter() *atomic.Uint64 { return &s.Peripheral().orphans }
 
 func (s *Core) MarkV2SchemaStale(keyspace string, dropped bool) {
 	p := s.Peripheral()

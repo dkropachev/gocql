@@ -253,16 +253,62 @@ func TestSession(t *testing.T) {
 		for i := 1; i <= 100; i++ {
 			s.RecordV2Latency(time.Duration(i) * time.Millisecond)
 		}
-		sessionRecordV2Orphan(s)
-		s.Peripheral().publishLatencySummary()
+		p := s.Peripheral()
+		p.publishLatencySummary()
 		m := s.Metrics()
-		if m.LatencyP50 != 50*time.Millisecond || m.LatencyP95 != 95*time.Millisecond || m.LatencyP99 != 99*time.Millisecond || m.Orphans != 1 {
+		if m.LatencyP50 != 50*time.Millisecond || m.LatencyP95 != 95*time.Millisecond || m.LatencyP99 != 99*time.Millisecond {
 			t.Fatal(m)
+		}
+		// With nothing recorded since, the previous figures stay.
+		for range len(p.latencyMarks) + 1 {
+			p.publishLatencySummary()
+		}
+		if m := s.Metrics(); m.LatencyP50 != 50*time.Millisecond || m.LatencyP99 != 99*time.Millisecond {
+			t.Fatal("idle recomputation changed the percentiles:", m)
+		}
+		// The samples above are now older than the window, so only the new
+		// ones count.
+		s.RecordV2Latency(time.Second)
+		p.publishLatencySummary()
+		if m := s.Metrics(); m.LatencyP50 != time.Second || m.LatencyP99 != time.Second {
+			t.Fatal("percentiles kept samples older than the window:", m)
+		}
+		// Past len(latency) samples, only the latest count.
+		for i := range 2 * len(p.latency) {
+			d := time.Millisecond
+			if i >= len(p.latency) {
+				d = time.Minute
+			}
+			s.RecordV2Latency(d)
+		}
+		p.publishLatencySummary()
+		if m := s.Metrics(); m.LatencyP50 != time.Minute {
+			t.Fatal("percentiles kept samples beyond the newest 1024:", m)
 		}
 		generation := sessionTypedSchemaGeneration(s)
 		s.PublishV2Metadata()
 		if sessionTypedSchemaGeneration(s) != generation {
 			t.Fatal("topology invalidated prepared schema")
+		}
+	})
+
+	// The transport counts orphans in the counter the session hands its
+	// connections, and Metrics must report that same counter.
+	t.Run("MetricsOrphansFromConnections", func(t *testing.T) {
+		typed := settings.DefaultConfig("127.0.0.1")
+		cfg := InternalNewClusterSettings("127.0.0.1")
+		s, err := newSessionCommonWithRuntime(*cfg, &typed, func(_ *Core, c settings.Config) *settings.Config { return &c })
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s.Close()
+		orphans := s.privateStorage.InternalConnCfg.InternalOrphans
+		if orphans == nil {
+			t.Fatal("connections have no orphan counter")
+		}
+		orphans.Add(2)
+		if got := s.Metrics().Orphans; got != 2 {
+			t.Fatalf("Orphans = %d, want 2", got)
 		}
 	})
 
