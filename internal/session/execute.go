@@ -67,10 +67,11 @@ type InternalSessionRuntime struct {
 	closingOnce      sync.Once
 	prepareWorkersMu sync.Mutex
 	InternalMu       sync.Mutex
-	// refusedDuringClose counts requests that took an id but were refused
-	// because the session was closing. Requests is requestID minus this, so
+	// refusedRegistrations counts admissions that took a request id but
+	// that registerExecution refused: the session was closing or closed, or
+	// the reusable query was closed. Requests is requestID minus this, so
 	// admission writes no separate request counter.
-	refusedDuringClose   atomic.Uint64
+	refusedRegistrations atomic.Uint64
 	prepareWorkersClosed bool
 
 	// The fields below are written by every request. Each group has its own
@@ -160,10 +161,11 @@ func (rt *InternalSessionRuntime) metricsSnapshot() metrics.Snapshot {
 }
 
 // requestCount reports the admitted requests: every request id taken, minus
-// those refused during Close. The refusals are read first, so a refusal racing
-// with this read cannot outnumber the ids it read.
+// the admissions registerExecution refused. The refusals are read first, so a
+// refusal racing with this read cannot outnumber the ids it read. The count
+// may briefly include an admission that has its id but is about to be refused.
 func (rt *InternalSessionRuntime) requestCount() uint64 {
-	refused := rt.refusedDuringClose.Load()
+	refused := rt.refusedRegistrations.Load()
 	return rt.requestID.Load() - refused
 }
 
@@ -682,8 +684,9 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 	*logical = logicalExecution{lifetime: executionLifetime{cancel: stop, done: done}, id: rt.requestID.Add(1), started: started, observer: observer, rt: rt, request: request}
 	request.InternalLogical = logical
 	if err := rt.registerExecution(request.InternalLogical, request.InternalOwner); err != nil {
-		// registerExecution refuses only a closing session.
-		rt.refusedDuringClose.Add(1)
+		// registerExecution refuses a closing or closed session or a closed
+		// query; either way this id is not a request.
+		rt.refusedRegistrations.Add(1)
 		cancel()
 		request.InternalLogical.releaseInput()
 		return nil, nil, nil, err

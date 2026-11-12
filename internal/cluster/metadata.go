@@ -1138,8 +1138,11 @@ func (s *Core) RecordV2Latency(id uint64, latency time.Duration) {
 // preferring newer calls' samples. Bounding the window by time as well as by
 // count keeps the figures current when executions are rare. Each call takes
 // the samples out of latency, so a sample is read once, whenever its store
-// lands. When no sample was stored since the previous call, the previous
-// figures stay. Only the metrics worker calls it, once a second.
+// lands. A slot holds only the latest finish among the ids that map to it
+// (v2LatencySlot: one id in every 1024), so between two calls the ring keeps
+// about the last 1024 request ids, not the last 1024 finishes. When no sample
+// was stored since the previous call, the previous figures stay. Only the
+// metrics worker calls it, once a second.
 func (p *InternalV2PeripheralState) publishLatencySummary() {
 	batch := p.latencyBatches[p.latencyTick][:0]
 	for i := range p.latency {
