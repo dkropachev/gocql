@@ -45,20 +45,24 @@ type prepareFlight struct {
 }
 type InternalSessionRuntime struct {
 	*implCluster.Core
-	executions                                                   map[*logicalExecution]struct{}
-	queries                                                      map[weak.Pointer[queryState]]*queryEntry
-	schema                                                       *schemafence.InternalPreparedSchemaTracker
-	preparing                                                    map[prepareCacheKey]*prepareFlight
-	InternalProfile                                              *settings.Profile
-	InternalPrepared                                             map[prepareCacheKey]*InternalPreparedState
-	pools                                                        map[*queryPoolEntry]struct{}
-	InternalPrepareOrder                                         []prepareCacheKey
-	defaultOptions                                               InternalResolvedOptions // the zero CompiledOptions resolved for this session
-	config                                                       settings.Config
-	prepareWorkers                                               sync.WaitGroup
-	requestID                                                    atomic.Uint64
-	requests, attempts, errors, retries, speculations, cancelled atomic.Uint64
-	inflight                                                     atomic.Int64
+	executions                                         map[*logicalExecution]struct{}
+	queries                                            map[weak.Pointer[queryState]]*queryEntry
+	schema                                             *schemafence.InternalPreparedSchemaTracker
+	preparing                                          map[prepareCacheKey]*prepareFlight
+	InternalProfile                                    *settings.Profile
+	InternalPrepared                                   map[prepareCacheKey]*InternalPreparedState
+	pools                                              map[*queryPoolEntry]struct{}
+	InternalPrepareOrder                               []prepareCacheKey
+	defaultOptions                                     InternalResolvedOptions // the zero CompiledOptions resolved for this session
+	config                                             settings.Config
+	prepareWorkers                                     sync.WaitGroup
+	requestID                                          atomic.Uint64
+	attempts, errors, retries, speculations, cancelled atomic.Uint64
+	inflight                                           atomic.Int64
+	// refusedDuringClose counts requests that took an id but were refused
+	// because the session was closing. Requests is requestID minus this, so
+	// admission writes no separate request counter.
+	refusedDuringClose atomic.Uint64
 	// pooledBusy counts busy queries of prepared statements' one-shot pools.
 	// Close waits for it to reach zero; pooledWake, guarded by InternalMu,
 	// is the channel it waits on.
@@ -108,13 +112,21 @@ func (rt *InternalSessionRuntime) sessionDone() <-chan struct{} { return rt.clos
 
 func (rt *InternalSessionRuntime) metricsSnapshot() metrics.Snapshot {
 	cache := implCluster.SessionData(rt.Core).InternalConnCfg
-	result := metrics.Snapshot{Requests: rt.requests.Load(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), Cancelled: rt.cancelled.Load(), InFlight: rt.inflight.Load()}
+	result := metrics.Snapshot{Requests: rt.requestCount(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), Cancelled: rt.cancelled.Load(), InFlight: rt.inflight.Load()}
 	if cache != nil {
 		stats := cache.InternalReceiveCache.Stats()
 		result.ReceiveCacheHits, result.ReceiveCacheMisses = stats.Hits, stats.Misses
 		result.ReceiveCacheBytes, result.ReceiveCacheObjects = stats.RetainedBytes, stats.RetainedObjects
 	}
 	return result
+}
+
+// requestCount reports the admitted requests: every request id taken, minus
+// those refused during Close. The refusals are read first, so a refusal racing
+// with this read cannot outnumber the ids it read.
+func (rt *InternalSessionRuntime) requestCount() uint64 {
+	refused := rt.refusedDuringClose.Load()
+	return rt.requestID.Load() - refused
 }
 
 func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, keyspace string, options PrepareOptions) (state *InternalPreparedState, err error) {
@@ -632,11 +644,12 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 	*logical = logicalExecution{lifetime: executionLifetime{cancel: stop, done: done}, id: rt.requestID.Add(1), started: started, observer: observer, rt: rt, request: request}
 	request.InternalLogical = logical
 	if err := rt.registerExecution(request.InternalLogical, request.InternalOwner); err != nil {
+		// registerExecution refuses only a closing session.
+		rt.refusedDuringClose.Add(1)
 		cancel()
 		request.InternalLogical.releaseInput()
 		return nil, nil, nil, err
 	}
-	rt.requests.Add(1)
 	rt.inflight.Add(1)
 	if !request.routing.Conditional && !requestHasCounter(request) && !request.InternalOptions.InternalOptions.Timestamp.Set && rt.config.TimestampGenerator != nil {
 		request.InternalOptions.InternalOptions.Timestamp = cqltype.Option[int64]{Value: rt.config.TimestampGenerator(), Set: true}
