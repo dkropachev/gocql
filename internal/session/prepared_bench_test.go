@@ -57,7 +57,8 @@ func BenchmarkPrepared(b *testing.B) {
 					deps := tracker.InternalDependencies("ks", columns, columns)
 					hp := &InternalHostPrepared{InternalEpoch: deps.InternalSnapshot()}
 					id := cqltype.UUID{15: 1}
-					state := &InternalPreparedState{InternalSession: s, InternalProtocol: 4, InternalStatement: "SELECT value FROM ks.tbl WHERE value=?", InternalParameters: columns, InternalColumns: columns, InternalHosts: map[cqltype.UUID]*InternalHostPrepared{id: hp}, InternalDependencies: deps, InternalInitialEpoch: deps.InternalSnapshot(), InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl", PartitionKeyIndexes: []int{0}}}
+					state := &InternalPreparedState{InternalSession: s, InternalProtocol: 4, InternalStatement: "SELECT value FROM ks.tbl WHERE value=?", InternalParameters: columns, InternalColumns: columns, InternalDependencies: deps, InternalInitialEpoch: deps.InternalSnapshot(), InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl", PartitionKeyIndexes: []int{0}}}
+					newTestPreparedState(state, map[cqltype.UUID]*InternalHostPrepared{id: hp}, nil, cqltype.UUID{})
 					prepared := new(Prepared[[]byte, cqltype.Bytes])
 					PreparedData(prepared).InternalState = state
 					PreparedData(prepared).kind = cqltype.OrdinaryStatement
@@ -139,7 +140,7 @@ func BenchmarkPrepared(b *testing.B) {
 		deps := tracker.InternalDependencies("ks", cqltype.NewColumns(), columns)
 		hp := &InternalHostPrepared{InternalEpoch: deps.InternalSnapshot()}
 		id := cqltype.UUID{15: 1}
-		state := &InternalPreparedState{InternalHosts: map[cqltype.UUID]*InternalHostPrepared{id: hp}, InternalDependencies: deps}
+		state := newTestPreparedState(&InternalPreparedState{InternalDependencies: deps}, map[cqltype.UUID]*InternalHostPrepared{id: hp}, nil, cqltype.UUID{})
 		conn := &transport.Conn{InternalHost: func() *endpoint.HostInfo {
 			opaqueStorageValuex := new(endpoint.HostInfo)
 			implEndpoint.HostInfoData(opaqueStorageValuex).InternalHostId = id

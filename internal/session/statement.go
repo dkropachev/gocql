@@ -42,9 +42,8 @@ type InternalHostPrepared struct {
 	InternalMetadataChanged        bool
 }
 type InternalPreparedState struct {
-	InternalResult       *model.ResultSchemaIdentity
 	InternalSession      *implCluster.Core
-	InternalHosts        map[cqltype.UUID]*InternalHostPrepared
+	view                 atomic.Pointer[preparedView]
 	preparing            map[cqltype.UUID]*hostPrepareFlight
 	InternalDependencies *schemafence.InternalPreparedDependencies
 	// tabletPlacement finds the statement's table among tablet placements.
@@ -59,7 +58,6 @@ type InternalPreparedState struct {
 	conflictMu                          sync.Mutex
 	conflictDirty                       atomic.Bool
 	conflictRefresh                     atomic.Bool
-	InternalResultHost                  cqltype.UUID
 	InternalProtocol                    uint8
 }
 type hostPrepareFlight struct {

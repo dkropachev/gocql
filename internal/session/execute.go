@@ -245,7 +245,8 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 	dependencies := tracker.InternalDependencies(info.Keyspace, page.BindColumns(), page.Columns)
 	epoch := dependencies.InternalSince(started)
 	result := &model.ResultSchemaIdentity{InternalColumns: page.Columns, InternalEpoch: epoch, InternalTracker: dependencies.InternalTracker}
-	state = &InternalPreparedState{InternalSession: s.Core, InternalProtocol: conn.InternalVersion, InternalStatement: statement, InternalKeyspace: keyspace, InternalParameters: page.BindColumns(), InternalColumns: page.Columns, InternalInfo: info, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalResult: result, InternalResultHost: conn.InternalHostID(), partitioner: s.Core.PreparedPartitionerName(info.Keyspace, info.Table), InternalHosts: map[cqltype.UUID]*InternalHostPrepared{conn.InternalHostID(): {InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: page.Columns, InternalGeneration: generation, InternalRevision: 1, InternalEpoch: epoch, InternalResult: result}}}
+	state = &InternalPreparedState{InternalSession: s.Core, InternalProtocol: conn.InternalVersion, InternalStatement: statement, InternalKeyspace: keyspace, InternalParameters: page.BindColumns(), InternalColumns: page.Columns, InternalInfo: info, InternalDependencies: dependencies, InternalInitialEpoch: epoch, partitioner: s.Core.PreparedPartitionerName(info.Keyspace, info.Table)}
+	state.view.Store(&preparedView{hosts: map[cqltype.UUID]*InternalHostPrepared{conn.InternalHostID(): {InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: page.Columns, InternalGeneration: generation, InternalRevision: 1, InternalEpoch: epoch, InternalResult: result}}, result: result, resultHost: conn.InternalHostID()})
 
 	tracker.InternalMu.RLock()
 	defer tracker.InternalMu.RUnlock()
@@ -286,15 +287,13 @@ func (s *InternalSessionRuntime) prepareOnConnExpected(ctx context.Context, conn
 		return nil, err
 	}
 	id := conn.InternalHostID()
-	state.InternalMu.RLock()
-	cached := state.InternalHosts[id]
-	state.InternalMu.RUnlock()
+	cached := state.host(id)
 	if cached != nil && cached.InternalEpoch.InternalCurrent() && (!force || failed != nil && cached != failed) {
 		return cached, nil
 	}
 	epoch := state.InternalDependencies.InternalSnapshot()
 	state.InternalMu.Lock()
-	cached = state.InternalHosts[id]
+	cached = state.host(id)
 	if cached != nil && cached.InternalEpoch.InternalCurrent() && (!force || failed != nil && cached != failed) {
 		state.InternalMu.Unlock()
 		return cached, nil
@@ -377,14 +376,12 @@ func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *transpor
 	state.InternalDependencies.InternalExtend(state.InternalInfo.Keyspace, state.InternalParameters, page.Columns)
 	epoch := state.InternalDependencies.InternalSince(flight.started)
 	result := &model.ResultSchemaIdentity{InternalColumns: page.Columns, InternalEpoch: epoch, InternalTracker: state.InternalDependencies.InternalTracker}
-	state.InternalMu.RLock()
-	if state.InternalResult != nil && state.InternalResult.InternalColumns.Equal(page.Columns) {
-		result.InternalColumns = state.InternalResult.InternalColumns
-		if state.InternalResult.InternalEpoch.InternalEqual(epoch) {
-			result = state.InternalResult
+	if current := state.loadView().result; current != nil && current.InternalColumns.Equal(page.Columns) {
+		result.InternalColumns = current.InternalColumns
+		if current.InternalEpoch.InternalEqual(epoch) {
+			result = current
 		}
 	}
-	state.InternalMu.RUnlock()
 	candidate := &InternalHostPrepared{InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: result.InternalColumns, InternalGeneration: s.Core.TypedGeneration(), InternalRevision: revision, InternalEpoch: epoch, InternalResult: result}
 
 	// Exact-entry/epoch CAS. A losing response keeps its own immutable candidate;
@@ -393,12 +390,10 @@ func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *transpor
 	defer state.InternalDependencies.InternalTracker.InternalMu.RUnlock()
 	state.InternalMu.Lock()
 	defer state.InternalMu.Unlock()
-	if state.InternalHosts[conn.InternalHostID()] == flight.previous && flight.epoch.InternalCurrent() && candidate.InternalEpoch.InternalCurrent() {
-		state.InternalHosts[conn.InternalHostID()] = candidate
-		conflict = state.InternalResultHost != conn.InternalHostID() && state.InternalResult != nil && !state.InternalResult.InternalColumns.Equal(result.InternalColumns)
+	if v := state.loadView(); v.hosts[conn.InternalHostID()] == flight.previous && flight.epoch.InternalCurrent() && candidate.InternalEpoch.InternalCurrent() {
+		conflict = v.resultHost != conn.InternalHostID() && v.result != nil && !v.result.InternalColumns.Equal(result.InternalColumns)
+		state.publishHost(conn.InternalHostID(), candidate, !conflict, result)
 		if !conflict {
-			state.InternalResultHost = conn.InternalHostID()
-			state.InternalResult = result
 			state.InternalInitialEpoch = candidate.InternalEpoch
 			state.InternalColumns = result.InternalColumns
 		}
@@ -467,9 +462,8 @@ func selectPreparedMetadata(state *InternalPreparedState, host cqltype.UUID, pre
 			}
 		}
 	}()
-	state.InternalMu.RLock()
-	conflict = state.InternalHosts[host] == prepared && state.InternalResultHost != host && state.InternalResult != nil && !state.InternalResult.InternalColumns.Equal(response.columns)
-	state.InternalMu.RUnlock()
+	v := state.loadView()
+	conflict = v.hosts[host] == prepared && v.resultHost != host && v.result != nil && !v.result.InternalColumns.Equal(response.columns)
 	changed := !prepared.InternalColumns.Equal(response.columns) || len(response.metadataID) > 0 && !bytes.Equal(prepared.InternalMetadataID, response.metadataID)
 	if !changed {
 		response.columns = prepared.InternalColumns
@@ -502,12 +496,11 @@ func selectPreparedMetadata(state *InternalPreparedState, host cqltype.UUID, pre
 	defer state.InternalDependencies.InternalTracker.InternalMu.RUnlock()
 	state.InternalMu.Lock()
 	defer state.InternalMu.Unlock()
-	if state.InternalHosts[host] == prepared && prepared.InternalEpoch.InternalCurrent() && candidate.InternalEpoch.InternalCurrent() {
-		conflict = conflict || state.InternalResultHost != host && state.InternalResult != nil && !state.InternalResult.InternalColumns.Equal(response.columns)
-		state.InternalHosts[host] = &candidate
-		if state.InternalResult == prepared.InternalResult && !conflict {
-			state.InternalResultHost = host
-			state.InternalResult = result
+	if v := state.loadView(); v.hosts[host] == prepared && prepared.InternalEpoch.InternalCurrent() && candidate.InternalEpoch.InternalCurrent() {
+		conflict = conflict || v.resultHost != host && v.result != nil && !v.result.InternalColumns.Equal(response.columns)
+		adopt := v.result == prepared.InternalResult && !conflict
+		state.publishHost(host, &candidate, adopt, result)
+		if adopt {
 			state.InternalInitialEpoch = candidate.InternalEpoch
 			state.InternalColumns = result.InternalColumns
 		}
