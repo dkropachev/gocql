@@ -24,7 +24,10 @@
 
 package streams
 
-import "testing"
+import (
+	"sync"
+	"testing"
+)
 
 func TestIDGenerator(t *testing.T) {
 	t.Parallel()
@@ -44,8 +47,8 @@ func TestIDGenerator(t *testing.T) {
 					t.Fatalf("stream %d was not in use", i)
 				}
 			}
-			for i, word := range streams.used {
-				if word != 0 {
+			for i := range streams.state[1:] {
+				if word := streams.state[1+i].Load(); word != 0 {
 					t.Errorf("did not clear streams in word %d: %x", i, word)
 				}
 			}
@@ -85,7 +88,7 @@ func TestIDGenerator(t *testing.T) {
 	})
 
 	t.Run("GetStream", func(t *testing.T) {
-		t.Run("ReusesLastReleased", func(t *testing.T) {
+		t.Run("ReusesLowestReleased", func(t *testing.T) {
 			t.Parallel()
 
 			streams := New()
@@ -95,16 +98,31 @@ func TestIDGenerator(t *testing.T) {
 			if a != 0 || b != 1 || c != 2 {
 				t.Fatalf("fresh streams = %d %d %d, want 0 1 2", a, b, c)
 			}
-			streams.Clear(a)
 			streams.Clear(c)
-			if got, _ := streams.GetStream(); got != c {
-				t.Fatalf("got %d, want the last released %d", got, c)
-			}
+			streams.Clear(a)
 			if got, _ := streams.GetStream(); got != a {
-				t.Fatalf("got %d, want %d", got, a)
+				t.Fatalf("got %d, want the lowest released %d", got, a)
+			}
+			if got, _ := streams.GetStream(); got != c {
+				t.Fatalf("got %d, want %d", got, c)
 			}
 			if got, _ := streams.GetStream(); got != 3 {
 				t.Fatalf("got %d, want the next fresh stream 3", got)
+			}
+		})
+
+		t.Run("ReusesBelowHint", func(t *testing.T) {
+			t.Parallel()
+
+			// Fill the first word so the hint moves past it, then free an ID in
+			// it: the next allocation must find it again.
+			streams := NewLimited(128)
+			for range 65 {
+				streams.GetStream()
+			}
+			streams.Clear(5)
+			if got, _ := streams.GetStream(); got != 5 {
+				t.Fatalf("got %d, want 5", got)
 			}
 		})
 
@@ -139,4 +157,64 @@ func TestIDGenerator(t *testing.T) {
 			}
 		})
 	})
+}
+
+// Allocations and releases from many goroutines never hand out an ID that is
+// still in use, and the in-use count returns to zero.
+func TestStreamBitmapConcurrent(t *testing.T) {
+	t.Parallel()
+
+	for _, limit := range []int{40, 200, 32768} {
+		streams := NewLimited(limit)
+		owner := make([]sync.Mutex, limit)
+		held := make([]bool, limit)
+		const workers, rounds = 16, 2000
+		var wg sync.WaitGroup
+		for w := range workers {
+			wg.Go(func() {
+				var mine []int
+				for i := range rounds {
+					// Hold up to a few IDs at once so the bitmap fills and drains.
+					if len(mine) < 1+(w+i)%5 {
+						stream, ok := streams.GetStream()
+						if !ok {
+							if len(mine) == 0 {
+								continue
+							}
+						} else {
+							owner[stream].Lock()
+							dup := held[stream]
+							held[stream] = true
+							owner[stream].Unlock()
+							if dup {
+								t.Errorf("limit %d: stream %d handed out twice", limit, stream)
+								return
+							}
+							mine = append(mine, stream)
+							continue
+						}
+					}
+					stream := mine[len(mine)-1]
+					mine = mine[:len(mine)-1]
+					owner[stream].Lock()
+					held[stream] = false
+					owner[stream].Unlock()
+					if !streams.Clear(stream) {
+						t.Errorf("limit %d: stream %d was not in use", limit, stream)
+						return
+					}
+				}
+				for _, stream := range mine {
+					owner[stream].Lock()
+					held[stream] = false
+					owner[stream].Unlock()
+					streams.Clear(stream)
+				}
+			})
+		}
+		wg.Wait()
+		if streams.InUse() != 0 || streams.Available() != limit {
+			t.Fatalf("limit %d: InUse=%d Available=%d", limit, streams.InUse(), streams.Available())
+		}
+	}
 }
