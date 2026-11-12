@@ -263,9 +263,8 @@ func TestPrepared(t *testing.T) {
 				implSession.OptionsData(opaqueStorageValuexxx).InternalConnection = conn
 				return opaqueStorageValuexxx
 			}())
-			preparedData(prepared).InternalState.InternalMu.RLock()
-			id := append([]byte(nil), preparedData(prepared).InternalState.InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)].InternalId...)
-			preparedData(prepared).InternalState.InternalMu.RUnlock()
+			entry, _ := implSession.InternalHostPreparedEntry(preparedData(prepared).InternalState, implEndpoint.InternalHostInfoHostUUID(conn.InternalHost))
+			id := entry.InternalId
 			require.NotEqual(t, []byte("foobar"), id)
 			require.Equal(t, int64(7), cassandraInt(t, cassandraRead(t, session, "SELECT bar FROM "+table+" WHERE foo=?", codecTestMust(dynamic.Text("bar"))), "bar"))
 		})
@@ -282,9 +281,8 @@ func TestPrepared(t *testing.T) {
 				return opaqueStorageValuexx
 			}()))
 			require.NoError(t, err)
-			preparedData(prepared).InternalState.InternalMu.RLock()
-			id := append([]byte(nil), preparedData(prepared).InternalState.InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)].InternalId...)
-			preparedData(prepared).InternalState.InternalMu.RUnlock()
+			entry, _ := implSession.InternalHostPreparedEntry(preparedData(prepared).InternalState, implEndpoint.InternalHostInfoHostUUID(conn.InternalHost))
+			id := entry.InternalId
 			require.NotEqual(t, []byte("foobar"), id)
 			require.Equal(t, int64(7), cassandraInt(t, cassandraRead(t, session, "SELECT bar FROM "+table+" WHERE foo=?", codecTestMust(dynamic.Text("bar"))), "bar"))
 		})
