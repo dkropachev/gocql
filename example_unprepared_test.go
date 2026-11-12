@@ -8,16 +8,17 @@ import (
 	"log"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 )
 
 func ExampleSession_UnpreparedExec() {
 	ctx := context.Background()
-	config, err := gocql.NewConfig("localhost:9042").Build()
+	cfg, err := config.New("localhost:9042").Build()
 	if err != nil {
 		log.Fatal(err)
 	}
-	session, err := gocql.Connect[gocql.ScyllaV4](ctx, config)
+	session, err := gocql.Connect[gocql.ScyllaV4](ctx, cfg)
 	if err != nil {
 		log.Fatal(err)
 	}

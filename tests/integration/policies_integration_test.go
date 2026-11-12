@@ -4,6 +4,7 @@ package integration
 
 import (
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
@@ -34,7 +35,7 @@ func testV2InvalidDatacenter(t *testing.T, options routing.Options) {
 	}
 }
 
-func testIfPolicyInitializedProperly(t *testing.T, cluster gocql.Config, keyspace string) {
+func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspace string) {
 	t.Helper()
 	ctx := context.Background()
 	session, err := gocql.Connect[testDialect](ctx, cluster)
@@ -118,7 +119,7 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster gocql.Config, keyspac
 		if err != nil {
 			t.Fatal(err)
 		}
-		builder := gocql.NewProfile()
+		builder := config.NewProfile()
 		fixtureProfile(builder)
 		profile, err := builder.WithRouting(policy).Build()
 		if err != nil {

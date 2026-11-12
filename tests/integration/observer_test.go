@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
 )
@@ -135,7 +136,7 @@ func TestObserver(t *testing.T) {
 		require.Equal(t, int64(42), cassandraInt(t, cassandraReadOne(t, session, read, []dynamic.Value{dynamic.Int(42)}, gocql.Options{Observer: observer}), "id"))
 		check(selectCQL, false)
 		observer.reset()
-		other := createV2Session(t, func(c *gocql.ConfigBuilder) { c.WithObserver(observer) })
+		other := createV2Session(t, func(c *config.ConfigBuilder) { c.WithObserver(observer) })
 		defer other.Close()
 		observer.reset()
 		read = cassandraDynamicPrepared(t, other, selectCQL, gocql.PrepareOptions{})

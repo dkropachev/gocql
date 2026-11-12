@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -187,7 +188,7 @@ func TestFraming(t *testing.T) {
 				},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
-					session := createV2Session(t, func(c *gocql.ConfigBuilder) {
+					session := createV2Session(t, func(c *config.ConfigBuilder) {
 						c.WithIgnoreEvents(gocql.SchemaEvent).WithAutomaticSchemaAgreement(false).WithRefreshAfterAgreement(false)
 					})
 					defer session.Close()
@@ -219,7 +220,7 @@ func TestFraming(t *testing.T) {
 		// (scylladb/java-driver#758) and python-driver's
 		// test_empty_sentinel_id_triggers_metadata_changed (scylladb/python-driver#770).
 		t.Run("ScyllaEmpty", func(t *testing.T) {
-			session := createV2Session(t, func(c *gocql.ConfigBuilder) {
+			session := createV2Session(t, func(c *config.ConfigBuilder) {
 				c.WithIgnoreEvents(gocql.SchemaEvent).WithAutomaticSchemaAgreement(false).WithRefreshAfterAgreement(false)
 			})
 			defer session.Close()

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
 )
 
@@ -33,12 +34,12 @@ func cleanupNamespaces(t *testing.T, allowed []string) {
 		selected[name] = true
 	}
 	matches := func(name string) bool { return owns(name) && (allowed == nil || selected[name]) }
-	config := createV2Cluster(func(c *gocql.ConfigBuilder) {
+	cfg := createV2Cluster(func(c *config.ConfigBuilder) {
 		c.WithIgnoreEvents(gocql.SchemaEvent, gocql.TopologyEvent, gocql.StatusEvent).
 			WithAutomaticSchemaAgreement(false).
 			WithRefreshAfterAgreement(false)
 	})
-	s, err := gocql.Connect[testDialect](ctx, mustBuild(t, config))
+	s, err := gocql.Connect[testDialect](ctx, mustBuild(t, cfg))
 	if err != nil {
 		t.Fatal(err)
 	}

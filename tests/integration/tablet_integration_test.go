@@ -5,7 +5,7 @@ package integration
 import (
 	"sync"
 
-	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/routing"
 )
 
@@ -14,8 +14,8 @@ type v2TabletAttemptObserver struct {
 	targets []routing.Target
 }
 
-func (*v2TabletAttemptObserver) ObserveRequest(gocql.RequestEvent) {}
-func (o *v2TabletAttemptObserver) ObserveAttempt(event gocql.AttemptEvent) {
+func (*v2TabletAttemptObserver) ObserveRequest(config.RequestEvent) {}
+func (o *v2TabletAttemptObserver) ObserveAttempt(event config.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if event.Err == nil {

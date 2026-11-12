@@ -40,6 +40,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -86,7 +87,7 @@ func TestRouting(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, oneHost := range []bool{false, true} {
-				builder := gocql.NewProfile()
+				builder := config.NewProfile()
 				fixtureProfile(builder)
 				profile, err := builder.WithRouting(v2UnavailableHostsRouting{Policy: policy, oneHost: oneHost}).Build()
 				if err != nil {
@@ -270,7 +271,7 @@ func TestRouting(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cluster.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithRouting(rr) })
+			cluster.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithRouting(rr) })
 			// we'll filter out the second host
 			filtered := clusterHosts[1]
 			cluster.WithHostFilter(func(host routing.HostSnapshot) bool { return host.Address.Addr().String() != filtered })
@@ -306,7 +307,7 @@ func TestRouting(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cluster.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithRouting(rr) })
+			cluster.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithRouting(rr) })
 			// we'll filter out the second host
 			filtered := clusterHosts[1]
 			cluster.WithHostFilter(func(host routing.HostSnapshot) bool { return host.Address.Addr().String() != filtered })
@@ -354,7 +355,7 @@ func TestRouting(t *testing.T) {
 		// Integration test of the routing key calculation
 		t.Run("Computed", func(t *testing.T) {
 			t.Parallel()
-			session := createV2Session(t, func(c *gocql.ConfigBuilder) { c.WithIgnoreEvents(gocql.SchemaEvent) })
+			session := createV2Session(t, func(c *config.ConfigBuilder) { c.WithIgnoreEvents(gocql.SchemaEvent) })
 			defer session.Close()
 			single, composite := testTableName(t, "single"), testTableName(t, "composite")
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(first_id int,second_id int,PRIMARY KEY(first_id,second_id))", single))
@@ -437,7 +438,7 @@ func TestRouting(t *testing.T) {
 			v2ConfigureRouting(t, cluster, routing.Options{TokenAware: true})
 			// The rows are read back at ONE from whichever replica the tablet
 			// routes to: write them at ALL so a lagging replica cannot miss one.
-			cluster.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithConsistency(cql.All) })
+			cluster.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithConsistency(cql.All) })
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
 			supported, err := v2TabletsSupported(ctx, session)
@@ -596,9 +597,9 @@ func TestRouting(t *testing.T) {
 		t.Run("Leader", func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
-			config := createV2Cluster()
-			v2ConfigureRouting(t, config, routing.Options{TokenAware: true, LeaderAware: true, ShuffleReplicas: true})
-			s, err := gocql.Connect[testDialect](ctx, mustBuild(t, config))
+			cfg := createV2Cluster()
+			v2ConfigureRouting(t, cfg, routing.Options{TokenAware: true, LeaderAware: true, ShuffleReplicas: true})
+			s, err := gocql.Connect[testDialect](ctx, mustBuild(t, cfg))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -685,9 +686,9 @@ func TestRouting(t *testing.T) {
 		t.Run("Live", func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
-			config := createV2Cluster()
-			v2ConfigureRouting(t, config, routing.Options{TokenAware: true, LeaderAware: true, ShuffleReplicas: true})
-			s, err := gocql.Connect[testDialect](ctx, mustBuild(t, config))
+			cfg := createV2Cluster()
+			v2ConfigureRouting(t, cfg, routing.Options{TokenAware: true, LeaderAware: true, ShuffleReplicas: true})
+			s, err := gocql.Connect[testDialect](ctx, mustBuild(t, cfg))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -876,10 +877,10 @@ func TestRouting(t *testing.T) {
 		// Integration test of the token-aware policy-based connection pool
 		t.Run("ConnPool", func(t *testing.T) {
 			t.Parallel()
-			session := createV2SessionFromConfig(createV2ClusterWithout(fixtureConsistency, func(c *gocql.ConfigBuilder) {
-				c.WithPoolSize(gocql.PerHost(1))
+			session := createV2SessionFromConfig(createV2ClusterWithout(fixtureConsistency, func(c *config.ConfigBuilder) {
+				c.WithConnectionsPerHost(1)
 				// The row is read back at ONE: write it at ALL so any replica has it.
-				c.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithPageSize(1).WithConsistency(cql.All) })
+				c.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithPageSize(1).WithConsistency(cql.All) })
 			}), t, false)
 			defer session.Close()
 			conns := waitForHostConns(t, session)

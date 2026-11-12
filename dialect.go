@@ -3,13 +3,16 @@
 
 package gocql
 
-import implSettings "github.com/scylladb/gocql/v2/internal/settings"
+import (
+	"github.com/scylladb/gocql/v2/config"
+	implSettings "github.com/scylladb/gocql/v2/internal/settings"
+)
 
 // Dialect is the database and native protocol version a Session speaks. It
 // is the type parameter of Session and Connect, chosen by the caller, who
 // knows which cluster they connect to:
 //
-//	session, err := gocql.Connect[gocql.ScyllaV4](ctx, config)
+//	session, err := gocql.Connect[gocql.ScyllaV4](ctx, cfg)
 //
 // The driver negotiates no protocol version. Every connection speaks the
 // dialect's version, and Connect fails when the cluster does not speak it or
@@ -59,9 +62,9 @@ func (CassandraV5) dialect() dialectSpec {
 	return dialectSpec{protocol: 5, server: implSettings.ServerCassandra}
 }
 
-// dialectSettings returns config's settings for dialect D.
-func dialectSettings[D Dialect](config Config) (implSettings.Config, error) {
-	settings, err := config.resolved()
+// dialectSettings returns cfg's settings for dialect D.
+func dialectSettings[D Dialect](cfg config.Config) (implSettings.Config, error) {
+	settings, err := implSettings.InternalResolvePublic(cfg)
 	if err != nil {
 		return settings, err
 	}

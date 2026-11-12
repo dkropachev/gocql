@@ -7,11 +7,13 @@ import (
 	"errors"
 	"time"
 
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	implBinding "github.com/scylladb/gocql/v2/internal/binding"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
+	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/retry"
 )
 
@@ -21,10 +23,11 @@ import (
 // deadlines for request time limits without rebuilding options.
 type Options struct {
 	Retry    retry.Policy
-	Observer Observer
+	Observer config.Observer
 	// Profile replaces the session's default profile before other overrides.
-	// It must come from ProfileBuilder.Build; a Profile literal is rejected.
-	Profile  *Profile
+	// It must come from config.ProfileBuilder.Build; a config.Profile literal
+	// is rejected.
+	Profile  *config.Profile
 	Keyspace string
 	// CustomPayload is copied, including borrowed payload bytes, when compiled.
 	CustomPayload        []cql.PayloadEntry
@@ -50,7 +53,7 @@ type Options struct {
 }
 
 // SerialOverride chooses the serial consistency an execution sends, relative
-// to its profile's Profile.SerialConsistency. The zero value inherits it.
+// to its profile's config.Profile.SerialConsistency. The zero value inherits it.
 type SerialOverride uint8
 
 const (
@@ -111,7 +114,7 @@ func internalOptions(o Options) implSession.Options {
 	}
 	if o.Profile != nil {
 		// The only copy of the caller's profile: compiling keeps it.
-		profile := internalProfile(*o.Profile)
+		profile := implSettings.InternalProfileFromPublic(*o.Profile)
 		v.Profile = &profile
 	}
 	return v
@@ -128,7 +131,7 @@ func publicOptions(o implSession.Options) Options {
 		Idempotent: o.Idempotent, Trace: o.Trace,
 	}
 	if o.Profile != nil {
-		profile := publicProfile(*o.Profile)
+		profile := implSettings.InternalProfileToPublic[config.Profile](*o.Profile)
 		v.Profile = &profile
 	}
 	return v

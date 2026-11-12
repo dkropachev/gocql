@@ -12,6 +12,7 @@ statements. The data vocabulary (statements, types, codecs, values,
 consistency levels and server errors) lives in `github.com/scylladb/gocql/v2/cql`;
 its subpackages `cql/stream` (decoding into caller storage) and `cql/dynamic`
 (values typed by metadata at run time) build on it.
+Session configuration and execution profiles are in `config`.
 Cluster metadata (topology and schema) is in `metadata`, host selection in `routing`, authentication
 in `auth`, addressing and dialing in `endpoint`, and API only ScyllaDB supports in
 `scylla`. The repository has one Go
@@ -22,14 +23,15 @@ module; compression and benchmarks are included in it.
 ```go
 import (
     gocql "github.com/scylladb/gocql/v2"
+    "github.com/scylladb/gocql/v2/config"
     "github.com/scylladb/gocql/v2/cql"
 )
 
-config, err := gocql.NewConfig("127.0.0.1:9042").Build()
+cfg, err := config.New("127.0.0.1:9042").Build()
 if err != nil { return err }
 // The dialect names the database and protocol version: ScyllaV4,
 // CassandraV4 or CassandraV5. Nothing is negotiated.
-session, err := gocql.Connect[gocql.ScyllaV4](ctx, config)
+session, err := gocql.Connect[gocql.ScyllaV4](ctx, cfg)
 if err != nil { return err }
 defer session.Close()
 
@@ -103,7 +105,7 @@ number of queries can share one preparation. It resolves its options once and
 skips the one-shot calls' pool hand-off, which saves about 2 to 4 percent of
 client CPU at high concurrency, and it adds the executions whose handles
 outlive the call: `Run` returns `Rows`, iterated with `NextInto` and closed by
-the caller; and `RunPage` resumes from a saved `PageState` for explicit paging.
+the caller; and `RunPage` resumes from a saved `cql.PageState` for explicit paging.
 It also has `All`. `RunPage` takes the page size as an argument, so a size
 that changes per request needs no new options; zero uses the resolved page
 size. The page size `cql.Unpaged`, as that argument or as
@@ -161,20 +163,22 @@ per object and 64 objects per session.
 
 Normal buffered execution supports negotiated LZ4 and Snappy subject to native
 protocol rules; protocol 5 compression uses LZ4. Configure
-`gocql.NewConfig(hosts...).WithCompression(gocql.LZ4Compression)` without a
+`config.New(hosts...).WithCompression(config.LZ4Compression)` without a
 compressor import.
 
 ## Configuration and extensions
 
-`NewConfig` and `NewProfile` setters store the latest value, including invalid
+Package `config` holds the session configuration. `config.New` and
+`config.NewProfile` setters store the latest value, including invalid
 values. `Build` validates the final settings and reports the first error;
 correcting a setting and building again clears that error. Nil optional
 providers remove overrides, and zero optional timeouts disable them.
 
 `Connect` snapshots validated configuration before starting workers. Configure
 TLS with `crypto/tls`, authentication with `auth.Password` or an `auth.Provider`, and
-routing/retry/speculation through `WithDefaultProfile` or a per-query `*Profile`,
-built with `NewProfile` (a `Profile` literal is rejected).
+routing/retry/speculation through `WithDefaultProfile` or a per-query
+`*config.Profile`, built with `config.NewProfile` (a `config.Profile` literal is
+rejected).
 Per-execution settings are plain `gocql.Options` values, for example
 `gocql.Options{PageSize: cql.Some[int32](100)}`; the zero `Options{}` uses the
 session default. Query constructors validate, resolve and encode them for their

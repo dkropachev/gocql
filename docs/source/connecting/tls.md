@@ -1,12 +1,12 @@
 # TLS
 
-`ConfigBuilder.WithTLS` takes a `TLSSource`. For a fixed configuration, wrap a
+For a fixed configuration, pass `config.ConfigBuilder.WithTLS` a
 `crypto/tls.Config` with trusted `RootCAs`, optional client certificates and a
-minimum TLS version in `gocql.StaticTLS`, which copies it:
+minimum TLS version; it copies it:
 
 ```go
-config, err := gocql.NewConfig("10.0.0.1").
-	WithTLS(gocql.StaticTLS(&tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS13})).
+cfg, err := config.New("10.0.0.1").
+	WithTLS(&tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS13}).
 	Build()
 ```
 
@@ -23,7 +23,8 @@ the standalone streaming command has an explicit `-tls-uri` example.
 
 ## Changing TLS while sessions run
 
-The driver calls its `TLSConfig` method on every dial and uses the result for
+`WithTLSSource` takes a `config.TLSSource` instead. The driver calls its
+`TLSConfig` method on every dial and uses the result for
 that connection: reconnects, pool refills, new shards and the control
 connection all pick up the current config. Connections that are already open
 keep the config they were dialed with until they close; nothing closes them
@@ -31,15 +32,15 @@ early. `Build` validates the config the source returns at that time. A source
 must never return nil; a dial that gets nil fails
 instead of falling back to plaintext.
 
-`TLSFileSource` reloads the client certificate, key and CA from PEM files:
+`config.TLSFileSource` reloads the client certificate, key and CA from PEM files:
 
 ```go
-files, err := gocql.NewTLSFiles(&tls.Config{MinVersion: tls.VersionTLS13}, gocql.TLSFiles{
+files, err := config.NewTLSFiles(&tls.Config{MinVersion: tls.VersionTLS13}, config.TLSFiles{
 	CertFile: "/etc/scylla-client/tls.crt",
 	KeyFile:  "/etc/scylla-client/tls.key",
 	CAFile:   "/etc/scylla-client/ca.crt",
 })
-config, err := gocql.NewConfig("10.0.0.1").WithTLS(files).Build()
+cfg, err := config.New("10.0.0.1").WithTLSSource(files).Build()
 ```
 
 The files replace `Certificates` and `RootCAs` of the base config, or of TLS
@@ -68,7 +69,7 @@ func (r *rotatingTLS) TLSConfig() *tls.Config { return r.current.Load() }
 
 source := &rotatingTLS{}
 source.current.Store(initial)
-config, err := gocql.NewConfig("10.0.0.1").WithTLS(source).Build()
+cfg, err := config.New("10.0.0.1").WithTLSSource(source).Build()
 // later: new dials use the new config
 source.current.Store(next)
 ```

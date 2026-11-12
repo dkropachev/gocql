@@ -23,7 +23,7 @@
  */
 
 // Package gocql implements the typed Cassandra and ScyllaDB native protocol API.
-// Connect opens a validated Config as a Session of a Dialect, the database
+// Connect opens a validated config.Config as a Session of a Dialect, the database
 // and native protocol version the caller connects to: ScyllaV4, CassandraV4
 // or CassandraV5. The driver negotiates no version. Statements declare
 // parameter encoders and row decoders. Session.Prepare creates shareable
@@ -40,7 +40,7 @@
 // range form of Each: a for-range loop over All yields every row, valid until
 // the next iteration, and any error once; breaking out releases the execution.
 // Prepared.Run returns Rows to iterate with NextInto and close, and
-// Prepared.RunPage returns one Page from a saved PageState with a page size
+// Prepared.RunPage returns one Page from a saved cql.PageState with a page size
 // argument; each handle holds a pooled query until it is closed.
 //
 // Prepared.Query creates a reusable query owned by one goroutine. It resolves
@@ -71,7 +71,7 @@
 // ByteSliceCodec fills reusable owned slices with RowInto.
 //
 // The driver logs through log/slog, to slog.Default() unless
-// ConfigBuilder.WithLogger supplies another logger. Debug carries
+// config.ConfigBuilder.WithLogger supplies another logger. Debug carries
 // per-connection detail such as shard dialing; Info reports cluster changes
 // such as nodes going up or down; Warn reports degraded but continuing
 // operation; Error reports a subsystem that will not recover by itself.
@@ -81,5 +81,5 @@
 // panicking handler cannot break the driver. To log through a *log.Logger l
 // at level lvl, use the standard library's text handler:
 //
-//	config.WithLogger(slog.New(slog.NewTextHandler(l.Writer(), &slog.HandlerOptions{Level: lvl})))
+//	builder.WithLogger(slog.New(slog.NewTextHandler(l.Writer(), &slog.HandlerOptions{Level: lvl})))
 package gocql

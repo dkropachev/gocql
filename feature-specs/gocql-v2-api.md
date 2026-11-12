@@ -637,22 +637,25 @@ Package-level functions exist only where a method cannot express them. Go 1.27
 methods may declare their own type parameters, so the generic operations are
 methods on the type that owns them (`Session.Prepare`, `Session.PrepareStream`,
 `Session.RunBatch`, `Session.Unprepared*`, `Prepared.Query`,
-`PreparedStream.Query`). The root package's functions construct a value from
-nothing:
+`PreparedStream.Query`). Settings that only refine a builder are methods of
+the builder, not values made by a function: pool size, client routes and a
+fixed TLS configuration are `ConfigBuilder` methods.
+
+The root package has one function, `Connect[D Dialect](context.Context,
+config.Config) (*Session[D], error)`, which opens a session of dialect D. It
+cannot be a method of `config.Config`: package `config` cannot import the
+`Session` it would return. Every other constructor lives in the package that
+owns its type:
 
 | Function | Purpose |
 |---|---|
-| `Connect[D Dialect](context.Context, Config) (*Session[D], error)` | opens a session of dialect D |
-| `NewConfig(contactPoints ...string) *ConfigBuilder` | starts a configuration |
-| `NewProfile() *ProfileBuilder` | starts an execution profile |
-| `NewClientRoutes(connectionIDs ...string) *ClientRoutesBuilder` | starts ScyllaDB client-route settings |
-| `PerShard(n int) PoolSize`, `PerHost(n int) PoolSize` | pool sizes for `ConfigBuilder.WithPoolSize` |
-| `StaticTLS(*tls.Config) TLSSource` | a fixed TLS configuration |
-| `NewTLSFiles(*tls.Config, TLSFiles) (*TLSFileSource, error)` | a TLS configuration reloaded from files |
-| `PageStateFromToken([]byte) PageState` | a continuation from a saved token; `PageState` fields are private |
+| `config.New(contactPoints ...string) *config.ConfigBuilder` | starts a configuration |
+| `config.NewProfile() *config.ProfileBuilder` | starts an execution profile |
+| `config.NewTLSFiles(*tls.Config, config.TLSFiles) (*config.TLSFileSource, error)` | a TLS configuration reloaded from files |
+| `cql.PageStateFromToken([]byte) cql.PageState` | a continuation from a saved token; `PageState` fields are private |
 
-The root package also exports `var StartPage PageState` (the zero `PageState`)
-and `var StopIteration` (see below).
+Package `cql` also exports `var StartPage PageState` (the zero `PageState`);
+the root package exports `var StopIteration` (see below).
 
 ## Statements, preparation, queries and execution
 
@@ -670,7 +673,7 @@ type ScyllaV4 struct{}    // ScyllaDB, native protocol 4
 type CassandraV4 struct{} // Apache Cassandra, native protocol 4
 type CassandraV5 struct{} // Apache Cassandra 4.0+, native protocol 5
 type Session[D Dialect] struct { /* opaque */ }
-func Connect[D Dialect](context.Context, Config) (*Session[D], error)
+func Connect[D Dialect](context.Context, config.Config) (*Session[D], error)
 func (s *Session[D]) ID() string
 ```
 
@@ -702,7 +705,7 @@ func (p *Prepared[P, R]) One(context.Context, P, *R, ...CompiledOptions) (bool, 
 func (p *Prepared[P, R]) Each(context.Context, P, *R, func(*R) error, ...CompiledOptions) (Result, error)
 func (p *Prepared[P, R]) All(context.Context, P, *R, ...CompiledOptions) iter.Seq2[*R, error]
 func (p *Prepared[P, R]) Run(context.Context, P, ...CompiledOptions) (Rows[R], error)                // holds a pooled query until closed
-func (p *Prepared[P, R]) RunPage(context.Context, P, PageState, int32, ...CompiledOptions) (*Page[R], error)
+func (p *Prepared[P, R]) RunPage(context.Context, P, cql.PageState, int32, ...CompiledOptions) (*Page[R], error)
 func (p *Prepared[P, R]) AddToBatch(*Batch, P) error
 
 // Worker-owned reusable queries.
@@ -717,7 +720,7 @@ func (q *Query[P, R]) Each(context.Context, P, *R, func(*R) error) (Result, erro
 func (q *Query[P, R]) One(context.Context, P, *R) (bool, Result, error)
 func (q *Query[P, R]) All(context.Context, P, *R) iter.Seq2[*R, error]
 func (q *Query[P, R]) Run(context.Context, P) (Rows[R], error)
-func (q *Query[P, R]) RunPage(context.Context, P, PageState, int32) (*Page[R], error) // page size: 0 resolved, cql.Unpaged
+func (q *Query[P, R]) RunPage(context.Context, P, cql.PageState, int32) (*Page[R], error) // page size: 0 resolved, cql.Unpaged
 func (q *Query[P, R]) Routing(P) (routing.Info, error)
 func (q *Query[P, R]) AddToBatch(*Batch, P) error
 func (q *Query[P, R]) Close()                       // stop at once
@@ -844,12 +847,14 @@ func (p *Page[R]) Err() error
 func (p *Page[R]) Close() error
 func (p *Page[R]) Retain() (*PageLease, error)
 func (p *Page[R]) Clone() (R, error)
-func (p *Page[R]) State() PageState
+func (p *Page[R]) State() cql.PageState
 func (p *Page[R]) Info() Result
 func (p *Page[R]) Columns() cql.Columns
 
 type PageLease struct { /* stable shared reference to receive storage */ }
 func (l *PageLease) Close()
+
+// package cql
 type PageState struct { /* start / more / complete, opaque owned token */ }
 var StartPage PageState // the zero PageState
 func PageStateFromToken([]byte) PageState
@@ -1107,7 +1112,7 @@ type EncodedValue struct { Type DataType; State CellState; Bytes []byte }
 var Encoded Decoder[EncodedValue]
 
 // package cqlerr
-type StreamCapabilityError struct { Protocol int; Compression gocql.Compression; Reason string }
+type StreamCapabilityError struct { Protocol int; Compression config.Compression; Reason string }
 type StreamCapacityError struct { Path string; Required, Available int64 }
 func (e *StreamCapabilityError) Error() string
 func (e *StreamCapacityError) Error() string
@@ -1300,7 +1305,7 @@ type Options struct {
     HostID cql.Option[cql.UUID]
     ShardID cql.Option[uint32]
     Retry retry.Policy                            // nil inherits; retry.Never{} disables
-    Observer Observer
+    Observer config.Observer
 }
 // package cql
 type PayloadEntry struct { Key string; Value Nullable[Bytes] }
@@ -1308,6 +1313,8 @@ type PayloadEntry struct { Key string; Value Nullable[Bytes] }
 // package gocql
 type SerialOverride uint8                         // one field, so no invalid combination exists
 const (SerialInherit SerialOverride = iota; SerialSerial; SerialLocal; SerialOmit)
+
+// package config
 type Profile struct {
     Consistency cql.Consistency
     SerialConsistency cql.Option[cql.Consistency]
@@ -1435,11 +1442,11 @@ type Policy interface {
     Validate(*metadata.Snapshot) error
     Pick(Info, *metadata.Snapshot) (Route, bool)     // cheap first route; false: start with Fallback
     Fallback(Info, *metadata.Snapshot) Plan          // every route, in order
-    Observe(gocql.AttemptEvent)
+    Observe(config.AttemptEvent)
 }
 func NewPlan(Policy, Info, *metadata.Snapshot) Plan  // combines Pick and Fallback
 
-// package gocql
+// package config
 type AttemptEvent struct {
     RequestID uint64
     Attempt int
@@ -1733,7 +1740,7 @@ Rows/Page Close remains idempotent. Concurrent/repeated Session.Close calls wait
 for the same shutdown completion and return the same shutdown result. Shutdown
 drains all admissions made by this session.
 
-A `Config` is an
+Package `config` holds the configuration API. A `config.Config` is an
 opaque, immutable value made only by `ConfigBuilder.Build`; users never write a
 `Config` literal or assign its fields. Each builder method sets one setting
 and is named `With*` (`WithPort`, `WithTLS`, `WithConnectTimeout`), except `Build`,
@@ -1753,14 +1760,20 @@ configuration values while callback/provider objects remain shared and concurren
 These functions are the entry points:
 
 ```go
-func NewConfig(contactPoints ...string) *ConfigBuilder
+// package config
+func New(contactPoints ...string) *ConfigBuilder
 func (*ConfigBuilder) Build() (Config, error)
 func (*ConfigBuilder) WithDefaultProfile(Profile) *ConfigBuilder
 func (*ConfigBuilder) ConfigureDefaultProfile(func(*ProfileBuilder)) *ConfigBuilder
 func (*ConfigBuilder) WithOnlyHost(id cql.UUID) *ConfigBuilder
 func (*ConfigBuilder) WithHostFilter(keep func(routing.HostSnapshot) bool) *ConfigBuilder
-func (*ConfigBuilder) WithPoolSize(PoolSize) *ConfigBuilder
-func (*ConfigBuilder) WithTLS(TLSSource) *ConfigBuilder
+func (*ConfigBuilder) WithConnectionsPerShard(n int) *ConfigBuilder
+func (*ConfigBuilder) WithConnectionsPerHost(n int) *ConfigBuilder
+func (*ConfigBuilder) WithTLS(*tls.Config) *ConfigBuilder
+func (*ConfigBuilder) WithTLSSource(TLSSource) *ConfigBuilder
+func (*ConfigBuilder) WithClientRoutes(connectionIDs ...string) *ConfigBuilder
+func (*ConfigBuilder) WithClientRouteHostname(connectionID, hostname string) *ConfigBuilder
+func (*ConfigBuilder) WithClientRouteTLS(bool) *ConfigBuilder
 func (*ConfigBuilder) WithAuth(auth.Provider) *ConfigBuilder
 func (*ConfigBuilder) WithResolver(endpoint.Resolver) *ConfigBuilder
 func (*ConfigBuilder) WithAddressTranslator(endpoint.Translator) *ConfigBuilder
@@ -1768,8 +1781,9 @@ func (*ConfigBuilder) WithDialer(endpoint.Dialer) *ConfigBuilder
 func (*ConfigBuilder) WithPartitioner(name string, routing.TokenPartitioner) *ConfigBuilder
 func (*ConfigBuilder) WithMetadataMode(metadata.Mode) *ConfigBuilder
 func NewProfile() *ProfileBuilder
-func NewClientRoutes(connectionIDs ...string) *ClientRoutesBuilder
-func Connect[D Dialect](context.Context, Config) (*Session[D], error)
+
+// package gocql
+func Connect[D Dialect](context.Context, config.Config) (*Session[D], error)
 ```
 
 `Connect` rejects the zero `Config`. `WithOnlyHost` connects only to the node
@@ -1784,9 +1798,10 @@ native protocol version is not a setting: it comes from the session's dialect. T
 validates host/CA by default, and never downgrades after a TLS failure. Each
 auth exchange is per connection; providers are concurrency-safe. One TLS
 configuration serves every node; without an explicit ServerName each
-connection verifies the node's IP address. `ConfigBuilder.WithTLS`
-takes a `TLSSource` (`TLSConfig() *tls.Config`) that the dialer asks for the
-config of every new connection; `StaticTLS(*tls.Config)` serves a fixed copy; open connections keep theirs, and a nil result
+connection verifies the node's IP address. `ConfigBuilder.WithTLS` copies a
+fixed `*tls.Config`; `WithTLSSource` takes a `TLSSource`
+(`TLSConfig() *tls.Config`) that the dialer asks for the config of every new
+connection; open connections keep theirs, and a nil result
 fails the dial. Build validates the source's config at that time. `TLSFileSource` (`NewTLSFiles(base, TLSFiles)`) loads the client
 certificate/key and CA from files over base, fails if they cannot be loaded,
 and rechecks them during a dial once `Interval` has passed, keeping the current
@@ -1794,8 +1809,9 @@ files when a check fails. Context-taking hooks honor cancellation; synchronous c
 prompt/nonblocking and cannot reenter blocking Close/Wait. Client
 routes supply per-connection-ID endpoint overrides and disable advanced shard
 awareness (shard selection by source port through the shard-aware port), which
-their proxy breaks. `WithPoolSize` takes `PerShard(n)` (default `PerShard(1)`)
-or `PerHost(n)`; `PerHost` dials the regular port only and keeps no per-shard
+their proxy breaks. `WithConnectionsPerShard(n)` (default 1) and
+`WithConnectionsPerHost(n)` size the pool, the later call winning;
+`WithConnectionsPerHost` dials the regular port only and keeps no per-shard
 excess, so Build rejects it with `WithAdvancedShardAwareness` or
 `WithMaxExcessPerShard`. Keepalive, orphan-stream budget, connection repair and
 graceful close remain separate from user-request timeout.
@@ -1845,8 +1861,8 @@ socket represents only its reconciled local host, so remote strict targets fail.
 For example:
 
 ```go
-config, err := gocql.NewConfig("unix:/run/scylla/cql.m").Build()
-session, err := gocql.Connect[gocql.ScyllaV4](ctx, config)
+cfg, err := config.New("unix:/run/scylla/cql.m").Build()
+session, err := gocql.Connect[gocql.ScyllaV4](ctx, cfg)
 ```
 
 ```go

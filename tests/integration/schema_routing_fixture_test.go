@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/routing"
@@ -19,13 +20,13 @@ func v2SchemaRoutingName(t testing.TB) string {
 	return testKeyspaceName(t, strings.ReplaceAll(cql.RandomUUID().String(), "-", ""))
 }
 
-func v2ConfigureRouting(t testing.TB, config *gocql.ConfigBuilder, options routing.Options) routing.Policy {
+func v2ConfigureRouting(t testing.TB, cfg *config.ConfigBuilder, options routing.Options) routing.Policy {
 	t.Helper()
 	policy, err := routing.NewPolicy(options)
 	if err != nil {
 		t.Fatal(err)
 	}
-	config.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithRouting(policy) })
+	cfg.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithRouting(policy) })
 	return policy
 }
 

@@ -21,6 +21,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/scylladb/gocql/v2/config"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 
 	gocql "github.com/scylladb/gocql/v2"
@@ -44,12 +45,12 @@ func TestPerformance(t *testing.T) {
 		}
 		runtime.GC()
 		initial := mem().HeapAlloc
-		config := createV2Cluster(func(c *gocql.ConfigBuilder) {
-			c.WithPoolSize(gocql.PerHost(8)).WithHeartbeat(0, 0).WithMetadataRefresh(0)
+		cfg := createV2Cluster(func(c *config.ConfigBuilder) {
+			c.WithConnectionsPerHost(8).WithHeartbeat(0, 0).WithMetadataRefresh(0)
 		})
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 		defer cancel()
-		s, e := gocql.Connect[testDialect](ctx, mustBuild(t, config))
+		s, e := gocql.Connect[testDialect](ctx, mustBuild(t, cfg))
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -323,8 +324,8 @@ func TestPerformance(t *testing.T) {
 		if e := os.WriteFile(filepath.Join(outputDir, "counter-calibration.json"), append(calibrationBytes, '\n'), 0644); e != nil {
 			t.Fatal(e)
 		}
-		config := createV2Cluster(func(c *gocql.ConfigBuilder) {
-			c.WithPoolSize(gocql.PerShard(1)).
+		cfg := createV2Cluster(func(c *config.ConfigBuilder) {
+			c.WithConnectionsPerShard(1).
 				WithAdvancedShardAwareness(32768, 65535).
 				WithHeartbeat(30*time.Second, 30*time.Second).
 				WithMetadataRefresh(0)
@@ -341,7 +342,7 @@ func TestPerformance(t *testing.T) {
 		defer cancel()
 		runtime.GC()
 		baseRuntime := mem().HeapAlloc
-		s, err := gocql.Connect[testDialect](ctx, mustBuild(t, config))
+		s, err := gocql.Connect[testDialect](ctx, mustBuild(t, cfg))
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -1,7 +1,7 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package gocql
+package config
 
 import (
 	"crypto/sha256"
@@ -19,16 +19,12 @@ import (
 // configuration can change while sessions run. The driver calls TLSConfig on
 // every dial, from many goroutines, and copies the result; it must be fast and
 // must not return nil. Connections already open keep the configuration they
-// were dialed with. Pass a source to ConfigBuilder.WithTLS; StaticTLS and
-// TLSFileSource are ready-made sources.
+// were dialed with. Pass a source to ConfigBuilder.WithTLSSource;
+// TLSFileSource is a ready-made one. Use ConfigBuilder.WithTLS for a fixed
+// configuration.
 type TLSSource = implSettings.TLSSource
 
-// StaticTLS returns a source that always serves a copy of config. A source
-// made from nil serves nil, which ConfigBuilder.Build rejects.
-func StaticTLS(config *tls.Config) TLSSource {
-	return staticTLS{config: implSettings.InternalCloneV2TLSConfig(config)}
-}
-
+// staticTLS is the source ConfigBuilder.WithTLS makes.
 type staticTLS struct{ config *tls.Config }
 
 func (s staticTLS) TLSConfig() *tls.Config { return s.config }

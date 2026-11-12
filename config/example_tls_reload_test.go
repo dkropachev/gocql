@@ -1,7 +1,7 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package gocql_test
+package config_test
 
 import (
 	"context"
@@ -12,11 +12,12 @@ import (
 	"sync/atomic"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 )
 
 // Reload the client certificate and CA from files while sessions run.
 func ExampleNewTLSFiles() {
-	files, err := gocql.NewTLSFiles(&tls.Config{MinVersion: tls.VersionTLS13}, gocql.TLSFiles{
+	files, err := config.NewTLSFiles(&tls.Config{MinVersion: tls.VersionTLS13}, config.TLSFiles{
 		CertFile: "/etc/scylla-client/tls.crt",
 		KeyFile:  "/etc/scylla-client/tls.key",
 		CAFile:   "/etc/scylla-client/ca.crt",
@@ -24,11 +25,11 @@ func ExampleNewTLSFiles() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	config, err := gocql.NewConfig("192.168.1.1", "192.168.1.2").WithTLS(files).Build()
+	cfg, err := config.New("192.168.1.1", "192.168.1.2").WithTLSSource(files).Build()
 	if err != nil {
 		log.Fatal(err)
 	}
-	session, err := gocql.Connect[gocql.ScyllaV4](context.Background(), config)
+	session, err := gocql.Connect[gocql.ScyllaV4](context.Background(), cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -47,11 +48,11 @@ func (r *rotatingTLS) TLSConfig() *tls.Config { return r.current.Load() }
 func ExampleTLSSource() {
 	source := &rotatingTLS{}
 	source.current.Store(&tls.Config{MinVersion: tls.VersionTLS13})
-	config, err := gocql.NewConfig("192.168.1.1").WithTLS(source).Build()
+	cfg, err := config.New("192.168.1.1").WithTLSSource(source).Build()
 	if err != nil {
 		log.Fatal(err)
 	}
-	session, err := gocql.Connect[gocql.ScyllaV4](context.Background(), config)
+	session, err := gocql.Connect[gocql.ScyllaV4](context.Background(), cfg)
 	if err != nil {
 		log.Fatal(err)
 	}

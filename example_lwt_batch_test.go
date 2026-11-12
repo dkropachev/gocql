@@ -30,6 +30,7 @@ import (
 	"log"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 )
 
@@ -38,11 +39,11 @@ func ExampleSession_RunBatch_conditional() {
 	// Assumes example.my_lwt_batch_table(pk text, ck text, version int, value text,
 	// PRIMARY KEY(pk, ck)), with initial rows (pk1,ck1,1,a) and (pk1,ck2,1,A).
 	ctx := context.Background()
-	config, err := gocql.NewConfig("localhost:9042").WithKeyspace("example").Build()
+	cfg, err := config.New("localhost:9042").WithKeyspace("example").Build()
 	if err != nil {
 		log.Fatal(err)
 	}
-	session, err := gocql.Connect[gocql.ScyllaV4](ctx, config)
+	session, err := gocql.Connect[gocql.ScyllaV4](ctx, cfg)
 	if err != nil {
 		log.Fatal(err)
 	}

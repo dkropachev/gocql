@@ -52,6 +52,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/auth"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
@@ -222,16 +223,16 @@ func init() {
 
 type cassandraObserver struct {
 	mu       sync.Mutex
-	requests []gocql.RequestEvent
-	attempts []gocql.AttemptEvent
+	requests []config.RequestEvent
+	attempts []config.AttemptEvent
 }
 
-func (o *cassandraObserver) ObserveRequest(e gocql.RequestEvent) {
+func (o *cassandraObserver) ObserveRequest(e config.RequestEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.requests = append(o.requests, e)
 }
-func (o *cassandraObserver) ObserveAttempt(e gocql.AttemptEvent) {
+func (o *cassandraObserver) ObserveAttempt(e config.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.attempts = append(o.attempts, e)
@@ -242,10 +243,10 @@ func (o *cassandraObserver) reset() {
 	o.requests = nil
 	o.attempts = nil
 }
-func (o *cassandraObserver) snapshot() ([]gocql.RequestEvent, []gocql.AttemptEvent) {
+func (o *cassandraObserver) snapshot() ([]config.RequestEvent, []config.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]gocql.RequestEvent(nil), o.requests...), append([]gocql.AttemptEvent(nil), o.attempts...)
+	return append([]config.RequestEvent(nil), o.requests...), append([]config.AttemptEvent(nil), o.attempts...)
 }
 
 type cassandraRetry struct{}
@@ -377,38 +378,38 @@ const (
 )
 
 // createV2Cluster starts a fixture config for the integration cluster.
-func createV2Cluster(opts ...func(*gocql.ConfigBuilder)) *gocql.ConfigBuilder {
+func createV2Cluster(opts ...func(*config.ConfigBuilder)) *config.ConfigBuilder {
 	return newFixtureConfig(getClusterHosts(), 0, opts...)
 }
 
 // createV2ClusterWithout starts a fixture config that leaves out skip, for a
 // test that chooses those settings itself.
-func createV2ClusterWithout(skip fixtureParts, opts ...func(*gocql.ConfigBuilder)) *gocql.ConfigBuilder {
+func createV2ClusterWithout(skip fixtureParts, opts ...func(*config.ConfigBuilder)) *config.ConfigBuilder {
 	return newFixtureConfig(getClusterHosts(), skip, opts...)
 }
 
 // newFixtureConfig applies the integration flags, except skip, to a config
 // for hosts, then opts.
-func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*gocql.ConfigBuilder)) *gocql.ConfigBuilder {
-	b := gocql.NewConfig(hosts...)
+func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*config.ConfigBuilder)) *config.ConfigBuilder {
+	b := config.New(hosts...)
 	if skip&fixtureProtocol == 0 {
 		b.WithCQLVersion(*flagCQL)
 	}
 	if skip&fixtureAgreement == 0 {
 		b.WithSchemaAgreement(2*time.Minute, 200*time.Millisecond)
 	}
-	b.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { fixtureProfileExcept(p, skip) })
+	b.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { fixtureProfileExcept(p, skip) })
 	if *flagRunAuthTest && skip&fixtureAuth == 0 {
 		b.WithAuth(auth.Password("cassandra", "cassandra"))
 	}
 	if skip&fixtureCompression == 0 {
 		switch *flagCompressTest {
 		case "snappy":
-			b.WithCompression(gocql.SnappyCompression)
+			b.WithCompression(config.SnappyCompression)
 		case "lz4":
-			b.WithCompression(gocql.LZ4Compression)
+			b.WithCompression(config.LZ4Compression)
 		case "no-compression", "":
-			b.WithCompression(gocql.NoCompression)
+			b.WithCompression(config.NoCompression)
 		default:
 			panic("invalid compressor: " + *flagCompressTest)
 		}
@@ -420,7 +421,7 @@ func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*gocql.Con
 			b.WithPort(9142)
 		}
 		if skip&fixtureTLS == 0 {
-			b.WithTLS(gocql.StaticTLS(fixtureTLSConfig(fixtureClientTLS())))
+			b.WithTLS(fixtureTLSConfig(fixtureClientTLS()))
 		}
 	}
 	for _, opt := range opts {
@@ -430,7 +431,7 @@ func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*gocql.Con
 }
 
 // fixtureProfileExcept applies the fixture's profile choices, except skip.
-func fixtureProfileExcept(p *gocql.ProfileBuilder, skip fixtureParts) {
+func fixtureProfileExcept(p *config.ProfileBuilder, skip fixtureParts) {
 	if skip&fixtureConsistency == 0 {
 		p.WithConsistency(cql.Quorum)
 	}
@@ -444,7 +445,7 @@ func fixtureProfileExcept(p *gocql.ProfileBuilder, skip fixtureParts) {
 
 // fixtureProfile applies the integration flags to a profile. createV2Cluster
 // uses it for the default profile; tests use it for per-query profiles.
-func fixtureProfile(p *gocql.ProfileBuilder) { fixtureProfileExcept(p, 0) }
+func fixtureProfile(p *config.ProfileBuilder) { fixtureProfileExcept(p, 0) }
 
 // fixtureClientTLS returns the integration client's certificate and CA.
 func fixtureClientTLS() *tls.Config {
@@ -516,22 +517,22 @@ func fixtureTLSConfig(base *tls.Config) *tls.Config {
 	return fixtureTLS
 }
 
-func createV2Session(t testing.TB, opts ...func(*gocql.ConfigBuilder)) *gocql.Session[testDialect] {
+func createV2Session(t testing.TB, opts ...func(*config.ConfigBuilder)) *gocql.Session[testDialect] {
 	t.Helper()
 	return createV2SessionFromConfig(createV2Cluster(opts...), t, false)
 }
 
 // mustBuild builds b or fails the test.
-func mustBuild(t testing.TB, b *gocql.ConfigBuilder) gocql.Config {
+func mustBuild(t testing.TB, b *config.ConfigBuilder) config.Config {
 	t.Helper()
-	config, err := b.Build()
+	cfg, err := b.Build()
 	if err != nil {
 		t.Fatalf("build integration config: %v", err)
 	}
-	return config
+	return cfg
 }
 
-func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisabled bool) *gocql.Session[testDialect] {
+func createV2SessionFromConfig(b *config.ConfigBuilder, t testing.TB, tabletsDisabled bool) *gocql.Session[testDialect] {
 	t.Helper()
 	keyspace := fixtureKeyspace("")
 	if tabletsDisabled {
@@ -543,7 +544,7 @@ func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisa
 		// Keyspace creation uses a fresh fixture config: the test's own
 		// choices may not reach a working cluster.
 		bootstrap := mustBuild(t, createV2ClusterWithout(fixtureTimeout).WithKeyspace("system").
-			ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithTimeout(30 * time.Second) }))
+			ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithTimeout(30 * time.Second) }))
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 		session, err := gocql.Connect[testDialect](ctx, bootstrap)
@@ -563,10 +564,10 @@ func createV2SessionFromConfig(b *gocql.ConfigBuilder, t testing.TB, tabletsDisa
 			t.Fatalf("create typed integration keyspace: %v", err)
 		}
 	})
-	config := mustBuild(t, b.WithKeyspace(keyspace))
+	cfg := mustBuild(t, b.WithKeyspace(keyspace))
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	session, err := gocql.Connect[testDialect](ctx, config)
+	session, err := gocql.Connect[testDialect](ctx, cfg)
 	if err != nil {
 		t.Fatalf("create typed integration session: %v", err)
 	}
@@ -1348,24 +1349,24 @@ func (c *OneConnTestServer) lockedClose() {
 
 type sessionTestObserver struct {
 	mu       sync.Mutex
-	requests []gocql.RequestEvent
-	attempts []gocql.AttemptEvent
+	requests []config.RequestEvent
+	attempts []config.AttemptEvent
 }
 
-func (o *sessionTestObserver) ObserveRequest(e gocql.RequestEvent) {
+func (o *sessionTestObserver) ObserveRequest(e config.RequestEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.requests = append(o.requests, e)
 }
-func (o *sessionTestObserver) ObserveAttempt(e gocql.AttemptEvent) {
+func (o *sessionTestObserver) ObserveAttempt(e config.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.attempts = append(o.attempts, e)
 }
-func (o *sessionTestObserver) snapshot() ([]gocql.RequestEvent, []gocql.AttemptEvent) {
+func (o *sessionTestObserver) snapshot() ([]config.RequestEvent, []config.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]gocql.RequestEvent(nil), o.requests...), append([]gocql.AttemptEvent(nil), o.attempts...)
+	return append([]config.RequestEvent(nil), o.requests...), append([]config.AttemptEvent(nil), o.attempts...)
 }
 
 type sessionTestRetry struct {
@@ -1476,8 +1477,8 @@ type v2TabletAttemptObserver struct {
 	targets []routing.Target
 }
 
-func (*v2TabletAttemptObserver) ObserveRequest(gocql.RequestEvent) {}
-func (o *v2TabletAttemptObserver) ObserveAttempt(event gocql.AttemptEvent) {
+func (*v2TabletAttemptObserver) ObserveRequest(config.RequestEvent) {}
+func (o *v2TabletAttemptObserver) ObserveAttempt(event config.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if event.Err == nil {

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 )
@@ -45,7 +46,7 @@ func dropLeftoverKeyspaces() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	config, err := createV2Cluster(func(c *gocql.ConfigBuilder) {
+	cfg, err := createV2Cluster(func(c *config.ConfigBuilder) {
 		c.WithKeyspace("system").
 			WithIgnoreEvents(gocql.SchemaEvent, gocql.TopologyEvent, gocql.StatusEvent).
 			WithAutomaticSchemaAgreement(false).
@@ -54,7 +55,7 @@ func dropLeftoverKeyspaces() error {
 	if err != nil {
 		return fmt.Errorf("build config: %w", err)
 	}
-	s, err := connectOnceCredentialsWork(ctx, config)
+	s, err := connectOnceCredentialsWork(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
@@ -100,9 +101,9 @@ func dropLeftoverKeyspaces() error {
 // superuser a few seconds after the native transport starts accepting
 // connections, so a suite started right after make cassandra-start would see
 // every session refused. Any other error is returned at once.
-func connectOnceCredentialsWork(ctx context.Context, config gocql.Config) (*gocql.Session[testDialect], error) {
+func connectOnceCredentialsWork(ctx context.Context, cfg config.Config) (*gocql.Session[testDialect], error) {
 	for {
-		s, err := gocql.Connect[testDialect](ctx, config)
+		s, err := gocql.Connect[testDialect](ctx, cfg)
 		if request, ok := errors.AsType[cqlerr.ServerError](err); err == nil || !ok || request.Code() != cqlerr.CodeBadCredentials {
 			return s, err
 		}

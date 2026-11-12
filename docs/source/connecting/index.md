@@ -1,19 +1,20 @@
 # Connecting
 
-A `Config` is built, never written by hand. `NewConfig(contactPoints...)`
-returns a `ConfigBuilder`, and each method sets one setting; settings you do
+A `config.Config` is built, never written by hand. Package
+`github.com/scylladb/gocql/v2/config` holds the configuration API:
+`config.New(contactPoints...)` returns a `ConfigBuilder`, and each method sets one setting; settings you do
 not choose keep the driver's behavior, and when a setting is chosen again the
 last call wins. Setters only store values. `Build` validates the final configuration and
 returns an immutable `Config` or the first validation error. A later setting
 replaces an earlier one even if it was invalid:
 
 ```go
-profile, err := gocql.NewProfile().
+profile, err := config.NewProfile().
     WithConsistency(cql.LocalQuorum).WithTimeout(5 * time.Second).Build()
 if err != nil { return err }
-config, err := gocql.NewConfig("10.0.0.1", "10.0.0.2").
+cfg, err := config.New("10.0.0.1", "10.0.0.2").
     WithKeyspace("app").
-    WithPoolSize(gocql.PerShard(2)).
+    WithConnectionsPerShard(2).
     WithDefaultProfile(profile).
     Build()
 ```
@@ -28,7 +29,7 @@ Unix socket: no host discovery is then filled in unless chosen.
 protocol version you connect to.
 
 ```go
-session, err := gocql.Connect[gocql.ScyllaV4](ctx, config)
+session, err := gocql.Connect[gocql.ScyllaV4](ctx, cfg)
 ```
 
 | Dialect | Database | Protocol |
@@ -64,7 +65,7 @@ statements. On/off settings take a bool: `WithNagle`, `WithDiscovery`,
 Zero optional timeouts disable their budget; nil optional providers clear the
 override, including `WithTLS(nil)` for plaintext. `WithDefaultProfile(profile)`
 copies and replaces the complete profile. Build profiles with `NewProfile` to
-start from driver defaults; a `gocql.Profile{...}` literal would leave every
+start from driver defaults; a `config.Profile{...}` literal would leave every
 unset field zero, so `Build` rejects it. A built profile may be copied and its
 fields edited. Later edits to a supplied profile do not affect the
 configuration. Use `ConfigureDefaultProfile(callback)` to compose changes to
@@ -73,16 +74,16 @@ all profile settings. `WithIgnoreEvents` replaces the complete ignored-event
 list; calling it without arguments restores all events.
 
 `WithContactPoints` replaces the contact points. Slice arguments are copied,
-and `Build` snapshots the finished configuration. `StaticTLS` copies its input
-when constructed. Callbacks and provider objects remain shared and must support
+and `Build` snapshots the finished configuration. `WithTLS` copies its input
+when called. Callbacks and provider objects remain shared and must support
 concurrent use.
 
-`WithPoolSize` sizes each node's pool: `gocql.PerShard(n)` keeps n connections
-to every shard (the default is `PerShard(1)`), and `gocql.PerHost(n)` keeps n
-per node regardless of its shard count. `PerHost` turns shard-aware connection
+`WithConnectionsPerShard(n)` keeps n connections to every shard of each node
+(the default is 1), and `WithConnectionsPerHost(n)` keeps n per node regardless
+of its shard count; the later call wins. `WithConnectionsPerHost` turns shard-aware connection
 management off: connections use the regular port only, the node picks their
 shards, and requests for a shard without a connection take another shard's
-connection. `Build` rejects `PerHost` with `WithAdvancedShardAwareness` or
+connection. `Build` rejects `WithConnectionsPerHost` with `WithAdvancedShardAwareness` or
 `WithMaxExcessPerShard`. An explicit incremental stream occupies one configured connection through
 idle time and pages. Default page-buffered streams use normal multiplexing. Cancellation interrupts work;
 Session.Close rejects new work, cancels requests and joins writers/workers.

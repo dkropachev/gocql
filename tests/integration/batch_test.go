@@ -33,6 +33,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/config"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 
 	"github.com/stretchr/testify/require"
@@ -100,10 +101,10 @@ func TestBatch(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
 			retryPolicy := sessionTestRetry{action: retry.Next, maxAttempts: 2}
-			session := createV2SessionFromConfig(createV2ClusterWithout(fixtureRetry|fixtureConsistency, func(config *gocql.ConfigBuilder) {
+			session := createV2SessionFromConfig(createV2ClusterWithout(fixtureRetry|fixtureConsistency, func(cfg *config.ConfigBuilder) {
 				// The batch below writes at ONE, so the rows are read back at ALL:
 				// a QUORUM read could miss the one replica that took the write.
-				config.ConfigureDefaultProfile(func(p *gocql.ProfileBuilder) { p.WithRetry(retryPolicy).WithConsistency(cql.All) })
+				cfg.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithRetry(retryPolicy).WithConsistency(cql.All) })
 			}), t, false)
 			defer session.Close()
 			table := testTableName(t)

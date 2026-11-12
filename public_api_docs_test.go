@@ -16,9 +16,13 @@ import (
 func TestPublicMethodDocumentation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	for _, symbol := range []string{"Session.Prepare", "Session.PrepareStream", "Session.UnpreparedEach", "PreparedStream.Query", "Prepared.One", "Query.Close", "StreamQuery.Run", "Rows.NextInto", "Page.Retain", "PageState.Token", "RowStream.Close", "Batch.Reset", "CompiledOptions.Values", "ConfigBuilder.WithDefaultProfile", "ConfigBuilder.ConfigureDefaultProfile"} {
+	for _, symbol := range []string{"Session.Prepare", "Session.PrepareStream", "Session.UnpreparedEach", "PreparedStream.Query", "Prepared.One", "Query.Close", "StreamQuery.Run", "Rows.NextInto", "Page.Retain", "RowStream.Close", "Batch.Reset", "CompiledOptions.Values", "config.ConfigBuilder.WithDefaultProfile", "config.ConfigBuilder.ConfigureDefaultProfile", "cql.PageState.Token"} {
 		t.Run(symbol, func(t *testing.T) {
-			out, err := exec.CommandContext(ctx, "go", "doc", "github.com/scylladb/gocql/v2."+symbol).CombinedOutput()
+			path := "github.com/scylladb/gocql/v2." + symbol
+			if pkg, rest, ok := strings.Cut(symbol, "."); ok && pkg == strings.ToLower(pkg) {
+				path = "github.com/scylladb/gocql/v2/" + pkg + "." + rest
+			}
+			out, err := exec.CommandContext(ctx, "go", "doc", path).CombinedOutput()
 			if err != nil {
 				t.Fatalf("go doc: %v\n%s", err, out)
 			}
@@ -33,10 +37,10 @@ func TestPublicMethodDocumentation(t *testing.T) {
 	}
 	for _, check := range []struct{ symbol, want string }{
 		{"github.com/scylladb/gocql/v2.Options.PageSize", "PageSize"},
-		{"github.com/scylladb/gocql/v2.Profile.Consistency", "Consistency"},
+		{"github.com/scylladb/gocql/v2/config.Profile.Consistency", "Consistency"},
 		{"github.com/scylladb/gocql/v2.PrepareOptions.HostID", "HostID"},
 		{"github.com/scylladb/gocql/v2.StreamOptions.Incremental", "Incremental"},
-		{"github.com/scylladb/gocql/v2.Observer", "ObserveRequest"},
+		{"github.com/scylladb/gocql/v2/config.Observer", "ObserveRequest"},
 		{"github.com/scylladb/gocql/v2/metrics.Snapshot", "Requests"},
 		{"github.com/scylladb/gocql/v2/cql.Statement.Rows", "Rows"},
 		{"github.com/scylladb/gocql/v2/cql/stream.Statement.Rows", "Rows"},
