@@ -131,9 +131,11 @@ func (s *InternalSessionRuntime) registerExecution(l *logicalExecution, parent *
 	return nil
 }
 
-// executionShards is the number of registry shards, a power of two. Each
-// shard has its own lock and cache lines, so concurrent registrations, which
-// take consecutive request ids, rarely share either.
+// executionShards is the number of registry shards, a power of two. A shard is
+// picked by request id, not by P, and drained often runs on another goroutine
+// than the registration, so the lines are not core-local. Each shard has its
+// own lock and cache lines, so concurrent registrations, which take
+// consecutive request ids, rarely share either.
 const executionShards = 32
 
 // executionRegistry holds the session's in-flight executions that no reusable

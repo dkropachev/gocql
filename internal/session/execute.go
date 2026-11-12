@@ -45,6 +45,10 @@ type prepareFlight struct {
 }
 type InternalSessionRuntime struct {
 	*implCluster.Core
+	// registry holds the in-flight executions no reusable query owns. It is
+	// allocated once, so the runtime keeps the field layout it had with the
+	// executions map in this slot.
+	registry             *executionRegistry
 	queries              map[weak.Pointer[queryState]]*queryEntry
 	schema               *schemafence.InternalPreparedSchemaTracker
 	preparing            map[prepareCacheKey]*prepareFlight
@@ -90,8 +94,7 @@ type InternalSessionRuntime struct {
 	// pooledBusy counts busy queries of prepared statements' one-shot pools.
 	// Close waits for it to reach zero on pooledWake.
 	pooledBusy atomic.Int64
-	// registry holds the in-flight executions no reusable query owns.
-	registry executionRegistry
+	_          cacheLinePad
 }
 
 // startTimestamps is the session's default client timestamp source. It takes
@@ -133,7 +136,7 @@ func InternalRuntimeFor(s *implCluster.Core) *InternalSessionRuntime {
 	implCluster.SessionData(s).InternalTypedMu.Lock()
 	defer implCluster.SessionData(s).InternalTypedMu.Unlock()
 	if implCluster.SessionData(s).InternalTypedState == nil {
-		rt := &InternalSessionRuntime{Core: s, InternalPrepared: make(map[prepareCacheKey]*InternalPreparedState), closing: make(chan struct{})}
+		rt := &InternalSessionRuntime{Core: s, InternalPrepared: make(map[prepareCacheKey]*InternalPreparedState), closing: make(chan struct{}), registry: new(executionRegistry)}
 		rt.InternalSetProfile(nil)
 		implCluster.SessionData(s).InternalTypedState = rt
 	}

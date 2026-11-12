@@ -57,14 +57,6 @@ func InternalNewInputOwner() *inputOwner {
 	return &inputOwner{done: make(chan struct{})}
 }
 
-// newClosedInputOwner returns an execution owner holding the execution's own
-// reference: it drains when that reference and every writer's are released.
-func newClosedInputOwner() *inputOwner {
-	o := new(inputOwner)
-	o.state.Store(ownerClosed | 1)
-	return o
-}
-
 // resetExecution prepares a reusable execution owner for its next generation.
 // The previous generation has drained: its last action was the drain callback,
 // which runs after the final release and never touches the owner again.
