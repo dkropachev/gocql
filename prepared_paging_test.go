@@ -46,6 +46,6 @@ func testPreparedState(t *testing.T, s *testSession, columns cql.Columns) (*prep
 	epoch := dependencies.InternalSnapshot()
 	result := &typedResultMetadata{InternalColumns: columns, InternalEpoch: epoch, InternalTracker: tracker}
 	hp := &hostPrepared{InternalId: []byte("id"), InternalMetadataID: []byte("meta"), InternalColumns: columns, InternalResult: result, InternalEpoch: epoch, InternalRevision: 1}
-	state := &preparedState{InternalSession: (*implSession.Session)(s).Core(), InternalProtocol: 4, InternalStatement: "SELECT value FROM ks.tbl", InternalKeyspace: "ks", InternalParameters: cql.NewColumns(), InternalColumns: columns, InternalResult: result, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalResultHost: cql.UUID{15: 1}, InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl"}, InternalHosts: map[cql.UUID]*hostPrepared{{15: 1}: hp}}
+	state := &preparedState{InternalSession: (*implSession.Session)(s).Core(), InternalProtocol: 4, InternalStatement: "SELECT value FROM ks.tbl", InternalKeyspace: "ks", InternalParameters: cql.NewColumns(), InternalColumns: columns, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl"}}
 	return state, hp
 }
