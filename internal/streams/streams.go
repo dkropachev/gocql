@@ -43,9 +43,11 @@ import (
 type IDGenerator struct {
 	NumStreams int
 	state      []atomic.Uint64
-	// hint is the lowest bitmap word that may have a clear bit. It is only a
-	// starting point: GetStream wraps around, so a stale hint costs a longer
-	// scan, never an ID.
+	// hint is where GetStream starts scanning: usually the lowest bitmap word
+	// with a clear bit. Concurrent updates may leave it stale in either
+	// direction; that only affects locality (which ID is handed out) and scan
+	// length, never whether a free ID is found, since GetStream wraps around
+	// and rescans before failing.
 	hint atomic.Uint32
 }
 
@@ -87,6 +89,26 @@ func (s *IDGenerator) GetStream() (int, bool) {
 		}
 		if i++; i == len(words) {
 			i = 0
+		}
+	}
+	return s.getStreamSlow()
+}
+
+// getStreamSlow makes one more pass over the whole bitmap before reporting
+// that no ID is free: under churn at capacity, IDs released behind the first
+// pass's position would otherwise be missed.
+//
+//go:noinline
+func (s *IDGenerator) getStreamSlow() (int, bool) {
+	words := s.state[1:]
+	for i := range words {
+		word := &words[i]
+		for w := word.Load(); w != ^uint64(0); w = word.Load() {
+			bit := bits.TrailingZeros64(^w)
+			if word.CompareAndSwap(w, w|1<<uint(bit)) {
+				s.state[0].Add(1)
+				return i<<6 | bit, true
+			}
 		}
 	}
 	return 0, false

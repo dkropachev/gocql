@@ -159,6 +159,56 @@ func TestIDGenerator(t *testing.T) {
 	})
 }
 
+// At capacity under churn a free ID always exists, so GetStream must never
+// fail. The window in which the first pass misses an ID freed behind it is too
+// narrow to hit reliably; TestGetStreamSlowFindsAnyFreeID covers the rescan.
+func TestStreamBitmapFullChurn(t *testing.T) {
+	t.Parallel()
+
+	const limit, workers = 4096, 16
+	streams := NewLimited(limit)
+	// Fill all but workers IDs; each worker then cycles one ID.
+	for range limit - workers {
+		streams.GetStream()
+	}
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Go(func() {
+			for range 20000 {
+				stream, ok := streams.GetStream()
+				if !ok {
+					t.Error("no stream although one is always free")
+					return
+				}
+				streams.Clear(stream)
+			}
+		})
+	}
+	wg.Wait()
+}
+
+// The rescan before failing finds a free ID anywhere in the bitmap.
+func TestGetStreamSlowFindsAnyFreeID(t *testing.T) {
+	t.Parallel()
+
+	streams := NewLimited(300)
+	for range 300 {
+		streams.GetStream()
+	}
+	if _, ok := streams.getStreamSlow(); ok {
+		t.Fatal("rescan found an ID in a full bitmap")
+	}
+	for _, id := range []int{0, 70, 299} {
+		streams.Clear(id)
+		if got, ok := streams.getStreamSlow(); !ok || got != id {
+			t.Fatalf("rescan got %d %v, want %d", got, ok, id)
+		}
+	}
+	if streams.InUse() != 300 {
+		t.Fatalf("InUse=%d", streams.InUse())
+	}
+}
+
 // Allocations and releases from many goroutines never hand out an ID that is
 // still in use, and the in-use count returns to zero.
 func TestStreamBitmapConcurrent(t *testing.T) {
