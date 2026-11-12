@@ -28,16 +28,12 @@ func mustBuildConfig(t *testing.T, b *ConfigBuilder) Config {
 	return c
 }
 
-// comparable drops the fields that hold fresh closures or policies on every
+// comparable drops the fields that hold fresh policies on every
 // DefaultConfig call, so the remaining settings compare with DeepEqual.
 func comparable(c implSettings.Config) implSettings.Config {
 	profile := *c.DefaultProfile
 	profile.Routing = nil
 	c.DefaultProfile = &profile
-	if c.TimestampGenerator == nil {
-		panic("missing timestamp generator")
-	}
-	c.TimestampGenerator = nil
 	return c
 }
 
@@ -107,14 +103,17 @@ func TestConfigBuilder(t *testing.T) {
 			WithPreparedCacheSize(10).WithPreparedCacheSize(0).
 			WithTimestampGenerator(func() int64 { return 1 }).WithServerTimestamps()).settings
 		if c.KeepaliveInterval != 0 || c.Pool.ConnectionsPerHost != 0 || c.Pool.ConnectionsPerShard != 2 || c.Pool.AdvancedShardAwareness.Enabled ||
-			c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.TimestampGenerator != nil {
+			c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.Timestamps.Mode() != implSettings.ServerTimestampMode {
 			t.Fatalf("a later call did not replace an earlier one: %+v", c)
 		}
-		if c.DefaultTimestamps {
-			t.Fatal("WithServerTimestamps kept the default timestamp mark")
+		if c := mustBuildConfig(t, New("h")).settings; c.Timestamps.Mode() != implSettings.DriverTimestampMode {
+			t.Fatalf("default timestamps: mode %d", c.Timestamps.Mode())
 		}
-		if c := mustBuildConfig(t, New("h").WithTimestampGenerator(func() int64 { return 1 })).settings; c.DefaultTimestamps {
-			t.Fatal("a user timestamp generator kept the default timestamp mark")
+		if c := mustBuildConfig(t, New("h").WithTimestampGenerator(func() int64 { return 7 })).settings; c.Timestamps.Mode() != implSettings.GeneratedTimestampMode || c.Timestamps.Generator()() != 7 {
+			t.Fatalf("a user timestamp generator: mode %d", c.Timestamps.Mode())
+		}
+		if c := mustBuildConfig(t, New("h").WithTimestampGenerator(nil)).settings; c.Timestamps.Mode() != implSettings.ServerTimestampMode {
+			t.Fatalf("a nil timestamp generator: mode %d", c.Timestamps.Mode())
 		}
 		c = mustBuildConfig(t, New("h").WithHeartbeat(0, 0).WithHeartbeat(time.Second, 2*time.Second).WithConnectionsPerShard(2).WithConnectionsPerHost(4)).settings
 		if c.KeepaliveInterval != time.Second || c.KeepaliveTimeout != 2*time.Second || c.Pool.ConnectionsPerHost != 4 {
@@ -413,7 +412,7 @@ func TestConfigBuilder(t *testing.T) {
 	t.Run("DisableMethods", func(t *testing.T) {
 		c := mustBuildConfig(t, New("h").WithHeartbeat(0, 0).WithMetadataRefresh(0).WithPreparedCacheSize(0).WithServerTimestamps().
 			WithConfigReport(false).WithDiscovery(false).WithAutomaticSchemaAgreement(false).WithRefreshAfterAgreement(false).NoAdvancedShardAwareness().WithNagle(true)).settings
-		if c.KeepaliveInterval != 0 || c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.TimestampGenerator != nil ||
+		if c.KeepaliveInterval != 0 || c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.Timestamps.Mode() != implSettings.ServerTimestampMode ||
 			c.ReportConfiguration || c.Metadata.InitialDiscovery || c.Metadata.AutomaticAgreement || c.Metadata.RefreshAfterAgreement || c.Pool.AdvancedShardAwareness.Enabled || c.NoDelay {
 			t.Fatalf("a disabling setting left its feature on: %+v", c)
 		}

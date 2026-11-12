@@ -684,7 +684,7 @@ func (s *Core) BuildQueryReport() queryReport {
 			cfg.SerialConsistency = profile.SerialConsistency.Value
 		}
 		cfg.DefaultIdempotence = false
-		cfg.DefaultTimestamp = runtime.ConfigSnapshot().TimestampGenerator != nil
+		cfg.DefaultTimestamp = runtime.ConfigSnapshot().Timestamps.Mode() != settings.ServerTimestampMode
 		loadBalancing = buildTypedLoadBalancingReport(profile.Routing)
 	}
 	return queryReport{Defaults: buildQueryDefaultsReport(&cfg), Retry: buildQueryRetryReport(&cfg), LoadBalancing: loadBalancing}

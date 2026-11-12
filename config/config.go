@@ -532,19 +532,18 @@ func (b *ConfigBuilder) WithPreparedCacheSize(n int) *ConfigBuilder {
 	return b
 }
 
-// WithTimestampGenerator supplies client timestamps in microseconds. It replaces
-// WithServerTimestamps. Default a monotonic clock.
+// WithTimestampGenerator supplies client timestamps in microseconds; a nil next
+// sends none. It replaces WithServerTimestamps. By default the driver stamps
+// each request with the time it was admitted, strictly increasing per session.
 func (b *ConfigBuilder) WithTimestampGenerator(next func() int64) *ConfigBuilder {
-	b.settings.TimestampGenerator = next
-	b.settings.DefaultTimestamps = false
+	b.settings.Timestamps = implSettings.GeneratedTimestamps(next)
 	return b
 }
 
 // WithServerTimestamps sends no client timestamp, so the server assigns one. It
 // replaces WithTimestampGenerator.
 func (b *ConfigBuilder) WithServerTimestamps() *ConfigBuilder {
-	b.settings.TimestampGenerator = nil
-	b.settings.DefaultTimestamps = false
+	b.settings.Timestamps = implSettings.ClientTimestamps{}
 	return b
 }
 

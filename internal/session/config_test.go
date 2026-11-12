@@ -381,31 +381,11 @@ func TestConfig(t *testing.T) {
 	})
 
 	t.Run("TimestampGenerator", func(t *testing.T) {
-		t.Run("Concurrent", func(t *testing.T) {
-			generator := settings.InternalNewTimestampGenerator()
-			values := make(chan int64, 1000)
-			for i := 0; i < 10; i++ {
-				go func() {
-					for j := 0; j < 100; j++ {
-						values <- generator()
-					}
-				}()
-			}
-			seen := make(map[int64]bool)
-			for i := 0; i < 1000; i++ {
-				value := <-values
-				if seen[value] {
-					t.Fatal("duplicate timestamp")
-				}
-				seen[value] = true
-			}
-		})
-
 		t.Run("OnceAcrossRetryAndPages", func(t *testing.T) {
 			s, _, peers := runtimeTestSession(t, 1)
 			defer s.Close()
 			var calls atomic.Int32
-			InternalRuntimeFor(s).config.TimestampGenerator = func() int64 { calls.Add(1); return 987654321 }
+			InternalRuntimeFor(s).config.Timestamps = settings.GeneratedTimestamps(func() int64 { calls.Add(1); return 987654321 })
 			done := make(chan error, 1)
 			go func() {
 				for step := 0; step < 5; step++ {

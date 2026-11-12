@@ -94,7 +94,7 @@ type InternalSessionRuntime struct {
 
 // startTimestamps is the session's default client timestamp source. It takes
 // each timestamp from the start time admission already read, instead of
-// reading the clock again as settings.InternalNewTimestampGenerator does.
+// reading the clock again.
 type startTimestamps struct{ last atomic.Int64 }
 
 // next returns started in microseconds, raised above every timestamp returned
@@ -689,12 +689,12 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 		return nil, nil, nil, err
 	}
 	rt.inflight.Add(1)
-	if !request.routing.Conditional && !requestHasCounter(request) && !request.InternalOptions.InternalOptions.Timestamp.Set && rt.config.TimestampGenerator != nil {
+	if mode := rt.config.Timestamps.Mode(); mode != settings.ServerTimestampMode && !request.routing.Conditional && !requestHasCounter(request) && !request.InternalOptions.InternalOptions.Timestamp.Set {
 		var timestamp int64
-		if rt.config.DefaultTimestamps {
+		if mode == settings.DriverTimestampMode {
 			timestamp = rt.timestamps.next(started)
 		} else {
-			timestamp = rt.config.TimestampGenerator()
+			timestamp = rt.config.Timestamps.Generator()()
 		}
 		request.InternalOptions.InternalOptions.Timestamp = cqltype.Option[int64]{Value: timestamp, Set: true}
 	}

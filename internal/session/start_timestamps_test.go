@@ -3,11 +3,14 @@ package session
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/binding"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
@@ -57,36 +60,35 @@ func TestStartTimestamps(t *testing.T) {
 		}
 	})
 
-	// Admission with the default generator takes timestamps from its start
-	// time without calling the generator; across 10 000 concurrent requests
-	// they are unique and strictly increasing per caller.
-	t.Run("DefaultGenerator", func(t *testing.T) {
+	// Admission with driver timestamps takes them from its start time:
+	// across 10 000 concurrent requests they are unique, and each caller's,
+	// in the order the server received them, strictly increasing.
+	t.Run("DriverTimestamps", func(t *testing.T) {
+		const workers, each = 16, 625
 		s, _, peers := runtimeTestSession(t, 1)
 		defer s.Close()
-		var calls atomic.Int64
 		rt := InternalRuntimeFor(s)
-		rt.config.TimestampGenerator = func() int64 { calls.Add(1); return 1 }
-		rt.config.DefaultTimestamps = true
+		rt.config.Timestamps = settings.DriverTimestamps()
 		var mu sync.Mutex
-		sent := make(map[int64]bool)
+		sent := make(map[string][]int64, workers)
 		void := binary.BigEndian.AppendUint32(nil, 1)
 		go serveLoopback(peers[0], func(body []byte) []byte {
-			at := 4 + int(binary.BigEndian.Uint32(body[:4])) + 2
-			if body[at]&0x20 == 0 {
+			n := int(binary.BigEndian.Uint32(body[:4]))
+			if body[4+n+2]&0x20 == 0 {
 				t.Error("request without a timestamp")
 				return void
 			}
 			mu.Lock()
-			sent[int64(binary.BigEndian.Uint64(body[len(body)-8:]))] = true
+			cql := string(body[4 : 4+n])
+			sent[cql] = append(sent[cql], int64(binary.BigEndian.Uint64(body[len(body)-8:])))
 			mu.Unlock()
 			return void
 		}, nil)
-		b := runtimeQuery(t)
-		defer b.Close()
-		const workers, each = 16, 625
-		var wg sync.WaitGroup
 		before := time.Now().UnixMicro()
-		for range workers {
+		var wg sync.WaitGroup
+		for w := range workers {
+			b := timestampQuery(t, fmt.Sprintf("SELECT value FROM ks.tbl /* caller %d */", w))
+			defer b.Close()
 			wg.Go(func() {
 				for range each {
 					if _, err := Exec(context.Background(), s, b, CompiledOptions{}); err != nil {
@@ -97,27 +99,66 @@ func TestStartTimestamps(t *testing.T) {
 			})
 		}
 		wg.Wait()
-		if calls.Load() != 0 {
-			t.Fatalf("the default generator was called %d times", calls.Load())
-		}
 		mu.Lock()
 		defer mu.Unlock()
-		if len(sent) != workers*each {
-			t.Fatalf("%d distinct timestamps for %d requests", len(sent), workers*each)
-		}
-		for v := range sent {
-			if v < before || v > rt.timestamps.last.Load() {
-				t.Fatalf("timestamp %d outside [%d, %d]", v, before, rt.timestamps.last.Load())
+		seen := make(map[int64]bool, workers*each)
+		for cql, values := range sent {
+			if len(values) != each {
+				t.Fatalf("%s: %d requests, want %d", cql, len(values), each)
 			}
+			for i, v := range values {
+				if seen[v] {
+					t.Fatalf("duplicate timestamp %d", v)
+				}
+				seen[v] = true
+				if v < before {
+					t.Fatalf("%s: timestamp %d before the test started at %d", cql, v, before)
+				}
+				if i > 0 && v <= values[i-1] {
+					t.Fatalf("%s: timestamp %d after %d", cql, v, values[i-1])
+				}
+			}
+		}
+		if len(sent) != workers {
+			t.Fatalf("%d callers seen, want %d", len(sent), workers)
 		}
 	})
 
+	// A user generator's value is sent as is.
 	t.Run("UserGenerator", func(t *testing.T) {
-		// DefaultConfig marks its generator; one set through the builder
-		// clears the mark (TestConfigBuilder), and an unmarked generator is
-		// called (TestConfig/TimestampGenerator/OnceAcrossRetryAndPages).
-		if !settings.DefaultConfig("localhost").DefaultTimestamps {
-			t.Fatal("DefaultConfig does not mark its timestamp generator")
+		s, _, peers := runtimeTestSession(t, 1)
+		defer s.Close()
+		InternalRuntimeFor(s).config.Timestamps = settings.GeneratedTimestamps(func() int64 { return 4242 })
+		got := make(chan int64, 1)
+		void := binary.BigEndian.AppendUint32(nil, 1)
+		go serveLoopback(peers[0], func(body []byte) []byte {
+			at := 4 + int(binary.BigEndian.Uint32(body[:4])) + 2
+			if body[at]&0x20 == 0 {
+				got <- -1
+			} else {
+				got <- int64(binary.BigEndian.Uint64(body[len(body)-8:]))
+			}
+			return void
+		}, nil)
+		b := runtimeQuery(t)
+		defer b.Close()
+		if _, err := Exec(context.Background(), s, b, CompiledOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if v := <-got; v != 4242 {
+			t.Fatalf("sent timestamp %d, want the generator's 4242", v)
+		}
+		if settings.DefaultConfig("localhost").Timestamps.Mode() != settings.DriverTimestampMode {
+			t.Fatal("DefaultConfig does not use driver timestamps")
 		}
 	})
+}
+
+func timestampQuery(t testing.TB, cql string) *Bound[cqltype.Bytes] {
+	t.Helper()
+	b, err := BindUnpreparedBorrowed(binding.Statement[codec.EmptyRecord, cqltype.Bytes]{Kind: cqltype.OrdinaryStatement, CQL: cql, Params: codec.EmptyParamsEncoder, Rows: codec.OneColumn(codec.BlobCodec)}, cqltype.NewColumns(), codec.EmptyRecord{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
