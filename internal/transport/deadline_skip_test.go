@@ -11,10 +11,10 @@ import (
 // deadlineCountingConn serves an endless byte stream and records every deadline
 // the connection code applies.
 type deadlineCountingConn struct {
-	mu       sync.Mutex
-	readSets []time.Time
-	writeSet []time.Time
-	off      int
+	mu        sync.Mutex
+	readSets  []time.Time
+	writeSets []time.Time
+	off       int
 }
 
 func (f *deadlineCountingConn) Read(p []byte) (int, error) {
@@ -37,7 +37,7 @@ func (f *deadlineCountingConn) SetReadDeadline(t time.Time) error {
 }
 func (f *deadlineCountingConn) SetWriteDeadline(t time.Time) error {
 	f.mu.Lock()
-	f.writeSet = append(f.writeSet, t)
+	f.writeSets = append(f.writeSets, t)
 	f.mu.Unlock()
 	return nil
 }
@@ -49,7 +49,7 @@ func (f *deadlineCountingConn) reads() []time.Time {
 func (f *deadlineCountingConn) writes() []time.Time {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append([]time.Time(nil), f.writeSet...)
+	return append([]time.Time(nil), f.writeSets...)
 }
 
 func newCountingReader(conn net.Conn) *InternalConnReader {
@@ -156,7 +156,7 @@ func TestWriterSkipsRedundantZeroDeadline(t *testing.T) {
 	}
 }
 
-func TestDeadlineReappliedAfterTimeoutChange(t *testing.T) {
+func TestWriterDeadlineReappliedAfterChange(t *testing.T) {
 	nc := new(deadlineCountingConn)
 	w := &InternalDeadlineContextWriter{InternalW: nc, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
 	ctx := t.Context()
