@@ -176,3 +176,28 @@ func TestCursor(t *testing.T) {
 		}
 	})
 }
+
+// TestHeadSkipRejectsOverflow checks that a skip past the head span misses
+// without moving the cursor even when offset+n overflows int64, leaving Skip
+// to report the short chain.
+func TestHeadSkipRejectsOverflow(t *testing.T) {
+	cur := NewCursor(segmented(t, []byte("0123456789"), 4))
+	if _, err := cur.Uint8(); err != nil {
+		t.Fatal(err)
+	}
+	before := *cur
+	for _, n := range []int64{-1, 3, math.MaxInt64, math.MaxInt64 - 1} {
+		if cur.HeadSkip(n) {
+			t.Fatalf("HeadSkip(%d) hit at offset 1 of a 4-byte head", n)
+		}
+		if moved(cur, before) {
+			t.Fatalf("missed HeadSkip(%d) moved the cursor", n)
+		}
+	}
+	if !cur.HeadSkip(2) || cur.Remaining() != 7 {
+		t.Fatalf("HeadSkip(2) inside the head: remaining %d", cur.Remaining())
+	}
+	if err := cur.Skip(math.MaxInt64); !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("Skip(MaxInt64) = %v", err)
+	}
+}

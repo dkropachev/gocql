@@ -285,13 +285,14 @@ func (c *Cursor) HeadUint64() (uint64, bool) {
 }
 
 // HeadSkip is Skip for a nonnegative n that ends strictly inside the head
-// span. A negative n misses, leaving Skip to report ErrBounds.
+// span. A negative n, or one past the head span however large, misses,
+// leaving Skip to report the error.
 func (c *Cursor) HeadSkip(n int64) bool {
-	if end := int64(c.offset) + n; c.index == 0 && n >= 0 && end < int64(len(c.chain.head.data)) {
+	if c.index == 0 && n >= 0 && n < int64(len(c.chain.head.data)-c.offset) {
 		if debugCursor {
 			c.assertHead()
 		}
-		c.offset = int(end)
+		c.offset += int(n)
 		c.remaining -= n
 		return true
 	}
