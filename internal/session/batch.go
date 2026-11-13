@@ -247,25 +247,13 @@ func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, stateme
 
 // InternalConditionalStatement returns the index of the statement whose
 // result is row i of the rows of a conditional batch on ScyllaDB, which
-// returns one row per conditional statement, in statement order. It reports
-// false when the batch has no i-th conditional statement, or when the kind of
-// a statement before it is unknown.
+// returns one row per statement, conditional or not, in statement order. It
+// reports false when the batch has no statement i.
 func (b *Batch) InternalConditionalStatement(i int) (int, bool) {
-	if b == nil || i < 0 {
+	if b == nil || i < 0 || i >= len(b.entries) {
 		return 0, false
 	}
-	for index := range b.entries {
-		switch b.entries[index].kind {
-		case cqltype.UnknownStatement:
-			return 0, false
-		case cqltype.ConditionalStatement:
-			if i == 0 {
-				return index, true
-			}
-			i--
-		}
-	}
-	return 0, false
+	return i, true
 }
 
 // InternalAddBound appends bound's statement and values to batch.

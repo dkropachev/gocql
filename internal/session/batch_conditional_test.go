@@ -10,8 +10,8 @@ import (
 	"github.com/scylladb/gocql/v2/internal/model"
 )
 
-// ScyllaDB returns one row per conditional statement of a batch, in statement
-// order: row i belongs to the i-th conditional statement.
+// ScyllaDB returns one row per statement of a conditional batch, conditional
+// or not, in statement order: row i belongs to statement i.
 func TestBatchConditionalStatement(t *testing.T) {
 	s, _, _ := runtimeTestSession(t, 0)
 	build := func(kinds ...cqltype.StatementKind) *Batch {
@@ -24,25 +24,16 @@ func TestBatchConditionalStatement(t *testing.T) {
 		return &batch
 	}
 	o, c, u := cqltype.OrdinaryStatement, cqltype.ConditionalStatement, cqltype.UnknownStatement
-	batch := build(o, c, o, c, c)
-	for row, want := range []int{1, 3, 4} {
-		if got, ok := batch.InternalConditionalStatement(row); !ok || got != want {
-			t.Errorf("row %d: statement %d %t, want %d", row, got, ok, want)
+	batch := build(o, c, u, c, c)
+	for row := range 5 {
+		if got, ok := batch.InternalConditionalStatement(row); !ok || got != row {
+			t.Errorf("row %d: statement %d %t, want %d", row, got, ok, row)
 		}
 	}
-	for _, row := range []int{-1, 3} {
+	for _, row := range []int{-1, 5} {
 		if _, ok := batch.InternalConditionalStatement(row); ok {
 			t.Errorf("row %d mapped to a statement", row)
 		}
-	}
-	// A statement of unknown kind may or may not have a row, so the rows
-	// after it cannot be placed.
-	batch = build(c, u, c)
-	if got, ok := batch.InternalConditionalStatement(0); !ok || got != 0 {
-		t.Errorf("row 0 before the unknown statement: %d %t", got, ok)
-	}
-	if _, ok := batch.InternalConditionalStatement(1); ok {
-		t.Error("row 1 after an unknown statement was mapped")
 	}
 	var none *Batch
 	if _, ok := none.InternalConditionalStatement(0); ok {
