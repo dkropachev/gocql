@@ -10,8 +10,10 @@ import (
 	"math/rand/v2"
 	"strings"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	// Immutable AVL indices share every unaffected subtree. Neither an observation
@@ -274,13 +276,34 @@ func InternalMetadataSnapshotTabletRoot(m *MetadataSnapshot, k InternalMetadataT
 // snapshot, found once for an execution and shared by its tablet version
 // block and its routing plan.
 type InternalTabletLookup struct {
-	// node is the tablet holding the token, or nil.
-	node *InternalTabletRange
+	// ref is, when tracked, the tablet holding the token
+	// (*InternalTabletRange) or nil; otherwise it is nil or the
+	// *placementCacheEntry holding the table's token ranges in the snapshot
+	// the lookup ran in. One field for both keeps the lookup at 16 bytes,
+	// which execution and planning copy on every request.
+	ref unsafe.Pointer
 	// tracked reports that the snapshot tracks the table's tablets, so
 	// a missing node means no replicas rather than vnode placement.
 	tracked bool
 	// done reports that the lookup ran; the zero lookup did not.
 	done bool
+}
+
+// node is the tablet holding the token, or nil.
+func (l *InternalTabletLookup) node() *InternalTabletRange {
+	if l.tracked {
+		return (*InternalTabletRange)(l.ref)
+	}
+	return nil
+}
+
+// cached is the placement cache entry the lookup found the table's token
+// ranges in, or nil.
+func (l *InternalTabletLookup) cached() *placementCacheEntry {
+	if l.tracked {
+		return nil
+	}
+	return (*placementCacheEntry)(l.ref)
 }
 
 // InternalLookupTablet finds the tablet holding info's token in m.
@@ -296,22 +319,32 @@ func InternalLookupTablet(m *MetadataSnapshot, info model.RoutingInfo) InternalT
 	}
 	if n := SnapshotData(m).InternalPlacements.Get(InternalMetadataTable{InternalKeyspace: info.Keyspace, InternalTable: info.Table}); n != nil {
 		l.tracked = true
-		l.node = n.InternalValue.tabletRangeFor(info.Token.Value)
+		l.ref = unsafe.Pointer(n.InternalValue.tabletRangeFor(info.Token.Value))
 	}
 	return l
 }
 
-// InternalPlacementCache remembers the placement of one statement's table
-// in the placement tree it was last found in, so that requests of the
-// statement skip the tree walk until a tablet update replaces the tree.
+// InternalPlacementCache remembers where one statement's table is placed
+// in the snapshot it was last routed by: its tablet placement, or else its
+// token ranges. Requests of the statement skip those lookups until a new
+// snapshot is published. Snapshots are never changed once published, so the
+// snapshot's id identifies what was found in it; keying by id rather than by
+// address leaves an idle statement's old snapshot free to be collected.
 type InternalPlacementCache struct {
 	entry atomic.Pointer[placementCacheEntry]
 }
 
 type placementCacheEntry struct {
-	root *tabletPlacementTree
-	// placement is the table's placement in root, or nil without one.
+	// snapshot is the id of the snapshot the entry was found in.
+	snapshot uint64
+	// placement is the table's placement in snapshot, or nil without one.
 	placement *InternalTabletPlacement
+	// ranges are the table's token ranges in snapshot when it has no
+	// placement, as InternalMetadataSnapshotLookupRanges finds them, or nil
+	// when the snapshot has no ranges for it; tablet reports that they are
+	// the table's tablets.
+	ranges []TokenRange
+	tablet bool
 }
 
 // InternalLookupTabletCached is InternalLookupTablet for a statement whose
@@ -325,20 +358,31 @@ func InternalLookupTabletCached(m *MetadataSnapshot, info model.RoutingInfo, c *
 		l.tracked = true
 		return l
 	}
-	root := SnapshotData(m).InternalPlacements
 	e := c.entry.Load()
-	if e == nil || e.root != root {
-		e = &placementCacheEntry{root: root}
-		if n := root.Get(InternalMetadataTable{InternalKeyspace: info.Keyspace, InternalTable: info.Table}); n != nil {
-			e.placement = &n.InternalValue
-		}
+	if e == nil || e.snapshot != m.id {
+		e = newPlacementCacheEntry(m, info.Keyspace, info.Table)
 		c.entry.Store(e)
 	}
 	if e.placement != nil {
 		l.tracked = true
-		l.node = e.placement.tabletRangeFor(info.Token.Value)
+		l.ref = unsafe.Pointer(e.placement.tabletRangeFor(info.Token.Value))
+	} else {
+		l.ref = unsafe.Pointer(e)
 	}
 	return l
+}
+
+// newPlacementCacheEntry looks keyspace.table up in m for a placement cache.
+func newPlacementCacheEntry(m *MetadataSnapshot, keyspace, table string) *placementCacheEntry {
+	e := &placementCacheEntry{snapshot: m.id}
+	if n := SnapshotData(m).InternalPlacements.Get(InternalMetadataTable{InternalKeyspace: keyspace, InternalTable: table}); n != nil {
+		e.placement = &n.InternalValue
+		return e
+	}
+	if ranges, tablet, err := InternalMetadataSnapshotLookupRanges(m, keyspace, table); err == nil {
+		e.ranges, e.tablet = ranges, tablet
+	}
+	return e
 }
 
 // VersionBlock returns the tablet version block a request with lookup l
@@ -348,7 +392,7 @@ func (l *InternalTabletLookup) VersionBlock(info model.RoutingInfo) byte {
 	if info.Table == "" || info.Keyspace == "" || !info.Token.Set {
 		return 0
 	}
-	if n := l.node; n != nil && n.InternalVersion.Set {
+	if n := l.node(); n != nil && n.InternalVersion.Set {
 		index := rand.Uint32N(16)
 		return byte(index<<4) | byte(n.InternalVersion.Value>>(index*4)&15)
 	}
@@ -373,10 +417,16 @@ func (m *MetadataSnapshot) lookupReplicas(l *InternalTabletLookup, keyspace, tab
 		return nil, nil
 	}
 	if l.tracked {
-		if n := l.node; n != nil {
+		if n := l.node(); n != nil {
 			return n.InternalSpan.Replicas, n
 		}
 		return nil, nil
+	}
+	if e := l.cached(); e != nil && e.snapshot == m.id {
+		if len(e.ranges) == 0 {
+			return nil, nil
+		}
+		return m.legacyPlacementReplicas(e.ranges, e.tablet, token), nil
 	}
 	ranges, tablet, err := InternalMetadataSnapshotLookupRanges(m, keyspace, table)
 	if err != nil || len(ranges) == 0 {
@@ -415,11 +465,14 @@ type InternalTabletFeedbackStamp struct {
 	// copies InternalSchema and InternalTable are read from on receipt.
 	InternalSchemaEpochs   *map[string]uint64
 	InternalTableRevisions *map[InternalMetadataTable]uint64
-	// InternalIdentity is the table's schema source identity until receipt,
-	// then the snapshot's identity it matched.
-	InternalIdentity                             string
+	// InternalSchemaSource is the schema source as it was at capture, which
+	// the table's source identity is read from on receipt; nil once read.
+	InternalSchemaSource                         *map[string]*implMetadata.KeyspaceMetadata
 	InternalEpoch, InternalSchema, InternalTable uint64
 	InternalValid                                bool
+	// _ keeps the stamp at its former size: shrinking it moves the fields
+	// of the query state after it and slows admission by about 2%.
+	_ [8]byte
 }
 
 func InternalClonePlacementSnapshot(m *MetadataSnapshot) *MetadataSnapshot {

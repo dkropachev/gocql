@@ -24,26 +24,31 @@ func (s *Core) CaptureTabletFeedback(info model.RoutingInfo, m *routing.Metadata
 	// least one of them differs from what the publisher compares it with
 	// under the lock, and the feedback is dropped, as it would be if it had
 	// been captured before the change.
-	// The schema source is live, so its identity is read now; the snapshot
-	// and the epoch maps are immutable, so what is read from them waits for
-	// a hint in InternalSessionResolveTabletFeedback.
-	identity, ok := s.tabletSchemaIdentity(info.Keyspace, info.Table)
-	return routing.InternalTabletFeedbackStamp{InternalValid: ok, InternalSnapshot: m, InternalEpoch: p.InternalPlacementEpoch.Load(), InternalSchemaEpochs: p.schemaEpochs.Load(), InternalTableRevisions: p.tableRevisions.Load(), InternalIdentity: identity}
+	// The schema source, the snapshot and the epoch maps are all replaced on
+	// change, never changed in place, so what is read from them waits for a
+	// hint in sessionResolveTabletFeedback.
+	source := s.schemaSource()
+	return routing.InternalTabletFeedbackStamp{InternalValid: source != nil, InternalSnapshot: m, InternalEpoch: p.InternalPlacementEpoch.Load(), InternalSchemaEpochs: p.schemaEpochs.Load(), InternalTableRevisions: p.tableRevisions.Load(), InternalSchemaSource: source}
 }
 
 // sessionResolveTabletFeedback completes a stamp captured for table k
-// with the values it deferred, as they were at capture: the stamp is valid
-// only if the schema source identity matched the snapshot's.
-func sessionResolveTabletFeedback(stamp *routing.InternalTabletFeedbackStamp, k routing.InternalMetadataTable) {
+// with the values it deferred, as they were at capture, and returns the
+// table's identity. A stamp with epoch maps is valid only if the schema
+// source identity matches the snapshot's, which is returned; one without
+// returns the schema source identity.
+func sessionResolveTabletFeedback(stamp *routing.InternalTabletFeedbackStamp, k routing.InternalMetadataTable) string {
+	identity, ok := schemaSourceIdentity(stamp.InternalSchemaSource, k.InternalKeyspace, k.InternalTable)
+	stamp.InternalValid = stamp.InternalValid && ok
+	stamp.InternalSchemaSource = nil
 	if stamp.InternalSchemaEpochs == nil {
-		return
+		return identity
 	}
-	identity := routing.InternalMetadataSnapshotTableIdentity(stamp.InternalSnapshot, k)
-	stamp.InternalValid = stamp.InternalValid && stamp.InternalIdentity == identity
-	stamp.InternalIdentity = identity
+	snapshot := routing.InternalMetadataSnapshotTableIdentity(stamp.InternalSnapshot, k)
+	stamp.InternalValid = stamp.InternalValid && identity == snapshot
 	stamp.InternalSchema = (*stamp.InternalSchemaEpochs)[k.InternalKeyspace]
 	stamp.InternalTable = (*stamp.InternalTableRevisions)[k]
 	stamp.InternalSchemaEpochs, stamp.InternalTableRevisions = nil, nil
+	return snapshot
 }
 
 type InternalV2TabletFeedbackKey struct {
@@ -53,7 +58,10 @@ type InternalV2TabletFeedbackKey struct {
 type InternalV2PendingTabletFeedback struct {
 	InternalStamp routing.InternalTabletFeedbackStamp
 	InternalHint  tablets.TabletInfo
-	observation   routing.InternalTabletRangeObservation
+	// identity is the table's identity sessionResolveTabletFeedback returned
+	// for InternalStamp; a stamp not yet resolved is resolved on publication.
+	identity    string
+	observation routing.InternalTabletRangeObservation
 }
 
 // applyV2TabletHint is retained for internal legacy callers/tests. Actual EXECUTE
@@ -68,7 +76,8 @@ func (s *Core) QueueTabletFeedback(h tablets.TabletInfo, stamp routing.InternalT
 		return
 	}
 	k := routing.InternalMetadataTable{InternalKeyspace: h.KeyspaceName(), InternalTable: h.TableName()}
-	if sessionResolveTabletFeedback(&stamp, k); !stamp.InternalValid {
+	identity := sessionResolveTabletFeedback(&stamp, k)
+	if !stamp.InternalValid {
 		return
 	}
 	if _, _, err := routing.InternalMetadataSnapshotLookupRanges(stamp.InternalSnapshot, k.InternalKeyspace, k.InternalTable); err != nil {
@@ -81,7 +90,9 @@ func (s *Core) QueueTabletFeedback(h tablets.TabletInfo, stamp routing.InternalT
 	}
 	before, _ := routing.InternalMetadataSnapshotTabletRoot(stamp.InternalSnapshot, k)
 	observation := routing.InternalObserveTabletRanges(before, h.FirstToken(), h.LastToken())
-	stamp.InternalSnapshot = nil // the queue never retains a cluster/schema snapshot or page.
+	// The queue never retains a cluster/schema snapshot or page; resolution
+	// already cleared the schema source.
+	stamp.InternalSnapshot = nil
 	p.InternalFeedbackMu.Lock()
 	key := InternalV2TabletFeedbackKey{k.InternalKeyspace, k.InternalTable, h.LastToken()}
 	if !p.knownTabletTables[k] {
@@ -95,8 +106,8 @@ func (s *Core) QueueTabletFeedback(h tablets.TabletInfo, stamp routing.InternalT
 	}
 	// Keep the earliest pending observation for an overlapping identity/range.
 	// Later requests can relearn after it publishes; receipt order is not freshness.
-	if !ok || prior.InternalStamp.InternalEpoch != stamp.InternalEpoch || prior.InternalStamp.InternalSchema != stamp.InternalSchema || prior.InternalStamp.InternalTable != stamp.InternalTable || prior.InternalStamp.InternalIdentity != stamp.InternalIdentity {
-		p.InternalFeedback[key] = InternalV2PendingTabletFeedback{InternalHint: h, InternalStamp: stamp, observation: observation}
+	if !ok || prior.InternalStamp.InternalEpoch != stamp.InternalEpoch || prior.InternalStamp.InternalSchema != stamp.InternalSchema || prior.InternalStamp.InternalTable != stamp.InternalTable || prior.identity != identity {
+		p.InternalFeedback[key] = InternalV2PendingTabletFeedback{InternalHint: h, InternalStamp: stamp, identity: identity, observation: observation}
 	}
 	p.InternalFeedbackMu.Unlock()
 	p.InternalFeedbackOnce.Do(func() { p.InternalStartWorker(func() { sessionRunV2TabletFeedback(s, p) }) })
@@ -158,19 +169,22 @@ func (s *Core) PublishTabletFeedback(p *InternalV2PeripheralState, updates map[I
 		}
 	}
 	for _, u := range updates {
-		h, stamp := u.InternalHint, u.InternalStamp
+		h, stamp, identity := u.InternalHint, u.InternalStamp, u.identity
 		k := routing.InternalMetadataTable{InternalKeyspace: h.KeyspaceName(), InternalTable: h.TableName()}
-		if sessionResolveTabletFeedback(&stamp, k); !stamp.InternalValid {
+		if stamp.InternalSchemaSource != nil {
+			identity = sessionResolveTabletFeedback(&stamp, k)
+		}
+		if !stamp.InternalValid {
 			continue
 		}
-		if !s.tabletSchemaCurrent(k, stamp.InternalIdentity) || stamp.InternalEpoch != epoch || stamp.InternalSchema != p.schemaEpoch[k.InternalKeyspace] || stamp.InternalTable != p.tableRevision[k] || p.schemaDropped[k.InternalKeyspace] || stamp.InternalIdentity != routing.InternalMetadataSnapshotTableIdentity(old, k) {
+		if !s.tabletSchemaCurrent(k, identity) || stamp.InternalEpoch != epoch || stamp.InternalSchema != p.schemaEpoch[k.InternalKeyspace] || stamp.InternalTable != p.tableRevision[k] || p.schemaDropped[k.InternalKeyspace] || identity != routing.InternalMetadataSnapshotTableIdentity(old, k) {
 			continue
 		}
 		if _, _, err := routing.InternalMetadataSnapshotLookupRanges(old, k.InternalKeyspace, k.InternalTable); err != nil {
 			continue
 		}
 		var current *routing.InternalTabletRangeTree
-		t := routing.InternalTabletPlacement{InternalIdentity: stamp.InternalIdentity}
+		t := routing.InternalTabletPlacement{InternalIdentity: identity}
 		if n := routing.SnapshotData(next).InternalPlacements.Get(k); n != nil {
 			t = n.InternalValue
 			current = t.InternalRanges
@@ -240,10 +254,28 @@ func (s *Core) tabletSchemaCurrent(k routing.InternalMetadataTable, identity str
 // tabletSchemaIdentity returns the identity of a table or view in the
 // schema source, or false when the source lacks it or has invalidated it.
 func (s *Core) tabletSchemaIdentity(keyspace, table string) (string, bool) {
+	return schemaSourceIdentity(s.schemaSource(), keyspace, table)
+}
+
+// schemaSource is the live schema source map, or nil without one. The map
+// is replaced on every change, never changed in place.
+func (s *Core) schemaSource() *map[string]*implMetadata.KeyspaceMetadata {
 	if s.privateStorage.InternalMetadataDescriber == nil || s.privateStorage.InternalMetadataDescriber.InternalMetadata == nil {
-		return "", false
+		return nil
 	}
-	source := s.privateStorage.InternalMetadataDescriber.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalKeyspaceMap.Load()
+	return s.privateStorage.InternalMetadataDescriber.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalKeyspaceMap.Load()
+}
+
+// testHookSchemaIdentity, when set, is called on each schema source
+// identity lookup.
+var testHookSchemaIdentity func()
+
+// schemaSourceIdentity returns the identity of a table or view in source, or
+// false when source lacks it or has invalidated it.
+func schemaSourceIdentity(source *map[string]*implMetadata.KeyspaceMetadata, keyspace, table string) (string, bool) {
+	if testHookSchemaIdentity != nil {
+		testHookSchemaIdentity()
+	}
 	if source == nil {
 		return "", false
 	}

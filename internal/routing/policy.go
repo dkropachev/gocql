@@ -525,18 +525,22 @@ func (p *InternalRoutingPolicy) planWith(info model.RoutingInfo, m *MetadataSnap
 		return plan
 	}
 	o := &p.InternalOptions
-	var lookup InternalTabletLookup
-	if tablet != nil && tablet.done {
-		lookup = *tablet
-	} else if o.TokenAware && info.Token.Set {
-		lookup = InternalLookupTablet(m, info)
+	// The caller's lookup is used in place; only a plan that looks the
+	// tablet up itself needs its own.
+	var own InternalTabletLookup
+	lookup := tablet
+	if tablet == nil || !tablet.done {
+		lookup = &own
+		if o.TokenAware && info.Token.Set {
+			own = InternalLookupTablet(m, info)
+		}
 	}
 	if o.TokenAware && info.Token.Set && info.Keyspace != "" && info.Table != "" {
-		plan.replicas, _ = m.lookupReplicas(&lookup, info.Keyspace, info.Table, info.Token.Value)
+		plan.replicas, _ = m.lookupReplicas(lookup, info.Keyspace, info.Table, info.Token.Value)
 	}
 	plan.conditional = info.Conditional || info.Consistency == cqltype.Serial || info.Consistency == cqltype.LocalSerial
 	if o.LeaderAware {
-		plan.leader = p.leader(info, m, &lookup)
+		plan.leader = p.leader(info, m, lookup)
 	}
 	plan.rotate = !plan.conditional
 	// The happy path: a shuffled plan whose first route is any routable
