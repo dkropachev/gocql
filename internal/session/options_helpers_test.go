@@ -6,6 +6,7 @@ package session
 import (
 	"errors"
 
+	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
@@ -24,12 +25,17 @@ func hasErrorType[E error](err error) bool {
 	return ok
 }
 
-// generalPathProfile is the default profile with a speculation policy, which
-// keeps executions on the general path: attempts run on goroutines of their
-// own, so a blocked observer keeps an execution draining after its caller
-// returned. On the direct path observers run on the caller.
+// goroutineRouting is the default routing policy under a type the direct
+// path does not know, which keeps attempts on goroutines of their own.
+type goroutineRouting struct{ routing.RoutingPolicy }
+
+// generalPathProfile keeps executions on the general path: attempts run on
+// goroutines of their own, so a blocked observer keeps an execution
+// draining after its caller returned. On the direct path, and for the first
+// attempt of a speculating execution, observers run on the caller.
 func generalPathProfile() *settings.Profile {
-	p := settings.InternalDefaultProfile()
-	p.Speculation = neverSpeculate{}
+	base := settings.DefaultConfig("localhost")
+	p := *base.DefaultProfile
+	p.Routing = goroutineRouting{base.DefaultProfile.Routing}
 	return &p
 }

@@ -5,7 +5,6 @@ package session
 
 import (
 	"github.com/scylladb/gocql/v2/internal/codec"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/schemafence"
@@ -953,6 +952,87 @@ type typedAttemptOutcome struct {
 	consistency cqltype.Consistency
 }
 
+// beginAttempt tells the request's observer that an attempt on conn starts
+// and returns its target, start time and the observer's end callback.
+func (s *InternalSessionRuntime) beginAttempt(request *InternalExecutionRequest, conn *transport.Conn, index int, speculative bool) (model.Target, time.Time, func(routing.AttemptEvent)) {
+	target := attemptTarget(request, conn)
+	var requestID uint64
+	if request.InternalLogical != nil {
+		requestID = request.InternalLogical.id
+	}
+	started := time.Now()
+	end := request.InternalLogical.startAttempt(routing.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Started: started, Speculative: speculative})
+	return target, started, end
+}
+
+// attemptOutcome reports one finished attempt to the observer's end callback
+// and the routing policy and returns it for the execution loop.
+func (s *InternalSessionRuntime) attemptOutcome(request *InternalExecutionRequest, conn *transport.Conn, target model.Target, index int, started time.Time, response *transport.InternalResponsePage, err error, consistency cqltype.Consistency, speculative bool, end func(routing.AttemptEvent)) typedAttemptOutcome {
+	var requestID uint64
+	if request.InternalLogical != nil {
+		requestID = request.InternalLogical.id
+	}
+	event := routing.AttemptEvent{RequestID: requestID, Attempt: index, Target: target, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded), Speculative: speculative}
+	if end != nil {
+		perfAdd(1, 1)
+		s.Core.ObserveSafely(func() { end(event) })
+	}
+	if policy := request.options.InternalProfile.Routing; policy != nil {
+		s.Core.ObserveSafely(func() { policy.Observe(event) })
+	}
+	return typedAttemptOutcome{response: response, err: err, conn: conn, event: event, consistency: consistency}
+}
+
+// inlineSpeculation is the state a first attempt running on its execution's
+// goroutine shares with the speculative attempts its timer starts.
+type inlineSpeculation struct {
+	timer   *time.Timer
+	due     time.Time // when timer next starts an attempt, or zero
+	winner  typedAttemptOutcome
+	mu      sync.Mutex
+	running bool // the first attempt is still waiting
+	won     bool
+}
+
+// claimWin records a successful speculative attempt that finished while the
+// first attempt still waits, and cancels the page so that the wait ends.
+func (sp *inlineSpeculation) claimWin(outcome typedAttemptOutcome, cancelPage context.CancelFunc) bool {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	if !sp.running || sp.won {
+		return false
+	}
+	sp.won, sp.winner = true, outcome
+	cancelPage()
+	return true
+}
+
+// speculationOnly reports whether speculation is all that keeps request off
+// the direct path.
+func speculationOnly(request *InternalExecutionRequest) bool {
+	profile := request.options.InternalProfile
+	if profile.Speculation == nil || request.InternalLogical == nil || request.connection != nil {
+		return false
+	}
+	profile.Speculation = nil
+	return canUseDirectProfile(profile)
+}
+
+// speculationDelay returns the delay before the speculative attempt that
+// follows started attempts, if request speculates.
+func speculationDelay(request *InternalExecutionRequest, started int) (time.Duration, bool) {
+	if !request.options.InternalOptions.Idempotent || request.routing.Kind != cqltype.OrdinaryStatement || request.options.InternalProfile.Speculation == nil {
+		return 0, false
+	}
+	perfAdd(2, 1)
+	delay, ok := request.options.InternalProfile.Speculation.Delay(started)
+	if !ok || delay < 0 {
+		return 0, false
+	}
+	perfAdd(3, 1)
+	return delay, true
+}
+
 // pagePlan builds the routing plan for one page's attempts.
 // tablet is the request's tablet, looked up in metadata.
 func (s *InternalSessionRuntime) pagePlan(request *InternalExecutionRequest, metadata *routing.MetadataSnapshot, tablet *routing.InternalTabletLookup, direct bool) (routing.QueryPlan, error) {
@@ -1029,8 +1109,8 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 	outcomes := make(chan typedAttemptOutcome)
 	type delayedAttempt struct {
 		conn        *transport.Conn
-		consistency cqltype.Consistency
 		due         time.Time
+		consistency cqltype.Consistency
 	}
 	// Retries waiting for their delay, and a timer for the earliest of them.
 	// The nil channels disable their receive cases until a retry actually
@@ -1059,6 +1139,9 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 	}
 	aggregate := model.Result{AchievedConsistency: request.options.InternalProfile.Consistency}
 	startedCount, active := 0, 0
+	// spec coordinates a first attempt running on this goroutine with the
+	// speculative attempts that its timer starts.
+	var spec inlineSpeculation
 	launch := func(conn *transport.Conn, consistency cqltype.Consistency, speculative bool) error {
 		var err error
 		if conn == nil && request.connection != nil {
@@ -1080,27 +1163,14 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 		}
 		go func() {
 			defer request.InternalOwner.InternalRelease()
-			target := model.Target{HostID: conn.InternalHostID(), ShardID: request.routing.ShardID}
-			if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0 {
-				target.ShardID = cqltype.Option[uint32]{Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard), Set: true}
-			}
-			var requestID uint64
-			if request.InternalLogical != nil {
-				requestID = request.InternalLogical.id
-			}
-			started := time.Now()
-			end := request.InternalLogical.startAttempt(routing.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Started: started, Speculative: speculative})
+			target, started, end := s.beginAttempt(request, conn, index, speculative)
 			response, err := s.executeTypedAttempt(ctx, conn, request, state, consistency)
-			event := routing.AttemptEvent{RequestID: requestID, Attempt: index, Target: target, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded), Speculative: speculative}
-			if end != nil {
-				perfAdd(1, 1)
-				s.Core.ObserveSafely(func() { end(event) })
-			}
-			if policy := request.options.InternalProfile.Routing; policy != nil {
-				s.Core.ObserveSafely(func() { policy.Observe(event) })
+			outcome := s.attemptOutcome(request, conn, target, index, started, response, err, consistency, speculative, end)
+			if err == nil && spec.claimWin(outcome, cancel) {
+				return
 			}
 			select {
-			case outcomes <- typedAttemptOutcome{response: response, err: err, conn: conn, event: event, consistency: consistency}:
+			case outcomes <- outcome:
 			case <-ctx.Done():
 				if response != nil {
 					response.Owner.Release()
@@ -1109,7 +1179,94 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 		}()
 		return nil
 	}
-	if err := launch(nil, request.options.InternalProfile.Consistency, false); err != nil {
+	var firstOutcome *typedAttemptOutcome
+	var inline typedAttemptOutcome
+	// specDue is when the inline first attempt's speculation timer would
+	// next start an attempt, or zero.
+	var specDue time.Time
+	var won bool
+	// ended is set when the page context ended the inline first attempt.
+	var ended bool
+	if speculationOnly(request) {
+		// The first attempt runs on this goroutine. A speculative attempt
+		// gets a goroutine of its own only when its timer fires, and stops
+		// this wait if it wins.
+		consistency := request.options.InternalProfile.Consistency
+		conn, err := s.Core.SelectTypedConn(ctx, request.routing, plan)
+		if err != nil {
+			return nil, newExecutionError(err, aggregate, cqltype.NotExecuted, nil)
+		}
+		if conn.InternalStreamObserver != nil {
+			// A stream-observed connection keeps its attempt on a goroutine.
+			if err := launch(conn, consistency, false); err != nil {
+				return nil, newExecutionError(err, aggregate, cqltype.NotExecuted, nil)
+			}
+		} else {
+			startedCount, active = 1, 1
+			s.attempts.Add(1)
+			target, started, end := s.beginAttempt(request, conn, 1, false)
+			// The callback takes spec.mu, so even after a zero delay it runs
+			// only once the timer is stored.
+			spec.mu.Lock()
+			spec.running = true
+			if delay, ok := speculationDelay(request, startedCount); ok {
+				spec.due = started.Add(delay)
+				spec.timer = time.AfterFunc(delay, func() {
+					spec.mu.Lock()
+					defer spec.mu.Unlock()
+					if !spec.running || request.InternalLogical != nil && request.InternalLogical.ddlCoordinator.Load() != nil {
+						return
+					}
+					spec.due = time.Time{}
+					if launch(nil, consistency, true) == nil {
+						if delay, ok := speculationDelay(request, startedCount); ok {
+							spec.due = time.Now().Add(delay)
+							spec.timer.Reset(delay)
+						}
+					}
+				})
+			}
+			spec.mu.Unlock()
+			response, err := s.executeTypedAttempt(ctx, conn, request, state, consistency)
+			spec.mu.Lock()
+			spec.running = false
+			if spec.timer != nil {
+				spec.timer.Stop()
+			}
+			won, specDue = spec.won, spec.due
+			spec.mu.Unlock()
+			inline = s.attemptOutcome(request, conn, target, 1, started, response, err, consistency, false, end)
+			switch {
+			case won && inline.err == nil:
+				// Both succeeded before this attempt saw the cancel: keep its
+				// response and drop the speculative one.
+				if spec.winner.response != nil {
+					spec.winner.response.Owner.Release()
+				}
+				active--
+				firstOutcome = &inline
+			case won:
+				// A speculative attempt won and cancelled the page context,
+				// which ended this attempt: the winner is the page's outcome.
+				if inline.response != nil {
+					inline.response.Owner.Release()
+				}
+				active--
+				inline = spec.winner
+				firstOutcome = &inline
+			case inline.err != nil && ctx.Err() != nil:
+				// The page context (the caller's, or the page timeout) ended
+				// the attempt: the loop ends the execution as it does for
+				// attempts on goroutines.
+				if inline.response != nil {
+					inline.response.Owner.Release()
+				}
+				ended = true
+			default:
+				firstOutcome = &inline
+			}
+		}
+	} else if err := launch(nil, request.options.InternalProfile.Consistency, false); err != nil {
 		return nil, newExecutionError(err, aggregate, cqltype.NotExecuted, nil)
 	}
 	var timer *time.Timer
@@ -1120,19 +1277,20 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			timer = nil
 		}
 		speculate = nil
-		if !request.options.InternalOptions.Idempotent || request.routing.Kind != cqltype.OrdinaryStatement || request.options.InternalProfile.Speculation == nil {
+		delay, ok := speculationDelay(request, startedCount)
+		if !ok {
 			return
 		}
-		perfAdd(2, 1)
-		delay, ok := request.options.InternalProfile.Speculation.Delay(startedCount)
-		if !ok || delay < 0 {
-			return
-		}
-		perfAdd(3, 1)
 		timer = time.NewTimer(delay)
 		speculate = timer.C
 	}
-	arm()
+	if firstOutcome == nil && !ended {
+		arm()
+	} else if firstOutcome != nil && !won && !specDue.IsZero() && (startedCount > 1 || firstOutcome.err != nil) {
+		// Attempts remain: keep the schedule the inline attempt started.
+		timer = time.NewTimer(max(time.Until(specDue), 0))
+		speculate = timer.C
+	}
 	defer func() {
 		if timer != nil {
 			timer.Stop()
@@ -1144,66 +1302,78 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 	var lastErr error
 	var log attemptLog
 	for {
-		select {
-		case <-ctx.Done():
-			aggregate.Attempts = startedCount
-			failure := ctx.Err()
-			if active > 0 {
-				// An abandoned in-flight attempt may have been applied.
-				log.raise(cqltype.MaybeExecuted)
-			}
-			if request.InternalLogical != nil {
-				if coordinator := request.InternalLogical.ddlCoordinator.Load(); coordinator != nil {
-					aggregate.HostID = *coordinator
-					failure = fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", failure)
-					log.raise(cqltype.PartiallyExecuted)
+		var outcome typedAttemptOutcome
+		if firstOutcome != nil {
+			outcome, firstOutcome = *firstOutcome, nil
+		} else {
+			received := false
+			select {
+			case <-ctx.Done():
+				aggregate.Attempts = startedCount
+				failure := ctx.Err()
+				if active > 0 {
+					// An abandoned in-flight attempt may have been applied.
+					log.raise(cqltype.MaybeExecuted)
 				}
-			}
-			return nil, log.error(failure, aggregate)
-		case <-closing:
-			// A closing session ends the delayed retries instead of
-			// launching them.
-			delayed = delayed[:0]
-			armDelay()
-			lastErr = runtimeerrors.ErrClosed
-			if active == 0 {
-				return nil, log.error(lastErr, aggregate)
-			}
-		case now := <-delayFired:
-			due := delayed[:0]
-			var launchErr error
-			for _, pending := range delayed {
-				if pending.due.After(now) {
-					due = append(due, pending)
+				if request.InternalLogical != nil {
+					if coordinator := request.InternalLogical.ddlCoordinator.Load(); coordinator != nil {
+						aggregate.HostID = *coordinator
+						failure = fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", failure)
+						log.raise(cqltype.PartiallyExecuted)
+					}
+				}
+				return nil, log.error(failure, aggregate)
+			case <-closing:
+				// A closing session ends the delayed retries instead of
+				// launching them.
+				delayed = delayed[:0]
+				armDelay()
+				lastErr = runtimeerrors.ErrClosed
+				if active == 0 {
+					return nil, log.error(lastErr, aggregate)
+				}
+			case now := <-delayFired:
+				due := delayed[:0]
+				var launchErr error
+				for _, pending := range delayed {
+					if pending.due.After(now) {
+						due = append(due, pending)
+						continue
+					}
+					if err := launch(pending.conn, pending.consistency, false); err != nil {
+						launchErr = err
+					} else {
+						s.retries.Add(1)
+						arm()
+					}
+				}
+				clear(delayed[len(due):])
+				delayed = due
+				armDelay()
+				if launchErr != nil {
+					lastErr = launchErr
+					if active == 0 && len(delayed) == 0 {
+						return nil, log.error(launchErr, aggregate)
+					}
+				}
+			case <-speculate:
+				if request.InternalLogical != nil && request.InternalLogical.ddlCoordinator.Load() != nil {
+					speculate = nil
 					continue
 				}
-				if err := launch(pending.conn, pending.consistency, false); err != nil {
-					launchErr = err
-				} else {
-					s.retries.Add(1)
+				if err := launch(nil, request.options.InternalProfile.Consistency, true); err == nil {
 					arm()
+				} else {
+					speculate = nil
 				}
+			case outcome = <-outcomes:
+				received = true
 			}
-			clear(delayed[len(due):])
-			delayed = due
-			armDelay()
-			if launchErr != nil {
-				lastErr = launchErr
-				if active == 0 && len(delayed) == 0 {
-					return nil, log.error(launchErr, aggregate)
-				}
-			}
-		case <-speculate:
-			if request.InternalLogical != nil && request.InternalLogical.ddlCoordinator.Load() != nil {
-				speculate = nil
+			if !received {
 				continue
 			}
-			if err := launch(nil, request.options.InternalProfile.Consistency, true); err == nil {
-				arm()
-			} else {
-				speculate = nil
-			}
-		case outcome := <-outcomes:
+		}
+		{
 			active--
 			response, attemptErr := outcome.response, outcome.err
 			aggregate.Attempts = startedCount

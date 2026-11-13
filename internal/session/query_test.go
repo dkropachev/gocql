@@ -195,6 +195,10 @@ func loopbackPagingState(b []byte) []byte {
 	return take(u32())
 }
 
+// loopbackOverloaded is the body of an OVERLOADED error; serveLoopback
+// sends it in an ERROR frame.
+var loopbackOverloaded = []byte{0, 0, 0x10, 0x01, 0, 4, 'b', 'u', 's', 'y'}
+
 // serveLoopback answers PREPARE with prepared and every other request frame
 // with choose(request body), preserving its stream. Like a server, it flushes
 // once no further request bytes are buffered.
@@ -222,6 +226,9 @@ func serveLoopback(peer net.Conn, choose func([]byte) []byte, prepared []byte) {
 			response = choose(request)
 		}
 		header[0], header[1], header[4] = 0x84, 0, byte(frm.OpResult)
+		if len(response) > 0 && &response[0] == &loopbackOverloaded[0] {
+			header[4] = byte(frm.OpError)
+		}
 		binary.BigEndian.PutUint32(header[5:], uint32(len(response)))
 		if _, err := w.Write(header[:]); err != nil {
 			return
@@ -830,6 +837,19 @@ func TestQuery(t *testing.T) {
 		choose := func([]byte) []byte { return body }
 		if strings.HasPrefix(workload, "page") {
 			choose = loopbackPages()
+		}
+		if workload == "poneerr" {
+			// Every other request on the connection fails; with one reader
+			// each retried read takes two attempts.
+			body = runtimeRowsBody(nil, loopbackValue)
+			n := 0
+			choose = func([]byte) []byte {
+				n++
+				if n%2 == 1 {
+					return loopbackOverloaded
+				}
+				return body
+			}
 		}
 		key := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))})
 		value := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
