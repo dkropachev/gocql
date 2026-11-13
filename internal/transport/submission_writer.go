@@ -45,8 +45,7 @@ var ticketPool = syncx.NewPool(func() *writeTicket { return &writeTicket{wake: m
 
 // release drops one owner's reference. The last owner recycles the ticket and
 // ends a typed request's shared admission, so an exclusive reservation waits
-// for both the writer and the caller's cleanup: the reader frees a live call's
-// stream before the caller is done with the call.
+// for both the writer and the caller's cleanup.
 func (t *writeTicket) release() {
 	if t.refs.Add(-1) != 0 {
 		return
@@ -308,9 +307,8 @@ func (w *submissionWriter) run() {
 // submitter, so taking the queue at once would find only the request that
 // woke it and pay one syscall per request. When more requests are in flight
 // than queued, the writer yields once so runnable submitters enqueue first.
-// In flight counts shared admissions, which last until each caller's cleanup,
-// not streams: the reader frees a stream on delivery, and a caller whose
-// response just arrived is usually the next submitter.
+// In flight counts shared admissions, which last until each caller's cleanup:
+// a caller whose response just arrived is usually the next submitter.
 // There is no timer and no wait for future requests, and a lone caller never
 // yields.
 func (w *submissionWriter) take() (batch []*writeTicket, ok bool) {

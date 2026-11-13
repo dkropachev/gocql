@@ -16,6 +16,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -39,9 +40,7 @@ func receiveWithin[T any](t *testing.T, ch <-chan T, what string) T {
 // connCounters reads streams in use, registered calls, orphans and shared ops.
 func connCounters(c *Conn) (streams, calls, orphans, shared int) {
 	shared = c.InternalSharedOps()
-	c.InternalMu.Lock()
-	defer c.InternalMu.Unlock()
-	return c.InternalStreams.InUse(), c.InternalCalls.Len(), c.orphans, shared
+	return c.InternalStreams.InUse(), c.InternalCalls.Len(), int(c.orphans.Load()), shared
 }
 
 // expectReservationBlocked fails unless a reservation attempt times out.
@@ -379,9 +378,9 @@ func TestStreamObserverOncePerStream(t *testing.T) {
 	}
 }
 
-// The reader frees a live call's stream when it unregisters the call, before
-// the caller runs its cleanup.
-func TestReaderFreesDeliveredStream(t *testing.T) {
+// The reader unregisters a live call; the caller frees its stream in its
+// cleanup, so a delivered call keeps its stream until then.
+func TestCallerFreesDeliveredStream(t *testing.T) {
 	c, server := invPair(t, 4)
 	go c.InternalServe(c.InternalCtx)
 	go func() {
@@ -397,14 +396,258 @@ func TestReaderFreesDeliveredStream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s, calls, _, _ := connCounters(c); s != 0 || calls != 0 {
-		t.Fatalf("before cleanup: streams %d, calls %d, want 0", s, calls)
+	if s, calls, _, _ := connCounters(c); s != 1 || calls != 0 {
+		t.Fatalf("before cleanup: streams %d, calls %d, want 1 and 0", s, calls)
 	}
 	x.cleanup(req)
 	page.Owner.Release()
 	if s, calls, o, shared := connCounters(c); s != 0 || calls != 0 || o != 0 || shared != 0 {
 		t.Fatalf("after cleanup: streams %d, calls %d, orphans %d, shared %d", s, calls, o, shared)
 	}
+}
+
+// A typed request on a healthy connection, the reader's delivery included,
+// never takes the connection lock: requests complete while a test holds it.
+func TestTypedRequestTakesNoConnLock(t *testing.T) {
+	c, server := invPair(t, 4)
+	go c.InternalServe(c.InternalCtx)
+	go func() {
+		for {
+			stream, err := invReadRequest(server)
+			if err != nil {
+				return
+			}
+			server.Write(invFrame(4, stream, typedTestRowsBody([]byte("v"))))
+		}
+	}()
+	c.InternalMu.Lock()
+	done := make(chan error, 1)
+	go func() {
+		for range 50 {
+			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+			if err != nil {
+				done <- err
+				return
+			}
+			page.Owner.Release()
+		}
+		done <- nil
+	}()
+	select {
+	case err := <-done:
+		c.InternalMu.Unlock()
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		c.InternalMu.Unlock()
+		t.Fatal("typed requests blocked on the connection lock")
+	}
+	// The writer may drop its ticket reference, and with it the last shared
+	// admission, after the caller returned.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		s, calls, o, shared := connCounters(c)
+		if s == 0 && calls == 0 && o == 0 && shared == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("counters: streams %d, calls %d, orphans %d, shared %d", s, calls, o, shared)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// A reservation already waiting for an orphan's stream is woken by the free
+// that follows the orphan's late response.
+func TestStreamFreeWakesWaitingReservation(t *testing.T) {
+	c, server := invPair(t, 4)
+	go c.InternalServe(c.InternalCtx)
+	requested := make(chan int, 1)
+	go func() {
+		stream, err := invReadRequest(server)
+		if err != nil {
+			return
+		}
+		requested <- stream
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		page, err := c.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+		if page != nil {
+			page.Owner.Release()
+		}
+		done <- err
+	}()
+	stream := <-requested
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	reserved := make(chan error, 1)
+	go func() {
+		rctx, rcancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer rcancel()
+		r, err := c.InternalReserveExclusive(rctx)
+		if err == nil {
+			err = r.InternalClose(true)
+		}
+		reserved <- err
+	}()
+	// Let the reservation set its flag and find the orphan's stream in use.
+	deadline := time.Now().Add(5 * time.Second)
+	for !c.InternalExclusive() {
+		if time.Now().After(deadline) {
+			t.Fatal("reservation never started")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(10 * time.Millisecond)
+	select {
+	case err := <-reserved:
+		t.Fatalf("reservation finished while the orphan held its stream: %v", err)
+	default:
+	}
+	if _, err := server.Write(invFrame(4, stream, typedTestRowsBody(nil))); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-reserved; err != nil {
+		t.Fatalf("reservation: %v", err)
+	}
+}
+
+// A misplaced call the reader cannot put back is answered by the reader: its
+// slot was taken, or close may already have drained the table.
+func TestMisplacedCallAnsweredWhenNotPutBack(t *testing.T) {
+	expectAnswered := func(t *testing.T, call *InternalCallReq) {
+		t.Helper()
+		select {
+		case resp := <-call.InternalResp:
+			if resp.InternalErr == nil || resp.removedFromCalls {
+				t.Fatalf("got %+v, want an error without the stream", resp)
+			}
+		default:
+			t.Fatal("misplaced call not answered")
+		}
+	}
+	t.Run("SlotTaken", func(t *testing.T) {
+		c, _ := invPair(t, 4)
+		call, other := getCallReq(7), getCallReq(5)
+		c.InternalCalls.Set(5, other)
+		if err := c.misplacedCall(call, 5); err == nil {
+			t.Fatal("no error")
+		}
+		expectAnswered(t, call)
+		if c.InternalCalls.Get(5) != other {
+			t.Fatal("the slot's own call was replaced")
+		}
+		c.InternalCalls.Delete(5)
+	})
+	t.Run("Closed", func(t *testing.T) {
+		c, _ := invPair(t, 4)
+		call := getCallReq(7)
+		c.admission.Or(admissionClosed)
+		if err := c.misplacedCall(call, 5); err == nil {
+			t.Fatal("no error")
+		}
+		expectAnswered(t, call)
+		if n := c.InternalCalls.Len(); n != 0 {
+			t.Fatalf("%d calls left in the table", n)
+		}
+	})
+	t.Run("PutBack", func(t *testing.T) {
+		c, _ := invPair(t, 4)
+		call := getCallReq(7)
+		if err := c.misplacedCall(call, 5); err == nil {
+			t.Fatal("no error")
+		}
+		if c.InternalCalls.Get(5) != call {
+			t.Fatal("misplaced call not put back")
+		}
+		c.InternalCalls.Delete(5)
+	})
+}
+
+// Registrations and withdrawals racing close: every call registered is either
+// withdrawn by its caller or drained and answered by close, a registration
+// after close fails with ErrConnectionClosed, and the table ends empty.
+// Streams held outside the table push the workers' streams into chunks that
+// are not yet published, so chunk publication races close too.
+func TestCallTableCloseRace(t *testing.T) {
+	closeErr := errors.New("test close")
+	published := 0
+	var answered atomic.Int32 // calls close took over and answered
+	for round := range 200 {
+		c, _ := invPair(t, 4)
+		held := callChunkSize*(1+round%4) - round%8
+		for range held {
+			c.InternalStreams.GetStream()
+		}
+		fresh := held / callChunkSize // no chunk is published yet: held streams are not registered
+		const workers = 16
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		for range workers {
+			wg.Go(func() {
+				<-start
+				for {
+					call := getCallReq(0)
+					call.typed = true
+					if err := c.allocCall(call); err != nil {
+						if !errors.Is(err, runtimeerrors.ErrConnectionClosed) {
+							t.Errorf("round %d: allocCall: %v", round, err)
+						}
+						call.finishExec()
+						putCallReq(call)
+						return
+					}
+					if c.InternalRemoveCallIfOpen(call) {
+						c.releaseStream(call)
+						call.finishExec()
+						putCallReq(call)
+						continue
+					}
+					// Close owns the call: it answers, then waits for us.
+					select {
+					case resp := <-call.InternalResp:
+						if !errors.Is(resp.InternalErr, closeErr) {
+							t.Errorf("round %d: drained call got %v", round, resp.InternalErr)
+						}
+						answered.Add(1)
+					case <-time.After(5 * time.Second):
+						t.Errorf("round %d: registered call never answered after close", round)
+					}
+					call.finishExec()
+					return
+				}
+			})
+		}
+		close(start)
+		if round%3 != 0 {
+			// Otherwise close races the first registrations, chunk publication
+			// included; rounds with held%256 != 0 also cross a chunk boundary.
+			time.Sleep(time.Duration(rand.IntN(200)) * time.Microsecond)
+		}
+		c.InternalCloseWithError(closeErr)
+		wg.Wait()
+		if n := c.InternalCalls.Len(); n != 0 {
+			t.Fatalf("round %d: %d calls left in the table after close", round, n)
+		}
+		if c.InternalCalls.chunks[fresh].Load() != nil {
+			published++
+		}
+		if t.Failed() {
+			return
+		}
+	}
+	if published == 0 {
+		t.Fatal("no round registered into a chunk beyond the held streams")
+	}
+	if answered.Load() == 0 {
+		t.Fatal("close never took over a registered call")
+	}
+	t.Logf("%d rounds published a chunk while racing close", published)
 }
 
 // A reservation takes one connection out of shared use; the session-wide
