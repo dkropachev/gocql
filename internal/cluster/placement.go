@@ -56,12 +56,12 @@ type InternalV2TabletFeedbackKey struct {
 	InternalEnd                     int64
 }
 type InternalV2PendingTabletFeedback struct {
-	InternalStamp routing.InternalTabletFeedbackStamp
-	InternalHint  tablets.TabletInfo
 	// identity is the table's identity sessionResolveTabletFeedback returned
 	// for InternalStamp; a stamp not yet resolved is resolved on publication.
-	identity    string
-	observation routing.InternalTabletRangeObservation
+	identity      string
+	InternalStamp routing.InternalTabletFeedbackStamp
+	InternalHint  tablets.TabletInfo
+	observation   routing.InternalTabletRangeObservation
 }
 
 // applyV2TabletHint is retained for internal legacy callers/tests. Actual EXECUTE

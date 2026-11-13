@@ -143,15 +143,15 @@ const executionShards = 32
 // InternalMu: registration and drain each took that lock, so every
 // Bind+Exec serialized on it twice.
 type executionRegistry struct {
-	_      cacheLinePad
 	shards [executionShards]executionShard
+	_      cacheLinePad
 }
 
 // A shard spans two cache lines: the registry is only 8-byte aligned, so with
 // one line per shard its lock could share a line with a neighbour's.
 type executionShard struct {
-	mu   sync.Mutex
 	head *sessionExecution
+	mu   sync.Mutex
 	_    [2*cacheLineSize - 16]byte
 }
 
@@ -163,11 +163,11 @@ func (r *executionRegistry) shard(id uint64) *executionShard {
 // in a shard's list. The owner drains when the execution's own reference and
 // every writer's are released.
 type sessionExecution struct {
-	owner      inputOwner
 	l          *logicalExecution
 	parent     *inputOwner
 	shard      *executionShard
 	prev, next *sessionExecution
+	owner      inputOwner
 }
 
 // push and unlink run under the shard lock.

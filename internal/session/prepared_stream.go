@@ -26,8 +26,8 @@ type StreamStatement[P, R any] struct {
 type PreparedStream[P, R any] struct {
 	prepared *Prepared[P, codec.EmptyRecord]
 	decoder  codec.StreamRowDecoder[R]
-	columns  cqltype.Columns
 	plan     codec.StreamRowPlan[R]
+	columns  cqltype.Columns
 }
 
 func (s *Session) PrepareStream[P, R any](ctx context.Context, statement StreamStatement[P, R], options PrepareOptions) (*PreparedStream[P, R], error) {

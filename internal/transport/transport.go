@@ -50,18 +50,18 @@ func (c *Conn) InternalExecuteTypedInto(ctx context.Context, req *model.AttemptR
 // reads: what the attempt still holds when it returns.
 type typedExec struct {
 	conn *Conn
-	// The shared admission and the input reference move to the writer's
-	// request lease once the request is submitted; until then they are ours.
-	// The admission is taken together with the stream.
-	sharedHeld, inputHeld bool
+	// call is set once the call holds a stream.
+	call     *InternalCallReq
+	closeErr error
+	ticket   *writeTicket
 	// Custom payload views can belong to a previously received page. Each
 	// accepted attempt holds those leases just like canonical bound values.
 	payloadOwners []*wire.Lease
-	// call is set once the call holds a stream.
-	call                                    *InternalCallReq
+	// The shared admission and the input reference move to the writer's
+	// request lease once the request is submitted; until then they are ours.
+	// The admission is taken together with the stream.
+	sharedHeld, inputHeld                   bool
 	stopWaiting, releaseStream, recycleCall bool
-	closeErr                                error
-	ticket                                  *writeTicket
 }
 
 // cleanup releases what the attempt holds, in the reverse order of taking it,

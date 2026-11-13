@@ -26,23 +26,23 @@ import (
 // buffer on a miss; Release accepts only exact class sizes. Requests above
 // 8 MiB are plain allocations.
 type ReceiveCache struct {
+	classes [receiveCacheClasses]receiveClass
 	// idle is the bytes of buffers under the shared budget: every buffer of a
 	// class above receiveCacheFreeClassMax, and everything stacked above the
 	// first receiveClassFree entries of the smaller classes. One CAS enforces
 	// it. The remaining entries are covered by the fixed receiveCacheFreeBytes
 	// allowance and cost no atomic.
-	idle    atomic.Int64
-	epoch   atomic.Uint64
-	closed  atomic.Bool
-	over    atomic.Uint64 // misses above the largest class
-	_       [64]byte      // header off the first class's mutex
-	classes [receiveCacheClasses]receiveClass
+	idle   atomic.Int64
+	epoch  atomic.Uint64
+	over   atomic.Uint64 // misses above the largest class
+	closed atomic.Bool
+	_      [64]byte // header off the next object's cache line
 }
 
 type receiveClass struct {
-	mu           sync.Mutex
 	stack        [][]byte
 	hits, misses uint64
+	mu           sync.Mutex
 	_            [64]byte // keep neighbouring classes off one cache line
 }
 
