@@ -32,7 +32,7 @@ func TestPublicOptionsSnapshot(t *testing.T) {
 		NowInSeconds: cql.Some[int32](456), ShardID: cql.Some[uint32](2),
 		SerialConsistency: exec.SerialSerial, Consistency: cql.Some(cql.One),
 		HostID:          cql.Some(cql.MustParseUUID("00112233-4455-4677-8899-aabbccddeeff")),
-		IncludeMetadata: true, Idempotent: true, Trace: true,
+		IncludeMetadata: true, Idempotent: true, CQLTrace: true,
 	}
 	if got := roundTripOptions(t, want); !reflect.DeepEqual(got, want) {
 		t.Fatalf("public options lost settings:\n got %+v\nwant %+v", got, want)

@@ -208,7 +208,7 @@ func mergeResponseResult(result *model.Result, response *transport.InternalRespo
 	if len(response.TraceID()) == 16 {
 		var id cqltype.UUID
 		copy(id[:], response.TraceID())
-		result.AddTraceIDs(id)
+		result.AddCQLTraceIDs(id)
 	}
 	for _, entry := range response.Payload() {
 		if entry.Value.Valid {

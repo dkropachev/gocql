@@ -424,7 +424,7 @@ func TestQuery(t *testing.T) {
 			require.Zero(t, zero.Latency)
 			retryPolicy := sessionTestRetry{action: retry.Next, maxAttempts: 3}
 			observer := new(sessionTestObserver)
-			options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, SerialConsistency: exec.SerialLocal, PageSize: cql.Option[int32]{Value: 10, Set: true}, Prefetch: cql.Option[int]{Value: 1, Set: true}, Retry: retryPolicy, Trace: true, Observer: observer}
+			options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, SerialConsistency: exec.SerialLocal, PageSize: cql.Option[int32]{Value: 10, Set: true}, Prefetch: cql.Option[int]{Value: 1, Set: true}, Retry: retryPolicy, CQLTrace: true, Observer: observer}
 			resolved, err := resolveOptions(session, options)
 			require.NoError(t, err)
 			require.Equal(t, cql.All, resolved.InternalProfile.Consistency)
@@ -445,7 +445,7 @@ func TestQuery(t *testing.T) {
 				require.Equal(t, 1, result.Attempts)
 				require.Greater(t, result.Latency, time.Duration(0))
 				require.Equal(t, cql.All, result.AchievedConsistency)
-				require.NotEmpty(t, result.TraceIDs)
+				require.NotEmpty(t, result.CQLTraceIDs())
 			}
 			requests, attempts := observer.snapshot()
 			require.Len(t, requests, 3)

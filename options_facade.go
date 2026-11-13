@@ -23,7 +23,7 @@ func internalOptions(o exec.Options) implSession.Options {
 		NowInSeconds: o.NowInSeconds, ShardID: o.ShardID,
 		SerialConsistency: implSession.SerialOverride(o.SerialConsistency), Consistency: o.Consistency,
 		HostID: o.HostID, IncludeMetadata: o.IncludeMetadata,
-		Idempotent: o.Idempotent, Trace: o.Trace,
+		Idempotent: o.Idempotent, CQLTrace: o.CQLTrace,
 	}
 	if o.Profile != nil {
 		// The only copy of the caller's profile: compiling keeps it.

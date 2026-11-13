@@ -629,7 +629,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		s.privateStorage.info.Result.SetDiagnostics(nil, nil, nil)
 		if response != nil {
 			info := response.InternalInfo
-			s.privateStorage.info.Result.SetDiagnostics(info.Warnings(), info.TraceIDs(), info.CustomPayload())
+			s.privateStorage.info.Result.SetDiagnostics(info.Warnings(), info.CQLTraceIDs(), info.CustomPayload())
 		}
 		s.privateStorage.mu.Unlock()
 		// Latest failed-attempt extensions remain budgeted until replacement or

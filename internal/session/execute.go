@@ -230,7 +230,7 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 		}
 		wireKeyspace = ""
 	}
-	page, err := conn.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: statement, Keyspace: wireKeyspace, Prepare: true, Trace: options.Trace})
+	page, err := conn.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: statement, Keyspace: wireKeyspace, Prepare: true, Trace: options.CQLTrace})
 	if page != nil {
 		defer page.Owner.Release()
 	}
@@ -1236,7 +1236,7 @@ func (s *InternalSessionRuntime) newAttempt(w *model.AttemptRequest, conn *trans
 	if opts.NowInSeconds.Set && !version.NowInSeconds {
 		return cqltype.TypeValidation("now in seconds", "requires protocol v5")
 	}
-	*w = model.AttemptRequest{TabletVersionBlock: request.tabletVersionBlock, Statement: request.statement, Values: request.InternalValues.Framed, ValueCount: len(request.InternalValues.Cells), Consistency: consistency, PageSize: int(request.options.InternalProfile.PageSize), Keyspace: request.keyspace, Trace: opts.Trace, Payload: opts.CustomPayload}
+	*w = model.AttemptRequest{TabletVersionBlock: request.tabletVersionBlock, Statement: request.statement, Values: request.InternalValues.Framed, ValueCount: len(request.InternalValues.Cells), Consistency: consistency, PageSize: int(request.options.InternalProfile.PageSize), Keyspace: request.keyspace, Trace: opts.CQLTrace, Payload: opts.CustomPayload}
 	if !version.QueryKeyspace {
 		w.Keyspace = ""
 	}
