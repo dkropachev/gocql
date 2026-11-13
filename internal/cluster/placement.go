@@ -33,8 +33,9 @@ func (s *Core) CaptureTabletFeedback(info model.RoutingInfo, m *routing.Metadata
 
 // sessionResolveTabletFeedback completes a stamp captured for table k
 // with the values it deferred, as they were at capture, and returns the
-// table's identity: the snapshot's, which the stamp is valid only if the
-// schema source identity matched.
+// table's identity. A stamp with epoch maps is valid only if the schema
+// source identity matches the snapshot's, which is returned; one without
+// returns the schema source identity.
 func sessionResolveTabletFeedback(stamp *routing.InternalTabletFeedbackStamp, k routing.InternalMetadataTable) string {
 	identity, ok := schemaSourceIdentity(stamp.InternalSchemaSource, k.InternalKeyspace, k.InternalTable)
 	stamp.InternalValid = stamp.InternalValid && ok
