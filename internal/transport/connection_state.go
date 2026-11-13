@@ -39,12 +39,13 @@ import (
 var errOrphanBudget = errors.New("gocql: abandoned stream budget exceeded")
 
 // admission packs a connection's shared-operation count with two flags.
-// Shared operations enter with one CAS and leave with one Add. The flags change
-// only under InternalMu: closed once, by InternalCloseWithError; exclusive by a
-// reserver, which waits under InternalMu until the count, the calls (orphans
-// included) and the streams in use are all zero. A shared operation that finds
-// a flag set takes InternalMu and waits on the change channel, and one that
-// leaves an exclusive connection idle wakes the reserver the same way.
+// Shared operations enter with a CAS loop and leave with one Add. The flags
+// change only under InternalMu: closed once, by InternalCloseWithError;
+// exclusive by a reserver, which waits under InternalMu until the count, the
+// calls (orphans included) and the streams in use are all zero. A shared
+// operation that finds a flag set takes InternalMu and waits on the change
+// channel, and one that leaves an exclusive connection idle wakes the reserver
+// the same way.
 //
 // admissionClosed only gates admission. InternalClosed remains the authority
 // on whether the connection is closed; both are written under InternalMu.

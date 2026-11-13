@@ -23,14 +23,22 @@ import (
 // connection's admission counters return to zero, independent of how shared
 // admission and stream release are implemented.
 
-// connSharedOps reads the connection's shared-operation count.
-func connSharedOps(c *Conn) int {
-	return c.InternalSharedOps()
+// receiveWithin returns the next value from ch, failing the test if none
+// arrives within five seconds.
+func receiveWithin[T any](t *testing.T, ch <-chan T, what string) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for %s", what)
+		panic("unreachable")
+	}
 }
 
 // connCounters reads streams in use, registered calls, orphans and shared ops.
 func connCounters(c *Conn) (streams, calls, orphans, shared int) {
-	shared = connSharedOps(c)
+	shared = c.InternalSharedOps()
 	c.InternalMu.Lock()
 	defer c.InternalMu.Unlock()
 	return c.InternalStreams.InUse(), c.InternalCalls.Len(), c.orphans, shared
@@ -71,6 +79,9 @@ func expectReservation(t *testing.T, c *Conn) {
 
 func TestExclusiveWaitsForQueuedTicket(t *testing.T) {
 	c, server := invPair(t, 4)
+	if err := server.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	go c.InternalServe(c.InternalCtx)
 	// Occupy the writer with a packet the server does not read yet, so the next
 	// request stays queued behind it.
@@ -114,7 +125,7 @@ func TestExclusiveWaitsForQueuedTicket(t *testing.T) {
 	// Cancel the queued request: its caller returns and frees the stream, but
 	// the writer still holds the ticket and the shared admission with it.
 	cancel()
-	if err := <-done; !errors.Is(err, context.Canceled) {
+	if err := receiveWithin(t, done, "the cancelled request"); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 	expectReservationBlocked(t, c, "a ticket is queued in the writer")
@@ -147,6 +158,40 @@ func TestExclusiveWaitsForDeliveredButNotCleanedUp(t *testing.T) {
 	expectReservation(t, c)
 }
 
+// finishHook runs fn when a stream finishes.
+type finishHook struct{ fn func() }
+
+func (h finishHook) StreamContext(context.Context) StreamObserverContext { return h }
+func (finishHook) StreamStarted(ObservedStream)                          {}
+func (finishHook) StreamAbandoned(ObservedStream)                        {}
+func (h finishHook) StreamFinished(ObservedStream)                       { h.fn() }
+
+func TestExclusiveWaitsForCallerCleanup(t *testing.T) {
+	c, server := invPair(t, 4)
+	finished := 0
+	c.InternalStreamObserver = finishHook{fn: func() {
+		finished++
+		expectReservationBlocked(t, c, "the caller is cleaning up its call")
+	}}
+	go c.InternalServe(c.InternalCtx)
+	go func() {
+		stream, err := invReadRequest(server)
+		if err != nil {
+			return
+		}
+		server.Write(invFrame(4, stream, typedTestRowsBody([]byte("v"))))
+	}()
+	page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page.Owner.Release()
+	if finished != 1 {
+		t.Fatalf("stream finished %d times, want 1", finished)
+	}
+	expectReservation(t, c)
+}
+
 func TestExclusiveWaitsForOrphan(t *testing.T) {
 	c, server := invPair(t, 4)
 	go c.InternalServe(c.InternalCtx)
@@ -167,9 +212,9 @@ func TestExclusiveWaitsForOrphan(t *testing.T) {
 		}
 		done <- err
 	}()
-	stream := <-requested
+	stream := receiveWithin(t, requested, "the request")
 	cancel()
-	if err := <-done; !errors.Is(err, context.Canceled) {
+	if err := receiveWithin(t, done, "the cancelled request"); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 	expectReservationBlocked(t, c, "an orphan's response is outstanding")
@@ -206,10 +251,10 @@ func (s *countingStream) StreamFinished(ObservedStream)  { s.ended.Add(1) }
 func runMixedRequests(t *testing.T, c *Conn, server net.Conn) {
 	t.Helper()
 	responses := make(chan int, 4096)
-	serverDone := make(chan struct{})
+	stop := make(chan struct{})
+	t.Cleanup(func() { close(stop) })
 	var pending sync.WaitGroup
 	go func() {
-		defer close(serverDone)
 		for {
 			stream, err := invReadRequest(server)
 			if err != nil {
@@ -224,9 +269,14 @@ func runMixedRequests(t *testing.T, c *Conn, server net.Conn) {
 		}
 	}()
 	go func() {
-		for stream := range responses {
-			server.Write(invFrame(4, stream, typedTestRowsBody([]byte("v"))))
-			pending.Done()
+		for {
+			select {
+			case stream := <-responses:
+				server.Write(invFrame(4, stream, typedTestRowsBody([]byte("v"))))
+				pending.Done()
+			case <-stop:
+				return
+			}
 		}
 	}()
 	const workers, perWorker = 16, 63
@@ -279,7 +329,9 @@ func runMixedRequests(t *testing.T, c *Conn, server net.Conn) {
 	if c.Closed() {
 		t.Fatal("connection closed during the run")
 	}
-	pending.Wait()
+	answered := make(chan struct{})
+	go func() { pending.Wait(); close(answered) }()
+	receiveWithin(t, answered, "the server's responses")
 }
 
 func TestConnCountersReturnToZero(t *testing.T) {
@@ -289,7 +341,7 @@ func TestConnCountersReturnToZero(t *testing.T) {
 	expectReservation(t, c)
 }
 
-func TestStreamObserverOnceperStream(t *testing.T) {
+func TestStreamObserverOncePerStream(t *testing.T) {
 	c, server := invPair(t, 4)
 	observer := new(countingObserver)
 	c.InternalStreamObserver = observer

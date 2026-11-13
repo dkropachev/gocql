@@ -64,12 +64,12 @@ type typedExec struct {
 	ticket                                  *writeTicket
 }
 
-// cleanup releases what the attempt holds, in the reverse order of taking it.
+// cleanup releases what the attempt holds, in the reverse order of taking it,
+// except that the write ticket goes after the call: its last owner ends the
+// shared admission, so no exclusive reservation starts while the call is
+// still being cleaned up.
 func (x *typedExec) cleanup(req *model.AttemptRequest) {
 	c := x.conn
-	if x.ticket != nil {
-		x.ticket.release()
-	}
 	if call := x.call; call != nil {
 		if x.stopWaiting {
 			if resp, ok := call.stopWaiting(); ok {
@@ -93,6 +93,9 @@ func (x *typedExec) cleanup(req *model.AttemptRequest) {
 		if x.closeErr != nil {
 			c.InternalCloseWithError(x.closeErr)
 		}
+	}
+	if x.ticket != nil {
+		x.ticket.release()
 	}
 	for _, owner := range x.payloadOwners {
 		owner.Release()
@@ -178,8 +181,9 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 	}
 	var ticket *writeTicket
 	if c.coalesceWait == 0 {
-		// Hold both input and shared-connection admission until the persistent
-		// writer finishes, even if cancellation returns to the calling goroutine.
+		// Hand input and shared-connection admission to the ticket, which ends
+		// the admission once both the persistent writer and this caller released
+		// it, even if cancellation returns to the calling goroutine.
 		t := getTicket()
 		owner := &t.request
 		owner.conn, owner.payloads, owner.scratch = c, x.payloadOwners, scratch

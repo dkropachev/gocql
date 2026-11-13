@@ -1136,8 +1136,9 @@ func (c *Conn) InternalProcessFrameSource(ctx context.Context, src InternalFrame
 		// freed after the header only, so another request may take the ID
 		// while this frame's body is still being read. That is safe: the call
 		// is already out of the table, so the new request's response finds its
-		// own call, and this call's caller still holds its shared admission, so
-		// no exclusive reservation can start. A live caller's cleanup then
+		// own call, and an exclusive reservation pauses the reader only between
+		// frames (see requestPause), so it cannot take the socket mid-body even
+		// if this call's caller gives up meanwhile. A live caller's cleanup then
 		// skips the connection lock (see releaseStream); an orphan keeps its
 		// stream until releaseStream settles its count.
 		if !call.orphaned {
