@@ -331,7 +331,7 @@ func TestStream(t *testing.T) {
 			if cursor.NextInto(nil) || !errors.Is(cursor.Err(), runtimeerrors.ErrClosed) {
 				t.Fatal(cursor.Err())
 			}
-			if len(InternalRuntimeFor(s).executions) != 0 {
+			if InternalRuntimeFor(s).activeExecutions() != 0 {
 				t.Fatal("idle operation leaked")
 			}
 		})

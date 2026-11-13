@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
@@ -34,22 +33,70 @@ func TestRequestCount(t *testing.T) {
 		if _, err := Exec(context.Background(), s, b, CompiledOptions{}); err != nil {
 			t.Fatal(err)
 		}
-		data := implCluster.SessionData(s)
-		data.InternalSessionStateMu.Lock()
-		data.InternalIsClosing = true
-		data.InternalSessionStateMu.Unlock()
-		if _, err := Exec(context.Background(), s, b, CompiledOptions{}); !errors.Is(err, runtimeerrors.ErrClosed) {
+		// Hold every registry shard so that the second Exec takes its id and
+		// then waits to register while Close marks the session closing.
+		rt := InternalRuntimeFor(s)
+		release := holdRegistry(rt)
+		defer release()
+		refused := make(chan error, 1)
+		go func() { _, err := Exec(context.Background(), s, b, CompiledOptions{}); refused <- err }()
+		spinUntil(t, "Exec took its request id", func() bool { return rt.requestID.Load() == 2 })
+		closed := make(chan struct{})
+		go func() { _ = s.Close(); close(closed) }()
+		spinUntil(t, "Close marked the session", s.Closed)
+		release()
+		if err := receiveWithin(t, "Exec", refused); !errors.Is(err, runtimeerrors.ErrClosed) {
 			t.Fatalf("Exec on a closing session: %v", err)
 		}
-		data.InternalSessionStateMu.Lock()
-		data.InternalIsClosing = false
-		data.InternalSessionStateMu.Unlock()
-		rt := InternalRuntimeFor(s)
+		receiveWithin(t, "Close", closed)
 		if refused := rt.refusedRegistrations.Load(); refused != 1 || rt.requestID.Load() != 2 {
 			t.Fatalf("refused %d of %d ids, want 1 of 2", refused, rt.requestID.Load())
 		}
 		if m := s.Metrics(); m.Requests != 1 || m.InFlight != 0 {
 			t.Fatalf("Requests = %d, in flight %d; want 1, 0", m.Requests, m.InFlight)
+		}
+	})
+
+	// CloseRegistration: a registration holds a request id and waits for its
+	// registry shard while Close marks the session closing and starts listing
+	// executions. Close marked the session before the shard is released, so
+	// the registration, which checks the mark under the shard lock, must be
+	// refused with ErrClosed; it must never be registered after the mark,
+	// where Close's listing of its shard could miss it.
+	t.Run("CloseRegistration", func(t *testing.T) {
+		for range 20 {
+			s, _, peers := runtimeTestSession(t, 1)
+			void := binary.BigEndian.AppendUint32(nil, 1)
+			go serveLoopback(peers[0], func([]byte) []byte { return void }, nil)
+			b := runtimeQuery(t)
+			rt := InternalRuntimeFor(s)
+			release := holdRegistry(rt)
+			result := make(chan error, 1)
+			go func() { _, err := Exec(context.Background(), s, b, CompiledOptions{}); result <- err }()
+			spinUntil(t, "Exec took its request id", func() bool { return rt.requestID.Load() == 1 })
+			closed := make(chan error, 1)
+			go func() { closed <- s.Close() }()
+			spinUntil(t, "Close marked the session", s.Closed)
+			release()
+			// A registration that checked the mark before waiting for the
+			// lock would be registered after Close marked, and is listed only
+			// if Close reaches its shard after it: that is the miss.
+			if err := receiveWithin(t, "Exec", result); !errors.Is(err, runtimeerrors.ErrClosed) {
+				t.Fatalf("Exec on a session Close was stopping: %v", err)
+			}
+			if refused := rt.refusedRegistrations.Load(); refused != 1 {
+				t.Fatalf("refused %d registrations, want 1: the execution was registered", refused)
+			}
+			if cerr := receiveWithin(t, "Close", closed); cerr != nil {
+				t.Fatal(cerr)
+			}
+			if n := rt.activeExecutions(); n != 0 {
+				t.Fatalf("%d executions still registered after Close", n)
+			}
+			if m := s.Metrics(); m.InFlight != 0 {
+				t.Fatalf("in flight %d after Close, want 0", m.InFlight)
+			}
+			b.Close()
 		}
 	})
 
