@@ -1020,7 +1020,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			defer request.InternalOwner.InternalRelease()
 			started := time.Now()
 			response, err := s.executeTypedAttempt(ctx, conn, request, state, consistency)
-			event := routing.AttemptEvent{Attempt: index, Target: model.Target{HostID: conn.InternalHostID(), ShardID: request.routing.ShardID}, Started: started, Latency: time.Since(started), Err: err, Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded), Speculative: speculative}
+			event := routing.AttemptEvent{Attempt: index, Target: model.Target{HostID: conn.InternalHostID(), ShardID: request.routing.ShardID}, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded), Speculative: speculative}
 			if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0 {
 				event.Target.ShardID = cqltype.Option[uint32]{Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard), Set: true}
 			}
@@ -1144,12 +1144,12 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			// Automatic post-DDL work cannot cause a successful statement to replay.
 			if response != nil && response.SchemaChange() {
 				response.Owner.Release()
-				log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency)
+				log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency, outcome.event.CQLTraceID)
 				log.raise(cqltype.PartiallyExecuted)
 				return nil, log.error(fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", attemptErr), aggregate)
 			}
 			lastErr = attemptErr
-			attemptStatus := log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency)
+			attemptStatus := log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency, outcome.event.CQLTraceID)
 			if response != nil {
 				response.Owner.Release()
 			}

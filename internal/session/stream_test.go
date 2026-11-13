@@ -903,6 +903,44 @@ func TestStream(t *testing.T) {
 				})
 			}
 		})
+		t.Run("CQLTraceIDsAccumulateAcrossPages", func(t *testing.T) {
+			s, c, peer := rowStreamSession(t, 4, nil)
+			ids := []cqltype.UUID{{15: 1}, {15: 2}, {15: 3}}
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				for i, body := range [][]byte{runtimeRowsBody([]byte{1}, "a"), runtimeRowsBody([]byte{2}, "b"), runtimeRowsBody(nil, "c")} {
+					stream := typedTestReadRequest(t, c, peer)
+					frame := typedTestResponse(t, 4, stream, append(append([]byte{}, ids[i][:]...), body...))
+					frame[1] = 2 // tracing
+					if _, err := peer.Write(frame); err != nil {
+						t.Error(err)
+						return
+					}
+				}
+			}()
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			b := runtimeQuery(t)
+			defer b.Close()
+			cursor, err := RunStream(ctx, s, b, codec.StreamOneColumn(codec.StreamBlob), StreamOptions{Incremental: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			dst := make([]byte, 0, 8)
+			for cursor.NextInto(&dst) {
+			}
+			if err := cursor.Err(); err != nil {
+				t.Fatal(err)
+			}
+			if err := cursor.Close(); err != nil {
+				t.Fatal(err)
+			}
+			<-done
+			if info := cursor.Info(); info.Pages != 3 || len(info.Result.CQLTraceIDs()) != 3 || info.Result.CQLTraceIDs()[0] != ids[0] || info.Result.CQLTraceIDs()[2] != ids[2] {
+				t.Fatalf("pages %d, trace IDs %v, want %v", info.Pages, info.Result.CQLTraceIDs(), ids)
+			}
+		})
 	})
 
 	t.Run("Prepared", func(t *testing.T) {

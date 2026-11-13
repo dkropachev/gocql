@@ -429,6 +429,9 @@ func TestExecution(t *testing.T) {
 			observer.mu.Lock()
 			requests, attempts := observer.requests, observer.attempts
 			observer.mu.Unlock()
+			if len(attempts) == 1 && (!attempts[0].CQLTraceID.Set || attempts[0].CQLTraceID.Value != trace) {
+				t.Fatalf("attempt trace = %+v, want %v", attempts[0].CQLTraceID, trace)
+			}
 			if len(requests) != 1 || len(attempts) != 1 || requests[0].Err != nil || requests[0].Result.CQLTraceIDs()[0] != trace || requests[0].Result.Warnings()[0] != "warning" {
 				t.Fatalf("observer events = %+v / %+v", requests, attempts)
 			}
