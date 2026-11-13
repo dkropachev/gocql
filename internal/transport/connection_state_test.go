@@ -443,8 +443,77 @@ func TestTypedRequestTakesNoConnLock(t *testing.T) {
 		c.InternalMu.Unlock()
 		t.Fatal("typed requests blocked on the connection lock")
 	}
-	if s, calls, o, shared := connCounters(c); s != 0 || calls != 0 || o != 0 || shared != 0 {
-		t.Fatalf("counters: streams %d, calls %d, orphans %d, shared %d", s, calls, o, shared)
+	// The writer may drop its ticket reference, and with it the last shared
+	// admission, after the caller returned.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		s, calls, o, shared := connCounters(c)
+		if s == 0 && calls == 0 && o == 0 && shared == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("counters: streams %d, calls %d, orphans %d, shared %d", s, calls, o, shared)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// A reservation already waiting for an orphan's stream is woken by the free
+// that follows the orphan's late response.
+func TestStreamFreeWakesWaitingReservation(t *testing.T) {
+	c, server := invPair(t, 4)
+	go c.InternalServe(c.InternalCtx)
+	requested := make(chan int, 1)
+	go func() {
+		stream, err := invReadRequest(server)
+		if err != nil {
+			return
+		}
+		requested <- stream
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		page, err := c.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+		if page != nil {
+			page.Owner.Release()
+		}
+		done <- err
+	}()
+	stream := <-requested
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	reserved := make(chan error, 1)
+	go func() {
+		rctx, rcancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer rcancel()
+		r, err := c.InternalReserveExclusive(rctx)
+		if err == nil {
+			err = r.InternalClose(true)
+		}
+		reserved <- err
+	}()
+	// Let the reservation set its flag and find the orphan's stream in use.
+	deadline := time.Now().Add(5 * time.Second)
+	for !c.InternalExclusive() {
+		if time.Now().After(deadline) {
+			t.Fatal("reservation never started")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(10 * time.Millisecond)
+	select {
+	case err := <-reserved:
+		t.Fatalf("reservation finished while the orphan held its stream: %v", err)
+	default:
+	}
+	if _, err := server.Write(invFrame(4, stream, typedTestRowsBody(nil))); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-reserved; err != nil {
+		t.Fatalf("reservation: %v", err)
 	}
 }
 
@@ -508,6 +577,7 @@ func TestMisplacedCallAnsweredWhenNotPutBack(t *testing.T) {
 func TestCallTableCloseRace(t *testing.T) {
 	closeErr := errors.New("test close")
 	published := 0
+	var answered atomic.Int32 // calls close took over and answered
 	for round := range 200 {
 		c, _ := invPair(t, 4)
 		held := callChunkSize*(1+round%4) - round%8
@@ -544,6 +614,7 @@ func TestCallTableCloseRace(t *testing.T) {
 						if !errors.Is(resp.InternalErr, closeErr) {
 							t.Errorf("round %d: drained call got %v", round, resp.InternalErr)
 						}
+						answered.Add(1)
 					case <-time.After(5 * time.Second):
 						t.Errorf("round %d: registered call never answered after close", round)
 					}
@@ -572,6 +643,9 @@ func TestCallTableCloseRace(t *testing.T) {
 	}
 	if published == 0 {
 		t.Fatal("no round registered into a chunk beyond the held streams")
+	}
+	if answered.Load() == 0 {
+		t.Fatal("close never took over a registered call")
 	}
 	t.Logf("%d rounds published a chunk while racing close", published)
 }
