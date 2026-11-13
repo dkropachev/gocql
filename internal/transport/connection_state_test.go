@@ -406,3 +406,25 @@ func TestReaderFreesDeliveredStream(t *testing.T) {
 		t.Fatalf("after cleanup: streams %d, calls %d, orphans %d, shared %d", s, calls, o, shared)
 	}
 }
+
+// A reservation takes one connection out of shared use; the session-wide
+// receive cache belongs to every other connection too, so it must keep its
+// idle buffers.
+func TestExclusiveReservationKeepsReceiveCache(t *testing.T) {
+	c, _ := invPair(t, 4)
+	go c.InternalServe(c.InternalCtx)
+	cache := c.InternalCfg.InternalReceiveCache
+	buf, epoch := cache.Acquire(8192)
+	cache.Release(buf, epoch)
+	if n, _ := cache.Storage(); n == 0 {
+		t.Fatal("cache did not retain a released buffer")
+	}
+	expectReservation(t, c)
+	if n, objects := cache.Storage(); n == 0 || objects != 1 {
+		t.Fatalf("reservation drained the receive cache: %d bytes, %d objects", n, objects)
+	}
+	reused, _ := cache.Acquire(8192)
+	if &reused[0] != &buf[0] {
+		t.Fatal("cached buffer not reused after reservation")
+	}
+}

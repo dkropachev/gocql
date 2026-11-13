@@ -275,9 +275,6 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 		c.InternalMu.Unlock()
 		return nil, runtimeerrors.ErrNoStreams
 	}
-	if c.InternalCfg != nil {
-		c.InternalCfg.InternalReceiveCache.Clear()
-	}
 	// From here on beginShared fails its CAS and waits under InternalMu.
 	c.admission.Or(admissionExclusive)
 	c.changeLocked()
