@@ -102,8 +102,11 @@ func TestReceiveCache(t *testing.T) {
 	})
 	t.Run("MixedAdmission", func(t *testing.T) {
 		cache := new(ReceiveCache)
+		// Small frames of four classes, each deep enough to exhaust any
+		// shared object count, must not take the hot class's slots.
+		small := func(i int) int { return receiveCacheMinClass << (i % 4) }
 		for i := 0; i < 4; i++ {
-			cache.Release(make([]byte, 32+i), cache.epoch.Load())
+			cache.Release(make([]byte, small(i)), cache.epoch.Load())
 		}
 		hot, e := cache.Acquire(512 << 10)
 		hot[0] = 71
@@ -112,17 +115,18 @@ func TestReceiveCache(t *testing.T) {
 		if &reused[0] != &hot[0] || reused[0] != 71 {
 			t.Fatal("four tiny slots starved hot frame backing")
 		}
-		cache.Release(reused, e)
+		// Small buffers pile up while the hot frame is in use.
 		for i := 0; i < 1000; i++ {
-			cache.Release(make([]byte, 32+i%4), cache.epoch.Load())
+			cache.Release(make([]byte, small(i)), cache.epoch.Load())
 		}
+		cache.Release(reused, e)
 		reused, e = cache.Acquire(512 << 10)
 		if &reused[0] != &hot[0] {
-			t.Fatal("tiny traffic evicted hot frame")
+			t.Fatal("small traffic starved hot frame")
 		}
 		cache.Release(reused, e)
 		for i := 0; i < 64; i++ {
-			other, e := cache.Acquire(1024 + (i%4)*1024)
+			other, e := cache.Acquire(small(i))
 			cache.Release(other, e)
 			large, e := cache.Acquire(512 << 10)
 			if &large[0] != &hot[0] {

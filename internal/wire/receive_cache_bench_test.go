@@ -29,7 +29,7 @@ func BenchmarkReceiveCache(b *testing.B) {
 			}
 		})
 	})
-	// A loopback page frame just over 128 KiB, and a default-size page.
+	// A loopback page frame just under 128 KiB, and a default-size page.
 	for _, c := range []struct {
 		name string
 		size int
@@ -44,7 +44,7 @@ func BenchmarkReceiveCache(b *testing.B) {
 			}
 		})
 	}
-	// Eight goroutines contending for one class.
+	// Eight goroutines per GOMAXPROCS contending for one class.
 	b.Run("parallel8", func(b *testing.B) {
 		cache := new(ReceiveCache)
 		b.ReportAllocs()

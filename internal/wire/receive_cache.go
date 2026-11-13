@@ -16,18 +16,21 @@ import (
 //
 // Buffers are kept on size-class free lists, each a small mutex-protected LIFO
 // stack. Classes are powers of two from 4 KiB to 64 KiB, then four steps per
-// power of two (64, 80, 96, 112, 128, 160, ... KiB) up to 8 MiB, so a class
-// wastes at most 25% of a request. The class index is bit arithmetic: Acquire
+// power of two (64, 80, 96, 112, 128, 160, ... KiB) up to 8 MiB, so above
+// 64 KiB a class wastes at most 25% of a request; below it a class can be
+// twice the request, and every buffer is at least 4 KiB.
+// Each class holds at most receiveClassShared buffers past its free entries,
+// so idle buffers of one class never take another class's slots; only the
+// byte budget is shared. The class index is bit arithmetic: Acquire
 // pops from the smallest class that fits and allocates a full class-size
 // buffer on a miss; Release accepts only exact class sizes. Requests above
 // 8 MiB are plain allocations.
 type ReceiveCache struct {
-	// idle packs the bytes (low idleObjectShift bits) and count of buffers
-	// under the shared budget: every buffer of a class above
-	// receiveCacheFreeClassMax, and everything stacked above the first
-	// receiveClassFree entries of the smaller classes. One CAS enforces it.
-	// The remaining entries are covered by the fixed receiveCacheFreeBytes and
-	// receiveCacheFreeObjects allowance and cost no atomic.
+	// idle is the bytes of buffers under the shared budget: every buffer of a
+	// class above receiveCacheFreeClassMax, and everything stacked above the
+	// first receiveClassFree entries of the smaller classes. One CAS enforces
+	// it. The remaining entries are covered by the fixed receiveCacheFreeBytes
+	// allowance and cost no atomic.
 	idle    atomic.Int64
 	epoch   atomic.Uint64
 	closed  atomic.Bool
@@ -45,9 +48,10 @@ type receiveClass struct {
 
 const ReceiveCacheMaxBytes = 16 << 20
 
-// ReceiveCacheMaxObjects bounds idle buffers over all classes: 64 under the
-// shared budget plus the fixed allowance of the small classes.
-const ReceiveCacheMaxObjects = receiveCacheSharedObjects + receiveCacheFreeObjects
+// ReceiveCacheMaxObjects bounds idle buffers over all classes: up to
+// receiveClassShared budgeted buffers per class plus the fixed allowance of
+// the small classes.
+const ReceiveCacheMaxObjects = receiveCacheClasses*receiveClassShared + receiveCacheFreeObjects
 
 // ReceiveCacheMaxObject is the largest buffer Release retains.
 const ReceiveCacheMaxObject = 8 << 20
@@ -57,17 +61,16 @@ const (
 	receiveCacheMinClass = 1 << receiveCacheMinShift
 	// Classes: 4, 8, 16, 32, 64 KiB, then 4 steps in each of the 7 octaves
 	// (64 KiB, 128 KiB], ... (4 MiB, 8 MiB].
-	receiveCacheClasses       = 5 + 7*4
-	idleObjectShift           = 40
-	idleObjectUnit      int64 = 1 << idleObjectShift
+	receiveCacheClasses = 5 + 7*4
 	// The first receiveClassFree buffers of every class up to
 	// receiveCacheFreeClassMax (256 KiB) stay outside the shared budget, which
-	// leaves room for them within the hard limits. Larger classes (frames of
-	// 320 KiB and up) always go through the atomic budget.
-	receiveClassFree          = 2
-	receiveCacheFreeClassMax  = 12
-	receiveCacheSharedObjects = 64
-	receiveCacheFreeObjects   = receiveClassFree * (receiveCacheFreeClassMax + 1)
+	// leaves room for them within the hard limits. Larger classes (frames over
+	// 256 KiB) always go through the atomic budget.
+	receiveClassFree         = 2
+	receiveCacheFreeClassMax = 12
+	// receiveClassShared caps each class's budgeted buffers.
+	receiveClassShared      = 64
+	receiveCacheFreeObjects = receiveClassFree * (receiveCacheFreeClassMax + 1)
 	// 2 * (4+8+16+32+64 + 80..128 + 160..256 KiB).
 	receiveCacheFreeBytes = 2 * (124 + 416 + 832) << 10
 )
@@ -113,7 +116,7 @@ func (c *ReceiveCache) Acquire(n int) ([]byte, uint64) {
 		cl.hits++
 		cl.mu.Unlock()
 		if last >= receiveClassFreeEntries(idx) {
-			c.idle.Add(-(int64(cap(b)) + idleObjectUnit))
+			c.idle.Add(-int64(cap(b)))
 		}
 		return b[:n], epoch
 	}
@@ -151,14 +154,18 @@ func (c *ReceiveCache) Release(b []byte, epoch uint64) {
 		cl.mu.Unlock()
 		return
 	}
-	if len(cl.stack) >= receiveClassFreeEntries(idx) {
+	if free := receiveClassFreeEntries(idx); len(cl.stack) >= free {
+		if len(cl.stack)-free >= receiveClassShared {
+			cl.mu.Unlock()
+			return
+		}
 		for {
 			v := c.idle.Load()
-			if v&(idleObjectUnit-1)+int64(size) > ReceiveCacheMaxBytes-receiveCacheFreeBytes || v>>idleObjectShift >= receiveCacheSharedObjects {
+			if v+int64(size) > ReceiveCacheMaxBytes-receiveCacheFreeBytes {
 				cl.mu.Unlock()
 				return
 			}
-			if c.idle.CompareAndSwap(v, v+int64(size)+idleObjectUnit) {
+			if c.idle.CompareAndSwap(v, v+int64(size)) {
 				break
 			}
 		}
@@ -190,7 +197,7 @@ func (c *ReceiveCache) drain() {
 		cl := &c.classes[i]
 		cl.mu.Lock()
 		for j := receiveClassFreeEntries(i); j < len(cl.stack); j++ {
-			c.idle.Add(-(int64(cap(cl.stack[j])) + idleObjectUnit))
+			c.idle.Add(-int64(cap(cl.stack[j])))
 		}
 		clear(cl.stack)
 		cl.stack = nil
