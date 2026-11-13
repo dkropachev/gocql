@@ -4,6 +4,7 @@
 package settings
 
 import (
+	"context"
 	"time"
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
@@ -67,8 +68,22 @@ type SpeculationPolicy interface {
 }
 
 type Observer interface {
-	ObserveRequest(RequestEvent)
-	ObserveAttempt(routing.AttemptEvent)
+	StartRequest(context.Context, RequestStart) (context.Context, func(RequestEvent))
+	StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent)
+}
+
+// RequestStart describes a request as it is admitted, before its first
+// attempt.
+type RequestStart struct {
+	Started         time.Time
+	Statement       string
+	BatchStatements []string
+	Parameters      cqltype.Columns
+	Routing         model.RoutingInfo
+	ID              uint64
+	// CQLTrace reports that the request's attempts ask the cluster to record
+	// CQL trace sessions.
+	CQLTrace bool
 }
 type RequestEvent struct {
 	Err             error

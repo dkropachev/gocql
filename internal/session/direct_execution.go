@@ -110,6 +110,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		aggregate.HostID = conn.InternalHostID()
 		aggregate.AchievedConsistency = consistency
 		mergeResponseResult(&aggregate, response)
+		trace := responseTraceID(response)
 		if err == nil {
 			// Attempts run one at a time here, and a failed attempt's response
 			// is released before the next; later pages get their own storage.
@@ -131,7 +132,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 				if log == nil {
 					log = new(attemptLog)
 				}
-				log.fail(err, conn, attempt, consistency)
+				log.fail(err, conn, attempt, consistency, trace)
 				log.raise(cqltype.PartiallyExecuted)
 				return failure(fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", err))
 			}
@@ -139,7 +140,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		if log == nil {
 			log = new(attemptLog)
 		}
-		attemptStatus := log.fail(err, conn, attempt, consistency)
+		attemptStatus := log.fail(err, conn, attempt, consistency, trace)
 		decision := retry.Decision{}
 		if policy := request.options.InternalProfile.Retry; policy != nil {
 			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
@@ -205,10 +206,8 @@ func mergeResponseResult(result *model.Result, response *transport.InternalRespo
 		return
 	}
 	result.AddWarnings(response.Warnings()...)
-	if len(response.TraceID()) == 16 {
-		var id cqltype.UUID
-		copy(id[:], response.TraceID())
-		result.AddTraceIDs(id)
+	if id := response.CQLTraceID(); id.Set {
+		result.AddCQLTraceIDs(id.Value)
 	}
 	for _, entry := range response.Payload() {
 		if entry.Value.Valid {

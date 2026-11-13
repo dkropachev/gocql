@@ -116,12 +116,12 @@ func TestBatch(t *testing.T) {
 			require.Equal(t, retryPolicy, inherited.InternalProfile.Retry)
 			override := sessionTestRetry{action: retry.Next, maxAttempts: 4}
 			observer := new(sessionTestObserver)
-			options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, Retry: override, Trace: true, Observer: observer}
+			options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, Retry: override, CQLTrace: true, Observer: observer}
 			resolved, err := resolveOptions(session, options)
 			require.NoError(t, err)
 			require.Equal(t, override, resolved.InternalProfile.Retry)
 			require.Equal(t, cql.One, resolved.InternalProfile.Consistency)
-			require.True(t, resolved.InternalOptions.Trace)
+			require.True(t, resolved.InternalOptions.CQLTrace)
 			// Native batch kind remains explicit on Batch.Kind.
 			// Per-request Result/Observer replace attempts/latency on a mutable batch.
 			require.Zero(t, (gocql.Result{}).Attempts)
@@ -136,7 +136,7 @@ func TestBatch(t *testing.T) {
 				require.Equal(t, 1, result.Attempts)
 				require.Greater(t, result.Latency, time.Duration(0))
 				require.Equal(t, cql.One, result.AchievedConsistency)
-				require.NotEmpty(t, result.TraceIDs)
+				require.NotEmpty(t, result.CQLTraceIDs())
 			}
 			requests, attempts := observer.snapshot()
 			require.Len(t, requests, 2)

@@ -18,6 +18,13 @@ type countingObserver struct{ requests atomic.Uint64 }
 func (o *countingObserver) ObserveRequest(settings.RequestEvent) { o.requests.Add(1) }
 func (o *countingObserver) ObserveAttempt(routing.AttemptEvent)  {}
 
+func (o *countingObserver) StartRequest(ctx context.Context, _ settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
+	return ctx, o.ObserveRequest
+}
+func (o *countingObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+	return o.ObserveAttempt
+}
+
 // TestRequestCount checks that Requests, derived from the request ids minus
 // the refused registrations, counts exactly the admitted requests.
 func TestRequestCount(t *testing.T) {

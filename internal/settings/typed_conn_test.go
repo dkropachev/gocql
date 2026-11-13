@@ -409,7 +409,7 @@ func TestTypedConn(t *testing.T) {
 			if unprepared, ok := errors.AsType[*protocol.UnpreparedError](err); !ok || !bytes.Equal(unprepared.StatementID, []byte{1, 2}) {
 				t.Fatalf("wrong error %v", err)
 			}
-			if page == nil || len(page.Warnings()) != 1 || len(page.TraceID()) != 16 || len(page.Payload()) != 1 {
+			if page == nil || len(page.Warnings()) != 1 || !page.CQLTraceID().Set || len(page.Payload()) != 1 {
 				t.Fatal("error metadata lost")
 			}
 			if got := string(page.Payload()[0].Value.Value.OwnedBytes()); got != "val" {

@@ -7,11 +7,14 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
@@ -25,6 +28,19 @@ func serverError(t *testing.T, stream int, code protocol.ErrorCode, body []byte)
 	b = binary.BigEndian.AppendUint16(b, 4)
 	b = append(b, "test"...)
 	response := typedTestResponse(t, 4, stream, append(b, body...))
+	response[4] = 0 // OpError
+	return response
+}
+
+// tracedServerError is serverError carrying the CQL trace session id.
+func tracedServerError(t *testing.T, stream int, code protocol.ErrorCode, body []byte, id cqltype.UUID) []byte {
+	t.Helper()
+	b := append([]byte{}, id[:]...)
+	b = binary.BigEndian.AppendUint32(b, uint32(code))
+	b = binary.BigEndian.AppendUint16(b, 4)
+	b = append(b, "test"...)
+	response := typedTestResponse(t, 4, stream, append(b, body...))
+	response[1] = frm.FlagTracing
 	response[4] = 0 // OpError
 	return response
 }
@@ -151,6 +167,27 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 		failure := requestError(t, err)
 		if len(failure.Attempts) != 2 || failure.Attempts[0].Status != cqlerr.MaybeExecuted || failure.Attempts[1].Status != cqlerr.NotExecuted || failure.Attempts[0].HostID == (cqlerr.AttemptFailure{}).HostID {
 			t.Fatalf("attempt history %+v", failure.Attempts)
+		}
+	})
+
+	t.Run("TracedAttemptsKeepTraceIDs", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		ids := []cqltype.UUID{{15: 1}, {15: 2}}
+		err := run(t, ctx, &recordingRetry{limit: 2}, func(attempt, stream int) []byte {
+			return tracedServerError(t, stream, protocol.CodeUnavailable, unavailableBody(), ids[attempt])
+		}, 2)
+		failure := requestError(t, err)
+		if len(failure.Attempts) != 2 {
+			t.Fatalf("attempt history %+v", failure.Attempts)
+		}
+		for i, attempt := range failure.Attempts {
+			if !attempt.CQLTraceID.Set || attempt.CQLTraceID.Value != ids[i] {
+				t.Fatalf("attempt %d trace = %+v, want %v", i+1, attempt.CQLTraceID, ids[i])
+			}
+		}
+		if got := failure.Result.CQLTraceIDs(); !slices.Equal(got, ids) {
+			t.Fatalf("result trace IDs = %v, want %v", got, ids)
 		}
 	})
 

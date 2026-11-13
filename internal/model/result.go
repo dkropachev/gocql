@@ -37,8 +37,9 @@ func (r Result) Warnings() []string {
 	return r.diag.warnings
 }
 
-// TraceIDs returns the trace session IDs of traced attempts.
-func (r Result) TraceIDs() []UUID {
+// CQLTraceIDs returns the server-side CQL trace session IDs of traced
+// attempts; package cqltrace reads them.
+func (r Result) CQLTraceIDs() []UUID {
 	if r.diag == nil {
 		return nil
 	}
@@ -74,8 +75,8 @@ func (r *Result) AddWarnings(warnings ...string) {
 	}
 }
 
-// AddTraceIDs appends trace session IDs.
-func (r *Result) AddTraceIDs(ids ...UUID) {
+// AddCQLTraceIDs appends CQL trace session IDs.
+func (r *Result) AddCQLTraceIDs(ids ...UUID) {
 	if len(ids) > 0 {
 		d := r.own()
 		d.traceIDs = append(d.traceIDs, ids...)
@@ -116,7 +117,7 @@ func MergeResult(dst *Result, src Result) {
 	dst.Latency += src.Latency
 	dst.Rows += src.Rows
 	dst.AddWarnings(src.Warnings()...)
-	dst.AddTraceIDs(src.TraceIDs()...)
+	dst.AddCQLTraceIDs(src.CQLTraceIDs()...)
 	dst.AddCustomPayload(src.CustomPayload()...)
 	dst.AchievedConsistency = src.AchievedConsistency
 }

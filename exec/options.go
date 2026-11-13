@@ -48,7 +48,12 @@ type Options struct {
 	SerialConsistency SerialOverride
 	IncludeMetadata   bool
 	Idempotent        bool
-	Trace             bool
+	// CQLTrace asks the cluster to record a CQL trace session of every
+	// attempt in system_traces. Result.CQLTraceIDs and
+	// cqlerr.AttemptFailure.CQLTraceID name the sessions; package cqltrace
+	// reads them. This is server-side tracing, unrelated to client-side
+	// instrumentation such as OpenTelemetry, which hooks config.Observer.
+	CQLTrace bool
 }
 
 // SerialOverride chooses the serial consistency an execution sends, relative
@@ -88,7 +93,9 @@ func (o CompiledOptions) Values() Options {
 type PrepareOptions struct {
 	Keyspace string
 	HostID   cql.Option[cql.UUID]
-	Trace    bool
+	// CQLTrace records a server-side CQL trace session of the PREPARE. The
+	// driver does not report its session ID.
+	CQLTrace bool
 }
 
 // StreamOptions chooses caller-storage decoding and its receive mode. The zero
@@ -112,7 +119,7 @@ func publicOptions(o implSession.Options) Options {
 		NowInSeconds: o.NowInSeconds, ShardID: o.ShardID,
 		SerialConsistency: SerialOverride(o.SerialConsistency), Consistency: o.Consistency,
 		HostID: o.HostID, IncludeMetadata: o.IncludeMetadata,
-		Idempotent: o.Idempotent, Trace: o.Trace,
+		Idempotent: o.Idempotent, CQLTrace: o.CQLTrace,
 	}
 	if o.Profile != nil {
 		profile := implSettings.InternalProfileToPublic[config.Profile](*o.Profile)

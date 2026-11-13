@@ -14,7 +14,6 @@ import (
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/metrics"
-	"github.com/scylladb/gocql/v2/trace"
 )
 
 // Session owns cluster metadata, pooled connections and typed executions.
@@ -35,7 +34,7 @@ func (s *Session[D]) Prepare[P, R any](ctx context.Context, statement cql.Statem
 	switch len(options) {
 	case 0:
 	case 1:
-		o = implSession.PrepareOptions{Keyspace: options[0].Keyspace, HostID: options[0].HostID, Trace: options[0].Trace}
+		o = implSession.PrepareOptions{Keyspace: options[0].Keyspace, HostID: options[0].HostID, CQLTrace: options[0].CQLTrace}
 	default:
 		return nil, tooManyPrepareOptions()
 	}
@@ -53,7 +52,7 @@ func (s *Session[D]) PrepareStream[P, R any](ctx context.Context, statement stre
 	switch len(options) {
 	case 0:
 	case 1:
-		o = implSession.PrepareOptions{Keyspace: options[0].Keyspace, HostID: options[0].HostID, Trace: options[0].Trace}
+		o = implSession.PrepareOptions{Keyspace: options[0].Keyspace, HostID: options[0].HostID, CQLTrace: options[0].CQLTrace}
 	default:
 		return nil, tooManyPrepareOptions()
 	}
@@ -186,11 +185,6 @@ func (s *Session[D]) Metrics() metrics.Snapshot { return s.internal().Metrics() 
 // performing that refresh use the configured metadata timeout.
 func (s *Session[D]) RefreshMetadata(ctx context.Context) error {
 	return s.internal().RefreshMetadata(ctx)
-}
-
-// Trace reads a trace's events, polling for readiness within ctx.
-func (s *Session[D]) Trace(ctx context.Context, id cql.UUID) (trace.Info, error) {
-	return s.internal().Trace(ctx, id)
 }
 
 // Subscribe subscribes to matching session events. Close the subscription when

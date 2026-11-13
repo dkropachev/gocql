@@ -35,7 +35,7 @@ type Options struct {
 	SerialConsistency SerialOverride
 	IncludeMetadata   bool
 	Idempotent        bool
-	Trace             bool
+	CQLTrace          bool
 }
 
 // SerialOverride chooses the serial consistency of an execution relative to

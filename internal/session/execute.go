@@ -230,7 +230,7 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 		}
 		wireKeyspace = ""
 	}
-	page, err := conn.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: statement, Keyspace: wireKeyspace, Prepare: true, Trace: options.Trace})
+	page, err := conn.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: statement, Keyspace: wireKeyspace, Prepare: true, Trace: options.CQLTrace})
 	if page != nil {
 		defer page.Owner.Release()
 	}
@@ -512,8 +512,11 @@ func selectPreparedMetadata(state *InternalPreparedState, host cqltype.UUID, pre
 }
 
 type logicalExecution struct {
-	started        time.Time
-	observer       settings.Observer
+	started  time.Time
+	observer settings.Observer
+	// observerCtx and requestEnd are what observer.StartRequest returned.
+	observerCtx    context.Context
+	requestEnd     func(settings.RequestEvent)
 	ddlCoordinator atomic.Pointer[cqltype.UUID]
 	rt             *InternalSessionRuntime
 	request        *InternalExecutionRequest
@@ -546,19 +549,53 @@ func (l *logicalExecution) InternalFinish(result model.Result, err error) {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		rt.cancelled.Add(1)
 	}
-	if l.observer != nil {
+	if end := l.requestEnd; end != nil {
 		perfAdd(0, 1)
-		event := settings.RequestEvent{ID: l.id, Statement: l.request.statement, Parameters: l.request.InternalValues.Columns, Routing: l.request.routing, Result: model.CloneResult(result), Err: err}
-		if state := l.request.InternalPrepared(); state != nil {
-			event.Parameters = state.InternalParameters
-		}
-		if l.request.batch != nil {
-			for _, entry := range l.request.batch.entries {
-				event.BatchStatements = append(event.BatchStatements, entry.statement)
-			}
-		}
-		rt.ObserveSafely(func() { l.observer.ObserveRequest(event) })
+		event := settings.RequestEvent{ID: l.id, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), Result: model.CloneResult(result), Err: err}
+		rt.ObserveSafely(func() { end(event) })
 	}
+}
+
+// startRequest calls the observer's StartRequest with the caller's context.
+func (l *logicalExecution) startRequest(ctx context.Context) {
+	l.observerCtx = ctx
+	start := settings.RequestStart{ID: l.id, Started: l.started, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), CQLTrace: l.request.options.InternalOptions.CQLTrace}
+	l.rt.ObserveSafely(func() {
+		observerCtx, end := l.observer.StartRequest(ctx, start)
+		if observerCtx != nil {
+			l.observerCtx = observerCtx
+		}
+		l.requestEnd = end
+	})
+}
+
+// startAttempt calls the observer's StartAttempt, returning the function to
+// call with the completed attempt, or nil.
+func (l *logicalExecution) startAttempt(start routing.AttemptStart) func(routing.AttemptEvent) {
+	if l == nil || l.observer == nil {
+		return nil
+	}
+	var end func(routing.AttemptEvent)
+	l.rt.ObserveSafely(func() { end = l.observer.StartAttempt(l.observerCtx, start) })
+	return end
+}
+
+func (l *logicalExecution) requestParameters() cqltype.Columns {
+	if state := l.request.InternalPrepared(); state != nil {
+		return state.InternalParameters
+	}
+	return l.request.InternalValues.Columns
+}
+
+func (l *logicalExecution) batchStatements() []string {
+	if l.request.batch == nil {
+		return nil
+	}
+	statements := make([]string, 0, len(l.request.batch.entries))
+	for _, entry := range l.request.batch.entries {
+		statements = append(statements, entry.statement)
+	}
+	return statements
 }
 
 // runtimeOf returns s's runtime, or nil for a nil session so that the
@@ -691,6 +728,9 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 		return nil, nil, nil, err
 	}
 	rt.inflight.Add(1)
+	if observer != nil {
+		logical.startRequest(ctx)
+	}
 	if values.Timestamp.Set {
 		request.timestamp, request.hasTimestamp = values.Timestamp.Value, true
 	} else if mode := rt.config.Timestamps.Mode(); mode != settings.ServerTimestampMode && !request.routing.Conditional && !request.hasCounter {
@@ -1018,18 +1058,21 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 		}
 		go func() {
 			defer request.InternalOwner.InternalRelease()
-			started := time.Now()
-			response, err := s.executeTypedAttempt(ctx, conn, request, state, consistency)
-			event := routing.AttemptEvent{Attempt: index, Target: model.Target{HostID: conn.InternalHostID(), ShardID: request.routing.ShardID}, Started: started, Latency: time.Since(started), Err: err, Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded), Speculative: speculative}
+			target := model.Target{HostID: conn.InternalHostID(), ShardID: request.routing.ShardID}
 			if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0 {
-				event.Target.ShardID = cqltype.Option[uint32]{Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard), Set: true}
+				target.ShardID = cqltype.Option[uint32]{Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard), Set: true}
 			}
+			var requestID uint64
 			if request.InternalLogical != nil {
-				event.RequestID = request.InternalLogical.id
-				if request.InternalLogical.observer != nil {
-					perfAdd(1, 1)
-					s.Core.ObserveSafely(func() { request.InternalLogical.observer.ObserveAttempt(event) })
-				}
+				requestID = request.InternalLogical.id
+			}
+			started := time.Now()
+			end := request.InternalLogical.startAttempt(routing.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Started: started, Speculative: speculative})
+			response, err := s.executeTypedAttempt(ctx, conn, request, state, consistency)
+			event := routing.AttemptEvent{RequestID: requestID, Attempt: index, Target: target, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded), Speculative: speculative}
+			if end != nil {
+				perfAdd(1, 1)
+				s.Core.ObserveSafely(func() { end(event) })
 			}
 			if policy := request.options.InternalProfile.Routing; policy != nil {
 				s.Core.ObserveSafely(func() { policy.Observe(event) })
@@ -1144,12 +1187,12 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			// Automatic post-DDL work cannot cause a successful statement to replay.
 			if response != nil && response.SchemaChange() {
 				response.Owner.Release()
-				log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency)
+				log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency, outcome.event.CQLTraceID)
 				log.raise(cqltype.PartiallyExecuted)
 				return nil, log.error(fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", attemptErr), aggregate)
 			}
 			lastErr = attemptErr
-			attemptStatus := log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency)
+			attemptStatus := log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency, outcome.event.CQLTraceID)
 			if response != nil {
 				response.Owner.Release()
 			}
@@ -1236,7 +1279,7 @@ func (s *InternalSessionRuntime) newAttempt(w *model.AttemptRequest, conn *trans
 	if opts.NowInSeconds.Set && !version.NowInSeconds {
 		return cqltype.TypeValidation("now in seconds", "requires protocol v5")
 	}
-	*w = model.AttemptRequest{TabletVersionBlock: request.tabletVersionBlock, Statement: request.statement, Values: request.InternalValues.Framed, ValueCount: len(request.InternalValues.Cells), Consistency: consistency, PageSize: int(request.options.InternalProfile.PageSize), Keyspace: request.keyspace, Trace: opts.Trace, Payload: opts.CustomPayload}
+	*w = model.AttemptRequest{TabletVersionBlock: request.tabletVersionBlock, Statement: request.statement, Values: request.InternalValues.Framed, ValueCount: len(request.InternalValues.Cells), Consistency: consistency, PageSize: int(request.options.InternalProfile.PageSize), Keyspace: request.keyspace, Trace: opts.CQLTrace, Payload: opts.CustomPayload}
 	if !version.QueryKeyspace {
 		w.Keyspace = ""
 	}

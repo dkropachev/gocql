@@ -33,6 +33,7 @@ import (
 
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -602,18 +603,27 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		}
 		wireRequest.Lease = request.InternalOwner.InternalWriterLease(request.InternalValues.Framed)
 		observed := request.source().observe()
+		conn := s.privateStorage.reservation.InternalConn
+		target := model.Target{HostID: conn.InternalHostID()}
+		if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0 {
+			target.ShardID = cqltype.Option[uint32]{Set: true, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}
+		}
 		started := time.Now()
+		end := request.InternalLogical.startAttempt(implRouting.AttemptStart{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started})
 		response, err := s.privateStorage.reservation.InternalExchange(pagectx, wireRequest)
 		wireRequest.Lease.Release()
-		conn := s.privateStorage.reservation.InternalConn
-		event := implRouting.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: model.Target{HostID: conn.InternalHostID()}, Started: started, Latency: time.Since(started), Err: err, Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
-		if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0 {
-			event.Target.ShardID = cqltype.Option[uint32]{Set: true, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}
+		var traces []cqltype.UUID
+		if response != nil {
+			traces = response.InternalInfo.CQLTraceIDs()
+		}
+		event := implRouting.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started, Latency: time.Since(started), Err: err, Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
+		if len(traces) > 0 {
+			event.CQLTraceID = cqltype.Option[cqltype.UUID]{Value: traces[len(traces)-1], Set: true}
 		}
 		rt := InternalRuntimeFor(s.privateStorage.session)
 		rt.attempts.Add(1)
-		if observer := request.InternalLogical.observer; observer != nil {
-			s.privateStorage.session.ObserveSafely(func() { observer.ObserveAttempt(event) })
+		if end != nil {
+			s.privateStorage.session.ObserveSafely(func() { end(event) })
 		}
 		if policy := request.options.InternalProfile.Routing; policy != nil {
 			s.privateStorage.session.ObserveSafely(func() { policy.Observe(event) })
@@ -624,13 +634,19 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		s.privateStorage.info.Result.HostID = event.Target.HostID
 		s.privateStorage.info.Result.AchievedConsistency = consistency
 
-		// Result extensions describe the latest attempt, including terminal server
-		// errors after output. The metadata parser already owns their bytes.
-		s.privateStorage.info.Result.SetDiagnostics(nil, nil, nil)
+		// Warnings and custom payload describe the latest attempt, including
+		// terminal server errors after output; the metadata parser already owns
+		// their bytes. CQL trace IDs accumulate across attempts and pages, since
+		// each names a trace session the caller may want to read.
+		var warnings []string
+		var payload []model.PayloadEntry
 		if response != nil {
-			info := response.InternalInfo
-			s.privateStorage.info.Result.SetDiagnostics(info.Warnings(), info.TraceIDs(), info.CustomPayload())
+			warnings, payload = response.InternalInfo.Warnings(), response.InternalInfo.CustomPayload()
 		}
+		if prior := s.privateStorage.info.Result.CQLTraceIDs(); len(prior) > 0 {
+			traces = slices.Concat(prior, traces)
+		}
+		s.privateStorage.info.Result.SetDiagnostics(warnings, traces, payload)
 		s.privateStorage.mu.Unlock()
 		// Latest failed-attempt extensions remain budgeted until replacement or
 		// terminal cleanup, including while another attempt allocates metadata.
@@ -675,7 +691,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		if response != nil {
 			s.privateStorage.attemptMetadata = response
 		}
-		attemptStatus := log.fail(err, conn, attempt, consistency)
+		attemptStatus := log.fail(err, conn, attempt, consistency, event.CQLTraceID)
 		// OutputStarted is set before Reset, so no decoder/partial row ever replays.
 		if s.Info().OutputStarted {
 			return err

@@ -28,9 +28,9 @@ type attemptLog struct {
 // out of line so the request loops keep their happy-path frame small.
 //
 //go:noinline
-func (l *attemptLog) fail(err error, conn *transport.Conn, number int, consistency cqltype.Consistency) cqltype.ExecutionStatus {
+func (l *attemptLog) fail(err error, conn *transport.Conn, number int, consistency cqltype.Consistency, trace cqltype.Option[cqltype.UUID]) cqltype.ExecutionStatus {
 	status := runtimeerrors.ExecutionStatusOf(err)
-	failure := AttemptFailure{Err: err, Number: number, Consistency: consistency, Status: status}
+	failure := AttemptFailure{Err: err, Number: number, Consistency: consistency, Status: status, CQLTraceID: trace}
 	if conn != nil {
 		failure.Address = conn.Address()
 		failure.HostID = conn.InternalHostID()
@@ -41,6 +41,14 @@ func (l *attemptLog) fail(err error, conn *transport.Conn, number int, consisten
 	l.failures = append(l.failures, failure)
 	l.raise(status)
 	return status
+}
+
+// responseTraceID returns the CQL trace session a possibly nil response names.
+func responseTraceID(response *transport.InternalResponsePage) cqltype.Option[cqltype.UUID] {
+	if response == nil {
+		return cqltype.Option[cqltype.UUID]{}
+	}
+	return response.CQLTraceID()
 }
 
 // raise records that the request reached at least status.

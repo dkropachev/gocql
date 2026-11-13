@@ -77,11 +77,15 @@ func (r *ResponseData) PkIndexes() []int {
 	}
 	return r.Extras.PkIndexes
 }
-func (r *ResponseData) TraceID() []byte {
-	if r.Extras == nil {
-		return nil
+
+// CQLTraceID returns the CQL trace session the response names, if any.
+func (r *ResponseData) CQLTraceID() Option[UUID] {
+	var id Option[UUID]
+	if r.Extras != nil && len(r.Extras.TraceID) == len(id.Value) {
+		copy(id.Value[:], r.Extras.TraceID)
+		id.Set = true
 	}
-	return r.Extras.TraceID
+	return id
 }
 func (r *ResponseData) Payload() []PayloadEntry {
 	if r.Extras == nil {

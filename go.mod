@@ -19,7 +19,6 @@ module github.com/scylladb/gocql/v2
 
 require (
 	github.com/google/go-cmp v0.7.0
-	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.20.0
 	github.com/pierrec/lz4/v4 v4.1.29
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3

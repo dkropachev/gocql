@@ -8,7 +8,7 @@ import "testing"
 func TestResultDiagnostics(t *testing.T) {
 	t.Run("ZeroValue", func(t *testing.T) {
 		var empty Result
-		if empty.Warnings() != nil || empty.TraceIDs() != nil || empty.CustomPayload() != nil {
+		if empty.Warnings() != nil || empty.CQLTraceIDs() != nil || empty.CustomPayload() != nil {
 			t.Fatal("empty result reports diagnostics")
 		}
 	})

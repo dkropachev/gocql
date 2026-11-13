@@ -3,6 +3,7 @@
 package integration
 
 import (
+	"context"
 	"sync"
 
 	"github.com/scylladb/gocql/v2/config"
@@ -21,6 +22,13 @@ func (o *v2TabletAttemptObserver) ObserveAttempt(event config.AttemptEvent) {
 	if event.Err == nil {
 		o.targets = append(o.targets, event.Target)
 	}
+}
+
+func (o *v2TabletAttemptObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
+	return ctx, o.ObserveRequest
+}
+func (o *v2TabletAttemptObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+	return o.ObserveAttempt
 }
 func (o *v2TabletAttemptObserver) snapshot() []routing.Target {
 	o.mu.Lock()

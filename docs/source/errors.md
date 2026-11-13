@@ -55,7 +55,8 @@ Messages start with the code's name, e.g.
 A failed request returns `*cqlerr.ExecutionError`. `Err` is why it stopped: the
 last attempt's error, the caller's cancellation, or a failure before any
 attempt. `Attempts` lists every failed attempt with its host address, shard,
-consistency, execution status and error; `errors.As` searches all of them, so a
+consistency, execution status, error and, when the request ran with
+`exec.Options.CQLTrace`, the `CQLTraceID` of the server's trace session; `errors.As` searches all of them, so a
 server error from an earlier attempt is found even after a timeout.
 
 ```go

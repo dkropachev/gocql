@@ -6,6 +6,7 @@ package routing
 import (
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	model "github.com/scylladb/gocql/v2/internal/model"
 )
 
@@ -33,12 +34,24 @@ type RoutingPolicy interface {
 	Fallback(model.RoutingInfo, *MetadataSnapshot) QueryPlan
 	Observe(AttemptEvent)
 }
+
+// AttemptStart describes an attempt as it is sent to its target.
+type AttemptStart struct {
+	Started     time.Time
+	RequestID   uint64
+	Attempt     int
+	Target      Target
+	Speculative bool
+}
 type AttemptEvent struct {
-	Started                time.Time
-	Err                    error
-	RequestID              uint64
-	Attempt                int
-	Latency                time.Duration
-	Target                 Target
+	Started   time.Time
+	Err       error
+	RequestID uint64
+	Attempt   int
+	Latency   time.Duration
+	Target    Target
+	// CQLTraceID is the CQL trace session the attempt's response named, when
+	// the execution ran with CQL tracing and a response arrived.
+	CQLTraceID             cqltype.Option[cqltype.UUID]
 	Cancelled, Speculative bool
 }

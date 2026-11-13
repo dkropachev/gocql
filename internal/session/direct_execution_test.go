@@ -16,6 +16,13 @@ type directTestObserver struct{}
 func (directTestObserver) ObserveRequest(settings.RequestEvent) {}
 func (directTestObserver) ObserveAttempt(routing.AttemptEvent)  {}
 
+func (o directTestObserver) StartRequest(ctx context.Context, _ settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
+	return ctx, o.ObserveRequest
+}
+func (o directTestObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+	return o.ObserveAttempt
+}
+
 type directTestStreamObserver struct{}
 
 func (directTestStreamObserver) StreamContext(context.Context) implTransport.StreamObserverContext {

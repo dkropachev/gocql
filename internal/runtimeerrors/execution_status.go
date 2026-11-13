@@ -96,6 +96,10 @@ type AttemptFailure struct {
 	Shard       cqltype.Option[uint32]
 	Consistency cqltype.Consistency
 	Status      cqltype.ExecutionStatus
+	// CQLTraceID is the CQL trace session the server recorded for the
+	// attempt, when it ran with CQL tracing and the server answered with an
+	// error. Read it with package cqltrace.
+	CQLTraceID cqltype.Option[cqltype.UUID]
 }
 
 func (a AttemptFailure) String() string {
