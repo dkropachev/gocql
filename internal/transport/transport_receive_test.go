@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -81,5 +82,87 @@ func TestReceiveTypedCallParseFailureClearsDest(t *testing.T) {
 	}
 	if dest.Rows.Len() != 0 || dest.Kind != 0 {
 		t.Fatalf("dest not cleared: kind=%d", dest.Kind)
+	}
+}
+
+// A response that arrives after its caller was cancelled must not delay the
+// response of another stream on the same connection.
+func TestLateResponseAfterCancelDoesNotDelayOthers(t *testing.T) {
+	c, server := invPair(t, 4)
+	go c.InternalServe(c.InternalCtx)
+	// A request that is never written fails the read instead of hanging.
+	if err := server.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 20; i++ {
+		ctxA, cancelA := context.WithCancel(context.Background())
+		aErr := make(chan error, 1)
+		go func() {
+			page, err := c.InternalExecuteTyped(ctxA, &model.AttemptRequest{Statement: "SELECT a", Consistency: cqltype.One})
+			if page != nil {
+				page.Owner.Release()
+			}
+			aErr <- err
+		}()
+		aStream, err := invReadRequest(server)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cancelA()
+		select {
+		case err := <-aErr:
+			if err == nil {
+				t.Fatal("A was not cancelled")
+			}
+		case <-time.After(time.Second):
+			t.Fatal("A did not return after cancellation")
+		}
+		bDone := make(chan error, 1)
+		go func() {
+			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT b", Consistency: cqltype.One})
+			if err == nil {
+				page.Owner.Release()
+			}
+			bDone <- err
+		}()
+		bStream, err := invReadRequest(server)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// net.Pipe writes complete only when the reader consumed them, so
+		// they run apart from the checks below.
+		go func() {
+			server.Write(invFrame(4, aStream, typedTestRowsBody([]byte("a"))))
+			server.Write(invFrame(4, bStream, typedTestRowsBody([]byte("b"))))
+		}()
+		select {
+		case err := <-bDone:
+			if err != nil {
+				t.Fatalf("B: %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("B was delayed by A's late response")
+		}
+	}
+	// A's late response frees its stream; give the reader no more than a second.
+	deadline := time.Now().Add(time.Second)
+	for c.InternalStreams.InUse() != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("streams in use after run: %d", c.InternalStreams.InUse())
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// A v5 frame for a stream with no handler is dropped from its segment without
+// disturbing the frame after it, in this segment and the next.
+func TestV5FrameWithoutHandlerSkipped(t *testing.T) {
+	frames := invFrame(5, 7, typedTestRowsBody([]byte("orphan")))
+	frames = append(frames, invFrame(5, 0, typedTestRowsBody([]byte("v")))...)
+	l := newRecvLoop(t, 5, recvWire(t, 5, frames))
+	for i := 0; i < 2; i++ {
+		page := l.one(t)
+		checkRecvPage(t, page, 'v', 1)
+		page.Owner.Release()
 	}
 }

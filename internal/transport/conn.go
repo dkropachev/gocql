@@ -307,7 +307,10 @@ type Conn struct {
 	admission        atomic.Uint64
 	pauseRequested   atomic.Bool // mirrors pauseWanted for the reader's lock-free check
 	tabletsRoutingV1 int32
-	headerBuf        [protocol.HeadSize]byte
+	// headerBuf holds the frame or segment header, or segment trailer, being
+	// read or decoded, so none escapes through the reader. Like headerReader it
+	// is only touched by the receiving goroutine, one header at a time.
+	headerBuf [protocol.HeadSize]byte
 	// closesOnCancel reports that cancelling InternalCtx closes the connection,
 	// so every waiting typed call receives the closure through its response.
 	closesOnCancel       bool
@@ -1047,23 +1050,37 @@ func (c *Conn) InternalReadFrameHeader(r io.Reader) (frm.FrameHeader, error) {
 }
 
 func (c *Conn) InternalProcessFrameSource(ctx context.Context, src InternalFrameSource) error {
+	return c.processFrameSource(ctx, src, nil)
+}
+
+// processFrameSource reads one frame header from src.InternalR and dispatches
+// the frame, unless parsed is non-nil: then the caller already decoded the
+// header out of a received v5 segment, src.InternalR is unused and the body is
+// src.chain.
+func (c *Conn) processFrameSource(ctx context.Context, src InternalFrameSource, parsed *frm.FrameHeader) error {
 
 	r := src.InternalR
 
 	headStartTime, headEndTime := src.netStart, src.netEnd
-	measureHere := headStartTime.IsZero() && c.InternalFrameObserver != nil
+	var head frm.FrameHeader
+	var err error
+	if parsed != nil {
+		head = *parsed
+	} else {
+		measureHere := headStartTime.IsZero() && c.InternalFrameObserver != nil
 
-	if measureHere {
-		headStartTime = time.Now()
-	}
+		if measureHere {
+			headStartTime = time.Now()
+		}
 
-	head, err := c.InternalReadFrameHeader(r)
+		head, err = c.InternalReadFrameHeader(r)
 
-	if measureHere {
-		headEndTime = time.Now()
-	}
-	if err != nil {
-		return err
+		if measureHere {
+			headEndTime = time.Now()
+		}
+		if err != nil {
+			return err
+		}
 	}
 
 	if c.InternalFrameObserver != nil {
@@ -1151,6 +1168,10 @@ func (c *Conn) InternalProcessFrameSource(ctx context.Context, src InternalFrame
 	c.InternalMu.Unlock()
 	if call == nil {
 		c.logger().Warn("response for stream with no handler", logging.KeyStream, head.Stream, "opcode", head.Op.String())
+		if parsed != nil {
+			// The body is already in memory; nothing is left on the wire.
+			return nil
+		}
 		return c.discardFrame(r, head)
 	}
 
@@ -1290,7 +1311,7 @@ func (c *Conn) InternalReadFirstSegmentHeader() (segment.Header, error) {
 
 	c.headerReader.reset(c.InternalR, c.InternalR)
 
-	hdr, err := segment.ReadHeader(&c.headerReader, c.InternalSegCompressor != nil)
+	hdr, err := segment.ReadHeaderInto(&c.headerReader, c.InternalSegCompressor != nil, c.headerBuf[:])
 	if err != nil {
 		if netErr, ok := errors.AsType[net.Error](err); c.headerReader.n == 0 && ok && netErr.Timeout() {
 			return segment.Header{}, fmt.Errorf("%w: %w", protocol.ErrReadHeaderTimeout, err)

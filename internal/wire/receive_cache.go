@@ -9,10 +9,10 @@ import (
 	"sync/atomic"
 )
 
-// ReceiveCache reuses only fully released raw v4 frame allocations. One
-// session owns it, with hard idle byte/object limits independent of
-// connection/shard counts. Outstanding page bytes are outside it: they are
-// ordinary demand, not idle.
+// ReceiveCache reuses only fully released receive buffers: raw v4 frame
+// bodies and v5 segment payloads. One session owns it, with hard idle
+// byte/object limits independent of connection/shard counts. Outstanding page
+// bytes are outside it: they are ordinary demand, not idle.
 //
 // Buffers are kept on size-class free lists, each a small mutex-protected LIFO
 // stack. Classes are powers of two from 4 KiB to 64 KiB, then four steps per

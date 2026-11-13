@@ -281,8 +281,13 @@ func (c *Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, 
 	if c.SegmentCompression && c.Compression != "lz4" {
 		return wire.Chain{}, false, fmt.Errorf("gocql: v5 spans require LZ4 segment Compression")
 	}
-	var spans []wire.Span
 	selfContained := frame.Len() <= segment.MaxPayloadSize
+	if used && selfContained && !c.SegmentCompression {
+		// The common case: one uncompressed segment, built in the scratch.
+		frame, err = segment.EncodeUncompressedInto(scratch, frame, true)
+		return frame, used, err
+	}
+	var spans []wire.Span
 	for offset := int64(0); offset < frame.Len(); {
 		size := min(int64(segment.MaxPayloadSize), frame.Len()-offset)
 		part, _ := frame.Slice(offset, size)
