@@ -72,6 +72,9 @@ func (b *ConfigBuilder) Build() (Config, error) {
 			settings.Metadata.InitialDiscovery = false
 		}
 	}
+	if settings.Identity.ApplicationVersion != "" && settings.Identity.ApplicationName == "" {
+		return Config{}, &cqlerr.ValidationError{Field: "application", Err: errors.New("version requires a name")}
+	}
 	if settings.TLSSource != nil {
 		settings.TLS = settings.TLSSource.TLSConfig()
 		if settings.TLS == nil {
@@ -550,6 +553,8 @@ func (b *ConfigBuilder) WithServerTimestamps() *ConfigBuilder {
 }
 
 // WithApplication reports the application's name and version in STARTUP.
+// Build rejects a version without a name; empty name and version report
+// neither.
 func (b *ConfigBuilder) WithApplication(name, version string) *ConfigBuilder {
 	b.settings.Identity.ApplicationName = name
 	b.settings.Identity.ApplicationVersion = version
