@@ -89,11 +89,14 @@ type InternalV2PeripheralState struct {
 	latencyStored atomic.Uint64
 	// latencyMarks, latencyTick and latencyPublished belong to
 	// publishLatencySummary.
-	latencyMarks           [10]uint64
-	latencyTick            int
-	latencyPublished       uint64
-	orphans                atomic.Uint64
-	InternalMu             sync.RWMutex // per-request feedback captures read under RLock
+	latencyMarks     [10]uint64
+	latencyTick      int
+	latencyPublished uint64
+	orphans          atomic.Uint64
+	// InternalMu guards pending scopes and feedback captures. A prepared
+	// conflict reads InternalSchemaReconciled atomically first and takes this
+	// lock only once that counter shows a reconcile may have cleared its scope.
+	InternalMu             sync.RWMutex
 	metricsOnce            sync.Once
 	periodicOnce           sync.Once
 	InternalFeedbackOnce   sync.Once

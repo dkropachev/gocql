@@ -1743,7 +1743,7 @@ func TestConn(t *testing.T) {
 					t.Fatal("exec deadlocked waiting for timeout")
 				}
 
-				if !c.InternalRemoveCallIfOpen(call.InternalStreamID) {
+				if !c.InternalRemoveCallIfOpen(call) {
 					t.Fatal("expected timed out call to still be registered")
 				}
 
@@ -1786,7 +1786,7 @@ func TestConn(t *testing.T) {
 					t.Fatal("exec deadlocked waiting for context cancellation")
 				}
 
-				if !c.InternalRemoveCallIfOpen(call.InternalStreamID) {
+				if !c.InternalRemoveCallIfOpen(call) {
 					t.Fatal("expected canceled call to still be registered")
 				}
 

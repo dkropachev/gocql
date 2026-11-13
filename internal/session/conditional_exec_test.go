@@ -6,7 +6,9 @@ package session
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/codec"
@@ -64,4 +66,33 @@ func TestConditionalExecRejected(t *testing.T) {
 			check(t, err)
 		}
 	})
+}
+
+// SERIAL consistency makes a read a Paxos read that is routed like a
+// conditional statement, but its result is ordinary rows: Exec does not
+// reject it up front. It is sent, and fails on its result columns.
+func TestExecSerialConsistencyReadIsNotRejectedUpFront(t *testing.T) {
+	s, _, peers := runtimeTestSession(t, 1)
+	defer peers[0].Close()
+	requests := make(chan oneShotRequest, 1)
+	p := oneShotPrepare(t, s, peers[0], requests)
+	sizes := answerOneShot(t, peers[0], requests, "v")
+	opts := testOptions(Options{Consistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.Serial}})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := p.Exec(ctx, 1, opts)
+	select {
+	case <-sizes:
+	default:
+		t.Fatal("the request was not sent")
+	}
+	if err == nil {
+		t.Fatal("Exec of a row-returning statement succeeded")
+	}
+	if errors.Is(err, runtimeerrors.ErrConditionalExec) {
+		t.Fatalf("err = %v, rejected up front as conditional", err)
+	}
+	if !strings.Contains(err.Error(), "result columns require Run") {
+		t.Fatalf("err = %v, want the result-columns error", err)
+	}
 }

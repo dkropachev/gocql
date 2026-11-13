@@ -128,6 +128,9 @@ to infer it (`internal/cqltype/statement_kind.go`). `Exec` and `ExecBatch`
 reject a known conditional request before sending it
 (`cqlerr.ErrConditionalExec`). On Cassandra with an undeclared kind, the
 request is sent and its result columns are rejected after the response.
+A statement executed with SERIAL or LOCAL_SERIAL consistency is a Paxos read,
+not a conditional statement: `Exec` does not reject it up front, and fails on
+its result columns like any other row-returning statement.
 
 ## Paging
 

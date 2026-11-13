@@ -153,7 +153,7 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 	}
 	failBeforeWrite := func(err error) (*InternalResponsePage, error) {
 		x.stopWaiting = true
-		if c.InternalRemoveCallIfOpen(stream) {
+		if c.InternalRemoveCallIfOpen(call) {
 			x.releaseStream = true
 			x.recycleCall = true
 		}
@@ -202,7 +202,7 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 		if err != nil {
 			x.stopWaiting = true
 			if n == 0 && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
-				if c.InternalRemoveCallIfOpen(stream) {
+				if c.InternalRemoveCallIfOpen(call) {
 					x.releaseStream = true
 					x.recycleCall = true
 				}
@@ -252,7 +252,7 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 		x.stopWaiting = true
 		if ticket != nil && ticket.unsent() {
 			// Withdrawn before transmission: the stream is free again.
-			if c.InternalRemoveCallIfOpen(stream) {
+			if c.InternalRemoveCallIfOpen(call) {
 				x.releaseStream = true
 				x.recycleCall = true
 			}
@@ -293,7 +293,7 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 	case <-timeoutCh:
 		x.stopWaiting = true
 		if ticket != nil && ticket.unsent() {
-			if c.InternalRemoveCallIfOpen(stream) {
+			if c.InternalRemoveCallIfOpen(call) {
 				x.releaseStream = true
 				x.recycleCall = true
 			}

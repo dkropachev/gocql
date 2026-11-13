@@ -301,6 +301,7 @@ func (c *Conn) parseTypedResponseInto(head frm.FrameHeader, body wire.Chain, own
 	}
 	data, err := c.nativeProtocol().ParseTypedResponseInto(head, body, owner, &page.ResponseData)
 	if data == nil {
+		clearFailedDest(page)
 		return nil, err
 	}
 	return page, err
@@ -325,3 +326,11 @@ func (r *chainReader) Read(p []byte) (int, error) {
 	}
 	return part.CopyTo(p[:int(n)])
 }
+
+// clearFailedDest empties the page after a failed parse, so a caller's
+// destination cannot keep half-decoded values or point at the lease that
+// receiveTypedCall releases on the error path. It stays out of line to keep
+// zeroing the large page out of the successful parse path.
+//
+//go:noinline
+func clearFailedDest(page *InternalResponsePage) { *page = InternalResponsePage{} }

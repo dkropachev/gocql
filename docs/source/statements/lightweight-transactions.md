@@ -8,7 +8,9 @@ conditional write reports whether it applied: read it with `One`, `Each`,
 prepared metadata. Cassandra does not, so declare the kind there. Server conditional
 metadata and SERIAL/LOCAL_SERIAL consistency also force safe conditional
 classification. Conditional requests never speculate and use deterministic
-replica ordering.
+replica ordering. A statement executed with SERIAL or LOCAL_SERIAL consistency
+is a Paxos read, not a conditional statement: `Exec` does not reject it up
+front, and fails on its result columns like any other row-returning statement.
 
 Use `CASRows(decoder)` to decode the applied flag and the returned row through a
 typed `CASResult[R]`. For conditional batches, pass this decoder to `session.RunBatch`.
