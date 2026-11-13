@@ -46,9 +46,3 @@ func (s *InternalPreparedState) publishHost(id cqltype.UUID, entry *InternalHost
 	}
 	s.view.Store(v)
 }
-
-// newTestPreparedState seeds a view for tests.
-func newTestPreparedState(state *InternalPreparedState, hosts map[cqltype.UUID]*InternalHostPrepared, result *model.ResultSchemaIdentity, resultHost cqltype.UUID) *InternalPreparedState {
-	state.view.Store(&preparedView{hosts: hosts, result: result, resultHost: resultHost})
-	return state
-}
