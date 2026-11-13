@@ -2980,7 +2980,7 @@ func TestConn(t *testing.T) {
 				errCh <- c.InternalRecvSegment(ctx)
 			}()
 
-			// Receive in segment order: processAllFramesInSegment consumes the frames
+			// Receive in segment order: InternalRecvSegment consumes the frames
 			// sequentially and each send is on an unbuffered channel, so frame 1 is fully
 			// delivered before frame 2 starts.
 			//
