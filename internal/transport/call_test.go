@@ -160,6 +160,16 @@ func TestRemoveCallIfOpenIgnoresReusedStream(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := a.InternalStreamID
+	// Detach whatever is still registered on s before invPair's Close runs,
+	// so Close does not wait for an exec that never ran, even after a failure.
+	t.Cleanup(func() {
+		c.InternalMu.Lock()
+		if c.InternalCalls.Get(s) != nil {
+			c.InternalCalls.Delete(s)
+			c.InternalStreams.Clear(s)
+		}
+		c.InternalMu.Unlock()
+	})
 	// Simulated early free: the reader deletes and frees the stream in one
 	// section (a spurious response for s).
 	c.InternalMu.Lock()
@@ -183,11 +193,4 @@ func TestRemoveCallIfOpenIgnoresReusedStream(t *testing.T) {
 	if got := c.InternalStreams.InUse(); got != 1 {
 		t.Fatalf("InUse = %d, want 1", got)
 	}
-	// Detach both calls so Close does not wait for an exec that never ran.
-	c.InternalMu.Lock()
-	c.InternalCalls.Delete(s)
-	c.InternalStreams.Clear(s)
-	c.InternalMu.Unlock()
-	putCallReq(a)
-	putCallReq(b)
 }
