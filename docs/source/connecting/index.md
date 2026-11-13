@@ -126,16 +126,21 @@ tls
 `ConvictionPolicy.AddFailure(ConvictionEvent)` returns whether a connection
 failure should mark the host down. The event carries the error, a detached
 read-only `HostSnapshot` that can be retained, the `Source` (a pool connection
-or the control connection) and, when one shard's connection failed, the
-`Shard`. With advanced shard awareness the pool reports every failed shard
-dial; the event without a shard follows when the host has no connection left.
-A convicting verdict always marks the whole host down, for a shard event once
-the pool stops filling: there is no per-shard down state. A request for a
-shard without a connection already uses another shard of the host, unless it
-names a shard or is conditional.
+or the control connection) and, when the pool asked for one shard, the
+`Shard`. Once the pool knows a host's shard count it picks the shard of each
+connection and reports each failed attempt to open one, after reconnection
+retries; the event without a shard follows when the host has no connection
+left. A dialer that cannot target shards connects wherever the server places
+the connection, so `Shard` names the shard the pool asked for.
 
-`Reset(ConvictionEvent)` reports a recovery: with `Shard` set, a shard whose
-failure was reported connected again; without it, the host's pool connected
-again. Custom policies must support concurrent callbacks, which run outside
-driver locks. The default SimpleConvictionPolicy convicts on every whole-host
+A convicting verdict always marks the whole host down, for a shard event once
+the pool stops filling and even though other shards are still connected:
+there is no per-shard down state. A request for a shard without a connection
+already uses another shard of the host, unless it names a shard or is
+conditional.
+
+`Reset(ConvictionEvent)` reports that connections opened again: with `Shard`
+set, the connection to a shard whose failure was reported; without it, the
+first connection of a host's pool, after startup or after the host was marked
+down. Custom policies must support concurrent callbacks. The default SimpleConvictionPolicy convicts on every whole-host
 failure, ignores single-shard failures, and its Reset is a no-op.

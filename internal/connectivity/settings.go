@@ -97,29 +97,34 @@ type ConvictionEvent struct {
 	Err error
 	// Host is detached, read-only host metadata that may be retained.
 	Host HostSnapshot
-	// Shard is set when the event concerns the connection to one shard:
-	// a failed dial to it, or, in Reset, a connection to it opened again.
+	// Shard is set when the event concerns a connection the pool opened to
+	// one shard: a failed attempt to open it or, in Reset, the connection
+	// to it opened again. It is the shard the pool asked for; a dialer that
+	// cannot target shards connects wherever the server places it.
 	Shard  Option[uint32]
 	Source ConvictionSource
 }
 
 // ConvictionPolicy decides whether connection failures mark a host down.
-// Callbacks run concurrently and outside driver locks.
+// Callbacks run concurrently.
 //
-// A pool that dials shards explicitly (advanced shard awareness) reports each
-// failed shard dial with Shard set, before the event without Shard that
-// follows when the host has no connections left. A pool that does not choose
-// shards reports only the latter.
+// When the pool picks the shard of a connection, it reports each failed
+// attempt to open it with Shard set, once per attempt after reconnection
+// retries, before the event without Shard that follows when the host has no
+// connection left. The pool picks shards only once it knows the host's shard
+// count, so the failure of a host's first connection has no Shard.
 type ConvictionPolicy interface {
 	// AddFailure reports a failure and returns whether to mark the host
 	// down. A true verdict on a shard event marks the whole host down once
-	// the pool stops filling; there is no per-shard down state. A request for
-	// a shard without a connection already uses another shard of the host,
+	// the pool stops filling, even though the pool still has connections
+	// to other shards; there is no per-shard down state. A request for a
+	// shard without a connection already uses another shard of the host,
 	// unless it names a shard or is conditional.
 	AddFailure(ConvictionEvent) bool
-	// Reset reports a recovery: with Shard set, a connection to a shard that
-	// had failed was opened again; without it, the host's pool connected
-	// again. Implementations should clear the matching state.
+	// Reset reports that connections opened again: with Shard set, the
+	// connection to a shard whose failure was reported; without it, the
+	// first connection of a host's pool, after startup or after the host
+	// was marked down. Implementations should clear the matching state.
 	Reset(ConvictionEvent)
 }
 type Config struct {

@@ -480,8 +480,11 @@ func (pool *InternalHostConnPool) fillNow() {
 			pool.fillingStopped(err)
 			return
 		}
+		// Reset before the rest of the fill starts, so that the policy
+		// sees it ahead of any shard failure that fill reports.
+		pool.resetConviction()
 		// notify the session that this node is connected
-		pool.InternalServices.Worker(func() { pool.hostConnected() })
+		pool.InternalServices.Worker(func() { pool.InternalServices.Connected(pool) })
 
 		// filled one, let's reload it to see if it has changed
 		pool.InternalMu.RLock()
@@ -498,7 +501,7 @@ func (pool *InternalHostConnPool) fillNow() {
 
 		if err == nil && startCount > 0 {
 			// notify the session that this node is connected again
-			pool.InternalServices.Worker(func() { pool.hostConnected() })
+			pool.InternalServices.Worker(func() { pool.InternalServices.Connected(pool) })
 		}
 	}()
 }
@@ -546,7 +549,9 @@ func (pool *InternalHostConnPool) fillingStopped(err error) {
 	}
 	host := pool.InternalHost
 	port := pool.InternalHost.Port()
-	convict := pool.shardConvicted
+	// A closed pool no longer speaks for its host, which may be served by
+	// a new pool by now.
+	convict := pool.shardConvicted && !pool.InternalClosed
 	pool.shardConvicted = false
 	pool.InternalMu.Unlock()
 	if missing > 0 {
@@ -570,9 +575,10 @@ func (pool *InternalHostConnPool) fillingStopped(err error) {
 	}
 }
 
-// hostConnected resets the conviction policy for the host and notifies the
-// session that the host is connected.
-func (pool *InternalHostConnPool) hostConnected() {
+// resetConviction resets the conviction policy for the host once the pool
+// opens its first connection. It runs on the filling goroutine before the
+// rest of the fill starts.
+func (pool *InternalHostConnPool) resetConviction() {
 	pool.InternalMu.Lock()
 	pool.failedShards = nil
 	pool.InternalMu.Unlock()
@@ -580,12 +586,12 @@ func (pool *InternalHostConnPool) hostConnected() {
 		snapshot, _ := implEndpoint.SnapshotHost(pool.InternalHost)
 		policy.Reset(connectivity.ConvictionEvent{Host: snapshot, Source: connectivity.ConvictionPool})
 	}
-	pool.InternalServices.Connected(pool)
 }
 
 // shardFailed reports a failed connection to shard, chosen by the picker out
-// of shards, to the conviction policy. shards is zero when the picker did not
-// choose the shard. A convicting verdict marks the host down when filling
+// of shards, to the conviction policy, once per connection attempt after the
+// reconnection retries. shards is zero when the picker did not choose the
+// shard. A convicting verdict marks the host down when filling
 // stops.
 func (pool *InternalHostConnPool) shardFailed(err error, shard, shards int) {
 	policy := pool.InternalServices.Conviction

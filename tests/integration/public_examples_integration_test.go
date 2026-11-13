@@ -141,7 +141,7 @@ func (p *testConviction) AddFailure(e config.ConvictionEvent) bool {
 func (p *testConviction) Reset(e config.ConvictionEvent) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if len(p.hosts) == 0 || p.hosts[0].ID != e.Host.ID {
+	if e.Host.ID.IsEmpty() || len(p.hosts) > 0 && p.hosts[0].ID != e.Host.ID {
 		panic("reset lost host identity")
 	}
 	p.resets++

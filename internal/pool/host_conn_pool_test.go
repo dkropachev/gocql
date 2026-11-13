@@ -14,6 +14,7 @@ import (
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 func TestHostConnPool(t *testing.T) {
@@ -112,6 +113,57 @@ func TestHostConnPool(t *testing.T) {
 					t.Fatal("shard verdict applied twice", downs)
 				}
 			})
+			t.Run("ClosedPoolKeepsHost", func(t *testing.T) {
+				policy := &convictionRecorder{callback: func(connectivity.ConvictionEvent) bool { return true }}
+				downs := 0
+				p := newPool(policy, &downs)
+				p.shardFailed(cause, 3, 8)
+				p.InternalClosed = true
+				p.fillingStopped(cause)
+				if downs != 0 {
+					t.Fatal("closed pool marked its host down on a shard verdict")
+				}
+			})
+			t.Run("Connect", func(t *testing.T) {
+				// InternalConnect reports a failed dial to the shard the picker chose.
+				for _, tc := range []struct {
+					name          string
+					shard, shards int
+					want          bool
+				}{{"ChosenShard", 5, 8, true}, {"UnchosenShard", 0, 0, false}} {
+					t.Run(tc.name, func(t *testing.T) {
+						var events []connectivity.ConvictionEvent
+						policy := &convictionRecorder{callback: func(e connectivity.ConvictionEvent) bool {
+							events = append(events, e)
+							return false
+						}}
+						downs := 0
+						p := newPool(policy, &downs)
+						p.InternalConnPicker = convictionPicker{count: 1, shard: tc.shard, shards: tc.shards}
+						p.InternalServices.Reconnection = &NoReconnectionPolicy{}
+						var dialed [2]int
+						p.InternalServices.Dial = func(_ context.Context, _ *endpoint.HostInfo, _ transport.ConnErrorHandler, shard, shards int) (*transport.Conn, error) {
+							dialed = [2]int{shard, shards}
+							return nil, cause
+						}
+						if err := p.InternalConnect(); !errors.Is(err, cause) {
+							t.Fatal("dial failure replaced", err)
+						}
+						if dialed != [2]int{tc.shard, tc.shards} {
+							t.Fatal("dialed another shard", dialed)
+						}
+						if !tc.want {
+							if len(events) != 0 {
+								t.Fatalf("failure without a chosen shard reported as %+v", events)
+							}
+							return
+						}
+						if len(events) != 1 || !events[0].Shard.Set || events[0].Shard.Value != uint32(tc.shard) || !errors.Is(events[0].Err, cause) {
+							t.Fatalf("chosen shard failure reported as %+v", events)
+						}
+					})
+				}
+			})
 			t.Run("UnknownShard", func(t *testing.T) {
 				policy := &convictionRecorder{callback: func(connectivity.ConvictionEvent) bool {
 					t.Fatal("failure without a chosen shard reported as a shard failure")
@@ -135,7 +187,7 @@ func TestHostConnPool(t *testing.T) {
 					t.Fatalf("shard reset reported as %+v", policy.resets)
 				}
 				p.shardFailed(cause, 5, 8)
-				p.hostConnected()
+				p.resetConviction()
 				if len(policy.resets) != 2 || policy.resets[1].Shard.Set || policy.resets[1].Host.ID != id {
 					t.Fatalf("host reset reported as %+v", policy.resets)
 				}
@@ -160,7 +212,9 @@ func (r *convictionRecorder) Reset(e connectivity.ConvictionEvent) { r.resets = 
 
 type convictionPicker struct {
 	InternalNopConnPicker
-	count int
+	count, shard, shards int
 }
+
+func (p convictionPicker) NextShard() (int, int) { return p.shard, p.shards }
 
 func (p convictionPicker) Size() (int, int) { return p.count, 0 }
