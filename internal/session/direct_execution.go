@@ -22,13 +22,13 @@ import (
 // qualify; a request pinned to a connection with a stream observer does not,
 // since executePageDirect hands such a connection to the general path.
 func canExecuteDirect(s *InternalSessionRuntime, request *InternalExecutionRequest) bool {
-	if request.InternalLogical == nil || request.InternalLogical.observer != nil || request.InternalOptions.InternalProfile.Speculation != nil {
+	if request.InternalLogical == nil || request.InternalLogical.observer != nil || request.options.InternalProfile.Speculation != nil {
 		return false
 	}
 	if request.connection != nil && request.connection.InternalStreamObserver != nil {
 		return false
 	}
-	return canUseDirectProfile(request.InternalOptions.InternalProfile) && s.config.CoalesceWait == 0
+	return canUseDirectProfile(request.options.InternalProfile) && s.config.CoalesceWait == 0
 }
 func canUseDirectProfile(profile settings.Profile) bool {
 	if profile.Speculation != nil {
@@ -49,7 +49,7 @@ func canUseDirectProfile(profile settings.Profile) bool {
 // outcome channel or per-attempt goroutine. Optional callbacks/speculation keep
 // their general execution path.
 func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request *InternalExecutionRequest, state model.PageState, plan routing.QueryPlan) (*transport.InternalResponsePage, error) {
-	consistency := request.InternalOptions.InternalProfile.Consistency
+	consistency := request.options.InternalProfile.Consistency
 	aggregate := model.Result{AchievedConsistency: consistency}
 	var log *attemptLog // allocated on the first failed attempt
 	failure := func(err error) (*transport.InternalResponsePage, error) { return nil, log.error(err, aggregate) }
@@ -141,8 +141,8 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		}
 		attemptStatus := log.fail(err, conn, attempt, consistency)
 		decision := retry.Decision{}
-		if policy := request.InternalOptions.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
+		if policy := request.options.InternalProfile.Retry; policy != nil {
+			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
 		}
 		switch decision.Action {
 		case retry.IgnoreWrite:

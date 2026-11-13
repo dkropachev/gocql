@@ -351,7 +351,7 @@ func TestPaging(t *testing.T) {
 				t.Fatal(err)
 			}
 			profile.PageSize = 11
-			if RowsData(rows).request.InternalOptions.InternalProfile.PageSize != 7 {
+			if RowsData(rows).request.options.InternalProfile.PageSize != 7 {
 				t.Fatal("profile changed after admission")
 			}
 			bound.Close()

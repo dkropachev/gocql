@@ -168,7 +168,7 @@ func TestExecution(t *testing.T) {
 	t.Run("CanExecuteDirect", func(t *testing.T) {
 		rt := &InternalSessionRuntime{}
 		request := func() *InternalExecutionRequest {
-			return &InternalExecutionRequest{InternalLogical: &logicalExecution{}, InternalOptions: InternalResolvedOptions{InternalProfile: settings.InternalDefaultProfile()}}
+			return &InternalExecutionRequest{InternalLogical: &logicalExecution{}, options: &InternalResolvedOptions{InternalProfile: settings.InternalDefaultProfile()}}
 		}
 		if !canExecuteDirect(rt, request()) {
 			t.Fatal("one-shot execution should run direct")

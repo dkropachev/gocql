@@ -245,7 +245,7 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 	dependencies := tracker.InternalDependencies(info.Keyspace, page.BindColumns(), page.Columns)
 	epoch := dependencies.InternalSince(started)
 	result := &model.ResultSchemaIdentity{InternalColumns: page.Columns, InternalEpoch: epoch, InternalTracker: dependencies.InternalTracker}
-	state = &InternalPreparedState{InternalSession: s.Core, InternalProtocol: conn.InternalVersion, InternalStatement: statement, InternalKeyspace: keyspace, InternalParameters: page.BindColumns(), InternalColumns: page.Columns, InternalInfo: info, InternalDependencies: dependencies, InternalInitialEpoch: epoch, partitioner: s.Core.PreparedPartitionerName(info.Keyspace, info.Table)}
+	state = &InternalPreparedState{InternalSession: s.Core, InternalProtocol: conn.InternalVersion, InternalStatement: statement, InternalKeyspace: keyspace, InternalParameters: page.BindColumns(), hasCounter: hasCounterColumn(page.BindColumns()), InternalColumns: page.Columns, InternalInfo: info, InternalDependencies: dependencies, InternalInitialEpoch: epoch, partitioner: s.Core.PreparedPartitionerName(info.Keyspace, info.Table)}
 	state.view.Store(&preparedView{hosts: map[cqltype.UUID]*InternalHostPrepared{conn.InternalHostID(): {InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: page.Columns, InternalGeneration: generation, InternalRevision: 1, InternalEpoch: epoch, InternalResult: result}}, result: result, resultHost: conn.InternalHostID()})
 
 	tracker.InternalMu.RLock()
@@ -593,18 +593,17 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 	}
 	*request = b.privateStorage.InternalRequest
 	// A query resolved its own options when it was created; a pooled
-	// query's come with each call. CompiledOptions that need resolving for this
-	// session resolve straight into the request.
+	// query's come with each call. The request points at shared options;
+	// CompiledOptions that need resolving for this session resolve into
+	// scratch of the request's own.
 	var resolved *InternalResolvedOptions
 	if query != nil && !query.perCall && request.batch == nil {
 		resolved = query.resolved
-	} else {
-		resolved = options.resolve(rt, &request.InternalOptions)
+	} else if resolved = options.shared(rt); resolved == nil {
+		resolved = options.resolve(rt, request.optionsScratch())
 	}
-	if resolved != &request.InternalOptions {
-		request.InternalOptions = *resolved
-	}
-	values := &request.InternalOptions.InternalOptions
+	request.options = resolved
+	values := &resolved.InternalOptions
 	if query := request.query; query != nil {
 		request.responseDest = &query.response
 	}
@@ -689,14 +688,15 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 		return nil, nil, nil, err
 	}
 	rt.inflight.Add(1)
-	if mode := rt.config.Timestamps.Mode(); mode != settings.ServerTimestampMode && !request.routing.Conditional && !requestHasCounter(request) && !request.InternalOptions.InternalOptions.Timestamp.Set {
-		var timestamp int64
+	if values.Timestamp.Set {
+		request.timestamp, request.hasTimestamp = values.Timestamp.Value, true
+	} else if mode := rt.config.Timestamps.Mode(); mode != settings.ServerTimestampMode && !request.routing.Conditional && !request.hasCounter {
 		if mode == settings.DriverTimestampMode {
-			timestamp = rt.timestamps.next(started)
+			request.timestamp = rt.timestamps.next(started)
 		} else {
-			timestamp = rt.config.Timestamps.Generator()()
+			request.timestamp = rt.config.Timestamps.Generator()()
 		}
-		request.InternalOptions.InternalOptions.Timestamp = cqltype.Option[int64]{Value: timestamp, Set: true}
+		request.hasTimestamp = true
 	}
 	return runctx, cancel, request, nil
 }
@@ -795,14 +795,17 @@ func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *B
 	if err != nil {
 		return nil, err
 	}
-	if pageSize != 0 {
-		// The request holds its own copy of the resolved options. Its
-		// parameters template, encoded for the resolved page size, then no
-		// longer matches, so the request encodes its parameters field by field.
-		if pageSize == cqltype.Unpaged {
-			pageSize = 0 // no page size on the wire
-		}
-		request.InternalOptions.InternalProfile.PageSize = pageSize
+	if pageSize == cqltype.Unpaged {
+		pageSize = 0 // no page size on the wire
+	} else if pageSize == 0 {
+		pageSize = request.options.InternalProfile.PageSize
+	}
+	if pageSize != request.options.InternalProfile.PageSize {
+		// The page size applies to this request only, so it goes in a copy
+		// of the shared options. Their parameters template, encoded for the
+		// resolved page size, then no longer matches, so the request
+		// encodes its parameters field by field.
+		request.ownOptions().InternalProfile.PageSize = pageSize
 	}
 	// A Page outlives its query's generation as a stale handle whose
 	// accessors still read its response, so it never uses query storage.
@@ -910,7 +913,7 @@ type typedAttemptOutcome struct {
 // pagePlan builds the routing plan for one page's attempts.
 // tablet is the request's tablet, looked up in metadata.
 func (s *InternalSessionRuntime) pagePlan(request *InternalExecutionRequest, metadata *routing.MetadataSnapshot, tablet *routing.InternalTabletLookup, direct bool) (routing.QueryPlan, error) {
-	policy := request.InternalOptions.InternalProfile.Routing
+	policy := request.options.InternalProfile.Routing
 	if policy == nil {
 		return nil, nil
 	}
@@ -942,7 +945,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 	// A deadline context already supplies cancellation for this page's attempts.
 	// With no page deadline, retain an independent cancellation scope so a winner
 	// still stops speculative siblings without cancelling the logical execution.
-	pageTimeout := request.InternalOptions.InternalProfile.PageTimeout
+	pageTimeout := request.options.InternalProfile.PageTimeout
 	var cancel context.CancelFunc = func() {}
 	deadline, bounded := ctx.Deadline()
 	if !direct {
@@ -989,7 +992,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 	// delay. Most pages complete without scheduling any delayed attempt.
 	var delayed chan delayedAttempt
 	scheduled := 0
-	aggregate := model.Result{AchievedConsistency: request.InternalOptions.InternalProfile.Consistency}
+	aggregate := model.Result{AchievedConsistency: request.options.InternalProfile.Consistency}
 	startedCount, active := 0, 0
 	launch := func(conn *transport.Conn, consistency cqltype.Consistency, speculative bool) error {
 		var err error
@@ -1025,7 +1028,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 					s.Core.ObserveSafely(func() { request.InternalLogical.observer.ObserveAttempt(event) })
 				}
 			}
-			if policy := request.InternalOptions.InternalProfile.Routing; policy != nil {
+			if policy := request.options.InternalProfile.Routing; policy != nil {
 				s.Core.ObserveSafely(func() { policy.Observe(event) })
 			}
 			select {
@@ -1038,7 +1041,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 		}()
 		return nil
 	}
-	if err := launch(nil, request.InternalOptions.InternalProfile.Consistency, false); err != nil {
+	if err := launch(nil, request.options.InternalProfile.Consistency, false); err != nil {
 		return nil, newExecutionError(err, aggregate, cqltype.NotExecuted, nil)
 	}
 	var timer *time.Timer
@@ -1049,11 +1052,11 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			timer = nil
 		}
 		speculate = nil
-		if !request.InternalOptions.InternalOptions.Idempotent || request.routing.Kind != cqltype.OrdinaryStatement || request.InternalOptions.InternalProfile.Speculation == nil {
+		if !request.options.InternalOptions.Idempotent || request.routing.Kind != cqltype.OrdinaryStatement || request.options.InternalProfile.Speculation == nil {
 			return
 		}
 		perfAdd(2, 1)
-		delay, ok := request.InternalOptions.InternalProfile.Speculation.Delay(startedCount, s.Core.Metrics())
+		delay, ok := request.options.InternalProfile.Speculation.Delay(startedCount, s.Core.Metrics())
 		if !ok || delay < 0 {
 			return
 		}
@@ -1110,7 +1113,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				speculate = nil
 				continue
 			}
-			if err := launch(nil, request.InternalOptions.InternalProfile.Consistency, true); err == nil {
+			if err := launch(nil, request.options.InternalProfile.Consistency, true); err == nil {
 				arm()
 			} else {
 				speculate = nil
@@ -1148,8 +1151,8 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				response.Owner.Release()
 			}
 			decision := retry.Decision{}
-			if policy := request.InternalOptions.InternalProfile.Retry; policy != nil {
-				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.InternalOptions.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
+			if policy := request.options.InternalProfile.Retry; policy != nil {
+				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
 			}
 			if decision.Action == retry.IgnoreWrite {
 				return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: model.CompletePageState(), Result: aggregate}}, nil
@@ -1222,7 +1225,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 // The caller owns w, so an attempt that does not outlive its caller stays
 // off the heap.
 func (s *InternalSessionRuntime) newAttempt(w *model.AttemptRequest, conn *transport.Conn, request *InternalExecutionRequest, state model.PageState, consistency cqltype.Consistency) error {
-	opts := &request.InternalOptions.InternalOptions
+	opts := &request.options.InternalOptions
 	version := conn.InternalWire()
 	if !version.QueryKeyspace && request.keyspace != "" && request.keyspace != implCluster.SessionData(s.Core).InternalCfg.Keyspace && !requestQualifiedForKeyspace(request, request.keyspace) {
 		return cqltype.TypeValidation("keyspace", "protocol v4 requires the session keyspace")
@@ -1230,18 +1233,18 @@ func (s *InternalSessionRuntime) newAttempt(w *model.AttemptRequest, conn *trans
 	if opts.NowInSeconds.Set && !version.NowInSeconds {
 		return cqltype.TypeValidation("now in seconds", "requires protocol v5")
 	}
-	*w = model.AttemptRequest{TabletVersionBlock: request.tabletVersionBlock, Statement: request.statement, Values: request.InternalValues.Framed, ValueCount: len(request.InternalValues.Cells), Consistency: consistency, PageSize: int(request.InternalOptions.InternalProfile.PageSize), Keyspace: request.keyspace, Trace: opts.Trace, Payload: opts.CustomPayload}
+	*w = model.AttemptRequest{TabletVersionBlock: request.tabletVersionBlock, Statement: request.statement, Values: request.InternalValues.Framed, ValueCount: len(request.InternalValues.Cells), Consistency: consistency, PageSize: int(request.options.InternalProfile.PageSize), Keyspace: request.keyspace, Trace: opts.Trace, Payload: opts.CustomPayload}
 	if !version.QueryKeyspace {
 		w.Keyspace = ""
 	}
 	if state.More() {
 		w.PagingState = model.PageToken(state)
 	}
-	if request.InternalOptions.InternalProfile.SerialConsistency.Set {
-		w.SerialConsistency = request.InternalOptions.InternalProfile.SerialConsistency.Value
+	if request.options.InternalProfile.SerialConsistency.Set {
+		w.SerialConsistency = request.options.InternalProfile.SerialConsistency.Value
 	}
-	if opts.Timestamp.Set {
-		w.Timestamp = opts.Timestamp.Value
+	if request.hasTimestamp {
+		w.Timestamp = request.timestamp
 		w.DefaultTimestamp = true
 	}
 	if opts.NowInSeconds.Set {
@@ -1250,7 +1253,7 @@ func (s *InternalSessionRuntime) newAttempt(w *model.AttemptRequest, conn *trans
 	return nil
 }
 func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *transport.Conn, request *InternalExecutionRequest, state model.PageState, consistency cqltype.Consistency) (*transport.InternalResponsePage, error) {
-	opts := &request.InternalOptions.InternalOptions
+	opts := &request.options.InternalOptions
 	wireRequest := new(model.AttemptRequest)
 	if err := s.newAttempt(wireRequest, conn, request, state, consistency); err != nil {
 		return nil, err
@@ -1269,7 +1272,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		}
 	}
 	// After the batch is set, so that a batch takes no template.
-	wireRequest.Params = paramsTemplate(&request.InternalOptions, wireRequest, conn.InternalVersion)
+	wireRequest.Params = paramsTemplate(request.options, wireRequest, conn.InternalVersion)
 	lease := request.InternalOwner.InternalWriterLease(request.InternalValues.Framed)
 	defer lease.Release()
 	wireRequest.Lease = lease
@@ -1381,12 +1384,11 @@ func attemptBytesWritten(err error) bool {
 	return runtimeerrors.ExecutionStatusOf(err) != cqltype.NotExecuted
 }
 
-func requestHasCounter(request *InternalExecutionRequest) bool {
-	if request.batch != nil && request.batch.kind == cqltype.CounterBatch {
-		return true
-	}
-	for _, cell := range request.InternalValues.Cells {
-		if cell.Typ.Kind() == cqltype.TypeCounter {
+// hasCounterColumn reports whether columns, a statement's parameters, include
+// a counter: executing the statement is then a counter write.
+func hasCounterColumn(columns cqltype.Columns) bool {
+	for _, column := range cqltype.ColumnSlice(columns) {
+		if column.Type.Kind() == cqltype.TypeCounter {
 			return true
 		}
 	}

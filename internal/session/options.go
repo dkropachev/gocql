@@ -101,16 +101,26 @@ func (o CompiledOptions) final(rt *InternalSessionRuntime) bool {
 // for rt as they are, without synchronization. Other options are resolved
 // into scratch.
 func (o CompiledOptions) resolve(rt *InternalSessionRuntime, scratch *InternalResolvedOptions) *InternalResolvedOptions {
+	if r := o.shared(rt); r != nil {
+		return r
+	}
+	// NewCompiledOptions validated the values, and the session profile was
+	// validated at Connect, so resolution cannot fail here.
+	*scratch, _ = resolveOptionValues(rt.InternalProfile, o.p.resolved.InternalOptions)
+	return scratch
+}
+
+// shared returns o resolved for rt when that resolution is shared and needs
+// no work: for the zero CompiledOptions and options bound for rt. Otherwise
+// it returns nil.
+func (o CompiledOptions) shared(rt *InternalSessionRuntime) *InternalResolvedOptions {
 	if o.p == nil {
 		return &rt.defaultOptions
 	}
 	if o.final(rt) {
 		return &o.p.resolved
 	}
-	// NewCompiledOptions validated the values, and the session profile was
-	// validated at Connect, so resolution cannot fail here.
-	*scratch, _ = resolveOptionValues(rt.InternalProfile, o.p.resolved.InternalOptions)
-	return scratch
+	return nil
 }
 
 // resolveFixed returns o resolved for rt in storage that stays valid, for a

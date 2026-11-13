@@ -32,9 +32,11 @@ type queryState struct {
 	done         chan struct{} // created by the first waiter of a busy generation
 	retire       func()
 	resolved     *InternalResolvedOptions // the query's options, resolved at creation
-	// _ holds the place of a removed field: moving the fields after it
-	// slows admission by about 3%.
-	_ [8]byte
+	// optionsScratch holds options an execution resolves or overrides for
+	// itself, allocated on first use (see InternalExecutionRequest.ownOptions).
+	// It sits in the 8 bytes a removed field left, so the fields after it
+	// keep their offsets: moving them slows admission by about 3%.
+	optionsScratch *InternalResolvedOptions
 	// historyInline is the inline paging history storage the query's
 	// iterator lends its history.
 	historyInline [paging.InternalInlineHistory]model.PageState
@@ -177,7 +179,7 @@ func newPreparedQuery[P, R any](p *Prepared[P, R], options CompiledOptions, pool
 	q.bound.privateStorage.rows = &q.rows
 	info := &state.InternalInfo
 	kind := p.privateStorage.kind
-	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, routing: model.RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Kind: kind, Conditional: kind != cqltype.OrdinaryStatement}}
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, routing: model.RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Kind: kind, Conditional: kind != cqltype.OrdinaryStatement}, hasCounter: state.hasCounter}
 	if err := newQueryState(p.privateStorage.InternalState.InternalSession, &q.state, q.retire, pool); err != nil {
 		return nil, err
 	}
@@ -199,7 +201,7 @@ func newUnpreparedQuery[P, R any](s *implCluster.Core, statement binding.Stateme
 	q.bound.privateStorage.InternalRows = statement.Rows
 	q.bound.privateStorage.plans = &InternalResultPlanCache[R]{}
 	q.bound.privateStorage.rows = &q.rows
-	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement.CQL, InternalSource: cqlText{}, routing: model.RoutingInfo{Kind: statement.Kind, Conditional: statement.Kind != cqltype.OrdinaryStatement}}
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement.CQL, InternalSource: cqlText{}, routing: model.RoutingInfo{Kind: statement.Kind, Conditional: statement.Kind != cqltype.OrdinaryStatement}, hasCounter: hasCounterColumn(columns)}
 	if err := newQueryState(s, &q.state, q.retire, nil); err != nil {
 		return nil, err
 	}

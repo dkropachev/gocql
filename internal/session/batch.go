@@ -297,7 +297,7 @@ func runBatch[R any](ctx context.Context, s *implCluster.Core, batch *Batch, dec
 	owner := InternalNewInputOwner()
 	batch.lastOwner, batch.lastQuery = owner, nil
 	bound := new(Bound[R])
-	bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalOwner: owner, routing: batch.requestRouting(), batch: state}
+	bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalOwner: owner, routing: batch.requestRouting(), batch: state, hasCounter: batch.Kind == cqltype.CounterBatch}
 	bound.privateStorage.InternalRows = decoder
 	page, err := runtimeOf(s).runSinglePage(ctx, bound, model.StartPage(), 0, options)
 	owner.InternalClose()
@@ -310,7 +310,7 @@ func runBatch[R any](ctx context.Context, s *implCluster.Core, batch *Batch, dec
 func (b *Batch) queryExec(dst *InternalExecutionRequest, q *queryState) {
 	state := b.begin()
 	b.lastQuery, b.lastGen, b.lastOwner = q, q.generation.Load(), nil
-	*dst = InternalExecutionRequest{InternalOwner: q.owner, query: q, routing: b.requestRouting(), batch: state}
+	*dst = InternalExecutionRequest{InternalOwner: q.owner, query: q, routing: b.requestRouting(), batch: state, hasCounter: b.Kind == cqltype.CounterBatch}
 }
 
 // execBatch sends batch on s and drains its result, which must have no
