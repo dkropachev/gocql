@@ -302,7 +302,7 @@ func BenchmarkExecution(b *testing.B) {
 	})
 
 	b.Run("SingleConn", func(b *testing.B) {
-		srv := NewTestServer(b, 3, context.Background())
+		srv := NewTestServer(b, 4, context.Background())
 		defer srv.Stop()
 
 		cluster := testCluster(implProtocol.ProtoVersion4, srv.Address)

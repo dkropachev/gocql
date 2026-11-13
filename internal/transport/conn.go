@@ -292,7 +292,7 @@ type Conn struct {
 	InternalScyllaSupported     implEndpoint.ScyllaConnectionFeatures
 	InternalOpeningSharderEpoch uint64
 	InternalTargetEpoch         uint64
-	InternalSharedOps, orphans  int
+	orphans                     int
 	InternalMetadataTimeout     time.Duration
 	coalesceWait                time.Duration
 	InternalWriteTimeout        atomic.Int64
@@ -302,10 +302,12 @@ type Conn struct {
 	InternalPoolPolicy          InternalConnectionPoolPolicy
 	InternalMu                  sync.Mutex
 	InternalRequestedShard      cqltype.Option[uint32]
-	InternalExclusiveFlag       atomic.Bool
-	pauseRequested              atomic.Bool // mirrors pauseWanted for the reader's lock-free check
-	tabletsRoutingV1            int32
-	headerBuf                   [protocol.HeadSize]byte
+	// admission packs the shared-operation count with the closed and
+	// exclusive flags; see connection_state.go.
+	admission        atomic.Uint64
+	pauseRequested   atomic.Bool // mirrors pauseWanted for the reader's lock-free check
+	tabletsRoutingV1 int32
+	headerBuf        [protocol.HeadSize]byte
 	// closesOnCancel reports that cancelling InternalCtx closes the connection,
 	// so every waiting typed call receives the closure through its response.
 	closesOnCancel       bool
@@ -487,7 +489,7 @@ func (c *Conn) Write(p []byte) (n int, err error) {
 // read-deadline handling); Read is retained so that *Conn keeps satisfying
 // io.Reader for external callers, as it does io.Writer via Write.
 func (c *Conn) Read(p []byte) (n int, err error) {
-	if c.InternalExclusiveFlag.Load() {
+	if c.InternalExclusive() {
 		return 0, &connectivity.UnsupportedSettingError{Setting: "raw connection read", Reason: "reader is reserved for streaming"}
 	}
 	return c.InternalR.Read(p)
@@ -771,6 +773,7 @@ func (c *Conn) InternalCloseWithError(err error) {
 		return
 	}
 	c.InternalClosed = true
+	c.admission.Or(admissionClosed)
 	c.changeLocked()
 	callsToClose := c.InternalCalls
 
@@ -1128,6 +1131,21 @@ func (c *Conn) InternalProcessFrameSource(ctx context.Context, src InternalFrame
 
 			return fmt.Errorf("gocql: response for stream %d dispatched to a call on stream %d", head.Stream, streamID)
 		}
+		// The server answered: no later frame can arrive on this stream, and
+		// the call is unregistered below, so the stream is free again. It is
+		// freed after the header only, so another request may take the ID
+		// while this frame's body is still being read. That is safe: the call
+		// is already out of the table, so the new request's response finds its
+		// own call, and an exclusive reservation pauses the reader only between
+		// frames (see requestPause), so it cannot take the socket mid-body even
+		// if this call's caller gives up meanwhile. A live caller's cleanup then
+		// skips the connection lock (see releaseStream); an orphan keeps its
+		// stream until releaseStream settles its count.
+		if !call.orphaned {
+			c.InternalStreams.Clear(head.Stream)
+			call.streamFreed = true
+			c.changeLocked()
+		}
 	}
 	c.InternalCalls.Delete(head.Stream)
 	c.InternalMu.Unlock()
@@ -1207,15 +1225,21 @@ func (c *Conn) InternalAbandonRecvCall(call *InternalCallReq, framer *protocol.F
 	putCallReq(call)
 }
 
+// releaseStream frees call's stream unless the reader already did, settles an
+// orphan, and ends the stream for the observer. Its caller owns call's cleanup:
+// either it received the reader's response, whose delivery orders the reader's
+// streamFreed write before this read, or call never reached the reader.
 func (c *Conn) releaseStream(call *InternalCallReq) {
-	c.InternalMu.Lock()
-	if call.orphaned {
-		c.orphans--
-		call.orphaned = false
+	if call.orphaned || !call.streamFreed {
+		c.InternalMu.Lock()
+		if call.orphaned {
+			c.orphans--
+			call.orphaned = false
+		}
+		c.InternalStreams.Clear(call.InternalStreamID)
+		c.changeLocked()
+		c.InternalMu.Unlock()
 	}
-	c.InternalStreams.Clear(call.InternalStreamID)
-	c.changeLocked()
-	c.InternalMu.Unlock()
 
 	if call.streamObserverContext != nil {
 		call.streamObserverEndOnce.Do(func() {
@@ -1415,6 +1439,9 @@ type InternalCallReq struct {
 	state                 atomic.Uint32 // callWaiting, callClaimed, callDelivered or callStopped
 	orphaned              bool
 	typed                 bool
+	// streamFreed is set under InternalMu by the reader that freed the stream
+	// when it unregistered the call; releaseStream then leaves the stream alone.
+	streamFreed bool
 }
 
 var callReqPool = syncx.NewPool(func() *InternalCallReq {
@@ -1427,6 +1454,7 @@ func getCallReq(streamID int) *InternalCallReq {
 	call.state.Store(callWaiting)
 	call.typed = false
 	call.orphaned = false
+	call.streamFreed = false
 	call.InternalStreamID = streamID
 	call.dest = nil
 	call.streamObserverContext = nil
@@ -1577,20 +1605,10 @@ func (c *Conn) allocCall(call *InternalCallReq) error {
 	return c.allocCallLocked(call)
 }
 
-// allocSharedCall is beginShared followed by allocCall, in one critical section
-// unless the connection is reserved and admission has to wait. On success the
-// caller owns a shared admission it must end with endShared.
+// allocSharedCall is beginShared followed by allocCall. Admission takes the
+// connection lock only while the connection is reserved. On success the caller
+// owns a shared admission it must end with endShared.
 func (c *Conn) allocSharedCall(ctx context.Context, call *InternalCallReq) error {
-	c.InternalMu.Lock()
-	if !c.InternalClosed && !c.InternalExclusiveFlag.Load() {
-		err := c.allocCallLocked(call)
-		if err == nil {
-			c.InternalSharedOps++
-		}
-		c.InternalMu.Unlock()
-		return err
-	}
-	c.InternalMu.Unlock()
 	if err := c.beginShared(ctx); err != nil {
 		return err
 	}
@@ -1867,7 +1885,7 @@ func (c *Conn) Address() string {
 }
 
 func (c *Conn) AvailableStreams() int {
-	if c.InternalExclusiveFlag.Load() {
+	if c.InternalExclusive() {
 		return 0
 	}
 	return c.InternalStreams.Available()
@@ -2094,6 +2112,11 @@ type InternalConnReader struct {
 	pause          atomic.Bool
 	InternalDisarm atomic.Bool
 	transferable   bool
+	// lastDeadlineZero records that the socket's read deadline is already zero:
+	// the last SetReadDeadline succeeded with a zero time. It lets the default
+	// no-timeout configuration skip the syscall on every read. Guarded by
+	// deadlineMu, and cleared by every call that applies a non-zero deadline.
+	lastDeadlineZero bool
 }
 
 // maxReadAttempts bounds how many times Read re-arms the deadline and resumes a
@@ -2191,16 +2214,29 @@ func (c *InternalConnReader) armDeadline() error {
 	}
 	if c.InternalDisarm.Load() {
 		if c.pause.Load() {
+			c.lastDeadlineZero = false
 			return c.InternalConn.SetReadDeadline(time.Now())
 		}
 
-		return c.InternalConn.SetReadDeadline(time.Time{})
+		return c.setZeroReadDeadline()
 	}
 	if timeout := c.GetTimeout(); timeout > 0 {
+		c.lastDeadlineZero = false
 		return c.InternalConn.SetReadDeadline(time.Now().Add(timeout))
 	}
 
-	return c.InternalConn.SetReadDeadline(time.Time{})
+	return c.setZeroReadDeadline()
+}
+
+// setZeroReadDeadline clears the read deadline unless it is already clear.
+// The caller holds deadlineMu.
+func (c *InternalConnReader) setZeroReadDeadline() error {
+	if c.lastDeadlineZero {
+		return nil
+	}
+	err := c.InternalConn.SetReadDeadline(time.Time{})
+	c.lastDeadlineZero = err == nil
+	return err
 }
 
 // setDisarm enables or disables the read-deadline disarm used around the
@@ -2268,6 +2304,25 @@ type InternalDeadlineContextWriter struct {
 	// InternalSemaphore; it lives here so that a write does not allocate it.
 	writeBuffers    net.Buffers
 	InternalTimeout atomic.Int64
+	// lastDeadlineZero records that the socket's write deadline is already
+	// zero, so a no-timeout writer skips the syscall. Guarded by
+	// InternalSemaphore.
+	lastDeadlineZero bool
+}
+
+// setWriteDeadline applies timeout's deadline unless the socket already has a
+// zero deadline and timeout asks for none. *lastZero is guarded by the caller.
+func setWriteDeadline(w deadlineWriter, lastZero *bool, timeout int64) error {
+	if timeout > 0 {
+		*lastZero = false
+		return w.SetWriteDeadline(time.Now().Add(time.Duration(timeout)))
+	}
+	if *lastZero {
+		return nil
+	}
+	err := w.SetWriteDeadline(time.Time{})
+	*lastZero = err == nil
+	return err
 }
 
 func (c *InternalDeadlineContextWriter) InternalSetWriteTimeout(timeout time.Duration) {
@@ -2290,7 +2345,7 @@ func (c *InternalDeadlineContextWriter) InternalWriteContext(ctx context.Context
 		<-c.InternalSemaphore
 	}()
 
-	if err := c.InternalW.SetWriteDeadline(effectiveWriteDeadline(c.InternalTimeout.Load())); err != nil {
+	if err := setWriteDeadline(c.InternalW, &c.lastDeadlineZero, c.InternalTimeout.Load()); err != nil {
 		return 0, err
 	}
 

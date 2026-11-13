@@ -432,11 +432,11 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 		// Prefer an idle connection before closing admission on a busy candidate.
 		for pass := 0; pass < 2; pass++ {
 			for _, c := range candidates {
-				if c.InternalExclusiveFlag.Load() {
+				if c.InternalExclusive() {
 					continue
 				}
 				c.InternalMu.Lock()
-				idle := c.InternalSharedOps == 0 && c.InternalCalls.Len() == 0 && c.InternalStreams.InUse() == 0
+				idle := c.InternalSharedOps() == 0 && c.InternalCalls.Len() == 0 && c.InternalStreams.InUse() == 0
 				c.InternalMu.Unlock()
 				if pass == 0 && !idle || pass == 1 && idle {
 					continue
@@ -468,7 +468,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 		// Close the notification race if a reservation ended before registration.
 		available := false
 		for _, c := range candidates {
-			if !c.InternalExclusiveFlag.Load() && !c.Closed() {
+			if !c.InternalExclusive() && !c.Closed() {
 				available = true
 				break
 			}

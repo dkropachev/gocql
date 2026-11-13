@@ -561,7 +561,7 @@ func TestTypedConn(t *testing.T) {
 			if _, err := c.InternalReserveExclusive(ctx); !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatal("orphan acquisition", err)
 			}
-			if c.InternalExclusiveFlag.Load() {
+			if c.InternalExclusive() {
 				t.Fatal("canceled acquisition retained admission gate")
 			}
 			close(allowLate)

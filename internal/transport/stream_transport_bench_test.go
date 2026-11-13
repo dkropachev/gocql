@@ -91,7 +91,7 @@ func memoryReservation(version byte, compressor protocol.Compressor, source net.
 	if !ok || stream != 0 {
 		panic("synthetic stream allocation failed")
 	}
-	c.InternalExclusiveFlag.Store(true)
+	c.InternalSetExclusive(true)
 	r := &InternalExclusiveConn{InternalConn: c, InternalCtx: ctx, InternalComplete: true, InternalStream: stream, InternalDone: make(chan struct{})}
 	r.InternalInitStream(StreamLimits{})
 	return r
@@ -372,7 +372,7 @@ func BenchmarkStreamTransport(b *testing.B) {
 				c.InternalW = &InternalDeadlineContextWriter{InternalW: client, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
 				c.InternalInitFramerCache()
 				stream, _ := c.InternalStreams.GetStream()
-				c.InternalExclusiveFlag.Store(true)
+				c.InternalSetExclusive(true)
 				r := &InternalExclusiveConn{InternalConn: c, InternalCtx: ctx, InternalStream: stream, InternalComplete: true, InternalDone: make(chan struct{})}
 				r.InternalInitStream(StreamLimits{})
 				defer r.InternalClose(true)

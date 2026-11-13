@@ -81,7 +81,7 @@ func (w *InternalDeadlineContextWriter) writeSpans(ctx context.Context, chain wi
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	if err := w.InternalW.SetWriteDeadline(effectiveWriteDeadline(w.InternalTimeout.Load())); err != nil {
+	if err := setWriteDeadline(w.InternalW, &w.lastDeadlineZero, w.InternalTimeout.Load()); err != nil {
 		return 0, err
 	}
 
