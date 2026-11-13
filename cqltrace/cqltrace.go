@@ -49,6 +49,10 @@ type Info struct {
 	RequestSize  cql.Option[int32]
 	ResponseSize cql.Option[int32]
 	ID           cql.UUID
+	// Settled reports that Events stopped changing for Fetcher.Settle. It is
+	// false when Settle is negative or ctx ended first: nodes may still have
+	// been writing events, so Events may be incomplete.
+	Settled bool
 }
 
 // Event is one activity a node recorded in a trace session.
@@ -96,16 +100,16 @@ func addr(a netip.Addr) string {
 	return a.String()
 }
 
-// Fetcher reads CQL trace sessions. Its zero value reads at consistency ONE
-// and polls every 100ms.
+// Fetcher reads CQL trace sessions. Its zero value reads at consistency ONE,
+// polls every 100ms and settles for 200ms.
 type Fetcher struct {
 	// Poll is the wait between readiness checks. Zero means 100ms.
 	Poll time.Duration
-	// Settle, when positive, keeps reading a ready trace session's events
-	// until their count stays the same for Settle, so that events written
-	// late are included. Zero returns as soon as the session is ready. If
-	// ctx ends while settling, Fetch returns the events read so far and no
-	// error.
+	// Settle is how long a ready trace session's event count must stay the
+	// same before Fetch returns, so that events nodes write late are
+	// included. Zero means 200ms; negative returns as soon as the session is
+	// ready. If ctx ends while settling, Fetch returns the events read so far
+	// and no error, with Info.Settled false.
 	Settle time.Duration
 	// Consistency is the consistency the trace tables are read at. Zero
 	// (cql.Any, which cannot read) means cql.One.
@@ -126,8 +130,9 @@ func Fetch[D gocql.Dialect](ctx context.Context, s *gocql.Session[D], id cql.UUI
 //
 // The cluster writes a trace session asynchronously, after it answers the
 // traced request. A session is ready once its row records a duration and at
-// least one event is visible. Events can still arrive after that; set Settle
-// to wait for them. Only ctx bounds the wait; each read also uses the
+// least one event is visible. Events can still arrive after that, so Fetch
+// then waits for them to settle; Info.Settled reports whether they did. Only
+// ctx bounds the wait; each read also uses the
 // session's default profile timeout.
 func (f Fetcher) Fetch[D gocql.Dialect](ctx context.Context, s *gocql.Session[D], id cql.UUID) (Info, error) {
 	info := Info{ID: id}
@@ -166,26 +171,44 @@ func (f Fetcher) Fetch[D gocql.Dialect](ctx context.Context, s *gocql.Session[D]
 			return info, err
 		}
 	}
-	if f.Settle <= 0 {
-		return info, nil
+	err := f.settle(ctx, &info, func(ctx context.Context) ([]Event, error) {
+		return readEvents(ctx, s, id, options)
+	})
+	return info, err
+}
+
+// settle rereads a ready session's events with read until their count stays
+// the same for f.Settle, and sets info.Settled when it does.
+func (f Fetcher) settle(ctx context.Context, info *Info, read func(context.Context) ([]Event, error)) error {
+	d := f.Settle
+	if d == 0 {
+		d = 200 * time.Millisecond
+	}
+	if d < 0 {
+		return nil
 	}
 	for {
-		if err := wait(ctx, f.Settle); err != nil {
+		if err := wait(ctx, d); err != nil {
 			// The events read so far stand; only waiting for more failed.
-			return info, nil
+			return nil
 		}
-		events, err := readEvents(ctx, s, id, options)
+		events, err := read(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
 				// As above: the session is ready, ctx only cut the wait short.
-				return info, nil
+				return nil
 			}
-			return info, err
+			return err
 		}
-		if len(events) <= len(info.Events) {
-			return info, nil
+		switch {
+		case len(events) == len(info.Events):
+			info.Settled = true
+			return nil
+		case len(events) > len(info.Events):
+			info.Events = events
 		}
-		info.Events = events
+		// Fewer events means a replica that has not caught up answered the
+		// read: keep what was read and wait again.
 	}
 }
 

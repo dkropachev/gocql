@@ -178,6 +178,7 @@ func TestObserver(t *testing.T) {
 					require.NoError(t, err)
 					require.Equal(t, ref.ID, trace.ID)
 					require.NotEmpty(t, trace.Events)
+					require.True(t, trace.Settled)
 				}
 			}
 			checkTrace(result.CQLTraces())

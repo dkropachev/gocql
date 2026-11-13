@@ -106,3 +106,89 @@ func TestNotReady(t *testing.T) {
 		t.Fatalf("wait: %v", err)
 	}
 }
+
+func TestSettle(t *testing.T) {
+	events := func(n int) []Event { return make([]Event, n) }
+	// reads returns each count in turn, then repeats the last one.
+	reads := func(counts ...int) (func(context.Context) ([]Event, error), *int) {
+		calls := new(int)
+		return func(context.Context) ([]Event, error) {
+			i := min(*calls, len(counts)-1)
+			*calls++
+			return events(counts[i]), nil
+		}, calls
+	}
+	fast := Fetcher{Settle: time.Millisecond}
+	// bounded keeps a settle loop that never settles from hanging the suite.
+	bounded := func(t *testing.T) context.Context {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		t.Cleanup(cancel)
+		return ctx
+	}
+
+	t.Run("Stable", func(t *testing.T) {
+		info := Info{Events: events(2)}
+		read, calls := reads(2)
+		if err := fast.settle(bounded(t), &info, read); err != nil || !info.Settled || len(info.Events) != 2 || *calls != 1 {
+			t.Fatalf("err %v, settled %v, events %d, reads %d", err, info.Settled, len(info.Events), *calls)
+		}
+	})
+	t.Run("Growing", func(t *testing.T) {
+		info := Info{Events: events(1)}
+		read, calls := reads(2, 3, 3)
+		if err := fast.settle(bounded(t), &info, read); err != nil || !info.Settled || len(info.Events) != 3 || *calls != 3 {
+			t.Fatalf("err %v, settled %v, events %d, reads %d", err, info.Settled, len(info.Events), *calls)
+		}
+	})
+	t.Run("ShrinkingKeepsLargerRead", func(t *testing.T) {
+		info := Info{Events: events(3)}
+		read, calls := reads(1, 3)
+		if err := fast.settle(bounded(t), &info, read); err != nil || !info.Settled || len(info.Events) != 3 || *calls != 2 {
+			t.Fatalf("err %v, settled %v, events %d, reads %d", err, info.Settled, len(info.Events), *calls)
+		}
+	})
+	t.Run("Negative", func(t *testing.T) {
+		info := Info{Events: events(1)}
+		read, calls := reads(5)
+		if err := (Fetcher{Settle: -1}).settle(bounded(t), &info, read); err != nil || info.Settled || *calls != 0 {
+			t.Fatalf("err %v, settled %v, reads %d", err, info.Settled, *calls)
+		}
+	})
+	t.Run("DefaultWaits200ms", func(t *testing.T) {
+		info := Info{Events: events(1)}
+		read, _ := reads(1)
+		start := time.Now()
+		if err := (Fetcher{}).settle(bounded(t), &info, read); err != nil || !info.Settled {
+			t.Fatalf("err %v, settled %v", err, info.Settled)
+		}
+		if elapsed := time.Since(start); elapsed < 200*time.Millisecond {
+			t.Fatalf("settled after %v, want at least 200ms", elapsed)
+		}
+	})
+	t.Run("ContextEndsWhileSettling", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(bounded(t))
+		info := Info{Events: events(1)}
+		calls := 0
+		read := func(context.Context) ([]Event, error) {
+			calls++
+			cancel()
+			return nil, context.Canceled
+		}
+		if err := fast.settle(ctx, &info, read); err != nil || info.Settled || len(info.Events) != 1 || calls != 1 {
+			t.Fatalf("err %v, settled %v, events %d, reads %d", err, info.Settled, len(info.Events), calls)
+		}
+		// A context that has already ended stops the wait before any read.
+		calls = 0
+		if err := fast.settle(ctx, &info, read); err != nil || info.Settled || calls != 0 {
+			t.Fatalf("ended ctx: err %v, settled %v, reads %d", err, info.Settled, calls)
+		}
+	})
+	t.Run("ReadError", func(t *testing.T) {
+		info := Info{Events: events(1)}
+		failure := errors.New("read failed")
+		read := func(context.Context) ([]Event, error) { return nil, failure }
+		if err := fast.settle(bounded(t), &info, read); err != failure || info.Settled {
+			t.Fatalf("err %v, settled %v", err, info.Settled)
+		}
+	})
+}

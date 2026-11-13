@@ -1685,6 +1685,7 @@ type Info struct {
     Parameters map[string]string
     RequestSize, ResponseSize cql.Option[int32] // ScyllaDB only
     Events []Event
+    Settled bool // events stopped changing for Fetcher.Settle
 }
 type Event struct {
     ID cql.TimeUUID
@@ -1696,7 +1697,7 @@ func (i Info) Nodes() []netip.Addr
 func (i Info) String() string
 type Fetcher struct {
     Poll time.Duration          // 0: 100ms
-    Settle time.Duration        // >0: wait until the event count is stable
+    Settle time.Duration        // 0: 200ms; <0: return once ready
     Consistency cql.Consistency // 0 (Any): One
 }
 func (f Fetcher) Fetch[D gocql.Dialect](context.Context, *gocql.Session[D], cql.UUID) (Info, error)

@@ -37,9 +37,12 @@ for _, trace := range result.CQLTraces() {
 
 The cluster writes a trace session after it answers, so `Fetch` polls until
 the session's duration and at least one event are visible, within `ctx`.
-Events can still arrive after that; a `cqltrace.Fetcher` with `Settle` set
-waits for them. `Fetcher` also sets the poll interval and read consistency.
-When `ctx` ends first, the error matches `cqltrace.ErrNotReady`.
+Events can still arrive after that, so `Fetch` then waits until the event
+count stays the same for 200ms; `Info.Settled` reports whether it did, and is
+false when `ctx` ended first. A `cqltrace.Fetcher` changes that wait with
+`Settle` (negative skips it), the poll interval and the read consistency.
+When `ctx` ends before the session is ready, the error matches
+`cqltrace.ErrNotReady`.
 
 `exec.PrepareOptions.CQLTrace` traces the PREPARE request itself; the driver
 does not report that session's ID, so find it in `system_traces.sessions`.
