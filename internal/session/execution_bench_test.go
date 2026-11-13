@@ -270,33 +270,16 @@ func BenchmarkExecution(b *testing.B) {
 
 	b.Run("SharedAdmission", func(b *testing.B) {
 		for _, parallelism := range []int{1, 4, 16} {
-			b.Run(fmt.Sprint(parallelism), func(b *testing.B) {
-				s := func() *cluster.Core {
-					opaqueStorageValue := new(cluster.Core)
-					return opaqueStorageValue
-				}()
+			b.Run(fmt.Sprint(parallelism), func(b *testing.B) { benchmarkSharedAdmission(b, parallelism, nil) })
+		}
+	})
 
-				bound := runtimeQuery(b)
-				b.ReportAllocs()
-				old := runtime.GOMAXPROCS(parallelism)
-				defer runtime.GOMAXPROCS(old)
-				b.ResetTimer()
-				b.RunParallel(func(pb *testing.PB) {
-					for pb.Next() {
-						ctx, cancel, request, err := InternalAdmitExecution(context.Background(), s, bound, CompiledOptions{})
-						if err != nil {
-							b.Error(err)
-							return
-						}
-						_ = ctx
-						request.InternalLogical.InternalFinish(model.Result{}, nil)
-						cancel()
-						request.InternalLogical.releaseInput()
-					}
-				})
-				b.StopTimer()
-				bound.Close()
-				bound.Wait(context.Background())
+	// DefaultTimestamps is SharedAdmission with DefaultConfig's client
+	// timestamps, which admission assigns to every ordinary statement.
+	b.Run("DefaultTimestamps", func(b *testing.B) {
+		for _, parallelism := range []int{1, 4, 16} {
+			b.Run(fmt.Sprint(parallelism), func(b *testing.B) {
+				benchmarkSharedAdmission(b, parallelism, func(rt *InternalSessionRuntime) { rt.config = settings.DefaultConfig("localhost") })
 			})
 		}
 	})
@@ -327,4 +310,39 @@ func BenchmarkExecution(b *testing.B) {
 			}
 		})
 	})
+}
+
+// benchmarkSharedAdmission admits and finishes executions of one statement
+// from parallelism goroutines on a session without connections; configure, if
+// set, adjusts the session runtime first.
+func benchmarkSharedAdmission(b *testing.B, parallelism int, configure func(*InternalSessionRuntime)) {
+	s := func() *cluster.Core {
+		opaqueStorageValue := new(cluster.Core)
+		return opaqueStorageValue
+	}()
+
+	if configure != nil {
+		configure(InternalRuntimeFor(s))
+	}
+	bound := runtimeQuery(b)
+	b.ReportAllocs()
+	old := runtime.GOMAXPROCS(parallelism)
+	defer runtime.GOMAXPROCS(old)
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			ctx, cancel, request, err := InternalAdmitExecution(context.Background(), s, bound, CompiledOptions{})
+			if err != nil {
+				b.Error(err)
+				return
+			}
+			_ = ctx
+			request.InternalLogical.InternalFinish(model.Result{}, nil)
+			cancel()
+			request.InternalLogical.releaseInput()
+		}
+	})
+	b.StopTimer()
+	bound.Close()
+	bound.Wait(context.Background())
 }

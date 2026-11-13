@@ -11,7 +11,6 @@ import (
 	"math/rand/v2"
 	"net"
 	"net/netip"
-	"sync/atomic"
 	"time"
 
 	"log/slog"
@@ -39,12 +38,14 @@ type Config struct {
 	TLS               *tls.Config
 	// TLSSource, when set, supplies TLS for every dial; TLS then holds its
 	// config at Build, for validation.
-	TLSSource                 TLSSource
-	HostFilter                func(model.HostSnapshot) bool
-	ClientRoutes              *ClientRoutesOptions
-	DefaultProfile            *Profile
-	Partitioners              map[string]routing.TokenPartitioner
-	TimestampGenerator        func() int64
+	TLSSource      TLSSource
+	HostFilter     func(model.HostSnapshot) bool
+	ClientRoutes   *ClientRoutesOptions
+	DefaultProfile *Profile
+	Partitioners   map[string]routing.TokenPartitioner
+	// Timestamps is the source of client timestamps. Its zero value sends
+	// none, so the server assigns them; DefaultConfig sets DriverTimestamps.
+	Timestamps                ClientTimestamps
 	Identity                  IdentityOptions
 	Keyspace, CQLVersion      string
 	ContactPoints             []string
@@ -107,23 +108,47 @@ type TLSSource = connectivity.TLSSource
 func DefaultConfig(contactPoints ...string) Config {
 	profile := InternalDefaultProfile()
 	profile.Routing, _ = routing.NewRoutingPolicy(routing.RoutingOptions{TokenAware: true, ShuffleReplicas: true})
-	return Config{ContactPoints: append([]string(nil), contactPoints...), Port: 9042, Protocol: 4, CQLVersion: "3.0.0", ConnectTimeout: 5 * time.Second, DNSTimeout: 5 * time.Second, KeepaliveInterval: 30 * time.Second, KeepaliveTimeout: 30 * time.Second, NoDelay: true, Pool: PoolOptions{ConnectionsPerShard: 1, MaxExcessPerShard: 2, MaxRequestsPerConnection: 32768, MaxOrphanedStreams: 1024, AdvancedShardAwareness: AdvancedShardAwarenessOptions{Enabled: true, SourcePortStart: 49152, SourcePortEnd: 65535}}, Metadata: MetadataOptions{Mode: MetadataSchemaFull, InitialDiscovery: true, PeriodicRefresh: 60 * time.Second, RequestTimeout: 31 * time.Second, AgreementTimeout: 60 * time.Second, AgreementPoll: 200 * time.Millisecond, AutomaticAgreement: true, RefreshAfterAgreement: true, TopologyEvents: true, StatusEvents: true, SchemaEvents: true, ClientRouteEvents: true}, Limits: ProtocolLimits{MaxFrameBytes: 256 << 20, MaxDecompressedBytes: 256 << 20, MaxMetadataDepth: 64, MaxPagingStates: 65536, MaxPagingStateBytes: 16 << 20}, PreparedCacheSize: 1000, Partitioners: map[string]routing.TokenPartitioner{"org.apache.cassandra.dht.Murmur3Partitioner": routing.Murmur3TokenPartitioner, "Murmur3Partitioner": routing.Murmur3TokenPartitioner, "com.scylladb.dht.CDCPartitioner": routing.CDCTokenPartitioner, "CDCPartitioner": routing.CDCTokenPartitioner}, DefaultProfile: &profile, Identity: IdentityOptions{DriverName: InternalDefaultDriverName, DriverVersion: InternalDefaultDriverVersion}, Reconnect: defaultReconnectPolicy{}, ReportConfiguration: true, TimestampGenerator: InternalNewTimestampGenerator()}
+	return Config{ContactPoints: append([]string(nil), contactPoints...), Port: 9042, Protocol: 4, CQLVersion: "3.0.0", ConnectTimeout: 5 * time.Second, DNSTimeout: 5 * time.Second, KeepaliveInterval: 30 * time.Second, KeepaliveTimeout: 30 * time.Second, NoDelay: true, Pool: PoolOptions{ConnectionsPerShard: 1, MaxExcessPerShard: 2, MaxRequestsPerConnection: 32768, MaxOrphanedStreams: 1024, AdvancedShardAwareness: AdvancedShardAwarenessOptions{Enabled: true, SourcePortStart: 49152, SourcePortEnd: 65535}}, Metadata: MetadataOptions{Mode: MetadataSchemaFull, InitialDiscovery: true, PeriodicRefresh: 60 * time.Second, RequestTimeout: 31 * time.Second, AgreementTimeout: 60 * time.Second, AgreementPoll: 200 * time.Millisecond, AutomaticAgreement: true, RefreshAfterAgreement: true, TopologyEvents: true, StatusEvents: true, SchemaEvents: true, ClientRouteEvents: true}, Limits: ProtocolLimits{MaxFrameBytes: 256 << 20, MaxDecompressedBytes: 256 << 20, MaxMetadataDepth: 64, MaxPagingStates: 65536, MaxPagingStateBytes: 16 << 20}, PreparedCacheSize: 1000, Partitioners: map[string]routing.TokenPartitioner{"org.apache.cassandra.dht.Murmur3Partitioner": routing.Murmur3TokenPartitioner, "Murmur3Partitioner": routing.Murmur3TokenPartitioner, "com.scylladb.dht.CDCPartitioner": routing.CDCTokenPartitioner, "CDCPartitioner": routing.CDCTokenPartitioner}, DefaultProfile: &profile, Identity: IdentityOptions{DriverName: InternalDefaultDriverName, DriverVersion: InternalDefaultDriverVersion}, Reconnect: defaultReconnectPolicy{}, ReportConfiguration: true, Timestamps: DriverTimestamps()}
 }
-func InternalNewTimestampGenerator() func() int64 {
-	var last atomic.Int64
-	return func() int64 {
-		for {
-			prev := last.Load()
-			now := time.Now().UnixMicro()
-			if now <= prev {
-				now = prev + 1
-			}
-			if last.CompareAndSwap(prev, now) {
-				return now
-			}
-		}
+
+// TimestampMode is where client timestamps come from.
+type TimestampMode uint8
+
+const (
+	// ServerTimestampMode sends no client timestamp; the server assigns one.
+	ServerTimestampMode TimestampMode = iota
+	// DriverTimestampMode takes each timestamp from the time the session
+	// admitted the request, kept strictly increasing per session.
+	DriverTimestampMode
+	// GeneratedTimestampMode calls a user generator for each timestamp.
+	GeneratedTimestampMode
+)
+
+// ClientTimestamps selects the client timestamp source. Its fields are set
+// only by its constructors, so a generator and its mode always agree.
+type ClientTimestamps struct {
+	next func() int64
+	mode TimestampMode
+}
+
+// DriverTimestamps is the default source: microseconds since the epoch at
+// admission, strictly increasing per session.
+func DriverTimestamps() ClientTimestamps { return ClientTimestamps{mode: DriverTimestampMode} }
+
+// GeneratedTimestamps calls next for each timestamp; a nil next sends none.
+func GeneratedTimestamps(next func() int64) ClientTimestamps {
+	if next == nil {
+		return ClientTimestamps{}
 	}
+	return ClientTimestamps{next: next, mode: GeneratedTimestampMode}
 }
+
+// Mode reports the source.
+func (c ClientTimestamps) Mode() TimestampMode { return c.mode }
+
+// Generator returns the user generator of GeneratedTimestampMode, else nil.
+func (c ClientTimestamps) Generator() func() int64 { return c.next }
+
 func (config Config) Validate() error {
 	if _, err := config.UnixContact(); err != nil {
 		return err

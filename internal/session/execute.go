@@ -45,37 +45,84 @@ type prepareFlight struct {
 }
 type InternalSessionRuntime struct {
 	*implCluster.Core
-	executions                                                   map[*logicalExecution]struct{}
-	queries                                                      map[weak.Pointer[queryState]]*queryEntry
-	schema                                                       *schemafence.InternalPreparedSchemaTracker
-	preparing                                                    map[prepareCacheKey]*prepareFlight
-	InternalProfile                                              *settings.Profile
-	InternalPrepared                                             map[prepareCacheKey]*InternalPreparedState
-	pools                                                        map[*queryPoolEntry]struct{}
-	InternalPrepareOrder                                         []prepareCacheKey
-	defaultOptions                                               InternalResolvedOptions // the zero CompiledOptions resolved for this session
-	config                                                       settings.Config
-	prepareWorkers                                               sync.WaitGroup
-	requestID                                                    atomic.Uint64
-	requests, attempts, errors, retries, speculations, cancelled atomic.Uint64
-	inflight                                                     atomic.Int64
-	// pooledBusy counts busy queries of prepared statements' one-shot pools.
-	// Close waits for it to reach zero; pooledWake, guarded by InternalMu,
-	// is the channel it waits on.
-	pooledBusy atomic.Int64
+	executions           map[*logicalExecution]struct{}
+	queries              map[weak.Pointer[queryState]]*queryEntry
+	schema               *schemafence.InternalPreparedSchemaTracker
+	preparing            map[prepareCacheKey]*prepareFlight
+	InternalProfile      *settings.Profile
+	InternalPrepared     map[prepareCacheKey]*InternalPreparedState
+	pools                map[*queryPoolEntry]struct{}
+	InternalPrepareOrder []prepareCacheKey
+	defaultOptions       InternalResolvedOptions // the zero CompiledOptions resolved for this session
+	config               settings.Config
+	prepareWorkers       sync.WaitGroup
+	// pooledWake, guarded by InternalMu, is the channel Close waits on for
+	// pooledBusy to reach zero.
 	pooledWake chan struct{}
 	// batchPool keeps the queries that run the session's batches, created
 	// by the first batch.
 	batchPool *queryPool[codec.EmptyRecord, codec.EmptyRecord]
 	batchErr  error
-	batchOnce sync.Once
 	// closing is closed when Close starts stopping executions.
-	closing              chan struct{}
-	closingOnce          sync.Once
-	prepareWorkersMu     sync.Mutex
-	InternalMu           sync.Mutex
+	closing          chan struct{}
+	batchOnce        sync.Once
+	closingOnce      sync.Once
+	prepareWorkersMu sync.Mutex
+	InternalMu       sync.Mutex
+	// refusedRegistrations counts admissions that took a request id but
+	// that registerExecution refused: the session was closing or closed, or
+	// the reusable query was closed. Requests is requestID minus this, so
+	// admission writes no separate request counter.
+	refusedRegistrations atomic.Uint64
 	prepareWorkersClosed bool
+
+	// The fields below are written on the request path. Each group has its
+	// own cache line, so that the writes do not evict the read-mostly fields
+	// above (config, defaultOptions) from other cores' caches, nor one
+	// another's lines.
+	_         cacheLinePad
+	requestID atomic.Uint64
+	// timestamps is written with requestID, by the same admission.
+	timestamps startTimestamps
+	_          cacheLinePad
+	// attempts..inflight feed Metrics only.
+	attempts, errors, retries, speculations, cancelled atomic.Uint64
+	inflight                                           atomic.Int64
+	// pooledBusy counts busy queries of prepared statements' one-shot pools.
+	// Close waits for it to reach zero on pooledWake.
+	pooledBusy atomic.Int64
+	_          cacheLinePad
 }
+
+// startTimestamps is the session's default client timestamp source. It takes
+// each timestamp from the start time admission already read, instead of
+// reading the clock again.
+type startTimestamps struct{ last atomic.Int64 }
+
+// next returns started in microseconds, raised above every timestamp returned
+// before, so the timestamps are strictly increasing and never earlier than
+// their start. Uncontended, it takes one CAS. Once another request has raised
+// the last timestamp to started or beyond, one increment past it is used; the
+// CAS is retried only while the last timestamp stays below started.
+func (t *startTimestamps) next(started time.Time) int64 {
+	now := started.UnixMicro()
+	for {
+		prev := t.last.Load()
+		if now <= prev {
+			return t.last.Add(1)
+		}
+		if t.last.CompareAndSwap(prev, now) {
+			return now
+		}
+	}
+}
+
+// cacheLineSize is the coherence unit hot counters are padded to.
+const cacheLineSize = 64
+
+// cacheLinePad keeps the fields on either side of it off one cache line,
+// whatever the alignment of the struct that holds it.
+type cacheLinePad struct{ _ [cacheLineSize]byte }
 
 func InternalRuntimeFor(s *implCluster.Core) *InternalSessionRuntime {
 	// The runtime is created once per session and never replaced, so every
@@ -108,13 +155,22 @@ func (rt *InternalSessionRuntime) sessionDone() <-chan struct{} { return rt.clos
 
 func (rt *InternalSessionRuntime) metricsSnapshot() metrics.Snapshot {
 	cache := implCluster.SessionData(rt.Core).InternalConnCfg
-	result := metrics.Snapshot{Requests: rt.requests.Load(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), Cancelled: rt.cancelled.Load(), InFlight: rt.inflight.Load()}
+	result := metrics.Snapshot{Requests: rt.requestCount(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), Cancelled: rt.cancelled.Load(), InFlight: rt.inflight.Load()}
 	if cache != nil {
 		stats := cache.InternalReceiveCache.Stats()
 		result.ReceiveCacheHits, result.ReceiveCacheMisses = stats.Hits, stats.Misses
 		result.ReceiveCacheBytes, result.ReceiveCacheObjects = stats.RetainedBytes, stats.RetainedObjects
 	}
 	return result
+}
+
+// requestCount reports the admitted requests: every request id taken, minus
+// the admissions registerExecution refused. The refusals are read first, so a
+// refusal racing with this read cannot outnumber the ids it read. The count
+// may briefly include an admission that has its id but is about to be refused.
+func (rt *InternalSessionRuntime) requestCount() uint64 {
+	refused := rt.refusedRegistrations.Load()
+	return rt.requestID.Load() - refused
 }
 
 func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, keyspace string, options PrepareOptions) (state *InternalPreparedState, err error) {
@@ -489,7 +545,7 @@ func (l *logicalExecution) InternalFinish(result model.Result, err error) {
 	if err != nil {
 		rt.errors.Add(1)
 	} else {
-		rt.RecordV2Latency(time.Since(l.started))
+		rt.RecordV2Latency(l.id, time.Since(l.started))
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		rt.cancelled.Add(1)
@@ -632,14 +688,22 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 	*logical = logicalExecution{lifetime: executionLifetime{cancel: stop, done: done}, id: rt.requestID.Add(1), started: started, observer: observer, rt: rt, request: request}
 	request.InternalLogical = logical
 	if err := rt.registerExecution(request.InternalLogical, request.InternalOwner); err != nil {
+		// registerExecution refuses a closing or closed session or a closed
+		// query; either way this id is not a request.
+		rt.refusedRegistrations.Add(1)
 		cancel()
 		request.InternalLogical.releaseInput()
 		return nil, nil, nil, err
 	}
-	rt.requests.Add(1)
 	rt.inflight.Add(1)
-	if !request.routing.Conditional && !requestHasCounter(request) && !request.InternalOptions.InternalOptions.Timestamp.Set && rt.config.TimestampGenerator != nil {
-		request.InternalOptions.InternalOptions.Timestamp = cqltype.Option[int64]{Value: rt.config.TimestampGenerator(), Set: true}
+	if mode := rt.config.Timestamps.Mode(); mode != settings.ServerTimestampMode && !request.routing.Conditional && !requestHasCounter(request) && !request.InternalOptions.InternalOptions.Timestamp.Set {
+		var timestamp int64
+		if mode == settings.DriverTimestampMode {
+			timestamp = rt.timestamps.next(started)
+		} else {
+			timestamp = rt.config.Timestamps.Generator()()
+		}
+		request.InternalOptions.InternalOptions.Timestamp = cqltype.Option[int64]{Value: timestamp, Set: true}
 	}
 	return runctx, cancel, request, nil
 }

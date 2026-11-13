@@ -251,7 +251,7 @@ func TestSession(t *testing.T) {
 		}()
 
 		for i := 1; i <= 100; i++ {
-			s.RecordV2Latency(time.Duration(i) * time.Millisecond)
+			s.RecordV2Latency(uint64(i), time.Duration(i)*time.Millisecond)
 		}
 		p := s.Peripheral()
 		p.publishLatencySummary()
@@ -260,7 +260,7 @@ func TestSession(t *testing.T) {
 			t.Fatal(m)
 		}
 		// With nothing recorded since, the previous figures stay.
-		for range len(p.latencyMarks) + 1 {
+		for range len(p.latencyBatches) + 1 {
 			p.publishLatencySummary()
 		}
 		if m := s.Metrics(); m.LatencyP50 != 50*time.Millisecond || m.LatencyP99 != 99*time.Millisecond {
@@ -268,7 +268,7 @@ func TestSession(t *testing.T) {
 		}
 		// The samples above are now older than the window, so only the new
 		// ones count.
-		s.RecordV2Latency(time.Second)
+		s.RecordV2Latency(101, time.Second)
 		p.publishLatencySummary()
 		if m := s.Metrics(); m.LatencyP50 != time.Second || m.LatencyP99 != time.Second {
 			t.Fatal("percentiles kept samples older than the window:", m)
@@ -279,25 +279,22 @@ func TestSession(t *testing.T) {
 			if i >= len(p.latency) {
 				d = time.Minute
 			}
-			s.RecordV2Latency(d)
+			s.RecordV2Latency(uint64(102+i), d)
 		}
 		p.publishLatencySummary()
 		if m := s.Metrics(); m.LatencyP50 != time.Minute {
 			t.Fatal("percentiles kept samples beyond the newest 1024:", m)
 		}
-		// A recomputation between RecordV2Latency counting a sample and
-		// storing it reads the slot's old value. The next one after the
-		// store must pick the value up rather than treat the count as seen.
-		for range 2 * len(p.latencyMarks) {
+		// A sample stored after a recomputation, however late, is picked up
+		// by the next one.
+		for range 2 * len(p.latencyBatches) {
 			p.publishLatencySummary()
 		}
-		index := p.latencyCount.Add(1) - 1
 		p.publishLatencySummary()
-		p.latency[index%uint64(len(p.latency))].Store(int64(time.Hour))
-		p.latencyStored.Add(1)
+		s.RecordV2Latency(uint64(102+2*len(p.latency)), time.Hour)
 		p.publishLatencySummary()
 		if m := s.Metrics(); m.LatencyP50 != time.Hour {
-			t.Fatal("percentiles missed a sample stored after a recomputation counted it:", m)
+			t.Fatal("percentiles missed a sample stored after a recomputation:", m)
 		}
 		generation := sessionTypedSchemaGeneration(s)
 		s.PublishV2Metadata()

@@ -76,23 +76,21 @@ type InternalV2PeripheralState struct {
 	knownTabletTables             map[routing.InternalMetadataTable]bool
 	refreshDiagnostics            []error
 	InternalConfig                settings.Config
-	latency                       [1024]atomic.Int64
+	_                             [64]byte
+	latency                       [v2LatencySlots]atomic.Int64 // latency+1 per slot; 0 is empty
+	_                             [64]byte
 	workers                       sync.WaitGroup
 	InternalPublicationRevision   uint64
 	preparedRefreshVersion        uint64
 	InternalSchemaReconciled      atomic.Uint64
 	schemaGeneration              atomic.Uint64
 	InternalPlacementEpoch        atomic.Uint64
-	latencyCount                  atomic.Uint64
-	// latencyStored counts samples whose value is in latency. It trails
-	// latencyCount while a RecordV2Latency is between its two steps.
-	latencyStored atomic.Uint64
-	// latencyMarks, latencyTick and latencyPublished belong to
-	// publishLatencySummary.
-	latencyMarks     [10]uint64
-	latencyTick      int
-	latencyPublished uint64
-	orphans          atomic.Uint64
+	// latencyBatches and latencyTick belong to publishLatencySummary:
+	// latencyBatches[i] holds the samples one call took from latency, and
+	// latencyTick indexes the oldest.
+	latencyBatches [10][]time.Duration
+	latencyTick    int
+	orphans        atomic.Uint64
 	// InternalMu guards pending scopes and feedback captures. A prepared
 	// conflict reads InternalSchemaReconciled atomically first and takes this
 	// lock only once that counter shows a reconcile may have cleared its scope.
@@ -1115,44 +1113,52 @@ func sessionTypedSchemaGeneration(s *Core) uint64 {
 	return p.schemaGeneration.Load() + 1
 }
 
-// RecordV2Latency records the latency of an execution that succeeded.
-func (s *Core) RecordV2Latency(latency time.Duration) {
+// v2LatencySlots is the size of the latency ring.
+const v2LatencySlots = 1024
+
+// v2LatencySlot is the ring slot of the request with this id. Consecutive ids
+// land at least 8 slots (64 bytes) apart, so concurrent requests write
+// different cache lines, and every slot is used once in 1024 consecutive ids.
+func v2LatencySlot(id uint64) uint64 {
+	return (id%128)*8 + id/128%8
+}
+
+// RecordV2Latency records the latency of the request with this id, an
+// execution that succeeded. It writes no shared counter: the slot follows
+// from the id.
+func (s *Core) RecordV2Latency(id uint64, latency time.Duration) {
 	if s == nil || latency < 0 {
 		return
 	}
-	p := s.Peripheral()
-	index := p.latencyCount.Add(1) - 1
-	p.latency[index%uint64(len(p.latency))].Store(int64(latency))
-	p.latencyStored.Add(1)
+	s.Peripheral().latency[v2LatencySlot(id)].Store(int64(latency) + 1)
 }
 
 // publishLatencySummary recomputes the percentiles from the samples recorded
-// in the last len(latencyMarks) calls, at most len(latency) of them. Bounding
-// the window by time as well as by count keeps the figures current when
-// executions are rare. When no sample was stored since the previous call, the
-// previous figures stay. Only the metrics worker calls it, once a second.
+// in the last len(latencyBatches) calls, at most len(latency) of them,
+// preferring newer calls' samples. Bounding the window by time as well as by
+// count keeps the figures current when executions are rare. Each call takes
+// the samples out of latency, so a sample is read once, whenever its store
+// lands. A slot holds only the latest successful finish among the ids that
+// map to it (v2LatencySlot: one id in every 1024), so between two calls the
+// ring keeps at most one sample per 1024 consecutive ids, not the last 1024
+// finishes. When no sample was stored since the previous call, the previous
+// figures stay. Only the metrics worker calls it, once a second.
 func (p *InternalV2PeripheralState) publishLatencySummary() {
-	// Read stored first: a sample counted in count but not yet in stored may
-	// have been read before its value landed, and the later increment of
-	// stored brings a recomputation that picks the value up.
-	stored := p.latencyStored.Load()
-	count := p.latencyCount.Load()
-	// latencyMarks[latencyTick] holds the count from len(latencyMarks) calls ago.
-	since := p.latencyMarks[p.latencyTick]
-	p.latencyMarks[p.latencyTick] = count
-	p.latencyTick = (p.latencyTick + 1) % len(p.latencyMarks)
-	if stored == p.latencyPublished {
+	batch := p.latencyBatches[p.latencyTick][:0]
+	for i := range p.latency {
+		if v := p.latency[i].Swap(0); v != 0 {
+			batch = append(batch, time.Duration(v-1))
+		}
+	}
+	p.latencyBatches[p.latencyTick] = batch
+	p.latencyTick = (p.latencyTick + 1) % len(p.latencyBatches)
+	if len(batch) == 0 {
 		return
 	}
-	p.latencyPublished = stored
-	n := min(count-since, uint64(len(p.latency)))
-	if n == 0 {
-		// Only samples counted before the window landed since the last call.
-		return
-	}
-	samples := make([]time.Duration, int(n))
-	for i := range samples {
-		samples[i] = time.Duration(p.latency[(count-n+uint64(i))%uint64(len(p.latency))].Load())
+	samples := make([]time.Duration, 0, len(p.latency))
+	for k := 1; k <= len(p.latencyBatches) && len(samples) < len(p.latency); k++ {
+		b := p.latencyBatches[(p.latencyTick-k+len(p.latencyBatches))%len(p.latencyBatches)]
+		samples = append(samples, b[:min(len(b), len(p.latency)-len(samples))]...)
 	}
 	slices.Sort(samples)
 	percentile := func(percent int) time.Duration { return samples[(len(samples)*percent+99)/100-1] }
