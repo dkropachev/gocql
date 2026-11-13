@@ -1242,8 +1242,13 @@ func (c *Conn) misplacedCall(call *InternalCallReq, stream int) error {
 		return err
 	}
 	// The table is corrupt, so the call's stream is left alone and the call
-	// is not recycled.
+	// is not recycled. Like close, this abandons the stream for the observer.
 	call.deliver(InternalCallResp{InternalErr: err})
+	if call.streamObserverContext != nil {
+		call.streamObserverEndOnce.Do(func() {
+			call.streamObserverContext.StreamAbandoned(ObservedStream{Host: c.InternalHost})
+		})
+	}
 	return err
 }
 
