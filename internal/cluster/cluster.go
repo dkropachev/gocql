@@ -153,7 +153,9 @@ type InternalClusterSettings struct {
 	privateStorage clusterSettingsStorage
 	// The time to wait for frames before flushing the frames connection to Cassandra.
 	// Can help reduce syscall overhead by making less calls to write. Set to 0 to
-	// disable.
+	// disable. Typed connections, which a session's pool and control
+	// connection use, ignore it: their writer already batches the requests
+	// queued while it was busy.
 	//
 	// (default: 200 microseconds)
 	WriteCoalesceWaitTime time.Duration

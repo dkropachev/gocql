@@ -33,7 +33,7 @@ func TestQueryDrainAdmission(t *testing.T) {
 				<-release
 			}
 		}}
-		query := codecTestMust(unpreparedQuery(s, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, Options{Observer: observer}))
+		query := codecTestMust(unpreparedQuery(s, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, Options{Observer: observer, Profile: generalPathProfile()}))
 		t.Cleanup(query.Close)
 		served := make(chan struct{})
 		go func() {
@@ -89,7 +89,7 @@ func TestQueryDrainAdmission(t *testing.T) {
 		s, conns, peers := runtimeTestSession(t, 1)
 		entered, release := make(chan struct{}), make(chan struct{})
 		observer := &execVoidObserver{onAttempt: func(routing.AttemptEvent) { close(entered); <-release }}
-		query := codecTestMust(unpreparedQuery(s, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, Options{Observer: observer}))
+		query := codecTestMust(unpreparedQuery(s, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, Options{Observer: observer, Profile: generalPathProfile()}))
 		go func() {
 			stream := typedTestReadRequest(t, conns[0], peers[0])
 			if _, err := peers[0].Write(typedTestResponse(t, 4, stream, []byte{0, 0, 0, frm.ResultKindVoid})); err != nil {

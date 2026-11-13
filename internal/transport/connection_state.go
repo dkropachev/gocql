@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -476,67 +477,78 @@ func (s *exclusiveReadSource) readAvailable(p []byte) (int, error) {
 	return s.raw.readAvailable(p)
 }
 
-func (c *Conn) typedHeartbeat(ctx context.Context) {
+// startTypedHeartbeat sends heartbeats from a timer callback, so that an
+// idle connection holds no goroutine between them.
+func (c *Conn) startTypedHeartbeat(ctx context.Context) {
 	config := c.InternalCfg.TypedConfig
-	interval := config.KeepaliveInterval
-	if interval == 0 {
+	if config.KeepaliveInterval == 0 {
 		return
 	}
-	timer := time.NewTimer(interval)
-	defer timer.Stop()
-	failures := 0
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-timer.C:
-		}
-		callCtx := ctx
-		cancel := func() {}
-		if config.KeepaliveTimeout > 0 {
-			callCtx, cancel = context.WithTimeout(ctx, config.KeepaliveTimeout)
-		}
-		err := c.beginShared(callCtx)
-		if err != nil {
-			cancel()
-			if ctx.Err() != nil {
-				return
-			}
-			timer.Reset(interval)
-			continue
-		}
-		done := make(chan struct{})
-		stop := context.AfterFunc(callCtx, func() { c.InternalCloseWithError(callCtx.Err()); close(done) })
-		f, err := c.execAdmitted(callCtx, &protocol.WriteOptionsFrame{}, nil, 0, true)
-		if !stop() {
-			<-done
-		}
-		cancel()
-		c.endShared()
-		if err == nil {
-			var result protocol.Frame
-			result, err = f.ParseFrame()
-			f.Release()
-			if err == nil {
-				if _, ok := result.(*frm.SupportedFrame); !ok {
-					err = fmt.Errorf("gocql: unexpected heartbeat response %T", result)
-				}
-			}
-		}
-		if err == nil {
-			failures = 0
-		} else {
-			failures++
-			if c.Closed() {
-				return
-			}
-		}
-		if failures > 5 {
-			c.InternalCloseWithError(fmt.Errorf("gocql: heartbeat failed"))
-			return
-		}
-		timer.Reset(interval)
+	h := &typedHeartbeat{conn: c, ctx: ctx, interval: config.KeepaliveInterval, timeout: config.KeepaliveTimeout}
+	// The callback re-arms the timer, so it is set before the first run.
+	h.timer = time.AfterFunc(time.Duration(math.MaxInt64), h.beat)
+	h.timer.Reset(h.interval)
+	context.AfterFunc(ctx, func() { h.timer.Stop() })
+}
+
+type typedHeartbeat struct {
+	conn              *Conn
+	ctx               context.Context
+	timer             *time.Timer
+	interval, timeout time.Duration
+	failures          int // read by one beat at a time: each re-arms the timer last
+}
+
+func (h *typedHeartbeat) beat() {
+	if h.ctx.Err() == nil && h.once() {
+		h.timer.Reset(h.interval)
 	}
+}
+
+// once sends one heartbeat and reports whether to schedule the next.
+func (h *typedHeartbeat) once() bool {
+	c, ctx := h.conn, h.ctx
+	callCtx := ctx
+	cancel := func() {}
+	if h.timeout > 0 {
+		callCtx, cancel = context.WithTimeout(ctx, h.timeout)
+	}
+	err := c.beginShared(callCtx)
+	if err != nil {
+		cancel()
+		return ctx.Err() == nil
+	}
+	done := make(chan struct{})
+	stop := context.AfterFunc(callCtx, func() { c.InternalCloseWithError(callCtx.Err()); close(done) })
+	f, err := c.execAdmitted(callCtx, &protocol.WriteOptionsFrame{}, nil, 0, true)
+	if !stop() {
+		<-done
+	}
+	cancel()
+	c.endShared()
+	if err == nil {
+		var result protocol.Frame
+		result, err = f.ParseFrame()
+		f.Release()
+		if err == nil {
+			if _, ok := result.(*frm.SupportedFrame); !ok {
+				err = fmt.Errorf("gocql: unexpected heartbeat response %T", result)
+			}
+		}
+	}
+	if err == nil {
+		h.failures = 0
+	} else {
+		h.failures++
+		if c.Closed() {
+			return false
+		}
+	}
+	if h.failures > 5 {
+		c.InternalCloseWithError(fmt.Errorf("gocql: heartbeat failed"))
+		return false
+	}
+	return true
 }
 
 func (c *Conn) InternalOpeningContext(parent context.Context) (context.Context, context.CancelFunc) {

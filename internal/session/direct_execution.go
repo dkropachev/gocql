@@ -5,10 +5,12 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -21,24 +23,24 @@ import (
 // goroutine. Executions of a reusable query and one-shot executions both
 // qualify; a request pinned to a connection with a stream observer does not,
 // since executePageDirect hands such a connection to the general path.
-func canExecuteDirect(s *InternalSessionRuntime, request *InternalExecutionRequest) bool {
-	if request.InternalLogical == nil || request.InternalLogical.observer != nil || request.options.InternalProfile.Speculation != nil {
+func canExecuteDirect(request *InternalExecutionRequest) bool {
+	if request.InternalLogical == nil || request.options.InternalProfile.Speculation != nil {
 		return false
 	}
 	if request.connection != nil && request.connection.InternalStreamObserver != nil {
 		return false
 	}
-	return canUseDirectProfile(request.options.InternalProfile) && s.config.CoalesceWait == 0
+	return canUseDirectProfile(request.options.InternalProfile)
 }
 func canUseDirectProfile(profile settings.Profile) bool {
 	if profile.Speculation != nil {
 		return false
 	}
-	switch policy := profile.Routing.(type) {
+	switch profile.Routing.(type) {
 	case nil:
 		return true
 	case *routing.InternalRoutingPolicy:
-		return !policy.InternalOptions.Latency.Enabled
+		return true
 	default:
 		return false // custom routing callbacks retain cancellation isolation
 	}
@@ -46,8 +48,9 @@ func canUseDirectProfile(profile settings.Profile) bool {
 
 // Submission transfers buffer ownership to the persistent connection writer.
 // The calling goroutine coordinates ordinary attempts directly, without an
-// outcome channel or per-attempt goroutine. Optional callbacks/speculation keep
-// their general execution path.
+// outcome channel or per-attempt goroutine. Observers and latency-aware
+// routing are told about each attempt on this goroutine; speculation and
+// custom routing policies keep the general execution path.
 func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request *InternalExecutionRequest, state model.PageState, plan routing.QueryPlan) (*transport.InternalResponsePage, error) {
 	consistency := request.options.InternalProfile.Consistency
 	aggregate := model.Result{AchievedConsistency: consistency}
@@ -55,6 +58,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 	failure := func(err error) (*transport.InternalResponsePage, error) { return nil, log.error(err, aggregate) }
 	var conn *transport.Conn
 	pinned := false // the first attempt went to request.pinned
+	observe := request.InternalLogical.observer != nil || routingObservesLatency(request.options.InternalProfile.Routing)
 	for attempt := 1; ; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return failure(err)
@@ -104,9 +108,18 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		} else {
 			started = time.Now()
 		}
+		var end func(routing.AttemptEvent)
+		var observed time.Time
+		if observe {
+			end, observed = startDirectAttempt(request, conn, attempt)
+		}
 		response, err := s.executeTypedAttempt(ctx, conn, request, state, consistency)
+		latency := time.Since(started)
+		if observe {
+			s.endDirectAttempt(request, conn, attempt, observed, response, err, end)
+		}
 		aggregate.Attempts = attempt
-		aggregate.Latency += time.Since(started)
+		aggregate.Latency += latency
 		aggregate.HostID = conn.InternalHostID()
 		aggregate.AchievedConsistency = consistency
 		mergeResponseResult(&aggregate, response)
@@ -214,5 +227,47 @@ func mergeResponseResult(result *model.Result, response *transport.InternalRespo
 			entry.Value.Value = entry.Value.Value.Clone()
 		}
 		result.AddCustomPayload(entry)
+	}
+}
+
+// routingObservesLatency reports whether policy learns from attempt latencies.
+func routingObservesLatency(policy routing.RoutingPolicy) bool {
+	p, ok := policy.(*routing.InternalRoutingPolicy)
+	return ok && p.InternalOptions.Latency.Enabled
+}
+
+// attemptTarget is the host and shard an attempt on conn goes to.
+func attemptTarget(request *InternalExecutionRequest, conn *transport.Conn) model.Target {
+	target := model.Target{HostID: conn.InternalHostID(), ShardID: request.routing.ShardID}
+	if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0 {
+		target.ShardID = cqltype.Option[uint32]{Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard), Set: true}
+	}
+	return target
+}
+
+// startDirectAttempt tells the request's observer, on the calling
+// goroutine, that a direct attempt starts, and returns its end callback with
+// the attempt's start. That start excludes routing, as on the general path,
+// although the execution's own latency may include it.
+//
+//go:noinline
+func startDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int) (func(routing.AttemptEvent), time.Time) {
+	l := request.InternalLogical
+	started := time.Now()
+	return l.startAttempt(routing.AttemptStart{RequestID: l.id, Attempt: attempt, Target: attemptTarget(request, conn), Started: started}), started
+}
+
+// endDirectAttempt reports one finished direct attempt to the observer's end
+// callback and to a latency-aware routing policy, on the calling goroutine.
+//
+//go:noinline
+func (s *InternalSessionRuntime) endDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int, started time.Time, response *transport.InternalResponsePage, err error, end func(routing.AttemptEvent)) {
+	event := routing.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: attemptTarget(request, conn), Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
+	if end != nil {
+		perfAdd(1, 1)
+		s.Core.ObserveSafely(func() { end(event) })
+	}
+	if policy := request.options.InternalProfile.Routing; routingObservesLatency(policy) {
+		s.Core.ObserveSafely(func() { policy.Observe(event) })
 	}
 }

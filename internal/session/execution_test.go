@@ -222,40 +222,34 @@ func TestExecution(t *testing.T) {
 	})
 
 	// TestExecution/CanExecuteDirect checks that executions without a reusable
-	// query take the direct path unless an observer, speculation, write
-	// coalescing or a stream-observed connection needs the general one.
+	// query take the direct path unless speculation or a stream-observed
+	// connection needs the general one. Observers keep it.
 	t.Run("CanExecuteDirect", func(t *testing.T) {
-		rt := &InternalSessionRuntime{}
 		request := func() *InternalExecutionRequest {
 			return &InternalExecutionRequest{InternalLogical: &logicalExecution{}, options: &InternalResolvedOptions{InternalProfile: settings.InternalDefaultProfile()}}
 		}
-		if !canExecuteDirect(rt, request()) {
+		if !canExecuteDirect(request()) {
 			t.Fatal("one-shot execution should run direct")
 		}
 		r := request()
 		r.query = &queryState{}
-		if !canExecuteDirect(rt, r) {
+		if !canExecuteDirect(r) {
 			t.Fatal("query execution should run direct")
 		}
 		r = request()
 		r.InternalLogical.observer = directTestObserver{}
-		if canExecuteDirect(rt, r) {
-			t.Fatal("an observer needs the general path")
+		if !canExecuteDirect(r) {
+			t.Fatal("an observer must keep the direct path")
 		}
 		r = request()
 		r.connection = &transport.Conn{InternalStreamObserver: directTestStreamObserver{}}
-		if canExecuteDirect(rt, r) {
+		if canExecuteDirect(r) {
 			t.Fatal("a stream-observed connection needs the general path")
 		}
 		r = request()
 		r.InternalLogical = nil
-		if canExecuteDirect(rt, r) {
+		if canExecuteDirect(r) {
 			t.Fatal("an unadmitted request needs the general path")
-		}
-		coalescing := &InternalSessionRuntime{}
-		coalescing.config.CoalesceWait = time.Millisecond
-		if canExecuteDirect(coalescing, request()) {
-			t.Fatal("write coalescing needs the general path")
 		}
 	})
 
@@ -287,7 +281,7 @@ func TestExecution(t *testing.T) {
 					defer cancel()
 					done := make(chan error, 1)
 					go func() {
-						_, err := Exec(ctx, s, b, testOptions(Options{Observer: observer}))
+						_, err := Exec(ctx, s, b, testOptions(Options{Observer: observer, Profile: generalPathProfile()}))
 						done <- err
 					}()
 					select {
