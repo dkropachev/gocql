@@ -13,6 +13,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
@@ -127,8 +128,7 @@ func TestTooManyOptions(t *testing.T) {
 	two := []exec.CompiledOptions{{}, {}}
 	check := func(name string, err error) {
 		t.Helper()
-		var ve *cqlerr.ValidationError
-		if !errors.As(err, &ve) || ve.Field != "options" || ve.Err.Error() != "at most one CompiledOptions" {
+		if ve, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || ve.Field != "options" || ve.Err.Error() != "at most one CompiledOptions" {
 			t.Errorf("%s: error %v", name, err)
 		}
 	}
@@ -138,11 +138,16 @@ func TestTooManyOptions(t *testing.T) {
 	check("One", err)
 	_, err = p.Each(ctx, 1, &dst, func(*[]byte) error { return nil }, two...)
 	check("Each", err)
+	yields := 0
 	for row, err := range p.All(ctx, 1, &dst, two...) {
+		yields++
 		if row != nil {
 			t.Error("All yielded a row")
 		}
 		check("All", err)
+	}
+	if yields != 1 {
+		t.Errorf("All: %d yields, want 1", yields)
 	}
 	_, err = p.Run(ctx, 1, two...)
 	check("Run", err)
@@ -152,8 +157,14 @@ func TestTooManyOptions(t *testing.T) {
 	check("ExecBatch", err)
 	_, err = s.RunBatch[[]byte](ctx, nil, nil, two...)
 	check("RunBatch", err)
-	_, err = s.Prepare(ctx, cql.Statement[int32, []byte]{}, exec.PrepareOptions{}, exec.PrepareOptions{})
-	if ve, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || ve.Field != "options" || ve.Err.Error() != "at most one PrepareOptions" {
-		t.Errorf("Prepare: error %v", err)
+	checkPrepare := func(name string, err error) {
+		t.Helper()
+		if ve, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || ve.Field != "options" || ve.Err.Error() != "at most one PrepareOptions" {
+			t.Errorf("%s: error %v", name, err)
+		}
 	}
+	_, err = s.Prepare(ctx, cql.Statement[int32, []byte]{}, exec.PrepareOptions{}, exec.PrepareOptions{})
+	checkPrepare("Prepare", err)
+	_, err = s.PrepareStream(ctx, stream.Statement[int32, []byte]{}, exec.PrepareOptions{}, exec.PrepareOptions{})
+	checkPrepare("PrepareStream", err)
 }
