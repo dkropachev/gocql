@@ -328,7 +328,9 @@ func (r *chainReader) Read(p []byte) (int, error) {
 }
 
 // clearFailedDest empties the page after a failed parse, so a caller's
-// destination cannot keep pointing at the lease the caller releases next.
+// destination cannot keep half-decoded values or point at the lease that
+// receiveTypedCall releases on the error path. It stays out of line to keep
+// zeroing the large page out of the successful parse path.
 //
 //go:noinline
 func clearFailedDest(page *InternalResponsePage) { *page = InternalResponsePage{} }

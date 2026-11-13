@@ -93,9 +93,12 @@ func (s *InternalPreparedState) reconcilePendingConflict() error {
 		return nil
 	}
 	// A pending scope is cleared only by the schema retry worker, which adds
-	// to InternalSchemaReconciled after each clear. conflictEpoch is that
-	// counter plus one as read when the scope was queued: until the counter
-	// reaches it no scope has cleared, so this one is still pending.
+	// to the session-wide InternalSchemaReconciled after every successful
+	// reconcile of any keyspace, whether or not it deleted the scope.
+	// conflictEpoch is that counter plus one as read when the scope was
+	// queued: until the counter reaches it nothing has been reconciled, so
+	// this scope is still pending. Once it does, the locked path below
+	// re-checks the pending set.
 	if e := s.conflictEpoch.Load(); e != 0 && s.InternalSession.Peripheral().InternalSchemaReconciled.Load() < e {
 		return nil
 	}
