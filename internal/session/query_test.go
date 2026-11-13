@@ -14,6 +14,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -70,14 +71,21 @@ func (p *slicePlan) Next() (routing.Route, bool) {
 // batching, the submission writer and shared-connection admission.
 //
 // The fake server runs in a child process pinned by GOCQL_LOOPBACK_SERVER_CPUS
-// (default 6-7), so client CPU time and scheduling are not shared with it.
+// (default 6-7 on hosts with at least 8 CPUs, unpinned otherwise), so client
+// CPU time and scheduling are not shared with it.
 func loopbackTestSession(t testing.TB, workload string) *cluster.Core {
 	t.Helper()
 	cpus := os.Getenv("GOCQL_LOOPBACK_SERVER_CPUS")
-	if cpus == "" {
+	if cpus == "" && runtime.NumCPU() >= 8 {
 		cpus = "6-7"
 	}
-	cmd := exec.Command("taskset", "-c", cpus, os.Args[0], "-test.run=^TestQuery$/^LoopbackServerProcess$")
+	args := []string{os.Args[0], "-test.run=^TestQuery$/^LoopbackServerProcess$"}
+	if cpus != "" {
+		if _, err := exec.LookPath("taskset"); err == nil {
+			args = append([]string{"taskset", "-c", cpus}, args...)
+		}
+	}
+	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Env = append(os.Environ(), "GOCQL_LOOPBACK_SERVER="+workload)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
