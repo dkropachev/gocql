@@ -144,9 +144,13 @@ func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement bindi
 	// conditional statements therefore defer absent result shapes until EXECUTE;
 	// actual metadata still selects and validates the plan before any row output.
 	// A confirmed ordinary statement keeps eager zero-column validation.
+	// ScyllaDB does return conditional result metadata; a conditional
+	// statement's plan still compiles at EXECUTE when it does not fit here,
+	// as on Cassandra, so Exec rejects it with ErrConditionalExec instead of
+	// Prepare failing on the [applied] column.
 	if columns.Len() != 0 || kind == cqltype.OrdinaryStatement {
 		rows, err = codec.CompileRowPlan(statement.Rows, columns)
-		if err != nil {
+		if err != nil && kind != cqltype.ConditionalStatement {
 			return nil, err
 		}
 	}

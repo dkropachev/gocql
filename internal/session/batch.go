@@ -31,25 +31,25 @@ import (
 // safe for concurrent use and must not be copied. It may be sent any number of
 // times; Reset empties it for the next batch and keeps its Kind.
 type Batch struct {
-	entries []batchEntry
-	// values holds the encoded values of every entry back to back.
-	values  []byte
 	session *implCluster.Core
-	// params encodes AddToBatch values straight into values.
-	params binding.ParameterBuffer
 	// The latest execution: one sent through a query is tracked by the
 	// query's generation, one sent without by its owner.
 	lastQuery *queryState
 	lastOwner *inputOwner
 	// rows is the *batchRows[R] of the latest RunBatch, reused by the next
 	// RunBatch with the same R once its rows are closed.
-	rows any
+	rows    any
+	entries []batchEntry
+	// values holds the encoded values of every entry back to back.
+	values []byte
+	// exec is the request Session.ExecBatch admits; admission copies it.
+	exec Bound[codec.EmptyRecord]
 	// state is the execution state lent to an execution while no earlier
 	// one may still read it.
 	state   batchState
 	routing model.RoutingInfo
-	// exec is the request Session.ExecBatch admits; admission copies it.
-	exec    Bound[codec.EmptyRecord]
+	// params encodes AddToBatch values straight into values.
+	params  binding.ParameterBuffer
 	lastGen uint64
 	// shared reports that an execution no longer tracked may still read
 	// entries or values: Reset must abandon them instead of reusing them.
@@ -247,25 +247,13 @@ func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, stateme
 
 // InternalConditionalStatement returns the index of the statement whose
 // result is row i of the rows of a conditional batch on ScyllaDB, which
-// returns one row per conditional statement, in statement order. It reports
-// false when the batch has no i-th conditional statement, or when the kind of
-// a statement before it is unknown.
+// returns one row per statement, conditional or not, in statement order. It
+// reports false when the batch has no statement i.
 func (b *Batch) InternalConditionalStatement(i int) (int, bool) {
-	if b == nil || i < 0 {
+	if b == nil || i < 0 || i >= len(b.entries) {
 		return 0, false
 	}
-	for index := range b.entries {
-		switch b.entries[index].kind {
-		case cqltype.UnknownStatement:
-			return 0, false
-		case cqltype.ConditionalStatement:
-			if i == 0 {
-				return index, true
-			}
-			i--
-		}
-	}
-	return 0, false
+	return i, true
 }
 
 // InternalAddBound appends bound's statement and values to batch.
@@ -382,9 +370,9 @@ func InternalExecBatch(ctx context.Context, s *implCluster.Core, batch *Batch, o
 // request, its result plans and its iterator. A Batch keeps it, so that a
 // reused batch sent again with RunBatch allocates nothing.
 type batchRows[R any] struct {
-	holder rowsHolder[R]
-	plans  InternalResultPlanCache[R]
 	bound  Bound[R]
+	plans  InternalResultPlanCache[R]
+	holder rowsHolder[R]
 	// gen numbers the executions that used holder, so that a handle kept
 	// from an earlier one is stale. The pooled query each execution runs
 	// on has a generation of its own, which another query can repeat.

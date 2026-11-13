@@ -39,17 +39,17 @@ Write portable code this way:
 
 | Outcome | Cassandra | ScyllaDB |
 |---|---|---|
-| Applied | One row, with `Applied` true | One row per conditional statement, in statement order |
-| Not applied | One row per table row the conditions read, with `Applied` false | One row per conditional statement, in statement order |
+| Applied | One row, with `Applied` true | One row per statement, in statement order |
+| Not applied | One row per table row the conditions read, with `Applied` false | One row per statement, in statement order |
 
 A batch is applied only when all its conditions hold. The portable test is: the
 batch was applied if and only if every row reports `Applied`.
 
-On ScyllaDB, `scylla.BatchStatement(session, &batch, i)` returns which member
-of the batch row `i` belongs to. It takes a `*gocql.Session[gocql.ScyllaV4]`, so
-it does not compile for a Cassandra session, whose rows belong to table rows,
-not statements. Declare `Statement.Kind` for unprepared members: ScyllaDB
-marks only prepared statements as conditional.
+On ScyllaDB, row `i` belongs to member `i` of the batch; a member without a
+condition reports `Applied` with no previous row.
+`scylla.BatchStatement(session, &batch, i)` returns that member. It takes a
+`*gocql.Session[gocql.ScyllaV4]`, so it does not compile for a Cassandra
+session, whose rows belong to table rows, not statements.
 
 ## Paging
 

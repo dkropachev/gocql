@@ -42,8 +42,8 @@ import (
 // allocations, so an allocation or release writes one contended line (and
 // reads the hint, which changes rarely).
 type IDGenerator struct {
-	NumStreams int
 	state      []atomic.Uint64
+	NumStreams int
 	// hint is where GetStream starts scanning: usually the lowest bitmap word
 	// with a clear bit. Concurrent updates may leave it stale in either
 	// direction; that only affects locality (which ID is handed out) and scan

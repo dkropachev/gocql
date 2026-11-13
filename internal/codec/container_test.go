@@ -145,8 +145,8 @@ func TestContainer(t *testing.T) {
 							return
 						}
 						values := sequence
-						if err != nil || len(values) != 3 || values[2] != 3 {
-							t.Errorf("decode values=%v err=%v", values, err)
+						if len(values) != 3 || values[2] != 3 {
+							t.Errorf("decode values=%v", values)
 							return
 						}
 					}
@@ -228,8 +228,8 @@ func TestContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			values := sequence
-			if err != nil || !reflect.DeepEqual(values, []int32{1, -1}) {
-				t.Fatalf("values=%v err=%v", values, err)
+			if !reflect.DeepEqual(values, []int32{1, -1}) {
+				t.Fatalf("values=%v", values)
 			}
 		}
 		text := rowTestType(t, cqltype.TypeText)
@@ -241,8 +241,8 @@ func TestContainer(t *testing.T) {
 			t.Fatal(err)
 		}
 		entries := mapping
-		if err != nil || len(entries) != 1 || entries[0].Key.String() != "x" || string(entries[0].Value.OwnedBytes()) != "y" {
-			t.Fatalf("entries=%v err=%v", entries, err)
+		if len(entries) != 1 || entries[0].Key.String() != "x" || string(entries[0].Value.OwnedBytes()) != "y" {
+			t.Fatalf("entries=%v", entries)
 		}
 		tiny, _ := cqltype.VectorDataType(rowTestType(t, cqltype.TypeTinyInt), 2)
 		containerGolden(t, tiny, VectorEncoder(Int8), []int8{1, -1}, "010101ff")
@@ -253,8 +253,8 @@ func TestContainer(t *testing.T) {
 			t.Fatal(err)
 		}
 		stringsValues := strings
-		if err != nil || stringsValues[0].String() != "" || stringsValues[1].String() != "é" {
-			t.Fatalf("variable vector: %v", err)
+		if stringsValues[0].String() != "" || stringsValues[1].String() != "é" {
+			t.Fatalf("variable vector: %v", stringsValues)
 		}
 		nested, _ := cqltype.VectorDataType(vector, 2)
 		encoded = containerGolden(t, nested, VectorEncoder(VectorEncoder(Int32)), [][]int32{{1, 2}, {3, 4}}, "00000001000000020000000300000004")
@@ -298,8 +298,8 @@ func TestContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			values := empty
-			if err != nil || len(values) != 1 || values[0].String() != "" {
-				t.Fatalf("final zero length must stay present: %v", err)
+			if len(values) != 1 || values[0].String() != "" {
+				t.Fatalf("final zero length must stay present: %v", values)
 			}
 			huge, _ := cqltype.VectorDataType(integer, 65535)
 			huge, _ = cqltype.VectorDataType(huge, 65535)
@@ -348,8 +348,8 @@ func TestContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			values := sequence
-			if err != nil || len(values) != 2 || values[0].Len() != 128 || values[1].Len() != 0 {
-				t.Fatalf("segmented vector values=%v err=%v", values, err)
+			if len(values) != 2 || values[0].Len() != 128 || values[1].Len() != 0 {
+				t.Fatalf("segmented vector values=%v", values)
 			}
 		})
 	})

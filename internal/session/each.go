@@ -44,7 +44,7 @@ var StopIteration = errors.New("gocql: stop iteration successfully")
 
 func isStopIteration(err error) bool {
 	for err != nil {
-		if err == StopIteration {
+		if err == StopIteration { //nolint:errorlint // single-error Unwrap chain only: errors.Is would also match inside joined errors
 			return true
 		}
 		wrapper, ok := err.(interface{ Unwrap() error })

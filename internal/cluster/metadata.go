@@ -60,22 +60,22 @@ type InternalV2PeripheralState struct {
 	schemaStale                   map[string]bool
 	knownTabletTables             map[routing.InternalMetadataTable]bool
 	refreshDiagnostics            []error
-	InternalConfig                settings.Config
-	_                             [64]byte
-	latency                       [v2LatencySlots]atomic.Int64 // latency+1 per slot; 0 is empty
-	_                             [64]byte
-	workers                       sync.WaitGroup
-	InternalPublicationRevision   uint64
-	preparedRefreshVersion        uint64
-	InternalSchemaReconciled      atomic.Uint64
-	schemaGeneration              atomic.Uint64
-	InternalPlacementEpoch        atomic.Uint64
 	// latencyBatches and latencyTick belong to publishLatencySummary:
-	// latencyBatches[i] holds the samples one call took from latency, and
-	// latencyTick indexes the oldest.
-	latencyBatches [10][]time.Duration
-	latencyTick    int
-	orphans        atomic.Uint64
+	// latencyBatches[i] holds the samples one call took from latency.
+	latencyBatches              [10][]time.Duration
+	InternalConfig              settings.Config
+	_                           [64]byte
+	latency                     [v2LatencySlots]atomic.Int64 // latency+1 per slot; 0 is empty
+	_                           [64]byte
+	workers                     sync.WaitGroup
+	InternalPublicationRevision uint64
+	preparedRefreshVersion      uint64
+	InternalSchemaReconciled    atomic.Uint64
+	schemaGeneration            atomic.Uint64
+	InternalPlacementEpoch      atomic.Uint64
+	// latencyTick indexes the oldest of latencyBatches.
+	latencyTick int
+	orphans     atomic.Uint64
 	// InternalMu guards pending scopes and feedback captures. A prepared
 	// conflict reads InternalSchemaReconciled atomically first and takes this
 	// lock only once that counter shows a reconcile may have cleared its scope.

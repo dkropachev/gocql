@@ -39,11 +39,13 @@ func TestLWTDialect(t *testing.T) {
 	// One struct-mapped decoder for every outcome and both servers: columns
 	// it has no field for are skipped, fields without a column stay zero.
 	decoder := cql.CASRows(cql.MustRowOf[row]())
+	// The server names the IF marker after its column, v, like the SET
+	// marker, so the parameters bind by position.
 	updateParams := cql.Params(
-		cql.Param("v", cql.Int32Codec, func(u update) int32 { return u.V }),
-		cql.Param("k", cql.Int32Codec, func(u update) int32 { return u.K }),
-		cql.Param("c", cql.Int32Codec, func(u update) int32 { return u.C }),
-		cql.Param("expect", cql.Int32Codec, func(u update) int32 { return u.Expect }),
+		cql.ParamAt(0, cql.Int32Codec, func(u update) int32 { return u.V }),
+		cql.ParamAt(1, cql.Int32Codec, func(u update) int32 { return u.K }),
+		cql.ParamAt(2, cql.Int32Codec, func(u update) int32 { return u.C }),
+		cql.ParamAt(3, cql.Int32Codec, func(u update) int32 { return u.Expect }),
 	)
 	updateCQL := fmt.Sprintf("UPDATE %s SET v = ? WHERE k = ? AND c = ? IF v = ?", table)
 	conditional := cassandraPrepared(t, session, cql.Statement[update, cql.CASResult[row]]{
@@ -103,7 +105,8 @@ func TestLWTDialect(t *testing.T) {
 			for _, u := range updates {
 				require.NoError(t, conditional.AddToBatch(&batch, u))
 			}
-			// An ordinary member contributes no row on ScyllaDB.
+			// An ordinary member gets an applied row with no previous row
+			// on ScyllaDB.
 			require.NoError(t, insert.AddToBatch(&batch, row{K: 1, C: 3, V: 30}))
 			_, err := session.ExecBatch(ctx, &batch)
 			require.True(t, errors.Is(err, cqlerr.ErrConditionalExec), "%v", err)
@@ -126,14 +129,15 @@ func TestLWTDialect(t *testing.T) {
 			}
 			return len(rows) > 0
 		}
-		// Applied: ScyllaDB returns a row per conditional statement, in
-		// statement order; Cassandra one row.
+		// Applied: ScyllaDB returns a row per statement, in statement order;
+		// Cassandra one row.
 		rows := run(update{K: 1, C: 1, V: 13, Expect: 11}, update{K: 1, C: 2, V: 23, Expect: 20})
 		require.True(t, applied(rows))
 		if scylla {
-			require.Len(t, rows, 2)
+			require.Len(t, rows, 3)
 			require.Equal(t, int32(11), rows[0].Previous.Value.V)
 			require.Equal(t, int32(20), rows[1].Previous.Value.V)
+			require.False(t, rows[2].Previous.Set)
 		} else {
 			require.Len(t, rows, 1)
 		}
@@ -141,7 +145,7 @@ func TestLWTDialect(t *testing.T) {
 		rows = run(update{K: 1, C: 1, V: 14, Expect: 13}, update{K: 1, C: 2, V: 24, Expect: 0})
 		require.False(t, applied(rows))
 		if scylla {
-			require.Len(t, rows, 2)
+			require.Len(t, rows, 3)
 		} else {
 			require.NotEmpty(t, rows)
 		}

@@ -47,17 +47,13 @@ type InternalSessionRuntime struct {
 	// registry holds the in-flight executions no reusable query owns. It is
 	// allocated once, so the runtime keeps the field layout it had with the
 	// executions map in this slot.
-	registry             *executionRegistry
-	queries              map[weak.Pointer[queryState]]*queryEntry
-	schema               *schemafence.InternalPreparedSchemaTracker
-	preparing            map[prepareCacheKey]*prepareFlight
-	InternalProfile      *settings.Profile
-	InternalPrepared     map[prepareCacheKey]*InternalPreparedState
-	pools                map[*queryPoolEntry]struct{}
-	InternalPrepareOrder []prepareCacheKey
-	defaultOptions       InternalResolvedOptions // the zero CompiledOptions resolved for this session
-	config               settings.Config
-	prepareWorkers       sync.WaitGroup
+	registry         *executionRegistry
+	queries          map[weak.Pointer[queryState]]*queryEntry
+	schema           *schemafence.InternalPreparedSchemaTracker
+	preparing        map[prepareCacheKey]*prepareFlight
+	InternalProfile  *settings.Profile
+	InternalPrepared map[prepareCacheKey]*InternalPreparedState
+	pools            map[*queryPoolEntry]struct{}
 	// pooledWake, guarded by InternalMu, is the channel Close waits on for
 	// pooledBusy to reach zero.
 	pooledWake chan struct{}
@@ -66,11 +62,15 @@ type InternalSessionRuntime struct {
 	batchPool *queryPool[codec.EmptyRecord, codec.EmptyRecord]
 	batchErr  error
 	// closing is closed when Close starts stopping executions.
-	closing          chan struct{}
-	batchOnce        sync.Once
-	closingOnce      sync.Once
-	prepareWorkersMu sync.Mutex
-	InternalMu       sync.Mutex
+	closing              chan struct{}
+	InternalPrepareOrder []prepareCacheKey
+	defaultOptions       InternalResolvedOptions // the zero CompiledOptions resolved for this session
+	config               settings.Config
+	prepareWorkers       sync.WaitGroup
+	batchOnce            sync.Once
+	closingOnce          sync.Once
+	prepareWorkersMu     sync.Mutex
+	InternalMu           sync.Mutex
 	// refusedRegistrations counts admissions that took a request id but
 	// that registerExecution refused: the session was closing or closed, or
 	// the reusable query was closed. Requests is requestID minus this, so

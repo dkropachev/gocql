@@ -217,12 +217,12 @@ func TestBatch(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY)", table))
 			prepared := cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), exec.PrepareOptions{})
 			batch := &gocql.Batch{Kind: cql.LoggedBatch}
-			for range 65537 {
+			before := session.Metrics()
+			for range 65535 {
 				cassandraAdd(t, batch, prepared, []dynamic.Value{dynamic.Int(1)})
 			}
-			before := session.Metrics()
-			_, err := session.ExecBatch(context.Background(), batch)
-			require.Error(t, err)
+			err := prepared.AddToBatch(batch, []dynamic.Value{dynamic.Int(1)})
+			require.Error(t, err, "the statement past the limit must be refused when added")
 			require.Contains(t, err.Error(), "65535")
 			require.Equal(t, before.Requests, session.Metrics().Requests, "oversized batches must be rejected before submission")
 		})

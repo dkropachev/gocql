@@ -50,13 +50,27 @@ jobs:
             echo 'target=all' >> "$GITHUB_OUTPUT"
           fi
 
-  publish:
+  build:
     needs: select-target
     uses: ./.github/workflows/docs.yml
+    with:
+      target: ${{ needs.select-target.outputs.target }}
+      publish: true
+
+  # Deploy lives here rather than in docs.yml: a reusable workflow whose job
+  # asks for pages/id-token write fails at startup in any caller that grants
+  # only contents: read (Docs / Build PR), even when the job would be skipped.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       pages: write
       id-token: write
-    with:
-      target: ${{ needs.select-target.outputs.target }}
-      publish: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5

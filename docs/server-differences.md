@@ -86,10 +86,10 @@ Open gaps:
 
 | Case | Cassandra | ScyllaDB |
 |---|---|---|
-| Applied | One row, `[applied]` only | One row per conditional statement, in statement order, with previous values |
-| Not applied | One row per CQL row read from the partition, presumably in clustering order (**unverified**), each with `[applied] = false` | One row per conditional statement, in statement order |
+| Applied | One row, `[applied]` only | One row per statement, in statement order, with previous values |
+| Not applied | One row per CQL row read from the partition, presumably in clustering order (**unverified**), each with `[applied] = false` | One row per statement, in statement order |
 | Not applied, partition absent | One row, `[applied]` only | Not documented (**unverified**) |
-| Non-conditional members | Not reported separately | Contribute no row |
+| Non-conditional members | Not reported separately | One row each, `[applied] = true` and all-NULL condition columns |
 | Columns | Primary key, then the union of condition columns in statement order. Every column if any member uses `IF EXISTS` / `IF NOT EXISTS` | Union of the condition columns of all conditional statements |
 
 A batch is applied only when all its conditions hold, so on both servers it was
@@ -105,18 +105,18 @@ Driver handling:
 - The same `CASRows` path as a single statement, run through
   `Session.RunBatch`, which returns `Rows`. `ExecBatch` rejects a batch known
   to be conditional before sending it (`cqlerr.ErrConditionalExec`).
-- `scylla.BatchStatement` (package `scylla`) maps row i to the i-th
-  conditional member of the batch, from the kind each member had when it
-  joined (`batchEntry.kind`, `Batch.InternalConditionalStatement`). It takes a
-  `*Session[ScyllaV4]`, so it does not compile for Cassandra, whose rows map
-  to partition rows. A member of unknown kind stops the mapping, because it
-  may or may not have a row.
+- `scylla.BatchStatement` (package `scylla`) maps row i to member i of the
+  batch (`Batch.InternalConditionalStatement`): ScyllaDB answers every
+  member, conditional or not. It takes a `*Session[ScyllaV4]`, so it does not
+  compile for Cassandra, whose rows map to partition rows. The all-NULL
+  previous row of a member without a condition decodes as no previous row.
 
 `tests/integration/lwt_dialect_test.go` asserts the shapes per dialect: the
 row count of applied and not-applied batches, `Previous.Set` on applied
 single statements, the previous value of a not-applied one, and no previous
-row for a missing one. It has not run against a live cluster yet, so the
-**unverified** marks above stay until it does.
+row for a missing one. It runs against ScyllaDB in CI (2026.3), which
+confirmed the per-statement batch rows; the Cassandra **unverified** marks
+stay until it runs against Cassandra.
 
 ### Prepared metadata
 

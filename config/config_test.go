@@ -71,6 +71,17 @@ func TestConfigBuilder(t *testing.T) {
 		mustBuildConfig(t, b)
 	})
 
+	t.Run("ApplicationVersionRequiresName", func(t *testing.T) {
+		b := New("h").WithApplication("", "1.0.0")
+		if _, err := b.Build(); err == nil {
+			t.Fatal("Build accepted an application version without a name")
+		} else if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "application" {
+			t.Fatalf("Build = %v, want an application ValidationError", err)
+		}
+		mustBuildConfig(t, b.WithApplication("app", "1.0.0"))
+		mustBuildConfig(t, b.WithApplication("", ""))
+	})
+
 	t.Run("NoContactPoints", func(t *testing.T) {
 		if _, err := New().Build(); err == nil || !strings.Contains(err.Error(), "contact points") {
 			t.Fatalf("Build without contact points = %v", err)

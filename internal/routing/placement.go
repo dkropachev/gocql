@@ -174,11 +174,11 @@ type InternalTabletRange struct {
 }
 type InternalTabletRangeTree = InternalPlacementTree[int64, *InternalTabletRange, tokenOrder]
 type InternalTabletPlacement struct {
-	InternalRanges   *InternalTabletRangeTree
-	InternalIdentity string
+	InternalRanges *InternalTabletRangeTree
 	// index lists InternalRanges in chunks for lookups; it is used only
 	// while its root is still InternalRanges.
-	index *tabletRangeIndex
+	index            *tabletRangeIndex
+	InternalIdentity string
 }
 type tabletPlacementTree = InternalPlacementTree[InternalMetadataTable, InternalTabletPlacement, tableOrder]
 
@@ -335,8 +335,6 @@ type InternalPlacementCache struct {
 }
 
 type placementCacheEntry struct {
-	// snapshot is the id of the snapshot the entry was found in.
-	snapshot uint64
 	// placement is the table's placement in snapshot, or nil without one.
 	placement *InternalTabletPlacement
 	// ranges are the table's token ranges in snapshot when it has no
@@ -344,7 +342,9 @@ type placementCacheEntry struct {
 	// when the snapshot has no ranges for it; tablet reports that they are
 	// the table's tablets.
 	ranges []TokenRange
-	tablet bool
+	// snapshot is the id of the snapshot the entry was found in.
+	snapshot uint64
+	tablet   bool
 }
 
 // InternalLookupTabletCached is InternalLookupTablet for a statement whose

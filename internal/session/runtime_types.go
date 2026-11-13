@@ -186,16 +186,16 @@ type InternalExecutionRequest struct {
 	InternalOwner   *inputOwner
 	batch           *batchState
 	InternalLogical *logicalExecution
-	statement       string
-	keyspace        string
-	InternalValues  model.EncodedValues
-	tabletFeedback  routing.InternalTabletFeedbackStamp
-	routing         model.RoutingInfo
 	// options are the request's resolved options: the session's defaults,
 	// frozen CompiledOptions or a query's own resolution, all shared, so
 	// never changed through the request. An execution that overrides them
 	// first takes a copy of its own with ownOptions.
-	options *InternalResolvedOptions
+	options        *InternalResolvedOptions
+	statement      string
+	keyspace       string
+	InternalValues model.EncodedValues
+	tabletFeedback routing.InternalTabletFeedbackStamp
+	routing        model.RoutingInfo
 	// timestamp is the client timestamp the request sends when
 	// hasTimestamp: its options' own or one admission generated.
 	timestamp          int64
