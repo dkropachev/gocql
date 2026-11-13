@@ -222,20 +222,6 @@ func (s *InternalSessionRuntime) stopExecutions() []*logicalExecution {
 	return active
 }
 
-// activeExecutions counts the registered executions.
-func (s *InternalSessionRuntime) activeExecutions() int {
-	n := 0
-	for i := range s.registry.shards {
-		shard := &s.registry.shards[i]
-		shard.mu.Lock()
-		for e := shard.head; e != nil; e = e.next {
-			n++
-		}
-		shard.mu.Unlock()
-	}
-	return n
-}
-
 // A zero duration disables only this local deadline. WithTimeout itself avoids
 // allocating a timer when the caller already has an earlier deadline.
 func InternalExecutionContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {

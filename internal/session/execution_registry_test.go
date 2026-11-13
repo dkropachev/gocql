@@ -6,6 +6,7 @@ package session
 import (
 	"context"
 	"errors"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -30,6 +31,9 @@ func TestCloseStopsBoundExecutions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Close is idempotent: this ends the goroutines when the test fails
+	// before its own Close.
+	defer db.Close()
 	// Every eighth goroutine sends a statement the server never answers, so
 	// that Close finds executions it alone can end.
 	statements := []string{"void", "void", "slow"}
@@ -86,5 +90,59 @@ func TestCloseStopsBoundExecutions(t *testing.T) {
 	}
 	if err := execTestStatement(context.Background(), db, "void", CompiledOptions{}); !errors.Is(err, runtimeerrors.ErrClosed) {
 		t.Fatal("registration after Close", err)
+	}
+}
+
+// activeExecutions counts the registered executions.
+func (s *InternalSessionRuntime) activeExecutions() int {
+	n := 0
+	for i := range s.registry.shards {
+		shard := &s.registry.shards[i]
+		shard.mu.Lock()
+		for e := shard.head; e != nil; e = e.next {
+			n++
+		}
+		shard.mu.Unlock()
+	}
+	return n
+}
+
+// holdRegistry locks every registry shard of rt. The returned release unlocks
+// them once; defer it as well, so that a failed test does not leave Close
+// blocked on a shard.
+func holdRegistry(rt *InternalSessionRuntime) (release func()) {
+	for i := range rt.registry.shards {
+		rt.registry.shards[i].mu.Lock()
+	}
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			for i := range rt.registry.shards {
+				rt.registry.shards[i].mu.Unlock()
+			}
+		})
+	}
+}
+
+// spinUntil yields until cond holds, failing the test after 10 seconds.
+func spinUntil(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); !cond(); runtime.Gosched() {
+		if time.Now().After(deadline) {
+			t.Fatal("timed out waiting until", what)
+		}
+	}
+}
+
+// receiveWithin returns the next value from ch, failing the test after 10
+// seconds.
+func receiveWithin[T any](t *testing.T, what string, ch <-chan T) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for", what)
+		panic("unreachable")
 	}
 }

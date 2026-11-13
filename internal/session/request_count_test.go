@@ -4,11 +4,9 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -38,26 +36,19 @@ func TestRequestCount(t *testing.T) {
 		// Hold every registry shard so that the second Exec takes its id and
 		// then waits to register while Close marks the session closing.
 		rt := InternalRuntimeFor(s)
-		for i := range rt.registry.shards {
-			rt.registry.shards[i].mu.Lock()
-		}
+		release := holdRegistry(rt)
+		defer release()
 		refused := make(chan error, 1)
 		go func() { _, err := Exec(context.Background(), s, b, CompiledOptions{}); refused <- err }()
-		for rt.requestID.Load() != 2 {
-			runtime.Gosched()
-		}
+		spinUntil(t, "Exec took its request id", func() bool { return rt.requestID.Load() == 2 })
 		closed := make(chan struct{})
 		go func() { _ = s.Close(); close(closed) }()
-		for !s.Closed() {
-			runtime.Gosched()
-		}
-		for i := range rt.registry.shards {
-			rt.registry.shards[i].mu.Unlock()
-		}
-		if err := <-refused; !errors.Is(err, runtimeerrors.ErrClosed) {
+		spinUntil(t, "Close marked the session", s.Closed)
+		release()
+		if err := receiveWithin(t, "Exec", refused); !errors.Is(err, runtimeerrors.ErrClosed) {
 			t.Fatalf("Exec on a closing session: %v", err)
 		}
-		<-closed
+		receiveWithin(t, "Close", closed)
 		if refused := rt.refusedRegistrations.Load(); refused != 1 || rt.requestID.Load() != 2 {
 			t.Fatalf("refused %d of %d ids, want 1 of 2", refused, rt.requestID.Load())
 		}
@@ -68,9 +59,10 @@ func TestRequestCount(t *testing.T) {
 
 	// CloseRegistration: a registration holds a request id and waits for its
 	// registry shard while Close marks the session closing and starts listing
-	// executions. Once the shard is released the execution must be refused with
-	// ErrClosed, or be listed and stopped by Close; it must never be registered
-	// after Close listed its shard and so run on unstopped.
+	// executions. Close marked the session before the shard is released, so
+	// the registration, which checks the mark under the shard lock, must be
+	// refused with ErrClosed; it must never be registered after the mark,
+	// where Close's listing of its shard could miss it.
 	t.Run("CloseRegistration", func(t *testing.T) {
 		for range 20 {
 			s, _, peers := runtimeTestSession(t, 1)
@@ -78,40 +70,24 @@ func TestRequestCount(t *testing.T) {
 			go serveLoopback(peers[0], func([]byte) []byte { return void }, nil)
 			b := runtimeQuery(t)
 			rt := InternalRuntimeFor(s)
-			for i := range rt.registry.shards {
-				rt.registry.shards[i].mu.Lock()
-			}
+			release := holdRegistry(rt)
 			result := make(chan error, 1)
 			go func() { _, err := Exec(context.Background(), s, b, CompiledOptions{}); result <- err }()
-			for rt.requestID.Load() != 1 {
-				runtime.Gosched()
-			}
+			spinUntil(t, "Exec took its request id", func() bool { return rt.requestID.Load() == 1 })
 			closed := make(chan error, 1)
 			go func() { closed <- s.Close() }()
-			for !s.Closed() {
-				runtime.Gosched()
-			}
-			for i := range rt.registry.shards {
-				rt.registry.shards[i].mu.Unlock()
-			}
-			var err error
-			select {
-			case err = <-result:
-			case <-time.After(10 * time.Second):
-				t.Fatal("Exec did not return after Close: it was registered and missed")
-			}
-			// Close marked the session before the shard was released, so the
-			// registration, which checks the mark under the shard lock, is
-			// refused. A registration that checked before waiting for the lock
-			// would instead be registered after Close marked, and is listed
-			// only if Close reaches its shard after it: that is the miss.
-			if !errors.Is(err, runtimeerrors.ErrClosed) {
+			spinUntil(t, "Close marked the session", s.Closed)
+			release()
+			// A registration that checked the mark before waiting for the
+			// lock would be registered after Close marked, and is listed only
+			// if Close reaches its shard after it: that is the miss.
+			if err := receiveWithin(t, "Exec", result); !errors.Is(err, runtimeerrors.ErrClosed) {
 				t.Fatalf("Exec on a session Close was stopping: %v", err)
 			}
 			if refused := rt.refusedRegistrations.Load(); refused != 1 {
 				t.Fatalf("refused %d registrations, want 1: the execution was registered", refused)
 			}
-			if cerr := <-closed; cerr != nil {
+			if cerr := receiveWithin(t, "Close", closed); cerr != nil {
 				t.Fatal(cerr)
 			}
 			if n := rt.activeExecutions(); n != 0 {
