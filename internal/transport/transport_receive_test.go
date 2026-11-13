@@ -90,6 +90,10 @@ func TestReceiveTypedCallParseFailureClearsDest(t *testing.T) {
 func TestLateResponseAfterCancelDoesNotDelayOthers(t *testing.T) {
 	c, server := invPair(t, 4)
 	go c.InternalServe(c.InternalCtx)
+	// A request that is never written fails the read instead of hanging.
+	if err := server.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 	for i := 0; i < 20; i++ {
 		ctxA, cancelA := context.WithCancel(context.Background())
 		aErr := make(chan error, 1)
@@ -105,8 +109,13 @@ func TestLateResponseAfterCancelDoesNotDelayOthers(t *testing.T) {
 			t.Fatal(err)
 		}
 		cancelA()
-		if err := <-aErr; err == nil {
-			t.Fatal("A was not cancelled")
+		select {
+		case err := <-aErr:
+			if err == nil {
+				t.Fatal("A was not cancelled")
+			}
+		case <-time.After(time.Second):
+			t.Fatal("A did not return after cancellation")
 		}
 		bDone := make(chan error, 1)
 		go func() {
@@ -142,5 +151,18 @@ func TestLateResponseAfterCancelDoesNotDelayOthers(t *testing.T) {
 			t.Fatalf("streams in use after run: %d", c.InternalStreams.InUse())
 		}
 		time.Sleep(time.Millisecond)
+	}
+}
+
+// A v5 frame for a stream with no handler is dropped from its segment without
+// disturbing the frame after it, in this segment and the next.
+func TestV5FrameWithoutHandlerSkipped(t *testing.T) {
+	frames := invFrame(5, 7, typedTestRowsBody([]byte("orphan")))
+	frames = append(frames, invFrame(5, 0, typedTestRowsBody([]byte("v")))...)
+	l := newRecvLoop(t, 5, recvWire(t, 5, frames))
+	for i := 0; i < 2; i++ {
+		page := l.one(t)
+		checkRecvPage(t, page, 'v', 1)
+		page.Owner.Release()
 	}
 }
