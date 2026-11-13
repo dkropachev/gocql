@@ -465,7 +465,13 @@ func (c *Conn) init(ctx context.Context, dialedHost *implEndpoint.DialedHost) er
 		return err
 	}
 
-	if c.coalesceWait > 0 && !c.InternalCfg.InternalDisableCoalesce && (!dialedHost.DisableCoalesce || c.InternalCfg.TypedConfig != nil) {
+	// A typed connection's submission writer already sends every request
+	// queued while it was busy in one socket write; a coalescer in front of
+	// the socket would only add a goroutine hop and a timer wait.
+	if c.InternalCfg.TypedConfig != nil {
+		c.coalesceWait = 0
+	}
+	if c.coalesceWait > 0 && !c.InternalCfg.InternalDisableCoalesce && !dialedHost.DisableCoalesce {
 		c.InternalW = InternalNewWriteCoalescer(dialedHost.Conn, c.InternalCfg.ConnectTimeout, c.coalesceWait, c.InternalCtx.Done())
 	}
 

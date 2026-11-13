@@ -21,14 +21,14 @@ import (
 // goroutine. Executions of a reusable query and one-shot executions both
 // qualify; a request pinned to a connection with a stream observer does not,
 // since executePageDirect hands such a connection to the general path.
-func canExecuteDirect(s *InternalSessionRuntime, request *InternalExecutionRequest) bool {
+func canExecuteDirect(request *InternalExecutionRequest) bool {
 	if request.InternalLogical == nil || request.InternalLogical.observer != nil || request.options.InternalProfile.Speculation != nil {
 		return false
 	}
 	if request.connection != nil && request.connection.InternalStreamObserver != nil {
 		return false
 	}
-	return canUseDirectProfile(request.options.InternalProfile) && s.config.CoalesceWait == 0
+	return canUseDirectProfile(request.options.InternalProfile)
 }
 func canUseDirectProfile(profile settings.Profile) bool {
 	if profile.Speculation != nil {

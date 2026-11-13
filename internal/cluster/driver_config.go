@@ -74,8 +74,8 @@ type connectionReport struct {
 	// group are never populated: the schema declares both as
 	// additionalProperties:false with no properties, an explicit placeholder
 	// for a future schema version, so there is nothing a v1 report could put
-	// there even though gocql does have both features (WriteCoalesceWaitTime,
-	// the control connection's heartBeat()).
+	// there even though gocql has a heartbeat (the control connection's
+	// heartBeat()); WriteCoalesceWaitTime coalesces only untyped connections.
 	Read  *readWriteTimeoutReport `json:"read,omitempty"`
 	Write *readWriteTimeoutReport `json:"write,omitempty"`
 	// TLS is omitted when TLS is not configured, or when a HostDialer is set:

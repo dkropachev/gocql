@@ -690,7 +690,7 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 	if observer == nil {
 		observer = rt.config.Observer
 	}
-	inline := query != nil && observer == nil && rt.config.CoalesceWait == 0 && canUseDirectProfile(resolved.InternalProfile)
+	inline := query != nil && observer == nil && canUseDirectProfile(resolved.InternalProfile)
 	var runctx context.Context
 	var cancel context.CancelFunc
 	var stop context.CancelFunc // cancels from another goroutine (query or session stop)
@@ -979,7 +979,7 @@ func pinnedUsable(conn *transport.Conn) bool {
 }
 
 func (s *InternalSessionRuntime) executePage(ctx context.Context, request *InternalExecutionRequest, state model.PageState) (*transport.InternalResponsePage, error) {
-	direct := canExecuteDirect(s, request)
+	direct := canExecuteDirect(request)
 	if !direct {
 		pageRequest := *request
 		pageRequest.responseDest = nil // concurrent attempts cannot share it
