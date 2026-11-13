@@ -721,7 +721,7 @@ func TestQuery(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			entered, release := make(chan struct{}), make(chan struct{})
 			observer := &execVoidObserver{onAttempt: func(routing.AttemptEvent) { close(entered); <-release }}
-			query := codecTestMust(unpreparedQuery(s, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, Options{Observer: observer}))
+			query := codecTestMust(unpreparedQuery(s, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, Options{Observer: observer, Profile: generalPathProfile()}))
 			defer query.Close()
 			served := make(chan struct{})
 			go func() {

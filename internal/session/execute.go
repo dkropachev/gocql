@@ -690,7 +690,7 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 	if observer == nil {
 		observer = rt.config.Observer
 	}
-	inline := query != nil && observer == nil && canUseDirectProfile(resolved.InternalProfile)
+	inline := query != nil && canUseDirectProfile(resolved.InternalProfile)
 	var runctx context.Context
 	var cancel context.CancelFunc
 	var stop context.CancelFunc // cancels from another goroutine (query or session stop)

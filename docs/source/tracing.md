@@ -49,6 +49,11 @@ returns the function the driver calls when that request or attempt finishes.
 Set the observer for the session with `config.ConfigBuilder.WithObserver`, or
 per execution with `exec.Options.Observer`.
 
+Attempt hooks usually run on the goroutine that called the execution, the
+start hook before each attempt and its end function after it, so an observer
+that blocks delays that call. Keep them short and hand slow work to a
+goroutine of your own.
+
 The driver itself depends on no tracing library. To link the two kinds, an
 observer can record `AttemptEvent.CQLTraceID` on its attempt span when the
 request runs with `CQLTrace`.

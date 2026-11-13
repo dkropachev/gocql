@@ -222,8 +222,8 @@ func TestExecution(t *testing.T) {
 	})
 
 	// TestExecution/CanExecuteDirect checks that executions without a reusable
-	// query take the direct path unless an observer, speculation or a
-	// stream-observed connection needs the general one.
+	// query take the direct path unless speculation or a stream-observed
+	// connection needs the general one. Observers keep it.
 	t.Run("CanExecuteDirect", func(t *testing.T) {
 		request := func() *InternalExecutionRequest {
 			return &InternalExecutionRequest{InternalLogical: &logicalExecution{}, options: &InternalResolvedOptions{InternalProfile: settings.InternalDefaultProfile()}}
@@ -238,8 +238,8 @@ func TestExecution(t *testing.T) {
 		}
 		r = request()
 		r.InternalLogical.observer = directTestObserver{}
-		if canExecuteDirect(r) {
-			t.Fatal("an observer needs the general path")
+		if !canExecuteDirect(r) {
+			t.Fatal("an observer must keep the direct path")
 		}
 		r = request()
 		r.connection = &transport.Conn{InternalStreamObserver: directTestStreamObserver{}}
@@ -281,7 +281,7 @@ func TestExecution(t *testing.T) {
 					defer cancel()
 					done := make(chan error, 1)
 					go func() {
-						_, err := Exec(ctx, s, b, testOptions(Options{Observer: observer}))
+						_, err := Exec(ctx, s, b, testOptions(Options{Observer: observer, Profile: generalPathProfile()}))
 						done <- err
 					}()
 					select {
