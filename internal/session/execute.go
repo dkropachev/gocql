@@ -56,7 +56,9 @@ type InternalSessionRuntime struct {
 	defaultOptions       InternalResolvedOptions // the zero CompiledOptions resolved for this session
 	config               settings.Config
 	prepareWorkers       sync.WaitGroup
-	pooledWake           chan struct{}
+	// pooledWake, guarded by InternalMu, is the channel Close waits on for
+	// pooledBusy to reach zero.
+	pooledWake chan struct{}
 	// batchPool keeps the queries that run the session's batches, created
 	// by the first batch.
 	batchPool *queryPool[codec.EmptyRecord, codec.EmptyRecord]
@@ -74,8 +76,8 @@ type InternalSessionRuntime struct {
 	refusedRegistrations atomic.Uint64
 	prepareWorkersClosed bool
 
-	// The fields below are written by every request. Each group has its own
-	// cache line, so that the writes do not evict the read-mostly fields
+	// The fields below are written on the request path. Each group has its
+	// own cache line, so that the writes do not evict the read-mostly fields
 	// above (config, defaultOptions) from other cores' caches, nor one
 	// another's lines.
 	_         cacheLinePad
@@ -87,8 +89,7 @@ type InternalSessionRuntime struct {
 	attempts, errors, retries, speculations, cancelled atomic.Uint64
 	inflight                                           atomic.Int64
 	// pooledBusy counts busy queries of prepared statements' one-shot pools.
-	// Close waits for it to reach zero; pooledWake, guarded by InternalMu,
-	// is the channel it waits on.
+	// Close waits for it to reach zero on pooledWake.
 	pooledBusy atomic.Int64
 	_          cacheLinePad
 }

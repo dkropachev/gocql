@@ -25,7 +25,8 @@ type Snapshot struct {
 	ReceiveCacheBytes, ReceiveCacheObjects int
 	// Requests counts executions started, and Attempts the requests they
 	// sent to nodes, including retries and speculative attempts. While an
-	// admission is being refused, Requests may briefly include it.
+	// admission is being refused, Requests may briefly include it, so a
+	// later snapshot can report one fewer.
 	Requests, Attempts uint64
 	// Errors counts executions that ended with an error, and Cancelled
 	// those of them that ended because their context was cancelled or its
@@ -42,8 +43,10 @@ type Snapshot struct {
 	// InFlight is the number of executions started and not yet finished.
 	InFlight int64
 	// LatencyP50, LatencyP95 and LatencyP99 are percentiles of the latency
-	// of the executions that succeeded in the last ten seconds, at most the
-	// latest 1024 of them, recomputed once a second. Failed executions are
+	// of the executions that succeeded in the last ten seconds, at most 1024
+	// of them, newer seconds first, recomputed once a second. In a second
+	// with more than 1024 requests, the samples are spread over its requests
+	// rather than being the latest 1024 to finish. Failed executions are
 	// not included. When none succeeded since the last computation, the
 	// previous values stay. They are zero until the first computation.
 	LatencyP50, LatencyP95, LatencyP99 time.Duration

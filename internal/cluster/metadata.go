@@ -1117,8 +1117,8 @@ func sessionTypedSchemaGeneration(s *Core) uint64 {
 const v2LatencySlots = 1024
 
 // v2LatencySlot is the ring slot of the request with this id. Consecutive ids
-// land 8 slots (64 bytes) apart, so concurrent requests write different cache
-// lines, and every slot is used once in 1024 consecutive ids.
+// land at least 8 slots (64 bytes) apart, so concurrent requests write
+// different cache lines, and every slot is used once in 1024 consecutive ids.
 func v2LatencySlot(id uint64) uint64 {
 	return (id%128)*8 + id/128%8
 }
@@ -1138,11 +1138,11 @@ func (s *Core) RecordV2Latency(id uint64, latency time.Duration) {
 // preferring newer calls' samples. Bounding the window by time as well as by
 // count keeps the figures current when executions are rare. Each call takes
 // the samples out of latency, so a sample is read once, whenever its store
-// lands. A slot holds only the latest finish among the ids that map to it
-// (v2LatencySlot: one id in every 1024), so between two calls the ring keeps
-// about the last 1024 request ids, not the last 1024 finishes. When no sample
-// was stored since the previous call, the previous figures stay. Only the
-// metrics worker calls it, once a second.
+// lands. A slot holds only the latest successful finish among the ids that
+// map to it (v2LatencySlot: one id in every 1024), so between two calls the
+// ring keeps at most one sample per 1024 consecutive ids, not the last 1024
+// finishes. When no sample was stored since the previous call, the previous
+// figures stay. Only the metrics worker calls it, once a second.
 func (p *InternalV2PeripheralState) publishLatencySummary() {
 	batch := p.latencyBatches[p.latencyTick][:0]
 	for i := range p.latency {
