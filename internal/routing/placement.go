@@ -328,13 +328,15 @@ func InternalLookupTablet(m *MetadataSnapshot, info model.RoutingInfo) InternalT
 // in the snapshot it was last routed by: its tablet placement, or else its
 // token ranges. Requests of the statement skip those lookups until a new
 // snapshot is published. Snapshots are never changed once published, so the
-// snapshot's address identifies what was found in it.
+// snapshot's id identifies what was found in it; keying by id rather than by
+// address leaves an idle statement's old snapshot free to be collected.
 type InternalPlacementCache struct {
 	entry atomic.Pointer[placementCacheEntry]
 }
 
 type placementCacheEntry struct {
-	snapshot *MetadataSnapshot
+	// snapshot is the id of the snapshot the entry was found in.
+	snapshot uint64
 	// placement is the table's placement in snapshot, or nil without one.
 	placement *InternalTabletPlacement
 	// ranges are the table's token ranges in snapshot when it has no
@@ -357,7 +359,7 @@ func InternalLookupTabletCached(m *MetadataSnapshot, info model.RoutingInfo, c *
 		return l
 	}
 	e := c.entry.Load()
-	if e == nil || e.snapshot != m {
+	if e == nil || e.snapshot != m.id {
 		e = newPlacementCacheEntry(m, info.Keyspace, info.Table)
 		c.entry.Store(e)
 	}
@@ -372,7 +374,7 @@ func InternalLookupTabletCached(m *MetadataSnapshot, info model.RoutingInfo, c *
 
 // newPlacementCacheEntry looks keyspace.table up in m for a placement cache.
 func newPlacementCacheEntry(m *MetadataSnapshot, keyspace, table string) *placementCacheEntry {
-	e := &placementCacheEntry{snapshot: m}
+	e := &placementCacheEntry{snapshot: m.id}
 	if n := SnapshotData(m).InternalPlacements.Get(InternalMetadataTable{InternalKeyspace: keyspace, InternalTable: table}); n != nil {
 		e.placement = &n.InternalValue
 		return e
@@ -420,7 +422,7 @@ func (m *MetadataSnapshot) lookupReplicas(l *InternalTabletLookup, keyspace, tab
 		}
 		return nil, nil
 	}
-	if e := l.cached(); e != nil && e.snapshot == m {
+	if e := l.cached(); e != nil && e.snapshot == m.id {
 		if len(e.ranges) == 0 {
 			return nil, nil
 		}

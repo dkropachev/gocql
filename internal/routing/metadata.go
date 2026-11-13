@@ -22,7 +22,14 @@ type TokenRange struct {
 }
 type MetadataSnapshot struct {
 	state SnapshotState
+	// id is unique among the snapshots of the process, so a cache can key
+	// what it found in a snapshot by id without keeping the snapshot alive.
+	id uint64
 }
+
+// snapshotIDs numbers snapshots for MetadataSnapshot.id.
+var snapshotIDs atomic.Uint64
+
 type InternalMetadataTable = model.TableKey
 
 func (m *MetadataSnapshot) Generation() uint64 {

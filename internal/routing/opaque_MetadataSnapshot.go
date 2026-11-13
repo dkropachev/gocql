@@ -3,5 +3,7 @@
 
 package routing
 
-func SnapshotData(v *MetadataSnapshot) *SnapshotState       { return &v.state }
-func NewMetadataSnapshot(v SnapshotState) *MetadataSnapshot { return &MetadataSnapshot{state: v} }
+func SnapshotData(v *MetadataSnapshot) *SnapshotState { return &v.state }
+func NewMetadataSnapshot(v SnapshotState) *MetadataSnapshot {
+	return &MetadataSnapshot{state: v, id: snapshotIDs.Add(1)}
+}

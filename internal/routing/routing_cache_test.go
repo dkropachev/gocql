@@ -5,8 +5,10 @@ package routing
 
 import (
 	"math"
+	"runtime"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
@@ -99,4 +101,54 @@ func TestRoutingCacheStalePlacementSignal(t *testing.T) {
 	if got := cachedReplicas(m, &c); got != nil {
 		t.Fatalf("route after the placement signal moved on: replicas %v", got)
 	}
+}
+
+// TestRoutingCacheTabletRanges checks that a table whose snapshot ranges are
+// its tablets, without a tablet placement, routes by them when cached: a
+// token outside every tablet has no replicas rather than wrapping around.
+func TestRoutingCacheTabletRanges(t *testing.T) {
+	var c InternalPlacementCache
+	m := vnodeCacheSnapshot(1, 2, 3)
+	SnapshotData(m).InternalTablets = map[InternalMetadataTable][]TokenRange{
+		{InternalKeyspace: "ks", InternalTable: "t"}: {{Start: 0, End: 100, Replicas: []Target{{HostID: cqltype.UUID{15: 4}}}}},
+	}
+	for range 2 {
+		if got := replicaHosts(cachedReplicas(m, &c)); string(got) != "\x04" {
+			t.Fatalf("token in a tablet: replicas %v", got)
+		}
+	}
+	info := model.RoutingInfo{Keyspace: "ks", Table: "t", Token: cqltype.Option[int64]{Value: 200, Set: true}}
+	l := InternalLookupTabletCached(m, info, &c)
+	if l.cached() == nil {
+		t.Fatal("the lookup did not carry the cached ranges")
+	}
+	if r, _ := m.lookupReplicas(&l, info.Keyspace, info.Table, info.Token.Value); r != nil {
+		t.Fatalf("token outside every tablet: replicas %v", replicaHosts(r))
+	}
+}
+
+// TestRoutingCacheReleasesSnapshot checks that a statement's cache does not
+// keep the snapshot it last routed by alive.
+func TestRoutingCacheReleasesSnapshot(t *testing.T) {
+	var c InternalPlacementCache
+	released := make(chan struct{})
+	func() {
+		m := vnodeCacheSnapshot(1, 2, 3)
+		runtime.AddCleanup(m, func(ch chan struct{}) { close(ch) }, released)
+		if got := cachedReplicas(m, &c); len(got) != 3 {
+			t.Fatalf("replicas %v", got)
+		}
+	}()
+	for range 10 {
+		runtime.GC()
+		select {
+		case <-released:
+			if c.entry.Load() == nil {
+				t.Fatal("the cache entry was dropped")
+			}
+			return
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	t.Fatal("the placement cache kept the snapshot alive")
 }
