@@ -118,7 +118,7 @@ func (cf *connFramers) initCache(c *Conn) {
 	}
 	cfg.InternalTabletsRoutingV2 = endpoint.InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, endpoint.InternalTabletsRoutingV2) != nil
 	cf.InternalDefaults = cfg
-	c.typedSettings.Store(c.buildNativeProtocol())
+	c.typedSettings.Store(c.buildNativeProtocol(c.metadataReuse()))
 	c.setTabletSupported(cfg.InternalTabletsRoutingV1 || cfg.InternalTabletsRoutingV2)
 	cf.InternalInitPool(c)
 }

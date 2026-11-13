@@ -58,7 +58,7 @@ func TestPrepared(t *testing.T) {
 			state, old := preparedState(t, s, cols)
 			host := cqltype.UUID{15: 2}
 			other := *old
-			state.InternalHosts[host] = &other
+			state.publishHost(host, &other, false, nil)
 			page := testPage(t, "retained")
 			defer page.Close()
 			var view cqltype.Bytes
@@ -449,7 +449,7 @@ func TestPrepared(t *testing.T) {
 						t.Fatal(err)
 					}
 					if !incompatible {
-						if hp := state.InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)]; hp == old || !bytes.Equal(hp.InternalId, []byte("new")) {
+						if hp := state.host(implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)); hp == old || !bytes.Equal(hp.InternalId, []byte("new")) {
 							t.Fatal("host ID not updated")
 						}
 					}
@@ -514,7 +514,7 @@ func TestPrepared(t *testing.T) {
 			state, old := preparedState(t, s, columns)
 			host := implCqltype.UUID{15: 2}
 			second := *old
-			state.InternalHosts[host] = &second
+			state.publishHost(host, &second, false, nil)
 			changed := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))})
 			for i := 0; i < 100; i++ {
 				response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("conflict")}}
@@ -529,7 +529,7 @@ func TestPrepared(t *testing.T) {
 				t.Fatal("conflict not scheduled")
 			}
 			state.InternalMu.RLock()
-			latest := state.InternalResult
+			latest := state.loadView().result
 			state.InternalMu.RUnlock()
 			if latest != old.InternalResult {
 				t.Fatal("remote order guessed")
@@ -736,7 +736,7 @@ func TestPrepared(t *testing.T) {
 			if err := selectPreparedResponse(state, implCqltype.UUID{15: 1}, old, old.InternalMetadataID, true, response, state.InternalDependencies.InternalTracker.InternalStart()); err != nil {
 				t.Fatal(err)
 			}
-			current := state.InternalHosts[implCqltype.UUID{15: 1}]
+			current := state.host(implCqltype.UUID{15: 1})
 			if current == old || !current.InternalEpoch.InternalCurrent() {
 				t.Fatal("changed result not installed")
 			}
@@ -792,26 +792,26 @@ func TestPrepared(t *testing.T) {
 			newer := *old
 			newer.InternalRevision++
 			newer.InternalMetadataID = []byte("a")
-			state.InternalHosts[id] = &newer
+			state.publishHost(id, &newer, false, nil)
 			response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: columns, MetadataID: []byte("z")}}
 			if err := selectPreparedResponse(state, id, old, old.InternalMetadataID, true, response); err != nil {
 				t.Fatal(err)
 			}
-			if state.InternalHosts[id] != &newer {
+			if state.host(id) != &newer {
 				t.Fatal("stale response replaced newer entry")
 			}
 			response = &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: columns, MetadataID: []byte("0")}}
 			if err := selectPreparedResponse(state, id, &newer, newer.InternalMetadataID, true, response); err != nil {
 				t.Fatal(err)
 			}
-			if !bytes.Equal(state.InternalHosts[id].InternalMetadataID, []byte("0")) {
+			if !bytes.Equal(state.host(id).InternalMetadataID, []byte("0")) {
 				t.Fatal("opaque IDs treated as ordered")
 			}
-			current := state.InternalHosts[id]
+			current := state.host(id)
 			s.InvalidatePreparedSchema(cluster.Event{Keyspace: "ks", Object: "tbl", Target: "TABLE"})
 			response = &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: columns, MetadataID: []byte("later")}}
 			_ = selectPreparedResponse(state, id, current, current.InternalMetadataID, true, response)
-			if state.InternalHosts[id] != current {
+			if state.host(id) != current {
 				t.Fatal("stale schema publication")
 			}
 		})
@@ -870,7 +870,7 @@ func TestPrepared(t *testing.T) {
 			if err := selectPreparedResponse(state, implCqltype.UUID{15: 1}, old, old.InternalMetadataID, true, response, started); err != nil {
 				t.Fatal(err)
 			}
-			if state.InternalHosts[implCqltype.UUID{15: 1}] != old {
+			if state.host(implCqltype.UUID{15: 1}) != old {
 				t.Fatal("new dependency event lost")
 			}
 			if !response.Columns.Equal(changed) {
@@ -909,7 +909,7 @@ func TestPrepared(t *testing.T) {
 						replacement.InternalId = []byte("current")
 						expected = &replacement
 						state.InternalMu.Lock()
-						state.InternalHosts[implCqltype.UUID{15: 1}] = expected
+						state.publishHost(implCqltype.UUID{15: 1}, expected, false, nil)
 						state.InternalMu.Unlock()
 					} else {
 						s.InvalidatePreparedSchema(cluster.Event{Keyspace: "ks", Target: "TABLE", Object: "tbl"})
@@ -923,7 +923,7 @@ func TestPrepared(t *testing.T) {
 						t.Fatal("losing response unavailable")
 					}
 					state.InternalMu.RLock()
-					actual := state.InternalHosts[implCqltype.UUID{15: 1}]
+					actual := state.host(implCqltype.UUID{15: 1})
 					state.InternalMu.RUnlock()
 					if actual != expected {
 						t.Fatal("late prepare overwrote replacement")
@@ -1105,7 +1105,7 @@ func TestPrepared(t *testing.T) {
 					if _, ok := errors.AsType[*runtimeerrors.SchemaChangedError](err); !ok {
 						t.Fatal(mode, err)
 					}
-					if state.InternalHosts[implCqltype.UUID{15: 1}] != old {
+					if state.host(implCqltype.UUID{15: 1}) != old {
 						t.Fatal("incompatible prepare installed")
 					}
 					if err := <-done; err != nil {

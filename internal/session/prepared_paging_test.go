@@ -70,7 +70,8 @@ func preparedState(t *testing.T, s *cluster.Core, columns implCqltype.Columns) (
 	epoch := dependencies.InternalSnapshot()
 	result := &implModel.ResultSchemaIdentity{InternalColumns: columns, InternalEpoch: epoch, InternalTracker: tracker}
 	hp := &InternalHostPrepared{InternalId: []byte("id"), InternalMetadataID: []byte("meta"), InternalColumns: columns, InternalResult: result, InternalEpoch: epoch, InternalRevision: 1}
-	state := &InternalPreparedState{InternalSession: s, InternalProtocol: 4, InternalStatement: "SELECT value FROM ks.tbl", InternalKeyspace: "ks", InternalParameters: implCqltype.NewColumns(), InternalColumns: columns, InternalResult: result, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalResultHost: implCqltype.UUID{15: 1}, InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl"}, InternalHosts: map[implCqltype.UUID]*InternalHostPrepared{{15: 1}: hp}}
+	state := &InternalPreparedState{InternalSession: s, InternalProtocol: 4, InternalStatement: "SELECT value FROM ks.tbl", InternalKeyspace: "ks", InternalParameters: implCqltype.NewColumns(), InternalColumns: columns, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl"}}
+	newTestPreparedState(state, map[implCqltype.UUID]*InternalHostPrepared{{15: 1}: hp}, result, implCqltype.UUID{15: 1})
 	return state, hp
 }
 func preparedBody(id []byte, parameters, columns implCqltype.Columns, pk ...int) []byte {

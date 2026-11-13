@@ -165,11 +165,13 @@ func injectInvalidPreparedStatement(t *testing.T, session *gocql.Session[testDia
 		implSession.PrepareOptionsData(opaqueStorageValuex).InternalConnection = conn
 		return opaqueStorageValuex
 	}())
-	preparedData(prepared).InternalState.InternalMu.Lock()
-	host := preparedData(prepared).InternalState.InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)]
-	host.InternalId = []byte("foobar")
-	preparedData(prepared).InternalState.InternalHosts[implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)] = host
-	preparedData(prepared).InternalState.InternalMu.Unlock()
+	hostID := implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)
+	entry, ok := implSession.InternalHostPreparedEntry(preparedData(prepared).InternalState, hostID)
+	if !ok {
+		t.Fatal("statement is not prepared on the chosen host")
+	}
+	entry.InternalId = []byte("foobar")
+	implSession.InternalSetHostPrepared(preparedData(prepared).InternalState, hostID, entry)
 	return prepared, conn
 }
 
@@ -223,11 +225,8 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session[testDialect], c
 	require.Equal(t, int64(1), cassandraInt(t, row, "id"))
 	cached := func() hostPrepared {
 		t.Helper()
-		preparedData(prepared).InternalState.InternalMu.RLock()
-		defer preparedData(prepared).InternalState.InternalMu.RUnlock()
-		entry, ok := preparedData(prepared).InternalState.InternalHosts[host.Value]
+		v, ok := implSession.InternalHostPreparedEntry(preparedData(prepared).InternalState, host.Value)
 		require.True(t, ok)
-		v := *entry
 		v.InternalId = append([]byte(nil), v.InternalId...)
 		v.InternalMetadataID = append([]byte(nil), v.InternalMetadataID...)
 		return v
@@ -271,9 +270,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session[testDialect], c
 	// revision ordering so the next change must be observable as a new revision.
 	stale := before
 	stale.InternalRevision = after.InternalRevision
-	preparedData(prepared).InternalState.InternalMu.Lock()
-	preparedData(prepared).InternalState.InternalHosts[host.Value] = &stale
-	preparedData(prepared).InternalState.InternalMu.Unlock()
+	implSession.InternalSetHostPrepared(preparedData(prepared).InternalState, host.Value, stale)
 	checkRows()
 	healed := cached()
 	require.True(t, healed.InternalMetadataChanged)

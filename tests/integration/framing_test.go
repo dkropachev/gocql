@@ -249,15 +249,12 @@ func TestFraming(t *testing.T) {
 				implSession.OptionsData(opaqueStorageValuexxxxxxx).InternalConnection = conn
 				return opaqueStorageValuexxxxxxx
 			}())
-			preparedData(prepared).InternalState.InternalMu.Lock()
-			entry, ok := preparedData(prepared).InternalState.InternalHosts[host.Value]
+			cached, ok := implSession.InternalHostPreparedEntry(preparedData(prepared).InternalState, host.Value)
 			require.True(t, ok)
-			cached := *entry
 			require.NotEmpty(t, cached.InternalMetadataID)
 			cached.InternalMetadataID = nil
 			cached.InternalRevision++
-			preparedData(prepared).InternalState.InternalHosts[host.Value] = &cached
-			preparedData(prepared).InternalState.InternalMu.Unlock()
+			implSession.InternalSetHostPrepared(preparedData(prepared).InternalState, host.Value, cached)
 			row := cassandraReadOne(t, session, prepared, int32(1), *func() *implSession.Options {
 				opaqueStorageValuexxxxxxxx := new(implSession.Options)
 				opaqueStorageValuexxxxxxxx.HostID = host
@@ -266,9 +263,7 @@ func TestFraming(t *testing.T) {
 			}())
 			require.Equal(t, int64(1), cassandraInt(t, row, "id"))
 			require.Equal(t, int64(7), cassandraInt(t, row, "val"))
-			preparedData(prepared).InternalState.InternalMu.RLock()
-			healed := preparedData(prepared).InternalState.InternalHosts[host.Value]
-			preparedData(prepared).InternalState.InternalMu.RUnlock()
+			healed, _ := implSession.InternalHostPreparedEntry(preparedData(prepared).InternalState, host.Value)
 			require.NotEmpty(t, healed.InternalMetadataID, "empty metadata ID must be repaired from response")
 			require.True(t, healed.InternalMetadataChanged)
 			require.Greater(t, healed.InternalRevision, cached.InternalRevision)

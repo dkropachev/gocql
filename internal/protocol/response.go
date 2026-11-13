@@ -37,17 +37,133 @@ type TypedParser struct {
 }
 
 // MetadataReuse belongs to the serialized receive path of one connection.
-// It retains one fully validated column specification, with a 64 KiB encoded
-// ceiling. Exact byte identity permits sharing immutable names and types;
-// differing bytes always take the complete checked parser path.
+// It retains up to metadataReuseEntries fully validated column specifications,
+// each with a 64 KiB encoded ceiling, so that statements interleaved on the
+// connection keep theirs. Exact byte identity permits sharing immutable names
+// and types; differing bytes always take the complete checked parser path.
 type MetadataReuse struct {
+	entries [metadataReuseEntries]metadataReuseEntry
+	// next is the entry a response with no entry of its own replaces.
+	next uint8
+}
+
+const metadataReuseEntries = 4
+
+type metadataReuseEntry struct {
 	encoded []byte
 	columns Columns
-	// expected is a request's expected columns found equal to columns; a
-	// request expecting the same receives them instead.
-	expected Columns
-	global   bool
-	depth    int
+	// owner is the expected columns of the request that filled the entry, or
+	// last matched it; a request expecting them probes this entry first, and
+	// replaces it when its result metadata changes.
+	owner Columns
+	// hit is what a byte-identical response returns to owner's requests:
+	// owner when it equals columns, so that checking the response against
+	// the expected columns compares identities, otherwise columns.
+	hit    Columns
+	depth  int32
+	global bool
+}
+
+// match reports whether the entry holds metadata of count columns encoded
+// exactly as the next bytes of cursor, advancing cursor past them if so; on a
+// mismatch the caller restores cursor.
+func (e *metadataReuseEntry) match(cursor *wire.Cursor, count int, global bool, depth int) bool {
+	if e.columns.Len() != count || e.global != global || int(e.depth) != depth || len(e.encoded) == 0 {
+		return false
+	}
+	candidate, err := cursor.Take(int64(len(e.encoded)))
+	if err != nil {
+		return false
+	}
+	if b, ok := candidate.Contiguous(); ok {
+		return bytes.Equal(b, e.encoded)
+	}
+	offset, same := 0, true
+	_ = candidate.Each(func(span wire.Span) error {
+		n := span.Len()
+		if !bytes.Equal(span.Bytes(), e.encoded[offset:offset+n]) {
+			same = false
+		}
+		offset += n
+		return nil
+	})
+	return same
+}
+
+// lookup returns the remembered columns for metadata encoded exactly as the
+// next bytes of cursor, probing first the entry of the request's expected
+// columns. On a hit it advances cursor past the metadata.
+func (r *MetadataReuse) lookup(cursor *wire.Cursor, expect Columns, count int, global bool, depth int) (Columns, bool) {
+	start := *cursor
+	tried := -1
+	if expect.Len() > 0 {
+		for i := range r.entries {
+			e := &r.entries[i]
+			if owned := e.owner.Same(expect); owned || e.columns.Same(expect) {
+				if e.match(cursor, count, global, depth) {
+					if !owned {
+						// The statement adopted these parsed columns.
+						return expect, true
+					}
+					return e.hit, true
+				}
+				*cursor = start
+				tried = i
+				break
+			}
+		}
+	}
+	for i := range r.entries {
+		e := &r.entries[i]
+		if i == tried {
+			continue
+		}
+		if !e.match(cursor, count, global, depth) {
+			*cursor = start
+			continue
+		}
+		if expect.Len() == count && e.columns.Equal(expect) {
+			if e.owner.Len() == 0 {
+				e.owner, e.hit = expect, expect
+			}
+			return expect, true
+		}
+		return e.columns, true
+	}
+	return Columns{}, false
+}
+
+// store remembers parsed columns for the encoded metadata, replacing the
+// entry of the request's expected columns, or else the next one in turn. It
+// returns what the response carries: expect when equal to columns.
+func (r *MetadataReuse) store(encoded wire.Chain, columns, expect Columns, global bool, depth int) Columns {
+	hit := columns
+	if expect.Len() == columns.Len() && expect.Len() > 0 && columns.Equal(expect) {
+		hit = expect
+	}
+	slot := -1
+	if expect.Len() > 0 {
+		for i := range r.entries {
+			if e := &r.entries[i]; e.owner.Same(expect) || e.columns.Same(expect) {
+				slot = i
+				break
+			}
+		}
+	}
+	if slot < 0 {
+		slot = int(r.next)
+		r.next = (r.next + 1) % metadataReuseEntries
+	}
+	e := &r.entries[slot]
+	n := encoded.Len()
+	if c := cap(e.encoded); c < int(n) || (c > 4096 && c > 4*int(n)) {
+		e.encoded = make([]byte, int(n))
+	} else {
+		e.encoded = e.encoded[:n]
+	}
+	_, _ = encoded.CopyTo(e.encoded)
+	e.columns, e.owner, e.hit, e.global, e.depth = columns, expect, hit, global, int32(depth)
+	return hit
 }
 
 func (p *TypedParser) Check(err error) {
@@ -350,31 +466,8 @@ func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLW
 	cursor, buffered := p.Cursor.(*wire.Cursor)
 	if buffered && !prepared && p.reuse != nil && p.Err == nil {
 		checkpoint = *cursor
-		cache := p.reuse
-		if cache.columns.Len() == count && cache.global == global && cache.depth == p.MaxDepth && len(cache.encoded) > 0 {
-			candidate, err := cursor.Take(int64(len(cache.encoded)))
-			if err == nil {
-				offset, same := 0, true
-				_ = candidate.Each(func(span wire.Span) error {
-					n := span.Len()
-					if !bytes.Equal(span.Bytes(), cache.encoded[offset:offset+n]) {
-						same = false
-					}
-					offset += n
-					return nil
-				})
-				if same {
-					if p.expect.Len() > 0 && p.expect.Same(cache.expected) {
-						return cache.expected, count
-					}
-					if p.expect.Len() == count && cache.columns.Equal(p.expect) {
-						cache.expected = p.expect
-						return p.expect, count
-					}
-					return cache.columns, count
-				}
-			}
-			*cursor = checkpoint
+		if columns, ok := p.reuse.lookup(cursor, p.expect, count, global, p.MaxDepth); ok {
+			return columns, count
 		}
 	}
 	keyspace, table := "", ""
@@ -400,17 +493,8 @@ func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLW
 	if buffered && !prepared && p.reuse != nil && p.Err == nil {
 		n := checkpoint.Remaining() - cursor.Remaining()
 		if n > 0 && n <= 64<<10 {
-			encoded, err := checkpoint.Take(n)
-			if err == nil {
-				cache := p.reuse
-				if cap(cache.encoded) < int(n) {
-					cache.encoded = make([]byte, int(n))
-				} else {
-					cache.encoded = cache.encoded[:n]
-				}
-				_, _ = encoded.CopyTo(cache.encoded)
-				cache.columns, cache.global, cache.depth = result, global, p.MaxDepth
-				cache.expected = Columns{}
+			if encoded, err := checkpoint.Take(n); err == nil {
+				return p.reuse.store(encoded, result, p.expect, global, p.MaxDepth), count
 			}
 		}
 	}

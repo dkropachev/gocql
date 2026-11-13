@@ -478,9 +478,7 @@ func (s *RowStream[R]) acquire(plan implRouting.QueryPlan) error {
 		if state == nil {
 			return nil
 		}
-		state.InternalMu.RLock()
-		prepared := state.InternalHosts[implEndpoint.InternalHostInfoHostUUID(reservation.InternalConn.InternalHost)]
-		state.InternalMu.RUnlock()
+		prepared := state.host(implEndpoint.InternalHostInfoHostUUID(reservation.InternalConn.InternalHost))
 		if prepared != nil && prepared.InternalEpoch.InternalCurrent() {
 			s.privateStorage.prepared = prepared
 			// Conditional PREPARE responses may omit result columns. The actual

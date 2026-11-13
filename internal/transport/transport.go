@@ -413,18 +413,27 @@ func (c *Conn) nativeProtocol() *protocol.Settings {
 	if p := c.typedSettings.Load(); p != nil {
 		return p
 	}
-	return c.buildNativeProtocol()
+	return c.buildNativeProtocol(new(protocol.MetadataReuse))
 }
 
 // InternalRefreshNativeProtocol rebuilds the cached protocol settings, for
 // tests that change framer defaults after initialisation.
 func (c *Conn) InternalRefreshNativeProtocol() {
-	c.typedSettings.Store(c.buildNativeProtocol())
+	c.typedSettings.Store(c.buildNativeProtocol(c.metadataReuse()))
 }
 
-func (c *Conn) buildNativeProtocol() *protocol.Settings {
+// metadataReuse returns the connection's result-metadata cache, allocating it
+// out of line on first use. Callers are the serialized framer initialisation.
+func (c *Conn) metadataReuse() *protocol.MetadataReuse {
+	if c.typedMetadataReuse == nil {
+		c.typedMetadataReuse = new(protocol.MetadataReuse)
+	}
+	return c.typedMetadataReuse
+}
+
+func (c *Conn) buildNativeProtocol(reuse *protocol.MetadataReuse) *protocol.Settings {
 	limits := c.typedProtocolLimits()
-	p := protocol.Settings{MetadataReuse: &c.typedMetadataReuse, Version: *c.InternalWire(), Flags: c.InternalFramers.InternalDefaults.InternalFlags, MetadataID: c.InternalFramers.InternalDefaults.InternalScyllaUseMetadataID, TabletsRoutingV2: c.InternalFramers.InternalDefaults.InternalTabletsRoutingV2, MaxFrameBytes: limits.MaxFrameBytes, MaxDecompressedBytes: limits.MaxDecompressedBytes, MaxMetadataDepth: limits.MaxMetadataDepth, FlagLWT: c.InternalFramers.InternalDefaults.InternalFlagLWT, RateLimitingErrorCode: c.InternalFramers.InternalDefaults.rateLimitingErrorCode, SegmentCompression: c.InternalSegCompressor != nil}
+	p := protocol.Settings{MetadataReuse: reuse, Version: *c.InternalWire(), Flags: c.InternalFramers.InternalDefaults.InternalFlags, MetadataID: c.InternalFramers.InternalDefaults.InternalScyllaUseMetadataID, TabletsRoutingV2: c.InternalFramers.InternalDefaults.InternalTabletsRoutingV2, MaxFrameBytes: limits.MaxFrameBytes, MaxDecompressedBytes: limits.MaxDecompressedBytes, MaxMetadataDepth: limits.MaxMetadataDepth, FlagLWT: c.InternalFramers.InternalDefaults.InternalFlagLWT, RateLimitingErrorCode: c.InternalFramers.InternalDefaults.rateLimitingErrorCode, SegmentCompression: c.InternalSegCompressor != nil}
 	if c.InternalCompressor != nil {
 		p.Compression = c.InternalCompressor.Name()
 	}

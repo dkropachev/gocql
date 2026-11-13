@@ -499,9 +499,7 @@ func (s *InternalSessionRuntime) repairBatch(ctx context.Context, conn *transpor
 		if state == nil {
 			continue
 		}
-		state.InternalMu.RLock()
-		cached := state.InternalHosts[conn.InternalHostID()]
-		state.InternalMu.RUnlock()
+		cached := state.host(conn.InternalHostID())
 		if cached != nil && bytes.Equal(cached.InternalId, id) {
 			_, err := entry.sourceOrText().onConn(ctx, s, conn, entry.encoded(), true, nil)
 			return err
