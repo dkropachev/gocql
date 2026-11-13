@@ -164,20 +164,24 @@ func TestObserver(t *testing.T) {
 			write := cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), exec.PrepareOptions{})
 			result, err := write.Exec(context.Background(), []dynamic.Value{dynamic.Int(42)}, bindOptions(session, exec.Options{CQLTrace: true}))
 			require.NoError(t, err)
-			require.NotEmpty(t, result.CQLTraceIDs())
-			checkTrace := func(ids []cql.UUID) {
+			require.NotEmpty(t, result.CQLTraces())
+			checkTrace := func(refs []gocql.CQLTraceRef) {
 				t.Helper()
-				require.NotEmpty(t, ids)
-				for _, id := range ids {
+				require.NotEmpty(t, refs)
+				for _, ref := range refs {
+					require.False(t, ref.Failed)
+					require.Equal(t, 1, ref.Attempt)
+					require.NotZero(t, ref.HostID)
 					ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-					trace, err := cqltrace.Fetch(ctx, session, id)
+					trace, err := cqltrace.Fetch(ctx, session, ref.ID)
 					cancel()
 					require.NoError(t, err)
-					require.Equal(t, id, trace.ID)
+					require.Equal(t, ref.ID, trace.ID)
 					require.NotEmpty(t, trace.Events)
+					require.True(t, trace.Settled)
 				}
 			}
-			checkTrace(result.CQLTraceIDs())
+			checkTrace(result.CQLTraces())
 			read := cassandraDynamicPrepared(t, session, fmt.Sprintf("SELECT id FROM %s WHERE id = ?", table), exec.PrepareOptions{})
 			// Options are explicit per execution; the same statement can be traced repeatedly.
 			for i := 0; i < 2; i++ {
@@ -189,7 +193,7 @@ func TestObserver(t *testing.T) {
 				require.Equal(t, int64(42), cassandraInt(t, row, "id"))
 				require.False(t, rows.NextInto(&row))
 				require.NoError(t, rows.Close())
-				checkTrace(rows.Info().CQLTraceIDs())
+				checkTrace(rows.Info().CQLTraces())
 			}
 		})
 		t.Run("Tracer", func(t *testing.T) {
@@ -203,7 +207,7 @@ func TestObserver(t *testing.T) {
 			write := cassandraWritePrepared(t, session, fmt.Sprintf(`INSERT INTO %s (id) VALUES (?)`, table), exec.PrepareOptions{})
 			inserted, err := write.Exec(ctx, []dynamic.Value{dynamic.Int(42)}, bindOptions(session, exec.Options{CQLTrace: true}))
 			require.NoError(t, err)
-			require.NotEmpty(t, inserted.CQLTraceIDs())
+			require.NotEmpty(t, inserted.CQLTraces())
 			prepared, err := session.Prepare(ctx, cql.Statement[int32, int32]{CQL: fmt.Sprintf(`SELECT id FROM %s WHERE id = ?`, table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.Int32Codec)}, exec.PrepareOptions{})
 			require.NoError(t, err)
 			rows, err := prepared.Run(ctx, int32(42), bindOptions(session, exec.Options{CQLTrace: true}))
@@ -216,13 +220,13 @@ func TestObserver(t *testing.T) {
 			require.NoError(t, rows.Err())
 			selected := rows.Info()
 			require.NoError(t, rows.Close())
-			require.NotEmpty(t, selected.CQLTraceIDs())
+			require.NotEmpty(t, selected.CQLTraces())
 			// Trace polls readiness under the caller context and returns owned typed
 			// events; the legacy Tracer's internal table queries are no longer used.
-			for _, id := range append(inserted.CQLTraceIDs(), selected.CQLTraceIDs()...) {
-				info, err := cqltrace.Fetch(ctx, session, id)
+			for _, ref := range append(inserted.CQLTraces(), selected.CQLTraces()...) {
+				info, err := cqltrace.Fetch(ctx, session, ref.ID)
 				require.NoError(t, err)
-				require.Equal(t, id, info.ID)
+				require.Equal(t, ref.ID, info.ID)
 				require.True(t, info.Coordinator.IsValid(), "trace coordinator missing")
 				require.False(t, info.Started.IsZero(), "trace start missing")
 				require.NotEmpty(t, info.Request, "trace request missing")

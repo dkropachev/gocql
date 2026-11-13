@@ -903,44 +903,118 @@ func TestStream(t *testing.T) {
 				})
 			}
 		})
-		t.Run("CQLTraceIDsAccumulateAcrossPages", func(t *testing.T) {
-			s, c, peer := rowStreamSession(t, 4, nil)
-			ids := []cqltype.UUID{{15: 1}, {15: 2}, {15: 3}}
-			done := make(chan struct{})
-			go func() {
-				defer close(done)
-				for i, body := range [][]byte{runtimeRowsBody([]byte{1}, "a"), runtimeRowsBody([]byte{2}, "b"), runtimeRowsBody(nil, "c")} {
-					stream := typedTestReadRequest(t, c, peer)
-					frame := typedTestResponse(t, 4, stream, append(append([]byte{}, ids[i][:]...), body...))
-					frame[1] = 2 // tracing
-					if _, err := peer.Write(frame); err != nil {
-						t.Error(err)
-						return
+		t.Run("CQLTracesAccumulateAcrossPages", func(t *testing.T) {
+			for _, incremental := range []bool{true, false} {
+				t.Run(map[bool]string{true: "incremental", false: "buffered"}[incremental], func(t *testing.T) {
+					s, c, peer := rowStreamSession(t, 4, nil)
+					ids := []cqltype.UUID{{15: 1}, {15: 2}, {15: 3}}
+					done := make(chan struct{})
+					go func() {
+						defer close(done)
+						for i, body := range [][]byte{runtimeRowsBody([]byte{1}, "a"), runtimeRowsBody([]byte{2}, "b"), runtimeRowsBody(nil, "c")} {
+							stream := typedTestReadRequest(t, c, peer)
+							frame := typedTestResponse(t, 4, stream, append(append([]byte{}, ids[i][:]...), body...))
+							frame[1] = 2 // tracing
+							if _, err := peer.Write(frame); err != nil {
+								t.Error(err)
+								return
+							}
+						}
+					}()
+					ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+					defer cancel()
+					b := runtimeQuery(t)
+					defer b.Close()
+					cursor, err := RunStream(ctx, s, b, codec.StreamOneColumn(codec.StreamBlob), StreamOptions{Incremental: incremental})
+					if err != nil {
+						t.Fatal(err)
 					}
-				}
-			}()
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
-			b := runtimeQuery(t)
-			defer b.Close()
-			cursor, err := RunStream(ctx, s, b, codec.StreamOneColumn(codec.StreamBlob), StreamOptions{Incremental: true})
-			if err != nil {
-				t.Fatal(err)
-			}
-			dst := make([]byte, 0, 8)
-			for cursor.NextInto(&dst) {
-			}
-			if err := cursor.Err(); err != nil {
-				t.Fatal(err)
-			}
-			if err := cursor.Close(); err != nil {
-				t.Fatal(err)
-			}
-			<-done
-			if info := cursor.Info(); info.Pages != 3 || len(info.Result.CQLTraceIDs()) != 3 || info.Result.CQLTraceIDs()[0] != ids[0] || info.Result.CQLTraceIDs()[2] != ids[2] {
-				t.Fatalf("pages %d, trace IDs %v, want %v", info.Pages, info.Result.CQLTraceIDs(), ids)
+					dst := make([]byte, 0, 8)
+					for cursor.NextInto(&dst) {
+					}
+					if err := cursor.Err(); err != nil {
+						t.Fatal(err)
+					}
+					if err := cursor.Close(); err != nil {
+						t.Fatal(err)
+					}
+					select {
+					case <-done:
+					case <-time.After(3 * time.Second):
+						t.Fatal("the stream did not request every page")
+					}
+					info := cursor.Info()
+					traces := info.Result.CQLTraces()
+					if info.Pages != 3 || len(traces) != 3 {
+						t.Fatalf("pages %d, traces %+v, want %v", info.Pages, traces, ids)
+					}
+					for i, trace := range traces {
+						if trace != (model.CQLTraceRef{ID: ids[i], HostID: info.Result.HostID, Attempt: 1}) {
+							t.Fatalf("page %d trace %+v, want ID %v", i+1, trace, ids[i])
+						}
+					}
+				})
 			}
 		})
+		for _, incremental := range []bool{true, false} {
+			mode := map[bool]string{true: "incremental", false: "buffered"}[incremental]
+			// A traced response that arrives but fails validation, here a
+			// decoder that compiles no plan, and a traced server error both
+			// leave a failed trace ref on the failed stream's Result.
+			for _, tc := range []struct {
+				name    string
+				frame   func(stream int, id cqltype.UUID) []byte
+				decoder codec.StreamRowDecoder[[]byte]
+			}{
+				{"CQLTraceOfRejectedResponseIsFailed", func(stream int, id cqltype.UUID) []byte {
+					frame := typedTestResponse(t, 4, stream, append(append([]byte{}, id[:]...), runtimeRowsBody(nil, "a")...))
+					frame[1] = 2 // tracing
+					return frame
+				}, nilPreparedStreamPlan{}},
+				{"CQLTraceOfServerErrorIsFailed", func(stream int, id cqltype.UUID) []byte {
+					return tracedServerError(t, stream, implProtocol.CodeInvalid, nil, id)
+				}, codec.StreamOneColumn(codec.StreamBlob)},
+			} {
+				t.Run(tc.name+"/"+mode, func(t *testing.T) {
+					s, c, peer := rowStreamSession(t, 4, nil)
+					id := cqltype.UUID{15: 9}
+					done := make(chan struct{})
+					go func() {
+						defer close(done)
+						stream := typedTestReadRequest(t, c, peer)
+						if _, err := peer.Write(tc.frame(stream, id)); err != nil {
+							t.Error(err)
+						}
+					}()
+					ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+					defer cancel()
+					b := runtimeQuery(t)
+					defer b.Close()
+					cursor, err := RunStream(ctx, s, b, tc.decoder, StreamOptions{Incremental: incremental})
+					var result model.Result
+					if err != nil {
+						result = InternalExecutionErrorResult(err)
+					} else {
+						dst := make([]byte, 0, 8)
+						for cursor.NextInto(&dst) {
+						}
+						if cursor.Err() == nil {
+							t.Fatal("stream succeeded")
+						}
+						result = cursor.Info().Result
+						cursor.Close()
+					}
+					select {
+					case <-done:
+					case <-time.After(3 * time.Second):
+						t.Fatal("the stream sent no request")
+					}
+					if traces := result.CQLTraces(); len(traces) != 1 || traces[0].ID != id || !traces[0].Failed {
+						t.Fatalf("traces %+v, want one failed ref with ID %v (err %v)", traces, id, err)
+					}
+				})
+			}
+		}
 	})
 
 	t.Run("Prepared", func(t *testing.T) {
@@ -996,6 +1070,51 @@ func TestStream(t *testing.T) {
 					}
 					<-done
 				})
+			}
+		})
+
+		t.Run("CQLTraceOfMetadataRejectionIsFailed", func(t *testing.T) {
+			// A traced NO_METADATA page whose column count does not match the
+			// prepared result fails metadata selection: its attempt failed,
+			// and the execution's Result keeps that attempt's trace ref.
+			s, c, peer := rowStreamSession(t, 4, nil)
+			implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
+			columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.BlobType})
+			state, _ := preparedState(t, s, columns)
+			bound := new(Bound[cqltype.Bytes])
+			BoundData(bound).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cqltype.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Kind: cqltype.OrdinaryStatement}}
+			BoundData(bound).InternalRows = codec.OneColumn(codec.BlobCodec)
+			id := cqltype.UUID{15: 11}
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				stream := typedTestReadRequest(t, c, peer)
+				body := []byte{0, 0, 0, 2, 0, 0, 0, 4, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 3, 'a', 'b', 'c', 255, 255, 255, 255}
+				frame := testResponse(t, c, stream, append(append([]byte{}, id[:]...), body...))
+				frame[1] |= 2 // tracing
+				_, _ = peer.Write(frame)
+			}()
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{}))
+			if page != nil {
+				page.Close()
+			}
+			if _, ok := errors.AsType[*cqltype.ProtocolError](err); !ok {
+				t.Fatalf("err %v, want a result metadata ProtocolError", err)
+			}
+			traces := InternalExecutionErrorResult(err).CQLTraces()
+			if len(traces) != 1 || traces[0].ID != id || traces[0].Attempt != 1 || !traces[0].Failed || traces[0].HostID != c.InternalHostID() {
+				t.Fatalf("traces %+v, want one failed ref with ID %v", traces, id)
+			}
+			bound.Close()
+			if err := bound.Wait(ctx); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-done:
+			case <-time.After(3 * time.Second):
+				t.Fatal("the page sent no request")
 			}
 		})
 
@@ -1082,7 +1201,7 @@ func TestStream(t *testing.T) {
 			}
 			t.Logf("canonical stream attempts=3 payload_backing_bytes=%d", spy.bytes.Load())
 			info := cursor.Info()
-			if len(info.Result.Warnings()) != 1 || info.Result.Warnings()[0] != "terminal" || len(info.Result.CQLTraceIDs()) != 1 || info.Result.CQLTraceIDs()[0][15] != 7 || len(info.Result.CustomPayload()) != 1 || string(info.Result.CustomPayload()[0].Value.Value.OwnedBytes()) != "new" {
+			if len(info.Result.Warnings()) != 1 || info.Result.Warnings()[0] != "terminal" || len(info.Result.CQLTraces()) != 1 || info.Result.CQLTraces()[0].ID[15] != 7 || !info.Result.CQLTraces()[0].Failed || len(info.Result.CustomPayload()) != 1 || string(info.Result.CustomPayload()[0].Value.Value.OwnedBytes()) != "new" {
 				t.Fatal("terminal attempt metadata missing", info)
 			}
 			bound.Close()

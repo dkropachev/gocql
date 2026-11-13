@@ -1381,7 +1381,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			aggregate.HostID = outcome.event.Target.HostID
 			aggregate.AchievedConsistency = outcome.consistency
 			if response != nil {
-				mergeResponseResult(&aggregate, response)
+				mergeResponseResult(&aggregate, response, model.CQLTraceRef{HostID: outcome.event.Target.HostID, Attempt: outcome.event.Attempt, Failed: attemptErr != nil, Speculative: outcome.event.Speculative})
 			}
 			if attemptErr == nil {
 				response.Result = aggregate
@@ -1562,8 +1562,10 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 			return nil, &cqltype.ProtocolError{Stage: "execute", Err: fmt.Errorf("missing response")}
 		}
 		if err := selectPreparedResponse(source.prepared(), conn.InternalHostID(), prepared, wireRequest.ResultMetadataID, conn.InternalTracksResultMetadataID(), response, observed); err != nil {
-			response.Owner.Release()
-			return nil, err
+			// Hand the rejected response back with its error, as for a
+			// server error: callers record its CQL trace as a failed
+			// attempt's and then release it.
+			return response, err
 		}
 
 		if response.SchemaChange() {

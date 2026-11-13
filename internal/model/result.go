@@ -25,8 +25,25 @@ type Result struct {
 
 type resultDiagnostics struct {
 	warnings      []string
-	traceIDs      []UUID
+	traces        []CQLTraceRef
 	customPayload []PayloadEntry
+}
+
+// CQLTraceRef names a server-side CQL trace session and the attempt it
+// records. Read the session with package cqltrace.
+type CQLTraceRef struct {
+	// ID is the trace session ID.
+	ID UUID
+	// HostID is the node that coordinated the attempt.
+	HostID UUID
+	// Attempt is the attempt's 1-based number within its page.
+	Attempt int
+	// Failed reports that the attempt ended in an error, such as a timeout
+	// the driver then retried. Every page's last reference that has Failed
+	// unset is the attempt that served it.
+	Failed bool
+	// Speculative reports that the attempt was a speculative execution.
+	Speculative bool
 }
 
 // Warnings returns the server warnings of all attempts and pages.
@@ -37,13 +54,14 @@ func (r Result) Warnings() []string {
 	return r.diag.warnings
 }
 
-// CQLTraceIDs returns the server-side CQL trace session IDs of traced
-// attempts; package cqltrace reads them.
-func (r Result) CQLTraceIDs() []UUID {
+// CQLTraces returns the server-side CQL trace sessions of the execution's
+// traced attempts, failed ones included, in the order they finished, page
+// after page; package cqltrace reads them.
+func (r Result) CQLTraces() []CQLTraceRef {
 	if r.diag == nil {
 		return nil
 	}
-	return r.diag.traceIDs
+	return r.diag.traces
 }
 
 // CustomPayload returns the custom payload entries of all responses.
@@ -60,7 +78,7 @@ func (r *Result) own() *resultDiagnostics {
 	d := &resultDiagnostics{}
 	if r.diag != nil {
 		d.warnings = slices.Clip(r.diag.warnings)
-		d.traceIDs = slices.Clip(r.diag.traceIDs)
+		d.traces = slices.Clip(r.diag.traces)
 		d.customPayload = slices.Clip(r.diag.customPayload)
 	}
 	r.diag = d
@@ -75,11 +93,11 @@ func (r *Result) AddWarnings(warnings ...string) {
 	}
 }
 
-// AddCQLTraceIDs appends CQL trace session IDs.
-func (r *Result) AddCQLTraceIDs(ids ...UUID) {
-	if len(ids) > 0 {
+// AddCQLTraces appends CQL trace session references.
+func (r *Result) AddCQLTraces(traces ...CQLTraceRef) {
+	if len(traces) > 0 {
 		d := r.own()
-		d.traceIDs = append(d.traceIDs, ids...)
+		d.traces = append(d.traces, traces...)
 	}
 }
 
@@ -91,21 +109,21 @@ func (r *Result) AddCustomPayload(entries ...PayloadEntry) {
 	}
 }
 
-// SetDiagnostics replaces warnings, trace IDs and custom payload, taking
-// ownership of the slices.
-func (r *Result) SetDiagnostics(warnings []string, traceIDs []UUID, customPayload []PayloadEntry) {
-	if len(warnings) == 0 && len(traceIDs) == 0 && len(customPayload) == 0 {
+// SetDiagnostics replaces warnings, trace references and custom payload,
+// taking ownership of the slices.
+func (r *Result) SetDiagnostics(warnings []string, traces []CQLTraceRef, customPayload []PayloadEntry) {
+	if len(warnings) == 0 && len(traces) == 0 && len(customPayload) == 0 {
 		r.diag = nil
 		return
 	}
-	r.diag = &resultDiagnostics{warnings: warnings, traceIDs: traceIDs, customPayload: customPayload}
+	r.diag = &resultDiagnostics{warnings: warnings, traces: traces, customPayload: customPayload}
 }
 
 func CloneResult(result Result) Result {
 	if result.diag != nil {
 		result.diag = &resultDiagnostics{
 			warnings:      append([]string(nil), result.diag.warnings...),
-			traceIDs:      append([]UUID(nil), result.diag.traceIDs...),
+			traces:        append([]CQLTraceRef(nil), result.diag.traces...),
 			customPayload: append([]PayloadEntry(nil), result.diag.customPayload...),
 		}
 	}
@@ -117,7 +135,7 @@ func MergeResult(dst *Result, src Result) {
 	dst.Latency += src.Latency
 	dst.Rows += src.Rows
 	dst.AddWarnings(src.Warnings()...)
-	dst.AddCQLTraceIDs(src.CQLTraceIDs()...)
+	dst.AddCQLTraces(src.CQLTraces()...)
 	dst.AddCustomPayload(src.CustomPayload()...)
 	dst.AchievedConsistency = src.AchievedConsistency
 }

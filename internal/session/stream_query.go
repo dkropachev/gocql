@@ -5,9 +5,11 @@ package session
 
 import (
 	"context"
+	"slices"
 	"sync"
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/transport"
 
 	"github.com/scylladb/gocql/v2/internal/codec"
@@ -98,8 +100,40 @@ func (s *RowStream[R]) loadBufferedPage() error {
 	p := &s.privateStorage
 	response, err := InternalRuntimeFor(p.session).executePage(p.ctx, p.request, s.state)
 	if err != nil {
+		s.mergeBufferedFailure(InternalExecutionErrorResult(err))
 		return err
 	}
+	if err := s.installBufferedPage(response); err != nil {
+		// The response arrived but cannot be decoded: its attempt failed.
+		s.mergeBufferedFailure(response.Result)
+		return err
+	}
+	return nil
+}
+
+// mergeBufferedFailure adds a page execution that produced no page to the
+// stream's Result: its attempts, latency and CQL trace refs, all marked
+// failed, so that a failed stream still names its traced attempts.
+func (s *RowStream[R]) mergeBufferedFailure(result model.Result) {
+	p := &s.privateStorage
+	refs := slices.Clone(result.CQLTraces())
+	for i := range refs {
+		refs[i].Failed = true
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	r := &p.info.Result
+	r.Attempts += result.Attempts
+	r.Latency += result.Latency
+	if len(refs) > 0 {
+		r.SetDiagnostics(r.Warnings(), slices.Concat(r.CQLTraces(), refs), r.CustomPayload())
+	}
+}
+
+// installBufferedPage makes a page execution's response the stream's current
+// page and adds its Result to the stream's.
+func (s *RowStream[R]) installBufferedPage(response *transport.InternalResponsePage) error {
+	p := &s.privateStorage
 	// Release the preceding page before retaining this one. Validation is shared
 	// only for identical immutable column storage; changed metadata is rechecked.
 	previous := p.bufferedReader
@@ -157,6 +191,12 @@ func (s *RowStream[R]) loadBufferedPage() error {
 	p.info.Result.Attempts += prior.Attempts
 	p.info.Result.Latency += prior.Latency
 	p.info.Result.Rows = p.info.DeliveredRows
+	if traces := prior.CQLTraces(); len(traces) > 0 {
+		// CQL trace refs accumulate page after page; the response owns its
+		// own slice, so build a fresh one.
+		r := &p.info.Result
+		r.SetDiagnostics(r.Warnings(), slices.Concat(traces, r.CQLTraces()), r.CustomPayload())
+	}
 	p.info.Pages++
 	p.mu.Unlock()
 	return nil

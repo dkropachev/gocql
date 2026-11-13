@@ -33,7 +33,6 @@ import (
 
 	"context"
 	"errors"
-	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -612,13 +611,13 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		end := request.InternalLogical.startAttempt(implRouting.AttemptStart{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started})
 		response, err := s.privateStorage.reservation.InternalExchange(pagectx, wireRequest)
 		wireRequest.Lease.Release()
-		var traces []cqltype.UUID
+		var traces []model.CQLTraceRef
 		if response != nil {
-			traces = response.InternalInfo.CQLTraceIDs()
+			traces = response.InternalInfo.CQLTraces()
 		}
 		event := implRouting.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started, Latency: time.Since(started), Err: err, Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
 		if len(traces) > 0 {
-			event.CQLTraceID = cqltype.Option[cqltype.UUID]{Value: traces[len(traces)-1], Set: true}
+			event.CQLTraceID = cqltype.Option[cqltype.UUID]{Value: traces[len(traces)-1].ID, Set: true}
 		}
 		rt := InternalRuntimeFor(s.privateStorage.session)
 		rt.attempts.Add(1)
@@ -643,10 +642,15 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		if response != nil {
 			warnings, payload = response.InternalInfo.Warnings(), response.InternalInfo.CustomPayload()
 		}
-		if prior := s.privateStorage.info.Result.CQLTraceIDs(); len(prior) > 0 {
-			traces = slices.Concat(prior, traces)
+		// Info hands out clones, so the stream's own trace slice can grow in
+		// place instead of being copied on every page.
+		tracedOK := err == nil && len(traces) > 0
+		all := s.privateStorage.info.Result.CQLTraces()
+		for _, trace := range traces {
+			trace.HostID, trace.Attempt, trace.Failed = target.HostID, attempt, err != nil
+			all = append(all, trace)
 		}
-		s.privateStorage.info.Result.SetDiagnostics(warnings, traces, payload)
+		s.privateStorage.info.Result.SetDiagnostics(warnings, all, payload)
 		s.privateStorage.mu.Unlock()
 		// Latest failed-attempt extensions remain budgeted until replacement or
 		// terminal cleanup, including while another attempt allocates metadata.
@@ -690,6 +694,16 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		}
 		if response != nil {
 			s.privateStorage.attemptMetadata = response
+		}
+		if tracedOK {
+			// The response failed validation after its refs were recorded as
+			// served: mark them failed, as the attempt now is.
+			s.privateStorage.mu.Lock()
+			refs := s.privateStorage.info.Result.CQLTraces()
+			for i := len(refs) - len(traces); i < len(refs); i++ {
+				refs[i].Failed = true
+			}
+			s.privateStorage.mu.Unlock()
 		}
 		attemptStatus := log.fail(err, conn, attempt, consistency, event.CQLTraceID)
 		// OutputStarted is set before Reset, so no decoder/partial row ever replays.

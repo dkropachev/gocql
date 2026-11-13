@@ -7,8 +7,13 @@ OpenTelemetry, records what the driver did, in your own tracing system.
 ## CQL tracing
 
 Set `exec.Options.CQLTrace` and the cluster records a trace session of every
-attempt in `system_traces`. The session IDs come back on `Result.CQLTraceIDs`,
-on each `cqlerr.AttemptFailure.CQLTraceID` of a failed request, and on each
+attempt in `system_traces`. `Result.CQLTraces` lists them in the order the
+attempts finished, page after page. Each `gocql.CQLTraceRef` carries the
+session ID and the attempt it records: its coordinator `HostID`, its
+`Attempt` number within the page, and whether it `Failed` or was
+`Speculative`. The `Result` of a failed request lists its failed attempts'
+sessions too, so tracing a timeout needs no error unwrapping. The IDs also
+come back on each `cqlerr.AttemptFailure.CQLTraceID` and each
 `config.AttemptEvent.CQLTraceID`. Package `cqltrace` reads a session:
 
 ```go
@@ -21,8 +26,8 @@ result, err := session.UnpreparedExec(ctx, insert, 42, exec.Options{CQLTrace: tr
 if err != nil {
 	return err
 }
-for _, id := range result.CQLTraceIDs() {
-	info, err := cqltrace.Fetch(ctx, session, id)
+for _, trace := range result.CQLTraces() {
+	info, err := cqltrace.Fetch(ctx, session, trace.ID)
 	if err != nil {
 		return err
 	}
@@ -32,9 +37,12 @@ for _, id := range result.CQLTraceIDs() {
 
 The cluster writes a trace session after it answers, so `Fetch` polls until
 the session's duration and at least one event are visible, within `ctx`.
-Events can still arrive after that; a `cqltrace.Fetcher` with `Settle` set
-waits for them. `Fetcher` also sets the poll interval and read consistency.
-When `ctx` ends first, the error matches `cqltrace.ErrNotReady`.
+Events can still arrive after that, so `Fetch` then waits until the event
+count stays the same for 200ms; `Info.Settled` reports whether it did, and is
+false when `ctx` ended first. A `cqltrace.Fetcher` changes that wait with
+`Settle` (negative skips it), the poll interval and the read consistency.
+When `ctx` ends before the session is ready, the error matches
+`cqltrace.ErrNotReady`.
 
 `exec.PrepareOptions.CQLTrace` traces the PREPARE request itself; the driver
 does not report that session's ID, so find it in `system_traces.sessions`.

@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -186,8 +185,14 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 				t.Fatalf("attempt %d trace = %+v, want %v", i+1, attempt.CQLTraceID, ids[i])
 			}
 		}
-		if got := failure.Result.CQLTraceIDs(); !slices.Equal(got, ids) {
-			t.Fatalf("result trace IDs = %v, want %v", got, ids)
+		traces := failure.Result.CQLTraces()
+		if len(traces) != len(ids) {
+			t.Fatalf("result traces = %+v, want IDs %v", traces, ids)
+		}
+		for i, trace := range traces {
+			if trace.ID != ids[i] || trace.Attempt != i+1 || !trace.Failed || trace.HostID != failure.Attempts[i].HostID {
+				t.Fatalf("result trace %d = %+v, want ID %v of failed attempt %d", i, trace, ids[i], i+1)
+			}
 		}
 	})
 
