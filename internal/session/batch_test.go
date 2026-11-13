@@ -349,7 +349,7 @@ func TestBatch(t *testing.T) {
 			}()
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			if _, err := InternalWrapSession(s).ExecBatch(ctx, &batch); err != nil {
+			if _, err := InternalWrapSession(s).ExecBatch(ctx, &batch, CompiledOptions{}); err != nil {
 				t.Fatal(err)
 			}
 			if err := <-serverDone; err != nil {
@@ -384,7 +384,7 @@ func TestBatch(t *testing.T) {
 			}
 			// A batch may be sent again unchanged.
 			for i := 0; i < 2; i++ {
-				if _, err := InternalWrapSession(s).ExecBatch(ctx, &batch); err != nil {
+				if _, err := InternalWrapSession(s).ExecBatch(ctx, &batch, CompiledOptions{}); err != nil {
 					t.Fatal(err)
 				}
 				r := <-requests
@@ -407,7 +407,7 @@ func TestBatch(t *testing.T) {
 			if &batch.values[0] != values {
 				t.Fatal("Reset did not keep the storage")
 			}
-			if _, err := InternalWrapSession(s).ExecBatch(ctx, &batch); err != nil {
+			if _, err := InternalWrapSession(s).ExecBatch(ctx, &batch, CompiledOptions{}); err != nil {
 				t.Fatal(err)
 			}
 			r := <-requests
@@ -510,7 +510,7 @@ func TestBatch(t *testing.T) {
 		otherSession := InternalWrapSession(other.state.runtime.Core)
 		ctx := context.Background()
 		var batch Batch
-		if _, err := session.ExecBatch(ctx, &batch); err == nil {
+		if _, err := session.ExecBatch(ctx, &batch, CompiledOptions{}); err == nil {
 			t.Fatal("empty batch sent")
 		}
 		if err := q.AddToBatch(nil, []byte("v")); err == nil {
@@ -522,11 +522,11 @@ func TestBatch(t *testing.T) {
 		if err := other.AddToBatch(&batch, []byte("v")); err == nil || batch.Len() != 1 {
 			t.Fatal("statement of another session added", err)
 		}
-		if _, err := otherSession.ExecBatch(ctx, &batch); err == nil {
+		if _, err := otherSession.ExecBatch(ctx, &batch, CompiledOptions{}); err == nil {
 			t.Fatal("batch sent on another session")
 		}
 		batch.Kind = cqltype.BatchKind(42)
-		if _, err := session.ExecBatch(ctx, &batch); err == nil {
+		if _, err := session.ExecBatch(ctx, &batch, CompiledOptions{}); err == nil {
 			t.Fatal("unknown batch kind sent")
 		}
 		batch.Kind = cqltype.LoggedBatch

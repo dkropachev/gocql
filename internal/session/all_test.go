@@ -118,7 +118,7 @@ func TestPreparedAll(t *testing.T) {
 		}()
 		var dst []byte
 		var got []string
-		for row, err := range p.All(ctx, 1, &dst) {
+		for row, err := range p.All(ctx, 1, &dst, CompiledOptions{}) {
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -136,7 +136,7 @@ func TestPreparedAll(t *testing.T) {
 			_, _ = peers[0].Write(typedTestResponse(t, 4, r.stream, runtimeRowsBody(nil, "a", "b")))
 		}()
 		var dst []byte
-		for _, err := range p.All(ctx, 1, &dst) {
+		for _, err := range p.All(ctx, 1, &dst, CompiledOptions{}) {
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -145,20 +145,6 @@ func TestPreparedAll(t *testing.T) {
 		waitIdle(t, p, 1)
 		if pooledBusy(s) != 0 {
 			t.Fatal("break left a pooled query busy")
-		}
-	})
-
-	t.Run("TooManyOptions", func(t *testing.T) {
-		var dst []byte
-		yields := 0
-		for _, err := range p.All(ctx, 1, &dst, CompiledOptions{}, CompiledOptions{}) {
-			yields++
-			if err == nil {
-				t.Fatal("two options accepted")
-			}
-		}
-		if yields != 1 {
-			t.Fatalf("yields %d", yields)
 		}
 	})
 }

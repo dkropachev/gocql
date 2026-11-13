@@ -31,9 +31,13 @@ func (s *Session[D]) internal() *implSession.Session { return (*implSession.Sess
 // immutable and safe to share between goroutines. At most one exec.PrepareOptions
 // may be passed; omitting it uses the session keyspace and any eligible host.
 func (s *Session[D]) Prepare[P, R any](ctx context.Context, statement cql.Statement[P, R], options ...exec.PrepareOptions) (*Prepared[P, R], error) {
-	o, err := internalPrepareOptions(options)
-	if err != nil {
-		return nil, err
+	var o implSession.PrepareOptions
+	switch len(options) {
+	case 0:
+	case 1:
+		o = implSession.PrepareOptions{Keyspace: options[0].Keyspace, HostID: options[0].HostID, Trace: options[0].Trace}
+	default:
+		return nil, tooManyPrepareOptions()
 	}
 	p, err := s.internal().Prepare(ctx, internalStatement(statement), o)
 	return (*Prepared[P, R])(p), err
@@ -45,9 +49,13 @@ func (s *Session[D]) Prepare[P, R any](ctx context.Context, statement cql.Statem
 // unavailable during preparation is checked on execution. At most one
 // exec.PrepareOptions may be supplied.
 func (s *Session[D]) PrepareStream[P, R any](ctx context.Context, statement stream.Statement[P, R], options ...exec.PrepareOptions) (*PreparedStream[P, R], error) {
-	o, err := internalPrepareOptions(options)
-	if err != nil {
-		return nil, err
+	var o implSession.PrepareOptions
+	switch len(options) {
+	case 0:
+	case 1:
+		o = implSession.PrepareOptions{Keyspace: options[0].Keyspace, HostID: options[0].HostID, Trace: options[0].Trace}
+	default:
+		return nil, tooManyPrepareOptions()
 	}
 	p, err := s.internal().PrepareStream(ctx, internalStreamStatement(statement), o)
 	return (*PreparedStream[P, R])(p), err
@@ -109,9 +117,13 @@ func (s *Session[D]) UnpreparedAll[P, R any](ctx context.Context, statement cql.
 // not modify batch until the call returns. A reused batch sends without
 // allocating.
 func (s *Session[D]) ExecBatch(ctx context.Context, batch *Batch, options ...exec.CompiledOptions) (Result, error) {
-	o, err := internalCompiledOptions(options)
-	if err != nil {
-		return implSession.InternalExecutionErrorResult(err), err
+	var o implSession.CompiledOptions
+	switch len(options) {
+	case 0:
+	case 1:
+		o = implSession.CompiledOptions(options[0])
+	default:
+		return tooManyOptionsResult()
 	}
 	return s.internal().ExecBatch(ctx, (*implSession.Batch)(batch), o)
 }
@@ -124,9 +136,13 @@ func (s *Session[D]) ExecBatch(ctx context.Context, batch *Batch, options ...exe
 // ownership are as for ExecBatch. Once its rows are closed, a batch sent again
 // with the same R and decoder reuses their storage and allocates nothing.
 func (s *Session[D]) RunBatch[R any](ctx context.Context, batch *Batch, decoder cql.RowDecoder[R], options ...exec.CompiledOptions) (Rows[R], error) {
-	o, err := internalCompiledOptions(options)
-	if err != nil {
-		return Rows[R]{}, err
+	var o implSession.CompiledOptions
+	switch len(options) {
+	case 0:
+	case 1:
+		o = implSession.CompiledOptions(options[0])
+	default:
+		return Rows[R]{}, tooManyOptions()
 	}
 	rows, err := s.internal().RunBatch(ctx, (*implSession.Batch)(batch), decoder, o)
 	return Rows[R](rows), err

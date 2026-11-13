@@ -37,7 +37,7 @@ func TestPreparedOneShot(t *testing.T) {
 			first := make(chan error, 1)
 			go func() {
 				var dst []byte
-				_, _, err := p.One(ctx, 1, &dst)
+				_, _, err := p.One(ctx, 1, &dst, CompiledOptions{})
 				first <- err
 			}()
 			r1 := <-requests
@@ -49,7 +49,7 @@ func TestPreparedOneShot(t *testing.T) {
 			second := make(chan error, 1)
 			go func() {
 				var dst []byte
-				found, _, err := p.One(context.Background(), 2, &dst)
+				found, _, err := p.One(context.Background(), 2, &dst, CompiledOptions{})
 				if err == nil && (!found || string(dst) != "fresh") {
 					err = fmt.Errorf("found %t, row %q", found, dst)
 				}
@@ -88,7 +88,7 @@ func TestPreparedOneShot(t *testing.T) {
 					for w := range 32 {
 						wg.Go(func() {
 							for i := range 100 {
-								if _, err := p.Exec(ctx, loopbackRow{k: int32(w*100 + i), value: []byte(loopbackValue)}); err != nil {
+								if _, err := p.Exec(ctx, loopbackRow{k: int32(w*100 + i), value: []byte(loopbackValue)}, CompiledOptions{}); err != nil {
 									errs <- err
 									return
 								}
@@ -104,7 +104,7 @@ func TestPreparedOneShot(t *testing.T) {
 								var err error
 								if i%2 == 0 {
 									var found bool
-									found, _, err = p.One(ctx, int32(w), &dst)
+									found, _, err = p.One(ctx, int32(w), &dst, CompiledOptions{})
 									if err == nil && (!found || string(dst) != loopbackValue) {
 										err = fmt.Errorf("bad row")
 									}
@@ -116,7 +116,7 @@ func TestPreparedOneShot(t *testing.T) {
 										}
 										rows++
 										return nil
-									})
+									}, CompiledOptions{})
 									if err == nil && rows != 1 {
 										err = fmt.Errorf("%d rows", rows)
 									}
@@ -197,7 +197,7 @@ func TestPreparedOneShot(t *testing.T) {
 				errs := make(chan error, 1)
 				go func() {
 					var dst []byte
-					_, _, err := p.One(context.Background(), 1, &dst)
+					_, _, err := p.One(context.Background(), 1, &dst, CompiledOptions{})
 					errs <- err
 				}()
 				r := <-requests
@@ -237,7 +237,7 @@ func TestPreparedOneShot(t *testing.T) {
 			for i := range burst {
 				go func() {
 					var dst []byte
-					_, _, err := p.One(context.Background(), int32(i), &dst)
+					_, _, err := p.One(context.Background(), int32(i), &dst, CompiledOptions{})
 					errs <- err
 				}()
 			}
@@ -275,7 +275,7 @@ func TestPreparedOneShot(t *testing.T) {
 		inflight := make(chan error, 1)
 		go func() {
 			var dst []byte
-			_, _, err := p.One(context.Background(), 1, &dst)
+			_, _, err := p.One(context.Background(), 1, &dst, CompiledOptions{})
 			inflight <- err
 		}()
 		<-requests
@@ -290,7 +290,7 @@ func TestPreparedOneShot(t *testing.T) {
 			t.Fatal("close did not stop the unanswered call")
 		}
 		<-closed
-		if _, err := p.Exec(context.Background(), 2); !errors.Is(err, runtimeerrors.ErrClosed) {
+		if _, err := p.Exec(context.Background(), 2, CompiledOptions{}); !errors.Is(err, runtimeerrors.ErrClosed) {
 			t.Fatalf("call after close: %v", err)
 		}
 	})
@@ -358,7 +358,7 @@ func TestPreparedOneShot(t *testing.T) {
 				<-release
 				returned.Store(true)
 				return nil
-			})
+			}, CompiledOptions{})
 			call <- err
 		}()
 		r := <-requests

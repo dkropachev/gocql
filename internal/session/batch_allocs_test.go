@@ -30,7 +30,7 @@ func TestBatchAllocs(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if _, err := session.ExecBatch(ctx, &batch); err != nil {
+			if _, err := session.ExecBatch(ctx, &batch, CompiledOptions{}); err != nil {
 				t.Fatal(err)
 			}
 		}

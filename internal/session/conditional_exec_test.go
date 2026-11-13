@@ -62,7 +62,7 @@ func TestConditionalExecRejected(t *testing.T) {
 			}
 			_, err := InternalExecBatch(context.Background(), s, &batch, CompiledOptions{})
 			check(t, err)
-			_, err = InternalWrapSession(s).ExecBatch(context.Background(), &batch)
+			_, err = InternalWrapSession(s).ExecBatch(context.Background(), &batch, CompiledOptions{})
 			check(t, err)
 		}
 	})

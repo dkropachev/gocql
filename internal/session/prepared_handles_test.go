@@ -51,12 +51,12 @@ func dropPreparedHandle(t *testing.T, p *Prepared[int32, []byte], page bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if page {
-		if _, err := p.RunPage(ctx, 1, model.StartPage(), 0); err != nil {
+		if _, err := p.RunPage(ctx, 1, model.StartPage(), 0, CompiledOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		return
 	}
-	if _, err := p.Run(ctx, 1); err != nil {
+	if _, err := p.Run(ctx, 1, CompiledOptions{}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -75,7 +75,7 @@ func TestPreparedHandles(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		answerOneShot(t, peer, requests, "a", "b")
-		rows, err := p.Run(ctx, 1)
+		rows, err := p.Run(ctx, 1, CompiledOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -103,7 +103,7 @@ func TestPreparedHandles(t *testing.T) {
 		// A closed handle stays inert after its query serves another call.
 		answerOneShot(t, peer, requests, "c")
 		var other []byte
-		if found, _, err := p.One(ctx, 2, &other); err != nil || !found || string(other) != "c" {
+		if found, _, err := p.One(ctx, 2, &other, CompiledOptions{}); err != nil || !found || string(other) != "c" {
 			t.Fatalf("reuse: %t %q %v", found, other, err)
 		}
 		if rows.NextInto(&dst) || rows.Close() != nil {
@@ -117,12 +117,12 @@ func TestPreparedHandles(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		answerOneShot(t, peer, requests, "a")
-		first, err := p.Run(ctx, 1)
+		first, err := p.Run(ctx, 1, CompiledOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		answerOneShot(t, peer, requests, "b")
-		second, err := p.RunPage(ctx, 2, model.StartPage(), 0)
+		second, err := p.RunPage(ctx, 2, model.StartPage(), 0, CompiledOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -140,7 +140,7 @@ func TestPreparedHandles(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		sizes := answerOneShot(t, peer, requests, "a")
-		page, err := p.RunPage(ctx, 1, model.StartPage(), 9)
+		page, err := p.RunPage(ctx, 1, model.StartPage(), 9, CompiledOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -161,7 +161,7 @@ func TestPreparedHandles(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		answerOneShot(t, peer, requests, "a", "b")
-		rows, err := p.Run(ctx, 1)
+		rows, err := p.Run(ctx, 1, CompiledOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}

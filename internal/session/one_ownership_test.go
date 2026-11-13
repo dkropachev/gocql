@@ -25,7 +25,7 @@ func TestOneOwnsBorrowedResult(t *testing.T) {
 			read := func(dst *cqltype.Bytes) (bool, model.Result, error) {
 				switch mode {
 				case "prepared":
-					return p.One(context.Background(), int32(1), dst)
+					return p.One(context.Background(), int32(1), dst, CompiledOptions{})
 				case "query":
 					return q.One(context.Background(), int32(1), dst)
 				default:

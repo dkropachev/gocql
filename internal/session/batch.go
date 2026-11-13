@@ -356,20 +356,15 @@ func (rt *InternalSessionRuntime) batchQueries() (*queryPool[codec.EmptyRecord, 
 // beginBatch validates a batch call on s and takes a pooled query that has
 // begun an execution for it. The caller releases the query's owner when the
 // execution no longer needs it.
-func beginBatch(ctx context.Context, s *implCluster.Core, batch *Batch, options []CompiledOptions) (*Query[codec.EmptyRecord, codec.EmptyRecord], CompiledOptions, error) {
-	o, err := oneShotOptions(options)
-	if err != nil {
-		return nil, o, err
-	}
+func beginBatch(ctx context.Context, s *implCluster.Core, batch *Batch) (*Query[codec.EmptyRecord, codec.EmptyRecord], error) {
 	if err := validateBatch(s, batch); err != nil {
-		return nil, o, err
+		return nil, err
 	}
 	pool, err := InternalRuntimeFor(s).batchQueries()
 	if err != nil {
-		return nil, o, err
+		return nil, err
 	}
-	q, err := pool.begin(ctx)
-	return q, o, err
+	return pool.begin(ctx)
 }
 
 // InternalRunBatch sends batch on s; tests use it to run batches built from

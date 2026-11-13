@@ -28,7 +28,7 @@ var (
 // the A and B fields of each row joined.
 func runBatchRows(t testing.TB, session *Session, batch *Batch, decoder codec.RowDecoder[batchRow]) []string {
 	t.Helper()
-	rows, err := session.RunBatch(context.Background(), batch, decoder)
+	rows, err := session.RunBatch(context.Background(), batch, decoder, CompiledOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestRunBatch(t *testing.T) {
 	// reused, even though the pooled query behind it may differ.
 	t.Run("StaleHandle", func(t *testing.T) {
 		session, batch := newBatch(t)
-		old, err := session.RunBatch(context.Background(), batch, decoder)
+		old, err := session.RunBatch(context.Background(), batch, decoder, CompiledOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -87,7 +87,7 @@ func TestRunBatch(t *testing.T) {
 	// Rows still open keep their storage: the next RunBatch gets its own.
 	t.Run("OpenRows", func(t *testing.T) {
 		session, batch := newBatch(t)
-		open, err := session.RunBatch(context.Background(), batch, decoder)
+		open, err := session.RunBatch(context.Background(), batch, decoder, CompiledOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -108,7 +108,7 @@ func TestRunBatch(t *testing.T) {
 		session, batch := newBatch(t)
 		runBatchRows(t, session, batch, decoder)
 		var row batchRow
-		rows, err := session.RunBatch(context.Background(), batch, batchRowB)
+		rows, err := session.RunBatch(context.Background(), batch, batchRowB, CompiledOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}

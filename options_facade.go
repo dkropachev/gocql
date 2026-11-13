@@ -37,15 +37,12 @@ func internalStreamOptions(o exec.StreamOptions) implSession.StreamOptions {
 	return implSession.StreamOptions{Options: internalOptions(o.Options), Limits: o.Limits, Incremental: o.Incremental}
 }
 
-func internalPrepareOptions(options []exec.PrepareOptions) (implSession.PrepareOptions, error) {
-	if len(options) > 1 {
-		return implSession.PrepareOptions{}, &cqlerr.ValidationError{Field: "options", Err: errors.New("at most one PrepareOptions")}
-	}
-	if len(options) == 0 {
-		return implSession.PrepareOptions{}, nil
-	}
-	o := options[0]
-	return implSession.PrepareOptions{Keyspace: o.Keyspace, HostID: o.HostID, Trace: o.Trace}, nil
+// tooManyPrepareOptions is the error of a call given more than one
+// PrepareOptions.
+//
+//go:noinline
+func tooManyPrepareOptions() error {
+	return &cqlerr.ValidationError{Field: "options", Err: errors.New("at most one PrepareOptions")}
 }
 
 // internalOptionList converts the optional exec.Options of a throwaway call; the
@@ -61,14 +58,30 @@ func internalOptionList(options []exec.Options) []implSession.Options {
 	return out
 }
 
-func internalCompiledOptions(options []exec.CompiledOptions) (implSession.CompiledOptions, error) {
-	if len(options) > 1 {
-		return implSession.CompiledOptions{}, &cqlerr.ValidationError{Field: "options", Err: errors.New("at most one CompiledOptions")}
-	}
-	if len(options) == 0 {
-		return implSession.CompiledOptions{}, nil
-	}
-	return implSession.CompiledOptions(options[0]), nil
+// tooManyOptions is the error of a call given more than one CompiledOptions.
+// It and the helpers below stay out of line to keep the error path out of the
+// facade methods.
+//
+//go:noinline
+func tooManyOptions() error {
+	return &cqlerr.ValidationError{Field: "options", Err: errors.New("at most one CompiledOptions")}
+}
+
+// tooManyOptionsResult returns tooManyOptions with its execution result.
+//
+//go:noinline
+func tooManyOptionsResult() (Result, error) {
+	err := tooManyOptions()
+	return implSession.InternalExecutionErrorResult(err), err
+}
+
+// tooManyOptionsFound returns tooManyOptionsResult for a call that reports
+// whether a row was found.
+//
+//go:noinline
+func tooManyOptionsFound() (bool, Result, error) {
+	r, err := tooManyOptionsResult()
+	return false, r, err
 }
 
 func internalStatement[P, R any](s cql.Statement[P, R]) implBinding.Statement[P, R] {
