@@ -277,11 +277,8 @@ type Conn struct {
 	// processFrameSource touches neither field after handing that response to its
 	// caller.
 	//
-	// Note that last clause is what makes it safe, not an ordering — setupConn
-	// returns on the startupErr send, which the options goroutine performs before
-	// close(frameTicker), so the startup reader can still be unwinding when
-	// serve() starts. Work added to processFrameSource after the response is
-	// delivered would need a real barrier here.
+	// A successful setupConn also waits for the startup reader to return
+	// before serve() starts.
 	headerReader headerReader
 	InternalAddr string
 	// segScratch holds the reusable buffers inbound v5 segments are read into.
@@ -527,40 +524,46 @@ func (s *startupCoordinator) setupConn(ctx context.Context) error {
 	startupCompleted := &atomic.Bool{}
 	startupCompleted.Store(false)
 
-	startupErr := make(chan error)
+	// The reader runs on a goroutine of its own, reading one response per
+	// request that options sends on this goroutine. A read failure cancels
+	// ctx, which ends the request waiting for that response; the error is
+	// queued before the cancel, so options never returns ahead of it.
+	readErr := make(chan error, 1)
+	readDone := make(chan struct{})
 	go func() {
+		defer close(readDone)
 		for range s.frameTicker {
-			err := s.conn.InternalRecv(ctx, startupCompleted.Load())
-			if err != nil {
-				select {
-				case startupErr <- err:
-				case <-ctx.Done():
-				}
-
+			if err := s.conn.InternalRecv(ctx, startupCompleted.Load()); err != nil {
+				readErr <- err
+				cancel()
 				return
 			}
 		}
 	}()
 
-	go func() {
-		defer close(s.frameTicker)
-		err := s.options(ctx, startupCompleted)
+	err := s.options(ctx, startupCompleted)
+	close(s.frameTicker)
+	if err == nil {
+		// Every request got its response, so the reader is back waiting for
+		// a tick and returns now: serve() never overlaps it.
+		<-readDone
+		return nil
+	}
+	// A startup that ran out of time reports the timeout even when the
+	// reader failed first; otherwise a read failure explains the error.
+	timedOut := errors.Is(ctx.Err(), context.DeadlineExceeded)
+	cancel()
+	if !timedOut {
 		select {
-		case startupErr <- err:
-		case <-ctx.Done():
-		}
-	}()
-
-	select {
-	case err := <-startupErr:
-		if err != nil {
+		case err := <-readErr:
 			return err
+		default:
 		}
-	case <-ctx.Done():
+	}
+	if ctx.Err() != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 		return errors.New("gocql: no response to connection startup within timeout")
 	}
-
-	return nil
+	return err
 }
 
 // write sends the given frame on the connection during startup and returns
