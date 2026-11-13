@@ -33,20 +33,6 @@ func invPair(t testing.TB, proto byte) (*Conn, net.Conn) {
 	return c, server
 }
 
-func invRowsBody(value []byte) []byte {
-	out := binary.BigEndian.AppendUint32(nil, 2)
-	out = binary.BigEndian.AppendUint32(out, 1)
-	out = binary.BigEndian.AppendUint32(out, 1)
-	for _, s := range []string{"ks", "tbl", "value"} {
-		out = binary.BigEndian.AppendUint16(out, uint16(len(s)))
-		out = append(out, s...)
-	}
-	out = binary.BigEndian.AppendUint16(out, uint16(cqltype.TypeBlob))
-	out = binary.BigEndian.AppendUint32(out, 1)
-	out = binary.BigEndian.AppendUint32(out, uint32(len(value)))
-	return append(out, value...)
-}
-
 func invFrame(proto byte, stream int, body []byte) []byte {
 	out := []byte{proto | 0x80, 0, byte(stream >> 8), byte(stream), byte(frm.OpResult)}
 	out = binary.BigEndian.AppendUint32(out, uint32(len(body)))
@@ -137,8 +123,8 @@ func TestLateResponseAfterCancelDoesNotDelayOthers(t *testing.T) {
 		// net.Pipe writes complete only when the reader consumed them, so
 		// they run apart from the checks below.
 		go func() {
-			server.Write(invFrame(4, aStream, invRowsBody([]byte("a"))))
-			server.Write(invFrame(4, bStream, invRowsBody([]byte("b"))))
+			server.Write(invFrame(4, aStream, typedTestRowsBody([]byte("a"))))
+			server.Write(invFrame(4, bStream, typedTestRowsBody([]byte("b"))))
 		}()
 		select {
 		case err := <-bDone:
