@@ -23,7 +23,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -56,6 +58,64 @@ type panicObserver struct{}
 
 func (panicObserver) ObserveRequest(settings.RequestEvent) { panic("request") }
 func (panicObserver) ObserveAttempt(routing.AttemptEvent)  { panic("attempt") }
+
+func (o panicObserver) StartRequest(ctx context.Context, _ settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
+	return ctx, o.ObserveRequest
+}
+func (o panicObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+	return o.ObserveAttempt
+}
+
+// panicStartObserver panics when a request or attempt starts.
+type panicStartObserver struct{}
+
+func (panicStartObserver) StartRequest(context.Context, settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
+	panic("request start")
+}
+func (panicStartObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+	panic("attempt start")
+}
+
+type observerKey struct{}
+
+// pairingObserver records the order of start and end calls and checks that
+// StartAttempt receives the context StartRequest returned.
+type pairingObserver struct {
+	mu     sync.Mutex
+	calls  []string
+	starts []settings.RequestStart
+	ends   []settings.RequestEvent
+	ctxErr bool
+}
+
+func (o *pairingObserver) record(call string) {
+	o.mu.Lock()
+	o.calls = append(o.calls, call)
+	o.mu.Unlock()
+}
+
+func (o *pairingObserver) StartRequest(ctx context.Context, start settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
+	o.mu.Lock()
+	o.starts = append(o.starts, start)
+	o.mu.Unlock()
+	o.record("request start")
+	return context.WithValue(ctx, observerKey{}, "span"), func(e settings.RequestEvent) {
+		o.mu.Lock()
+		o.ends = append(o.ends, e)
+		o.mu.Unlock()
+		o.record("request end")
+	}
+}
+
+func (o *pairingObserver) StartAttempt(ctx context.Context, start routing.AttemptStart) func(routing.AttemptEvent) {
+	if ctx.Value(observerKey{}) != "span" {
+		o.mu.Lock()
+		o.ctxErr = true
+		o.mu.Unlock()
+	}
+	o.record(fmt.Sprintf("attempt %d start", start.Attempt))
+	return func(e routing.AttemptEvent) { o.record(fmt.Sprintf("attempt %d end", e.Attempt)) }
+}
 
 type panicHandler struct{}
 
@@ -491,6 +551,64 @@ func TestExecution(t *testing.T) {
 			rows.Close()
 			if m := s.Metrics(); m.Requests != 1 || m.Attempts != 1 || m.InFlight != 0 {
 				t.Fatal(m)
+			}
+		})
+
+		t.Run("ObserverStartPanicsContained", func(t *testing.T) {
+			s, cs, ps := runtimeTestSession(t, 1)
+			implCluster.SessionData(s).InternalLogger = slog.New(panicHandler{})
+			go func() {
+				stream := typedTestReadRequest(t, cs[0], ps[0])
+				_, _ = ps[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))
+			}()
+			b := runtimeQuery(t)
+			defer b.Close()
+			rows, err := Run(context.Background(), s, b, testOptions(Options{Observer: panicStartObserver{}}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var row cqltype.Bytes
+			if !rows.NextInto(&row) {
+				t.Fatal(rows.Err())
+			}
+			rows.Close()
+			if m := s.Metrics(); m.Requests != 1 || m.Attempts != 1 || m.InFlight != 0 {
+				t.Fatal(m)
+			}
+		})
+
+		t.Run("ObserverStartsAndEndsInOrder", func(t *testing.T) {
+			s, cs, ps := runtimeTestSession(t, 1)
+			go func() {
+				stream := typedTestReadRequest(t, cs[0], ps[0])
+				_, _ = ps[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))
+			}()
+			b := runtimeQuery(t)
+			defer b.Close()
+			observer := new(pairingObserver)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			rows, err := Run(ctx, s, b, testOptions(Options{Observer: observer, CQLTrace: true}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var row cqltype.Bytes
+			for rows.NextInto(&row) {
+			}
+			if err := rows.Close(); err != nil {
+				t.Fatal(err)
+			}
+			observer.mu.Lock()
+			defer observer.mu.Unlock()
+			if want := []string{"request start", "attempt 1 start", "attempt 1 end", "request end"}; !slices.Equal(observer.calls, want) {
+				t.Fatalf("calls = %q, want %q", observer.calls, want)
+			}
+			if observer.ctxErr {
+				t.Fatal("StartAttempt did not receive the context StartRequest returned")
+			}
+			start, end := observer.starts[0], observer.ends[0]
+			if start.ID != end.ID || start.Statement != end.Statement || start.Statement == "" || !start.CQLTrace || start.Started.IsZero() {
+				t.Fatalf("start %+v, end %+v", start, end)
 			}
 		})
 	})

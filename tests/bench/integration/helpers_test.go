@@ -238,6 +238,13 @@ func (o *cassandraObserver) ObserveAttempt(e config.AttemptEvent) {
 	defer o.mu.Unlock()
 	o.attempts = append(o.attempts, e)
 }
+
+func (o *cassandraObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
+	return ctx, o.ObserveRequest
+}
+func (o *cassandraObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+	return o.ObserveAttempt
+}
 func (o *cassandraObserver) reset() {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -1368,6 +1375,13 @@ func (o *sessionTestObserver) ObserveAttempt(e config.AttemptEvent) {
 	defer o.mu.Unlock()
 	o.attempts = append(o.attempts, e)
 }
+
+func (o *sessionTestObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
+	return ctx, o.ObserveRequest
+}
+func (o *sessionTestObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+	return o.ObserveAttempt
+}
 func (o *sessionTestObserver) snapshot() ([]config.RequestEvent, []config.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -1489,6 +1503,13 @@ func (o *v2TabletAttemptObserver) ObserveAttempt(event config.AttemptEvent) {
 	if event.Err == nil {
 		o.targets = append(o.targets, event.Target)
 	}
+}
+
+func (o *v2TabletAttemptObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
+	return ctx, o.ObserveRequest
+}
+func (o *v2TabletAttemptObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+	return o.ObserveAttempt
 }
 func (o *v2TabletAttemptObserver) snapshot() []routing.Target {
 	o.mu.Lock()

@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"sync"
 
 	"github.com/scylladb/gocql/v2/internal/routing"
@@ -26,4 +27,11 @@ func (o *execVoidObserver) ObserveAttempt(event routing.AttemptEvent) {
 	if o.onAttempt != nil {
 		o.onAttempt(event)
 	}
+}
+
+func (o *execVoidObserver) StartRequest(ctx context.Context, _ settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
+	return ctx, o.ObserveRequest
+}
+func (o *execVoidObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+	return o.ObserveAttempt
 }

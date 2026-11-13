@@ -34,6 +34,15 @@ type RoutingPolicy interface {
 	Fallback(model.RoutingInfo, *MetadataSnapshot) QueryPlan
 	Observe(AttemptEvent)
 }
+
+// AttemptStart describes an attempt as it is sent to its target.
+type AttemptStart struct {
+	Started     time.Time
+	RequestID   uint64
+	Attempt     int
+	Target      Target
+	Speculative bool
+}
 type AttemptEvent struct {
 	Started   time.Time
 	Err       error

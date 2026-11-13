@@ -416,6 +416,13 @@ type testObserver struct{ requests, attempts atomic.Int64 }
 func (o *testObserver) ObserveRequest(config.RequestEvent) { o.requests.Add(1) }
 func (o *testObserver) ObserveAttempt(config.AttemptEvent) { o.attempts.Add(1) }
 
+func (o *testObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
+	return ctx, o.ObserveRequest
+}
+func (o *testObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+	return o.ObserveAttempt
+}
+
 type speculation struct{}
 
 func (speculation) Delay(int) (time.Duration, bool) {

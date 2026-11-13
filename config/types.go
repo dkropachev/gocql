@@ -4,6 +4,7 @@
 package config
 
 import (
+	"context"
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -31,12 +32,34 @@ const (
 type LifecycleEvent = implSettings.LifecycleEvent
 type LifecycleObserver = implSettings.LifecycleObserver
 
-// Observer receives completed requests and individual attempts. Implementations
+// Observer instruments requests and their attempts from the client side; it
+// is the hook for client-side tracing such as OpenTelemetry. Implementations
 // are shared between executions and must be safe for concurrent use.
+//
+// StartRequest is called once per request as it is admitted, with the
+// caller's context. The context it returns is passed to StartAttempt for
+// each of the request's attempts, so a span started for the request can
+// parent the attempts' spans; the driver uses it for nothing else and never
+// derives cancellation from it. The function it returns, if not nil, is
+// called once with the completed request.
+//
+// StartAttempt is called as each attempt, retry or speculative attempt is
+// sent. The function it returns, if not nil, is called once with the
+// completed attempt; AttemptEvent.CQLTraceID links it to the server-side CQL
+// trace session when the request runs with exec.Options.CQLTrace.
+//
+// A speculative attempt that loses can start or end after its request has
+// ended. A panic in any of these calls is logged and otherwise ignored.
 type Observer interface {
-	ObserveRequest(RequestEvent)
-	ObserveAttempt(AttemptEvent)
+	StartRequest(ctx context.Context, start RequestStart) (context.Context, func(RequestEvent))
+	StartAttempt(ctx context.Context, start AttemptStart) func(AttemptEvent)
 }
+
+// RequestStart describes a request as it is admitted, before its first attempt.
+type RequestStart = implSettings.RequestStart
+
+// AttemptStart describes an attempt as it is sent to its target.
+type AttemptStart = implRouting.AttemptStart
 
 type AttemptEvent = implRouting.AttemptEvent
 

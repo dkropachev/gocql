@@ -254,6 +254,13 @@ func (o *cassandraObserver) ObserveAttempt(e config.AttemptEvent) {
 	defer o.mu.Unlock()
 	o.attempts = append(o.attempts, e)
 }
+
+func (o *cassandraObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
+	return ctx, o.ObserveRequest
+}
+func (o *cassandraObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+	return o.ObserveAttempt
+}
 func (o *cassandraObserver) reset() {
 	o.mu.Lock()
 	defer o.mu.Unlock()
