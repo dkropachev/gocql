@@ -216,11 +216,6 @@ type InternalExecutionRequest struct {
 	hasTimestamp bool
 }
 
-// InternalResolved returns the options request was admitted with.
-func (r *InternalExecutionRequest) InternalResolved() *InternalResolvedOptions {
-	return r.options
-}
-
 // ownOptions makes request's options its own to change, for an execution
 // that overrides them: a copy in scratch the request's query keeps for its
 // executions, or in new storage without a query. The query's next

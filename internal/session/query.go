@@ -34,8 +34,8 @@ type queryState struct {
 	resolved     *InternalResolvedOptions // the query's options, resolved at creation
 	// optionsScratch holds options an execution resolves or overrides for
 	// itself, allocated on first use (see InternalExecutionRequest.ownOptions).
-	// It also holds the place of a removed field: moving the fields after it
-	// slows admission by about 3%.
+	// It sits in the 8 bytes a removed field left, so the fields after it
+	// keep their offsets: moving them slows admission by about 3%.
 	optionsScratch *InternalResolvedOptions
 	// historyInline is the inline paging history storage the query's
 	// iterator lends its history.
