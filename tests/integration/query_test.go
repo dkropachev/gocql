@@ -445,7 +445,7 @@ func TestQuery(t *testing.T) {
 				require.Equal(t, 1, result.Attempts)
 				require.Greater(t, result.Latency, time.Duration(0))
 				require.Equal(t, cql.All, result.AchievedConsistency)
-				require.NotEmpty(t, result.CQLTraceIDs())
+				require.NotEmpty(t, result.CQLTraces())
 			}
 			requests, attempts := observer.snapshot()
 			require.Len(t, requests, 3)

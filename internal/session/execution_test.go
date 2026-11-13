@@ -35,6 +35,7 @@ import (
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -469,7 +470,7 @@ func TestExecution(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			result, err := Exec(ctx, s, b, testOptions(Options{CQLTrace: true, Observer: observer}))
-			if err != nil || result.Attempts != 1 || result.Rows != 0 || len(result.CQLTraceIDs()) != 1 || result.CQLTraceIDs()[0] != trace || len(result.Warnings()) != 1 || result.Warnings()[0] != "warning" {
+			if err != nil || result.Attempts != 1 || result.Rows != 0 || len(result.CQLTraces()) != 1 || result.CQLTraces()[0] != (model.CQLTraceRef{ID: trace, HostID: result.HostID, Attempt: 1}) || len(result.Warnings()) != 1 || result.Warnings()[0] != "warning" {
 				t.Fatalf("result = %+v, %v", result, err)
 			}
 			if len(result.CustomPayload()) != 1 || result.CustomPayload()[0].Key != "key" || string(result.CustomPayload()[0].Value.Value.OwnedBytes()) != "val" {
@@ -486,7 +487,7 @@ func TestExecution(t *testing.T) {
 			if len(attempts) == 1 && (!attempts[0].CQLTraceID.Set || attempts[0].CQLTraceID.Value != trace) {
 				t.Fatalf("attempt trace = %+v, want %v", attempts[0].CQLTraceID, trace)
 			}
-			if len(requests) != 1 || len(attempts) != 1 || requests[0].Err != nil || requests[0].Result.CQLTraceIDs()[0] != trace || requests[0].Result.Warnings()[0] != "warning" {
+			if len(requests) != 1 || len(attempts) != 1 || requests[0].Err != nil || requests[0].Result.CQLTraces()[0].ID != trace || requests[0].Result.Warnings()[0] != "warning" {
 				t.Fatalf("observer events = %+v / %+v", requests, attempts)
 			}
 			if len(requests[0].Result.CustomPayload()) != 1 || string(requests[0].Result.CustomPayload()[0].Value.Value.OwnedBytes()) != "val" {
@@ -730,6 +731,46 @@ func TestExecution(t *testing.T) {
 				t.Run(pageTimeout.String(), func(t *testing.T) {
 					runtimeSpeculativeLoserWriterKeepsInput(t, pageTimeout)
 				})
+			}
+		})
+
+		t.Run("SpeculativeTraceRef", func(t *testing.T) {
+			s, conns, peers := runtimeTestSession(t, 2)
+			second := implEndpoint.InternalHostInfoHostUUID(conns[1].InternalHost)
+			policy := &runtimePolicy{targets: []model.Target{{HostID: implEndpoint.InternalHostInfoHostUUID(conns[0].InternalHost)}, {HostID: second}}}
+			profile := settings.InternalDefaultProfile()
+			profile.Routing = policy
+			profile.Speculation = runtimeSpeculation{}
+			handle := new(profile)
+			id := cqltype.UUID{15: 5}
+			go func() {
+				stream := typedTestReadRequest(t, conns[1], peers[1])
+				frame := typedTestResponse(t, 4, stream, append(append([]byte{}, id[:]...), runtimeRowsBody(nil, "winner")...))
+				frame[1] = frm.FlagTracing
+				_, _ = peers[1].Write(frame)
+			}()
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			bound := runtimeQuery(t)
+			page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: true, CQLTrace: true}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			traces := page.Info().CQLTraces()
+			bound.Close()
+			page.Close()
+			// The winner may cancel the primary attempt before its writer sends
+			// it, so answer the loser only if its request arrives.
+			go func() {
+				if _, stream, _, err := readRequest(peers[0]); err == nil {
+					_, _ = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "loser")))
+				}
+			}()
+			if err := bound.Wait(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if len(traces) != 1 || traces[0].ID != id || !traces[0].Speculative || traces[0].Failed || traces[0].HostID != second {
+				t.Fatalf("traces %+v, want the speculative winner's ref from %v", traces, second)
 			}
 		})
 

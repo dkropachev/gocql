@@ -122,7 +122,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		aggregate.Latency += latency
 		aggregate.HostID = conn.InternalHostID()
 		aggregate.AchievedConsistency = consistency
-		mergeResponseResult(&aggregate, response)
+		mergeResponseResult(&aggregate, response, model.CQLTraceRef{HostID: aggregate.HostID, Attempt: attempt, Failed: err != nil})
 		trace := responseTraceID(response)
 		if err == nil {
 			// Attempts run one at a time here, and a failed attempt's response
@@ -213,14 +213,17 @@ func (p *skipHostPlan) Next() (routing.Route, bool) {
 	}
 }
 
-func mergeResponseResult(result *model.Result, response *transport.InternalResponsePage) {
+// mergeResponseResult adds a response's diagnostics to result. A trace
+// session the response names is recorded as attempt, with its ID filled in.
+func mergeResponseResult(result *model.Result, response *transport.InternalResponsePage, attempt model.CQLTraceRef) {
 	// Warnings, trace IDs and custom payload all live in the rare extras.
 	if response == nil || response.Extras == nil {
 		return
 	}
 	result.AddWarnings(response.Warnings()...)
 	if id := response.CQLTraceID(); id.Set {
-		result.AddCQLTraceIDs(id.Value)
+		attempt.ID = id.Value
+		result.AddCQLTraces(attempt)
 	}
 	for _, entry := range response.Payload() {
 		if entry.Value.Valid {

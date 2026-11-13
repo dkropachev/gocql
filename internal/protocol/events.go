@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"unsafe"
 
 	. "github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -80,16 +81,16 @@ func (p *TypedParser) StreamEvent(h frm.FrameHeader) frm.Frame {
 
 func (p *TypedParser) StreamExtensions(h frm.FrameHeader) Result {
 	info := Result{}
-	var traceIDs []UUID
+	var traces []CQLTraceRef
 	var warnings []string
 	var payload []PayloadEntry
 	if h.Flags&frm.FlagTracing != 0 {
 		b := p.Copy(16)
 		if p.Err == nil {
-			p.ReserveAllocation(16)
+			p.ReserveAllocation(int64(unsafe.Sizeof(CQLTraceRef{})))
 			var id UUID
 			copy(id[:], b)
-			traceIDs = []UUID{id}
+			traces = []CQLTraceRef{{ID: id}}
 		}
 	}
 	if h.Flags&frm.FlagWarning != 0 {
@@ -110,6 +111,6 @@ func (p *TypedParser) StreamExtensions(h frm.FrameHeader) Result {
 			}
 		}
 	}
-	info.SetDiagnostics(warnings, traceIDs, payload)
+	info.SetDiagnostics(warnings, traces, payload)
 	return info
 }

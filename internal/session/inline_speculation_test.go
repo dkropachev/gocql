@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
@@ -24,7 +26,7 @@ import (
 // the speculation schedule it started.
 func TestInlineSpeculation(t *testing.T) {
 	t.Run("SpeculativeWinnerEndsInlineWait", func(t *testing.T) {
-		s, _, peers := runtimeTestSession(t, 2)
+		s, conns, peers := runtimeTestSession(t, 2)
 		type request struct{ peer, stream int }
 		requests := make(chan request, 4)
 		done := make(chan struct{})
@@ -45,7 +47,10 @@ func TestInlineSpeculation(t *testing.T) {
 			}()
 		}
 		profile := settings.InternalDefaultProfile()
-		profile.Speculation = runtimeSpeculation{}
+		// The delay orders the requests: the first attempt reaches its peer
+		// well before the speculative one, so the second request read is
+		// the speculative attempt's.
+		profile.Speculation = scheduleSpeculation{}
 		if !speculationOnly(&InternalExecutionRequest{InternalLogical: &logicalExecution{}, options: &InternalResolvedOptions{InternalProfile: profile}}) {
 			t.Fatal("the default routing with speculation must run its first attempt inline")
 		}
@@ -59,8 +64,10 @@ func TestInlineSpeculation(t *testing.T) {
 				return request{}, false
 			}
 		}
-		// The first attempt gets no answer until the speculative one won.
-		first := make(chan request, 1)
+		// The first attempt gets no answer until the speculative one won,
+		// whose traced response names trace.
+		trace := cqltype.UUID{15: 7}
+		first, winner := make(chan request, 1), make(chan int, 1)
 		go func() {
 			slow, ok := next()
 			if !ok {
@@ -71,7 +78,10 @@ func TestInlineSpeculation(t *testing.T) {
 			if !ok {
 				return
 			}
-			_, _ = peers[fast.peer].Write(typedTestResponse(t, 4, fast.stream, runtimeRowsBody(nil, "winner")))
+			winner <- fast.peer
+			frame := typedTestResponse(t, 4, fast.stream, append(append([]byte{}, trace[:]...), runtimeRowsBody(nil, "winner")...))
+			frame[1] = frm.FlagTracing
+			_, _ = peers[fast.peer].Write(frame)
 		}()
 		bound := runtimeQuery(t)
 		page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: &profile, Idempotent: true}))
@@ -82,7 +92,12 @@ func TestInlineSpeculation(t *testing.T) {
 		if !page.NextInto(&row) || string(row.OwnedBytes()) != "winner" {
 			t.Fatal("page is not the speculative winner's", page.Err())
 		}
+		traces := page.Info().CQLTraces()
 		page.Close()
+		host := implEndpoint.InternalHostInfoHostUUID(conns[<-winner].InternalHost)
+		if len(traces) != 1 || traces[0] != (model.CQLTraceRef{ID: trace, HostID: host, Attempt: 2, Speculative: true}) {
+			t.Fatalf("traces %+v, want the speculative winner's ref from %v", traces, host)
+		}
 		bound.Close()
 		var slow request
 		select {

@@ -36,9 +36,9 @@ func ExampleFetch() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, id := range result.CQLTraceIDs() {
+	for _, trace := range result.CQLTraces() {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		info, err := cqltrace.Fetch(ctx, session, id)
+		info, err := cqltrace.Fetch(ctx, session, trace.ID)
 		cancel()
 		if err != nil {
 			log.Fatal(err)

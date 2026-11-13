@@ -1372,8 +1372,15 @@ type Result struct {
     /* unexported diagnostics */
 }
 func (r Result) Warnings() []string
-func (r Result) CQLTraceIDs() []cql.UUID
+func (r Result) CQLTraces() []CQLTraceRef
 func (r Result) CustomPayload() []cql.PayloadEntry
+
+// CQLTraceRef names a CQL trace session and the attempt it records.
+type CQLTraceRef struct {
+    ID, HostID cql.UUID
+    Attempt int // 1-based, within its page
+    Failed, Speculative bool
+}
 ```
 
 Invalid values fail in the query constructor or Session.CompileOptions, before any
@@ -1634,7 +1641,8 @@ snapshots are maintained outside individual request completion; disabled
 speculation does not create a scheduler/timer. Row
 cardinality is separate from successful server execution. Trace
 IDs/warnings are preserved per response; Result aggregates across consumed
-pages, and failed attempts keep their CQL trace IDs on ExecutionError.Result and
+pages. Failed attempts keep their CQL trace references, marked Failed, on the
+returned Result and ExecutionError.Result, and their trace IDs on
 AttemptFailure.CQLTraceID. Package cqltrace reads trace sessions through the
 public Session API with context-bounded readiness polling; a session is ready
 once its duration and at least one event are visible.
