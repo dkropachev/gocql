@@ -3,8 +3,7 @@
 
 // Package metrics describes the session-wide counters a session keeps.
 //
-// Session.Metrics returns a Snapshot of them, and a speculative execution
-// policy receives one with every SpeculationPolicy.Delay call. The counters
+// Session.Metrics returns a Snapshot of them. The counters
 // cover every execution of the session, of every statement and batch: they
 // start at zero when the session is opened and only grow, except InFlight
 // and the receive cache's current retention, which report the present.

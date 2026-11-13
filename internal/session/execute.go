@@ -1059,7 +1059,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			return
 		}
 		perfAdd(2, 1)
-		delay, ok := request.options.InternalProfile.Speculation.Delay(startedCount, s.Core.Metrics())
+		delay, ok := request.options.InternalProfile.Speculation.Delay(startedCount)
 		if !ok || delay < 0 {
 			return
 		}
