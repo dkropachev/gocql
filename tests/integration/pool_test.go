@@ -107,7 +107,7 @@ func TestPool(t *testing.T) {
 				if resets != 0 {
 					t.Fatal("driver introduced a new reset call")
 				}
-				policy.Reset(hosts[0])
+				policy.Reset(config.ConvictionEvent{Host: hosts[0]})
 				policy.mu.Lock()
 				resets = policy.resets
 				policy.mu.Unlock()

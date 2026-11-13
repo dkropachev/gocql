@@ -425,7 +425,8 @@ func (b *ConfigBuilder) WithReconnect(policy ReconnectPolicy) *ConfigBuilder {
 	return b
 }
 
-// WithConviction decides when connection errors mark a node down. Default none.
+// WithConviction decides when connection errors mark a node down.
+// Default SimpleConvictionPolicy: a node is down once it has no connection left.
 func (b *ConfigBuilder) WithConviction(policy ConvictionPolicy) *ConfigBuilder {
 	b.settings.Conviction = policy
 	return b

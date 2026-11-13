@@ -123,8 +123,19 @@ compression
 tls
 ```
 
-`ConvictionPolicy.AddFailure(error, HostSnapshot)` returns whether a failed host
-should be marked down; `Reset(HostSnapshot)` clears application policy state.
-The host snapshot is detached read-only metadata that can be retained. Custom
-policies must support concurrent callbacks. The default SimpleConvictionPolicy
-always convicts and its Reset is a no-op.
+`ConvictionPolicy.AddFailure(ConvictionEvent)` returns whether a connection
+failure should mark the host down. The event carries the error, a detached
+read-only `HostSnapshot` that can be retained, the `Source` (a pool connection
+or the control connection) and, when one shard's connection failed, the
+`Shard`. With advanced shard awareness the pool reports every failed shard
+dial; the event without a shard follows when the host has no connection left.
+A convicting verdict always marks the whole host down, for a shard event once
+the pool stops filling: there is no per-shard down state. A request for a
+shard without a connection already uses another shard of the host, unless it
+names a shard or is conditional.
+
+`Reset(ConvictionEvent)` reports a recovery: with `Shard` set, a shard whose
+failure was reported connected again; without it, the host's pool connected
+again. Custom policies must support concurrent callbacks, which run outside
+driver locks. The default SimpleConvictionPolicy convicts on every whole-host
+failure, ignores single-shard failures, and its Reset is a no-op.

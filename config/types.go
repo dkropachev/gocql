@@ -15,6 +15,19 @@ import (
 
 type ConvictionPolicy = implSettings.ConvictionPolicy
 
+// ConvictionEvent describes a connection failure, or a recovery, that a
+// ConvictionPolicy receives.
+type ConvictionEvent = implSettings.ConvictionEvent
+
+// ConvictionSource names what failed to connect: a pool connection or the
+// control connection.
+type ConvictionSource = implSettings.ConvictionSource
+
+const (
+	ConvictionPool    = implSettings.ConvictionPool
+	ConvictionControl = implSettings.ConvictionControl
+)
+
 type LifecycleEvent = implSettings.LifecycleEvent
 type LifecycleObserver = implSettings.LifecycleObserver
 
