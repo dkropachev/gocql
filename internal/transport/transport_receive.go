@@ -214,7 +214,7 @@ func (f *splitFrame) ReleaseLease() {
 }
 
 // splitFrameSegments is how many segments a split frame collects without
-// allocating: 16 full segments carry a 2 MiB frame.
+// allocating: 16 full segments carry a frame of up to 2 MiB less 16 bytes.
 const splitFrameSegments = 16
 
 // recvSplitLeasedFrame reassembles one frame the peer split across
