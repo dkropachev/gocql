@@ -34,11 +34,17 @@ type scalarCodec[T any] struct {
 }
 
 func checkScalarType(t cqltype.DataType, kind, alternative cqltype.Type) error {
-	if t.Kind() != kind && (alternative == 0 || t.Kind() != alternative) {
-		return fmt.Errorf("gocql: codec for %s cannot use %s", kind, t.Kind())
+	if k := t.Kind(); k != kind && (alternative == 0 || k != alternative) {
+		return scalarTypeError(kind, k)
 	}
 	return nil
 }
+
+//go:noinline
+func scalarTypeError(kind, got cqltype.Type) error {
+	return fmt.Errorf("gocql: codec for %s cannot use %s", kind, got)
+}
+
 func (c scalarCodec[T]) CheckType(t cqltype.DataType) error {
 	perfCheckType()
 
@@ -94,11 +100,20 @@ func integerColumn(r *RowReader, kind, alternative cqltype.Type, compiled bool, 
 	if _, err := r.scalarColumn(kind, alternative, compiled, width); err != nil {
 		return 0, err
 	}
-	// Retain the scalar cursor lease check in addition to the frame and
-	// present-value checks, without constructing a ValueCursor.
-	if !r.lease.IsZero() && !r.lease.Alive() {
-		_ = r.cursor.Skip(width) // match the consumed generic value body
-		return 0, cqltype.ErrReleased
+	// scalarColumn checked the lease for this present cell; the body is
+	// loaded without a second check.
+	if body, ok := r.cursor.HeadBytes(int(width)); ok {
+		r.cursor.AdvanceHead(int(width))
+		switch width {
+		case 1:
+			return int64(int8(body[0])), nil
+		case 2:
+			return int64(int16(binary.BigEndian.Uint16(body))), nil
+		case 4:
+			return int64(int32(binary.BigEndian.Uint32(body))), nil
+		default:
+			return int64(binary.BigEndian.Uint64(body)), nil
+		}
 	}
 	switch width {
 	case 1:
