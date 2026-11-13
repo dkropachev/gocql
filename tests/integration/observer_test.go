@@ -38,6 +38,7 @@ import (
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/dynamic"
+	"github.com/scylladb/gocql/v2/cqltrace"
 	"github.com/scylladb/gocql/v2/exec"
 )
 
@@ -169,7 +170,7 @@ func TestObserver(t *testing.T) {
 				require.NotEmpty(t, ids)
 				for _, id := range ids {
 					ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-					trace, err := session.Trace(ctx, id)
+					trace, err := cqltrace.Fetch(ctx, session, id)
 					cancel()
 					require.NoError(t, err)
 					require.Equal(t, id, trace.ID)
@@ -219,11 +220,14 @@ func TestObserver(t *testing.T) {
 			// Trace polls readiness under the caller context and returns owned typed
 			// events; the legacy Tracer's internal table queries are no longer used.
 			for _, id := range append(inserted.CQLTraceIDs(), selected.CQLTraceIDs()...) {
-				info, err := session.Trace(ctx, id)
+				info, err := cqltrace.Fetch(ctx, session, id)
 				require.NoError(t, err)
 				require.Equal(t, id, info.ID)
 				require.True(t, info.Coordinator.IsValid(), "trace coordinator missing")
 				require.False(t, info.Started.IsZero(), "trace start missing")
+				require.NotEmpty(t, info.Request, "trace request missing")
+				require.NotEmpty(t, info.Parameters, "trace parameters missing")
+				require.Contains(t, info.Nodes(), info.Coordinator)
 				require.NotEmpty(t, info.Events, "trace activities missing")
 				for _, event := range info.Events {
 					require.NotEmpty(t, event.Activity)

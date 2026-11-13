@@ -4,10 +4,8 @@
 package cluster
 
 import (
-	"context"
 	"sync/atomic"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/schemafence"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/metrics"
@@ -15,7 +13,6 @@ import (
 
 type InternalExecutionWaiter interface{ Wait() }
 type executionLifecycle interface {
-	Trace(context.Context, cqltype.UUID) (TraceInfo, error)
 	StopPrepared() InternalExecutionWaiter
 	StopActive() InternalExecutionWaiter
 	MetricsSnapshot() metrics.Snapshot

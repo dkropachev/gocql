@@ -9,7 +9,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/stream"
-	"github.com/scylladb/gocql/v2/cqltrace"
 	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/exec"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
@@ -186,11 +185,6 @@ func (s *Session[D]) Metrics() metrics.Snapshot { return s.internal().Metrics() 
 // performing that refresh use the configured metadata timeout.
 func (s *Session[D]) RefreshMetadata(ctx context.Context) error {
 	return s.internal().RefreshMetadata(ctx)
-}
-
-// Trace reads a trace's events, polling for readiness within ctx.
-func (s *Session[D]) Trace(ctx context.Context, id cql.UUID) (cqltrace.Info, error) {
-	return s.internal().Trace(ctx, id)
 }
 
 // Subscribe subscribes to matching session events. Close the subscription when

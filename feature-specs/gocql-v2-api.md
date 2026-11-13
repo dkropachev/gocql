@@ -1635,6 +1635,39 @@ placement. Do not retain known-stale mappings, leak page owners, or fail a
 successful response due solely to saturation. Invalidation takes effect through
 a bounded atomic signal even when the normal queue is full.
 
+Package cqltrace reads server-side CQL trace sessions through the public
+Session API; it is not a Session method because it needs nothing internal.
+
+```go
+// package cqltrace
+type Info struct {
+    ID cql.UUID
+    Coordinator, Client netip.Addr
+    Started time.Time
+    Duration time.Duration
+    Command, Request string
+    Parameters map[string]string
+    RequestSize, ResponseSize cql.Option[int32] // ScyllaDB only
+    Events []Event
+}
+type Event struct {
+    ID cql.TimeUUID
+    Source netip.Addr
+    Activity, Thread string
+    Elapsed time.Duration
+}
+func (i Info) Nodes() []netip.Addr
+func (i Info) String() string
+type Fetcher struct {
+    Poll time.Duration          // 0: 100ms
+    Settle time.Duration        // >0: wait until the event count is stable
+    Consistency cql.Consistency // 0 (Any): One
+}
+func (f Fetcher) Fetch[D gocql.Dialect](context.Context, *gocql.Session[D], cql.UUID) (Info, error)
+func Fetch[D gocql.Dialect](context.Context, *gocql.Session[D], cql.UUID) (Info, error)
+var ErrNotReady error // ctx ended before the session was ready
+```
+
 ```go
 func (s *Session[D]) Metadata() *metadata.Snapshot
 func (s *Session[D]) RefreshMetadata(context.Context) error

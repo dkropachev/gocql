@@ -36,21 +36,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
-type TraceInfo struct {
-	Coordinator netip.Addr
-	Started     time.Time
-	Events      []TraceEvent
-	Duration    time.Duration
-	ID          cqltype.UUID
-}
-type TraceEvent struct {
-	Source   netip.Addr
-	Activity string
-	Thread   string
-	Elapsed  time.Duration
-	ID       cqltype.UUID
-}
-
 type v2LatencySummary struct{ p50, p95, p99 time.Duration }
 
 type InternalV2PeripheralState struct {
@@ -501,23 +486,6 @@ func (s *Core) RefreshMetadata(ctx context.Context) error {
 		return errors.Join(&implMetadata.PartialRefreshError{Generation: s.Metadata().Generation(), Topology: topologyErr, ClientRoutes: routeErr}, schemaErr)
 	}
 	return schemaErr
-}
-
-// Trace reads tracing tables through the same typed QUERY/codec path as user
-// requests. Readiness polling is governed by one context across every round.
-func (s *Core) Trace(ctx context.Context, id cqltype.UUID) (TraceInfo, error) {
-	result := TraceInfo{ID: id}
-	if ctx == nil {
-		return result, cqltype.TypeValidation("trace context", "nil context")
-	}
-	if s == nil || s.Closed() {
-		return result, runtimeerrors.ErrClosed
-	}
-	owner := s.CurrentExecution()
-	if owner == nil {
-		return result, runtimeerrors.ErrNoConnections
-	}
-	return owner.Trace(ctx, id)
 }
 
 // readV2SystemRows is the context-bound typed control-query seam. It detaches

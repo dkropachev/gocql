@@ -176,12 +176,6 @@ func (s *Session) Metrics() metrics.Snapshot { return s.Core().Metrics() }
 // context. Metadata queries themselves use the session metadata timeout.
 func (s *Session) RefreshMetadata(ctx context.Context) error { return s.core.RefreshMetadata(ctx) }
 
-// Trace reads tracing tables through the same typed QUERY/codec path as user
-// requests. Readiness polling is governed by one context across every round.
-func (s *Session) Trace(ctx context.Context, id cqltype.UUID) (implCluster.TraceInfo, error) {
-	return s.core.Trace(ctx, id)
-}
-
 // Subscribe returns a subscription to the session's events that match
 // filter.
 func (s *Session) Subscribe(filter implCluster.EventFilter) (*implCluster.Subscription, error) {
