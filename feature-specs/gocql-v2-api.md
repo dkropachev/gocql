@@ -13,7 +13,7 @@ Module: `github.com/scylladb/gocql/v2`. The public packages are:
 | `config` | cluster configuration and profile builders, observers |
 | `exec` | per-execution options: `Options`, `CompiledOptions`, `PrepareOptions`, `StreamOptions`, `StreamLimits`, `SerialOverride` |
 | `event` | cluster events delivered by `Session.Subscribe` |
-| `trace` | query traces read by `Session.Trace` |
+| `cqltrace` | server-side CQL trace sessions read by `cqltrace.Fetch` |
 | `cql` | statements, data types, values, buffered codecs, parameter and row mappings, consistency |
 | `cql/stream` | decoders that write streamed rows into caller storage |
 | `cql/dynamic` | values whose types are known only from metadata at run time |
@@ -695,7 +695,7 @@ captured parameters through retries, pages, accepted writes and callbacks.
 type PrepareOptions struct {
     Keyspace string
     HostID cql.Option[cql.UUID]
-    Trace bool
+    CQLTrace bool
 }
 
 // package gocql
@@ -1165,9 +1165,9 @@ destination. NextInto reads one row into that destination and performs automatic
 paging on demand, including empty-page progress checks. RowStream has no
 Clone or Retain: output already belongs to the caller and no PageLease is needed.
 Columns returns current-page checked metadata. Info counters are cumulative;
-its Result warnings, trace IDs and custom payload describe only the latest
+its Result warnings and custom payload describe only the latest
 page/attempt, bounded by MaxMetadataBytes, rather than accumulating per-page
-payloads forever. OutputStarted becomes true before the first decoder operation
+payloads forever; its CQL trace IDs accumulate across pages and attempts. OutputStarted becomes true before the first decoder operation
 that can modify a destination, including Reset; it never becomes false again.
 DeliveredRows increments only after complete checked rows. Pages counts checked
 response pages, including empty pages. Errors retain this information through
@@ -1316,7 +1316,7 @@ type Options struct {
     Timestamp cql.Option[int64]                   // microseconds
     NowInSeconds cql.Option[int32]
     Keyspace string
-    Trace bool
+    CQLTrace bool                                 // server-side CQL tracing
     CustomPayload []cql.PayloadEntry
     IncludeMetadata bool                          // request full result metadata
     HostID cql.Option[cql.UUID]
@@ -1372,7 +1372,7 @@ type Result struct {
     /* unexported diagnostics */
 }
 func (r Result) Warnings() []string
-func (r Result) TraceIDs() []cql.UUID
+func (r Result) CQLTraceIDs() []cql.UUID
 func (r Result) CustomPayload() []cql.PayloadEntry
 ```
 
@@ -1471,10 +1471,30 @@ type AttemptEvent struct {
     Started time.Time
     Latency time.Duration
     Err error
+    CQLTraceID cql.Option[cql.UUID]
     Cancelled, Speculative bool
 }
+type AttemptStart struct {
+    RequestID uint64
+    Attempt int
+    Target Target
+    Started time.Time
+    Speculative bool
+}
 type SpeculationPolicy interface { Delay(attempt int) (time.Duration, bool) }
-type Observer interface { ObserveRequest(RequestEvent); ObserveAttempt(AttemptEvent) }
+type Observer interface {
+    StartRequest(context.Context, RequestStart) (context.Context, func(RequestEvent))
+    StartAttempt(context.Context, AttemptStart) func(AttemptEvent)
+}
+type RequestStart struct {
+    ID uint64
+    Started time.Time
+    Statement string
+    BatchStatements []string
+    Parameters cql.Columns
+    Routing routing.Info
+    CQLTrace bool
+}
 type RequestEvent struct {
     ID uint64
     Statement string
@@ -1599,17 +1619,25 @@ partitioners must consume it synchronously and not retain borrowed spans.
 
 Policies may not mutate request inputs; no observer receives `[]any`. Observer
 callbacks are synchronous and must not block; panic containment logs observer
-failure without corrupting execution. There is one terminal request event and
-one terminal event per started attempt, including cancellation and speculative
-losers, for each configured observer. When no observer is configured, skip event
+failure without corrupting execution. StartRequest receives the caller's
+context as the request is admitted; the context it returns is passed to
+StartAttempt for every attempt of that request and is never used for
+cancellation. There is one terminal request event and one terminal event per
+started attempt, including cancellation and speculative losers, for each
+configured observer, delivered through the functions the start hooks return.
+Observer is the seam for client-side tracing such as OpenTelemetry, which lives
+outside the core module; AttemptEvent.CQLTraceID links an attempt to the
+server-side CQL trace session it produced. When no observer is configured, skip event
 construction, batch-statement arrays and diagnostic formatting. Required policy
 Observe feedback, metrics and Result accounting still run. Latency percentile
 snapshots are maintained outside individual request completion; disabled
 speculation does not create a scheduler/timer. Row
 cardinality is separate from successful server execution. Trace
 IDs/warnings are preserved per response; Result aggregates across consumed
-pages. Tracing lookup uses typed internal queries and context-bounded readiness
-polling.
+pages, and failed attempts keep their CQL trace IDs on ExecutionError.Result and
+AttemptFailure.CQLTraceID. Package cqltrace reads trace sessions through the
+public Session API with context-bounded readiness polling; a session is ready
+once its duration and at least one event are visible.
 
 The safe retry policy only retries unknown-outcome writes when explicitly
 idempotent. Read timeout/unavailable repair follows server evidence with bounded
@@ -1674,7 +1702,6 @@ func (s *Session[D]) RefreshMetadata(context.Context) error
 func (s *Session[D]) AwaitSchemaAgreement(context.Context) error
 func (s *Session[D]) Subscribe(event.Filter) (*event.Subscription, error)
 func (s *Session[D]) Metrics() metrics.Snapshot // session-wide counters
-func (s *Session[D]) Trace(context.Context, cql.UUID) (trace.Info, error)
 func (s *Session[D]) Close() error
 func (s *Session[D]) Closed() bool
 
