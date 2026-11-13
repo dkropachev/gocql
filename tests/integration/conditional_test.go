@@ -70,8 +70,12 @@ func TestConditional(t *testing.T) {
 		deleted := cassandraReadOne(t, session, failedDelete, []dynamic.Value{codecTestMust(dynamic.Text(title)), revValue, dynamic.Timestamp(modified + 10000)}, exec.Options{})
 		require.False(t, deleted.Applied)
 		require.Equal(t, int64(modified), cassandraInt(t, deleted.Previous.Value, "last_modified"))
-		// Missing or incompatible previous-value decoders fail explicitly.
-		invalid, err := session.Prepare(context.Background(), cql.Statement[[]dynamic.Value, cql.CASResult[cql.EmptyRow]]{CQL: deleteCQL, Params: dynamic.Params, Rows: cql.CASRows(cql.EmptyRowDecoder)}, exec.PrepareOptions{})
+		// A previous-value decoder whose field type does not match its column
+		// fails explicitly. Columns without a field are skipped, so only the
+		// type mismatch can fail.
+		type modifiedAsInt struct{ Modified int32 }
+		incompatible := cql.Row(cql.Column("last_modified", cql.Int32Codec, func(r *modifiedAsInt) *int32 { return &r.Modified }))
+		invalid, err := session.Prepare(context.Background(), cql.Statement[[]dynamic.Value, cql.CASResult[modifiedAsInt]]{CQL: deleteCQL, Params: dynamic.Params, Rows: cql.CASRows(incompatible)}, exec.PrepareOptions{})
 		if err == nil {
 			rows, e := invalid.Run(context.Background(), []dynamic.Value{codecTestMust(dynamic.Text(title)), revValue, dynamic.Timestamp(modified + 10000)})
 			defer rows.Close()

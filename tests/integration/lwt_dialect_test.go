@@ -39,11 +39,13 @@ func TestLWTDialect(t *testing.T) {
 	// One struct-mapped decoder for every outcome and both servers: columns
 	// it has no field for are skipped, fields without a column stay zero.
 	decoder := cql.CASRows(cql.MustRowOf[row]())
+	// The server names the IF marker after its column, v, like the SET
+	// marker, so the parameters bind by position.
 	updateParams := cql.Params(
-		cql.Param("v", cql.Int32Codec, func(u update) int32 { return u.V }),
-		cql.Param("k", cql.Int32Codec, func(u update) int32 { return u.K }),
-		cql.Param("c", cql.Int32Codec, func(u update) int32 { return u.C }),
-		cql.Param("expect", cql.Int32Codec, func(u update) int32 { return u.Expect }),
+		cql.ParamAt(0, cql.Int32Codec, func(u update) int32 { return u.V }),
+		cql.ParamAt(1, cql.Int32Codec, func(u update) int32 { return u.K }),
+		cql.ParamAt(2, cql.Int32Codec, func(u update) int32 { return u.C }),
+		cql.ParamAt(3, cql.Int32Codec, func(u update) int32 { return u.Expect }),
 	)
 	updateCQL := fmt.Sprintf("UPDATE %s SET v = ? WHERE k = ? AND c = ? IF v = ?", table)
 	conditional := cassandraPrepared(t, session, cql.Statement[update, cql.CASResult[row]]{
