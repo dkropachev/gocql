@@ -43,7 +43,8 @@ func (s *Session) Data() *implCluster.SessionStorage {
 	return implCluster.SessionData(s.Core())
 }
 
-// Prepare prepares statement on s. The zero PrepareOptions prepares with the session's keyspace on any host.
+// Prepare prepares statement on s. The zero PrepareOptions prepares with the
+// session's keyspace on any host.
 func (s *Session) Prepare[P, R any](ctx context.Context, statement binding.Statement[P, R], options PrepareOptions) (*Prepared[P, R], error) {
 	return Prepare(ctx, s.Core(), statement, options)
 }
@@ -62,9 +63,9 @@ func (s *Session) CompileOptions(options Options) (CompiledOptions, error) {
 
 // ExecBatch sends batch as one CQL BATCH of batch.Kind on s. The batch's
 // statements must produce no result columns; RunBatch reads the rows of a
-// conditional batch. The zero CompiledOptions uses the
-// session's default profile. ExecBatch is safe for concurrent use with other
-// session calls, but a Batch must not be changed while it is sent.
+// conditional batch. The zero CompiledOptions uses the session's default
+// profile. ExecBatch is safe for concurrent use with other session calls, but
+// a Batch must not be changed while it is sent.
 func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options CompiledOptions) (model.Result, error) {
 	if s == nil {
 		err := cqltype.TypeValidation("session", "nil session")

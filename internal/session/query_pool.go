@@ -325,10 +325,10 @@ func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
 }
 
 // Exec binds value and executes the statement once. The statement must not
-// return rows. The CompiledOptions applies to this call only; the zero value uses
-// the session's default profile. Exec is safe for concurrent use:
-// it runs on a query the statement keeps for one-shot calls, so it allocates
-// no per-call execution state.
+// return rows. The CompiledOptions applies to this call only; the zero value
+// uses the session's default profile. Exec is safe for concurrent use: it runs
+// on a query the statement keeps for one-shot calls, so it allocates no
+// per-call execution state.
 func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options CompiledOptions) (model.Result, error) {
 	pool, err := p.pool()
 	if err != nil {

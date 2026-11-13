@@ -59,19 +59,25 @@ func internalOptionList(options []exec.Options) []implSession.Options {
 }
 
 // tooManyOptions is the error of a call given more than one CompiledOptions.
-// The helpers stay out of line so the facade methods inline.
+// It and the helpers below stay out of line to keep the error path out of the
+// facade methods.
 //
 //go:noinline
 func tooManyOptions() error {
 	return &cqlerr.ValidationError{Field: "options", Err: errors.New("at most one CompiledOptions")}
 }
 
+// tooManyOptionsResult returns tooManyOptions with its execution result.
+//
 //go:noinline
 func tooManyOptionsResult() (Result, error) {
 	err := tooManyOptions()
 	return implSession.InternalExecutionErrorResult(err), err
 }
 
+// tooManyOptionsFound returns tooManyOptionsResult for a call that reports
+// whether a row was found.
+//
 //go:noinline
 func tooManyOptionsFound() (bool, Result, error) {
 	r, err := tooManyOptionsResult()
