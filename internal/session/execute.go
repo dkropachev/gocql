@@ -1030,11 +1030,33 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 	type delayedAttempt struct {
 		conn        *transport.Conn
 		consistency cqltype.Consistency
+		due         time.Time
 	}
-	// A nil channel disables the receive case until a retry actually needs a
-	// delay. Most pages complete without scheduling any delayed attempt.
-	var delayed chan delayedAttempt
-	scheduled := 0
+	// Retries waiting for their delay, and a timer for the earliest of them.
+	// The nil channels disable their receive cases until a retry actually
+	// needs a delay. Most pages complete without scheduling any.
+	var delayed []delayedAttempt
+	var delayTimer *time.Timer
+	var delayFired <-chan time.Time
+	var closing <-chan struct{}
+	armDelay := func() {
+		if len(delayed) == 0 {
+			delayFired, closing = nil, nil
+			return
+		}
+		due := delayed[0].due
+		for _, d := range delayed[1:] {
+			if d.due.Before(due) {
+				due = d.due
+			}
+		}
+		if delayTimer == nil {
+			delayTimer = time.NewTimer(time.Until(due))
+		} else {
+			delayTimer.Reset(time.Until(due))
+		}
+		delayFired, closing = delayTimer.C, s.sessionDone()
+	}
 	aggregate := model.Result{AchievedConsistency: request.options.InternalProfile.Consistency}
 	startedCount, active := 0, 0
 	launch := func(conn *transport.Conn, consistency cqltype.Consistency, speculative bool) error {
@@ -1115,6 +1137,9 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 		if timer != nil {
 			timer.Stop()
 		}
+		if delayTimer != nil {
+			delayTimer.Stop()
+		}
 	}()
 	var lastErr error
 	var log attemptLog
@@ -1135,24 +1160,38 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				}
 			}
 			return nil, log.error(failure, aggregate)
-		case pending := <-delayed:
-			scheduled--
-			if s.Core.Closed() {
-				// The delay ended early because the session is closing.
-				lastErr = runtimeerrors.ErrClosed
-				if active == 0 && scheduled == 0 {
-					return nil, log.error(lastErr, aggregate)
-				}
-				continue
+		case <-closing:
+			// A closing session ends the delayed retries instead of
+			// launching them.
+			delayed = delayed[:0]
+			armDelay()
+			lastErr = runtimeerrors.ErrClosed
+			if active == 0 {
+				return nil, log.error(lastErr, aggregate)
 			}
-			if err := launch(pending.conn, pending.consistency, false); err != nil {
-				lastErr = err
-				if active == 0 && scheduled == 0 {
-					return nil, log.error(err, aggregate)
+		case now := <-delayFired:
+			due := delayed[:0]
+			var launchErr error
+			for _, pending := range delayed {
+				if pending.due.After(now) {
+					due = append(due, pending)
+					continue
 				}
-			} else {
-				s.retries.Add(1)
-				arm()
+				if err := launch(pending.conn, pending.consistency, false); err != nil {
+					launchErr = err
+				} else {
+					s.retries.Add(1)
+					arm()
+				}
+			}
+			clear(delayed[len(due):])
+			delayed = due
+			armDelay()
+			if launchErr != nil {
+				lastErr = launchErr
+				if active == 0 && len(delayed) == 0 {
+					return nil, log.error(launchErr, aggregate)
+				}
 			}
 		case <-speculate:
 			if request.InternalLogical != nil && request.InternalLogical.ddlCoordinator.Load() != nil {
@@ -1204,7 +1243,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: model.CompletePageState(), Result: aggregate}}, nil
 			}
 			if decision.Action == retry.Stop {
-				if active == 0 && scheduled == 0 {
+				if active == 0 && len(delayed) == 0 {
 					return nil, log.error(lastErr, aggregate)
 				}
 				continue
@@ -1227,29 +1266,9 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				conn = nil
 			}
 			if decision.Delay > 0 {
-				if delayed == nil {
-					delayed = make(chan delayedAttempt)
-				}
-				scheduled++
-				request.InternalOwner.retain()
-				go func(wait time.Duration, next delayedAttempt, ready chan<- delayedAttempt, closing <-chan struct{}) {
-					defer request.InternalOwner.InternalRelease()
-					perfAdd(5, 1)
-					timer := time.NewTimer(wait)
-					defer timer.Stop()
-					// A closing session hands the attempt back early; the
-					// loop then ends the execution instead of launching it.
-					select {
-					case <-ctx.Done():
-						return
-					case <-closing:
-					case <-timer.C:
-					}
-					select {
-					case ready <- next:
-					case <-ctx.Done():
-					}
-				}(decision.Delay, delayedAttempt{conn: conn, consistency: consistency}, delayed, s.sessionDone())
+				perfAdd(5, 1)
+				delayed = append(delayed, delayedAttempt{conn: conn, consistency: consistency, due: time.Now().Add(decision.Delay)})
+				armDelay()
 				continue
 			}
 
