@@ -2402,10 +2402,10 @@ func TestConn(t *testing.T) {
 			config.KeepaliveInterval = time.Millisecond
 			config.KeepaliveTimeout = 10 * time.Millisecond
 			c.InternalCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityPointer()}
-			done = make(chan struct{})
-			go func() { c.InternalHeartBeat(c.InternalCtx); close(done) }()
+			// The heartbeats run from a timer: the call only schedules them.
+			c.InternalHeartBeat(c.InternalCtx)
 			select {
-			case <-done:
+			case <-c.InternalCtx.Done():
 			case <-time.After(time.Second):
 				t.Fatal("heartbeat timeout did not cover blocked write")
 			}

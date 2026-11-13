@@ -480,7 +480,11 @@ func (c *Conn) init(ctx context.Context, dialedHost *implEndpoint.DialedHost) er
 	}
 
 	go c.InternalServe(c.InternalCtx)
-	go c.InternalHeartBeat(c.InternalCtx)
+	if c.InternalCfg.TypedConfig != nil {
+		c.startTypedHeartbeat(c.InternalCtx)
+	} else {
+		go c.InternalHeartBeat(c.InternalCtx)
+	}
 
 	return nil
 }
@@ -963,9 +967,11 @@ func (p *InternalProtocolError) Unwrap() error {
 	return nil
 }
 
+// InternalHeartBeat sends heartbeats until ctx ends. A typed connection's
+// heartbeats run from a timer: the call schedules them and returns.
 func (c *Conn) InternalHeartBeat(ctx context.Context) {
 	if c.InternalCfg != nil && c.InternalCfg.TypedConfig != nil {
-		c.typedHeartbeat(ctx)
+		c.startTypedHeartbeat(ctx)
 		return
 	}
 	sleepTime := 1 * time.Second
