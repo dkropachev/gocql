@@ -248,8 +248,8 @@ type InternalHostConnPool struct {
 	InternalHost       *implEndpoint.HostInfo
 	InternalDebouncer  *debounce.SimpleDebouncer
 	reservationChanged chan struct{}
-	// failedShards holds the shards whose failed dials the conviction
-	// policy saw and that have not connected since; guarded by InternalMu.
+	// failedShards holds the shards whose failed connections the
+	// conviction policy saw and that have not connected since.
 	failedShards         map[uint32]struct{}
 	InternalRepairCancel context.CancelFunc
 	InternalKeyspace     string
@@ -257,7 +257,8 @@ type InternalHostConnPool struct {
 	generation           uint64
 	reconnectAttempt     int
 	legacy               atomic.Bool // the installed picker is not typed
-	// protection for connPicker, closed, filling
+	// protection for connPicker, closed, filling, failedShards and
+	// shardConvicted
 	InternalMu                            sync.RWMutex
 	InternalClosed                        bool
 	InternalFilling                       bool
@@ -534,7 +535,6 @@ func (pool *InternalHostConnPool) fillingStopped(err error) {
 	}
 
 	pool.InternalMu.Lock()
-	pool.InternalFilling = false
 	count, missing := pool.InternalConnPicker.Size()
 	if !pool.InternalClosed {
 		if count > 0 {
@@ -554,9 +554,6 @@ func (pool *InternalHostConnPool) fillingStopped(err error) {
 	convict := pool.shardConvicted && !pool.InternalClosed
 	pool.shardConvicted = false
 	pool.InternalMu.Unlock()
-	if missing > 0 {
-		pool.InternalScheduleTypedRepair()
-	}
 
 	// if we errored and the size is now zero, make sure the host is marked as down
 	// see https://github.com/apache/cassandra-gocql-driver/issues/1614
@@ -573,10 +570,19 @@ func (pool *InternalHostConnPool) fillingStopped(err error) {
 	if convict {
 		pool.InternalServices.Down(host.ConnectAddress(), port)
 	}
+
+	// The fill ends only after the policy saw its failures, so the Reset of
+	// the next fill cannot reach the policy ahead of them.
+	pool.InternalMu.Lock()
+	pool.InternalFilling = false
+	pool.InternalMu.Unlock()
+	if missing > 0 {
+		pool.InternalScheduleTypedRepair()
+	}
 }
 
-// resetConviction resets the conviction policy for the host once the pool
-// opens its first connection. It runs on the filling goroutine before the
+// resetConviction resets the conviction policy for the host when a pool
+// without connections opens one. It runs on the filling goroutine before the
 // rest of the fill starts.
 func (pool *InternalHostConnPool) resetConviction() {
 	pool.InternalMu.Lock()
@@ -591,8 +597,7 @@ func (pool *InternalHostConnPool) resetConviction() {
 // shardFailed reports a failed connection to shard, chosen by the picker out
 // of shards, to the conviction policy, once per connection attempt after the
 // reconnection retries. shards is zero when the picker did not choose the
-// shard. A convicting verdict marks the host down when filling
-// stops.
+// shard. A convicting verdict marks the host down when filling stops.
 func (pool *InternalHostConnPool) shardFailed(err error, shard, shards int) {
 	policy := pool.InternalServices.Conviction
 	if policy == nil || shards <= 0 || pool.InternalRepairCtx.Err() != nil {

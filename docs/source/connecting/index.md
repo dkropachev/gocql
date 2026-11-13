@@ -127,8 +127,9 @@ tls
 failure should mark the host down. The event carries the error, a detached
 read-only `HostSnapshot` that can be retained, the `Source` (a pool connection
 or the control connection) and, when the pool asked for one shard, the
-`Shard`. Once the pool knows a host's shard count it picks the shard of each
-connection and reports each failed attempt to open one, after reconnection
+`Shard`. The pool asks for a shard when it dials a shard-aware port and knows
+the host's shard count, which a new pool learns from its first connection.
+It reports each failed attempt to open such a connection, after reconnection
 retries; the event without a shard follows when the host has no connection
 left. A dialer that cannot target shards connects wherever the server places
 the connection, so `Shard` names the shard the pool asked for.
@@ -141,6 +142,8 @@ conditional.
 
 `Reset(ConvictionEvent)` reports that connections opened again: with `Shard`
 set, the connection to a shard whose failure was reported; without it, the
-first connection of a host's pool, after startup or after the host was marked
-down. Custom policies must support concurrent callbacks. The default SimpleConvictionPolicy convicts on every whole-host
-failure, ignores single-shard failures, and its Reset is a no-op.
+first connection of a pool that had none, such as a new pool at startup or
+after the host was marked down, or a pool that lost every connection.
+Callbacks run concurrently, some on the goroutine that opens connections, so
+they must not block. The default SimpleConvictionPolicy convicts on every
+whole-host failure, ignores single-shard failures, and its Reset is a no-op.

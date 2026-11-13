@@ -40,9 +40,9 @@ const (
 	ConvictionControl = connectivity.ConvictionControl
 )
 
-// SimpleConvictionPolicy convicts a host whenever it has no connection left
-// or its control connection dial fails, whatever the error. It ignores
-// single-shard failures.
+// SimpleConvictionPolicy convicts a host whenever opening its connections
+// leaves it with none, or the control connection fails to dial it, whatever
+// the error. It ignores single-shard failures.
 type SimpleConvictionPolicy struct{}
 
 func (e *SimpleConvictionPolicy) AddFailure(ev ConvictionEvent) bool {

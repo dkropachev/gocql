@@ -33,6 +33,9 @@ func TestHostConnPool(t *testing.T) {
 					p := &InternalHostConnPool{InternalHost: &host, InternalConnPicker: convictionPicker{}, InternalLogger: logging.Nop()}
 					policy := &convictionRecorder{callback: func(e connectivity.ConvictionEvent) bool {
 						err, snapshot := e.Err, e.Host
+						if !p.InternalFilling {
+							t.Fatal("fill ended before the policy saw its failure")
+						}
 						if e.Shard.Set || e.Source != connectivity.ConvictionPool {
 							t.Fatalf("whole-host pool failure reported as %+v", e)
 						}
@@ -56,7 +59,11 @@ func TestHostConnPool(t *testing.T) {
 							t.Fatal("wrong down endpoint")
 						}
 					}}
+					p.InternalFilling = true
 					p.fillingStopped(cause)
+					if p.InternalFilling {
+						t.Fatal("fill not ended")
+					}
 					if calls != 1 || downs != map[bool]int{false: 0, true: 1}[convict] {
 						t.Fatal("conviction decision changed", calls, downs)
 					}

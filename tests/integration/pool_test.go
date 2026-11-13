@@ -105,7 +105,7 @@ func TestPool(t *testing.T) {
 					}
 				}
 				if resets != 0 {
-					t.Fatal("driver introduced a new reset call")
+					t.Fatal("reset reported although no pool connection opened")
 				}
 				policy.Reset(config.ConvictionEvent{Host: hosts[0]})
 				policy.mu.Lock()

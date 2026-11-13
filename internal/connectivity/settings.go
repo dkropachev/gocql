@@ -106,13 +106,15 @@ type ConvictionEvent struct {
 }
 
 // ConvictionPolicy decides whether connection failures mark a host down.
-// Callbacks run concurrently.
+// Callbacks run concurrently, some on the goroutine that opens connections,
+// so they must not block.
 //
-// When the pool picks the shard of a connection, it reports each failed
-// attempt to open it with Shard set, once per attempt after reconnection
-// retries, before the event without Shard that follows when the host has no
-// connection left. The pool picks shards only once it knows the host's shard
-// count, so the failure of a host's first connection has no Shard.
+// When the pool asks for a specific shard, which takes a shard-aware port and
+// a known shard count, it reports each failed attempt to open that connection
+// with Shard set, once per attempt after reconnection retries, before the
+// event without Shard that follows when the host has no connection left. A
+// new pool does not know the shard count, so the failure of its first
+// connection has no Shard.
 type ConvictionPolicy interface {
 	// AddFailure reports a failure and returns whether to mark the host
 	// down. A true verdict on a shard event marks the whole host down once
@@ -123,8 +125,9 @@ type ConvictionPolicy interface {
 	AddFailure(ConvictionEvent) bool
 	// Reset reports that connections opened again: with Shard set, the
 	// connection to a shard whose failure was reported; without it, the
-	// first connection of a host's pool, after startup or after the host
-	// was marked down. Implementations should clear the matching state.
+	// first connection of a pool that had none, such as a new pool at
+	// startup or after the host was marked down, or a pool that lost every
+	// connection. Implementations should clear the matching state.
 	Reset(ConvictionEvent)
 }
 type Config struct {
