@@ -207,8 +207,8 @@ type InternalRoutingDecisions struct{ InternalSlow map[cqltype.UUID]time.Time }
 type InternalRoutingPolicy struct {
 	InternalDecisions atomic.Pointer[InternalRoutingDecisions]
 	updateAfter       atomic.Pointer[time.Time]
-	// validated is the last host index whose datacenter and rack
-	// Validate found eligible.
+	// validated is the last host index in which Validate found the
+	// datacenter, and the rack when one is set, eligible.
 	validated atomic.Pointer[InternalRoutingHostIndex]
 	// fixed holds, for each replica count up to sixteen, the permutation
 	// a plan applies when replicas are not shuffled per request, which

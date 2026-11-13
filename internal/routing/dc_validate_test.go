@@ -18,10 +18,7 @@ func countRackLookups(t *testing.T) *int {
 }
 
 func TestDCAwareValidateSkipsRackLookupWhenUnset(t *testing.T) {
-	p, err := NewRoutingPolicy(RoutingOptions{Datacenter: "a"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	p := codecTestMust(NewRoutingPolicy(RoutingOptions{Datacenter: "a"}))
 	n := countRackLookups(t)
 	m := v2TestMetadata()
 	for i := 0; i < 3; i++ {
@@ -35,7 +32,7 @@ func TestDCAwareValidateSkipsRackLookupWhenUnset(t *testing.T) {
 }
 
 func TestDCAwareValidateRackLookupOncePerIndex(t *testing.T) {
-	p, _ := NewRoutingPolicy(RoutingOptions{Datacenter: "a", Rack: "r1"})
+	p := codecTestMust(NewRoutingPolicy(RoutingOptions{Datacenter: "a", Rack: "r1"}))
 	n := countRackLookups(t)
 	m := v2TestMetadata()
 	for i := 0; i < 3; i++ {
@@ -53,7 +50,7 @@ func TestDCAwareValidateRackLookupOncePerIndex(t *testing.T) {
 // without it, and accepted again when it returns.
 func TestDCAwareValidateCacheFollowsIndex(t *testing.T) {
 	for _, o := range []RoutingOptions{{Datacenter: "a"}, {Datacenter: "a", Rack: "r1"}} {
-		p, _ := NewRoutingPolicy(o)
+		p := codecTestMust(NewRoutingPolicy(o))
 		old := v2TestMetadata()
 		if err := p.Validate(old); err != nil {
 			t.Fatal(err)
@@ -62,7 +59,8 @@ func TestDCAwareValidateCacheFollowsIndex(t *testing.T) {
 			h := []model.HostSnapshot{v2TestHost(1, dc, rack), v2TestHost(2, "b", "r9")}
 			return NewMetadataSnapshot(SnapshotState{InternalHostIndex: InternalBuildRoutingHostIndex(h), InternalHosts: h})
 		}
-		for name, m := range map[string]*MetadataSnapshot{"no dc": hosts("c", "r1"), "no rack": hosts("a", "r2")} {
+		noDC := hosts("c", "r1")
+		for name, m := range map[string]*MetadataSnapshot{"no dc": noDC, "no rack": hosts("a", "r2")} {
 			if o.Rack == "" && name == "no rack" {
 				continue
 			}
@@ -80,24 +78,10 @@ func TestDCAwareValidateCacheFollowsIndex(t *testing.T) {
 		if err := p.Validate(old); err != nil {
 			t.Fatal(err)
 		}
-		// same index pointer reused after the cache holds another one
-		if err := p.Validate(hosts("c", "r1")); err == nil {
+		// an index rejected earlier is rejected again after the cache
+		// holds another one
+		if err := p.Validate(noDC); err == nil {
 			t.Fatalf("%+v: stale acceptance", o)
 		}
-	}
-}
-
-func BenchmarkDCAwareValidate(b *testing.B) {
-	for _, rack := range []string{"", "r1"} {
-		b.Run("rack="+rack, func(b *testing.B) {
-			p, _ := NewRoutingPolicy(RoutingOptions{Datacenter: "a", Rack: rack})
-			m := v2TestMetadata()
-			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
-				if err := p.Validate(m); err != nil {
-					b.Fatal(err)
-				}
-			}
-		})
 	}
 }
