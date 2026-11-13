@@ -213,3 +213,82 @@ func TestPreparedHandles(t *testing.T) {
 		})
 	}
 }
+
+// TestCloseStopsRowsOfBusyPooledQuery checks that Session.Close stops rows
+// mid-page on a busy pooled query: the next NextInto fails with ErrClosed
+// although the rows still hold decoded rows.
+func TestCloseStopsRowsOfBusyPooledQuery(t *testing.T) {
+	s, _, peers := runtimeTestSession(t, 1)
+	t.Cleanup(func() { _ = peers[0].Close() })
+	requests := make(chan oneShotRequest, 4)
+	p := oneShotPrepare(t, s, peers[0], requests)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	answerOneShot(t, peers[0], requests, "a", "b", "c")
+	rows, err := p.Run(ctx, 1, CompiledOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var dst []byte
+	if !rows.NextInto(&dst) || string(dst) != "a" {
+		t.Fatal("first row", rows.Err())
+	}
+	closed := make(chan struct{})
+	go func() {
+		s.Close()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+	case <-time.After(time.Second):
+		t.Fatal("Session.Close waits for busy pooled rows")
+	}
+	next := make(chan bool, 1)
+	go func() { next <- rows.NextInto(&dst) }()
+	select {
+	case ok := <-next:
+		if ok {
+			t.Fatalf("NextInto after Session.Close decoded %q", dst)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("NextInto after Session.Close blocked")
+	}
+	if err := rows.Err(); !errors.Is(err, runtimeerrors.ErrClosed) {
+		t.Fatalf("rows after Session.Close: %v", err)
+	}
+}
+
+// TestCancelStopsRowsMidPage checks that cancelling the caller's context stops
+// rows mid-page with the context's error, not ErrClosed, while the session
+// stays open.
+func TestCancelStopsRowsMidPage(t *testing.T) {
+	s, _, peers := runtimeTestSession(t, 1)
+	t.Cleanup(func() { _ = peers[0].Close() })
+	requests := make(chan oneShotRequest, 4)
+	p := oneShotPrepare(t, s, peers[0], requests)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	answerOneShot(t, peers[0], requests, "a", "b", "c")
+	runCtx, stop := context.WithCancel(ctx)
+	defer stop()
+	rows, err := p.Run(runCtx, 1, CompiledOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var dst []byte
+	if !rows.NextInto(&dst) || string(dst) != "a" {
+		t.Fatal("first row", rows.Err())
+	}
+	stop()
+	if rows.NextInto(&dst) {
+		t.Fatalf("NextInto after cancel decoded %q", dst)
+	}
+	if err := rows.Err(); !errors.Is(err, context.Canceled) || errors.Is(err, runtimeerrors.ErrClosed) {
+		t.Fatalf("rows after cancel: %v", err)
+	}
+	if s.Closed() {
+		t.Fatal("session closed")
+	}
+}
