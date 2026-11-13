@@ -15,10 +15,11 @@ import (
 // operations over an arbitrarily segmented chain and checks every result,
 // error and remaining count against a flat reference slice. It covers the
 // transitions between single-span fast paths and span-crossing slow paths,
-// including loads that end exactly on a span boundary. An even arg first
-// tries the call-free head-span fast path (HeadUint32, HeadUint64, HeadBytes,
-// PeekHeadUint32, HeadSkip), which must either succeed with the reference
-// result or miss without moving the cursor.
+// including loads that end exactly on a span boundary. A scalar load with an
+// even arg, and a Skip at an even op index, first tries the call-free
+// head-span fast path (HeadUint32, HeadUint64, HeadBytes, PeekHeadUint32,
+// HeadSkip), which must either succeed with the reference result or miss
+// without moving the cursor.
 func FuzzCursorOps(f *testing.F) {
 	f.Add([]byte("0123456789abcdefghijklmnopqrstuvwxyz"), []byte{3, 7}, []byte{0, 1, 2, 3, 4, 5, 6, 7, 8})
 	f.Add(bytes.Repeat([]byte{0xa5}, 64), []byte{4}, []byte{2, 2, 2, 2, 4, 4})
