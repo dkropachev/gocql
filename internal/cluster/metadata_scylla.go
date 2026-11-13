@@ -315,45 +315,15 @@ func (s *InternalMetadataDescriber) InternalRefreshTableSchema(keyspaceName, tab
 func getKeyspaceMetadata(s *Core, keyspace string) (*implMetadata.KeyspaceMetadata, error) {
 	return implMetadata.InternalGetV2KeyspaceMetadata(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), keyspace)
 }
-func getTableMetadata(s *Core, keyspace string) ([]implMetadata.TableMetadata, error) {
-	return implMetadata.InternalGetV2TableMetadata(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), keyspace, "")
-}
 func getTableMetadataByName(s *Core, keyspace, table string) ([]implMetadata.TableMetadata, error) {
 	return implMetadata.InternalGetV2TableMetadata(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), keyspace, table)
-}
-func getColumnMetadata(s *Core, keyspace string) ([]implMetadata.ColumnMetadata, error) {
-	return implMetadata.InternalGetV2ColumnMetadata(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), keyspace, "")
 }
 func getColumnMetadataByTable(s *Core, keyspace, table string) ([]implMetadata.ColumnMetadata, error) {
 	return implMetadata.InternalGetV2ColumnMetadata(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), keyspace, table)
 }
-func getIndexMetadata(s *Core, keyspace string) ([]implMetadata.IndexMetadata, error) {
-	return implMetadata.InternalGetV2IndexMetadata(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), keyspace, "")
-}
 func getIndexMetadataByTable(s *Core, keyspace, table string) ([]implMetadata.IndexMetadata, error) {
 	return implMetadata.InternalGetV2IndexMetadata(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), keyspace, table)
 }
-func getViewMetadata(s *Core, keyspace string) ([]implMetadata.ViewMetadata, error) {
-	return implMetadata.InternalGetV2ViewMetadata(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), keyspace, "")
-}
 func getViewMetadataByTable(s *Core, keyspace, table string) ([]implMetadata.ViewMetadata, error) {
 	return implMetadata.InternalGetV2ViewMetadata(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), keyspace, table)
-}
-func getTypeMetadata(s *Core, keyspace string) ([]implMetadata.TypeMetadata, error) {
-	return implMetadata.InternalQueryV2SchemaRows(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), `SELECT * FROM system_schema.types WHERE keyspace_name = ?`, []string{keyspace}, implMetadata.InternalV2DecodeTypeMetadata(keyspace))
-}
-func getFunctionsMetadata(s *Core, keyspace string) ([]implMetadata.FunctionMetadata, error) {
-	if !s.privateStorage.InternalHasAggregatesAndFunctions {
-		return nil, nil
-	}
-	return implMetadata.InternalQueryV2SchemaRows(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), `SELECT * FROM system_schema.functions WHERE keyspace_name = ?`, []string{keyspace}, implMetadata.InternalV2DecodeFunctionMetadata(keyspace))
-}
-func getAggregatesMetadata(s *Core, keyspace string) ([]implMetadata.AggregateMetadata, error) {
-	if !s.privateStorage.InternalHasAggregatesAndFunctions {
-		return nil, nil
-	}
-	return implMetadata.InternalQueryV2SchemaRows(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), `SELECT * FROM system_schema.aggregates WHERE keyspace_name = ?`, []string{keyspace}, implMetadata.InternalV2DecodeAggregateMetadata(keyspace))
-}
-func getCreateStatements(s *Core, keyspace string) ([]byte, error) {
-	return implMetadata.InternalGetV2CreateStatements(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), keyspace)
 }

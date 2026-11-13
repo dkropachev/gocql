@@ -14,5 +14,3 @@ type SubscriptionStorage struct {
 	mu     sync.Mutex
 	closed bool
 }
-
-func SubscriptionData(v *Subscription) *SubscriptionStorage { return &v.privateStorage }

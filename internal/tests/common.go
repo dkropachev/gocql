@@ -1,13 +1,6 @@
 package tests
 
-import (
-	"fmt"
-	"reflect"
-	"strconv"
-	"testing"
-
-	"github.com/google/uuid"
-)
+import "testing"
 
 func AssertTrue(t *testing.T, description string, value bool) {
 	t.Helper()
@@ -23,42 +16,9 @@ func AssertEqual(t *testing.T, description string, expected, actual any) {
 	}
 }
 
-func AssertDeepEqual(t *testing.T, description string, expected, actual any) {
-	t.Helper()
-	if !reflect.DeepEqual(expected, actual) {
-		t.Fatalf("expected %s to be (%+v) but was (%+v) instead", description, expected, actual)
-	}
-}
-
 func AssertNil(t *testing.T, description string, actual any) {
 	t.Helper()
 	if actual != nil {
 		t.Fatalf("expected %s to be (nil) but was (%+v) instead", description, actual)
 	}
-}
-
-func RandomUUID() string {
-	val, err := uuid.NewRandom()
-	if err != nil {
-		panic(fmt.Sprintf("failed to generate UUID: %s", err.Error()))
-	}
-	return val.String()
-}
-
-// GenerateHostNames generates a slice of host names with the format "host0", "host1", ..., "hostN-1",
-// where N is the specified hostCount.
-//
-// Parameters:
-//
-//	hostCount - the number of host names to generate.
-//
-// Returns:
-//
-//	A slice of strings containing host names.
-func GenerateHostNames(hostCount int) []string {
-	hosts := make([]string, hostCount)
-	for i := 0; i < hostCount; i++ {
-		hosts[i] = "host" + strconv.Itoa(i)
-	}
-	return hosts
 }

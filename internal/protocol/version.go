@@ -3,8 +3,6 @@
 
 package protocol
 
-import "fmt"
-
 // Version describes what one native protocol version puts on the wire. Each
 // supported version is defined in a file of its own (version_v4.go,
 // version_v5.go). Code that writes or reads the wire asks a connection's
@@ -38,17 +36,6 @@ type Version struct {
 	// FailureReasonMap reports that READ_FAILURE and WRITE_FAILURE errors
 	// carry a map of failure reasons by replica; otherwise they carry a count.
 	FailureReasonMap bool
-}
-
-// VersionOf returns the Version numbered n.
-func VersionOf(n byte) (Version, error) {
-	switch n {
-	case V4.Number:
-		return V4, nil
-	case V5.Number:
-		return V5, nil
-	}
-	return Version{}, fmt.Errorf("gocql: unsupported native protocol version %d: the driver speaks versions 4 and 5", n)
 }
 
 // FlagsWidth returns the size in bytes of the QUERY, EXECUTE and BATCH flags.

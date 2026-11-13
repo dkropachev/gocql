@@ -505,13 +505,6 @@ func (s *Core) RefreshMetadata(ctx context.Context) error {
 	return schemaErr
 }
 
-// routingPartitioner chooses the configured server/table partitioner. Unknown
-// names deliberately leave routing tokenless; hashing with a guessed algorithm
-// would send requests to the wrong replicas.
-func (s *Core) routingPartitioner(keyspace, table string) routing.TokenPartitioner {
-	return s.CapturedRoutingPartitioner(s.PreparedPartitionerName(keyspace, table))
-}
-
 // Trace reads tracing tables through the same typed QUERY/codec path as user
 // requests. Readiness polling is governed by one context across every round.
 func (s *Core) Trace(ctx context.Context, id cqltype.UUID) (TraceInfo, error) {

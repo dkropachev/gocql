@@ -8,4 +8,3 @@ func PageStateOwned(token []byte, kind uint8) PageState {
 	return PageState{token: token, kind: kind}
 }
 func PageToken(p PageState) []byte { return p.token }
-func PageKind(p PageState) uint8   { return p.kind }

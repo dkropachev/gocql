@@ -12,5 +12,3 @@ type TracerEnhancedStorage struct {
 	traceIDs [][]byte
 	mu       sync.Mutex
 }
-
-func TracerEnhancedData(v *TracerEnhanced) *TracerEnhancedStorage { return &v.privateStorage }

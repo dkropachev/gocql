@@ -3,7 +3,6 @@ package tablets
 import (
 	"encoding/binary"
 	"math"
-	"math/rand"
 	"sync/atomic"
 
 	"github.com/scylladb/gocql/v2/internal/tests"
@@ -102,10 +101,6 @@ func unrankCombination(n, k, counter int, input []HostUUID) []ReplicaInfo {
 
 func getThreadSafeRnd() *tests.ThreadSafeRand {
 	return tests.NewThreadSafeRand(randSeed)
-}
-
-func getRnd() *rand.Rand {
-	return rand.New(rand.NewSource(randSeed))
 }
 
 // GenerateHostUUIDs generates a slice of deterministic HostUUIDs for testing.

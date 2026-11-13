@@ -29,7 +29,3 @@ type StaticApplicationInfoStorage struct {
 	applicationVersion string
 	clientID           string
 }
-
-func StaticApplicationInfoData(v *StaticApplicationInfo) *StaticApplicationInfoStorage {
-	return &v.privateStorage
-}

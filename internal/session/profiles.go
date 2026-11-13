@@ -6,10 +6,10 @@ package session
 import (
 	"time"
 
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/retry"
 	// IncludeMetadata requests full result metadata even when a validated cache exists.
 )
@@ -59,14 +59,6 @@ type InternalResolvedOptions struct {
 	templates       *optionTemplates
 	InternalProfile settings.Profile
 	InternalOptions Options
-}
-
-func InternalResolveOptions(s *implCluster.Core, options Options) (InternalResolvedOptions, error) {
-	var base *settings.Profile
-	if s != nil {
-		base = InternalRuntimeFor(s).InternalProfile
-	}
-	return resolveOptionValues(base, options)
 }
 
 // resolveOptionValues merges options over base, the session's default
@@ -151,4 +143,8 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	// The payload is not copied: NewCompiledOptions copied it already, and
 	// a resolution for one execution reads the compiled options' copy.
 	return InternalResolvedOptions{InternalProfile: p, InternalOptions: options}, nil
+}
+
+type OptionsStorage struct {
+	InternalConnection *transport.Conn
 }

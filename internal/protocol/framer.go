@@ -754,10 +754,6 @@ type ResultMetadata struct {
 	ActualColCount int
 }
 
-func (r *ResultMetadata) morePages() bool {
-	return r.Flags&frm.FlagHasMorePages == frm.FlagHasMorePages
-}
-
 func (r *ResultMetadata) noMetaData() bool {
 	return r.Flags&frm.FlagNoMetaData == frm.FlagNoMetaData
 }
@@ -1369,15 +1365,6 @@ func (f *Framer) readStringMultiMap() map[string][]string {
 
 func (f *Framer) WriteByteValue(b byte) {
 	f.Buf = append(f.Buf, b)
-}
-
-func appendBytes(p []byte, d []byte) []byte {
-	if d == nil {
-		return appendIntNeg1(p)
-	}
-	p = appendInt(p, int32(len(d)))
-	p = append(p, d...)
-	return p
 }
 
 func appendShort(p []byte, n uint16) []byte {

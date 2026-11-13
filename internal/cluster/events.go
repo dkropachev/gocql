@@ -138,33 +138,6 @@ const (
 	eventDebounceTime       = 1 * time.Second
 )
 
-// flush must be called with mu locked
-func (e *InternalEventDebouncer) flush() {
-	if len(e.InternalEvents) == 0 {
-		return
-	}
-
-	// if the flush interval is faster than the callback then we will end up calling
-	// the callback multiple times, probably a bad idea. In this case we could drop
-	// frames?
-	pending := e.InternalEvents
-	releases := e.releases
-	e.InternalEvents = nil
-	e.releases = nil
-	e.InternalMu.Unlock()
-	func() {
-		defer func() {
-			for _, release := range releases {
-				if release != nil {
-					release()
-				}
-			}
-		}()
-		e.callback(pending)
-	}()
-	e.InternalMu.Lock()
-}
-
 func (e *InternalEventDebouncer) InternalDebounce(frame protocol.Frame) {
 	e.InternalDebounceOwned(frame, nil)
 }

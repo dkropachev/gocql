@@ -18,5 +18,3 @@ type TraceWriterStorage struct {
 	maxAttempts   int
 	sleepInterval time.Duration
 }
-
-func TraceWriterData(v *TraceWriter) *TraceWriterStorage { return &v.privateStorage }

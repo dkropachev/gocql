@@ -482,7 +482,7 @@ func TestSegmentSplitter(t *testing.T) {
 							payload: bytes.Join([][]byte{one, two, one}, nil),
 							want:    [][]byte{one, two, one},
 						},
-						// Accepted, not refused: the driver's own processAllFramesInSegment
+						// Accepted, not refused: the driver's segment reader (transport.InternalRecvLeasedSegment)
 						// loops while bytes remain, so it reads an empty self-contained
 						// segment as zero frames and no error. Refusing it here would fail
 						// a stream gocql handles. The chain rule is the asymmetric one; see

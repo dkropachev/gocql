@@ -326,3 +326,7 @@ func TestPage(t *testing.T) {
 		})
 	})
 }
+
+// newRows returns a handle over new, empty iterator storage, for tests
+// that assemble an iterator directly.
+func newRows[R any]() Rows[R] { return newRowsHandle(new(rowsImpl[R])) }

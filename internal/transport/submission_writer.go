@@ -61,12 +61,6 @@ func (t *writeTicket) finish(result InternalWriteResult) {
 	t.release()
 }
 
-// pendingWriteError means the writer may still be transmitting. The stream ID
-// must become an orphan, and only writer completion may release request storage.
-type pendingWriteError struct{ error }
-
-func (e *pendingWriteError) Unwrap() error { return e.error }
-
 // submissionWriter is a connection's persistent writer. Submitters append to
 // queue under mu and wake the writer only when it is parked.
 type submissionWriter struct {
