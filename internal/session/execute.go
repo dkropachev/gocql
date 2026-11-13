@@ -99,18 +99,21 @@ type InternalSessionRuntime struct {
 type startTimestamps struct{ last atomic.Int64 }
 
 // next returns started in microseconds, raised above every timestamp returned
-// before. One CAS keeps the timestamps strictly increasing; when it loses to a
-// concurrent request, the increment after that request's value is used.
+// before, so the timestamps are strictly increasing and never earlier than
+// their start. Uncontended, it takes one CAS. Once another request has raised
+// the last timestamp to started or beyond, one increment past it is used; the
+// CAS is retried only while the last timestamp stays below started.
 func (t *startTimestamps) next(started time.Time) int64 {
 	now := started.UnixMicro()
-	prev := t.last.Load()
-	if now <= prev {
-		now = prev + 1
+	for {
+		prev := t.last.Load()
+		if now <= prev {
+			return t.last.Add(1)
+		}
+		if t.last.CompareAndSwap(prev, now) {
+			return now
+		}
 	}
-	if t.last.CompareAndSwap(prev, now) {
-		return now
-	}
-	return t.last.Add(1)
 }
 
 // cacheLineSize is the coherence unit hot counters are padded to.

@@ -49,6 +49,28 @@ func TestStartTimestamps(t *testing.T) {
 		}
 	})
 
+	// LaterStarts: each goroutine's start times lie ahead of the others',
+	// so a CAS lost to a request with an earlier start must still return a
+	// timestamp no earlier than its own start.
+	t.Run("LaterStarts", func(t *testing.T) {
+		var timestamps startTimestamps
+		base := time.UnixMicro(1_000_000)
+		const workers, each = 16, 1000
+		var wg sync.WaitGroup
+		for w := range workers {
+			wg.Go(func() {
+				for i := range each {
+					started := base.Add(time.Duration(i*workers+w) * time.Millisecond)
+					if v := timestamps.next(started); v < started.UnixMicro() {
+						t.Errorf("timestamp %d before its start %d", v, started.UnixMicro())
+						return
+					}
+				}
+			})
+		}
+		wg.Wait()
+	})
+
 	t.Run("FollowsStart", func(t *testing.T) {
 		var timestamps startTimestamps
 		started := time.UnixMicro(1_000_000)
