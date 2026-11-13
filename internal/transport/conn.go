@@ -1230,14 +1230,21 @@ func (c *Conn) readFrameIntoFramer(src InternalFrameSource, head frm.FrameHeader
 }
 
 // misplacedCall puts back a call found under a stream other than its own
-// (a corrupt table) and reports the fatal error. The call stays where it was
-// found, so closing the connection resolves it.
+// (a corrupt table) and reports the fatal error, whose close then answers the
+// call. If the slot was taken meanwhile, or close may already have drained the
+// table, the reader still owns the call and answers it here.
 //
 //go:noinline
 func (c *Conn) misplacedCall(call *InternalCallReq, stream int) error {
-	streamID := call.InternalStreamID
-	c.InternalCalls.register(stream, call)
-	return fmt.Errorf("gocql: response for stream %d dispatched to a call on stream %d", stream, streamID)
+	err := fmt.Errorf("gocql: response for stream %d dispatched to a call on stream %d", stream, call.InternalStreamID)
+	if c.InternalCalls.register(stream, call) &&
+		(c.admission.Load()&admissionClosed == 0 || !c.InternalCalls.remove(stream, call)) {
+		return err
+	}
+	// The table is corrupt, so the call's stream is left alone and the call
+	// is not recycled.
+	call.deliver(InternalCallResp{InternalErr: err})
+	return err
 }
 
 func (c *Conn) InternalAbandonRecvCall(call *InternalCallReq, framer *protocol.Framer) {
@@ -1556,9 +1563,10 @@ func (call *InternalCallReq) waitExecDone(where string) {
 // reused by another call, which must stay registered. Once the connection has
 // started closing, closeWithError() becomes responsible for draining and
 // recycling detached callReqs. A close that sets its flag after the check
-// below and before the CAS does not find the call: the CAS decides the owner.
+// below races this CAS against its drain: whichever empties the slot owns the
+// call.
 func (c *Conn) InternalRemoveCallIfOpen(call *InternalCallReq) bool {
-	if c.InternalCalls == nil || c.admission.Load()&admissionClosed != 0 {
+	if c.admission.Load()&admissionClosed != 0 {
 		return false
 	}
 	return c.InternalCalls.remove(call.InternalStreamID, call)

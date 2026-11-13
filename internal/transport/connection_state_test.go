@@ -448,6 +448,58 @@ func TestTypedRequestTakesNoConnLock(t *testing.T) {
 	}
 }
 
+// A misplaced call the reader cannot put back is answered by the reader: its
+// slot was taken, or close may already have drained the table.
+func TestMisplacedCallAnsweredWhenNotPutBack(t *testing.T) {
+	expectAnswered := func(t *testing.T, call *InternalCallReq) {
+		t.Helper()
+		select {
+		case resp := <-call.InternalResp:
+			if resp.InternalErr == nil || resp.removedFromCalls {
+				t.Fatalf("got %+v, want an error without the stream", resp)
+			}
+		default:
+			t.Fatal("misplaced call not answered")
+		}
+	}
+	t.Run("SlotTaken", func(t *testing.T) {
+		c, _ := invPair(t, 4)
+		call, other := getCallReq(7), getCallReq(5)
+		c.InternalCalls.Set(5, other)
+		if err := c.misplacedCall(call, 5); err == nil {
+			t.Fatal("no error")
+		}
+		expectAnswered(t, call)
+		if c.InternalCalls.Get(5) != other {
+			t.Fatal("the slot's own call was replaced")
+		}
+		c.InternalCalls.Delete(5)
+	})
+	t.Run("Closed", func(t *testing.T) {
+		c, _ := invPair(t, 4)
+		call := getCallReq(7)
+		c.admission.Or(admissionClosed)
+		if err := c.misplacedCall(call, 5); err == nil {
+			t.Fatal("no error")
+		}
+		expectAnswered(t, call)
+		if n := c.InternalCalls.Len(); n != 0 {
+			t.Fatalf("%d calls left in the table", n)
+		}
+	})
+	t.Run("PutBack", func(t *testing.T) {
+		c, _ := invPair(t, 4)
+		call := getCallReq(7)
+		if err := c.misplacedCall(call, 5); err == nil {
+			t.Fatal("no error")
+		}
+		if c.InternalCalls.Get(5) != call {
+			t.Fatal("misplaced call not put back")
+		}
+		c.InternalCalls.Delete(5)
+	})
+}
+
 // Registrations and withdrawals racing close: every call registered is either
 // withdrawn by its caller or drained and answered by close, a registration
 // after close fails with ErrConnectionClosed, and the table ends empty.
