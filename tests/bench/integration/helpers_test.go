@@ -1062,20 +1062,24 @@ type testConviction struct {
 	resets  int
 }
 
-func (p *testConviction) AddFailure(err error, host routing.HostSnapshot) bool {
+func (p *testConviction) AddFailure(e config.ConvictionEvent) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if !errors.Is(err, p.cause) {
+	host := e.Host
+	if e.Shard.Set || e.Source != config.ConvictionPool {
+		panic("conviction event is not a whole-host pool failure")
+	}
+	if !errors.Is(e.Err, p.cause) {
 		panic("conviction lost original failure")
 	}
 	host.Tokens = append([]int64(nil), host.Tokens...)
 	p.hosts = append(p.hosts, host)
 	return p.verdict
 }
-func (p *testConviction) Reset(host routing.HostSnapshot) {
+func (p *testConviction) Reset(e config.ConvictionEvent) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if len(p.hosts) == 0 || p.hosts[0].ID != host.ID {
+	if e.Host.ID.IsEmpty() || (len(p.hosts) > 0 && p.hosts[0].ID != e.Host.ID) {
 		panic("reset lost host identity")
 	}
 	p.resets++

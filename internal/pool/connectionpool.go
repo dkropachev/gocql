@@ -36,6 +36,7 @@ import (
 
 	"log/slog"
 
+	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/tablets"
@@ -239,27 +240,34 @@ func (p *InternalPolicyConnPool) InternalRemoveHost(hostID cqltype.UUID) {
 func (pool *InternalHostConnPool) logger() *slog.Logger { return logging.Or(pool.InternalLogger) }
 
 type InternalHostConnPool struct {
-	InternalServices     InternalPoolServices
-	InternalConnPicker   ConnPicker
-	typed                atomic.Pointer[InternalTypedConnPicker]
-	InternalLogger       *slog.Logger
-	InternalRepairCtx    context.Context
-	InternalHost         *implEndpoint.HostInfo
-	InternalDebouncer    *debounce.SimpleDebouncer
-	reservationChanged   chan struct{}
+	InternalServices   InternalPoolServices
+	InternalConnPicker ConnPicker
+	typed              atomic.Pointer[InternalTypedConnPicker]
+	InternalLogger     *slog.Logger
+	InternalRepairCtx  context.Context
+	InternalHost       *implEndpoint.HostInfo
+	InternalDebouncer  *debounce.SimpleDebouncer
+	reservationChanged chan struct{}
+	// failedShards holds the shards whose failed connections the
+	// conviction policy saw and that have not connected since.
+	failedShards         map[uint32]struct{}
 	InternalRepairCancel context.CancelFunc
 	InternalKeyspace     string
 	InternalSize         int
 	generation           uint64
 	reconnectAttempt     int
 	legacy               atomic.Bool // the installed picker is not typed
-	// protection for connPicker, closed, filling
+	// protection for connPicker, closed, filling, failedShards and
+	// shardConvicted
 	InternalMu                            sync.RWMutex
 	InternalClosed                        bool
 	InternalFilling                       bool
 	InternalState                         poolState
 	InternalStarted                       bool
 	InternalRepairScheduled, retryStopped bool
+	// shardConvicted reports that the conviction policy convicted the host
+	// on a shard failure; fillingStopped marks the host down.
+	shardConvicted bool
 }
 
 func (pool *InternalHostConnPool) String() string {
@@ -473,6 +481,9 @@ func (pool *InternalHostConnPool) fillNow() {
 			pool.fillingStopped(err)
 			return
 		}
+		// Reset before the rest of the fill starts, so that the policy
+		// sees it ahead of any shard failure that fill reports.
+		pool.resetConviction()
 		// notify the session that this node is connected
 		pool.InternalServices.Worker(func() { pool.InternalServices.Connected(pool) })
 
@@ -524,7 +535,6 @@ func (pool *InternalHostConnPool) fillingStopped(err error) {
 	}
 
 	pool.InternalMu.Lock()
-	pool.InternalFilling = false
 	count, missing := pool.InternalConnPicker.Size()
 	if !pool.InternalClosed {
 		if count > 0 {
@@ -539,10 +549,11 @@ func (pool *InternalHostConnPool) fillingStopped(err error) {
 	}
 	host := pool.InternalHost
 	port := pool.InternalHost.Port()
+	// A closed pool no longer speaks for its host, which may be served by
+	// a new pool by now.
+	convict := pool.shardConvicted && !pool.InternalClosed
+	pool.shardConvicted = false
 	pool.InternalMu.Unlock()
-	if missing > 0 {
-		pool.InternalScheduleTypedRepair()
-	}
 
 	// if we errored and the size is now zero, make sure the host is marked as down
 	// see https://github.com/apache/cassandra-gocql-driver/issues/1614
@@ -552,9 +563,71 @@ func (pool *InternalHostConnPool) fillingStopped(err error) {
 		// looking the pool up through its parent while initial SetHosts may be
 		// waiting for this fill to finish under the parent's membership lock.
 		snapshot, _ := implEndpoint.SnapshotHost(host)
-		if pool.InternalServices.Conviction.AddFailure(err, snapshot) {
-			pool.InternalServices.Down(host.ConnectAddress(), port)
+		if pool.InternalServices.Conviction.AddFailure(connectivity.ConvictionEvent{Err: err, Host: snapshot, Source: connectivity.ConvictionPool}) {
+			convict = true
 		}
+	}
+	if convict {
+		pool.InternalServices.Down(host.ConnectAddress(), port)
+	}
+
+	// The fill ends only after the policy saw its failures, so the Reset of
+	// the next fill cannot reach the policy ahead of them.
+	pool.InternalMu.Lock()
+	pool.InternalFilling = false
+	pool.InternalMu.Unlock()
+	if missing > 0 {
+		pool.InternalScheduleTypedRepair()
+	}
+}
+
+// resetConviction resets the conviction policy for the host when a pool
+// without connections opens one. It runs on the filling goroutine before the
+// rest of the fill starts.
+func (pool *InternalHostConnPool) resetConviction() {
+	pool.InternalMu.Lock()
+	pool.failedShards = nil
+	pool.InternalMu.Unlock()
+	if policy := pool.InternalServices.Conviction; policy != nil {
+		snapshot, _ := implEndpoint.SnapshotHost(pool.InternalHost)
+		policy.Reset(connectivity.ConvictionEvent{Host: snapshot, Source: connectivity.ConvictionPool})
+	}
+}
+
+// shardFailed reports a failed connection to shard, chosen by the picker out
+// of shards, to the conviction policy, once per connection attempt after the
+// reconnection retries. shards is zero when the picker did not choose the
+// shard. A convicting verdict marks the host down when filling stops.
+func (pool *InternalHostConnPool) shardFailed(err error, shard, shards int) {
+	policy := pool.InternalServices.Conviction
+	if policy == nil || shards <= 0 || pool.InternalRepairCtx.Err() != nil {
+		return
+	}
+	snapshot, _ := implEndpoint.SnapshotHost(pool.InternalHost)
+	convict := policy.AddFailure(connectivity.ConvictionEvent{Err: err, Host: snapshot, Shard: cqltype.Some(uint32(shard)), Source: connectivity.ConvictionPool})
+	pool.InternalMu.Lock()
+	if pool.failedShards == nil {
+		pool.failedShards = make(map[uint32]struct{})
+	}
+	pool.failedShards[uint32(shard)] = struct{}{}
+	pool.shardConvicted = pool.shardConvicted || convict
+	pool.InternalMu.Unlock()
+}
+
+// shardConnected resets the conviction policy for shard when its failure was
+// reported.
+func (pool *InternalHostConnPool) shardConnected(shard, shards int) {
+	policy := pool.InternalServices.Conviction
+	if policy == nil || shards <= 0 {
+		return
+	}
+	pool.InternalMu.Lock()
+	_, failed := pool.failedShards[uint32(shard)]
+	delete(pool.failedShards, uint32(shard))
+	pool.InternalMu.Unlock()
+	if failed {
+		snapshot, _ := implEndpoint.SnapshotHost(pool.InternalHost)
+		policy.Reset(connectivity.ConvictionEvent{Host: snapshot, Shard: cqltype.Some(uint32(shard)), Source: connectivity.ConvictionPool})
 	}
 }
 
@@ -638,6 +711,7 @@ func (pool *InternalHostConnPool) InternalConnect() (err error) {
 	}
 
 	if err != nil {
+		pool.shardFailed(err, shardID, nrShards)
 		return err
 	}
 	// Validate rejects a non-positive limit, but a custom policy can still
@@ -654,11 +728,13 @@ func (pool *InternalHostConnPool) InternalConnect() (err error) {
 	if pool.InternalKeyspace != "" {
 		if err = conn.InternalUseKeyspaceContext(openingCtx, pool.InternalKeyspace); err != nil {
 			conn.Close()
+			pool.shardFailed(err, shardID, nrShards)
 			return err
 		}
 	}
 	if err = conn.InternalValidateOpeningTarget(openingCtx); err != nil {
 		conn.Close()
+		pool.shardFailed(err, shardID, nrShards)
 		return err
 	}
 	// A setup cancellation callback cannot survive publication and later close a
@@ -731,6 +807,7 @@ func (pool *InternalHostConnPool) InternalConnect() (err error) {
 		closeConns(p.takeRetired()...)
 	}
 	conn.InternalFinalizeConnection()
+	pool.shardConnected(shardID, nrShards)
 
 	return nil
 }

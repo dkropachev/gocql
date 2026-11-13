@@ -26,19 +26,27 @@ package settings
 
 import (
 	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
-	"github.com/scylladb/gocql/v2/internal/model"
 )
 
 // ConvictionPolicy interface is used by gocql to determine if a host should be
 // marked as DOWN based on the error and host info
 type ConvictionPolicy = connectivity.ConvictionPolicy
 
-// SimpleConvictionPolicy implements a ConvictionPolicy which convicts all hosts
-// regardless of error
+type ConvictionEvent = connectivity.ConvictionEvent
+type ConvictionSource = connectivity.ConvictionSource
+
+const (
+	ConvictionPool    = connectivity.ConvictionPool
+	ConvictionControl = connectivity.ConvictionControl
+)
+
+// SimpleConvictionPolicy convicts a host whenever opening its connections
+// leaves it with none, or the control connection fails to dial it, whatever
+// the error. It ignores single-shard failures.
 type SimpleConvictionPolicy struct{}
 
-func (e *SimpleConvictionPolicy) AddFailure(error error, host model.HostSnapshot) bool {
-	return true
+func (e *SimpleConvictionPolicy) AddFailure(ev ConvictionEvent) bool {
+	return !ev.Shard.Set
 }
 
-func (e *SimpleConvictionPolicy) Reset(host model.HostSnapshot) {}
+func (e *SimpleConvictionPolicy) Reset(ConvictionEvent) {}
