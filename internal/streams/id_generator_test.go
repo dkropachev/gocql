@@ -78,7 +78,7 @@ func TestIDGenerator(t *testing.T) {
 			if streams.InUse() != 0 {
 				t.Fatalf("InUse=%d after a double clear", streams.InUse())
 			}
-			// A double clear must not put the ID on the free stack twice.
+			// A double clear must not let the ID be handed out twice.
 			x, _ := streams.GetStream()
 			y, _ := streams.GetStream()
 			if x == y {
@@ -159,9 +159,9 @@ func TestIDGenerator(t *testing.T) {
 	})
 }
 
-// At capacity under churn a free ID always exists, so GetStream must never
-// fail. The window in which the first pass misses an ID freed behind it is too
-// narrow to hit reliably; TestGetStreamSlowFindsAnyFreeID covers the rescan.
+// Near capacity under churn a free ID always exists in the last word, where
+// every scan starts, so GetStream must never fail there however the workers'
+// CASes collide. TestGetStreamSlowFindsAnyFreeID covers the rescan.
 func TestStreamBitmapFullChurn(t *testing.T) {
 	t.Parallel()
 

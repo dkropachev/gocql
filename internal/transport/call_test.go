@@ -163,26 +163,22 @@ func TestRemoveCallIfOpenIgnoresReusedStream(t *testing.T) {
 	// Detach whatever is still registered on s before invPair's Close runs,
 	// so Close does not wait for an exec that never ran, even after a failure.
 	t.Cleanup(func() {
-		c.InternalMu.Lock()
 		if c.InternalCalls.Get(s) != nil {
 			c.InternalCalls.Delete(s)
 			c.InternalStreams.Clear(s)
 		}
-		c.InternalMu.Unlock()
 	})
-	// Simulated early free: the reader deletes and frees the stream in one
-	// section (a spurious response for s).
-	c.InternalMu.Lock()
+	// Simulated early free: the call leaves the table and its stream is freed
+	// (a spurious response for s).
 	c.InternalCalls.Delete(s)
 	c.InternalStreams.Clear(s)
-	c.InternalMu.Unlock()
 	b := getCallReq(0)
 	b.typed = true
 	if err := c.allocCall(b); err != nil {
 		t.Fatal(err)
 	}
 	if b.InternalStreamID != s {
-		t.Fatalf("LIFO reuse expected, got %d vs %d", b.InternalStreamID, s)
+		t.Fatalf("lowest free stream expected, got %d vs %d", b.InternalStreamID, s)
 	}
 	if c.InternalRemoveCallIfOpen(a) {
 		t.Fatalf("removed a call that is no longer registered (stream %d)", s)

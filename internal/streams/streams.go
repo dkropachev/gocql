@@ -39,15 +39,17 @@ import (
 //
 // state[0] counts the IDs in use and state[1:] is the bitmap. The count shares
 // a cache line with the lowest bitmap words, which carry the happy-path
-// allocations, so an allocation or release touches one contended line.
+// allocations, so an allocation or release writes one contended line (and
+// reads the hint, which changes rarely).
 type IDGenerator struct {
 	NumStreams int
 	state      []atomic.Uint64
 	// hint is where GetStream starts scanning: usually the lowest bitmap word
 	// with a clear bit. Concurrent updates may leave it stale in either
 	// direction; that only affects locality (which ID is handed out) and scan
-	// length, never whether a free ID is found, since GetStream wraps around
-	// and rescans before failing.
+	// length, since GetStream wraps around and rescans before failing. Only an
+	// ID freed behind both passes, while every word ahead of them stayed full,
+	// can be missed, as if it had been freed just after GetStream failed.
 	hint atomic.Uint32
 }
 
