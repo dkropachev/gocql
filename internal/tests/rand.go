@@ -5,25 +5,6 @@ import (
 	"sync"
 )
 
-// RandInterface defines the thread-safe random number generator interface.
-// It abstracts all methods provided by ThreadSafeRand.
-type RandInterface interface {
-	Uint64() uint64
-	Uint32() uint32
-	Int() int
-	Intn(n int) int
-	Int63() int64
-	Int63n(n int64) int64
-	Int31() int32
-	Int31n(n int32) int32
-	Float64() float64
-	Float32() float32
-	ExpFloat64() float64
-	NormFloat64() float64
-	Shuffle(n int, swap func(i, j int))
-	Read(p []byte) (n int, err error)
-}
-
 // ThreadSafeRand provides a concurrency-safe wrapper around math/rand.Rand.
 // It allows safe usage of random number generation methods from multiple goroutines.
 // All access to the underlying rand.Rand is synchronized via a mutex.
