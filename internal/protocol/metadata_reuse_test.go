@@ -80,8 +80,24 @@ func TestMetadataReuseInterleaved(t *testing.T) {
 	}
 	// Statement 0's result changes type: the new columns are parsed, never the
 	// expected or remembered ones, and the other statements keep their entries.
-	for i := 1; i < 4; i++ {
+	// A fresh cache makes the slots deterministic: one per statement 0..3.
+	settings.MetadataReuse = new(MetadataReuse)
+	for i := 0; i < 4; i++ {
 		parse(bodies[i], expect[i])
+	}
+	owns := func(e cqltype.Columns) *metadataReuseEntry {
+		for j := range settings.MetadataReuse.entries {
+			if entry := &settings.MetadataReuse.entries[j]; entry.owner.Same(e) {
+				return entry
+			}
+		}
+		return nil
+	}
+	var kept [4]*metadataReuseEntry
+	for i := 1; i < 4; i++ {
+		if kept[i] = owns(expect[i]); kept[i] == nil {
+			t.Fatal("statement has no entry of its own", i)
+		}
 	}
 	changedBody := reuseMetadataBody("v0", uint16(cqltype.TypeInt))
 	for range 2 {
@@ -93,13 +109,13 @@ func TestMetadataReuseInterleaved(t *testing.T) {
 			t.Fatal("changed metadata parsed to", spec.Type)
 		}
 	}
-	i = 1
-	allocs = testing.AllocsPerRun(300, func() {
-		parse(bodies[i], expect[i])
-		i = i%3 + 1
-	})
-	if allocs != base {
-		t.Fatalf("a changed statement evicted another's entry: %.0f allocs/op, one statement %.0f/op", allocs, base)
+	for i := 1; i < 4; i++ {
+		if e := owns(expect[i]); e != kept[i] || !e.columns.Equal(expect[i]) {
+			t.Fatal("a changed statement evicted another's entry", i)
+		}
+	}
+	if e := owns(expect[0]); e == nil || e.columns.Equal(expect[0]) {
+		t.Fatal("the changed statement's entry does not hold the new shape")
 	}
 	if got := parse(bodies[0], expect[0]); !got.Equal(expect[0]) {
 		t.Fatal("original shape after a change parsed to other columns")
