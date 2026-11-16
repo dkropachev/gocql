@@ -39,3 +39,28 @@ func TestRunBatchAllocs(t *testing.T) {
 		t.Fatalf("RunBatch allocates %v times per send, want at most %d", n, heldQueryAllocs)
 	}
 }
+
+// TestRunConditionalBatchAllocs checks that the applied tally adds nothing
+// to what RunBatch allocates. Its previous values are borrowed, so decoding
+// them allocates nothing either.
+func TestRunConditionalBatchAllocs(t *testing.T) {
+	session, batch := newCASBatch(t, casRowsBody(casBatchRow{true, "a"}, casBatchRow{true, "b"}))
+	type borrowed struct{ V cqltype.Bytes }
+	decoder := codec.CASRows(codec.Row(codec.Column("value", codec.BlobCodec, func(r *borrowed) *cqltype.Bytes { return &r.V })))
+	send := func() {
+		rows, err := session.RunConditionalBatch(context.Background(), batch, decoder, CompiledOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if applied, err := rows.Applied(); err != nil || !applied {
+			t.Fatal(applied, err)
+		}
+		if err := rows.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	send()
+	if n := testing.AllocsPerRun(50, send); n > heldQueryAllocs {
+		t.Fatalf("RunConditionalBatch allocates %v times per send, want at most %d", n, heldQueryAllocs)
+	}
+}

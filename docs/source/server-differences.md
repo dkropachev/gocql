@@ -44,12 +44,16 @@ Write portable code this way:
 
 A batch is applied only when all its conditions hold. The portable test is: the
 batch was applied if and only if every row reports `Applied`.
+`session.RunConditionalBatch` returns `CASBatchRows`, whose `Applied` makes
+that test for you, reading any rows you have not.
 
-On ScyllaDB, row `i` belongs to member `i` of the batch; a member without a
-condition reports `Applied` with no previous row.
-`scylla.BatchStatement(session, &batch, i)` returns that member. It takes a
-`*gocql.Session[gocql.ScyllaV4]`, so it does not compile for a Cassandra
-session, whose rows belong to table rows, not statements.
+On ScyllaDB, row `i` belongs to member `i` of the batch. Every row carries the
+same batch-wide `Applied`: there is no per-statement flag, and the server stops
+checking conditions at the first that fails. What row `i` adds is the current
+values of member `i`'s row, with no previous row when it does not exist; to
+find the condition that failed, compare them with your conditions. Count rows
+as you read them: the count is the member index. This holds only on ScyllaDB;
+on Cassandra the rows belong to table rows, not statements.
 
 ## Paging
 

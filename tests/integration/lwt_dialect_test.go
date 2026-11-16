@@ -105,8 +105,8 @@ func TestLWTDialect(t *testing.T) {
 			for _, u := range updates {
 				require.NoError(t, conditional.AddToBatch(&batch, u))
 			}
-			// An ordinary member gets an applied row with no previous row
-			// on ScyllaDB.
+			// An ordinary member gets a row too on ScyllaDB; its row does
+			// not exist, so the row has no previous values.
 			require.NoError(t, insert.AddToBatch(&batch, row{K: 1, C: 3, V: 30}))
 			_, err := session.ExecBatch(ctx, &batch)
 			require.True(t, errors.Is(err, cqlerr.ErrConditionalExec), "%v", err)
@@ -145,7 +145,12 @@ func TestLWTDialect(t *testing.T) {
 		rows = run(update{K: 1, C: 1, V: 14, Expect: 13}, update{K: 1, C: 2, V: 24, Expect: 0})
 		require.False(t, applied(rows))
 		if scylla {
+			// Every row carries the batch's flag, the ordinary member's too:
+			// ScyllaDB has no per-statement applied flag.
 			require.Len(t, rows, 3)
+			for i, r := range rows {
+				require.False(t, r.Applied, "row %d", i)
+			}
 		} else {
 			require.NotEmpty(t, rows)
 		}

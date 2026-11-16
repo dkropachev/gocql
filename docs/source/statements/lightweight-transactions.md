@@ -13,7 +13,9 @@ is a Paxos read, not a conditional statement: `Exec` does not reject it up
 front, and fails on its result columns like any other row-returning statement.
 
 Use `CASRows(decoder)` to decode the applied flag and the returned row through a
-typed `CASResult[R]`. For conditional batches, pass this decoder to `session.RunBatch`.
+typed `CASResult[R]`. For conditional batches, pass this decoder to
+`session.RunConditionalBatch`, whose `Applied` reports whether the batch
+applied, or to `session.RunBatch` for plain `Rows`.
 The ordinary `exec.Options` carries regular and serial consistency; profile defaults
 apply when an explicit override is absent. `exec.Options.SerialConsistency` is an
 `exec.SerialOverride`: `exec.SerialInherit` (the zero value) keeps the profile's,

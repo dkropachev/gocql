@@ -13,8 +13,8 @@ dialect. No other execution type carries the dialect: `Prepared`, `Query`,
 `Batch`, `Rows` and `Page` stay dialect-free, so a dialect never adds a type
 parameter to them. A method that only one dialect supports is a function that
 takes a `*Session` of that dialect, not a method that fails at run time on the
-others: `scylla.BatchStatement` in package `scylla`, for one. Dialect-only
-functions live in a package named after the database. See
+others. Dialect-only functions live in a package named after the database;
+none exist today. See
 `docs/server-differences.md`.
 
 ## Statement kinds
@@ -146,6 +146,13 @@ and no options.
     with no continuation, so there is no page state and no `Page`. Like
     `Prepared.Run`'s rows, the rows hold a pooled query until they are
     closed, and the session registers it so that `Session.Close` stops them.
+  - Conditional rows: `Session.RunConditionalBatch` → `CASBatchRows[X]`,
+    the rows column with the decoder fixed to `cql.CASRows`. Its `Applied`
+    reads whatever rows are left and reports whether every row applied, the
+    one outcome test that holds on Cassandra and ScyllaDB alike. It is a
+    separate method because a method on `Rows[R]` cannot require `R` to be a
+    `CASResult`. Mapping rows to statements stays in package `scylla`,
+    because only ScyllaDB's rows map to statements.
 - **Options.** As for the shared form: an optional `exec.CompiledOptions`, so the
   send resolves nothing per call. Paging options are ignored, so options
   compiled for statements serve batches too.
@@ -159,6 +166,8 @@ and no options.
     (`batchRows`), reused once the previous rows are closed, while `R` and
     the decoder stay the same. A warm `RunBatch` allocates only the held-query
     registration that `Prepared.Run` also pays (`TestRunBatchAllocs`).
+    `RunConditionalBatch` keeps its applied tally in the same storage and
+    allocates no more (`TestRunConditionalBatchAllocs`).
   - The wire batch of an attempt reuses the batch's item storage. Only a
     concurrent speculative attempt builds its own.
   - Per-member work at send time is a lookup of the prepared ID on the
@@ -171,4 +180,10 @@ and no options.
 
 ## Current deviations
 
-None. Record any deviation from these rules here, with what resolves it.
+- `Session.RunConditionalBatch` is a second method in the batch rows cell,
+  next to `RunBatch`. It exists because `Applied` needs `R` to be a
+  `CASResult`, which a method on `Rows[R]` cannot require. It stays unless
+  Go gains methods with their own type parameters constrained beyond the
+  receiver's.
+
+Record any deviation from these rules here, with what resolves it.

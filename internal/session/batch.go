@@ -32,10 +32,9 @@ import (
 // times; Reset empties it for the next batch and keeps its Kind.
 type Batch struct {
 	session *implCluster.Core
-	// The latest execution: one sent through a query is tracked by the
-	// query's generation, one sent without by its owner.
+	// lastQuery is the query of the latest execution, tracked by its
+	// generation lastGen.
 	lastQuery *queryState
-	lastOwner *inputOwner
 	// rows is the *batchRows[R] of the latest RunBatch, reused by the next
 	// RunBatch with the same R once its rows are closed.
 	rows    any
@@ -108,9 +107,6 @@ func (b *Batch) Reset() {
 // drained reports whether the latest execution of the batch, if any, has
 // stopped reading it.
 func (b *Batch) drained() bool {
-	if b.lastOwner != nil && !b.lastOwner.drained.Load() {
-		return false
-	}
 	if q := b.lastQuery; q != nil && q.generation.Load() == b.lastGen {
 		q.mu.Lock()
 		busy := q.busy
@@ -149,7 +145,7 @@ func validateBatch(s *implCluster.Core, batch *Batch) error {
 		return cqltype.TypeValidation("batch", "nil batch")
 	}
 	if len(batch.entries) == 0 {
-		return cqltype.TypeValidation("batch", "requires 1 to 65535 entries")
+		return cqltype.TypeValidation("batch", "batch is empty")
 	}
 	if kind := batch.Kind; kind != cqltype.LoggedBatch && kind != cqltype.UnloggedBatch && kind != cqltype.CounterBatch {
 		return cqltype.TypeValidation("batch kind", "unknown kind")
@@ -205,7 +201,7 @@ func (b *Batch) admit(s *implCluster.Core, r *model.RoutingInfo) error {
 		return cqltype.TypeValidation("batch", "nil batch")
 	}
 	if len(b.entries) == implCluster.MaxBatchStatements {
-		return cqltype.TypeValidation("batch", "requires 1 to 65535 entries")
+		return cqltype.TypeValidation("batch", "batch is full (65535 statements)")
 	}
 	if b.session != nil && b.session != s {
 		return cqltype.TypeValidation("batch session", "statements belong to different sessions")
@@ -245,17 +241,6 @@ func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, stateme
 	}
 }
 
-// InternalConditionalStatement returns the index of the statement whose
-// result is row i of the rows of a conditional batch on ScyllaDB, which
-// returns one row per statement, conditional or not, in statement order. It
-// reports false when the batch has no statement i.
-func (b *Batch) InternalConditionalStatement(i int) (int, bool) {
-	if b == nil || i < 0 || i >= len(b.entries) {
-		return 0, false
-	}
-	return i, true
-}
-
 // InternalAddBound appends bound's statement and values to batch.
 func InternalAddBound[R any](batch *Batch, s *implCluster.Core, bound *Bound[R]) error {
 	if bound == nil || bound.privateStorage.InternalRequest.InternalOwner == nil {
@@ -272,53 +257,13 @@ func InternalAddBound[R any](batch *Batch, s *implCluster.Core, bound *Bound[R])
 	return batch.add(s, request.InternalSource, request.statement, &request.routing, request.InternalValues)
 }
 
-// runBatch sends batch on s without a query and returns its first and
-// only page.
-func runBatch[R any](ctx context.Context, s *implCluster.Core, batch *Batch, decoder codec.RowDecoder[R], options CompiledOptions) (*Page[R], error) {
-	if err := validateBatch(s, batch); err != nil {
-		return nil, err
-	}
-	if decoder == nil {
-		return nil, cqltype.TypeValidation("batch rows", "nil decoder")
-	}
-	state := batch.begin()
-	owner := InternalNewInputOwner()
-	batch.lastOwner, batch.lastQuery = owner, nil
-	bound := new(Bound[R])
-	bound.privateStorage.InternalRequest = InternalExecutionRequest{InternalOwner: owner, routing: batch.requestRouting(), batch: state, hasCounter: batch.Kind == cqltype.CounterBatch}
-	bound.privateStorage.InternalRows = decoder
-	page, err := runtimeOf(s).runSinglePage(ctx, bound, model.StartPage(), 0, options)
-	owner.InternalClose()
-	return page, err
-}
-
 // queryExec prepares the batch's request for an execution on query q,
 // which began its own execution generation for it. Admission copies the
 // request into the query's inline request.
 func (b *Batch) queryExec(dst *InternalExecutionRequest, q *queryState) {
 	state := b.begin()
-	b.lastQuery, b.lastGen, b.lastOwner = q, q.generation.Load(), nil
+	b.lastQuery, b.lastGen = q, q.generation.Load()
 	*dst = InternalExecutionRequest{InternalOwner: q.owner, query: q, routing: b.requestRouting(), batch: state, hasCounter: b.Kind == cqltype.CounterBatch}
-}
-
-// execBatch sends batch on s and drains its result, which must have no
-// columns.
-func execBatch(ctx context.Context, s *implCluster.Core, batch *Batch, options CompiledOptions) (model.Result, error) {
-	if batch != nil && batch.routing.Kind == cqltype.ConditionalStatement {
-		return conditionalExec()
-	}
-	page, err := runBatch(ctx, s, batch, execRowsDecoder{}, options)
-	if err != nil {
-		return InternalExecutionErrorResult(err), err
-	}
-	defer page.Close()
-	var row codec.EmptyRecord
-	for page.NextInto(&row) {
-	}
-	if page.Err() == nil && page.Columns().Len() > 0 {
-		page.privateStorage.err = cqltype.TypeValidation("ExecBatch", "result columns require RunBatch")
-	}
-	return page.Info(), page.Err()
 }
 
 // batchQueries returns the pool of queries that run rt's batches, created on
@@ -355,21 +300,31 @@ func beginBatch(ctx context.Context, s *implCluster.Core, batch *Batch) (*Query[
 	return pool.begin(ctx)
 }
 
-// InternalRunBatch sends batch on s; tests use it to run batches built from
-// bindings.
-func InternalRunBatch[R any](ctx context.Context, s *implCluster.Core, batch *Batch, decoder codec.RowDecoder[R], options CompiledOptions) (*Page[R], error) {
-	return runBatch(ctx, s, batch, decoder, options)
-}
-
-// InternalExecBatch sends batch on s and drains its result.
-func InternalExecBatch(ctx context.Context, s *implCluster.Core, batch *Batch, options CompiledOptions) (model.Result, error) {
-	return execBatch(ctx, s, batch, options)
+// sendBatchRows sends batch on s on a pooled query it holds until the rows
+// are closed, and returns the batch's storage the rows use.
+func sendBatchRows[R any](ctx context.Context, s *implCluster.Core, batch *Batch, decoder codec.RowDecoder[R], options CompiledOptions) (*batchRows[R], Rows[R], error) {
+	q, err := beginBatch(ctx, s, batch)
+	if err != nil {
+		return nil, Rows[R]{}, err
+	}
+	r := batch.rowsFor(decoder)
+	batch.queryExec(&r.bound.privateStorage.InternalRequest, &q.state)
+	q.hold()
+	rows, err := q.state.runtime.run(ctx, &r.bound, options)
+	q.state.owner.InternalRelease()
+	if err != nil {
+		return nil, Rows[R]{}, err
+	}
+	return r, r.retag(rows), nil
 }
 
 // batchRows is the storage of one RunBatch execution with row type R: its
 // request, its result plans and its iterator. A Batch keeps it, so that a
 // reused batch sent again with RunBatch allocates nothing.
 type batchRows[R any] struct {
+	// cas is the applied tally of a RunConditionalBatch, reset for every
+	// execution.
+	cas    casTally[R]
 	bound  Bound[R]
 	plans  InternalResultPlanCache[R]
 	holder rowsHolder[R]
@@ -414,6 +369,7 @@ func (r *batchRows[R]) idle() bool {
 func (r *batchRows[R]) retag(rows Rows[R]) Rows[R] {
 	r.used = true
 	r.gen++
+	r.cas.reset()
 	rows.impl.gen.Store(r.gen)
 	rows.gen = r.gen
 	return rows

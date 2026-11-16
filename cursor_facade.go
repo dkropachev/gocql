@@ -47,6 +47,48 @@ func (r Rows[R]) Clone() (R, error) { return (implSession.Rows[R])(r).Clone() }
 // Info returns execution information accumulated so far.
 func (r Rows[R]) Info() Result { return (implSession.Rows[R])(r).Info() }
 
+// CASBatchRows are the rows of a conditional batch sent with
+// Session.RunConditionalBatch. Each row reports whether the batch applied, and
+// Applied reports it over all of them, which is the same rule on Cassandra and
+// ScyllaDB. Which rows the server returns differs: on ScyllaDB row i belongs
+// to statement i and holds its row's previous values, while on Cassandra rows
+// belong to rows of the partition. Ownership and staleness are as for Rows. CASBatchRows must not be used concurrently.
+type CASBatchRows[X any] implSession.CASBatchRows[X]
+
+// NextInto decodes the next row into dst, reporting whether one exists.
+func (r CASBatchRows[X]) NextInto(dst *cql.CASResult[X]) bool {
+	return (implSession.CASBatchRows[X])(r).NextInto(dst)
+}
+
+// Applied reports whether the batch applied: whether every row reports it.
+// It reads the rows NextInto has not, so it may be called with or without
+// iterating first. Rows closed before they were read to their end return an
+// error, as do rows whose iteration failed.
+func (r CASBatchRows[X]) Applied() (bool, error) { return (implSession.CASBatchRows[X])(r).Applied() }
+
+// Err returns the terminal iteration error, if any.
+func (r CASBatchRows[X]) Err() error { return (implSession.CASBatchRows[X])(r).Err() }
+
+// Close stops iteration and releases this execution. It is idempotent.
+func (r CASBatchRows[X]) Close() error { return (implSession.CASBatchRows[X])(r).Close() }
+
+// Columns returns the actual immutable result metadata.
+func (r CASBatchRows[X]) Columns() cql.Columns { return (implSession.CASBatchRows[X])(r).Columns() }
+
+// Retain keeps the current row's physical page alive until the lease closes.
+func (r CASBatchRows[X]) Retain() (*PageLease, error) {
+	lease, err := (implSession.CASBatchRows[X])(r).Retain()
+	return (*PageLease)(lease), err
+}
+
+// Clone returns an owned copy of the current row, recursively detaching views.
+func (r CASBatchRows[X]) Clone() (cql.CASResult[X], error) {
+	return (implSession.CASBatchRows[X])(r).Clone()
+}
+
+// Info returns execution information accumulated so far.
+func (r CASBatchRows[X]) Info() Result { return (implSession.CASBatchRows[X])(r).Info() }
+
 // Page iterates exactly one response page. Borrowed fields expire on
 // advancement or Close unless Retain pins the page. State remains available
 // after Close to resume explicit paging. A Page must not be copied or used concurrently.
