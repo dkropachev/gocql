@@ -134,7 +134,13 @@ func (w *kindWalk) visit(err error) bool {
 	}
 	k := sentinelKind(err)
 	if k == KindUnknown {
-		if typed, ok := err.(kinded); ok { //nolint:errorlint // one node of a tree walkErrors walks
+		switch typed := err.(type) { //nolint:errorlint // one node of a tree walkErrors walks
+		case *cqltype.ValidationError, *cqltype.CodecError:
+			// Package cql defines them and cannot name Kind.
+			k = KindInvalid
+		case *cqltype.ProtocolError:
+			k = KindProtocol
+		case kinded:
 			k = typed.Kind()
 		}
 	}

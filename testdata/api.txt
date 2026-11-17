@@ -909,7 +909,6 @@ package cqlerr
 		field Stage string
 		field Index int
 		method (*T) Error() string
-		method (*T) Kind() internal/cqltype.Kind
 		method (*T) Unwrap() error
 	type cqlerr.ConnectError = internal/runtimeerrors.ConnectError
 		field Stage string
@@ -1017,7 +1016,6 @@ package cqlerr
 		field Stage string
 		field Offset int64
 		method (*T) Error() string
-		method (*T) Kind() internal/cqltype.Kind
 		method (*T) Unwrap() error
 	type cqlerr.QueryError = internal/runtimeerrors.QueryError
 		method (*T) Error() string
@@ -1110,7 +1108,6 @@ package cqlerr
 		field Err error
 		field Field string
 		method (*T) Error() string
-		method (*T) Kind() internal/cqltype.Kind
 		method (*T) Unwrap() error
 	type cqlerr.WriteFailureError = internal/protocol.WriteFailureError
 		field ErrorMap internal/protocol.ErrorMap
