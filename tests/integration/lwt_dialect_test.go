@@ -100,17 +100,25 @@ func TestLWTDialect(t *testing.T) {
 	})
 
 	t.Run("Batch", func(t *testing.T) {
+		applied := func(rows []cql.CASResult[row]) bool {
+			for _, r := range rows {
+				if !r.Applied {
+					return false
+				}
+			}
+			return len(rows) > 0
+		}
 		run := func(updates ...update) []cql.CASResult[row] {
 			var batch gocql.Batch
 			for _, u := range updates {
 				require.NoError(t, conditional.AddToBatch(&batch, u))
 			}
-			// An ordinary member gets a row too on ScyllaDB; its row does
-			// not exist, so the row has no previous values.
+			// An ordinary member gets a row too on ScyllaDB; its row is not
+			// read, so the row has no previous values.
 			require.NoError(t, insert.AddToBatch(&batch, row{K: 1, C: 3, V: 30}))
 			_, err := session.ExecBatch(ctx, &batch)
 			require.True(t, errors.Is(err, cqlerr.ErrConditionalExec), "%v", err)
-			rows, err := session.RunBatch(ctx, &batch, decoder)
+			rows, err := session.RunConditionalBatch(ctx, &batch, decoder)
 			require.NoError(t, err)
 			defer rows.Close()
 			var out []cql.CASResult[row]
@@ -119,15 +127,11 @@ func TestLWTDialect(t *testing.T) {
 				out = append(out, r)
 			}
 			require.NoError(t, rows.Err())
+			// Applied makes the same every-row test as applied above.
+			got, err := rows.Applied()
+			require.NoError(t, err)
+			require.Equal(t, applied(out), got)
 			return out
-		}
-		applied := func(rows []cql.CASResult[row]) bool {
-			for _, r := range rows {
-				if !r.Applied {
-					return false
-				}
-			}
-			return len(rows) > 0
 		}
 		// Applied: ScyllaDB returns a row per statement, in statement order;
 		// Cassandra one row.

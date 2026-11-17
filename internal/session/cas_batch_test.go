@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"testing"
 
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -58,12 +59,9 @@ var casBatchDecoder = codec.CASRows(batchRowA)
 // body, and a batch of one conditional member.
 func newCASBatch(t testing.TB, body []byte) (*Session, *Batch) {
 	t.Helper()
-	s := batchServeSession(t, body)
-	var batch Batch
-	if err := batch.add(s, cqlText{}, "UPDATE ks.t SET v = 1 WHERE k = 1 IF v = 0", &model.RoutingInfo{Kind: cqltype.ConditionalStatement}, model.EncodedValues{}); err != nil {
-		t.Fatal(err)
-	}
-	return InternalWrapSession(s), &batch
+	return newServedBatchOf(t, body, func(s *implCluster.Core, batch *Batch) error {
+		return batch.add(s, cqlText{}, "UPDATE ks.t SET v = 1 WHERE k = 1 IF v = 0", &model.RoutingInfo{Kind: cqltype.ConditionalStatement}, model.EncodedValues{})
+	})
 }
 
 func runCASBatch(t testing.TB, session *Session, batch *Batch) CASBatchRows[batchRow] {
@@ -196,6 +194,16 @@ func TestRunConditionalBatch(t *testing.T) {
 		}
 		if m := session.Core().Metrics(); m.Requests != 0 {
 			t.Fatalf("a rejected batch counted a request: %+v", m)
+		}
+	})
+
+	// A conditional result always has a row; none cannot report Applied.
+	t.Run("NoRows", func(t *testing.T) {
+		session, batch := newCASBatch(t, casRowsBody())
+		rows := runCASBatch(t, session, batch)
+		defer rows.Close()
+		if got, err := rows.Applied(); err == nil {
+			t.Fatalf("Applied without rows = %v", got)
 		}
 	})
 

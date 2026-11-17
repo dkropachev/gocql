@@ -11,22 +11,34 @@ import (
 	"github.com/scylladb/gocql/v2/internal/model"
 )
 
-// casTally is what a CASBatchRows has learned from the rows read so far.
-// The Batch keeps it with the execution's storage, so that tracking it
-// allocates nothing. scratch is the destination Applied decodes the rows
-// the caller did not read into; R is always a CASResult.
-type casTally[R any] struct {
-	scratch R
-	// notApplied reports a row with Applied false.
-	notApplied bool
+// casTally is what a CASBatchRows has learned from the rows read so far. A
+// Batch keeps one per rows storage, owner, and resets it for each
+// RunConditionalBatch, so tracking it allocates nothing once warm and costs
+// RunBatch nothing. scratch is the destination Applied decodes the rows the
+// caller did not read into.
+type casTally[X any] struct {
+	owner   *batchRows[codec.CASResult[X]]
+	scratch codec.CASResult[X]
+	// rows reports that a row was read; notApplied, that one had Applied
+	// false.
+	rows, notApplied bool
 	// done reports that the rows were read to their end; closed, that
 	// they were closed before it.
 	done, closed bool
 }
 
-func (t *casTally[R]) reset() {
-	var zero R
-	t.scratch, t.notApplied, t.done, t.closed = zero, false, false, false
+// casTallyFor returns b's tally for rows storage r, reset for a new
+// execution. A handle of an earlier execution on r is stale by then, so it
+// no longer reads or writes the tally.
+func (b *Batch) casTallyFor[X any](r *batchRows[codec.CASResult[X]]) *casTally[X] {
+	t, ok := b.cas.(*casTally[X])
+	if !ok || t.owner != r {
+		t = &casTally[X]{owner: r}
+		b.cas = t
+		return t
+	}
+	*t = casTally[X]{owner: r}
+	return t
 }
 
 // CASBatchRows are the rows of a conditional batch, each reporting whether
@@ -36,13 +48,14 @@ func (t *casTally[R]) reset() {
 // for its next execution once these rows are closed; a handle kept from an
 // earlier execution is stale. It is not safe for concurrent use.
 type CASBatchRows[X any] struct {
-	tally *casTally[codec.CASResult[X]]
+	tally *casTally[X]
 	rows  Rows[codec.CASResult[X]]
 }
 
 // NextInto decodes the next row into dst and reports whether there was one.
 func (r CASBatchRows[X]) NextInto(dst *codec.CASResult[X]) bool {
 	if r.rows.NextInto(dst) {
+		r.tally.rows = true
 		if !dst.Applied {
 			r.tally.notApplied = true
 		}
@@ -56,9 +69,11 @@ func (r CASBatchRows[X]) NextInto(dst *codec.CASResult[X]) bool {
 
 // Applied reports whether the batch applied: on Cassandra and ScyllaDB alike,
 // it applied if and only if every row reports it. It reads the rows NextInto
-// has not, so it can be called without iterating, or after. Rows closed
-// before NextInto or Applied reported their end cannot tell, even when the
-// last row was read, and return an error.
+// has not, so it can be called without iterating, or after. It returns an
+// error instead when iteration failed, when the rows were closed before
+// NextInto or Applied reported their end (even right after the last row),
+// when the result had no rows, which no conditional batch returns, when the
+// handle is stale, and for the zero CASBatchRows.
 func (r CASBatchRows[X]) Applied() (bool, error) {
 	if r.tally == nil {
 		return false, cqltype.TypeValidation("CASBatchRows", "zero rows handle")
@@ -75,6 +90,9 @@ func (r CASBatchRows[X]) Applied() (bool, error) {
 	}
 	if !r.tally.done {
 		return false, cqltype.TypeValidation("CASBatchRows", "rows closed before Applied read them")
+	}
+	if !r.tally.rows {
+		return false, cqltype.TypeValidation("CASBatchRows", "conditional batch returned no rows")
 	}
 	return !r.tally.notApplied, nil
 }
@@ -116,15 +134,19 @@ func (s *Session) RunConditionalBatch[X any](ctx context.Context, batch *Batch, 
 	if decoder == nil {
 		return CASBatchRows[X]{}, cqltype.TypeValidation("batch rows", "nil decoder")
 	}
+	core := s.Core()
+	if err := validateBatch(core, batch); err != nil {
+		return CASBatchRows[X]{}, err
+	}
 	// A batch known to hold no condition gets a VOID result, which has no
 	// [applied] to report: reject it before sending, as ExecBatch rejects a
 	// conditional one.
-	if batch != nil && len(batch.entries) > 0 && batch.routing.Kind == cqltype.OrdinaryStatement {
+	if batch.routing.Kind == cqltype.OrdinaryStatement {
 		return CASBatchRows[X]{}, cqltype.TypeValidation("RunConditionalBatch", "batch has no conditional statement; send it with ExecBatch")
 	}
-	r, rows, err := sendBatchRows(ctx, s.Core(), batch, decoder, options)
+	r, rows, err := sendBatchRows(ctx, core, batch, decoder, options)
 	if err != nil {
 		return CASBatchRows[X]{}, err
 	}
-	return CASBatchRows[X]{tally: &r.cas, rows: rows}, nil
+	return CASBatchRows[X]{tally: batch.casTallyFor(r), rows: rows}, nil
 }

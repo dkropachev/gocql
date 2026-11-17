@@ -37,7 +37,10 @@ type Batch struct {
 	lastQuery *queryState
 	// rows is the *batchRows[R] of the latest RunBatch, reused by the next
 	// RunBatch with the same R once its rows are closed.
-	rows    any
+	rows any
+	// cas is the *casTally[X] of the latest RunConditionalBatch, tied to
+	// the rows storage it counts.
+	cas     any
 	entries []batchEntry
 	// values holds the encoded values of every entry back to back.
 	values []byte
@@ -322,9 +325,6 @@ func sendBatchRows[R any](ctx context.Context, s *implCluster.Core, batch *Batch
 // request, its result plans and its iterator. A Batch keeps it, so that a
 // reused batch sent again with RunBatch allocates nothing.
 type batchRows[R any] struct {
-	// cas is the applied tally of a RunConditionalBatch, reset for every
-	// execution.
-	cas    casTally[R]
 	bound  Bound[R]
 	plans  InternalResultPlanCache[R]
 	holder rowsHolder[R]
@@ -369,7 +369,6 @@ func (r *batchRows[R]) idle() bool {
 func (r *batchRows[R]) retag(rows Rows[R]) Rows[R] {
 	r.used = true
 	r.gen++
-	r.cas.reset()
 	rows.impl.gen.Store(r.gen)
 	rows.gen = r.gen
 	return rows

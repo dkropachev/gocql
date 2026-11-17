@@ -45,17 +45,21 @@ Write portable code this way:
 A batch is applied only when all its conditions hold. The portable test is: the
 batch was applied if and only if every row reports `Applied`.
 `session.RunConditionalBatch` returns `CASBatchRows`, whose `Applied` makes
-that test for you, reading any rows you have not.
+that test for you, reading any rows you have not. It rejects a batch whose
+members are all known not to be conditional before sending it.
 
 On ScyllaDB, row `i` belongs to member `i` of the batch. Every row carries the
 same batch-wide `Applied`: there is no per-statement flag, and the server stops
 checking conditions at the first that fails. What row `i` adds is `Previous`:
-the row member `i`'s condition is checked against, which is its clustering
-row, or the partition's static row when that row is absent. `Previous` is
-unset when neither exists. To find the condition that failed, compare them
-with your conditions. Count rows
-as you read them: the count is the member index. This holds only on ScyllaDB;
-on Cassandra the rows belong to table rows, not statements.
+the condition columns of the row member `i`'s condition is checked against,
+which is its clustering row, or the partition's static row when that row is
+absent and the member is not `IF EXISTS` / `IF NOT EXISTS`. `Previous` is
+unset when neither exists or those columns are all NULL. A member without a
+condition is not read, so its `Previous` says nothing about its row. To find
+the condition that failed, compare the conditional members' `Previous` with
+your conditions. Count rows as you read them: the count is the member index.
+This holds only on ScyllaDB; on Cassandra the rows belong to table rows, not
+statements.
 
 ## Paging
 
